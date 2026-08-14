@@ -68,6 +68,21 @@ pub fn level_for_kind(kind: ControlKind) -> ControlLevel {
     }
 }
 
+impl ControlKind {
+    /// control-intent 事件 kind 载荷（EV-04 / D-03：soft-inject 聚合
+    /// steer / follow_up / soft_inject 三运行时变体；其余一一对应）
+    pub fn as_event_kind(&self) -> &'static str {
+        match self {
+            ControlKind::SoftInject | ControlKind::Steer | ControlKind::FollowUp => {
+                "soft-inject"
+            }
+            ControlKind::CooperativeStop => "cooperative-stop",
+            ControlKind::ForceCancel => "force-cancel",
+            ControlKind::Continue => "continue",
+        }
+    }
+}
+
 /// L1 注入类 kind（写入 input queue 的某一环）
 pub fn is_l1_inject_kind(kind: ControlKind) -> bool {
     matches!(kind, ControlKind::SoftInject | ControlKind::Steer | ControlKind::FollowUp)
@@ -206,10 +221,19 @@ pub enum ControlDrainAction {
 ///
 /// 本任务范围只含 L3 意图队列（B3.2 产出：入队/peek/drainAsAction）；
 /// L1 点对点 send / L2 事件订阅不属于 session-loop 内核，由上层另行实现。
+///
+/// EV-04（D-03）入队观测：request() 无 session 上下文无法直接发射
+/// control-intent 事件，故在总线内保留 enqueued 态轨迹（[Self::take_trace]），
+/// 由会话事件面（loop/handlers check_control 安全点）取走并发射——
+/// 与 consumed 态同一次安全点发射，intent_id 两态配对。
 #[derive(Debug, Clone, Default)]
 pub struct ControlBus {
     queue: VecDeque<ControlIntent>,
     seq: u64,
+    /// EV-04（D-03）：入队观测轨迹——request() 记录非 continue 意图，
+    /// check_control 安全点经 [Self::take_trace] 取走发射
+    /// control-intent(enqueued)；continue 不入队不记录。
+    trace: VecDeque<ControlIntent>,
 }
 
 fn now_millis() -> u64 {
@@ -242,8 +266,16 @@ impl ControlBus {
         };
         if kind != ControlKind::Continue {
             self.queue.push_back(intent.clone());
+            // EV-04（D-03）：入队观测轨迹（事件发射在安全点 check_control）
+            self.trace.push_back(intent.clone());
         }
         intent
+    }
+
+    /// EV-04（D-03）：取走全部入队观测轨迹（enqueued 态事件素材；消费侧
+    /// 在安全点先取走再 drain——幂等，重复调用只返回新增轨迹）
+    pub fn take_trace(&mut self) -> Vec<ControlIntent> {
+        self.trace.drain(..).collect()
     }
 
     /// pi steer：下一安全点注入（与 soft_inject 同 L1 wire，入 steer 环）
@@ -631,6 +663,49 @@ mod tests {
         assert_eq!(json["level"], "L3");
         assert_eq!(json["reason"], "r");
         assert_eq!(json["source"], "ui");
+    }
+
+    // ── EV-04（D-03）：入队观测轨迹（control-intent enqueued 态素材）──
+
+    /// 入队轨迹：非 continue 意图 request 即记录（含 id/source/reason 供
+    /// 事件载荷）；continue 不入队不记录；take_trace 幂等（只取新增）
+    #[test]
+    fn trace_records_enqueued_intents_and_is_idempotent() {
+        let mut bus = ControlBus::new();
+        // continue 不入队不记录
+        bus.request(ControlIntentInput::new(ControlKind::Continue));
+        assert!(bus.take_trace().is_empty(), "continue 不得记录轨迹");
+        // L2 协作停止：reason/source 随轨迹保留（cooperative_stop 的
+        // reason 不再丢弃，EV-04 验收）
+        let stop = bus.request_cooperative_stop(
+            Some("用户协作停止".to_string()),
+            Some("ui".to_string()),
+        );
+        let l1 = bus.request_steer(msg("提示"), Some("subagent_inject:sub-1".into()), None);
+        let trace = bus.take_trace();
+        assert_eq!(trace.len(), 2, "两条非 continue 意图入队轨迹");
+        assert_eq!(trace[0].id, stop.id);
+        assert_eq!(trace[0].reason.as_deref(), Some("用户协作停止"));
+        assert_eq!(trace[0].source.as_deref(), Some("ui"));
+        assert_eq!(trace[1].id, l1.id);
+        assert_eq!(trace[1].reason.as_deref(), Some("subagent_inject:sub-1"));
+        // 幂等：取走后再次取为空；新请求只返回新增
+        assert!(bus.take_trace().is_empty());
+        bus.request_force_cancel(None, None);
+        let trace2 = bus.take_trace();
+        assert_eq!(trace2.len(), 1, "只返回新增轨迹");
+        assert_eq!(trace2[0].kind, ControlKind::ForceCancel);
+    }
+
+    /// 事件 kind 载荷映射（soft-inject 聚合 steer/follow_up/soft_inject）
+    #[test]
+    fn event_kind_maps_runtime_variants_to_wire_kinds() {
+        assert_eq!(ControlKind::SoftInject.as_event_kind(), "soft-inject");
+        assert_eq!(ControlKind::Steer.as_event_kind(), "soft-inject");
+        assert_eq!(ControlKind::FollowUp.as_event_kind(), "soft-inject");
+        assert_eq!(ControlKind::CooperativeStop.as_event_kind(), "cooperative-stop");
+        assert_eq!(ControlKind::ForceCancel.as_event_kind(), "force-cancel");
+        assert_eq!(ControlKind::Continue.as_event_kind(), "continue");
     }
 
     // ── C8/M8：运行中注入（wait 期间向子代理注入提示词）──────────

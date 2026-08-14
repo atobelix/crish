@@ -44,6 +44,7 @@ fn tool_progress_text_maps_to_tool_update() {
             category: ToolCategory::Internal,
             concurrency: ToolConcurrency::Sequential,
             summary: "call shell_command".into(),
+            occurred_at_ms: Some(1_000),
         },
         ToolEvent::ToolProgress {
             call_id: "c1".into(),
@@ -61,6 +62,10 @@ fn tool_progress_text_maps_to_tool_update() {
             output: serde_json::json!({ "out": "x" }),
             error_code: None,
             error_message: None,
+            attempt: Some(1),
+            deduplicated: Some(false),
+            executed_input: None,
+            occurred_at_ms: Some(1_020),
         },
         ToolEvent::BatchEnd {
             batch_id: "batch-1".into(),
@@ -176,6 +181,10 @@ fn approval_resolved_expired_maps_to_agent_event() {
             output: serde_json::Value::Null,
             error_code: Some("tool.approval_expired".into()),
             error_message: Some("approval expired".into()),
+            attempt: Some(1),
+            deduplicated: Some(false),
+            executed_input: None,
+            occurred_at_ms: None,
         },
         ToolEvent::BatchEnd {
             batch_id: "batch-1".into(),
@@ -216,6 +225,10 @@ fn tool_result_message_id_derivation_documented() {
         error_message: None,
         output: serde_json::json!({"ok": true}),
         duration_ms: 1,
+        attempt: 1,
+        deduplicated: false,
+        executed_input: None,
+        occurred_at_ms: None,
     };
     let message = tool_result_message(&ok);
     assert_eq!(message.id, "tool-result-call_x");
@@ -234,6 +247,10 @@ fn tool_result_message_id_derivation_documented() {
         error_message: None,
         output: serde_json::json!({"ok": true}),
         duration_ms: 1,
+        attempt: 1,
+        deduplicated: false,
+        executed_input: None,
+        occurred_at_ms: None,
     };
     assert_ne!(
         tool_result_message(&ok).id,

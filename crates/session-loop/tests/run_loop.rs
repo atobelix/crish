@@ -1018,7 +1018,8 @@ async fn request_session_id_injected_into_provider_request() {
 }
 
 /// 事件序列契约抽查（01 §五.6）：agent-start/end 首尾、turn-start/end 成对、
-/// message-start/end 每条消息成对
+/// message-start/end 每条消息成对；EV-11（D-03）起 turn-start 与 assistant
+/// message-start 之间插入 provider-request-anchored（请求发出点锚点，Delta）
 #[tokio::test]
 async fn event_sequence_contract() {
     let provider = TestProvider::new(vec![
@@ -1039,9 +1040,11 @@ async fn event_sequence_contract() {
             "message-start",
             "message-end",
             "turn-start",
+            "provider-request-anchored",
             "message-start",
             "message-delta",
             "message-end",
+            "steering-evaluated",
             "turn-end",
             "agent-end",
         ],
@@ -1372,4 +1375,818 @@ async fn length_upgrade_limit_zero_fails_immediately() {
     assert!(outcome.error.is_some());
     // 无升级重试（provider 仅调用 1 次）
     assert_eq!(provider_handle.call_count(), 1, "length limit 0 不得发起任何升级重试");
+}
+
+// ── EV-08：孤儿 turn-start 修复（「turn 对恒成对」不变量）───────────────
+
+/// EV-08：「turn 对恒成对」不变量断言辅助——扫事件序列，每个 turn-start
+/// 必被同 turn_index 的 turn-end 闭合（轮次集合一致 + 逐 index 计数配对；
+/// 多余 / 缺失 / 索引不一致均失败）。被 ≥2 用例调用（方案验收断言 ⑤）。
+fn assert_turn_pairs_closed(events: &[conex_types::events::AgentEvent]) {
+    use std::collections::HashMap;
+    let mut starts: HashMap<u32, u32> = HashMap::new();
+    let mut ends: HashMap<u32, u32> = HashMap::new();
+    for event in events {
+        match event {
+            conex_types::events::AgentEvent::TurnStart { turn_index, .. } => {
+                *starts.entry(*turn_index).or_insert(0) += 1;
+            }
+            conex_types::events::AgentEvent::TurnEnd { turn_index, .. } => {
+                *ends.entry(*turn_index).or_insert(0) += 1;
+            }
+            _ => {}
+        }
+    }
+    assert_eq!(
+        starts.len(),
+        ends.len(),
+        "turn 对恒成对：turn-start 与 turn-end 的轮次集合必须一致（孤儿 turn-start 修复，EV-08）"
+    );
+    for (index, start_count) in &starts {
+        let end_count = ends.get(index).copied().unwrap_or(0);
+        assert_eq!(
+            start_count, &end_count,
+            "turn 对恒成对：turn_index={index} 的 turn-start({start_count}) 必须被同轮次 \
+             turn-end({end_count}) 闭合（EV-08：abort/强停/错误收敛路径不得产生孤儿 turn-start）"
+        );
+    }
+}
+
+/// EV-08：streaming 中途 abort（L3 强停）→ aborted 收场，turn-start 必须被
+/// 同 turn_index 的 turn-end 闭合（修复前 streaming_aborted 收敛不经
+/// turn_complete → 孤儿 turn-start）
+#[tokio::test]
+async fn turn_pair_invariant_mid_stream_abort() {
+    // Q41（T11.7.2）：虚拟时间护栏（真实 sleep → advance 显式推进）
+    let _time = TimePauseGuard::new();
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::text("已流出的部分内容"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ])
+    .with_pause(1, 300);
+    let mut loop_ = loop_with(provider, vec![]);
+    let abort = loop_.abort_signal();
+
+    let handle = tokio::spawn(async move { loop_.run(user("生成内容")).await });
+    // provider 正在栅栏停顿中 → L3 强停
+    tokio::time::advance(Duration::from_millis(80)).await;
+    abort.abort();
+    // 越过 provider 栅栏（300ms 虚拟停顿），loop 读到 abort 并收场
+    tokio::time::advance(Duration::from_millis(300)).await;
+    let outcome = handle.await.expect("run 不应 panic");
+
+    assert_eq!(outcome.reason, AgentEndReason::Aborted);
+    // 不变量：turn-start 恒被同轮次 turn-end 闭合（streaming_aborted +
+    // converge 兜底，EV-08）
+    assert_turn_pairs_closed(&outcome.events);
+    // 部分内容保留（partial salvage 不被修复破坏）
+    let partial = outcome
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::Assistant)
+        .expect("部分内容应已 commit");
+    assert_eq!(partial.text(), "已流出的部分内容");
+}
+
+/// EV-08：L3 force_cancel（经控制总线，流结束安全点 check_control 收敛）→
+/// aborted 收场，turn 对恒成对（修复前 check_control 收敛路径缺 turn-end）
+#[tokio::test]
+async fn turn_pair_invariant_force_cancel_via_bus() {
+    // Q41（T11.7.2）：虚拟时间护栏
+    let _time = TimePauseGuard::new();
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::text("部分内容"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ])
+    .with_pause(1, 300);
+    let mut loop_ = loop_with(provider, vec![]);
+    let bus = loop_.control_bus();
+
+    let handle = tokio::spawn(async move { loop_.run(user("跑起来")).await });
+    tokio::time::advance(Duration::from_millis(80)).await;
+    bus.lock()
+        .unwrap()
+        .request_force_cancel(Some("用户强停".into()), Some("ui".into()));
+    // 越过 provider 栅栏（300ms 虚拟停顿），loop 才读到取消并收场
+    tokio::time::advance(Duration::from_millis(300)).await;
+    let outcome = handle.await.expect("run 不应 panic");
+
+    assert_eq!(outcome.reason, AgentEndReason::Aborted);
+    // 不变量：check_control 收敛路径也必须有 turn-end 闭合（EV-08）
+    assert_turn_pairs_closed(&outcome.events);
+}
+
+/// EV-08：L2 cooperative_stop → stopped 收场（D1，不 abort），turn 对恒成对
+/// （修复前 streaming_aborted CooperativeStop 分支收敛缺 turn-end）
+#[tokio::test]
+async fn turn_pair_invariant_cooperative_stop() {
+    // Q41（T11.7.2）：虚拟时间护栏
+    let _time = TimePauseGuard::new();
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::text("这条消息保留"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ])
+    .with_pause(1, 300);
+    let mut loop_ = loop_with(provider, vec![]);
+    let bus = loop_.control_bus();
+
+    let handle = tokio::spawn(async move { loop_.run(user("开始")).await });
+    tokio::time::advance(Duration::from_millis(80)).await;
+    bus.lock()
+        .unwrap()
+        .request_cooperative_stop(Some("用户协作停止".into()), Some("test".into()));
+    // 越过 provider 栅栏（300ms 虚拟停顿），loop 读到协作停止并收场
+    tokio::time::advance(Duration::from_millis(300)).await;
+    let outcome = handle.await.expect("run 不应 panic");
+
+    // D1：独立 reason stopped
+    assert_eq!(outcome.reason, AgentEndReason::Stopped);
+    // 不变量：协作停止收敛路径同样闭合 turn（EV-08）
+    assert_turn_pairs_closed(&outcome.events);
+}
+
+/// EV-08：工具致命错误（fatalOnError）→ error 收场，turn 对恒成对
+/// （turn_complete 正常发射路径回归——修复不得破坏正常语义）
+#[tokio::test]
+async fn turn_pair_invariant_fatal_tool_error() {
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::tool_call(
+            Some("call_fail".into()),
+            "fail",
+            serde_json::json!({}),
+        ),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]);
+    let tool = Arc::new(TestTool::with_error("fail", "boom").with_fatal_on_error());
+    let mut loop_ = loop_with(provider, vec![tool]);
+
+    let outcome = loop_.run(user("执行")).await;
+
+    assert_eq!(outcome.reason, AgentEndReason::Error);
+    assert!(outcome.error.is_some());
+    // 不变量：错误收敛路径 turn 恒成对（executing-tools ERROR → turn-complete
+    // 正常发射，EV-08 回归）
+    assert_turn_pairs_closed(&outcome.events);
+}
+
+/// EV-08：瞬态错误无重试预算（transient_retry_limit=0）→ 直接 error 收场，
+/// turn 对恒成对（修复前 stream_error_fatal 直接 error 收敛不经 turn_complete
+/// → 孤儿 turn-start；converge 兜底闭合）
+#[tokio::test]
+async fn turn_pair_invariant_transient_fatal_no_retry() {
+    let provider_handle = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("不应到达"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ])
+    .with_error(classified(ProviderErrorKind::RateLimit)));
+    let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]);
+    loop_ = loop_.with_options(SessionLoopOptions {
+        transient_retry_limit: 0,
+        ..Default::default()
+    });
+
+    let outcome = loop_.run(user("你好")).await;
+
+    assert_eq!(outcome.reason, AgentEndReason::Error);
+    assert!(outcome.error.is_some());
+    // 不变量：provider fatal 直接 error 收敛路径也必须闭合 turn（EV-08）
+    assert_turn_pairs_closed(&outcome.events);
+}
+
+/// EV-08：正常完成（纯文字回复 → stop）turn 对恒成对——正常语义回归
+/// （修复不得改变 turn_complete 正常发射行为）
+#[tokio::test]
+async fn turn_pair_invariant_normal_stop() {
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::text("你好，我是助手"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]);
+    let mut loop_ = loop_with(provider, vec![]);
+
+    let outcome = loop_.run(user("你好")).await;
+
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    // 不变量：正常路径 turn 恒成对（EV-08 回归，与 event_sequence_contract
+    // 互补——后者断言序列位置，本辅助断言配对计数）
+    assert_turn_pairs_closed(&outcome.events);
+    // 且 turn-end 的 tool_call_count 与 turn-start 轮次对应（载荷一致性抽查）
+    let starts: Vec<u32> = outcome
+        .events
+        .iter()
+        .filter_map(|e| match e {
+            conex_types::events::AgentEvent::TurnStart { turn_index, .. } => Some(*turn_index),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(starts, vec![1], "首轮 turn-start 轮次为 1（TURN_PREPARED 递增后）");
+}
+
+/// EV-11（D-03 EV-13）S5 测钉：provider 请求锚点——请求发出 → 事件序列含
+/// provider-request-anchored（turn_index 与当前轮 turn-start 一致、model
+/// 非空=注入的当前模型名、request_started_at_ms 非零且与事件自身 timestamp
+/// 同毫秒）；其后 message-delta timestamp ≥ 锚点时间戳（首字节延迟可测面）
+#[tokio::test]
+async fn provider_request_anchored_carries_turn_model_and_precedes_delta() {
+    use conex_types::events::AgentEvent;
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::text("锚点回复"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]);
+    let mut loop_ = loop_with(provider, vec![]);
+    // 注入缓存测量配置 → 模型名经 cache_tracker 装配面进入锚点载荷
+    loop_ = loop_.with_options(SessionLoopOptions {
+        cache_tracking: Some(session_loop::CacheTrackingConfig {
+            provider: "deepseek".to_string(),
+            model: "deepseek-v4-flash".to_string(),
+            ttl_seconds: 60,
+        }),
+        ..Default::default()
+    });
+
+    let outcome = loop_.run(user("验证")).await;
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+
+    // turn-start 的 turn_index（当前轮展示值）
+    let turn_index = outcome
+        .events
+        .iter()
+        .find_map(|e| match e {
+            AgentEvent::TurnStart { turn_index, .. } => Some(*turn_index),
+            _ => None,
+        })
+        .expect("必须有 turn-start");
+    // 锚点：turn_index 与当前轮一致、model 非空、request_started_at_ms 非零
+    let anchors: Vec<_> = outcome
+        .events
+        .iter()
+        .filter_map(|e| match e {
+            AgentEvent::ProviderRequestAnchored {
+                turn_index,
+                model,
+                request_started_at_ms,
+                timestamp,
+                ..
+            } => Some((*turn_index, model.clone(), *request_started_at_ms, timestamp.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(anchors.len(), 1, "单轮 run 恰好一次请求锚点");
+    let (anchor_turn, model, started_ms, anchor_ts) = &anchors[0];
+    assert_eq!(anchor_turn, &turn_index, "锚点 turn_index 必须与当前轮一致");
+    assert!(
+        model.is_some() && !model.as_deref().unwrap().is_empty(),
+        "注入缓存配置后 model 必须非空：{model:?}"
+    );
+    assert_eq!(model.as_deref(), Some("deepseek-v4-flash"));
+    assert!(*started_ms > 0, "request_started_at_ms 必须非零");
+    // 锚点事件自身 timestamp 与 request_started_at_ms 同一毫秒（±1ms 容差）
+    let anchor_ts_ms = iso_to_epoch_ms(anchor_ts);
+    assert!(
+        started_ms.abs_diff(anchor_ts_ms) <= 1,
+        "锚点 timestamp 与 request_started_at_ms 必须同毫秒：{started_ms} vs {anchor_ts_ms}"
+    );
+    // 锚点在事件序列中先于首个 message-delta（请求发出 → 首字节）
+    let anchor_idx = outcome
+        .events
+        .iter()
+        .position(|e| matches!(e, AgentEvent::ProviderRequestAnchored { .. }))
+        .expect("锚点在序列中");
+    let first_delta = outcome
+        .events
+        .iter()
+        .position(|e| matches!(e, AgentEvent::MessageDelta { .. }))
+        .expect("收口 message-delta 在序列中");
+    assert!(anchor_idx < first_delta, "锚点必须先于 message-delta 发出");
+    // 首个 message-delta timestamp ≥ 锚点时间戳（首字节延迟非负可测）
+    let delta_ts_ms = outcome
+        .events
+        .iter()
+        .find_map(|e| match e {
+            AgentEvent::MessageDelta { timestamp, .. } => Some(iso_to_epoch_ms(timestamp)),
+            _ => None,
+        })
+        .expect("message-delta 必有 timestamp");
+    assert!(
+        delta_ts_ms >= *started_ms,
+        "首个 message-delta 时间戳 {delta_ts_ms}ms 必须 ≥ 锚点 {started_ms}ms"
+    );
+}
+
+/// EV-11（D-03 EV-13）S5 测钉：TurnEnd usage 真值——带 usage 的流 →
+/// TurnEnd.usage = 六字段 TurnUsage（prompt/completion/total/cache_read/
+/// cache_write/cache_miss）；provider 未报告 usage → TurnEnd.usage = None
+/// （旧帧缺省兼容，不猜估算值）
+#[tokio::test]
+async fn turn_end_carries_turn_usage_from_provider() {
+    use conex_types::events::{AgentEvent, TurnUsage};
+    // 带 usage 的流（ProviderUsage camelCase 六键，consume 收口写入
+    // metadata.usage；cache_miss_tokens=None → 键省略 → 提取为 0）
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::text("用量回复"),
+        ProviderStreamEvent::Stop {
+            reason: StopReason::Stop,
+            error: None,
+            error_kind: None,
+            usage: Some(session_loop::ProviderUsage {
+                prompt_tokens: Some(1_000),
+                completion_tokens: Some(50),
+                total_tokens: Some(1_050),
+                cache_read_tokens: Some(800),
+                cache_write_tokens: Some(100),
+                cache_miss_tokens: None,
+                reasoning_tokens: None,
+            }),
+        },
+    ]);
+    let mut loop_ = loop_with(provider, vec![]);
+    let outcome = loop_.run(user("验证")).await;
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+
+    let usage = outcome
+        .events
+        .iter()
+        .find_map(|e| match e {
+            AgentEvent::TurnEnd { usage, .. } => usage.clone(),
+            _ => None,
+        })
+        .expect("run 必须发射 turn-end 且带 usage 真值（find_map 已展平 Option）");
+    assert_eq!(
+        usage,
+        TurnUsage {
+            prompt_tokens: 1_000,
+            completion_tokens: 50,
+            total_tokens: 1_050,
+            cache_read_tokens: 800,
+            cache_write_tokens: 100,
+            cache_miss_tokens: 0,
+        },
+        "TurnEnd.usage 六字段必须与 provider 报告一致"
+    );
+
+    // 对照：无 usage 的流 → TurnEnd.usage = None（旧帧缺省兼容）
+    let provider2 = TestProvider::new(vec![
+        ProviderStreamEvent::text("无用量回复"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]);
+    let mut loop2 = loop_with(provider2, vec![]);
+    let outcome2 = loop2.run(user("验证")).await;
+    let usage2 = outcome2
+        .events
+        .iter()
+        .find_map(|e| match e {
+            AgentEvent::TurnEnd { usage, .. } => usage.clone(),
+            _ => None,
+        });
+    assert!(
+        outcome2
+            .events
+            .iter()
+            .any(|e| matches!(e, AgentEvent::TurnEnd { .. })),
+        "run 必须发射 turn-end"
+    );
+    assert_eq!(usage2, None, "provider 未报告 usage 时 TurnEnd.usage 保持 None");
+}
+
+/// ISO8601（`YYYY-MM-DDTHH:MM:SS.mmmZ`，now_iso_utc 固定格式）→ epoch 毫秒
+/// （测试内轻量解析，无 chrono 依赖；civil-from-days 逆运算）
+fn iso_to_epoch_ms(iso: &str) -> u64 {
+    let parts: Vec<u64> = iso
+        .split(|c: char| c == '-' || c == 'T' || c == ':' || c == '.' || c == 'Z')
+        .filter(|s| !s.is_empty())
+        .map(|s| s.parse().expect("ISO 字段必须可解析"))
+        .collect();
+    let (y, mo, d) = (parts[0], parts[1], parts[2]);
+    let (h, mi, s, ms) = (parts[3], parts[4], parts[5], parts[6]);
+    let y2 = if mo <= 2 { y - 1 } else { y };
+    let era = y2 / 400;
+    let yoe = y2 - era * 400;
+    let doy = (153 * (if mo > 2 { mo - 3 } else { mo + 9 }) + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    days * 86_400_000 + h * 3_600_000 + mi * 60_000 + s * 1_000 + ms
+}
+
+// ── EV-03（D-03）：循环决策事件组 + EV-09（D-03）：工具原子要素组 ──────
+
+/// 构造带任意类型工具注册表的循环（EV-09 慢速工具测钉用——与
+/// `loop_with` 的 `Vec<Arc<TestTool>>` 区分，注册表 register 接受
+/// `Arc<dyn Tool>` 可擦除）
+fn loop_with_tools<T>(provider: TestProvider, tools: Vec<Arc<T>>) -> AgentSessionLoop
+where
+    T: agent_tools::definition::Tool + Send + Sync + 'static,
+{
+    let mut registry = ToolRegistry::new();
+    for tool in tools {
+        registry.register(tool).expect("注册测试工具");
+    }
+    AgentSessionLoop::new("sess-1", "run-1", 16, Box::new(provider), Arc::new(registry))
+}
+
+/// 慢速失败工具（EV-09 测钉）：执行 50ms 后抛错——失败路径 duration_ms
+/// 真实化断言素材（执行耗时非 0）
+struct SlowFailTool {
+    name: String,
+    definition: agent_tools::definition::ToolDefinition,
+}
+
+impl SlowFailTool {
+    fn new(name: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            definition: agent_tools::definition::ToolDefinition {
+                name: name.to_string(),
+                description: format!("slow fail tool {name}"),
+                input_schema: serde_json::json!({"type": "object"}),
+                dangerous: false,
+                fatal_on_error: false,
+            },
+        }
+    }
+}
+
+#[async_trait]
+impl agent_tools::definition::Tool for SlowFailTool {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn definition(&self) -> &agent_tools::definition::ToolDefinition {
+        &self.definition
+    }
+
+    async fn execute(
+        &self,
+        _ctx: &agent_tools::context::ToolContext,
+        _args: serde_json::Value,
+    ) -> Result<serde_json::Value, agent_tools::definition::ToolError> {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        Err(agent_tools::definition::ToolError::execution_failed(
+            &self.name,
+            "slow boom",
+        ))
+    }
+}
+
+/// EV-03（D-03）：empty-response steering 注入后事件序列含
+/// steering-evaluated（phase=empty-response，reset=false；命中策略 +
+/// 计数前后 + budget 剩余）；恢复后正常结束路径发 reset=true 变体
+/// （no-tool-calls 重置点）
+#[tokio::test]
+async fn empty_response_emits_steering_evaluated_event() {
+    let provider = TestProvider::with_scripts(vec![
+        // 第 1 次：空响应
+        vec![ProviderStreamEvent::stop(StopReason::Stop)],
+        // 第 2 次：注入后正常回复
+        vec![
+            ProviderStreamEvent::text("抱歉，我重新回答了"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+    ]);
+    let mut loop_ = loop_with(provider, vec![]);
+
+    let outcome = loop_.run(user("回答")).await;
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+
+    // S5 测钉：快照记录 steering-evaluated 事件 + getter + 断言
+    let evaluated: Vec<&conex_types::events::AgentEvent> = outcome
+        .events
+        .iter()
+        .filter(|e| matches!(e, conex_types::events::AgentEvent::SteeringEvaluated { .. }))
+        .collect();
+    assert!(
+        !evaluated.is_empty(),
+        "事件序列必须含 steering-evaluated（EV-03 发射点接线）"
+    );
+    // evaluate 变体（phase=empty-response，reset=false，命中 recovery）
+    let evaluate_evt = evaluated.iter().find_map(|e| match e {
+        conex_types::events::AgentEvent::SteeringEvaluated {
+            phase,
+            hit_strategies,
+            steering_count_before,
+            steering_count_after,
+            budget_remaining,
+            reset,
+            ..
+        } if !reset => Some((
+            phase,
+            hit_strategies,
+            steering_count_before,
+            steering_count_after,
+            budget_remaining,
+        )),
+        _ => None,
+    });
+    let (phase, hits, before, after, budget) = evaluate_evt.expect("必须有 evaluate 变体");
+    assert_eq!(phase, "empty-response");
+    assert!(hits.contains(&"recovery".to_string()), "命中策略含 recovery");
+    assert_eq!(*before, 0);
+    assert_eq!(*after, 1, "潜在计数含本次注入预占");
+    // budget_remaining = max_steering_budget − 实际计数（评估时 apply 未
+    // 执行，计数仍 0 → 全预算 3；潜在扣减由 steering_count_after 承载）
+    assert_eq!(*budget, Some(3), "评估时点实际计数 0 → 预算剩余 3");
+    // reset 变体（恢复后 no-tool-calls 正常结束重置点，计数清零）
+    let reset_evt = evaluated.iter().find_map(|e| match e {
+        conex_types::events::AgentEvent::SteeringEvaluated {
+            phase,
+            steering_count_before,
+            steering_count_after,
+            reset,
+            ..
+        } if *reset => Some((phase, steering_count_before, steering_count_after)),
+        _ => None,
+    });
+    let (reset_phase, reset_before, reset_after) = reset_evt.expect("必须有 reset 变体");
+    assert_eq!(reset_phase, "no-tool-calls");
+    assert_eq!(*reset_before, 1, "reset 前计数 = 注入后计数");
+    assert_eq!(*reset_after, 0, "reset 后计数清零");
+}
+
+/// EV-03（D-03）：length 阶梯升级后 provider-diagnostic kind=length-escalation
+/// （attempt=1、maxTokens 8192→16384 前后值随 reason 载荷；对齐
+/// stream_error_retry.rs 的 phase=Retry 载荷先例）
+#[tokio::test]
+async fn length_ladder_emits_length_escalation_diagnostic() {
+    let provider = TestProvider::with_scripts(vec![
+        // 第 1 次：length 截断
+        vec![
+            ProviderStreamEvent::text("这是截断的长回复"),
+            ProviderStreamEvent::stop(StopReason::Length),
+        ],
+        // 第 2 次：升级 max_tokens 后完整回复
+        vec![
+            ProviderStreamEvent::text("完整回复"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+    ]);
+    let mut loop_ = loop_with(provider, vec![]);
+
+    let outcome = loop_.run(user("写长文")).await;
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+
+    // S5 测钉：length-escalation 诊断载荷断言
+    let diag = outcome
+        .events
+        .iter()
+        .find_map(|e| match e {
+            conex_types::events::AgentEvent::ProviderDiagnostic { diagnostic, .. } => {
+                Some(diagnostic)
+            }
+            _ => None,
+        })
+        .expect("length 升级必须发 provider-diagnostic 事件");
+    let reason = diag.reason.as_deref().unwrap_or_default();
+    assert!(
+        reason.contains("length-escalation"),
+        "kind=length-escalation 标识随 reason：{reason}"
+    );
+    assert!(
+        reason.contains("8192") && reason.contains("16384"),
+        "maxTokens 升级前后值随载荷：{reason}"
+    );
+    assert_eq!(diag.attempt, Some(1), "attempt=1（首次升级）");
+    assert_eq!(diag.max_attempts, Some(2), "阶梯上限 2");
+}
+
+/// EV-09（D-03）：工具失败 duration_ms 真实化——慢速失败工具（50ms 后
+/// 抛错）的 tool-end duration_ms ≥ 实际执行时长下限；attempt=1、
+/// deduplicated=false、executed_input 非空（实际入参）
+#[tokio::test]
+async fn tool_failure_carries_real_duration_and_atoms() {
+    let provider = TestProvider::with_scripts(vec![
+        // 第 1 轮：工具调用（慢速失败）
+        vec![
+            ProviderStreamEvent::tool_call(
+                Some("call_slow".into()),
+                "slow_fail",
+                serde_json::json!({"v": 1}),
+            ),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+        // 第 2 轮：读工具结果后正常结束
+        vec![
+            ProviderStreamEvent::text("工具失败了，我继续"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+    ]);
+    let tool = Arc::new(SlowFailTool::new("slow_fail"));
+    let mut loop_ = loop_with_tools(provider, vec![tool]);
+
+    let outcome = loop_.run(user("执行")).await;
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+
+    // tool-end 载荷：duration_ms 非零 + 原子要素真值
+    let tool_end = outcome
+        .events
+        .iter()
+        .find_map(|e| match e {
+            conex_types::events::AgentEvent::ToolEnd {
+                result,
+                attempt,
+                deduplicated,
+                executed_input,
+                ..
+            } => Some((result, attempt, deduplicated, executed_input)),
+            _ => None,
+        })
+        .expect("run 必须发射 tool-end");
+    let (result, attempt, deduplicated, executed_input) = tool_end;
+    assert!(result.is_error, "慢速工具抛错");
+    assert!(
+        result.duration_ms >= 40,
+        "失败路径 duration_ms 必须 ≥ 实际执行时长（50ms 睡眠，实测 {}）",
+        result.duration_ms
+    );
+    assert_eq!(attempt, &Some(1), "无审批重试 → attempt=1");
+    assert_eq!(deduplicated, &Some(false), "无幂等命中");
+    assert_eq!(
+        executed_input,
+        &Some(serde_json::json!({"v": 1})),
+        "实际入参 = 模型下发入参（无中间件改写）"
+    );
+}
+
+/// EV-09（D-03）：批事件 calls 摘要级填充 + turn_index 真值——并行批
+/// 2 工具：tool-batch-start.calls 非空（id+toolName，入参不复制）、
+/// tool-batch-end.calls 非空（status+duration）、tool-start.turn_index
+/// = 当前轮次、tool-start.timestamp ≤ tool-end.timestamp（occurred_at
+/// 打点回填）
+#[tokio::test]
+async fn batch_tool_events_carry_summary_calls_and_turn_index() {
+    let provider = TestProvider::with_scripts(vec![
+        // 第 1 轮：并行两个工具调用
+        vec![
+            ProviderStreamEvent::tool_call(
+                Some("call_b1".into()),
+                "echo",
+                serde_json::json!({"v": "x"}),
+            ),
+            ProviderStreamEvent::tool_call(
+                Some("call_b2".into()),
+                "echo",
+                serde_json::json!({"v": "y"}),
+            ),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+        // 第 2 轮：正常收尾
+        vec![
+            ProviderStreamEvent::text("两个工具都完成了"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+    ]);
+    let tool = Arc::new(TestTool::new("echo", serde_json::json!({"ok": true})));
+    let mut loop_ = loop_with(provider, vec![tool]);
+
+    let outcome = loop_.run(user("并行执行")).await;
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+
+    // 批开始 calls 摘要级（id + toolName；input 摘要级不复制全量入参）
+    let batch_start = outcome
+        .events
+        .iter()
+        .find_map(|e| match e {
+            conex_types::events::AgentEvent::ToolBatchStart { calls, .. } => Some(calls),
+            _ => None,
+        })
+        .expect("必须发射 tool-batch-start");
+    assert_eq!(batch_start.len(), 2, "批 calls 非空（摘要级填充）");
+    assert_eq!(batch_start[0].id, "call_b1");
+    assert_eq!(batch_start[0].tool_name, "echo");
+    assert_eq!(batch_start[1].id, "call_b2");
+    assert_eq!(batch_start[1].tool_name, "echo");
+    assert!(
+        batch_start.iter().all(|c| c.input.is_null()),
+        "摘要级：批 calls 不复制全量入参（全量由 tool-start 承载）"
+    );
+    // 批结束 calls 摘要级（status + duration）
+    let batch_end = outcome
+        .events
+        .iter()
+        .find_map(|e| match e {
+            conex_types::events::AgentEvent::ToolBatchEnd { calls, .. } => Some(calls),
+            _ => None,
+        })
+        .expect("必须发射 tool-batch-end");
+    assert_eq!(batch_end.len(), 2, "批结束 calls 非空");
+    assert!(!batch_end[0].is_error && !batch_end[1].is_error);
+    // tool-start turn_index 真值 + occurred_at 打点顺序
+    let starts: Vec<_> = outcome
+        .events
+        .iter()
+        .filter_map(|e| match e {
+            conex_types::events::AgentEvent::ToolStart {
+                turn_index,
+                timestamp,
+                call,
+                ..
+            } => Some((*turn_index, timestamp.clone(), call.id.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(starts.len(), 2);
+    for (turn_index, _, id) in &starts {
+        assert_eq!(*turn_index, Some(1u32), "tool-start.turn_index = 当前轮次（{id}）");
+    }
+    let end_timestamps: Vec<String> = outcome
+        .events
+        .iter()
+        .filter_map(|e| match e {
+            conex_types::events::AgentEvent::ToolEnd { timestamp, .. } => Some(timestamp.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(end_timestamps.len(), 2);
+    for (i, (_, start_ts, _)) in starts.iter().enumerate() {
+        assert!(
+            start_ts.as_str() <= end_timestamps[i].as_str(),
+            "tool-start.timestamp ≤ tool-end.timestamp（occurred_at 打点回填）：{start_ts} vs {}",
+            end_timestamps[i]
+        );
+    }
+    // tool-end attempt 真值（并行路径透传）
+    let attempts: Vec<_> = outcome
+        .events
+        .iter()
+        .filter_map(|e| match e {
+            conex_types::events::AgentEvent::ToolEnd { attempt, .. } => *attempt,
+            _ => None,
+        })
+        .collect();
+    assert_eq!(attempts, vec![1u32, 1], "并行批 attempt=1");
+}
+
+/// EV-04（D-03）：control-intent 入队/消费两态——L2 cooperative_stop
+/// 经总线入队 → 下一安全点消费：事件序列含 control-intent(enqueued) →
+/// control-intent(consumed) 且 intent_id 相同、reason 透出（不再丢弃）
+#[tokio::test]
+async fn control_intent_emits_enqueued_and_consumed() {
+    // Q41（T11.7.2）：虚拟时间护栏（真实 sleep → advance 显式推进）
+    let _time = TimePauseGuard::new();
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::text("这条消息保留"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ])
+    .with_pause(1, 300);
+    let mut loop_ = loop_with(provider, vec![]);
+    let bus = loop_.control_bus();
+
+    let handle = tokio::spawn(async move { loop_.run(user("开始")).await });
+    tokio::time::advance(Duration::from_millis(80)).await;
+    bus.lock()
+        .unwrap()
+        .request_cooperative_stop(Some("用户协作停止".into()), Some("test".into()));
+    // 越过 provider 栅栏（300ms 虚拟停顿），loop 读到协作停止并收场
+    tokio::time::advance(Duration::from_millis(300)).await;
+    let outcome = handle.await.expect("run 不应 panic");
+
+    assert_eq!(outcome.reason, AgentEndReason::Stopped);
+
+    // S5 测钉：control-intent 两态配对断言
+    let intents: Vec<(
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+    )> = outcome
+        .events
+        .iter()
+        .filter_map(|e| match e {
+            conex_types::events::AgentEvent::ControlIntent {
+                kind,
+                intent_id,
+                source,
+                reason,
+                state,
+                ..
+            } => Some((
+                kind.clone(),
+                intent_id.clone(),
+                source.clone(),
+                reason.clone(),
+                state.clone(),
+            )),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !intents.is_empty(),
+        "事件序列必须含 control-intent（EV-04 两态发射）"
+    );
+    let enqueued = intents
+        .iter()
+        .find(|(_, _, _, _, state)| state == "enqueued")
+        .expect("必须有 enqueued 态");
+    let consumed = intents
+        .iter()
+        .find(|(_, _, _, _, state)| state == "consumed")
+        .expect("必须有 consumed 态");
+    assert_eq!(enqueued.0, "cooperative-stop");
+    assert_eq!(enqueued.1, consumed.1, "intent_id 两态配对");
+    assert_eq!(enqueued.2.as_deref(), Some("test"), "source 透出");
+    assert_eq!(
+        enqueued.3.as_deref(),
+        Some("用户协作停止"),
+        "cooperative_stop 的 reason 不再丢弃"
+    );
+    assert_eq!(consumed.3.as_deref(), Some("用户协作停止"), "consumed 同样携带 reason");
 }

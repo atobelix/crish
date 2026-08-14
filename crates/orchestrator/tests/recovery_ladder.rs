@@ -51,6 +51,8 @@ struct InMemoryRecoveryStore {
     events: Mutex<Vec<(String, String, String)>>,
     run_status: Mutex<HashMap<String, (String, String)>>,
     paths: Mutex<HashMap<String, String>>,
+    // LK-02：原 run → parent_tool_call_id 记忆（fork 传播断言面）
+    parent_tool_calls: Mutex<HashMap<String, Option<String>>>,
 }
 
 impl InMemoryRecoveryStore {
@@ -60,6 +62,14 @@ impl InMemoryRecoveryStore {
 
     fn events(&self) -> Vec<(String, String, String)> {
         self.events.lock().unwrap().clone()
+    }
+
+    /// LK-02：预置原 run 行的父工具调用 id（fork 传播测试锚）
+    fn seed_parent_tool_call(&self, run_id: &str, value: Option<String>) {
+        self.parent_tool_calls
+            .lock()
+            .unwrap()
+            .insert(run_id.to_string(), value);
     }
 }
 
@@ -114,6 +124,21 @@ impl RecoveryStore for InMemoryRecoveryStore {
             .unwrap()
             .insert(subagent_run_id.to_string(), path_json.to_string());
         Ok(())
+    }
+
+    fn get_subagent_parent_tool_call_id(
+        &self,
+        _session_id: &str,
+        subagent_run_id: &str,
+    ) -> Result<Option<String>, RecoveryError> {
+        // LK-02：查 seed 记忆，缺省 None（未预置 = 行不存在语义）
+        Ok(self
+            .parent_tool_calls
+            .lock()
+            .unwrap()
+            .get(subagent_run_id)
+            .cloned()
+            .flatten())
     }
 }
 
@@ -214,6 +239,25 @@ impl RecoveryStore for DbStore {
                 message: e.to_string(),
             })
     }
+
+    fn get_subagent_parent_tool_call_id(
+        &self,
+        session_id: &str,
+        subagent_run_id: &str,
+    ) -> Result<Option<String>, RecoveryError> {
+        // LK-02：对齐 recovery_store.rs 的 LocalDb 实现（load_session_agents
+        // 过滤原行）；行缺失 = None
+        let agents = self
+            .db
+            .load_session_agents(session_id)
+            .map_err(|e| RecoveryError::PersistFailed {
+                message: e.to_string(),
+            })?;
+        Ok(agents
+            .iter()
+            .find(|a| a.subagent_run_id == subagent_run_id)
+            .and_then(|a| a.parent_tool_call_id.clone()))
+    }
 }
 
 /// 记录式 spawner：DB 模式同时落库 session_agents 行（pending 首写即
@@ -242,6 +286,10 @@ impl RecordingSpawner {
             db: Some((db, session_id.to_string())),
             reject: false,
         })
+    }
+
+    fn requests(&self) -> Vec<SubagentSpawnRequest> {
+        self.requests.lock().unwrap().clone()
     }
 }
 
@@ -272,7 +320,9 @@ impl SubagentSpawner for RecordingSpawner {
                 subagent_run_id: run_id.clone(),
                 parent_session_id: session_id.clone(),
                 parent_run_id: String::new(),
-                parent_tool_call_id: None,
+                // LK-02：对齐真实 spawner 的 row_for 行为——落库透传请求键
+                // （sqlite fork 传播测试依赖该真值）
+                parent_tool_call_id: req.parent_tool_call_id.clone(),
                 description: "恢复 fork（C7 阶梯 3，承接同一目标）".to_string(),
                 mode: String::new(),
                 status: "running".to_string(),
@@ -291,6 +341,8 @@ impl SubagentSpawner for RecordingSpawner {
                 allowed_write_paths_json: req.allowed_write_paths.as_ref().map(|paths| {
                     serde_json::to_string(paths).expect("路径白名单序列化不应失败")
                 }),
+                // D-02 LK-04 v9 列：测试域无子会话映射（None）
+                sub_session_id: None,
             });
             db.save_session_agents(session_id, &agents)
                 .map_err(|e| SubagentSpawnError::PersistFailed(e.to_string()))?;
@@ -513,6 +565,8 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
             task_type: None,
             display_label: None,
             allowed_write_paths_json: None,
+            // D-02 LK-04 v9 列：测试域无子会话映射（None）
+            sub_session_id: None,
         }],
     )
     .expect("原子代理行落库失败");
@@ -602,6 +656,130 @@ async fn ladder3_fork_persists_path_and_events_in_sqlite() {
         .entry(&record.new_leaf_id)
         .expect("fork 叶子必须存在");
     assert_eq!(new_leaf.parent_id.as_deref(), Some("leaf-a"));
+}
+
+// ── LK-02 fork 反查传播（真实 SQLite：session_agents 行真值）──────
+
+/// LK-02 S5 测钉（有行态，真实 sqlite）：原 run 行带 parent_tool_call_id
+/// → fork 反查传播到新请求（DbStore 反查路径 + RecordingSpawner 落库
+/// 透传，新 run 行同样携带）
+#[tokio::test]
+async fn ladder3_fork_propagates_parent_tool_call_id_in_sqlite() {
+    let ws = TempWorkspace::new("recovery_ladder_lk02");
+    let db = LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+    db.insert_session("s1", "会话").expect("插入会话失败");
+    db.insert_run("run-1", "s1", RunStatus::Running, None, 1)
+        .expect("插入 run 失败");
+    // 原 run 行带父工具调用键（LK-02 反查源）
+    db.save_session_agents(
+        "s1",
+        &[SessionAgent {
+            id: "sub-a".to_string(),
+            subagent_run_id: "run-1".to_string(),
+            parent_session_id: "s1".to_string(),
+            parent_run_id: "run-main".to_string(),
+            parent_tool_call_id: Some("call-orig-lk02".to_string()),
+            description: String::new(),
+            mode: String::new(),
+            status: "running".to_string(),
+            summary: None,
+            messages: Vec::new(),
+            started_at: now_ms(),
+            ended_at: None,
+            depth: Some(1),
+            subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
+            // v9 新列（LK-04 并行契约）：测试域构造点缺省 None
+            sub_session_id: None,
+        }],
+    )
+    .expect("原子代理行落库失败");
+
+    let store: Arc<dyn RecoveryStore> = Arc::new(DbStore { db: db.clone() });
+    let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+    let tree = Arc::new(Mutex::new(SessionTree::new("s1")));
+    tree.lock()
+        .unwrap()
+        .append("leaf-a", serde_json::json!({ "text": "root" }))
+        .unwrap();
+    let spawner = RecordingSpawner::with_db(db.clone(), "s1");
+    let mut coordinator = RecoveryCoordinator::new(
+        "s1",
+        store.clone(),
+        queue.clone(),
+        tree.clone(),
+        spawner.clone(),
+        retry_policy(),
+    )
+    .expect("协调器构造失败");
+
+    let outcome = coordinator
+        .fork_and_reassign(&failure_ctx("run-1", ProviderErrorKind::ServerError, 5, 61_000))
+        .await
+        .expect("fork 应成功");
+    assert_eq!(outcome.ladder, RecoveryLadder::Ladder3Fork);
+    let requests = spawner.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].parent_tool_call_id.as_deref(),
+        Some("call-orig-lk02"),
+        "fork 请求必须经 DbStore 反查传播原行真键"
+    );
+    // 新 run 行同样携带（RecordingSpawner 落库透传，对齐真实 row_for）
+    let agents = db.load_session_agents("s1").expect("读取子代理行失败");
+    let new_row = agents
+        .iter()
+        .find(|a| a.subagent_run_id == "fork-run-0")
+        .expect("新 run 行必须存在");
+    assert_eq!(
+        new_row.parent_tool_call_id.as_deref(),
+        Some("call-orig-lk02"),
+        "fork 新行必须落库传播键（行面真值）"
+    );
+}
+
+/// LK-02 S5 测钉（无行态，真实 sqlite）：原 run 在 session_agents 无行
+/// → fork 照常成功且请求 parent_tool_call_id = None（键缺失不阻断恢复）
+#[tokio::test]
+async fn ladder3_fork_without_row_keeps_none_in_sqlite() {
+    let ws = TempWorkspace::new("recovery_ladder_lk02_none");
+    let db = LocalDb::open(ws.path().join("sessions.db")).expect("打开测试库失败");
+    db.insert_session("s1", "会话").expect("插入会话失败");
+    db.insert_run("run-ghost", "s1", RunStatus::Running, None, 1)
+        .expect("插入 run 失败");
+    // 注意：session_agents 无原 run 行（反查返回 None）
+
+    let store: Arc<dyn RecoveryStore> = Arc::new(DbStore { db: db.clone() });
+    let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+    let tree = Arc::new(Mutex::new(SessionTree::new("s1")));
+    tree.lock()
+        .unwrap()
+        .append("leaf-a", serde_json::json!({ "text": "root" }))
+        .unwrap();
+    let spawner = RecordingSpawner::with_db(db.clone(), "s1");
+    let mut coordinator = RecoveryCoordinator::new(
+        "s1",
+        store.clone(),
+        queue.clone(),
+        tree.clone(),
+        spawner.clone(),
+        retry_policy(),
+    )
+    .expect("协调器构造失败");
+
+    let outcome = coordinator
+        .fork_and_reassign(&failure_ctx("run-ghost", ProviderErrorKind::ServerError, 5, 61_000))
+        .await
+        .expect("fork 应成功（缺键不阻断）");
+    assert_eq!(outcome.ladder, RecoveryLadder::Ladder3Fork);
+    let requests = spawner.requests();
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0].parent_tool_call_id.is_none(),
+        "无行态 fork 保持 None"
+    );
 }
 
 // ── C7 验收 5：重启后未处理阶梯 2 通知仍在队列 ───────────────────

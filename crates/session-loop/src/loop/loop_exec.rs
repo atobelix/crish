@@ -103,7 +103,12 @@ impl AgentSessionLoop {
         self.state.cache_tracker = build_tracker(self.state.options.cache_tracking.as_ref());
 
         // 用户消息入队（force 环）→ INITIALIZED → agent-start（01 §2.1）
+        // EV-12 输入留痕写点：用户消息主路径入队即落库（save_pending_input，
+        // fail-open）——与 enqueue_input（loop_runner.rs）共同构成「每条
+        // 用户消息 1 INSERT」；消费删点见 record_message（handlers/mod.rs）
+        let input_snapshot = input.clone();
         self.state.input_queue.enqueue_force(input);
+        self.spawn_pending_input_save(&input_snapshot);
         if let Err(err) = handlers::dispatch(&mut self.state, E::Initialized) {
             return self.converge(EndDecision::error(&self.state, err.message())).await;
         }
@@ -265,10 +270,15 @@ impl AgentSessionLoop {
                     // 若推进到 turn-complete 则交回主循环收敛（内容保留），
                     // 否则直接 aborted 收场
                     if self.state.machine.state() != S::TurnComplete {
+                        // EV-08：孤儿 turn-start 兜底——直接 aborted 收场
+                        // 不经 turn_complete，补发 turn-end 闭合
+                        handlers::emit_missing_turn_end(&mut self.state);
                         return Some(EndDecision::aborted(&self.state));
                     }
                     return None;
                 }
+                // dispatch 失败（状态机拒绝 ABORT）：同样直接收场，补发闭合
+                handlers::emit_missing_turn_end(&mut self.state);
                 Some(EndDecision::aborted(&self.state))
             }
             RecoveryDecision::Fatal => {
@@ -287,6 +297,11 @@ impl AgentSessionLoop {
     /// 后 `state.conversation` 清空，真实接线每 run 重建 loop 无影响，
     /// 测试路径经 [Self::with_initial_conversation] 续接。
     async fn converge(&mut self, decision: EndDecision) -> RunOutcome {
+        // EV-08：孤儿 turn-start **最终兜底**——任何收敛路径（含未来新增
+        // 路径 / 防御性收敛）在 agent-end 前闭合未完成的 turn（converge 是
+        // 全部收敛路径的唯一收口；current_turn_index 为 None 时幂等无操作，
+        // 与各收敛路径显式挂接并存不重复发射）
+        handlers::emit_missing_turn_end(&mut self.state);
         let reason = decision.reason;
         let error = decision.error.clone();
         let diagnostic = decision.diagnostic.clone();

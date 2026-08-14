@@ -72,6 +72,19 @@ pub enum SteeringReason {
     EmptyResponse,
 }
 
+impl SteeringPhase {
+    /// 事件/元数据使用的字符串形式（`after-tools` / `empty-response` /
+    /// `before-turn`，与 serde kebab-case 序列化同口径——steering-evaluated
+    /// 事件 phase 字段取值来源）
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SteeringPhase::AfterTools => "after-tools",
+            SteeringPhase::BeforeTurn => "before-turn",
+            SteeringPhase::EmptyResponse => "empty-response",
+        }
+    }
+}
+
 impl SteeringReason {
     /// 事件/元数据使用的字符串形式（`tool-errors` / `tool-loop` / `empty-response`）
     pub fn as_str(&self) -> &'static str {
@@ -171,6 +184,32 @@ pub struct AppliedResult {
     pub intervention_required: bool,
 }
 
+/// steering 评估观测轨迹（EV-03 / D-03：steering-evaluated 事件载荷素材）
+///
+/// 由 [SteeringCoordinator::evaluate_traced] 产出，调用方（handler 安全点）
+/// 组装 [steering_evaluated_event] 发射；计数重置点构造「空命中 + before/0」
+/// 轨迹发射 reset=true 变体。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct SteeringEvaluationTrace {
+    /// 命中策略名列表（空 = 无动作；含预算跳过命中）
+    pub hit_strategies: Vec<String>,
+    /// 评估前计数
+    pub steering_count_before: u32,
+    /// 评估后潜在计数（含本次 inject-message 预占）
+    pub steering_count_after: u32,
+}
+
+impl SteeringEvaluationTrace {
+    /// 计数重置轨迹（reset 变体：无策略命中、计数清零）
+    pub(crate) fn reset(steering_count_before: u32) -> Self {
+        Self {
+            hit_strategies: Vec::new(),
+            steering_count_before,
+            steering_count_after: 0,
+        }
+    }
+}
+
 /// 统一纠偏协调器（对齐 TS SteeringCoordinator）
 ///
 /// 职责（01 §3.1-3.3）：
@@ -213,8 +252,27 @@ impl SteeringCoordinator {
         phase: SteeringPhase,
         context: &SteeringContext<'_>,
     ) -> Vec<SteeringAction> {
+        let (actions, _) = self.evaluate_traced(phase, context);
+        actions
+    }
+
+    /// 评估 + 命中策略轨迹（EV-03 / D-03：steering-evaluated 事件载荷素材）。
+    ///
+    /// 与 [Self::evaluate] 同逻辑，额外返回本次评估的观测轨迹：
+    /// - `hit_strategies`：命中策略名列表（策略产出动作即计入，含预算
+    ///   跳过——「命中但未注入」也属观测对象；空 = 无动作）；
+    /// - `steering_count_before`：评估前计数；
+    /// - `steering_count_after`：评估后潜在计数（含本次 inject-message
+    ///   预占，对齐 TS potentialSteeringCount 传递语义）。
+    pub(crate) fn evaluate_traced(
+        &self,
+        phase: SteeringPhase,
+        context: &SteeringContext<'_>,
+    ) -> (Vec<SteeringAction>, SteeringEvaluationTrace) {
+        let steering_count_before = self.steering_count as u32;
         let mut actions = Vec::new();
         let mut potential = self.steering_count;
+        let mut hit_strategies = Vec::new();
         for strategy in &self.strategies {
             if !strategy.phases().contains(&phase) {
                 continue;
@@ -230,6 +288,9 @@ impl SteeringCoordinator {
             let Some(action) = strategy.evaluate(phase, &strategy_ctx) else {
                 continue;
             };
+            // EV-03（D-03）：策略命中记录（聚合语义——单事件一次发射，
+            // 不逐策略逐条发；预算跳过也计入命中）
+            hit_strategies.push(strategy.name().to_string());
             match &action {
                 // 超预算跳过 inject-message（intervention/diagnostic 不受限）。
                 // T06.3 Q08 接线 + Q32 修复：不静默跳过——产出一条
@@ -252,7 +313,14 @@ impl SteeringCoordinator {
             }
             actions.push(action);
         }
-        actions
+        (
+            actions,
+            SteeringEvaluationTrace {
+                hit_strategies,
+                steering_count_before,
+                steering_count_after: potential as u32,
+            },
+        )
     }
 
     /// 执行纠偏动作。
@@ -328,6 +396,12 @@ impl SteeringCoordinator {
         self.steering_count
     }
 
+    /// 当前预算剩余（max_steering_budget − steering_count，0 封底；
+    /// EV-03 / D-03 steering-evaluated 事件 budget_remaining 载荷）
+    pub fn budget_remaining(&self) -> u32 {
+        self.max_steering_budget.saturating_sub(self.steering_count) as u32
+    }
+
     /// 重置纠偏计数（01 §3.3：工具批全部成功 / length 升级 / 无 tool-call 正常结束）
     pub fn reset(&mut self) {
         self.steering_count = 0;
@@ -369,6 +443,43 @@ pub(crate) fn unix_millis() -> u128 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0)
+}
+
+/// 构造 steering-evaluated 事件（EV-03 / D-03，Delta 可丢观测事件）
+///
+/// 发射点两类：
+/// - **evaluate 命中/跳过**：策略评估处（reset=false，hit_strategies 为
+///   命中策略列表，计数前后取自 [SteeringCoordinator::evaluate_traced]）；
+/// - **计数重置**：reset=true，hit_strategies 恒空，计数 = before/0。
+///
+/// 聚合语义（禁止项）：每次评估只发一条（不逐策略逐条发射）。
+pub(crate) fn steering_evaluated_event(
+    session_id: &str,
+    phase: &str,
+    trace: &SteeringEvaluationTrace,
+    budget_remaining: Option<u32>,
+    reset: bool,
+) -> AgentEvent {
+    AgentEvent::SteeringEvaluated {
+        session_id: session_id.to_string(),
+        timestamp: now_iso_utc(),
+        phase: phase.to_string(),
+        hit_strategies: trace.hit_strategies.clone(),
+        steering_count_before: trace.steering_count_before,
+        steering_count_after: trace.steering_count_after,
+        budget_remaining,
+        reset,
+    }
+}
+
+/// Unix 毫秒 → ISO8601 UTC 字符串（EV-09 / D-03：工具执行时刻 occurred_at_ms
+/// 打点回填 tool 域事件 timestamp 用；与 [now_iso_utc] 同精度同格式）
+pub(crate) fn iso_from_epoch_ms(ms: u64) -> String {
+    let secs = ms / 1000;
+    let millis = ms % 1000;
+    let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
+    let (year, month, day) = civil_from_days((secs / 86400) as i64);
+    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
 }
 
 pub use diagnostics::SelfTerminationDiagnostic;
@@ -804,6 +915,169 @@ mod tests {
         assert_eq!(civil_from_days(0), (1970, 1, 1));
         assert_eq!(civil_from_days(1), (1970, 1, 2));
         assert_eq!(civil_from_days(20665), (2026, 7, 31));
+    }
+
+    /// EV-03（D-03）：evaluate_traced 命中轨迹——命中时 hit_strategies
+    /// 含策略名、计数前后 = 实际/潜在计数；无命中（阶段未注册）时为空且
+    /// 计数不变
+    #[test]
+    fn evaluate_traced_reports_hit_strategies_and_potential_count() {
+        let mut coordinator = SteeringCoordinator::new(
+            vec![Box::new(FixedStrategy {
+                phases: &[SteeringPhase::EmptyResponse],
+                action: SteeringAction::InjectMessage {
+                    message: fake_steering_message(),
+                    reason: SteeringReason::EmptyResponse,
+                },
+            })],
+            SteeringCoordinatorOptions {
+                max_steering_budget: Some(3),
+            },
+        );
+        let mut conversation = Vec::new();
+
+        // 命中：evaluate_traced 返回轨迹（命中名 + 潜在计数 0→1）
+        let (actions, trace) =
+            coordinator.evaluate_traced(SteeringPhase::EmptyResponse, &empty_context());
+        assert_eq!(actions.len(), 1);
+        assert_eq!(trace.hit_strategies, vec!["fixed".to_string()]);
+        assert_eq!(trace.steering_count_before, 0);
+        assert_eq!(trace.steering_count_after, 1, "潜在计数含本次注入预占");
+
+        // apply 后实际计数 +1；预算剩余 = 3 − 1 = 2
+        coordinator.apply(&actions, "sess-1", &mut conversation);
+        assert_eq!(coordinator.get_steering_count(), 1);
+        assert_eq!(coordinator.budget_remaining(), 2);
+
+        // 未关注阶段：空命中轨迹（hit 空、计数不变）
+        let (actions, trace) = coordinator.evaluate_traced(SteeringPhase::AfterTools, &empty_context());
+        assert!(actions.is_empty());
+        assert!(trace.hit_strategies.is_empty());
+        assert_eq!(trace.steering_count_before, 1);
+        assert_eq!(trace.steering_count_after, 1);
+    }
+
+    /// EV-03（D-03）：预算耗尽跳过 inject-message 时策略仍计入命中
+    /// （「命中但未注入」属观测对象——budget-exhausted 诊断路径）
+    #[test]
+    fn evaluate_traced_counts_hit_even_when_budget_skips() {
+        let mut coordinator = SteeringCoordinator::new(
+            vec![Box::new(FixedStrategy {
+                phases: &[SteeringPhase::EmptyResponse],
+                action: SteeringAction::InjectMessage {
+                    message: fake_steering_message(),
+                    reason: SteeringReason::EmptyResponse,
+                },
+            })],
+            SteeringCoordinatorOptions {
+                max_steering_budget: Some(1),
+            },
+        );
+        let mut conversation = Vec::new();
+        // 首轮注入（计数 0→1）
+        let (actions, trace) =
+            coordinator.evaluate_traced(SteeringPhase::EmptyResponse, &empty_context());
+        assert_eq!(trace.hit_strategies, vec!["fixed".to_string()]);
+        coordinator.apply(&actions, "sess-1", &mut conversation);
+        assert_eq!(coordinator.get_steering_count(), 1);
+        // 预算耗尽：策略命中但动作被跳过为 budget-exhausted 诊断——
+        // hit_strategies 仍含策略名，潜在计数不再增长
+        let (actions, trace) =
+            coordinator.evaluate_traced(SteeringPhase::EmptyResponse, &empty_context());
+        assert_eq!(trace.hit_strategies, vec!["fixed".to_string()]);
+        assert_eq!(trace.steering_count_after, 1, "预算跳过不预占计数");
+        assert!(matches!(
+            actions.as_slice(),
+            [SteeringAction::EmitDiagnostic { reason, .. }]
+                if reason == "steering-budget-exhausted"
+        ));
+    }
+
+    /// EV-03（D-03）：steering_evaluated_event 载荷组装——evaluate 变体
+    /// （reset=false）与 reset 变体（reset=true、计数清零）字段可 grep
+    #[test]
+    fn steering_evaluated_event_carries_trace_and_reset_flag() {
+        let trace = SteeringEvaluationTrace {
+            hit_strategies: vec!["recovery".to_string()],
+            steering_count_before: 0,
+            steering_count_after: 1,
+        };
+        let evaluate_event = steering_evaluated_event(
+            "sess-1",
+            SteeringPhase::EmptyResponse.as_str(),
+            &trace,
+            Some(2),
+            false,
+        );
+        match evaluate_event {
+            AgentEvent::SteeringEvaluated {
+                session_id,
+                phase,
+                hit_strategies,
+                steering_count_before,
+                steering_count_after,
+                budget_remaining,
+                reset,
+                ..
+            } => {
+                assert_eq!(session_id, "sess-1");
+                assert_eq!(phase, "empty-response");
+                assert_eq!(hit_strategies, vec!["recovery".to_string()]);
+                assert_eq!(steering_count_before, 0);
+                assert_eq!(steering_count_after, 1);
+                assert_eq!(budget_remaining, Some(2));
+                assert!(!reset);
+            }
+            other => panic!("应为 SteeringEvaluated，实际 {other:?}"),
+        }
+        // reset 变体：空命中 + before/0
+        let reset_event = steering_evaluated_event(
+            "sess-1",
+            "no-tool-calls",
+            &SteeringEvaluationTrace::reset(3),
+            Some(3),
+            true,
+        );
+        match reset_event {
+            AgentEvent::SteeringEvaluated {
+                phase,
+                hit_strategies,
+                steering_count_before,
+                steering_count_after,
+                reset,
+                ..
+            } => {
+                assert_eq!(phase, "no-tool-calls");
+                assert!(hit_strategies.is_empty());
+                assert_eq!(steering_count_before, 3);
+                assert_eq!(steering_count_after, 0);
+                assert!(reset);
+            }
+            other => panic!("应为 SteeringEvaluated，实际 {other:?}"),
+        }
+    }
+
+    /// EV-09（D-03）：iso_from_epoch_ms 与 now_iso_utc 同格式同精度
+    /// （YYYY-MM-DDTHH:MM:SS.mmmZ；occurred_at 打点回填 tool 域事件）
+    #[test]
+    fn iso_from_epoch_ms_matches_now_format() {
+        // 格式形状（与 now_iso_utc 同布局，确定性断言不依赖墙钟跳动）
+        let iso = iso_from_epoch_ms(unix_millis() as u64);
+        assert_eq!(iso.len(), 24, "含毫秒与 Z 后缀");
+        assert!(iso.ends_with('Z'));
+        let mid = &iso[..iso.len() - 1];
+        assert_eq!(&mid[4..5], "-");
+        assert_eq!(&mid[7..8], "-");
+        assert_eq!(&mid[10..11], "T");
+        assert_eq!(&mid[13..14], ":");
+        assert_eq!(&mid[16..17], ":");
+        assert_eq!(&mid[19..20], ".");
+        // 已知锚点：0 → 1970-01-01T00:00:00.000Z；2026-08-01 10:30:45.123
+        assert_eq!(iso_from_epoch_ms(0), "1970-01-01T00:00:00.000Z");
+        assert_eq!(
+            iso_from_epoch_ms(20_666 * 86_400_000 + 10 * 3_600_000 + 30 * 60_000 + 45_123),
+            "2026-08-01T10:30:45.123Z"
+        );
     }
 }
 

@@ -21,6 +21,8 @@ struct InMemoryRecoveryStore {
     events: StdMutex<Vec<(String, String, String)>>,
     run_status: StdMutex<HashMap<String, (String, String)>>,
     paths: StdMutex<HashMap<String, String>>,
+    // LK-02：原 run → parent_tool_call_id 记忆（fork 传播断言面）
+    parent_tool_calls: StdMutex<HashMap<String, Option<String>>>,
 }
 
 impl InMemoryRecoveryStore {
@@ -38,6 +40,14 @@ impl InMemoryRecoveryStore {
 
     fn path(&self, run_id: &str) -> Option<String> {
         self.paths.lock().unwrap().get(run_id).cloned()
+    }
+
+    /// LK-02：预置原 run 行的父工具调用 id（fork 传播测试锚）
+    fn seed_parent_tool_call(&self, run_id: &str, value: Option<String>) {
+        self.parent_tool_calls
+            .lock()
+            .unwrap()
+            .insert(run_id.to_string(), value);
     }
 }
 
@@ -92,6 +102,21 @@ impl RecoveryStore for InMemoryRecoveryStore {
             .unwrap()
             .insert(subagent_run_id.to_string(), path_json.to_string());
         Ok(())
+    }
+
+    fn get_subagent_parent_tool_call_id(
+        &self,
+        _session_id: &str,
+        subagent_run_id: &str,
+    ) -> Result<Option<String>, RecoveryError> {
+        // LK-02：查 seed 记忆，缺省 None（未预置 = 行不存在语义）
+        Ok(self
+            .parent_tool_calls
+            .lock()
+            .unwrap()
+            .get(subagent_run_id)
+            .cloned()
+            .flatten())
     }
 }
 

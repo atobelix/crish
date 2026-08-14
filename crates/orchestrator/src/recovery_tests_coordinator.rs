@@ -99,6 +99,22 @@ async fn ladder2_activation_path_and_acknowledge() {
         "幂等：二次确认无变更"
     );
     assert_eq!(coordinator.pending_notifications(), 0);
+    // EV-08：翻转留痕——每次实际翻转发 recovery-acknowledged（typed
+    // 序列化，载荷含 subagentRunId；幂等二次确认无新事件）
+    let events = env.store.events();
+    let ack: Vec<_> = events
+        .iter()
+        .filter(|(_, t, _)| t == RECOVER_ACKNOWLEDGED_EVENT)
+        .collect();
+    assert_eq!(ack.len(), 1, "仅实际翻转发射一次（幂等不发）");
+    let (session, event_type, payload) = &ack[0];
+    assert_eq!(session, "s1");
+    assert_eq!(event_type, "recovery-acknowledged");
+    let value: serde_json::Value = serde_json::from_str(payload).expect("载荷合法 JSON");
+    assert_eq!(value["type"], "recovery-acknowledged", "typed 顶层 type 键");
+    assert_eq!(value["sessionId"], "s1");
+    assert_eq!(value["subagentRunId"], "run-1", "载荷携带被确认的 run id");
+    assert!(value["timestamp"].as_str().is_some(), "时间戳非空");
 }
 
 /// 重启恢复：未处理的阶梯 2 通知仍在队列（04 C7 验收 5）
@@ -548,5 +564,44 @@ async fn recovery_event_payload_type_tagged() {
     assert!(
         report.get("attempts").is_some(),
         "report 镜像保真 attempts（typed 变体不含该字段）"
+    );
+}
+
+// ── LK-02 fork 反查传播（parent_tool_call_id 双态）───────────────
+
+/// LK-02 S5 测钉（有行态）：fork 前反查原 session_agents 行并传播
+/// parent_tool_call_id——fork 请求携带原行真值（链路键随 fork 延续）
+#[tokio::test]
+async fn fork_propagates_parent_tool_call_id_from_original_row() {
+    let (env, mut coordinator) = env();
+    env.store
+        .seed_parent_tool_call("run-1", Some("call-orig-1".to_string()));
+    let failure_ctx = ctx("run-1", ProviderErrorKind::ServerError, 4, 61_000);
+    let outcome = coordinator.fork_and_reassign(&failure_ctx).await.unwrap();
+    assert_eq!(outcome.ladder, RecoveryLadder::Ladder3Fork);
+    let requests = env.spawner.requests();
+    assert_eq!(requests.len(), 1);
+    assert_eq!(
+        requests[0].parent_tool_call_id.as_deref(),
+        Some("call-orig-1"),
+        "fork 请求必须传播原 run 行的 parent_tool_call_id"
+    );
+}
+
+/// LK-02 S5 测钉（无行态）：原 run 行不存在（或键为空）→ fork 照常
+/// 成功，请求 parent_tool_call_id = None（键是观测增强非前置条件，
+/// 不因缺键阻断恢复）
+#[tokio::test]
+async fn fork_without_parent_tool_call_row_keeps_none_and_succeeds() {
+    let (env, mut coordinator) = env();
+    // 不预置原 run 行（store 反查 None）
+    let failure_ctx = ctx("run-ghost", ProviderErrorKind::ServerError, 4, 61_000);
+    let outcome = coordinator.fork_and_reassign(&failure_ctx).await.unwrap();
+    assert_eq!(outcome.ladder, RecoveryLadder::Ladder3Fork);
+    let requests = env.spawner.requests();
+    assert_eq!(requests.len(), 1);
+    assert!(
+        requests[0].parent_tool_call_id.is_none(),
+        "查不到原行键 → 保持 None（fork 不被观测缺口阻断）"
     );
 }

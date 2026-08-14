@@ -33,6 +33,8 @@ impl ToolExecutor {
             category: call.category,
             concurrency: call.concurrency,
             summary: call.summary.clone(),
+            // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp）
+            occurred_at_ms: Some(crate::steering::unix_millis() as u64),
         });
 
         // abort 前置检查
@@ -46,12 +48,18 @@ impl ToolExecutor {
                     output: serde_json::Value::Null,
                     error_code: Some("tool.cancelled".to_string()),
                     error_message: Some("aborted".to_string()),
+                    // EV-09（D-03）：未执行路径原子要素留空
+                    attempt: None,
+                    deduplicated: None,
+                    executed_input: None,
+                    occurred_at_ms: None,
                 });
                 return ClassifiedToolResult::error(
                     &call.id,
                     &call.tool_name,
                     ToolErrorKind::Cancelled,
                     "aborted",
+                    0,
                 );
             }
         }
@@ -98,6 +106,7 @@ impl ToolExecutor {
                             &call.tool_name,
                             ToolErrorKind::Cancelled,
                             "aborted",
+                            0,
                         ),
                         ApprovalWaitOutcome::Decision(ApprovalDecision::Approved) => {
                             let (r, extra) = self
@@ -112,6 +121,7 @@ impl ToolExecutor {
                                 &call.tool_name,
                                 ToolErrorKind::UserDenied,
                                 denied_message(requester.is_some(), &reason),
+                                0,
                             )
                         }
                         ApprovalWaitOutcome::Decision(ApprovalDecision::Expired) => {
@@ -130,6 +140,7 @@ impl ToolExecutor {
                                 &call.tool_name,
                                 ToolErrorKind::ApprovalExpired,
                                 "approval expired",
+                                0,
                             )
                         }
                     }
@@ -145,6 +156,7 @@ impl ToolExecutor {
                         &call.tool_name,
                         ToolErrorKind::ApprovalRequired,
                         self.revert_refusal_message(call),
+                        0,
                     )
                 }
                 _ => {
@@ -167,6 +179,11 @@ impl ToolExecutor {
             output: r.output.clone(),
             error_code: r.error_kind.map(|k| k.error_code().to_string()),
             error_message: r.error_message.clone(),
+            // EV-09（D-03）：原子要素透传（attempt/dedup/实际入参/打点）
+            attempt: Some(r.attempt),
+            deduplicated: Some(r.deduplicated),
+            executed_input: r.executed_input.clone(),
+            occurred_at_ms: r.occurred_at_ms,
         });
         r
     }
@@ -177,6 +194,8 @@ impl ToolExecutor {
     /// [ApprovalChannel]（真实审批请求 + abort 取消），full-access 模式
     /// [NoopAskChannel]（自动放行，T0–T3 语义），其余未接线 None（工具
     /// 自报 tool.requires_approval → 执行器分类 ApprovalRequired 透传）。
+    /// `attempt`（EV-09 / D-03）：本次执行在审批重试链中的序号（首
+    /// attempt=1，requires_approval 审批通过后重试=2）。
     /// 返回（结果, 审批附加事件）。
     async fn execute_single(
         &self,
@@ -185,6 +204,7 @@ impl ToolExecutor {
         options: &ToolBatchOptions,
         abort: Option<&crate::safe_point::AbortSignal>,
         approval: Option<Arc<dyn ApprovalGate>>,
+        attempt: u32,
     ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
         // 未知工具
         let tool = match self.registry.get(&call.tool_name) {
@@ -196,6 +216,7 @@ impl ToolExecutor {
                         &call.tool_name,
                         ToolErrorKind::NotFound,
                         format!("unknown tool: {}", call.tool_name),
+                        0,
                     ),
                     Vec::new(),
                 )
@@ -306,6 +327,7 @@ impl ToolExecutor {
                         &call.tool_name,
                         ToolErrorKind::Cancelled,
                         "aborted",
+                        0,
                     ),
                     Vec::new(),
                 );
@@ -364,6 +386,7 @@ impl ToolExecutor {
                     &call.tool_name,
                     ToolErrorKind::ExecutionFailed,
                     reason,
+                    0,
                 ),
                 Vec::new(),
             );
@@ -441,6 +464,9 @@ impl ToolExecutor {
         };
 
         let duration_ms = start.elapsed().as_millis() as u64;
+        // EV-09（D-03）：执行完成时刻打点（ms epoch；翻译层回填
+        // tool-end.timestamp，替代批收口翻译时刻）
+        let occurred_at_ms = crate::steering::unix_millis() as u64;
 
         // 审批附加事件（approval-requested 等，执行后取回）
         let recorded = approval_channel
@@ -456,31 +482,41 @@ impl ToolExecutor {
 
         if let Some(sig) = abort {
             if sig.is_aborted() {
-                return (
-                    ClassifiedToolResult::error(
-                        &call.id,
-                        &call.tool_name,
-                        ToolErrorKind::Cancelled,
-                        "aborted",
-                    ),
-                    recorded,
+                // EV-09（D-03）：执行期间 abort——耗时真实化（确实执行了
+                // 这么久）；实际入参 = 中间件改写后入参
+                let mut r = ClassifiedToolResult::error(
+                    &call.id,
+                    &call.tool_name,
+                    ToolErrorKind::Cancelled,
+                    "aborted",
+                    duration_ms,
                 );
+                r.attempt = attempt;
+                r.executed_input = Some(exec_input.clone());
+                r.occurred_at_ms = Some(occurred_at_ms);
+                return (r, recorded);
             }
         }
 
         match outcome {
             // 竞速获胜：abort 已触发（上方检查兜底），防御性按取消处理
-            None => (
-                ClassifiedToolResult::error(
+            None => {
+                let mut r = ClassifiedToolResult::error(
                     &call.id,
                     &call.tool_name,
                     ToolErrorKind::Cancelled,
                     "aborted",
-                ),
-                recorded,
-            ),
-            Some(Err(_elapsed)) => (
-                ClassifiedToolResult::error(
+                    duration_ms,
+                );
+                r.attempt = attempt;
+                r.executed_input = Some(exec_input.clone());
+                r.occurred_at_ms = Some(occurred_at_ms);
+                (r, recorded)
+            }
+            Some(Err(_elapsed)) => {
+                // EV-09（D-03）：超时耗时真实化（duration_ms = 实际执行
+                // 时长 ≥ 超时阈值语义由调用方保证）
+                let mut r = ClassifiedToolResult::error(
                     &call.id,
                     &call.tool_name,
                     ToolErrorKind::Timeout,
@@ -488,9 +524,13 @@ impl ToolExecutor {
                         "tool {} timed out after {:?}",
                         call.tool_name, options.timeout
                     ),
-                ),
-                recorded,
-            ),
+                    duration_ms,
+                );
+                r.attempt = attempt;
+                r.executed_input = Some(exec_input.clone());
+                r.occurred_at_ms = Some(occurred_at_ms);
+                (r, recorded)
+            }
             Some(Ok(Ok(tool_result))) => {
                 if tool_result.deduplicated {
                     // 幂等去重：未真正执行，跳过 on_result 改写链，仅广播
@@ -506,10 +546,15 @@ impl ToolExecutor {
                             })
                             .await;
                     }
-                    (
-                        ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, 0),
-                        recorded,
-                    )
+                    // EV-09（D-03）：deduplicated=true 标记（守卫命中 =
+                    // 未真正执行，duration 保持 0）
+                    let mut r =
+                        ClassifiedToolResult::ok(&call.id, &call.tool_name, tool_result.output, 0);
+                    r.attempt = attempt;
+                    r.deduplicated = true;
+                    r.executed_input = Some(exec_input.clone());
+                    r.occurred_at_ms = Some(occurred_at_ms);
+                    (r, recorded)
                 } else {
                     // 3) middleware on_result 链：可改写输出；Err/超时记录
                     //    日志并降级透传原输出（后置钩子错误不改变已完成的
@@ -566,15 +611,18 @@ impl ToolExecutor {
                             })
                             .await;
                     }
-                    (
-                        ClassifiedToolResult::ok(
-                            &call.id,
-                            &call.tool_name,
-                            final_output,
-                            duration_ms,
-                        ),
-                        recorded,
-                    )
+                    // EV-09（D-03）：实际入参 = 中间件改写后的 exec_input
+                    //（与 ToolStart.input 展示原始入参对照）
+                    let mut r = ClassifiedToolResult::ok(
+                        &call.id,
+                        &call.tool_name,
+                        final_output,
+                        duration_ms,
+                    );
+                    r.attempt = attempt;
+                    r.executed_input = Some(exec_input.clone());
+                    r.occurred_at_ms = Some(occurred_at_ms);
+                    (r, recorded)
                 }
             }
             Some(Ok(Err(err))) => {
@@ -636,10 +684,13 @@ impl ToolExecutor {
                         .await;
                 }
                 let (kind, msg) = classify_tool_error(&err);
-                (
-                    ClassifiedToolResult::error(&call.id, &call.tool_name, kind, msg),
-                    recorded,
-                )
+                // EV-09（D-03）：执行失败耗时真实化（duration_ms = 实际
+                // 执行时长；实际入参 = 中间件改写后入参）
+                let mut r = ClassifiedToolResult::error(&call.id, &call.tool_name, kind, msg, duration_ms);
+                r.attempt = attempt;
+                r.executed_input = Some(exec_input.clone());
+                r.occurred_at_ms = Some(occurred_at_ms);
+                (r, recorded)
             }
         }
     }
@@ -652,6 +703,10 @@ impl ToolExecutor {
     /// 防循环）；拒绝返回明确拒绝结果（Denied 语义）；无门时透传需审批
     /// 状态给模型（不再伪装成 SoftDeny 可自行降级）。
     /// 返回（结果, 审批附加事件）。
+    ///
+    /// EV-09（D-03）：attempt 链——首 execute_single = attempt 1，审批
+    /// 通过后重试 = attempt 2（终态载荷可查审批重试发生）；审批拒绝/
+    /// 过期路径保持首 attempt 载荷。
     pub(crate) async fn execute_single_with_retry(
         &self,
         call: &ToolBatchCall,
@@ -661,7 +716,7 @@ impl ToolExecutor {
         approval: Option<Arc<dyn ApprovalGate>>,
     ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
         let (r, extra) = self
-            .execute_single(call, ctx, options, abort, approval.clone())
+            .execute_single(call, ctx, options, abort, approval.clone(), 1)
             .await;
         if r.error_kind != Some(ToolErrorKind::ApprovalRequired) {
             return (r, extra);
@@ -675,9 +730,9 @@ impl ToolExecutor {
         match verdict {
             PermissionVerdict::Deny => (denied_result(call, options), extra),
             PermissionVerdict::Allow => {
-                // full-access：自动放行，直接重试执行一次
+                // full-access：自动放行，直接重试执行一次（attempt 2）
                 let (r2, extra2) =
-                    self.execute_single(call, ctx, options, abort, approval).await;
+                    self.execute_single(call, ctx, options, abort, approval, 2).await;
                 (r2, [extra, extra2].concat())
             }
             PermissionVerdict::NeedsApproval => match approval {
@@ -710,12 +765,14 @@ impl ToolExecutor {
                                 &call.tool_name,
                                 ToolErrorKind::Cancelled,
                                 "aborted",
+                                0,
                             ),
                             extra,
                         ),
                         ApprovalWaitOutcome::Decision(ApprovalDecision::Approved) => {
+                            // 审批通过：重试执行一次（attempt 2）
                             let (r2, extra2) = self
-                                .execute_single(call, ctx, options, abort, Some(gate))
+                                .execute_single(call, ctx, options, abort, Some(gate), 2)
                                 .await;
                             (r2, [extra, extra2].concat())
                         }
@@ -725,6 +782,7 @@ impl ToolExecutor {
                                 &call.tool_name,
                                 ToolErrorKind::UserDenied,
                                 denied_message(requester.is_some(), &reason),
+                                0,
                             ),
                             extra,
                         ),
@@ -741,6 +799,7 @@ impl ToolExecutor {
                                     &call.tool_name,
                                     ToolErrorKind::ApprovalExpired,
                                     "approval expired",
+                                    0,
                                 ),
                                 extra,
                             )

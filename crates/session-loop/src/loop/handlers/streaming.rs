@@ -16,7 +16,7 @@
 //!   6. 安全点（stream 结束且消息已落盘，不丢本轮输出，01 §2.4 步骤 6）；
 //!   7. 分类分派（01 §2.4 步骤 7）。
 
-use conex_types::events::AgentEvent;
+use conex_types::events::{AgentEvent, TurnUsage};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
 use conex_types::response::ProviderOutput;
 use conex_types::session::AgentSessionEvent as E;
@@ -30,8 +30,8 @@ use crate::stream::{
 
 use super::super::end::EndDecision;
 use super::super::handlers::{
-    check_control, clamp_max_tokens, dispatch, estimate_context, new_message_id, HandlerOutcome,
-    LoopState,
+    check_control, clamp_max_tokens, dispatch, emit_missing_turn_end, estimate_context,
+    new_message_id, HandlerOutcome, LoopState,
 };
 use super::super::LoopError;
 use super::{no_tool_calls, stream_error};
@@ -61,12 +61,22 @@ pub(crate) async fn handle(
     if let Some(tracker) = &mut state.cache_tracker {
         tracker.capture_signature(system.as_deref(), &tools, &state.conversation);
     }
+    // EV-11（D-03 EV-13）：provider 请求锚点（Delta 可丢）——请求发出
+    // 时刻捕获 + 发射；支撑「provider 请求总等待 / 首字节延迟」可测
+    // （turn-start 是会话循环侧时间，请求构造 / 排队 / 连接无锚点，
+    // 09 §4.1 缺口）。request 携带 &LoopState 整体不可变借用，期间无法
+    // &mut state 推事件（E0502 字段级拆分不可达——借用经生命周期参数
+    // 绑定到整体），故时点取在 stream 调用前一刻、发射紧跟调用返回后
+    // （request 最后使用点 = stream 调用，NLL 允许此后 &mut state；
+    // 消费循环尚未开始，锚点必然先于任何 message-delta）。
     let request = build_request(state);
+    let request_started_at_ms = crate::steering::unix_millis() as u64;
+    let result = provider.stream(&request).await;
+    emit_provider_request_anchored(state, request_started_at_ms);
     // T09.1 双轨：预生成 assistant 消息 id——实时 delta 与最终收口消息共用
     // 同一 id，保证 message-delta / message-start / message-end 的
     // message_id 对齐（前端按 messageId 累加）
     let assistant_message_id = new_message_id("assistant");
-    let result = provider.stream(&request).await;
 
     // 4. 增量消费（T09.1：逐事件边收边聚合 + delta 实时双轨发射）
     // 契约 v1（PE-02 §3.1）：流前 Err = 未产出任何事件（进重试阶梯）；
@@ -166,6 +176,10 @@ pub(crate) async fn handle(
     // CacheMiss 由 T-40 按告警阈值转 cache-waste-alert 事件（本层只记录日志，
     // 不越界发事件；aborted / error 回合的实测 usage 照记，pi 语义）
     consume_cache_usage(state, &consumed);
+    // EV-11（D-03 EV-13）：每 turn usage 槽位——turn-complete 收口注入
+    // TurnEnd.usage（六字段真值）；provider 未报告 usage（对象缺失）时
+    // 保持 None（诚实留空，不猜前端估算）
+    state.turn_usage = turn_usage_from_metadata(&consumed.metadata);
 
     // 5. 响应分类（01 §2.4 步骤 5）
     match &consumed.response {
@@ -250,6 +264,10 @@ pub(crate) async fn handle(
 /// T09.9 Q40：stream_error 重试阶梯入口的 abort 收场复用本路径
 /// （「与正常收场共享决策路径」——收场决策单一化，不另起分支）。
 pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome, LoopError> {
+    // EV-08：孤儿 turn-start 兜底——abort 收场路径不经 turn_complete
+    //（turn-end 正常发射点），补发闭合（current_turn_index 为 None 时
+    // 幂等无操作；stream_error 阶梯复用本路径同样覆盖）
+    emit_missing_turn_end(state);
     let action = {
         let mut bus = state.control_bus.lock().unwrap_or_else(|e| e.into_inner());
         crate::safe_point::apply_safe_point_control(&mut bus, Some(&state.abort_signal))
@@ -357,6 +375,25 @@ pub(crate) fn ensure_tools_snapshot(state: &mut LoopState) {
     }
 }
 
+/// provider 请求锚点发射（EV-11/D-03：请求发出点，Delta 可丢）
+///
+/// 载荷：request_started_at_ms（请求发出时刻，epoch 毫秒——调用方在
+/// provider.stream 前一刻捕获）、model（当前模型名，经 cache_tracker
+/// 装配面——未配置缓存测量时 None，契约 Option）、turn_index（当前
+/// 轮次，与 turn-start 同值口径——TURN_PREPARED 递增后）。
+fn emit_provider_request_anchored(state: &mut LoopState, request_started_at_ms: u64) {
+    let session_id = state.machine.context().session_id.clone();
+    let turn_index = state.machine.context().turn_index;
+    let model = state.cache_tracker.as_ref().map(|t| t.model().to_string());
+    state.events.push(AgentEvent::ProviderRequestAnchored {
+        session_id,
+        timestamp: crate::steering::now_iso_utc(),
+        turn_index,
+        model,
+        request_started_at_ms,
+    });
+}
+
 /// 诊断事件透出（01 §2.4 步骤 4：provider-diagnostic）
 fn emit_diagnostics(state: &mut LoopState, consumed: &ConsumeResult) {
     let session_id = state.machine.context().session_id.clone();
@@ -367,6 +404,24 @@ fn emit_diagnostics(state: &mut LoopState, consumed: &ConsumeResult) {
             diagnostic: diagnostic.clone(),
         });
     }
+}
+
+/// 每 turn usage 提取（EV-11/D-03）：`consumed.metadata.usage`（ProviderUsage
+/// camelCase 六键：promptTokens/completionTokens/totalTokens/cacheReadTokens/
+/// cacheWriteTokens/cacheMissTokens，consume 收口处原样写入，stream.rs:469）
+/// → [TurnUsage]；usage 对象缺失 = provider 未报告 → None（诚实留空，
+/// 与 TurnEnd.usage 的 Option 契约一致，旧帧缺省读 None 兼容）
+fn turn_usage_from_metadata(metadata: &serde_json::Value) -> Option<TurnUsage> {
+    let usage = metadata.get("usage")?.as_object()?;
+    let get = |key: &str| usage.get(key).and_then(|v| v.as_u64()).unwrap_or(0);
+    Some(TurnUsage {
+        prompt_tokens: get("promptTokens"),
+        completion_tokens: get("completionTokens"),
+        total_tokens: get("totalTokens"),
+        cache_read_tokens: get("cacheReadTokens"),
+        cache_write_tokens: get("cacheWriteTokens"),
+        cache_miss_tokens: get("cacheMissTokens"),
+    })
 }
 
 /// 缓存 usage 消费（P5 S2 / T-36）：`metadata.usage`（ProviderUsage camelCase

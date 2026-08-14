@@ -97,9 +97,10 @@ pub(crate) async fn handle(
         record_message(state, tool_result_message(result));
     }
 
-    // 4. 结果全非 error → resetSteeringCount（01 §2.8 步骤 4 / 01 §3.3 ①）
+    // 4. 结果全非 error → resetSteeringCount（01 §2.8 步骤 4 / 01 §3.3 ①；
+    //    EV-03：reset 前后计数进 steering-evaluated 事件）
     if all_ok {
-        state.steering.reset();
+        super::super::handlers::emit_steering_reset_event(state, "after-tools");
     }
 
     // 5. findFatalToolError（01 §2.8 步骤 6）：runtime-error + ERROR →
@@ -201,9 +202,65 @@ fn tool_output_from_result(result: &ClassifiedToolResult) -> ToolOutput {
 }
 
 /// 工具事件 → AgentEvent（ToolBatchResult 组装，前端硬依赖 03 §5.1-7/8）
+///
+/// EV-09（D-03）：
+/// - **批 calls 摘要级填充**：tool-batch-start.calls / tool-batch-end.calls
+///   为摘要级（call id + toolName + status + duration；input/output 全量
+///   仍由 tool-start/tool-end 承载，不复制——序列化体积控制，反过度设计）；
+/// - **occurred_at 打点回填**：tool-start/tool-end 的 timestamp 优先取
+///   执行器打点的 occurred_at_ms（真实执行时刻），缺省回退翻译时刻
+///   （批收口语义：事件 = 批收口一次性广播，非实时轨，见 tool_events.rs
+///   头注）；并行组 tool-end 顺序即完成时刻顺序；
+/// - **turn_index 真值**：工具事件轮次关联键 = 当前机器上下文轮次
+///   （TURN_PREPARED 递增后，与 message-end.turnIndex 同值口径）。
 fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
     let session_id = state.machine.context().session_id.clone();
+    let turn_index = Some(state.machine.context().turn_index);
     let mut batch_id = String::new();
+    // 第一遍：收集批级摘要（batch-start.calls / batch-end.calls 摘要级
+    // 填充素材——全量 input/output 不复制）
+    let mut calls_summary: Vec<ToolBatchCall> = Vec::new();
+    let mut results_summary: Vec<ToolBatchResult> = Vec::new();
+    for event in events {
+        match event {
+            ToolEvent::ToolStart {
+                call_id,
+                tool_name,
+                category,
+                concurrency,
+                summary,
+                ..
+            } => {
+                calls_summary.push(ToolBatchCall {
+                    id: call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    // 摘要级：不复制全量入参（input=Null），体积控制
+                    summary: summary.clone(),
+                    input: serde_json::Value::Null,
+                    category: *category,
+                    concurrency: *concurrency,
+                });
+            }
+            ToolEvent::ToolEnd {
+                call_id,
+                tool_name,
+                is_error,
+                duration_ms,
+                ..
+            } => {
+                results_summary.push(ToolBatchResult {
+                    id: call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    // 摘要级：不复制全量输出（status + duration 足够检索）
+                    output: ToolOutput::empty(),
+                    is_error: *is_error,
+                    duration_ms: *duration_ms,
+                });
+            }
+            _ => {}
+        }
+    }
+    // 第二遍：正式发射（batch-start 的 calls 取摘要清单）
     for event in events {
         match event {
             ToolEvent::BatchStart {
@@ -216,7 +273,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     batch_id: id.clone(),
                     timestamp: crate::steering::now_iso_utc(),
                     summary: format!("{count} 个工具调用"),
-                    calls: Vec::new(),
+                    calls: calls_summary.clone(),
                 });
             }
             ToolEvent::ToolStart {
@@ -226,6 +283,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                 category,
                 concurrency,
                 summary,
+                occurred_at_ms,
             } => {
                 state.events.push(AgentEvent::ToolStart {
                     session_id: session_id.clone(),
@@ -238,10 +296,13 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         category: *category,
                         concurrency: *concurrency,
                     },
-                    timestamp: crate::steering::now_iso_utc(),
-                    // D-03 契约窗口（EV-11）：轮次关联键，翻译层注入
-                    // turn_index——接线轮补真值，当前保持 None
-                    turn_index: None,
+                    // EV-09（D-03）：timestamp 优先执行器打点时刻
+                    timestamp: occurred_at_ms
+                        .map(|ms| crate::steering::iso_from_epoch_ms(ms))
+                        .unwrap_or_else(crate::steering::now_iso_utc),
+                    // EV-09（D-03）：轮次关联键真值（与 turn-start /
+                    // message-end.turnIndex 同值口径）
+                    turn_index,
                 });
             }
             ToolEvent::ApprovalRequested {
@@ -318,6 +379,10 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                 output,
                 error_code,
                 error_message,
+                attempt,
+                deduplicated,
+                executed_input,
+                occurred_at_ms,
             } => {
                 // 完整输出透传：成功带结构化 output；失败带错误码 + 文案
                 // （tool_output_from_result 与 tool 角色消息共用同一转换，
@@ -337,13 +402,15 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         is_error: *is_error,
                         duration_ms: *duration_ms,
                     },
-                    timestamp: crate::steering::now_iso_utc(),
-                    // D-03 契约窗口（EV-11）：工具原子要素（审批重试 attempt/
-                    // 批内去重/中间件改写后实际入参）——接线轮补真值，
-                    // 当前保持 None
-                    attempt: None,
-                    deduplicated: None,
-                    executed_input: None,
+                    // EV-09（D-03）：timestamp 优先执行器打点时刻
+                    timestamp: occurred_at_ms
+                        .map(|ms| crate::steering::iso_from_epoch_ms(ms))
+                        .unwrap_or_else(crate::steering::now_iso_utc),
+                    // EV-09（D-03）：工具原子要素真值（审批重试 attempt 链 /
+                    // 幂等去重 / 中间件改写后实际入参）
+                    attempt: *attempt,
+                    deduplicated: *deduplicated,
+                    executed_input: executed_input.clone(),
                 });
             }
             ToolEvent::BatchEnd { batch_id: id } => {
@@ -351,7 +418,9 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     session_id: session_id.clone(),
                     batch_id: id.clone(),
                     timestamp: crate::steering::now_iso_utc(),
-                    calls: Vec::new(),
+                    // EV-09（D-03）：摘要级结果清单（id + toolName + status
+                    // + duration；全量输出由 tool-end 承载）
+                    calls: results_summary.clone(),
                 });
             }
         }

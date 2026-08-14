@@ -76,7 +76,10 @@ pub use hooks::{
     HookAction, HookDispatchOutcome, HookError, HookEvent, HookEventKind, HookFailStrategy,
     HookHandler, HookMode, HookRegisterOptions, HookRegistry,
 };
-pub use input::{next_batch_seq, AgentInputQueue, InputEnqueueMode, RingBuffer, INPUT_QUEUE_CAPACITY};
+pub use input::{
+    input_overwrite_count, next_batch_seq, AgentInputQueue, InputEnqueueMode, PendingInputStore,
+    RingBuffer, INPUT_QUEUE_CAPACITY,
+};
 pub use provider::{
     DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamItem, ToolSchema,
 };
@@ -91,10 +94,13 @@ pub use r#loop::summary_coordinator::{
     SessionSummaryCoordinatorRegistry,
 };
 pub use r#loop::summary_dispatch::{
+    DEFAULT_RETRY_GUARD_MAX_ATTEMPTS, DEFAULT_RETRY_GUARD_WINDOW_MS,
     LOOP_SUMMARY_MAX_WALL_MS, MAX_SUMMARY_ATTEMPTS, META_KEY_SUMMARY_BACKOFF_MS,
-    META_KEY_SUMMARY_L1_PLACEHOLDER, META_KEY_SUMMARY_WALL_MS, SUMMARY_BACKOFF_MS,
-    SUMMARY_JITTER_RATIO, SummaryDispatch, SummaryDispatchConfig, SummaryDispatchOutcome,
-    SummaryDispatchTask, SummaryOutcomeCallback, summary_l1_placeholder,
+    META_KEY_SUMMARY_L1_PLACEHOLDER, META_KEY_SUMMARY_MAX_ATTEMPTS,
+    META_KEY_SUMMARY_RETRY_WINDOW_MS, META_KEY_SUMMARY_WALL_MS, SUMMARY_BACKOFF_MS,
+    SUMMARY_JITTER_RATIO, SummaryBackgroundSink, SummaryBackgroundSinkRef, SummaryDispatch,
+    SummaryDispatchConfig, SummaryDispatchOutcome, SummaryDispatchTask, SummaryOutcomeCallback,
+    SummaryRetryGate, SummaryRetryGuardConfig, summary_l1_placeholder,
 };
 pub use safe_point::{AbortSignal, ControlAction, apply_safe_point_control};
 pub use state::AgentSessionMachine;

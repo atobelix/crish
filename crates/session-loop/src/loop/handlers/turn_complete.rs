@@ -43,10 +43,15 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         turn_index: ctx.turn_index,
         timestamp: crate::steering::now_iso_utc(),
         tool_call_count: ctx.tool_call_count,
-        // D-03 契约窗口（EV-13）：turn 级 usage 载荷——接线轮注入真值，
-        // 当前保持 None
-        usage: None,
+        // D-03 契约窗口（EV-11/EV-13）：turn 级 usage 真值——streaming
+        // consume 后写入槽位（六字段：prompt/completion/total/cache_read/
+        // cache_write/cache_miss tokens），provider 未报告时 None（旧帧
+        // 缺省兼容；take 消费防同一槽位被二次发射复用）
+        usage: state.turn_usage.take(),
     });
+    // EV-08：正常发射完成，清除未闭合 turn 标记（收敛路径兜底补发不再触发；
+    // turn-complete 起始的 check_control 收敛由 check_control 内单点兜底）
+    state.current_turn_index = None;
 
     // 2. abort 检查 → FINISH + aborted（01 §2.9 步骤 2）
     if state.abort_signal.is_aborted() {

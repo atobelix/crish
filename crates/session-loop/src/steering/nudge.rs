@@ -22,6 +22,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::AgentEvent;
 
 use crate::input::{AgentInputQueue, InputEnqueueMode};
 use crate::steering::{SteeringReason, now_iso_utc, unix_millis};
@@ -168,10 +169,19 @@ impl PendingNudge {
 /// run 内产生的 nudge 一律先入本通道，**不注入当前 run**；orchestrator 在
 /// 下一 run 开始时消费（[Self::drain_all] / [Self::enqueue_into_input_queue]）。
 /// 容量固定（默认 50），满容量覆盖最旧条目（防无界增长）。
+///
+/// EV-08 观测面：入队动作留痕——每次 [Self::enqueue] 产生一条
+/// `nudge-enqueued` 事件（覆盖最旧时 `overwrote=true` 也发，覆盖无痕
+/// 缺陷闭合；事件缓冲经 [Self::take_enqueue_events] 取走，由调用方
+/// （orchestrator 消费侧）送入事件通道发射）。
 #[derive(Debug, Clone)]
 pub struct PendingNudgeChannel {
     entries: VecDeque<PendingNudge>,
     max_size: usize,
+    /// 会话归属（nudge-enqueued 事件 session_id 载荷；缺省空串）
+    session_id: String,
+    /// 入队留痕事件缓冲（nudge-enqueued）
+    enqueue_events: Vec<AgentEvent>,
 }
 
 impl PendingNudgeChannel {
@@ -185,15 +195,42 @@ impl PendingNudgeChannel {
         Self {
             entries: VecDeque::new(),
             max_size: max_size.max(1),
+            session_id: String::new(),
+            enqueue_events: Vec::new(),
+        }
+    }
+
+    /// 新建通道并指定会话归属（nudge-enqueued 事件 session_id 载荷）
+    pub fn with_session_id(session_id: impl Into<String>) -> Self {
+        Self {
+            session_id: session_id.into(),
+            ..Self::new()
         }
     }
 
     /// 入队一个 nudge；满容量时覆盖最旧条目
+    ///
+    /// EV-08：每次入队（含覆盖丢弃）产生 `nudge-enqueued` 留痕事件，
+    /// 缓冲于通道内，调用方经 [Self::take_enqueue_events] 取走后发射。
     pub fn enqueue(&mut self, nudge: PendingNudge) {
-        if self.entries.len() == self.max_size {
+        let overwrote = self.entries.len() == self.max_size;
+        if overwrote {
             self.entries.pop_front();
         }
+        let reason = nudge.reason.as_str().to_string();
         self.entries.push_back(nudge);
+        self.enqueue_events.push(AgentEvent::NudgeEnqueued {
+            session_id: self.session_id.clone(),
+            timestamp: now_iso_utc(),
+            reason,
+            target_ring: "pending".to_string(),
+            overwrote,
+        });
+    }
+
+    /// 取走入队留痕事件（nudge-enqueued；调用方负责送入事件通道发射）
+    pub fn take_enqueue_events(&mut self) -> Vec<AgentEvent> {
+        std::mem::take(&mut self.enqueue_events)
     }
 
     /// 便捷入队：按原因生成 nudge（文本缺省用 [runtime_steering_text]）
@@ -445,5 +482,67 @@ mod tests {
         let c = new_message_id("steering");
         assert_ne!(a, b);
         assert_ne!(a, c);
+    }
+
+    // ── EV-08：入队留痕事件（nudge-enqueued）─────────────────────
+
+    /// 入队 → 产生 nudge-enqueued 事件（reason/目标环/未覆盖）
+    #[test]
+    fn nudge_enqueued_event_emitted_on_enqueue() {
+        let mut channel = PendingNudgeChannel::with_session_id("sess-1");
+        channel.enqueue_reason(SteeringReason::ToolLoop);
+        let events = channel.take_enqueue_events();
+        assert_eq!(events.len(), 1, "每次入队恰一条留痕事件");
+        match &events[0] {
+            conex_types::AgentEvent::NudgeEnqueued {
+                session_id,
+                reason,
+                target_ring,
+                overwrote,
+                ..
+            } => {
+                assert_eq!(session_id, "sess-1", "事件携带会话归属");
+                assert_eq!(reason, "tool-loop", "事件携带 nudge 原因");
+                assert_eq!(target_ring, "pending", "入队环 = pending 通道");
+                assert!(!overwrote, "未满容量不入队覆盖");
+            }
+            other => panic!("期望 nudge-enqueued，实际 {other:?}"),
+        }
+    }
+
+    /// 满容量覆盖最旧 → 事件仍发且 overwrote=true（覆盖无痕缺陷闭合）
+    #[test]
+    fn nudge_enqueued_event_overwrite_flag_on_capacity() {
+        let mut channel = PendingNudgeChannel::with_capacity(2);
+        channel.enqueue_reason(SteeringReason::EmptyResponse);
+        channel.enqueue_reason(SteeringReason::ToolErrors);
+        channel.enqueue_reason(SteeringReason::ToolLoop);
+        let events = channel.take_enqueue_events();
+        assert_eq!(events.len(), 3, "覆盖最旧时事件也发（不静默）");
+        let overwrote_flags: Vec<bool> = events
+            .iter()
+            .map(|e| match e {
+                conex_types::AgentEvent::NudgeEnqueued { overwrote, .. } => *overwrote,
+                other => panic!("期望 nudge-enqueued，实际 {other:?}"),
+            })
+            .collect();
+        assert_eq!(overwrote_flags, vec![false, false, true], "第三条覆盖最旧");
+        let reasons: Vec<String> = events
+            .iter()
+            .map(|e| match e {
+                conex_types::AgentEvent::NudgeEnqueued { reason, .. } => reason.clone(),
+                other => panic!("期望 nudge-enqueued，实际 {other:?}"),
+            })
+            .collect();
+        assert_eq!(reasons, vec!["empty-response", "tool-errors", "tool-loop"]);
+    }
+
+    /// 取走事件后缓冲清空（调用方发射一次取一次）
+    #[test]
+    fn take_enqueue_events_drains_buffer() {
+        let mut channel = PendingNudgeChannel::new();
+        channel.enqueue_reason(SteeringReason::EmptyResponse);
+        assert_eq!(channel.take_enqueue_events().len(), 1);
+        assert!(channel.take_enqueue_events().is_empty(), "取走后缓冲清空");
     }
 }

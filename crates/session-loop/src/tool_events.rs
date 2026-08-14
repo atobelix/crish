@@ -12,7 +12,24 @@
 //!   无需各自本地计时兜底
 //! - 事件为轻量结构，后续由 orchestrator 转成 AgentEvent（03 §1 清单）
 //!
-//! 语义来源：01-session-loop-semantics.md §2.8 / §五.8；TOOLS-01 §3.1.5
+//! # 批收口语义（EV-09 / D-03 文档化契约）
+//!
+//! **tool 域事件 = 批收口一次性广播（execute_batch 全部返回后经
+//! `emit_tool_events` 翻译为 AgentEvent），非实时轨**——不做逐事件实时
+//! 推送（R-16 裁决：不建实时工具轨，加字段不加系统）。观测含义：
+//!
+//! - `timestamp` 默认取翻译时刻；EV-09 起执行器在**实际发生时刻**打点
+//!   `occurred_at_ms`（工具开始/完成毫秒），翻译层优先回填——事件序列
+//!   仍为批收口广播，但时间轴反映真实执行时刻（并行组 tool-end 按完成
+//!   时刻排序，事件顺序即完成顺序）；
+//! - 审批挂起可见性：工具等待审批时事件流处于「本批 tool-start 已发、
+//!   tool-end 未发」的中间态，run 状态机为 awaiting-approval 中间态；
+//!   实时查询面 = `list_pending_approvals`（壳层命令），不依赖事件轨；
+//! - 实时轨登记为后续增强（触发条件：工具执行 >N 秒场景出现或用户明确
+//!   要求），当前不实现。
+//!
+//! 语义来源：01-session-loop-semantics.md §2.8 / §五.8；TOOLS-01 §3.1.5；
+//! D-03 详案 EV-10（duration_ms 真实化 / occurred_at 打点 / 批收口语义）
 
 use agent_tools::permission::PermissionMode;
 use conex_types::tool::{ToolCategory, ToolConcurrency, ToolProgressUpdate};
@@ -37,6 +54,9 @@ pub enum ToolEvent {
         category: crate::tool_events::ToolCategory,
         concurrency: crate::tool_events::ToolConcurrency,
         summary: String,
+        /// EV-09（D-03）：工具实际开始时刻（ms epoch；执行器打点，
+        /// 翻译层回填 timestamp——批收口广播时间轴真实化）
+        occurred_at_ms: Option<u64>,
     },
     /// 审批请求（先于等待发出，防死锁）
     ApprovalRequested {
@@ -69,6 +89,17 @@ pub enum ToolEvent {
         error_code: Option<String>,
         /// 错误文案（is_error 时有值）
         error_message: Option<String>,
+        /// EV-09（D-03）：审批重试 attempt 序号（首 attempt=1，审批重试
+        /// =2；非重试路径恒 1）
+        attempt: Option<u32>,
+        /// EV-09（D-03）：幂等去重命中标记（守卫命中 = 未真正执行）
+        deduplicated: Option<bool>,
+        /// EV-09（D-03）：中间件改写后的实际执行入参（与
+        /// ToolStart.input 展示原始入参对照；未执行路径 None）
+        executed_input: Option<Value>,
+        /// EV-09（D-03）：执行完成时刻（ms epoch；执行器打点，翻译层
+        /// 回填 timestamp）
+        occurred_at_ms: Option<u64>,
     },
     /// 工具执行进度增量（S1 流式输出，TOOLS-01 §3.1.5）
     ///
@@ -201,6 +232,10 @@ impl ToolErrorKind {
 }
 
 /// 单工具执行的分类结果（内部结构，映射到 ToolBatchResult 输出）
+///
+/// EV-09（D-03）原子要素：attempt/deduplicated/executed_input/occurred_at_ms
+/// 随本结构从执行器（exec_single / exec_batch）透传到翻译层
+/// （executing_tools.rs），落 ToolEnd 事件载荷。
 #[derive(Debug, Clone)]
 pub struct ClassifiedToolResult {
     /// 对应 ToolBatchCall.id
@@ -213,8 +248,16 @@ pub struct ClassifiedToolResult {
     pub error_message: Option<String>,
     /// 成功时的工具输出（JSON）
     pub output: Value,
-    /// 执行耗时
+    /// 执行耗时（未执行语义保持 0：abort/denied/expired/blocked/not-found）
     pub duration_ms: u64,
+    /// 审批重试 attempt 序号（首 attempt=1；审批重试后终态=2）
+    pub attempt: u32,
+    /// 幂等去重命中标记（守卫命中 = 未真正执行）
+    pub deduplicated: bool,
+    /// 中间件改写后的实际执行入参（未执行路径 None）
+    pub executed_input: Option<Value>,
+    /// 执行完成时刻（ms epoch；None = 未执行/未打点）
+    pub occurred_at_ms: Option<u64>,
 }
 
 impl ClassifiedToolResult {
@@ -223,15 +266,26 @@ impl ClassifiedToolResult {
         self.error_kind.is_none()
     }
 
-    /// 便捷构造：错误结果
-    pub fn error(id: impl Into<String>, tool_name: impl Into<String>, kind: ToolErrorKind, message: impl Into<String>) -> Self {
+    /// 便捷构造：错误结果（duration_ms 传实际执行耗时；未执行路径传 0——
+    /// EV-09/D-03：失败路径 duration_ms 真实化，禁止硬编码）
+    pub fn error(
+        id: impl Into<String>,
+        tool_name: impl Into<String>,
+        kind: ToolErrorKind,
+        message: impl Into<String>,
+        duration_ms: u64,
+    ) -> Self {
         Self {
             id: id.into(),
             tool_name: tool_name.into(),
             error_kind: Some(kind),
             error_message: Some(message.into()),
             output: serde_json::Value::Null,
-            duration_ms: 0,
+            duration_ms,
+            attempt: 1,
+            deduplicated: false,
+            executed_input: None,
+            occurred_at_ms: None,
         }
     }
 
@@ -244,6 +298,10 @@ impl ClassifiedToolResult {
             error_message: None,
             output,
             duration_ms,
+            attempt: 1,
+            deduplicated: false,
+            executed_input: None,
+            occurred_at_ms: None,
         }
     }
 }

@@ -32,8 +32,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use super::summary_dispatch::{
-    run_summary_task, SummaryDispatchConfig, SummaryDispatchOutcome, SummaryDispatchTask,
-    SummaryOutcomeCallback,
+    emit_summary_background, run_summary_task, SummaryBackgroundSinkRef, SummaryDispatchConfig,
+    SummaryDispatchOutcome, SummaryDispatchTask, SummaryOutcomeCallback,
 };
 
 /// 全局并发上限（00-plan §6.4 / 04 §7.1：多会话并发摘要 ≤ 2）
@@ -65,6 +65,8 @@ pub struct SessionSummaryCoordinator {
     config: Mutex<SummaryDispatchConfig>,
     /// 最近一次完成结果（会话元数据快照；供查询 / 审计 / 前端展示挂账）
     last_outcome: Mutex<Option<SummaryDispatchOutcome>>,
+    /// summary-background 事件发射器（EV-06 观测面；None = 不发射）
+    background_sink: Mutex<Option<SummaryBackgroundSinkRef>>,
     /// 会话级默认完成回调（壳层注入：落 compression_blocks 表；None =
     /// 只落日志）。per-trigger 回调优先于本默认值。
     on_done: Option<Arc<dyn Fn(SummaryDispatchOutcome) + Send + Sync>>,
@@ -83,8 +85,19 @@ impl SessionSummaryCoordinator {
             task: Mutex::new(None),
             config: Mutex::new(config),
             last_outcome: Mutex::new(None),
+            background_sink: Mutex::new(None),
             on_done,
         }
+    }
+
+    /// 装配 summary-background 事件发射器（EV-06 观测面；None = 不发射，
+    /// 行为与现状一致）。注册表 [SessionSummaryCoordinatorRegistry] 经
+    /// [Self::set_background_sink] 在 get_or_create 时透传装配。
+    pub fn set_background_sink(&self, sink: Option<SummaryBackgroundSinkRef>) {
+        *self
+            .background_sink
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = sink;
     }
 
     /// 会话 id（会话元数据）
@@ -126,6 +139,10 @@ impl SessionSummaryCoordinator {
         task: SummaryDispatchTask,
         on_done: Option<SummaryOutcomeCallback>,
     ) -> bool {
+        // D-03 EV-06 并行域最小修复（EV-04 观测接线时解除编译阻塞）：spawned
+        // 事件在锁块外发射，块 id 需在锁块外声明——原声明在锁块内导致
+        // spawn 成功路径编译错误（作用域越界）；仅上移声明，不碰逻辑。
+        let spawned_block_id = task.block_id.clone();
         // 会话单飞：存活任务存在 → 去重（幂等触发语义）
         {
             let mut guard = self.task.lock().unwrap_or_else(|e| e.into_inner());
@@ -153,6 +170,13 @@ impl SessionSummaryCoordinator {
                 return false;
             }
             let config = self.config();
+            // EV-06：事件发射器快照（spawned 在任务启动后发射；其余 phase
+            // 由 run_summary_task 内单点发射——两调度面事件口径一致）
+            let background = self
+                .background_sink
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             // 完成回调解析：per-trigger 优先；否则会话级默认回调。统一包
             // 一层「会话元数据记录器」——outcome 在回调链内先写入
             // [Self::last_outcome]（快照保持最终态）再透传业务回调
@@ -173,12 +197,29 @@ impl SessionSummaryCoordinator {
                 }
             };
             let handle = tokio::spawn(async move {
-                run_summary_task(task, config, callback).await;
+                run_summary_task(task, config, callback, background).await;
                 // 任务终态（committed / retired 皆释放全局计数）
                 ACTIVE_SUMMARY_TASKS.fetch_sub(1, Ordering::AcqRel);
             });
             *guard = Some(handle);
         }
+        // EV-06：spawn 成功 → spawned（attempt=1；任务关联块 id 经
+        // messageId 承载）。单飞去重 / 全局并发拒绝不发事件（临时拒绝，
+        // 后续 run / 压缩会再次触发——日志已留痕，非「放弃」语义）。
+        // 发射在任务锁释放后、先快照 sink 再调用（防外部 sink 重入死锁）
+        let background_snapshot = self
+            .background_sink
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        emit_summary_background(
+            &background_snapshot,
+            &self.session_id,
+            "spawned",
+            1,
+            None,
+            Some(spawned_block_id),
+        );
         true
     }
 
@@ -197,6 +238,9 @@ impl SessionSummaryCoordinator {
 pub struct SessionSummaryCoordinatorRegistry {
     /// session_id → 会话级协调器（get_or_create 幂等）
     sessions: Mutex<HashMap<String, Arc<SessionSummaryCoordinator>>>,
+    /// summary-background 事件发射器模板（EV-06；None = 不发射）。
+    /// get_or_create 时透传装配到会话协调器。
+    background_sink: Mutex<Option<SummaryBackgroundSinkRef>>,
     /// 会话级默认完成回调模板（壳层注入：落 compression_blocks 表；
     /// None = 只落日志）
     on_done: Option<Arc<dyn Fn(SummaryDispatchOutcome) + Send + Sync>>,
@@ -207,8 +251,18 @@ impl SessionSummaryCoordinatorRegistry {
     pub fn new(on_done: Option<Arc<dyn Fn(SummaryDispatchOutcome) + Send + Sync>>) -> Self {
         Self {
             sessions: Mutex::new(HashMap::new()),
+            background_sink: Mutex::new(None),
             on_done,
         }
+    }
+
+    /// 装配 summary-background 事件发射器模板（EV-06 观测面；None = 不
+    /// 发射）。装配后新建 / 已存在的会话协调器均在触发时透传本模板。
+    pub fn set_background_sink(&self, sink: Option<SummaryBackgroundSinkRef>) {
+        *self
+            .background_sink
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = sink;
     }
 
     /// 取得（或新建）会话协调器——幂等：同会话返回同一 Arc，跨 run
@@ -219,8 +273,15 @@ impl SessionSummaryCoordinatorRegistry {
         config: SummaryDispatchConfig,
     ) -> Arc<SessionSummaryCoordinator> {
         let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        // EV-06：发射器模板透传（None = 不发射；装配后刷新已存在协调器）
+        let background = self
+            .background_sink
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         if let Some(coordinator) = sessions.get(session_id) {
             coordinator.set_config(config);
+            coordinator.set_background_sink(background);
             Arc::clone(coordinator)
         } else {
             let coordinator = Arc::new(SessionSummaryCoordinator::new(
@@ -228,6 +289,7 @@ impl SessionSummaryCoordinatorRegistry {
                 config,
                 self.on_done.clone(),
             ));
+            coordinator.set_background_sink(background);
             sessions.insert(session_id.to_string(), Arc::clone(&coordinator));
             coordinator
         }
@@ -271,9 +333,11 @@ mod tests {
     // 计数断言才自洽（非真实代码路径的锁语义，豁免 await_holding_lock）
     #![allow(clippy::await_holding_lock)]
 
+    use super::super::summary_dispatch::SummaryBackgroundSink;
     use super::*;
     use conex_compaction::recovery::SummaryState;
     use conex_compaction::Summarizer;
+    use conex_types::events::AgentEvent;
     use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
     use std::time::Duration;
 
@@ -476,7 +540,11 @@ mod tests {
         assert_eq!(a_outcome.block_id, "ca");
         assert_eq!(b_outcome.block_id, "cb");
         assert_eq!(a_outcome.state, SummaryState::Committed, "a 成功（好摘要器）");
-        assert_eq!(b_outcome.state, SummaryState::Retired, "b 耗尽（坏摘要器）");
+        assert_eq!(
+            b_outcome.state,
+            SummaryState::Awaiting,
+            "b episode 耗尽 → 低功耗待重试（E2 F2 层 1：废除 retired 永驻，块保持 awaiting）"
+        );
         assert!(a_outcome.summary_json.is_some());
         assert!(b_outcome.summary_json.is_none());
     }
@@ -536,5 +604,72 @@ mod tests {
         assert_eq!(done.len(), 1, "默认回调必须收到结果");
         assert_eq!(done[0].session_id, "s9");
         assert_eq!(done[0].state, SummaryState::Committed);
+    }
+
+    // ── EV-06 summary-background 事件面（会话级协调器）───────────────
+
+    /// 记录型 summary-background sink（测试断言面）
+    struct RecordingSummarySink {
+        events: std::sync::Mutex<Vec<AgentEvent>>,
+    }
+    impl RecordingSummarySink {
+        fn new() -> Self {
+            Self {
+                events: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+        fn phases(&self) -> Vec<String> {
+            self.events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .iter()
+                .filter_map(|e| match e {
+                    AgentEvent::SummaryBackground { phase, .. } => Some(phase.clone()),
+                    _ => None,
+                })
+                .collect()
+        }
+    }
+    impl SummaryBackgroundSink for RecordingSummarySink {
+        fn emit(&self, event: &AgentEvent) {
+            self.events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(event.clone());
+        }
+    }
+
+    /// 会话级触发：注册表装配 sink → try_trigger 成功发射 spawned，任务内
+    /// 后续 phase（attempt/success）单点发射；单飞去重拒绝时不发事件
+    /// （临时拒绝，非「放弃」语义）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn coordinator_emits_spawned_and_task_phases() {
+        let _serial = test_serial_guard();
+        let sink = Arc::new(RecordingSummarySink::new());
+        let registry = SessionSummaryCoordinatorRegistry::new(None);
+        registry.set_background_sink(Some(Arc::clone(&sink) as SummaryBackgroundSinkRef));
+        let good: Arc<dyn Summarizer> = Arc::new(RecordingSummarizer {
+            calls: std::sync::Mutex::new(0),
+            result: std::sync::Mutex::new(Ok(valid_json("compacted-summary-1-1"))),
+        });
+        let coordinator = registry.get_or_create("s1", fast_config());
+        // 任务存活期间再次触发被去重 → 无事件（非放弃）
+        assert!(coordinator.try_trigger(task_with(good.clone(), "s1", "compacted-summary-1-1"), None));
+        let phases_after_first = sink.phases();
+        assert_eq!(phases_after_first.len(), 1, "存活期去重不发事件");
+        assert_eq!(phases_after_first[0], "spawned", "触发成功必须发射 spawned");
+        assert!(
+            !coordinator.try_trigger(task_with(good.clone(), "s1", "compacted-summary-1-2"), None),
+            "存活任务去重"
+        );
+        assert_eq!(sink.phases().len(), 1, "去重拒绝不发事件（临时拒绝非放弃）");
+        // 任务完成：spawned → attempt → success 全序列
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let all = sink.phases();
+        assert_eq!(
+            all,
+            vec!["spawned", "attempt", "success"],
+            "会话级触发事件序列（单飞去重无额外 spawned）：{all:?}"
+        );
     }
 }

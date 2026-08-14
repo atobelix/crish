@@ -42,9 +42,19 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     }
 
     // 2-3. 评估并执行（budget / intervention 由 coordinator 与策略掌管）
-    let actions = state
+    let (actions, trace) = state
         .steering
-        .evaluate(SteeringPhase::EmptyResponse, &steering_context(state));
+        .evaluate_traced(SteeringPhase::EmptyResponse, &steering_context(state));
+    // EV-03（D-03）：evaluate 命中/跳过聚合发射——每次评估一条
+    // steering-evaluated（含无动作空命中；reset=false；预算剩余 =
+    // max_steering_budget − 潜在计数）
+    state.events.push(crate::steering::steering_evaluated_event(
+        &state.machine.context().session_id,
+        SteeringPhase::EmptyResponse.as_str(),
+        &trace,
+        Some(state.steering.budget_remaining()),
+        false,
+    ));
     if actions.is_empty() {
         // 预算耗尽且无任何动作（含 intervention）：D9 → stop 收场，不 error
         tracing::info!(

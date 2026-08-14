@@ -54,12 +54,15 @@
 //! 通知重新排入队列。conex-db 只读：session_meta 与事件/run/session_agents
 //! 均经既有接口（[RecoveryStore] 抽象，无一行 conex-db 改动）。
 //!
-//! **待接（F2 审计 F2-08，C7 生产未接线）**：上述引擎侧接线点当前无调用
-//! 方——子代理 run 失败时生产二进制不触发阶梯 1/2（仅 tests 与 lifecycle
-//! resume 命令面消费）。接线需引擎侧基础设施：每会话 RecoveryCoordinator
-//! 生命周期（RecoveryStore 适配 + SessionTree 装配 + SubagentSpawner 复用）
-//! 与 provider 流错误分类钩子，且按 F2-27 要求走 spawn_blocking（RecoveryStore
-//! 为同步 SQLite trait）。属 I6 遗留 L1–L3 大件，另行排期，不硬接。
+//! **接线现状（EV-08 头注更新，08 审计建议 6）**：D3 实现后生产接线已
+//! 存在——协调器装配（[RecoveryCoordinator]）与阶梯 1 决策/执行
+//! （decide_subagent_recovery / execute_subagent_recovery）、阶梯 2
+//! 通知恢复（restore_steering_notifications）均在壳层
+//! （apps/agent-workbench run/run_resume.rs、run/run_idle.rs）接线；
+//! acknowledge 由主 agent 处理阶梯 2 通知后调用。子代理 run 失败时
+//! 生产链路触发四级阶梯恢复。conex-db 只读：session_meta 与事件/run/
+//! session_agents 均经既有接口（[RecoveryStore] 抽象，无一行 conex-db
+//! 改动）。
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -124,6 +127,8 @@ pub const RECOVER_GROUP_PREFIX: &str = "recovery-";
 pub const RECOVER_ESCALATED_EVENT: &str = "recovery-escalated";
 /// 阶梯 2 steering 通知留痕
 pub const RECOVER_STEERING_EVENT: &str = "recovery-steering";
+/// 阶梯 2 通知确认留痕（EV-08：acknowledge pending→false 翻转点）
+pub const RECOVER_ACKNOWLEDGED_EVENT: &str = "recovery-acknowledged";
 /// 阶梯 3 fork 留痕
 pub const RECOVER_FORK_EVENT: &str = "recovery-fork";
 /// 阶梯 4 上报用户留痕
@@ -566,7 +571,6 @@ impl RecoveryCoordinator {
             role: None,
             capability_mode: None,
             allowed_tools: None,
-            timeout_ms: None,
             description: Some("恢复 fork（C7 阶梯 3，承接同一目标）".to_string()),
             mode: None,
             parent_session_id: self.session_id.clone(),
@@ -671,6 +675,10 @@ impl RecoveryCoordinator {
 
     /// 阶梯 2 确认：主 agent 已注入激活指令处理该 run——通知置
     /// pending = false（幂等），重启后不再重排入队。
+    ///
+    /// EV-08：每次实际翻转（pending→false）发射 `recovery-acknowledged`
+    /// 留痕事件（动作链闭合——「主 agent 已处理该通知」可查；幂等二次
+    /// 确认无翻转不发）。
     pub fn acknowledge(&mut self, subagent_run_id: &str) -> Result<bool, RecoveryError> {
         let mut changed = false;
         for notification in &mut self.notifications {
@@ -681,6 +689,19 @@ impl RecoveryCoordinator {
         }
         if changed {
             self.persist_notifications()?;
+            // DM-05 typed 序列化：字段形状与 engine-events.json 注册表
+            // 一致（recovery-acknowledged；notificationId 缺省 None——
+            // RecoveryNotification 无独立 id，subagentRunId 即关联键）
+            self.store.append_event(
+                &self.session_id,
+                RECOVER_ACKNOWLEDGED_EVENT,
+                &serialize_recovery_typed(&AgentEvent::RecoveryAcknowledged {
+                    session_id: self.session_id.clone(),
+                    timestamp: crate::now_iso_utc(),
+                    notification_id: None,
+                    subagent_run_id: subagent_run_id.to_string(),
+                })?,
+            )?;
         }
         Ok(changed)
     }

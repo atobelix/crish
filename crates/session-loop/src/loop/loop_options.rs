@@ -211,6 +211,13 @@ pub struct SessionLoopOptions {
     /// `note_backend_unwired`）；Some = `conex-note-runtime::NoteRuntime::open`
     /// 等实现。允许 Option 透传 None，字段必须存在且可注入。
     pub note_backend: Option<NoteBackendHandle>,
+    /// 待处理输入持久化面（EV-12 输入留痕生产接线）：经
+    /// [crate::input::PendingInputStore] 注入（None = 不落库，向后兼容）。
+    /// session-loop **不直接持 DB 连接**——实现方为 orchestrator 的
+    /// `Store` 适配（LocalDbStore / InMemoryStore，persist.rs），
+    /// spawn_blocking 纪律与 save_run_usage 同；enqueue 写点 / 消费删点
+    /// 均 fail-open（DB 失败仅 warn 不阻断循环）。
+    pub pending_input_store: Option<Arc<dyn crate::input::PendingInputStore>>,
 }
 
 impl Default for SessionLoopOptions {
@@ -293,6 +300,11 @@ impl Default for SessionLoopOptions {
             // Round6 / W4-E：笔记后端缺省 None = 未接线（工具 note_backend_unwired）；
             // 壳层 / engine 经 options 注入 StoreNoteBackend
             note_backend: None,
+            // EV-12 输入留痕：待处理输入持久化面（None = 不落库，向后
+            // 兼容；经 with_pending_input_store / 壳层 options 装配注入）——
+            // session-loop 不直接持 DB 连接，实现方为 orchestrator 的
+            // Store 适配（LocalDbStore / InMemoryStore，persist.rs）
+            pending_input_store: None,
         }
     }
 }

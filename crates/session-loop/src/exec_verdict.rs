@@ -166,6 +166,7 @@ pub(crate) fn denied_result(call: &ToolBatchCall, options: &ToolBatchOptions) ->
         &call.tool_name,
         ToolErrorKind::UserDenied,
         format!("permission denied by {mode} mode: {}", call.tool_name),
+        0,
     )
 }
 
@@ -193,6 +194,8 @@ pub(crate) fn mark_rest_cancelled(
             category: call.category,
             concurrency: call.concurrency,
             summary: call.summary.clone(),
+            // EV-09（D-03）：兄弟失败取消——标记时刻打点（未执行，duration=0）
+            occurred_at_ms: Some(crate::steering::unix_millis() as u64),
         });
         events.push(ToolEvent::ToolEnd {
             call_id: call.id.clone(),
@@ -202,12 +205,18 @@ pub(crate) fn mark_rest_cancelled(
             output: serde_json::Value::Null,
             error_code: Some("tool.cancelled".to_string()),
             error_message: Some("cancelled: sibling failure".to_string()),
+            // EV-09（D-03）：未执行路径原子要素留空
+            attempt: None,
+            deduplicated: None,
+            executed_input: None,
+            occurred_at_ms: None,
         });
         results[i] = Some(ClassifiedToolResult::error(
             &call.id,
             &call.tool_name,
             ToolErrorKind::Cancelled,
             "cancelled: sibling failure",
+            0,
         ));
     }
 }

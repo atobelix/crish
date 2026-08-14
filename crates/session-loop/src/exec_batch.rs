@@ -197,6 +197,8 @@ impl ToolExecutor {
                         category: call.category,
                         concurrency: call.concurrency,
                         summary: call.summary.clone(),
+                        // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp）
+                        occurred_at_ms: Some(crate::steering::unix_millis() as u64),
                     });
                 }
 
@@ -316,6 +318,7 @@ impl ToolExecutor {
                                     &call.tool_name,
                                     ToolErrorKind::ApprovalRequired,
                                     self.revert_refusal_message(call),
+                                    0,
                                 )
                             }
                             _ => match decided {
@@ -325,6 +328,7 @@ impl ToolExecutor {
                                         &call.tool_name,
                                         ToolErrorKind::UserDenied,
                                         denied_message(requesters[pos].is_some(), &reason),
+                                        0,
                                     )
                                 }
                                 Some(ApprovalDecision::Expired) => {
@@ -340,6 +344,7 @@ impl ToolExecutor {
                                         &call.tool_name,
                                         ToolErrorKind::ApprovalExpired,
                                         "approval expired",
+                                        0,
                                     )
                                 }
                                 // 无决策 = abort 中断，与顺序路径 abort 收场一致
@@ -348,6 +353,7 @@ impl ToolExecutor {
                                     &call.tool_name,
                                     ToolErrorKind::Cancelled,
                                     "aborted",
+                                    0,
                                 ),
                             },
                         };
@@ -392,6 +398,7 @@ impl ToolExecutor {
                                 &call.tool_name,
                                 ToolErrorKind::Cancelled,
                                 "cancelled",
+                                0,
                             ),
                             Vec::new(),
                         )
@@ -405,6 +412,11 @@ impl ToolExecutor {
                         output: r.output.clone(),
                         error_code: r.error_kind.map(|k| k.error_code().to_string()),
                         error_message: r.error_message.clone(),
+                        // EV-09（D-03）：原子要素透传（attempt/dedup/实际入参/打点）
+                        attempt: Some(r.attempt),
+                        deduplicated: Some(r.deduplicated),
+                        executed_input: r.executed_input.clone(),
+                        occurred_at_ms: r.occurred_at_ms,
                     });
                     if self.result_is_fatal(call, &r) {
                         fatal = Some(
@@ -431,7 +443,7 @@ impl ToolExecutor {
         debug_assert!(results.iter().all(Option::is_some));
         let results = results
             .into_iter()
-            .map(|r| r.unwrap_or_else(|| ClassifiedToolResult::error("", "", ToolErrorKind::Cancelled, "cancelled")))
+            .map(|r| r.unwrap_or_else(|| ClassifiedToolResult::error("", "", ToolErrorKind::Cancelled, "cancelled", 0)))
             .collect();
 
         ToolBatchOutcome {

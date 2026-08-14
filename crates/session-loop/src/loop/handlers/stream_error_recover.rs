@@ -1,15 +1,12 @@
 //! 超限恢复阶梯面（01 §2.6 length 阶梯 + P4 §3.5 溢出压缩阶梯 + 溢出常量）——
 //! SR-06c · 拆分 · ≠ EL：自 stream_error.rs 拆出，公共面经父模 re-export。
 
-use std::time::Duration;
-
 use conex_compaction::CompactionEngine;
 use conex_types::response::ClassifiedStreamError;
 use conex_types::session::AgentSessionEvent as E;
 use conex_types::tool::{ContextCompressionReason, ContextCompressionTrigger};
 
 use super::fatal::fatal_provider_error;
-use super::retry::emit_retry_diagnostic;
 use super::super::{
     apply_compaction, compaction_shape_ok, dispatch, CompactionTriggerInfo, HandlerOutcome,
     LoopState,
@@ -50,13 +47,23 @@ pub(crate) async fn length_ladder(state: &mut LoopState, classified: &Classified
     let limit = state.options.length_upgrade_limit.min(MAX_LENGTH_UPGRADES);
     if state.length_upgrades < limit {
         state.length_upgrades += 1;
+        let max_tokens_before = state.max_tokens;
         // F2-01：saturating 翻倍（阶梯上限 2 使常规路径封顶 32768；
         // saturating 为防御纵深——内部计数异常时永不溢出回绕）
         state.max_tokens = state.max_tokens.saturating_mul(2);
-        // 01 §3.3 ②：length 升级时重置 steering 计数
-        state.steering.reset();
-        // length 阶梯无退避等待（立即升级重进 provider 循环，delay=0）
-        emit_retry_diagnostic(state, classified, state.length_upgrades, limit, Duration::ZERO, None);
+        // 01 §3.3 ②：length 升级时重置 steering 计数（EV-03：reset 前后
+        // 计数进 steering-evaluated 事件）
+        super::super::emit_steering_reset_event(state, "length-escalation");
+        // length 阶梯无退避等待（立即升级重进 provider 循环，delay=0）；
+        // EV-03：provider-diagnostic kind=length-escalation（attempt/
+        // maxTokens 前后值随载荷）
+        super::retry::emit_length_escalation_diagnostic(
+            state,
+            state.length_upgrades,
+            limit,
+            max_tokens_before,
+            state.max_tokens,
+        );
         dispatch(state, E::NoProgressContinue)?;
         return Ok(HandlerOutcome::continue_run());
     }

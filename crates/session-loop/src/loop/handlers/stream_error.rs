@@ -35,8 +35,10 @@ mod recover;
 mod fatal;
 
 // 公共面 re-export（外部经 stream_error::* 引用不 break：no_tool_calls.rs
-// 的 MAX_LENGTH_UPGRADES、loop options 装配的 MAX_OVERFLOW_COMPRESSION_RETRIES）
+// 的 MAX_LENGTH_UPGRADES、loop options 装配的 MAX_OVERFLOW_COMPRESSION_RETRIES、
+// EV-03 length 升级诊断 emit_length_escalation_diagnostic）
 pub(crate) use recover::{MAX_LENGTH_UPGRADES, MAX_OVERFLOW_COMPRESSION_RETRIES};
+pub(crate) use retry::emit_length_escalation_diagnostic;
 
 // handle 分派消费的恢复阶梯入口（生产路径）
 use fatal::fatal_provider_error;

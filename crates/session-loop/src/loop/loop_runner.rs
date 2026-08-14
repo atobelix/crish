@@ -316,8 +316,62 @@ impl AgentSessionLoop {
         &self.state.input_queue
     }
 
-    /// 向输入队列排入一条消息（测试 / 编排层注入用）
+    /// EV-12 输入留痕写点（fail-open 落库）。
+    ///
+    /// 经 [SessionLoopOptions::pending_input_store] 注入的持久化面把用户
+    /// 消息写入 `pending_inputs` 表（INSERT OR REPLACE 幂等，id = 消息
+    /// id，run_id = 当前 run）；fire-and-forget（tokio spawn）不阻断入队
+    /// 路径；DB 失败仅 warn（恢复语义 fail-open——未落库输入由当前
+    /// 会话运行兜底，崩溃恢复语义允许丢失，不假装可回放）。无注入面
+    /// 或无 runtime 上下文时零开销跳过（向后兼容）。
+    pub(crate) fn spawn_pending_input_save(&self, message: &AgentMessage) {
+        let Some(store) = &self.state.options.pending_input_store else {
+            return;
+        };
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let store = Arc::clone(store);
+        let id = message.id.clone();
+        let session_id = self.session_id.clone();
+        let run_id = self.tool_ctx.run_id.clone();
+        let payload = serde_json::to_string(message).unwrap_or_default();
+        handle.spawn(async move {
+            if let Err(err) = store
+                .save_pending_input(&id, &session_id, Some(&run_id), &payload)
+                .await
+            {
+                tracing::warn!(
+                    target: "session_loop",
+                    message_id = %id,
+                    error = %err,
+                    "待处理输入落库失败（fail-open：不阻断入队）"
+                );
+            }
+        });
+    }
+
+    /// 向输入队列排入一条消息（测试 / 编排层注入用）。
+    ///
+    /// EV-12 输入留痕：入队即落库（save_pending_input，fail-open）——
+    /// 与 run 起始用户消息写点（loop_exec.rs run()）共同构成「每条用户
+    /// 消息 1 INSERT」；消费删点见 record_message（handlers/mod.rs）。
     pub fn enqueue_input(&mut self, message: AgentMessage, mode: crate::input::InputEnqueueMode) {
+        let snapshot = message.clone();
         self.state.input_queue.enqueue(message, mode);
+        self.spawn_pending_input_save(&snapshot);
+    }
+
+    /// 注入待处理输入持久化面（EV-12 输入留痕）。
+    ///
+    /// 实现方 = orchestrator 的 `Store` 适配（LocalDbStore / InMemoryStore，
+    /// persist.rs）；未注入（None）时 enqueue 不落库，行为与现状一致。
+    /// 必须 `run()` 前调用（options 构造期定，run 内不可变）。
+    pub fn with_pending_input_store(
+        mut self,
+        store: Arc<dyn crate::input::PendingInputStore>,
+    ) -> Self {
+        self.state.options.pending_input_store = Some(store);
+        self
     }
 }

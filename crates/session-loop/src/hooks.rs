@@ -43,7 +43,20 @@
 //! 失败策略语义（propagate 不中断会话）：
 //! - tool.pre 的 propagate 失败 → 该工具调用以执行失败结果收场，批继续；
 //! - turn.end 的 propagate 失败 → 记录日志后收场流程继续。
+//!
+//! hook-outcome 观测镜像（D-03 EV-05，2026-08-14 契约窗口）：
+//! - dispatch 单点聚合：HookRegistry 可经 [HookRegistry::set_outcome_sink]
+//!   接线观测出口，dispatch 出口处每批次发射一次 `AgentEvent::HookOutcome`
+//!   （Delta 级，可丢）；未接线 = 无观测事件，dispatch 语义完全不变。
+//! - 聚合载荷：hook 种类（event.kind）+ 结果（ok/blocked/failed/timeout，
+//!   blocked 带原因）+ 触发 handler 名；turn.end 的 Block（stop 建议）同样
+//!   以 outcome=blocked 表达。
+//! - model.beforeRequest/afterResponse、subagent.start/end 四变体：本层
+//!   「只挂钩不补源」（M14/M7 由宿主/编排层接线）；dispatch 单点对任意
+//!   HookEventKind 通用，宿主接线后自动发射 hook-outcome，本层不硬造
+//!   生产发射点。
 
+use conex_types::events::AgentEvent;
 use regex::Regex;
 use serde_json::Value;
 use std::fmt;
@@ -321,6 +334,9 @@ pub struct HookRegisterOptions {
 pub struct HookError {
     /// 错误文案
     pub message: String,
+    /// 触发失败的 handler 名（D-03 EV-05：hook-outcome(failed) 载荷用；
+    /// 常规 [HookError::new] 构造为 None，propagate 失败携带）
+    pub handler_name: Option<String>,
 }
 
 impl HookError {
@@ -328,6 +344,7 @@ impl HookError {
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+            handler_name: None,
         }
     }
 }
@@ -367,8 +384,14 @@ pub trait HookHandler: Send + Sync {
 pub struct HookDispatchOutcome {
     /// 是否被 handler 阻止（仅 tool.pre on 模式产生；reason 为阻止原因）
     pub blocked: Option<String>,
+    /// 触发阻止的 handler 名（D-03 EV-05 观测字段：hook-outcome(blocked)
+    /// 载荷用；未阻止为 None）
+    pub blocked_handler: Option<String>,
     /// 被 swallow / log 策略吞掉的 handler 失败数
     pub failed_handlers: usize,
+    /// 首个失败/超时 handler 名（D-03 EV-05 观测字段：hook-outcome
+    /// (failed/timeout) 载荷用；无失败为 None）
+    pub first_failed_handler: Option<String>,
     /// 超时（虚拟失败）handler 数
     pub timeouts: usize,
     /// 因 handler 失败统一广播的 error.occurred 诊断事件数
@@ -391,6 +414,10 @@ pub struct HookRegistry {
     entries: RwLock<Vec<HandlerEntry>>,
     /// 错误事件化重入护栏（error.occurred 再分派期间不再触发错误事件）
     error_eventing: std::sync::atomic::AtomicBool,
+    /// hook-outcome 观测镜像出口（D-03 EV-05）：dispatch 聚合出口发射
+    /// AgentEvent::HookOutcome（Delta 级可丢）；None = 未接线，dispatch
+    /// 语义不变（仅观测，不搬 HookEvent 插件通道）
+    outcome_sink: RwLock<Option<Arc<dyn Fn(AgentEvent) + Send + Sync>>>,
 }
 
 impl HookRegistry {
@@ -502,8 +529,60 @@ impl HookRegistry {
     /// - 任何 handler 失败（Err/超时）除按策略处置外，统一再广播
     ///   `error.occurred` 诊断事件（错误事件化；error.occurred 自身
     ///   分派期间不再级联）。
+    ///
+    /// D-03 EV-05（hook-outcome 观测镜像）：出口处单点聚合发射
+    /// `AgentEvent::HookOutcome`（每批次一次，不逐 hook 发）；已接线
+    /// outcome_sink 时每次 dispatch（含 Err 传播路径）发射一条。
     pub async fn dispatch(&self, event: &HookEvent) -> Result<HookDispatchOutcome, HookError> {
-        self.dispatch_inner(event, true).await
+        let result = self.dispatch_inner(event, true).await;
+        self.emit_hook_outcome(event, &result);
+        result
+    }
+
+    /// 接线 hook-outcome 观测镜像出口（D-03 EV-05）：dispatch 出口处
+    /// 每批次发射一次 AgentEvent::HookOutcome；不接线 = 无观测事件，
+    /// dispatch 语义完全不变（纯观测，HookEvent 插件通道不受影响）。
+    pub fn set_outcome_sink(&self, sink: Arc<dyn Fn(AgentEvent) + Send + Sync>) {
+        *self
+            .outcome_sink
+            .write()
+            .unwrap_or_else(|e| {
+                // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续接线
+                tracing::error!("hook 观测出口写锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            }) = Some(sink);
+    }
+
+    /// hook-outcome 聚合发射（dispatch 单点，D-03 EV-05）。
+    ///
+    /// 聚合语义：每批次一条——blocked（tool.pre on 阻止 / turn.end stop
+    /// 建议，带原因）> timeout > failed > ok 优先级判定；hook_name 取触发
+    /// handler 名；Err 路径（propagate）同样发射 failed。
+    fn emit_hook_outcome(
+        &self,
+        event: &HookEvent,
+        result: &Result<HookDispatchOutcome, HookError>,
+    ) {
+        let sink = self
+            .outcome_sink
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
+        let Some(sink) = sink.as_ref() else { return };
+        let (outcome, hook_name, blocked_reason) = match result {
+            Ok(o) if o.blocked.is_some() => ("blocked", o.blocked_handler.clone(), o.blocked.clone()),
+            Ok(o) if o.timeouts > 0 => ("timeout", o.first_failed_handler.clone(), None),
+            Ok(o) if o.failed_handlers > 0 => ("failed", o.first_failed_handler.clone(), None),
+            Ok(_) => ("ok", None, None),
+            Err(e) => ("failed", e.handler_name.clone(), None),
+        };
+        sink(AgentEvent::HookOutcome {
+            session_id: event.session_id().to_string(),
+            timestamp: crate::steering::now_iso_utc(),
+            hook_type: event.kind().as_str().to_string(),
+            outcome: outcome.to_string(),
+            hook_name,
+            blocked_reason,
+        });
     }
 
     /// 内部分派（error_eventing 开关：error.occurred 再分派时关闭，
@@ -555,6 +634,9 @@ impl HookRegistry {
                         Err(_elapsed) => {
                             outcome.timeouts += 1;
                             outcome.failed_handlers += 1;
+                            if outcome.first_failed_handler.is_none() {
+                                outcome.first_failed_handler = Some(handler.name().to_string());
+                            }
                             let message = format!(
                                 "hook {} 超时（{}ms）",
                                 handler.name(),
@@ -608,6 +690,8 @@ impl HookRegistry {
                     }
                     if event.kind() == HookEventKind::ToolPre {
                         outcome.blocked = Some(reason);
+                        // D-03 EV-05：记录阻止 handler 名（hook-outcome(blocked) 载荷）
+                        outcome.blocked_handler = Some(handler.name().to_string());
                         return Ok(outcome);
                     }
                     // 非 tool.pre 的 Block：观察语义下忽略（仅记录）
@@ -645,6 +729,11 @@ impl HookRegistry {
         outcome: &mut HookDispatchOutcome,
     ) -> Option<HookError> {
         let message = err.message.clone();
+        // D-03 EV-05：记录首个失败 handler 名（hook-outcome(failed/timeout) 载荷；
+        // 含 propagate——Err 传播路径也经单点发射观测事件）
+        if outcome.first_failed_handler.is_none() {
+            outcome.first_failed_handler = Some(handler.name().to_string());
+        }
         match strategy {
             HookFailStrategy::Swallow => {
                 outcome.failed_handlers += 1;
@@ -660,11 +749,14 @@ impl HookRegistry {
             HookFailStrategy::Propagate => {
                 // 错误事件化先行（诊断事件不因 propagate 丢失）
                 self.emit_error_event(event, &message, error_eventing, outcome).await;
-                Some(HookError::new(format!(
+                let mut hook_err = HookError::new(format!(
                     "hook {} 失败（propagate）：{}",
                     handler.name(),
                     err.message
-                )))
+                ));
+                // D-03 EV-05：Err 路径带 handler 名（hook-outcome(failed) 载荷）
+                hook_err.handler_name = Some(handler.name().to_string());
+                Some(hook_err)
             }
         }
     }
@@ -1238,5 +1330,204 @@ mod tests {
                 .push(event.kind());
             Ok(HookAction::Continue)
         }
+    }
+
+    // ── D-03 EV-05：hook-outcome 观测镜像（dispatch 单点聚合）──
+
+    /// 接线观测出口的测试辅助：捕获 hook-outcome 事件列表
+    fn sink_capture() -> (Arc<dyn Fn(AgentEvent) + Send + Sync>, Arc<std::sync::Mutex<Vec<AgentEvent>>>) {
+        let captured = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink: Arc<dyn Fn(AgentEvent) + Send + Sync> = Arc::new({
+            let captured = Arc::clone(&captured);
+            move |evt| {
+                captured.lock().unwrap_or_else(|e| e.into_inner()).push(evt);
+            }
+        });
+        (sink, captured)
+    }
+
+    /// 提取捕获列表中的 hook-outcome 事件（断言辅助）
+    fn take_hook_outcomes(captured: &Arc<std::sync::Mutex<Vec<AgentEvent>>>) -> Vec<(String, String, Option<String>, Option<String>)> {
+        captured
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .filter_map(|evt| match evt {
+                AgentEvent::HookOutcome {
+                    hook_type,
+                    outcome,
+                    hook_name,
+                    blocked_reason,
+                    ..
+                } => Some((
+                    hook_type.clone(),
+                    outcome.clone(),
+                    hook_name.clone(),
+                    blocked_reason.clone(),
+                )),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// 普通 dispatch（ok 路径）→ 发射 hook-outcome(outcome=ok)，载荷含种类
+    #[tokio::test]
+    async fn hook_outcome_ok_on_normal_dispatch() {
+        let registry = HookRegistry::new();
+        let (sink, captured) = sink_capture();
+        registry.set_outcome_sink(sink);
+        let spy = Arc::new(SpyHandler::new("spy", None));
+        registry.register(HookEventKind::ToolPre, HookFailStrategy::Swallow, spy as Arc<dyn HookHandler>);
+
+        let outcome = registry.dispatch(&tool_pre()).await.unwrap();
+        assert!(outcome.blocked.is_none());
+        let events = take_hook_outcomes(&captured);
+        assert_eq!(events.len(), 1, "每批次恰一条 hook-outcome");
+        assert_eq!(events[0].0, "tool.pre", "hook_type 必须为事件种类");
+        assert_eq!(events[0].1, "ok");
+        assert!(events[0].2.is_none(), "ok 路径无触发 handler 名");
+        assert!(events[0].3.is_none());
+    }
+
+    /// tool.pre 阻止（on 模式 Block）→ hook-outcome(outcome=blocked)，
+    /// blocked_reason 非空且 hook_name = 阻止 handler 名
+    #[tokio::test]
+    async fn hook_outcome_blocked_carries_reason_and_handler() {
+        let registry = HookRegistry::new();
+        let (sink, captured) = sink_capture();
+        registry.set_outcome_sink(sink);
+        let blocker = Arc::new(SpyHandler::new(
+            "blocker",
+            Some(HookAction::Block {
+                reason: "策略禁止".into(),
+            }),
+        ));
+        registry.register(HookEventKind::ToolPre, HookFailStrategy::Swallow, blocker as Arc<dyn HookHandler>);
+
+        let outcome = registry.dispatch(&tool_pre()).await.unwrap();
+        assert_eq!(outcome.blocked.as_deref(), Some("策略禁止"));
+        assert_eq!(outcome.blocked_handler.as_deref(), Some("blocker"));
+        let events = take_hook_outcomes(&captured);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, "tool.pre");
+        assert_eq!(events[0].1, "blocked");
+        assert_eq!(events[0].2.as_deref(), Some("blocker"), "hook_name 必须为阻止 handler 名");
+        assert_eq!(events[0].3.as_deref(), Some("策略禁止"), "blocked 必须带原因");
+    }
+
+    /// 失败 handler（swallow）→ 也发 hook-outcome(outcome=failed)，hook_name 可辨
+    #[tokio::test]
+    async fn hook_outcome_failed_on_handler_error() {
+        let registry = HookRegistry::new();
+        let (sink, captured) = sink_capture();
+        registry.set_outcome_sink(sink);
+        let fail = Arc::new(SpyHandler::failing("fail", "boom"));
+        let ok = Arc::new(SpyHandler::new("ok", None));
+        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, fail as Arc<dyn HookHandler>);
+        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, Arc::clone(&ok) as Arc<dyn HookHandler>);
+
+        let outcome = registry.dispatch(&turn_end()).await.unwrap();
+        assert_eq!(outcome.failed_handlers, 1);
+        let events = take_hook_outcomes(&captured);
+        assert_eq!(events.len(), 1, "失败批次仍只发一条聚合事件");
+        assert_eq!(events[0].0, "turn.end");
+        assert_eq!(events[0].1, "failed");
+        assert_eq!(events[0].2.as_deref(), Some("fail"), "hook_name 必须为失败 handler 名");
+    }
+
+    /// 超时 handler（timeout_ms 注入）→ outcome=timeout 可辨（与 failed 区分）
+    #[tokio::test]
+    async fn hook_outcome_timeout_distinct_from_failed() {
+        let registry = HookRegistry::new();
+        let (sink, captured) = sink_capture();
+        registry.set_outcome_sink(sink);
+        let slow = Arc::new(SpyHandler::slow("slow", 50));
+        registry
+            .register_with(
+                HookEventKind::ToolPre,
+                HookFailStrategy::Swallow,
+                slow as Arc<dyn HookHandler>,
+                HookRegisterOptions {
+                    mode: HookMode::On,
+                    timeout_ms: Some(1),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+
+        let outcome = registry.dispatch(&tool_pre()).await.unwrap();
+        assert_eq!(outcome.timeouts, 1);
+        let events = take_hook_outcomes(&captured);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].1, "timeout", "超时必须与普通失败可辨");
+        assert_eq!(events[0].2.as_deref(), Some("slow"));
+    }
+
+    /// propagate 失败 → dispatch 返回 Err，但仍发 hook-outcome(failed)
+    /// 且 hook_name 携带失败 handler 名（Err 路径单点发射）
+    #[tokio::test]
+    async fn hook_outcome_emitted_on_propagate_error() {
+        let registry = HookRegistry::new();
+        let (sink, captured) = sink_capture();
+        registry.set_outcome_sink(sink);
+        let fail = Arc::new(SpyHandler::failing("fail", "boom"));
+        registry.register(HookEventKind::ToolPre, HookFailStrategy::Propagate, fail as Arc<dyn HookHandler>);
+
+        let err = registry.dispatch(&tool_pre()).await.unwrap_err();
+        assert!(err.message.contains("boom"));
+        assert_eq!(err.handler_name.as_deref(), Some("fail"));
+        let events = take_hook_outcomes(&captured);
+        assert_eq!(events.len(), 1, "Err 路径也必须发 hook-outcome");
+        assert_eq!(events[0].1, "failed");
+        assert_eq!(events[0].2.as_deref(), Some("fail"));
+    }
+
+    /// 四 hook 变体（model.beforeRequest / model.afterResponse /
+    /// subagent.start / subagent.end）：dispatch 单点通用，任意种类
+    /// 聚合发射（宿主接线后自动覆盖；本层不硬造生产发射点）
+    #[tokio::test]
+    async fn hook_outcome_covers_four_hook_variants() {
+        let registry = HookRegistry::new();
+        let (sink, captured) = sink_capture();
+        registry.set_outcome_sink(sink);
+        let spy = Arc::new(SpyHandler::new("spy", None));
+        for kind in [
+            HookEventKind::ModelBeforeRequest,
+            HookEventKind::ModelAfterResponse,
+            HookEventKind::SubagentStart,
+            HookEventKind::SubagentEnd,
+        ] {
+            registry.register_observe(kind, HookFailStrategy::Swallow, Arc::clone(&spy) as Arc<dyn HookHandler>);
+        }
+
+        let events = vec![
+            HookEvent::ModelBeforeRequest { session_id: "s1".into(), provider_id: Some("deepseek".into()), model: Some("v4".into()) },
+            HookEvent::ModelAfterResponse { session_id: "s1".into(), provider_id: None, model: None, ok: true },
+            HookEvent::SubagentStart { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), role: Some("researcher".into()) },
+            HookEvent::SubagentEnd { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), reason: Some("completed".into()) },
+        ];
+        for event in &events {
+            registry.dispatch(event).await.unwrap();
+        }
+        let outcomes = take_hook_outcomes(&captured);
+        assert_eq!(outcomes.len(), 4, "四变体各发一条聚合事件");
+        let types: Vec<&str> = outcomes.iter().map(|o| o.0.as_str()).collect();
+        assert_eq!(
+            types,
+            vec!["model.beforeRequest", "model.afterResponse", "subagent.start", "subagent.end"],
+            "四变体 hook_type 载荷必须对应事件种类"
+        );
+        assert!(outcomes.iter().all(|o| o.1 == "ok"));
+    }
+
+    /// 未接线观测出口 → 无 hook-outcome 事件（dispatch 语义不变，纯观测）
+    #[tokio::test]
+    async fn hook_outcome_absent_without_sink() {
+        let registry = HookRegistry::new();
+        let spy = Arc::new(SpyHandler::new("spy", None));
+        registry.register(HookEventKind::TurnEnd, HookFailStrategy::Swallow, spy as Arc<dyn HookHandler>);
+        let outcome = registry.dispatch(&turn_end()).await.unwrap();
+        assert!(outcome.blocked.is_none());
+        assert_eq!(outcome.failed_handlers, 0);
     }
 }

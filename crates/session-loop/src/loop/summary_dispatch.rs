@@ -46,6 +46,7 @@ use std::time::Duration;
 
 use conex_compaction::summary_document::{summary_to_markdown, validate_summary_document};
 use conex_compaction::{recovery::SummaryState, Summarizer};
+use conex_types::events::AgentEvent;
 use conex_types::message::AgentMessage;
 
 /// 单次摘要调用墙钟上限（毫秒；04 §5.2 / 评审 02 P1-10 对齐 ~60s 预算）
@@ -390,12 +391,52 @@ impl SummaryRetryGate {
 /// 表写入与事件 details 标记；None = 只落日志，stub awaiting 永驻）
 pub type SummaryOutcomeCallback = Box<dyn FnOnce(SummaryDispatchOutcome) + Send>;
 
+/// summary-background 事件出口（EV-06 观测面；仿
+/// `agent_tools::audit::SecurityAuditSink` 先例）。
+///
+/// 后台摘要任务生命周期（spawn/重试/成功/失败/放弃）经本 sink 发射
+/// `AgentEvent::SummaryBackground`（Delta 级可丢、NoPersist——可追溯性不
+/// 阻塞主链；变体定义见 conex-types/events.rs）。None = 不发射（行为与
+/// 现状一致）。sink 实现不得 panic / 不得阻塞（观测面失败不应拖垮后台
+/// 摘要任务）。
+pub trait SummaryBackgroundSink: Send + Sync {
+    /// 发射一条摘要后台生命周期事件
+    fn emit(&self, event: &AgentEvent);
+}
+
+/// summary-background 事件发射器别名（Arc 共享；与 AuditSink 形态对齐）
+pub type SummaryBackgroundSinkRef = Arc<dyn SummaryBackgroundSink>;
+
+/// 构造并发射 `summary-background` 事件（sink 为 None 时静默，零行为变化；
+/// phase 取值对齐契约：spawned | attempt | success | failure | give-up）
+pub(crate) fn emit_summary_background(
+    sink: &Option<SummaryBackgroundSinkRef>,
+    session_id: &str,
+    phase: &str,
+    attempt: u32,
+    reason: Option<String>,
+    message_id: Option<String>,
+) {
+    if let Some(sink) = sink {
+        sink.emit(&AgentEvent::SummaryBackground {
+            session_id: session_id.to_string(),
+            timestamp: crate::steering::now_iso_utc(),
+            phase: phase.to_string(),
+            attempt,
+            reason,
+            message_id,
+        });
+    }
+}
+
 /// 摘要后台调度器（run 内单飞面；跨 run 会话级容器由轮次 6 壳层承接）
 pub struct SummaryDispatch {
     /// 存活任务句柄（单飞去重面；完成后可再 spawn）
     task: Mutex<Option<tokio::task::JoinHandle<()>>>,
     /// 退避 / 墙钟 / 尝试上限配置
     config: SummaryDispatchConfig,
+    /// summary-background 事件发射器（EV-06 观测面；None = 不发射）
+    background_sink: Mutex<Option<SummaryBackgroundSinkRef>>,
     /// 低功耗尝试护栏（E2 F2 层 1）：跨 episode 累计尝试 + 观察窗口重置。
     /// Arc<Mutex> 形态——spawn 出的任务在收尾回调里记账（run_summary_task
     /// 是独立任务，需共享句柄）。**生产主路径（会话级 coordinator）的
@@ -409,10 +450,30 @@ impl SummaryDispatch {
         Self {
             task: Mutex::new(None),
             config,
+            background_sink: Mutex::new(None),
             retry_gate: Arc::new(Mutex::new(SummaryRetryGate::new(
                 SummaryRetryGuardConfig::default(),
             ))),
         }
+    }
+
+    /// 装配 summary-background 事件发射器（EV-06 观测面；None = 不发射，
+    /// 行为与现状一致。壳层接线：会话级协调器经
+    /// [SessionSummaryCoordinatorRegistry::set_background_sink] 装配，run
+    /// 级兜底调度器经本方法装配）
+    pub fn set_background_sink(&self, sink: Option<SummaryBackgroundSinkRef>) {
+        *self
+            .background_sink
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = sink;
+    }
+
+    /// 当前事件发射器快照（None = 未装配，不发射）
+    fn background_sink(&self) -> Option<SummaryBackgroundSinkRef> {
+        self.background_sink
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// 装配低功耗护栏配置（E2 F2 层 1；loop/mod.rs `with_options` 消费
@@ -459,13 +520,29 @@ impl SummaryDispatch {
         let now_ms = crate::steering::unix_millis() as u64;
         let mut gate = self.retry_gate.lock().unwrap_or_else(|e| e.into_inner());
         if !gate.try_begin_episode(now_ms) {
+            let attempts_in_window = gate.attempts_in_window();
+            let guard_max = gate.config().max_attempts;
             tracing::warn!(
                 session_id = %task.session_id,
                 block_id = %task.block_id,
-                attempts_in_window = gate.attempts_in_window(),
-                guard_max = gate.config().max_attempts,
+                attempts_in_window = attempts_in_window,
+                guard_max = guard_max,
                 window_ms = gate.config().retry_window_ms,
                 "低功耗护栏：窗口内累计尝试已达上限 → 忽略本次摘要触发（等待窗口重置或被动触发点）"
+            );
+            drop(gate);
+            // EV-06：护栏拒绝 = 明确放弃——用户可据此区分「正在补摘要」与
+            // 「已放弃」（01 无声清单 #1 黑洞闭合；attempt = 窗口内已累计
+            // 尝试数，reason = 护栏上限文案）
+            emit_summary_background(
+                &self.background_sink(),
+                &task.session_id,
+                "give-up",
+                attempts_in_window,
+                Some(format!(
+                    "低功耗护栏：窗口内累计尝试 {attempts_in_window} 已达上限 {guard_max} → 忽略本次摘要触发"
+                )),
+                Some(task.block_id.clone()),
             );
             return false;
         }
@@ -484,10 +561,25 @@ impl SummaryDispatch {
                 callback(outcome);
             }
         });
+        // EV-06：spawn 前快照发射器 + 任务标识（task 将 move 进任务闭包）
+        let background = self.background_sink();
+        let spawned_session_id = task.session_id.clone();
+        let spawned_block_id = task.block_id.clone();
         let handle = tokio::spawn(async move {
-            run_summary_task(task, config, Some(recorder)).await;
+            run_summary_task(task, config, Some(recorder), background).await;
         });
         *guard = Some(handle);
+        drop(guard);
+        // EV-06：spawn 成功 → spawned（attempt=1 起算，含同步那次口径；
+        // task 锁已释放——sink 回调不得持锁调用，防外部 sink 重入死锁）
+        emit_summary_background(
+            &self.background_sink(),
+            &spawned_session_id,
+            "spawned",
+            1,
+            None,
+            Some(spawned_block_id),
+        );
         true
     }
 }
@@ -505,10 +597,14 @@ impl SummaryDispatch {
 ///
 /// pub(crate)：会话级协调器（summary_coordinator.rs，T-42）复用同一执行体
 /// ——run 级与会话级任务共用退避/墙钟/回调语义，行为单一事实源。
+///
+/// `background`：summary-background 事件发射器（EV-06；None = 不发射，
+/// 退避/成功/失败/放弃 phase 均在此单点发射——两调度面事件口径一致）。
 pub(crate) async fn run_summary_task(
     task: SummaryDispatchTask,
     config: SummaryDispatchConfig,
     on_done: Option<SummaryOutcomeCallback>,
+    background: Option<SummaryBackgroundSinkRef>,
 ) {
     let mut attempts: u32 = 1; // 含同步那次
     let mut outcome: Option<SummaryDispatchOutcome> = None;
@@ -520,12 +616,31 @@ pub(crate) async fn run_summary_task(
         let delay = jittered_ms(*delay_ms, config.jitter);
         tokio::time::sleep(Duration::from_millis(delay)).await;
         attempts += 1;
+        // EV-06：每次退避重试发射 attempt（reason = 本次退避延迟；attempt
+        // 序号单调递增，含同步那次口径）
+        emit_summary_background(
+            &background,
+            &task.session_id,
+            "attempt",
+            attempts,
+            Some(format!("退避重试（第 {attempts} 次；延迟 {delay}ms）")),
+            Some(task.block_id.clone()),
+        );
         match summarize_once(&task, config.max_wall_ms).await {
             Ok(json) => {
                 // 合法 Schema V1 文档 → committed（R-G：JSON 规范面）；
                 // 校验失败按失败尝试继续（不 byte 截断 JSON，保解析）
                 match validate_summary_document(&json, task.max_bytes) {
                     Ok(doc) => {
+                        // EV-06：成功 → success（attempt = 本次成功尝试序号）
+                        emit_summary_background(
+                            &background,
+                            &task.session_id,
+                            "success",
+                            attempts,
+                            None,
+                            Some(task.block_id.clone()),
+                        );
                         outcome = Some(SummaryDispatchOutcome {
                             session_id: task.session_id.clone(),
                             block_id: task.block_id.clone(),
@@ -538,6 +653,15 @@ pub(crate) async fn run_summary_task(
                         break;
                     }
                     Err(err) => {
+                        // EV-06：失败（输出非 Schema V1，按失败尝试计数）
+                        emit_summary_background(
+                            &background,
+                            &task.session_id,
+                            "failure",
+                            attempts,
+                            Some(format!("输出非 Schema V1 文档：{err}")),
+                            Some(task.block_id.clone()),
+                        );
                         tracing::warn!(
                             block_id = %task.block_id,
                             error = %err,
@@ -547,6 +671,15 @@ pub(crate) async fn run_summary_task(
                 }
             }
             Err(err) => {
+                // EV-06：失败（摘要器错误 / 墙钟超时，reason = 错误文本）
+                emit_summary_background(
+                    &background,
+                    &task.session_id,
+                    "failure",
+                    attempts,
+                    Some(err.clone()),
+                    Some(task.block_id.clone()),
+                );
                 tracing::warn!(
                     block_id = %task.block_id,
                     error = %err,
@@ -561,15 +694,31 @@ pub(crate) async fn run_summary_task(
         // 块保持 awaiting；attempts 达 [SummaryDispatchConfig::max_attempts]
         // 作为「episode 耗尽」标记——壳层可据此发临时通知事件（E2 §7.2
         // provider-diagnostic phase=summary 投影由后续批次接线），不进对话
-        None => SummaryDispatchOutcome {
-            session_id: task.session_id,
-            block_id: task.block_id,
-            generation: task.generation,
-            summary_json: None,
-            rendered_markdown: None,
-            state: SummaryState::Awaiting,
-            attempts,
-        },
+        None => {
+            // EV-06：放弃 → give-up（MAX_SUMMARY_ATTEMPTS 触顶——用户可
+            // 据此区分「正在补摘要」与「已放弃」；与 ContextCompressionEnd
+            // summaryState=awaiting 语义对齐：awaiting = 本轮放弃待被动触发）
+            emit_summary_background(
+                &background,
+                &task.session_id,
+                "give-up",
+                attempts,
+                Some(format!(
+                    "MAX_SUMMARY_ATTEMPTS={} 触顶 → episode 耗尽（awaiting 低功耗待重试）",
+                    config.max_attempts
+                )),
+                Some(task.block_id.clone()),
+            );
+            SummaryDispatchOutcome {
+                session_id: task.session_id,
+                block_id: task.block_id,
+                generation: task.generation,
+                summary_json: None,
+                rendered_markdown: None,
+                state: SummaryState::Awaiting,
+                attempts,
+            }
+        }
     };
     tracing::info!(
         session_id = %outcome.session_id,
@@ -1142,5 +1291,173 @@ mod tests {
         let config = SummaryRetryGuardConfig::from_session_meta(meta);
         assert_eq!(config.max_attempts, DEFAULT_RETRY_GUARD_MAX_ATTEMPTS);
         assert_eq!(config.retry_window_ms, 90_000);
+    }
+
+    // ── EV-06 summary-background 事件面（spawn/重试/成功/失败/放弃）────
+
+    /// 记录型 summary-background sink（测试断言面）
+    struct RecordingSummarySink {
+        events: std::sync::Mutex<Vec<AgentEvent>>,
+    }
+    impl RecordingSummarySink {
+        fn new() -> Self {
+            Self {
+                events: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+        fn events(&self) -> Vec<AgentEvent> {
+            self.events.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        }
+    }
+    impl SummaryBackgroundSink for RecordingSummarySink {
+        fn emit(&self, event: &AgentEvent) {
+            self.events
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(event.clone());
+        }
+    }
+
+    /// 提取 summary-background 事件序列（phase, attempt, reason）
+    fn summary_phases(events: &[AgentEvent]) -> Vec<(String, u32, Option<String>)> {
+        events
+            .iter()
+            .filter_map(|e| match e {
+                AgentEvent::SummaryBackground {
+                    phase, attempt, reason, ..
+                } => Some((phase.clone(), *attempt, reason.clone())),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// 成功路径：spawn → 退避重试 → success 序列（attempt 单调递增；
+    /// 首次重试即成功：attempt=2，含同步那次口径）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn background_events_spawn_to_success_sequence() {
+        let summarizer = Arc::new(RecordingSummarizer {
+            calls: std::sync::Mutex::new(Vec::new()),
+            result: std::sync::Mutex::new(Ok(valid_json("compacted-summary-1-1"))),
+        });
+        let sink = Arc::new(RecordingSummarySink::new());
+        let dispatch = SummaryDispatch::new(fast_config());
+        dispatch.set_background_sink(Some(Arc::clone(&sink) as SummaryBackgroundSinkRef));
+        assert!(
+            dispatch.try_spawn(task_with(summarizer.clone(), "compacted-summary-1-1"), None),
+            "spawn 必须成功"
+        );
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let phases = summary_phases(&sink.events());
+        let names: Vec<&str> = phases.iter().map(|(p, _, _)| p.as_str()).collect();
+        assert_eq!(
+            names,
+            vec!["spawned", "attempt", "success"],
+            "成功路径序列 = spawned → attempt → success：{phases:?}"
+        );
+        assert_eq!(phases[0].1, 1, "spawned attempt=1");
+        assert_eq!(phases[1].1, 2, "首次重试 attempt=2（含同步那次）");
+        assert_eq!(phases[2].1, 2, "success attempt=2");
+        // attempt 序号单调
+        for pair in phases.windows(2) {
+            assert!(pair[1].1 >= pair[0].1, "attempt 序号必须单调：{phases:?}");
+        }
+        // spawned 携带任务关联（messageId = 块 id）
+        let spawned = &sink.events()[0];
+        if let AgentEvent::SummaryBackground { message_id, .. } = spawned {
+            assert_eq!(message_id.as_deref(), Some("compacted-summary-1-1"));
+        } else {
+            panic!("首事件必须是 SummaryBackground");
+        }
+    }
+
+    /// 失败路径：spawn → 退避重试全部失败 → give-up（MAX_SUMMARY_ATTEMPTS
+    /// 触顶）——用户可据此区分「正在补摘要」与「已放弃」；give-up 带原因
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn background_events_failure_to_give_up_sequence() {
+        let summarizer = Arc::new(RecordingSummarizer {
+            calls: std::sync::Mutex::new(Vec::new()),
+            result: std::sync::Mutex::new(Err("摘要器持续失败".to_string())),
+        });
+        let sink = Arc::new(RecordingSummarySink::new());
+        let dispatch = SummaryDispatch::new(fast_config());
+        dispatch.set_background_sink(Some(Arc::clone(&sink) as SummaryBackgroundSinkRef));
+        assert!(dispatch.try_spawn(task_with(summarizer.clone(), "compacted-summary-1-1"), None));
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let phases = summary_phases(&sink.events());
+        let names: Vec<&str> = phases.iter().map(|(p, _, _)| p.as_str()).collect();
+        assert_eq!(
+            names,
+            vec![
+                "spawned", "attempt", "failure", "attempt", "failure", "attempt", "failure",
+                "give-up",
+            ],
+            "失败路径序列 = spawned → (attempt → failure) ×3 → give-up：{phases:?}"
+        );
+        // give-up：attempt=4（触顶，含同步那次）+ 带放弃原因
+        let give_up = phases.last().expect("必须以 give-up 收尾");
+        assert_eq!(give_up.0, "give-up");
+        assert_eq!(give_up.1, 4, "give-up attempt = MAX_SUMMARY_ATTEMPTS");
+        let reason = give_up.2.as_deref().expect("give-up 必须带原因");
+        assert!(reason.contains("MAX_SUMMARY_ATTEMPTS=4"), "give-up 原因含触顶口径：{reason}");
+        // 每次 failure 带失败原因（区分「正在补」各次失败可查）
+        for failure in phases.iter().filter(|(p, _, _)| p == "failure") {
+            assert!(failure.2.is_some(), "failure 必须带原因");
+        }
+        // 事件总条数 = 8（1 spawned + 3 attempt + 3 failure + 1 give-up）
+        assert_eq!(phases.len(), 8);
+    }
+
+    /// 护栏拒绝路径：窗口内累计达上限 → 新触发被拒 → 发射 give-up（不
+    /// 发射 spawned——任务未启动；reason = 护栏上限文案）
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn background_events_gate_denied_emits_give_up() {
+        let summarizer = Arc::new(RecordingSummarizer {
+            calls: std::sync::Mutex::new(Vec::new()),
+            result: std::sync::Mutex::new(Err("持续失败".to_string())),
+        });
+        let sink = Arc::new(RecordingSummarySink::new());
+        let dispatch = SummaryDispatch::new(fast_config());
+        dispatch.set_background_sink(Some(Arc::clone(&sink) as SummaryBackgroundSinkRef));
+        // 护栏上限 2：episode 1 的 4 次尝试已超上限 → 后续触发被拒绝
+        dispatch.set_retry_guard(SummaryRetryGuardConfig {
+            max_attempts: 2,
+            retry_window_ms: 60_000,
+        });
+        assert!(
+            dispatch.try_spawn(task_with(summarizer.clone(), "compacted-summary-1-1"), None),
+            "episode 1（累计 0 < 2）必须放行"
+        );
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        let before = summary_phases(&sink.events());
+        // episode 1 耗尽已发射 give-up（触顶 → awaiting 待被动触发）
+        let episode_give_up = before.last().expect("episode 耗尽以 give-up 收尾");
+        assert_eq!(episode_give_up.0, "give-up");
+        assert!(
+            episode_give_up
+                .2
+                .as_deref()
+                .map(|r| r.contains("MAX_SUMMARY_ATTEMPTS"))
+                .unwrap_or(false),
+            "episode 耗尽 give-up 原因 = 触顶口径"
+        );
+        // 第二次触发：窗口内累计 4 >= 2 → 护栏拒绝
+        assert!(
+            !dispatch.try_spawn(task_with(summarizer.clone(), "compacted-summary-1-2"), None),
+            "窗口内累计达护栏上限 → 拒绝"
+        );
+        let after = summary_phases(&sink.events());
+        assert_eq!(after.len(), before.len() + 1, "被拒触发必须补发一条 give-up");
+        let denied = after.last().expect("最后一条为 give-up");
+        assert_eq!(denied.0, "give-up");
+        assert_eq!(denied.1, 4, "give-up attempt = 窗口内已累计尝试数");
+        let reason = denied.2.as_deref().expect("give-up 必须带原因");
+        assert!(reason.contains("低功耗护栏"), "护栏拒绝原因：{reason}");
+        assert!(
+            before
+                .first()
+                .map(|(p, _, _)| p == "spawned")
+                .unwrap_or(false),
+            "episode 1 以 spawned 开头（事件面完整）：{before:?}"
+        );
     }
 }

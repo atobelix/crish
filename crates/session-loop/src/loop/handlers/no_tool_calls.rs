@@ -34,10 +34,22 @@ pub(crate) async fn handle(
             .min(super::stream_error::MAX_LENGTH_UPGRADES);
         if state.length_upgrades < upgrade_limit {
             state.length_upgrades += 1;
+            let max_tokens_before = state.max_tokens;
             // F2-01：saturating 翻倍（防御纵深，常规路径封顶 32768）
             state.max_tokens = state.max_tokens.saturating_mul(2);
-            // 01 §3.3 ②：length 升级时重置 steering 计数
-            state.steering.reset();
+            // EV-03（D-03）：length 升级诊断——provider-diagnostic
+            // kind=length-escalation（attempt/maxTokens 前后值随载荷，
+            // 对齐 stream_error_retry.rs 的 phase=Retry 载荷先例）
+            super::stream_error::emit_length_escalation_diagnostic(
+                state,
+                state.length_upgrades,
+                upgrade_limit,
+                max_tokens_before,
+                state.max_tokens,
+            );
+            // 01 §3.3 ②：length 升级时重置 steering 计数（reset 前后计数
+            // 进 steering-evaluated 事件，EV-03）
+            super::super::handlers::emit_steering_reset_event(state, "length-escalation");
             // 重进 provider 循环（更高 max_tokens）
             dispatch(state, E::NoProgressContinue)?;
             return Ok(HandlerOutcome::continue_run());
@@ -56,8 +68,9 @@ pub(crate) async fn handle(
         state.continue_nudges = 0;
     }
 
-    // 无 tool-call 正常结束：重置 steering 计数（01 §2.6 步骤 3 / 01 §3.3 ③）
-    state.steering.reset();
+    // 无 tool-call 正常结束：重置 steering 计数（01 §2.6 步骤 3 / 01 §3.3 ③；
+    // EV-03：reset 前后计数进 steering-evaluated 事件）
+    super::super::handlers::emit_steering_reset_event(state, "no-tool-calls");
     // NO_TOOL_CALLS → turn-complete（纯文字回复正常收场）
     dispatch(state, E::NoToolCalls)?;
     Ok(HandlerOutcome::continue_run())

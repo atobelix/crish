@@ -23,7 +23,7 @@ use conex_compaction::compaction::StubPolicy;
 use conex_compaction::{CompactionEngine, CompactionPlan, EstimateContext, Summarizer};
 use conex_types::context::ContextBudget;
 use conex_types::error::codes;
-use conex_types::events::AgentEvent;
+use conex_types::events::{AgentEvent, TurnUsage};
 use conex_types::message::{AgentMessage, AgentMessageRole};
 use conex_types::session::{AgentSessionEvent as E, AgentSessionState as S};
 use conex_types::tool::{
@@ -116,6 +116,11 @@ pub(crate) struct LoopState {
     pub(crate) continue_nudges: u32,
     /// error 收场时的错误文案（turn-complete 收敛读取）
     pub(crate) terminal_error: Option<String>,
+    /// 当前已发射 turn-start 的轮次（EV-08 孤儿 turn-start 修复）：TurnStart
+    /// 发射（prepare_turn）置 Some、TurnEnd 正常发射（turn_complete）清 None；
+    /// 收敛路径未走 turn_complete 时经 [emit_missing_turn_end] 补发闭合——
+    /// 「turn 对恒成对」不变量载体。None = 无未闭合 turn。
+    pub(crate) current_turn_index: Option<u32>,
     /// 预算配置（经 SessionLoopOptions 注入，P4 §3.3.2）：None = 不钳制
     /// 不预检（向后兼容现状）；Some = 发请求前估算 + max_tokens 钳制 +
     /// prepare_turn 阈值预检压缩。
@@ -168,6 +173,10 @@ pub(crate) struct LoopState {
     /// 替换 / 清理则自然失效。fresh run 不重置（跨 run 待重试语义延续，
     /// 与 summary_coordinator 任务存活语义对齐）。None = 无待重试摘要。
     pub(crate) pending_summary_retry: Option<PendingSummaryRetry>,
+    /// 当前轮 usage 槽位（EV-11/D-03：streaming consume 后写入本 turn 六字段
+    /// 真值，prepare_turn 新一轮归零，turn_complete 收口注入 TurnEnd.usage；
+    /// None = provider 未报告 usage / 本轮未发请求——诚实留空，旧帧兼容）
+    pub(crate) turn_usage: Option<TurnUsage>,
 }
 
 impl LoopState {
@@ -221,6 +230,8 @@ impl LoopState {
             terminal_provider_error: None,
             continue_nudges: 0,
             terminal_error: None,
+            // EV-08：fresh state 无未闭合 turn（孤儿 turn-start 修复初始位）
+            current_turn_index: None,
             budget,
             compaction_policy,
             summarizer,
@@ -235,6 +246,8 @@ impl LoopState {
             summary_coordinator,
             // E2 F3：无待重试摘要（fresh state）
             pending_summary_retry: None,
+            // EV-11（D-03）：当前轮 usage 槽位初始空（provider 未报告前无数据）
+            turn_usage: None,
         }
     }
 }
@@ -834,6 +847,7 @@ fn compression_reason_str(reason: ContextCompressionReason) -> &'static str {
     match reason {
         ContextCompressionReason::Manual => "manual",
         ContextCompressionReason::UserMessage => "usermessage",
+        ContextCompressionReason::Stage => "stage",
         ContextCompressionReason::Threshold => "threshold",
         ContextCompressionReason::Overflow => "overflow",
         ContextCompressionReason::Idle => "idle",
@@ -896,6 +910,25 @@ pub(crate) fn dispatch(state: &mut LoopState, event: E) -> Result<(), LoopError>
 /// 删除既有消息会破坏请求前缀字节稳定性；压缩是唯一例外（P4 闸门，
 /// compaction 是唯一前缀重写点）。
 pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
+    // EV-12 删点：消息出队被消费成为 message-start → 删除待处理输入行
+    //（fire-and-forget fail-open；未落库的内部消息 delete 无行可删，
+    // 幂等无害——对应「每条用户消息 1 DELETE」）
+    if let Some(store) = &state.options.pending_input_store {
+        if let Ok(handle) = tokio::runtime::Handle::try_current() {
+            let store = Arc::clone(store);
+            let id = message.id.clone();
+            handle.spawn(async move {
+                if let Err(err) = store.delete_pending_input(&id).await {
+                    tracing::warn!(
+                        target: "session_loop",
+                        message_id = %id,
+                        error = %err,
+                        "待处理输入删除失败（fail-open：不阻断消费）"
+                    );
+                }
+            });
+        }
+    }
     let session_id = state.machine.context().session_id.clone();
     let message = Arc::new(message);
     state.events.push(AgentEvent::MessageStart {
@@ -1025,6 +1058,25 @@ pub(crate) fn steering_context(state: &LoopState) -> SteeringContext<'_> {
     }
 }
 
+/// EV-03（D-03）：steering 计数重置观测点——重置前后计数进
+/// steering-evaluated(reset=true) 事件（Delta 可丢）。
+///
+/// 重置时机（01 §3.3）：工具批全部成功 / length 升级 / 无 tool-call 正常结束。
+/// phase 取值：`after-tools`（工具批后）、`length-escalation`（length 阶梯）、
+/// `no-tool-calls`（纯文字正常结束）。
+pub(crate) fn emit_steering_reset_event(state: &mut LoopState, phase: &str) {
+    let before = state.steering.get_steering_count() as u32;
+    state.steering.reset();
+    let trace = crate::steering::SteeringEvaluationTrace::reset(before);
+    state.events.push(crate::steering::steering_evaluated_event(
+        &state.machine.context().session_id,
+        phase,
+        &trace,
+        Some(state.steering.budget_remaining()),
+        true,
+    ));
+}
+
 /// 驱动状态机到 done（cooperative_stop 安全点，D1：不 abort）
 ///
 /// 01 §2.10 覆盖的三态路径：streaming: NO_TOOL_CALLS+SHOULD_STOP；
@@ -1050,19 +1102,88 @@ fn drive_machine_to_stop(state: &mut LoopState) -> Result<(), LoopError> {
     Ok(())
 }
 
+/// 孤儿 turn-start 兜底补发（EV-08 单点）：当前轮次 turn-start 已发射但
+/// 本收敛路径未走 turn_complete 正常发射 turn-end（abort / 强停 /
+/// check_control 收敛等）时，补发 turn-end 闭合——保证「turn 对恒成对」
+/// 不变量。
+///
+/// **幂等**：[LoopState::current_turn_index] 为 None 时不发（正常发射已清
+/// 位）；补发后清位，多次调用无副作用——各收敛路径挂接与 converge 最终
+/// 兜底可并存，互不重复发射。
+///
+/// 载荷对齐 turn_complete 正常发射（D-03 契约）：turn_index 与 turn-start
+/// 一致（取记录值而非 context——避免与已发射 turn-start 显示值漂移）、
+/// tool_call_count 取当前批计数、usage 保持 None（EV-13 接线前契约位）。
+pub(crate) fn emit_missing_turn_end(state: &mut LoopState) {
+    let Some(turn_index) = state.current_turn_index.take() else {
+        return;
+    };
+    state.events.push(AgentEvent::TurnEnd {
+        session_id: state.machine.context().session_id.clone(),
+        turn_index,
+        timestamp: crate::steering::now_iso_utc(),
+        tool_call_count: state.machine.context().tool_call_count,
+        usage: None,
+    });
+    tracing::info!(
+        turn_index,
+        "收敛路径未走 turn-complete：补发 turn-end 闭合孤儿 turn-start（EV-08）"
+    );
+}
+
 /// 安全点统一检查：handler 起始与 stream / tool 批结束调用。
 ///
 /// 返回 [Some] 表示 run 已可收敛（force_cancel / cooperative_stop），
 /// [None] 表示继续（soft_inject 只读消费后消息已落环）。
 pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>, LoopError> {
     // AbortSignal 等价 L3 强停，优先于总线内任何意图（01 §2.10）
-    let action = {
+    let (action, drained) = {
         let mut bus = state.control_bus.lock().unwrap_or_else(|e| e.into_inner());
-        apply_safe_point_control(&mut bus, Some(&state.abort_signal))
+        let action = apply_safe_point_control(&mut bus, Some(&state.abort_signal));
+        // EV-04（D-03）：本次安全点消费的意图轨迹（enqueued 态事件素材）——
+        // abort 抢占路径（未 drain，意图原样保留）不取走，下次安全点
+        // enqueued→consumed 统一配对发射，不丢轨迹不重复
+        let trace = if state.abort_signal.is_aborted() {
+            Vec::new()
+        } else {
+            bus.take_trace()
+        };
+        (action, trace)
     };
     let Some(action) = action else {
         return Ok(None);
     };
+    // EV-04（D-03）：control-intent 两态发射——enqueued 先、consumed 后，
+    // intent_id 两态配对（Delta 可丢观测事件；软注入消息本体不入事件，
+    // message-start/end 已可见；cooperative_stop 的 reason 经 intent 透出，
+    // 不再丢弃）
+    let session_id = state.machine.context().session_id.clone();
+    for intent in &drained {
+        state.events.push(AgentEvent::ControlIntent {
+            session_id: session_id.clone(),
+            timestamp: crate::steering::now_iso_utc(),
+            kind: intent.kind.as_event_kind().to_string(),
+            intent_id: intent.id.clone(),
+            source: intent.source.clone(),
+            reason: intent.reason.clone(),
+            state: "enqueued".to_string(),
+        });
+    }
+    for intent in &drained {
+        state.events.push(AgentEvent::ControlIntent {
+            session_id: session_id.clone(),
+            timestamp: crate::steering::now_iso_utc(),
+            kind: intent.kind.as_event_kind().to_string(),
+            intent_id: intent.id.clone(),
+            source: intent.source.clone(),
+            reason: intent.reason.clone(),
+            state: "consumed".to_string(),
+        });
+    }
+    // EV-08：收敛分支统一兜底——check_control 收敛路径（含 turn-complete
+    // 起始，turn-end 尚未正常发射）不经 turn_complete，此处单点补发闭合
+    // 孤儿 turn-start（current_turn_index 为 None 时幂等无操作）
+    emit_missing_turn_end(state);
     match action {
         crate::safe_point::ControlAction::ForceCancel { reason } => {
             // L3 强停：可立即中断 → ABORT（endReason=aborted；取消原因经

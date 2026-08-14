@@ -189,3 +189,34 @@ pub(crate) fn emit_retry_diagnostic(
         },
     });
 }
+
+/// length 阶梯升级诊断（EV-03 / D-03：provider-diagnostic 扩展
+/// kind=length-escalation，复用同族不加新类型）
+///
+/// 载荷：`reason` 携带 kind=length-escalation 标识 + maxTokens 升级前后值；
+/// `attempt`/`max_attempts` 对齐 [emit_retry_diagnostic] 的 phase=Retry
+/// 先例（attempt = 本次升级序号）。发射点：no_tool_calls.rs（stopReason=
+/// Length 的 max_tokens 翻倍路径）与 length_ladder（ContextLengthExceeded
+/// 阶梯，经同一函数）。
+pub(crate) fn emit_length_escalation_diagnostic(
+    state: &mut LoopState,
+    attempt: u32,
+    max_attempts: u32,
+    max_tokens_before: u32,
+    max_tokens_after: u32,
+) {
+    let session_id = state.machine.context().session_id.clone();
+    state.events.push(AgentEvent::ProviderDiagnostic {
+        session_id,
+        timestamp: crate::steering::now_iso_utc(),
+        diagnostic: ProviderDiagnostic {
+            phase: ProviderDiagnosticPhase::Retry,
+            attempt: Some(attempt),
+            max_attempts: Some(max_attempts),
+            reason: Some(format!(
+                "length-escalation: maxTokens {max_tokens_before}→{max_tokens_after}"
+            )),
+            ..ProviderDiagnostic::default()
+        },
+    });
+}

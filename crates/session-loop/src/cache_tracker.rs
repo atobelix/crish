@@ -355,6 +355,13 @@ impl CacheStatsTracker {
         self.model_switch_pending = true;
     }
 
+    /// 当前模型标识（EV-11/D-03：provider-request-anchored 事件 model 载荷
+    /// 来源；装配面 = [CacheTrackingConfig] 经 engine 注入，None 语义 = 未
+    /// 装配缓存测量时事件 model 为 None）
+    pub fn model(&self) -> &str {
+        &self.model
+    }
+
     /// 冷缓存预警判定（请求启动路径，P5 §3.4.4）：无基线 / 未超 TTL /
     /// TTL 未知（调用方传 0 时按 ttl_seconds == 0 不判定——P5 约定 TTL
     /// 查询失败不提示，见函数注释）→ None

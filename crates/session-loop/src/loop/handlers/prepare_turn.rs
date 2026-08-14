@@ -65,11 +65,19 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     //    F1-03：饱和加——u32::MAX 时事件载荷保持上限，不得溢出 panic）
     let session_id = state.machine.context().session_id.clone();
     let turn_index = state.machine.context().turn_index.saturating_add(1);
+    // EV-11（D-03 EV-13）：新一轮 usage 槽位归零——streaming consume 后
+    // 写入本 turn 真值，turn-complete 收口注入 TurnEnd.usage（防上一轮
+    // usage 错位泄漏进本轮无请求的 turn）
+    state.turn_usage = None;
     state.events.push(AgentEvent::TurnStart {
         session_id: session_id.clone(),
         turn_index,
         timestamp: crate::steering::now_iso_utc(),
     });
+    // EV-08：孤儿 turn-start 修复——记录已发射 turn-start 的轮次（收敛
+    // 路径未走 turn_complete 时经 emit_missing_turn_end 补发 turn-end 闭合；
+    // turn_complete 正常发射后清 None）
+    state.current_turn_index = Some(turn_index);
     // I8-E1 第一批：turn.start 钩子广播（turn 编排起点；observe 默认，
     // 失败吞掉 + 计数，编排继续——03 §2.4 表）
     if let Some(hooks) = &state.options.hooks {
