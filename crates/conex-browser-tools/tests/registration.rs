@@ -95,18 +95,37 @@ fn all_tool_names_unique_and_namespaced() {
     }
 }
 
-/// 门禁配置非法（TLD 通配等）→ 注册期结构化错误（配置校验期报错，17 §4.2）。
+/// 门禁配置非法（TLD 通配等）→ 注册期结构化错误（配置校验期报错，17 §4.2）；
+/// 白/黑名单同源校验（P0-2 配置入口：domain_allowlist/domain_blocklist）。
 #[test]
 fn registration_rejects_invalid_gate_patterns() {
     let mut registry = ToolRegistry::new();
     let config = conex_browser_tools::BrowserToolsConfig {
-        gate_allowlist: vec!["example.*".to_string()],
+        domain_allowlist: vec!["example.*".to_string()],
         ..empty_config()
     };
     let err = register_browser_tools(&mut registry, config).expect_err("非法模式应拒绝");
     assert_eq!(err.code(), "tool.invalid_input");
     assert!(err.to_string().contains("门禁配置"));
     assert_eq!(registry.len(), 0, "注册失败不得留下半成品工具");
+    // 黑名单同源校验（非法模式同样拒绝）
+    let mut registry = ToolRegistry::new();
+    let config = conex_browser_tools::BrowserToolsConfig {
+        domain_blocklist: vec!["*x.example".to_string()],
+        ..empty_config()
+    };
+    let err = register_browser_tools(&mut registry, config).expect_err("黑名单非法模式应拒绝");
+    assert_eq!(err.code(), "tool.invalid_input");
+    assert!(err.to_string().contains("门禁配置"));
+    assert_eq!(registry.len(), 0, "注册失败不得留下半成品工具");
+    // 合法模式（子域通配/IP 字面量）放行
+    let mut registry = ToolRegistry::new();
+    let config = conex_browser_tools::BrowserToolsConfig {
+        domain_allowlist: vec!["*.corp.example".to_string(), "127.0.0.1".to_string()],
+        ..empty_config()
+    };
+    register_browser_tools(&mut registry, config).expect("合法模式应注册成功");
+    assert_eq!(registry.len(), 24);
 }
 
 /// 显式注入门禁优先于 MVP 内置门禁（引擎侧正式实现替换路径）。
@@ -121,6 +140,115 @@ fn explicit_gate_overrides_builtin() {
     };
     register_browser_tools(&mut registry, config).expect("显式门禁注入");
     assert_eq!(registry.len(), 24);
+}
+
+/// P0-2 默认空列表（R-7 语义：全允许限公共互联网）——注册不受影响；
+/// 缺省兜底为正式门禁默认策略：保留段 IP 字面量确定性拒绝（零 DNS，
+/// 命令零注入），证明兜底门禁真实生效而非放行替身。
+#[tokio::test]
+async fn default_empty_lists_register_and_deny_reserved() {
+    let mock = MockSession::new();
+    let registry = registry_with(mock_config(&mock, true));
+    assert_eq!(registry.len(), 24, "默认空配置注册不受影响");
+    let ctx = agent_tools::context::create_mock_tool_context();
+    let err = registry
+        .get("browser_navigate")
+        .unwrap()
+        .execute(&ctx, json!({ "url": "http://10.0.0.1/" }))
+        .await
+        .expect_err("保留段字面量应拒绝");
+    assert_eq!(err.code(), "tool.browser.gate_blocked", "错误码：{err}");
+    assert!(
+        err.to_string().contains("保留"),
+        "拒绝原因应说明保留段：{err}"
+    );
+    assert!(
+        !mock.calls().iter().any(|c| c.contains("Page.navigate")),
+        "拒绝时命令零注入"
+    );
+}
+
+/// P0-2 白名单非空 = 硬化模式（17 §4.1）：名单外 Deny（零命令注入）；
+/// 名单内显式信任跳过解析校验（确定性放行，不依赖 CI DNS）。
+/// 经 browser_navigate 全链路（注册面构造 → 导航检查点）验证。
+#[tokio::test]
+async fn allowlist_hardening_via_config() {
+    let mock = MockSession::new();
+    let mut config = mock_config(&mock, true);
+    config.domain_allowlist = vec!["a.example".to_string()];
+    let registry = registry_with(config);
+    let ctx = agent_tools::context::create_mock_tool_context();
+    let tool = registry.get("browser_navigate").unwrap();
+    // 名单外：gate_blocked（硬化模式白名单外 Deny）
+    let err = tool
+        .execute(&ctx, json!({ "url": "https://b.example/x" }))
+        .await
+        .expect_err("白名单外应拒绝");
+    assert_eq!(err.code(), "tool.browser.gate_blocked", "错误码：{err}");
+    assert!(
+        !mock.calls().iter().any(|c| c.contains("Page.navigate")),
+        "名单外拒绝时命令零注入"
+    );
+    // 名单内（根域条目含任意子域，R-7）：显式信任跳过解析，确定性放行
+    let out = tool
+        .execute(&ctx, json!({ "url": "https://a.example/after" }))
+        .await
+        .expect("白名单内导航应成功（显式信任，零 DNS）");
+    assert_eq!(out["url"], "https://a.example/after");
+    let navigates = mock
+        .calls()
+        .iter()
+        .filter(|c| c.contains("Page.navigate"))
+        .count();
+    assert_eq!(navigates, 1, "仅白名单内注入一次导航命令");
+}
+
+/// P0-2 黑名单不可豁免（17 §4.2，R-7 定死）：同在白名单内的域名仍 Deny，
+/// 黑名单优先于白名单。
+#[tokio::test]
+async fn blocklist_never_exemptable_via_config() {
+    let mock = MockSession::new();
+    let mut config = mock_config(&mock, true);
+    config.domain_allowlist = vec!["a.example".to_string()];
+    config.domain_blocklist = vec!["a.example".to_string()];
+    let registry = registry_with(config);
+    let ctx = agent_tools::context::create_mock_tool_context();
+    let err = registry
+        .get("browser_navigate")
+        .unwrap()
+        .execute(&ctx, json!({ "url": "https://a.example/after" }))
+        .await
+        .expect_err("黑名单命中不可豁免（含白名单内）");
+    assert_eq!(err.code(), "tool.browser.gate_blocked", "错误码：{err}");
+    assert!(
+        !mock.calls().iter().any(|c| c.contains("Page.navigate")),
+        "黑名单拒绝时命令零注入"
+    );
+}
+
+/// 既有 MvpDomainGate 权线不回退（05 文档方案 A 注入优先）：调用方/引擎
+/// 显式注入 MvpDomainGate 实例仍优先于配置列表（config.gate 注入位不变），
+/// 注入面行为与配置入口落地前一致。
+#[tokio::test]
+async fn injected_mvp_gate_still_takes_priority() {
+    let mock = MockSession::new();
+    let mut config = mock_config(&mock, true);
+    // 注入 Mvp 门禁（白名单 a.example）；配置列表与之不一致——注入优先，
+    // 配置列表被忽略（若配置生效，a.example 将因列表不含而被拒）
+    config.gate = Some(std::sync::Arc::new(
+        conex_browser_tools::gate::MvpDomainGate::new(&["a.example".to_string()], &[])
+            .expect("Mvp 门禁构造"),
+    ));
+    config.domain_allowlist = vec!["never.example".to_string()];
+    let registry = registry_with(config);
+    let ctx = agent_tools::context::create_mock_tool_context();
+    let out = registry
+        .get("browser_navigate")
+        .unwrap()
+        .execute(&ctx, json!({ "url": "https://a.example/after" }))
+        .await
+        .expect("注入门禁白名单命中应放行（注入优先）");
+    assert_eq!(out["url"], "https://a.example/after");
 }
 
 /// 注册后工具可执行闭环（最小面：not_ready 在空会话下结构化返回）。

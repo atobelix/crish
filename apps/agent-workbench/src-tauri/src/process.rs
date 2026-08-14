@@ -67,13 +67,33 @@ pub(crate) async fn workbench_run_shell(
         return Err(CoreError::InvalidInput("command too long".to_string()));
     }
 
+    let cwd = resolve_shell_cwd(request.cwd.as_deref())?;
+    let workspace_root = if let Ok(app) = crate::host_paths::app_dir() {
+        crate::host_paths::workspace_root(&app)
+    } else {
+        std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    };
+
     let gatekeeper = conex_sandbox::gatekeeper::CommandGatekeeper::new();
-    if gatekeeper.check_command(&command, &[]) == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
-        || gatekeeper.patterns().is_match(&command)
-    {
-        return Err(CoreError::InvalidInput(
-            "Command blocked by safety red-line gatekeeper (InvalidCommand)".to_string(),
-        ));
+    let cwd_str = cwd.to_string_lossy();
+    let root_str = workspace_root.to_string_lossy();
+
+    // 1. 调用带工作区上下文的完整门禁（第一道 AST 门禁）
+    let verdict = gatekeeper.check_command_with_context(&command, &[], &cwd_str, &root_str);
+
+    match verdict {
+        conex_sandbox::gatekeeper::GatekeeperResult::Blocked => {
+            return Err(CoreError::InvalidInput(
+                "Command blocked by safety red-line gatekeeper (InvalidCommand)".to_string(),
+            ));
+        }
+        conex_sandbox::gatekeeper::GatekeeperResult::RequiresApproval => {
+            // Local IPC 若未弹窗确认，必须 Fail-Closed 严禁静默放行 Dangerous 命令！
+            return Err(CoreError::InvalidInput(
+                "Dangerous command requires explicit user approval before execution in workbench shell".to_string(),
+            ));
+        }
+        conex_sandbox::gatekeeper::GatekeeperResult::Allowed => {}
     }
 
     // ── cd 判定点（预留；产品决策：终端面板保留允许 cd）──
@@ -82,13 +102,20 @@ pub(crate) async fn workbench_run_shell(
         return Err(err);
     }
 
-    let cwd = resolve_shell_cwd(request.cwd.as_deref())?;
     let timeout_ms = request
         .timeout_ms
         .unwrap_or(DEFAULT_SHELL_TIMEOUT_MS)
         .clamp(1_000, 600_000);
 
     let (program, args, shell_label) = build_shell_invocation(&command)?;
+
+    // 2. 二次 AST 语法校验（Secondary AST Gate）：落地执行前杜绝参数逃逸与组装后 Redline 注入
+    let secondary_verdict = gatekeeper.check_command_with_context(&command, &[], &cwd_str, &root_str);
+    if secondary_verdict == conex_sandbox::gatekeeper::GatekeeperResult::Blocked {
+        return Err(CoreError::InvalidInput(
+            "Command payload violates safety redline on secondary inspection".to_string(),
+        ));
+    }
     let started = now_millis();
 
     let mut child_cmd = TokioCommand::new(&program);
@@ -707,6 +734,94 @@ mod tests {
                 }
                 other => panic!("expected InvalidInput for `{cmd}`, got {other:?}"),
             }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_workbench_run_shell_requires_approval_for_dangerous_command() {
+        let dangerous = [
+            "git push --force origin main",
+            "npm publish",
+            "sudo apt-get update",
+            "$x = 'Remove-Item'; & $x C:\\ -Force",
+        ];
+
+        for cmd in dangerous {
+            let req = WorkbenchRunShellRequest {
+                command: cmd.to_string(),
+                cwd: None,
+                timeout_ms: Some(5000),
+            };
+            let res = workbench_run_shell(req).await;
+            assert!(res.is_err(), "Expected dangerous command `{}` to require approval", cmd);
+            let err = res.unwrap_err();
+            match err {
+                CoreError::InvalidInput(msg) => {
+                    assert!(
+                        msg.contains("Dangerous command requires explicit user approval"),
+                        "Expected permission denied message for `{cmd}`: {msg}"
+                    );
+                }
+                other => panic!("expected InvalidInput for `{cmd}`, got {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_workbench_run_shell_blocks_obfuscated_and_reflection_redlines() {
+        let red_lines = [
+            "r`i C:\\ -Recurse -Force",
+            "R`em`ove-Item C:\\ -Force -Recurse",
+            "powershell -enco cgBtACAALQByAGYAIAAvAA==",
+            "pwsh -e:cgBtACAALQByAGYAIAAvAA==",
+            "[System.Diagnostics.Process]::Start('cmd.exe', '/c del /f /q C:\\*')",
+        ];
+
+        for cmd in red_lines {
+            let req = WorkbenchRunShellRequest {
+                command: cmd.to_string(),
+                cwd: None,
+                timeout_ms: Some(5000),
+            };
+            let res = workbench_run_shell(req).await;
+            assert!(res.is_err(), "Expected obfuscated redline `{}` to be blocked", cmd);
+            let err = res.unwrap_err();
+            match err {
+                CoreError::InvalidInput(msg) => {
+                    assert!(
+                        msg.contains("InvalidCommand") || msg.contains("safety redline") || msg.contains("safety red-line"),
+                        "detail should block for `{cmd}`: {msg}"
+                    );
+                }
+                other => panic!("expected InvalidInput for `{cmd}`, got {other:?}"),
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_workbench_run_shell_escalates_outside_workspace() {
+        // Normal command with an explicit out-of-workspace cwd -> escalated to RequiresApproval -> InvalidInput
+        let cwd_outside = if cfg!(windows) {
+            "C:\\Windows"
+        } else {
+            "/etc"
+        };
+        let req = WorkbenchRunShellRequest {
+            command: "git status".to_string(),
+            cwd: Some(cwd_outside.to_string()),
+            timeout_ms: Some(5000),
+        };
+        let res = workbench_run_shell(req).await;
+        assert!(res.is_err(), "Expected out of workspace command to fail-closed");
+        let err = res.unwrap_err();
+        match err {
+            CoreError::InvalidInput(msg) => {
+                assert!(
+                    msg.contains("Dangerous command requires explicit user approval"),
+                    "Expected permission denied for outside cwd: {msg}"
+                );
+            }
+            other => panic!("expected InvalidInput for outside cwd, got {other:?}"),
         }
     }
 

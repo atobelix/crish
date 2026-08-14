@@ -8,9 +8,10 @@
 //! - **持久化**：原子写（tmp + rename，对齐 `config/persistence.rs` 先例）；
 //!   权限位（Unix 0600 / Windows ACL 收紧）与撤销全链归 R1-07。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use axum::{
     Json,
@@ -33,6 +34,237 @@ pub const TOKEN_BYTES: usize = 32;
 // R1-02 备注：R1-07 撤销全链消费——dead_code 静音（测试构建保持检查）
 #[cfg_attr(not(test), allow(dead_code))]
 pub const PAIRING_FILE_VERSION: u32 = 1;
+
+/// 默认 Nonce 容量上限（LRU 驱逐）
+pub const DEFAULT_NONCE_CAPACITY: usize = 10_000;
+/// 默认时钟偏移容忍阈值（300 秒 = 5 分钟）
+pub const DEFAULT_CLOCK_SKEW_MS: u64 = 300_000;
+/// 全局时钟透传 Header 名
+pub const SERVER_TIME_HEADER: &str = "X-Server-Time-Ms";
+
+/// Nonce 记录条目（幂等响应缓存）
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NonceEntry {
+    /// 接收时间戳（epoch ms）
+    pub received_at_ms: u64,
+    /// 请求体 SHA-256 哈希
+    pub payload_sha256: [u8; 32],
+    /// 缓存的 HTTP 状态码
+    pub cached_status: u16,
+    /// 缓存的响应体字节
+    pub cached_body: Vec<u8>,
+}
+
+/// Nonce 校验结果
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NonceCheckResult {
+    /// 全新合法请求
+    Valid,
+    /// 合法弱网重传（相同 Nonce 且 Payload 哈希完全一致）-> 幂等返回缓存响应
+    IdempotentRetry { status: u16, body: Vec<u8> },
+    /// 恶意重放或参数篡改
+    ReplayDetected,
+    /// 时钟偏差过大
+    ClockSkewTooLarge { diff_ms: u64, max_skew_ms: u64 },
+}
+
+#[derive(Debug)]
+struct NonceStoreInner {
+    capacity: usize,
+    map: HashMap<(String, String), NonceEntry>,
+    order: VecDeque<(String, String)>,
+}
+
+impl NonceStoreInner {
+    fn new(capacity: usize) -> Self {
+        Self {
+            capacity: capacity.max(1),
+            map: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    fn evict_oldest_if_needed(&mut self) {
+        while self.map.len() >= self.capacity {
+            if let Some(old_key) = self.order.pop_front() {
+                self.map.remove(&old_key);
+            } else {
+                break;
+            }
+        }
+    }
+
+    fn put(&mut self, key: (String, String), entry: NonceEntry) {
+        if !self.map.contains_key(&key) {
+            self.evict_oldest_if_needed();
+            self.order.push_back(key.clone());
+        }
+        self.map.insert(key, entry);
+    }
+
+    fn get(&self, key: &(String, String)) -> Option<&NonceEntry> {
+        self.map.get(key)
+    }
+
+    fn get_mut(&mut self, key: &(String, String)) -> Option<&mut NonceEntry> {
+        self.map.get_mut(key)
+    }
+}
+
+/// 高级 Nonce 守卫（防重放 + 弱网幂等重传放行）
+pub struct AdvancedNonceGuard {
+    clock_skew_ms: u64,
+    inner: Mutex<NonceStoreInner>,
+}
+
+impl AdvancedNonceGuard {
+    /// 创建 Nonce 守卫
+    pub fn new(capacity: usize, clock_skew_ms: u64) -> Self {
+        Self {
+            clock_skew_ms,
+            inner: Mutex::new(NonceStoreInner::new(capacity)),
+        }
+    }
+
+    /// 获取配置的时钟偏差上限
+    pub fn clock_skew_ms(&self) -> u64 {
+        self.clock_skew_ms
+    }
+
+    /// 校验并记录 Nonce
+    pub fn check_and_record(
+        &self,
+        device_id: &str,
+        nonce: &str,
+        req_ts: u64,
+        now_ms: u64,
+        payload_sha256: [u8; 32],
+    ) -> NonceCheckResult {
+        // 1. 检查时钟偏移
+        let diff = req_ts.abs_diff(now_ms);
+        if diff > self.clock_skew_ms {
+            return NonceCheckResult::ClockSkewTooLarge {
+                diff_ms: diff,
+                max_skew_ms: self.clock_skew_ms,
+            };
+        }
+
+        let key = (device_id.to_string(), nonce.to_string());
+        let mut store = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+
+        // 2. 检查 Nonce 记录
+        if let Some(entry) = store.get(&key) {
+            if entry.payload_sha256 == payload_sha256 {
+                // 弱网重传完全同构，放行幂等处理
+                return NonceCheckResult::IdempotentRetry {
+                    status: entry.cached_status,
+                    body: entry.cached_body.clone(),
+                };
+            } else {
+                // Nonce 相同但 Payload 被篡改，判定为恶意重放
+                return NonceCheckResult::ReplayDetected;
+            }
+        }
+
+        // 3. 记录全新请求（预占位）
+        store.put(
+            key,
+            NonceEntry {
+                received_at_ms: now_ms,
+                payload_sha256,
+                cached_status: 200,
+                cached_body: Vec::new(),
+            },
+        );
+
+        NonceCheckResult::Valid
+    }
+
+    /// 更新响应缓存供后续幂等重试直接返回
+    pub fn update_response(&self, device_id: &str, nonce: &str, status: u16, body: &[u8]) {
+        let key = (device_id.to_string(), nonce.to_string());
+        let mut store = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(entry) = store.get_mut(&key) {
+            entry.cached_status = status;
+            entry.cached_body = body.to_vec();
+        }
+    }
+
+    /// 查询已缓存的响应
+    pub fn get_cached_response(&self, device_id: &str, nonce: &str) -> Option<(u16, Vec<u8>)> {
+        let key = (device_id.to_string(), nonce.to_string());
+        let store = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        store.get(&key).map(|e| (e.cached_status, e.cached_body.clone()))
+    }
+
+    /// 当前缓存条目数
+    pub fn len(&self) -> usize {
+        let store = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        store.map.len()
+    }
+
+    /// 是否为空
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+impl Default for AdvancedNonceGuard {
+    fn default() -> Self {
+        Self::new(DEFAULT_NONCE_CAPACITY, DEFAULT_CLOCK_SKEW_MS)
+    }
+}
+
+/// HMAC-SHA256 计算（使用 ring::hmac）
+pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
+    let s_key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, key);
+    let tag = ring::hmac::sign(&s_key, data);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(tag.as_ref());
+    out
+}
+
+/// HMAC-SHA256 hex 计算（小写 hex 64 字符）
+pub fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
+    hex::encode(hmac_sha256(key, data))
+}
+
+/// 常量时间校验 HMAC-SHA256 签名（防时序攻击）
+pub fn verify_hmac_sha256(key: &[u8], data: &[u8], signature_hex: &str) -> bool {
+    let s_key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, key);
+    let Ok(sig_bytes) = hex::decode(signature_hex) else {
+        return false;
+    };
+    ring::hmac::verify(&s_key, data, &sig_bytes).is_ok()
+}
+
+/// HTTP REST 请求签名规范化输入（ADR-01 方案 B）：
+/// `canon_http = deviceId || method || path || ts || nonce || body_sha256_hex`
+pub fn canonical_http_signing_payload(
+    device_id: &str,
+    method: &str,
+    path: &str,
+    ts: u64,
+    nonce: &str,
+    body_sha256_hex: &str,
+) -> String {
+    format!("{device_id}{method}{path}{ts}{nonce}{body_sha256_hex}")
+}
+
+/// WebSocket 信封签名规范化输入（ADR-01 方案 B）：
+/// `canon_ws = deviceId || ts || nonce || msgId || kind || v || bodyJson`
+pub fn canonical_ws_signing_payload(
+    device_id: &str,
+    ts: u64,
+    nonce: &str,
+    msg_id: &str,
+    kind: &str,
+    v: u32,
+    body_json: &str,
+) -> String {
+    format!("{device_id}{ts}{nonce}{msg_id}{kind}{v}{body_json}")
+}
 
 /// 令牌记录（pairing.json 条目；只含哈希，永不含明文）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -326,14 +558,19 @@ pub fn constant_time_eq(a: &str, b: &str) -> bool {
 }
 
 /// Bearer 令牌校验中间件（D2 §7.1 零信任：除 /v1/info 与 /v1/pair 外全部
-/// 接口必须携带有效令牌；校验失败 → 401 + ErrorBody 载荷）
+/// 接口必须携带有效令牌；校验失败 → 401 + ErrorBody 载荷；全部响应透传 X-Server-Time-Ms）
 pub async fn require_bearer_token(
     State(state): State<ServerState>,
     request: Request,
     next: Next,
 ) -> Response {
+    let now = now_ms();
     let unauthorized = |code: DeviceErrorCode, message: &str| -> Response {
-        (StatusCode::UNAUTHORIZED, Json(ErrorBody::new(code, message))).into_response()
+        let mut resp = (StatusCode::UNAUTHORIZED, Json(ErrorBody::new(code, message))).into_response();
+        if let Ok(val) = axum::http::HeaderValue::from_str(&now.to_string()) {
+            resp.headers_mut().insert(SERVER_TIME_HEADER, val);
+        }
+        resp
     };
     let Some(token) = bearer_token(&request) else {
         return unauthorized(
@@ -344,7 +581,7 @@ pub async fn require_bearer_token(
     let verdict = {
         let tokens = state.tokens();
         let mut guard = tokens.lock().unwrap_or_else(|e| e.into_inner());
-        let verdict = guard.verify(token, now_ms());
+        let verdict = guard.verify(token, now);
         if verdict != TokenVerdict::Valid {
             // R1-10 T-01：认证失败计数（伪造端/失窃令牌重放均计入；
             // 纯计数不联动锁定——锁定/审计归 limiter 域）
@@ -352,14 +589,18 @@ pub async fn require_bearer_token(
         }
         verdict
     };
-    match verdict {
+    let mut response = match verdict {
         TokenVerdict::Valid => next.run(request).await,
         TokenVerdict::Revoked => unauthorized(
             DeviceErrorCode::AuthDeviceRevoked,
             "令牌已被撤销，请重新配对",
         ),
         TokenVerdict::Invalid => unauthorized(DeviceErrorCode::AuthBadSignature, "令牌校验失败"),
+    };
+    if let Ok(val) = axum::http::HeaderValue::from_str(&now.to_string()) {
+        response.headers_mut().insert(SERVER_TIME_HEADER, val);
     }
+    response
 }
 
 /// 从请求头解析 Bearer 令牌（`Authorization: Bearer <token>`）
@@ -618,5 +859,89 @@ mod tests {
         );
         assert_eq!(store.records()[0].label, "新名字");
         let _ = fs::remove_file(path);
+    }
+
+    // ── Nonce 幂等表与 HMAC-SHA256 测试 ──
+
+    #[test]
+    fn adversarial_nonce_idempotent_retry_and_clock_sync() {
+        let guard = AdvancedNonceGuard::new(1000, 300_000);
+        let now = 1_770_800_000_000u64;
+        let payload_hash = [0xabu8; 32];
+
+        // 1. 首次合法请求
+        let res1 = guard.check_and_record("dev-1", "nonce-100", now, now, payload_hash);
+        assert!(matches!(res1, NonceCheckResult::Valid));
+        guard.update_response("dev-1", "nonce-100", 200, b"{\"status\":\"ok\"}");
+
+        // 2. 弱网丢包后原样重传 -> 必须幂等返回缓存响应，严禁报错 401
+        let res2 = guard.check_and_record("dev-1", "nonce-100", now, now + 2000, payload_hash);
+        match res2 {
+            NonceCheckResult::IdempotentRetry { status, body } => {
+                assert_eq!(status, 200);
+                assert_eq!(body, b"{\"status\":\"ok\"}");
+            }
+            _ => panic!("合法弱网重传必须被判定为 IdempotentRetry"),
+        }
+
+        // 3. 恶意篡改 Payload 的相同 Nonce -> 必须拦截
+        let tampered_hash = [0xcd; 32];
+        let res3 = guard.check_and_record("dev-1", "nonce-100", now, now + 3000, tampered_hash);
+        assert!(matches!(res3, NonceCheckResult::ReplayDetected));
+
+        // 4. 时钟偏差 > 300s -> 拦截并返回 ClockSkewTooLarge
+        let res4 = guard.check_and_record("dev-1", "nonce-101", now + 350_000, now, payload_hash);
+        assert!(matches!(res4, NonceCheckResult::ClockSkewTooLarge { .. }));
+    }
+
+    #[test]
+    fn nonce_guard_capacity_eviction_lru() {
+        let guard = AdvancedNonceGuard::new(3, 300_000);
+        let now = 1_000_000u64;
+
+        assert!(matches!(
+            guard.check_and_record("d1", "n1", now, now, [1u8; 32]),
+            NonceCheckResult::Valid
+        ));
+        assert!(matches!(
+            guard.check_and_record("d1", "n2", now, now, [2u8; 32]),
+            NonceCheckResult::Valid
+        ));
+        assert!(matches!(
+            guard.check_and_record("d1", "n3", now, now, [3u8; 32]),
+            NonceCheckResult::Valid
+        ));
+        assert_eq!(guard.len(), 3);
+
+        // 插入第 4 个，淘汰最旧的 n1
+        assert!(matches!(
+            guard.check_and_record("d1", "n4", now, now, [4u8; 32]),
+            NonceCheckResult::Valid
+        ));
+        assert_eq!(guard.len(), 3);
+
+        // n1 已被驱逐，再次进入视为全新 Valid 请求
+        assert!(matches!(
+            guard.check_and_record("d1", "n1", now, now, [1u8; 32]),
+            NonceCheckResult::Valid
+        ));
+    }
+
+    #[test]
+    fn hmac_sha256_verification_and_canonical_payloads() {
+        let key = b"secret-key-32-bytes-long-padding";
+        let data = b"canonical-message-payload";
+        let sig = hmac_sha256_hex(key, data);
+        assert_eq!(sig.len(), 64);
+        assert!(verify_hmac_sha256(key, data, &sig));
+        assert!(!verify_hmac_sha256(key, b"different-data", &sig));
+        assert!(!verify_hmac_sha256(b"wrong-key", data, &sig));
+        assert!(!verify_hmac_sha256(key, data, "invalid-hex"));
+
+        let canon_http = canonical_http_signing_payload("dev-1", "POST", "/v1/runs", 1000, "nonce-1", "abcdef");
+        assert_eq!(canon_http, "dev-1POST/v1/runs1000nonce-1abcdef");
+
+        let canon_ws = canonical_ws_signing_payload("dev-1", 1000, "nonce-1", "msg-1", "runTask", 1, "{}");
+        assert_eq!(canon_ws, "dev-11000nonce-1msg-1runTask1{}");
     }
 }

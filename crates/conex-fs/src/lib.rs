@@ -13,14 +13,75 @@ pub mod trash;
 pub mod watch;
 
 pub use atomic_write::{atomic_write, atomic_write_file, AtomicWriteState, AtomicWriteTx};
-pub use watch::{is_internal_atomic_transient_path, watcher_filter};
+pub use path_utils::{
+    compute_file_hash, ensure_parent_dir, is_dos_device_name, safe_canonicalize,
+    strip_verbatim_prefix,
+};
+pub use watch::{glob_match, is_internal_atomic_transient_path, watcher_filter};
 
 pub mod path_utils {
     use anyhow::{bail, Result};
     use std::path::{Component, Path, PathBuf};
 
+    /// 剥离 Windows canonicalize 的 `\\?\` / `\\?\UNC\` 前缀（其它平台原样返回）
+    ///
+    /// 对 `\\?\UNC\server\share\file` 严格规范化为 `\\server\share\file`（双反斜杠标准 UNC 格式）。
+    pub fn strip_verbatim_prefix(path: impl AsRef<Path>) -> PathBuf {
+        let path = path.as_ref();
+        #[cfg(windows)]
+        {
+            let s = path.to_string_lossy();
+            if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
+                return PathBuf::from(format!(r"\\{rest}"));
+            }
+            if let Some(rest) = s.strip_prefix(r"\\?\") {
+                return PathBuf::from(rest.to_string());
+            }
+            if let Some(rest) = s.strip_prefix(r"\\.\") {
+                return PathBuf::from(rest.to_string());
+            }
+        }
+        path.to_path_buf()
+    }
+
+    /// 检查是否为 Windows DOS 保留设备名称（如 CON, PRN, AUX, NUL, COM1-9, LPT1-9, CONIN$, CONOUT$ 等）
+    pub fn is_dos_device_name(name: &str) -> bool {
+        let s = name.trim();
+        let stem = s.split('.').next().unwrap_or(s);
+        let stem = stem.split(':').next().unwrap_or(stem).trim();
+        let upper = stem.to_ascii_uppercase();
+        matches!(
+            upper.as_str(),
+            "CON"
+                | "PRN"
+                | "AUX"
+                | "NUL"
+                | "CONIN$"
+                | "CONOUT$"
+                | "COM1"
+                | "COM2"
+                | "COM3"
+                | "COM4"
+                | "COM5"
+                | "COM6"
+                | "COM7"
+                | "COM8"
+                | "COM9"
+                | "LPT1"
+                | "LPT2"
+                | "LPT3"
+                | "LPT4"
+                | "LPT5"
+                | "LPT6"
+                | "LPT7"
+                | "LPT8"
+                | "LPT9"
+        )
+    }
+
     /// Safely canonicalize a path with depth limiting and traversal protection.
-    /// Prevents path traversal attacks (../ sequences) and enforces max component depth.
+    /// Prevents path traversal attacks (../ sequences), drive-relative paths (C:file.txt),
+    /// DOS reserved devices (CON, NUL, AUX, etc.), and enforces max component depth.
     pub fn safe_canonicalize(path: impl AsRef<Path>, max_depth: usize) -> Result<PathBuf> {
         let path = path.as_ref();
 
@@ -34,14 +95,50 @@ pub mod path_utils {
             bail!("path contains null byte");
         }
 
-        // Count depth and check for traversal
+        // 拦截驱动器相对路径（如 "C:file.txt", "d:sub\foo"）
+        let bytes = path_str.as_bytes();
+        if bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' {
+            if bytes.len() == 2 || (bytes[2] != b'/' && bytes[2] != b'\\') {
+                bail!(
+                    "drive-relative path not allowed: '{}' (must be absolute with root slash)",
+                    path_str
+                );
+            }
+        }
+
+        // 拦截 Windows DOS 保留设备名称（按路径分隔符切分检查）
+        for seg in path_str.split(['/', '\\']) {
+            if !seg.is_empty() && is_dos_device_name(seg) {
+                bail!("DOS device name detected: '{}' is a reserved device name", seg);
+            }
+        }
+
+        // Count depth and check for traversal and prefix components
         let mut depth: usize = 0;
+        let mut components_iter = path.components().peekable();
+        if let Some(Component::Prefix(_)) = components_iter.peek() {
+            components_iter.next();
+            match components_iter.peek() {
+                Some(Component::RootDir) => {} // Absolute drive path C:\... -> OK
+                _ => {
+                    bail!(
+                        "drive-relative path not allowed: '{}'",
+                        path.display()
+                    );
+                }
+            }
+        }
+
         for component in path.components() {
             match component {
                 Component::ParentDir => {
                     bail!("path traversal detected: '..' component not allowed");
                 }
-                Component::Normal(_) => {
+                Component::Normal(os_str) => {
+                    let name = os_str.to_string_lossy();
+                    if is_dos_device_name(&name) {
+                        bail!("DOS device name detected: '{}' is a reserved device name", name);
+                    }
                     depth += 1;
                     if depth > max_depth {
                         bail!(
@@ -282,5 +379,82 @@ mod tests {
         assert!(file_path.parent().unwrap().exists());
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn strip_verbatim_prefix_handles_unc_and_local() {
+        let unc_path = Path::new(r"\\?\UNC\server\share\file.txt");
+        let stripped_unc = strip_verbatim_prefix(unc_path);
+        #[cfg(windows)]
+        assert_eq!(stripped_unc.to_string_lossy(), r"\\server\share\file.txt");
+
+        let local_path = Path::new(r"\\?\C:\workspace\file.txt");
+        let stripped_local = strip_verbatim_prefix(local_path);
+        #[cfg(windows)]
+        assert_eq!(stripped_local.to_string_lossy(), r"C:\workspace\file.txt");
+
+        let dot_path = Path::new(r"\\.\pipe\test");
+        let stripped_dot = strip_verbatim_prefix(dot_path);
+        #[cfg(windows)]
+        assert_eq!(stripped_dot.to_string_lossy(), r"pipe\test");
+
+        let plain_path = Path::new(r"C:\simple\path.txt");
+        let stripped_plain = strip_verbatim_prefix(plain_path);
+        assert_eq!(stripped_plain, plain_path);
+    }
+
+    #[test]
+    fn safe_canonicalize_rejects_drive_relative_paths() {
+        let cases = ["C:file.txt", "d:sub/dir.txt", "C:", "x:foo\\bar"];
+        for case in cases {
+            let res = safe_canonicalize(case, 10);
+            assert!(
+                res.is_err(),
+                "驱动器相对路径必须被 safe_canonicalize 拦截: {case}"
+            );
+            let err = res.unwrap_err().to_string();
+            assert!(
+                err.contains("drive-relative"),
+                "错误信息必须明确提示 drive-relative: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn safe_canonicalize_rejects_dos_device_names() {
+        let cases = [
+            "CON",
+            "con",
+            "PRN",
+            "prn",
+            "AUX",
+            "aux",
+            "NUL",
+            "nul",
+            "nul.txt",
+            "con.tar.gz",
+            "AUX.json",
+            "COM1",
+            "com3.log",
+            "LPT1",
+            "lpt9.dat",
+            "CONIN$",
+            "conout$",
+            "folder/CON/file.txt",
+            "sub/nul.txt",
+            r"dir\aux\test.rs",
+        ];
+        for case in cases {
+            let res = safe_canonicalize(case, 10);
+            assert!(
+                res.is_err(),
+                "DOS 保留设备名称必须被 safe_canonicalize 拦截: {case}"
+            );
+            let err = res.unwrap_err().to_string();
+            assert!(
+                err.contains("DOS device name"),
+                "错误信息必须明确提示 DOS device name: {err}"
+            );
+        }
     }
 }

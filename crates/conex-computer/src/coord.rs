@@ -17,12 +17,12 @@ pub const XGA_H: u32 = 768;
 pub const WXGA_W: u32 = 1280;
 /// WXGA 缩放目标
 pub const WXGA_H: u32 = 800;
-/// FWXGA 缩放目标(约 16:9)
-pub const FWXGA_W: u32 = 1366;
-/// FWXGA 缩放目标
-pub const FWXGA_H: u32 = 768;
-/// 目标宽高比容差(18 §4.1:绝对值差 <0.02 视为命中)
-pub const RATIO_TOLERANCE: f64 = 0.02;
+/// HD720 缩放目标(严格 16:9)
+pub const HD720_W: u32 = 1280;
+/// HD720 缩放目标
+pub const HD720_H: u32 = 720;
+/// 目标宽高比容差(04 §5.3 / 18 §4.1:绝对值差 <0.005 视为命中)
+pub const RATIO_TOLERANCE: f64 = 0.005;
 
 /// 坐标点(物理像素或 API 像素,依语境而定)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -99,6 +99,11 @@ impl ScaleSpec {
         self.target_h as f64 / self.phys_h as f64
     }
 
+    /// 是否为严格等比缩放 (fx == fy)
+    pub fn is_isometric(&self) -> bool {
+        (self.fx() - self.fy()).abs() < 1e-6
+    }
+
     /// API → 物理(注入前):`x_phys = round(x_api / fx) + origin_x`
     pub fn api_to_phys(&self, p: Point) -> Point {
         let x = (p.x as f64 / self.fx()).round() as i32 + self.origin_x;
@@ -142,15 +147,15 @@ impl ScaleSpec {
     }
 }
 
-/// 缩放目标选择(18 §4.1):
-/// 按序检查 [XGA, WXGA, FWXGA],取首个「宽高比差 <0.02 且目标宽 < 物理宽」;
+/// 缩放目标选择(18 §4.1 / 04 §5.3):
+/// 按序检查 [XGA, WXGA, HD720],取首个「宽高比差 <0.005 且目标宽 < 物理宽」;
 /// 未命中返回物理尺寸(不缩放,避免超宽屏强制拉伸畸变)。
 pub fn choose_target(phys_w: u32, phys_h: u32) -> (u32, u32) {
     let ratio = phys_w as f64 / phys_h as f64;
     let candidates = [
-        (XGA_W, XGA_H),
-        (WXGA_W, WXGA_H),
-        (FWXGA_W, FWXGA_H),
+        (XGA_W, XGA_H),     // 4:3
+        (WXGA_W, WXGA_H),   // 16:10
+        (HD720_W, HD720_H), // 严格 16:9 (1.7777778), 确保 fx == fy
     ];
     for (tw, th) in candidates {
         let target_ratio = tw as f64 / th as f64;
@@ -202,9 +207,9 @@ mod tests {
     }
 
     #[test]
-    fn scale_target_16x9_chooses_fwxga() {
-        // 2560×1440(≈16:9,37 报告实测环境)→ FWXGA 1366×768
-        assert_eq!(choose_target(2560, 1440), (FWXGA_W, FWXGA_H));
+    fn scale_target_16x9_chooses_hd720() {
+        // 2560×1440 (16:9) → HD720 1280×720
+        assert_eq!(choose_target(2560, 1440), (HD720_W, HD720_H));
     }
 
     #[test]
@@ -217,28 +222,31 @@ mod tests {
     fn scale_only_down_keeps_original() {
         // 只缩不升:物理分辨率不大于任何目标时保持原尺寸
         assert_eq!(choose_target(1024, 768), (1024, 768));
-        assert_eq!(choose_target(1366, 768), (1366, 768));
+        assert_eq!(choose_target(1280, 720), (1280, 720));
         assert_eq!(choose_target(800, 600), (800, 600));
     }
 
     #[test]
     fn coord_roundtrip_dpi_100() {
-        // DPI 100%:物理 1920×1080 → FWXGA
-        let scale = ScaleSpec::new(0, 0, 1920, 1080, 1366, 768);
+        // DPI 100%:物理 1920×1080 → HD720 1280×720
+        let scale = ScaleSpec::new(0, 0, 1920, 1080, 1280, 720);
+        assert!(scale.is_isometric());
         assert_roundtrip_grid(&scale);
     }
 
     #[test]
     fn coord_roundtrip_dpi_125() {
-        // DPI 125%:物理 2560×1440 → FWXGA(37 报告本机环境)
-        let scale = ScaleSpec::new(0, 0, 2560, 1440, 1366, 768);
+        // DPI 125%:物理 2560×1440 → HD720 1280×720
+        let scale = ScaleSpec::new(0, 0, 2560, 1440, 1280, 720);
+        assert!(scale.is_isometric());
         assert_roundtrip_grid(&scale);
     }
 
     #[test]
     fn coord_roundtrip_dpi_150() {
-        // DPI 150%:物理 2880×1620 → FWXGA
-        let scale = ScaleSpec::new(0, 0, 2880, 1620, 1366, 768);
+        // DPI 150%:物理 2880×1620 → HD720 1280×720
+        let scale = ScaleSpec::new(0, 0, 2880, 1620, 1280, 720);
+        assert!(scale.is_isometric());
         assert_roundtrip_grid(&scale);
     }
 
@@ -247,6 +255,7 @@ mod tests {
         // 双屏负坐标:[-1920,0]+[0,0] 并排,虚拟桌面左上角 (-1920,0);
         // 合成图 3840×1080 超宽 → 不缩放(fx=fy=1)
         let scale = ScaleSpec::new(-1920, 0, 3840, 1080, 3840, 1080);
+        assert!(scale.is_isometric());
         // 物理 (-100,300) → API (1820,300) → 物理 (-100,300)
         assert_eq!(scale.phys_to_api(Point::new(-100, 300)), Point::new(1820, 300));
         assert_eq!(scale.api_to_phys(Point::new(1820, 300)), Point::new(-100, 300));
@@ -255,8 +264,8 @@ mod tests {
 
     #[test]
     fn coord_roundtrip_scaled_with_negative_origin() {
-        // 缩放 + 负原点组合:原点 (-100,-50),物理 2560×1440 → FWXGA
-        let scale = ScaleSpec::new(-100, -50, 2560, 1440, 1366, 768);
+        // 缩放 + 负原点组合:原点 (-100,-50),物理 2560×1440 → HD720
+        let scale = ScaleSpec::new(-100, -50, 2560, 1440, 1280, 720);
         assert_eq!(scale.api_to_phys(Point::new(0, 0)), Point::new(-100, -50));
         assert_eq!(scale.phys_to_api(Point::new(-100, -50)), Point::new(0, 0));
         assert_roundtrip_grid(&scale);
@@ -264,7 +273,7 @@ mod tests {
 
     #[test]
     fn coord_out_of_bounds_returns_error() {
-        let scale = ScaleSpec::new(0, 0, 2560, 1440, 1366, 768);
+        let scale = ScaleSpec::new(0, 0, 2560, 1440, 1280, 720);
         // 越界:负坐标与超出目标宽高
         assert_eq!(
             scale.validate_api(Point::new(-1, 0)),
@@ -275,25 +284,43 @@ mod tests {
             Err(CoordError::CoordsOutOfBounds)
         );
         assert_eq!(
-            scale.validate_api(Point::new(1367, 0)),
+            scale.validate_api(Point::new(1281, 0)),
             Err(CoordError::CoordsOutOfBounds)
         );
         assert_eq!(
-            scale.validate_api(Point::new(0, 769)),
+            scale.validate_api(Point::new(0, 721)),
             Err(CoordError::CoordsOutOfBounds)
         );
         // 边界内合法(含右/下边界值,04 §4.4 允许 ≤)
         assert!(scale.validate_api(Point::new(0, 0)).is_ok());
-        assert!(scale.validate_api(Point::new(1366, 768)).is_ok());
+        assert!(scale.validate_api(Point::new(1280, 720)).is_ok());
     }
 
     #[test]
     fn coord_phys_clamp() {
         // 虚拟桌面跨度 [-100, -100+2560) = [-100, 2460],钳制上下界随原点平移
-        let scale = ScaleSpec::new(-100, 0, 2560, 1440, 1366, 768);
+        let scale = ScaleSpec::new(-100, 0, 2560, 1440, 1280, 720);
         assert_eq!(scale.clamp_phys(Point::new(3000, -20)), Point::new(2460, 0));
         assert_eq!(scale.clamp_phys(Point::new(-500, 500)), Point::new(-100, 500));
         // 边界内原样返回
         assert_eq!(scale.clamp_phys(Point::new(100, 100)), Point::new(100, 100));
+    }
+
+    #[test]
+    fn adversarial_coord_1280x720_isometric_and_screens() {
+        // 1080P / 2K / 4K 严格等比换算 (INV-04)
+        let screens = [(1920, 1080), (2560, 1440), (3840, 2160)];
+        for (pw, ph) in screens {
+            let (tw, th) = choose_target(pw, ph);
+            assert_eq!((tw, th), (1280, 720), "标准 16:9 屏幕必须收敛至 1280x720");
+            let spec = ScaleSpec::new(0, 0, pw, ph, tw, th);
+            assert!(spec.is_isometric(), "16:9 屏幕缩放因子 fx == fy 必须成立");
+
+            // 往返双向无畸变
+            let pt = Point::new(640, 360);
+            let phys = spec.api_to_phys(pt);
+            let back = spec.phys_to_api(phys);
+            assert!((back.x - pt.x).abs() <= 1 && (back.y - pt.y).abs() <= 1);
+        }
     }
 }

@@ -1,7 +1,9 @@
 pub mod semantics;
-// T-AB-05 新增公开导出：禁 cd 语义层分类入口（供 T-AB-04 调用，
-// 冻结签名 classify_command_segments(&[String]) -> CommandClass）
-pub use semantics::{classify_command_segments, CommandClass};
+// T-AB-05 / Unit 5.1 新增公开导出：禁 cd 语义层与反混淆/AST 门禁接口
+pub use semantics::{
+    analyze_segment_ast, analyze_token_danger, classify_command_segments, is_ps_encoded_command_flag,
+    split_command_args_normalized, CommandClass,
+};
 pub mod gatekeeper {
     use regex::RegexSet;
     use serde::{Deserialize, Serialize};
@@ -74,21 +76,24 @@ pub mod gatekeeper {
         }
 
         pub fn check_command(&self, cmd: &str, args: &[&str]) -> GatekeeperResult {
-            let full_line = format!("{cmd} {}", args.join(" "));
+            let full_line = if args.is_empty() {
+                cmd.to_string()
+            } else {
+                format!("{cmd} {}", args.join(" "))
+            };
 
-            // 红线先行分支（S2 语义兜底，最高优先级）：
-            // 任一段命中 Redline → 直接 Blocked，不落正则判定（100% 拦截）。
-            // 间接执行（sudo bash -c / eval）内层红线已由语义层整体升级为段 Redline。
+            // 1. 语义与 AST 分析（红线最高优先级，100% 拦截）
             let analysis = crate::semantics::analyze(&full_line);
             if analysis
                 .segments
                 .iter()
                 .any(|s| s.class == crate::semantics::CommandClass::Redline)
+                || analysis.overall_class == crate::semantics::CommandClass::Redline
             {
                 return GatekeeperResult::Blocked;
             }
 
-            // 静态红线清单兜底（第一层：Format-Volume / dd 写设备等确定性毁灭目标）
+            // 2. 静态红线清单兜底（第一层：Format-Volume / dd 写设备等确定性毁灭目标）
             if self.blocked_patterns.is_match(cmd)
                 || self.blocked_patterns.is_match(&full_line)
                 || args.iter().any(|arg| self.blocked_patterns.is_match(arg))
@@ -96,16 +101,18 @@ pub mod gatekeeper {
                 return GatekeeperResult::Blocked;
             }
 
-            // 语义层 Dangerous（mkfs / dd / curl 等）合并既有 approval_patterns 语义
+            // 3. 语义层 Dangerous / 间接删除 / AST 危险判定合并既有 approval_patterns 语义
             if analysis
                 .segments
                 .iter()
                 .any(|s| s.class == crate::semantics::CommandClass::Dangerous)
+                || analysis.overall_class == crate::semantics::CommandClass::Dangerous
+                || analysis.has_indirect_delete
             {
                 return GatekeeperResult::RequiresApproval;
             }
 
-            // 既有审批正则清单
+            // 4. 既有审批正则清单
             if self.approval_patterns.is_match(cmd)
                 || self.approval_patterns.is_match(&full_line)
                 || args.iter().any(|arg| self.approval_patterns.is_match(arg))
@@ -464,6 +471,42 @@ mod tests {
             gk.check_command("git checkout main", &[]),
             GatekeeperResult::Allowed,
             "分支切换保持放行"
+        );
+    }
+
+    // ===== Unit 5.1：Section 8.1 混淆逃逸与对抗断言 =====
+
+    #[test]
+    fn test_adversarial_sandbox_obfuscation_and_secondary_check() {
+        let gk = CommandGatekeeper::new();
+
+        // 1. 反引号与编码变形
+        let cases = [
+            "r`i C:\\ -Recurse -Force",
+            "R`em`ove-Item C:\\ -Force -Recurse",
+            "powershell -enco cgBtACAALQByAGYAIAAvAA==",
+            "pwsh -e:cgBtACAALQByAGYAIAAvAA==",
+            "[System.Diagnostics.Process]::Start('cmd.exe', '/c del /f /q C:\\*')",
+            "$x = 'Remove-Item'; & $x C:\\ -Force",
+            "Get-ChildItem C:\\ | % { Remove-Item $_.FullName -Force }",
+        ];
+
+        for cmd in cases {
+            let verdict = gk.check_command_with_context(cmd, &[], "C:\\ws", "C:\\ws");
+            assert_ne!(
+                verdict,
+                GatekeeperResult::Allowed,
+                "混淆/反射命令必须被拦截或要求审批: {cmd}"
+            );
+        }
+
+        // 2. 工作区越界升级
+        let out_cmd = "git status";
+        let verdict_out = gk.check_command_with_context(out_cmd, &[], "C:\\Windows\\System32", "C:\\ws");
+        assert_eq!(
+            verdict_out,
+            GatekeeperResult::RequiresApproval,
+            "工作区越界命令必须自动升级为 RequiresApproval"
         );
     }
 }

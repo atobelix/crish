@@ -132,20 +132,19 @@ impl RealComputerSession {
         self
     }
 
-    /// 动作前检查器（守卫⑥）：解析当前活动窗口标题 → 构造窗口目标 →
-    /// `gate.check`；拒绝 → [`SessionError::Gate`]（工具层映射
-    /// `tool.computer.elevated_window`）。
-    ///
-    /// 感知不可用（无活动窗口 / UIA 故障）时跳过门禁（空白名单默认放行
-    /// 语义下零注入面不受影响；提权探测需进程名，感知面未提供，遗留登记）。
+    /// 动作前检查器（守卫⑥）：Win32 API 动态解析前台活动窗口 HWND/PID/真实 ExeName，
+    /// 废除 process: None 硬编码；遭遇 ACCESS_DENIED 等异常严格 Fail-Closed 判定提权阻止注入。
     fn gate_check(&self) -> Result<(), SessionError> {
-        let Ok(snap) = self.perception.0.snapshot() else {
-            return Ok(());
-        };
-        let target = ActionTarget::Window {
-            title: snap.root.name,
-            process: None,
-        };
+        let mut target = conex_computer::window_gate::resolve_foreground_target();
+        if let ActionTarget::Window { ref mut title, .. } = target {
+            if *title == "未知窗口" || *title == "无标题窗口" || title.is_empty() {
+                if let Ok(snap) = self.perception.0.snapshot() {
+                    if !snap.root.name.is_empty() {
+                        *title = snap.root.name;
+                    }
+                }
+            }
+        }
         self.gate
             .check(&target)
             .map_err(SessionError::Gate)

@@ -31,6 +31,7 @@ pub mod adapters;
 pub mod browser;
 pub mod cdp;
 pub mod frames;
+pub mod gate;
 pub mod import;
 pub mod input;
 pub mod snapshot;
@@ -39,6 +40,10 @@ pub use import::ImportService;
 
 pub use action::evaluate::EvaluateRequest;
 pub use action::gate::{DomainGate, GateDenial};
+pub use gate::{
+    blocked_urls, FormalDomainGate, GateClock, HostResolver, SetBlockedSender, SystemClock,
+    SystemResolver, TransportGate, REBINDING_WINDOW,
+};
 pub use action::keyboard::KeySpec;
 pub use action::locate::{Located, ResolvedPoint, ViewportSize};
 pub use action::ops::{BrowserPageOps, BrowserSnapshotStore, Delay, PageOps, TokioDelay};
@@ -238,6 +243,17 @@ async fn enable_domains(channel: &dyn CommandChannel, session: &str) -> Result<(
             .send_command(method, params, Some(session), ENABLE_TIMEOUT)
             .await?;
     }
+    // 传输层 SSRF 防护：挂载 Network.setBlockedURLs 物理阻断 169.254.169.254 与私网探测
+    let blocked_patterns = crate::gate::blocked_urls();
+    let _ = channel
+        .send_command(
+            NETWORK_SET_BLOCKED_URLS,
+            Some(json!({ "urls": blocked_patterns })),
+            Some(session),
+            ENABLE_TIMEOUT,
+        )
+        .await;
+
     // attach 后恢复（Chrome 144+ 目标暂停，runIfWaitingForDebugger 恢复；no-op 兜底）
     let _ = channel
         .send_command_no_wait(RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, None, Some(session))
@@ -379,6 +395,27 @@ impl BrowserSession {
                         }
                         Ok(_) => {}
                         Err(_) => break,
+                    }
+                }
+            });
+        }
+
+        // 传输层 SSRF 防护：在导航与 frame 事件发生时重新挂载 setBlockedURLs 幂等防线
+        {
+            let transport_gate = transport.clone();
+            let mut rx = bus.subscribe();
+            tokio::spawn(async move {
+                while let Ok(ev) = rx.recv().await {
+                    if let BrowserEvent::NavigationStarted { session, .. } = ev {
+                        let blocked = crate::gate::blocked_urls();
+                        let _ = transport_gate
+                            .send_command(
+                                NETWORK_SET_BLOCKED_URLS,
+                                Some(json!({ "urls": blocked })),
+                                Some(&session),
+                                ENABLE_TIMEOUT,
+                            )
+                            .await;
                     }
                 }
             });
@@ -664,6 +701,19 @@ impl BrowserSession {
     }
 }
 
+#[async_trait]
+impl SetBlockedSender for BrowserSession {
+    async fn set_blocked_urls(&self, urls: &[String]) -> Result<(), CdpError> {
+        let active = self.current_session()?;
+        self.send_page(
+            &active.session,
+            NETWORK_SET_BLOCKED_URLS,
+            json!({ "urls": urls }),
+        )
+        .await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -728,6 +778,7 @@ mod tests {
             (RUNTIME_ENABLE, MockReply::Ok(json!({}))),
             (DOM_ENABLE, MockReply::Ok(json!({}))),
             (NETWORK_ENABLE, MockReply::Ok(json!({}))),
+            (NETWORK_SET_BLOCKED_URLS, MockReply::Ok(json!({}))),
             (RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, MockReply::Ok(json!({}))),
             (RUNTIME_EVALUATE, MockReply::Ok(json!({ "result": { "value": 1 } }))),
             (PAGE_SET_WINDOW_OPEN_HANDLER, MockReply::Ok(json!({}))),
@@ -1082,6 +1133,7 @@ mod tests {
             "Runtime.enable",
             "DOM.enable",
             "Network.enable",
+            "Network.setBlockedURLs",
         ] {
             let cmd = mock.next_command().await;
             assert_eq!(cmd["method"], expected, "enable 序列顺序应恢复路径一致");

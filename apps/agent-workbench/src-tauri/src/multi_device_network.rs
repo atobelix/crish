@@ -1,12 +1,10 @@
 //! 网络环境检测（R1-09 G-4：Windows 防火墙 / AP 隔离用户引导数据源）。
 //!
 //! 数据来源与口径：
-//! - 网络配置文件类别：读注册表 `HKLM\SOFTWARE\Microsoft\Windows NT\
-//!   CurrentVersion\NetworkList\Profiles` 下各 profile 的 `Category` 值
-//!   （REG_DWORD：0 = 公用 / 1 = 专用 / 2 = 域）聚合判定当前网络类型。
-//!   Windows 未在注册表暴露「当前活动 profile」标记，本实现取全部 profile
-//!   中最信任类别（域 > 专用 > 公用）作为近似——诚实标注粒度，见
-//!   [classify_category] 文档。
+//! - 网络配置文件类别：优先 NLM COM (INetworkListManager) 实时探测活动网络类别，
+//!   回退读注册表 `HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkList\Profiles`
+//!   下各 profile 的 `Category` 值（REG_DWORD：0 = 公用 / 1 = 专用 / 2 = 域），
+//!   按 Fail-Closed min() 聚合判定当前网络类型（公网优先：任何 Public 即判定 Public）。
 //! - 可直连 IP 枚举：独立实现，逻辑与 server/pairing.rs 的
 //!   `windows_ip_enum::local_unicast_ips`（GetAdaptersAddresses，
 //!   pairing.rs:449-533）及 `default_route_ip`（UDP connect 技巧，
@@ -17,6 +15,8 @@
 //!
 //! 全部失败路径安全降级：非 Windows / 注册表无权限 → `unknown`；
 //! IP 枚举失败 → 含 "0.0.0.0" 占位（UI 侧过滤并引导检查网络连接）。
+
+#![allow(unsafe_code)]
 
 use serde::Serialize;
 
@@ -34,9 +34,9 @@ pub struct NetworkEnvInfo {
     pub hint: String,
 }
 
-/// 网络类别判定结果（注册表 Category 聚合后的语义态）。
+/// 网络类别判定结果（注册表 / NLM COM Category 聚合后的语义态）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum NetworkKind {
+pub enum NetworkKind {
     /// 公用网络（Windows 默认拦截入站，需切换专用）
     Public,
     /// 专用网络（家用/办公局域网常态）
@@ -47,11 +47,22 @@ enum NetworkKind {
     Unknown,
 }
 
-/// 主入口：收集注册表 profile 类别 → 判定网络类型 → 枚举可直连 IP →
-/// 生成引导文案。全部路径零 panic（外部输入仅来自本机注册表/网卡）。
+/// 主入口：收集 NLM COM / 注册表 profile 类别 → 判定网络类型 → 枚举可直连 IP →
+/// 生成引导文案。全部路径零 panic（外部输入仅来自本机 COM/注册表/网卡）。
 pub fn network_env_info() -> NetworkEnvInfo {
+    #[cfg(windows)]
+    let categories = {
+        let nlm_cats = nlm_com::query_connected_network_categories();
+        if !nlm_cats.is_empty() {
+            nlm_cats
+        } else {
+            read_profile_categories()
+        }
+    };
+    #[cfg(not(windows))]
     let categories = read_profile_categories();
-    let kind = classify_category(&categories);
+
+    let kind = classify_network_categories(&categories);
     NetworkEnvInfo {
         profile: kind_to_profile(kind).to_string(),
         usable_ips: usable_lan_ips(),
@@ -59,20 +70,32 @@ pub fn network_env_info() -> NetworkEnvInfo {
     }
 }
 
-/// 聚合判定：Category 集合 → 网络类别。
+/// Windows NLM COM / 注册表 Category 集合 → 网络类别聚合判定。
 ///
-/// Windows NetworkList 注册表对「当前活动 profile」无显式标记（连接过的
-/// 网络各自留存一个 profile），本实现取最信任类别（域 2 > 专用 1 > 公用 0）
-/// 作为近似：只要存在受信 profile 即按受信类别引导，避免把当前网络误判
-/// 为公用而阻断配对；异常值（>2）按公用处理（fail-closed：Windows 默认
-/// 拦截入站，提示最安全）。空集合（非 Windows / 无权限 / 键缺失）→ 未知。
-fn classify_category(categories: &[u32]) -> NetworkKind {
-    match categories.iter().copied().max() {
+/// Fail-Closed 铁律（公网优先，最严格安全假设）：
+/// 1. 只要存在任何一个 Public (0)，整体判定为 Public（Windows 默认拦截入站）；
+/// 2. 均为非公网时，取最小信任级别（Private 1 优先于 Domain 2）；
+/// 3. 异常值（>2）按公用处理（Fail-Closed）；
+/// 4. 空集合（非 Windows / 无权限 / 键缺失）→ 未知。
+pub fn classify_network_categories(categories: &[u32]) -> NetworkKind {
+    if categories.is_empty() {
+        return NetworkKind::Unknown;
+    }
+    // Fail-Closed 铁律：只要存在任何一个 Public (0)，整体判定为 Public
+    if categories.iter().any(|&c| c == 0) {
+        return NetworkKind::Public;
+    }
+    // 均为非公网时，取最小信任级别（Private 1 优先于 Domain 2）
+    match categories.iter().copied().min() {
         Some(1) => NetworkKind::Private,
         Some(2) => NetworkKind::Domain,
-        Some(_) => NetworkKind::Public,
-        None => NetworkKind::Unknown,
+        _ => NetworkKind::Public,
     }
+}
+
+/// 兼容别名：委托 [classify_network_categories]
+pub fn classify_category(categories: &[u32]) -> NetworkKind {
+    classify_network_categories(categories)
 }
 
 /// 网络类别 → wire 字符串（前端按此渲染徽标与提示）。
@@ -102,6 +125,165 @@ fn hint_for(kind: NetworkKind) -> String {
              放行专用网络，并关闭路由器客户端隔离（AP 隔离），或手动输入上方 IP。"
                 .to_string()
         }
+    }
+}
+
+// ── Windows NLM (Network List Manager) COM 探测 ───────────────────────
+
+#[cfg(windows)]
+mod nlm_com {
+    use std::ffi::c_void;
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct GUID {
+        pub data1: u32,
+        pub data2: u16,
+        pub data3: u16,
+        pub data4: [u8; 8],
+    }
+
+    pub const CLSID_NETWORK_LIST_MANAGER: GUID = GUID {
+        data1: 0xDCB00DA0,
+        data2: 0x570F,
+        data3: 0x4A9B,
+        data4: [0x8D, 0x69, 0x19, 0x9F, 0xDB, 0xA5, 0x72, 0x3B],
+    };
+
+    pub const IID_INETWORK_LIST_MANAGER: GUID = GUID {
+        data1: 0xDCB00000,
+        data2: 0x570F,
+        data3: 0x4A9B,
+        data4: [0x8D, 0x69, 0x19, 0x9F, 0xDB, 0xA5, 0x72, 0x3B],
+    };
+
+    pub const CLSCTX_INPROC_SERVER: u32 = 1;
+    pub const COINIT_MULTITHREADED: u32 = 0;
+    pub const NLM_ENUM_NETWORK_CONNECTED: u32 = 1;
+    pub const S_OK: i32 = 0;
+
+    #[link(name = "ole32")]
+    unsafe extern "system" {
+        pub fn CoInitializeEx(pvReserved: *const c_void, dwCoInit: u32) -> i32;
+        pub fn CoUninitialize();
+        pub fn CoCreateInstance(
+            rclsid: *const GUID,
+            pUnkOuter: *mut c_void,
+            dwClsContext: u32,
+            riid: *const GUID,
+            ppv: *mut *mut c_void,
+        ) -> i32;
+    }
+
+    #[repr(C)]
+    pub struct INetworkListManagerVtbl {
+        // IUnknown
+        pub query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
+        pub add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+        pub release: unsafe extern "system" fn(*mut c_void) -> u32,
+        // IDispatch
+        pub get_type_info_count: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
+        pub get_type_info: unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> i32,
+        pub get_ids_of_names: unsafe extern "system" fn(*mut c_void, *const GUID, *const *const u16, u32, u32, *mut i32) -> i32,
+        pub invoke: unsafe extern "system" fn(*mut c_void, i32, *const GUID, u32, u16, *mut c_void, *mut c_void, *mut c_void, *mut u32) -> i32,
+        // INetworkListManager
+        pub get_networks: unsafe extern "system" fn(*mut c_void, u32, *mut *mut c_void) -> i32,
+    }
+
+    #[repr(C)]
+    pub struct IEnumNetworksVtbl {
+        // IUnknown
+        pub query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
+        pub add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+        pub release: unsafe extern "system" fn(*mut c_void) -> u32,
+        // IDispatch
+        pub get_type_info_count: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
+        pub get_type_info: unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> i32,
+        pub get_ids_of_names: unsafe extern "system" fn(*mut c_void, *const GUID, *const *const u16, u32, u32, *mut i32) -> i32,
+        pub invoke: unsafe extern "system" fn(*mut c_void, i32, *const GUID, u32, u16, *mut c_void, *mut c_void, *mut c_void, *mut u32) -> i32,
+        // IEnumNetworks
+        pub get_new_enum: unsafe extern "system" fn(*mut c_void, *mut *mut c_void) -> i32,
+        pub next: unsafe extern "system" fn(*mut c_void, u32, *mut *mut c_void, *mut u32) -> i32,
+    }
+
+    #[repr(C)]
+    pub struct INetworkVtbl {
+        // IUnknown
+        pub query_interface: unsafe extern "system" fn(*mut c_void, *const GUID, *mut *mut c_void) -> i32,
+        pub add_ref: unsafe extern "system" fn(*mut c_void) -> u32,
+        pub release: unsafe extern "system" fn(*mut c_void) -> u32,
+        // IDispatch
+        pub get_type_info_count: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
+        pub get_type_info: unsafe extern "system" fn(*mut c_void, u32, u32, *mut *mut c_void) -> i32,
+        pub get_ids_of_names: unsafe extern "system" fn(*mut c_void, *const GUID, *const *const u16, u32, u32, *mut i32) -> i32,
+        pub invoke: unsafe extern "system" fn(*mut c_void, i32, *const GUID, u32, u16, *mut c_void, *mut c_void, *mut c_void, *mut u32) -> i32,
+        // INetwork
+        pub get_name: unsafe extern "system" fn(*mut c_void, *mut *mut u16) -> i32,
+        pub set_name: unsafe extern "system" fn(*mut c_void, *const u16) -> i32,
+        pub get_description: unsafe extern "system" fn(*mut c_void, *mut *mut u16) -> i32,
+        pub set_description: unsafe extern "system" fn(*mut c_void, *const u16) -> i32,
+        pub get_network_id: unsafe extern "system" fn(*mut c_void, *mut GUID) -> i32,
+        pub get_domain_type: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
+        pub get_network_connections: unsafe extern "system" fn(*mut c_void, *mut *mut c_void) -> i32,
+        pub get_time_created_and_connected: unsafe extern "system" fn(*mut c_void, *mut u32, *mut u32, *mut u32, *mut u32) -> i32,
+        pub is_connected_to_internet: unsafe extern "system" fn(*mut c_void, *mut i16) -> i32,
+        pub is_connected: unsafe extern "system" fn(*mut c_void, *mut i16) -> i32,
+        pub get_category: unsafe extern "system" fn(*mut c_void, *mut u32) -> i32,
+    }
+
+    /// 通过 Windows Network List Manager COM API 查询当前活跃连接网卡的 Category 列表
+    pub fn query_connected_network_categories() -> Vec<u32> {
+        let mut categories = Vec::new();
+        unsafe {
+            let hr_init = CoInitializeEx(std::ptr::null(), COINIT_MULTITHREADED);
+            let must_uninit = hr_init >= 0;
+
+            let mut p_mgr: *mut c_void = std::ptr::null_mut();
+            let hr = CoCreateInstance(
+                &CLSID_NETWORK_LIST_MANAGER,
+                std::ptr::null_mut(),
+                CLSCTX_INPROC_SERVER,
+                &IID_INETWORK_LIST_MANAGER,
+                &mut p_mgr,
+            );
+
+            if hr == S_OK && !p_mgr.is_null() {
+                let vtbl = *(p_mgr as *const *const INetworkListManagerVtbl);
+                let mut p_enum: *mut c_void = std::ptr::null_mut();
+                let hr_enum = ((*vtbl).get_networks)(p_mgr, NLM_ENUM_NETWORK_CONNECTED, &mut p_enum);
+
+                if hr_enum == S_OK && !p_enum.is_null() {
+                    let enum_vtbl = *(p_enum as *const *const IEnumNetworksVtbl);
+                    loop {
+                        let mut p_network: *mut c_void = std::ptr::null_mut();
+                        let mut fetched: u32 = 0;
+                        let hr_next = ((*enum_vtbl).next)(p_enum, 1, &mut p_network, &mut fetched);
+                        if hr_next != S_OK || fetched == 0 || p_network.is_null() {
+                            break;
+                        }
+
+                        let net_vtbl = *(p_network as *const *const INetworkVtbl);
+                        let mut cat: u32 = 0;
+                        let hr_cat = ((*net_vtbl).get_category)(p_network, &mut cat);
+                        if hr_cat == S_OK {
+                            categories.push(cat);
+                        }
+
+                        let unk_vtbl = *(p_network as *const *const INetworkVtbl);
+                        ((*unk_vtbl).release)(p_network);
+                    }
+
+                    ((*enum_vtbl).release)(p_enum);
+                }
+
+                ((*vtbl).release)(p_mgr);
+            }
+
+            if must_uninit {
+                CoUninitialize();
+            }
+        }
+        categories
     }
 }
 
@@ -434,18 +616,18 @@ mod windows_ip_enum {
 mod tests {
     use super::*;
 
-    /// 网络类别聚合：空集合 → 未知；单类别直判；混合取最信任
-    /// （域 > 专用 > 公用）；异常值按公用 fail-closed。
+    /// 网络类别聚合：空集合 → 未知；单类别直判；Fail-Closed（公网优先，min() 聚合）；异常值按公用 fail-closed。
     #[test]
     fn classify_category_resolves_trust_level() {
         assert_eq!(classify_category(&[]), NetworkKind::Unknown);
         assert_eq!(classify_category(&[0]), NetworkKind::Public);
         assert_eq!(classify_category(&[1]), NetworkKind::Private);
         assert_eq!(classify_category(&[2]), NetworkKind::Domain);
-        // 历史公用 + 当前专用 → 取专用（不误伤受信网络）
-        assert_eq!(classify_category(&[0, 1]), NetworkKind::Private);
-        assert_eq!(classify_category(&[0, 2]), NetworkKind::Domain);
-        assert_eq!(classify_category(&[1, 2]), NetworkKind::Domain);
+        // Fail-Closed 铁律：公用 + 专用 → 公用（任何公网均视为公用）
+        assert_eq!(classify_category(&[0, 1]), NetworkKind::Public);
+        assert_eq!(classify_category(&[0, 2]), NetworkKind::Public);
+        // 专用 + 域 → 专用（Private 1 优先于 Domain 2）
+        assert_eq!(classify_category(&[1, 2]), NetworkKind::Private);
         // 异常值（>2）按公用处理（fail-closed：提示最安全）
         assert_eq!(classify_category(&[9]), NetworkKind::Public);
         assert_eq!(classify_category(&[3, 4]), NetworkKind::Public);

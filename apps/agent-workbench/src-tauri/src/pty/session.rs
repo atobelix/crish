@@ -1,9 +1,12 @@
 //! PTY session registry and lifecycle.
 //!
-//! Thread model:
-//! - Create opens a native PTY, spawns the shell, stores master/writer/killer.
+//! Thread model & 3-state machine (Active / Detached / Dead):
+//! - Create opens a native PTY, spawns the shell, stores master/writer/killer in Active state.
 //! - A dedicated OS thread reads master → emits `workbench://pty-output`.
-//! - On EOF / read error the reader waits for the child and emits `workbench://pty-exit`.
+//! - On stdout bytes > 0, automatically refreshes `session.touch()` liveness timestamp.
+//! - On EOF / read error the reader sets `Dead`, waits for child, emits `workbench://pty-exit`.
+//! - Front-end tab switch/refresh transitions session to `Detached`, keeping child alive
+//!   with a 2-hour grace period for background builds/compilations.
 //! - Kill removes the session and signals the child.
 //!
 //! 错误统一为 `CoreError`（IPC 面唯一协议）：会话不存在 → `NotFound`，
@@ -11,7 +14,7 @@
 
 use conex_types::CoreError;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     io::{Read, Write},
@@ -24,6 +27,15 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 use tauri::{AppHandle, Emitter};
+
+/// PTY 会话最大允许容量（单桌面窗口上限 16）
+pub(crate) const MAX_PTY_SESSIONS: usize = 16;
+
+/// 前端前台失联判定超时（2 分钟无任何活动/心跳 → 转为 Detached 托管）
+pub(crate) const ACTIVE_IDLE_TIMEOUT_MS: u64 = 120_000;
+
+/// Detached 游离态托管宽限期（2 小时无任何 stdout 输出与重连 → 安全 GC 回收）
+pub(crate) const DETACHED_GC_GRACE_MS: u64 = 7_200_000;
 
 // ── event payloads ───────────────────────────────────────────────────────────
 
@@ -42,17 +54,112 @@ struct PtyExitEvent {
     exit_code: Option<u32>,
 }
 
+// ── 3-state liveness state machine ───────────────────────────────────────────
+
+/// PTY 三态生命周期状态机
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PtyLivenessState {
+    /// 活跃连接态：前端正在展示且心跳正常
+    Active,
+    /// 游离保留态：前端 Tab 已切走/组件卸载，但底层子进程仍在运行（保留输出流与自动续约）
+    Detached,
+    /// 终态：子进程已退出
+    Dead,
+}
+
 // ── session ──────────────────────────────────────────────────────────────────
 
-struct PtySession {
+pub(crate) struct PtySession {
     /// Frontend association key (not used for routing; for diagnostics).
-    // G11a 备注：session_key 仅前端关联诊断用（不参与路由/控制），
-    // 非 test 构建从未读取——dead_code 静音。
     #[allow(dead_code)]
-    session_key: String,
-    writer: Mutex<Box<dyn Write + Send>>,
-    master: Box<dyn MasterPty + Send>,
-    killer: Mutex<Box<dyn portable_pty::ChildKiller + Send + Sync>>,
+    pub(crate) session_key: String,
+    pub(crate) writer: Mutex<Box<dyn Write + Send>>,
+    pub(crate) master: Box<dyn MasterPty + Send>,
+    pub(crate) killer: Mutex<Box<dyn portable_pty::ChildKiller + Send + Sync>>,
+    /// 最近一次活跃时刻（键盘输入、Ping、或 stdout 输出）
+    pub(crate) last_activity_at_ms: AtomicU64,
+    /// 状态标志（Active / Detached / Dead）
+    pub(crate) state: Mutex<PtyLivenessState>,
+    /// 游离断连起始时刻（Active -> Detached 时更新）
+    pub(crate) detached_at_ms: AtomicU64,
+}
+
+impl PtySession {
+    #[allow(dead_code)]
+    pub(crate) fn new(
+        session_key: String,
+        writer: Box<dyn Write + Send>,
+        master: Box<dyn MasterPty + Send>,
+        killer: Box<dyn portable_pty::ChildKiller + Send + Sync>,
+        now_ms: u64,
+    ) -> Self {
+        Self {
+            session_key,
+            writer: Mutex::new(writer),
+            master,
+            killer: Mutex::new(killer),
+            last_activity_at_ms: AtomicU64::new(now_ms),
+            state: Mutex::new(PtyLivenessState::Active),
+            detached_at_ms: AtomicU64::new(0),
+        }
+    }
+
+    /// 刷新活跃时刻（stdout 输出 >0 字节、键盘输入、ping 等自动调用）
+    pub(crate) fn touch(&self) {
+        self.touch_at(crate::server::now_ms());
+    }
+
+    pub(crate) fn touch_at(&self, now: u64) {
+        self.last_activity_at_ms.store(now, Ordering::Relaxed);
+    }
+
+    pub(crate) fn set_state(&self, new_state: PtyLivenessState) {
+        self.set_state_at(new_state, crate::server::now_ms());
+    }
+
+    pub(crate) fn set_state_at(&self, new_state: PtyLivenessState, now: u64) {
+        let mut guard = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        if *guard == PtyLivenessState::Active && new_state == PtyLivenessState::Detached {
+            self.detached_at_ms.store(now, Ordering::Relaxed);
+        }
+        *guard = new_state;
+    }
+
+    pub(crate) fn state(&self) -> PtyLivenessState {
+        *self.state.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub(crate) fn last_activity_at_ms(&self) -> u64 {
+        self.last_activity_at_ms.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn detached_at_ms(&self) -> u64 {
+        self.detached_at_ms.load(Ordering::Relaxed)
+    }
+
+    /// 判定是否应被 30s GC 回收：
+    /// - Active: 前台若 >120s 无活动，GC 自动置为 Detached 托管，但不立即 kill；
+    /// - Detached: 游离态且超过 2 小时（7,200,000ms）无任何 stdout 输出与重连，返回 true 安全回收；
+    /// - Dead: 已退出，返回 true 立即回收。
+    pub(crate) fn is_gc_eligible(&self, now_ms: u64) -> bool {
+        let state = self.state();
+        let last_act = self.last_activity_at_ms();
+        let detached_at = self.detached_at_ms();
+        match state {
+            PtyLivenessState::Active => {
+                if now_ms.saturating_sub(last_act) > ACTIVE_IDLE_TIMEOUT_MS {
+                    self.set_state_at(PtyLivenessState::Detached, now_ms);
+                }
+                false
+            }
+            PtyLivenessState::Detached => {
+                now_ms.saturating_sub(detached_at) > DETACHED_GC_GRACE_MS
+                    && now_ms.saturating_sub(last_act) > DETACHED_GC_GRACE_MS
+            }
+            PtyLivenessState::Dead => true,
+        }
+    }
 }
 
 impl Drop for PtySession {
@@ -198,6 +305,18 @@ pub(crate) fn create_session(
     rows: u16,
     cwd: Option<String>,
 ) -> Result<String, CoreError> {
+    // 1. 容量硬顶拦截（最多 16 个 PTY 实例）
+    {
+        let reg = registry()
+            .lock()
+            .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
+        if reg.len() >= MAX_PTY_SESSIONS {
+            return Err(CoreError::InvalidInput(format!(
+                "PTY session capacity exceeded: maximum {MAX_PTY_SESSIONS} active sessions allowed"
+            )));
+        }
+    }
+
     let cwd_path = resolve_cwd(cwd.as_deref());
     let pty_id = next_pty_id();
 
@@ -281,6 +400,9 @@ pub(crate) fn create_session(
         writer: Mutex::new(writer),
         master: pair.master,
         killer: Mutex::new(killer),
+        last_activity_at_ms: AtomicU64::new(crate::server::now_ms()),
+        state: Mutex::new(PtyLivenessState::Active),
+        detached_at_ms: AtomicU64::new(0),
     };
 
     {
@@ -290,7 +412,7 @@ pub(crate) fn create_session(
         reg.insert(pty_id.clone(), session);
     }
 
-    // Reader + wait thread. Emits output then exit; removes from registry.
+    // Reader + wait thread. Emits output then exit; marks Dead on EOF / error.
     let emit_id = pty_id.clone();
     let app_reader = app.clone();
     thread::Builder::new()
@@ -299,8 +421,22 @@ pub(crate) fn create_session(
             let mut buf = [0u8; 8192];
             loop {
                 match reader.read(&mut buf) {
-                    Ok(0) => break,
+                    Ok(0) => {
+                        // 子进程退出
+                        if let Ok(reg) = registry().lock() {
+                            if let Some(sess) = reg.get(&emit_id) {
+                                sess.set_state(PtyLivenessState::Dead);
+                            }
+                        }
+                        break;
+                    }
                     Ok(n) => {
+                        // 只要产生输出（stdout > 0 字节），自动续约活性，绝不误杀正在进行的长编译任务！
+                        if let Ok(reg) = registry().lock() {
+                            if let Some(sess) = reg.get(&emit_id) {
+                                sess.touch();
+                            }
+                        }
                         let data = String::from_utf8_lossy(&buf[..n]).into_owned();
                         // Do not log full terminal data at info level.
                         tracing::trace!(
@@ -324,6 +460,11 @@ pub(crate) fn create_session(
                             error = %e,
                             "pty reader ended"
                         );
+                        if let Ok(reg) = registry().lock() {
+                            if let Some(sess) = reg.get(&emit_id) {
+                                sess.set_state(PtyLivenessState::Dead);
+                            }
+                        }
                         break;
                     }
                 }
@@ -376,6 +517,7 @@ pub(crate) fn write_session(pty_id: &str, data: &[u8]) -> Result<(), CoreError> 
     let session = reg
         .get(pty_id)
         .ok_or_else(|| not_found_error(pty_id))?;
+    session.touch();
     let mut writer = session
         .writer
         .lock()
@@ -396,6 +538,7 @@ pub(crate) fn resize_session(pty_id: &str, cols: u16, rows: u16) -> Result<(), C
     let session = reg
         .get(pty_id)
         .ok_or_else(|| not_found_error(pty_id))?;
+    session.touch();
     session
         .master
         .resize(PtySize {
@@ -405,6 +548,73 @@ pub(crate) fn resize_session(pty_id: &str, cols: u16, rows: u16) -> Result<(), C
             pixel_height: 0,
         })
         .map_err(|e| CoreError::Internal(format!("pty resize failed: {e}")))
+}
+
+/// 前端切 Tab/组件卸载时调用：将会话置为 Detached 游离态（后台托管，享受 2 小时宽限期）
+pub(crate) fn detach_session(pty_id: &str) -> Result<(), CoreError> {
+    let reg = registry()
+        .lock()
+        .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
+    let session = reg
+        .get(pty_id)
+        .ok_or_else(|| not_found_error(pty_id))?;
+    session.set_state(PtyLivenessState::Detached);
+    tracing::debug!(target: "pty", pty_id, "pty session detached to background");
+    Ok(())
+}
+
+/// 前端切回 Tab 时调用：将会话重新附着为 Active 活跃态并刷新活性
+pub(crate) fn attach_session(pty_id: &str) -> Result<(), CoreError> {
+    let reg = registry()
+        .lock()
+        .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
+    let session = reg
+        .get(pty_id)
+        .ok_or_else(|| not_found_error(pty_id))?;
+    session.set_state(PtyLivenessState::Active);
+    session.touch();
+    tracing::debug!(target: "pty", pty_id, "pty session attached to foreground");
+    Ok(())
+}
+
+/// 前端心跳 Ping 刷新活性时刻
+pub(crate) fn touch_session(pty_id: &str) -> Result<(), CoreError> {
+    let reg = registry()
+        .lock()
+        .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
+    let session = reg
+        .get(pty_id)
+        .ok_or_else(|| not_found_error(pty_id))?;
+    session.touch();
+    Ok(())
+}
+
+/// 查询会话当前生命周期状态
+#[allow(dead_code)]
+pub(crate) fn get_session_state(pty_id: &str) -> Result<PtyLivenessState, CoreError> {
+    let reg = registry()
+        .lock()
+        .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
+    let session = reg
+        .get(pty_id)
+        .ok_or_else(|| not_found_error(pty_id))?;
+    Ok(session.state())
+}
+
+/// 30s 周期 GC 扫描清理超期或已终止的 PTY 会话
+pub(crate) fn run_gc_sweep(now_ms: u64) -> Vec<String> {
+    let mut to_kill = Vec::new();
+    if let Ok(reg) = registry().lock() {
+        for (id, session) in reg.iter() {
+            if session.is_gc_eligible(now_ms) {
+                to_kill.push(id.clone());
+            }
+        }
+    }
+    for id in &to_kill {
+        let _ = kill_session(id);
+    }
+    to_kill
 }
 
 pub(crate) fn kill_session(pty_id: &str) -> Result<(), CoreError> {
@@ -443,3 +653,4 @@ pub(crate) fn kill_all() {
         tracing::info!(target: "pty", count, "killed all pty sessions");
     }
 }
+

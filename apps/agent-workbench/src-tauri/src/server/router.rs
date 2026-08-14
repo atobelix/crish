@@ -35,7 +35,7 @@ use axum::{
     Json,
     extract::{FromRequest, Path, RawQuery, Request, State},
     http::{StatusCode, Uri},
-    middleware,
+    middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
     Router,
@@ -182,14 +182,30 @@ pub struct HelloInfo {
     pub server_time_ms: u64,
 }
 
+/// 全局时钟响应头注入中间件（为所有 HTTP 响应注入 X-Server-Time-Ms，使客户端能自愈时钟偏差）
+pub async fn inject_server_time_header(
+    request: Request,
+    next: Next,
+) -> Response {
+    let now = now_ms();
+    let mut response = next.run(request).await;
+    if let Ok(val) = axum::http::HeaderValue::from_str(&now.to_string()) {
+        response.headers_mut().insert(
+            crate::server::auth::SERVER_TIME_HEADER,
+            val,
+        );
+    }
+    response
+}
+
 /// 构建服务路由（R1-03：info/hello + F1 监控域 10 条只读端点；
 /// R1-05：WS /v1/events 挂载）
 pub fn build_router(state: ServerState) -> Router {
-    // 免鉴权面（/v1/info 服务自报；/v1/pair 配对入口——R1-11 G-2：
-    // 配对端点无令牌可入，否则「先有令牌才能拿令牌」；handler 内自行
-    // 校验服务开关与配对协调器装配态）
+    // 免鉴权面（/v1/info 服务自报；/v1/hello 时钟基准与握手；/v1/pair 配对入口——
+    // 配对与握手端点免鉴权进入，使时钟偏差客户端能获取基准自愈）
     let info = Router::new()
         .route(INFO_PATH, get(handle_info))
+        .route(HELLO_PATH, get(handle_hello))
         .route(PAIR_PATH, post(crate::server::pair_endpoint::handle_rest_pair));
     // WS 事件端点（R1-05）：handler 内自鉴权（Bearer 头或 ?token= 双通道，
     // D2 §10.1）——不进 require_bearer_token 中间件组（浏览器 WS 无法携带
@@ -200,7 +216,6 @@ pub fn build_router(state: ServerState) -> Router {
     );
     // 鉴权面（Bearer 中间件；全部只读端点挂此组，D2 §7.1 零信任）
     let protected = Router::new()
-        .route(HELLO_PATH, get(handle_hello))
         .route(STATUS_PATH, get(handle_status))
         .route(RUN_SNAPSHOT_PATH, get(handle_run_snapshot))
         .route(SESSION_EVENTS_PATH, get(handle_session_events))
@@ -234,6 +249,7 @@ pub fn build_router(state: ServerState) -> Router {
         .merge(ws_router)
         .merge(protected)
         .fallback(handle_not_found)
+        .layer(middleware::from_fn(inject_server_time_header))
         .with_state(state)
 }
 
@@ -242,7 +258,7 @@ async fn handle_info(State(state): State<ServerState>) -> Json<ServerInfoWire> {
     Json(state.server_info())
 }
 
-/// GET /v1/hello：鉴权握手（中间件校验通过后才到达）
+/// GET /v1/hello：服务时钟基准与握手信息（免鉴权暴露，供客户端计算时差并在重试中自愈）
 async fn handle_hello(State(state): State<ServerState>) -> Json<HelloInfo> {
     let info = state.server_info();
     Json(HelloInfo {
@@ -1623,7 +1639,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hello_without_token_is_401() {
+    async fn hello_without_token_succeeds_and_returns_clock() {
         let app = build_router(test_state());
         let response = app
             .oneshot(
@@ -1634,7 +1650,31 @@ mod tests {
             )
             .await
             .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().contains_key(crate::server::auth::SERVER_TIME_HEADER));
+        let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["protocolVersion"].as_u64(), Some(1));
+        assert!(body["serverVersion"].is_string());
+        assert!(body["serverTimeMs"].is_u64());
+    }
+
+    #[tokio::test]
+    async fn status_without_token_is_401() {
+        let app = build_router(test_state());
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri(STATUS_PATH)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert!(response.headers().contains_key(crate::server::auth::SERVER_TIME_HEADER));
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -1659,6 +1699,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().contains_key(crate::server::auth::SERVER_TIME_HEADER));
         let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -1669,7 +1710,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn hello_with_revoked_token_is_401() {
+    async fn status_with_revoked_token_is_401() {
         let state = test_state();
         let raw = issue_token(&state);
         let hash = sha256_hex(raw.as_bytes());
@@ -1678,7 +1719,7 @@ mod tests {
         let response = app
             .oneshot(
                 axum::http::Request::builder()
-                    .uri(HELLO_PATH)
+                    .uri(STATUS_PATH)
                     .header(axum::http::header::AUTHORIZATION, format!("Bearer {raw}"))
                     .body(Body::empty())
                     .unwrap(),
@@ -1699,7 +1740,7 @@ mod tests {
         let response = app
             .oneshot(
                 axum::http::Request::builder()
-                    .uri(HELLO_PATH)
+                    .uri(STATUS_PATH)
                     // 非 Bearer 前缀 / 空令牌
                     .header(axum::http::header::AUTHORIZATION, "Token abc")
                     .body(Body::empty())
@@ -1712,14 +1753,14 @@ mod tests {
 
     // ── R1-10 T-01：伪造端无令牌直连 ──
 
-    /// T-01 伪造端直连（无令牌）：握手 / 只读 / 审批写面代表性端点一律
-    /// 401 + AuthBadSignature（D2 §7.1 零信任：认证先于一切业务面）
+    /// T-01 伪造端直连（无令牌）：状态只读 / 会话列表 / 审批写面代表性端点一律
+    /// 401 + AuthBadSignature（D2 §7.1 零信任：认证先于一切业务面），并注入 X-Server-Time-Ms
     #[tokio::test]
     async fn t01_no_token_direct_connection_rejected() {
         let app = build_router(test_state());
         let cases = [
-            ("握手", "GET", HELLO_PATH),
-            ("只读面", "GET", STATUS_PATH),
+            ("只读状态面", "GET", STATUS_PATH),
+            ("会话列表面", "GET", SESSIONS_PATH),
             ("审批写面", "POST", "/v1/approval/tc-fake/approve"),
         ];
         for (label, method, uri) in cases {
@@ -1733,6 +1774,10 @@ mod tests {
                 response.status(),
                 StatusCode::UNAUTHORIZED,
                 "{label} {uri} 无令牌直连必须 401"
+            );
+            assert!(
+                response.headers().contains_key(crate::server::auth::SERVER_TIME_HEADER),
+                "{label} 401 响应头必须携带 X-Server-Time-Ms"
             );
             let body: ErrorBody = serde_json::from_value(json_body(response).await)
                 .expect("401 载荷必须可反序列化为 ErrorBody");
@@ -1749,12 +1794,12 @@ mod tests {
     /// 计数锚——伪造端每次失败按尝试令牌哈希累计）；合法令牌不受影响
     #[tokio::test]
     async fn t01_forged_token_rejected_and_counts_failure() {
-        let state = test_state();
+        let state = test_state_with(Some(MockBackend::new()));
         let app = build_router(state.clone());
         let forged = "f".repeat(64);
         let forged_hash = sha256_hex(forged.as_bytes());
         for expected in 1..=3 {
-            let response = app.clone().oneshot(authed_get(HELLO_PATH, &forged)).await.unwrap();
+            let response = app.clone().oneshot(authed_get(STATUS_PATH, &forged)).await.unwrap();
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
             let body: ErrorBody = serde_json::from_value(json_body(response).await)
                 .expect("401 载荷必须可反序列化为 ErrorBody");
@@ -1764,7 +1809,7 @@ mod tests {
         }
         // 合法令牌随后可正常通过（伪造尝试不影响合法路径）
         let raw = issue_token(&state);
-        let response = app.clone().oneshot(authed_get(HELLO_PATH, &raw)).await.unwrap();
+        let response = app.clone().oneshot(authed_get(STATUS_PATH, &raw)).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
     }
 
@@ -1774,18 +1819,18 @@ mod tests {
     /// 立即被拒（401 + AuthDeviceRevoked）；Revoked 失败计入认证失败计数
     #[tokio::test]
     async fn t11_reconnect_with_revoked_token_rejected() {
-        let state = test_state();
+        let state = test_state_with(Some(MockBackend::new()));
         let raw = issue_token(&state);
         let hash = sha256_hex(raw.as_bytes());
         let app = build_router(state.clone());
 
         // 撤销前：旧令牌连接成功
-        let before = app.clone().oneshot(authed_get(HELLO_PATH, &raw)).await.unwrap();
+        let before = app.clone().oneshot(authed_get(STATUS_PATH, &raw)).await.unwrap();
         assert_eq!(before.status(), StatusCode::OK, "撤销前旧令牌应可连");
 
         // 撤销（注册表删除）→ 旧令牌重连请求被拒
         assert!(state.tokens().lock().unwrap().revoke(&hash));
-        let after = app.clone().oneshot(authed_get(HELLO_PATH, &raw)).await.unwrap();
+        let after = app.clone().oneshot(authed_get(STATUS_PATH, &raw)).await.unwrap();
         assert_eq!(
             after.status(),
             StatusCode::UNAUTHORIZED,
@@ -3291,7 +3336,7 @@ mod tests {
         let state = ServerState::new(
             &handle,
             TokenStore::new(handle.config().pairing_file_path.clone()),
-            None,
+            Some(Arc::new(MockBackend::new())),
         )
         .with_pairing(Arc::clone(&coordinator));
         (state, coordinator)
@@ -3332,7 +3377,7 @@ mod tests {
 
     /// 免鉴权 POST /v1/pair：正确码 → 200 {token, label?}，且令牌**无
     /// Authorization 头**即可拿到（配对端点豁免鉴权——否则先有令牌才能
-    /// 拿令牌）；令牌立即可用于后续鉴权请求（GET /v1/hello 200）
+    /// 拿令牌）；令牌立即可用于后续鉴权请求（GET /v1/status 200）
     #[tokio::test]
     async fn pair_endpoint_issues_token_usable_immediately() {
         let (state, coordinator) = test_pair_state();
@@ -3355,7 +3400,7 @@ mod tests {
         // 路由 store 分离的 R1-07 装配断裂修复点）
         let response = app
             .clone()
-            .oneshot(authed_get(HELLO_PATH, token))
+            .oneshot(authed_get(STATUS_PATH, token))
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK, "新令牌必须立即通过鉴权");

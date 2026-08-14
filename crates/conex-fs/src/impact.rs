@@ -11,14 +11,19 @@
 
 pub use conex_types::impact::{IMPACT_FLAG_FILE_THRESHOLD, ImpactAssessment};
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
+
+/// 最大目录遍历递归深度守卫（杜绝死循环与栈溢出）
+pub const MAX_DEPTH: usize = 64;
+pub const MAX_IMPACT_DEPTH: usize = MAX_DEPTH;
 
 /// 对一组删除目标评估影响面（缺失/不可读目标跳过）
 pub fn assess(targets: &[PathBuf]) -> ImpactAssessment {
     let mut file_count = 0u64;
     let mut total_size_bytes = 0u64;
     let mut directory_count = 0u64;
-    let mut parents: Vec<PathBuf> = Vec::new();
+    let mut parents: HashSet<PathBuf> = HashSet::new();
 
     for target in targets {
         let meta = match std::fs::symlink_metadata(target) {
@@ -27,7 +32,7 @@ pub fn assess(targets: &[PathBuf]) -> ImpactAssessment {
         };
         if meta.file_type().is_dir() {
             directory_count += 1;
-            let (files, size) = walk_dir(target, &mut parents);
+            let (files, size) = walk_dir(target, &mut parents, 0);
             file_count += files;
             total_size_bytes += size;
         } else {
@@ -35,13 +40,11 @@ pub fn assess(targets: &[PathBuf]) -> ImpactAssessment {
             file_count += 1;
             total_size_bytes += meta.len();
             if let Some(p) = target.parent() {
-                parents.push(p.to_path_buf());
+                parents.insert(p.to_path_buf());
             }
         }
     }
 
-    parents.sort();
-    parents.dedup();
     let cross_directory = parents.len() > 1;
     let flagged = file_count > IMPACT_FLAG_FILE_THRESHOLD;
 
@@ -59,8 +62,11 @@ pub fn assess(targets: &[PathBuf]) -> ImpactAssessment {
 /// 遍历一律使用不跟随符号链接的元数据入口（`symlink_metadata` +
 /// `file_type().is_dir()`，兑现模块头承诺）：目录内的 symlink/junction
 /// 按单条计（取链接自身大小），不跟随目标、不递归——防指向祖先的链接环
-/// 导致无限递归栈溢出。
-fn walk_dir(dir: &Path, parents: &mut Vec<PathBuf>) -> (u64, u64) {
+/// 导致无限递归栈溢出。同时严格设定 MAX_DEPTH = 64 深度守卫并改用 HashSet 记录目录级父路径。
+fn walk_dir(dir: &Path, parents: &mut HashSet<PathBuf>, depth: usize) -> (u64, u64) {
+    if depth >= MAX_DEPTH {
+        return (0, 0);
+    }
     let mut count = 0u64;
     let mut size = 0u64;
     let rd = match std::fs::read_dir(dir) {
@@ -80,17 +86,17 @@ fn walk_dir(dir: &Path, parents: &mut Vec<PathBuf>) -> (u64, u64) {
             count += 1;
             size += meta.len();
             if let Some(p) = path.parent() {
-                parents.push(p.to_path_buf());
+                parents.insert(p.to_path_buf());
             }
         } else if ft.is_dir() {
-            let (files, bytes) = walk_dir(&path, parents);
+            let (files, bytes) = walk_dir(&path, parents, depth + 1);
             count += files;
             size += bytes;
         } else if ft.is_file() {
             count += 1;
             size += meta.len();
             if let Some(p) = path.parent() {
-                parents.push(p.to_path_buf());
+                parents.insert(p.to_path_buf());
             }
         }
     }
@@ -260,5 +266,20 @@ mod tests {
             assert_eq!(a.file_count, 2, "junction 环必须有限且环内条目计 1 条");
             assert!(a.total_size_bytes >= 5, "真实文件大小计入");
         }
+    }
+
+    #[test]
+    fn max_depth_guard_prevents_deep_recursion() {
+        let d = TempDir::new("deep_depth");
+        let mut curr = d.0.clone();
+        for i in 0..70 {
+            curr = curr.join(format!("dir_{i}"));
+        }
+        std::fs::create_dir_all(&curr).unwrap();
+        std::fs::write(curr.join("deep_file.txt"), "hello").unwrap();
+
+        let a = assess(std::slice::from_ref(&d.0));
+        // 超出 MAX_DEPTH = 64 层的深层文件不会被无限递归，安全截断
+        assert_eq!(a.directory_count, 1);
     }
 }

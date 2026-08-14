@@ -18,7 +18,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use conex_types::events::AgentEventEnvelope;
+use conex_types::events::{AgentEvent, AgentEventEnvelope};
 
 /// 一次发射的报告（S-8 修复：背压丢帧可观测，AA-02 W-2 / PE-04 T04.2-3）
 ///
@@ -53,6 +53,21 @@ pub trait Emitter: Send + Sync {
     fn emit(&self, channel: &str, payload: &str);
 }
 
+/// 事件旁路监听抽象（如 TimerRegistry 早退唤醒 / 状态跟踪）
+pub trait EventListener: Send + Sync {
+    /// 收到事件时触发（实现方可处理同步逻辑或在需要时触发异步早退）
+    fn on_event(&self, event: &AgentEvent);
+}
+
+/// 基于闭包的事件监听器
+pub struct FnEventListener<F: Fn(&AgentEvent) + Send + Sync>(pub F);
+
+impl<F: Fn(&AgentEvent) + Send + Sync> EventListener for FnEventListener<F> {
+    fn on_event(&self, event: &AgentEvent) {
+        (self.0)(event);
+    }
+}
+
 /// Tauri 事件通道实现：`app.emit(channel, payload)`（03 §3.1）
 pub struct TauriEmitter {
     app: tauri::AppHandle,
@@ -80,6 +95,27 @@ impl Emitter for TauriEmitter {
     }
 }
 
+/// 旁路监听槽（内部可变：EventBridge 共享形态下运行期挂接 TimerRegistry 或其他监听器）
+#[derive(Default)]
+struct ListenerSlot {
+    inner: Mutex<Vec<Arc<dyn EventListener>>>,
+}
+
+impl ListenerSlot {
+    fn get_all(&self) -> Vec<Arc<dyn EventListener>> {
+        match self.inner.lock() {
+            Ok(slot) => slot.clone(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    fn add(&self, listener: Arc<dyn EventListener>) {
+        if let Ok(mut slot) = self.inner.lock() {
+            slot.push(listener);
+        }
+    }
+}
+
 /// 事件桥：信封序列化 + 发射（B6.3）
 ///
 /// 共享形态（[Clone] 为 Arc 引用）：跨 run 复用同一桥（每 run 经
@@ -92,6 +128,8 @@ pub struct EventBridge {
     emitter: Arc<dyn Emitter>,
     /// 跨端扇出槽（R1-01：可选订阅者；未装配时零开销）
     fanout: Arc<FanoutSlot>,
+    /// 旁路监听器槽（TimerRegistry 早退 / 状态观测；未装配时零开销）
+    listeners: Arc<ListenerSlot>,
 }
 
 /// 跨端扇出槽（内部可变：EventBridge 共享形态下运行期挂接 FanOutEmitter）
@@ -115,7 +153,6 @@ impl FanoutSlot {
     }
 
     /// 挂接扇出器（幂等：重复挂接覆盖旧值）
-    // R1-01 备注：装配点（main.rs）接线消费——dead_code 静音
     #[cfg_attr(not(test), allow(dead_code))]
     fn set(&self, fanout: Arc<dyn Emitter>) {
         if let Ok(mut slot) = self.inner.lock() {
@@ -125,29 +162,42 @@ impl FanoutSlot {
 }
 
 impl EventBridge {
-    /// 新建事件桥（通道名 + 发射器；跨端扇出默认未挂接）
+    /// 新建事件桥（通道名 + 发射器；跨端扇出与旁路监听默认未挂接）
     pub fn new(channel: impl Into<String>, emitter: Arc<dyn Emitter>) -> Self {
         Self {
             channel: Arc::from(channel.into()),
             emitter,
             fanout: Arc::new(FanoutSlot::default()),
+            listeners: Arc::new(ListenerSlot::default()),
         }
     }
 
     /// 挂接跨端扇出器（R1-01：FanOutEmitter，见 server/fanout.rs）。
-    ///
-    /// 共享形态（Clone）下运行期挂接：服务装配点（main.rs）构造
-    /// FanOutEmitter 后调用；幂等（重复挂接覆盖旧值）；不挂接时扇出
-    /// 路径零开销（emit_payload 一次判空）。
-    // R1-01 备注：装配点（main.rs）接线消费——dead_code 静音
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn attach_fanout(&self, fanout: Arc<dyn Emitter>) {
         self.fanout.set(fanout);
     }
 
+    /// 挂接旁路事件监听器（如 TimerRegistry::on_event 早退唤醒）
+    #[allow(dead_code)]
+    pub fn attach_listener(&self, listener: Arc<dyn EventListener>) {
+        self.listeners.add(listener);
+    }
+
+    /// 挂接基于闭包的旁路事件监听器
+    #[allow(dead_code)]
+    pub fn attach_fn_listener<F: Fn(&AgentEvent) + Send + Sync + 'static>(&self, f: F) {
+        self.listeners.add(Arc::new(FnEventListener(f)));
+    }
+
+    /// 通知所有旁路监听器
+    pub fn notify_event(&self, event: &AgentEvent) {
+        for listener in self.listeners.get_all() {
+            listener.on_event(event);
+        }
+    }
+
     /// 序列化信封（缓冲层在入队时即序列化，flush 直接发射字符串，AA-06 P9）
-    ///
-    /// 失败返回 None（信封内容不可序列化属防御性异常，记录后跳过）。
     pub fn serialize(&self, envelope: &AgentEventEnvelope) -> Option<String> {
         match serde_json::to_string(envelope) {
             Ok(payload) => Some(payload),
@@ -164,12 +214,9 @@ impl EventBridge {
     }
 
     /// 序列化信封并发射（完整事件 JSON 载荷，03 §3.1）。
-    ///
-    /// G11a 备注：非 test 构建无 bin 消费者（生产路径经
-    /// BufferedRunEventBridge::flush → emit_payload），本方法为测试直接覆盖的
-    /// 信封直发 API（payload_is_flat_top_level_envelope_json 等断言）——dead_code 静音。
-    #[cfg_attr(not(test), allow(dead_code))]
+    /// 同时旁路广播至所有注册的 EventListener（如 TimerRegistry::on_event）
     pub fn emit_envelope(&self, envelope: &AgentEventEnvelope) -> EmitReport {
+        self.notify_event(&envelope.event);
         match self.serialize(envelope) {
             Some(payload) => self.emit_payload(&payload),
             None => EmitReport::default(),
@@ -181,7 +228,6 @@ impl EventBridge {
     pub fn emit_payload(&self, payload: &str) -> EmitReport {
         self.emitter.emit(&self.channel, payload);
         // 跨端扇出（R1-01）：可选订阅者——未挂接（服务未启动）时零开销；
-        // FanOutEmitter 内部按订阅过滤 + 丢帧分级 + 端级背压，失败自兜底
         if let Some(fanout) = self.fanout.get() {
             fanout.emit(&self.channel, payload);
         }
@@ -302,12 +348,10 @@ mod tests {
         );
     }
 
-    /// 挂接扇出后双通道发射（R1-01：attach_fanout → 扇出侧收到同载荷；
-    /// FanOutEmitter 本身的过滤/分级在 server/fanout.rs 单独测试）
+    /// 挂接扇出后双通道发射
     #[test]
     fn attach_fanout_routes_same_payload() {
         let (bridge, emitter) = recording_bridge();
-        // 扇出侧测试替身（同 RecordingEmitter：attach 面契约 = Emitter trait）
         let fanout = Arc::new(RecordingEmitter::default());
         bridge.attach_fanout(Arc::clone(&fanout) as Arc<dyn Emitter>);
 
@@ -317,4 +361,48 @@ mod tests {
         assert_eq!(fanout.calls().len(), 1, "扇出通道应收到同一条事件");
         assert_eq!(emitter.calls()[0], fanout.calls()[0], "双通道载荷逐字节一致");
     }
+
+    /// §6.1 旁路事件监听器接线测试（如 TimerRegistry::on_event 早退唤醒）
+    #[test]
+    fn attach_listener_receives_bypass_events() {
+        let (bridge, _emitter) = recording_bridge();
+        let received_events = Arc::new(Mutex::new(Vec::new()));
+        let recv_clone = Arc::clone(&received_events);
+
+        bridge.attach_fn_listener(move |event| {
+            recv_clone.lock().unwrap().push(event.clone());
+        });
+
+        let env = envelope();
+        bridge.emit_envelope(&env);
+
+        let events = received_events.lock().unwrap().clone();
+        assert_eq!(events.len(), 1);
+        assert!(matches!(events[0], AgentEvent::AgentStart { .. }));
+    }
+
+    /// 多个监听器同时接收旁路广播
+    #[test]
+    fn multiple_listeners_receive_broadcast() {
+        let (bridge, _emitter) = recording_bridge();
+        let counter1 = Arc::new(Mutex::new(0usize));
+        let counter2 = Arc::new(Mutex::new(0usize));
+
+        let c1 = Arc::clone(&counter1);
+        bridge.attach_fn_listener(move |_| {
+            *c1.lock().unwrap() += 1;
+        });
+
+        let c2 = Arc::clone(&counter2);
+        bridge.attach_fn_listener(move |_| {
+            *c2.lock().unwrap() += 1;
+        });
+
+        bridge.emit_envelope(&envelope());
+        bridge.emit_envelope(&envelope());
+
+        assert_eq!(*counter1.lock().unwrap(), 2);
+        assert_eq!(*counter2.lock().unwrap(), 2);
+    }
 }
+

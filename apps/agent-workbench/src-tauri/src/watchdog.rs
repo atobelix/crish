@@ -112,6 +112,8 @@ impl LastWakeupTracker {
 pub(crate) trait DispatchStore: Send + Sync {
     /// 读取本会话的 dispatch 声明（无声明 → 空 Vec；fail-open 不 panic）
     fn load_declarations(&self) -> Vec<DispatchDeclaration>;
+    /// 清理/核销历史 dispatch 声明（消除虚假超时报警风暴）
+    fn clear_declarations(&self) {}
 }
 
 /// 内存持久化适配（测试 + 引擎默认装配；conex-db session_meta 真适配
@@ -143,6 +145,13 @@ impl MemoryDispatchStore {
 impl DispatchStore for MemoryDispatchStore {
     fn load_declarations(&self) -> Vec<DispatchDeclaration> {
         self.declarations.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    fn clear_declarations(&self) {
+        self.declarations
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 }
 
@@ -183,6 +192,8 @@ pub(crate) struct Watchdog {
     /// 活跃定时器计数探测（>0 = AI 已设置定时器等待，抑制兜底；
     /// 缺省不抑制——A3 装配时注入真实计数）
     active_timer_probe: Arc<dyn Fn() -> usize + Send + Sync>,
+    /// 子代理状态源（用于过滤已完成/已终止的子代理，消除虚假超时报警风暴）
+    agents_source: Option<Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>>,
     /// 上次触发时刻（epoch 毫秒；触发后重置计时防风暴）
     last_fired_ms: Mutex<Option<u64>>,
     /// 配置（N 分钟 / 周期 / 时钟）
@@ -206,9 +217,20 @@ impl Watchdog {
             store,
             last_wakeup,
             active_timer_probe,
+            agents_source: None,
             last_fired_ms: Mutex::new(None),
             options,
         }
+    }
+
+    /// 注入子代理状态源（用于过滤非运行态子代理与历史声明核销）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn with_agents_source(
+        mut self,
+        agents_source: Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>,
+    ) -> Self {
+        self.agents_source = Some(agents_source);
+        self
     }
 
     /// 周期扫描一次（[spawn] 的循环体；测试可直接驱动）
@@ -228,6 +250,8 @@ impl Watchdog {
     /// 单次扫描判定（纯同步逻辑，时钟可注入便于测试）：
     /// - 活跃定时器存在 → 抑制（REQ-C05「既没有设置定时器」条件）；
     /// - 无 dispatch 声明 → 不触发；
+    /// - 子代理状态源过滤：已终态（completed/failed/stopped）子代理从扫描中剔除；
+    ///   若所有历史声明均已完成，自动核销 store 声明消除虚假超时风暴；
     /// - idle 基准 = max(最近分发时刻, 最近唤醒, 上次触发)；自基准起
     ///   超过 N 分钟 → 构造兜底条目并记录触发时刻（重置计时）。
     fn scan(&self, now_ms: u64) -> Option<SteeringInputEntry> {
@@ -240,9 +264,45 @@ impl Watchdog {
         if declarations.is_empty() {
             return None;
         }
+
+        // §6.2 真实子代理状态过滤与元数据闭环核销：
+        // 过滤非运行态子代理，消除虚假超时报警风暴
+        let active_declarations: Vec<DispatchDeclaration> = if let Some(ref source) = self.agents_source {
+            let agents = source.load_agents();
+            if agents.is_empty() {
+                // fail-open：状态源暂无记录时保留既有声明
+                declarations
+            } else {
+                declarations
+                    .into_iter()
+                    .filter(|decl| {
+                        // 若声明中任一子代理仍处于运行态（running/pending/started），保留声明；
+                        // 若声明内全部子代理均已终态（completed/failed/stopped），则过滤该声明
+                        decl.subagent_ids.iter().any(|id| {
+                            match agents.iter().find(|a| &a.id == id || &a.subagent_run_id == id) {
+                                Some(agent) => {
+                                    let s = agent.status.to_ascii_lowercase();
+                                    s == "running" || s == "pending" || s == "started"
+                                }
+                                None => true, // fail-open: 未知状态视为活跃
+                            }
+                        })
+                    })
+                    .collect()
+            }
+        } else {
+            declarations
+        };
+
+        if active_declarations.is_empty() {
+            // 所有历史分发的子代理均已完成或失败，核销 store 历史声明，消除误报风暴
+            self.store.clear_declarations();
+            return None;
+        }
+
         // idle 基准：最近的分发时刻（有新分发 = 有新活动）与最近事件唤醒
         // 取较晚者；触发后以上次触发时刻为基准（去重防风暴）
-        let dispatched_at = declarations
+        let dispatched_at = active_declarations
             .iter()
             .map(|d| d.dispatched_at_ms)
             .max()
@@ -260,8 +320,8 @@ impl Watchdog {
             return None;
         }
         // 触发：取最近一次分发的声明构造条目，并记录触发时刻（重置计时）。
-        // declarations 非空已在上方守卫，unwrap 不可达
-        let target = declarations
+        // active_declarations 非空已在上方守卫，unwrap 不可达
+        let target = active_declarations
             .iter()
             .max_by_key(|d| d.dispatched_at_ms)?;
         *self
@@ -517,4 +577,139 @@ mod tests {
         assert_eq!(format_duration_ms(11 * 60_000), "11 分钟");
         assert_eq!(format_duration_ms(45_000), "45 秒");
     }
+
+    fn test_agent(id: &str, status: &str) -> conex_types::SessionAgent {
+        conex_types::SessionAgent {
+            id: id.to_string(),
+            subagent_run_id: format!("run-{id}"),
+            parent_session_id: "sess-1".to_string(),
+            parent_run_id: "run-main".to_string(),
+            parent_tool_call_id: None,
+            description: "test".to_string(),
+            mode: "general".to_string(),
+            status: status.to_string(),
+            summary: None,
+            messages: Vec::new(),
+            started_at: 100_000,
+            ended_at: None,
+            depth: Some(1),
+            subagent_path_json: None,
+            task_type: None,
+            display_label: None,
+            allowed_write_paths_json: None,
+            sub_session_id: None,
+        }
+    }
+
+    /// §6.2 状态过滤与历史声明核销测试：
+    /// 当所有子代理均已 completed 时，过滤掉并核销声明，不触发虚假报警风暴
+    #[tokio::test]
+    async fn watchdog_filters_completed_subagents_and_clears_declarations() {
+        let (clock, options) = test_clock();
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let store = Arc::new(MemoryDispatchStore::new());
+        let last_wakeup = Arc::new(LastWakeupTracker::new());
+        let agent_source = Arc::new(crish_agent_workbench::wait_channel::MemoryAgentSource::new());
+        agent_source.set_agents(vec![test_agent("sa-1", "completed")]);
+
+        let watchdog = Arc::new(
+            Watchdog::new(
+                "sess-1".to_string(),
+                Arc::clone(&queue),
+                Arc::clone(&store) as Arc<dyn DispatchStore>,
+                Arc::clone(&last_wakeup),
+                Arc::new(|| 0),
+                options,
+            )
+            .with_agents_source(Arc::clone(&agent_source) as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
+        );
+
+        // 注入 11 分钟前的分发声明
+        store.set_declarations(vec![declaration(
+            "sa-1",
+            clock.load(Ordering::Relaxed) - 11 * 60_000,
+        )]);
+
+        // 周期扫描：检测到 sa-1 已 completed，自动核销声明并不触发报警
+        watchdog.tick().await;
+
+        assert!(
+            drain_entries(&queue).is_empty(),
+            "已完成的子代理绝对不得触发超时报警"
+        );
+        assert!(
+            store.load_declarations().is_empty(),
+            "已完成子代理的历史声明必须被自动核销清理"
+        );
+    }
+
+    /// 运行中的子代理在超时后正常触发报警
+    #[tokio::test]
+    async fn watchdog_fires_for_running_subagent() {
+        let (clock, options) = test_clock();
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let store = Arc::new(MemoryDispatchStore::new());
+        let last_wakeup = Arc::new(LastWakeupTracker::new());
+        let agent_source = Arc::new(crish_agent_workbench::wait_channel::MemoryAgentSource::new());
+        agent_source.set_agents(vec![test_agent("sa-1", "running")]);
+
+        let watchdog = Arc::new(
+            Watchdog::new(
+                "sess-1".to_string(),
+                Arc::clone(&queue),
+                Arc::clone(&store) as Arc<dyn DispatchStore>,
+                Arc::clone(&last_wakeup),
+                Arc::new(|| 0),
+                options,
+            )
+            .with_agents_source(Arc::clone(&agent_source) as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
+        );
+
+        store.set_declarations(vec![declaration(
+            "sa-1",
+            clock.load(Ordering::Relaxed) - 11 * 60_000,
+        )]);
+
+        watchdog.tick().await;
+
+        let entries = drain_entries(&queue);
+        assert_eq!(entries.len(), 1, "真正运行中且失联超时的子代理应正常报警");
+        assert!(entries[0].text.contains("sa-1"));
+    }
+
+    /// 状态源为空时 fail-open 保留声明
+    #[tokio::test]
+    async fn watchdog_fail_open_on_empty_agents_source() {
+        let (clock, options) = test_clock();
+        let queue = Arc::new(Mutex::new(PendingMessageQueue::new()));
+        let store = Arc::new(MemoryDispatchStore::new());
+        let last_wakeup = Arc::new(LastWakeupTracker::new());
+        let agent_source = Arc::new(crish_agent_workbench::wait_channel::MemoryAgentSource::new());
+
+        let watchdog = Arc::new(
+            Watchdog::new(
+                "sess-1".to_string(),
+                Arc::clone(&queue),
+                Arc::clone(&store) as Arc<dyn DispatchStore>,
+                Arc::clone(&last_wakeup),
+                Arc::new(|| 0),
+                options,
+            )
+            .with_agents_source(Arc::clone(&agent_source) as Arc<dyn crish_agent_workbench::wait_channel::SubagentStatusSource>),
+        );
+
+        store.set_declarations(vec![declaration(
+            "sa-1",
+            clock.load(Ordering::Relaxed) - 11 * 60_000,
+        )]);
+
+        watchdog.tick().await;
+
+        assert_eq!(
+            drain_entries(&queue).len(),
+            1,
+            "状态源为空时应 fail-open 触发兜底"
+        );
+    }
 }
+

@@ -277,7 +277,7 @@ mod tests {
 
     #[test]
     fn layout_single_monitor_dpi_125() {
-        // 37 报告环境:单屏 2560×1440 @125% → FWXGA 1366×768
+        // 单屏 2560×1440 @125% → HD720 1280×720
         let layout = layout_from_raw(&raw_single(2560, 1440, 1.25)).expect("布局构造失败");
         assert_eq!(layout.origin_x, 0);
         assert_eq!(layout.origin_y, 0);
@@ -286,12 +286,13 @@ mod tests {
         assert_eq!(layout.monitors.len(), 1);
         let m = &layout.monitors[0];
         assert_eq!(m.dpi_scale, 1.25);
-        // 缩放后图像尺寸:Fwxga 1366×768
-        assert_eq!(m.image_w, 1366);
-        assert_eq!(m.image_h, 768);
+        // 缩放后图像尺寸: HD720 1280×720 (严格等比)
+        assert_eq!(m.image_w, 1280);
+        assert_eq!(m.image_h, 720);
         let spec = layout.to_scale_spec();
-        assert_eq!(spec.target_w, 1366);
-        assert_eq!(spec.target_h, 768);
+        assert_eq!(spec.target_w, 1280);
+        assert_eq!(spec.target_h, 720);
+        assert!(spec.is_isometric());
     }
 
     #[test]

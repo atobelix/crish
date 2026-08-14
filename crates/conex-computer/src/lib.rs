@@ -29,10 +29,12 @@ pub use security::{
     IdleTimeout, SessionEnablement, StopSource, StopRecord,
 };
 
-/// 会话级错误(动作校验 / 注入 / 截屏 / 初始化四类)。
+/// 会话级错误(动作校验 / 注入 / 截屏 / 初始化 / 目标门禁五类)。
 ///
 /// 错误码语义对齐 04 §2.1 与 §4.4:`Action` 细分 `tool.computer.invalid_params`
-/// 与 `tool.computer.coords_out_of_bounds`;设备面错误统一透传文本。
+/// 与 `tool.computer.coords_out_of_bounds`;设备面错误统一透传文本;
+/// `Gate` 承载动作前检查器(05 文档 §5.2 ActionTargetGate)拒绝载荷,工具层
+/// 映射 `tool.computer.elevated_window`(06 文档 §4.2 守卫⑥,白名单/提权统一)。
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
     /// 动作参数校验失败(参数非法 / 坐标越界,由 `ActionError` 细分)
@@ -47,6 +49,10 @@ pub enum SessionError {
     /// 会话初始化失败(注入后端 / 截屏源 / 布局查询)
     #[error("会话初始化失败: {0}")]
     Init(String),
+    /// 动作前检查器拒绝(目标窗口白名单 / 提权探测;工具层映射
+    /// `tool.computer.elevated_window`,06 文档 §4.2 守卫⑥)
+    #[error("目标门禁拒绝: {0:?}")]
+    Gate(conex_shared::gate::TargetDenial),
 }
 
 /// 动作执行结果(感知类动作返回数据,其余动作为 `Done`)。
@@ -69,6 +75,7 @@ pub struct ComputerSession {
     backend: action::inject::OsInputBackend,
     capture: screen::ScreenCapture,
     spec: ScaleSpec,
+    stop: Option<std::sync::Arc<security::EmergencyStop>>,
 }
 
 #[cfg(windows)]
@@ -87,7 +94,21 @@ impl ComputerSession {
             backend,
             capture,
             spec,
+            stop: None,
         })
+    }
+
+    /// 注入急停标志
+    pub fn with_stop(mut self, stop: std::sync::Arc<security::EmergencyStop>) -> Self {
+        self.backend.set_stop(Some(stop.clone()));
+        self.stop = Some(stop);
+        self
+    }
+
+    /// 设置急停标志
+    pub fn set_stop(&mut self, stop: Option<std::sync::Arc<security::EmergencyStop>>) {
+        self.backend.set_stop(stop.clone());
+        self.stop = stop;
     }
 
     /// 当前布局表(显示器清单 / 虚拟桌面边界)
@@ -115,6 +136,11 @@ impl ComputerSession {
     /// - 带修饰键的点击/滚动按「修饰键 down → 动作 → 修饰键 up」包裹;
     /// - `CursorPosition` 返回物理光标经物理→API 换算的 API 空间值。
     pub fn dispatch(&mut self, action: &Action) -> Result<ActionResult, SessionError> {
+        if let Some(ref s) = self.stop {
+            if s.stopped() {
+                return Err(SessionError::Inject("急停已置位，拒绝派发注入动作".to_string()));
+            }
+        }
         action.validate(&self.spec)?;
         match action {
             Action::Key { keys } => {

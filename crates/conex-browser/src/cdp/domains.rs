@@ -33,6 +33,9 @@ pub mod names {
     pub const PAGE_START_SCREENCAST: &str = "Page.startScreencast";
     pub const PAGE_STOP_SCREENCAST: &str = "Page.stopScreencast";
     pub const PAGE_SCREENCAST_FRAME_ACK: &str = "Page.screencastFrameAck";
+    // U-3 静态帧降级（screencast 不可用 → 1fps captureScreenshot 轮询）；
+    // 参数/结果类型见 CaptureScreenshotParams/CaptureScreenshotResult（本文件）
+    pub const PAGE_CAPTURE_SCREENSHOT: &str = "Page.captureScreenshot";
     pub const PAGE_GET_LAYOUT_METRICS: &str = "Page.getLayoutMetrics";
     // Chrome 151 已移除 Runtime.createIsolatedWorld（-32601 not found）；
     // 隔离世界创建改走 Page 域：getFrameTree 取主 frameId + createIsolatedWorld

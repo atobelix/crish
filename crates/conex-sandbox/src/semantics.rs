@@ -200,12 +200,30 @@ fn split_segments(line: &str) -> Vec<String> {
                 quote = Some(c);
                 current.push(c);
             }
-            ';' | '&' | '|' => {
-                // 处理 && / || / |& 双字符操作符
-                if let Some(&next_c) = chars.peek() {
-                    if (c == '&' && next_c == '&') || (c == '|' && (next_c == '|' || next_c == '&')) {
-                        chars.next();
+            '&' => {
+                if chars.peek() == Some(&'&') {
+                    chars.next();
+                    let trimmed = current.trim();
+                    if !trimmed.is_empty() {
+                        segments.push(trimmed.to_string());
                     }
+                    current = String::new();
+                } else if current.trim().is_empty() {
+                    // Leading & is PowerShell call operator, not a command separator
+                    current.push('&');
+                } else {
+                    // Trailing & is backgrounding / separator
+                    let trimmed = current.trim();
+                    if !trimmed.is_empty() {
+                        segments.push(trimmed.to_string());
+                    }
+                    current = String::new();
+                }
+            }
+            ';' | '|' => {
+                // 处理 || / |& 双字符操作符
+                if c == '|' && (chars.peek() == Some(&'|') || chars.peek() == Some(&'&')) {
+                    chars.next();
                 }
                 let trimmed = current.trim();
                 if !trimmed.is_empty() {
@@ -379,15 +397,8 @@ fn is_escape_requiring(c: char) -> bool {
         || c == '>'
 }
 
-/// 拆分段为（命令, 参数）：处理引号、上下文判定转义，命令为第一个 token。
-///
-/// 转义语义（12-T-PD-03，单套跨平台、不分支 cfg(windows)）：
-/// - `\` 仅在后跟转义需求字符时吞掉自身、保留后字符（见 is_escape_requiring）；
-///   后跟普通路径字符时原样保留反斜杠——Windows 路径 `C:\temp\a.txt` 完整入参；
-/// - 行尾孤反斜杠（`cd /d C:\`）无下一字符可吞，原样保留；
-/// - 单引号内反斜杠恒为字面量（Unix 语义，`'C:\x\y.txt'` 原样保留）；
-/// - Unix 形态安全网：`echo a\ b`、`rm -rf \` 续行等 `\` 后跟空白仍按转义处理。
-fn split_command_args(segment: &str) -> (String, Vec<String>) {
+/// 规范化拆分命令行 Token，彻底剥离反引号与非单引号转义符
+pub fn split_command_args_normalized(segment: &str) -> (String, Vec<String>) {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut quote: Option<char> = None;
@@ -395,7 +406,42 @@ fn split_command_args(segment: &str) -> (String, Vec<String>) {
     let mut chars = segment.chars().peekable();
 
     while let Some(c) = chars.next() {
-        if c == '\\' && quote != Some('\'') {
+        // 1. 单引号上下文：内部字符严格原样保留，绝对不转义
+        if quote == Some('\'') {
+            if c == '\'' {
+                quote = None;
+            } else {
+                current.push(c);
+            }
+            started = true;
+            continue;
+        }
+
+        // 2. 双引号上下文：反引号 ` 作为转义符，转义下一个字符（如 `"r`i"` -> `"ri"`）
+        if quote == Some('"') {
+            if c == '"' {
+                quote = None;
+            } else if c == '`' {
+                if let Some(next_c) = chars.next() {
+                    current.push(next_c);
+                }
+            } else {
+                current.push(c);
+            }
+            started = true;
+            continue;
+        }
+
+        // 3. 无引号上下文：处理 PowerShell 反引号 ` 与 Windows 路径反斜杠 \
+        if c == '`' {
+            if let Some(next_c) = chars.next() {
+                current.push(next_c);
+                started = true;
+            }
+            continue;
+        }
+
+        if c == '\\' {
             // 盘符上下文（PS-01 T1.4）：current 形如 `X:`（字母+冒号）时，
             // 本 `\` 是 Windows 盘符根路径分隔符（`C:\ -Recurse` 形态——
             // R1 形态 4 的 `ri C:\ -Recurse -Force`），后跟空白/元字符
@@ -405,8 +451,6 @@ fn split_command_args(segment: &str) -> (String, Vec<String>) {
             let after_drive = current.len() >= 2
                 && current.as_bytes()[current.len() - 2].is_ascii_alphabetic()
                 && current.as_bytes()[current.len() - 1] == b':';
-            // 上下文判定：后跟转义需求字符才吞反斜杠；
-            // 否则（后跟普通路径字符或行尾无下一字符）原样保留反斜杠
             if let Some(&next_c) = chars.peek() {
                 if is_escape_requiring(next_c) && !after_drive {
                     chars.next();
@@ -419,15 +463,7 @@ fn split_command_args(segment: &str) -> (String, Vec<String>) {
             started = true;
             continue;
         }
-        if let Some(q) = quote {
-            if c == q {
-                quote = None;
-            } else {
-                current.push(c);
-            }
-            started = true;
-            continue;
-        }
+
         match c {
             '\'' | '"' => {
                 quote = Some(c);
@@ -445,6 +481,7 @@ fn split_command_args(segment: &str) -> (String, Vec<String>) {
             }
         }
     }
+
     if !current.is_empty() {
         tokens.push(current);
     }
@@ -455,6 +492,120 @@ fn split_command_args(segment: &str) -> (String, Vec<String>) {
         let command = tokens.remove(0);
         (command, tokens)
     }
+}
+
+/// 拆分段为（命令, 参数）：委托 split_command_args_normalized（反混淆状态机）
+fn split_command_args(segment: &str) -> (String, Vec<String>) {
+    split_command_args_normalized(segment)
+}
+
+/// 泛化匹配 PowerShell EncodedCommand 开关全变形（-enco, -e:, /e:, -EncodedCommand= 等）
+pub fn is_ps_encoded_command_flag(arg: &str) -> bool {
+    let lower = arg.to_lowercase();
+    let stripped = match lower.strip_prefix('-').or_else(|| lower.strip_prefix('/')) {
+        Some(s) => s,
+        None => return false,
+    };
+    let flag_name = stripped.split(['=', ':']).next().unwrap_or(stripped);
+    if flag_name.is_empty() {
+        return false;
+    }
+    if "encodedcommand".starts_with(flag_name) {
+        if flag_name == "e" || flag_name.starts_with("enc") || flag_name.starts_with("enco") {
+            return true;
+        }
+    }
+    false
+}
+
+/// 识别单 Token 的危险特征（.NET 动态反射、进程启动与环境变量求值）
+pub fn analyze_token_danger(token: &str) -> Option<CommandClass> {
+    let lower = token.to_lowercase();
+
+    // 1. 拦截 .NET 动态进程启动与反射代码生成 -> 直接 Redline 阻断
+    if lower.starts_with("[system.diagnostics.process]")
+        || lower.contains("::start")
+        || lower.starts_with("[scriptblock]")
+        || lower.contains("::create")
+        || lower.starts_with("[powershell]")
+        || lower.starts_with("[system.appdomain]")
+        || lower.starts_with("[system.reflection.")
+    {
+        return Some(CommandClass::Redline);
+    }
+
+    // 2. 拦截环境变量动态拼接与非常规求值 -> 提升为 Dangerous 触发人工确认
+    if lower.contains("$env:comspec") || lower.contains("$env:systemroot") {
+        return Some(CommandClass::Dangerous);
+    }
+
+    None
+}
+
+/// 分析段内语法特征与间接/反射执行（AST 门禁）
+pub fn analyze_segment_ast(command: &str, args: &[String], depth: usize) -> CommandClass {
+    if depth > MAX_WRAP_DEPTH {
+        return CommandClass::Redline; // 深度防爆守卫
+    }
+
+    // 1. 检查首 Token 与所有参数的危险反射特征
+    if let Some(danger) = analyze_token_danger(command) {
+        return danger;
+    }
+    for arg in args {
+        if let Some(danger) = analyze_token_danger(arg) {
+            return danger;
+        }
+    }
+
+    // 2. 检查呼叫操作符 & $var / &(...) / &{...} / $(...)
+    if command == "&" && !args.is_empty() {
+        let target = &args[0];
+        if target.starts_with('$') || target.starts_with('(') || target.starts_with('{') {
+            return CommandClass::Dangerous;
+        }
+    }
+    if command.starts_with("$(") || command.starts_with("&(") || command.starts_with("&{") {
+        return CommandClass::Dangerous;
+    }
+    if command.starts_with('$')
+        && !args.first().map(|a| a == "=").unwrap_or(false)
+        && !PRINT_WHITELIST.contains(&command)
+    {
+        return CommandClass::Dangerous;
+    }
+
+    // 3. 检查 Base64 编码开关变形 (powershell / pwsh)
+    let lower_cmd = command.to_lowercase();
+    if lower_cmd == "powershell" || lower_cmd == "pwsh" {
+        for arg in args {
+            if is_ps_encoded_command_flag(arg) {
+                return CommandClass::Redline;
+            }
+        }
+    }
+
+    // 4. 检查 % (ForEach-Object) 管道与花括号内 ScriptBlock 递归提取
+    if lower_cmd == "%" || lower_cmd == "foreach-object" {
+        for arg in args {
+            if arg.starts_with('{') && arg.ends_with('}') && arg.len() >= 2 {
+                let inner = &arg[1..arg.len() - 1];
+                let (sub_cmd, sub_args) = split_command_args_normalized(inner);
+                if !sub_cmd.is_empty() {
+                    let sub_norm = normalize_command(&sub_cmd);
+                    if is_delete_command(&sub_norm) {
+                        return CommandClass::Dangerous;
+                    }
+                    let sub_class = analyze_segment_ast(&sub_norm, &sub_args, depth + 1);
+                    if sub_class == CommandClass::Redline || sub_class == CommandClass::Dangerous {
+                        return sub_class;
+                    }
+                }
+            }
+        }
+    }
+
+    CommandClass::Normal
 }
 
 /// 命令名规范化：小写、去路径前缀（/bin/rm -> rm）、去 .exe 扩展名
@@ -490,6 +641,10 @@ fn normalize_command(command: &str) -> String {
     // `ri C:\ -Recurse -Force` 命中既有盘符根红线判定。
     if lower == "ri" {
         return "remove-item".to_string();
+    }
+    // % → foreach-object（ForEach-Object 管道别名）
+    if lower == "%" {
+        return "foreach-object".to_string();
     }
     lower
 }
@@ -685,16 +840,11 @@ fn analyze_indirect(segment_raw: &str) -> SemanticAnalysis {
     let normalized = normalize_command(&command);
     let inner = match normalized.as_str() {
         "bash" | "sh" | "cmd" | "pwsh" | "powershell" | "node" | "python" | "python3" => {
-            // PS-01 T1.3（R1 ④ 盲区）：-EncodedCommand / -enc / -e / -E 是
-            // base64 编码隐藏形态（`-e` 是 -EncodedCommand 的短写，原被误当
-            // -Command 把 base64 串当命令分析 → 无效 → Normal → 放行）。
-            // 不追求静态解出内层（F9-01 修复建议 ②），检测到即整体升级
-            // Redline（D2：inner 置不可解析标记，段整体 Redline）。
-            let mut iter = args.iter();
-            while let Some(a) = iter.next() {
-                if a == "-EncodedCommand" || a == "-enc" || a == "-e" || a == "-E"
-                    || a.starts_with("-EncodedCommand=")
-                {
+            // PS-01 T1.3（R1 ④ 盲区）/ Unit 5.1：-EncodedCommand / -enc / -e / -enco / /e: 等
+            // base64 编码隐藏形态全变形泛化拦截。
+            // 检测到即整体升级 Redline。
+            for a in &args {
+                if is_ps_encoded_command_flag(a) {
                     return redline_only_analysis();
                 }
             }
@@ -888,6 +1038,17 @@ fn classify_depth(
                 CommandClass::Dangerous => return CommandClass::Dangerous,
                 _ => {}
             }
+        }
+    }
+
+    // 0.1 AST 语法特征与动态执行分析（动态反射、变量调用 & $var、Base64 开关等）
+    if !INDIRECT_COMMANDS.contains(&command) {
+        let ast_class = analyze_segment_ast(command, args, depth);
+        if ast_class == CommandClass::Redline {
+            return CommandClass::Redline;
+        }
+        if ast_class == CommandClass::Dangerous {
+            return CommandClass::Dangerous;
         }
     }
 
@@ -1721,5 +1882,118 @@ mod tests {
         let b = analyze("cd x && ForEach-Object { Remove-Item $_ }");
         assert!(b.has_indirect_delete);
         assert_eq!(b.overall_class, CommandClass::CdShape);
+    }
+
+    // ===== Unit 5.1：词法反混淆与动态 AST 门禁专项测试 =====
+
+    #[test]
+    fn test_split_command_args_normalized_backticks() {
+        // 反引号混淆剥离：r`i -> ri, R`em`ove-Item -> Remove-Item
+        let (cmd1, args1) = split_command_args_normalized("r`i C:\\ -Recurse -Force");
+        assert_eq!(cmd1, "ri");
+        assert_eq!(args1, vec!["C:\\", "-Recurse", "-Force"]);
+
+        let (cmd2, args2) = split_command_args_normalized("R`em`ove-Item C:\\ -Force -Recurse");
+        assert_eq!(cmd2, "Remove-Item");
+        assert_eq!(args2, vec!["C:\\", "-Force", "-Recurse"]);
+
+        // 双引号内反引号转义：`"r`i"` -> `"ri"`
+        let (cmd3, _) = split_command_args_normalized("\"r`i\" C:\\");
+        assert_eq!(cmd3, "ri");
+
+        // 单引号内反引号字面量保留
+        let (cmd4, args4) = split_command_args_normalized("echo 'r`i'");
+        assert_eq!(cmd4, "echo");
+        assert_eq!(args4, vec!["r`i"]);
+    }
+
+    #[test]
+    fn test_is_ps_encoded_command_flag_variants() {
+        assert!(is_ps_encoded_command_flag("-enco"));
+        assert!(is_ps_encoded_command_flag("-EncodedCommand"));
+        assert!(is_ps_encoded_command_flag("-encodedcommand"));
+        assert!(is_ps_encoded_command_flag("-e"));
+        assert!(is_ps_encoded_command_flag("-E"));
+        assert!(is_ps_encoded_command_flag("-enc"));
+        assert!(is_ps_encoded_command_flag("/e:cgBtACAALQByAGYAIAAvAA=="));
+        assert!(is_ps_encoded_command_flag("-e:cgBtACAALQByAGYAIAAvAA=="));
+        assert!(is_ps_encoded_command_flag("-EncodedCommand=cgBtACAALQByAGYAIAAvAA=="));
+        assert!(is_ps_encoded_command_flag("/encodedcommand"));
+
+        // 负例
+        assert!(!is_ps_encoded_command_flag("-entity"));
+        assert!(!is_ps_encoded_command_flag("-exec"));
+        assert!(!is_ps_encoded_command_flag("-erroraction"));
+        assert!(!is_ps_encoded_command_flag("npm"));
+    }
+
+    #[test]
+    fn test_analyze_token_danger_dotnet_and_env() {
+        assert_eq!(
+            analyze_token_danger("[System.Diagnostics.Process]::Start"),
+            Some(CommandClass::Redline)
+        );
+        assert_eq!(
+            analyze_token_danger("[scriptblock]::create"),
+            Some(CommandClass::Redline)
+        );
+        assert_eq!(
+            analyze_token_danger("[PowerShell]::Create()"),
+            Some(CommandClass::Redline)
+        );
+        assert_eq!(
+            analyze_token_danger("$env:comspec"),
+            Some(CommandClass::Dangerous)
+        );
+        assert_eq!(
+            analyze_token_danger("$env:SystemRoot"),
+            Some(CommandClass::Dangerous)
+        );
+    }
+
+    #[test]
+    fn test_ps_dynamic_reflection_and_call_operator() {
+        // [System.Diagnostics.Process]::Start -> Redline
+        let a = analyze("[System.Diagnostics.Process]::Start('cmd.exe', '/c del /f /q C:\\*')");
+        assert_eq!(a.overall_class, CommandClass::Redline);
+
+        // & $var 动态变量调用 -> Dangerous
+        let b = analyze("$x = 'Remove-Item'; & $x C:\\ -Force");
+        assert_eq!(b.overall_class, CommandClass::Dangerous);
+
+        // $(whoami) 与 &($code) 作为命令调用 -> Dangerous
+        let d = analyze("$(whoami) args");
+        assert_eq!(d.overall_class, CommandClass::Dangerous);
+
+        let e = analyze("&($code) args");
+        assert_eq!(e.overall_class, CommandClass::Dangerous);
+
+        // % (ForEach-Object) 管道与内层 Remove-Item
+        let c = analyze("Get-ChildItem C:\\ | % { Remove-Item $_.FullName -Force }");
+        assert!(c.has_indirect_delete);
+        assert_eq!(c.overall_class, CommandClass::Indirect);
+    }
+
+    #[test]
+    fn test_adversarial_obfuscation_and_reflection_semantics() {
+        // Section 8.1 对抗用例
+        let cases = [
+            "r`i C:\\ -Recurse -Force",
+            "R`em`ove-Item C:\\ -Force -Recurse",
+            "powershell -enco cgBtACAALQByAGYAIAAvAA==",
+            "pwsh -e:cgBtACAALQByAGYAIAAvAA==",
+            "[System.Diagnostics.Process]::Start('cmd.exe', '/c del /f /q C:\\*')",
+            "$x = 'Remove-Item'; & $x C:\\ -Force",
+            "Get-ChildItem C:\\ | % { Remove-Item $_.FullName -Force }",
+        ];
+
+        for cmd in cases {
+            let res = analyze(cmd);
+            assert_ne!(
+                res.overall_class,
+                CommandClass::Normal,
+                "混淆/反射命令不能被误判为 Normal: {cmd}"
+            );
+        }
     }
 }

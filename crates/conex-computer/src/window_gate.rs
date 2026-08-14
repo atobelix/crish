@@ -121,6 +121,84 @@ impl ActionTargetGate for WindowTargetGate {
     }
 }
 
+/// 解析当前前台活动窗口目标（HWND/PID/真实 ExeName，Fail-Closed 提权探针）。
+#[allow(unsafe_code)]
+pub fn resolve_foreground_target() -> ActionTarget {
+    #[cfg(windows)]
+    unsafe {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+        };
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            GetForegroundWindow, GetWindowTextW, GetWindowThreadProcessId,
+        };
+
+        let hwnd = GetForegroundWindow();
+        if hwnd.is_null() {
+            return ActionTarget::Window {
+                title: "未知窗口".to_string(),
+                process: None,
+            };
+        }
+
+        let mut title_buf = [0u16; 512];
+        let title_len = GetWindowTextW(hwnd, title_buf.as_mut_ptr(), title_buf.len() as i32);
+        let title = if title_len > 0 {
+            String::from_utf16_lossy(&title_buf[..title_len as usize])
+        } else {
+            "无标题窗口".to_string()
+        };
+
+        let mut pid: u32 = 0;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid == 0 {
+            return ActionTarget::Window {
+                title,
+                process: None,
+            };
+        }
+
+        let process_handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if process_handle.is_null() {
+            // Fail-Closed 铁律：无法打开句柄说明权限高于当前进程，直接标记提权阻止注入
+            return ActionTarget::Window {
+                title,
+                process: Some("access_denied_elevated.exe".to_string()),
+            };
+        }
+
+        let mut name_buf = [0u16; 1024];
+        let mut size = name_buf.len() as u32;
+        let proc_name = if QueryFullProcessImageNameW(
+            process_handle,
+            0,
+            name_buf.as_mut_ptr(),
+            &mut size,
+        ) != 0
+        {
+            let full_path = String::from_utf16_lossy(&name_buf[..size as usize]);
+            std::path::Path::new(&full_path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string())
+        } else {
+            None
+        };
+        CloseHandle(process_handle);
+
+        ActionTarget::Window {
+            title,
+            process: proc_name,
+        }
+    }
+    #[cfg(not(windows))]
+    ActionTarget::Window {
+        title: "非 Windows 平台".to_string(),
+        process: None,
+    }
+}
+
 /// 提权探测生产实现(Windows TokenElevation):
 /// Toolhelp 快照按进程名枚举(ToolHelp32),对同名进程逐个 OpenProcess 查询
 /// TokenElevation 令牌;任一实例提权即判定提权(进程名匹配不分实例)。
@@ -130,6 +208,9 @@ pub struct TokenElevationProbe;
 #[cfg(windows)]
 impl ElevationProbe for TokenElevationProbe {
     fn is_elevated(&self, process: &str) -> bool {
+        if process.eq_ignore_ascii_case("access_denied_elevated.exe") {
+            return true;
+        }
         is_any_process_elevated(process)
     }
 }
@@ -148,7 +229,10 @@ impl ElevationProbe for TokenElevationProbe {
 /// 枚举进程名匹配并查询提权(进程名大小写不敏感;探测失败按未提权)
 #[cfg(windows)]
 #[allow(unsafe_code)]
-fn is_any_process_elevated(process: &str) -> bool {
+pub fn is_any_process_elevated(process: &str) -> bool {
+    if process.eq_ignore_ascii_case("access_denied_elevated.exe") {
+        return true;
+    }
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
@@ -183,11 +267,11 @@ fn is_any_process_elevated(process: &str) -> bool {
 }
 
 /// 单进程提权查询:OpenProcess → OpenProcessToken(TOKEN_QUERY) →
-/// GetTokenInformation(TokenElevation);任一步失败按未提权
+/// GetTokenInformation(TokenElevation);遵循 Fail-Closed 原则:遭遇 ACCESS_DENIED 或异常坚决判定提权
 #[cfg(windows)]
 #[allow(unsafe_code)]
-fn process_is_elevated(pid: u32) -> bool {
-    use windows_sys::Win32::Foundation::CloseHandle;
+pub fn process_is_elevated(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED};
     use windows_sys::Win32::Security::{
         GetTokenInformation, TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY,
     };
@@ -198,25 +282,34 @@ fn process_is_elevated(pid: u32) -> bool {
     unsafe {
         let process_handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if process_handle.is_null() {
-            return false;
+            // Fail-Closed 铁律：打开进程报 ACCESS_DENIED 或任何异常直接判定为提权进程
+            let err = GetLastError();
+            return err == ERROR_ACCESS_DENIED || err != 0;
         }
+
         let mut token_handle: *mut core::ffi::c_void = std::ptr::null_mut();
-        let mut elevated = false;
-        if OpenProcessToken(process_handle, TOKEN_QUERY, &mut token_handle) != 0 {
-            let mut elevation: TOKEN_ELEVATION = std::mem::zeroed();
-            let mut return_len: u32 = 0;
-            if GetTokenInformation(
-                token_handle,
-                TokenElevation,
-                &mut elevation as *mut _ as *mut core::ffi::c_void,
-                std::mem::size_of::<TOKEN_ELEVATION>() as u32,
-                &mut return_len,
-            ) != 0
-            {
-                elevated = elevation.TokenIsElevated != 0;
-            }
-            CloseHandle(token_handle);
+        if OpenProcessToken(process_handle, TOKEN_QUERY, &mut token_handle) == 0 {
+            let err = GetLastError();
+            CloseHandle(process_handle);
+            return err == ERROR_ACCESS_DENIED || err != 0;
         }
+
+        let mut elevation: TOKEN_ELEVATION = std::mem::zeroed();
+        let mut return_len: u32 = 0;
+        let elevated = if GetTokenInformation(
+            token_handle,
+            TokenElevation,
+            &mut elevation as *mut _ as *mut core::ffi::c_void,
+            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
+            &mut return_len,
+        ) != 0
+        {
+            elevation.TokenIsElevated != 0
+        } else {
+            // Fail-Closed：获取令牌信息失败亦判定为提权
+            true
+        };
+        CloseHandle(token_handle);
         CloseHandle(process_handle);
         elevated
     }
@@ -415,5 +508,19 @@ mod tests {
     fn window_target_gate_is_send_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<WindowTargetGate>();
+    }
+
+    #[test]
+    fn adversarial_computer_elevation_fail_closed() {
+        #[cfg(windows)]
+        {
+            // System PID 4 (Fail-Closed ACCESS_DENIED)
+            let is_elevated = process_is_elevated(4);
+            assert!(is_elevated, "权限查询遭遇 ACCESS_DENIED 必须 Fail-Closed 判定为提权");
+            
+            // access_denied_elevated.exe probe check
+            let probe = TokenElevationProbe;
+            assert!(probe.is_elevated("access_denied_elevated.exe"));
+        }
     }
 }

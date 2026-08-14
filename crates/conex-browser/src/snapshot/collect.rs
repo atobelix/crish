@@ -1594,6 +1594,7 @@ mod tests {
             (RUNTIME_ENABLE, MockReply::Ok(json!({}))),
             (DOM_ENABLE, MockReply::Ok(json!({}))),
             (NETWORK_ENABLE, MockReply::Ok(json!({}))),
+            (NETWORK_SET_BLOCKED_URLS, MockReply::Ok(json!({}))),
             (RUNTIME_RUN_IF_WAITING_FOR_DEBUGGER, MockReply::Ok(json!({}))),
             (RUNTIME_EVALUATE, MockReply::Ok(json!({ "result": { "value": 1 } }))),
             (PAGE_SET_WINDOW_OPEN_HANDLER, MockReply::Ok(json!({}))),

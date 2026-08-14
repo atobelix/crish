@@ -197,7 +197,7 @@ impl TrashService {
             // 登记失败：尽力把已移动内容移回原路径，避免孤儿条目（不吞原始错误）
             let moved_back = atomic_move(&payload_dst, path, is_dir).is_ok();
             if moved_back {
-                let _ = fs::remove_dir_all(&entry_dir);
+                let _ = force_remove_dir_all(&entry_dir);
             }
             return Err(e).with_context(|| format!("登记回收站条目失败：{}", path.display()));
         }
@@ -205,11 +205,6 @@ impl TrashService {
     }
 
     /// 写前自动备份快照（S10b 中间件钩子存储面）
-    ///
-    /// 目标文件**复制**进回收站域并登记（原路径保留，写工具随后覆盖写入），
-    /// 与 [Self::trash_file] 的「移入」语义互补。仅支持普通文件（写工具
-    /// 不写目录）；目标原不存在时登记 nil-content 条目（`original_existed`
-    /// = false，无 payload，恢复语义 = 删除原路径）。
     pub fn snapshot(&self, path: &Path) -> Result<TrashEntry> {
         if path_is_within(&self.root, path) {
             bail!("目标位于回收站根目录内，拒绝快照：{}", path.display());
@@ -221,58 +216,53 @@ impl TrashService {
             .join(PAYLOAD_DIR)
             .join(relative_path_of(&original));
 
-        match fs::metadata(path) {
-            Ok(metadata) if metadata.is_file() => {
-                crate::path_utils::ensure_parent_dir(&payload_dst)
-                    .with_context(|| format!("创建快照目录失败：{}", payload_dst.display()))?;
-                let checksum = crate::path_utils::compute_file_hash(path)?;
-                fs::copy(path, &payload_dst)
-                    .with_context(|| format!("复制快照失败：{}", path.display()))?;
-                let snapshot = SnapshotMeta {
-                    mtime: epoch_millis(metadata.modified().ok()),
-                    readonly: metadata.permissions().readonly(),
-                };
-                let entry = TrashEntry {
-                    id: id.clone(),
-                    original_path: original,
-                    trashed_at: now_millis(),
-                    kind: TrashKind::File,
-                    size: metadata.len(),
-                    checksum: Some(checksum),
-                    mode: EntryMode::Snapshot,
-                };
-                write_meta(&entry_dir, &entry, true, Some(snapshot), true)?;
-                Ok(entry)
-            }
-            Ok(_) => bail!("快照仅支持普通文件：{}", path.display()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // nil-content 条目（原不存在）：登记「原不存在」语义，
-                // 不复制 payload；恢复 = 删除原路径（FileSnap 反向语义）
-                fs::create_dir_all(&entry_dir)
-                    .with_context(|| format!("创建快照目录失败：{}", entry_dir.display()))?;
-                let entry = TrashEntry {
-                    id: id.clone(),
-                    original_path: original,
-                    trashed_at: now_millis(),
-                    kind: TrashKind::File,
-                    size: 0,
-                    checksum: None,
-                    mode: EntryMode::Snapshot,
-                };
-                write_meta(&entry_dir, &entry, true, None, false)?;
-                Ok(entry)
-            }
-            Err(e) => bail!("目标不可访问（快照失败）：{}：{e}", path.display()),
+        if !path.exists() {
+            crate::path_utils::ensure_parent_dir(&entry_dir.join(META_FILE))?;
+            let entry = TrashEntry {
+                id: id.clone(),
+                original_path: original.clone(),
+                trashed_at: now_millis(),
+                kind: TrashKind::File,
+                size: 0,
+                checksum: None,
+                mode: EntryMode::Snapshot,
+            };
+            write_meta(&entry_dir, &entry, true, None, false)?;
+            return Ok(entry);
         }
+
+        let metadata = fs::metadata(path)
+            .with_context(|| format!("快照目标不可访问：{}", path.display()))?;
+        if metadata.is_dir() {
+            bail!("快照仅支持普通文件，拒绝目录：{}", path.display());
+        }
+
+        crate::path_utils::ensure_parent_dir(&payload_dst)?;
+        fs::copy(path, &payload_dst)
+            .with_context(|| format!("复制快照失败：{}", path.display()))?;
+
+        let checksum = Some(crate::path_utils::compute_file_hash(path)?);
+        let snapshot = SnapshotMeta {
+            mtime: epoch_millis(metadata.modified().ok()),
+            readonly: metadata.permissions().readonly(),
+        };
+        let entry = TrashEntry {
+            id: id.clone(),
+            original_path: original.clone(),
+            trashed_at: now_millis(),
+            kind: TrashKind::File,
+            size: metadata.len(),
+            checksum,
+            mode: EntryMode::Snapshot,
+        };
+        if let Err(e) = write_meta(&entry_dir, &entry, true, Some(snapshot), true) {
+            let _ = force_remove_dir_all(&entry_dir);
+            return Err(e).with_context(|| format!("登记快照条目失败：{}", path.display()));
+        }
+        Ok(entry)
     }
 
-    /// 从回收站恢复到原路径（校验 checksum 防篡改）
-    ///
-    /// - 条目不存在 / 内容缺失 → 结构化错误；
-    /// - backup=true 的条目先重算校验和比对，不匹配拒绝恢复（防篡改）；
-    /// - 原路径已存在 → 拒绝覆盖（不静默覆盖用户文件）；
-    /// - 快照条目（写前备份，原路径仍存在）→ 拒绝并引导 [Self::restore_force]；
-    /// - 恢复成功后移除条目目录（登记一并清除）。
+    /// 恢复条目至原始路径（恢复语义与 entry.mode 绑定）
     pub fn restore(&self, entry_id: &str) -> Result<PathBuf> {
         let entry_dir = self.entry_dir(entry_id)?;
         if !entry_dir.is_dir() {
@@ -282,12 +272,13 @@ impl TrashService {
         let entry = &meta.entry;
         if entry.mode == EntryMode::Snapshot {
             bail!(
-                "条目为快照条目（写前备份，原路径仍存在），请用覆盖恢复接口：{entry_id}"
+                "条目为快照条目（写前备份，原路径仍存在），请用覆盖恢复接口（restore_force）：{entry_id}"
             );
         }
-        // 原路径全链校验（read_meta 之后、任何移动/复制动作之前，fail-fast）：
-        // 绝对路径 + 无 .. 穿越 + 不在 trash 根内（防 meta.json 被篡改后越界恢复）
+        // 原路径全链校验（read_meta 之后、payload 移动之前，fail-fast）：
+        // 绝对路径 + 无 .. 穿越 + 不在 trash 根内（防 meta.json 被篡改后越界写入）
         validate_original_path(&entry.original_path, &self.root)?;
+
         let is_dir = entry.kind == TrashKind::Dir;
         let payload = entry_dir
             .join(PAYLOAD_DIR)
@@ -308,16 +299,11 @@ impl TrashService {
         crate::path_utils::ensure_parent_dir(original)?;
         atomic_move(&payload, original, is_dir)?;
         // 恢复成功后清理条目目录（移除登记与空壳）；清理失败不阻塞恢复结果
-        let _ = fs::remove_dir_all(&entry_dir);
+        let _ = force_remove_dir_all(&entry_dir);
         Ok(original.clone())
     }
 
     /// 覆盖式恢复（快照条目专用，S10b 写前备份）
-    ///
-    /// 与 [Self::restore] 的「拒绝覆盖」守卫互补：快照条目的原路径必然
-    /// 存在（写工具已覆盖写入），恢复 = 把快照内容校验后**覆盖写回**；
-    /// nil-content 条目（原不存在）恢复 = 删除原路径（FileSnap
-    /// `Content == nil` 反向语义）。恢复成功后移除条目目录（登记清除）。
     pub fn restore_force(&self, entry_id: &str) -> Result<PathBuf> {
         let entry_dir = self.entry_dir(entry_id)?;
         if !entry_dir.is_dir() {
@@ -339,9 +325,9 @@ impl TrashService {
                 );
             }
             if original.exists() {
-                remove_all(original, false)?;
+                force_remove_all(original, false)?;
             }
-            let _ = fs::remove_dir_all(&entry_dir);
+            let _ = force_remove_dir_all(&entry_dir);
             return Ok(original.clone());
         }
         let payload = entry_dir
@@ -359,7 +345,7 @@ impl TrashService {
         crate::path_utils::ensure_parent_dir(original)?;
         fs::copy(&payload, original)
             .with_context(|| format!("恢复写回失败：{}", original.display()))?;
-        let _ = fs::remove_dir_all(&entry_dir);
+        let _ = force_remove_dir_all(&entry_dir);
         Ok(original.clone())
     }
 
@@ -392,7 +378,7 @@ impl TrashService {
         if !entry_dir.is_dir() {
             bail!("回收站条目不存在：{entry_id}");
         }
-        fs::remove_dir_all(&entry_dir)
+        force_remove_dir_all(&entry_dir)
             .with_context(|| format!("清除条目失败：{entry_id}"))?;
         Ok(())
     }
@@ -412,10 +398,6 @@ impl TrashService {
 }
 
 /// 写登记文件（meta.json）
-///
-/// 原子写：同目录临时文件 `meta.json.agent-tmp` + rename 交换，防崩溃
-/// 半写登记（对齐 replace.rs atomic_write 先例）；Windows 上 rename
-/// 不覆盖既有目标，先 remove 再 rename（同目录无跨卷风险）。
 fn write_meta(
     entry_dir: &Path,
     entry: &TrashEntry,
@@ -434,18 +416,18 @@ fn write_meta(
     let tmp = entry_dir.join(format!("{META_FILE}.agent-tmp"));
     if let Err(e) = fs::write(&tmp, json) {
         // 写临时文件失败：清理残骸后透传错误
-        let _ = fs::remove_file(&tmp);
+        let _ = force_remove_file(&tmp);
         return Err(e).with_context(|| format!("写登记临时文件失败：{}", tmp.display()));
     }
     // Windows 上 rename 不覆盖既有目标：先 remove 再 rename（同目录无跨卷
     // 风险；Unix 上 rename 本身原子覆盖，跳过 remove 以保持原子性）
     #[cfg(windows)]
     if target.exists() {
-        fs::remove_file(&target)?;
+        force_remove_file(&target)?;
     }
     if let Err(e) = fs::rename(&tmp, &target) {
         // rename 失败：清理临时文件，不留残骸
-        let _ = fs::remove_file(&tmp);
+        let _ = force_remove_file(&tmp);
         return Err(e).with_context(|| format!("原子替换登记文件失败：{}", target.display()));
     }
     Ok(())
@@ -489,7 +471,8 @@ fn validate_original_path(original: &Path, trash_root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 原子移动：同卷 `rename` 优先；失败（跨卷 / 目标已存在等）回退 copy + delete
+/// 原子移动：同卷 `rename` 优先；失败（跨卷 / 目标已存在等）回退 copy + delete。
+/// 跨卷移动若源文件/目录删除失败，必须自动调用事务补偿清理删除 dst 已写入的 Payload，绝不残留幽灵孤儿数据！
 fn atomic_move(src: &Path, dst: &Path, is_dir: bool) -> Result<()> {
     match fs::rename(src, dst) {
         Ok(()) => Ok(()),
@@ -499,7 +482,17 @@ fn atomic_move(src: &Path, dst: &Path, is_dir: bool) -> Result<()> {
             } else {
                 fs::copy(src, dst)?;
             }
-            remove_all(src, is_dir)?;
+            if let Err(e) = force_remove_all(src, is_dir) {
+                // 事务补偿回滚：源文件/目录删除失败时，必须自动删除 dst 已经写入的 Payload，绝不残留幽灵孤儿数据！
+                let _ = force_remove_all(dst, is_dir);
+                return Err(e).with_context(|| {
+                    format!(
+                        "跨卷移动删除源失败，已触发事务补偿清理删除目标：src={}, dst={}",
+                        src.display(),
+                        dst.display()
+                    )
+                });
+            }
             Ok(())
         }
     }
@@ -521,16 +514,63 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     Ok(())
 }
 
-/// 物理删除（本模块为产品唯一物理删除点，其余代码不得直调 fs::remove_*）
-fn remove_all(path: &Path, is_dir: bool) -> Result<()> {
-    if is_dir {
-        fs::remove_dir_all(path)
-            .with_context(|| format!("删除目录失败：{}", path.display()))?;
-    } else {
-        fs::remove_file(path)
-            .with_context(|| format!("删除文件失败：{}", path.display()))?;
+/// 强制删除文件（遇到 Windows 只读属性 FILE_ATTRIBUTE_READONLY 时自动清除只读属性并重试）
+pub fn force_remove_file(path: &Path) -> Result<()> {
+    match fs::remove_file(path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            // 若删除失败，检查并尝试清除只读属性后重试
+            if let Ok(meta) = fs::symlink_metadata(path) {
+                let mut perms = meta.permissions();
+                if perms.readonly() {
+                    perms.set_readonly(false);
+                    let _ = fs::set_permissions(path, perms);
+                    return fs::remove_file(path)
+                        .with_context(|| format!("清除只读属性后删除文件仍失败：{}", path.display()));
+                }
+            }
+            Err(e).with_context(|| format!("删除文件失败：{}", path.display()))
+        }
     }
-    Ok(())
+}
+
+/// 递归清除目录树内所有条目（文件与子目录）的只读属性
+fn clear_readonly_recursive(path: &Path) {
+    if let Ok(meta) = fs::symlink_metadata(path) {
+        let mut perms = meta.permissions();
+        if perms.readonly() {
+            perms.set_readonly(false);
+            let _ = fs::set_permissions(path, perms);
+        }
+        if meta.is_dir() && !meta.is_symlink() {
+            if let Ok(entries) = fs::read_dir(path) {
+                for entry in entries.flatten() {
+                    clear_readonly_recursive(&entry.path());
+                }
+            }
+        }
+    }
+}
+
+/// 强制删除目录（遇到 Windows 只读属性时递归清除只读属性并重试）
+pub fn force_remove_dir_all(path: &Path) -> Result<()> {
+    match fs::remove_dir_all(path) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            clear_readonly_recursive(path);
+            fs::remove_dir_all(path)
+                .with_context(|| format!("清除只读属性后删除目录仍失败（原错误: {e}）：{}", path.display()))
+        }
+    }
+}
+
+/// 物理删除总入口（强制清除只读属性）
+pub fn force_remove_all(path: &Path, is_dir: bool) -> Result<()> {
+    if is_dir {
+        force_remove_dir_all(path)
+    } else {
+        force_remove_file(path)
+    }
 }
 
 /// 目录递归大小（字节）
@@ -572,22 +612,7 @@ fn abs_clean(path: &Path) -> PathBuf {
             .map(|c| c.join(path))
             .unwrap_or_else(|_| path.to_path_buf())
     };
-    strip_verbatim(&abs)
-}
-
-/// 剥离 Windows canonicalize 的 verbatim 前缀（其它平台原样返回）
-fn strip_verbatim(path: &Path) -> PathBuf {
-    #[cfg(windows)]
-    {
-        let s = path.to_string_lossy();
-        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
-            return PathBuf::from(format!("\\{rest}"));
-        }
-        if let Some(rest) = s.strip_prefix(r"\\?\") {
-            return PathBuf::from(rest.to_string());
-        }
-    }
-    path.to_path_buf()
+    crate::path_utils::strip_verbatim_prefix(&abs)
 }
 
 /// 去根前缀的相对路径（C:\a\b.txt → a/b.txt；/home/u/x → home/u/x）
@@ -1288,5 +1313,43 @@ mod tests {
             !snap_dir.join("meta.json.agent-tmp").exists(),
             "快照登记原子写后不得残留临时文件"
         );
+    }
+
+    #[test]
+    fn force_remove_clears_readonly_and_succeeds() {
+        let dir = TempDir::new("readonly_test");
+        let file_path = dir.write("readonly_file.txt", "read only content");
+
+        // 设置只读权限
+        let mut perms = fs::metadata(&file_path).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&file_path, perms).unwrap();
+        assert!(fs::metadata(&file_path).unwrap().permissions().readonly());
+
+        // force_remove_file 必须成功清除只读属性并删除文件
+        force_remove_file(&file_path).unwrap();
+        assert!(!file_path.exists());
+
+        // 测试目录内嵌套只读文件与只读子目录
+        let sub_file = dir.write("sub/nested/file.txt", "nested content");
+        let mut perms = fs::metadata(&sub_file).unwrap().permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&sub_file, perms).unwrap();
+
+        let sub_dir = dir.0.join("sub");
+        force_remove_dir_all(&sub_dir).unwrap();
+        assert!(!sub_dir.exists());
+    }
+
+    #[test]
+    fn atomic_move_same_dir_and_fallback() {
+        let dir = TempDir::new("atomic_move_test");
+        let src = dir.write("src.txt", "payload data");
+        let dst = dir.0.join("dst.txt");
+
+        atomic_move(&src, &dst, false).unwrap();
+        assert!(!src.exists());
+        assert!(dst.exists());
+        assert_eq!(fs::read_to_string(&dst).unwrap(), "payload data");
     }
 }

@@ -47,6 +47,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1153,6 +1154,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "tokio",
  "tracing",
 ]
 
@@ -1229,6 +1231,8 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.19",
  "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -1443,6 +1447,8 @@ dependencies = [
  "conex-browser",
  "conex-browser-tools",
  "conex-compaction",
+ "conex-computer",
+ "conex-computer-tools",
  "conex-db",
  "conex-diff",
  "conex-fs",
@@ -1463,6 +1469,7 @@ dependencies = [
  "portable-pty",
  "rcgen",
  "reqwest",
+ "ring",
  "rusqlite",
  "rustls",
  "rustls-pemfile",
@@ -4908,6 +4915,7 @@ dependencies = [
  "session-loop",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

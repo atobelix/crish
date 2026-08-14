@@ -505,17 +505,22 @@ fn normalize_for_compare(p: &Path) -> String {
     s
 }
 
-/// 简易 glob 匹配（排除清单用，路径段级）：
+/// 跨平台简易 glob 匹配（排除清单用，路径段级）：
 ///
 /// - `*`：段内任意字符序列（不含分隔符）；
 /// - `?`：段内单个任意字符；
-/// - `**`：跨层通配（支持 `**/` 前缀与裸 `**` 匹配整棵子树）。
-///
-/// 实现边界（诚实声明）：不支持字符类 `[...]` 与花括号 `{a,b}`；
-/// 路径统一以 `/` 分隔后匹配（Windows 分隔符先归一）。
-fn glob_match(pattern: &str, path: &str) -> bool {
-    let pat_segs: Vec<&str> = pattern.split('/').filter(|s| !s.is_empty()).collect();
-    let path_segs: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+/// - `**`：跨层通配（支持 `**/` 前缀与裸 `**` 匹配整棵子树）；
+/// - 跨平台双斜杠切分：基于 `split(['/', '\\'])` 切分路径与模式；
+/// - Windows 平台执行大小写不敏感匹配，消除 Windows 下失效引发的事件风暴。
+pub fn glob_match(pattern: &str, path: &str) -> bool {
+    let pat_segs: Vec<&str> = pattern
+        .split(['/', '\\'])
+        .filter(|s| !s.is_empty())
+        .collect();
+    let path_segs: Vec<&str> = path
+        .split(['/', '\\'])
+        .filter(|s| !s.is_empty())
+        .collect();
     // `**` 出现在模式末尾（无尾段）视为整树匹配
     if pat_segs == ["**"] {
         return true;
@@ -539,11 +544,20 @@ fn glob_segs(pat: &[&str], path: &[&str]) -> bool {
 }
 
 /// 单段 glob 匹配（`*` 任意序列、`?` 单字符，递归展开；字符级切片，
-/// 避免对多字节字符（中文路径）在非 UTF-8 边界切片 panic）
+/// 避免对多字节字符（中文路径）在非 UTF-8 边界切片 panic；Windows 下大小写折叠）
 fn seg_match(pat: &str, s: &str) -> bool {
-    let pat: Vec<char> = pat.chars().collect();
-    let s: Vec<char> = s.chars().collect();
-    seg_match_chars(&pat, &s)
+    #[cfg(windows)]
+    {
+        let pat: Vec<char> = pat.chars().flat_map(|c| c.to_lowercase()).collect();
+        let s: Vec<char> = s.chars().flat_map(|c| c.to_lowercase()).collect();
+        seg_match_chars(&pat, &s)
+    }
+    #[cfg(not(windows))]
+    {
+        let pat: Vec<char> = pat.chars().collect();
+        let s: Vec<char> = s.chars().collect();
+        seg_match_chars(&pat, &s)
+    }
 }
 
 /// 字符级 glob 匹配核心（`*` 吞 0..n 个字符）
@@ -783,6 +797,22 @@ mod tests {
         assert!(glob_match("node_modules", "node_modules"));
         assert!(glob_match("**/node_modules/**", "a/node_modules/b/x"));
         assert!(!glob_match("node_modules/*", "node_modules/a/b"));
+
+        // 跨平台 Windows 反斜杠与正斜杠切分
+        assert!(glob_match("vendor/**", "vendor/lib/index.js"));
+        assert!(glob_match("vendor/**", r"vendor\lib\index.js"));
+        assert!(glob_match(r"vendor\**", "vendor/lib/index.js"));
+        assert!(glob_match(r"vendor\**", r"vendor\lib\index.js"));
+        assert!(glob_match("**/test/**", r"a\b\test\c\d.rs"));
+
+        // Windows 大小写不敏感匹配
+        #[cfg(windows)]
+        {
+            assert!(glob_match("vendor/**", "VENDOR/LIB/INDEX.JS"));
+            assert!(glob_match("*.PNG", "photo.png"));
+            assert!(glob_match("*.png", "PHOTO.PNG"));
+            assert!(glob_match("src/**/*.rs", r"SRC\MOD\MAIN.RS"));
+        }
     }
 
     #[test]

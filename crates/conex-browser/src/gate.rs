@@ -17,10 +17,17 @@
 //!   [`TransportGate`] 经 [`SetBlockedSender`] 下发 + iframe 导航订阅兜底重挂。
 //!
 //! **接线点登记（并行域，不在本文件实施）**：
+//! - 工具层注入（P0-2 配置入口落地）：`BrowserToolsConfig.domain_allowlist/
+//!   domain_blocklist`（conex-browser-tools/src/lib.rs）——`config.gate`
+//!   未注入时由 `register_browser_tools` 构造本正式实现（05 文档方案 A
+//!   注入语义更新：缺省兜底从 `MvpDomainGate` 升级为本实现，非法模式
+//!   注册期拒绝）；显式注入仍优先（引擎侧装配任意 `DomainGate` 实现，
+//!   含 `MvpDomainGate`，配置列表被忽略）；
 //! - 引擎侧注入：`FormalDomainGate::new(allowlist, blocklist)` 装箱为
 //!   `Arc<dyn DomainGate>`，经 `BrowserToolsConfig.gate` 注入工具层
-//!   （conex-browser-tools/src/lib.rs:116/137-143 —— 05 文档方案 A 语义：
-//!   `config.gate: Some(正式门禁)` 时优先使用，未注入才回退 `MvpDomainGate`）；
+//!   （27 方案 S4 会话槽 `BrowserSlot::gate()`，apps/agent-workbench/
+//!   src-tauri/src/browser/mod.rs:263 现装配空白名单 `MvpDomainGate`——
+//!   用户配置列表值源接线登记：会话设置面 P1）；
 //! - 动作执行器注入：`ActionExecutor::with_gate`（action/mod.rs:328）；
 //! - 传输层会话接线：`TransportGate::apply` 于会话启动/重连恢复（11 §2.4
 //!   拦截重挂清单第 5 项）/门禁配置变更时调用；`TransportGate::on_frame_navigated`
@@ -29,9 +36,11 @@
 //! - `SetBlockedSender` 生产实现：BrowserSession `send_page` 发送面
 //!   （`Network.setBlockedURLs` + [`SetBlockedURLsParams`]）。
 //!
-//! **与 MvpDomainGate 的关系（05 文档方案 A）**：browser-tools 的 `MvpDomainGate`
-//! 保持 MVP 最小实现（消费面占位），引擎侧经 `config.gate` 注入本正式实现后
-//! 委托关系即成立（注入优先、Mvp 兜底）。委托面在并行域，仅登记不实施。
+//! **与 MvpDomainGate 的关系（05 文档方案 A，P0-2 注入语义更新）**：
+//! browser-tools 的 `MvpDomainGate` 保持 MVP 实现供显式注入（引擎侧既有
+//! 权线不破坏）；`config.gate` 未注入时，tools 侧缺省兜底已升级为构造
+//! 本正式实现（从配置列表注入 allowlist/blocklist），两者匹配语义同源
+//! （R-7 定死）。
 
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
@@ -954,9 +963,12 @@ mod tests {
     #[test]
     fn rebinding_window_expires_after_60s() {
         let clock = Arc::new(MockClock::default());
-        let g = FormalDomainGate::with_clock(
+        let resolver = Arc::new(MultiIpResolver(vec!["93.184.216.34".parse().unwrap()]));
+        let g = FormalDomainGate::with_parts(
             &[],
             &[],
+            resolver,
+            true,
             clock.clone(),
         )
         .unwrap();
