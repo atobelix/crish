@@ -73,6 +73,10 @@ mod power;
 mod process;
 mod pty;
 mod resource;
+// R3-02 推送装配适配层（bin 侧：lib push 契约 ↔ bin server/WsRegistry 桥接
+// ——Emitter 双向适配 + DevicePresenceSource 适配 + PushChannel WS 实现；
+// 见 push_wiring.rs 模块头注记）
+mod push_wiring;
 
 mod session_commands;
 mod server;
@@ -109,7 +113,7 @@ mod scripted_mock_server;
 
 use std::sync::{Arc, RwLock};
 
-use core_event_bridge::{EventBridge, TauriEmitter};
+use core_event_bridge::{Emitter, EventBridge, TauriEmitter};
 use tauri::Manager;
 
 /// 命令注册面（编译期真源）
@@ -654,13 +658,30 @@ fn main() {
             // ⑥ 状态诊断 manage（与 CoreRunState 共享同一实例）
             app.manage(Arc::clone(diagnostics));
 
-            // 事件桥（B6.3：workbench-run-event 通道；Tauri 发射器）
+            // 事件桥（B6.3：workbench-run-event 通道；Tauri 发射器）——R3-02
+            // 推送装配（D7 §9.2 方案 a）：PushAwareEmitter 装饰内层发射器
+            // （转发原通道不变 + 旁路 push-core 决策与双轨分发——在线 WS
+            // 直推 / 离线 pending 内存队列，R3-03 厂商发送器消费）。在线
+            // 判定与直投数据源 = 既有共享 WsRegistry（与配对协调器同一
+            // 实例，见 ⑤b——ServerState 路由层为独立注册表实例，属既有
+            // 装配口径，连接面共享接线待主控裁决）；适配层在
+            // push_wiring.rs（Emitter 双向桥 + WsRegistry 适配 + 直投）
             let browser_emitter_handle = app_handle.clone();
+            let push_dispatcher = Arc::new(crish_agent_workbench::push::PushDispatcher::new(
+                Arc::clone(&ws_registry) as Arc<dyn crish_agent_workbench::push::DevicePresenceSource>,
+                Arc::new(push_wiring::WsPushChannel::new(Arc::clone(&ws_registry)))
+                    as Arc<dyn crish_agent_workbench::push::PushChannel>,
+            ));
+            let push_aware = Arc::new(crish_agent_workbench::push::PushAwareEmitter::new(
+                // 桥下行（lib Emitter for bin TauriEmitter）在 push_wiring.rs
+                Arc::new(TauriEmitter::new(app_handle.clone()))
+                    as Arc<dyn crish_agent_workbench::core_event_bridge::Emitter>,
+                push_dispatcher,
+            ));
             let bridge = EventBridge::new(
                 "workbench-run-event",
-                // clone 供桥持有：原 app_handle 继续供后续装配（⑧e
-                // ComputerSlot 发射器接线）取用，避免移动后借用
-                Arc::new(TauriEmitter::new(app_handle.clone())),
+                // 桥上行（bin Emitter for lib PushAwareEmitter）在 push_wiring.rs
+                Arc::clone(&push_aware) as Arc<dyn Emitter>,
             );
 
             // 快照存储（B4.3：主文件 + .prev 备份双文件模型）
@@ -782,6 +803,20 @@ fn main() {
                         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
                         engine::forward_drained_timer_events(&timer_sink, &drain_bridge);
                         engine::forward_drained_scheduler_events(&sched_sink, &drain_bridge);
+                    }
+                });
+            }
+
+            // R3-02：推送决策合并桶 drain（500ms，对齐上方 timer/cron drain
+            // 先例——PushAwareEmitter::flush 到点产出合并直推；延迟 ≤ 500ms，
+            // 空缓冲零开销，[push::pusher::PushAwareEmitter::flush] Vec::take
+            // 语义）
+            {
+                let push_emitter = Arc::clone(&push_aware);
+                tauri::async_runtime::spawn(async move {
+                    loop {
+                        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                        push_emitter.flush(server::now_ms());
                     }
                 });
             }

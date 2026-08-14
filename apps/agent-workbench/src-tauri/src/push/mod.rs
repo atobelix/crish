@@ -71,30 +71,39 @@
 //!
 //! ## 与 R3-02 / R3-03 的接口注记
 //!
-//! - **装配**：`PushDecisionEngine` 挂在 `core_event_bridge.rs` 的
-//!   `PushAwareEmitter` 旁路（D7 §9.2 方案 a；R3-02 [pusher] 已交付挂点
-//!   装饰器 + 分发器，main.rs 接线留 R3 接线轮），`decide()` 逐事件调用；
-//!   合并桶经 `flush()` 周期 drain（对齐 main.rs:430-441 的 500ms drain 先例）。
+//! - **装配（R3-02 接线轮已落地）**：`PushDecisionEngine` 挂在
+//!   `core_event_bridge.rs` 的 `PushAwareEmitter` 旁路（D7 §9.2 方案 a），
+//!   `decide()` 逐事件调用；合并桶经 `flush()` 周期 drain——main.rs 已
+//!   接线：事件桥装配处包装 PushAwareEmitter + 500ms drain 循环（对齐
+//!   timer/cron drain 先例）。lib/bin 模块树分裂（lib.rs:1-22 注记）下
+//!   的跨层适配（Emitter 双向桥 / WsRegistry→DevicePresenceSource /
+//!   PushChannel WS 实现）集中在 bin 侧 `src/push_wiring.rs`。
 //! - **事件信封**：`AgentEventEnvelope.run_id`（events.rs:1109）注入
 //!   [intent::PushIntentCtx::envelope_run_id]（缓存/审计/运行异常等事件体无
 //!   runId 字段，去重键需要）。
-//! - **审批持久化**：S1/S2 去重键与重推阶梯（15min → 60min → 每小时×5，M8 §3.4.4）
-//!   必须落 SQLite `push_pending_approvals`/`push_events_dedupe`（D7 §8.2）；
-//!   [dedupe::DedupeBackend] 接口与内存实现已交付，SQLite 后端 R3-02/03 接线。
-//! - **输出消费（R3-02 直推通道）**：deliver=true 的决策 →
+//! - **审批持久化（R3-03 消费）**：S1/S2 去重键与重推阶梯（15min → 60min
+//!   → 每小时×5，M8 §3.4.4）必须落 SQLite
+//!   `push_pending_approvals`/`push_events_dedupe`（D7 §8.2）；
+//!   [dedupe::DedupeBackend] 接口与内存实现已交付，SQLite 后端 R3-03 接线。
+//! - **输出消费（R3-02 直推通道已接线）**：deliver=true 的决策 →
 //!   [pusher::PushDispatcher]：在线设备经 [pusher::PushChannel] WS 直推
-//!   （帧 kind = `events.push`，[schema::WS_PUSH_KIND]，M8 裁决修正 2）；
+//!   （帧 kind = `events.push`，[schema::WS_PUSH_KIND]，M8 裁决修正 2；
+//!   实现 = bin 侧 WsPushChannel，注册表 send_push_frame 定向投递）；
 //!   离线设备标记 [pusher::PendingDelivery]（内存队列，[pusher::PushDispatcher::
-//!   take_pending] 由 R3-03 厂商发送器消费）；在线判定见 [online]。
+//!   take_pending] 由 R3-03 厂商发送器消费）；在线判定见 [online]
+//!   （WsRegistry 适配 = bin 侧 push_wiring.rs）。
 //! - **载荷**：[engine::PushDecision] → [schema::PushMessage]（D7 §6.2 schema
 //!   v1）映射由 [schema::message_from_decision] 承担；title/body 文案渲染
-//!   （push/copy.rs，D7 §6.5）不在 R3-02，映射置 None 由接线轮经
+//!   （push/copy.rs，D7 §6.5）留 R3 后续，映射置 None 由接线轮经
 //!   [schema::PushMessage::with_copy] 填充。
 //!
 //! ## 临时过渡允许（对齐 wakeup_summary.rs 先例）
 //!
-//! 本模块 R3-01 交付决策面、R3-02 交付直推通道，R3 接线轮接线前无调用点，
-//! 暂时允许 dead_code；接线落地即移除本属性（不允许长期保留）。
+//! 本模块 R3-01 交付决策面、R3-02 交付直推通道；R3-02 接线轮已把挂点 /
+//! 适配 / 直推落地（main.rs + bin 侧 push_wiring.rs 消费）。仍无调用点的
+//! R3-03 面（vendor 厂商通道、take_pending 消费、with_copy 文案填充）与
+//! SQLite 持久化待接线，暂时保留 dead_code；R3-03 落地即移除本属性
+//! （不允许长期保留）。
 
 #![allow(dead_code)]
 
@@ -111,9 +120,13 @@ mod throttle;
 mod vendor;
 
 pub use coalesce::{CoalesceState, CoalesceWindows, MergedPush, PendingPush};
-pub use dedupe::{DedupeBackend, DedupeState, MemoryDedupeBackend};
+pub use dedupe::{DedupeBackend, DedupeState, MemoryDedupeBackend, SqliteDedupeBackend};
 pub use engine::{DecisionOutcome, PushDecision, PushDecisionEngine};
-pub use intent::{ApprovalPushRef, PayloadDigest, PushIntent, PushIntentCtx};
+pub use intent::{
+    push_intent, push_intent_with_kill_source, run_terminal_source, run_termination_source,
+    task_killed_should_push, ApprovalPushRef, PayloadDigest, PushIntent, PushIntentCtx,
+    RunTerminationSource,
+};
 pub use online::{
     device_activity, is_device_online, DeviceActivity, DevicePresenceSource,
     MemoryPresenceSource, PRESENCE_TIMEOUT_MS,
@@ -122,7 +135,10 @@ pub use pusher::{
     DispatchReport, PendingDelivery, PushAwareEmitter, PushChannel, PushChannelError,
     PushDispatcher,
 };
-pub use quiet::{QuietHoursConfig, QuietPolicy, DEFAULT_QUIET_END_MINUTES, DEFAULT_QUIET_START_MINUTES};
+pub use quiet::{
+    compose_night_summary, night_summary_date, NightSummary, NightSummaryGroup, NightSummaryItem,
+    QuietHoursConfig, QuietPolicy, DEFAULT_QUIET_END_MINUTES, DEFAULT_QUIET_START_MINUTES,
+};
 pub use scenes::SceneId;
 pub use schema::{
     message_from_decision, scene_category, scene_channel_id, scene_collapse_key,

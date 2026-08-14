@@ -90,6 +90,10 @@ time = "0.3"
 x509-parser = "0.16"
 fs2 = "0.4"
 thiserror.workspace = true
+# R3-01a 补强：推送去重 SQLite 后端（push/dedupe.rs SqliteDedupeBackend，
+# push_events_dedupe 表——S1/S2 审批键持久化，重启不丢；workspace 既有
+# 声明（0.31 bundled，conex-db 同栈），零新增锁版本）
+rusqlite = { workspace = true }
 # R3-03 推送厂商通道：APNs .p8 AuthKey ES256 签名（JWT 头）——ring 0.17
 # 已在锁文件（rustls/rcgen 传递依赖），直接声明复用，不新增锁文件条目；
 # 用 ECDSA_P256_SHA256_FIXED_SIGNING 直出 JWT 所需裸 r||s 签名（RFC 7518）

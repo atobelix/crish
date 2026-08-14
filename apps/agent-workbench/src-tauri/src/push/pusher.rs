@@ -22,25 +22,27 @@
 //!             └─ 离线设备 → pending 队列（R3-03 厂商通道消费）
 //! ```
 //!
-//! ## 装配注记（R3 接线轮）
+//! ## 装配注记（R3-02 接线轮已落地）
 //!
-//! - `PushAwareEmitter` 在 main.rs 事件桥装配处包装内层发射器
-//!   （EventBridge::new 的 emitter 参数，main.rs:649）——D7 §9.2 方案 a；
-//!   周期 drain：`flush(now_ms)` 对齐 main.rs:430-441 的 500ms drain 先例；
-//! - [DevicePresenceSource] 以 `server::ws::WsRegistry` 适配（连接快照 →
-//!   [crate::push::online::DeviceActivity]；ws.rs 需补 ≤30 行只读接口暴露
-//!   连接条目设备令牌，见 online.rs 装配注记）；
-//! - [PushChannel] 的 WS 实现：按 device_key（令牌哈希）定位连接 →
-//!   复用 ws.rs outbound_frame 构造 events.push 信封 → 写帧（连接面在
-//!   R1-05 已备：conn 出站通道 + drain task 结构）；
+//! - `PushAwareEmitter` 已在 main.rs 事件桥装配处包装内层发射器
+//!   （EventBridge::new 的 emitter 参数）——D7 §9.2 方案 a；周期 drain：
+//!   `flush(now_ms)` 500ms 循环已接线（对齐 timer/cron drain 先例）；
+//! - [DevicePresenceSource] 已以 `server::ws::WsRegistry` 适配（连接快照 →
+//!   [crate::push::online::DeviceActivity]；ws.rs 增补 device_activities /
+//!   attach_outbound / send_push_frame 只读数据面）；适配层因 lib/bin
+//!   模块树分裂（lib.rs:1-22 注记）落在 bin 侧 `src/push_wiring.rs`；
+//! - [PushChannel] 的 WS 实现（bin 侧 WsPushChannel）：按 device_key
+//!   （令牌哈希）定位连接 → 复用 ws.rs outbound_frame 构造 events.push
+//!   信封 → 出站通道投递（R1-05 已备的 conn 出站通道 + sender task）；
 //! - `take_pending()` 由 R3-03 厂商发送器周期消费（离线兜底）；审批键
-//!   待发表的 SQLite 持久化（push_pending_approvals，D7 §9.3）在 R3-03 接线，
-//!   本任务只覆盖内存 pending（在线判定面）。
+//!   待发表的 SQLite 持久化（push_pending_approvals，D7 §9.3）在 R3-03
+//!   接线，本任务只覆盖内存 pending（在线判定面）。
 //!
 //! ## 临时过渡允许（对齐 R3-01 先例）
 //!
-//! 本模块 R3-02 交付接口与分发器，R3 接线轮接线前无生产调用点，
-//! 由 push/mod.rs 的 `#![allow(dead_code)]` 覆盖；接线落地即移除。
+//! 本模块 R3-02 交付接口与分发器；挂点 / 适配 / 直推已在 R3-02 接线轮
+//! 落地（main.rs + push_wiring.rs），`take_pending` / 持久化面仍待 R3-03
+//! 消费，由 push/mod.rs 的 `#![allow(dead_code)]` 覆盖；R3-03 落地即移除。
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};

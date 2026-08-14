@@ -9,11 +9,13 @@
 //!      ——审批不能漏，审批重推阶梯与去重表互斥（重推不走去重键，走
 //!      approval_id 幂等）。
 //!
-//! 本任务交付 [DedupeBackend] 接口 + [MemoryDedupeBackend]（纯内存）；
-//! TTL 语义统一由 [DedupeState] 承担（后端只存「键 → 记录时刻」）；
-//! SQLite 后端（R3-02/03 接线）实现该接口后由装配点注入 [DedupeState]。
+//! 本模块交付 [DedupeBackend] 接口 + [MemoryDedupeBackend]（纯内存）+
+//! [SqliteDedupeBackend]（R3-01a 补强：`push_events_dedupe` 表实现，审批键持久化）；
+//! TTL 语义统一由 [DedupeState] 承担（后端只存「键 → 记录时刻」，SQLite 后端
+//! 额外维护 expires_at 供 D7 24h TTL 扫描清理）；后端由装配点注入 [DedupeState]。
 
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 /// 去重 TTL（D7 §3.4.1：24h）
 pub const DEDUPE_TTL_MS: u64 = 24 * 60 * 60 * 1000;
@@ -34,8 +36,8 @@ pub fn dedupe_key(event_type: &str, biz_key: &str) -> String {
 ///
 /// 后端只负责「键 → 记录时刻」的存取；TTL 判定与过期清理由
 /// [DedupeState] 统一完成（两种后端行为一致，测试等价）。
-/// 持久化注记：S1/S2 审批键由 SQLite 后端实现（R3-02/03 接线），
-/// 非审批键走内存后端即可（重启丢失可接受，推送本就尽力而为）。
+/// 持久化注记：S1/S2 审批键由 [SqliteDedupeBackend] 实现（R3-01a 补强交付，
+/// R3 接线轮按键路由：审批键落 SQLite、非审批键走内存），重启不丢。
 pub trait DedupeBackend: Send + Sync {
     /// 记录键（幂等覆盖：同键重复记录刷新时间戳）
     fn record(&mut self, key: &str, now_ms: u64);
@@ -75,6 +77,140 @@ impl DedupeBackend for MemoryDedupeBackend {
 
     fn len(&self) -> usize {
         self.entries.len()
+    }
+}
+
+/// SQLite 去重后端（R3-01a 补强：D7 §8.2 `push_events_dedupe` 表实现）
+///
+/// 表结构（对齐 D7 §8.2 审批去重表语义 + 任务书 dedupe_key/expires_at 口径；
+/// recorded_at 为 [DedupeBackend] trait 的「键 → 记录时刻」存取面，
+/// expires_at 为 D7「24h TTL 扫描清理」的过期面，两者差 = TTL）：
+///
+/// ```sql
+/// CREATE TABLE IF NOT EXISTS push_events_dedupe (
+///     dedupe_key  TEXT PRIMARY KEY,   -- {eventType}:{业务键}（§3.4.1）
+///     recorded_at INTEGER NOT NULL,   -- 记录时刻（epoch ms）
+///     expires_at  INTEGER NOT NULL    -- 过期时刻 = recorded_at + ttl（24h 扫描清理）
+/// );
+/// ```
+///
+/// - 与 [MemoryDedupeBackend] 同 trait（[DedupeBackend]），[DedupeState] 可注入互换；
+/// - **审批键与 `push_pending_approvals` 关联注记**（D7 §8.2 / §9.3 / M8 §3.4.1）：
+///   S1/S2 审批键（`approval-requested:{toolCallId}` /
+///   `approval-resolved:{toolCallId}:expired`）必须落本表**持久化**（审批不能漏，
+///   桌面重启不丢）；重推阶梯表 `push_pending_approvals` 以 approval_id 幂等
+///   （重推不走去重键，与去重表**互斥**——同一审批只落一张表的记录面）；
+/// - 线程模型：rusqlite `Connection` 非 Send/Sync，包 [Arc<Mutex>]（对齐
+///   conex-db `LocalDb` 的 single-writer 先例，克隆廉价可跨线程持有）；
+/// - trait 方法为 infallible 接口：落库失败 `tracing::warn` 降级为无操作
+///   （不 panic、不阻塞决策管线；去重失效 = 尽力而为的多推一次，可接受）。
+#[derive(Debug)]
+pub struct SqliteDedupeBackend {
+    conn: Arc<Mutex<rusqlite::Connection>>,
+    /// 去重 TTL（与 [DedupeState] 的 ttl_ms 同值装配；用于 expires_at 列）
+    ttl_ms: u64,
+}
+
+impl SqliteDedupeBackend {
+    /// 建表 DDL（幂等；缺表自动创建）
+    const CREATE_TABLE_SQL: &'static str = "\
+        CREATE TABLE IF NOT EXISTS push_events_dedupe (\
+            dedupe_key  TEXT PRIMARY KEY,\
+            recorded_at INTEGER NOT NULL,\
+            expires_at  INTEGER NOT NULL\
+        )";
+
+    /// 绑定连接构造（自动建表；ttl_ms 与 [DedupeState] 装配同值）
+    pub fn new(conn: rusqlite::Connection, ttl_ms: u64) -> rusqlite::Result<Self> {
+        conn.execute_batch(Self::CREATE_TABLE_SQL)?;
+        Ok(Self {
+            conn: Arc::new(Mutex::new(conn)),
+            ttl_ms,
+        })
+    }
+
+    /// 内存库构造（测试用；对齐 [MemoryDedupeBackend::new] 测试等价）
+    pub fn open_in_memory(ttl_ms: u64) -> rusqlite::Result<Self> {
+        Self::new(rusqlite::Connection::open_in_memory()?, ttl_ms)
+    }
+
+    /// 显式清理已过期条目（D7 §8.2「24h TTL 扫描清理」周期维护；
+    /// [DedupeState::prune] 之外的独立清理面）
+    pub fn prune_expired(&mut self, now_ms: u64) {
+        let _ = self.conn.lock().map_err(|_| {
+            tracing::warn!(target: "push", "SQLite 去重表锁损坏，跳过过期清理");
+        }).and_then(|conn| {
+            conn.execute(
+                "DELETE FROM push_events_dedupe WHERE expires_at < ?1",
+                rusqlite::params![now_ms as i64],
+            )
+            .map(|_| ())
+            .map_err(|e| tracing::warn!(target: "push", "SQLite 去重表过期清理失败: {e}"))
+        });
+    }
+}
+
+impl DedupeBackend for SqliteDedupeBackend {
+    fn record(&mut self, key: &str, now_ms: u64) {
+        let expires_at = now_ms.saturating_add(self.ttl_ms) as i64;
+        let _ = self
+            .conn
+            .lock()
+            .map_err(|_| {
+                tracing::warn!(target: "push", "SQLite 去重表锁损坏，跳过记录");
+            })
+            .and_then(|conn| {
+                conn.execute(
+                    "INSERT OR REPLACE INTO push_events_dedupe (dedupe_key, recorded_at, expires_at) \
+                     VALUES (?1, ?2, ?3)",
+                    rusqlite::params![key, now_ms as i64, expires_at],
+                )
+                .map(|_| ())
+                .map_err(|e| tracing::warn!(target: "push", "SQLite 去重表记录失败: {e}"))
+            });
+    }
+
+    fn recorded_at(&self, key: &str) -> Option<u64> {
+        let conn = self.conn.lock().ok()?;
+        // 读失败（含缺行）一律 None：去重视为未记录（fail-open——
+        // 推送尽力而为，宁可多推一次也不丢推送）
+        conn.query_row(
+            "SELECT recorded_at FROM push_events_dedupe WHERE dedupe_key = ?1",
+            rusqlite::params![key],
+            |row| row.get::<_, i64>(0),
+        )
+        .ok()
+        .map(|t| t as u64)
+    }
+
+    fn prune_older_than(&mut self, cutoff_ms: u64) {
+        let _ = self
+            .conn
+            .lock()
+            .map_err(|_| {
+                tracing::warn!(target: "push", "SQLite 去重表锁损坏，跳过清理");
+            })
+            .and_then(|conn| {
+                conn.execute(
+                    "DELETE FROM push_events_dedupe WHERE recorded_at < ?1",
+                    rusqlite::params![cutoff_ms as i64],
+                )
+                .map(|_| ())
+                .map_err(|e| tracing::warn!(target: "push", "SQLite 去重表清理失败: {e}"))
+            });
+    }
+
+    fn len(&self) -> usize {
+        let conn = match self.conn.lock() {
+            Ok(c) => c,
+            Err(_) => return 0,
+        };
+        conn.query_row(
+            "SELECT COUNT(*) FROM push_events_dedupe",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap_or(0) as usize
     }
 }
 
@@ -175,6 +311,104 @@ mod tests {
         assert_eq!(
             dedupe_key("approval-resolved", "tc-1:expired"),
             "approval-resolved:tc-1:expired"
+        );
+    }
+
+    // ── R3-01a 补强：SQLite 去重后端（CRUD / TTL / 持久化语义）──
+
+    /// SQLite 后端与内存后端同 trait 行为等价（DedupeState 语义层不感知后端）
+    #[test]
+    fn sqlite_backend_crud_roundtrip() {
+        let mut backend = SqliteDedupeBackend::open_in_memory(DEDUPE_TTL_MS).expect("内存库");
+        assert_eq!(backend.len(), 0);
+        backend.record("approval-requested:tc-1", 1_000);
+        assert_eq!(backend.recorded_at("approval-requested:tc-1"), Some(1_000));
+        assert_eq!(backend.len(), 1);
+        // 未记录键 → None（fail-open：视为未去重）
+        assert_eq!(backend.recorded_at("approval-requested:tc-9"), None);
+        // 同键重记刷新时刻（幂等覆盖语义）
+        backend.record("approval-requested:tc-1", 2_000);
+        assert_eq!(backend.recorded_at("approval-requested:tc-1"), Some(2_000));
+        assert_eq!(backend.len(), 1);
+    }
+
+    #[test]
+    fn sqlite_backend_prune_older_than() {
+        let mut backend = SqliteDedupeBackend::open_in_memory(10_000).expect("内存库");
+        backend.record("old", 0);
+        backend.record("new", 5_000);
+        backend.prune_older_than(4_000);
+        assert_eq!(backend.recorded_at("old"), None, "截止线前的条目应清理");
+        assert_eq!(backend.recorded_at("new"), Some(5_000), "截止线后的条目保留");
+        assert_eq!(backend.len(), 1);
+    }
+
+    #[test]
+    fn sqlite_backend_prune_expired_uses_expires_at() {
+        // ttl 10s：recorded_at 0 → expires_at 10_000；recorded_at 5_000 → expires_at 15_000
+        let mut backend = SqliteDedupeBackend::open_in_memory(10_000).expect("内存库");
+        backend.record("a", 0);
+        backend.record("b", 5_000);
+        backend.prune_expired(12_000);
+        assert_eq!(backend.recorded_at("a"), None, "expires_at(10s) < now(12s) → 清理");
+        assert_eq!(backend.recorded_at("b"), Some(5_000), "expires_at(15s) ≥ now(12s) → 保留");
+    }
+
+    /// DedupeState 装配 SQLite 后端：TTL 判定语义与内存后端一致（同 trait 等价）
+    #[test]
+    fn dedupe_state_with_sqlite_backend_ttl_equivalent() {
+        let mut state = DedupeState::new(
+            Box::new(SqliteDedupeBackend::open_in_memory(10_000).expect("内存库")),
+            10_000,
+        );
+        assert!(state.check_and_record("run-terminal:run-1", 1_000));
+        assert!(!state.check_and_record("run-terminal:run-1", 10_999), "TTL 内重复抑制");
+        assert!(state.check_and_record("run-terminal:run-1", 11_000), "TTL 过后重新放行");
+        // 惰性容量护栏路径同样工作（不 panic）
+        assert!(state.check_and_record("approval-requested:tc-2", 12_000));
+    }
+
+    /// 审批键持久化语义（D7 §8.2：审批去重表必须持久化，重启不丢）：
+    /// 连接关闭重开（模拟桌面重启）后已记录审批键仍在
+    #[test]
+    fn sqlite_backend_persists_across_reopen() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let db_path = dir.path().join("push-dedupe.db");
+        let ttl = DEDUPE_TTL_MS;
+
+        {
+            let conn = rusqlite::Connection::open(&db_path).expect("建库");
+            let mut backend = SqliteDedupeBackend::new(conn, ttl).expect("建表");
+            backend.record("approval-requested:tc-1", 1_000);
+            backend.record("approval-requested:tc-2", 2_000);
+        } // 连接 drop（模拟进程退出）
+
+        // 重启后重新打开：审批键仍在（内存后端此时必丢——这正是持久化价值）
+        let conn = rusqlite::Connection::open(&db_path).expect("重开库");
+        let backend = SqliteDedupeBackend::new(conn, ttl).expect("建表");
+        assert_eq!(backend.len(), 2, "重启后记录不丢");
+        assert_eq!(backend.recorded_at("approval-requested:tc-1"), Some(1_000));
+        assert_eq!(backend.recorded_at("approval-requested:tc-2"), Some(2_000));
+    }
+
+    /// 持久化后端经 DedupeState 重启后仍抑制重复推送（审批重放防护）
+    #[test]
+    fn sqlite_backend_restart_suppresses_approval_replay() {
+        let dir = tempfile::tempdir().expect("临时目录");
+        let db_path = dir.path().join("push-dedupe-replay.db");
+        let ttl = DEDUPE_TTL_MS;
+
+        {
+            let conn = rusqlite::Connection::open(&db_path).expect("建库");
+            let mut state = DedupeState::new(Box::new(SqliteDedupeBackend::new(conn, ttl).expect("建表")), ttl);
+            assert!(state.check_and_record("approval-requested:tc-1", 1_000));
+        } // 重启
+
+        let conn = rusqlite::Connection::open(&db_path).expect("重开库");
+        let mut state = DedupeState::new(Box::new(SqliteDedupeBackend::new(conn, ttl).expect("建表")), ttl);
+        assert!(
+            !state.check_and_record("approval-requested:tc-1", 2_000),
+            "重启后同审批键仍在 TTL 内 → 抑制重推"
         );
     }
 }

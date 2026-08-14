@@ -10,18 +10,21 @@
 //! 设计：
 //! - [is_device_online]：**在线判定纯函数**——最近活动时刻距今
 //!   < 超时窗口 = 在线（时钟注入可测，D7 §4.5「心跳超时 30s」口径）；
-//! - [DevicePresenceSource]：连接活跃度**数据源抽象**——R3 接线轮以
-//!   `server::ws::WsRegistry` 适配实现（连接列表 / 设备令牌 / 最近活动）；
+//! - [DevicePresenceSource]：连接活跃度**数据源抽象**——已由 R3-02 接线轮
+//!   以 `server::ws::WsRegistry` 适配实现（连接列表 / 设备令牌 / 最近活动，
+//!   bin 侧 `src/push_wiring.rs`）；
 //! - 本模块不依赖 server 面（对齐 R3-01 模块纪律：仅 conex-types / serde /
-//!   std，可在无 Tauri runtime 下编译与单测），WsRegistry 适配留装配接线轮。
+//!   std，可在无 Tauri runtime 下编译与单测），WsRegistry 适配落在 bin 侧
+//!   装配层（lib/bin 模块树分裂见 lib.rs:1-22 注记）。
 //!
-//! ## 装配注记（R3 接线轮）
+//! ## 装配注记（R3-02 接线轮已落地）
 //!
-//! - `DevicePresenceSource` 的 WsRegistry 实现：`ws_registry.snapshot()`
-//!   （ws.rs:404，label + last_frame_at_ms）已够判定输入；设备令牌哈希
-//!   （对齐 P0-3「每设备一主连接」语义）需 ws.rs 在连接快照中补暴露
-//!   token_hash（最小增量 ≤30 行，R3-02 任务书允许），或经
-//!   `mark_authenticated` 迁移面取回——接线轮定夺，本任务只冻结接口。
+//! - `DevicePresenceSource` 的 WsRegistry 实现：ws.rs 增补
+//!   `device_activities()`（ws.rs 连接条目 → token_hash + label +
+//!   last_frame_at_ms 三元组，≤30 行只读数据面）——适配层（bin 侧
+//!   push_wiring.rs）映射为 [DeviceActivity]；设备令牌哈希对齐 P0-3
+//!   「每设备一主连接」语义（by_token 表主键 = mark_authenticated 迁移
+//!   后的真实令牌哈希）。
 
 use std::sync::Mutex;
 

@@ -18,6 +18,9 @@
 //!
 //! - `events.push`：实时事件（一帧一事件，载荷 = AgentEventEnvelope 扁平
 //!   JSON 与桌面事件通道逐字节一致；按订阅过滤 + 连接级背压，D2 §10.4）；
+//! - `events.push`（R3-02 直推变体）：PushMessage 载荷（schema v1，M8
+//!   裁决修正 2）——不经订阅过滤，经 [WsRegistry::send_push_frame] 按令牌
+//!   哈希定向投递（PushChannel 直投，适配层见 src/push_wiring.rs）；
 //! - `error`：统一错误（未订阅续传 / 订阅超限 / 帧超限 / 版本不匹配 /
 //!   踢出原因等）。
 //!
@@ -133,6 +136,9 @@ struct ConnInfo {
     subscribe_all: HashSet<String>,
     /// 踢出信号（None = 活跃；Some(reason) = 踢出原因；Some("") = 主动关闭）
     kill: watch::Sender<Option<String>>,
+    /// 出站帧通道（R3-02 推送直投：连接建立、channel 创建后经
+    /// [WsRegistry::attach_outbound] 注入；None = 尚未注入/未注册）
+    out_tx: Option<mpsc::Sender<Outbound>>,
     /// 正在重放的会话（resume 处理中，实时事件改入 pending）
     replaying: HashSet<String>,
     /// 重放期间的实时事件 pending（会话 → 队列；含背压级别供超限丢弃）
@@ -201,6 +207,7 @@ impl WsRegistry {
                 sessions: HashSet::new(),
                 subscribe_all: HashSet::new(),
                 kill,
+                out_tx: None,
                 replaying: HashSet::new(),
                 pending: HashMap::new(),
             },
@@ -434,6 +441,52 @@ impl WsRegistry {
             .get(&conn_id)
             .map(|conn| conn.label.clone())
     }
+
+    /// 注入连接出站通道（R3-02 推送直投数据面：handle_socket 创建 channel
+    /// 后调用；未注入前直投按无通道处理）
+    pub fn attach_outbound(&self, conn_id: u64, out_tx: mpsc::Sender<Outbound>) {
+        let mut inner = lock(&self.inner);
+        if let Some(conn) = inner.conns.get_mut(&conn_id) {
+            conn.out_tx = Some(out_tx);
+        }
+    }
+
+    /// 设备活跃快照（R3-02 DevicePresenceSource 适配数据源：token_hash +
+    /// label + 最近活动时刻，对齐 push::online::DeviceActivity 字段形状；
+    /// 连接关闭即不在列表——R1-05 断线清理语义）
+    pub fn device_activities(&self) -> Vec<(String, String, u64)> {
+        lock(&self.inner)
+            .conns
+            .values()
+            .map(|conn| {
+                (
+                    conn.token_hash.clone(),
+                    conn.label.clone(),
+                    conn.last_frame_at_ms,
+                )
+            })
+            .collect()
+    }
+
+    /// 直推 events.push 帧到指定令牌设备（R3-02 PushChannel 消费；M8 裁决
+    /// 修正 2——复用 R1 事件面 outbound_frame 信封构造，from=desktop →
+    /// to=mobile，body 为 EventsPush 载荷）。
+    ///
+    /// 返回：`None` = 无活动连接（在线判定竞态）；`Some(true)` = 帧已入
+    /// 连接出站缓冲（sender task 独占写端消费）；`Some(false)` = 出站缓冲
+    /// 满（端级背压，调用方降级 pending，D7 §6.6）。
+    pub fn send_push_frame(&self, token_hash: &str, body: Value) -> Option<bool> {
+        let inner = lock(&self.inner);
+        let conn_id = inner.by_token.get(token_hash).copied()?;
+        let conn = inner.conns.get(&conn_id)?;
+        let out_tx = conn.out_tx.as_ref()?;
+        let frame = outbound_frame(conn_id, MessageKind::EventsPush, body);
+        Some(
+            out_tx
+                .try_send(Outbound::Frame(axum::extract::ws::Message::Text(frame.into())))
+                .is_ok(),
+        )
+    }
 }
 
 impl Default for WsRegistry {
@@ -459,7 +512,11 @@ pub struct ConnSnapshot {
 }
 
 /// 出站帧（sender task 独占 WS 写端；Close 触发正常收尾）
-enum Outbound {
+///
+/// pub(crate)：R3-02 [WsRegistry::attach_outbound] 公开签名携带
+/// `mpsc::Sender<Outbound>`——bin 测试目标按 lib 可见性检查
+/// （private-in-public），保持 crate 内可见即可满足
+pub(crate) enum Outbound {
     /// 文本帧（信封 JSON）或控制帧（Ping/Pong）
     Frame(axum::extract::ws::Message),
     /// 连接侧主动关闭（sender task 收尾并注销）
@@ -628,6 +685,9 @@ async fn handle_socket(
     }
     let (ws_sender, mut ws_receiver) = socket.split();
     let (out_tx, out_rx) = mpsc::channel::<Outbound>(CONN_BUFFER_CAPACITY);
+    // R3-02 推送直投数据面：出站通道注入注册表（PushChannel 按令牌哈希
+    // 定位连接后 try_send events.push 帧，复用本 sender task 发送路径）
+    registry.attach_outbound(conn_id, out_tx.clone());
 
     // sender task：独占 WS 写端；踢出信号 → 发 kicked 帧 → 关闭 → 注销
     let sender_task = tokio::spawn(sender_loop(
@@ -2582,6 +2642,150 @@ mod tests {
         assert_eq!(entry.subscribed_count, 2);
         registry.unregister(conn_id);
         assert!(registry.snapshot().is_empty(), "注销后快照应清空");
+    }
+
+    // ── R3-02 推送直投数据面（PushChannel 帧发送路径）──
+
+    /// 注册连接 + 注入出站通道 → send_push_frame 投递 events.push 信封
+    /// （envelope 内容级断言：kind / body / from-to，M8 裁决修正 2）
+    #[tokio::test]
+    async fn send_push_frame_delivers_envelope_to_token() {
+        let registry = Arc::new(WsRegistry::new());
+        let (kill_tx, _) = watch::channel::<Option<String>>(None);
+        let token_hash = sha256_hex(b"tok-a");
+        let conn_id = match registry.register(&token_hash, "手机 A", kill_tx, 1_000) {
+            RegisterOutcome::Registered(id) => id,
+            _ => panic!("注册必须成功"),
+        };
+        let (out_tx, mut out_rx) = mpsc::channel::<Outbound>(4);
+        registry.attach_outbound(conn_id, out_tx);
+
+        let body = serde_json::json!({
+            "sessionId": "s-7",
+            "event": { "eventType": "run-terminal", "dedupeKey": "run-terminal:run-42:failed" },
+        });
+        assert_eq!(
+            registry.send_push_frame(&token_hash, body),
+            Some(true),
+            "在线连接直推必须入缓冲"
+        );
+
+        let frame = out_rx.recv().await.expect("直推帧必须到达出站通道");
+        let Outbound::Frame(axum::extract::ws::Message::Text(text)) = frame else {
+            panic!("直推帧必须为文本帧");
+        };
+        let envelope: DeviceEnvelope = serde_json::from_str(&text).expect("直推帧必须为合法信封");
+        assert_eq!(envelope.kind.as_str(), "events.push");
+        assert_eq!(envelope.body["sessionId"], "s-7");
+        assert_eq!(
+            envelope.body["event"]["dedupeKey"],
+            "run-terminal:run-42:failed"
+        );
+        assert_eq!(envelope.from, DeviceEndpoint::Desktop);
+        assert_eq!(envelope.to, DeviceEndpoint::Mobile);
+    }
+
+    /// 无连接（令牌未注册 / 已注销）→ None（PushChannel 映射 NoConnection）
+    #[test]
+    fn send_push_frame_missing_connection_returns_none() {
+        let registry = WsRegistry::new();
+        assert_eq!(
+            registry.send_push_frame("hash-ghost", serde_json::json!({})),
+            None,
+            "未注册令牌直投必须返回无连接"
+        );
+    }
+
+    /// 出站缓冲满 → Some(false)（端级背压；PushChannel 映射 SendFailed，
+    /// 分发器降级 pending，D7 §6.6）
+    #[tokio::test]
+    async fn send_push_frame_backpressured_when_buffer_full() {
+        let registry = Arc::new(WsRegistry::new());
+        let (kill_tx, _) = watch::channel::<Option<String>>(None);
+        let token_hash = sha256_hex(b"tok-b");
+        let conn_id = match registry.register(&token_hash, "手机 B", kill_tx, 1_000) {
+            RegisterOutcome::Registered(id) => id,
+            _ => panic!("注册必须成功"),
+        };
+        // 容量 1：首帧占满 → 第二帧 Full（接收端不消费模拟慢消费者；
+        // 接收端保持存活——drop 会使 try_send 返回 Closed 而非 Full）
+        let (out_tx, out_rx) = mpsc::channel::<Outbound>(1);
+        registry.attach_outbound(conn_id, out_tx);
+
+        assert_eq!(
+            registry.send_push_frame(&token_hash, serde_json::json!({ "n": 1 })),
+            Some(true),
+            "首帧应入缓冲"
+        );
+        assert_eq!(
+            registry.send_push_frame(&token_hash, serde_json::json!({ "n": 2 })),
+            Some(false),
+            "缓冲满必须返回背压信号"
+        );
+        let _ = out_rx;
+    }
+
+    /// 设备活跃快照（R3-02 DevicePresenceSource 适配数据源：token_hash +
+    /// label + 最近活动；touch 刷新；注销即移除）
+    #[test]
+    fn device_activities_reflect_connections_and_touch() {
+        let registry = WsRegistry::new();
+        let (kill_tx_a, _) = watch::channel::<Option<String>>(None);
+        let id_a = match registry.register("hash-a", "手机 A", kill_tx_a, 1_000) {
+            RegisterOutcome::Registered(id) => id,
+            _ => panic!("注册必须成功"),
+        };
+        let (kill_tx_b, _) = watch::channel::<Option<String>>(None);
+        registry.register("hash-b", "手机 B", kill_tx_b, 2_000);
+
+        let activities = registry.device_activities();
+        assert_eq!(activities.len(), 2, "两台设备");
+        let a = activities
+            .iter()
+            .find(|(hash, _, _)| hash == "hash-a")
+            .expect("A 在表内");
+        assert_eq!(a.1, "手机 A");
+        assert_eq!(a.2, 1_000);
+
+        // touch 刷新最近活动（对齐 ws.rs touch 语义）
+        registry.touch(id_a, 60_000);
+        let activities = registry.device_activities();
+        let a = activities
+            .iter()
+            .find(|(hash, _, _)| hash == "hash-a")
+            .expect("A 在表内");
+        assert_eq!(a.2, 60_000, "touch 后最近活动刷新");
+
+        // 注销即不在列表（R1-05 断线清理语义）
+        registry.unregister(id_a);
+        let activities = registry.device_activities();
+        assert_eq!(activities.len(), 1);
+        assert_eq!(activities[0].0, "hash-b");
+    }
+
+    /// 端到端：真实服务 + WS 连接 → send_push_frame 帧到达客户端 socket
+    /// （PushChannel 同路径：注册表 → 出站通道 → sender task → wire）
+    #[tokio::test]
+    async fn push_frame_reaches_connected_socket() {
+        let (addr, _handle, token, registry) = test_server(None, None).await;
+        let mut ws = ws_connect(addr, &token).await;
+        confirm_registered(&mut ws).await;
+
+        let hash = sha256_hex(token.as_bytes());
+        let body = serde_json::json!({
+            "sessionId": "s-7",
+            "event": { "eventType": "run-terminal", "dedupeKey": "run-terminal:run-42" },
+        });
+        assert_eq!(
+            registry.send_push_frame(&hash, body),
+            Some(true),
+            "在线连接直推必须入缓冲"
+        );
+        let (kind, push_body) = parse_frame(&next_text(&mut ws).await.expect("直推帧必须到达"));
+        assert_eq!(kind, "events.push");
+        assert_eq!(push_body["sessionId"], "s-7");
+        assert_eq!(push_body["event"]["dedupeKey"], "run-terminal:run-42");
+        let _ = ws.close(None).await;
     }
 
     #[test]

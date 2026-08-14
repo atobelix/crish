@@ -15,6 +15,7 @@
 use conex_types::events::{
     AgentEvent, ApprovalDecision, RunTerminalStatus, SecurityAuditDecision, SubagentEndStatus,
 };
+use conex_types::session::AgentEndReason;
 
 use super::scenes::SceneId;
 use super::{PushLevel, PushTargetScreen};
@@ -86,11 +87,88 @@ pub fn dedupe_key(event_type: &str, biz_key: &str) -> String {
     format!("{event_type}:{biz_key}")
 }
 
+/// run 终止来源（R3-01a 补强：S8e 精确来源判定的判定输入）
+///
+/// D7 §3.3 S8e：task-killed 与 kill 来源联动——**用户主动 kill 不推**，
+/// 系统/watchdog 强制 kill 才推。来源由装配层从事件流注入：
+/// - 精确路径：[run_termination_source]（`agent-end.reason` 的
+///   [AgentEndReason]——用户 cancel 命令 → `Aborted`/`Stopped`）；
+/// - 等价路径：[run_terminal_source]（`run-terminal.terminal` 的
+///   [RunTerminalStatus]——事件流无 agent-end 时的等价判定）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RunTerminationSource {
+    /// 用户主动终止（cancel 命令 / 用户协作停止）
+    UserKilled,
+    /// 引擎/系统终止（正常收场 / 错误收场 / 预算用尽）
+    EngineTerminated,
+}
+
+/// [AgentEndReason] → run 终止来源（精确判定：agent-end 事件 reason 字段）
+pub fn run_termination_source(reason: AgentEndReason) -> RunTerminationSource {
+    match reason {
+        // 用户中止（ABORT 事件 / L3 force_cancel）与用户协作停止 → 用户主动
+        AgentEndReason::Aborted | AgentEndReason::Stopped => RunTerminationSource::UserKilled,
+        // 正常收场 / 预算用尽（非错误非中止）/ 错误收场 → 引擎终止
+        AgentEndReason::Stop | AgentEndReason::MaxTurns | AgentEndReason::Error => {
+            RunTerminationSource::EngineTerminated
+        }
+    }
+}
+
+/// [RunTerminalStatus] → run 终止来源（等价判定：事件流无 agent-end reason
+/// 时的回退；Cancelled 无法区分用户取消/引擎中止，保守按用户主动归入
+/// [RunTerminationSource::UserKilled]——S8e 语境下「run 取消 → 任务被连坐
+/// 终止」多为用户行为，宁可少推不可扰民）
+pub fn run_terminal_source(terminal: RunTerminalStatus) -> RunTerminationSource {
+    match terminal {
+        RunTerminalStatus::Cancelled => RunTerminationSource::UserKilled,
+        RunTerminalStatus::Completed | RunTerminalStatus::Failed => {
+            RunTerminationSource::EngineTerminated
+        }
+    }
+}
+
+/// S8e 判定矩阵：task-killed 是否应推送。
+///
+/// | 来源（注入） | via_force | 判定 | 语义 |
+/// | --- | --- | --- | --- |
+/// | UserKilled | 任意 | 不推 | 用户主动 kill（Windows 两阶段升级后 via_force=true 仍属用户行为） |
+/// | EngineTerminated | 任意 | 推 | 系统/watchdog 强制 kill |
+/// | None（来源未知） | false | 不推 | 回退 R3-01a 近似：优雅 kill 视为用户主动 |
+/// | None（来源未知） | true | 推 | 回退 R3-01a 近似：强制 kill 视为系统行为 |
+pub fn task_killed_should_push(
+    source: Option<RunTerminationSource>,
+    via_force: bool,
+) -> bool {
+    match source {
+        Some(RunTerminationSource::UserKilled) => false,
+        Some(RunTerminationSource::EngineTerminated) => true,
+        // 来源未知：回退 via_force 近似（R3-01a 口径）
+        None => via_force,
+    }
+}
+
 /// 事件 → 推送意图（D7 §3.2 全量筛选表 + M8 §3.2.3 级别真源）
 ///
 /// 返回 `None` 即 P3 不推。match 覆盖全部 49 变体（穷尽是编译期护栏：
 /// 新事件变体必须在此表态）。
+///
+/// kill 来源注入：S8e 需要精确来源时调用
+/// [push_intent_with_kill_source]（引擎事件流观察 / 装配层注入）；
+/// 本函数等价于注入 `None`（来源未知回退 via_force 近似）。
 pub fn push_intent(event: &AgentEvent, ctx: &PushIntentCtx) -> Option<PushIntent> {
+    push_intent_with_kill_source(event, ctx, None)
+}
+
+/// 带 kill 来源注入的推送意图判定（R3-01a 补强：S8e 精确来源）
+///
+/// 与 [push_intent] 的唯一差异是 S8e（task-killed）场景按来源精确判定；
+/// 其余场景行为完全一致。`kill_source = None` 时行为 = [push_intent]。
+pub fn push_intent_with_kill_source(
+    event: &AgentEvent,
+    ctx: &PushIntentCtx,
+    kill_source: Option<RunTerminationSource>,
+) -> Option<PushIntent> {
     match event {
         // ── S1 审批请求（P0 必达最高）──
         AgentEvent::ApprovalRequested {
@@ -348,9 +426,9 @@ pub fn push_intent(event: &AgentEvent, ctx: &PushIntentCtx) -> Option<PushIntent
             approval: None,
         }),
 
-        // ── S8e 任务被终止（P1；仅强制终止推——两阶段升级后的强制终止
-        //    通常是系统/watchdog 行为；用户主动的一阶段 kill 不推，
-        //    与 kill 来源联动的精确判定留 R3-02 接线注入）──
+        // ── S8e 任务被终止（P1；与 kill 来源联动——用户主动 kill 不推，
+        //    系统/watchdog 强制 kill 才推；来源经
+        //    [push_intent_with_kill_source] 注入，未知回退 via_force 近似）──
         AgentEvent::TaskKilled {
             session_id,
             task_id,
@@ -358,7 +436,7 @@ pub fn push_intent(event: &AgentEvent, ctx: &PushIntentCtx) -> Option<PushIntent
             diagnostics,
             ..
         } => {
-            if !via_force {
+            if !task_killed_should_push(kill_source, *via_force) {
                 return None;
             }
             Some(PushIntent {
@@ -639,6 +717,7 @@ mod tests {
             status,
             summary: Some("已产出缺口分析 5 页".to_string()),
             ended_at: "2026-08-13T10:00:00Z".to_string(),
+            subagent_session_id: None,
         }
     }
 
@@ -869,6 +948,120 @@ mod tests {
         );
     }
 
+    /// S8e 来源判定矩阵（R3-01a 补强）：来源精确优先，未知回退 via_force
+    #[test]
+    fn s8e_kill_source_matrix() {
+        // 来源精确判定优先于 via_force：用户 kill 即使两阶段升级强制也不推
+        assert!(!task_killed_should_push(Some(RunTerminationSource::UserKilled), true));
+        assert!(!task_killed_should_push(Some(RunTerminationSource::UserKilled), false));
+        // 系统/watchdog：来源=引擎终止恒推
+        assert!(task_killed_should_push(Some(RunTerminationSource::EngineTerminated), true));
+        assert!(task_killed_should_push(Some(RunTerminationSource::EngineTerminated), false));
+        // 来源未知：回退 R3-01a via_force 近似
+        assert!(!task_killed_should_push(None, false));
+        assert!(task_killed_should_push(None, true));
+    }
+
+    /// AgentEndReason → 来源（精确路径：agent-end 事件 reason 字段）
+    #[test]
+    fn s8e_agent_end_reason_mapping() {
+        // 用户中止 / 用户协作停止 → 用户主动 kill
+        assert_eq!(
+            run_termination_source(AgentEndReason::Aborted),
+            RunTerminationSource::UserKilled
+        );
+        assert_eq!(
+            run_termination_source(AgentEndReason::Stopped),
+            RunTerminationSource::UserKilled
+        );
+        // 正常收场 / 预算用尽 / 错误收场 → 引擎终止
+        assert_eq!(
+            run_termination_source(AgentEndReason::Stop),
+            RunTerminationSource::EngineTerminated
+        );
+        assert_eq!(
+            run_termination_source(AgentEndReason::MaxTurns),
+            RunTerminationSource::EngineTerminated
+        );
+        assert_eq!(
+            run_termination_source(AgentEndReason::Error),
+            RunTerminationSource::EngineTerminated
+        );
+    }
+
+    /// RunTerminalStatus → 来源（等价路径：无 agent-end 时的回退判定）
+    #[test]
+    fn s8e_run_terminal_status_mapping() {
+        assert_eq!(
+            run_terminal_source(RunTerminalStatus::Cancelled),
+            RunTerminationSource::UserKilled,
+            "取消保守归用户主动（S8e 宁可少推）"
+        );
+        assert_eq!(
+            run_terminal_source(RunTerminalStatus::Completed),
+            RunTerminationSource::EngineTerminated
+        );
+        assert_eq!(
+            run_terminal_source(RunTerminalStatus::Failed),
+            RunTerminationSource::EngineTerminated
+        );
+    }
+
+    /// S8e 注入面：用户 kill（含 Windows 升级强制形态）→ 不推；
+    /// 系统/watchdog kill → 推（优雅形态也推——来源判定优先）
+    #[test]
+    fn s8e_injected_source_overrides_via_force() {
+        let killed_force = AgentEvent::TaskKilled {
+            session_id: "s-7".to_string(),
+            task_id: "t-3".to_string(),
+            via_force: true,
+            diagnostics: Some("升级强制终止".to_string()),
+        };
+        // 用户 kill（Windows 两阶段升级 via_force=true 仍属用户行为）→ 不推
+        assert_eq!(
+            push_intent_with_kill_source(
+                &killed_force,
+                &ctx(),
+                Some(RunTerminationSource::UserKilled)
+            ),
+            None,
+            "用户 kill 即使升级为强制也不推（精确来源覆盖 via_force 近似）"
+        );
+
+        // 系统/watchdog 强制 kill → 推（P1）
+        let intent = push_intent_with_kill_source(
+            &killed_force,
+            &ctx(),
+            Some(RunTerminationSource::EngineTerminated),
+        )
+        .expect("系统强制 kill 必须推");
+        assert_eq!(intent.scene, SceneId::TaskKilled);
+        assert_eq!(intent.level, PushLevel::P1Important);
+        assert_eq!(intent.dedupe_key, "task-killed:t-3");
+
+        // 系统优雅形态（via_force=false 但来源=引擎终止）→ 推
+        let killed_graceful = AgentEvent::TaskKilled {
+            session_id: "s-7".to_string(),
+            task_id: "t-3".to_string(),
+            via_force: false,
+            diagnostics: None,
+        };
+        let intent = push_intent_with_kill_source(
+            &killed_graceful,
+            &ctx(),
+            Some(RunTerminationSource::EngineTerminated),
+        )
+        .expect("系统终止任务必须推");
+        assert_eq!(intent.dedupe_key, "task-killed:t-3");
+
+        // 注入 None = push_intent 等价（来源未知回退 via_force 近似）
+        assert_eq!(
+            push_intent_with_kill_source(&killed_graceful, &ctx(), None),
+            push_intent(&killed_graceful, &ctx()),
+            "注入 None 与默认函数行为一致"
+        );
+    }
+
     #[test]
     fn s9a_timer_fired_p1() {
         let event = AgentEvent::TimerFired {
@@ -1061,6 +1254,7 @@ mod tests {
                 description: None,
                 mode: None,
                 parent_tool_call_id: None,
+                subagent_session_id: None,
             },
             AgentEvent::SubagentEvent {
                 session_id: "s-7".to_string(),
