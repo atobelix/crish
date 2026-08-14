@@ -6,8 +6,12 @@
 //! `report_to_json` / `import_result_to_json`）。共享失败面（`unwired_failure` /
 //! `err_outcome`）持有于门面 `note_commands`（本模经 `super::` 引用）。
 //!
-//! SR-06f · 拆分 · ≠ 关闭任何 EL（搬移不改语义；X-05 静默盖阻断原样保留）。
+//! B2 · spawn_blocking 两段式（2026-08-13）：同步核心段（mirror 文件 hash /
+//! 三路 diff 提案 + 报告 JSON 序列化）经 `tokio::task::spawn_blocking` 承接，
+//! 对齐 orchestrator `persist.rs::blocking_db_call` 样板——锁生命周期全在
+//! 闭包内，不进 await 边界；join 失败归 `note.execution_unknown`。
 
+use agent_tools::note_backend::NoteBackendError;
 use conex_note_runtime::{
     ImportMirrorResult, MirrorDriftClass, MirrorDriftReport, ThreeWayStrategy,
 };
@@ -187,16 +191,25 @@ pub async fn note_detect_mirror_drift(req: NoteDetectMirrorArgs) -> Result<JsonV
     let Some(store) = note_runtime::try_store_backend() else {
         return Ok(unwired_failure());
     };
-    match store.detect_mirror_drift(&doc_id, req.authority_rev) {
-        Ok(report) => {
-            let mut body = report_to_json(&report);
-            if let Some(obj) = body.as_object_mut() {
-                obj.insert("ok".into(), json!(true));
-                obj.insert("source".into(), json!("tauri-ipc"));
-            }
-            Ok(body)
+    // B2：同步核心段（mirror 文件 hash + 漂移分类 + 报告序列化）在 blocking
+    // 线程执行
+    let authority_rev = req.authority_rev;
+    let joined = tokio::task::spawn_blocking(move || {
+        let report = store.detect_mirror_drift(&doc_id, authority_rev)?;
+        let mut body = report_to_json(&report);
+        if let Some(obj) = body.as_object_mut() {
+            obj.insert("ok".into(), json!(true));
+            obj.insert("source".into(), json!("tauri-ipc"));
         }
-        Err(e) => Ok(err_outcome(e)),
+        Ok(body)
+    })
+    .await;
+    match joined {
+        Ok(Ok(body)) => Ok(body),
+        Ok(Err(e)) => Ok(err_outcome(e)),
+        Err(join_err) => Ok(err_outcome(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        )))),
     }
 }
 
@@ -236,14 +249,19 @@ pub async fn note_import_mirror_proposal(
     };
     let unpushed = req.unpushed_op_count.unwrap_or(0) as usize;
     let use_tree = req.use_session_tree.unwrap_or(true);
-    match store.import_mirror_proposal(
-        &doc_id,
-        strategy,
-        unpushed,
-        req.authority_rev,
-        use_tree,
-    ) {
-        Ok(result) => Ok(import_result_to_json(&result)),
-        Err(e) => Ok(err_outcome(e)),
+    let authority_rev = req.authority_rev;
+    // B2：同步核心段（三路 diff 提案 + 报告 JSON 序列化）在 blocking 线程执行
+    let joined = tokio::task::spawn_blocking(move || {
+        store
+            .import_mirror_proposal(&doc_id, strategy, unpushed, authority_rev, use_tree)
+            .map(|result| import_result_to_json(&result))
+    })
+    .await;
+    match joined {
+        Ok(Ok(body)) => Ok(body),
+        Ok(Err(e)) => Ok(err_outcome(e)),
+        Err(join_err) => Ok(err_outcome(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        )))),
     }
 }

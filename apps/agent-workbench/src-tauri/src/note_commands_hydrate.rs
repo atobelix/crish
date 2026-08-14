@@ -5,9 +5,12 @@
 //! 助手）。共享失败面（`unwired_failure` / `err_outcome`）持有于门面
 //! `note_commands`（本模经 `super::` 引用）。
 //!
-//! SR-06f · 拆分 · ≠ 关闭任何 EL（搬移不改语义；hydrate 分轨口径原样保留）。
+//! B2 · spawn_blocking 两段式（2026-08-13）：同步核心段（SQLite 派生索引查询 /
+//! DocSession hydrate + CDCS 树投影序列化）经 `tokio::task::spawn_blocking`
+//! 承接，对齐 orchestrator `persist.rs::blocking_db_call` 样板——锁生命周期
+//! 全在闭包内，不进 await 边界；join 失败归 `note.execution_unknown`。
 
-use agent_tools::note_backend::NoteQueryBlocksParams;
+use agent_tools::note_backend::{NoteBackendError, NoteQueryBlocksParams};
 use conex_note_runtime::{HYDRATE_PATH_DOC_SESSION, HYDRATE_PATH_QUERY_BLOCKS};
 use conex_types::CoreError;
 use serde::Deserialize;
@@ -38,7 +41,19 @@ pub async fn note_query_blocks(params: NoteQueryBlocksParams) -> Result<JsonValu
     let Some(backend) = note_runtime::try_backend() else {
         return Ok(unwired_failure());
     };
-    match backend.query_blocks(params).await {
+    // B2：同步核心段（SQLite 派生索引查询）在 blocking 线程执行
+    let handle = tokio::runtime::Handle::current();
+    let joined = tokio::task::spawn_blocking(move || {
+        handle.block_on(backend.query_blocks(params))
+    })
+    .await;
+    let result = match joined {
+        Ok(r) => r,
+        Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        ))),
+    };
+    match result {
         Ok(result) => Ok(json!({
             "ok": true,
             "blocks": result.blocks,
@@ -84,11 +99,22 @@ pub async fn note_document_hydrate(req: NoteHydrateDocumentArgs) -> Result<JsonV
         let Some(store) = note_runtime::try_store_backend() else {
             return Ok(unwired_failure());
         };
-        return match store.hydrate_document_from_session(&doc_id, limit) {
-            Ok(proj) => {
-                debug_assert_eq!(proj.hydrate_path, HYDRATE_PATH_DOC_SESSION);
-                Ok(proj.to_ipc_json("tauri-ipc"))
-            }
+        // B2：同步核心段（DocSession hydrate + CDCS 树投影序列化）在 blocking
+        // 线程执行
+        let joined = tokio::task::spawn_blocking(move || {
+            let proj = store.hydrate_document_from_session(&doc_id, limit)?;
+            debug_assert_eq!(proj.hydrate_path, HYDRATE_PATH_DOC_SESSION);
+            Ok(proj.to_ipc_json("tauri-ipc"))
+        })
+        .await;
+        let result = match joined {
+            Ok(r) => r,
+            Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
+                "spawn_blocking join 失败: {join_err}"
+            ))),
+        };
+        return match result {
+            Ok(v) => Ok(v),
             Err(e) => Ok(err_outcome(e)),
         };
     }
@@ -109,7 +135,19 @@ async fn hydrate_via_query_blocks(doc_id: &str, limit: u32) -> Result<JsonValue,
         limit: Some(limit),
         ..Default::default()
     };
-    match backend.query_blocks(params).await {
+    // B2：同步核心段（SQLite 派生索引查询）在 blocking 线程执行
+    let handle = tokio::runtime::Handle::current();
+    let joined = tokio::task::spawn_blocking(move || {
+        handle.block_on(backend.query_blocks(params))
+    })
+    .await;
+    let result = match joined {
+        Ok(r) => r,
+        Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        ))),
+    };
+    match result {
         Ok(result) => {
             let blocks: Vec<JsonValue> = result
                 .blocks

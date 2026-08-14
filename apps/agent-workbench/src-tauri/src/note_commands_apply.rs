@@ -5,17 +5,38 @@
 //! 共享失败面（`unwired_failure` / `err_outcome`）持有于门面 `note_commands`
 //! （本模经 `super::` 引用）。
 //!
-//! SR-06f · 拆分 · ≠ 关闭任何 EL（搬移不改语义；B2 spawn_blocking 与
-//! CT-01 err_outcome 映射排本拆分之后，本模不加）。
+//! B2 · spawn_blocking 两段式（2026-08-13）：三命令的同步核心段（SQLite 事务 /
+//! DocSession apply / collab wire 序列化）经 `tokio::task::spawn_blocking` 承接，
+//! 对齐 orchestrator `persist.rs::blocking_db_call` 样板——锁（store conn /
+//! sessions per-doc 锁）生命周期全在闭包内，不进 await 边界；join 失败
+//! （闭包 panic）归为 `note.execution_unknown`，不 panic 上抛。
+//! 命令签名 / IPC 契约零改动（CT-01 err_outcome 映射不动）。
 
-use agent_tools::note_backend::{apply_result_json, NoteApplyMdRequest, NoteApplyMode};
+use agent_tools::note_backend::{
+    apply_result_json, NoteApplyMdRequest, NoteApplyMode, NoteBackendError,
+};
 use conex_types::CoreError;
 use serde::Deserialize;
 use serde_json::{json, Value as JsonValue};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::note_runtime;
 
 use super::{err_outcome, unwired_failure};
+
+/// B2 慢盘注入（仅测试）：延迟在 `spawn_blocking` 闭包内执行（占用阻塞线程池
+/// 而非 tokio worker）。对齐 persist.rs `set_append_delay` 形态。
+#[cfg(test)]
+pub(crate) static TEST_APPLY_DELAY_MS: AtomicU64 = AtomicU64::new(0);
+
+/// 慢盘注入点：非零时在闭包内 sleep（仅测试构建编译；生产零开销）。
+#[cfg(test)]
+pub(crate) fn test_apply_delay() {
+    let ms = TEST_APPLY_DELAY_MS.load(Ordering::Relaxed);
+    if ms > 0 {
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
+}
 
 /// send_to_note 专用入参（intent_id 必填；与 apply 字段同形）。
 #[derive(Debug, Clone, Deserialize)]
@@ -61,7 +82,23 @@ pub async fn note_document_apply_md(req: NoteApplyMdRequest) -> Result<JsonValue
     let Some(backend) = note_runtime::try_backend() else {
         return Ok(unwired_failure());
     };
-    match backend.apply_md_fragment(req).await {
+    // B2：同步核心段（SQLite 事务 + DocSession apply）在 blocking 线程执行
+    let handle = tokio::runtime::Handle::current();
+    let joined = tokio::task::spawn_blocking(move || {
+        #[cfg(test)]
+        test_apply_delay();
+        handle.block_on(backend.apply_md_fragment(req))
+    })
+    .await;
+    let result = match joined {
+        Ok(r) => r,
+        // 对齐 persist.rs blocking_db_call：join 失败（闭包 panic）不 panic 上抛，
+        // 归为执行结果未知（note.execution_unknown）
+        Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        ))),
+    };
+    match result {
         Ok(result) => Ok(apply_result_json(&result)),
         Err(e) => Ok(err_outcome(e)),
     }
@@ -93,7 +130,19 @@ pub async fn note_send_to_note(req: NoteSendToNoteArgs) -> Result<JsonValue, Cor
         message_id: req.message_id,
         origin: Some(req.origin.unwrap_or_else(|| "user".into())),
     };
-    match backend.apply_md_fragment(apply_req).await {
+    // B2：同步核心段（intent 幂等 + SQLite 事务）在 blocking 线程执行
+    let handle = tokio::runtime::Handle::current();
+    let joined = tokio::task::spawn_blocking(move || {
+        handle.block_on(backend.apply_md_fragment(apply_req))
+    })
+    .await;
+    let result = match joined {
+        Ok(r) => r,
+        Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        ))),
+    };
+    match result {
         Ok(result) => Ok(apply_result_json(&result)),
         Err(e) => Ok(err_outcome(e)),
     }
@@ -132,27 +181,40 @@ pub async fn note_apply_ops(req: NoteApplyOpsArgs) -> Result<JsonValue, CoreErro
     let Some(store) = note_runtime::try_store_backend() else {
         return Ok(unwired_failure());
     };
-    match store.apply_collab_ops_json(&doc_id, &req.ops_json, req.origin.as_deref()) {
-        Ok(out) => {
-            let mut body = json!({
-                "ok": true,
-                "doc_id": doc_id,
-                "rev": out.rev,
-                "applied": out.applied,
-                "source": "tauri-ipc",
-            });
-            if let Some(intent) = req
-                .intent_id
-                .as_ref()
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-            {
-                if let Some(obj) = body.as_object_mut() {
-                    obj.insert("intent_id".into(), json!(intent));
+    // B2：同步核心段（collab wire 解析 + DocSession apply + JSON 组装）
+    // 在 blocking 线程执行
+    let ops_json = req.ops_json.clone();
+    let origin = req.origin.clone();
+    let intent_id = req.intent_id.clone();
+    let joined = tokio::task::spawn_blocking(move || {
+        store
+            .apply_collab_ops_json(&doc_id, &ops_json, origin.as_deref())
+            .map(|out| {
+                let mut body = json!({
+                    "ok": true,
+                    "doc_id": doc_id,
+                    "rev": out.rev,
+                    "applied": out.applied,
+                    "source": "tauri-ipc",
+                });
+                if let Some(intent) = intent_id
+                    .as_ref()
+                    .map(|s| s.trim())
+                    .filter(|s| !s.is_empty())
+                {
+                    if let Some(obj) = body.as_object_mut() {
+                        obj.insert("intent_id".into(), json!(intent));
+                    }
                 }
-            }
-            Ok(body)
-        }
-        Err(e) => Ok(err_outcome(e)),
+                body
+            })
+    })
+    .await;
+    match joined {
+        Ok(Ok(body)) => Ok(body),
+        Ok(Err(e)) => Ok(err_outcome(e)),
+        Err(join_err) => Ok(err_outcome(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        )))),
     }
 }
