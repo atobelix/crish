@@ -27,6 +27,9 @@ export type EngineLiveStatus = {
   connected: boolean;
   activeRuns: ActiveRunInfo[];
   pendingApprovals: PendingApprovalInfo[];
+  /** 当前 run 的 trace_id（core_get_status.traceId 投影；S2 分布式追踪
+   * 最小面——排障关联键，不进 UI 文案；无活动 run = undefined） */
+  traceId?: string;
   error?: string;
   raw?: Record<string, unknown>;
 };
@@ -36,7 +39,9 @@ function asArr(v: unknown): unknown[] {
 }
 
 function asRec(v: unknown): Record<string, unknown> | null {
-  return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  return v && typeof v === 'object' && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
 }
 
 export async function fetchEngineLiveStatus(): Promise<EngineLiveStatus> {
@@ -44,7 +49,13 @@ export async function fetchEngineLiveStatus(): Promise<EngineLiveStatus> {
   if (!transport.isReady()) {
     const ready = await transport.waitUntilConnected(6_000);
     if (!ready) {
-      return { ok: false, connected: false, activeRuns: [], pendingApprovals: [], error: 'not_connected' };
+      return {
+        ok: false,
+        connected: false,
+        activeRuns: [],
+        pendingApprovals: [],
+        error: 'not_connected',
+      };
     }
   }
 
@@ -52,7 +63,7 @@ export async function fetchEngineLiveStatus(): Promise<EngineLiveStatus> {
     const res = (await transport.request<Record<string, unknown>>(
       'core_get_status',
       {},
-      { timeoutMs: 8_000 },
+      { timeoutMs: 8_000 }
     )) as Record<string, unknown>;
 
     const activeRuns: ActiveRunInfo[] = asArr(res.activeRuns)
@@ -77,7 +88,12 @@ export async function fetchEngineLiveStatus(): Promise<EngineLiveStatus> {
         const o = asRec(a);
         if (!o) return null;
         return {
-          toolCallId: typeof o.toolCallId === 'string' ? o.toolCallId : typeof o.id === 'string' ? o.id : undefined,
+          toolCallId:
+            typeof o.toolCallId === 'string'
+              ? o.toolCallId
+              : typeof o.id === 'string'
+                ? o.id
+                : undefined,
           toolName: typeof o.toolName === 'string' ? o.toolName : undefined,
           summary: typeof o.summary === 'string' ? o.summary : undefined,
           runId: typeof o.runId === 'string' ? o.runId : undefined,
@@ -90,6 +106,8 @@ export async function fetchEngineLiveStatus(): Promise<EngineLiveStatus> {
       connected: true,
       activeRuns,
       pendingApprovals,
+      // S2：当前 run trace_id 投影（None/非字符串 → undefined 缺省）
+      traceId: typeof res.traceId === 'string' ? res.traceId : undefined,
       raw: res,
     };
   } catch (e) {

@@ -3326,3 +3326,433 @@ mod continuity_wiring_tests {
         assert!(err.to_string().contains("未绑定"));
     }
 }
+// ── B1-5 毒丸恢复观测化（engine 片）毒化测 ─────────────────────────
+
+/// B1-5 毒化测模块：生产段 21 处 into_inner 全部「error! 成对 + 计数」后，
+/// 每文件 ≥1 毒化测（三要素：正常返回 + error 日志 + 计数 +1）。
+///
+/// 日志捕获：本 crate 无 tracing-subscriber 依赖（file 域锁禁改 Cargo.toml），
+/// 用 tracing 自带 Subscriber/Visit 面实现最小捕获器（对齐
+/// agent-tools note_memory.rs capture 同形语义，仅捕获 error 级 message）。
+#[cfg(test)]
+mod b1_5_poison_tests {
+    use super::*;
+    use crate::core_event_bridge::Emitter;
+    use session_loop::ControlBus;
+    use tracing::field::{Field, Visit};
+    use tracing::{Event, Level, Metadata, Subscriber};
+
+    /// 捕获日志的内存缓冲（Arc 共享写，捕获器与测试方同读）
+    #[derive(Default)]
+    struct LogCapture {
+        lines: Mutex<Vec<String>>,
+    }
+
+    impl LogCapture {
+        fn push(&self, line: String) {
+            self.lines.lock().unwrap().push(line);
+        }
+        fn snapshot(&self) -> Vec<String> {
+            self.lines.lock().unwrap().clone()
+        }
+    }
+
+    /// 最小 Subscriber：只放行 error 级事件，记录其 message 字段
+    struct CaptureSubscriber {
+        capture: Arc<LogCapture>,
+    }
+
+    impl Subscriber for CaptureSubscriber {
+        fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+            *metadata.level() <= Level::ERROR
+        }
+        fn new_span(&self, _attrs: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
+        fn event(&self, event: &Event<'_>) {
+            let mut visitor = MessageVisitor::default();
+            event.record(&mut visitor);
+            self.capture.push(visitor.message);
+        }
+        fn enter(&self, _span: &tracing::span::Id) {}
+        fn exit(&self, _span: &tracing::span::Id) {}
+    }
+
+    /// 提取事件的 message 字段（字面量消息经 record_str，插值消息经
+    /// record_debug——tracing 的 format_args 消息走 Display 包装）
+    #[derive(Default)]
+    struct MessageVisitor {
+        message: String,
+    }
+
+    impl Visit for MessageVisitor {
+        fn record_str(&mut self, field: &Field, value: &str) {
+            if field.name() == "message" {
+                self.message = value.to_string();
+            }
+        }
+        fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+            if field.name() == "message" {
+                self.message = format!("{value:?}");
+            }
+        }
+    }
+
+    /// 在捕获 subscriber 下执行闭包，返回捕获行（本线程默认订阅者；
+    /// 测试各自线程隔离，互不串扰）
+    fn with_capture<F, R>(f: F) -> (R, Vec<String>)
+    where
+        F: FnOnce() -> R,
+    {
+        let capture = Arc::new(LogCapture::default());
+        let subscriber = CaptureSubscriber {
+            capture: Arc::clone(&capture),
+        };
+        let guard = tracing::subscriber::set_default(subscriber);
+        let result = f();
+        let lines = capture.snapshot();
+        drop(guard);
+        (result, lines)
+    }
+
+    /// 毒化 std `Mutex`（对齐 agent-tools test_support::poison_std_lock
+    /// 形态：持锁线程内 panic → 锁进入中毒状态）
+    fn poison_std_lock<T: Send>(lock: &Mutex<T>) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    let _guard = lock.lock().unwrap();
+                    panic!("模拟持锁 panic（毒化锁）");
+                });
+            });
+        }));
+    }
+
+    /// 测试发射器：记录 (channel, payload) 序列（对齐 core_event_bridge
+    /// 测试先例 RecordingEmitter）
+    #[derive(Default)]
+    struct RecordingEmitter {
+        calls: Mutex<Vec<(String, String)>>,
+    }
+
+    impl Emitter for RecordingEmitter {
+        fn emit(&self, channel: &str, payload: &str) {
+            self.calls
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((channel.to_string(), payload.to_string()));
+        }
+    }
+
+    /// 假控制总线解析器：任意子代理 id 均返回共享总线（bind 生效断言面）
+    struct FakeBusResolver;
+
+    impl ControlBusResolver for FakeBusResolver {
+        fn control_bus(&self, _subagent_id: &str) -> Option<Arc<Mutex<ControlBus>>> {
+            Some(Arc::new(Mutex::new(ControlBus::new())))
+        }
+    }
+
+    /// B1-5 毒化测（engine_audit）：routes 锁中毒后 register 正常完成
+    /// （不 panic）+ error 日志出现 + 毒丸恢复计数 +1（三要素）
+    #[test]
+    fn poisoned_routes_lock_register_recovers_with_log_and_count() {
+        let sink = RoutingAuditSink::new(Arc::new(DeniedStats::new()));
+        sink.poison_routes_for_test();
+        let before = audit_poison_recovery_count();
+        let ((), lines) = with_capture(|| {
+            // 毒化后写路径仍正常完成（恢复语义不变：不 panic、不传播）
+            sink.register(
+                "s-poison",
+                Arc::new(agent_tools::audit::RecordingAuditSink::new()) as AuditSink,
+            );
+        });
+        assert!(
+            lines.iter().any(|l| l.contains("锁中毒")),
+            "缺少锁中毒 error 日志，捕获：\n{}",
+            lines.join("\n")
+        );
+        // 计数断言必须在再锁之前（route_count 同锁中毒，自身也会 +1）
+        assert_eq!(
+            audit_poison_recovery_count(),
+            before + 1,
+            "routes 锁中毒恢复必须计数 +1"
+        );
+        assert_eq!(
+            sink.route_count(),
+            1,
+            "毒化后注册仍应生效（恢复语义不变）"
+        );
+    }
+
+    /// B1-5 毒化测（engine_channels 事件桥）：缓冲锁中毒后 emit 正常入队
+    /// （恢复语义 + 丢帧语义不变）+ error 日志 + 计数 +1（三要素）
+    #[test]
+    fn poisoned_buffer_lock_emit_recovers_with_log_and_count() {
+        let emitter = Arc::new(RecordingEmitter::default());
+        let bridge = EventBridge::new("workbench-run-event", Arc::clone(&emitter) as Arc<dyn Emitter>);
+        let buffered = BufferedRunEventBridge::new(bridge, "run-poison");
+        buffered.poison_buffer_for_test();
+        let before = channels_poison_recovery_count();
+        let envelope = AgentEventEnvelope::new(
+            AgentEvent::AgentStart {
+                session_id: "s-poison".to_string(),
+                timestamp: "2026-08-13T00:00:00.000Z".to_string(),
+            },
+            Some("run-poison".to_string()),
+            None,
+        );
+        // 毒化后 emit 仍正常完成（不 panic）：buffered=true 入队成功
+        let (report, lines) = with_capture(|| buffered.emit(&envelope));
+        assert!(
+            report.buffered > 0,
+            "毒化后 emit 必须仍正常入队（buffered=true，丢帧语义不变）"
+        );
+        assert!(
+            lines.iter().any(|l| l.contains("锁中毒")),
+            "缺少锁中毒 error 日志，捕获：\n{}",
+            lines.join("\n")
+        );
+        // 本文件两个 channels 毒化测并行共享同一计数器——用单调 ≥ 断言，
+        // 本测试的 +1 由上方 error 日志行独立证明
+        assert!(
+            channels_poison_recovery_count() >= before + 1,
+            "buffer 锁中毒恢复必须计数 +1"
+        );
+    }
+
+    /// B1-5 毒化测（engine_channels 板卡）：control_bus 锁中毒后
+    /// bind_control_bus 正常完成（绑定仍生效）+ error 日志 + 计数 +1
+    /// （三要素）
+    #[test]
+    fn poisoned_control_bus_lock_bind_recovers_with_log_and_count() {
+        let board = ContinuityChannelBoard::new();
+        board.poison_control_bus_for_test();
+        let before = channels_poison_recovery_count();
+        // 毒化后绑定仍正常完成（恢复语义不变：不 panic、不传播）
+        let ((), lines) = with_capture(|| {
+            board.bind_control_bus(Arc::new(FakeBusResolver));
+        });
+        assert!(
+            lines.iter().any(|l| l.contains("锁中毒")),
+            "缺少锁中毒 error 日志，捕获：\n{}",
+            lines.join("\n")
+        );
+        // 计数断言必须在再锁之前（control_bus 读路径同锁中毒，自身也会 +1；
+        // 且本文件两个 channels 毒化测并行共享同一计数器——用单调 ≥ 断言，
+        // 本测试的 +1 由上方 error 日志行独立证明）
+        assert!(
+            channels_poison_recovery_count() >= before + 1,
+            "control_bus 锁中毒恢复必须计数 +1"
+        );
+        // 绑定生效断言：读路径（同锁中毒状态）取回假解析器的总线
+        assert!(
+            board.control_bus("any-sub").is_some(),
+            "毒化后 bind 必须仍写入 control_bus 解析器"
+        );
+    }
+
+    /// B1-5 毒化测（engine_build 装配面）：provider 锁中毒后访问器正常
+    /// 返回（不 panic、不传播）+ error 日志 + 计数 +1（三要素）
+    #[test]
+    fn poisoned_provider_lock_recovers_with_log_and_count() {
+        let engine = EngineHandle::new(None);
+        poison_std_lock(&engine.provider);
+        let before = build_poison_recovery_count();
+        // 毒化后读路径仍正常返回（None 亦为合法降级，不 panic 不传播）
+        let (result, lines) = with_capture(|| engine.provider());
+        let _ = result;
+        assert!(
+            lines.iter().any(|l| l.contains("锁中毒")),
+            "缺少锁中毒 error 日志，捕获：\n{}",
+            lines.join("\n")
+        );
+        assert_eq!(
+            build_poison_recovery_count(),
+            before + 1,
+            "provider 锁中毒恢复必须计数 +1"
+        );
+    }
+}
+
+// ── S3 性能热点埋点（三热点耗时/计数 + 条件告警）观测测 ────────────
+//
+// 覆盖：① 事件序列化慢告警（engine_channels::warn_slow_event_serialize）。
+// ② 长锁等待 / ③ 全文序列化告警在 conex-note-runtime store_backend_tests
+// 覆盖（同形 LogCapture）；StreamRenderBuffer 帧预算超限计数由前端 vitest
+// 覆盖（apps/crish-desktop/src/api/StreamRenderBuffer.test.ts）。
+//
+// 日志捕获：本 crate 无 tracing-subscriber 依赖（文件域锁禁改 Cargo.toml），
+// 复用 B1-5 最小 Subscriber 形态，但放行 **WARN 级**（B1-5 捕获器只放行
+// ERROR）；对齐 observability.rs LogCapture 语义（内存缓冲 + set_default）。
+
+/// S3 超阈值条件告警测：`warn_slow_event_serialize` 超阈值 → warn 行捕获；
+/// 低于阈值 → 零日志（条件告警门控可证伪）。
+#[cfg(test)]
+mod s3_hotspot_tests {
+    use super::*;
+    use crate::core_event_bridge::Emitter;
+    use tracing::field::{Field, Visit};
+    use tracing::{Event, Level, Metadata, Subscriber};
+
+    /// 捕获日志的内存缓冲（Arc 共享写）
+    #[derive(Default)]
+    struct LogCapture {
+        lines: Mutex<Vec<String>>,
+    }
+
+    impl LogCapture {
+        fn push(&self, line: String) {
+            self.lines.lock().unwrap().push(line);
+        }
+        fn snapshot(&self) -> Vec<String> {
+            self.lines.lock().unwrap().clone()
+        }
+    }
+
+    /// 最小 Subscriber：放行 WARN 及以上事件，记录 message + 关键字段
+    struct CaptureSubscriber {
+        capture: Arc<LogCapture>,
+    }
+
+    impl Subscriber for CaptureSubscriber {
+        fn enabled(&self, metadata: &Metadata<'_>) -> bool {
+            *metadata.level() <= Level::WARN
+        }
+        fn new_span(&self, _attrs: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _span: &tracing::span::Id, _values: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _span: &tracing::span::Id, _follows: &tracing::span::Id) {}
+        fn event(&self, event: &Event<'_>) {
+            let mut visitor = MessageVisitor::default();
+            event.record(&mut visitor);
+            if !visitor.message.is_empty() {
+                self.capture.push(visitor.message);
+            }
+        }
+        fn enter(&self, _span: &tracing::span::Id) {}
+        fn exit(&self, _span: &tracing::span::Id) {}
+    }
+
+    /// 提取事件 message + 数值字段（warn 插值消息经 record_debug）
+    #[derive(Default)]
+    struct MessageVisitor {
+        message: String,
+    }
+
+    impl Visit for MessageVisitor {
+        fn record_str(&mut self, field: &Field, value: &str) {
+            if field.name() == "message" {
+                self.message = value.to_string();
+            }
+        }
+        fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+            if field.name() == "message" {
+                self.message = format!("{value:?}");
+            }
+        }
+    }
+
+    /// 在捕获 subscriber 下执行闭包，返回捕获行（WARN 级）
+    fn with_capture_warn<F, R>(f: F) -> (R, Vec<String>)
+    where
+        F: FnOnce() -> R,
+    {
+        let capture = Arc::new(LogCapture::default());
+        let subscriber = CaptureSubscriber {
+            capture: Arc::clone(&capture),
+        };
+        let guard = tracing::subscriber::set_default(subscriber);
+        let result = f();
+        let lines = capture.snapshot();
+        drop(guard);
+        (result, lines)
+    }
+
+    /// ① 事件序列化：超阈值（≥ SLOW_EVENT_SERIALIZE_WARN_MS=10ms）→
+    /// warn 行捕获（含 run_id / event_type 字段）；条件告警门控可证伪。
+    #[test]
+    fn slow_event_serialize_warns_over_threshold() {
+        let (_, lines) = with_capture_warn(|| {
+            super::super::engine_channels::warn_slow_event_serialize(
+                "run-s3-slow",
+                "message-delta",
+                Duration::from_millis(20),
+            );
+        });
+        assert!(
+            lines.iter().any(|l| l.contains("事件序列化慢于阈值")),
+            "超阈值必须出 warn，捕获：\n{}",
+            lines.join("\n")
+        );
+    }
+
+    /// ① 事件序列化：低于阈值 → 零告警（常态零日志开销断言）。
+    #[test]
+    fn fast_event_serialize_stays_silent() {
+        let (_, lines) = with_capture_warn(|| {
+            super::super::engine_channels::warn_slow_event_serialize(
+                "run-s3-fast",
+                "message-delta",
+                Duration::from_micros(500),
+            );
+        });
+        assert!(
+            !lines.iter().any(|l| l.contains("事件序列化慢于阈值")),
+            "低于阈值必须零告警，捕获：\n{}",
+            lines.join("\n")
+        );
+    }
+
+    /// ① 事件序列化：emit 全路径接线冒烟——正常信封经 emit 不触发慢告警
+    /// （序列化常态 µs 级），且发射/缓冲报告不受埋点影响（运行语义零改动）。
+    #[test]
+    fn emit_smoke_keeps_report_semantics() {
+        let emitter = Arc::new(RecordingEmitter::default());
+        let bridge = EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&emitter) as Arc<dyn Emitter>,
+        );
+        let buffered =
+            super::super::engine_channels::BufferedRunEventBridge::new(bridge, "run-s3-smoke");
+        let envelope = AgentEventEnvelope::new(
+            AgentEvent::MessageDelta {
+                session_id: "s-s3-smoke".to_string(),
+                timestamp: "2026-08-13T00:00:00.000Z".to_string(),
+                message_id: "msg-1".to_string(),
+                block: AgentMessageBlock::Text {
+                    text: "hello".into(),
+                },
+            },
+            Some("run-s3-smoke".to_string()),
+            Some(1),
+        );
+        let (report, lines) = with_capture_warn(|| buffered.emit(&envelope));
+        assert_eq!(report.dropped, 0, "常态无丢帧");
+        assert_eq!(report.buffered, 1, "常态入缓冲 1 条");
+        assert!(
+            !lines.iter().any(|l| l.contains("事件序列化慢于阈值")),
+            "常态序列化不得告警，捕获：\n{}",
+            lines.join("\n")
+        );
+    }
+
+    /// 测试发射器：记录 (channel, payload) 序列（对齐 core_event_bridge /
+    /// B1-5 测试先例；本模块自带——兄弟模块的 RecordingEmitter 不可见）
+    #[derive(Default)]
+    struct RecordingEmitter {
+        calls: Mutex<Vec<(String, String)>>,
+    }
+
+    impl Emitter for RecordingEmitter {
+        fn emit(&self, channel: &str, payload: &str) {
+            self.calls
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push((channel.to_string(), payload.to_string()));
+        }
+    }
+}

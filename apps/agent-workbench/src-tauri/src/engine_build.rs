@@ -12,20 +12,25 @@
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分，不关任何 EL；仅搬移不改语义）。
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use agent_provider::models::{cache_ttl_for_provider_model, infer_vendor, CacheTtl, ModelCatalog};
+use agent_provider::models::{cache_ttl_for_provider_model, infer_vendor, CacheTtl};
+use agent_tools::audit::AuditSink;
 use agent_tools::background::BackgroundTaskManager;
 use agent_tools::definition::{ToolDefinition, ToolError};
 use agent_tools::mcp::{register_plugin_server, McpClientBridge, McpServerConfig};
 use agent_tools::registry::ToolRegistry;
+use agent_tools::tools::kill_subagent::SubagentKillChannel;
+use agent_tools::tools::send_message::{MainAgentMessageChannel, SubagentInjectChannel};
 use agent_tools::tools::set_timer::TimerChannel;
 use agent_tools::tools::wait_subagents::SubagentWaitChannel;
+use async_trait::async_trait;
 use conex_db::LocalDb;
 use conex_types::denied_stats::DeniedStats;
-use conex_types::events::{AgentEvent, AgentEventEnvelope, MissAttribution, RunCacheStats};
+use conex_types::events::{AgentEvent, MissAttribution, RunCacheStats};
 use conex_types::message::AgentMessage;
+use conex_types::response::ClassifiedStreamError;
 use conex_telemetry::cache::{
     cold_cache_check, is_cold, CacheBaseline, RequestSignature, WARN_MISSED_COST_USD,
     WARN_MISSED_TOKENS,
@@ -40,10 +45,9 @@ use session_loop::{
 use super::engine_audit::{RoutingAuditSink, WaitDispatchStore};
 use super::engine_channels::ContinuityChannelBoard;
 use super::engine_provider::{
-    bundled_catalog, load_provider_endpoint, EngineProviderConfig, HttpProviderCall, now_iso_utc,
-    user_message,
+    build_http_client, bundled_catalog, load_provider_endpoint, EngineProviderConfig,
+    HttpProviderCall, now_iso_utc,
 };
-use crate::browser::BrowserSlot;
 use crate::fs_commands::skills::RustSkill;
 use crate::timers::{
     AgentEventSink, LocalDbTimerStore, MemoryTimerStore, QueuePendingSink, TimerRegistry,
@@ -51,8 +55,21 @@ use crate::timers::{
 use crate::watchdog::{LastWakeupTracker, Watchdog, WatchdogOptions};
 use crish_agent_workbench::wait_channel::{
     ControlBusResolver, EventStreamBroadcast, LocalDbWaitStore, MemoryAgentSource, MemoryWaitStore,
-    SubagentStatusSource, WaitChannel,
+    SubagentStatusSource, WaitChannel, WaitStore,
 };
+
+
+/// 毒丸恢复计数（B1-5 观测化：构建面 8 处锁中毒恢复次数——EngineHandle
+/// provider / provider_config / ready_reason / cache_sessions 四锁；对齐
+/// registry.rs / note_memory.rs 「tracing::error! 成对 + 计数」样板，
+/// 零新依赖）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 毒丸恢复计数读取（毒化测断言面；S3 埋点消费面就绪后解除 cfg(test)）
+#[cfg(test)]
+pub(crate) fn build_poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
 
 
 /// 引擎句柄（B6.4：provider 生效配置 + 工具注册表 + engineReady）
@@ -445,7 +462,15 @@ impl EngineHandle {
     pub(crate) fn ready_reason(&self) -> Option<String> {
         self.ready_reason
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "EngineHandle ready_reason 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .clone()
     }
 
@@ -453,7 +478,15 @@ impl EngineHandle {
     pub(crate) fn provider(&self) -> Option<Arc<dyn ProviderCall>> {
         self.provider
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "EngineHandle provider 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .clone()
     }
 
@@ -495,10 +528,34 @@ impl EngineHandle {
                 )
             }
         };
-        *self.provider.lock().unwrap_or_else(|e| e.into_inner()) = provider;
-        *self.provider_config.lock().unwrap_or_else(|e| e.into_inner()) = provider_config;
+        *self.provider.lock().unwrap_or_else(|e| {
+            // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+            tracing::error!(
+                target: "engine",
+                "EngineHandle provider 锁中毒，按恢复模式继续：{e}"
+            );
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        }) = provider;
+        *self.provider_config.lock().unwrap_or_else(|e| {
+            // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+            tracing::error!(
+                target: "engine",
+                "EngineHandle provider_config 锁中毒，按恢复模式继续：{e}"
+            );
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        }) = provider_config;
         self.ready.store(ready, Ordering::SeqCst);
-        *self.ready_reason.lock().unwrap_or_else(|e| e.into_inner()) = ready_reason;
+        *self.ready_reason.lock().unwrap_or_else(|e| {
+            // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+            tracing::error!(
+                target: "engine",
+                "EngineHandle ready_reason 锁中毒，按恢复模式继续：{e}"
+            );
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        }) = ready_reason;
     }
 
     /// 工具注册表（只读共享）
@@ -696,7 +753,15 @@ impl EngineHandle {
     pub(crate) fn provider_config(&self) -> Option<EngineProviderConfig> {
         self.provider_config
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "EngineHandle provider_config 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .clone()
     }
 
@@ -716,7 +781,15 @@ impl EngineHandle {
     pub(crate) fn cache_session(&self, session_id: &str) -> SessionCacheState {
         self.cache_sessions
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "EngineHandle cache_sessions 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .get(session_id)
             .cloned()
             .unwrap_or_default()
@@ -734,7 +807,15 @@ impl EngineHandle {
         let mut sessions = self
             .cache_sessions
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "EngineHandle cache_sessions 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            });
         let state = sessions.entry(session_id.to_string()).or_default();
         state.last_stats = Some(*stats);
         state.last_model = Some(model.to_string());

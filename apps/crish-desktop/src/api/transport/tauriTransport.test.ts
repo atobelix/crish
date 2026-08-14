@@ -4,7 +4,11 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand, mockTauriError } from '../../test-setup';
-import { CORE_GET_STATUS, RUN_EVENT_CHANNEL, TauriTransport } from './tauriTransport';
+import {
+  CORE_GET_STATUS,
+  RUN_EVENT_CHANNEL,
+  TauriTransport,
+} from './tauriTransport';
 
 type TauriEventHandler = (e: { payload?: unknown }) => void;
 
@@ -30,7 +34,10 @@ describe('TauriTransport', () => {
   beforeEach(async () => {
     eventMock.handlers.clear();
     eventMock.listen.mockImplementation(
-      async (event: string, handler: TauriEventHandler): Promise<() => void> => {
+      async (
+        event: string,
+        handler: TauriEventHandler
+      ): Promise<() => void> => {
         eventMock.handlers.set(event, handler);
         return () => {
           eventMock.handlers.delete(event);
@@ -51,13 +58,38 @@ describe('TauriTransport', () => {
   // ── request（职责 5：配对 → invoke）────────────────────────
 
   it('request 成功：invoke 命令 + 透传 payload，返回 data', async () => {
-    const impl = vi.fn(async (args: Record<string, unknown>) => ({ runId: args.runId }));
+    const impl = vi.fn(async (args: Record<string, unknown>) => ({
+      runId: args.runId,
+    }));
     mockTauriCommand('core_run_task', impl);
 
-    const data = await transport.request('core_run_task', { runId: 'run-1', sessionId: 's1' });
+    const data = await transport.request('core_run_task', {
+      runId: 'run-1',
+      sessionId: 's1',
+    });
 
     expect(impl).toHaveBeenCalledWith({ runId: 'run-1', sessionId: 's1' });
     expect(data).toEqual({ runId: 'run-1' });
+  });
+
+  it('request payload 透传 trace_id（S2：payload 逐字透传，非 HTTP 头）', async () => {
+    // S2 分布式追踪最小面：run 类命令 payload 携带 trace_id 时，transport
+    // 必须原样透传到 invoke 参数（Tauri IPC 无 HTTP 头语义——透传在
+    // payload 面，D-05 §四）
+    const impl = vi.fn(async () => ({ ok: true }));
+    mockTauriCommand('core_run_task', impl);
+
+    await transport.request('core_run_task', {
+      runId: 'run-1',
+      sessionId: 's1',
+      traceId: 'run-t-1-2-3',
+    });
+
+    expect(impl).toHaveBeenCalledWith({
+      runId: 'run-1',
+      sessionId: 's1',
+      traceId: 'run-t-1-2-3',
+    });
   });
 
   it('request 命令未注册（missing）→ 抛错', async () => {
@@ -67,7 +99,10 @@ describe('TauriTransport', () => {
   });
 
   it('request CoreError → 抛 `${kind}: ${message}`', async () => {
-    mockTauriError('core_run_task', { kind: 'InvalidInput', detail: 'bad payload' });
+    mockTauriError('core_run_task', {
+      kind: 'InvalidInput',
+      detail: 'bad payload',
+    });
     await expect(transport.request('core_run_task', {})).rejects.toThrow(
       'InvalidInput: bad payload'
     );
@@ -76,7 +111,11 @@ describe('TauriTransport', () => {
   it('request 暂态失败 → 自动重试一次并成功（C3.3 等价能力）', async () => {
     const impl = vi
       .fn()
-      .mockRejectedValueOnce({ status: 'error', kind: 'Internal', message: 'busy' })
+      .mockRejectedValueOnce({
+        status: 'error',
+        kind: 'Internal',
+        message: 'busy',
+      })
       .mockResolvedValueOnce({ ok: true });
     mockTauriCommand('core_run_task', impl);
     const args = { runId: 'r1' };
@@ -91,8 +130,16 @@ describe('TauriTransport', () => {
   it('request 暂态失败持续 → 重试一次后仍抛错', async () => {
     const impl = vi
       .fn()
-      .mockRejectedValueOnce({ status: 'error', kind: 'Internal', message: 'boom' })
-      .mockRejectedValueOnce({ status: 'error', kind: 'Internal', message: 'boom again' });
+      .mockRejectedValueOnce({
+        status: 'error',
+        kind: 'Internal',
+        message: 'boom',
+      })
+      .mockRejectedValueOnce({
+        status: 'error',
+        kind: 'Internal',
+        message: 'boom again',
+      });
     mockTauriCommand('core_run_task', impl);
     await expect(transport.request('core_run_task', {})).rejects.toThrow();
     expect(impl).toHaveBeenCalledTimes(2);
@@ -119,10 +166,15 @@ describe('TauriTransport', () => {
   // ── call（PE-03 T03.2 唯一 invoke 通道）─────────────────────
 
   it('call 成功：清单内命令 invoke + 透传 payload，返回 ok 三态', async () => {
-    const impl = vi.fn(async (args: Record<string, unknown>) => ({ runId: args.runId }));
+    const impl = vi.fn(async (args: Record<string, unknown>) => ({
+      runId: args.runId,
+    }));
     mockTauriCommand('core_run_task', impl);
 
-    const res = await transport.call('core_run_task', { runId: 'run-1', sessionId: 's1' });
+    const res = await transport.call('core_run_task', {
+      runId: 'run-1',
+      sessionId: 's1',
+    });
 
     expect(impl).toHaveBeenCalledWith({ runId: 'run-1', sessionId: 's1' });
     expect(res).toEqual({ status: 'ok', data: { runId: 'run-1' } });
@@ -145,7 +197,10 @@ describe('TauriTransport', () => {
   });
 
   it('call CoreError → 返回结构化 error 三态（不抛）', async () => {
-    mockTauriError('core_run_task', { kind: 'InvalidInput', detail: 'bad payload' });
+    mockTauriError('core_run_task', {
+      kind: 'InvalidInput',
+      detail: 'bad payload',
+    });
     const res = await transport.call('core_run_task', {});
     expect(res.status).toBe('error');
     if (res.status === 'error') {
@@ -157,7 +212,11 @@ describe('TauriTransport', () => {
   it('call 暂态失败 → 自动重试一次并成功', async () => {
     const impl = vi
       .fn()
-      .mockRejectedValueOnce({ status: 'error', kind: 'Internal', message: 'busy' })
+      .mockRejectedValueOnce({
+        status: 'error',
+        kind: 'Internal',
+        message: 'busy',
+      })
       .mockResolvedValueOnce({ ok: true });
     mockTauriCommand('core_run_task', impl);
 
@@ -169,8 +228,16 @@ describe('TauriTransport', () => {
   it('call 暂态失败持续 → 重试一次后返回 error 三态（不抛）', async () => {
     const impl = vi
       .fn()
-      .mockRejectedValueOnce({ status: 'error', kind: 'Internal', message: 'boom' })
-      .mockRejectedValueOnce({ status: 'error', kind: 'Internal', message: 'boom again' });
+      .mockRejectedValueOnce({
+        status: 'error',
+        kind: 'Internal',
+        message: 'boom',
+      })
+      .mockRejectedValueOnce({
+        status: 'error',
+        kind: 'Internal',
+        message: 'boom again',
+      });
     mockTauriCommand('core_run_task', impl);
 
     const res = await transport.call('core_run_task', {});
@@ -192,7 +259,9 @@ describe('TauriTransport', () => {
 
   it('send 失败 → 错误上抛', async () => {
     mockTauriError('core_run_control', new Error('boom'));
-    await expect(transport.send('core_run_control', {})).rejects.toThrow('boom');
+    await expect(transport.send('core_run_control', {})).rejects.toThrow(
+      'boom'
+    );
   });
 
   // ── onMessage（职责 7：广播 → listen('workbench-run-event')）─
@@ -214,11 +283,23 @@ describe('TauriTransport', () => {
     const received: unknown[] = [];
     const unsub1 = transport.onMessage((m) => received.push(m));
     const unsub2 = transport.onMessage((m) => received.push(m));
-    await vi.waitFor(() => expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(true));
+    await vi.waitFor(() =>
+      expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(true)
+    );
 
-    emitRunEvent({ type: 'message-delta', runId: 'r1', sequence: 1 });
+    emitRunEvent({
+      type: 'message-delta',
+      runId: 'r1',
+      sequence: 1,
+      traceId: 'run-t-9-8-7',
+    });
     expect(received).toHaveLength(2);
-    expect(received[0]).toEqual({ type: 'message-delta', runId: 'r1', sequence: 1 });
+    expect(received[0]).toEqual({
+      type: 'message-delta',
+      runId: 'r1',
+      sequence: 1,
+      traceId: 'run-t-9-8-7',
+    });
 
     unsub1();
     emitRunEvent({ type: 'run-terminal', runId: 'r1' });
@@ -232,7 +313,9 @@ describe('TauriTransport', () => {
   it('非对象载荷（null/非 JSON 字符串）静默忽略，不抛错', async () => {
     const received: unknown[] = [];
     transport.onMessage((m) => received.push(m));
-    await vi.waitFor(() => expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(true));
+    await vi.waitFor(() =>
+      expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(true)
+    );
 
     expect(() => {
       emitRunEvent(null);
@@ -245,10 +328,17 @@ describe('TauriTransport', () => {
   it('Rust emit 字符串 JSON：解析后逐字透传（B6.3 完整事件 JSON 载荷）', async () => {
     const received: unknown[] = [];
     transport.onMessage((m) => received.push(m));
-    await vi.waitFor(() => expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(true));
+    await vi.waitFor(() =>
+      expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(true)
+    );
 
     emitRunEvent(
-      JSON.stringify({ type: 'run-terminal', runId: 'r1', terminal: 'completed', sequence: 7 })
+      JSON.stringify({
+        type: 'run-terminal',
+        runId: 'r1',
+        terminal: 'completed',
+        sequence: 7,
+      })
     );
     expect(received).toHaveLength(1);
     expect(received[0]).toEqual({
@@ -305,7 +395,9 @@ describe('TauriTransport', () => {
     await transport.waitUntilConnected(200);
 
     transport.onMessage(() => undefined);
-    await vi.waitFor(() => expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(true));
+    await vi.waitFor(() =>
+      expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(true)
+    );
 
     transport.stop();
     expect(eventMock.handlers.has(RUN_EVENT_CHANNEL)).toBe(false);

@@ -7,6 +7,7 @@
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分，不关任何 EL；仅搬移不改语义）。
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::audit::{AuditSink, SecurityAuditSink};
@@ -14,6 +15,18 @@ use agent_tools::tools::wait_subagents::DispatchDeclaration;
 use conex_types::denied_stats::DeniedStats;
 use conex_types::events::{AgentEvent, SecurityAuditDecision};
 use crish_agent_workbench::wait_channel::{LocalDbWaitStore, MemoryWaitStore, WaitStore};
+
+
+/// 毒丸恢复计数（B1-5 观测化：RoutingAuditSink routes 锁中毒恢复次数；
+/// 对齐 registry.rs / note_memory.rs 「tracing::error! 成对 + 计数」样板，
+/// 零新依赖；本文件 4 处 routes 锁共用）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 毒丸恢复计数读取（毒化测断言面；S3 埋点消费面就绪后解除 cfg(test)）
+#[cfg(test)]
+pub(crate) fn audit_poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
 
 
 // ── 15-T-6（裁决 D9）：路由型审计 sink ────────────────────────────
@@ -56,7 +69,15 @@ impl RoutingAuditSink {
     pub(crate) fn register(&self, session_id: &str, sink: AuditSink) {
         self.routes
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "RoutingAuditSink routes 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .insert(session_id.to_string(), sink);
     }
 
@@ -64,7 +85,15 @@ impl RoutingAuditSink {
     pub(crate) fn unregister(&self, session_id: &str) {
         self.routes
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "RoutingAuditSink routes 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .remove(session_id);
     }
 
@@ -73,8 +102,30 @@ impl RoutingAuditSink {
     pub(crate) fn route_count(&self) -> usize {
         self.routes
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "RoutingAuditSink routes 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .len()
+    }
+
+    /// 毒化 routes 锁（B1-5 毒化测注入：持锁线程内 panic → 中毒状态；
+    /// 对齐 agent-tools test_support::poison_std_lock 形态）
+    #[cfg(test)]
+    pub(crate) fn poison_routes_for_test(&self) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    let _guard = self.routes.lock().unwrap();
+                    panic!("模拟持锁 panic（毒化 routes 锁）");
+                });
+            });
+        }));
     }
 }
 
@@ -97,7 +148,15 @@ impl SecurityAuditSink for RoutingAuditSink {
         let sink = self
             .routes
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "RoutingAuditSink routes 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .get(session_id)
             .cloned();
         match sink {

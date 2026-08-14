@@ -9,7 +9,9 @@
 //! （[forward_drained_timer_events] / [forward_drained_scheduler_events]）。
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分，不关任何 EL；仅搬移不改语义）。
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use agent_provider::request::{
     build_chat_completions_request_body, ChatCompletionsRequestOptions, MaxTokensField,
@@ -20,15 +22,28 @@ use agent_tools::tools::send_message::{
     MainAgentMessageChannel, MainMessageRing, SubagentInjectChannel,
 };
 use conex_types::events::{AgentEvent, AgentEventEnvelope};
+use conex_types::tool::SystemPromptWireMode;
 use session_loop::provider::DeltaSink;
 use session_loop::ControlBus;
 use crish_agent_workbench::wait_channel::ControlBusResolver;
 
 use super::engine_build::EngineHandle;
 use super::engine_provider::{chat_provider_url, user_message, EngineProviderConfig, now_iso_utc};
-use crate::buffer::EventBuffer;
+use crate::buffer::{drop_class_of, EventBuffer};
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::timers::AgentEventSink;
+
+
+/// 毒丸恢复计数（B1-5 观测化：通道面 9 处锁中毒恢复次数——板卡四通道
+/// 绑定/读取 + 缓冲事件桥 buffer 锁；对齐 registry.rs / note_memory.rs
+/// 「tracing::error! 成对 + 计数」样板，零新依赖）
+static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
+
+/// 毒丸恢复计数读取（毒化测断言面；S3 埋点消费面就绪后解除 cfg(test)）
+#[cfg(test)]
+pub(crate) fn channels_poison_recovery_count() -> u64 {
+    POISON_RECOVERIES.load(Ordering::Relaxed)
+}
 
 
 /// 会话级 Summarizer 工厂（T-43，00-plan §10 轮次 6 / 04 §9.4 T16；评审
@@ -287,22 +302,68 @@ impl ContinuityChannelBoard {
 
     /// 绑定控制总线解析器（CoreRunState 实现；Weak 适配切断引用环）
     pub(crate) fn bind_control_bus(&self, resolver: Arc<dyn ControlBusResolver>) {
-        *self.control_bus.lock().unwrap_or_else(|e| e.into_inner()) = Some(resolver);
+        *self.control_bus.lock().unwrap_or_else(|e| {
+            // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+            tracing::error!(
+                target: "engine",
+                "ContinuityChannelBoard control_bus 锁中毒，按恢复模式继续：{e}"
+            );
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        }) = Some(resolver);
     }
 
     /// 绑定 kill_subagent 终止通道（CoreRunState 实现）
     pub(crate) fn bind_kill(&self, channel: Arc<dyn SubagentKillChannel>) {
-        *self.kill.lock().unwrap_or_else(|e| e.into_inner()) = Some(channel);
+        *self.kill.lock().unwrap_or_else(|e| {
+            // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+            tracing::error!(
+                target: "engine",
+                "ContinuityChannelBoard kill 锁中毒，按恢复模式继续：{e}"
+            );
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        }) = Some(channel);
     }
 
     /// 绑定 send_message 子代理注入通道（CoreRunState 实现）
     pub(crate) fn bind_inject(&self, channel: Arc<dyn SubagentInjectChannel>) {
-        *self.inject.lock().unwrap_or_else(|e| e.into_inner()) = Some(channel);
+        *self.inject.lock().unwrap_or_else(|e| {
+            // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+            tracing::error!(
+                target: "engine",
+                "ContinuityChannelBoard inject 锁中毒，按恢复模式继续：{e}"
+            );
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        }) = Some(channel);
     }
 
     /// 绑定 send_message 主 agent 消息通道（CoreRunState 实现）
     pub(crate) fn bind_self_message(&self, channel: Arc<dyn MainAgentMessageChannel>) {
-        *self.self_message.lock().unwrap_or_else(|e| e.into_inner()) = Some(channel);
+        *self.self_message.lock().unwrap_or_else(|e| {
+            // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+            tracing::error!(
+                target: "engine",
+                "ContinuityChannelBoard self_message 锁中毒，按恢复模式继续：{e}"
+            );
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        }) = Some(channel);
+    }
+
+    /// 毒化 control_bus 锁（B1-5 毒化测注入：持锁线程内 panic → 中毒状态；
+    /// 对齐 agent-tools test_support::poison_std_lock 形态）
+    #[cfg(test)]
+    pub(crate) fn poison_control_bus_for_test(&self) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    let _guard = self.control_bus.lock().unwrap();
+                    panic!("模拟持锁 panic（毒化 control_bus 锁）");
+                });
+            });
+        }));
     }
 }
 
@@ -310,7 +371,15 @@ impl ControlBusResolver for ContinuityChannelBoard {
     fn control_bus(&self, subagent_id: &str) -> Option<Arc<Mutex<ControlBus>>> {
         self.control_bus
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "ContinuityChannelBoard control_bus 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .as_ref()
             .and_then(|resolver| resolver.control_bus(subagent_id))
     }
@@ -327,7 +396,15 @@ impl SubagentKillChannel for ContinuityChannelBoard {
         let Some(channel) = self
             .kill
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "ContinuityChannelBoard kill 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .clone()
         else {
             return Err("kill_subagent 通道未绑定（引擎装配与 finalize 之间窗口）".to_string());
@@ -342,7 +419,15 @@ impl SubagentInjectChannel for ContinuityChannelBoard {
         let Some(channel) = self
             .inject
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "ContinuityChannelBoard inject 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .clone()
         else {
             return Err("send_message 子代理注入通道未绑定（引擎装配与 finalize 之间窗口）".to_string());
@@ -362,7 +447,15 @@ impl MainAgentMessageChannel for ContinuityChannelBoard {
         let Some(channel) = self
             .self_message
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                // B1-5 观测化：锁中毒恢复，不 panic 且可继续（恢复语义不变）
+                tracing::error!(
+                    target: "engine",
+                    "ContinuityChannelBoard self_message 锁中毒，按恢复模式继续：{e}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
             .clone()
         else {
             return Err("send_message 主 agent 消息通道未绑定（引擎装配与 finalize 之间窗口）".to_string());
@@ -414,6 +507,29 @@ fn forward_drained_events(events: Vec<AgentEvent>, bridge: &EventBridge) -> usiz
 
 // ── BufferedRunEventBridge：缓冲 + 序列化 + 发射组装 ───────────────
 
+/// 事件序列化耗时告警阈值（S3 热点①-事件序列化；毫秒）。
+///
+/// 单信封 JSON 序列化常态为 µs 级；超 10ms 已属异常（超大载荷 / 设备
+/// 负载异常），按阈值条件告警（对齐 EmitReport.dropped 样板：超阈值
+/// 才 `tracing::warn!`，常态零日志开销）。
+const SLOW_EVENT_SERIALIZE_WARN_MS: u64 = 10;
+
+/// S3 事件序列化慢告警（条件告警：`elapsed >= SLOW_EVENT_SERIALIZE_WARN_MS`
+/// 才 warn；对齐 core_event_bridge `EmitReport.dropped → tracing::warn!`
+/// 样板——引擎事件面慢序列化热点，只加耗时观测不改运行语义）。
+pub(crate) fn warn_slow_event_serialize(run_id: &str, event_type: &str, elapsed: Duration) {
+    let elapsed_ms = elapsed.as_millis() as u64;
+    if elapsed_ms >= SLOW_EVENT_SERIALIZE_WARN_MS {
+        tracing::warn!(
+            target: "event_bridge",
+            run_id = %run_id,
+            event_type = %event_type,
+            serialize_ms = elapsed_ms,
+            "事件序列化慢于阈值（S3 慢序列化热点）"
+        );
+    }
+}
+
 /// 缓冲事件桥（每 run 一个实例；B6.3 组装层）
 ///
 /// - [Self::emit]：信封 → 序列化 → 按 runId 入缓冲（P9：入队时序列化，
@@ -432,33 +548,77 @@ pub(crate) struct BufferedRunEventBridge {
     buffer: Mutex<EventBuffer>,
     /// 本桥绑定的 run
     run_id: String,
+    /// run 级 trace_id（S2 分布式追踪最小面：装配面注入，emit 层单点
+    /// 挂到信封；None = 未装配（定时器/cron 域等无 run 上下文桥））
+    trace_id: Option<String>,
 }
 
 impl BufferedRunEventBridge {
-    /// 新建缓冲事件桥（run 级实例）
+    /// 新建缓冲事件桥（run 级实例；trace_id 缺省 None，经
+    /// [Self::with_trace_id] 注入）
     pub(crate) fn new(bridge: EventBridge, run_id: impl Into<String>) -> Self {
         Self {
             bridge,
             buffer: Mutex::new(EventBuffer::default()),
             run_id: run_id.into(),
+            trace_id: None,
         }
+    }
+
+    /// 注入 run 级 trace_id（S2：run 装配面调用一次；本桥发射的全部
+    /// 信封在 [Self::emit] 统一挂 traceId——drive outcome / approval
+    /// 广播 / delta 实时轨 / 审计 sink 单点覆盖）
+    ///
+    /// **待接线（顺延标注）**：生产注入方 = core_run_commands.rs
+    /// `run_task_impl` 装配面（`BufferedRunEventBridge::new(...).with_trace_id(Some(trace_id))`）
+    /// 与 `core_get_status` 暴露（CoreStatus.traceId），**依赖 SR-02
+    /// （core_run 域切分）并行域收口后接线**（2026-08-14 主控裁决顺延）。
+    /// 本桥字段/builder/emit 注入面已就绪，无 trace 配置的桥零开销
+    /// （None 分支直通，与接线前行为一致）。
+    pub(crate) fn with_trace_id(mut self, trace_id: Option<String>) -> Self {
+        self.trace_id = trace_id;
+        self
     }
 
     /// 入队一条信封（序列化 + 缓冲；不立即发射）
     ///
-    /// 丢帧（Soft 水位优先丢 Delta 旧帧，Critical 永不丢——buffer.rs:41-58
-    /// 语义）经 EmitReport 汇入 tracing 计数（S-8 / PE-04 T04.2-3）。
+    /// S2 注入：装配了 trace_id 且信封未显式携带时，克隆信封挂 traceId
+    /// 后序列化（信封显式携带者原样透传；克隆仅在注入发生时，无 trace
+    /// 配置的桥零开销）。丢帧（Soft 水位优先丢 Delta 旧帧，Critical
+    /// 永不丢——buffer.rs:41-58 语义）经 EmitReport 汇入 tracing 计数
+    /// （S-8 / PE-04 T04.2-3）。
+    ///
+    /// S3 埋点（性能热点①-事件序列化）：对序列化段计时，超阈值条件告警
+    /// （对齐 EmitReport.dropped 的 `if dropped > 0 { tracing::warn! }`
+    /// 样板；消费 B1 计数原语——本处只加耗时面，不重复加计数）。
     pub(crate) fn emit(&self, envelope: &AgentEventEnvelope) -> EmitReport {
-        let Some(payload) = self.bridge.serialize(envelope) else {
+        let serialize_started = std::time::Instant::now();
+        let payload = match (&self.trace_id, &envelope.trace_id) {
+            (Some(trace_id), None) => {
+                let injected = envelope.clone().with_trace_id(Some(trace_id.clone()));
+                self.bridge.serialize(&injected)
+            }
+            _ => self.bridge.serialize(envelope),
+        };
+        let serialize_elapsed = serialize_started.elapsed();
+        warn_slow_event_serialize(&self.run_id, envelope.type_name(), serialize_elapsed);
+        let Some(payload) = payload else {
             return EmitReport::default();
         };
         let class = drop_class_of(&envelope.event);
         let mut report = EmitReport::default();
         let outcome = match self.buffer.lock() {
             Ok(mut buffer) => buffer.enqueue(&self.run_id, class, payload),
-            Err(poisoned) => poisoned
-                .into_inner()
-                .enqueue(&self.run_id, class, payload),
+            Err(poisoned) => {
+                // B1-5 观测化：缓冲锁中毒恢复，不 panic 且可继续；丢帧语义
+                // 不变（EmitReport dropped 统计与下方 tracing::warn 样板不动）
+                tracing::error!(
+                    target: "engine",
+                    "BufferedRunEventBridge buffer 锁中毒，按恢复模式继续（丢帧语义不变）：{poisoned}"
+                );
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                poisoned.into_inner().enqueue(&self.run_id, class, payload)
+            }
         };
         report.buffered = usize::from(outcome.buffered);
         report.dropped = outcome.dropped;
@@ -485,6 +645,20 @@ impl BufferedRunEventBridge {
             report.add(self.bridge.emit_payload(&payload));
         }
         report
+    }
+
+    /// 毒化 buffer 锁（B1-5 毒化测注入：持锁线程内 panic → 中毒状态；
+    /// 对齐 agent-tools test_support::poison_std_lock 形态）
+    #[cfg(test)]
+    pub(crate) fn poison_buffer_for_test(&self) {
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            std::thread::scope(|scope| {
+                scope.spawn(|| {
+                    let _guard = self.buffer.lock().unwrap();
+                    panic!("模拟持锁 panic（毒化 buffer 锁）");
+                });
+            });
+        }));
     }
 }
 

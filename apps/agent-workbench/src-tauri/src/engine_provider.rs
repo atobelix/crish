@@ -360,7 +360,9 @@ pub(crate) struct HttpProviderCall {
     /// 共享 reqwest 客户端（连接池 / TLS 会话跨 run 复用，AA-02 S-7）
     client: reqwest::Client,
     /// 生效配置（EngineHandle 重载时重建本适配层）
-    config: EngineProviderConfig,
+    /// （pub(crate)：SR-04 拆分后 engine_tests 为同级子模，测试面仍需
+    /// 直读配置断言缓存/窗口；仅可见性调整，语义不变）
+    pub(crate) config: EngineProviderConfig,
     /// 首字节超时
     first_byte_timeout: Option<Duration>,
     /// 流块间空闲超时
@@ -428,7 +430,9 @@ impl HttpProviderCall {
     }
 
     /// 请求构建上下文（消息 0 深拷贝借用，PE-09 T09.3 阶段 1）
-    fn build_context<'a>(&self, request: &ProviderRequest<'a>) -> RequestBuildContext<'a> {
+    /// （pub(crate)：SR-04 拆分后 engine_tests 为同级子模，测试面仍需
+    /// 直用请求构建上下文断言；仅可见性调整，语义不变）
+    pub(crate) fn build_context<'a>(&self, request: &ProviderRequest<'a>) -> RequestBuildContext<'a> {
         RequestBuildContext {
             system_prompt: request.system_prompt.map(str::to_string),
             messages: request.messages,

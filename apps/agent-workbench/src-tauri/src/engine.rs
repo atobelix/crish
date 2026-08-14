@@ -28,11 +28,19 @@
 //!   buffer 的 Delta 类目兜底，message-end 必达）。
 //!
 //! 头钉：SR-04 · 拆分 · ≠ EL（结构拆分不关任何 EL；仅搬移不改语义；
-//! into_inner 与可观测埋点分别排 B1-5 / S2/S3）。
+//! 生产段 into_inner 已 B1-5 观测化（error! 成对 + 计数；测试段不观测），
+//! S2/S3 另行）。
 
+// B1-5 接线修正：子模以 `#[path]` 显式接线（同目录旁挂，对齐
+// note_commands.rs 先例）——rustc 2018+ 对非根模块文件只解析
+// 目录式子模块路径（`engine/engine_audit.rs`），旁挂文件必须 #[path]
+#[path = "engine_audit.rs"]
 mod engine_audit;
+#[path = "engine_build.rs"]
 mod engine_build;
+#[path = "engine_channels.rs"]
 mod engine_channels;
+#[path = "engine_provider.rs"]
 mod engine_provider;
 
 pub(crate) use engine_audit::*;

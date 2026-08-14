@@ -52,7 +52,6 @@ export interface ToolExecutionContext {
   signal: AbortSignal;
   emit(update: ToolProgressUpdate): void;
   metadata?: Record<string, unknown>;
-  traceId?: string;
   runId?: string;
   batchId?: string;
   mode?: string;

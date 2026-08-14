@@ -1078,6 +1078,60 @@ fn envelope_omits_run_id_and_sequence_when_absent() {
     assert_eq!(envelope, back);
 }
 
+// ── 4b. S2 分布式追踪最小面：traceId 可选字段（D-05 §二 S2 完成定义②）──
+
+#[test]
+fn envelope_carries_trace_id_when_injected() {
+    // with_trace_id 注入 → wire 顶层 traceId（camelCase，与 runId 一致）
+    let envelope = AgentEventEnvelope::new(
+        AgentEvent::AgentStart {
+            session_id: "s1".into(),
+            timestamp: TS.into(),
+        },
+        Some("run-1".into()),
+        Some(3),
+    )
+    .with_trace_id(Some("run-t-1-2-3".into()));
+    let json = serde_json::to_value(&envelope).unwrap();
+    assert_eq!(json["traceId"], "run-t-1-2-3");
+    // roundtrip 保留
+    let back: AgentEventEnvelope = serde_json::from_value(json).unwrap();
+    assert_eq!(envelope, back);
+    assert_eq!(back.trace_id.as_deref(), Some("run-t-1-2-3"));
+}
+
+#[test]
+fn envelope_omits_trace_id_when_absent_and_old_frames_compatible() {
+    // 无注入 → wire 无 traceId 键（None 省略，旧帧形状不变）
+    let envelope = AgentEventEnvelope::new(
+        AgentEvent::AgentStart {
+            session_id: "s1".into(),
+            timestamp: TS.into(),
+        },
+        None,
+        None,
+    );
+    let json = serde_json::to_value(&envelope).unwrap();
+    assert!(json.get("traceId").is_none());
+    // 旧帧（无 traceId 键）解析 → None，向后兼容（schema_version 不升）
+    let back: AgentEventEnvelope = serde_json::from_value(json).unwrap();
+    assert_eq!(back.trace_id, None);
+    assert_eq!(back.schema_version, 1);
+}
+
+#[test]
+fn envelope_trace_id_roundtrip_all_events() {
+    // 全部事件经带 trace_id 的信封往返一致（S2 契约：任意事件可携带 trace_id）
+    for event in all_events() {
+        let envelope = AgentEventEnvelope::new(event.clone(), Some("run-1".into()), Some(7))
+            .with_trace_id(Some("run-all-1".into()));
+        let json = serde_json::to_value(&envelope).unwrap();
+        assert_eq!(json["traceId"], "run-all-1");
+        let back: AgentEventEnvelope = serde_json::from_value(json).unwrap();
+        assert_eq!(envelope, back, "带 trace_id 的信封 roundtrip 不一致：{}", event_type_name(&event));
+    }
+}
+
 #[test]
 fn envelope_roundtrip_all_events_with_run_id_and_sequence() {
     // 全部事件经信封（注入 runId/sequence）往返一致，

@@ -1097,6 +1097,13 @@ pub fn subagent_event_kind_backpressure(kind: SubagentEventKind) -> Backpressure
 /// 与游标的唯一依据（03 §5.1-2/3）。`run-terminal` 的 runId 必须填充
 /// （03 §5.1-16；其事件体内的 runId 字段与信封注入值一致，03 §5.3-2）。
 ///
+/// `traceId`（S2 分布式追踪最小面，2026-08-13-wave 维度 5）为**可选**字段：
+/// run 启动装配面生成 per-run trace_id，经缓冲事件桥注入（wire 键 `traceId`，
+/// camelCase 与 runId/sequence 一致）；缺省 None = 无 run 上下文（定时器/cron
+/// 域事件）或旧帧向后兼容——`schema_version` 不升（D-05 §二 S2 完成定义②）。
+/// 前端 transport 对事件 payload 逐字透传（不按 HTTP 头实现——Tauri IPC
+/// 无 HTTP 头语义，D-05 §四）。
+///
 /// `schemaVersion` 是信封（wire）层的 schema 版本（PE-03 T03.10 / PE-12 T12.5），
 /// 与事件字段演进无关：缺省视为 1（无该字段的旧帧照常解析，[`AgentEvent`] 本身
 /// 不携带版本字段，域类型纯净）。当前唯一版本为 1；字段演进走
@@ -1117,6 +1124,9 @@ pub struct AgentEventEnvelope {
     pub sequence: Option<u64>,
     /// 信封 schema 版本（wire 层注入，camelCase `schemaVersion`；当前恒为 1）
     pub schema_version: u32,
+    /// run 级追踪 id（S2 分布式追踪最小面；wire 键 `traceId`，可选字段——
+    /// 旧帧无该键解析为 None，向后兼容；None 兼容既有事件语义）
+    pub trace_id: Option<String>,
 }
 
 /// 事件信封 wire schema 版本（PE-03 T03.10 / PE-12 T12.5）
@@ -1142,6 +1152,9 @@ impl serde::Serialize for AgentEventEnvelope {
         if let Some(sequence) = self.sequence {
             map.insert("sequence".into(), serde_json::json!(sequence));
         }
+        if let Some(trace_id) = &self.trace_id {
+            map.insert("traceId".into(), serde_json::json!(trace_id));
+        }
         map.insert(
             "schemaVersion".into(),
             serde_json::json!(self.schema_version),
@@ -1163,6 +1176,11 @@ impl<'de> serde::Deserialize<'de> for AgentEventEnvelope {
         let event = AgentEvent::deserialize(value.clone()).map_err(D::Error::custom)?;
         let run_id = map.get("runId").and_then(serde_json::Value::as_str).map(str::to_string);
         let sequence = map.get("sequence").and_then(serde_json::Value::as_u64);
+        // S2：traceId 可选字段——旧帧缺省 None，向后兼容（schema_version 不升）
+        let trace_id = map
+            .get("traceId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string);
         // 旧帧无 schemaVersion 字段时缺省补 1（PE-03 T03.10：向后兼容）
         let schema_version = map
             .get("schemaVersion")
@@ -1174,12 +1192,14 @@ impl<'de> serde::Deserialize<'de> for AgentEventEnvelope {
             run_id,
             sequence,
             schema_version,
+            trace_id,
         })
     }
 }
 
 impl AgentEventEnvelope {
-    /// 构造信封（schema 版本默认取当前 [EVENT_ENVELOPE_SCHEMA_VERSION]）
+    /// 构造信封（schema 版本默认取当前 [EVENT_ENVELOPE_SCHEMA_VERSION]；
+    /// trace_id 缺省 None——S2 起 run 级 trace 经 [Self::with_trace_id] 注入）
     pub fn new(
         event: AgentEvent,
         run_id: Option<String>,
@@ -1190,7 +1210,15 @@ impl AgentEventEnvelope {
             run_id,
             sequence,
             schema_version: EVENT_ENVELOPE_SCHEMA_VERSION,
+            trace_id: None,
         }
+    }
+
+    /// 注入 run 级 trace_id（S2 分布式追踪最小面：缓冲事件桥 emit 层单点
+    /// 注入；调用方仅在信封 trace_id 为 None 时覆盖，显式携带者原样保留）
+    pub fn with_trace_id(mut self, trace_id: Option<String>) -> Self {
+        self.trace_id = trace_id;
+        self
     }
 
     /// 事件类型名（顶层 `type` 值；委托 [AgentEvent::type_name]）
