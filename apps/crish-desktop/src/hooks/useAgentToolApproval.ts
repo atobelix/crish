@@ -15,6 +15,10 @@ import {
   patchAgentTool,
 } from '../api/storeAccess';
 import type { MessageToolCallStatus } from '../store/types';
+import {
+  shouldSkipApprovalRollback,
+  shouldSkipDenyRollback,
+} from '../api/chat-approval/approvalRollbackGuard';
 
 function findAgentTool(
   parentSessionId: string,
@@ -108,14 +112,8 @@ export function useAgentToolApproval(
           mid,
           tid
         );
-        // 若已被并发事件推进至 success / completed 终态，或已有实际执行输出，坚决拦截后发过期 catch 覆写为 error
-        if (
-          currentTc?.status === 'success' ||
-          (currentTc?.status as string) === 'completed' ||
-          (currentTc?.status === 'running' &&
-            currentTc?.output &&
-            currentTc.output !== '执行中…')
-        ) {
+        // 若已被并发事件推进至 success 终态，或已有实际执行输出，坚决拦截后发过期 catch 覆写为 error
+        if (shouldSkipApprovalRollback(currentTc)) {
           return;
         }
 
@@ -164,12 +162,8 @@ export function useAgentToolApproval(
           mid,
           tid
         );
-        // 若已被并发事件推进至 running / success / completed，坚决拦截后发 catch 覆写为 pending_approval
-        if (
-          currentTc?.status === 'running' ||
-          currentTc?.status === 'success' ||
-          (currentTc?.status as string) === 'completed'
-        ) {
+        // 若已被并发事件推进至 running / success，坚决拦截后发 catch 覆写为 pending_approval
+        if (shouldSkipDenyRollback(currentTc)) {
           return;
         }
 

@@ -48,10 +48,10 @@ struct PtyOutputEvent {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct PtyExitEvent {
-    pty_id: String,
+pub(crate) struct PtyExitEvent {
+    pub(crate) pty_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    exit_code: Option<u32>,
+    pub(crate) exit_code: Option<u32>,
 }
 
 // ── 3-state liveness state machine ───────────────────────────────────────────

@@ -11,6 +11,7 @@
 //   不抛错不阻塞启动）。
 import {
   loadNotificationsApi,
+  setNotificationChannelAsyncSafe,
   type AndroidImportanceKey,
   type NotificationChannelInputLike,
 } from './expoNotificationsFacade';
@@ -111,16 +112,18 @@ export function channelInputOf(
 export async function registerChannelsAsync(): Promise<number> {
   const api = await loadNotificationsApi();
   if (!api) return 0;
-  await Promise.all(
-    NOTIFICATION_CHANNELS.map((def) =>
-      api.setNotificationChannelAsync(
-        def.id,
-        channelInputOf(
-          def,
-          api.AndroidImportance[IMPORTANCE_VALUE_KEY[def.importance]]
-        )
-      )
-    )
-  );
-  return NOTIFICATION_CHANNELS.length;
+  let count = 0;
+  for (const def of NOTIFICATION_CHANNELS) {
+    const input = channelInputOf(
+      def,
+      api.AndroidImportance[IMPORTANCE_VALUE_KEY[def.importance]]
+    );
+    const ok = await setNotificationChannelAsyncSafe(def.id, input);
+    if (ok) {
+      count += 1;
+    } else {
+      console.warn(`[Notifications] 渠道 ${def.id} 注册失败，已安全降级`);
+    }
+  }
+  return count;
 }

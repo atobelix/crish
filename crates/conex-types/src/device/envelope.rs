@@ -33,7 +33,7 @@ pub enum DeviceEndpoint {
 ///
 /// `sig = HMAC-SHA256(token_key, canon(header) ∥ bodyJson)`，base64 承载；
 /// `nonce` 随机字节 base64 防重放（±5min 窗口 + per-device LRU）。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthHeader {
     /// 设备 id（注册表主键）
@@ -252,7 +252,8 @@ pub const STATIC_KINDS: [&str; 29] = [
 
 impl MessageKind {
     /// wire 字面量（动态命令类拼出 `remote.<name>` / `result.<name>`）
-    pub fn as_str(&self) -> String {        match self {
+    pub fn as_str(&self) -> String {
+        match self {
             MessageKind::EventsSubscribe => "events.subscribe".to_string(),
             MessageKind::EventsSubscribeAll => "events.subscribeAll".to_string(),
             MessageKind::EventsSubscribeOk => "events.subscribe.ok".to_string(),
@@ -331,6 +332,7 @@ pub struct DeviceEnvelope {
     /// 接收端字面量
     pub to: DeviceEndpoint,
     /// 消息级 HMAC 签名域（配对期可为空占位，D3 §5.2）
+    #[serde(default)]
     pub auth: AuthHeader,
     /// 业务载荷（kind 决定结构）
     pub body: serde_json::Value,
@@ -451,17 +453,27 @@ mod tests {
         assert_eq!(json["auth"]["sig"], "sig-abc");
         assert_eq!(json["body"]["code"], "CXN-7K4P-Q2MB-9XRT");
 
-        let back: DeviceEnvelope = serde_json::from_str(&serde_json::to_string(&envelope).unwrap()).unwrap();
+        let back: DeviceEnvelope =
+            serde_json::from_str(&serde_json::to_string(&envelope).unwrap()).unwrap();
         assert_eq!(envelope, back);
     }
 
     #[test]
     fn kind_wire_values_and_dynamic_commands() {
         assert_eq!(MessageKind::PairHello.as_str(), "pair.hello");
-        assert_eq!(MessageKind::EventsSubscribeOk.as_str(), "events.subscribe.ok");
+        assert_eq!(
+            MessageKind::EventsSubscribeOk.as_str(),
+            "events.subscribe.ok"
+        );
         assert_eq!(MessageKind::HeartbeatOk.as_str(), "heartbeat.ok");
-        assert_eq!(MessageKind::remote_command("approve").as_str(), "remote.approve");
-        assert_eq!(MessageKind::result_of("getStatus").as_str(), "result.getStatus");
+        assert_eq!(
+            MessageKind::remote_command("approve").as_str(),
+            "remote.approve"
+        );
+        assert_eq!(
+            MessageKind::result_of("getStatus").as_str(),
+            "result.getStatus"
+        );
 
         // 反序列化：静态变体按 wire 名还原
         let kind: MessageKind = serde_json::from_str("\"pair.challenge\"").unwrap();
@@ -485,7 +497,11 @@ mod tests {
             ("future.kind", MessageKind::Unknown("future.kind".into())),
         ] {
             let serialized = serde_json::to_string(&expected).unwrap();
-            assert_eq!(serialized, format!("\"{wire}\""), "kind [{wire}] 序列化非裸字符串");
+            assert_eq!(
+                serialized,
+                format!("\"{wire}\""),
+                "kind [{wire}] 序列化非裸字符串"
+            );
             let back: MessageKind = serde_json::from_str(&serialized).unwrap();
             assert_eq!(back, expected, "kind [{wire}] 序列化-反序列化不对称");
         }
@@ -530,15 +546,42 @@ mod tests {
             "\"mobile\""
         );
 
-        let hb = Heartbeat { ts: 1754651200000, device_time_ms: 1754651199500 };
+        let hb = Heartbeat {
+            ts: 1754651200000,
+            device_time_ms: 1754651199500,
+        };
         let json = serde_json::to_value(hb).unwrap();
         assert_eq!(json["ts"], 1754651200000_i64);
         assert_eq!(json["deviceTimeMs"], 1754651199500_i64);
 
-        let hb_ok = HeartbeatOk { ts: 1754651200000, server_time: 1754651200001 };
+        let hb_ok = HeartbeatOk {
+            ts: 1754651200000,
+            server_time: 1754651200001,
+        };
         let json = serde_json::to_value(hb_ok).unwrap();
         assert_eq!(json["serverTime"], 1754651200001_i64);
-        let back: HeartbeatOk = serde_json::from_str(&serde_json::to_string(&hb_ok).unwrap()).unwrap();
+        let back: HeartbeatOk =
+            serde_json::from_str(&serde_json::to_string(&hb_ok).unwrap()).unwrap();
         assert_eq!(hb_ok, back);
+    }
+
+    #[test]
+    fn device_envelope_deserialization_with_omitted_auth() {
+        // 彻底缺失 auth 字段的信封（配对阶段免签帧反序列化兼容）
+        let json_str = r#"{
+            "v": 1,
+            "kind": "pair.hello",
+            "msgId": "msg-001",
+            "ts": 1754651200000,
+            "from": "mobile",
+            "to": "desktop",
+            "body": { "code": "7K4LQ2MB9XRT" }
+        }"#;
+        let env: DeviceEnvelope = serde_json::from_str(json_str).expect("缺失 auth 字段必须反序列化成功");
+        assert_eq!(env.auth, AuthHeader::default());
+        assert_eq!(env.auth.device_id, "");
+        assert_eq!(env.auth.ts, 0);
+        assert_eq!(env.auth.nonce, "");
+        assert_eq!(env.auth.sig, "");
     }
 }

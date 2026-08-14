@@ -158,6 +158,7 @@ impl DispatchStore for MemoryDispatchStore {
 // ── Watchdog（兜底唤醒判定与触发）──────────────────────────────────
 
 /// watchdog 配置（N 分钟 / 周期 / 时钟均可注入便于测试）
+#[allow(dead_code)]
 pub(crate) struct WatchdogOptions {
     /// 失联阈值（分钟；默认 [DEFAULT_WATCHDOG_IDLE_MINUTES] = 10，
     /// 对齐 MAX_WAIT_TIMEOUT_MS；任务书：EngineOptions 或环境变量由
@@ -180,6 +181,7 @@ impl Default for WatchdogOptions {
 }
 
 /// 兜底 watchdog（每会话一个；[spawn] 为 tokio 周期任务）
+#[allow(dead_code)]
 pub(crate) struct Watchdog {
     /// 会话标识（steering 分组名来源）
     session_id: String,
@@ -365,6 +367,7 @@ impl Watchdog {
 
 /// spawn 入口（每会话一个 tokio 周期任务；engine.rs 引擎装配点已接线，
 /// R-CF3 核销）
+#[allow(dead_code)]
 pub(crate) fn spawn(
     runtime: &tokio::runtime::Handle,
     watchdog: Arc<Watchdog>,
@@ -375,6 +378,32 @@ pub(crate) fn spawn(
         loop {
             interval.tick().await;
             watchdog.tick().await;
+        }
+    })
+}
+
+/// spawn 周期任务，支持通过 watch 通道信号优雅取消
+#[allow(dead_code)]
+pub(crate) fn spawn_with_cancel(
+    runtime: &tokio::runtime::Handle,
+    watchdog: Arc<Watchdog>,
+    mut cancel_rx: tokio::sync::watch::Receiver<bool>,
+) -> tokio::task::JoinHandle<()> {
+    let period = watchdog.options.period;
+    runtime.spawn(async move {
+        let mut interval = tokio::time::interval(period);
+        loop {
+            tokio::select! {
+                res = cancel_rx.changed() => {
+                    if res.is_err() || *cancel_rx.borrow() {
+                        tracing::debug!(target: "watchdog", session_id = %watchdog.session_id, "Watchdog 已被取消退出");
+                        break;
+                    }
+                }
+                _ = interval.tick() => {
+                    watchdog.tick().await;
+                }
+            }
         }
     })
 }

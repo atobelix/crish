@@ -78,6 +78,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_pty_create", "workbench", "gui", true),
         entry("workbench_pty_write", "workbench", "gui", true),
         entry("workbench_pty_resize", "workbench", "gui", true),
+        entry("workbench_pty_detach", "workbench", "gui", true),
+        entry("workbench_pty_attach", "workbench", "gui", true),
+        entry("workbench_pty_ping", "workbench", "gui", true),
         entry("workbench_pty_kill", "workbench", "gui", true),
         entry("workbench_list_host_openers", "workbench", "gui", true),
         entry("workbench_open_host_target", "workbench", "gui", true),
@@ -289,12 +292,12 @@ mod tests {
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
         assert_eq!(
-             total, 127,
-             "总数 127（电脑操作四命令 + note_apply_ops + note_undo_text + note_redo_text + mirror + hydrate + D4a + core_read_run_events 恢复，与前端同步）"
+             total, 130,
+             "总数 130（电脑操作四命令 + note_apply_ops + note_undo_text + note_redo_text + mirror + hydrate + D4a + core_read_run_events 恢复 + PTY 保活切接三命令，与前端同步）"
          );
         assert_eq!(
-            registered, 122,
-            "注册面 122（含 core_compact_now 已接线 + core_read_run_events 恢复激活 + note_undo_text/redo_text）"
+            registered, 125,
+            "注册面 125（含 core_compact_now 已接线 + core_read_run_events 恢复激活 + note_undo_text/redo_text + PTY 三命令）"
         );
         assert_eq!(pending, 5, "登记先行 5");
     }
@@ -442,7 +445,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 127);
+        assert_eq!(manifest.commands.len(), 130);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

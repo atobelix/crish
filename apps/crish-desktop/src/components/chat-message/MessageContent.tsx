@@ -156,6 +156,19 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       timelineCacheRef.current = { msgId: msg.id, sig: null, timeline: null };
     }
 
+    // 跟踪上一帧流式状态与消息状态，落实防线 2
+    const prevStreamingRef = useRef(false);
+    const prevStatusRef = useRef(msg.status);
+
+    // 状态跃迁检测：流式态结束 或 processing 转为 completed/stopped/error
+    if (
+      (prevStreamingRef.current && !isThinkingMsg) ||
+      (prevStatusRef.current === 'processing' && msg.status !== 'processing')
+    ) {
+      timelineCacheRef.current.sig = null;
+      timelineCacheRef.current.timeline = null;
+    }
+
     // T1.1 增量 stripper：ref 持有完成行窗口状态，按 (sessionId, msgId) 复位；
     // 文本收缩/流重启 → resynced，调用方重挂载 StreamingTextBlock。
     const stripperRef = useRef<IncrementalThoughtStripper | null>(null);
@@ -185,6 +198,14 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       before: EMPTY_TIMELINE,
       after: EMPTY_TIMELINE,
     });
+
+    if (
+      (prevStreamingRef.current && !isThinkingMsg) ||
+      (prevStatusRef.current === 'processing' && msg.status !== 'processing')
+    ) {
+      splitRef.current.timeline = EMPTY_TIMELINE;
+      splitRef.current.streamIdx = -1;
+    }
 
     // timeline 构建（签名缓存 + 全量重建兜底）；构建失败走 catch 兜底路径
     let timeline: AssistantTimelineItem[];
@@ -281,6 +302,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     }
     const stableBefore = splitRef.current.before;
     const stableAfter = splitRef.current.after;
+
+    prevStreamingRef.current = streaming;
+    prevStatusRef.current = msg.status;
 
     if (!timeline.length) {
       const fallback = stripThoughtPlaceholders(displayMsg.text || '');

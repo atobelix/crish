@@ -88,8 +88,11 @@ function renderApproval(sid: string) {
   return { ...utils, toast };
 }
 
+import { inFlightApprovalRegistry } from './chat-approval/inFlightApprovalRegistry';
+
 beforeEach(() => {
   vi.useFakeTimers();
+  inFlightApprovalRegistry.clearForTest();
   chatBridgeMock.engineApproveTool.mockReset();
   chatBridgeMock.engineDenyTool.mockReset();
   useLayoutStore.setState((st) => {

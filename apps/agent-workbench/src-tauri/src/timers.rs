@@ -522,6 +522,15 @@ impl TimerRegistry {
             .collect()
     }
 
+    /// 活跃定时器计数（针对特定会话或全局；Watchdog 探测待命状态）
+    pub(crate) fn active_count_for_session(&self, _session_id: &str) -> usize {
+        let timers = self.timers.lock().unwrap_or_else(|e| e.into_inner());
+        timers
+            .values()
+            .filter(|e| !e.declaration.fired && !e.declaration.cancelled)
+            .count()
+    }
+
     /// 重启恢复（T-CF-06 §4）：扫描已持久化声明，
     /// - fired=false && cancelled=false 且未到期 → 按 remaining_ms 重建
     ///   sleep（重登记 early_exit 映射）；

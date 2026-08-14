@@ -99,4 +99,80 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       expect(txt.trim().length).toBeGreaterThan(0);
     }
   });
+
+  it('交错块 [text, tool_call, text] 从流式到完成态全周期单调不减，完成态绝不截断 (A-01)', async () => {
+    const sessionId = 'test-sess-interleaved';
+    const msgId = 'msg-int-1';
+
+    // 1. 初始流式状态：工具执行完毕，尾部正文正在流式输出
+    const streamingMsg: SessionMessage = {
+      id: msgId,
+      sender: 'assistant',
+      status: 'processing',
+      toolCalls: [
+        {
+          id: 't1',
+          name: 'read_file',
+          status: 'success',
+          arguments: '',
+          output: 'ok',
+        },
+      ],
+      blocks: [
+        { type: 'text', content: '准备读取文件...' },
+        { type: 'tool_call', id: 't1' },
+        { type: 'text', content: '读取结果：' }, // 流式初期快照
+      ],
+    };
+
+    act(() => {
+      useStreamingStore
+        .getState()
+        .setStreamText(
+          sessionId,
+          msgId,
+          '读取结果：全量内容已完整加载完毕，无任何截断。'
+        );
+    });
+
+    const { container, rerender } = render(
+      <MessageContent
+        msg={streamingMsg}
+        isThinkingMsg={true}
+        toolStackProps={{ activeSessionId: sessionId }}
+      />
+    );
+
+    expect(container.textContent).toContain(
+      '读取结果：全量内容已完整加载完毕，无任何截断。'
+    );
+
+    // 2. 状态跃迁至完成态：持久化提交全量文本
+    const completedMsg: SessionMessage = {
+      ...streamingMsg,
+      status: 'completed',
+      blocks: [
+        { type: 'text', content: '准备读取文件...' },
+        { type: 'tool_call', id: 't1' },
+        {
+          type: 'text',
+          content: '读取结果：全量内容已完整加载完毕，无任何截断。',
+        },
+      ],
+    };
+
+    rerender(
+      <MessageContent
+        msg={completedMsg}
+        isThinkingMsg={false}
+        toolStackProps={{ activeSessionId: sessionId }}
+      />
+    );
+
+    // 3. 断言：完成态渲染文本必须严格包含全量内容，绝对不发生截断回退到 '读取结果：'
+    expect(container.textContent).toContain(
+      '读取结果：全量内容已完整加载完毕，无任何截断。'
+    );
+    expect(container.textContent).not.toBe('准备读取文件...读取结果：');
+  });
 });

@@ -17,7 +17,7 @@ import {
 } from './sessionSharedHelpers';
 import { applySubagentEventToMessages } from '../api/subagentTimeline';
 import {
-  clearSessionStreams,
+  clearStreams,
   getStreamText,
   getStreamThinking,
 } from './streamingStore';
@@ -171,8 +171,11 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
         if (!sess) return;
         const ag = getSessionAgent(sess, agentId);
         if (!ag?.messages) return;
+
+        const finalizedMsgIds: string[] = [];
         for (const m of ag.messages) {
           if (m.sender !== 'assistant') continue;
+          finalizedMsgIds.push(m.id);
           if (m.status === 'processing') {
             m.status = 'completed';
             if (m.thinking === '正在处理…') m.thinking = '';
@@ -197,10 +200,12 @@ export function createSessionAgentActions<T extends SessionStoreSlice>(
         }
         rebindSessionById(state, sessionId, sess);
 
-        // 异步安全清理关联流
-        queueMicrotask(() => {
-          clearSessionStreams(sessionId);
-        });
+        // 精确清理当前 Agent 关联的消息流，绝不误伤同会话下其它 Agent 的并发流
+        if (finalizedMsgIds.length > 0) {
+          queueMicrotask(() => {
+            clearStreams(sessionId, finalizedMsgIds);
+          });
+        }
       }),
   };
 }

@@ -3,7 +3,6 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import {
   withAutoIndex,
-  sessionsIdKey,
   buildSessionsMap,
   type SessionsAwareState,
 } from './autoIndexMiddleware';
@@ -58,12 +57,6 @@ function createTestStore(initial: TestSession[] = []) {
 }
 
 describe('withAutoIndex', () => {
-  it('sessionsIdKey is order-sensitive and skips empty ids', () => {
-    expect(sessionsIdKey([{ id: 'a' }, { id: 'b' }])).toBe('a\0b');
-    expect(sessionsIdKey([{ id: 'b' }, { id: 'a' }])).toBe('b\0a');
-    expect(sessionsIdKey([{ id: '' }, { id: 'a' }])).toBe('a');
-  });
-
   it('rebuilds sessionsById when a session is added (id set change)', () => {
     const store = createTestStore([{ id: 'a', title: 'A' }]);
     expect(store.getState().sessionsById.a?.title).toBe('A');
@@ -100,13 +93,19 @@ describe('withAutoIndex', () => {
     expect(st.sessionsById.a).toBe(st.sessions.find((s) => s.id === 'a'));
   });
 
-  it('does not rebuild when sessions array ref changes but id set is unchanged', () => {
+  it('rebuilds sessionsById instance when sessions array ref changes with identical content (A-08)', () => {
     const store = createTestStore([{ id: 'a', title: 'A' }]);
     const mapBefore = store.getState().sessionsById;
 
     store.getState().replaceSessionsArrayOnly();
 
-    expect(store.getState().sessionsById).toStrictEqual(mapBefore);
+    const mapAfter = store.getState().sessionsById;
+    // 数组引用改变触发 map 实例重建以防元素内部突变引用过时，但结构内容与新 sessions 严格一致
+    expect(mapAfter).not.toBe(mapBefore);
+    expect(mapAfter).toStrictEqual(mapBefore);
+    expect(mapAfter.a).toBe(
+      store.getState().sessions.find((s) => s.id === 'a')
+    );
   });
 
   it('does not rebuild on unrelated field updates', () => {

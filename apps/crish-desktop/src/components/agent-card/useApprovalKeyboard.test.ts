@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderHook } from '@testing-library/react';
 import { useApprovalKeyboard } from './useApprovalKeyboard';
 
-describe('useApprovalKeyboard (DEF-01 全局按键安全与焦点收敛)', () => {
+describe('useApprovalKeyboard (DEF-01 / P-02 全局按键安全与焦点收敛)', () => {
   afterEach(() => {
     document.body.innerHTML = '';
   });
@@ -150,7 +150,43 @@ describe('useApprovalKeyboard (DEF-01 全局按键安全与焦点收敛)', () =>
     expect(prevented).toBe(false);
   });
 
-  it('confirmArmed 为 true 时按下 Escape 触发 onDisarm', () => {
+  it('外部聚焦时按 Escape 不拦截全局按键，不触发 onDisarm (A-03)', () => {
+    const root = document.createElement('div');
+    const allowBtn = document.createElement('button');
+    root.appendChild(allowBtn);
+    document.body.appendChild(root);
+
+    const outsideInput = document.createElement('input');
+    document.body.appendChild(outsideInput);
+
+    const onEnterAllow = vi.fn();
+    const onDisarm = vi.fn();
+
+    renderHook(() =>
+      useApprovalKeyboard({
+        rootRef: { current: root },
+        allowBtnRef: { current: allowBtn },
+        confirmArmed: true,
+        busy: false,
+        msgId: 'msg-1',
+        onDisarm,
+        onEnterAllow,
+      })
+    );
+
+    outsideInput.focus();
+    const event = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+    const prevented = !outsideInput.dispatchEvent(event);
+
+    expect(onDisarm).not.toHaveBeenCalled();
+    expect(prevented).toBe(false);
+  });
+
+  it('内部聚焦时按 Escape 触发 onDisarm 并拦截事件传播 (A-03)', () => {
     const root = document.createElement('div');
     const allowBtn = document.createElement('button');
     root.appendChild(allowBtn);
@@ -171,13 +207,48 @@ describe('useApprovalKeyboard (DEF-01 全局按键安全与焦点收敛)', () =>
       })
     );
 
+    allowBtn.focus();
     const event = new KeyboardEvent('keydown', {
       key: 'Escape',
       bubbles: true,
       cancelable: true,
     });
-    window.dispatchEvent(event);
+    const prevented = !allowBtn.dispatchEvent(event);
 
     expect(onDisarm).toHaveBeenCalledTimes(1);
+    expect(prevented).toBe(true);
+  });
+
+  it('输入法合成态（isComposing / keyCode 229）下按 Escape 不触发 onDisarm', () => {
+    const root = document.createElement('div');
+    const allowBtn = document.createElement('button');
+    root.appendChild(allowBtn);
+    document.body.appendChild(root);
+
+    const onEnterAllow = vi.fn();
+    const onDisarm = vi.fn();
+
+    renderHook(() =>
+      useApprovalKeyboard({
+        rootRef: { current: root },
+        allowBtnRef: { current: allowBtn },
+        confirmArmed: true,
+        busy: false,
+        msgId: 'msg-1',
+        onDisarm,
+        onEnterAllow,
+      })
+    );
+
+    allowBtn.focus();
+    const composingEvent = new KeyboardEvent('keydown', {
+      key: 'Escape',
+      bubbles: true,
+      cancelable: true,
+    });
+    Object.defineProperty(composingEvent, 'isComposing', { value: true });
+    allowBtn.dispatchEvent(composingEvent);
+
+    expect(onDisarm).not.toHaveBeenCalled();
   });
 });

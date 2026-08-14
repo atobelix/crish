@@ -243,6 +243,10 @@ pub fn build_router(state: ServerState) -> Router {
         .route(PAUSE_AUTOMATION_PATH, post(handle_pause_automation))
         .layer(middleware::from_fn_with_state(
             state.clone(),
+            crate::server::auth::require_signed_request,
+        ))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
             crate::server::auth::require_bearer_token,
         ));
     Router::new()

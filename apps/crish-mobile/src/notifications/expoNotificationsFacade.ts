@@ -139,7 +139,8 @@ export async function getPermissionsAsyncSafe(): Promise<PermissionStatusLike | 
   if (!api) return null;
   try {
     return await api.getPermissionsAsync();
-  } catch {
+  } catch (err) {
+    console.warn('[NotificationsFacade] getPermissionsAsyncSafe failed:', err);
     return null;
   }
 }
@@ -150,7 +151,11 @@ export async function requestPermissionsAsyncSafe(): Promise<PermissionStatusLik
   if (!api) return null;
   try {
     return await api.requestPermissionsAsync();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[NotificationsFacade] requestPermissionsAsyncSafe failed:',
+      err
+    );
     return null;
   }
 }
@@ -165,7 +170,11 @@ export async function setNotificationChannelAsyncSafe(
   try {
     await api.setNotificationChannelAsync(channelId, channel);
     return true;
-  } catch {
+  } catch (err) {
+    console.warn(
+      `[NotificationsFacade] setNotificationChannelAsyncSafe(${channelId}) failed:`,
+      err
+    );
     return false;
   }
 }
@@ -181,7 +190,11 @@ export async function setNotificationHandlerSafe(handler: {
   try {
     api.setNotificationHandler(handler);
     return true;
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[NotificationsFacade] setNotificationHandlerSafe failed:',
+      err
+    );
     return false;
   }
 }
@@ -195,7 +208,11 @@ export async function addNotificationReceivedListenerSafe(
   try {
     const sub = api.addNotificationReceivedListener(listener);
     return () => sub.remove();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[NotificationsFacade] addNotificationReceivedListenerSafe failed:',
+      err
+    );
     return null;
   }
 }
@@ -209,7 +226,11 @@ export async function addNotificationResponseReceivedListenerSafe(
   try {
     const sub = api.addNotificationResponseReceivedListener(listener);
     return () => sub.remove();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[NotificationsFacade] addNotificationResponseReceivedListenerSafe failed:',
+      err
+    );
     return null;
   }
 }
@@ -220,7 +241,11 @@ export async function getLastNotificationResponseAsyncSafe(): Promise<Notificati
   if (!api) return null;
   try {
     return await api.getLastNotificationResponseAsync();
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[NotificationsFacade] getLastNotificationResponseAsyncSafe failed:',
+      err
+    );
     return null;
   }
 }
@@ -233,7 +258,11 @@ export async function scheduleNotificationAsyncSafe(
   if (!api) return null;
   try {
     return await api.scheduleNotificationAsync(request);
-  } catch {
+  } catch (err) {
+    console.warn(
+      '[NotificationsFacade] scheduleNotificationAsyncSafe failed:',
+      err
+    );
     return null;
   }
 }

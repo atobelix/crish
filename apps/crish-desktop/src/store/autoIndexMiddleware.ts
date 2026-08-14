@@ -36,19 +36,6 @@ function buildSessionsMap(
   return map;
 }
 
-/** 稳定的 id 集合键：顺序敏感 */
-function sessionsIdKey(sessions: ReadonlyArray<{ id: string }>): string {
-  let key = '';
-  for (let i = 0; i < sessions.length; i++) {
-    const id = sessions[i]?.id;
-    if (typeof id === 'string' && id.length > 0) {
-      if (key) key += '\0';
-      key += id;
-    }
-  }
-  return key;
-}
-
 type SetStateFn<S> = (
   partial: S | Partial<S> | ((state: S) => S | Partial<S> | void),
   replace?: boolean
@@ -149,4 +136,4 @@ export const withAutoIndex =
     return store;
   };
 
-export { sessionsIdKey, buildSessionsMap };
+export { buildSessionsMap };

@@ -1793,6 +1793,211 @@ async fn config_profile_apply_clearing_key_degrades_engine_ready() {
     );
 }
 
+// ── T5.2a（G3 收敛 · 引擎侧 profile 服务）───────────────────────────────
+
+/// R5 T5.2a 验收①：引擎可服务前端预置 `opencode-go` profile——
+/// `config_profile_apply("opencode-go", key=DPAPI 槽, baseUrl, model)` 后，生效
+/// 配置即 opencode-go 的端点/模型/凭据，且真实请求命中
+/// `https://opencode.ai/zen/go/v1/chat/completions`（chat 轨：deepseek-v4-flash
+/// 走 openai-completions 协议，默认端点 chat-completions，00 D3）。密钥不随
+/// apply 传入（从前置 `config_secret_set` 的 DPAPI 槽回读），对齐前端激活路径。
+#[tokio::test]
+async fn config_profile_apply_opencode_go_serves_preset_profile() {
+    use tauri::Manager as _;
+    let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = temp_config_dir();
+    isolate_config_store(&dir);
+
+    // 预置 opencode-go 密钥（前端 saveProfileKey / config_secret_set 落 DPAPI 槽）。
+    crate::config::config_secret_set("opencode-go".to_string(), "sk-opencode-go".to_string())
+        .expect("store opencode-go key");
+
+    let server = RequestCaptureServer::start().await;
+    for var in [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ] {
+        std::env::remove_var(var);
+    }
+    let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+    let app = tauri::test::mock_builder()
+        .manage(Arc::clone(&state))
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("mock app");
+    let st = app.state::<Arc<CoreRunState>>();
+
+    // 前端激活 opencode-go：key 从 DPAPI 槽回读（apiKey 不传），带 baseUrl+model。
+    crate::config::config_profile_apply(
+        st,
+        "opencode-go".to_string(),
+        None,
+        Some(server.base_url("/zen/go/v1")),
+        Some("deepseek-v4-flash".to_string()),
+    )
+    .expect("apply opencode-go");
+
+    // 引擎生效配置 = opencode-go 端点/模型/凭据（profile 投影优先）。
+    let config = state.engine.provider_config().expect("opencode-go 就绪");
+    assert_eq!(
+        config.base_url, server.base_url("/zen/go/v1"),
+        "生效 baseUrl 必须为 opencode-go 端点"
+    );
+    assert_eq!(config.model, "deepseek-v4-flash", "生效 model 必须为 opencode-go");
+    assert_eq!(config.api_key, "sk-opencode-go", "生效 key 来自 DPAPI 槽");
+    assert!(state.engine.ready(), "opencode-go 三件套齐备引擎就绪");
+
+    // 真实请求：chat 轨 URL 形如 `{base}/chat/completions`（opencode-go 走
+    // openai-completions 协议）。
+    let provider = state.engine.provider().expect("provider 就绪");
+    let messages: Vec<Arc<AgentMessage>> = Vec::new();
+    let request = session_loop::provider::ProviderRequest {
+        messages: &messages,
+        tools: Vec::new(),
+        max_tokens: None,
+        system_prompt: None,
+        session_id: None,
+        reasoning_effort: None,
+    };
+    let stream = provider
+        .stream(&request)
+        .await
+        .expect("opencode-go 本地服务器可发起流");
+    drop(stream);
+    let captured = server.wait_for(1).await;
+    assert_eq!(captured.len(), 1, "应捕获 1 个请求");
+    assert!(
+        captured[0].path.starts_with("/zen/go/v1/chat/completions"),
+        "opencode-go 必须走 chat 轨（chat/completions）：{}",
+        captured[0].path
+    );
+    assert_eq!(
+        captured[0].body_model.as_deref(),
+        Some("deepseek-v4-flash"),
+        "请求体 model 必须为 opencode-go 的 deepseek-v4-flash"
+    );
+}
+
+/// R5 T5.2a 验收②：多 profile 并存——profile A/B 独立端点/模型互不串扰；
+/// 切换后生效配置随之切换（对齐 C2 per-provider 语义）。
+#[tokio::test]
+async fn config_profile_apply_switches_profiles_independently() {
+    use tauri::Manager as _;
+    let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = temp_config_dir();
+    isolate_config_store(&dir);
+
+    crate::config::config_secret_set("profile-a".to_string(), "sk-a".to_string())
+        .expect("store a key");
+    crate::config::config_secret_set("profile-b".to_string(), "sk-b".to_string())
+        .expect("store b key");
+
+    let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+    let app = tauri::test::mock_builder()
+        .manage(Arc::clone(&state))
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("mock app");
+    // 应用 A
+    crate::config::config_profile_apply(
+        app.state::<Arc<CoreRunState>>(),
+        "profile-a".to_string(),
+        None,
+        Some("https://a.example/v1".to_string()),
+        Some("model-a".to_string()),
+    )
+    .expect("apply a");
+    let a = state.engine.provider_config().expect("a 就绪");
+    assert_eq!(a.base_url, "https://a.example/v1");
+    assert_eq!(a.model, "model-a");
+    assert_eq!(a.api_key, "sk-a");
+
+    // 应用 B（切到 B）
+    crate::config::config_profile_apply(
+        app.state::<Arc<CoreRunState>>(),
+        "profile-b".to_string(),
+        None,
+        Some("https://b.example/v1".to_string()),
+        Some("model-b".to_string()),
+    )
+    .expect("apply b");
+    let b = state.engine.provider_config().expect("b 就绪");
+    assert_eq!(b.base_url, "https://b.example/v1", "B 的 baseUrl 独立");
+    assert_eq!(b.model, "model-b", "B 的 model 独立");
+    assert_eq!(b.api_key, "sk-b", "B 的 key 独立");
+
+    // 切回 A：A 的端点/模型独立恢复，不被 B 覆盖
+    crate::config::config_profile_apply(
+        app.state::<Arc<CoreRunState>>(),
+        "profile-a".to_string(),
+        None,
+        Some("https://a.example/v1".to_string()),
+        Some("model-a".to_string()),
+    )
+    .expect("reapply a");
+    let a2 = state.engine.provider_config().expect("a 恢复");
+    assert_eq!(a2.base_url, "https://a.example/v1", "A 端点不被 B 串扰");
+    assert_eq!(a2.model, "model-a", "A 模型不被 B 串扰");
+    assert_eq!(a2.api_key, "sk-a", "A 凭据不被 B 串扰");
+}
+
+/// R5 T5.2a 验收③：config_get 快照含 ≥2 提供方（I2：Tauri 壳 config 快照
+/// ≥2 提供方）——活跃 profile 与已配置 profile 并列，activeProfileId 暴露。
+#[tokio::test]
+async fn config_get_snapshot_exposes_multiple_providers() {
+    use tauri::Manager as _;
+    let _lock = CONFIG_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let dir = temp_config_dir();
+    isolate_config_store(&dir);
+
+    crate::config::config_secret_set("profile-a".to_string(), "sk-a".to_string())
+        .expect("store a key");
+    crate::config::config_secret_set("profile-b".to_string(), "sk-b".to_string())
+        .expect("store b key");
+
+    let state = core_state_with_store(Arc::new(InMemoryStore::new()));
+    let app = tauri::test::mock_builder()
+        .manage(Arc::clone(&state))
+        .build(tauri::test::mock_context(tauri::test::noop_assets()))
+        .expect("mock app");
+
+    crate::config::config_profile_apply(
+        app.state::<Arc<CoreRunState>>(),
+        "profile-a".to_string(),
+        None,
+        Some("https://a.example/v1".to_string()),
+        Some("model-a".to_string()),
+    )
+    .expect("apply a");
+    crate::config::config_profile_apply(
+        app.state::<Arc<CoreRunState>>(),
+        "profile-b".to_string(),
+        None,
+        Some("https://b.example/v1".to_string()),
+        Some("model-b".to_string()),
+    )
+    .expect("apply b");
+
+    let snapshot = crate::config::config_get().expect("config_get");
+    let providers = snapshot["providers"].as_array().expect("providers 数组");
+    assert!(providers.len() >= 2, "config 快照应含 ≥2 提供方：{providers:?}");
+    assert_eq!(
+        snapshot["activeProfileId"].as_str(),
+        Some("profile-b"),
+        "activeProfileId 应指向最近应用者"
+    );
+    let ids: Vec<&str> = providers
+        .iter()
+        .filter_map(|p| p["profileId"].as_str())
+        .collect();
+    assert!(
+        ids.contains(&"profile-a") && ids.contains(&"profile-b"),
+        "providers 应含 A 与 B：{ids:?}"
+    );
+}
+
 // ── PERSIST-02 P1-2：restore 完成/成功前禁止覆盖主快照 ──
 
 /// restore 完成前（restore_ready=false）保存快照被门禁拒绝——退出钩子

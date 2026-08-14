@@ -171,6 +171,9 @@ command_registry![
     ("workbench_pty_create", pty::workbench_pty_create),
     ("workbench_pty_write", pty::workbench_pty_write),
     ("workbench_pty_resize", pty::workbench_pty_resize),
+    ("workbench_pty_detach", pty::workbench_pty_detach),
+    ("workbench_pty_attach", pty::workbench_pty_attach),
+    ("workbench_pty_ping", pty::workbench_pty_ping),
     ("workbench_pty_kill", pty::workbench_pty_kill),
     (
         "workbench_list_host_openers",

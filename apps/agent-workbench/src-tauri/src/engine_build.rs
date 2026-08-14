@@ -268,30 +268,10 @@ impl EngineHandle {
             Arc::clone(&continuity) as Arc<dyn ControlBusResolver>,
         ));
 
-        // ── T-CF-13：Watchdog 装配（A7 提供 pub(crate) 构造器与 spawn）──
+        // ── T-CF-13：最近事件唤醒跟踪装配 ──
         // 最近事件唤醒跟踪（事件收口处 mark_wakeup 已接线：壳层事件
         // emit 循环与子代理终态收口驱动，R-CF3 核销）
         let last_wakeup = Arc::new(LastWakeupTracker::new());
-        // 引擎级无会话归属：空串占位；会话级 watchdog 由 T-CF-11（A8）
-        // idle 续 run 收口按会话 spawn（watchdog.rs 头部注记）。
-        // active_timer_probe：TimerRegistry 无同步计数接口（timers.rs
-        // 本轮只读），缺省 0 不抑制兜底——同步计数接线登记遗留问题
-        let watchdog = Arc::new(Watchdog::new(
-            String::new(),
-            Arc::clone(&timer_steering_queue),
-            Arc::clone(&dispatch_store) as Arc<dyn crate::watchdog::DispatchStore>,
-            Arc::clone(&last_wakeup),
-            Arc::new(|| 0),
-            WatchdogOptions::default(),
-        ));
-        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
-            crate::watchdog::spawn(&runtime, Arc::clone(&watchdog));
-        } else {
-            tracing::debug!(
-                target: "engine",
-                "Watchdog 装配跳过：当前上下文无 tokio runtime"
-            );
-        }
 
         // ── T-CF-09：SchedulerRegistry 装配（A5 提供 pub(crate) 构造器）──
         // 已按 A5 落盘签名对齐（pending/events/store/launcher 四适配；
@@ -622,6 +602,22 @@ impl EngineHandle {
     /// 已接线）
     pub(crate) fn last_wakeup(&self) -> Arc<LastWakeupTracker> {
         Arc::clone(&self.last_wakeup)
+    }
+
+    /// 为会话动态创建 Watchdog 实例（SESS-01 消除全局空串单例）
+    #[allow(dead_code)]
+    pub(crate) fn create_session_watchdog(&self, session_id: &str) -> Arc<Watchdog> {
+        let sid = session_id.to_string();
+        let tr = Arc::clone(&self.timer_registry);
+        let sid_for_probe = sid.clone();
+        Arc::new(Watchdog::new(
+            sid,
+            Arc::clone(&self.timer_steering_queue),
+            Arc::clone(&self.dispatch_store) as Arc<dyn crate::watchdog::DispatchStore>,
+            Arc::clone(&self.last_wakeup),
+            Arc::new(move || tr.active_count_for_session(&sid_for_probe)),
+            WatchdogOptions::default(),
+        ))
     }
 
     /// Cron 调度注册表（T-CF-09 装配产物；None = 未装配降级；

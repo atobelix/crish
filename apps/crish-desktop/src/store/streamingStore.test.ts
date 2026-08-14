@@ -4,6 +4,7 @@ import {
   applyStreamToolsToMessage,
   clearSessionStreams,
   clearStream,
+  clearStreams,
   clearStreamTool,
   clearStreamTools,
   getStreamEntry,
@@ -112,6 +113,18 @@ describe('streamingStore', () => {
     clearStream('s1', 'm1');
     expect(getStreamText('s1', 'm1')).toBeUndefined();
     expect(getStreamText('s1', 'm2')).toBe('b');
+  });
+
+  it('clearStreams 精确清理指定 messageIds，同会话其他流不受影响 (A-06)', () => {
+    setStreamText('s1', 'agent-a-m1', 'hello from agent A');
+    setStreamText('s1', 'agent-b-m1', 'hello from agent B');
+    setStreamText('s1', 'agent-c-m1', 'hello from agent C');
+
+    clearStreams('s1', ['agent-a-m1', 'agent-c-m1']);
+
+    expect(getStreamText('s1', 'agent-a-m1')).toBeUndefined();
+    expect(getStreamText('s1', 'agent-b-m1')).toBe('hello from agent B');
+    expect(getStreamText('s1', 'agent-c-m1')).toBeUndefined();
   });
 
   it('clearSession removes all keys for that session', () => {

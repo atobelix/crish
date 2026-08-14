@@ -29,10 +29,12 @@ export type PtyExitPayload = { ptyId: string; code?: number | null };
 export type PtyInvokeOk<T> = { status: 'ok'; data: T };
 export type PtyInvokeMissing = { status: 'missing' };
 export type PtyInvokeErr = { status: 'error'; message: string };
-export type PtyInvokeResult<T> = PtyInvokeOk<T> | PtyInvokeMissing | PtyInvokeErr;
+export type PtyInvokeResult<T> =
+  PtyInvokeOk<T> | PtyInvokeMissing | PtyInvokeErr;
 
 const EVENT_PTY_OUTPUT = 'workbench://pty-output';
 const EVENT_PTY_EXIT = 'workbench://pty-exit';
+const EVENT_PTY_GC_KILLED = 'workbench://pty-gc-killed';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -58,9 +60,7 @@ function coercePtyId(raw: unknown): string | null {
   return null;
 }
 
-function mapInvoke<T>(
-  res: InvokeResult<T>,
-): PtyInvokeResult<T> {
+function mapInvoke<T>(res: InvokeResult<T>): PtyInvokeResult<T> {
   if (res.status === 'ok') return { status: 'ok', data: res.data };
   if (res.status === 'missing') return { status: 'missing' };
   return { status: 'error', message: res.message };
@@ -102,7 +102,7 @@ function parseExitPayload(raw: unknown): PtyExitPayload | null {
  * missing = non-Tauri / command not registered; error = shell failure.
  */
 export async function ptyCreate(
-  opts: PtyCreateOptions,
+  opts: PtyCreateOptions
 ): Promise<PtyInvokeResult<PtyCreateResult>> {
   const sessionKey = (opts.sessionKey || '').trim();
   if (!sessionKey) {
@@ -123,7 +123,10 @@ export async function ptyCreate(
 
   const ptyId = coercePtyId(res.data);
   if (!ptyId) {
-    return { status: 'error', message: 'workbench_pty_create returned no ptyId' };
+    return {
+      status: 'error',
+      message: 'workbench_pty_create returned no ptyId',
+    };
   }
   return { status: 'ok', data: { ptyId } };
 }
@@ -131,7 +134,7 @@ export async function ptyCreate(
 /** Write raw bytes/text to a live PTY. */
 export async function ptyWrite(
   ptyId: string,
-  data: string,
+  data: string
 ): Promise<PtyInvokeResult<void>> {
   const id = (ptyId || '').trim();
   if (!id) return { status: 'error', message: 'ptyId is empty' };
@@ -148,7 +151,7 @@ export async function ptyWrite(
 export async function ptyResize(
   ptyId: string,
   cols: number,
-  rows: number,
+  rows: number
 ): Promise<PtyInvokeResult<void>> {
   const id = (ptyId || '').trim();
   if (!id) return { status: 'error', message: 'ptyId is empty' };
@@ -159,6 +162,42 @@ export async function ptyResize(
     ptyId: id,
     cols: c,
     rows: r,
+  });
+  if (res.status === 'ok') return { status: 'ok', data: undefined };
+  return mapInvoke(res);
+}
+
+/** Detach PTY to background (e.g. Tab switch / unmount). */
+export async function ptyDetach(ptyId: string): Promise<PtyInvokeResult<void>> {
+  const id = (ptyId || '').trim();
+  if (!id) return { status: 'error', message: 'ptyId is empty' };
+
+  const res = await invokeResult<unknown>('workbench_pty_detach', {
+    ptyId: id,
+  });
+  if (res.status === 'ok') return { status: 'ok', data: undefined };
+  return mapInvoke(res);
+}
+
+/** Re-attach PTY from background to foreground. */
+export async function ptyAttach(ptyId: string): Promise<PtyInvokeResult<void>> {
+  const id = (ptyId || '').trim();
+  if (!id) return { status: 'error', message: 'ptyId is empty' };
+
+  const res = await invokeResult<unknown>('workbench_pty_attach', {
+    ptyId: id,
+  });
+  if (res.status === 'ok') return { status: 'ok', data: undefined };
+  return mapInvoke(res);
+}
+
+/** Ping PTY session to refresh heartbeat. */
+export async function ptyPing(ptyId: string): Promise<PtyInvokeResult<void>> {
+  const id = (ptyId || '').trim();
+  if (!id) return { status: 'error', message: 'ptyId is empty' };
+
+  const res = await invokeResult<unknown>('workbench_pty_ping', {
+    ptyId: id,
   });
   if (res.status === 'ok') return { status: 'ok', data: undefined };
   return mapInvoke(res);
@@ -201,7 +240,7 @@ const exitFanout: FanoutEntry<PtyExitPayload> = {
 async function ensureTauriListen<T>(
   eventName: string,
   entry: FanoutEntry<T>,
-  parse: (raw: unknown) => T | null,
+  parse: (raw: unknown) => T | null
 ): Promise<void> {
   if (entry.unlisten || entry.starting) {
     await entry.starting;
@@ -214,17 +253,23 @@ async function ensureTauriListen<T>(
       const listen = mod?.listen;
       if (typeof listen !== 'function') return;
 
-      entry.unlisten = await listen(eventName, (event: { payload?: unknown }) => {
-        const payload = parse(event?.payload);
-        if (!payload) return;
-        for (const h of entry.handlers) {
-          try {
-            h(payload);
-          } catch (err) {
-            console.warn(`[ptySessionApi] handler error on ${eventName}`, err);
+      entry.unlisten = await listen(
+        eventName,
+        (event: { payload?: unknown }) => {
+          const payload = parse(event?.payload);
+          if (!payload) return;
+          for (const h of entry.handlers) {
+            try {
+              h(payload);
+            } catch (err) {
+              console.warn(
+                `[ptySessionApi] handler error on ${eventName}`,
+                err
+              );
+            }
           }
         }
-      });
+      );
     } catch {
       // Browser dev / no Tauri event module — subscribe stays local no-op.
       entry.unlisten = null;
@@ -240,7 +285,7 @@ function subscribeFanout<T>(
   eventName: string,
   entry: FanoutEntry<T>,
   parse: (raw: unknown) => T | null,
-  handler: (p: T) => void,
+  handler: (p: T) => void
 ): () => void {
   entry.handlers.add(handler);
   void ensureTauriListen(eventName, entry, parse);
@@ -260,16 +305,39 @@ function subscribeFanout<T>(
 
 /** Subscribe to PTY stdout/stderr chunks. Returns unsubscribe. */
 export function subscribePtyOutput(
-  handler: (p: PtyOutputPayload) => void,
+  handler: (p: PtyOutputPayload) => void
 ): () => void {
-  return subscribeFanout(EVENT_PTY_OUTPUT, outputFanout, parseOutputPayload, handler);
+  return subscribeFanout(
+    EVENT_PTY_OUTPUT,
+    outputFanout,
+    parseOutputPayload,
+    handler
+  );
 }
+
+const gcKilledFanout: FanoutEntry<PtyExitPayload> = {
+  handlers: new Set(),
+  unlisten: null,
+  starting: null,
+};
 
 /** Subscribe to PTY process exit. Returns unsubscribe. */
 export function subscribePtyExit(
-  handler: (p: PtyExitPayload) => void,
+  handler: (p: PtyExitPayload) => void
 ): () => void {
   return subscribeFanout(EVENT_PTY_EXIT, exitFanout, parseExitPayload, handler);
+}
+
+/** Subscribe to PTY GC kill events (>2h detached idle sweep). Returns unsubscribe. */
+export function subscribePtyGcKilled(
+  handler: (p: PtyExitPayload) => void
+): () => void {
+  return subscribeFanout(
+    EVENT_PTY_GC_KILLED,
+    gcKilledFanout,
+    parseExitPayload,
+    handler
+  );
 }
 
 // ── Optional thin manager (sessionKey → ptyId) ───────────────────────
@@ -286,7 +354,10 @@ export type PtySessionManagerOptions = {
  */
 export class PtySessionManager {
   private readonly bySession = new Map<string, string>();
-  private readonly creating = new Map<string, Promise<PtyInvokeResult<PtyCreateResult>>>();
+  private readonly creating = new Map<
+    string,
+    Promise<PtyInvokeResult<PtyCreateResult>>
+  >();
 
   getPtyId(sessionKey: string): string | undefined {
     const key = (sessionKey || '').trim();
@@ -296,7 +367,7 @@ export class PtySessionManager {
   /** Create if missing; return existing ptyId otherwise. */
   async ensure(
     sessionKey: string,
-    opts: PtySessionManagerOptions = {},
+    opts: PtySessionManagerOptions = {}
   ): Promise<PtyInvokeResult<PtyCreateResult>> {
     const key = (sessionKey || '').trim();
     if (!key) return { status: 'error', message: 'sessionKey is empty' };
@@ -326,7 +397,7 @@ export class PtySessionManager {
 
   async write(
     sessionKey: string,
-    data: string,
+    data: string
   ): Promise<PtyInvokeResult<void>> {
     const ptyId = this.getPtyId(sessionKey);
     if (!ptyId) return { status: 'error', message: 'no PTY for session' };
@@ -336,7 +407,7 @@ export class PtySessionManager {
   async resize(
     sessionKey: string,
     cols: number,
-    rows: number,
+    rows: number
   ): Promise<PtyInvokeResult<void>> {
     const ptyId = this.getPtyId(sessionKey);
     if (!ptyId) return { status: 'error', message: 'no PTY for session' };
@@ -357,7 +428,7 @@ export class PtySessionManager {
     this.bySession.clear();
     this.creating.clear();
     await Promise.all(
-      entries.map(([, ptyId]) => ptyKill(ptyId).catch(() => undefined)),
+      entries.map(([, ptyId]) => ptyKill(ptyId).catch(() => undefined))
     );
   }
 }

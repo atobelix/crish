@@ -86,6 +86,42 @@ describe('SessionCoordinator', () => {
     clearSnapshotsSpy.mockRestore();
   });
 
+  it('sessionStore.deleteSession 生产路径直接触发 streamingStore 级联清理 (A-07)', () => {
+    const s1: SessionState = {
+      id: 'sess-cascade-1',
+      title: 'Session Cascade',
+      createdAt: 1000,
+      updatedAt: 1000,
+      messages: [],
+    };
+    useSessionStore.setState({
+      sessions: [s1],
+      sessionsById: { 'sess-cascade-1': s1 },
+      activeSessionId: 'sess-cascade-1',
+    });
+
+    useStreamingStore
+      .getState()
+      .setStreamText('sess-cascade-1', 'm1', 'Ghost stream to clean');
+
+    expect(
+      useStreamingStore.getState().getStreamText('sess-cascade-1', 'm1')
+    ).toBe('Ghost stream to clean');
+
+    const removed = useSessionStore.getState().deleteSession('sess-cascade-1');
+    expect(removed).toBe(true);
+
+    // streamingStore 中对应会话的流被彻底清空
+    expect(
+      useStreamingStore.getState().getStreamText('sess-cascade-1', 'm1')
+    ).toBeUndefined();
+    expect(
+      Object.keys(useStreamingStore.getState().byKey).filter((k) =>
+        k.startsWith('sess-cascade-1::')
+      ).length
+    ).toBe(0);
+  });
+
   it('handles empty and non-existent session ids gracefully', () => {
     expect(SessionCoordinator.deleteSessionCascade('')).toBe(false);
     expect(SessionCoordinator.deleteSessionCascade('non-existent-id')).toBe(

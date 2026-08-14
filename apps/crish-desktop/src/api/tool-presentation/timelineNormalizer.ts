@@ -270,20 +270,17 @@ export function buildAssistantTimeline(
 }
 
 /**
- * Timeline 结构签名（T1.2，08-detail D5）。
+ * 助手消息渲染时间线签名（T1.2 / 🔴 红-01 根治修复版）。
  *
- * 规则：**最后 text 块内容不进签名**——纯文本流式期间它每帧增长，
- * 若进签名则签名每帧失效、缓存无意义；工具区（dedupe/分组）与
- * 非最后 text 块在流式期间稳定，签名命中时直接复用上次 timeline 引用。
- *
- * 覆盖面 = buildAssistantTimeline 的全部输入依赖：
- * - blocks 序列（type/id + 非最后 text 块 content；最后 text 块仅记标记）
- * - toolCalls 值（id/name/status/output/arguments/explanation —— 全部喂给
- *   buildToolRenderItems 的 dedupe/分组/标签）
- * - msg.text 不进签名：有 text 块时 timeline 不用 msg.text；无 text 块时
- *   msg.text 落为「最后 text 项」= 流式增长内容，由调用方按流式区处理。
+ * 核心契约：
+ * 1. 流式运行态（msg.status === 'processing'）：最后 text 块只记标记与空态，内容不进签名，
+ *    保证流式每帧打字时不触发 timeline 重建，保护 memo 渲染性能；
+ * 2. 完成态（msg.status !== 'processing'）：最后 text 块必须将完整 content 纳入签名，
+ *    保证持久化提交时签名结构发生绝对改变，强力击穿旧缓存；
+ * 3. 兜底特征（A-06）：当 blocks 中无有效 text 块时，将 msg.text 纳入签名投影。
  */
 export function timelineSignature(msg: SessionMessage): string {
+  const isLiveProcessing = msg.status === 'processing';
   const blocks = msg.blocks || [];
   let lastTextIdx = -1;
   for (let i = blocks.length - 1; i >= 0; i--) {
@@ -292,18 +289,19 @@ export function timelineSignature(msg: SessionMessage): string {
       break;
     }
   }
+
   const blocksProj = blocks.map((b, i) => {
     if (b.type === 'text') {
-      // 最后 text 块只记标记（流式增长面），不进内容——
-      // 但空态必须入签名：空→非空转换（首帧）会改变 timeline 结构
-      //（空尾块被 buildAssistantTimeline 排除），漏记会导致缓存命中
-      // 返回缺尾块的陈旧 timeline（F1-08 流式区定位回归）
-      return i === lastTextIdx
-        ? { t: 'text', last: 1, e: (b.content || '') === '' ? 1 : 0 }
-        : { t: 'text', c: b.content };
+      if (i === lastTextIdx) {
+        return isLiveProcessing
+          ? { t: 'text', last: 1, e: (b.content || '') === '' ? 1 : 0 }
+          : { t: 'text', last: 1, c: b.content || '' };
+      }
+      return { t: 'text', c: b.content || '' };
     }
     return { t: b.type, id: b.id };
   });
+
   const toolsProj = (msg.toolCalls || []).map((tc) => ({
     id: tc.id,
     n: tc.name,
@@ -312,14 +310,26 @@ export function timelineSignature(msg: SessionMessage): string {
     a: tc.arguments,
     e: tc.explanation,
   }));
-  if (blocks.length === 0) {
+
+  const hasExplicitText = blocks.some(
+    (b) => b.type === 'text' && (b.content || '').trim().length > 0
+  );
+
+  if (blocks.length === 0 || !hasExplicitText) {
     return JSON.stringify({
       b: blocksProj,
       t: toolsProj,
+      st: msg.status || 'unknown',
       hasText: Boolean((msg.text || '').trim()),
+      txt: isLiveProcessing ? undefined : msg.text || '',
     });
   }
-  return JSON.stringify({ b: blocksProj, t: toolsProj });
+
+  return JSON.stringify({
+    b: blocksProj,
+    t: toolsProj,
+    st: msg.status || 'unknown',
+  });
 }
 
 /**

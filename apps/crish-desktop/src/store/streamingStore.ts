@@ -65,6 +65,7 @@ export type StreamingState = {
   ) => void;
   clearStreamTools: (sessionId: string, messageId: string) => void;
   clearStream: (sessionId: string, messageId: string) => void;
+  clearStreams: (sessionId: string, messageIds: string[]) => void;
   clearSession: (sessionId: string) => void;
   getStreamText: (sessionId: string, messageId: string) => string | undefined;
   getStreamThinking: (
@@ -266,6 +267,25 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
     });
   },
 
+  clearStreams: (sessionId, messageIds) => {
+    if (!messageIds || messageIds.length === 0) return;
+    const targetKeys = new Set(
+      messageIds.map((mid) => streamStoreKey(sessionId, mid))
+    );
+    set((state) => {
+      let changed = false;
+      const next: Record<string, StreamEntry> = Object.create(null);
+      for (const [k, v] of Object.entries(state.byKey)) {
+        if (targetKeys.has(k)) {
+          changed = true;
+          continue;
+        }
+        next[k] = v;
+      }
+      return changed ? { byKey: next } : state;
+    });
+  },
+
   clearSession: (sessionId) => {
     const prefix = `${sessionId}::`;
     set((state) => {
@@ -340,6 +360,10 @@ export function clearStreamTools(sessionId: string, messageId: string): void {
 
 export function clearStream(sessionId: string, messageId: string): void {
   useStreamingStore.getState().clearStream(sessionId, messageId);
+}
+
+export function clearStreams(sessionId: string, messageIds: string[]): void {
+  useStreamingStore.getState().clearStreams(sessionId, messageIds);
 }
 
 export function clearSessionStreams(sessionId: string): void {

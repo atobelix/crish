@@ -64,8 +64,9 @@ describe('commandManifest', () => {
       // F-03（DM-07）：core_read_run_events 恢复激活（T-F 06 退役撤销；
       //   124 → 125，119 → 120）
       // note_undo_text + note_redo_text：CRDT 因果撤销/重做（125 → 127，120 → 122）
-      expect(registered).toBe(122);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(127);
+      // PTY 保活切接与心跳（workbench_pty_detach / attach / ping）（127 → 130，122 → 125）
+      expect(registered).toBe(125);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(130);
     });
 
     it('命令名唯一', () => {
@@ -298,10 +299,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（127；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（130；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(127);
+      expect(total).toBe(130);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

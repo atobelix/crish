@@ -18,13 +18,16 @@ import {
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
-import {
-  recordDraftCommit,
-  recordDraftEnter,
-} from '../api/controlMetrics';
+import { recordDraftCommit, recordDraftEnter } from '../api/controlMetrics';
 import { runEmptyShellAssert } from '../dev/emptyShellAssert';
 import { useTerminalStore } from './terminalStore';
-import type { SessionActions, SessionStoreSlice, SessionImmerSet, SessionStoreGet } from './sessionActions';
+import { useStreamingStore } from './streamingStore';
+import type {
+  SessionActions,
+  SessionStoreSlice,
+  SessionImmerSet,
+  SessionStoreGet,
+} from './sessionActions';
 import {
   applyTitleIfDefault,
   dropTerminalForSession,
@@ -38,7 +41,7 @@ import {
 
 /** 规范化外部导入 meta；非法则丢弃（不写坏字段） */
 function normalizeImportMeta(
-  raw: SessionImportMeta | undefined,
+  raw: SessionImportMeta | undefined
 ): SessionImportMeta | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const source =
@@ -83,10 +86,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
    * 不变量：activeSessionId 绝不允许为空字符串，必须始终是有效会话 ID 或草稿哨兵。
    * 此辅助函数是所有"进入草稿态"路径的统一收口点，确保 draftFolder 不会缺失。
    */
-  const applyDraftModeToState = (
-    state: SessionStoreSlice,
-    folder?: string
-  ) => {
+  const applyDraftModeToState = (state: SessionStoreSlice, folder?: string) => {
     state.activeSessionId = PENDING_DRAFT_SESSION_ID;
     state.draftFolder =
       (typeof folder === 'string' && folder.trim()) ||
@@ -203,7 +203,10 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
                     if (!s) return;
                     // 按 id 合并：本地乐观消息 + 引擎回放不双 append；重放 length 不增
                     if (res.messages.length > 0) {
-                      s.messages = mergeMessagesById(s.messages || [], res.messages);
+                      s.messages = mergeMessagesById(
+                        s.messages || [],
+                        res.messages
+                      );
                       s.timestamp = nowIsoTimestamp();
                       s.timestampSource = 'remote';
                       maybeAutoTitleSession(state, s);
@@ -440,6 +443,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       if (removed) {
         sessionRuntimeRegistry.remove(id);
         clearMessageSnapshots(id);
+        useStreamingStore.getState().clearSession(id);
       }
       return removed;
     },
@@ -478,7 +482,8 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
           // active 指向不存在的会话（非草稿态）：优先取首个 session 作后备，否则草稿哨兵
           // 不变量：绝不留下空字符串 activeSessionId
           // 草稿态保持不变，不被同步进来的会话抢占
-          state.activeSessionId = state.sessions[0]?.id || PENDING_DRAFT_SESSION_ID;
+          state.activeSessionId =
+            state.sessions[0]?.id || PENDING_DRAFT_SESSION_ID;
           state.activeAgentId = null;
           state.panelAgentId = null;
           syncActiveTerminalSession(state.activeSessionId || null);

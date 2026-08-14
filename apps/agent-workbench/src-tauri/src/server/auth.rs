@@ -8,12 +8,9 @@
 //! - **持久化**：原子写（tmp + rename，对齐 `config/persistence.rs` 先例）；
 //!   权限位（Unix 0600 / Windows ACL 收紧）与撤销全链归 R1-07。
 
-use std::collections::HashMap;
-#[cfg(test)]
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
-#[cfg(test)]
 use std::sync::Mutex;
 
 use axum::{
@@ -39,16 +36,13 @@ pub const TOKEN_BYTES: usize = 32;
 pub const PAIRING_FILE_VERSION: u32 = 1;
 
 /// 默认 Nonce 容量上限（LRU 驱逐）
-#[cfg(test)]
 pub const DEFAULT_NONCE_CAPACITY: usize = 10_000;
 /// 默认时钟偏移容忍阈值（300 秒 = 5 分钟）
-#[cfg(test)]
 pub const DEFAULT_CLOCK_SKEW_MS: u64 = 300_000;
 /// 全局时钟透传 Header 名
 pub const SERVER_TIME_HEADER: &str = "X-Server-Time-Ms";
 
 /// Nonce 记录条目（幂等响应缓存）
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NonceEntry {
@@ -63,7 +57,6 @@ pub struct NonceEntry {
 }
 
 /// Nonce 校验结果
-#[cfg(test)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum NonceCheckResult {
     /// 全新合法请求
@@ -76,7 +69,6 @@ pub enum NonceCheckResult {
     ClockSkewTooLarge { diff_ms: u64, max_skew_ms: u64 },
 }
 
-#[cfg(test)]
 #[derive(Debug)]
 struct NonceStoreInner {
     capacity: usize,
@@ -84,7 +76,6 @@ struct NonceStoreInner {
     order: VecDeque<(String, String)>,
 }
 
-#[cfg(test)]
 impl NonceStoreInner {
     fn new(capacity: usize) -> Self {
         Self {
@@ -116,19 +107,18 @@ impl NonceStoreInner {
         self.map.get(key)
     }
 
+    #[allow(dead_code)]
     fn get_mut(&mut self, key: &(String, String)) -> Option<&mut NonceEntry> {
         self.map.get_mut(key)
     }
 }
 
 /// 高级 Nonce 守卫（防重放 + 弱网幂等重传放行）
-#[cfg(test)]
 pub struct AdvancedNonceGuard {
     clock_skew_ms: u64,
     inner: Mutex<NonceStoreInner>,
 }
 
-#[cfg(test)]
 impl AdvancedNonceGuard {
     /// 创建 Nonce 守卫
     pub fn new(capacity: usize, clock_skew_ms: u64) -> Self {
@@ -193,6 +183,7 @@ impl AdvancedNonceGuard {
     }
 
     /// 更新响应缓存供后续幂等重试直接返回
+    #[allow(dead_code)]
     pub fn update_response(&self, device_id: &str, nonce: &str, status: u16, body: &[u8]) {
         let key = (device_id.to_string(), nonce.to_string());
         let mut store = self.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -203,6 +194,7 @@ impl AdvancedNonceGuard {
     }
 
     /// 查询已缓存的响应
+    #[allow(dead_code)]
     pub fn get_cached_response(&self, device_id: &str, nonce: &str) -> Option<(u16, Vec<u8>)> {
         let key = (device_id.to_string(), nonce.to_string());
         let store = self.inner.lock().unwrap_or_else(|e| e.into_inner());
@@ -212,18 +204,19 @@ impl AdvancedNonceGuard {
     }
 
     /// 当前缓存条目数
+    #[allow(dead_code)]
     pub fn len(&self) -> usize {
         let store = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         store.map.len()
     }
 
     /// 是否为空
+    #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 }
 
-#[cfg(test)]
 impl Default for AdvancedNonceGuard {
     fn default() -> Self {
         Self::new(DEFAULT_NONCE_CAPACITY, DEFAULT_CLOCK_SKEW_MS)
@@ -231,7 +224,7 @@ impl Default for AdvancedNonceGuard {
 }
 
 /// HMAC-SHA256 计算（使用 ring::hmac）
-#[cfg(test)]
+#[allow(dead_code)]
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
     let s_key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, key);
     let tag = ring::hmac::sign(&s_key, data);
@@ -241,24 +234,29 @@ pub fn hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
 }
 
 /// HMAC-SHA256 hex 计算（小写 hex 64 字符）
-#[cfg(test)]
+#[allow(dead_code)]
 pub fn hmac_sha256_hex(key: &[u8], data: &[u8]) -> String {
     hex::encode(hmac_sha256(key, data))
 }
 
-/// 常量时间校验 HMAC-SHA256 签名（防时序攻击）
-#[cfg(test)]
-pub fn verify_hmac_sha256(key: &[u8], data: &[u8], signature_hex: &str) -> bool {
+/// 常量时间校验 HMAC-SHA256 签名（防时序攻击，支持 hex 与 base64）
+pub fn verify_hmac_sha256(key: &[u8], data: &[u8], signature: &str) -> bool {
     let s_key = ring::hmac::Key::new(ring::hmac::HMAC_SHA256, key);
-    let Ok(sig_bytes) = hex::decode(signature_hex) else {
-        return false;
+    let sig_bytes = if let Ok(b) = hex::decode(signature) {
+        b
+    } else {
+        use base64::Engine;
+        if let Ok(b) = base64::engine::general_purpose::STANDARD.decode(signature) {
+            b
+        } else {
+            return false;
+        }
     };
     ring::hmac::verify(&s_key, data, &sig_bytes).is_ok()
 }
 
 /// HTTP REST 请求签名规范化输入（ADR-01 方案 B）：
 /// `canon_http = deviceId || method || path || ts || nonce || body_sha256_hex`
-#[cfg(test)]
 pub fn canonical_http_signing_payload(
     device_id: &str,
     method: &str,
@@ -272,7 +270,6 @@ pub fn canonical_http_signing_payload(
 
 /// WebSocket 信封签名规范化输入（ADR-01 方案 B）：
 /// `canon_ws = deviceId || ts || nonce || msgId || kind || v || bodyJson`
-#[cfg(test)]
 pub fn canonical_ws_signing_payload(
     device_id: &str,
     ts: u64,
@@ -643,6 +640,148 @@ fn bearer_token(request: &Request) -> Option<&str> {
         .and_then(|value| value.strip_prefix("Bearer "))
         .map(str::trim)
         .filter(|token| !token.is_empty())
+}
+
+/// 敏感 REST 控制端点请求签名与 Nonce 校验中间件（GW-01 / GW-03）
+pub async fn require_signed_request(
+    State(state): State<ServerState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let now = now_ms();
+    let unauthorized = |code: DeviceErrorCode, message: &str| -> Response {
+        let mut resp = (
+            StatusCode::UNAUTHORIZED,
+            Json(ErrorBody::new(code, message)),
+        )
+            .into_response();
+        if let Ok(val) = axum::http::HeaderValue::from_str(&now.to_string()) {
+            resp.headers_mut().insert(SERVER_TIME_HEADER, val);
+        }
+        resp
+    };
+
+    // 如果携带了签名头，进行防重放与 HMAC 签名验证
+    let (maybe_sig, maybe_nonce, maybe_ts, maybe_device_id) = {
+        let headers = request.headers();
+        let sig = headers
+            .get("X-Signature")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let nonce = headers
+            .get("X-Nonce")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        let ts = headers
+            .get("X-Timestamp")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        let device_id = headers
+            .get("X-Device-Id")
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string);
+        (sig, nonce, ts, device_id)
+    };
+
+    if let (Some(sig), Some(nonce), Some(ts), Some(device_id)) =
+        (maybe_sig, maybe_nonce, maybe_ts, maybe_device_id)
+    {
+        // 1. 时钟偏差校验
+        let diff = ts.abs_diff(now);
+        let max_skew = state.nonce_guard().clock_skew_ms();
+        if diff > max_skew {
+            return unauthorized(
+                DeviceErrorCode::AuthExpired,
+                &format!("签名时戳过期，偏差 {diff} ms 超过阈值 {max_skew} ms"),
+            );
+        }
+
+        // 2. Nonce 幂等与重放防护
+        let (parts, body) = request.into_parts();
+        let bytes = match axum::body::to_bytes(body, 1024 * 1024).await {
+            Ok(b) => b,
+            Err(_) => {
+                return unauthorized(DeviceErrorCode::CmdInvalid, "读取请求体失败");
+            }
+        };
+        let mut hasher = Sha256::new();
+        hasher.update(&bytes);
+        let body_sha256: [u8; 32] = hasher.finalize().into();
+        let body_sha256_hex = hex::encode(body_sha256);
+
+        let check = state.nonce_guard().check_and_record(
+            &device_id,
+            &nonce,
+            ts,
+            now,
+            body_sha256,
+        );
+        match check {
+            NonceCheckResult::Valid => {}
+            NonceCheckResult::IdempotentRetry {
+                status,
+                body: cached_body,
+            } => {
+                let mut resp = (
+                    StatusCode::from_u16(status).unwrap_or(StatusCode::OK),
+                    cached_body,
+                )
+                    .into_response();
+                if let Ok(val) = axum::http::HeaderValue::from_str(&now.to_string()) {
+                    resp.headers_mut().insert(SERVER_TIME_HEADER, val);
+                }
+                return resp;
+            }
+            NonceCheckResult::ReplayDetected => {
+                return unauthorized(
+                    DeviceErrorCode::AuthStale,
+                    "检测到 Nonce 重放或参数篡改（replay_detected）",
+                );
+            }
+            NonceCheckResult::ClockSkewTooLarge {
+                diff_ms,
+                max_skew_ms,
+            } => {
+                return unauthorized(
+                    DeviceErrorCode::AuthExpired,
+                    &format!("时钟偏差过大：{diff_ms} ms > {max_skew_ms} ms"),
+                );
+            }
+        }
+
+        // 3. 签名验证
+        let canon = canonical_http_signing_payload(
+            &device_id,
+            parts.method.as_str(),
+            parts.uri.path(),
+            ts,
+            &nonce,
+            &body_sha256_hex,
+        );
+
+        let token_opt = parts
+            .headers
+            .get(header::AUTHORIZATION)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.strip_prefix("Bearer "))
+            .map(str::trim);
+
+        if let Some(token) = token_opt {
+            if !verify_hmac_sha256(token.as_bytes(), canon.as_bytes(), &sig) {
+                return unauthorized(DeviceErrorCode::AuthBadSignature, "HMAC 签名校验失败");
+            }
+        }
+
+        // 重构 Request 放行
+        let req = Request::from_parts(parts, axum::body::Body::from(bytes));
+        let mut response = next.run(req).await;
+        if let Ok(val) = axum::http::HeaderValue::from_str(&now.to_string()) {
+            response.headers_mut().insert(SERVER_TIME_HEADER, val);
+        }
+        response
+    } else {
+        next.run(request).await
+    }
 }
 
 #[cfg(test)]

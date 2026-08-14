@@ -19,6 +19,7 @@
 //! Events:
 //! - `workbench://pty-output` — `{ ptyId, data }`
 //! - `workbench://pty-exit`   — `{ ptyId, exitCode? }`
+//! - `workbench://pty-gc-killed` — `{ ptyId, exitCode? }`
 //!
 //! 错误统一为 `CoreError`（IPC 面唯一协议，PE-03 T03.3）：
 //! 创建命令（含进程拉起 / Job 分配）走 `spawn_blocking` 避免阻塞命令线程；
@@ -28,7 +29,7 @@ mod session;
 
 use conex_types::CoreError;
 use serde::Serialize;
-use tauri::AppHandle;
+use tauri::{AppHandle, Emitter};
 
 #[cfg(test)]
 pub(crate) use session::next_pty_id;
@@ -89,21 +90,18 @@ pub(crate) fn workbench_pty_resize(pty_id: String, cols: u16, rows: u16) -> Resu
 }
 
 /// Detach PTY to background (e.g. Tab switch / unmount).
-#[allow(dead_code)]
 #[tauri::command]
 pub(crate) fn workbench_pty_detach(pty_id: String) -> Result<(), CoreError> {
     session::detach_session(&pty_id)
 }
 
 /// Re-attach PTY from background to foreground.
-#[allow(dead_code)]
 #[tauri::command]
 pub(crate) fn workbench_pty_attach(pty_id: String) -> Result<(), CoreError> {
     session::attach_session(&pty_id)
 }
 
 /// Ping PTY session to refresh heartbeat.
-#[allow(dead_code)]
 #[tauri::command]
 pub(crate) fn workbench_pty_ping(pty_id: String) -> Result<(), CoreError> {
     session::touch_session(&pty_id)
@@ -124,7 +122,7 @@ pub(crate) fn kill_all_sessions() {
 }
 
 /// 启动后台 30s 周期 PTY GC 协程，回收超期游离会话（>2h 无输出）与 Dead 会话
-pub(crate) fn spawn_pty_gc_loop(_app: AppHandle) -> tauri::async_runtime::JoinHandle<()> {
+pub(crate) fn spawn_pty_gc_loop(app: AppHandle) -> tauri::async_runtime::JoinHandle<()> {
     tauri::async_runtime::spawn(async move {
         let mut interval = tokio::time::interval(std::time::Duration::from_secs(30));
         interval.tick().await;
@@ -138,6 +136,13 @@ pub(crate) fn spawn_pty_gc_loop(_app: AppHandle) -> tauri::async_runtime::JoinHa
                     count = killed.len(),
                     "PTY GC swept expired/dead sessions"
                 );
+                for pty_id in killed {
+                    let event = session::PtyExitEvent {
+                        pty_id,
+                        exit_code: None,
+                    };
+                    let _ = app.emit("workbench://pty-gc-killed", event);
+                }
             }
         }
     })

@@ -67,6 +67,7 @@ use conex_types::events::BackpressureLevel;
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc, watch};
 
 use crate::server::fanout::{FanoutError, FanoutReceiver, SubscriptionFilter};
@@ -551,6 +552,8 @@ struct ConnCtx {
     /// fanout 接收端更新通道（订阅变更时重建 FanoutReceiver；None =
     /// 未装配 fanout，广播推送不可用）
     fanout_rx: Option<watch::Sender<FanoutReceiver>>,
+    /// 令牌密钥（HMAC-SHA256 验签；配对后动态填充）
+    token_key: Option<Arc<Mutex<Option<String>>>>,
 }
 
 /// WS upgrade handler（GET /v1/events）
@@ -637,7 +640,17 @@ pub async fn handle_ws_upgrade(State(state): State<ServerState>, request: Reques
         // 旧实现 8 hex 截断，对齐铁律 12 hex 口径（脱敏单一真源在
         // conex-telemetry::redact，避免各处自造截断口径漂移）
         .unwrap_or_else(|| conex_telemetry::redact::redact_token(&token));
-    ws.on_upgrade(move |socket| handle_socket(socket, state, token_hash, label, false))
+    let token_clone = token.clone();
+    ws.on_upgrade(move |socket| {
+        handle_socket(
+            socket,
+            state,
+            token_hash,
+            label,
+            false,
+            Some(token_clone),
+        )
+    })
 }
 
 /// 配对升级路径（R1-11 G-2）：配对激活期无令牌/无效令牌连接放行进入
@@ -654,7 +667,14 @@ async fn upgrade_pairing(request: Request, state: ServerState) -> Response {
     let pairing_id = MSG_COUNTER.fetch_add(1, Ordering::Relaxed);
     let token_hash = auth::sha256_hex(format!("pairing-pending:{pairing_id}").as_bytes());
     ws.on_upgrade(move |socket| {
-        handle_socket(socket, state, token_hash, "pairing".to_string(), true)
+        handle_socket(
+            socket,
+            state,
+            token_hash,
+            "pairing".to_string(),
+            true,
+            None,
+        )
     })
 }
 
@@ -669,6 +689,7 @@ async fn handle_socket(
     token_hash: String,
     label: String,
     pair_pending: bool,
+    initial_token: Option<String>,
 ) {
     let registry = state.ws_registry();
     let (kill_tx, kill_rx) = watch::channel::<Option<String>>(None);
@@ -761,11 +782,13 @@ async fn handle_socket(
     };
 
     // 主消息循环（读端独占）
+    let token_key = Arc::new(Mutex::new(initial_token));
     let ctx = ConnCtx {
         conn_id,
         state,
         out_tx: out_tx.clone(),
         fanout_rx: fanout_ctx.map(|(rx_tx, _)| rx_tx),
+        token_key: Some(token_key),
     };
     while let Some(frame) = ws_receiver.next().await {
         match frame {
@@ -1007,6 +1030,106 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
         );
         return send_frame(ctx, frame).await;
     }
+
+    // HMAC 签名与 Nonce 防重放校验（GW-01 / GW-03）
+    let has_auth_sig = !envelope.auth.sig.is_empty();
+    let has_auth_nonce = !envelope.auth.nonce.is_empty();
+    let is_pair_hello = envelope.kind == MessageKind::PairHello;
+
+    // 1. 时钟偏差校验
+    if envelope.auth.ts > 0 {
+        let now = now_ms();
+        let max_skew = ctx.state.nonce_guard().clock_skew_ms();
+        let diff = envelope.auth.ts.abs_diff(now);
+        if diff > max_skew {
+            let frame = error_frame(
+                ctx.conn_id,
+                DeviceErrorCode::AuthExpired,
+                format!("签名时戳过期，偏差 {diff} ms 超过阈值 {max_skew} ms"),
+                Some(envelope.msg_id.as_str()),
+            );
+            let _ = send_frame(ctx, frame).await;
+            return Action::Continue;
+        }
+    }
+
+    // 2. Nonce 幂等与重放防护
+    if has_auth_nonce {
+        let now = now_ms();
+        let mut hasher = Sha256::new();
+        hasher.update(serde_json::to_string(&envelope.body).unwrap_or_default().as_bytes());
+        let body_hash: [u8; 32] = hasher.finalize().into();
+
+        let check = ctx.state.nonce_guard().check_and_record(
+            &envelope.auth.device_id,
+            &envelope.auth.nonce,
+            envelope.auth.ts,
+            now,
+            body_hash,
+        );
+        match check {
+            auth::NonceCheckResult::Valid => {}
+            auth::NonceCheckResult::IdempotentRetry {
+                status: _,
+                body: _,
+            } => {
+                // 弱网重传完全同构，放行幂等处理
+            }
+            auth::NonceCheckResult::ReplayDetected => {
+                let frame = error_frame(
+                    ctx.conn_id,
+                    DeviceErrorCode::AuthStale,
+                    "检测到 Nonce 重放或参数篡改（replay_detected）".to_string(),
+                    Some(envelope.msg_id.as_str()),
+                );
+                let _ = send_frame(ctx, frame).await;
+                return Action::Continue;
+            }
+            auth::NonceCheckResult::ClockSkewTooLarge {
+                diff_ms,
+                max_skew_ms,
+            } => {
+                let frame = error_frame(
+                    ctx.conn_id,
+                    DeviceErrorCode::AuthExpired,
+                    format!("时钟偏差过大：{diff_ms} ms > {max_skew_ms} ms"),
+                    Some(envelope.msg_id.as_str()),
+                );
+                let _ = send_frame(ctx, frame).await;
+                return Action::Continue;
+            }
+        }
+    }
+
+    // 3. HMAC-SHA256 签名校验（非配对 hello 帧且携带 sig 或已认证连接）
+    if has_auth_sig && !is_pair_hello {
+        let maybe_key = ctx
+            .token_key
+            .as_ref()
+            .and_then(|k| k.lock().ok().and_then(|guard| guard.clone()));
+        if let Some(key) = maybe_key {
+            let body_json = serde_json::to_string(&envelope.body).unwrap_or_default();
+            let canon = auth::canonical_ws_signing_payload(
+                &envelope.auth.device_id,
+                envelope.auth.ts,
+                &envelope.auth.nonce,
+                &envelope.msg_id,
+                &envelope.kind_str(),
+                envelope.v,
+                &body_json,
+            );
+            if !auth::verify_hmac_sha256(key.as_bytes(), canon.as_bytes(), &envelope.auth.sig) {
+                let frame = error_frame(
+                    ctx.conn_id,
+                    DeviceErrorCode::AuthBadSignature,
+                    "HMAC 签名校验失败（auth.bad_signature）".to_string(),
+                    Some(envelope.msg_id.as_str()),
+                );
+                let _ = send_frame(ctx, frame).await;
+                return Action::Continue;
+            }
+        }
+    }
     match &envelope.kind {
         MessageKind::PairHello => {
             handle_pair_hello_frame(envelope.body, envelope.msg_id.as_str(), ctx).await
@@ -1088,6 +1211,11 @@ async fn handle_pair_hello_frame(body: Value, msg_id: &str, ctx: &ConnCtx) -> Ac
     // 令牌哈希迁移：配对完成 → 连接转已认证（本连接后续消息放行，
     // 撤销全链 kick_by_token_hash 从此可命中）
     let token_hash = auth::sha256_hex(token.as_bytes());
+    if let Some(ref tk_cell) = ctx.token_key {
+        if let Ok(mut guard) = tk_cell.lock() {
+            *guard = Some(token.clone());
+        }
+    }
     // 新令牌落盘后重载路由层令牌库（协调器 store 与本路由 store 各自
     // 独立——R1-07 装配断裂收口：新令牌立即被路由层鉴权接受）
     ctx.state.reload_tokens();
@@ -3186,5 +3314,136 @@ mod tests {
                 .is_empty(),
             "占位哈希应已释放"
         );
+    }
+
+    /// WebSocket HMAC-SHA256 签名与 Nonce 防重放校验测试（GW-01 / GW-03）
+    #[tokio::test]
+    async fn ws_hmac_signature_and_nonce_verification() {
+        let (addr, _handle, raw_token, _) = test_server(None, None).await;
+        let mut ws = ws_connect(addr, &raw_token).await;
+
+        let now = now_ms();
+        let device_id = "test-device";
+        let body = serde_json::json!({ "ts": now, "deviceTimeMs": now });
+        let body_str = serde_json::to_string(&body).unwrap();
+        let nonce = "nonce-ws-001";
+        let msg_id = "msg-ws-001";
+
+        // 1. 合法签名 + Nonce -> 心跳成功 (heartbeat.ok)
+        let canon = auth::canonical_ws_signing_payload(
+            device_id,
+            now,
+            nonce,
+            msg_id,
+            "heartbeat",
+            1,
+            &body_str,
+        );
+        let valid_sig = auth::hmac_sha256_hex(raw_token.as_bytes(), canon.as_bytes());
+
+        let frame = serde_json::json!({
+            "v": 1,
+            "kind": "heartbeat",
+            "msgId": msg_id,
+            "ts": now,
+            "from": "mobile",
+            "to": "desktop",
+            "auth": {
+                "deviceId": device_id,
+                "ts": now,
+                "nonce": nonce,
+                "sig": valid_sig,
+            },
+            "body": body,
+        });
+        let _ = ws
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                serde_json::to_string(&frame).unwrap().into(),
+            ))
+            .await;
+        let (kind, _) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "heartbeat.ok", "合法签名必须成功返回 heartbeat.ok");
+
+        // 2. 错误 HMAC 签名 -> 返回 error (AuthBadSignature)
+        let invalid_frame = serde_json::json!({
+            "v": 1,
+            "kind": "heartbeat",
+            "msgId": "msg-ws-002",
+            "ts": now,
+            "from": "mobile",
+            "to": "desktop",
+            "auth": {
+                "deviceId": device_id,
+                "ts": now,
+                "nonce": "nonce-ws-002",
+                "sig": "0000000000000000000000000000000000000000000000000000000000000000",
+            },
+            "body": body,
+        });
+        let _ = ws
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                serde_json::to_string(&invalid_frame).unwrap().into(),
+            ))
+            .await;
+        let (kind, body_res) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "error", "错误签名必须返回 error 帧");
+        let err: ErrorBody = serde_json::from_value(body_res).unwrap();
+        assert_eq!(err.code, DeviceErrorCode::AuthBadSignature);
+
+        // 3. 过期时间戳 (>5分钟偏差) -> 返回 error (AuthExpired)
+        let expired_ts = now - 400_000;
+        let expired_frame = serde_json::json!({
+            "v": 1,
+            "kind": "heartbeat",
+            "msgId": "msg-ws-003",
+            "ts": expired_ts,
+            "from": "mobile",
+            "to": "desktop",
+            "auth": {
+                "deviceId": device_id,
+                "ts": expired_ts,
+                "nonce": "nonce-ws-003",
+                "sig": valid_sig,
+            },
+            "body": body,
+        });
+        let _ = ws
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                serde_json::to_string(&expired_frame).unwrap().into(),
+            ))
+            .await;
+        let (kind, body_res) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "error", "过期时戳必须返回 error 帧");
+        let err: ErrorBody = serde_json::from_value(body_res).unwrap();
+        assert_eq!(err.code, DeviceErrorCode::AuthExpired);
+
+        // 4. 重放攻击（相同 Nonce 篡改 Body）-> 返回 error (AuthStale)
+        let tampered_body = serde_json::json!({ "ts": now, "deviceTimeMs": now + 999 });
+        let replay_frame = serde_json::json!({
+            "v": 1,
+            "kind": "heartbeat",
+            "msgId": "msg-ws-004",
+            "ts": now,
+            "from": "mobile",
+            "to": "desktop",
+            "auth": {
+                "deviceId": device_id,
+                "ts": now,
+                "nonce": nonce, // 重复使用 nonce-ws-001
+                "sig": valid_sig,
+            },
+            "body": tampered_body,
+        });
+        let _ = ws
+            .send(tokio_tungstenite::tungstenite::Message::Text(
+                serde_json::to_string(&replay_frame).unwrap().into(),
+            ))
+            .await;
+        let (kind, body_res) = parse_frame(&next_text(&mut ws).await.unwrap());
+        assert_eq!(kind, "error", "重放篡改必须返回 error 帧");
+        let err: ErrorBody = serde_json::from_value(body_res).unwrap();
+        assert_eq!(err.code, DeviceErrorCode::AuthStale);
+
+        let _ = ws.close(None).await;
     }
 }

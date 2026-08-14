@@ -47,15 +47,26 @@ export function useApprovalKeyboard({
   useEffect(() => {
     if (!confirmArmed) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        onDisarmRef.current();
+      if (e.key !== 'Escape') return;
+      if (e.isComposing || (e as any).keyCode === 229) return;
+      const root = rootRef.current;
+      if (!root) return;
+      const target =
+        e.target instanceof HTMLElement
+          ? e.target
+          : document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+      if (target && target !== document.body && !root.contains(target)) {
+        return; // 外部元素处于焦点态，严禁拦截全局按键
       }
+      e.preventDefault();
+      e.stopPropagation();
+      onDisarmRef.current();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [confirmArmed]);
+  }, [confirmArmed, rootRef]);
 
   // 3. Focus trap：Tab / Shift+Tab 在卡片内循环，不漂回页面其他元素
   useEffect(() => {
@@ -91,15 +102,23 @@ export function useApprovalKeyboard({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Enter') return;
-      const target = e.target as HTMLElement | null;
-      if (!rootRef.current || !rootRef.current.contains(target)) return;
+      if (e.isComposing || (e as any).keyCode === 229) return;
+      const root = rootRef.current;
+      if (!root) return;
+      const target =
+        e.target instanceof HTMLElement
+          ? e.target
+          : document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+      if (!target || !root.contains(target)) return;
       if (
-        target?.tagName === 'TEXTAREA' ||
-        target?.isContentEditable ||
-        target?.contentEditable === 'true' ||
-        target?.contentEditable === '' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable ||
+        target.contentEditable === 'true' ||
+        target.contentEditable === '' ||
         Boolean(
-          target?.closest?.(
+          target.closest?.(
             '[contenteditable="true"], [contenteditable=""], [contenteditable]:not([contenteditable="false"])'
           )
         )

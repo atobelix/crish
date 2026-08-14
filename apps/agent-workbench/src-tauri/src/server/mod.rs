@@ -426,6 +426,8 @@ pub struct ServerState {
     /// 与命令面 / main.rs 装配共用同一 Arc 实例；None = 未装配，配对入口
     /// 返回 503 诚实降级）
     pairing: Option<Arc<pairing::PairingCoordinator>>,
+    /// Nonce 幂等与重放守卫（GW-01 生产级装配）
+    nonce_guard: Arc<auth::AdvancedNonceGuard>,
     _started_at_ms: u64,
 }
 
@@ -447,8 +449,17 @@ impl ServerState {
             event_stream: None,
             audit_bridge: None,
             pairing: None,
+            nonce_guard: Arc::new(auth::AdvancedNonceGuard::new(
+                auth::DEFAULT_NONCE_CAPACITY,
+                auth::DEFAULT_CLOCK_SKEW_MS,
+            )),
             _started_at_ms: now_ms(),
         }
+    }
+
+    /// Nonce 幂等与重放守卫
+    pub fn nonce_guard(&self) -> &Arc<auth::AdvancedNonceGuard> {
+        &self.nonce_guard
     }
 
     /// 注入远程审计事件桥（R1-11：remote-* 审计 SecurityAudit 事件发射
