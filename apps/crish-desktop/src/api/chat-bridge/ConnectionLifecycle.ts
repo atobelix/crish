@@ -99,8 +99,8 @@ export const HISTORY_MESSAGE_TOKEN_OVERHEAD = 8;
 
 export function estimateTextTokens(text: string | undefined): number {
   if (!text || text.length === 0) return 0;
-  let tokens = 0;
-  let wordChars = 0;
+  let tokens = 0,
+    wordChars = 0;
   for (const ch of text) {
     const code = ch.charCodeAt(0);
     const isSep =
@@ -150,6 +150,7 @@ function jsonFieldOrUndefined<T>(value: T[] | undefined): string | undefined {
   try {
     return JSON.stringify(value);
   } catch {
+    /* swallow-ok: 序列化失败返回 undefined */
     return undefined;
   }
 }
@@ -166,8 +167,8 @@ export function truncateHistoryWithAnchor(
   const headTokens = perMessageTokens
     .slice(0, anchorEnd + 1)
     .reduce((sum, n) => sum + n, 0);
-  let tailStart = anchorEnd + 1;
-  let tailTokens = total - headTokens;
+  let tailStart = anchorEnd + 1,
+    tailTokens = total - headTokens;
   while (tailStart < history.length && headTokens + tailTokens > budget) {
     tailTokens -= perMessageTokens[tailStart] ?? 0;
     tailStart += 1;
@@ -188,8 +189,11 @@ export function buildHistoryMessages(
   const excludeId = opts?.excludeId;
   const history: HistoryMessage[] = [];
   for (const msg of source) {
-    if (msg.sender !== 'user' && msg.sender !== 'assistant') continue;
-    if (!isHistoryEligible(msg)) continue;
+    if (
+      (msg.sender !== 'user' && msg.sender !== 'assistant') ||
+      !isHistoryEligible(msg)
+    )
+      continue;
     if (excludeId && msg.id === excludeId) continue;
     const entry: HistoryMessage = {
       id: msg.id,
@@ -199,10 +203,10 @@ export function buildHistoryMessages(
     if (typeof msg.text === 'string' && msg.text) entry.text = msg.text;
     if (typeof msg.thinking === 'string' && msg.thinking)
       entry.thinking = msg.thinking;
-    const toolCallsJson = jsonFieldOrUndefined(msg.toolCalls);
-    if (toolCallsJson) entry.tool_calls_json = toolCallsJson;
-    const resultsJson = jsonFieldOrUndefined(msg.toolCallResults);
-    if (resultsJson) entry.tool_call_results_json = resultsJson;
+    const tcJson = jsonFieldOrUndefined(msg.toolCalls);
+    if (tcJson) entry.tool_calls_json = tcJson;
+    const resJson = jsonFieldOrUndefined(msg.toolCallResults);
+    if (resJson) entry.tool_call_results_json = resJson;
     if (msg.status) entry.status = msg.status;
     history.push(entry);
   }
@@ -215,23 +219,18 @@ export function resolveContextWindow(
   sets?: Settings | null
 ): number | undefined {
   const explicit = (sets as { contextWindow?: unknown } | null)?.contextWindow;
-  if (
-    typeof explicit === 'number' &&
-    Number.isFinite(explicit) &&
-    explicit > 0
-  ) {
+  if (typeof explicit === 'number' && Number.isFinite(explicit) && explicit > 0)
     return Math.floor(explicit);
-  }
   try {
-    const profileId = getActiveProfileId();
-    const model = getActiveModelId();
+    const profileId = getActiveProfileId(),
+      model = getActiveModelId();
     if (profileId && model) {
       const meta = getModelMeta(profileId, model);
       if (typeof meta.contextLength === 'number' && meta.contextLength > 0)
         return meta.contextLength;
     }
   } catch {
-    /* swallow-ok */
+    /* swallow-ok: 目录读取失败不发窗口 */
   }
   return undefined;
 }
@@ -252,6 +251,7 @@ export async function checkEngineReadyRealtime(
       { timeoutMs }
     );
   } catch {
+    /* swallow-ok: 查询失败放行，避免双重报错 */
     return {
       ok: true,
       state: 'ok',
@@ -337,7 +337,7 @@ export function createFinishController(
     try {
       callbacks.onComplete();
     } catch {
-      /* swallow-ok */
+      /* swallow-ok: 完成回调抛错不阻断终态 */
     }
   };
 
@@ -384,7 +384,7 @@ export function createStreamCancel(
     try {
       callbacks.onComplete();
     } catch {
-      /* swallow-ok */
+      /* swallow-ok: 完成回调抛错不阻断终态 */
     }
   };
 }
@@ -393,18 +393,30 @@ export function composeSystemPrompt(
   base: string | undefined,
   guidance: string | undefined
 ): string | undefined {
-  const baseTrimmed = typeof base === 'string' ? base.trim() : '';
-  const guidanceTrimmed = typeof guidance === 'string' ? guidance.trim() : '';
-  if (baseTrimmed && guidanceTrimmed)
-    return `${baseTrimmed}\n\n${guidanceTrimmed}`;
-  if (baseTrimmed) return baseTrimmed;
-  if (guidanceTrimmed) return guidanceTrimmed;
-  return undefined;
+  const b = typeof base === 'string' ? base.trim() : '';
+  const g = typeof guidance === 'string' ? guidance.trim() : '';
+  if (b && g) return `${b}\n\n${g}`;
+  return b || g || undefined;
 }
 
 function isRunDead(state: StreamState): boolean {
   return state.finished || state.cancelled;
 }
+
+const STYLE_DESCS: Record<string, string> = {
+  minimal:
+    'Response style: minimal. Prefer the shortest correct answer. Avoid preambles, lists, and restating the question.',
+  low: 'Response style: concise. Keep answers short; use bullets only when they improve clarity. Skip lengthy explanations unless asked.',
+  medium:
+    'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
+  high: 'Response style: thorough. Provide structured reasoning, edge cases, and verification steps when useful. Still stay on-topic.',
+};
+const STYLE_ZH_MAP: Record<string, string> = {
+  极简: 'minimal',
+  简洁: 'low',
+  适中: 'medium',
+  深入: 'high',
+};
 
 export async function createStreamSession(
   prompt: string,
@@ -474,23 +486,12 @@ export async function createStreamSession(
       else if (tl === 'medium') budgetDifficulty = 'normal';
       else if (tl === 'high' || tl === 'xhigh') budgetDifficulty = 'hard';
 
-      const styleKey = String(sets?.responseStyle ?? 'medium').toLowerCase();
-      const styleMap: Record<string, string> = {
-        minimal:
-          'Response style: minimal. Prefer the shortest correct answer. Avoid preambles, lists, and restating the question.',
-        low: 'Response style: concise. Keep answers short; use bullets only when they improve clarity. Skip lengthy explanations unless asked.',
-        medium:
-          'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
-        high: 'Response style: thorough. Provide structured reasoning, edge cases, and verification steps when useful. Still stay on-topic.',
-        极简: 'Response style: minimal. Prefer the shortest correct answer. Avoid preambles, lists, and restating the question.',
-        简洁: 'Response style: concise. Keep answers short; use bullets only when they improve clarity. Skip lengthy explanations unless asked.',
-        适中: 'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
-        深入: 'Response style: thorough. Provide structured reasoning, edge cases, and verification steps when useful. Still stay on-topic.',
-      };
-      responseStyleGuidance = styleMap[styleKey] ?? styleMap.medium;
+      const rawStyle = String(sets?.responseStyle ?? 'medium');
+      const resolvedKey = STYLE_ZH_MAP[rawStyle] || rawStyle.toLowerCase();
+      responseStyleGuidance = STYLE_DESCS[resolvedKey] ?? STYLE_DESCS.medium;
       contextWindow = resolveContextWindow(sets);
     } catch {
-      /* swallow-ok */
+      /* swallow-ok: 设置解析失败按默认执行 */
     }
 
     const goalMode =
@@ -532,7 +533,7 @@ export async function createStreamSession(
       const body = await loadSessionBody(safeSessionId);
       history = buildHistoryMessages(body, { excludeId: userClientMessageId });
     } catch {
-      /* swallow-ok */
+      /* swallow-ok: 历史加载失败不阻塞 run */
     }
 
     if (isRunDead(state)) return;
@@ -614,7 +615,7 @@ export function streamViaEngine(
   sessionId: string,
   assistantMsgId: string,
   options?: StreamRequestOptions
-): () => void {
+): StreamCancelFn {
   const transport = getTransport();
   const safeSessionId = normalizeStreamSessionId(sessionId);
   const state: StreamState = {
@@ -635,13 +636,12 @@ export function streamViaEngine(
   try {
     callbacks.onRunMeta?.({ runId });
   } catch {
-    /* swallow-ok */
+    /* swallow-ok: meta 回调失败不阻断 */
   }
 
   const cleanup = () => {
     cleanupStreamState(state);
   };
-
   const { finish, tryResumeFinish } = createFinishController(
     approvalFlow,
     callbacks,
@@ -649,7 +649,6 @@ export function streamViaEngine(
     state,
     options?.finishTimeoutMs ?? 120000
   );
-
   const router = new EventRouter(
     state,
     approvalFlow,
@@ -672,7 +671,6 @@ export function streamViaEngine(
     finish,
     assistantClientMessageId || undefined
   );
-
   const cancel = createStreamCancel(
     runId,
     callbacks,
@@ -680,8 +678,5 @@ export function streamViaEngine(
     cleanup,
     state
   );
-  const cancelWithMode: StreamCancelFn = (opts) => {
-    cancel(opts);
-  };
-  return cancelWithMode;
+  return cancel;
 }
