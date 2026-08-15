@@ -140,22 +140,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
               onClick={() => onSetActiveDiffSource(active ? null : f)}
               aria-label={`${basename(f.filePath)} +${f.additions} −${f.deletions}`}
             >
-              <span
-                className={styles.fileNameLink}
-                role="link"
-                tabIndex={0}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSetActiveDiffSource(active ? null : f);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onSetActiveDiffSource(active ? null : f);
-                  }
-                }}
-              >
+              <span className={styles.fileNameLink}>
                 {basename(f.filePath)}
               </span>
 

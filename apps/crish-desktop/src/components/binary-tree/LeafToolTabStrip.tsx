@@ -78,6 +78,15 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
       [leaf.id, leaf.sessionId, setActiveTab]
     );
 
+    const handleCollapseDock = useCallback(() => {
+      if (leaf.sessionId) {
+        // 精准收起当前 leaf 所属会话的工具坞
+        openToolInSession(leaf.sessionId, 'chat');
+      } else {
+        collapseActiveTabRightDock(true);
+      }
+    }, [leaf.sessionId]);
+
     // 单 tab 或无 tab 时不渲染标签栏（已调整为无 tabs 时才不渲染，以保证加号可用）
     if (tabs.length === 0) return null;
 
@@ -143,16 +152,14 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                   side="bottom"
                   sideOffset={4}
                   trigger={
-                    <Tooltip content="添加功能面板">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={styles.addTabBtn}
-                        aria-label="添加功能面板"
-                        icon={<Plus size={14} />}
-                      />
-                    </Tooltip>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={styles.addTabBtn}
+                      aria-label="添加功能面板"
+                      icon={<Plus size={14} />}
+                    />
                   }
                   options={availablePanels.map((pid) => ({
                     id: pid,
@@ -178,9 +185,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                   variant="ghost"
                   size="sm"
                   className={styles.addTabBtn}
-                  onClick={() => {
-                    collapseActiveTabRightDock(true);
-                  }}
+                  onClick={handleCollapseDock}
                   aria-label="收起右侧面板"
                   icon={<IconSidebarRight size={14} />}
                 />

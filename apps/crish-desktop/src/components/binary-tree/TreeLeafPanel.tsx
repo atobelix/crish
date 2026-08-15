@@ -9,8 +9,17 @@
  * 功能区 leaf 必须带所属 session 的 sessionId（owner），与对话 unit 绑定。
  */
 
-import React, { lazy, Suspense, useCallback, useLayoutEffect, useRef } from 'react';
-import { useLayoutTreeStore, isChatDomain } from '../../api/store-access/componentAccess';
+import React, {
+  lazy,
+  Suspense,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+} from 'react';
+import {
+  useLayoutTreeStore,
+  isChatDomain,
+} from '../../api/store-access/componentAccess';
 import type { LayoutLeaf } from '../../store/types';
 import { getPanelTitle } from '../../api/store-access/componentAccess';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
@@ -22,6 +31,7 @@ import styles from './BinaryTreeWorkspace.module.css';
 import {
   useWorkspaceShellStore,
   openToolInSession,
+  openToolInActiveTab,
 } from '../../api/store-access/componentAccess';
 import {
   selectActiveSessionId,
@@ -105,7 +115,14 @@ function leafPropsEqual(a: LayoutLeaf, b: LayoutLeaf): boolean {
 // ── 组件实现 ─────────────────────────────────────────────────────────
 
 export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
-  ({ leaf, rect, isActive, isDragSource, onShowToast, isMultiChat = false }) => {
+  ({
+    leaf,
+    rect,
+    isActive,
+    isDragSource,
+    onShowToast,
+    isMultiChat = false,
+  }) => {
     const setActiveLeaf = useLayoutTreeStore((s) => s.setActiveLeaf);
     const leafElRef = useRef<HTMLDivElement>(null);
     const { startSessionDrag } = useSessionTabDrag();
@@ -171,7 +188,9 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
         <div className={styles.leafBody}>
           <AppErrorBoundary compact>
-            <Suspense fallback={<div className={styles.emptyState}>加载中…</div>}>
+            <Suspense
+              fallback={<div className={styles.emptyState}>加载中…</div>}
+            >
               <LeafBody
                 panelId={leaf.activeTab}
                 leafId={leaf.id}
@@ -222,9 +241,28 @@ function LeafBody({
       ? activeSessionId
       : leafSessionId || activeSessionId;
 
+  // 统一会话感知工具分发器（裁决 ARB-06：采用自由函数分发）
+  const handleOpenTool = useCallback(
+    (panelId: string) => {
+      const targetSessionId = sessionForPanel;
+      if (targetSessionId && !targetSessionId.startsWith('__pending')) {
+        openToolInSession(targetSessionId, panelId);
+      } else {
+        openToolInActiveTab(panelId);
+      }
+    },
+    [sessionForPanel]
+  );
+
   if (panelId.startsWith('file-viewer:')) {
     const filePath = panelId.substring('file-viewer:'.length);
-    return <FileViewerCard filePath={filePath} onShowToast={onShowToast} />;
+    return (
+      <FileViewerCard
+        key={filePath}
+        filePath={filePath}
+        onShowToast={onShowToast}
+      />
+    );
   }
 
   switch (panelId) {
@@ -234,7 +272,7 @@ function LeafBody({
           wsId="default"
           colIdx={0}
           groupIdx={0}
-          handleGlobalTabClick={() => {}}
+          handleGlobalTabClick={handleOpenTool}
           onShowToast={onShowToast}
           // draft 时传 PENDING_DRAFT；否则优先 leaf 绑定
           sessionId={sessionForPanel ?? undefined}
@@ -245,16 +283,9 @@ function LeafBody({
     case 'preview':
       return <PreviewCard wsId="default" onShowToast={onShowToast} />;
     case 'overview':
-      return (
-        <OverviewCard
-          wsId="default"
-          onOpenPanel={(pid: string) => {
-            if (sessionForPanel) openToolInSession(sessionForPanel, pid);
-          }}
-        />
-      );
+      return <OverviewCard wsId="default" onOpenPanel={handleOpenTool} />;
     case 'files':
-      return <FilesCard />;
+      return <FilesCard onShowToast={onShowToast} />;
     case 'diff':
       return <DiffCard onShowToast={onShowToast} />;
     case 'runtime':
@@ -262,8 +293,6 @@ function LeafBody({
     case 'agent':
       return <AgentCard />;
     default:
-      return (
-        <div className={styles.emptyState}>未知面板类型：{panelId}</div>
-      );
+      return <div className={styles.emptyState}>未知面板类型：{panelId}</div>;
   }
 }

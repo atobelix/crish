@@ -591,19 +591,43 @@
 }
 
 .filesListPane {
-  flex: 0 0 42%;
-  max-width: 52%;
-  min-width: 120px;
+  flex: 0 0 40%;
+  max-width: 50%;
+  min-width: 160px;
   border-right: 1px solid var(--hairline, var(--border-subtle));
 }
 
 .filesDetailPane {
-  flex: 1 1 58%;
+  flex: 1 1 60%;
   min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* 窄屏或分屏模式 (宽度 <= 440px)：单栏流式自适应切换 */
+@container filesCard (max-width: 440px) {
+  /* 浏览状态：全宽显示文件树，隐藏详情区 */
+  .filesBodySplit[data-mode='browse'] .filesListPane {
+    flex: 1 1 100%;
+    max-width: 100%;
+    min-width: 0;
+    border-right: none;
+  }
+  .filesBodySplit[data-mode='browse'] .filesDetailPane {
+    display: none;
+  }
+
+  /* 详情状态：全宽显示代码预览与编辑，隐藏文件树 */
+  .filesBodySplit[data-mode='detail'] .filesListPane {
+    display: none;
+  }
+  .filesBodySplit[data-mode='detail'] .filesDetailPane {
+    flex: 1 1 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
 }
 
 /* 闂佺懓鐏氶幐鍝ユ閹达箑妫橀柣鐔稿绾偓闂佺厧鐤囧▔娑樷枖椤撱垺鏅慨妯哄鐢盯鎮规担闈涒偓鏍ㄦ櫠閿曗偓椤曪綁鍩€?+ 婵炴垶鎸搁鍡樺垔濞差亜绠ユい鎰╁灩閻撳倿鏌ｉ妸銉ヮ仼缂併劍鐓￠敓?*/
@@ -866,7 +890,8 @@
 .filesInlineErrDetail {
   margin: 0;
   border-radius: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--accent-red) 18%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--accent-red) 18%, transparent);
   flex-shrink: 0;
 }
 
@@ -1079,7 +1104,9 @@
   z-index: var(--z-card-footer);
   width: min(320px, calc(100% - 16px));
   max-width: 320px;
-  transition: top var(--transition-micro), left var(--transition-micro);
+  transition:
+    top var(--transition-micro),
+    left var(--transition-micro);
   box-sizing: border-box;
 }
 

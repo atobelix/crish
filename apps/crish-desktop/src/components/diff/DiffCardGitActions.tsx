@@ -43,7 +43,20 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
 
   if (!open) {
     return (
-      <div className={styles.commitTriggerBar} onClick={onToggle}>
+      <div
+        className={styles.commitTriggerBar}
+        role="button"
+        tabIndex={0}
+        aria-expanded={false}
+        aria-label={`展开提交与推送面板，已暂存 ${stagedCount} 个，未暂存 ${unstagedCount} 个`}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+      >
         <Lucide.GitCommit size={14} className={styles.commitTriggerIcon} />
         <span className={styles.commitTriggerText}>
           输入提交信息… ({stagedCount} 个已暂存 / {unstagedCount} 个未暂存)

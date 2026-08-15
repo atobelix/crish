@@ -71,14 +71,14 @@ export const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
       });
     }, [setShowMsgFilter, setLocalMsgFilter]);
 
-    if (
-      mainSurface !== 'chat' ||
-      !session ||
-      !session.messages ||
-      session.messages.length === 0
-    ) {
+    // 仅在非 chat 主视面（如 scheduled 视图）时隐藏 Header，空会话与草稿态保持常驻
+    if (mainSurface !== 'chat') {
       return null;
     }
+
+    const hasMessages = Boolean(
+      session?.messages && session.messages.length > 0
+    );
 
     return (
       <div
@@ -86,11 +86,12 @@ export const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
         data-testid="chat-toolbar"
         data-unit-chrome="true"
         data-session-id={activeSessionId || undefined}
+        data-has-messages={hasMessages ? 'true' : 'false'}
         role="toolbar"
         aria-label="对话工具栏"
       >
         <div className={styles.toolbarLeft}>
-          {showMsgFilter ? (
+          {showMsgFilter && hasMessages ? (
             <ChatMsgFilterBar
               localMsgFilter={localMsgFilter}
               setLocalMsgFilter={setLocalMsgFilter}
@@ -120,19 +121,21 @@ export const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
           onExportMarkdown={onExportMarkdown}
           onClearHistory={onClearHistory}
           leading={
-            <Tooltip content={showMsgFilter ? '关闭消息搜索' : '搜索消息'}>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={styles.toolBtn}
-                data-testid="chat-toggle-search"
-                data-active={showMsgFilter ? 'true' : 'false'}
-                aria-label={showMsgFilter ? '关闭消息搜索' : '搜索消息'}
-                onClick={toggleSearch}
-                icon={<Search size={15} strokeWidth={1.75} aria-hidden />}
-              />
-            </Tooltip>
+            hasMessages ? (
+              <Tooltip content={showMsgFilter ? '关闭消息搜索' : '搜索消息'}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={styles.toolBtn}
+                  data-testid="chat-toggle-search"
+                  data-active={showMsgFilter ? 'true' : 'false'}
+                  aria-label={showMsgFilter ? '关闭消息搜索' : '搜索消息'}
+                  onClick={toggleSearch}
+                  icon={<Search size={15} strokeWidth={1.75} aria-hidden />}
+                />
+              </Tooltip>
+            ) : null
           }
         />
       </div>

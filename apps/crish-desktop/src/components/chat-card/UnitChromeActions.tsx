@@ -76,7 +76,14 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
         : s.openTabs.find((t) => t.tabId === s.activeTabId);
       return tab?.rightDock ?? null;
     });
-    const rightDockCollapsed = useLayoutTreeStore((s) => s.toolColumnCollapsed);
+    const globalTreeCollapsed = useLayoutTreeStore(
+      (s) => s.toolColumnCollapsed
+    );
+
+    // 作用域真值修正：若本 Unit 有独立的 dockSnapshot，以 dockSnapshot.collapsed 为唯一真源；无快照时回退全局
+    const rightDockCollapsed = dockSnapshot
+      ? dockSnapshot.collapsed
+      : globalTreeCollapsed;
     const openPanelIds = dockSnapshot?.openPanelIds;
     const activePanelId = dockSnapshot?.activePanelId;
 

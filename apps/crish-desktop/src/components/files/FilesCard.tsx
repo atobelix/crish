@@ -29,7 +29,7 @@ const PARENT_DIR_LABEL = '上级目录';
 const REFRESH_LABEL = '刷新';
 
 export const FilesCard: React.FC<FilesCardProps> = React.memo(
-  ({ initialPath }) => {
+  ({ initialPath, onShowToast }) => {
     const preview = useFilePreview();
     const nav = useFileNavigation(() => preview.dirty);
     const filterInputRef = useRef<HTMLInputElement>(null);
@@ -90,8 +90,9 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     const handleCopyPath = useCallback(
       (mode: 'abs' | 'rel') => {
         preview.copyPath(preview.selected || nav.cwd, nav.root, mode);
+        onShowToast?.(mode === 'abs' ? '绝对路径已复制' : '相对路径已复制');
       },
-      [preview, nav]
+      [preview, nav, onShowToast]
     );
 
     const handleNavigate = useCallback(
@@ -349,7 +350,10 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
               </div>
             </div>
           ) : (
-            <div className={`${styles.filesBody} ${styles.filesBodySplit}`}>
+            <div
+              className={`${styles.filesBody} ${styles.filesBodySplit}`}
+              data-mode={preview.view}
+            >
               <FileTree
                 flatTree={nav.flatTree}
                 selected={preview.selected}
