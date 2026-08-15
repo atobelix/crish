@@ -148,6 +148,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
             aria-expanded={showModelDropdown}
             aria-label="选择模型"
             style={{ cursor: 'pointer', position: 'relative' }}
+            onClick={() => setShowModelDropdown((prev) => !prev)}
           >
             <span
               className={styles.modelText}
