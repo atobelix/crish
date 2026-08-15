@@ -16,7 +16,7 @@ import { readFileSync } from 'node:fs';
 const CSS = readFileSync(new URL('./tokens.css', import.meta.url), 'utf8');
 
 const LIGHT_BLOCK_RE = /:root,[\s\S]*?\n\}/;
-const DARK_BLOCK_RE = /html\[data-theme="dark"\]\s*\{[\s\S]*?\n\}/;
+const DARK_BLOCK_RE = /html\[data-theme=['"]dark['"]\]\s*\{[\s\S]*?\n\}/;
 
 type Rgb = { r: number; g: number; b: number };
 type TokenTable = Map<string, string>;
@@ -54,7 +54,9 @@ function hexToRgb(value: string): Rgb | null {
 }
 
 function hslToRgb(value: string): Rgb | null {
-  const m = value.match(/hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/i);
+  const m = value.match(
+    /hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/i
+  );
   if (!m) return null;
   const h = ((parseFloat(m[1]) % 360) + 360) % 360;
   const s = parseFloat(m[2]) / 100;
@@ -79,7 +81,12 @@ function hslToRgb(value: string): Rgb | null {
 }
 
 /** 解析 token 值为 sRGB；color-mix(in srgb, A p%, transparent) 按主题背景合成 */
-function resolveColor(value: string, table: TokenTable, bg: Rgb, depth = 0): Rgb | null {
+function resolveColor(
+  value: string,
+  table: TokenTable,
+  bg: Rgb,
+  depth = 0
+): Rgb | null {
   if (depth > 8) return null;
   const v = value.trim();
   const hex = hexToRgb(v);
@@ -88,12 +95,19 @@ function resolveColor(value: string, table: TokenTable, bg: Rgb, depth = 0): Rgb
   if (hsl) return hsl;
   const varMatch = v.match(/^var\((--[\w-]+)(?:\s*,\s*([^)]+))?\)$/);
   if (varMatch) {
-    const resolved = resolveColor(table.get(varMatch[1]) ?? '', table, bg, depth + 1);
+    const resolved = resolveColor(
+      table.get(varMatch[1]) ?? '',
+      table,
+      bg,
+      depth + 1
+    );
     if (resolved) return resolved;
     if (varMatch[2]) return resolveColor(varMatch[2], table, bg, depth + 1);
     return null;
   }
-  const mix = v.match(/^color-mix\(in srgb,\s*(.+?)\s*([\d.]+)%\s*,\s*transparent\)$/);
+  const mix = v.match(
+    /^color-mix\(in srgb,\s*(.+?)\s*([\d.]+)%\s*,\s*transparent\)$/
+  );
   if (mix) {
     const base = resolveColor(mix[1], table, bg, depth + 1);
     if (!base) return null;
@@ -113,7 +127,9 @@ function linearize(ch: number): number {
 }
 
 function luminance(c: Rgb): number {
-  return 0.2126 * linearize(c.r) + 0.7152 * linearize(c.g) + 0.0722 * linearize(c.b);
+  return (
+    0.2126 * linearize(c.r) + 0.7152 * linearize(c.g) + 0.0722 * linearize(c.b)
+  );
 }
 
 function contrastRatio(a: Rgb, b: Rgb): number {
@@ -132,7 +148,13 @@ function resolveToken(token: string, table: TokenTable, bg: Rgb): Rgb {
   return rgb as Rgb;
 }
 
-function assertMin(token: string, bg: Rgb, threshold: number, table: TokenTable, label: string) {
+function assertMin(
+  token: string,
+  bg: Rgb,
+  threshold: number,
+  table: TokenTable,
+  label: string
+) {
   const ratio = contrastRatio(resolveToken(token, table, bg), bg);
   expect(
     ratio,
@@ -140,9 +162,21 @@ function assertMin(token: string, bg: Rgb, threshold: number, table: TokenTable,
   ).toBeGreaterThanOrEqual(threshold);
 }
 
-const LIGHT_BG_PRIMARY = resolveToken('--bg-primary', LIGHT_TOKENS, { r: 0, g: 0, b: 0 });
-const LIGHT_BG_SECONDARY = resolveToken('--bg-secondary', LIGHT_TOKENS, { r: 0, g: 0, b: 0 });
-const DARK_BG_PRIMARY = resolveToken('--bg-primary', DARK_TOKENS, { r: 0, g: 0, b: 0 });
+const LIGHT_BG_PRIMARY = resolveToken('--bg-primary', LIGHT_TOKENS, {
+  r: 0,
+  g: 0,
+  b: 0,
+});
+const LIGHT_BG_SECONDARY = resolveToken('--bg-secondary', LIGHT_TOKENS, {
+  r: 0,
+  g: 0,
+  b: 0,
+});
+const DARK_BG_PRIMARY = resolveToken('--bg-primary', DARK_TOKENS, {
+  r: 0,
+  g: 0,
+  b: 0,
+});
 
 describe('对比度验收（04-detail ③表 8 行，WCAG 2.1 AA）', () => {
   it('行 1：light text-tertiary vs 主背景 ≥ 4.5:1（时间戳/ghost 按钮/提示文字）', () => {
@@ -154,7 +188,13 @@ describe('对比度验收（04-detail ③表 8 行，WCAG 2.1 AA）', () => {
   });
 
   it('行 3：light text-warning-strong vs 主背景 ≥ 4.5:1（橙色文字专用 token）', () => {
-    assertMin('--text-warning-strong', LIGHT_BG_PRIMARY, 4.5, LIGHT_TOKENS, '行 3');
+    assertMin(
+      '--text-warning-strong',
+      LIGHT_BG_PRIMARY,
+      4.5,
+      LIGHT_TOKENS,
+      '行 3'
+    );
   });
 
   it('行 4：light accent-blue vs 主背景 ≥ 4.5:1（链接/强调文字）', () => {
@@ -205,17 +245,26 @@ describe('对比度验收（全部语义文字/状态 token × 主题主背景�
     '--color-info',
   ];
 
-  it.each(TEXT_TOKENS.map((t) => [t]))('light 文字 token %s ≥ 4.5:1', (token) => {
-    assertMin(token, LIGHT_BG_PRIMARY, 4.5, LIGHT_TOKENS, 'light 文字');
-  });
+  it.each(TEXT_TOKENS.map((t) => [t]))(
+    'light 文字 token %s ≥ 4.5:1',
+    (token) => {
+      assertMin(token, LIGHT_BG_PRIMARY, 4.5, LIGHT_TOKENS, 'light 文字');
+    }
+  );
 
-  it.each(UI_TOKENS.map((t) => [t]))('light UI/状态 token %s ≥ 3:1', (token) => {
-    assertMin(token, LIGHT_BG_PRIMARY, 3.0, LIGHT_TOKENS, 'light UI');
-  });
+  it.each(UI_TOKENS.map((t) => [t]))(
+    'light UI/状态 token %s ≥ 3:1',
+    (token) => {
+      assertMin(token, LIGHT_BG_PRIMARY, 3.0, LIGHT_TOKENS, 'light UI');
+    }
+  );
 
-  it.each(TEXT_TOKENS.map((t) => [t]))('dark 文字 token %s ≥ 4.5:1', (token) => {
-    assertMin(token, DARK_BG_PRIMARY, 4.5, DARK_TOKENS, 'dark 文字');
-  });
+  it.each(TEXT_TOKENS.map((t) => [t]))(
+    'dark 文字 token %s ≥ 4.5:1',
+    (token) => {
+      assertMin(token, DARK_BG_PRIMARY, 4.5, DARK_TOKENS, 'dark 文字');
+    }
+  );
 
   it.each(UI_TOKENS.map((t) => [t]))('dark UI/状态 token %s ≥ 3:1', (token) => {
     assertMin(token, DARK_BG_PRIMARY, 3.0, DARK_TOKENS, 'dark UI');

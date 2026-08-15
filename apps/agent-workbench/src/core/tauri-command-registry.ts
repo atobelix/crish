@@ -239,6 +239,16 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     status: 'implemented',
     feature: 'secret reveal',
   },
+  {
+    command: 'provider_probe_ping',
+    status: 'implemented',
+    feature: 'provider probe ping latency check',
+  },
+  {
+    command: 'provider_probe_scan_models',
+    status: 'implemented',
+    feature: 'provider probe scan models',
+  },
   // ── 工具旧组（E1，§2.2-E）──
   {
     command: 'core_check_command',
