@@ -2,10 +2,12 @@
  * ui/Menu/position.ts 纯函数测试：视口边界钳制与避让方向
  * T05.3.1 补充：measureMenu（真实尺寸再钳位）、折叠侧栏窄视口、预估高度溢出
  */
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import {
   clampPosition,
   measureMenu,
+  calculateMenuPosition,
   MENU_EDGE_PAD,
   MENU_EST_WIDTH,
   MENU_EST_HEIGHT,

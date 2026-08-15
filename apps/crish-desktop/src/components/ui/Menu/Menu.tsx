@@ -12,6 +12,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as Popover from '@radix-ui/react-popover';
+import { Tooltip } from '../Tooltip/Tooltip';
 import styles from './Menu.module.css';
 import type { SelectOptionItem } from './types';
 
@@ -64,6 +65,10 @@ export interface MenuProps {
    * 消费方据此区分「外点关闭」与「Esc/键盘关闭」。
    */
   onInteractOutside?: (event: Event) => void;
+  /** 点击外部指针按下回调（用于阻止默认关闭行为，解决 Anchor 模式 Double Toggle 竞态） */
+  onPointerDownOutside?: (
+    event: CustomEvent<{ originalEvent: PointerEvent }>
+  ) => void;
   /**
    * Esc 键拦截回调（08-步5 T4-3 嵌套子菜单逐级关闭需要）：
    * 透传给 Radix Popover.Content 的 onEscapeKeyDown——Radix 在 document
@@ -94,6 +99,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   maxHeight,
   anchor,
   onInteractOutside,
+  onPointerDownOutside,
   onEscapeKeyDown,
 }: MenuProps) {
   const [internalOpen, setInternalOpen] = useState(false);
@@ -119,6 +125,35 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     },
     [isControlled, externalOnOpenChange]
   );
+
+  // WO-26: Anchor 模式下的 PointerId 追踪与 Drag-off 闭环
+  useEffect(() => {
+    if (!isOpen || !anchor?.current) return;
+    const anchorEl = anchor.current;
+    let trackedPointerId: number | null = null;
+
+    const handlePointerDown = (e: PointerEvent) => {
+      trackedPointerId = e.pointerId;
+    };
+
+    const handlePointerUp = (e: PointerEvent) => {
+      if (trackedPointerId !== null && e.pointerId === trackedPointerId) {
+        trackedPointerId = null;
+        const target = e.target as Node | null;
+        if (!anchorEl.contains(target)) {
+          handleOpenChange(false);
+        }
+      }
+    };
+
+    anchorEl.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointerup', handlePointerUp, true);
+
+    return () => {
+      anchorEl.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointerup', handlePointerUp, true);
+    };
+  }, [isOpen, anchor, handleOpenChange]);
 
   // F7 F2：ARIA menu 模式——打开时初始焦点落首个未禁用项。
   // 用 ref 缓存首项索引，effect 只在 open 转变时触发（避免父级重渲染
@@ -217,7 +252,9 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         setFocusedIndex((prev) => {
           if (prev >= 0) return prev <= 0 ? items.length - 1 : prev - 1;
           const start = items.indexOf(active as HTMLButtonElement);
-          return start < 0 ? items.length - 1 : (start - 1 + items.length) % items.length;
+          return start < 0
+            ? items.length - 1
+            : (start - 1 + items.length) % items.length;
         });
       } else if (e.key === 'Home') {
         e.preventDefault();
@@ -243,22 +280,42 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     }
   }, [focusedIndex]);
 
-  // 克隆 trigger 并精确绑定防冒泡点击事件（保留 UnifiedSelectPopover 行为）
-  const clonedTrigger = React.isValidElement(trigger)
+  // 如果 trigger 顶层被 Tooltip 包裹，提取出内部的实际 DOM 子元素与 tooltip content，
+  // 避免 Radix Popover.Trigger asChild 接收到 Fragment 导致 anchor ref 丢失无法测量 DOMRect
+  let actualTrigger = trigger;
+  let tipContent: React.ReactNode = null;
+  let tipSide: 'top' | 'bottom' | 'left' | 'right' = 'top';
+
+  if (
+    React.isValidElement(trigger) &&
+    typeof trigger.type !== 'string' &&
+    (trigger.props as { content?: React.ReactNode; children?: React.ReactNode })
+      .content !== undefined &&
+    (trigger.props as { content?: React.ReactNode; children?: React.ReactNode })
+      .children !== undefined
+  ) {
+    tipContent = (trigger.props as { content?: React.ReactNode }).content;
+    tipSide =
+      (trigger.props as { side?: 'top' | 'bottom' | 'left' | 'right' }).side ||
+      'top';
+    actualTrigger = (trigger.props as { children?: React.ReactNode }).children;
+  }
+
+  // 克隆 trigger 并精确绑定防冒泡事件（保留原生 click 冒泡给 Radix 处理，不重复调用 handleOpenChange）
+  const clonedTrigger = React.isValidElement(actualTrigger)
     ? React.cloneElement(
-        trigger as React.ReactElement<Record<string, unknown>>,
+        actualTrigger as React.ReactElement<Record<string, unknown>>,
         {
           onClick: (e: React.MouseEvent) => {
             e.stopPropagation();
             (
-              trigger.props as { onClick?: (e: React.MouseEvent) => void }
+              actualTrigger.props as { onClick?: (e: React.MouseEvent) => void }
             ).onClick?.(e);
-            handleOpenChange(!isOpen);
           },
           onPointerDown: (e: React.PointerEvent) => {
             e.stopPropagation();
             (
-              trigger.props as {
+              actualTrigger.props as {
                 onPointerDown?: (e: React.PointerEvent) => void;
               }
             ).onPointerDown?.(e);
@@ -266,28 +323,45 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
           onMouseDown: (e: React.MouseEvent) => {
             e.stopPropagation();
             (
-              trigger.props as { onMouseDown?: (e: React.MouseEvent) => void }
+              actualTrigger.props as {
+                onMouseDown?: (e: React.MouseEvent) => void;
+              }
             ).onMouseDown?.(e);
           },
         }
       )
-    : trigger;
+    : actualTrigger;
 
   const contentClasses = [styles.menuContent, contentClassName]
     .filter(Boolean)
     .join(' ');
 
+  const triggerNode = anchor ? (
+    // P1-F4：外部真实按钮作浮动锚点（virtualRef 指向 anchor.current，
+    // Radix 测量该可见元素而非本 div；本 div 仅作 custom-anchor 注册节点）
+    <Popover.Anchor virtualRef={anchor} data-menu-anchor="true" />
+  ) : (
+    <Popover.Trigger asChild className="no-drag">
+      {clonedTrigger}
+    </Popover.Trigger>
+  );
+
+  const renderedTrigger = tipContent ? (
+    <Tooltip content={tipContent} side={tipSide}>
+      {triggerNode}
+    </Tooltip>
+  ) : (
+    triggerNode
+  );
+
+  const resolvedMaxHeight =
+    maxHeight != null
+      ? `min(${typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight}, var(--radix-popover-content-available-height, 360px), 70vh, 360px)`
+      : undefined;
+
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
-      {anchor ? (
-        // P1-F4：外部真实按钮作浮动锚点（virtualRef 指向 anchor.current，
-        // Radix 测量该可见元素而非本 div；本 div 仅作 custom-anchor 注册节点）
-        <Popover.Anchor virtualRef={anchor} data-menu-anchor="true" />
-      ) : (
-        <Popover.Trigger asChild className="no-drag">
-          {clonedTrigger}
-        </Popover.Trigger>
-      )}
+      {renderedTrigger}
 
       <Popover.Portal>
         <Popover.Content
@@ -300,11 +374,36 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
           avoidCollisions={true}
           collisionPadding={12}
           className={contentClasses}
-          style={{ maxHeight, ...contentStyle }}
+          style={{ maxHeight: resolvedMaxHeight, ...contentStyle }}
           onKeyDown={handleKeyDown}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
-          onInteractOutside={onInteractOutside}
+          onPointerDownOutside={(e) => {
+            if (onPointerDownOutside) {
+              onPointerDownOutside(e);
+              return;
+            }
+            if (anchor?.current) {
+              const target = e.detail.originalEvent.target as Node | null;
+              if (anchor.current.contains(target)) {
+                e.preventDefault();
+              }
+            }
+          }}
+          onInteractOutside={(e) => {
+            if (onInteractOutside) {
+              onInteractOutside(e);
+              return;
+            }
+            if (anchor?.current) {
+              const customEvent = e as CustomEvent<{ originalEvent?: Event }>;
+              const target = (customEvent.detail?.originalEvent?.target ||
+                e.target) as Node | null;
+              if (anchor.current.contains(target)) {
+                e.preventDefault();
+              }
+            }
+          }}
           onEscapeKeyDown={onEscapeKeyDown}
         >
           {title != null ? (

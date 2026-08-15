@@ -4,14 +4,24 @@
 // @vitest-environment jsdom
 import React, { useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from '@testing-library/react';
 import { Menu } from './Menu';
 import styles from './Menu.module.css';
 
 const TRIGGER_TEXT = '菜单触发器';
 
 /** 双模受控示例：外部 open + onOpenChange 桥接 */
-function ControlledMenu({ onOpenChange }: { onOpenChange?: (open: boolean) => void }) {
+function ControlledMenu({
+  onOpenChange,
+}: {
+  onOpenChange?: (open: boolean) => void;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <Menu
@@ -37,7 +47,12 @@ afterEach(() => {
 
 describe('ui/Menu', () => {
   it('点击触发器打开面板并渲染选项', async () => {
-    render(<Menu trigger={<button type="button">{TRIGGER_TEXT}</button>} options={[{ id: 'a', label: '选项甲' }]} />);
+    render(
+      <Menu
+        trigger={<button type="button">{TRIGGER_TEXT}</button>}
+        options={[{ id: 'a', label: '选项甲' }]}
+      />
+    );
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
     const item = await screen.findByRole('menuitem', { name: /选项甲/ });
     expect(item).toBeInTheDocument();
@@ -70,14 +85,22 @@ describe('ui/Menu', () => {
       <Menu
         trigger={<button type="button">{TRIGGER_TEXT}</button>}
         onSelect={onSelect}
-        options={[{ id: 'a', label: '选项甲' }, { id: 'b', label: '选项乙' }]}
+        options={[
+          { id: 'a', label: '选项甲' },
+          { id: 'b', label: '选项乙' },
+        ]}
       />
     );
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
     const item = await screen.findByRole('menuitem', { name: /选项乙/ });
     fireEvent.click(item);
-    expect(onSelect).toHaveBeenCalledWith('b', expect.objectContaining({ id: 'b', label: '选项乙' }));
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    expect(onSelect).toHaveBeenCalledWith(
+      'b',
+      expect.objectContaining({ id: 'b', label: '选项乙' })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
   });
 
   it('键盘漫游：初始落首项、ArrowDown 跳过 disabled、Enter 选中', async () => {
@@ -104,14 +127,20 @@ describe('ui/Menu', () => {
     expect(screen.getByRole('menuitem', { name: /选项丙/ })).toHaveFocus();
     // Enter 选中
     fireEvent.keyDown(content, { key: 'Enter' });
-    expect(onSelect).toHaveBeenCalledWith('c', expect.objectContaining({ id: 'c' }));
+    expect(onSelect).toHaveBeenCalledWith(
+      'c',
+      expect.objectContaining({ id: 'c' })
+    );
   });
 
   it('ArrowUp 反向漫游', async () => {
     render(
       <Menu
         trigger={<button type="button">{TRIGGER_TEXT}</button>}
-        options={[{ id: 'a', label: '选项甲' }, { id: 'b', label: '选项乙' }]}
+        options={[
+          { id: 'a', label: '选项甲' },
+          { id: 'b', label: '选项乙' },
+        ]}
       />
     );
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
@@ -131,7 +160,9 @@ describe('ui/Menu', () => {
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
     const content = await screen.findByRole('menu');
     fireEvent.keyDown(content, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
   });
 
   it('受控 open/onOpenChange 双模桥接', async () => {
@@ -141,7 +172,9 @@ describe('ui/Menu', () => {
     const item = await screen.findByRole('menuitem', { name: /选项甲/ });
     expect(onOpenChange).toHaveBeenCalledWith(true);
     fireEvent.click(item);
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
@@ -166,7 +199,11 @@ describe('ui/Menu', () => {
     render(
       <div onClick={onOuterClick}>
         <Menu
-          trigger={<button type="button" onClick={originalOnClick}>{TRIGGER_TEXT}</button>}
+          trigger={
+            <button type="button" onClick={originalOnClick}>
+              {TRIGGER_TEXT}
+            </button>
+          }
           options={[{ id: 'a', label: '选项甲' }]}
         />
       </div>
@@ -183,7 +220,10 @@ describe('ui/Menu', () => {
       <Menu
         trigger={<button type="button">{TRIGGER_TEXT}</button>}
         onSelect={onSelect}
-        options={[{ id: 'a', label: '选项甲' }, { id: 'b', label: '选项乙' }]}
+        options={[
+          { id: 'a', label: '选项甲' },
+          { id: 'b', label: '选项乙' },
+        ]}
       />
     );
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
@@ -192,7 +232,10 @@ describe('ui/Menu', () => {
       expect(screen.getByRole('menuitem', { name: /选项甲/ })).toHaveFocus()
     );
     fireEvent.keyDown(content, { key: 'Enter' });
-    expect(onSelect).toHaveBeenCalledWith('a', expect.objectContaining({ id: 'a' }));
+    expect(onSelect).toHaveBeenCalledWith(
+      'a',
+      expect.objectContaining({ id: 'a' })
+    );
   });
 
   it('受控模式无内部写回：打开后不产生额外渲染（F7-F3）', async () => {
@@ -248,7 +291,10 @@ describe('ui/Menu', () => {
       render(
         <Menu
           trigger={<button type="button">{TRIGGER_TEXT}</button>}
-          options={[{ id: 'a', label: '选项甲' }, { id: 'b', label: '选项乙' }]}
+          options={[
+            { id: 'a', label: '选项甲' },
+            { id: 'b', label: '选项乙' },
+          ]}
         />
       );
       fireEvent.click(screen.getByText(TRIGGER_TEXT));
@@ -270,9 +316,15 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
   function ChildrenMenu() {
     return (
       <Menu trigger={<button type="button">{TRIGGER_TEXT}</button>}>
-        <button type="button" role="menuitem">子项甲</button>
-        <button type="button" role="menuitem">子项乙</button>
-        <button type="button" role="menuitem">子项丙</button>
+        <button type="button" role="menuitem">
+          子项甲
+        </button>
+        <button type="button" role="menuitem">
+          子项乙
+        </button>
+        <button type="button" role="menuitem">
+          子项丙
+        </button>
       </Menu>
     );
   }
@@ -316,21 +368,27 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
     const onPick = vi.fn();
     render(
       <Menu trigger={<button type="button">{TRIGGER_TEXT}</button>}>
-        <button type="button" role="menuitem" onClick={onPick}>子项甲</button>
+        <button type="button" role="menuitem" onClick={onPick}>
+          子项甲
+        </button>
       </Menu>
     );
     const content = await openAndFocusFirst();
     fireEvent.keyDown(content, { key: 'Enter' });
     // 基座不拦截 Enter（不 preventDefault、不自行关闭/回调）
     expect(onPick).not.toHaveBeenCalled();
-    expect(screen.getByRole('menuitem', { name: /子项甲/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('menuitem', { name: /子项甲/ })
+    ).toBeInTheDocument();
   });
 
   it('焦点不在漫游项上时不劫持方向键（搜索框输入场景）', async () => {
     render(
       <Menu trigger={<button type="button">{TRIGGER_TEXT}</button>}>
         <input aria-label="搜索项目" />
-        <button type="button" role="menuitem">子项甲</button>
+        <button type="button" role="menuitem">
+          子项甲
+        </button>
       </Menu>
     );
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
@@ -339,5 +397,78 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
     const content = input.closest('[role="dialog"]') as HTMLElement;
     fireEvent.keyDown(content, { key: 'ArrowDown' });
     expect(input).toHaveFocus();
+  });
+
+  it('Anchor 模式：点击外部 Anchor 按钮关闭时，不发生开→关→开振荡', async () => {
+    const AnchorComponent = () => {
+      const [open, setOpen] = useState(true);
+      const anchorRef = React.useRef<HTMLButtonElement>(null);
+      return (
+        <div>
+          <button
+            ref={anchorRef}
+            data-testid="anchor-btn"
+            onClick={() => setOpen((prev) => !prev)}
+          >
+            Toggle
+          </button>
+          <Menu
+            open={open}
+            onOpenChange={setOpen}
+            anchor={anchorRef}
+            options={[{ id: '1', label: 'Item 1' }]}
+          />
+        </div>
+      );
+    };
+
+    render(<AnchorComponent />);
+    expect(screen.getByText('Item 1')).toBeInTheDocument();
+
+    const anchorBtn = screen.getByTestId('anchor-btn');
+    fireEvent.pointerDown(anchorBtn);
+    fireEvent.click(anchorBtn);
+
+    expect(screen.queryByText('Item 1')).not.toBeInTheDocument();
+  });
+
+  it('Anchor 模式：在 Anchor 按钮上按下后拖拽移出（Drag-off）应正常关闭菜单', async () => {
+    const onOpenChange = vi.fn();
+    const AnchorComponent = () => {
+      const [open, setOpen] = useState(false);
+      const anchorRef = React.useRef<HTMLButtonElement>(null);
+      return (
+        <div>
+          <button
+            ref={anchorRef}
+            data-testid="anchor-btn"
+            onClick={() => setOpen((prev) => !prev)}
+          >
+            Toggle
+          </button>
+          <Menu
+            open={open}
+            onOpenChange={(next) => {
+              setOpen(next);
+              onOpenChange(next);
+            }}
+            anchor={anchorRef}
+            options={[{ id: '1', label: 'Item 1' }]}
+          />
+        </div>
+      );
+    };
+
+    render(<AnchorComponent />);
+    const anchorBtn = screen.getByTestId('anchor-btn');
+    fireEvent.click(anchorBtn);
+
+    expect(await screen.findByText('Item 1')).toBeInTheDocument();
+
+    const outsideEl = document.body;
+    fireEvent.pointerDown(anchorBtn);
+    fireEvent.pointerUp(outsideEl);
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

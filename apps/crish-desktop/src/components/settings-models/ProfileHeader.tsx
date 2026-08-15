@@ -26,7 +26,7 @@ export const ProfileHeader: React.FC<{
   setSelectedId?: (id: string | null) => void;
 }> = ({
   selected,
-  selectedLabel: _selectedLabel,
+  selectedLabel,
   editingName,
   nameDraft,
   setNameDraft,
@@ -35,8 +35,8 @@ export const ProfileHeader: React.FC<{
   setConfirmDeleteId,
   refresh,
   notify: _notify,
-  setProfiles: _setProfiles,
-  setSelectedId: _setSelectedId,
+  setProfiles,
+  setSelectedId,
 }) => {
   return (
     <div className="mrd-head">
@@ -180,8 +180,8 @@ export const ProfileHeader: React.FC<{
                   }}
                   onClick={() => {
                     const next = removeProfile(selected.id);
-                    setProfiles(next);
-                    setSelectedId(next[0]?.id || null);
+                    setProfiles?.(next);
+                    setSelectedId?.(next[0]?.id || null);
                     setConfirmDeleteId(null);
                   }}
                 >

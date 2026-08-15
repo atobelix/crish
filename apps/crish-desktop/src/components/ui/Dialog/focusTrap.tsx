@@ -1,13 +1,20 @@
 /**
- * ui/Dialog 目录内私有焦点圈定基元（PE-05 T05.1.3）
+ * ui/Dialog 目录内私有焦点圈定基元（PE-05 T05.1.3, WO-21）
  *
- * 从 `components/FocusTrap.tsx` 提炼（ui 原子层禁止依赖业务组件目录）。
- * 行为保持一致：Tab/Shift+Tab 循环 + 惰性 inert/aria-hidden 旁路
- * （对容器同级兄弟元素隐藏，使屏幕阅读器与焦点序不逃逸）。
+ * 引用计数沙盒与白名单隔离（WO-21 / SPEC-03）：
+ * 1. 建立 FocusTrapIsolationManager 原生 Map<Element, number> inert 引用计数状态机；
+ * 2. 精确隔离当前 activeTrapElement 自身，多层嵌套时父级 Dialog 被正确 inert 冻结；
+ * 3. 白名单旁路：Radix Popper、Tooltip、Toast 兄弟容器不打上 aria-hidden="true" / inert=true；
+ * 4. Tab / Shift+Tab 循环锁定与边界 wrap-around 冒泡阻断。
  */
-import { useCallback, useEffect, useRef, type ReactNode, type RefObject } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 
-interface FocusTrapProps {
+export interface FocusTrapProps {
   children: ReactNode;
   /** 是否启用 focus trap */
   active: boolean;
@@ -25,99 +32,219 @@ const FOCUSABLE_SELECTOR = [
   '[contenteditable]',
 ].join(', ');
 
-function getFocusableElements(container: HTMLElement): HTMLElement[] {
+export function getFocusableElements(container: HTMLElement): HTMLElement[] {
   return Array.from(
-    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+    container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
   ).filter((el) => {
     const style = getComputedStyle(el);
     return style.display !== 'none' && style.visibility !== 'hidden';
   });
 }
 
-function FocusTrap({ children, active, initialFocusRef }: FocusTrapProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const originalValues = useRef<Map<Element, string | null>>(new Map());
+interface InertSnapshot {
+  hadAriaHidden: boolean;
+  originalAriaHidden: string | null;
+  hadInert: boolean;
+}
 
-  const activate = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
+class FocusTrapIsolationManager {
+  private static instance: FocusTrapIsolationManager;
+  private trapStack: HTMLElement[] = [];
+  private inertCounts = new Map<Element, number>();
+  private snapshots = new Map<Element, InertSnapshot>();
 
-    const parent = container.parentElement;
-    if (parent) {
-      for (const child of Array.from(parent.children)) {
-        if (child === container) continue;
-        // F7 F5：跳过其他已开 Dialog 的 FocusTrap 容器——嵌套/并发弹窗
-        // 的 portal 是 body 兄弟节点，若被外层旁路 inert/aria-hidden，
-        // 内层弹窗将完全不可交互（时序错位风险）
-        if (child.hasAttribute('data-focus-trap')) continue;
-        originalValues.current.set(child, child.getAttribute('aria-hidden'));
-        child.setAttribute('aria-hidden', 'true');
-        if ('inert' in HTMLElement.prototype && 'inert' in child) {
-          (child as HTMLElement & { inert: boolean }).inert = true;
+  static getInstance(): FocusTrapIsolationManager {
+    if (!FocusTrapIsolationManager.instance) {
+      FocusTrapIsolationManager.instance = new FocusTrapIsolationManager();
+    }
+    return FocusTrapIsolationManager.instance;
+  }
+
+  private isWhitelisted(node: Element): boolean {
+    if (
+      node.hasAttribute('data-radix-popper-content-wrapper') ||
+      node.getAttribute('data-tooltip-portal') === 'true' ||
+      node.getAttribute('data-toast-container') === 'true' ||
+      node.classList.contains('radix-popper-content-wrapper') ||
+      node.classList.contains('toaster') ||
+      node.id === 'toast-portal' ||
+      node.id === 'tooltip-portal'
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  pushTrap(trapEl: HTMLElement): void {
+    this.trapStack.push(trapEl);
+    this.applyIsolation();
+  }
+
+  popTrap(trapEl: HTMLElement): void {
+    const idx = this.trapStack.lastIndexOf(trapEl);
+    if (idx !== -1) {
+      this.trapStack.splice(idx, 1);
+    }
+    this.applyIsolation();
+  }
+
+  private restoreNode(node: Element): void {
+    const snap = this.snapshots.get(node);
+    if (snap) {
+      this.snapshots.delete(node);
+      if (snap.hadAriaHidden) {
+        if (snap.originalAriaHidden != null) {
+          node.setAttribute('aria-hidden', snap.originalAriaHidden);
+        } else {
+          node.removeAttribute('aria-hidden');
+        }
+      } else {
+        node.removeAttribute('aria-hidden');
+      }
+      if (!snap.hadInert) {
+        node.removeAttribute('inert');
+      }
+    } else {
+      node.removeAttribute('aria-hidden');
+      node.removeAttribute('inert');
+    }
+  }
+
+  private applyIsolation(): void {
+    const activeTrap =
+      this.trapStack.length > 0
+        ? this.trapStack[this.trapStack.length - 1]
+        : null;
+    if (!activeTrap) {
+      for (const [node] of Array.from(this.inertCounts.entries())) {
+        this.restoreNode(node);
+      }
+      this.inertCounts.clear();
+      this.snapshots.clear();
+      return;
+    }
+
+    const currentInertTargets = new Set<Element>();
+    const docBody = document.body;
+
+    // 1. document.body 层级的所有非包含 activeTrap 的子元素
+    if (docBody) {
+      for (const child of Array.from(docBody.children)) {
+        if (child === activeTrap || child.contains(activeTrap)) continue;
+        if (this.isWhitelisted(child)) continue;
+        currentInertTargets.add(child);
+      }
+    }
+
+    // 2. 如果 activeTrap 在某一容器内嵌套，沿 DOM 树向上处理同层兄弟
+    let curr: HTMLElement | null = activeTrap.parentElement;
+    while (curr && curr !== docBody) {
+      for (const child of Array.from(curr.children)) {
+        if (child === activeTrap || child.contains(activeTrap)) continue;
+        if (this.isWhitelisted(child)) continue;
+        currentInertTargets.add(child);
+      }
+      curr = curr.parentElement;
+    }
+
+    // 3. 释放已不需要 inert 的节点
+    for (const [node, count] of Array.from(this.inertCounts.entries())) {
+      if (!currentInertTargets.has(node)) {
+        if (count <= 1) {
+          this.inertCounts.delete(node);
+          this.restoreNode(node);
+        } else {
+          this.inertCounts.set(node, count - 1);
         }
       }
     }
-  }, []);
 
-  const deactivate = useCallback(() => {
-    for (const [el, val] of originalValues.current) {
-      if (val === null) {
-        el.removeAttribute('aria-hidden');
-      } else {
-        el.setAttribute('aria-hidden', val);
-      }
-      if ('inert' in HTMLElement.prototype && 'inert' in el) {
-        (el as HTMLElement & { inert: boolean }).inert = false;
+    // 4. 对当前需要 inert 的目标施加状态并记录快照
+    for (const target of currentInertTargets) {
+      const prevCount = this.inertCounts.get(target) || 0;
+      this.inertCounts.set(target, prevCount + 1);
+
+      if (prevCount === 0) {
+        if (!this.snapshots.has(target)) {
+          this.snapshots.set(target, {
+            hadAriaHidden: target.hasAttribute('aria-hidden'),
+            originalAriaHidden: target.getAttribute('aria-hidden'),
+            hadInert: target.hasAttribute('inert'),
+          });
+        }
+        target.setAttribute('aria-hidden', 'true');
+        target.setAttribute('inert', '');
       }
     }
-    originalValues.current.clear();
-  }, []);
+  }
+}
+
+export function FocusTrap({
+  children,
+  active,
+  initialFocusRef,
+}: FocusTrapProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!active) return;
     const container = containerRef.current;
     if (!container) return;
 
-    // F7 F6：initialFocusRef 指向容器外/已卸载元素时不聚焦（焦点会逃逸出
-    // trap，Tab 循环与 inert 旁路全部失效）——回退到容器内首个可交互元素
+    const manager = FocusTrapIsolationManager.getInstance();
+    manager.pushTrap(container);
+
     const target =
-      initialFocusRef?.current &&
-      container.contains(initialFocusRef.current)
+      initialFocusRef?.current && container.contains(initialFocusRef.current)
         ? initialFocusRef.current
         : getFocusableElements(container)[0];
     target?.focus();
 
-    activate();
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
-      const focusable = getFocusableElements(container);
-      if (focusable.length === 0) return;
+      if (!containerRef.current) return;
+
+      const focusable = getFocusableElements(containerRef.current);
+      if (focusable.length === 0) {
+        e.preventDefault();
+        return;
+      }
 
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      const activeEl = document.activeElement;
 
       if (e.shiftKey) {
-        if (document.activeElement === first) {
+        if (activeEl === first || !containerRef.current.contains(activeEl)) {
           e.preventDefault();
-          last!.focus();
+          e.stopPropagation();
+          last.focus();
         }
-      } else if (document.activeElement === last) {
-        e.preventDefault();
-        first!.focus();
+      } else {
+        if (activeEl === last || !containerRef.current.contains(activeEl)) {
+          e.preventDefault();
+          e.stopPropagation();
+          first.focus();
+        }
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
+
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
-      deactivate();
+      manager.popTrap(container);
     };
-  }, [active, initialFocusRef, activate, deactivate]);
+  }, [active, initialFocusRef]);
 
-  // data-focus-trap 标记：供同级 FocusTrap 的 inert 旁路识别（F7 F5）
-  return <div ref={containerRef} data-focus-trap>{children}</div>;
+  return (
+    <div
+      ref={containerRef}
+      data-focus-trap="true"
+      style={{ display: 'contents' }}
+    >
+      {children}
+    </div>
+  );
 }
-
-export { FocusTrap };
-export type { FocusTrapProps };

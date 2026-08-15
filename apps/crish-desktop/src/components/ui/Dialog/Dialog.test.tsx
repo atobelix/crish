@@ -3,7 +3,13 @@
  * ui/Dialog 基座测试：Esc 关闭、焦点归还、Tab 循环、inert 旁路还原、aria
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  act,
+} from '@testing-library/react';
 import React, { useState } from 'react';
 import { Dialog } from './Dialog';
 
@@ -13,7 +19,10 @@ function DialogHarness({
   onClose,
   children,
   ...props
-}: React.ComponentProps<typeof Dialog> & { initialOpen?: boolean; onClose?: () => void }) {
+}: React.ComponentProps<typeof Dialog> & {
+  initialOpen?: boolean;
+  onClose?: () => void;
+}) {
   const [open, setOpen] = useState(initialOpen);
   return (
     <>
@@ -45,7 +54,9 @@ describe('ui/Dialog', () => {
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     // portal 结构：body > FocusTrap 容器 > 遮罩壳 > 面板
-    expect(dialog.parentElement?.parentElement?.parentElement).toBe(document.body);
+    expect(dialog.parentElement?.parentElement?.parentElement).toBe(
+      document.body
+    );
   });
 
   it('标题经 aria-labelledby 关联', () => {
@@ -61,7 +72,9 @@ describe('ui/Dialog', () => {
     const dialog = screen.getByRole('dialog');
     const describedBy = dialog.getAttribute('aria-describedby');
     expect(describedBy).toBeTruthy();
-    expect(document.getElementById(describedBy!)).toHaveTextContent('该操作不可撤销');
+    expect(document.getElementById(describedBy!)).toHaveTextContent(
+      '该操作不可撤销'
+    );
   });
 
   it('alertdialog 角色透传（供危险操作确认）', () => {
@@ -99,7 +112,9 @@ describe('ui/Dialog', () => {
 
   it('dismissible=false 时 Esc 不关闭', () => {
     const onClose = vi.fn();
-    render(<DialogHarness title="强制步进" dismissible={false} onClose={onClose} />);
+    render(
+      <DialogHarness title="强制步进" dismissible={false} onClose={onClose} />
+    );
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -156,7 +171,8 @@ describe('ui/Dialog', () => {
 
   it('inert 旁路：打开时对 body 兄弟节点设置 aria-hidden，关闭后还原', () => {
     const { unmount } = render(<DialogHarness title="旁路" />);
-    const trapContainer = screen.getByRole('dialog').parentElement!.parentElement!;
+    const trapContainer =
+      screen.getByRole('dialog').parentElement!.parentElement!;
     expect(trapContainer.parentElement).toBe(document.body);
 
     const hiddenSiblings = Array.from(document.body.children).filter(
@@ -216,7 +232,9 @@ describe('ui/Dialog', () => {
         <button type="button">唯一按钮</button>
       </DialogHarness>
     );
-    expect(screen.queryByRole('button', { name: '关闭弹窗' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '关闭弹窗' })
+    ).not.toBeInTheDocument();
     // 初始聚焦落到内容区首个可交互元素（无关闭按钮兜底）
     expect(screen.getByText('唯一按钮')).toHaveFocus();
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -240,7 +258,7 @@ describe('ui/Dialog', () => {
         <DialogHarness title="内层" onClose={onCloseInner} />
       </>
     );
-    expect(screen.getAllByRole('dialog')).toHaveLength(2);
+    expect(screen.getAllByRole('dialog', { hidden: true })).toHaveLength(2);
     fireEvent.keyDown(document, { key: 'Escape' });
     // 仅最顶层（后挂载的内层）响应 Esc，外层不得同时关闭
     expect(onCloseInner).toHaveBeenCalledTimes(1);

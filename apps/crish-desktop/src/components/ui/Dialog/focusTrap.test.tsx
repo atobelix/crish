@@ -79,25 +79,30 @@ describe('FocusTrap 引用计数沙盒与白名单隔离 (WO-21)', () => {
     function NestedDialogHarness() {
       const [showInner, setShowInner] = useState(false);
       return (
-        <FocusTrap active={true}>
-          <div data-testid="outer-dialog" role="dialog">
-            <button data-testid="open-inner" onClick={() => setShowInner(true)}>
-              打开内层
-            </button>
-            {showInner && (
-              <FocusTrap active={true}>
-                <div data-testid="inner-dialog" role="dialog">
-                  <button
-                    data-testid="close-inner"
-                    onClick={() => setShowInner(false)}
-                  >
-                    关闭内层
-                  </button>
-                </div>
-              </FocusTrap>
-            )}
-          </div>
-        </FocusTrap>
+        <>
+          <FocusTrap active={true}>
+            <div data-testid="outer-dialog" role="dialog">
+              <button
+                data-testid="open-inner"
+                onClick={() => setShowInner(true)}
+              >
+                打开内层
+              </button>
+            </div>
+          </FocusTrap>
+          {showInner && (
+            <FocusTrap active={true}>
+              <div data-testid="inner-dialog" role="dialog">
+                <button
+                  data-testid="close-inner"
+                  onClick={() => setShowInner(false)}
+                >
+                  关闭内层
+                </button>
+              </div>
+            </FocusTrap>
+          )}
+        </>
       );
     }
 
@@ -105,7 +110,7 @@ describe('FocusTrap 引用计数沙盒与白名单隔离 (WO-21)', () => {
       container: document.getElementById('portal-root')!,
     });
 
-    const outerDialog = screen.getByTestId('outer-dialog');
+    const outerDialog = screen.getByTestId('outer-dialog').parentElement!;
     expect(rootEl.getAttribute('aria-hidden')).toBe('true');
     // 单层时外层 Dialog 活跃，未被 inert
     expect(outerDialog.getAttribute('aria-hidden')).toBeNull();
@@ -113,7 +118,7 @@ describe('FocusTrap 引用计数沙盒与白名单隔离 (WO-21)', () => {
 
     // 打开内层 Dialog
     fireEvent.click(screen.getByTestId('open-inner'));
-    const innerDialog = screen.getByTestId('inner-dialog');
+    const innerDialog = screen.getByTestId('inner-dialog').parentElement!;
 
     // 内层打开后，外层 Dialog 应当被 freeze（标记 aria-hidden 与 inert）
     expect(outerDialog.getAttribute('aria-hidden')).toBe('true');

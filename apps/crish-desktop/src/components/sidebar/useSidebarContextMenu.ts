@@ -15,7 +15,6 @@ import {
   type SessionContextMenuState,
   type SessionMenuAction,
 } from './SidebarContextMenus';
-import { clampPosition } from '../ui/Menu/position';
 import { openSessionInNewWindow } from './sidebarHelpers';
 
 /**
@@ -44,8 +43,7 @@ function openSessionInChatSplit(
     return;
   }
 
-  const target =
-    chats.find((c) => c.id === tree.activeLeafId) ?? chats[0]!;
+  const target = chats.find((c) => c.id === tree.activeLeafId) ?? chats[0]!;
 
   // 目标 leaf 未绑定时，先绑 shell active，避免两 pane 都跟 shell 漂
   const shell = root.shell.getState();
@@ -130,9 +128,8 @@ export function useSidebarContextMenu({
   const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
     e.preventDefault();
     setRenamingSessionId(null);
-    // 坐标钳位单源：ui/Menu/position.ts（T05.3.1）
-    const { x, y } = clampPosition(e.clientX, e.clientY);
-    setContextMenu({ x, y, sessionId });
+    // 严格保存原始物理点击坐标，不可变锚点传递给浮层组件（彻底根除 Double Flip 二次翻转）
+    setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
   };
 
   const handleAction = (action: SessionMenuAction) => {
