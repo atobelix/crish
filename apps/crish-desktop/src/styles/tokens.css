@@ -1,19 +1,27 @@
 /* --- CONEX UI tokens pure neutral grays (no blue/purple tint) --- */
 
 :root,
-html[data-theme="default"],
-html[data-theme="light"] {
+html[data-theme='default'],
+html[data-theme='light'] {
   /*
    * Premium Light Theme
    * Pure neutral/monochrome greys
    */
-  --bg-primary: hsl(35, 12%, 94.0%);     /* 主背景色：极简护眼暖灰 */
-  --bg-secondary: hsl(35, 12%, 91.5%);   /* 次级背景/侧栏/顶栏：温暖舒适的暖灰 */
-  --bg-tertiary: hsl(35, 12%, 88.5%);    /* 三级背景：配置卡片等下凹底色 */
-  --bg-hover: var(--tint-hover);         /* 悬浮（tint 档位语义别名） */
-  --bg-active: var(--tint-active);       /* 激活（tint 档位语义别名） */
-  --bg-card: hsl(35, 10%, 98.0%);       /* 卡片底色：温润暖白，调高白度以增强卡片浮动感 */
-  --bg-elevated: hsl(35, 8%, 100.0%);   /* 弹层与下拉底色：高雅温润的乳白，确保亮度高于背景 */
+  --bg-primary: hsl(35, 12%, 94%); /* 主背景色：极简护眼暖灰 */
+  --bg-secondary: hsl(35, 12%, 91.5%); /* 次级背景/侧栏/顶栏：温暖舒适的暖灰 */
+  --bg-tertiary: hsl(35, 12%, 88.5%); /* 三级背景：配置卡片等下凹底色 */
+  --bg-hover: var(--tint-hover); /* 悬浮（tint 档位语义别名） */
+  --bg-active: var(--tint-active); /* 激活（tint 档位语义别名） */
+  --bg-card: hsl(
+    35,
+    10%,
+    98%
+  ); /* 卡片底色：温润暖白，调高白度以增强卡片浮动感 */
+  --bg-elevated: hsl(
+    35,
+    8%,
+    100%
+  ); /* 弹层与下拉底色：高雅温润的乳白，确保亮度高于背景 */
   --bg-workspace: var(--bg-primary);
   --card-header-bg: var(--bg-secondary);
   --bg-subtle: var(--bg-secondary);
@@ -33,54 +41,104 @@ html[data-theme="light"] {
   --tint-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
-  --tint-scrollbar-thumb: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --tint-scrollbar-thumb: color-mix(
+    in srgb,
+    var(--text-primary) 18%,
+    transparent
+  );
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
   /* T-C 批次 5.2 · T11：ui/Switch 轨道与拇指阴影（对齐旧 settings-switch 观感） */
-  --switch-track-bg: color-mix(in srgb, var(--text-primary) 5%, var(--bg-tertiary));
-  --switch-thumb-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
-  
-  --border-color: hsl(35, 10%, 86.0%);
-  --border-subtle: hsl(35, 8%, 91.0%);
-  --composer-bg: color-mix(in srgb, var(--control-mix-color) 15%, var(--bg-primary));
+  --switch-track-bg: color-mix(
+    in srgb,
+    var(--text-primary) 5%,
+    var(--bg-tertiary)
+  );
+  --switch-thumb-shadow: 0 1px 2px
+    color-mix(in srgb, var(--shadow-color) 12%, transparent);
+
+  --border-color: hsl(35, 10%, 86%);
+  --border-subtle: hsl(35, 8%, 91%);
+  --composer-bg: color-mix(
+    in srgb,
+    var(--control-mix-color) 15%,
+    var(--bg-primary)
+  );
   --composer-footer-bg: transparent;
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
-  
+
   --control-mix-color: hsl(35, 40%, 30%);
-  
-  --control-soft-bg: color-mix(in srgb, var(--control-mix-color) 4%, var(--bg-primary));
-  --control-soft-bg-hover: color-mix(in srgb, var(--control-mix-color) 4%, var(--bg-primary));
-  --control-soft-bg-active: color-mix(in srgb, var(--control-mix-color) 8%, var(--bg-primary));
-  --sidebar-hover: color-mix(in srgb, var(--control-mix-color) 4%, var(--bg-secondary));
-  --sidebar-active: color-mix(in srgb, var(--control-mix-color) 8%, var(--bg-secondary));
-  
-  --md-code-bg: color-mix(in srgb, var(--control-mix-color) 1.5%, var(--bg-primary));
+
+  --control-soft-bg: color-mix(
+    in srgb,
+    var(--control-mix-color) 4%,
+    var(--bg-primary)
+  );
+  --control-soft-bg-hover: color-mix(
+    in srgb,
+    var(--control-mix-color) 4%,
+    var(--bg-primary)
+  );
+  --control-soft-bg-active: color-mix(
+    in srgb,
+    var(--control-mix-color) 8%,
+    var(--bg-primary)
+  );
+  --sidebar-hover: color-mix(
+    in srgb,
+    var(--control-mix-color) 4%,
+    var(--bg-secondary)
+  );
+  --sidebar-active: color-mix(
+    in srgb,
+    var(--control-mix-color) 8%,
+    var(--bg-secondary)
+  );
+
+  --md-code-bg: color-mix(
+    in srgb,
+    var(--control-mix-color) 1.5%,
+    var(--bg-primary)
+  );
   --md-code-border: var(--border-color);
   --md-code-fg: var(--text-primary);
-  --focus-ring-color: color-mix(in srgb, var(--control-mix-color) 8%, transparent);
+  --focus-ring-color: color-mix(
+    in srgb,
+    var(--control-mix-color) 8%,
+    transparent
+  );
   --focus-ring: 0 0 0 2px var(--focus-ring-color);
-  --focus-ring-strong: 0 0 0 3px color-mix(in srgb, var(--control-mix-color) 12%, transparent);
+  --focus-ring-strong: 0 0 0 3px
+    color-mix(in srgb, var(--control-mix-color) 12%, transparent);
 
-  --accent-color: hsl(35, 16%, 15%);     /* 暖调深炭古铜 */
-  --accent-light: hsl(35, 20%, 98.5%);   /* 暖象牙白 */
-  --accent-hover: hsl(35, 16%, 22%);     /* 暖深炭黑 */
-  --accent-soft: hsl(35, 12%, 93.5%);    /* 极柔和暖 */
+  --accent-color: hsl(35, 16%, 15%); /* 暖调深炭古铜 */
+  --accent-light: hsl(35, 20%, 98.5%); /* 暖象牙白 */
+  --accent-hover: hsl(35, 16%, 22%); /* 暖深炭黑 */
+  --accent-soft: hsl(35, 12%, 93.5%); /* 极柔和暖 */
 
   --accent-orange: hsl(38, 92%, 50%);
   --accent-orange-light: hsl(38, 100%, 96%);
-  --accent-green: hsl(142, 35%, 42%);     /* 护眼森林暖绿 */
+  --accent-green: hsl(142, 35%, 42%); /* 护眼森林暖绿 */
   --accent-green-hover: hsl(142, 35%, 35%);
   --accent-green-light: hsl(142, 35%, 96.5%); /* 极轻透暖鼠尾草绿 */
   --accent-green-soft: hsl(142, 30%, 92.5%);
   --accent-green-muted: hsl(142, 30%, 82.5%);
-  --accent-red: hsl(0, 55%, 55%);         /* 柔和砖红/赤土 */
-  --accent-red-light: hsl(0, 55%, 97.5%);   /* 极轻透暖蜜桃 */
+  --accent-red: hsl(0, 55%, 55%); /* 柔和砖红/赤土 */
+  --accent-red-light: hsl(0, 55%, 97.5%); /* 极轻透暖蜜桃 */
   /* 运行时注入（themeStore applyTheme）的默认皮肤等价静态定义——注入缺失路径的兜底 */
-  --accent-green-light-adaptive: color-mix(in srgb, var(--accent-green, #16a34a) 15.5%, #ffffff);
-  --accent-red-light-adaptive: color-mix(in srgb, var(--accent-red, #dc2626) 12.5%, #ffffff);
+  --accent-green-light-adaptive: color-mix(
+    in srgb,
+    var(--accent-green, #16a34a) 15.5%,
+    #ffffff
+  );
+  --accent-red-light-adaptive: color-mix(
+    in srgb,
+    var(--accent-red, #dc2626) 12.5%,
+    #ffffff
+  );
   /* 批次 6.1 对比度修复（08 ③表行 4）：accent-blue 作链接/强调文字用时
    * #2f81f7 档仅 3.23:1 → #1d4ed8 档 5.89:1（WCAG AA 正文 ≥4.5:1）；
    * 图标/装饰仍可走 --color-info（dark 分支值不变，暗底 5.35:1 已达标） */
@@ -94,6 +152,8 @@ html[data-theme="light"] {
   --accent-inverted: var(--text-primary);
   --accent-chart-in: hsl(35, 10%, 82%);
   --accent-chart-out: hsl(35, 12%, 35%);
+  --chart-color-1: var(--accent-chart-out);
+  --chart-color-2: var(--accent-chart-in);
   --text-on-accent: #ffffff;
 
   /* semantic color roles */
@@ -102,7 +162,11 @@ html[data-theme="light"] {
   --color-success-border: var(--accent-green-muted);
   --color-warning: var(--accent-orange);
   --color-warning-bg: var(--accent-orange-light);
-  --color-warning-border: color-mix(in srgb, var(--accent-orange) 25%, transparent);
+  --color-warning-border: color-mix(
+    in srgb,
+    var(--accent-orange) 25%,
+    transparent
+  );
   --color-error: var(--accent-red);
   --color-error-bg: var(--accent-red-light);
   --color-error-border: color-mix(in srgb, var(--accent-red) 25%, transparent);
@@ -162,7 +226,7 @@ html[data-theme="light"] {
   --syntax-deletion: #dc2626;
   --syntax-meta: var(--text-secondary);
 
-  --terminal-bg: var(--bg-secondary); 
+  --terminal-bg: var(--bg-secondary);
   --terminal-fg: var(--text-primary);
   --terminal-err: var(--accent-red);
   --terminal-muted: var(--text-tertiary);
@@ -204,28 +268,28 @@ html[data-theme="light"] {
   --radius-full: 9999px;
 
   /* --- Unified Header & Titlebar Rows Token System --- */
-  --titlebar-row-h: 28px;       /* Row height (e.g. workspace bar, sessions bar, card-header) */
-  --titlebar-item-h: 28px;      /* Content/button/tab height — aligns with 36px header */
-  --titlebar-top-gap: 0px;      /* Vertical spacing from the upper frame border */
+  --titlebar-row-h: 28px; /* Row height (e.g. workspace bar, sessions bar, card-header) */
+  --titlebar-item-h: 28px; /* Content/button/tab height — aligns with 36px header */
+  --titlebar-top-gap: 0px; /* Vertical spacing from the upper frame border */
 
   /* Premium Soft Low-Presence Shadows */
-  --shadow-sm: 
+  --shadow-sm:
     0 1px 2px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 1px 1px color-mix(in srgb, var(--shadow-color) 1%, transparent);
-  --shadow-md: 
+  --shadow-md:
     0 2px 4px color-mix(in srgb, var(--shadow-color) 1%, transparent),
     0 4px 12px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 1px 1px color-mix(in srgb, var(--shadow-color) 0.5%, transparent);
-  --shadow-lg: 
+  --shadow-lg:
     0 4px 8px color-mix(in srgb, var(--shadow-color) 1%, transparent),
     0 12px 24px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 24px 48px color-mix(in srgb, var(--shadow-color) 1%, transparent),
     0 1px 2px color-mix(in srgb, var(--shadow-color) 0.5%, transparent);
-  --shadow-drag: 
+  --shadow-drag:
     0 8px 16px color-mix(in srgb, var(--shadow-color) 2%, transparent),
     0 20px 40px color-mix(in srgb, var(--shadow-color) 2.5%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1%, transparent);
-  --shadow-2xl: 
+  --shadow-2xl:
     0 12px 24px color-mix(in srgb, var(--shadow-color) 2.5%, transparent),
     0 32px 64px color-mix(in srgb, var(--shadow-color) 3.5%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1%, transparent);
@@ -264,18 +328,25 @@ html[data-theme="light"] {
   --easing-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* 默认中英文同一主族（雅黑/苹方等含 CJK 字形）；fontStore 运行时会覆盖 */
-  --font-sans: 'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Noto Sans CJK SC', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Segoe UI Mono', 'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
+  --font-sans:
+    'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB',
+    'Noto Sans SC', 'Noto Sans CJK SC', system-ui, -apple-system,
+    BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Variable Text', 'Helvetica Neue',
+    Arial, sans-serif;
+  --font-mono:
+    'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Segoe UI Mono',
+    'SF Mono', Consolas, 'Liberation Mono', ui-monospace, monospace;
 
   --dropdown-padding: var(--space-1_5);
   --dropdown-gap: var(--space-0_5);
-  --dropdown-radius: var(--radius-md);
+  --dropdown-radius: var(--radius-xl);
   --item-padding: 8px 12px;
-  --item-radius: var(--radius-sm);
+  --item-radius: var(--radius-md);
   --item-font-size: var(--font-size-base);
 
   --header-height: 36px;
   --sidebar-width: 260px; /* overridden by JS constants at runtime */
+  --settings-sidebar-width: 240px;
 
   /*
    * 文字层级（正?14 为基准）
@@ -316,7 +387,7 @@ html[data-theme="light"] {
   /* 层级变量统一以 styles/z-index.css 为唯一真源 */
   /* --font-mono-features 由 fontStore.ts 运行时注入（字体特性开关）；此处补静态
    * 默认定义（对齐注入默认值），注入缺失时降级可用 */
-  --font-mono-features: "calt" 0, "liga" 0;
+  --font-mono-features: 'calt' 0, 'liga' 0;
 
   --breakpoint-sm: 640px;
   --breakpoint-md: 768px;
@@ -432,13 +503,13 @@ html[data-theme="light"] {
  *   --hairline       = 结构分隔（card-header 底、settings-list 行、filter-bar?
  *   --hairline-strong = 可交互描边（输入壳、浮层菜单、用户气泡）
  * 禁止组件再写独立 color-mix 百分比描?*/
-html[data-theme="dark"] {
+html[data-theme='dark'] {
   /* Premium Dark Theme (Neutral/Vercel style) */
   --bg-primary: hsl(0, 0%, 5%);
   --bg-secondary: hsl(0, 0%, 8%);
   --bg-tertiary: hsl(0, 0%, 11%);
-  --bg-hover: var(--tint-hover);         /* 悬浮（tint 档位语义别名） */
-  --bg-active: var(--tint-active);       /* 激活（tint 档位语义别名） */
+  --bg-hover: var(--tint-hover); /* 悬浮（tint 档位语义别名） */
+  --bg-active: var(--tint-active); /* 激活（tint 档位语义别名） */
   --bg-card: hsl(0, 0%, 11%);
   --bg-elevated: hsl(0, 0%, 15%);
   --bg-subtle: var(--bg-secondary);
@@ -456,13 +527,18 @@ html[data-theme="dark"] {
   --tint-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
-  --tint-scrollbar-thumb: color-mix(in srgb, var(--text-primary) 18%, transparent);
+  --tint-scrollbar-thumb: color-mix(
+    in srgb,
+    var(--text-primary) 18%,
+    transparent
+  );
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
   /* T-C 批次 5.2 · T11：ui/Switch 轨道与拇指阴影（dark 轨道对齐旧 theme-dark.css 覆盖） */
   --switch-track-bg: var(--tint-active);
-  --switch-thumb-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color) 12%, transparent);
+  --switch-thumb-shadow: 0 1px 2px
+    color-mix(in srgb, var(--shadow-color) 12%, transparent);
 
   --border-color: hsl(0, 0%, 18%);
   --border-subtle: hsl(0, 0%, 14%);
@@ -475,18 +551,39 @@ html[data-theme="dark"] {
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
-  
-  --control-soft-bg: color-mix(in srgb, var(--text-primary) 5%, var(--bg-primary));
-  --control-soft-bg-hover: color-mix(in srgb, var(--text-primary) 6.5%, var(--bg-primary));
-  --control-soft-bg-active: color-mix(in srgb, var(--text-primary) 9.5%, var(--bg-primary));
+
+  --control-soft-bg: color-mix(
+    in srgb,
+    var(--text-primary) 5%,
+    var(--bg-primary)
+  );
+  --control-soft-bg-hover: color-mix(
+    in srgb,
+    var(--text-primary) 6.5%,
+    var(--bg-primary)
+  );
+  --control-soft-bg-active: color-mix(
+    in srgb,
+    var(--text-primary) 9.5%,
+    var(--bg-primary)
+  );
   /* dark 分支缺口补齐（01 退化 P2-01）：light 侧栏 hover/active 与 control-mix-color 在 dark 下
    * 会继承 light 暖棕值，补定义后与 tint 同基底、观感一致 */
-  --sidebar-hover: color-mix(in srgb, var(--text-primary) 5%, var(--bg-secondary));
-  --sidebar-active: color-mix(in srgb, var(--text-primary) 8%, var(--bg-secondary));
+  --sidebar-hover: color-mix(
+    in srgb,
+    var(--text-primary) 5%,
+    var(--bg-secondary)
+  );
+  --sidebar-active: color-mix(
+    in srgb,
+    var(--text-primary) 8%,
+    var(--bg-secondary)
+  );
   --control-mix-color: var(--text-primary);
   --focus-ring-color: color-mix(in srgb, var(--text-primary) 30%, transparent);
   --focus-ring: 0 0 0 2px var(--focus-ring-color);
-  --focus-ring-strong: 0 0 0 3px color-mix(in srgb, var(--text-primary) 22%, transparent);
+  --focus-ring-strong: 0 0 0 3px
+    color-mix(in srgb, var(--text-primary) 22%, transparent);
 
   --accent-color: #f8fafc;
   --accent-light: #1e293b;
@@ -503,8 +600,16 @@ html[data-theme="dark"] {
   --accent-red: hsl(0, 55%, 55%);
   --accent-red-light: hsl(0, 55%, 16%);
   /* 运行时注入（themeStore applyTheme）的默认皮肤等价静态定义——dark 兜底 */
-  --accent-green-light-adaptive: color-mix(in srgb, var(--accent-green, #22c55e) 8%, var(--bg-primary));
-  --accent-red-light-adaptive: color-mix(in srgb, var(--accent-red, #ef4444) 8%, var(--bg-primary));
+  --accent-green-light-adaptive: color-mix(
+    in srgb,
+    var(--accent-green, #22c55e) 8%,
+    var(--bg-primary)
+  );
+  --accent-red-light-adaptive: color-mix(
+    in srgb,
+    var(--accent-red, #ef4444) 8%,
+    var(--bg-primary)
+  );
   --accent-blue: hsl(217, 91%, 60%);
   --accent-blue-light: hsl(224, 64%, 33%);
   --accent-violet: hsl(258, 90%, 66%);
@@ -532,7 +637,11 @@ html[data-theme="dark"] {
   --color-success-border: var(--accent-green-muted);
   --color-warning: var(--accent-orange);
   --color-warning-bg: var(--accent-orange-light);
-  --color-warning-border: color-mix(in srgb, var(--accent-orange) 25%, transparent);
+  --color-warning-border: color-mix(
+    in srgb,
+    var(--accent-orange) 25%,
+    transparent
+  );
   --color-error: var(--accent-red);
   --color-error-bg: var(--accent-red-light);
   --color-error-border: color-mix(in srgb, var(--accent-red) 25%, transparent);
@@ -540,26 +649,24 @@ html[data-theme="dark"] {
   --color-info-bg: var(--accent-blue-light);
   --color-info-border: color-mix(in srgb, var(--accent-blue) 25%, transparent);
 
-
-
   /* Premium Soft Dark Shadows */
-  --shadow-sm: 
+  --shadow-sm:
     0 1px 2px color-mix(in srgb, var(--shadow-color) 15%, transparent),
     0 1px 1px color-mix(in srgb, var(--shadow-color) 10%, transparent);
-  --shadow-md: 
+  --shadow-md:
     0 2px 4px color-mix(in srgb, var(--shadow-color) 15%, transparent),
     0 6px 16px color-mix(in srgb, var(--shadow-color) 20%, transparent),
     0 1px 1px color-mix(in srgb, var(--shadow-color) 10%, transparent);
-  --shadow-lg: 
+  --shadow-lg:
     0 4px 8px color-mix(in srgb, var(--shadow-color) 20%, transparent),
     0 16px 32px color-mix(in srgb, var(--shadow-color) 25%, transparent),
     0 32px 64px color-mix(in srgb, var(--shadow-color) 15%, transparent),
     0 1px 2px color-mix(in srgb, var(--shadow-color) 10%, transparent);
-  --shadow-drag: 
+  --shadow-drag:
     0 8px 16px color-mix(in srgb, var(--shadow-color) 25%, transparent),
     0 24px 48px color-mix(in srgb, var(--shadow-color) 35%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
-  --shadow-2xl: 
+  --shadow-2xl:
     0 12px 24px color-mix(in srgb, var(--shadow-color) 30%, transparent),
     0 32px 64px color-mix(in srgb, var(--shadow-color) 40%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
@@ -603,7 +710,8 @@ html[data-theme="dark"] {
 
 /* UI Size Gear 相对 14px 基准缩放；small 不低11px 元信 */
 /* 密度只改字号/控件高，不改侧栏宽（侧栏宽独token + 用户拖拽持久化） */
-[data-ui-size="small"] {
+[data-ui-size='small'] {
+  --settings-sidebar-width: 220px;
   --dropdown-padding: 5px;
   --dropdown-gap: var(--space-0_5);
   --dropdown-radius: 10px;
@@ -678,9 +786,8 @@ html[data-theme="dark"] {
   --diff-file-chip-min-xs: 72px;
 }
 
-
-
-[data-ui-size="large"] {
+[data-ui-size='large'] {
+  --settings-sidebar-width: 260px;
   --dropdown-padding: var(--space-2);
   --dropdown-gap: 3px;
   --dropdown-radius: 14px;
@@ -763,24 +870,24 @@ html[data-theme="dark"] {
 /* --- Conex System Performance Tiers --- */
 
 /* HIGH SPEC TIER: Snappy, brisk, and premium transitions */
-html[data-perf-tier="high"] {
+html[data-perf-tier='high'] {
   --backdrop-blur: blur(16px);
   --bg-glass: rgba(255, 255, 255, 0.75);
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
 }
-html[data-perf-tier="high"][data-theme="dark"] {
+html[data-perf-tier='high'][data-theme='dark'] {
   --bg-glass: rgba(10, 10, 10, 0.75);
 }
 
 /* BALANCED SPEC TIER: Snappy layout transitions */
-html[data-perf-tier="balanced"] {
+html[data-perf-tier='balanced'] {
   --backdrop-blur: blur(0px); /* Disable expensive GPU filters */
   --bg-glass: var(--bg-elevated); /* solid background fallback */
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
 }
 
 /* ECO PERFORMANCE TIER: Strictly flat layout, zero transitions */
-html[data-perf-tier="eco"] {
+html[data-perf-tier='eco'] {
   --backdrop-blur: blur(0px);
   --bg-glass: var(--bg-elevated);
   --transition-spring-layout: 0ms !important;

@@ -75,7 +75,7 @@
   min-width: 165px;
   max-width: 260px;
   padding: 0 12px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-full);
   border: none; /* CRITICAL: DO NOT ADD BORDER TO MODEL BADGE. STIPULATED BY USER RULE TO AVOID OUTDATED BROWSER DEFAULTS */
   background: transparent;
   font-size: var(--font-size-sm);
@@ -83,7 +83,10 @@
   box-sizing: border-box;
   position: relative;
   user-select: none;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .modelBadge:hover {
