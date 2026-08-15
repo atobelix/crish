@@ -1,4 +1,12 @@
-import React, { useState, useEffect, useRef, useCallback, useId, lazy, Suspense } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  useId,
+  lazy,
+  Suspense,
+} from 'react';
 import styles from './SettingsPanel.module.css';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
 import {
@@ -15,54 +23,96 @@ import {
   type TabType,
 } from '../settingsTabsMeta';
 import { useSettingsNav } from '../useSettingsNav';
-import { SettingsTablist } from '../SettingsTablist';
+import { SettingsSidebar } from './SettingsSidebar';
 import { SettingsWindowControls } from '../SettingsWindowControls';
 
-/**
- * 设置 tab 懒加载：设置页是低频入口，11 个 tab（含 873 行 SkillsSettingsTab /
- * 788 行 McpSettingsTab / 650 行 ModelsSettingsTab）不应全部进初始 bundle。
- * React.lazy + Suspense 按需加载，首屏只加载当前激活 tab。
- * 命名导出需 .then(m => ({ default: m.Xxx })) 适配 lazy 的 default 导出约定。
- */
+/** 设置 tab 懒加载：按需加载，首屏只加载当前激活 tab */
 const ModelsSettingsTab = lazy(() =>
-  import('../settings-models/ModelsSettingsTab').then((m) => ({ default: m.ModelsSettingsTab })),
+  import('../settings-models/ModelsSettingsTab').then((m) => ({
+    default: m.ModelsSettingsTab,
+  }))
 );
 const SettingsScheduleTab = lazy(() =>
-  import('./SettingsScheduleTab').then((m) => ({ default: m.SettingsScheduleTab })),
+  import('./SettingsScheduleTab').then((m) => ({
+    default: m.SettingsScheduleTab,
+  }))
 );
 const SettingsRulesTab = lazy(() =>
-  import('./SettingsRulesTab').then((m) => ({ default: m.SettingsRulesTab })),
+  import('./SettingsRulesTab').then((m) => ({ default: m.SettingsRulesTab }))
 );
 const SettingsSecurityTab = lazy(() =>
-  import('./SettingsSecurityTab').then((m) => ({ default: m.SettingsSecurityTab })),
+  import('./SettingsSecurityTab').then((m) => ({
+    default: m.SettingsSecurityTab,
+  }))
 );
 const SettingsProfileTab = lazy(() =>
-  import('./SettingsProfileTab').then((m) => ({ default: m.SettingsProfileTab })),
+  import('./SettingsProfileTab').then((m) => ({
+    default: m.SettingsProfileTab,
+  }))
 );
 const SettingsAppearanceTab = lazy(() =>
-  import('./SettingsAppearanceTab').then((m) => ({ default: m.SettingsAppearanceTab })),
+  import('./SettingsAppearanceTab').then((m) => ({
+    default: m.SettingsAppearanceTab,
+  }))
 );
 const SettingsUsageTab = lazy(() =>
-  import('./SettingsUsageTab').then((m) => ({ default: m.SettingsUsageTab })),
+  import('./SettingsUsageTab').then((m) => ({ default: m.SettingsUsageTab }))
 );
 const SettingsDevicesTab = lazy(() =>
-  import('./SettingsDevicesTab').then((m) => ({ default: m.SettingsDevicesTab })),
+  import('./SettingsDevicesTab').then((m) => ({
+    default: m.SettingsDevicesTab,
+  }))
 );
 const SettingsShortcutsTab = lazy(() =>
-  import('./SettingsShortcutsTab').then((m) => ({ default: m.SettingsShortcutsTab })),
+  import('./SettingsShortcutsTab').then((m) => ({
+    default: m.SettingsShortcutsTab,
+  }))
 );
 const SettingsPersonalizeTab = lazy(() =>
-  import('./SettingsPersonalizeTab').then((m) => ({ default: m.SettingsPersonalizeTab })),
+  import('./SettingsPersonalizeTab').then((m) => ({
+    default: m.SettingsPersonalizeTab,
+  }))
 );
 const SettingsExtensionsTab = lazy(() =>
-  import('../settings-extensions/SettingsExtensionsTab').then((m) => ({ default: m.SettingsExtensionsTab })),
+  import('../settings-extensions/SettingsExtensionsTab').then((m) => ({
+    default: m.SettingsExtensionsTab,
+  }))
 );
 const StatusDiagnosticsPanel = lazy(() =>
-  import('./StatusDiagnosticsPanel').then((m) => ({ default: m.StatusDiagnosticsPanel })),
+  import('./StatusDiagnosticsPanel').then((m) => ({
+    default: m.StatusDiagnosticsPanel,
+  }))
 );
 
+type TabComponentProps = {
+  onShowToast: (msg: string, onUndo?: () => void) => void;
+  onBlockingOverlayChange?: (open: boolean) => void;
+};
+
+const TAB_COMPONENTS: Record<
+  TabType,
+  { label: string; Component: React.ComponentType<TabComponentProps> }
+> = {
+  profile: { label: '个人资料', Component: SettingsProfileTab },
+  appearance: { label: '外观', Component: SettingsAppearanceTab },
+  personalize: { label: '通用设置', Component: SettingsPersonalizeTab },
+  models: { label: '模型', Component: ModelsSettingsTab },
+  plugins: { label: '扩展', Component: SettingsExtensionsTab },
+  skills: { label: '扩展', Component: SettingsExtensionsTab },
+  mcp: { label: '扩展', Component: SettingsExtensionsTab },
+  usage: { label: '用量', Component: SettingsUsageTab },
+  devices: { label: '多端互通', Component: SettingsDevicesTab },
+  schedule: { label: '定时任务', Component: SettingsScheduleTab },
+  rules: { label: '规则', Component: SettingsRulesTab },
+  shortcuts: { label: '快捷键', Component: SettingsShortcutsTab },
+  security: { label: '安全', Component: SettingsSecurityTab },
+  diagnostics: { label: '状态诊断', Component: StatusDiagnosticsPanel },
+};
+
 /** tab 懒加载占位：与设置页骨架样式一致，避免加载抖动 */
-const SettingsTabSuspenseFallback: React.FC<{ tabName: string }> = ({ tabName }) => (
+const SettingsTabSuspenseFallback: React.FC<{ tabName: string }> = ({
+  tabName,
+}) => (
   <div className="settings-tab-loading" role="status" aria-live="polite">
     <span className="settings-tab-loading-text">加载 {tabName}…</span>
   </div>
@@ -74,7 +124,7 @@ import type { SettingsTabType } from '../../store/types';
 export type { SettingsTabType };
 
 interface SettingsPanelProps {
-  wsId: string;
+  wsId?: string;
   onShowToast: (msg: string, onUndo?: () => void) => void;
   onClose?: () => void;
   initialTab?: SettingsTabType;
@@ -82,9 +132,7 @@ interface SettingsPanelProps {
 }
 
 /**
- * 设置壳组件：顶栏窗口控制 + 侧栏导航（SettingsTablist）+ 内容区（11 个懒加载
- * Suspense 分支）。tab 元数据见 settingsTabsMeta；搜索/roving/Esc/快捷键见
- * useSettingsNav；窗口控制见 SettingsWindowControls。
+ * 设置壳组件：顶栏窗口控制 + 专属侧栏导航（SettingsSidebar）+ 内容区（懒加载 Suspense 分支）。
  */
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   isOpen,
@@ -112,14 +160,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
     (raw?: string | null): TabType => {
       const n = normalizeSettingsTabId(raw ?? undefined);
       if (n) return n;
-      if (raw && (allowedTabIds(mcpAvailable) as string[]).includes(raw)) return raw as TabType;
+      if (raw && (allowedTabIds(mcpAvailable) as string[]).includes(raw))
+        return raw as TabType;
       return 'profile';
     },
-    [mcpAvailable],
+    [mcpAvailable]
   );
 
   const [activeTab, setActiveTab] = useState<TabType>(() =>
-    resolveTab(initialTab || storeTab),
+    resolveTab(initialTab || storeTab)
   );
 
   // Deep-link: follow store when settings open with a target tab
@@ -135,7 +184,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       if (opts?.focusTab) {
         requestAnimationFrame(() => {
           const el = tablistRef.current?.querySelector<HTMLElement>(
-            `[data-settings-tab-id="${tab}"]`,
+            `[data-settings-tab-id="${tab}"]`
           );
           el?.focus();
         });
@@ -145,14 +194,14 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         });
       }
     },
-    [setSettingsActiveTab],
+    [setSettingsActiveTab]
   );
 
-  /** 永远走合法 tab；未知 id 回退 profile，保证默认页可挂载 */
   const safeActiveTab: TabType = resolveTab(activeTab);
-  /** 当前页元信息；永远有 fallback，避免渲染期未定义变量导致设置打不开 */
   const activeTabMeta =
-    TAB_META.find((t) => t.id === safeActiveTab) ?? TAB_META[0] ?? FALLBACK_TAB_META;
+    TAB_META.find((t) => t.id === safeActiveTab) ??
+    TAB_META[0] ??
+    FALLBACK_TAB_META;
   const activeLabel = activeTabMeta.label || '设置';
   const panelId = `${baseId}-panel-${safeActiveTab}`;
   const activeTabBtnId = `${baseId}-tab-${safeActiveTab}`;
@@ -160,12 +209,17 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   const handleRootWheel = (e: React.WheelEvent) => {
     if (contentAreaRef.current) {
       const target = e.target as HTMLElement;
-      if (target.closest('textarea') || target.closest('pre') || target.closest('select')) {
+      if (
+        target.closest('textarea') ||
+        target.closest('pre') ||
+        target.closest('select')
+      )
         return;
-      }
-      if (contentAreaRef.current.contains(target) && target !== contentAreaRef.current) {
+      if (
+        contentAreaRef.current.contains(target) &&
+        target !== contentAreaRef.current
+      )
         return;
-      }
       contentAreaRef.current.scrollTop += e.deltaY;
     }
   };
@@ -188,10 +242,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
   if (isOpen === false) return null;
 
-  // 全屏盖层（PE-05 T05.2 #5）：收敛到 ui/Dialog 基座——
-  // 遮罩/焦点圈定/焦点归还/动画由基座接管；dismissible=false 使 Esc 仍走
-  // useSettingsNav 的三层优先级（清搜索 → 关设置），rulesModalOpen 为
-  // 规则编辑器打开时的第一层守卫；初始聚焦搜索框。
+  const currentTabDef = TAB_COMPONENTS[safeActiveTab] ?? TAB_COMPONENTS.profile;
+  const ActiveTabComponent = currentTabDef.Component;
+
   return (
     <Dialog
       open={isOpen ?? true}
@@ -210,151 +263,68 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         data-density="compact"
         onWheel={handleRootWheel}
       >
-        {/* 顶栏极简：仅拖拽区 + 关闭；键盘 Esc 关闭（搜索有词时先清空） */}
-        <header className={`${styles.coverHeader} ${styles.coverHeaderSlim}`} data-tauri-drag-region>
+        <header
+          className={`${styles.coverHeader} ${styles.coverHeaderSlim}`}
+          data-tauri-drag-region
+        >
           <div className={styles.coverHeaderSpacer} data-tauri-drag-region />
           <SettingsWindowControls onClose={onClose} />
         </header>
 
-      <div className={styles.coverBody} data-density="compact">
-        <SettingsTablist
-          baseId={baseId}
-          items={nav.visibleTabs}
-          activeId={safeActiveTab}
-          rovingId={nav.rovingId}
-          tablistId={tablistId}
-          searchId={searchId}
-          statusId={statusId}
-          panelId={panelId}
-          searchQuery={nav.navQuery}
-          filterStatusText={nav.filterStatusText}
-          searchInputRef={nav.searchInputRef}
-          tablistRef={tablistRef}
-          onBack={onClose}
-          onSearchChange={nav.setNavQuery}
-          onSearchKeyDown={nav.onSearchKeyDown}
-          onTablistKeyDown={nav.onTablistKeyDown}
-          onSelect={selectTab}
-          onFocusTab={setNavFocusId}
-        />
+        <div className={styles.coverBody} data-density="compact">
+          <SettingsSidebar
+            baseId={baseId}
+            items={nav.visibleTabs}
+            activeId={safeActiveTab}
+            rovingId={nav.rovingId}
+            tablistId={tablistId}
+            searchId={searchId}
+            statusId={statusId}
+            panelId={panelId}
+            searchQuery={nav.navQuery}
+            filterStatusText={nav.filterStatusText}
+            searchInputRef={nav.searchInputRef}
+            tablistRef={tablistRef}
+            onBack={onClose}
+            onSearchChange={nav.setNavQuery}
+            onSearchKeyDown={nav.onSearchKeyDown}
+            onTablistKeyDown={nav.onTablistKeyDown}
+            onSelect={selectTab}
+            onFocusTab={setNavFocusId}
+          />
 
-        <div
-          ref={contentAreaRef}
-          id={panelId}
-          role="tabpanel"
-          tabIndex={0}
-          className={styles.coverContent}
-          aria-label={activeLabel}
-          aria-labelledby={activeTabBtnId}
-          data-settings-tab={safeActiveTab}
-          data-density="compact"
-        >
-          {/* 每页独立 ErrorBoundary + Suspense：单页崩溃不拖垮整个设置层；
-              React.lazy 按需加载，首屏只加载当前 tab。
-              key 切换时重置错误态 + Suspense 重新挂载 */}
-          {safeActiveTab === 'profile' && (
-            <Suspense key="tab-profile-suspense" fallback={<SettingsTabSuspenseFallback tabName="个人资料" />}>
-              <AppErrorBoundary key="tab-profile" compact title="设置页面出错">
-                <SettingsProfileTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'appearance' && (
-            <Suspense key="tab-appearance-suspense" fallback={<SettingsTabSuspenseFallback tabName="外观" />}>
-              <AppErrorBoundary key="tab-appearance" compact title="设置页面出错">
-                <SettingsAppearanceTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'personalize' && (
-            <Suspense key="tab-personalize-suspense" fallback={<SettingsTabSuspenseFallback tabName="通用设置" />}>
-              <AppErrorBoundary key="tab-personalize" compact title="设置页面出错">
-                <SettingsPersonalizeTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'models' && (
-            <Suspense key="tab-models-suspense" fallback={<SettingsTabSuspenseFallback tabName="模型" />}>
-              <AppErrorBoundary key="tab-models" compact title="设置页面出错">
-                <ModelsSettingsTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'plugins' && (
+          <div
+            ref={contentAreaRef}
+            id={panelId}
+            role="tabpanel"
+            tabIndex={0}
+            className={styles.coverContent}
+            aria-label={activeLabel}
+            aria-labelledby={activeTabBtnId}
+            data-settings-tab={safeActiveTab}
+            data-density="compact"
+          >
             <Suspense
-              key="tab-plugins-suspense"
-              fallback={<SettingsTabSuspenseFallback tabName="扩展" />}
+              key={`tab-${safeActiveTab}-suspense`}
+              fallback={
+                <SettingsTabSuspenseFallback tabName={currentTabDef.label} />
+              }
             >
-              <AppErrorBoundary key="tab-plugins" compact title="设置页面出错">
-                <SettingsExtensionsTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'usage' && (
-            <Suspense key="tab-usage-suspense" fallback={<SettingsTabSuspenseFallback tabName="用量" />}>
-              <AppErrorBoundary key="tab-usage" compact title="设置页面出错">
-                <SettingsUsageTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'devices' && (
-            <Suspense key="tab-devices-suspense" fallback={<SettingsTabSuspenseFallback tabName="多端互通" />}>
-              <AppErrorBoundary key="tab-devices" compact title="设置页面出错">
-                <SettingsDevicesTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'schedule' && (
-            <Suspense key="tab-schedule-suspense" fallback={<SettingsTabSuspenseFallback tabName="定时任务" />}>
-              <AppErrorBoundary key="tab-schedule" compact title="设置页面出错">
-                <SettingsScheduleTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'rules' && (
-            <Suspense key="tab-rules-suspense" fallback={<SettingsTabSuspenseFallback tabName="规则" />}>
-              <AppErrorBoundary key="tab-rules" compact title="设置页面出错">
-                <SettingsRulesTab
+              <AppErrorBoundary
+                key={`tab-${safeActiveTab}`}
+                compact
+                title="设置页面出错"
+              >
+                <ActiveTabComponent
                   onShowToast={onShowToast}
-                  onBlockingOverlayChange={setRulesModalOpen}
+                  {...(safeActiveTab === 'rules'
+                    ? { onBlockingOverlayChange: setRulesModalOpen }
+                    : {})}
                 />
               </AppErrorBoundary>
             </Suspense>
-          )}
-
-          {safeActiveTab === 'shortcuts' && (
-            <Suspense key="tab-shortcuts-suspense" fallback={<SettingsTabSuspenseFallback tabName="快捷键" />}>
-              <AppErrorBoundary key="tab-shortcuts" compact title="设置页面出错">
-                <SettingsShortcutsTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'security' && (
-            <Suspense key="tab-security-suspense" fallback={<SettingsTabSuspenseFallback tabName="安全" />}>
-              <AppErrorBoundary key="tab-security" compact title="设置页面出错">
-                <SettingsSecurityTab onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
-
-          {safeActiveTab === 'diagnostics' && (
-            <Suspense key="tab-diagnostics-suspense" fallback={<SettingsTabSuspenseFallback tabName="状态诊断" />}>
-              <AppErrorBoundary key="tab-diagnostics" compact title="设置页面出错">
-                <StatusDiagnosticsPanel onShowToast={onShowToast} />
-              </AppErrorBoundary>
-            </Suspense>
-          )}
+          </div>
         </div>
-      </div>
       </div>
     </Dialog>
   );
