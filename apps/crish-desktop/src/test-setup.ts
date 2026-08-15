@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { beforeEach, vi } from 'vitest';
+import { beforeEach, afterEach, vi } from 'vitest';
 
 // =============================================================================
 // Tauri invoke mock 基础设施（Stream F）
@@ -81,7 +81,7 @@ vi.mock('@tauri-apps/plugin-shell', () => ({
  */
 export function mockTauriCommand(
   cmd: string,
-  impl: (args: unknown) => unknown | Promise<unknown>,
+  impl: (args: unknown) => unknown | Promise<unknown>
 ): void {
   mockState.commands.set(cmd, { state: 'ok', impl });
 }
@@ -137,11 +137,65 @@ export function __inspectMockState(): Record<string, string[]> {
   return byState;
 }
 
-// 每个测试用例前自动清空 mock 状态，保证可重置。
-// 使用 beforeEach 而非 beforeAll，确保用例之间隔离。
-beforeEach(() => {
-  clearMockTauriCommands();
-});
+// =============================================================================
+// DOM 基础辅助垫片
+// =============================================================================
+
+// 1. 安全补全 Element.prototype.scrollIntoView
+if (
+  typeof Element !== 'undefined' &&
+  typeof Element.prototype.scrollIntoView !== 'function'
+) {
+  Element.prototype.scrollIntoView = function (
+    arg?: boolean | ScrollIntoViewOptions
+  ) {
+    (
+      this as Element & {
+        __lastScrollIntoViewArg?: boolean | ScrollIntoViewOptions;
+      }
+    ).__lastScrollIntoViewArg = arg;
+  };
+}
+
+// 2. 安全补全 document.elementFromPoint
+if (
+  typeof document !== 'undefined' &&
+  typeof document.elementFromPoint !== 'function'
+) {
+  document.elementFromPoint = function (x: number, y: number): Element | null {
+    const all = document.body.querySelectorAll('*');
+    for (let i = all.length - 1; i >= 0; i--) {
+      const el = all[i];
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        return el;
+      }
+    }
+    return document.body;
+  };
+}
+
+// =============================================================================
+// 引入真实物理排版仿真引擎与可控 ResizeObserver
+// =============================================================================
+export {
+  MockPhysicalGeometryEngine,
+  type TestViewportConfig,
+  type ElementGeometryConfig,
+} from './test-utils/MockPhysicalGeometryEngine';
+export { ControllableResizeObserver } from './test-utils/ControllableResizeObserver';
+
+import { MockPhysicalGeometryEngine } from './test-utils/MockPhysicalGeometryEngine';
+import { ControllableResizeObserver } from './test-utils/ControllableResizeObserver';
+
+// 安装驱动型 ResizeObserver
+globalThis.ResizeObserver =
+  ControllableResizeObserver as unknown as typeof ResizeObserver;
+
+// 安装物理排版仿真引擎
+const geometryEngine = MockPhysicalGeometryEngine.getInstance();
+geometryEngine.install();
 
 // =============================================================================
 // Multi-window shell scope: stable window id for vitest (openTabs / layout tree)
@@ -155,13 +209,17 @@ try {
 }
 
 // =============================================================================
-// 原有 ResizeObserver mock（jsdom 环境补全）
+// 每个测试用例前后的严格沙箱重置与还原
 // =============================================================================
+beforeEach(() => {
+  clearMockTauriCommands();
+  geometryEngine.reset();
+  ControllableResizeObserver.clearAll();
+});
 
-if (typeof ResizeObserver === 'undefined') {
-  globalThis.ResizeObserver = class ResizeObserver {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-}
+afterEach(() => {
+  vi.restoreAllMocks();
+  if (typeof document !== 'undefined' && document.body) {
+    document.body.innerHTML = '';
+  }
+});

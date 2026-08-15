@@ -8,33 +8,10 @@
 import React, { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { TiptapComposerField, type TiptapComposerFieldProps } from './TiptapComposerField';
-
-// jsdom 缺口：Range.getClientRects / getBoundingClientRect 未实现（PM coordsAtPos / 斜杠菜单定位依赖）
-if (typeof Range !== 'undefined' && typeof Range.prototype.getClientRects !== 'function') {
-  Range.prototype.getClientRects = function getClientRects() {
-    return [this.getBoundingClientRect()];
-  };
-}
-if (typeof Range !== 'undefined' && typeof Range.prototype.getBoundingClientRect !== 'function') {
-  Range.prototype.getBoundingClientRect = function getBoundingClientRect() {
-    return {
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      width: 0,
-      height: 0,
-      x: 0,
-      y: 0,
-    } as DOMRect;
-  };
-}
-
-// jsdom 缺口：Element.scrollIntoView 未实现（菜单高亮项滚入视野依赖；布局职责，测试置空）
-if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
-  Element.prototype.scrollIntoView = function scrollIntoView() {};
-}
+import {
+  TiptapComposerField,
+  type TiptapComposerFieldProps,
+} from './TiptapComposerField';
 
 function getEditorDom(): HTMLElement {
   const el = document.querySelector('[contenteditable="true"]');
@@ -54,7 +31,11 @@ async function typeText(text: string): Promise<void> {
   const sel = document.getSelection();
   let target: Node = dom;
   let offset = 0;
-  if (sel && sel.rangeCount > 0 && dom.contains(sel.getRangeAt(0).startContainer)) {
+  if (
+    sel &&
+    sel.rangeCount > 0 &&
+    dom.contains(sel.getRangeAt(0).startContainer)
+  ) {
     target = sel.getRangeAt(0).startContainer;
     offset = sel.getRangeAt(0).startOffset;
   } else {
@@ -67,9 +48,15 @@ async function typeText(text: string): Promise<void> {
   }
   const textNode = document.createTextNode(text);
   if (target.nodeType === Node.TEXT_NODE) {
-    (target as Text).insertData(Math.min(offset, (target as Text).length), text);
+    (target as Text).insertData(
+      Math.min(offset, (target as Text).length),
+      text
+    );
   } else {
-    (target as Element).insertBefore(textNode, (target as Element).childNodes[offset] ?? null);
+    (target as Element).insertBefore(
+      textNode,
+      (target as Element).childNodes[offset] ?? null
+    );
   }
   // 光标移到插入文本之后（suggestion 插件依赖光标前字符判定 / 触发）
   if (sel) {
@@ -202,7 +189,9 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
       placeholder: '输入消息…',
     });
     await waitFor(() => {
-      expect(getEditorDom().querySelector('p')?.getAttribute('data-placeholder')).toBe('输入排队消息…');
+      expect(
+        getEditorDom().querySelector('p')?.getAttribute('data-placeholder')
+      ).toBe('输入排队消息…');
     });
     rerender(
       <TiptapComposerField
@@ -217,7 +206,9 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
       />
     );
     await waitFor(() => {
-      expect(getEditorDom().querySelector('p')?.getAttribute('data-placeholder')).toBe('输入消息…');
+      expect(
+        getEditorDom().querySelector('p')?.getAttribute('data-placeholder')
+      ).toBe('输入消息…');
     });
   });
 
@@ -252,7 +243,9 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
     const onSlashMenuPick = vi.fn();
     const { onChangeLog } = renderAdapter({ onSlashMenuPick });
     await typeText('/');
-    const scheduleItem = await screen.findByRole('option', { name: /\/schedule/ });
+    const scheduleItem = await screen.findByRole('option', {
+      name: /\/schedule/,
+    });
     fireEvent.click(scheduleItem);
     await waitFor(() => {
       expect(onSlashMenuPick).toHaveBeenCalledWith('/schedule');
@@ -265,7 +258,9 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
       skillSlashCommands: [{ cmd: '/skill:检视', desc: '检视代码质量' }],
     });
     await typeText('/');
-    const skillItem = await screen.findByRole('option', { name: /\/skill:检视/ });
+    const skillItem = await screen.findByRole('option', {
+      name: /\/skill:检视/,
+    });
     fireEvent.click(skillItem);
     await waitFor(() => {
       expect(getEditorDom().textContent).toContain('/skill:检视');

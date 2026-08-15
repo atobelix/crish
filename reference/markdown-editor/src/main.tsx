@@ -37,35 +37,6 @@ window.__CRISH_METRICS__ = {
   },
 };
 
-// --- Forced Synchronous Layout Sentinel ---
-let frameLayoutCalls = 0;
-const reportThrashing = () => {
-  if (frameLayoutCalls > 5) {
-    console.error(
-      `[CRISH METRICS] Layout Thrash Detected! ${frameLayoutCalls} calls this frame.`
-    );
-  }
-  frameLayoutCalls = 0;
-  requestAnimationFrame(reportThrashing);
-};
-requestAnimationFrame(reportThrashing);
-
-const originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
-Element.prototype.getBoundingClientRect = function () {
-  frameLayoutCalls++;
-  metrics.incrementLayoutThrash();
-  return originalGetBoundingClientRect.apply(this, arguments as any);
-};
-
-const originalRangeGetBoundingClientRect =
-  Range.prototype.getBoundingClientRect;
-Range.prototype.getBoundingClientRect = function () {
-  frameLayoutCalls++;
-  metrics.incrementLayoutThrash();
-  return originalRangeGetBoundingClientRect.apply(this, arguments as any);
-};
-// ----------------------------------------
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

@@ -10,31 +10,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ChatComposer, type ChatComposerProps } from './ChatComposer';
 
-// jsdom 缺口：Range.getClientRects / getBoundingClientRect（PM coordsAtPos 依赖）
-if (typeof Range !== 'undefined' && typeof Range.prototype.getClientRects !== 'function') {
-  Range.prototype.getClientRects = function getClientRects() {
-    return [this.getBoundingClientRect()];
-  };
-}
-if (typeof Range !== 'undefined' && typeof Range.prototype.getBoundingClientRect !== 'function') {
-  Range.prototype.getBoundingClientRect = function getBoundingClientRect() {
-    return {
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      width: 0,
-      height: 0,
-      x: 0,
-      y: 0,
-    } as DOMRect;
-  };
-}
-// jsdom 缺口：Element.scrollIntoView（菜单高亮项滚入视野依赖）
-if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
-  Element.prototype.scrollIntoView = function scrollIntoView() {};
-}
-
 function getEditorDom(): HTMLElement {
   const el = document.querySelector('[contenteditable="true"]');
   if (!el) throw new Error('编辑器未挂载');
@@ -48,7 +23,11 @@ async function typeText(text: string): Promise<void> {
   const sel = document.getSelection();
   let target: Node = dom;
   let offset = 0;
-  if (sel && sel.rangeCount > 0 && dom.contains(sel.getRangeAt(0).startContainer)) {
+  if (
+    sel &&
+    sel.rangeCount > 0 &&
+    dom.contains(sel.getRangeAt(0).startContainer)
+  ) {
     target = sel.getRangeAt(0).startContainer;
     offset = sel.getRangeAt(0).startOffset;
   } else {
@@ -60,9 +39,15 @@ async function typeText(text: string): Promise<void> {
   }
   const textNode = document.createTextNode(text);
   if (target.nodeType === Node.TEXT_NODE) {
-    (target as Text).insertData(Math.min(offset, (target as Text).length), text);
+    (target as Text).insertData(
+      Math.min(offset, (target as Text).length),
+      text
+    );
   } else {
-    (target as Element).insertBefore(textNode, (target as Element).childNodes[offset] ?? null);
+    (target as Element).insertBefore(
+      textNode,
+      (target as Element).childNodes[offset] ?? null
+    );
   }
   if (sel) {
     const range = document.createRange();
@@ -114,8 +99,12 @@ function renderChatComposer(opts: {
 
   function Harness() {
     const [input, setInput] = useState(opts.initialInput ?? '');
-    const [attachments, setAttachments] = useState<ChatComposerProps['attachments']>([]);
-    const [permission, setPermission] = useState<'ask' | 'deep' | 'full' | 'plan'>('ask');
+    const [attachments, setAttachments] = useState<
+      ChatComposerProps['attachments']
+    >([]);
+    const [permission, setPermission] = useState<
+      'ask' | 'deep' | 'full' | 'plan'
+    >('ask');
     const [composing, setComposing] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const inputRef = useRef(input);
@@ -159,7 +148,14 @@ function renderChatComposer(opts: {
   }
 
   const utils = render(<Harness />);
-  return { ...utils, loadSkillSlash, onSend, onPasteImage, onOpenSchedule, sentValues };
+  return {
+    ...utils,
+    loadSkillSlash,
+    onSend,
+    onPasteImage,
+    onOpenSchedule,
+    sentValues,
+  };
 }
 
 describe('ChatComposer 全链（T6 接线）', () => {
@@ -239,7 +235,9 @@ describe('ChatComposer 全链（T6 接线）', () => {
         { name: 'report.md', text: '内容' },
       ]);
       const fileInputRef = useRef<HTMLInputElement>(null);
-      const [permission, setPermission] = useState<'ask' | 'deep' | 'full' | 'plan'>('ask');
+      const [permission, setPermission] = useState<
+        'ask' | 'deep' | 'full' | 'plan'
+      >('ask');
       const [composing, setComposing] = useState(false);
       return (
         <ChatComposer
@@ -288,7 +286,9 @@ describe('ChatComposer 全链（T6 接线）', () => {
     const planItem = screen.getByRole('menuitem', { name: /计划/ });
     fireEvent.click(planItem);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /当前权限模式：计划/ })).toBeTruthy();
+      expect(
+        screen.getByRole('button', { name: /当前权限模式：计划/ })
+      ).toBeTruthy();
     });
   });
 
@@ -314,7 +314,9 @@ describe('ChatComposer 全链（T6 接线）', () => {
   it('open-schedule 动作：/schedule 点选转交宿主开面板，不落输入', async () => {
     const { onOpenSchedule } = renderChatComposer({});
     await typeText('/sche');
-    const scheduleItem = await screen.findByRole('option', { name: /\/schedule/ });
+    const scheduleItem = await screen.findByRole('option', {
+      name: /\/schedule/,
+    });
     fireEvent.click(scheduleItem);
     await waitFor(() => {
       expect(onOpenSchedule).toHaveBeenCalledTimes(1);
@@ -328,7 +330,9 @@ describe('ChatComposer 全链（T6 接线）', () => {
       expect(loadSkillSlash).toHaveBeenCalled();
     });
     // skill 命令经 filteredCommands 桥入菜单
-    const skillItem = await screen.findByRole('option', { name: /\/skill:检视/ });
+    const skillItem = await screen.findByRole('option', {
+      name: /\/skill:检视/,
+    });
     expect(skillItem).toBeTruthy();
   });
 
@@ -337,8 +341,14 @@ describe('ChatComposer 全链（T6 接线）', () => {
     const container = document.querySelector('[data-composer-field="1"]');
     expect(container).toBeTruthy();
     expect(container?.getAttribute('data-composer-max-lines')).toBe('10');
-    expect((container as HTMLElement).style.getPropertyValue('--composer-max-lines')).toBe('10');
-    expect((container as HTMLElement).style.getPropertyValue('--composer-line-height')).toBe('1.45');
+    expect(
+      (container as HTMLElement).style.getPropertyValue('--composer-max-lines')
+    ).toBe('10');
+    expect(
+      (container as HTMLElement).style.getPropertyValue(
+        '--composer-line-height'
+      )
+    ).toBe('1.45');
   });
 
   it('队列面板共存：排队消息展示，编辑/发送/删除回调透传', async () => {
@@ -353,7 +363,9 @@ describe('ChatComposer 全链（T6 接线）', () => {
       onSendQueuedNow,
       onDeleteQueued,
     });
-    const panel = await screen.findByRole('region', { name: '排队消息，共 1 条' });
+    const panel = await screen.findByRole('region', {
+      name: '排队消息，共 1 条',
+    });
     expect(panel.textContent).toContain('排队消息甲');
     fireEvent.click(screen.getByRole('button', { name: '编辑排队消息' }));
     expect(onEditQueued).toHaveBeenCalledWith('q1');

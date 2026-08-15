@@ -25,9 +25,14 @@ afterEach(() => {
 describe('diff/VirtualPlainCodeViewer 行高契约（F7-F15）', () => {
   it('长行不折行：行文本 white-space: pre + 横向滚动', () => {
     const { container } = render(
-      <VirtualPlainCodeViewer content={'x'.repeat(500) + '\n短行'} filePath="a.ts" />
+      <VirtualPlainCodeViewer
+        content={'x'.repeat(500) + '\n短行'}
+        filePath="a.ts"
+      />
     );
-    const lineTexts = Array.from(container.querySelectorAll(`.${styles.lineText}`));
+    const lineTexts = Array.from(
+      container.querySelectorAll(`.${styles.lineText}`)
+    );
     expect(lineTexts.length).toBeGreaterThan(0);
     for (const el of lineTexts) {
       const styleEl = el as HTMLElement;
@@ -37,8 +42,15 @@ describe('diff/VirtualPlainCodeViewer 行高契约（F7-F15）', () => {
   });
 
   it('行高按实测高度而非硬编码 20px（ui-size 缩放安全）', () => {
-    // ui-size large 下首行实测 34px：totalHeight 必须以 34 计算
-    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(34);
+    // ui-size large 下首行实测 34px：精准针对应行 DOM，不污染外部容器
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(
+      function (this: HTMLElement) {
+        if (this.classList?.contains(styles.line)) {
+          return 34;
+        }
+        return 0;
+      }
+    );
     const { container } = render(
       <VirtualPlainCodeViewer content={'a\nb\nc'} filePath="b.ts" />
     );

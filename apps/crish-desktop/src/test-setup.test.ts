@@ -14,16 +14,15 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import {
-  invokeResult,
-  invokeCmd,
-} from './api/tauriInvoke';
+import { invokeResult, invokeCmd } from './api/tauriInvoke';
 import {
   mockTauriCommand,
   mockTauriMissing,
   mockTauriError,
   clearMockTauriCommands,
   __inspectMockState,
+  MockPhysicalGeometryEngine,
+  ControllableResizeObserver,
 } from './test-setup';
 
 // test-setup.ts 的 beforeEach 已经在每个用例前调用 clearMockTauriCommands，
@@ -108,7 +107,7 @@ describe('Tauri invoke mock 三态语义', () => {
       mockTauriMissing('unregistered_cmd');
 
       await expect(invoke('unregistered_cmd')).rejects.toThrow(
-        /command .* not found/,
+        /command .* not found/
       );
     });
 
@@ -173,7 +172,7 @@ describe('Tauri invoke mock 三态语义', () => {
 
     it('invoke 直接调用未注册命令抛出错误', async () => {
       await expect(invoke('never_registered_direct')).rejects.toThrow(
-        /command .* not found/,
+        /command .* not found/
       );
     });
   });
@@ -290,5 +289,185 @@ describe('rustCore 集成验证（端到端）', () => {
     const { getRustCoreStatus } = await import('./api/rustCore');
     const status = await getRustCoreStatus();
     expect(status).toBeNull();
+  });
+});
+
+describe('MockPhysicalGeometryEngine 物理排版仿真引擎', () => {
+  it('setViewport 正确同步 window.innerWidth / innerHeight 与 visualViewport', () => {
+    const engine = MockPhysicalGeometryEngine.getInstance();
+    engine.setViewport({ width: 800, height: 600 });
+
+    expect(window.innerWidth).toBe(800);
+    expect(window.innerHeight).toBe(600);
+    expect(window.visualViewport?.width).toBe(800);
+    expect(window.visualViewport?.height).toBe(600);
+  });
+
+  it('Range 具备真实物理行高（20.3px）且拒绝全零坍缩', () => {
+    const range = document.createRange();
+    const textNode = document.createTextNode('Hello Antigravity');
+    document.body.appendChild(textNode);
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 5);
+
+    const rect = range.getBoundingClientRect();
+    expect(rect.height).toBeCloseTo(20.3, 1);
+    expect(rect.width).toBeCloseTo(8.5, 1);
+    expect(rect.top).toBeGreaterThan(0);
+    expect(rect.left).toBeGreaterThan(0);
+
+    const clientRects = range.getClientRects();
+    expect(clientRects.length).toBe(1);
+    expect(clientRects[0].height).toBeCloseTo(20.3, 1);
+  });
+
+  it('支持 CJK 中文字符（14px）与 ASCII 拉丁字符（8.5px）复合排版宽度解算', () => {
+    const engine = MockPhysicalGeometryEngine.getInstance();
+    const parentEl = document.createElement('div');
+    parentEl.textContent = 'Hello世界';
+    document.body.appendChild(parentEl);
+
+    engine.registerElementRect(parentEl, {
+      left: 100,
+      top: 200,
+      width: 500,
+      height: 300,
+    });
+
+    const textNode = parentEl.firstChild!;
+    const range = document.createRange();
+    // startOffset = 7 (5 ASCII + 2 CJK)
+    range.setStart(textNode, 7);
+    range.setEnd(textNode, 7);
+
+    const rect = range.getBoundingClientRect();
+    // 5 * 8.5 + 2 * 14 = 42.5 + 28 = 70.5
+    const expectedOffset = 5 * 8.5 + 2 * 14;
+    expect(rect.left).toBeCloseTo(100 + expectedOffset, 1);
+    expect(rect.top).toBe(200);
+    expect(rect.height).toBeCloseTo(20.3, 1);
+  });
+
+  it('data-mock-rect 属性支持精确重载 Element 与 Range 几何包围盒', () => {
+    const el = document.createElement('div');
+    el.setAttribute('data-mock-rect', '15,25,350,120');
+    document.body.appendChild(el);
+
+    const rect = el.getBoundingClientRect();
+    expect(rect.left).toBe(15);
+    expect(rect.top).toBe(25);
+    expect(rect.width).toBe(350);
+    expect(rect.height).toBe(120);
+
+    const text = document.createTextNode('Mocked Text');
+    el.appendChild(text);
+    const range = document.createRange();
+    range.setStart(text, 2);
+    range.setEnd(text, 6);
+
+    const rangeRect = range.getBoundingClientRect();
+    expect(rangeRect.left).toBe(15);
+    expect(rangeRect.top).toBe(25);
+    expect(rangeRect.width).toBe(350);
+    expect(rangeRect.height).toBe(120);
+  });
+
+  it('未挂载或 display:none 元素返回全 0 盒模型', () => {
+    const detachedEl = document.createElement('div');
+    expect(detachedEl.getBoundingClientRect()).toEqual(new DOMRect(0, 0, 0, 0));
+
+    const hiddenEl = document.createElement('div');
+    hiddenEl.style.display = 'none';
+    document.body.appendChild(hiddenEl);
+    expect(hiddenEl.getBoundingClientRect()).toEqual(new DOMRect(0, 0, 0, 0));
+  });
+
+  it('选择器注册表 registerSelectorRect 精准匹配', () => {
+    const engine = MockPhysicalGeometryEngine.getInstance();
+    engine.registerSelectorRect('.custom-popover', {
+      left: 40,
+      top: 80,
+      width: 220,
+      height: 180,
+    });
+
+    const popover = document.createElement('div');
+    popover.className = 'custom-popover';
+    document.body.appendChild(popover);
+
+    const rect = popover.getBoundingClientRect();
+    expect(rect.left).toBe(40);
+    expect(rect.top).toBe(80);
+    expect(rect.width).toBe(220);
+    expect(rect.height).toBe(180);
+  });
+
+  it('DOM 辅助垫片 scrollIntoView 与 elementFromPoint 正常工作', () => {
+    const btn = document.createElement('button');
+    btn.setAttribute('data-mock-rect', '50,50,100,30');
+    document.body.appendChild(btn);
+
+    btn.scrollIntoView({ behavior: 'smooth' });
+    expect(
+      (btn as unknown as { __lastScrollIntoViewArg?: unknown })
+        .__lastScrollIntoViewArg
+    ).toEqual({ behavior: 'smooth' });
+
+    const found = document.elementFromPoint(60, 60);
+    expect(found).toBe(btn);
+  });
+});
+
+describe('ControllableResizeObserver 驱动型尺寸监听器', () => {
+  it('observe 元素后可通过 triggerResize 主动广播并触发回调', () => {
+    const callback = vi.fn();
+    const observer = new ResizeObserver(callback);
+    const target = document.createElement('div');
+    document.body.appendChild(target);
+
+    observer.observe(target);
+
+    ControllableResizeObserver.triggerResize(target, {
+      width: 320,
+      height: 240,
+      left: 10,
+      top: 20,
+    });
+    expect(callback).toHaveBeenCalledTimes(1);
+
+    const [entries] = callback.mock.calls[0];
+    expect(entries).toHaveLength(1);
+    expect(entries[0].target).toBe(target);
+    expect(entries[0].contentRect.width).toBe(320);
+    expect(entries[0].contentRect.height).toBe(240);
+
+    observer.unobserve(target);
+    ControllableResizeObserver.triggerResize(target, {
+      width: 400,
+      height: 300,
+    });
+    expect(callback).toHaveBeenCalledTimes(1); // 不会再次被调用
+  });
+
+  it('triggerAll 批量广播所有监听元素', () => {
+    const cb1 = vi.fn();
+    const cb2 = vi.fn();
+    const obs1 = new ResizeObserver(cb1);
+    const obs2 = new ResizeObserver(cb2);
+
+    const el1 = document.createElement('div');
+    const el2 = document.createElement('div');
+    document.body.appendChild(el1);
+    document.body.appendChild(el2);
+
+    obs1.observe(el1);
+    obs2.observe(el2);
+
+    ControllableResizeObserver.triggerAll({ width: 500, height: 400 });
+    expect(cb1).toHaveBeenCalledTimes(1);
+    expect(cb2).toHaveBeenCalledTimes(1);
+
+    obs1.disconnect();
+    obs2.disconnect();
   });
 });

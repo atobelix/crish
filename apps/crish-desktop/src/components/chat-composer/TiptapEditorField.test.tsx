@@ -6,44 +6,27 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from '@testing-library/react';
 import { TiptapEditorField } from './TiptapEditorField';
 
 // jsdom 缺 ClipboardEvent：prosemirror-view.pasteHTML 会构造合成事件，补最小实现
-if (typeof (globalThis as Record<string, unknown>).ClipboardEvent === 'undefined') {
-  (globalThis as Record<string, unknown>).ClipboardEvent = class ClipboardEvent extends Event {
-    clipboardData: DataTransfer | null;
-    constructor(type: string, init?: { clipboardData?: DataTransfer }) {
-      super(type);
-      this.clipboardData = init?.clipboardData ?? null;
-    }
-  };
-}
-
-// jsdom 缺口：Range.getClientRects / getBoundingClientRect 未实现（PM coordsAtPos / 滚动定位依赖）
-if (typeof Range !== 'undefined' && typeof Range.prototype.getClientRects !== 'function') {
-  Range.prototype.getClientRects = function getClientRects() {
-    return [this.getBoundingClientRect()];
-  };
-}
-if (typeof Range !== 'undefined' && typeof Range.prototype.getBoundingClientRect !== 'function') {
-  Range.prototype.getBoundingClientRect = function getBoundingClientRect() {
-    return {
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      width: 0,
-      height: 0,
-      x: 0,
-      y: 0,
-    } as DOMRect;
-  };
-}
-
-// jsdom 缺口：Element.scrollIntoView 未实现（菜单高亮项滚入视野依赖；布局职责，测试置空）
-if (typeof Element !== 'undefined' && typeof Element.prototype.scrollIntoView !== 'function') {
-  Element.prototype.scrollIntoView = function scrollIntoView() {};
+if (
+  typeof (globalThis as Record<string, unknown>).ClipboardEvent === 'undefined'
+) {
+  (globalThis as Record<string, unknown>).ClipboardEvent =
+    class ClipboardEvent extends Event {
+      clipboardData: DataTransfer | null;
+      constructor(type: string, init?: { clipboardData?: DataTransfer }) {
+        super(type);
+        this.clipboardData = init?.clipboardData ?? null;
+      }
+    };
 }
 
 function getEditorDom(): HTMLElement {
@@ -63,7 +46,11 @@ async function typeText(text: string): Promise<void> {
   const sel = document.getSelection();
   let target: Node = dom;
   let offset = 0;
-  if (sel && sel.rangeCount > 0 && dom.contains(sel.getRangeAt(0).startContainer)) {
+  if (
+    sel &&
+    sel.rangeCount > 0 &&
+    dom.contains(sel.getRangeAt(0).startContainer)
+  ) {
     target = sel.getRangeAt(0).startContainer;
     offset = sel.getRangeAt(0).startOffset;
   } else {
@@ -75,9 +62,15 @@ async function typeText(text: string): Promise<void> {
   }
   const textNode = document.createTextNode(text);
   if (target.nodeType === Node.TEXT_NODE) {
-    (target as Text).insertData(Math.min(offset, (target as Text).length), text);
+    (target as Text).insertData(
+      Math.min(offset, (target as Text).length),
+      text
+    );
   } else {
-    (target as Element).insertBefore(textNode, (target as Element).childNodes[offset] ?? null);
+    (target as Element).insertBefore(
+      textNode,
+      (target as Element).childNodes[offset] ?? null
+    );
   }
   if (sel) {
     const range = document.createRange();
@@ -94,7 +87,10 @@ describe('TiptapEditorField T3 补全', () => {
   it('Mention 注册：markdown 水合渲染 mention chip，序列化双向保真', async () => {
     const onMarkdownChange = vi.fn();
     render(
-      <TiptapEditorField content={'提及 @[Agent 史密斯](agent-007:agent)'} onMarkdownChange={onMarkdownChange} />
+      <TiptapEditorField
+        content={'提及 @[Agent 史密斯](agent-007:agent)'}
+        onMarkdownChange={onMarkdownChange}
+      />
     );
     const dom = getEditorDom();
     await waitFor(() => {
@@ -129,12 +125,19 @@ describe('TiptapEditorField T3 补全', () => {
         expect.stringContaining('```ts')
       );
     });
-    expect(onMarkdownChange.mock.calls[onMarkdownChange.mock.calls.length - 1][0]).toContain('\n');
+    expect(
+      onMarkdownChange.mock.calls[onMarkdownChange.mock.calls.length - 1][0]
+    ).toContain('\n');
   });
 
   it('普通段落 Enter 发送，且发送后内容清空', async () => {
     const onSendMarkdown = vi.fn();
-    render(<TiptapEditorField content="hello world" onSendMarkdown={onSendMarkdown} />);
+    render(
+      <TiptapEditorField
+        content="hello world"
+        onSendMarkdown={onSendMarkdown}
+      />
+    );
     const dom = getEditorDom();
     await waitFor(() => {
       expect(dom.textContent).toContain('hello world');
@@ -173,7 +176,9 @@ describe('TiptapEditorField T3 补全', () => {
 
   it('event.isComposing 门：标记中的 Enter 不发送，普通 Enter 恢复发送', async () => {
     const onSendMarkdown = vi.fn();
-    render(<TiptapEditorField content="中文" onSendMarkdown={onSendMarkdown} />);
+    render(
+      <TiptapEditorField content="中文" onSendMarkdown={onSendMarkdown} />
+    );
     const dom = getEditorDom();
     await waitFor(() => {
       expect(dom.textContent).toContain('中文');
@@ -187,7 +192,8 @@ describe('TiptapEditorField T3 补全', () => {
   it('DOMPurify 粘贴清洗：script 被剥离，安全内容保留', async () => {
     render(<TiptapEditorField />);
     const dom = getEditorDom();
-    const html = '<p>安全内容</p><script>alert(1)</script><p style="color:red">样式剥离</p>';
+    const html =
+      '<p>安全内容</p><script>alert(1)</script><p style="color:red">样式剥离</p>';
     fireEvent.paste(dom, {
       clipboardData: {
         items: [],
@@ -218,18 +224,26 @@ describe('TiptapEditorField T3 补全', () => {
     const { rerender } = render(<TiptapEditorField placeholder="默认占位" />);
     const dom = getEditorDom();
     await waitFor(() => {
-      expect(dom.querySelector('p')?.getAttribute('data-placeholder')).toBe('默认占位');
+      expect(dom.querySelector('p')?.getAttribute('data-placeholder')).toBe(
+        '默认占位'
+      );
     });
     rerender(<TiptapEditorField placeholder="处理中占位" />);
     await waitFor(() => {
-      expect(dom.querySelector('p')?.getAttribute('data-placeholder')).toBe('处理中占位');
+      expect(dom.querySelector('p')?.getAttribute('data-placeholder')).toBe(
+        '处理中占位'
+      );
     });
   });
 
   it('ctrlEnter 偏好：普通 Enter 不发送，Ctrl+Enter 发送', async () => {
     const onSendMarkdown = vi.fn();
     render(
-      <TiptapEditorField content="ctrl 消息" sendShortcut="ctrlEnter" onSendMarkdown={onSendMarkdown} />
+      <TiptapEditorField
+        content="ctrl 消息"
+        sendShortcut="ctrlEnter"
+        onSendMarkdown={onSendMarkdown}
+      />
     );
     const dom = getEditorDom();
     await waitFor(() => {
@@ -337,14 +351,20 @@ describe('TiptapEditorField T8 提及与 aria 全链', () => {
     const listboxId = dom.getAttribute('aria-controls') ?? '';
     expect(listboxId.endsWith('-slash')).toBe(true);
     await waitFor(() => {
-      expect(document.getElementById(listboxId)?.textContent).toContain('Heading 1');
+      expect(document.getElementById(listboxId)?.textContent).toContain(
+        'Heading 1'
+      );
     });
     // 初始高亮首项，activedescendant 指向 listbox 内 option
-    expect(dom.getAttribute('aria-activedescendant')).toBe(`${listboxId}-opt-0`);
+    expect(dom.getAttribute('aria-activedescendant')).toBe(
+      `${listboxId}-opt-0`
+    );
     // 键盘漫游：ArrowDown 高亮下一项，activedescendant 跟随
     fireEvent.keyDown(dom, { key: 'ArrowDown' });
     await waitFor(() => {
-      expect(dom.getAttribute('aria-activedescendant')).toBe(`${listboxId}-opt-1`);
+      expect(dom.getAttribute('aria-activedescendant')).toBe(
+        `${listboxId}-opt-1`
+      );
     });
     // Esc 关闭：combobox 弹层 aria 全部清理
     fireEvent.keyDown(dom, { key: 'Escape' });
@@ -356,7 +376,6 @@ describe('TiptapEditorField T8 提及与 aria 全链', () => {
     expect(document.getElementById(listboxId)).toBeNull();
   });
 });
-
 
 // ──────────────────────────────────────────────
 // R-08（08-detail T5.5）：大文档序列化阈值警告
