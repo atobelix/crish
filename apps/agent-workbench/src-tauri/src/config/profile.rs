@@ -44,6 +44,9 @@ pub(crate) struct ProfileConfig {
     pub(crate) endpoint: Option<String>,
     /// 是否流式（None = 默认 true）。
     pub(crate) stream: Option<bool>,
+    /// 扫描或保存的模型列表。
+    #[serde(default)]
+    pub(crate) models: Vec<String>,
 }
 
 /// profile 状态持久化载荷（独立 `profile-config.json`，与扁平单轨文件隔离）。
@@ -69,7 +72,7 @@ impl PersistedProfileState {
         }
     }
 
-    fn save(&self) -> Result<(), String> {
+    pub(crate) fn save(&self) -> Result<(), String> {
         let path = Self::config_path();
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent)

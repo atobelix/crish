@@ -12,8 +12,8 @@
 
 mod credentials;
 mod env_filter;
-mod persistence;
-mod profile;
+pub(crate) mod persistence;
+pub(crate) mod profile;
 mod provider;
 mod resolution;
 

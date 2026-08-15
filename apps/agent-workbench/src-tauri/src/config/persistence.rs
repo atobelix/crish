@@ -106,3 +106,8 @@ pub(crate) fn sanitize_profile_secret_id(profile_id: &str) -> Result<String, Str
     }
     Ok(id.to_string())
 }
+
+/// 读取多 profile 持久化配置（`profile-config.json`）。
+pub(crate) fn load_profiles_config() -> super::profile::PersistedProfileState {
+    super::profile::PersistedProfileState::load()
+}

@@ -70,6 +70,7 @@ mod note_commands;
 mod note_runtime;
 mod perf;
 mod power;
+mod probe;
 mod process;
 mod pty;
 mod resource;
@@ -218,6 +219,12 @@ command_registry![
     ("config_secret_clear", config::config_secret_clear),
     ("config_profile_apply", config::config_profile_apply),
     ("config_secret_reveal", config::config_secret_reveal),
+    // ── 原生探活与模型扫描（Batch 1 · G3：provider_probe_ping / provider_probe_scan_models）──
+    ("provider_probe_ping", probe::provider_probe_ping),
+    (
+        "provider_probe_scan_models",
+        probe::provider_probe_scan_models
+    ),
     // ── G03 产出根配置（T-EG-12：agentOutputsRoot 全局设置 + 校验）──
     (
         "config_get_outputs_root",

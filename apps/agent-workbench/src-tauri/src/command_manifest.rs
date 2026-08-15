@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（125 条 = 注册面 120 + 登记先行 5；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（132 条 = 注册面 127 + 登记先行 5；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
@@ -122,6 +122,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("config_secret_clear", "config", "engine", true),
         entry("config_profile_apply", "config", "engine", true),
         entry("config_secret_reveal", "config", "engine", true),
+        // ── 原生探活与模型扫描（Batch 1 · G3：provider_probe_ping / provider_probe_scan_models）──
+        entry("provider_probe_ping", "config", "engine", true),
+        entry("provider_probe_scan_models", "config", "engine", true),
         // ── G03 产出根配置（T-EG-12：agentOutputsRoot 全局设置 + 校验）──
         entry("config_get_outputs_root", "config", "engine", true),
         entry("config_set_outputs_root", "config", "engine", true),
@@ -292,12 +295,12 @@ mod tests {
         let pending = total - registered;
         assert!(pending > 0, "登记先行必须 > 0");
         assert_eq!(
-             total, 130,
-             "总数 130（电脑操作四命令 + note_apply_ops + note_undo_text + note_redo_text + mirror + hydrate + D4a + core_read_run_events 恢复 + PTY 保活切接三命令，与前端同步）"
+             total, 132,
+             "总数 132（电脑操作四命令 + note_apply_ops + note_undo_text + note_redo_text + mirror + hydrate + D4a + core_read_run_events 恢复 + PTY 保活切接三命令 + provider_probe_ping/scan_models 原生探活，与前端同步）"
          );
         assert_eq!(
-            registered, 125,
-            "注册面 125（含 core_compact_now 已接线 + core_read_run_events 恢复激活 + note_undo_text/redo_text + PTY 三命令）"
+            registered, 127,
+            "注册面 127（含 core_compact_now 已接线 + core_read_run_events 恢复激活 + note_undo_text/redo_text + PTY 三命令 + provider_probe_ping/scan_models）"
         );
         assert_eq!(pending, 5, "登记先行 5");
     }
@@ -445,7 +448,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 130);
+        assert_eq!(manifest.commands.len(), 132);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
