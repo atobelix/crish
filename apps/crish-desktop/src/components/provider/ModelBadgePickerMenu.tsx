@@ -13,6 +13,7 @@ import { Menu } from '../ui';
 type Props = {
   activeModel?: string | null;
   onClose: () => void;
+  onOpenChange?: (open: boolean) => void;
   open?: boolean;
   side?: 'top' | 'bottom';
   /** 真实触发器（模型徽标），用于锚定基座浮层（T05.3.2 由父级 Popover.Root 迁移） */
@@ -31,6 +32,7 @@ type Props = {
 export const ModelBadgePickerMenu: React.FC<Props> = ({
   activeModel,
   onClose,
+  onOpenChange,
   open = true,
   side = 'bottom',
   children,
@@ -62,7 +64,11 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     <Menu
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) onClose();
+        if (onOpenChange) {
+          onOpenChange(nextOpen);
+        } else if (!nextOpen) {
+          onClose();
+        }
       }}
       trigger={children}
       side={side}

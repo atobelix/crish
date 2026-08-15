@@ -130,6 +130,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
       <ModelBadgePickerMenu
         activeModel={engineModel}
         onClose={() => setShowModelDropdown(false)}
+        onOpenChange={setShowModelDropdown}
         open={showModelDropdown}
         side="top"
       >
@@ -139,6 +140,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
               ? `${getActiveProfile()!.name} · ${resolveDisplayModelId(engineModel) || engineModel || '未选模型'}`
               : '服务商与模型（可在设置中更改）'
           }
+          disabled={showModelDropdown}
         >
           <button
             type="button"
@@ -148,7 +150,6 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
             aria-expanded={showModelDropdown}
             aria-label="选择模型"
             style={{ cursor: 'pointer', position: 'relative' }}
-            onClick={() => setShowModelDropdown((prev) => !prev)}
           >
             <span
               className={styles.modelText}

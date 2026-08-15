@@ -93,20 +93,18 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
     setOpen(nextOpen);
   }, []);
 
-  const closeMenu = useCallback(
-    (opts?: { restoreFocus?: boolean }) => {
-      restoreOnCloseRef.current = !!opts?.restoreFocus;
-      setOpen(false);
-    },
-    [],
-  );
+  const closeMenu = useCallback((opts?: { restoreFocus?: boolean }) => {
+    restoreOnCloseRef.current = !!opts?.restoreFocus;
+    setOpen(false);
+  }, []);
 
   // 侧栏宽度变化：基座浮层需重新锚定（原实现手动 reposition，现改为重挂）
   useEffect(() => {
     if (!open) return;
     const onSidebarResize = () => setAnchorTick((n) => n + 1);
     window.addEventListener('crish-sidebar-resize', onSidebarResize);
-    return () => window.removeEventListener('crish-sidebar-resize', onSidebarResize);
+    return () =>
+      window.removeEventListener('crish-sidebar-resize', onSidebarResize);
   }, [open]);
 
   // 打开后聚焦首个可操作控件，便于键盘立即操作
@@ -176,7 +174,7 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
           restoreOnCloseRef.current = false;
         }}
         trigger={
-          <Tooltip content="快捷设置">
+          <Tooltip content="快捷设置" disabled={open}>
             <button
               ref={btnRef}
               type="button"
@@ -189,7 +187,12 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
             >
               <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />
               <span>设置</span>
-              <Lucide.ChevronUp size={14} strokeWidth={1.75} className={styles.sbQuickChev} aria-hidden />
+              <Lucide.ChevronUp
+                size={14}
+                strokeWidth={1.75}
+                className={styles.sbQuickChev}
+                aria-hidden
+              />
             </button>
           </Tooltip>
         }

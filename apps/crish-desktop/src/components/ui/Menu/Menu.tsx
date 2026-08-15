@@ -116,6 +116,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
 
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const contentRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const menuId = useId();
 
   useLayerRegistration(
@@ -128,7 +129,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         onEscapeKeyDown?.(event);
       },
       elementRef: contentRef,
-      anchorRef: anchor,
+      anchorRef: anchor ?? triggerRef,
     },
     isOpen
   );
@@ -186,10 +187,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     if (firstEnabledIndexRef.current >= 0) {
       setFocusedIndex(firstEnabledIndexRef.current);
     }
-    const raf = requestAnimationFrame(() => {
-      window.dispatchEvent(new CustomEvent('resize'));
-    });
-    return () => cancelAnimationFrame(raf);
   }, [isOpen]);
 
   // 键盘 ↑ ↓ 漫游与 Enter / Esc 支持（08-步5 T4-4：children 模式双通道漫游）
@@ -336,32 +333,25 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     actualTrigger = (trigger.props as { children?: React.ReactNode }).children;
   }
 
-  // 克隆 trigger 并精确绑定防冒泡事件（保留原生 click 冒泡给 Radix 处理，不重复调用 handleOpenChange）
+  // 克隆 trigger 并精确绑定 ref（由 Radix Popover.Trigger 处理原生点击与切换状态机）
   const clonedTrigger = React.isValidElement(actualTrigger)
     ? React.cloneElement(
         actualTrigger as React.ReactElement<Record<string, unknown>>,
         {
-          onClick: (e: React.MouseEvent) => {
-            e.stopPropagation();
-            (
-              actualTrigger.props as { onClick?: (e: React.MouseEvent) => void }
-            ).onClick?.(e);
-          },
-          onPointerDown: (e: React.PointerEvent) => {
-            e.stopPropagation();
-            (
-              actualTrigger.props as {
-                onPointerDown?: (e: React.PointerEvent) => void;
-              }
-            ).onPointerDown?.(e);
-          },
-          onMouseDown: (e: React.MouseEvent) => {
-            e.stopPropagation();
-            (
-              actualTrigger.props as {
-                onMouseDown?: (e: React.MouseEvent) => void;
-              }
-            ).onMouseDown?.(e);
+          ref: (node: HTMLElement | null) => {
+            triggerRef.current = node;
+            const origRef = (actualTrigger as { ref?: React.Ref<HTMLElement> })
+              .ref;
+            if (typeof origRef === 'function') {
+              origRef(node);
+            } else if (
+              origRef &&
+              typeof origRef === 'object' &&
+              'current' in origRef
+            ) {
+              (origRef as React.MutableRefObject<HTMLElement | null>).current =
+                node;
+            }
           },
         }
       )
@@ -371,22 +361,20 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     .filter(Boolean)
     .join(' ');
 
-  const triggerNode = anchor ? (
+  const renderedTrigger = anchor ? (
     // P1-F4：外部真实按钮作浮动锚点（virtualRef 指向 anchor.current，
     // Radix 测量该可见元素而非本 div；本 div 仅作 custom-anchor 注册节点）
     <Popover.Anchor virtualRef={anchor} data-menu-anchor="true" />
   ) : (
     <Popover.Trigger asChild className="no-drag">
-      {clonedTrigger}
+      {tipContent && React.isValidElement(clonedTrigger) ? (
+        <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
+          {clonedTrigger}
+        </Tooltip>
+      ) : (
+        (clonedTrigger as React.ReactElement)
+      )}
     </Popover.Trigger>
-  );
-
-  const renderedTrigger = tipContent ? (
-    <Tooltip content={tipContent} side={tipSide}>
-      {triggerNode}
-    </Tooltip>
-  ) : (
-    triggerNode
   );
 
   const resolvedMaxHeight =
@@ -418,11 +406,10 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
               onPointerDownOutside(e);
               return;
             }
-            if (anchor?.current) {
-              const target = e.detail.originalEvent.target as Node | null;
-              if (anchor.current.contains(target)) {
-                e.preventDefault();
-              }
+            const target = e.detail.originalEvent.target as Node | null;
+            const triggerEl = anchor?.current ?? triggerRef.current;
+            if (triggerEl && target && triggerEl.contains(target)) {
+              e.preventDefault();
             }
           }}
           onInteractOutside={(e) => {
@@ -430,13 +417,12 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
               onInteractOutside(e);
               return;
             }
-            if (anchor?.current) {
-              const customEvent = e as CustomEvent<{ originalEvent?: Event }>;
-              const target = (customEvent.detail?.originalEvent?.target ||
-                e.target) as Node | null;
-              if (anchor.current.contains(target)) {
-                e.preventDefault();
-              }
+            const customEvent = e as CustomEvent<{ originalEvent?: Event }>;
+            const target = (customEvent.detail?.originalEvent?.target ||
+              e.target) as Node | null;
+            const triggerEl = anchor?.current ?? triggerRef.current;
+            if (triggerEl && target && triggerEl.contains(target)) {
+              e.preventDefault();
             }
           }}
           onEscapeKeyDown={(e) => {

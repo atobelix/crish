@@ -215,7 +215,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
         <div className={styles.footerActions} data-composer-footer="1">
           <div className={styles.leftActions} style={{ position: 'relative' }}>
-            <Tooltip content="添加文件、技能、扩展…">
+            <Tooltip content="添加文件、技能、扩展…" disabled={showPlusMenu}>
               <Button
                 ref={plusBtnRef}
                 type="button"

@@ -193,24 +193,20 @@ describe('ui/Menu', () => {
     expect(content.parentElement).toHaveClass(styles.menuContent);
   });
 
-  it('trigger 事件保留：原 onClick 与防冒泡同时生效', async () => {
+  it('trigger 事件保留：原 onClick 正常触发且菜单展开', async () => {
     const originalOnClick = vi.fn();
-    const onOuterClick = vi.fn();
     render(
-      <div onClick={onOuterClick}>
-        <Menu
-          trigger={
-            <button type="button" onClick={originalOnClick}>
-              {TRIGGER_TEXT}
-            </button>
-          }
-          options={[{ id: 'a', label: '选项甲' }]}
-        />
-      </div>
+      <Menu
+        trigger={
+          <button type="button" onClick={originalOnClick}>
+            {TRIGGER_TEXT}
+          </button>
+        }
+        options={[{ id: 'a', label: '选项甲' }]}
+      />
     );
     fireEvent.click(screen.getByText(TRIGGER_TEXT));
     expect(originalOnClick).toHaveBeenCalledTimes(1);
-    expect(onOuterClick).not.toHaveBeenCalled();
     await screen.findByRole('menuitem', { name: /选项甲/ });
   });
 

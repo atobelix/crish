@@ -266,6 +266,8 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       onMouseLeave?: (e: React.MouseEvent<HTMLElement>) => void;
       onFocus?: (e: React.FocusEvent<HTMLElement>) => void;
       onBlur?: (e: React.FocusEvent<HTMLElement>) => void;
+      onPointerDown?: (e: React.PointerEvent<HTMLElement>) => void;
+      onClick?: (e: React.MouseEvent<HTMLElement>) => void;
     };
     const childRef = child
       ? ((child.props as { ref?: React.Ref<HTMLElement> }).ref ??
@@ -273,6 +275,14 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       : null;
     const mergedRef = useMergeRefs(forwardedRef, childRef, childElRef);
     const restHandlers = restProps as React.HTMLAttributes<HTMLElement>;
+
+    // disabled 或 content 变空时立即隐藏并清空定时器
+    useEffect(() => {
+      if (disabled || !content) {
+        clearHideTimer();
+        setVisible(false);
+      }
+    }, [disabled, content, clearHideTimer]);
 
     // F7-F8：可见期间跟随滚动（capture 捕获任意滚动容器）与视口 resize，
     // 重取目标 rect 触发重新钳位
@@ -355,6 +365,21 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       restHandlers.onBlur?.(e);
     };
 
+    // 点击/按下触发元素时立即隐藏 Tooltip，杜绝菜单展开时 Tooltip 悬浮残留
+    const handlePointerDown = (e: React.PointerEvent<HTMLElement>) => {
+      clearHideTimer();
+      setVisible(false);
+      childHandlers.onPointerDown?.(e);
+      restHandlers.onPointerDown?.(e);
+    };
+
+    const handleClick = (e: React.MouseEvent<HTMLElement>) => {
+      clearHideTimer();
+      setVisible(false);
+      childHandlers.onClick?.(e);
+      restHandlers.onClick?.(e);
+    };
+
     if (!isValid || !child) {
       return <>{children}</>;
     }
@@ -390,6 +415,8 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     delete (rest as { onMouseLeave?: unknown }).onMouseLeave;
     delete (rest as { onFocus?: unknown }).onFocus;
     delete (rest as { onBlur?: unknown }).onBlur;
+    delete (rest as { onPointerDown?: unknown }).onPointerDown;
+    delete (rest as { onClick?: unknown }).onClick;
 
     const mergedEventHandlers: Record<string, (e: unknown) => void> = {};
     const childPropsRecord = child.props as Record<string, unknown>;
@@ -420,6 +447,8 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       onMouseLeave: handleMouseLeave,
       onFocus: handleFocus,
       onBlur: handleBlur,
+      onPointerDown: handlePointerDown,
+      onClick: handleClick,
     });
 
     return (

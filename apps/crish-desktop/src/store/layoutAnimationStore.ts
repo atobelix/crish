@@ -8,8 +8,7 @@ export type LayoutAnimationType =
   | 'workspace-resizing'
   /** OS / 浏览器窗口缩放 pulse（R3 桥；独立于 sash 的 workspace-resizing，避免 Set 无引用计数时误 end） */
   | 'window-resizing'
-  | 'tab-dragging'
-  ;
+  | 'tab-dragging';
 
 /** 布局动画阶段 */
 export type AnimationPhase = 'idle' | 'animating' | 'catching-up';
@@ -32,7 +31,7 @@ const TYPE_BODY_CLASSES: Record<LayoutAnimationType, readonly string[]> = {
   // 列宽/组高 sash、侧栏拖宽共用；is-resizing 兼容旧 CSS
   'workspace-resizing': ['resizing-active', 'is-resizing'],
   // 窗口缩放：兼容旧 CSS 选择器 body.window-resizing；is-layout-frozen 由 active 统一加
-  'window-resizing': ['window-resizing', 'is-resizing'],
+  'window-resizing': ['window-resizing'],
   'tab-dragging': ['dragging-card'],
 };
 
@@ -120,7 +119,8 @@ export interface LayoutAnimationActions {
   flushCatchupTasks: () => void;
 }
 
-export type LayoutAnimationStore = LayoutAnimationState & LayoutAnimationActions;
+export type LayoutAnimationStore = LayoutAnimationState &
+  LayoutAnimationActions;
 
 function deriveBodyClasses(active: Set<LayoutAnimationType>): Set<string> {
   const classes = new Set<string>();
@@ -173,98 +173,103 @@ function deriveFlags(active: Set<LayoutAnimationType>) {
   };
 }
 
-export const useLayoutAnimationStore = create<LayoutAnimationStore>((set, get) => ({
-  activeAnimations: new Set(),
-  isSidebarTransitioning: false,
-  isWorkspaceResizing: false,
-  isWindowResizing: false,
-  isTabDragging: false,
-  isLayoutFrozen: false,
-  phase: 'idle',
-  catchupQueue: new Map(),
+export const useLayoutAnimationStore = create<LayoutAnimationStore>(
+  (set, get) => ({
+    activeAnimations: new Set(),
+    isSidebarTransitioning: false,
+    isWorkspaceResizing: false,
+    isWindowResizing: false,
+    isTabDragging: false,
+    isLayoutFrozen: false,
+    phase: 'idle',
+    catchupQueue: new Map(),
 
-  startAnimation: (type) => {
-    const current = get().activeAnimations;
-    // 已在集合中：仍强制同步 body，避免外部误清 class 后永久失步
-    if (current.has(type)) {
-      syncBodyFromActive(current);
-      // 刷新 watchdog，避免长驻交互在首次 arm 后超时误杀
+    startAnimation: (type) => {
+      const current = get().activeAnimations;
+      // 已在集合中：仍强制同步 body，避免外部误清 class 后永久失步
+      if (current.has(type)) {
+        syncBodyFromActive(current);
+        // 刷新 watchdog，避免长驻交互在首次 arm 后超时误杀
+        armFreezeWatchdog(type);
+        return;
+      }
+      const nextSet = new Set(current).add(type);
+      syncBodyFromActive(nextSet);
       armFreezeWatchdog(type);
-      return;
-    }
-    const nextSet = new Set(current).add(type);
-    syncBodyFromActive(nextSet);
-    armFreezeWatchdog(type);
-    set({
-      ...deriveFlags(nextSet),
-      phase: 'animating',
-    });
-  },
+      set({
+        ...deriveFlags(nextSet),
+        phase: 'animating',
+      });
+    },
 
-  endAnimation: (type) => {
-    clearFreezeWatchdog(type);
-    const current = get().activeAnimations;
-    if (!current.has(type)) {
-      // 对称清理：重复 end 时仍校正 body，避免永久 frozen class 泄漏
-      syncBodyFromActive(current);
-      return;
-    }
+    endAnimation: (type) => {
+      clearFreezeWatchdog(type);
+      const current = get().activeAnimations;
+      if (!current.has(type)) {
+        // 对称清理：重复 end 时仍校正 body，避免永久 frozen class 泄漏
+        syncBodyFromActive(current);
+        return;
+      }
 
-    const nextSet = new Set(current);
-    nextSet.delete(type);
-    const isStillFrozen = nextSet.size > 0;
-    syncBodyFromActive(nextSet);
+      const nextSet = new Set(current);
+      nextSet.delete(type);
+      const isStillFrozen = nextSet.size > 0;
+      syncBodyFromActive(nextSet);
 
-    set({
-      ...deriveFlags(nextSet),
-      phase: isStillFrozen ? 'animating' : 'catching-up',
-    });
+      set({
+        ...deriveFlags(nextSet),
+        phase: isStillFrozen ? 'animating' : 'catching-up',
+      });
 
-    if (!isStillFrozen) {
-      get().flushCatchupTasks();
-    }
-  },
+      if (!isStillFrozen) {
+        get().flushCatchupTasks();
+      }
+    },
 
-  registerCatchupTask: (key, task) => {
-    get().catchupQueue.set(key, task);
-  },
+    registerCatchupTask: (key, task) => {
+      get().catchupQueue.set(key, task);
+    },
 
-  unregisterCatchupTask: (key) => {
-    get().catchupQueue.delete(key);
-  },
+    unregisterCatchupTask: (key) => {
+      get().catchupQueue.delete(key);
+    },
 
-  flushCatchupTasks: () => {
-    const { catchupQueue } = get();
-    if (catchupQueue.size === 0) {
-      set({ phase: 'idle' });
-      return;
-    }
+    flushCatchupTasks: () => {
+      const { catchupQueue } = get();
+      if (catchupQueue.size === 0) {
+        set({ phase: 'idle' });
+        return;
+      }
 
-    try {
-      flushSync(() => {
+      try {
+        flushSync(() => {
+          catchupQueue.forEach((task) => {
+            try {
+              task();
+            } catch (e) {
+              console.error('[LayoutAnimationStore] Catch-up task failed:', e);
+            }
+          });
+        });
+      } catch {
+        // 在非 React 调度回调中 fallback 至普通调用
         catchupQueue.forEach((task) => {
           try {
             task();
-          } catch (e) {
-            console.error('[LayoutAnimationStore] Catch-up task failed:', e);
+          } catch (err) {
+            console.error(
+              '[LayoutAnimationStore] Fallback catchup failed:',
+              err
+            );
           }
         });
-      });
-    } catch {
-      // 在非 React 调度回调中 fallback 至普通调用
-      catchupQueue.forEach((task) => {
-        try {
-          task();
-        } catch (err) {
-          console.error('[LayoutAnimationStore] Fallback catchup failed:', err);
-        }
-      });
-    }
+      }
 
-    catchupQueue.clear();
-    set({ phase: 'idle' });
-  },
-}));
+      catchupQueue.clear();
+      set({ phase: 'idle' });
+    },
+  })
+);
 
 export interface LayoutInteractionOptions {
   /**

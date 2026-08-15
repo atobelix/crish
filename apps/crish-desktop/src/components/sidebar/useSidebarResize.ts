@@ -17,8 +17,7 @@ export function useSidebarResize() {
   useEffect(() => {
     try {
       const layout = configService.get('workspace.layout') as
-        | { sidebarWidth?: number }
-        | undefined;
+        { sidebarWidth?: number } | undefined;
       const restoredWidth = layout?.sidebarWidth;
       if (
         typeof restoredWidth === 'number' &&
@@ -43,10 +42,7 @@ export function useSidebarResize() {
         n >= SIDEBAR_WIDTH_MIN &&
         n <= SIDEBAR_WIDTH_MAX
       ) {
-        document.documentElement.style.setProperty(
-          '--sidebar-width',
-          `${n}px`
-        );
+        document.documentElement.style.setProperty('--sidebar-width', `${n}px`);
         document.documentElement.style.setProperty(
           '--sidebar-visible-width',
           `${n}px`
@@ -78,22 +74,22 @@ export function useSidebarResize() {
       return;
     }
     if (sidebarCollapsed) {
-        document.documentElement.style.setProperty('--sidebar-width', '0px');
-        document.documentElement.style.setProperty(
-          '--sidebar-visible-width',
-          `${sidebarWidthPx}px`
-        );
-      } else {
-        document.documentElement.style.setProperty(
-          '--sidebar-width',
-          `${sidebarWidthPx}px`
-        );
-        document.documentElement.style.setProperty(
-          '--sidebar-visible-width',
-          `${sidebarWidthPx}px`
-        );
-        window.dispatchEvent(new Event('crish-sidebar-resize'));
-      }
+      document.documentElement.style.setProperty('--sidebar-width', '0px');
+      document.documentElement.style.setProperty(
+        '--sidebar-visible-width',
+        `${sidebarWidthPx}px`
+      );
+    } else {
+      document.documentElement.style.setProperty(
+        '--sidebar-width',
+        `${sidebarWidthPx}px`
+      );
+      document.documentElement.style.setProperty(
+        '--sidebar-visible-width',
+        `${sidebarWidthPx}px`
+      );
+      window.dispatchEvent(new Event('crish-sidebar-resize'));
+    }
   }, [sidebarCollapsed, sidebarWidthPx]);
 
   const persistSidebarWidth = useCallback((px: number) => {
@@ -143,6 +139,7 @@ export function useSidebarResize() {
   const handleSidebarResizeStart = (e: React.PointerEvent) => {
     e.preventDefault();
     document.body.classList.add('is-resizing');
+    document.body.classList.add('sidebar-resizing');
     const startX = e.clientX;
     const startWidth =
       parseInt(
@@ -181,6 +178,7 @@ export function useSidebarResize() {
     };
     const handlePointerUp = (upEvent: PointerEvent) => {
       document.body.classList.remove('is-resizing');
+      document.body.classList.remove('sidebar-resizing');
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       const finalWidth = startWidth + (upEvent.clientX - startX);

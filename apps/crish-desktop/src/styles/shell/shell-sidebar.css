@@ -19,8 +19,8 @@
   border-right: none;
 }
 
-body.is-resizing,
-body.is-resizing * {
+body.sidebar-resizing,
+body.sidebar-resizing * {
   transition: none !important;
   cursor: col-resize !important;
   user-select: none !important;
@@ -52,7 +52,9 @@ body.is-resizing * {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .nav-item:hover {
@@ -112,7 +114,8 @@ body.is-resizing * {
   padding-left: 0;
 }
 
-.collapse-btn, .folder-collapse-btn {
+.collapse-btn,
+.folder-collapse-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -124,11 +127,14 @@ body.is-resizing * {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    background-color var(--transition-fast);
   flex-shrink: 0;
 }
 
-.collapse-btn:hover, .folder-collapse-btn:hover {
+.collapse-btn:hover,
+.folder-collapse-btn:hover {
   background-color: transparent;
   color: var(--text-primary);
 }
@@ -138,7 +144,8 @@ body.is-resizing * {
   opacity: 1;
 }
 
-.collapse-btn svg, .folder-collapse-btn svg {
+.collapse-btn svg,
+.folder-collapse-btn svg {
   width: var(--icon-size-sm);
   height: var(--icon-size-sm);
   transition: transform var(--transition-fast);
@@ -177,7 +184,10 @@ body.is-resizing * {
   border: 1px dashed var(--border-color);
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
-  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .pin-icon {
@@ -253,7 +263,9 @@ body.is-resizing * {
   text-decoration: none;
   font-size: var(--font-size-base);
   color: var(--text-secondary);
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
   position: relative;
   gap: var(--space-2);
   font-weight: var(--font-weight-medium) !important;
@@ -295,7 +307,9 @@ body.is-resizing * {
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity var(--transition-fast), background-color var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    background-color var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -371,7 +385,9 @@ body.is-resizing * {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .settings-btn:hover {
@@ -409,7 +425,10 @@ body.is-resizing * {
     transparent 100%
   );
   opacity: 0.55;
-  transition: opacity var(--transition-fast), width var(--transition-fast), filter var(--transition-fast);
+  transition:
+    opacity var(--transition-fast),
+    width var(--transition-fast),
+    filter var(--transition-fast);
   pointer-events: none;
 }
 .sidebar-resizer:hover::after,

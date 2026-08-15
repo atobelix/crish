@@ -24,7 +24,10 @@ type Props = {
  * - 枚举已统一为 api/permissionModes 单一真相源（40 方案 T2/T7）；
  *   coercePermissionMode 仍保留作为存储/旧值运行期防御。
  */
-export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange }) => {
+export const PermissionModeMenu: React.FC<Props> = ({
+  mode: modeRaw,
+  onChange,
+}) => {
   const mode = coercePermissionMode(modeRaw);
   const meta = permissionModeMeta(mode);
   const [open, setOpen] = useState(false);
@@ -37,7 +40,7 @@ export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange })
       }
       setOpen(false);
     },
-    [mode, onChange],
+    [mode, onChange]
   );
 
   const options = DESKTOP_PERMISSION_MODE_IDS.map((m) => ({
@@ -47,19 +50,30 @@ export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange })
   }));
 
   return (
-    <div className={styles.permModeWrap} data-density="compact" style={{ position: 'relative', display: 'inline-block' }}>
+    <div
+      className={styles.permModeWrap}
+      data-density="compact"
+      style={{ position: 'relative', display: 'inline-block' }}
+    >
       <Menu
         open={open}
         onOpenChange={setOpen}
         trigger={
-          <Tooltip content={`当前权限模式：${meta.label} · ${meta.matrixHint}`}>
+          <Tooltip
+            content={`当前权限模式：${meta.label} · ${meta.matrixHint}`}
+            disabled={open}
+          >
             <button
               type="button"
               className={`${styles.permPill} ${open ? styles.isOpen : ''}`}
               aria-label={`当前权限模式：${meta.label}`}
             >
               <span>{meta.label}</span>
-              <Lucide.ChevronDown size={11} className={styles.permPillChev} aria-hidden />
+              <Lucide.ChevronDown
+                size={11}
+                className={styles.permPillChev}
+                aria-hidden
+              />
             </button>
           </Tooltip>
         }
@@ -84,7 +98,11 @@ export const PermissionModeMenu: React.FC<Props> = ({ mode: modeRaw, onChange })
               >
                 <span>{itemMeta.label}</span>
                 {isSelected ? (
-                  <Lucide.Check size={12} style={{ marginLeft: 'auto', opacity: 0.8 }} aria-hidden />
+                  <Lucide.Check
+                    size={12}
+                    style={{ marginLeft: 'auto', opacity: 0.8 }}
+                    aria-hidden
+                  />
                 ) : null}
               </button>
             </Tooltip>
