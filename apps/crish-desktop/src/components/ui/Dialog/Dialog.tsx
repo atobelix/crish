@@ -13,21 +13,18 @@
  *
  * 分层契约：只依赖 react/react-dom 与 tokens CSS 变量。
  */
-import React, { useEffect, useId } from 'react';
+import React, { useId } from 'react';
 import { createPortal } from 'react-dom';
+import * as DismissableLayer from '@radix-ui/react-dismissable-layer';
 import styles from './Dialog.module.css';
 import { FocusTrap } from './focusTrap';
 import { useAnimatedPresence } from './useAnimatedPresence';
 import { useRestoreFocus } from './useRestoreFocus';
+import { useLayerRegistration } from '../../../hooks/useLayerRegistration';
 
 export type DialogSize = 'sm' | 'md' | 'lg';
 export type DialogRole = 'dialog' | 'alertdialog';
 export type DialogVariant = 'modal' | 'fullscreen';
-
-// 嵌套 Dialog Esc 竞态（F7 F5）：打开中的 Dialog 按挂载顺序登记进栈，
-// document 层 Esc 监听只允许栈顶响应——一次 Esc 只关最顶层，
-// 不会两层同时关闭；退出动画期间已从栈中移除，外层立即恢复响应。
-const dialogStack: string[] = [];
 
 export interface DialogProps {
   /** 受控开关 */
@@ -97,33 +94,22 @@ export function Dialog({
   // 三件套：进出场动画 + 焦点归还 + 焦点圈定
   // exitDurationMs 与 CSS --duration-exit（150ms）对齐（F7 F5），
   // 退出动画结束即卸载，不留 50ms 空窗
-  const { state, isMounted } = useAnimatedPresence({ visible: open, exitDurationMs: 150 });
+  const { state, isMounted } = useAnimatedPresence({
+    visible: open,
+    exitDurationMs: 150,
+  });
   useRestoreFocus(open);
 
-  // 登记/退栈：打开且已挂载时入栈，关闭/卸载时出栈（F7 F5）
-  useEffect(() => {
-    if (!open || !isMounted) return;
-    dialogStack.push(dialogId);
-    return () => {
-      const idx = dialogStack.indexOf(dialogId);
-      if (idx >= 0) dialogStack.splice(idx, 1);
-    };
-  }, [open, isMounted, dialogId]);
-
-  // Esc 关闭：挂在 document 层（与 FocusTrap 的 Tab 循环互不干扰）；
-  // 仅最顶层响应（F7 F5：嵌套 Dialog 一次 Esc 只关顶层）；
-  // 消费方自定义 Esc 三层级（SettingsPanel/FirstRunWizard）时置 dismissible=false
-  useEffect(() => {
-    if (!open) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (dialogStack[dialogStack.length - 1] !== dialogId) return;
-      e.preventDefault();
-      if (dismissible) onClose();
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [open, dismissible, onClose, dialogId]);
+  useLayerRegistration(
+    {
+      id: dialogId,
+      type: role === 'alertdialog' ? 'confirm-dialog' : 'modal-dialog',
+      modal: true,
+      dismissible,
+      onDismiss: () => onClose(),
+    },
+    open && isMounted
+  );
 
   if (!isMounted) return null;
 
@@ -152,60 +138,74 @@ export function Dialog({
 
   return createPortal(
     // FocusTrap 容器直接挂在 body 下：兄弟节点（应用主体）被 aria-hidden 旁路
-    <FocusTrap active={open} initialFocusRef={initialFocusRef}>
-      <div className={overlayClasses}>
-        <div
-          className={styles.backdrop}
-          aria-hidden="true"
-          onClick={dismissible ? onClose : undefined}
-        />
-        <div
-          role={role}
-          aria-modal="true"
-          aria-label={title == null ? ariaLabel : undefined}
-          aria-labelledby={title != null ? titleId : undefined}
-          aria-describedby={description != null ? descriptionId : undefined}
-          className={panelClasses}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className={styles.dialogHeader}>
-            {title != null ? (
-              <h2 className={styles.dialogTitle} id={titleId}>
-                {title}
-              </h2>
+    <DismissableLayer.Branch asChild>
+      <FocusTrap active={open} initialFocusRef={initialFocusRef}>
+        <div className={overlayClasses}>
+          <div
+            className={styles.backdrop}
+            aria-hidden="true"
+            onClick={dismissible ? onClose : undefined}
+          />
+          <div
+            role={role}
+            aria-modal="true"
+            aria-label={title == null ? ariaLabel : undefined}
+            aria-labelledby={title != null ? titleId : undefined}
+            aria-describedby={description != null ? descriptionId : undefined}
+            className={panelClasses}
+            onMouseDown={(e) => e.stopPropagation()}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={styles.dialogHeader}>
+              {title != null ? (
+                <h2 className={styles.dialogTitle} id={titleId}>
+                  {title}
+                </h2>
+              ) : null}
+              {dismissible && showCloseButton ? (
+                <button
+                  type="button"
+                  className={styles.dialogClose}
+                  aria-label="关闭弹窗"
+                  onClick={onClose}
+                >
+                  <CloseIcon />
+                </button>
+              ) : null}
+            </div>
+
+            {description != null ? (
+              <p className={styles.dialogDescription} id={descriptionId}>
+                {description}
+              </p>
             ) : null}
-            {dismissible && showCloseButton ? (
-              <button
-                type="button"
-                className={styles.dialogClose}
-                aria-label="关闭弹窗"
-                onClick={onClose}
-              >
-                <CloseIcon />
-              </button>
+
+            <div className={styles.dialogBody}>{children}</div>
+
+            {footer != null ? (
+              <div className={styles.dialogFooter}>{footer}</div>
             ) : null}
           </div>
-
-          {description != null ? (
-            <p className={styles.dialogDescription} id={descriptionId}>
-              {description}
-            </p>
-          ) : null}
-
-          <div className={styles.dialogBody}>{children}</div>
-
-          {footer != null ? <div className={styles.dialogFooter}>{footer}</div> : null}
         </div>
-      </div>
-    </FocusTrap>,
+      </FocusTrap>
+    </DismissableLayer.Branch>,
     target
   );
 }
 
 function CloseIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>

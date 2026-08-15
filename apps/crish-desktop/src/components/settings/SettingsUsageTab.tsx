@@ -4,10 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './SettingsUsageTab.module.css';
-import {
-  loadPrices,
-  type ModelPrice,
-} from '../../api/pricingStore';
+import { loadPrices, type ModelPrice } from '../../api/pricingStore';
 import {
   clearUsageHistory,
   loadUsageSnapshot,
@@ -15,7 +12,7 @@ import {
   type UsageSnapshot,
 } from '../../api/usageStore';
 import { SettingsPage, SettingsSection, SettingsCard } from './SettingsUI';
-import { Button, ConfirmDialog, Tooltip } from '../ui';
+import { Button, ConfirmDialog } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 import { PriceConfigModal } from './PriceConfigModal';
 import { UsageChart } from './UsageChart';

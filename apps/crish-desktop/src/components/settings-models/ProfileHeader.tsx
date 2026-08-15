@@ -7,7 +7,6 @@ import {
   type ProviderProfile,
 } from '../../api/providerProfiles';
 import { Button, Tooltip } from '../ui';
-import styles from './ModelsSettingsTab.module.css';
 
 /**
  * 详情头部：重命名标题 / 启用状态按钮 / 自定义服务商删除确认组。
@@ -22,12 +21,12 @@ export const ProfileHeader: React.FC<{
   confirmDeleteId: string | null;
   setConfirmDeleteId: (id: string | null) => void;
   refresh: () => void;
-  notify: (ok: boolean, text: string) => void;
-  setProfiles: (profiles: ProviderProfile[]) => void;
-  setSelectedId: (id: string | null) => void;
+  notify?: (ok: boolean, text: string) => void;
+  setProfiles?: (profiles: ProviderProfile[]) => void;
+  setSelectedId?: (id: string | null) => void;
 }> = ({
   selected,
-  selectedLabel,
+  selectedLabel: _selectedLabel,
   editingName,
   nameDraft,
   setNameDraft,
@@ -35,9 +34,9 @@ export const ProfileHeader: React.FC<{
   confirmDeleteId,
   setConfirmDeleteId,
   refresh,
-  notify,
-  setProfiles,
-  setSelectedId,
+  notify: _notify,
+  setProfiles: _setProfiles,
+  setSelectedId: _setSelectedId,
 }) => {
   return (
     <div className="mrd-head">
@@ -52,10 +51,7 @@ export const ProfileHeader: React.FC<{
             autoFocus
             onChange={(e) => setNameDraft(e.target.value)}
             onBlur={() => {
-              if (
-                nameDraft.trim() &&
-                nameDraft.trim() !== selected.name
-              ) {
+              if (nameDraft.trim() && nameDraft.trim() !== selected.name) {
                 upsertProfile({ ...selected, name: nameDraft.trim() });
                 refresh();
               }
@@ -99,12 +95,10 @@ export const ProfileHeader: React.FC<{
                 transition: 'border-color 0.15s ease',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor =
-                  'var(--text-secondary)';
+                e.currentTarget.style.borderColor = 'var(--text-secondary)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor =
-                  'var(--border-subtle)';
+                e.currentTarget.style.borderColor = 'var(--border-subtle)';
               }}
             >
               {selectedLabel}

@@ -23,7 +23,7 @@ import {
   togglePreviewBookmark,
   validateBrowseUrl,
 } from '../../api/previewBrowserStore';
-import { HIST_PANEL_ID, LOAD_TIMEOUT_MS, safeIframeSrc } from './previewCardLib';
+import { LOAD_TIMEOUT_MS, safeIframeSrc } from './previewCardLib';
 
 export type UsePreviewNavigationOptions = {
   onShowToast: (message: string) => void;
@@ -69,7 +69,7 @@ export type UsePreviewNavigationResult = {
 };
 
 export function usePreviewNavigation(
-  opts: UsePreviewNavigationOptions,
+  opts: UsePreviewNavigationOptions
 ): UsePreviewNavigationResult {
   const [urlInput, setUrlInput] = useState(() => {
     const u = getPreviewUrl();
@@ -84,7 +84,7 @@ export function usePreviewNavigation(
   const [loadError, setLoadError] = useState(false);
   const [loading, setLoading] = useState(false);
   const [bookmarked, setBookmarked] = useState(() =>
-    isPreviewBookmarked(getPreviewUrl()),
+    isPreviewBookmarked(getPreviewUrl())
   );
   const [showHist, setShowHist] = useState(false);
   const [, setHistTick] = useState(0);
@@ -94,14 +94,8 @@ export function usePreviewNavigation(
   const toastRef = useRef(opts.onShowToast);
   toastRef.current = opts.onShowToast;
 
-  const history = useMemo(
-    () => getPreviewHistory(),
-    [],
-  );
-  const bookmarks = useMemo(
-    () => getPreviewBookmarks(),
-    [],
-  );
+  const history = useMemo(() => getPreviewHistory(), []);
+  const bookmarks = useMemo(() => getPreviewBookmarks(), []);
 
   const blank = isAboutBlank(activeUrl);
   const canEmbed = isEmbeddablePreviewUrl(activeUrl);
@@ -138,7 +132,7 @@ export function usePreviewNavigation(
         return next;
       });
     },
-    [stackIdx],
+    [stackIdx]
   );
 
   const navigateRef = useRef(navigate);
@@ -282,7 +276,7 @@ export function usePreviewNavigation(
     }
     const on = togglePreviewBookmark(
       activeUrl,
-      previewDisplayHost(activeUrl) || activeUrl,
+      previewDisplayHost(activeUrl) || activeUrl
     );
     setBookmarked(on);
     setHistTick((n) => n + 1);
