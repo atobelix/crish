@@ -183,10 +183,11 @@
   overflow-x: hidden;
   overscroll-behavior: auto;
   scrollbar-gutter: stable both-edges;
-  border-radius: var(--shell-inset-radius, 14px);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-sm);
-  margin: 0 var(--space-2, 8px) var(--space-2, 8px) 0;
+  border-radius: 0;
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: none;
+  margin: 0;
   padding: 24px 32px 32px;
   display: flex;
   flex-direction: column;
