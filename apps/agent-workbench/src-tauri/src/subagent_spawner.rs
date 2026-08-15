@@ -669,7 +669,21 @@ impl SubagentSpawnerImpl {
                         false
                     } else {
                         db.query_events_by_run(&cfg.parent_session_id, &parent, 0, Some(200))
-                            .map(|rows| rows.iter().any(|e| e.event_type == "subagent-ended"))
+                            .map(|rows| {
+                                rows.iter().any(|e| {
+                                    if e.event_type != "subagent-ended" {
+                                        return false;
+                                    }
+                                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&e.payload) {
+                                        let sub_id = val.get("subagentId").and_then(|v| v.as_str());
+                                        let sub_run_id = val.get("subagentRunId").and_then(|v| v.as_str());
+                                        if sub_id == Some(&cfg.subagent_id) || sub_run_id == Some(&run_id) {
+                                            return true;
+                                        }
+                                    }
+                                    false
+                                })
+                            })
                             .unwrap_or(false)
                     }
                 }
@@ -1901,7 +1915,7 @@ mod tests {
             "sess-main",
             seq,
             "subagent-ended",
-            r#"{"type":"subagent-ended","runId":"run-main","status":"cancelled"}"#,
+            &format!(r#"{{"type":"subagent-ended","runId":"run-main","subagentId":"{}","status":"cancelled"}}"#, result.subagent_id),
             Some("run-main"),
         )
         .expect("kill 直发落库");
