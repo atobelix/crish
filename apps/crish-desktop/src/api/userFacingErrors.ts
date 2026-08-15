@@ -110,25 +110,31 @@ export function classifySoftFailure(input: unknown): SoftFailureKind {
   return null;
 }
 
+export type UserFacingMessage = string | null;
+
 /**
- * 差异化六域（docs/error-notification-governance/10-analysis/03 §④ S1-S6）：
+ * 差异化八域（docs/system-audit-and-redesign/02-核心聊天与容错状态机详案 S1-S8）：
  * - S1 本地核心未就绪（waitUntilConnected 超时 / initialized=false）
  * - S2 引擎未就绪（provider 配置缺失）
  * - S3 restore 进行中（restore.state=pending）
  * - S4 provider 网络（kebab 码 network/timeout/endpoint-unavailable）
  * - S5 provider 侧故障（server-error/rate-limit/gateway-challenge）
- * - S6 内部错误（其他 CoreError）
+ * - S6 内部错误（panic / 未捕获异常）
+ * - S7 会话排队中（SESSION_BUSY / 串行守卫）
+ * - S8 存储同步中（STORAGE_BUSY / database locked）
  */
-export type ErrorDomain = 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6';
+export type ErrorDomain = 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8';
 
 /** 差异化文案表（用户裁决选项 A：分层 + 动作指引，不虚假承诺「自动恢复」） */
-const DOMAIN_MESSAGES: Record<ErrorDomain, string> = {
+export const DOMAIN_MESSAGES: Record<ErrorDomain, string> = {
   S1: '软件服务正在启动，请稍候片刻。',
   S2: '模型服务尚未配置，请打开 设置 → 模型 完成配置后再发送。',
   S3: '正在恢复上次的会话数据，稍后即可发送。',
   S4: '模型服务商暂时无法连接（网络问题），请检查网络后重发。',
   S5: '模型服务商侧出现故障，请稍后重试或切换模型。',
   S6: '软件内部错误，请稍后重试；若反复出现请重启应用。',
+  S7: '当前会话上一轮任务仍在收尾中，已自动为您排队。',
+  S8: '本地会话存储正在同步数据，请稍候片刻。',
 };
 
 /** kebab 错误码 → 域（Rust provider 包装 `provider 错误（{kind}）：{message}`） */
@@ -140,20 +146,22 @@ const KEBAB_TO_DOMAIN: Record<string, ErrorDomain> = {
   'rate-limit': 'S5',
   'gateway-challenge': 'S5',
   // T-F 06（T3.2）补码：context-length-exceeded / payload-too-large /
-  // invalid-request → S5（provider 侧故障）；aborted → S6（用户取消/中断）
+  // invalid-request → S5（provider 侧故障）；aborted 剥离并显式返回 null（静默收口）
   'context-length-exceeded': 'S5',
   'payload-too-large': 'S5',
   'invalid-request': 'S5',
-  aborted: 'S6',
 };
 
+const SESSION_BUSY_RE = /SESSION_BUSY|已有活动 run|串行守卫/i;
+const STORAGE_BUSY_RE =
+  /database locked|sqlite busy|store\.(?:append_event|query|lock)/i;
 const PROVIDER_CONFIG_MISSING_RE =
-  /provider\s*配置缺失|provider config.*missing/i;
+  /provider\s*配置缺失|provider config.*missing|no provider/i;
 const RESTORE_IN_PROGRESS_RE = /restore in progress|restore.*进行中/i;
 const LOCAL_CORE_NOT_READY_RE = /engine not ready|引擎未就绪|核心未就绪/i;
-const PROVIDER_SIDE_FAULT_RE = /server.?error|5\d{2}|rate.?limit|gateway/i;
+const PROVIDER_SIDE_FAULT_RE = /server.?error|5\d{2}|rate.?limit|gateway|429/i;
 const INTERNAL_ERROR_RE =
-  /invalid\s?input|encoding error|io error|not found|cancelled|internal:|tauri command not available|command not available|^unknown:/i;
+  /encoding error|tauri command not available|command not available|^unknown:|panic:|unhandled exception/i;
 
 /** core_get_status 返回体形状判定（serde camelCase：initialized/engineReady/restore 等） */
 function isStatusLike(input: unknown): input is Record<string, unknown> {
@@ -190,8 +198,8 @@ function classifyStatusDomain(
 }
 
 /**
- * 差异化六域判定（03 §④ 4.3 必改项：networkUserMessage 消费 detail 的判定面）。
- * 支持两类 detail：core_get_status 状态对象（S1/S2/S3）与错误文本/对象（S1-S6）。
+ * 差异化八域判定（S1-S8）。
+ * 支持两类 detail：core_get_status 状态对象（S1/S2/S3）与错误文本/对象（S1-S8）。
  * 未命中任何域 → null（保留既有 classifySoftFailure 分类路径，不做越权判定）。
  */
 export function classifyErrorDomain(input: unknown): ErrorDomain | null {
@@ -200,7 +208,14 @@ export function classifyErrorDomain(input: unknown): ErrorDomain | null {
   if (!text) return null;
   // kebab 错误码优先（统一规范）；未登记码（auth/quota 等）→ 既有分类接管
   const wrapper = RUST_PROVIDER_WRAPPER_RE.exec(text);
-  if (wrapper) return KEBAB_TO_DOMAIN[wrapper[1]!] ?? null;
+  if (wrapper) {
+    const code = wrapper[1]!;
+    if (code === 'aborted') return null; // 用户取消正常静默收口，绝不上抛 S6
+    return KEBAB_TO_DOMAIN[code] ?? null;
+  }
+  // 串行并发 (S7) 与存储繁忙 (S8) 优先分流
+  if (SESSION_BUSY_RE.test(text)) return 'S7';
+  if (STORAGE_BUSY_RE.test(text)) return 'S8';
   // S2 先于 S1：Rust 门禁文案「engine not ready（provider 配置缺失）」同时含两者
   if (PROVIDER_CONFIG_MISSING_RE.test(text)) return 'S2';
   if (RESTORE_IN_PROGRESS_RE.test(text)) return 'S3';
@@ -211,31 +226,37 @@ export function classifyErrorDomain(input: unknown): ErrorDomain | null {
   return null;
 }
 
-/** 差异化文案取值（S1-S6 域 → 用户可见文案） */
+/** 差异化文案取值（S1-S8 域 → 用户可见文案） */
 export function domainUserMessage(domain: ErrorDomain): string {
   return DOMAIN_MESSAGES[domain];
 }
 
 /**
- * 网络/连接类失败的用户文案（03 §④：不再一刀切「正在自动恢复」）。
- * 消费 detail 做分域判定（S1-S6）；detail 缺失或未命中任何域 → S6 兜底
- *（诚实通用句：不虚假承诺自动恢复，给出重试/重启指引）。
+ * 网络/连接类失败的用户文案（不再一刀切「正在自动恢复」）。
+ * 消费 detail 做分域判定（S1-S8）；detail 缺失或未命中任何域 → S4 兜底
+ *（默认归为 S4 网络连接异常，彻底消灭网络波动误退回 S6 的无参死循环）。
  */
 export function networkUserMessage(detail?: unknown): string {
-  const domain = classifyErrorDomain(detail);
-  return domain ? DOMAIN_MESSAGES[domain] : DOMAIN_MESSAGES.S6;
+  if (detail !== undefined && detail !== null) {
+    const domain = classifyErrorDomain(detail);
+    if (domain) return DOMAIN_MESSAGES[domain];
+  }
+  return DOMAIN_MESSAGES.S4;
 }
 
 export function productStartingMessage(): string {
   return '正在启动…';
 }
 
-export function softFailureMessage(kind: SoftFailureKind): string | null {
+export function softFailureMessage(
+  kind: SoftFailureKind,
+  detail?: unknown
+): UserFacingMessage {
   switch (kind) {
     case 'network':
-      return networkUserMessage();
+      return networkUserMessage(detail);
     case 'no_key':
-      return '还没有配置可用的模型密钥。请打开设置 → 模型，填写密钥后再试。';
+      return DOMAIN_MESSAGES.S2;
     case 'auth':
       return '模型密钥无效或已过期，请打开设置 → 模型检查密钥与服务商地址。';
     case 'no_project':
@@ -247,10 +268,9 @@ export function softFailureMessage(kind: SoftFailureKind): string | null {
       return DOMAIN_MESSAGES.S5;
     case 'context':
       // T-F 06（T3.2）：context-length-exceeded 专属文案
-      // （文案细化为 error-notification-governance 轮次 T-2 的差异化文案表轮次）
       return '上下文已超限：本轮对话过长，系统已自动压缩或需新建会话。';
     case 'ended':
-      return '这一轮任务中断了：可能是引擎繁忙、模型无响应，或运行被取消。请稍后重试；若刚改过密钥或地址，请到设置确认。';
+      return null;
     default:
       return null;
   }
@@ -263,7 +283,7 @@ export function softFailureMessage(kind: SoftFailureKind): string | null {
  */
 export function assistantBubbleForFailure(input: unknown): string | null {
   const kind = classifySoftFailure(input);
-  if (kind) return softFailureMessage(kind);
+  if (kind) return softFailureMessage(kind, input);
   if (isNetworkishError(input)) return networkUserMessage(input);
   return null;
 }

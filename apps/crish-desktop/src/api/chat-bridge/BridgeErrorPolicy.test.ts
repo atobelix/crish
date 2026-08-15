@@ -16,7 +16,12 @@ describe('BridgeErrorPolicy', () => {
       onRunError,
     };
 
-    surfaceStreamFailure('Network request failed', 'network', callbacks, 'run-1');
+    surfaceStreamFailure(
+      'Network request failed',
+      'network',
+      callbacks,
+      'run-1'
+    );
 
     expect(onRunError).toHaveBeenCalledTimes(1);
     const [msg, kind] = onRunError.mock.calls[0];
@@ -36,7 +41,12 @@ describe('BridgeErrorPolicy', () => {
       onRunError,
     };
 
-    surfaceStreamFailure('checkpoint restore failed', 'checkpoint', callbacks, 'run-2');
+    surfaceStreamFailure(
+      'checkpoint restore failed',
+      'checkpoint',
+      callbacks,
+      'run-2'
+    );
 
     expect(onRunError).toHaveBeenCalledTimes(1);
   });
@@ -57,7 +67,7 @@ describe('BridgeErrorPolicy', () => {
       'internal: provider 配置缺失（baseUrl/model/apiKey 三件套）',
       'run-failed',
       callbacks,
-      'run-3',
+      'run-3'
     );
 
     expect(onRunError).toHaveBeenCalledTimes(1);
@@ -83,7 +93,7 @@ describe('BridgeErrorPolicy', () => {
       'provider 错误（rate-limit）：429 Too Many Requests',
       'runtime-error',
       callbacks,
-      'run-4',
+      'run-4'
     );
 
     expect(onRunError).toHaveBeenCalledTimes(1);
@@ -108,7 +118,7 @@ describe('BridgeErrorPolicy', () => {
       'provider 错误（auth）：invalid api key',
       'runtime-error',
       callbacks,
-      'run-5',
+      'run-5'
     );
 
     expect(onRunError).toHaveBeenCalledTimes(1);
@@ -133,13 +143,77 @@ describe('BridgeErrorPolicy', () => {
       'internal: restore in progress：等待重启恢复完成',
       'run-failed',
       callbacks,
-      'run-6',
+      'run-6'
     );
 
     expect(onRunError).toHaveBeenCalledTimes(1);
     const [msg, kind] = onRunError.mock.calls[0];
     expect(msg).toBe('正在恢复上次的会话数据，稍后即可发送。');
     expect(kind).toBe('network');
+  });
+
+  it('用户主动取消（aborted / user-cancel / ui-stop）静默收口，不触发 onRunError 报错', () => {
+    const onRunError = vi.fn();
+    const callbacks: StreamCallbacks = {
+      onChunk: vi.fn(),
+      onThought: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete: vi.fn(),
+      onRunError,
+    };
+
+    surfaceStreamFailure(
+      'provider 错误（aborted）：user cancelled',
+      'runtime-error',
+      callbacks,
+      'run-abort-1'
+    );
+    surfaceStreamFailure(
+      'ui-force-cancel',
+      'runtime-error',
+      callbacks,
+      'run-abort-2'
+    );
+    surfaceStreamFailure('stream stopped', 'ended', callbacks, 'run-abort-3');
+
+    expect(onRunError).not.toHaveBeenCalled();
+  });
+
+  it('S7 串行并发排队与 S8 本地存储同步分流正确', () => {
+    const onRunError = vi.fn();
+    const callbacks: StreamCallbacks = {
+      onChunk: vi.fn(),
+      onThought: vi.fn(),
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete: vi.fn(),
+      onRunError,
+    };
+
+    surfaceStreamFailure(
+      'InvalidInput: 会话 s1 已有活动 run（串行守卫）',
+      'runtime-error',
+      callbacks,
+      'run-s7'
+    );
+    expect(onRunError).toHaveBeenCalledTimes(1);
+    expect(onRunError.mock.calls[0][0]).toBe(
+      '当前会话上一轮任务仍在收尾中，已自动为您排队。'
+    );
+
+    surfaceStreamFailure(
+      'Io: database locked (sqlite busy)',
+      'runtime-error',
+      callbacks,
+      'run-s8'
+    );
+    expect(onRunError).toHaveBeenCalledTimes(2);
+    expect(onRunError.mock.calls[1][0]).toBe(
+      '本地会话存储正在同步数据，请稍候片刻。'
+    );
   });
 });
 
@@ -159,8 +233,18 @@ describe('BridgeErrorPolicy per-run 失败去重（04 §5.1-4 / G6/R5）', () =>
   it('同 run 同错误指纹（双源不同 scope）只 surface 一次', () => {
     const onRunError = vi.fn();
     const callbacks = makeCallbacks(onRunError);
-    surfaceStreamFailure('dup-boom', 'run-terminal-failed', callbacks, 'run-dedup-1');
-    surfaceStreamFailure('dup-boom', 'agent-end-error', callbacks, 'run-dedup-1');
+    surfaceStreamFailure(
+      'dup-boom',
+      'run-terminal-failed',
+      callbacks,
+      'run-dedup-1'
+    );
+    surfaceStreamFailure(
+      'dup-boom',
+      'agent-end-error',
+      callbacks,
+      'run-dedup-1'
+    );
     expect(onRunError).toHaveBeenCalledTimes(1);
   });
 
@@ -184,8 +268,18 @@ describe('BridgeErrorPolicy per-run 失败去重（04 §5.1-4 / G6/R5）', () =>
     const onRunError = vi.fn();
     const callbacks = makeCallbacks(onRunError);
     const diagSpy = vi.spyOn(streamDiagModule, 'recordStreamDiag');
-    surfaceStreamFailure('dup-boom-4', 'runtime-error', callbacks, 'run-dedup-4');
-    surfaceStreamFailure('dup-boom-4', 'runtime-error', callbacks, 'run-dedup-4');
+    surfaceStreamFailure(
+      'dup-boom-4',
+      'runtime-error',
+      callbacks,
+      'run-dedup-4'
+    );
+    surfaceStreamFailure(
+      'dup-boom-4',
+      'runtime-error',
+      callbacks,
+      'run-dedup-4'
+    );
     expect(onRunError).toHaveBeenCalledTimes(1);
     expect(diagSpy).toHaveBeenCalledTimes(1);
   });

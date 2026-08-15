@@ -2,18 +2,10 @@
  * Daemon stream connection lifecycle —— Tauri IPC transport 直连（C1.2 / C3.1）。
  *
  * ## Transport SoT
- * - **唯一通道**：`getTransport()`（TauriTransport，进程内核心直连，03 §3.1）。
- * - run-task 经 `startRunTask(transport, params)` 分派 `core_run_task`。
- * - 事件经 `transport.onMessage` → `router.onMsg`（listen('workbench-run-event')）。
- * - 核心未就绪（waitUntilConnected 超时）→ **拒绝启动**（C3.4：无 directFetch 降级）。
- *
- * ## 删除项（Phase C3.1 / C3.4）
- * - WS daemonClient / directFetch HTTP SSE 降级分支（ALLOW_AUTO_DIRECT_FETCH_FALLBACK 已删）；
- * - `state.transportAbort`（streamState）与 `recordTransportDegradedDirectFetch`（controlMetrics）；
- * - StreamRecovery 流恢复协议（reload/HMR 恢复由 Rust 事件通道有序保证，前端不再重放）。
- *
- * ## Cancel parity
- * - 取消经 `compositionRoot.runControl.dispatch`（L2/L3 → core_run_control）。
+ * - 唯一通道：getTransport()（TauriTransport，进程内核心直连，03 §3.1）。
+ * - run-task 经 startRunTask(transport, params) 分派 core_run_task。
+ * - 事件经 transport.onMessage → router.onMsg（listen('workbench-run-event')）。
+ * - 核心未就绪（waitUntilConnected 超时）→ 拒绝启动（C3.4：无 directFetch 降级）。
  */
 import { getTransport, startRunTask } from '../transport';
 import type { StreamCallbacks, StreamRequestOptions } from '../chatApi';
@@ -21,6 +13,7 @@ import { toEnginePermissionMode } from '../permissionModes';
 import { getPermissionMode } from '../storeAccess';
 import {
   classifyErrorDomain,
+  domainUserMessage,
   logInternalError,
   networkUserMessage,
 } from '../userFacingErrors';
@@ -31,7 +24,6 @@ import { type StreamState, cleanupStreamState } from './handlers/streamState';
 import { EventRouter } from './EventRouter';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { RUN_CONTROL_LEVEL } from '@crish/shared-types';
-/** Single SoT for cancel mode literals — do not redeclare in this package. */
 import type { StreamCancelMode } from '../runControlClient';
 import type { Settings } from '../clientApi';
 import type { SessionMessage } from '../../store/types';
@@ -40,15 +32,57 @@ import { getModelMeta } from '../modelCatalog';
 
 export type { StreamCancelMode };
 
-/**
- * P4 §3.7 / T-27 前端投影：`core_run_task.history` 水合载荷（camelCase，
- * 与 Rust `conex-types::history::HistoryMessage` 的 serde 字段名对齐）。
- * - `id` / `sender` / `timestamp` 必填；`text` / `thinking` /
- *   `tool_calls_json` / `tool_call_results_json` / `status` 可选；
- * - `blocks_json` 不在此组装：前端 timeline 形状与 `AgentMessageBlock`
- *   序列不兼容（T-28 实测），引擎 hydrate 模块对缺块字段走
- *   text/thinking/tool_calls_json 合成兜底（hydrate.rs resolve_blocks）。
- */
+export type ReadinessState = 'ok' | 'blocked_with_action' | 'retryable_wait';
+
+export interface ReadinessGuidance {
+  action: 'open-settings' | 'wait' | 'none';
+  targetTab?: string;
+  message: string;
+}
+
+export interface ReadinessCheckResult {
+  ok: boolean;
+  state: ReadinessState;
+  domain: ErrorDomain | null;
+  guidance?: ReadinessGuidance;
+}
+
+/** 动态重置就绪状态机（当收到配置变更或后端事件时调用） */
+export function resetReadiness(): void {
+  const transport = getTransport();
+  if (
+    typeof (transport as unknown as { resetReadiness?: () => void })
+      .resetReadiness === 'function'
+  ) {
+    (transport as unknown as { resetReadiness: () => void }).resetReadiness();
+  }
+}
+
+/** 响应式就绪监听器：收到 engine-status-changed 或 config-reloaded 事件时自愈同步 */
+let readinessListenerSubscribed = false;
+
+export function ensureReadinessSync(): void {
+  if (readinessListenerSubscribed) return;
+  readinessListenerSubscribed = true;
+  try {
+    const transport = getTransport();
+    transport.onMessage((event) => {
+      if (
+        event?.type === 'engine-status-changed' ||
+        event?.type === 'config-reloaded'
+      ) {
+        const isReady =
+          event.engineReady === true ||
+          event.engine_ready === true ||
+          event.ready === true;
+        if (!isReady) resetReadiness();
+      }
+    });
+  } catch {
+    /* swallow-ok */
+  }
+}
+
 export interface HistoryMessage {
   id: string;
   sender: 'user' | 'assistant';
@@ -60,42 +94,23 @@ export interface HistoryMessage {
   timestamp: number;
 }
 
-/**
- * DEEPCHECK-01 P0（历史回流前缀漂移修复）：历史回流 token 预算。
- * - 语义从「最近 N 条」改为「token 预算 + 稳定锚点」：预算内全量回传
- *   （append-only 请求前缀天然字节稳定，服务端自动前缀缓存全量命中）；
- * - 超预算：锚点（会话首条 user 消息，含其前的稳定头部）恒在 + 尾部按
- *   预算从旧到新尽量多带，中间段才允许丢弃——请求前缀跨 run 恒以同一
- *   锚点字节开头，失配点收敛到尾部增量（不再逐轮整体漂移）；
- * - 估算对齐 conex-compaction `count_tokens` 启发式（4 字符/token 量级）。
- */
 export const HISTORY_TOKEN_BUDGET = 200_000;
-
-/** 单条历史消息的固定线缆开销估算（role/id/timestamp/status + JSON 信封，
- * 与 Rust SessionHistoryCache 的 SESSION_HISTORY_MESSAGE_TOKEN_OVERHEAD 对齐） */
 export const HISTORY_MESSAGE_TOKEN_OVERHEAD = 8;
 
-/**
- * 文本 token 估算（对齐 conex-compaction `compaction::count_tokens` 启发式：
- * ASCII 单词约 4 字符折 1 token（向上取整）、空白/标点每字符 1 token、
- * 非 ASCII（CJK 等）每字符 1 token；非空文本至少 1 token）。
- */
 export function estimateTextTokens(text: string | undefined): number {
   if (!text || text.length === 0) return 0;
   let tokens = 0;
   let wordChars = 0;
   for (const ch of text) {
     const code = ch.charCodeAt(0);
+    const isSep =
+      code <= 0x20 ||
+      (code >= 0x21 && code <= 0x2f) ||
+      (code >= 0x3a && code <= 0x40) ||
+      (code >= 0x5b && code <= 0x60) ||
+      (code >= 0x7b && code <= 0x7e);
     if (code < 0x80) {
-      // ASCII：空白（0x20 及以下）或标点（0x21-2F / 3A-40 / 5B-60 / 7B-7E）
-      // 为分隔符（自身 1 token）；其余字符计入单词
-      const isSeparator =
-        code <= 0x20 ||
-        (code >= 0x21 && code <= 0x2f) ||
-        (code >= 0x3a && code <= 0x40) ||
-        (code >= 0x5b && code <= 0x60) ||
-        (code >= 0x7b && code <= 0x7e);
-      if (isSeparator) {
+      if (isSep) {
         if (wordChars > 0) {
           tokens += Math.ceil(wordChars / 4);
           wordChars = 0;
@@ -105,7 +120,6 @@ export function estimateTextTokens(text: string | undefined): number {
         wordChars += 1;
       }
     } else {
-      // 非 ASCII（CJK 等）：每字符约 1 token
       if (wordChars > 0) {
         tokens += Math.ceil(wordChars / 4);
         wordChars = 0;
@@ -117,7 +131,6 @@ export function estimateTextTokens(text: string | undefined): number {
   return Math.max(tokens, 1);
 }
 
-/** 单条历史消息 token 估算：正文/思考/工具调用/工具结果 JSON + 固定消息开销 */
 export function estimateHistoryMessageTokens(msg: HistoryMessage): number {
   return (
     estimateTextTokens(msg.text) +
@@ -128,15 +141,10 @@ export function estimateHistoryMessageTokens(msg: HistoryMessage): number {
   );
 }
 
-/**
- * 完成态过滤（对齐引擎 hydrate.rs 规则 1）：`completed` 或无 status（旧数据）
- * 才进上下文；queued/processing/error/空串 一律跳过（半成品不进 LLM）。
- */
 function isHistoryEligible(msg: SessionMessage): boolean {
   return msg.status === undefined || msg.status === 'completed';
 }
 
-/** 数组字段 → JSON 字符串（空数组 / 序列化失败 → undefined，与 sessionRustDb 写面同语义） */
 function jsonFieldOrUndefined<T>(value: T[] | undefined): string | undefined {
   if (!value || value.length === 0) return undefined;
   try {
@@ -146,18 +154,6 @@ function jsonFieldOrUndefined<T>(value: T[] | undefined): string | undefined {
   }
 }
 
-/**
- * DEEPCHECK-01 P0：稳定锚点 + token 预算截断（纯函数，跨 run 请求前缀稳定；
- * 与 Rust SessionHistoryCache 的 truncate_history_with_anchor / hydrate
- * 尾部 user 截断三层同语义）。
- * - 预算内 → 原样返回：会话在预算内时全量回传，append-only 前缀字节稳定，
- *   服务端自动前缀缓存全量命中（不再固定条数尾部滑窗）；
- * - 超预算 → 锚点恒在：首条 user 消息（含其前的稳定头部）永不因截断消失，
- *   其余从最老消息起逐条让位，直到尾部窗口装入预算——中间段才允许丢弃，
- *   请求前缀跨 run 恒以同一锚点字节开头，失配点收敛到尾部增量；
- * - 前端载荷仅 user/assistant 且单条自包含（工具调用与结果同消息），
- *   截断边界无需孤儿工具配对防护（引擎缓存路径另有 ensure_safe_prefix 系）。
- */
 export function truncateHistoryWithAnchor(
   history: HistoryMessage[],
   budget: number
@@ -165,13 +161,11 @@ export function truncateHistoryWithAnchor(
   const perMessageTokens = history.map(estimateHistoryMessageTokens);
   const total = perMessageTokens.reduce((sum, n) => sum + n, 0);
   if (total <= budget) return history;
-  // 锚点 = 首条 user 消息；无 user → 以首条为锚（退化形态仍保证前缀稳定）
   const anchorIdx = history.findIndex((m) => m.sender === 'user');
   const anchorEnd = anchorIdx === -1 ? 0 : anchorIdx;
   const headTokens = perMessageTokens
     .slice(0, anchorEnd + 1)
     .reduce((sum, n) => sum + n, 0);
-  // 尾部窗口：从旧到新尽量多带（tailStart 尽可能小，预算内）
   let tailStart = anchorEnd + 1;
   let tailTokens = total - headTokens;
   while (tailStart < history.length && headTokens + tailTokens > budget) {
@@ -181,16 +175,6 @@ export function truncateHistoryWithAnchor(
   return [...history.slice(0, anchorEnd + 1), ...history.slice(tailStart)];
 }
 
-/**
- * P4 T-31：会话存储消息 → `history` 载荷组装（纯函数）。
- * - 仅 user/assistant 且完成态消息进上下文（System/Tool 是 run 内瞬态角色，跨 run 不回传）；
- * - 字段按 HistoryMessage 组装：sender/text/thinking/tool_calls_json/
- *   tool_call_results_json/status/timestamp（camelCase）；
- * - 上限截断（DEEPCHECK-01 P0）：token 预算 + 稳定锚点——预算内全量回传；
- *   超预算保留首条 user 锚点 + 预算内尾部窗口（见 truncateHistoryWithAnchor）；
- * - `excludeId`：排除当前 run 的 user 消息 id（避免历史与 prompt 重复下发）；
- * - 空会话 / 全被过滤 → `undefined`（不传 = 引擎现状单消息 run，向后兼容）。
- */
 export function buildHistoryMessages(
   messages: readonly SessionMessage[] | undefined | null,
   opts?: { tokenBudget?: number; excludeId?: string }
@@ -213,9 +197,8 @@ export function buildHistoryMessages(
       timestamp: msg.timestamp,
     };
     if (typeof msg.text === 'string' && msg.text) entry.text = msg.text;
-    if (typeof msg.thinking === 'string' && msg.thinking) {
+    if (typeof msg.thinking === 'string' && msg.thinking)
       entry.thinking = msg.thinking;
-    }
     const toolCallsJson = jsonFieldOrUndefined(msg.toolCalls);
     if (toolCallsJson) entry.tool_calls_json = toolCallsJson;
     const resultsJson = jsonFieldOrUndefined(msg.toolCallResults);
@@ -228,13 +211,6 @@ export function buildHistoryMessages(
     : undefined;
 }
 
-/**
- * P4 T-31：`contextWindow` 解析（P3 模型目录接线前的本地真源，core_run_task
- * 入站为 `Option<u32>`，T-33 预算钳制消费）。
- * 优先级：显式设置键（预留，Settings.contextWindow）→ 生效模型 catalog
- * 元数据（`getModelMeta(activeProfile, activeModel).contextLength`）→
- * `undefined`（缺省不发，引擎未启用钳制 = 现状）。
- */
 export function resolveContextWindow(
   sets?: Settings | null
 ): number | undefined {
@@ -251,30 +227,22 @@ export function resolveContextWindow(
     const model = getActiveModelId();
     if (profileId && model) {
       const meta = getModelMeta(profileId, model);
-      if (typeof meta.contextLength === 'number' && meta.contextLength > 0) {
+      if (typeof meta.contextLength === 'number' && meta.contextLength > 0)
         return meta.contextLength;
-      }
     }
   } catch {
-    /* swallow-ok: 目录读取失败不发窗口，回退无 meta 路径 */
+    /* swallow-ok */
   }
   return undefined;
 }
 
 /**
- * 发送前真实就绪检查（03 §⑤ R7）：实时 core_get_status 查询，不信 transport.ready
- * 陈旧 latch（latch 置位后永不刷新，配置变更后引擎降级仍报就绪）。
- *
- * - initialized=false → S1（本地核心未就绪）
- * - restore.state=pending → S3（恢复会话数据中）
- * - engineReady=false → S2（provider 配置缺失）
- * - 查询失败 → 放行（不阻塞发送；真实错误由 createStreamSession 兜底分域文案）
- *
- * 返回 ok=false 时携带命中域（S1/S2/S3），调用方按 domainUserMessage 给单次提示。
+ * 发送前真实就绪检查（03 §⑤ R7）：实时 core_get_status 查询，三态结构化返回值。
  */
 export async function checkEngineReadyRealtime(
   timeoutMs = 3_000
-): Promise<{ ok: boolean; domain: ErrorDomain | null }> {
+): Promise<ReadinessCheckResult> {
+  ensureReadinessSync();
   const transport = getTransport();
   let status: unknown;
   try {
@@ -284,29 +252,51 @@ export async function checkEngineReadyRealtime(
       { timeoutMs }
     );
   } catch {
-    // 查询失败（命令缺失/IPC 异常）：放行，避免双重报错
-    return { ok: true, domain: null };
+    return {
+      ok: true,
+      state: 'ok',
+      domain: null,
+      guidance: { action: 'none', message: '' },
+    };
   }
   const domain = classifyErrorDomain(status);
-  if (domain === 'S1' || domain === 'S2' || domain === 'S3') {
-    return { ok: false, domain };
+  if (domain === 'S2') {
+    return {
+      ok: false,
+      state: 'blocked_with_action',
+      domain: 'S2',
+      guidance: {
+        action: 'open-settings',
+        targetTab: 'models',
+        message: domainUserMessage('S2'),
+      },
+    };
   }
-  return { ok: true, domain: null };
+  if (domain) {
+    return {
+      ok: false,
+      state: 'retryable_wait',
+      domain,
+      guidance: { action: 'wait', message: domainUserMessage(domain) },
+    };
+  }
+  return {
+    ok: true,
+    state: 'ok',
+    domain: null,
+    guidance: { action: 'none', message: '' },
+  };
 }
 
-/**
- * 等待核心就绪并探测 get-status（AppBootstrap 启动门闩用）。
- * IPC 模式：waitUntilConnected 内部即 core_get_status 轮询，无需二次 request。
- */
 export async function ensureEngineConnected(): Promise<{
   ok: boolean;
   error?: string;
 }> {
+  ensureReadinessSync();
   const transport = getTransport();
   try {
     const ready = await transport.waitUntilConnected(20_000);
     if (!ready) {
-      // S1：未就绪（waitUntilConnected 超时）→ 传 detail 供分域文案
       return {
         ok: false,
         error: networkUserMessage(new Error('核心未就绪（等待连接超时）')),
@@ -340,38 +330,32 @@ export function createFinishController(
         return;
       }
     }
-    if (approvalFlow.isDeferredTerminal()) {
+    if (approvalFlow.isDeferredTerminal())
       approvalFlow.dispatch({ type: 'force_finish' });
-    }
     state.finished = true;
     cleanup();
     try {
       callbacks.onComplete();
     } catch {
-      /* swallow-ok: 完成回调抛错不阻断连接终态 */
+      /* swallow-ok */
     }
   };
 
   const tryResumeFinish = () => {
     if (state.finished || state.cancelled) return;
     const snap = approvalFlow.snapshot();
-    if (!snap.deferredTerminal) return;
-    if (!snap.sawRunTerminal) return;
-    if (approvalFlow.shouldBlockTerminal()) return;
+    if (
+      !snap.deferredTerminal ||
+      !snap.sawRunTerminal ||
+      approvalFlow.shouldBlockTerminal()
+    )
+      return;
     finish(false);
   };
 
   return { finish, tryResumeFinish };
 }
 
-/**
- * Stream cancel 句柄（对齐 Run 控制 L2/L3）：
- * - cooperative：L2 cooperative_stop（经 compositionRoot.runControl）
- * - force：L3 force_cancel
- *
- * mode 字面量真源：`runControlClient.StreamCancelMode`（本模块 re-export）。
- * @see apps/crish-desktop/src/api/runControlClient.ts
- */
 export type StreamCancelFn = (opts?: { mode?: StreamCancelMode }) => void;
 
 export function createStreamCancel(
@@ -387,10 +371,8 @@ export function createStreamCancel(
     state.cancelled = true;
     approvalFlow.dispatch({ type: 'clear_all' });
     approvalFlow.dispatch({ type: 'force_finish' });
-
     cleanup();
 
-    // L2/L3 经 compositionRoot.runControl（metrics + EventBus + transport wire）
     void getCompositionRoot().runControl.dispatch({
       level:
         mode === 'cooperative' ? RUN_CONTROL_LEVEL.L2 : RUN_CONTROL_LEVEL.L3,
@@ -402,55 +384,28 @@ export function createStreamCancel(
     try {
       callbacks.onComplete();
     } catch {
-      /* swallow-ok: 完成回调抛错不阻断取消终态 */
+      /* swallow-ok */
     }
   };
 }
 
-/**
- * P1：systemPrompt 组装纯函数化——消除三形态漂移。
- * 规则：base 与 guidance 各自 trim 后按固定分隔符 "\n\n" 拼接；
- * guidance 为空 → 仅 base；base 为空 → 仅 guidance；两者皆空 → undefined。
- * 删除 base.includes('Response style:') 特殊分支（同一配置下形态唯一）。
- */
 export function composeSystemPrompt(
   base: string | undefined,
   guidance: string | undefined
 ): string | undefined {
   const baseTrimmed = typeof base === 'string' ? base.trim() : '';
   const guidanceTrimmed = typeof guidance === 'string' ? guidance.trim() : '';
-  if (baseTrimmed && guidanceTrimmed) {
+  if (baseTrimmed && guidanceTrimmed)
     return `${baseTrimmed}\n\n${guidanceTrimmed}`;
-  }
   if (baseTrimmed) return baseTrimmed;
   if (guidanceTrimmed) return guidanceTrimmed;
   return undefined;
 }
 
-/**
- * P1-F2（F5-04）取消竞态判定：run 是否已死（cancelled / finished）。
- *
- * 根因：createStreamSession 对 createStreamCancel 为异步并发（fire-and-forget），
- * waitUntilConnected 挂起期间用户点停止 → cancel 置 cancelled/finished 并派发 L3
- * force_cancel；若 createStreamSession 在 await 恢复后不检查取消态，仍会订阅并
- * startRunTask 派发 core_run_task——run 实际启动，且 force_cancel 早于 run 到达
- * 引擎时取消目标不存在而失效。
- *
- * 修复机制：启动流与取消共享同一 state 对象 = 取消信号自然传播到等待方；每个
- * await 点恢复后先经本判定短路（命中 → 静默 return，不启动 run、不再回调）。
- */
 function isRunDead(state: StreamState): boolean {
   return state.finished || state.cancelled;
 }
 
-/**
- * 创建流式 run（C1.2 主路径）：
- * 1. transport.waitUntilConnected(1.5s) —— 核心未就绪直接拒绝（无降级）；
- * 2. 挂 transport.onMessage（listen 事件通道）→ onMessage 回调；
- * 3. 组装 run-task 参数 → startRunTask 分派 core_run_task。
- *
- * 参数中 runId 为前端自管（03 §3.1），Rust 以请求携带 runId 回发事件。
- */
 export async function createStreamSession(
   prompt: string,
   sessionId: string,
@@ -460,18 +415,20 @@ export async function createStreamSession(
   state: StreamState,
   onMessage: (msg: Record<string, unknown>) => void,
   finish: (force?: boolean) => void,
-  /** 本地助手 placeholder id（= clientMessageId），经 run-task 下发 */
   assistantClientMessageId?: string
 ): Promise<void> {
   const transport = getTransport();
+  const safeSessionId = normalizeStreamSessionId(sessionId);
+  const userClientMessageId =
+    typeof options?.clientMessageId === 'string' &&
+    options.clientMessageId.trim()
+      ? options.clientMessageId.trim()
+      : undefined;
+
   try {
     const ready = await transport.waitUntilConnected(1_500);
-    // P1-F2（F5-04）①：等待连接期间用户点了停止（createStreamCancel 已置
-    // cancelled/finished 并派发 force_cancel）→ 不订阅、不 onChunk/onRunError、
-    // 不启动 run，静默返回（cancel 已自行收口 onComplete）。
     if (isRunDead(state)) return;
     if (!ready || !transport.isReady()) {
-      // C3.4：核心未就绪 → 拒绝启动（无 directFetch 降级）；S1 域差异化文案
       logInternalError(
         'stream-start-refuse-direct',
         new Error('engine not ready; no degraded fallback (C3.4)')
@@ -479,11 +436,8 @@ export async function createStreamSession(
       const msg = networkUserMessage(
         new Error('核心未就绪（waitUntilConnected 超时）')
       );
-      if (callbacks.onRunError) {
-        callbacks.onRunError(msg, 'network');
-      } else {
-        callbacks.onChunk(msg);
-      }
+      if (callbacks.onRunError) callbacks.onRunError(msg, 'network');
+      else callbacks.onChunk(msg);
       finish();
       return;
     }
@@ -493,20 +447,16 @@ export async function createStreamSession(
 
     const { getWorkspacePath } = await import('../projectStore');
     const cwd = getWorkspacePath() || undefined;
-
     const mode = getPermissionMode();
     const permissionMode = toEnginePermissionMode(mode);
-
     const hasImages = Boolean(
       options?.hasImages ||
       options?.content?.some((p) => p.type === 'image_url')
     );
-    const safeSessionId = normalizeStreamSessionId(sessionId);
 
     let mcpDisabledTools: Record<string, string[]> | undefined;
     let budgetDifficulty: string | undefined;
     let responseStyleGuidance: string | undefined;
-    // P4 T-31：生效模型窗口（P3 目录接线前由前端下发；缺省不发 = 引擎不钳制）
     let contextWindow: number | undefined;
     try {
       const { clientApi } = await import('../clientApi');
@@ -520,16 +470,11 @@ export async function createStreamSession(
       const tl = String(sets?.defaultThinkingLevel || '')
         .trim()
         .toLowerCase();
-      // 「提供方默认」/ off / 未知 → 不注入显式思考（引擎按描述接口默认执行）；
-      // 显式档位 → 推导预算档（会话侧难度）。最终档位有效性由请求面校验（T4.1）。
-      if (tl === '' || tl === 'default' || tl === 'off') {
-        budgetDifficulty = undefined;
-      } else if (tl === 'minimal' || tl === 'low') budgetDifficulty = 'easy';
+      if (tl === 'minimal' || tl === 'low') budgetDifficulty = 'easy';
       else if (tl === 'medium') budgetDifficulty = 'normal';
       else if (tl === 'high' || tl === 'xhigh') budgetDifficulty = 'hard';
-      else budgetDifficulty = undefined;
 
-      const styleKey = String(sets?.responseStyle ?? 'medium');
+      const styleKey = String(sets?.responseStyle ?? 'medium').toLowerCase();
       const styleMap: Record<string, string> = {
         minimal:
           'Response style: minimal. Prefer the shortest correct answer. Avoid preambles, lists, and restating the question.',
@@ -542,16 +487,10 @@ export async function createStreamSession(
         适中: 'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
         深入: 'Response style: thorough. Provide structured reasoning, edge cases, and verification steps when useful. Still stay on-topic.',
       };
-      // 只含 styleMap 映射文案（不含 base），与 base 的拼接统一走 composeSystemPrompt
-      responseStyleGuidance =
-        styleMap[styleKey] ??
-        styleMap[styleKey.toLowerCase()] ??
-        styleMap.medium;
-
-      // P4 T-31：contextWindow 解析（设置预留键 → 生效模型 catalog；缺省 undefined）
+      responseStyleGuidance = styleMap[styleKey] ?? styleMap.medium;
       contextWindow = resolveContextWindow(sets);
     } catch {
-      /* swallow-ok: contextWindow 解析失败回退 undefined，引擎按默认窗口执行 */
+      /* swallow-ok */
     }
 
     const goalMode =
@@ -572,17 +511,10 @@ export async function createStreamSession(
       options.maxStalledRounds > 0
         ? Math.floor(options.maxStalledRounds)
         : undefined;
-
     const systemPrompt = composeSystemPrompt(
       options?.systemPrompt,
       responseStyleGuidance
     );
-
-    const userClientMessageId =
-      typeof options?.clientMessageId === 'string' &&
-      options.clientMessageId.trim()
-        ? options.clientMessageId.trim()
-        : undefined;
     const asstClientMessageId =
       (typeof assistantClientMessageId === 'string' &&
       assistantClientMessageId.trim()
@@ -593,9 +525,6 @@ export async function createStreamSession(
         ? options.assistantClientMessageId.trim()
         : undefined);
 
-    // P4 T-31：历史回流组装（loadSessionBody 为 UI 读面真源，sessionRustDb.ts:499-504）。
-    // 排除当前 run 的 user 消息 id（历史与 prompt 不重复）；空会话 / 加载失败 /
-    // 全被完成态过滤 → undefined 不发（引擎回退 SessionHistoryCache 或现状单消息）。
     let history: HistoryMessage[] | undefined;
     try {
       const { loadSessionBody } =
@@ -603,13 +532,9 @@ export async function createStreamSession(
       const body = await loadSessionBody(safeSessionId);
       history = buildHistoryMessages(body, { excludeId: userClientMessageId });
     } catch {
-      /* swallow-ok: 历史加载失败不阻塞 run（向后兼容） */
+      /* swallow-ok */
     }
 
-    // P1-F2（F5-04）②：参数组装（动态 import / getSettingsEx / loadSessionBody
-    // 等 await 点）期间发生取消 → 短路，不派发 core_run_task（避免 force_cancel
-    // 早于 run 到达引擎而失效，run 全量跑完用户取消无效）。守卫命中前若已订阅，
-    // createStreamCancel 的 cleanup 已退订（cleanupStreamState），无需二次处理。
     if (isRunDead(state)) return;
 
     await startRunTask(transport, {
@@ -630,19 +555,52 @@ export async function createStreamSession(
       ...(maxRounds !== undefined ? { maxRounds } : {}),
       ...(maxStalledRounds !== undefined ? { maxStalledRounds } : {}),
       ...(systemPrompt ? { systemPrompt } : {}),
-      // P4 T-31：history / contextWindow 全部可选，缺省不发 = 引擎现状单消息 run
       ...(history ? { history } : {}),
       ...(contextWindow !== undefined ? { contextWindow } : {}),
-      // 幂等键：与本地乐观 message.id 对齐，供 message-end / hydrate rekey
       ...(userClientMessageId ? { clientMessageId: userClientMessageId } : {}),
       ...(asstClientMessageId
         ? { assistantClientMessageId: asstClientMessageId }
         : {}),
     });
   } catch (e) {
+    const text =
+      typeof e === 'object' && e !== null
+        ? (e as { message?: string }).message || String(e)
+        : String(e);
+    const domain = classifyErrorDomain(e);
+    const isSessionBusy =
+      domain === 'S7' || /SESSION_BUSY|已有活动 run|串行守卫/i.test(text);
+
+    if (isSessionBusy) {
+      logInternalError('stream-start-busy-queued', e);
+      try {
+        const root = getCompositionRoot();
+        if (userClientMessageId) {
+          root.layout
+            .getState()
+            .setSessionMessageStatus(
+              safeSessionId,
+              userClientMessageId,
+              'queued'
+            );
+        }
+        void root.runControl.followUp({
+          runId: null,
+          sessionId: safeSessionId,
+          text: prompt,
+          clientMessageId: userClientMessageId,
+          reason: 'serial-guard-auto-queue',
+        });
+      } catch (err) {
+        logInternalError('stream-start-busy-followup', err);
+      }
+      if (callbacks.onThought)
+        callbacks.onThought('当前会话上一轮任务仍在收尾中，已自动为您排队…');
+      finish();
+      return;
+    }
+
     logInternalError('stream-start', e);
-    // 传真实错误 e（含 detail）做分域判定（S2/S3/S4/S5/S6），不再恒报 network 文案；
-    // kind 保持 'network'（T-1 分级分发：network 类走输入框上方持久条面）
     const msg = networkUserMessage(e);
     if (callbacks.onRunError) callbacks.onRunError(msg, 'network');
     else callbacks.onChunk(msg);
@@ -650,10 +608,6 @@ export async function createStreamSession(
   }
 }
 
-/**
- * 产品流入口（chatApi.streamAssistantResponseApi 唯一调用）：
- * transport 事件订阅 → EventRouter 路由 → 审批/收口；返回 cancel 句柄。
- */
 export function streamViaEngine(
   prompt: string,
   callbacks: StreamCallbacks,
@@ -662,9 +616,7 @@ export function streamViaEngine(
   options?: StreamRequestOptions
 ): () => void {
   const transport = getTransport();
-
   const safeSessionId = normalizeStreamSessionId(sessionId);
-
   const state: StreamState = {
     cancelled: false,
     finished: false,
@@ -675,7 +627,6 @@ export function streamViaEngine(
   };
   const approvalFlow = new ApprovalFlowMachine();
   const runId = `run-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  // assistantMsgId = 本地 clientMessageId：热路径 upsert + run-task 下发
   const assistantClientMessageId =
     (typeof assistantMsgId === 'string' && assistantMsgId.trim()) ||
     (typeof options?.assistantClientMessageId === 'string' &&
@@ -684,7 +635,7 @@ export function streamViaEngine(
   try {
     callbacks.onRunMeta?.({ runId });
   } catch {
-    /* swallow-ok: runMeta 回调抛错不阻断 run 启动 */
+    /* swallow-ok */
   }
 
   const cleanup = () => {
@@ -729,8 +680,6 @@ export function streamViaEngine(
     cleanup,
     state
   );
-
-  // 透传 L2/L3 mode；无参默认 force 保持 replace/旧路径兼容
   const cancelWithMode: StreamCancelFn = (opts) => {
     cancel(opts);
   };

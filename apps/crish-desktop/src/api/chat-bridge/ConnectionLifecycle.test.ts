@@ -235,9 +235,7 @@ describe('buildHistoryMessages（P4 T-31：store 消息 → history 载荷）', 
     const messages = Array.from({ length: 10 }, (_, i) =>
       makeMsg({ id: `m${i}`, sender: 'user', text: `m${i}`, timestamp: i })
     );
-    expect(
-      buildHistoryMessages(messages, { tokenBudget: 40 })
-    ).toEqual([
+    expect(buildHistoryMessages(messages, { tokenBudget: 40 })).toEqual([
       { id: 'm0', sender: 'user', text: 'm0', timestamp: 0 },
       { id: 'm7', sender: 'user', text: 'm7', timestamp: 7 },
       { id: 'm8', sender: 'user', text: 'm8', timestamp: 8 },
@@ -324,9 +322,7 @@ describe('buildHistoryMessages（P4 T-31：store 消息 → history 载荷）', 
     const dropped = messages
       .map((m) => m.id)
       .filter((id) => !history.some((h) => h.id === id));
-    expect(dropped).toEqual(
-      Array.from({ length: 90 }, (_, i) => `m${i + 1}`)
-    );
+    expect(dropped).toEqual(Array.from({ length: 90 }, (_, i) => `m${i + 1}`));
   });
 
   it('excludeId 排除当前 run 的 user 消息（历史与 prompt 不重复）', () => {
@@ -444,18 +440,22 @@ describe('ConnectionLifecycle（Tauri IPC 版）', () => {
         restore: { state: 'done' },
       });
       const res = await checkEngineReadyRealtime();
-      expect(res).toEqual({ ok: true, domain: null });
+      expect(res).toMatchObject({ ok: true, domain: null, state: 'ok' });
       expect(fakeTransport.request).toHaveBeenCalledWith(
         'core_get_status',
         {},
-        { timeoutMs: 3_000 },
+        { timeoutMs: 3_000 }
       );
     });
 
     it('initialized=false → S1（本地核心未就绪）', async () => {
       fakeTransport.request.mockResolvedValue({ initialized: false });
       const res = await checkEngineReadyRealtime();
-      expect(res).toEqual({ ok: false, domain: 'S1' });
+      expect(res).toMatchObject({
+        ok: false,
+        domain: 'S1',
+        state: 'retryable_wait',
+      });
     });
 
     it('restore.state=pending → S3（恢复会话数据中）', async () => {
@@ -465,7 +465,11 @@ describe('ConnectionLifecycle（Tauri IPC 版）', () => {
         restore: { state: 'pending' },
       });
       const res = await checkEngineReadyRealtime();
-      expect(res).toEqual({ ok: false, domain: 'S3' });
+      expect(res).toMatchObject({
+        ok: false,
+        domain: 'S3',
+        state: 'retryable_wait',
+      });
     });
 
     it('engineReady=false → S2（provider 配置缺失）', async () => {
@@ -475,15 +479,19 @@ describe('ConnectionLifecycle（Tauri IPC 版）', () => {
         engineReady: false,
       });
       const res = await checkEngineReadyRealtime();
-      expect(res).toEqual({ ok: false, domain: 'S2' });
+      expect(res).toMatchObject({
+        ok: false,
+        domain: 'S2',
+        state: 'blocked_with_action',
+      });
     });
 
     it('查询失败 → 放行（ok:true，不阻塞发送；真实错误由 createStreamSession 兜底）', async () => {
       fakeTransport.request.mockRejectedValue(
-        new Error('Tauri command not available: core_get_status'),
+        new Error('Tauri command not available: core_get_status')
       );
       const res = await checkEngineReadyRealtime();
-      expect(res).toEqual({ ok: true, domain: null });
+      expect(res).toMatchObject({ ok: true, domain: null, state: 'ok' });
     });
   });
 
@@ -755,11 +763,49 @@ describe('取消与启动竞态（P1-F2：waitUntilConnected 挂起期间 stop�
     expect(finish).toHaveBeenCalledTimes(1);
   });
 
-  it('catch 分支：非 S1-S5 的 CoreError（串行守卫）→ S6 内部错误文案', async () => {
+  it('catch 分支：串行守卫（SESSION_BUSY）→ S7 会话排队中（自动入队，0 次红条报错）', async () => {
     vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
     vi.mocked(fakeTransport.isReady).mockReturnValue(true);
     startRunTask.mockRejectedValueOnce(
       new Error('InvalidInput: 会话 sess-gate-2 已有活动 run（串行守卫）')
+    );
+    const onThought = vi.fn();
+    const onRunError = vi.fn();
+    const callbacks: StreamCallbacks = {
+      onChunk: vi.fn(),
+      onThought,
+      onToolStart: vi.fn(),
+      onToolError: vi.fn(),
+      onToolSuccess: vi.fn(),
+      onComplete: vi.fn(),
+      onRunError,
+    };
+    const state = makeState();
+    const finish = vi.fn();
+
+    await createStreamSession(
+      'gate reject',
+      'sess-gate-2',
+      'run-gate-2',
+      callbacks,
+      undefined,
+      state,
+      () => undefined,
+      finish
+    );
+
+    expect(onRunError).not.toHaveBeenCalled();
+    expect(onThought).toHaveBeenCalledWith(
+      '当前会话上一轮任务仍在收尾中，已自动为您排队…'
+    );
+    expect(finish).toHaveBeenCalledTimes(1);
+  });
+
+  it('catch 分支：内部崩溃（panic / 未捕获异常）→ S6 内部错误文案', async () => {
+    vi.mocked(fakeTransport.waitUntilConnected).mockResolvedValue(true);
+    vi.mocked(fakeTransport.isReady).mockReturnValue(true);
+    startRunTask.mockRejectedValueOnce(
+      new Error('Internal: panic: engine core crash at session.rs:42')
     );
     const onRunError = vi.fn();
     const callbacks: StreamCallbacks = {
@@ -775,9 +821,9 @@ describe('取消与启动竞态（P1-F2：waitUntilConnected 挂起期间 stop�
     const finish = vi.fn();
 
     await createStreamSession(
-      'gate reject',
-      'sess-gate-2',
-      'run-gate-2',
+      'panic reject',
+      'sess-gate-3',
+      'run-gate-3',
       callbacks,
       undefined,
       state,

@@ -126,13 +126,13 @@ describe('T-F 06 kebab 错误码双向漂移（Rust kind_str ↔ 前端码表）
     ).toBe('S5');
   });
 
-  it('断言四：aborted → ended（S6）；payload-too-large / invalid-request → provider_fault（S5）', () => {
+  it('断言四：aborted → ended（null 域静默收口）；payload-too-large / invalid-request → provider_fault（S5）', () => {
     expect(
       classifySoftFailure('provider 错误（aborted）：user cancelled')
     ).toBe('ended');
     expect(
       classifyErrorDomain('provider 错误（aborted）：user cancelled')
-    ).toBe('S6');
+    ).toBeNull();
     expect(
       classifySoftFailure('provider 错误（payload-too-large）：too big')
     ).toBe('provider_fault');

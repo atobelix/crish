@@ -53,13 +53,23 @@ export function surfaceStreamFailure(
   runId: string
 ): void {
   logInternalError(scope, raw);
-  // per-run 失败去重（04 §5.1-4 / G6/R5）：同 run 同指纹已 surface 过 →
+
+  // 1. 用户主动取消或正常收口：静默退出，绝不弹出错误提示
+  const text = normalizeErrorText(raw);
+  if (
+    /aborted|stopped|ui-stop|ui-force-cancel|user-cancel/i.test(text) ||
+    scope === 'ended'
+  ) {
+    return;
+  }
+
+  // 2. per-run 失败去重（04 §5.1-4 / G6/R5）：同 run 同指纹已 surface 过 →
   // 仅保留上面的 logInternalError（可观测），不再重复诊断与展示
   if (isFailedRunDeduplicated(runId, failureFingerprint(raw, scope))) {
     return;
   }
   const kind = classifySoftFailure(raw);
-  // 差异化六域优先（03 §④）：S1-S6 命中 → 按域文案；未命中保留既有分类兼容
+  // 差异化八域优先（03 §④ / S1-S8）：S1-S8 命中 → 按域文案；未命中保留既有分类兼容
   //（auth/no_key/no_project/blocked/ended 走 softFailureMessage 原路径）
   const isCheckpoint =
     /checkpoint/i.test(String(raw || '')) || /checkpoint/i.test(scope);
@@ -67,7 +77,7 @@ export function surfaceStreamFailure(
   const formatted = formatRunFailureForUi(raw, scope);
   let msg =
     (domain ? domainUserMessage(domain) : null) ??
-    softFailureMessage(kind) ??
+    softFailureMessage(kind, raw) ??
     assistantBubbleForFailure(raw) ??
     formatted.message;
   if (isCheckpoint) {
