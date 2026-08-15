@@ -26,7 +26,6 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { RUN_CONTROL_LEVEL } from '@crish/shared-types';
 import type { StreamCancelMode } from '../runControlClient';
 import type { Settings } from '../clientApi';
-import type { SessionMessage } from '../../store/types';
 import { getActiveModelId, getActiveProfileId } from '../providerProfiles';
 import { getModelMeta } from '../modelCatalog';
 
@@ -83,137 +82,16 @@ export function ensureReadinessSync(): void {
   }
 }
 
-export interface HistoryMessage {
-  id: string;
-  sender: 'user' | 'assistant';
-  text?: string;
-  thinking?: string;
-  tool_calls_json?: string;
-  tool_call_results_json?: string;
-  status?: string;
-  timestamp: number;
-}
-
-export const HISTORY_TOKEN_BUDGET = 200_000;
-export const HISTORY_MESSAGE_TOKEN_OVERHEAD = 8;
-
-export function estimateTextTokens(text: string | undefined): number {
-  if (!text || text.length === 0) return 0;
-  let tokens = 0,
-    wordChars = 0;
-  for (const ch of text) {
-    const code = ch.charCodeAt(0);
-    const isSep =
-      code <= 0x20 ||
-      (code >= 0x21 && code <= 0x2f) ||
-      (code >= 0x3a && code <= 0x40) ||
-      (code >= 0x5b && code <= 0x60) ||
-      (code >= 0x7b && code <= 0x7e);
-    if (code < 0x80) {
-      if (isSep) {
-        if (wordChars > 0) {
-          tokens += Math.ceil(wordChars / 4);
-          wordChars = 0;
-        }
-        tokens += 1;
-      } else {
-        wordChars += 1;
-      }
-    } else {
-      if (wordChars > 0) {
-        tokens += Math.ceil(wordChars / 4);
-        wordChars = 0;
-      }
-      tokens += 1;
-    }
-  }
-  if (wordChars > 0) tokens += Math.ceil(wordChars / 4);
-  return Math.max(tokens, 1);
-}
-
-export function estimateHistoryMessageTokens(msg: HistoryMessage): number {
-  return (
-    estimateTextTokens(msg.text) +
-    estimateTextTokens(msg.thinking) +
-    estimateTextTokens(msg.tool_calls_json) +
-    estimateTextTokens(msg.tool_call_results_json) +
-    HISTORY_MESSAGE_TOKEN_OVERHEAD
-  );
-}
-
-function isHistoryEligible(msg: SessionMessage): boolean {
-  return msg.status === undefined || msg.status === 'completed';
-}
-
-function jsonFieldOrUndefined<T>(value: T[] | undefined): string | undefined {
-  if (!value || value.length === 0) return undefined;
-  try {
-    return JSON.stringify(value);
-  } catch {
-    /* swallow-ok: 序列化失败返回 undefined */
-    return undefined;
-  }
-}
-
-export function truncateHistoryWithAnchor(
-  history: HistoryMessage[],
-  budget: number
-): HistoryMessage[] {
-  const perMessageTokens = history.map(estimateHistoryMessageTokens);
-  const total = perMessageTokens.reduce((sum, n) => sum + n, 0);
-  if (total <= budget) return history;
-  const anchorIdx = history.findIndex((m) => m.sender === 'user');
-  const anchorEnd = anchorIdx === -1 ? 0 : anchorIdx;
-  const headTokens = perMessageTokens
-    .slice(0, anchorEnd + 1)
-    .reduce((sum, n) => sum + n, 0);
-  let tailStart = anchorEnd + 1,
-    tailTokens = total - headTokens;
-  while (tailStart < history.length && headTokens + tailTokens > budget) {
-    tailTokens -= perMessageTokens[tailStart] ?? 0;
-    tailStart += 1;
-  }
-  return [...history.slice(0, anchorEnd + 1), ...history.slice(tailStart)];
-}
-
-export function buildHistoryMessages(
-  messages: readonly SessionMessage[] | undefined | null,
-  opts?: { tokenBudget?: number; excludeId?: string }
-): HistoryMessage[] | undefined {
-  const source = messages ?? [];
-  const rawBudget = opts?.tokenBudget;
-  const budget =
-    typeof rawBudget === 'number' && Number.isFinite(rawBudget) && rawBudget > 0
-      ? Math.floor(rawBudget)
-      : HISTORY_TOKEN_BUDGET;
-  const excludeId = opts?.excludeId;
-  const history: HistoryMessage[] = [];
-  for (const msg of source) {
-    if (
-      (msg.sender !== 'user' && msg.sender !== 'assistant') ||
-      !isHistoryEligible(msg)
-    )
-      continue;
-    if (excludeId && msg.id === excludeId) continue;
-    const entry: HistoryMessage = {
-      id: msg.id,
-      sender: msg.sender,
-      timestamp: msg.timestamp,
-    };
-    if (typeof msg.text === 'string' && msg.text) entry.text = msg.text;
-    if (typeof msg.thinking === 'string' && msg.thinking)
-      entry.thinking = msg.thinking;
-    const tcJson = jsonFieldOrUndefined(msg.toolCalls);
-    if (tcJson) entry.tool_calls_json = tcJson;
-    const resJson = jsonFieldOrUndefined(msg.toolCallResults);
-    if (resJson) entry.tool_call_results_json = resJson;
-    if (msg.status) entry.status = msg.status;
-    history.push(entry);
-  }
-  return history.length > 0
-    ? truncateHistoryWithAnchor(history, budget)
-    : undefined;
-}
+export {
+  type HistoryMessage,
+  HISTORY_TOKEN_BUDGET,
+  HISTORY_MESSAGE_TOKEN_OVERHEAD,
+  estimateTextTokens,
+  estimateHistoryMessageTokens,
+  truncateHistoryWithAnchor,
+  buildHistoryMessages,
+} from './historyMessages';
+import { buildHistoryMessages } from './historyMessages';
 
 export function resolveContextWindow(
   sets?: Settings | null
