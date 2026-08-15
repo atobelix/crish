@@ -73,7 +73,7 @@ const MIX_SKIP_FILE_NAMES = [
 ];
 
 const LIGHT_BLOCK_RE = /:root,[\s\S]*?\n\}/;
-const DARK_BLOCK_RE = /html\[data-theme="dark"\]\s*\{[\s\S]*?\n\}/;
+const DARK_BLOCK_RE = /html\[data-theme=['"]dark['"]\]\s*\{[\s\S]*?\n\}/;
 
 describe('z-index token 契约（F7-F14）', () => {
   it('审计列出的 4 个文件不存在裸数字 z-index 硬编码', () => {
@@ -406,7 +406,7 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
       /\r\n/g,
       '\n'
     );
-    const decls = css.match(/^[ \t]*\.card-tab\.active\s*\{/gm) ?? [];
+    const decls = css.match(/^\.card-tab\.active\s*\{/gm) ?? [];
     expect(decls).toEqual(['.card-tab.active {']);
   });
 });
