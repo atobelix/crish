@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   addModelToProfile,
   createCustomProfile,
@@ -273,25 +273,6 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
     return () => window.removeEventListener('keydown', onKey);
   }, [addOpen, configOpenId, manualOpen, modelFilter, confirmDeleteId]);
 
-  const addRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!addOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (addRef.current && !addRef.current.contains(e.target as Node)) {
-        setAddOpen(false);
-      }
-    };
-    const onScroll = () => {
-      setAddOpen(false);
-    };
-    document.addEventListener('mousedown', onDoc);
-    window.addEventListener('scroll', onScroll, true);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      window.removeEventListener('scroll', onScroll, true);
-    };
-  }, [addOpen]);
-
   const saveKey = async () => {
     if (!selected || !keyDraft.trim()) return;
     const res = await saveProfileKey(selected.id, keyDraft.trim());
@@ -540,6 +521,5 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
     hasKeySelected,
     activeProfileId,
     globalActiveModelId,
-    addRef,
   };
 }

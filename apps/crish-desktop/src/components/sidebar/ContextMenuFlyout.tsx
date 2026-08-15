@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import { Menu } from '../ui';
-import { calculateMenuPosition, measureMenu } from '../ui/Menu/position';
+import { calculateMenuPosition } from '../ui/Menu/position';
 import styles from './SidebarContextMenus.module.css';
 
 type FlyKey = 'sort' | 'group' | 'filter' | null;
@@ -244,17 +244,6 @@ export const ContextMenuFlyout: React.FC<{
     []
   );
 
-  // 排序菜单同样钳位（真实尺寸由基座浮层实测后统一走 position.ts）
-  useLayoutEffect(() => {
-    if (!sortDropdownOpen || !sortDropdownCoords || !sortMenuRef.current)
-      return;
-    const el = sortMenuRef.current;
-    const next = measureMenu(el, sortDropdownCoords.x, sortDropdownCoords.y);
-    el.style.left = `${next.x}px`;
-    el.style.top = `${next.y}px`;
-    el.style.transformOrigin = next.transformOrigin;
-  }, [sortDropdownOpen, sortDropdownCoords, sortMenuRef]);
-
   const sortDropdownRestoreRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -269,37 +258,18 @@ export const ContextMenuFlyout: React.FC<{
     });
   }, [sortDropdownOpen, sortMenuRef]);
 
-  useEffect(() => {
-    if (!sortDropdownOpen) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        // F7-F12：flyout 展开时 Esc 只关 flyout（不关整个排序菜单），
-        // 并聚焦回入口行
-        if (fly !== null) {
-          e.stopImmediatePropagation();
-          setFly(null);
-          rowRefs.current[fly]?.focus();
-          return;
-        }
-        e.stopPropagation();
-        onCloseSortDropdown();
-        const target =
-          sortTriggerRef?.current || sortDropdownRestoreRef.current;
-        requestAnimationFrame(() => target?.focus());
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [sortDropdownOpen, onCloseSortDropdown, sortTriggerRef, sortMenuRef, fly]);
-
-  if (!sortDropdownOpen) return null;
-
   return (
     <Menu
       open={sortDropdownOpen}
       onOpenChange={(open) => {
         if (!open) onCloseSortDropdown();
+      }}
+      onEscapeKeyDown={(event) => {
+        if (fly !== null) {
+          event.preventDefault();
+          setFly(null);
+          rowRefs.current[fly]?.focus();
+        }
       }}
       anchor={sortTriggerRef}
       align="start"

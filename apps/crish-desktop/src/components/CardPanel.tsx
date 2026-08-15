@@ -62,7 +62,9 @@ type SessionChromeSource = {
   >;
 };
 
-function selectActiveSessionChrome(s: SessionChromeSource): ActiveSessionChrome {
+function selectActiveSessionChrome(
+  s: SessionChromeSource
+): ActiveSessionChrome {
   const sess = s.sessionsById[s.activeSessionId];
   if (!sess) return EMPTY_ACTIVE_CHROME;
   const label =
@@ -93,7 +95,6 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(
     const reactId = React.useId();
     const tabIdPrefix = `cp-tab-${reactId}`;
     const panelBodyId = `cp-body-${reactId}`;
-    const tabAddMenuId = `cp-add-menu-${reactId}`;
 
     const col = ws?.columns[colIdx];
     const group = col?.groups[groupIdx];
@@ -102,19 +103,13 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(
       dockOverlayStyle,
       activeCardId,
       cardsLen,
-      tabAddOpen,
-      tabAddPos,
-      setTabAddOpen,
-      setTabAddPos,
       tabsBarRef,
       tabAddBtnRef,
-      tabAddMenuRef,
       handleGlobalTabClick,
       handleTabClick,
       closeToolTab,
       resolveFocusAfterClose,
       onTabKeyDown,
-      onAddMenuKeyDown,
     } = useCardPanelTabs({
       wsId,
       colIdx,
@@ -180,10 +175,8 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(
           isEmptyChat={isEmptyChat}
           tabsBarRef={tabsBarRef}
           tabAddBtnRef={tabAddBtnRef}
-          tabAddMenuRef={tabAddMenuRef}
           tabIdPrefix={tabIdPrefix}
           panelBodyId={panelBodyId}
-          tabAddMenuId={tabAddMenuId}
           draggedTab={draggedTab}
           handleTabClick={handleTabClick}
           handleTabPointerDown={handleTabPointerDown}
@@ -191,11 +184,6 @@ export const CardPanel: React.FC<CardPanelProps> = React.memo(
           closeToolTab={closeToolTab}
           resolveFocusAfterClose={resolveFocusAfterClose}
           handleGlobalTabClick={handleGlobalTabClick}
-          tabAddOpen={tabAddOpen}
-          tabAddPos={tabAddPos}
-          setTabAddOpen={setTabAddOpen}
-          setTabAddPos={setTabAddPos}
-          onAddMenuKeyDown={onAddMenuKeyDown}
         />
 
         <CardPanelLayout

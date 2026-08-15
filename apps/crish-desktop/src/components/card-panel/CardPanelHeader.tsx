@@ -1,5 +1,4 @@
 import React from 'react';
-import { createPortal } from 'react-dom';
 import {
   CircleCheck,
   FolderOpen,
@@ -21,30 +20,9 @@ import { getPanelTitle } from '../../api/store-access/componentAccess';
 import { ChatHeaderMore } from '../chat-card/ChatHeaderMore';
 import { WorkspaceChromeBars } from '../workspace/WorkspaceChromeBars';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip, Menu } from '../ui';
 import type { CardState, GroupState } from '../../store/types';
 import { GENERAL_FOLDER } from '../../api/projectStore';
-
-const TABS_ADD_MENU_W = 188;
-export function placeTabsAddMenu(anchor: DOMRect): {
-  top: number;
-  left: number;
-} {
-  const gap = 4;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  let left = anchor.left;
-  if (left + TABS_ADD_MENU_W > vw - 8) {
-    left = Math.max(8, anchor.right - TABS_ADD_MENU_W);
-  }
-  left = Math.max(8, Math.min(left, vw - TABS_ADD_MENU_W - 8));
-  let top = anchor.bottom + gap;
-  const estH = 280;
-  if (top + estH > vh - 8 && anchor.top - gap - estH > 8) {
-    top = Math.max(8, anchor.top - gap - estH);
-  }
-  return { top, left };
-}
 
 export function isClosableTab(cardId: string): boolean {
   return cardId !== 'chat' && cardId !== 'overview';
@@ -141,10 +119,8 @@ export interface CardPanelHeaderProps {
   isEmptyChat: boolean;
   tabsBarRef: React.RefObject<HTMLDivElement | null>;
   tabAddBtnRef: React.RefObject<HTMLButtonElement | null>;
-  tabAddMenuRef: React.RefObject<HTMLDivElement | null>;
   tabIdPrefix: string;
   panelBodyId: string;
-  tabAddMenuId: string;
   draggedTab: {
     sourceGroupId: string;
     cardId: string;
@@ -156,13 +132,6 @@ export interface CardPanelHeaderProps {
   closeToolTab: (cardId: string, focusAfter: string | null) => void;
   resolveFocusAfterClose: (cardId: string) => string;
   handleGlobalTabClick: (cardId: string) => void;
-  tabAddOpen: boolean;
-  tabAddPos: { top: number; left: number } | null;
-  setTabAddOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  setTabAddPos: React.Dispatch<
-    React.SetStateAction<{ top: number; left: number } | null>
-  >;
-  onAddMenuKeyDown: (e: React.KeyboardEvent) => void;
 }
 
 export const CardPanelHeader: React.FC<CardPanelHeaderProps> = React.memo(
@@ -177,10 +146,8 @@ export const CardPanelHeader: React.FC<CardPanelHeaderProps> = React.memo(
     isEmptyChat,
     tabsBarRef,
     tabAddBtnRef,
-    tabAddMenuRef,
     tabIdPrefix,
     panelBodyId,
-    tabAddMenuId,
     draggedTab,
     handleTabClick,
     handleTabPointerDown,
@@ -188,11 +155,6 @@ export const CardPanelHeader: React.FC<CardPanelHeaderProps> = React.memo(
     closeToolTab,
     resolveFocusAfterClose,
     handleGlobalTabClick,
-    tabAddOpen,
-    tabAddPos,
-    setTabAddOpen,
-    setTabAddPos,
-    onAddMenuKeyDown,
   }) => {
     const showCardHeader = !insetChatChrome && !scheduledChrome && !isEmptyChat;
 
@@ -313,82 +275,40 @@ export const CardPanelHeader: React.FC<CardPanelHeaderProps> = React.memo(
                   );
                 })}
                 <div className="tabs-add-wrap">
-                  <Tooltip content="打开面板">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="tabs-add-btn"
-                      data-testid="add-panel-button"
-                      ref={tabAddBtnRef}
-                      aria-label="打开面板"
-                      aria-haspopup="menu"
-                      aria-expanded={tabAddOpen}
-                      aria-controls={tabAddOpen ? tabAddMenuId : undefined}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const nextOpen = !tabAddOpen;
-                        setTabAddOpen(nextOpen);
-                        if (nextOpen) {
-                          setTabAddPos(
-                            placeTabsAddMenu(
-                              e.currentTarget.getBoundingClientRect()
-                            )
-                          );
-                        } else {
-                          setTabAddPos(null);
-                        }
-                      }}
-                      icon={
-                        <Plus
-                          size={TAB_ICON_SIZE}
-                          strokeWidth={TAB_ICON_STROKE}
-                          aria-hidden
+                  <Menu
+                    align="start"
+                    side="bottom"
+                    sideOffset={4}
+                    trigger={
+                      <Tooltip content="打开面板">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="tabs-add-btn"
+                          data-testid="add-panel-button"
+                          ref={tabAddBtnRef}
+                          aria-label="打开面板"
+                          icon={
+                            <Plus
+                              size={TAB_ICON_SIZE}
+                              strokeWidth={TAB_ICON_STROKE}
+                              aria-hidden
+                            />
+                          }
                         />
-                      }
-                    />
-                  </Tooltip>
+                      </Tooltip>
+                    }
+                    options={PANEL_ADD_IDS.map((id) => ({
+                      id,
+                      label: getPanelTitle(id),
+                      icon: renderCardIcon(id),
+                      onClick: () => handleGlobalTabClick(id),
+                    }))}
+                  />
                 </div>
               </div>
             )}
-
-            {tabAddOpen && tabAddPos
-              ? createPortal(
-                  <div
-                    id={tabAddMenuId}
-                    ref={tabAddMenuRef}
-                    className="tabs-add-menu"
-                    role="menu"
-                    aria-label="打开面板"
-                    style={{ top: tabAddPos.top, left: tabAddPos.left }}
-                    onKeyDown={onAddMenuKeyDown}
-                  >
-                    {PANEL_ADD_IDS.map((id) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className="tabs-add-item"
-                        data-testid={`add-panel-item-${id}`}
-                        role="menuitem"
-                        tabIndex={-1}
-                        aria-label={`打开${getPanelTitle(id)}`}
-                        onClick={() => {
-                          setTabAddOpen(false);
-                          setTabAddPos(null);
-                          handleGlobalTabClick(id);
-                          requestAnimationFrame(() =>
-                            tabAddBtnRef.current?.focus()
-                          );
-                        }}
-                      >
-                        {renderCardIcon(id)}
-                        <span>{getPanelTitle(id)}</span>
-                      </button>
-                    ))}
-                  </div>,
-                  document.body
-                )
-              : null}
           </div>
         ) : null}
       </>

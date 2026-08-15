@@ -7,7 +7,12 @@ import { activateProfileModel } from '../../api/providerProfiles';
 import styles from './ModelsSettingsTab.module.css';
 import { Button, Menu } from '../ui';
 import type { SelectOptionItem } from '../ui';
-import { SettingsCard, SettingsPage, SettingsRow, SettingsSection } from '../settings/SettingsUI';
+import {
+  SettingsCard,
+  SettingsPage,
+  SettingsRow,
+  SettingsSection,
+} from '../settings/SettingsUI';
 import {
   emptyAddDraft,
   PRESETS,
@@ -36,8 +41,16 @@ export const AddProviderMenu: React.FC<{
 }> = ({ addOpen, setAddOpen, onAddTemplate, onAddPreset }) => {
   // 键盘漫游用选项数组（children 渲染顺序与其一致）
   const menuOptions: SelectOptionItem[] = [
-    { id: 'openai', label: 'OpenAI 格式', onClick: () => onAddTemplate('openai') },
-    { id: 'anthropic', label: 'Anthropic 格式', onClick: () => onAddTemplate('anthropic') },
+    {
+      id: 'openai',
+      label: 'OpenAI 格式',
+      onClick: () => onAddTemplate('openai'),
+    },
+    {
+      id: 'anthropic',
+      label: 'Anthropic 格式',
+      onClick: () => onAddTemplate('anthropic'),
+    },
     ...PRESETS.map((pr) => ({
       id: pr.id,
       label: pr.name,
@@ -86,7 +99,9 @@ export const AddProviderMenu: React.FC<{
           Anthropic 格式
         </button>
 
-        <div className={`${styles.addMenuTitle} ${styles.addMenuTitleGap}`}>常用服务</div>
+        <div className={`${styles.addMenuTitle} ${styles.addMenuTitleGap}`}>
+          常用服务
+        </div>
         {PRESETS.map((pr) => (
           <button
             key={pr.id}
@@ -150,11 +165,10 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     hasKeySelected,
     activeProfileId,
     globalActiveModelId,
-    addRef,
   } = useModelProfilesState(onShowToast);
 
   const headerMeta = (
-    <div ref={addRef} style={{ position: 'relative', display: 'inline-block' }}>
+    <div style={{ position: 'relative', display: 'inline-block' }}>
       <AddProviderMenu
         addOpen={addOpen}
         setAddOpen={setAddOpen}

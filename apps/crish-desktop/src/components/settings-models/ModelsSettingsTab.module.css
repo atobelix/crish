@@ -979,3 +979,134 @@
 .addMenuOption:hover {
   background: var(--tint-active);
 }
+
+/* ModelsCascadeSelect (ModelProfileList) */
+.cascadeSelectTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--control-soft-bg, var(--bg-secondary));
+  border-radius: var(--radius-xl);
+  padding: 0 12px;
+  min-height: var(--control-height-sm, 28px);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.cascadeSelectTrigger:hover {
+  background: var(--tint-hover);
+}
+
+.cascadeSelectTrigger:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+}
+
+.cascadeSelectValue {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  font-weight: var(--font-weight-medium);
+}
+
+.cascadeList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 220px;
+}
+
+.cascadeEmpty {
+  padding: 8px 12px;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  cursor: default;
+}
+
+.cascadeRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px 10px;
+  border-radius: var(--radius-lg);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--transition-fast);
+}
+
+.cascadeRow:hover,
+.cascadeRow.isOpen {
+  background: var(--tint-active);
+}
+
+.cascadeChev {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.cascadeFlyout {
+  position: absolute;
+  right: calc(100% + 6px);
+  top: 0;
+  min-width: 180px;
+  max-height: 280px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: var(--z-model-flyout);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(
+    --shadow-floating,
+    0 4px 16px color-mix(in srgb, var(--shadow-color) 8%, transparent)
+  );
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cascadeOption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cascadeOption:hover {
+  background: var(--tint-active);
+}
+
+.cascadeOption.isOn {
+  background: var(--tint-active);
+  font-weight: var(--font-weight-medium);
+}
+
+.cascadeOptionText {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.cascadeCheck {
+  color: var(--accent-primary, var(--text-primary));
+  flex-shrink: 0;
+}

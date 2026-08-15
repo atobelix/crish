@@ -275,13 +275,121 @@ export class MockPhysicalGeometryEngine {
           }
         }
 
-        // 5. 根据 DOM 结构推断合理的默认尺寸（如 Dialog、Menu、Button、Input）
+        // 5. 解析 HTMLElement 内联坐标（如 Popper / Tooltip 注入的 style.top / style.left / transform）
         const tag = this.tagName.toLowerCase();
         const role = this.getAttribute('role');
 
-        if (role === 'dialog' || this.classList.contains('menuContent')) {
+        if (this instanceof HTMLElement) {
+          let topVal: number | undefined;
+          let leftVal: number | undefined;
+          let widthVal: number | undefined;
+          let heightVal: number | undefined;
+
+          if (this.style.top && this.style.top.endsWith('px')) {
+            topVal = parseFloat(this.style.top);
+          }
+          if (this.style.left && this.style.left.endsWith('px')) {
+            leftVal = parseFloat(this.style.left);
+          }
+          if (this.style.width && this.style.width.endsWith('px')) {
+            widthVal = parseFloat(this.style.width);
+          }
+          if (this.style.height && this.style.height.endsWith('px')) {
+            heightVal = parseFloat(this.style.height);
+          }
+
+          const parent = this.parentElement;
+          if (parent instanceof HTMLElement) {
+            if (
+              topVal === undefined &&
+              parent.style.top &&
+              parent.style.top.endsWith('px')
+            ) {
+              topVal = parseFloat(parent.style.top);
+            }
+            if (
+              leftVal === undefined &&
+              parent.style.left &&
+              parent.style.left.endsWith('px')
+            ) {
+              leftVal = parseFloat(parent.style.left);
+            }
+            const tf =
+              this.style.transform ||
+              parent.style.transform ||
+              this.style.getPropertyValue('--tooltip-translate') ||
+              parent.style.getPropertyValue('--tooltip-translate');
+            if (tf) {
+              const match = tf.match(
+                /translate(?:3d)?\(\s*(-?[\d.]+)px\s*,\s*(-?[\d.]+)px/
+              );
+              if (match) {
+                leftVal = (leftVal ?? 0) + parseFloat(match[1]!);
+                topVal = (topVal ?? 0) + parseFloat(match[2]!);
+              }
+              if (tf.includes('-50%')) {
+                const w = widthVal ?? (role === 'tooltip' ? 80 : 100);
+                leftVal = (leftVal ?? 0) - w / 2;
+              }
+              if (tf.includes('-100%')) {
+                const h = heightVal ?? (role === 'tooltip' ? 24 : 30);
+                topVal = (topVal ?? 0) - h;
+              }
+            }
+          }
+
+          if (topVal !== undefined || leftVal !== undefined) {
+            const defaultW =
+              role === 'dialog' ||
+              role === 'menu' ||
+              role === 'listbox' ||
+              this.classList.contains('menuContent')
+                ? 200
+                : role === 'tooltip'
+                  ? 80
+                  : 100;
+            const defaultH =
+              role === 'dialog' ||
+              role === 'menu' ||
+              role === 'listbox' ||
+              this.classList.contains('menuContent')
+                ? 240
+                : role === 'tooltip'
+                  ? 24
+                  : 30;
+            let finalLeft = leftVal ?? 0;
+            let finalTop = topVal ?? 0;
+
+            const selfTf =
+              this.style.transform ||
+              this.style.getPropertyValue('--tooltip-translate');
+            if (selfTf) {
+              if (selfTf.includes('-50%'))
+                finalLeft -= (widthVal ?? defaultW) / 2;
+              if (selfTf.includes('-100%')) finalTop -= heightVal ?? defaultH;
+            }
+
+            return new DOMRect(
+              finalLeft,
+              finalTop,
+              widthVal ?? defaultW,
+              heightVal ?? defaultH
+            );
+          }
+        }
+
+        // 6. 根据 DOM 结构推断合理的默认尺寸（如 Dialog、Menu、Button、Input、Tooltip）
+        if (
+          role === 'dialog' ||
+          role === 'menu' ||
+          role === 'listbox' ||
+          this.classList.contains('menuContent')
+        ) {
           // 菜单/弹窗默认尺寸：宽 200px, 高 240px
           return new DOMRect(100, 100, 200, 240);
+        }
+        if (role === 'tooltip') {
+          return new DOMRect(100, 100, 80, 24);
         }
         if (tag === 'button' || role === 'button') {
           return new DOMRect(50, 50, 80, 32);

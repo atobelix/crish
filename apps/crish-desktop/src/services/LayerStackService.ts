@@ -75,6 +75,19 @@ export interface LayerTraceRecord {
   dismissReason: DismissReason;
 }
 
+const LAYER_TYPE_PRIORITY: Record<LayerType, number> = {
+  'modal-dialog': 10,
+  'confirm-dialog': 15,
+  drawer: 20,
+  popover: 30,
+  'dropdown-menu': 40,
+  'context-menu': 40,
+  'cascade-submenu': 50,
+  tooltip: 60,
+  toast: 70,
+  'virtual-interceptor': 100,
+};
+
 const PROCESSED_EVENTS = new WeakSet<Event>();
 
 export class LayerStackService {
@@ -84,6 +97,9 @@ export class LayerStackService {
   private layers: LayerRegistration[] = [];
   private traceHistory: LayerTraceRecord[] = [];
   private isListening = false;
+  private lastEscapeDismissTime = 0;
+
+  private sequence = 0;
 
   private constructor() {
     this.attachGlobalListeners();
@@ -106,12 +122,20 @@ export class LayerStackService {
     this.attachGlobalListeners();
     const fullLayer: LayerRegistration = {
       ...layer,
-      mountedAt: Date.now(),
+      mountedAt: ++this.sequence,
     };
 
     // 避免重复 ID 污染
     this.layers = this.layers.filter((l) => l.id !== fullLayer.id);
     this.layers.push(fullLayer);
+
+    // 按层级权重稳定排序（相同权重保持 mountedAt 注册入栈顺序）
+    this.layers.sort((a, b) => {
+      const pA = LAYER_TYPE_PRIORITY[a.type] ?? 0;
+      const pB = LAYER_TYPE_PRIORITY[b.type] ?? 0;
+      if (pA !== pB) return pA - pB;
+      return a.mountedAt - b.mountedAt;
+    });
 
     return () => {
       this.unregister(fullLayer.id);
@@ -222,6 +246,9 @@ export class LayerStackService {
     }
 
     // 2. 关闭自身并记录 Trace 审计
+    if (reason === 'escape') {
+      this.lastEscapeDismissTime = Date.now();
+    }
     try {
       layer.onDismiss(reason);
     } catch (err) {
@@ -351,6 +378,18 @@ export class LayerStackService {
 
     if (event.key !== 'Escape') return;
 
+    // 同帧/短时间防抖（50ms 内快速双击 Esc 时，逐帧退栈，绝不一击穿透全部关闭，满足 GEO-ESC-06）
+    const now = Date.now();
+    if (
+      this.lastEscapeDismissTime &&
+      now >= this.lastEscapeDismissTime &&
+      now - this.lastEscapeDismissTime < 50
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     if (this.layers.length === 0) {
       // 栈中无浮层，放行至全局 ShortcutService
       return;
@@ -417,12 +456,7 @@ export class LayerStackService {
     // 2. 检查点击是否位于关联的 Anchor / Trigger 触发源内部
     const anchorEl = this.resolveElement(topLayer.anchorRef);
     if (anchorEl && anchorEl.contains(target)) {
-      if (
-        topLayer.onPointerDownOutside?.(event) === true ||
-        event.defaultPrevented
-      ) {
-        return; // 被自定义拦截
-      }
+      return; // 触发源自身事件管理开关，避免 Double Toggle 震荡
     }
 
     // 3. 检查点击是否位于任何子孙 Branch 浮层内部（如 Tooltip / 二级 Submenu）
@@ -472,6 +506,8 @@ export class LayerStackService {
     }
     this.layers = [];
     this.traceHistory = [];
+    this.lastEscapeDismissTime = 0;
+    this.sequence = 0;
     this.isListening = false;
     LayerStackService.instance = null;
   }

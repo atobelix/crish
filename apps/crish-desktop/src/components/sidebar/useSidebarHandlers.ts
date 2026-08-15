@@ -39,7 +39,7 @@ export function useSidebarHandlers({
   setProjectsSectionCollapsed,
   setCollapsedProjects,
   setActiveProjectId,
-  setSortDropdownCoords,
+  setSortDropdownCoords: _setSortDropdownCoords,
   setSortDropdownOpen,
   setOverlayOpen,
   sidebarBehavior,
@@ -109,17 +109,23 @@ export function useSidebarHandlers({
     [setRenamingSessionId, setGeneralCollapsed, setCollapsedProjects]
   );
 
-  const handleOpenProject = useCallback((id: string) => {
-    setActiveProjectId(id);
-    setCollapsedProjects((prev) => ({ ...prev, [id]: false }));
-    if (isPendingDraft(getCompositionRoot().session.getActiveSessionId())) {
-      setDraftFolder(id);
-    }
-  }, [setActiveProjectId, setCollapsedProjects]);
+  const handleOpenProject = useCallback(
+    (id: string) => {
+      setActiveProjectId(id);
+      setCollapsedProjects((prev) => ({ ...prev, [id]: false }));
+      if (isPendingDraft(getCompositionRoot().session.getActiveSessionId())) {
+        setDraftFolder(id);
+      }
+    },
+    [setActiveProjectId, setCollapsedProjects]
+  );
 
-  const handleToggleProjectCollapsed = useCallback((id: string) => {
-    setCollapsedProjects((prev) => ({ ...prev, [id]: !prev[id] }));
-  }, [setCollapsedProjects]);
+  const handleToggleProjectCollapsed = useCallback(
+    (id: string) => {
+      setCollapsedProjects((prev) => ({ ...prev, [id]: !prev[id] }));
+    },
+    [setCollapsedProjects]
+  );
 
   const handleToggleGeneral = useCallback(() => {
     setGeneralCollapsed((v) => !v);
@@ -137,21 +143,24 @@ export function useSidebarHandlers({
     emitUiEvent('pick-workspace');
   }, []);
 
-  const handleStartRename = useCallback((id: string) => {
-    setRenamingSessionId(id);
-  }, [setRenamingSessionId]);
+  const handleStartRename = useCallback(
+    (id: string) => {
+      setRenamingSessionId(id);
+    },
+    [setRenamingSessionId]
+  );
 
   const handleCancelRename = useCallback(() => {
     setRenamingSessionId(null);
   }, [setRenamingSessionId]);
 
-  const handleSortBtnClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    const btn = e.currentTarget as HTMLElement;
-    const rect = btn.getBoundingClientRect();
-    setSortDropdownCoords({ x: rect.left, y: rect.top + rect.height + 4 });
-    setSortDropdownOpen((open) => !open);
-  }, [setSortDropdownCoords, setSortDropdownOpen]);
+  const handleSortBtnClick = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setSortDropdownOpen((open) => !open);
+    },
+    [setSortDropdownOpen]
+  );
 
   const handleOverlayClose = useCallback(() => {
     setOverlayOpen(false);

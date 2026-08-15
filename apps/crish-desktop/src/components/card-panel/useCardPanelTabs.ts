@@ -1,9 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
 import { focusOrOpenPanel, setGroupActiveCard } from '../../api/storeAccess';
 import { onUiEvent } from '../../api/uiEvents';
 import { closeAgentSidePanel } from '../../api/openAgentPanel';
-import { isClosableTab, placeTabsAddMenu } from './CardPanelHeader';
+import { isClosableTab } from './CardPanelHeader';
 import { getDockOverlayStyle } from './CardPanelLayout';
 import type { GroupState } from '../../store/types';
 
@@ -24,15 +24,8 @@ export function useCardPanelTabs({
   const draggedTab = useLayoutStore((s) => s.draggedTab);
   const dropPreview = useLayoutStore((s) => s.dropPreview);
 
-  const [tabAddOpen, setTabAddOpen] = useState(false);
-  const [tabAddPos, setTabAddPos] = useState<{
-    top: number;
-    left: number;
-  } | null>(null);
-
   const tabsBarRef = useRef<HTMLDivElement>(null);
   const tabAddBtnRef = useRef<HTMLButtonElement>(null);
-  const tabAddMenuRef = useRef<HTMLDivElement>(null);
   const sideActionBtnRef = useRef<HTMLButtonElement>(null);
   const pendingFocusCardIdRef = useRef<string | null>(null);
 
@@ -117,47 +110,6 @@ export function useCardPanelTabs({
       el.removeEventListener('mousedown', onMouseDown);
     };
   }, [activeCardId, cardsLen]);
-
-  useEffect(() => {
-    if (!tabAddOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (tabAddBtnRef.current?.contains(t)) return;
-      if (tabAddMenuRef.current?.contains(t)) return;
-      setTabAddOpen(false);
-      setTabAddPos(null);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        setTabAddOpen(false);
-        setTabAddPos(null);
-        requestAnimationFrame(() => tabAddBtnRef.current?.focus());
-      }
-    };
-    const reposition = () => {
-      const btn = tabAddBtnRef.current;
-      if (!btn) return;
-      setTabAddPos(placeTabsAddMenu(btn.getBoundingClientRect()));
-    };
-    document.addEventListener('mousedown', onDoc);
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('resize', reposition);
-    window.addEventListener('scroll', reposition, true);
-    return () => {
-      document.removeEventListener('mousedown', onDoc);
-      window.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', reposition);
-      window.removeEventListener('scroll', reposition, true);
-    };
-  }, [tabAddOpen]);
-
-  useEffect(() => {
-    if (!tabAddOpen || !tabAddMenuRef.current) return;
-    const first =
-      tabAddMenuRef.current.querySelector<HTMLElement>('[role="menuitem"]');
-    requestAnimationFrame(() => first?.focus());
-  }, [tabAddOpen]);
 
   useEffect(() => {
     const want = pendingFocusCardIdRef.current;
@@ -264,45 +216,16 @@ export function useCardPanelTabs({
     }
   };
 
-  const onAddMenuKeyDown = (e: React.KeyboardEvent) => {
-    const menu = tabAddMenuRef.current;
-    if (!menu) return;
-    const items = Array.from(
-      menu.querySelectorAll<HTMLElement>('[role="menuitem"]')
-    );
-    if (items.length === 0) return;
-    const i = items.indexOf(document.activeElement as HTMLElement);
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      items[(i + 1 + items.length) % items.length]?.focus();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      items[(i - 1 + items.length) % items.length]?.focus();
-    } else if (e.key === 'Home') {
-      e.preventDefault();
-      items[0]?.focus();
-    } else if (e.key === 'End') {
-      e.preventDefault();
-      items[items.length - 1]?.focus();
-    }
-  };
-
   return {
     dockOverlayStyle,
     activeCardId,
     cardsLen,
-    tabAddOpen,
-    tabAddPos,
-    setTabAddOpen,
-    setTabAddPos,
     tabsBarRef,
     tabAddBtnRef,
-    tabAddMenuRef,
     handleGlobalTabClick,
     handleTabClick,
     closeToolTab,
     resolveFocusAfterClose,
     onTabKeyDown,
-    onAddMenuKeyDown,
   };
 }

@@ -136,6 +136,8 @@ describe('LayerStackService (WO-20, WO-22, WO-25, WO-27)', () => {
       expect(dismissL1).not.toHaveBeenCalled();
       expect(evt1.defaultPrevented).toBe(true);
 
+      // 模拟下一帧或 50ms 后的第 2 次 Esc
+      (service as any).lastEscapeDismissTime = 0;
       // 2nd Esc -> closes L2
       const evt2 = new KeyboardEvent('keydown', {
         key: 'Escape',
@@ -148,6 +150,8 @@ describe('LayerStackService (WO-20, WO-22, WO-25, WO-27)', () => {
       expect(dismissL1).not.toHaveBeenCalled();
       expect(evt2.defaultPrevented).toBe(true);
 
+      // 模拟下一帧或 50ms 后的第 3 次 Esc
+      (service as any).lastEscapeDismissTime = 0;
       // 3rd Esc -> closes L1
       const evt3 = new KeyboardEvent('keydown', {
         key: 'Escape',

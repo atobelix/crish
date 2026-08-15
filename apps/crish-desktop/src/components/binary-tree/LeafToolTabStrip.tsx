@@ -12,7 +12,7 @@
  * 仅当工具 leaf 有多个 tab 时渲染；单 tab 工具 leaf 不显示标签栏（避免占行）。
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Plus, X } from 'lucide-react';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import {
@@ -24,7 +24,7 @@ import {
   openToolInSession,
   openToolInActiveTab,
 } from '../../api/store-access/componentAccess';
-import { Button, TabStrip, Tooltip } from '../ui';
+import { Button, TabStrip, Tooltip, Menu } from '../ui';
 import styles from './LeafToolTabStrip.module.css';
 
 const PANEL_LABELS: Record<string, string> = {
@@ -66,22 +66,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
       [leaf.id, removeTabFromLeaf]
     );
 
-    const [showAddMenu, setShowAddMenu] = useState(false);
-    // 08-步5 T4-2 键盘闭环：加号/菜单容器 ref（Esc 关闭后焦点归还加号）
-    const addBtnRef = useRef<HTMLButtonElement | null>(null);
-    const addMenuRef = useRef<HTMLDivElement | null>(null);
-
-    // 打开后焦点移入菜单首项（键盘漫游起点）
-    useEffect(() => {
-      if (showAddMenu) {
-        const first =
-          addMenuRef.current?.querySelector<HTMLButtonElement>(
-            '[role="menuitem"]'
-          );
-        first?.focus();
-      }
-    }, [showAddMenu]);
-
     const openPanel = useCallback(
       (pid: string) => {
         if (leaf.sessionId) {
@@ -90,50 +74,8 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
           openToolInActiveTab(pid);
         }
         setActiveTab(leaf.id, pid);
-        setShowAddMenu(false);
       },
       [leaf.id, leaf.sessionId, setActiveTab]
-    );
-
-    // 添加菜单键盘：↑↓/Home/End 漫游、Enter 原生激活、Esc 关闭并归还加号焦点
-    const handleAddMenuKeyDown = useCallback(
-      (e: React.KeyboardEvent<HTMLDivElement>) => {
-        const items = Array.from(
-          e.currentTarget.querySelectorAll<HTMLButtonElement>(
-            '[role="menuitem"]'
-          )
-        );
-        if (items.length === 0) return;
-        if (
-          e.key === 'ArrowDown' ||
-          e.key === 'ArrowUp' ||
-          e.key === 'Home' ||
-          e.key === 'End'
-        ) {
-          e.preventDefault();
-          e.stopPropagation();
-          const active = document.activeElement;
-          const cur =
-            active instanceof HTMLButtonElement ? items.indexOf(active) : -1;
-          let next: number;
-          if (e.key === 'ArrowDown')
-            next = cur < 0 ? 0 : (cur + 1) % items.length;
-          else if (e.key === 'ArrowUp')
-            next =
-              cur < 0
-                ? items.length - 1
-                : (cur - 1 + items.length) % items.length;
-          else if (e.key === 'Home') next = 0;
-          else next = items.length - 1;
-          items[next]?.focus();
-        } else if (e.key === 'Escape') {
-          e.preventDefault();
-          e.stopPropagation();
-          setShowAddMenu(false);
-          addBtnRef.current?.focus();
-        }
-      },
-      []
     );
 
     // 单 tab 或无 tab 时不渲染标签栏（已调整为无 tabs 时才不渲染，以保证加号可用）
@@ -196,67 +138,28 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
             {/* 添加面板加号按钮 */}
             {availablePanels.length > 0 && (
               <div className={styles.addTabContainer}>
-                <Tooltip content="添加功能面板">
-                  <Button
-                    ref={addBtnRef}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={styles.addTabBtn}
-                    onClick={() => {
-                      setShowAddMenu((v) => !v);
-                    }}
-                    onPointerDown={(e) => {
-                      e.stopPropagation();
-                    }}
-                    onKeyDown={(e) => {
-                      // 键盘路径：Enter/Space 开关（preventDefault 防原生 click 二次触发）
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setShowAddMenu((v) => !v);
-                      }
-                    }}
-                    aria-label="添加功能面板"
-                    aria-haspopup="menu"
-                    aria-expanded={showAddMenu}
-                    icon={<Plus size={14} />}
-                  />
-                </Tooltip>
-
-                {showAddMenu && (
-                  <>
-                    <div
-                      className={styles.menuBackdrop}
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        setShowAddMenu(false);
-                      }}
-                    />
-                    <div
-                      ref={addMenuRef}
-                      className={styles.addDropdownMenu}
-                      role="menu"
-                      onKeyDown={handleAddMenuKeyDown}
-                    >
-                      {availablePanels.map((pid) => {
-                        const label = PANEL_LABELS[pid] || pid;
-                        return (
-                          <button
-                            key={pid}
-                            type="button"
-                            role="menuitem"
-                            className={styles.menuItem}
-                            onPointerDown={(e) => e.stopPropagation()}
-                            onClick={() => openPanel(pid)}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
+                <Menu
+                  align="start"
+                  side="bottom"
+                  sideOffset={4}
+                  trigger={
+                    <Tooltip content="添加功能面板">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={styles.addTabBtn}
+                        aria-label="添加功能面板"
+                        icon={<Plus size={14} />}
+                      />
+                    </Tooltip>
+                  }
+                  options={availablePanels.map((pid) => ({
+                    id: pid,
+                    label: PANEL_LABELS[pid] || pid,
+                    onClick: () => openPanel(pid),
+                  }))}
+                />
               </div>
             )}
 

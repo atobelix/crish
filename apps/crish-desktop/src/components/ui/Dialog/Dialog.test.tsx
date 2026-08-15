@@ -2,7 +2,7 @@
 /**
  * ui/Dialog 基座测试：Esc 关闭、焦点归还、Tab 循环、inert 旁路还原、aria
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   render,
   screen,
@@ -12,6 +12,7 @@ import {
 } from '@testing-library/react';
 import React, { useState } from 'react';
 import { Dialog } from './Dialog';
+import { layerStackService } from '../../../services/LayerStackService';
 
 /** 受控包装：open 状态由父层持有，模拟真实消费方用法 */
 function DialogHarness({
@@ -43,9 +44,14 @@ function DialogHarness({
   );
 }
 
+beforeEach(() => {
+  layerStackService.dispose();
+});
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  layerStackService.dispose();
 });
 
 describe('ui/Dialog', () => {
@@ -332,7 +338,7 @@ describe('ui/Dialog', () => {
     try {
       const onClose = vi.fn();
       render(<DialogHarness title="时长" onClose={onClose} />);
-      fireEvent.keyDown(document, { key: 'Escape' });
+      fireEvent.keyDown(window, { key: 'Escape' });
       expect(onClose).toHaveBeenCalledTimes(1);
       // CSS --duration-exit = 150ms：动画结束后即应卸载，不留 50ms 空窗
       act(() => vi.advanceTimersByTime(150));

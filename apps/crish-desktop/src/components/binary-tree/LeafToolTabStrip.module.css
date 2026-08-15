@@ -152,16 +152,6 @@
   color: var(--text-primary);
 }
 
-.menuBackdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  /* F7-F14：z-index 走 token 档位，禁裸数字 */
-  z-index: var(--z-dropdown-menu);
-}
-
 .addDropdownMenu {
   position: absolute;
   top: calc(100% + 4px);

@@ -10,9 +10,10 @@
  * 后续 12 套菜单收敛（T05.3）统一基于本基座；坐标计算单源
  * 见同目录 position.ts。
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState, useId } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { Tooltip } from '../Tooltip/Tooltip';
+import { useLayerRegistration } from '../../../hooks/useLayerRegistration';
 import styles from './Menu.module.css';
 import type { SelectOptionItem } from './types';
 
@@ -47,6 +48,8 @@ export interface MenuProps {
   sideOffset?: number;
   /** 面板标题（可选） */
   title?: string;
+  /** 初始是否打开（非受控模式） */
+  defaultOpen?: boolean;
   /** 外部受控 open */
   open?: boolean;
   /** 外部受控 onOpenChange */
@@ -92,6 +95,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   side = 'bottom',
   sideOffset = 6,
   title,
+  defaultOpen = false,
   open: externalOpen,
   onOpenChange: externalOnOpenChange,
   contentClassName,
@@ -102,7 +106,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   onPointerDownOutside,
   onEscapeKeyDown,
 }: MenuProps) {
-  const [internalOpen, setInternalOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
 
   // F7 F3：受控/非受控双模互斥——外部受控时内部状态完全旁路（不写回、
   // 不参与 OR），消除「onOpenChange(false) 后父级仍传 true → 菜单立即重开」
@@ -112,6 +116,22 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
 
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const contentRef = useRef<HTMLDivElement>(null);
+  const menuId = useId();
+
+  useLayerRegistration(
+    {
+      id: menuId,
+      type: 'dropdown-menu',
+      dismissible: true,
+      onDismiss: () => handleOpenChange(false),
+      onEscapeKeyDown: (event) => {
+        onEscapeKeyDown?.(event);
+      },
+      elementRef: contentRef,
+      anchorRef: anchor,
+    },
+    isOpen
+  );
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -172,6 +192,17 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!isOpen) return;
+
+      // CJK IME 组合态与 Windows 229 合成事件绝对放行，绝不拦截/关闭
+      if (
+        Boolean(
+          (e.nativeEvent as unknown as { isComposing?: boolean })?.isComposing
+        ) ||
+        e.keyCode === 229 ||
+        e.key === 'Process'
+      ) {
+        return;
+      }
 
       if (e.key === 'Escape') {
         // 消费方 onEscapeKeyDown（Radix document 捕获）已 preventDefault 时，
@@ -404,7 +435,24 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
               }
             }
           }}
-          onEscapeKeyDown={onEscapeKeyDown}
+          onEscapeKeyDown={(e) => {
+            const rawEvent = e as unknown as {
+              isComposing?: boolean;
+              keyCode?: number;
+              key?: string;
+              nativeEvent?: { isComposing?: boolean };
+            };
+            if (
+              rawEvent.isComposing ||
+              rawEvent.nativeEvent?.isComposing ||
+              rawEvent.keyCode === 229 ||
+              rawEvent.key === 'Process'
+            ) {
+              e.preventDefault();
+              return;
+            }
+            onEscapeKeyDown?.(e);
+          }}
         >
           {title != null ? (
             <div className={styles.menuTitle}>{title}</div>
