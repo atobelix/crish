@@ -257,12 +257,8 @@ export class LayerStackService {
     this.recordTrace(layer, reason);
     this.unregister(layer.id);
 
-    // 3. 焦点平滑还原
-    if (
-      reason === 'escape' ||
-      reason === 'outside-pointer' ||
-      reason === 'item-select'
-    ) {
+    // 3. 焦点平滑还原（仅 Esc 与选中项操作还原焦点；外点交互尊重用户外部聚焦目标）
+    if (reason === 'escape' || reason === 'item-select') {
       this.restoreFocus(layer);
     }
   }
