@@ -91,7 +91,7 @@ export {
   truncateHistoryWithAnchor,
   buildHistoryMessages,
 } from './historyMessages';
-import { buildHistoryMessages } from './historyMessages';
+import { buildHistoryMessages, type HistoryMessage } from './historyMessages';
 
 export function resolveContextWindow(
   sets?: Settings | null
