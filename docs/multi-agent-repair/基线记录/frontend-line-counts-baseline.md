@@ -87,7 +87,7 @@ apps/crish-desktop/src/components/agent-card/AgentCard.tsx 461
 apps/crish-desktop/src/components/agent-card/AgentTeamBoard.tsx 461
 apps/crish-desktop/src/components/agent-card/InlineAgentPanel.tsx 604
 apps/crish-desktop/src/components/chat-card/useChatComposerProps.ts 472
-apps/crish-desktop/src/components/chat-composer/SlashExtension.ts 442
+apps/crish-desktop/src/components/chat-composer/SlashExtension.ts 444
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
 apps/crish-desktop/src/components/diff/DiffCard.tsx 442
 apps/crish-desktop/src/components/files/FileViewerCard.tsx 427
