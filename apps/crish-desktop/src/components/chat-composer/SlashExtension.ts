@@ -71,7 +71,7 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
       runEditorCommand(editor, range, (c) => c.toggleBulletList()),
   },
   {
-    id: 'numbered-list',
+    id: 'ordered-list',
     title: 'Numbered List',
     description: 'Create a numbered list',
     iconName: 'ListOrdered',
@@ -82,8 +82,8 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
   {
     id: 'task-list',
     title: 'Task List',
-    description: 'Create a checklist with task items',
-    iconName: 'CheckSquare',
+    description: 'Create a to-do list with checkboxes',
+    iconName: 'ListTodo',
     keywords: ['todo', 'task', 'checklist'],
     command: ({ editor, range }: any) =>
       runEditorCommand(editor, range, (c) => c.toggleTaskList()),
@@ -91,9 +91,9 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
   {
     id: 'code-block',
     title: 'Code Block',
-    description: 'Display code with syntax highlighting',
+    description: 'Insert a preformatted code snippet',
     iconName: 'Code',
-    keywords: ['code', 'pre', 'block'],
+    keywords: ['code', 'pre', 'snippet'],
     command: ({ editor, range }: any) =>
       runEditorCommand(editor, range, (c) => c.toggleCodeBlock()),
   },
