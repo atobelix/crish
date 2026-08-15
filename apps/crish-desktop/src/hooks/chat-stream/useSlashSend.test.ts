@@ -21,15 +21,17 @@ const requestFollowUp = vi.fn(async () => true);
 // R7 发送前就绪检查：mock 掉 ConnectionLifecycle 的实时查询（默认就绪放行），
 // 就绪拦截用例单独覆盖 S1/S2/S3 域（vi.hoisted：mock 工厂在执行期可安全引用）
 const { checkEngineReadyRealtime } = vi.hoisted(() => ({
-  checkEngineReadyRealtime: vi.fn<[], Promise<{ ok: boolean; domain: ErrorDomain | null }>>(
-    async () => ({ ok: true, domain: null })
-  ),
+  checkEngineReadyRealtime: vi.fn<
+    [],
+    Promise<{ ok: boolean; domain: ErrorDomain | null }>
+  >(async () => ({ ok: true, domain: null })),
 }));
 
 vi.mock('../../api/chat-bridge/ConnectionLifecycle', async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import('../../api/chat-bridge/ConnectionLifecycle')
-  >();
+  const actual =
+    await importOriginal<
+      typeof import('../../api/chat-bridge/ConnectionLifecycle')
+    >();
   return {
     ...actual,
     checkEngineReadyRealtime,
@@ -37,7 +39,8 @@ vi.mock('../../api/chat-bridge/ConnectionLifecycle', async (importOriginal) => {
 });
 
 vi.mock('../../api/runControlClient', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../api/runControlClient')>();
+  const actual =
+    await importOriginal<typeof import('../../api/runControlClient')>();
   return {
     ...actual,
     requestFollowUp: (...args: unknown[]) => requestFollowUp(...args),
@@ -57,7 +60,12 @@ const SID = 'sess-slash-send-1';
 function seedSession(opts?: {
   title?: string;
   active?: string;
-  messages?: Array<{ id: string; sender: 'user' | 'assistant'; text: string; status?: string }>;
+  messages?: Array<{
+    id: string;
+    sender: 'user' | 'assistant';
+    text: string;
+    status?: string;
+  }>;
 }) {
   const sess = {
     id: SID,
@@ -71,7 +79,8 @@ function seedSession(opts?: {
       sender: m.sender,
       text: m.text,
       timestamp: Date.now(),
-      status: (m.status as 'completed' | 'processing' | 'queued') || 'completed',
+      status:
+        (m.status as 'completed' | 'processing' | 'queued') || 'completed',
     })),
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -81,13 +90,18 @@ function seedSession(opts?: {
       ...(st as any).sessionsById,
       [SID]: sess,
     };
-    const list = Array.isArray((st as any).sessions) ? [...(st as any).sessions] : [];
+    const list = Array.isArray((st as any).sessions)
+      ? [...(st as any).sessions]
+      : [];
     const idx = list.findIndex((s: { id: string }) => s.id === SID);
     if (idx >= 0) list[idx] = sess;
     else list.push(sess);
     (st as any).sessions = list;
     (st as any).activeSessionId = opts?.active ?? SID;
-    (st as any).composerDrafts = { ...(st as any).composerDrafts, [SID]: 'draft text' };
+    (st as any).composerDrafts = {
+      ...(st as any).composerDrafts,
+      [SID]: 'draft text',
+    };
   });
 }
 
@@ -198,13 +212,19 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
     );
     // queued user message present
     const msgs = useLayoutStore.getState().sessionsById?.[SID]?.messages ?? [];
-    expect(msgs.some((m: { status?: string; sender?: string }) => m.sender === 'user' && m.status === 'queued')).toBe(
-      true
-    );
+    expect(
+      msgs.some(
+        (m: { status?: string; sender?: string }) =>
+          m.sender === 'user' && m.status === 'queued'
+      )
+    ).toBe(true);
   });
 
   it('pending draft first send: commitDraftIfNeeded only (no createSession product mint)', async () => {
-    const createSessionSpy = vi.spyOn(useLayoutStore.getState(), 'createSession');
+    const createSessionSpy = vi.spyOn(
+      useLayoutStore.getState(),
+      'createSession'
+    );
     // enter draft sentinel
     useLayoutStore.setState((st) => {
       (st as any).activeSessionId = PENDING_DRAFT_SESSION_ID;
@@ -249,7 +269,9 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
       await result.current.handleSendChat(false, 'engine starting');
     });
 
-    expect(options.setPickerInlineError).toHaveBeenCalledWith('软件服务正在启动，请稍候片刻。');
+    expect(options.setPickerInlineError).toHaveBeenCalledWith(
+      '软件服务正在启动，请稍候片刻。'
+    );
     expect(runStreamingAssistant).not.toHaveBeenCalled();
     // 不产生失败 run：无 runControl 派发、无 follow-up
     expect(requestFollowUp).not.toHaveBeenCalled();
@@ -270,7 +292,7 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
     });
 
     expect(options.setPickerInlineError).toHaveBeenCalledWith(
-      '模型服务尚未配置，请打开 设置 → 模型 完成配置后再发送。',
+      '模型服务尚未配置，请打开 设置 → 模型 完成配置后再发送。'
     );
     expect(runStreamingAssistant).not.toHaveBeenCalled();
   });
@@ -290,8 +312,57 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
     });
 
     expect(options.setPickerInlineError).toHaveBeenCalledWith(
-      '正在恢复上次的会话数据，稍后即可发送。',
+      '正在恢复上次的会话数据，稍后即可发送。'
     );
     expect(runStreamingAssistant).not.toHaveBeenCalled();
+  });
+
+  it('slashSendDraftManager: save snapshot, rollback optimistic message and restore draft', async () => {
+    const {
+      saveDraftSnapshot,
+      restoreChatDraft,
+      rollbackOptimisticMessage,
+      clearDraftSnapshot,
+    } = await import('./slashSendDraftManager');
+
+    saveDraftSnapshot('s-test', 'draft text to save');
+    const setInput = vi.fn();
+    restoreChatDraft('s-test', setInput);
+    expect(setInput).toHaveBeenCalledWith('draft text to save');
+
+    // test optimistic rollback using seeded session
+    seedSession({
+      messages: [{ id: 'msg-opt', text: 'hello', sender: 'user' }],
+    });
+    rollbackOptimisticMessage('ws-1', SID, 'msg-opt');
+    const sess = useLayoutStore.getState().sessionsById?.[SID];
+    expect(sess?.messages?.length ?? 0).toBe(0);
+
+    clearDraftSnapshot('s-test', setInput);
+    expect(setInput).toHaveBeenCalledWith('');
+  });
+
+  it('slashSendQueueHelper: checkSessionAiBusy and enqueueFollowUpMessage', async () => {
+    const { checkSessionAiBusy, enqueueFollowUpMessage } =
+      await import('./slashSendQueueHelper');
+
+    expect(checkSessionAiBusy(true, SID)).toBe(true);
+    expect(checkSessionAiBusy(false, SID)).toBe(false);
+
+    const ok = enqueueFollowUpMessage({
+      wsId: 'ws-1',
+      sessionId: SID,
+      userMsgId: 'u-fup',
+      displayText: 'follow up text',
+      liveHandleRunId: 'run-fup-1',
+    });
+    expect(ok).toBe(true);
+    expect(requestFollowUp).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: 'run-fup-1',
+        sessionId: SID,
+        text: 'follow up text',
+      })
+    );
   });
 });

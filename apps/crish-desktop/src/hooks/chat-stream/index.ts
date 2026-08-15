@@ -3,7 +3,11 @@ import type { Dispatch, SetStateAction } from 'react';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useTerminalStore } from '../../store/terminalStore';
 import { getTransport } from '../../api/transport';
-import type { UseChatStreamOptions, UseChatStreamResult, RunNotice } from './types';
+import type {
+  UseChatStreamOptions,
+  UseChatStreamResult,
+  RunNotice,
+} from './types';
 import { useStreamBatchers } from './useStreamBatchers';
 import { useStreamCallbacks } from './useStreamCallbacks';
 import { useSlashSend } from './useSlashSend';
@@ -79,7 +83,10 @@ export function createRunNoticeController(
 
     if (notice.persistent) {
       // 持久条：同文案已显示 → 幂等保持（防 R1 双事件重复 setState）；否则显示（无 TTL）
-      if (persistentNotice && normalizeRunNoticeKey(persistentNotice.text) === key) {
+      if (
+        persistentNotice &&
+        normalizeRunNoticeKey(persistentNotice.text) === key
+      ) {
         return;
       }
       clearTimer();
@@ -186,25 +193,22 @@ export function useChatStream(
     options,
     refs,
     { pushRunNotice, dismissRunNotice, dismissTransientRunNotice },
-    { wsId, setActiveDiffSource, upsertSessionAgent },
+    { wsId, setActiveDiffSource, upsertSessionAgent }
   );
 
   const { handleSendChat } = useSlashSend(options, refs, runStreamingAssistant);
 
   const setRunNoticePublic: Dispatch<SetStateAction<RunNotice | null>> =
-    useCallback(
-      (action) => {
-        setRunNotice((prev) => {
-          const next = typeof action === 'function' ? action(prev) : action;
-          if (next == null) {
-            // 外部置空视同 dismiss：同步清 controller 内部状态（timer / 持久条）
-            runNoticeControllerRef.current?.dismiss();
-          }
-          return next;
-        });
-      },
-      []
-    );
+    useCallback((action) => {
+      setRunNotice((prev) => {
+        const next = typeof action === 'function' ? action(prev) : action;
+        if (next == null) {
+          // 外部置空视同 dismiss：同步清 controller 内部状态（timer / 持久条）
+          runNoticeControllerRef.current?.dismiss();
+        }
+        return next;
+      });
+    }, []);
 
   return {
     runNotice,
@@ -215,3 +219,8 @@ export function useChatStream(
     handleForceCancelGeneration,
   };
 }
+
+export { useSlashSend } from './useSlashSend';
+export * from './slashSendDraftManager';
+export * from './slashSendQueueHelper';
+export * from './slashSendPreflight';
