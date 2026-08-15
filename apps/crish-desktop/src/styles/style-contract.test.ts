@@ -315,7 +315,7 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
     const pctOf = (block: string, token: string): string | null => {
       const m = block.match(
         new RegExp(
-          `${token}:\\s*color-mix\\(in srgb,\\s*var\\(--[\\w-]+\\)\\s*(\\d+(?:\\.\\d+)?)%`
+          `${token}:\\s*color-mix\\(\\s*in srgb,\\s*var\\(--[\\w-]+\\)\\s*(\\d+(?:\\.\\d+)?)%`
         )
       );
       return m?.[1] ?? null;

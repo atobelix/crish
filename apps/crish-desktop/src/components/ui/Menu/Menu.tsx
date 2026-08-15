@@ -379,6 +379,30 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
                 ).current = node;
               }
             },
+            onClick: (e: React.MouseEvent) => {
+              e.stopPropagation();
+              (
+                (actualTrigger as React.ReactElement).props as {
+                  onClick?: (e: React.MouseEvent) => void;
+                }
+              )?.onClick?.(e);
+            },
+            onPointerDown: (e: React.PointerEvent) => {
+              e.stopPropagation();
+              (
+                (actualTrigger as React.ReactElement).props as {
+                  onPointerDown?: (e: React.PointerEvent) => void;
+                }
+              )?.onPointerDown?.(e);
+            },
+            onMouseDown: (e: React.MouseEvent) => {
+              e.stopPropagation();
+              (
+                (actualTrigger as React.ReactElement).props as {
+                  onMouseDown?: (e: React.MouseEvent) => void;
+                }
+              )?.onMouseDown?.(e);
+            },
           }
         )
       : actualTrigger;
