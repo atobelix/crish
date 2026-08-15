@@ -15,8 +15,8 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { NotebookPen } from 'lucide-react';
-import { Button } from '../ui';
+import { Check, SquarePen } from 'lucide-react';
+import { Button, Tooltip } from '../ui';
 import type { NoteTransport } from '../../api/noteApi';
 import {
   dispatchSendToNote,
@@ -59,6 +59,8 @@ export type SendToNoteButtonProps = {
   className?: string;
   /** 按钮文案 */
   label?: string;
+  /** 纯图标按钮模式（嵌入消息操作栏） */
+  iconOnly?: boolean;
 };
 
 /**
@@ -78,6 +80,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
   onError,
   className,
   label = '发送到笔记',
+  iconOnly = false,
 }) => {
   const canSend = status === 'completed';
   const [busy, setBusy] = useState(false);
@@ -148,6 +151,40 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
     onError,
   ]);
 
+  if (iconOnly) {
+    return (
+      <div
+        className={className}
+        data-testid="send-to-note-root"
+        data-status={String(status ?? '')}
+        data-can-send={canSend ? 'true' : 'false'}
+      >
+        <Tooltip content={lastOk ? '已发送到笔记' : errorText || label}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={!canSend || busy}
+            loading={busy}
+            onClick={() => {
+              void handleClick();
+            }}
+            aria-label={label}
+            data-testid="send-to-note-button"
+            className={className}
+            icon={
+              lastOk ? (
+                <Check size={14} aria-hidden />
+              ) : (
+                <SquarePen size={14} aria-hidden />
+              )
+            }
+          />
+        </Tooltip>
+      </div>
+    );
+  }
+
   return (
     <div
       className={className}
@@ -166,7 +203,7 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
         }}
         aria-label={label}
         data-testid="send-to-note-button"
-        icon={<NotebookPen size={14} aria-hidden />}
+        icon={<SquarePen size={14} aria-hidden />}
       >
         {label}
       </Button>

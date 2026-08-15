@@ -37,6 +37,8 @@ export type ChatSendToNoteEntryProps = {
   onSuccess?: (result: Extract<SendToNoteResult, { ok: true }>) => void;
   onError?: (result: Extract<SendToNoteResult, { ok: false }>) => void;
   className?: string;
+  /** 纯图标模式 */
+  iconOnly?: boolean;
 };
 
 /**
@@ -54,6 +56,7 @@ export const ChatSendToNoteEntry: React.FC<ChatSendToNoteEntryProps> = ({
   onSuccess,
   onError,
   className,
+  iconOnly,
 }) => {
   const handleSuccess = useCallback(
     (result: Extract<SendToNoteResult, { ok: true }>) => {
@@ -90,6 +93,7 @@ export const ChatSendToNoteEntry: React.FC<ChatSendToNoteEntryProps> = ({
         docId={docId}
         intentId={intentId}
         origin={origin}
+        iconOnly={iconOnly}
         {...(sink !== undefined ? { sink } : {})}
         {...(transport !== undefined ? { transport } : {})}
         onSuccess={handleSuccess}

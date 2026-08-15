@@ -87,12 +87,13 @@ export const MEMO_COMPARE_FIELDS = [
 type _NonComparedFields = 'messageIndex' | 'virtualScrollManager';
 
 /** 新增 prop 忘收录 → 编译红（类型级穷尽检查） */
-type _Exhausted = Exclude<
-  keyof ChatAssistantMessageRowProps,
-  typeof MEMO_COMPARE_FIELDS[number] | _NonComparedFields
-> extends never
-  ? true
-  : false;
+type _Exhausted =
+  Exclude<
+    keyof ChatAssistantMessageRowProps,
+    (typeof MEMO_COMPARE_FIELDS)[number] | _NonComparedFields
+  > extends never
+    ? true
+    : false;
 const _exhaustedCheck: _Exhausted = true;
 
 export function assistantRowPropsEqual(
@@ -269,11 +270,6 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
           isThinkingMsg={isThinkingMsg}
           toolStackProps={toolStackProps}
         />
-
-        {/* T-48：badge 挂真实 metrics（消息级数据链：message-end →
-            computeCacheMetricsFromUsage → SessionMessage.cacheMetrics）；
-            null / undefined = 未上报 → 组件内部隐藏（C15 无 0% 误导） */}
-        <CacheMetricsBadge metrics={msg.cacheMetrics?.metrics ?? null} />
       </div>
 
       {!isThinkingMsg && msg.status !== 'processing' && (
@@ -297,6 +293,9 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
           onOpenDiff={onOpenDiff}
           {...(onOpenDiffPanel !== undefined && { onOpenDiffPanel })}
           onShowToast={onShowToast}
+          cacheMetricsNode={
+            <CacheMetricsBadge metrics={msg.cacheMetrics?.metrics ?? null} />
+          }
         />
       )}
     </div>

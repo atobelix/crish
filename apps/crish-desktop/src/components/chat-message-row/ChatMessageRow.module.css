@@ -59,7 +59,11 @@
 }
 
 .userBubble {
-  background: color-mix(in srgb, var(--bg-secondary) 88%, var(--bg-elevated) 12%);
+  background: color-mix(
+    in srgb,
+    var(--bg-secondary) 88%,
+    var(--bg-elevated) 12%
+  );
   color: var(--text-primary);
   border-radius: 20px 20px var(--radius-xs) 20px;
   padding: 12px 16px;
@@ -161,7 +165,8 @@
   display: inline-flex;
   align-items: stretch;
   max-width: 100%;
-  border: var(--hairline-width, 1px) solid var(--hairline-strong, var(--border-color));
+  border: var(--hairline-width, 1px) solid
+    var(--hairline-strong, var(--border-color));
   border-radius: var(--radius-full);
   background: transparent;
   overflow: hidden;
@@ -220,7 +225,10 @@
 .followupChipSend:focus-visible,
 .followupDismiss:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px color-mix(in srgb, var(--text-tertiary) 15%, transparent));
+  box-shadow: var(
+    --focus-ring,
+    0 0 0 2px color-mix(in srgb, var(--text-tertiary) 15%, transparent)
+  );
 }
 
 .followupDismiss {
@@ -251,15 +259,25 @@
 .assistantMeta {
   display: flex;
   align-items: center;
-  gap: 0;
-  margin-top: var(--space-0_5);
+  gap: var(--space-0_5);
+  margin-top: var(--space-1);
   min-height: 22px;
-  opacity: 0.28;
+  opacity: 0;
   transition: opacity var(--transition-fast);
 }
 
 .rowAssistant:hover .assistantMeta {
-  opacity: 0.95;
+  opacity: 1;
+}
+
+.cacheMetricsInline {
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  margin-left: var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  user-select: none;
 }
 
 .iconBtn {
@@ -341,10 +359,11 @@
 .accordionWrapper {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--transition-accordion, 220ms cubic-bezier(0.16, 1, 0.3, 1));
+  transition: grid-template-rows
+    var(--transition-accordion, 220ms cubic-bezier(0.16, 1, 0.3, 1));
 }
 
-.accordionWrapper[data-expanded="true"] {
+.accordionWrapper[data-expanded='true'] {
   grid-template-rows: 1fr;
 }
 
@@ -354,7 +373,7 @@
   transition: opacity var(--transition-fast, 150ms ease);
 }
 
-.accordionWrapper[data-expanded="true"] .accordionInner {
+.accordionWrapper[data-expanded='true'] .accordionInner {
   opacity: 1;
 }
 
@@ -410,7 +429,8 @@
   padding: 2px 7px;
   border-radius: var(--radius-full);
   background: transparent;
-  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle, var(--border-color)));
+  border: var(--hairline-width, 1px) solid
+    var(--hairline, var(--border-subtle, var(--border-color)));
 }
 
 .rowUser .pinBadge {
@@ -475,7 +495,9 @@
 }
 
 @keyframes caret {
-  50% { opacity: 0; }
+  50% {
+    opacity: 0;
+  }
 }
 
 .inlineImages {
@@ -514,8 +536,12 @@
 }
 
 @keyframes skeleton-shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 .skeletonLine {
   height: var(--font-size-base);
@@ -530,4 +556,3 @@
   animation: skeleton-shimmer var(--transition-skeleton) infinite;
   margin-bottom: var(--space-1_5);
 }
-

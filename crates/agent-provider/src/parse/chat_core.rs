@@ -108,10 +108,12 @@ impl ChatCompletionsParser {
                     text: text.to_owned(),
                 });
             }
-            // thought 优先级：reasoning_content → thinking → thinking_delta（02 §1.4）
+            // thought 优先级：reasoning_content → reasoning → thinking → thinking_delta → thought（02 §1.4）
             if let Some(thought) = non_empty_string(delta.get("reasoning_content"))
+                .or_else(|| non_empty_string(delta.get("reasoning")))
                 .or_else(|| non_empty_string(delta.get("thinking")))
                 .or_else(|| non_empty_string(delta.get("thinking_delta")))
+                .or_else(|| non_empty_string(delta.get("thought")))
             {
                 events.push(ProviderStreamEvent::ThoughtDelta {
                     text: thought.to_owned(),

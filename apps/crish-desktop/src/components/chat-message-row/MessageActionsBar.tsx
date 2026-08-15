@@ -133,6 +133,8 @@ export interface AssistantMessageActionsBarProps {
   onCopy: () => void;
   onRegenerate: () => void;
   onTogglePin: () => void;
+  sendToNoteNode?: React.ReactNode;
+  metricsNode?: React.ReactNode;
 }
 
 export const AssistantMessageActionsBar: React.FC<
@@ -145,6 +147,8 @@ export const AssistantMessageActionsBar: React.FC<
   onCopy,
   onRegenerate,
   onTogglePin,
+  sendToNoteNode,
+  metricsNode,
 }) => {
   const pinLabels = pinToggleLabels(isPinned);
   return (
@@ -174,6 +178,7 @@ export const AssistantMessageActionsBar: React.FC<
           />
         </Tooltip>
       ) : null}
+      {sendToNoteNode}
       {isPinned ? (
         <Tooltip content={pinLabels.title}>
           <Button
@@ -187,6 +192,9 @@ export const AssistantMessageActionsBar: React.FC<
             icon={<PinOff size={14} />}
           />
         </Tooltip>
+      ) : null}
+      {metricsNode ? (
+        <span className={styles.cacheMetricsInline}>{metricsNode}</span>
       ) : null}
     </div>
   );
