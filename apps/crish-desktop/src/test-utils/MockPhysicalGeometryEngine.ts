@@ -406,8 +406,8 @@ export class MockPhysicalGeometryEngine {
           );
         }
 
-        // 默认通用元素盒
-        return new DOMRect(0, 0, 100, 30);
+        // 默认通用未设定尺寸元素盒（对齐 jsdom 原生行为，防止破坏未设宽高的元素）
+        return new DOMRect(0, 0, 0, 0);
       };
     }
 
