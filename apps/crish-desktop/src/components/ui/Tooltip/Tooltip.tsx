@@ -85,37 +85,26 @@ function translateFor(side: TooltipSide): string {
   }
 }
 
+export interface ClampedTooltipResult {
+  top: number;
+  left: number;
+  effectiveSide: TooltipSide;
+}
+
 /**
- * 按 side + 实测提示尺寸把提示盒钳入视口（浮点化计算，无整型截断误差）
- * 流程：base 定位 → 由 translate 反推提示盒四角 → 钳入视口留白内 → 反算 base left/top。
+ * 4 向智能碰撞翻折与视口钳位计算（浮点化计算，无整型截断误差）
+ * 流程：
+ * 1. 计算触发元素在视口中的 4 向剩余空间；
+ * 2. 空间不足且对侧空间更大时自动进行 4 向翻折（Collision Flip）；
+ * 3. 依据 effectiveSide 计算未约束坐标与理论包围盒；
+ * 4. 钳入视口留白内并反算 base left/top 注入 DOM。
  */
 function computeClampedPosition(
   side: TooltipSide,
   rect: DOMRect,
   tipWidth: number,
   tipHeight: number
-): { top: number; left: number } {
-  let left: number;
-  let top: number;
-  switch (side) {
-    case 'top':
-      left = rect.left + rect.width / 2;
-      top = rect.top - TOOLTIP_GAP;
-      break;
-    case 'bottom':
-      left = rect.left + rect.width / 2;
-      top = rect.bottom + TOOLTIP_GAP;
-      break;
-    case 'left':
-      left = rect.left - TOOLTIP_GAP;
-      top = rect.top + rect.height / 2;
-      break;
-    case 'right':
-      left = rect.right + TOOLTIP_GAP;
-      top = rect.top + rect.height / 2;
-      break;
-  }
-
+): ClampedTooltipResult {
   const vw =
     typeof window !== 'undefined'
       ? window.visualViewport?.width || window.innerWidth || 1280
@@ -125,44 +114,102 @@ function computeClampedPosition(
       ? window.visualViewport?.height || window.innerHeight || 800
       : 800;
 
-  // 反推提示盒（translate 之后的四角）
+  // 1. 计算触发元素在视口中的 4 向剩余空间
+  const spaceTop = rect.top - TOOLTIP_EDGE_PAD;
+  const spaceBottom = vh - TOOLTIP_EDGE_PAD - rect.bottom;
+  const spaceLeft = rect.left - TOOLTIP_EDGE_PAD;
+  const spaceRight = vw - TOOLTIP_EDGE_PAD - rect.right;
+
+  const requiredVertical = tipHeight + TOOLTIP_GAP;
+  const requiredHorizontal = tipWidth + TOOLTIP_GAP;
+
+  let effectiveSide: TooltipSide = side;
+
+  // 2. 4 向智能碰撞翻折判定
+  if (side === 'top' && spaceTop < requiredVertical && spaceBottom > spaceTop) {
+    effectiveSide = 'bottom';
+  } else if (
+    side === 'bottom' &&
+    spaceBottom < requiredVertical &&
+    spaceTop > spaceBottom
+  ) {
+    effectiveSide = 'top';
+  } else if (
+    side === 'left' &&
+    spaceLeft < requiredHorizontal &&
+    spaceRight > spaceLeft
+  ) {
+    effectiveSide = 'right';
+  } else if (
+    side === 'right' &&
+    spaceRight < requiredHorizontal &&
+    spaceLeft > spaceRight
+  ) {
+    effectiveSide = 'left';
+  }
+
+  // 3. 依据 effectiveSide 计算未约束坐标与理论包围盒
+  let left: number;
+  let top: number;
   let boxLeft: number;
   let boxTop: number;
-  switch (side) {
+
+  switch (effectiveSide) {
     case 'top':
+      left = rect.left + rect.width / 2;
+      top = rect.top - TOOLTIP_GAP;
       boxLeft = left - tipWidth / 2;
       boxTop = top - tipHeight;
       break;
     case 'bottom':
+      left = rect.left + rect.width / 2;
+      top = rect.bottom + TOOLTIP_GAP;
       boxLeft = left - tipWidth / 2;
       boxTop = top;
       break;
     case 'left':
+      left = rect.left - TOOLTIP_GAP;
+      top = rect.top + rect.height / 2;
       boxLeft = left - tipWidth;
       boxTop = top - tipHeight / 2;
       break;
     case 'right':
+      left = rect.right + TOOLTIP_GAP;
+      top = rect.top + rect.height / 2;
       boxLeft = left;
       boxTop = top - tipHeight / 2;
       break;
   }
 
+  // 4. 视口边缘安全钳位
   const clampW = Math.max(TOOLTIP_EDGE_PAD, vw - tipWidth - TOOLTIP_EDGE_PAD);
   const clampH = Math.max(TOOLTIP_EDGE_PAD, vh - tipHeight - TOOLTIP_EDGE_PAD);
   const cLeft = Math.min(Math.max(TOOLTIP_EDGE_PAD, boxLeft), clampW);
   const cTop = Math.min(Math.max(TOOLTIP_EDGE_PAD, boxTop), clampH);
 
-  // 反算 base 坐标（translate 由 CSS 变量施加）
-  switch (side) {
+  // 5. 反算 base 坐标（translate 由 CSS 变量施加）
+  let resLeft: number;
+  let resTop: number;
+  switch (effectiveSide) {
     case 'top':
-      return { left: cLeft + tipWidth / 2, top: cTop + tipHeight };
+      resLeft = cLeft + tipWidth / 2;
+      resTop = cTop + tipHeight;
+      break;
     case 'bottom':
-      return { left: cLeft + tipWidth / 2, top: cTop };
+      resLeft = cLeft + tipWidth / 2;
+      resTop = cTop;
+      break;
     case 'left':
-      return { left: cLeft + tipWidth, top: cTop + tipHeight / 2 };
+      resLeft = cLeft + tipWidth;
+      resTop = cTop + tipHeight / 2;
+      break;
     case 'right':
-      return { left: cLeft, top: cTop + tipHeight / 2 };
+      resLeft = cLeft;
+      resTop = cTop + tipHeight / 2;
+      break;
   }
+
+  return { left: resLeft, top: resTop, effectiveSide };
 }
 
 export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
@@ -179,10 +226,9 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
   ) => {
     const [visible, setVisible] = useState(false);
     const [rect, setRect] = useState<DOMRect | null>(null);
-    const [clampedPos, setClampedPos] = useState<{
-      top: number;
-      left: number;
-    } | null>(null);
+    const [clampedPos, setClampedPos] = useState<ClampedTooltipResult | null>(
+      null
+    );
     const hideTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(
       undefined
     );
@@ -204,6 +250,12 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     }, []);
 
     useEffect(() => () => clearHideTimer(), [clearHideTimer]);
+
+    useEffect(() => {
+      if (!isMounted) {
+        setClampedPos(null);
+      }
+    }, [isMounted]);
 
     const isValid = React.isValidElement(children);
     const child = (isValid ? children : null) as React.ReactElement<
@@ -272,11 +324,9 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       if (delayHide > 0) {
         hideTimerRef.current = setTimeout(() => {
           setVisible(false);
-          setClampedPos(null);
         }, delayHide);
       } else {
         setVisible(false);
-        setClampedPos(null);
       }
     };
 
@@ -357,6 +407,8 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       }
     }
 
+    const effectiveSide = clampedPos?.effectiveSide ?? side;
+
     const clonedChild = React.cloneElement(child, {
       ref: mergedRef,
       ...rest,
@@ -383,13 +435,13 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
                 id={tipId}
                 role="tooltip"
                 data-tooltip-portal="true"
-                className={`${styles.tooltip} ${styles[side]} ${state === 'exiting' ? styles.tooltipExit : styles.tooltipEnter}`}
+                className={`${styles.tooltip} ${styles[effectiveSide]} ${state === 'exiting' ? styles.tooltipExit : styles.tooltipEnter}`}
                 style={
                   {
                     top: `${clampedPos?.top ?? rect.top}px`,
                     left: `${clampedPos?.left ?? rect.left}px`,
                     opacity: clampedPos !== null ? undefined : 0,
-                    '--tooltip-translate': translateFor(side),
+                    '--tooltip-translate': translateFor(effectiveSide),
                   } as React.CSSProperties & Record<string, unknown>
                 }
               >

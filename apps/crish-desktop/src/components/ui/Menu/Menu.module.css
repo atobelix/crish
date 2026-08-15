@@ -8,8 +8,15 @@
   outline: none;
   pointer-events: auto;
   min-width: 180px;
-  max-height: min(70vh, 360px);
+  max-height: min(
+    var(--radix-popover-content-available-height, 360px),
+    70vh,
+    360px
+  );
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   padding: var(--dropdown-padding);
   border-radius: var(--dropdown-radius);
   border: 1px solid var(--hairline-strong);

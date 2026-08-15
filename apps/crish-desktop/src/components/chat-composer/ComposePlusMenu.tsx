@@ -108,7 +108,7 @@ export const ComposePlusMenu: React.FC<Props> = ({
       align="start"
       side="top"
       sideOffset={6}
-      contentClassName={`${styles.root} ${styles.slim} no-drag`}
+      contentClassName={`${styles.plusMenu} no-drag`}
       renderItem={(item) => (
         <Tooltip key={item.id} content={item.hint || item.label}>
           <button

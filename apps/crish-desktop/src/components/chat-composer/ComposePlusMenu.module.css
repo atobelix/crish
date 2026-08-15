@@ -1,71 +1,71 @@
-.root {
-  position: absolute;
-  bottom: calc(100% + 8px);
-  left: 0;
-  display: flex;
-  align-items: flex-end;
-  gap: var(--space-1_5);
-  z-index: var(--z-dropdown-menu);
-  pointer-events: none;
+/**
+ * 输入区「+」菜单局部样式
+ * 遵循《Menu 容器样式与业务 contentClassName 隔离清洗契约》：
+ * - 仅提供良性尺寸修饰（min-width: 188px）
+ * - 剔除容器层叠/定位/指针污染
+ * - 菜单项保证 width: 100%，消除交叉轴虚位
+ */
+
+.plusMenu {
+  min-width: 188px;
 }
-.root > * {
-  pointer-events: auto;
-}
-.main {
-  width: 220px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-1_5);
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  animation: cds-popover-enter var(--transition-popover-enter) forwards;
-  transform-origin: bottom left;
-}
-.mainExit {
-  animation: cds-popover-exit var(--transition-popover-exit) forwards;
-}
+
 .item {
   display: flex;
   align-items: center;
-  gap: var(--space-2_5);
+  gap: var(--space-2);
   width: 100%;
   border: none;
   background: transparent;
   text-align: left;
-  padding: 9px 10px;
-  border-radius: var(--radius-lg);
+  padding: 6px 8px;
+  border-radius: var(--radius-md, 7px);
+  min-height: 34px;
   cursor: pointer;
   font-family: inherit;
   color: var(--text-primary);
   transition: background var(--transition-micro);
+  box-sizing: border-box;
 }
+
 .item:hover,
-.item.isActive {
-  background: var(--tint-hover);
+.item:focus-visible {
+  outline: none;
+  background: var(--bg-hover);
 }
+
+.item:focus-visible {
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+}
+
 .item:active {
   transform: scale(0.98);
   transition: transform var(--transition-press, 80ms ease-out);
 }
+
 .icon {
-  width: var(--control-height);
-  height: var(--control-height);
-  border-radius: var(--radius-lg);
-  background: var(--bg-secondary);
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-md);
+  background: var(--tint-hover);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
   flex-shrink: 0;
 }
-.item.isActive .icon,
-.item:hover .icon {
+
+.icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.item:hover .icon,
+.item:focus-visible .icon {
   background: var(--bg-active);
   color: var(--text-primary);
 }
+
 .text {
   flex: 1;
   min-width: 0;
@@ -73,71 +73,21 @@
   flex-direction: column;
   gap: 1px;
 }
+
 .title {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-xs-plus, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  line-height: var(--line-height-dense);
   color: var(--text-primary);
 }
+
 .desc {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
+  font-size: 10.5px;
+  line-height: var(--line-height-tight);
+  opacity: 0.9;
   color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
-}
-
-/* 閸旂姴褰块懣婊冨礋閻︼箒闊╅敍姘瑢 slash 閼挎粌宕熼崥灞俱€傜槐褍鍣鹃敍灞肩矌闂勫嫪娆㈢粵澶庝氦閸斻劋锟?*/
-.slim {
-  bottom: calc(100% + 6px);
-}
-.slim .main {
-  width: 188px;
-  max-height: min(340px, 60dvh);
-  overflow-y: auto;
-  padding: var(--space-1);
-  border-radius: var(--radius-xl);
-  gap: 1px;
-  border: var(--hairline-width, 1px) solid var(--tint-strong);
-  box-shadow:
-    0 10px 24px color-mix(in srgb, var(--shadow-color) 10%, transparent),
-    0 0 0 1px var(--tint-hover);
-  background: var(--bg-elevated, var(--bg-primary));
-}
-.slim .item {
-  padding: 6px 8px;
-  gap: var(--space-2);
-  border-radius: 7px;
-  min-height: 34px;
-}
-.slim .item:focus-visible {
-  outline: none;
-  background: var(--bg-hover);
-  /* 闁潧鎯婄拋鎹愵吀鐟欏嫯瀵栭敍姘舵暛锟?focus-visible 閺冩湹濞囬悽銊︾€ǎ?active border 锟?soft box shadow */
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
-}
-.slim .title {
-  font-size: var(--font-size-xs-plus);
-  font-weight: var(--font-weight-medium, 500);
-  line-height: var(--line-height-dense);
-  color: var(--text-primary);
-}
-.slim .desc {
-  display: block;
-  font-size: 10.5px;
-  line-height: var(--line-height-tight);
-  opacity: 0.9;
-  color: var(--text-tertiary);
-}
-.slim .icon {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-md);
-  background: var(--tint-hover);
-  color: var(--text-secondary);
-}
-.slim .icon svg {
-  width: 13px;
-  height: 13px;
 }

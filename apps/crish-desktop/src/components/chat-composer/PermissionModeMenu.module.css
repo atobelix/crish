@@ -11,7 +11,9 @@
   font-family: inherit;
   font-size: var(--font-size-sm);
   cursor: pointer;
-  transition: background var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
   white-space: nowrap;
   flex-shrink: 0;
   max-width: 100%;
@@ -49,7 +51,6 @@
   flex-shrink: 0;
 }
 
-
 .permPillChev {
   opacity: 0.5;
   transition: transform var(--transition-micro);
@@ -60,7 +61,6 @@
 }
 
 .permMenu {
-  position: fixed;
   z-index: var(--z-permission-menu);
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
@@ -71,7 +71,16 @@
   flex-direction: column;
   gap: 1px;
   animation: cds-popover-enter var(--transition-popover-enter) forwards;
-  transform-origin: top left;
+  transform-origin: var(--radix-popover-content-transform-origin, top left);
+  max-height: min(
+    var(--radix-popover-content-available-height, 360px),
+    70vh,
+    360px
+  );
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   box-sizing: border-box;
 }
 .permMenuExit {
@@ -93,7 +102,9 @@
   background: transparent;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
   text-align: left;
   white-space: nowrap;
   font-family: inherit;

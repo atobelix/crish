@@ -388,7 +388,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   const resolvedMaxHeight =
     maxHeight != null
       ? `min(${typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight}, var(--radix-popover-content-available-height, 360px), 70vh, 360px)`
-      : undefined;
+      : 'min(var(--radix-popover-content-available-height, 360px), 70vh, 360px)';
 
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>

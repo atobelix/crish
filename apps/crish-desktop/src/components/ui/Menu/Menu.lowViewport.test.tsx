@@ -46,28 +46,40 @@ function makeOptions(count: number) {
 describe('ui/Menu 低视口（600px 高）定位回归', () => {
   it('clampPosition 在 600px 高视口下纵向钳入（不溢出）', () => {
     // 菜单底部贴底：600 高视口 + 280 预估高 → 应上翻并钳入留白内
-    const pos = clampPosition(100, 500, 160, 280, { width: 1280, height: LOW_VH });
+    const pos = clampPosition(100, 500, 160, 280, {
+      width: 1280,
+      height: LOW_VH,
+    });
     expect(pos.y + 280).toBeLessThanOrEqual(LOW_VH - 8);
     expect(pos.y).toBeGreaterThanOrEqual(0);
     expect(pos.transformOrigin).toContain('bottom');
   });
 
   it('clampPosition 在 600px 高视口下超尺寸菜单不产生负坐标', () => {
-    const pos = clampPosition(100, 200, 160, 5000, { width: 1280, height: LOW_VH });
+    const pos = clampPosition(100, 200, 160, 5000, {
+      width: 1280,
+      height: LOW_VH,
+    });
     expect(pos.y).toBeGreaterThanOrEqual(0);
     expect(pos.y + 5000).toBeGreaterThanOrEqual(LOW_VH - 8);
   });
 
   it('基座 CSS 契约：menuContent 含低视口 max-height 钳制 + overflow-y 滚动', () => {
     const css = readCssText('Menu.module.css');
-    expect(css).toContain('max-height: min(70vh, 360px)');
+    expect(css).toContain('--radix-popover-content-available-height');
+    expect(css).toContain('70vh');
+    expect(css).toContain('360px');
     expect(css).toContain('overflow-y: auto');
   });
 
-  it('G15a 核销：ComposePlusMenu 已有视口钳制（max-height + overflow-y）', () => {
-    const css = readCssText('../../chat-composer/ComposePlusMenu.module.css');
-    expect(css).toContain('max-height: min(340px, 60dvh)');
-    expect(css).toContain('overflow-y: auto');
+  it('G15a 核销：ComposePlusMenu 基于 Menu 基座继承视口钳制（max-height + overflow-y）', () => {
+    const baseCss = readCssText('Menu.module.css');
+    expect(baseCss).toContain('--radix-popover-content-available-height');
+    expect(baseCss).toContain('overflow-y: auto');
+    const plusCss = readCssText(
+      '../../chat-composer/ComposePlusMenu.module.css'
+    );
+    expect(plusCss).toContain('.plusMenu');
   });
 
   it('600px 高视口下打开高选项菜单：popover 正常挂载且带 menuContent 钳制类', async () => {
@@ -78,7 +90,8 @@ describe('ui/Menu 低视口（600px 高）定位回归', () => {
       />
     );
     fireEvent.click(screen.getByText('低视口触发器'));
-    const content = (await screen.findByRole('menu')).parentElement as HTMLElement;
+    const content = (await screen.findByRole('menu'))
+      .parentElement as HTMLElement;
     expect(content).toBeTruthy();
     expect(content.classList.contains(styles.menuContent)).toBe(true);
     // 全部选项渲染（内容超视口时由 max-height + overflow-y 承接滚动）

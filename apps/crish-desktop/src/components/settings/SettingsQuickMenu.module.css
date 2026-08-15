@@ -17,7 +17,9 @@
   color: var(--text-secondary);
   font-family: inherit;
   font-size: var(--font-size-sm);
-  transition: background var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
 }
 
 .sidebarFooterSettings:hover {
@@ -42,7 +44,6 @@
 }
 
 .sbQuickMenu {
-  position: fixed;
   z-index: var(--z-settings-dialog);
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
@@ -54,6 +55,15 @@
   gap: var(--space-0_5);
   min-width: 220px;
   max-width: min(280px, calc(100vw - 16px));
+  max-height: min(
+    var(--radix-popover-content-available-height, 360px),
+    70vh,
+    360px
+  );
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   box-sizing: border-box;
 }
 
@@ -108,7 +118,9 @@
   background: transparent;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background var(--transition-micro), color var(--transition-micro);
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
   text-align: left;
   white-space: nowrap;
   font-family: inherit;
