@@ -30,7 +30,10 @@ export interface ChatHeaderControlsProps {
   needsModelSetup: boolean;
 }
 
-export function useModelSelection(appSettings: AppSettings | undefined, projectTick: number) {
+export function useModelSelection(
+  appSettings: AppSettings | undefined,
+  projectTick: number
+) {
   const [engineModel, setEngineModel] = useState('');
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
@@ -136,9 +139,13 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
               : '服务商与模型（可在设置中更改）'
           }
         >
-          <div
+          <button
+            type="button"
             className={`${styles.modelBadge} ${showModelDropdown ? styles.active : ''}`}
             data-testid="model-selector-button"
+            aria-haspopup="menu"
+            aria-expanded={showModelDropdown}
+            aria-label="选择模型"
             style={{ cursor: 'pointer', position: 'relative' }}
           >
             <span
@@ -161,7 +168,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
               size={14}
               style={{ opacity: 0.6, marginLeft: 6, flexShrink: 0 }}
             />
-          </div>
+          </button>
         </Tooltip>
       </ModelBadgePickerMenu>
     </Suspense>

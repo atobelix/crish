@@ -17,6 +17,16 @@ import { ReactRenderer } from '@tiptap/react';
 import { TiptapSlashMenu } from './TiptapSlashMenu';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 
+function runEditorCommand(
+  editor: any,
+  range: any,
+  action: (chain: any) => any
+) {
+  const chain = editor.chain().focus();
+  if (range) chain.deleteRange(range);
+  action(chain).run();
+}
+
 const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
   {
     id: 'heading-1',
@@ -24,18 +34,10 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     description: 'Large section heading',
     iconName: 'Heading1',
     keywords: ['h1', 'title', 'heading'],
-    command: ({ editor, range }: { editor: any; range?: any }) => {
-      if (range) {
-        editor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .setNode('heading', { level: 1 })
-          .run();
-      } else {
-        editor.chain().focus().setNode('heading', { level: 1 }).run();
-      }
-    },
+    command: ({ editor, range }: any) =>
+      runEditorCommand(editor, range, (c) =>
+        c.setNode('heading', { level: 1 })
+      ),
   },
   {
     id: 'heading-2',
@@ -43,18 +45,10 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     description: 'Medium section heading',
     iconName: 'Heading2',
     keywords: ['h2', 'subtitle', 'heading'],
-    command: ({ editor, range }: { editor: any; range?: any }) => {
-      if (range) {
-        editor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .setNode('heading', { level: 2 })
-          .run();
-      } else {
-        editor.chain().focus().setNode('heading', { level: 2 }).run();
-      }
-    },
+    command: ({ editor, range }: any) =>
+      runEditorCommand(editor, range, (c) =>
+        c.setNode('heading', { level: 2 })
+      ),
   },
   {
     id: 'heading-3',
@@ -62,18 +56,10 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     description: 'Small section heading',
     iconName: 'Heading3',
     keywords: ['h3', 'subheading', 'heading'],
-    command: ({ editor, range }: { editor: any; range?: any }) => {
-      if (range) {
-        editor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .setNode('heading', { level: 3 })
-          .run();
-      } else {
-        editor.chain().focus().setNode('heading', { level: 3 }).run();
-      }
-    },
+    command: ({ editor, range }: any) =>
+      runEditorCommand(editor, range, (c) =>
+        c.setNode('heading', { level: 3 })
+      ),
   },
   {
     id: 'bullet-list',
@@ -81,13 +67,8 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     description: 'Create a simple bulleted list',
     iconName: 'List',
     keywords: ['ul', 'bullet', 'list'],
-    command: ({ editor, range }: { editor: any; range?: any }) => {
-      if (range) {
-        editor.chain().focus().deleteRange(range).toggleBulletList().run();
-      } else {
-        editor.chain().focus().toggleBulletList().run();
-      }
-    },
+    command: ({ editor, range }: any) =>
+      runEditorCommand(editor, range, (c) => c.toggleBulletList()),
   },
   {
     id: 'numbered-list',
@@ -95,13 +76,8 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     description: 'Create a numbered list',
     iconName: 'ListOrdered',
     keywords: ['ol', 'number', 'list'],
-    command: ({ editor, range }: { editor: any; range?: any }) => {
-      if (range) {
-        editor.chain().focus().deleteRange(range).toggleOrderedList().run();
-      } else {
-        editor.chain().focus().toggleOrderedList().run();
-      }
-    },
+    command: ({ editor, range }: any) =>
+      runEditorCommand(editor, range, (c) => c.toggleOrderedList()),
   },
   {
     id: 'task-list',
@@ -109,13 +85,8 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     description: 'Create a checklist with task items',
     iconName: 'CheckSquare',
     keywords: ['todo', 'task', 'checklist'],
-    command: ({ editor, range }: { editor: any; range?: any }) => {
-      if (range) {
-        editor.chain().focus().deleteRange(range).toggleTaskList().run();
-      } else {
-        editor.chain().focus().toggleTaskList().run();
-      }
-    },
+    command: ({ editor, range }: any) =>
+      runEditorCommand(editor, range, (c) => c.toggleTaskList()),
   },
   {
     id: 'code-block',
@@ -123,13 +94,8 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     description: 'Display code with syntax highlighting',
     iconName: 'Code',
     keywords: ['code', 'pre', 'block'],
-    command: ({ editor, range }: { editor: any; range?: any }) => {
-      if (range) {
-        editor.chain().focus().deleteRange(range).toggleCodeBlock().run();
-      } else {
-        editor.chain().focus().toggleCodeBlock().run();
-      }
-    },
+    command: ({ editor, range }: any) =>
+      runEditorCommand(editor, range, (c) => c.toggleCodeBlock()),
   },
   {
     id: 'blockquote',
@@ -137,34 +103,17 @@ const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
     description: 'Capture a quote or reference text',
     iconName: 'Quote',
     keywords: ['quote', 'cite', 'blockquote'],
-    command: ({ editor, range }: { editor: any; range?: any }) => {
-      if (range) {
-        editor.chain().focus().deleteRange(range).toggleBlockquote().run();
-      } else {
-        editor.chain().focus().toggleBlockquote().run();
-      }
-    },
+    command: ({ editor, range }: any) =>
+      runEditorCommand(editor, range, (c) => c.toggleBlockquote()),
   },
-  // E2 F4：手动上下文压缩（/compact [目标 token 数]；会话级副作用命令，
-  // 发送时经 resolveSlashCommand → useSlashSend 调 daemon core_compact_now）
   {
     id: 'compact',
     title: 'Compact',
     description: '手动压缩上下文（/compact [目标 token 数]）',
     iconName: 'Compress',
     keywords: ['compact', '压缩', 'compress', '压缩上下文'],
-    command: ({ editor, range }: { editor: any; range?: any }) => {
-      if (range) {
-        editor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .insertContent('/compact ')
-          .run();
-      } else {
-        editor.chain().focus().insertContent('/compact ').run();
-      }
-    },
+    command: ({ editor, range }: any) =>
+      runEditorCommand(editor, range, (c) => c.insertContent('/compact ')),
   },
 ];
 
@@ -247,6 +196,58 @@ type SuggestionRenderCtx = {
 };
 
 /**
+ * 测量指定 ProseMirror 文档位置处的真实物理 LineBox 包围盒。
+ * 恢复真实高度、宽度与视口顶/底/左/右坐标，彻底消除 0D 点矩形坍缩。
+ *
+ * @param view ProseMirror EditorView 或具备 coordsAtPos 的视图对象
+ * @param pos 文档绝对位置索引
+ * @param side 亲和性：1 表示向后（下一字形左侧），-1 表示向前（上一字形右侧）
+ * @returns 包含真实行高的 DOMRect 视口包围盒
+ */
+export function measureCursorLineBox(
+  view:
+    | {
+        coordsAtPos: (
+          pos: number,
+          side?: number
+        ) => { top: number; bottom: number; left: number; right?: number };
+      }
+    | null
+    | undefined,
+  pos: number,
+  side: number = 1
+): DOMRect {
+  if (!view || typeof view.coordsAtPos !== 'function') {
+    return new DOMRect(0, 0, 0, 0);
+  }
+
+  try {
+    const coords = view.coordsAtPos(pos, side);
+    const top = coords.top;
+    const bottom = coords.bottom;
+
+    // 物理行高守卫：兜底最小行高 16px（防止空文档测量未就绪）
+    const measuredHeight = bottom - top;
+    const height = Math.max(
+      16,
+      Number.isFinite(measuredHeight) ? measuredHeight : 20
+    );
+
+    // 水平坐标与光标宽度（Caret 宽度至少 2px，保证包围盒有物理体积）
+    const left = coords.left;
+    const measuredWidth = (coords.right ?? coords.left) - coords.left;
+    const width = Math.max(
+      2,
+      Number.isFinite(measuredWidth) ? measuredWidth : 2
+    );
+
+    return new DOMRect(left, top, width, height);
+  } catch {
+    return new DOMRect(0, 0, 0, 0);
+  }
+}
+
+/**
  * Suggestion render 生命周期工厂：两个 suggestion 实例共用同一套
  * ReactRenderer 创建/更新/销毁与编辑器 combobox aria 同步（T8），
  * 避免生命周期逻辑双份漂移。
@@ -255,6 +256,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
   return () => {
     let component: ReactRenderer | null = null;
     let propsRef: any = null;
+    let lastCachedBox: DOMRect | null = null;
 
     const buildProps = (props: any) => ({
       items: props.items,
@@ -268,14 +270,23 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         component?.destroy();
         component = null;
       },
-      clientRect:
-        props.clientRect ||
-        (() => {
-          const view = props.editor?.view;
-          if (!view || !props.range) return null;
-          const coords = view.coordsAtPos(props.range.from);
-          return new DOMRect(coords.left, coords.bottom, 0, 0);
-        }),
+      clientRect: () => {
+        const view = props.editor?.view;
+        if (!view || !props.range) return lastCachedBox;
+
+        // CJK 合成态下坐标保持静止，返回稳定缓存
+        if (view.composing || (view as any).input?.composing) {
+          return lastCachedBox;
+        }
+
+        try {
+          const box = measureCursorLineBox(view, props.range.from, 1);
+          lastCachedBox = box;
+          return box;
+        } catch {
+          return lastCachedBox;
+        }
+      },
       label: ctx.label,
       emptyMessage: ctx.emptyMessage,
       listboxId: ctx.listboxId,
@@ -320,6 +331,16 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
 
       onKeyDown(props: any) {
         if (props.event.key === 'Escape') {
+          // IME 合成态下绝不拦截 Esc（Tri-Shield 防护）
+          if (
+            props.event.isComposing ||
+            (props.event as any).nativeEvent?.isComposing ||
+            props.event.keyCode === 229 ||
+            props.event.key === 'Process'
+          ) {
+            return false;
+          }
+
           // 兜底退出建议状态（Radix 弹层 preventDefault 时 PM 链被跳过，
           // 主路径在 TiptapEditorField 的 capture 监听；此处保证非 Radix 环境一致）
           if (component) {
@@ -345,6 +366,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         component?.destroy();
         component = null;
         propsRef = null;
+        lastCachedBox = null;
       },
     };
   };

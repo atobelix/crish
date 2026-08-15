@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import { Menu } from '../ui';
-import { measureMenu } from '../ui/Menu/position';
+import { calculateMenuPosition, measureMenu } from '../ui/Menu/position';
 import styles from './SidebarContextMenus.module.css';
 
 type FlyKey = 'sort' | 'group' | 'filter' | null;
@@ -40,13 +40,54 @@ const FlyoutRow: React.FC<{
   onFlyoutKeyDown,
   children,
 }) => {
+  const localRowElRef = useRef<HTMLDivElement | null>(null);
+  const localFlyoutElRef = useRef<HTMLDivElement | null>(null);
+  const [flipLeft, setFlipLeft] = useState(false);
+
+  const handleRowRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      localRowElRef.current = el;
+      rowRef(el);
+    },
+    [rowRef]
+  );
+
+  const handleFlyoutRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      localFlyoutElRef.current = el;
+      flyoutRef(el);
+    },
+    [flyoutRef]
+  );
+
+  useLayoutEffect(() => {
+    if (!open || !localRowElRef.current) return;
+    const rowRect = localRowElRef.current.getBoundingClientRect();
+    const flyoutWidth = localFlyoutElRef.current?.offsetWidth || 148;
+    const flyoutHeight = localFlyoutElRef.current?.offsetHeight || 100;
+    const pos = calculateMenuPosition({
+      anchor: {
+        x: rowRect.right,
+        y: rowRect.top,
+        width: rowRect.width,
+        height: rowRect.height,
+      },
+      menu: { width: flyoutWidth, height: flyoutHeight },
+      preferredSide: 'right',
+      preferredAlign: 'start',
+    });
+    setFlipLeft(
+      pos.isFlippedX || rowRect.right + flyoutWidth > window.innerWidth - 8
+    );
+  }, [open]);
+
   return (
     <div
       className={`${styles.sortFilterRow} ${open ? styles.isOpen : ''}`}
       role="menuitem"
       tabIndex={0}
       data-fly-row={type}
-      ref={rowRef}
+      ref={handleRowRef}
       aria-haspopup="true"
       aria-expanded={open}
       onMouseEnter={onFlyEnter}
@@ -62,8 +103,8 @@ const FlyoutRow: React.FC<{
       />
       {open ? (
         <div
-          ref={flyoutRef}
-          className={styles.sortFilterFlyout}
+          ref={handleFlyoutRef}
+          className={`${styles.sortFilterFlyout} ${flipLeft ? styles.flipLeft : ''}`}
           role="group"
           aria-label={label}
           onMouseEnter={onFlyoutEnter}
@@ -159,11 +200,13 @@ export const ContextMenuFlyout: React.FC<{
 
   // F7-F12：flyout/入口行 DOM 引用（键盘导航焦点落点；sortMenuRef 由
   // 外部持有但未挂载到元素，不可依赖）
-  const flyoutRefs = useRef<Record<NonNullable<FlyKey>, HTMLDivElement | null>>({
-    sort: null,
-    group: null,
-    filter: null,
-  });
+  const flyoutRefs = useRef<Record<NonNullable<FlyKey>, HTMLDivElement | null>>(
+    {
+      sort: null,
+      group: null,
+      filter: null,
+    }
+  );
   const rowRefs = useRef<Record<NonNullable<FlyKey>, HTMLDivElement | null>>({
     sort: null,
     group: null,
@@ -179,10 +222,9 @@ export const ContextMenuFlyout: React.FC<{
         e.stopPropagation();
         setFly(type);
         requestAnimationFrame(() => {
-          const first =
-            flyoutRefs.current[type]?.querySelector<HTMLElement>(
-              '[role="menuitemradio"]'
-            );
+          const first = flyoutRefs.current[type]?.querySelector<HTMLElement>(
+            '[role="menuitemradio"]'
+          );
           first?.focus();
         });
       }
@@ -259,13 +301,13 @@ export const ContextMenuFlyout: React.FC<{
       onOpenChange={(open) => {
         if (!open) onCloseSortDropdown();
       }}
-      trigger={<div style={{ display: 'none' }} />}
+      anchor={sortTriggerRef}
       align="start"
       side="bottom"
       sideOffset={4}
       contentClassName={`${styles.sortFilterMenu} ${styles.open} no-drag`}
       contentStyle={
-        sortDropdownCoords
+        !sortTriggerRef?.current && sortDropdownCoords
           ? {
               position: 'fixed',
               left: sortDropdownCoords.x,

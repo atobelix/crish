@@ -28,6 +28,7 @@ export interface SidebarSessionListProps {
   onToggleProjectsSection: () => void;
   onOpenProject: (id: string) => void;
   onSortBtnClick: (e: React.MouseEvent) => void;
+  sortTriggerRef?: React.RefObject<HTMLButtonElement | null>;
   onNewSession: () => void;
   /** 添加本地项目（文件夹选择） */
   onAddProject: () => void;

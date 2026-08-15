@@ -2,7 +2,11 @@ import React, { useCallback, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ModelBadgePickerMenu.module.css';
 import { activateProfileModel } from '../../api/providerProfiles';
-import { formatModelDisplayName, getModelMeta, listPickerProfiles } from '../../api/modelCatalog';
+import {
+  formatModelDisplayName,
+  getModelMeta,
+  listPickerProfiles,
+} from '../../api/modelCatalog';
 import { openSettings } from '../../api/storeAccess';
 import { Menu } from '../ui';
 
@@ -29,7 +33,9 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   open = true,
   children,
 }) => {
-  const [expandedProfileId, setExpandedProfileId] = useState<string | null>(null);
+  const [expandedProfileId, setExpandedProfileId] = useState<string | null>(
+    null
+  );
   const enterTimerRef = useRef<number | undefined>(undefined);
   const leaveTimerRef = useRef<number | undefined>(undefined);
   const rowRefsRef = useRef<Record<string, HTMLButtonElement | null>>({});
@@ -57,9 +63,9 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
         if (!nextOpen) onClose();
       }}
       trigger={children}
-      side="top"
-      align="end"
-      sideOffset={6}
+      side="bottom"
+      align="start"
+      sideOffset={4}
       contentClassName={styles.mbMenu}
       onEscapeKeyDown={(event) => {
         // 逐级关闭第一环：子菜单打开时 Esc 只关子菜单（Radix document 捕获
@@ -107,7 +113,9 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                 }}
               >
                 <span className={styles.mbRowText}>{p.name}</span>
-                {hasModels && <Lucide.ChevronLeft size={14} className={styles.mbChevron} />}
+                {hasModels && (
+                  <Lucide.ChevronLeft size={14} className={styles.mbChevron} />
+                )}
               </button>
 
               {isExpanded && hasModels && (
@@ -119,7 +127,9 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                     // 子菜单内漫游：↑↓ 循环 / Home / End（Esc 走 Menu onEscapeKeyDown
                     // 捕获通道，见上——bubble 阶段 stopPropagation 挡不住 Radix）
                     const items = Array.from(
-                      e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
+                      e.currentTarget.querySelectorAll<HTMLButtonElement>(
+                        '[role="menuitem"]'
+                      )
                     );
                     if (items.length === 0) return;
                     if (
@@ -131,11 +141,18 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                       e.preventDefault();
                       e.stopPropagation();
                       const active = document.activeElement;
-                      const cur = active instanceof HTMLButtonElement ? items.indexOf(active) : -1;
+                      const cur =
+                        active instanceof HTMLButtonElement
+                          ? items.indexOf(active)
+                          : -1;
                       let next: number;
-                      if (e.key === 'ArrowDown') next = cur < 0 ? 0 : (cur + 1) % items.length;
+                      if (e.key === 'ArrowDown')
+                        next = cur < 0 ? 0 : (cur + 1) % items.length;
                       else if (e.key === 'ArrowUp')
-                        next = cur < 0 ? items.length - 1 : (cur - 1 + items.length) % items.length;
+                        next =
+                          cur < 0
+                            ? items.length - 1
+                            : (cur - 1 + items.length) % items.length;
                       else if (e.key === 'Home') next = 0;
                       else next = items.length - 1;
                       items[next]?.focus();
@@ -157,8 +174,12 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                           onClose();
                         }}
                       >
-                        <span className={styles.mbSubRowText}>{formatModelDisplayName(p.id, m)}</span>
-                        {isSelected && <Lucide.Check size={14} className={styles.mbCheck} />}
+                        <span className={styles.mbSubRowText}>
+                          {formatModelDisplayName(p.id, m)}
+                        </span>
+                        {isSelected && (
+                          <Lucide.Check size={14} className={styles.mbCheck} />
+                        )}
                       </button>
                     );
                   })}

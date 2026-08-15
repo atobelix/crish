@@ -18,7 +18,11 @@
 .popoverContent {
   z-index: var(--z-popover);
   width: 256px;
-  max-height: min(320px, 40vh);
+  max-height: min(
+    var(--radix-popover-content-available-height, 320px),
+    70vh,
+    320px
+  );
   overflow-y: auto;
   background: var(--bg-elevated);
   border: var(--hairline-width, 1px) solid var(--border-color);
@@ -28,6 +32,7 @@
   box-shadow: none !important;
   animation: popoverFadeIn var(--transition-fast);
   scrollbar-width: thin;
+  -webkit-app-region: no-drag;
 }
 
 .menuList {

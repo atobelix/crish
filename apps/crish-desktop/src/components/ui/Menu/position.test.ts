@@ -23,7 +23,10 @@ describe('ui/Menu clampPosition', () => {
   });
 
   it('超出视口右下角时钳回并翻转到另一侧', () => {
-    const pos = clampPosition(99999, 99999, 160, 200, { width: VW, height: VH });
+    const pos = clampPosition(99999, 99999, 160, 200, {
+      width: VW,
+      height: VH,
+    });
     expect(pos.x).toBe(VW - 160 - MENU_EDGE_PAD);
     expect(pos.y).toBe(VH - 200 - MENU_EDGE_PAD);
     expect(pos.transformOrigin).toBe('bottom right');
@@ -37,13 +40,19 @@ describe('ui/Menu clampPosition', () => {
   });
 
   it('右侧贴边时水平左翻（originX=right）', () => {
-    const pos = clampPosition(VW - 100, 50, 160, 200, { width: VW, height: VH });
+    const pos = clampPosition(VW - 100, 50, 160, 200, {
+      width: VW,
+      height: VH,
+    });
     expect(pos.x).toBe(VW - 100 - 160);
     expect(pos.transformOrigin).toContain('right');
   });
 
   it('底部贴边时垂直上翻（originY=bottom）', () => {
-    const pos = clampPosition(100, VH - 100, 160, 200, { width: VW, height: VH });
+    const pos = clampPosition(100, VH - 100, 160, 200, {
+      width: VW,
+      height: VH,
+    });
     expect(pos.y).toBe(VH - 100 - 200);
     expect(pos.transformOrigin).toContain('bottom');
   });
@@ -82,7 +91,14 @@ describe('ui/Menu measureMenu（真实尺寸再钳位）', () => {
   function fakeEl(width: number, height: number): HTMLElement {
     return {
       getBoundingClientRect: () =>
-        ({ width, height, top: 0, left: 0, right: width, bottom: height } as DOMRect),
+        ({
+          width,
+          height,
+          top: 0,
+          left: 0,
+          right: width,
+          bottom: height,
+        }) as DOMRect,
     } as HTMLElement;
   }
 
@@ -116,5 +132,62 @@ describe('ui/Menu measureMenu（真实尺寸再钳位）', () => {
     expect(pos.x).toBe(1280 - MENU_EST_WIDTH - MENU_EDGE_PAD);
     expect(pos.y).toBe(800 - MENU_EST_HEIGHT - MENU_EDGE_PAD);
     expect(pos.transformOrigin).toBe('bottom right');
+  });
+});
+
+describe('ui/Menu calculateMenuPosition（不可变纯函数单源定位）', () => {
+  it('保持输入 anchor 不可变', () => {
+    const anchor = Object.freeze({ x: 500, y: 300, width: 100, height: 30 });
+    const pos = calculateMenuPosition({
+      anchor,
+      menu: { width: 180, height: 240 },
+      viewport: { width: VW, height: VH },
+      preferredSide: 'bottom',
+      preferredAlign: 'start',
+    });
+    expect(anchor.x).toBe(500);
+    expect(anchor.y).toBe(300);
+    expect(pos.x).toBe(500);
+    expect(pos.y).toBe(330);
+    expect(pos.isFlippedX).toBe(false);
+    expect(pos.isFlippedY).toBe(false);
+  });
+
+  it('右边缘碰撞自动向左展开（isFlippedX = true）', () => {
+    const pos = calculateMenuPosition({
+      anchor: { x: 1200, y: 100, width: 60, height: 30 },
+      menu: { width: 180, height: 200 },
+      viewport: { width: VW, height: VH },
+      preferredSide: 'bottom',
+      preferredAlign: 'start',
+    });
+    expect(pos.isFlippedX).toBe(true);
+    expect(pos.x).toBe(1200 + 60 - 180);
+    expect(pos.x + 180).toBeLessThanOrEqual(VW - MENU_EDGE_PAD);
+  });
+
+  it('底边缘碰撞自动向上翻转（isFlippedY = true）', () => {
+    const pos = calculateMenuPosition({
+      anchor: { x: 100, y: 700, width: 60, height: 30 },
+      menu: { width: 180, height: 200 },
+      viewport: { width: VW, height: VH },
+      preferredSide: 'bottom',
+    });
+    expect(pos.isFlippedY).toBe(true);
+    expect(pos.y).toBe(700 - 200);
+    expect(pos.placement.side).toBe('top');
+  });
+
+  it('侧向展开（preferredSide: right）在右侧不足时翻向左侧', () => {
+    const pos = calculateMenuPosition({
+      anchor: { x: 1150, y: 200, width: 100, height: 36 },
+      menu: { width: 160, height: 120 },
+      viewport: { width: VW, height: VH },
+      preferredSide: 'right',
+      preferredAlign: 'start',
+    });
+    expect(pos.isFlippedX).toBe(true);
+    expect(pos.placement.side).toBe('left');
+    expect(pos.x).toBe(1150 - 160);
   });
 });

@@ -7,7 +7,13 @@
  * CI Guardrail: Max 500 lines of effective code
  */
 
-import React, { forwardRef, useEffect, useImperativeHandle, useState, useRef } from 'react';
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useState,
+  useRef,
+} from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import {
   Heading1,
@@ -26,12 +32,26 @@ import {
   Globe,
   PlayCircle,
   Sparkles,
+  Shrink,
+  Minimize2,
   AtSign,
+  FileText,
+  Bot,
+  Search,
+  Eraser,
+  Terminal,
 } from 'lucide-react';
 import type { SlashMenuProps, SlashCommandItem } from './composerTypes';
 import styles from './TiptapSlashMenu.module.css';
 
-const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
+const ICON_MAP: Record<
+  string,
+  React.ComponentType<{
+    size?: number;
+    className?: string;
+    'aria-hidden'?: boolean;
+  }>
+> = {
   Heading1,
   Heading2,
   Heading3,
@@ -40,7 +60,6 @@ const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: 
   CheckSquare,
   Code,
   Quote,
-  // 宿主系统命令图标（/goal /learn /schedule /teamwork /browser /simulate 等）
   Target,
   BookOpen,
   Calendar,
@@ -48,12 +67,66 @@ const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: 
   Globe,
   PlayCircle,
   Sparkles,
-  // 提及候选人图标（@ 触发）
+  Compress: Shrink,
+  Shrink,
+  Minimize2,
   AtSign,
+  FileText,
+  Bot,
+  Search,
+  Eraser,
+  Terminal,
+  HelpCircle,
 };
 
 export interface SlashMenuRefHandle {
   onKeyDown: (props: { event: KeyboardEvent }) => boolean;
+}
+
+/**
+ * 严格判定 DOMRect / ClientRect 几何有效性。
+ * 只要坐标为有限浮点数且尺寸非负，即为合法视口包围盒。
+ * (0, 0, 0, 0) 也是合法的几何点，绝不可用 !== 0 拦截！
+ */
+export function isValidClientRect(rect: unknown): rect is DOMRect {
+  if (!rect || typeof rect !== 'object') return false;
+  const r = rect as DOMRect;
+  return (
+    typeof r.top === 'number' &&
+    Number.isFinite(r.top) &&
+    typeof r.left === 'number' &&
+    Number.isFinite(r.left) &&
+    typeof r.width === 'number' &&
+    Number.isFinite(r.width) &&
+    r.width >= 0 &&
+    typeof r.height === 'number' &&
+    Number.isFinite(r.height) &&
+    r.height >= 0
+  );
+}
+
+/**
+ * 判定光标是否处于编辑器可见滚动视口内部。
+ * 若光标完全滚出可视区域，浮层应被隐藏或静默收起。
+ */
+export function isCursorVisibleInField(
+  cursorRect: DOMRect,
+  fieldElement: HTMLElement | null | undefined
+): boolean {
+  if (!fieldElement) return true;
+  try {
+    const fieldRect = fieldElement.getBoundingClientRect();
+    // 若容器尚未完成排版布局（如 jsdom 或未挂载零尺寸），放行
+    if (fieldRect.width === 0 && fieldRect.height === 0) {
+      return true;
+    }
+    const tolerance = 4; // 容差 4px（允许字形顶底微量溢出）
+    const isAbove = cursorRect.bottom < fieldRect.top - tolerance;
+    const isBelow = cursorRect.top > fieldRect.bottom + tolerance;
+    return !isAbove && !isBelow;
+  } catch {
+    return true;
+  }
 }
 
 export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
@@ -90,11 +163,15 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       const dom = editorAny?.view?.dom as HTMLElement | undefined;
       if (!dom) return;
       const optionId = `${listboxId ?? 'tiptap-suggestion'}-opt-${selectedIndex}`;
-      if (items.length > 0) dom.setAttribute('aria-activedescendant', optionId);
+      if (items && items.length > 0) {
+        dom.setAttribute('aria-activedescendant', optionId);
+      }
       return () => {
-        if (!editorAny?.isDestroyed) dom.removeAttribute('aria-activedescendant');
+        if (!editorAny?.isDestroyed) {
+          dom.removeAttribute('aria-activedescendant');
+        }
       };
-    }, [selectedIndex, items.length, listboxId, props.editor]);
+    }, [selectedIndex, items, listboxId, props.editor]);
 
     const selectItem = (index: number) => {
       const item = items[index];
@@ -105,7 +182,27 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
 
     useImperativeHandle(ref, () => ({
       onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-        if (!items || items.length === 0) return false;
+        // ──────────────────────────────────────────────────────────
+        // 【核心铁律 1】：CJK IME 组合态绝对放行
+        // 只要输入法处于合成状态，放行一切按键，严禁 preventDefault！
+        // ──────────────────────────────────────────────────────────
+        if (
+          event.isComposing ||
+          (event as any).nativeEvent?.isComposing ||
+          event.keyCode === 229 ||
+          event.key === 'Process'
+        ) {
+          return false;
+        }
+
+        if (!items || items.length === 0) {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            if (onClose) onClose();
+            return true;
+          }
+          return false;
+        }
 
         if (event.key === 'ArrowDown') {
           event.preventDefault();
@@ -125,6 +222,12 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
           return true;
         }
 
+        if (event.key === 'Tab') {
+          event.preventDefault();
+          selectItem(selectedIndex);
+          return true;
+        }
+
         if (event.key === 'Escape') {
           event.preventDefault();
           if (onClose) onClose();
@@ -135,19 +238,33 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       },
     }));
 
-    if (!isOpen || !items) {
+    const editorDom = (props.editor as any)?.view?.dom as
+      HTMLElement | undefined;
+    const rawRect =
+      typeof clientRect === 'function' ? clientRect() : clientRect;
+
+    // ──────────────────────────────────────────────────────────
+    // 【核心铁律 2】：物理拔除 (rawRect.top !== 0 || ...) 毒代码
+    // 采用严格的 isValidClientRect 进行有限浮点数判定
+    // ──────────────────────────────────────────────────────────
+    const rect = isValidClientRect(rawRect)
+      ? rawRect
+      : editorDom?.getBoundingClientRect?.() || new DOMRect(0, 0, 0, 0);
+
+    // 光标可视性判定（防止多行滚动出界脱缰漂浮）
+    const isVisible = isCursorVisibleInField(rect, editorDom);
+
+    if (!isOpen || !items || !isVisible) {
       return null;
     }
 
-    const rawRect = typeof clientRect === 'function' ? clientRect() : clientRect;
-    const rect = rawRect || new DOMRect(0, 0, 0, 0);
-    // 锚点层仅用于坐标定位（隐藏、不响应指针），z 轴走 var(--z-popover) token（不硬编码数值）
+    // 锚点层仅用于坐标定位（隐藏、不响应指针），z 轴走 var(--z-popover) token
     const triggerStyle: React.CSSProperties = {
       position: 'fixed',
-      top: rect.top,
-      left: rect.left,
-      width: rect.width || 1,
-      height: rect.height || 1,
+      top: `${rect.top}px`,
+      left: `${rect.left}px`,
+      width: `${Math.max(1, rect.width)}px`,
+      height: `${Math.max(1, rect.height)}px`,
       pointerEvents: 'none',
       visibility: 'hidden',
       zIndex: 'var(--z-popover)',
@@ -161,9 +278,11 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
         <Popover.Portal>
           <Popover.Content
             className={styles.popoverContent}
-            side="bottom"
+            side="top"
             align="start"
-            sideOffset={4}
+            sideOffset={8}
+            avoidCollisions={true}
+            collisionPadding={12}
             onOpenAutoFocus={(e) => e.preventDefault()}
             onCloseAutoFocus={(e) => e.preventDefault()}
           >
@@ -186,13 +305,19 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
                   return (
                     <button
                       key={item.id || item.title}
-                      ref={(el) => { itemRefs.current[index] = el; }}
+                      ref={(el) => {
+                        itemRefs.current[index] = el;
+                      }}
                       type="button"
                       role="option"
                       id={`${listboxId ?? 'tiptap-suggestion'}-opt-${index}`}
                       aria-selected={isActive}
                       className={`${styles.menuItem} ${isActive ? styles.menuItemActive : ''}`}
-                      onClick={() => selectItem(index)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        selectItem(index);
+                      }}
                       onMouseEnter={() => setSelectedIndex(index)}
                     >
                       <div className={styles.iconWrapper}>

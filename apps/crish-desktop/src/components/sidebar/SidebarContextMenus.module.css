@@ -10,16 +10,17 @@
   display: none;
   flex-direction: column;
   box-sizing: border-box;
+  -webkit-app-region: no-drag;
 }
 
 .contextMenu.open {
   display: flex;
-  animation: cds-popover-enter var(--transition-popover-enter) forwards;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
   transform-origin: top left;
 }
 .contextMenuExit {
   display: flex;
-  animation: cds-popover-exit var(--transition-popover-exit) forwards;
+  animation: crish-popover-exit var(--transition-popover-exit) forwards;
 }
 
 .contextMenuItem {
@@ -81,6 +82,13 @@
   flex-direction: column;
   gap: var(--space-0_5);
   box-sizing: border-box;
+  max-height: min(
+    var(--radix-popover-content-available-height, 360px),
+    70vh,
+    360px
+  );
+  overflow-y: auto;
+  -webkit-app-region: no-drag;
 }
 
 .sortFilterMenu.open {
@@ -143,6 +151,19 @@
   flex-direction: column;
   gap: var(--space-0_5);
   z-index: var(--z-sticky-bar);
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  max-height: min(
+    var(--radix-popover-content-available-height, 280px),
+    70vh,
+    280px
+  );
+  overflow-y: auto;
+  -webkit-app-region: no-drag;
+}
+
+.sortFilterFlyout.flipLeft {
+  left: auto;
+  right: calc(100% + 6px);
 }
 
 .sortFilterOption {

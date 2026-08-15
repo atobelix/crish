@@ -30,6 +30,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
     onToggleProjectsSection,
     onOpenProject,
     onSortBtnClick,
+    sortTriggerRef,
     onMoveSessionRealtime,
   } = props;
 
@@ -143,6 +144,7 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
             showAllGeneralSessions={showAllGeneralSessions}
             onToggleGeneral={onToggleGeneral}
             onSortBtnClick={onSortBtnClick}
+            sortTriggerRef={sortTriggerRef}
             onToggleShowAllGeneralSessions={toggleShowAllGeneralSessions}
             onMoveSessionRealtime={onMoveSessionRealtime}
             renderSessionItem={renderSessionItem}

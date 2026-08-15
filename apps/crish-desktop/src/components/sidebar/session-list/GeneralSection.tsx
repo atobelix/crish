@@ -18,6 +18,7 @@ export interface GeneralSectionProps {
   showAllGeneralSessions: boolean;
   onToggleGeneral: () => void;
   onSortBtnClick: (e: React.MouseEvent) => void;
+  sortTriggerRef?: React.RefObject<HTMLButtonElement | null>;
   onToggleShowAllGeneralSessions: () => void;
   /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
@@ -38,6 +39,7 @@ export function GeneralSection({
   showAllGeneralSessions,
   onToggleGeneral,
   onSortBtnClick,
+  sortTriggerRef,
   onToggleShowAllGeneralSessions,
   onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
@@ -74,6 +76,7 @@ export function GeneralSection({
           </button>
           <Tooltip content="排序与过滤">
             <Button
+              ref={sortTriggerRef}
               type="button"
               variant="ghost"
               size="sm"
