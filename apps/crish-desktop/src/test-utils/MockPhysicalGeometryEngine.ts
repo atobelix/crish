@@ -302,6 +302,23 @@ export class MockPhysicalGeometryEngine {
         return new DOMRect(0, 0, 100, 30);
       };
     }
+
+    if (typeof HTMLElement !== 'undefined') {
+      Object.defineProperty(HTMLElement.prototype, 'offsetWidth', {
+        get(this: HTMLElement) {
+          const rect = this.getBoundingClientRect();
+          return Math.round(rect.width);
+        },
+        configurable: true,
+      });
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+        get(this: HTMLElement) {
+          const rect = this.getBoundingClientRect();
+          return Math.round(rect.height);
+        },
+        configurable: true,
+      });
+    }
   }
 
   /**
