@@ -16,9 +16,22 @@ import { readStoredTheme, setTheme, type UiTheme } from '../../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';
 import { Menu, Tooltip } from '../ui';
 
-interface Props {
+export interface SettingsQuickMenuProps {
   onShowToast?: (msg: string) => void;
+  trigger?: React.ReactNode;
+  renderTrigger?: (params: {
+    open: boolean;
+    triggerProps: {
+      ref?: React.RefObject<HTMLButtonElement | null>;
+      'aria-haspopup': 'menu';
+      'aria-expanded': boolean;
+      'aria-controls'?: string;
+      onClick: () => void;
+    };
+  }) => React.ReactNode;
 }
+
+export type Props = SettingsQuickMenuProps;
 
 /** 可聚焦控件：主题 radio + 菜单项（不含禁用） */
 const FOCUSABLE_SEL =
@@ -66,7 +79,11 @@ const QUICK_ENTRIES: readonly QuickEntry[] = [
   },
 ] as const;
 
-export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
+  onShowToast,
+  trigger,
+  renderTrigger,
+}) => {
   const [open, setOpen] = useState(false);
   const [theme, setThemeLocal] = useState<UiTheme>(() => readStoredTheme());
   const openSettings = useLayoutStore((s) => s.openSettings);
@@ -83,12 +100,19 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
   const handleOpenChange = useCallback((nextOpen: boolean) => {
     if (!nextOpen) {
       // 按关闭来源决定是否还原焦点（Esc/Tab/选中 → 还原；外点/触发器 → 不抢）
-      if (restoreOnCloseRef.current) {
+      const shouldRestore = restoreOnCloseRef.current;
+      restoreOnCloseRef.current = false;
+      if (shouldRestore) {
         queueMicrotask(() => {
           btnRef.current?.focus();
         });
+      } else {
+        queueMicrotask(() => {
+          if (document.activeElement === btnRef.current) {
+            btnRef.current?.blur();
+          }
+        });
       }
-      restoreOnCloseRef.current = false;
     }
     setOpen(nextOpen);
   }, []);
@@ -163,6 +187,39 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
   void onShowToast;
   const isDark = theme === 'dark';
 
+  const triggerProps = {
+    ref: btnRef,
+    'aria-haspopup': 'menu' as const,
+    'aria-expanded': open,
+    'aria-controls': open ? menuId : undefined,
+    onClick: () => handleOpenChange(!open),
+  };
+
+  const defaultTrigger = (
+    <Tooltip content="快捷设置" disabled={open}>
+      <button
+        type="button"
+        className={`${styles.sidebarFooterSettings}${open ? ` ${styles.isOpen}` : ''}`}
+        data-testid="settings-button"
+        aria-label={triggerLabel}
+        {...triggerProps}
+      >
+        <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />
+        <span>设置</span>
+        <Lucide.ChevronUp
+          size={14}
+          strokeWidth={1.75}
+          className={styles.sbQuickChev}
+          aria-hidden
+        />
+      </button>
+    </Tooltip>
+  );
+
+  const finalTrigger = renderTrigger
+    ? renderTrigger({ open, triggerProps })
+    : (trigger ?? defaultTrigger);
+
   return (
     <div className={styles.sbQuickWrap} ref={rootRef} data-density="compact">
       <Menu
@@ -173,29 +230,12 @@ export const SettingsQuickMenu: React.FC<Props> = ({ onShowToast }) => {
           // 外点关闭：不抢焦点
           restoreOnCloseRef.current = false;
         }}
-        trigger={
-          <Tooltip content="快捷设置" disabled={open}>
-            <button
-              ref={btnRef}
-              type="button"
-              className={`${styles.sidebarFooterSettings}${open ? ` ${styles.isOpen}` : ''}`}
-              data-testid="settings-button"
-              aria-label={triggerLabel}
-              aria-haspopup="menu"
-              aria-expanded={open}
-              aria-controls={open ? menuId : undefined}
-            >
-              <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />
-              <span>设置</span>
-              <Lucide.ChevronUp
-                size={14}
-                strokeWidth={1.75}
-                className={styles.sbQuickChev}
-                aria-hidden
-              />
-            </button>
-          </Tooltip>
-        }
+        onCloseAutoFocus={(e) => {
+          if (!restoreOnCloseRef.current) {
+            e.preventDefault();
+          }
+        }}
+        trigger={finalTrigger}
         side="top"
         align="start"
         sideOffset={6}

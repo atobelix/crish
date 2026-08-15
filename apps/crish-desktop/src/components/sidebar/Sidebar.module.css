@@ -48,14 +48,151 @@
 }
 
 .sidebarFooter {
-  padding: 4px 14px; /* Thinner bottom settings row */
+  padding: 4px 10px 8px 10px;
   border-top: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-2);
   background: transparent;
   box-sizing: border-box;
   min-height: 0;
+}
+
+.footerUserCol {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.footerGearCol {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.userProfileCard {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px 8px;
+  border-radius: var(--radius-xl);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-primary);
+  transition:
+    background var(--transition-micro),
+    border-color var(--transition-micro);
+  box-sizing: border-box;
+  text-align: left;
+}
+
+.userProfileCard:hover {
+  background: var(--bg-hover);
+}
+
+.userProfileCard.isOpen {
+  background: var(--bg-active);
+}
+
+.userAvatarContainer {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.userAvatar {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+.userOnlineStatus {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  background: var(--accent-green, #10b981);
+  box-shadow: 0 0 0 1.5px var(--bg-secondary);
+}
+
+.userTextStack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.userName {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.userWorkspace {
+  font-size: var(--font-size-xxs);
+  color: var(--text-tertiary);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.userChevron {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.settingsGearBtn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: var(--radius-xl);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro);
+  box-sizing: border-box;
+}
+
+.settingsGearBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.gearUpdatePulseDot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--accent-green);
+  box-shadow: 0 0 0 2px var(--bg-secondary);
 }
 
 .modeChip {
@@ -160,7 +297,7 @@
   left: 0;
   height: 100vh !important;
   z-index: var(--z-sidebar, 100);
-  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0,0,0,0.12));
+  box-shadow: var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.12));
 }
 
 .overlayBackdrop {
@@ -212,11 +349,11 @@
   padding-right: 8px;
 }
 
-.iconCollapse .sidebarTop :global([class*="topActions"]) {
+.iconCollapse .sidebarTop :global([class*='topActions']) {
   gap: var(--space-2, 6px);
 }
 
-.iconCollapse .sidebarTop :global([class*="navItem"]) {
+.iconCollapse .sidebarTop :global([class*='navItem']) {
   justify-content: center;
   padding: 0;
   width: 32px;
@@ -224,9 +361,9 @@
   border-radius: var(--radius-md, 8px);
 }
 
-.iconCollapse .sidebarTop :global([class*="navItem"]) > span,
-.iconCollapse .sidebarTop :global([class*="navItem"]) > input,
-.iconCollapse .sidebarTop :global([class*="navItem"]) > [role="search"] {
+.iconCollapse .sidebarTop :global([class*='navItem']) > span,
+.iconCollapse .sidebarTop :global([class*='navItem']) > input,
+.iconCollapse .sidebarTop :global([class*='navItem']) > [role='search'] {
   display: none;
 }
 
@@ -235,20 +372,20 @@
   padding-right: 8px;
 }
 
-.iconCollapse .sidebarScroll :global([class*="sectionLabel"]) > :not(svg),
-.iconCollapse .sidebarScroll :global([class*="folderHeader"]) > :not(svg),
-.iconCollapse .sidebarScroll :global([class*="folderName"]),
-.iconCollapse .sidebarScroll :global([class*="folderCount"]),
-.iconCollapse .sidebarScroll :global([class*="sessionText"]),
-.iconCollapse .sidebarScroll :global([class*="sessionSearchSnippet"]),
-.iconCollapse .sidebarScroll :global([class*="sessionTime"]),
-.iconCollapse .sidebarScroll :global([class*="sessionActionsBtn"]),
-.iconCollapse .sidebarScroll :global([class*="emptyHint"]),
-.iconCollapse .sidebarScroll :global([class*="sessionItemFoldBtn"]) {
+.iconCollapse .sidebarScroll :global([class*='sectionLabel']) > :not(svg),
+.iconCollapse .sidebarScroll :global([class*='folderHeader']) > :not(svg),
+.iconCollapse .sidebarScroll :global([class*='folderName']),
+.iconCollapse .sidebarScroll :global([class*='folderCount']),
+.iconCollapse .sidebarScroll :global([class*='sessionText']),
+.iconCollapse .sidebarScroll :global([class*='sessionSearchSnippet']),
+.iconCollapse .sidebarScroll :global([class*='sessionTime']),
+.iconCollapse .sidebarScroll :global([class*='sessionActionsBtn']),
+.iconCollapse .sidebarScroll :global([class*='emptyHint']),
+.iconCollapse .sidebarScroll :global([class*='sessionItemFoldBtn']) {
   display: none;
 }
 
-.iconCollapse .sidebarScroll :global([class*="sessionItem"]) {
+.iconCollapse .sidebarScroll :global([class*='sessionItem']) {
   justify-content: center;
   padding: 0;
   width: 32px;
@@ -257,7 +394,7 @@
   margin: 0 auto;
 }
 
-.iconCollapse .sidebarScroll :global([class*="sessionItem"])::before {
+.iconCollapse .sidebarScroll :global([class*='sessionItem'])::before {
   content: '';
   width: 8px;
   height: 8px;
@@ -266,7 +403,7 @@
   opacity: 0.5;
 }
 
-.iconCollapse .sidebarScroll :global([class*="sessionItem"].active)::before {
+.iconCollapse .sidebarScroll :global([class*='sessionItem'].active)::before {
   opacity: 1;
   background: var(--accent-primary);
 }
@@ -274,14 +411,39 @@
 .iconCollapse .sidebarFooter {
   padding: 10px 8px;
   justify-content: center;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.iconCollapse .footerUserCol {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.iconCollapse .footerGearCol {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.iconCollapse .userProfileCard {
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+}
+
+.iconCollapse .userTextStack,
+.iconCollapse .userChevron {
+  display: none;
 }
 
 .iconCollapse .sidebarFooter > :global(*) {
   justify-content: center;
 }
 
-.iconCollapse .sidebarFooter :global([class*="modeChip"]) > span,
-.iconCollapse .sidebarFooter :global([class*="footerActions"]) > span {
+.iconCollapse .sidebarFooter :global([class*='modeChip']) > span,
+.iconCollapse .sidebarFooter :global([class*='footerActions']) > span {
   display: none;
 }
-
