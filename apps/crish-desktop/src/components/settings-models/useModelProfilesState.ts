@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   addModelToProfile,
   createCustomProfile,
@@ -15,208 +15,92 @@ import {
 } from '../../api/providerProfiles';
 import {
   getModelMeta,
-  MODEL_CAPABILITY_OPTIONS,
   scanProviderModels,
-  setModelCapability,
-  setModelContextLength,
-  setModelDisplayName,
   testProviderModel,
-  type ModelCapabilityKey,
 } from '../../api/modelCatalog';
+import {
+  applyMetaForModel,
+  emptyAddDraft,
+  type AddModelDraft,
+  type ConfigDraft,
+} from './modelsIpcHelpers';
+import {
+  DEFAULT_PROVIDER_BASE_URLS,
+  PRESETS,
+  type PresetProvider,
+} from './modelsPresets';
 
-const DEFAULT_PROVIDER_BASE_URLS: Record<string, string> = {
-  openai: 'https://api.openai.com/v1',
-  anthropic: 'https://api.anthropic.com/v1',
+export type AddDraft = AddModelDraft;
+export type CfgDraft = ConfigDraft;
+export {
+  emptyAddDraft,
+  PRESETS,
+  type AddModelDraft,
+  type ConfigDraft,
+  type PresetProvider,
 };
 
-export interface PresetProvider {
-  id: string;
-  name: string;
-  baseUrl: string;
-  models: string[];
-  format: 'openai' | 'anthropic';
-}
-
-export const PRESETS: PresetProvider[] = [
-  {
-    id: 'preset-opencode-go',
-    name: 'OpenCode Go 订阅',
-    baseUrl: 'https://opencode.ai/zen/go/v1',
-    // 模型取 00-catalog 现行旗舰：GLM-5.2（§4.1）、kimi-k3（§5.1）
-    models: ['deepseek-v4-flash', 'glm-5.2', 'kimi-k3'],
-    format: 'openai',
-  },
-  {
-    id: 'preset-opencode-zen',
-    name: 'OpenCode Zen 订阅',
-    baseUrl: 'https://opencode.ai/zen/v1',
-    // gemini-3.6-flash（§8.1）、claude-sonnet-5（§1.4）
-    models: ['deepseek-v4-flash', 'gemini-3.6-flash', 'claude-sonnet-5'],
-    format: 'openai',
-  },
-  {
-    id: 'preset-deepseek',
-    name: 'DeepSeek 官方',
-    baseUrl: 'https://api.deepseek.com',
-    // 旧 alias deepseek-chat/reasoner 已退役，v4 系为现行（§3.1）
-    models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
-    format: 'openai',
-  },
-  {
-    id: 'preset-qwen',
-    name: '千问 Qwen Portal',
-    baseUrl: 'https://portal.qwen.ai/v1',
-    // 百炼现行型号（§11.1）
-    models: ['qwen3.7-max', 'qwen3.7-plus', 'qwen3-coder-plus'],
-    format: 'openai',
-  },
-  {
-    id: 'preset-openai',
-    name: 'OpenAI 兼容',
-    baseUrl: 'https://api.openai.com/v1',
-    // gpt-5.x 现行（§2.2）
-    models: ['gpt-5.6', 'gpt-5.5'],
-    format: 'openai',
-  },
-  {
-    id: 'preset-anthropic',
-    name: 'Anthropic 兼容',
-    baseUrl: 'https://api.anthropic.com/v1',
-    models: ['claude-sonnet-5'],
-    format: 'anthropic',
-  },
-  {
-    id: 'preset-flowbit',
-    name: 'Flowbit',
-    baseUrl: 'https://api.flowbit.me',
-    models: [],
-    format: 'openai',
-  },
-];
-
-export type AddDraft = {
-  displayName: string;
-  modelId: string;
-  contextLength: string;
-  caps: Record<ModelCapabilityKey, boolean>;
-};
-
-export function emptyAddDraft(): AddDraft {
-  return {
-    displayName: '',
-    modelId: '',
-    contextLength: '',
-    caps: { tools: false, vision: false, reasoning: false },
-  };
-}
-
-export type CfgDraft = {
-  displayName: string;
-  contextLength: string;
-  caps: Record<ModelCapabilityKey, boolean>;
-};
-
-export function useModelProfilesState(onShowToast?: (msg: string) => void) {
-  const [profiles, setProfiles] = useState<ProviderProfile[]>(() => {
+export function useModelProfilesState(
+  onShowToast?: ((ok: boolean, msg: string) => void) | ((msg: string) => void)
+) {
+  const [profiles, setProfiles] = useState<ProviderProfile[]>(() =>
+    loadProfiles()
+  );
+  const [selectedId, setSelectedIdState] = useState<string>(() => {
     try {
-      return loadProfiles();
+      const s = sessionStorage.getItem('crish_models_selected_profile_v1');
+      if (s && loadProfiles().some((p) => p.id === s)) return s;
     } catch {
-      return [];
+      /* ignore */
     }
+    const act = getActiveProfileId();
+    if (act && loadProfiles().some((p) => p.id === act)) return act;
+    return loadProfiles()[0]?.id || '';
   });
 
-  const [selectedId, setSelectedId] = useState<string | null>(() => {
-    try {
-      const remembered =
-        typeof sessionStorage !== 'undefined'
-          ? sessionStorage.getItem('crish_models_selected_profile_v1')
-          : null;
-      if (remembered && loadProfiles().some((p) => p.id === remembered)) {
-        return remembered;
-      }
-      return getActiveProfileId() || loadProfiles()[0]?.id || null;
-    } catch {
-      return null;
-    }
-  });
+  const setSelectedId = useCallback((id: string | null) => {
+    setSelectedIdState(id || '');
+  }, []);
 
   const [keyDraft, setKeyDraft] = useState('');
   const [addOpen, setAddOpen] = useState(false);
-  const [busyState, setBusyState] = useState<{
-    testBusy: string | null;
-    scanBusy: boolean;
-    checkBusy: boolean;
-  }>({ testBusy: null, scanBusy: false, checkBusy: false });
-
-  const testBusy = busyState.testBusy;
-  const scanBusy = busyState.scanBusy;
-  const checkBusy = busyState.checkBusy;
-
-  const setTestBusy = (val: React.SetStateAction<string | null>) =>
-    setBusyState((prev) => ({
-      ...prev,
-      testBusy: typeof val === 'function' ? val(prev.testBusy) : val,
-    }));
-  const setScanBusy = (val: React.SetStateAction<boolean>) =>
-    setBusyState((prev) => ({
-      ...prev,
-      scanBusy: typeof val === 'function' ? val(prev.scanBusy) : val,
-    }));
-  const setCheckBusy = (val: React.SetStateAction<boolean>) =>
-    setBusyState((prev) => ({
-      ...prev,
-      checkBusy: typeof val === 'function' ? val(prev.checkBusy) : val,
-    }));
-
+  const [testBusy, setTestBusy] = useState<string | null>(null);
+  const [scanBusy, setScanBusy] = useState(false);
+  const [checkBusy, setCheckBusy] = useState(false);
   const [modelFilter, setModelFilter] = useState('');
   const [configOpenId, setConfigOpenId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
   const [addDraft, setAddDraft] = useState<AddDraft>(() => emptyAddDraft());
   const [cfgDraft, setCfgDraft] = useState<CfgDraft | null>(null);
-
-  const [nameEditState, setNameEditState] = useState<{
-    editing: boolean;
-    draft: string;
-  }>({
-    editing: false,
-    draft: '',
-  });
-
-  const editingName = nameEditState.editing;
-  const nameDraft = nameEditState.draft;
-
-  const setEditingName = (val: React.SetStateAction<boolean>) =>
-    setNameEditState((prev) => ({
-      ...prev,
-      editing: typeof val === 'function' ? val(prev.editing) : val,
-    }));
-  const setNameDraft = (val: React.SetStateAction<string>) =>
-    setNameEditState((prev) => ({
-      ...prev,
-      draft: typeof val === 'function' ? val(prev.draft) : val,
-    }));
-
+  const [editingName, setEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  const selected = useMemo(
-    () => profiles.find((p) => p.id === selectedId) || null,
-    [profiles, selectedId]
+  const notify = useCallback(
+    (ok: boolean, msg: string) => {
+      if (onShowToast) {
+        if (onShowToast.length === 1) {
+          (onShowToast as (msg: string) => void)(msg);
+        } else {
+          (onShowToast as (ok: boolean, msg: string) => void)(ok, msg);
+        }
+      }
+    },
+    [onShowToast]
   );
 
-  const refresh = () => {
-    try {
-      setProfiles(loadProfiles());
-    } catch (e) {
-      onShowToast?.(
-        `读取服务商失败：${e instanceof Error ? e.message : String(e)}`
-      );
-      setProfiles([]);
-    }
-  };
+  const refresh = useCallback(() => {
+    const list = loadProfiles();
+    setProfiles(list);
+    setSelectedIdState((cur) => {
+      if (cur && list.some((p) => p.id === cur)) return cur;
+      return list[0]?.id || '';
+    });
+  }, []);
 
-  const notify = (ok: boolean, text: string) => {
-    if (!ok) onShowToast?.(text);
-  };
+  const selected = useMemo(() => {
+    return profiles.find((p) => p.id === selectedId) || null;
+  }, [profiles, selectedId]);
 
   useEffect(() => {
     if (selectedId) {
@@ -295,7 +179,7 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
       models: [],
     });
     refresh();
-    setSelectedId(p.id);
+    setSelectedIdState(p.id);
     setAddOpen(false);
   };
 
@@ -306,29 +190,8 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
       models: [],
     });
     refresh();
-    setSelectedId(p.id);
+    setSelectedIdState(p.id);
     setAddOpen(false);
-  };
-
-  const applyMetaForModel = (
-    profileId: string,
-    modelId: string,
-    draft: {
-      displayName: string;
-      contextLength: string;
-      caps: Record<ModelCapabilityKey, boolean>;
-    }
-  ) => {
-    if (draft.displayName.trim()) {
-      setModelDisplayName(profileId, modelId, draft.displayName.trim());
-    }
-    const n = parseInt(draft.contextLength.replace(/[^\d]/g, ''), 10);
-    if (Number.isFinite(n) && n > 0) {
-      setModelContextLength(profileId, modelId, n);
-    }
-    for (const opt of MODEL_CAPABILITY_OPTIONS) {
-      setModelCapability(profileId, modelId, opt.key, !!draft.caps[opt.key]);
-    }
   };
 
   const handleManualAdd = () => {
@@ -355,9 +218,9 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
             ? String(meta.contextLength)
             : snap.contextLength || '',
         caps: {
-          tools: !!meta.capabilities?.tools,
-          vision: !!meta.capabilities?.vision,
-          reasoning: !!meta.capabilities?.reasoning,
+          tools: Boolean(meta.capabilities?.tools),
+          vision: Boolean(meta.capabilities?.vision),
+          reasoning: Boolean(meta.capabilities?.reasoning),
         },
       });
     }, 0);
@@ -373,9 +236,9 @@ export function useModelProfilesState(onShowToast?: (msg: string) => void) {
       contextLength:
         meta.contextLength != null ? String(meta.contextLength) : '',
       caps: {
-        tools: !!meta.capabilities?.tools,
-        vision: !!meta.capabilities?.vision,
-        reasoning: !!meta.capabilities?.reasoning,
+        tools: Boolean(meta.capabilities?.tools),
+        vision: Boolean(meta.capabilities?.vision),
+        reasoning: Boolean(meta.capabilities?.reasoning),
       },
     });
   };

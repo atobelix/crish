@@ -50,7 +50,10 @@ export function configSecretSet(
   profileId: string,
   apiKey: string
 ): Promise<InvokeTypedResult<ConfigSecretStatus>> {
-  return invokeTyped<ConfigSecretStatus>('config_secret_set', { profileId, apiKey });
+  return invokeTyped<ConfigSecretStatus>('config_secret_set', {
+    profileId,
+    apiKey,
+  });
 }
 
 /** config_secret_get：仅回 { hasKey, apiKeyLast4 }（K-02，不回明文） */
@@ -101,5 +104,58 @@ export function configProfileApply(
     ...(rest.apiKey !== undefined ? { apiKey: rest.apiKey } : {}),
     ...(rest.baseUrl !== undefined ? { baseUrl: rest.baseUrl } : {}),
     ...(rest.model !== undefined ? { model: rest.model } : {}),
+  });
+}
+
+export type ProbePingResult = {
+  ok: boolean;
+  latencyMs: number;
+  statusCode?: number;
+  error?: string;
+};
+
+export type ScannedModel = {
+  model: string;
+  vendor?: string;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  capabilities?: {
+    tools?: boolean;
+    vision?: boolean;
+    reasoning?: boolean;
+  };
+};
+
+export type ProbeScanResult = {
+  ok: boolean;
+  models: ScannedModel[];
+  error?: string;
+};
+
+/**
+ * provider_probe_ping：原生服务商连通性探活（底层从 DPAPI 读 Key，高精度 RTT 测速）
+ */
+export function providerProbePing(
+  profileId: string,
+  model?: string,
+  timeoutMs?: number
+): Promise<InvokeTypedResult<ProbePingResult>> {
+  return invokeTyped<ProbePingResult>('provider_probe_ping', {
+    profileId,
+    ...(model ? { model } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+  });
+}
+
+/**
+ * provider_probe_scan_models：原生模型列表扫描（底层从 DPAPI 读 Key 请求 /models 并自动合并 Catalog）
+ */
+export function providerProbeScanModels(
+  profileId: string,
+  timeoutMs?: number
+): Promise<InvokeTypedResult<ProbeScanResult>> {
+  return invokeTyped<ProbeScanResult>('provider_probe_scan_models', {
+    profileId,
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
   });
 }

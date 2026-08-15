@@ -109,6 +109,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('config_secret_clear', 'config', 'engine'),
     entry('config_profile_apply', 'config', 'engine'),
     entry('config_secret_reveal', 'config', 'engine'),
+    // ── 原生探活与模型扫描（Batch 1 · G3：provider_probe_ping / provider_probe_scan_models）──
+    entry('provider_probe_ping', 'config', 'engine'),
+    entry('provider_probe_scan_models', 'config', 'engine'),
     // F10（T-EG-12）：产出根两级配置（全局 + 会话级）
     entry('config_get_outputs_root', 'config', 'engine'),
     entry('config_set_outputs_root', 'config', 'engine'),

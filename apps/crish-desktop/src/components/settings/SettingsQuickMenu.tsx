@@ -230,7 +230,7 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
           // 外点关闭：不抢焦点
           restoreOnCloseRef.current = false;
         }}
-        onCloseAutoFocus={(e) => {
+        onCloseAutoFocus={(e: Event) => {
           if (!restoreOnCloseRef.current) {
             e.preventDefault();
           }

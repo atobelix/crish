@@ -79,6 +79,8 @@ export interface MenuProps {
    * 基座自身的 Esc 分支尊重 defaultPrevented（消费方已处理则不重复关闭）。
    */
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
+  /** 关闭后焦点还原控制回调 */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 /**
@@ -105,6 +107,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   onInteractOutside,
   onPointerDownOutside,
   onEscapeKeyDown,
+  onCloseAutoFocus,
 }: MenuProps) {
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
 
@@ -421,6 +424,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
           onKeyDown={handleKeyDown}
           onMouseDown={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
+          onCloseAutoFocus={onCloseAutoFocus}
           onPointerDownOutside={(e) => {
             if (onPointerDownOutside) {
               onPointerDownOutside(e);

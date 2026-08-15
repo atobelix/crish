@@ -141,7 +141,7 @@ function extractFrontendInvokeNames(): {
   // 命令形态前缀：抽取到的字面量必须是命令名形态（tauriInvoke.ts 内部
   // `invoke(cmd, args)` 变量参数调用、`status: 'ok'` 等通用字符串不是命令）
   const COMMAND_PREFIX_RE =
-    /^(core_|workbench_|config_|multi_device_|browser_|note_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-|computer_|kill_|resume_)/;
+    /^(core_|workbench_|config_|provider_|multi_device_|browser_|note_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-|computer_|kill_|resume_)/;
   const constRe = /\bconst\s+[A-Z][A-Z0-9_]*\s*=\s*'([a-z][a-z0-9_-]*)'/g;
   const templateRe =
     /\b(invoke|invokeTyped|invokeResult|invokeCmd|transport\.request|transport\.send)\s*\(\s*`/g;
@@ -223,6 +223,8 @@ const GHOST_EXEMPTIONS: ReadonlySet<string> = new Set([
   // workbench_select_folder：原生目录选择器（PE-07 T07.2 唯一「新授权」入口），
   // 前端经 openDirectoryDialogSafe 动态触发（对话框后段），非静态字面量
   'workbench_select_folder',
+  // workbench_http_request：原生通用出站代理通道，保留供扩展与备用网络探测
+  'workbench_http_request',
 ]);
 
 describe('T-F 06 T5.1 命令契约漂移总门禁', () => {

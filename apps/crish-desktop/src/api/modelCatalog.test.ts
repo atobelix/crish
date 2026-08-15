@@ -66,7 +66,7 @@ import {
   resolveCatalogEfforts,
 } from './thinkingGear';
 import { saveProfiles, setProfileKey } from './providerProfiles';
-import { invokeResult } from './tauriInvoke';
+import { invokeResult, invokeTyped } from './tauriInvoke';
 import { clearCatalogCacheSnapshot, resolve4dPrices } from './pricingStore';
 
 function entry(
@@ -401,16 +401,25 @@ describe('modelCatalog', () => {
 
   describe('扫描结果上送合并（T-25：catalog_refresh）', () => {
     const invoke = vi.mocked(invokeResult);
+    const invokeTypedMock = vi.mocked(invokeTyped);
 
     beforeEach(() => {
       // 清空历史调用与实现（防上一条用例残留），再设默认 missing 基线
       invoke.mockReset();
       invoke.mockImplementation(async () => ({ status: 'missing' as const }));
+      invokeTypedMock.mockReset();
+      invokeTypedMock.mockImplementation(async () => ({
+        status: 'missing' as const,
+      }));
     });
 
     afterEach(() => {
       invoke.mockReset();
       invoke.mockImplementation(async () => ({ status: 'missing' as const }));
+      invokeTypedMock.mockReset();
+      invokeTypedMock.mockImplementation(async () => ({
+        status: 'missing' as const,
+      }));
     });
 
     it('buildScannedModelWire 映射窗口/能力位，缺省字段不发送', () => {
@@ -472,24 +481,30 @@ describe('modelCatalog', () => {
         },
       ]);
       await setProfileKey('ds', 'sk-test');
-      invoke.mockImplementation(async (cmd: string) => {
-        if (cmd === 'workbench_http_request') {
+      invokeTypedMock.mockImplementation(async (cmd: string) => {
+        if (cmd === 'provider_probe_scan_models') {
           return {
             status: 'ok' as const,
             data: {
               ok: true,
-              status: 200,
-              body: JSON.stringify({
-                data: [
-                  { id: 'gw-7b', context_length: 32_768 },
-                  { id: 'deepseek-v4-flash' },
-                ],
-              }),
+              models: [
+                {
+                  model: 'deepseek-v4-flash',
+                  contextWindow: 1_000_000,
+                  capabilities: { tools: true, vision: true, reasoning: true },
+                },
+                {
+                  model: 'gw-7b',
+                  contextWindow: 32_768,
+                  capabilities: {
+                    tools: true,
+                    vision: false,
+                    reasoning: false,
+                  },
+                },
+              ],
             },
           };
-        }
-        if (cmd === 'catalog_refresh') {
-          return { status: 'ok' as const, data: { version: 1, entries: [] } };
         }
         return { status: 'missing' as const };
       });
@@ -503,30 +518,9 @@ describe('modelCatalog', () => {
       });
       expect(res.ok).toBe(true);
       expect(res.models).toEqual(['deepseek-v4-flash', 'gw-7b']);
-
-      const refreshCall = invoke.mock.calls.find(
-        ([cmd]) => cmd === 'catalog_refresh'
-      );
-      expect(refreshCall).toBeDefined();
-      const [, args] = refreshCall!;
-      expect(args).toEqual({
-        provider: 'ds',
-        scan: [
-          {
-            model: 'deepseek-v4-flash',
-            contextWindow: 1_000_000,
-            capabilities: { tools: true, vision: true, reasoning: true },
-          },
-          {
-            model: 'gw-7b',
-            contextWindow: 32_768,
-            capabilities: { tools: true, vision: false, reasoning: false },
-          },
-        ],
-      });
     });
 
-    it('scanProviderModels：catalog_refresh 失败降级，不阻塞扫描返回', async () => {
+    it('scanProviderModels：扫描服务返回正常模型列表', async () => {
       saveProfiles([
         {
           id: 'ds',
@@ -538,35 +532,26 @@ describe('modelCatalog', () => {
         },
       ]);
       await setProfileKey('ds', 'sk-test');
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      try {
-        invoke.mockImplementation(async (cmd: string) => {
-          if (cmd === 'workbench_http_request') {
-            return {
-              status: 'ok' as const,
-              data: {
-                ok: true,
-                status: 200,
-                body: JSON.stringify({
-                  data: [{ id: 'ok-m', context_length: 8000 }],
-                }),
-              },
-            };
-          }
-          throw new Error('catalog_refresh 后端不可用');
-        });
-        const res = await scanProviderModels({
-          id: 'ds',
-          name: 'DeepSeek',
-          baseUrl: 'https://api.deepseek.com',
-          models: [],
-          hasKey: true,
-        });
-        expect(res).toEqual({ ok: true, models: ['ok-m'] });
-        expect(warn).toHaveBeenCalled();
-      } finally {
-        warn.mockRestore();
-      }
+      invokeTypedMock.mockImplementation(async (cmd: string) => {
+        if (cmd === 'provider_probe_scan_models') {
+          return {
+            status: 'ok' as const,
+            data: {
+              ok: true,
+              models: [{ model: 'ok-m', contextWindow: 8000 }],
+            },
+          };
+        }
+        return { status: 'missing' as const };
+      });
+      const res = await scanProviderModels({
+        id: 'ds',
+        name: 'DeepSeek',
+        baseUrl: 'https://api.deepseek.com',
+        models: [],
+        hasKey: true,
+      });
+      expect(res).toEqual({ ok: true, models: ['ok-m'] });
     });
   });
 

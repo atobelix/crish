@@ -6,12 +6,13 @@
  * 空 catalog 不得回落 mimo 等硬编码默认。
  */
 
-import {
-  getProfileKeyInMemory,
-  loadProfiles,
-  type ProviderProfile,
-} from './providerProfiles';
+import { loadProfiles, type ProviderProfile } from './providerProfiles';
 import { invokeResult } from './tauriInvoke';
+import {
+  providerProbePing,
+  providerProbeScanModels,
+  type ScannedModel as WireScannedModel,
+} from './provider-profiles/rustProfileStore';
 import {
   applyCatalogCacheSnapshot,
   type CatalogCacheSnapshot,
@@ -383,7 +384,7 @@ export function guessContextLength(model: string): number | undefined {
   return undefined;
 }
 
-function guessModelCapabilities(model: string): ModelCapabilities {
+export function guessModelCapabilities(model: string): ModelCapabilities {
   if (!model) return { tools: true };
   const m = model.toLowerCase();
   const reasoning =
@@ -527,272 +528,40 @@ export function formatContextLabelZh(n?: number | null): string {
   return `上下文 ${formatContextLabel(n)}`;
 }
 
-function normalizeBaseUrl(baseUrl: string): string {
-  const u = (baseUrl || '').trim().replace(/\/+$/, '');
-  if (!u) return '';
-  // 已带 /v1 则保持
-  return u;
-}
-
-function modelsListUrl(baseUrl: string): string {
-  const u = ensureOpenAiCompatibleRoot(baseUrl);
-  if (!u) return '';
-  if (/\/models$/i.test(u)) return u;
-  // 已含 /v1 → /v1/models；否则补 /v1/models（OpenAI / DeepSeek 惯例）
-  if (/\/v1$/i.test(u)) return `${u}/models`;
-  return `${u}/v1/models`;
-}
-
-function chatCompletionsUrl(baseUrl: string): string {
-  const u = ensureOpenAiCompatibleRoot(baseUrl);
-  if (!u) return '';
-  if (/\/chat\/completions$/i.test(u)) return u;
-  if (/\/v1$/i.test(u)) return `${u}/chat/completions`;
-  return `${u}/v1/chat/completions`;
-}
-
-/**
- * HTTP 探测顺序（OpenAI 兼容供应商，服务端出站无 CORS）：
- * 1. Tauri 原生 workbench_http_request（reqwest）
- * 2. Vite 开发代理 /__crish_http_proxy（localhost:5174 场景）
- * 3. 浏览器直连 fetch（多数公网 API 会被 CORS 拦截，仅作最后手段）
- */
-async function httpRequest(
-  url: string,
-  init: { method: string; headers?: Record<string, string>; body?: string }
-): Promise<{ ok: boolean; status: number; text: string }> {
-  const method = (init.method || 'GET').toUpperCase();
-  // GET/HEAD 不要带 Content-Type，避免多余 preflight（直连时）
-  const headers: Record<string, string> = { ...(init.headers || {}) };
-  if (method === 'GET' || method === 'HEAD') {
-    delete headers['Content-Type'];
-    delete headers['content-type'];
-  }
-
-  // 1) 桌面壳原生 HTTP（命令未注册 / 非 Tauri → missing，fallthrough 代理）
-  const tauriRes = await invokeResult<{
-    ok?: boolean;
-    status?: number;
-    body?: string;
-  }>('workbench_http_request', {
-    url,
-    method,
-    headers,
-    body: init.body ?? null,
-  });
-  if (tauriRes.status === 'ok') {
-    const res = tauriRes.data;
-    return {
-      ok: Boolean(res?.ok),
-      status: Number(res?.status) || 0,
-      text: String(res?.body ?? ''),
-    };
-  }
-  if (tauriRes.status === 'error') {
-    const msg = tauriRes.message;
-    // 真网络错误 → 抛出；其余（含命令/IPC 文案）→ 继续代理
-    if (/network:/i.test(msg)) {
-      throw new Error(msg.replace(/^network:\s*/i, ''));
-    }
-    if (/error sending|dns|connect|timed out|timeout|refused/i.test(msg)) {
-      throw new Error(msg);
-    }
-    // fall through to vite proxy
-  }
-
-  // 2) Vite 开发代理（origin 为 localhost:5174 时的正解）
-  const useDevProxy =
-    typeof window !== 'undefined' &&
-    (window.location.port === '5174' ||
-      window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1');
-  if (useDevProxy) {
-    try {
-      const res = await fetch('/__crish_http_proxy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          url,
-          method,
-          headers,
-          body: init.body ?? null,
-        }),
-      });
-      const data = (await res.json()) as {
-        ok?: boolean;
-        status?: number;
-        body?: string;
-        error?: string;
-      };
-      if (data.error && !data.status) {
-        throw new Error(data.error);
-      }
-      return {
-        ok: Boolean(data.ok),
-        status: Number(data.status) || 0,
-        text: String(data.body ?? ''),
-      };
-    } catch (e) {
-      // 代理未启动时再 fall through
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!/failed to fetch|404|proxy/i.test(msg)) throw e;
-    }
-  }
-
-  // 3) 浏览器直连（多数供应商会 CORS 失败）
-  const res = await fetch(url, {
-    method,
-    headers,
-    ...(init.body !== undefined && { body: init.body }),
-  });
-  const text = await res.text();
-  return { ok: res.ok, status: res.status, text };
-}
-
-function friendlyFetchError(e: unknown): string {
-  const msg = e instanceof Error ? e.message : String(e);
-  if (/failed to fetch|networkerror|load failed|cors/i.test(msg)) {
-    return '浏览器无法直连该 API（常见于跨域）。请使用桌面应用，或确认引擎/壳已启动后再试；也可手动添加模型 id。';
-  }
-  if (/ssl|certificate|cert/i.test(msg)) {
-    return '证书或 HTTPS 校验失败，请检查 Base URL。';
-  }
-  if (/timed out|timeout/i.test(msg)) {
-    return '请求超时，请检查网络与 Base URL。';
-  }
-  if (/dns|getaddrinfo|name not resolved/i.test(msg)) {
-    return '无法解析主机名，请检查 Base URL。';
-  }
-  if (/refused|connect/i.test(msg)) {
-    return '无法连接到服务器，请检查 Base URL 与网络。';
-  }
-  return msg || '请求失败';
-}
-
-/**
- * OpenAI 兼容 URL 规范化：
- * - DeepSeek 文档：https://api.deepseek.com 或 …/v1
- * - 列模型：GET {base}/models（base 已含 /v1 时不再叠）
- * - 对话：POST {base}/chat/completions
- */
-function ensureOpenAiCompatibleRoot(baseUrl: string): string {
-  let u = normalizeBaseUrl(baseUrl);
-  if (!u) return '';
-  // 去掉末尾 /models 误写
-  u = u.replace(/\/models\/?$/i, '');
-  return u;
-}
-
 /** 扫描提供商模型列表（OpenAI 兼容 /models） */
 export async function scanProviderModels(
   profile: ProviderProfile
 ): Promise<{ ok: boolean; models: string[]; error?: string }> {
-  // 始终用本地最新 profile（含密钥），避免 UI 态过期
   const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
-  // K-01：明文只经会话内内存缓存（saveProfileKey 写入）；profile 对象不再带 apiKey
-  const key = getProfileKeyInMemory(fresh.id) || fresh.apiKey?.trim();
-  if (!key) {
-    return {
-      ok: false,
-      models: [],
-      error: fresh.hasKey
-        ? '密钥未载入内存，请重新输入并保存密钥后再试'
-        : '未配置密钥，请先保存 API Key',
-    };
-  }
-  const url = modelsListUrl(fresh.baseUrl);
-  if (!url) return { ok: false, models: [], error: '未配置地址（Base URL）' };
-
-  // T03.7：probe-provider-models 幽灵命令已删，HTTP 直连为唯一路径
   try {
-    const res = await httpRequest(url, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
-    });
-    if (!res.ok) {
-      return {
-        ok: false,
-        models: [],
-        error: `获取失败 HTTP ${res.status}${res.text ? `：${res.text.slice(0, 120)}` : ''}`,
-      };
-    }
-    let data: {
-      data?: Array<{
-        id?: string;
-        context_length?: number;
-        max_model_len?: number;
-      }>;
-      models?: Array<{ id?: string } | string>;
-    };
-    try {
-      data = JSON.parse(res.text) as typeof data;
-    } catch {
-      return {
-        ok: false,
-        models: [],
-        error: '响应不是 JSON，请检查 Base URL 是否指向 API 根路径',
-      };
-    }
-    const rawList = Array.isArray(data.data)
-      ? data.data
-      : Array.isArray(data.models)
-        ? data.models
-        : [];
-    const models: string[] = [];
-    // 响应体显式声明的窗口（context_length / max_model_len），上送时优先于猜测
-    const scannedCtx = new Map<string, number>();
-    for (const item of rawList) {
-      if (typeof item === 'string' && item.trim()) {
-        models.push(item.trim());
-        continue;
-      }
-      if (item && typeof item === 'object') {
-        const id = typeof item.id === 'string' ? item.id.trim() : '';
-        if (!id) continue;
-        models.push(id);
-        const ctx =
-          typeof (item as { context_length?: number }).context_length ===
-          'number'
-            ? (item as { context_length: number }).context_length
-            : typeof (item as { max_model_len?: number }).max_model_len ===
-                'number'
-              ? (item as { max_model_len: number }).max_model_len
-              : undefined;
-        if (ctx && ctx > 0) {
-          upsertModelMeta(fresh.id, id, { contextLength: ctx });
-          scannedCtx.set(id, ctx);
+    const res = await providerProbeScanModels(fresh.id);
+    if (res.status === 'ok') {
+      const data = res.data;
+      if (data.ok && data.models.length > 0) {
+        const modelNames = data.models.map((m: WireScannedModel) => m.model);
+        for (const m of data.models) {
+          if (m.contextWindow && m.contextWindow > 0) {
+            upsertModelMeta(fresh.id, m.model, {
+              contextLength: m.contextWindow,
+            });
+          }
         }
+        return { ok: true, models: modelNames };
       }
+      return {
+        ok: false,
+        models: [],
+        error: data.error || '未能检测到服务器可用模型',
+      };
     }
-    const unique = Array.from(new Set(models)).sort((a, b) =>
-      a.localeCompare(b)
-    );
-    for (const m of unique) {
-      const ctx = guessContextLength(m);
-      const caps = guessModelCapabilities(m);
-      upsertModelMeta(fresh.id, m, {
-        ...(ctx ? { contextLength: ctx } : {}),
-        capabilities: caps,
-      });
+    if (res.status === 'error') {
+      return { ok: false, models: [], error: res.message };
     }
-    // P3 步骤 5b / §3.1.3（数据来源策略 2）：扫描结果上送合并——
-    // 仅窗口 / 能力位，不覆盖价格（Rust upsert_from_scan 保证）；
-    // 命令缺失 / invoke 失败降级记录，不阻塞扫描流程（uploadScannedModels 内吞错）。
-    const scanned: ScannedModel[] = unique.map((m) =>
-      buildScannedModelWire(
-        m,
-        scannedCtx.get(m) ?? guessContextLength(m),
-        guessModelCapabilities(m)
-      )
-    );
-    await uploadScannedModels(fresh.id, scanned);
-    return { ok: true, models: unique };
   } catch (e) {
-    return { ok: false, models: [], error: friendlyFetchError(e) };
+    const error = e instanceof Error ? e.message : String(e);
+    return { ok: false, models: [], error };
   }
+  return { ok: false, models: [], error: '扫描服务未就绪' };
 }
 
 // ─── P3 扫描结果上送（catalog_refresh；T-25）────────────────────────────
@@ -889,7 +658,9 @@ export interface CatalogSnapshotWire {
 }
 
 /** 条目 tiered 档映射（Rust TieredPriceTier camelCase → 前端 CatalogTier） */
-function toCatalogTierWire(tiers: CatalogSnapshotEntryWire['tieredPricing']): CatalogTier[] | undefined {
+function toCatalogTierWire(
+  tiers: CatalogSnapshotEntryWire['tieredPricing']
+): CatalogTier[] | undefined {
   if (!Array.isArray(tiers) || tiers.length === 0) return undefined;
   const out: CatalogTier[] = [];
   for (const t of tiers) {
@@ -897,10 +668,18 @@ function toCatalogTierWire(tiers: CatalogSnapshotEntryWire['tieredPricing']): Ca
     out.push({
       minTokens: t.minTokens,
       ...(typeof t.maxTokens === 'number' ? { maxTokens: t.maxTokens } : {}),
-      ...(typeof t.inputPrice === 'number' ? { inputPerMTok: t.inputPrice } : {}),
-      ...(typeof t.outputPrice === 'number' ? { outputPerMTok: t.outputPrice } : {}),
-      ...(typeof t.cacheReadPrice === 'number' ? { cacheReadPerMTok: t.cacheReadPrice } : {}),
-      ...(typeof t.cacheWritePrice === 'number' ? { cacheWritePerMTok: t.cacheWritePrice } : {}),
+      ...(typeof t.inputPrice === 'number'
+        ? { inputPerMTok: t.inputPrice }
+        : {}),
+      ...(typeof t.outputPrice === 'number'
+        ? { outputPerMTok: t.outputPrice }
+        : {}),
+      ...(typeof t.cacheReadPrice === 'number'
+        ? { cacheReadPerMTok: t.cacheReadPrice }
+        : {}),
+      ...(typeof t.cacheWritePrice === 'number'
+        ? { cacheWritePerMTok: t.cacheWritePrice }
+        : {}),
     });
   }
   return out.length > 0 ? out : undefined;
@@ -916,7 +695,10 @@ export function toCatalogCacheSnapshot(
 ): CatalogCacheSnapshot {
   const prices: Record<string, CatalogSnapshotPrice> = {};
   if (!wire || !Array.isArray(wire.entries)) {
-    return { version: typeof wire?.version === 'number' ? wire.version : 0, prices };
+    return {
+      version: typeof wire?.version === 'number' ? wire.version : 0,
+      prices,
+    };
   }
   for (const entry of wire.entries) {
     const model = normalizeModelIdText(entry?.model);
@@ -987,89 +769,28 @@ export async function testProviderModel(
   model: string
 ): Promise<{ ok: boolean; latencyMs?: number; error?: string }> {
   const fresh = loadProfiles().find((p) => p.id === profile.id) || profile;
-  // K-01：明文只经会话内内存缓存（saveProfileKey 写入）；profile 对象不再带 apiKey
-  const key = getProfileKeyInMemory(fresh.id) || fresh.apiKey?.trim();
-  if (!key) {
-    const r = {
-      ok: false,
-      error: fresh.hasKey ? '密钥未载入，请重新输入并点「保存」' : '未配置密钥',
-    };
-    upsertModelMeta(fresh.id, model, {
-      lastTest: { ok: false, at: Date.now(), error: r.error },
-    });
-    return r;
-  }
-  const base = normalizeBaseUrl(fresh.baseUrl);
-  if (!base) {
-    const r = { ok: false, error: '未配置地址' };
-    upsertModelMeta(fresh.id, model, {
-      lastTest: { ok: false, at: Date.now(), error: r.error },
-    });
-    return r;
-  }
-  const url = chatCompletionsUrl(base);
-  if (!url) {
-    const r = { ok: false, error: '无法构造 chat/completions 地址' };
-    upsertModelMeta(fresh.id, model, {
-      lastTest: { ok: false, at: Date.now(), error: r.error },
-    });
-    return r;
-  }
-
-  // Define timeout promise of 5 seconds
-  const timeoutPromise = new Promise<{
-    ok: boolean;
-    latencyMs?: number;
-    error?: string;
-  }>((_, reject) => {
-    setTimeout(() => {
-      reject(new Error('连接超时（超过 5 秒）'));
-    }, 5000);
-  });
-
-  // T03.7：probe-provider-chat 幽灵命令已删，HTTP 直连为唯一路径
-  const doTest = async (): Promise<{
-    ok: boolean;
-    latencyMs?: number;
-    error?: string;
-  }> => {
-    const started = performance.now();
-    const res = await httpRequest(url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 1,
-        temperature: 0,
-      }),
-    });
-    const latencyMs = Math.round(performance.now() - started);
-    if (!res.ok) {
-      const error = `连通失败 HTTP ${res.status}${res.text ? `：${res.text.slice(0, 100)}` : ''}`;
-      upsertModelMeta(fresh.id, model, {
-        lastTest: { ok: false, latencyMs, at: Date.now(), error },
-      });
-      return { ok: false, latencyMs, error };
-    }
-    upsertModelMeta(fresh.id, model, {
-      lastTest: { ok: true, latencyMs, at: Date.now() },
-    });
-    return { ok: true, latencyMs };
-  };
-
   try {
-    return await Promise.race([doTest(), timeoutPromise]);
-  } catch (e: unknown) {
+    const res = await providerProbePing(fresh.id, model || undefined);
+    if (res.status === 'ok') {
+      const data = res.data;
+      upsertModelMeta(fresh.id, model, {
+        lastTest: {
+          ok: data.ok,
+          latencyMs: data.latencyMs,
+          at: Date.now(),
+          error: data.error,
+        },
+      });
+      return { ok: data.ok, latencyMs: data.latencyMs, error: data.error };
+    }
+    if (res.status === 'error') {
+      return { ok: false, error: res.message };
+    }
+  } catch (e) {
     const error = e instanceof Error ? e.message : String(e);
-    upsertModelMeta(fresh.id, model, {
-      lastTest: { ok: false, at: Date.now(), error },
-    });
     return { ok: false, error };
   }
+  return { ok: false, error: '探活服务未就绪' };
 }
 
 /** 启用中的提供商（有密钥的优先展示） */
