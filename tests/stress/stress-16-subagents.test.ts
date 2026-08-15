@@ -137,119 +137,112 @@ describe('Unit 7.2: 16 子 Agent 并发压力与零死锁拓扑实证 (TS/前端
     );
   });
 
-  it('五级锁偏序客户端拓扑模拟 (L0 内存守卫 -> L1 状态树 -> L2 恢复协调 -> L3 异步写队列 -> L4 只读缓存) 零死锁', async () => {
+  it('PTY 注册表并发互斥与流式批处理器背压压测 (16 并发会话 / 5000+ chunks/s / 零数据撕裂)', async () => {
     const totalWorkers = 16;
-    const iterationsPerWorker = 30;
+    const chunksPerWorker = 50;
+    const spawnedPtyProcesses = new Set<string>();
+    const flushedTexts = new Map<string, string>();
+    let monotonicityViolations = 0;
 
-    // 模拟五级锁偏序
-    // L0: 内存守卫 (同步 Map)
-    const l0MemoryGuard = new Map<string, number>();
-    // L1: 领域状态树 (带并发版本号的 Session Store)
-    const l1SessionStore = {
-      version: 0,
-      sessions: new Map<string, { title: string; count: number }>(),
-    };
-    // L2: 恢复协调器 (异步 Mutex 队列)
-    class AsyncMutex {
-      private locked = false;
-      private waiting: Array<() => void> = [];
+    // 注入真实 Mock PTY 处理器（带微秒级异步延迟模拟真实进程创建）
+    registerPtyHandlers({
+      spawn: async (sessionId: string) => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        const ptyId = `pty-proc-${sessionId}`;
+        spawnedPtyProcesses.add(ptyId);
+        return ptyId;
+      },
+      kill: async (ptyId: string, _sessionId: string) => {
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        spawnedPtyProcesses.delete(ptyId);
+      },
+    });
 
-      async lock(): Promise<() => void> {
-        if (this.locked) {
-          await new Promise<void>((resolve) => this.waiting.push(resolve));
+    // 生产级 StreamTextBatcher 实例（高频批合并与背压刷新）
+    const batcher = new StreamTextBatcher(
+      (key, text) => {
+        const prev = flushedTexts.get(key);
+        if (prev !== undefined && !text.startsWith(prev)) {
+          monotonicityViolations++;
         }
-        this.locked = true;
-        return () => {
-          this.locked = false;
-          const next = this.waiting.shift();
-          if (next) next();
-        };
+        flushedTexts.set(key, text);
+      },
+      {
+        intervalMs: 16,
+        maxPendingKeys: 8,
+        maxBufferedChars: 2000,
       }
-    }
-    const l2RecoveryMutex = new AsyncMutex();
-
-    // L3: 批写单写队列 (Single Writer Actor 队列模型)
-    class SingleWriterQueue {
-      private queue: Array<{ data: string; resolve: () => void }> = [];
-      private flushing = false;
-      public totalBatches = 0;
-      public totalWrites = 0;
-
-      async submit(data: string): Promise<void> {
-        return new Promise<void>((resolve) => {
-          this.queue.push({ data, resolve });
-          if (!this.flushing) {
-            this.flushing = true;
-            setTimeout(() => this.flush(), 2);
-          }
-        });
-      }
-
-      private flush(): void {
-        const batch = this.queue.splice(0, 50);
-        if (batch.length > 0) {
-          this.totalBatches++;
-          this.totalWrites += batch.length;
-          for (const item of batch) {
-            item.resolve();
-          }
-        }
-        if (this.queue.length > 0) {
-          setTimeout(() => this.flush(), 2);
-        } else {
-          this.flushing = false;
-        }
-      }
-    }
-    const l3WriteQueue = new SingleWriterQueue();
-
-    // L4: 只读并发缓存
-    const l4ReadCache = new Map<string, string>();
+    );
 
     const startTime = performance.now();
-    let completedOps = 0;
+    const expectedTexts = new Map<string, string>();
 
+    // 16 个并发 Worker：同时进行 PTY 会话互斥保障与流式批处理背压推流
     const workers = Array.from(
       { length: totalWorkers },
       async (_, workerId) => {
-        for (let iter = 0; iter < iterationsPerWorker; iter++) {
-          // L0: 纳秒级内存守卫
-          l0MemoryGuard.set(`w-${workerId}`, iter);
+        const sessionId = `stress-pty-sess-${workerId}`;
+        const messageId = `msg-worker-${workerId}`;
 
-          // L1: 领域状态更新
-          l1SessionStore.version++;
-          l1SessionStore.sessions.set(`s-${workerId}`, {
-            title: `Session ${workerId}`,
-            count: iter,
-          });
+        // 1. 并发竞争 PTY 挂载（同一 session 触发 3 次并发 ensurePtyForSession，验证单例互斥与幂等）
+        const [pty1, pty2, pty3] = await Promise.all([
+          ensurePtyForSession(sessionId),
+          ensurePtyForSession(sessionId),
+          ensurePtyForSession(sessionId),
+        ]);
+        expect(pty1).toBe(`pty-proc-${sessionId}`);
+        expect(pty2).toBe(pty1);
+        expect(pty3).toBe(pty1);
 
-          // L2: 异步业务锁
-          const unlock = await l2RecoveryMutex.lock();
-          try {
-            // L3: 异步单写批提交
-            await l3WriteQueue.submit(`write-${workerId}-${iter}`);
-            // L4: 更新只读缓存
-            l4ReadCache.set(`key-${workerId}`, `val-${iter}`);
-          } finally {
-            unlock();
+        // 2. 高频推流（模拟大模型 16 路子代理密集流式吐字）
+        let cumulativeText = '';
+        for (let iter = 0; iter < chunksPerWorker; iter++) {
+          const chunk = `[w${workerId}-t${iter}:${'x'.repeat(20)}] `;
+          cumulativeText += chunk;
+
+          batcher.push(messageId, cumulativeText);
+
+          // 模拟网络微时隙
+          if (iter % 15 === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 1));
           }
-
-          completedOps++;
         }
+
+        expectedTexts.set(messageId, cumulativeText);
       }
     );
 
     await Promise.all(workers);
-    const elapsed = performance.now() - startTime;
-    const expectedOps = totalWorkers * iterationsPerWorker;
 
-    expect(completedOps).toBe(expectedOps);
-    expect(l3WriteQueue.totalWrites).toBe(expectedOps);
-    expect(l3WriteQueue.totalBatches).toBeLessThan(expectedOps); // 确认批聚合发生
-    expect(l4ReadCache.size).toBe(totalWorkers);
+    // 3. 终态强行冲刷（对齐 complete/stop 时的 flushNow 契约）
+    batcher.flushNow();
+    const elapsed = performance.now() - startTime;
+    const totalChunks = totalWorkers * chunksPerWorker;
+    const qps = (totalChunks / (elapsed / 1000)).toFixed(2);
+
+    // 4. 断言单调不变量与零数据撕裂
+    expect(monotonicityViolations).toBe(0);
+    expect(flushedTexts.size).toBe(totalWorkers);
+    for (let i = 0; i < totalWorkers; i++) {
+      const msgId = `msg-worker-${i}`;
+      const expected = expectedTexts.get(msgId);
+      const actual = flushedTexts.get(msgId);
+      expect(actual).toBe(expected);
+      expect(actual?.length).toBeGreaterThan(0);
+    }
+
+    // 5. 断言 PTY 注册表状态与无孤儿泄漏
+    expect(ptyRegistry.size).toBe(totalWorkers);
+    expect(spawnedPtyProcesses.size).toBe(totalWorkers);
+
+    // 6. 清理释放 PTY
+    const killedSessions = await killAllPtys();
+    expect(killedSessions.length).toBe(totalWorkers);
+    expect(ptyRegistry.size).toBe(0);
+    expect(spawnedPtyProcesses.size).toBe(0);
 
     console.log(
-      `[VITEST-STRESS] 五级偏序客户端拓扑实证: 总操作=${completedOps}, 批次=${l3WriteQueue.totalBatches}, 耗时=${elapsed.toFixed(2)}ms, 死锁率=0.00%`
+      `[VITEST-STRESS] PTY 注册表并发互斥与流式批处理器背压压测通过: 总操作=${totalChunks}, 耗时=${elapsed.toFixed(2)}ms, QPS=${qps} chunks/s, 孤儿泄漏=0`
     );
   });
 

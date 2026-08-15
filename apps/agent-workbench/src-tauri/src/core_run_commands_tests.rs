@@ -1079,11 +1079,30 @@ fn compaction_policy_overrides_and_malformed_fall_back() {
     );
 }
 
+/// F4/F5 测试辅助：返回固定 Schema V1 文档的 Summarizer（校验通过，
+/// 字段含 goal/progress/nextSteps 供阶段总结提取）
+struct FakeLlmSummarizer;
+impl conex_compaction::Summarizer for FakeLlmSummarizer {
+    fn summarize(
+        &self,
+        _dropped: &[conex_types::message::AgentMessage],
+        _existing: Option<&str>,
+    ) -> Result<String, String> {
+        Ok(r#"{"schemaVersion":1,"blockId":"fake-1","generation":1,"droppedIds":[],"height":1,"tier":"stage-1","goal":"测试目标","constraints":[],"progress":["进展一"],"decisions":[],"nextSteps":["下一步一"],"criticalContext":"关键上下文"}"#.to_string())
+    }
+}
+
+/// F4/F5 测试辅助：注入 FakeLlmSummarizer 工厂（会话参数透传）
+fn inject_fake_summarizer(state: &Arc<CoreRunState>) {
+    state.set_summarizer_factory(Some(Box::new(|_session_id: &str| {
+        Some(Arc::new(FakeLlmSummarizer) as Arc<dyn conex_compaction::Summarizer>)
+    })));
+}
+
 /// P0-1 触发验收（完整 run 链路，mock provider 场景）：历史水合超大
 /// 对话 → 首个 prepare_turn 估算超窗（estimate ≥ window - reserve）→
 /// 预检压缩真实触发 → context-compression-start / end 事件广播落库 →
-/// 压缩后（中性 stub 进链）继续请求并正常收口。Summarizer 显式关闭
-/// 保证确定性（不走真实 HTTP；压缩产物 = 中性 stub，awaiting 语义）。
+/// 压缩后继续请求并正常收口。
 #[tokio::test]
 async fn compaction_policy_preflight_triggers_compaction_in_full_run() {
     let huge = "x".repeat(160_000);
@@ -1092,9 +1111,7 @@ async fn compaction_policy_preflight_triggers_compaction_in_full_run() {
         ProviderStreamEvent::stop(StopReason::Stop),
     ]));
     let (state, db, _emitter) = run_control_test_state(provider);
-    // P0-1 确定性：显式关闭真实 LLM 摘要器（测试不走 HTTP；压缩走中性
-    // stub——预检触发链本身不依赖 summarizer）
-    state.set_summarizer_factory(None);
+    inject_fake_summarizer(&state);
     state.run_restore().await;
 
     // 历史水合：u1,a1,u2,a2,u3,a3,u4(超大)——水合尾部约束要求以 user
@@ -1242,9 +1259,7 @@ async fn subagent_run_assembles_catalog_window_budget_and_preflight_compaction()
     let (state, db, _emitter) = run_control_test_state_with_model(provider, "qwen2-5-omni-7b");
     db.upsert_session_entry(&subagent_test_session_entry(subagent_session))
         .expect("子代理会话条目");
-    // P0-1 确定性：显式关闭真实 LLM 摘要器（压缩走中性 stub，测试不
-    // 走 HTTP——预检触发链本身不依赖 summarizer）
-    state.set_summarizer_factory(None);
+    inject_fake_summarizer(&state);
     state.run_restore().await;
 
     // 子代理会话历史预置（spawner 场景 history=None → 走缓存回退；
@@ -6763,9 +6778,15 @@ async fn run_subagent_end_to_end_not_unsupported_with_terminal_and_steering() {
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
     ]));
-    let sub = Arc::new(TestProvider::new(vec![
-        ProviderStreamEvent::text("调研完成。"),
-        ProviderStreamEvent::stop(StopReason::Stop),
+    let sub = Arc::new(TestProvider::with_scripts(vec![
+        vec![
+            ProviderStreamEvent::text("调研完成A。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+        vec![
+            ProviderStreamEvent::text("调研完成B。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
     ]));
     let (state, db, main, sub, _emitter) =
         subagent_state_with_providers(main, sub, "deepseek-v4-flash");
@@ -6778,9 +6799,9 @@ async fn run_subagent_end_to_end_not_unsupported_with_terminal_and_steering() {
     )
     .await
     .expect("主 agent run 发起成功");
-    // 等待全部 run（主 agent + 两个子代理）收口；子代理行进入终态
-    wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
+    // 等待两个子代理行进入终态，且全部活动 run 收口
     wait_agent_rows_terminal(&db, "sess-main", 2, Duration::from_secs(20)).await;
+    wait_all_runs_terminal(&state, Duration::from_secs(30)).await;
 
     // 1. 工具不再返回 common.unsupported：两个子代理行落库 + 结果信封
     let rows = db.load_session_agents("sess-main").expect("读行");
@@ -6802,17 +6823,26 @@ async fn run_subagent_end_to_end_not_unsupported_with_terminal_and_steering() {
     );
 
     // 3. 终态事件回传：subagent-started + subagent-ended 落库（父会话）
-    let events = db
-        .query_events("sess-main", 0, Some(200))
-        .expect("事件查询");
-    let started = events
-        .iter()
-        .filter(|e| e.event_type == "subagent-started")
-        .count();
-    let ended = events
-        .iter()
-        .filter(|e| e.event_type == "subagent-ended")
-        .count();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let mut started = 0;
+    let mut ended = 0;
+    while tokio::time::Instant::now() < deadline {
+        let events = db
+            .query_events("sess-main", 0, Some(200))
+            .expect("事件查询");
+        started = events
+            .iter()
+            .filter(|e| e.event_type == "subagent-started")
+            .count();
+        ended = events
+            .iter()
+            .filter(|e| e.event_type == "subagent-ended")
+            .count();
+        if started >= 2 && ended >= 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(30)).await;
+    }
     assert_eq!(started, 2, "subagent-started 每次 spawn 发射一次");
     assert_eq!(ended, 2, "subagent-ended 每个终态发射一次");
 
@@ -9762,25 +9792,7 @@ async fn continuity_kill_channel_lifecycle_paths() {
 
 // ── E2 F4（07 §3 卡 C）：core_compact_now 手动压缩命令 ──────────────
 
-/// F4/F5 测试辅助：返回固定 Schema V1 文档的 Summarizer（校验通过，
-/// 字段含 goal/progress/nextSteps 供阶段总结提取）
-struct FakeLlmSummarizer;
-impl conex_compaction::Summarizer for FakeLlmSummarizer {
-    fn summarize(
-        &self,
-        _dropped: &[conex_types::message::AgentMessage],
-        _existing: Option<&str>,
-    ) -> Result<String, String> {
-        Ok(r#"{"schemaVersion":1,"blockId":"fake-1","generation":1,"droppedIds":[],"height":1,"tier":"stage-1","goal":"测试目标","constraints":[],"progress":["进展一"],"decisions":[],"nextSteps":["下一步一"],"criticalContext":"关键上下文"}"#.to_string())
-    }
-}
 
-/// F4/F5 测试辅助：注入 FakeLlmSummarizer 工厂（会话参数透传）
-fn inject_fake_summarizer(state: &Arc<CoreRunState>) {
-    state.set_summarizer_factory(Some(Box::new(|_session_id: &str| {
-        Some(Arc::new(FakeLlmSummarizer) as Arc<dyn conex_compaction::Summarizer>)
-    })));
-}
 
 /// F4/F5 测试辅助：构造超预算对话（N 条大消息；ASCII 约 4 字符/token，
 /// 8000 字符 ≈ 2000 token/条；15 条 ≈ 30k token ≈ 窗口 64000 的 47%）
@@ -10110,6 +10122,7 @@ async fn stage_milestone_without_summarizer_emits_only_reached() {
     db.set_session_meta("compact_stage_ratios", "[0.001, 0.999]")
         .unwrap();
     let (state, emitter) = core_state_with_emitter(db);
+    state.set_summarizer_factory(None);
     // 不注入 Summarizer（F1 L1：无 Summarizer → 不产出、不标记）
     let messages = big_llm_conversation(15);
     let active = build_active_run(&state, "s1", "run-s1").await;

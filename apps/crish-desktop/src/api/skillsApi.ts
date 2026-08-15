@@ -203,10 +203,11 @@ export function removeExtraSkillDir(dir: string) {
 
 /* ---------- FS helpers（plugin-fs 优先，突破工作区沙箱） ---------- */
 
+const PLUGIN_FS_PKG = '@tauri-apps/plugin-fs';
+const TAURI_PATH_PKG = '@tauri-apps/api/path';
+
 async function tryPluginFs(): Promise<{
-  readDir?: (
-    p: string
-  ) => Promise<
+  readDir?: (p: string) => Promise<
     Array<{
       name?: unknown;
       isDirectory?: boolean;
@@ -220,14 +221,14 @@ async function tryPluginFs(): Promise<{
   exists?: (p: string) => Promise<boolean>;
 } | null> {
   const fs: unknown = await (
-    import(/* @vite-ignore */ '@tauri-apps/plugin-fs') as Promise<unknown>
+    import(/* @vite-ignore */ PLUGIN_FS_PKG) as Promise<unknown>
   ).catch(() => null);
   return (fs as NonNullable<Awaited<ReturnType<typeof tryPluginFs>>>) || null;
 }
 
 async function tryHomeDir(): Promise<string | null> {
   const pathApi = (await (
-    import(/* @vite-ignore */ '@tauri-apps/api/path') as Promise<unknown>
+    import(/* @vite-ignore */ TAURI_PATH_PKG) as Promise<unknown>
   ).catch(() => null)) as { homeDir?: () => Promise<string> } | null;
   const h = pathApi?.homeDir ? await pathApi.homeDir().catch(() => null) : null;
   return h ? String(h) : null;
@@ -623,11 +624,14 @@ export async function pickSkillDirectory(): Promise<string | null> {
   return openDirectoryDialogSafe('选择技能目录');
 }
 
+const PLUGIN_OPENER_PKG = '@tauri-apps/plugin-opener';
+const PLUGIN_SHELL_PKG = '@tauri-apps/plugin-shell';
+
 /** 在系统资源管理器中显示路径 */
 export async function revealSkillPath(filePath: string): Promise<boolean> {
   try {
     const opener = (await (
-      import(/* @vite-ignore */ '@tauri-apps/plugin-opener') as Promise<unknown>
+      import(/* @vite-ignore */ PLUGIN_OPENER_PKG) as Promise<unknown>
     ).catch(() => null)) as {
       openPath?: (p: string) => Promise<unknown>;
       revealItemInDir?: (p: string) => Promise<unknown>;
@@ -645,7 +649,7 @@ export async function revealSkillPath(filePath: string): Promise<boolean> {
   }
   try {
     const shell = (await (
-      import(/* @vite-ignore */ '@tauri-apps/plugin-shell') as Promise<unknown>
+      import(/* @vite-ignore */ PLUGIN_SHELL_PKG) as Promise<unknown>
     ).catch(() => null)) as { open?: (url: string) => Promise<unknown> } | null;
     if (shell?.open) {
       await shell.open(dirname(filePath));
