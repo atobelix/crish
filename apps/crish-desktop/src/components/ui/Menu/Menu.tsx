@@ -312,70 +312,90 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     }
   }, [focusedIndex]);
 
-  // 如果 trigger 顶层被 Tooltip 包裹，提取出内部的实际 DOM 子元素与 tooltip content，
-  // 避免 Radix Popover.Trigger asChild 接收到 Fragment 导致 anchor ref 丢失无法测量 DOMRect
-  let actualTrigger = trigger;
-  let tipContent: React.ReactNode = null;
-  let tipSide: 'top' | 'bottom' | 'left' | 'right' = 'top';
+  // ══════════════════════════════════════════════════════════════════════════════
+  // Trigger 渲染与 React 19 安全克隆分支
+  // ══════════════════════════════════════════════════════════════════════════════
+  let renderedTrigger: React.ReactNode = null;
 
-  if (
-    React.isValidElement(trigger) &&
-    typeof trigger.type !== 'string' &&
-    (trigger.props as { content?: React.ReactNode; children?: React.ReactNode })
-      .content !== undefined &&
-    (trigger.props as { content?: React.ReactNode; children?: React.ReactNode })
-      .children !== undefined
-  ) {
-    tipContent = (trigger.props as { content?: React.ReactNode }).content;
-    tipSide =
-      (trigger.props as { side?: 'top' | 'bottom' | 'left' | 'right' }).side ||
-      'top';
-    actualTrigger = (trigger.props as { children?: React.ReactNode }).children;
-  }
+  if (anchor) {
+    // 【推荐模式】显式 Anchor：Radix Popover 仅挂载 Anchor 虚拟参考点，外部按钮拥有绝对所有权
+    renderedTrigger = (
+      <Popover.Anchor virtualRef={anchor} data-menu-anchor="true" />
+    );
+  } else if (trigger) {
+    // 【向后兼容模式】对 trigger 进行 React 19 安全解析
+    let actualTrigger: React.ReactNode = trigger;
+    let tipContent: React.ReactNode = null;
+    let tipSide: 'top' | 'bottom' | 'left' | 'right' = 'top';
 
-  // 克隆 trigger 并精确绑定 ref（由 Radix Popover.Trigger 处理原生点击与切换状态机）
-  const clonedTrigger = React.isValidElement(actualTrigger)
-    ? React.cloneElement(
-        actualTrigger as React.ReactElement<Record<string, unknown>>,
-        {
-          ref: (node: HTMLElement | null) => {
-            triggerRef.current = node;
-            const origRef = (actualTrigger as { ref?: React.Ref<HTMLElement> })
-              .ref;
-            if (typeof origRef === 'function') {
-              origRef(node);
-            } else if (
-              origRef &&
-              typeof origRef === 'object' &&
-              'current' in origRef
-            ) {
-              (origRef as React.MutableRefObject<HTMLElement | null>).current =
-                node;
-            }
-          },
+    if (
+      React.isValidElement(trigger) &&
+      typeof trigger.type !== 'string' &&
+      (
+        trigger.props as {
+          content?: React.ReactNode;
+          children?: React.ReactNode;
         }
-      )
-    : actualTrigger;
+      ).content !== undefined &&
+      (
+        trigger.props as {
+          content?: React.ReactNode;
+          children?: React.ReactNode;
+        }
+      ).children !== undefined
+    ) {
+      tipContent = (trigger.props as { content?: React.ReactNode }).content;
+      tipSide =
+        (trigger.props as { side?: 'top' | 'bottom' | 'left' | 'right' })
+          .side || 'top';
+      actualTrigger = (trigger.props as { children?: React.ReactNode })
+        .children;
+    }
+
+    // React 19 安全克隆：优先通过 props.ref 访问，绝不直接读取 (actualTrigger as any).ref
+    const clonedTrigger = React.isValidElement(actualTrigger)
+      ? React.cloneElement(
+          actualTrigger as React.ReactElement<Record<string, unknown>>,
+          {
+            ref: (node: HTMLElement | null) => {
+              triggerRef.current = node;
+              const propsRef = (
+                (actualTrigger as React.ReactElement).props as {
+                  ref?: React.Ref<HTMLElement>;
+                }
+              )?.ref;
+              if (typeof propsRef === 'function') {
+                propsRef(node);
+              } else if (
+                propsRef &&
+                typeof propsRef === 'object' &&
+                'current' in propsRef
+              ) {
+                (
+                  propsRef as React.MutableRefObject<HTMLElement | null>
+                ).current = node;
+              }
+            },
+          }
+        )
+      : actualTrigger;
+
+    renderedTrigger = (
+      <Popover.Trigger asChild className="no-drag">
+        {tipContent && React.isValidElement(clonedTrigger) ? (
+          <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
+            {clonedTrigger}
+          </Tooltip>
+        ) : (
+          (clonedTrigger as React.ReactElement)
+        )}
+      </Popover.Trigger>
+    );
+  }
 
   const contentClasses = [styles.menuContent, contentClassName]
     .filter(Boolean)
     .join(' ');
-
-  const renderedTrigger = anchor ? (
-    // P1-F4：外部真实按钮作浮动锚点（virtualRef 指向 anchor.current，
-    // Radix 测量该可见元素而非本 div；本 div 仅作 custom-anchor 注册节点）
-    <Popover.Anchor virtualRef={anchor} data-menu-anchor="true" />
-  ) : (
-    <Popover.Trigger asChild className="no-drag">
-      {tipContent && React.isValidElement(clonedTrigger) ? (
-        <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
-          {clonedTrigger}
-        </Tooltip>
-      ) : (
-        (clonedTrigger as React.ReactElement)
-      )}
-    </Popover.Trigger>
-  );
 
   const resolvedMaxHeight =
     maxHeight != null

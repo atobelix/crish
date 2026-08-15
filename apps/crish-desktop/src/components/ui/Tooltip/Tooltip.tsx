@@ -71,6 +71,29 @@ const TOOLTIP_EDGE_PAD = 8;
 /** 与触发器的间距 */
 const TOOLTIP_GAP = 8;
 
+/**
+ * 严格几何合法性校验谓词：判定 DOMRect 是否为有效视口几何
+ * 绝对拦截以下非法瞬态：
+ * 1. rect 为 null/undefined；
+ * 2. 宽高均为 0 且位置为 (0,0) 的全 0 未布局态；
+ * 3. 宽或高 <= 0 的不可见态 / 脱离文档流态。
+ */
+export function isValidDOMRect(rect: DOMRect | null | undefined): boolean {
+  if (!rect) return false;
+  if (
+    rect.width <= 0 &&
+    rect.height <= 0 &&
+    rect.top === 0 &&
+    rect.left === 0
+  ) {
+    return false;
+  }
+  if (rect.width <= 0 || rect.height <= 0) {
+    return false;
+  }
+  return true;
+}
+
 /** side → CSS translate（动画起点/终点形变用，与历史 getPositionStyle 一致） */
 function translateFor(side: TooltipSide): string {
   switch (side) {
@@ -323,9 +346,11 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
 
     const handleShow = (el: HTMLElement) => {
       if (!shouldShowTooltip) return;
+      const currentRect = el.getBoundingClientRect();
+      if (!isValidDOMRect(currentRect)) return;
       clearHideTimer();
       childElRef.current = el;
-      setRect(el.getBoundingClientRect());
+      setRect(currentRect);
       setVisible(true);
     };
 
@@ -354,7 +379,33 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
 
     // F7-F8：键盘 focus/blur 触发（与 hover 语义一致，delayHide 尊重）
     const handleFocus = (e: React.FocusEvent<HTMLElement>) => {
-      handleShow(e.currentTarget);
+      const target = e.currentTarget;
+      // 守卫 1: 隔离程序化聚焦 (非用户真实键盘漫游)
+      // 在真实浏览器中，element.focus() 不匹配 :focus-visible；
+      // 在测试环境 (jsdom) 中，若未模拟 activeElement，则放行合成事件
+      try {
+        if (
+          typeof target.matches === 'function' &&
+          target.ownerDocument.activeElement === target &&
+          !target.matches(':focus-visible')
+        ) {
+          childHandlers.onFocus?.(e);
+          restHandlers.onFocus?.(e);
+          return;
+        }
+      } catch {
+        // 兼容不支持 matches 或 :focus-visible 的特殊环境
+      }
+
+      // 守卫 2: 校验目标节点物理几何尺寸
+      const currentRect = target.getBoundingClientRect();
+      if (!isValidDOMRect(currentRect)) {
+        childHandlers.onFocus?.(e);
+        restHandlers.onFocus?.(e);
+        return;
+      }
+
+      handleShow(target);
       childHandlers.onFocus?.(e);
       restHandlers.onFocus?.(e);
     };
@@ -457,6 +508,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
         {shouldShowTooltip &&
           isMounted &&
           rect &&
+          isValidDOMRect(rect) &&
           createPortal(
             <DismissableLayer.Branch asChild>
               <div
@@ -469,7 +521,14 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
                   {
                     top: `${clampedPos?.top ?? rect.top}px`,
                     left: `${clampedPos?.left ?? rect.left}px`,
-                    opacity: clampedPos !== null ? undefined : 0,
+                    opacity:
+                      clampedPos !== null && isValidDOMRect(rect)
+                        ? undefined
+                        : 0,
+                    pointerEvents:
+                      clampedPos !== null && isValidDOMRect(rect)
+                        ? undefined
+                        : 'none',
                     '--tooltip-translate': translateFor(effectiveSide),
                   } as React.CSSProperties & Record<string, unknown>
                 }

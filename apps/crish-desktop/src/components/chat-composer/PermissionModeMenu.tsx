@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PermissionModeMenu.module.css';
 import { Menu, Tooltip } from '../ui';
@@ -16,9 +16,9 @@ type Props = {
 };
 
 /**
- * 权限模式菜单（T05.3.2 迁移到 ui/Menu 基座）：
- * - 坐标/Esc/外点关闭全部由基座 Radix Popover 接管（删除自算坐标
- *   与「预估高度 140」hack）；弹出方向 side="top" 对齐原「按钮上方」布局；
+ * 权限模式菜单（T05.3.2 迁移到 ui/Menu 基座 / 显式 Anchor 模式）：
+ * - 药丸按钮拥有独立的 pillBtnRef 与 onClick 处理器，消除 Popover.Trigger 与 Tooltip 争抢导致的 Quad-Click 四击关闭 Bug；
+ * - 坐标/Esc/外点关闭全部由基座 Radix Popover 接管；弹出方向 side="top" 对齐原「按钮上方」布局；
  * - 键盘漫游（↑↓/Enter）由基座 options 模式提供；
  * - 每项仍包 Tooltip 展示矩阵提示，选中态打勾。
  * - 枚举已统一为 api/permissionModes 单一真相源（40 方案 T2/T7）；
@@ -31,6 +31,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
   const mode = coercePermissionMode(modeRaw);
   const meta = permissionModeMeta(mode);
   const [open, setOpen] = useState(false);
+  const pillBtnRef = useRef<HTMLButtonElement>(null);
 
   const selectMode = useCallback(
     (nextRaw: unknown) => {
@@ -42,6 +43,10 @@ export const PermissionModeMenu: React.FC<Props> = ({
     },
     [mode, onChange]
   );
+
+  const handleToggle = useCallback(() => {
+    setOpen((prev) => !prev);
+  }, []);
 
   const options = DESKTOP_PERMISSION_MODE_IDS.map((m) => ({
     id: m,
@@ -55,28 +60,33 @@ export const PermissionModeMenu: React.FC<Props> = ({
       data-density="compact"
       style={{ position: 'relative', display: 'inline-block' }}
     >
+      <Tooltip
+        content={`当前权限模式：${meta.label} · ${meta.matrixHint}`}
+        disabled={open}
+        side="top"
+      >
+        <button
+          ref={pillBtnRef}
+          type="button"
+          className={`${styles.permPill} ${open ? styles.isOpen : ''} no-drag`}
+          onClick={handleToggle}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          aria-label={`当前权限模式：${meta.label}`}
+        >
+          <span>{meta.label}</span>
+          <Lucide.ChevronDown
+            size={11}
+            className={styles.permPillChev}
+            aria-hidden="true"
+          />
+        </button>
+      </Tooltip>
+
       <Menu
         open={open}
         onOpenChange={setOpen}
-        trigger={
-          <Tooltip
-            content={`当前权限模式：${meta.label} · ${meta.matrixHint}`}
-            disabled={open}
-          >
-            <button
-              type="button"
-              className={`${styles.permPill} ${open ? styles.isOpen : ''}`}
-              aria-label={`当前权限模式：${meta.label}`}
-            >
-              <span>{meta.label}</span>
-              <Lucide.ChevronDown
-                size={11}
-                className={styles.permPillChev}
-                aria-hidden
-              />
-            </button>
-          </Tooltip>
-        }
+        anchor={pillBtnRef}
         options={options}
         side="top"
         align="start"
@@ -101,7 +111,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
                   <Lucide.Check
                     size={12}
                     style={{ marginLeft: 'auto', opacity: 0.8 }}
-                    aria-hidden
+                    aria-hidden="true"
                   />
                 ) : null}
               </button>
