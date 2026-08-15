@@ -187,6 +187,12 @@ impl BackgroundTaskRegistry {
         shared
     }
 
+    /// 返回日志根目录
+    #[allow(dead_code)]
+    pub fn log_root(&self) -> PathBuf {
+        self.log_root.clone()
+    }
+
     /// 纯构造（不启动归档线程；`new()` 与 `with_config` 共用）。
     /// 资源段字段取默认：采样配置 2s/60s、通知投递器未接线（留痕兜底）。
     pub(crate) fn construct(log_root: PathBuf, retention: Duration, max_tasks: usize) -> Self {

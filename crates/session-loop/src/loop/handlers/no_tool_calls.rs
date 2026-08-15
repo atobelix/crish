@@ -1,4 +1,4 @@
-//! handleNoToolCalls（01 §2.6，tool-promise steering 已删除 D2）
+//! handleNoToolCalls（01 §2.6 / Tool-Promise 自愈状态机 RUL-02）
 //!
 //! 触发：streaming 中消息无 tool-call。
 //! 行为：
@@ -7,19 +7,26 @@
 //!      NO_PROGRESS_CONTINUE；阶梯用尽后 continue-nudge 上限内再试一次
 //!      （01 §2.6 步骤 1；nudge 文本按 D8 不注入当前 run，仅重试）；
 //!   2. 非 length：重置 length 计数器（01 §2.6 步骤 2）；
-//!   3. resetSteeringCount（01 §2.6 步骤 3 / 01 §3.3 ③）；
-//!   4. NO_TOOL_CALLS → turn-complete（纯文字回复 = 正常结束，01 D6）。
+//!   3. Tool-Promise 意图自愈状态机（RUL-02）：
+//!      三层反向过滤 + 行动意图检测；未超 max_tool_promise_heals（默认 2）
+//!      上限时合成 Steering Nudge 注入并以 NO_PROGRESS_CONTINUE 推进续轮；
+//!   4. resetSteeringCount（01 §2.6 步骤 3 / 01 §3.3 ③）；
+//!   5. NO_TOOL_CALLS → turn-complete（纯文字回复 = 正常结束，01 D6）。
 //!
 //! 期望语义：无 tool-call 的纯文字回复 = 正常收场（永不 error，本次 bug 锚点）。
 
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use conex_types::session::AgentSessionEvent as E;
 
+use crate::steering::strategy::ToolPromiseDetector;
 use crate::stream::ConsumeStopReason;
 
-use super::super::handlers::{dispatch, HandlerOutcome, LoopState};
+use super::super::handlers::{
+    dispatch, last_assistant_message, new_message_id, HandlerOutcome, LoopState,
+};
 use super::super::LoopError;
 
-/// no-tool-calls handler（01 §2.6）
+/// no-tool-calls handler（01 §2.6 / RUL-02）
 pub(crate) async fn handle(
     state: &mut LoopState,
     stop_reason: Option<ConsumeStopReason>,
@@ -66,6 +73,56 @@ pub(crate) async fn handle(
         // 非 length：重置 length 计数器（01 §2.6 步骤 2）
         state.length_upgrades = 0;
         state.continue_nudges = 0;
+
+        // ── Tool-Promise 意图自愈状态机（RUL-02）──
+        if state.options.tool_promise_recovery_enabled {
+            if let Some(assistant) = last_assistant_message(state) {
+                let text = assistant.text();
+                if let Some(snippet) = ToolPromiseDetector::detect_action_promise(&text) {
+                    if state.tool_promise_heals < state.options.max_tool_promise_heals {
+                        state.tool_promise_heals += 1;
+                        tracing::warn!(
+                            session_id = %state.machine.context().session_id,
+                            heal_count = state.tool_promise_heals,
+                            snippet = %snippet,
+                            "检测到 AI 行动宣誓但未调用工具，触发 Tool-Promise 自愈推进"
+                        );
+
+                        // 构造针对性的 Steering Nudge 注入下一轮
+                        let nudge_prompt = format!(
+                            "【系统自动推进】：你刚刚在回复中表达了执行动作的意图（“{}”），但当前轮次未检测到结构化的工具调用。请立即调用相应的系统工具（如 `shell_command`、`write_file` 等）执行操作，或者给出明确针对用户的最终结论。",
+                            snippet
+                        );
+
+                        let nudge_msg = AgentMessage {
+                            id: new_message_id("nudge-promise"),
+                            role: AgentMessageRole::User,
+                            created_at: crate::steering::now_iso_utc(),
+                            blocks: vec![AgentMessageBlock::Text { text: nudge_prompt }],
+                            metadata: Some(serde_json::json!({
+                                "kind": "tool-promise-recovery",
+                                "actionSnippet": snippet,
+                                "healCount": state.tool_promise_heals,
+                            })),
+                            client_message_id: None,
+                            content: None,
+                        };
+
+                        state.input_queue.enqueue_steer(nudge_msg);
+
+                        // 重进 provider 循环
+                        dispatch(state, E::NoProgressContinue)?;
+                        return Ok(HandlerOutcome::continue_run());
+                    } else {
+                        tracing::info!(
+                            session_id = %state.machine.context().session_id,
+                            heal_count = state.tool_promise_heals,
+                            "Tool-Promise 自愈已达到硬上限（2 次），安全收口退出"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     // 无 tool-call 正常结束：重置 steering 计数（01 §2.6 步骤 3 / 01 §3.3 ③；

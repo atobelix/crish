@@ -145,6 +145,8 @@ fn exec_ctx(
         )),
         // Round6：笔记后端（g02 不消费，None = unwired）
         note_backend: None,
+        background: None,
+        log_root: None,
     }
 }
 

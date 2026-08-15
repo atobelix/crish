@@ -531,7 +531,7 @@ async fn delete_redirect_emits_security_audit_event() {
             assert_eq!(operation, &Op::Delete);
             assert_eq!(
                 targets,
-                &vec![ws.path().join("sub").display().to_string()],
+                &vec![conex_fs::ConexPathNormalizer::normalize(&ws.path().join("sub")).display().to_string()],
                 "目标为解析后的绝对路径"
             );
             assert_eq!(impact.file_count, 2);
@@ -1522,3 +1522,75 @@ fn max_output_bytes_clamped_to_usize_range() {
         assert_ne!(clamp_u64_to_usize(0x1_0000_0000), 1);
     }
 }
+
+/// DIM-04: Plan 模式禁止任何 Shell 命令执行
+#[tokio::test]
+async fn plan_mode_blocks_shell_execution() {
+    let ws = TempWorkspace::new("shell_plan_mode");
+    let t = tool();
+    let ctx = ToolContext {
+        permission_mode: crate::permission::PermissionMode::Plan,
+        ..ctx(&ws)
+    };
+    let err = t
+        .execute(&ctx, json!({ "command": "echo test" }))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), TOOL_COMMAND_BLOCKED);
+    assert!(err.to_string().contains("Plan (Read-Only)"));
+}
+
+/// DIM-04: FullAccess 模式直接放行复合删除与间接删除
+#[tokio::test]
+async fn full_access_mode_allows_compound_and_indirect_delete() {
+    let ws = TempWorkspace::new("shell_full_access");
+    ws.write_file("temp.txt", "will delete");
+    let t = tool();
+    let ctx = ToolContext {
+        permission_mode: crate::permission::PermissionMode::FullAccess,
+        ..ctx(&ws)
+    };
+    let cmd = if cfg!(windows) {
+        "cmd /c del temp.txt"
+    } else {
+        "rm temp.txt"
+    };
+    let res = t.execute(&ctx, json!({ "command": cmd })).await;
+    assert!(res.is_ok(), "FullAccess 模式下应直接放行删除命令");
+    assert!(!ws.path().join("temp.txt").exists());
+}
+
+/// DIM-04: 输出超限溢出落盘测试
+#[tokio::test]
+async fn shell_output_spills_to_log_root_when_truncated() {
+    let ws = TempWorkspace::new("shell_spill_ws");
+    let log_ws = TempWorkspace::new("shell_log_ws");
+    let t = tool();
+    let ctx = ToolContext {
+        log_root: Some(log_ws.path().clone()),
+        session_id: "test-sess-spill".to_string(),
+        ..ctx(&ws)
+    };
+    let cmd = if cfg!(windows) {
+        "Write-Output '1234567890abcdefghijklmnopqrstuvwxyz'"
+    } else {
+        "echo '1234567890abcdefghijklmnopqrstuvwxyz'"
+    };
+    let res = t
+        .execute(
+            &ctx,
+            json!({
+                "command": cmd,
+                "maxOutputBytes": 10
+            }),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res["truncated"], true);
+    assert!(res.get("logPath").is_some());
+    let log_path_str = res["logPath"].as_str().unwrap();
+    let log_path = std::path::PathBuf::from(log_path_str);
+    assert!(log_path.exists(), "溢出日志文件应已落盘");
+}
+

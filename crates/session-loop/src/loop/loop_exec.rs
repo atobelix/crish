@@ -68,6 +68,7 @@ impl AgentSessionLoop {
         // 恢复阶梯计数归零（fresh run）
         self.state.length_upgrades = 0;
         self.state.transient_retries = 0;
+        self.state.tool_promise_heals = 0;
         // D1 R1（预算起点归零）：预算起点随 run 重建——fresh run 从零预算
         // 计时（跨 run 持续故障由会话级熔断 provider_fail_streak 承担，
         // 04 文档 G9 的跨 run 计数重置问题由壳层收口计数解决）
@@ -112,10 +113,14 @@ impl AgentSessionLoop {
                 .converge(EndDecision::error(&self.state, err.message()))
                 .await;
         }
-        self.state.events.push(AgentEvent::AgentStart {
+        let start_event = AgentEvent::AgentStart {
             session_id: self.session_id.clone(),
             timestamp: crate::steering::now_iso_utc(),
-        });
+        };
+        self.state.events.push(start_event.clone());
+        if let Some(sink) = &self.state.options.live_sink {
+            sink.push_live(start_event);
+        }
         // I8-E1 第一批：session.start 钩子广播（run 启动处；载荷最小子集
         // sessionId；observe 观察者失败不阻塞 run 启动——dispatch 内部
         // 已按 failStrategy 处置 + 错误事件化）
@@ -305,12 +310,16 @@ impl AgentSessionLoop {
         let reason = decision.reason;
         let error = decision.error.clone();
         let diagnostic = decision.diagnostic.clone();
-        self.state.events.push(AgentEvent::AgentEnd {
+        let end_event = AgentEvent::AgentEnd {
             session_id: self.session_id.clone(),
             timestamp: crate::steering::now_iso_utc(),
             reason,
             error: error.clone(),
-        });
+        };
+        self.state.events.push(end_event.clone());
+        if let Some(sink) = &self.state.options.live_sink {
+            sink.push_live(end_event);
+        }
         // I8-E1 第一批：session.end 钩子广播（run 收场终态；observe 默认，
         // 失败吞掉 + 计数，收场流程继续——03 §2.4 表）
         if let Some(hooks) = &self.state.options.hooks {

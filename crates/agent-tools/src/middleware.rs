@@ -268,6 +268,7 @@ mod tests {
                 .unwrap_or_else(|| {
                     std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
                 }),
+            permission_mode: crate::permission::PermissionMode::default(),
             write_claims: None,
             write_claim_holder: None,
             explore_docs_quota: None,

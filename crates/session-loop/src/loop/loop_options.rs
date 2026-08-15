@@ -3,6 +3,7 @@
 //! 自 loop/mod.rs 拆出，经父模 re-export（crate::r#loop::SessionLoopOptions
 //! 路径不 break）。
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use agent_tools::backup::BackupMiddleware;
@@ -20,6 +21,16 @@ use super::{RecoveryHook, TurnEndHook};
 /// 循环配置（恢复阶梯上限 / 钩子；缺省值对齐 01 §2.5-2.6 与 §3.3）
 #[derive(Clone)]
 pub struct SessionLoopOptions {
+    /// 实时事件通知通道（Live Track 实时发射）
+    pub live_sink: Option<Arc<dyn crate::provider::LiveEventSink>>,
+    /// 后台任务管理器实例（T-AB-02 执行期动态注入）
+    pub background: Option<Arc<dyn agent_tools::background::BackgroundTaskManager>>,
+    /// 任务日志与溢出落盘根目录
+    pub log_root: Option<PathBuf>,
+    /// Tool-Promise 自愈策略开关（默认 true，遵循 RUL-02）
+    pub tool_promise_recovery_enabled: bool,
+    /// Tool-Promise 最大自愈次数上限（默认 2，遵循 RUL-02）
+    pub max_tool_promise_heals: u32,
     /// 瞬态 provider 错误重试上限（默认 3，01 §2.5 步骤 2）
     pub transient_retry_limit: u32,
     /// 瞬态重试退避配置（D1 §3.1.4 R6）：None = 现状立即重试（向后兼容）；
@@ -223,6 +234,11 @@ pub struct SessionLoopOptions {
 impl Default for SessionLoopOptions {
     fn default() -> Self {
         Self {
+            live_sink: None,
+            background: None,
+            log_root: None,
+            tool_promise_recovery_enabled: true,
+            max_tool_promise_heals: 2,
             transient_retry_limit: 3,
             // D1：退避与熔断配置位缺省 None = 现状立即重试 / 熔断不启用
             //（向后兼容；壳层装配时经 session_meta 键注入）

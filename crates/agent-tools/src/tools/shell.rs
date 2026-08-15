@@ -233,7 +233,10 @@ impl ShellCommandTool {
         let cwd_str = gate_path(&cwd);
         let root_str = gate_path(workspace_root);
         let verdict = gatekeeper.check_command_with_context(&command, &[], &cwd_str, &root_str);
-        if verdict == GatekeeperResult::Blocked || gatekeeper.patterns().is_match(&command) {
+        if verdict == GatekeeperResult::Blocked
+            || gatekeeper.patterns().is_match(&command)
+            || conex_fs::ConexPathNormalizer::is_system_critical_path(&cwd)
+        {
             // I2-S8：红线拦截审计事件（decision=blocked，operation=command-exec）
             emit_blocked_audit(
                 &self.audit_sink,
@@ -248,21 +251,34 @@ impl ShellCommandTool {
                 ),
             )));
         }
-        // I2-S4：删除形态重定向——semantics 判定 DeleteShape 的命令不再直接
-        // 执行，改走删除接管接口（trash 服务，移入回收站可恢复）；复合链 /
-        // 间接执行包裹删除形态整链拦截 + 引导。红线（Redline）已由上方门禁
-        // 100% 拦截（S2），此处只处理删除形态。
+
+        // DIM-04: Plan (只读规划模式) 禁止执行 Shell 命令
+        if ctx.permission_mode == crate::permission::PermissionMode::Plan {
+            return Prepared::Done(Err(ToolError::new(
+                TOOL_COMMAND_BLOCKED,
+                "PermissionDenied: Shell command execution is prohibited in Plan (Read-Only) mode.",
+            )));
+        }
+
         let analysis = conex_sandbox::semantics::analyze(&command);
-        if analysis.overall_class == CommandClass::DeleteShape || analysis.has_indirect_delete {
-            return Prepared::Done(redirect_or_intercept_delete(
-                &analysis,
-                &command,
-                workspace_root,
-                &cwd,
-                self.trash_root.clone(),
-                ctx,
-                Arc::clone(&self.audit_sink),
-            ));
+
+        // DIM-04: FullAccess 模式下完全信任用户，放行复合删除与间接删除（只要未触碰上方物理红线）
+        if ctx.permission_mode != crate::permission::PermissionMode::FullAccess {
+            // I2-S4：删除形态重定向——semantics 判定 DeleteShape 的命令不再直接
+            // 执行，改走删除接管接口（trash 服务，移入回收站可恢复）；复合链 /
+            // 间接执行包裹删除形态整链拦截 + 引导。红线（Redline）已由上方门禁
+            // 100% 拦截（S2），此处只处理删除形态。
+            if analysis.overall_class == CommandClass::DeleteShape || analysis.has_indirect_delete {
+                return Prepared::Done(redirect_or_intercept_delete(
+                    &analysis,
+                    &command,
+                    workspace_root,
+                    &cwd,
+                    self.trash_root.clone(),
+                    ctx,
+                    Arc::clone(&self.audit_sink),
+                ));
+            }
         }
 
         // T-AB-04：第五项「cd 形态」拦截（判定优先级：门禁 → 删除形态 →
@@ -273,7 +289,9 @@ impl ShellCommandTool {
             return Prepared::Done(Err(err));
         }
 
-        if verdict == GatekeeperResult::RequiresApproval {
+        if verdict == GatekeeperResult::RequiresApproval
+            && ctx.permission_mode != crate::permission::PermissionMode::FullAccess
+        {
             // R4 T10：经 ctx.ask 审批通道发起真实审批——approval-requested
             // 事件由通道侧记录并广播，等待用户裁决（abort 可取消）；
             // 用户同意后继续执行（等价重试该命令），拒绝返回明确拒绝结果。

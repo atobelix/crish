@@ -79,6 +79,19 @@ pub(crate) async fn handle(
         )));
     }
 
+    // 2a. Live Track 实时发射 ToolStart（消除长任务中间停滞）
+    if let Some(sink) = &state.options.live_sink {
+        for call in &calls {
+            sink.push_live(AgentEvent::ToolStart {
+                session_id: state.machine.context().session_id.clone(),
+                batch_id: String::new(),
+                call: call.clone(),
+                timestamp: crate::steering::now_iso_utc(),
+                turn_index: Some(state.machine.context().turn_index),
+            });
+        }
+    }
+
     // 2b. 批量执行（B3.5：并行分区 / 超时 / 审批 / 失败策略 / abort 提前退出）
     let abort: Option<&AbortSignal> = Some(&state.abort_signal);
     let outcome = executor
@@ -262,19 +275,19 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
     }
     // 第二遍：正式发射（batch-start 的 calls 取摘要清单）
     for event in events {
-        match event {
+        let agent_event = match event {
             ToolEvent::BatchStart {
                 batch_id: id,
                 count,
             } => {
                 batch_id = id.clone();
-                state.events.push(AgentEvent::ToolBatchStart {
+                AgentEvent::ToolBatchStart {
                     session_id: session_id.clone(),
                     batch_id: id.clone(),
                     timestamp: crate::steering::now_iso_utc(),
                     summary: format!("{count} 个工具调用"),
                     calls: calls_summary.clone(),
-                });
+                }
             }
             ToolEvent::ToolStart {
                 call_id,
@@ -285,7 +298,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                 summary,
                 occurred_at_ms,
             } => {
-                state.events.push(AgentEvent::ToolStart {
+                AgentEvent::ToolStart {
                     session_id: session_id.clone(),
                     batch_id: batch_id.clone(),
                     call: ToolBatchCall {
@@ -303,7 +316,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     // EV-09（D-03）：轮次关联键真值（与 turn-start /
                     // message-end.turnIndex 同值口径）
                     turn_index,
-                });
+                }
             }
             ToolEvent::ApprovalRequested {
                 call_id,
@@ -313,7 +326,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
             } => {
                 // approval-requested 事件先于等待发出（防死锁，01 §五.8）；
                 // 真实 PermissionRequest 由 B4/B6 审批层补齐
-                state.events.push(AgentEvent::ApprovalRequested {
+                AgentEvent::ApprovalRequested {
                     session_id: session_id.clone(),
                     request: conex_types::events::PermissionRequest {
                         id: format!("approval-{call_id}"),
@@ -331,7 +344,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         reason: requester.as_ref().and_then(|r| r.reason.clone()),
                     },
                     timestamp: crate::steering::now_iso_utc(),
-                });
+                }
             }
             ToolEvent::ApprovalResolved { call_id, decision } => {
                 // G-9：审批超时权威语义——引擎把超时转移落为
@@ -341,7 +354,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                 // request_id 缺省 None）。随会话事件流持久化，经同步面
                 // 白名单（SYNC_ELIGIBLE_TYPES 含 approval-resolved）
                 // 多端透传，手机端过期状态无需本地计时兜底。
-                state.events.push(AgentEvent::ApprovalResolved {
+                AgentEvent::ApprovalResolved {
                     session_id: session_id.clone(),
                     tool_call_id: call_id.clone(),
                     request_id: None,
@@ -355,19 +368,19 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         ApprovalDecision::Expired => conex_types::events::ApprovalDecision::Expired,
                     },
                     timestamp: crate::steering::now_iso_utc(),
-                });
+                }
             }
             ToolEvent::ToolProgress { call_id, update } => {
                 // S1 流式进度（TOOLS-01 §3.1.5）：ToolUpdate 出站（展示面，
                 // 携带 batch_id/tool_call_id；不进消息历史——终值仍由
                 // ToolEnd 承载，避免污染对话缓存前缀）
-                state.events.push(AgentEvent::ToolUpdate {
+                AgentEvent::ToolUpdate {
                     session_id: session_id.clone(),
                     batch_id: batch_id.clone(),
                     tool_call_id: call_id.clone(),
                     update: update.clone(),
                     timestamp: crate::steering::now_iso_utc(),
-                });
+                }
             }
             ToolEvent::ToolEnd {
                 call_id,
@@ -385,7 +398,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                 // 完整输出透传：成功带结构化 output；失败带错误码 + 文案
                 // （tool_output_from_result 与 tool 角色消息共用同一转换，
                 // 保证 tool-end 事件与消息落盘语义一致）
-                state.events.push(AgentEvent::ToolEnd {
+                AgentEvent::ToolEnd {
                     session_id: session_id.clone(),
                     batch_id: batch_id.clone(),
                     result: ToolBatchResult {
@@ -409,18 +422,23 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     attempt: *attempt,
                     deduplicated: *deduplicated,
                     executed_input: executed_input.clone(),
-                });
+                }
             }
             ToolEvent::BatchEnd { batch_id: id } => {
-                state.events.push(AgentEvent::ToolBatchEnd {
+                AgentEvent::ToolBatchEnd {
                     session_id: session_id.clone(),
                     batch_id: id.clone(),
                     timestamp: crate::steering::now_iso_utc(),
                     // EV-09（D-03）：摘要级结果清单（id + toolName + status
                     // + duration；全量输出由 tool-end 承载）
                     calls: results_summary.clone(),
-                });
+                }
             }
+        };
+
+        state.events.push(agent_event.clone());
+        if let Some(sink) = &state.options.live_sink {
+            sink.push_live(agent_event);
         }
     }
 }

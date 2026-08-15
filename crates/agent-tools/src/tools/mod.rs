@@ -359,10 +359,10 @@ pub(crate) fn resolve_workspace_path(
     }
     let canonical = conex_fs::path_utils::safe_canonicalize(&candidate, MAX_PATH_DEPTH)
         .map_err(|e| ToolError::invalid_input(format!("invalid path: {e}")))?;
-    let canonical = strip_verbatim_prefix(&canonical);
+    let canonical = conex_fs::ConexPathNormalizer::normalize(&canonical);
     let canonical_root = conex_fs::path_utils::safe_canonicalize(workspace_root, MAX_PATH_DEPTH)
-        .map(|p| strip_verbatim_prefix(&p))
-        .unwrap_or_else(|_| workspace_root.to_path_buf());
+        .map(|p| conex_fs::ConexPathNormalizer::normalize(&p))
+        .unwrap_or_else(|_| conex_fs::ConexPathNormalizer::normalize(workspace_root));
     if !path_within_root(&canonical, &canonical_root) {
         return Err(ToolError::new(
             codes::TOOL_PATH_ESCAPE,
@@ -372,8 +372,9 @@ pub(crate) fn resolve_workspace_path(
     // 双保险（审计 P1-S1，F3-02/F5-01）：safe_canonicalize 的「最深已存在祖先」
     // 方案能解析非 dangling symlink，但 dangling symlink 目标不存在无法
     // canonicalize，词法尾部仍可能残留 symlink 组件——对 canonical 相对根
-    // 的每一级做 symlink_metadata（不跟随链接，dangling 也可见），命中即拒绝。
-    if has_symlink_below_root(&canonical, &canonical_root) {
+    // 的每一级做 symlink_metadata 检查。
+    // 若为工作区内部合法符号链接/Junction（如 pnpm 依赖），放行；逃逸或 dangling 则拒绝。
+    if has_escaping_symlink_below_root(&canonical, &canonical_root) {
         return Err(ToolError::new(
             codes::TOOL_PATH_ESCAPE,
             format!("Path escapes workspace: {input}"),
@@ -382,26 +383,43 @@ pub(crate) fn resolve_workspace_path(
     Ok(canonical)
 }
 
-/// 符号链接组件检测（双保险）：从根开始逐级构造路径并对每级做
-/// symlink_metadata 检查（不跟随链接，dangling 也可见）。文本前缀不匹配
-/// 时返回 false——该形态由 path_within_root 包含性校验兜底拒绝。
-fn has_symlink_below_root(path: &Path, root: &Path) -> bool {
-    let rel = match path.strip_prefix(root) {
+/// 符号链接组件与 Junction 检测：
+/// - 若为 NTFS Junction 或 Symlink，解析其实际物理目标；
+/// - 若物理目标依然在工作区内部（例如 pnpm 依赖），放行；
+/// - 若物理目标逃逸出工作区或为 dangling symlink，返回 true 拦截。
+fn has_escaping_symlink_below_root(path: &Path, root: &Path) -> bool {
+    let norm_path = conex_fs::ConexPathNormalizer::normalize(path);
+    let norm_root = conex_fs::ConexPathNormalizer::normalize(root);
+
+    let rel = match norm_path.strip_prefix(&norm_root) {
         Ok(r) => r,
         Err(_) => return false,
     };
-    let mut cur = root.to_path_buf();
+    let mut cur = norm_root.clone();
     for comp in rel.components() {
-        match comp {
-            std::path::Component::Normal(name) => {
-                cur.push(name);
-                if let Ok(meta) = std::fs::symlink_metadata(&cur) {
-                    if meta.file_type().is_symlink() {
+        if let std::path::Component::Normal(name) = comp {
+            cur.push(name);
+            if let Ok(meta) = std::fs::symlink_metadata(&cur) {
+                if meta.file_type().is_symlink() {
+                    // 解析符号链接 / Junction 真实目标
+                    if let Ok(target) = std::fs::read_link(&cur) {
+                        let resolved_target = if target.is_absolute() {
+                            conex_fs::ConexPathNormalizer::normalize(&target)
+                        } else {
+                            conex_fs::ConexPathNormalizer::normalize(
+                                &cur.parent().unwrap_or(&norm_root).join(&target),
+                            )
+                        };
+                        // 判定目标是否依然在工作区内部
+                        if !conex_fs::ConexPathNormalizer::is_subpath(&resolved_target, &norm_root) {
+                            return true; // 逃逸出工作区，拦截
+                        }
+                    } else {
+                        // 链接无法读取（如 dangling symlink 或无权限），双保险拦截
                         return true;
                     }
                 }
             }
-            _ => {}
         }
     }
     false
@@ -561,29 +579,9 @@ fn decode_utf16(bytes: &[u8], little_endian: bool) -> (String, bool) {
     }
 }
 
-/// 路径包含性检查（Windows 大小写不敏感，按组件语义比较）
+/// 路径包含性检查（Windows 大小写不敏感，统一大写盘符与斜杠比较）
 fn path_within_root(candidate: &Path, root: &Path) -> bool {
-    let c = normalize_for_compare(candidate);
-    let r = normalize_for_compare(root);
-    if c == r {
-        return true;
-    }
-    let sep = std::path::MAIN_SEPARATOR.to_string();
-    c.starts_with(&format!("{r}{sep}"))
-}
-
-/// 比较用归一化：统一分隔符 + Windows 小写 + 去尾部分隔符
-fn normalize_for_compare(p: &Path) -> String {
-    let sep = std::path::MAIN_SEPARATOR.to_string();
-    let mut s = p.to_string_lossy().replace(['/', '\\'], &sep);
-    #[cfg(windows)]
-    {
-        s = s.to_lowercase();
-    }
-    if s.len() > 1 {
-        s = s.trim_end_matches(std::path::MAIN_SEPARATOR).to_string();
-    }
-    s
+    conex_fs::ConexPathNormalizer::is_subpath(candidate, root)
 }
 
 /// 系统时间 → 纪元毫秒（对齐全仓 epoch ms 惯例；不可用时 0）

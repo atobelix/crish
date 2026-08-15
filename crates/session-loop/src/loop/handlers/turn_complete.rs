@@ -38,7 +38,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
 
     // 1. turn-end 事件（01 §2.9 步骤 1）
     let ctx = state.machine.context().clone();
-    state.events.push(AgentEvent::TurnEnd {
+    let turn_end_event = AgentEvent::TurnEnd {
         session_id: ctx.session_id.clone(),
         turn_index: ctx.turn_index,
         timestamp: crate::steering::now_iso_utc(),
@@ -48,7 +48,11 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         // cache_write/cache_miss tokens），provider 未报告时 None（旧帧
         // 缺省兼容；take 消费防同一槽位被二次发射复用）
         usage: state.turn_usage.take(),
-    });
+    };
+    state.events.push(turn_end_event.clone());
+    if let Some(sink) = &state.options.live_sink {
+        sink.push_live(turn_end_event);
+    }
     // EV-08：正常发射完成，清除未闭合 turn 标记（收敛路径兜底补发不再触发；
     // turn-complete 起始的 check_control 收敛由 check_control 内单点兜底）
     state.current_turn_index = None;

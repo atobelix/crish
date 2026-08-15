@@ -278,6 +278,7 @@ impl ToolExecutor {
                 .clone()
                 .or_else(|| ctx.cwd.clone().map(PathBuf::from))
                 .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))),
+            permission_mode: options.permission_mode.unwrap_or_default(),
             // I4-M3：写路径互斥注册表——会话级装配（与 workspace_root 同源，
             // 由 AgentSessionLoop::with_options 创建并经 ToolExecCtx 注入；
             // None = 写工具不强制互斥，测试与直连场景向后兼容）
@@ -294,10 +295,9 @@ impl ToolExecutor {
             //（loop 装配面默认注入 OutputWorkspace；None = 未接线，
             // resolve_output_dir 返回 common.unsupported）
             output_dir: ctx.output_dir.clone(),
-            // 后台任务管理器 / 日志落盘根未接线（A1 域新字段占位：None =
-            // 无后台任务能力、截断不落盘；真实接线由引擎装配面注入）
-            background: None,
-            log_root: None,
+            // 后台任务管理器 / 日志落盘根：完整透传
+            background: ctx.background.clone(),
+            log_root: ctx.log_root.clone(),
             // T-40（记忆韧性轮次 5）：压缩块只读访问服务——本轮仅占位
             // None（search_context/decompress_context 返回
             // common.unsupported）；轮次 6 由引擎侧注入

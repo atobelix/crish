@@ -27,7 +27,9 @@
 
 mod diagnostics;
 mod nudge;
-mod strategy;
+pub(crate) mod strategy;
+
+pub use strategy::ToolPromiseDetector;
 
 use std::sync::Arc;
 

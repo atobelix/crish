@@ -88,6 +88,12 @@ pub type ProviderStreamItem = Result<ProviderStreamEvent, ClassifiedStreamError>
 /// 完成序列化）；调用方取消 = drop 流。
 pub type ProviderEventStream = Pin<Box<dyn Stream<Item = ProviderStreamItem> + Send + 'static>>;
 
+/// 实时事件通知接口（支持流式 Token、工具状态与轮次信标实时推送）
+pub trait LiveEventSink: Send + Sync {
+    /// 推送实时事件（信封 sequence=None，立即发射至前端 IPC）
+    fn push_live(&self, event: AgentEvent);
+}
+
 /// 流式增量转发（T09.1 实时双轨的**实时轨**：delta 实时到前端）
 ///
 /// - 只承载 `message-delta`（text-delta / thought-delta 增量，非持久化类，
@@ -99,6 +105,12 @@ pub type ProviderEventStream = Pin<Box<dyn Stream<Item = ProviderStreamItem> + S
 pub trait DeltaSink: Send + Sync {
     /// 推送一条增量事件（message-delta；实现方负责信封构造与发射）
     fn push(&self, delta: AgentEvent);
+}
+
+impl DeltaSink for Arc<dyn LiveEventSink> {
+    fn push(&self, delta: AgentEvent) {
+        self.push_live(delta);
+    }
 }
 
 /// provider 调用请求（对齐 01 §2.4 步骤 1 的 buildProviderCall 上下文）

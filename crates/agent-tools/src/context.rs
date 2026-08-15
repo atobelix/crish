@@ -16,6 +16,7 @@
 //! 判定挂 ctx.ask 通道、审批等待期支持 abort_token 取消）已接线。
 
 use crate::definition::ToolError;
+use crate::permission::PermissionMode;
 use crate::write_paths::WritePathRegistry;
 use async_trait::async_trait;
 use std::path::PathBuf;
@@ -106,6 +107,8 @@ pub struct ToolContext {
     pub ask: Option<AskCallback>,
     /// 工作区根目录：路径类工具相对路径解析与越界校验基准
     pub workspace_root: PathBuf,
+    /// 当前生效的权限模式（DIM-04 核心装配：Plan / Ask / FullAccess）
+    pub permission_mode: PermissionMode,
     /// 写路径互斥注册表（I4-M3：None = 未接线，写工具不强制互斥；
     /// 接线由执行器按会话装配，M2 子代理执行上下文注入）
     pub write_claims: Option<Arc<WritePathRegistry>>,
@@ -174,6 +177,7 @@ impl ToolContext {
             abort_token: AbortToken::new(),
             ask: None,
             workspace_root,
+            permission_mode: PermissionMode::default(),
             write_claims: None,
             write_claim_holder: None,
             explore_docs_quota: None,
@@ -200,6 +204,7 @@ pub fn create_mock_tool_context() -> ToolContext {
         abort_token: AbortToken::new(),
         ask: None,
         workspace_root: std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        permission_mode: PermissionMode::default(),
         write_claims: None,
         write_claim_holder: None,
         explore_docs_quota: None,

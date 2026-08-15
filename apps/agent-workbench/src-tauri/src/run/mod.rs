@@ -118,7 +118,7 @@ pub(crate) use crate::core_query_commands::{
 // 审计 01 W1：ControlBusResolver 契约（库目标 wait_channel 定义；引擎
 // WaitChannel 的 inject 面与 send_message 子代理注入共用同一解析器）
 pub(crate) use crate::engine::{
-    BridgeDeltaSink, BufferedRunEventBridge, ContextInjection, ContextInjectionKind,
+    BridgeLiveSink, BufferedRunEventBridge, ContextInjection, ContextInjectionKind,
     ContextInjector, EngineHandle, SessionLoopProducer,
 };
 pub(crate) use crate::status_diagnostics::StatusDiagnostics;

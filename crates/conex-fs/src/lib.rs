@@ -9,10 +9,12 @@
 
 pub mod atomic_write;
 pub mod impact;
+pub mod path_normalizer;
 pub mod trash;
 pub mod watch;
 
 pub use atomic_write::{atomic_write, atomic_write_file, AtomicWriteState, AtomicWriteTx};
+pub use path_normalizer::ConexPathNormalizer;
 pub use path_utils::{
     compute_file_hash, ensure_parent_dir, is_dos_device_name, safe_canonicalize,
     strip_verbatim_prefix,

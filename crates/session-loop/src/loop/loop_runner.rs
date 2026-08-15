@@ -95,6 +95,8 @@ impl AgentSessionLoop {
                 output_dir: None,
                 // Round6 / W4-E：笔记后端随 with_options 装配（构造期 None）
                 note_backend: None,
+                background: None,
+                log_root: None,
             },
             tool_options: ToolBatchOptions::default(),
             approval: None,
@@ -164,6 +166,14 @@ impl AgentSessionLoop {
         self.tool_ctx.parent_run_id = options.parent_run_id.clone();
         // Round6 / W4-E：笔记后端经 tool_ctx 透传工具执行面（None = unwired）
         self.tool_ctx.note_backend = options.note_backend.clone();
+        // 后台任务管理器与日志落盘根透传工具执行面
+        self.tool_ctx.background = options.background.clone();
+        self.tool_ctx.log_root = options.log_root.clone();
+        if self.delta_sink.is_none() {
+            if let Some(live_sink) = &options.live_sink {
+                self.delta_sink = Some(Arc::new(live_sink.clone()) as Arc<dyn DeltaSink>);
+            }
+        }
 
         self.state.options = options.clone();
         // 预算/压缩派生状态同步（P4 阶段 2-2/3-2）：LoopState 的
@@ -225,6 +235,13 @@ impl AgentSessionLoop {
     /// 序列/持久化记账）。
     pub fn with_delta_sink(mut self, sink: Arc<dyn DeltaSink>) -> Self {
         self.delta_sink = Some(sink);
+        self
+    }
+
+    /// 注入实时事件通知通道（Live Track 实时双轨事件发射，sequence=None）。
+    pub fn with_live_sink(mut self, sink: Arc<dyn crate::provider::LiveEventSink>) -> Self {
+        self.state.options.live_sink = Some(Arc::clone(&sink));
+        self.delta_sink = Some(Arc::new(sink) as Arc<dyn DeltaSink>);
         self
     }
 

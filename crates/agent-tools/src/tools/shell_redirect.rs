@@ -219,8 +219,46 @@ pub(crate) fn redirect_or_intercept_delete(
     ))
 }
 
+/// 判断是否为可安全清理的临时目录、构建缓存或回收站内部路径
+pub(crate) fn is_safe_temp_or_cache_path(path: &Path) -> bool {
+    let norm = conex_fs::ConexPathNormalizer::normalize(path);
+    let s = norm.to_string_lossy();
+    let upper = s.to_ascii_uppercase();
+
+    // 检查系统 TEMP / TMP 目录
+    if let Ok(temp_dir) = std::env::var("TEMP") {
+        let norm_temp = conex_fs::ConexPathNormalizer::normalize(Path::new(&temp_dir));
+        if conex_fs::ConexPathNormalizer::is_subpath(&norm, &norm_temp) {
+            return true;
+        }
+    }
+    if let Ok(tmp_dir) = std::env::var("TMP") {
+        let norm_tmp = conex_fs::ConexPathNormalizer::normalize(Path::new(&tmp_dir));
+        if conex_fs::ConexPathNormalizer::is_subpath(&norm, &norm_tmp) {
+            return true;
+        }
+    }
+
+    // 常见构建缓存 / 临时目录组件判定
+    let safe_patterns = [
+        "/TARGET/TMP",
+        "/NODE_MODULES/.CACHE",
+        "/.CRISH-TRASH",
+        "/DIST",
+        "/BUILD",
+        "/.CACHE",
+    ];
+    for pattern in &safe_patterns {
+        if upper.ends_with(pattern) || upper.contains(&format!("{pattern}/")) {
+            return true;
+        }
+    }
+
+    false
+}
+
 /// 解析删除目标：相对 cwd 拼接后做工作区包含性校验；通配符 / 特殊路径 /
-/// 工作区外目标一律拒绝（I2-S4 内容 3：越界目标不引导不降级）。
+/// 工作区外目标一律拒绝（I2-S4 内容 3：越界目标不引导不降级；放行合规临时目录清理）。
 fn resolve_delete_target(
     workspace_root: &Path,
     cwd: &Path,
@@ -245,6 +283,12 @@ fn resolve_delete_target(
     } else {
         cwd.join(raw)
     };
+
+    // 允许安全清理临时构建目录、缓存目录或回收站
+    if is_safe_temp_or_cache_path(&candidate) {
+        return Ok(conex_fs::ConexPathNormalizer::normalize(&candidate));
+    }
+
     resolve_workspace_path(workspace_root, &candidate.to_string_lossy()).map_err(|_| {
         ToolError::new(
             TOOL_COMMAND_BLOCKED,

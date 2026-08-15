@@ -133,6 +133,8 @@ fn exec_ctx_wired(
         output_dir: None,
         // Round6：笔记后端（e01 不消费，None = unwired）
         note_backend: None,
+        background: None,
+        log_root: None,
     }
 }
 

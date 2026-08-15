@@ -114,6 +114,10 @@ pub struct ToolExecCtx {
     /// 返回 `note_backend_unwired` 占位——允许 Option 透传，结构字段须存在
     /// 且可注入；真实实现见 `conex-note-runtime::StoreNoteBackend`）
     pub note_backend: Option<NoteBackendHandle>,
+    /// 后台任务管理器实例（透传给 ToolContext.background）
+    pub background: Option<Arc<dyn agent_tools::background::BackgroundTaskManager>>,
+    /// 会话日志与命令溢出落盘根目录（透传给 ToolContext.log_root）
+    pub log_root: Option<PathBuf>,
 }
 
 /// 批处理产出：结果 + 事件序列 + 致命错误

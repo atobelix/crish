@@ -64,6 +64,13 @@ impl RunAwareBackgroundManager {
         }
     }
 
+    /// 后台任务日志与溢出落盘根目录
+    pub(crate) fn log_root(&self) -> std::path::PathBuf {
+        crate::host_paths::app_dir()
+            .map(|app| app.join("logs").join("tasks"))
+            .unwrap_or_else(|_| std::env::temp_dir().join("crish-background-tasks"))
+    }
+
     /// 后台任务汇总（core_get_status.backgroundTasks 数据源）
     ///
     /// 口径说明（与前端状态栏 / 诊断面板展示对齐）：

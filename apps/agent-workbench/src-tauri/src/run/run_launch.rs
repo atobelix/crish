@@ -403,10 +403,10 @@ pub(crate) async fn run_task_impl(
         None
     };
 
-    // T09.1 实时 delta 双轨：BridgeDeltaSink 注入 SessionLoopProducer
-    // （core_run_commands.rs:667-716 装配，PE-09 T09.1.2 步骤 4）
-    let delta_sink: Arc<dyn DeltaSink> =
-        Arc::new(BridgeDeltaSink::new(Arc::clone(&bridge), run_id.clone()));
+    // T09.1 / DIM-01 实时双轨：BridgeLiveSink 注入 SessionLoopProducer 与 SessionLoopOptions
+    let live_sink: Arc<BridgeLiveSink> =
+        Arc::new(BridgeLiveSink::new(Arc::clone(&bridge), run_id.clone()));
+    let delta_sink: Arc<dyn DeltaSink> = Arc::clone(&live_sink) as Arc<dyn DeltaSink>;
 
     // ── T-29 context_window 入站（P4 §3.3.2）──────────────────────
     // 生效模型窗口 → ContextBudget（reserve/safety 取默认）；经
@@ -711,6 +711,9 @@ pub(crate) async fn run_task_impl(
         // Round7：笔记后端真注入（与 engine produce 双保险；同源
         // note_runtime 进程句柄 / app_dir()/workspace.db）
         note_backend: crate::note_runtime::try_backend(),
+        live_sink: Some(Arc::clone(&live_sink) as Arc<dyn session_loop::provider::LiveEventSink>),
+        background: Some(Arc::clone(&state.background) as Arc<dyn agent_tools::background::BackgroundTaskManager>),
+        log_root: Some(state.background.log_root()),
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {

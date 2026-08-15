@@ -23,7 +23,7 @@ use agent_tools::tools::send_message::{
 use conex_types::events::{AgentEvent, AgentEventEnvelope};
 use conex_types::tool::SystemPromptWireMode;
 use crish_agent_workbench::wait_channel::ControlBusResolver;
-use session_loop::provider::DeltaSink;
+use session_loop::provider::{DeltaSink, LiveEventSink};
 use session_loop::ControlBus;
 
 use super::engine_build::EngineHandle;
@@ -684,25 +684,23 @@ impl BufferedRunEventBridge {
     }
 }
 
-// ── BridgeDeltaSink：T09.1 实时轨桥 ────────────────────────────────
+// ── BridgeLiveSink：T09.1 / DIM-01 实时双轨桥 ────────────────────────
 
-/// 实时 delta 转发桥（T09.1 双轨的实时轨：sequence=None 实时发射）
+/// 实时事件通知与增量转发桥（DIM-01 双轨的实时轨：sequence=None 实时发射）
 ///
-/// - 只承载 message-delta（text/thought 增量）；信封由本桥构造，
-///   **sequence=None**（不落库、无序列号，前端按 messageId 累加，
-///   PE-09 §0.3 契约点 3）；
-/// - 背压/丢帧复用缓冲桥的 Delta 类目（delta 可丢、message-end 必达，
-///   03 §5.3-6）；
+/// - 承载 message-delta、TurnStart/TurnEnd、ToolStart/ToolEnd、ApprovalRequested/Resolved；
+///   信封由本桥构造，**sequence=None**（不落库、无序列号，立即发射至前端 IPC）；
+/// - 背压/丢帧复用缓冲桥的 Delta 类目（delta 可丢、终态必达，03 §5.3-6）；
 /// - 无状态（[Send] + [Sync]），run 结束无清理需求。
-pub(crate) struct BridgeDeltaSink {
+pub(crate) struct BridgeLiveSink {
     /// 缓冲事件桥（emit + flush）
     bridge: Arc<BufferedRunEventBridge>,
     /// 本 run 标识（信封 runId 注入）
     run_id: String,
 }
 
-impl BridgeDeltaSink {
-    /// 新建实时 delta 桥（共享 run 级缓冲事件桥）
+impl BridgeLiveSink {
+    /// 新建实时事件桥（共享 run 级缓冲事件桥）
     pub(crate) fn new(bridge: Arc<BufferedRunEventBridge>, run_id: impl Into<String>) -> Self {
         Self {
             bridge,
@@ -711,12 +709,21 @@ impl BridgeDeltaSink {
     }
 }
 
-impl DeltaSink for BridgeDeltaSink {
-    fn push(&self, delta: AgentEvent) {
-        // 信封：{event, runId: Some, sequence: None}（T09.1 实时轨）
-        let envelope = AgentEventEnvelope::new(delta, Some(self.run_id.clone()), None);
+impl LiveEventSink for BridgeLiveSink {
+    fn push_live(&self, event: AgentEvent) {
+        // 信封：{event, runId: Some, sequence: None}（DIM-01 实时轨）
+        let envelope = AgentEventEnvelope::new(event, Some(self.run_id.clone()), None);
         self.bridge.emit(&envelope);
-        // 实时通道立即发射（丢帧由 buffer 的 Delta 类目兜底，不丢 message-end）
+        // 实时通道立即发射
         self.bridge.flush();
     }
 }
+
+impl DeltaSink for BridgeLiveSink {
+    fn push(&self, delta: AgentEvent) {
+        self.push_live(delta);
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) type BridgeDeltaSink = BridgeLiveSink;

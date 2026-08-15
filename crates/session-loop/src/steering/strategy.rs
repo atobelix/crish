@@ -269,6 +269,94 @@ fn exit_code_from_text(text: &str) -> Option<i64> {
     None
 }
 
+/// Tool-Promise 意图自愈侦测器（RUL-02：三层反向过滤 + 行动意图匹配）
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ToolPromiseDetector;
+
+impl ToolPromiseDetector {
+    /// 核心判定函数：返回 Some(action_snippet) 表示检测到行动承诺且通过三层反向过滤
+    pub fn detect_action_promise(text: &str) -> Option<String> {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return None;
+        }
+
+        // ── 第一层过滤：排除教程、代码示例与解释性排版 ──
+        if trimmed.contains("```markdown")
+            || trimmed.contains("```json")
+            || trimmed.contains("```")
+            || trimmed.contains("例如：")
+            || trimmed.contains("例如:")
+            || trimmed.contains("示例如下：")
+            || trimmed.contains("示例如下:")
+            || trimmed.contains("配置如下：")
+            || trimmed.contains("配置如下:")
+            || trimmed.contains("可以通过如下配置")
+        {
+            return None;
+        }
+
+        // ── 第二层过滤：排除向用户反问与等待确认 ──
+        if trimmed.contains("是否需要")
+            || trimmed.contains("您希望")
+            || trimmed.contains("请确认")
+            || trimmed.contains("如果你同意")
+            || trimmed.contains("如果您同意")
+            || trimmed.contains("如需继续请")
+            || trimmed.ends_with('？')
+            || trimmed.ends_with('?')
+        {
+            return None;
+        }
+
+        // ── 第三层过滤：排除第三人称与过去历史描述/复盘 ──
+        if trimmed.contains("上一轮中")
+            || trimmed.contains("在上一轮中")
+            || trimmed.contains("之前已经")
+            || trimmed.contains("刚才尝试了")
+            || trimmed.contains("失败原因是")
+            || trimmed.contains("执行失败了是因为")
+            || trimmed.contains("系统报告了如下错误")
+        {
+            return None;
+        }
+
+        // ── 正向行动意图匹配（重点关注文本尾部 300 字符） ──
+        let tail = if trimmed.len() > 300 {
+            &trimmed[trimmed.len() - 300..]
+        } else {
+            trimmed
+        };
+
+        let action_patterns = [
+            "尝试单独调用",
+            "正在调用",
+            "现在开始执行",
+            "接下来使用",
+            "准备运行",
+            "尝试通过",
+            "我将执行",
+            "使用 PowerShell",
+            "使用 shell_command",
+            "重新运行",
+            "尝试调用",
+            "接下来执行",
+            "我来调用",
+            "开始执行",
+        ];
+
+        for pattern in &action_patterns {
+            if let Some(pos) = tail.rfind(pattern) {
+                let snippet = &tail[pos..];
+                let end_pos = snippet.find(['。', '！', '\n', '.', '!']).unwrap_or(snippet.len());
+                return Some(snippet[..end_pos].to_string());
+            }
+        }
+
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

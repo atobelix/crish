@@ -176,6 +176,8 @@ pub(crate) struct LoopState {
     /// 真值，prepare_turn 新一轮归零，turn_complete 收口注入 TurnEnd.usage；
     /// None = provider 未报告 usage / 本轮未发请求——诚实留空，旧帧兼容）
     pub(crate) turn_usage: Option<TurnUsage>,
+    /// Tool-Promise 自愈触发次数计数（RUL-02：上限 2 次，防死循环）
+    pub(crate) tool_promise_heals: u32,
 }
 
 impl LoopState {
@@ -218,6 +220,7 @@ impl LoopState {
             tools_snapshot: None,
             max_tokens: crate::r#loop::DEFAULT_MAX_TOKENS,
             length_upgrades: 0,
+            tool_promise_heals: 0,
             transient_retries: 0,
             // D1：预算起点空（首次瞬态错误惰性初始化）、延迟注入面空
             //（生产走 retry_backoff 配置）、fatal 摘要空（无 provider fatal）
@@ -1122,13 +1125,17 @@ pub(crate) fn emit_missing_turn_end(state: &mut LoopState) {
     let Some(turn_index) = state.current_turn_index.take() else {
         return;
     };
-    state.events.push(AgentEvent::TurnEnd {
+    let end_event = AgentEvent::TurnEnd {
         session_id: state.machine.context().session_id.clone(),
         turn_index,
         timestamp: crate::steering::now_iso_utc(),
         tool_call_count: state.machine.context().tool_call_count,
         usage: None,
-    });
+    };
+    state.events.push(end_event.clone());
+    if let Some(sink) = &state.options.live_sink {
+        sink.push_live(end_event);
+    }
     tracing::info!(
         turn_index,
         "收敛路径未走 turn-complete：补发 turn-end 闭合孤儿 turn-start（EV-08）"
@@ -1230,6 +1237,17 @@ pub(crate) fn last_assistant_with_tool_calls(
         .iter()
         .rev()
         .find(|m| m.role == AgentMessageRole::Assistant && m.tool_calls().next().is_some())
+}
+
+/// 取最后一条 assistant 消息（用于 Tool-Promise 自愈意图检测）
+pub(crate) fn last_assistant_message(
+    state: &LoopState,
+) -> Option<&Arc<conex_types::message::AgentMessage>> {
+    state
+        .conversation
+        .iter()
+        .rev()
+        .find(|m| m.role == AgentMessageRole::Assistant)
 }
 
 // ── T-33 单测（P4 阶段 2-2/2-3/2-4、阶段 3-2/3-3）：钳制/预检/护栏/事件 ──

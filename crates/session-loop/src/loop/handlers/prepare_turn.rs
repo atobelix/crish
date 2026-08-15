@@ -68,11 +68,15 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     // 写入本 turn 真值，turn-complete 收口注入 TurnEnd.usage（防上一轮
     // usage 错位泄漏进本轮无请求的 turn）
     state.turn_usage = None;
-    state.events.push(AgentEvent::TurnStart {
+    let start_event = AgentEvent::TurnStart {
         session_id: session_id.clone(),
         turn_index,
         timestamp: crate::steering::now_iso_utc(),
-    });
+    };
+    state.events.push(start_event.clone());
+    if let Some(sink) = &state.options.live_sink {
+        sink.push_live(start_event);
+    }
     // EV-08：孤儿 turn-start 修复——记录已发射 turn-start 的轮次（收敛
     // 路径未走 turn_complete 时经 emit_missing_turn_end 补发 turn-end 闭合；
     // turn_complete 正常发射后清 None）

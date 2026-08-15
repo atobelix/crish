@@ -120,6 +120,12 @@ pub(crate) async fn handle(
                             {
                                 sink.push(delta);
                             }
+                        } else if let Some(sink) = &state.options.live_sink {
+                            if let Some(delta) =
+                                delta_to_message_event(state, &assistant_message_id, &event)
+                            {
+                                sink.push_live(delta);
+                            }
                         }
                         builder.push(event);
                     }
@@ -555,19 +561,27 @@ fn build_assistant_message(
 fn commit_message_with_deltas(state: &mut LoopState, message: AgentMessage) {
     let session_id = state.machine.context().session_id.clone();
     let message = Arc::new(message);
-    state.events.push(AgentEvent::MessageStart {
+    let start_event = AgentEvent::MessageStart {
         session_id: session_id.clone(),
         message: message.clone(),
-    });
+    };
+    state.events.push(start_event.clone());
+    if let Some(sink) = &state.options.live_sink {
+        sink.push_live(start_event);
+    }
     emit_message_deltas(state, &message);
     state.conversation.push(message.clone());
-    state.events.push(AgentEvent::MessageEnd {
+    let end_event = AgentEvent::MessageEnd {
         session_id,
         message,
         // G4 / 04 §5.2-5：assistant 收口消息带当前轮次（与 turn-start/turn-end
         // 同值——TURN_PREPARED 递增后），前端据此按 turn 分段合并
         turn_index: Some(state.machine.context().turn_index),
-    });
+    };
+    state.events.push(end_event.clone());
+    if let Some(sink) = &state.options.live_sink {
+        sink.push_live(end_event);
+    }
 }
 
 /// 实时轨 delta 事件构造（T09.1 双轨）：text-delta / thought-delta →

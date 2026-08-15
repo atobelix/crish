@@ -281,7 +281,8 @@ fn spill_full_output(
     if std::fs::write(&path, &full).is_err() {
         return None;
     }
-    Some(path.display().to_string())
+    let norm = conex_fs::ConexPathNormalizer::normalize(&path);
+    Some(norm.display().to_string())
 }
 
 /// 截断落盘文件序号（进程级单调递增；会话内唯一）
