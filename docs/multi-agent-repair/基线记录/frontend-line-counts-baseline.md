@@ -56,7 +56,7 @@
 apps/crish-desktop/src/api/applyFileDiff.ts 441
 apps/crish-desktop/src/api/approvalMeta.ts 400
 apps/crish-desktop/src/api/backgroundTasksApi.ts 621
-apps/crish-desktop/src/api/chat-bridge/ConnectionLifecycle.ts 526
+apps/crish-desktop/src/api/chat-bridge/ConnectionLifecycle.ts 503
 apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.ts 358
 apps/crish-desktop/src/api/clientApi.ts 697
 apps/crish-desktop/src/api/commandPermissions.ts 521
