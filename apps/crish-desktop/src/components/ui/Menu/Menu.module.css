@@ -3,11 +3,11 @@
  * 全部引用 tokens.css / z-index.css 变量，无裸 hex/rgba */
 
 .menuContent {
-  position: fixed;
   z-index: var(--z-dropdown-menu);
   outline: none;
   pointer-events: auto;
   min-width: 180px;
+  box-sizing: border-box;
   max-height: min(
     var(--radix-popover-content-available-height, 360px),
     70vh,

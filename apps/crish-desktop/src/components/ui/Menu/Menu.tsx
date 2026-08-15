@@ -186,6 +186,10 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     if (firstEnabledIndexRef.current >= 0) {
       setFocusedIndex(firstEnabledIndexRef.current);
     }
+    const raf = requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent('resize'));
+    });
+    return () => cancelAnimationFrame(raf);
   }, [isOpen]);
 
   // 键盘 ↑ ↓ 漫游与 Enter / Esc 支持（08-步5 T4-4：children 模式双通道漫游）
