@@ -112,7 +112,7 @@ apps/crish-desktop/src/store/sessionCrudActions.ts 428
 apps/crish-desktop/src/store/sessionIndex.ts 473
 apps/crish-desktop/src/store/sessionMessageActions.ts 436
 apps/crish-desktop/src/store/sessionSharedHelpers.ts 419
-apps/crish-desktop/src/store/streamingStore.ts 351
+apps/crish-desktop/src/store/streamingStore.ts 373
 apps/crish-desktop/src/store/workspace-shell/adapterShape.ts 616
 apps/crish-desktop/src/store/workspace-shell/workspaceShellStore.ts 459
 apps/crish-desktop/src/store/workspaceActions.ts 512
