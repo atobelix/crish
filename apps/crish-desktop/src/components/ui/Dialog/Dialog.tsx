@@ -157,23 +157,25 @@ export function Dialog({
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className={styles.dialogHeader}>
-              {title != null ? (
-                <h2 className={styles.dialogTitle} id={titleId}>
-                  {title}
-                </h2>
-              ) : null}
-              {dismissible && showCloseButton ? (
-                <button
-                  type="button"
-                  className={styles.dialogClose}
-                  aria-label="关闭弹窗"
-                  onClick={onClose}
-                >
-                  <CloseIcon />
-                </button>
-              ) : null}
-            </div>
+            {title != null || (dismissible && showCloseButton) ? (
+              <div className={styles.dialogHeader}>
+                {title != null ? (
+                  <h2 className={styles.dialogTitle} id={titleId}>
+                    {title}
+                  </h2>
+                ) : null}
+                {dismissible && showCloseButton ? (
+                  <button
+                    type="button"
+                    className={styles.dialogClose}
+                    aria-label="关闭弹窗"
+                    onClick={onClose}
+                  >
+                    <CloseIcon />
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
 
             {description != null ? (
               <p className={styles.dialogDescription} id={descriptionId}>

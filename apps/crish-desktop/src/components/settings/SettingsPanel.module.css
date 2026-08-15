@@ -136,7 +136,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-0_5);
-  padding-bottom: var(--space-3);
+  padding: 8px 0;
 }
 
 .navEmpty {
@@ -158,10 +158,11 @@
   flex-shrink: 0;
   border-right: none;
   background: var(--bg-secondary);
-  padding: 0 var(--space-2) var(--space-2) var(--space-2);
+  padding: 8px 10px 8px 10px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
   gap: 0;
 }
 

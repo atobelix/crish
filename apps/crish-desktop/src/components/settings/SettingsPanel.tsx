@@ -291,6 +291,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             onTablistKeyDown={nav.onTablistKeyDown}
             onSelect={selectTab}
             onFocusTab={setNavFocusId}
+            onShowToast={onShowToast}
           />
 
           <div

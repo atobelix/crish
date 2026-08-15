@@ -1,8 +1,10 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './SettingsPanel.module.css';
+import navStyles from '../sidebar/SidebarNav.module.css';
 import { Button, Tooltip } from '../ui';
 import type { TabMeta, TabType } from '../settingsTabsMeta';
+import { SidebarFooter } from '../sidebar/SidebarFooter';
 
 export interface SettingsSidebarProps {
   baseId: string;
@@ -26,6 +28,7 @@ export interface SettingsSidebarProps {
     opts?: { focusTab?: boolean; focusPanel?: boolean }
   ) => void;
   onFocusTab: (tab: TabType) => void;
+  onShowToast?: (msg: string) => void;
 }
 
 export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
@@ -48,6 +51,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
     onTablistKeyDown,
     onSelect,
     onFocusTab,
+    onShowToast,
   }) => {
     return (
       <nav
@@ -56,47 +60,48 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
         data-density="compact"
         data-testid="settings-sidebar"
       >
-        {onBack ? (
-          <Tooltip content="返回应用 (Esc)">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={`${styles.navBack} no-drag`}
-              onClick={onBack}
-              aria-label="返回应用，关闭设置"
-              icon={
-                <Lucide.ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
-              }
-            >
-              返回应用
-            </Button>
-          </Tooltip>
-        ) : null}
+        <div className={navStyles.topActions}>
+          {onBack ? (
+            <Tooltip content="返回应用 (Esc)">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={`${navStyles.navItem} no-drag`}
+                onClick={onBack}
+                aria-label="返回应用，关闭设置"
+                icon={
+                  <Lucide.ArrowLeft size={16} strokeWidth={1.75} aria-hidden />
+                }
+              >
+                返回应用
+              </Button>
+            </Tooltip>
+          ) : null}
 
-        <div className={styles.searchWrap}>
-          <Lucide.Search
-            size={14}
-            strokeWidth={1.75}
-            className={styles.searchIco}
-            aria-hidden
-          />
-          <input
-            ref={searchInputRef}
-            id={searchId}
-            type="search"
-            className={styles.search}
-            placeholder="搜索设置…"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            onKeyDown={onSearchKeyDown}
-            aria-label="搜索设置分类"
-            aria-controls={tablistId}
-            aria-describedby={statusId}
-            autoComplete="off"
-            spellCheck={false}
-            enterKeyHint="search"
-          />
+          <div
+            className={`${navStyles.navItem} no-drag`}
+            role="search"
+            aria-label="设置搜索"
+            style={{ cursor: 'text' }}
+          >
+            <Lucide.Search size={16} strokeWidth={1.75} aria-hidden="true" />
+            <input
+              ref={searchInputRef}
+              id={searchId}
+              type="search"
+              placeholder="搜索设置…"
+              value={searchQuery}
+              onChange={(e) => onSearchChange(e.target.value)}
+              onKeyDown={onSearchKeyDown}
+              aria-label="搜索设置分类"
+              aria-controls={tablistId}
+              aria-describedby={statusId}
+              autoComplete="off"
+              spellCheck={false}
+              enterKeyHint="search"
+            />
+          </div>
         </div>
 
         <div
@@ -156,6 +161,9 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
             </div>
           ) : null}
         </div>
+
+        {/* 侧栏底栏：左列 UserProfileCard + 右列 SettingsIconButton */}
+        <SidebarFooter onShowToast={onShowToast ?? (() => {})} />
 
         {/* 读屏播报当前页 / 筛选结果（视觉隐藏） */}
         <div
