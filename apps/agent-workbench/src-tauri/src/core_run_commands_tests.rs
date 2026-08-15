@@ -5784,11 +5784,23 @@ async fn fail_streak_cross_threshold_emits_circuit_trip() {
     wait_run_agent_end_reason(&db, "s1", Duration::from_secs(30)).await;
     let streak = wait_for_fail_streak(&db, 6, Duration::from_secs(10)).await;
     assert_eq!(streak.count, 6, "跨过阈值 6");
-    let payloads = emitter.0.lock().unwrap().clone();
-    let values: Vec<serde_json::Value> = payloads
-        .iter()
-        .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
-        .collect();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    let mut values: Vec<serde_json::Value> = Vec::new();
+    while tokio::time::Instant::now() < deadline {
+        let payloads = emitter.0.lock().unwrap().clone();
+        values = payloads
+            .iter()
+            .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
+            .collect();
+        if values.iter().any(|v| v["type"] == "runtime-intervention-required")
+            && values
+                .iter()
+                .any(|v| v["type"] == "recovery-escalated" && v["detail"] == "circuit-trip")
+        {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     assert!(
         values
             .iter()

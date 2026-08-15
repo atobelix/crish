@@ -21,155 +21,35 @@ import {
   type FsDirEntry,
 } from './workspaceFsApi';
 
-export type SkillScope = 'global' | 'project' | 'workspace';
-export type SkillActivation = 'enabled' | 'recommended' | 'disabled';
-
-export type DesktopSkill = {
-  id: string;
-  name: string;
-  description: string;
-  filePath: string;
-  baseDir: string;
-  /** SKILL.md 正文（无 frontmatter） */
-  content: string;
-  /** 完整文件原文（含 frontmatter），便于预览 */
-  raw: string;
-  scope: SkillScope;
-  activation: SkillActivation;
-  tags: string[];
-  appliesTo: string[];
-  disableModelInvocation: boolean;
-  /** 来自系统目录（如 ~/.codex/skills/.system） */
-  system?: boolean;
-};
-
-export type SkillSlashCommand = {
-  cmd: string;
-  desc: string;
-  skillId: string;
-  skillName: string;
-};
-
-const ACTIVATION_KEY = 'crish_skill_activation_v1';
-const EXTRA_DIRS_KEY = 'crish_skill_extra_dirs_v1';
-
-/** 子目录名以这些开头时不跳过（点目录通常跳过） */
-const ALLOWED_DOT_DIRS = new Set(['.system']);
-
-function joinPath(base: string, name: string): string {
-  if (!base) return name;
-  const sep = base.includes('\\') ? '\\' : '/';
-  return `${base.replace(/[\\/]+$/, '')}${sep}${name}`;
-}
-
-function basename(p: string): string {
-  const n = p.replace(/[\\/]+$/, '');
-  const i = Math.max(n.lastIndexOf('/'), n.lastIndexOf('\\'));
-  return i >= 0 ? n.slice(i + 1) : n;
-}
-
-function dirname(p: string): string {
-  const n = p.replace(/[\\/]+$/, '');
-  const i = Math.max(n.lastIndexOf('/'), n.lastIndexOf('\\'));
-  return i >= 0 ? n.slice(0, i) : n;
-}
-
-/** Legacy desktop id (pre-T1). Used only for localStorage migration. */
-function legacySkillIdFromPath(filePath: string): string {
-  return `skill-file:${filePath.replace(/\\/g, '/').toLowerCase()}`;
-}
-
-/**
- * Resolve activation for a skill id, migrating legacy `skill-file:...` keys
- * onto runtime-compatible `skill_<hash>` when found by path.
- */
-function resolveActivationFromMap(
-  map: Record<string, SkillActivation>,
-  id: string,
-  filePath: string
-): { activation?: SkillActivation; migrated: boolean } {
-  if (map[id]) return { activation: map[id], migrated: false };
-  const legacyId = legacySkillIdFromPath(filePath);
-  if (legacyId !== id && map[legacyId]) {
-    map[id] = map[legacyId]!;
-    delete map[legacyId];
-    return { activation: map[id], migrated: true };
-  }
-  return { migrated: false };
-}
-
-function normalizeSlashName(name: string): string {
-  return name
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-/* ---------- frontmatter（对齐 agent-runtime / Codex SKILL.md） ---------- */
-
-function parseFrontmatter(content: string): {
-  data: Record<string, string | boolean>;
-  body: string;
-} {
-  if (!content.startsWith('---')) return { data: {}, body: content };
-  const end = content.indexOf('\n---', 3);
-  if (end === -1) return { data: {}, body: content };
-  const raw = content.slice(3, end).trim();
-  const body = content.slice(end + 4).replace(/^\r?\n/, '');
-  const data: Record<string, string | boolean> = {};
-  for (const line of raw.split(/\r?\n/)) {
-    const match = /^([^:#]+):\s*(.*)$/.exec(line);
-    if (!match) continue;
-    const key = match[1]!.trim();
-    const value = match[2]!.trim().replace(/^["']|["']$/g, '');
-    data[key] = value === 'true' ? true : value === 'false' ? false : value;
-  }
-  return { data, body };
-}
-
-function stringList(v: unknown): string[] {
-  if (typeof v !== 'string' || !v.trim()) return [];
-  return v
-    .split(/[,[\]]/)
-    .map((s) => s.trim().replace(/^["']|["']$/g, ''))
-    .filter(Boolean);
-}
-
-function skillScope(v: unknown): SkillScope | undefined {
-  if (v === 'global' || v === 'project' || v === 'workspace') return v;
-  return undefined;
-}
-
-function skillActivation(v: unknown): SkillActivation | undefined {
-  if (v === 'enabled' || v === 'recommended' || v === 'disabled') return v;
-  return undefined;
-}
-
-function firstMarkdownSentence(content: string): string | undefined {
-  const line = content
-    .split(/\r?\n/)
-    .map((item) => item.trim())
-    .find((item) => item && !item.startsWith('#'));
-  return line?.slice(0, 160);
-}
-
-/* ---------- activation store ---------- */
-
-function loadActivationMap(): Record<string, SkillActivation> {
-  try {
-    const raw = localStorage.getItem(ACTIVATION_KEY);
-    if (!raw) return {};
-    const o = JSON.parse(raw);
-    return o && typeof o === 'object' ? o : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveActivationMap(map: Record<string, SkillActivation>) {
-  localStorage.setItem(ACTIVATION_KEY, JSON.stringify(map));
-}
+export type {
+  DesktopSkill,
+  SkillActivation,
+  SkillScope,
+  SkillSlashCommand,
+} from './skillsApi.types';
+import type {
+  DesktopSkill,
+  SkillActivation,
+  SkillScope,
+  SkillSlashCommand,
+} from './skillsApi.types';
+import {
+  ALLOWED_DOT_DIRS,
+  EXTRA_DIRS_KEY,
+  basename,
+  dirname,
+  firstMarkdownSentence,
+  joinPath,
+  legacySkillIdFromPath,
+  loadActivationMap,
+  normalizeSlashName,
+  parseFrontmatter,
+  resolveActivationFromMap,
+  saveActivationMap,
+  skillActivation,
+  skillScope,
+  stringList,
+} from './skillsApiHelpers';
 
 export function getExtraSkillDirs(): string[] {
   try {
