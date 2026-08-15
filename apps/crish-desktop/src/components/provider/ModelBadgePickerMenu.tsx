@@ -14,6 +14,7 @@ type Props = {
   activeModel?: string | null;
   onClose: () => void;
   open?: boolean;
+  side?: 'top' | 'bottom';
   /** 真实触发器（模型徽标），用于锚定基座浮层（T05.3.2 由父级 Popover.Root 迁移） */
   children: React.ReactNode;
 };
@@ -31,6 +32,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   activeModel,
   onClose,
   open = true,
+  side = 'bottom',
   children,
 }) => {
   const [expandedProfileId, setExpandedProfileId] = useState<string | null>(
@@ -63,7 +65,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
         if (!nextOpen) onClose();
       }}
       trigger={children}
-      side="bottom"
+      side={side}
       align="start"
       sideOffset={4}
       contentClassName={styles.mbMenu}

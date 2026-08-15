@@ -131,6 +131,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
         activeModel={engineModel}
         onClose={() => setShowModelDropdown(false)}
         open={showModelDropdown}
+        side="top"
       >
         <Tooltip
           content={
