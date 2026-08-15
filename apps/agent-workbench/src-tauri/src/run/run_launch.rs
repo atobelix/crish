@@ -343,6 +343,12 @@ pub(crate) async fn run_task_impl(
         None => base_registry,
     };
 
+    // 确保 session 行存在（自愈补建，避免 FK 报错；对齐 session_commands::self_heal_then_save_body）
+    if let Some(db) = state.local_db() {
+        let sid = session_id.clone();
+        let _ = tokio::task::spawn_blocking(move || db.insert_session(&sid, "")).await;
+    }
+
     // 注册 run（queued → initializing → running，落库）
     let handle = state
         .run_manager

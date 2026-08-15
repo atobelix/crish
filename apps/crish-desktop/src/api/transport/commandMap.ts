@@ -42,6 +42,9 @@ export const COMMAND_NAME_ALLOWLIST: ReadonlySet<string> = new Set([
   'kill_subagent',
   // ── E2 F4：手动压缩命令（slash /compact 消费面；registered=true 已接线）──
   'core_compact_now',
+  // ── 运行生命周期类（core_*）──
+  'core_run_task',
+  'core_cancel_run',
   // ── 壳命令（config / session，F5 终态名：config_update / list_sessions）──
   'config_update',
   'list_sessions',
@@ -87,6 +90,12 @@ const PAYLOAD_SHAPERS: Readonly<
   config_update: (p) => {
     const { type: _type, apiKey: _apiKey, ...rest } = p;
     return rest;
+  },
+  core_run_task: (p) => {
+    if ('options' in p && typeof p.options === 'object' && p.options !== null) {
+      return p;
+    }
+    return { options: p };
   },
 };
 

@@ -58,9 +58,10 @@ describe('TauriTransport', () => {
   // ── request（职责 5：配对 → invoke）────────────────────────
 
   it('request 成功：invoke 命令 + 透传 payload，返回 data', async () => {
-    const impl = vi.fn(async (args: Record<string, unknown>) => ({
-      runId: args.runId,
-    }));
+    const impl = vi.fn(async (args: Record<string, unknown>) => {
+      const opts = args?.options as Record<string, unknown> | undefined;
+      return { runId: opts?.runId ?? args?.runId };
+    });
     mockTauriCommand('core_run_task', impl);
 
     const data = await transport.request('core_run_task', {
@@ -68,7 +69,9 @@ describe('TauriTransport', () => {
       sessionId: 's1',
     });
 
-    expect(impl).toHaveBeenCalledWith({ runId: 'run-1', sessionId: 's1' });
+    expect(impl).toHaveBeenCalledWith({
+      options: { runId: 'run-1', sessionId: 's1' },
+    });
     expect(data).toEqual({ runId: 'run-1' });
   });
 
@@ -86,9 +89,11 @@ describe('TauriTransport', () => {
     });
 
     expect(impl).toHaveBeenCalledWith({
-      runId: 'run-1',
-      sessionId: 's1',
-      traceId: 'run-t-1-2-3',
+      options: {
+        runId: 'run-1',
+        sessionId: 's1',
+        traceId: 'run-t-1-2-3',
+      },
     });
   });
 
@@ -122,8 +127,8 @@ describe('TauriTransport', () => {
     // 走 invokeTyped 包装：直接用 mock 注册的 impl 计数（invokeTyped 状态由 mock 层派生）
     const res = await transport.request('core_run_task', args);
     expect(impl).toHaveBeenCalledTimes(2);
-    expect(impl).toHaveBeenNthCalledWith(1, args);
-    expect(impl).toHaveBeenNthCalledWith(2, args);
+    expect(impl).toHaveBeenNthCalledWith(1, { options: args });
+    expect(impl).toHaveBeenNthCalledWith(2, { options: args });
     expect(res).toEqual({ ok: true });
   });
 

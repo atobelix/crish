@@ -36,7 +36,13 @@ export function startRunTask(
   transport: Transport,
   params: Record<string, unknown>
 ): Promise<unknown> {
-  return transport.request('core_run_task', params);
+  const payload =
+    'options' in params &&
+    typeof params.options === 'object' &&
+    params.options !== null
+      ? params
+      : { options: params };
+  return transport.request('core_run_task', payload);
 }
 
 /** 测试用：重置单例（调用旧实例 stop 释放监听后置空） */

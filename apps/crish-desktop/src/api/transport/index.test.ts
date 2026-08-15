@@ -39,12 +39,14 @@ describe('transport（C3.1：IPC 单路径）', () => {
         .mockResolvedValue({ runId: 'r1', sessionId: 's1' });
 
       await expect(
-        mod.startRunTask(tauri, { runId: 'r1', prompt: 'hi' }),
+        mod.startRunTask(tauri, { runId: 'r1', prompt: 'hi' })
       ).resolves.toEqual({ runId: 'r1', sessionId: 's1' });
 
       expect(requestSpy).toHaveBeenCalledWith('core_run_task', {
-        runId: 'r1',
-        prompt: 'hi',
+        options: {
+          runId: 'r1',
+          prompt: 'hi',
+        },
       });
     });
   });
