@@ -1,20 +1,18 @@
 .settingsUiPage {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
-  /*
-   * width: 100% 濠靛鍋呭?stretch 闁绘牞娉涢崹顏堟晬?   * max-width 闂侇偅淇虹换?token 缂備胶鍠嶇粩鎾箳瑜嶉崺妤呮晬鐎圭敘rgin: auto 閻庡湱鍋熼獮鍥╀沪閸涱剝鍘柕?   * 缂佸倷鐒﹂娑㈠礃瀹ュ懏韬柛?tab CSS 闂佹彃鑻幃鍥礃濞嗗海顏卞ù?max-width: 680/720px闁?   */
+  gap: var(--space-4, 16px);
   width: 100%;
-  max-width: var(--settings-content-max, 720px);
+  max-width: var(--settings-content-max, 820px);
   margin-left: auto;
   margin-right: auto;
-  padding-bottom: 40px;
+  padding-bottom: 24px;
   box-sizing: border-box;
 }
 
 .settingsUiPageHead {
   margin: 0;
-  padding: 0;
+  padding: 0 2px;
 }
 
 .settingsUiHeadInline {
@@ -26,9 +24,9 @@
 
 .settingsUiPageTitle {
   margin: 0;
-  font-size: var(--font-size-2xl, 24px);
+  font-size: var(--font-size-xl, 20px);
   font-weight: var(--font-weight-semibold);
-  letter-spacing: var(--letter-spacing-tighter);
+  letter-spacing: var(--letter-spacing-tight);
   color: var(--text-primary);
   line-height: var(--line-height-dense);
 }
@@ -36,13 +34,13 @@
 .settingsUiPageBody {
   display: flex;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-5, 20px);
 }
 
 .settingsUiSection {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2, 8px);
   content-visibility: auto;
   contain-intrinsic-size: auto 200px;
 }
@@ -50,7 +48,7 @@
 .settingsUiSectionTitle {
   margin: 0;
   padding: 0 4px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
   letter-spacing: var(--letter-spacing-snug);
@@ -59,14 +57,13 @@
 .settingsUiSectionContent {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3, 12px);
 }
 
-/* 缂傚倷鑳堕崰宥囩博閹绢喗鍎嶉柛鏇ㄥ灣瑜邦垳绱掗悪娆忓暙楠炪垽鏌ｅΔ鈧ú銈夘敊閹版澘闂い顓熷笧缁€澶娾槈閹惧崬鍔滈柣妤佹倐閺屽棝妫冨☉姘闂佸搫顑勭粈浣圭閺囩儐鍤曢弶鍫氭櫃缁辨骞栨潏鎹愵吅缂?=4%闂佹寧绋戦¨鈧紒杈ㄧ箞瀵噣鎮╅幓鎺曗拡闂備焦褰冪粔鐟拔ｉ幑鎰╀汗闁规彃顑囩粈澶岀磼缂併垹鐏ｉ悶娑栧劦閹啴宕熼锝咁洭闁荤喐鐟︾敮濠勭箔?1px hairline */
 .settingsUiCard {
   background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl, 16px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl, 12px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -75,9 +72,9 @@
 .settingsUiRow {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
+  gap: var(--space-3, 12px);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -192,7 +189,7 @@
 }
 
 /* Dark mode theme support */
-:global(html[data-theme="dark"]) .modernSelectTooltipInner {
+:global(html[data-theme='dark']) .modernSelectTooltipInner {
   background: var(--bg-elevated);
   border-color: var(--border-subtle);
   color: var(--text-primary);
@@ -201,7 +198,7 @@
     0 2px 8px color-mix(in srgb, var(--shadow-color) 20%, transparent);
 }
 
-:global(html[data-theme="dark"]) .modernSelectTooltipArrow {
+:global(html[data-theme='dark']) .modernSelectTooltipArrow {
   background: var(--bg-elevated);
   border-color: var(--border-subtle);
 }
