@@ -5,8 +5,9 @@
  * 40 方案 T3 补全：Mention 注册、CodeBlock Enter 保护、DOMPurify 粘贴清洗、动态占位符。
  * T8 扩展：Mention 建议（@ 触发，候选人引用桥接）、combobox aria 全链
  * （role/haspopup/autocomplete 常驻，expanded/controls/activedescendant 由 suggestion 生命周期驱动）。
- * 性能：编辑器装配（extensions/editorProps/onUpdate）useMemo 一次性稳定，回调全部经 ref
- * 桥接，避免 tiptap v3 useEditor 每渲染 setOptions 重建 ExtensionManager。
+ * F1-β 拆分：编辑器装配（extensions/onUpdate/editorProps）迁至 ./TiptapEditorExtensions，
+ * Enter/IME keymap 决策迁至 ./TiptapKeymap（纯函数）；本文件保留核心编辑器装配壳
+ * （ref 桥接 + 生命周期 effects + forwardRef handle + IME DOM 保护 + 渲染）。
  * CI Guardrail: UI Component (Max 500 lines of effective code, Max 12 useState)
  */
 
@@ -21,21 +22,8 @@ import React, {
 
 import { useEditor, EditorContent } from '@tiptap/react';
 
-import StarterKit from '@tiptap/starter-kit';
-
-import Placeholder from '@tiptap/extension-placeholder';
-
-import Link from '@tiptap/extension-link';
-
-import DOMPurify from 'dompurify';
 import { exitSuggestion } from '@tiptap/suggestion';
-import {
-  SlashExtension,
-  MentionExtension,
-  MentionSuggestionExtension,
-  slashSuggestionKey,
-  mentionSuggestionKey,
-} from './SlashExtension';
+import { slashSuggestionKey, mentionSuggestionKey } from './SlashExtension';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 import { serializeToMarkdown } from './serialization/markdownSerializer';
 import { parseFromMarkdown } from './serialization/markdownDeserializer';
@@ -43,6 +31,11 @@ import type {
   TiptapEditorFieldProps,
   TiptapEditorFieldHandle,
 } from './composerTypes';
+import {
+  buildTiptapEditorOptions,
+  type TiptapEditorBridge,
+  type TiptapEditorCallbacks,
+} from './TiptapEditorExtensions';
 import styles from './TiptapEditorField.module.css';
 
 /**
@@ -68,13 +61,6 @@ function safeViewDom(
 
 /** 编辑器最大长度防爆上限（与草稿截断一致，SRS 安全红线兜底） */
 const COMPOSER_MAX_LENGTH = 100000;
-
-/**
- * 大文档序列化警告阈值（R-08，08-detail T5.5）：建议 50KB，
- * 实现时按压测校准（100KB 级序列化全量同步成本见 07 审计 R-08）。
- * 超过阈值在防抖窗口末帧 / 发送路径回调 onOversizeWarning（宿主 toast）。
- */
-const SERIALIZE_WARN_CHARS = 50000;
 
 export const TiptapEditorField = React.forwardRef<
   TiptapEditorFieldHandle,
@@ -132,7 +118,7 @@ export const TiptapEditorField = React.forwardRef<
         return null;
       },
     });
-    const callbacksRef = useRef({
+    const callbacksRef = useRef<TiptapEditorCallbacks>({
       onSendMarkdown,
       onMarkdownChange,
       onCompositionChange,
@@ -177,223 +163,31 @@ export const TiptapEditorField = React.forwardRef<
       onOversizeWarning,
     ]);
 
-    /**
-     * R-08：序列化结果大文档检查（防抖末帧 / 发送路径共用）。
-     * 超过阈值且未警告过 → 回调宿主（toast）；回落阈值以下后允许再次警告。
-     */
-    const checkOversize = (markdown: string): void => {
-      const len = markdown?.length ?? 0;
-      if (len > SERIALIZE_WARN_CHARS) {
-        if (!oversizeWarnedRef.current) {
-          oversizeWarnedRef.current = true;
-          callbacksRef.current.onOversizeWarning?.(len);
-        }
-      } else if (oversizeWarnedRef.current) {
-        oversizeWarnedRef.current = false;
-      }
+    // ── 编辑器装配（稳定实例）：extensions/onUpdate/editorProps 在
+    //    TiptapEditorExtensions 组装，回调全部经 bridge 取最新值 ───────────────
+    const editorBridge: TiptapEditorBridge = {
+      placeholderRef,
+      sendShortcutRef,
+      slashExtraItemsRef,
+      mentionCandidatesRef,
+      containerRef: containerRefBridge.current,
+      isComposingRef,
+      lastContentRef,
+      debounceTimerRef,
+      editorRef,
+      oversizeWarnedRef,
+      callbacksRef,
+      slashListboxId,
+      mentionListboxId,
     };
 
-    // ── 编辑器装配（稳定实例）─────────────────────────────────────────────────
-    // 注意：装配一次性固定（useMemo 空依赖），回调全部经 ref 桥接取最新值；
+    // 注意：装配一次性固定（useMemo 空依赖），bridge 内均为稳定 ref；
     // aria 属性为运行期动态值，走下方 DOM setAttribute 同步（不经装配重建）。
-    const editorOptions = useMemo(() => {
-      const extensions = [
-        StarterKit.configure({
-          // 彻底禁用所有块级博客排版节点，对话输入框保持纯净行内修饰流
-          heading: false,
-          bulletList: false,
-          orderedList: false,
-          listItem: false,
-          blockquote: false,
-          codeBlock: {}, // 保留行内与围栏代码块结构，提供 Enter 换行保护
-          horizontalRule: false,
-          dropcursor: false,
-          gapcursor: false,
-          link: false,
-        }),
-        Placeholder.configure({
-          // 动态占位符：函数形式每次装饰时读取最新值（processing 双态）
-          placeholder: () => placeholderRef.current ?? '',
-        }),
-        // 链接 mark 注册（对齐序列化 link 分支，[text](url) 水合保真；不自动链接）
-        Link.configure({
-          openOnClick: false,
-          autolink: false,
-          linkOnPaste: false,
-        }),
-        MentionExtension,
-        // 宿主系统/skill 命令以引用桥接，动态更新无需重建编辑器
-        SlashExtension.configure({
-          extraItemsRef: slashExtraItemsRef,
-          listboxId: slashListboxId,
-          containerRef: containerRefBridge.current,
-        }),
-        // @ 提及建议（候选人引用桥接；空列表兜底不弹面板）
-        MentionSuggestionExtension.configure({
-          candidatesRef: mentionCandidatesRef,
-          listboxId: mentionListboxId,
-          containerRef: containerRefBridge.current,
-        }),
-      ];
-
-      return {
-        extensions,
-        onUpdate: ({ editor }: any) => {
-          // 性能优化：防抖处理海量节点下的 serializeToMarkdown 计算，避免主线程卡顿
-          if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-          }
-          debounceTimerRef.current = setTimeout(() => {
-            const markdown = serializeToMarkdown(editor.getJSON());
-            lastContentRef.current = markdown;
-            // R-08：防抖窗口末帧全量序列化的大文档预算提示（宿主 toast）
-            checkOversize(markdown);
-            callbacksRef.current.onMarkdownChange?.(markdown);
-          }, 150);
-        },
-        editorProps: {
-          attributes: {
-            class: styles.proseMirrorField ?? '',
-            'data-testid': 'chat-input',
-          },
-          handleKeyDown: (view: any, event: KeyboardEvent | any) => {
-            // CRM-03: IME Composition Protection Gate（view.composing + event.isComposing + DOM 监听）
-            if (view.composing || event.isComposing || isComposingRef.current) {
-              callbacksRef.current.onCompositionChange?.(true);
-              return false; // Pass through to browser native CJK IME candidate selection
-            }
-
-            const isShift = event.shiftKey;
-            const isCtrlOrCmd = event.ctrlKey || event.metaKey;
-
-            // Shift+Enter inserts hard break
-            if (event.key === 'Enter' && isShift) {
-              return false;
-            }
-
-            // CodeBlock Enter 保护（SRS 3.7.1）：代码块内 Enter 只换行，绝不触发发送
-            if (
-              event.key === 'Enter' &&
-              view.state.selection.$from.parent.type.name === 'codeBlock'
-            ) {
-              return false;
-            }
-
-            // Send Keymaps
-            if (event.key === 'Enter') {
-              let shouldSend = false;
-
-              if (
-                sendShortcutRef.current === 'enter' &&
-                !isShift &&
-                !isCtrlOrCmd
-              ) {
-                shouldSend = true;
-              } else if (
-                sendShortcutRef.current === 'ctrlEnter' &&
-                isCtrlOrCmd
-              ) {
-                shouldSend = true;
-              }
-
-              if (shouldSend) {
-                event.preventDefault();
-                const editor = editorRef.current;
-                if (!editor) return true;
-
-                // 强制立即执行一次同步转换以保证发送内容最新
-                const json = editor.getJSON();
-                const markdown =
-                  serializeToMarkdown(json).trim() || editor.getText().trim();
-
-                // R-08：发送瞬间同步全量序列化的大文档预算提示
-                checkOversize(markdown);
-
-                if (markdown && callbacksRef.current.onSendMarkdown) {
-                  callbacksRef.current.onSendMarkdown(markdown);
-                  editor.commands.clearContent();
-                  lastContentRef.current = '';
-                  callbacksRef.current.onMarkdownChange?.('');
-                }
-                return true;
-              }
-            }
-
-            return false;
-          },
-          handleDrop: (
-            view: any,
-            event: DragEvent | any,
-            _slice: any,
-            moved: boolean
-          ) => {
-            if (
-              !moved &&
-              event.dataTransfer &&
-              event.dataTransfer.files.length > 0
-            ) {
-              event.preventDefault();
-              callbacksRef.current.onDropFiles?.(
-                Array.from(event.dataTransfer.files)
-              );
-              return true;
-            }
-            return false;
-          },
-          handlePaste: (view: any, event: any) => {
-            const clipboardData = event.clipboardData;
-            if (!clipboardData) return false;
-
-            // 1. 图片粘贴 → 转交适配层（宿主附件链），不落入编辑器
-            const items = clipboardData.items;
-            if (items && items.length > 0) {
-              for (let idx = 0; idx < items.length; idx++) {
-                const item = items.item ? items.item(idx) : items[idx];
-                if (item && item.type.startsWith('image/')) {
-                  const file = item.getAsFile();
-                  if (file) {
-                    event.preventDefault();
-                    callbacksRef.current.onPasteImage?.(file, event);
-                    return true;
-                  }
-                }
-              }
-            }
-
-            // 2. HTML 粘贴 → DOMPurify 清洗后以安全 HTML 插入（防 XSS 注入）
-            const html = clipboardData.getData('text/html');
-            if (html) {
-              event.preventDefault();
-              const cleaned = DOMPurify.sanitize(html, {
-                FORBID_TAGS: [
-                  'script',
-                  'style',
-                  'iframe',
-                  'object',
-                  'embed',
-                  'form',
-                  'link',
-                  'meta',
-                  'img',
-                  'video',
-                  'audio',
-                  'source',
-                  'input',
-                  'button',
-                  'textarea',
-                ],
-                FORBID_ATTR: ['style', 'onerror', 'onload', 'onclick'],
-              });
-              view.pasteHTML(cleaned);
-              return true;
-            }
-
-            // 3. 纯文本由 ProseMirror 默认处理
-            return false;
-          },
-        },
-      };
-    }, []);
+    const editorOptions = useMemo(
+      () => buildTiptapEditorOptions(editorBridge),
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      []
+    );
 
     const editor = useEditor(editorOptions);
 

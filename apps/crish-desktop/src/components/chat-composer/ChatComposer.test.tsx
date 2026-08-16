@@ -18,8 +18,11 @@ function getEditorDom(): HTMLElement {
 
 /** 输入模拟：光标处 DOM 变更 + input 事件驱动 PM DOMObserver（jsdom 无原生可编辑行为） */
 async function typeText(text: string): Promise<void> {
+  // 富文本经 React.lazy 软接（F1-γ）：等待编辑器挂载（Suspense 解析完成），
+  // 再保留与拆分前一致的 60ms settle 窗口（PM view / DOMObserver 初始化完成），
+  // 避免 DOM 变更落在 view 就绪前被 PM 回滚
+  const dom = await waitFor(() => getEditorDom());
   await new Promise((r) => setTimeout(r, 60));
-  const dom = getEditorDom();
   const sel = document.getSelection();
   let target: Node = dom;
   let offset = 0;
@@ -193,7 +196,8 @@ describe('ChatComposer 全链（T6 接线）', () => {
 
   it('空护栏：无内容时 Enter 不发送', async () => {
     const { onSend } = renderChatComposer({});
-    const dom = getEditorDom();
+    // 富文本经 React.lazy 软接（F1-γ）：等编辑器挂载 + PM view settle 再发 Enter
+    const dom = await waitFor(() => getEditorDom());
     await new Promise((r) => setTimeout(r, 60));
     fireEvent.keyDown(dom, { key: 'Enter' });
     await new Promise((r) => setTimeout(r, 30));
@@ -213,7 +217,8 @@ describe('ChatComposer 全链（T6 接线）', () => {
       },
     });
     // 直接驱动宿主回调：编辑器 onPaste 转发原事件（含 clipboardData）
-    const dom = getEditorDom();
+    // 富文本经 React.lazy 软接（F1-γ）：等编辑器挂载 + PM view settle
+    const dom = await waitFor(() => getEditorDom());
     await new Promise((r) => setTimeout(r, 60));
     const fakeFile = new File(['x'], '截图.png', { type: 'image/png' });
     const items = [{ type: 'image/png', getAsFile: () => fakeFile }];

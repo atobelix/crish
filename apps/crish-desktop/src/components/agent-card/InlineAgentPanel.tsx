@@ -7,6 +7,8 @@
  * - 输入区 ComposerField dense + maxLines=3，壳与侧栏 AgentCard 同轨
  * - 运行中可停止：折叠头 / 工具条 / Composer 默认 Stop=L2；Composer Force=L3 onForceStop
  * - 卸载安全：取消 follow-up 流，迟到 setState 不写回
+ * - F1-β 拆分：壳收敛全部 store hook / 编排职责；Header/Timeline/Composer/
+ *   Approval/ThinkingFold 为纯 props 展示子件（零 hook / 零 store）
  */
 import React, {
   useCallback,
@@ -16,8 +18,6 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ChevronRight } from 'lucide-react';
-import * as Lucide from 'lucide-react';
 import type { SessionAgent } from '../../store/types';
 import styles from './InlineAgentPanel.module.css';
 import {
@@ -25,8 +25,6 @@ import {
   selectPanelAgentId,
   useSessionField,
 } from '../../store/storeAccess';
-import { buildAssistantTimeline } from '../../api/toolPresentation';
-import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import {
   normalizeAgentPanelAgentId,
   openAgentInSidePanel,
@@ -36,14 +34,9 @@ import {
   resolveAgentPanelTitle,
   shouldReuseAgentPanelFocus,
 } from '../../api/openAgentPanel';
-import { Priority } from '../../workers';
-import { ComposerField } from '../chat-composer/ChatComposer';
-import { ChatToolStack } from '../chat-tool-call/ChatToolCallBlock';
-import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
 import { useAgentPanel } from '../../hooks/useAgentStream';
 import { useAgentToolApproval } from '../../hooks/useAgentToolApproval';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { Button, Tooltip } from '../ui';
 import {
   isAnyRecoveryCommandReady,
   isRecoveryCommandReady,
@@ -52,33 +45,12 @@ import {
   resumeSubagent,
 } from '../../api/subagentRecoveryApi';
 import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
+import { InlineAgentPanelHeader } from './InlineAgentPanelHeader';
+import { InlineAgentTimeline } from './InlineAgentTimeline';
+import { InlineAgentComposer } from './InlineAgentComposer';
 
 /** 内联 denser：比主列 / 侧栏默认 4 行再收一行，避免时间线被撑爆 */
 const INLINE_COMPOSER_MAX_LINES = 3;
-
-const SubagentThinkingFold: React.FC<{
-  thinkingText: string;
-  isLive?: boolean;
-}> = ({ thinkingText, isLive = false }) => {
-  const [open, setOpen] = useState(false);
-  const isExpanded = open || isLive;
-  return (
-    <details
-      className={`${styles.thinkingFold} ${isExpanded ? styles.isOpen : ''}`}
-      open={isExpanded}
-      onToggle={(e) => setOpen(e.currentTarget.open)}
-    >
-      <summary className={styles.thinkingFoldSum}>
-        <ChevronRight
-          size={14}
-          className={`${styles.thinkingChevron} ${isExpanded ? styles.isOpen : ''}`}
-        />
-        <span className={styles.thinkingFoldLabel}>思考</span>
-      </summary>
-      <div className={styles.thinkingFoldBody}>{thinkingText.trim()}</div>
-    </details>
-  );
-};
 
 interface InlineAgentPanelProps {
   agent: SessionAgent;
@@ -268,6 +240,24 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
     : `在侧栏打开子智能体「${displayTitle}」`;
   const regionAria = `${displayTitle}，${statusLabel}`;
 
+  /** 停止/强制停止统一绑 summary（折叠头 / 工具条 / Composer 三入口共用） */
+  const stopAgent = useCallback(() => {
+    handleStopGeneration(live.summary);
+  }, [handleStopGeneration, live.summary]);
+
+  const forceCancelAgent = useCallback(() => {
+    handleForceCancelGeneration(live.summary);
+  }, [handleForceCancelGeneration, live.summary]);
+
+  /** Composer 发送：trim 后清空输入并走 follow-up 流 */
+  const sendToAgent = useCallback(() => {
+    const text = input.trim();
+    if (text) {
+      setInput('');
+      void handleSend(text);
+    }
+  }, [input, handleSend]);
+
   return (
     <div
       className={`${styles.inlineAgent} ${styles.inlineAgentDense} ${open ? `${styles.isOpen} is-open` : ''} ${
@@ -288,102 +278,27 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
       data-side-focused={sideFocused ? '1' : '0'}
       data-composer-dense="1"
     >
-      <div className={styles.inlineAgentHeadRow}>
-        <button
-          type="button"
-          className={styles.inlineAgentHead}
-          aria-expanded={open}
-          aria-controls={bodyDomId}
-          id={labelDomId}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {running ? (
-            <span className="tool-row-live" aria-hidden>
-              <span
-                className="loading-spinner"
-                style={{ width: 8, height: 8, borderWidth: 1.5 }}
-              />
-            </span>
-          ) : (
-            <Lucide.Bot size={13} className="inline-agent-ico" aria-hidden />
-          )}
-          <span className={styles.inlineAgentLabel}>{displayLabel}</span>
-          <span
-            className={`${styles.inlineAgentBadge} ${
-              live.status === 'running'
-                ? styles.inlineAgentBadgeRunning
-                : live.status === 'failed'
-                  ? styles.inlineAgentBadgeFailed
-                  : live.status === 'stopped'
-                    ? styles.inlineAgentBadgeStopped
-                    : ''
-            }`}
-            aria-live="polite"
-          >
-            {statusLabel}
-          </span>
-          {pendingTools > 0 ? (
-            <Tooltip content={`待审批 ${pendingTools} 项`}>
-              <span
-                className={`${styles.inlineAgentBadge} ${styles.inlineAgentBadgePending}`}
-                aria-label={`待审批 ${pendingTools} 项`}
-              >
-                待批 {pendingTools}
-              </span>
-            </Tooltip>
-          ) : null}
-          {live.mode ? (
-            <Tooltip content={live.mode}>
-              <span className={styles.inlineAgentMode}>{live.mode}</span>
-            </Tooltip>
-          ) : null}
-          <span className={styles.inlineAgentMeta}>
-            {msgCount} 条{live.summary ? ` · ${live.summary.slice(0, 36)}` : ''}
-          </span>
-          <Lucide.ChevronRight
-            size={13}
-            className={`tool-row-chevron ${open ? 'rot' : ''}`}
-            aria-hidden
-          />
-        </button>
-        {/* 折叠态也可：停止 / 侧栏 only（不依赖展开 Composer） */}
-        <div className={styles.inlineAgentHeadActions}>
-          {running ? (
-            <Tooltip content={stopping ? '停止中…' : '停止子智能体'}>
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                className={`${styles.agentHeadBtn} ${styles.inlineAgentStopBtn}`}
-                aria-label={stopping ? '正在停止子智能体' : '停止子智能体'}
-                aria-busy={stopping || undefined}
-                disabled={stopping}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  handleStopGeneration(live.summary);
-                }}
-                icon={
-                  <Lucide.Square size={11} fill="currentColor" aria-hidden />
-                }
-              />
-            </Tooltip>
-          ) : null}
-          <Tooltip content={sideOpenTitle}>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={`${styles.agentHeadBtn} ${sideFocused ? styles.isActive : ''}`}
-              aria-label={sideOpenAria}
-              aria-pressed={sideFocused}
-              disabled={!agentIdNorm}
-              onClick={openInSideOnly}
-              icon={<Lucide.PanelRight size={13} aria-hidden />}
-            />
-          </Tooltip>
-        </div>
-      </div>
+      <InlineAgentPanelHeader
+        open={open}
+        onToggleOpen={() => setOpen((v) => !v)}
+        status={live.status}
+        running={running}
+        stopping={stopping}
+        onStop={stopAgent}
+        displayLabel={displayLabel}
+        statusLabel={statusLabel}
+        pendingTools={pendingTools}
+        mode={live.mode}
+        msgCount={msgCount}
+        summary={live.summary}
+        sideFocused={sideFocused}
+        sideOpenTitle={sideOpenTitle}
+        sideOpenAria={sideOpenAria}
+        sideDisabled={!agentIdNorm}
+        onOpenSide={openInSideOnly}
+        labelDomId={labelDomId}
+        bodyDomId={bodyDomId}
+      />
 
       {open ? (
         <div
@@ -392,298 +307,65 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           role="group"
           aria-label={`${displayTitle} 详情`}
         >
-          <div className={styles.inlineAgentToolbar}>
-            {running ? (
-              <Tooltip content="停止生成">
-                <button
-                  type="button"
-                  className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkStop}`}
-                  aria-label="停止生成"
-                  aria-busy={stopping || undefined}
-                  disabled={stopping}
-                  onClick={() => handleStopGeneration(live.summary)}
-                >
-                  {stopping ? '停止中…' : '停止'}
-                </button>
-              </Tooltip>
-            ) : null}
-            {pendingTools > 0 ? (
-              <span className={styles.inlineAgentToolbarHint} role="status">
-                有 {pendingTools} 项待确认
-              </span>
-            ) : null}
-          </div>
+          <InlineAgentTimeline
+            bodyRef={bodyRef}
+            live={live}
+            running={running}
+            stopping={stopping}
+            onStop={stopAgent}
+            parentSessionId={parentSessionId}
+            expandedTools={expandedTools}
+            onToggleTool={onToggleTool}
+            approval={{
+              approvalBusy,
+              onApprovalAllow,
+              onApprovalDeny,
+              pendingTools,
+            }}
+            emptyStreamCopy={emptyStreamCopy}
+            recovery={{
+              isFailed,
+              errorKindLabel,
+              retries,
+              recoveryReady,
+              resumeReady,
+              killReady,
+              killAllReady,
+              recoveryBusy,
+              recoveryError,
+            }}
+            onRecoveryAction={runRecoveryAction}
+          />
 
-          <div
-            className={styles.inlineAgentStream}
-            ref={bodyRef}
-            role="log"
-            aria-relevant="additions"
-            aria-busy={running || undefined}
-          >
-            {msgCount === 0 ? (
-              <div className={styles.inlineAgentEmpty} role="status">
-                <p className={styles.inlineAgentEmptyP} style={{ margin: 0 }}>
-                  {emptyStreamCopy}
-                </p>
-                {/* D8 §3.7.1 失败摘要行：错误 kind + 重试次数（recovery-escalated
-                    投影；数据源缺位时回退「需人工介入」提示，不假装有数据） */}
-                {isFailed &&
-                (errorKindLabel || retries !== undefined || live.needsUser) ? (
-                  <div
-                    className={`${styles.inlineAgentFailSummary} is-failed-summary`}
-                    data-testid="inline-agent-fail-summary"
-                  >
-                    {errorKindLabel ? (
-                      <span className={styles.inlineAgentFailKind}>
-                        错误：{errorKindLabel}
-                      </span>
-                    ) : null}
-                    {retries !== undefined && retries > 0 ? (
-                      <span className={styles.inlineAgentFailRetries}>
-                        已重试 {retries} 次
-                      </span>
-                    ) : null}
-                    {live.needsUser ? (
-                      <span className={styles.inlineAgentFailNeedsUser}>
-                        需人工介入
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-                {/* D8 §3.7.1 操作按钮组（failed 态专属；命令面未注册期隐藏） */}
-                {isFailed && recoveryReady ? (
-                  <div
-                    className={`${styles.inlineAgentRecovery} is-recovery-actions`}
-                    data-testid="inline-agent-recovery-actions"
-                  >
-                    {resumeReady ? (
-                      <Tooltip content="关闭并重新派发（fork 新 run）">
-                        <button
-                          type="button"
-                          className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkResume}`}
-                          aria-label="恢复运行该子智能体"
-                          disabled={recoveryBusy}
-                          onClick={() =>
-                            void runRecoveryAction('resume', 'resume 失败')
-                          }
-                        >
-                          {recoveryBusy ? '处理中…' : '恢复运行'}
-                        </button>
-                      </Tooltip>
-                    ) : null}
-                    {killReady ? (
-                      <Tooltip content="终止该子智能体">
-                        <button
-                          type="button"
-                          className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkKill}`}
-                          aria-label="终止该子智能体"
-                          disabled={recoveryBusy}
-                          onClick={() =>
-                            void runRecoveryAction('kill', 'kill 失败')
-                          }
-                        >
-                          关闭
-                        </button>
-                      </Tooltip>
-                    ) : null}
-                    {killAllReady ? (
-                      <Tooltip content="批量终止全部运行中子智能体">
-                        <button
-                          type="button"
-                          className={`${styles.inlineAgentLink} ${styles.inlineAgentLinkKillAll}`}
-                          aria-label="批量终止全部运行中子智能体"
-                          disabled={recoveryBusy}
-                          onClick={() =>
-                            void runRecoveryAction('kill_all', 'kill_all 失败')
-                          }
-                        >
-                          全部关闭
-                        </button>
-                      </Tooltip>
-                    ) : null}
-                    {recoveryError ? (
-                      <span
-                        className={styles.inlineAgentRecoveryError}
-                        role="alert"
-                      >
-                        {recoveryError}
-                      </span>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`${styles.inlineAgentMsg} inline-agent-msg--${msg.sender}`}
-                >
-                  {msg.sender === 'user' ? (
-                    <div className={styles.inlineAgentUserPrompt}>
-                      {msg.text}
-                    </div>
-                  ) : (
-                    <>
-                      {msg.thinking &&
-                      msg.thinking.trim() &&
-                      msg.thinking !== '正在处理…' &&
-                      !looksLikeShellDump(msg.thinking) ? (
-                        <SubagentThinkingFold
-                          thinkingText={msg.thinking}
-                          isLive={running}
-                        />
-                      ) : null}
-                      {(() => {
-                        // Stream = plain text (no per-token HTML). Completed = Rust async.
-                        const isStreamingMsg =
-                          msg.status === 'processing' ||
-                          msg.status === 'queued';
-                        const mdPriority = isStreamingMsg
-                          ? Priority.Normal
-                          : Priority.High;
-                        const timeline = buildAssistantTimeline(msg);
-                        if (!timeline.length && (msg.text || '').trim()) {
-                          const fallback = stripThoughtPlaceholders(
-                            msg.text || ''
-                          );
-                          if (!fallback.trim()) return null;
-                          return (
-                            <div className="msg-assistant-text">
-                              <AsyncMarkdownBlock
-                                text={fallback}
-                                isStreaming={isStreamingMsg}
-                                priority={mdPriority}
-                              />
-                            </div>
-                          );
-                        }
-                        const textItems = timeline.filter(
-                          (i) => i.kind === 'text'
-                        );
-                        const lastTextKey = textItems.length
-                          ? textItems[textItems.length - 1]!.key
-                          : null;
-                        return timeline.map((item) => {
-                          if (item.kind === 'thought') {
-                            return (
-                              <div
-                                key={item.key}
-                                className="msg-timeline-thought"
-                              >
-                                <AsyncMarkdownBlock
-                                  text={item.content}
-                                  isStreaming={false}
-                                  priority={mdPriority}
-                                />
-                              </div>
-                            );
-                          }
-                          if (item.kind === 'text') {
-                            const body = stripThoughtPlaceholders(
-                              item.content || ''
-                            );
-                            if (!body.trim()) return null;
-                            const streaming =
-                              isStreamingMsg && item.key === lastTextKey;
-                            return (
-                              <div key={item.key} className="msg-timeline-text">
-                                <AsyncMarkdownBlock
-                                  text={body}
-                                  isStreaming={streaming}
-                                  priority={mdPriority}
-                                />
-                              </div>
-                            );
-                          }
-                          if (item.kind === 'tools') {
-                            return (
-                              <div
-                                key={item.key}
-                                className="msg-timeline-tools agent-tool-stack"
-                              >
-                                <ChatToolStack
-                                  items={item.items}
-                                  msgId={msg.id}
-                                  agents={[]}
-                                  activeSessionId={parentSessionId}
-                                  expandedTools={expandedTools}
-                                  onToggleTool={onToggleTool}
-                                  approvalBusy={approvalBusy}
-                                  pendingApprovalMsgId={msg.id}
-                                  onOpenDiff={() => {}}
-                                  onOpenPath={() => {}}
-                                  onOpenTerminal={() => {}}
-                                  onApprovalAllow={onApprovalAllow}
-                                  onApprovalDeny={onApprovalDeny}
-                                />
-                              </div>
-                            );
-                          }
-                          return null;
-                        });
-                      })()}
-                    </>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* denser ComposerField：footer 渐变 + ≤3 行增高 + 主题半透壳 */}
-          <div
-            className={`chat-footer agent-card-composer agent-card-composer--dense ${styles.inlineAgentComposerWrap} ${styles.inlineAgentComposerWrapDense}`}
-            data-composer="inline-agent-dense"
-          >
-            <ComposerField
-              value={input}
-              onChange={setInput}
-              onSend={() => {
-                const text = input.trim();
-                if (text) {
-                  setInput('');
-                  void handleSend(text);
-                }
-              }}
-              canSend={canSend}
-              disabled={sending || stopping || !agentIdNorm}
-              isComposing={isComposing}
-              setIsComposing={setIsComposing}
-              isProcessing={running}
-              onStop={() => handleStopGeneration(live.summary)}
-              onForceStop={() => handleForceCancelGeneration(live.summary)}
-              processingSendLabel="发送"
-              maxLines={INLINE_COMPOSER_MAX_LINES}
-              placeholder={
-                !agentIdNorm
-                  ? '子智能体不可用…'
-                  : running
-                    ? '向子智能体补充指示…'
-                    : '继续向该子智能体发消息…'
-              }
-              ariaLabel={
-                !agentIdNorm
-                  ? '子智能体不可用'
-                  : running
-                    ? '向内联子智能体补充指示'
-                    : '继续与内联子智能体对话'
-              }
-              dense
-              className={styles.noOutlineComposer}
-            />
-          </div>
+          <InlineAgentComposer
+            value={input}
+            onChange={setInput}
+            onSend={sendToAgent}
+            onStop={stopAgent}
+            onForceStop={forceCancelAgent}
+            canSend={canSend}
+            disabled={sending || stopping || !agentIdNorm}
+            isComposing={isComposing}
+            setIsComposing={setIsComposing}
+            isProcessing={running}
+            maxLines={INLINE_COMPOSER_MAX_LINES}
+            placeholder={
+              !agentIdNorm
+                ? '子智能体不可用…'
+                : running
+                  ? '向子智能体补充指示…'
+                  : '继续向该子智能体发消息…'
+            }
+            ariaLabel={
+              !agentIdNorm
+                ? '子智能体不可用'
+                : running
+                  ? '向内联子智能体补充指示'
+                  : '继续与内联子智能体对话'
+            }
+          />
         </div>
       ) : null}
     </div>
   );
 };
-
-/** 避免把 shell 表格拉进「思考」折叠 */
-function looksLikeShellDump(s: string): boolean {
-  return (
-    /FullName|LastWriteTime|Mode\s+Length|----/.test(s) ||
-    (/^[A-Za-z]:\\/.test(s.trim()) &&
-      s.includes('\n') &&
-      s.split('\n').length > 4)
-  );
-}

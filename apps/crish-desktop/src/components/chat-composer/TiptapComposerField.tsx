@@ -38,8 +38,8 @@ import {
   FORCE_STOP_LONG_PRESS_MS,
   STOP_ARIA_LABEL,
   STOP_TOOLTIP,
-  type ComposerFieldProps,
 } from './ComposerField';
+import type { ComposerFieldProps } from './composerTypes';
 
 /** 宿主系统斜杠命令默认集（对齐 useChatComposerProps.BASE_SLASH 与 AI 系统指令集） */
 const HOST_SYSTEM_SLASH: ReadonlyArray<{ cmd: string; desc: string }> = [

@@ -107,9 +107,7 @@ apps/crish-desktop/src/api/workspaceFsApi.ts 360
 apps/crish-desktop/src/bridges/send-to-note.ts 341
 apps/crish-desktop/src/components/agent-card/AgentCard.tsx 461
 apps/crish-desktop/src/components/agent-card/AgentTeamBoard.tsx 461
-apps/crish-desktop/src/components/agent-card/InlineAgentPanel.tsx 621
 apps/crish-desktop/src/components/chat-card/useChatComposerProps.ts 478
-apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx 477
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
 apps/crish-desktop/src/components/diff/DiffCard.tsx 439
 apps/crish-desktop/src/components/settings-extensions/ExtensionCard.tsx 466

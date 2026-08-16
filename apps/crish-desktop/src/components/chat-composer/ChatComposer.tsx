@@ -8,8 +8,21 @@
  * - 命令源 filteredCommands 以 baseSlashCommands 桥入编辑器菜单（宿主过滤 + 编辑器 query 精滤）；
  * - open-schedule 动作经 onSlashMenuPick 回宿主开面板；
  * - 落地面态（RL-01 5% 焦点混色特例）从祖先 DOM data-empty-kind 感知。
+ *
+ * F1-γ 输入契约化：主输入不再硬绑富文本——
+ * - 核心输入契约（ComposerFieldProps，composerTypes.ts canonical）统一装配 fieldContract；
+ * - 默认主路 = TiptapComposerField（React.lazy 软接 + Suspense）；
+ * - 富文本装配失败（模块加载 / 渲染抛错，InputFieldErrorBoundary 捕获）→
+ *   回落 ComposerField（textarea）兜底，纯文本可发送；附件/权限/队列保持壳层职责。
  */
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
@@ -18,13 +31,42 @@ import { PermissionModeMenu } from './PermissionModeMenu';
 import { Button, Tooltip } from '../ui';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment, QueuedMessage } from '../../hooks/useChatStream';
-import { TiptapComposerField } from './TiptapComposerField';
+import { ComposerField } from './ComposerField';
+import type { ComposerFieldProps } from './composerTypes';
 import { ComposerAttachmentBar } from './ComposerAttachmentBar';
 import { ChatQueuePanel } from './ChatQueuePanel';
 import { getCompositionRoot } from '../../app/compositionRoot';
 
-export type { ComposerFieldProps } from './ComposerField';
+export type { ComposerFieldProps } from './composerTypes';
 export { ComposerField, STOP_TOOLTIP } from './ComposerField';
+
+/** 富文本输入（默认主路）：React.lazy 软接，装配失败回落 textarea（F1-γ） */
+const TiptapComposerFieldLazy = React.lazy(() =>
+  import('./TiptapComposerField').then((m) => ({
+    default: m.TiptapComposerField,
+  }))
+);
+
+/** 富文本输入装配失败兜底边界：捕获 lazy 加载 / 渲染错误 → 通知宿主切 textarea */
+class InputFieldErrorBoundary extends React.Component<
+  { onFail: () => void; children?: React.ReactNode },
+  { failed: boolean }
+> {
+  state: { failed: boolean } = { failed: false };
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true };
+  }
+
+  componentDidCatch(): void {
+    this.props.onFail();
+  }
+
+  render(): React.ReactNode {
+    if (this.state.failed) return null;
+    return this.props.children;
+  }
+}
 
 export type ChatComposerProps = {
   chatInput: string;
@@ -114,6 +156,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   const fieldContainerRef = useRef<HTMLDivElement>(null);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
 
+  /** F1-γ：富文本装配失败（lazy 加载 / 渲染抛错）后永久回落 textarea 分支 */
+  const [richTextFailed, setRichTextFailed] = useState(false);
+
   // 落地面态（RL-01 特例）：宿主未透传 emptyKind 时，从 DOM 祖先 data-empty-kind
   // （chatBody）读取；会话在空态/消息态间切换时经 MutationObserver 同步，
   // 保证 session-empty 落地面走 5% 焦点混色而非标准 6%。
@@ -190,11 +235,78 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     }
   }, [attachments.length, chatInput, onSend, setChatInput]);
 
+  // ── F1-γ 核心输入契约（canonical）：富文本 / textarea 共用同一契约对象 ───────
+  // 附件（ComposerAttachmentBar + 隐藏 file input）/ 权限 / 队列为壳层职责，不塞入契约；
+  // 发送底层只吃纯文本（useSlashSend chatInput.trim()），提取层归各变体。
+  const fieldContract = useMemo<ComposerFieldProps>(
+    () => ({
+      value: chatInput,
+      onChange: (val) => {
+        setChatInput(val);
+        // 输入前缀斜杠时预载 skill 命令（tiptap 菜单经引用桥接即时并入）
+        if (val.startsWith('/') && !val.includes(' ')) {
+          void loadSkillSlash();
+        }
+      },
+      onSend: handleProtectedSend,
+      canSend,
+      isComposing,
+      setIsComposing,
+      isProcessing,
+      onStop,
+      onForceStop,
+      onPaste: (e) => {
+        void onPasteImage(e);
+      },
+      placeholder: '输入消息，或键入 / 打开命令…（可粘贴截图）',
+      processingPlaceholder: '输入排队消息…（当前回复结束后发送，可粘贴截图）',
+      ariaLabel: '主对话输入',
+      containerRef: fieldContainerRef,
+    }),
+    [
+      chatInput,
+      setChatInput,
+      loadSkillSlash,
+      handleProtectedSend,
+      canSend,
+      isComposing,
+      setIsComposing,
+      isProcessing,
+      onStop,
+      onForceStop,
+      onPasteImage,
+    ]
+  );
+
+  /**
+   * 统一输入区装配：默认主路 = TiptapComposerField（React.lazy 软接 + Suspense，
+   * 加载期以 textarea 同契约兜底渲染）；富文本装配失败（lazy 加载 / 渲染抛错，
+   * InputFieldErrorBoundary 捕获）→ 永久回落 ComposerField（textarea），纯文本可发送。
+   */
+  const renderInputField = () => {
+    if (richTextFailed) {
+      return <ComposerField {...fieldContract} />;
+    }
+    return (
+      <InputFieldErrorBoundary onFail={() => setRichTextFailed(true)}>
+        <React.Suspense fallback={<ComposerField {...fieldContract} />}>
+          <TiptapComposerFieldLazy
+            {...fieldContract}
+            baseSlashCommands={filteredCommands}
+            onSlashMenuPick={handleSlashMenuPick}
+            emptyKind={emptyKind}
+          />
+        </React.Suspense>
+      </InputFieldErrorBoundary>
+    );
+  };
+
   return (
     <AppErrorBoundary variant="compact" title="输入区出错">
       <div
         ref={wrapperRef}
         className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}
+        data-input-field={richTextFailed ? 'textarea' : 'rich-text'}
       >
         <ChatQueuePanel
           queue={queuedMessages}
@@ -202,33 +314,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           onEdit={onEditQueued ?? (() => {})}
           onDelete={onDeleteQueued ?? (() => {})}
         />
-        <TiptapComposerField
-          containerRef={fieldContainerRef}
-          value={chatInput}
-          onChange={(val) => {
-            setChatInput(val);
-            // 输入前缀斜杠时预载 skill 命令（tiptap 菜单经引用桥接即时并入）
-            if (val.startsWith('/') && !val.includes(' ')) {
-              void loadSkillSlash();
-            }
-          }}
-          onSend={handleProtectedSend}
-          canSend={canSend}
-          isComposing={isComposing}
-          setIsComposing={setIsComposing}
-          isProcessing={isProcessing}
-          onStop={onStop}
-          onForceStop={onForceStop}
-          onPaste={(e) => {
-            void onPasteImage(e);
-          }}
-          placeholder="输入消息，或键入 / 打开命令…（可粘贴截图）"
-          processingPlaceholder="输入排队消息…（当前回复结束后发送，可粘贴截图）"
-          ariaLabel="主对话输入"
-          baseSlashCommands={filteredCommands}
-          onSlashMenuPick={handleSlashMenuPick}
-          emptyKind={emptyKind}
-        />
+        {renderInputField()}
 
         <ComposerAttachmentBar
           attachments={attachments}

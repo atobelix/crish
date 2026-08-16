@@ -9,6 +9,7 @@ import {
   COMPOSER_MAX_LINES,
   useAutoGrowTextarea,
 } from '../../hooks/useAutoGrowTextarea';
+import type { ComposerFieldProps } from './composerTypes';
 
 /**
  * Stop UX 文案（产品：默认 Stop = L2 cooperative；Force = L3 force_cancel）。
@@ -23,70 +24,8 @@ export const FORCE_CANCEL_CONFIRM =
 /** 长按 Stop → L3 的毫秒阈值 */
 export const FORCE_STOP_LONG_PRESS_MS = 550;
 
-/** 与主对话同款输入壳：input-container + 发送钮 + 自动增高（默认 ≤4 行滚动） */
-export type ComposerFieldProps = {
-  value: string;
-  onChange: (v: string) => void;
-  onSend: () => void;
-  canSend: boolean;
-  placeholder?: string | undefined;
-  disabled?: boolean | undefined;
-  isComposing: boolean;
-  setIsComposing: (v: boolean) => void;
-  /** 流式/子 agent 运行中：显示发送（或排队）+ 停止 */
-  isProcessing?: boolean | undefined;
-  /** 默认 Stop = L2 cooperative_stop（单击） */
-  onStop?: (() => void) | undefined;
-  /**
-   * 强制取消 = L3 force_cancel（Shift+点击 / 长按，二次确认后）。
-   * 未传时 Shift+点击 / 长按会在确认后回落 onStop（过渡期）。
-   */
-  onForceStop?: (() => void) | undefined;
-  /** 处理中时主按钮文案。主对话默认「排队」；子 agent 续聊用「发送」。 */
-  processingSendLabel?: string | undefined;
-  /** 处理中时的占位提示（中文） */
-  processingPlaceholder?: string | undefined;
-  onPaste?: ((e: React.ClipboardEvent) => void) | undefined;
-  /** 额外按键（slash 等）；返回 true 表示已处理 */
-  onKeyDownExtra?:
-    | ((e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean | void)
-    | undefined;
-  className?: string | undefined;
-  /** 输入框内前缀区（slash 菜单等） */
-  leading?: React.ReactNode;
-  /** 侧栏 / 内联 denser：收紧 pad + 略紧行高，仍同一套半透壳与 grow */
-  dense?: boolean | undefined;
-  /** 打开侧栏 agent 时自动聚焦 */
-  autoFocus?: boolean | undefined;
-  /** 无障碍标签（默认随 placeholder） */
-  ariaLabel?: string | undefined;
-  /** 覆盖默认 maxLines（默认 COMPOSER_MAX_LINES=4；dense 侧栏/内联常传 3）。 */
-  maxLines?: number | undefined;
-  /** 斜杠 / 弹出层：aria-expanded */
-  ariaExpanded?: boolean | undefined;
-  /** 关联 listbox / menu id */
-  ariaControls?: string | undefined;
-  /** listbox | menu 等 */
-  ariaHasPopup?:
-    | (
-        | boolean
-        | 'false'
-        | 'true'
-        | 'menu'
-        | 'listbox'
-        | 'tree'
-        | 'grid'
-        | 'dialog'
-      )
-    | undefined;
-  /** 当前高亮 option id */
-  ariaActivedescendant?: string | undefined;
-  ariaAutocomplete?: ('none' | 'inline' | 'list' | 'both') | undefined;
-  /** 可选 textarea id（供外部 label / controls） */
-  textAreaId?: string | undefined;
-  /** 外壳 ref（便于父级 focus 回输入框） */
-  containerRef?: React.Ref<HTMLDivElement> | undefined;
-};
+/** 核心输入契约（canonical 归置 composerTypes.ts，F1-γ）：与主对话同款输入壳 */
+export type { ComposerFieldProps } from './composerTypes';
 
 export const ComposerField: React.FC<ComposerFieldProps> = React.memo(
   ({

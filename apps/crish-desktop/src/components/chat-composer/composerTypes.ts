@@ -10,6 +10,80 @@
 
 export type { PermissionMode } from '../../api/permissionModes';
 
+/**
+ * 核心输入契约（F1-γ canonical，唯一契约基准）：
+ * ComposerField（textarea 纯文本）与 TiptapComposerField（富文本可替换增强）
+ * 共用同一 props 契约；ChatComposer 以同一契约对象装配输入区并可在富文本
+ * 装配失败时回落 textarea。
+ * - 附件（ComposerAttachmentBar + 隐藏 file input）与权限/队列为壳层职责，
+ *   不塞入字段契约（反过度设计 §7-2 接口两实现法则）；
+ * - 发送底层只吃纯文本（useSlashSend chatInput.trim()），富文本→纯文本的
+ *   提取层归 Tiptap 变体，textarea 变体无需。
+ */
+export type ComposerFieldProps = {
+  value: string;
+  onChange: (v: string) => void;
+  onSend: () => void;
+  canSend: boolean;
+  placeholder?: string | undefined;
+  disabled?: boolean | undefined;
+  isComposing: boolean;
+  setIsComposing: (v: boolean) => void;
+  /** 流式/子 agent 运行中：显示发送（或排队）+ 停止 */
+  isProcessing?: boolean | undefined;
+  /** 默认 Stop = L2 cooperative_stop（单击） */
+  onStop?: (() => void) | undefined;
+  /**
+   * 强制取消 = L3 force_cancel（Shift+点击 / 长按，二次确认后）。
+   * 未传时 Shift+点击 / 长按会在确认后回落 onStop（过渡期）。
+   */
+  onForceStop?: (() => void) | undefined;
+  /** 处理中时主按钮文案。主对话默认「排队」；子 agent 续聊用「发送」。 */
+  processingSendLabel?: string | undefined;
+  /** 处理中的占位提示（中文） */
+  processingPlaceholder?: string | undefined;
+  onPaste?: ((e: React.ClipboardEvent) => void) | undefined;
+  /** 额外按键（slash 等）；返回 true 表示已处理 */
+  onKeyDownExtra?:
+    | ((e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean | void)
+    | undefined;
+  className?: string | undefined;
+  /** 输入框内前缀区（slash 菜单等） */
+  leading?: React.ReactNode;
+  /** 侧栏 / 内联 denser：收紧 pad + 略紧行高，仍同一套半透壳与 grow */
+  dense?: boolean | undefined;
+  /** 打开侧栏 agent 时自动聚焦 */
+  autoFocus?: boolean | undefined;
+  /** 无障碍标签（默认随 placeholder） */
+  ariaLabel?: string | undefined;
+  /** 覆盖默认 maxLines（默认 COMPOSER_MAX_LINES=4；dense 侧栏/内联常传 3）。 */
+  maxLines?: number | undefined;
+  /** 斜杠 / 弹出层：aria-expanded */
+  ariaExpanded?: boolean | undefined;
+  /** 关联 listbox / menu id */
+  ariaControls?: string | undefined;
+  /** listbox | menu 等 */
+  ariaHasPopup?:
+    | (
+        | boolean
+        | 'false'
+        | 'true'
+        | 'menu'
+        | 'listbox'
+        | 'tree'
+        | 'grid'
+        | 'dialog'
+      )
+    | undefined;
+  /** 当前高亮 option id */
+  ariaActivedescendant?: string | undefined;
+  ariaAutocomplete?: ('none' | 'inline' | 'list' | 'both') | undefined;
+  /** 可选 textarea id（供外部 label / controls） */
+  textAreaId?: string | undefined;
+  /** 外壳 ref（便于父级 focus 回输入框） */
+  containerRef?: React.Ref<HTMLDivElement> | undefined;
+};
+
 /** 提及候选人（@ 触发；宿主接入候选人源后注入，未接入时为空列表兜底不弹面板） */
 export interface MentionCandidate {
   id: string;
