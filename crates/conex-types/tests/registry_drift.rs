@@ -2018,9 +2018,10 @@ fn device_registry_capabilities_match_rust_all_capabilities() {
 fn device_registry_events_match_engine_and_sync_whitelist() {
     let reg = device_registry();
     let engine = registry();
-    // 事件段 57 条（49 变体 + D-03 九观测事件；2026-08-14 契约窗口：
-    // tool-input-repaired 核销 + 9 新事件，49 → 57）
-    assert_eq!(reg.events.len(), 57, "事件段必须为 57 条（D-03 契约窗口后）");
+    // 事件段 58 条（49 变体 + D-03 九观测事件 + T1b timeline-truncate；
+    // 2026-08-14 契约窗口 tool-input-repaired 核销 + 9 新事件 49 → 57；
+    // 2026-08-16 统一输入流收敛战役 T1b 补链 timeline-truncate 57 → 58）
+    assert_eq!(reg.events.len(), 58, "事件段必须为 58 条（T1b 补链后）");
     let mut strategy_counts: std::collections::BTreeMap<&str, usize> =
         std::collections::BTreeMap::new();
     for (i, ev) in reg.events.iter().enumerate() {
@@ -2072,11 +2073,13 @@ fn device_registry_events_match_engine_and_sync_whitelist() {
     // goal-continuation-decided=tuple（prompt 任务级内容 fail-closed）→ U 11；
     // 2026-08-14 D-03 契约窗口：tool-input-repaired 核销（-1 U）+ 9 观测事件
     // 全 redacted（观测字段无正文敏感，对齐 recovery-* 桌面观测面先例）
-    // → T 14 / R 33 / U 10）
+    // → T 14 / R 33 / U 10；
+    // 2026-08-16 T1b：timeline-truncate=transparent（event_cross_strategy 同判，
+    // Critical 必达会话内事件透传不裁剪，R1 主控裁决）→ T 15 / R 33 / U 10）
     assert_eq!(
         strategy_counts.get("transparent").copied().unwrap_or(0),
-        14,
-        "透明透传必须为 14 类（M6 §5.1 13 + D8 recovery-fork）"
+        15,
+        "透明透传必须为 15 类（M6 §5.1 13 + D8 recovery-fork + T1b timeline-truncate）"
     );
     assert_eq!(
         strategy_counts.get("redacted").copied().unwrap_or(0),

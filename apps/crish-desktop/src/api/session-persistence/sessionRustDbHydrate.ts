@@ -3,26 +3,20 @@
  *
  * 职责：
  *   - hydrateSessionsFromRust：boot 时一次性加载全部会话（index + bodies + agents）
- *   - loadSessionBodyWithDegradedRecovery：P1-F1 分叉单向修复路径（LS 真源回灌 SQLite）
+ *     （T2-1 剥镜像：正文直连 SQLite，不再有降级戳分叉恢复读面）
  *   - persistAllSessionsRust：全量持久化（per-session invoke，写队列 + 版本戳 CAS）
  *   - persistAllSessionsSyncViaLocalStorage：beforeunload 同步镜像（禁止 await）
  */
 
-import type { SessionMessage, SessionState } from '../../store/layoutStore';
+import type { SessionState } from '../../store/layoutStore';
 import {
   SESSION_AGENTS_PREFIX,
   SESSION_BODY_PREFIX,
   type SessionIndexEntry,
 } from './sessionPersistenceTypes';
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
+import { type RustSessionIndexEntry } from './sessionRustDbWire';
 import {
-  toRustSessionMessage,
-  type RustSessionIndexEntry,
-} from './sessionRustDbWire';
-import {
-  clearDegradedSession,
-  hasDegradedSession,
-  lsLoadSessionBody,
   lsLoadSessionIndex,
   lsSaveActiveSessionId,
   lsSaveFolderOrder,
@@ -40,7 +34,6 @@ import {
   loadSessionAgents,
   loadSessionBody,
   nextBatchVersion,
-  recordWrittenBodyVersion,
   saveSessionAgents,
   saveSessionBody,
   setSessionMeta,
@@ -58,59 +51,6 @@ import { prepareSessionsForUi } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';
 
 // ── 复合 API：hydrateSessionsFromRust ──────────────────────────────────────
-
-/**
- * P1-F1 hydrate 分叉恢复（F5-01 单向修复路径）。
- *
- * 会话带降级戳（期间 invoke 失败 → LS 正文为最新、SQLite 为旧快照）时：
- *   ① 以 LS 正文为真源（跳过 SQLite 读取）；
- *   ② 回写 SQLite（save_session_body，载荷 = LS 正文，取新批次戳）——回写失败
- *      （invoke 仍未恢复）→ 保持降级戳待下次 hydrate 重试，不丢数据；本次
- *      hydrate 仍展示 LS 最新正文；
- *   ③ 回写成功（或 LS 正文为空、无回灌价值）→ 清戳，后续 hydrate 恢复
- *      SQLite 优先（37/37 基线契约不回归）。
- *
- * 回写直接走 invokeResult 而非 saveSessionBody：修复失败时不能走其降级分支
- * 的「打戳 → 本函数清戳」抵消序列（AU-03:127：清戳时机 = 回写成功后）。
- * 批次戳取模块级新版本号，保证不被 CAS（writtenBodyBatchVersions）误判陈旧。
- */
-async function loadSessionBodyWithDegradedRecovery(
-  sessionId: string
-): Promise<SessionMessage[]> {
-  if (!hasDegradedSession(sessionId)) return loadSessionBody(sessionId);
-
-  const lsMessages = lsLoadSessionBody(sessionId);
-  if (lsMessages.length === 0) {
-    // LS 正文为空：无最新证据可回灌，清戳后按 SQLite 现状加载，
-    // 避免空正文经回灌盖掉 SQLite 已有数据
-    clearDegradedSession(sessionId);
-    return loadSessionBody(sessionId);
-  }
-
-  logInternalError('hydrate-degraded-repair', {
-    sessionId,
-    messageCount: lsMessages.length,
-  });
-  const version = nextBatchVersion();
-  const res = await invokeResult<void>('save_session_body', {
-    sessionId,
-    messages: lsMessages.map(toRustSessionMessage),
-    batchVersion: version,
-  });
-  if (res.status === 'ok') {
-    recordWrittenBodyVersion(sessionId, version);
-    clearDegradedSession(sessionId);
-    // D-05 S1：回灌清戳成功 = 分叉消除、invoke 已恢复 → 持久化降级状态解除
-    errorStore.setPersistenceStatus('healthy');
-  } else {
-    // 回写失败：保持降级戳（下次 hydrate 重试单向修复），日志暴露修复未完成
-    logInternalError('hydrate-degraded-repair-failed', {
-      sessionId,
-      status: res.status,
-    });
-  }
-  return lsMessages;
-}
 
 /**
  * 从存储层加载全部会话（index + bodies + agents），构造 SessionState[]。
@@ -156,7 +96,7 @@ export async function hydrateSessionsFromRust(): Promise<{
   const sessions: SessionState[] = await Promise.all(
     ordered.map(async (e) => {
       const [messages, agents] = await Promise.all([
-        loadSessionBodyWithDegradedRecovery(e.id),
+        loadSessionBody(e.id),
         loadSessionAgents(e.id),
       ]);
       const sanitized = sanitizeMessagesForHydrate(messages);

@@ -1,8 +1,15 @@
 // 事件消费映射（F1 §2.5 矩阵 / F3 §2 分类 → store 动作）：纯函数、可单测
 // 输入 = events.push.body.event 的 AgentEventEnvelope 扁平 JSON（M6 §10.5）或设备帧（WsGateway 分发产物）
 // 职责：type → ingest 路由表；未知 type 宽容跳过（对齐 MessageKind::Unknown 语义，
-//       crates/conex-types/src/device/envelope.rs:164-206：未登记 kind → Unknown 兜底不崩溃）
+//       crates/conex-types/src/device/envelope.rs:164-206：未登记 kind → Unknown 兜底不崩溃）。
+// T1b 统一输入流收敛战役：timeline-truncate 路由 + parseEngineEvent 严格解析（未知/畸形宽容跳过），
+//       generated 唯一解析权威（详案 T1b / T3）——新类型自动获严格结构校验。
 import { ENGINE_EVENT_TYPES } from '../../../../../packages/shared-types/src/generated/engine/events';
+import {
+  isParseOk,
+  parseEngineEvent,
+} from '../../../../../packages/shared-types/src/generated/engine/parser';
+import type { EngineEvent } from '../../../../../packages/shared-types/src/generated/engine/events';
 import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
 import {
   readBool,
@@ -78,6 +85,22 @@ export function routeEventType(type: string): EventRoute | null {
   return EVENT_ROUTES[type] ?? null;
 }
 
+// ── parseEngineEvent 唯一解析权威（详案 T1b / T3：generated 严格解析） ──
+
+/**
+ * 事件信封 → `parseEngineEvent` 严格结构解析（generated 唯一解析权威，
+ * 对齐 approvalWiring.ts 既有先例，M5 §1.4 走生成面）。
+ * 返回解析后的 `EngineEvent`；未知 type / 畸形载荷 / 缺必填字段 → `null`
+ * （宽容跳过，MessageKind::Unknown 语义，不崩溃不猜测——M6 §10.5）。
+ * 新增事件 type 自动获严格结构校验，无需手写第 N 套解析。
+ */
+export function parseEngineFrame(
+  frame: EventEnvelopeFrame
+): EngineEvent | null {
+  const parsed = parseEngineEvent(frame);
+  return isParseOk(parsed) ? parsed.data : null;
+}
+
 // ── 信封解析（宽容：扁平 JSON 校验 type/sessionId，保留原对象引用不复制载荷） ──
 
 /**
@@ -138,6 +161,19 @@ export function mapIngestFrame(
   const route = routeEventType(frame.type);
   if (route === null) {
     return [{ kind: 'ignore', reason: `unknown-event-type:${frame.type}` }];
+  }
+  // T1b：timeline-truncate 为 default-required 语义关键事件（R1 撤回出站）。
+  // parseEngineEvent 严格解析 → 结构性完整才入 feed；未知/畸形载荷（缺任一
+  // 必填字段 boundarySeq/reason/targetMessageId/... 或 type 不符）宽容跳过，
+  // 拒畸形入 feed，避免污染 R1 撤回重放基准（详案 T1 决定 3 over-refuse）。
+  if (frame.type === 'timeline-truncate' && parseEngineFrame(frame) === null) {
+    return [
+      {
+        kind: 'ignore',
+        reason:
+          'timeline-truncate:parseEngineEvent strict-parse failed (malformed/unknown, lenient skip)',
+      },
+    ];
   }
   const actions: StoreIngestAction[] = [
     { kind: 'feed-append', sessionId: frame.sessionId, frame, preview },

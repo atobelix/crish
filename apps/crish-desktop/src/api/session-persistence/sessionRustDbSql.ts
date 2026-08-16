@@ -23,7 +23,6 @@ import {
   type RustSessionMessage,
 } from './sessionRustDbWire';
 import {
-  clearDegradedSession,
   lsLoadActiveSessionId,
   lsLoadFolderOrder,
   lsLoadSessionAgents,
@@ -32,8 +31,6 @@ import {
   lsSaveActiveSessionId,
   lsSaveFolderOrder,
   lsSaveSessionAgents,
-  lsSaveSessionBody,
-  markDegradedSession,
 } from './sessionRustDbFallback';
 import {
   SESSION_ACTIVE_KEY,
@@ -179,7 +176,8 @@ export async function loadSessionBody(
 
 /**
  * 全量保存会话正文（先删后插，事务原子）。
- * 命令缺失 → 回退 localStorage（同步）。
+ * T2-1 剥镜像：SQLite 为唯一落点，命令缺失/错误不改写 LS、不打降级戳，
+ * 失败经 errorStore 数据面带呈现（persist-degraded-ls，非静默回退）。
  * I-DRAFT：PENDING_DRAFT 哨兵永不写 body。
  *
  * @param batchVersion 批次版本戳（CAS 防线 2，裁决 R9 单调递增版本号）。
@@ -213,27 +211,18 @@ export async function saveSessionBody(
   });
   if (res.status === 'ok') {
     recordWrittenBodyVersion(sessionId, batchVersion);
-    // Stream D 主存 SQLite；非空正文额外镜像到 LS，供 seedSessions 同步路径与 MCP 观测。
-    // 空数组不写 LS：避免远程懒壳把 crish_session_body_v1:* 刷成 [] 误报「丢消息」。
-    if (msgs.length > 0) {
-      lsSaveSessionBody(sessionId, msgs);
-    }
-    // P1-F1：SQLite 落库成功 = 本会话已无分叉（LS 镜像可能陈旧，如 quota 写失败），
-    // 清除遗留降级戳，防止下次 hydrate 以 LS 旧正文回灌盖掉 SQLite 新数据。
-    clearDegradedSession(sessionId);
+    // T2-1 剥镜像：SQLite 落库成功 = 唯一落点，不再镜像到 LS，
+    // 也不再清除降级戳（无镜像即无降级戳语义）。
     return;
   }
-  // missing / error → localStorage 回退。P1-F1：降级不再静默——记日志 + 打降级戳，
-  // hydrate 分叉恢复据此识别「LS 正文为最新真源」的会话并回写 SQLite。
+  // T2-1 剥镜像：缺/错命令不再回退写 LS 正文、不再打降级戳。失败改走 errorStore 数据面带
+  //（I1/T5 衔接：persist-degraded-ls 经 logInternalError 推入 errorStore → 可感知降级，非静默）。
   logInternalError('persist-degraded-ls', {
     command: 'save_session_body',
     sessionId,
     batchVersion,
     status: res.status,
   });
-  lsSaveSessionBody(sessionId, msgs);
-  // 空正文不标记：无内容可回灌，标记反而会让 hydrate 以空正文盖掉 SQLite 已有数据
-  if (msgs.length > 0) markDegradedSession(sessionId);
 }
 
 /**
