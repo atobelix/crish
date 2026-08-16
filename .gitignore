@@ -48,6 +48,10 @@ coverage/
 /test-baseline.md
 /workspace.db*
 /sessions.db*
+# 运行期产物子目录锚定（R0 解禁：根锚定不覆盖子目录，补 apps/agent-workbench 与通用子目录）
+apps/agent-workbench/*.db*
+**/*.db-shm
+**/*.db-wal
 
 # One-off agent/codegen scratch scripts (never commit)
 _dump_*.py
