@@ -936,3 +936,328 @@ pub(crate) fn now_iso_utc() -> String {
     let (year, month, day) = civil_from_days((secs / 86400) as i64);
     format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
 }
+
+// ── T5-2：孤儿 run 收割周期任务 ────────────────────────────────────
+
+/// 收割周期（ms；与心跳同一低频周期 ~60s，对齐周期快照骨架）
+pub(crate) const ORPHAN_REAP_PERIOD_MS: u64 = 60_000;
+/// 收割去抖轮数（M=2：`driver.is_finished()` 连续 M 轮仍停留 activeRuns
+/// 才判定孤儿——防把「刚正常收口、正在从 activeRuns 移除」的短窗口
+/// 残留误判为孤儿）
+pub(crate) const ORPHAN_REAP_DEBOUNCE_ROUNDS: u32 = 2;
+
+impl CoreRunState {
+    /// T5-2：孤儿 run 收割周期任务装配（低频 tokio 周期任务，复用
+    /// watchdog / spawn_snapshot_loop 的 exist 骨架，**不复用 watchdog
+    /// 语义**——watchdog 是子代理 idle 唤醒器，本任务是 run 驱动任务
+    /// 异常退出后的终态补写器）。幂等：重复调用不重复启动。
+    ///
+    /// 判定（壳层 + orchestrator 外层只读，**禁止在核心循环加探活**）：
+    /// `ActiveRun::driver.is_finished()`（run_core.rs 注释：已收口/已取消
+    /// 均成立）连续 [ORPHAN_REAP_DEBOUNCE_ROUNDS] 轮仍停留 activeRuns
+    /// → [finalize_orphan_run]（run_launch.rs 复用 [finalize_failed]
+    /// 触发点）补写 lastError / run-terminal(failed) / 移出 activeRuns。
+    pub fn spawn_run_reaper_loop(self: &Arc<Self>) {
+        if self.reaper_loop_running.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let this = Arc::clone(self);
+        tauri::async_runtime::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_millis(ORPHAN_REAP_PERIOD_MS));
+            interval.tick().await; // 首拍立即触发（interval 首拍即完成），跳过
+            loop {
+                interval.tick().await;
+                reap_orphan_runs_round(&this).await;
+            }
+        });
+    }
+}
+
+/// T5-2：单轮孤儿收割（纯逻辑可单测；测试直调，不依赖周期任务时序）。
+///
+/// 每轮对活动注册表快照逐条判定：
+/// - `driver_finished() == false` → 驱动任务仍在跑/未登记 → 清零去抖
+///   （移除表项），不收割；
+/// - `driver_finished() == true` 且仍在 activeRuns → 去抖 +1；连续
+///   [ORPHAN_REAP_DEBOUNCE_ROUNDS] 轮 → [finalize_orphan_run] 收割。
+///
+/// 收割后清理去抖表项（finalize_failed 已移出 activeRuns，表项不再
+/// 有消费方）。
+pub(crate) async fn reap_orphan_runs_round(state: &Arc<CoreRunState>) {
+    let candidates: Vec<(String, Arc<ActiveRun>)> = state
+        .active_runs
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .iter()
+        .map(|(run_id, active)| (run_id.clone(), Arc::clone(active)))
+        .collect();
+    for (run_id, active) in candidates {
+        if !active.driver_finished() {
+            // 驱动任务仍在跑（或句柄未登记）：正常 run，清零去抖
+            state
+                .orphan_debounce
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&run_id);
+            continue;
+        }
+        let streak = {
+            let mut debounce = state
+                .orphan_debounce
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            let entry = debounce.entry(run_id.clone()).or_insert(0);
+            *entry += 1;
+            *entry
+        };
+        if streak >= ORPHAN_REAP_DEBOUNCE_ROUNDS {
+            tracing::warn!(
+                target: "run",
+                run_id = %run_id,
+                streak,
+                "孤儿 run 收割：驱动任务已收口且连续 {ORPHAN_REAP_DEBOUNCE_ROUNDS} 轮停留活动注册表（无终态收口，补写终态）"
+            );
+            state
+                .orphan_debounce
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(&run_id);
+            finalize_orphan_run(state, &active).await;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use orchestrator::persist::InMemoryStore;
+    use orchestrator::restore::SnapshotFileStore;
+
+    /// 记录型发射器（事件桥测试替身；Emitter trait 公开可注入）
+    #[derive(Default)]
+    struct RecordingEmitter(std::sync::Mutex<Vec<String>>);
+
+    impl crate::core_event_bridge::Emitter for RecordingEmitter {
+        fn emit(&self, _channel: &str, payload: &str) {
+            self.0.lock().unwrap().push(payload.to_string());
+        }
+    }
+
+    fn recording_bridge() -> (EventBridge, Arc<RecordingEmitter>) {
+        let emitter = Arc::new(RecordingEmitter::default());
+        let bridge = EventBridge::new(
+            "workbench-run-event",
+            Arc::clone(&emitter) as Arc<dyn crate::core_event_bridge::Emitter>,
+        );
+        (bridge, emitter)
+    }
+
+    /// 测试用 CoreRunState（InMemoryStore + 独立快照文件 + 记录桥）
+    fn test_state() -> Arc<CoreRunState> {
+        let (bridge, _emitter) = recording_bridge();
+        let snapshots: Arc<dyn SnapshotStore> = Arc::new(SnapshotFileStore::new(
+            std::env::temp_dir().join(format!(
+                "conex_reaper_{}_{}_snapshot.json",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            )),
+        ));
+        Arc::new(CoreRunState::new(
+            Arc::new(InMemoryStore::new()),
+            snapshots,
+            bridge,
+            Arc::new(StatusDiagnostics::new()),
+            None,
+        ))
+    }
+
+    /// 组装活动 run（装配面与 core_run_commands_tests::build_active_run
+    /// 对齐：EventQueue / 缓冲桥 / 审批门；driver 句柄由调用方指定）
+    async fn build_active_run(
+        state: &CoreRunState,
+        session_id: &str,
+        run_id: &str,
+        driver: Option<tauri::async_runtime::JoinHandle<()>>,
+    ) -> Arc<ActiveRun> {
+        let handle = Arc::new(tokio::sync::Mutex::new(
+            state
+                .run_manager
+                .start_run(session_id, run_id)
+                .await
+                .expect("start_run"),
+        ));
+        let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
+            state.store.clone(),
+            0,
+            None,
+        )));
+        let bridge = Arc::new(BufferedRunEventBridge::new(
+            state.bridge.clone(),
+            run_id.to_string(),
+        ));
+        let broadcast_bridge = Arc::clone(&bridge);
+        let broadcast_run_id = run_id.to_string();
+        let broadcast = Box::new(move |event: AgentEvent| {
+            let envelope = AgentEventEnvelope::new(event, Some(broadcast_run_id.clone()), None);
+            broadcast_bridge.emit(&envelope);
+            broadcast_bridge.flush();
+        });
+        let approval = Arc::new(ApprovalGateImpl::new(
+            run_id.to_string(),
+            session_id.to_string(),
+            None,
+            broadcast,
+            Arc::clone(&handle),
+            state.store.clone(),
+            None,
+        ));
+        let active = Arc::new(ActiveRun {
+            session_id: session_id.to_string(),
+            run_id: run_id.to_string(),
+            handle,
+            queue,
+            control_bus: Arc::new(Mutex::new(ControlBus::new())),
+            abort_signal: AbortSignal::new(),
+            approval,
+            bridge,
+            delta_sink_active: true,
+            driver: Mutex::new(driver),
+            user_touched: AtomicBool::new(false),
+            subagent: None,
+            audit_persist: Mutex::new(None),
+        });
+        state
+            .active_runs
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(run_id.to_string(), Arc::clone(&active));
+        active
+    }
+
+    /// 已收口驱动句柄（spawn 空任务并等待 is_finished——语义 = tokio
+    /// JoinHandle::is_finished：已收口/已取消均成立，正是收割判据）
+    async fn finished_driver() -> tauri::async_runtime::JoinHandle<()> {
+        let handle = tauri::async_runtime::spawn(async {});
+        while !handle.inner().is_finished() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        handle
+    }
+
+    /// T5-2 验收 2：驱动任务已收口且停留 activeRuns → 去抖 M=2 轮后
+    /// 收割：写 lastError（含 ORPHAN_REAP_MESSAGE）、run 标记 failed、
+    /// 从 activeRuns 移除、去抖表项清理。
+    #[tokio::test]
+    async fn reaper_reaps_orphan_after_debounce_rounds() {
+        let state = test_state();
+        let active = build_active_run(
+            &state,
+            "sess-reap",
+            "run-orphan",
+            Some(finished_driver().await),
+        )
+        .await;
+
+        // 第 1 轮：is_finished 为真但仅 1 轮 → 去抖未满，不收割（防误伤
+        // 「刚正常收口、正在从 activeRuns 移除」的短窗口残留）
+        reap_orphan_runs_round(&state).await;
+        assert!(
+            state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .contains_key("run-orphan"),
+            "去抖第 1 轮不得收割"
+        );
+
+        // 第 2 轮：连续 2 轮 is_finished + 停留 → 判定孤儿，收割
+        reap_orphan_runs_round(&state).await;
+        assert!(
+            !state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .contains_key("run-orphan"),
+            "去抖满 M 轮后必须收割并移出活动注册表"
+        );
+        assert!(
+            state
+                .orphan_debounce
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
+            "收割后去抖表项必须清理"
+        );
+
+        // 终态补写断言：run 标记 failed + lastError 写入收割文案
+        let status = active.handle.lock().await.status.clone();
+        assert_eq!(status, conex_db::RunStatus::Failed, "孤儿 run 终态 = failed");
+        let last_error = state.diagnostics.last_error().expect("收割必须写 lastError");
+        assert!(
+            last_error.message.contains(ORPHAN_REAP_MESSAGE),
+            "lastError 必须含收割文案：{}",
+            last_error.message
+        );
+    }
+
+    /// T5-2 验收 3：收割不误伤正常 run——
+    /// - 驱动任务仍在跑（is_finished=false）→ 每轮清零去抖，永不收割；
+    /// - 驱动句柄未登记（None）→ 视同未收口，不收割；
+    /// - 去抖表不残留条目。
+    #[tokio::test]
+    async fn reaper_does_not_reap_running_or_unregistered_runs() {
+        let state = test_state();
+
+        // 仍在跑的驱动任务（sleep 远长于测试窗口）
+        let running_handle = tauri::async_runtime::spawn(async {
+            tokio::time::sleep(Duration::from_secs(60)).await;
+        });
+        let running = build_active_run(
+            &state,
+            "sess-running",
+            "run-running",
+            Some(running_handle),
+        )
+        .await;
+
+        // 未登记驱动句柄（构造在前、spawn 在后的中间态 / 测试驱动路径）
+        let unregistered =
+            build_active_run(&state, "sess-none", "run-none", None).await;
+
+        // 连续多轮：两条 run 都必须存活
+        for _ in 0..(ORPHAN_REAP_DEBOUNCE_ROUNDS + 2) {
+            reap_orphan_runs_round(&state).await;
+        }
+        let registry = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+        assert!(registry.contains_key("run-running"), "运行中 run 不得被收割");
+        assert!(registry.contains_key("run-none"), "未登记驱动 run 不得被收割");
+        drop(registry);
+        assert!(
+            state
+                .orphan_debounce
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .is_empty(),
+            "未收口 run 的去抖表项必须被清零"
+        );
+        // 运行中 run 终态未被触碰（仍 running）
+        let status = running.handle.lock().await.status.clone();
+        assert_eq!(status, conex_db::RunStatus::Running);
+        let _ = unregistered;
+    }
+
+    /// T5-2 装配：spawn_run_reaper_loop 幂等（重复调用不重复启动）。
+    #[tokio::test]
+    async fn spawn_run_reaper_loop_is_idempotent() {
+        let state = test_state();
+        state.spawn_run_reaper_loop();
+        state.spawn_run_reaper_loop();
+        assert!(
+            state.reaper_loop_running.load(Ordering::SeqCst),
+            "收割周期任务运行标记必须置位"
+        );
+    }
+}

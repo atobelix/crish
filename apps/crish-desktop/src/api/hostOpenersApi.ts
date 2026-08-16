@@ -39,7 +39,7 @@ function normalizeOpener(raw: RawHostOpener): HostOpener | null {
   const id = String(raw.id || '').trim();
   if (!id) return null;
   const displayName = String(
-    raw.displayName || raw.display_name || raw.label || id,
+    raw.displayName || raw.display_name || raw.label || id
   ).trim();
   const path =
     (typeof raw.path === 'string' && raw.path) ||
@@ -62,7 +62,7 @@ function normalizeOpener(raw: RawHostOpener): HostOpener | null {
 
 /** 扫描本机可用打开器（编辑器 / 资源管理器等，由壳层发现） */
 export async function listHostOpeners(): Promise<HostOpener[]> {
-  // T-F 06 T6.1：invokeCmd → invokeTyped 三态化（missing → []，error → 日志 + []）
+  // T-F 06 T6.1 / T5-5：invokeTyped 三态化（missing → []，error → 日志 + []）
   const res = await invokeTyped<RawHostOpener[]>('workbench_list_host_openers');
   if (res.status === 'error') logInternalError('listHostOpeners', res.message);
   if (res.status !== 'ok') return [];
@@ -78,10 +78,14 @@ export async function listHostOpeners(): Promise<HostOpener[]> {
 async function listFileOpenHandlers(filePath: string): Promise<HostOpener[]> {
   const path = (filePath || '').trim();
   if (!path) return [];
-  const res = await invokeTyped<RawHostOpener[]>('workbench_list_file_openers', {
-    path,
-  });
-  if (res.status === 'error') logInternalError('listFileOpenHandlers', res.message);
+  const res = await invokeTyped<RawHostOpener[]>(
+    'workbench_list_file_openers',
+    {
+      path,
+    }
+  );
+  if (res.status === 'error')
+    logInternalError('listFileOpenHandlers', res.message);
   if (res.status !== 'ok') return [];
   return (Array.isArray(res.data) ? res.data : [])
     .map(normalizeOpener)
@@ -91,7 +95,7 @@ async function listFileOpenHandlers(filePath: string): Promise<HostOpener[]> {
 /** 用指定 opener 打开路径 */
 export async function openWithHostOpener(
   openerId: string,
-  filePath: string,
+  filePath: string
 ): Promise<void> {
   const res = await invokeResult('workbench_open_host_target', {
     openerId,
@@ -120,7 +124,8 @@ export async function openPathDefault(filePath: string): Promise<void> {
   }
   // missing command：PowerShell Start-Process 最后手段
   const isWin =
-    typeof navigator !== 'undefined' && /Win/i.test(navigator.userAgent || navigator.platform || '');
+    typeof navigator !== 'undefined' &&
+    /Win/i.test(navigator.userAgent || navigator.platform || '');
   const shell = await invokeResult('workbench_run_shell', {
     command: isWin
       ? `powershell -NoProfile -Command "Start-Process -LiteralPath '${path.replace(/'/g, "''")}'"`
@@ -152,9 +157,8 @@ export async function listOpenOptionsForFile(filePath: string): Promise<{
   const openers = [...map.values()];
   // 轻量偏好：图片/文档时把 file-manager 沉底，编辑器仍可见
   const imageLike = /^(png|jpe?g|gif|webp|bmp|svg|pdf|ico)$/i.test(lower);
-  const codeLike = /^(ts|tsx|js|jsx|json|md|css|html|rs|py|go|java|c|cpp|h|cs)$/i.test(
-    lower,
-  );
+  const codeLike =
+    /^(ts|tsx|js|jsx|json|md|css|html|rs|py|go|java|c|cpp|h|cs)$/i.test(lower);
   openers.sort((a, b) => {
     const score = (o: HostOpener) => {
       let s = 0;
@@ -165,8 +169,7 @@ export async function listOpenOptionsForFile(filePath: string): Promise<{
     };
     return score(b) - score(a);
   });
-  const defaultLabel =
-    imageLike ? '打开' : codeLike ? '编辑' : '打开';
+  const defaultLabel = imageLike ? '打开' : codeLike ? '编辑' : '打开';
   return { defaultLabel, openers };
 }
 

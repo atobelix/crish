@@ -115,6 +115,11 @@ export function bootstrapServices(): () => void {
       case 'authenticating':
         errorStore.setConnectionStatus('waiting');
         break;
+      // T5-1：崩溃域映射——引擎探活判死（前端心跳连续失败）进入
+      // engine_crashed；恢复由心跳成功路径/ready 相位回 connected
+      case 'engine-crashed':
+        errorStore.setConnectionStatus('engine_crashed');
+        break;
       case 'disconnected':
       default:
         errorStore.setConnectionStatus('disconnected');
@@ -128,16 +133,18 @@ export function bootstrapServices(): () => void {
   // 原 AppBootstrap E13 手动 classList 双写已删除，is-layout-frozen 自此单源。
   // R-06 / T-E D2：空 catch 显式登记（非连接态软失败，warning 不打扰；
   // 05 步骤 3 收口时以 grep 实测剔除本处）。
-  void WindowResizeBridge.getInstance().connect().catch((err) => {
-    errorStore.push({
-      code: 'RESIZE_BRIDGE_CONNECT_FAILED',
-      module: 'bootstrap-services',
-      severity: 'warning',
-      message: '窗口缩放桥接初始化失败',
-      technical: err instanceof Error ? err.message : String(err),
-      autoResolve: true,
+  void WindowResizeBridge.getInstance()
+    .connect()
+    .catch((err) => {
+      errorStore.push({
+        code: 'RESIZE_BRIDGE_CONNECT_FAILED',
+        module: 'bootstrap-services',
+        severity: 'warning',
+        message: '窗口缩放桥接初始化失败',
+        technical: err instanceof Error ? err.message : String(err),
+        autoResolve: true,
+      });
     });
-  });
   cleanups.push(() => {
     WindowResizeBridge.getInstance().disconnect();
   });

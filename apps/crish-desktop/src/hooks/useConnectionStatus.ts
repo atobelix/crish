@@ -11,6 +11,7 @@
  * - waiting       → 连接中
  * - disconnected  → 离线
  * - degraded      → 降级
+ * - engine_crashed → 引擎无响应/已崩溃（T5-1 心跳判死域）
  *
  * useSyncExternalStore 直接订阅 errorStore.subscribe（ErrorStore 已有订阅接口），
  * 不依赖 useEngineState 模块单例（避免模块单例再挂一跳）。
@@ -30,7 +31,8 @@ export function useConnectionStatus(): ConnectionStatus {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-/** 连接态 → 是否「引擎可用」（connected 判定；reconnecting/waiting 视为未就绪） */
+/** 连接态 → 是否「引擎可用」（connected 判定；reconnecting/waiting/
+ * engine_crashed 视为未就绪） */
 export function isConnectionReady(status: ConnectionStatus): boolean {
   return status === 'connected';
 }

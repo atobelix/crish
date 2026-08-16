@@ -400,6 +400,14 @@ impl ApiBackend for CoreStateBackend {
             // 对账公共方法，M6 §4.1.1 摘要形状）
             list_active_runs_impl(&self.core).await,
             list_pending_approval_summaries_impl(&self.core),
+            // T5-1b：崩溃台账读出面（与 GUI core_get_status 同源——
+            // conex-telemetry 进程内崩溃标记，/v1/status 同步下发）
+            conex_telemetry::last_crash_marker().map(|marker| {
+                crate::core_query_commands::LastCrashInfo {
+                    file_name: marker.file_name,
+                    timestamp_ms: marker.timestamp_ms,
+                }
+            }),
         );
         serde_json::to_value(status)
             .map_err(|e| ServerError::internal(format!("状态序列化失败：{e}")))

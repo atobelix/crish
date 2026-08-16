@@ -7,8 +7,14 @@ import { SIDEBAR_WIDTH_DEFAULT, CHAT_COL_MAX } from './constants/layout';
 initSsrGlobals();
 
 // CSS token runtime injection — keeps JS source of truth in sync with CSS
-document.documentElement.style.setProperty('--sidebar-width', `${SIDEBAR_WIDTH_DEFAULT}px`);
-document.documentElement.style.setProperty('--chat-col-max', `${CHAT_COL_MAX}px`);
+document.documentElement.style.setProperty(
+  '--sidebar-width',
+  `${SIDEBAR_WIDTH_DEFAULT}px`
+);
+document.documentElement.style.setProperty(
+  '--chat-col-max',
+  `${CHAT_COL_MAX}px`
+);
 
 async function startup() {
   // Phase 0: 等待 ServiceRegistry / ConfigService 初始化
@@ -16,7 +22,9 @@ async function startup() {
 
   // Phase 1: 并行初始化最小依赖（失败不阻塞渲染）
   try {
-    await import('./bootstrap-core').then(({ bootstrapCore }) => bootstrapCore());
+    await import('./bootstrap-core').then(({ bootstrapCore }) =>
+      bootstrapCore()
+    );
   } catch (e) {
     console.warn('[crish] bootstrap-core failed, continuing startup:', e);
   }
@@ -40,9 +48,12 @@ async function startup() {
   // Phase 1.5: 动态加载 React + App（失败则展示错误边界 fallback）
   // R-09（T5.3）：AppErrorBoundary chunk 与 React/App 并行预取——
   // 首屏渲染不再被 boundary chunk 加载阻塞一拍（原 render 前单独 await）
-  let StrictMode: React.ComponentType<{ children?: React.ReactNode }> | null = null;
+  let StrictMode: React.ComponentType<{ children?: React.ReactNode }> | null =
+    null;
   let createRoot: typeof import('react-dom/client').createRoot | null = null;
   let App: React.ComponentType<Record<string, never>> | null = null;
+  let GlobalErrorBanner: React.ComponentType<Record<string, never>> | null =
+    null;
   const boundaryLoad = import('./components/AppErrorBoundary');
   try {
     const [{ StrictMode: SM }, { createRoot: CR }] = await Promise.all([
@@ -53,6 +64,16 @@ async function startup() {
     createRoot = CR;
     const { default: AppModule } = await import('./App');
     App = AppModule;
+    // T5-4：全局错误横幅（消费 errorStore 的 GLOBAL_UNCAUGHT_ERROR 槽位；
+    // 与 AppErrorBoundary 同批预取，失败不阻断主渲染——横幅是可选的
+    // 呈现面，加载失败仅缺失告知）
+    try {
+      const { GlobalErrorBanner: GEB } =
+        await import('./components/GlobalErrorBanner');
+      GlobalErrorBanner = GEB;
+    } catch (e) {
+      console.warn('[crish] failed to load GlobalErrorBanner (non-fatal):', e);
+    }
   } catch (e) {
     console.error('[crish] fatal: failed to load React or App module:', e);
     const el = document.getElementById('root');
@@ -79,15 +100,25 @@ async function startup() {
         <AppErrorBoundary>
           <App />
         </AppErrorBoundary>
-      </StrictMode>,
+        {/* T5-4：React 渲染树之外的全局错误呈现面（window.onerror /
+            unhandledrejection 双写 errorStore 的消费端；不弹模态、不打断
+            渲染，仅可见告知 + dismiss；横幅 chunk 加载失败仅缺失告知，
+            不阻断主渲染） */}
+        {GlobalErrorBanner ? <GlobalErrorBanner /> : null}
+      </StrictMode>
     );
   } catch {
-    // 降级：不含 AppErrorBoundary 的渲染
-    root.render(
-      <StrictMode>
-        <App />
-      </StrictMode>,
-    );
+    // T5-4：AppErrorBoundary chunk 加载失败 → 内联静态错误面（复用上方
+    // 「应用启动失败」同一套内联 HTML fallback 构造，不依赖任何 chunk）。
+    // **不再回到裸 <App/>**——App 内再抛错即白屏，白屏路径必须消除。
+    console.error('[crish] fatal: failed to load AppErrorBoundary chunk');
+    const el = document.getElementById('root');
+    if (el) {
+      el.innerHTML =
+        '<div style="display:flex;height:100vh;align-items:center;justify-content:center;font-family:sans-serif;color:#888;padding:20px;text-align:center">' +
+        '<div><h2 style="margin:0 0 8px;font-weight:500;font-size:18px">应用启动失败</h2>' +
+        '<p style="margin:0;font-size:14px">界面保护模块加载失败，请查看控制台后重试</p></div></div>';
+    }
   }
 
   // R-09（T5.3）：React 首帧渲染完成标记——root.render 后首个 rAF 打点，
@@ -102,9 +133,11 @@ async function startup() {
   // Phase 2: idle 时加载完整 UI（后台连接、设置同步、会话元数据）
   // 失败不应阻塞已有 UI，只记日志
   const idleTask = () => {
-    import('./bootstrap-full').then((m) => m.bootstrapFull()).catch((e) => {
-      console.warn('[crish] bootstrap-full failed (non-fatal):', e);
-    });
+    import('./bootstrap-full')
+      .then((m) => m.bootstrapFull())
+      .catch((e) => {
+        console.warn('[crish] bootstrap-full failed (non-fatal):', e);
+      });
   };
   if ('requestIdleCallback' in window) {
     requestIdleCallback(idleTask, { timeout: 2000 });
@@ -126,7 +159,9 @@ async function startup() {
       .then(() => {
         console.info('[crish] tauri-plugin-mcp guest listeners ready');
         // shell helpers for app_bridge (open_session / shell_snapshot)
-        return import('./dev/mcpBridge').then((b) => b.registerCrishMcpBridge());
+        return import('./dev/mcpBridge').then((b) =>
+          b.registerCrishMcpBridge()
+        );
       })
       .catch((e) => {
         // Browser-only / plugin not linked: non-fatal
@@ -141,7 +176,11 @@ async function startup() {
     const p = window.__crish_perf;
     const marks: Record<string, number[]> = {};
     p.marks = marks;
-    p.budgetExceeded = (entry: { name: string; duration: number; budget: number }) => {
+    p.budgetExceeded = (entry: {
+      name: string;
+      duration: number;
+      budget: number;
+    }) => {
       let list = marks[entry.name];
       if (!list) {
         list = [];

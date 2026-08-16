@@ -133,7 +133,11 @@ export type FilterBackgroundTasksOpts = {
 /** cancel 纯语义结果：调用方决定是否 invoke */
 export type CancelBackgroundTaskDecision =
   | { ok: true; taskId: string }
-  | { ok: false; reason: 'missing_id' | 'not_found' | 'not_cancellable'; state?: BackgroundTaskState };
+  | {
+      ok: false;
+      reason: 'missing_id' | 'not_found' | 'not_cancellable';
+      state?: BackgroundTaskState;
+    };
 
 // ── 内部工具 ──────────────────────────────────────────────────────────
 
@@ -171,7 +175,9 @@ export function normalizeBackgroundTaskId(raw: unknown): string | null {
  * 将任意 state/status 别名折叠到 BackgroundTaskState。
  * 空 / 未知 → 'unknown'（永不抛）。
  */
-export function normalizeBackgroundTaskState(raw: unknown): BackgroundTaskState {
+export function normalizeBackgroundTaskState(
+  raw: unknown
+): BackgroundTaskState {
   if (raw == null) return 'unknown';
   const s = String(raw)
     .trim()
@@ -231,15 +237,22 @@ export function normalizeBackgroundTaskState(raw: unknown): BackgroundTaskState 
 }
 
 export function isBackgroundTaskState(v: unknown): v is BackgroundTaskState {
-  return typeof v === 'string' && (BACKGROUND_TASK_STATES as readonly string[]).includes(v);
+  return (
+    typeof v === 'string' &&
+    (BACKGROUND_TASK_STATES as readonly string[]).includes(v)
+  );
 }
 
-export function isBackgroundTaskActive(state: BackgroundTaskState | string): boolean {
+export function isBackgroundTaskActive(
+  state: BackgroundTaskState | string
+): boolean {
   const s = normalizeBackgroundTaskState(state);
   return s === 'queued' || s === 'running';
 }
 
-export function isBackgroundTaskTerminal(state: BackgroundTaskState | string): boolean {
+export function isBackgroundTaskTerminal(
+  state: BackgroundTaskState | string
+): boolean {
   const s = normalizeBackgroundTaskState(state);
   return (
     s === 'succeeded' ||
@@ -300,9 +313,7 @@ export function parseBackgroundTask(raw: unknown): BackgroundTaskInfo | null {
     (typeof o.name === 'string' && o.name.trim()) ||
     (typeof o.title === 'string' && o.title.trim()) ||
     '';
-  const label =
-    labelRaw ||
-    (command ? command.slice(0, 64) : id);
+  const label = labelRaw || (command ? command.slice(0, 64) : id);
 
   const startedAt =
     parseBackgroundTaskStartedAt(o.startedAt) ??
@@ -336,7 +347,8 @@ export function parseBackgroundTask(raw: unknown): BackgroundTaskInfo | null {
   const finishedRaw =
     typeof o.finishedAtMs === 'number' && Number.isFinite(o.finishedAtMs)
       ? o.finishedAtMs
-      : typeof o.finished_at_ms === 'number' && Number.isFinite(o.finished_at_ms)
+      : typeof o.finished_at_ms === 'number' &&
+          Number.isFinite(o.finished_at_ms)
         ? o.finished_at_ms
         : typeof o.finishedAt === 'number' && Number.isFinite(o.finishedAt)
           ? o.finishedAt
@@ -352,18 +364,24 @@ export function parseBackgroundTask(raw: unknown): BackgroundTaskInfo | null {
   const lastOutputAt =
     typeof o.lastOutputAtMs === 'number' && Number.isFinite(o.lastOutputAtMs)
       ? o.lastOutputAtMs
-      : typeof o.last_output_at_ms === 'number' && Number.isFinite(o.last_output_at_ms)
+      : typeof o.last_output_at_ms === 'number' &&
+          Number.isFinite(o.last_output_at_ms)
         ? o.last_output_at_ms
         : undefined;
 
   // resource：null 显式保留（未启用资源监控）；对象解析为快照；其余省略
   const resource =
-    o.resource === null ? null : asRec(o.resource) ? parseBgTaskResourceSample(o.resource) : undefined;
+    o.resource === null
+      ? null
+      : asRec(o.resource)
+        ? parseBgTaskResourceSample(o.resource)
+        : undefined;
 
   const promptRaw = typeof o.prompt === 'string' ? o.prompt.trim() : '';
   const prompt = promptRaw ? promptRaw : undefined;
 
-  const suspicious = typeof o.suspicious === 'boolean' ? o.suspicious : undefined;
+  const suspicious =
+    typeof o.suspicious === 'boolean' ? o.suspicious : undefined;
 
   return {
     id,
@@ -412,7 +430,8 @@ function parseBgTaskResourceSample(raw: unknown): BackgroundTaskResourceSample {
   const last =
     typeof o.lastOutputAtMs === 'number' && Number.isFinite(o.lastOutputAtMs)
       ? o.lastOutputAtMs
-      : typeof o.last_output_at_ms === 'number' && Number.isFinite(o.last_output_at_ms)
+      : typeof o.last_output_at_ms === 'number' &&
+          Number.isFinite(o.last_output_at_ms)
         ? o.last_output_at_ms
         : undefined;
   if (sampled !== undefined) out.sampledAtMs = sampled;
@@ -469,7 +488,7 @@ export function parseBackgroundTaskList(data: unknown): BackgroundTaskInfo[] {
  * 空列表 / 已唯一时返回新数组（纯且可测）。
  */
 export function dedupeBackgroundTasksById(
-  tasks: readonly BackgroundTaskInfo[],
+  tasks: readonly BackgroundTaskInfo[]
 ): BackgroundTaskInfo[] {
   if (!tasks.length) return [];
   const seen = new Set<string>();
@@ -489,7 +508,7 @@ export function dedupeBackgroundTasksById(
  */
 export function filterBackgroundTasks(
   tasks: readonly BackgroundTaskInfo[] | null | undefined,
-  opts?: FilterBackgroundTasksOpts,
+  opts?: FilterBackgroundTasksOpts
 ): BackgroundTaskInfo[] {
   if (!tasks || tasks.length === 0) return [];
   const stateSet =
@@ -503,9 +522,11 @@ export function filterBackgroundTasks(
     const st = normalizeBackgroundTaskState(t.state);
     if (stateSet && !stateSet.has(st)) return false;
     if (opts?.activeOnly === true && !isBackgroundTaskActive(st)) return false;
-    if (opts?.activeOnly === false && !isBackgroundTaskTerminal(st)) return false;
+    if (opts?.activeOnly === false && !isBackgroundTaskTerminal(st))
+      return false;
     if (q) {
-      const hay = `${t.id} ${t.label ?? ''} ${t.command ?? ''} ${t.summary ?? ''}`.toLowerCase();
+      const hay =
+        `${t.id} ${t.label ?? ''} ${t.command ?? ''} ${t.summary ?? ''}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -514,14 +535,14 @@ export function filterBackgroundTasks(
 
 /** 仅活跃（queued|running） */
 export function filterActiveBackgroundTasks(
-  tasks: readonly BackgroundTaskInfo[] | null | undefined,
+  tasks: readonly BackgroundTaskInfo[] | null | undefined
 ): BackgroundTaskInfo[] {
   return filterBackgroundTasks(tasks, { activeOnly: true });
 }
 
 /** 仅终态 */
 export function filterTerminalBackgroundTasks(
-  tasks: readonly BackgroundTaskInfo[] | null | undefined,
+  tasks: readonly BackgroundTaskInfo[] | null | undefined
 ): BackgroundTaskInfo[] {
   return filterBackgroundTasks(tasks, { activeOnly: false });
 }
@@ -530,12 +551,18 @@ export function filterTerminalBackgroundTasks(
  * 排序：startedAt 降序（新在前）；缺 startedAt 靠后；同时间按 id 稳定。
  */
 export function sortBackgroundTasksByStartedAt(
-  tasks: readonly BackgroundTaskInfo[],
+  tasks: readonly BackgroundTaskInfo[]
 ): BackgroundTaskInfo[] {
   if (!tasks.length) return [];
   return [...tasks].sort((a, b) => {
-    const ta = typeof a.startedAt === 'number' && Number.isFinite(a.startedAt) ? a.startedAt : -1;
-    const tb = typeof b.startedAt === 'number' && Number.isFinite(b.startedAt) ? b.startedAt : -1;
+    const ta =
+      typeof a.startedAt === 'number' && Number.isFinite(a.startedAt)
+        ? a.startedAt
+        : -1;
+    const tb =
+      typeof b.startedAt === 'number' && Number.isFinite(b.startedAt)
+        ? b.startedAt
+        : -1;
     if (tb !== ta) return tb - ta;
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
@@ -570,7 +597,7 @@ export function parseBackgroundTaskOutput(data: unknown): string {
  */
 export function buildBackgroundTaskTerminalLines(
   output: string | null | undefined,
-  maxLines: number = BACKGROUND_TASK_TERMINAL_MAX_LINES,
+  maxLines: number = BACKGROUND_TASK_TERMINAL_MAX_LINES
 ): string[] {
   const cap =
     typeof maxLines === 'number' && Number.isFinite(maxLines) && maxLines > 0
@@ -589,7 +616,7 @@ export function buildBackgroundTaskTerminalLines(
 export function resolveBackgroundTaskDisplayOutput(
   output: string | null | undefined,
   task?: Pick<BackgroundTaskInfo, 'summary' | 'command'> | null,
-  opts?: { errorFallback?: string },
+  opts?: { errorFallback?: string }
 ): string {
   if (typeof output === 'string' && output.length > 0) return output;
   if (task?.summary && task.summary.trim()) return task.summary.trim();
@@ -605,7 +632,7 @@ export function resolveBackgroundTaskDisplayOutput(
  * 未知状态保守：不可 cancel（避免误杀历史项）。
  */
 export function canCancelBackgroundTask(
-  task: Pick<BackgroundTaskInfo, 'id' | 'state'> | null | undefined,
+  task: Pick<BackgroundTaskInfo, 'id' | 'state'> | null | undefined
 ): boolean {
   if (!task) return false;
   if (!normalizeBackgroundTaskId(task.id)) return false;
@@ -620,7 +647,7 @@ export function canCancelBackgroundTask(
  */
 export function decideCancelBackgroundTask(
   taskId: unknown,
-  tasks?: readonly BackgroundTaskInfo[] | null,
+  tasks?: readonly BackgroundTaskInfo[] | null
 ): CancelBackgroundTaskDecision {
   const id = normalizeBackgroundTaskId(taskId);
   if (!id) return { ok: false, reason: 'missing_id' };
@@ -649,7 +676,7 @@ export function decideCancelBackgroundTask(
  *   `{ failed: { taskId, reason } }` → unknown + reason 摘要（取消未生效）。
  */
 export function parseCancelBackgroundTaskResult(
-  data: unknown,
+  data: unknown
 ): BackgroundTaskInfo | null {
   if (data == null) return null;
   const root = asRec(data);
@@ -664,7 +691,7 @@ export function parseCancelBackgroundTaskResult(
     const code = exited.exitCode ?? exited.exit_code;
     return projectionFromKillResult(
       exited,
-      typeof code === 'number' && code !== 0 ? 'failed' : 'succeeded',
+      typeof code === 'number' && code !== 0 ? 'failed' : 'succeeded'
     );
   }
   const failed = asRec(root.failed);
@@ -686,7 +713,7 @@ export function parseCancelBackgroundTaskResult(
  */
 function projectionFromKillResult(
   v: Record<string, unknown>,
-  state: BackgroundTaskState,
+  state: BackgroundTaskState
 ): BackgroundTaskInfo | null {
   const id = normalizeBackgroundTaskId(v.taskId ?? v.task_id);
   if (!id) return null;
@@ -697,9 +724,10 @@ function projectionFromKillResult(
 
 /** 列表：`{ tasks: [...] }`（Rust camelCase wire，无 label / summary 字段）。 */
 export async function listBackgroundTasks(): Promise<BackgroundTaskInfo[]> {
-  // T-F 06 T6.1：invokeCmd → invokeTyped 三态化（missing → []，error → 日志 + []）
+  // T-F 06 T6.1 / T5-5：invokeTyped 三态化（missing → []，error → 日志 + []）
   const res = await invokeTyped<unknown>('workbench_list_background_tasks');
-  if (res.status === 'error') logInternalError('listBackgroundTasks', res.message);
+  if (res.status === 'error')
+    logInternalError('listBackgroundTasks', res.message);
   if (res.status !== 'ok') return [];
   return parseBackgroundTaskList(res.data);
 }
@@ -713,10 +741,14 @@ export async function getBackgroundTaskOutput(taskId: string): Promise<string> {
   const id = normalizeBackgroundTaskId(taskId);
   if (!id) return '';
   try {
-    const res = await invokeTyped<unknown>('workbench_get_background_task_output', {
-      taskId: id,
-    });
-    if (res.status === 'error') logInternalError('getBackgroundTaskOutput', res.message);
+    const res = await invokeTyped<unknown>(
+      'workbench_get_background_task_output',
+      {
+        taskId: id,
+      }
+    );
+    if (res.status === 'error')
+      logInternalError('getBackgroundTaskOutput', res.message);
     if (res.status !== 'ok') return '';
     return parseBackgroundTaskOutput(res.data);
   } catch {
@@ -734,14 +766,15 @@ export async function getBackgroundTaskOutput(taskId: string): Promise<string> {
  */
 export async function cancelBackgroundTask(
   taskId: string,
-  knownTasks?: readonly BackgroundTaskInfo[] | null,
+  knownTasks?: readonly BackgroundTaskInfo[] | null
 ): Promise<BackgroundTaskInfo | null> {
   const decision = decideCancelBackgroundTask(taskId, knownTasks);
   if (!decision.ok) return null;
   const res = await invokeTyped<unknown>('workbench_cancel_background_task', {
     taskId: decision.taskId,
   });
-  if (res.status === 'error') logInternalError('cancelBackgroundTask', res.message);
+  if (res.status === 'error')
+    logInternalError('cancelBackgroundTask', res.message);
   if (res.status !== 'ok') return null;
   return parseCancelBackgroundTaskResult(res.data);
 }
@@ -762,7 +795,9 @@ export type KillBackgroundTaskResult =
  * `{ killed: { taskId, viaForce } }` / `{ alreadyExited: { taskId, exitCode } }`
  * / `{ failed: { taskId, reason } }`；畸形 / 缺 id → null（永不抛）。
  */
-function parseKillResultPayload(data: unknown): KillBackgroundTaskResult | null {
+function parseKillResultPayload(
+  data: unknown
+): KillBackgroundTaskResult | null {
   const root = asRec(data);
   if (!root) return null;
 
@@ -807,14 +842,15 @@ function parseKillResultPayload(data: unknown): KillBackgroundTaskResult | null 
  */
 export async function killBackgroundTask(
   taskId: string,
-  knownTasks?: readonly BackgroundTaskInfo[] | null,
+  knownTasks?: readonly BackgroundTaskInfo[] | null
 ): Promise<KillBackgroundTaskResult | null> {
   const decision = decideCancelBackgroundTask(taskId, knownTasks);
   if (!decision.ok) return null;
   const res = await invokeTyped<unknown>('workbench_cancel_background_task', {
     taskId: decision.taskId,
   });
-  if (res.status === 'error') logInternalError('killBackgroundTask', res.message);
+  if (res.status === 'error')
+    logInternalError('killBackgroundTask', res.message);
   if (res.status !== 'ok') return null;
   return parseKillResultPayload(res.data);
 }
@@ -824,7 +860,10 @@ export async function killBackgroundTask(
 /** send_input 调用结果：成功带 appendNewline 实参；失败按原因分类 */
 export type SendBackgroundTaskInputResult =
   | { ok: true; taskId: string; appendedNewline: boolean }
-  | { ok: false; reason: 'missing_id' | 'empty_text' | 'not_active' | 'invoke_failed' };
+  | {
+      ok: false;
+      reason: 'missing_id' | 'empty_text' | 'not_active' | 'invoke_failed';
+    };
 
 /**
  * 纯 send_input 决策：缺 id / 空文本 / 非活跃任务 → 失败（不 invoke）。
@@ -833,7 +872,7 @@ export type SendBackgroundTaskInputResult =
 function decideSendBackgroundTaskInput(
   taskId: unknown,
   text: unknown,
-  task?: Pick<BackgroundTaskInfo, 'id' | 'state'> | null,
+  task?: Pick<BackgroundTaskInfo, 'id' | 'state'> | null
 ):
   | { ok: false; reason: 'missing_id' | 'empty_text' | 'not_active' }
   | { ok: true; taskId: string } {
@@ -860,7 +899,7 @@ export async function sendBackgroundTaskInput(
   taskId: string,
   text: string,
   appendNewline: boolean = true,
-  task?: Pick<BackgroundTaskInfo, 'id' | 'state'> | null,
+  task?: Pick<BackgroundTaskInfo, 'id' | 'state'> | null
 ): Promise<SendBackgroundTaskInputResult> {
   const decision = decideSendBackgroundTaskInput(taskId, text, task);
   if (!decision.ok) return decision;
@@ -877,12 +916,15 @@ export async function sendBackgroundTaskInput(
  * 将任务输出推到终端面板并打开终端侧栏。
  * 成功路径不 toast（由调用方保证）；打开面板即反馈。
  */
-export function openBackgroundTaskInTerminal(title: string, output: string): void {
+export function openBackgroundTaskInTerminal(
+  title: string,
+  output: string
+): void {
   const lines = buildBackgroundTaskTerminalLines(output);
   window.dispatchEvent(
     new CustomEvent('crish-terminal-append', {
       detail: { title, lines },
-    }),
+    })
   );
   // 仅切终端标签；不发「已打开」类 toast
   window.dispatchEvent(new CustomEvent('crish-open-terminal'));

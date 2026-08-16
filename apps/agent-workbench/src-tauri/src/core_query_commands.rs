@@ -128,6 +128,18 @@ pub struct LastTaskTerminal {
     pub finished_at_ms: i64,
 }
 
+/// 崩溃台账条目（T5-1b：core_get_status.lastCrash；进程内 panic 崩溃
+/// 标记读出面——conex-telemetry panic hook 写崩溃文件后记录的「最后一次
+/// 崩溃」，前端心跳轮询一并读取，把死文件变成可读崩溃台账）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastCrashInfo {
+    /// 崩溃文件名（`crash-YYYYMMDD-HHMMSS-<thread>.log`）
+    pub file_name: String,
+    /// 崩溃时刻（epoch ms）
+    pub timestamp_ms: u64,
+}
+
 /// 后台任务汇总域（T-AB-19 增量：core_get_status.backgroundTasks 数据源；
 /// 前端状态栏与诊断面板展示）。
 ///
@@ -186,6 +198,11 @@ pub struct CoreStatus {
     pub active_runs: Vec<ActiveRunSummary>,
     /// 待审批摘要列表（C13 对账投影 M6 摘要子集）
     pub pending_approvals: Vec<PendingApprovalSummary>,
+    // ── T5-1b 增量（崩溃台账：进程内 panic 崩溃标记读出面）──
+    /// 最近崩溃标记（None = 进程内无 panic；前端心跳轮询读取，发现
+    /// 较上次查询新增崩溃文件 → errorStore 记录「检测到一次引擎崩溃」）
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_crash: Option<LastCrashInfo>,
 }
 
 /// 组装 CoreStatus（**唯一**组装函数；F2 串行序：PE-01 → PE-04 → PE-08 以追加参数并入，
@@ -216,6 +233,8 @@ pub fn build_status(
     // P-7 增量（R2-07 D-02 收尾：activeRuns / pendingApprovals 摘要）
     active_runs: Vec<ActiveRunSummary>,
     pending_approvals: Vec<PendingApprovalSummary>,
+    // T5-1b 增量（崩溃台账：进程内崩溃标记；None = 无 panic）
+    last_crash: Option<LastCrashInfo>,
 ) -> CoreStatus {
     CoreStatus {
         initialized,
@@ -234,6 +253,7 @@ pub fn build_status(
         background_tasks,
         active_runs,
         pending_approvals,
+        last_crash,
     }
 }
 
@@ -301,6 +321,11 @@ pub async fn core_get_status(
         .read()
         .map(|files| !files.is_empty())
         .unwrap_or(false);
+    // engineReady（core.engine_ready()）语义注记（T5-1：假就绪修正）——
+    // 仅指 provider 配置三件套（baseUrl/model/apiKey）齐备，**非运行时
+    // 健康探针**；引擎崩溃感知由前端心跳（fetchEngineLiveStatus 连续失败
+    // 判死）+ 本响应 lastCrash 崩溃台账承担，engineReady 不得再被当作
+    // 崩溃真源。
     Ok(build_status(
         core.initialized(),
         env!("CARGO_PKG_VERSION").to_string(),
@@ -336,6 +361,12 @@ pub async fn core_get_status(
         // GUI 命令面与 /v1/status 共用同一组装函数，同步下发
         crate::core_run_commands::list_active_runs_impl(&core).await,
         crate::core_run_commands::list_pending_approval_summaries_impl(&core),
+        // T5-1b：崩溃台账读出面（conex-telemetry 进程内标记；leaf crate
+        // 边界——不新增 Tauri State，标记本身即进程级真源）
+        conex_telemetry::last_crash_marker().map(|marker| LastCrashInfo {
+            file_name: marker.file_name,
+            timestamp_ms: marker.timestamp_ms,
+        }),
     ))
 }
 
@@ -870,6 +901,11 @@ mod tests {
                 run_id: Some("r-1".to_string()),
                 summary: Some("npm test 需要执行权限".to_string()),
             }],
+            // T5-1b：崩溃台账（进程内 panic 崩溃标记）
+            Some(LastCrashInfo {
+                file_name: "crash-20260816-120000-main.log".to_string(),
+                timestamp_ms: 1_700_000_000_005,
+            }),
         );
         let json = serde_json::to_value(&status).unwrap();
         // 基线字段 camelCase
@@ -930,6 +966,9 @@ mod tests {
             json["pendingApprovals"][0]["summary"],
             "npm test 需要执行权限"
         );
+        // T5-1b 增量（崩溃台账）
+        assert_eq!(json["lastCrash"]["fileName"], "crash-20260816-120000-main.log");
+        assert_eq!(json["lastCrash"]["timestampMs"], 1_700_000_000_005_i64);
         // 不得出现 snake_case 键
         for key in [
             "search_index_ready",
@@ -945,6 +984,7 @@ mod tests {
             "last_finished",
             "active_runs",
             "pending_approvals",
+            "last_crash",
         ] {
             assert!(json.get(key).is_none(), "不得出现 snake_case 键 {key}");
         }
@@ -984,6 +1024,7 @@ mod tests {
             BackgroundTasksSummary::default(),
             Vec::new(),
             Vec::new(),
+            None,
         );
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["initialized"], false);
@@ -1006,6 +1047,11 @@ mod tests {
         // 字段——桌面端总是下发数组，空数组合法）
         assert_eq!(json["activeRuns"], serde_json::json!([]));
         assert_eq!(json["pendingApprovals"], serde_json::json!([]));
+        // T5-1b：无崩溃标记时 lastCrash 缺省（诚实化，不下发 null）
+        assert!(
+            json.get("lastCrash").is_none(),
+            "无崩溃标记时 lastCrash 缺省"
+        );
     }
 
     /// T-AB-19：后台任务汇总 wire 形状（camelCase + lastFinished 缺省规则）

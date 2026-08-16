@@ -21,6 +21,9 @@ export function formatEngineStatusShort(status: ConnectionStatus): string {
       return '连接中';
     case 'degraded':
       return '降级';
+    // T5-1：崩溃域（前端心跳连续失败判死）
+    case 'engine_crashed':
+      return '引擎无响应';
     case 'disconnected':
     default:
       return '未就绪';
@@ -38,6 +41,9 @@ export function formatEngineStatusFull(status: ConnectionStatus): string {
       return '引擎连接中';
     case 'degraded':
       return '引擎连接降级';
+    // T5-1：崩溃域
+    case 'engine_crashed':
+      return '引擎无响应，可能已崩溃';
     case 'disconnected':
     default:
       return '引擎未就绪';
@@ -55,6 +61,10 @@ export function formatEngineStatusTitle(status: ConnectionStatus): string {
       return '引擎正在建立连接';
     case 'degraded':
       return '引擎连接降级，部分能力可能受限';
+    // T5-1：崩溃域——只给「自动重连 / 查看崩溃日志」，不给「重启引擎」
+    // 按钮（进程内架构下重启 = 整个 Tauri 重启，产品待决，明示不做）
+    case 'engine_crashed':
+      return '引擎连续探活失败，任务可能已中断；可自动重连，崩溃现场见日志目录（logs/crash-*.log）';
     case 'disconnected':
     default:
       return '引擎未连接；活动任务与计划可能不完整';

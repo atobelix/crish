@@ -60,7 +60,7 @@ vi.mock('../api/workflowApi', () => ({
 /** 构造一个规范化后台任务（每次调用返回全新对象，模拟轮询反序列化产生的新引用） */
 function makeTask(
   id: string,
-  over: Partial<BackgroundTaskInfo> = {},
+  over: Partial<BackgroundTaskInfo> = {}
 ): BackgroundTaskInfo {
   return { id, label: `任务 ${id}`, state: 'running', ...over };
 }
@@ -212,7 +212,7 @@ describe('L1 数据面路由生产激活（轮询层持有 ensureDataPlaneRouter
     await flushTicks(0);
 
     expect(mocks.listBackgroundTasks.mock.calls.length).toBeGreaterThan(
-      baseline,
+      baseline
     );
   });
 
@@ -228,7 +228,7 @@ describe('L1 数据面路由生产激活（轮询层持有 ensureDataPlaneRouter
     await flushTicks(0);
 
     expect(mocks.listBackgroundTasks.mock.calls.length).toBeGreaterThan(
-      baseline,
+      baseline
     );
   });
 
@@ -260,5 +260,116 @@ describe('L1 数据面路由生产激活（轮询层持有 ensureDataPlaneRouter
     unmount();
     await flushTicks(0);
     expect(mocks.dataPlaneListeners.size).toBe(0);
+  });
+});
+
+describe('T5-2 中断 run 识别（引擎探活失败窗口内消失）', () => {
+  it('上一帧探活失败 + 本帧成功且 run 消失 → 记入 interruptedRuns', async () => {
+    // 帧 1：成功帧，run r1 存在（基线）
+    mocks.fetchEngineLiveStatus.mockResolvedValueOnce({
+      ok: true,
+      connected: true,
+      activeRuns: [{ runId: 'r1', prompt: '任务一' }],
+      pendingApprovals: [],
+    });
+    // 帧 2：探活失败帧（activeRuns 为空是「读不到」——基线不更新）
+    mocks.fetchEngineLiveStatus.mockResolvedValueOnce({
+      ok: false,
+      connected: true,
+      activeRuns: [],
+      pendingApprovals: [],
+      error: 'timeout',
+    });
+    // 帧 3：恢复成功帧，r1 消失 → 识别为中断
+    mocks.fetchEngineLiveStatus.mockResolvedValueOnce({
+      ok: true,
+      connected: true,
+      activeRuns: [],
+      pendingApprovals: [],
+    });
+
+    const { result, unmount } = renderHook(() => useEngineState());
+    mounted.push(unmount);
+
+    // 订阅即触发帧 1
+    await flushTicks(0);
+    expect(result.current.interruptedRuns).toHaveLength(0);
+
+    // 帧 2：失败帧（仍不识别——prevProbeOk=true）
+    await flushTicks(4000);
+    expect(result.current.interruptedRuns).toHaveLength(0);
+
+    // 帧 3：恢复帧，r1 消失 → 识别
+    await flushTicks(4000);
+    expect(result.current.interruptedRuns).toHaveLength(1);
+    expect(result.current.interruptedRuns[0]?.runId).toBe('r1');
+    expect(result.current.interruptedRuns[0]?.prompt).toBe('任务一');
+  });
+
+  it('引擎健康期间 run 正常消失（完成/取消）→ 不识别为中断', async () => {
+    mocks.fetchEngineLiveStatus.mockResolvedValueOnce({
+      ok: true,
+      connected: true,
+      activeRuns: [{ runId: 'r2' }],
+      pendingApprovals: [],
+    });
+    mocks.fetchEngineLiveStatus.mockResolvedValueOnce({
+      ok: true,
+      connected: true,
+      activeRuns: [],
+      pendingApprovals: [],
+    });
+
+    const { result, unmount } = renderHook(() => useEngineState());
+    mounted.push(unmount);
+
+    await flushTicks(0);
+    await flushTicks(4000);
+    expect(result.current.interruptedRuns).toHaveLength(0);
+  });
+
+  it('同 run 不重复识别（去重）+ 卸载复位（refcount 归零清空基线）', async () => {
+    mocks.fetchEngineLiveStatus.mockResolvedValueOnce({
+      ok: true,
+      connected: true,
+      activeRuns: [{ runId: 'r3' }],
+      pendingApprovals: [],
+    });
+    mocks.fetchEngineLiveStatus.mockResolvedValueOnce({
+      ok: false,
+      connected: true,
+      activeRuns: [],
+      pendingApprovals: [],
+      error: 'timeout',
+    });
+    mocks.fetchEngineLiveStatus.mockResolvedValueOnce({
+      ok: true,
+      connected: true,
+      activeRuns: [],
+      pendingApprovals: [],
+    });
+    // 帧 4：再次成功帧——r3 已识别，不得重复入列
+    mocks.fetchEngineLiveStatus.mockResolvedValue({
+      ok: true,
+      connected: true,
+      activeRuns: [],
+      pendingApprovals: [],
+    });
+
+    const { result, unmount } = renderHook(() => useEngineState());
+    mounted.push(unmount);
+    await flushTicks(0);
+    await flushTicks(4000);
+    await flushTicks(4000);
+    expect(result.current.interruptedRuns).toHaveLength(1);
+    await flushTicks(4000);
+    expect(result.current.interruptedRuns).toHaveLength(1);
+
+    unmount();
+    // 重新挂载：基线复位，interruptedRuns 清空（refcount 归零语义）
+    const { result: r2, unmount: u2 } = renderHook(() => useEngineState());
+    mounted.push(u2);
+    await flushTicks(0);
+    expect(r2.current.interruptedRuns).toHaveLength(0);
   });
 });

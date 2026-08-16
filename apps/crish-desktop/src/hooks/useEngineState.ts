@@ -26,7 +26,10 @@ import {
   listBackgroundTasks,
   type BackgroundTaskInfo,
 } from '../api/backgroundTasksApi';
-import { ensureDataPlaneRouter, ensureSubagentPlaneRouter } from '../api/chat-bridge/dataPlaneRouter';
+import {
+  ensureDataPlaneRouter,
+  ensureSubagentPlaneRouter,
+} from '../api/chat-bridge/dataPlaneRouter';
 import { onDataPlaneRefresh } from '../api/chat-bridge/handlers/taskEventHandlers';
 
 export interface WorkflowRunInfo {
@@ -36,14 +39,30 @@ export interface WorkflowRunInfo {
   startedAt: number;
 }
 
+/** T5-2：中断 run 条目（引擎探活失败窗口内从 activeRuns 消失的 run；
+ * 无 run-terminal 事件时的心跳兜底识别，事件层正常消费不受影响） */
+export interface InterruptedRunInfo {
+  runId: string;
+  prompt?: string;
+  /** 识别时刻（epoch ms） */
+  interruptedAt: number;
+}
+
 export interface EngineState {
   activeRuns: ActiveRunInfo[];
   pendingApprovals: PendingApprovalInfo[];
   bgTasks: BackgroundTaskInfo[];
   workflows: WorkflowDefinition[];
   workflowRuns: WorkflowRunInfo[];
+  /** T5-2：中断 run 展示（引擎异常期间消失的 run；上限 5 条，过期清理） */
+  interruptedRuns: InterruptedRunInfo[];
   loading: boolean;
 }
+
+/** T5-2：中断清单上限（防膨胀；最早条目被挤出） */
+const INTERRUPTED_RUNS_MAX = 5;
+/** T5-2：中断条目过期（ms；超过即从清单清理，防「已中断」残留误导） */
+const INTERRUPTED_RUNS_TTL_MS = 5 * 60_000;
 
 const EMPTY_BG_TASKS: BackgroundTaskInfo[] = Object.freeze(
   []
@@ -59,7 +78,7 @@ const EMPTY_BG_TASKS: BackgroundTaskInfo[] = Object.freeze(
  */
 function _sameBgTasksContent(
   a: readonly BackgroundTaskInfo[],
-  b: readonly BackgroundTaskInfo[],
+  b: readonly BackgroundTaskInfo[]
 ): boolean {
   if (a.length !== b.length) return false;
   let refSame = true;
@@ -97,6 +116,11 @@ let _unsubDataPlane: (() => void) | null = null;
 let _unsubSubagentPlane: (() => void) | null = null;
 let _unsubDataPlaneRefresh: (() => void) | null = null;
 let _workflowsLoaded = false;
+// T5-2：上一帧 activeRuns 快照（中断识别基线；仅成功帧更新）+ 上一帧
+// 探活结果（ok=false 帧不更新快照——失败帧 activeRuns 为空是「读不到」
+// 而非「run 消失」，不能据此误判）
+let _prevActiveRuns: ActiveRunInfo[] = [];
+let _prevProbeOk = true;
 
 type Listener = () => void;
 const _listeners = new Set<Listener>();
@@ -107,6 +131,7 @@ let _state: EngineState = {
   bgTasks: EMPTY_BG_TASKS,
   workflows: [],
   workflowRuns: [],
+  interruptedRuns: [],
   loading: true,
 };
 
@@ -124,13 +149,56 @@ function _setState(patch: Partial<EngineState>): void {
     _state.pendingApprovals === next.pendingApprovals &&
     _state.bgTasks === next.bgTasks &&
     _state.workflows === next.workflows &&
-    _state.workflowRuns === next.workflowRuns
+    _state.workflowRuns === next.workflowRuns &&
+    _state.interruptedRuns === next.interruptedRuns
   ) {
     return;
   }
 
   _state = next;
   _notify();
+}
+
+/** T5-2：中断 run 识别——run 从 activeRuns 消失（上一成功帧存在、本帧
+ * 不存在）且**上一帧**探活失败（引擎无响应窗口）→ 记入中断清单。
+ * 语义铁律：正常收口的 run 也「消失」，但引擎健康期间不记（事件层
+ * run-terminal 正常消费）；仅「引擎异常期间消失且无事件兜底」才识别，
+ * 心跳兜底见 T5-1（engine_crashed ribbon）。
+ * 引用稳定性：无过期清理且无新识别时返回原引用（_setState 浅等防护
+ * 不被击穿——轮询身份抖动防护测试锁定）。 */
+function collectInterruptedRuns(
+  current: ActiveRunInfo[],
+  prev: ActiveRunInfo[],
+  prevProbeOk: boolean,
+  now: number
+): InterruptedRunInfo[] {
+  const hasExpired = _state.interruptedRuns.some(
+    (entry) => now - entry.interruptedAt >= INTERRUPTED_RUNS_TTL_MS
+  );
+  const base = hasExpired
+    ? _state.interruptedRuns.filter(
+        (entry) => now - entry.interruptedAt < INTERRUPTED_RUNS_TTL_MS
+      )
+    : _state.interruptedRuns;
+  // 上一帧探活成功 → 引擎健康，run 消失是正常收口（事件层消费），不识别
+  if (prevProbeOk) return base;
+  const vanished = prev.filter(
+    (p) => !current.some((c) => c.runId === p.runId)
+  );
+  if (vanished.length === 0) return base;
+  const seen = new Set(base.map((e) => e.runId));
+  const fresh: InterruptedRunInfo[] = [];
+  for (const v of vanished) {
+    if (seen.has(v.runId)) continue;
+    seen.add(v.runId);
+    fresh.push({
+      runId: v.runId,
+      prompt: v.prompt,
+      interruptedAt: now,
+    });
+  }
+  if (fresh.length === 0) return base;
+  return [...fresh, ...base].slice(0, INTERRUPTED_RUNS_MAX);
 }
 
 async function _tick(): Promise<void> {
@@ -146,11 +214,25 @@ async function _tick(): Promise<void> {
       fetchEngineLiveStatus(),
       listBackgroundTasks().catch(() => EMPTY_BG_TASKS),
     ]);
+    const now = Date.now();
     _setState({
       activeRuns: live.activeRuns,
       pendingApprovals: live.pendingApprovals,
       bgTasks: _normalizeBgTasks(bgs),
+      // T5-2：中断识别（上一帧探活失败 + 本帧成功 → 本帧消失的 run）
+      interruptedRuns: collectInterruptedRuns(
+        live.activeRuns,
+        _prevActiveRuns,
+        _prevProbeOk,
+        now
+      ),
     });
+    // T5-2：仅成功帧更新消失基线——失败帧 activeRuns 为空是「读不到」
+    // 而非「run 消失」，覆盖基线会导致恢复帧误判全部 run 中断
+    if (live.ok) {
+      _prevActiveRuns = live.activeRuns;
+    }
+    _prevProbeOk = live.ok;
   } catch {
     // 网络错误保留上次状态，不写新空对象
   }
@@ -207,7 +289,10 @@ function _stopSingleton(): void {
     _unsubSubagentPlane = null;
   }
   _workflowsLoaded = false;
-  _state = { ..._state, loading: true };
+  // T5-2：中断识别基线随单例归零复位（测试隔离；refcount 归零语义）
+  _prevActiveRuns = [];
+  _prevProbeOk = true;
+  _state = { ..._state, interruptedRuns: [], loading: true };
 }
 
 function _subscribe(listener: Listener): () => void {

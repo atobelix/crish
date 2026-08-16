@@ -17,7 +17,7 @@ import {
   openPathDefault,
   listOpenOptionsForFile,
 } from './hostOpenersApi';
-import { invokeCmd, invokeResult, invokeTyped } from './tauriInvoke';
+import { invokeResult, invokeTyped } from './tauriInvoke';
 import capabilitiesManifest from '../../../agent-workbench/src-tauri/capabilities/default.json';
 
 // Mock tauriInvoke dependencies for unit tests
@@ -26,7 +26,6 @@ vi.mock('./tauriInvoke', async (importOriginal) => {
   return {
     ...actual,
     invokeResult: vi.fn(),
-    invokeCmd: vi.fn(),
     invokeTyped: vi.fn(),
   };
 });
@@ -43,13 +42,11 @@ vi.mock('./projectStore', () => ({
 import { getWorkspacePath } from './projectStore';
 
 const mockedInvokeResult = vi.mocked(invokeResult);
-const mockedInvokeCmd = vi.mocked(invokeCmd);
 const mockedInvokeTyped = vi.mocked(invokeTyped);
 const mockedGetWorkspacePath = vi.mocked(getWorkspacePath);
 
 beforeEach(() => {
   mockedInvokeResult.mockReset();
-  mockedInvokeCmd.mockReset();
   mockedInvokeTyped.mockReset();
   mockedGetWorkspacePath.mockReturnValue('C:\\Users\\dev\\project');
 });
@@ -90,15 +87,25 @@ describe('Desktop Native Features - Path Normalization & Security Safeguards', (
   describe('resolveWorkspacePath - Cross-platform Normalization & Traversal Defense', () => {
     it('joins relative paths with Windows backslash when workspace root contains backslashes', () => {
       mockedGetWorkspacePath.mockReturnValue('C:\\Users\\dev\\project');
-      expect(resolveWorkspacePath('src\\main.ts')).toBe('C:\\Users\\dev\\project\\src\\main.ts');
-      expect(resolveWorkspacePath('src/main.ts')).toBe('C:\\Users\\dev\\project\\src/main.ts');
-      expect(resolveWorkspacePath('.\\src\\index.ts')).toBe('C:\\Users\\dev\\project\\src\\index.ts');
+      expect(resolveWorkspacePath('src\\main.ts')).toBe(
+        'C:\\Users\\dev\\project\\src\\main.ts'
+      );
+      expect(resolveWorkspacePath('src/main.ts')).toBe(
+        'C:\\Users\\dev\\project\\src/main.ts'
+      );
+      expect(resolveWorkspacePath('.\\src\\index.ts')).toBe(
+        'C:\\Users\\dev\\project\\src\\index.ts'
+      );
     });
 
     it('joins relative paths with POSIX slash when workspace root contains slashes', () => {
       mockedGetWorkspacePath.mockReturnValue('/home/user/project');
-      expect(resolveWorkspacePath('src/main.ts')).toBe('/home/user/project/src/main.ts');
-      expect(resolveWorkspacePath('./src/index.ts')).toBe('/home/user/project/src/index.ts');
+      expect(resolveWorkspacePath('src/main.ts')).toBe(
+        '/home/user/project/src/main.ts'
+      );
+      expect(resolveWorkspacePath('./src/index.ts')).toBe(
+        '/home/user/project/src/index.ts'
+      );
     });
 
     it('rejects path traversal components (..)', () => {
@@ -128,11 +135,17 @@ describe('Desktop Native Features - Path Normalization & Security Safeguards', (
 
     it('verifies absolute path stays inside workspace root case-insensitively', () => {
       mockedGetWorkspacePath.mockReturnValue('C:\\Users\\dev\\project');
-      expect(resolveWorkspacePath('C:\\Users\\dev\\project\\src\\App.tsx')).toBe('C:\\Users\\dev\\project\\src\\App.tsx');
-      expect(resolveWorkspacePath('c:/users/dev/project/src/app.tsx')).toBe('c:/users/dev/project/src/app.tsx');
-      
+      expect(
+        resolveWorkspacePath('C:\\Users\\dev\\project\\src\\App.tsx')
+      ).toBe('C:\\Users\\dev\\project\\src\\App.tsx');
+      expect(resolveWorkspacePath('c:/users/dev/project/src/app.tsx')).toBe(
+        'c:/users/dev/project/src/app.tsx'
+      );
+
       // Outside workspace root -> rejected
-      expect(resolveWorkspacePath('C:\\Users\\dev\\other_project\\file.txt')).toBe('');
+      expect(
+        resolveWorkspacePath('C:\\Users\\dev\\other_project\\file.txt')
+      ).toBe('');
       expect(resolveWorkspacePath('D:\\project\\file.txt')).toBe('');
     });
 
@@ -145,21 +158,39 @@ describe('Desktop Native Features - Path Normalization & Security Safeguards', (
 
   describe('Path Manipulation Helpers (pathBasename, pathDirname, pathRelativeToRoot)', () => {
     it('extracts basename correctly for both Windows backslash and POSIX slash paths', () => {
-      expect(pathBasename('C:\\Users\\dev\\project\\src\\index.ts')).toBe('index.ts');
+      expect(pathBasename('C:\\Users\\dev\\project\\src\\index.ts')).toBe(
+        'index.ts'
+      );
       expect(pathBasename('/home/user/project/src/index.ts')).toBe('index.ts');
       expect(pathBasename('C:\\Users\\dev\\project\\folder')).toBe('folder');
       expect(pathBasename('file.txt')).toBe('file.txt');
     });
 
     it('extracts dirname correctly for cross-platform paths', () => {
-      expect(pathDirname('C:\\Users\\dev\\project\\src\\index.ts')).toBe('C:\\Users\\dev\\project\\src');
-      expect(pathDirname('/home/user/project/src/index.ts')).toBe('/home/user/project/src');
+      expect(pathDirname('C:\\Users\\dev\\project\\src\\index.ts')).toBe(
+        'C:\\Users\\dev\\project\\src'
+      );
+      expect(pathDirname('/home/user/project/src/index.ts')).toBe(
+        '/home/user/project/src'
+      );
     });
 
     it('computes path relative to root handling mixed slashes and case insensitivity', () => {
-      expect(pathRelativeToRoot('C:\\Users\\dev\\project\\src\\index.ts', 'C:/Users/dev/project')).toBe('src/index.ts');
-      expect(pathRelativeToRoot('c:/users/dev/project/src/components/Button.tsx', 'C:\\Users\\dev\\project')).toBe('src/components/Button.tsx');
-      expect(pathRelativeToRoot('C:\\Users\\dev\\project', 'C:\\Users\\dev\\project')).toBe('.');
+      expect(
+        pathRelativeToRoot(
+          'C:\\Users\\dev\\project\\src\\index.ts',
+          'C:/Users/dev/project'
+        )
+      ).toBe('src/index.ts');
+      expect(
+        pathRelativeToRoot(
+          'c:/users/dev/project/src/components/Button.tsx',
+          'C:\\Users\\dev\\project'
+        )
+      ).toBe('src/components/Button.tsx');
+      expect(
+        pathRelativeToRoot('C:\\Users\\dev\\project', 'C:\\Users\\dev\\project')
+      ).toBe('.');
     });
   });
 });
@@ -174,27 +205,65 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
       mockedInvokeTyped.mockResolvedValueOnce({
         status: 'ok',
         data: [
-          { id: 'system-file-manager', displayName: 'File Manager', kind: 'file-manager', available: true },
-          { id: 'vscode', displayName: 'VS Code', kind: 'editor', available: true, path: 'C:\\Program Files\\VSCode\\Code.exe' },
-          { id: 'cursor', displayName: 'Cursor', kind: 'editor', available: false, reason: 'Not installed' },
+          {
+            id: 'system-file-manager',
+            displayName: 'File Manager',
+            kind: 'file-manager',
+            available: true,
+          },
+          {
+            id: 'vscode',
+            displayName: 'VS Code',
+            kind: 'editor',
+            available: true,
+            path: 'C:\\Program Files\\VSCode\\Code.exe',
+          },
+          {
+            id: 'cursor',
+            displayName: 'Cursor',
+            kind: 'editor',
+            available: false,
+            reason: 'Not installed',
+          },
         ],
       });
 
       const openers = await listHostOpeners();
       expect(openers).toHaveLength(2);
-      expect(openers[0]).toMatchObject({ id: 'system-file-manager', available: true });
-      expect(openers[1]).toMatchObject({ id: 'vscode', available: true, path: 'C:\\Program Files\\VSCode\\Code.exe' });
-      expect(mockedInvokeTyped).toHaveBeenCalledWith('workbench_list_host_openers');
+      expect(openers[0]).toMatchObject({
+        id: 'system-file-manager',
+        available: true,
+      });
+      expect(openers[1]).toMatchObject({
+        id: 'vscode',
+        available: true,
+        path: 'C:\\Program Files\\VSCode\\Code.exe',
+      });
+      expect(mockedInvokeTyped).toHaveBeenCalledWith(
+        'workbench_list_host_openers'
+      );
     });
 
     it('opens file target with specified opener using workbench_open_host_target', async () => {
-      mockedInvokeResult.mockResolvedValueOnce({ status: 'ok', data: { ok: true } });
-
-      await openWithHostOpener('vscode', 'C:\\Users\\dev\\project\\src\\main.ts');
-      expect(mockedInvokeResult).toHaveBeenCalledWith('workbench_open_host_target', {
-        openerId: 'vscode',
-        target: { type: 'path', path: 'C:\\Users\\dev\\project\\src\\main.ts' },
+      mockedInvokeResult.mockResolvedValueOnce({
+        status: 'ok',
+        data: { ok: true },
       });
+
+      await openWithHostOpener(
+        'vscode',
+        'C:\\Users\\dev\\project\\src\\main.ts'
+      );
+      expect(mockedInvokeResult).toHaveBeenCalledWith(
+        'workbench_open_host_target',
+        {
+          openerId: 'vscode',
+          target: {
+            type: 'path',
+            path: 'C:\\Users\\dev\\project\\src\\main.ts',
+          },
+        }
+      );
     });
 
     it('handles unavailable host opener error gracefully', async () => {
@@ -203,36 +272,66 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
         message: 'Host opener missing-opener was not found on this system.',
       });
 
-      await expect(openWithHostOpener('missing-opener', 'C:\\Users\\dev\\project\\src\\main.ts')).rejects.toThrow(
-        'Host opener missing-opener was not found on this system.',
+      await expect(
+        openWithHostOpener(
+          'missing-opener',
+          'C:\\Users\\dev\\project\\src\\main.ts'
+        )
+      ).rejects.toThrow(
+        'Host opener missing-opener was not found on this system.'
       );
     });
 
     it('opens system default path via workbench_open_path_default and falls back if missing', async () => {
-      mockedInvokeResult.mockResolvedValueOnce({ status: 'ok', data: { ok: true } });
+      mockedInvokeResult.mockResolvedValueOnce({
+        status: 'ok',
+        data: { ok: true },
+      });
 
       await openPathDefault('C:\\Users\\dev\\project\\readme.md');
-      expect(mockedInvokeResult).toHaveBeenCalledWith('workbench_open_path_default', {
-        path: 'C:\\Users\\dev\\project\\readme.md',
-      });
+      expect(mockedInvokeResult).toHaveBeenCalledWith(
+        'workbench_open_path_default',
+        {
+          path: 'C:\\Users\\dev\\project\\readme.md',
+        }
+      );
     });
 
     it('reveals file in OS file manager via workbench_open_host_target', async () => {
-      mockedInvokeResult.mockResolvedValueOnce({ status: 'ok', data: { ok: true } });
+      mockedInvokeResult.mockResolvedValueOnce({
+        status: 'ok',
+        data: { ok: true },
+      });
 
       await revealInOs('C:\\Users\\dev\\project\\src\\App.tsx');
-      expect(mockedInvokeResult).toHaveBeenCalledWith('workbench_open_host_target', {
-        openerId: 'system-file-manager',
-        target: { type: 'path', path: 'C:\\Users\\dev\\project\\src\\App.tsx' },
-      });
+      expect(mockedInvokeResult).toHaveBeenCalledWith(
+        'workbench_open_host_target',
+        {
+          openerId: 'system-file-manager',
+          target: {
+            type: 'path',
+            path: 'C:\\Users\\dev\\project\\src\\App.tsx',
+          },
+        }
+      );
     });
 
     it('sorts host opener options dynamically based on file type', async () => {
       mockedInvokeTyped.mockResolvedValueOnce({
         status: 'ok',
         data: [
-          { id: 'system-file-manager', displayName: 'File Manager', kind: 'file-manager', available: true },
-          { id: 'vscode', displayName: 'VS Code', kind: 'editor', available: true },
+          {
+            id: 'system-file-manager',
+            displayName: 'File Manager',
+            kind: 'file-manager',
+            available: true,
+          },
+          {
+            id: 'vscode',
+            displayName: 'VS Code',
+            kind: 'editor',
+            available: true,
+          },
         ],
       });
       mockedInvokeTyped.mockResolvedValueOnce({
@@ -240,7 +339,9 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
         data: [],
       });
 
-      const options = await listOpenOptionsForFile('C:\\Users\\dev\\project\\src\\index.ts');
+      const options = await listOpenOptionsForFile(
+        'C:\\Users\\dev\\project\\src\\index.ts'
+      );
       expect(options.defaultLabel).toBe('编辑');
       expect(options.openers[0]!.id).toBe('vscode');
     });
@@ -254,7 +355,9 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
       });
 
       // Import listDirectory or direct invoke test for workbench_select_folder payload structure
-      const res = await invokeResult<{ path: string | null }>('workbench_select_folder');
+      const res = await invokeResult<{ path: string | null }>(
+        'workbench_select_folder'
+      );
       expect(res).toEqual({
         status: 'ok',
         data: { path: 'C:\\Users\\dev\\new_project' },
@@ -267,7 +370,9 @@ describe('Desktop Native Features - Tauri Native Commands Suite', () => {
         data: { path: null },
       });
 
-      const res = await invokeResult<{ path: string | null }>('workbench_select_folder');
+      const res = await invokeResult<{ path: string | null }>(
+        'workbench_select_folder'
+      );
       expect(res).toEqual({
         status: 'ok',
         data: { path: null },
@@ -350,25 +455,30 @@ describe('Desktop Native Features - HMR Hot-Reload Race Protection', () => {
       return { status: 'missing' };
     });
 
-    const res = await invokeResult('workbench_read_file_content', { path: 'C:\\Users\\dev\\project\\file.txt' });
+    const res = await invokeResult('workbench_read_file_content', {
+      path: 'C:\\Users\\dev\\project\\file.txt',
+    });
     expect(res.status).toBe('missing');
   });
 
   it('prevents unhandled promise rejections on workspace file reads during HMR reload', async () => {
     mockedInvokeResult.mockResolvedValueOnce({
       status: 'error',
-      message: 'Failed to fetch dynamically imported module: @tauri-apps/api/core',
+      message:
+        'Failed to fetch dynamically imported module: @tauri-apps/api/core',
     });
 
     await expect(readTextFile('src/main.ts')).rejects.toThrow(
-      'Failed to fetch dynamically imported module: @tauri-apps/api/core',
+      'Failed to fetch dynamically imported module: @tauri-apps/api/core'
     );
   });
 
   it('ensures listDirectory handles missing desktop shell during frontend reload gracefully', async () => {
     mockedInvokeResult.mockResolvedValueOnce({ status: 'missing' });
 
-    await expect(listDirectory()).rejects.toThrow('当前环境无法浏览本地目录（需桌面壳）');
+    await expect(listDirectory()).rejects.toThrow(
+      '当前环境无法浏览本地目录（需桌面壳）'
+    );
   });
 
   it('ensures writeTextFile handles write permission error cleanly without dangling state', async () => {
@@ -378,7 +488,7 @@ describe('Desktop Native Features - HMR Hot-Reload Race Protection', () => {
     });
 
     await expect(writeTextFile('outside.txt', 'data')).rejects.toThrow(
-      'Path is outside the allowed workspace root.',
+      'Path is outside the allowed workspace root.'
     );
   });
 });

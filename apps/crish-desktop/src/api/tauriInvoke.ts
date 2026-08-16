@@ -10,8 +10,9 @@
  *    InvokeError 携带 `kind` / `message` / `raw`，对齐 Rust 侧 CoreError 协议。
  *    新代码应优先使用此 API。
  *
- * 旧 `invokeCmd<T>` 返回 `T | null`（missing 与 error 都返回 null），
- * 已 `@deprecated`，新代码用 `invokeTyped` 替代。
+ * 旧「宽松折叠层」（返回 `T | null`，missing 与 error 都折叠为 null——
+ * 成功 null 与失败 null 混为一谈，review.md §6 Fail-Open 分叉风险）已随
+ * T5-5 迁移删除：全部生产调用方迁至 `invokeTyped` 三态分派。
  * @see invokeTyped
  */
 
@@ -54,7 +55,7 @@ function formatInvokeError(err: unknown): string {
 
 function isMissingCommandMessage(msg: string): boolean {
   return /not allowed|command .* not found|unknown command|not implemented|Cannot find module|Failed to fetch dynamically/i.test(
-    msg,
+    msg
   );
 }
 
@@ -81,11 +82,12 @@ function extractErrorKind(err: unknown): { kind: string; message: string } {
     // Rust CoreError serde tagged enum: { kind: "InvalidInput", detail: "msg" }
     if (typeof o.kind === 'string') {
       const detail = o.detail;
-      const message = typeof detail === 'string'
-        ? detail
-        : typeof o.message === 'string'
-          ? o.message
-          : String(o.kind);
+      const message =
+        typeof detail === 'string'
+          ? detail
+          : typeof o.message === 'string'
+            ? o.message
+            : String(o.kind);
       return { kind: o.kind, message };
     }
     // 普通 Error 对象
@@ -102,8 +104,9 @@ function extractErrorKind(err: unknown): { kind: string; message: string } {
 }
 
 let cachedInvoke: typeof import('@tauri-apps/api/core').invoke | null = null;
-let invokeCheckPromise: Promise<typeof import('@tauri-apps/api/core').invoke | null> | null =
-  null;
+let invokeCheckPromise: Promise<
+  typeof import('@tauri-apps/api/core').invoke | null
+> | null = null;
 
 async function getTauriInvoke() {
   // 冷启动竞态修复（F-A 收尾审计发现，d9e5b61e 起存在）：原实现先置
@@ -133,7 +136,7 @@ async function getTauriInvoke() {
  */
 export async function invokeResult<T = unknown>(
   cmd: string,
-  args?: Record<string, unknown>,
+  args?: Record<string, unknown>
 ): Promise<InvokeResult<T>> {
   try {
     const invoke = await getTauriInvoke();
@@ -166,7 +169,7 @@ export async function invokeResult<T = unknown>(
  */
 export async function invokeTyped<T = unknown>(
   cmd: string,
-  args?: Record<string, unknown>,
+  args?: Record<string, unknown>
 ): Promise<InvokeTypedResult<T>> {
   try {
     const invoke = await getTauriInvoke();
@@ -179,20 +182,4 @@ export async function invokeTyped<T = unknown>(
     const { kind, message } = extractErrorKind(err);
     return { status: 'error', kind, message, raw: err };
   }
-}
-
-/**
- * 宽松 invoke：失败或非 Tauri 返回 null（兼容 git/fs/background 旧调用方）。
- *
- * @deprecated 新代码应使用 `invokeTyped`（区分错误类型）。
- * 此 API 把 missing 与 error 都吞为 null，丢失错误信息，不利于排错。
- * @see invokeTyped
- */
-export async function invokeCmd<T = unknown>(
-  cmd: string,
-  args?: Record<string, unknown>,
-): Promise<T | null> {
-  const res = await invokeResult<T>(cmd, args);
-  if (res.status === 'ok') return res.data;
-  return null;
 }

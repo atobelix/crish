@@ -38,11 +38,15 @@ import { CircuitBreakerBanner } from './CircuitBreakerBanner';
 import { RetrySlotNotice } from './RetrySlotNotice';
 import { ApprovalDock } from './ApprovalDock';
 import { useContinuityUiStore } from '../../api/continuity/continuityUiStore';
+import { useConnectionStatus } from '../../hooks/useConnectionStatus';
+import { connectionManager } from '../../services/ConnectionManager';
 import {
   filterActiveBackgroundTasks,
   useBackgroundTaskPolling,
 } from './useBackgroundTaskPolling';
 import {
+  resolveEngineCrashedText,
+  ENGINE_CRASH_RECONNECT_LABEL,
   resolveEngineDownSoftHintText,
   resolveSetupHintAction,
   resolveSetupHintKind,
@@ -187,6 +191,12 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     () => filterActiveBackgroundTasks(bgTasks),
     [bgTasks]
   );
+
+  // T5-1：引擎崩溃域（前端心跳连续失败判死 → errorStore.engine_crashed）。
+  // 与 engine-down 离线软提示分离：崩溃是「探活判死」，给独立恢复动作。
+  const connectionStatus = useConnectionStatus();
+  const engineCrashed = connectionStatus === 'engine_crashed';
+  const engineCrashedText = resolveEngineCrashedText({ onEmptySurface });
 
   // D8 §3.7.4/§3.7.5：临时通知（老虎机滚动重连）+ 熔断横幅（会话级订阅；
   // 不进对话历史，仅 UI 层——事件 handler 写入 continuityUiStore）
@@ -405,6 +415,37 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
 
       {/* 引导态：页内 soft-hint 互斥一条；FirstRun 盖层时 resolveSetupHintKind=null */}
       <SetupHintBanner state={setupState} onAction={handleSetupAction} />
+
+      {/* T5-1：引擎崩溃 ribbon（心跳判死域；「自动重连」入口——不给
+          「重启引擎」按钮，进程内架构重启 = 整个 Tauri 重启，产品待决
+          明示不做；崩溃现场见 errorStore ENGINE_CRASH_PROBED technical
+          = logDir/crash-*.log） */}
+      {engineCrashed ? (
+        <div
+          className={styles.crashRibbon}
+          data-crash-ribbon="true"
+          role="status"
+          aria-live="assertive"
+          aria-label={engineCrashedText}
+        >
+          <Lucide.AlertTriangle
+            size={14}
+            strokeWidth={1.75}
+            aria-hidden
+            style={{ flexShrink: 0 }}
+          />
+          <span className={styles.crashRibbonText}>{engineCrashedText}</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={styles.crashRibbonAction}
+            onClick={() => void connectionManager.reconnect()}
+          >
+            {ENGINE_CRASH_RECONNECT_LABEL}
+          </Button>
+        </div>
+      ) : null}
 
       <PlanGoalRibbons plan={planState} goal={goalState} />
 

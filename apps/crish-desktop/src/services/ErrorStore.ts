@@ -29,7 +29,24 @@ export interface UiError {
   classified: ClassifiedError;
 }
 
-export type ConnectionStatus = 'connected' | 'reconnecting' | 'waiting' | 'disconnected' | 'degraded';
+/**
+ * 连接态（D2 单真源：transport → ConnectionManager → eventBus →
+ * bootstrap-services 映射 → 本枚举；T5-1 追加崩溃域）。
+ * - connected      → 在线（引擎可接收任务）
+ * - reconnecting   → 重连中
+ * - waiting        → 连接中
+ * - disconnected   → 离线
+ * - degraded       → 降级
+ * - engine_crashed → 引擎无响应/已崩溃（T5-1 前端心跳连续失败判死；
+ *   由 fetchEngineLiveStatus 心跳写入，恢复时回 connected）
+ */
+export type ConnectionStatus =
+  | 'connected'
+  | 'reconnecting'
+  | 'waiting'
+  | 'disconnected'
+  | 'degraded'
+  | 'engine_crashed';
 
 export type PersistenceStatus = 'healthy' | 'warning' | 'critical';
 
@@ -99,13 +116,19 @@ class ErrorStore {
     try {
       return crypto.randomUUID();
     } catch {
-      return `${Date.now()}-${Math.random().toString(36).slice(2,10)}`;
+      return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     }
   }
 
-  push(error: Omit<UiError, 'id' | 'timestamp' | 'resolved' | 'reason' | 'classified'>): string {
+  push(
+    error: Omit<
+      UiError,
+      'id' | 'timestamp' | 'resolved' | 'reason' | 'classified'
+    >
+  ): string {
     const existing = this.errorHistory.find(
-      (e) => e.code === error.code && !e.resolved && e.severity === error.severity,
+      (e) =>
+        e.code === error.code && !e.resolved && e.severity === error.severity
     );
 
     const classified = classifyError(error.code, error.message);
@@ -114,7 +137,8 @@ class ErrorStore {
       existing.timestamp = Date.now();
       if (error.message) existing.message = error.message;
       if (error.technical !== undefined) existing.technical = error.technical;
-      if (error.autoResolve !== undefined) existing.autoResolve = error.autoResolve;
+      if (error.autoResolve !== undefined)
+        existing.autoResolve = error.autoResolve;
       existing.reason = classified.reason;
       existing.classified = classified;
       this.notifyIfActiveChanged();
@@ -134,7 +158,9 @@ class ErrorStore {
       reason: classified.reason,
       classified,
       ...(error.technical !== undefined ? { technical: error.technical } : {}),
-      ...(error.autoResolve !== undefined ? { autoResolve: error.autoResolve } : {}),
+      ...(error.autoResolve !== undefined
+        ? { autoResolve: error.autoResolve }
+        : {}),
     };
 
     this.errorHistory.push(entry);
@@ -143,7 +169,9 @@ class ErrorStore {
     }
 
     telemetry.error(entry.module, entry.message, undefined, {
-      code: entry.code, severity: entry.severity, classified: entry.classified,
+      code: entry.code,
+      severity: entry.severity,
+      classified: entry.classified,
     });
 
     this.notifyIfActiveChanged();

@@ -11,7 +11,7 @@
  *   extractRustManifestNames 先例；读失败 fail 不 skip + 哨兵计数防摆设化）；
  * - 前端：扫描 `apps/crish-desktop/src` 生产文件（排除 `*.test.ts`、
  *   `test-setup*`、`generated/`），正则匹配 `invoke('X'` / `invokeTyped('X'` /
- *   `invokeResult('X'` / `invokeCmd('X'` / `transport.request('X'` /
+ *   `invokeResult('X'` / `transport.request('X'` /
  *   `transport.send('X'` 的字符串字面量（含跨行参数形态：调用名在下一行）；
  * - 动态拼接：当前启动链路无 `invoke(\`...\`)` 模板串，断言 0 个动态拼接
  *   （出现动态拼接需显式登记白名单，04 ⑥-7 风险）。
@@ -121,7 +121,7 @@ function readdirSorted(dir: string): string[] {
 
 /**
  * 从前端生产代码抽取 invoke 字面量。
- * 算法：定位调用名（invoke/invokeTyped/invokeResult/invokeCmd/tryInvokeTauri/
+ * 算法：定位调用名（invoke/invokeTyped/invokeResult/tryInvokeTauri/
  * transport.request/send/call）→ 取其后第一个 `(` → 括号内第一个命令名字面量。
  * 这样泛型（`invokeResult<{ status: 'ok' }>`）内的字符串不会误配为命令名，
  * 跨行调用（调用名与命令名不同行）同样覆盖。
@@ -136,7 +136,7 @@ function extractFrontendInvokeNames(): {
   const names = new Set<string>();
   let dynamicTemplates = 0;
   const callRe =
-    /\b(invoke|invokeTyped|invokeResult|invokeCmd|tryInvokeTauri|(?:getTransport\(\)|transport)\.(?:request|send|call))\b(?!\s*,)/g;
+    /\b(invoke|invokeTyped|invokeResult|tryInvokeTauri|(?:getTransport\(\)|transport)\.(?:request|send|call))\b(?!\s*,)/g;
   const cmdRe = /'([a-z][a-z0-9_-]*)'/g;
   // 命令形态前缀：抽取到的字面量必须是命令名形态（tauriInvoke.ts 内部
   // `invoke(cmd, args)` 变量参数调用、`status: 'ok'` 等通用字符串不是命令）
@@ -144,7 +144,7 @@ function extractFrontendInvokeNames(): {
     /^(core_|workbench_|config_|provider_|multi_device_|browser_|note_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-|computer_|kill_|resume_)/;
   const constRe = /\bconst\s+[A-Z][A-Z0-9_]*\s*=\s*'([a-z][a-z0-9_-]*)'/g;
   const templateRe =
-    /\b(invoke|invokeTyped|invokeResult|invokeCmd|transport\.request|transport\.send)\s*\(\s*`/g;
+    /\b(invoke|invokeTyped|invokeResult|transport\.request|transport\.send)\s*\(\s*`/g;
   for (const file of collectFrontendFiles(
     join(locateRepoRoot(), FRONTEND_ROOT_REL)
   )) {

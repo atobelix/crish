@@ -122,8 +122,11 @@ export type UserFacingMessage = string | null;
  * - S6 内部错误（panic / 未捕获异常）
  * - S7 会话排队中（SESSION_BUSY / 串行守卫）
  * - S8 存储同步中（STORAGE_BUSY / database locked）
+ * - engine_crash（T5-1 追加）：引擎崩溃/无响应域（崩溃文案显式分类，
+ *   不再落入 S6 内部错误——「引擎已崩溃」需要独立的呈现面与恢复指引）
  */
-export type ErrorDomain = 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8';
+export type ErrorDomain =
+  'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'S6' | 'S7' | 'S8' | 'engine_crash';
 
 /** 差异化文案表（用户裁决选项 A：分层 + 动作指引，不虚假承诺「自动恢复」） */
 export const DOMAIN_MESSAGES: Record<ErrorDomain, string> = {
@@ -135,6 +138,10 @@ export const DOMAIN_MESSAGES: Record<ErrorDomain, string> = {
   S6: '软件内部错误，请稍后重试；若反复出现请重启应用。',
   S7: '当前会话上一轮任务仍在收尾中，已自动为您排队。',
   S8: '本地会话存储正在同步数据，请稍候片刻。',
+  // T5-1：崩溃域——只给「自动重连 / 查看崩溃日志」，不给「重启引擎」
+  // 按钮（进程内架构重启 = 整个 Tauri 重启，产品待决明示不做）
+  engine_crash:
+    '引擎无响应，可能已崩溃；任务可能已中断，请检查崩溃日志或重启应用。',
 };
 
 /** kebab 错误码 → 域（Rust provider 包装 `provider 错误（{kind}）：{message}`） */
@@ -162,6 +169,19 @@ const LOCAL_CORE_NOT_READY_RE = /engine not ready|引擎未就绪|核心未就�
 const PROVIDER_SIDE_FAULT_RE = /server.?error|5\d{2}|rate.?limit|gateway|429/i;
 const INTERNAL_ERROR_RE =
   /encoding error|tauri command not available|command not available|^unknown:|panic:|unhandled exception/i;
+// T5-1：引擎崩溃/无响应域（崩溃台账文案 / 收割终态标记 / 心跳判死域）
+const ENGINE_CRASH_RE =
+  /crash-.*\.log|引擎无响应|引擎已崩溃|engine crashed|engine unresponsive|已中断，无终态收口|core dumped/i;
+
+/**
+ * 引擎崩溃/无响应文案判定（T5-1 崩溃域分类；崩溃台账 / 收割终态 /
+ * 心跳判死域的文案统一入口）。
+ */
+export function isEngineCrashishError(input: unknown): boolean {
+  const text = normalizeErrorText(input);
+  if (!text) return false;
+  return ENGINE_CRASH_RE.test(text);
+}
 
 /** core_get_status 返回体形状判定（serde camelCase：initialized/engineReady/restore 等） */
 function isStatusLike(input: unknown): input is Record<string, unknown> {
@@ -216,6 +236,8 @@ export function classifyErrorDomain(input: unknown): ErrorDomain | null {
   // 串行并发 (S7) 与存储繁忙 (S8) 优先分流
   if (SESSION_BUSY_RE.test(text)) return 'S7';
   if (STORAGE_BUSY_RE.test(text)) return 'S8';
+  // T5-1：崩溃域显式分类（先于 S6——崩溃文案不再落入「内部错误」泛域）
+  if (ENGINE_CRASH_RE.test(text)) return 'engine_crash';
   // S2 先于 S1：Rust 门禁文案「engine not ready（provider 配置缺失）」同时含两者
   if (PROVIDER_CONFIG_MISSING_RE.test(text)) return 'S2';
   if (RESTORE_IN_PROGRESS_RE.test(text)) return 'S3';

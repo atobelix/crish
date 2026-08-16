@@ -40,7 +40,7 @@ export async function searchFiles(request: SearchRequest): Promise<FileHit[]> {
 
 /** 结构化搜索：区分 ok / 命令缺失 / 错误（QuickOpen 诚实空态用） */
 export async function searchFilesDetailed(
-  request: SearchRequest,
+  request: SearchRequest
 ): Promise<SearchFilesOutcome> {
   const limit = request.limit ?? QUICK_OPEN_RESULT_LIMIT;
   const res = await invokeResult<unknown>('core_search_files', {
@@ -71,9 +71,12 @@ export async function compactMessages(
   messages: Message[],
   maxTokens: number
 ): Promise<CompactionResult> {
-  // T-F 06 T6.1：invokeCmd → invokeTyped 三态化（worker 回退路径纪律：
+  // T-F 06 T6.1 / T5-5：invokeTyped 三态化（worker 回退路径纪律：
   // missing → 回退兜底；error → logInternalError 再回退）
-  const res = await invokeTyped<CompactionResult>('core_compact_messages', { messages, maxTokens });
+  const res = await invokeTyped<CompactionResult>('core_compact_messages', {
+    messages,
+    maxTokens,
+  });
   if (res.status === 'ok') return res.data;
   if (res.status === 'error') logInternalError('compactMessages', res.message);
   return { messages, tokensConsumed: 0, cacheHitRateOptimized: false };
@@ -94,7 +97,10 @@ export async function checkCommand(
   cmd: string,
   args: string[]
 ): Promise<GatekeeperResult> {
-  const res = await invokeTyped<GatekeeperResult>('core_check_command', { cmd, args });
+  const res = await invokeTyped<GatekeeperResult>('core_check_command', {
+    cmd,
+    args,
+  });
   if (res.status === 'ok') return res.data;
   if (res.status === 'error') logInternalError('checkCommand', res.message);
   return 'Allowed';
@@ -125,7 +131,10 @@ export async function computeDiff(
   oldText: string,
   newText: string
 ): Promise<DiffResult> {
-  const res = await invokeTyped<DiffResult>('core_compute_diff', { oldText, newText });
+  const res = await invokeTyped<DiffResult>('core_compute_diff', {
+    oldText,
+    newText,
+  });
   if (res.status === 'ok') return res.data;
   if (res.status === 'error') logInternalError('computeDiff', res.message);
   return { hunks: [], addedLines: 0, removedLines: 0 };
@@ -172,7 +181,10 @@ export async function rebuildSearchIndex(): Promise<boolean> {
     const res = await invokeResult<unknown>('core_rebuild_search_index', {});
     if (res.status === 'ok') return true;
     if (res.status === 'missing') {
-      logInternalError('rebuildSearchIndex', 'core_rebuild_search_index missing — 搜索索引重建不可用');
+      logInternalError(
+        'rebuildSearchIndex',
+        'core_rebuild_search_index missing — 搜索索引重建不可用'
+      );
       return false;
     }
     logInternalError('rebuildSearchIndex', res.message);
@@ -210,11 +222,15 @@ export async function renderMarkdown(text: string): Promise<string | null> {
  * （逐条语义与 renderMarkdown 一致），调用方逐条回退 worker。
  */
 export async function renderMarkdownBatch(
-  texts: string[],
+  texts: string[]
 ): Promise<(string | null)[]> {
-  const items = Array.isArray(texts) ? texts.filter((t): t is string => typeof t === 'string') : [];
+  const items = Array.isArray(texts)
+    ? texts.filter((t): t is string => typeof t === 'string')
+    : [];
   if (items.length === 0) return [];
-  const res = await invokeResult<string[]>('core_md_render_batch', { texts: items });
+  const res = await invokeResult<string[]>('core_md_render_batch', {
+    texts: items,
+  });
   if (res.status !== 'ok' || !Array.isArray(res.data)) {
     return items.map(() => null);
   }
@@ -243,7 +259,7 @@ export async function renderMarkdownBatch(
  */
 export async function coreHashCompute(
   data: ArrayBuffer | Uint8Array | string,
-  algorithm?: string,
+  algorithm?: string
 ): Promise<string | null> {
   const bytes = toBytes(data);
   const args: Record<string, unknown> = { data: bytes };
@@ -259,7 +275,7 @@ export async function coreHashCompute(
  */
 export async function coreBase64Encode(
   data: ArrayBuffer | Uint8Array | string,
-  config?: string,
+  config?: string
 ): Promise<string | null> {
   const bytes = toBytes(data);
   const args: Record<string, unknown> = { data: bytes };
@@ -275,7 +291,7 @@ export async function coreBase64Encode(
  */
 export async function coreBase64Decode(
   encoded: string,
-  config?: string,
+  config?: string
 ): Promise<Uint8Array | null> {
   const args: Record<string, unknown> = { encoded };
   if (config != null && config !== '') args.config = config;
@@ -296,12 +312,15 @@ export interface CoreEncodingDetectResult {
  * 命令缺失或失败时返回 null。
  */
 export async function coreDetectEncoding(
-  data: ArrayBuffer | Uint8Array,
+  data: ArrayBuffer | Uint8Array
 ): Promise<CoreEncodingDetectResult | null> {
   const bytes = toBytes(data);
-  const res = await invokeResult<CoreEncodingDetectResult>('core_detect_encoding', {
-    data: bytes,
-  });
+  const res = await invokeResult<CoreEncodingDetectResult>(
+    'core_detect_encoding',
+    {
+      data: bytes,
+    }
+  );
   if (res.status === 'ok') return res.data;
   return null;
 }
@@ -312,7 +331,7 @@ export async function coreDetectEncoding(
  */
 export async function coreDecodeText(
   data: ArrayBuffer | Uint8Array,
-  encoding?: string,
+  encoding?: string
 ): Promise<string | null> {
   const bytes = toBytes(data);
   const args: Record<string, unknown> = { data: bytes };
@@ -376,7 +395,7 @@ export interface CoreDiffParseResult {
  */
 export async function coreParseDiff(
   unifiedDiff: string,
-  maxLines?: number,
+  maxLines?: number
 ): Promise<CoreDiffParseResult | null> {
   const args: Record<string, unknown> = { unifiedDiff };
   if (maxLines != null) args.maxLines = maxLines;
@@ -390,7 +409,7 @@ export async function coreParseDiff(
  * 命令缺失或失败时返回 null。
  */
 export async function coreMessagesToJsonl(
-  messages: unknown[],
+  messages: unknown[]
 ): Promise<string | null> {
   const res = await invokeResult<string>('core_messages_to_jsonl', {
     messages: messages || [],
@@ -404,7 +423,7 @@ export async function coreMessagesToJsonl(
  * 命令缺失或失败时返回 null。
  */
 export async function coreJsonlToMessages(
-  text: string,
+  text: string
 ): Promise<unknown[] | null> {
   const res = await invokeResult<unknown[]>('core_jsonl_to_messages', { text });
   if (res.status === 'ok') return res.data || [];

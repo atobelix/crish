@@ -13,6 +13,7 @@ import {
   formatEngineStatusTitle,
   formatSectionCount,
   formatUsageRingAria,
+  isReadyStatus,
   liveTaskAriaLabel,
 } from './runtimePanelLib';
 
@@ -45,12 +46,23 @@ describe('engine status copy', () => {
     expect(formatEngineStatusShort('waiting')).toBe('连接中');
     expect(formatEngineStatusShort('disconnected')).toBe('未就绪');
     expect(formatEngineStatusShort('degraded')).toBe('降级');
+    // T5-1 崩溃域
+    expect(formatEngineStatusShort('engine_crashed')).toBe('引擎无响应');
     expect(formatEngineStatusFull('connected')).toBe('引擎就绪');
     expect(formatEngineStatusFull('disconnected')).toBe('引擎未就绪');
     expect(formatEngineStatusFull('reconnecting')).toBe('引擎重连中');
+    expect(formatEngineStatusFull('engine_crashed')).toMatch(/崩溃/);
     expect(formatEngineStatusTitle('connected')).toMatch(/已连接/);
     expect(formatEngineStatusTitle('disconnected')).toMatch(/未连接/);
     expect(formatEngineStatusTitle('reconnecting')).toMatch(/重连/);
+    // T5-1 崩溃域 title：探活失败 + 日志指引（不给「重启引擎」承诺）
+    expect(formatEngineStatusTitle('engine_crashed')).toMatch(/探活失败/);
+    expect(formatEngineStatusTitle('engine_crashed')).toMatch(/crash-\*\.log/);
+  });
+
+  it('T5-1：isReadyStatus 崩溃域视为未就绪', () => {
+    expect(isReadyStatus('engine_crashed')).toBe(false);
+    expect(isReadyStatus('connected')).toBe(true);
   });
 });
 
@@ -80,20 +92,32 @@ describe('formatSectionCount', () => {
 describe('liveTaskAriaLabel', () => {
   it('names task with elapsed and optional session hint', () => {
     expect(
-      liveTaskAriaLabel({ taskName: '重构', elapsedSeconds: 65, hasSession: true }),
+      liveTaskAriaLabel({
+        taskName: '重构',
+        elapsedSeconds: 65,
+        hasSession: true,
+      })
     ).toBe('重构，已运行 1 分 5 秒，点击打开对应会话');
     expect(
-      liveTaskAriaLabel({ taskName: '  ', elapsedSeconds: 3, hasSession: false }),
+      liveTaskAriaLabel({
+        taskName: '  ',
+        elapsedSeconds: 3,
+        hasSession: false,
+      })
     ).toBe('引擎任务，已运行 3 秒');
   });
 });
 
 describe('formatBgTaskMeta', () => {
   it('opening wins, else state label + truncated command', () => {
-    expect(formatBgTaskMeta({ state: 'running', opening: true })).toBe('打开中…');
+    expect(formatBgTaskMeta({ state: 'running', opening: true })).toBe(
+      '打开中…'
+    );
     expect(formatBgTaskMeta({ state: 'running' })).toMatch(/运行/);
     const long = 'c'.repeat(100);
-    expect(formatBgTaskMeta({ state: 'done', command: long }).length).toBeLessThan(60);
+    expect(
+      formatBgTaskMeta({ state: 'done', command: long }).length
+    ).toBeLessThan(60);
   });
 });
 

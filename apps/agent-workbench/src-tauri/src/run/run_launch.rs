@@ -95,6 +95,26 @@ pub(crate) fn crish_payload_from_message(message: &str) -> CrishErrorPayload {
     CrishError::new(codes::COMMON_UNKNOWN, message.to_string()).to_error_payload(0)
 }
 
+// ── T5-2：孤儿 run 收割触发点 ─────────────────────────────────────
+
+/// 孤儿 run 收割终态文案（锁定标记；与 drive 错误分支的「错误原文」
+/// 可区分——前端/诊断据此识别「任务被中断，无终态收口」）。
+pub(crate) const ORPHAN_REAP_MESSAGE: &str = "<panic> 任务已中断，无终态收口";
+
+/// T5-2：孤儿 run 收割触发点——复用 [finalize_failed] 兜底收口
+/// （runtime-error 持久化 + lastError 写入 + run-terminal(failed)
+/// 终态事件 + 移出 activeRuns + 排空审计 worker + 快照）。
+///
+/// 触发时机由收割周期任务（run_commands.rs [reap_orphan_runs_round]）
+/// 判定：`ActiveRun::driver.is_finished()` 连续 M 轮仍停留 activeRuns
+/// （drive_run_loop 未走正常收口即退出——produce 内 panic 冒泡到 tokio
+/// 任务边界被兜住、任务被 abort 等）→ 本触发点补写终态，防卡死/孤儿
+/// 条目占用。**语义铁律**：终态记为 failed（非 cancelled），与 R1
+/// 「kill_all 事件层 cancelled 为准」不重叠；去抖见收割轮。
+pub(crate) async fn finalize_orphan_run(state: &Arc<CoreRunState>, active: &Arc<ActiveRun>) {
+    finalize_failed(state, active, ORPHAN_REAP_MESSAGE).await;
+}
+
 /// 活动 run 查找（命令入口共用）
 pub(crate) fn active_run(state: &CoreRunState, run_id: &str) -> Result<Arc<ActiveRun>, CoreError> {
     state

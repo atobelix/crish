@@ -12,11 +12,9 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { telemetryMonitor } from './TelemetryMonitor';
+import { errorStore } from './ErrorStore';
 import { getWorkspacePath } from '../api/workspaceFsApi';
-import {
-  mockTauriCommand,
-  mockTauriMissing,
-} from '../test-setup';
+import { mockTauriCommand, mockTauriMissing } from '../test-setup';
 
 // TelemetryMonitor 在 flush 时经 getWorkspacePath 运行时派生路径；
 // mock 该模块（保留其余导出），默认无工作区。
@@ -52,11 +50,13 @@ describe('TelemetryMonitor 接线行为（B7）', () => {
         path: 'logs/telemetry_runtime.jsonl',
         flush: true,
         workspaceRoot: undefined,
-      }),
+      })
     );
-    const callArgs = mockedInvoke.mock.calls.at(-1)?.[1] as {
-      lines?: string[];
-    } | undefined;
+    const callArgs = mockedInvoke.mock.calls.at(-1)?.[1] as
+      | {
+          lines?: string[];
+        }
+      | undefined;
     expect(callArgs?.lines).toHaveLength(1);
     expect(callArgs?.lines?.[0]).toContain('open-session');
   });
@@ -73,7 +73,7 @@ describe('TelemetryMonitor 接线行为（B7）', () => {
       expect.objectContaining({
         path: 'C:/work/my-project/logs/telemetry_runtime.jsonl',
         workspaceRoot: 'C:/work/my-project',
-      }),
+      })
     );
   });
 
@@ -93,7 +93,7 @@ describe('TelemetryMonitor 接线行为（B7）', () => {
 
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining('core_jsonl_append missing'),
-      expect.anything(),
+      expect.anything()
     );
     warnSpy.mockRestore();
   });
@@ -121,5 +121,47 @@ describe('TelemetryMonitor 接线行为（B7）', () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(tm.buffer.length).toBeLessThanOrEqual(1000);
+  });
+
+  it('T5-4：全局错误双写——window error → JSONL + errorStore 槽位（GLOBAL_UNCAUGHT_ERROR）', () => {
+    errorStore.resolveByCode('GLOBAL_UNCAUGHT_ERROR');
+    try {
+      const err = new Error('uncaught boom');
+      window.dispatchEvent(new ErrorEvent('error', { error: err }));
+
+      const entry = errorStore
+        .getActiveErrors()
+        .find((e) => e.code === 'GLOBAL_UNCAUGHT_ERROR');
+      expect(entry).toBeTruthy();
+      expect(entry?.module).toBe('TelemetryMonitor');
+      expect(entry?.technical).toContain('uncaught boom');
+
+      // JSONL 侧同步落盘（logError 立即 flush）
+      const tm = telemetryMonitor as unknown as { buffer: string[] };
+      expect(tm.buffer.length).toBe(0);
+    } finally {
+      errorStore.resolveByCode('GLOBAL_UNCAUGHT_ERROR');
+    }
+  });
+
+  it('T5-4：全局错误双写——unhandledrejection → errorStore 槽位', () => {
+    errorStore.resolveByCode('GLOBAL_UNCAUGHT_ERROR');
+    try {
+      const reason = new Error('rejection boom');
+      window.dispatchEvent(
+        new PromiseRejectionEvent('unhandledrejection', {
+          promise: Promise.reject(reason),
+          reason,
+        })
+      );
+
+      const entry = errorStore
+        .getActiveErrors()
+        .find((e) => e.code === 'GLOBAL_UNCAUGHT_ERROR');
+      expect(entry).toBeTruthy();
+      expect(entry?.technical).toContain('rejection boom');
+    } finally {
+      errorStore.resolveByCode('GLOBAL_UNCAUGHT_ERROR');
+    }
   });
 });

@@ -261,6 +261,14 @@ pub struct CoreRunState {
     pub(crate) sessions: Mutex<Vec<SessionRecord>>,
     /// 周期快照任务运行标记（幂等防重复启动）
     pub(crate) snapshot_loop_running: AtomicBool,
+    /// T5-2：孤儿 run 收割去抖表（run_id → 驱动任务已收口且仍停留
+    /// activeRuns 的连续轮数；每轮 [crate::run::run_commands::
+    /// reap_orphan_runs_round] 更新——driver 未收口即清零/移除，连续
+    /// [ORPHAN_REAP_DEBOUNCE_ROUNDS] 轮仍停留才判定孤儿收割，防把
+    /// 「刚正常收口、正在从 activeRuns 移除」误判为孤儿）。
+    pub(crate) orphan_debounce: Mutex<HashMap<String, u32>>,
+    /// T5-2：孤儿收割周期任务运行标记（幂等防重复启动）
+    pub(crate) reaper_loop_running: AtomicBool,
     /// setup 完成标记（PE-01 T01.2：main.rs setup 末尾置 true；
     /// core_get_status.initialized 数据源）
     pub(crate) initialized: AtomicBool,
@@ -491,6 +499,8 @@ impl CoreRunState {
             snapshot_last_error: Mutex::new(None),
             sessions: Mutex::new(Vec::new()),
             snapshot_loop_running: AtomicBool::new(false),
+            orphan_debounce: Mutex::new(HashMap::new()),
+            reaper_loop_running: AtomicBool::new(false),
             initialized: AtomicBool::new(false),
             restore_started: AtomicBool::new(false),
             restore_failed: AtomicBool::new(false),

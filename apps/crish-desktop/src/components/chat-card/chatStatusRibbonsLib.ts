@@ -14,10 +14,7 @@ import {
 
 /** setup soft-hint 互斥种类（data-setup-hint）；null = 不展示任何 setup 条。 */
 export type SetupHintKind =
-  | 'engine-down'
-  | 'needs-key'
-  | 'needs-model'
-  | 'sync-engine';
+  'engine-down' | 'needs-key' | 'needs-model' | 'sync-engine';
 
 /**
  * 单一出口：setup soft-hint 优先级（最多一条）。
@@ -53,7 +50,9 @@ export function resolveSetupHintKind(opts: {
     shouldShowNeedsModelSoftHint({
       needsModelSetup: Boolean(opts.needsModelSetup),
       firstRunOpen: false,
-      ...(opts.needsKeySetup !== undefined && { needsKeySetup: opts.needsKeySetup }),
+      ...(opts.needsKeySetup !== undefined && {
+        needsKeySetup: opts.needsKeySetup,
+      }),
       ...(opts.engineOk !== undefined && { engineOk: opts.engineOk }),
     })
   ) {
@@ -101,7 +100,7 @@ export const GOAL_RIBBON_PREVIEW_MAX_LEN = 28;
 /** 目标文案截断：ellipsis 仅用于 ribbon 主行，完整 goal 走 title。 */
 export function formatGoalRibbonPreview(
   goalText: string,
-  maxLen = GOAL_RIBBON_PREVIEW_MAX_LEN,
+  maxLen = GOAL_RIBBON_PREVIEW_MAX_LEN
 ): string {
   const t = (goalText || '').trim();
   if (!t) return '';
@@ -163,7 +162,7 @@ export function resolveGoalRibbonAriaLabel(opts: {
 /** 目标清单进度 0–1；无清单 / 非法 total 返回 null（不画进度条）。 */
 export function goalRibbonProgressRatio(
   done: number,
-  total: number,
+  total: number
 ): number | null {
   const rawT = Number(total);
   const t = Math.max(0, Number.isFinite(rawT) ? rawT | 0 : 0);
@@ -176,7 +175,7 @@ export function goalRibbonProgressRatio(
 /** 进度条 width %；无清单返回 null。 */
 export function goalRibbonProgressPercent(
   done: number,
-  total: number,
+  total: number
 ): number | null {
   const ratio = goalRibbonProgressRatio(done, total);
   if (ratio == null) return null;
@@ -193,6 +192,22 @@ export function resolveEngineDownSoftHintText(opts: {
   if (opts.onEmptySurface) return '引擎连接恢复中…';
   return '引擎连接恢复中，请稍候';
 }
+
+/**
+ * T5-1：引擎崩溃 ribbon 文案（connectionStatus === 'engine_crashed' 时
+ * 展示；与 engine-down 离线软提示分离——崩溃是「探活判死」，需要
+ * 独立的恢复动作（自动重连），不是配置引导）。
+ */
+export function resolveEngineCrashedText(opts: {
+  onEmptySurface?: boolean;
+}): string {
+  if (opts.onEmptySurface) return '引擎无响应，可能已崩溃';
+  return '引擎无响应，可能已崩溃；任务可能已中断，可自动重连';
+}
+
+/** T5-1：崩溃 ribbon 动作文案（只给「自动重连」，不给「重启引擎」——
+ * 进程内架构重启 = 整个 Tauri 重启，产品待决明示不做）。 */
+export const ENGINE_CRASH_RECONNECT_LABEL = '自动重连';
 
 /**
  * 本地密钥待同步 soft-hint 文案。
@@ -235,7 +250,7 @@ export function resolveSetupHintAction(kind: SetupHintKind): {
  * run-notice 是否挂载：null / 空文案不渲染，防幽灵条。
  */
 export function shouldRenderRunNotice(
-  notice: RunNotice | null | undefined,
+  notice: RunNotice | null | undefined
 ): boolean {
   if (notice == null) return false;
   return Boolean(String(notice.text ?? '').trim());
@@ -252,7 +267,7 @@ export function resolveRunNoticeAriaLabel(text: string): string {
  * run-notice 播报急迫度：错误类 assertive，其余 polite。
  */
 export function resolveRunNoticeAriaLive(
-  kind?: string | null,
+  kind?: string | null
 ): 'polite' | 'assertive' {
   const k = String(kind ?? '')
     .trim()
@@ -269,17 +284,20 @@ export function resolveRunNoticeAriaLive(
  */
 export function shouldRenderApprovalDock(
   showApprovalDock: boolean,
-  pendingCount: number,
+  pendingCount: number
 ): boolean {
   if (!showApprovalDock) return false;
-  const n = Math.max(0, Number.isFinite(Number(pendingCount)) ? pendingCount | 0 : 0);
+  const n = Math.max(
+    0,
+    Number.isFinite(Number(pendingCount)) ? pendingCount | 0 : 0
+  );
   return n > 0;
 }
 
 /** dock 可见文案：优先完整 summary（approvalDockLabel），否则裸计数。 */
 export function resolveApprovalDockLabelText(
   count: number,
-  summary: string,
+  summary: string
 ): string {
   const s = (summary || '').trim();
   if (s) return s;
@@ -291,7 +309,7 @@ export function resolveApprovalDockLabelText(
 /** dock 可访问名：优先完整 summary，否则计数（比 label 更口语）。 */
 export function resolveApprovalDockAriaLabel(
   count: number,
-  summary: string,
+  summary: string
 ): string {
   const s = (summary || '').trim();
   if (s) return s;

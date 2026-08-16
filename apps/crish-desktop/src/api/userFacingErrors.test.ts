@@ -5,9 +5,11 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  DOMAIN_MESSAGES,
   classifyErrorDomain,
   classifySoftFailure,
   domainUserMessage,
+  isEngineCrashishError,
   networkUserMessage,
   softFailureMessage,
 } from './userFacingErrors';
@@ -188,6 +190,30 @@ describe('classifyErrorDomain：差异化八域判定（S1-S8）', () => {
     expect(classifyErrorDomain('')).toBeNull();
     expect(classifyErrorDomain(null)).toBeNull();
     expect(classifyErrorDomain(undefined)).toBeNull();
+  });
+
+  it('T5-1：崩溃域显式分类（崩溃台账/探活/收割终态文案 → engine_crash，不再落入 S6 泛域）', () => {
+    expect(classifyErrorDomain('crash-20260816-120000-main.log')).toBe(
+      'engine_crash'
+    );
+    expect(classifyErrorDomain('引擎无响应，可能已崩溃')).toBe('engine_crash');
+    expect(classifyErrorDomain('engine crashed (unresponsive)')).toBe(
+      'engine_crash'
+    );
+    expect(classifyErrorDomain('<panic> 任务已中断，无终态收口')).toBe(
+      'engine_crash'
+    );
+    // 域文案可经 DOMAIN_MESSAGES 取值（呈现面单一文案源）
+    expect(DOMAIN_MESSAGES.engine_crash).toMatch(/引擎无响应/);
+    expect(DOMAIN_MESSAGES.engine_crash).toMatch(/崩溃日志/);
+  });
+
+  it('T5-1：isEngineCrashishError 判定（崩溃文案 true / 普通错误 false）', () => {
+    expect(isEngineCrashishError('crash-1.log')).toBe(true);
+    expect(isEngineCrashishError('引擎已崩溃')).toBe(true);
+    expect(isEngineCrashishError('boom')).toBe(false);
+    expect(isEngineCrashishError(null)).toBe(false);
+    expect(isEngineCrashishError('')).toBe(false);
   });
 });
 

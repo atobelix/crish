@@ -23,13 +23,14 @@ import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
 import { useLayoutStore } from '../../store/storeAccess';
 import type { SessionState } from '../../store/types';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
+import { useEngineState } from '../../hooks/useEngineState';
 
 export interface LiveTask {
   id: string;
   taskName: string;
   elapsedSeconds: number;
   sessionId?: string | undefined;
-  kind: 'session' | 'run';
+  kind: 'session' | 'run' | 'interrupted';
 }
 
 export function useOverviewState(
@@ -53,6 +54,10 @@ export function useOverviewState(
   const actionErrTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastGitRefreshAtRef = useRef(0);
   const gitRefreshSeqRef = useRef(0);
+  // T5-2：中断 run 展示数据源（useEngineState 心跳兜底识别——引擎探活
+  // 失败窗口内从 activeRuns 消失的 run；与 useEngineState 模块单例共享
+  // refcount，零额外轮询）
+  const engineDs = useEngineState();
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -105,8 +110,24 @@ export function useOverviewState(
         kind: 'run',
       });
     }
+    // T5-2：中断 run 展示（引擎异常期间消失、无 run-terminal 事件的心跳
+    // 兜底识别；kind='interrupted' 与活动 run 区分，任务名带「已中断」）
+    for (const ir of engineDs.interruptedRuns) {
+      if (from.some((t) => t.id === ir.runId)) continue;
+      const matched = sessions.find((s) => s.engineLastRunId === ir.runId);
+      from.push({
+        id: ir.runId,
+        taskName: `${(matched?.title || ir.prompt || '引擎任务').trim().slice(0, 40)}（已中断）`,
+        elapsedSeconds: Math.max(
+          0,
+          Math.round((now - ir.interruptedAt) / 1000)
+        ),
+        sessionId: matched?.id,
+        kind: 'interrupted',
+      });
+    }
     return from;
-  }, [sessions, activeRuns, now]);
+  }, [sessions, activeRuns, engineDs.interruptedRuns, now]);
 
   const showActionErr = useCallback((msg: string) => {
     setActionErr(msg);

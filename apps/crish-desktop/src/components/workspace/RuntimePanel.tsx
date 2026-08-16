@@ -22,6 +22,8 @@ import { SecurityAuditSection } from './SecurityAuditSection';
 import { TrashSection } from './TrashSection';
 import { FlowDagView } from './FlowDagView';
 import { useFlowDagVisible } from '../../hooks/useFlowDagVisible';
+import { connectionManager } from '../../services/ConnectionManager';
+import { Button } from '../ui';
 import {
   formatEngineStatusFull,
   formatEngineStatusShort,
@@ -91,7 +93,10 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
 
   return (
     <div className={styles.panel} role="region" aria-label="运行状态">
-      {/* 引擎状态已在 float header 展示；面板内仅一行精简状态 */}
+      {/* 引擎状态已在 float header 展示；面板内仅一行精简状态。
+          T5-1：崩溃域（engine_crashed）呈现「引擎无响应」+ 自动重连
+          入口——不给「重启引擎」按钮（进程内架构重启 = 整个 Tauri
+          重启，超出战役范围，产品待决明示不做） */}
       <RuntimeSection
         titleId="rt-sec-engine"
         title="引擎"
@@ -111,6 +116,16 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
             <span className={`${styles.rowMeta} ${styles.engineMeta}`}>
               {formatEngineStatusShort(connectionStatus)}
             </span>
+            {connectionStatus === 'engine_crashed' ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => void connectionManager.reconnect()}
+              >
+                自动重连
+              </Button>
+            ) : null}
           </div>
         }
       />

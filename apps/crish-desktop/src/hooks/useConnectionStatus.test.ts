@@ -57,6 +57,15 @@ describe('useConnectionStatus — errorStore 四态投影', () => {
     expect(isConnectionReady(result.current)).toBe(false);
   });
 
+  it('T5-1：engine_crashed → 投影「引擎无响应/已崩溃」（isConnectionReady = false）', () => {
+    const { result } = renderHook(() => useConnectionStatus());
+    act(() => {
+      errorStore.setConnectionStatus('engine_crashed');
+    });
+    expect(result.current).toBe('engine_crashed');
+    expect(isConnectionReady(result.current)).toBe(false);
+  });
+
   it('状态未变化不触发订阅者（setConnectionStatus 同值跳过）', () => {
     let renders = 0;
     renderHook(() => {

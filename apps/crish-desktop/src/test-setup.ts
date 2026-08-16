@@ -5,7 +5,7 @@ import { beforeEach, afterEach, vi } from 'vitest';
 // Tauri invoke mock 基础设施（Stream F）
 //
 // 系统化方案：直接 mock `@tauri-apps/api/core` 的 invoke 函数，从底层切断
-// Tauri IPC。所有上层 wrapper（invokeCmd / invokeResult / rustCore.*）都自动
+// Tauri IPC。所有上层 wrapper（invokeTyped / invokeResult / rustCore.*）都自动
 // 走 mock 路径，无需每个测试文件各自 mock `./tauriInvoke` 模块。
 //
 // 三态语义（对齐 tauriInvoke.ts 的 InvokeResult）：

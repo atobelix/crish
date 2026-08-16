@@ -65,14 +65,22 @@ function isCoreReady(status: unknown): boolean {
 }
 
 /** 惰性加载并缓存 Tauri listen（非 Tauri 环境返回 null，与 tauriInvoke.getTauriInvoke 同策略） */
-let cachedListen: ((event: string, handler: (e: { payload?: unknown }) => void) => Promise<() => void>) | null | undefined;
+let cachedListen:
+  | ((
+      event: string,
+      handler: (e: { payload?: unknown }) => void
+    ) => Promise<() => void>)
+  | null
+  | undefined;
 let listenChecked = false;
 
 /**
  * 解析事件 payload 为对象（Rust emit 字符串 JSON；解析失败返回 null，
  * 由调用方静默丢弃——防御 Tauri 内部异常载荷）。
  */
-function safeParseEventPayload(payload: string): Record<string, unknown> | null {
+function safeParseEventPayload(
+  payload: string
+): Record<string, unknown> | null {
   try {
     const value: unknown = JSON.parse(payload);
     if (typeof value === 'object' && value !== null) {
@@ -97,7 +105,7 @@ async function getTauriListen(): Promise<typeof cachedListen> {
   return cachedListen;
 }
 
-/** 把 invokeTyped 三态结果转成 Promise<T>（missing / error 抛错，文案对齐 invokeCmdStrict） */
+/** 把 invokeTyped 三态结果转成 Promise<T>（missing / error 抛错，文案对齐严格 invoke 语义） */
 function fromInvokeTyped<T>(res: InvokeTypedResult<T>, cmd: string): T {
   if (res.status === 'ok') return res.data;
   if (res.status === 'missing') {
@@ -121,12 +129,18 @@ function isTransientInvokeResult(res: InvokeTypedResult<unknown>): boolean {
 }
 
 export class TauriTransport {
-  private status: 'disconnected' | 'connecting' | 'connected' | 'failed' = 'disconnected';
+  private status: 'disconnected' | 'connecting' | 'connected' | 'failed' =
+    'disconnected';
   private ready = false;
   private stopped = false;
 
   private messageListeners = new Set<(msg: Record<string, unknown>) => void>();
-  private statusListeners = new Set<(s: 'disconnected' | 'connecting' | 'connected' | 'failed', err?: Error) => void>();
+  private statusListeners = new Set<
+    (
+      s: 'disconnected' | 'connecting' | 'connected' | 'failed',
+      err?: Error
+    ) => void
+  >();
 
   private unlistenEvents: (() => void) | null = null;
   private listenStarting: Promise<void> | null = null;
@@ -157,7 +171,7 @@ export class TauriTransport {
    */
   async call<T = unknown>(
     cmd: string,
-    args?: Record<string, unknown>,
+    args?: Record<string, unknown>
   ): Promise<InvokeTypedResult<T>> {
     const resolved = resolveTauriCommand(cmd);
     if (!resolved) return { status: 'missing' };
@@ -195,7 +209,10 @@ export class TauriTransport {
 
   /** fire-and-forget 发送：invoke 命令（职责 6）；失败上抛（与旧 WS send 抛「未连接」一致） */
   async send(type: string, payload?: Record<string, unknown>): Promise<void> {
-    const res = await this.call<unknown>(type, shapeTauriPayload(type, payload));
+    const res = await this.call<unknown>(
+      type,
+      shapeTauriPayload(type, payload)
+    );
     if (res.status === 'ok') return;
     fromInvokeTyped(res, type);
   }
@@ -210,7 +227,12 @@ export class TauriTransport {
   }
 
   /** 连接状态订阅（职责 2） */
-  onStatus(listener: (s: 'disconnected' | 'connecting' | 'connected' | 'failed', err?: Error) => void): () => void {
+  onStatus(
+    listener: (
+      s: 'disconnected' | 'connecting' | 'connected' | 'failed',
+      err?: Error
+    ) => void
+  ): () => void {
     this.statusListeners.add(listener);
     return () => {
       this.statusListeners.delete(listener);
@@ -250,7 +272,11 @@ export class TauriTransport {
       await new Promise((r) => setTimeout(r, this.pollIntervalMs));
     }
 
-    const timeoutErr = lastErr ?? new Error(`核心未就绪（${Math.max(0, timeoutMs ?? this.timeoutMs)}ms 超时）`);
+    const timeoutErr =
+      lastErr ??
+      new Error(
+        `核心未就绪（${Math.max(0, timeoutMs ?? this.timeoutMs)}ms 超时）`
+      );
     this.setStatus('failed', timeoutErr);
     return false;
   }
@@ -305,7 +331,8 @@ export class TauriTransport {
   /** 懒订阅 workbench-run-event（首个订阅者出现时启动；幂等；非 Tauri 环境静默降级） */
   private ensureEventSubscription(): Promise<void> {
     if (this.stopped) return Promise.resolve();
-    if (this.unlistenEvents || this.listenStarting) return this.listenStarting ?? Promise.resolve();
+    if (this.unlistenEvents || this.listenStarting)
+      return this.listenStarting ?? Promise.resolve();
 
     this.listenStarting = (async () => {
       try {
@@ -326,13 +353,19 @@ export class TauriTransport {
             try {
               cb(parsed);
             } catch (err) {
-              logger.warn('[TauriTransport] event listener error', { module: 'transport', err: toErrMeta(err) });
+              logger.warn('[TauriTransport] event listener error', {
+                module: 'transport',
+                err: toErrMeta(err),
+              });
             }
           }
         });
       } catch (err) {
         // 浏览器 dev / 事件模块不可用：订阅保持 no-op
-        logger.warn('[TauriTransport] listen failed', { module: 'transport', err: toErrMeta(err) });
+        logger.warn('[TauriTransport] listen failed', {
+          module: 'transport',
+          err: toErrMeta(err),
+        });
       } finally {
         this.listenStarting = null;
       }
@@ -350,7 +383,10 @@ export class TauriTransport {
     }
   }
 
-  private setStatus(status: 'disconnected' | 'connecting' | 'connected' | 'failed', err?: Error): void {
+  private setStatus(
+    status: 'disconnected' | 'connecting' | 'connected' | 'failed',
+    err?: Error
+  ): void {
     if (this.status === status) return;
     this.status = status;
     for (const cb of this.statusListeners) {

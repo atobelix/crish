@@ -2,16 +2,18 @@
 /**
  * AsyncMarkdownBlock 组件测试（PE-02 T02.2/T02.4 验收锚点）。
  *
- * 覆盖（对齐 D0 residual 清理后的组件契约）：
+ * 覆盖（对齐 D0 residual 清理后的组件契约 + T5-3 失败回退）：
  *   1. 流式期间（isStreaming=true）→ 纯文本 + caret，不注入 HTML、不调 hook 渲染
  *   2. 未闭合 fence 流式 → 纯文本可见（不提前渲染）
  *   3. 完成态切换 → 一次收敛为 rustHtml（hook 结果写入 innerHTML）
  *   4. 完成态无 rustHtml → skeleton 占位；渲染完成清除
+ *   4c. 完成态渲染失败（failed=true, html=''）→ 纯文本原文回退（T5-3，
+ *       <pre class="md-text-fallback">，不再空白；不注入 innerHTML）
  *   5. hook 渲染失败（reject）→ 不崩溃、无骨架残留
  *   6. 文本全量替换 → 完成态按新文本重新渲染（不残留旧内容）
  *   7. 空文本 → 渲染 null
  *
- * 说明：完成态 hook（useAsyncMarkdownHtml）以 mock 控制 html/loading；
+ * 说明：完成态 hook（useAsyncMarkdownHtml）以 mock 控制 html/loading/failed；
  * 已删除路径（IncrementalMarkdownParser / data-block-id / data-block-tail /
  * visible 暂停）不再断言（D0 residual）。
  */
@@ -31,7 +33,11 @@ vi.mock('../../api/markdownRenderAsync', () => ({
 const RUST_HTML = '<h1 class="md-h1">标题</h1><p class="md-p">正文</p>';
 
 function useEmptyRender() {
-  mocks.useAsyncMarkdownHtml.mockReturnValue({ html: '', loading: false });
+  mocks.useAsyncMarkdownHtml.mockReturnValue({
+    html: '',
+    loading: false,
+    failed: false,
+  });
 }
 
 afterEach(() => {
@@ -43,7 +49,9 @@ describe('AsyncMarkdownBlock', () => {
   it('用例1：流式期间纯文本可见，不注入 HTML（不调 hook 渲染）', () => {
     useEmptyRender();
     const text = '## 二级标题\n\n段落一\n\n- 项1\n- 项2';
-    const { container } = render(<AsyncMarkdownBlock text={text} isStreaming />);
+    const { container } = render(
+      <AsyncMarkdownBlock text={text} isStreaming />
+    );
     // 纯文本直接可见（markdown 源码，未渲染）
     expect(container.textContent).toContain('## 二级标题');
     expect(container.textContent).toContain('项1');
@@ -58,7 +66,9 @@ describe('AsyncMarkdownBlock', () => {
   it('用例2：未闭合 fence 流式 → 纯文本可见', () => {
     useEmptyRender();
     const text = '```typescript\nconst a = 1;\nlet b = 2;';
-    const { container } = render(<AsyncMarkdownBlock text={text} isStreaming />);
+    const { container } = render(
+      <AsyncMarkdownBlock text={text} isStreaming />
+    );
     // 源码字符直接可见（不等待渲染完成）
     expect(container.textContent).toContain('const a = 1;');
     expect(container.textContent).toContain('let b = 2;');
@@ -75,7 +85,10 @@ describe('AsyncMarkdownBlock', () => {
     );
     // 流式结束：完成态渲染
     rerender(
-      <AsyncMarkdownBlock text={'```typescript\nconst a = 1;\n```'} isStreaming={false} />
+      <AsyncMarkdownBlock
+        text={'```typescript\nconst a = 1;\n```'}
+        isStreaming={false}
+      />
     );
     const rendered = container.firstElementChild as HTMLElement;
     expect(rendered.innerHTML).toBe(RUST_HTML);
@@ -111,6 +124,7 @@ describe('AsyncMarkdownBlock', () => {
     mocks.useAsyncMarkdownHtml.mockReturnValue({
       html: '<p class="md-p">完成正文</p>',
       loading: false,
+      failed: false,
     });
     const { container, rerender } = render(
       <AsyncMarkdownBlock text="进行中正文" isStreaming />
@@ -122,14 +136,52 @@ describe('AsyncMarkdownBlock', () => {
     expect(rendered.textContent).not.toContain('进行中正文');
   });
 
+  it('用例4c（T5-3）：完成态渲染失败（failed=true, html=""）→ 纯文本原文回退，不再空白', () => {
+    mocks.useAsyncMarkdownHtml.mockReturnValue({
+      html: '',
+      loading: false,
+      failed: true,
+    });
+    const text = '# 标题\n\n正文段落';
+    const { container } = render(
+      <AsyncMarkdownBlock text={text} isStreaming={false} />
+    );
+    // 回退渲染纯文本原文（pre.md-text-fallback），不再空白
+    const pre = container.querySelector('.md-text-fallback');
+    expect(pre).toBeTruthy();
+    expect(pre?.textContent).toContain('# 标题');
+    expect(pre?.textContent).toContain('正文段落');
+    // 保持完成态语义：data-streaming="false" 保留
+    expect(container.firstElementChild?.getAttribute('data-streaming')).toBe(
+      'false'
+    );
+    // 零 XSS / 不注入 innerHTML：源码以文本节点渲染，容器内无解析出的
+    // HTML 元素（如 h1），源码字符不构成标签
+    expect(container.querySelector('h1')).toBeNull();
+    // 回退文本不经 innerHTML 注入（effect 跳过失败分支）
+    expect(container.firstElementChild?.innerHTML).not.toContain('<h1');
+  });
+
+  it('用例4d（T5-3）：failed=true 但已有 html → 正常渲染（失败标志仅回退空结果）', () => {
+    mocks.useAsyncMarkdownHtml.mockReturnValue({
+      html: RUST_HTML,
+      loading: false,
+      failed: true,
+    });
+    const { container } = render(
+      <AsyncMarkdownBlock text="## 标题" isStreaming={false} />
+    );
+    const rendered = container.firstElementChild as HTMLElement;
+    expect(rendered.innerHTML).toBe(RUST_HTML);
+    expect(container.querySelector('.md-text-fallback')).toBeNull();
+  });
+
   it('用例5：hook 渲染失败 → 不崩溃、无骨架残留（loading 结束回退空态）', () => {
     mocks.useAsyncMarkdownHtml.mockReturnValue({
       html: '',
       loading: false,
     });
-    const errorSpy = vi
-      .spyOn(console, 'error')
-      .mockImplementation(() => {});
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const text = '# 标题\n\n正文';
     const { container } = render(
       <AsyncMarkdownBlock text={text} isStreaming={false} />
@@ -150,8 +202,12 @@ describe('AsyncMarkdownBlock', () => {
       <AsyncMarkdownBlock text="旧文本片段" isStreaming />
     );
     expect(container.textContent).toContain('旧文本片段');
-    rerender(<AsyncMarkdownBlock text="全新文本 A\n\n全新文本 B" isStreaming={false} />);
-    expect(container.querySelector('.md-rendered')?.textContent ?? '').toContain('全新文本 A');
+    rerender(
+      <AsyncMarkdownBlock text="全新文本 A\n\n全新文本 B" isStreaming={false} />
+    );
+    expect(
+      container.querySelector('.md-rendered')?.textContent ?? ''
+    ).toContain('全新文本 A');
     expect(container.textContent).not.toContain('旧文本片段');
   });
 

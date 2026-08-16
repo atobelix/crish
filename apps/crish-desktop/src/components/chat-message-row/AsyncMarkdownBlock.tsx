@@ -20,6 +20,11 @@ export interface AsyncMarkdownBlockProps {
  *   - 完成态（isStreaming=false）：useAsyncMarkdownHtml → Rust md_render
  *     （worker highlight.js 仅作 missing/offline fallback）
  *   - 渲染完成前 skeleton；缓存命中时 hook 同步返回，不进 loading
+ *   - T5-3 完成态失败回退：`failed === true && html === ''`（Rust missing +
+ *     worker 也失败）→ 渲染**纯文本原文**（`<pre class="md-text-fallback">`，
+ *     文本节点渲染，不注入 innerHTML → 零 XSS、不把源码当 HTML 解析；
+ *     内容完整性优先于空白消息体）。保持 data-streaming="false" 与既有
+ *     测试语义兼容。
  *
  * 已删除路径：IncrementalMarkdownParser / Bridge / domPatch（D0 residual）。
  *
@@ -39,56 +44,62 @@ function asyncMarkdownBlockPropsEqual(
   );
 }
 
-export const AsyncMarkdownBlock = React.memo(
-  function AsyncMarkdownBlock({
-    text,
-    isStreaming = false,
-    priority,
-  }: AsyncMarkdownBlockProps) {
-    const containerRef = useRef<HTMLDivElement>(null);
+export const AsyncMarkdownBlock = React.memo(function AsyncMarkdownBlock({
+  text,
+  isStreaming = false,
+  priority,
+}: AsyncMarkdownBlockProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
 
-    // 流式期间不调 hook（避免每帧重渲染），完成态才请求 Rust 渲染
-    const renderTarget = isStreaming ? '' : text;
-    const { html, loading } = useAsyncMarkdownHtml(
-      renderTarget,
-      priority,
-    );
+  // 流式期间不调 hook（避免每帧重渲染），完成态才请求 Rust 渲染
+  const renderTarget = isStreaming ? '' : text;
+  const { html, loading, failed } = useAsyncMarkdownHtml(
+    renderTarget,
+    priority
+  );
+  // T5-3：完成态渲染失败（failed && 无 html）→ 纯文本次优回退
+  const fallbackActive = !isStreaming && failed && !html && !loading;
 
-    // 完成态：渲染结果写入 DOM
-    useEffect(() => {
-      const el = containerRef.current;
-      if (!el) return;
-      if (isStreaming) return; // 流式期间由下方纯文本分支处理
-      el.innerHTML = html;
-    }, [html, isStreaming]);
+  // 完成态：渲染结果写入 DOM（失败回退分支跳过——回退文本是 React
+  // 子节点，innerHTML 写入会清空它）
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (isStreaming) return; // 流式期间由下方纯文本分支处理
+    if (fallbackActive) return; // T5-3：失败回退分支不写 innerHTML
+    el.innerHTML = html;
+  }, [html, isStreaming, fallbackActive]);
 
-    if (!text) return null;
+  if (!text) return null;
 
-    // 流式期间：纯文本 div + caret，零 IPC、零 HTML 解析
-    if (isStreaming) {
-      return (
-        <div
-          ref={containerRef}
-          className={`${styles.assistantText} md-rendered ${styles.isStreaming}`}
-          data-streaming="true"
-        >
-          {text}
-        </div>
-      );
-    }
-
-    // 完成态：渲染中显示 skeleton 占位；渲染完成 innerHTML 由 effect 写入
+  // 流式期间：纯文本 div + caret，零 IPC、零 HTML 解析
+  if (isStreaming) {
     return (
       <div
         ref={containerRef}
-        className={`${styles.assistantText} md-rendered`}
-        data-streaming="false"
+        className={`${styles.assistantText} md-rendered ${styles.isStreaming}`}
+        data-streaming="true"
       >
-        {loading && !html ? (
-          <div className={styles.skeletonLine} aria-hidden />
-        ) : null}
+        {text}
       </div>
     );
-  },
-  asyncMarkdownBlockPropsEqual
-);
+  }
+
+  // 完成态：渲染中显示 skeleton 占位；失败回退纯文本（T5-3，文本节点
+  // 渲染零 XSS）；成功 innerHTML 由 effect 写入
+  return (
+    <div
+      ref={containerRef}
+      className={`${styles.assistantText} md-rendered`}
+      data-streaming="false"
+    >
+      {fallbackActive ? (
+        <pre className={`${styles.mdTextFallback} md-text-fallback`}>
+          {text}
+        </pre>
+      ) : loading && !html ? (
+        <div className={styles.skeletonLine} aria-hidden />
+      ) : null}
+    </div>
+  );
+}, asyncMarkdownBlockPropsEqual);

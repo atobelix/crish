@@ -14,7 +14,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { invokeResult, invokeCmd } from './api/tauriInvoke';
+import { invokeResult, invokeTyped } from './api/tauriInvoke';
 import {
   mockTauriCommand,
   mockTauriMissing,
@@ -53,18 +53,20 @@ describe('Tauri invoke mock 三态语义', () => {
       }
     });
 
-    it('invokeCmd 宽松包装层返回 data（而非 null）', async () => {
+    it('invokeTyped 三态：ok 状态返回 data（不再折叠为 null）', async () => {
       mockTauriCommand('core_get_status', () => ({
         searchIndexReady: true,
         dbReady: false,
         compactionReady: true,
       }));
 
-      const data = await invokeCmd<{
+      const res = await invokeTyped<{
         searchIndexReady: boolean;
       }>('core_get_status');
-      expect(data).not.toBeNull();
-      expect(data?.searchIndexReady).toBe(true);
+      expect(res.status).toBe('ok');
+      if (res.status === 'ok') {
+        expect(res.data.searchIndexReady).toBe(true);
+      }
     });
 
     it('impl 可以返回 undefined / null / 0 等假值', async () => {
@@ -118,10 +120,10 @@ describe('Tauri invoke mock 三态语义', () => {
       expect(res.status).toBe('missing');
     });
 
-    it('invokeCmd 宽松包装层在 missing 时返回 null', async () => {
+    it('invokeTyped 三态：missing 状态结构化返回（不再吞为 null）', async () => {
       mockTauriMissing('missing_cmd');
-      const data = await invokeCmd('missing_cmd');
-      expect(data).toBeNull();
+      const res = await invokeTyped('missing_cmd');
+      expect(res.status).toBe('missing');
     });
   });
 
