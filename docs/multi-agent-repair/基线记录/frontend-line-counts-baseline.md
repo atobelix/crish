@@ -78,12 +78,11 @@
 apps/crish-desktop/src/api/applyFileDiff.ts 441
 apps/crish-desktop/src/api/approvalMeta.ts 400
 apps/crish-desktop/src/api/backgroundTasksApi.ts 621
-apps/crish-desktop/src/api/chat-bridge/ConnectionLifecycle.ts 502
-apps/crish-desktop/src/api/chat-bridge/EventRouter.ts 386
-apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.ts 377
+apps/crish-desktop/src/api/chat-bridge/ConnectionLifecycle.ts 506
+apps/crish-desktop/src/api/chat-bridge/EventRouter.ts 358
+apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.ts 366
 apps/crish-desktop/src/api/clientApi.ts 680
 apps/crish-desktop/src/api/clientApiNormalize.ts 342
-apps/crish-desktop/src/api/commandPermissions.ts 521
 apps/crish-desktop/src/api/engineConfig.ts 460
 apps/crish-desktop/src/api/fontStore.ts 440
 apps/crish-desktop/src/api/gitApi.ts 476
@@ -93,7 +92,7 @@ apps/crish-desktop/src/api/markdown-render/markdownPlugins.ts 517
 apps/crish-desktop/src/api/modelCatalog.ts 634
 apps/crish-desktop/src/api/previewBrowserStore.ts 343
 apps/crish-desktop/src/api/pricingStore.ts 1409
-apps/crish-desktop/src/api/provider-profiles/profileStore.ts 541
+apps/crish-desktop/src/api/provider-profiles/profileStore.ts 557
 apps/crish-desktop/src/api/session-persistence/sessionHydration.ts 387
 apps/crish-desktop/src/api/session-persistence/sessionRustDbSql.ts 384
 apps/crish-desktop/src/api/sessionEventHydrate.ts 520
@@ -133,7 +132,7 @@ apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts 352
 apps/crish-desktop/src/store/layout-tree/operations.ts 761
 apps/crish-desktop/src/store/sessionCrudActions.ts 416
 apps/crish-desktop/src/store/sessionIndex.ts 473
-apps/crish-desktop/src/store/sessionMessageActions.ts 436
+apps/crish-desktop/src/store/sessionMessageActions.ts 471
 apps/crish-desktop/src/store/sessionSharedHelpers.ts 440
 apps/crish-desktop/src/store/streamingStore.ts 369
 apps/crish-desktop/src/store/workspace-shell/adapterShape.ts 616
