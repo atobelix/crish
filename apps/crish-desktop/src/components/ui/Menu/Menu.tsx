@@ -13,7 +13,7 @@
 import React, { useCallback, useEffect, useRef, useState, useId } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { Tooltip } from '../Tooltip/Tooltip';
-import { useLayerRegistration } from '../../../hooks/useLayerRegistration';
+import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 import styles from './Menu.module.css';
 import type { SelectOptionItem } from './types';
 

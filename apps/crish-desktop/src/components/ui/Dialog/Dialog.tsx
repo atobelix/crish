@@ -20,7 +20,7 @@ import styles from './Dialog.module.css';
 import { FocusTrap } from './focusTrap';
 import { useAnimatedPresence } from './useAnimatedPresence';
 import { useRestoreFocus } from './useRestoreFocus';
-import { useLayerRegistration } from '../../../hooks/useLayerRegistration';
+import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 
 export type DialogSize = 'sm' | 'md' | 'lg';
 export type DialogRole = 'dialog' | 'alertdialog';

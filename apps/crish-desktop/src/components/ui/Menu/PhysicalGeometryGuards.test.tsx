@@ -28,7 +28,7 @@ import { TiptapSlashMenu } from '../../chat-composer/TiptapSlashMenu';
 import { ModelBadgePickerMenu } from '../../provider/ModelBadgePickerMenu';
 import { PermissionModeMenu } from '../../chat-composer/PermissionModeMenu';
 import { FileBreadcrumb } from '../../files/FileBreadcrumb';
-import { layerStackService } from '../../../services/LayerStackService';
+import { layerStackService } from '../internal/layer-stack/LayerStackService';
 import { MockPhysicalGeometryEngine } from '../../../test-utils/MockPhysicalGeometryEngine';
 import { ControllableResizeObserver } from '../../../test-utils/ControllableResizeObserver';
 import { mockTauriCommand, clearMockTauriCommands } from '../../../test-setup';

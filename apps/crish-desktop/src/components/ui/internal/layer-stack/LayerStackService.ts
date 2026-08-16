@@ -1,15 +1,18 @@
 /**
- * apps/crish-desktop/src/services/LayerStackService.ts
+ * ui/internal/layer-stack/LayerStackService.ts
  *
- * 全系统浮层栈与事件隔离单例中枢 (LayerStackService)
+ * 浮层栈与事件隔离单例中枢 —— ui/ 原子层内部私有实现（全仓唯一实装）。
  *
- * 核心职责：
- * 1. 维护全局浮层 LIFO 栈与 Tree 级联父子指针；
- * 2. 宿主根环境挂载单一标准 keydown 监听器，接管 Escape 单点下发与 IME 选词保护；
- * 3. 宿主根环境挂载单一 pointerdown 监听器，基于 Branch 拓扑进行外点判定；
- * 4. 接管虚拟拦截器（如快捷键录制态、分屏拖拽态）最高优先级直通拦截；
- * 5. 全生命周期 Trace 审计（id, type, parentId, mountedAt, dismissReason）；
- * 6. 管理焦点平滑归还机制与孤儿节点安全清理。
+ * 由来：原 `src/services/LayerStackService.ts` 被 ui 原子层（Dialog/Menu）经
+ * `src/hooks/useLayerRegistration.ts` 反向依赖，违反原子层门禁。按详案 F1-α
+ * 将服务**无副作用下沉**为 ui/ 内部私有（`ui/internal/**` 视为 ui 自身，门禁放行），
+ * 使 ui/ 内部 hook 不再 import `src/services/`。
+ *
+ * 说明：详案命名的"最小子集"（register/registerVirtual + 单例 + 类型）与类内部
+ * 实现（layers 栈 / 全局监听 / Trace / 焦点还原 / 级联关闭）不可分割，故保留完整
+ * 类实现以保证行为零漂移；对外仅暴露原子层所需调用面。
+ * 原 `src/services/LayerStackService.ts` 死副本及其陪葬测试 `LayerStackService.test.ts`
+ * 已按主控裁决删除（生产零消费，收敛为单 canonical 实现）。
  */
 
 export type LayerType =

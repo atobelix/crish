@@ -12,7 +12,7 @@ import {
 } from '@testing-library/react';
 import React, { useState } from 'react';
 import { Dialog } from './Dialog';
-import { layerStackService } from '../../../services/LayerStackService';
+import { layerStackService } from '../internal/layer-stack/LayerStackService';
 
 /** 受控包装：open 状态由父层持有，模拟真实消费方用法 */
 function DialogHarness({

@@ -33,13 +33,16 @@ function isFile(p) {
   }
 }
 
-/** 递归收集目录下全部 ts/tsx 文件 */
+/** 递归收集目录下全部 ts/tsx 源文件（排除测试文件，对齐 check-line-counts 口径） */
 function collectFiles(dir, out = []) {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) {
       collectFiles(full, out);
     } else if (/\.(ts|tsx|mts|cts)$/.test(entry)) {
+      // 测试不属于产物原子层，且其业务 import（如 LayerStackService 下沉前的
+      // services/ 依赖）本就不应被门禁拦截；排除 .test/.spec，避免误扫自身测试文件。
+      if (/\.(test|spec)\.(ts|tsx|mts|cts)$/.test(entry)) continue;
       out.push(full);
     }
   }
