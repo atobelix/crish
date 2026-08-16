@@ -496,18 +496,11 @@ export function dropTerminalForSession(
   sessionId: string
 ): void {
   void state;
-  useTerminalStore.getState().removeTerminalSession(sessionId);
+  useTerminalStore.getState().removePtySession(sessionId);
 }
 
-/**
- * 会话切换 → terminal 活动镜像同步（D7 收敛点，8 散点统一入口）。
- *
- * 幂等：与当前 activeTerminalSessionId 相同则跳过（避免无谓 immer 写）。
- * 所有会话 CRUD / 排序动作的镜像同步必须经本 helper，禁止散点直调
- * setActiveTerminalSession（新增会话切换路径漏调即镜像陈旧，P2-3）。
- */
-export function syncActiveTerminalSession(sessionId: string | null): void {
-  useTerminalStore.getState().setActiveTerminalSession(sessionId);
+export function syncActiveTerminalSession(_sessionId: string | null): void {
+  // PTY runs directly in native PTY session
 }
 
 export function pruneEmptyShellsInPlace(

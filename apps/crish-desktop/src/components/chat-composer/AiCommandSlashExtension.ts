@@ -1,29 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * apps/crish-desktop/src/components/chat-composer/AiCommandSlashExtension.ts
- * 纯净化 AI 会话系统指令与技能斜杠扩展 (DIM-06, CRM-01)。
+ * 纯净化 AI 会话系统指令集定义 (DIM-06, CRM-01)。
  * 彻底清除富文本编辑器残留的博客排版指令（如 H1/H2/H3、列表、代码块等），
  * 专注于 AI 会话、系统控制与工作台能力调度。
- *
- * CI Guardrail: Max 400 lines of effective code, UTF-8 无 BOM.
  */
 
-import { Extension } from '@tiptap/core';
-import Suggestion, { exitSuggestion } from '@tiptap/suggestion';
-import { PluginKey } from '@tiptap/pm/state';
-import { ReactRenderer } from '@tiptap/react';
-import { TiptapSlashMenu } from './TiptapSlashMenu';
 import type { SlashCommandItem } from './composerTypes';
-import {
-  calculateSafeCursorAnchor,
-  measureCursorLineBox,
-} from './safeCursorAnchor';
-
-export interface AiSlashExtensionOptions {
-  extraCommandsRef?: { current: SlashCommandItem[] };
-  onExecuteCommand?: (cmd: SlashCommandItem) => void;
-  listboxId?: string;
-}
 
 export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
@@ -65,9 +48,9 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
     id: 'mode',
     title: '/mode',
-    description: '切换智能体权限与执行模式 (Auto/Approval/ReadOnly)',
-    iconName: 'Sliders',
-    keywords: ['mode', '模式', '权限', 'permission'],
+    description: '切换权限模式（只读审查 / 工作区修改 / 完全访问）',
+    iconName: 'Shield',
+    keywords: ['mode', '权限', '模式', 'permission', 'safe'],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).insertContent('/mode ').run();
     },
@@ -75,9 +58,9 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
     id: 'prompt',
     title: '/prompt',
-    description: '插入常用系统提示词或自定义指令模板',
+    description: '插入系统提示词或预设指令模板',
     iconName: 'FileCode',
-    keywords: ['prompt', '提示词', '指令', 'template'],
+    keywords: ['prompt', '提示词', '模板', 'template'],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).insertContent('/prompt ').run();
     },
@@ -85,24 +68,22 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
     id: 'compact',
     title: '/compact',
-    description: '手动压缩会话历史，释放 Token 空间 (/compact [tokens])',
-    iconName: 'Shrink',
-    keywords: ['compact', '压缩', 'compress', 'token', '瘦身'],
+    description: '手动触发会话上下文摘要压缩，释放 Token 预算',
+    iconName: 'Sliders',
+    keywords: ['compact', '压缩', '摘要', 'summarize', 'budget'],
     command: ({ editor, range }: any) => {
-      editor
-        .chain()
-        .focus()
-        .deleteRange(range)
-        .insertContent('/compact ')
-        .run();
+      editor.chain().focus().deleteRange(range).run();
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('crish:chat-compact'));
+      }
     },
   },
   {
     id: 'schedule',
     title: '/schedule',
-    description: '设置一次性定时提醒或周期性自动化 Cron 任务',
-    iconName: 'Calendar',
-    keywords: ['schedule', '定时', 'cron', 'timer', '计划'],
+    description: '安排一次性定时提醒或周期性 Cron 任务',
+    iconName: 'Clock',
+    keywords: ['schedule', '定时', '计划', 'cron', 'timer'],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -115,9 +96,9 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
     id: 'grill-me',
     title: '/grill-me',
-    description: '启动深度需求访谈与方案对齐，澄清设计决策',
-    iconName: 'HelpCircle',
-    keywords: ['grill-me', '访谈', '对齐', '需求', 'interview'],
+    description: '进入深度交互式方案推演模式，对设计决策进行严格拷问',
+    iconName: 'Flame',
+    keywords: ['grill', '拷问', '推演', 'interview', 'review'],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -128,11 +109,11 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
     },
   },
   {
-    id: 'teamwork',
+    id: 'teamwork-preview',
     title: '/teamwork-preview',
-    description: '唤起多 Agent 团队协同架构与运行拓扑预览',
+    description: '预览多 Agent 团队并行协同分工与执行流水线',
     iconName: 'Users',
-    keywords: ['teamwork', '团队', '多agent', 'subagent', 'preview'],
+    keywords: ['teamwork', '协同', '多Agent', 'pipeline', 'preview'],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -145,9 +126,9 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
     id: 'browser',
     title: '/browser',
-    description: '启动受管浏览器自动化能力（打开网页/提取/交互）',
-    iconName: 'Globe',
-    keywords: ['browser', '浏览器', 'web', '网页', 'chrome'],
+    description: '唤起内置受管浏览器自动化插件并导航至指定 URL',
+    iconName: 'Compass',
+    keywords: ['browser', '浏览器', 'web', '网页', 'navigate'],
     command: ({ editor, range }: any) => {
       editor
         .chain()
@@ -160,9 +141,9 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
     id: 'learn',
     title: '/learn',
-    description: '沉淀当前会话的踩坑经验与自定义规则至技能库',
+    description: '从当前会话与调试经验中提取长期模式记忆',
     iconName: 'BookOpen',
-    keywords: ['learn', '学习', '经验', '规则', 'persist'],
+    keywords: ['learn', '记忆', '学习', 'persist', 'memory'],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).insertContent('/learn ').run();
     },
@@ -170,8 +151,8 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
   {
     id: 'settings',
     title: '/settings',
-    description: '打开全局系统设置中心（模型/外观/扩展/权限）',
-    iconName: 'Sparkles',
+    description: '打开工作台设置中心（模型、快捷键、插件与通用偏好）',
+    iconName: 'Settings',
     keywords: ['settings', '设置', '偏好', 'config', 'preferences'],
     command: ({ editor, range }: any) => {
       editor.chain().focus().deleteRange(range).run();
@@ -191,171 +172,3 @@ export const AI_SYSTEM_COMMANDS: SlashCommandItem[] = [
     },
   },
 ];
-
-export const aiCommandSlashPluginKey = new PluginKey('crishAiCommandSlash');
-
-export const AiCommandSlashExtension =
-  Extension.create<AiSlashExtensionOptions>({
-    name: 'aiCommandSlash',
-
-    addOptions() {
-      return {
-        extraCommandsRef: undefined,
-        onExecuteCommand: undefined,
-        listboxId: 'crish-ai-composer-slash-listbox',
-      };
-    },
-
-    addProseMirrorPlugins() {
-      return [
-        Suggestion({
-          pluginKey: aiCommandSlashPluginKey,
-          editor: this.editor,
-          char: '/',
-          allowSpaces: false,
-          startOfLine: false,
-
-          items: ({ query }: { query: string }): SlashCommandItem[] => {
-            const q = query.trim().toLowerCase();
-            const extras = this.options.extraCommandsRef?.current || [];
-            const seen = new Set<string>();
-            const pool: SlashCommandItem[] = [];
-
-            for (const item of [...extras, ...AI_SYSTEM_COMMANDS]) {
-              const key = item.title.toLowerCase().trim();
-              if (!seen.has(key)) {
-                seen.add(key);
-                pool.push(item);
-              }
-            }
-
-            if (!q) return pool;
-
-            return pool.filter((item) => {
-              if (item.title.toLowerCase().includes(q)) return true;
-              if (item.id.toLowerCase().includes(q)) return true;
-              if (item.description?.toLowerCase().includes(q)) return true;
-              return item.keywords?.some((k) => k.toLowerCase().includes(q));
-            });
-          },
-
-          render: () => {
-            let component: ReactRenderer<any> | null = null;
-            let propsRef: any = null;
-            let lastCachedBox: DOMRect | null = null;
-
-            const buildProps = (props: any) => ({
-              items: props.items,
-              command: (item: SlashCommandItem) => {
-                item.command({ editor: props.editor, range: props.range });
-                this.options.onExecuteCommand?.(item);
-              },
-              editor: props.editor,
-              range: props.range,
-              isOpen: true,
-              onClose: () => {
-                component?.destroy();
-                component = null;
-              },
-              clientRect: () => {
-                const view = props.editor?.view;
-                if (!view || !props.range) return lastCachedBox;
-
-                // CJK 组合态坐标保持静止
-                if (view.composing || (view as any).input?.composing) {
-                  return lastCachedBox;
-                }
-
-                try {
-                  const rawBox = measureCursorLineBox(
-                    view,
-                    props.range.from,
-                    1
-                  );
-                  const safeAnchor = calculateSafeCursorAnchor({
-                    rawCursorRect: rawBox,
-                    editorViewDom: view.dom,
-                  });
-                  if (safeAnchor) {
-                    lastCachedBox = new DOMRect(
-                      safeAnchor.left,
-                      safeAnchor.top,
-                      safeAnchor.width,
-                      safeAnchor.height
-                    );
-                    return lastCachedBox;
-                  }
-                  return lastCachedBox;
-                } catch {
-                  return lastCachedBox;
-                }
-              },
-              label: 'AI 会话系统指令',
-              emptyMessage: '未找到匹配的 AI 指令或技能',
-              listboxId: this.options.listboxId,
-            });
-
-            return {
-              onStart: (props: any) => {
-                propsRef = props;
-                const dom = props.editor?.view?.dom;
-                if (dom) {
-                  if (this.options.listboxId) {
-                    dom.setAttribute('aria-controls', this.options.listboxId);
-                  }
-                  dom.setAttribute('aria-expanded', 'true');
-                }
-                component = new ReactRenderer(TiptapSlashMenu, {
-                  props: buildProps(props),
-                  editor: props.editor,
-                });
-              },
-
-              onUpdate: (props: any) => {
-                propsRef = props;
-                if (component) {
-                  component.updateProps(buildProps(props));
-                }
-              },
-
-              onKeyDown: (props: any) => {
-                if (props.event.key === 'Escape') {
-                  // IME 合成态下绝不拦截 Esc
-                  if (
-                    props.event.isComposing ||
-                    (props.event as any).nativeEvent?.isComposing ||
-                    props.event.keyCode === 229 ||
-                    props.event.key === 'Process'
-                  ) {
-                    return false;
-                  }
-                  if (component) {
-                    component.destroy();
-                    component = null;
-                  }
-                  if (props.view) {
-                    exitSuggestion(props.view, aiCommandSlashPluginKey);
-                  }
-                  return true;
-                }
-                return (component?.ref as any)?.onKeyDown(props) ?? false;
-              },
-
-              onExit: () => {
-                const dom = propsRef?.editor?.view?.dom;
-                if (dom) {
-                  dom.removeAttribute('aria-expanded');
-                  dom.removeAttribute('aria-controls');
-                  dom.removeAttribute('aria-activedescendant');
-                }
-                component?.destroy();
-                component = null;
-                propsRef = null;
-                lastCachedBox = null;
-              },
-            };
-          },
-        }),
-      ];
-    },
-  });

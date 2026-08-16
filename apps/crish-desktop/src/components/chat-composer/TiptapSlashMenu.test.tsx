@@ -7,7 +7,7 @@ import {
   isValidClientRect,
   isCursorVisibleInField,
 } from './TiptapSlashMenu';
-import { measureCursorLineBox } from './SlashExtension';
+import { measureCursorLineBox } from './safeCursorAnchor';
 
 describe('LineBox Geometric Clearance & No-Occlusion Assertion (WO-13)', () => {
   it('should construct a LineBox DOMRect containing real physical line-height', () => {

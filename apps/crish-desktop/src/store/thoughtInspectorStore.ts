@@ -8,20 +8,10 @@ export interface ThoughtInspectorOpenParams {
   messageId?: string | null;
   turnIndex?: number | null;
   content?: string;
-  fullThought?: string;
-  fullText?: string;
   title?: string | null;
   durationSec?: number;
   sessionId?: string;
   modelDisplayName?: string;
-}
-
-export interface ThoughtModalData {
-  messageId: string;
-  sessionId?: string;
-  fullThought: string;
-  modelDisplayName?: string;
-  thinkingDurationSec?: number;
 }
 
 export interface ThoughtInspectorState {
@@ -35,18 +25,10 @@ export interface ThoughtInspectorState {
   modelDisplayName: string | null;
   searchQuery: string;
 
-  /** 兼容既有数据结构 */
-  data: ThoughtModalData | null;
-
   /** 标准 API */
   openThoughtInspector: (params: ThoughtInspectorOpenParams) => void;
   closeThoughtInspector: () => void;
   setSearchQuery: (query: string) => void;
-
-  /** 兼容别名 */
-  openInspector: (params: ThoughtInspectorOpenParams) => void;
-  open: (params: ThoughtInspectorOpenParams) => void;
-  close: () => void;
 }
 
 export const useThoughtInspectorStore = create<ThoughtInspectorState>(
@@ -60,11 +42,9 @@ export const useThoughtInspectorStore = create<ThoughtInspectorState>(
     sessionId: null,
     modelDisplayName: null,
     searchQuery: '',
-    data: null,
 
     openThoughtInspector: (params: ThoughtInspectorOpenParams) => {
-      const text =
-        params.content ?? params.fullThought ?? params.fullText ?? '';
+      const text = params.content ?? '';
       const messageId = params.messageId ?? '';
       const turnIndex = params.turnIndex ?? null;
       const title = params.title ?? null;
@@ -82,13 +62,6 @@ export const useThoughtInspectorStore = create<ThoughtInspectorState>(
         sessionId: sessionId ?? null,
         modelDisplayName: modelDisplayName ?? null,
         searchQuery: '',
-        data: {
-          messageId,
-          sessionId,
-          fullThought: text,
-          modelDisplayName,
-          thinkingDurationSec: durationSec,
-        },
       });
     },
 
@@ -103,21 +76,10 @@ export const useThoughtInspectorStore = create<ThoughtInspectorState>(
         sessionId: null,
         modelDisplayName: null,
         searchQuery: '',
-        data: null,
       });
     },
 
     setSearchQuery: (searchQuery: string) => set({ searchQuery }),
-
-    openInspector: (params) => {
-      useThoughtInspectorStore.getState().openThoughtInspector(params);
-    },
-    open: (params) => {
-      useThoughtInspectorStore.getState().openThoughtInspector(params);
-    },
-    close: () => {
-      useThoughtInspectorStore.getState().closeThoughtInspector();
-    },
   })
 );
 
@@ -132,8 +94,3 @@ export function closeThoughtInspector(): void {
 export function setSearchQuery(query: string): void {
   useThoughtInspectorStore.getState().setSearchQuery(query);
 }
-
-export const openThoughtModal = openThoughtInspector;
-export const closeThoughtModal = closeThoughtInspector;
-export const openInspector = openThoughtInspector;
-export const closeInspector = closeThoughtInspector;

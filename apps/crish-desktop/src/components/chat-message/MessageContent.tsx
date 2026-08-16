@@ -16,7 +16,7 @@ import { Priority } from '../../workers';
 import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
 import { MessageToolCallsSection } from '../chat-message-row/MessageToolCallsSection';
 import { StreamingTextBlock } from '../chat-message-row/StreamingTextBlock';
-import { TimelineThoughtSection } from './TimelineThoughtSection';
+import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
 import { useShallow } from '../../api/store-access/componentAccess';
 import {
   streamStoreKey,

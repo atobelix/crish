@@ -298,11 +298,3 @@ export function patchAgentTool(
   if (!sid) return;
   getSessionStoreState().patchAgentTool(sid, agentId, toolCallId, patch);
 }
-
-export function addTerminalLine(_line: string, _sessionId?: string): void {
-  // No-op: fake line buffer removed in DIM-07
-}
-
-export function addTerminalLines(_lines: string[], _sessionId?: string): void {
-  // No-op: fake line buffer removed in DIM-07
-}

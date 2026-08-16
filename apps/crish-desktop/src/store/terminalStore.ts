@@ -26,10 +26,7 @@ export interface TerminalStore {
   ptySessions: Record<string, PtySessionMeta>;
   registerPtySession: (sessionKey: string, meta: PtySessionMeta) => void;
   removePtySession: (sessionKey: string) => void;
-  /** 会话清理别名 */
-  removeTerminalSession: (sessionId: string) => void;
   pruneTerminalSessions: (validIds: Iterable<string>) => void;
-  setActiveTerminalSession: (id: string | null) => void;
 
   // ── diff buffers（跨会话工作产物）──
   activeDiffSource: FileDiff | null;
@@ -60,12 +57,6 @@ export const useTerminalStore = create<TerminalStore>()(
             delete state.ptySessions[sessionKey];
           }),
 
-        removeTerminalSession: (sessionId: string) =>
-          set((state) => {
-            if (!sessionId) return;
-            delete state.ptySessions[sessionId];
-          }),
-
         pruneTerminalSessions: (validIds: Iterable<string>) =>
           set((state) => {
             const valid = new Set(validIds);
@@ -75,10 +66,6 @@ export const useTerminalStore = create<TerminalStore>()(
               }
             }
           }),
-
-        setActiveTerminalSession: (_id: string | null) => {
-          // No-op: fake terminal line mirroring is completely removed
-        },
 
         // ── diff 缓冲区 ──
         setActiveDiffSource: (diff: FileDiff | null) =>

@@ -4,8 +4,6 @@ import {
   openThoughtInspector,
   closeThoughtInspector,
   setSearchQuery,
-  openThoughtModal,
-  closeThoughtModal,
 } from './thoughtInspectorStore';
 
 describe('thoughtInspectorStore (FIN-03)', () => {
@@ -20,7 +18,6 @@ describe('thoughtInspectorStore (FIN-03)', () => {
     expect(state.activeTurnIndex).toBeNull();
     expect(state.content).toBe('');
     expect(state.searchQuery).toBe('');
-    expect(state.data).toBeNull();
   });
 
   it('openThoughtInspector 规范化开启模态并设置上下文', () => {
@@ -39,8 +36,6 @@ describe('thoughtInspectorStore (FIN-03)', () => {
     expect(state.content).toBe('正在推导算法逻辑...');
     expect(state.title).toBe('算法推导演算');
     expect(state.durationSec).toBe(3.5);
-    expect(state.data?.fullThought).toBe('正在推导算法逻辑...');
-    expect(state.data?.thinkingDurationSec).toBe(3.5);
   });
 
   it('setSearchQuery 正确更新检索词', () => {
@@ -67,22 +62,5 @@ describe('thoughtInspectorStore (FIN-03)', () => {
     expect(state.activeMessageId).toBeNull();
     expect(state.content).toBe('');
     expect(state.searchQuery).toBe('');
-    expect(state.data).toBeNull();
-  });
-
-  it('兼容别名 openThoughtModal 与 closeThoughtModal 行为一致', () => {
-    openThoughtModal({
-      messageId: 'm-compat',
-      fullThought: '兼容旧版入参',
-      thinkingDurationSec: 2.1,
-    });
-
-    const state = useThoughtInspectorStore.getState();
-    expect(state.isOpen).toBe(true);
-    expect(state.activeMessageId).toBe('m-compat');
-    expect(state.content).toBe('兼容旧版入参');
-
-    closeThoughtModal();
-    expect(useThoughtInspectorStore.getState().isOpen).toBe(false);
   });
 });

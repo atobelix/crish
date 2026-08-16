@@ -23,12 +23,7 @@ import {
 } from './safeCursorAnchor';
 import { AI_SYSTEM_COMMANDS } from './AiCommandSlashExtension';
 
-export { measureCursorLineBox } from './safeCursorAnchor';
-export {
-  AI_SYSTEM_COMMANDS,
-  AiCommandSlashExtension,
-  aiCommandSlashPluginKey,
-} from './AiCommandSlashExtension';
+export { AI_SYSTEM_COMMANDS } from './AiCommandSlashExtension';
 
 export const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = AI_SYSTEM_COMMANDS;
 

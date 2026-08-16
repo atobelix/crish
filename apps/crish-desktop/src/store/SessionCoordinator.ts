@@ -34,7 +34,7 @@ export const SessionCoordinator = {
     clearMessageSnapshots(id);
 
     // 4. 清理 terminalStore 中的终端绑定与会话关联
-    useTerminalStore.getState().removeTerminalSession(id);
+    useTerminalStore.getState().removePtySession(id);
 
     return removed;
   },
