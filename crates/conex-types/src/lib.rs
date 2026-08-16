@@ -130,35 +130,6 @@ pub struct CompactionResult {
     pub cache_hit_rate_optimized: bool,
 }
 
-// ===== IPC Types (Round 2 使用) =====
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct IpcEnvelope {
-    pub id: String,
-    pub method: String,
-    pub payload: serde_json::Value,
-    pub timestamp: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct IpcResponse {
-    pub id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub result: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-// ===== Stream Types (Round 2 使用) =====
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct StreamChunk {
-    pub data: Vec<u8>,
-    pub is_final: bool,
-}
-
 // ===== Session Persistence Types (对齐 crish-desktop store/types.ts) =====
 
 /// 会话内一条用户或助手消息（对齐 SessionMessage in store/types.ts L344-370）
@@ -422,30 +393,7 @@ mod tests {
         assert_eq!(json["cacheHitRateOptimized"], true);
     }
 
-    #[test]
-    fn ipc_envelope_roundtrip() {
-        let envelope = IpcEnvelope {
-            id: "req-1".into(),
-            method: "search".into(),
-            payload: serde_json::json!({"query": "test"}),
-            timestamp: 1700000000,
-        };
-        let json = serde_json::to_string(&envelope).unwrap();
-        let back: IpcEnvelope = serde_json::from_str(&json).unwrap();
-        assert_eq!(envelope, back);
-    }
 
-    #[test]
-    fn ipc_response_skips_none_fields() {
-        let resp = IpcResponse {
-            id: "req-1".into(),
-            result: Some(serde_json::json!({"ok": true})),
-            error: None,
-        };
-        let json = serde_json::to_value(&resp).unwrap();
-        assert!(json.get("error").is_none());
-        assert_eq!(json["result"]["ok"], true);
-    }
 
     #[test]
     fn session_message_serializes_to_camel_case() {

@@ -48,7 +48,7 @@ impl AgentSessionLoop {
         // 收场原因与观测对齐 turn_complete 的 max-turns 路径（独立预算 reason
         // + runtime-error 观测事件 + error.occurred 钩子广播）
         if self.max_turns == 0 {
-            self.state.events.push(AgentEvent::RuntimeError {
+            self.state.emit_event(AgentEvent::RuntimeError {
                 session_id: self.session_id.clone(),
                 timestamp: crate::steering::now_iso_utc(),
                 error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
@@ -117,10 +117,7 @@ impl AgentSessionLoop {
             session_id: self.session_id.clone(),
             timestamp: crate::steering::now_iso_utc(),
         };
-        self.state.events.push(start_event.clone());
-        if let Some(sink) = &self.state.options.live_sink {
-            sink.push_live(start_event);
-        }
+        self.state.emit_event(start_event);
         // I8-E1 第一批：session.start 钩子广播（run 启动处；载荷最小子集
         // sessionId；observe 观察者失败不阻塞 run 启动——dispatch 内部
         // 已按 failStrategy 处置 + 错误事件化）
@@ -230,7 +227,7 @@ impl AgentSessionLoop {
             "run 循环错误（catch 兜底）"
         );
         // 观测事件（runtime-error：retryable 只表「可重试」，与收场正交）
-        self.state.events.push(AgentEvent::RuntimeError {
+        self.state.emit_event(AgentEvent::RuntimeError {
             session_id: self.session_id.clone(),
             timestamp: crate::steering::now_iso_utc(),
             error: err.message().to_string(),
@@ -316,10 +313,7 @@ impl AgentSessionLoop {
             reason,
             error: error.clone(),
         };
-        self.state.events.push(end_event.clone());
-        if let Some(sink) = &self.state.options.live_sink {
-            sink.push_live(end_event);
-        }
+        self.state.emit_event(end_event);
         // I8-E1 第一批：session.end 钩子广播（run 收场终态；observe 默认，
         // 失败吞掉 + 计数，收场流程继续——03 §2.4 表）
         if let Some(hooks) = &self.state.options.hooks {

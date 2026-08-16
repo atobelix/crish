@@ -110,15 +110,21 @@ impl LocalDb {
             message: format!("failed to open database: {e}"),
             kind: DbFailureKind::Open,
         })?;
+        let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
 
-        // 启用 WAL 模式优化
-        let _ = conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
+        // 启用 WAL 模式优化与 busy_timeout
+        let _ = conn.execute_batch(
+            "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;",
+        );
 
         let write_conn = Connection::open(path_ref).map_err(|e| DbFailure {
             message: format!("failed to open writer database: {e}"),
             kind: DbFailureKind::Open,
         })?;
-        let _ = write_conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;");
+        let _ = write_conn.busy_timeout(std::time::Duration::from_millis(5000));
+        let _ = write_conn.execute_batch(
+            "PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL; PRAGMA busy_timeout = 5000;",
+        );
         let writer = DbWriteHandle::spawn(write_conn, GroupCommitConfig::default());
 
         let reader_pool = match ReaderPool::open(path_ref, ReaderPoolConfig::default()) {
@@ -149,11 +155,15 @@ impl LocalDb {
             message: format!("failed to open in-memory database: {e}"),
             kind: DbFailureKind::Open,
         })?;
+        let _ = conn.busy_timeout(std::time::Duration::from_millis(5000));
+        let _ = conn.execute_batch("PRAGMA busy_timeout = 5000;");
 
         let writer_conn = Connection::open_in_memory().map_err(|e| DbFailure {
             message: format!("failed to open in-memory writer: {e}"),
             kind: DbFailureKind::Open,
         })?;
+        let _ = writer_conn.busy_timeout(std::time::Duration::from_millis(5000));
+        let _ = writer_conn.execute_batch("PRAGMA busy_timeout = 5000;");
         let writer = DbWriteHandle::spawn(writer_conn, GroupCommitConfig::default());
 
         let reader_pool = Arc::new(ReaderPool::from_connections(
@@ -204,21 +214,47 @@ impl LocalDb {
         self.writer.write(f).await
     }
 
-    /// 只读查询
+    /// 只读查询（优先调度至 ReaderPool 8 槽位无锁并发读取，无池时平滑回退主连接）
     pub fn read<F, R>(&self, f: F) -> Result<R, DbFailure>
     where
         F: FnOnce(&Connection) -> Result<R, DbFailure>,
     {
-        self.reader_pool.read(f)
+        if self.reader_pool.pool_size() > 0 {
+            if let Ok(reader) = self.reader_pool.acquire() {
+                return f(&reader);
+            }
+        }
+
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+        f(&conn)
     }
 
-    /// 异步只读查询
+    /// 异步只读查询（优先调度至 ReaderPool 8 槽位无锁并发读取，无池时平滑回退主连接）
     pub async fn read_async<F, R>(&self, f: F) -> Result<R, DbFailure>
     where
         F: FnOnce(&Connection) -> Result<R, DbFailure> + Send + 'static,
         R: Send + 'static,
     {
-        self.reader_pool.read_async(f).await
+        if self.reader_pool.pool_size() > 0 {
+            self.reader_pool.read_async(f).await
+        } else {
+            let conn = Arc::clone(&self.conn);
+            tokio::task::spawn_blocking(move || {
+                let conn = conn.lock().map_err(|e| DbFailure {
+                    message: format!("lock poisoned: {e}"),
+                    kind: DbFailureKind::Lock,
+                })?;
+                f(&conn)
+            })
+            .await
+            .map_err(|e| DbFailure {
+                message: format!("read task join failed: {e}"),
+                kind: DbFailureKind::Other("task_join_failed".to_string()),
+            })?
+        }
     }
 
     /// Get the current failure latch (None if healthy).

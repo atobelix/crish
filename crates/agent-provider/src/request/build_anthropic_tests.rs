@@ -157,7 +157,7 @@ fn full_mock_request_body_shape() {
         json!({ "path": "/tmp/a.txt" })
     );
 
-    // tool_result：Anthropic 官方 tool_result 属 user 角色
+    // tool_result：Anthropic 官方 tool_result 属 user 角色，且末尾块注入 cache_control
     assert_eq!(messages[2]["role"], "user");
     let tool_result_content = messages[2]["content"]
         .as_array()
@@ -166,6 +166,10 @@ fn full_mock_request_body_shape() {
     assert_eq!(tool_result_content[0]["type"], "tool_result");
     assert_eq!(tool_result_content[0]["tool_use_id"], "call_1");
     assert_eq!(tool_result_content[0]["content"], "文件内容：hello");
+    assert_eq!(
+        tool_result_content[0]["cache_control"],
+        json!({ "type": "ephemeral" })
+    );
 }
 
 // ── 验收 3：思考关闭时请求体不含 `thinking` 键 ──

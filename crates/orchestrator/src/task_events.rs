@@ -317,22 +317,42 @@ pub fn build_task_audit_event(session_id: &str, record: &TaskAuditRecord) -> Age
 ///
 /// - task-started 记忆 task_id → command 摘要，供终态记录回填命令摘要
 ///   （completed/failed/killed 事件体不含 command 字段）；
+/// 默认审计记录上限（DEC-04 裁决：有界容量防泄漏）
+pub const DEFAULT_MAX_AUDIT_RECORDS: usize = 1000;
+/// 默认临时命令摘要映射上限
+pub const DEFAULT_MAX_COMMANDS: usize = 1000;
+
+/// 任务安全审计记录聚合器（T-AB-18）
+///
+/// 承载会话内全部后台任务的审计流水（started / completed / failed /
+/// killed / archived），供 [Self::emit_audit_events] 批量落库。
+///
+/// - 有界容量与 FIFO 淘汰（DEC-04 裁决：默认 1000 条上限，超限淘汰最早记录）；
+/// - 终态即时释放 `commands` 临时映射（防长期运行内存泄漏）；
 /// - 同 (task_id, result) 原位替换（重复终态只留一条，防无限增长）；
 /// - [Self::record_archive] 为归档审计入口（无 task-archived 事件类型，
 ///   由壳层 T-AB-16 在 30 分钟归档时接线调用）。
 pub struct TaskAuditAccumulator {
-    /// task_id → command 摘要（task-started 记忆）
+    /// task_id → command 摘要（task-started 记忆，有界容量）
     commands: BTreeMap<String, String>,
-    /// 审计记录（按发生顺序；同 task+result 原位替换）
+    /// 审计记录（按发生顺序；同 task+result 原位替换，有界 FIFO 队列）
     records: Vec<TaskAuditRecord>,
+    /// 审计记录最大容量
+    max_records: usize,
 }
 
 impl TaskAuditAccumulator {
-    /// 新建聚合器
+    /// 新建聚合器（默认 1000 条上限）
     pub fn new() -> Self {
+        Self::with_capacity(DEFAULT_MAX_AUDIT_RECORDS)
+    }
+
+    /// 指定容量上限新建聚合器
+    pub fn with_capacity(max_records: usize) -> Self {
         Self {
             commands: BTreeMap::new(),
             records: Vec::new(),
+            max_records,
         }
     }
 
@@ -340,22 +360,34 @@ impl TaskAuditAccumulator {
     ///
     /// 操作者由接线方传入（壳层知道任务由 AI 工具调用还是用户命令
     /// 发起）；返回 `true` 表示产生了审计记录。
+    /// 进入终态（Completed / Failed / Killed）时即时清理 `commands` 映射。
     pub fn push(&mut self, event: &AgentEvent, operator: TaskAuditOperator) -> bool {
         match event {
             AgentEvent::TaskStarted {
                 task_id, command, ..
             } => {
+                if self.commands.len() >= DEFAULT_MAX_COMMANDS {
+                    if let Some(first_key) = self.commands.keys().next().cloned() {
+                        self.commands.remove(&first_key);
+                    }
+                }
                 self.commands.insert(task_id.clone(), command.clone());
                 self.record(task_id.clone(), operator, TaskAuditResult::Started)
             }
             AgentEvent::TaskCompleted { task_id, .. } => {
-                self.record(task_id.clone(), operator, TaskAuditResult::Completed)
+                let ok = self.record(task_id.clone(), operator, TaskAuditResult::Completed);
+                self.commands.remove(task_id);
+                ok
             }
             AgentEvent::TaskFailed { task_id, .. } => {
-                self.record(task_id.clone(), operator, TaskAuditResult::Failed)
+                let ok = self.record(task_id.clone(), operator, TaskAuditResult::Failed);
+                self.commands.remove(task_id);
+                ok
             }
             AgentEvent::TaskKilled { task_id, .. } => {
-                self.record(task_id.clone(), operator, TaskAuditResult::Killed)
+                let ok = self.record(task_id.clone(), operator, TaskAuditResult::Killed);
+                self.commands.remove(task_id);
+                ok
             }
             _ => false,
         }
@@ -371,6 +403,7 @@ impl TaskAuditAccumulator {
         operator: TaskAuditOperator,
         at_ms: u64,
     ) -> bool {
+        self.commands.remove(task_id);
         self.record_with(
             task_id.to_string(),
             command.to_string(),
@@ -392,7 +425,7 @@ impl TaskAuditAccumulator {
         self.record_with(task_id, command, operator, at_ms, result)
     }
 
-    /// 聚合记录落位（同 task+result 原位替换）
+    /// 聚合记录落位（同 task+result 原位替换，超限 FIFO 淘汰）
     fn record_with(
         &mut self,
         task_id: String,
@@ -415,6 +448,9 @@ impl TaskAuditAccumulator {
         {
             *existing = record;
             return true;
+        }
+        if self.records.len() >= self.max_records {
+            self.records.remove(0);
         }
         self.records.push(record);
         true
@@ -870,5 +906,35 @@ mod tests {
         let sub_tasks = filter_tasks_by_owner(events.iter(), "run-sub-1");
         assert_eq!(sub_tasks.len(), 1, "子 agent 来源一个任务");
         assert_eq!(task_owner_run_id(sub_tasks[0]), Some("run-sub-1"));
+    }
+
+    #[test]
+    fn audit_capacity_fifo_eviction() {
+        let mut acc = TaskAuditAccumulator::with_capacity(3);
+        let ai = TaskAuditOperator::AiTool { tool_call_id: None };
+        acc.push(&started("t-1", "run-main"), ai.clone());
+        acc.push(&started("t-2", "run-main"), ai.clone());
+        acc.push(&started("t-3", "run-main"), ai.clone());
+        assert_eq!(acc.count(), 3);
+        assert_eq!(acc.records()[0].task_id, "t-1");
+
+        // 插入第 4 条，t-1 被 FIFO 淘汰
+        acc.push(&started("t-4", "run-main"), ai.clone());
+        assert_eq!(acc.count(), 3);
+        assert_eq!(acc.records()[0].task_id, "t-2");
+        assert_eq!(acc.records()[1].task_id, "t-3");
+        assert_eq!(acc.records()[2].task_id, "t-4");
+    }
+
+    #[test]
+    fn audit_terminal_cleans_commands_map() {
+        let mut acc = TaskAuditAccumulator::new();
+        let ai = TaskAuditOperator::AiTool { tool_call_id: None };
+        acc.push(&started("t-1", "run-main"), ai.clone());
+        assert_eq!(acc.commands.get("t-1").map(String::as_str), Some("cargo build"));
+
+        // completed 后 commands 映射即时释放
+        acc.push(&completed("t-1", 0), ai.clone());
+        assert_eq!(acc.commands.get("t-1"), None);
     }
 }

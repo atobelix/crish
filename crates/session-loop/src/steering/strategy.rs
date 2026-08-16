@@ -269,12 +269,25 @@ fn exit_code_from_text(text: &str) -> Option<i64> {
     None
 }
 
-/// Tool-Promise 意图自愈侦测器（RUL-02：三层反向过滤 + 行动意图匹配）
+/// Tool-Promise 意图自愈侦测器（RUL-02：多层反向过滤 + 否定词过滤 + 中英双语行动意图匹配）
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ToolPromiseDetector;
 
 impl ToolPromiseDetector {
-    /// 核心判定函数：返回 Some(action_snippet) 表示检测到行动承诺且通过三层反向过滤
+    /// 截取 Unicode 字符安全的尾部切片（杜绝 UTF-8 字节切断 Panic）
+    pub fn safe_tail_slice(text: &str, max_chars: usize) -> &str {
+        let char_count = text.chars().count();
+        if char_count <= max_chars {
+            return text;
+        }
+        let skip_chars = char_count - max_chars;
+        text.char_indices()
+            .nth(skip_chars)
+            .map(|(idx, _)| &text[idx..])
+            .unwrap_or(text)
+    }
+
+    /// 核心判定函数：返回 Some(action_snippet) 表示检测到行动承诺且通过过滤
     pub fn detect_action_promise(text: &str) -> Option<String> {
         let trimmed = text.trim();
         if trimmed.is_empty() {
@@ -321,14 +334,30 @@ impl ToolPromiseDetector {
             return None;
         }
 
-        // ── 正向行动意图匹配（重点关注文本尾部 300 字符） ──
-        let tail = if trimmed.len() > 300 {
-            &trimmed[trimmed.len() - 300..]
-        } else {
-            trimmed
-        };
+        // ── 第四层过滤：排除否定词与明确不执行/禁止表达（DEC-01 裁决）──
+        let negative_phrases = [
+            "我不会",
+            "禁止",
+            "暂不执行",
+            "没有调用",
+            "并未调用",
+            "不会调用",
+            "不会执行",
+            "不执行",
+            "i will not",
+            "will not run",
+            "do not execute",
+            "cannot execute",
+        ];
+        if negative_phrases.iter().any(|neg| trimmed.contains(neg)) {
+            return None;
+        }
+
+        // ── 正向行动意图匹配（重点关注文本尾部 300 Unicode 字符） ──
+        let tail = Self::safe_tail_slice(trimmed, 300);
 
         let action_patterns = [
+            // 中文模式
             "尝试单独调用",
             "正在调用",
             "现在开始执行",
@@ -343,13 +372,42 @@ impl ToolPromiseDetector {
             "接下来执行",
             "我来调用",
             "开始执行",
+            "我先执行",
+            "让我来运行",
+            "立即运行",
+            // 英文模式（小写比对）
+            "i will now run",
+            "i will execute",
+            "i will call",
+            "let me run",
+            "let me execute",
+            "let me call",
+            "now executing",
+            "starting to run",
+            "proceeding with",
+            "running the command",
+            "calling tool",
+            "executing tool",
+            "i'm going to run",
+            "i am going to execute",
         ];
 
+        let lower_tail = tail.to_lowercase();
         for pattern in &action_patterns {
-            if let Some(pos) = tail.rfind(pattern) {
-                let snippet = &tail[pos..];
+            if let Some(pos) = lower_tail.rfind(pattern) {
+                // 保证切片在合法字符边界
+                let char_boundary_pos = tail
+                    .char_indices()
+                    .map(|(idx, _)| idx)
+                    .filter(|&idx| idx <= pos)
+                    .last()
+                    .unwrap_or(pos);
+                let snippet = &tail[char_boundary_pos..];
                 let end_pos = snippet.find(['。', '！', '\n', '.', '!']).unwrap_or(snippet.len());
-                return Some(snippet[..end_pos].to_string());
+                let result = snippet[..end_pos].trim();
+                if !result.is_empty() {
+                    return Some(result.to_string());
+                }
             }
         }
 
@@ -780,6 +838,53 @@ mod tests {
                 .and_then(|c| c.as_u64()),
             Some(3),
             "元数据 steeringCount = 注入后计数（当前计数 + 1）"
+        );
+    }
+
+    #[test]
+    fn tool_promise_detector_safe_tail_slice_never_panics_on_chinese() {
+        // 构造长度超过 300 字符的大段中文，验证无论长度如何均安全截取不 panic
+        let long_chinese = "这是一段很长的中文文本用于测试字符安全切片。".repeat(30);
+        assert!(long_chinese.len() > 300);
+        let tail = ToolPromiseDetector::safe_tail_slice(&long_chinese, 300);
+        assert!(tail.chars().count() <= 300);
+        assert!(!tail.is_empty());
+
+        let text_with_promise = format!("{long_chinese}接下来使用 shell_command 运行测试。");
+        let detected = ToolPromiseDetector::detect_action_promise(&text_with_promise);
+        assert_eq!(detected, Some("接下来使用 shell_command 运行测试".to_string()));
+    }
+
+    #[test]
+    fn tool_promise_detector_negative_phrases_filtered() {
+        let neg1 = "我不会执行任何未经确认的命令，请用户明确指示。";
+        assert_eq!(ToolPromiseDetector::detect_action_promise(neg1), None);
+
+        let neg2 = "系统禁止调用外部工具。";
+        assert_eq!(ToolPromiseDetector::detect_action_promise(neg2), None);
+
+        let neg3 = "暂不执行该操作。";
+        assert_eq!(ToolPromiseDetector::detect_action_promise(neg3), None);
+
+        let neg4 = "当前轮次没有调用工具。";
+        assert_eq!(ToolPromiseDetector::detect_action_promise(neg4), None);
+
+        let neg5 = "I will not run this command without permission.";
+        assert_eq!(ToolPromiseDetector::detect_action_promise(neg5), None);
+    }
+
+    #[test]
+    fn tool_promise_detector_english_patterns() {
+        let p1 = "I will now run the build command to test changes.";
+        assert_eq!(
+            ToolPromiseDetector::detect_action_promise(p1),
+            Some("I will now run the build command to test changes".to_string())
+        );
+
+        let p2 = "Let me execute the test suite now.";
+        assert_eq!(
+            ToolPromiseDetector::detect_action_promise(p2),
+            Some("Let me execute the test suite now".to_string())
         );
     }
 }

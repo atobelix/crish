@@ -79,26 +79,13 @@ pub(crate) async fn handle(
         )));
     }
 
-    // 2a. Live Track 实时发射 ToolStart（消除长任务中间停滞）
-    if let Some(sink) = &state.options.live_sink {
-        for call in &calls {
-            sink.push_live(AgentEvent::ToolStart {
-                session_id: state.machine.context().session_id.clone(),
-                batch_id: String::new(),
-                call: call.clone(),
-                timestamp: crate::steering::now_iso_utc(),
-                turn_index: Some(state.machine.context().turn_index),
-            });
-        }
-    }
-
-    // 2b. 批量执行（B3.5：并行分区 / 超时 / 审批 / 失败策略 / abort 提前退出）
+    // 2a. 批量执行（B3.5：并行分区 / 超时 / 审批 / 失败策略 / abort 提前退出）
     let abort: Option<&AbortSignal> = Some(&state.abort_signal);
     let outcome = executor
         .execute_batch(&calls, ctx, approval, options, abort)
         .await;
 
-    // 2c. 工具事件 → AgentEvent（tool-batch-start/end、tool-start/end、
+    // 2b. 工具事件 → AgentEvent（tool-batch-start/end、tool-start/end、
     //     approval-requested、approval-resolved（超时 Expired），01 §五.6
     //     契约 + G-9 审批超时权威语义落库）
     emit_tool_events(state, &outcome.events);
@@ -130,7 +117,7 @@ pub(crate) async fn handle(
             error = %fatal,
             "工具致命错误"
         );
-        state.events.push(AgentEvent::RuntimeError {
+        state.emit_event(AgentEvent::RuntimeError {
             session_id: state.machine.context().session_id.clone(),
             timestamp: crate::steering::now_iso_utc(),
             error: format!("工具致命错误：{fatal}"),
@@ -436,10 +423,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
             }
         };
 
-        state.events.push(agent_event.clone());
-        if let Some(sink) = &state.options.live_sink {
-            sink.push_live(agent_event);
-        }
+        state.emit_event(agent_event);
     }
 }
 

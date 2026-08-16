@@ -23,16 +23,23 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-/// 中止令牌（std 同步原语：共享 `Arc<AtomicBool>`）
+/// 中止令牌（共享 `Arc<AtomicBool>` + `Arc<tokio::sync::Notify>`）
 ///
-/// tokio-util 不在依赖树，按任务书选型用 std 同步原语实现；
-/// 语义对齐 TS AbortSignal 的 is_aborted。可 Clone 传递，线程安全。
-/// 本层保持轻量、无 tokio 运行时绑定；会话级中止信号与批执行器
-/// 的中止竞速接线（T09.9 Q21）由上层（session-loop）负责，T10
-/// 审批等待期将复用本令牌取消。
-#[derive(Debug, Clone, Default)]
+/// 支持同步状态查询（`is_aborted`）与零轮询异步等待通知唤醒（`wait_aborted`）。
+/// 可 Clone 传递，线程安全。
+#[derive(Debug, Clone)]
 pub struct AbortToken {
     aborted: Arc<AtomicBool>,
+    notify: Arc<tokio::sync::Notify>,
+}
+
+impl Default for AbortToken {
+    fn default() -> Self {
+        Self {
+            aborted: Arc::new(AtomicBool::new(false)),
+            notify: Arc::new(tokio::sync::Notify::new()),
+        }
+    }
 }
 
 impl AbortToken {
@@ -41,14 +48,27 @@ impl AbortToken {
         Self::default()
     }
 
-    /// 触发中止（幂等）
+    /// 触发中止（幂等且广播通知唤醒）
     pub fn abort(&self) {
         self.aborted.store(true, Ordering::SeqCst);
+        self.notify.notify_waiters();
     }
 
     /// 是否已触发中止
     pub fn is_aborted(&self) -> bool {
         self.aborted.load(Ordering::SeqCst)
+    }
+
+    /// 异步等待 abort 触发（已触发立即返回，零轮询）
+    pub async fn wait_aborted(&self) {
+        if self.is_aborted() {
+            return;
+        }
+        let notified = self.notify.notified();
+        if self.is_aborted() {
+            return;
+        }
+        notified.await;
     }
 }
 

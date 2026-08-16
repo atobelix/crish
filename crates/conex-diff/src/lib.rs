@@ -26,11 +26,11 @@ pub mod diff_engine {
             let mut removed_lines: usize = 0;
 
             // Collect all changes with positions
-            let mut changes: Vec<(ChangeTag, usize, usize, String)> = Vec::new();
+            let mut changes: Vec<(ChangeTag, Option<usize>, Option<usize>, String)> = Vec::new();
             for change in diff.iter_all_changes() {
                 let tag = change.tag();
-                let old_idx = change.old_index().unwrap_or(0);
-                let new_idx = change.new_index().unwrap_or(0);
+                let old_idx = change.old_index();
+                let new_idx = change.new_index();
                 let content = change.value().trim_end_matches('\n').to_string();
 
                 match tag {
@@ -64,7 +64,7 @@ pub mod diff_engine {
 
     /// Build hunk groups from a flat list of changes, including context lines around modifications.
     fn build_hunks(
-        changes: &[(ChangeTag, usize, usize, String)],
+        changes: &[(ChangeTag, Option<usize>, Option<usize>, String)],
         context: usize,
     ) -> Vec<DiffHunk> {
         if changes.is_empty() {
@@ -111,11 +111,28 @@ pub mod diff_engine {
             let mut old_count: usize = 0;
             let mut new_count: usize = 0;
 
-            for (tag, old_idx, new_idx, content) in changes.iter().take(hunk_end).skip(hunk_start) {
+            // 预先定位 hunk_start 之前最近的历史行号
+            let mut prev_old = 0;
+            let mut prev_new = 0;
+            for i in 0..hunk_start {
+                if let Some(o) = changes[i].1 {
+                    prev_old = o + 1;
+                }
+                if let Some(n) = changes[i].2 {
+                    prev_new = n + 1;
+                }
+            }
 
+            for (tag, old_idx, new_idx, content) in changes.iter().take(hunk_end).skip(hunk_start) {
                 if old_start.is_none() {
-                    old_start = Some(*old_idx + 1); // 1-based
-                    new_start = Some(*new_idx + 1);
+                    if let Some(idx) = old_idx {
+                        old_start = Some(idx + 1); // 1-based
+                    }
+                }
+                if new_start.is_none() {
+                    if let Some(idx) = new_idx {
+                        new_start = Some(idx + 1);
+                    }
                 }
 
                 let kind = match tag {
@@ -140,11 +157,16 @@ pub mod diff_engine {
                 });
             }
 
+            let final_old_start =
+                old_start.unwrap_or(if old_count == 0 { prev_old } else { prev_old + 1 }.max(1));
+            let final_new_start =
+                new_start.unwrap_or(if new_count == 0 { prev_new } else { prev_new + 1 }.max(1));
+
             if !lines.is_empty() {
                 hunks.push(DiffHunk {
-                    old_start: old_start.unwrap_or(1),
+                    old_start: final_old_start,
                     old_lines: old_count,
-                    new_start: new_start.unwrap_or(1),
+                    new_start: final_new_start,
                     new_lines: new_count,
                     lines,
                 });

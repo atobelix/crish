@@ -8,6 +8,89 @@
 //! 5. 确立系统核心目录物理红线（`is_system_critical_path`）。
 
 use std::path::{Component, Path, PathBuf, Prefix};
+use std::sync::OnceLock;
+
+/// 根锚点类型
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RootAnchor {
+    None,
+    PosixRoot,
+    Disk(char),
+    UNC { server: String, share: String },
+}
+
+static SYSTEM_CRITICAL_PREFIXES: OnceLock<Vec<String>> = OnceLock::new();
+
+fn get_system_critical_prefixes() -> &'static [String] {
+    SYSTEM_CRITICAL_PREFIXES.get_or_init(|| {
+        let mut prefixes = Vec::new();
+
+        #[cfg(windows)]
+        {
+            // 1. 动态感知 Windows 系统目录环境变量
+            let env_vars = [
+                "SystemRoot",
+                "windir",
+                "ProgramFiles",
+                "ProgramFiles(x86)",
+            ];
+            for var in &env_vars {
+                if let Ok(val) = std::env::var(var) {
+                    let norm = ConexPathNormalizer::normalize(Path::new(&val));
+                    let s = norm.to_string_lossy().to_ascii_uppercase();
+                    if !s.is_empty() && !prefixes.contains(&s) {
+                        prefixes.push(s);
+                    }
+                }
+            }
+
+            // 2. 动态感知用户凭据敏感子目录 (%USERPROFILE%/.ssh 等)
+            if let Ok(user_profile) = std::env::var("USERPROFILE") {
+                let norm = ConexPathNormalizer::normalize(Path::new(&user_profile));
+                let user_base = norm.to_string_lossy().to_ascii_uppercase();
+                let sensitive_subdirs = [
+                    ".SSH",
+                    ".GNUPG",
+                    ".AWS",
+                    ".AZURE",
+                    ".KUBE",
+                    ".GITCONFIG",
+                ];
+                for sub in &sensitive_subdirs {
+                    let full = format!("{user_base}/{sub}");
+                    if !prefixes.contains(&full) {
+                        prefixes.push(full);
+                    }
+                }
+            }
+        }
+
+        #[cfg(not(windows))]
+        {
+            let posix_critical = [
+                "/BIN", "/SBIN", "/USR/BIN", "/USR/SBIN", "/ETC", "/BOOT", "/DEV", "/PROC",
+                "/SYS", "/LIB", "/LIB64", "/VAR/RUN",
+            ];
+            for p in &posix_critical {
+                prefixes.push(p.to_string());
+            }
+
+            if let Ok(home) = std::env::var("HOME") {
+                let norm = ConexPathNormalizer::normalize(Path::new(&home));
+                let home_base = norm.to_string_lossy().to_ascii_uppercase();
+                let sensitive_subdirs = [".SSH", ".GNUPG", ".AWS", ".KUBE", ".GITCONFIG"];
+                for sub in &sensitive_subdirs {
+                    let full = format!("{home_base}/{sub}");
+                    if !prefixes.contains(&full) {
+                        prefixes.push(full);
+                    }
+                }
+            }
+        }
+
+        prefixes
+    })
+}
 
 /// Conex 统一路径规范化工具
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,48 +104,51 @@ impl ConexPathNormalizer {
 
         let p = Path::new(&stripped);
         let mut normalized_components = Vec::new();
-        let mut has_disk_prefix = false;
+        let mut anchor = RootAnchor::None;
 
         for component in p.components() {
             match component {
-                Component::Prefix(prefix_comp) => {
-                    match prefix_comp.kind() {
-                        Prefix::Disk(letter) | Prefix::VerbatimDisk(letter) => {
-                            // RUL-04 权威裁决：强制统一大写盘符 (C:)
-                            let upper_drive = (letter as char).to_ascii_uppercase();
-                            normalized_components.push(format!("{upper_drive}:"));
-                            has_disk_prefix = true;
-                        }
-                        Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => {
-                            let s = server.to_string_lossy().replace('\\', "/");
-                            let sh = share.to_string_lossy().replace('\\', "/");
-                            normalized_components.push(format!("//{s}/{sh}"));
-                        }
-                        _ => {
-                            normalized_components.push(
-                                prefix_comp
-                                    .as_os_str()
-                                    .to_string_lossy()
-                                    .replace('\\', "/"),
-                            );
-                        }
+                Component::Prefix(prefix_comp) => match prefix_comp.kind() {
+                    Prefix::Disk(letter) | Prefix::VerbatimDisk(letter) => {
+                        // RUL-04 权威裁决：强制统一大写盘符 (C:)
+                        let upper_drive = (letter as char).to_ascii_uppercase();
+                        normalized_components.push(format!("{upper_drive}:"));
+                        anchor = RootAnchor::Disk(upper_drive);
                     }
-                }
+                    Prefix::UNC(server, share) | Prefix::VerbatimUNC(server, share) => {
+                        let s = server.to_string_lossy().replace('\\', "/");
+                        let sh = share.to_string_lossy().replace('\\', "/");
+                        normalized_components.push(format!("//{s}/{sh}"));
+                        anchor = RootAnchor::UNC {
+                            server: s,
+                            share: sh,
+                        };
+                    }
+                    _ => {
+                        normalized_components.push(
+                            prefix_comp
+                                .as_os_str()
+                                .to_string_lossy()
+                                .replace('\\', "/"),
+                        );
+                    }
+                },
                 Component::RootDir => {
-                    if !has_disk_prefix && normalized_components.is_empty() {
+                    if anchor == RootAnchor::None && normalized_components.is_empty() {
                         normalized_components.push("".to_string());
+                        anchor = RootAnchor::PosixRoot;
                     }
                 }
                 Component::CurDir => {}
                 Component::ParentDir => {
-                    // 安全词法弹出
+                    // 安全词法弹出：若存在根锚点，栈底第一个元素（根前缀）绝对不可弹出！
                     if !normalized_components.is_empty()
                         && normalized_components.last().map(|s| s.as_str()) != Some("..")
                     {
-                        if !has_disk_prefix || normalized_components.len() > 1 {
+                        if anchor == RootAnchor::None || normalized_components.len() > 1 {
                             normalized_components.pop();
                         }
-                    } else {
+                    } else if anchor == RootAnchor::None {
                         normalized_components.push("..".to_string());
                     }
                 }
@@ -89,6 +175,10 @@ impl ConexPathNormalizer {
                 }
                 result_str.push_str(comp);
             }
+        }
+
+        if result_str.is_empty() && anchor == RootAnchor::PosixRoot {
+            return PathBuf::from("/");
         }
 
         PathBuf::from(result_str)
@@ -149,20 +239,38 @@ impl ConexPathNormalizer {
             if (upper.len() <= 3 && upper.ends_with(":/"))
                 || (upper.len() == 2 && upper.ends_with(':'))
             {
-                return true; // 拦截 "C:/" 或 "C:" 整个盘符根
+                return true; // 拦截 "C:/" 或 "C:" 或 "D:/" 等整个盘符根
             }
 
-            let critical_prefixes = [
-                "C:/WINDOWS",
-                "C:/PROGRAM FILES",
-                "C:/PROGRAM FILES (X86)",
-                "C:/PROGRAMDATA/MICROSOFT",
-                "C:/SYSTEM VOLUME INFORMATION",
-                "C:/RECOVERY",
-                "C:/BOOT",
+            // 任意盘符通用保留目录前缀 (A-Z)
+            let drive_relative_patterns = [
+                "WINDOWS",
+                "WINNT",
+                "PROGRAM FILES",
+                "PROGRAM FILES (X86)",
+                "PROGRAMDATA/MICROSOFT",
+                "SYSTEM VOLUME INFORMATION",
+                "RECOVERY",
+                "BOOT",
+                "BOOTMGR",
+                "$RECYCLE.BIN",
+                "PAGEFILE.SYS",
+                "HIBERFIL.SYS",
+                "DUMPSTACK.LOG",
             ];
 
-            for prefix in &critical_prefixes {
+            // 检查是否形如 X:/PATTERN 或 X:/PATTERN/...
+            if upper.len() >= 3 && &upper[1..3] == ":/" {
+                let after_drive = &upper[3..];
+                for pat in &drive_relative_patterns {
+                    if after_drive == *pat || after_drive.starts_with(&format!("{pat}/")) {
+                        return true;
+                    }
+                }
+            }
+
+            // 动态感知环境变量前缀与用户敏感凭据
+            for prefix in get_system_critical_prefixes() {
                 if upper == *prefix || upper.starts_with(&format!("{prefix}/")) {
                     return true;
                 }
@@ -194,12 +302,7 @@ impl ConexPathNormalizer {
                 return true;
             }
 
-            let critical_prefixes = [
-                "/BIN", "/SBIN", "/USR/BIN", "/USR/SBIN", "/ETC", "/BOOT", "/DEV", "/PROC",
-                "/SYS", "/LIB", "/LIB64", "/VAR/RUN",
-            ];
-
-            for prefix in &critical_prefixes {
+            for prefix in get_system_critical_prefixes() {
                 if upper == *prefix || upper.starts_with(&format!("{prefix}/")) {
                     return true;
                 }
@@ -223,6 +326,21 @@ impl ConexPathNormalizer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_normalize_posix_root() {
+        let p_root = Path::new("/");
+        assert_eq!(ConexPathNormalizer::normalize(p_root), PathBuf::from("/"));
+
+        let p_root_dotdot = Path::new("/..");
+        assert_eq!(
+            ConexPathNormalizer::normalize(p_root_dotdot),
+            PathBuf::from("/")
+        );
+
+        let p_sub = Path::new("/foo/bar/..");
+        assert_eq!(ConexPathNormalizer::normalize(p_sub), PathBuf::from("/foo"));
+    }
 
     #[test]
     fn test_normalize_uppercase_drive_letter() {
@@ -264,6 +382,27 @@ mod tests {
     }
 
     #[test]
+    fn test_unc_root_monotonicity_protection() {
+        let unc_root = Path::new(r"\\server\share\..");
+        assert_eq!(
+            ConexPathNormalizer::normalize(unc_root),
+            PathBuf::from("//server/share")
+        );
+
+        let unc_sub = Path::new(r"//server/share/dir/..");
+        assert_eq!(
+            ConexPathNormalizer::normalize(unc_sub),
+            PathBuf::from("//server/share")
+        );
+
+        let unc_deep = Path::new(r"//server/share/a/b/../../c");
+        assert_eq!(
+            ConexPathNormalizer::normalize(unc_deep),
+            PathBuf::from("//server/share/c")
+        );
+    }
+
+    #[test]
     fn test_is_subpath() {
         let root = Path::new("C:/Software/conex");
         let sub = Path::new("c:/software/conex/src/lib.rs");
@@ -285,10 +424,12 @@ mod tests {
         {
             assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:")));
             assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:/")));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("D:")));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("D:/")));
             assert!(ConexPathNormalizer::is_system_critical_path(Path::new("c:\\windows")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:\\Windows\\System32")));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("D:\\Windows\\System32")));
             assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:\\Program Files")));
-            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:\\Program Files (x86)\\app")));
+            assert!(ConexPathNormalizer::is_system_critical_path(Path::new("E:\\Program Files (x86)\\app")));
             assert!(ConexPathNormalizer::is_system_critical_path(Path::new("diskpart.exe")));
             assert!(ConexPathNormalizer::is_system_critical_path(Path::new("C:/tools/bcdedit.exe")));
 

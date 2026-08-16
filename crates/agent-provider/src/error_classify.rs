@@ -76,9 +76,9 @@ pub(super) fn looks_like_payload_too_large_message(lower: &str) -> bool {
     .any(|pattern| lower.contains(pattern))
 }
 
-/// 5xx 状态码集合（02 §4.2 第 10 行）
+/// 5xx 状态码集合（覆盖全部 500..=599，含 529 Overloaded 及 Cloudflare 52x 错误）
 pub(super) fn is_server_status(status: Option<u16>) -> bool {
-    matches!(status, Some(500 | 502 | 503 | 504 | 520 | 522 | 523 | 524))
+    matches!(status, Some(500..=599))
 }
 
 /// server 消息字样（:283-293）：\b502\b…|bad gateway|gateway timeout|server error|overloaded|temporarily unavailable

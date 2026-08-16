@@ -350,6 +350,11 @@ impl ReaderPool {
         }
     }
 
+    /// 获取连接池槽位数（容量）
+    pub fn pool_size(&self) -> usize {
+        self.inner.slots.len()
+    }
+
     /// 获取连接池运行指标快照。
     pub fn stats(&self) -> ReaderPoolStats {
         let pool_size = self.inner.slots.len();

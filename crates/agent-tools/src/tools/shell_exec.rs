@@ -572,10 +572,15 @@ pub(crate) fn terminate_process_tree(pid: u32) -> Result<(), String> {
         .stdin(Stdio::null())
         .output()
         .map_err(|e| format!("failed to start taskkill: {e}"))?;
-    if output.status.success() {
+    if output.status.success() || output.status.code() == Some(128) {
         Ok(())
     } else {
-        Err(String::from_utf8_lossy(&output.stderr).trim().to_string())
+        let err_msg = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        if err_msg.contains("not found") || err_msg.contains("找不到") {
+            Ok(())
+        } else {
+            Err(err_msg)
+        }
     }
 }
 

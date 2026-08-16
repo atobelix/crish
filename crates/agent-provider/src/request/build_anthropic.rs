@@ -69,7 +69,12 @@ pub struct AnthropicRequestOptions {
     /// 显式下发的精确 Token 预算（1024 ~ 64000）
     pub thinking_budget: Option<u64>,
     pub tool_choice: Option<ToolChoice>,
+    /// 显式 PromptCache 策略
+    pub cache: Option<super::cache::CachePolicy>,
 }
+
+/// 默认 Anthropic 物理最大输出 Token 限制（64K）
+pub const DEFAULT_ANTHROPIC_MAX_OUTPUT: u64 = 64_000;
 
 /// 构建 Anthropic Messages API 请求体（compactObject 等价：None 字段一律省略）
 pub fn build_anthropic_request_body(
@@ -89,7 +94,8 @@ pub fn build_anthropic_request_body(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .is_some();
-    let bp_plan = allocate_breakpoints(context.tools.len(), has_system, false);
+    let has_messages = !context.messages.is_empty();
+    let bp_plan = allocate_breakpoints(context.tools.len(), has_system, has_messages);
 
     if let Some(prompt) = build_system_prompt_string(context.system_prompt.as_deref()) {
         if bp_plan.system {
@@ -123,19 +129,19 @@ pub fn build_anthropic_request_body(
 
     let budget = if let Some(explicit_budget) = opts.thinking_budget {
         if explicit_budget > 0 {
-            Some(explicit_budget)
+            Some(explicit_budget.max(1024))
         } else {
             None
         }
     } else if let Some(intensity) = opts.thinking_intensity {
         if intensity != ThinkingIntensity::Off {
-            Some(thinking_to_budget_tokens(intensity))
+            Some(thinking_to_budget_tokens(intensity).max(1024))
         } else {
             None
         }
     } else if let Some(effort) = opts.reasoning_effort {
         if !matches!(effort, ReasoningEffort::Off | ReasoningEffort::Auto) {
-            Some(effort_to_budget_tokens(effort))
+            Some(effort_to_budget_tokens(effort).max(1024))
         } else {
             None
         }
@@ -154,7 +160,8 @@ pub fn build_anthropic_request_body(
         }
         None => min_max_tokens,
     };
-    body.insert("max_tokens".to_string(), json!(final_max_tokens));
+    let clamped_max_tokens = final_max_tokens.min(DEFAULT_ANTHROPIC_MAX_OUTPUT);
+    body.insert("max_tokens".to_string(), json!(clamped_max_tokens));
 
     // 3. tools：`[{name, description, input_schema, cache_control?}]`
     if !context.tools.is_empty() {
@@ -190,12 +197,34 @@ pub fn build_anthropic_request_body(
     }
 
     // 4. messages
-    body.insert(
-        "messages".to_string(),
-        json!(to_anthropic_messages(context)),
-    );
+    let mut messages = to_anthropic_messages(context);
+    if bp_plan.messages {
+        inject_last_message_cache_control(&mut messages);
+    }
+    body.insert("messages".to_string(), json!(messages));
 
     Value::Object(body)
+}
+
+/// 在最后一条 user 或 tool 消息的末尾块上注入 cache_control
+fn inject_last_message_cache_control(messages: &mut [Value]) {
+    for msg in messages.iter_mut().rev() {
+        if let Some(role) = msg.get("role").and_then(|r| r.as_str()) {
+            if role == "user" {
+                if let Some(content) = msg.get_mut("content").and_then(|c| c.as_array_mut()) {
+                    if let Some(last_block) = content.last_mut() {
+                        if let Some(obj) = last_block.as_object_mut() {
+                            obj.insert(
+                                "cache_control".to_string(),
+                                json!({ "type": "ephemeral" }),
+                            );
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 /// 差异化请求头（anthropic.messages API）：x-api-key / anthropic-version /
@@ -206,6 +235,32 @@ pub fn anthropic_request_headers(api_key: &str) -> Vec<(&'static str, String)> {
         ("anthropic-version", ANTHROPIC_VERSION.to_string()),
         ("content-type", "application/json".to_string()),
     ]
+}
+
+/// 聚合带 beta 功能标头的 Anthropic 完整请求头
+pub fn build_anthropic_headers(
+    api_key: &str,
+    opts: &AnthropicRequestOptions,
+    has_cache: bool,
+) -> Vec<(&'static str, String)> {
+    let mut headers = anthropic_request_headers(api_key);
+    let mut betas = Vec::new();
+    if has_cache {
+        betas.push("prompt-caching-2024-07-31");
+    }
+    if opts.thinking_budget.is_some()
+        || opts.thinking_intensity.is_some_and(|i| i != ThinkingIntensity::Off)
+        || opts.reasoning_effort.is_some_and(|e| !matches!(e, ReasoningEffort::Off | ReasoningEffort::Auto))
+    {
+        betas.push("interleaved-thinking-2025-05-14");
+    }
+    if opts.max_tokens.is_some_and(|m| m > 4096) {
+        betas.push("output-128k-2025-02-19");
+    }
+    if !betas.is_empty() {
+        headers.push(("anthropic-beta", betas.join(",")));
+    }
+    headers
 }
 
 /// system prompt 稳定构造（字符串形态；trim + 空值归一）
@@ -224,17 +279,17 @@ fn anthropic_thinking_object(opts: &AnthropicRequestOptions) -> Option<Value> {
         if explicit_budget == 0 {
             return None;
         }
-        explicit_budget
+        explicit_budget.max(1024)
     } else if let Some(intensity) = opts.thinking_intensity {
         if intensity == ThinkingIntensity::Off {
             return None;
         }
-        thinking_to_budget_tokens(intensity)
+        thinking_to_budget_tokens(intensity).max(1024)
     } else if let Some(effort) = opts.reasoning_effort {
         if matches!(effort, ReasoningEffort::Off | ReasoningEffort::Auto) {
             return None;
         }
-        effort_to_budget_tokens(effort)
+        effort_to_budget_tokens(effort).max(1024)
     } else {
         return None;
     };

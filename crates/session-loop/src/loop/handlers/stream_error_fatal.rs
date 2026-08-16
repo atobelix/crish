@@ -47,7 +47,7 @@ pub(crate) fn fatal_provider_error(
     // 过大或窗口过小；E2 F1 L3：LLM 摘要不可用未压缩；无压缩恢复路径时
     // 保留原说明）
     let compression_note = compression_fatal_note(state, classified.kind);
-    state.events.push(AgentEvent::RuntimeError {
+    state.emit_event(AgentEvent::RuntimeError {
         session_id: state.machine.context().session_id.clone(),
         timestamp: crate::steering::now_iso_utc(),
         error: format!(

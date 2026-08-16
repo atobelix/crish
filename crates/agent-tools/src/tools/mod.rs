@@ -383,11 +383,12 @@ pub(crate) fn resolve_workspace_path(
     Ok(canonical)
 }
 
-/// 符号链接组件与 Junction 检测：
-/// - 若为 NTFS Junction 或 Symlink，解析其实际物理目标；
-/// - 若物理目标依然在工作区内部（例如 pnpm 依赖），放行；
-/// - 若物理目标逃逸出工作区或为 dangling symlink，返回 true 拦截。
-fn has_escaping_symlink_below_root(path: &Path, root: &Path) -> bool {
+/// 符号链接组件与 Junction 检测（递归多级链式解析与防环）：
+/// - 对输入路径在工作区下的每一级组件执行 `resolve_symlink_chain`；
+/// - 若解析过程中遭遇循环引用、死循环或 I/O 错误，采用 Fail-Closed 策略返回 true 拦截；
+/// - 校验解析后的终态物理路径是否落入 `norm_root` 工作区边界内；
+/// - 若逃逸出工作区，返回 true 拦截；仅当全程物理封闭时返回 false 放行。
+pub(crate) fn has_escaping_symlink_below_root(path: &Path, root: &Path) -> bool {
     let norm_path = conex_fs::ConexPathNormalizer::normalize(path);
     let norm_root = conex_fs::ConexPathNormalizer::normalize(root);
 
@@ -401,22 +402,16 @@ fn has_escaping_symlink_below_root(path: &Path, root: &Path) -> bool {
             cur.push(name);
             if let Ok(meta) = std::fs::symlink_metadata(&cur) {
                 if meta.file_type().is_symlink() {
-                    // 解析符号链接 / Junction 真实目标
-                    if let Ok(target) = std::fs::read_link(&cur) {
-                        let resolved_target = if target.is_absolute() {
-                            conex_fs::ConexPathNormalizer::normalize(&target)
-                        } else {
-                            conex_fs::ConexPathNormalizer::normalize(
-                                &cur.parent().unwrap_or(&norm_root).join(&target),
-                            )
-                        };
-                        // 判定目标是否依然在工作区内部
-                        if !conex_fs::ConexPathNormalizer::is_subpath(&resolved_target, &norm_root) {
-                            return true; // 逃逸出工作区，拦截
+                    match conex_fs::resolve_symlink_chain(&cur, 32) {
+                        Ok(resolved_target) => {
+                            if !conex_fs::ConexPathNormalizer::is_subpath(&resolved_target, &norm_root) {
+                                return true; // 终态物理路径逃逸，拦截
+                            }
                         }
-                    } else {
-                        // 链接无法读取（如 dangling symlink 或无权限），双保险拦截
-                        return true;
+                        Err(_) => {
+                            // 发生循环引用、深度超限或无法读取，Fail-Closed 拦截
+                            return true;
+                        }
                     }
                 }
             }
@@ -458,19 +453,11 @@ fn display_path_native(root: &Path, path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-/// 剥离 Windows canonicalize 的 `\\?\` / `\\?\UNC\` 前缀（其它平台原样返回）
+/// 剥离 Windows canonicalize 的 `\\?\` / `\\?\UNC\` 前缀（统一由 conex-fs 提供）
 pub(crate) fn strip_verbatim_prefix(path: &Path) -> PathBuf {
-    #[cfg(windows)]
-    {
-        let s = path.to_string_lossy();
-        if let Some(rest) = s.strip_prefix(r"\\?\UNC\") {
-            return PathBuf::from(format!("\\{rest}"));
-        }
-        if let Some(rest) = s.strip_prefix(r"\\?\") {
-            return PathBuf::from(rest.to_string());
-        }
-    }
-    path.to_path_buf()
+    PathBuf::from(conex_fs::ConexPathNormalizer::strip_verbatim_prefix(
+        &path.to_string_lossy(),
+    ))
 }
 
 /// 快照标记：文件 SHA-256 前 12 个 hex 字符（对齐 TS computeSnapshotTag）

@@ -73,10 +73,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         turn_index,
         timestamp: crate::steering::now_iso_utc(),
     };
-    state.events.push(start_event.clone());
-    if let Some(sink) = &state.options.live_sink {
-        sink.push_live(start_event);
-    }
+    state.emit_event(start_event);
     // EV-08：孤儿 turn-start 修复——记录已发射 turn-start 的轮次（收敛
     // 路径未走 turn_complete 时经 emit_missing_turn_end 补发 turn-end 闭合；
     // turn_complete 正常发射后清 None）
@@ -105,7 +102,9 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
             let applied = state
                 .steering
                 .apply(&actions, &session_id, &mut state.conversation);
-            state.events.extend(applied.events);
+            for event in applied.events {
+                state.emit_event(event);
+            }
             if applied.intervention_required {
                 // 裁决（00 D6 / 01 §五.4）：intervention 事件照发，
                 // 但 run 以 stop + 诊断收场，不以 error 收场

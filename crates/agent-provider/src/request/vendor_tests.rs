@@ -413,7 +413,7 @@ fn unsupported() -> ThinkingCapability {
 
 #[test]
 fn budget_tokens_and_gemini_level_mappings() {
-    assert_eq!(thinking_to_budget_tokens(ThinkingIntensity::Minimal), 128);
+    assert_eq!(thinking_to_budget_tokens(ThinkingIntensity::Minimal), 1024);
     assert_eq!(thinking_to_budget_tokens(ThinkingIntensity::Low), 1024);
     assert_eq!(thinking_to_budget_tokens(ThinkingIntensity::Medium), 2048);
     assert_eq!(thinking_to_budget_tokens(ThinkingIntensity::High), 4096);

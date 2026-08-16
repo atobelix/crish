@@ -44,17 +44,14 @@ mod apply;
 mod assemble;
 mod mode;
 mod parse;
-mod parse_handwritten;
 mod parse_mdast;
 mod serialize;
 
-pub use apply::{ApplyReport, apply_md_fragment};
+pub use apply::{apply_md_fragment, ApplyReport};
 pub use mode::{
-    MdMode, ParseOpts, SerializeOpts, normalize_md, parse_md, serialize_md,
+    normalize_md, parse_md, serialize_md, MdMode, ParseOpts, SerializeOpts,
 };
-pub use parse::{PARSE_BACKEND, ParseOutput, parse_document, parse_document_detailed};
-#[allow(deprecated)]
-pub use parse_handwritten::{parse_document_detailed_handwritten, parse_document_handwritten};
+pub use parse::{parse_document, parse_document_detailed, ParseOutput, PARSE_BACKEND};
 pub use serialize::{document_to_md, serialize_tree};
 
 use thiserror::Error;

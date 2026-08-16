@@ -22,6 +22,7 @@ conex-types = { path = "../conex-types" }
 # tokio 供事件通道（tx: mpsc::Sender，方案 §3.2 签名逐字一致）；
 # tracing 供锁中毒恢复日志（PE-07 T07.6 A 模式）
 notify = { workspace = true }
+thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 

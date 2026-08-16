@@ -249,6 +249,22 @@ impl LoopState {
             turn_usage: None,
         }
     }
+
+    /// 统一单点事件发射：同时推入持久化事件轨与实时通知轨（保证严格因果序）
+    pub(crate) fn emit_event(&mut self, event: AgentEvent) {
+        self.events.push(event.clone());
+        if let Some(sink) = &self.options.live_sink {
+            sink.push_live(event);
+        }
+    }
+
+    /// 仅推入实时轨（用于 MessageDelta 等非持久化流式事件）
+    #[allow(dead_code)]
+    pub(crate) fn emit_live_only(&self, event: AgentEvent) {
+        if let Some(sink) = &self.options.live_sink {
+            sink.push_live(event);
+        }
+    }
 }
 
 // ── P4 预算层（阶段 2-2/2-3）：估算 + 钳制 ─────────────────────────────
@@ -624,7 +640,7 @@ pub(crate) async fn apply_compaction(
         "上下文压缩完成"
     );
     // Start 事件（压缩开始：触发原因 + 压缩前 token）
-    state.events.push(AgentEvent::ContextCompressionStart {
+    state.emit_event(AgentEvent::ContextCompressionStart {
         session_id: session_id.clone(),
         timestamp: crate::steering::now_iso_utc(),
         reason: compression_reason_str(info.reason).to_string(),
@@ -824,7 +840,7 @@ pub(crate) async fn apply_compaction(
         )),
     };
     let compaction_id = record.id.clone();
-    state.events.push(AgentEvent::ContextCompressionEnd {
+    state.emit_event(AgentEvent::ContextCompressionEnd {
         session_id: session_id.clone(),
         timestamp: crate::steering::now_iso_utc(),
         result: Some(record),
@@ -934,12 +950,12 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
     }
     let session_id = state.machine.context().session_id.clone();
     let message = Arc::new(message);
-    state.events.push(AgentEvent::MessageStart {
+    state.emit_event(AgentEvent::MessageStart {
         session_id: session_id.clone(),
         message: message.clone(),
     });
     state.conversation.push(message.clone());
-    state.events.push(AgentEvent::MessageEnd {
+    state.emit_event(AgentEvent::MessageEnd {
         session_id,
         message,
         // G4 / 04 §5.2-5：消息带当前轮次上下文（user 消息在 turn-start 前
@@ -1075,7 +1091,7 @@ pub(crate) fn emit_steering_reset_event(state: &mut LoopState, phase: &str) {
     let before = state.steering.get_steering_count() as u32;
     state.steering.reset();
     let trace = crate::steering::SteeringEvaluationTrace::reset(before);
-    state.events.push(crate::steering::steering_evaluated_event(
+    state.emit_event(crate::steering::steering_evaluated_event(
         &state.machine.context().session_id,
         phase,
         &trace,
@@ -1132,10 +1148,7 @@ pub(crate) fn emit_missing_turn_end(state: &mut LoopState) {
         tool_call_count: state.machine.context().tool_call_count,
         usage: None,
     };
-    state.events.push(end_event.clone());
-    if let Some(sink) = &state.options.live_sink {
-        sink.push_live(end_event);
-    }
+    state.emit_event(end_event);
     tracing::info!(
         turn_index,
         "收敛路径未走 turn-complete：补发 turn-end 闭合孤儿 turn-start（EV-08）"

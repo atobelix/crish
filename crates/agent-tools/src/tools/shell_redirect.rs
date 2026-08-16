@@ -341,6 +341,7 @@ fn build_redirect_output(
 
 /// 门禁比较用路径串：剥离 `\\?\` 前缀、反斜杠转斜杠、Windows 小写
 /// （与 CommandGatekeeper 内部 normalize 方式一致，避免误升级审批）
+#[allow(dead_code)]
 pub(crate) fn gate_path(p: &Path) -> String {
     let s = crate::tools::strip_verbatim_prefix(p)
         .to_string_lossy()

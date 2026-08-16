@@ -22,9 +22,7 @@ use crate::tools::{
     resolve_workspace_path,
 };
 use async_trait::async_trait;
-use conex_sandbox::gatekeeper::{CommandGatekeeper, GatekeeperResult};
-use conex_sandbox::semantics::CommandClass;
-use conex_types::events::SecurityAuditOperation;
+use conex_sandbox::gatekeeper::CommandGatekeeper;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -162,7 +160,7 @@ fn clamp_u64_to_usize(value: u64) -> usize {
 }
 
 /// 通过预检的可执行命令参数（execute / execute_stream 消费）
-struct PreparedCommand {
+pub(crate) struct PreparedCommand {
     command: String,
     cwd: PathBuf,
     timeout_ms: u64,
@@ -227,48 +225,32 @@ impl ShellCommandTool {
             mode == ShellMode::Daemon || optional_bool(args, "isDaemon").unwrap_or(false);
         let resource_monitor = optional_bool(args, "resourceMonitor").unwrap_or(false);
 
-        // 命令门禁：越界/危险命令在解析前先拦下（对齐 workbench_run_shell）
-        // 上下文字符串统一为门禁比较格式：剥离 \\?\ 前缀、反斜杠转斜杠、Windows 小写
+        // 权限集中化评估（物理红线、Plan模式阻断、GitRevert护栏、删除重定向、CD拦截与审批）
         let gatekeeper = CommandGatekeeper::new();
-        let cwd_str = gate_path(&cwd);
-        let root_str = gate_path(workspace_root);
-        let verdict = gatekeeper.check_command_with_context(&command, &[], &cwd_str, &root_str);
-        if verdict == GatekeeperResult::Blocked
-            || gatekeeper.patterns().is_match(&command)
-            || conex_fs::ConexPathNormalizer::is_system_critical_path(&cwd)
-        {
-            // I2-S8：红线拦截审计事件（decision=blocked，operation=command-exec）
-            emit_blocked_audit(
-                &self.audit_sink,
-                ctx,
-                SecurityAuditOperation::CommandExec,
-                vec![command.clone()],
-            );
-            return Prepared::Done(Err(ToolError::new(
-                TOOL_COMMAND_BLOCKED,
-                format!(
-                    "PermissionDenied: Command blocked by safety red-line gatekeeper: {command}"
-                ),
-            )));
-        }
+        let perm_req = crate::permission::CommandPermissionRequest {
+            command_line: &command,
+            cwd: &cwd,
+            workspace_root,
+            permission_mode: ctx.permission_mode,
+            is_dangerous: false,
+            revert_policy: None,
+            gatekeeper: Some(&gatekeeper),
+            trash_root: self.trash_root.clone(),
+        };
 
-        // DIM-04: Plan (只读规划模式) 禁止执行 Shell 命令
-        if ctx.permission_mode == crate::permission::PermissionMode::Plan {
-            return Prepared::Done(Err(ToolError::new(
-                TOOL_COMMAND_BLOCKED,
-                "PermissionDenied: Shell command execution is prohibited in Plan (Read-Only) mode.",
-            )));
-        }
-
-        let analysis = conex_sandbox::semantics::analyze(&command);
-
-        // DIM-04: FullAccess 模式下完全信任用户，放行复合删除与间接删除（只要未触碰上方物理红线）
-        if ctx.permission_mode != crate::permission::PermissionMode::FullAccess {
-            // I2-S4：删除形态重定向——semantics 判定 DeleteShape 的命令不再直接
-            // 执行，改走删除接管接口（trash 服务，移入回收站可恢复）；复合链 /
-            // 间接执行包裹删除形态整链拦截 + 引导。红线（Redline）已由上方门禁
-            // 100% 拦截（S2），此处只处理删除形态。
-            if analysis.overall_class == CommandClass::DeleteShape || analysis.has_indirect_delete {
+        match crate::permission::PermissionDecisionEngine::evaluate_command(&perm_req) {
+            crate::permission::CommandDecision::Allow => {}
+            crate::permission::CommandDecision::Deny {
+                reason,
+                is_redline,
+                audit_op,
+            } => {
+                if is_redline {
+                    emit_blocked_audit(&self.audit_sink, ctx, audit_op, vec![command.clone()]);
+                }
+                return Prepared::Done(Err(ToolError::new(TOOL_COMMAND_BLOCKED, reason)));
+            }
+            crate::permission::CommandDecision::RedirectDelete { analysis } => {
                 return Prepared::Done(redirect_or_intercept_delete(
                     &analysis,
                     &command,
@@ -279,40 +261,27 @@ impl ShellCommandTool {
                     Arc::clone(&self.audit_sink),
                 ));
             }
-        }
-
-        // T-AB-04：第五项「cd 形态」拦截（判定优先级：门禁 → 删除形态 →
-        // cd 形态 → 审批 → 执行；`cd x && rm -rf y` 同时命中时删除形态已先行拦截，
-        // 此处只处理残留的 cd 形态）——纯 cd 命令结构化错误（tool.cd_blocked），
-        // 复合链含 cd 段整链拦截 + 引导（链内其他段依赖目录状态，不代为执行）。
-        if let Some(err) = intercept_cd_shape(&analysis, &command) {
-            return Prepared::Done(Err(err));
-        }
-
-        if verdict == GatekeeperResult::RequiresApproval
-            && ctx.permission_mode != crate::permission::PermissionMode::FullAccess
-        {
-            // R4 T10：经 ctx.ask 审批通道发起真实审批——approval-requested
-            // 事件由通道侧记录并广播，等待用户裁决（abort 可取消）；
-            // 用户同意后继续执行（等价重试该命令），拒绝返回明确拒绝结果。
-            // 未接线（ask: None）时返回 tool.requires_approval，执行器
-            // 分类为 ApprovalRequired 透传审批状态（不再折叠 SoftDeny）。
-            match &ctx.ask {
-                Some(ask) => match ask.ask(&self.def.name, args).await {
-                    Ok(AskDecision::Allowed) => {}
-                    Ok(AskDecision::Denied { reason }) => {
+            crate::permission::CommandDecision::InterceptCd { message } => {
+                return Prepared::Done(Err(ToolError::new(TOOL_CD_BLOCKED, message)));
+            }
+            crate::permission::CommandDecision::NeedsApproval { prompt } => {
+                match &ctx.ask {
+                    Some(ask) => match ask.ask(&self.def.name, args).await {
+                        Ok(AskDecision::Allowed) => {}
+                        Ok(AskDecision::Denied { reason }) => {
+                            return Prepared::Done(Err(ToolError::new(
+                                TOOL_USER_DENIED,
+                                format!("user denied: {reason}"),
+                            )));
+                        }
+                        Err(err) => return Prepared::Done(Err(err)),
+                    },
+                    None => {
                         return Prepared::Done(Err(ToolError::new(
-                            TOOL_USER_DENIED,
-                            format!("user denied: {reason}"),
+                            TOOL_REQUIRES_APPROVAL,
+                            prompt,
                         )));
                     }
-                    Err(err) => return Prepared::Done(Err(err)),
-                },
-                None => {
-                    return Prepared::Done(Err(ToolError::new(
-                        TOOL_REQUIRES_APPROVAL,
-                        format!("Command requires approval: {command}"),
-                    )));
                 }
             }
         }
@@ -427,9 +396,9 @@ mod shell_output;
 #[path = "shell_redirect.rs"]
 mod shell_redirect;
 
-use shell_exec::{run_command_maybe_background, run_command_streaming};
-use shell_invoke::{parse_mode, ShellMode};
-use shell_redirect::{
+pub(crate) use shell_exec::{run_command_maybe_background, run_command_streaming};
+pub(crate) use shell_invoke::{parse_mode, ShellMode};
+pub(crate) use shell_redirect::{
     emit_blocked_audit, gate_path, intercept_cd_shape, redirect_or_intercept_delete,
 };
 

@@ -17,10 +17,10 @@ pub fn normalize_reasoning_effort(effort: ReasoningEffort) -> Option<&'static st
     }
 }
 
-/// effort → Anthropic thinking budget_tokens（对齐 `model:openai-request-build.ts:119-136`）
+/// effort → Anthropic thinking budget_tokens（Anthropic 官方硬性约束 budget_tokens >= 1024）
 pub fn effort_to_budget_tokens(effort: ReasoningEffort) -> u64 {
     match effort {
-        ReasoningEffort::Minimal => 128,
+        ReasoningEffort::Minimal => 1024,
         ReasoningEffort::Low => 1024,
         ReasoningEffort::Medium => 2048,
         ReasoningEffort::High => 4096,
@@ -32,10 +32,10 @@ pub fn effort_to_budget_tokens(effort: ReasoningEffort) -> u64 {
     }
 }
 
-/// intensity → Anthropic thinking budget_tokens（对齐 `shared:thinking-intensity.ts:212-221`）
+/// intensity → Anthropic thinking budget_tokens（Anthropic 官方硬性约束 budget_tokens >= 1024）
 pub fn thinking_to_budget_tokens(intensity: ThinkingIntensity) -> u64 {
     match intensity {
-        ThinkingIntensity::Minimal => 128,
+        ThinkingIntensity::Minimal => 1024,
         ThinkingIntensity::Low => 1024,
         ThinkingIntensity::Medium => 2048,
         ThinkingIntensity::High => 4096,

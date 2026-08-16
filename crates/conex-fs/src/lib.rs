@@ -16,8 +16,8 @@ pub mod watch;
 pub use atomic_write::{atomic_write, atomic_write_file, AtomicWriteState, AtomicWriteTx};
 pub use path_normalizer::ConexPathNormalizer;
 pub use path_utils::{
-    compute_file_hash, ensure_parent_dir, is_dos_device_name, safe_canonicalize,
-    strip_verbatim_prefix,
+    compute_file_hash, ensure_parent_dir, is_dos_device_name, resolve_symlink_chain,
+    safe_canonicalize, strip_verbatim_prefix, SymlinkResolveError,
 };
 pub use watch::{glob_match, is_internal_atomic_transient_path, watcher_filter};
 
@@ -227,6 +227,62 @@ pub mod path_utils {
             }
         }
         Ok(())
+    }
+
+    use std::collections::HashSet;
+    use crate::path_normalizer::ConexPathNormalizer;
+
+    #[derive(Debug, thiserror::Error)]
+    pub enum SymlinkResolveError {
+        #[error("I/O error during symlink resolution: {0}")]
+        Io(#[from] std::io::Error),
+        #[error("Cyclic symlink detected at: {0}")]
+        Cyclic(PathBuf),
+        #[error("Symlink traversal depth exceeded maximum limit ({0})")]
+        DepthExceeded(usize),
+    }
+
+    /// 递归规范化解析符号链接/Junction 直至物理终态路径
+    pub fn resolve_symlink_chain(
+        start_path: &Path,
+        max_hops: usize,
+    ) -> std::result::Result<PathBuf, SymlinkResolveError> {
+        let mut current = ConexPathNormalizer::normalize(start_path);
+        let mut visited = HashSet::new();
+        let mut hops = 0;
+
+        while hops < max_hops {
+            let meta = match std::fs::symlink_metadata(&current) {
+                Ok(m) => m,
+                Err(_) => break, // 目标不存在或无权限读取元数据，视为终态
+            };
+
+            if !meta.file_type().is_symlink() {
+                break; // 终态物理文件/目录
+            }
+
+            let normalized_current = ConexPathNormalizer::normalize(&current);
+            if !visited.insert(normalized_current.clone()) {
+                return Err(SymlinkResolveError::Cyclic(current));
+            }
+
+            let raw_target = std::fs::read_link(&current)?;
+            let next_path = if raw_target.is_absolute() {
+                raw_target
+            } else {
+                let parent = current.parent().unwrap_or_else(|| Path::new("."));
+                parent.join(raw_target)
+            };
+
+            current = ConexPathNormalizer::normalize(&next_path);
+            hops += 1;
+
+            if hops >= max_hops {
+                return Err(SymlinkResolveError::DepthExceeded(max_hops));
+            }
+        }
+
+        Ok(current)
     }
 }
 

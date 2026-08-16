@@ -332,7 +332,7 @@ fn consecutive_assistant_alternative_projection_inv07() {
 /// budget / thinking_level 换算源常数值钉死（契约防两端漂移）。
 #[test]
 fn vendor_budget_and_level_constants_are_stable() {
-    assert_eq!(effort_to_budget_tokens(ReasoningEffort::Minimal), 128);
+    assert_eq!(effort_to_budget_tokens(ReasoningEffort::Minimal), 1024);
     assert_eq!(effort_to_budget_tokens(ReasoningEffort::Low), 1024);
     assert_eq!(effort_to_budget_tokens(ReasoningEffort::Medium), 2048);
     assert_eq!(effort_to_budget_tokens(ReasoningEffort::High), 4096);

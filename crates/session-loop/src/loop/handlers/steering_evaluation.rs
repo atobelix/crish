@@ -48,7 +48,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     // EV-03（D-03）：evaluate 命中/跳过聚合发射——每次评估一条
     // steering-evaluated（含无动作空命中；reset=false；预算剩余 =
     // max_steering_budget − 潜在计数）
-    state.events.push(crate::steering::steering_evaluated_event(
+    state.emit_event(crate::steering::steering_evaluated_event(
         &state.machine.context().session_id,
         SteeringPhase::EmptyResponse.as_str(),
         &trace,
@@ -73,7 +73,9 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     let applied = state
         .steering
         .apply(&actions, &session_id, &mut state.conversation);
-    state.events.extend(applied.events);
+    for event in applied.events {
+        state.emit_event(event);
+    }
 
     if applied.intervention_required {
         // D7 裁决：intervention 事件照发，run 以 stop + 诊断收场（不 error）

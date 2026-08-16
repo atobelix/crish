@@ -39,8 +39,8 @@ pub use build::{
     resolve_endpoint, ChatCompletionsRequestOptions, MaxTokensField, RequestBuildContext,
 };
 pub use build_anthropic::{
-    anthropic_request_headers, build_anthropic_request_body, AnthropicRequestOptions,
-    ANTHROPIC_VERSION,
+    anthropic_request_headers, build_anthropic_headers, build_anthropic_request_body,
+    AnthropicRequestOptions, ANTHROPIC_VERSION, DEFAULT_ANTHROPIC_MAX_OUTPUT,
 };
 pub use build_gemini::{build_gemini_request_body, gemini_request_headers, GeminiRequestOptions};
 pub use cache::{

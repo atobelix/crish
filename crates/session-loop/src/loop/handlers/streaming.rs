@@ -328,15 +328,35 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
 /// （window - estimate - safety，估算 = [estimate_context] 双源，
 /// C9 口径 input_total）；预算未配置（None）时透传现状值，向后兼容。
 fn build_request(state: &LoopState) -> ProviderRequest<'_> {
+    // DEC-01 裁决：当最后一条消息是 Tool-Promise 自愈或显式设 thinking_budget 为 0 时，
+    // 强制将思考档位设为 Off（thinking_budget = 0）
+    let is_zero_thinking_budget = state
+        .conversation
+        .last()
+        .and_then(|m| m.metadata.as_ref())
+        .map(|meta| {
+            meta.get("kind").and_then(|k| k.as_str()) == Some("tool-promise-recovery")
+                || meta
+                    .get("thinking_budget")
+                    .or_else(|| meta.get("thinkingBudget"))
+                    .and_then(|v| v.as_u64())
+                    == Some(0)
+        })
+        .unwrap_or(false);
+
+    let reasoning_effort = if is_zero_thinking_budget {
+        Some(crate::provider::ReasoningEffort::Off)
+    } else {
+        None
+    };
+
     ProviderRequest {
         messages: &state.conversation,
         tools: tools_schema(state).to_vec(),
         max_tokens: Some(clamp_request_max_tokens(state)),
         system_prompt: state.options.system_prompt.as_deref(),
         session_id: Some(state.machine.context().session_id.clone()),
-        // T3.1：接线归 T3.2 适配层消费，本构造点暂填 None（提供方默认，
-        // 缺省不携带思考参数，与旧版 wire 逐字节一致）
-        reasoning_effort: None,
+        reasoning_effort,
     }
 }
 
@@ -394,7 +414,7 @@ fn emit_provider_request_anchored(state: &mut LoopState, request_started_at_ms: 
     let session_id = state.machine.context().session_id.clone();
     let turn_index = state.machine.context().turn_index;
     let model = state.cache_tracker.as_ref().map(|t| t.model().to_string());
-    state.events.push(AgentEvent::ProviderRequestAnchored {
+    state.emit_event(AgentEvent::ProviderRequestAnchored {
         session_id,
         timestamp: crate::steering::now_iso_utc(),
         turn_index,
@@ -407,7 +427,7 @@ fn emit_provider_request_anchored(state: &mut LoopState, request_started_at_ms: 
 fn emit_diagnostics(state: &mut LoopState, consumed: &ConsumeResult) {
     let session_id = state.machine.context().session_id.clone();
     for diagnostic in &consumed.diagnostics {
-        state.events.push(AgentEvent::ProviderDiagnostic {
+        state.emit_event(AgentEvent::ProviderDiagnostic {
             session_id: session_id.clone(),
             timestamp: crate::steering::now_iso_utc(),
             diagnostic: diagnostic.clone(),
@@ -565,10 +585,7 @@ fn commit_message_with_deltas(state: &mut LoopState, message: AgentMessage) {
         session_id: session_id.clone(),
         message: message.clone(),
     };
-    state.events.push(start_event.clone());
-    if let Some(sink) = &state.options.live_sink {
-        sink.push_live(start_event);
-    }
+    state.emit_event(start_event);
     emit_message_deltas(state, &message);
     state.conversation.push(message.clone());
     let end_event = AgentEvent::MessageEnd {
@@ -578,10 +595,7 @@ fn commit_message_with_deltas(state: &mut LoopState, message: AgentMessage) {
         // 同值——TURN_PREPARED 递增后），前端据此按 turn 分段合并
         turn_index: Some(state.machine.context().turn_index),
     };
-    state.events.push(end_event.clone());
-    if let Some(sink) = &state.options.live_sink {
-        sink.push_live(end_event);
-    }
+    state.emit_event(end_event);
 }
 
 /// 实时轨 delta 事件构造（T09.1 双轨）：text-delta / thought-delta →

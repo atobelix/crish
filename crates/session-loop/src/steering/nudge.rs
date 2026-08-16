@@ -100,6 +100,8 @@ pub fn build_steering_message(reason: SteeringReason, steering_count: usize) -> 
             "kind": "runtime-steering",
             "reason": reason.as_str(),
             "steeringCount": steering_count,
+            "thinking_budget": 0,
+            "thinkingBudget": 0,
         })),
         client_message_id: None,
         content: None,

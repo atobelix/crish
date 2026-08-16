@@ -206,7 +206,7 @@ pub fn classify_provider_error(
     let source = source.unwrap_or(ProviderSourceError::Other);
 
     // 1. abort（signal.aborted / isAbortError 等价，error-classifier.ts:119-126）
-    if source == ProviderSourceError::Aborted || lower.contains("aborted") {
+    if source == ProviderSourceError::Aborted {
         return ProviderError::Aborted;
     }
     // 2. HTTP 413 → payload_too_large（:128-136）

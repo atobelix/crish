@@ -21,8 +21,7 @@ use crate::approval_router::relay_denied_message;
 use crate::safe_point::AbortSignal;
 use crate::tool_events::{ApprovalDecision, ApprovalGate, ApprovalRequester, ToolEvent};
 
-/// abort 取消轮询间隔（std AbortToken 无异步等待原语，轮询查标志位）
-const ABORT_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(50);
+// abort 唤醒使用 AbortToken 与 AbortSignal 的 Notify 异步通知，0 轮询
 
 /// 审批通道（AskChannel 实现，R4 T10）
 #[derive(Clone)]
@@ -88,14 +87,21 @@ impl ApprovalChannel {
             || self.abort.as_ref().map(|s| s.is_aborted()).unwrap_or(false)
     }
 
-    /// 等待中止：批级 AbortSignal 与 abort_token 任一触发即返回
-    /// （std 令牌无异步等待原语，按固定间隔轮询标志位）
+    /// 等待中止：批级 AbortSignal 与 abort_token 任一触发即唤醒（0 轮询）
     async fn wait_aborted(&self) {
-        loop {
-            if self.is_aborted() {
-                return;
+        if self.is_aborted() {
+            return;
+        }
+        let token_wait = self.abort_token.wait_aborted();
+        if let Some(signal) = &self.abort {
+            let signal_wait = signal.wait_aborted();
+            tokio::select! {
+                biased;
+                () = token_wait => {},
+                () = signal_wait => {},
             }
-            tokio::time::sleep(ABORT_POLL_INTERVAL).await;
+        } else {
+            token_wait.await;
         }
     }
 }

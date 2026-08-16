@@ -55,14 +55,9 @@ pub fn bid(s: &str) -> crate::BlockId {
 
 #[cfg(test)]
 mod tests {
-    #![allow(deprecated)]
-
     use super::*;
-    use crate::parse_handwritten::{
-        parse_document_detailed_handwritten, parse_document_handwritten,
-    };
     use crate::serialize_tree;
-    use crate::{BlockKind, structure_eq};
+    use crate::{structure_eq, BlockKind};
 
     #[test]
     fn parse_backend_is_markdown_rs() {
@@ -278,33 +273,6 @@ fn main() {}
         let n = tree.get(&id).unwrap();
         assert_eq!(n.kind, BlockKind::Code);
         assert_eq!(n.text_snapshot.as_deref(), Some("fn main() {}"));
-    }
-
-    /// 默认主路径与退役手写路径对结构子集同构（对照，非双主）。
-    #[test]
-    fn markdown_rs_matches_handwritten_on_nested_heading() {
-        let md = "\
-<!--c:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa-->
-# 标题
-
-<!--c:bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb-->
-子段落
-";
-        let a = parse_document(md).unwrap();
-        let b = parse_document_handwritten(md).unwrap();
-        assert!(structure_eq(&a, &b));
-    }
-
-    #[test]
-    fn handwritten_is_not_default_but_still_callable() {
-        let out = parse_document_detailed_handwritten("裸段\n").unwrap();
-        assert_eq!(out.tree.root_children.len(), 1);
-        assert!(
-            out.lossy
-                .items
-                .iter()
-                .any(|i| i.code == "missing_block_id")
-        );
     }
 
     #[test]

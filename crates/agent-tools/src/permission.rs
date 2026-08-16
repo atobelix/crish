@@ -150,6 +150,142 @@ pub fn decide_command_with_revert(
     decide(dangerous, requires_approval, mode)
 }
 
+use conex_types::events::SecurityAuditOperation;
+use std::path::{Path, PathBuf};
+
+/// 命令权限评估请求参数包
+pub struct CommandPermissionRequest<'a> {
+    pub command_line: &'a str,
+    pub cwd: &'a Path,
+    pub workspace_root: &'a Path,
+    pub permission_mode: PermissionMode,
+    pub is_dangerous: bool,
+    pub revert_policy: Option<&'a crate::revert::RevertPolicy>,
+    pub gatekeeper: Option<&'a conex_sandbox::gatekeeper::CommandGatekeeper>,
+    pub trash_root: Option<PathBuf>,
+}
+
+/// 集中化命令裁决判定结果全集
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommandDecision {
+    /// 完全放行执行
+    Allow,
+    /// 硬性拒绝（系统红线、Plan 模式限制、用户拒绝）
+    Deny {
+        reason: String,
+        is_redline: bool,
+        audit_op: SecurityAuditOperation,
+    },
+    /// 删除形态重定向（移入回收站）
+    RedirectDelete {
+        analysis: conex_sandbox::semantics::SemanticAnalysis,
+    },
+    /// CD 形态拦截（结构化引导）
+    InterceptCd {
+        message: String,
+    },
+    /// 需用户交互审批（Ask 模式下的越界/危险命令）
+    NeedsApproval {
+        prompt: String,
+    },
+}
+
+/// 集中化权限裁决引擎
+pub struct PermissionDecisionEngine;
+
+impl PermissionDecisionEngine {
+    pub fn evaluate_command(req: &CommandPermissionRequest) -> CommandDecision {
+        let cmd = req.command_line.trim();
+
+        // 1. 物理红线与系统核心关键目录判定（不可豁免，S4 定理）
+        let (gate_verdict, gate_pattern_match) = if let Some(gk) = req.gatekeeper {
+            let cwd_str = crate::tools::shell::gate_path(req.cwd);
+            let root_str = crate::tools::shell::gate_path(req.workspace_root);
+            let v = gk.check_command_with_context(cmd, &[], &cwd_str, &root_str);
+            let m = gk.patterns().is_match(cmd);
+            (v, m)
+        } else {
+            let gk = conex_sandbox::gatekeeper::CommandGatekeeper::new();
+            let cwd_str = crate::tools::shell::gate_path(req.cwd);
+            let root_str = crate::tools::shell::gate_path(req.workspace_root);
+            let v = gk.check_command_with_context(cmd, &[], &cwd_str, &root_str);
+            let m = gk.patterns().is_match(cmd);
+            (v, m)
+        };
+
+        let analysis = conex_sandbox::semantics::analyze(cmd);
+        let is_redline = gate_verdict == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
+            || gate_pattern_match
+            || analysis.overall_class == conex_sandbox::semantics::CommandClass::Redline
+            || conex_fs::ConexPathNormalizer::is_system_critical_path(req.cwd);
+
+        if is_redline {
+            return CommandDecision::Deny {
+                reason: format!("PermissionDenied: Command blocked by safety red-line gatekeeper: {cmd}"),
+                is_redline: true,
+                audit_op: SecurityAuditOperation::CommandExec,
+            };
+        }
+
+        // 2. Plan 模式硬性阻断（只读规划模式严禁执行任何 Shell 命令）
+        if req.permission_mode == PermissionMode::Plan {
+            return CommandDecision::Deny {
+                reason: "PermissionDenied: Shell command execution is prohibited in Plan (Read-Only) mode.".to_string(),
+                is_redline: false,
+                audit_op: SecurityAuditOperation::CommandExec,
+            };
+        }
+
+        // 3. C3 Git 回退护栏判定（GitRevertShape 超阈值拦截）
+        if let Some(policy) = req.revert_policy {
+            if let Some(verdict) = policy.gate_verdict(&analysis, req.permission_mode) {
+                if verdict == PermissionVerdict::NeedsApproval {
+                    return CommandDecision::NeedsApproval {
+                        prompt: format!("Large scale git revert requires confirmation: {cmd}"),
+                    };
+                } else if verdict == PermissionVerdict::Deny {
+                    return CommandDecision::Deny {
+                        reason: "Git revert operation denied by policy.".to_string(),
+                        is_redline: false,
+                        audit_op: SecurityAuditOperation::CommandExec,
+                    };
+                }
+            }
+        }
+
+        // 4. 删除形态重定向（FullAccess 信任放行；非 FullAccess 模式走回收站接管）
+        if req.permission_mode != PermissionMode::FullAccess {
+            if analysis.overall_class == conex_sandbox::semantics::CommandClass::DeleteShape
+                || analysis.has_indirect_delete
+            {
+                return CommandDecision::RedirectDelete { analysis };
+            }
+        }
+
+        // 5. CD 形态拦截（对齐 T-AB-04：引导使用 cwd 参数）
+        if let Some(err) = crate::tools::shell::intercept_cd_shape(&analysis, cmd) {
+            return CommandDecision::InterceptCd {
+                message: err.to_string(),
+            };
+        }
+
+        // 6. 三态矩阵与越界升级（Ask 模式下的审批门）
+        if req.permission_mode == PermissionMode::Ask {
+            if gate_verdict == conex_sandbox::gatekeeper::GatekeeperResult::RequiresApproval
+                || req.is_dangerous
+                || analysis.overall_class == conex_sandbox::semantics::CommandClass::Dangerous
+            {
+                return CommandDecision::NeedsApproval {
+                    prompt: format!("Command requires approval: {cmd}"),
+                };
+            }
+        }
+
+        // 7. 全部规则检查通过，放行执行
+        CommandDecision::Allow
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

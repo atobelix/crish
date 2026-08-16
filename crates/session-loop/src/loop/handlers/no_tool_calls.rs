@@ -103,6 +103,8 @@ pub(crate) async fn handle(
                                 "kind": "tool-promise-recovery",
                                 "actionSnippet": snippet,
                                 "healCount": state.tool_promise_heals,
+                                "thinking_budget": 0,
+                                "thinkingBudget": 0,
                             })),
                             client_message_id: None,
                             content: None,
