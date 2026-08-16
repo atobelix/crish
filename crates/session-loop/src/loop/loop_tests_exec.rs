@@ -160,15 +160,12 @@
         }
     }
 
-    /// T-EG-06 装配冒烟：with_options 装配块四线接线全链路生效——
-    /// 注册表（互斥）/ 配额 / 默认中间件链 / ESC 判定器注入；run 后
-    /// 守卫无泄漏；判定器与工具执行共享同一注册表实例
+    /// T-EG-06 装配冒烟：with_options 装配块接线全链路生效——
+    /// 注册表（互斥）/ 配额 / 默认中间件链；run 后守卫无泄漏
     #[tokio::test]
-    async fn assembly_smoke_wires_registry_quota_middleware_and_detector() {
-        use agent_tools::audit::{AuditSink, RecordingAuditSink};
+    async fn assembly_smoke_wires_registry_quota_and_middleware() {
         use agent_tools::context::ExploreDocsQuotaContext;
         use agent_tools::explore_quota::InMemoryExploreDocsQuotaStore;
-        use conex_fs::watch::{ChangeKind, FileChangeEvent};
         use conex_test_utils::TempWorkspace;
         use conex_types::session::AgentEndReason;
         use crate::stream::{ProviderStreamEvent, StopReason};
@@ -195,7 +192,6 @@
             ],
         ]);
 
-        let sink = Arc::new(RecordingAuditSink::new());
         let quota_store = Arc::new(InMemoryExploreDocsQuotaStore::new());
         let mut loop_ =
             AgentSessionLoop::new("s1", "run-eg06", 16, Box::new(provider), Arc::new(reg));
@@ -212,13 +208,6 @@
                         as Arc<dyn agent_tools::explore_quota::ExploreDocsQuotaStore>,
                 ),
             }),
-            // ESC 装配配置：with_options 装配块注入判定器（与注册表同实例）
-            escape_watch: Some(EscapeWatchConfig::new(
-                ws.path(),
-                "s1",
-                "run-eg06",
-                Arc::clone(&sink) as AuditSink,
-            )),
             ..Default::default()
         });
 
@@ -254,31 +243,6 @@
             vec!["backup".to_string()],
             "默认中间件链 = 备份中间件"
         );
-
-        // 4) ESC 判定器：装配后注入；与工具执行共享同一注册表实例——
-        // 同注册表声明后 is_declared 命中，释放后不命中
-        let esc = loop_
-            .state
-            .options
-            .escape_watch
-            .clone()
-            .expect("装配后 ESC 配置必须存在");
-        let detector = esc
-            .detector
-            .clone()
-            .expect("装配后必须注入判定器");
-        let event = FileChangeEvent {
-            path: ws.path().join("probe.txt"),
-            kind: ChangeKind::Created,
-            from: None,
-            occurred_at_ms: 1,
-        };
-        let guard = registry
-            .claim_one("test", "probe.txt", agent_tools::write_paths::ClaimMode::Write)
-            .expect("手动声明成功");
-        assert!(detector.is_declared(&event), "已声明路径必须命中判定器");
-        drop(guard);
-        assert!(!detector.is_declared(&event), "声明释放后不得命中判定器");
     }
 
     // ── D1 A7：RunOutcome.provider_error 数据面（01 敲定 §2.3，验收断言）──

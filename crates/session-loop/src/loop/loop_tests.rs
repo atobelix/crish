@@ -10,7 +10,6 @@ use conex_types::session::{
 };
 use std::sync::Arc;
 
-use crate::escape_watch::EscapeWatchConfig;
     use conex_types::{AgentMessageBlock, AgentMessageRole};
     use crate::testing::TestProvider;
 

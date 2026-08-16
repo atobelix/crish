@@ -39,7 +39,6 @@ pub mod approval_router;
 pub mod cache_tracker;
 pub mod checkpoint;
 pub mod control;
-pub mod escape_watch;
 pub mod hooks;
 pub mod hydrate;
 pub mod input;
@@ -52,7 +51,6 @@ pub mod stream;
 pub mod testing;
 pub mod tool_events;
 pub mod tool_exec;
-pub mod undeclared_detector;
 
 pub use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 pub use approval::ApprovalChannel;
@@ -66,11 +64,6 @@ pub use cache_tracker::{CacheMiss, CacheStatsTracker, CacheTrackingConfig};
 pub use control::{
     level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput, ControlKind,
     ControlLevel,
-};
-pub use escape_watch::{
-    build_escape_injection_text, escape_exclude_paths, spawn_escape_watch,
-    spawn_escape_watch_consumer, EscapeAggregator, EscapeWatchConfig, EscapeWatchHandle,
-    EscapeWatchInjector,
 };
 pub use hooks::{
     HookAction, HookDispatchOutcome, HookError, HookEvent, HookEventKind, HookFailStrategy,
@@ -119,4 +112,3 @@ pub use tool_events::{
     ToolBatchOptions, ToolErrorKind, ToolEvent,
 };
 pub use tool_exec::{ToolBatchOutcome, ToolExecCtx, ToolExecutor};
-pub use undeclared_detector::{RegistryBackedDetector, UndeclaredWriteDetector};

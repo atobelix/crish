@@ -105,8 +105,7 @@ pub(crate) use session_loop::approval_router::{
 pub(crate) use session_loop::hydrate::hydrate_history;
 pub(crate) use session_loop::tool_events::{ApprovalDecision, ApprovalRequester};
 pub(crate) use session_loop::{
-    spawn_escape_watch, AbortSignal, ApprovalGate, ControlBus, DeltaSink, EscapeWatchConfig,
-    EscapeWatchHandle, EscapeWatchInjector, PermissionMode, RegistryBackedDetector, RunOutcome,
+    AbortSignal, ApprovalGate, ControlBus, DeltaSink, PermissionMode, RunOutcome,
     SessionLoopOptions, SummaryDispatchConfig, ToolBatchOptions,
 };
 

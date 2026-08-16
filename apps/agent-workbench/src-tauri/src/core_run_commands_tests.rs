@@ -220,7 +220,6 @@ async fn t10_active_run(
         approval,
         bridge,
         delta_sink_active: true,
-        escape_watch: Mutex::new(None),
         driver: Mutex::new(None),
         user_touched: AtomicBool::new(false),
         subagent: None,
@@ -2888,7 +2887,6 @@ async fn build_active_run(state: &CoreRunState, session_id: &str, run_id: &str) 
         approval,
         bridge,
         delta_sink_active: true,
-        escape_watch: Mutex::new(None),
         driver: Mutex::new(None),
         user_touched: AtomicBool::new(false),
         // T-D-13：测试驱动路径的子代理配置缺省 None（普通 run 语义）
@@ -7962,337 +7960,69 @@ async fn active_run_driver_joinhandle_saved() {
     }
 }
 
-/// 30-P5 验收（E2E-2）：真实 watcher 触发逃逸注入 → 主 agent
-/// followUp 真实到达——批量写入触发聚合报告 → 注入经同一控制总线
-/// 落 followUp 环 → 安全点消费 → 下一轮对话包含归因摘要
+/// 主动探查架构验收（零被动注入回归）：并发写入工作区文件期间，
+/// 系统绝不产生被动 escape_watch 注入或 undeclared-write 审计，会话保持纯净。
 #[tokio::test]
-async fn escape_watch_inject_reaches_main_agent() {
-    let ws = TestWorkspace::new("esc_inject_e2e");
+async fn zero_passive_injection_during_run_e2e() {
+    let ws = TestWorkspace::new("zero_inj_e2e");
     let provider = Arc::new(
         TestProvider::with_scripts(vec![
             vec![
-                ProviderStreamEvent::text("第一轮"),
-                ProviderStreamEvent::stop(StopReason::Stop),
-            ],
-            vec![
-                ProviderStreamEvent::text("收到注入"),
+                ProviderStreamEvent::text("第一轮回复完毕"),
                 ProviderStreamEvent::stop(StopReason::Stop),
             ],
         ])
-        .with_pause(0, 5_000),
+        .with_pause(0, 2_000),
     );
-    let (state, _db, _emitter) = run_control_test_state(Arc::clone(&provider));
-    state.run_restore().await;
-
-    run_task_impl(
-        Arc::clone(&state),
-        test_options_with_cwd("run-esc-inj", "s1", "发起 run", &ws.path_str()),
-    )
-    .await
-    .expect("run 发起成功");
-    // 栅栏窗口内批量写入（≥ batch_size 触发即时聚合报告 → 注入）
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    for i in 0..12 {
-        ws.write_file(&format!("f{i}.txt"), "escape");
-    }
-    // 注入真实到达：下一轮 provider 请求的对话包含归因摘要（含 run 标识）
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
-    loop {
-        let injected = provider
-            .request_message_arcs(1)
-            .iter()
-            .any(|m| m.text().contains("检测到工具外写入") && m.text().contains("run-esc-inj"));
-        if injected {
-            break;
-        }
-        assert!(
-            tokio::time::Instant::now() < deadline,
-            "逃逸注入未在窗口内到达会话对话"
-        );
-        tokio::time::sleep(Duration::from_millis(30)).await;
-    }
-}
-
-/// 逃逸探针工具（30-P5 判定器端到端）：可选声明写路径 → 写文件 →
-/// 持声明休眠（让 watcher 事件落入声明窗口，notify 事件延迟通常
-/// <200ms，2s 窗口确定性充足）→ 释放。记录执行面注入的注册表 Arc
-///（同一实例断言用）
-struct EscapeProbeTool {
-    /// 声明写路径（Some = 声明覆盖静默路径；None = 未声明上报路径）
-    claim_path: Option<String>,
-    /// 额外写入的未声明路径（与声明路径成对验证同一注册表）
-    extra_unclaimed: Option<String>,
-    /// 记录执行面注入的注册表（30-P5 双端注入成对断言）
-    observed_registry: Arc<Mutex<Option<Arc<WritePathRegistry>>>>,
-}
-
-#[async_trait::async_trait]
-impl agent_tools::definition::Tool for EscapeProbeTool {
-    fn name(&self) -> &str {
-        "escape_probe"
-    }
-
-    fn definition(&self) -> &agent_tools::definition::ToolDefinition {
-        static DEF: std::sync::OnceLock<agent_tools::definition::ToolDefinition> =
-            std::sync::OnceLock::new();
-        DEF.get_or_init(|| agent_tools::definition::ToolDefinition {
-            name: "escape_probe".to_string(),
-            description: "逃逸判定器探针".to_string(),
-            input_schema: serde_json::json!({"type": "object"}),
-            dangerous: false,
-            fatal_on_error: false,
-        })
-    }
-
-    async fn execute(
-        &self,
-        ctx: &agent_tools::context::ToolContext,
-        _args: serde_json::Value,
-    ) -> Result<serde_json::Value, ToolError> {
-        *self
-            .observed_registry
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = ctx.write_claims.clone();
-        let write = |rel: &str, content: &str| {
-            std::fs::write(ctx.workspace_root.join(rel), content).map_err(|error| {
-                ToolError::execution_failed("escape_probe", &format!("写文件失败 {rel}：{error}"))
-            })
-        };
-        if let Some(claim) = &self.claim_path {
-            let holder = ctx
-                .write_claim_holder
-                .clone()
-                .unwrap_or_else(|| ctx.session_id.clone());
-            let registry = ctx
-                .write_claims
-                .clone()
-                .expect("装配后执行面必须注入写路径注册表");
-            let _guard = registry
-                .claim_one(holder, claim, agent_tools::write_paths::ClaimMode::Write)
-                .map_err(|error| {
-                    ToolError::execution_failed(
-                        "escape_probe",
-                        &format!("声明写路径失败 {claim}：{error}"),
-                    )
-                })?;
-            write(claim, "declared")?;
-            // 持声明窗口：守卫在本块内保持（notify 事件延迟通常
-            // <200ms，2s 窗口确定性充足）——声明覆盖判定在事件到达
-            // 时仍有效；声明释放后该路径恢复未声明上报
-            tokio::time::sleep(Duration::from_millis(2_000)).await;
-        }
-        if let Some(extra) = &self.extra_unclaimed {
-            write(extra, "unclaimed")?;
-        }
-        Ok(serde_json::json!({"probe": true}))
-    }
-}
-
-/// 30-P5 验收（E2E-3）：声明写路径静默——工具声明覆盖的写入不产生
-/// undeclared-write 审计（判定器与工具执行面同源：声明覆盖跳过）
-#[tokio::test]
-async fn escape_detector_claims_suppress_audit_e2e() {
-    let ws = TestWorkspace::new("esc_suppress_e2e");
-    let observed = Arc::new(Mutex::new(None));
-    let tool = Arc::new(EscapeProbeTool {
-        claim_path: Some("escape.txt".to_string()),
-        extra_unclaimed: None,
-        observed_registry: Arc::clone(&observed),
-    });
-    let provider = Arc::new(TestProvider::with_scripts(vec![
-        vec![
-            ProviderStreamEvent::tool_call(
-                Some("call_probe".into()),
-                "escape_probe",
-                serde_json::json!({}),
-            ),
-            ProviderStreamEvent::stop(StopReason::ToolCall),
-        ],
-        vec![
-            ProviderStreamEvent::text("完成"),
-            ProviderStreamEvent::stop(StopReason::Stop),
-        ],
-    ]));
     let (state, _db, emitter) = run_control_test_state(Arc::clone(&provider));
-    state
-        .engine
-        .tool_registry()
-        .register_runtime(Arc::clone(&tool) as Arc<dyn agent_tools::definition::Tool>)
-        .expect("探针工具注册");
     state.run_restore().await;
 
     run_task_impl(
         Arc::clone(&state),
-        test_options_with_cwd("run-esc-suppress", "s1", "发起 run", &ws.path_str()),
+        test_options_with_cwd("run-zero-inj", "s1", "发起 run", &ws.path_str()),
     )
     .await
     .expect("run 发起成功");
-    // 收口（逃逸监视 shutdown flush 已完成——驱动任务收口后注册表移除）
+
+    // 模拟后台应用写入大量日志与数据库文件
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    for i in 0..15 {
+        ws.write_file(&format!("runtime_log_{i}.log"), "some tracing log");
+        ws.write_file(&format!("sessions_db_{i}.db-wal"), "wal content");
+    }
+
+    // 等待 run 正常结束
     let active = state
         .active_runs
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .get("run-esc-suppress")
-        .cloned()
-        .expect("run 已注册");
-    let _ = wait_run_end_reason(&active, Duration::from_secs(30)).await;
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
-    while !active.driver_finished() {
-        assert!(
-            tokio::time::Instant::now() < deadline,
-            "驱动任务未在窗口内收口"
-        );
-        tokio::time::sleep(Duration::from_millis(30)).await;
+        .get("run-zero-inj")
+        .cloned();
+    if let Some(active) = active {
+        let _ = wait_run_end_reason(&active, Duration::from_secs(10)).await;
     }
-    // 声明覆盖静默：事件桥无 undeclared-write 审计
+
+    // 验证：事件流中绝无 undeclared-write 被动审计事件
     let ops = audit_operations(&emitter);
     assert!(
         !ops.iter().any(|op| op == "undeclared-write"),
-        "声明覆盖的写入不得产生 undeclared-write 审计：{ops:?}"
+        "主动探查架构下不得产生 undeclared-write 审计：{ops:?}"
     );
-    // 执行面确实注入了注册表（探针观测；与判定器同源的前提）
-    assert!(
-        observed.lock().unwrap_or_else(|e| e.into_inner()).is_some(),
-        "工具执行面必须注入写路径注册表（30-P5 write_claims 恒注入）"
-    );
-}
 
-/// 30-P5 验收（E2E-3）：未声明路径写入上报——工具未声明的写入产生
-/// undeclared-write 审计（判定器生效的正面路径）
-#[tokio::test]
-async fn escape_detector_unclaimed_path_reports_e2e() {
-    let ws = TestWorkspace::new("esc_report_e2e");
-    let tool = Arc::new(EscapeProbeTool {
-        claim_path: None,
-        extra_unclaimed: Some("escape_probe.txt".to_string()),
-        observed_registry: Arc::new(Mutex::new(None)),
-    });
-    let provider = Arc::new(TestProvider::with_scripts(vec![
-        vec![
-            ProviderStreamEvent::tool_call(
-                Some("call_probe".into()),
-                "escape_probe",
-                serde_json::json!({}),
-            ),
-            ProviderStreamEvent::stop(StopReason::ToolCall),
-        ],
-        vec![
-            ProviderStreamEvent::text("完成"),
-            ProviderStreamEvent::stop(StopReason::Stop),
-        ],
-    ]));
-    let (state, _db, emitter) = run_control_test_state(Arc::clone(&provider));
-    state
-        .engine
-        .tool_registry()
-        .register_runtime(Arc::clone(&tool) as Arc<dyn agent_tools::definition::Tool>)
-        .expect("探针工具注册");
-    state.run_restore().await;
-
-    run_task_impl(
-        Arc::clone(&state),
-        test_options_with_cwd("run-esc-report", "s1", "发起 run", &ws.path_str()),
-    )
-    .await
-    .expect("run 发起成功");
-    // 未声明写入 → undeclared-write 审计（收口 flush 兜底发射）
-    wait_for_audit_operation(&emitter, "undeclared-write", Duration::from_secs(30)).await;
-    // 审计载荷字段级断言（operation / decision=denied / targets）
-    let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let reported = payloads.iter().any(|p| {
-        let value: serde_json::Value = serde_json::from_str(p).ok().unwrap_or_default();
-        value["type"] == "security-audit"
-            && value["operation"] == "undeclared-write"
-            && value["decision"] == "denied"
-            && value["targets"]
-                .as_array()
-                .map(|t| {
-                    t.iter().any(|v| {
-                        v.as_str()
-                            .map(|s| s.contains("escape_probe"))
-                            .unwrap_or(false)
-                    })
-                })
-                .unwrap_or(false)
-    });
-    assert!(reported, "未声明写入必须上报（含 targets 路径）");
-}
-
-/// 30-P5 验收：write_claims 与判定器同一 Arc 实例（双端注入成对）——
-/// 探针工具声明路径静默（判定器看到声明）、未声明兄弟路径上报
-/// （判定器读同一注册表）——行为级同一实例证明
-#[tokio::test]
-async fn write_claims_injected_registry_shared_with_tool_ctx() {
-    let ws = TestWorkspace::new("esc_pair_e2e");
-    let observed = Arc::new(Mutex::new(None));
-    let tool = Arc::new(EscapeProbeTool {
-        claim_path: Some("escape.txt".to_string()),
-        extra_unclaimed: Some("sibling.txt".to_string()),
-        observed_registry: Arc::clone(&observed),
-    });
-    let provider = Arc::new(TestProvider::with_scripts(vec![
-        vec![
-            ProviderStreamEvent::tool_call(
-                Some("call_probe".into()),
-                "escape_probe",
-                serde_json::json!({}),
-            ),
-            ProviderStreamEvent::stop(StopReason::ToolCall),
-        ],
-        vec![
-            ProviderStreamEvent::text("完成"),
-            ProviderStreamEvent::stop(StopReason::Stop),
-        ],
-    ]));
-    let (state, _db, emitter) = run_control_test_state(Arc::clone(&provider));
-    state
-        .engine
-        .tool_registry()
-        .register_runtime(Arc::clone(&tool) as Arc<dyn agent_tools::definition::Tool>)
-        .expect("探针工具注册");
-    state.run_restore().await;
-
-    run_task_impl(
-        Arc::clone(&state),
-        test_options_with_cwd("run-esc-pair", "s1", "发起 run", &ws.path_str()),
-    )
-    .await
-    .expect("run 发起成功");
-    // 未声明兄弟路径上报（同一 run 内判定器生效）
-    wait_for_audit_operation(&emitter, "undeclared-write", Duration::from_secs(30)).await;
-    // 执行面注入的注册表与判定器同源：声明路径不产生独立审计条目
-    let payloads = emitter.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
-    let any_escape_txt = payloads.iter().any(|p| {
-        let value: serde_json::Value = serde_json::from_str(p).ok().unwrap_or_default();
-        value["operation"] == "undeclared-write"
-            && value["targets"]
-                .as_array()
-                .map(|t| {
-                    t.iter().any(|v| {
-                        v.as_str()
-                            .map(|s| s.contains("escape.txt"))
-                            .unwrap_or(false)
-                    })
-                })
-                .unwrap_or(false)
-    });
-    assert!(
-        !any_escape_txt,
-        "声明覆盖的路径不得出现在 undeclared-write 审计中"
+    // 验证：provider 只接收到 1 次初始调用，没有发生被动注入导致的第二轮唤醒
+    assert_eq!(
+        provider.requests().len(),
+        1,
+        "必须无任何自发唤醒，只执行用户发起的单轮调用"
     );
 }
 
-/// 30-P5：逃逸监视根解析 helper 与 with_options 解析链同源——
-/// 无 cwd 场景（None → current_dir）与显式 cwd 两分支
+/// 运行工作区根解析 helper 与 with_options 解析链同源断言
 #[test]
-fn escape_root_resolution_matches_with_options() {
-    // 显式 cwd：原样解析（与 with_options 的 options.cwd 分支一致）
-    let explicit = resolve_escape_watch_root(Some("C:\\work\\proj"));
+fn workspace_root_resolution_matches_with_options() {
+    let explicit = resolve_run_workspace_root(Some("C:\\work\\proj"));
     assert_eq!(explicit, PathBuf::from("C:\\work\\proj"));
-    // None → current_dir（与 with_options 的 current_dir 兜底一致；
-    // 该分支下监视不启动、注册表以 current_dir 为根、run 装配不
-    // panic——既有 run 测试（cwd=None）持续覆盖）
-    let none = resolve_escape_watch_root(None);
+    let none = resolve_run_workspace_root(None);
     let current = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
     assert_eq!(none, current);
 }
@@ -9439,7 +9169,6 @@ async fn insert_continuity_run(
         approval,
         bridge,
         delta_sink_active: true,
-        escape_watch: Mutex::new(None),
         driver: Mutex::new(None),
         user_touched: AtomicBool::new(false),
         subagent,

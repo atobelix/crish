@@ -65,9 +65,6 @@ pub(crate) struct ActiveRun {
     pub(crate) bridge: Arc<BufferedRunEventBridge>,
     /// 实时 delta 是否激活（T09.1：激活时收口 message-delta 跳过不双发）
     pub(crate) delta_sink_active: bool,
-    /// 逃逸监视句柄（T-ESC-03：run 起停钩子；None = 未启用。Mutex 包装：
-    /// drive / finalize 路径经锁 take 出句柄后 async 收口，锁不跨 await）
-    pub(crate) escape_watch: Mutex<Option<EscapeWatchHandle>>,
     /// 驱动任务句柄（30-P1：spawn(drive_run_loop) 的 JoinHandle）。
     /// Mutex<Option> 形态——ActiveRun 构造在前、spawn 在后，句柄经
     /// [Self::set_driver] 事后登记；收口**不 await**（JoinHandle drop 即
@@ -216,33 +213,6 @@ pub(crate) fn spawn_audit_persistence(
             }
         }
     })
-}
-
-/// 逃逸监视主 agent 注入器（T-ESC-03 壳层适配）：归因摘要经 L1
-/// followUp 环注入会话（D8：run 内不注入，run idle promote 后成为
-/// 下一条用户消息——主 agent 下一轮即可看到，REQ §3.3 第 3 点；
-/// 注入频率限流由聚合报告粒度承担）
-pub(crate) struct ControlBusInjector {
-    /// 本 run 控制总线（std Mutex，锁不跨 await 持有）
-    pub(crate) bus: Arc<Mutex<ControlBus>>,
-}
-
-impl ControlBusInjector {
-    /// 新建注入器（总线与 run 同生命周期）
-    pub(crate) fn new(bus: Arc<Mutex<ControlBus>>) -> Self {
-        Self { bus }
-    }
-}
-
-impl EscapeWatchInjector for ControlBusInjector {
-    fn inject(&self, text: &str) {
-        let mut bus = self.bus.lock().unwrap_or_else(|e| e.into_inner());
-        bus.request_follow_up(
-            crate::engine::user_message(text, None),
-            Some("escape-watch".to_string()),
-            Some("system".to_string()),
-        );
-    }
 }
 
 // ── CoreRunState ──────────────────────────────────────────────────

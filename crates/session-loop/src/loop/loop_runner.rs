@@ -17,7 +17,6 @@ use crate::provider::{DeltaSink, ProviderCall};
 use crate::steering::{RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions};
 use crate::tool_events::{ApprovalGate, ToolBatchOptions};
 use crate::tool_exec::{ToolExecCtx, ToolExecutor};
-use crate::undeclared_detector::RegistryBackedDetector;
 
 use super::handlers;
 use super::options::SessionLoopOptions;
@@ -119,7 +118,7 @@ impl AgentSessionLoop {
     ///
     /// 顺序约束（Rust builder 语义，Option 字段构造期定）：`with_options` /
     /// `with_tool_options` / `with_approval` 必须在 `run()` 之前调用。
-    pub fn with_options(mut self, mut options: SessionLoopOptions) -> Self {
+    pub fn with_options(mut self, options: SessionLoopOptions) -> Self {
         // ── 引擎装配块（T-EG-06：互斥 / 配额 / 中间件链 / ESC 判定器）──
         // 工作区根解析链：显式 workspace_root → options.cwd → 当前目录
         // （与 ToolContext.workspace_root 既有回退语义一致，
@@ -140,14 +139,6 @@ impl AgentSessionLoop {
             .unwrap_or_else(|| Arc::new(WritePathRegistry::new(&self.session_id, &root)));
         self.tool_ctx.workspace_root = Some(root);
         self.tool_ctx.write_claims = Some(Arc::clone(&registry));
-        // 逃逸监视判定器注入（T-ESC-03 交接点）：装配后形态 = detector
-        // 已挂载 RegistryBackedDetector——run 内工具写路径声明即视为已
-        // 声明覆盖（审计静默跳过），声明释放后恢复未声明上报
-        if let Some(config) = options.escape_watch.take() {
-            options.escape_watch = Some(
-                config.with_detector(Arc::new(RegistryBackedDetector::new(Arc::clone(&registry)))),
-            );
-        }
         // 探索类文档配额上下文（I6-M11 C5）：经 tool_ctx 透传工具执行面；
         // None = 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」）
         self.tool_ctx.explore_docs_quota = options.explore_docs_quota.clone();

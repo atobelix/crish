@@ -1349,16 +1349,6 @@ pub(crate) mod idle_resume {
                     error = %error,
                     "drive_outcome 失败（防御性收口）"
                 );
-                // T-ESC-03：失败收口同样停止监视 + flush 剩余事件
-                // （run 中崩溃不泄漏监视任务，REQ §5.4 风险缓解）
-                let escape_handle = active
-                    .escape_watch
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner())
-                    .take();
-                if let Some(mut handle) = escape_handle {
-                    handle.shutdown().await;
-                }
                 finalize_failed(&state, &active, &error.to_string()).await;
                 return;
             }
@@ -1402,17 +1392,6 @@ pub(crate) mod idle_resume {
             dropped = report.dropped,
             "事件发射完成（缓冲桥）"
         );
-
-        // T-ESC-03 run 收口钩子：停止监视 + flush 剩余事件（聚合补发最后
-        // 一条报告——审计经桥广播，注入经 followUp 环落会话，REQ §3.5.1）
-        let escape_handle = active
-            .escape_watch
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .take();
-        if let Some(mut handle) = escape_handle {
-            handle.shutdown().await;
-        }
 
         // 4-5. 终态：移出注册表 + 快照（T08.6 触发点 A；cursor 已由
         //      drive_outcome 维护并在 finalize 落库）

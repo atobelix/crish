@@ -15,7 +15,6 @@ use conex_compaction::{CompactionPolicy, Summarizer};
 use conex_types::context::ContextBudget;
 
 use crate::cache_tracker::CacheTrackingConfig;
-use crate::escape_watch::EscapeWatchConfig;
 
 use super::{RecoveryHook, TurnEndHook};
 /// 循环配置（恢复阶梯上限 / 钩子；缺省值对齐 01 §2.5-2.6 与 §3.3）
@@ -166,14 +165,6 @@ pub struct SessionLoopOptions {
     /// 主 agent；主 agent run → 裁决者 = 用户）。None = 主 agent run /
     /// 无父 run（现状）；子代理 run 的父 run 归属由 spawner（T-D-13）装配。
     pub parent_run_id: Option<String>,
-    /// 逃逸监视装配配置（T-ESC-03 P3 装配面）：None = 不启用逃逸监视
-    /// （现状行为）。装配上下文透传——壳层 run 起停钩子消费：run 开始
-    /// 经 [crate::escape_watch::spawn_escape_watch] 启动监视并 spawn 消费
-    /// 任务（聚合 → 审计发射 + 主 agent 注入），run 收口经
-    /// [crate::escape_watch::EscapeWatchHandle::shutdown] 停止并 flush 剩余
-    /// 事件；LoopState 不消费本字段（消费循环由壳层 spawn，见
-    /// REQ-逃逸追踪分析 §3.5.1）。
-    pub escape_watch: Option<EscapeWatchConfig>,
     /// 摘要后台调度配置（T-33，00-plan §6.4 R-F 异步面）：None = 生产缺省
     /// （退避 1s/3s/9s ±20% jitter、单次墙钟 [LOOP_SUMMARY_MAX_WALL_MS]、
     /// episode attempts 上限 [MAX_SUMMARY_ATTEMPTS] 含同步）；测试可注入
@@ -296,8 +287,6 @@ impl Default for SessionLoopOptions {
             // T-D-14：父 run 归属缺省 None = 主 agent run（审批裁决者 =
             // 用户，现状行为；子代理 spawner 装配时显式注入）
             parent_run_id: None,
-            // T-ESC-03：逃逸监视缺省关闭（未配置即现状行为）
-            escape_watch: None,
             // T-33：摘要后台调度缺省生产参数（退避 1s/3s/9s、墙钟 60s、
             // episode attempts 4 含同步；测试经 options 注入快速参数）
             summary_dispatch: None,

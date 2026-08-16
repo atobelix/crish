@@ -8,17 +8,6 @@ use super::*;
 /// - 终态事件尽力发出（run-terminal 唯一终态，03 §5.2-2）；
 /// - lastError 写入（T04.5-1：finalize_failed 写入点）。
 pub(crate) async fn finalize_failed(state: &Arc<CoreRunState>, active: &ActiveRun, message: &str) {
-    // T-ESC-03：失败收口兜底停止监视 + flush（drive 错误分支已收口
-    // 时此处幂等跳过——句柄经 take 已取出）
-    let escape_handle = active
-        .escape_watch
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .take();
-    if let Some(mut handle) = escape_handle {
-        handle.shutdown().await;
-    }
-
     let session_id = active.session_id.clone();
     let run_id = active.run_id.clone();
     let mut run = active.handle.lock().await;
@@ -117,15 +106,10 @@ pub(crate) fn active_run(state: &CoreRunState, run_id: &str) -> Result<Arc<Activ
         .ok_or_else(|| CoreError::NotFound(format!("run 不存在或已终态：{run_id}")))
 }
 
-/// 逃逸监视根解析（30-P5 共用 helper，与 loop 装配块 with_options 解析链
+/// 运行工作区根解析（共用 helper，与 loop 装配块 with_options 解析链
 /// 同源：workspace_root → cwd → 当前目录；壳层 workspace_root 恒 None，
 /// 等效 cwd → current_dir）。
-///
-/// run 装配面的三处根解析共用本函数（单一真源，杜绝双处漂移复发——
-/// 00 风险 2）：逃逸监视 spawn 根 / 共享写路径注册表根 / 子代理沙箱根。
-/// None（无 cwd）时监视不启动、注册表以 current_dir 为根、run 装配不
-/// panic（E2E-3 无 cwd 分支）。
-pub(crate) fn resolve_escape_watch_root(cwd: Option<&str>) -> PathBuf {
+pub(crate) fn resolve_run_workspace_root(cwd: Option<&str>) -> PathBuf {
     cwd.map(PathBuf::from)
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
 }
@@ -457,73 +441,15 @@ pub(crate) async fn run_task_impl(
         run_id.clone(),
         audit_persist_tx,
     ));
-    let escape_root = resolve_escape_watch_root(cwd.as_deref());
+    let run_root = resolve_run_workspace_root(cwd.as_deref());
     let control_bus = Arc::new(Mutex::new(ControlBus::new()));
-    // 30-P5：共享写路径注册表（会话级，与逃逸监视根同源）——工具执行
-    // 面与逃逸判定器读同一实例；loop 侧 with_options 解析链
-    // （options.write_claims 优先）保持同源
-    let shared_registry = Arc::new(WritePathRegistry::new(session_id.clone(), &escape_root));
-    // 30-P1：每 run 新建 abort 信号（M3 契约「每 run 重建 loop + 新信号」——
-    // AbortSignal 共享 AtomicBool 不可复位，跨 run 泄漏语义禁止复用；
-    // 同一实例注入 ActiveRun 与 loop，L3 强停 / kill_all 经同一触发面）。
-    // AbortSignal::reset 不实现（Notify 无法复位，跨 run 泄漏语义登记
-    // A4-M3 邻接，以「每 run 新信号」契约兜底）
+    let shared_registry = Arc::new(WritePathRegistry::new(session_id.clone(), &run_root));
     let abort_signal = AbortSignal::new();
-    // ── 27 方案 S5：browser estop 桥（M-2，run 级 abort → CDP 发送层取消）──
-    // 三层信号联动（27 §1.3 表）：run 级 AbortSignal（L3 强停/用户取消）
-    // → 浏览器会话槽 estop 令牌（发送层在途命令逐 id 取消 +
-    // CdpError::Cancelled）+ 急停旗（新命令拒绝）。每 run 先 reset_estop
-    // 换新周期——新 run 不继承上一 run 的取消态（防跨 run 毒化会话）；
-    // 急停旗随下一启动周期复位（browser/mod.rs BrowserSlot::reset_estop）。
-    // 并发 run 共享同一 estop 周期（最后复位者生效）：多 run 并发操作
-    // 同一浏览器实例登记遗留（27 §6 P1 会话归属迁移）。
-    // 31 评审 F2（P1）：装配判定见 [assemble_browser_estop]——仅主 run
-    // （subagent_config = None）装配；子代理 run 不装配（杜绝「子代理
-    // abort → cancel 主 run estop」故障链）。
     if assemble_browser_estop(&subagent_config) {
         let browser_slot = state.engine.browser_slot();
         browser_slot.reset_estop();
         crate::browser::spawn_browser_estop_watcher(browser_slot, abort_signal.clone());
     }
-    let (escape_watch, escape_config) = if let Some(dir) = cwd.clone() {
-        let root = PathBuf::from(dir);
-        let config = EscapeWatchConfig::new(
-            root.clone(),
-            session_id.clone(),
-            run_id.clone(),
-            // 15-T-6：与工具级审计路由共用同一 run 级桥（同一
-            // BridgeAuditSink 实例双注入，无重复广播）
-            Arc::clone(&bridge_audit_sink) as AuditSink,
-        )
-        .with_injector(Arc::new(ControlBusInjector::new(Arc::clone(&control_bus))))
-        // 30-P5：判定器在 spawn 前注入（与 write_claims 同一 registry
-        // 实例——声明写静默 / 未声明上报；消除 detector 恒 None 的
-        // C-36 假闭环）
-        .with_detector(Arc::new(RegistryBackedDetector::new(Arc::clone(
-            &shared_registry,
-        ))));
-        match spawn_escape_watch(root, config.clone()) {
-            Ok(handle) => {
-                tracing::info!(
-                    target: "run",
-                    run_id = %run_id,
-                    "逃逸监视已启动（T-ESC-03）"
-                );
-                (Some(handle), Some(config))
-            }
-            Err(error) => {
-                tracing::warn!(
-                    target: "run",
-                    run_id = %run_id,
-                    error = %error,
-                    "逃逸监视启动失败（仅告警，run 继续）"
-                );
-                (None, None)
-            }
-        }
-    } else {
-        (None, None)
-    };
 
     // ── 15-T-6（裁决 D9）：工具级审计路由注册（run 级桥）──────────
     // 工具级 security-audit（shell/delete 经 BuiltinToolConfig.audit_sink
@@ -558,10 +484,10 @@ pub(crate) async fn run_task_impl(
     let (subagent_write_registry, subagent_quota, subagent_injector) = match &subagent_config {
         None => (subagent_write_registry, subagent_quota, subagent_injector),
         Some(config) => {
-            // 工作区根解析链（30-P5：与 loop 装配块同源，经共用 helper
-            // resolve_escape_watch_root——单一真源，杜绝双处漂移复发；
+            // 工作区根解析链（与 loop 装配块同源，经共用 helper
+            // resolve_run_workspace_root——单一真源，杜绝双处漂移复发；
             // 壳层 workspace_root 恒 None，等效 cwd → current_dir）
-            let root = resolve_escape_watch_root(cwd.as_deref());
+            let root = resolve_run_workspace_root(cwd.as_deref());
             // 写路径沙箱装配
             let write_registry = match &config.allowed_write_paths {
                 Some(paths) => {
@@ -668,8 +594,6 @@ pub(crate) async fn run_task_impl(
         // D1 §3.2.3：会话级熔断计数当前值（transient_retry 入口闸 C1
         // 输入；None = 不启用闸）
         provider_fail_streak,
-        // T-ESC-03：逃逸监视配置透传（装配上下文，LoopState 不消费）
-        escape_watch: escape_config,
         // T-EG-05（F7）：写前自动备份中间件装配（S10b）——备份根经
         // with_defaults(None) 执行期回退工作区 `.crish-trash`，与 UI 删除
         // 命令（trash_root_for 未注入时兜底，core_run_commands.rs:2356）及
@@ -809,7 +733,6 @@ pub(crate) async fn run_task_impl(
         approval: approval_gate,
         bridge,
         delta_sink_active: true,
-        escape_watch: Mutex::new(escape_watch),
         user_touched: AtomicBool::new(false),
         // 30-P1：spawn 句柄经 set_driver 事后登记（构造在前、spawn 在后）
         driver: Mutex::new(None),
