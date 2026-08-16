@@ -57,5 +57,11 @@
 - 消息管道统一（E3 候选）：主控 R4 期间登记（「用户消息/agent 通信/提问都是节点」）。
 - context-state 前端产生器：D0 已登记归 R6（I1-β 同批）。
 - 显示策略注册表：本文件 M4/D 项。
+- `apps/crish-desktop/src/api/subagentTimeline.ts:14` 本地 blockText 副本（:131/:154-155 消费）：与 eventUtils.ts:14 单源定义逐行同构（text→content 回退），T3 详案断言 3 字面未扫尽此文件（文件在 T3 文件域外，T3 越界禁止未动）——**归 T4 消费收口**：T4 单一投影 store 统一 blockText 单源并删本地副本；T4 详案出稿时按本登记裁决，不重复立项。引用 `execution/audits/R4-审计报告.md` §5-3 / §9-2（承上轮审计-R3 问题 3）。
+- `apps/crish-desktop/src/api/messageProjection.ts:85` timelineBlockToAgentBlock（头注 :11）：生产+测试**零调用**——**零消费维持至 T4**（T4 投影 store 持久化往返消费该反向映射），定义+头注保留、**禁止提前删**；T4 落地后若仍零消费再按详案禁止项 6 处置。引用 `execution/audits/R4-审计报告.md` §5-4 / §9-3。
+
+## 四、已接受偏差
+
+- `SessionMessage.metadata?: unknown`（store/types.ts:400-401，vs generated `JsonValue`）：为避 immer TS4023（递归 JsonValue 触 immer draft 命名问题）的**有意偏差**——R3 审计接受（字段保留、消费面收窄、根 typecheck 绿），**维持至类型面收口**（T4/类型面战役评估时再收敛）。交叉引用：`00-总方案框架.md` §3.1 审计修正记录（R4 补记行）+ `execution/audits/R4-审计报告.md` §5-5 / §9-4。
 
 _维护：对应轮次评估后回填状态（已实现 / 已裁决不做 / 立项轮次）；本文件为登记不承诺。_
