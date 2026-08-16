@@ -13,13 +13,26 @@
 //! 等）保留在 handlers/mod.rs 原位，本 mod 经 `super::handlers` 引用；
 //! handlers/mod.rs 经 `pub(crate) use` 保留既有调用面（消费点零改动）。
 //! LoopState 外围字段收敛（CompactionRuntime / BudgetState 子结构）归
-//! C1c（详案 §3.3：先搬移才有「缝的形状」），本轮只搬不拆。
+//! C1c（详案 §3.3：先搬移才有「缝的形状」），C1a 只搬不拆、C1c 收口。
+//!
+//! ## C1c 裁决（抽象纪律审计点 · 详案 C1c §1 / 00-核心逻辑模型草案.md §7）
+//!
+//! **CompactionDispatch 缝面：登记，不建 trait。** 本 mod 的编排函数
+//! （maybe_compact_preflight / maybe_compact_user_boundary /
+//! compact_with_llm_guard / apply_compaction + clamp/estimate 纯函数）即
+//! 压缩调度缝（触发/预算/边界语义）的**唯一实现**（消费点：prepare_turn
+//! 边界+预检、stream_error_recover 溢出阶梯、streaming 钳制/估算）。按
+//! 接口两实现法则（抽象接口只在已有 ≥2 个真实实现时成立；单一实现一律
+//! 直接用具体类型），**登记缝面形态、具体函数直连**——不强行 trait；
+//! 未来出现第二个实现（如外部策略驱动编排）时再升级为 `CompactionDispatch`
+//! trait。同批 C1c 落地：LoopState 外围字段收敛为本文件 [CompactionRuntime] /
+//! [BudgetState] 子结构（07 §4.2-2）。
 use std::sync::Arc;
 
 use conex_compaction::compaction::StubPolicy;
-use conex_compaction::{CompactionEngine, CompactionPlan, EstimateContext};
+use conex_compaction::{CompactionEngine, CompactionPlan, EstimateContext, Summarizer};
 use conex_types::context::ContextBudget;
-use conex_types::events::AgentEvent;
+use conex_types::events::{AgentEvent, TurnUsage};
 use conex_types::message::{AgentMessage, AgentMessageRole};
 use conex_types::tool::{
     compaction_block_details, ContextCompressionCacheBoundaryMetadata,
@@ -28,6 +41,10 @@ use conex_types::tool::{
 };
 
 use super::handlers::{compaction_shape_ok, new_message_id, streaming, LoopState};
+use super::SessionLoopOptions;
+use crate::cache_tracker::CacheStatsTracker;
+use crate::r#loop::summary_coordinator::SessionSummaryCoordinator;
+use crate::r#loop::summary_dispatch::SummaryDispatch;
 
 // ── P4 预算层（阶段 2-2/2-3）：估算 + 钳制 ─────────────────────────────
 
@@ -78,7 +95,7 @@ pub(crate) fn estimate_context(state: &LoopState) -> EstimateContext {
         &state.conversation,
         tools_prefix_json(state).as_deref(),
         state.options.system_prompt.as_deref(),
-        state.last_compaction_at,
+        state.compaction.last_compaction_at,
     )
 }
 
@@ -146,13 +163,13 @@ pub(crate) struct PendingSummaryRetry {
 ///
 /// 返回是否实际发生了压缩（对话被替换 + 事件已广播）。
 pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
-    let Some(budget) = state.budget else {
+    let Some(budget) = state.budget_state.budget else {
         return false;
     };
-    let Some(policy) = state.compaction_policy.clone() else {
+    let Some(policy) = state.compaction.compaction_policy.clone() else {
         return false;
     };
-    if state.compactions_this_run >= state.options.max_auto_compactions_per_run {
+    if state.compaction.compactions_this_run >= state.options.max_auto_compactions_per_run {
         return false;
     }
     // 快照锁定（与 streaming 同一入口；预检发生在首次 build_request 之前，
@@ -196,10 +213,10 @@ pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
 ///
 /// 返回是否实际发生了压缩（对话被替换 + 事件已广播）。
 pub(crate) async fn maybe_compact_user_boundary(state: &mut LoopState) -> bool {
-    let Some(budget) = state.budget else {
+    let Some(budget) = state.budget_state.budget else {
         return false;
     };
-    let Some(policy) = state.compaction_policy.clone() else {
+    let Some(policy) = state.compaction.compaction_policy.clone() else {
         return false;
     };
     // 快照锁定（与预检同一入口；估算需折算 tools 前缀）
@@ -214,7 +231,7 @@ pub(crate) async fn maybe_compact_user_boundary(state: &mut LoopState) -> bool {
         maybe_retry_pending_summary(state);
         return false;
     }
-    if state.compactions_this_run >= state.options.max_auto_compactions_per_run {
+    if state.compaction.compactions_this_run >= state.options.max_auto_compactions_per_run {
         // 计数封顶 → 不压缩（与预检共享单 run 计数，边界压缩后预检自然
         // 跳过）；被动补摘要**不受压缩计数约束**（不压缩对话、不消耗
         // 计数——仅补摘要的被动触发面）
@@ -263,7 +280,7 @@ pub(crate) async fn compact_with_llm_guard(
         &state.conversation,
         budget_tokens as usize,
         policy,
-        state.summarizer.as_deref(),
+        state.compaction.summarizer.as_deref(),
         stub_policy,
     );
     if plan.llm_unavailable {
@@ -317,14 +334,14 @@ pub(crate) async fn compact_with_llm_guard(
 /// 不阻塞发送、不消耗压缩计数；存活任务去重由协调器 / 调度器保证——
 /// 重复触发幂等（摘要成功升级 committed 由后台任务回调面完成）。
 fn maybe_retry_pending_summary(state: &mut LoopState) {
-    let Some(pending) = state.pending_summary_retry.clone() else {
+    let Some(pending) = state.compaction.pending_summary_retry.clone() else {
         return;
     };
     // 块已不在对话（摘要成功替换 / 清理）→ 不再待重试
     if !state.conversation.iter().any(|m| m.id == pending.block_id) {
         return;
     }
-    let Some(summarizer) = state.summarizer.clone() else {
+    let Some(summarizer) = state.compaction.summarizer.clone() else {
         return;
     };
     let task = crate::r#loop::summary_dispatch::SummaryDispatchTask {
@@ -336,7 +353,7 @@ fn maybe_retry_pending_summary(state: &mut LoopState) {
         max_bytes: pending.max_bytes,
         summarizer,
     };
-    match &state.summary_coordinator {
+    match &state.compaction.summary_coordinator {
         // 会话级协调器（壳层注入）：跨 run 单飞 + 全局并发 ≤2 + 任务跨
         // run 存活；默认回调（落 compression_blocks 表）随协调器携带
         Some(coordinator) => {
@@ -344,7 +361,7 @@ fn maybe_retry_pending_summary(state: &mut LoopState) {
         }
         // run 级 dispatch（未注入会话级容器时）：run 内单飞
         None => {
-            state.summary_dispatch.try_spawn(task, None);
+            state.compaction.summary_dispatch.try_spawn(task, None);
         }
     }
 }
@@ -411,8 +428,8 @@ pub(crate) async fn apply_compaction(
     // 对话替换（压缩是唯一前缀重写点；plan 已保留 system 消息）
     state.conversation = plan.messages.clone();
     // 护栏：单 run 压缩计数 + 时间戳护栏重置（§3.4.6）
-    state.compactions_this_run += 1;
-    state.last_compaction_at = Some(boundary_ms);
+    state.compaction.compactions_this_run += 1;
+    state.compaction.last_compaction_at = Some(boundary_ms);
     // 缓存审计基线重置（P5 S2 / T-36，C13）：压缩是唯一前缀重写点——
     // tracker 代数 +1、签名基线作废（压缩后是新内容非重放，不计 miss；
     // jcode KvCacheBaseline 双保险 / pi prev=undefined）。
@@ -422,7 +439,7 @@ pub(crate) async fn apply_compaction(
     // 2) capture_post_compaction：对话替换后捕获「压缩后真实请求前缀」
     //    预测签名（system + tools + 链全查 + tail 原文），供压缩后首请求
     //    前缀比对（record_usage 消费，T-29 追加区豁免）。
-    if let Some(tracker) = &mut state.cache_tracker {
+    if let Some(tracker) = &mut state.compaction.cache_tracker {
         tracker.on_compaction();
         tracker.apply_external_generation(plan.generation);
         let system = plan
@@ -485,7 +502,7 @@ pub(crate) async fn apply_compaction(
     // 架构决策）。丢弃消息已在对话替换前捕获（dropped_for_retry），
     // existing 取链尾文本（与同步尝试同源）。
     if !plan.summary_is_llm && !block_id.is_empty() && !dropped_for_retry.is_empty() {
-        if let Some(summarizer) = &state.summarizer {
+        if let Some(summarizer) = &state.compaction.summarizer {
             let existing = plan
                 .messages
                 .iter()
@@ -500,6 +517,7 @@ pub(crate) async fn apply_compaction(
                 })
                 .next_back();
             let max_bytes = state
+                .compaction
                 .compaction_policy
                 .as_ref()
                 .map(|p| p.max_summary_tokens.saturating_mul(4))
@@ -508,14 +526,14 @@ pub(crate) async fn apply_compaction(
             // 07 方案 §2.4 断言 4）——与后台任务同一入参源
             // （dropped/existing/max_bytes），边界触发经
             // [maybe_retry_pending_summary] 重建任务单飞续试
-            state.pending_summary_retry = Some(PendingSummaryRetry {
+            state.compaction.pending_summary_retry = Some(PendingSummaryRetry {
                 block_id: block_id.clone(),
                 generation: plan.generation,
                 dropped: dropped_for_retry.clone(),
                 existing: existing.clone(),
                 max_bytes,
             });
-            let spawned = match &state.summary_coordinator {
+            let spawned = match &state.compaction.summary_coordinator {
                 // T-42：会话级协调器（壳层注入）——跨 run 单飞 + 全局
                 // 并发上限 + 任务跨 run 存活；默认回调（壳层装配：落
                 // compression_blocks 表）随协调器携带
@@ -532,7 +550,7 @@ pub(crate) async fn apply_compaction(
                     None,
                 ),
                 // 轮次 4 兜底：run 级 dispatch（未注入会话级容器时）
-                None => state.summary_dispatch.try_spawn(
+                None => state.compaction.summary_dispatch.try_spawn(
                     crate::r#loop::summary_dispatch::SummaryDispatchTask {
                         session_id: session_id.clone(),
                         block_id: block_id.clone(),
@@ -643,5 +661,124 @@ fn policy_tier_for(trigger: ContextCompressionTrigger) -> ContextCompressionPoli
     match trigger {
         ContextCompressionTrigger::Overflow => ContextCompressionPolicyTier::Recovery,
         _ => ContextCompressionPolicyTier::Proactive,
+    }
+}
+
+// ── C1c 收敛：LoopState 外围字段子结构（07 §4.2-2 / 详案 C1c §1）─────
+
+/// 压缩/摘要/cache 运行态子结构（C1c 收敛）：原 LoopState 外围字段归组
+/// （07 §4.2-2「核心可变状态被外围功能撑大」）——压缩策略 / LLM 摘要器 /
+/// 护栏计数（时间戳 / 单 run / 溢出重试 / LLM 不可用）/ 缓存跟踪器 /
+/// 摘要调度与协调器 / 待重试快照。LoopState 只留 1 个组合引用
+/// （[crate::r#loop::handlers::LoopState::compaction]），字段文档随迁本处。
+///
+/// 生命周期 = LoopState：构造派生见 `LoopState::new`（mod.rs）与
+/// `loop_runner with_options` 同步；run 起始归零见 loop_exec.rs（压缩
+/// 护栏 + cache_tracker 复位同批，P5 §3.4.5 fresh run 语义）。
+pub(crate) struct CompactionRuntime {
+    /// 压缩策略（经 SessionLoopOptions 注入，P4 §3.4.2）：None = 无自动压缩。
+    pub(crate) compaction_policy: Option<conex_compaction::CompactionPolicy>,
+    /// L2 LLM 摘要器（可选注入，P4 §3.4.4）：None = L1 静态占位符；
+    /// C14 摘要请求缓存隔离由实现方保证（本层只透传 trait 对象）。
+    pub(crate) summarizer: Option<Arc<dyn Summarizer>>,
+    /// 时间戳护栏（epoch ms，P4 §3.4.6）：压缩完成时写入；usage 源消息
+    /// 时间戳早于它则该 usage 不再描述当前前缀（压缩插入新前缀消息），
+    /// 估算回退启发式（判定在 conex-compaction 引擎内部完成）。
+    pub(crate) last_compaction_at: Option<i64>,
+    /// 单 run 压缩次数（P4 §3.4.6）：预检触发与用户消息边界/分阶段触发
+    /// 共用计数，上限 max_auto_compactions_per_run（默认 1）；**溢出阶梯
+    /// 绕开本计数**（E2 F2 层 2：溢出自有 compression_retries 防死循环，
+    /// 预检不再饿死溢出恢复，DEEPCHECK-11 §7 冲突 1）；run 起始归零。
+    pub(crate) compactions_this_run: u32,
+    /// 溢出压缩重试计数（P4 §3.5，上限 [SessionLoopOptions::compact_overflow_retries]
+    /// 默认 2）：T-34 压缩阶梯（ContextLengthExceeded / PayloadTooLarge
+    /// 恢复）消费；**绕开预检共享计数**（E2 F2 层 2：max_auto_compactions_per_run
+    /// 仅约束预检/边界/分阶段，溢出自有本计数防死循环）。本任务只提供
+    /// 字段与归零点。
+    pub(crate) compression_retries: u32,
+    /// 溢出压缩因 LLM 摘要不可用而未压缩（E2 F1 L3）：compression_ladder
+    /// 在 plan.llm_unavailable 且无豁免时置 true，fatal 文案经
+    /// compression_fatal_note 输出「LLM 不可用」附注（显式失败不静默丢语义，
+    /// 信息分级约束 C：经 runtime-error 事件呈现，不进对话）；fresh run
+    /// 归零（loop_exec.rs run 起始同批）。
+    pub(crate) overflow_llm_unavailable: bool,
+    /// 缓存跟踪器（P5 S2 / T-36）：None = 未配置缓存测量（行为与现状一致）；
+    /// 构造 / 复位点 = LoopState 构造 + run() 起始（fresh run，P5 §3.4.5）；
+    /// run 内跨 turn 维护签名基线并聚合 RunCacheStats；压缩事件（
+    /// [apply_compaction] 单一广播点）触发代数 +1 / 基线作废（C13）。
+    pub(crate) cache_tracker: Option<CacheStatsTracker>,
+    /// 摘要后台调度器（T-33，00-plan §6.4）：run 内单飞面——压缩产出
+    /// stub 且 Summarizer 注入存在时 spawn 后台退避重试任务；任务不绑定
+    /// LoopState 生命周期（tokio::spawn 独立任务，run 收口不摧毁，R-I）；
+    /// 跨 run 会话级容器（CoreRunState）由轮次 6 壳层承接。
+    pub(crate) summary_dispatch: Arc<SummaryDispatch>,
+    /// 会话级摘要协调器（T-42，00-plan §6.5 R-I）：壳层经注册表装配注入
+    /// ——跨 run 单飞 + 全局并发上限 + 任务跨 run 存活（run 收口不摧毁）。
+    /// None = 回退 run 级 [Self::summary_dispatch]（轮次 4 语义）。
+    pub(crate) summary_coordinator: Option<Arc<SessionSummaryCoordinator>>,
+    /// E2 F3：最近一次压缩的摘要待重试快照（用户消息边界被动触发点素材，
+    /// 07 方案 §2.4 断言 4）。[apply_compaction] 产出 stub 时记录（与后台
+    /// 任务同一入参源）；用户消息边界经 [maybe_retry_pending_summary] 重建
+    /// 任务单飞触发——判定「对话中仍存在该块 stub 消息」为待重试。块已被
+    /// 替换 / 清理则自然失效。fresh run 不重置（跨 run 待重试语义延续，
+    /// 与 summary_coordinator 任务存活语义对齐）。None = 无待重试摘要。
+    pub(crate) pending_summary_retry: Option<PendingSummaryRetry>,
+}
+
+/// 预算/用量运行态子结构（C1c 收敛 · 07 §4.2-2 / §6.2）：P4 预算配置 +
+/// EV-11 每 turn usage 槽位。LoopState 只留 1 个组合引用
+/// （[crate::r#loop::handlers::LoopState::budget_state]）。
+pub(crate) struct BudgetState {
+    /// 预算配置（经 SessionLoopOptions 注入，P4 §3.3.2）：None = 不钳制
+    /// 不预检（向后兼容现状）；Some = 发请求前估算 + max_tokens 钳制 +
+    /// prepare_turn 阈值预检压缩。
+    pub(crate) budget: Option<ContextBudget>,
+    /// 当前轮 usage 槽位（EV-11/D-03：streaming consume 后写入本 turn 六字段
+    /// 真值，prepare_turn 新一轮归零，turn_complete 收口注入 TurnEnd.usage；
+    /// None = provider 未报告 usage / 本轮未发请求——诚实留空，旧帧兼容）
+    pub(crate) turn_usage: Option<TurnUsage>,
+}
+
+impl CompactionRuntime {
+    /// 从 options 派生构造（LoopState::new 构造期调用；with_options 覆盖
+    /// options 时由 loop_runner 派生状态同步刷新，run 起始复位见 loop_exec.rs）
+    pub(crate) fn from_options(options: &SessionLoopOptions) -> Self {
+        Self {
+            compaction_policy: options.compaction_policy.clone(),
+            summarizer: options.summarizer.clone(),
+            // 护栏初始态：时间戳护栏空（无压缩边界）、计数 0（fresh run）
+            last_compaction_at: None,
+            compactions_this_run: 0,
+            compression_retries: 0,
+            // E2 F1 L3：溢出 LLM 不可用标记初始 false（无 fatal 前恒为假）
+            overflow_llm_unavailable: false,
+            // 缓存测量面（P5 S2 / T-36）：构造期从 options 派生一次
+            // （with_options / run() 起始由 loop/mod.rs 同步刷新与复位）
+            cache_tracker: crate::cache_tracker::build_tracker(options.cache_tracking.as_ref()),
+            // 摘要后台调度（T-33）：构造期从 options 派生（None = 生产缺省
+            // 退避参数；测试注入快速序列）；run 起始不复位（单飞句柄跨 run
+            // 保留——存活任务阻塞新 spawn，会话级单飞语义在 loop 实例内成立）
+            summary_dispatch: Arc::new(SummaryDispatch::new(
+                options.summary_dispatch.clone().unwrap_or_default(),
+            )),
+            // 会话级协调器（T-42）：构造期从 options 派生（壳层装配；None =
+            // 回退 run 级 dispatch）——协调器由注册表持有，LoopState 只借用
+            // Arc 引用，run 收口 drop 后任务仍由注册表支撑存活
+            summary_coordinator: options.summary_coordinator.clone(),
+            // E2 F3：无待重试摘要（fresh state）
+            pending_summary_retry: None,
+        }
+    }
+}
+
+impl BudgetState {
+    /// 从 options 派生构造（LoopState::new 构造期调用；with_options 覆盖
+    /// options 时由 loop_runner 派生状态同步刷新）
+    pub(crate) fn from_options(options: &SessionLoopOptions) -> Self {
+        Self {
+            budget: options.context_budget,
+            // EV-11（D-03）：usage 槽位初始空（provider 未报告前无数据）
+            turn_usage: None,
+        }
     }
 }

@@ -10,15 +10,15 @@
     #[tokio::test]
     async fn overflow_without_summarizer_fatals_with_llm_unavailable_note() {
         let mut state = budgeted_state();
-        state.summarizer = None; // 无 Summarizer 注入（LLM 摘要不可用）
+        state.compaction.summarizer = None; // 无 Summarizer 注入（LLM 摘要不可用）
         let snapshot = state.conversation.clone();
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
         assert!(outcome.end.is_some(), "无 Summarizer 且 LLM 强制必须直接 fatal");
         assert_eq!(state.machine.context().end_reason, R::Error);
-        assert_eq!(state.compression_retries, 0, "未压缩不消耗重试计数");
-        assert_eq!(state.compactions_this_run, 0, "未压缩不消耗单 run 计数");
+        assert_eq!(state.compaction.compression_retries, 0, "未压缩不消耗重试计数");
+        assert_eq!(state.compaction.compactions_this_run, 0, "未压缩不消耗单 run 计数");
         // 对话原样（无 stub 入对话——禁止纯丢弃式）
         assert_eq!(state.conversation.len(), snapshot.len(), "对话必须保持原样");
         assert!(
@@ -65,13 +65,13 @@
     #[tokio::test]
     async fn overflow_stub_fallback_exemption_allows_stub() {
         let mut state = budgeted_state();
-        state.summarizer = None;
+        state.compaction.summarizer = None;
         state.options.compact_allow_stub_fallback = true;
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
         assert!(outcome.end.is_none(), "豁免路径必须压缩并重试");
-        assert_eq!(state.compression_retries, 1);
+        assert_eq!(state.compaction.compression_retries, 1);
         // stub 入对话（降级路径语义）
         let summary = compression_record(&state)
             .map(|r| r.summary)
@@ -88,13 +88,13 @@
     #[tokio::test]
     async fn overflow_require_llm_disabled_allows_stub() {
         let mut state = budgeted_state();
-        state.summarizer = None;
+        state.compaction.summarizer = None;
         state.options.compact_require_llm = false;
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
         assert!(outcome.end.is_none(), "compact_require_llm=false 必须放行 stub 压缩");
-        assert_eq!(state.compression_retries, 1);
+        assert_eq!(state.compaction.compression_retries, 1);
         let summary = compression_record(&state)
             .map(|r| r.summary)
             .expect("必须有压缩记录");
@@ -117,13 +117,13 @@
             }
         }
         let mut state = budgeted_state();
-        state.summarizer = Some(Arc::new(FailingSummarizer));
+        state.compaction.summarizer = Some(Arc::new(FailingSummarizer));
         let snapshot = state.conversation.clone();
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
         assert!(outcome.end.is_some(), "摘要失败且 LLM 强制必须直接 fatal");
-        assert_eq!(state.compression_retries, 0);
+        assert_eq!(state.compaction.compression_retries, 0);
         assert_eq!(state.conversation.len(), snapshot.len(), "对话保持原样");
         let runtime_error = state
             .events
@@ -150,8 +150,8 @@
             .await
             .unwrap();
         assert!(outcome.end.is_some(), "上限 0 必须直接 fatal");
-        assert_eq!(state.compression_retries, 0);
-        assert_eq!(state.compactions_this_run, 0, "未压缩不得计数");
+        assert_eq!(state.compaction.compression_retries, 0);
+        assert_eq!(state.compaction.compactions_this_run, 0, "未压缩不得计数");
         // 1 = 只压缩一次，第二次仍超限直接 fatal（旧语义上限）
         let mut state = budgeted_state();
         state.options.compact_overflow_retries = 1;
@@ -159,13 +159,13 @@
             .await
             .unwrap();
         assert!(o1.end.is_none());
-        assert_eq!(state.compression_retries, 1);
+        assert_eq!(state.compaction.compression_retries, 1);
         re_enter_streaming(&mut state);
         let o2 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
         assert!(o2.end.is_some(), "上限 1 耗尽后必须 fatal");
-        assert_eq!(state.compression_retries, 1);
+        assert_eq!(state.compaction.compression_retries, 1);
     }
 
     /// E2 F2 层 2 阶梯下调（D1 §3.5.1 / DEEPCHECK-11 §8 机制化）：
@@ -214,16 +214,16 @@
             ..Default::default()
         };
         state.options = options.clone();
-        state.budget = options.context_budget;
-        state.compaction_policy = options.compaction_policy.clone();
-        state.summarizer = options.summarizer.clone();
+        state.budget_state.budget = options.context_budget;
+        state.compaction.compaction_policy = options.compaction_policy.clone();
+        state.compaction.summarizer = options.summarizer.clone();
         state.conversation = conversation;
         // 第一次压缩（keep=20000 → cut=8）
         let o1 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
         assert!(o1.end.is_none());
-        assert_eq!(state.compression_retries, 1);
+        assert_eq!(state.compaction.compression_retries, 1);
         // 压缩后对话 = 链 + m8..m11（5 条）
         assert_eq!(state.conversation.len(), 5);
         re_enter_streaming(&mut state);
@@ -232,7 +232,7 @@
             .await
             .unwrap();
         assert!(o2.end.is_none(), "阶梯下调后第二次压缩必须成功（非 noop fatal）");
-        assert_eq!(state.compression_retries, 2);
+        assert_eq!(state.compaction.compression_retries, 2);
         let record = compression_record(&state).expect("第二次压缩必须广播事件");
         assert_eq!(
             record.compressed_message_ids,
@@ -250,7 +250,7 @@
     #[tokio::test]
     async fn llm_unavailable_overflow_never_injects_diagnostic_into_conversation() {
         let mut state = budgeted_state();
-        state.summarizer = None;
+        state.compaction.summarizer = None;
         let snapshot: Vec<Arc<AgentMessage>> = state.conversation.clone();
         handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await

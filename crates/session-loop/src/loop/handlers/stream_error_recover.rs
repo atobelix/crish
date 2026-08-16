@@ -117,19 +117,21 @@ pub(crate) async fn compression_ladder(
     }
     // 条件 2：溢出重试上限（可配；0 = 溢出不压缩直接 fatal）
     let overflow_limit = state.options.compact_overflow_retries;
-    if state.compression_retries >= overflow_limit {
+    if state.compaction.compression_retries >= overflow_limit {
         return fatal_provider_error(state, classified);
     }
     // 条件 1：预算与压缩策略缺省（None，向后兼容现状）
-    let Some(budget) = state.budget else {
+    let Some(budget) = state.budget_state.budget else {
         return fatal_provider_error(state, classified);
     };
-    let Some(mut policy) = state.compaction_policy.clone() else {
+    let Some(mut policy) = state.compaction.compaction_policy.clone() else {
         return fatal_provider_error(state, classified);
     };
     // 条件 3：第二次起 keep_recent_tokens 阶梯下调（D1 §3.5.1 机制化；
     // min(配置值, 阶梯值)——阶梯是下调方向，永不放大配置预算）
-    if let Some(stair) = OVERFLOW_KEEP_RECENT_STAIRCASE.get(state.compression_retries as usize) {
+    if let Some(stair) =
+        OVERFLOW_KEEP_RECENT_STAIRCASE.get(state.compaction.compression_retries as usize)
+    {
         policy.keep_recent_tokens = policy.keep_recent_tokens.min(*stair);
     }
     // 目标预算 = window - reserve（与预检触发同一口径，P4 §3.4.1 触发点 2）
@@ -148,7 +150,7 @@ pub(crate) async fn compression_ladder(
         &state.conversation,
         budget_tokens as usize,
         &policy,
-        state.summarizer.as_deref(),
+        state.compaction.summarizer.as_deref(),
         stub_policy,
     );
     if plan.llm_unavailable {
@@ -159,7 +161,7 @@ pub(crate) async fn compression_ladder(
             session_id = %state.machine.context().session_id,
             "溢出压缩因 LLM 摘要不可用而未压缩（默认 fatal；compact_allow_stub_fallback=true 可豁免为临时 stub）"
         );
-        state.overflow_llm_unavailable = true;
+        state.compaction.overflow_llm_unavailable = true;
         return fatal_provider_error(state, classified);
     }
     if plan.dropped_ids.is_empty() {
@@ -186,7 +188,7 @@ pub(crate) async fn compression_ladder(
                     &state.conversation,
                     budget_tokens as usize,
                     &tighter_policy,
-                    state.summarizer.as_deref(),
+                    state.compaction.summarizer.as_deref(),
                     stub_policy,
                 );
                 if compaction_shape_ok(&tighter_plan.messages)
@@ -211,7 +213,7 @@ pub(crate) async fn compression_ladder(
         reason: ContextCompressionReason::Overflow,
     };
     apply_compaction(state, &plan, &info, Some(u64::from(budget_tokens))).await;
-    state.compression_retries += 1;
+    state.compaction.compression_retries += 1;
     // T-35 注入卫生（debug 面）：压缩替换对话后复检——压缩是唯一前缀
     // 重写点，链消息与保留区不得携带时间线注入（注入只允许在对话末尾
     // user 消息）

@@ -72,9 +72,9 @@ use conex_types::events::AgentEvent;
         // LoopState 构造期从 options 派生 budget/policy——测试内直接改
         // options 需同步派生字段（生产路径经 with_options 派生）
         state.options = options.clone();
-        state.budget = options.context_budget;
-        state.compaction_policy = options.compaction_policy.clone();
-        state.summarizer = options.summarizer.clone();
+        state.budget_state.budget = options.context_budget;
+        state.compaction.compaction_policy = options.compaction_policy.clone();
+        state.compaction.summarizer = options.summarizer.clone();
         state.conversation = big_conversation();
         state
     }

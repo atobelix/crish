@@ -47,7 +47,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         // consume 后写入槽位（六字段：prompt/completion/total/cache_read/
         // cache_write/cache_miss tokens），provider 未报告时 None（旧帧
         // 缺省兼容；take 消费防同一槽位被二次发射复用）
-        usage: state.turn_usage.take(),
+        usage: state.budget_state.turn_usage.take(),
     };
     state.emit_event(turn_end_event);
     // EV-08：正常发射完成，清除未闭合 turn 标记（收敛路径兜底补发不再触发；

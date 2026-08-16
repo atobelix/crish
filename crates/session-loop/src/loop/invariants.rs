@@ -308,7 +308,10 @@ async fn i5_compaction_resets_usage_baseline_via_real_path() {
         maybe_compact_preflight(&mut state).await,
         "usage 估算超阈值必须压缩"
     );
-    assert!(state.last_compaction_at.is_some(), "压缩后必须写时间戳护栏");
+    assert!(
+        state.compaction.last_compaction_at.is_some(),
+        "压缩后必须写时间戳护栏"
+    );
     assert!(
         state.conversation.iter().any(|m| m.id == "a-usage"),
         "usage 消息位于保留段，压缩后必须存活（护栏判定才有意义）"

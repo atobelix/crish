@@ -24,6 +24,18 @@
 //! - `apply_compaction`（压缩事件单一广播点）触发 `on_compaction`
 //!   （C13：代数 +1、基线作废）；
 //! - `converge` 收口 `finish()` → `RunOutcome.cache_stats`。
+//!
+//! ## C1c 裁决（抽象纪律审计点 · 详案-C1-核心循环瘦身.md C1c 段 / 00-核心逻辑模型草案.md §7）
+//!
+//! **CacheTelemetry 缝面：登记，不建 trait。** 本模块 [CacheStatsTracker] 是
+//! 缓存遥测/查询面（capture/record/finish/on_compaction/model 等）的
+//! **唯一实现**；装配缝 = [build_tracker]（构造经 `CacheTrackingConfig`）+
+//! LoopState 的 `Option<CacheStatsTracker>` 引用（None = 未装配缓存测量，
+//! 行为与现状一致）——C1c 起该引用落在 `CompactionRuntime` 子结构内。
+//! 按接口两实现法则（抽象接口只在已有 ≥2 个真实实现时成立；单一实现
+//! 一律直接用具体类型），**登记缝面形态、具体类型直连，不强行 trait**；
+//! 未来出现第二实现（如会话级跨 run 遥测聚合器）时再升级为
+//! `CacheTelemetry` trait。
 
 use std::sync::Arc;
 

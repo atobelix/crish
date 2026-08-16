@@ -63,7 +63,7 @@ pub(crate) async fn handle(
     // 只读哈希，不改请求字节）
     let tools = tools_schema(state).to_vec();
     let system = state.options.system_prompt.clone();
-    if let Some(tracker) = &mut state.cache_tracker {
+    if let Some(tracker) = &mut state.compaction.cache_tracker {
         tracker.capture_signature(system.as_deref(), &tools, &state.conversation);
     }
     // EV-11（D-03 EV-13）：provider 请求锚点（Delta 可丢）——请求发出
@@ -242,7 +242,7 @@ async fn consume_classify(
     // EV-11（D-03 EV-13）：每 turn usage 槽位——turn-complete 收口注入
     // TurnEnd.usage（六字段真值）；provider 未报告 usage（对象缺失）时
     // 保持 None（诚实留空，不猜前端估算）
-    state.turn_usage = turn_usage_from_metadata(&consumed.metadata);
+    state.budget_state.turn_usage = turn_usage_from_metadata(&consumed.metadata);
 
     // 5. 响应分类（01 §2.4 步骤 5）
     match &consumed.response {
@@ -422,7 +422,7 @@ fn build_request(state: &LoopState) -> ProviderRequest<'_> {
 /// （length 阶梯值）经 [clamp_max_tokens] 钳到 `window - estimate - safety`；
 /// 预算缺省 None = 不钳制（向后兼容现状）
 fn clamp_request_max_tokens(state: &LoopState) -> u32 {
-    let Some(budget) = state.budget else {
+    let Some(budget) = state.budget_state.budget else {
         return state.max_tokens;
     };
     let estimate = estimate_context(state);
@@ -471,7 +471,11 @@ pub(crate) fn ensure_tools_snapshot(state: &mut LoopState) {
 fn emit_provider_request_anchored(state: &mut LoopState, request_started_at_ms: u64) {
     let session_id = state.machine.context().session_id.clone();
     let turn_index = state.machine.context().turn_index;
-    let model = state.cache_tracker.as_ref().map(|t| t.model().to_string());
+    let model = state
+        .compaction
+        .cache_tracker
+        .as_ref()
+        .map(|t| t.model().to_string());
     state.emit_event(AgentEvent::ProviderRequestAnchored {
         session_id,
         timestamp: crate::steering::now_iso_utc(),
@@ -516,7 +520,7 @@ fn turn_usage_from_metadata(metadata: &serde_json::Value) -> Option<TurnUsage> {
 /// `tracker.record_usage`；产出的 [CacheMiss] 只做日志观测——cache-waste-alert
 /// 事件发射（阈值 + DeltaSink 实时轨）归 T-40 engine 接线。
 fn consume_cache_usage(state: &mut LoopState, consumed: &ConsumeResult) {
-    let Some(tracker) = &mut state.cache_tracker else {
+    let Some(tracker) = &mut state.compaction.cache_tracker else {
         return;
     };
     let Some(usage) = consumed.metadata.get("usage").and_then(|v| v.as_object()) else {

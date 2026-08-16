@@ -222,9 +222,9 @@
         assert!(outcome.end.is_none(), "压缩后必须重试而非 fatal");
         assert_eq!(state.machine.state(), S::PreparingTurn);
         // 护栏：溢出重试计数 + 单 run 压缩计数 + 时间戳护栏
-        assert_eq!(state.compression_retries, 1, "溢出压缩重试计数 = 1");
-        assert_eq!(state.compactions_this_run, 1);
-        assert!(state.last_compaction_at.is_some(), "压缩后时间戳护栏必须重置");
+        assert_eq!(state.compaction.compression_retries, 1, "溢出压缩重试计数 = 1");
+        assert_eq!(state.compaction.compactions_this_run, 1);
+        assert!(state.compaction.last_compaction_at.is_some(), "压缩后时间戳护栏必须重置");
         // 事件：Overflow 触发成对广播
         let record = compression_record(&state).expect("必须广播压缩结束事件");
         assert_eq!(record.trigger, ContextCompressionTrigger::Overflow);
@@ -255,7 +255,7 @@
             .await
             .unwrap();
         assert!(o1.end.is_none());
-        assert_eq!(state.compression_retries, 1);
+        assert_eq!(state.compaction.compression_retries, 1);
         re_enter_streaming(&mut state);
         // 第二次（压缩后仍 PayloadTooLarge）：再次压缩 + 重试（retries 1→2，
         // 上限 2 未耗尽——E2 新语义）
@@ -263,14 +263,14 @@
             .await
             .unwrap();
         assert!(o2.end.is_none(), "重试上限 2 内第二次压缩必须发生（E2 F2 层 2）");
-        assert_eq!(state.compression_retries, 2);
+        assert_eq!(state.compaction.compression_retries, 2);
         re_enter_streaming(&mut state);
         // 第三次（仍超限）：上限耗尽 → fatal，不再压缩
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
         assert!(outcome.end.is_some(), "压缩后仍超限必须 fatal");
-        assert_eq!(state.compression_retries, 2, "重试上限 2 不可再超");
+        assert_eq!(state.compaction.compression_retries, 2, "重试上限 2 不可再超");
         assert_eq!(state.machine.context().end_reason, R::Error);
         assert_eq!(state.machine.state(), S::TurnComplete);
         // 诊断含压缩后 token 数（P4 §3.5：压缩后仍超 = 单条消息过大或窗口过小）
@@ -323,8 +323,8 @@
             .await
             .unwrap();
         assert!(o3.end.is_none(), "length 用尽后必须走压缩阶梯而非 fatal");
-        assert_eq!(state.compression_retries, 1);
-        assert_eq!(state.compactions_this_run, 1);
+        assert_eq!(state.compaction.compression_retries, 1);
+        assert_eq!(state.compaction.compactions_this_run, 1);
         let record = compression_record(&state).expect("压缩阶梯必须广播结束事件");
         assert_eq!(record.trigger, ContextCompressionTrigger::Overflow);
         // 压缩重试后循环重进 streaming
@@ -335,8 +335,8 @@
             .await
             .unwrap();
         assert!(o4.end.is_none(), "压缩 #2 必须发生（上限 2 未耗尽）");
-        assert_eq!(state.compression_retries, 2);
-        assert_eq!(state.compactions_this_run, 2);
+        assert_eq!(state.compaction.compression_retries, 2);
+        assert_eq!(state.compaction.compactions_this_run, 2);
         re_enter_streaming(&mut state);
         // 第五次：压缩后仍超限 → fatal（上限 2 耗尽，不再次压缩）
         let o5 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
@@ -344,8 +344,8 @@
             .unwrap();
         assert!(o5.end.is_some());
         assert_eq!(state.machine.context().end_reason, R::Error);
-        assert_eq!(state.compression_retries, 2, "compression_retries ≤ 2");
-        assert_eq!(state.compactions_this_run, 2, "不得再次压缩");
+        assert_eq!(state.compaction.compression_retries, 2, "compression_retries ≤ 2");
+        assert_eq!(state.compaction.compactions_this_run, 2, "不得再次压缩");
     }
 
     /// 缺省配置（无预算 / 无压缩策略）：PayloadTooLarge 保持「直接 fatal」
@@ -358,7 +358,7 @@
             .unwrap();
         assert!(outcome.end.is_some());
         assert_eq!(state.machine.context().end_reason, R::Error);
-        assert_eq!(state.compression_retries, 0, "缺省配置不消耗压缩重试计数");
+        assert_eq!(state.compaction.compression_retries, 0, "缺省配置不消耗压缩重试计数");
         let runtime_error = state
             .events
             .iter()
@@ -391,8 +391,8 @@
             .await
             .unwrap();
         assert!(outcome.end.is_some(), "无可丢内容不得假恢复（直接 fatal）");
-        assert_eq!(state.compression_retries, 0, "noop 压缩不消耗重试计数");
-        assert_eq!(state.compactions_this_run, 0);
+        assert_eq!(state.compaction.compression_retries, 0, "noop 压缩不消耗重试计数");
+        assert_eq!(state.compaction.compactions_this_run, 0);
         assert!(
             state.events.iter().all(|e| !matches!(e, AgentEvent::ContextCompressionEnd { .. })),
             "noop 压缩不得广播压缩事件"
@@ -407,7 +407,7 @@
     #[tokio::test]
     async fn overflow_compaction_bypasses_preflight_run_limit() {
         let mut state = budgeted_state();
-        state.compactions_this_run = 1; // 模拟预检已压缩（单 run 上限 1 已用尽）
+        state.compaction.compactions_this_run = 1; // 模拟预检已压缩（单 run 上限 1 已用尽）
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
@@ -415,9 +415,9 @@
             outcome.end.is_none(),
             "溢出阶梯必须绕开预检共享计数（预检不再饿死溢出恢复）"
         );
-        assert_eq!(state.compression_retries, 1, "溢出压缩照常发生");
+        assert_eq!(state.compaction.compression_retries, 1, "溢出压缩照常发生");
         assert_eq!(
-            state.compactions_this_run, 2,
+            state.compaction.compactions_this_run, 2,
             "溢出压缩也计入总计数（apply_compaction 统一口径），但不受其约束"
         );
         assert!(
@@ -434,14 +434,14 @@
     #[tokio::test]
     async fn preflight_guard_still_blocks_second_preflight_compaction() {
         let mut state = budgeted_state();
-        state.compactions_this_run = 1;
+        state.compaction.compactions_this_run = 1;
         // 直接驱动预检触发（阈值估计：对话 10 条 × 5000 token 远超 8000）
         let compacted = crate::r#loop::handlers::maybe_compact_preflight(&mut state).await;
         assert!(
             !compacted,
             "预检路径必须仍受单 run 上限约束（计数解耦只针对溢出）"
         );
-        assert_eq!(state.compactions_this_run, 1, "预检被挡下不得计数");
+        assert_eq!(state.compaction.compactions_this_run, 1, "预检被挡下不得计数");
     }
 
     /// F2-01（红→绿）：length 阶梯配置放大溢出防护——length_upgrade_limit
@@ -546,7 +546,7 @@
         let calls = Arc::new(Mutex::new(Vec::new()));
         let summarizer = Arc::new(RecordingSummarizer { calls: calls.clone() });
         let mut state = budgeted_state();
-        state.summarizer = Some(summarizer.clone());
+        state.compaction.summarizer = Some(summarizer.clone());
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();

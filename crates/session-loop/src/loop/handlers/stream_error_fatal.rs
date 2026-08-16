@@ -66,14 +66,14 @@ pub(crate) fn fatal_provider_error(
 
 /// fatal 诊断附注（P4 §3.5 / E2 F1 L3）：压缩阶梯用尽后仍超限时携带压缩后
 /// token 数（压缩后仍超 = 单条消息过大或窗口过小）；LLM 摘要不可用未压缩
-/// 时携带「LLM 不可用」附注（[LoopState::overflow_llm_unavailable]，E2 F1
-/// L3 默认 fatal 的文案面）；未发生压缩时保留「无压缩恢复路径」说明
+/// 时携带「LLM 不可用」附注（`CompactionRuntime::overflow_llm_unavailable`，
+/// E2 F1 L3 默认 fatal 的文案面）；未发生压缩时保留「无压缩恢复路径」说明
 /// （T06.2.2 语义的缺省表述）。
 fn compression_fatal_note(state: &LoopState, kind: ProviderErrorKind) -> String {
     // E2 F1 L3：溢出压缩因 LLM 摘要不可用而未压缩（优先级最高——
     // 未发生压缩，压缩后 token 附注无意义，无压缩恢复路径说明会让用户
     // 误以为压缩路径缺省未配置）
-    if state.overflow_llm_unavailable {
+    if state.compaction.overflow_llm_unavailable {
         return "；LLM 不可用，溢出未压缩——直接终止（不再重试）".to_string();
     }
     let tokens_after = last_compression_tokens_after(state);

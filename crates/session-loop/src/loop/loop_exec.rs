@@ -90,16 +90,17 @@ impl AgentSessionLoop {
         //   再压缩」死循环）。
         // last_compaction_at 不在此归零（跨 run 时间戳护栏，压缩边界持续
         // 有效；跨重启由 orchestrator SessionContextMeta 持久化恢复，T-34）
-        self.state.compactions_this_run = 0;
-        self.state.compression_retries = 0;
+        self.state.compaction.compactions_this_run = 0;
+        self.state.compaction.compression_retries = 0;
         // E2 F1 L3：溢出 LLM 不可用标记随 run 归零（fatal 附注只在触发
         // 压缩阶梯的 run 内消费）
-        self.state.overflow_llm_unavailable = false;
+        self.state.compaction.overflow_llm_unavailable = false;
         // 缓存跟踪器复位（fresh run，P5 S2 / T-36 / §3.4.5「每 run 重建」语义）：
         // run 内跨 turn 基线在 tracker 内部维护；跨 run 基线持久化由 engine
         // 层负责（T-40，经 CacheStatsTracker::baseline 移交）——本层只保证
         // 每 run 从干净状态开始（压缩代数归 0、签名基线作废、聚合清零）。
-        self.state.cache_tracker = build_tracker(self.state.options.cache_tracking.as_ref());
+        self.state.compaction.cache_tracker =
+            build_tracker(self.state.options.cache_tracking.as_ref());
 
         // 用户消息入队（force 环）→ INITIALIZED → agent-start（01 §2.1）
         // EV-12 输入留痕写点：用户消息主路径入队即落库（save_pending_input，
@@ -337,6 +338,7 @@ impl AgentSessionLoop {
             // 未配置 / 无样本 → None（缺省向后兼容，T-40 落库与事件消费）
             cache_stats: self
                 .state
+                .compaction
                 .cache_tracker
                 .take()
                 .map(CacheStatsTracker::finish),

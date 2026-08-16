@@ -19,10 +19,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use agent_tools::registry::ToolRegistry;
-use conex_compaction::Summarizer;
-use conex_types::context::ContextBudget;
 use conex_types::error::codes;
-use conex_types::events::{AgentEvent, TurnUsage};
+use conex_types::events::AgentEvent;
 use conex_types::message::{AgentMessage, AgentMessageRole};
 use conex_types::session::{AgentSessionEvent as E, AgentSessionState as S};
 
@@ -114,62 +112,16 @@ pub(crate) struct LoopState {
     /// 收敛路径未走 turn_complete 时经 [emit_missing_turn_end] 补发闭合——
     /// 「turn 对恒成对」不变量载体。None = 无未闭合 turn。
     pub(crate) current_turn_index: Option<u32>,
-    /// 预算配置（经 SessionLoopOptions 注入，P4 §3.3.2）：None = 不钳制
-    /// 不预检（向后兼容现状）；Some = 发请求前估算 + max_tokens 钳制 +
-    /// prepare_turn 阈值预检压缩。
-    pub(crate) budget: Option<ContextBudget>,
-    /// 压缩策略（经 SessionLoopOptions 注入，P4 §3.4.2）：None = 无自动压缩。
-    pub(crate) compaction_policy: Option<conex_compaction::CompactionPolicy>,
-    /// L2 LLM 摘要器（可选注入，P4 §3.4.4）：None = L1 静态占位符；
-    /// C14 摘要请求缓存隔离由实现方保证（本层只透传 trait 对象）。
-    pub(crate) summarizer: Option<Arc<dyn Summarizer>>,
-    /// 时间戳护栏（epoch ms，P4 §3.4.6）：压缩完成时写入；usage 源消息
-    /// 时间戳早于它则该 usage 不再描述当前前缀（压缩插入新前缀消息），
-    /// 估算回退启发式（判定在 conex-compaction 引擎内部完成）。
-    pub(crate) last_compaction_at: Option<i64>,
-    /// 单 run 压缩次数（P4 §3.4.6）：预检触发与用户消息边界/分阶段触发
-    /// 共用计数，上限 max_auto_compactions_per_run（默认 1）；**溢出阶梯
-    /// 绕开本计数**（E2 F2 层 2：溢出自有 compression_retries 防死循环，
-    /// 预检不再饿死溢出恢复，DEEPCHECK-11 §7 冲突 1）；run 起始归零。
-    pub(crate) compactions_this_run: u32,
-    /// 溢出压缩重试计数（P4 §3.5，上限 [SessionLoopOptions::compact_overflow_retries]
-    /// 默认 2）：T-34 压缩阶梯（ContextLengthExceeded / PayloadTooLarge
-    /// 恢复）消费；**绕开预检共享计数**（E2 F2 层 2：max_auto_compactions_per_run
-    /// 仅约束预检/边界/分阶段，溢出自有本计数防死循环）。本任务只提供
-    /// 字段与归零点。
-    pub(crate) compression_retries: u32,
-    /// 溢出压缩因 LLM 摘要不可用而未压缩（E2 F1 L3）：compression_ladder
-    /// 在 plan.llm_unavailable 且无豁免时置 true，fatal 文案经
-    /// compression_fatal_note 输出「LLM 不可用」附注（显式失败不静默丢语义，
-    /// 信息分级约束 C：经 runtime-error 事件呈现，不进对话）；fresh run
-    /// 归零（loop/mod.rs run 起始同批）。
-    pub(crate) overflow_llm_unavailable: bool,
-    /// 缓存跟踪器（P5 S2 / T-36）：None = 未配置缓存测量（行为与现状一致）；
-    /// 构造 / 复位点 = LoopState 构造 + run() 起始（fresh run，P5 §3.4.5）；
-    /// run 内跨 turn 维护签名基线并聚合 RunCacheStats；压缩事件（
-    /// [apply_compaction] 单一广播点）触发代数 +1 / 基线作废（C13）。
-    pub(crate) cache_tracker: Option<crate::cache_tracker::CacheStatsTracker>,
-    /// 摘要后台调度器（T-33，00-plan §6.4）：run 内单飞面——压缩产出
-    /// stub 且 Summarizer 注入存在时 spawn 后台退避重试任务；任务不绑定
-    /// LoopState 生命周期（tokio::spawn 独立任务，run 收口不摧毁，R-I）；
-    /// 跨 run 会话级容器（CoreRunState）由轮次 6 壳层承接。
-    pub(crate) summary_dispatch: Arc<crate::r#loop::summary_dispatch::SummaryDispatch>,
-    /// 会话级摘要协调器（T-42，00-plan §6.5 R-I）：壳层经注册表装配注入
-    /// ——跨 run 单飞 + 全局并发上限 + 任务跨 run 存活（run 收口不摧毁）。
-    /// None = 回退 run 级 [Self::summary_dispatch]（轮次 4 语义）。
-    pub(crate) summary_coordinator:
-        Option<Arc<crate::r#loop::summary_coordinator::SessionSummaryCoordinator>>,
-    /// E2 F3：最近一次压缩的摘要待重试快照（用户消息边界被动触发点素材，
-    /// 07 方案 §2.4 断言 4）。[apply_compaction] 产出 stub 时记录（与后台
-    /// 任务同一入参源）；用户消息边界经 [maybe_retry_pending_summary] 重建
-    /// 任务单飞触发——判定「对话中仍存在该块 stub 消息」为待重试。块已被
-    /// 替换 / 清理则自然失效。fresh run 不重置（跨 run 待重试语义延续，
-    /// 与 summary_coordinator 任务存活语义对齐）。None = 无待重试摘要。
-    pub(crate) pending_summary_retry: Option<PendingSummaryRetry>,
-    /// 当前轮 usage 槽位（EV-11/D-03：streaming consume 后写入本 turn 六字段
-    /// 真值，prepare_turn 新一轮归零，turn_complete 收口注入 TurnEnd.usage；
-    /// None = provider 未报告 usage / 本轮未发请求——诚实留空，旧帧兼容）
-    pub(crate) turn_usage: Option<TurnUsage>,
+    /// 压缩/摘要/cache 运行态（C1c 收敛 · 07 §4.2-2）：压缩策略 / LLM 摘要器 /
+    /// 护栏计数（时间戳 / 单 run / 溢出重试 / LLM 不可用）/ 缓存跟踪器 /
+    /// 摘要调度与协调器 / 待重试快照归组为 `CompactionRuntime` 子结构
+    /// （定义与字段文档在 compaction_dispatch.rs，C1a 详案 C1c 段）；
+    /// LoopState 只留组合引用，run 起始归零见 loop_exec.rs。
+    pub(crate) compaction: CompactionRuntime,
+    /// 预算/用量运行态（C1c 收敛 · 07 §4.2-2 / §6.2）：P4 预算配置 +
+    /// EV-11 每 turn usage 槽位归组为 `BudgetState` 子结构
+    /// （定义在 compaction_dispatch.rs）。
+    pub(crate) budget_state: BudgetState,
     /// Tool-Promise 自愈触发次数计数（RUL-02：上限 2 次，防死循环）
     pub(crate) tool_promise_heals: u32,
 }
@@ -183,24 +135,12 @@ impl LoopState {
         options: SessionLoopOptions,
         tool_registry: Arc<ToolRegistry>,
     ) -> Self {
-        // 预算/压缩面（P4 阶段 2-2/3-2）：构造期从 options 派生一次
-        // （with_options 覆盖 options 时由 loop/mod.rs 派生状态同步刷新）
-        let budget = options.context_budget;
-        let compaction_policy = options.compaction_policy.clone();
-        let summarizer = options.summarizer.clone();
-        // 缓存测量面（P5 S2 / T-36）：构造期从 options 派生一次
-        // （with_options / run() 起始由 loop/mod.rs 同步刷新与复位）
-        let cache_tracker = crate::cache_tracker::build_tracker(options.cache_tracking.as_ref());
-        // 摘要后台调度（T-33）：构造期从 options 派生（None = 生产缺省
-        // 退避参数；测试注入快速序列）；run 起始不复位（单飞句柄跨 run
-        // 保留——存活任务阻塞新 spawn，会话级单飞语义在 loop 实例内成立）
-        let summary_dispatch = Arc::new(crate::r#loop::summary_dispatch::SummaryDispatch::new(
-            options.summary_dispatch.clone().unwrap_or_default(),
-        ));
-        // 会话级协调器（T-42）：构造期从 options 派生（壳层装配；None =
-        // 回退 run 级 dispatch）——协调器由注册表持有，LoopState 只借用
-        // Arc 引用，run 收口 drop 后任务仍由注册表支撑存活
-        let summary_coordinator = options.summary_coordinator.clone();
+        // 预算/用量面 + 压缩/摘要/cache 面（P4 + EV-11 + P5 S2 + T-33/T-42）：
+        // 构造期从 options 派生（with_options 覆盖 options 时由 loop/mod.rs
+        // 派生状态同步刷新）——C1c 收敛为 BudgetState / CompactionRuntime
+        // 子结构（定义与 from_options 在 compaction_dispatch.rs）
+        let budget_state = BudgetState::from_options(&options);
+        let compaction = CompactionRuntime::from_options(&options);
         Self {
             machine: AgentSessionMachine::new(session_id, max_turns),
             input_queue: AgentInputQueue::new(),
@@ -225,22 +165,8 @@ impl LoopState {
             terminal_error: None,
             // EV-08：fresh state 无未闭合 turn（孤儿 turn-start 修复初始位）
             current_turn_index: None,
-            budget,
-            compaction_policy,
-            summarizer,
-            // 护栏初始态：时间戳护栏空（无压缩边界）、计数 0（fresh run）
-            last_compaction_at: None,
-            compactions_this_run: 0,
-            compression_retries: 0,
-            // E2 F1 L3：溢出 LLM 不可用标记初始 false（无 fatal 前恒为假）
-            overflow_llm_unavailable: false,
-            cache_tracker,
-            summary_dispatch,
-            summary_coordinator,
-            // E2 F3：无待重试摘要（fresh state）
-            pending_summary_retry: None,
-            // EV-11（D-03）：当前轮 usage 槽位初始空（provider 未报告前无数据）
-            turn_usage: None,
+            compaction,
+            budget_state,
         }
     }
 
@@ -266,9 +192,12 @@ impl LoopState {
 // `loop/compaction_dispatch.rs`——本处 `pub(crate) use` 保留既有调用面
 // （dispatch / prepare_turn / stream_error_recover / streaming /
 // invariants / 测试海消费点不变，语义零变化）。
+// C1c（同详案 C1c 段）：LoopState 外围字段收敛为 CompactionRuntime /
+// BudgetState 子结构（定义在 compaction_dispatch.rs），经本 use 供
+// LoopState::new 与测试构造引用。
 pub(crate) use crate::r#loop::compaction_dispatch::{
     apply_compaction, clamp_max_tokens, estimate_context, maybe_compact_preflight,
-    maybe_compact_user_boundary, CompactionTriggerInfo, PendingSummaryRetry,
+    maybe_compact_user_boundary, BudgetState, CompactionRuntime, CompactionTriggerInfo,
 };
 
 /// handler 产出：可选收口决策（None = 继续循环）
@@ -665,6 +594,7 @@ mod tests {
     use std::sync::Mutex;
 
     use conex_compaction::{CompactionPlan, EstimateSource, Summarizer};
+    use conex_types::context::ContextBudget;
     use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
     // C1a：压缩编排面外置后，压缩事件载荷类型改由本测试模块直接导入
     //（此前经 handlers 顶层 import + `use super::*` 透传）
@@ -819,7 +749,7 @@ mod tests {
         assert_eq!(estimate.tokens, 900);
         assert_eq!(estimate.usage_message_id.as_deref(), Some("a1"));
         // 压缩边界晚于消息时间戳 → usage 作废 → 启发式兜底
-        state.last_compaction_at = Some(i64::MAX);
+        state.compaction.last_compaction_at = Some(i64::MAX);
         let estimate = estimate_context(&state);
         assert_eq!(estimate.source, EstimateSource::Heuristic);
         assert_eq!(estimate.usage_message_id, None);
@@ -836,9 +766,9 @@ mod tests {
             "超阈值必须触发预检压缩"
         );
         // 护栏：压缩计数 + 时间戳护栏重置
-        assert_eq!(state.compactions_this_run, 1);
+        assert_eq!(state.compaction.compactions_this_run, 1);
         assert!(
-            state.last_compaction_at.is_some(),
+            state.compaction.last_compaction_at.is_some(),
             "压缩后时间戳护栏必须重置"
         );
         // 事件成对广播
@@ -869,7 +799,7 @@ mod tests {
             !maybe_compact_preflight(&mut state).await,
             "同 run 内第二次超阈值不得再压缩（单 run 上限护栏）"
         );
-        assert_eq!(state.compactions_this_run, 1);
+        assert_eq!(state.compaction.compactions_this_run, 1);
         assert_eq!(
             state
                 .events
@@ -892,7 +822,7 @@ mod tests {
         assert!(maybe_compact_preflight(&mut state).await);
         state.conversation = big_conversation();
         assert!(maybe_compact_preflight(&mut state).await);
-        assert_eq!(state.compactions_this_run, 2);
+        assert_eq!(state.compaction.compactions_this_run, 2);
         state.conversation = big_conversation();
         assert!(!maybe_compact_preflight(&mut state).await, "上限 2 已用尽");
     }
@@ -918,7 +848,7 @@ mod tests {
             content: None,
         })];
         assert!(!maybe_compact_preflight(&mut state).await);
-        assert_eq!(state.compactions_this_run, 0);
+        assert_eq!(state.compaction.compactions_this_run, 0);
         assert!(state.events.is_empty(), "未触发不得广播任何事件");
     }
 
@@ -953,7 +883,7 @@ mod tests {
             maybe_compact_user_boundary(&mut state).await,
             "超阈值必须边界压缩"
         );
-        assert_eq!(state.compactions_this_run, 1);
+        assert_eq!(state.compaction.compactions_this_run, 1);
         // append：用户消息入对话尾部
         state.conversation.push(held.clone());
         // 压缩前后对话尾部 = 用户消息原文（逐字节相等）
@@ -1022,7 +952,7 @@ mod tests {
             !maybe_compact_user_boundary(&mut state).await,
             "未超阈值不得边界压缩"
         );
-        assert_eq!(state.compactions_this_run, 0);
+        assert_eq!(state.compaction.compactions_this_run, 0);
         assert!(state.events.is_empty(), "未触发不得广播任何事件");
         // 无预算配置（默认 options 全 None）→ 不触发
         let mut state = test_state(SessionLoopOptions::default());
@@ -1045,7 +975,10 @@ mod tests {
             !maybe_compact_user_boundary(&mut state).await,
             "LLM 摘要不可用 → 不压缩"
         );
-        assert_eq!(state.compactions_this_run, 0, "不消耗单 run 计数");
+        assert_eq!(
+            state.compaction.compactions_this_run, 0,
+            "不消耗单 run 计数"
+        );
         // 事件面提示（信息分级约束 C：事件呈现，不进对话）
         assert!(
             state
@@ -1075,7 +1008,7 @@ mod tests {
         let mut state = test_state(budgeted_options());
         state.conversation = big_conversation();
         assert!(maybe_compact_user_boundary(&mut state).await);
-        assert_eq!(state.compactions_this_run, 1);
+        assert_eq!(state.compaction.compactions_this_run, 1);
         // 同 turn 预检：对话重新膨胀但计数已封顶 → 自然跳过
         state.conversation = big_conversation();
         assert!(
@@ -1089,7 +1022,7 @@ mod tests {
         });
         state.conversation = big_conversation();
         assert!(!maybe_compact_user_boundary(&mut state).await);
-        assert_eq!(state.compactions_this_run, 0);
+        assert_eq!(state.compaction.compactions_this_run, 0);
         let mut state = test_state(budgeted_options());
         state.conversation = big_conversation();
         assert!(
@@ -1140,7 +1073,7 @@ mod tests {
         assert!(maybe_compact_user_boundary(&mut state).await);
         assert_eq!(*calls.lock().unwrap(), 1, "同步一次摘要尝试");
         assert!(
-            state.pending_summary_retry.is_some(),
+            state.compaction.pending_summary_retry.is_some(),
             "产出 stub 必须记录待重试快照"
         );
         // 等首轮后台任务结束（恒失败 → retired，快退避 1ms×3）
@@ -1177,7 +1110,10 @@ mod tests {
             !maybe_compact_user_boundary(&mut state).await,
             "未超阈值不压缩"
         );
-        assert_eq!(state.compactions_this_run, 1, "被动重试不消耗压缩计数");
+        assert_eq!(
+            state.compaction.compactions_this_run, 1,
+            "被动重试不消耗压缩计数"
+        );
         // 等被动重试任务完成（退避 1ms×3 + 调用）
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
         let total = *calls.lock().unwrap();
@@ -1220,8 +1156,8 @@ mod tests {
 
         // 对话替换 + 护栏
         assert_eq!(state.conversation, plan.messages, "压缩结果必须替换对话");
-        assert_eq!(state.compactions_this_run, 1);
-        assert!(state.last_compaction_at.is_some());
+        assert_eq!(state.compaction.compactions_this_run, 1);
+        assert!(state.compaction.last_compaction_at.is_some());
         // Start 事件：reason + tokens_before
         let (start_reason, start_tokens) = state
             .events
@@ -1287,12 +1223,14 @@ mod tests {
         };
         // 首轮：捕获签名 + 消费 usage（read > 0 → reported_cache 粘性置位）
         state
+            .compaction
             .cache_tracker
             .as_mut()
             .unwrap()
             .capture_signature(Some("sys"), &[], &[]);
         assert!(
             state
+                .compaction
                 .cache_tracker
                 .as_mut()
                 .unwrap()
@@ -1301,7 +1239,13 @@ mod tests {
             "首轮无基线 → 不计 miss"
         );
         assert!(
-            state.cache_tracker.as_ref().unwrap().baseline().is_some(),
+            state
+                .compaction
+                .cache_tracker
+                .as_ref()
+                .unwrap()
+                .baseline()
+                .is_some(),
             "首轮后基线必须建立"
         );
         // 压缩（apply_compaction 是预检与溢出两路径的单一广播点）
@@ -1327,7 +1271,13 @@ mod tests {
         apply_compaction(&mut state, &plan, &info, Some(8_000)).await;
         // C13：基线作废
         assert!(
-            state.cache_tracker.as_ref().unwrap().baseline().is_none(),
+            state
+                .compaction
+                .cache_tracker
+                .as_ref()
+                .unwrap()
+                .baseline()
+                .is_none(),
             "压缩后基线必须作废"
         );
         // T-31：压缩后重建签名已捕获（capture_post_compaction 接线）——
@@ -1335,6 +1285,7 @@ mod tests {
         let post_compaction = state.conversation.clone();
         assert!(
             state
+                .compaction
                 .cache_tracker
                 .as_ref()
                 .unwrap()
@@ -1345,12 +1296,14 @@ mod tests {
         // 压缩后首轮：重建签名与捕获签名同输入 → Identical（追加区豁免）；
         // 无基线 → detect 不计 miss
         state
+            .compaction
             .cache_tracker
             .as_mut()
             .unwrap()
             .capture_signature(None, &[], &post_compaction);
         assert!(
             state
+                .compaction
                 .cache_tracker
                 .as_mut()
                 .unwrap()
@@ -1625,7 +1578,7 @@ mod tests {
             !maybe_compact_preflight(&mut state).await,
             "压缩产物协议形状违规（无 system 且链后首条非 user）→ 必须跳过压缩"
         );
-        assert_eq!(state.compactions_this_run, 0, "护栏拦下不得计数");
+        assert_eq!(state.compaction.compactions_this_run, 0, "护栏拦下不得计数");
         assert!(
             state
                 .events
@@ -1745,6 +1698,7 @@ mod tests {
         // 3) rebuild_signature 已捕获（capture_post_compaction 接线）
         assert!(
             state
+                .compaction
                 .cache_tracker
                 .as_ref()
                 .expect("已配置 tracker")

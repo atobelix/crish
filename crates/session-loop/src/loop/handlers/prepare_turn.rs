@@ -67,7 +67,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     // EV-11（D-03 EV-13）：新一轮 usage 槽位归零——streaming consume 后
     // 写入本 turn 真值，turn-complete 收口注入 TurnEnd.usage（防上一轮
     // usage 错位泄漏进本轮无请求的 turn）
-    state.turn_usage = None;
+    state.budget_state.turn_usage = None;
     let start_event = AgentEvent::TurnStart {
         session_id: session_id.clone(),
         turn_index,
@@ -213,12 +213,12 @@ mod tests {
 
         let mut state = preparing_state();
         // 预算/策略注入（与 LoopState::new 派生同源；窗口 1 万、阈值 8000）
-        state.budget = Some(ContextBudget {
+        state.budget_state.budget = Some(ContextBudget {
             context_window: 10_000,
             reserve_tokens: 2_000,
             safety_tokens: 100,
         });
-        state.compaction_policy = Some(CompactionPolicy {
+        state.compaction.compaction_policy = Some(CompactionPolicy {
             keep_recent_tokens: 2_000,
             min_recent_turns: 1,
             ..Default::default()
@@ -249,7 +249,7 @@ mod tests {
                 .to_string())
             }
         }
-        state.summarizer = Some(Arc::new(StubSummary));
+        state.compaction.summarizer = Some(Arc::new(StubSummary));
         // 超阈值对话：10 条 × 5000 字（CJK 逐字符 ≈ 5000 token）≈ 5 万 token
         state.conversation = (0..10)
             .map(|i| {

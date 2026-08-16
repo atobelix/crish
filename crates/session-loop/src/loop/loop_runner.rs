@@ -173,17 +173,17 @@ impl AgentSessionLoop {
         // 预算/压缩派生状态同步（P4 阶段 2-2/3-2）：LoopState 的
         // budget / compaction_policy / summarizer 与 options 同源，
         // 避免 handler 侧双读不一致（with_options 构造期定，run 内不可变）
-        self.state.budget = options.context_budget;
-        self.state.compaction_policy = options.compaction_policy.clone();
-        self.state.summarizer = options.summarizer.clone();
+        self.state.budget_state.budget = options.context_budget;
+        self.state.compaction.compaction_policy = options.compaction_policy.clone();
+        self.state.compaction.summarizer = options.summarizer.clone();
         // 会话级摘要协调器派生状态同步（T-42）：与 options 同源（壳层
         // 装配；None = 回退 run 级 dispatch）
-        self.state.summary_coordinator = options.summary_coordinator.clone();
+        self.state.compaction.summary_coordinator = options.summary_coordinator.clone();
         // E2 F2 层 1（低功耗模式）：低功耗护栏配置派生（两新键）——
         // 装配到 run 级调度器 [SummaryDispatch]（会话级 coordinator 侧
         // 的护栏接线由壳层批次在 SessionSummaryCoordinator 装配，07 §5.4
         // 文件域；本处为 session-loop 内核面的完整默认接线，含测试路径）
-        self.state.summary_dispatch.set_retry_guard(
+        self.state.compaction.summary_dispatch.set_retry_guard(
             crate::r#loop::summary_dispatch::SummaryRetryGuardConfig {
                 max_attempts: options.compact_summary_max_attempts,
                 retry_window_ms: options.compact_summary_retry_window_ms,
@@ -191,7 +191,8 @@ impl AgentSessionLoop {
         );
         // 缓存测量派生状态同步（P5 S2 / T-36）：cache_tracker 与 options
         // 同源（构造期定，run 起始再复位）
-        self.state.cache_tracker = build_tracker(self.state.options.cache_tracking.as_ref());
+        self.state.compaction.cache_tracker =
+            build_tracker(self.state.options.cache_tracking.as_ref());
         self.tool_ctx.cwd = self.state.options.cwd.clone();
         // 幂等开关派生状态同步（T06.4.4）：true → 注入新守卫；false → 移除
         let idempotency = if options.idempotency_enabled {

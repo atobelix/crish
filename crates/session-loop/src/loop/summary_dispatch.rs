@@ -40,6 +40,19 @@
 //!    （apply_compaction 单点广播）；临界线硬压缩（旧 Message 面）不经过
 //!    本层。无 Summarizer 注入 → 不 spawn（纯 stub awaiting 永驻，
 //!    00-plan §6.4「无注入不 spawn」）。
+//!
+//! ## C1c 裁决（抽象纪律审计点 · 详案-C1-核心循环瘦身.md C1c 段 / 00-核心逻辑模型草案.md §7）
+//!
+//! **SummaryRetryTracker 缝面：登记，不封装 struct。** 摘要待重试跟踪 =
+//! 待重试快照（`PendingSummaryRetry`，定义于 compaction_dispatch.rs，随
+//! 后台任务同一入参源记录）+ 被动触发判定（`maybe_retry_pending_summary`，
+//! 用户消息边界消费；判定「对话中仍存在该块 stub 消息」为待重试）——
+//! 当前为**唯一实现**，生命周期语义与 [SummaryDispatch] 对齐（run 起始
+//! 不复位，跨 run 待重试延续，与 summary_coordinator 任务存活语义一致）。
+//! 按接口两实现法则，**登记缝面形态、具体类型直连**：快照 + 触发在
+//! 压缩触发侧（compaction_dispatch.rs）同文件高内聚，封装为 struct 属
+//! 纯搬运（行数/字段零收益、触发点调用面变宽）；未来出现第二个生命周期/
+//! 实现（如会话级重试注册表）时再封装为 `SummaryRetryTracker`。
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
