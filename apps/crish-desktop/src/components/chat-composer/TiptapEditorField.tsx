@@ -101,6 +101,7 @@ export const TiptapEditorField = React.forwardRef<
       slashExtraItems,
       mentionCandidates,
       autoFocus = false,
+      containerRef,
     },
     ref
   ) => {
@@ -119,6 +120,18 @@ export const TiptapEditorField = React.forwardRef<
     const sendShortcutRef = useRef<'enter' | 'ctrlEnter'>(sendShortcut);
     const slashExtraItemsRef = useRef<SlashCommandItem[]>([]);
     const mentionCandidatesRef = useRef<MentionCandidate[]>([]);
+    const containerRefBridge = useRef<{ current: HTMLElement | null }>({
+      get current() {
+        if (!containerRef) return null;
+        if (typeof containerRef === 'object' && 'current' in containerRef) {
+          return (
+            (containerRef as React.RefObject<HTMLElement | null>).current ??
+            null
+          );
+        }
+        return null;
+      },
+    });
     const callbacksRef = useRef({
       onSendMarkdown,
       onMarkdownChange,
@@ -213,11 +226,13 @@ export const TiptapEditorField = React.forwardRef<
         SlashExtension.configure({
           extraItemsRef: slashExtraItemsRef,
           listboxId: slashListboxId,
+          containerRef: containerRefBridge.current,
         }),
         // @ 提及建议（候选人引用桥接；空列表兜底不弹面板）
         MentionSuggestionExtension.configure({
           candidatesRef: mentionCandidatesRef,
           listboxId: mentionListboxId,
+          containerRef: containerRefBridge.current,
         }),
       ];
 

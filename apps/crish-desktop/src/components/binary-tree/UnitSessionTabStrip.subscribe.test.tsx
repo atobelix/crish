@@ -49,7 +49,10 @@ describe('openTabsStripRelevantEqual', () => {
         tabId: 't1',
         sessionId: 's1',
         title: 'A',
-        rightDock: createDefaultDock({ collapsed: false, openPanelIds: ['files'] }),
+        rightDock: createDefaultDock({
+          collapsed: false,
+          openPanelIds: ['files'],
+        }),
       }),
     ];
     expect(openTabsStripRelevantEqual(a, b)).toBe(true);
@@ -72,7 +75,14 @@ describe('openTabsStripRelevantEqual', () => {
     expect(
       openTabsStripRelevantEqual(
         [base],
-        [makeTab({ tabId: 't1', sessionId: 's1', title: 'A', workspaceKey: 'proj-x' })]
+        [
+          makeTab({
+            tabId: 't1',
+            sessionId: 's1',
+            title: 'A',
+            workspaceKey: 'proj-x',
+          }),
+        ]
       )
     ).toBe(false);
   });
@@ -207,9 +217,9 @@ describe('UnitSessionTabStrip narrow re-render', () => {
 
     expect(shellSubRenders).toBeGreaterThan(afterMount);
     const labels = getAllByTestId('unit-session-tab').map(
-      (el) => el.querySelector('button')?.getAttribute('title') ?? ''
+      (el) => el.textContent ?? ''
     );
-    expect(labels).toContain('改名后');
+    expect(labels.some((l) => l.includes('改名后'))).toBe(true);
   });
 
   it('非 chat 布局扰动（tool splitRatio）不触发 units 窄订阅 re-render', () => {

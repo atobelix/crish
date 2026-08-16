@@ -1,5 +1,6 @@
 import React from 'react';
 import type { ThoughtHeading } from '../../workers/thoughtWorker';
+import { Tooltip } from '../ui';
 import styles from './ThoughtOutline.module.css';
 
 export interface ThoughtOutlineProps {
@@ -26,15 +27,16 @@ export const ThoughtOutline: React.FC<ThoughtOutlineProps> = ({
               activeHeadingId === h.id ? styles.active : ''
             }`}
           >
-            <button
-              type="button"
-              className={styles.headingBtn}
-              onClick={() => onSelectHeading(h)}
-              title={h.text}
-            >
-              <span className={styles.headingDot} />
-              <span className={styles.headingText}>{h.text}</span>
-            </button>
+            <Tooltip content={h.text}>
+              <button
+                type="button"
+                className={styles.headingBtn}
+                onClick={() => onSelectHeading(h)}
+              >
+                <span className={styles.headingDot} />
+                <span className={styles.headingText}>{h.text}</span>
+              </button>
+            </Tooltip>
           </li>
         ))}
       </ul>

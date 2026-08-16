@@ -9,7 +9,7 @@
 import React, { useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './BgTaskCard.module.css';
-import { Button } from '../ui';
+import { Button, Tooltip } from '../ui';
 import {
   backgroundTaskStateLabel,
   getBackgroundTaskOutput,
@@ -187,9 +187,9 @@ export const BgTaskCard: React.FC<BgTaskCardProps> = ({
       </div>
 
       {task.command ? (
-        <div className={styles.command} title={task.command}>
-          {task.command}
-        </div>
+        <Tooltip content={task.command}>
+          <div className={styles.command}>{task.command}</div>
+        </Tooltip>
       ) : null}
 
       {prompt && (
@@ -198,9 +198,9 @@ export const BgTaskCard: React.FC<BgTaskCardProps> = ({
           data-testid="bg-task-prompt-banner"
         >
           <span className={styles.promptLabel}>{TASK_AWAITING_INPUT_TEXT}</span>
-          <span className={styles.promptText} title={prompt}>
-            {prompt}
-          </span>
+          <Tooltip content={prompt}>
+            <span className={styles.promptText}>{prompt}</span>
+          </Tooltip>
         </div>
       )}
 

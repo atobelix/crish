@@ -31,6 +31,8 @@ export interface CalculateSafeAnchorOptions {
   composerContainer?: HTMLElement | null;
   selectionRange?: Range | null;
   edgeThreshold?: number; // 默认 120px
+  previousSide?: 'top' | 'bottom';
+  hysteresis?: number; // 默认 24px (DEC-06)
 }
 
 /**
@@ -141,11 +143,14 @@ export function isAnchorInsideVisibleField(
 
 /**
  * 计算视口边界安全边距与翻折方向建议。
+ * 引入 24px 迟滞回差（Hysteresis Margin，DEC-06），杜绝亚像素浮动与临界点高频颠簸闪烁。
  */
 export function computeViewportEdgeAlignment(
   top: number,
   height: number,
-  edgeThreshold = 120
+  edgeThreshold = 120,
+  previousSide?: 'top' | 'bottom',
+  hysteresis = 24
 ): { suggestedSide: 'top' | 'bottom'; nearEdge: boolean } {
   const vh =
     typeof window !== 'undefined' && Number.isFinite(window.innerHeight)
@@ -155,10 +160,23 @@ export function computeViewportEdgeAlignment(
   const distToTop = top;
   const distToBottom = vh - (top + height);
 
-  if (distToTop < edgeThreshold && distToBottom >= distToTop) {
+  // 引入迟滞回差：当 previousSide 为 'top' 时，顶部阈值收缩（偏向保持 top）
+  // 当 previousSide 为 'bottom' 时，顶部阈值扩张（偏向保持 bottom）
+  const sideHysteresis =
+    previousSide === 'top'
+      ? -hysteresis
+      : previousSide === 'bottom'
+        ? hysteresis
+        : 0;
+  const effectiveTopThreshold = Math.max(0, edgeThreshold + sideHysteresis);
+
+  if (distToTop < effectiveTopThreshold && distToBottom >= distToTop) {
     return { suggestedSide: 'bottom', nearEdge: true };
   }
-  if (distToBottom < edgeThreshold && distToTop >= distToBottom) {
+  if (
+    distToBottom < edgeThreshold - sideHysteresis &&
+    distToTop >= distToBottom
+  ) {
     return { suggestedSide: 'top', nearEdge: true };
   }
 
@@ -179,6 +197,8 @@ export function calculateSafeCursorAnchor(
     composerContainer,
     selectionRange,
     edgeThreshold = 120,
+    previousSide,
+    hysteresis = 24,
   } = options;
 
   // Level 1: 探测精确光标包围盒 (view.coordsAtPos / rawCursorRect)
@@ -190,7 +210,9 @@ export function calculateSafeCursorAnchor(
       const edgeInfo = computeViewportEdgeAlignment(
         directRect.top,
         directRect.height,
-        edgeThreshold
+        edgeThreshold,
+        previousSide,
+        hysteresis
       );
       return {
         top: directRect.top,
@@ -236,7 +258,9 @@ export function calculateSafeCursorAnchor(
       const edgeInfo = computeViewportEdgeAlignment(
         rangeRect.top,
         rangeRect.height,
-        edgeThreshold
+        edgeThreshold,
+        previousSide,
+        hysteresis
       );
       return {
         top: rangeRect.top,
@@ -259,7 +283,9 @@ export function calculateSafeCursorAnchor(
         const edgeInfo = computeViewportEdgeAlignment(
           edRect.top + 8,
           20,
-          edgeThreshold
+          edgeThreshold,
+          previousSide,
+          hysteresis
         );
         return {
           top: edRect.top + 8,
@@ -285,7 +311,9 @@ export function calculateSafeCursorAnchor(
         const edgeInfo = computeViewportEdgeAlignment(
           compRect.top + 12,
           20,
-          edgeThreshold
+          edgeThreshold,
+          previousSide,
+          hysteresis
         );
         return {
           top: compRect.top + 12,

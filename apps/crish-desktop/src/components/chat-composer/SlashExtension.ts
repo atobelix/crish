@@ -88,16 +88,18 @@ const getMentionItems = (
   }));
 };
 
-/** SlashExtension 可配置选项：宿主系统/skill 命令与弹层 listbox id */
+/** SlashExtension 可配置选项：宿主系统/skill 命令与弹层 listbox id 及 Level 4 容器引用 */
 export interface SlashExtensionOptions {
   extraItemsRef?: { current: SlashCommandItem[] };
   listboxId?: string;
+  containerRef?: { current: HTMLElement | null };
 }
 
-/** MentionSuggestionExtension 可配置选项：候选人源 + 弹层 listbox id */
+/** MentionSuggestionExtension 可配置选项：候选人源 + 弹层 listbox id 及 Level 4 容器引用 */
 export interface MentionSuggestionOptions {
   candidatesRef?: { current: MentionCandidate[] };
   listboxId?: string;
+  containerRef?: { current: HTMLElement | null };
 }
 
 /** 斜杠 suggestion 独立 keyed plugin */
@@ -112,6 +114,7 @@ type SuggestionRenderCtx = {
   emptyMessage?: string;
   skipEmpty?: boolean;
   pluginKey?: PluginKey;
+  containerRef?: { current: HTMLElement | null };
 };
 
 /**
@@ -122,7 +125,15 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
   return () => {
     let component: ReactRenderer | null = null;
     let propsRef: any = null;
-    let lastCachedBox: DOMRect | null = null;
+    let lastCachedBox:
+      | (DOMRect & {
+          suggestedSide?: 'top' | 'bottom';
+          nearEdge?: boolean;
+          isFallback?: boolean;
+          isValid?: boolean;
+        })
+      | null = null;
+    let lastSuggestedSide: 'top' | 'bottom' | undefined = undefined;
 
     const buildProps = (props: any) => ({
       items: props.items,
@@ -150,14 +161,28 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
           const safeAnchor = calculateSafeCursorAnchor({
             rawCursorRect: rawBox,
             editorViewDom: view.dom,
+            composerContainer: ctx.containerRef?.current ?? undefined,
+            previousSide: lastSuggestedSide,
+            hysteresis: 24,
           });
           if (safeAnchor) {
-            lastCachedBox = new DOMRect(
-              safeAnchor.left,
-              safeAnchor.top,
-              safeAnchor.width,
-              safeAnchor.height
+            lastSuggestedSide = safeAnchor.suggestedSide;
+            // 🌟 关键修复 (DEC-06 / Task 4.1): 保全 suggestedSide 与 nearEdge 扩展属性
+            const extendedRect = Object.assign(
+              new DOMRect(
+                safeAnchor.left,
+                safeAnchor.top,
+                safeAnchor.width,
+                safeAnchor.height
+              ),
+              {
+                suggestedSide: safeAnchor.suggestedSide,
+                nearEdge: safeAnchor.nearEdge,
+                isFallback: safeAnchor.isFallback,
+                isValid: safeAnchor.isValid,
+              }
             );
+            lastCachedBox = extendedRect;
             return lastCachedBox;
           }
           return lastCachedBox;
@@ -241,6 +266,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         component = null;
         propsRef = null;
         lastCachedBox = null;
+        lastSuggestedSide = undefined;
       },
     };
   };
@@ -256,6 +282,7 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
     return {
       extraItemsRef: undefined,
       listboxId: undefined,
+      containerRef: undefined,
       suggestion: {
         char: '/',
         command: ({ editor, range, props }: any) => {
@@ -281,6 +308,7 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
           label: 'AI 会话系统指令',
           emptyMessage: '无匹配指令',
           pluginKey: slashSuggestionKey,
+          containerRef: this.options.containerRef,
         }),
       }),
     ];
@@ -296,6 +324,7 @@ export const MentionSuggestionExtension =
       return {
         candidatesRef: undefined,
         listboxId: undefined,
+        containerRef: undefined,
       };
     },
 
@@ -318,6 +347,7 @@ export const MentionSuggestionExtension =
             emptyMessage: '无匹配项',
             skipEmpty: true,
             pluginKey: mentionSuggestionKey,
+            containerRef: this.options.containerRef,
           }),
         }),
       ];

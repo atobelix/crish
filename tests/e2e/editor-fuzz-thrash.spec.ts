@@ -3,15 +3,23 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 test.describe('Editor Fuzz thrash testing', () => {
-  const fuzzDir = path.resolve(
+  const candidateA = path.resolve(
     __dirname,
     '../../reference/markdown-editor/tests/e2e/fuzz-data'
   );
+  const candidateB = path.resolve(
+    process.cwd(),
+    'reference/markdown-editor/tests/e2e/fuzz-data'
+  );
+  const fuzzDir = fs.existsSync(candidateA) ? candidateA : candidateB;
+
   if (!fs.existsSync(fuzzDir)) {
-    console.warn(`Fuzz directory not found: ${fuzzDir}`);
-    return;
+    throw new Error(`[DEC-08] Fuzz directory not found: ${fuzzDir}`);
   }
   const files = fs.readdirSync(fuzzDir).filter((f) => f.endsWith('.md'));
+  if (files.length === 0) {
+    throw new Error(`[DEC-08] No fuzz files found in: ${fuzzDir}`);
+  }
 
   for (const file of files) {
     test(`fuzz test: ${file}`, async ({ page }) => {

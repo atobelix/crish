@@ -6,7 +6,8 @@ import {
 import type { MessageToolCall } from '../store/layoutStore';
 
 function tc(
-  partial: Partial<MessageToolCall> & Pick<MessageToolCall, 'id' | 'name' | 'status'>,
+  partial: Partial<MessageToolCall> &
+    Pick<MessageToolCall, 'id' | 'name' | 'status'>
 ): MessageToolCall {
   return {
     arguments: '',
@@ -24,7 +25,7 @@ describe('shouldShowFollowUpSuggestions', () => {
         isThinkingMsg: false,
         status: 'completed',
         toolCalls: doneTools,
-      }),
+      })
     ).toBe(true);
   });
 
@@ -35,7 +36,7 @@ describe('shouldShowFollowUpSuggestions', () => {
         isThinkingMsg: true,
         status: 'processing',
         toolCalls: doneTools,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldShowFollowUpSuggestions({
@@ -43,7 +44,7 @@ describe('shouldShowFollowUpSuggestions', () => {
         isThinkingMsg: false,
         status: 'processing',
         toolCalls: doneTools,
-      }),
+      })
     ).toBe(false);
     expect(
       shouldShowFollowUpSuggestions({
@@ -51,7 +52,7 @@ describe('shouldShowFollowUpSuggestions', () => {
         isThinkingMsg: false,
         status: 'completed',
         toolCalls: doneTools,
-      }),
+      })
     ).toBe(false);
   });
 
@@ -62,7 +63,7 @@ describe('shouldShowFollowUpSuggestions', () => {
         isThinkingMsg: false,
         status: 'completed',
         toolCalls: [tc({ id: '1', name: 'shell', status: 'running' })],
-      }),
+      })
     ).toBe(false);
     expect(
       shouldShowFollowUpSuggestions({
@@ -73,7 +74,7 @@ describe('shouldShowFollowUpSuggestions', () => {
           tc({ id: '1', name: 'shell', status: 'success' }),
           tc({ id: '2', name: 'edit', status: 'pending_approval' }),
         ],
-      }),
+      })
     ).toBe(false);
     expect(
       shouldShowFollowUpSuggestions({
@@ -81,7 +82,7 @@ describe('shouldShowFollowUpSuggestions', () => {
         isThinkingMsg: false,
         status: 'completed',
         toolCalls: [],
-      }),
+      })
     ).toBe(false);
   });
 
@@ -93,7 +94,19 @@ describe('shouldShowFollowUpSuggestions', () => {
         status: 'completed',
         toolCalls: doneTools,
         dismissed: true,
-      }),
+      })
+    ).toBe(false);
+  });
+
+  it('hides for subagent sessions (DEC-07 physical isolation)', () => {
+    expect(
+      shouldShowFollowUpSuggestions({
+        isLastAssistant: true,
+        isThinkingMsg: false,
+        status: 'completed',
+        toolCalls: doneTools,
+        isSubagent: true,
+      })
     ).toBe(false);
   });
 });
@@ -118,7 +131,9 @@ describe('buildFollowUpSuggestions', () => {
 
   it('prefers diagnose chips when tools errored', () => {
     const list = buildFollowUpSuggestions({
-      toolCalls: [tc({ id: 'e', name: 'run_command', status: 'error', output: 'fail' })],
+      toolCalls: [
+        tc({ id: 'e', name: 'run_command', status: 'error', output: 'fail' }),
+      ],
     });
     expect(list.some((s) => s.id === 'diagnose-error')).toBe(true);
   });

@@ -238,6 +238,3 @@ export function unicodeScalarRangeToUtf16Range(
   const e = unicodeScalarToUtf16Offset(text, rangeScalar[1]);
   return [s, e];
 }
-
-export type { DiffReplaceResult } from './diff';
-export { diffToReplace } from './diff';

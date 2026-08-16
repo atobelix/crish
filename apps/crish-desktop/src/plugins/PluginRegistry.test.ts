@@ -117,6 +117,40 @@ describe('PluginRegistry 插件基座与生命周期调度测试 (DIM-06, RUL-06
     ).rejects.toThrowError(
       /\[PluginSecurityError\] Plugin 'security-plugin' lacks permission 'browser:control'/
     );
+
+    // 3. 🚨 未知未映射通道：Default-Deny 默认拒绝
+    await expect(
+      capturedCtx.invokeIpc('unknown:dangerous_channel', { data: 123 })
+    ).rejects.toThrowError(
+      /\[PluginSecurityError\] Channel 'unknown:dangerous_channel' is not permitted or unknown in IPC whitelist \(Default-Deny\)/
+    );
+
+    // 4. 系统无害通道：直接放行
+    const appResult = await capturedCtx.invokeIpc('app:get_version');
+    expect(appResult).toEqual({ success: true });
+  });
+
+  it('插件激活失败时原子回滚并释放已挂载的 DisposableBag 资源', async () => {
+    const cleanupFn = vi.fn();
+    const failingPlugin: CrishPlugin = {
+      manifest: {
+        id: 'failing-plugin',
+        name: 'Failing Plugin',
+        version: '1.0.0',
+      },
+      activate: (ctx) => {
+        ctx.subscriptions.add(cleanupFn);
+        throw new Error('Boom in activate!');
+      },
+    };
+
+    registry.register(failingPlugin);
+    await expect(registry.activate('failing-plugin')).rejects.toThrow(
+      'Boom in activate!'
+    );
+    expect(registry.getPluginStatus('failing-plugin')).toBe('error');
+    expect(registry.getPluginContext('failing-plugin')).toBeUndefined();
+    expect(cleanupFn).toHaveBeenCalledTimes(1);
   });
 });
 

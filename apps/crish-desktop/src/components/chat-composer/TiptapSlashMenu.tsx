@@ -18,14 +18,6 @@ import React, {
 } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import {
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
-  CheckSquare,
-  Code,
-  Quote,
   HelpCircle,
   Target,
   BookOpen,
@@ -65,14 +57,6 @@ const ICON_MAP: Record<
     'aria-hidden'?: boolean;
   }>
 > = {
-  Heading1,
-  Heading2,
-  Heading3,
-  List,
-  ListOrdered,
-  CheckSquare,
-  Code,
-  Quote,
   Target,
   BookOpen,
   Calendar,

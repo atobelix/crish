@@ -101,18 +101,19 @@ export const ChatHeader: React.FC<ChatHeaderProps> = React.memo(
               inputRef={inputRef}
             />
           ) : (
-            <div
-              className={styles.unitLabel}
-              data-testid="chat-unit-label"
-              title={sessionTitleHint || unitChromeLabel}
-              aria-label={
-                sessionTitleHint
-                  ? `${unitChromeLabel} · ${sessionTitleHint}`
-                  : unitChromeLabel
-              }
-            >
-              <span className={styles.unitType}>{unitChromeLabel}</span>
-            </div>
+            <Tooltip content={sessionTitleHint || unitChromeLabel}>
+              <div
+                className={styles.unitLabel}
+                data-testid="chat-unit-label"
+                aria-label={
+                  sessionTitleHint
+                    ? `${unitChromeLabel} · ${sessionTitleHint}`
+                    : unitChromeLabel
+                }
+              >
+                <span className={styles.unitType}>{unitChromeLabel}</span>
+              </div>
+            </Tooltip>
           )}
         </div>
 

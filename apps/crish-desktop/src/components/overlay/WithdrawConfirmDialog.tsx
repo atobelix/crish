@@ -11,7 +11,7 @@
  */
 import React from 'react';
 import styles from './WithdrawConfirmDialog.module.css';
-import { Button, Dialog } from '../ui';
+import { Button, Dialog, Tooltip } from '../ui';
 import type { RewindScopeSummary } from '../../api/collectRewindScope';
 
 export interface WithdrawConfirmDialogProps {
@@ -66,9 +66,9 @@ export const WithdrawConfirmDialog: React.FC<WithdrawConfirmDialogProps> = ({
       {files.length > 0 ? (
         <ul className={styles.fileList}>
           {files.map((fp) => (
-            <li key={fp} className={styles.fileItem} title={fp}>
-              {fp}
-            </li>
+            <Tooltip key={fp} content={fp}>
+              <li className={styles.fileItem}>{fp}</li>
+            </Tooltip>
           ))}
         </ul>
       ) : null}

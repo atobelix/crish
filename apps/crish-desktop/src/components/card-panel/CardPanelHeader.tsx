@@ -174,30 +174,28 @@ export const CardPanelHeader: React.FC<CardPanelHeaderProps> = React.memo(
               >
                 {folderLabel && folderLabel !== GENERAL_FOLDER ? (
                   <>
-                    <span
-                      className="breadcrumb-item folder-trigger"
-                      title={folderLabel}
-                    >
-                      <FolderOpen
-                        size={14}
-                        strokeWidth={1.65}
-                        className="folder-icon"
-                        aria-hidden
-                      />
-                      <span className="folder-name-txt">{folderLabel}</span>
-                    </span>
+                    <Tooltip content={folderLabel}>
+                      <span className="breadcrumb-item folder-trigger">
+                        <FolderOpen
+                          size={14}
+                          strokeWidth={1.65}
+                          className="folder-icon"
+                          aria-hidden
+                        />
+                        <span className="folder-name-txt">{folderLabel}</span>
+                      </span>
+                    </Tooltip>
                     <span className="breadcrumb-separator" aria-hidden>
                       /
                     </span>
                   </>
                 ) : null}
                 <span className="chat-title-cluster">
-                  <span
-                    className="breadcrumb-item session-trigger"
-                    title={sessionLabel}
-                  >
-                    <span className="session-name-txt">{sessionLabel}</span>
-                  </span>
+                  <Tooltip content={sessionLabel}>
+                    <span className="breadcrumb-item session-trigger">
+                      <span className="session-name-txt">{sessionLabel}</span>
+                    </span>
+                  </Tooltip>
                   <ChatHeaderMore canExport={Boolean(activeSession)} />
                 </span>
               </div>

@@ -1,37 +1,55 @@
+/**
+ * MockDaemon - 用于测试前端与 Daemon IPC 的连接、断开与事件流并发竞争
+ */
 export class MockDaemon {
-  private handlers: Map<string, (payload: any) => void> = new Map();
+  private connected = true;
+  private listeners = new Map<string, Array<(payload: any) => void>>();
   private latency = 0;
-  private shouldDisconnectNext = false;
 
-  constructor(options?: { latency?: number }) {
-    this.latency = options?.latency ?? 0;
+  constructor(opts?: { latency?: number }) {
+    this.latency = opts?.latency ?? 0;
   }
 
-  on(event: string, handler: (payload: any) => void): void {
-    this.handlers.set(event, handler);
+  on(event: string, handler: (payload: any) => void) {
+    const list = this.listeners.get(event) || [];
+    list.push(handler);
+    this.listeners.set(event, list);
   }
 
-  async send(event: string, payload: any): Promise<void> {
-    const handler = this.handlers.get(event);
-    if (!handler) throw new Error(`No handler for event: ${event}`);
-    if (this.shouldDisconnectNext) throw new Error('Connection lost');
-    await new Promise(r => setTimeout(r, this.latency));
-    handler(payload);
+  async send(channel: string, payload: any): Promise<void> {
+    if (!this.connected) {
+      throw new Error('Connection lost');
+    }
+    if (this.latency > 0) {
+      await new Promise((r) => setTimeout(r, this.latency));
+    }
+    const handlers = this.listeners.get(channel) || [];
+    for (const h of handlers) {
+      h(payload);
+    }
   }
 
-  simulateDisconnect(): void {
-    this.shouldDisconnectNext = true;
+  simulateDisconnect() {
+    this.connected = false;
   }
 
-  simulateReconnect(): void {
-    this.shouldDisconnectNext = false;
+  simulateReconnect() {
+    this.connected = true;
   }
 
-  async *streamEvents(event: string, count: number, intervalMs: number = 5): AsyncGenerator<any> {
+  async *streamEvents(
+    channel: string,
+    count: number,
+    delayMs = 1
+  ): AsyncGenerator<{ seq: number; channel: string }> {
     for (let i = 0; i < count; i++) {
-      if (this.shouldDisconnectNext) throw new Error('Stream interrupted');
-      await new Promise(r => setTimeout(r, intervalMs));
-      yield { seq: i, event, timestamp: Date.now() };
+      if (!this.connected) {
+        throw new Error('Stream disconnected');
+      }
+      if (delayMs > 0) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
+      yield { seq: i, channel };
     }
   }
 }

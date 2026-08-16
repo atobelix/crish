@@ -2,11 +2,11 @@
 
 exports[`ToastStack snapshots > renders multiple toasts 1`] = `
 <div
-  class="_toastStack_9bcf44"
+  class="_toastStack_9bce87"
 >
   <div
     aria-live="polite"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     role="status"
   >
     <span>
@@ -14,19 +14,24 @@ exports[`ToastStack snapshots > renders multiple toasts 1`] = `
     </span>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
       type="button"
     >
       <span
         aria-hidden="true"
+        class="_buttonIcon_ae1db5"
       >
-        ×
+        <span
+          aria-hidden="true"
+        >
+          ×
+        </span>
       </span>
     </button>
   </div>
   <div
     aria-live="polite"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     role="status"
   >
     <span>
@@ -34,19 +39,24 @@ exports[`ToastStack snapshots > renders multiple toasts 1`] = `
     </span>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
       type="button"
     >
       <span
         aria-hidden="true"
+        class="_buttonIcon_ae1db5"
       >
-        ×
+        <span
+          aria-hidden="true"
+        >
+          ×
+        </span>
       </span>
     </button>
   </div>
   <div
     aria-live="polite"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     role="status"
   >
     <span>
@@ -54,13 +64,18 @@ exports[`ToastStack snapshots > renders multiple toasts 1`] = `
     </span>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
       type="button"
     >
       <span
         aria-hidden="true"
+        class="_buttonIcon_ae1db5"
       >
-        ×
+        <span
+          aria-hidden="true"
+        >
+          ×
+        </span>
       </span>
     </button>
   </div>
@@ -69,11 +84,11 @@ exports[`ToastStack snapshots > renders multiple toasts 1`] = `
 
 exports[`ToastStack snapshots > renders single toast 1`] = `
 <div
-  class="_toastStack_9bcf44"
+  class="_toastStack_9bce87"
 >
   <div
     aria-live="polite"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     role="status"
   >
     <span>
@@ -81,13 +96,18 @@ exports[`ToastStack snapshots > renders single toast 1`] = `
     </span>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
       type="button"
     >
       <span
         aria-hidden="true"
+        class="_buttonIcon_ae1db5"
       >
-        ×
+        <span
+          aria-hidden="true"
+        >
+          ×
+        </span>
       </span>
     </button>
   </div>
@@ -96,31 +116,40 @@ exports[`ToastStack snapshots > renders single toast 1`] = `
 
 exports[`ToastStack snapshots > renders toast with undo 1`] = `
 <div
-  class="_toastStack_9bcf44"
+  class="_toastStack_9bce87"
 >
   <div
     aria-live="assertive"
-    class="_toastAlert_9bcf44"
+    class="_toastAlert_9bce87"
     role="status"
   >
     <span>
       文件已删除
     </span>
     <button
-      class="_toastUndoBtn_9bcf44"
+      class="_button_ae1db5 _buttonSecondary_ae1db5 _buttonSm_ae1db5 _toastUndoBtn_9bce87"
       type="button"
     >
-      撤销
+      <span
+        class="_buttonLabel_ae1db5"
+      >
+        撤销
+      </span>
     </button>
     <button
       aria-label="关闭通知"
-      class="_toastDismissBtn_9bcf44"
+      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
       type="button"
     >
       <span
         aria-hidden="true"
+        class="_buttonIcon_ae1db5"
       >
-        ×
+        <span
+          aria-hidden="true"
+        >
+          ×
+        </span>
       </span>
     </button>
   </div>

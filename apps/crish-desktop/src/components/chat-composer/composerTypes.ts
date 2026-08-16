@@ -57,7 +57,18 @@ export interface TiptapEditorFieldProps {
   /** 斜杠弹层 combobox 链（对齐 ComposerField 语义） */
   ariaExpanded?: boolean | undefined;
   ariaControls?: string | undefined;
-  ariaHasPopup?: (boolean | 'false' | 'true' | 'menu' | 'listbox' | 'tree' | 'grid' | 'dialog') | undefined;
+  ariaHasPopup?:
+    | (
+        | boolean
+        | 'false'
+        | 'true'
+        | 'menu'
+        | 'listbox'
+        | 'tree'
+        | 'grid'
+        | 'dialog'
+      )
+    | undefined;
   ariaActivedescendant?: string | undefined;
   ariaAutocomplete?: ('none' | 'inline' | 'list' | 'both') | undefined;
   /** 宿主系统/skill 斜杠命令（经引用桥接动态更新，无需重建编辑器） */
@@ -72,6 +83,8 @@ export interface TiptapEditorFieldProps {
   onOversizeWarning?: (charCount: number) => void;
   /** 挂载后自动聚焦编辑器 */
   autoFocus?: boolean;
+  /** Composer 外部容器引用（打通 Level 4 几何备援） */
+  containerRef?: React.Ref<HTMLElement> | null;
 }
 
 /** 编辑器命令式句柄（适配层发送前同步用） */

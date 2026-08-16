@@ -390,6 +390,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
         onPasteImage={handlePasteImage}
         slashExtraItems={slashExtraItems}
         mentionCandidates={mentionCandidates}
+        containerRef={containerRef}
       />
       <div className={styles.buttons}>
         {isProcessing ? (

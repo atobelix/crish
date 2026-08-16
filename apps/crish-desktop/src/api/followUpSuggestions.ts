@@ -40,7 +40,10 @@ export function shouldShowFollowUpSuggestions(opts: {
   toolCalls?: readonly MessageToolCall[] | null | undefined;
   /** 用户手动关闭后隐藏 */
   dismissed?: boolean | undefined;
+  /** 🚨 子 Agent (Subagent) 物理硬阻断隔离 (DEC-07) */
+  isSubagent?: boolean | undefined;
 }): boolean {
+  if (opts.isSubagent) return false;
   if (opts.dismissed) return false;
   if (!opts.isLastAssistant) return false;
   if (opts.isThinkingMsg) return false;
@@ -55,10 +58,7 @@ export function shouldShowFollowUpSuggestions(opts: {
   return true;
 }
 
-function pushUnique(
-  out: FollowUpSuggestion[],
-  item: FollowUpSuggestion,
-): void {
+function pushUnique(out: FollowUpSuggestion[], item: FollowUpSuggestion): void {
   if (out.length >= MAX_SUGGESTIONS) return;
   if (out.some((x) => x.id === item.id || x.prompt === item.prompt)) return;
   out.push(item);
@@ -69,7 +69,7 @@ function pushUnique(
  * 纯启发式；不依赖模型协议，避免改 streaming 管线。
  */
 export function buildFollowUpSuggestions(
-  msg: Pick<SessionMessage, 'toolCalls' | 'text' | 'blocks'>,
+  msg: Pick<SessionMessage, 'toolCalls' | 'text' | 'blocks'>
 ): FollowUpSuggestion[] {
   const tools = msg.toolCalls || [];
   if (tools.length === 0) return [];
@@ -77,14 +77,14 @@ export function buildFollowUpSuggestions(
   const out: FollowUpSuggestion[] = [];
   const hasError = tools.some((t) => t.status === 'error');
   const hasEdit = tools.some(
-    (t) => t.status === 'success' && isEditToolName(t.name || ''),
+    (t) => t.status === 'success' && isEditToolName(t.name || '')
   );
   const hasShell = tools.some((t) => isShellToolName(t.name || ''));
   const hasShellError = tools.some(
-    (t) => t.status === 'error' && isShellToolName(t.name || ''),
+    (t) => t.status === 'error' && isShellToolName(t.name || '')
   );
   const hasDiff = tools.some(
-    (t) => Array.isArray(t.diffs) && t.diffs.length > 0,
+    (t) => Array.isArray(t.diffs) && t.diffs.length > 0
   );
   const inspectish = tools.some((t) => {
     const n = (t.name || '').toLowerCase();
@@ -149,7 +149,8 @@ export function buildFollowUpSuggestions(
     pushUnique(out, {
       id: 'next-step',
       label: '下一步建议',
-      prompt: '基于刚才完成的工具操作，给出 2–3 个最合理的下一步，并直接执行最优先的一项',
+      prompt:
+        '基于刚才完成的工具操作，给出 2–3 个最合理的下一步，并直接执行最优先的一项',
     });
     pushUnique(out, {
       id: 'what-changed',

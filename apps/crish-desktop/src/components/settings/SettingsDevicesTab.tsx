@@ -475,9 +475,9 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
                           )}
                         </div>
                         <div className={styles.deviceDesc}>
-                          <span title={device.id}>
-                            {device.id.slice(0, 12)}…
-                          </span>
+                          <Tooltip content={device.id}>
+                            <span>{device.id.slice(0, 12)}…</span>
+                          </Tooltip>
                           <span>
                             {new Date(device.issued_at_ms).toLocaleString()}
                           </span>

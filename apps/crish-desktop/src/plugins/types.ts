@@ -131,6 +131,46 @@ export interface PluginManifest {
   icon?: string;
 }
 
+/** 系统核心无害通道白名单（默认放行） */
+export const SYSTEM_SAFE_CHANNELS = new Set([
+  'app:get_version',
+  'app:get_info',
+  'app:info',
+  'clipboard:write_text',
+  'clipboard:read_text',
+  'clipboard:read',
+  'clipboard:write',
+  'window:set_title',
+  'window:minimize',
+  'window:maximize',
+  'window:is_maximized',
+  'dialog:open',
+  'dialog:save',
+]);
+
+/** 结构化 IPC 通道与权限映射表 (DEC-07) */
+export const CHANNEL_PERMISSION_MAP: Record<string, string> = {
+  'fs:read_file': 'fs:access',
+  'fs:list_dir': 'fs:access',
+  'fs:write_file': 'fs:access',
+  'fs:delete_file': 'fs:access',
+  'fs:read': 'fs:access',
+  'fs:write': 'fs:access',
+  'fs:list': 'fs:access',
+  'markdown:render': 'markdown:render',
+  'conex-markdown:render': 'markdown:render',
+  'shell:open_external': 'computer:control',
+  'browser:navigate': 'browser:control',
+  'browser:open': 'browser:control',
+  'browser:control': 'browser:control',
+  'browser:screenshot': 'screen:capture',
+  'screen:capture': 'screen:capture',
+  'computer:control': 'computer:control',
+  'assistant:get_suggestions': 'assistant:suggestions',
+  'assistant:suggestions': 'assistant:suggestions',
+  'assistant:followUp': 'assistant:suggestions',
+};
+
 /**
  * 插件运行上下文与安全屏障 (PluginContext)
  */
@@ -172,27 +212,41 @@ export class PluginContext<TConfig = Record<string, any>> {
   }
 
   /**
-   * 能力级权限受控 IPC 调用
+   * 能力级权限受控 IPC 调用 (DEC-07: Default-Deny 默认拒绝)
    */
   public async invokeIpc<TResult = unknown>(
     channel: string,
     payload?: unknown
   ): Promise<TResult> {
-    const requiredPermission = this.resolveRequiredPermission(channel);
-    const declaredPermissions = this.manifest.permissions ?? [];
+    // 1. 系统核心安全通道放行
+    if (SYSTEM_SAFE_CHANNELS.has(channel)) {
+      return (await this.hostIpc(channel, payload)) as TResult;
+    }
 
-    if (
-      requiredPermission &&
-      !declaredPermissions.includes(requiredPermission)
-    ) {
+    const requiredPermission = this.resolveRequiredPermission(channel);
+
+    // 2. 🚨 Default-Deny：未知或未映射通道默认拒绝阻断
+    if (!requiredPermission) {
+      throw new Error(
+        `[PluginSecurityError] Channel '${channel}' is not permitted or unknown in IPC whitelist (Default-Deny)`
+      );
+    }
+
+    // 3. 校验插件 manifest 是否声明了该权限
+    const declaredPermissions = this.manifest.permissions ?? [];
+    if (!declaredPermissions.includes(requiredPermission)) {
       throw new Error(
         `[PluginSecurityError] Plugin '${this.manifest.id}' lacks permission '${requiredPermission}' to invoke '${channel}'`
       );
     }
+
     return (await this.hostIpc(channel, payload)) as TResult;
   }
 
   private resolveRequiredPermission(channel: string): string | null {
+    if (CHANNEL_PERMISSION_MAP[channel]) {
+      return CHANNEL_PERMISSION_MAP[channel];
+    }
     if (channel.startsWith('fs:')) return 'fs:access';
     if (
       channel.startsWith('conex-markdown:') ||

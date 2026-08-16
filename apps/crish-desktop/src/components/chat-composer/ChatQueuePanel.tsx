@@ -48,14 +48,16 @@ export const ChatQueuePanel: React.FC<ChatQueuePanelProps> = ({
       {queue.map((msg, index) => (
         <div key={msg.id} className={styles.item}>
           <span className={styles.index}>{index + 1}</span>
-          <span className={styles.text} title={msg.text}>
-            {formatQueueText(msg.text)}
-            {msg.attachments.length > 0 && (
-              <span className={styles.attachmentHint}>
-                （{msg.attachments.length} 个附件）
-              </span>
-            )}
-          </span>
+          <Tooltip content={msg.text}>
+            <span className={styles.text}>
+              {formatQueueText(msg.text)}
+              {msg.attachments.length > 0 && (
+                <span className={styles.attachmentHint}>
+                  （{msg.attachments.length} 个附件）
+                </span>
+              )}
+            </span>
+          </Tooltip>
           <div className={styles.actions}>
             <Tooltip content="发送">
               <Button

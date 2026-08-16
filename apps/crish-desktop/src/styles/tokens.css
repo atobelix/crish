@@ -774,7 +774,7 @@ html[data-theme='dark'] {
   --radius-lg: 7px;
   --radius-xl: 9px;
   --radius-2xl: 11px;
-  --radius-full: 998px;
+  --radius-full: 9999px;
 
   --card-header-min-height: 32px;
   --card-header-pad-y: 3px;
@@ -850,7 +850,7 @@ html[data-theme='dark'] {
   --radius-lg: 9px;
   --radius-xl: 11px;
   --radius-2xl: 13px;
-  --radius-full: 1000px;
+  --radius-full: 9999px;
 
   --card-header-min-height: 40px;
   --card-header-pad-y: 5px;

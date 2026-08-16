@@ -99,11 +99,7 @@ export {
 } from './opsWire';
 
 // 坐标系（UTF-16 vs Unicode Scalar 标量品牌类型与双向单射转换）
-export type {
-  Utf16CodeUnitOffset,
-  UnicodeScalarOffset,
-  DiffReplaceResult,
-} from './coordinates';
+export type { Utf16CodeUnitOffset, UnicodeScalarOffset } from './coordinates';
 export {
   asUtf16Offset,
   asUnicodeScalarOffset,
@@ -122,5 +118,8 @@ export {
   utf16Length,
   utf16RangeToUnicodeScalarRange,
   unicodeScalarRangeToUtf16Range,
-  diffToReplace,
 } from './coordinates';
+
+// 差分替换（Diff / Replace）
+export type { DiffReplaceResult } from './diff';
+export { diffToReplace } from './diff';

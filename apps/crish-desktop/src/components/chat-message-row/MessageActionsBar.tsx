@@ -207,6 +207,7 @@ export interface FollowUpSuggestionsSectionProps {
   isLastAssistant: boolean;
   isThinkingMsg: boolean;
   followUpDismissed?: boolean;
+  isSubagent?: boolean;
   onFillFollowUp?: (prompt: string) => void;
   onSendFollowUp?: (prompt: string) => void;
   onDismissFollowUp?: (msgId: string) => void;
@@ -219,6 +220,7 @@ export const FollowUpSuggestionsSection: React.FC<
   isLastAssistant,
   isThinkingMsg,
   followUpDismissed = false,
+  isSubagent,
   onFillFollowUp,
   onSendFollowUp,
   onDismissFollowUp,
@@ -231,6 +233,7 @@ export const FollowUpSuggestionsSection: React.FC<
       status: msg.status,
       toolCalls: msg.toolCalls,
       dismissed: followUpDismissed,
+      isSubagent,
     })
   ) {
     return null;

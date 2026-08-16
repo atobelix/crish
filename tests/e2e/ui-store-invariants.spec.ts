@@ -56,7 +56,10 @@ async function clickAndAssertInvariants(
   ).toBeLessThan(10);
 
   // 6. 校验 Store 不变量
-  expect(storeStats.state, 'window.useLayoutStore 必须挂载并就绪').not.toBeNull();
+  expect(
+    storeStats.state,
+    'window.useLayoutStore 必须挂载并就绪'
+  ).not.toBeNull();
 
   // 6a. 绝无 permissionMode 状态污染 ('ask' | 'deep' | 'full' | 'plan')
   const validModes = ['ask', 'deep', 'full', 'plan'];
@@ -68,7 +71,9 @@ async function clickAndAssertInvariants(
   // 6b. 工作区索引与状态防越界不变量
   expect(storeStats.state!.workspacesLength).toBeGreaterThan(0);
   expect(storeStats.state!.activeWorkspaceIndex).toBeGreaterThanOrEqual(0);
-  expect(storeStats.state!.activeWorkspaceIndex).toBeLessThan(storeStats.state!.workspacesLength);
+  expect(storeStats.state!.activeWorkspaceIndex).toBeLessThan(
+    storeStats.state!.workspacesLength
+  );
 }
 
 test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
@@ -117,66 +122,103 @@ test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
       // R3 域拆分：permissionMode 位于 permissionStore
       return {
         ...state,
-        permissionMode: (window as any).usePermissionStore?.getState?.().permissionMode,
+        permissionMode: (window as any).usePermissionStore?.getState?.()
+          .permissionMode,
       };
     });
 
     expect(initialState).not.toBeNull();
-    expect(['ask', 'deep', 'full', 'plan']).toContain(initialState.permissionMode);
+    expect(['ask', 'deep', 'full', 'plan']).toContain(
+      initialState.permissionMode
+    );
     expect(initialState.workspaces.length).toBeGreaterThan(0);
   });
 
   test('02. 侧栏导航交互与 Store 频次监控', async ({ page }) => {
     // 点击「定时任务」
-    await clickAndAssertInvariants(page, '[data-testid="sidebar-nav-scheduled"]', '侧栏点击定时任务');
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="sidebar-nav-scheduled"]',
+      '侧栏点击定时任务'
+    );
 
     // 点击「新建对话」
-    await clickAndAssertInvariants(page, '[data-testid="new-session-button"]', '侧栏点击新建对话');
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="new-session-button"]',
+      '侧栏点击新建对话'
+    );
 
     // 如果存在会话项，测试选择会话
-    const sessionItem = page.locator('[data-testid="sidebar-session-item"]').first();
+    const sessionItem = page
+      .locator('[data-testid="sidebar-session-item"]')
+      .first();
     if ((await sessionItem.count()) > 0) {
-      await clickAndAssertInvariants(page, '[data-testid="sidebar-session-item"]', '侧栏选择会话项');
+      await clickAndAssertInvariants(
+        page,
+        '[data-testid="sidebar-session-item"]',
+        '侧栏选择会话项'
+      );
     }
   });
 
   test('03. Tab 页切换与 Store 不变量监控', async ({ page }) => {
     // 检查是否存在现有 Tab（如 chat / overview）
     const chatTab = page.locator('[data-testid="tab-chat"]').first();
-    if (await chatTab.isVisible()) {
-      await clickAndAssertInvariants(page, '[data-testid="tab-chat"]', '切换到对话 Tab');
-    }
+    await expect(chatTab).toBeVisible({ timeout: 5000 });
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="tab-chat"]',
+      '切换到对话 Tab'
+    );
 
     // 点击添加面板按钮
     const addBtn = page.locator('[data-testid="add-panel-button"]').first();
-    if (await addBtn.isVisible()) {
-      await clickAndAssertInvariants(page, '[data-testid="add-panel-button"]', '点击添加面板按钮');
+    await expect(addBtn).toBeVisible({ timeout: 5000 });
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="add-panel-button"]',
+      '点击添加面板按钮'
+    );
 
-      // 点击打开终端面板
-      const terminalItem = page.locator('[data-testid="add-panel-item-terminal"]').first();
-      if (await terminalItem.isVisible()) {
-        await clickAndAssertInvariants(page, '[data-testid="add-panel-item-terminal"]', '选择打开终端面板');
-      }
-    }
+    // 点击打开终端面板
+    const terminalItem = page
+      .locator('[data-testid="add-panel-item-terminal"]')
+      .first();
+    await expect(terminalItem).toBeVisible({ timeout: 5000 });
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="add-panel-item-terminal"]',
+      '选择打开终端面板'
+    );
   });
 
   test('04. 模型选择主交互与 Store 频次断言', async ({ page }) => {
-    const modelBtn = page.locator('[data-testid="model-selector-button"]').first();
-    if (await modelBtn.isVisible()) {
-      // 展开模型选择下拉框
-      await clickAndAssertInvariants(page, '[data-testid="model-selector-button"]', '点击模型选择器按钮');
+    const modelBtn = page
+      .locator('[data-testid="model-selector-button"]')
+      .first();
+    await expect(modelBtn).toBeVisible({ timeout: 5000 });
+    // 展开模型选择下拉框
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="model-selector-button"]',
+      '点击模型选择器按钮'
+    );
 
-      // 验证模型菜单是否显示
-      const modelMenu = page.locator('[data-testid="model-picker-menu"]').first();
-      if (await modelMenu.isVisible()) {
-        await expect(modelMenu).toBeVisible();
-      }
-    }
+    // 验证模型菜单是否显示
+    const modelMenu = page.locator('[data-testid="model-picker-menu"]').first();
+    await expect(modelMenu).toBeVisible({ timeout: 5000 });
   });
 
-  test('05. 设置弹窗全流程交互与 permissionMode 防污染断言', async ({ page }) => {
+  test('05. 设置弹窗全流程交互与 permissionMode 防污染断言', async ({
+    page,
+  }) => {
     // 打开快捷设置菜单
-    await clickAndAssertInvariants(page, '[data-testid="settings-button"]', '点击侧栏设置按钮');
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="settings-button"]',
+      '点击侧栏设置按钮'
+    );
 
     // 点击「全部设置」打开 SettingsPanel
     // （ui/Menu 基座弹层在 low-height 视口下溢出，既有产品缺陷 →
@@ -191,16 +233,32 @@ test.describe('L2 UI 交互与 Store 防无限循环 E2E 测试套件', () => {
     await expect(settingsPanel).toBeVisible();
 
     // 切换设置 Tab: 外观
-    await clickAndAssertInvariants(page, '[data-testid="settings-tab-appearance"]', '切换设置 Tab：外观');
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="settings-tab-appearance"]',
+      '切换设置 Tab：外观'
+    );
 
     // 切换设置 Tab: 模型与密钥
-    await clickAndAssertInvariants(page, '[data-testid="settings-tab-models"]', '切换设置 Tab：模型与密钥');
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="settings-tab-models"]',
+      '切换设置 Tab：模型与密钥'
+    );
 
     // 切换设置 Tab: 规则
-    await clickAndAssertInvariants(page, '[data-testid="settings-tab-rules"]', '切换设置 Tab：规则');
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="settings-tab-rules"]',
+      '切换设置 Tab：规则'
+    );
 
     // 关闭设置弹窗
-    await clickAndAssertInvariants(page, '[data-testid="settings-close-button"]', '关闭设置弹窗');
+    await clickAndAssertInvariants(
+      page,
+      '[data-testid="settings-close-button"]',
+      '关闭设置弹窗'
+    );
 
     // 确认弹窗已被销毁或隐藏
     await expect(settingsPanel).not.toBeVisible();

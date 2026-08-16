@@ -75,8 +75,9 @@ export class PluginRegistry {
       return; // 已经激活
     }
 
+    let context: PluginContext | undefined;
     try {
-      const context = new PluginContext(
+      context = new PluginContext(
         reg.plugin.manifest,
         customConfig ?? {},
         this.hostIpcHandler,
@@ -91,6 +92,15 @@ export class PluginRegistry {
     } catch (err: any) {
       reg.status = 'error';
       reg.error = err?.message || String(err);
+      // 🚨 关键修复 (DEC-07 / Task 4.1): 激活失败时强制释放已部分绑定的 EventListener 与 Timer
+      if (context) {
+        try {
+          await context.subscriptions.dispose();
+        } catch {
+          // ignore dispose error
+        }
+      }
+      reg.context = undefined;
       console.error(
         `[PluginRegistry] Failed to activate plugin '${pluginId}':`,
         err

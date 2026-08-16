@@ -28,6 +28,7 @@ import {
 } from './flowDagLayout';
 import { invokeTyped } from '../../api/tauriInvoke';
 import { getActiveSessionId } from '../../api/storeAccess';
+import { Tooltip } from '../ui';
 
 /** 快照轻量轮询间隔（≥2s；首查立即执行，此后按此周期刷新） */
 const FLOW_SNAPSHOT_POLL_MS = 3000;
@@ -94,9 +95,9 @@ export const FlowDagGraph: React.FC<{
                       data-state-dot={n.state}
                       aria-hidden
                     />
-                    <span className={styles.nodeTitle} title={n.task || n.id}>
-                      {n.task || n.id}
-                    </span>
+                    <Tooltip content={n.task || n.id}>
+                      <span className={styles.nodeTitle}>{n.task || n.id}</span>
+                    </Tooltip>
                     <span className={styles.nodeMeta}>
                       {stateLabel(n.state)}
                     </span>
@@ -134,9 +135,7 @@ export const FlowDagView: React.FC = () => {
       });
       if (!alive) return; // 已卸载：丢弃迟到响应
       if (res.status === 'ok') {
-        useFlowDagStore
-          .getState()
-          .pushNodes(sanitizeDagNodes(res.data));
+        useFlowDagStore.getState().pushNodes(sanitizeDagNodes(res.data));
       }
       // missing / error：保持上次数据（首版兜底，不打扰用户）
     };

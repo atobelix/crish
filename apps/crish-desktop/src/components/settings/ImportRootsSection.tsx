@@ -41,9 +41,19 @@ export const ImportRootsSection: React.FC<{
               <span className={styles.importRootBadgeMuted}>默认</span>
             )}
           </span>
-          <span className={styles.importRootPath} title={roots.effective.claudeConfig}>
-            {roots.effective.claudeConfig || roots.defaults.claudeConfig || '（未解析）'}
-          </span>
+          <Tooltip
+            content={
+              roots.effective.claudeConfig ||
+              roots.defaults.claudeConfig ||
+              '（未解析）'
+            }
+          >
+            <span className={styles.importRootPath}>
+              {roots.effective.claudeConfig ||
+                roots.defaults.claudeConfig ||
+                '（未解析）'}
+            </span>
+          </Tooltip>
         </div>
         <div className={styles.importRootBtns}>
           <Tooltip content="选择非默认的 Claude Code 配置目录（含 projects）">
@@ -87,9 +97,19 @@ export const ImportRootsSection: React.FC<{
               <span className={styles.importRootBadgeMuted}>默认</span>
             )}
           </span>
-          <span className={styles.importRootPath} title={roots.effective.codexHome}>
-            {roots.effective.codexHome || roots.defaults.codexHome || '（未解析）'}
-          </span>
+          <Tooltip
+            content={
+              roots.effective.codexHome ||
+              roots.defaults.codexHome ||
+              '（未解析）'
+            }
+          >
+            <span className={styles.importRootPath}>
+              {roots.effective.codexHome ||
+                roots.defaults.codexHome ||
+                '（未解析）'}
+            </span>
+          </Tooltip>
         </div>
         <div className={styles.importRootBtns}>
           <Tooltip content="选择非默认的 Codex 配置目录（含 sessions）">

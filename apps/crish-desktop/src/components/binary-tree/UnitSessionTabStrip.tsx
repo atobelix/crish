@@ -261,7 +261,6 @@ export const UnitSessionTabStrip: React.FC<UnitSessionTabStripProps> =
                 className={styles.tabMain}
                 tabIndex={-1}
                 onClick={() => selectSession(tab.id)}
-                title={tab.label}
               >
                 {meta?.pinned ? (
                   <Pin
