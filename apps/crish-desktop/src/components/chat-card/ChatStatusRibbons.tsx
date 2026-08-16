@@ -16,7 +16,7 @@ import * as Lucide from 'lucide-react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import type { EngineStatus } from '../../api/engineConfig';
 import type { RunNotice } from '../../hooks/useChatStream';
-import { getSessionById } from '../../api/store-access/componentAccess';
+import { getSessionById } from '../../store/storeAccess';
 import {
   resolveSessionProgressItems,
   computeChecklistProgress,

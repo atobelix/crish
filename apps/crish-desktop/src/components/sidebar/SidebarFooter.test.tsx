@@ -4,7 +4,7 @@ import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { SidebarFooter } from './SidebarFooter';
 import { UserProfileCard } from './UserProfileCard';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import * as appModeApi from '../../api/appMode';
 
 describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {

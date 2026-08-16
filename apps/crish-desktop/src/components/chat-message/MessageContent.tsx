@@ -17,29 +17,22 @@ import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
 import { MessageToolCallsSection } from '../chat-message-row/MessageToolCallsSection';
 import { StreamingTextBlock } from '../chat-message-row/StreamingTextBlock';
 import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
-import { useShallow } from '../../api/store-access/componentAccess';
-import {
-  streamStoreKey,
-  useStreamingStore,
-  type StreamToolLive,
-} from '../../api/store-access/componentAccess';
-import {
-  applyStreamTextToMessage,
-  applyStreamToolsToMessage,
-} from './streamMessageViewModel';
 
 export interface MessageContentProps {
+  /**
+   * 已合并的流式渲染 view model（T4 A1：由页面壳层 useStreamMessageViewModel
+   * 装配后传入；本组件不再直读 streamingStore）。
+   */
   msg: SessionMessage;
+  /**
+   * 流式累积正文（undefined = 热缓冲无条目）。驱动流式增量区 / 图片扫描 /
+   * streaming 判定；正文合并已由壳层完成（msg.text 即当前有效正文）。
+   */
+  streamText?: string;
   isThinkingMsg?: boolean;
   toolStackProps?: ChatToolStackSharedProps;
   className?: string;
 }
-
-/** Stable empty slice so non-live rows never re-render on byKey ticks. */
-const EMPTY_STREAM_BODY: {
-  text: string | undefined;
-  tools: Record<string, StreamToolLive> | undefined;
-} = { text: undefined, tools: undefined };
 
 const EMPTY_TIMELINE: AssistantTimelineItem[] = [];
 
@@ -130,40 +123,13 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
 TimelineBody.displayName = 'TimelineBody';
 
 export const MessageContent: React.FC<MessageContentProps> = React.memo(
-  ({ msg, isThinkingMsg = false, toolStackProps, className }) => {
-    const sessionId = toolStackProps?.activeSessionId;
-    // 关键防御 1：移除 live 门禁对 selector 的硬阻断。
-    // 即使 msg.status 已转为 completed，只要 streamingStore 中仍有条目，selector 依然返回缓冲内容，
-    // 直到 commitStreamToSession 在微任务中安全清理 streamingStore。
-    const { text: streamText, tools: streamTools } = useStreamingStore(
-      useShallow((s) => {
-        if (!sessionId) return EMPTY_STREAM_BODY;
-        const e = s.byKey[streamStoreKey(sessionId, msg.id)];
-        if (!e) return EMPTY_STREAM_BODY;
-        return { text: e.text, tools: e.tools };
-      })
-    );
-
-    const displayMsg = useMemo(() => {
-      let next: SessionMessage = msg;
-      // 关键防御 2：防撕裂平滑三元降级公式
-      // 1. 只有当 sessionStore 中的 msg.text 已经非空且状态已为 completed 时，才完全信任持久化 text；
-      // 2. 否则，只要 streamText 存在，无条件优先使用 streamText；
-      // 3. 兜底才使用 msg.text。
-      const hasCommittedText = Boolean(msg.text && msg.text.trim().length > 0);
-      const activeText =
-        hasCommittedText && msg.status === 'completed'
-          ? msg.text
-          : (streamText ?? msg.text);
-
-      if (activeText != null && activeText !== msg.text) {
-        next = applyStreamTextToMessage(next, activeText) as SessionMessage;
-      }
-      if (streamTools) {
-        next = applyStreamToolsToMessage(next, streamTools);
-      }
-      return next;
-    }, [msg, streamText, streamTools]);
+  ({ msg, streamText, isThinkingMsg = false, toolStackProps, className }) => {
+    // T4 A1：热缓冲订阅与 view model 合并已上移页面壳层（useStreamMessageViewModel），
+    // 本组件只收「已合并 view model」（msg）+ 流式累积正文（streamText）。
+    // 防撕裂平滑三元降级公式与 live 门禁语义由壳层装配点承载——即使 msg.status
+    // 已转 completed、只要热缓冲仍有条目，壳层依然返回缓冲内容，直到
+    // commitStreamToSession 在微任务中安全清理（queueMicrotask clearStream 时序闭环）。
+    const displayMsg = msg;
 
     // T1.2 签名缓存：纯文本流式帧命中（最后 text 块内容不进签名）→ 复用上次
     // timeline 引用（TimelineBody memo 全链路零重渲染）。按 msg.id 复位。

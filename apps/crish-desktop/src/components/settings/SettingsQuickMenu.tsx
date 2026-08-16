@@ -10,7 +10,7 @@
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import type { SettingsTabType } from '../../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';

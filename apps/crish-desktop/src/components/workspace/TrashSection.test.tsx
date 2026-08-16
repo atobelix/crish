@@ -20,7 +20,7 @@ import {
 } from '@testing-library/react';
 import { TrashSection } from './TrashSection';
 import * as trashApi from '../../api/trashApi';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import type { TrashEntryDto } from '../../api/trashApi';
 
 vi.mock('../../api/trashApi', () => ({

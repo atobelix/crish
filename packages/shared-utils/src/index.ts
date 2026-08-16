@@ -189,3 +189,30 @@ export type {
   CacheAffinityParams,
   CacheAffinityResult,
 } from './cache/index';
+
+// ── 事件投影原语（T4 下沉：mobile/desktop 共用的事件→投影纯逻辑，transport 无关） ──
+export { readRecord, readString, readNumber, readBool } from './event-envelope';
+export type { EventEnvelopeFrame } from './event-envelope';
+
+export {
+  FEED_RING_MAX,
+  createWindow,
+  appendFeed,
+  stableSortBySeq,
+  hydrateFeed,
+  advanceCursor,
+} from './event-ring-window';
+export type {
+  FeedEntry,
+  EventWindow,
+  AppendOutcome,
+} from './event-ring-window';
+
+export {
+  deriveErrorLevel,
+  filterErrors,
+  filterByRunId,
+  filterByTypes,
+  filterFeed,
+} from './event-filter';
+export type { FeedFilter } from './event-filter';

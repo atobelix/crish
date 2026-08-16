@@ -4,19 +4,12 @@
  */
 
 import type { MessageToolCall, SessionMessage } from '../store/types';
+import { blockText } from './chat-bridge/handlers/eventUtils';
 
 type AnyRec = Record<string, unknown>;
 
 function asRec(v: unknown): AnyRec | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as AnyRec) : null;
-}
-
-function blockText(block: unknown): string {
-  const b = asRec(block);
-  if (!b) return '';
-  if (typeof b.text === 'string') return b.text;
-  if (typeof b.content === 'string') return b.content;
-  return '';
 }
 
 /** 与 chatBridge / sessionEventHydrate 对齐：兼容 id|toolCallId、name|toolName、input|arguments|parameters */
@@ -41,7 +34,9 @@ function toolCallFields(call: unknown): {
   } else if (c.parameters !== undefined) {
     try {
       args =
-        typeof c.parameters === 'string' ? c.parameters : JSON.stringify(c.parameters);
+        typeof c.parameters === 'string'
+          ? c.parameters
+          : JSON.stringify(c.parameters);
     } catch {
       args = String(c.parameters);
     }
@@ -105,7 +100,7 @@ function ensureToolBlock(a: SessionMessage, id: string): void {
  */
 export function applySubagentEventToMessages(
   messages: SessionMessage[],
-  event: Record<string, unknown>,
+  event: Record<string, unknown>
 ): SessionMessage[] {
   const type = String(event.type ?? '');
   const next = [...messages];
@@ -140,7 +135,11 @@ export function applySubagentEventToMessages(
     return next;
   }
 
-  if (type === 'message-end' && event.message && typeof event.message === 'object') {
+  if (
+    type === 'message-end' &&
+    event.message &&
+    typeof event.message === 'object'
+  ) {
     const msg = event.message as AnyRec;
     if (msg.role === 'assistant') {
       const a = ensureAsst();
@@ -151,7 +150,8 @@ export function applySubagentEventToMessages(
       for (const bl of blocks) {
         if (!bl || typeof bl !== 'object') continue;
         const b = bl as AnyRec;
-        if (b.type === 'thought' || b.kind === 'thought') thought += blockText(b);
+        if (b.type === 'thought' || b.kind === 'thought')
+          thought += blockText(b);
         else if (b.type === 'text') text += blockText(b);
       }
       if (text.trim()) a.text = text.trim();

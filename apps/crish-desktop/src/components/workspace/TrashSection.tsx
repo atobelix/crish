@@ -10,7 +10,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import styles from './RuntimePanel.module.css';
 import { RuntimeSection } from './RuntimeSection';
 import { Button, Tooltip } from '../ui';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import {
   formatTrashedAt,
   listTrashEntries,

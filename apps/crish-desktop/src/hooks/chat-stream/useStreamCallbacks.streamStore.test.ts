@@ -32,36 +32,16 @@ const updateMessageText = vi.fn();
 const updateMessageToolCall = vi.fn();
 const addMessageToolCall = vi.fn();
 
+// T4 A3：helpers 写入统一走 api/storeAccess 编排单点（sessionAccess 门面），
+// 故工具行收口 spy 挂在 api/storeAccess 上（不再直写 layoutStore）。
 vi.mock('../../api/storeAccess', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../api/storeAccess')>();
   return {
     ...actual,
     updateMessageText: (...args: unknown[]) => updateMessageText(...args),
-  };
-});
-
-vi.mock('../../store/layoutStore', async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import('../../store/layoutStore')>();
-  return {
-    ...actual,
-    useLayoutStore: Object.assign(
-      (...args: unknown[]) =>
-        (actual.useLayoutStore as unknown as (...a: unknown[]) => unknown)(
-          ...args
-        ),
-      {
-        getState: () => ({
-          ...actual.useLayoutStore.getState(),
-          updateMessageToolCall: (...args: unknown[]) =>
-            updateMessageToolCall(...args),
-          addMessageToolCall: (...args: unknown[]) =>
-            addMessageToolCall(...args),
-        }),
-        setState: actual.useLayoutStore.setState,
-        subscribe: actual.useLayoutStore.subscribe,
-      }
-    ),
+    updateMessageToolCall: (...args: unknown[]) =>
+      updateMessageToolCall(...args),
+    addMessageToolCall: (...args: unknown[]) => addMessageToolCall(...args),
   };
 });
 

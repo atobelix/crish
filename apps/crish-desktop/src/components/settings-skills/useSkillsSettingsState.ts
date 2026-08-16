@@ -24,7 +24,7 @@ import { clientApi } from '../../api/clientApi';
 import { setComposerSeed } from '../../api/composerSeed';
 import { emitUiEvent } from '../../api/uiEvents';
 import { formatEngineDegradeToast } from '../../hooks/useToastQueue';
-import { closeSettings } from '../../api/store-access/componentAccess';
+import { closeSettings } from '../../store/storeAccess';
 
 export const ACTIVATION_OPTIONS: { id: SkillActivation; label: string }[] = [
   { id: 'enabled', label: '启用' },
@@ -45,7 +45,10 @@ export const EMPTY_FILTER_HINT = '当前筛选无匹配技能，可清除筛选�
 export type ScopeFilter = string;
 export type SkillScope = string;
 export type CreateMode = 'global' | 'project';
-export type BatchConfirm = { action: 'enable' | 'disable' | 'delete'; count: number } | null;
+export type BatchConfirm = {
+  action: 'enable' | 'disable' | 'delete';
+  count: number;
+} | null;
 export type DiscoverPick = { dir: string; name: string } | null;
 
 export function errText(e: unknown): string {
@@ -69,7 +72,6 @@ export function skillSlashCmd(name: string): string {
     .replace(/^-+|-+$/g, '');
   return `/skill:${slug || name.trim()}`;
 }
-
 
 export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
   const [listState, setListState] = useState<{
@@ -96,17 +98,36 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
   const enableCommands = listState.enableCommands;
 
   const setSkills = (val: React.SetStateAction<DesktopSkill[]>) =>
-    setListState((prev) => ({ ...prev, skills: typeof val === 'function' ? val(prev.skills) : val }));
+    setListState((prev) => ({
+      ...prev,
+      skills: typeof val === 'function' ? val(prev.skills) : val,
+    }));
   const setLoading = (val: React.SetStateAction<boolean>) =>
-    setListState((prev) => ({ ...prev, loading: typeof val === 'function' ? val(prev.loading) : val }));
+    setListState((prev) => ({
+      ...prev,
+      loading: typeof val === 'function' ? val(prev.loading) : val,
+    }));
   const setLoadError = (val: React.SetStateAction<string | null>) =>
-    setListState((prev) => ({ ...prev, loadError: typeof val === 'function' ? val(prev.loadError) : val }));
+    setListState((prev) => ({
+      ...prev,
+      loadError: typeof val === 'function' ? val(prev.loadError) : val,
+    }));
   const setSelectedId = (val: React.SetStateAction<string | null>) =>
-    setListState((prev) => ({ ...prev, selectedId: typeof val === 'function' ? val(prev.selectedId) : val }));
+    setListState((prev) => ({
+      ...prev,
+      selectedId: typeof val === 'function' ? val(prev.selectedId) : val,
+    }));
   const setFsOk = (val: React.SetStateAction<boolean>) =>
-    setListState((prev) => ({ ...prev, fsOk: typeof val === 'function' ? val(prev.fsOk) : val }));
+    setListState((prev) => ({
+      ...prev,
+      fsOk: typeof val === 'function' ? val(prev.fsOk) : val,
+    }));
   const setEnableCommands = (val: React.SetStateAction<boolean>) =>
-    setListState((prev) => ({ ...prev, enableCommands: typeof val === 'function' ? val(prev.enableCommands) : val }));
+    setListState((prev) => ({
+      ...prev,
+      enableCommands:
+        typeof val === 'function' ? val(prev.enableCommands) : val,
+    }));
 
   const [filterState, setFilterState] = useState<{
     filter: string;
@@ -138,15 +159,32 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
   scopeFilterRef.current = scopeFilter;
 
   const setFilter = (val: React.SetStateAction<string>) =>
-    setFilterState((prev) => ({ ...prev, filter: typeof val === 'function' ? val(prev.filter) : val }));
+    setFilterState((prev) => ({
+      ...prev,
+      filter: typeof val === 'function' ? val(prev.filter) : val,
+    }));
   const setScopeFilter = (val: React.SetStateAction<ScopeFilter>) =>
-    setFilterState((prev) => ({ ...prev, scopeFilter: typeof val === 'function' ? val(prev.scopeFilter) : val }));
-  const setScopeProjects = (val: React.SetStateAction<ReturnType<typeof listSettingsScopeProjects>>) =>
-    setFilterState((prev) => ({ ...prev, scopeProjects: typeof val === 'function' ? val(prev.scopeProjects) : val }));
+    setFilterState((prev) => ({
+      ...prev,
+      scopeFilter: typeof val === 'function' ? val(prev.scopeFilter) : val,
+    }));
+  const setScopeProjects = (
+    val: React.SetStateAction<ReturnType<typeof listSettingsScopeProjects>>
+  ) =>
+    setFilterState((prev) => ({
+      ...prev,
+      scopeProjects: typeof val === 'function' ? val(prev.scopeProjects) : val,
+    }));
   const setExtraDir = (val: React.SetStateAction<string>) =>
-    setFilterState((prev) => ({ ...prev, extraDir: typeof val === 'function' ? val(prev.extraDir) : val }));
+    setFilterState((prev) => ({
+      ...prev,
+      extraDir: typeof val === 'function' ? val(prev.extraDir) : val,
+    }));
   const setExtraDirs = (val: React.SetStateAction<string[]>) =>
-    setFilterState((prev) => ({ ...prev, extraDirs: typeof val === 'function' ? val(prev.extraDirs) : val }));
+    setFilterState((prev) => ({
+      ...prev,
+      extraDirs: typeof val === 'function' ? val(prev.extraDirs) : val,
+    }));
 
   const [actionState, setActionState] = useState<{
     busyId: string | null;
@@ -196,37 +234,88 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
   const extraOpen = actionState.extraOpen;
 
   const setBusyId = (val: React.SetStateAction<string | null>) =>
-    setActionState((prev) => ({ ...prev, busyId: typeof val === 'function' ? val(prev.busyId) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      busyId: typeof val === 'function' ? val(prev.busyId) : val,
+    }));
   const setShowRaw = (val: React.SetStateAction<boolean>) =>
-    setActionState((prev) => ({ ...prev, showRaw: typeof val === 'function' ? val(prev.showRaw) : val }));
-  const setCreateMode = (val: React.SetStateAction<'none' | 'paths' | 'manual'>) =>
-    setActionState((prev) => ({ ...prev, createMode: typeof val === 'function' ? val(prev.createMode) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      showRaw: typeof val === 'function' ? val(prev.showRaw) : val,
+    }));
+  const setCreateMode = (
+    val: React.SetStateAction<'none' | 'paths' | 'manual'>
+  ) =>
+    setActionState((prev) => ({
+      ...prev,
+      createMode: typeof val === 'function' ? val(prev.createMode) : val,
+    }));
   const setCreateName = (val: React.SetStateAction<string>) =>
-    setActionState((prev) => ({ ...prev, createName: typeof val === 'function' ? val(prev.createName) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      createName: typeof val === 'function' ? val(prev.createName) : val,
+    }));
   const setCreateDesc = (val: React.SetStateAction<string>) =>
-    setActionState((prev) => ({ ...prev, createDesc: typeof val === 'function' ? val(prev.createDesc) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      createDesc: typeof val === 'function' ? val(prev.createDesc) : val,
+    }));
   const setCreateBusy = (val: React.SetStateAction<boolean>) =>
-    setActionState((prev) => ({ ...prev, createBusy: typeof val === 'function' ? val(prev.createBusy) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      createBusy: typeof val === 'function' ? val(prev.createBusy) : val,
+    }));
   const setSyncBusy = (val: React.SetStateAction<boolean>) =>
-    setActionState((prev) => ({ ...prev, syncBusy: typeof val === 'function' ? val(prev.syncBusy) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      syncBusy: typeof val === 'function' ? val(prev.syncBusy) : val,
+    }));
   const setBatchBusy = (val: React.SetStateAction<boolean>) =>
-    setActionState((prev) => ({ ...prev, batchBusy: typeof val === 'function' ? val(prev.batchBusy) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      batchBusy: typeof val === 'function' ? val(prev.batchBusy) : val,
+    }));
   const setDiscoverBusy = (val: React.SetStateAction<boolean>) =>
-    setActionState((prev) => ({ ...prev, discoverBusy: typeof val === 'function' ? val(prev.discoverBusy) : val }));
-  const setBatchConfirm = (val: React.SetStateAction<'enabled' | 'disabled' | null>) =>
-    setActionState((prev) => ({ ...prev, batchConfirm: typeof val === 'function' ? val(prev.batchConfirm) : val }));
-  const setDiscoverCandidates = (val: React.SetStateAction<DesktopSkill[] | null>) =>
-    setActionState((prev) => ({ ...prev, discoverCandidates: typeof val === 'function' ? val(prev.discoverCandidates) : val }));
-  const setDiscoverPick = (val: React.SetStateAction<Record<string, boolean>>) =>
-    setActionState((prev) => ({ ...prev, discoverPick: typeof val === 'function' ? val(prev.discoverPick) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      discoverBusy: typeof val === 'function' ? val(prev.discoverBusy) : val,
+    }));
+  const setBatchConfirm = (
+    val: React.SetStateAction<'enabled' | 'disabled' | null>
+  ) =>
+    setActionState((prev) => ({
+      ...prev,
+      batchConfirm: typeof val === 'function' ? val(prev.batchConfirm) : val,
+    }));
+  const setDiscoverCandidates = (
+    val: React.SetStateAction<DesktopSkill[] | null>
+  ) =>
+    setActionState((prev) => ({
+      ...prev,
+      discoverCandidates:
+        typeof val === 'function' ? val(prev.discoverCandidates) : val,
+    }));
+  const setDiscoverPick = (
+    val: React.SetStateAction<Record<string, boolean>>
+  ) =>
+    setActionState((prev) => ({
+      ...prev,
+      discoverPick: typeof val === 'function' ? val(prev.discoverPick) : val,
+    }));
   const setMoreOpen = (val: React.SetStateAction<boolean>) =>
-    setActionState((prev) => ({ ...prev, moreOpen: typeof val === 'function' ? val(prev.moreOpen) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      moreOpen: typeof val === 'function' ? val(prev.moreOpen) : val,
+    }));
   const setExtraOpen = (val: React.SetStateAction<boolean>) =>
-    setActionState((prev) => ({ ...prev, extraOpen: typeof val === 'function' ? val(prev.extraOpen) : val }));
+    setActionState((prev) => ({
+      ...prev,
+      extraOpen: typeof val === 'function' ? val(prev.extraOpen) : val,
+    }));
 
   const selected = useMemo(
     () => skills.find((s) => s.id === selectedId) || null,
-    [skills, selectedId],
+    [skills, selectedId]
   );
 
   const knownIdsKey = 'crish_skill_known_ids_v1';
@@ -298,7 +387,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
         setLoading(false);
       }
     },
-    [onShowToast, resolveDiscoverWorkspace],
+    [onShowToast, resolveDiscoverWorkspace]
   );
 
   const applyDiscoverImport = async (mode: 'selected' | 'all' | 'skip') => {
@@ -334,7 +423,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
         onShowToast?.(
           fail === targets.length
             ? `导入失败：全部 ${fail} 个未能启用`
-            : `导入部分失败：${fail}/${targets.length}`,
+            : `导入部分失败：${fail}/${targets.length}`
         );
       }
     } finally {
@@ -354,7 +443,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
     const hit = scopeProjects.find(
       (p) =>
         p.path.replace(/\\/g, '/').toLowerCase() ===
-        scopeFilter.replace(/\\/g, '/').toLowerCase(),
+        scopeFilter.replace(/\\/g, '/').toLowerCase()
     );
     return hit?.name || projectFolderLabel(scopeFilter);
   }, [scopeFilter, scopeProjects]);
@@ -430,13 +519,16 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
     void refresh({ scope: value });
   };
 
-  const setActivation = async (skill: DesktopSkill, activation: SkillActivation) => {
+  const setActivation = async (
+    skill: DesktopSkill,
+    activation: SkillActivation
+  ) => {
     if (skill.activation === activation) return;
     setBusyId(skill.id);
     try {
       const r = await setSkillActivation(skill, activation);
       setSkills((list) =>
-        list.map((s) => (s.id === skill.id ? { ...s, activation } : s)),
+        list.map((s) => (s.id === skill.id ? { ...s, activation } : s))
       );
       invalidateSkillSlashCache();
       if (!r.engineSynced) {
@@ -469,7 +561,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
         try {
           await setSkillActivation(s, activation);
           setSkills((list) =>
-            list.map((x) => (x.id === s.id ? { ...x, activation } : x)),
+            list.map((x) => (x.id === s.id ? { ...x, activation } : x))
           );
         } catch {
           fail += 1;
@@ -480,7 +572,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
         onShowToast?.(
           fail === targets.length
             ? `${label}失败：全部 ${fail} 个`
-            : `${label}部分失败：${fail}/${targets.length}`,
+            : `${label}部分失败：${fail}/${targets.length}`
         );
       }
     } finally {
@@ -497,7 +589,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
         onShowToast?.(
           r.ok === 0
             ? `同步失败：全部 ${r.fail} 个`
-            : `同步部分失败：${r.fail}/${r.ok + r.fail}`,
+            : `同步部分失败：${r.fail}/${r.ok + r.fail}`
         );
       }
     } catch (e) {
@@ -590,7 +682,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
         '请帮我创建一个 Crish 技能（正式 SKILL.md）。',
         '需要：用途说明、适用场景、主要步骤，以及可直接保存的完整 SKILL.md 内容（含 frontmatter）。',
         '我打算用它来：',
-      ].join('\n'),
+      ].join('\n')
     );
     setCreateMode('none');
     closeSettings();
@@ -614,8 +706,12 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
   }, [selected, showRaw]);
 
   const selectedSlash = selected ? skillSlashCmd(selected.name) : '';
-  const batchEnableCount = filtered.filter((s) => s.activation !== 'enabled').length;
-  const batchDisableCount = filtered.filter((s) => s.activation !== 'disabled').length;
+  const batchEnableCount = filtered.filter(
+    (s) => s.activation !== 'enabled'
+  ).length;
+  const batchDisableCount = filtered.filter(
+    (s) => s.activation !== 'disabled'
+  ).length;
 
   return {
     skills,

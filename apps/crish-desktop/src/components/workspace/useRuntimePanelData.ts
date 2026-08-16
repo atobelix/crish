@@ -4,8 +4,12 @@
  * 渲染层（RuntimeSection 基座 + 4 个业务 Section）不持有这些派生逻辑。
  */
 import { useEffect, useMemo, useState } from 'react';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
-import { useSettingsField, selectScheduledTasks, selectTokenUsage } from '../../store/storeAccess';
+import { useLayoutStore } from '../../store/storeAccess';
+import {
+  useSettingsField,
+  selectScheduledTasks,
+  selectTokenUsage,
+} from '../../store/storeAccess';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { setActiveSessionId } from '../../api/storeAccess';
 import { estimateCostUsd } from '../../api/pricingStore';
@@ -60,7 +64,10 @@ export function useRuntimePanelData(): UseRuntimePanelDataResult {
           fromMessages.push({
             id: m.id,
             taskName: s.title || '对话进行中',
-            elapsedSeconds: Math.max(0, Math.round((now - (m.timestamp || now)) / 1000)),
+            elapsedSeconds: Math.max(
+              0,
+              Math.round((now - (m.timestamp || now)) / 1000)
+            ),
             sessionId: s.id,
             kind: 'session',
           });
@@ -77,7 +84,7 @@ export function useRuntimePanelData(): UseRuntimePanelDataResult {
             ? Date.parse(r.startedAt) || now
             : now;
       const matched = sessions.find(
-        (s) => s.engineLastRunId === r.runId || s.id === r.sessionId,
+        (s) => s.engineLastRunId === r.runId || s.id === r.sessionId
       );
       const rawName = (matched?.title || r.prompt || '').trim();
       fromMessages.push({
@@ -95,7 +102,9 @@ export function useRuntimePanelData(): UseRuntimePanelDataResult {
     setActiveSessionId(sessionId);
     clearAgentPanelFocus();
     try {
-      window.dispatchEvent(new CustomEvent('crish-focus-chat', { detail: { sessionId } }));
+      window.dispatchEvent(
+        new CustomEvent('crish-focus-chat', { detail: { sessionId } })
+      );
     } catch {
       /* ignore */
     }
@@ -109,7 +118,10 @@ export function useRuntimePanelData(): UseRuntimePanelDataResult {
 
   const tokenPercent = Math.min(
     100,
-    Math.max(0, Math.round((tokenUsage.input / (tokenUsage.inputMax || 160000)) * 100)),
+    Math.max(
+      0,
+      Math.round((tokenUsage.input / (tokenUsage.inputMax || 160000)) * 100)
+    )
   );
 
   const planCount = ds.workflows.length + cronJobs.length;

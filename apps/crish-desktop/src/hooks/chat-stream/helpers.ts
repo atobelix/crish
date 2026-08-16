@@ -1,13 +1,14 @@
 import type { SessionMessage } from '../../store/layoutStore';
 import { getSessionById } from '../../store/sessionStore';
 import {
+  addMessageToolCall,
   updateMessageText,
   updateMessageThinking,
+  updateMessageToolCall,
 } from '../../api/storeAccess';
 import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { parseMarkdownToHtmlAsync } from '../../api/markdownRenderAsync';
 import { isPendingDraft } from '../../store/draftSession';
-import { useLayoutStore } from '../../store/layoutStore';
 import {
   clearStream,
   clearStreamTools,
@@ -90,6 +91,9 @@ export function scheduleFinalMarkdownHtml(
  * Apply one tool patch into session messages (immer once).
  * Merges any lite-store intermediate fields so success patches that omit
  * name/args still land a complete durable row.
+ *
+ * T4 A3：写入统一走 `api/storeAccess` 编排单点（sessionAccess 门面），
+ * 不再直写 layoutStore（单一写入通道语义，check:store-writes 对齐）。
  */
 export function commitToolPatchToSession(
   sessionId: string,
@@ -98,7 +102,6 @@ export function commitToolPatchToSession(
   patch: StreamToolCallPatch | StreamToolLive
 ): void {
   const lite = getStreamTools(sessionId, messageId)?.[toolId];
-  const store = useLayoutStore.getState();
   const existing = getSessionById(sessionId)
     ?.messages?.find((m) => m.id === messageId)
     ?.toolCalls?.find((t) => t.id === toolId);
@@ -154,9 +157,9 @@ export function commitToolPatchToSession(
     if (approvalMeta !== undefined) updates.approvalMeta = approvalMeta;
     if (diffs !== undefined) updates.diffs = diffs;
     if (startedAt !== undefined) updates.startedAt = startedAt;
-    store.updateMessageToolCall(sessionId, messageId, toolId, updates);
+    updateMessageToolCall(sessionId, messageId, toolId, updates);
   } else {
-    store.addMessageToolCall(sessionId, messageId, {
+    addMessageToolCall(sessionId, messageId, {
       id: toolId,
       name,
       arguments: argumentsText || '',

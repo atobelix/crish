@@ -2,6 +2,17 @@
  * Lightweight per-token stream buffer (plain zustand, NO immer).
  *
  * key = `${sessionId}::${messageId}`
+ *
+ * ## 定位（T4 单一投影 store 固化 · analysis/16 §①）
+ *
+ * 本 store 是「设计内必需桥」的**热缓冲（中间态）**，不是持久投影的第二真相源：
+ * - 热缓冲（本文件）：每 token 流式增量帧（text/thinking/tools/images），
+ *   Delta 可丢；流式期间存在，`commitStreamToSession` 收口后由
+ *   `queueMicrotask clearStream` 时序闭环清空（helpers.ts 注释：严禁同步
+ *   clearStream，杜绝组件切换瞬间白屏闪烁）；
+ * - 持久投影（终态落点）：layoutStore/sessionStore.messages，run 收口后才写终态。
+ * 渲染 view model 由页面壳层装配（useStreamMessageViewModel：订阅本缓冲 +
+ * applyStream* 纯函数合并），复合组件不直连本缓冲。
  */
 
 import { create } from 'zustand';
@@ -407,8 +418,3 @@ export function getStreamEntry(
 ): StreamEntry | undefined {
   return useStreamingStore.getState().getStreamEntry(sessionId, messageId);
 }
-
-export {
-  applyStreamTextToMessage,
-  applyStreamToolsToMessage,
-} from '../components/chat-message/streamMessageViewModel';

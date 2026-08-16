@@ -18,8 +18,8 @@ import {
   listChatLeaves,
   type LayoutLeaf,
   type FlatBranch,
-} from '../../api/store-access/componentAccess';
-import { getPanelTitle } from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
+import { getPanelTitle } from '../../store/storeAccess';
 import { useTreeDrag } from '../../hooks/useTreeDrag';
 import { useTreeResize } from '../../hooks/useTreeResize';
 import { useTreePanelEvents } from '../../hooks/useTreePanelEvents';
@@ -129,7 +129,9 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
   React.memo(({ onShowToast }) => {
     const tree = useLayoutTreeStore((s) => s.tree);
     const activeLeafId = useLayoutTreeStore((s) => s.activeLeafId);
-    const toolColumnCollapsed = useLayoutTreeStore((s) => s.toolColumnCollapsed);
+    const toolColumnCollapsed = useLayoutTreeStore(
+      (s) => s.toolColumnCollapsed
+    );
     const draggedSource = useLayoutTreeStore((s) => s.draggedSource);
     // 注意：勿订 past/future 长度 — 历史栈变化与 canvas 渲染无关，
     // 曾导致每次 resize commit / 其它写历史动作全树 leaf+sash re-render。
@@ -140,12 +142,15 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
     useTreePanelEvents();
     useChatPanelSync();
 
-    const { leaves: panels, branches, isMultiChat } = React.useMemo(() => {
+    const {
+      leaves: panels,
+      branches,
+      isMultiChat,
+    } = React.useMemo(() => {
       // multi-chat：禁止全局 toolColumnCollapsed 压掉所有 unit 右坞
       const multi = listChatLeaves(tree.root).length > 1;
       const result = flattenTree(tree.root, {
-        collapsedDomain:
-          !multi && toolColumnCollapsed ? 'tool' : undefined,
+        collapsedDomain: !multi && toolColumnCollapsed ? 'tool' : undefined,
       });
       return { ...result, isMultiChat: multi };
     }, [tree.root, toolColumnCollapsed]);
@@ -167,7 +172,9 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
     }, [branches]);
 
     const draggedLeafId =
-      draggedSource && draggedSource.type === 'leaf' ? draggedSource.leafId : null;
+      draggedSource && draggedSource.type === 'leaf'
+        ? draggedSource.leafId
+        : null;
 
     const ghostLabel = React.useMemo(() => {
       if (!draggedSource) return null;
@@ -184,7 +191,12 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
       <div
         className={styles.section}
         data-tree-workspace="true"
-        style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%' }}
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '100%',
+          height: '100%',
+        }}
       >
         <AppErrorBoundary compact>
           <div
@@ -193,7 +205,12 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
             data-tree-canvas="true"
             role="group"
             aria-label="二叉树布局画布"
-            style={{ flex: 1, position: 'relative', width: '100%', minHeight: 0 }}
+            style={{
+              flex: 1,
+              position: 'relative',
+              width: '100%',
+              minHeight: 0,
+            }}
           >
             {panels.map((panel) => {
               const entry = stableLeafEntries.get(panel.leafId)!;
@@ -212,8 +229,7 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
 
             {/* 渲染所有 sash（branch 经 branchId 缓存稳定；startResize 稳定 + isResizing 布尔） */}
             {branches.map((branch) => {
-              const stable =
-                stableBranches.get(branch.branchId) ?? branch;
+              const stable = stableBranches.get(branch.branchId) ?? branch;
               return (
                 <TreeResizeSash
                   key={branch.branchId}

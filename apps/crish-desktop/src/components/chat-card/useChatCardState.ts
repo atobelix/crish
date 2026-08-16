@@ -1,15 +1,9 @@
-import {
-  useState,
-  useEffect,
-  useRef,
-  useCallback,
-  useReducer,
-} from 'react';
+import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import {
   useLayoutStore,
   useSessionField,
   selectActiveSessionId,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import type { FileDiff, SessionState } from '../../store/types';
 import {
   useTerminalField,
@@ -140,17 +134,11 @@ export function useChatCardState({
   );
   const messages = useScopedSessionField(
     resolveSessionId,
-    useCallback(
-      (session) => session?.messages || EMPTY_ARRAY,
-      []
-    )
+    useCallback((session) => session?.messages || EMPTY_ARRAY, [])
   );
   const agents = useScopedSessionField(
     resolveSessionId,
-    useCallback(
-      (session) => session?.agents || EMPTY_ARRAY,
-      []
-    )
+    useCallback((session) => session?.agents || EMPTY_ARRAY, [])
   );
   const goalMode = useScopedSessionField(
     resolveSessionId,

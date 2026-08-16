@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, act } from '@testing-library/react';
 import React from 'react';
 import { MessageContent } from './MessageContent';
+import { useStreamMessageViewModel } from './streamMessageViewModel';
 import { useStreamingStore } from '../../store/streamingStore';
 import type { SessionMessage } from '../../store/types';
 
@@ -13,6 +14,30 @@ vi.mock('../../api/markdownRenderAsync', () => ({
   }),
   parseMarkdownToHtmlAsync: vi.fn(async (m: string) => `<p>${m}</p>`),
 }));
+
+/**
+ * T4 A1 测试装配壳层：复刻页面壳层 StreamingAssistantRow 的接线
+ * （useStreamMessageViewModel 订阅 + 合并 → MessageContent 收已合并 view model）。
+ */
+function StreamHarness({
+  msg,
+  isThinkingMsg,
+  sessionId,
+}: {
+  msg: SessionMessage;
+  isThinkingMsg: boolean;
+  sessionId: string;
+}) {
+  const vm = useStreamMessageViewModel(msg, sessionId);
+  return (
+    <MessageContent
+      msg={vm.msg}
+      streamText={vm.streamText}
+      isThinkingMsg={isThinkingMsg}
+      toolStackProps={{ activeSessionId: sessionId }}
+    />
+  );
+}
 
 describe('MessageContent 零闪烁与平滑降级断言', () => {
   beforeEach(() => {
@@ -38,11 +63,7 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
 
     const renderedTexts: string[] = [];
     const { container, rerender } = render(
-      <MessageContent
-        msg={mockMsg}
-        isThinkingMsg={true}
-        toolStackProps={{ activeSessionId: sessionId }}
-      />
+      <StreamHarness msg={mockMsg} isThinkingMsg={true} sessionId={sessionId} />
     );
 
     renderedTexts.push(container.textContent || '');
@@ -55,11 +76,7 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       text: '',
     };
     rerender(
-      <MessageContent
-        msg={midMsg}
-        isThinkingMsg={false}
-        toolStackProps={{ activeSessionId: sessionId }}
-      />
+      <StreamHarness msg={midMsg} isThinkingMsg={false} sessionId={sessionId} />
     );
     renderedTexts.push(container.textContent || '');
     // 断言：由于平滑三元降级，此时绝不发生空白闪烁，依然显示 streamText
@@ -72,10 +89,10 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       text: '正在生成的长篇 Markdown 正文',
     };
     rerender(
-      <MessageContent
+      <StreamHarness
         msg={finalMsg}
         isThinkingMsg={false}
-        toolStackProps={{ activeSessionId: sessionId }}
+        sessionId={sessionId}
       />
     );
     renderedTexts.push(container.textContent || '');
@@ -85,10 +102,10 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
       useStreamingStore.getState().clearStream(sessionId, msgId);
     });
     rerender(
-      <MessageContent
+      <StreamHarness
         msg={finalMsg}
         isThinkingMsg={false}
-        toolStackProps={{ activeSessionId: sessionId }}
+        sessionId={sessionId}
       />
     );
     renderedTexts.push(container.textContent || '');
@@ -136,10 +153,10 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
     });
 
     const { container, rerender } = render(
-      <MessageContent
+      <StreamHarness
         msg={streamingMsg}
         isThinkingMsg={true}
-        toolStackProps={{ activeSessionId: sessionId }}
+        sessionId={sessionId}
       />
     );
 
@@ -162,10 +179,10 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
     };
 
     rerender(
-      <MessageContent
+      <StreamHarness
         msg={completedMsg}
         isThinkingMsg={false}
-        toolStackProps={{ activeSessionId: sessionId }}
+        sessionId={sessionId}
       />
     );
 

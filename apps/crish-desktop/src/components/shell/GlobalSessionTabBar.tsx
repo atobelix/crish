@@ -24,15 +24,15 @@ import {
   EMPTY_SESSION_TITLE,
   sessionListDisplayTitle,
 } from '../../api/sessionTitle';
-import { getSessionById } from '../../api/store-access/componentAccess';
+import { getSessionById } from '../../store/storeAccess';
 import {
   useWorkspaceShellStore,
   selectActiveTabSessionId,
   resolveStripWorkspaceKey,
   createDefaultDock,
   type TabSurface,
-} from '../../api/store-access/componentAccess';
-import { isPendingDraft } from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
+import { isPendingDraft } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
 import { Button, TabStrip, Tooltip } from '../ui';

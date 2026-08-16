@@ -87,7 +87,13 @@ export const LAYOUT_TREE_OWNERSHIP = {
   forbidAlongside: ['workspaceShellStore', 'compositionRoot.shell'],
 } as const satisfies StoreOwnership;
 
-/** Session list / messages on the god layout instance (facade, not a second store). */
+/**
+ * Session list / messages on the god layout instance (facade, not a second store).
+ *
+ * T4 A2 定位固化：`sessions[].messages` 是**事件流的持久投影缓存（终态落点）**——
+ * 流式中间态归 streamingStore 热缓冲（设计内必需桥），run 收口后经
+ * commitStreamToSession 单通道落账本投影；本域不存流式中边帧、不新造第三 store。
+ */
 export const SESSION_OWNERSHIP = {
   domain: 'session',
   writeOwner: 'sessionStore',

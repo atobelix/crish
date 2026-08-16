@@ -20,7 +20,7 @@ import {
   type BackgroundTaskInfo,
 } from '../../api/backgroundTasksApi';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import type { SessionState } from '../../store/types';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 
@@ -34,7 +34,12 @@ export interface LiveTask {
 
 export function useOverviewState(
   sessions: SessionState[],
-  activeRuns: Array<{ runId: string; startedAt?: number | string | undefined; prompt?: string | undefined; sessionId?: string | undefined }>,
+  activeRuns: Array<{
+    runId: string;
+    startedAt?: number | string | undefined;
+    prompt?: string | undefined;
+    sessionId?: string | undefined;
+  }>,
   onOpenPanel: (id: string) => void
 ) {
   const [git, setGit] = useState<GitStatusResult | null>(null);
@@ -69,7 +74,10 @@ export function useOverviewState(
           from.push({
             id: m.id,
             taskName: s.title || '对话进行中',
-            elapsedSeconds: Math.max(0, Math.round((now - (m.timestamp || now)) / 1000)),
+            elapsedSeconds: Math.max(
+              0,
+              Math.round((now - (m.timestamp || now)) / 1000)
+            ),
             sessionId: s.id,
             kind: 'session',
           });
@@ -89,7 +97,9 @@ export function useOverviewState(
       );
       from.push({
         id: r.runId,
-        taskName: ((matched?.title || r.prompt || '').trim() || '引擎任务').slice(0, 48),
+        taskName: (
+          (matched?.title || r.prompt || '').trim() || '引擎任务'
+        ).slice(0, 48),
         elapsedSeconds: Math.max(0, Math.round((now - started) / 1000)),
         sessionId: matched?.id || r.sessionId,
         kind: 'run',
@@ -125,13 +135,15 @@ export function useOverviewState(
           (s) =>
             (s.messages || []).some((m) =>
               (m.toolCalls || []).some(
-                (tc) => tc.id === a.toolCallId && tc.status === 'pending_approval'
+                (tc) =>
+                  tc.id === a.toolCallId && tc.status === 'pending_approval'
               )
             ) ||
             (s.agents || []).some((ag) =>
               (ag.messages || []).some((m) =>
                 (m.toolCalls || []).some(
-                  (tc) => tc.id === a.toolCallId && tc.status === 'pending_approval'
+                  (tc) =>
+                    tc.id === a.toolCallId && tc.status === 'pending_approval'
                 )
               )
             )
@@ -139,7 +151,9 @@ export function useOverviewState(
       : undefined;
     const found2 =
       !found && a.runId
-        ? sessions.find((s) => s.engineLastRunId === a.runId || s.id === a.runId)
+        ? sessions.find(
+            (s) => s.engineLastRunId === a.runId || s.id === a.runId
+          )
         : found;
     if (found2) focusSession(found2.id);
     else showActionErr('未找到待确认会话');
@@ -154,12 +168,14 @@ export function useOverviewState(
     if (!toolCallId) return;
     // T-E 步骤 4（C1）：raw setState 全表扫描 → markToolCallLocalStatus action
     //（scope 命中时只扫 scope 内；handleApprovalAllow 有 a.runId 可传）
-    useLayoutStore.getState().markToolCallLocalStatus(
-      toolCallId,
-      status,
-      output,
-      runId ? { runId } : undefined
-    );
+    useLayoutStore
+      .getState()
+      .markToolCallLocalStatus(
+        toolCallId,
+        status,
+        output,
+        runId ? { runId } : undefined
+      );
   };
 
   const handleApprovalAllow = (a: PendingApprovalInfo, e: React.MouseEvent) => {
@@ -202,10 +218,16 @@ export function useOverviewState(
       const out = await getBackgroundTaskOutput(t.id);
       openBackgroundTaskInTerminal(
         t.label,
-        out || t.summary || t.command || BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER
+        out ||
+          t.summary ||
+          t.command ||
+          BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER
       );
     } catch {
-      openBackgroundTaskInTerminal(t.label, t.summary || t.command || '读取失败');
+      openBackgroundTaskInTerminal(
+        t.label,
+        t.summary || t.command || '读取失败'
+      );
       showActionErr('读取后台任务输出失败');
     } finally {
       setBgOpeningId(null);

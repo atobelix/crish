@@ -11,12 +11,9 @@ import {
   findChatLeafBySessionId,
   isChatDomain,
   useLayoutTreeStore,
-} from '../../api/store-access/componentAccess';
-import {
-  insertLeafBesideNode,
-  moveNode,
-} from '../../api/store-access/componentAccess';
-import type { DropZone } from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
+import { insertLeafBesideNode, moveNode } from '../../store/storeAccess';
+import type { DropZone } from '../../store/storeAccess';
 import {
   planSessionCanvasDrop,
   reprojectAllSessionDocksSafe,
@@ -44,7 +41,9 @@ export function useCanvasDropPlanner(
     (leafId: string, sourceSessionId: string) => {
       setActiveLeaf(leafId);
       const shell = getCompositionRoot().shell.getState();
-      const existing = shell.openTabs.find((t) => t.sessionId === sourceSessionId);
+      const existing = shell.openTabs.find(
+        (t) => t.sessionId === sourceSessionId
+      );
       if (existing) {
         shell.activateTab(existing.tabId);
       } else {

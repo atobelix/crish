@@ -15,15 +15,12 @@
 import React, { useCallback } from 'react';
 import { Plus, X } from 'lucide-react';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
-import {
-  useLayoutTreeStore,
-  type LayoutLeaf,
-} from '../../api/store-access/componentAccess';
+import { useLayoutTreeStore, type LayoutLeaf } from '../../store/storeAccess';
 import {
   collapseActiveTabRightDock,
   openToolInSession,
   openToolInActiveTab,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import { Button, TabStrip, Tooltip, Menu } from '../ui';
 import styles from './LeafToolTabStrip.module.css';
 

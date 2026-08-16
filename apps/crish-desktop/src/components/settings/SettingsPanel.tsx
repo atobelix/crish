@@ -8,7 +8,7 @@ import React, {
   Suspense,
 } from 'react';
 import styles from './SettingsPanel.module.css';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import {
   getCachedCapabilities,
   refreshProductCapabilities,

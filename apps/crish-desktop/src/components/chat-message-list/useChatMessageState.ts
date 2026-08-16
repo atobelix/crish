@@ -1,10 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type {
-  FileDiff,
-  SessionAgent,
-  SessionMessage,
-} from '../../store/types';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import type { FileDiff, SessionAgent, SessionMessage } from '../../store/types';
+import { useLayoutStore } from '../../store/storeAccess';
 import { assistantCopyText } from '../../api/toolPresentation';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type { PinnedItem } from './MessageVirtualizer';

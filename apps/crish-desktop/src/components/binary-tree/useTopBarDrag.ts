@@ -30,8 +30,8 @@ import {
   findLeafAtPointer,
   isChatDomain,
   type DropZone,
-} from '../../api/store-access/componentAccess';
-import type { TreeDragSource } from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
+import type { TreeDragSource } from '../../store/storeAccess';
 import {
   usePointerDragBase,
   DROP_DETECT_INTERVAL_MS,
@@ -158,11 +158,17 @@ export function useTopBarDrag(
         if (source.leafId === hit.id) {
           // 同 leaf：若只有 1 个 tab 只能 merge-tab（重排），否则正常检测
           if (hit.tabCount <= 1) {
-            updateZone({ type: 'merge-tab', targetLeafId: hit.id, confidence: 1 });
+            updateZone({
+              type: 'merge-tab',
+              targetLeafId: hit.id,
+              confidence: 1,
+            });
             return;
           }
         }
-        updateZone(detectDropZone({ x: clientX, y: clientY }, hit.rect, hit.id));
+        updateZone(
+          detectDropZone({ x: clientX, y: clientY }, hit.rect, hit.id)
+        );
       } else {
         // 会话标签：优先检测是否悬停在另一个会话标签上（重排）
         const tabEl = findSessionTabAt({ x: clientX, y: clientY });
@@ -185,10 +191,7 @@ export function useTopBarDrag(
         }
         // 拖到 chat 画布：显示 split 落点（多 chat 分屏）
         const leafRects = cachedLeafRectsRef.current;
-        const hit = findChatLeafAt(
-          { x: clientX, y: clientY },
-          leafRects
-        );
+        const hit = findChatLeafAt({ x: clientX, y: clientY }, leafRects);
         if (!hit) {
           updateZone(null);
           return;

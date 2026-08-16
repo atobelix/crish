@@ -14,9 +14,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useAgentToolApproval } from '../hooks/useAgentToolApproval';
-import { useLayoutStore } from './store-access/componentAccess';
+import { useLayoutStore } from '../store/storeAccess';
 import { getCommandPermissions, getSessionAgent } from './storeAccess';
-import type { MessageToolCall, SessionAgent, SessionMessage } from '../store/types';
+import type {
+  MessageToolCall,
+  SessionAgent,
+  SessionMessage,
+} from '../store/types';
 
 const { chatBridgeMock } = vi.hoisted(() => ({
   chatBridgeMock: {
@@ -29,9 +33,14 @@ vi.mock('./chatBridge', () => chatBridgeMock);
 
 function makeToolCall(
   id: string,
-  overrides: Partial<MessageToolCall> = {},
+  overrides: Partial<MessageToolCall> = {}
 ): MessageToolCall {
-  return { id, name: 'shell_command', status: 'pending_approval', ...overrides };
+  return {
+    id,
+    name: 'shell_command',
+    status: 'pending_approval',
+    ...overrides,
+  };
 }
 
 function seedAgentSession(agentId: string, messages: SessionMessage[]) {
@@ -94,7 +103,9 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
       },
     ]);
     const toast = vi.fn();
-    const { result } = renderHook(() => useAgentToolApproval(sid, agentId, toast));
+    const { result } = renderHook(() =>
+      useAgentToolApproval(sid, agentId, toast)
+    );
 
     await act(async () => {
       result.current.onApprovalAllow('tc-1', 'm1');
@@ -116,7 +127,9 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
         sender: 'assistant',
         timestamp: Date.now(),
         toolCalls: [
-          makeToolCall('tc-1', { arguments: '{"command":"npm install lodash"}' }),
+          makeToolCall('tc-1', {
+            arguments: '{"command":"npm install lodash"}',
+          }),
         ],
       },
     ]);
@@ -164,7 +177,9 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
       },
     ]);
     const toast = vi.fn();
-    const { result } = renderHook(() => useAgentToolApproval(sid, agentId, toast));
+    const { result } = renderHook(() =>
+      useAgentToolApproval(sid, agentId, toast)
+    );
 
     await act(async () => {
       result.current.onApprovalAllow('tc-1', 'm1');
@@ -188,14 +203,18 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
       },
     ]);
     const toast = vi.fn();
-    const { result } = renderHook(() => useAgentToolApproval(sid, agentId, toast));
+    const { result } = renderHook(() =>
+      useAgentToolApproval(sid, agentId, toast)
+    );
 
     await act(async () => {
       result.current.onApprovalDeny('tc-1', 'm1');
       await vi.advanceTimersByTimeAsync(200);
     });
 
-    expect(readAgentTool(sid, agentId, 'tc-1')?.status).toBe('pending_approval');
+    expect(readAgentTool(sid, agentId, 'tc-1')?.status).toBe(
+      'pending_approval'
+    );
     expect(readAgentTool(sid, agentId, 'tc-1')?.output).toBe('拒绝未送达');
     expect(toast).toHaveBeenCalledWith('拒绝未送达，请重试');
   });
@@ -206,7 +225,7 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
       () =>
         new Promise<void>((res) => {
           release = res;
-        }),
+        })
     );
     const { sid, agentId } = seedAgentSession('ag-1', [
       {
@@ -254,7 +273,9 @@ describe('useAgentToolApproval 允许 / 拒绝动作', () => {
     expect(chatBridgeMock.engineApproveTool).not.toHaveBeenCalled();
     expect(chatBridgeMock.engineDenyTool).not.toHaveBeenCalled();
     expect(result.current.approvalBusy).toBe(false);
-    expect(readAgentTool(sid, agentId, 'tc-1')?.status).toBe('pending_approval');
+    expect(readAgentTool(sid, agentId, 'tc-1')?.status).toBe(
+      'pending_approval'
+    );
   });
 });
 
@@ -269,7 +290,7 @@ describe('useAgentToolApproval 绑定与解绑', () => {
       },
     ]);
     const { result, rerender } = renderHook(() =>
-      useAgentToolApproval(sid, agentId),
+      useAgentToolApproval(sid, agentId)
     );
 
     await act(async () => {
@@ -292,7 +313,7 @@ describe('useAgentToolApproval 绑定与解绑', () => {
       },
     ]);
     const { result, unmount } = renderHook(() =>
-      useAgentToolApproval(sid, agentId),
+      useAgentToolApproval(sid, agentId)
     );
 
     act(() => {
@@ -310,7 +331,7 @@ describe('useAgentToolApproval 绑定与解绑', () => {
       () =>
         new Promise<void>((res) => {
           releaseA = res;
-        }),
+        })
     );
     const sidA = `parentA-${Math.random().toString(36).slice(2, 8)}`;
     const sidB = `parentB-${Math.random().toString(36).slice(2, 8)}`;
@@ -373,7 +394,7 @@ describe('useAgentToolApproval 绑定与解绑', () => {
               startedAt: 1,
             },
           ],
-        },
+        }
       );
     });
     const hookA = renderHook(() => useAgentToolApproval(sidA, 'ag-a'));

@@ -12,7 +12,7 @@ import {
 } from '../../api/projectStore';
 import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
 import { getSessionStoreState, setDraftFolder } from '../../api/storeAccess';
-import { isPendingDraft } from '../../api/store-access/componentAccess';
+import { isPendingDraft } from '../../store/storeAccess';
 import {
   Check,
   ChevronRight,

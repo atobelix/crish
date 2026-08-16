@@ -1,5 +1,11 @@
-import type { MessageToolCall } from '../../store/types';
-import type { StreamToolLive } from '../../store/streamingStore';
+import { useMemo } from 'react';
+import type { MessageToolCall, SessionMessage } from '../../store/types';
+import {
+  useStreamingStore,
+  useShallow,
+  streamStoreKey,
+  type StreamToolLive,
+} from '../../store/storeAccess';
 
 export type MsgWithBlocks = {
   text?: string | undefined;
@@ -149,4 +155,63 @@ export function applyStreamToolsToMessage<T extends MsgWithTools>(
   }
 
   return { ...msg, toolCalls, blocks };
+}
+
+/** 流式渲染 view model（T4 A1：投影链单源装配产物，页面壳层只收此结果） */
+export interface StreamMessageViewModel {
+  /** 已合并流式正文/工具的渲染消息投影（热缓冲无条目时 = 原消息引用） */
+  msg: SessionMessage;
+  /** 流式累积正文（undefined = 热缓冲无条目；驱动流式增量区与图片扫描） */
+  streamText: string | undefined;
+}
+
+/** 稳定空切片：非 live 行在 byKey tick 上零重渲染（原 MessageContent 内联常量上移） */
+const EMPTY_STREAM_BODY: {
+  text: string | undefined;
+  tools: Record<string, StreamToolLive> | undefined;
+} = { text: undefined, tools: undefined };
+
+/**
+ * 流式 view model 装配（T4 A1：渲染期 merge 从组件内联上移到壳层单点）。
+ *
+ * - 订阅 streamingStore 热缓冲 byKey（useShallow 浅比较，与旧内联订阅同构）；
+ * - 防撕裂平滑三元降级公式（原 MessageContent「关键防御 2」原样上移）：
+ *   1. 仅当持久化 msg.text 非空且状态 completed 才完全信任持久化 text；
+ *   2. 否则 streamText 存在时无条件优先；
+ *   3. 兜底 msg.text；
+ * - 工具中间态经 applyStreamToolsToMessage 合并（不降级终态行）。
+ * 热缓冲写入/清理路径（streamingStore actions + commitStreamToSession 的
+ * queueMicrotask clearStream 时序闭环）不在此触碰。
+ */
+export function useStreamMessageViewModel(
+  msg: SessionMessage,
+  sessionId: string | undefined
+): StreamMessageViewModel {
+  const { text: streamText, tools: streamTools } = useStreamingStore(
+    useShallow((s) => {
+      if (!sessionId) return EMPTY_STREAM_BODY;
+      const e = s.byKey[streamStoreKey(sessionId, msg.id)];
+      if (!e) return EMPTY_STREAM_BODY;
+      return { text: e.text, tools: e.tools };
+    })
+  );
+
+  const merged = useMemo(() => {
+    let next: SessionMessage = msg;
+    const hasCommittedText = Boolean(msg.text && msg.text.trim().length > 0);
+    const activeText =
+      hasCommittedText && msg.status === 'completed'
+        ? msg.text
+        : (streamText ?? msg.text);
+
+    if (activeText != null && activeText !== msg.text) {
+      next = applyStreamTextToMessage(next, activeText) as SessionMessage;
+    }
+    if (streamTools) {
+      next = applyStreamToolsToMessage(next, streamTools);
+    }
+    return next;
+  }, [msg, streamText, streamTools]);
+
+  return { msg: merged, streamText };
 }

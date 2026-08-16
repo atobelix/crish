@@ -14,7 +14,7 @@ import {
   type HiddenBucketKind,
 } from '../../api/messageUserProjection';
 import { downloadTextFile } from '../../api/sessionExport';
-import { useActiveSession } from '../../api/store-access/componentAccess';
+import { useActiveSession } from '../../store/storeAccess';
 import { SettingsCard, SettingsRow, SettingsSection } from './SettingsUI';
 import { Button, Tooltip } from '../ui';
 import styles from './UserViewDebugPanel.module.css';
@@ -65,7 +65,7 @@ export const UserViewDebugPanel: React.FC<Props> = ({ onShowToast }) => {
         sessionTitle: session?.title,
         sessionMessageCount: session?.messages?.length ?? 0,
       }),
-    [dto, session?.id, session?.title, session?.messages?.length],
+    [dto, session?.id, session?.title, session?.messages?.length]
   );
 
   const handleExport = useCallback(() => {
@@ -84,7 +84,13 @@ export const UserViewDebugPanel: React.FC<Props> = ({ onShowToast }) => {
     } catch (err) {
       onShowToast?.('导出失败：' + String(err));
     }
-  }, [dto, onShowToast, session?.id, session?.messages?.length, session?.title]);
+  }, [
+    dto,
+    onShowToast,
+    session?.id,
+    session?.messages?.length,
+    session?.title,
+  ]);
 
   const noSession = !session?.id;
   const consoleFlagOn = isUserViewDebugEnabled();
@@ -111,13 +117,17 @@ export const UserViewDebugPanel: React.FC<Props> = ({ onShowToast }) => {
         <div className={styles.statsGrid} role="group" aria-label="投影统计">
           <div className={styles.statItem}>
             <span className={styles.statLabel}>UserView 消息</span>
-            <span className={styles.statValue}>{summary.userViewMessageCount}</span>
+            <span className={styles.statValue}>
+              {summary.userViewMessageCount}
+            </span>
           </div>
           <div className={styles.statItem}>
             <Tooltip content="ModelView 粗算块：正文 + thinking + 每个 tool">
               <span className={styles.statLabel}>ModelView 块</span>
             </Tooltip>
-            <span className={styles.statValue}>{summary.stats.modelBlockCount}</span>
+            <span className={styles.statValue}>
+              {summary.stats.modelBlockCount}
+            </span>
           </div>
           <div className={styles.statItem}>
             <Tooltip content="可见正文条 + 工具摘要卡">
@@ -129,7 +139,9 @@ export const UserViewDebugPanel: React.FC<Props> = ({ onShowToast }) => {
           </div>
           <div className={styles.statItem}>
             <span className={styles.statLabel}>隐藏桶</span>
-            <span className={styles.statValue}>{summary.stats.hiddenCount}</span>
+            <span className={styles.statValue}>
+              {summary.stats.hiddenCount}
+            </span>
           </div>
         </div>
 
@@ -160,7 +172,7 @@ export const UserViewDebugPanel: React.FC<Props> = ({ onShowToast }) => {
               : summary.hiddenKinds
                   .map(
                     (k) =>
-                      `${KIND_LABEL_ZH[k] ?? k}×${summary.kindCounts[k] ?? 0}`,
+                      `${KIND_LABEL_ZH[k] ?? k}×${summary.kindCounts[k] ?? 0}`
                   )
                   .join(' · ')
           }
@@ -183,8 +195,13 @@ export const UserViewDebugPanel: React.FC<Props> = ({ onShowToast }) => {
         {showBucketList && summary.stats.hiddenCount > 0 ? (
           <ul className={styles.bucketList} aria-label="隐藏桶明细">
             {dto.hiddenBuckets.map((b, i) => (
-              <li key={`${b.kind}-${b.sourceMessageId ?? ''}-${i}`} className={styles.bucketItem}>
-                <span className={styles.bucketKind}>{KIND_LABEL_ZH[b.kind] ?? b.kind}</span>
+              <li
+                key={`${b.kind}-${b.sourceMessageId ?? ''}-${i}`}
+                className={styles.bucketItem}
+              >
+                <span className={styles.bucketKind}>
+                  {KIND_LABEL_ZH[b.kind] ?? b.kind}
+                </span>
                 <span className={styles.bucketChars}>{b.charCount} 字</span>
                 <Tooltip content={b.preview || '(空)'}>
                   <span className={styles.bucketPreview}>

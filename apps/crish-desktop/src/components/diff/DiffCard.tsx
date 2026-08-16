@@ -6,10 +6,7 @@ import React, { useCallback, useDeferredValue, useState } from 'react';
 import styles from './DiffCard.module.css';
 import { Button, ConfirmDialog, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
-import {
-  selectActiveSession,
-  useSessionField,
-} from '../../api/store-access/componentAccess';
+import { selectActiveSession, useSessionField } from '../../store/storeAccess';
 import type { FileDiff } from '../../store/types';
 import {
   useTerminalField,

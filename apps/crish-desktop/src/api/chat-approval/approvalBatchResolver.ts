@@ -1,4 +1,4 @@
-import { getSessionById } from '../store-access/componentAccess';
+import { getSessionById } from '../../store/storeAccess';
 
 export interface ApprovalBatchPair {
   toolId: string;

@@ -4,7 +4,7 @@ import type { FileDiff } from '../../store/types';
 import {
   useLayoutTreeStore,
   fileViewerInitialModeMap,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import { useTerminalField, selectDiffFiles } from '../../store/storeAccess';
 import {
   openPathDefault,

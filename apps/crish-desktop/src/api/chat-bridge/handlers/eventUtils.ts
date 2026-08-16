@@ -1,22 +1,30 @@
 /**
  * 从事件对象中提取 sequence 号（StreamRecovery 删除后迁入的游标助手）。
  * 支持字段名：sequence / eventSequence / seq。找不到返回 null。
+ *
+ * T4 投影原语单源：字段读取走 `packages/shared-utils` 共享宽容读取原语
+ * （readNumber 语义：缺失/类型错/非有限数 → undefined），与 mobile 端
+ * eventReducers 同一实现，杜绝双端信封解析漂移。
  */
+import {
+  readNumber,
+  readRecord,
+  readString,
+} from '../../../../../../packages/shared-utils/src/event-envelope';
+
 export function extractEventSequence(obj: unknown): number | null {
-  if (!obj || typeof obj !== 'object') return null;
-  const r = obj as Record<string, unknown>;
-  if (typeof r.sequence === 'number') return r.sequence;
-  if (typeof r.eventSequence === 'number') return r.eventSequence;
-  if (typeof r.seq === 'number') return r.seq;
-  return null;
+  return (
+    readNumber(obj, 'sequence') ??
+    readNumber(obj, 'eventSequence') ??
+    readNumber(obj, 'seq') ??
+    null
+  );
 }
 
 export function blockText(block: unknown): string {
-  if (!block || typeof block !== 'object' || Array.isArray(block)) return '';
-  const b = block as Record<string, unknown>;
-  if (typeof b.text === 'string') return b.text;
-  if (typeof b.content === 'string') return b.content;
-  return '';
+  const b = readRecord(block);
+  if (!b) return '';
+  return readString(b, 'text') ?? readString(b, 'content') ?? '';
 }
 
 export function normalizeStreamSessionId(sessionId: unknown): string {

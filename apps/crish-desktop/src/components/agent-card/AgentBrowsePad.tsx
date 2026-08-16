@@ -7,7 +7,7 @@ import {
   selectActiveSessionId,
   selectSessionsById,
   useSessionField,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import { AgentStatusChip } from './AgentStatusChip';
 import {
   STATUS_LABEL,

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { configService } from '../../services/ConfigService';
 import {

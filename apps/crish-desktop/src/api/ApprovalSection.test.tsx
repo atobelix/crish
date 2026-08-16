@@ -11,9 +11,15 @@
  */
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from '@testing-library/react';
 import { ApprovalSection } from '../components/workspace/ApprovalSection';
-import { useLayoutStore } from './store-access/componentAccess';
+import { useLayoutStore } from '../store/storeAccess';
 import type { PendingApprovalInfo } from './engineStatus';
 import type { SessionMessage } from '../store/types';
 
@@ -26,7 +32,9 @@ const { chatBridgeMock } = vi.hoisted(() => ({
 
 vi.mock('./chatBridge', () => chatBridgeMock);
 
-const approval = (overrides: Partial<PendingApprovalInfo> = {}): PendingApprovalInfo => ({
+const approval = (
+  overrides: Partial<PendingApprovalInfo> = {}
+): PendingApprovalInfo => ({
   toolCallId: 'tc-1',
   toolName: 'shell',
   summary: '运行命令',
@@ -81,7 +89,7 @@ function renderSection(approvals: PendingApprovalInfo[]) {
       countLabel={approvals.length > 0 ? `${approvals.length} 项` : null}
       onShowToast={onShowToast}
       onFocusSession={onFocusSession}
-    />,
+    />
   );
   return { onShowToast, onFocusSession, ...utils };
 }
@@ -105,13 +113,11 @@ describe('ApprovalSection 渲染', () => {
   it('待审批列表渲染：标题 / 计数 / 行 / 允许拒绝按钮', () => {
     renderSection([approval()]);
 
-    expect(
-      screen.getByRole('heading', { name: '待确认' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '待确认' })).toBeInTheDocument();
     // 组件按 countLabel + 「项待确认」拼 aria-label（`1 项` + `项待确认`）
     expect(screen.getByLabelText('1 项', { exact: false })).toBeInTheDocument();
     expect(
-      screen.getByRole('button', { name: 'shell，等待批准，打开对应会话' }),
+      screen.getByRole('button', { name: 'shell，等待批准，打开对应会话' })
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '允许 shell' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '拒绝 shell' })).toBeEnabled();
@@ -153,7 +159,7 @@ describe('ApprovalSection 允许 / 拒绝按钮行为', () => {
       () =>
         new Promise<void>((res) => {
           release = res;
-        }),
+        })
     );
     seedPendingSession();
     renderSection([approval()]);
@@ -188,7 +194,9 @@ describe('ApprovalSection 允许 / 拒绝按钮行为', () => {
   });
 
   it('缺少 toolCallId：直接 toast，不发送', () => {
-    const { onShowToast } = renderSection([approval({ toolCallId: undefined })]);
+    const { onShowToast } = renderSection([
+      approval({ toolCallId: undefined }),
+    ]);
 
     fireEvent.click(screen.getByRole('button', { name: '允许 shell' }));
     expect(chatBridgeMock.engineApproveTool).not.toHaveBeenCalled();
@@ -202,7 +210,7 @@ describe('ApprovalSection 行点击聚焦会话', () => {
     const { onFocusSession } = renderSection([approval()]);
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'shell，等待批准，打开对应会话' }),
+      screen.getByRole('button', { name: 'shell，等待批准，打开对应会话' })
     );
     expect(onFocusSession).toHaveBeenCalledWith(sid);
   });
@@ -211,7 +219,7 @@ describe('ApprovalSection 行点击聚焦会话', () => {
     const { onFocusSession, onShowToast } = renderSection([approval()]);
 
     fireEvent.click(
-      screen.getByRole('button', { name: 'shell，等待批准，打开对应会话' }),
+      screen.getByRole('button', { name: 'shell，等待批准，打开对应会话' })
     );
     expect(onFocusSession).not.toHaveBeenCalled();
     expect(onShowToast).toHaveBeenCalledWith('未找到待确认会话');

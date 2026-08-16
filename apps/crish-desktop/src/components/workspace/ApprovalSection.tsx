@@ -7,7 +7,7 @@ import styles from './RuntimePanel.module.css';
 import { Button, Tooltip } from '../ui';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 
 export type ApprovalSectionProps = {
   approvals: PendingApprovalInfo[];
@@ -35,21 +35,22 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
           (s) =>
             (s.messages || []).some((m) =>
               (m.toolCalls || []).some(
-                (tc) => tc.id === toolCallId && tc.status === 'pending_approval',
-              ),
+                (tc) => tc.id === toolCallId && tc.status === 'pending_approval'
+              )
             ) ||
             (s.agents || []).some((ag) =>
               (ag.messages || []).some((m) =>
                 (m.toolCalls || []).some(
-                  (tc) => tc.id === toolCallId && tc.status === 'pending_approval',
-                ),
-              ),
-            ),
+                  (tc) =>
+                    tc.id === toolCallId && tc.status === 'pending_approval'
+                )
+              )
+            )
         )
       : undefined;
     if (!found && a.runId) {
       found = sessions.find(
-        (s) => s.engineLastRunId === a.runId || s.id === a.runId,
+        (s) => s.engineLastRunId === a.runId || s.id === a.runId
       );
     }
     if (found) {
@@ -68,12 +69,14 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     if (!toolCallId) return;
     // T-E 步骤 4（C2）：raw setState 全表扫描 → markToolCallLocalStatus action
     //（与 useOverviewState C1 共用同一 action；scope 限定 runId 时只扫 scope 内）
-    useLayoutStore.getState().markToolCallLocalStatus(
-      toolCallId,
-      status,
-      output,
-      runId ? { runId } : undefined
-    );
+    useLayoutStore
+      .getState()
+      .markToolCallLocalStatus(
+        toolCallId,
+        status,
+        output,
+        runId ? { runId } : undefined
+      );
   };
 
   const handleApprovalAllow = (a: PendingApprovalInfo, e: React.MouseEvent) => {
@@ -151,7 +154,10 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
                 }}
               >
                 <div className={styles.rowMain}>
-                  <span className={`${styles.dot} ${styles.warn}`} aria-hidden />
+                  <span
+                    className={`${styles.dot} ${styles.warn}`}
+                    aria-hidden
+                  />
                   <div className={styles.rowText}>
                     <span className={styles.rowTitle}>{toolLabel}</span>
                     <span className={styles.rowMeta}>

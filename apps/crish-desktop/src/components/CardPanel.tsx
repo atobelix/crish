@@ -1,10 +1,10 @@
 import React from 'react';
-import { useLayoutStore } from '../api/store-access/componentAccess';
+import { useLayoutStore } from '../store/storeAccess';
 import styles from './CardPanel.module.css';
-import { useSessionStore } from '../api/store-access/componentAccess';
-import { useShallow } from '../api/store-access/componentAccess';
+import { useSessionStore } from '../store/storeAccess';
+import { useShallow } from '../store/storeAccess';
 import { useTabDrag } from '../hooks/useTabDrag';
-import { getPanelTitle } from '../api/store-access/componentAccess';
+import { getPanelTitle } from '../store/storeAccess';
 import type { ShowToastFn } from '../hooks/useToastQueue';
 import { GENERAL_FOLDER, getActiveProject } from '../api/projectStore';
 import {

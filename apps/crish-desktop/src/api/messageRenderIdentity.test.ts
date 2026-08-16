@@ -57,25 +57,30 @@ describe('Chat list React key audit (static source)', () => {
     );
   });
 
-  it('S4.4 stream path: no dual streamText sub (row thinking / content body)', () => {
+  it('S4.4/T4-A1 stream path: single streamText sub at shell assembly (row/content passive)', () => {
     const row = stripComments(
       readSrc('../components/chat-message-row/ChatAssistantMessageRow.tsx')
     );
     const content = stripComments(
       readSrc('../components/chat-message/MessageContent.tsx')
     );
-    // Row: thinking only (copy uses imperative getStreamText)
-    expect(row).toMatch(/getStreamText/);
-    expect(row).toMatch(/\?\.thinking/);
-    expect(row).not.toMatch(/\?\.text\b/);
-    // Content: single useShallow body slice (text + tools), not two bare hooks
-    expect(content).toMatch(/useShallow/);
-    expect(content).toMatch(/text:\s*e\.text/);
-    expect(content).toMatch(/tools:\s*e\.tools/);
-    const contentSubs = content.match(/useStreamingStore\s*\(/g) ?? [];
-    expect(contentSubs.length).toBe(1);
-    const rowSubs = row.match(/useStreamingStore\s*\(/g) ?? [];
-    expect(rowSubs.length).toBe(1);
+    const shell = stripComments(
+      readSrc('../components/chat-message-list/StreamingAssistantRow.tsx')
+    );
+    const vm = stripComments(
+      readSrc('../components/chat-message/streamMessageViewModel.ts')
+    );
+    // Row / Content: 零 store 直连（纯 view model 消费方）
+    expect(row.match(/useStreamingStore\s*\(/g) ?? []).toHaveLength(0);
+    expect(content.match(/useStreamingStore\s*\(/g) ?? []).toHaveLength(0);
+    // 壳层装配点：单点订阅（body slice text + tools），无第二订阅
+    expect(shell.match(/useStreamingStore\s*\(/g) ?? []).toHaveLength(0);
+    expect(vm.match(/useStreamingStore\s*\(/g) ?? []).toHaveLength(1);
+    expect(vm).toMatch(/text:\s*e\.text/);
+    expect(vm).toMatch(/tools:\s*e\.tools/);
+    // streamText 沿壳层 → 行 → Content 透传（流式增量区数据面）
+    expect(row).toMatch(/streamText/);
+    expect(content).toMatch(/streamText/);
   });
 
   it('ChatToolCallBlock tool rows key by tool id', () => {

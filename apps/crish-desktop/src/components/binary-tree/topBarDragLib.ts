@@ -10,15 +10,15 @@ import {
   isChatDomain,
   rectFromDOM,
   type DropZone,
-} from '../../api/store-access/componentAccess';
-import { findParent } from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
+import { findParent } from '../../store/storeAccess';
 import type { DropDirection, LayoutNode } from '../../store/types';
 import { TOP_BAR_GHOST_CLASS } from './topBarDragConst';
 import type { LeafRectItem } from './topBarDragTypes';
 
 /** 延迟加载，避免与 adapterShape 在 HMR 时形成循环依赖导致缺导出崩溃 */
 export function reprojectAllSessionDocksSafe(): void {
-  void import('../../api/store-access/componentAccess')
+  void import('../../store/storeAccess')
     .then((m) => {
       if (typeof m.reprojectAllSessionDocks === 'function') {
         m.reprojectAllSessionDocks();
@@ -42,15 +42,25 @@ export function collectLeafRects(): LeafRectItem[] {
     const panelId = el.dataset.panelId || 'chat';
     const tabCount = parseInt(el.dataset.tabCount || '1', 10);
     if (!id) return;
-    result.push({ id, panelId, tabCount, rect: rectFromDOM(el.getBoundingClientRect()) });
+    result.push({
+      id,
+      panelId,
+      tabCount,
+      rect: rectFromDOM(el.getBoundingClientRect()),
+    });
   });
   return result;
 }
 
 /** 找到指针下方的会话标签元素（忽略 ghost / overlay 等 pointer-events 干扰） */
-export function findSessionTabAt(pointer: { x: number; y: number }): HTMLElement | null {
+export function findSessionTabAt(pointer: {
+  x: number;
+  y: number;
+}): HTMLElement | null {
   // 临时隐藏 ghost 避免命中测试干扰
-  const ghosts = document.querySelectorAll<HTMLElement>(`.${TOP_BAR_GHOST_CLASS}`);
+  const ghosts = document.querySelectorAll<HTMLElement>(
+    `.${TOP_BAR_GHOST_CLASS}`
+  );
   ghosts.forEach((g) => (g.style.pointerEvents = 'none'));
 
   // elementsFromPoint：即便有半透明层覆盖，也能找到 session tab
@@ -88,7 +98,9 @@ export function findChatLeafAt(
 }
 
 /** split zone → DropDirection */
-function splitZoneToDirection(zoneType: DropZone['type']): DropDirection | null {
+function splitZoneToDirection(
+  zoneType: DropZone['type']
+): DropDirection | null {
   switch (zoneType) {
     case 'split-left':
       return 'left';
@@ -120,16 +132,26 @@ function isAlreadyAdjacentOnSide(
   if (sibling.id !== sourceLeafId) return false;
 
   if (direction === 'left') {
-    return parent.direction === 'horizontal' && parent.children[0].id === sourceLeafId;
+    return (
+      parent.direction === 'horizontal' &&
+      parent.children[0].id === sourceLeafId
+    );
   }
   if (direction === 'right') {
-    return parent.direction === 'horizontal' && parent.children[1].id === sourceLeafId;
+    return (
+      parent.direction === 'horizontal' &&
+      parent.children[1].id === sourceLeafId
+    );
   }
   if (direction === 'top') {
-    return parent.direction === 'vertical' && parent.children[0].id === sourceLeafId;
+    return (
+      parent.direction === 'vertical' && parent.children[0].id === sourceLeafId
+    );
   }
   if (direction === 'bottom') {
-    return parent.direction === 'vertical' && parent.children[1].id === sourceLeafId;
+    return (
+      parent.direction === 'vertical' && parent.children[1].id === sourceLeafId
+    );
   }
   return false;
 }
@@ -172,7 +194,12 @@ function resolveSessionUnitAnchorId(
     if (unitId) return unitId;
   }
   const leaf = findNodeById(root, chatLeafId);
-  if (leaf && leaf.type === 'leaf' && isChatDomain(leaf.panelId) && leaf.sessionId) {
+  if (
+    leaf &&
+    leaf.type === 'leaf' &&
+    isChatDomain(leaf.panelId) &&
+    leaf.sessionId
+  ) {
     const unitId = findUnitRootId(root, leaf.sessionId);
     if (unitId) return unitId;
   }

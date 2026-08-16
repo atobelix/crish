@@ -28,35 +28,30 @@ import {
   EMPTY_SESSION_TITLE,
   sessionListDisplayTitle,
 } from '../../api/sessionTitle';
-import {
-  focusOrOpenPanel,
-  setActiveSessionId,
-} from '../../api/storeAccess';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
-import {
-  isChatColumn,
-} from '../../api/store-access/componentAccess';
+import { focusOrOpenPanel, setActiveSessionId } from '../../api/storeAccess';
+import { useLayoutStore } from '../../store/storeAccess';
+import { isChatColumn } from '../../store/storeAccess';
 import {
   getSessionById,
   selectActiveSessionId,
   useSessionField,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import {
   PENDING_DRAFT_SESSION_ID,
   isPendingDraft,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import { emitUiEvent } from '../../api/uiEvents';
 import {
   useLayoutTreeStore,
   collectLeaves,
   isChatDomain,
-} from '../../api/store-access/componentAccess';
-import { focusOrOpenTreePanel } from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
+import { focusOrOpenTreePanel } from '../../store/storeAccess';
 import { isTreeWorkspaceFast } from '../../createSsrGlobals';
 import {
   selectActiveTabSessionId,
   useWorkspaceShellStore,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 
 export type WorkspaceChromeProps = {
@@ -162,8 +157,7 @@ export function useWorkspaceChromeState(onAddProject?: () => void) {
   }, [folderKey, knownMap, shellOpenTabs]);
 
   /** 顶栏高亮：优先 shell 活动 tab，回落全局 activeSessionId */
-  const activeSessionId =
-    shellActiveSessionId ?? globalActiveSessionId ?? null;
+  const activeSessionId = shellActiveSessionId ?? globalActiveSessionId ?? null;
 
   const selectWorkspace = useCallback((tab: WorkspaceTab) => {
     if (tab.kind === 'general') setNoProject();
@@ -199,9 +193,7 @@ export function useWorkspaceChromeState(onAddProject?: () => void) {
       const existing = shell.openTabs.find((t) => t.sessionId === sessionId);
       if (existing && shell.activeTabId === existing.tabId) return;
 
-      const sess = isPendingDraft(sessionId)
-        ? null
-        : getSessionById(sessionId);
+      const sess = isPendingDraft(sessionId) ? null : getSessionById(sessionId);
       shell.openOrFocusSession(sessionId, {
         title: sess?.title,
         workspaceKey: folderKey,

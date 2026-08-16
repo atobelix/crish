@@ -14,18 +14,11 @@ import {
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
 import { setComposerSeed } from '../../api/composerSeed';
-import { closeSettings } from '../../api/store-access/componentAccess';
+import { closeSettings } from '../../store/storeAccess';
 import styles from './SettingsScheduleTab.module.css';
 import { Button } from '../ui';
-import {
-  SettingsPage,
-  SettingsSection,
-  SettingsCard,
-} from './SettingsUI';
-import {
-  FILTER_OPTIONS,
-  draftFromWorkflow,
-} from './workflowsSharedLib';
+import { SettingsPage, SettingsSection, SettingsCard } from './SettingsUI';
+import { FILTER_OPTIONS, draftFromWorkflow } from './workflowsSharedLib';
 import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
@@ -59,9 +52,13 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
   } = state;
 
   /** none | paths 双入口 | form 手动表单 */
-  const [createMode, setCreateMode] = useState<'none' | 'paths' | 'form'>('none');
-  const [wfDraft, setWfDraft] = useState<WorkflowScheduleDraft>(emptyWorkflowDraft);
-  const [editingWorkflow, setEditingWorkflow] = useState<WorkflowDefinition | null>(null);
+  const [createMode, setCreateMode] = useState<'none' | 'paths' | 'form'>(
+    'none'
+  );
+  const [wfDraft, setWfDraft] =
+    useState<WorkflowScheduleDraft>(emptyWorkflowDraft);
+  const [editingWorkflow, setEditingWorkflow] =
+    useState<WorkflowDefinition | null>(null);
 
   const workspacePath = getWorkspacePath() || '';
 
@@ -101,7 +98,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
         '请帮我设计一个 Crish 定时任务。',
         '输出：任务名称、触发方式（手动 / 每日时刻 / 间隔分钟）、完整提示词（可直接粘贴使用）。',
         '我想用它来：',
-      ].join('\n'),
+      ].join('\n')
     );
     setCreateMode('none');
     closeSettings();
@@ -124,12 +121,17 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
 
   return (
     <SettingsPage title="定时任务">
-      <div
-        aria-busy={loading || busy}
-        aria-label="定时任务"
-      >
-        <div className={`sched-settings-toolbar ${styles.toolbar}`} role="toolbar" aria-label="筛选与新建">
-          <div className="settings-choice-group" role="group" aria-label="任务筛选">
+      <div aria-busy={loading || busy} aria-label="定时任务">
+        <div
+          className={`sched-settings-toolbar ${styles.toolbar}`}
+          role="toolbar"
+          aria-label="筛选与新建"
+        >
+          <div
+            className="settings-choice-group"
+            role="group"
+            aria-label="任务筛选"
+          >
             {FILTER_OPTIONS.map((opt) => {
               const active = filter === opt.id;
               return (
@@ -174,12 +176,18 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
             aria-relevant="additions text"
           >
             {error ? (
-              <span className="settings-list-sub settings-list-sub--force" role="alert">
+              <span
+                className="settings-list-sub settings-list-sub--force"
+                role="alert"
+              >
                 {error}
               </span>
             ) : null}
             {ok && !error ? (
-              <span className="settings-list-sub settings-list-sub--force" role="status">
+              <span
+                className="settings-list-sub settings-list-sub--force"
+                role="status"
+              >
                 {ok}
               </span>
             ) : null}
@@ -187,32 +195,32 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
         )}
 
         {createMode === 'paths' ? (
-        <div className="settings-create-paths" id="sched-settings-form">
-          <button
-            type="button"
-            className="settings-create-path"
-            onClick={handleAiCreateSchedule}
-          >
-            <span className="settings-create-path-title">用对话创建</span>
-            <span className="settings-create-path-desc">
-              描述目标和频率，让 AI 帮你写好（推荐）
-            </span>
-          </button>
-          <button
-            type="button"
-            className="settings-create-path"
-            onClick={() => {
-              setCreateMode('form');
-              setError('');
-              setOk('');
-            }}
-          >
-            <span className="settings-create-path-title">手动创建</span>
-            <span className="settings-create-path-desc">
-              自己填名称、内容和触发方式
-            </span>
-          </button>
-        </div>
+          <div className="settings-create-paths" id="sched-settings-form">
+            <button
+              type="button"
+              className="settings-create-path"
+              onClick={handleAiCreateSchedule}
+            >
+              <span className="settings-create-path-title">用对话创建</span>
+              <span className="settings-create-path-desc">
+                描述目标和频率，让 AI 帮你写好（推荐）
+              </span>
+            </button>
+            <button
+              type="button"
+              className="settings-create-path"
+              onClick={() => {
+                setCreateMode('form');
+                setError('');
+                setOk('');
+              }}
+            >
+              <span className="settings-create-path-title">手动创建</span>
+              <span className="settings-create-path-desc">
+                自己填名称、内容和触发方式
+              </span>
+            </button>
+          </div>
         ) : null}
 
         {createMode === 'form' ? (
@@ -234,25 +242,25 @@ export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
         ) : null}
 
         <SettingsSection>
-        <SettingsCard>
-          <WorkflowList
-            variant="settings"
-            workflows={filtered}
-            busy={busy}
-            loading={loading}
-            emptyCopy={emptyCopy}
-            onToggle={(w) => {
-              void handleToggle(w);
-            }}
-            onTrigger={(w) => {
-              void handleTrigger(w);
-            }}
-            onDelete={(w) => {
-              void handleDelete(w);
-            }}
-            onEdit={handleEditClick}
-          />
-        </SettingsCard>
+          <SettingsCard>
+            <WorkflowList
+              variant="settings"
+              workflows={filtered}
+              busy={busy}
+              loading={loading}
+              emptyCopy={emptyCopy}
+              onToggle={(w) => {
+                void handleToggle(w);
+              }}
+              onTrigger={(w) => {
+                void handleTrigger(w);
+              }}
+              onDelete={(w) => {
+                void handleDelete(w);
+              }}
+              onEdit={handleEditClick}
+            />
+          </SettingsCard>
         </SettingsSection>
       </div>
     </SettingsPage>

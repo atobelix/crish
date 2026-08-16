@@ -16,7 +16,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { getPanelTitle } from '../../api/store-access/componentAccess';
+import { getPanelTitle } from '../../store/storeAccess';
 import { ChatHeaderMore } from '../chat-card/ChatHeaderMore';
 import { WorkspaceChromeBars } from '../workspace/WorkspaceChromeBars';
 import { AppErrorBoundary } from '../AppErrorBoundary';

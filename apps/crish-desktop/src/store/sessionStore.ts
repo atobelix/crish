@@ -2,6 +2,14 @@
  * 会话域 facade — 与 useLayoutStore **同一 zustand 实例**（非独立 create）。
  * 权威状态与 actions 在 layoutStore + sessionActions；本文件只导出域 API。
  *
+ * ## 消息持久投影定位（T4 A2 固化 · analysis/16 §①）
+ *
+ * `sessions[].messages` 是「事件流的持久投影缓存（终态落点）」：
+ * 流式期间正文/工具中间态在 streamingStore 热缓冲（byKey），run 收口后
+ * 由 commitStreamToSession 一次性落账本投影；本域不存流式中边帧。
+ * 不新增第三个 store——热缓冲（streamingStore）与持久投影（本 facade）
+ * 是设计内必需桥的两端，桥语义（queueMicrotask clearStream 时序闭环）保留。
+ *
  * ## Ownership note (OPT-C1)
  *
  * Sessions **still live on layoutStore** (god-object). This is intentional residual —

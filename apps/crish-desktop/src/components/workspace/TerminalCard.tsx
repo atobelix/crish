@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useEffect, useId, useState } from 'react';
 import styles from './TerminalCard.module.css';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import { getWorkspacePath } from '../../api/projectStore';
 import {
   InteractiveXtermTerminal,

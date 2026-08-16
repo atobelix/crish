@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getSessionById } from '../../api/store-access/componentAccess';
+import { getSessionById } from '../../store/storeAccess';
 import {
   addCommandPermission,
   updateMessageToolCall,

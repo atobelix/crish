@@ -6,7 +6,7 @@ import React, {
   useState,
 } from 'react';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import { useSettingsField, selectAppSettings } from '../../store/storeAccess';
 import { sessionRuntimeRegistry } from '../../api/SessionRuntimeRegistry';
 import type { Attachment } from '../../api/SessionRuntimeRegistry';
@@ -140,8 +140,7 @@ export function useChatComposerProps({
     (textOrFn: React.SetStateAction<string>) => {
       const sid = activeSessionIdRef.current;
       setChatInputState((prev) => {
-        const next =
-          typeof textOrFn === 'function' ? textOrFn(prev) : textOrFn;
+        const next = typeof textOrFn === 'function' ? textOrFn(prev) : textOrFn;
         if (sid) {
           // Local state updates immediately; store draft is debounced.
           // schedule via microtask so functional updater never calls setState mid-render.
@@ -444,13 +443,15 @@ export function useChatComposerProps({
       const text = chatInput;
       enqueueMessage(text, attachments);
       // 与 useSlashSend 同源：compositionRoot.runControl.followUp（不 cancel）
-      void import('../../app/compositionRoot').then(({ getCompositionRoot }) => {
-        void getCompositionRoot().runControl.followUp({
-          sessionId: activeSessionId || null,
-          text: text.trim(),
-          reason: 'ui-composer-queue-mode',
-        });
-      });
+      void import('../../app/compositionRoot').then(
+        ({ getCompositionRoot }) => {
+          void getCompositionRoot().runControl.followUp({
+            sessionId: activeSessionId || null,
+            text: text.trim(),
+            reason: 'ui-composer-queue-mode',
+          });
+        }
+      );
     } else {
       // handleSendChat 内部 isAiBusy 时也会 follow_up + status=queued
       void handleSendChat(false);
@@ -470,7 +471,12 @@ export function useChatComposerProps({
   useEffect(() => {
     const wasProcessing = prevIsProcessingRef.current;
     prevIsProcessingRef.current = isProcessing;
-    if (!queueMode || !wasProcessing || isProcessing || queuedMessages.length === 0) {
+    if (
+      !queueMode ||
+      !wasProcessing ||
+      isProcessing ||
+      queuedMessages.length === 0
+    ) {
       return;
     }
     if (drainLockRef.current) return;

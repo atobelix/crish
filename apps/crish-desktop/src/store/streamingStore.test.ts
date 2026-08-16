@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   applyStreamTextToMessage,
   applyStreamToolsToMessage,
+} from '../components/chat-message/streamMessageViewModel';
+import {
   clearSessionStreams,
   clearStream,
   clearStreams,

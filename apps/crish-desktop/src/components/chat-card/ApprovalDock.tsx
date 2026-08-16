@@ -7,7 +7,7 @@ import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ApprovalDock.module.css';
 import { Button, Tooltip } from '../ui';
-import { getSessionById } from '../../api/store-access/componentAccess';
+import { getSessionById } from '../../store/storeAccess';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import {
   resolveApprovalDockAriaLabel,

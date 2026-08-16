@@ -3,17 +3,15 @@ import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { Button, Tooltip } from '../ui';
 import { messageMatchesSearch } from '../../api/sessionSearch';
-import {
-  ChatAssistantMessageRow,
-  ChatUserMessageRow,
-} from '../chat-message-row/ChatMessageRow';
+import { ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
+import { StreamingAssistantRow } from './StreamingAssistantRow';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/messageWindow';
 import { ChevronDown, Pin, PinOff } from 'lucide-react';
 import {
   registerActiveVsm,
   unregisterActiveVsm,
-} from '../../store/messageSnapshotsBridge';
+} from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 
 import {
@@ -316,7 +314,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
           return (
             <AppErrorBoundary key={msg.id} variant="minimal" title="消息出错">
               <div data-vindex={msg.id}>
-                <ChatAssistantMessageRow
+                <StreamingAssistantRow
                   msg={msg}
                   isFollowUp={isFollowUp}
                   isPinned={isPinnedMsg}

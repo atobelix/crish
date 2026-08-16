@@ -16,12 +16,9 @@ import React, {
   useLayoutEffect,
   useRef,
 } from 'react';
-import {
-  useLayoutTreeStore,
-  isChatDomain,
-} from '../../api/store-access/componentAccess';
+import { useLayoutTreeStore, isChatDomain } from '../../store/storeAccess';
 import type { LayoutLeaf } from '../../store/types';
-import { getPanelTitle } from '../../api/store-access/componentAccess';
+import { getPanelTitle } from '../../store/storeAccess';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { UnitSessionTabStrip } from './UnitSessionTabStrip';
@@ -32,12 +29,12 @@ import {
   useWorkspaceShellStore,
   openToolInSession,
   openToolInActiveTab,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import {
   selectActiveSessionId,
   useSessionField,
-} from '../../api/store-access/componentAccess';
-import { isPendingDraft } from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
+import { isPendingDraft } from '../../store/storeAccess';
 
 // ── 面板内容懒加载 ──────────────────────────────────────────────────
 

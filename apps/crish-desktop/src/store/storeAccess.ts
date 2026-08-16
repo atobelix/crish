@@ -130,6 +130,8 @@ export const selectTokenUsage = (s: Pick<SettingsStore, 'tokenUsage'>) =>
 
 // ── 布局 chrome 读面（只读；写入走 layoutStore actions）────────────────────────
 
+export { useLayoutStore };
+
 export function getLayoutChromeState(): LayoutStore {
   return useLayoutStore.getState();
 }
@@ -166,6 +168,116 @@ export {
   SessionCoordinator,
   deleteSessionCascade,
 } from './sessionStore';
+
+// ── 会话域读面（T4 A4 统一读面：原过渡读面门面的会话/layout-tree/workspace-shell/streaming/draft 域并入）──
+
+export {
+  useSessionStore,
+  useSessionField,
+  useSidebarSessions,
+  useActiveSession,
+  selectActiveSession,
+  selectActiveSessionId,
+  selectSessionsById,
+  selectPanelAgentId,
+  selectActiveAgentId,
+  getSessionAgent,
+  getSessionStoreState,
+} from './sessionStore';
+
+export {
+  partitionSidebarSessions,
+  groupUnpinnedByProject,
+} from './sessionIndex';
+
+export { useShallow } from './useShallowSelector';
+
+// ── 布局助手 / 草稿 / 设置 UI（读面消费方入口）───────────────────────────────
+
+export {
+  getPanelTitle,
+  collapseToolColumnPreserve,
+  isChatColumn,
+} from './layoutHelpers';
+
+export { isPendingDraft, PENDING_DRAFT_SESSION_ID } from './draftSession';
+
+export { closeSettings } from './settingsUiStore';
+
+// ── layout-tree 读面（二叉几何域；写仍走 layoutTreeStore actions）────────────
+
+export {
+  useLayoutTreeStore,
+  isChatDomain,
+  collectLeaves,
+  listChatLeaves,
+  findChatLeafBySessionId,
+  findLeafAtPointer,
+  findNodeById,
+  findUnitRootId,
+  flattenTree,
+  detectDropZone,
+  isZoneSame,
+  rectFromDOM,
+  MIN_SPLIT_RATIO,
+  MAX_SPLIT_RATIO,
+} from './layout-tree';
+
+export type {
+  LayoutLeaf,
+  FlatBranch,
+  TreeDragSource,
+  DropZone,
+} from './layout-tree';
+
+export {
+  findParent,
+  insertLeafBesideNode,
+  moveNode,
+} from './layout-tree/operations';
+
+export { focusOrOpenTreePanel } from './layout-tree/treePanelAccess';
+
+// ── workspace-shell 读面（TabSurface / dock；写仍走 workspaceShellStore actions）─
+
+export {
+  useWorkspaceShellStore,
+  selectActiveTabSessionId,
+  resolveStripWorkspaceKey,
+  createDefaultDock,
+  openToolInSession,
+  openToolInActiveTab,
+  collapseActiveTabRightDock,
+  applyDockToTree,
+  listChatUnits,
+  tabsForUnit,
+  fileViewerInitialModeMap,
+  reprojectAllSessionDocks,
+} from './workspace-shell';
+
+export type { TabSurface, ChatUnitRef } from './workspace-shell';
+
+// ── streaming 热缓冲读面（view model 装配只经本读面；写仍走 streamingStore actions）─
+
+export {
+  useStreamingStore,
+  getStreamText,
+  streamStoreKey,
+} from './streamingStore';
+
+export type { StreamToolLive } from './streamingStore';
+
+// ── 消息快照桥 / 思维检视器（组件读面入口；T4 A4 统一读面收编）───────────────
+
+export {
+  registerActiveVsm,
+  unregisterActiveVsm,
+} from './messageSnapshotsBridge';
+
+export {
+  useThoughtInspectorStore,
+  openThoughtInspector,
+} from './thoughtInspectorStore';
 
 // ── 类型再导出（读面消费方经本模块取类型，避免直连 store 模块）─────────────────
 

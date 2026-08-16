@@ -6,7 +6,7 @@ import {
   chatEmptyKindAriaLabel,
   resolveChatEmptyKind,
 } from '../../api/chatEmptyState';
-import { isPendingDraft } from '../../api/store-access/componentAccess';
+import { isPendingDraft } from '../../store/storeAccess';
 
 export interface UseChatEmptyKindOptions {
   activeSessionId: string | null;
@@ -55,11 +55,7 @@ export function useChatEmptyKind({
       }
     }
     const isLocalMintId = /^sess-(branch-)?\d+$/i.test(activeSessionId);
-    if (
-      isLocalMintId &&
-      typeof engineCursor !== 'number' &&
-      !engineLastRunId
-    ) {
+    if (isLocalMintId && typeof engineCursor !== 'number' && !engineLastRunId) {
       return false;
     }
     return true;

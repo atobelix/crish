@@ -15,7 +15,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useChatApprovalHandlers } from '../components/chat-card/useChatApprovalHandlers';
-import { useLayoutStore } from './store-access/componentAccess';
+import { useLayoutStore } from '../store/storeAccess';
 import { getCommandPermissions } from './storeAccess';
 import type {
   MessageToolCall,

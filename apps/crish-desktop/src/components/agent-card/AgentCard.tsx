@@ -12,7 +12,7 @@ import {
   browseAgentSidePanel,
   openAgentInSidePanel,
 } from '../../api/openAgentPanel';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import type { FileDiff } from '../../store/types';
 import {
   focusOrOpenPanel,
@@ -25,7 +25,7 @@ import {
   selectPanelAgentId,
   selectSessionsById,
   useSessionField,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import { getSubagentStatus } from '../../api/subagentApi';
 import { ComposerField } from '../chat-composer/ChatComposer';
 import { AgentTeamBoard } from './AgentTeamBoard';

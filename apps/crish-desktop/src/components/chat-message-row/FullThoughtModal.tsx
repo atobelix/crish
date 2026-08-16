@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { Dialog, Button, Tooltip } from '../ui';
 import styles from './FullThoughtModal.module.css';
-import { useThoughtInspectorStore } from '../../store/thoughtInspectorStore';
+import { useThoughtInspectorStore } from '../../store/storeAccess';
 import { ThoughtOutline } from './ThoughtOutline';
 import { ThoughtSearchBar } from './ThoughtSearchBar';
 import type {

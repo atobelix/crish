@@ -6,18 +6,14 @@ import React, {
   useState,
 } from 'react';
 import type { SessionState } from '../../../store/types';
-import {
-  partitionSidebarSessions,
-} from '../../../api/store-access/componentAccess';
+import { partitionSidebarSessions } from '../../../store/storeAccess';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import {
   SESSION_LIST_TICK_HIDDEN_MS,
   sessionListTimeTickMs,
 } from '../../../api/sessionTime';
 import { sessionListDisplayTitle } from '../../../api/sessionTitle';
-import {
-  storeSessionSearchQuery,
-} from '../../../api/sessionSearch';
+import { storeSessionSearchQuery } from '../../../api/sessionSearch';
 import styles from '../SidebarSessionList.module.css';
 import { SessionRow } from './SessionRow';
 import { dedupeSessionsById } from './sessionListUtils';
@@ -78,25 +74,28 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
 
   const isDragging = activeDragItem?.type === 'session';
 
-  const { visible: visibleSessions, shellHiddenCount, inputListedCount } =
-    useMemo(() => {
-      const unique = dedupeSessionsById(sessions);
-      const nonArchivedCount = unique.reduce(
-        (n, s) => n + (s.isArchived ? 0 : 1),
-        0
-      );
-      const listedAll = partitionSidebarSessions(unique, {
-        activeSessionId,
-        filterType: 'all',
-      }).visible;
-      const visible =
-        filterType === 'pinned' ? listedAll.filter((s) => s.isPinned) : listedAll;
-      return {
-        visible: dedupeSessionsById(visible),
-        shellHiddenCount: Math.max(0, nonArchivedCount - listedAll.length),
-        inputListedCount: nonArchivedCount,
-      };
-    }, [sessions, activeSessionId, filterType]);
+  const {
+    visible: visibleSessions,
+    shellHiddenCount,
+    inputListedCount,
+  } = useMemo(() => {
+    const unique = dedupeSessionsById(sessions);
+    const nonArchivedCount = unique.reduce(
+      (n, s) => n + (s.isArchived ? 0 : 1),
+      0
+    );
+    const listedAll = partitionSidebarSessions(unique, {
+      activeSessionId,
+      filterType: 'all',
+    }).visible;
+    const visible =
+      filterType === 'pinned' ? listedAll.filter((s) => s.isPinned) : listedAll;
+    return {
+      visible: dedupeSessionsById(visible),
+      shellHiddenCount: Math.max(0, nonArchivedCount - listedAll.length),
+      inputListedCount: nonArchivedCount,
+    };
+  }, [sessions, activeSessionId, filterType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -218,7 +217,6 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
   const {
     generalWindowEnabled,
     generalRenderRange,
-    getGeneralHeight,
     rowHeightById,
     defaultRowHeight,
   } = useWindowedList({
@@ -243,8 +241,7 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
         nextId = delta < 0 ? ids[0] : ids[ids.length - 1];
       } else {
         const idx = ids.indexOf(fromId);
-        const from =
-          idx >= 0 ? idx : Math.max(0, ids.indexOf(activeSessionId));
+        const from = idx >= 0 ? idx : Math.max(0, ids.indexOf(activeSessionId));
         const next = Math.max(0, Math.min(ids.length - 1, from + delta));
         nextId = ids[next];
       }

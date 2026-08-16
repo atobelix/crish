@@ -8,7 +8,7 @@ import {
   isDemoMode,
   switchAppMode,
 } from '../../api/appMode';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { UserProfileCard } from './UserProfileCard';
 

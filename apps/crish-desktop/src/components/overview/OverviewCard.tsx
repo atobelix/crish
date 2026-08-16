@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import styles from './OverviewCard.module.css';
-import { useLayoutStore, selectActiveSession, selectActiveSessionId, useSessionField } from '../../api/store-access/componentAccess';
+import {
+  useLayoutStore,
+  selectActiveSession,
+  selectActiveSessionId,
+  useSessionField,
+} from '../../store/storeAccess';
 import {
   useTerminalField,
   useSettingsField,
@@ -35,7 +40,8 @@ export type OverviewCardProps = {
   onShowToast?: (msg: string) => void;
 };
 
-type SecKey = 'agents' | 'files' | 'usage' | 'activeTasks' | 'bgTasks' | 'cronJobs';
+type SecKey =
+  'agents' | 'files' | 'usage' | 'activeTasks' | 'bgTasks' | 'cronJobs';
 
 const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
   const activeSessionId = useSessionField(selectActiveSessionId);
@@ -90,7 +96,12 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
   const agents = session?.agents || [];
   const runningAgentCount = agents.filter((a) => a.status === 'running').length;
   const convoFiles = useMemo(
-    () => (diffFiles?.length ? diffFiles : activeDiffSource ? [activeDiffSource] : []),
+    () =>
+      diffFiles?.length
+        ? diffFiles
+        : activeDiffSource
+          ? [activeDiffSource]
+          : [],
     [diffFiles, activeDiffSource]
   );
 

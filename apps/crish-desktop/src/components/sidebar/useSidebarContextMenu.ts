@@ -7,7 +7,7 @@ import {
   listChatLeaves,
   collectLeaves,
   isChatDomain,
-} from '../../api/store-access/componentAccess';
+} from '../../store/storeAccess';
 import {
   archiveUndoToastMessage,
   branchUndoToastMessage,

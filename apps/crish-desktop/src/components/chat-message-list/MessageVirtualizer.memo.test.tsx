@@ -22,7 +22,7 @@ import {
 import {
   assistantRowPropsEqual,
   MEMO_COMPARE_FIELDS as ROW_MEMO_COMPARE_FIELDS,
-} from '../chat-message-row/ChatAssistantMessageRow';
+} from '../chat-message-row/chatMessageRowUtils';
 import type { SessionMessage } from '../../store/types';
 
 globalThis.ResizeObserver = class ResizeObserver {

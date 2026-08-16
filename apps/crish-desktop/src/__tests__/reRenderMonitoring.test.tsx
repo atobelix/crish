@@ -7,14 +7,52 @@
  */
 import React from 'react';
 import { render, act, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi, beforeAll, afterAll, beforeEach } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from 'vitest';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
 import { DiffCard } from '../components/diff/DiffCard';
 import { CardPanel } from '../components/CardPanel';
 import { MessageContent } from '../components/chat-message/MessageContent';
-import { useStreamingStore } from '../api/store-access/componentAccess';
+import { useStreamMessageViewModel } from '../components/chat-message/streamMessageViewModel';
+import { useStreamingStore } from '../store/storeAccess';
+import type { ChatToolStackSharedProps } from '../components/chat-tool-call/ChatToolCallBlock';
 import type { SessionMessage } from '../store/types';
+
+/**
+ * T4 A1 测试装配壳层：复刻页面壳层 StreamingAssistantRow 的接线
+ * （useStreamMessageViewModel 订阅 + 合并 → MessageContent 收已合并 view model）。
+ * toolStackProps 由调用方传入稳定引用（页面壳层经 useChatMessageState useMemo
+ * 产出稳定引用；测试内联新建会击穿 TimelineBody memo——原测试即模块级常量）。
+ */
+function StreamHarness({
+  msg,
+  isThinkingMsg,
+  sessionId,
+  toolStackProps,
+}: {
+  msg: SessionMessage;
+  isThinkingMsg: boolean;
+  sessionId: string;
+  toolStackProps: ChatToolStackSharedProps;
+}) {
+  const vm = useStreamMessageViewModel(msg, sessionId);
+  return (
+    <MessageContent
+      msg={vm.msg}
+      streamText={vm.streamText}
+      isThinkingMsg={isThinkingMsg}
+      toolStackProps={toolStackProps}
+    />
+  );
+}
 
 // ── T1.7/T4.4：流式增量渲染监控（08-detail 任务清单）──────────────────────
 // AsyncMarkdownBlock / MessageToolCallsSection 替换为渲染计数探针：
@@ -28,15 +66,20 @@ const { mockAmdRenders, mockToolSectionRenders } = vi.hoisted(() => ({
 vi.mock('../components/chat-message-row/AsyncMarkdownBlock', async () => {
   const ReactMod = await import('react');
   return {
-    AsyncMarkdownBlock: ReactMod.memo((props: { text?: string; isStreaming?: boolean }) => {
-      if (!props.text) return null; // 与真实组件语义一致：空文本不渲染
-      mockAmdRenders.push(props.text ?? '');
-      return ReactMod.createElement(
-        'div',
-        { 'data-testid': 'amd-block', 'data-streaming': String(!!props.isStreaming) },
-        props.text ?? ''
-      );
-    }),
+    AsyncMarkdownBlock: ReactMod.memo(
+      (props: { text?: string; isStreaming?: boolean }) => {
+        if (!props.text) return null; // 与真实组件语义一致：空文本不渲染
+        mockAmdRenders.push(props.text ?? '');
+        return ReactMod.createElement(
+          'div',
+          {
+            'data-testid': 'amd-block',
+            'data-streaming': String(!!props.isStreaming),
+          },
+          props.text ?? ''
+        );
+      }
+    ),
   };
 });
 
@@ -65,7 +108,8 @@ let origError: typeof console.error;
 beforeAll(() => {
   origError = console.error;
   console.error = (...args: unknown[]) => {
-    if (typeof args[0] === 'string' && args[0].includes('not wrapped in act')) return;
+    if (typeof args[0] === 'string' && args[0].includes('not wrapped in act'))
+      return;
     origError.call(console, ...args);
   };
 });
@@ -163,7 +207,14 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
 
     function PanelParentWrapper() {
       panelParentRenderCount++;
-      return <CardPanel wsId="ws-rerender-1" colIdx={0} groupIdx={0} onShowToast={vi.fn()} />;
+      return (
+        <CardPanel
+          wsId="ws-rerender-1"
+          colIdx={0}
+          groupIdx={0}
+          onShowToast={vi.fn()}
+        />
+      );
     }
 
     render(<PanelParentWrapper />);
@@ -250,9 +301,15 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
     };
 
     // 被 React.memo 包裹的测试子组件
-    const MemoizedChild = React.memo(function DummyChild(_props: typeof stableProps) {
+    const MemoizedChild = React.memo(function DummyChild(
+      _props: typeof stableProps
+    ) {
       childRenderCount++;
-      return <div data-testid="virtualizer-memo-child">MessageVirtualizer Memo Wrapped</div>;
+      return (
+        <div data-testid="virtualizer-memo-child">
+          MessageVirtualizer Memo Wrapped
+        </div>
+      );
     });
 
     function ParentContainer({ count }: { count: number }) {
@@ -284,7 +341,7 @@ describe('流式增量渲染监控（T1.7：纯文本帧零重渲染）', () => 
     onShowToast: vi.fn(),
     onOpenDiff: vi.fn(),
     onOpenDiffPanel: vi.fn(),
-  } as never;
+  } as unknown as ChatToolStackSharedProps;
 
   function streamingMsg(): SessionMessage {
     return {
@@ -312,9 +369,10 @@ describe('流式增量渲染监控（T1.7：纯文本帧零重渲染）', () => 
 
   it('流式纯文本帧：稳定历史块渲染 0 次；增量累积 = strip 后全文', () => {
     const { container } = render(
-      <MessageContent
+      <StreamHarness
         msg={streamingMsg()}
         isThinkingMsg
+        sessionId={SID}
         toolStackProps={toolStackProps}
       />
     );
@@ -349,9 +407,10 @@ describe('流式增量渲染监控（T1.7：纯文本帧零重渲染）', () => 
 
   it('complete 后流式节点卸载：稳定块接管全文（无重复文本）', () => {
     const { container } = render(
-      <MessageContent
+      <StreamHarness
         msg={streamingMsg()}
         isThinkingMsg
+        sessionId={SID}
         toolStackProps={toolStackProps}
       />
     );
@@ -378,7 +437,7 @@ describe('工具密集会话全链重渲染（T4.4：= 工具事件数，而非�
     onShowToast: vi.fn(),
     onOpenDiff: vi.fn(),
     onOpenDiffPanel: vi.fn(),
-  } as never;
+  } as unknown as ChatToolStackSharedProps;
 
   function toolRichMsg(): SessionMessage {
     return {
@@ -409,9 +468,10 @@ describe('工具密集会话全链重渲染（T4.4：= 工具事件数，而非�
 
   it('20 个工具事件：工具区渲染 = 工具事件数，稳定文本块零额外渲染', () => {
     render(
-      <MessageContent
+      <StreamHarness
         msg={toolRichMsg()}
         isThinkingMsg
+        sessionId={SID}
         toolStackProps={toolStackProps}
       />
     );
@@ -429,7 +489,9 @@ describe('工具密集会话全链重渲染（T4.4：= 工具事件数，而非�
 
     // 纯文本帧继续增长：稳定文本块 + 工具区零额外渲染
     act(() => {
-      useStreamingStore.getState().setStreamText(SID, MID, '流式正文第 1 行\n第二行\n');
+      useStreamingStore
+        .getState()
+        .setStreamText(SID, MID, '流式正文第 1 行\n第二行\n');
     });
     expect(mockAmdRenders).toEqual(['前置稳定文本']);
     expect(mockToolSectionRenders).toHaveLength(2);

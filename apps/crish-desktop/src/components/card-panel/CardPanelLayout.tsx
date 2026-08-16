@@ -3,7 +3,7 @@ import styles from '../CardPanel.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ChatCard } from '../chat-card/ChatCard';
 import { TerminalCard } from '../workspace/TerminalCard';
-import { getPanelTitle } from '../../api/store-access/componentAccess';
+import { getPanelTitle } from '../../store/storeAccess';
 import type { CardState, GroupState } from '../../store/types';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 
@@ -13,10 +13,7 @@ import { PlanLegacyRedirect } from './PlanLegacyRedirect';
 import { PanelBodyEmpty } from './PanelBodyEmpty';
 import { KNOWN_BODY_IDS, getDockOverlayStyle } from './cardPanelHelpers';
 
-export {
-  KNOWN_BODY_IDS,
-  getDockOverlayStyle,
-};
+export { KNOWN_BODY_IDS, getDockOverlayStyle };
 
 const PreviewCard = lazy(() =>
   import('../workspace/PreviewCard').then((m) => ({ default: m.PreviewCard }))
@@ -78,13 +75,9 @@ export const CardPanelLayout: React.FC<CardPanelLayoutProps> = React.memo(
         className="card-body"
         id={panelBodyId}
         role={activeCardId === 'chat' ? undefined : 'tabpanel'}
-        aria-label={
-          activeCardId === 'chat' ? undefined : `${activeTitle}内容`
-        }
+        aria-label={activeCardId === 'chat' ? undefined : `${activeTitle}内容`}
         aria-labelledby={
-          activeCardId === 'chat'
-            ? undefined
-            : `${tabIdPrefix}-${activeCardId}`
+          activeCardId === 'chat' ? undefined : `${tabIdPrefix}-${activeCardId}`
         }
       >
         <AppErrorBoundary compact>
@@ -157,21 +150,15 @@ export const CardPanelLayout: React.FC<CardPanelLayoutProps> = React.memo(
                         </div>
                       ) : null}
                     </Suspense>
-                    {id === 'tasks' ? (
-                      <PlanLegacyRedirect wsId={wsId} />
-                    ) : null}
+                    {id === 'tasks' ? <PlanLegacyRedirect wsId={wsId} /> : null}
                     {id === 'terminal' ? <TerminalCard /> : null}
                     {id === 'settings' ? <SettingsLegacyRedirect /> : null}
-                    {id === 'plan' ? (
-                      <PlanLegacyRedirect wsId={wsId} />
-                    ) : null}
+                    {id === 'plan' ? <PlanLegacyRedirect wsId={wsId} /> : null}
                     {!known && active ? (
                       <PanelBodyEmpty
                         title={`无法显示「${getPanelTitle(id)}」`}
                         hint="从标签栏关闭后重新添加"
-                        onOpenOverview={() =>
-                          handleGlobalTabClick('overview')
-                        }
+                        onOpenOverview={() => handleGlobalTabClick('overview')}
                       />
                     ) : null}
                   </div>

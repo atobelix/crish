@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { useLayoutStore } from '../../api/store-access/componentAccess';
+import { useLayoutStore } from '../../store/storeAccess';
 import type { LayoutStore, WorkspaceState } from '../../store/types';
 import styles from './Workspace.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
