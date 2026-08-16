@@ -372,6 +372,13 @@ impl SubagentSpawnerImpl {
                             visible_goal: None,
                             max_rounds: None,
                             max_stalled_rounds: None,
+                            // I1-β：子代理 run 思考档位缺省 None（引擎默认；
+                            // 子代理档位继承主 run 语义不在此面，未来经
+                            // spawner 装配面扩展）
+                            reasoning_effort: None,
+                            // I1-α②：子代理 run 不产生 context-state 注入
+                            //（状态切换告知仅主会话用户提交边界携带）
+                            context_state: None,
                         })
                         .await
                 }

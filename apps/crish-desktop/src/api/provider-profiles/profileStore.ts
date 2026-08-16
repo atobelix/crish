@@ -33,7 +33,11 @@ import {
   profileHasKey,
   stripLegacySeedModels,
 } from './profileValidation';
-import { ensureLegacyProfilesMigration, LEGACY_MIGRATION_FLAG_KEY } from './migrateLegacyProfiles';
+import {
+  ensureLegacyProfilesMigration,
+  LEGACY_MIGRATION_FLAG_KEY,
+} from './migrateLegacyProfiles';
+import { recordPendingContextState } from './contextStatePending';
 
 const PROFILES_KEY = 'crish_provider_profiles_v1';
 const ACTIVE_PROFILE_KEY = 'crish_active_profile_id';
@@ -136,6 +140,11 @@ export function saveProfiles(list: ProviderProfile[]) {
   } catch {
     /* swallow-ok: 变更事件分发失败不影响已落盘的 profile */
   }
+  // I1-α②（扩展点 A）：context-state 感知注入产生器——状态切换（模型/
+  // 服务商/权限/思考档位）的快照文本暂存，下一次 run-task 携带排入
+  // PendingMessageQueue（group_id=context-state 去重）→ 时间线注入。
+  // 17 审计纪律：仅「切换发生」感知进 seq；配置/偏好本身留在配置带。
+  recordPendingContextState();
 }
 
 export function loadProfiles(): ProviderProfile[] {
@@ -276,7 +285,9 @@ export function getProviderSetupStatus(opts?: {
   const hasKey = hasLocalKey || hasEngineKey;
   const hasLocalModel = anyProfileHasModel();
   const resolved = resolvePreferredModelSelection({
-    ...(opts?.engineModel !== undefined ? { engineModel: opts.engineModel } : {}),
+    ...(opts?.engineModel !== undefined
+      ? { engineModel: opts.engineModel }
+      : {}),
   });
   const resolvedModel = resolved?.model || null;
   const resolvedProfileId = resolved?.profileId || null;
@@ -446,7 +457,8 @@ export async function saveProfileKey(
   await setProfileKey(profileId, key);
   const profile = loadProfiles().find((p) => p.id === profileId);
   if (!profile) return { ok: false, error: 'profile_not_found', synced: false };
-  if (!profile.hasKey) return { ok: false, error: 'key_save_failed', synced: false };
+  if (!profile.hasKey)
+    return { ok: false, error: 'key_save_failed', synced: false };
 
   const activeId = getActiveProfileId();
   const shouldSync =
@@ -481,7 +493,11 @@ export async function saveProfileKey(
   }
 
   const res = await activateProfileModel(profileId, model);
-  return { ok: res.ok, ...(res.error ? { error: res.error } : {}), synced: res.ok };
+  return {
+    ok: res.ok,
+    ...(res.error ? { error: res.error } : {}),
+    synced: res.ok,
+  };
 }
 
 export function addModelToProfile(profileId: string, model: string) {
@@ -600,6 +616,9 @@ function notifyModelChanged(profileId: string, model: string) {
   } catch {
     /* swallow-ok: 模型切换事件分发失败不影响已切换状态 */
   }
+  // I1-α②：模型/服务商切换的 context-state 感知注入（模块级去重 +
+  // 引擎 group_id=context-state 去重，连切两次只注入一次）
+  recordPendingContextState();
 }
 
 /**
@@ -656,16 +675,19 @@ export async function activateProfileModel(
       return { ok: true, warning: 'model_mismatch' };
     }
     if (!hasLocalKey || (status.ok && status.hasApiKey === false)) {
-      return { ok: true, ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}) };
+      return {
+        ok: true,
+        ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
+      };
     }
-} catch {
-  /* swallow-ok: 引擎状态核验失败时按乐观路径返回，不阻断切换 */
-}
-return {
-  ok: true,
-  ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
-  ...(applied.apiKeyLast4 ? { apiKeyLast4: applied.apiKeyLast4 } : {}),
-};
+  } catch {
+    /* swallow-ok: 引擎状态核验失败时按乐观路径返回，不阻断切换 */
+  }
+  return {
+    ok: true,
+    ...(!hasLocalKey ? { warning: 'no_local_key' as const } : {}),
+    ...(applied.apiKeyLast4 ? { apiKeyLast4: applied.apiKeyLast4 } : {}),
+  };
 }
 
 /**

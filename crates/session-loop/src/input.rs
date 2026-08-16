@@ -10,6 +10,20 @@
 //!
 //! 底层用环形缓冲：`shift()` 为 O(1)，固定容量提供背压保护
 //! （超容量覆盖最旧，避免长会话下无界增长）。
+//!
+//! ## 适配层定位（详案 I1-α① 队列归一）
+//!
+//! [AgentInputQueue] 是 **run 内消费适配层**：只承担「当前 run 主循环如何
+//! 消化」的执行语义，**不承担**「下一条用户消息」的政策语义——跨 run 的
+//! 「下一条用户消息」唯一规范载体是 orchestrator `PendingMessageQueue`
+//! （`crates/orchestrator/src/steering_queue.rs`，已接线 run_idle 边界）。
+//! 本队列的公共入口只供两类消费方使用：
+//! - `PendingMessageQueue::transfer_follow_up` / `transfer_into_input_queue`
+//!   （orchestrator 适配端——把跨 run 条目迁入 followUp / steer 环）；
+//! - 主循环内部安全点（recovery 纠偏注入、safe-point 协作停止等）。
+//! 外部「下一条用户消息」一律走 `PendingMessageQueue`，不在本队列上挂
+//! 跨 run 注入入口（[InputEnqueueMode] 的 Steer/FollowUp 语义仅服务上述
+//! 适配端与主循环消费面）。
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -67,6 +81,11 @@ pub fn next_batch_seq() -> u64 {
 ///
 /// 注（T06.3 Q13）：`Soft` 兼容别名变体已删除——生产与测试均以
 /// `Steer` 命名（enqueue_steer / has_steer_pending / drain_steer）。
+///
+/// 注（详案 I1-α① 队列归一）：`Steer`/`FollowUp` 仅供 [PendingMessageQueue]
+/// 适配端（orchestrator `transfer_follow_up` / `transfer_into_input_queue`）
+/// + 主循环安全点消费；本队列不再作为「外部注入策略入口」暴露给壳层——
+/// 外部「下一条用户消息」一律走 `PendingMessageQueue`。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum InputEnqueueMode {
     /// 可中断路径（默认 enqueue；legacy mid-stream）

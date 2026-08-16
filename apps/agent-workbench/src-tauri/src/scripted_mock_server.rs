@@ -710,6 +710,8 @@ mod integration_tests {
             visible_goal: None,
             max_rounds: None,
             max_stalled_rounds: None,
+            reasoning_effort: None,
+            context_state: None,
         }
     }
 

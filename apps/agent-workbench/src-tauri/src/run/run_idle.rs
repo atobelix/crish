@@ -1240,6 +1240,13 @@ pub(crate) mod idle_resume {
             visible_goal: None,
             max_rounds: None,
             max_stalled_rounds: None,
+            // I1-β：idle 续 run 无前端档位参数——None = 引擎默认档位
+            //（与 context_window None 同待遇：自动恢复路径不携带用户
+            // 装配面之外的思考档位，向后兼容）
+            reasoning_effort: None,
+            // I1-α②：续 run 不产生 context-state（状态切换告知仅由前端
+            // 用户提交边界携带；引擎自主续 run 无状态切换语义）
+            context_state: None,
         };
         if let Err(error) = run_task_impl(Arc::clone(&state), options).await {
             tracing::warn!(

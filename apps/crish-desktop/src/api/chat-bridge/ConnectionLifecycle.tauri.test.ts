@@ -98,6 +98,7 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
     localStorage.removeItem('crish_active_profile_id');
     localStorage.removeItem('crish_active_model_id');
     localStorage.removeItem('crish_model_meta_v1');
+    localStorage.removeItem('crish_pending_context_state_v1');
   });
 
   describe('createStreamSession：core_run_task 参数组装', () => {
@@ -150,11 +151,19 @@ describe('ConnectionLifecycle Tauri IPC 路径（C1.2）', () => {
           permissionMode: 'ask',
           clientMessageId: 'user-msg-1',
           assistantClientMessageId: 'assistant-msg-1',
+          // I1-β：defaultThinkingLevel（'medium'）→ ReasoningEffort 档位
+          // 真下发（替换旧 budgetDifficulty 思考档位代表；budgetDifficulty
+          // 不再出现在 run-task 参数中——Rust 侧零消费死参数）
+          reasoningEffort: 'medium',
           // P1：systemPrompt 经 composeSystemPrompt 组装后下发（settings 为 medium → 仅 guidance）
           systemPrompt:
             'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
         })
       );
+      // I1-β：budgetDifficulty 已从 run-task 参数移除（无 Rust 消费面）
+      expect(params.budgetDifficulty).toBeUndefined();
+      // I1-α②：无 pending context-state 时不携带 contextState 参数
+      expect(params.contextState).toBeUndefined();
       // 通道名（core_run_task / run-task）由 startRunTask 分派，不再内嵌进 payload
       expect(params.type).toBeUndefined();
       // 事件订阅已挂在 transport.onMessage（懒订阅 listen('workbench-run-event') 的入口）

@@ -403,9 +403,13 @@ fn build_request(state: &LoopState) -> ProviderRequest<'_> {
         .unwrap_or(false);
 
     let reasoning_effort = if is_zero_thinking_budget {
+        // 零思考预算（tool-promise 自愈 / thinking_budget=0）仍强制 Off，
+        // 覆盖用户档位（既有语义，I1-β 保留）
         Some(crate::provider::ReasoningEffort::Off)
     } else {
-        None
+        // I1-β：非零思考预算用**用户档位**（SessionLoopOptions 装配面
+        // 注入；None = 提供方默认，wire 与现状逐字节一致）
+        state.options.reasoning_effort
     };
 
     ProviderRequest {

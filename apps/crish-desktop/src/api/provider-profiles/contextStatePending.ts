@@ -1,0 +1,128 @@
+/**
+ * context-state 感知注入：前端产生器 + 暂存/取走面（详案 I1-α② 扩展点 A）。
+ *
+ * 职责边界（17 审计纪律）：
+ * - **只**承载「状态切换发生」的感知注入（模型/服务商/权限/思考档位
+ *   切换的**快照文本**）——进会话时间线（经 PendingMessageQueue 下一
+ *   run 边界注入 seq）；
+ * - 配置/偏好本身（profile 存储、主题、布局等）留在独立配置带，**不进**
+ *   本通道（禁止把配置文件整体塞进消息流）。
+ *
+ * 链路：本模块产生器（profileStore 在 emitUiEvent('profiles-changed')
+ * 处调用 recordPendingContextState）→ 快照文本暂存 localStorage →
+ * ConnectionLifecycle.createStreamSession 取走（takePendingContextState）
+ * → run-task `contextState` 参数 → 引擎排入 PendingMessageQueue
+ * （group_id=context-state 去重）→ 下一次用户提交边界注入时间线。
+ *
+ * 去重双保险：模块级 lastRecordedSignature（文本未变化不覆盖暂存，防
+ * 「编辑 profile 列表也注入」噪音）+ 引擎侧 group_id 去重（连切两次只
+ * 注入一次，详案验收断言）。
+ */
+
+import { getPermissionMode, getAppSettings } from '../storeAccess';
+
+/** 暂存键（取走即清空；与 ConnectionLifecycle 共享） */
+export const PENDING_CONTEXT_STATE_KEY = 'crish_pending_context_state_v1';
+
+/** 上一次记录的快照签名（模块级去重：状态未变化不重新写入） */
+let lastRecordedSignature: string | undefined;
+
+/** 读活动模型 id（直读 localStorage，与 profileStore 同键；不反向
+ * import profileStore——避免产生器 ↔ profileStore 循环依赖） */
+function readActiveModelId(): string {
+  try {
+    return localStorage.getItem('crish_active_model_id') || '';
+  } catch {
+    return '';
+  }
+}
+
+/** 读活动服务商 id（同键直读） */
+function readActiveProfileId(): string {
+  try {
+    return localStorage.getItem('crish_active_profile_id') || '';
+  } catch {
+    return '';
+  }
+}
+
+/** 读思考档位（settings 同步面；经 storeAccess 封装，禁直连 store） */
+function readThinkingLevel(): string {
+  try {
+    return String(getAppSettings()?.defaultThinkingLevel || '').trim();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * 生成 context-state 快照文本（纯函数，可测）。
+ *
+ * 文本形态：「当前已切换到模型 {model}（服务商 {profile}）。权限模式：
+ * {permission}。思考档位：{thinking}。」——逐段可省略（读不到/空则跳过
+ * 该段），模型为空时整体返回空串（无可注入的状态告知）。
+ */
+export function buildContextStateText(): string {
+  const model = readActiveModelId();
+  const profile = readActiveProfileId();
+  const permission = getPermissionMode();
+  const thinking = readThinkingLevel();
+  if (!model && !profile) return '';
+  const parts: string[] = [];
+  if (model) {
+    parts.push(
+      profile
+        ? `当前已切换到模型 ${model}（服务商 ${profile}）`
+        : `当前已切换到模型 ${model}`
+    );
+  }
+  if (permission) parts.push(`权限模式：${permission}`);
+  if (thinking && thinking !== 'default' && thinking !== 'off') {
+    parts.push(`思考档位：${thinking}`);
+  }
+  return parts.join('。') + '。';
+}
+
+/**
+ * 产生器入口：在 emitUiEvent('profiles-changed') 处调用——生成当前
+ * 状态快照文本并暂存（状态未变化则保持既有暂存，不覆盖；失败静默——
+ * 感知注入是尽力而为面，不阻断状态切换本身）。
+ */
+export function recordPendingContextState(): void {
+  try {
+    const text = buildContextStateText();
+    if (!text) return;
+    // 模块级去重：文本与上次一致 → 不重新写入（编辑 profile 列表但
+    // 活动模型/权限/档位未变时不产生注入；切换后重复 emit 也幂等）
+    if (text === lastRecordedSignature) return;
+    lastRecordedSignature = text;
+    localStorage.setItem(PENDING_CONTEXT_STATE_KEY, text);
+  } catch {
+    /* swallow-ok: 暂存失败不影响状态切换本身 */
+  }
+}
+
+/**
+ * 取走暂存的 context-state 文本（ConnectionLifecycle 发起 run-task 时
+ * 调用）——取走即清空：本次 run 消费后不重复注入（配合引擎侧
+ * group_id=context-state 去重，连切两次只注入一次）。
+ */
+export function takePendingContextState(): string | undefined {
+  try {
+    const text = localStorage.getItem(PENDING_CONTEXT_STATE_KEY) || undefined;
+    if (text) localStorage.removeItem(PENDING_CONTEXT_STATE_KEY);
+    return text;
+  } catch {
+    return undefined;
+  }
+}
+
+/** 测试重置（去重签名与暂存键） */
+export function resetPendingContextStateForTest(): void {
+  lastRecordedSignature = undefined;
+  try {
+    localStorage.removeItem(PENDING_CONTEXT_STATE_KEY);
+  } catch {
+    /* swallow-ok */
+  }
+}

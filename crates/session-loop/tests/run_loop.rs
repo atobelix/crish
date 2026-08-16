@@ -1075,6 +1075,50 @@ async fn reasoning_effort_field_propagates_through_request() {
     );
 }
 
+/// I1-β 产品链路测：**经 SessionLoopOptions 注入档位** → 主循环
+/// build_request → ProviderRequest 捕获（不再直接构造 ProviderRequest——
+/// 钉死「产品链路」：壳层装配档位 → options → 请求体）。
+///
+/// 验收断言（详案 I1-β §5.1）：`reasoning_effort` 经 options 而非直接构造
+/// ProviderRequest 下发；非零思考预算（普通对话最后一条为 user 消息）
+/// 用用户档位。
+#[tokio::test]
+async fn reasoning_effort_options_injects_through_product_path() {
+    // 1) SessionLoopOptions 注入 Some(High)：经 loop.run 全链路捕获
+    let provider_handle = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("思考档位链路"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]).with_options(
+        SessionLoopOptions {
+            reasoning_effort: Some(ReasoningEffort::High),
+            ..Default::default()
+        },
+    );
+    let outcome = loop_.run(user("请求")).await;
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert!(outcome.error.is_none());
+    assert_eq!(
+        provider_handle.request_reasoning_effort(0),
+        Some(ReasoningEffort::High),
+        "产品链路：options 注入档位必须经 build_request 捕获（非直接构造请求）"
+    );
+
+    // 2) 缺省 None：主循环请求不携带思考参数（与旧版 wire 一致）
+    let provider_none_handle = Arc::new(TestProvider::new(vec![
+        ProviderStreamEvent::text("缺省无思考"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]));
+    let mut loop_none = loop_with_arc(provider_none_handle.clone(), vec![]);
+    let outcome = loop_none.run(user("请求")).await;
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    assert_eq!(
+        provider_none_handle.request_reasoning_effort(0),
+        None,
+        "缺省 None 时主循环请求不携带思考参数（向后兼容）"
+    );
+}
+
 /// S5 契约测钉（D-02）：build_request 注入真实 session_id——构造 loop 时
 /// 传入的会话 ID（loop_with_arc 固定 "sess-1"）经请求快照捕获，断言
 /// 非 None 且等于构造值（缓存键会话维度来源；engine.rs:452

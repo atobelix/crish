@@ -114,6 +114,63 @@ pub(crate) fn resolve_run_workspace_root(cwd: Option<&str>) -> PathBuf {
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
 }
 
+/// I1-β：run-task 思考档位入站解析（wire 值 → [ReasoningEffort]）。
+///
+/// 宽容 fail-open：未知 / 空值 → None（引擎默认档位，不阻断 run）——
+/// 与 [SessionLoopOptions::reasoning_effort] 的「None = 提供方默认」语义
+/// 一致，向后兼容（旧前端未发字段时行为与现状逐字节一致）。
+pub(crate) fn parse_reasoning_effort(wire: &str) -> Option<session_loop::ReasoningEffort> {
+    match wire.trim().to_ascii_lowercase().as_str() {
+        "off" => Some(session_loop::ReasoningEffort::Off),
+        "auto" => Some(session_loop::ReasoningEffort::Auto),
+        "minimal" => Some(session_loop::ReasoningEffort::Minimal),
+        "low" => Some(session_loop::ReasoningEffort::Low),
+        "medium" => Some(session_loop::ReasoningEffort::Medium),
+        "high" => Some(session_loop::ReasoningEffort::High),
+        "xhigh" => Some(session_loop::ReasoningEffort::Xhigh),
+        "max" => Some(session_loop::ReasoningEffort::Max),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_reasoning_effort;
+    use session_loop::ReasoningEffort;
+
+    /// I1-β：档位 wire 解析——全档位命中 + 大小写/空白宽容 + 未知值
+    /// fail-open None（引擎默认，不阻断 run）
+    #[test]
+    fn reasoning_effort_parse_covers_all_levels_and_fails_open() {
+        assert_eq!(parse_reasoning_effort("off"), Some(ReasoningEffort::Off));
+        assert_eq!(parse_reasoning_effort("auto"), Some(ReasoningEffort::Auto));
+        assert_eq!(
+            parse_reasoning_effort("minimal"),
+            Some(ReasoningEffort::Minimal)
+        );
+        assert_eq!(parse_reasoning_effort("low"), Some(ReasoningEffort::Low));
+        assert_eq!(
+            parse_reasoning_effort("medium"),
+            Some(ReasoningEffort::Medium)
+        );
+        assert_eq!(parse_reasoning_effort("high"), Some(ReasoningEffort::High));
+        assert_eq!(
+            parse_reasoning_effort("xhigh"),
+            Some(ReasoningEffort::Xhigh)
+        );
+        assert_eq!(parse_reasoning_effort("max"), Some(ReasoningEffort::Max));
+        // 大小写 / 空白宽容
+        assert_eq!(
+            parse_reasoning_effort("  High "),
+            Some(ReasoningEffort::High)
+        );
+        // 未知 / 空 → None（引擎默认档位，不阻断 run，向后兼容）
+        assert_eq!(parse_reasoning_effort("ultra"), None);
+        assert_eq!(parse_reasoning_effort(""), None);
+        assert_eq!(parse_reasoning_effort("  "), None);
+    }
+}
+
 // ── 命令：core_run_task ───────────────────────────────────────────
 
 /// 发起一次 run（03 §3.2 A 组；返回 {runId, sessionId} 回执）
@@ -163,6 +220,21 @@ pub struct RunTaskOptions {
     /// D5 §3.1：goal 连续空转上限（None → 引擎缺省 2）
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_stalled_rounds: Option<u32>,
+    /// I1-β：思考档位入站（`defaultThinkingLevel` → `ReasoningEffort`
+    /// 映射后的 wire 值，minimal/low/medium/high/xhigh/max；None = 未
+    /// 下发，引擎按提供方默认档位，wire 与现状逐字节一致）。装配进
+    /// [SessionLoopOptions::reasoning_effort]（build_request 读档位下发）。
+    /// serde camelCase 由结构体级 rename_all 覆盖（`reasoningEffort`）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_effort: Option<String>,
+    /// I1-α②（扩展点 A）：context-state 感知注入文本（前端 provider-profiles
+    /// 状态切换产生器在 `emitUiEvent('profiles-changed')` 处生成的快照文本：
+    /// 「当前已切换到模型 X / 权限 Y / 思考档位 Z」；None = 无状态切换告知）。
+    /// 装配：run_task_impl 收到后经 [PendingMessageQueue::replace_or_enqueue]
+    /// （group_id = [CONTEXT_STATE_GROUP] 去重）排入跨 run 队列——下一次
+    /// 用户提交边界注入时间线（详案 I1-α② 注入载体契约）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_state: Option<String>,
 }
 
 #[tauri::command]
@@ -227,6 +299,15 @@ pub(crate) async fn run_task_impl(
     let visible_goal = options.visible_goal;
     let max_rounds = options.max_rounds;
     let max_stalled_rounds = options.max_stalled_rounds;
+    // I1-β：思考档位入站（wire 值 → [ReasoningEffort]；None / 非法值 →
+    // 引擎默认，宽容 fail-open，不阻断 run）
+    let reasoning_effort = options
+        .reasoning_effort
+        .as_deref()
+        .and_then(parse_reasoning_effort);
+    // I1-α②：context-state 感知注入文本（前端状态切换产生器下发；
+    // None = 无切换告知）
+    let context_state = options.context_state;
 
     if run_id.is_empty() || session_id.is_empty() {
         return Err(CoreError::invalid_input("runId / sessionId 不能为空"));
@@ -341,13 +422,19 @@ pub(crate) async fn run_task_impl(
         .map_err(crate::core_error::map_run_err)?;
     let handle_shared = Arc::new(tokio::sync::Mutex::new(handle));
 
-    // 事件队列（base = 预热/懒计算 max+1，T08.8：不重置为 1）
+    // 事件队列（base = 预热/懒计算 max+1，T08.8：不重置为 1）。
+    // R1（统一输入流收敛战役）：挂载会话级撤回冻结护栏——与撤回命令
+    // （retraction_commands.rs）共享 state.retraction_freeze 同一实例，
+    // 冻结激活期写侧拒绝 `> frozen_seq` 非撤离写入
     let base = state.base_sequence_for(&session_id).await;
-    let queue = Arc::new(tokio::sync::Mutex::new(EventQueue::new(
-        state.store.clone(),
-        base,
-        Some(run_id.clone()),
-    )));
+    let queue = Arc::new(tokio::sync::Mutex::new(
+        EventQueue::new(
+            state.store.clone(),
+            base,
+            Some(run_id.clone()),
+        )
+        .with_freeze_registry(Arc::clone(&state.retraction_freeze)),
+    ));
 
     // 本 run 的缓冲事件桥（gate 广播 / delta sink / 收口 emit 共用）
     let bridge = Arc::new(BufferedRunEventBridge::new(
@@ -640,6 +727,9 @@ pub(crate) async fn run_task_impl(
         live_sink: Some(Arc::clone(&live_sink) as Arc<dyn session_loop::provider::LiveEventSink>),
         background: Some(Arc::clone(&state.background) as Arc<dyn agent_tools::background::BackgroundTaskManager>),
         log_root: Some(state.background.log_root()),
+        // I1-β：思考档位装配（run-task 入站 `reasoningEffort` → build_request
+        // 读档位下发；None = 引擎默认，wire 与现状一致）
+        reasoning_effort,
         ..SessionLoopOptions::default()
     };
     let tool_options = ToolBatchOptions {
@@ -654,6 +744,34 @@ pub(crate) async fn run_task_impl(
     // 用户消息（clientMessageId 透传，03 §5.3-4）
     let message =
         crate::engine::user_message(&prompt.unwrap_or_default(), client_message_id.as_deref());
+
+    // ── I1-α②（扩展点 A）：context-state 感知注入 ─────────────────
+    // 前端 provider-profiles 状态切换产生器（emitUiEvent('profiles-changed')
+    // 处生成「当前已切换到模型 X / 权限 Y / 思考档位 Z」快照文本）经
+    // run-task `contextState` 入站 → 本处经 PendingMessageQueue
+    // replace_or_enqueue（group_id = CONTEXT_STATE_GROUP 去重——连切两次
+    // 只注入一次）排入跨 run 队列 → 下一次用户提交边界
+    // drain_pending_to_inject_messages 按 User 文本注入时间线（详案 I1-α②
+    // 注入载体契约；17 审计纪律：仅「状态切换发生」感知注入进 seq，
+    // 配置/偏好本身不进消息流）。
+    if let Some(text) = context_state.filter(|t| !t.trim().is_empty()) {
+        let now = now_ms_internal();
+        let entry = orchestrator::steering_queue::SteeringInputEntry::context_state(
+            format!("context-state-{run_id}-{now}"),
+            text,
+            now,
+        );
+        state
+            .pending_queue
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .replace_or_enqueue(entry);
+        tracing::info!(
+            target: "run",
+            session_id = %session_id,
+            "context-state 感知注入已排入跨 run 队列（下一次用户提交边界注入时间线）"
+        );
+    }
 
     // ── T-29/T-30 历史参数装配（P4 §3.2.3 混合路线）───────────────
     // 前端 history（store 已完成消息）为冷启动水合兜底；为空/未传时回退

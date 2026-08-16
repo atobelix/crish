@@ -345,7 +345,7 @@ export async function createStreamSession(
     );
 
     let mcpDisabledTools: Record<string, string[]> | undefined;
-    let budgetDifficulty: string | undefined;
+    let reasoningEffort: string | undefined;
     let responseStyleGuidance: string | undefined;
     let contextWindow: number | undefined;
     try {
@@ -357,12 +357,13 @@ export async function createStreamSession(
       ) {
         mcpDisabledTools = sets.mcpDisabledTools;
       }
+      // I1-β：defaultThinkingLevel → ReasoningEffort（wire 值 = 枚举字面量）
       const tl = String(sets?.defaultThinkingLevel || '')
         .trim()
         .toLowerCase();
-      if (tl === 'minimal' || tl === 'low') budgetDifficulty = 'easy';
-      else if (tl === 'medium') budgetDifficulty = 'normal';
-      else if (tl === 'high' || tl === 'xhigh') budgetDifficulty = 'hard';
+      if (['minimal', 'low', 'medium', 'high', 'xhigh', 'max'].includes(tl)) {
+        reasoningEffort = tl;
+      }
 
       const rawStyle = String(sets?.responseStyle ?? 'medium');
       const resolvedKey = STYLE_ZH_MAP[rawStyle] || rawStyle.toLowerCase();
@@ -416,6 +417,11 @@ export async function createStreamSession(
 
     if (isRunDead(state)) return;
 
+    // I1-α②：取走暂存 context-state → run-task 下发 → 队列去重注入；取走即清空
+    const contextState = (
+      await import('../provider-profiles/contextStatePending')
+    ).takePendingContextState();
+
     await startRunTask(transport, {
       runId,
       prompt,
@@ -423,7 +429,8 @@ export async function createStreamSession(
       permissionMode,
       ...(cwd ? { cwd } : {}),
       ...(mcpDisabledTools ? { mcpDisabledTools } : {}),
-      ...(budgetDifficulty ? { budgetDifficulty } : {}),
+      ...(reasoningEffort ? { reasoningEffort } : {}),
+      ...(contextState ? { contextState } : {}),
       ...(options?.content?.length ? { content: options.content } : {}),
       ...(hasImages ? { hasImages: true } : {}),
       ...(options?.attachments?.length

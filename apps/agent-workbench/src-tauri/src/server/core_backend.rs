@@ -640,6 +640,12 @@ impl ApiBackend for CoreStateBackend {
             visible_goal: None,
             max_rounds: None,
             max_stalled_rounds: None,
+            // I1-β：远程 run 思考档位缺省 None（引擎默认；远程命令面无
+            // 前端档位通道，行为与现状一致）
+            reasoning_effort: None,
+            // I1-α②：远程 run 不携带 context-state（状态切换告知仅
+            // 桌面前端用户提交边界下发）
+            context_state: None,
         };
         let response = run_task_impl(Arc::clone(&self.core), options)
             .await

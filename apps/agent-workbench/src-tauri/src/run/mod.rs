@@ -67,7 +67,9 @@ pub(crate) use conex_types::events::{
     SubagentEventKind,
 };
 pub(crate) use conex_types::impact::ImpactAssessment;
-pub(crate) use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+pub(crate) use conex_types::message::{
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
+};
 pub(crate) use session_loop::r#loop::stage_summary::{
     build_stage_summary_document, next_pending_milestone, stage_ratios_from_session_meta,
     stage_summary_to_checkpoint_payload, stage_summary_to_markdown, stage_tier,
@@ -99,6 +101,7 @@ pub(crate) use orchestrator::subagent_events::{
 pub(crate) use orchestrator::{
     assess_round, GoalDecision, GoalState, PendingMessageQueue, RoundInput, ToolCallStamp,
 };
+pub(crate) use orchestrator::steering_queue::CONTEXT_STATE_GROUP;
 pub(crate) use session_loop::approval_router::{
     arbiter_metadata, classify_source, route_approval, route_approval_guarded,
 };

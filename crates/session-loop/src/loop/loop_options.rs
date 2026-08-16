@@ -219,6 +219,14 @@ pub struct SessionLoopOptions {
     /// spawn_blocking 纪律与 save_run_usage 同；enqueue 写点 / 消费删点
     /// 均 fail-open（DB 失败仅 warn 不阻断循环）。
     pub pending_input_store: Option<Arc<dyn crate::input::PendingInputStore>>,
+    /// 思考档位（详案 I1-β reasoning_effort 真下发）：None = 提供方默认
+    /// （build_request 不携带思考参数，wire 与现状逐字节一致，向后兼容）；
+    /// Some = 用户显式档位（minimal/low/medium/high/xhigh/max 等）。
+    /// 装配：壳层 run-task 思考档位注入（run_launch.rs 解析
+    /// `reasoningEffort` 入站），[crate::loop::handlers::streaming::build_request]
+    /// 读档位下发；零思考预算（tool-promise 自愈 / thinking_budget=0）仍
+    /// 覆盖为 [crate::provider::ReasoningEffort::Off]（保留既有语义）。
+    pub reasoning_effort: Option<crate::provider::ReasoningEffort>,
 }
 
 impl Default for SessionLoopOptions {
@@ -311,6 +319,9 @@ impl Default for SessionLoopOptions {
             // session-loop 不直接持 DB 连接，实现方为 orchestrator 的
             // Store 适配（LocalDbStore / InMemoryStore，persist.rs）
             pending_input_store: None,
+            // I1-β：思考档位缺省 None = 提供方默认（不携带思考参数，
+            // wire 与现状一致；壳层 run-task 思考档位注入时装配）
+            reasoning_effort: None,
         }
     }
 }
