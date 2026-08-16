@@ -60,6 +60,7 @@ conex-search = { path = "../../../crates/conex-search" }
 conex-fs = { path = "../../../crates/conex-fs" }
 conex-db = { path = "../../../crates/conex-db" }
 conex-markdown = { path = "../../../crates/conex-markdown" }
+dirs = "6"
 # Round7：真实笔记后端（DocSession + workspace.db 投影；独立于 sessions.db）
 conex-note-runtime = { path = "../../../crates/conex-note-runtime" }
 # R 轮重写接线：事件存储 / 恢复快照（orchestrator）、会话循环与审批

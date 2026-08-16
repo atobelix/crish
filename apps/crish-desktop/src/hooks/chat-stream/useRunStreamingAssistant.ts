@@ -25,7 +25,6 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { setStreamText } from '../../store/streamingStore';
 import { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import { streamBatchKey } from '../../api/streamTextBatcher';
-import { addTerminalLine } from '../../api/storeAccess';
 import { useGoalMode } from './useGoalMode';
 import {
   applySubagentStarted,
@@ -262,9 +261,8 @@ export function useRunStreamingAssistant(
             if (!assertLive()) return;
             applySubagentEnded({ sid, info });
           },
-          onTerminalLine: (line) => {
-            if (!assertLive()) return;
-            addTerminalLine(line, sid);
+          onTerminalLine: (_line) => {
+            // No-op: Terminal store decoupled from AI stream outputs (DIM-07)
           },
           onToolSuccess: (toolId, output, diffs) => {
             if (!assertLive()) return;

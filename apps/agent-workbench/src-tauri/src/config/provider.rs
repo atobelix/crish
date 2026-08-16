@@ -107,6 +107,7 @@ impl ApiConfigStore {
         credential_store: CredentialStore,
     ) -> Self {
         let mut store = Self::load(config_path, secret_path);
+        store.profile_state = PersistedProfileState::default();
         store.credential_store = credential_store;
         if store.credential_store.unavailable {
             store.diagnostic = Some(ProviderConfigDiagnostic {
@@ -245,6 +246,7 @@ impl ApiConfigStore {
     }
 
     pub(crate) fn set_api_key(&mut self, value: String) -> Result<(), String> {
+        clear_active_profile(&mut self.profile_state)?;
         let value = normalize_config_value(value);
         self.runtime.api_key_touched = true;
         if value.is_empty() {
@@ -298,6 +300,7 @@ impl ApiConfigStore {
     }
 
     fn set_credential_mode(&mut self, value: String) -> Result<(), String> {
+        clear_active_profile(&mut self.profile_state)?;
         let mode = normalize_credential_mode(value).ok_or_else(|| {
             "Invalid credentialMode. Expected direct, account-center, or auto.".to_string()
         })?;

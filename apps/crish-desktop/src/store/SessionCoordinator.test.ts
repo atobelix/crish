@@ -11,9 +11,9 @@ describe('SessionCoordinator', () => {
     // Reset stores
     useStreamingStore.setState({ byKey: {} });
     useTerminalStore.setState({
-      terminalBySession: {},
-      terminalLines: [],
-      activeTerminalSessionId: null,
+      ptySessions: {},
+      diffFiles: [],
+      activeDiffSource: null,
     });
   });
 
@@ -45,8 +45,18 @@ describe('SessionCoordinator', () => {
     useStreamingStore.getState().setStreamText('sess-2', 'm2', 'Stream text 2');
 
     // 3. Setup terminalStore
-    useTerminalStore.getState().addTerminalLine('Line in sess 1', 'sess-1');
-    useTerminalStore.getState().addTerminalLine('Line in sess 2', 'sess-2');
+    useTerminalStore.getState().registerPtySession('sess-1', {
+      ptyId: 'p1',
+      sessionKey: 'sess-1',
+      createdAt: Date.now(),
+      status: 'active',
+    });
+    useTerminalStore.getState().registerPtySession('sess-2', {
+      ptyId: 'p2',
+      sessionKey: 'sess-2',
+      createdAt: Date.now(),
+      status: 'active',
+    });
 
     // 4. Spy on messageSnapshotsBridge
     const clearSnapshotsSpy = vi.spyOn(
@@ -73,12 +83,8 @@ describe('SessionCoordinator', () => {
     );
 
     // Assert terminalStore cleaned
-    expect(
-      useTerminalStore.getState().terminalBySession['sess-1']
-    ).toBeUndefined();
-    expect(
-      useTerminalStore.getState().terminalBySession['sess-2']
-    ).toBeDefined();
+    expect(useTerminalStore.getState().ptySessions['sess-1']).toBeUndefined();
+    expect(useTerminalStore.getState().ptySessions['sess-2']).toBeDefined();
 
     // Assert snapshots bridge called
     expect(clearSnapshotsSpy).toHaveBeenCalledWith('sess-1');

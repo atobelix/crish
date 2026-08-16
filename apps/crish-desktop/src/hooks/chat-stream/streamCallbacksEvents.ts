@@ -18,11 +18,9 @@ import type { SessionStreamManager } from '../../api/sessionStreamManager';
 import type { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
 import type { StreamToolCallPatch } from '../../api/streamTextBatcher';
 import {
-  isShellToolName,
   resolveToolDiffs,
   sanitizeToolDisplayOutput,
 } from '../../api/toolFeedback';
-import { addTerminalLine, addTerminalLines } from '../../api/storeAccess';
 import { publishToolDiffsLazy } from './helpers';
 import {
   buildMessageIndex,
@@ -198,15 +196,12 @@ export function handleToolSuccess(opts: {
     },
     true
   );
-  if (isShellToolName(name) && displayOut) {
-    addTerminalLines(displayOut.split('\n').slice(0, 80), sid);
-  }
   if (resolvedDiffs.length > 0) {
     publishToolDiffsLazy(resolvedDiffs);
   }
 }
 
-/** 工具失败：终态 error patch + shell 回显清理。 */
+/** 工具失败：终态 error patch */
 export function handleToolError(opts: {
   sid: string;
   toolId: string;
@@ -218,17 +213,13 @@ export function handleToolError(opts: {
     immediate?: boolean
   ) => void;
 }): void {
-  const { sid, toolId, error, toolNames, queueToolCallPatch } = opts;
+  const { toolId, error, queueToolCallPatch } = opts;
   const clean = sanitizeToolDisplayOutput(error || '');
   queueToolCallPatch(
     toolId,
     { id: toolId, status: 'error', output: clean || error || '失败' },
     true
   );
-  const name = toolNames[toolId];
-  if (name && isShellToolName(name) && clean) {
-    addTerminalLine(clean, sid);
-  }
 }
 
 /**

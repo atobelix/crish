@@ -14,11 +14,7 @@ import {
   getSessionById,
   getSessionStoreState,
 } from '../../store/sessionStore';
-import { useTerminalStore } from '../../store/terminalStore';
-import {
-  resolveSessionState,
-  resolveWorkspaceState,
-} from './storeAccessCore';
+import { resolveSessionState, resolveWorkspaceState } from './storeAccessCore';
 
 export function isNonEmptySessionId(
   sessionId: string | null | undefined
@@ -303,10 +299,10 @@ export function patchAgentTool(
   getSessionStoreState().patchAgentTool(sid, agentId, toolCallId, patch);
 }
 
-export function addTerminalLine(line: string, sessionId?: string): void {
-  useTerminalStore.getState().addTerminalLine(line, sessionId);
+export function addTerminalLine(_line: string, _sessionId?: string): void {
+  // No-op: fake line buffer removed in DIM-07
 }
 
-export function addTerminalLines(lines: string[], sessionId?: string): void {
-  useTerminalStore.getState().addTerminalLines(lines, sessionId);
+export function addTerminalLines(_lines: string[], _sessionId?: string): void {
+  // No-op: fake line buffer removed in DIM-07
 }

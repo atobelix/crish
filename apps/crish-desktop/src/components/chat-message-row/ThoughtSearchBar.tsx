@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Search, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { Tooltip } from '../ui/Tooltip/Tooltip';
 import styles from './ThoughtSearchBar.module.css';
 
 export interface ThoughtSearchBarProps {
@@ -57,36 +58,39 @@ export const ThoughtSearchBar: React.FC<ThoughtSearchBarProps> = ({
               : '无匹配'}
           </span>
           {matchesCount > 0 && onPrev && (
-            <button
-              type="button"
-              className={styles.navBtn}
-              onClick={onPrev}
-              title="上一个匹配 (Shift+Enter)"
-              aria-label="上一个匹配"
-            >
-              <ChevronUp size={14} />
-            </button>
+            <Tooltip content="上一个匹配 (Shift+Enter)">
+              <button
+                type="button"
+                className={styles.navBtn}
+                onClick={onPrev}
+                aria-label="上一个匹配"
+              >
+                <ChevronUp size={14} />
+              </button>
+            </Tooltip>
           )}
           {matchesCount > 0 && onNext && (
+            <Tooltip content="下一个匹配 (Enter)">
+              <button
+                type="button"
+                className={styles.navBtn}
+                onClick={onNext}
+                aria-label="下一个匹配"
+              >
+                <ChevronDown size={14} />
+              </button>
+            </Tooltip>
+          )}
+          <Tooltip content="清空搜索">
             <button
               type="button"
-              className={styles.navBtn}
-              onClick={onNext}
-              title="下一个匹配 (Enter)"
-              aria-label="下一个匹配"
+              className={styles.clearBtn}
+              onClick={() => onChange('')}
+              aria-label="清空搜索"
             >
-              <ChevronDown size={14} />
+              <X size={13} />
             </button>
-          )}
-          <button
-            type="button"
-            className={styles.clearBtn}
-            onClick={() => onChange('')}
-            title="清空搜索"
-            aria-label="清空搜索"
-          >
-            <X size={13} />
-          </button>
+          </Tooltip>
         </div>
       ) : null}
     </div>

@@ -44,12 +44,8 @@ export function useTerminalField<T>(selector: (state: TerminalStore) => T): T {
   return useTerminalStore(selector);
 }
 
-export const selectTerminalLines = (s: Pick<TerminalStore, 'terminalLines'>) =>
-  s.terminalLines;
-
-export const selectTerminalBySession = (
-  s: Pick<TerminalStore, 'terminalBySession'>
-) => s.terminalBySession;
+export const selectPtySessions = (s: Pick<TerminalStore, 'ptySessions'>) =>
+  s.ptySessions;
 
 export const selectActiveDiffSource = (
   s: Pick<TerminalStore, 'activeDiffSource'>

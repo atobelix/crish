@@ -37,8 +37,6 @@ import {
   isLiveStreamRun,
 } from './helpers';
 import { markStreamingActive } from '../../api/streamStop';
-import { addTerminalLine } from '../../api/storeAccess';
-import { isShellToolName } from '../../api/toolFeedback';
 import type { RunNotice } from './types';
 
 /** msgId → message 索引（O(1) 查表替代逐次 find）。 */
@@ -426,9 +424,6 @@ export function createToolPatchQueue(opts: {
       },
       status === 'pending_approval'
     );
-    if (isShellToolName(name) && args) {
-      addTerminalLine(`$ ${args}`, sid);
-    }
   };
   return { queueToolCallPatch, upsertToolCall };
 }

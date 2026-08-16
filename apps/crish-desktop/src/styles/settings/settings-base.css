@@ -313,7 +313,7 @@ select.settings-field-input {
   font-size: var(--font-size-xxs);
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xl);
   padding: 0 var(--control-pad-x);
   min-height: var(--control-height-sm);
   height: var(--control-height-sm);
@@ -1611,8 +1611,7 @@ select.settings-field-input {
   gap: var(--space-2);
   min-height: 40px;
   padding: 6px 10px;
-  border-bottom: 1px solid
-    var(--tint-hover);
+  border-bottom: 1px solid var(--tint-hover);
 }
 .models-catalog-row:last-child {
   border-bottom: none;
@@ -1797,7 +1796,11 @@ select.settings-field-input {
 }
 .models-main-row.is-open {
   background: var(--tint-hover);
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
   padding: 4px 6px 8px;
   margin: 0;
   z-index: var(--z-decorative);
@@ -2465,8 +2468,7 @@ textarea.settings-dialog-textarea:focus-visible {
   padding: 12px 0;
   gap: 16px 20px;
   align-items: center;
-  border-bottom: 1px solid
-    var(--tint-active);
+  border-bottom: 1px solid var(--tint-active);
   border-radius: 0;
   background: transparent;
   margin: 0;

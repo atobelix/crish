@@ -79,7 +79,7 @@ apps/crish-desktop/src/api/sessionSearch.ts 412
 apps/crish-desktop/src/api/sessionTitle.ts 342
 apps/crish-desktop/src/api/skillsApi.ts 630
 apps/crish-desktop/src/api/themeStore.ts 697
-apps/crish-desktop/src/api/tool-presentation/toolCardPresenter.ts 776
+apps/crish-desktop/src/api/tool-presentation/toolCardPresenter.ts 394
 apps/crish-desktop/src/api/toolFeedback.ts 575
 apps/crish-desktop/src/api/workspaceFsApi.ts 360
 apps/crish-desktop/src/bridges/send-to-note.ts 341
@@ -88,6 +88,7 @@ apps/crish-desktop/src/components/agent-card/AgentTeamBoard.tsx 461
 apps/crish-desktop/src/components/agent-card/InlineAgentPanel.tsx 604
 apps/crish-desktop/src/components/chat-card/useChatComposerProps.ts 472
 apps/crish-desktop/src/components/chat-composer/SlashExtension.ts 444
+apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx 464
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
 apps/crish-desktop/src/components/diff/DiffCard.tsx 442
 apps/crish-desktop/src/components/files/FileViewerCard.tsx 427

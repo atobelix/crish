@@ -30,7 +30,11 @@
 }
 .settings-pane--shortcuts .settings-shortcuts-filter:focus,
 .settings-pane--shortcuts .settings-shortcuts-filter:focus-visible {
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
   background: var(--tint-hover);
 }
 
@@ -105,7 +109,7 @@
   min-height: 30px;
   height: 30px;
   padding: 0 10px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xl);
   border: 1px solid var(--tint-strong);
   background: transparent;
   color: var(--text-primary);
@@ -128,7 +132,7 @@
   border-color: var(--border-color);
 }
 
-html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
+html[data-theme='dark'] .settings-pane--shortcuts .shortcut-key-btn.recording {
   background: var(--tint-divider);
   color: var(--text-primary);
   border-color: var(--border-color) !important;
@@ -268,7 +272,11 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 .settings-pane--security .settings-security-input:focus-visible,
 .settings-pane--security .settings-field-input:focus,
 .settings-pane--security .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
   box-shadow: none;
 }
 
@@ -315,7 +323,6 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
     word-break: break-all;
   }
 }
-
 
 /* === rules polish-v1 === */
 /* 鏉堣锟1%閿涙稑鍨悰銊︾閺呭府绱辨０鍕啎閼侯垳澧栨潪缁樺伎锟 */
@@ -466,7 +473,11 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 .settings-pane--rules .settings-field-input:focus,
 .settings-pane--rules .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
   box-shadow: none;
 }
 
@@ -603,7 +614,11 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
 }
 .sched-settings .settings-field-input:focus,
 .sched-settings .settings-field-input:focus-visible {
-  border-color: color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
   box-shadow: none;
 }
 .sched-preset-chip {
@@ -662,7 +677,6 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
   white-space: nowrap;
 }
 
-
 @media (max-width: 640px) {
   .sched-settings .settings-create-paths {
     grid-template-columns: 1fr;
@@ -674,4 +688,3 @@ html[data-theme="dark"] .settings-pane--shortcuts .shortcut-key-btn.recording {
     grid-column: 1 / -1;
   }
 }
-

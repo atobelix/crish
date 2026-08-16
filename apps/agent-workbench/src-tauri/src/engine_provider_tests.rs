@@ -95,7 +95,8 @@ fn anthropic_rail_three_piece_consistent() {
     // body → anthropic 形状（system + messages，非 chat messages 数组形状）
     let body = call.request_body_for(protocol, &request);
     assert_eq!(body["model"], "claude-sonnet-5");
-    assert_eq!(body["system"], "你是助手。");
+    let system_text = body["system"][0]["text"].as_str().unwrap_or_else(|| body["system"].as_str().unwrap_or_default());
+    assert_eq!(system_text, "你是助手。");
     assert_eq!(body["messages"][0]["role"], "user");
     assert!(
         body.get("input").is_none() && body.get("instructions").is_none(),

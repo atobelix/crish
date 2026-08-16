@@ -229,7 +229,8 @@ fn resolve_cwd(cwd: Option<&str>) -> PathBuf {
             return root;
         }
     }
-    std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+    // FIN-07: 无工作区启动时安全降级为用户目录 (~)，严禁回退到 src-tauri 或 panic
+    dirs::home_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
 }
 
 /// Default interactive shell: Windows prefers pwsh then powershell.exe; Unix bash/$SHELL.

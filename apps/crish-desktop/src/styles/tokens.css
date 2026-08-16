@@ -111,8 +111,16 @@ html[data-theme='light'] {
     transparent
   );
   --focus-ring: 0 0 0 2px var(--focus-ring-color);
-  --focus-ring-strong: 0 0 0 3px
-    color-mix(in srgb, var(--control-mix-color) 12%, transparent);
+  --focus-ring-subtle: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+  --focus-ring-strong: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
 
   --accent-color: hsl(35, 16%, 15%); /* 暖调深炭古铜 */
   --accent-light: hsl(35, 20%, 98.5%); /* 暖象牙白 */
@@ -339,7 +347,9 @@ html[data-theme='light'] {
 
   --dropdown-padding: var(--space-1_5);
   --dropdown-gap: var(--space-0_5);
-  --dropdown-radius: var(--radius-xl);
+  --dropdown-radius: var(--radius-2xl);
+  --button-radius: var(--radius-xl);
+  --pill-radius: var(--radius-full);
   --item-padding: 8px 12px;
   --item-radius: var(--radius-md);
   --item-font-size: var(--font-size-base);

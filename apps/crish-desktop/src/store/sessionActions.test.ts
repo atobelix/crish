@@ -32,10 +32,7 @@ function makeMessage(
  * 测试辅助：从 sessionsById 取某个 session，缺失时抛出明确错误。
  * 用于在严格空检查下避免 `!` 断言，同时给出可读的失败信息。
  */
-function getSessionOrThrow(
-  state: SessionStoreSlice,
-  id: string
-): SessionState {
+function getSessionOrThrow(state: SessionStoreSlice, id: string): SessionState {
   const s = state.sessionsById[id];
   if (!s) throw new Error(`test harness: expected session "${id}" to exist`);
   return s;
@@ -228,7 +225,9 @@ describe('sessionActions create/prune paths', () => {
     expect(ids).toContain('content');
     expect(ids).not.toContain('ghost');
     // 有消息的默认标题被推导
-    expect(getSessionOrThrow(h.getState(), 'content').title).toContain('有正文');
+    expect(getSessionOrThrow(h.getState(), 'content').title).toContain(
+      '有正文'
+    );
   });
 
   it('createSession activate:false keeps current active shell and scheduled title', () => {
@@ -580,7 +579,10 @@ describe('sessionActions create/prune paths', () => {
       emptyShell({ id: 'ghost-b' }),
       emptyShell({ id: 'sched', title: '定时 · keep' }),
     ]);
-    const ids = h.getState().sessions.map((s) => s.id).sort();
+    const ids = h
+      .getState()
+      .sessions.map((s) => s.id)
+      .sort();
     expect(ids).toEqual(['hist', 'sched'].sort());
     expect(h.getState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
   });
@@ -736,25 +738,27 @@ describe('sessionActions create/prune paths', () => {
       )
     );
     useTerminalStore.setState({
-      terminalBySession: {
-        a: ['keep-a'],
-        b: ['keep-b'],
-        ghost: ['keep-ghost'],
+      ptySessions: {
+        a: { ptyId: 'p-a', sessionKey: 'a', createdAt: 0, status: 'active' },
+        b: { ptyId: 'p-b', sessionKey: 'b', createdAt: 0, status: 'active' },
+        ghost: {
+          ptyId: 'p-g',
+          sessionKey: 'ghost',
+          createdAt: 0,
+          status: 'active',
+        },
       },
-      activeTerminalSessionId: 'a',
-      terminalLines: ['keep-a'],
     });
     h.actions.setActiveSessionId('b');
     const st = h.getState();
-    // 会话与各会话 terminal 缓冲均保留；仅当前 terminalLines 切到 b
+    // 会话与各会话 PTY 会话均保留
     expect(st.sessions.map((s) => s.id).sort()).toEqual(
       ['a', 'b', 'ghost'].sort()
     );
     const t = useTerminalStore.getState();
-    expect(t.terminalBySession.ghost).toEqual(['keep-ghost']);
-    expect(t.terminalBySession.a).toEqual(['keep-a']);
-    expect(t.terminalBySession.b).toEqual(['keep-b']);
-    expect(t.terminalLines).toEqual(['keep-b']);
+    expect(t.ptySessions.ghost).toBeDefined();
+    expect(t.ptySessions.a).toBeDefined();
+    expect(t.ptySessions.b).toBeDefined();
   });
 
   it('branchSession prunes non-active empty shells', () => {
@@ -798,9 +802,20 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
       )
     );
     useTerminalStore.setState({
-      terminalBySession: { victim: ['line'], 'keep-content': ['ok'] },
-      activeTerminalSessionId: 'victim',
-      terminalLines: ['line'],
+      ptySessions: {
+        victim: {
+          ptyId: 'p-v',
+          sessionKey: 'victim',
+          createdAt: 0,
+          status: 'active',
+        },
+        'keep-content': {
+          ptyId: 'p-k',
+          sessionKey: 'keep-content',
+          createdAt: 0,
+          status: 'active',
+        },
+      },
     });
 
     const ok = h.actions.deleteSession('victim');
@@ -811,8 +826,8 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     expect(st.sessionsById['keep-content']).toBeDefined();
     expect(st.activeSessionId).toBe('keep-content');
     const t = useTerminalStore.getState();
-    expect(t.terminalBySession.victim).toBeUndefined();
-    expect(t.terminalLines).toEqual(['ok']);
+    expect(t.ptySessions.victim).toBeUndefined();
+    expect(t.ptySessions['keep-content']).toBeDefined();
   });
 
   it('deleteSession empty / missing is a guarded no-op', () => {
@@ -1034,6 +1049,8 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     expect(st.activeSessionId).not.toBe('src');
     expect(getSessionOrThrow(st, st.activeSessionId).title).toBe('分叉标题');
     expect(st.panelAgentId).toBeNull();
-    expect(getSessionOrThrow(st, st.activeSessionId).branchParentId).toBe('src');
+    expect(getSessionOrThrow(st, st.activeSessionId).branchParentId).toBe(
+      'src'
+    );
   });
 });

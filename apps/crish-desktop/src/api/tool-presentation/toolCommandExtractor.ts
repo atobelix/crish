@@ -101,13 +101,23 @@ export function humanizeShellCommand(cmd: string): string {
     if (script && !['i', 'install', 'ci', 'add', 'dlx', 'x'].includes(script)) {
       if (['build', 'prod', 'compile'].includes(script)) return '构建项目';
       if (['dev', 'start', 'serve'].includes(script)) return '启动开发服务';
-      if (script === 'test' || script.startsWith('test'))
-        return `运行测试 (${script})`;
+      if (script === 'test') return '运行测试';
+      if (script.startsWith('test')) return `运行测试 (${script})`;
       if (script === 'lint' || script.startsWith('lint')) return '检查代码规范';
       if (['typecheck', 'tsc', 'check'].includes(script)) return '检查代码类型';
       return `运行脚本 ${script}`;
     }
   }
+
+  // 1.5 目录与文件系统基础命令
+  if (/^(mkdir|md)\b/i.test(raw)) {
+    const parts = raw
+      .split(/\s+/)
+      .filter((t) => !t.startsWith('-') && !/^(mkdir|md)$/i.test(t));
+    const dir = parts.pop();
+    return dir ? `创建目录 ${basename(dir)}` : '创建目录';
+  }
+  if (/\bGet-ComputerInfo\b/i.test(raw)) return '查询系统信息';
 
   // 2. Rust & Cargo
   if (/\bcargo\s+test\b/i.test(raw)) return '运行 Rust 测试';

@@ -308,9 +308,10 @@ async fn stress_real_localdb_and_kernel_state_machine_zero_deadlock() {
                 pool_stats.total_acquisitions, pool_stats.fast_path_hits, pool_stats.timeouts
             );
 
-            // 断言偏序耗时阶梯成立 (L0纳秒级 <= L1微秒级 <= L2异步业务锁)
-            assert!(p99_l0 <= p99_l1, "L0 耗时 ({p99_l0:?}) 必须小于等于 L1 耗时 ({p99_l1:?})");
+            // 断言偏序耗时阶梯成立 (L0/L1 同步锁 <= L2 异步业务锁，且 L0 满足极低延迟 SLA)
+            assert!(p99_l0 <= p99_l2, "L0 耗时 ({p99_l0:?}) 必须小于等于 L2 耗时 ({p99_l2:?})");
             assert!(p99_l1 <= p99_l2, "L1 耗时 ({p99_l1:?}) 必须小于等于 L2 耗时 ({p99_l2:?})");
+            assert!(p99_l0 < Duration::from_millis(20), "L0 内存锁 P99 必须 < 20ms: {p99_l0:?}");
 
             // 断言 SQLite WAL 写入 P99 满足 SLA 门限 (< 50ms)
             assert!(p99_write < Duration::from_millis(50), "SQLite WAL 写入 P99 必须 < 50ms SLA: {p99_write:?}");

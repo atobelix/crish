@@ -13,6 +13,8 @@ export type {
   ToolRowTone,
 } from './tool-presentation/toolPresentationTypes';
 
+export type { ExtractedToolArgs } from './tool-presentation/toolArgsNormalizer';
+
 export {
   buildAssistantTimeline,
   buildAssistantTimelineCached,
@@ -22,25 +24,37 @@ export {
 
 export {
   assistantCopyText,
+  basename,
+  clipToolLabel,
   extractImageRefs,
   extractToolCommand,
+  extractToolCwd,
   formatToolDiffStat,
   fullToolOutput,
   humanizeAgentSummary,
   humanizeShellCommand,
+  isGenericExplanationSpam,
+  isHumanExplanation,
+  isInspectTool,
+  isInterruptedTool,
   isPlaceholderToolOutput,
   isShellToolName,
   isToolRowDefaultOpen,
   isTrivialToolOutput,
   normalizeToolDiffStat,
   parseGitShortstat,
+  parseToolArgsSafe,
   resolveToolRowOpen,
+  sanitizeHumanLabel,
   toolCommandPreview,
   toolDiffLineStats,
   toolHasDiffStat,
+  toolHasDisplayableResult,
   toolHasExpandableBody,
   toolHumanLabel,
+  toolLabelFromArgs,
   toolPathDisplayName,
   toolResultPreview,
   toolRowTone,
+  truncateToolOutput,
 } from './tool-presentation/toolCardPresenter';

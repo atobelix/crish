@@ -224,7 +224,9 @@ export function toolHasDiffStat(tc: MessageToolCall): boolean {
   return Boolean(s && (s.add > 0 || s.del > 0));
 }
 
-export function isToolRowDefaultOpen(): boolean {
+export function isToolRowDefaultOpen(
+  _tc?: MessageToolCall | null | undefined
+): boolean {
   return false;
 }
 

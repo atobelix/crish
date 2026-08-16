@@ -45,10 +45,7 @@ export function getMessageById(
  * 因此 MCP / 调试看到「有 title、messages.length===0」对未 activate 的远程壳是预期态。
  */
 export function needsEngineMessageHydrate(
-  sess:
-    | Pick<SessionState, 'hydratedFromEngine' | 'messages'>
-    | null
-    | undefined
+  sess: Pick<SessionState, 'hydratedFromEngine' | 'messages'> | null | undefined
 ): boolean {
   if (!sess) return false;
   if (sess.hydratedFromEngine) return false;
@@ -85,15 +82,33 @@ export function toolCallPatchHasChanges(
 ): boolean {
   if (updates.id !== undefined && tc.id !== updates.id) return true;
   if (updates.name !== undefined && tc.name !== updates.name) return true;
-  if (updates.arguments !== undefined && tc.arguments !== updates.arguments) return true;
+  if (updates.arguments !== undefined && tc.arguments !== updates.arguments)
+    return true;
   if (updates.status !== undefined && tc.status !== updates.status) return true;
   if (updates.output !== undefined && tc.output !== updates.output) return true;
   if (updates.diffs !== undefined && tc.diffs !== updates.diffs) return true;
-  if (updates.explanation !== undefined && tc.explanation !== updates.explanation) return true;
-  if (updates.approvalMeta !== undefined && tc.approvalMeta !== updates.approvalMeta) return true;
-  if (updates.approvalDecision !== undefined && tc.approvalDecision !== updates.approvalDecision) return true;
-  if (updates.startedAt !== undefined && tc.startedAt !== updates.startedAt) return true;
-  if (updates.completedAt !== undefined && tc.completedAt !== updates.completedAt) return true;
+  if (
+    updates.explanation !== undefined &&
+    tc.explanation !== updates.explanation
+  )
+    return true;
+  if (
+    updates.approvalMeta !== undefined &&
+    tc.approvalMeta !== updates.approvalMeta
+  )
+    return true;
+  if (
+    updates.approvalDecision !== undefined &&
+    tc.approvalDecision !== updates.approvalDecision
+  )
+    return true;
+  if (updates.startedAt !== undefined && tc.startedAt !== updates.startedAt)
+    return true;
+  if (
+    updates.completedAt !== undefined &&
+    tc.completedAt !== updates.completedAt
+  )
+    return true;
   if (updates.turnId !== undefined && tc.turnId !== updates.turnId) return true;
   return false;
 }
@@ -122,11 +137,15 @@ export function applyMessageToolCallPatch(
   if (updates.status !== undefined) target.status = updates.status;
   if (updates.output !== undefined) target.output = updates.output;
   if (updates.diffs !== undefined) target.diffs = updates.diffs;
-  if (updates.explanation !== undefined) target.explanation = updates.explanation;
-  if (updates.approvalMeta !== undefined) target.approvalMeta = updates.approvalMeta;
-  if (updates.approvalDecision !== undefined) target.approvalDecision = updates.approvalDecision;
+  if (updates.explanation !== undefined)
+    target.explanation = updates.explanation;
+  if (updates.approvalMeta !== undefined)
+    target.approvalMeta = updates.approvalMeta;
+  if (updates.approvalDecision !== undefined)
+    target.approvalDecision = updates.approvalDecision;
   if (updates.startedAt !== undefined) target.startedAt = updates.startedAt;
-  if (updates.completedAt !== undefined) target.completedAt = updates.completedAt;
+  if (updates.completedAt !== undefined)
+    target.completedAt = updates.completedAt;
   if (updates.turnId !== undefined) target.turnId = updates.turnId;
 }
 
@@ -139,8 +158,10 @@ export function applySessionAgentPatch(
   if (patch.endedAt !== undefined) target.endedAt = patch.endedAt;
   if (patch.description !== undefined) target.description = patch.description;
   if (patch.depth !== undefined) target.depth = patch.depth;
-  if (patch.subagentPath !== undefined) target.subagentPath = patch.subagentPath;
-  if (patch.subagentRunId !== undefined) target.subagentRunId = patch.subagentRunId;
+  if (patch.subagentPath !== undefined)
+    target.subagentPath = patch.subagentPath;
+  if (patch.subagentRunId !== undefined)
+    target.subagentRunId = patch.subagentRunId;
 }
 
 export function cloneMessages(messages: SessionMessage[]): SessionMessage[] {
@@ -234,7 +255,10 @@ export function mergeSessionMessageFields(
 ): void {
   existing.id = incoming.id;
   existing.sender = incoming.sender;
-  if (typeof incoming.timestamp === 'number' && Number.isFinite(incoming.timestamp)) {
+  if (
+    typeof incoming.timestamp === 'number' &&
+    Number.isFinite(incoming.timestamp)
+  ) {
     // 终态时间戳优先；partial 不回拨已有终态 ts
     const exTerm = isTerminalSessionMessageStatus(existing.status);
     const inTerm = isTerminalSessionMessageStatus(incoming.status);
@@ -243,7 +267,10 @@ export function mergeSessionMessageFields(
     }
   }
 
-  const nextStatus = preferSessionMessageStatus(existing.status, incoming.status);
+  const nextStatus = preferSessionMessageStatus(
+    existing.status,
+    incoming.status
+  );
   const nextText = preferSessionMessageText(
     existing.text,
     existing.status,
@@ -263,11 +290,7 @@ export function mergeSessionMessageFields(
       // 终态思考不被 partial 覆盖
     } else if (inThink === '' && exThink !== '') {
       // 空串不抹
-    } else if (
-      !exTerm &&
-      !inTerm &&
-      inThink.length < exThink.length
-    ) {
+    } else if (!exTerm && !inTerm && inThink.length < exThink.length) {
       // partial 乱序：保留更长
     } else {
       existing.thinking = incoming.thinking;
@@ -290,19 +313,20 @@ export function mergeSessionMessageFields(
       preferSessionMessageStatus(existing.status, incoming.status)
     );
     const inTerm = isTerminalSessionMessageStatus(incoming.status);
-    if (
-      !(
-        exTerm &&
-        !inTerm &&
-        existing.precomputedHtml &&
-        !incoming.precomputedHtml
-      )
-    ) {
+    if (!(
+      exTerm &&
+      !inTerm &&
+      existing.precomputedHtml &&
+      !incoming.precomputedHtml
+    )) {
       existing.precomputedHtml = incoming.precomputedHtml;
     }
   }
   if (incoming.toolCallResults !== undefined) {
-    if (incoming.toolCallResults.length > 0 || !existing.toolCallResults?.length) {
+    if (
+      incoming.toolCallResults.length > 0 ||
+      !existing.toolCallResults?.length
+    ) {
       existing.toolCallResults = incoming.toolCallResults;
     }
   }
@@ -483,9 +507,7 @@ export function dropTerminalForSession(
  * setActiveTerminalSession（新增会话切换路径漏调即镜像陈旧，P2-3）。
  */
 export function syncActiveTerminalSession(sessionId: string | null): void {
-  const term = useTerminalStore.getState();
-  if (term.activeTerminalSessionId === sessionId) return;
-  term.setActiveTerminalSession(sessionId);
+  useTerminalStore.getState().setActiveTerminalSession(sessionId);
 }
 
 export function pruneEmptyShellsInPlace(

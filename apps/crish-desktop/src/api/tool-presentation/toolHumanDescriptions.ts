@@ -135,7 +135,13 @@ export function toolLabelFromArgs(tc: MessageToolCall): string {
     (name.includes('write') && !name.includes('edit'))
   ) {
     const path = String(
-      p.targetfile || p.target_file || p.path || p.filepath || p.file || ''
+      p.targetfile ||
+        p.target_file ||
+        p.file_path ||
+        p.filepath ||
+        p.path ||
+        p.file ||
+        ''
     );
     return path ? `写入 ${basename(path)}` : '写入文件';
   }
@@ -278,6 +284,27 @@ export function toolLabelFromArgs(tc: MessageToolCall): string {
     if (toolName && serverName) return `调用 MCP [${serverName}:${toolName}]`;
     if (toolName) return `调用 MCP [${toolName}]`;
     return '调用扩展服务';
+  }
+
+  // 14. 网络访问 (web_fetch / fetch_web_page / fetch / browser_navigate)
+  if (
+    name.includes('fetch') ||
+    name.includes('web') ||
+    name.includes('browser') ||
+    name.includes('read_url')
+  ) {
+    const url = String(
+      p.url || p.uri || p.targeturl || p.target_url || p.link || ''
+    ).trim();
+    if (url) {
+      try {
+        const u = new URL(url.startsWith('http') ? url : `https://${url}`);
+        return `访问 ${u.hostname}`;
+      } catch {
+        return '访问网络页面';
+      }
+    }
+    return '访问网络页面';
   }
 
   // 终极安全清洗兜底

@@ -159,9 +159,7 @@ describe('DIM-05 / Batch 3 工具卡片语义化与防逃逸测试套件', () =>
       expect(humanizeShellCommand('powershell.exe -Command "cargo test"')).toBe(
         '运行 Rust 测试'
       );
-      expect(humanizeShellCommand('pwsh -c "npm run test"')).toBe(
-        '运行测试 (test)'
-      );
+      expect(humanizeShellCommand('pwsh -c "npm run test"')).toBe('运行测试');
       expect(
         humanizeShellCommand('cd C:/Software/conex && npm run build')
       ).toBe('构建项目');

@@ -526,16 +526,12 @@ export const TiptapEditorField = React.forwardRef<
       if (!dom) return;
       const onEscapeCapture = (e: KeyboardEvent) => {
         // 关键防线：IME 合成态下绝不拦截 Esc
-        if (
+        const isIme =
           e.isComposing ||
           (e as any).nativeEvent?.isComposing ||
           e.keyCode === 229 ||
-          e.key === 'Process'
-        ) {
-          return;
-        }
-
-        if (e.key !== 'Escape') return;
+          e.key === 'Process';
+        if (isIme || e.key !== 'Escape') return;
 
         const view = editor.view;
         if (!view?.state) return;
