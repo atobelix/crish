@@ -46,7 +46,7 @@ pub enum EventRedactStrategy {
 /// 2026-08-16 T1a/T1b 新增 timeline-truncate 后为 58 变体分组 15/33/10）
 ///
 /// 与 `AgentEvent` 变体逐一匹配（缺 arm 编译报错），未登记的未来变体在
-/// 网关层按 fail-closed 元组兜底（本函数只覆盖既有 57 变体）。
+/// 网关层按 fail-closed 元组兜底（本函数只覆盖既有 58 变体）。
 pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
     match event {
         // T 透明透传（14）：agent-start/end、turn-start/end、压缩 start/end、
@@ -134,8 +134,8 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
     }
 }
 
-/// 同步面白名单（M6 §5.0：57 变体中 20 类参与 `events.resume` / C03 续传；
-/// 29 类不同步——delta/诊断/定时器数据面、恢复域与 goal 域观测事件等由
+/// 同步面白名单（M6 §5.0：58 变体中 20 类参与 `events.resume` / C03 续传；
+/// 38 类不同步——delta/诊断/定时器数据面、恢复域与 goal 域观测事件等由
 /// 实时面或补取命令覆盖；D8 登记新增 8 事件均不入白名单；D-03 九观测事件
 /// 同为 Delta 可丢级不入白名单）
 pub const SYNC_ELIGIBLE_TYPES: [&str; 20] = [

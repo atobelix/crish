@@ -8,10 +8,11 @@
 
 mod common;
 
-use conex_types::message::AgentMessageRole;
+use conex_types::message::{AgentMessageMetadataKind, AgentMessageRole};
 use orchestrator::steering_queue::SteeringInputEntry;
 use orchestrator::PendingMessageQueue;
 use session_loop::input::AgentInputQueue;
+use session_loop::steering::metadata_kind_wire;
 
 /// 构造按 run 关联的普通条目（group_id 承载 run 归属；
 /// T06.3 Q15：session_id 恒空字段已删除）
@@ -139,7 +140,7 @@ fn transfer_follow_up_lands_in_follow_up_ring_and_promotes_on_idle() {
             .as_ref()
             .and_then(|m| m.get("kind"))
             .and_then(|k| k.as_str()),
-        Some("steering"),
+        Some(metadata_kind_wire(AgentMessageMetadataKind::Steering).as_str()),
         "steering 条目带元数据标记"
     );
 }

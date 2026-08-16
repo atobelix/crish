@@ -6,7 +6,9 @@
 #![allow(clippy::disallowed_methods)]
 
 use super::*;
-use conex_types::message::{AgentMessageBlock, AgentMessageRole, ToolCallBlock};
+use conex_types::message::{
+    AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
+};
 use conex_types::session::AgentEndReason;
 use conex_types::tool::ToolOutput;
 use orchestrator::steering_queue::SteeringInputEntry;
@@ -4111,7 +4113,10 @@ fn drain_merge_caps_at_16() {
         metadata
             .get("kind")
             .and_then(|k: &serde_json::Value| k.as_str()),
-        Some("steering")
+        Some(session_loop::steering::metadata_kind_wire(
+            AgentMessageMetadataKind::Steering
+        )
+        .as_str())
     );
 }
 
@@ -4930,7 +4935,10 @@ async fn goal_continue_inject_text_contains_goal_prefix_and_round() {
         .as_ref()
         .expect("goal 续轮消息带 metadata");
     assert_eq!(
-        metadata["kind"], "goal-continue",
+        metadata["kind"],
+        session_loop::steering::metadata_kind_wire(
+            AgentMessageMetadataKind::GoalContinue
+        ),
         "注入消息 metadata.kind=goal-continue（引擎自主续轮标识）"
     );
 }
