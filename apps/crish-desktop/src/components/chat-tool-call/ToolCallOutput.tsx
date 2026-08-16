@@ -1,28 +1,13 @@
-import React, { useState, useMemo, useRef, useLayoutEffect } from 'react';
+import React, { useMemo } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import type { FileDiff, MessageToolCall } from '../../store/types';
-import { Button } from '../ui';
-import {
-  extractImageRefs,
-  fullToolOutput,
-  isShellToolName,
-  toolCommandPreview,
-} from '../../api/toolPresentation';
-import { TOOL_OUTPUT_PIXEL_CAP } from '../../api/messageWindow';
-import { usePreparedText } from '../../hooks/useTextMeasure';
-import {
-  buildPretextFont,
-  getResolvedFontSizePx,
-} from '../../utils/pretextFontBridge';
-import {
-  prepareWithSegments,
-  walkLineRanges,
-  materializeLineRange,
-  layout,
-} from '@chenglou/pretext';
-import type { LayoutLineRange } from '@chenglou/pretext';
-import { ToolCallDiffPreview } from './ToolCallDiffPreview';
-import { toolStatusZh, TOOL_EMPTY_OUTPUT_ZH } from './chatToolCallUtils';
+import { ToolCallInputPane } from './ToolCallInputPane';
+import { ToolCallOutputPane } from './ToolCallOutputPane';
+import { extractImageRefs, fullToolOutput } from '../../api/toolPresentation';
+import { toolStatusZh } from './chatToolCallUtils';
+
+export const TOOL_OUTPUT_LINE_CAP = 2000;
+export const TOOL_OUTPUT_BYTE_CAP = 256 * 1024;
 
 export interface ToolCallOutputProps {
   tc: {
@@ -32,6 +17,8 @@ export interface ToolCallOutputProps {
     name?: string;
     status?: string;
     arguments?: string;
+    startedAt?: number;
+    completedAt?: number;
   };
   bodyId: string;
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
@@ -39,9 +26,7 @@ export interface ToolCallOutputProps {
 }
 
 /**
- * 展开体：默认折叠时整段不挂载；展开后仍做字符预算，
- * 超长需二次「显示全部」，避免单工具输出撑爆 DOM。
- * 空正文 →「（无输出）」中文占位（不复用「完成/失败」伪输出）。
+ * 下一代工具卡片展开区：结构化两段式分栏 + 大输出 2000 行 / 256KB 轻量视口保护 (FIN-01, RUL-05)
  */
 export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
   tc,
@@ -49,185 +34,90 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
   onOpenDiff,
   onOpenTerminal,
 }) => {
-  const [showFullOutput, setShowFullOutput] = useState(false);
   const raw = tc.output || '';
-  const images = useMemo(() => extractImageRefs(raw), [raw]);
   const full = useMemo(() => fullToolOutput(raw), [raw]);
+  const images = useMemo(() => extractImageRefs(raw), [raw]);
 
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const [containerWidth, setContainerWidth] = useState(0);
-  useLayoutEffect(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-    const measure = () => setContainerWidth(el.clientWidth - 24);
-    measure();
-    const ro = new ResizeObserver(() => measure());
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  const fontConfig = useMemo(() => {
-    const fontSizePx = getResolvedFontSizePx('--font-size-xs');
-    const fontStr = buildPretextFont('mono', 'normal', fontSizePx);
-    const lineHeightPx = Math.round(fontSizePx * 1.45);
-    return { fontStr, lineHeightPx };
-  }, []);
-
-  const { prepared } = usePreparedText({
-    text: full || '',
-    font: fontConfig.fontStr,
-    whiteSpace: 'pre-wrap',
-  });
-
-  const budget = useMemo(() => {
-    if (showFullOutput) {
-      return { text: full, truncated: false, originalLength: full.length };
+  // 计算耗时（精确至 0.1s）
+  const durationStr = useMemo(() => {
+    if (tc.startedAt && tc.completedAt) {
+      const sec = (tc.completedAt - tc.startedAt) / 1000;
+      return sec >= 0.1 ? `${sec.toFixed(1)}s` : null;
     }
-    if (!full || !containerWidth || containerWidth <= 16) {
-      return { text: full, truncated: false, originalLength: full.length };
-    }
-    try {
-      const totalHeight = layout(
-        prepared!,
-        containerWidth,
-        fontConfig.lineHeightPx
-      ).height;
-      if (totalHeight <= TOOL_OUTPUT_PIXEL_CAP) {
-        return { text: full, truncated: false, originalLength: full.length };
-      }
-      const pws = prepareWithSegments(full, fontConfig.fontStr, {
-        whiteSpace: 'pre-wrap',
-      });
-      const lineRanges: LayoutLineRange[] = [];
-      walkLineRanges(pws, containerWidth, (line) => {
-        lineRanges.push(line);
-      });
-      let accumulated = 0;
-      const parts: string[] = [];
-      for (const lr of lineRanges) {
-        if (accumulated + fontConfig.lineHeightPx > TOOL_OUTPUT_PIXEL_CAP)
-          break;
-        parts.push(materializeLineRange(pws, lr).text);
-        accumulated += fontConfig.lineHeightPx;
-      }
+    return null;
+  }, [tc.startedAt, tc.completedAt]);
+
+  // RUL-05: 2000 行 / 256KB 门限裁切保护
+  const { displayOutput, isTruncated, totalLines, totalBytes } = useMemo(() => {
+    if (!full) {
       return {
-        text: parts.join('\n') + '\n…（已截断）',
-        truncated: true,
-        originalLength: full.length,
+        displayOutput: '',
+        isTruncated: false,
+        totalLines: 0,
+        totalBytes: 0,
       };
-    } catch {
-      return { text: full, truncated: false, originalLength: full.length };
     }
-  }, [showFullOutput, full, containerWidth, fontConfig, prepared]);
+    const lines = full.split('\n');
+    const bytes =
+      typeof Blob !== 'undefined' ? new Blob([full]).size : full.length;
+    const overLine = lines.length > TOOL_OUTPUT_LINE_CAP;
+    const overByte = bytes > TOOL_OUTPUT_BYTE_CAP;
 
-  const out = budget.text;
-  const hasDiffs = Boolean(tc.diffs && tc.diffs.length);
-  const shellTool = isShellToolName(tc.name || '');
-  const longShell =
-    shellTool && (raw.length > 2000 || raw.split('\n').length > 80);
+    if (!overLine && !overByte) {
+      return {
+        displayOutput: full,
+        isTruncated: false,
+        totalLines: lines.length,
+        totalBytes: bytes,
+      };
+    }
+
+    // 轻量裁切
+    let sliced = lines.slice(0, TOOL_OUTPUT_LINE_CAP).join('\n');
+    if (sliced.length > TOOL_OUTPUT_BYTE_CAP) {
+      sliced = sliced.slice(0, TOOL_OUTPUT_BYTE_CAP);
+    }
+
+    return {
+      displayOutput: `${sliced}\n… [输出过长，已截断显示前 ${TOOL_OUTPUT_LINE_CAP} 行 / 256 KB]`,
+      isTruncated: true,
+      totalLines: lines.length,
+      totalBytes: bytes,
+    };
+  }, [full]);
+
   const statusZh = toolStatusZh(
     tc.status as MessageToolCall['status'] | undefined
   );
-  const emptyBody = !full && images.length === 0 && !hasDiffs;
-  const cmdLine = useMemo(
-    () =>
-      shellTool
-        ? toolCommandPreview(
-            {
-              id: tc.id || 'x',
-              name: tc.name || 'shell',
-              arguments: tc.arguments || '',
-              status: (tc.status as MessageToolCall['status']) || 'success',
-            },
-            200
-          )
-        : '',
-    [shellTool, tc.id, tc.name, tc.arguments, tc.status]
-  );
-
-  const truncatedStyle: React.CSSProperties | undefined = budget.truncated
-    ? { maxHeight: TOOL_OUTPUT_PIXEL_CAP, overflowY: 'hidden' }
-    : undefined;
 
   return (
     <div
       id={bodyId}
-      ref={bodyRef}
       className={styles.toolResultBody}
       role="region"
-      aria-label={`${statusZh}的工具输出`}
-      data-empty={emptyBody ? 'true' : undefined}
+      aria-label={`${statusZh}的工具详情`}
     >
-      {cmdLine ? (
-        <pre
-          className={`${styles.toolResultPre} ${styles.toolResultPreCmd}`}
-          aria-label="命令"
-        >
-          {cmdLine}
-        </pre>
-      ) : null}
-      {emptyBody ? (
-        <pre className={styles.toolResultPre} aria-label="无输出">
-          {TOOL_EMPTY_OUTPUT_ZH}
-        </pre>
-      ) : null}
-      {!emptyBody && out ? (
-        <pre className={styles.toolResultPre} style={truncatedStyle}>
-          {out}
-        </pre>
-      ) : null}
-      {budget.truncated ? (
-        <div className={styles.toolResultLongHint}>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className={styles.toolResultHintBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowFullOutput(true);
-            }}
-          >
-            显示全部输出（{budget.originalLength.toLocaleString()} 字符）
-          </Button>
-        </div>
-      ) : null}
-      {longShell ? (
-        <div className={styles.toolResultLongHint}>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className={styles.toolResultHintBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenTerminal?.();
-            }}
-          >
-            在终端查看
-          </Button>
-        </div>
-      ) : null}
-      {images.length > 0 && (
-        <div className={styles.toolResultImages}>
-          {images.map((src, i) => (
-            <img
-              key={src}
-              src={src}
-              alt={`工具输出图片 ${i + 1}`}
-              className={styles.toolResultImg}
-              loading="lazy"
-            />
-          ))}
-        </div>
-      )}
-      {tc.diffs?.map((d) => (
-        <ToolCallDiffPreview
-          key={d.filePath}
-          diff={d}
-          onOpenDiff={onOpenDiff}
-        />
-      ))}
+      {/* 📥 1. 结构化输入分栏 */}
+      <ToolCallInputPane
+        toolId={tc.id}
+        name={tc.name}
+        argumentsStr={tc.arguments}
+      />
+
+      {/* 📤 2. 结构化输出分栏 */}
+      <ToolCallOutputPane
+        toolId={tc.id}
+        output={displayOutput}
+        status={tc.status}
+        durationStr={durationStr}
+        diffs={tc.diffs}
+        images={images}
+        isTruncated={isTruncated}
+        totalLines={totalLines}
+        totalBytes={totalBytes}
+        onOpenDiff={onOpenDiff}
+        onOpenTerminal={onOpenTerminal}
+      />
     </div>
   );
 };
