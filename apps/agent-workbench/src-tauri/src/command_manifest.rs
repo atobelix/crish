@@ -65,7 +65,8 @@ const fn entry(
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：workbench_open_workspace /
 /// workbench_list_workspaces / workbench_dev_mcp_enabled / core_resume_run（P2）。
-/// F-03（DM-07）：core_read_run_events 恢复激活（注册面 119 → 120，总数 124 → 125）。
+/// F-03（DM-07）：core_read_run_events 恢复激活；R1 撤回 core_session_retract 登记
+///（统一输入流收敛战役）后总数 125（注册面 120 → 121）。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -273,7 +274,8 @@ mod tests {
     /// note_apply_ops（CONN-B3）后 119 → 120；
     /// 电脑操作四命令（computer_session_* / computer_estop / computer_status）
     /// 追加后 120 → 124；E2 F4 core_compact_now 接线 114 → 119（登记先行 6 → 5）；
-    /// F-03（DM-07）core_read_run_events 恢复激活 124 → 125（注册面 119 → 120）。
+    /// F-03（DM-07）core_read_run_events 恢复激活（注册面 119 → 120）；R1 撤回
+    /// core_session_retract 登记（统一输入流收敛战役）后总数 124 → 125（注册面 120 → 121）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -284,12 +286,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 124,
-            "总数 124（清理 5 条先行死命令与 3 条幽灵命令，与前端同步）"
+            total, 125,
+            "总数 125（124 = 清理 5 条先行死命令与 3 条幽灵命令后 + F-03 core_read_run_events 恢复激活；R1 撤回 core_session_retract +1，与前端同步）"
         );
         assert_eq!(
-            registered, 124,
-            "注册面 124（全部为 registered=true 实装命令）"
+            registered, 125,
+            "注册面 125（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -412,7 +414,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 124);
+        assert_eq!(manifest.commands.len(), 125);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
