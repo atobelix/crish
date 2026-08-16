@@ -33,7 +33,12 @@ vi.mock('./engineConfig', () => ({
 vi.mock('./provider-profiles/rustProfileStore', () => ({
   configSecretSet: vi.fn(async (profileId: string, apiKey: string) => ({
     status: 'ok' as const,
-    data: { ok: true, profileId, hasKey: Boolean(apiKey.trim()), persistence: 'persisted' },
+    data: {
+      ok: true,
+      profileId,
+      hasKey: Boolean(apiKey.trim()),
+      persistence: 'persisted',
+    },
   })),
   configSecretClear: vi.fn(async (profileId: string) => ({
     status: 'ok' as const,
@@ -57,17 +62,19 @@ vi.mock('./provider-profiles/rustProfileStore', () => ({
       revealed: uiConfirm,
     },
   })),
-  configProfileApply: vi.fn(async (args: { profileId: string; apiKey?: string }) => ({
-    status: 'ok' as const,
-    data: {
-      ok: true,
-      profileId: args.profileId,
-      hasApiKey: Boolean(args.apiKey),
-      apiKeyLast4: 'st4',
-      credentialMode: 'direct',
-      credentialPersistence: 'persisted',
-    },
-  })),
+  configProfileApply: vi.fn(
+    async (args: { profileId: string; apiKey?: string }) => ({
+      status: 'ok' as const,
+      data: {
+        ok: true,
+        profileId: args.profileId,
+        hasApiKey: Boolean(args.apiKey),
+        apiKeyLast4: 'st4',
+        credentialMode: 'direct',
+        credentialPersistence: 'persisted',
+      },
+    })
+  ),
   configGet: vi.fn(async () => ({ status: 'ok' as const, data: { ok: true } })),
   configUpdate: vi.fn(async (u: Record<string, unknown>) => ({
     status: 'ok' as const,
@@ -90,6 +97,10 @@ vi.mock('../store/layoutStore', () => ({
       setAppSettings: vi.fn(),
     }),
   },
+  // workspaceStore 顶层模块图（I1-β 后 profileStore → contextStatePending →
+  // storeAccess 链使 workspaceStore 进入本测试模块图；mock 补齐其顶层依赖）
+  DEFAULT_WORKSPACE_ID: 'default',
+  seedInitialWorkspaces: vi.fn(() => ({})),
 }));
 
 import {
@@ -134,7 +145,10 @@ import {
   truncateProfileLabel,
 } from './providerProfiles';
 import { updateEngineConfig } from './engineConfig';
-import { configProfileApply, configSecretSet } from './provider-profiles/rustProfileStore';
+import {
+  configProfileApply,
+  configSecretSet,
+} from './provider-profiles/rustProfileStore';
 
 describe('providerProfiles', () => {
   beforeEach(() => {
@@ -280,7 +294,9 @@ describe('providerProfiles', () => {
     expect(res.ok).toBe(true);
     expect(getActiveProfileId()).toBe('p1');
     expect(getActiveModelId()).toBe('custom-model-x');
-    expect(loadProfiles().find((p) => p.id === 'p1')?.models).toContain('custom-model-x');
+    expect(loadProfiles().find((p) => p.id === 'p1')?.models).toContain(
+      'custom-model-x'
+    );
   });
 
   it('removeModelFromProfile clears active model when removed', () => {
@@ -351,7 +367,10 @@ describe('providerProfiles', () => {
     // Defaults seed opencode-go with deepseek-v4-flash (intentional product default)
     // but no keys — so needs key setup, picker hidden, model shell already present.
     loadProfiles();
-    const s = getProviderSetupStatus({ engineOk: true, engineHasApiKey: false });
+    const s = getProviderSetupStatus({
+      engineOk: true,
+      engineHasApiKey: false,
+    });
     expect(s.needsKeySetup).toBe(true);
     expect(s.needsModelSetup).toBe(false);
     expect(s.showModelPicker).toBe(false);
@@ -480,7 +499,7 @@ describe('providerProfiles', () => {
           models: ['mimo-v2.5'],
           hasKey: false,
         },
-      ]),
+      ])
     );
     localStorage.setItem('crish_active_profile_id', 'flowbit');
     localStorage.setItem('crish_active_model_id', 'mimo-v2.5');
@@ -512,7 +531,7 @@ describe('providerProfiles', () => {
           hasKey: true,
           apiKey: 'sk-x',
         },
-      ]),
+      ])
     );
     localStorage.setItem('crish_active_profile_id', 'openai');
     localStorage.setItem('crish_active_model_id', 'mimo-v2.5');
@@ -520,7 +539,9 @@ describe('providerProfiles', () => {
     loadProfiles();
     expect(getActiveModelId()).toBeNull();
     // resolve must not treat ghost mimo as stored_active readiness
-    expect(resolvePreferredModelSelection({ engineModel: 'mimo-v2.5' })).toBeNull();
+    expect(
+      resolvePreferredModelSelection({ engineModel: 'mimo-v2.5' })
+    ).toBeNull();
     const s = getProviderSetupStatus({
       engineOk: true,
       engineHasApiKey: true,
@@ -558,7 +579,7 @@ describe('providerProfiles', () => {
           hasKey: true,
           apiKey: 'k',
         },
-      ]),
+      ])
     ).toBe(true);
     expect(getActiveModelId()).toBeNull();
   });
@@ -618,7 +639,9 @@ describe('providerProfiles', () => {
     expect(res.ok).toBe(true);
     expect(res.synced).toBe(false);
     expect(updateEngineConfig).not.toHaveBeenCalled();
-    expect(loadProfiles().find((p) => p.id === 'p1')?.baseUrl).toBe('https://a-new');
+    expect(loadProfiles().find((p) => p.id === 'p1')?.baseUrl).toBe(
+      'https://a-new'
+    );
   });
 
   it('saveProfileKey persists and activates when no active profile', async () => {
@@ -653,12 +676,20 @@ describe('providerProfiles', () => {
       JSON.stringify(vi.mocked(configProfileApply).mock.calls[0])
     ).not.toContain('sk-new');
     // localStorage 全程无明文
-    expect(localStorage.getItem('crish_provider_profiles_v1')).not.toContain('sk-new');
+    expect(localStorage.getItem('crish_provider_profiles_v1')).not.toContain(
+      'sk-new'
+    );
   });
 
   it('PE-07 T07.4 用例 3：setProfileKey 后 localStorage 无明文（仅 hasKey）', async () => {
     saveProfiles([
-      { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', models: [], hasKey: false },
+      {
+        id: 'openai',
+        name: 'OpenAI',
+        baseUrl: 'https://api.openai.com/v1',
+        models: [],
+        hasKey: false,
+      },
     ]);
     await setProfileKey('openai', 'sk-x');
     const stored = localStorage.getItem('crish_provider_profiles_v1') || '';
@@ -748,16 +779,22 @@ describe('providerProfiles', () => {
       expect(normalizeModelIds(null)).toEqual([]);
       expect(normalizeModelIds(undefined)).toEqual([]);
       expect(normalizeModelIds('not-array')).toEqual([]);
-      expect(normalizeModelIds(['  a ', '', 'b', 'a', '  ', 'c', 'b'])).toEqual([
-        'a',
-        'b',
-        'c',
+      expect(normalizeModelIds(['  a ', '', 'b', 'a', '  ', 'c', 'b'])).toEqual(
+        ['a', 'b', 'c']
+      );
+      expect(normalizeModelIds([null, 0 as unknown as string, 'x'])).toEqual([
+        '0',
+        'x',
       ]);
-      expect(normalizeModelIds([null, 0 as unknown as string, 'x'])).toEqual(['0', 'x']);
     });
 
     it('mergeModelIds unions lists with first-wins order', () => {
-      expect(mergeModelIds(['a', 'b'], ['b', 'c'], ['a', 'd'])).toEqual(['a', 'b', 'c', 'd']);
+      expect(mergeModelIds(['a', 'b'], ['b', 'c'], ['a', 'd'])).toEqual([
+        'a',
+        'b',
+        'c',
+        'd',
+      ]);
       expect(mergeModelIds(undefined, null, [])).toEqual([]);
       expect(mergeModelIds(['  x '], 'y', ['y', 'z'])).toEqual(['x', 'y', 'z']);
     });
@@ -778,7 +815,11 @@ describe('providerProfiles', () => {
       expect(p.enabled).toBe(true);
 
       // empty name → known Chinese shell label
-      const shell = normalizeProviderProfile({ id: 'openai', name: '  ', models: [] });
+      const shell = normalizeProviderProfile({
+        id: 'openai',
+        name: '  ',
+        models: [],
+      });
       expect(shell.name).toBe(KNOWN_PROFILE_LABELS.openai);
     });
 
@@ -799,8 +840,12 @@ describe('providerProfiles', () => {
 
     it('profileDisplayLabel / truncate are Chinese-safe', () => {
       expect(profileDisplayLabel('flowbit')).toBe('Flowbit');
-      expect(profileDisplayLabel({ id: 'custom', name: '我的服务商' })).toBe('我的服务商');
-      expect(profileDisplayLabel({ id: 'openai', name: '  ' })).toBe('OpenAI 兼容');
+      expect(profileDisplayLabel({ id: 'custom', name: '我的服务商' })).toBe(
+        '我的服务商'
+      );
+      expect(profileDisplayLabel({ id: 'openai', name: '  ' })).toBe(
+        'OpenAI 兼容'
+      );
       expect(profileDisplayLabel(null)).toBe('未命名服务商');
       expect(profileDisplayLabel('')).toBe('未命名服务商');
 
@@ -818,28 +863,41 @@ describe('providerProfiles', () => {
         isEmptyModelCatalog([
           { enabled: true, models: [] },
           { enabled: false, models: ['hidden'] },
-        ]),
+        ])
       ).toBe(true);
       expect(
-        isEmptyModelCatalog([{ enabled: true, models: ['  ', 'real'] }]),
+        isEmptyModelCatalog([{ enabled: true, models: ['  ', 'real'] }])
       ).toBe(false);
 
-      expect(profileHasUsableModels({ enabled: false, models: ['a'] })).toBe(false);
-      expect(profileHasUsableModels({ enabled: true, models: ['a'] })).toBe(true);
+      expect(profileHasUsableModels({ enabled: false, models: ['a'] })).toBe(
+        false
+      );
+      expect(profileHasUsableModels({ enabled: true, models: ['a'] })).toBe(
+        true
+      );
       expect(profileHasKey({ hasKey: false, apiKey: '  k ' })).toBe(true);
       expect(profileHasKey({ hasKey: false })).toBe(false);
 
       // 空 catalog + 引擎演示 id → null（绝不回落 mimo）
       const empty = pickDefaultModelSelection(
-        [{ id: 'openai', name: 'O', baseUrl: '', models: [], hasKey: true, apiKey: 'k' }],
-        { engineModel: 'mimo-v2.5' },
+        [
+          {
+            id: 'openai',
+            name: 'O',
+            baseUrl: '',
+            models: [],
+            hasKey: true,
+            apiKey: 'k',
+          },
+        ],
+        { engineModel: 'mimo-v2.5' }
       );
       expect(empty).toBeNull();
       expect(
         pickDefaultModelId(
           [{ id: 'x', name: 'X', baseUrl: '', models: [], hasKey: false }],
-          { engineModel: 'mimo-v2.5', storedModel: 'mimo-v2.5' },
-        ),
+          { engineModel: 'mimo-v2.5', storedModel: 'mimo-v2.5' }
+        )
       ).toBeNull();
     });
 
@@ -868,13 +926,13 @@ describe('providerProfiles', () => {
           storedProfileId: 'a',
           storedModel: 'local-pick',
           engineModel: 'engine-also',
-        })?.source,
+        })?.source
       ).toBe('stored_active');
 
       expect(
         pickDefaultModelSelection(profiles, {
           storedModel: 'other-first',
-        }),
+        })
       ).toEqual({
         profileId: 'b',
         model: 'other-first',
@@ -884,13 +942,13 @@ describe('providerProfiles', () => {
       expect(
         pickDefaultModelSelection(profiles, {
           storedProfileId: 'b',
-        })?.source,
+        })?.source
       ).toBe('active_profile_first');
 
       expect(
         pickDefaultModelSelection(profiles, {
           engineModel: 'engine-also',
-        })?.source,
+        })?.source
       ).toBe('engine_match');
 
       // requireInList rejects hand-fill not in list
@@ -901,15 +959,24 @@ describe('providerProfiles', () => {
             storedProfileId: 'a',
             storedModel: 'ghost',
             requireInList: true,
-          },
-        )?.model,
+          }
+        )?.model
       ).toBe('only');
     });
 
     it('pickDefault allows stored hand-fill when catalog empty and requireInList off', () => {
       const r = pickDefaultModelSelection(
-        [{ id: 'p', name: 'P', baseUrl: '', models: [], hasKey: true, apiKey: 'k' }],
-        { storedProfileId: 'p', storedModel: 'hand-filled-id' },
+        [
+          {
+            id: 'p',
+            name: 'P',
+            baseUrl: '',
+            models: [],
+            hasKey: true,
+            apiKey: 'k',
+          },
+        ],
+        { storedProfileId: 'p', storedModel: 'hand-filled-id' }
       );
       expect(r).toEqual({
         profileId: 'p',
@@ -926,13 +993,22 @@ describe('providerProfiles', () => {
       // empty catalog + ghost mimo → null（不冒充已配）
       expect(
         pickDefaultModelSelection(
-          [{ id: 'p', name: 'P', baseUrl: '', models: [], hasKey: true, apiKey: 'k' }],
+          [
+            {
+              id: 'p',
+              name: 'P',
+              baseUrl: '',
+              models: [],
+              hasKey: true,
+              apiKey: 'k',
+            },
+          ],
           {
             storedProfileId: 'p',
             storedModel: 'mimo-v2.5',
             engineModel: 'mimo-v2.5',
-          },
-        ),
+          }
+        )
       ).toBeNull();
 
       // non-empty catalog but mimo not listed → fall through to first_available
@@ -951,7 +1027,7 @@ describe('providerProfiles', () => {
           storedProfileId: 'p',
           storedModel: 'mimo-v2.5',
           engineModel: 'mimo-v2.5',
-        },
+        }
       );
       expect(r).toEqual({
         profileId: 'p',
@@ -972,8 +1048,8 @@ describe('providerProfiles', () => {
               apiKey: 'k',
             },
           ],
-          { storedProfileId: 'flowbit', storedModel: 'mimo-v2.5' },
-        ),
+          { storedProfileId: 'flowbit', storedModel: 'mimo-v2.5' }
+        )
       ).toEqual({
         profileId: 'flowbit',
         model: 'mimo-v2.5',
@@ -1013,7 +1089,7 @@ describe('providerProfiles', () => {
 
       pickDefaultModelSelection(
         [{ id: 'z', name: 'Z', baseUrl: '', models: ['m'], hasKey: false }],
-        { engineModel: 'mimo-v2.5' },
+        { engineModel: 'mimo-v2.5' }
       );
       normalizeProviderProfiles([{ id: 'z', models: ['a', 'a'] }]);
       mergeModelIds(['x'], ['y']);
@@ -1035,11 +1111,13 @@ describe('providerProfiles', () => {
             models: ['a', 'a', ' b ', 'b'],
             hasKey: true,
           },
-        ]),
+        ])
       );
       const loaded = loadProfiles();
       expect(loaded![0]!.models).toEqual(['a', 'b']);
-      const stored = JSON.parse(localStorage.getItem('crish_provider_profiles_v1')!);
+      const stored = JSON.parse(
+        localStorage.getItem('crish_provider_profiles_v1')!
+      );
       expect(stored[0]!.models).toEqual(['a', 'b']);
     });
 
