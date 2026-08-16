@@ -1,22 +1,9 @@
 // packages/plugin-sdk 公共入口
-// W4-C：导出 contribute points View 轨；保留 definePlugin 轻量约定
-
-export interface Plugin {
-  name: string;
-  version: string;
-  description?: string;
-  hooks?: {
-    onSessionStart?(id: string): void | Promise<void>;
-    onSessionEnd?(id: string): void | Promise<void>;
-    onToolCall?(call: unknown): void | Promise<void>;
-    onMessage?(msg: unknown): void | Promise<void>;
-  };
-  permissions?: string[];
-}
-
-export function definePlugin(plugin: Plugin): Plugin {
-  return plugin;
-}
+// 收敛（E1）：旧轻量插件入口接口已移除——插件契约真源为 shared-types
+// PluginManifest/PluginActivationApi（跨端契约）与 hooks PluginLifecycle
+// （A 轨运行时面 registry/*、api/plugin-api.ts、hooks/lifecycle.ts 保留给
+// E2 评估）。contribute View 轨库 + registerFlavour 继续经本入口导出，
+// 宿主接线待 E2 裁决（当前为有库无宿主，不作可点路径）。
 
 // ─── W4-C contribute points（View 轨）+ M4 registerFlavour ───
 export type {

@@ -26,7 +26,6 @@ const MEMORY_INTEGRATION_PINS: &[&str] = &[
     "crates/agent-tools/src/note_memory_apply.rs",
     "crates/agent-tools/src/note_memory_batch.rs",
     "crates/agent-tools/src/note_w6e_skeleton.rs",
-    "crates/agent-tools/src/note_w4c_contribute/tests.rs",
     "crates/conex-note-runtime/tests/note_plan_parity.rs",
     "crates/agent-tools/src/tools/note_query_blocks.rs",
     "crates/agent-tools/src/tools/note_document_outline.rs",

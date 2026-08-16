@@ -54,15 +54,12 @@ pub mod note_action_matrix;
 // W6-E-S Skeleton：千次批压测夹具 + 恶意扩展拒写/零持久化方向
 // ≠ EL-05；≠ A-AGT 满表；≠ W6-E Strict 闭环；Memory 禁关生产
 pub mod note_w6e_skeleton;
-// W4-C Strict 方向：扩展宿主 contribute View 轨 + 拒写句柄（投影-only）
-// ≠ EL-07 满关；≠ A-EXT 全表；Memory 禁关生产；不回退 W4-B/F / W6-E-S
 pub mod definition;
 pub mod executor;
 pub mod explore_quota;
 pub mod idempotency;
 pub mod mcp;
 pub mod middleware;
-pub mod note_w4c_contribute;
 pub mod output;
 pub mod permission;
 pub mod readonly;
@@ -172,14 +169,6 @@ pub use note_w6e_skeleton::{
     thousand_batch_dry_run_request, MaliciousExtensionGate, FORBIDDEN_WRITE_HANDLE_KEYS,
     MALICIOUS_EXTENSION_FORBIDDEN_WRITE, W6E_SKELETON_PACKAGE_ID, W6E_S_NOT_CLOSING,
     W6E_S_THOUSAND_BATCH_COUNT,
-};
-// W4-C Strict 方向导出（View 轨注册 + 拒写句柄；≠ EL-07 / ≠ A-EXT 全表）
-pub use note_w4c_contribute::{
-    contribute_err_to_backend_err, contribute_payload_has_write_handle, make_registration_key,
-    try_mutate_via_contribute, ContributeKind, ContributeRegisterError, ContributeRegisterOk,
-    ContributeRegistration, ContributeViewRegistry, ViewDescriptor, CONTRIBUTE_FORBIDDEN_WRITE,
-    CONTRIBUTE_KINDS, CONTRIBUTE_MUTATE_DENIED, REQUIRED_CONTRIBUTE_PERMISSION, W4C_NOT_CLOSING,
-    W4C_PACKAGE_ID,
 };
 pub use tools::{register_builtin_tools, register_builtin_tools_with_config, BuiltinToolConfig};
 // T-CF-05（G5 契约面 / REQ-C01）：定时器契约导出——引擎侧 TimerRegistry

@@ -18,6 +18,10 @@
 //! - **≠ EL-07** / A-EXT 全表（contribute 拒写句柄仅方向；F3 TrustGate 未关）
 //! - Memory 测绿 **禁关**生产 A-AGT / EL-05
 //! - **不回退** batch / move / insert / update / delete / lossy / plan Deny
+//! - **W4-C 旁路写禁令移交（E1 收口）**：W4-C View 轨双实现（View 注册表 +
+//!   恒拒写入口）已随 E1 删除；「View 轨扩展描述符绝不写权威树 / 旁路写」
+//!   禁令语义由本模块 [`find_forbidden_write_handle`] 扫描承载，勿恢复双
+//!   实现；若产品重建 View 扩展宿主，须在 A-EXT 侧以统一权限表承接（E2 裁决）
 //!
 //! # 与 plans/09
 //! - W6-E Strict：千次批 + 恶意扩展零持久化（本包 **不做** 满关）
