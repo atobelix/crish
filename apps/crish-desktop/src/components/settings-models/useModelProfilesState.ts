@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addModelToProfile,
   createCustomProfile,
@@ -29,6 +29,8 @@ import {
   PRESETS,
   type PresetProvider,
 } from './modelsPresets';
+import { onUiEvent } from '../../api/uiEvents';
+import { editSessionConsumer } from '../../api/chat-bridge/editSessionConsumer';
 
 export type AddDraft = AddModelDraft;
 export type CfgDraft = ConfigDraft;
@@ -39,6 +41,30 @@ export {
   type ConfigDraft,
   type PresetProvider,
 };
+
+/**
+ * 设置表单「编辑会话」对象 id：profileId::model（与 modelCatalog metaKey 同形，
+ * 跨 profile 隔离，避免 model id 裸串撞车）。
+ */
+function settingsObjectId(profileId: string, model: string): string {
+  return `${profileId}::${model}`;
+}
+
+/**
+ * CT-01 对齐的模型配置 rev：可编辑字段（displayName/contextLength/caps）的
+ * 稳定序列化签名。openConfigFor 时捕获为编辑会话 baseRev；saveConfig 保存前
+ * 重算比对——外部已变更（rev 不符）→ 拒绝陈旧覆盖（不静默 LWW）。
+ */
+function modelMetaRevision(profileId: string, model: string): string {
+  const meta = getModelMeta(profileId, model);
+  return JSON.stringify([
+    meta.displayName ?? '',
+    meta.contextLength ?? null,
+    meta.capabilities?.tools ?? false,
+    meta.capabilities?.vision ?? false,
+    meta.capabilities?.reasoning ?? false,
+  ]);
+}
 
 export function useModelProfilesState(
   onShowToast?: ((ok: boolean, msg: string) => void) | ((msg: string) => void)
@@ -76,6 +102,46 @@ export function useModelProfilesState(
   const [nameDraft, setNameDraft] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  // ── R2-a ④ 设置页失效订阅（详案 §1.1-④ + analysis/15 §2.4）──────────────
+  // 自身落盘（saveKey/addFrom*/handleManualAdd/runScan/saveConfig）经
+  // localMutationRef 标记为本地变更，跳过「外部变更」提示；外部变更（其它
+  // tab/窗口/Rust 端）命中 profiles-changed 事件时：有未保存草稿 → 提示 +
+  // 编辑会话 invalidate（不静默覆盖）；无未保存草稿 → 直接 refresh 重载。
+  const localMutationRef = useRef(false);
+  const cfgRevRef = useRef<Map<string, string>>(new Map());
+  const externalChangeStateRef = useRef({
+    profileId: '',
+    configOpenId: null as string | null,
+    hasUnsaved: false,
+  });
+  useEffect(() => {
+    externalChangeStateRef.current = {
+      profileId: selectedId,
+      configOpenId,
+      hasUnsaved:
+        cfgDraft != null ||
+        keyDraft.trim() !== '' ||
+        editingName ||
+        nameDraft.trim() !== '',
+    };
+  }, [selectedId, configOpenId, cfgDraft, keyDraft, editingName, nameDraft]);
+
+  /**
+   * 把「会落盘并触发 profiles-changed」的自身变更体标记为本地变更：
+   * 事件在异步落盘（await 之后）才派发，标记须覆盖整个变更体（含 await）。
+   */
+  const runAsLocalMutation = useCallback(
+    async <T>(fn: () => Promise<T> | T): Promise<T> => {
+      localMutationRef.current = true;
+      try {
+        return await fn();
+      } finally {
+        localMutationRef.current = false;
+      }
+    },
+    []
+  );
+
   const notify = useCallback(
     (ok: boolean, msg: string) => {
       if (onShowToast) {
@@ -97,6 +163,26 @@ export function useModelProfilesState(
       return list[0]?.id || '';
     });
   }, []);
+
+  useEffect(() => {
+    return onUiEvent('profiles-changed', () => {
+      if (localMutationRef.current) return;
+      const st = externalChangeStateRef.current;
+      if (st.hasUnsaved) {
+        // 有未保存草稿：提示用户，不静默覆盖；编辑会话失效（挂起面）
+        notify(false, '配置已被外部修改，请确认后重载或丢弃草稿');
+        if (st.configOpenId && st.profileId) {
+          editSessionConsumer.invalidate(
+            settingsObjectId(st.profileId, st.configOpenId),
+            'external'
+          );
+        }
+        return;
+      }
+      // 无未保存草稿：直接重载最新配置
+      refresh();
+    });
+  }, [refresh, notify]);
 
   const selected = useMemo(() => {
     return profiles.find((p) => p.id === selectedId) || null;
@@ -159,39 +245,45 @@ export function useModelProfilesState(
 
   const saveKey = async () => {
     if (!selected || !keyDraft.trim()) return;
-    const res = await saveProfileKey(selected.id, keyDraft.trim());
-    refresh();
-    setKeyDraft('');
-    if (!res.ok) {
-      notify(false, `保存失败：${res.error || '未知错误'}`);
-      return;
-    }
-    notify(true, '密钥已保存，正在自动扫描服务器可用模型...');
-    void runScan();
+    await runAsLocalMutation(async () => {
+      const res = await saveProfileKey(selected.id, keyDraft.trim());
+      refresh();
+      setKeyDraft('');
+      if (!res.ok) {
+        notify(false, `保存失败：${res.error || '未知错误'}`);
+        return;
+      }
+      notify(true, '密钥已保存，正在自动扫描服务器可用模型...');
+      void runScan();
+    });
   };
 
   const addFromTemplate = (format: 'openai' | 'anthropic') => {
-    const p = createCustomProfile({
-      name: format === 'openai' ? 'OpenAI 格式' : 'Anthropic 格式',
-      ...(DEFAULT_PROVIDER_BASE_URLS[format] !== undefined && {
-        baseUrl: DEFAULT_PROVIDER_BASE_URLS[format],
-      }),
-      models: [],
+    void runAsLocalMutation(() => {
+      const p = createCustomProfile({
+        name: format === 'openai' ? 'OpenAI 格式' : 'Anthropic 格式',
+        ...(DEFAULT_PROVIDER_BASE_URLS[format] !== undefined && {
+          baseUrl: DEFAULT_PROVIDER_BASE_URLS[format],
+        }),
+        models: [],
+      });
+      refresh();
+      setSelectedIdState(p.id);
+      setAddOpen(false);
     });
-    refresh();
-    setSelectedIdState(p.id);
-    setAddOpen(false);
   };
 
   const addFromPreset = (preset: PresetProvider) => {
-    const p = createCustomProfile({
-      name: preset.name,
-      baseUrl: preset.baseUrl,
-      models: [],
+    void runAsLocalMutation(() => {
+      const p = createCustomProfile({
+        name: preset.name,
+        baseUrl: preset.baseUrl,
+        models: [],
+      });
+      refresh();
+      setSelectedIdState(p.id);
+      setAddOpen(false);
     });
-    refresh();
-    setSelectedIdState(p.id);
-    setAddOpen(false);
   };
 
   const handleManualAdd = () => {
@@ -202,14 +294,19 @@ export function useModelProfilesState(
       return;
     }
     const snap = { ...addDraft };
-    addModelToProfile(selected.id, id);
-    applyMetaForModel(selected.id, id, snap);
-    refresh();
-    setAddDraft(emptyAddDraft());
-    setManualOpen(false);
+    void runAsLocalMutation(() => {
+      addModelToProfile(selected.id, id);
+      applyMetaForModel(selected.id, id, snap);
+      refresh();
+      setAddDraft(emptyAddDraft());
+      setManualOpen(false);
+    });
 
     window.setTimeout(() => {
       const meta = getModelMeta(selected.id, id);
+      // R2-a ④：cfgDraft 挂编辑会话（open；设置 rev 为本地签名，
+      // 不进会话数值 rev——CT-01 核对在 saveConfig 本地比对）
+      editSessionConsumer.open(settingsObjectId(selected.id, id));
       setConfigOpenId(id);
       setCfgDraft({
         displayName: meta.displayName || snap.displayName || '',
@@ -229,6 +326,11 @@ export function useModelProfilesState(
   const openConfigFor = (model: string) => {
     if (!selected) return;
     const meta = getModelMeta(selected.id, model);
+    const objectId = settingsObjectId(selected.id, model);
+    const rev = modelMetaRevision(selected.id, model);
+    // R2-a ④：cfgDraft 挂编辑会话（open；设置 rev 为本地签名，不进会话数值 rev）
+    cfgRevRef.current.set(objectId, rev);
+    editSessionConsumer.open(objectId);
     setManualOpen(false);
     setConfigOpenId(model);
     setCfgDraft({
@@ -244,15 +346,38 @@ export function useModelProfilesState(
   };
 
   const closeConfig = () => {
+    if (selected && configOpenId) {
+      const objectId = settingsObjectId(selected.id, configOpenId);
+      // 用户取消：关闭编辑会话（'external' 失效广播）+ 清本地 rev 记账
+      editSessionConsumer.invalidate(objectId, 'external');
+      cfgRevRef.current.delete(objectId);
+    }
     setConfigOpenId(null);
     setCfgDraft(null);
   };
 
   const saveConfig = () => {
     if (!selected || !configOpenId || !cfgDraft) return;
-    applyMetaForModel(selected.id, configOpenId, cfgDraft);
-    refresh();
-    openConfigFor(configOpenId);
+    const objectId = settingsObjectId(selected.id, configOpenId);
+    const draft = cfgDraft;
+    // CT-01 rev 核对（对齐 review §11 缓存失效 + analysis/15 §2.4）：
+    // 保存前比对「打开时快照 rev」与「当前 meta rev」，外部已变更 →
+    // 拒绝陈旧覆盖（不静默 LWW），与 persistence.rs Conflict 语义同构。
+    const expectRev = cfgRevRef.current.get(objectId);
+    const currentRev = modelMetaRevision(selected.id, configOpenId);
+    if (expectRev !== undefined && expectRev !== currentRev) {
+      notify(false, '配置已被外部修改，保存已取消，请重新确认');
+      editSessionConsumer.invalidate(objectId, 'external');
+      return;
+    }
+    void runAsLocalMutation(() => {
+      applyMetaForModel(selected.id, configOpenId, draft);
+      refresh();
+      // 提交并关闭编辑会话（推进 rev，广播失效）
+      editSessionConsumer.commit(objectId);
+      cfgRevRef.current.delete(objectId);
+      openConfigFor(configOpenId);
+    });
   };
 
   const runTest = async (model: string) => {
@@ -279,17 +404,19 @@ export function useModelProfilesState(
     if (!selected) return;
     setScanBusy(true);
     try {
-      const fresh =
-        loadProfiles().find((p) => p.id === selected.id) || selected;
-      const r = await scanProviderModels(fresh);
-      if (r.ok && r.models?.length) {
-        const merged = mergeModelIds(fresh.models, r.models);
-        upsertProfile({ ...fresh, models: merged });
-        refresh();
-        notify(true, `已自动获取 ${r.models.length} 个模型`);
-      } else {
-        notify(false, r.error || '未能检测到服务器可用模型');
-      }
+      await runAsLocalMutation(async () => {
+        const fresh =
+          loadProfiles().find((p) => p.id === selected.id) || selected;
+        const r = await scanProviderModels(fresh);
+        if (r.ok && r.models?.length) {
+          const merged = mergeModelIds(fresh.models, r.models);
+          upsertProfile({ ...fresh, models: merged });
+          refresh();
+          notify(true, `已自动获取 ${r.models.length} 个模型`);
+        } else {
+          notify(false, r.error || '未能检测到服务器可用模型');
+        }
+      });
     } catch (e) {
       notify(false, e instanceof Error ? e.message : String(e));
     } finally {

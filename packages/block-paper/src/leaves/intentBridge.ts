@@ -218,6 +218,16 @@ export type CollabApplySinkOptions = StructureToOpsOptions & {
    * 生产/默认写路径 **必须** 注入真实后端；单测可注入内存 adapter（仍须产出可解析 wire）。
    */
   applyOps: ApplyOpsAdapter;
+  /**
+   * R2-b ⑥ 冲突失效钩子（详案 §1.2-⑥-3）：applyOps 拒绝（返回 ok:false /
+   * 抛错）时回调，携带原始 intent 与拒绝原因（冲突/rev 不符等）。
+   *
+   * 宿主接线：将钩子绑定到对应编辑会话的 invalidate（如
+   * `editSession.invalidate(blockId, 'conflict')`）→ UI 展示冲突并让用户
+   * 重新确认/丢弃本地编辑。本工厂**不自动合并、不静默 LWW**——返回结果保持
+   * ok:false 透传（submitIntent 侧 code='sink_reject' 语义不变）。
+   */
+  onApplyRejected?: (info: { intent: PaperIntent; reason?: string }) => void;
 };
 
 /** 可审计的 collab apply sink（生产形状） */
@@ -261,7 +271,23 @@ export function createCollabApplySink(
 
   const wireCalls: string[] = [];
   const results: IntentSinkResult[] = [];
-  const { applyOps, ...wireOpts } = options;
+  const { applyOps, onApplyRejected, ...wireOpts } = options;
+
+  /**
+   * R2-b ⑥：apply 拒绝 → 通知宿主（冲突/rev 不符 → 对应编辑会话 invalidate）。
+   * 只通知不改结果（不自动合并、不静默 LWW）；钩子抛错隔离，不污染 sink。
+   */
+  const notifyRejected = (intent: PaperIntent, reason?: string): void => {
+    if (typeof onApplyRejected !== 'function') return;
+    try {
+      // exactOptionalPropertyTypes：仅已定义字段入载荷
+      const info: { intent: PaperIntent; reason?: string } = { intent };
+      if (reason !== undefined) info.reason = reason;
+      onApplyRejected(info);
+    } catch {
+      /* 钩子异常隔离：宿主接线失败不影响写路径返回 */
+    }
+  };
 
   const sink: IntentSink = async (intent) => {
     let payload: ReturnType<typeof submitStructureToCollabWire>;
@@ -274,6 +300,7 @@ export function createCollabApplySink(
           : `createCollabApplySink：wire 映射失败：${String(e)}`;
       const r: IntentSinkResult = { ok: false, reason };
       results.push(r);
+      notifyRejected(intent, reason);
       return r;
     }
 
@@ -288,6 +315,9 @@ export function createCollabApplySink(
         r.reason = applied.reason;
       }
       results.push(r);
+      if (!r.ok) {
+        notifyRejected(intent, r.reason);
+      }
       return r;
     } catch (e) {
       const reason =
@@ -296,6 +326,7 @@ export function createCollabApplySink(
           : `createCollabApplySink：applyOps 抛错：${String(e)}`;
       const r: IntentSinkResult = { ok: false, reason };
       results.push(r);
+      notifyRejected(intent, reason);
       return r;
     }
   };

@@ -16,7 +16,7 @@
  * 本文件 adapter 模拟后端：解析 wire、记录 ops，**不断言 mock.calls 为 apply 证据**——
  * 关闭证据 = wire 形状合法 + applyOps 被调用且返回 ok + 交叉引用 RS 真 session。
  */
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
 import {
   collabOpsFromJson,
   isCollabOpWire,
@@ -227,6 +227,88 @@ describe('createCollabApplySink（W3-D 生产默认形状）', () => {
 
   it('createDocSessionApplySink 与 createCollabApplySink 同义', () => {
     expect(createDocSessionApplySink).toBe(createCollabApplySink);
+  });
+});
+
+describe('createCollabApplySink 冲突失效钩子（R2-b ⑥ · 详案 §1.2-⑥-3）', () => {
+  const TEXT = {
+    type: 'text_edit' as const,
+    blockId: ID_A,
+    range: [0, 0] as [number, number],
+    insert: 'conflict-x',
+    intentId: 'conflict-intent',
+  };
+
+  it('applyOps 返回 ok:false（conflict）→ onApplyRejected 携带 intent+reason，结果保持 ok:false 透传（不静默 LWW）', async () => {
+    const onApplyRejected = vi.fn();
+    const rec = createRecordingApplyAdapter({
+      result: { ok: false, reason: 'Conflict { expect: 3 }' },
+    });
+    const collab = createCollabApplySink({
+      applyOps: rec.applyOps,
+      onApplyRejected,
+    });
+
+    const r = await submitIntent(TEXT, collab.sink);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.code).toBe('sink_reject');
+
+    expect(onApplyRejected).toHaveBeenCalledTimes(1);
+    expect(onApplyRejected).toHaveBeenCalledWith({
+      intent: TEXT,
+      reason: 'Conflict { expect: 3 }',
+    });
+    // 结果未被钩子改写：无自动合并、无静默覆盖
+    expect(collab.results[0]).toEqual({
+      ok: false,
+      reason: 'Conflict { expect: 3 }',
+    });
+  });
+
+  it('applyOps 抛错 → onApplyRejected 同样触发（本地乐观编辑未落地）', async () => {
+    const onApplyRejected = vi.fn();
+    const rec = createRecordingApplyAdapter({ throwOnCall: true });
+    const collab = createCollabApplySink({
+      applyOps: rec.applyOps,
+      onApplyRejected,
+    });
+
+    const r = await collab.sink(TEXT);
+    expect(r.ok).toBe(false);
+    expect(onApplyRejected).toHaveBeenCalledTimes(1);
+    expect(onApplyRejected).toHaveBeenCalledWith({
+      intent: TEXT,
+      reason: expect.stringMatching(/simulated failure/),
+    });
+  });
+
+  it('applyOps ok:true → 不触发钩子', async () => {
+    const onApplyRejected = vi.fn();
+    const rec = createRecordingApplyAdapter();
+    const collab = createCollabApplySink({
+      applyOps: rec.applyOps,
+      onApplyRejected,
+    });
+
+    const r = await submitIntent(TEXT, collab.sink);
+    expect(r.ok).toBe(true);
+    expect(onApplyRejected).not.toHaveBeenCalled();
+  });
+
+  it('钩子抛错不污染 sink 返回（异常隔离）', async () => {
+    const rec = createRecordingApplyAdapter({
+      result: { ok: false, reason: 'conflict' },
+    });
+    const collab = createCollabApplySink({
+      applyOps: rec.applyOps,
+      onApplyRejected: () => {
+        throw new Error('hook boom');
+      },
+    });
+
+    const r = await collab.sink(TEXT);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('conflict');
   });
 });
 

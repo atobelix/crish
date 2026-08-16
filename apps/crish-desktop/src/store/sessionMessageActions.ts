@@ -21,6 +21,7 @@ import {
 } from './sessionSharedHelpers';
 import { normalizeAssistantTimeline } from '../api/toolPresentation';
 import type { MessageCacheState } from '@crish/shared-types';
+import { invalidateEditObjects } from '../api/chat-bridge/editSessionConsumer';
 
 export function createSessionMessageActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>
@@ -137,6 +138,11 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
               { afterMessages: sess.messages }
             );
             rebindSessionById(state, sessionId, sess);
+            // R2-b ⑥ gap2 补点：被撤回消息（含其后）对象失效广播（语义不变）
+            invalidateEditObjects(
+              prevMessages.slice(idx).map((m) => m.id),
+              'withdraw'
+            );
           }
         }
       }),

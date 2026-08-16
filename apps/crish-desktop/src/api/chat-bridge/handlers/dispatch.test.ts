@@ -16,6 +16,23 @@ import type { HandlerEnv } from './handlerEnv';
 import { useLayoutStore } from '../../../store/layoutStore';
 import { onUiEvent } from '../../../api/uiEvents';
 
+// R2-b ⑥：timeline-truncate 消费端失效传播断言（编辑会话消费端 mock）
+const invalidationSpy = vi.hoisted(() => ({
+  invalidateEditObjects: vi.fn(),
+}));
+vi.mock('../editSessionConsumer', () => ({
+  editSessionConsumer: {
+    open: vi.fn(),
+    commit: vi.fn(),
+    invalidate: vi.fn(),
+    isOpen: vi.fn(),
+  },
+  invalidateEditObjects: invalidationSpy.invalidateEditObjects,
+  bindEditSession: vi.fn(),
+  getBoundEditSession: vi.fn(() => null),
+  isEditSessionConsumerBound: vi.fn(() => false),
+}));
+
 function makeEnv(): HandlerEnv {
   return {
     state: {
@@ -103,6 +120,7 @@ describe('onTimelineTruncate（R1 撤回消费：投影截断到 boundary + 回�
       activate: false,
     });
     created.push(sid);
+    invalidationSpy.invalidateEditObjects.mockClear();
     const wsId = useLayoutStore.getState().workspaces[0].id;
     useLayoutStore.getState().addMessage(wsId, sid, {
       id: 'msg-u1',
@@ -183,6 +201,28 @@ describe('onTimelineTruncate（R1 撤回消费：投影截断到 boundary + 回�
     const msgs = useLayoutStore.getState().sessionsById[sid].messages;
     expect(msgs).toHaveLength(3);
     expect(events).toEqual([]);
+  });
+
+  it('R2-b ⑥ 失效传播：boundary 之后的消息 id 收到 invalidate(truncate)', () => {
+    onTimelineTruncate(makeEnv(), truncateEnvelope(sid, 'msg-u1', 5));
+
+    // 截断范围 = target 之后全部节点（投影截断前收集）
+    expect(invalidationSpy.invalidateEditObjects).toHaveBeenCalledWith(
+      ['msg-a1', 'msg-a2'],
+      'truncate'
+    );
+  });
+
+  it('R2-b ⑥ 目标为末节点 → 无截断范围 → 不派发 invalidate', () => {
+    onTimelineTruncate(makeEnv(), truncateEnvelope(sid, 'msg-a2', 5));
+
+    expect(invalidationSpy.invalidateEditObjects).not.toHaveBeenCalled();
+  });
+
+  it('R2-b ⑥ 缺 sessionId → 不派发 invalidate（载荷防御）', () => {
+    onTimelineTruncate(makeEnv(), truncateEnvelope(undefined, 'msg-u1', 5));
+
+    expect(invalidationSpy.invalidateEditObjects).not.toHaveBeenCalled();
   });
 });
 

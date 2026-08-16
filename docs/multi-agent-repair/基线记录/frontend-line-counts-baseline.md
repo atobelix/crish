@@ -73,6 +73,15 @@
 - **死条目手动移除**：messageUserProjection.ts 626 对应文件已于 V1 `aaa68087` 整删（`--update` 不扫描已删文件故需手动清）。
 - **拆分时限触发条件**：以上条目在 SR-06 结构轮或对应拆分完成（降至类别上限内）时由 `--update` 自动移除；登记 ≠ 拆分完成。
 
+## R7 处置登记（2026-08-16 · 输入流收敛战役 R2 后半执行位 · 路径精确 `--update`）
+
+> 触发：R2-a ③ drain 抢跑窗口关闭（useChatComposerProps）+ R2-b ⑥ withdraw 收口适配
+> （sessionMessageActions）功能增长越冻结基线，均仍低于类别上限（481<500 / 473 为存量
+> 超限冻结项续登，登记 ≠ 拆分完成）。路径精确登记（未跑 `--all`，避免误登记并行 Agent 文件）。
+
+- `useChatComposerProps.ts` 478→481：R2-a ③ 编辑回移标记（editedBackMsgIdRef）+ drain 队首跳过守卫（+3 有效行，功能增长）。
+- `sessionMessageActions.ts` 471→473：R2-b ⑥ gap2 补点（withdrawMessage 失效广播，+2 有效行，功能增长）。
+
 <!-- BASELINE_START -->
 
 apps/crish-desktop/src/api/applyFileDiff.ts 441
@@ -107,7 +116,7 @@ apps/crish-desktop/src/api/workspaceFsApi.ts 360
 apps/crish-desktop/src/bridges/send-to-note.ts 341
 apps/crish-desktop/src/components/agent-card/AgentCard.tsx 461
 apps/crish-desktop/src/components/agent-card/AgentTeamBoard.tsx 461
-apps/crish-desktop/src/components/chat-card/useChatComposerProps.ts 478
+apps/crish-desktop/src/components/chat-card/useChatComposerProps.ts 481
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
 apps/crish-desktop/src/components/diff/DiffCard.tsx 439
 apps/crish-desktop/src/components/settings-extensions/ExtensionCard.tsx 466
@@ -130,7 +139,7 @@ apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts 352
 apps/crish-desktop/src/store/layout-tree/operations.ts 761
 apps/crish-desktop/src/store/sessionCrudActions.ts 416
 apps/crish-desktop/src/store/sessionIndex.ts 473
-apps/crish-desktop/src/store/sessionMessageActions.ts 471
+apps/crish-desktop/src/store/sessionMessageActions.ts 473
 apps/crish-desktop/src/store/sessionSharedHelpers.ts 440
 apps/crish-desktop/src/store/streamingStore.ts 369
 apps/crish-desktop/src/store/workspace-shell/adapterShape.ts 616

@@ -65,6 +65,8 @@ export function useChatComposerProps({
   const prevSessionIdRef = useRef(activeSessionId);
   const activeSessionIdRef = useRef(activeSessionId);
   const draftPersistTimerRef = useRef<number | null>(null);
+  /** R2-a ③：被移回输入框编辑的队内 id（drain 遇队首命中即跳过，不抢发） */
+  const editedBackMsgIdRef = useRef<string | null>(null);
   /** Latest draft text pending debounce flush (so session switch / unmount can flush). */
   const pendingDraftRef = useRef<{ sid: string; text: string } | null>(null);
 
@@ -420,6 +422,8 @@ export function useChatComposerProps({
     (id: string) => {
       const msg = queuedMessages.find((m) => m.id === id);
       if (!msg) return;
+      // R2-a ③：移回输入框编辑 → 关闭「可 drain」标记（ref 同步生效防抢发）
+      editedBackMsgIdRef.current = id;
       setChatInput(msg.text);
       setAttachments(msg.attachments);
       setQueuedMessages((prev) => prev.filter((m) => m.id !== id));
@@ -482,6 +486,8 @@ export function useChatComposerProps({
     if (drainLockRef.current) return;
     const first = queuedMessages[0];
     if (!first) return;
+    // R2-a ③ 竞态关闭：队首被编辑中 → 跳过本次 drain 不抢发
+    if (editedBackMsgIdRef.current === first.id) return;
     drainLockRef.current = true;
     void (async () => {
       await sendQueuedMessageNow(first.id);

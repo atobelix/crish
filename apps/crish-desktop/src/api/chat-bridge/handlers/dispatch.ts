@@ -14,6 +14,7 @@ import type {
 import type { HandlerEnv } from './handlerEnv';
 import { useLayoutStore } from '../../../store';
 import { emitUiEvent } from '../../../api/uiEvents';
+import { invalidateEditObjects } from '../editSessionConsumer';
 import {
   onMessageStart,
   onMessageDelta,
@@ -133,7 +134,8 @@ export function onProviderRequestAnchored(
 
 // 撤回域（T1a 统一输入流收敛战役）：timeline-truncate 出站事件，R1 撤回
 // 消费接线——投影重放至 boundary（applyTimelineTruncate）+ 从 boundary
-// user 节点原文回填 composer（不依赖 draft 快照，详案 §1.2-⑤⑥）
+// user 节点原文回填 composer（不依赖 draft 快照，详案 §1.2-⑤⑥）+
+// R2-b ⑥ 失效传播：截断范围内编辑中对象 invalidate（详案 §1.2-⑥-1）。
 export function onTimelineTruncate(
   env: HandlerEnv,
   envelope: EngineEnvelope<'timeline-truncate'>
@@ -144,18 +146,36 @@ export function onTimelineTruncate(
     const store = useLayoutStore.getState();
     // ① 取回 boundary user 节点原文（回填数据源；节点在投影截断前读取）
     let backfillText = '';
+    // ② R2-b ⑥：截断范围（boundary target 之后）内的消息 id —— 投影截断前
+    // 收集，供编辑会话失效传播（对象已不在时间线，编辑面应立即失效）。
+    const truncatedIds: string[] = [];
     const sess = store.sessionsById[event.sessionId];
-    const target = sess?.messages?.find((m) => m.id === event.targetMessageId);
-    if (target?.sender === 'user') {
-      backfillText = target.text || '';
+    if (sess?.messages) {
+      const targetIdx = sess.messages.findIndex(
+        (m) => m.id === event.targetMessageId
+      );
+      if (targetIdx !== -1) {
+        for (let i = targetIdx + 1; i < sess.messages.length; i++) {
+          const m = sess.messages[i];
+          if (m?.id) truncatedIds.push(m.id);
+        }
+        const target = sess.messages[targetIdx];
+        if (target?.sender === 'user') {
+          backfillText = target.text || '';
+        }
+      }
     }
-    // ② 投影重放至 boundary（保留边界节点，丢弃其后节点）
+    // ③ 投影重放至 boundary（保留边界节点，丢弃其后节点）
     store.applyTimelineTruncate(
       event.sessionId,
       event.boundarySeq,
       event.targetMessageId
     );
-    // ③ 文本回填 composer（宿主 ChatCard 订阅后 setChatInput +
+    // ④ R2-b ⑥ 失效传播：被截断对象若持有编辑会话 → invalidate('truncate')
+    if (truncatedIds.length > 0) {
+      invalidateEditObjects(truncatedIds, 'truncate');
+    }
+    // ⑤ 文本回填 composer（宿主 ChatCard 订阅后 setChatInput +
     // setComposerDraft；附件恢复登记为后续增强）
     if (backfillText) {
       emitUiEvent('retract-backfill', {
