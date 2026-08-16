@@ -2,15 +2,11 @@
  * 从事件对象中提取 sequence 号（StreamRecovery 删除后迁入的游标助手）。
  * 支持字段名：sequence / eventSequence / seq。找不到返回 null。
  *
- * T4 投影原语单源：字段读取走 `packages/shared-utils` 共享宽容读取原语
+ * T4 投影原语单源：字段读取走 `@crish/shared-utils` 共享宽容读取原语
  * （readNumber 语义：缺失/类型错/非有限数 → undefined），与 mobile 端
  * eventReducers 同一实现，杜绝双端信封解析漂移。
  */
-import {
-  readNumber,
-  readRecord,
-  readString,
-} from '../../../../../../packages/shared-utils/src/event-envelope';
+import { readNumber, readRecord, readString } from '@crish/shared-utils';
 
 export function extractEventSequence(obj: unknown): number | null {
   return (

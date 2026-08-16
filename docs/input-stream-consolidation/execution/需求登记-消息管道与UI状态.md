@@ -57,8 +57,8 @@
 - 消息管道统一（E3 候选）：主控 R4 期间登记（「用户消息/agent 通信/提问都是节点」）。
 - context-state 前端产生器：D0 已登记归 R6（I1-β 同批）。
 - 显示策略注册表：本文件 M4/D 项。
-- `apps/crish-desktop/src/api/subagentTimeline.ts:14` 本地 blockText 副本（:131/:154-155 消费）：与 eventUtils.ts:14 单源定义逐行同构（text→content 回退），T3 详案断言 3 字面未扫尽此文件（文件在 T3 文件域外，T3 越界禁止未动）——**归 T4 消费收口**：T4 单一投影 store 统一 blockText 单源并删本地副本；T4 详案出稿时按本登记裁决，不重复立项。引用 `execution/audits/R4-审计报告.md` §5-3 / §9-2（承上轮审计-R3 问题 3）。
-- `apps/crish-desktop/src/api/messageProjection.ts:85` timelineBlockToAgentBlock（头注 :11）：生产+测试**零调用**——**零消费维持至 T4**（T4 投影 store 持久化往返消费该反向映射），定义+头注保留、**禁止提前删**；T4 落地后若仍零消费再按详案禁止项 6 处置。引用 `execution/audits/R4-审计报告.md` §5-4 / §9-3。
+- `apps/crish-desktop/src/api/subagentTimeline.ts:14` 本地 blockText 副本（:131/:154-155 消费）：与 eventUtils.ts:14 单源定义逐行同构（text→content 回退），T3 详案断言 3 字面未扫尽此文件（文件在 T3 文件域外，T3 越界禁止未动）——**归 T4 消费收口**：T4 单一投影 store 统一 blockText 单源并删本地副本；T4 详案出稿时按本登记裁决，不重复立项。引用 `execution/audits/R4-审计报告.md` §5-3 / §9-2（承上轮审计-R3 问题 3）。**〔已闭环 ✓（T4 `01be2074`）：subagentTimeline.ts:7 改 `import { blockText } from './chat-bridge/handlers/eventUtils'`，本地定义删（旧 :14-20），:126/:154-155 消费不变；`rg 'blockText' subagentTimeline.ts` 无本地定义；R5 审计 §1.6 实证〕**
+- `apps/crish-desktop/src/api/messageProjection.ts:85` timelineBlockToAgentBlock（头注 :11）：生产+测试**零调用**——**零消费维持至 T4**（T4 投影 store 持久化往返消费该反向映射），定义+头注保留、**禁止提前删**；T4 落地后若仍零消费再按详案禁止项 6 处置。引用 `execution/audits/R4-审计报告.md` §5-4 / §9-3。**〔已闭环 ✓（V1 `aaa68087` · R4 附条件裁决执行）：T4 落地后仍零消费（R4 审计删前实测零调用 + V1 四工序无消费路径），按附条件裁决删除（messageProjection.ts 不在 V1 详案 §4 文件域，属裁决授权域外操作，授权链条完整）；删后 `rg 'timelineBlockToAgentBlock' apps/crish-desktop/src` 零命中；`agentBlockToTimelineBlock`/`projectAgentMessageContent`/`projectAgentMessageToSessionMessage` 等其余投影原语保留且消费面完整；R5 审计 §2.5 实证〕**
 
 ## 四、已接受偏差
 

@@ -51,14 +51,38 @@
 > 同日处置（非登记）：messageWindow.ts 三切分（Primitives/DomBudget/Viewport/Indices/Expand 五叶 + hub re-export），
 > 实测 558→111 有效行，`--update` 自动移除其 498 基线条目；并行域 M 文件（goalModeController 644 / sessionSharedHelpers 422）未触碰，收口后由后续轮次处置。
 
+## R5 处置登记（2026-08-16 · 输入流收敛战役收口 · `--update --all` 一次性刷新 66 条目）
+
+> 触发：R5 固定审计（`docs/input-stream-consolidation/execution/audits/R5-审计报告.md` §2.7/§9-2）实证
+> 7 处违规中 3 处为 T4 提交 `01be2074` 的 prettier 格式化附带引入（`git show -w` 零逻辑变更），按
+> AGENTS §11.9 / 附录 B §9「超限走拆分或 `--update` 登记基线，不以放宽阈值掩盖」处置，选择登记路径
+> （拆分属域外文件重构风险高；格式化膨胀非逻辑增长）。本次 `--update --all` 仅修改本基线文件，diff 逐行复核：
+
+- **T4 引入 3 处登记（格式化纯膨胀，零逻辑变更实证）**：useChatComposerProps 472→478（越基线）、
+  SettingsAppearanceTab 537（新 VIOLATION）、useSkillsSettingsState 635→732（HARD BLOCK 冻结为基线上限 732）。
+- **R5 前存量 4 处再冻结（非本批引入，R5 审计 §2.7 实证 R5 前后零变化）**：eventParser 358→377、
+  InlineAgentPanel 604→621、TiptapEditorField 464→477、sessionSharedHelpers 419→440。
+- **存量条目按实测刷新**（均 < 类别上限，冻结现状）：modelCatalog 868→634、clientApi 697→680、
+  skillsApi 630→588、sessionEventHydrate 554→520、ConnectionLifecycle 503→502、DiffCard 442→439、
+  sessionRustDbSql 393→384、streamCallbacksInternals 364→359、sessionCrudActions 428→416、streamingStore 373→369 等。
+- **5 条目自动移除（文件已回落 ≤85% 上限，放行语义）**：toolCardPresenter 394→198、SlashExtension 444→367、
+  FileViewerCard 427→367、useModelProfilesState 501→362、useSlashSend 457→195。
+- **6 新条目（越过 85% 的新增/增长文件，登记语义）**：EventRouter 386、clientApiNormalize 342、
+  Menu.tsx 448、Tooltip.tsx 445、timelineNormalizer 347（审计时点 342，脚本实测 347，均 WARNING 级）、
+  MockPhysicalGeometryEngine 385。
+- **死条目手动移除**：messageUserProjection.ts 626 对应文件已于 V1 `aaa68087` 整删（`--update` 不扫描已删文件故需手动清）。
+- **拆分时限触发条件**：以上条目在 SR-06 结构轮或对应拆分完成（降至类别上限内）时由 `--update` 自动移除；登记 ≠ 拆分完成。
+
 <!-- BASELINE_START -->
 
 apps/crish-desktop/src/api/applyFileDiff.ts 441
 apps/crish-desktop/src/api/approvalMeta.ts 400
 apps/crish-desktop/src/api/backgroundTasksApi.ts 621
-apps/crish-desktop/src/api/chat-bridge/ConnectionLifecycle.ts 503
-apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.ts 358
-apps/crish-desktop/src/api/clientApi.ts 697
+apps/crish-desktop/src/api/chat-bridge/ConnectionLifecycle.ts 502
+apps/crish-desktop/src/api/chat-bridge/EventRouter.ts 386
+apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.ts 377
+apps/crish-desktop/src/api/clientApi.ts 680
+apps/crish-desktop/src/api/clientApiNormalize.ts 342
 apps/crish-desktop/src/api/commandPermissions.ts 521
 apps/crish-desktop/src/api/engineConfig.ts 460
 apps/crish-desktop/src/api/fontStore.ts 440
@@ -66,55 +90,54 @@ apps/crish-desktop/src/api/gitApi.ts 476
 apps/crish-desktop/src/api/goalModeController.ts 623
 apps/crish-desktop/src/api/markdown-render/IncrementalMarkdownParser.ts 362
 apps/crish-desktop/src/api/markdown-render/markdownPlugins.ts 517
-apps/crish-desktop/src/api/messageUserProjection.ts 626
-apps/crish-desktop/src/api/modelCatalog.ts 868
+apps/crish-desktop/src/api/modelCatalog.ts 634
 apps/crish-desktop/src/api/previewBrowserStore.ts 343
 apps/crish-desktop/src/api/pricingStore.ts 1409
 apps/crish-desktop/src/api/provider-profiles/profileStore.ts 541
 apps/crish-desktop/src/api/session-persistence/sessionHydration.ts 387
-apps/crish-desktop/src/api/session-persistence/sessionRustDbSql.ts 393
-apps/crish-desktop/src/api/sessionEventHydrate.ts 554
+apps/crish-desktop/src/api/session-persistence/sessionRustDbSql.ts 384
+apps/crish-desktop/src/api/sessionEventHydrate.ts 520
 apps/crish-desktop/src/api/sessionExport.ts 547
 apps/crish-desktop/src/api/sessionSearch.ts 412
 apps/crish-desktop/src/api/sessionTitle.ts 342
-apps/crish-desktop/src/api/skillsApi.ts 630
+apps/crish-desktop/src/api/skillsApi.ts 588
 apps/crish-desktop/src/api/themeStore.ts 697
-apps/crish-desktop/src/api/tool-presentation/toolCardPresenter.ts 394
+apps/crish-desktop/src/api/tool-presentation/timelineNormalizer.ts 347
 apps/crish-desktop/src/api/toolFeedback.ts 575
 apps/crish-desktop/src/api/workspaceFsApi.ts 360
 apps/crish-desktop/src/bridges/send-to-note.ts 341
 apps/crish-desktop/src/components/agent-card/AgentCard.tsx 461
 apps/crish-desktop/src/components/agent-card/AgentTeamBoard.tsx 461
-apps/crish-desktop/src/components/agent-card/InlineAgentPanel.tsx 604
-apps/crish-desktop/src/components/chat-card/useChatComposerProps.ts 472
-apps/crish-desktop/src/components/chat-composer/SlashExtension.ts 444
-apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx 464
+apps/crish-desktop/src/components/agent-card/InlineAgentPanel.tsx 621
+apps/crish-desktop/src/components/chat-card/useChatComposerProps.ts 478
+apps/crish-desktop/src/components/chat-composer/TiptapEditorField.tsx 477
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
-apps/crish-desktop/src/components/diff/DiffCard.tsx 442
-apps/crish-desktop/src/components/files/FileViewerCard.tsx 427
+apps/crish-desktop/src/components/diff/DiffCard.tsx 439
 apps/crish-desktop/src/components/settings-extensions/ExtensionCard.tsx 466
 apps/crish-desktop/src/components/settings-extensions/useExtensionMarket.tsx 438
 apps/crish-desktop/src/components/settings-mcp/McpServerList.tsx 453
-apps/crish-desktop/src/components/settings-models/useModelProfilesState.ts 501
-apps/crish-desktop/src/components/settings-skills/useSkillsSettingsState.ts 635
+apps/crish-desktop/src/components/settings-skills/useSkillsSettingsState.ts 732
+apps/crish-desktop/src/components/settings/SettingsAppearanceTab.tsx 537
 apps/crish-desktop/src/components/settings/SettingsDevicesTab.tsx 486
 apps/crish-desktop/src/components/settings/SettingsShortcutsTab.tsx 447
+apps/crish-desktop/src/components/ui/Menu/Menu.tsx 448
+apps/crish-desktop/src/components/ui/Tooltip/Tooltip.tsx 445
 apps/crish-desktop/src/components/workspace/TerminalCard.xterm.tsx 431
 apps/crish-desktop/src/components/workspace/browser-panel/BrowserImportSection.tsx 471
-apps/crish-desktop/src/hooks/chat-stream/streamCallbacksInternals.ts 364
-apps/crish-desktop/src/hooks/chat-stream/useSlashSend.ts 457
+apps/crish-desktop/src/hooks/chat-stream/streamCallbacksInternals.ts 359
 apps/crish-desktop/src/hooks/tab-drag/tabDragGeometry.ts 718
 apps/crish-desktop/src/hooks/tab-drag/useTabDragEvents.ts 359
 apps/crish-desktop/src/hooks/useAgentStream.ts 454
 apps/crish-desktop/src/hooks/useToastQueue.ts 395
 apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts 352
 apps/crish-desktop/src/store/layout-tree/operations.ts 761
-apps/crish-desktop/src/store/sessionCrudActions.ts 428
+apps/crish-desktop/src/store/sessionCrudActions.ts 416
 apps/crish-desktop/src/store/sessionIndex.ts 473
 apps/crish-desktop/src/store/sessionMessageActions.ts 436
-apps/crish-desktop/src/store/sessionSharedHelpers.ts 419
-apps/crish-desktop/src/store/streamingStore.ts 373
+apps/crish-desktop/src/store/sessionSharedHelpers.ts 440
+apps/crish-desktop/src/store/streamingStore.ts 369
 apps/crish-desktop/src/store/workspace-shell/adapterShape.ts 616
 apps/crish-desktop/src/store/workspace-shell/workspaceShellStore.ts 459
 apps/crish-desktop/src/store/workspaceActions.ts 512
+apps/crish-desktop/src/test-utils/MockPhysicalGeometryEngine.ts 385
 <!-- BASELINE_END -->
