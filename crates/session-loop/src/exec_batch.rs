@@ -134,6 +134,9 @@ impl ToolExecutor {
     /// 执行一批工具调用
     ///
     /// 返回结果顺序与入参一致；`abort` 置位时返回已就绪结果，其余标记 cancelled。
+    /// C1d：并发编排面（分组 / 审批逐个 await / 信号量并发 / 取消 / 事件序列）
+    /// 已拆入 [BatchPlanner]（分组）+ [BatchRunner]（逐组执行），本函数仅保留
+    /// 批级编排骨架，语义与拆分前逐行一致。
     pub async fn execute_batch(
         &self,
         calls: &[ToolBatchCall],
@@ -151,298 +154,23 @@ impl ToolExecutor {
         let mut results: Vec<Option<ClassifiedToolResult>> = calls.iter().map(|_| None).collect();
         let mut fatal: Option<String> = None;
 
-        // 分组：Parallel 组可并行；Sequential/Exclusive 顺序执行
-        let mut parallel_group: Vec<usize> = Vec::new();
-        let mut order: Vec<usize> = Vec::new();
-        for (i, call) in calls.iter().enumerate() {
-            match call.concurrency {
-                ToolConcurrency::Parallel => parallel_group.push(i),
-                _ => order.push(i),
-            }
-        }
-        // 顺序项夹在并行组之后执行（保持工具间依赖顺序：并行组先发，随后顺序项依次）
-        let mut sequence: Vec<Vec<usize>> = Vec::new();
-        if !parallel_group.is_empty() {
-            sequence.push(parallel_group);
-        }
-        for i in order {
-            sequence.push(vec![i]);
-        }
+        // 分组编排（BatchPlanner：Parallel 组可并行；Sequential/Exclusive 顺序）
+        let sequence = BatchPlanner::plan(calls);
 
-        'outer: for group in sequence {
-            if group.len() == 1 {
-                let idx = group[0];
-                let r = self
-                    .execute_one(
-                        calls,
-                        idx,
-                        ctx,
-                        approval.clone(),
-                        options,
-                        abort,
-                        &mut events,
-                        &mut fatal,
-                    )
-                    .await;
-                results[idx] = Some(r);
-                if fatal.is_some() && options.fail_strategy == FailStrategy::CancelSiblings {
-                    mark_rest_cancelled(calls, &mut results, &mut events);
-                    break 'outer;
-                }
-            } else {
-                // 并行组（T09.6/P8：审批模式恢复并行，不再退化串行）：
-                // 事件顺序契约（tool_events.rs 头注）每项保持
-                // tool-start → approval-requested → tool-end；执行模型 A
-                //（AU-04 F9）：审批逐个 await（UX 与事件顺序不变），
-                // 通过后执行阶段 join_all 并行（批延迟 = max(工具耗时) + 审批链）。
-                for &idx in &group {
-                    let call = &calls[idx];
-                    events.push(ToolEvent::ToolStart {
-                        call_id: call.id.clone(),
-                        tool_name: call.tool_name.clone(),
-                        input: call.input.clone(),
-                        category: call.category,
-                        concurrency: call.concurrency,
-                        summary: call.summary.clone(),
-                        // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp）
-                        occurred_at_ms: Some(crate::steering::unix_millis() as u64),
-                    });
-                }
-
-                // 审批逐个发起：approval-requested 事件全组先发（防死锁
-                // 硬契约，01 §五.8），再逐个等待决策；abort 中断后不再
-                // 发起剩余审批（与顺序路径逐项 abort 前置检查一致）。
-                // R4 T10：permission_mode 显式设置时仅「需审批」项发起
-                //（dangerous → ask 问询 / plan 拒绝 / full-access 放行）；
-                // 未设置时沿用既有语义（approval_enabled → 全批审批）。
-                let mut approvals: Vec<Option<ApprovalDecision>> = vec![None; group.len()];
-                // T-D-14：并行组逐项请求方身份（拒绝文案按来源分支：
-                // 子代理申请被拒 → 含「主 agent 拒绝 / 回报主 agent」指引）
-                let mut requesters: Vec<Option<ApprovalRequester>> = vec![None; group.len()];
-                let approval_active = options.approval_enabled && approval.is_some();
-                if approval_active {
-                    if let Some(gate) = approval.as_deref() {
-                        let mut needs: Vec<usize> = Vec::new();
-                        for (pos, &idx) in group.iter().enumerate() {
-                            let call = &calls[idx];
-                            if self.call_verdict(call, options) == PermissionVerdict::NeedsApproval
-                            {
-                                needs.push(pos);
-                                let requester = self.approval_requester_for(ctx, &call.input);
-                                requesters[pos] = requester.clone();
-                                events.push(ToolEvent::ApprovalRequested {
-                                    call_id: call.id.clone(),
-                                    tool_name: call.tool_name.clone(),
-                                    args: call.input.clone(),
-                                    // T-D-14：子代理 run 携带请求方身份（理由
-                                    // 从入参保留键提取；主 agent run = None）
-                                    requester,
-                                });
-                            }
-                        }
-                        for &pos in &needs {
-                            if let Some(sig) = abort {
-                                if sig.is_aborted() {
-                                    break;
-                                }
-                            }
-                            let idx = group[pos];
-                            let call = &calls[idx];
-                            let requester = requesters[pos].as_ref();
-                            // F1-02：竞速 abort vs 审批等待（带超时）——
-                            // abort 命中 → 中断剩余审批（全部按取消收场，
-                            // 复用既有「无决策 = abort 中断」分支）
-                            match approval_wait(
-                                gate,
-                                &call.id,
-                                &call.tool_name,
-                                &call.input,
-                                requester,
-                                abort,
-                                options.approval_timeout,
-                            )
-                            .await
-                            {
-                                ApprovalWaitOutcome::Cancelled => break,
-                                ApprovalWaitOutcome::Decision(decision) => {
-                                    approvals[pos] = Some(decision);
-                                    // 竞速兜底（对齐 approval.rs:139-141）：
-                                    // 裁决到达时 abort 已触发 → 按取消收场，
-                                    // 不再发起剩余审批
-                                    if abort.map(|s| s.is_aborted()).unwrap_or(false) {
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // 执行阶段：已批准项 join_all 并行执行（拒绝/过期/abort
-                // 中断/权限拒绝项不执行，直接构造结果）。
-                // B4 并发上限：轻量信号量（默认 4 / max_parallel 可配）——
-                // acquire_owned 排队不拒绝（FIFO 等待 permit），permit
-                // 覆盖单工具执行全程，future drop（含 abort 收场）自动
-                // 释放；并发计数点（AtomicUsize active/peak）随执行器
-                // 实例观测。禁滑动窗口/熔断器（反过度设计红线）。
-                let exec = self.clone_executor();
-                let ctx_own = ctx.clone();
-                let options_own = options.clone();
-                let approval_own = approval.clone();
-                let max_parallel = options.max_parallel.unwrap_or(DEFAULT_MAX_PARALLEL).max(1);
-                let semaphore = Arc::new(Semaphore::new(max_parallel));
-                let obs = Arc::clone(&exec.concurrency_obs);
-                let mut futures = Vec::new();
-                let mut executed: Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>> =
-                    vec![None; group.len()];
-                for (pos, &idx) in group.iter().enumerate() {
-                    let call = &calls[idx];
-                    let verdict = self.call_verdict(call, options);
-                    let decided = approvals.get(pos).and_then(Option::as_ref);
-                    // 审批未启用/未注入门 → 全部执行；有决策 → 仅通过执行；
-                    // 无决策（abort 中断，未发起审批）→ 按取消收场；
-                    // 权限拒绝（plan 模式写类）→ 直接拒绝结果；
-                    // 显式模式无门（ask 模式缺审批基础设施）→ 透传需审批状态
-                    let should_execute = match (verdict, approval_active) {
-                        (PermissionVerdict::Deny, _) => false,
-                        (PermissionVerdict::NeedsApproval, true) => {
-                            matches!(decided, Some(ApprovalDecision::Approved))
-                        }
-                        (PermissionVerdict::NeedsApproval, false) => {
-                            options.permission_mode.is_none()
-                        }
-                        _ => true,
-                    };
-                    if !should_execute {
-                        let call = &calls[idx];
-                        let r = match verdict {
-                            PermissionVerdict::Deny => denied_result(call, options),
-                            PermissionVerdict::NeedsApproval
-                                if !approval_active && options.permission_mode.is_some() =>
-                            {
-                                ClassifiedToolResult::error(
-                                    &call.id,
-                                    &call.tool_name,
-                                    ToolErrorKind::ApprovalRequired,
-                                    self.revert_refusal_message(call),
-                                    0,
-                                )
-                            }
-                            _ => match decided {
-                                Some(ApprovalDecision::Denied { reason }) => {
-                                    ClassifiedToolResult::error(
-                                        &call.id,
-                                        &call.tool_name,
-                                        ToolErrorKind::UserDenied,
-                                        denied_message(requesters[pos].is_some(), &reason),
-                                        0,
-                                    )
-                                }
-                                Some(ApprovalDecision::Expired) => {
-                                    // G-9：超时 → Expired 权威语义落库（并行组
-                                    // 路径同顺序路径；approval-resolved 位于
-                                    // 本项 approval-requested 与 tool-end 之间）
-                                    events.push(ToolEvent::ApprovalResolved {
-                                        call_id: call.id.clone(),
-                                        decision: ApprovalDecision::Expired,
-                                    });
-                                    ClassifiedToolResult::error(
-                                        &call.id,
-                                        &call.tool_name,
-                                        ToolErrorKind::ApprovalExpired,
-                                        "approval expired",
-                                        0,
-                                    )
-                                }
-                                // 无决策 = abort 中断，与顺序路径 abort 收场一致
-                                _ => ClassifiedToolResult::error(
-                                    &call.id,
-                                    &call.tool_name,
-                                    ToolErrorKind::Cancelled,
-                                    "aborted",
-                                    0,
-                                ),
-                            },
-                        };
-                        executed[pos] = Some((r, Vec::new()));
-                        continue;
-                    }
-                    let call = calls[idx].clone();
-                    let e = exec.clone_executor();
-                    let c = ctx_own.clone();
-                    let o = options_own.clone();
-                    let ab = abort.cloned();
-                    let g = approval_own.clone();
-                    let s = Arc::clone(&semaphore);
-                    let obs = Arc::clone(&obs);
-                    futures.push(async move {
-                        // 信号量排队获取（不拒绝；`ok()` 仅在信号量被关闭时
-                        // 为 None——本批内永不关闭，防御性兜底照常执行）
-                        let permit = s.acquire_owned().await.ok();
-                        let _active = obs.enter();
-                        let (r, extra) = e
-                            .execute_single_with_retry(&call, &c, &o, ab.as_ref(), g)
-                            .await;
-                        obs.leave();
-                        drop(permit);
-                        (pos, r, extra)
-                    });
-                }
-                let finished = futures::future::join_all(futures).await;
-                for (pos, r, extra) in finished {
-                    executed[pos] = Some((r, extra));
-                }
-
-                // 按组序收 tool-end（每项 tool-start → approval-requested →
-                // tool-end 顺序保持；审批附加事件先于本项 tool-end 落位）
-                for (pos, &idx) in group.iter().enumerate() {
-                    let call = &calls[idx];
-                    let (r, extra) = executed[pos].take().unwrap_or_else(|| {
-                        // 防御性兜底：正常路径不应缺失（与批尾兜底语义一致）
-                        (
-                            ClassifiedToolResult::error(
-                                &call.id,
-                                &call.tool_name,
-                                ToolErrorKind::Cancelled,
-                                "cancelled",
-                                0,
-                            ),
-                            Vec::new(),
-                        )
-                    });
-                    events.extend(extra);
-                    events.push(ToolEvent::ToolEnd {
-                        call_id: call.id.clone(),
-                        tool_name: call.tool_name.clone(),
-                        is_error: r.error_kind.is_some(),
-                        duration_ms: r.duration_ms,
-                        output: r.output.clone(),
-                        error_code: r.error_kind.map(|k| k.error_code().to_string()),
-                        error_message: r.error_message.clone(),
-                        // EV-09（D-03）：原子要素透传（attempt/dedup/实际入参/打点）
-                        attempt: Some(r.attempt),
-                        deduplicated: Some(r.deduplicated),
-                        executed_input: r.executed_input.clone(),
-                        occurred_at_ms: r.occurred_at_ms,
-                    });
-                    if self.result_is_fatal(call, &r) {
-                        fatal = Some(
-                            r.error_message
-                                .clone()
-                                .unwrap_or_else(|| "tool failed".into()),
-                        );
-                    }
-                    results[idx] = Some(r);
-                }
-                if fatal.is_some() && options.fail_strategy == FailStrategy::CancelSiblings {
-                    mark_rest_cancelled(calls, &mut results, &mut events);
-                    break 'outer;
-                }
-            }
-        }
+        // 逐组执行（BatchRunner：审批逐个 await + 并行执行（B4 信号量并发
+        // 上限）+ 取消收尾 / 事件序列）
+        let runner = BatchRunner {
+            executor: self,
+            calls,
+            ctx,
+            approval,
+            options,
+            abort,
+        };
+        runner.run(sequence, &mut events, &mut results, &mut fatal).await;
 
         events.push(ToolEvent::BatchEnd {
-            batch_id: batch_id.clone(),
+            batch_id,
         });
 
         // 防御性兜底：正常路径下（含取消路径）全部结果应有值；
@@ -461,6 +189,387 @@ impl ToolExecutor {
             results,
             events,
             fatal,
+        }
+    }
+}
+
+/// 批次分组计划（C1d 拆段：纯结构搬移，语义与 [ToolExecutor::execute_batch]
+/// 原地分组一致）：返回按执行顺序排列的组序列——Parallel 组（可并行）先行，
+/// 随后 Sequential/Exclusive 项各成单元素组依次执行（保持工具间依赖顺序）。
+struct BatchPlanner;
+
+impl BatchPlanner {
+    /// 分组（Parallel 组可并行；Sequential/Exclusive 顺序执行）+ 顺序项
+    /// 夹在并行组之后执行（保持工具间依赖顺序：并行组先发，随后顺序项依次）
+    fn plan(calls: &[ToolBatchCall]) -> Vec<Vec<usize>> {
+        let mut parallel_group: Vec<usize> = Vec::new();
+        let mut order: Vec<usize> = Vec::new();
+        for (i, call) in calls.iter().enumerate() {
+            match call.concurrency {
+                ToolConcurrency::Parallel => parallel_group.push(i),
+                _ => order.push(i),
+            }
+        }
+        let mut sequence: Vec<Vec<usize>> = Vec::new();
+        if !parallel_group.is_empty() {
+            sequence.push(parallel_group);
+        }
+        for i in order {
+            sequence.push(vec![i]);
+        }
+        sequence
+    }
+}
+
+/// 批次执行器（C1d 拆段：审批 / 并发 / 取消 / 事件序列编排面；语义与
+/// [ToolExecutor::execute_batch] 原地逐行一致）。审批仍走外部 [ApprovalGate]，
+/// 本结构只编排等待 / 竞速 / 收尾，不改变审批语义。
+struct BatchRunner<'a> {
+    executor: &'a ToolExecutor,
+    calls: &'a [ToolBatchCall],
+    ctx: &'a ToolExecCtx,
+    approval: Option<Arc<dyn ApprovalGate>>,
+    options: &'a ToolBatchOptions,
+    abort: Option<&'a crate::safe_point::AbortSignal>,
+}
+
+impl BatchRunner<'_> {
+    /// 逐组执行序列：单元素组走顺序路径；组大小 >1 走并行组路径。
+    /// fatal 且 fail_strategy=CancelSiblings 时取消剩余兄弟并提前收尾。
+    async fn run(
+        &self,
+        sequence: Vec<Vec<usize>>,
+        events: &mut Vec<ToolEvent>,
+        results: &mut Vec<Option<ClassifiedToolResult>>,
+        fatal: &mut Option<String>,
+    ) {
+        'outer: for group in sequence {
+            if group.len() == 1 {
+                self.run_single(group[0], events, results, fatal).await;
+            } else {
+                self.run_parallel(&group, events, results, fatal).await;
+            }
+            // fatal 且 CancelSiblings 语义：取消剩余兄弟并提前收尾
+            if fatal.is_some() && self.options.fail_strategy == FailStrategy::CancelSiblings {
+                mark_rest_cancelled(self.calls, results, events);
+                break 'outer;
+            }
+        }
+    }
+
+    /// 顺序路径单元素组执行（execute_one 内在 abort 前置检查 + 审批等待）
+    async fn run_single(
+        &self,
+        idx: usize,
+        events: &mut Vec<ToolEvent>,
+        results: &mut Vec<Option<ClassifiedToolResult>>,
+        fatal: &mut Option<String>,
+    ) {
+        let r = self
+            .executor
+            .execute_one(
+                self.calls,
+                idx,
+                self.ctx,
+                self.approval.clone(),
+                self.options,
+                self.abort,
+                events,
+                fatal,
+            )
+            .await;
+        results[idx] = Some(r);
+    }
+
+    /// 并行组路径（T09.6/P8：审批模式恢复并行，不再退化串行）：
+    /// 事件顺序契约（tool_events.rs 头注）每项保持 tool-start →
+    /// approval-requested → tool-end；执行模型 A（AU-04 F9）：审批逐个 await
+    /// （UX 与事件顺序不变），通过后执行阶段 join_all 并行（批延迟 =
+    /// max(工具耗时) + 审批链）。拆为四个职责单一子段：组起始事件 →
+    /// 审批等待 → 并行执行 → 按组序收 tool-end。
+    async fn run_parallel(
+        &self,
+        group: &[usize],
+        events: &mut Vec<ToolEvent>,
+        results: &mut Vec<Option<ClassifiedToolResult>>,
+        fatal: &mut Option<String>,
+    ) {
+        self.emit_group_starts(group, events);
+        let approval_active = self.options.approval_enabled && self.approval.is_some();
+        let (approvals, requesters) = self.collect_approvals(group, approval_active, events).await;
+        let executed = self
+            .execute_group(group, &approvals, &requesters, approval_active, events)
+            .await;
+        self.collect_group_endings(group, executed, events, results, fatal);
+    }
+
+    /// 并行组起始事件（每个成员 tool-start 打点）
+    fn emit_group_starts(&self, group: &[usize], events: &mut Vec<ToolEvent>) {
+        for &idx in group {
+            let call = &self.calls[idx];
+            events.push(ToolEvent::ToolStart {
+                call_id: call.id.clone(),
+                tool_name: call.tool_name.clone(),
+                input: call.input.clone(),
+                category: call.category,
+                concurrency: call.concurrency,
+                summary: call.summary.clone(),
+                // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp）
+                occurred_at_ms: Some(crate::steering::unix_millis() as u64),
+            });
+        }
+    }
+
+    /// 审批逐个发起：approval-requested 事件全组先发（防死锁硬契约，
+    /// 01 §五.8），再逐个等待决策；abort 中断后不再发起剩余审批（与顺序
+    /// 路径逐项 abort 前置检查一致）。R4 T10：permission_mode 显式设置时仅
+    /// 「需审批」项发起（dangerous → ask 问询 / plan 拒绝 / full-access 放行）；
+    /// 未设置时沿用既有语义（approval_enabled → 全批审批）。
+    async fn collect_approvals(
+        &self,
+        group: &[usize],
+        approval_active: bool,
+        events: &mut Vec<ToolEvent>,
+    ) -> (Vec<Option<ApprovalDecision>>, Vec<Option<ApprovalRequester>>) {
+        let mut approvals: Vec<Option<ApprovalDecision>> = vec![None; group.len()];
+        // T-D-14：并行组逐项请求方身份（拒绝文案按来源分支：
+        // 子代理申请被拒 → 含「主 agent 拒绝 / 回报主 agent」指引）
+        let mut requesters: Vec<Option<ApprovalRequester>> = vec![None; group.len()];
+        if approval_active {
+            if let Some(gate) = self.approval.as_deref() {
+                let mut needs: Vec<usize> = Vec::new();
+                for (pos, &idx) in group.iter().enumerate() {
+                    let call = &self.calls[idx];
+                    if self.executor.call_verdict(call, self.options) == PermissionVerdict::NeedsApproval
+                    {
+                        needs.push(pos);
+                        let requester = self.executor.approval_requester_for(self.ctx, &call.input);
+                        requesters[pos] = requester.clone();
+                        events.push(ToolEvent::ApprovalRequested {
+                            call_id: call.id.clone(),
+                            tool_name: call.tool_name.clone(),
+                            args: call.input.clone(),
+                            // T-D-14：子代理 run 携带请求方身份（理由
+                            // 从入参保留键提取；主 agent run = None）
+                            requester,
+                        });
+                    }
+                }
+                for &pos in &needs {
+                    if let Some(sig) = self.abort {
+                        if sig.is_aborted() {
+                            break;
+                        }
+                    }
+                    let idx = group[pos];
+                    let call = &self.calls[idx];
+                    let requester = requesters[pos].as_ref();
+                    // F1-02：竞速 abort vs 审批等待（带超时）——abort 命中 →
+                    // 中断剩余审批（全部按取消收场，复用既有「无决策 = abort
+                    // 中断」分支）
+                    match approval_wait(
+                        gate,
+                        &call.id,
+                        &call.tool_name,
+                        &call.input,
+                        requester,
+                        self.abort,
+                        self.options.approval_timeout,
+                    )
+                    .await
+                    {
+                        ApprovalWaitOutcome::Cancelled => break,
+                        ApprovalWaitOutcome::Decision(decision) => {
+                            approvals[pos] = Some(decision);
+                            // 竞速兜底（对齐 approval.rs:139-141）：裁决到达时
+                            // abort 已触发 → 按取消收场，不再发起剩余审批
+                            if self.abort.map(|s| s.is_aborted()).unwrap_or(false) {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        (approvals, requesters)
+    }
+
+    /// 执行阶段：已批准项 join_all 并行执行（拒绝/过期/abort 中断/权限拒绝
+    /// 项不执行，直接构造结果）。B4 并发上限：轻量信号量（默认 4 /
+    /// max_parallel 可配）——acquire_owned 排队不拒绝（FIFO 等待 permit），
+    /// permit 覆盖单工具执行全程，future drop（含 abort 收场）自动释放；
+    /// 并发计数点（AtomicUsize active/peak）随执行器实例观测。禁滑动窗口 /
+    /// 熔断器（反过度设计红线）。
+    async fn execute_group(
+        &self,
+        group: &[usize],
+        approvals: &[Option<ApprovalDecision>],
+        requesters: &[Option<ApprovalRequester>],
+        approval_active: bool,
+        events: &mut Vec<ToolEvent>,
+    ) -> Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>> {
+        let exec = self.executor.clone_executor();
+        let ctx_own = self.ctx.clone();
+        let options_own = self.options.clone();
+        let approval_own = self.approval.clone();
+        let max_parallel = self
+            .options
+            .max_parallel
+            .unwrap_or(DEFAULT_MAX_PARALLEL)
+            .max(1);
+        let semaphore = Arc::new(Semaphore::new(max_parallel));
+        let obs = Arc::clone(&exec.concurrency_obs);
+        let mut futures = Vec::new();
+        let mut executed: Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>> =
+            vec![None; group.len()];
+        for (pos, &idx) in group.iter().enumerate() {
+            let call = &self.calls[idx];
+            let verdict = self.executor.call_verdict(call, self.options);
+            let decided = approvals.get(pos).and_then(Option::as_ref);
+            // 审批未启用/未注入门 → 全部执行；有决策 → 仅通过执行；
+            // 无决策（abort 中断，未发起审批）→ 按取消收场；
+            // 权限拒绝（plan 模式写类）→ 直接拒绝结果；
+            // 显式模式无门（ask 模式缺审批基础设施）→ 透传需审批状态
+            let should_execute = match (verdict, approval_active) {
+                (PermissionVerdict::Deny, _) => false,
+                (PermissionVerdict::NeedsApproval, true) => {
+                    matches!(decided, Some(ApprovalDecision::Approved))
+                }
+                (PermissionVerdict::NeedsApproval, false) => {
+                    self.options.permission_mode.is_none()
+                }
+                _ => true,
+            };
+            if !should_execute {
+                let call = &self.calls[idx];
+                let r = match verdict {
+                    PermissionVerdict::Deny => denied_result(call, self.options),
+                    PermissionVerdict::NeedsApproval
+                        if !approval_active && self.options.permission_mode.is_some() =>
+                    {
+                        ClassifiedToolResult::error(
+                            &call.id,
+                            &call.tool_name,
+                            ToolErrorKind::ApprovalRequired,
+                            self.executor.revert_refusal_message(call),
+                            0,
+                        )
+                    }
+                    _ => match decided {
+                        Some(ApprovalDecision::Denied { reason }) => {
+                            ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::UserDenied,
+                                denied_message(requesters[pos].is_some(), &reason),
+                                0,
+                            )
+                        }
+                        Some(ApprovalDecision::Expired) => {
+                            // G-9：超时 → Expired 权威语义落库（并行组路径同
+                            // 顺序路径；approval-resolved 位于本项
+                            // approval-requested 与 tool-end 之间）
+                            events.push(ToolEvent::ApprovalResolved {
+                                call_id: call.id.clone(),
+                                decision: ApprovalDecision::Expired,
+                            });
+                            ClassifiedToolResult::error(
+                                &call.id,
+                                &call.tool_name,
+                                ToolErrorKind::ApprovalExpired,
+                                "approval expired",
+                                0,
+                            )
+                        }
+                        // 无决策 = abort 中断，与顺序路径 abort 收场一致
+                        _ => ClassifiedToolResult::error(
+                            &call.id,
+                            &call.tool_name,
+                            ToolErrorKind::Cancelled,
+                            "aborted",
+                            0,
+                        ),
+                    },
+                };
+                executed[pos] = Some((r, Vec::new()));
+                continue;
+            }
+            let call = self.calls[idx].clone();
+            let e = exec.clone_executor();
+            let c = ctx_own.clone();
+            let o = options_own.clone();
+            let ab = self.abort.cloned();
+            let g = approval_own.clone();
+            let s = Arc::clone(&semaphore);
+            let obs = Arc::clone(&obs);
+            futures.push(async move {
+                // 信号量排队获取（不拒绝；`ok()` 仅在信号量被关闭时为 None——
+                // 本批内永不关闭，防御性兜底照常执行）
+                let permit = s.acquire_owned().await.ok();
+                let _active = obs.enter();
+                let (r, extra) = e
+                    .execute_single_with_retry(&call, &c, &o, ab.as_ref(), g)
+                    .await;
+                obs.leave();
+                drop(permit);
+                (pos, r, extra)
+            });
+        }
+        let finished = futures::future::join_all(futures).await;
+        for (pos, r, extra) in finished {
+            executed[pos] = Some((r, extra));
+        }
+        executed
+    }
+
+    /// 按组序收 tool-end（每项 tool-start → approval-requested → tool-end
+    /// 顺序保持；审批附加事件先于本项 tool-end 落位）、登记结果与致命判定
+    fn collect_group_endings(
+        &self,
+        group: &[usize],
+        mut executed: Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>>,
+        events: &mut Vec<ToolEvent>,
+        results: &mut Vec<Option<ClassifiedToolResult>>,
+        fatal: &mut Option<String>,
+    ) {
+        for (pos, &idx) in group.iter().enumerate() {
+            let call = &self.calls[idx];
+            let (r, extra) = executed[pos].take().unwrap_or_else(|| {
+                // 防御性兜底：正常路径不应缺失（与批尾兜底语义一致）
+                (
+                    ClassifiedToolResult::error(
+                        &call.id,
+                        &call.tool_name,
+                        ToolErrorKind::Cancelled,
+                        "cancelled",
+                        0,
+                    ),
+                    Vec::new(),
+                )
+            });
+            events.extend(extra);
+            events.push(ToolEvent::ToolEnd {
+                call_id: call.id.clone(),
+                tool_name: call.tool_name.clone(),
+                is_error: r.error_kind.is_some(),
+                duration_ms: r.duration_ms,
+                output: r.output.clone(),
+                error_code: r.error_kind.map(|k| k.error_code().to_string()),
+                error_message: r.error_message.clone(),
+                // EV-09（D-03）：原子要素透传（attempt/dedup/实际入参/打点）
+                attempt: Some(r.attempt),
+                deduplicated: Some(r.deduplicated),
+                executed_input: r.executed_input.clone(),
+                occurred_at_ms: r.occurred_at_ms,
+            });
+            if self.executor.result_is_fatal(call, &r) {
+                *fatal = Some(
+                    r.error_message
+                        .clone()
+                        .unwrap_or_else(|| "tool failed".into()),
+                );
+            }
+            results[idx] = Some(r);
         }
     }
 }

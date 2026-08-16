@@ -23,7 +23,9 @@ use conex_types::session::AgentSessionEvent as E;
 use futures::StreamExt;
 use std::sync::Arc;
 
-use crate::provider::{DeltaSink, ProviderCall, ProviderRequest, ToolSchema};
+use crate::provider::{
+    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ToolSchema,
+};
 use crate::stream::{
     ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, StopReason,
 };
@@ -78,9 +80,46 @@ pub(crate) async fn handle(
     // message_id 对齐（前端按 messageId 累加）
     let assistant_message_id = new_message_id("assistant");
 
-    // 4. 增量消费（T09.1：逐事件边收边聚合 + delta 实时双轨发射）
-    // 契约 v1（PE-02 §3.1）：流前 Err = 未产出任何事件（进重试阶梯）；
-    // 流中 Err = 已产出内容 → 内容保留收场（不重试，01 D6），未产出 → 重试阶梯。
+    // 4. 增量消费（T09.1：逐事件边收边聚合 + delta 实时双轨发射）＋
+    //    消费后分类（diagnostics / usage / 响应分类分派，01 §2.4 步骤 4-7）。
+    //    契约 v1（PE-02 §3.1）：流前 Err = 未产出任何事件（进重试阶梯）；
+    //    流中 Err = 已产出内容 → 内容保留收场（不重试，01 D6），未产出 → 重试阶梯。
+    let outcome = consume_stream(state, delta_sink, &assistant_message_id, result).await;
+    // 流前/流中无内容错误（未产出任何事件）：流中 abort → aborted 收场；
+    // 否则进入分类重试阶梯（瞬态 / length / payload，01 §2.5）；
+    // 重试入口自身的 abort 复查由 stream_error::handle 承担（Q40）
+    if let Some(classified) = outcome.stream_error {
+        if outcome.aborted {
+            return streaming_aborted(state);
+        }
+        return stream_error::handle(state, classified).await;
+    }
+    let consumed = outcome
+        .consumed
+        .expect("consume_stream：无流错误时必有收口结果");
+    consume_classify(state, &consumed, &assistant_message_id, outcome.aborted).await
+}
+
+/// 流消费收束状态（[consume_stream] 返回）：收口结果 / abort 竞速标记 /
+/// 流前或流中无内容的流错误（分类重试阶梯入口）。`consumed` 与
+/// `stream_error` 互斥：有错误时无收口结果。
+struct ConsumeOutcome {
+    consumed: Option<ConsumeResult>,
+    aborted: bool,
+    stream_error: Option<conex_types::response::ClassifiedStreamError>,
+}
+
+/// 4. 增量消费（T09.1：逐事件边收边聚合 + delta 实时双轨发射；C1d 从
+/// [handle] 拆出的流消费段，语义与原地逐行一致）
+///
+/// 契约 v1（PE-02 §3.1）：流前 Err = 未产出任何事件（进重试阶梯）；流中
+/// Err = 已产出内容 → 内容保留收场（不重试，01 D6），未产出 → 重试阶梯。
+async fn consume_stream(
+    state: &mut LoopState,
+    delta_sink: Option<&dyn DeltaSink>,
+    assistant_message_id: &str,
+    result: Result<ProviderEventStream, conex_types::response::ClassifiedStreamError>,
+) -> ConsumeOutcome {
     let mut builder = ConsumeBuilder::new();
     let mut stream_error: Option<conex_types::response::ClassifiedStreamError> = None;
     // Q21（T09.9）：流中 abort 竞速标记——流式消费期间 abort 置位即停收
@@ -116,13 +155,13 @@ pub(crate) async fn handle(
                         // 丢帧不丢 message-end，03 §5.3-6）
                         if let Some(sink) = delta_sink {
                             if let Some(delta) =
-                                delta_to_message_event(state, &assistant_message_id, &event)
+                                delta_to_message_event(state, assistant_message_id, &event)
                             {
                                 sink.push(delta);
                             }
                         } else if let Some(sink) = &state.options.live_sink {
                             if let Some(delta) =
-                                delta_to_message_event(state, &assistant_message_id, &event)
+                                delta_to_message_event(state, assistant_message_id, &event)
                             {
                                 sink.push_live(delta);
                             }
@@ -157,13 +196,11 @@ pub(crate) async fn handle(
         aborted = true;
     }
     if let Some(classified) = stream_error {
-        // 流前/流中无内容错误（未产出任何事件）：流中 abort → aborted 收场；
-        // 否则进入分类重试阶梯（瞬态 / length / payload，01 §2.5）；
-        // 重试入口自身的 abort 复查由 stream_error::handle 承担（Q40）
-        if aborted {
-            return streaming_aborted(state);
-        }
-        return stream_error::handle(state, classified).await;
+        return ConsumeOutcome {
+            consumed: None,
+            aborted,
+            stream_error: Some(classified),
+        };
     }
     let mut consumed = builder.finish(aborted);
     // Q33（T09.9）：consume 完成后重读 abort——consume 期间触发的 abort
@@ -173,15 +210,32 @@ pub(crate) async fn handle(
         consumed = crate::stream::reannotate_aborted(consumed);
         aborted = true;
     }
+    ConsumeOutcome {
+        consumed: Some(consumed),
+        aborted,
+        stream_error: None,
+    }
+}
 
+/// 5. 消费后分类（C1d 从 [handle] 拆出的分类段，语义与原地逐行一致）
+///
+/// 4b. diagnostics → provider-diagnostic（01 §2.4 步骤 4）；4c. 缓存审计
+/// （P5 S2 / T-36）与每 turn usage 槽位（EV-11/D-03 EV-13）；5. 响应分类
+/// 分派（01 §2.4 步骤 5-7）。abort / 空响应 / 流错误分支收场与原地一致。
+async fn consume_classify(
+    state: &mut LoopState,
+    consumed: &ConsumeResult,
+    assistant_message_id: &str,
+    aborted: bool,
+) -> Result<HandlerOutcome, LoopError> {
     // 4b. diagnostics → provider-diagnostic 事件（01 §2.4 步骤 4）
-    emit_diagnostics(state, &consumed);
+    emit_diagnostics(state, consumed);
 
     // 4c. 缓存审计（P5 S2 / T-36）：turn 后消费 usage——metadata.usage →
     // 标量面 → tracker.record_usage（run 聚合 + detectMiss 归因）；产出的
     // CacheMiss 由 T-40 按告警阈值转 cache-waste-alert 事件（本层只记录日志，
     // 不越界发事件；aborted / error 回合的实测 usage 照记，pi 语义）
-    consume_cache_usage(state, &consumed);
+    consume_cache_usage(state, consumed);
     // EV-11（D-03 EV-13）：每 turn usage 槽位——turn-complete 收口注入
     // TurnEnd.usage（六字段真值）；provider 未报告 usage（对象缺失）时
     // 保持 None（诚实留空，不猜前端估算）
@@ -194,8 +248,8 @@ pub(crate) async fn handle(
             // clientMessageId 取 run-task 下发的 assistantClientMessageId
             // （经 SessionLoopOptions 透传，03 §5.3-4）
             let message = build_assistant_message(
-                &consumed,
-                &assistant_message_id,
+                consumed,
+                assistant_message_id,
                 text.clone(),
                 tool_calls.clone(),
                 state.options.assistant_client_message_id.as_deref(),
@@ -240,9 +294,9 @@ pub(crate) async fn handle(
                 )));
             }
             // F2-04（P2 批 6）：分类后、steering 注入前复查 abort（对齐
-            // StreamError 分支 :219）——abort 在 Q33 复查（:151）之后、本
-            // 分支分派之前到达时，不得执行策略评估并把 steering 注入消息
-            // 写入对话（abort 后副作用）；命中直接 aborted 收场
+            // StreamError 分支）——abort 在 Q33 复查之后、本分支分派之前
+            // 到达时，不得执行策略评估并把 steering 注入消息写入对话
+            // （abort 后副作用）；命中直接 aborted 收场
             if aborted || state.abort_signal.is_aborted() {
                 return streaming_aborted(state);
             }
