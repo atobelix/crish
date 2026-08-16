@@ -46,21 +46,26 @@ const srcExts = ['rs', 'ts', 'tsx', 'js', 'jsx', 'vue', 'css', 'html'];
 
 const out = { root, scannedAt: new Date().toISOString(), metrics: {} };
 
-// 1. 未接线/临时标记
+// 1. 未接线/临时标记（同时报行数与 token 数两个口径，避免分母不一致）
 const markerRe = '未接线|待接线|临时|TODO|FIXME|hack|占位|降级|workaround';
 const markerFiles = rg(['-c', markerRe, '--no-messages', '--no-heading', ...globArgs(srcExts), root]);
 let markerLines = 0;
+let markerTokens = 0;
 for (const l of markerFiles) {
   const m = l.match(/:(\d+)$/);
   if (m) markerLines += Number(m[1]);
+  const path = l.replace(/:\d+$/, '');
+  const hits = rg(['-o', markerRe, '--no-messages', '--no-heading', path]);
+  markerTokens += hits.length;
 }
-out.metrics.marker = { files: markerFiles.length, lines: markerLines };
+out.metrics.marker = { files: markerFiles.length, lines: markerLines, tokens: markerTokens };
 
-// 2. 波次/批次命名文件（文件名含波次模式：w3f_/w6_a_s/w5b. 等；BATCH-/Round/SD- 前缀）
-const waveRe = /(^|[\\/._-])(w\d+[a-z]?[._-]|BATCH[-_]|Round\d*[._-]|SD[-_]\d+[._-])/i;
+// 2. 波次/批次命名文件（只匹配 basename，避免目录子串误报；分隔符 . _ - 均可触发，
+//    覆盖 chrome.w3f_dom.test.ts 中间位与 w5bStrict camelCase；_batch 领域词不误伤）
+const waveRe = /(^|[._-])(w\d+[a-z]?[._-]|w\d+[a-z]+[A-Z]|BATCH[-_]|Round\d*[._-]|SD[-_]\d+[._-])/i;
 const waveFiles = rg(['--files', '--no-messages', ...globArgs(srcExts), root])
   .map((f) => f.replaceAll('\\', '/'))
-  .filter((f) => waveRe.test(f.split('/').pop()) || waveRe.test(f));
+  .filter((f) => waveRe.test(f.split('/').pop()));
 out.metrics.waveNamedFiles = {
   count: waveFiles.length,
   samples: waveFiles.slice(0, 30),
