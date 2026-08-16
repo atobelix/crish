@@ -253,25 +253,7 @@ export function markDegradedSession(sessionId: string): void {
     /* swallow-ok: quota/隐私模式下降级标记写失败，下次回放仍可判定 */
   }
 }
-
-/** 会话是否存在未修复的降级戳。 */
-export function hasDegradedSession(sessionId: string): boolean {
-  try {
-    return localStorage.getItem(degradedMarkerKey(sessionId)) != null;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * 清除会话降级戳。
- * 调用时机约束（AU-03:127）：仅在「修复回写 SQLite 成功」后调用——回写失败时
- * 保持戳，下次 hydrate 重试单向修复，避免分叉在无痕状态下复发。
- */
-export function clearDegradedSession(sessionId: string): void {
-  try {
-    localStorage.removeItem(degradedMarkerKey(sessionId));
-  } catch {
-    /* swallow-ok: 降级标记清除失败仅留下过期标记，无功能影响 */
-  }
-}
+// 注（T2-2）：`hasDegradedSession` / `clearDegradedSession` 已随 T2-1 的降级
+// 恢复读面（loadSessionBodyWithDegradedRecovery）删除而失活（grep 零消费），
+// 予删。`markDegradedSession` 仍被 persistAllSessionsLocalFallback /
+// persistAllSessionsSyncViaLocalStorage 消费（T3 同步回退面），保留。
