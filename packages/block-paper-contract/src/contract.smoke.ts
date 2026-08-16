@@ -50,7 +50,7 @@ export const queryToolMeta = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// FlavourRegistration / registerFlavour
+// FlavourRegistration
 // ---------------------------------------------------------------------------
 
 export const sampleFlavour: FlavourRegistration = asFlavourRegistration({

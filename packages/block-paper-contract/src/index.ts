@@ -34,7 +34,7 @@ export type {
 } from './document-get-md';
 export { DOCUMENT_GET_MD_TOOL_NAME } from './document-get-md';
 
-// registerFlavour
+// FlavourRegistration
 export type {
   FlavourSchema,
   SlashContribution,

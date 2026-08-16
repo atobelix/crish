@@ -106,27 +106,14 @@ export type {
   HookRegistration,
 } from './hooks';
 
-// 插件契约（I8-E2 manifest 双轨收敛：shared-types 为跨端真源，plugin-sdk re-export）
+// 插件契约（I8-E2 manifest 双轨收敛：shared-types 为跨端真源）
 export type {
   PluginOrigin,
   PluginTrustLevel,
-  HookHandlerType,
   PluginPermission,
   PluginEntrypoints,
   PluginAuthor,
   PluginManifest,
-  PluginActivationApi,
-  PluginHookHandler,
-  HookControlSignal,
-  PluginToolDeclaration,
-  PluginMcpDeclaration,
-  PluginMcpServerDeclaration,
-  ActivatedPlugin,
-  SessionContextSnapshot,
-  PluginState,
-  PluginStateEntryLike,
-  PluginListEntryLike,
-  PluginRegistryLike,
 } from './plugin';
 
 // 存储事件

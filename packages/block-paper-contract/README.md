@@ -1,6 +1,6 @@
 # `@crish/block-paper-contract`
 
-块纸面 **W0 接口冻结** TypeScript 类型草稿包：`query_blocks` / `registerFlavour` / `ProjectionDiff` / `MountSpec` / `Intent` / **EditorSurface**。
+块纸面 **W0 接口冻结** TypeScript 类型草稿包：`query_blocks` / `FlavourRegistration` / `ProjectionDiff` / `MountSpec` / `Intent` / **EditorSurface**。
 
 **仅契约，不接线业务**（不改 apps、不实现工具/注册表/投影）。
 

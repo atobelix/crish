@@ -1,5 +1,5 @@
 /**
- * `registerFlavour` / FlavourRegistration 类型草稿（F0）。
+ * FlavourRegistration 类型草稿（F0）。
  *
  * 对齐：`docs/block-workspace-architecture/plans/specs/register-flavour-roadmap.md`
  *
@@ -60,7 +60,7 @@ export type BlockViewContribution = {
 };
 
 /**
- * `registerFlavour({ id, schema, blockView?, slash? })` 的注册载荷。
+ * FlavourRegistration 注册载荷（id + schema + 可选 View/slash 贡献）。
  */
 export type FlavourRegistration = {
   /** flavour / kind 唯一 id */
@@ -80,7 +80,7 @@ export type FlavourRegistration = {
 export type UnregisterFlavour = () => void;
 
 /**
- * `registerFlavour` 函数签名草稿。
+ * Flavour 注册函数签名草稿。
  *
  * @param registration 完整注册载荷（id + schema 必填）
  * @returns 可选注销器；F1 注册表落地后语义钉死

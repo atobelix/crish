@@ -50,10 +50,8 @@ const config: KnipConfig = {
     // 被 lint:all / lint:css 脚本经 stylelint 自动发现使用（stylelint 未本地安装，
     // knip 插件未激活而误报为 unused file）
     '.stylelintrc.cjs',
-    // R7 plugin-sdk 迁移预留资产（方案 01 §3 定义；R7 落地后移出本清单）
-    // 注：PS-02 T2.6 已按 knip Configuration hints 移出 5 项（store/index.ts、
-    // rustCoreStore.ts、hooks.ts、plugin.ts、subagent.ts）——knip 已确认它们
-    // 有真实 import 消费（此前登记已过时），仅保留仍未被引用的 thinking-intensity.ts
+    // 跨轮次预留资产：shared-types 类型已确认有真实 import 消费，
+    // 仅保留仍未被引用的 thinking-intensity.ts
     'packages/shared-types/src/thinking-intensity.ts',
   ],
   ignoreBinaries: [

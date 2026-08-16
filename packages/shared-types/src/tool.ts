@@ -26,7 +26,7 @@ export interface ToolDefinition {
   execute(input: JsonObject, ctx: ToolExecutionContext): Promise<ToolOutput>;
 }
 
-/** 工具注册选项（plugin-sdk ToolRegistrar.register 第二参；三层体系第 2 层） */
+/** 工具注册选项（ToolRegistrar.register 第二参；三层体系第 2 层） */
 export interface ToolRegistrationOptions {
   readonly label?: string;
   readonly category?: ToolCategory;

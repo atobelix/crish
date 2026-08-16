@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { PluginManifest } from '@crish/plugin-sdk/src/manifest';
+import type { PluginManifest } from '@crish/shared-types';
 import {
   declaredToolsInfo,
   manifest,
@@ -38,8 +38,8 @@ describe('官方导入插件 manifest', () => {
     expect(names).toEqual(manifest.declaredTools);
   });
 
-  it('结构契约：可赋给 plugin-sdk 的 PluginManifest（双向锁定）', () => {
-    // 类型层断言（编译期）：manifest 须满足 @crish/plugin-sdk 的声明契约。
+  it('结构契约：可赋给 shared-types 的 PluginManifest（双向锁定）', () => {
+    // 类型层断言（编译期）：manifest 须满足 @crish/shared-types 的声明契约。
     const asSdkManifest: PluginManifest = manifest;
     expect(asSdkManifest.id).toBe(manifest.id);
   });

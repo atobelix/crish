@@ -1,12 +1,12 @@
 /**
  * 官方导入插件 manifest（E3 首个官方插件试点）。
  *
- * 契约：与 plugin-sdk 的 PluginManifest 结构对齐（本文件自包含定义，
- * 不直接依赖 plugin-sdk 运行时；结构契约由 __tests__/manifest.test.ts
- * 以类型断言锁定——manifest 须可赋给 @crish/plugin-sdk 的 PluginManifest）。
+ * 契约：PluginManifest 由 @crish/shared-types 提供（I8-E2 跨端真源）。
+ * 本文件自包含结构契约由 __tests__/manifest.test.ts 以类型断言锁定——
+ * manifest 须可赋给 shared-types 的 PluginManifest。
  */
 
-import type { HookEventName, PluginPermission } from '@crish/plugin-sdk/src/manifest';
+import type { HookEventName, PluginPermission } from '@crish/shared-types';
 import type { ImportSource } from './types';
 
 /** 插件唯一标识（manifest id）。 */
@@ -29,7 +29,7 @@ interface PluginJsonObject {
 }
 
 /**
- * 插件清单（结构契约，字段对齐 plugin-sdk PluginManifest）。
+ * 插件清单（结构契约，字段对齐 shared-types PluginManifest）。
  */
 export interface ImportPluginManifest {
   readonly id: string;
@@ -43,7 +43,11 @@ export interface ImportPluginManifest {
   readonly declaredHooks: readonly HookEventName[];
   readonly declaredTools: readonly string[];
   readonly declaredMcpServers: readonly string[];
-  readonly author?: { readonly name: string; readonly email?: string; readonly url?: string };
+  readonly author?: {
+    readonly name: string;
+    readonly email?: string;
+    readonly url?: string;
+  };
   readonly keywords?: readonly string[];
   readonly metadata?: PluginJsonObject;
 }

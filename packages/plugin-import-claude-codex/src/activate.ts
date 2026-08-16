@@ -1,8 +1,8 @@
 /**
  * 插件激活入口（E2 运行时调用 activate(api)）。
  *
- * 结构契约：api 参数采用最小结构类型（observe/log），与 plugin-sdk 的
- * PluginAPI 方法签名兼容——E2 的 PluginAPI 实例结构上满足本接口。
+ * 结构契约：api 参数采用最小结构类型（observe/log），与宿主插件 API
+ * 方法签名兼容——宿主 PluginAPI 实例结构上满足本接口。
  * 第一版只注册 session.start 的 observe 观察（使用说明语义占位）：
  * 不注册工具执行器（manifest 只声明工具名；执行体为包内纯函数，
  * 由宿主侧运行时按工具名调用——依赖全注入原则，遵守最小权限面）。
@@ -10,7 +10,7 @@
 
 import { manifest } from './manifest';
 
-/** 激活期可用的最小插件 API（结构契约，与 plugin-sdk PluginAPI 兼容）。 */
+/** 激活期可用的最小插件 API（结构契约，与宿主 PluginAPI 兼容）。 */
 export interface PluginActivateApi {
   /**
    * 注册 observe 处理器（容错并行，失败吞掉）。
@@ -18,13 +18,13 @@ export interface PluginActivateApi {
    */
   observe(
     event: 'session.start',
-    handler: (payload: { sessionId?: string }) => void | Promise<void>,
+    handler: (payload: { sessionId?: string }) => void | Promise<void>
   ): unknown;
   /** 插件日志（宿主注入 logger，自动带 pluginId tag）。 */
   log(
     level: 'debug' | 'info' | 'warn' | 'error',
     message: string,
-    metadata?: Record<string, unknown>,
+    metadata?: Record<string, unknown>
   ): void;
 }
 

@@ -232,8 +232,8 @@ export interface ErrorOccurredPayload {
 }
 
 /**
- * 14 钩子事件 → payload 类型映射（I7-M13 事件映射表冻结；plugin-sdk
- * HookPayloadMap 与此同源）。
+ * 14 钩子事件 → payload 类型映射（I7-M13 事件映射表冻结；跨端钩子
+ * payload 契约与此同源）。
  */
 export interface HookPayloadMap {
   'turn.start': TurnStartPayload;
@@ -257,12 +257,12 @@ export type HookUnsubscribe = () => void;
 
 /** observe 模式 handler（容错并行，失败吞掉，禁令 14） */
 export type HookObserveHandler<E extends HookEventName> = (
-  payload: HookPayloadMap[E],
+  payload: HookPayloadMap[E]
 ) => void | Promise<void>;
 
 /** on 模式 handler（串行语义合并，可返回控制信号，禁令 14） */
 export type HookOnHandler<E extends HookEventName> = (
-  payload: HookPayloadMap[E],
+  payload: HookPayloadMap[E]
 ) =>
   | void
   | LifecycleHandlerResult
@@ -309,19 +309,19 @@ export interface HookBusLike {
   /** 通配符订阅全部事件（仅 observe） */
   observe(
     event: '*',
-    handler: (payload: unknown) => void | Promise<void>,
+    handler: (payload: unknown) => void | Promise<void>
   ): HookUnsubscribe;
   observe<E extends HookEventName>(
     event: E,
-    handler: HookObserveHandler<E>,
+    handler: HookObserveHandler<E>
   ): HookUnsubscribe;
   on<E extends HookEventName>(
     event: E,
-    handler: HookOnHandler<E>,
+    handler: HookOnHandler<E>
   ): HookUnsubscribe;
   emit<E extends HookEventName>(
     event: E,
-    payload: HookPayloadMap[E],
+    payload: HookPayloadMap[E]
   ): Promise<LifecycleHandlerResult>;
   /** 是否有已注册 handler（观测/诊断） */
   hasHandlers?(): boolean;

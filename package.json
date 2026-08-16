@@ -10,7 +10,6 @@
     "apps/agent-workbench",
     "apps/crish-mobile",
     "packages/plugin-import-claude-codex",
-    "packages/plugin-sdk",
     "packages/shared-types",
     "packages/shared-utils",
     "packages/test-utils",
