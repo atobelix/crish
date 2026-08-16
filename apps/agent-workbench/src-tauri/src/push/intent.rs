@@ -651,7 +651,9 @@ pub fn push_intent_with_kill_source(
         | AgentEvent::NudgeEnqueued { .. }
         | AgentEvent::RecoveryAcknowledged { .. }
         | AgentEvent::RecoveryRetryAttempted { .. }
-        | AgentEvent::ProviderRequestAnchored { .. } => None,
+        | AgentEvent::ProviderRequestAnchored { .. }
+        // R1 撤回域（会话内截断事件，不产生推送意图——撤回由前端投影重放呈现）
+        | AgentEvent::TimelineTruncate { .. } => None,
     }
 }
 

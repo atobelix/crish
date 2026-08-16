@@ -27,14 +27,14 @@
 //! `cargo test -p conex-types` 立即失败。
 
 use conex_types::{
-    AgentEndReason, AgentEvent, AgentMessage, AgentMessageBlock, AgentMessageRole,
-    ApprovalDecision, BackpressureLevel, ImpactAssessment, MissAttribution, PermissionRequest,
-    ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats,
+    AgentEndReason, AgentEvent, AgentMessage, AgentMessageBlock, AgentMessageMetadataKind,
+    AgentMessageRole, ApprovalDecision, BackpressureLevel, ImpactAssessment, MissAttribution,
+    PermissionRequest, ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats,
     RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
     RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
     SubagentEndStatus, SubagentEventKind, SubagentEventPayload, SystemPromptWireMode,
-    ToolArtifact, ToolArtifactKind, ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory,
-    ToolConcurrency, ToolMetadata, ToolOutput, ToolProgressUpdate,
+    TimelineTruncateReason, ToolArtifact, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
+    ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput, ToolProgressUpdate,
 };
 use conex_types::tool::{
     CompressionCacheInvalidation, ContextCompressionCacheBoundaryMetadata,
@@ -213,12 +213,12 @@ fn registry_event_types_match_enum_declaration_order() {
     let reg = registry();
     assert_eq!(reg.contract, "engine-events", "注册表契约名必须为 engine-events");
     assert_eq!(reg.schema_version, 1);
-    assert_eq!(reg.event_count, 57);
-    assert_eq!(reg.events.len(), 57, "事件注册表必须是 57 条");
+    assert_eq!(reg.event_count, 58);
+    assert_eq!(reg.events.len(), 58, "事件注册表必须是 58 条");
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        57,
-        "AgentEvent enum 必须是 57 种域事件"
+        58,
+        "AgentEvent enum 必须是 58 种域事件"
     );
     for (i, ev) in reg.events.iter().enumerate() {
         assert_eq!(ev.id as usize, i + 1, "事件编号必须从 1 连续递增");
@@ -514,6 +514,9 @@ fn enum_values_match_serde_wire() {
     check_enum!(reg, "SecurityAuditDecision", SecurityAuditDecision, 6);
     check_enum!(reg, "SubagentEventKind", SubagentEventKind, 3);
     check_enum!(reg, "SubagentEndStatus", SubagentEndStatus, 3);
+    // 统一输入流收敛战役 T1a：timeline-truncate.reason + AgentMessage.metadata.kind
+    check_enum!(reg, "TimelineTruncateReason", TimelineTruncateReason, 2);
+    check_enum!(reg, "AgentMessageMetadataKind", AgentMessageMetadataKind, 5);
 }
 
 /// 事件总数仍为 57：`operation` 是 security-audit 载荷内的字段值
@@ -522,15 +525,16 @@ fn enum_values_match_serde_wire() {
 #[test]
 fn security_audit_undeclared_write_operation_stays_in_sync() {
     let reg = registry();
-    // 事件总数保持 57（operation 值是载荷内字段，非独立事件类型；
+    // 事件总数保持 58（operation 值是载荷内字段，非独立事件类型；
     // 2026-08-04 T-AB-17 任务域兼容新增七事件，31 → 38；
     // 2026-08-05 T-CF-04 定时器域兼容新增两事件，38 → 40；
     // 同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41；
     // 2026-08-11 D8 恢复域 + goal 域兼容新增 8 事件，41 → 49；
     // 2026-08-14 D-03 契约窗口：tool-input-repaired 核销删除 + 9 新观测
-    // 事件，49 → 57）
-    assert_eq!(reg.event_count, 57, "新增 operation 值不得改变事件总数");
-    assert_eq!(reg.events.len(), 57);
+    // 事件，49 → 57；2026-08-16 统一输入流收敛战役 T1a：timeline-truncate，
+    // 57 → 58）
+    assert_eq!(reg.event_count, 58, "新增 operation 值不得改变事件总数");
+    assert_eq!(reg.events.len(), 58);
 
     // 注册表必须登记 undeclared-write（T-ESC-02 新值）
     let spec = &reg.enums["SecurityAuditOperation"];
@@ -597,6 +601,12 @@ fn registry_entries_are_reachable_from_events() {
             "注册表载荷类型 {name} 未被任何事件传递引用（死条目）"
         );
     }
+    // 例外登记（统一输入流收敛战役 T1a）：AgentMessageMetadataKind 是
+    // `AgentMessage.metadata.kind` 的来源标记常量集——`metadata` 字段保持
+    // JsonValue（详案-T1 §1.3：不改字段类型），故枚举位**结构上不被任何字段
+    // ts_type 引用**，而是经生成常量 AGENT_MESSAGE_METADATA_KIND_VALUES 暴露
+    // 给前端。此处显式把它视为可达，避免误判为死条目。
+    reachable.insert("AgentMessageMetadataKind".to_string());
     for name in reg.enums.keys() {
         assert!(
             reachable.contains(name),
@@ -678,35 +688,41 @@ fn registry_integer_markers_lock_fractional_whitelist() {
 fn envelope_wire_fields_are_separate_from_event_body() {
     // runId/sequence/schemaVersion 属信封（emit 层注入），不得进入事件体注册表
     let reg = registry();
+    // 特例：run-terminal 与 timeline-truncate 事件体自带 runId（03 §5.1-16；
+    // 详案-T1 §1.2(a) timeline-truncate 对齐 run-terminal 先例），其余事件
+    // 不得把信封 runId/sequence/schemaVersion 登记为事件体字段
+    let body_run_id_events = ["run-terminal", "timeline-truncate"];
     for ev in &reg.events {
-        // 特例：run-terminal 事件体自带 runId（03 §5.1-16），唯一例外，
-        // 其余事件不得把信封 runId/sequence/schemaVersion 登记为事件体字段
-        let is_run_terminal = ev.wire == "run-terminal";
+        let carries_body_run_id = body_run_id_events.contains(&ev.wire.as_str());
         for f in &ev.fields {
             assert_ne!(f.name, "sequence", "事件 {} 不应把信封 sequence 登记为事件体字段", ev.wire);
             assert_ne!(f.name, "schemaVersion", "事件 {} 不应把信封 schemaVersion 登记为事件体字段", ev.wire);
-            if !is_run_terminal {
+            if !carries_body_run_id {
                 assert_ne!(f.name, "runId", "事件 {} 不应把信封 runId 登记为事件体字段", ev.wire);
             }
         }
-        if is_run_terminal {
+        if carries_body_run_id {
             assert!(
                 ev.fields.iter().any(|f| f.name == "runId" && f.required),
-                "run-terminal 必须登记必填 runId"
+                "事件 {} 必须登记必填 runId",
+                ev.wire
             );
         }
     }
-    // 样本构造覆盖全量事件时，run-terminal 的 runId 必须能被 serde 接受
-    let run_terminal = reg
-        .events
-        .iter()
-        .find(|e| e.wire == "run-terminal")
-        .expect("注册表必须有 run-terminal");
-    let sample = build_event_sample(&reg, run_terminal);
-    let parsed: AgentEvent = serde_json::from_value(sample)
-        .unwrap_or_else(|e| panic!("run-terminal 注册表样本反序列化失败：{e}"));
-    let out = serde_json::to_value(&parsed).unwrap();
-    assert_eq!(out["runId"], json!("x"));
+    // 样本构造覆盖全量事件时，run-terminal / timeline-truncate 的 runId 必须
+    // 能被 serde 接受（事件体自带 runId，信封注入同值覆盖）
+    for wire in body_run_id_events {
+        let ev = reg
+            .events
+            .iter()
+            .find(|e| e.wire == wire)
+            .unwrap_or_else(|| panic!("注册表必须有 {wire}"));
+        let sample = build_event_sample(&reg, ev);
+        let parsed: AgentEvent = serde_json::from_value(sample)
+            .unwrap_or_else(|e| panic!("{wire} 注册表样本反序列化失败：{e}"));
+        let out = serde_json::to_value(&parsed).unwrap();
+        assert_eq!(out["runId"], json!("x"), "{wire} 事件体 runId 应存在");
+    }
 }
 
 // ── 7. 背压三级分类（I5-M7：注册表 backpressure 字段 ↔ Rust 判定函数双向锁定）──
@@ -991,14 +1007,14 @@ fn timer_cancelled_backpressure_is_soft() {
 #[test]
 fn registry_drift_timer_events_registered() {
     let reg = registry();
-    // 累计基线：38 → 40 → 41 → 49 → 57（D-03 契约窗口：tool-input-repaired
-    // 核销 + 9 新观测事件已登记）
-    assert_eq!(reg.event_count, 57, "累计基线必须为 57");
-    assert_eq!(reg.events.len(), 57);
+    // 累计基线：38 → 40 → 41 → 49 → 57 → 58（D-03 契约窗口：tool-input-repaired
+    // 核销 + 9 新观测事件已登记；T1a 统一输入流收敛战役追加 timeline-truncate）
+    assert_eq!(reg.event_count, 58, "累计基线必须为 58");
+    assert_eq!(reg.events.len(), 58);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        57,
-        "AgentEvent enum 变体数必须为 57"
+        58,
+        "AgentEvent enum 变体数必须为 58"
     );
 
     // timer-fired（38）：Critical 必达落库，字段 sessionId/timerId/prompt/firedAtMs
@@ -1099,13 +1115,14 @@ fn cron_fired_backpressure_is_critical() {
 #[test]
 fn registry_drift_cron_fired_registered() {
     let reg = registry();
-    // 累计基线终态：40 → 41 → 49 → 57（D-03 契约窗口后 57 变体）
-    assert_eq!(reg.event_count, 57);
-    assert_eq!(reg.events.len(), 57);
+    // 累计基线终态：40 → 41 → 49 → 57 → 58（D-03 契约窗口后 57 变体；
+    // T1a 统一输入流收敛战役追加 timeline-truncate）
+    assert_eq!(reg.event_count, 58);
+    assert_eq!(reg.events.len(), 58);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        57,
-        "AgentEvent enum 变体数必须为 57"
+        58,
+        "AgentEvent enum 变体数必须为 58"
     );
 
     // cron-fired（40）：Critical 必达落库，字段 sessionId/cronId/prompt/
@@ -1399,8 +1416,9 @@ fn registry_drift_d03_observation_events_registered() {
         assert_eq!(policy.bridge_priority, DropClass::Critical, "{wire} 桥丢帧判定不符");
     }
     // 与 ALL_TYPE_NAMES 声明序对齐（49-57 为 D-03 九观测事件，追加在
-    // goal-continuation-decided 之后）
-    let tail: Vec<&str> = AgentEvent::ALL_TYPE_NAMES[48..].to_vec();
+    // goal-continuation-decided 之后；timeline-truncate 由 T1a 追加在 58，
+    // 故此处只取前 9 项校验）
+    let tail: Vec<&str> = AgentEvent::ALL_TYPE_NAMES[48..57].to_vec();
     let expected_wires: Vec<&str> = expected.iter().map(|(w, _, _, _)| *w).collect();
     assert_eq!(tail, expected_wires, "enum 声明序尾部（49-57）必须为 9 新事件");
 }
@@ -1420,6 +1438,99 @@ fn registry_drift_tool_input_repaired_revoked() {
             .iter()
             .all(|n| *n != "tool-input-repaired"),
         "enum 不得残留 tool-input-repaired（D-03 核销）"
+    );
+}
+
+// ── 8.7 统一输入流收敛战役 T1a：timeline-truncate 事件 + 新枚举登记 ──
+
+/// timeline-truncate 事件登记终态断言（累计 58）：编号 58（声明序尾插，
+/// 事件域 retraction）、rustVariant=TimelineTruncate、三决策
+/// Critical+Persist+Critical（default required，决定 3——R1 撤回语义关键事件
+/// 须 over-refuse）、字段形状 sessionId/runId/boundarySeq/reason/
+/// targetMessageId/timestamp 全量必填、与 serde 行为双向一致、seq 归属
+/// `TimelineTruncate.sequence > boundarySeq` 不变量随 schema 锁定。
+#[test]
+fn registry_drift_timeline_truncate_registered() {
+    let reg = registry();
+    // 累计基线终态：57 → 58（T1a 统一输入流收敛战役追加）
+    assert_eq!(reg.event_count, 58);
+    assert_eq!(reg.events.len(), 58);
+    assert_eq!(
+        AgentEvent::ALL_TYPE_NAMES.len(),
+        58,
+        "AgentEvent enum 变体数必须为 58"
+    );
+
+    // timeline-truncate（58）：Critical 必达落库，字段 sessionId/runId/
+    // boundarySeq/reason/targetMessageId/timestamp
+    let ev = reg
+        .events
+        .iter()
+        .find(|e| e.wire == "timeline-truncate")
+        .expect("注册表必须登记 timeline-truncate");
+    assert_eq!(ev.id, 58, "timeline-truncate 编号必须为 58（声明序尾插，T1a）");
+    assert_eq!(ev.rust_variant, "TimelineTruncate");
+    assert_eq!(ev.domain, "retraction", "timeline-truncate 必须归属 retraction 域");
+    // default required（决定 3）：Critical+Persist+Critical 三决策显式锁定
+    assert_eq!(ev.backpressure, "critical", "timeline-truncate 必须为 Critical（必达落库）");
+    assert!(ev.persist, "timeline-truncate 必须 Persist（落库）");
+    assert_eq!(ev.bridge_priority, "critical", "timeline-truncate 桥丢帧必须 Critical");
+    assert!(
+        ev.kind_backpressure.is_none(),
+        "timeline-truncate 不得登记 kindBackpressure（仅 subagent-event 允许）"
+    );
+    let wire_fields: Vec<&str> = ev.fields.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(
+        wire_fields,
+        vec!["sessionId", "runId", "boundarySeq", "reason", "targetMessageId", "timestamp"],
+        "timeline-truncate 字段形状与详案-T1 §1.2(a) 不符"
+    );
+    // 字段全部必填（default required）
+    assert!(
+        ev.fields.iter().all(|f| f.required),
+        "timeline-truncate 的字段必须全部必填（default required）"
+    );
+    // sessionId/runId 必填在场（协议硬约束全局断言亦覆盖）
+    for name in ["sessionId", "runId"] {
+        let f = ev
+            .fields
+            .iter()
+            .find(|f| f.name == name)
+            .unwrap_or_else(|| panic!("timeline-truncate 缺 {name} 字段"));
+        assert!(f.required, "timeline-truncate 的 {name} 必须必填");
+    }
+    // reason 引用新枚举 TimelineTruncateReason（注册表内部类型引用自洽）
+    let reason = ev
+        .fields
+        .iter()
+        .find(|f| f.name == "reason")
+        .expect("timeline-truncate 缺 reason 字段");
+    assert_eq!(reason.ts_type, "TimelineTruncateReason", "reason 必须引用 TimelineTruncateReason");
+
+    // 注册表样本 ↔ serde 行为双向一致 + event_policy 三决策一致
+    let sample = build_event_sample(&reg, ev);
+    let parsed: AgentEvent = serde_json::from_value(sample)
+        .unwrap_or_else(|e| panic!("timeline-truncate 按注册表样本反序列化失败：{e}"));
+    assert_eq!(parsed.type_name(), "timeline-truncate", "type_name 与注册表 wire 不一致");
+
+    // seq 归属不变量：枚举声明序中 timeline-truncate 为最后一变体，其自身取号
+    // 在 boundarySeq 之后（`TimelineTruncate.sequence > boundarySeq`）；
+    // 此处锁定 ALL_TYPE_NAMES 尾位即 timeline-truncate
+    assert_eq!(
+        AgentEvent::ALL_TYPE_NAMES.last().copied(),
+        Some("timeline-truncate"),
+        "enum 声明序尾位必须为 timeline-truncate（seq 取号在 boundarySeq 之后）"
+    );
+
+    // 新枚举双向锁定（数值已在 enum_values_match_serde_wire 锁定，此处锚定 wire 语义）
+    let reason_spec = &reg.enums["TimelineTruncateReason"];
+    assert_eq!(reason_spec.wire, "kebab-case");
+    assert_eq!(reason_spec.values, vec!["user-requested", "error-rollback"]);
+    let kind_spec = &reg.enums["AgentMessageMetadataKind"];
+    assert_eq!(kind_spec.wire, "kebab-case");
+    assert_eq!(
+        kind_spec.values,
+        vec!["steering", "nudge", "diagnostic", "context-state", "injection"]
     );
 }
 

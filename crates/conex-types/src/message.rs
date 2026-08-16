@@ -9,6 +9,32 @@ use serde::{Deserialize, Serialize};
 
 use crate::tool::ToolOutput;
 
+/// 消息来源/类型标记（对齐 `AgentMessage.metadata.kind`，与 [AgentMessageRole]
+/// 正交的另一维度——role 是 LLM wire 对话角色，kind 是注入/状态等「来源标记」）。
+///
+/// 统一输入流收敛战役 T1a（详案-T1-事件模型扩展 §1.2 b/c）：把 02 审计问题⑥
+/// 的魔法字符串常量化（`runtime-steering`/`nudge`/`diagnostic`/`steering`）。
+/// T1 只定义枚举位，不改现有字符串写法（替换为 `as_str()` 归 I1）。wire
+/// kebab-case，serde 反序列化接受下列规范值。
+///
+/// serde 不可实例化冲突规避：枚举是「来源标记名称」集合，`AgentMessage.metadata`
+/// 依旧为 `JsonValue`（详案 §1.3：不改 metadata 字段类型），枚举位经生成常量
+/// `AGENT_MESSAGE_METADATA_KIND_VALUES` 暴露给前端。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AgentMessageMetadataKind {
+    /// 运行时 steering 注入（`runtime-steering` 出站，既有语义）
+    Steering,
+    /// 轻量 nudge 提示（`nudge`）
+    Nudge,
+    /// 诊断说明消息（`diagnostic`）
+    Diagnostic,
+    /// 上下文状态切换告知（I1 注入；role=User，正文走 text 块）
+    ContextState,
+    /// 静态注入文本（D2 文本化；走请求组装层，不进时间线）
+    Injection,
+}
+
 /// 消息角色（对齐 AgentMessage.role，serde lowercase）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]

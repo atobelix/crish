@@ -1,4 +1,4 @@
-//! I7-M13 事件映射表冻结护栏（57 引擎事件 → 14 钩子面）
+//! I7-M13 事件映射表冻结护栏（58 引擎事件 → 14 钩子面）
 //!
 //! 契约真源：docs/multi-agent-repair/improvement/reports/I7-M13-事件映射表.md
 //! （I8 生态轮 E1 的 hookPayloadMap 落地的依据）。
@@ -121,6 +121,9 @@ const UNMAPPED_EVENTS: &[&str] = &[
     "recovery-acknowledged",
     "recovery-retry-attempted",
     "provider-request-anchored",
+    // 撤回域（2026-08-16 T1a 统一输入流收敛战役）：timeline-truncate——
+    // R1 撤回出站事件走事件总线消费 + 投影重放，不进插件钩子面
+    "timeline-truncate",
 ];
 
 /// 14 钩子名全集（与 packages/shared-types/src/hooks.ts 的 HOOK_EVENT_NAMES 一致；
@@ -182,7 +185,7 @@ fn unmapped_engine_events_exist_in_enum() {
     }
 }
 
-// ── 2. 全集划分：57 = 11 映射 + 46 无对应 ──
+// ── 2. 全集划分：58 = 11 映射 + 47 无对应 ──
 
 #[test]
 fn mapping_partitions_all_engine_events() {
@@ -195,18 +198,18 @@ fn mapping_partitions_all_engine_events() {
         11,
         "映射引擎事件必须为 11 个（tool-end 双钩子去重）"
     );
-    assert_eq!(unmapped.len(), 46, "无对应引擎事件必须为 46 个");
+    assert_eq!(unmapped.len(), 47, "无对应引擎事件必须为 47 个");
     assert_eq!(
         registry.len(),
-        57,
-        "AgentEvent enum 必须为 57 种域事件（49 基线 + D-03 契约窗口 9 新事件 - tool-input-repaired 核销）"
+        58,
+        "AgentEvent enum 必须为 58 种域事件（57 基线 + T1a 统一输入流收敛战役 timeline-truncate）"
     );
 
     let union: BTreeSet<&str> = mapped.union(&unmapped).copied().collect();
     assert_eq!(
         union,
         registry,
-        "映射清单 ∪ 无对应清单 必须恰好等于全部引擎事件（57 = 11 + 46）"
+        "映射清单 ∪ 无对应清单 必须恰好等于全部引擎事件（58 = 11 + 47）"
     );
     let overlap: BTreeSet<&str> = mapped.intersection(&unmapped).copied().collect();
     assert!(overlap.is_empty(), "映射清单与无对应清单不得重叠：{overlap:?}");
@@ -352,10 +355,10 @@ fn mapping_contract_anchors() {
         first_batch.is_subset(&mapped),
         "第一批接 6 个引擎事件必须全部在映射面内"
     );
-    // 全部映射事件数量锚定（57 - 11 = 46 无对应）
+    // 全部映射事件数量锚定（58 - 11 = 47 无对应）
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len() - mapped.len(),
         UNMAPPED_EVENTS.len(),
-        "57 - 映射数 = 无对应数 必须成立"
+        "58 - 映射数 = 无对应数 必须成立"
     );
 }

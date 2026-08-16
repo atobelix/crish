@@ -1,4 +1,4 @@
-//! B1.5 序列化契约测试：57 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
+//! B1.5 序列化契约测试：58 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
 //!
 //! 穷举清单与 [AgentEvent::ALL_TYPE_NAMES]（引擎事件名宏同源生成）动态对照，
 //! 新增事件变体在两处登记后本测试自动纳入，不再硬编码事件数。
@@ -11,9 +11,9 @@ use conex_types::{
     ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats,
     RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
     RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
-    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, ToolArtifactKind,
-    ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory, ToolConcurrency,
-    ToolMetadata, ToolOutput, ToolProgressUpdate, TurnUsage,
+    SubagentEndStatus, SubagentEventKind, SubagentEventPayload, TimelineTruncateReason,
+    ToolArtifactKind, ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory,
+    ToolConcurrency, ToolMetadata, ToolOutput, ToolProgressUpdate, TurnUsage,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -679,6 +679,16 @@ fn all_events() -> Vec<AgentEvent> {
             turn_index: 1,
             model: Some("deepseek-v4-flash".to_string()),
             request_started_at_ms: 1_785_456_000_000,
+        },
+        // T1a 统一输入流收敛战役（2026-08-16）：retraction 域撤回出站事件，
+        // 与 ALL_TYPE_NAMES 声明序尾部一一对应
+        AgentEvent::TimelineTruncate {
+            session_id: "s1".to_string(),
+            run_id: "run-1".to_string(),
+            boundary_seq: 42,
+            reason: TimelineTruncateReason::UserRequested,
+            target_message_id: "msg-9".to_string(),
+            timestamp: TS.into(),
         },
     ]
 }

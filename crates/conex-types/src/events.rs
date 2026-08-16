@@ -1,6 +1,6 @@
 //! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! [AgentEvent] 是 57 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! [AgentEvent] 是 58 种域事件的 serde tagged enum（顶层 `type`），全部字段
 //! serde camelCase，字段结构以 03-frontend-contract.md §1.1-1.6 清单与 §5.1
 //! 硬依赖表为准。机器可读导出见 contracts/engine-events.json（事件注册表），
 //! 前端 TS 类型与解析器由 scripts/generate-engine-bindings.mjs 生成，落点
@@ -33,6 +33,19 @@ pub enum RunTerminalStatus {
     Cancelled,
     /// 失败
     Failed,
+}
+
+/// 时间线截断原因（`timeline-truncate.reason`，事件域 retraction；wire kebab-case）
+///
+/// 统一输入流收敛战役 T1a（详案-T1-事件模型扩展 §1.2 a）：`UserRequested` 为
+/// 用户 UI 主动撤回；`ErrorRollback` 为错误回滚触发的截断（扩展点 D 预留）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TimelineTruncateReason {
+    /// 用户 UI 主动撤回
+    UserRequested,
+    /// 错误回滚触发的截断（扩展点 D 预留）
+    ErrorRollback,
 }
 
 /// 审批放行行为（wire 值为 allow/deny/ask，lowercase）
@@ -373,7 +386,7 @@ pub struct TurnUsage {
     pub cache_miss_tokens: u64,
 }
 
-/// 57 种域事件（tagged enum，双端契约唯一事实源）
+/// 58 种域事件（tagged enum，双端契约唯一事实源）
 ///
 /// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase；
 /// 字段清单与类型映射见 contracts/engine-events.json（事件注册表），
@@ -388,6 +401,8 @@ pub struct TurnUsage {
 /// summary-background/stage-summary-milestone/nudge-enqueued/
 /// recovery-acknowledged/recovery-retry-attempted/provider-request-anchored，
 /// 全 Delta 可丢级观测事件），49 → 57（编号 50-58）。
+/// 2026-08-16 统一输入流收敛战役 T1a（详案-T1-事件模型扩展）：新增撤回域事件
+/// timeline-truncate（Critical+Persist+Critical），57 → 58（编号 59）。
 ///
 /// 跨进程序列化是主用途，事件按值短暂传递，变体间内存差异非热点，
 /// 故不装箱（装箱会破坏调用方 API 形态），显式允许 large_enum_variant。
@@ -1195,6 +1210,31 @@ pub enum AgentEvent {
         /// 请求发出时刻（epoch 毫秒）
         request_started_at_ms: u64,
     },
+
+    // ── 统一输入流收敛战役 · 撤回域（T1a：详案-T1-事件模型扩展 §1.2 a；
+    //     R1 撤回出站事件，default required（决定 3），Critical+Persist 必达落库；
+    //     seq 归属：TimelineTruncate 自身占一个会话内连续 sequence（emit 层
+    //     reserve_sequence 取号），boundary_seq 是「截断到哪」——两者关系
+    //     `TimelineTruncate.sequence > boundary_seq`。R1 定义「防越界不变量」：
+    //     boundary_seq 之前的旧事件保留、之后的重放忽略——事件流只追加不物理删）──
+
+    /// 时间线截断（R1 撤回出站事件；`type` = "timeline-truncate"）
+    #[serde(rename = "timeline-truncate", rename_all = "camelCase")]
+    TimelineTruncate {
+        /// 会话归属（协议硬约束，registry_drift 全局断言）
+        session_id: String,
+        /// 事件体自带 runId（对齐 run-terminal 先例；R1 撤回收场的 run；
+        /// 与信封 runId 同值，emit 层注入值覆盖）
+        run_id: String,
+        /// 截断边界 sequence（重放只到此前；事件流只追加不物理删）
+        boundary_seq: u64,
+        /// 截断原因（新枚举 TimelineTruncateReason）
+        reason: TimelineTruncateReason,
+        /// 被撤回的 user 消息稳定 id（R1 文本回填数据源）
+        target_message_id: String,
+        /// ISO8601 时间戳
+        timestamp: String,
+    },
 }
 
 /// 事件类型名宏：由同一份变体名 → wire 名清单展开出
@@ -1281,6 +1321,7 @@ engine_event_type_names! {
     RecoveryAcknowledged => "recovery-acknowledged",
     RecoveryRetryAttempted => "recovery-retry-attempted",
     ProviderRequestAnchored => "provider-request-anchored",
+    TimelineTruncate => "timeline-truncate",
 }
 
 /// 单一事件策略（D-04 PC-05：分类唯一事实源）——同一 match 产出
@@ -1401,6 +1442,14 @@ pub fn event_policy(event: &AgentEvent) -> EventPolicy {
         | AgentEvent::ProviderRequestAnchored { .. } => EventPolicy::new(
             BackpressureLevel::Delta,
             PersistenceDecision::NoPersist,
+            DropClass::Critical,
+        ),
+        // 撤回域（T1a：timeline-truncate 是 R1 撤回的语义关键事件——Critical +
+        // Persist + Critical 必达落库；显式声明（对齐 DSH ignorable 显式语义），
+        // 不落 catch-all，避免隐含 Critical 分级）
+        AgentEvent::TimelineTruncate { .. } => EventPolicy::new(
+            BackpressureLevel::Critical,
+            PersistenceDecision::Persist,
             DropClass::Critical,
         ),
         // 其余 Critical 族（agent/turn/tool/message-end/审批/审计/

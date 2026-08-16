@@ -6,9 +6,9 @@
 // Regenerate: node scripts/generate-engine-bindings.mjs
 // =======================================================================
 
-import type { EngineEvent, EngineAgentStartEvent, EngineAgentEndEvent, EngineTurnStartEvent, EngineTurnEndEvent, EngineMessageStartEvent, EngineMessageDeltaEvent, EngineMessageEndEvent, EngineToolStartEvent, EngineToolUpdateEvent, EngineToolEndEvent, EngineToolBatchStartEvent, EngineToolBatchEndEvent, EngineContextCompressionStartEvent, EngineContextCompressionEndEvent, EngineProviderDiagnosticEvent, EngineRuntimeErrorEvent, EngineRuntimeSteeringEvent, EngineRuntimeInterventionRequiredEvent, EngineApprovalRequestedEvent, EngineApprovalResolvedEvent, EngineCheckpointCreatedEvent, EngineCheckpointRestoredEvent, EngineRunTerminalEvent, EngineCacheStatsUpdatedEvent, EngineCacheWasteAlertEvent, EngineColdCacheWarningEvent, EngineSecurityAuditEvent, EngineSubagentStartedEvent, EngineSubagentEventEvent, EngineSubagentEndedEvent, EngineTaskStartedEvent, EngineTaskOutputEvent, EngineTaskHeartbeatEvent, EngineTaskSuspiciousEvent, EngineTaskCompletedEvent, EngineTaskFailedEvent, EngineTaskKilledEvent, EngineTimerFiredEvent, EngineTimerCancelledEvent, EngineCronFiredEvent, EngineRecoveryEscalatedEvent, EngineRecoverySteeringEvent, EngineRecoveryForkEvent, EngineRecoveryReportEvent, EngineRecoveryBudgetDeniedEvent, EngineGoalRoundStartedEvent, EngineGoalRoundCompletedEvent, EngineGoalContinuationDecidedEvent, EngineSteeringEvaluatedEvent, EngineControlIntentEvent, EngineHookOutcomeEvent, EngineSummaryBackgroundEvent, EngineStageSummaryMilestoneEvent, EngineNudgeEnqueuedEvent, EngineRecoveryAcknowledgedEvent, EngineRecoveryRetryAttemptedEvent, EngineProviderRequestAnchoredEvent } from "./events";
-import type { AgentMessage, AgentMessageBlock, AgentMessageBlockText, AgentMessageBlockThought, AgentMessageBlockToolCall, AgentMessageBlockToolResult, ToolOutput, ToolArtifact, ToolBatchCall, ToolBatchResult, ToolProgressUpdate, ProviderDiagnostic, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, ToolMetadata, PermissionRequest, ContextCompressionPolicyMetadata, ContextCompressionHandoffMetadata, ContextCompressionCacheBoundaryMetadata, ContextCompressionRecord, RunCacheStats, ImpactAssessment, SubagentEventPayload, AgentMessageRole, AgentEndReason, RunTerminalStatus, ApprovalDecision, ToolCategory, ToolConcurrency, ToolArtifactKind, ProviderDiagnosticPhase, SystemPromptWireMode, ProviderErrorKind, RuntimeCheckpointKind, ContextCompressionTrigger, ContextCompressionReason, ContextCompressionPolicyTier, ContextCompressionPolicyAction, CompressionCacheInvalidation, MissAttribution, SecurityAuditOperation, SecurityAuditDecision, SubagentEventKind, SubagentEndStatus } from "./types";
-import { AGENT_MESSAGE_ROLE_VALUES, AGENT_END_REASON_VALUES, RUN_TERMINAL_STATUS_VALUES, APPROVAL_DECISION_VALUES, TOOL_CATEGORY_VALUES, TOOL_CONCURRENCY_VALUES, TOOL_ARTIFACT_KIND_VALUES, PROVIDER_DIAGNOSTIC_PHASE_VALUES, SYSTEM_PROMPT_WIRE_MODE_VALUES, PROVIDER_ERROR_KIND_VALUES, RUNTIME_CHECKPOINT_KIND_VALUES, CONTEXT_COMPRESSION_TRIGGER_VALUES, CONTEXT_COMPRESSION_REASON_VALUES, CONTEXT_COMPRESSION_POLICY_TIER_VALUES, CONTEXT_COMPRESSION_POLICY_ACTION_VALUES, COMPRESSION_CACHE_INVALIDATION_VALUES, MISS_ATTRIBUTION_VALUES, SECURITY_AUDIT_OPERATION_VALUES, SECURITY_AUDIT_DECISION_VALUES, SUBAGENT_EVENT_KIND_VALUES, SUBAGENT_END_STATUS_VALUES } from "./types";
+import type { EngineEvent, EngineAgentStartEvent, EngineAgentEndEvent, EngineTurnStartEvent, EngineTurnEndEvent, EngineMessageStartEvent, EngineMessageDeltaEvent, EngineMessageEndEvent, EngineToolStartEvent, EngineToolUpdateEvent, EngineToolEndEvent, EngineToolBatchStartEvent, EngineToolBatchEndEvent, EngineContextCompressionStartEvent, EngineContextCompressionEndEvent, EngineProviderDiagnosticEvent, EngineRuntimeErrorEvent, EngineRuntimeSteeringEvent, EngineRuntimeInterventionRequiredEvent, EngineApprovalRequestedEvent, EngineApprovalResolvedEvent, EngineCheckpointCreatedEvent, EngineCheckpointRestoredEvent, EngineRunTerminalEvent, EngineCacheStatsUpdatedEvent, EngineCacheWasteAlertEvent, EngineColdCacheWarningEvent, EngineSecurityAuditEvent, EngineSubagentStartedEvent, EngineSubagentEventEvent, EngineSubagentEndedEvent, EngineTaskStartedEvent, EngineTaskOutputEvent, EngineTaskHeartbeatEvent, EngineTaskSuspiciousEvent, EngineTaskCompletedEvent, EngineTaskFailedEvent, EngineTaskKilledEvent, EngineTimerFiredEvent, EngineTimerCancelledEvent, EngineCronFiredEvent, EngineRecoveryEscalatedEvent, EngineRecoverySteeringEvent, EngineRecoveryForkEvent, EngineRecoveryReportEvent, EngineRecoveryBudgetDeniedEvent, EngineGoalRoundStartedEvent, EngineGoalRoundCompletedEvent, EngineGoalContinuationDecidedEvent, EngineSteeringEvaluatedEvent, EngineControlIntentEvent, EngineHookOutcomeEvent, EngineSummaryBackgroundEvent, EngineStageSummaryMilestoneEvent, EngineNudgeEnqueuedEvent, EngineRecoveryAcknowledgedEvent, EngineRecoveryRetryAttemptedEvent, EngineProviderRequestAnchoredEvent, EngineTimelineTruncateEvent } from "./events";
+import type { AgentMessage, AgentMessageBlock, AgentMessageBlockText, AgentMessageBlockThought, AgentMessageBlockToolCall, AgentMessageBlockToolResult, ToolOutput, ToolArtifact, ToolBatchCall, ToolBatchResult, ToolProgressUpdate, ProviderDiagnostic, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, ToolMetadata, PermissionRequest, ContextCompressionPolicyMetadata, ContextCompressionHandoffMetadata, ContextCompressionCacheBoundaryMetadata, ContextCompressionRecord, RunCacheStats, ImpactAssessment, SubagentEventPayload, AgentMessageRole, AgentEndReason, RunTerminalStatus, ApprovalDecision, ToolCategory, ToolConcurrency, ToolArtifactKind, ProviderDiagnosticPhase, SystemPromptWireMode, ProviderErrorKind, RuntimeCheckpointKind, ContextCompressionTrigger, ContextCompressionReason, ContextCompressionPolicyTier, ContextCompressionPolicyAction, CompressionCacheInvalidation, MissAttribution, SecurityAuditOperation, SecurityAuditDecision, SubagentEventKind, SubagentEndStatus, TimelineTruncateReason, AgentMessageMetadataKind } from "./types";
+import { AGENT_MESSAGE_ROLE_VALUES, AGENT_END_REASON_VALUES, RUN_TERMINAL_STATUS_VALUES, APPROVAL_DECISION_VALUES, TOOL_CATEGORY_VALUES, TOOL_CONCURRENCY_VALUES, TOOL_ARTIFACT_KIND_VALUES, PROVIDER_DIAGNOSTIC_PHASE_VALUES, SYSTEM_PROMPT_WIRE_MODE_VALUES, PROVIDER_ERROR_KIND_VALUES, RUNTIME_CHECKPOINT_KIND_VALUES, CONTEXT_COMPRESSION_TRIGGER_VALUES, CONTEXT_COMPRESSION_REASON_VALUES, CONTEXT_COMPRESSION_POLICY_TIER_VALUES, CONTEXT_COMPRESSION_POLICY_ACTION_VALUES, COMPRESSION_CACHE_INVALIDATION_VALUES, MISS_ATTRIBUTION_VALUES, SECURITY_AUDIT_OPERATION_VALUES, SECURITY_AUDIT_DECISION_VALUES, SUBAGENT_EVENT_KIND_VALUES, SUBAGENT_END_STATUS_VALUES, TIMELINE_TRUNCATE_REASON_VALUES, AGENT_MESSAGE_METADATA_KIND_VALUES } from "./types";
 import type { JsonValue } from "../../primitive-types";
 
 export type ParseResult<T> =
@@ -272,6 +272,20 @@ export function parseSubagentEndStatus(v: unknown): ParseResult<SubagentEndStatu
     return parseOk(v as SubagentEndStatus);
   }
   return parseErr("SubagentEndStatus: expected one of " + SUBAGENT_END_STATUS_VALUES.join(", "));
+}
+
+export function parseTimelineTruncateReason(v: unknown): ParseResult<TimelineTruncateReason> {
+  if (typeof v === "string" && (TIMELINE_TRUNCATE_REASON_VALUES as readonly string[]).includes(v)) {
+    return parseOk(v as TimelineTruncateReason);
+  }
+  return parseErr("TimelineTruncateReason: expected one of " + TIMELINE_TRUNCATE_REASON_VALUES.join(", "));
+}
+
+export function parseAgentMessageMetadataKind(v: unknown): ParseResult<AgentMessageMetadataKind> {
+  if (typeof v === "string" && (AGENT_MESSAGE_METADATA_KIND_VALUES as readonly string[]).includes(v)) {
+    return parseOk(v as AgentMessageMetadataKind);
+  }
+  return parseErr("AgentMessageMetadataKind: expected one of " + AGENT_MESSAGE_METADATA_KIND_VALUES.join(", "));
 }
 
 export function parseAgentMessage(v: unknown): ParseResult<AgentMessage> {
@@ -2222,6 +2236,32 @@ export function parseEngineProviderRequestAnchoredEvent(v: unknown): ParseResult
   });
 }
 
+export function parseEngineTimelineTruncateEvent(v: unknown): ParseResult<EngineTimelineTruncateEvent> {
+  if (!isRecord(v)) return parseErr("EngineTimelineTruncateEvent: payload must be an object");
+  if (v["type"] !== "timeline-truncate") return parseErr("EngineTimelineTruncateEvent: type mismatch");
+  const sessionId = reqField(v, "sessionId", checkString);
+  if (!sessionId.ok) return sessionId;
+  const runId = reqField(v, "runId", checkString);
+  if (!runId.ok) return runId;
+  const boundarySeq = reqField(v, "boundarySeq", checkInteger);
+  if (!boundarySeq.ok) return boundarySeq;
+  const reason = reqField(v, "reason", parseTimelineTruncateReason);
+  if (!reason.ok) return reason;
+  const targetMessageId = reqField(v, "targetMessageId", checkString);
+  if (!targetMessageId.ok) return targetMessageId;
+  const timestamp = reqField(v, "timestamp", checkString);
+  if (!timestamp.ok) return timestamp;
+  return parseOk({
+    type: "timeline-truncate",
+    sessionId: sessionId.data,
+    runId: runId.data,
+    boundarySeq: boundarySeq.data,
+    reason: reason.data,
+    targetMessageId: targetMessageId.data,
+    timestamp: timestamp.data,
+  });
+}
+
 export function parseEngineEvent(v: unknown): ParseResult<EngineEvent> {
   if (!isRecord(v)) return parseErr("engine event must be an object");
   const t = v["type"];
@@ -2284,6 +2324,7 @@ export function parseEngineEvent(v: unknown): ParseResult<EngineEvent> {
     case "recovery-acknowledged": return parseEngineRecoveryAcknowledgedEvent(v);
     case "recovery-retry-attempted": return parseEngineRecoveryRetryAttemptedEvent(v);
     case "provider-request-anchored": return parseEngineProviderRequestAnchoredEvent(v);
+    case "timeline-truncate": return parseEngineTimelineTruncateEvent(v);
     default: return parseErr("unknown engine event type '" + t + "'");
   }
 }

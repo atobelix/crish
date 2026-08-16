@@ -63,7 +63,11 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
         | AgentEvent::TaskSuspicious { .. }
         | AgentEvent::TaskCompleted { .. }
         | AgentEvent::TaskKilled { .. }
-        | AgentEvent::RecoveryFork { .. } => EventRedactStrategy::Transparent,
+        | AgentEvent::RecoveryFork { .. }
+        // T1a 统一输入流收敛战役：timeline-truncate 为 Critical 必达会话内
+        // 事件（R1 撤回出站），device 端透传不裁剪（与 message-end 同级，
+        // 会话树撤回语义须完整跨端透传，字段全为结构标识符无正文敏感）
+        | AgentEvent::TimelineTruncate { .. } => EventRedactStrategy::Transparent,
 
         // R 摘要化（33）：message-delta/end、tool-start/update/end、
         // runtime-error/intervention-required、approval-requested/resolved、

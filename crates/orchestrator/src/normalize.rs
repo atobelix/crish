@@ -94,6 +94,8 @@ fn event_session_id_mut(event: &mut AgentEvent) -> Option<&mut String> {
         AgentEvent::RecoveryAcknowledged { session_id, .. } => Some(session_id),
         AgentEvent::RecoveryRetryAttempted { session_id, .. } => Some(session_id),
         AgentEvent::ProviderRequestAnchored { session_id, .. } => Some(session_id),
+        // R1 撤回域事件（携带 sessionId；T1a 契约：boundary 截断事件属会话内，归一化补会话）
+        AgentEvent::TimelineTruncate { session_id, .. } => Some(session_id),
     }
 }
 

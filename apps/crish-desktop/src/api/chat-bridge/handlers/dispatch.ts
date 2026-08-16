@@ -130,6 +130,14 @@ export function onProviderRequestAnchored(
   _envelope: EngineEnvelope<'provider-request-anchored'>
 ): void {}
 
+// 撤回域（T1a 统一输入流收敛战役）：timeline-truncate 出站事件，R1 撤回消费
+// 面未接线（T1 只定义类型），前端显式空实现占位以满足 engineDispatchTable
+// 穷举键（对齐 D-03 观测事件与 timer/cron 显式空实现先例）
+export function onTimelineTruncate(
+  _env: HandlerEnv,
+  _envelope: EngineEnvelope<'timeline-truncate'>
+): void {}
+
 export const engineDispatchTable: {
   [ET in EngineEventType]: EngineHandler<ET>;
 } = {
@@ -204,6 +212,8 @@ export const engineDispatchTable: {
   'recovery-acknowledged': onRecoveryAcknowledged,
   'recovery-retry-attempted': onRecoveryRetryAttempted,
   'provider-request-anchored': onProviderRequestAnchored,
+  // 撤回域（T1a 统一输入流收敛战役，显式空实现）
+  'timeline-truncate': onTimelineTruncate,
 };
 
 type LegacyHandler = (env: HandlerEnv, envelope: LegacyEnvelope) => void;
