@@ -5,8 +5,7 @@
 //!   连续 / 载荷可读回）；
 //! - WAL 模式并发写：8 线程 × 500 事件 + 穿插会话 upsert——无锁冲突崩溃、
 //!   failure latch 不触发、行数准确、序列号唯一；
-//! - 写放大报告（报告模式，只统计不断言）：全量 `save_session_body` 重写
-//!   耗时 vs 增量 `append_session_messages` 追加耗时。
+//! - 写放大报告（报告模式，只统计不断言）：全量 `save_session_body` 重写耗时。
 //!
 //! 运行方式（release，显式跑；默认不进常规 CI）：
 //!   cargo test -p conex-db --release --test stress_write -- --ignored --nocapture
@@ -223,11 +222,10 @@ fn stress_wal_concurrent_appends_and_upserts() {
     );
 }
 
-/// 写放大报告（报告模式，只统计不断言耗时）：全量保存 vs 增量追加
+/// 写放大报告（报告模式，只统计不断言耗时）：全量保存路径
 ///
 /// AA-06 P6：`save_session_body` 每 commit 重写整个会话正文（O(n) 行
-/// DELETE+INSERT）；`append_session_messages` 为增量追加路径——本报告给出
-/// 两条路径的实测耗时差，供写放大数据留存。
+/// DELETE+INSERT）——本报告给出该 O(n) 重写路径的实测耗时，供写放大数据留存。
 #[test]
 #[ignore]
 fn stress_write_amplification_report() {
@@ -254,25 +252,6 @@ fn stress_write_amplification_report() {
         "全量保存后行数准确"
     );
 
-    // 增量追加 500 条（P6 优化路径）
-    let inc: Vec<SessionMessage> = (2000..2500u64)
-        .map(|i| {
-            sample_message(
-                &format!("m{i}"),
-                if i % 2 == 0 { "user" } else { "assistant" },
-                i as i64,
-            )
-        })
-        .collect();
-    let started = Instant::now();
-    db.append_session_messages("s1", &inc).expect("增量追加");
-    let inc_append = started.elapsed();
-    assert_eq!(
-        db.load_session_body("s1").expect("读回").len(),
-        2500,
-        "增量追加后行数准确"
-    );
-
     // 再次全量保存（写放大：重写全部现有行）
     let started = Instant::now();
     db.save_session_body("s1", &all).expect("再次全量保存");
@@ -284,6 +263,6 @@ fn stress_write_amplification_report() {
     );
 
     println!(
-        "[stress] 写放大报告（报告模式，无耗时断言）：全量保存 2000 条={full_save:?}，增量追加 500 条={inc_append:?}，再次全量重写 2500 条={full_rewrite:?}"
+        "[stress] 写放大报告（报告模式，无耗时断言）：全量保存 2000 条={full_save:?}，再次全量重写={full_rewrite:?}"
     );
 }

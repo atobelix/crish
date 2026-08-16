@@ -368,27 +368,6 @@ fn save_session_body_replaces() {
 }
 
 #[test]
-fn append_session_messages_increments_seq() {
-    let db = LocalDb::open_in_memory().unwrap();
-    db.upsert_session_entry(&sample_entry("s1")).unwrap();
-    db.save_session_body("s1", &[sample_message("m1", "user", 1)])
-        .unwrap();
-
-    db.append_session_messages(
-        "s1",
-        &[
-            sample_message("m2", "assistant", 2),
-            sample_message("m3", "user", 3),
-        ],
-    )
-    .unwrap();
-
-    let loaded = db.load_session_body("s1").unwrap();
-    assert_eq!(loaded.len(), 3);
-    assert_eq!(loaded[2].id, "m3");
-}
-
-#[test]
 fn trigger_maintains_message_count() {
     let db = LocalDb::open_in_memory().unwrap();
     db.upsert_session_entry(&sample_entry("s1")).unwrap();
@@ -403,11 +382,6 @@ fn trigger_maintains_message_count() {
 
     let list = db.list_sessions().unwrap();
     assert_eq!(list[0].message_count, 2);
-
-    db.append_session_messages("s1", &[sample_message("m3", "user", 3)])
-        .unwrap();
-    let list2 = db.list_sessions().unwrap();
-    assert_eq!(list2[0].message_count, 3);
 
     // save_session_body 替换为 1 条：先 delete(-2) 再 insert(+1) = -1
     db.save_session_body("s1", &[sample_message("m-only", "user", 10)])

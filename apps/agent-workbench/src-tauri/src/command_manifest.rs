@@ -10,7 +10,7 @@
 //! 维护规则：
 //! - `registered = true` 子集 = main.rs `make_handlers!` 当前注册面（integration agent
 //!   接线时以本清单为准对齐，任何不一致都是 bug）；
-//! - 登记先行命令（`registered = false`，如 append_session_messages / workbench_* 待接线）
+//! - 登记先行命令（`registered = false`，如 workbench_* 待接线）
 //!   由实现方各自负责，接线后翻 `true`；
 //! - 幽灵命令（AA-02 W-5，9 条）**严禁**登记（`manifest_excludes_ghost_commands` 测试拦截）。
 //!
@@ -63,9 +63,8 @@ const fn entry(
 /// 命令清单（132 条 = 注册面 127 + 登记先行 5；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
-/// 登记先行（registered=false）为「已登记未接线」：append_session_messages /
-/// workbench_open_workspace / workbench_list_workspaces / workbench_dev_mcp_enabled /
-/// core_resume_run（P2）。
+/// 登记先行（registered=false）为「已登记未接线」：workbench_open_workspace /
+/// workbench_list_workspaces / workbench_dev_mcp_enabled / core_resume_run（P2）。
 /// F-03（DM-07）：core_read_run_events 恢复激活（注册面 119 → 120，总数 124 → 125）。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,

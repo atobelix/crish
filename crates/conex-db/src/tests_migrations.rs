@@ -434,30 +434,6 @@ fn save_load_session_body_usage_roundtrip() {
 }
 
 #[test]
-fn append_session_messages_usage_roundtrip() {
-    // append 路径同样写 usage_json 列
-    let db = LocalDb::open_in_memory().unwrap();
-    db.upsert_session_entry(&sample_entry("s1")).unwrap();
-    db.save_session_body("s1", &[sample_message("m1", "user", 1)])
-        .unwrap();
-
-    let mut m2 = sample_message("m2", "assistant", 2);
-    m2.usage = Some(r#"{"promptTokens":9000,"cacheReadTokens":8000}"#.to_string());
-    let mut m3 = sample_message("m3", "user", 3);
-    m3.usage = None;
-    db.append_session_messages("s1", &[m2, m3]).unwrap();
-
-    let loaded = db.load_session_body("s1").unwrap();
-    assert_eq!(loaded.len(), 3);
-    assert_eq!(
-        loaded[1].usage.as_deref(),
-        Some(r#"{"promptTokens":9000,"cacheReadTokens":8000}"#),
-        "append 写入的 usage 回读一致"
-    );
-    assert_eq!(loaded[2].usage, None, "append 缺省 usage 回读 None");
-}
-
-#[test]
 fn load_session_body_usage_none_for_legacy_rows() {
     // 旧库行（v5 之前无 usage_json 列值）→ 列 NULL → usage None，兼容不炸
     let db = LocalDb::open_in_memory().unwrap();

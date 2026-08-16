@@ -1,11 +1,9 @@
 //! PE-09 T09.7 基准：DB 写入路径（P6）
 //!
-//! 场景：save_session_body 全量（100/1000/5000 消息）vs
-//! append_session_messages 增量（基库 1000 条上追加 +1/+10/+100）。
+//! 场景：save_session_body 全量保存（100/1000/5000 消息）。
 //!
-//! 指标：每批耗时与写放大比——全量路径 O(n)（DELETE 全表 + 逐条 INSERT +
-//! 逐行触发器 UPDATE）；增量路径 O(k)（k = 新增消息数）。写放大比 =
-//! 全量保存 N 条耗时 / 追加 k 条耗时（k = N 时二者的比值近似写放大）。
+//! 指标：每批耗时——全量路径 O(n)（DELETE 全表 + 逐条 INSERT +
+//! 逐行触发器 UPDATE）。
 //!
 //! 运行：`cargo bench -p conex-db --bench db_write`
 //! 快速模式：`cargo bench -p conex-db --bench db_write -- --measurement-time 1 --warm-up-time 0.2`
@@ -45,12 +43,6 @@ fn save_full(db: &LocalDb, session_id: &str, messages: &[SessionMessage]) {
         .expect("全量保存");
 }
 
-/// 增量追加路径：MAX(seq)+1 续写（P6 写放大 O(k)）
-fn append_delta(db: &LocalDb, session_id: &str, messages: &[SessionMessage]) {
-    db.append_session_messages(session_id, messages)
-        .expect("增量追加");
-}
-
 fn bench_db_write(c: &mut Criterion) {
     // 全量保存：消息数增长时耗时线性（O(n) 写放大对照）
     let mut full_group = c.benchmark_group("db_write/save_full");
@@ -71,32 +63,6 @@ fn bench_db_write(c: &mut Criterion) {
         );
     }
     full_group.finish();
-
-    // 增量追加：基库 1000 条，追加 +1/+10/+100（O(k) 写放大验证）
-    let base: Vec<SessionMessage> = (0..1000).map(|i| message(i, 256)).collect();
-    let mut append_group = c.benchmark_group("db_write/append_incremental");
-    for added in [1usize, 10, 100] {
-        let new_messages: Vec<SessionMessage> =
-            (1000..1000 + added).map(|i| message(i, 256)).collect();
-        append_group.bench_with_input(
-            BenchmarkId::new("added", format!("+{added}")),
-            &new_messages,
-            |b, new_messages| {
-                b.iter_batched(
-                    || {
-                        let db = db_with_session();
-                        save_full(&db, "s1", &base);
-                        db
-                    },
-                    |db| {
-                        append_delta(&db, "s1", new_messages);
-                    },
-                    criterion::BatchSize::SmallInput,
-                );
-            },
-        );
-    }
-    append_group.finish();
 }
 
 criterion_group!(benches, bench_db_write);

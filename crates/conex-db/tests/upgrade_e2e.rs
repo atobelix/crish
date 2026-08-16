@@ -410,12 +410,10 @@ fn upgrade_e2e_v3_to_v4_all_apis_usable_after_upgrade() {
     assert_eq!(after.len(), 1);
     assert_eq!(after[0].sequence, 4);
 
-    // ── 正文：全量替换 / 增量追加 ──
+    // ── 正文：全量保存 ──
     db.save_session_body("s3", &[sample_message("n1", "user")])
         .unwrap();
-    db.append_session_messages("s3", &[sample_message("n2", "assistant")])
-        .unwrap();
-    assert_eq!(db.load_session_body("s3").unwrap().len(), 2);
+    assert_eq!(db.load_session_body("s3").unwrap().len(), 1);
 
     // ── 子代理：保存 → 读回 ──
     db.save_session_agents("s3", &[sample_agent("a1")]).unwrap();

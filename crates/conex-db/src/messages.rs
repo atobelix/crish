@@ -1,4 +1,4 @@
-//! 消息域：session_messages 表正文的全量保存 / 加载 / 增量追加，
+//! 消息域：session_messages 表正文的全量保存 / 加载，
 //! 以及 localStorage 导入用的宽容解析助手。
 
 use super::{DbFailure, DbFailureKind, LocalDb};
@@ -103,68 +103,6 @@ impl LocalDb {
         Ok(())
     }
 
-    /// 增量追加消息（在当前 max seq 后续写）。
-    pub fn append_session_messages(
-        &self,
-        session_id: &str,
-        new_messages: &[SessionMessage],
-    ) -> Result<(), DbFailure> {
-        if new_messages.is_empty() {
-            return Ok(());
-        }
-
-        let mut conn = self.conn.lock().map_err(|e| DbFailure {
-            message: format!("lock poisoned: {e}"),
-            kind: DbFailureKind::Lock,
-        })?;
-
-        let tx = conn
-            .transaction()
-            .map_err(|e| self.latch_error("append_session_messages_tx", e))?;
-
-        let next_seq: i64 = {
-            let mut stmt = tx
-                .prepare(
-                    "SELECT COALESCE(MAX(seq), -1) + 1 FROM session_messages WHERE session_id = ?1",
-                )
-                .map_err(|e| self.latch_error("append_session_messages_max_seq", e))?;
-            stmt.query_row(rusqlite::params![session_id], |row| row.get::<_, i64>(0))
-                .map_err(|e| self.latch_error("append_session_messages_max_seq_row", e))?
-        };
-
-        for (offset, msg) in new_messages.iter().enumerate() {
-            let seq = next_seq + offset as i64;
-            tx.execute(
-                "INSERT INTO session_messages (
-                    session_id, seq, id, sender, text, thinking, timestamp, status,
-                    stream_text_offset, thinking_time, tool_calls_json,
-                    blocks_json, tool_call_results_json, usage_json
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-                rusqlite::params![
-                    session_id,
-                    seq,
-                    msg.id,
-                    msg.sender,
-                    msg.text,
-                    msg.thinking,
-                    msg.timestamp,
-                    msg.status,
-                    msg.stream_text_offset,
-                    msg.thinking_time,
-                    msg.tool_calls_json,
-                    msg.blocks_json,
-                    msg.tool_call_results_json,
-                    msg.usage,
-                ],
-            )
-            .map_err(|e| self.latch_error("append_session_messages_insert", e))?;
-        }
-
-        tx.commit()
-            .map_err(|e| self.latch_error("append_session_messages_commit", e))?;
-
-        Ok(())
-    }
 }
 
 /// 灵活解析会话消息：先尝试 JSON 数组，失败再走 JSONL 行解析。
