@@ -1,0 +1,66 @@
+.searchBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-secondary, rgba(0, 0, 0, 0.2));
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  flex: 0 0 auto;
+}
+
+.searchIcon {
+  color: var(--text-tertiary, #64748b);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary, #f8fafc);
+  outline: none;
+}
+
+.searchInput::placeholder {
+  color: var(--text-tertiary, #64748b);
+}
+
+.searchActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.matchesCount {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary, #94a3b8);
+  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.navBtn,
+.clearBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.navBtn:hover,
+.clearBtn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--text-primary, #f8fafc);
+}

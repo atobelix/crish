@@ -345,22 +345,40 @@ export interface SessionMessageToolCallResult {
   isError?: boolean;
 }
 
-/** 时间线块类型：正文段 / 工具调用锚点 / 图片块 */
-type MessageTimelineBlockType = 'text' | 'tool_call' | 'image';
+/** 时间线块类型：思维链段 / 正文段 / 工具调用锚点 / 图片块 / 步骤标记 */
+export type MessageTimelineBlockType =
+  'thought' | 'text' | 'tool_call' | 'image' | 'step_start' | 'step_end';
 
 /**
- * 消息时间线块（按发生顺序交错 text / tool_call / image）。
+ * 消息时间线块（按发生顺序交错 thought / text / tool_call / image）。
+ * - thought：单步思考块（一等公民），content 承载思考文本，turnIndex 标记轮次
  * - text：content 为该段正文；流式时由 streamTextOffset 切分
  * - tool_call：id 对齐 MessageToolCall.id；content 可选摘要
  * - image：images 承载结构化图片引用
  */
 export interface MessageTimelineBlock {
   type: MessageTimelineBlockType;
-  /** tool_call 时对应 toolCall.id；text 段可省略 */
+  /** tool_call 时对应 toolCall.id；thought 时对应 stepId/thoughtId */
   id?: string;
+  /** 文本或思考内容 */
   content?: string;
+  /** 关联的轮次索引 (0-based) */
+  turnIndex?: number;
+  /** 思考/执行耗时（毫秒） */
+  durationMs?: number;
+  /** 是否处于流式中 */
+  isStreaming?: boolean;
+  /** 是否已折叠（历史步骤默认折叠） */
+  isHistoricalCollapsed?: boolean;
+  /** 是否已被模型安全标记截断 */
+  redacted?: boolean;
   /** type === 'image' 时承载结构化图片引用 */
   images?: MessageImageRef[];
+}
+
+export interface TimelineThoughtBlock extends MessageTimelineBlock {
+  type: 'thought';
+  thinkingText?: string;
 }
 
 /** 会话内一条用户或助手消息 */
@@ -370,6 +388,12 @@ export interface SessionMessage {
   text?: string | undefined;
   /** 流式思考过程，与正式正文分离，避免互相覆盖 */
   thinking?: string | undefined;
+  /** 结构化思考分段列表（支持多轮回放与交错还原） */
+  thinkingTurns?: Array<{
+    turnIndex: number;
+    content: string;
+    durationMs?: number;
+  }>;
   /** epoch ms */
   timestamp: number;
   toolCalls?: MessageToolCall[] | undefined;
@@ -382,7 +406,7 @@ export interface SessionMessage {
    */
   toolCallResults?: SessionMessageToolCallResult[] | undefined;
   /**
-   * 时间线：按发生顺序交错 text / tool_call。
+   * 时间线：按发生顺序交错 thought / text / tool_call。
    * 流式累计正文用 streamTextOffset 切分到当前 text 段。
    */
   blocks?: MessageTimelineBlock[] | undefined;

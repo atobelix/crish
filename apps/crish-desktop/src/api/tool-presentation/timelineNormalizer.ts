@@ -1,5 +1,10 @@
 /**
- * 工具调用 Timeline 块规范化纯函数。
+ * 工具调用与交错多步骤 Timeline 块规范化纯函数（timelineNormalizer）。
+ *
+ * 核心设计：
+ * - 确立 [步骤 1: 思考 ➔ 工具调用 ➔ 观察结果] ➔ [步骤 2: 思考 ➔ 工具调用 ➔ 观察结果] ➔ [最终 Markdown 回复] 真实有序结构；
+ * - 流式期间保持 0 重排签名（timelineSignature 针对活跃增量块只投影标记，不破坏 memo）；
+ * - 规范化助手消息时间线，对齐 blocks / toolCalls / thinkingTurns。
  */
 
 import type { MessageToolCall, SessionMessage } from '../../store/layoutStore';
@@ -43,7 +48,6 @@ export function normalizeAssistantTimeline(
   const missing = tools.filter((t) => !inBlocks.has(t.id));
 
   if (missing.length > 0) {
-    // 无真实交错数据时：工具在前、正文在后（agent 常见形态）
     const onlyTextOrEmpty =
       blocks.length === 0 || blocks.every((b) => b.type === 'text');
     if (onlyTextOrEmpty) {
@@ -61,7 +65,6 @@ export function normalizeAssistantTimeline(
           : []),
       ];
     } else {
-      // 有交错：缺失的 tool 插在最后一个 text 之前，或末尾
       let insertAt = blocks.length;
       for (let i = blocks.length - 1; i >= 0; i--) {
         if (blocks[i]?.type === 'text') {
@@ -81,7 +84,7 @@ export function normalizeAssistantTimeline(
     }
   }
 
-  // 有正文但无 text 块
+  // 有正文但无 text 块时补偿
   if ((msg.text || '').trim() && !blocks.some((b) => b.type === 'text')) {
     blocks.push({ type: 'text', content: msg.text || '' });
   }
@@ -176,7 +179,6 @@ export function buildToolRenderItems(
       out.push({ kind: 'single', tc });
       continue;
     }
-    // 有实质输出的查看类单独成行，避免「组折叠藏结果」
     if (
       isInspectTool(tc) &&
       !toolHasDisplayableResult(tc) &&
@@ -198,8 +200,8 @@ export function buildToolRenderItems(
 }
 
 /**
- * 构建交错时间线。
- * blocks 可用时按 blocks 顺序；否则工具在前、正文在后。
+ * 构建交错式多步骤时间线（thought / tool_call / text 自然交错）。
+ * blocks 可用时严格按 blocks 顺序；否则平滑降级。
  */
 export function buildAssistantTimeline(
   msg: SessionMessage
@@ -212,6 +214,7 @@ export function buildAssistantTimeline(
     let toolBuf: MessageToolCall[] = [];
     let ti = 0;
     let xi = 0;
+    let thi = 0;
 
     const flushTools = () => {
       if (!toolBuf.length) return;
@@ -225,11 +228,32 @@ export function buildAssistantTimeline(
     if (blocks.length > 0) {
       const used = new Set<string>();
       for (const b of blocks) {
-        if (b.type === 'text') {
+        if (b.type === 'thought') {
+          flushTools();
+          const thoughtContent = (b.content || '').trim();
+          if (thoughtContent) {
+            items.push({
+              kind: 'thought',
+              content: thoughtContent,
+              id: b.id,
+              turnIndex: b.turnIndex,
+              durationMs: b.durationMs,
+              isStreaming: b.isStreaming,
+              isHistoricalCollapsed: b.isHistoricalCollapsed,
+              key: `thought-${b.id || (b.turnIndex !== undefined ? `turn-${b.turnIndex}` : thi++)}`,
+            });
+          }
+        } else if (b.type === 'text') {
           flushTools();
           const c = b.content || '';
-          if (c.trim())
-            items.push({ kind: 'text', content: c, key: `text-${xi++}` });
+          if (c.trim()) {
+            items.push({
+              kind: 'text',
+              content: c,
+              turnIndex: b.turnIndex,
+              key: `text-${xi++}`,
+            });
+          }
         } else if (b.type === 'tool_call' && b.id) {
           const tc = toolsById.get(b.id);
           if (tc) {
@@ -242,8 +266,9 @@ export function buildAssistantTimeline(
       const orphan = tools.filter((t) => !used.has(t.id));
       if (orphan.length) {
         const rendered = buildToolRenderItems(orphan);
-        if (rendered.length)
+        if (rendered.length) {
           items.push({ kind: 'tools', items: rendered, key: 'tools-orphan' });
+        }
       }
       if (!items.some((i) => i.kind === 'text') && (msg.text || '').trim()) {
         items.push({ kind: 'text', content: msg.text || '', key: 'text-full' });
@@ -251,17 +276,38 @@ export function buildAssistantTimeline(
       return items;
     }
 
+    // 降级回退（无 blocks 时）
+    if (msg.thinkingTurns && msg.thinkingTurns.length > 0) {
+      for (const tt of msg.thinkingTurns) {
+        if (tt.content?.trim()) {
+          items.push({
+            kind: 'thought',
+            content: tt.content,
+            turnIndex: tt.turnIndex,
+            durationMs: tt.durationMs,
+            key: `thought-turn-${tt.turnIndex}`,
+          });
+        }
+      }
+    } else if ((msg.thinking || '').trim()) {
+      items.push({
+        kind: 'thought',
+        content: msg.thinking || '',
+        durationMs: msg.thinkingTime ? msg.thinkingTime * 1000 : undefined,
+        key: 'thought-legacy',
+      });
+    }
     if (tools.length) {
       const rendered = buildToolRenderItems(tools);
-      if (rendered.length)
+      if (rendered.length) {
         items.push({ kind: 'tools', items: rendered, key: `tools-0` });
+      }
     }
     if ((msg.text || '').trim()) {
       items.push({ kind: 'text', content: msg.text || '', key: 'text-0' });
     }
     return items;
   } catch {
-    // 兜底：至少显示全文
     if ((msg.text || '').trim()) {
       return [{ kind: 'text', content: msg.text || '', key: 'text-fallback' }];
     }
@@ -270,24 +316,18 @@ export function buildAssistantTimeline(
 }
 
 /**
- * 助手消息渲染时间线签名（T1.2 / 🔴 红-01 根治修复版）。
- *
- * 核心契约：
- * 1. 流式运行态（msg.status === 'processing'）：最后 text 块只记标记与空态，内容不进签名，
- *    保证流式每帧打字时不触发 timeline 重建，保护 memo 渲染性能；
- * 2. 完成态（msg.status !== 'processing'）：最后 text 块必须将完整 content 纳入签名，
- *    保证持久化提交时签名结构发生绝对改变，强力击穿旧缓存；
- * 3. 兜底特征（A-06）：当 blocks 中无有效 text 块时，将 msg.text 纳入签名投影。
+ * 助手消息渲染时间线签名（流式 0 重排与状态跃迁缓存击穿）。
  */
 export function timelineSignature(msg: SessionMessage): string {
   const isLiveProcessing = msg.status === 'processing';
   const blocks = msg.blocks || [];
   let lastTextIdx = -1;
+  let lastThoughtIdx = -1;
+
   for (let i = blocks.length - 1; i >= 0; i--) {
-    if (blocks[i]?.type === 'text') {
-      lastTextIdx = i;
-      break;
-    }
+    if (lastTextIdx === -1 && blocks[i]?.type === 'text') lastTextIdx = i;
+    if (lastThoughtIdx === -1 && blocks[i]?.type === 'thought')
+      lastThoughtIdx = i;
   }
 
   const blocksProj = blocks.map((b, i) => {
@@ -298,6 +338,12 @@ export function timelineSignature(msg: SessionMessage): string {
           : { t: 'text', last: 1, c: b.content || '' };
       }
       return { t: 'text', c: b.content || '' };
+    }
+    if (b.type === 'thought') {
+      if (i === lastThoughtIdx && isLiveProcessing) {
+        return { t: 'thought', last: 1, e: (b.content || '') === '' ? 1 : 0 };
+      }
+      return { t: 'thought', c: b.content || '', turn: b.turnIndex };
     }
     return { t: b.type, id: b.id };
   });
@@ -333,7 +379,7 @@ export function timelineSignature(msg: SessionMessage): string {
 }
 
 /**
- * 带签名缓存的 timeline 构建（T1.2）。
+ * 带签名缓存的 timeline 构建。
  * 签名命中（纯文本流式帧）→ 返回上次 timeline 引用（零重建）；
  * 签名失效（工具事件/块结构变化）→ 全量重建。
  */

@@ -1,0 +1,69 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: var(--font-size-xs, 11px);
+  line-height: 1.4;
+  border-radius: var(--radius-full, 9999px);
+  cursor: default;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.hit {
+  color: var(--accent-green, #10b981);
+  background: color-mix(in srgb, var(--accent-green, #10b981) 12%, transparent);
+  border: 1px solid
+    color-mix(in srgb, var(--accent-green, #10b981) 25%, transparent);
+}
+
+.write {
+  color: var(--accent-primary, #0288d1);
+  background: color-mix(
+    in srgb,
+    var(--accent-primary, #0288d1) 12%,
+    transparent
+  );
+  border: 1px solid
+    color-mix(in srgb, var(--accent-primary, #0288d1) 25%, transparent);
+}
+
+.miss {
+  color: var(--text-tertiary, #94a3b8);
+  background: color-mix(in srgb, var(--border-color, #334155) 30%, transparent);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.tooltipContent {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 2px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.tooltipTitle {
+  font-weight: 600;
+  color: var(--text-primary, #f8fafc);
+  margin-bottom: 2px;
+}
+
+.tooltipRow {
+  color: var(--text-secondary, #cbd5e1);
+}
+
+.tooltipHighlight {
+  color: var(--accent-green, #10b981);
+  font-weight: 500;
+  margin-top: 2px;
+}
+
+.tooltipDesc {
+  color: var(--text-tertiary, #94a3b8);
+  font-size: 11px;
+}

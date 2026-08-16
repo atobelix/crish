@@ -29,14 +29,19 @@ export function extractToolCommand(args: string): string {
   try {
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed === 'object') {
-      if ('parameters' in (parsed as object) || 'toolName' in (parsed as object)) {
+      if (
+        'parameters' in (parsed as object) ||
+        'toolName' in (parsed as object)
+      ) {
         const p = parsed as Record<string, unknown>;
         const inner = p.parameters ?? p.input;
         if (inner && typeof inner === 'object') {
           return extractToolCommand(JSON.stringify(inner));
         }
-        if (typeof p.command === 'string' && p.command.trim()) return p.command.trim();
-        if (typeof p.summary === 'string' && p.summary.trim()) return p.summary.trim();
+        if (typeof p.command === 'string' && p.command.trim())
+          return p.command.trim();
+        if (typeof p.summary === 'string' && p.summary.trim())
+          return p.summary.trim();
       }
       // 与 extractFilePathFromToolArgs 路径键对齐，避免 file_path 等漏标
       for (const key of [
@@ -69,7 +74,9 @@ export function extractToolCommand(args: string): string {
 }
 
 /** 运行中 / 空占位输出（不进预览、不撑开行高） */
-export function isPlaceholderToolOutput(output: string | undefined | null): boolean {
+export function isPlaceholderToolOutput(
+  output: string | undefined | null
+): boolean {
   if (!output) return true;
   const t = output.trim();
   if (!t) return true;
@@ -77,16 +84,24 @@ export function isPlaceholderToolOutput(output: string | undefined | null): bool
 }
 
 /** 纯终态词，无实质内容（完成态行上用勾/叉表达，不占展开体） */
-export function isTrivialToolOutput(output: string | undefined | null): boolean {
+export function isTrivialToolOutput(
+  output: string | undefined | null
+): boolean {
   if (!output) return true;
   const t = output.trim();
   if (!t) return true;
   if (isPlaceholderToolOutput(t)) return true;
-  return /^(完成|OK|ok|Done|done|失败|failed|已拒绝|已取消|cancelled|canceled)$/i.test(t);
+  return /^(完成|OK|ok|Done|done|失败|failed|已拒绝|已取消|cancelled|canceled)$/i.test(
+    t
+  );
 }
 
 /** 折叠行预览可截断；展开区请用 fullToolOutput */
-function truncateToolOutput(output: string, maxLines = 16, maxChars = 1600): string {
+function truncateToolOutput(
+  output: string,
+  maxLines = 16,
+  maxChars = 1600
+): string {
   if (!output) return '';
   // 运行中占位不展示；纯终态词也不作预览噪音
   if (isPlaceholderToolOutput(output) || isTrivialToolOutput(output)) return '';
@@ -125,7 +140,9 @@ export function toolPathDisplayName(filePath: string): string {
  * 例：`1 file changed, 3 insertions(+), 1 deletion(-)`
  * 或缺侧：`2 files changed, 5 insertions(+)` / `1 file changed, 2 deletions(-)`
  */
-export function parseGitShortstat(text: string): { add: number; del: number } | null {
+export function parseGitShortstat(
+  text: string
+): { add: number; del: number } | null {
   if (!text) return null;
   // 允许前后有空白/前缀日志；取最后一次匹配（多次 summary 时以终态为准）
   const re =
@@ -136,7 +153,7 @@ export function parseGitShortstat(text: string): { add: number; del: number } | 
   if (!last) {
     // 无 files changed 头时的残段：`3 insertions(+), 1 deletion(-)`
     const loose = text.match(
-      /(?:^|[\s,])(\d+)\s+insertions?\(\+\)(?:\s*,\s*(\d+)\s+deletions?\(-\))?/i,
+      /(?:^|[\s,])(\d+)\s+insertions?\(\+\)(?:\s*,\s*(\d+)\s+deletions?\(-\))?/i
     );
     const onlyDel = !loose
       ? text.match(/(?:^|[\s,])(\d+)\s+deletions?\(-\)/i)
@@ -169,10 +186,12 @@ function looksLikeUnifiedOrPatchText(lines: string[]): boolean {
       l.startsWith('+++ ') ||
       l.startsWith('--- ') ||
       // apply_patch / V4A 风格
-      /^\*{3}\s+(Begin Patch|Update File|Add File|Delete File|End Patch)/i.test(l) ||
+      /^\*{3}\s+(Begin Patch|Update File|Add File|Delete File|End Patch)/i.test(
+        l
+      ) ||
       l.startsWith('*** Begin Patch') ||
       l.startsWith('*** Update File:') ||
-      l.startsWith('*** Add File:'),
+      l.startsWith('*** Add File:')
   );
 }
 
@@ -190,7 +209,9 @@ function isDiffMetaPlusMinusLine(line: string): boolean {
  * 无则从 unified / apply_patch 输出扫；再退到 git shortstat。
  * 目录列表输出绝不计为 ±，防 ls/dir 误伤。
  */
-export function toolDiffLineStats(tc: MessageToolCall): { add: number; del: number } | null {
+export function toolDiffLineStats(
+  tc: MessageToolCall
+): { add: number; del: number } | null {
   let add = 0;
   let del = 0;
   if (tc.diffs?.length) {
@@ -218,9 +239,17 @@ export function toolDiffLineStats(tc: MessageToolCall): { add: number; del: numb
       del += dDel;
     }
   }
-  if (add === 0 && del === 0 && tc.output && !isPlaceholderToolOutput(tc.output)) {
+  if (
+    add === 0 &&
+    del === 0 &&
+    tc.output &&
+    !isPlaceholderToolOutput(tc.output)
+  ) {
     // 去 BOM + 统一换行，避免 CRLF/脏头导致 shortstat / @@ 失配
-    const text = tc.output.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const text = tc.output
+      .replace(/^\uFEFF/, '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n');
     // 目录列表的 Mode/d----- 行绝不能当 diff
     if (!looksLikeDirectoryListing(text)) {
       const lines = text.split('\n');
@@ -230,12 +259,15 @@ export function toolDiffLineStats(tc: MessageToolCall): { add: number; del: numb
           // 跳过 patch 元数据与 \ No newline
           if (line.startsWith('\\') || line.startsWith('***')) continue;
           if (line.startsWith('+') && !isDiffMetaPlusMinusLine(line)) add += 1;
-          else if (line.startsWith('-') && !isDiffMetaPlusMinusLine(line)) del += 1;
+          else if (line.startsWith('-') && !isDiffMetaPlusMinusLine(line))
+            del += 1;
         }
         // 仅有 @@ 头、无 body 时：从 hunk 头估增减（new,old 计数）
         if (add === 0 && del === 0) {
           for (const line of lines) {
-            const m = line.match(/^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s@@/);
+            const m = line.match(
+              /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s@@/
+            );
             if (!m) continue;
             const oldN = m[2] != null ? Number(m[2]) : 1;
             const newN = m[4] != null ? Number(m[4]) : 1;
@@ -284,7 +316,10 @@ export function normalizeToolDiffStat(stats: { add: number; del: number }): {
  * 折叠行 ± 文案：始终成对展示（含 0）。
  * 例：+3 −1、+0 −2（减号用 U+2212，与 UI .del 一致）
  */
-export function formatToolDiffStat(stats: { add: number; del: number }): string {
+export function formatToolDiffStat(stats: {
+  add: number;
+  del: number;
+}): string {
   const { add: a, del: d } = normalizeToolDiffStat(stats);
   return `+${a} −${d}`;
 }
@@ -308,7 +343,7 @@ export function isToolRowDefaultOpen(
     status?: string;
     output?: string | undefined;
     diffs?: unknown[] | undefined;
-  } | null,
+  } | null
 ): boolean {
   return false;
 }
@@ -324,16 +359,21 @@ export function resolveToolRowOpen(
     status?: string;
     output?: string | undefined;
     diffs?: unknown[] | undefined;
-  } | null,
+  } | null
 ): boolean {
-  if (expandedTools != null && Object.prototype.hasOwnProperty.call(expandedTools, toolId)) {
+  if (
+    expandedTools != null &&
+    Object.prototype.hasOwnProperty.call(expandedTools, toolId)
+  ) {
     return Boolean(expandedTools[toolId]);
   }
   return isToolRowDefaultOpen(tc);
 }
 
 /** 行视觉态：固定类名，流式切换不改布局骨架 */
-export function toolRowTone(status: MessageToolCall['status'] | undefined): ToolRowTone {
+export function toolRowTone(
+  status: MessageToolCall['status'] | undefined
+): ToolRowTone {
   if (status === 'running') return 'running';
   if (status === 'error') return 'error';
   if (status === 'pending_approval') return 'pending';
@@ -346,7 +386,13 @@ export function toolRowTone(status: MessageToolCall['status'] | undefined): Tool
  * 纯「完成」/空输出不展开，避免折叠行噪音与高度抖动。
  */
 export function toolHasExpandableBody(tc: MessageToolCall): boolean {
-  if (tc.status === 'running' || tc.status === 'pending_approval') return false;
+  if (tc.status === 'pending_approval') return false;
+  if (tc.status === 'running') {
+    return Boolean(
+      (tc.arguments && tc.arguments.trim().length > 2) ||
+      (tc.output && tc.output.trim())
+    );
+  }
   if (tc.diffs && tc.diffs.length > 0) return true;
   if (extractImageRefs(tc.output || '').length > 0) return true;
   const raw = tc.output || '';
@@ -361,10 +407,18 @@ export function isInspectTool(tc: MessageToolCall): boolean {
   if (isEditToolName(n)) return false;
   if (isShellToolName(n)) {
     const cmd = extractToolCommand(tc.arguments || '').toLowerCase();
-    if (/^(pwd|ls|dir|cat|type|head|tail|git\s+status|git\s+diff|git\s+log|echo|whoami|hostname)\b/.test(cmd)) {
+    if (
+      /^(pwd|ls|dir|cat|type|head|tail|git\s+status|git\s+diff|git\s+log|echo|whoami|hostname)\b/.test(
+        cmd
+      )
+    ) {
       return true;
     }
-    if (/\b(rm|del|move|copy|set-content|out-file|write|install|npm\s+i|mkdir)\b/i.test(cmd)) {
+    if (
+      /\b(rm|del|move|copy|set-content|out-file|write|install|npm\s+i|mkdir)\b/i.test(
+        cmd
+      )
+    ) {
       return false;
     }
     return true;
@@ -395,12 +449,19 @@ function isHumanExplanation(text: string, toolName: string): boolean {
   if (!t || t === toolName || t === '需要确认') return false;
   if (t.startsWith('{') || t.startsWith('[')) return false;
   // 纯路径/命令串
-  if (/^[\w./\\:-]+\s+[\w./\\:-]+/.test(t) && !/[\u4e00-\u9fff]/.test(t)) return false;
+  if (/^[\w./\\:-]+\s+[\w./\\:-]+/.test(t) && !/[\u4e00-\u9fff]/.test(t))
+    return false;
   // 含中文：允许更长意图句（展示时再截断）
   if (/[\u4e00-\u9fff]/.test(t)) return t.length >= 2 && t.length <= 240;
   // 英文短说明（非路径）
-  if (/^[A-Za-z]/.test(t) && t.length >= 6 && t.length <= 160 && !/[\\/]{2,}/.test(t)) {
-    if (/^(ls|cd|cat|mkdir|rm|cp|mv|git|npm|pnpm|yarn)\b/i.test(t)) return false;
+  if (
+    /^[A-Za-z]/.test(t) &&
+    t.length >= 6 &&
+    t.length <= 160 &&
+    !/[\\/]{2,}/.test(t)
+  ) {
+    if (/^(ls|cd|cat|mkdir|rm|cp|mv|git|npm|pnpm|yarn)\b/i.test(t))
+      return false;
     return true;
   }
   return false;
@@ -416,21 +477,27 @@ function isGenericExplanationSpam(text: string): boolean {
   // 纯动作模板（无具体意图）
   if (
     /^(正在)?(查看|浏览|修改|搜索|访问|读取|写入|列出|创建|运行)(文件|目录|代码|网络|内容|命令|工具)?$/.test(
-      t,
+      t
     )
   ) {
     return true;
   }
   // 「查看 foo.ts」「正在查看 bar」——只有动作+路径，不是意图说明
-  if (/^正在?(查看|浏览|修改|搜索|访问|读取|写入|运行)\s+\S{1,80}$/.test(t)) return true;
+  if (/^正在?(查看|浏览|修改|搜索|访问|读取|写入|运行)\s+\S{1,80}$/.test(t))
+    return true;
   if (
     /^(创建目录|列出目录|列出目录内容|运行命令|运行终端命令|查看文件内容|查看文件|修改文件|写入文件|切换工作目录)(\s+\S+)?$/.test(
-      t,
+      t
     )
   ) {
     return true;
   }
-  if (/^正在?(创建目录|列出目录|查看文件|修改文件|写入文件|运行命令|访问网络)\b/.test(t) && t.length < 24) {
+  if (
+    /^正在?(创建目录|列出目录|查看文件|修改文件|写入文件|运行命令|访问网络)\b/.test(
+      t
+    ) &&
+    t.length < 24
+  ) {
     return true;
   }
   if (/^使用工具处理\s+\S+$/.test(t)) return true;
@@ -481,11 +548,11 @@ function unwrapPowerShellCommand(cmd: string): string {
   const s = cmd.replace(/\s+/g, ' ').trim();
   if (!s) return '';
   const m = s.match(
-    /^(?:powershell|pwsh)(?:\.exe)?\b(?:\s+-[A-Za-z]+)*=?(?:\s+"([^"]*)"|\s+'([^']*)'|\s+(.+))?$/i,
+    /^(?:powershell|pwsh)(?:\.exe)?\b(?:\s+-[A-Za-z]+)*=?(?:\s+"([^"]*)"|\s+'([^']*)'|\s+(.+))?$/i
   );
   if (!m) {
     const m2 = s.match(
-      /(?:powershell|pwsh)(?:\.exe)?\b[\s\S]*?-(?:Command|c)\s+(?:"([^"]*)"|'([^']*)'|(.+))$/i,
+      /(?:powershell|pwsh)(?:\.exe)?\b[\s\S]*?-(?:Command|c)\s+(?:"([^"]*)"|'([^']*)'|(.+))$/i
     );
     if (!m2) return s;
     return (m2[1] || m2[2] || m2[3] || '').trim();
@@ -500,8 +567,9 @@ function unwrapPowerShellCommand(cmd: string): string {
 export function humanizeShellCommand(cmd: string): string {
   const full = cmd.replace(/\s+/g, ' ').trim();
   if (!full) return '运行命令';
-  const unwrapped =
-    /^(?:powershell|pwsh)\b/i.test(full) ? unwrapPowerShellCommand(full) || full : full;
+  const unwrapped = /^(?:powershell|pwsh)\b/i.test(full)
+    ? unwrapPowerShellCommand(full) || full
+    : full;
   const raw = primaryShellSegment(unwrapped);
   if (!raw) return '运行命令';
   const lower = raw.toLowerCase();
@@ -513,13 +581,24 @@ export function humanizeShellCommand(cmd: string): string {
     return pkg ? `安装依赖 ${pkg}` : '安装项目依赖';
   }
   if (/\b(npm|pnpm|yarn)\s+add\s+/i.test(raw)) {
-    const pkg = raw.replace(/^.*\badd\s+/i, '').split(/\s+/).find((t) => t && !t.startsWith('-'));
+    const pkg = raw
+      .replace(/^.*\badd\s+/i, '')
+      .split(/\s+/)
+      .find((t) => t && !t.startsWith('-'));
     return pkg ? `安装依赖 ${pkg}` : '安装项目依赖';
   }
-  if (/\b(npm|pnpm|yarn)\s+run\s+([\w:-]+)/i.test(raw) || /\b(npm|pnpm|yarn)\s+([\w:-]+)\b/i.test(raw)) {
+  if (
+    /\b(npm|pnpm|yarn)\s+run\s+([\w:-]+)/i.test(raw) ||
+    /\b(npm|pnpm|yarn)\s+([\w:-]+)\b/i.test(raw)
+  ) {
     const m = raw.match(/\b(?:npm|pnpm|yarn)\s+(?:run\s+)?([\w:-]+)/i);
     const script = m?.[1]?.toLowerCase();
-    const skip = !script || script === 'i' || script === 'install' || script === 'ci' || script === 'add';
+    const skip =
+      !script ||
+      script === 'i' ||
+      script === 'install' ||
+      script === 'ci' ||
+      script === 'add';
     if (!skip) {
       if (script === 'build' || script === 'prod') return '构建项目';
       if (script === 'dev' || script === 'start') return '启动开发服务';
@@ -545,7 +624,10 @@ export function humanizeShellCommand(cmd: string): string {
     return pkg ? `安装依赖 ${pkg}` : '安装项目依赖';
   }
   if (/\bbun\s+add\s+/i.test(raw)) {
-    const pkg = raw.replace(/^.*\badd\s+/i, '').split(/\s+/).find((t) => t && !t.startsWith('-'));
+    const pkg = raw
+      .replace(/^.*\badd\s+/i, '')
+      .split(/\s+/)
+      .find((t) => t && !t.startsWith('-'));
     return pkg ? `安装依赖 ${pkg}` : '安装项目依赖';
   }
   if (/\bbun\s+x\s+/i.test(raw) || /\bbunx\s+/i.test(raw)) {
@@ -570,7 +652,10 @@ export function humanizeShellCommand(cmd: string): string {
   // PHP Composer
   if (/\bcomposer\s+install\b/i.test(raw)) return '安装 PHP 依赖';
   if (/\bcomposer\s+require\b/i.test(raw)) {
-    const pkg = raw.replace(/^.*\brequire\s+/i, '').split(/\s+/).find((t) => t && !t.startsWith('-'));
+    const pkg = raw
+      .replace(/^.*\brequire\s+/i, '')
+      .split(/\s+/)
+      .find((t) => t && !t.startsWith('-'));
     return pkg ? `添加 PHP 依赖 ${pkg}` : '添加 PHP 依赖';
   }
   if (/\bcomposer\s+update\b/i.test(raw)) return '更新 PHP 依赖';
@@ -582,9 +667,12 @@ export function humanizeShellCommand(cmd: string): string {
     const pkg = rest.split(/\s+/).find((t) => t && !t.startsWith('-'));
     return pkg ? `安装 Python 包 ${pkg}` : '安装 Python 依赖';
   }
-  if (/\b(pip3?|python\s+-m\s+pip)\s+uninstall\b/i.test(raw)) return '卸载 Python 包';
-  if (/\b(pip3?|python\s+-m\s+pip)\s+list\b/i.test(raw)) return '查看已装 Python 包';
-  if (/\bpython\b|\bpy\b/i.test(lower) && /\.py\b/i.test(raw)) return '运行 Python 脚本';
+  if (/\b(pip3?|python\s+-m\s+pip)\s+uninstall\b/i.test(raw))
+    return '卸载 Python 包';
+  if (/\b(pip3?|python\s+-m\s+pip)\s+list\b/i.test(raw))
+    return '查看已装 Python 包';
+  if (/\bpython\b|\bpy\b/i.test(lower) && /\.py\b/i.test(raw))
+    return '运行 Python 脚本';
   if (/\bpytest\b/i.test(raw)) return '运行 Python 测试';
 
   // Go
@@ -617,7 +705,8 @@ export function humanizeShellCommand(cmd: string): string {
 
   // CMake / Make
   if (/\bcmake\b/i.test(raw)) {
-    if (/\b--build\b/i.test(raw) || /\s+--build\b/i.test(raw)) return '用 CMake 构建';
+    if (/\b--build\b/i.test(raw) || /\s+--build\b/i.test(raw))
+      return '用 CMake 构建';
     return '配置 CMake 工程';
   }
   if (/^make\b/i.test(raw) || /\bmake\s+[\w-]+/i.test(raw)) {
@@ -668,7 +757,8 @@ export function humanizeShellCommand(cmd: string): string {
   if (/\bdocker\b/i.test(raw)) {
     if (/\bps\b/i.test(raw)) return '查看 Docker 容器';
     if (/\bbuild\b/i.test(raw)) return '构建 Docker 镜像';
-    if (/\bcompose\b/i.test(raw) || /\b-compose\b/i.test(raw)) return '运行 Docker Compose';
+    if (/\bcompose\b/i.test(raw) || /\b-compose\b/i.test(raw))
+      return '运行 Docker Compose';
     if (/\blogs\b/i.test(raw)) return '查看 Docker 日志';
     return '运行 Docker 相关命令';
   }
@@ -678,7 +768,8 @@ export function humanizeShellCommand(cmd: string): string {
   if (/^chown\b/i.test(raw) || /\bchown\s+/i.test(raw)) return '修改文件所有者';
 
   // 编译 / 检查 / 测试
-  if (/\btsc\b/i.test(raw) || /\btypescript\b/i.test(raw)) return '检查 TypeScript 类型';
+  if (/\btsc\b/i.test(raw) || /\btypescript\b/i.test(raw))
+    return '检查 TypeScript 类型';
   if (/\beslint\b/i.test(raw)) return '运行 ESLint 检查';
   if (/\bprettier\b/i.test(raw)) return '格式化代码';
   if (/\bvitest\b|\bjest\b/i.test(raw)) return '运行测试';
@@ -692,46 +783,77 @@ export function humanizeShellCommand(cmd: string): string {
   ) {
     return '列出目录内容';
   }
-  if (/^(cat|type|Get-Content|gc|head|tail)\b/i.test(raw) || /\bGet-Content\b/i.test(raw)) {
-    const file = raw.split(/\s+/).find((p) => /[./\\]/.test(p) && !p.startsWith('-'));
+  if (
+    /^(cat|type|Get-Content|gc|head|tail)\b/i.test(raw) ||
+    /\bGet-Content\b/i.test(raw)
+  ) {
+    const file = raw
+      .split(/\s+/)
+      .find((p) => /[./\\]/.test(p) && !p.startsWith('-'));
     return file ? `查看 ${basename(file)}` : '查看文件内容';
   }
-  if (/^(rm|del|Remove-Item|ri)\b/i.test(raw) || /\bRemove-Item\b/i.test(raw)) return '删除文件或目录';
-  if (/^(cp|copy|Copy-Item)\b/i.test(raw) || /\bCopy-Item\b/i.test(raw)) return '复制文件';
-  if (/^(mv|move|Move-Item|ren|Rename-Item)\b/i.test(raw) || /\bMove-Item\b|\bRename-Item\b/i.test(raw)) {
+  if (/^(rm|del|Remove-Item|ri)\b/i.test(raw) || /\bRemove-Item\b/i.test(raw))
+    return '删除文件或目录';
+  if (/^(cp|copy|Copy-Item)\b/i.test(raw) || /\bCopy-Item\b/i.test(raw))
+    return '复制文件';
+  if (
+    /^(mv|move|Move-Item|ren|Rename-Item)\b/i.test(raw) ||
+    /\bMove-Item\b|\bRename-Item\b/i.test(raw)
+  ) {
     return '移动或重命名';
   }
   if (/^(mkdir|md|New-Item)\b/i.test(raw) || /\bNew-Item\b/i.test(raw)) {
     const dir = raw
       .split(/\s+/)
       .slice(1)
-      .find((p) => p && !p.startsWith('-') && !/^-(ItemType|Force|Path)$/i.test(p));
+      .find(
+        (p) => p && !p.startsWith('-') && !/^-(ItemType|Force|Path)$/i.test(p)
+      );
     const clean = dir?.replace(/^['"]|['"]$/g, '');
     return clean ? `创建目录 ${basename(clean)}` : '创建目录';
   }
   if (/^(cd|Set-Location|sl|pushd|popd)\b/i.test(raw)) {
-    const dir = raw.split(/\s+/).slice(1).find((p) => p && !p.startsWith('-') && !/^\/[dD]$/i.test(p));
+    const dir = raw
+      .split(/\s+/)
+      .slice(1)
+      .find((p) => p && !p.startsWith('-') && !/^\/[dD]$/i.test(p));
     const clean = dir?.replace(/^['"]|['"]$/g, '');
     return clean ? `切换到 ${basename(clean)}` : '切换工作目录';
   }
 
   // 搜索
   if (/\brg\b|\bgrep\b|\bfindstr\b|\bSelect-String\b|\bfind\b/i.test(raw)) {
-    const q = raw.match(/['"]([^'"]{1,40})['"]/) || raw.match(/\s(-e\s+)?(\S{2,40})\s*$/);
+    const q =
+      raw.match(/['"]([^'"]{1,40})['"]/) ||
+      raw.match(/\s(-e\s+)?(\S{2,40})\s*$/);
     const term = q?.[1] || q?.[2];
     return term && !term.startsWith('-') ? `搜索「${term}」` : '搜索代码';
   }
 
   // 网络 / 进程
-  if (/\bcurl\b|\bwget\b|\bInvoke-WebRequest\b|\bInvoke-RestMethod\b/i.test(raw)) return '请求网络资源';
-  if (/\bGet-Process\b|\bStop-Process\b|(^|\s)ps(\s|$)/i.test(raw)) return '查看或管理进程';
-  if (/\bGet-Service\b|\bStart-Service\b|\bStop-Service\b/i.test(raw)) return '管理 Windows 服务';
-  if (/\bGet-ComputerInfo\b|\bGet-CimInstance\b|\bGet-WmiObject\b/i.test(raw)) return '查询系统信息';
+  if (
+    /\bcurl\b|\bwget\b|\bInvoke-WebRequest\b|\bInvoke-RestMethod\b/i.test(raw)
+  )
+    return '请求网络资源';
+  if (/\bGet-Process\b|\bStop-Process\b|(^|\s)ps(\s|$)/i.test(raw))
+    return '查看或管理进程';
+  if (/\bGet-Service\b|\bStart-Service\b|\bStop-Service\b/i.test(raw))
+    return '管理 Windows 服务';
+  if (/\bGet-ComputerInfo\b|\bGet-CimInstance\b|\bGet-WmiObject\b/i.test(raw))
+    return '查询系统信息';
   if (/\bStopwatch\b|\bMeasure-Command\b/i.test(raw)) return '测量执行耗时';
-  if (/\bNew-Item\b.*-ItemType\s+File\b|\bSet-Content\b|\bOut-File\b|\bAdd-Content\b/i.test(raw)) {
+  if (
+    /\bNew-Item\b.*-ItemType\s+File\b|\bSet-Content\b|\bOut-File\b|\bAdd-Content\b/i.test(
+      raw
+    )
+  ) {
     return '写入文件';
   }
-  if (/\bSelect-Object\b|\bWhere-Object\b|\bForEach-Object\b|\bSort-Object\b/i.test(raw)) {
+  if (
+    /\bSelect-Object\b|\bWhere-Object\b|\bForEach-Object\b|\bSort-Object\b/i.test(
+      raw
+    )
+  ) {
     return '处理命令输出';
   }
 
@@ -777,28 +899,55 @@ function toolLabelFromArgs(tc: MessageToolCall): string {
       name.includes('create') ||
       name === 'write_file' ||
       name === 'create_file';
-    if (isWrite && !name.includes('edit') && !name.includes('patch') && !name.includes('replace')) {
+    if (
+      isWrite &&
+      !name.includes('edit') &&
+      !name.includes('patch') &&
+      !name.includes('replace')
+    ) {
       return cmd ? `写入 ${basename(cmd)}` : '写入文件';
     }
     return cmd ? `修改 ${basename(cmd)}` : '修改文件';
   }
-  if (name.includes('read') || name.includes('cat') || name.includes('view') || name.includes('open_file')) {
+  if (
+    name.includes('read') ||
+    name.includes('cat') ||
+    name.includes('view') ||
+    name.includes('open_file')
+  ) {
     return cmd ? `查看 ${basename(cmd)}` : '查看文件';
   }
-  if (name.includes('list') || name.includes('glob') || name.includes('dir') || name.includes('ls')) {
+  if (
+    name.includes('list') ||
+    name.includes('glob') ||
+    name.includes('dir') ||
+    name.includes('ls')
+  ) {
     if (cmd && cmd !== '.' && cmd !== './') {
       const short = cmd.length > 36 ? '…' + cmd.slice(-34) : cmd;
       return `浏览 ${short}`;
     }
     return '浏览目录';
   }
-  if (name.includes('grep') || name.includes('search') || name.includes('find') || name.includes('rg')) {
-    const q = cmd.replace(/^.*(?:pattern|query)["']?\s*[:=]\s*["']?/i, '').slice(0, 32);
+  if (
+    name.includes('grep') ||
+    name.includes('search') ||
+    name.includes('find') ||
+    name.includes('rg')
+  ) {
+    const q = cmd
+      .replace(/^.*(?:pattern|query)["']?\s*[:=]\s*["']?/i, '')
+      .slice(0, 32);
     if (cmd && cmd.length < 40) return `搜索 ${cmd}`;
     if (q && !q.startsWith('{')) return `搜索「${q}」`;
     return '搜索代码';
   }
-  if (name.includes('web') || name.includes('fetch') || name.includes('http') || name.includes('browser')) {
+  if (
+    name.includes('web') ||
+    name.includes('fetch') ||
+    name.includes('http') ||
+    name.includes('browser')
+  ) {
     if (cmd && /^https?:\/\//i.test(cmd)) {
       try {
         const host = new URL(cmd).hostname;
@@ -815,17 +964,22 @@ function toolLabelFromArgs(tc: MessageToolCall): string {
         ? (JSON.parse(tc.arguments) as Record<string, unknown>)
         : null;
       const desc =
-        (typeof parsed?.description === 'string' && parsed.description.trim()) ||
-        (typeof parsed?.prompt === 'string' && parsed.prompt.trim().slice(0, 40)) ||
+        (typeof parsed?.description === 'string' &&
+          parsed.description.trim()) ||
+        (typeof parsed?.prompt === 'string' &&
+          parsed.prompt.trim().slice(0, 40)) ||
         '';
-      if (desc) return `协作子任务：${desc.length > 40 ? desc.slice(0, 39) + '…' : desc}`;
+      if (desc)
+        return `协作子任务：${desc.length > 40 ? desc.slice(0, 39) + '…' : desc}`;
     } catch {
       /* plain */
     }
     return '启动协作子任务';
   }
   if (name.includes('git')) {
-    return cmd ? humanizeShellCommand(cmd.startsWith('git') ? cmd : `git ${cmd}`) : '执行 Git 操作';
+    return cmd
+      ? humanizeShellCommand(cmd.startsWith('git') ? cmd : `git ${cmd}`)
+      : '执行 Git 操作';
   }
   if (name.includes('mcp')) return '调用扩展服务';
   if (name.includes('memory')) return '读写记忆';
@@ -833,7 +987,8 @@ function toolLabelFromArgs(tc: MessageToolCall): string {
 
   if (cmd) {
     const short = basename(cmd);
-    if (short && short.length < 48) return short === cmd ? `处理 ${short}` : `处理 ${short}`;
+    if (short && short.length < 48)
+      return short === cmd ? `处理 ${short}` : `处理 ${short}`;
   }
   const n = tc.name || '工具';
   const pretty = n.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -849,7 +1004,9 @@ export function toolHumanLabel(tc: MessageToolCall): string {
 
   const expLooksLikeRawCmd =
     /^(powershell|pwsh|cmd(?:\.exe)?|bash|sh|zsh)\b/i.test(exp) ||
-    (/^[\w./\\:-]+\s+/.test(exp) && exp.length > 48 && !/[\u4e00-\u9fff]/.test(exp));
+    (/^[\w./\\:-]+\s+/.test(exp) &&
+      exp.length > 48 &&
+      !/[\u4e00-\u9fff]/.test(exp));
 
   if (
     exp &&
@@ -902,7 +1059,7 @@ export function toolResultPreview(tc: MessageToolCall, max = 72): string {
 /** 清洗协作 agent 的 summary */
 export function humanizeAgentSummary(
   raw: string | undefined | null,
-  status?: string,
+  status?: string
 ): string {
   const fallback =
     status === 'running'
@@ -948,9 +1105,10 @@ export function assistantCopyText(msg: SessionMessage): string {
 export function extractImageRefs(text: string): string[] {
   if (!text) return [];
   const out: string[] = [];
-  for (const m of text.matchAll(/!\[[^\]]*]\(([^)\s]+)\)/g)) if (m[1]) out.push(m[1]);
+  for (const m of text.matchAll(/!\[[^\]]*]\(([^)\s]+)\)/g))
+    if (m[1]) out.push(m[1]);
   for (const m of text.matchAll(
-    /(?:^|[\s"'`])((?:[A-Za-z]:)?[\\/][^\s"'`]+\.(?:png|jpe?g|gif|webp|svg)|(?:\.\/|\/)[^\s"'`]+\.(?:png|jpe?g|gif|webp|svg))/gi,
+    /(?:^|[\s"'`])((?:[A-Za-z]:)?[\\/][^\s"'`]+\.(?:png|jpe?g|gif|webp|svg)|(?:\.\/|\/)[^\s"'`]+\.(?:png|jpe?g|gif|webp|svg))/gi
   )) {
     if (m[1]) out.push(m[1]);
   }

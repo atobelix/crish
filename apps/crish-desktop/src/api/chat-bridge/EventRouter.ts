@@ -7,12 +7,9 @@
  *   宽容形态（缺信封字段、text-delta / run-* 别名）在 handlers/eventParser 收敛；
  * - 分派走 handlers/dispatch 的 engineDispatchTable（41 键全覆盖）与
  *   legacyDispatchTable（subagent-* / error），handler 入参为具体事件信封类型；
- * - 未知事件（非生成类型且无归一器）进 registerUnknownEvent 显式登记，
- *   可观测、不静默吞；
- * - 四源失败统一收敛到 surfaceStreamFailure + finish（03 §2.4 表）。
- *
- * 事件载荷为 IPC 顶层平铺 `{ type, runId, sessionId, sequence, ... }`
- * （03 §3.1），不做二次归一；runId 过滤沿用 messageBelongsToRun。
+ * - 复合因果 Key 去重矩阵（FIN-06 / DIM-02）：实时轨 message-delta 100% 直通放行，
+ *   工具事件按 `${type}:${turn}:${toolId}` 隔离，因果时序缓冲 pendingToolEnds 防乱序到达；
+ * - 消费侧 per-run 去重集合 consumedEvents 具备 2000 条上限的 FIFO 淘汰机制，防内存泄漏。
  */
 import type { StreamCallbacks } from '../chatApi';
 import { logInternalError } from '../userFacingErrors';
@@ -38,12 +35,17 @@ export class EventRouter {
   private finish: (force?: boolean) => void;
   private tryResumeFinish: () => void;
   private client?: SendLike;
+
   /**
-   * 消费侧 per-run 幂等集合（04 §5.1-1 / G1/G2）：以 buildEventDedupeKey 生成的
-   * 键记录本 run 已消费事件，同键重复到达（重复 message-end / 重复 delta /
-   * 失败多源）只消费一次——防重复不再全押「引擎单发」单点，随 Router 收口释放。
+   * 消费侧 per-run 幂等集合：以 buildEventDedupeKey 生成的键记录已消费事件。
+   * 设定 2000 条上限的 FIFO 淘汰机制，彻底根除长会话内存泄漏。
    */
   private readonly consumedEvents = new Set<string>();
+  private readonly MAX_CONSUMED_EVENTS = 2000;
+
+  /** 因果时序乱序到达缓存区：处理 tool-end 先于 tool-start 到达的网络时序抖动 */
+  private readonly pendingToolEnds = new Map<string, BridgeEventEnvelope>();
+  private readonly knownStartedTools = new Set<string>();
 
   constructor(
     state: StreamState,
@@ -82,10 +84,42 @@ export class EventRouter {
   /** 主路径分派：入参为具体事件信封类型（engine 或 legacy），未知形态不达此方法 */
   handleAgentEvent(envelope: BridgeEventEnvelope): void {
     if (this.state.cancelled || this.state.finished) return;
-    // 双面隔离（14-T7）：数据面类型（task-* / timer-* / cron-fired）由全局
-    // 数据面路由（dataPlaneRouter）消费，per-run 面直接 return 防重复
-    // dispatch（34 §8.3）
     if (isDataPlaneEventType(envelope.type)) return;
+
+    // 因果时序乱序到达缓冲拦截
+    if (envelope.type === 'tool-start') {
+      const toolId = extractToolIdFromEnvelope(envelope);
+      if (toolId) {
+        this.knownStartedTools.add(toolId);
+      }
+      dispatchEvent(this.env, envelope);
+
+      // 若此前已有提前到达的 tool-end，在同一微任务内同步触发收口
+      if (toolId && this.pendingToolEnds.has(toolId)) {
+        const pendingEnd = this.pendingToolEnds.get(toolId)!;
+        this.pendingToolEnds.delete(toolId);
+        dispatchEvent(this.env, pendingEnd);
+      }
+      return;
+    }
+
+    if (envelope.type === 'tool-end') {
+      const toolId = extractToolIdFromEnvelope(envelope);
+      if (toolId && !this.knownStartedTools.has(toolId)) {
+        // tool-start 尚未到达，挂入因果缓冲队列
+        this.pendingToolEnds.set(toolId, envelope);
+        recordStreamDiag({
+          runId: this.runId,
+          scope: 'event-router',
+          kind: 'causality-buffered',
+          message: `tool-end arrived before tool-start for ${toolId}, buffering...`,
+        });
+        return;
+      }
+      dispatchEvent(this.env, envelope);
+      return;
+    }
+
     dispatchEvent(this.env, envelope);
   }
 
@@ -97,15 +131,6 @@ export class EventRouter {
 
     if (!messageBelongsToRun(raw.runId, this.runId)) return;
 
-    // 顺序契约（F5-12 收口）：事件顺序由引擎单通道（Tauri IPC 串行 + Rust
-    // 侧背压缓冲）保证，前端不校验 sequence，亦不做乱序缓冲/缺口检测
-    // （消费侧幂等去重见 parse 成功后：同键重复只消费一次，04 §5.1-1）。
-    // 事件桥已按「Delta 可丢、message-end 必达」契约实现（03 §5.3-6），
-    // 丢帧类目丢弃不丢 message-end；如未来引入乱序通道，须在此补真游标。
-    // C2.2：平铺事件直进主路径（event 信封 / run-ended 别名分支已删）
-    // T3.7 D7：消费侧兜底——生成 parser 已有深度守卫（超限返回 parseErr），
-    // 此处防其余未收敛异常路径（深层载荷曾抛 RangeError 逃逸破坏 fail-closed），
-    // 捕获后转显式登记，不中断事件处理循环
     let parsed: ReturnType<typeof parseBridgeEvent>;
     try {
       parsed = parseBridgeEvent(raw);
@@ -117,19 +142,30 @@ export class EventRouter {
       this.registerUnknownEvent(raw, parsed.error);
       return;
     }
-    // 消费侧 per-run 幂等去重（04 §5.1-1 / G1/G2）：同 run 内重复到达的同一
-    // 事件（重复 message-end / 重复 delta / 失败多源）只消费一次；键 =
-    // type:messageId:sequence，实时轨 sequence=None 时退化 type:messageId，
-    // 无 id 无 sequence 的事件不参与去重（透传）。静默跳过 + streamDiag 计数，
-    // 不阻断事件流。
+
+    // 复合因果 Key 去重检查（流式 delta 无 seq 时 100% 直通放行）
     const dedupeKey = buildEventDedupeKey(parsed.data);
     if (dedupeKey !== null && this.consumedEvents.has(dedupeKey)) {
       this.recordSkippedDuplicate(dedupeKey);
       return;
     }
-    if (dedupeKey !== null) this.consumedEvents.add(dedupeKey);
+    if (dedupeKey !== null) {
+      this.recordConsumedEvent(dedupeKey);
+    }
+
     this.handleAgentEvent(parsed.data);
   };
+
+  /** FIFO 淘汰机制记录已消费事件（上限 2000 条） */
+  private recordConsumedEvent(key: string): void {
+    if (this.consumedEvents.size >= this.MAX_CONSUMED_EVENTS) {
+      const oldest = this.consumedEvents.values().next().value;
+      if (oldest !== undefined) {
+        this.consumedEvents.delete(oldest);
+      }
+    }
+    this.consumedEvents.add(key);
+  }
 
   /** 重复事件跳过：静默 + recordStreamDiag 可观测计数（不阻断） */
   private recordSkippedDuplicate(key: string): void {
@@ -155,35 +191,168 @@ export class EventRouter {
 }
 
 /**
- * 事件幂等键生成（消费侧去重，04 §5.1-1 / G1/G2）：
- * - 有 messageId + sequence（收口轨）→ `${type}:${messageId}:${sequence}`；
- * - sequence 缺失（实时轨）→ `${type}:${messageId}`（messageId + type 键控）；
- * - 无 messageId → `${type}:${sequence}`；
- * - 两者皆缺（legacy 信封 / 无键事件）→ 返回 null，不参与去重（透传）。
- * 注意：跨 turn 复用 clientMessageId 的收口轨事件由 sequence 区分（G4 不误伤）；
- * 实时轨 delta 的 messageId 键控存在多轮 turn 同 id 的误伤面，见回报⑤。
+ * 辅助函数：从信封中安全提取 toolId（FIN-06 统一寻址）
+ */
+export function extractToolIdFromEnvelope(
+  envelope: BridgeEventEnvelope
+): string {
+  const { raw } = envelope;
+  if (envelope.kind === 'engine') {
+    const { event } = envelope;
+    if (
+      'call' in event &&
+      event.call &&
+      typeof event.call === 'object' &&
+      'id' in event.call
+    ) {
+      const id = String((event.call as { id?: unknown }).id ?? '').trim();
+      if (id) return id;
+    }
+    if (
+      'result' in event &&
+      event.result &&
+      typeof event.result === 'object' &&
+      'id' in event.result
+    ) {
+      const id = String((event.result as { id?: unknown }).id ?? '').trim();
+      if (id) return id;
+    }
+    if (
+      'callId' in event &&
+      typeof (event as { callId?: unknown }).callId === 'string'
+    ) {
+      const id = ((event as { callId: string }).callId || '').trim();
+      if (id) return id;
+    }
+  }
+  if (typeof raw.toolCallId === 'string' && raw.toolCallId.trim()) {
+    return raw.toolCallId.trim();
+  }
+  if (typeof raw.callId === 'string' && raw.callId.trim()) {
+    return raw.callId.trim();
+  }
+  if (typeof raw.id === 'string' && raw.id.trim()) {
+    return raw.id.trim();
+  }
+  if (
+    raw.call &&
+    typeof raw.call === 'object' &&
+    'id' in (raw.call as object)
+  ) {
+    const id = String((raw.call as { id?: unknown }).id ?? '').trim();
+    if (id) return id;
+  }
+  if (
+    raw.result &&
+    typeof raw.result === 'object' &&
+    'id' in (raw.result as object)
+  ) {
+    const id = String((raw.result as { id?: unknown }).id ?? '').trim();
+    if (id) return id;
+  }
+  return '';
+}
+
+/**
+ * 复合因果 Key 去重矩阵（FIN-06 / DIM-02 权威规范）：
+ * - message-delta：实时轨（无 sequence）坚决返回 null 100% 直通放行，彻底根除 "TheTheThe..." 乱码与吞词；
+ * - 工具事件：统一按 `${type}:${turn}:${toolId}` 安全取值，消除 undefined 误杀；
+ * - 轮次事件与终态消息：带 turnIndex 隔离多轮自主循环；
+ * - 其余通用事件：按 `${type}:${messageId}:${sequence}` 或 `${type}:${sequence}` 幂等。
  */
 export function buildEventDedupeKey(
   envelope: BridgeEventEnvelope
 ): string | null {
   if (envelope.kind === 'legacy') return null;
   const { event, raw } = envelope;
-  let messageId = '';
+
+  // 1. 增量流式 Delta：实时轨无 sequence 时必须返回 null 100% 透传，严禁按 messageId 拦截
   if (event.type === 'message-delta') {
-    messageId = event.messageId ?? '';
-  } else if (event.type === 'message-end') {
-    messageId = event.message?.id ?? '';
+    const seq = raw.sequence;
+    if (seq !== null && seq !== undefined && seq !== '') {
+      const messageId =
+        event.messageId ||
+        (typeof raw.messageId === 'string' ? raw.messageId : '');
+      return `message-delta:${messageId}:${String(seq)}`;
+    }
+    return null; // 实时轨 Token 增量全量放行！
   }
-  if (!messageId && typeof raw.messageId === 'string') {
-    messageId = raw.messageId;
+
+  // 2. 工具域事件：严格按 toolId + turnIndex 复合因果隔离
+  if (
+    event.type === 'tool-start' ||
+    event.type === 'tool-update' ||
+    event.type === 'tool-end'
+  ) {
+    const toolId = extractToolIdFromEnvelope(envelope);
+    const seq = raw.sequence;
+    const sequence =
+      seq === null || seq === undefined || seq === '' ? null : String(seq);
+    const turnIndex =
+      'turnIndex' in event &&
+      typeof (event as { turnIndex?: unknown }).turnIndex === 'number'
+        ? (event as { turnIndex: number }).turnIndex
+        : typeof raw.turnIndex === 'number'
+          ? raw.turnIndex
+          : null;
+    const turn = turnIndex !== null ? `turn-${turnIndex}` : 't0';
+
+    if (toolId && sequence !== null) {
+      return `${event.type}:${turn}:${toolId}:${sequence}`;
+    }
+    if (toolId) {
+      if (event.type === 'tool-update') return null; // 进度更新无 seq 全放行
+      return `${event.type}:${turn}:${toolId}`;
+    }
+    if (sequence !== null) return `${event.type}:${sequence}`;
+    return null;
   }
+
+  // 3. 轮次域与终态消息：结合 turnIndex 隔离多轮自主循环
+  if (
+    event.type === 'turn-start' ||
+    event.type === 'turn-end' ||
+    event.type === 'message-end'
+  ) {
+    const turnIdx =
+      'turnIndex' in event &&
+      typeof (event as { turnIndex?: unknown }).turnIndex === 'number'
+        ? (event as { turnIndex: number }).turnIndex
+        : typeof raw.turnIndex === 'number'
+          ? raw.turnIndex
+          : null;
+    const seq = raw.sequence;
+    const sequence =
+      seq === null || seq === undefined || seq === '' ? null : String(seq);
+    let messageId = '';
+    if (event.type === 'message-end' && event.message?.id) {
+      messageId = event.message.id;
+    } else if (typeof raw.messageId === 'string') {
+      messageId = raw.messageId;
+    }
+
+    const turnTag = turnIdx !== null ? `turn-${turnIdx}` : 't0';
+
+    if (sequence !== null) {
+      return `${event.type}:${messageId || 'm'}:${turnTag}:${sequence}`;
+    }
+    if (turnIdx !== null) {
+      return `${event.type}:${messageId || 'm'}:${turnTag}`;
+    }
+    if (event.type === 'message-end') {
+      return messageId ? `message-end:${messageId}:${turnTag}` : null;
+    }
+    return null;
+  }
+
+  // 4. 其余通用事件
   const seq = raw.sequence;
   const sequence =
     seq === null || seq === undefined || seq === '' ? null : String(seq);
+  const messageId = typeof raw.messageId === 'string' ? raw.messageId : '';
   if (messageId && sequence !== null) {
     return `${event.type}:${messageId}:${sequence}`;
   }
-  if (messageId) return `${event.type}:${messageId}`;
   if (sequence !== null) return `${event.type}:${sequence}`;
   return null;
 }

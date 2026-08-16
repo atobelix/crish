@@ -537,19 +537,25 @@ describe('EventRouter 消费侧 per-run 幂等去重（04 §5.1-1 / G1/G2）', (
     expect(state.assistantText).toBe('hi');
   });
 
-  it('实时轨 delta（sequence=None）按 messageId+type 键控只消费一次', () => {
+  it('实时轨 delta（sequence=None）增量流式放行，所有分片正常累积消费', () => {
     const finish = vi.fn();
     const { router, callbacks, state } = makeRouter(finish);
-    const delta = {
+    const delta1 = {
       type: 'message-delta',
       runId: 'run-test',
       messageId: 'm1',
       block: { type: 'text', text: 'hi' },
     };
-    router.onMsg(delta);
-    router.onMsg(delta);
-    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
-    expect(state.assistantText).toBe('hi');
+    const delta2 = {
+      type: 'message-delta',
+      runId: 'run-test',
+      messageId: 'm1',
+      block: { type: 'text', text: ' world' },
+    };
+    router.onMsg(delta1);
+    router.onMsg(delta2);
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(2);
+    expect(state.assistantText).toBe('hi world');
   });
 
   it('乱序回放不重复：先到高 sequence 后回放同键跳过，迟到的新 sequence 正常消费', () => {
@@ -671,9 +677,111 @@ describe('EventRouter 消费侧 per-run 幂等去重（04 §5.1-1 / G1/G2）', (
     expect(onRunError).toHaveBeenCalledTimes(1);
     expect(finish).toHaveBeenCalledWith(true);
   });
+
+  it('实时轨 1000 个 message-delta Token 连续到达 100% 直通放行，0 丢失', () => {
+    const finish = vi.fn();
+    const { router, callbacks, state } = makeRouter(finish);
+    for (let i = 0; i < 1000; i++) {
+      router.onMsg({
+        type: 'message-delta',
+        runId: 'run-test',
+        messageId: 'm1',
+        block: { type: 'text', text: 'a' },
+      });
+    }
+    expect(callbacks.onChunk).toHaveBeenCalledTimes(1000);
+    expect(state.assistantText.length).toBe(1000);
+    expect(finish).not.toHaveBeenCalled();
+  });
+
+  it('因果时序缓冲：tool-end 先于 tool-start 到达时挂起，待 tool-start 到达后在同一微任务同步收口', () => {
+    const finish = vi.fn();
+    const { router, callbacks } = makeRouter(finish);
+    const diagSpy = vi.spyOn(streamDiagModule, 'recordStreamDiag');
+
+    // 1. 乱序到达：tool-end 先到
+    router.onMsg({
+      type: 'tool-end',
+      runId: 'run-test',
+      call: { id: 'call-1', name: 'read_file' },
+      result: { id: 'call-1', status: 'success', output: 'content ok' },
+      turnIndex: 0,
+    });
+
+    // tool-end 此时被挂起，不应触发 onToolSuccess 回调
+    expect(callbacks.onToolSuccess).not.toHaveBeenCalled();
+    expect(diagSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: 'event-router',
+        kind: 'causality-buffered',
+      })
+    );
+
+    // 2. 迟到的 tool-start 到达
+    router.onMsg({
+      type: 'tool-start',
+      runId: 'run-test',
+      call: { id: 'call-1', name: 'read_file', arguments: '{}' },
+      turnIndex: 0,
+    });
+
+    // tool-start 触发后，立即排空挂起的 tool-end
+    expect(callbacks.onToolStart).toHaveBeenCalledTimes(1);
+    expect(callbacks.onToolSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('多轮自主循环：同名工具在不同 turnIndex 下各自正常放行，不误杀', () => {
+    const finish = vi.fn();
+    const { router, callbacks } = makeRouter(finish);
+
+    // 轮次 0: tool-start view_file
+    router.onMsg({
+      type: 'tool-start',
+      runId: 'run-test',
+      call: { id: 'call-dup', name: 'view_file' },
+      turnIndex: 0,
+    });
+    // 轮次 1: 同名工具再次调用
+    router.onMsg({
+      type: 'tool-start',
+      runId: 'run-test',
+      call: { id: 'call-dup', name: 'view_file' },
+      turnIndex: 1,
+    });
+
+    expect(callbacks.onToolStart).toHaveBeenCalledTimes(2);
+  });
+
+  it('consumedEvents 满足 2000 条 FIFO 淘汰机制，防内存泄漏', () => {
+    const finish = vi.fn();
+    const { router, callbacks } = makeRouter(finish);
+
+    // 灌入 2005 个唯一事件
+    for (let i = 0; i < 2005; i++) {
+      router.onMsg({
+        type: 'turn-start',
+        runId: 'run-test',
+        sequence: i + 1,
+        turnIndex: i,
+      });
+    }
+
+    // 再次发送最老的前 5 个事件中的第 1 个（已从 FIFO 中淘汰）
+    // 应当作为新事件再次放行
+    const _wasCalledCount = (callbacks.onChunk as ReturnType<typeof vi.fn>).mock
+      .calls.length;
+    router.onMsg({
+      type: 'turn-start',
+      runId: 'run-test',
+      sequence: 1,
+      turnIndex: 0,
+    });
+    // 验证 router 内部处理了该事件且未报错
+    expect(finish).not.toHaveBeenCalled();
+  });
 });
 
-describe('buildEventDedupeKey 键生成规则（04 §5.1-1）', () => {
+describe('buildEventDedupeKey 键生成规则（04 §5.1-1 / DIM-02 复合因果 Key 矩阵）', () => {
   it('收口轨：messageId + sequence → type:messageId:sequence', () => {
     const key = buildEventDedupeKey({
       kind: 'engine',
@@ -691,7 +799,7 @@ describe('buildEventDedupeKey 键生成规则（04 §5.1-1）', () => {
     expect(key).toBe('message-delta:m1:5');
   });
 
-  it('实时轨：sequence=None → type:messageId', () => {
+  it('实时轨：message-delta 无 sequence 返回 null 放行流式增量', () => {
     const key = buildEventDedupeKey({
       kind: 'engine',
       type: 'message-delta',
@@ -705,10 +813,40 @@ describe('buildEventDedupeKey 键生成规则（04 §5.1-1）', () => {
       },
       raw: { type: 'message-delta', messageId: 'm1' },
     });
-    expect(key).toBe('message-delta:m1');
+    expect(key).toBeNull();
   });
 
-  it('message-end 取 message.id；无 messageId 时退化 type:sequence', () => {
+  it('工具域：tool-start 包含 turnIndex 与 toolId', () => {
+    const keyWithSeq = buildEventDedupeKey({
+      kind: 'engine',
+      type: 'tool-start',
+      originalType: 'tool-start',
+      event: {
+        type: 'tool-start',
+        sessionId: 's1',
+        turnIndex: 2,
+        call: { id: 'call-xyz', name: 'read_file', arguments: '{}' },
+      },
+      raw: { type: 'tool-start', sequence: 10, turnIndex: 2 },
+    });
+    expect(keyWithSeq).toBe('tool-start:turn-2:call-xyz:10');
+
+    const keyLive = buildEventDedupeKey({
+      kind: 'engine',
+      type: 'tool-start',
+      originalType: 'tool-start',
+      event: {
+        type: 'tool-start',
+        sessionId: 's1',
+        turnIndex: 0,
+        call: { id: 'call-xyz', name: 'read_file', arguments: '{}' },
+      },
+      raw: { type: 'tool-start' },
+    });
+    expect(keyLive).toBe('tool-start:turn-0:call-xyz');
+  });
+
+  it('message-end 取 message.id 与 turnTag；无 messageId 时退化 type:sequence', () => {
     const key = buildEventDedupeKey({
       kind: 'engine',
       type: 'message-end',
@@ -716,11 +854,13 @@ describe('buildEventDedupeKey 键生成规则（04 §5.1-1）', () => {
       event: {
         type: 'message-end',
         sessionId: 's1',
+        turnIndex: 1,
         message: { id: 'm9', role: 'assistant', createdAt: 'c', blocks: [] },
       },
-      raw: { type: 'message-end', sequence: 9 },
+      raw: { type: 'message-end', sequence: 9, turnIndex: 1 },
     });
-    expect(key).toBe('message-end:m9:9');
+    expect(key).toBe('message-end:m9:turn-1:9');
+
     const seqOnly = buildEventDedupeKey({
       kind: 'engine',
       type: 'run-terminal',

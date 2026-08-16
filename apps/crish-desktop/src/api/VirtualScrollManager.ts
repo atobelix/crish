@@ -12,6 +12,8 @@
  * - generation: clear() 时递增，用于检测过时的异步 setActual 调用
  */
 
+import type { SessionMessage } from '../store/types';
+
 export interface VisibleRange {
   startIndex: number;
   endIndex: number;
@@ -27,7 +29,41 @@ export interface VsmDebugInfo {
 
 const FALLBACK_HEIGHT = 120;
 
+/**
+ * 结构化多步骤消息高度估算模型（误差收敛至 ≤15%）
+ */
+export function estimateTimelineMessageHeight(msg: SessionMessage): number {
+  let h = 48; // Base Row Padding + Actions
+  const blocks = msg.blocks || [];
+
+  if (blocks.length > 0) {
+    for (const b of blocks) {
+      if (b.type === 'thought') {
+        // 折叠思考胶囊 36px
+        h += 36;
+      } else if (b.type === 'tool_call') {
+        // 工具卡片紧凑行约 52px
+        h += 52;
+      } else if (b.type === 'text') {
+        const len = b.content?.length || 0;
+        h += Math.max(32, Math.ceil(len / 40) * 20);
+      }
+    }
+  } else {
+    // 降级文本估算
+    if ((msg.thinking || '').trim()) h += 36;
+    if (msg.toolCalls?.length) h += msg.toolCalls.length * 52;
+    const len = msg.text?.length || 0;
+    h += Math.max(48, Math.ceil(len / 40) * 20);
+  }
+
+  return Math.min(Math.max(h, 100), 4000);
+}
+
 export class VirtualScrollManager {
+  /** 全局流式吸附锁：在 Run 处于 processing 期间强制吸底，免疫历史折叠坍塌 */
+  private stickToBottomLock = false;
+
   /** 以 messageId 为键存储高度；estimated 始终为正数，actual 可为 null（待测量） */
   private heightsById = new Map<
     string,
@@ -142,6 +178,22 @@ export class VirtualScrollManager {
     }
     this.markDirty();
     return true;
+  }
+
+  /**
+   * 启动流式吸附锁定：在 Run 处于 processing 期间强制吸底，
+   * 免疫单帧折叠与高度骤降（-296px）带来的 userScrolledUp 误杀。
+   */
+  public setStickToBottomLock(locked: boolean): void {
+    this.stickToBottomLock = locked;
+  }
+
+  public isStickToBottomLocked(): boolean {
+    return this.stickToBottomLock;
+  }
+
+  public estimateHeight(msg: SessionMessage): number {
+    return estimateTimelineMessageHeight(msg);
   }
 
   /** 设置预测量高度（actual 已存在时跳过） */

@@ -10,8 +10,32 @@ export type ToolRenderItem =
 
 export type ToolRowTone = 'running' | 'success' | 'error' | 'pending' | 'idle';
 
-export type TimelineTextItem = { kind: 'text'; content: string; key: string };
+export type TimelineThoughtItem = {
+  kind: 'thought';
+  key: string;
+  content: string;
+  id?: string;
+  turnIndex?: number;
+  durationMs?: number;
+  isLive?: boolean;
+  isStreaming?: boolean;
+  isHistoricalCollapsed?: boolean;
+};
+
+export type TimelineTextItem = {
+  kind: 'text';
+  content: string;
+  key: string;
+  turnIndex?: number;
+  isFinal?: boolean;
+};
+
+export type TimelineToolsItem = {
+  kind: 'tools';
+  items: ToolRenderItem[];
+  key: string;
+  turnIndex?: number;
+};
 
 export type AssistantTimelineItem =
-  | TimelineTextItem
-  | { kind: 'tools'; items: ToolRenderItem[]; key: string };
+  TimelineThoughtItem | TimelineTextItem | TimelineToolsItem;

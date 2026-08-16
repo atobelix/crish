@@ -1,0 +1,120 @@
+.thoughtModal {
+  --dialog-width: 900px;
+  --dialog-max-width: 94vw;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeaderTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.headerBrainIcon {
+  color: var(--accent-primary, #0288d1);
+  flex-shrink: 0;
+}
+
+.headerTitleText {
+  font-weight: 600;
+  color: var(--text-primary, #f8fafc);
+  font-size: var(--font-size-base, 14px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metaBadge {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary, #94a3b8);
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.06));
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.thoughtModalBody {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 400px;
+  max-height: calc(88vh - 120px);
+  overflow: hidden;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-primary, #0f172a);
+}
+
+.thoughtContentPane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary, #0f172a);
+  overflow: hidden;
+}
+
+.thoughtTextWrapper {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 16px 20px;
+  scrollbar-width: thin;
+}
+
+.thoughtLinesContainer {
+  font-family: var(--font-mono, 'JetBrains Mono', 'Fira Code', monospace);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.6;
+  color: var(--text-secondary, #cbd5e1);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.thoughtLine {
+  display: flex;
+  gap: 16px;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm, 4px);
+}
+
+.thoughtLine:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.headingLine {
+  color: var(--accent-primary, #38bdf8);
+  font-weight: 600;
+  margin-top: 8px;
+  margin-bottom: 2px;
+}
+
+.lineNumber {
+  width: 36px;
+  flex-shrink: 0;
+  text-align: right;
+  color: var(--text-tertiary, #475569);
+  user-select: none;
+  font-size: var(--font-size-xxs, 11px);
+  font-variant-numeric: tabular-nums;
+}
+
+.lineContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.footerLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

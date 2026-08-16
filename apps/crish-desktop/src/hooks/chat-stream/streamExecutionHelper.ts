@@ -13,6 +13,7 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { markStreamingActive } from '../../api/streamStop';
 import { scheduleFinalMarkdownHtml, buildTerminalToolPatches } from './helpers';
 import { streamBatchKey } from '../../api/streamTextBatcher';
+import { getStreamThinking } from '../../store/streamingStore';
 import {
   commitRunCompletion,
   decideEmptyRunNotice,
@@ -71,21 +72,37 @@ export function createFinalHtmlScheduler(
 }
 
 /**
- * 当接收到有效文本 chunk 时，如果占位思考仍为初始提示词，则清理思考状态。
+ * 当接收到有效文本 chunk 时，如果占位思考仍为初始提示词且无真实思考流，则清理思考占位符。
  */
 export function handleThinkingResetOnChunk(
   sid: string,
   assistantMsgId: string,
   thinkingBatcher: StreamTextBatcher | null | undefined
 ): void {
+  // 1. 关键防御：优先检查轻量 streamingStore 中是否已有实时思考内容
+  const liveThinking = getStreamThinking(sid, assistantMsgId);
+  if (
+    liveThinking &&
+    liveThinking.trim() &&
+    liveThinking !== '正在处理…' &&
+    liveThinking !== '正在思考中...'
+  ) {
+    // 已有真实思考内容流出，严禁 drop 批合并器与抹除思考！
+    return;
+  }
+
+  // 2. 检查持久化 sessionStore 中的占位状态
   const cur = getSessionById(sid)?.messages?.find(
     (m: SessionMessage) => m.id === assistantMsgId
   );
   if (cur?.thinking === '正在处理…' || cur?.thinking === '正在思考中...') {
-    thinkingBatcher?.drop(streamBatchKey(sid, assistantMsgId));
-    getCompositionRoot()
-      .layout.getState()
-      .updateMessageThinking(sid, assistantMsgId, '');
+    const key = streamBatchKey(sid, assistantMsgId);
+    if (!thinkingBatcher?.hasPending(key)) {
+      thinkingBatcher?.drop(key);
+      getCompositionRoot()
+        .layout.getState()
+        .updateMessageThinking(sid, assistantMsgId, '');
+    }
   }
 }
 

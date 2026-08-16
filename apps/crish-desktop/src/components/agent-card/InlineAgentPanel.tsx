@@ -565,6 +565,20 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                           ? textItems[textItems.length - 1]!.key
                           : null;
                         return timeline.map((item) => {
+                          if (item.kind === 'thought') {
+                            return (
+                              <div
+                                key={item.key}
+                                className="msg-timeline-thought"
+                              >
+                                <AsyncMarkdownBlock
+                                  text={item.content}
+                                  isStreaming={false}
+                                  priority={mdPriority}
+                                />
+                              </div>
+                            );
+                          }
                           if (item.kind === 'text') {
                             const body = stripThoughtPlaceholders(
                               item.content || ''
@@ -582,28 +596,31 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
                               </div>
                             );
                           }
-                          return (
-                            <div
-                              key={item.key}
-                              className="msg-timeline-tools agent-tool-stack"
-                            >
-                              <ChatToolStack
-                                items={item.items}
-                                msgId={msg.id}
-                                agents={[]}
-                                activeSessionId={parentSessionId}
-                                expandedTools={expandedTools}
-                                onToggleTool={onToggleTool}
-                                approvalBusy={approvalBusy}
-                                pendingApprovalMsgId={msg.id}
-                                onOpenDiff={() => {}}
-                                onOpenPath={() => {}}
-                                onOpenTerminal={() => {}}
-                                onApprovalAllow={onApprovalAllow}
-                                onApprovalDeny={onApprovalDeny}
-                              />
-                            </div>
-                          );
+                          if (item.kind === 'tools') {
+                            return (
+                              <div
+                                key={item.key}
+                                className="msg-timeline-tools agent-tool-stack"
+                              >
+                                <ChatToolStack
+                                  items={item.items}
+                                  msgId={msg.id}
+                                  agents={[]}
+                                  activeSessionId={parentSessionId}
+                                  expandedTools={expandedTools}
+                                  onToggleTool={onToggleTool}
+                                  approvalBusy={approvalBusy}
+                                  pendingApprovalMsgId={msg.id}
+                                  onOpenDiff={() => {}}
+                                  onOpenPath={() => {}}
+                                  onOpenTerminal={() => {}}
+                                  onApprovalAllow={onApprovalAllow}
+                                  onApprovalDeny={onApprovalDeny}
+                                />
+                              </div>
+                            );
+                          }
+                          return null;
                         });
                       })()}
                     </>

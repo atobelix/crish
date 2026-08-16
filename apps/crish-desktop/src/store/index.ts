@@ -167,6 +167,7 @@ export { usePermissionStore } from './permissionStore';
 export type { PermissionStore } from './permissionStore';
 export { useSettingsStore } from './settingsStore';
 export type { SettingsStore } from './settingsStore';
+export * from './thoughtInspectorStore';
 
 // store 侧公共读面（T11 新域读入口）
 export * from './storeAccess';

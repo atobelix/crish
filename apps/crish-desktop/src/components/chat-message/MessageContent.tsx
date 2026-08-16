@@ -16,6 +16,7 @@ import { Priority } from '../../workers';
 import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
 import { MessageToolCallsSection } from '../chat-message-row/MessageToolCallsSection';
 import { StreamingTextBlock } from '../chat-message-row/StreamingTextBlock';
+import { TimelineThoughtSection } from './TimelineThoughtSection';
 import { useShallow } from '../../api/store-access/componentAccess';
 import {
   streamStoreKey,
@@ -48,7 +49,7 @@ const IMAGE_TAIL_WINDOW = 256;
 const STREAM_IMAGE_MAX = 8;
 
 /**
- * Timeline 主体（08-detail D6/T1.5）：工具卡 + 稳定文本块。
+ * Timeline 主体（08-detail D6/T1.5）：思考链 + 工具卡 + 稳定文本块。
  * memo 化 + 流式期间签名缓存命中（timeline 引用稳定）→ 纯文本帧零重渲染；
  * 流式增长的最后 text 项由调用方剔除，走独立 StreamingTextBlock 增量区。
  */
@@ -57,13 +58,32 @@ interface TimelineBodyProps {
   toolStackProps?: ChatToolStackSharedProps;
   msgId: string;
   status: SessionMessage['status'];
+  isThinkingMsg?: boolean;
 }
 
 const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
-  function TimelineBody({ items, toolStackProps, msgId, status }) {
+  function TimelineBody({
+    items,
+    toolStackProps,
+    msgId,
+    status,
+    isThinkingMsg = false,
+  }) {
     return (
       <>
         {items.map((item) => {
+          if (item.kind === 'thought') {
+            return (
+              <TimelineThoughtSection
+                key={item.key}
+                content={item.content}
+                isLive={item.isLive ?? isThinkingMsg}
+                durationMs={item.durationMs}
+                turnIndex={item.turnIndex}
+                messageId={msgId}
+              />
+            );
+          }
           if (item.kind === 'text') {
             const bodyText = stripThoughtPlaceholders(item.content || '');
             if (!bodyText.trim()) return null;
@@ -360,6 +380,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           toolStackProps={toolStackProps}
           msgId={msg.id}
           status={msg.status}
+          isThinkingMsg={isThinkingMsg}
         />
         {streaming && (
           <div className={styles.timelineText}>
@@ -388,6 +409,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           toolStackProps={toolStackProps}
           msgId={msg.id}
           status={msg.status}
+          isThinkingMsg={isThinkingMsg}
         />
       </div>
     );

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useLayoutEffect, useRef } from 'react';
 import { ChevronRight } from 'lucide-react';
 import styles from './ChatMessageRow.module.css';
 import { thinkingFoldAria } from './chatMessageRowUtils';
@@ -22,9 +22,28 @@ export const MessageThinkingSection: React.FC<MessageThinkingSectionProps> = ({
   setThinkingOpen,
   thinkingBudget,
 }) => {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const userScrolledUpRef = useRef(false);
+
+  // 实时流追尾滚动（用户未手动向上翻动时，随 token 输出自动贴底滚动）
+  useLayoutEffect(() => {
+    if (!showThinking || !isThinkingMsg || !bodyRef.current) return;
+    const el = bodyRef.current;
+    if (!userScrolledUpRef.current) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [thinkingBudget.text, isThinkingMsg, showThinking]);
+
   if (!showThinking) return null;
 
   const thinkingBodyOpen = isThinkingMsg || thinkingOpen;
+
+  const handleScroll = () => {
+    if (!bodyRef.current || !isThinkingMsg) return;
+    const { scrollTop, scrollHeight, clientHeight } = bodyRef.current;
+    // 离底部超过 32px 判定为用户主动向上查阅历史思考
+    userScrolledUpRef.current = scrollHeight - (scrollTop + clientHeight) > 32;
+  };
 
   return (
     <div
@@ -39,9 +58,7 @@ export const MessageThinkingSection: React.FC<MessageThinkingSectionProps> = ({
           isLive: isThinkingMsg,
           isOpen: thinkingBodyOpen,
         })}
-        aria-disabled={isThinkingMsg || undefined}
         onClick={() => {
-          if (isThinkingMsg) return;
           setThinkingOpen((v) => !v);
         }}
       >
@@ -72,7 +89,12 @@ export const MessageThinkingSection: React.FC<MessageThinkingSectionProps> = ({
         data-expanded={thinkingBodyOpen ? 'true' : 'false'}
       >
         <div className={styles.accordionInner}>
-          <div className={styles.thinkingFoldBody} id={thinkingBodyId}>
+          <div
+            ref={bodyRef}
+            onScroll={handleScroll}
+            className={styles.thinkingFoldBody}
+            id={thinkingBodyId}
+          >
             {thinkingBudget.text}
           </div>
         </div>

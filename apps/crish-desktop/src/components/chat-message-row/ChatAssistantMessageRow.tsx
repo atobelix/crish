@@ -1,10 +1,18 @@
+/**
+ * ChatAssistantMessageRow.tsx
+ * 纯净助手消息行容器（DIM-02 / FIN-02 权威重构版）
+ *
+ * 架构裁决：
+ * - 彻底拔除置顶独立的 MessageThinkingBlock 单体思维链；
+ * - 思维链完全下放至 MessageContent 交错时间线管道中渲染；
+ * - 保持 assistantRowPropsEqual 比较契约与 memo 完整性。
+ */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './ChatMessageRow.module.css';
 import type { FileDiff, SessionMessage } from '../../store/types';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import { assistantCopyText } from '../../api/toolPresentation';
 import type { PermissionMode } from '../../api/permissionModes';
-import { THINKING_DOM_CHAR_CAP, budgetDomText } from '../../api/messageWindow';
 import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 
 import {
@@ -13,7 +21,6 @@ import {
   toolStackSharedPropsEqual,
 } from './chatMessageRowUtils';
 
-import { MessageThinkingBlock } from '../chat-message/MessageThinkingBlock';
 import { MessageContent } from '../chat-message/MessageContent';
 import { MessageActions } from '../chat-message/MessageActions';
 import { CacheMetricsBadge } from './CacheMetricsBadge';
@@ -100,8 +107,6 @@ export function assistantRowPropsEqual(
   prev: ChatAssistantMessageRowProps,
   next: ChatAssistantMessageRowProps
 ): boolean {
-  // Live thinking ticks are owned by ThinkingTimer inside MessageThinkingBlock
-  // so the full row does not re-render every second.
   return (
     prev.msg.id === next.msg.id &&
     prev.msg.status === next.msg.status &&
@@ -142,7 +147,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   isPinned,
   isSearchHit,
   isThinkingMsg,
-  hideThinkingBlock,
+  hideThinkingBlock: _hideThinkingBlock,
   inPlanMode,
   planApproved,
   isLastAssistant,
@@ -164,31 +169,18 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
 }) => {
   void _onBranch;
   void _messageIndex;
+  void _hideThinkingBlock;
 
   const sessionId = toolStackProps.activeSessionId;
   const live = isThinkingMsg || msg.status === 'processing';
   // S4.4: row owns thinking only. Body text/tools live in MessageContent's
   // single shallow streamingStore sub so streamText is not dual-subscribed.
-  const streamThinking = useStreamingStore((s) => {
+  const _streamThinking = useStreamingStore((s) => {
     if (!live || !sessionId) return undefined;
     return s.byKey[streamStoreKey(sessionId, msg.id)]?.thinking;
   });
+  void _streamThinking;
 
-  const effectiveThinking = streamThinking ?? msg.thinking;
-  const thinkingRaw =
-    effectiveThinking &&
-    effectiveThinking.trim() &&
-    effectiveThinking !== '正在处理…' &&
-    effectiveThinking !== '正在思考中...'
-      ? effectiveThinking.trim()
-      : '';
-  const thinkingText = thinkingRaw || (isThinkingMsg ? '…' : '');
-  const thinkingLineCount = thinkingText
-    ? thinkingText.split(/\r?\n/).length
-    : 0;
-  const showThinking =
-    !hideThinkingBlock && (isThinkingMsg || thinkingLineCount > 0);
-  const [thinkingOpen, setThinkingOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
   const rowAria = messageRowAriaLabel({
@@ -197,12 +189,6 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
     isThinking: isThinkingMsg,
     status: msg.status,
   });
-  const thinkingBodyId = `msg-thinking-${msg.id}`;
-
-  useEffect(() => {
-    if (isThinkingMsg) setThinkingOpen(true);
-    else setThinkingOpen(false);
-  }, [isThinkingMsg, msg.id]);
 
   useEffect(
     () => () => {
@@ -211,14 +197,12 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
     []
   );
 
-  // Streaming: ResizeObserver owns live height. Invalidating on every token thrashs layout.
+  // Streaming: ResizeObserver owns live height. Invalidating on every token thrashes layout.
   // Only invalidate when stream ends or non-stream content updates.
   useEffect(() => {
     if (isThinkingMsg || msg.status === 'processing') return;
     virtualScrollManager?.invalidateActual(msg.id);
   }, [msg.text, msg.id, msg.status, isThinkingMsg, virtualScrollManager]);
-
-  const thinkingBudget = budgetDomText(thinkingText, THINKING_DOM_CHAR_CAP);
 
   const handleCopy = useCallback(() => {
     // Imperative read — no streamText subscription on the row (S4.4).
@@ -254,16 +238,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
       role="article"
       aria-label={rowAria}
     >
-      <MessageThinkingBlock
-        showThinking={showThinking}
-        isThinkingMsg={isThinkingMsg}
-        thinkingText={thinkingText}
-        thinkingBodyId={thinkingBodyId}
-        thinkingOpen={thinkingOpen}
-        setThinkingOpen={setThinkingOpen}
-        thinkingBudget={thinkingBudget}
-      />
-
+      {/* 拔除置顶独立的 MessageThinkingBlock，所有思维链下放至 MessageContent 自然交错渲染 */}
       <div className={styles.assistantBody} data-message-body="assistant">
         <MessageContent
           msg={msg}

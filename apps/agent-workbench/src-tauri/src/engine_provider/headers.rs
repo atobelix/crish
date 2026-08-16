@@ -32,11 +32,13 @@ pub(crate) fn request_headers_for(
     match protocol {
         WireProtocol::Anthropic => {
             let mut headers = anthropic_request_headers(&config.api_key);
+            let mut betas = vec!["prompt-caching-2024-07-25"];
             if let Some(header) =
                 reasoning_effort_headers(Some(ReasoningVendor::Anthropic), explicit_effort)
             {
-                headers.push((header.0, header.1.to_string()));
+                betas.push(header.1);
             }
+            headers.push(("anthropic-beta", betas.join(",")));
             headers
         }
         WireProtocol::Gemini => gemini_request_headers(&config.api_key),

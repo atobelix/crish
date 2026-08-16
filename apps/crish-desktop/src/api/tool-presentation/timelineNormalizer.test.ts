@@ -135,6 +135,77 @@ describe('timelineNormalizer', () => {
       expect(timeline[0]?.kind).toBe('tools');
       expect(timeline[1]?.kind).toBe('text');
     });
+
+    it('builds full interleaved timeline with thought, tool_call, and text in true order', () => {
+      const msg = makeMessage({
+        id: 'msg-multi-step',
+        sender: 'assistant',
+        toolCalls: [
+          makeToolCall({
+            id: 'tc-1',
+            name: 'grep_search',
+            status: 'success',
+            output: 'match found',
+          }),
+          makeToolCall({
+            id: 'tc-2',
+            name: 'replace_file_content',
+            status: 'success',
+            output: 'replaced',
+          }),
+        ],
+        blocks: [
+          {
+            type: 'thought',
+            content: '第一步思考：需要检索定义',
+            turnIndex: 0,
+          },
+          { type: 'tool_call', id: 'tc-1' },
+          {
+            type: 'thought',
+            content: '第二步思考：修改文件内容',
+            turnIndex: 1,
+          },
+          { type: 'tool_call', id: 'tc-2' },
+          { type: 'text', content: '最终交付物：任务已圆满完成！' },
+        ],
+      });
+
+      const timeline = buildAssistantTimeline(msg);
+      expect(timeline.length).toBe(5);
+      expect(timeline[0]?.kind).toBe('thought');
+      expect((timeline[0] as { content: string }).content).toBe(
+        '第一步思考：需要检索定义'
+      );
+      expect(timeline[1]?.kind).toBe('tools');
+      expect(timeline[2]?.kind).toBe('thought');
+      expect((timeline[2] as { content: string }).content).toBe(
+        '第二步思考：修改文件内容'
+      );
+      expect(timeline[3]?.kind).toBe('tools');
+      expect(timeline[4]?.kind).toBe('text');
+      expect((timeline[4] as { content: string }).content).toBe(
+        '最终交付物：任务已圆满完成！'
+      );
+    });
+
+    it('supports fallback to thinkingTurns when blocks are not provided', () => {
+      const msg = makeMessage({
+        id: 'msg-turns',
+        sender: 'assistant',
+        text: 'Reply',
+        thinkingTurns: [
+          { turnIndex: 0, content: 'Turn 0 thought', durationMs: 1200 },
+          { turnIndex: 1, content: 'Turn 1 thought', durationMs: 800 },
+        ],
+      });
+
+      const timeline = buildAssistantTimeline(msg);
+      expect(timeline.length).toBe(3);
+      expect(timeline[0]?.kind).toBe('thought');
+      expect(timeline[1]?.kind).toBe('thought');
+      expect(timeline[2]?.kind).toBe('text');
+    });
   });
 
   describe('timelineSignature 状态感知与单调性防线 (A-02)', () => {

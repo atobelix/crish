@@ -5,6 +5,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { SidebarFooter } from './SidebarFooter';
 import { UserProfileCard } from './UserProfileCard';
 import { useLayoutStore } from '../../api/store-access/componentAccess';
+import * as appModeApi from '../../api/appMode';
 
 describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
   const onShowToast = vi.fn();
@@ -95,5 +96,27 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
 
     // 脉冲角标
     expect(screen.getByLabelText('新版本可用提示')).toBeInTheDocument();
+  });
+
+  it('Demo 模式可用时渲染模式切换芯片', () => {
+    vi.spyOn(appModeApi, 'canUseDemoMode').mockReturnValue(true);
+    vi.spyOn(appModeApi, 'isDemoMode').mockReturnValue(false);
+    const switchSpy = vi
+      .spyOn(appModeApi, 'switchAppMode')
+      .mockImplementation(() => {});
+
+    render(
+      <SidebarFooter
+        onShowToast={onShowToast}
+        setUpdateAvailableState={setUpdateAvailableState}
+      />
+    );
+
+    const chip = screen.getByRole('button', { name: /当前正式模式/ });
+    expect(chip).toBeInTheDocument();
+    expect(screen.getByText('正式')).toBeInTheDocument();
+
+    fireEvent.click(chip);
+    expect(switchSpy).toHaveBeenCalledWith('demo');
   });
 });

@@ -1,21 +1,14 @@
 /**
- * 消息级缓存命中徽标（P6 骨架，T-46，R6 轮）。
- *
- * P6 阶段契约（P6-ts-shell-sync.md §3.3.3）：
- * - props.metrics 为 null（老数据/无 cache 字段/解析失败）→ 渲染 null，
- *   隐藏而非显示 0%（对齐 §3.6.1 默认值语义与 C15，0% 会误导）；
- * - 非 null → 最小数值文本渲染：命中率/读/写 token；命中率未上报或为 0 时
- *   显示"未命中"态而非 0%（e2e 用例④口径，文案细节归 P5）。
- *
- * 类型来源：T-42（shared-types cache-metrics 契约）已落盘，直接消费
- * 共享 `CacheMetrics`（字段全可选；hitRatio 为正式名、hitRate 为兼容别名，
- * 口径 C9：hitRatio = cacheRead / inputTotal）。
+ * 消息级缓存命中徽标（四态语义模型落地：⚡ 缓存命中 / 💾 写入缓存 / 未命中 / 隐藏）。
+ * 消除虚假未命中，提供精确 Token 计数与详尽 Tooltip 看板。
  */
 import React from 'react';
 import type { CacheMetrics } from '@crish/shared-types';
+import { Tooltip } from '../ui';
+import styles from './CacheMetricsBadge.module.css';
 
-interface CacheMetricsBadgeProps {
-  metrics: CacheMetrics | null;
+export interface CacheMetricsBadgeProps {
+  metrics: CacheMetrics | null | undefined;
 }
 
 export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
@@ -23,16 +16,114 @@ export const CacheMetricsBadge: React.FC<CacheMetricsBadgeProps> = ({
 }) => {
   if (metrics == null) return null;
 
-  // 命中率优先读 hitRatio（正式名），缺失时回退 hitRate 兼容别名
-  const ratio = metrics.hitRatio ?? metrics.hitRate;
-  const read = (metrics.cacheReadTokens ?? 0).toLocaleString();
-  const write = (metrics.cacheWriteTokens ?? 0).toLocaleString();
+  const read = metrics.cacheReadTokens ?? 0;
+  const write = metrics.cacheWriteTokens ?? 0;
+  const miss = metrics.cacheMissTokens ?? 0;
+  const total = metrics.inputTotal ?? read + write + miss;
+  const ratio =
+    metrics.hitRatio ?? metrics.hitRate ?? (total > 0 ? read / total : 0);
 
+  // 态 1：完全无缓存数据或总输入为 0 -> 隐藏
+  if (read === 0 && write === 0 && total === 0 && ratio === 0) {
+    return null;
+  }
+
+  // 态 2：缓存命中 (Read > 0)
+  if (read > 0) {
+    const percent = ratio >= 0.01 ? `${Math.round(ratio * 100)}%` : '<1%';
+    const writePart = write > 0 ? ` · 写 ${write.toLocaleString()}` : '';
+    return (
+      <Tooltip
+        content={
+          <div className={styles.tooltipContent}>
+            <div className={styles.tooltipTitle}>⚡ 提示词缓存加速生效</div>
+            <div className={styles.tooltipRow}>
+              • 命中读取：{read.toLocaleString()} tokens
+            </div>
+            {write > 0 && (
+              <div className={styles.tooltipRow}>
+                • 本轮写入：{write.toLocaleString()} tokens
+              </div>
+            )}
+            {miss > 0 && (
+              <div className={styles.tooltipRow}>
+                • 未命中量：{miss.toLocaleString()} tokens
+              </div>
+            )}
+            {total > 0 && (
+              <div className={styles.tooltipRow}>
+                • 提示词总量：{total.toLocaleString()} tokens
+              </div>
+            )}
+            <div className={styles.tooltipHighlight}>
+              • 缓存命中率：{(ratio * 100).toFixed(1)}%
+            </div>
+          </div>
+        }
+      >
+        <span
+          className={`${styles.badge} ${styles.hit}`}
+          data-testid="cache-metrics-badge"
+          data-state="hit"
+        >
+          ⚡ 缓存命中 {percent} · 读 {read.toLocaleString()}
+          {writePart}
+        </span>
+      </Tooltip>
+    );
+  }
+
+  // 态 3：首轮写入态 (Write > 0 且 Read == 0)
+  if (write > 0) {
+    return (
+      <Tooltip
+        content={
+          <div className={styles.tooltipContent}>
+            <div className={styles.tooltipTitle}>💾 提示词缓存已建立</div>
+            <div className={styles.tooltipRow}>
+              • 本轮写入：{write.toLocaleString()} tokens
+            </div>
+            <div className={styles.tooltipDesc}>
+              下一轮对话将命中该前缀，显著降低响应延迟与 Token 费用
+            </div>
+          </div>
+        }
+      >
+        <span
+          className={`${styles.badge} ${styles.write}`}
+          data-testid="cache-metrics-badge"
+          data-state="write"
+        >
+          💾 写入缓存 {write.toLocaleString()}
+        </span>
+      </Tooltip>
+    );
+  }
+
+  // 态 4：显式未命中
   return (
-    <span className="cache-metrics" data-testid="cache-metrics-badge">
-      {ratio != null && ratio > 0
-        ? `缓存命中 ${Math.round(ratio * 100)}% · 读 ${read} · 写 ${write}`
-        : '未命中'}
-    </span>
+    <Tooltip
+      content={
+        <div className={styles.tooltipContent}>
+          <div className={styles.tooltipTitle}>本次未命中缓存</div>
+          {total > 0 && (
+            <div className={styles.tooltipRow}>
+              • 输入总量：{total.toLocaleString()} tokens
+            </div>
+          )}
+          <div className={styles.tooltipDesc}>
+            可能原因：对话前缀改变或内容长度未达到模型缓存阈值
+          </div>
+        </div>
+      }
+    >
+      <span
+        className={`${styles.badge} ${styles.miss}`}
+        data-testid="cache-metrics-badge"
+        data-state="miss"
+      >
+        未命中
+      </span>
+    </Tooltip>
   );
 };

@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react';
 import { AppErrorBoundary } from '../components/AppErrorBoundary';
 import { TelemetryDialog } from '../components/overlay/TelemetryDialog';
+import { FullThoughtModal } from '../components/chat-message-row/FullThoughtModal';
 import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
@@ -9,7 +10,9 @@ import type { SettingsTabType } from '../store/types';
 
 // Lazy loaded components
 const ToastStack = lazy(() =>
-  import('../components/overlay/ToastStack').then((m) => ({ default: m.ToastStack }))
+  import('../components/overlay/ToastStack').then((m) => ({
+    default: m.ToastStack,
+  }))
 );
 const CheatsheetModal = lazy(() =>
   import('../components/overlay/CheatsheetModal').then((m) => ({
@@ -166,6 +169,8 @@ export function AppGlobalDialogs({
           </Suspense>
         </AppErrorBoundary>
       )}
+
+      <FullThoughtModal />
     </>
   );
 }

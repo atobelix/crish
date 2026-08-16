@@ -385,7 +385,7 @@
   color: var(--text-tertiary);
   white-space: pre-wrap;
   word-break: break-word;
-  max-height: calc(var(--font-size-sm) * 1.5 * 4);
+  max-height: 260px;
   overflow-y: auto;
   border: none;
   background: transparent;
@@ -394,10 +394,11 @@
   opacity: 0.9;
   -webkit-user-select: text;
   user-select: text;
+  scrollbar-width: thin;
 }
 
 .thinkingFold.isOpen:not(.isLive) .thinkingFoldBody {
-  max-height: calc(var(--font-size-sm) * 1.5 * 24);
+  max-height: 480px;
 }
 
 .thinkingSec {
@@ -465,8 +466,8 @@
   margin: 2px 0;
   contain: layout style;
   border: none;
-  border-top: none !important;
-  border-bottom: none !important;
+  border-top: none;
+  border-bottom: none;
 }
 
 .timelineText {
@@ -555,4 +556,223 @@
   background-size: 200% 100%;
   animation: skeleton-shimmer var(--transition-skeleton) infinite;
   margin-bottom: var(--space-1_5);
+}
+
+/* ─── Timeline Interleaved Thought Section ─── */
+.thoughtTimelineSection {
+  margin: 4px 0 6px;
+  padding: 0;
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(
+    in srgb,
+    var(--bg-secondary, rgba(0, 0, 0, 0.03)) 60%,
+    transparent
+  );
+  border: var(--hairline-width, 1px) solid
+    var(--border-subtle, rgba(0, 0, 0, 0.06));
+  transition:
+    background var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease);
+  max-width: 100%;
+}
+
+.thoughtTimelineSection:hover {
+  background: color-mix(
+    in srgb,
+    var(--bg-secondary, rgba(0, 0, 0, 0.05)) 85%,
+    transparent
+  );
+}
+
+.thoughtTimelineSection.isLive {
+  border-color: color-mix(
+    in srgb,
+    var(--accent-color, #3b82f6) 30%,
+    var(--border-subtle)
+  );
+}
+
+.thoughtHeaderBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  padding: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  border-radius: var(--radius-md, 8px);
+}
+
+.thoughtIconSlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.sparkleLiveIcon {
+  color: var(--accent-color, #3b82f6);
+  animation: pulse-live 1.8s ease-in-out infinite;
+}
+
+@keyframes pulse-live {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(0.9);
+  }
+}
+
+.brainIcon {
+  color: var(--text-tertiary);
+}
+
+.thoughtTitle {
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+  flex: 0 0 auto;
+}
+
+.thoughtMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xxs, 11px);
+  font-variant-numeric: tabular-nums;
+  flex: 1 1 auto;
+}
+
+.thoughtDuration {
+  color: var(--text-tertiary);
+}
+
+.thoughtWords {
+  color: var(--text-tertiary);
+  opacity: 0.85;
+}
+
+.thoughtExpandModalBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.thoughtTimelineSection:hover .thoughtExpandModalBtn {
+  opacity: 1;
+}
+
+.thoughtExpandModalBtn:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.06));
+  color: var(--text-primary);
+}
+
+.thoughtChevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform var(--transition-fast, 150ms ease);
+}
+
+.thoughtChevron.isOpen {
+  transform: rotate(90deg);
+}
+
+.thoughtAccordion {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.thoughtAccordion[data-expanded='true'] {
+  grid-template-rows: 1fr;
+}
+
+.thoughtAccordionInner {
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.thoughtAccordion[data-expanded='true'] .thoughtAccordionInner {
+  opacity: 1;
+}
+
+.thoughtScrollBody {
+  margin: 0;
+  padding: 8px 12px 10px;
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.6;
+  color: var(--text-tertiary);
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  border-top: var(--hairline-width, 1px) solid
+    var(--border-subtle, rgba(0, 0, 0, 0.05));
+  position: relative;
+}
+
+.thinkingBodyContainer {
+  position: relative;
+}
+
+.thinkingFadeOverlay {
+  position: relative;
+  margin-top: -36px;
+  padding: 32px 12px 8px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    color-mix(in srgb, var(--bg-primary, #0f172a) 85%, transparent) 40%,
+    var(--bg-primary, #0f172a) 100%
+  );
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+}
+
+.thinkingActionStrip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 12px;
+  background: var(--bg-secondary, rgba(255, 255, 255, 0.08));
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-full, 9999px);
+  backdrop-filter: blur(8px);
+}
+
+.thinkingSummaryText {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary, #94a3b8);
+  font-variant-numeric: tabular-nums;
+}
+
+.fullThoughtBtn {
+  font-size: var(--font-size-xs, 12px);
 }

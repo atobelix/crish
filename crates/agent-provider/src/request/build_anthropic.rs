@@ -42,6 +42,7 @@ use conex_compaction::clean_output::{clean_output, CleanupOptions};
 use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
 use serde_json::{json, Map, Value};
 
+use super::cache::allocate_breakpoints;
 use super::messages::{sanitize_tool_call_id, stringify_tool_output, WIRE_CONTINUATION_NOTE};
 use super::schema::canonicalize_schema;
 use super::tools::ToolChoice;
@@ -65,6 +66,8 @@ pub struct AnthropicRequestOptions {
     pub reasoning_effort: Option<ReasoningEffort>,
     /// 01 D5 thinkingIntensity 透传（提供时覆盖 reasoning_effort 换算）
     pub thinking_intensity: Option<ThinkingIntensity>,
+    /// 显式下发的精确 Token 预算（1024 ~ 64000）
+    pub thinking_budget: Option<u64>,
     pub tool_choice: Option<ToolChoice>,
 }
 
@@ -79,10 +82,30 @@ pub fn build_anthropic_request_body(
         body.insert("model".to_string(), json!(model));
     }
 
-    // system：Anthropic 官方接受字符串或块数组。任务书 T2.1a 采用字符串形态
-    // （可复用既有 system prompt 构造），与 pi-ai 块数组语义对齐但更保守。
+    // 1. system prompt 构造与缓存断点注入
+    let has_system = context
+        .system_prompt
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some();
+    let bp_plan = allocate_breakpoints(context.tools.len(), has_system, false);
+
     if let Some(prompt) = build_system_prompt_string(context.system_prompt.as_deref()) {
-        body.insert("system".to_string(), json!(prompt));
+        if bp_plan.system {
+            body.insert(
+                "system".to_string(),
+                json!([
+                    {
+                        "type": "text",
+                        "text": prompt,
+                        "cache_control": { "type": "ephemeral" }
+                    }
+                ]),
+            );
+        } else {
+            body.insert("system".to_string(), json!(prompt));
+        }
     }
 
     if let Some(stream) = opts.stream {
@@ -91,28 +114,72 @@ pub fn build_anthropic_request_body(
     if let Some(temperature) = opts.temperature {
         body.insert("temperature".to_string(), json!(temperature));
     }
-    if let Some(max_tokens) = opts.max_tokens {
-        body.insert("max_tokens".to_string(), json!(max_tokens));
-    }
 
-    // thinking 参数（思考启用时注入；Off/None 不注入 `thinking` 键）
-    if let Some(thinking) = anthropic_thinking_object(opts) {
+    // 2. thinking 参数与 max_tokens 自动安全抬升 (max_tokens >= budget + 4096)
+    let thinking_obj = anthropic_thinking_object(opts);
+    if let Some(thinking) = thinking_obj {
         body.insert("thinking".to_string(), thinking);
     }
 
-    // tools：`[{name, description, input_schema}]`（Anthropic 官方 shape，无 type 字段）
+    let budget = if let Some(explicit_budget) = opts.thinking_budget {
+        if explicit_budget > 0 {
+            Some(explicit_budget)
+        } else {
+            None
+        }
+    } else if let Some(intensity) = opts.thinking_intensity {
+        if intensity != ThinkingIntensity::Off {
+            Some(thinking_to_budget_tokens(intensity))
+        } else {
+            None
+        }
+    } else if let Some(effort) = opts.reasoning_effort {
+        if !matches!(effort, ReasoningEffort::Off | ReasoningEffort::Auto) {
+            Some(effort_to_budget_tokens(effort))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let min_max_tokens = budget.map(|b| b.saturating_add(4096)).unwrap_or(2048);
+    let final_max_tokens = match opts.max_tokens {
+        Some(m) => {
+            if budget.is_some() {
+                m.max(min_max_tokens)
+            } else {
+                m
+            }
+        }
+        None => min_max_tokens,
+    };
+    body.insert("max_tokens".to_string(), json!(final_max_tokens));
+
+    // 3. tools：`[{name, description, input_schema, cache_control?}]`
     if !context.tools.is_empty() {
+        let tool_count = context.tools.len();
         body.insert(
             "tools".to_string(),
             json!(context
                 .tools
                 .iter()
-                .map(|tool| {
-                    json!({
-                        "name": tool.name,
-                        "description": tool.description,
-                        "input_schema": canonicalize_schema(&tool.effective_input_schema()),
-                    })
+                .enumerate()
+                .map(|(idx, tool)| {
+                    let mut map = serde_json::Map::new();
+                    map.insert("name".to_string(), json!(tool.name));
+                    map.insert("description".to_string(), json!(tool.description));
+                    map.insert(
+                        "input_schema".to_string(),
+                        canonicalize_schema(&tool.effective_input_schema()),
+                    );
+                    if bp_plan.tools && (idx + 1 == tool_count) {
+                        map.insert(
+                            "cache_control".to_string(),
+                            json!({ "type": "ephemeral" }),
+                        );
+                    }
+                    Value::Object(map)
                 })
                 .collect::<Vec<_>>()),
         );
@@ -122,8 +189,7 @@ pub fn build_anthropic_request_body(
         );
     }
 
-    // messages：独立映射函数（从 AgentMessage 块直接构建 content 块数组，
-    // 禁止复用 chat 轨的 tool_calls 形状）
+    // 4. messages
     body.insert(
         "messages".to_string(),
         json!(to_anthropic_messages(context)),
@@ -151,9 +217,15 @@ fn build_system_prompt_string(system_prompt: Option<&str>) -> Option<String> {
 }
 
 /// thinking 参数（对齐 pi-ai buildParams 的 budget-based 形态）；
+/// 优先使用显式 thinking_budget，次选 intensity / effort 换算；
 /// effort/intensity 均为 None 或 off → None（不注入 `thinking` 键）
 fn anthropic_thinking_object(opts: &AnthropicRequestOptions) -> Option<Value> {
-    let budget = if let Some(intensity) = opts.thinking_intensity {
+    let budget = if let Some(explicit_budget) = opts.thinking_budget {
+        if explicit_budget == 0 {
+            return None;
+        }
+        explicit_budget
+    } else if let Some(intensity) = opts.thinking_intensity {
         if intensity == ThinkingIntensity::Off {
             return None;
         }
