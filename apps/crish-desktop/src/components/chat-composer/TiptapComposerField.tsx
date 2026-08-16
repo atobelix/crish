@@ -41,18 +41,30 @@ import {
   type ComposerFieldProps,
 } from './ComposerField';
 
-/** 宿主系统斜杠命令默认集（对齐 useChatComposerProps.BASE_SLASH，/simulate 由宿主按 demo 模式注入） */
+/** 宿主系统斜杠命令默认集（对齐 useChatComposerProps.BASE_SLASH 与 AI 系统指令集） */
 const HOST_SYSTEM_SLASH: ReadonlyArray<{ cmd: string; desc: string }> = [
+  { cmd: '/clear', desc: '清空会话历史' },
+  { cmd: '/stop', desc: '停止当前任务' },
+  { cmd: '/mode', desc: '切换执行模式' },
+  { cmd: '/prompt', desc: '插入提示词' },
+  { cmd: '/compact', desc: '压缩会话上下文' },
   { cmd: '/goal', desc: '多轮推进直至完成' },
-  { cmd: '/learn', desc: '记住一条规则' },
-  { cmd: '/grill-me', desc: '对齐提问，暂不实施' },
   { cmd: '/schedule', desc: '定时任务' },
+  { cmd: '/grill-me', desc: '对齐提问，暂不实施' },
   { cmd: '/teamwork', desc: '协作看板' },
   { cmd: '/browser', desc: '预览浏览器' },
+  { cmd: '/learn', desc: '记住一条规则' },
+  { cmd: '/settings', desc: '打开设置中心' },
+  { cmd: '/help', desc: '查看指令帮助' },
 ];
 
 /** 宿主命令 → 斜杠菜单图标映射 */
 const HOST_SLASH_ICONS: Record<string, string> = {
+  '/clear': 'Eraser',
+  '/stop': 'Square',
+  '/mode': 'Sliders',
+  '/prompt': 'FileCode',
+  '/compact': 'Shrink',
   '/goal': 'Target',
   '/learn': 'BookOpen',
   '/grill-me': 'HelpCircle',
@@ -61,6 +73,8 @@ const HOST_SLASH_ICONS: Record<string, string> = {
   '/browser': 'Globe',
   '/simulate': 'PlayCircle',
   '/skill': 'Sparkles',
+  '/settings': 'Sparkles',
+  '/help': 'HelpCircle',
 };
 
 export type TiptapComposerFieldProps = ComposerFieldProps & {

@@ -352,7 +352,7 @@ describe('TiptapEditorField T8 提及与 aria 全链', () => {
     expect(listboxId.endsWith('-slash')).toBe(true);
     await waitFor(() => {
       expect(document.getElementById(listboxId)?.textContent).toContain(
-        'Heading 1'
+        '/goal'
       );
     });
     // 初始高亮首项，activedescendant 指向 listbox 内 option

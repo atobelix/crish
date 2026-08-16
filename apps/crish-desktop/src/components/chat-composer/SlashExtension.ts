@@ -1,13 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * apps/crish-desktop/src/components/chat-composer/SlashExtension.ts
- * Tiptap Slash Command Extension & Mention Chip Node (CRM-01, FR-102, FR-103)。
- * 40 方案 T6/T8 扩展：
- * - 斜杠命令并入宿主系统/skill 命令（extraItemsRef 引用桥接）；
- * - Mention 用户提及 UI：@ 触发第二 suggestion 实例，候选人以引用桥接注入，
- *   空列表兜底（不弹面板、不崩溃）；
- * - 弹层 aria 全链：编辑器 combobox 的 aria-expanded/controls/activedescendant 随生命周期同步。
- * CI Guardrail: Max 400 lines of effective code
+ * Tiptap Slash Command Extension & Mention Chip Node (CRM-01, FR-102, FR-103, DIM-06)。
+ * 提示框纯净化重构：
+ * - 拔除 H1/H2/H3、列表、代码块等博客排版命令；
+ * - 收拢为 AI 会话与系统控制指令（/clear, /stop, /mode, /prompt, /compact, /goal, /schedule 等）；
+ * - 接入 safeCursorAnchor 四级几何安全探测器防 (0,0) 坍塌与漂移；
+ * - 保留 @ 提及候选人建议 (MentionSuggestionExtension) 与 Mention 行内节点。
+ *
+ * CI Guardrail: Max 400 lines of effective code, UTF-8 无 BOM.
  */
 
 import { Extension, Node, mergeAttributes } from '@tiptap/core';
@@ -16,118 +17,43 @@ import { PluginKey } from '@tiptap/pm/state';
 import { ReactRenderer } from '@tiptap/react';
 import { TiptapSlashMenu } from './TiptapSlashMenu';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
+import {
+  calculateSafeCursorAnchor,
+  measureCursorLineBox,
+} from './safeCursorAnchor';
+import { AI_SYSTEM_COMMANDS } from './AiCommandSlashExtension';
 
-function runEditorCommand(
-  editor: any,
-  range: any,
-  action: (chain: any) => any
-) {
-  const chain = editor.chain().focus();
-  if (range) chain.deleteRange(range);
-  action(chain).run();
-}
+export { measureCursorLineBox } from './safeCursorAnchor';
+export {
+  AI_SYSTEM_COMMANDS,
+  AiCommandSlashExtension,
+  aiCommandSlashPluginKey,
+} from './AiCommandSlashExtension';
 
-const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = [
-  {
-    id: 'heading-1',
-    title: 'Heading 1',
-    description: 'Large section heading',
-    iconName: 'Heading1',
-    keywords: ['h1', 'title', 'heading'],
-    command: ({ editor, range }: any) =>
-      runEditorCommand(editor, range, (c) =>
-        c.setNode('heading', { level: 1 })
-      ),
-  },
-  {
-    id: 'heading-2',
-    title: 'Heading 2',
-    description: 'Medium section heading',
-    iconName: 'Heading2',
-    keywords: ['h2', 'subtitle', 'heading'],
-    command: ({ editor, range }: any) =>
-      runEditorCommand(editor, range, (c) =>
-        c.setNode('heading', { level: 2 })
-      ),
-  },
-  {
-    id: 'heading-3',
-    title: 'Heading 3',
-    description: 'Small section heading',
-    iconName: 'Heading3',
-    keywords: ['h3', 'subheading', 'heading'],
-    command: ({ editor, range }: any) =>
-      runEditorCommand(editor, range, (c) =>
-        c.setNode('heading', { level: 3 })
-      ),
-  },
-  {
-    id: 'bullet-list',
-    title: 'Bullet List',
-    description: 'Create a simple bulleted list',
-    iconName: 'List',
-    keywords: ['ul', 'bullet', 'list'],
-    command: ({ editor, range }: any) =>
-      runEditorCommand(editor, range, (c) => c.toggleBulletList()),
-  },
-  {
-    id: 'ordered-list',
-    title: 'Numbered List',
-    description: 'Create a numbered list',
-    iconName: 'ListOrdered',
-    keywords: ['ol', 'number', 'list'],
-    command: ({ editor, range }: any) =>
-      runEditorCommand(editor, range, (c) => c.toggleOrderedList()),
-  },
-  {
-    id: 'task-list',
-    title: 'Task List',
-    description: 'Create a to-do list with checkboxes',
-    iconName: 'ListTodo',
-    keywords: ['todo', 'task', 'checklist'],
-    command: ({ editor, range }: any) =>
-      runEditorCommand(editor, range, (c) => c.toggleTaskList()),
-  },
-  {
-    id: 'code-block',
-    title: 'Code Block',
-    description: 'Insert a preformatted code snippet',
-    iconName: 'Code',
-    keywords: ['code', 'pre', 'snippet'],
-    command: ({ editor, range }: any) =>
-      runEditorCommand(editor, range, (c) => c.toggleCodeBlock()),
-  },
-  {
-    id: 'blockquote',
-    title: 'Blockquote',
-    description: 'Capture a quote or reference text',
-    iconName: 'Quote',
-    keywords: ['quote', 'cite', 'blockquote'],
-    command: ({ editor, range }: any) =>
-      runEditorCommand(editor, range, (c) => c.toggleBlockquote()),
-  },
-  {
-    id: 'compact',
-    title: 'Compact',
-    description: '手动压缩上下文（/compact [目标 token 数]）',
-    iconName: 'Compress',
-    keywords: ['compact', '压缩', 'compress', '压缩上下文'],
-    command: ({ editor, range }: any) =>
-      runEditorCommand(editor, range, (c) => c.insertContent('/compact ')),
-  },
-];
+export const DEFAULT_SLASH_COMMANDS: SlashCommandItem[] = AI_SYSTEM_COMMANDS;
 
 const getSuggestionItems = (
   query: string,
   extraItems: SlashCommandItem[] = []
 ): SlashCommandItem[] => {
   const q = query.toLowerCase().trim();
-  const all = [...DEFAULT_SLASH_COMMANDS, ...extraItems];
+  const seen = new Set<string>();
+  const all: SlashCommandItem[] = [];
+
+  for (const item of [...extraItems, ...DEFAULT_SLASH_COMMANDS]) {
+    const key = item.title.toLowerCase().trim();
+    if (!seen.has(key)) {
+      seen.add(key);
+      all.push(item);
+    }
+  }
+
   if (!q) return all;
   return all.filter((item) => {
     return (
       item.title.toLowerCase().includes(q) ||
-      item.description.toLowerCase().includes(q) ||
+      item.id.toLowerCase().includes(q) ||
+      item.description?.toLowerCase().includes(q) ||
       item.keywords?.some((k) => k.toLowerCase().includes(q))
     );
   });
@@ -167,7 +93,7 @@ const getMentionItems = (
   }));
 };
 
-/** SlashExtension 可配置选项：宿主系统/skill 命令与弹层 listbox id（引用桥接，动态更新不重建编辑器） */
+/** SlashExtension 可配置选项：宿主系统/skill 命令与弹层 listbox id */
 export interface SlashExtensionOptions {
   extraItemsRef?: { current: SlashCommandItem[] };
   listboxId?: string;
@@ -179,78 +105,23 @@ export interface MentionSuggestionOptions {
   listboxId?: string;
 }
 
-/** 斜杠 suggestion 独立 keyed plugin（与提及实例共存，防 RangeError: keyed plugin 冲突） */
+/** 斜杠 suggestion 独立 keyed plugin */
 export const slashSuggestionKey = new PluginKey('crishSlashSuggestion');
 
-/** 提及 suggestion 独立 keyed plugin（与斜杠实例共存） */
+/** 提及 suggestion 独立 keyed plugin */
 export const mentionSuggestionKey = new PluginKey('crishMentionSuggestion');
 
 type SuggestionRenderCtx = {
   listboxId?: string;
   label?: string;
   emptyMessage?: string;
-  /** 无匹配时不弹面板（提及空候选人兜底；斜杠保留空态面板） */
   skipEmpty?: boolean;
-  /** Esc 退出建议状态用（exitSuggestion 事务，走 onExit 清理 aria 链） */
   pluginKey?: PluginKey;
 };
 
 /**
- * 测量指定 ProseMirror 文档位置处的真实物理 LineBox 包围盒。
- * 恢复真实高度、宽度与视口顶/底/左/右坐标，彻底消除 0D 点矩形坍缩。
- *
- * @param view ProseMirror EditorView 或具备 coordsAtPos 的视图对象
- * @param pos 文档绝对位置索引
- * @param side 亲和性：1 表示向后（下一字形左侧），-1 表示向前（上一字形右侧）
- * @returns 包含真实行高的 DOMRect 视口包围盒
- */
-export function measureCursorLineBox(
-  view:
-    | {
-        coordsAtPos: (
-          pos: number,
-          side?: number
-        ) => { top: number; bottom: number; left: number; right?: number };
-      }
-    | null
-    | undefined,
-  pos: number,
-  side: number = 1
-): DOMRect {
-  if (!view || typeof view.coordsAtPos !== 'function') {
-    return new DOMRect(0, 0, 0, 0);
-  }
-
-  try {
-    const coords = view.coordsAtPos(pos, side);
-    const top = coords.top;
-    const bottom = coords.bottom;
-
-    // 物理行高守卫：兜底最小行高 16px（防止空文档测量未就绪）
-    const measuredHeight = bottom - top;
-    const height = Math.max(
-      16,
-      Number.isFinite(measuredHeight) ? measuredHeight : 20
-    );
-
-    // 水平坐标与光标宽度（Caret 宽度至少 2px，保证包围盒有物理体积）
-    const left = coords.left;
-    const measuredWidth = (coords.right ?? coords.left) - coords.left;
-    const width = Math.max(
-      2,
-      Number.isFinite(measuredWidth) ? measuredWidth : 2
-    );
-
-    return new DOMRect(left, top, width, height);
-  } catch {
-    return new DOMRect(0, 0, 0, 0);
-  }
-}
-
-/**
  * Suggestion render 生命周期工厂：两个 suggestion 实例共用同一套
- * ReactRenderer 创建/更新/销毁与编辑器 combobox aria 同步（T8），
- * 避免生命周期逻辑双份漂移。
+ * ReactRenderer 创建/更新/销毁与编辑器 combobox aria 同步
  */
 function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
   return () => {
@@ -280,9 +151,21 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
         }
 
         try {
-          const box = measureCursorLineBox(view, props.range.from, 1);
-          lastCachedBox = box;
-          return box;
+          const rawBox = measureCursorLineBox(view, props.range.from, 1);
+          const safeAnchor = calculateSafeCursorAnchor({
+            rawCursorRect: rawBox,
+            editorViewDom: view.dom,
+          });
+          if (safeAnchor) {
+            lastCachedBox = new DOMRect(
+              safeAnchor.left,
+              safeAnchor.top,
+              safeAnchor.width,
+              safeAnchor.height
+            );
+            return lastCachedBox;
+          }
+          return lastCachedBox;
         } catch {
           return lastCachedBox;
         }
@@ -294,7 +177,6 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
 
     const create = (props: any) => {
       propsRef = props;
-      // 弹层打开：编辑器 combobox aria-expanded/controls 置位（T8 全链）
       const dom = props.editor?.view?.dom;
       if (dom) {
         if (ctx.listboxId) dom.setAttribute('aria-controls', ctx.listboxId);
@@ -309,7 +191,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
     return {
       onStart(props: any) {
         if (ctx.skipEmpty && (!props.items || props.items.length === 0)) {
-          return; // 空候选人兜底：不弹面板（提及场景）
+          return;
         }
         create(props);
       },
@@ -331,7 +213,7 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
 
       onKeyDown(props: any) {
         if (props.event.key === 'Escape') {
-          // IME 合成态下绝不拦截 Esc（Tri-Shield 防护）
+          // IME 合成态下绝不拦截 Esc
           if (
             props.event.isComposing ||
             (props.event as any).nativeEvent?.isComposing ||
@@ -341,8 +223,6 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
             return false;
           }
 
-          // 兜底退出建议状态（Radix 弹层 preventDefault 时 PM 链被跳过，
-          // 主路径在 TiptapEditorField 的 capture 监听；此处保证非 Radix 环境一致）
           if (component) {
             component.destroy();
             component = null;
@@ -356,7 +236,6 @@ function createSuggestionRenderer(ctx: SuggestionRenderCtx) {
       },
 
       onExit() {
-        // 弹层关闭：清理编辑器 combobox aria 链（expanded/controls/activedescendant）
         const dom = propsRef?.editor?.view?.dom;
         if (dom) {
           dom.removeAttribute('aria-expanded');
@@ -380,7 +259,6 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
 
   addOptions() {
     return {
-      // 默认 undefined：configure 时 mergeDeep 直接替换（嵌套默认值会被深合并吞掉引用）
       extraItemsRef: undefined,
       listboxId: undefined,
       suggestion: {
@@ -397,7 +275,6 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
       Suggestion({
         editor: this.editor,
         char: '/',
-        // 与提及 suggestion 实例区分 keyed plugin（同编辑器双 suggestion 必需）
         pluginKey: slashSuggestionKey,
         items: ({ query }: { query: string }) =>
           getSuggestionItems(query, this.options.extraItemsRef?.current ?? []),
@@ -406,8 +283,8 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
         },
         render: createSuggestionRenderer({
           listboxId: this.options.listboxId,
-          label: '斜杠命令',
-          emptyMessage: '无匹配命令',
+          label: 'AI 会话系统指令',
+          emptyMessage: '无匹配指令',
           pluginKey: slashSuggestionKey,
         }),
       }),
@@ -415,7 +292,7 @@ export const SlashExtension = Extension.create<SlashExtensionOptions>({
   },
 });
 
-/** 提及建议插件：@ 触发第二 suggestion 实例（T8，候选人引用桥接） */
+/** 提及建议插件：@ 触发第二 suggestion 实例 */
 export const MentionSuggestionExtension =
   Extension.create<MentionSuggestionOptions>({
     name: 'mentionSuggestion',
@@ -433,10 +310,7 @@ export const MentionSuggestionExtension =
           editor: this.editor,
           char: '@',
           allowSpaces: true,
-          // 提及允许任意前缀（含中文相邻无空格场景，如「请分析@」）；
-          // tiptap v3 默认仅允许空白前缀，CJK 聊天语境下过于苛刻
           allowedPrefixes: null,
-          // 独立 keyed plugin：与斜杠实例共存（同编辑器双 suggestion）
           pluginKey: mentionSuggestionKey,
           items: ({ query }: { query: string }) =>
             getMentionItems(query, this.options.candidatesRef?.current ?? []),

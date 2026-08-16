@@ -1,10 +1,12 @@
 /**
  * apps/crish-desktop/src/components/chat-composer/TiptapSlashMenu.tsx
- * Radix Popover Menu for Slash / Mention Suggestions (CRM-01, T8 aria 全链)。
+ * Radix Popover Menu for Slash / Mention Suggestions (CRM-01, DIM-06, T8 aria 全链)。
  * - 键盘漫游与聚焦盾（onOpenAutoFocus/onCloseAutoFocus preventDefault）；
- * - aria-activedescendant 同步至编辑器 combobox（高亮项随键盘漫游变化）；
- * - listbox id / label / 空态文案由 suggestion 生命周期注入（斜杠与提及共用）。
- * CI Guardrail: Max 500 lines of effective code
+ * - aria-activedescendant 同步至编辑器 combobox；
+ * - 纯净化 AI 指令图标与四级几何防漂移；
+ * - 终极熔断防线：全零 (0,0) 或无效坐标绝对不挂载 Portal。
+ *
+ * CI Guardrail: Max 500 lines of effective code, UTF-8 无 BOM.
  */
 
 import React, {
@@ -40,9 +42,20 @@ import {
   Search,
   Eraser,
   Terminal,
+  Square,
+  Sliders,
+  FileCode,
 } from 'lucide-react';
 import type { SlashMenuProps, SlashCommandItem } from './composerTypes';
 import styles from './TiptapSlashMenu.module.css';
+import {
+  isPhysicallyVisibleNonZeroRect,
+  isAnchorInsideVisibleField,
+  calculateSafeCursorAnchor,
+  type SafeAnchorRect,
+} from './safeCursorAnchor';
+
+export { isValidClientRect } from './safeCursorAnchor';
 
 const ICON_MAP: Record<
   string,
@@ -77,6 +90,9 @@ const ICON_MAP: Record<
   Eraser,
   Terminal,
   HelpCircle,
+  Square,
+  Sliders,
+  FileCode,
 };
 
 export interface SlashMenuRefHandle {
@@ -84,49 +100,13 @@ export interface SlashMenuRefHandle {
 }
 
 /**
- * 严格判定 DOMRect / ClientRect 几何有效性。
- * 只要坐标为有限浮点数且尺寸非负，即为合法视口包围盒。
- * (0, 0, 0, 0) 也是合法的几何点，绝不可用 !== 0 拦截！
- */
-export function isValidClientRect(rect: unknown): rect is DOMRect {
-  if (!rect || typeof rect !== 'object') return false;
-  const r = rect as DOMRect;
-  return (
-    typeof r.top === 'number' &&
-    Number.isFinite(r.top) &&
-    typeof r.left === 'number' &&
-    Number.isFinite(r.left) &&
-    typeof r.width === 'number' &&
-    Number.isFinite(r.width) &&
-    r.width >= 0 &&
-    typeof r.height === 'number' &&
-    Number.isFinite(r.height) &&
-    r.height >= 0
-  );
-}
-
-/**
- * 判定光标是否处于编辑器可见滚动视口内部。
- * 若光标完全滚出可视区域，浮层应被隐藏或静默收起。
+ * 判定光标是否处于编辑器可见滚动视口内部（向后兼容别名）
  */
 export function isCursorVisibleInField(
-  cursorRect: DOMRect,
+  cursorRect: DOMRect | SafeAnchorRect,
   fieldElement: HTMLElement | null | undefined
 ): boolean {
-  if (!fieldElement) return true;
-  try {
-    const fieldRect = fieldElement.getBoundingClientRect();
-    // 若容器尚未完成排版布局（如 jsdom 或未挂载零尺寸），放行
-    if (fieldRect.width === 0 && fieldRect.height === 0) {
-      return true;
-    }
-    const tolerance = 4; // 容差 4px（允许字形顶底微量溢出）
-    const isAbove = cursorRect.bottom < fieldRect.top - tolerance;
-    const isBelow = cursorRect.top > fieldRect.bottom + tolerance;
-    return !isAbove && !isBelow;
-  } catch {
-    return true;
-  }
+  return isAnchorInsideVisibleField(cursorRect, fieldElement);
 }
 
 export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
@@ -137,8 +117,8 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       isOpen = true,
       onClose,
       clientRect,
-      label = '斜杠命令',
-      emptyMessage = '无匹配命令',
+      label = 'AI 会话系统指令',
+      emptyMessage = '无匹配指令',
       listboxId,
     } = props;
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -156,8 +136,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
       }
     }, [selectedIndex]);
 
-    // aria-activedescendant 全链：编辑器 combobox → 当前高亮 option（T8）。
-    // 卸载（菜单关闭/切换）时清理，退出侧的兜底见 SlashExtension onExit。
+    // aria-activedescendant 全链：编辑器 combobox → 当前高亮 option
     useEffect(() => {
       const editorAny = props.editor as any;
       const dom = editorAny?.view?.dom as HTMLElement | undefined;
@@ -182,10 +161,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
 
     useImperativeHandle(ref, () => ({
       onKeyDown: ({ event }: { event: KeyboardEvent }) => {
-        // ──────────────────────────────────────────────────────────
-        // 【核心铁律 1】：CJK IME 组合态绝对放行
-        // 只要输入法处于合成状态，放行一切按键，严禁 preventDefault！
-        // ──────────────────────────────────────────────────────────
+        // CJK IME 组合态绝对放行守卫
         if (
           event.isComposing ||
           (event as any).nativeEvent?.isComposing ||
@@ -216,13 +192,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
           return true;
         }
 
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          selectItem(selectedIndex);
-          return true;
-        }
-
-        if (event.key === 'Tab') {
+        if (event.key === 'Enter' || event.key === 'Tab') {
           event.preventDefault();
           selectItem(selectedIndex);
           return true;
@@ -243,28 +213,45 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
     const rawRect =
       typeof clientRect === 'function' ? clientRect() : clientRect;
 
-    // ──────────────────────────────────────────────────────────
-    // 【核心铁律 2】：物理拔除 (rawRect.top !== 0 || ...) 毒代码
-    // 采用严格的 isValidClientRect 进行有限浮点数判定
-    // ──────────────────────────────────────────────────────────
-    const rect = isValidClientRect(rawRect)
-      ? rawRect
-      : editorDom?.getBoundingClientRect?.() || new DOMRect(0, 0, 0, 0);
+    // 四级备援回退与几何有效性探测
+    let anchor: SafeAnchorRect | DOMRect | null = null;
+    if (rawRect && isPhysicallyVisibleNonZeroRect(rawRect)) {
+      anchor = rawRect;
+    } else {
+      anchor = calculateSafeCursorAnchor({
+        rawCursorRect: rawRect,
+        editorViewDom: editorDom,
+      });
+    }
 
-    // 光标可视性判定（防止多行滚动出界脱缰漂浮）
-    const isVisible = isCursorVisibleInField(rect, editorDom);
-
-    if (!isOpen || !items || !isVisible) {
+    // 终极熔断防线：无有效几何包围盒时拒绝挂载 Portal
+    if (
+      !isOpen ||
+      !items ||
+      !anchor ||
+      !isPhysicallyVisibleNonZeroRect(anchor)
+    ) {
       return null;
     }
 
-    // 锚点层仅用于坐标定位（隐藏、不响应指针），z 轴走 var(--z-popover) token
+    // 可视滚动视口检查
+    const isVisible = isAnchorInsideVisibleField(anchor, editorDom);
+    if (!isVisible) {
+      return null;
+    }
+
+    const side: 'top' | 'bottom' =
+      'suggestedSide' in anchor &&
+      (anchor.suggestedSide === 'bottom' || anchor.suggestedSide === 'top')
+        ? anchor.suggestedSide
+        : 'top';
+
     const triggerStyle: React.CSSProperties = {
       position: 'fixed',
-      top: `${rect.top}px`,
-      left: `${rect.left}px`,
-      width: `${Math.max(1, rect.width)}px`,
-      height: `${Math.max(1, rect.height)}px`,
+      top: `${anchor.top}px`,
+      left: `${anchor.left}px`,
+      width: `${Math.max(1, anchor.width)}px`,
+      height: `${Math.max(1, anchor.height)}px`,
       pointerEvents: 'none',
       visibility: 'hidden',
       zIndex: 'var(--z-popover)',
@@ -278,7 +265,7 @@ export const TiptapSlashMenu = forwardRef<SlashMenuRefHandle, SlashMenuProps>(
         <Popover.Portal>
           <Popover.Content
             className={styles.popoverContent}
-            side="top"
+            side={side}
             align="start"
             sideOffset={8}
             avoidCollisions={true}

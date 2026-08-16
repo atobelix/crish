@@ -25,10 +25,6 @@ import StarterKit from '@tiptap/starter-kit';
 
 import Placeholder from '@tiptap/extension-placeholder';
 
-import TaskList from '@tiptap/extension-task-list';
-
-import TaskItem from '@tiptap/extension-task-item';
-
 import Link from '@tiptap/extension-link';
 
 import DOMPurify from 'dompurify';
@@ -190,10 +186,16 @@ export const TiptapEditorField = React.forwardRef<
     const editorOptions = useMemo(() => {
       const extensions = [
         StarterKit.configure({
-          heading: { levels: [1, 2, 3] },
-          codeBlock: {},
-          // 内置 link 禁用（tiptap v3 StarterKit 默认含 link），
-          // 避免与下方显式 Link 配置重复注册（Duplicate extension 'link'）
+          // 彻底禁用所有块级博客排版节点，对话输入框保持纯净行内修饰流
+          heading: false,
+          bulletList: false,
+          orderedList: false,
+          listItem: false,
+          blockquote: false,
+          codeBlock: {}, // 保留行内与围栏代码块结构，提供 Enter 换行保护
+          horizontalRule: false,
+          dropcursor: false,
+          gapcursor: false,
           link: false,
         }),
         Placeholder.configure({
@@ -205,10 +207,6 @@ export const TiptapEditorField = React.forwardRef<
           openOnClick: false,
           autolink: false,
           linkOnPaste: false,
-        }),
-        TaskList,
-        TaskItem.configure({
-          nested: true,
         }),
         MentionExtension,
         // 宿主系统/skill 命令以引用桥接，动态更新无需重建编辑器
