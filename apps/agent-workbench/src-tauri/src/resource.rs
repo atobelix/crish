@@ -633,7 +633,7 @@ impl TaskNotifier {
             None => tracing::warn!(
                 target: "background",
                 text = %text,
-                "任务通知（nudge 通道未接线——PendingNudgeChannel 在 orchestrator 侧，留痕待 T-AB-18 接线）"
+                "任务通知降级留痕——nudge 通道已删（决策 9），跨 run 注入走 PendingMessageQueue"
             ),
         }
     }
