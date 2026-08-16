@@ -21,7 +21,7 @@ import { BlockChromeDomMount } from './BlockChromeDomMount';
 import { SlashMenuOverlay } from './SlashMenuOverlay';
 import { Button } from '../ui';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
-import { W5B_SKELETON_BOUNDARY } from './w5bSkeleton';
+import { W5B_SKELETON_BOUNDARY } from './notePaperSkeletonTrack';
 import {
   resolveSkeletonHeadingLevel,
   type DisplayBlock,

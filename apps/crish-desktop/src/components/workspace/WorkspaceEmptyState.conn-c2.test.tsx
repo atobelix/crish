@@ -2,7 +2,7 @@
 /**
  * WorkspaceEmptyState · CONN-C2 PaperList 产品默认策略
  *
- * 自 WorkspaceEmptyState.w5b.test.tsx 按域拆出（SD-35）；断言语义不变。
+ * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；断言语义不变。
  *
  * - **CONN-C2**：PaperList 产品默认 **关**（`enableProductPaperList` 默认 false →
  *   `data-product-paper-list=0` / panel `data-paper-list=0` / `react-rows`）；
@@ -10,7 +10,7 @@
  *   测钉 `conn_c2_default_no_paper_list` / `conn_c2_opt_in_paper_list_mutex`；
  *   **≠ EL-01**；**≠ W3-P 满窗**；禁默认真双内容
  *
- * 薄入口见 WorkspaceEmptyState.w5b.test.tsx。
+ * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';

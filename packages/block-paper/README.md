@@ -3,12 +3,12 @@
 块纸面 **呈现层**：W3-C chrome + W3-D 叶子 Intent（plain / **真 PM** / **`createCollabApplySink`**）+ W3-E CM6 代码叶 + W3-F 结构 Intent。
 
 > **本包是呈现层，不是文档权威。**  
-> **生产写路径**：`Intent → createCollabApplySink → applyOps → RS DocSession::apply`。  
-> `createMockIntentSink` **仅**形状测（G-INV-3）。  
-> **禁止** 把 DOM / ProseMirror doc / 本包假数据当作真相源持久化。  
-> **W3-D Strict** = 真 PM + TextEdit/Structure → 真 apply（本包工厂 + RS 集成）；**≠ EL-01**；**≠ A-BLK 全表**。  
-> **W3-F Strict 子集** = chrome `slash_insert` / `delete_blocks` → `createCollabApplySink`（`chrome.w3f_apply.test.ts` + RS `w3_f_*`）；**mock 不得关闭**；**≠ EL-01**；**≠ A-BLK-02/04/05 全关**。  
-> **W3-F DOM 余量** = `BlockChromeDomHost`（把手 / 多选框 / 落点线 / slash 宿主 jsdom 契约，`chrome.w3f_dom.test.ts`）；**桌面 React chrome 挂载已交**（`BlockChromeDomMount`）；**DOM ≠ EL-01**；A-BLK 全表 e2e / 真 Pointer 拖拽产品 e2e 仍开。  
+> **生产写路径**：`Intent → createCollabApplySink → applyOps → RS DocSession::apply`。
+> `createMockIntentSink` **仅**形状测（G-INV-3）。
+> **禁止** 把 DOM / ProseMirror doc / 本包假数据当作真相源持久化。
+> **W3-D Strict** = 真 PM + TextEdit/Structure → 真 apply（本包工厂 + RS 集成）；**≠ EL-01**；**≠ A-BLK 全表**。
+> **W3-F Strict 子集** = chrome `slash_insert` / `delete_blocks` → `createCollabApplySink`（`chrome.apply.test.ts` + RS `w3_f_*`）；**mock 不得关闭**；**≠ EL-01**；**≠ A-BLK-02/04/05 全关**。
+> **W3-F DOM 余量** = `BlockChromeDomHost`（把手 / 多选框 / 落点线 / slash 宿主 jsdom 契约，`chrome.dom.test.ts`）；**桌面 React chrome 挂载已交**（`BlockChromeDomMount`）；**DOM ≠ EL-01**；A-BLK 全表 e2e / 真 Pointer 拖拽产品 e2e 仍开。
 > **W3-E ≠ 全语言高亮完成**。
 
 ## 边界
@@ -195,9 +195,9 @@ await submitIntent(flushed!, mock.sink, { ime });
 ## 代码叶：CM6 host 接线（W3-E / Round8）
 
 > **W3-E ≠ 全语言高亮完成。**  
-> 已接线：可聚焦、`language` / `readOnly` / content snapshot、变更 → `text_edit` → `submitIntent`、**真 `Cm6CodeLeafHost`（`@codemirror/view` EditorView）**。  
-> 语言：`plaintext` + **`javascript`（`@codemirror/lang-javascript`）** Compartment 可换；其余 id 回落 plain。  
-> 默认 mount 仍用 `DomCodeLeafHost`（textarea）；真 CM6 经 `createHost: (el) => new Cm6CodeLeafHost(el, …)`。  
+> 已接线：可聚焦、`language` / `readOnly` / content snapshot、变更 → `text_edit` → `submitIntent`、**真 `Cm6CodeLeafHost`（`@codemirror/view` EditorView）**。
+> 语言：`plaintext` + **`javascript`（`@codemirror/lang-javascript`）** Compartment 可换；其余 id 回落 plain。
+> 默认 mount 仍用 `DomCodeLeafHost`（textarea）；真 CM6 经 `createHost: (el) => new Cm6CodeLeafHost(el, …)`。
 > 单测：`createCm6EditorState` + 真实 `EditorState` 证明依赖接线；**不接真实 RS**。
 
 ```text

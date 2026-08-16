@@ -156,9 +156,9 @@
      E3 默认 **不** 启调度（关时无 detect timer）
 10. **测名**：
 
-- Skeleton：`NotePaperPanel.test.tsx` / `w5bSkeleton.test.ts` / `WorkspaceEmptyState.w5bs.test.tsx`
-- Strict：`NotePaperStrictPanel.test.tsx` / `hydrateProjection.test.ts` / `w5bStrict.test.ts`（`w5b_strict_*`）
-- **产品入口**：`WorkspaceEmptyState.w5b.test.tsx`（`w5b_product_empty_*` / `conn_e2_*` / `conn_e3_*`）
+- Skeleton：`NotePaperPanel.test.tsx` / `notePaperSkeletonTrack.test.ts` / `WorkspaceEmptyState.skeleton.test.tsx`
+- Strict：`NotePaperStrictPanel.test.tsx` / `hydrateProjection.test.ts` / `notePaperStrictTrack.test.ts`（`w5b_strict_*`）
+- **产品入口**：`WorkspaceEmptyState.strict.test.tsx`（`w5b_product_empty_*` / `conn_e2_*` / `conn_e3_*`）
 - **hydrate IPC**：`noteHydrateIpc.test.ts`（`note_hydrate_ipc_*`）
 - **mirror IPC / 三路桥 / E3 调度**：`noteMirrorIpc.test.ts` / `mirrorThreeWayBridge.test.tsx` /
   `MirrorDriftStatusBar.test.tsx` / `mirrorDetectSchedule.test.ts`（`conn_e3_schedule_*`）

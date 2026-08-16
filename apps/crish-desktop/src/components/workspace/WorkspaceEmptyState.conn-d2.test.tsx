@@ -2,13 +2,13 @@
 /**
  * WorkspaceEmptyState · CONN-D2 / CONN-D3 mdPrefix 写锥
  *
- * 自 WorkspaceEmptyState.w5b.test.tsx 按域拆出（SD-35）；断言语义不变。
+ * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；断言语义不变。
  *
  * - **CONN-D2/D3**：无 applyOps 默认 mdPrefix disabled；注入后 `data-md-prefix-write-mode=writable`
  *   + content-row 叶 `data-md-prefix-leaf-mode=writable`（叶键入见 StrictContentRowLeaf 测）；
  *   **≠ A-BLK-08/09 e2e**
  *
- * 薄入口见 WorkspaceEmptyState.w5b.test.tsx。
+ * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';

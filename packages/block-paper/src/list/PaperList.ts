@@ -22,7 +22,7 @@
  * 3. **≠** EL-01 e2e 满关；**≠** W3-P WindowManager；**≠** C2 默开
  * 4. 主文件 **<400**（相对切开前 488 黄边显著下降）
  *
- * 测：`paperList.w3g.test.ts` · `PaperList.line-budget.test.ts`
+ * 测：`paperList.test.ts` · `PaperList.line-budget.test.ts`
  */
 
 import type { BlockId, MountSpec } from '@crish/block-paper-contract';

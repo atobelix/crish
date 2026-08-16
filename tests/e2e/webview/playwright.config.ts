@@ -11,7 +11,8 @@
  * - webview-smoke：9222 不可达 → cdp.ts fail-fast 可读错误。
  * - mirror-detect（CONN-E2′-tauri）：9222 不可达或无 Host → skip=未交付；
  *   交付主面在 jsdom `Workspace.conn-e2-prime-tauri.test.tsx`。
- * - w6a-*（W6-A-02 等）：9222 不可达 → 同 smoke fail-fast；勿用 jsdom w3f_* 关片。
+ * - a-blk-02-slash / conn-b3-e2e / conn-g2-e2e（W6-A-02 等）：9222 不可达 → 同
+ *   smoke fail-fast；勿用 jsdom DOM 测关片。
  *
  * CI 归属建议（主控定夺）：进慢层（nightly/发布前）或手动；
  * 不并入 PR 中层（中层无 Tauri 宿主，必红）。
@@ -35,7 +36,7 @@ export default defineConfig({
     {
       name: 'e2e-webview',
       testMatch:
-        /(webview-smoke|mirror-detect)\.spec\.ts$|w6[abc]-.*\.spec\.ts$/,
+        /(webview-smoke|mirror-detect|a-blk-02-slash|conn-b3-e2e|conn-g2-e2e)\.spec\.ts$/,
     },
   ],
 });

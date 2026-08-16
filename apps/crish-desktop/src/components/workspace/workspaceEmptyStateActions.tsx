@@ -12,11 +12,11 @@ import * as Lucide from 'lucide-react';
 import {
   W5B_SKELETON_PACKAGE_ID,
   W5B_SKELETON_TRACK,
-} from '../note-paper/w5bSkeleton';
+} from '../note-paper/notePaperSkeletonTrack';
 import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
-} from '../note-paper/w5bStrict';
+} from '../note-paper/notePaperStrictTrack';
 import { Button } from '../ui';
 import styles from './WorkspaceEmptyState.module.css';
 

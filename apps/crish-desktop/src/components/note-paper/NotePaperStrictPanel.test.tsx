@@ -19,8 +19,11 @@ import {
 } from './hydrateProjection';
 import { NotePaperStrictPanel } from './NotePaperStrictPanel';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
-import { W5B_STRICT_PACKAGE_ID, W5B_STRICT_TRACK } from './w5bStrict';
-import { W5B_SKELETON_PACKAGE_ID } from './w5bSkeleton';
+import {
+  W5B_STRICT_PACKAGE_ID,
+  W5B_STRICT_TRACK,
+} from './notePaperStrictTrack';
+import { W5B_SKELETON_PACKAGE_ID } from './notePaperSkeletonTrack';
 
 describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
   it('w5b_strict_panel_anchors_package_and_track', async () => {

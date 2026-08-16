@@ -45,6 +45,11 @@ export type NotePaperStrictBodyProps = {
   mdPrefixBinding?: ProductMdPrefixBinding;
   onMdPrefixCommit?: (result: ProductMdPrefixCommitResult) => void;
   onMdPrefixCommittedIntent?: (intent: TurnIntoIntent) => void;
+  /**
+   * CT-01 对象级 rev（R7 收口接线，主控裁决③）：hydrate 投影的文档 rev，
+   * 透传给块域编辑会话 open 记账（无真实 rev 时保持 undefined 占位）。
+   */
+  baseRev?: number;
   /** 内容宿主 B / chrome / slash 等兄弟槽（由面板传入） */
   children?: React.ReactNode;
 };
@@ -67,6 +72,7 @@ export const NotePaperStrictBody: React.FC<NotePaperStrictBodyProps> = ({
   mdPrefixBinding,
   onMdPrefixCommit,
   onMdPrefixCommittedIntent,
+  baseRev,
   children,
 }) => {
   return (
@@ -150,6 +156,7 @@ export const NotePaperStrictBody: React.FC<NotePaperStrictBodyProps> = ({
                       blockId={block.id}
                       flavour={block.flavour}
                       text={block.text ?? ''}
+                      baseRev={baseRev}
                       turnIntoSink={turnIntoSink}
                       mdPrefixWriteMode={mdPrefixWriteMode}
                       mdPrefixSinkSource={mdPrefixSinkSource}

@@ -30,11 +30,11 @@
  * - 本模块提供 wire 半桥；**生产 sink** 用 `createCollabApplySink`
  * - 真 PM 叶见 `leaves/pm`（W3-D-PM）；与本 wire + RS 真 apply 合 = **W3-D**
  * - **W3-F Strict 子集**：chrome `slash_insert` / `delete_blocks` → `submitIntent` →
- *   `createCollabApplySink` → wire → RS apply（测：`chrome.w3f_apply.test.ts` + `w3_f_*`）
- * - **W3-F-S**：StructureIntent + wire + mock（`chrome.w3f.test.ts`）；**不得**关 Strict
+ *   `createCollabApplySink` → wire → RS apply（测：`chrome.apply.test.ts` + `w3_f_*`）
+ * - **W3-F-S**：StructureIntent + wire + mock（`chrome.shape.test.ts`）；**不得**关 Strict
  * - **≠ EL-01**；**≠ A-BLK 全表**；禁止 mock sink 冒充 Strict 关闭
  * - **W3-F DOM 余量**：`BlockChromeDomHost` 把手/多选框/落点线/slash 宿主/拖拽预览子集
- *   jsdom 契约（`chrome.w3f_dom.test.ts` · `chrome.w3f_drag.test.ts`）；**DOM ≠ EL-01**
+ *   jsdom 契约（`chrome.dom.test.ts` · `chrome.drag.test.ts`）；**DOM ≠ EL-01**
  * - **桌面 React chrome 挂载已交**（`BlockChromeDomMount` / Strict 槽）；**仍未交付**的精确项：
  *   A-BLK 全表 e2e、真 Pointer 拖拽产品 e2e、桌面产品级 chrome 交互 e2e
  *

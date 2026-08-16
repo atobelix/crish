@@ -12,7 +12,7 @@
 //! - [`crate::note_plan_ops`]：`plan_block_ops` / `apply_planned_ops`
 //! - [`crate::note_md_parse`]：MD 行解析
 //! - [`crate::note_backend_json`]：工具 JSON 辅助
-//! - 集成测外置 `note_backend_tests.rs`（`#[path]`；**SD-47** 再拆 memory / w4；
+//! - 集成测外置 `note_backend_tests.rs`（`#[path]`；**SD-47** 再拆 memory / result；
 //!   **≠ EL-05**；**≠ W6-E**；Memory 测绿 **禁关**生产）
 //!
 //! # 不变量
@@ -305,7 +305,7 @@ pub trait NoteBackend: Send + Sync + Debug {
 /// Arc 包装助手
 pub type NoteBackendHandle = Arc<dyn NoteBackend>;
 
-// ── 测试（SD-23 外置；SD-47 按域拆 memory/w4；≠ EL-05；≠ W6-E）──
+// ── 测试（SD-23 外置；SD-47 按域拆 memory/result；≠ EL-05；≠ W6-E）──
 
 #[cfg(test)]
 #[path = "note_backend_tests.rs"]

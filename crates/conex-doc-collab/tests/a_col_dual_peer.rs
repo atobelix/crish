@@ -17,7 +17,7 @@
 //! - `docs/block-workspace-architecture/18-实现波前待决锁定-H1H2H3M1.md` §M1（删胜）
 //! - `docs/block-workspace-architecture/plans/specs/concurrent-move-rules.md` MV-03
 //! - W1-F harness：`DualSessionHarness`（结构 JSON 重放 + yrs 文本 update）
-//! - 包轨契约：`tests/w6_d_s_a_col_subset.rs` + `src/w6_d_s.rs`
+//! - 包轨契约：`tests/a_col_subset_skeleton.rs` + `src/a_col_skeleton.rs`
 
 use conex_doc_collab::{
     ApplyError, BlockId, BlockKind, BlockProps, DualSessionHarness, Op, Origin, PeerSide,

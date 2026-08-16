@@ -38,8 +38,8 @@ import {
 import { clearNoteDocWrittenListenersForTests } from '../../bridges/note-doc-written';
 import { adaptNoteTransportAsHydrate } from './hydrateProjection';
 import { NotePaperStrictPanel } from './NotePaperStrictPanel';
-import { W5B_SKELETON_PACKAGE_ID } from './w5bSkeleton';
-import { W5B_STRICT_PACKAGE_ID } from './w5bStrict';
+import { W5B_SKELETON_PACKAGE_ID } from './notePaperSkeletonTrack';
+import { W5B_STRICT_PACKAGE_ID } from './notePaperStrictTrack';
 
 const NEW_BLOCK_TEXT = 'CONN-G2 product apply new block';
 const OTHER_DOC_TEXT = 'should not appear here';

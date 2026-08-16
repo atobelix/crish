@@ -1,7 +1,7 @@
 //! W2-A 扩表 · golden：围栏代码 + 列表/引用加深。
 //!
 //! 诚实：**≠ A-MD-01 全集** / **≠ EL-06**；本文件仅加深可点名结构类。
-//! 围栏 lang/meta 诚实与 task nested 续加深见 `golden_w2a_deepen.rs`（仍 ≠ EL-06）。
+//! 围栏 lang/meta 诚实与 task nested 续加深见 `golden_deepen.rs`（仍 ≠ EL-06）。
 
 use conex_md_ast::{
     BlockId, BlockKind, document_to_md, parse_document, serialize_tree, structure_eq,

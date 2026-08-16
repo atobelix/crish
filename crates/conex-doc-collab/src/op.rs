@@ -75,7 +75,7 @@ pub enum Op {
 /// 权威变更仍须 [`crate::DocSession::apply`]。
 ///
 /// W3-D 子集可测路径（真 apply，非 mock）：
-/// `tests/w3_d_structure_intent_or_wire_apply.rs` · `w3_d_structure_intent_or_wire_applys_to_session`。
+/// `tests/structure_intent_or_wire_apply.rs` · `w3_d_structure_intent_or_wire_applys_to_session`。
 pub fn ops_from_json(bytes: &[u8]) -> Result<Vec<Op>, serde_json::Error> {
     serde_json::from_slice(bytes)
 }

@@ -14,7 +14,7 @@
  * | `createMockIntentSink` | 仅记录 `calls[]`，不接后端 | **否**；仅 W3-D-S / W3-D-PM 形状测 |
  *
  * 真 apply 库侧集成（TextEdit + Structure → 树/`read_text`）：
- * `crates/conex-doc-collab/tests/w3_d_structure_intent_or_wire_apply.rs`
+ * `crates/conex-doc-collab/tests/structure_intent_or_wire_apply.rs`
  *
  * ## 轨声明（诚实 · 09 §0.4）
  *

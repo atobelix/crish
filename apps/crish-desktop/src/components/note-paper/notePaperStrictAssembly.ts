@@ -29,7 +29,10 @@ import type {
 import type { ProductSlashSinkSource } from './productSlashSink';
 import type { SlashOverlayWriteMode } from './SlashMenuOverlay';
 import type { HydrateUiStatus } from './useNoteHydrate';
-import { W5B_STRICT_PACKAGE_ID, W5B_STRICT_TRACK } from './w5bStrict';
+import {
+  W5B_STRICT_PACKAGE_ID,
+  W5B_STRICT_TRACK,
+} from './notePaperStrictTrack';
 
 // ---------------------------------------------------------------------------
 // paperList + 内容宿主互斥

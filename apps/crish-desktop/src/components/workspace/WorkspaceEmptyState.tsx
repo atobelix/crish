@@ -46,7 +46,7 @@ import type {
   MirrorWatchSource,
   ThreeWayDecision,
 } from '../note-paper/mirrorDriftUi';
-import { W5B_PRODUCT_DEFAULT_EMPTY_TRACK } from '../note-paper/w5bStrict';
+import { W5B_PRODUCT_DEFAULT_EMPTY_TRACK } from '../note-paper/notePaperStrictTrack';
 import { WorkspaceEmptyStateLanding } from './workspaceEmptyStateActions';
 import { useWorkspaceEmptyStateMirrorSlot } from './workspaceEmptyStateMirrorSlot';
 import {

@@ -53,7 +53,7 @@ pub mod note_permission;
 pub mod note_action_matrix;
 // W6-E-S Skeleton：千次批压测夹具 + 恶意扩展拒写/零持久化方向
 // ≠ EL-05；≠ A-AGT 满表；≠ W6-E Strict 闭环；Memory 禁关生产
-pub mod note_w6e_skeleton;
+pub mod note_stress_guard;
 pub mod definition;
 pub mod executor;
 pub mod explore_quota;
@@ -162,7 +162,7 @@ pub use subagent_inject::{
     REVERT_CAUTION_TITLE, STARTED_AT_SECTION_TITLE,
 };
 // W6-E-S Skeleton 导出（压测夹具 + 恶意扩展门闸；≠ EL-05 / ≠ W6-E Strict）
-pub use note_w6e_skeleton::{
+pub use note_stress_guard::{
     build_stress_insert_ops, find_forbidden_write_handle, malicious_gate_to_backend_err,
     plugin_full_needs_approval_for_write, plugin_plan_denies_note_write,
     reject_malicious_extension_payload, thousand_batch_apply_request,

@@ -25,20 +25,20 @@
  *   - **W3-D-PM** = 真 PM 适配器入库；单独 **≠** W3-D 终局
  *   - **W3-D** = 真 PM + TextEdit/Structure Intent → 真 apply（本包工厂 + RS 集成）
  *   - **W3-E 方向子集** = 代码叶 Model + 真 CM6 host + flavour/fence→kind 映射 + 只读呈现；
- *     测 `leaves/code/*.w3e.test.ts`；**≠** A-BLK-14 产品 e2e；**≠** EL-01
+ *     测 `leaves/code/*.test.ts`；**≠** A-BLK-14 产品 e2e；**≠** EL-01
  *   - **W3-E′ 选区/多选/焦点方向** = `BlockSelectionBridge`（跨块 multi + anchor/head + focus 交互）；
- *     测 `chrome/blockSelection.w3e_sel.test.ts`；**≠ EL-01**；**≠** Notion 框选 e2e
- *   - **W3-F-S** = StructureIntent + wire + mock（`chrome.w3f.test.ts`）
+ *     测 `chrome/blockSelection.multiSelect.test.ts`；**≠ EL-01**；**≠** Notion 框选 e2e
+ *   - **W3-F-S** = StructureIntent + wire + mock（`chrome.shape.test.ts`）
  *   - **W3-F Strict 子集** = chrome slash_insert / delete_blocks → `createCollabApplySink`
- *     （`chrome.w3f_apply.test.ts` + RS `w3_f_*`）
+ *     （`chrome.apply.test.ts` + RS `w3_f_*`）
  *   - **W3-F DOM 余量** = `BlockChromeDomHost`（把手/多选框/落点线/slash 宿主/拖拽预览子集）；
- *     测 `chrome.w3f_dom.test.ts` · `chrome.w3f_drag.test.ts`；**DOM 交付 ≠ EL-01**；A-BLK e2e 仍开
+ *     测 `chrome.dom.test.ts` · `chrome.drag.test.ts`；**DOM 交付 ≠ EL-01**；A-BLK e2e 仍开
  *   - **slash 选中→sink** = `selectSlashItemAndSubmit` / `groupSlashCatalogItems`（React 浮层共用写路径）
  *   - 桌面 **React slash 浮层** = `apps/crish-desktop/.../SlashMenuOverlay`（包内无 React 依赖）
  *   - **W3-G PaperList** = 仅窗口∪pin 挂 DOM（`list/PaperList` + `buildMountPlan`）；
- *     测 `paperList.w3g.test.ts`；结构门 DOM 上界；假数据 **≠** 权威；**≠** EL-01 / A-PERF 数值
+ *     测 `paperList.test.ts`；结构门 DOM 上界；假数据 **≠** 权威；**≠** EL-01 / A-PERF 数值
  *   - **W3-H 方向子集** = MD 前缀快路径 + turn-into Intent + 未知 flavour 占位；
- *     composing 禁前缀；测 `leaves/w3h.direction.test.ts`；**≠** A-BLK 全表 e2e；**≠** EL-01
+ *     composing 禁前缀；测 `leaves/direction.test.ts`；**≠** A-BLK 全表 e2e；**≠** EL-01
  *   - **W3-H 产品接线** = `mdPrefixHost`：叶输入 → `commitMdPrefixFromLeaf` /
  *     `simulateMdPrefixSubmit` → 可注入 TurnInto sink（mock / provisional collab）；
  *     与 slash_insert **双通道不互抹**；CONN-D：RS 消费 pending / `Op::TurnInto` 改 kind；

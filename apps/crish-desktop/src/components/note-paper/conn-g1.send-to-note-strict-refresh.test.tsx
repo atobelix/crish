@@ -33,8 +33,8 @@ import {
 } from '../../bridges/note-doc-written';
 import { adaptNoteTransportAsHydrate } from './hydrateProjection';
 import { NotePaperStrictPanel } from './NotePaperStrictPanel';
-import { W5B_SKELETON_PACKAGE_ID } from './w5bSkeleton';
-import { W5B_STRICT_PACKAGE_ID } from './w5bStrict';
+import { W5B_SKELETON_PACKAGE_ID } from './notePaperSkeletonTrack';
+import { W5B_STRICT_PACKAGE_ID } from './notePaperStrictTrack';
 
 beforeEach(() => {
   resetSendToNoteIntentSeqForTests();

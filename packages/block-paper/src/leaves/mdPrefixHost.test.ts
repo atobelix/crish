@@ -10,7 +10,7 @@
  * - ≠ EL-01；≠ A-BLK-08/09 全表 e2e；≠ 桌面 PM 键入全链
  * - provisional sink 形状仍为 strip + pending（CONN-D：RS 消费 pending 改 kind，见
  *   crates/conex-doc-collab/tests/conn_d_turn_into_apply.rs）
- * - 不回退 w3h.direction 纯函数测；composing 拒 / 与 slash 不互抹 本文件钉死
+ * - 不回退 direction 纯函数测；composing 拒 / 与 slash 不互抹 本文件钉死
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import { resetIntentIdSeqForTests } from './TextLeafModel';

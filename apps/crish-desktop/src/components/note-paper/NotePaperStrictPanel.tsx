@@ -40,7 +40,7 @@ import {
 } from './notePaperStrictAssembly';
 import { useNoteHydrate } from './useNoteHydrate';
 import { useNotePaperStrictShell } from './useNotePaperStrictShell';
-import { W5B_STRICT_BOUNDARY } from './w5bStrict';
+import { W5B_STRICT_BOUNDARY } from './notePaperStrictTrack';
 import { MirrorDriftStatusBar } from './MirrorDriftStatusBar';
 import type { NotePaperStrictPanelProps } from './notePaperStrictProps';
 import styles from './NotePaperPanel.module.css';
@@ -203,6 +203,9 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
         errorReason={errorReason}
         errorCode={errorCode}
         blocks={blocks}
+        // CT-01 对象级 rev（R7 收口，主控裁决③）：hydrate 投影文档 rev 透传；
+        // 无真实 rev（未 hydrate / rev=0 占位）时保持 undefined
+        baseRev={resolvedRev > 0 ? resolvedRev : undefined}
         renderReactRows={renderReactRows}
         chrome={chrome}
         onHover={handleHover}

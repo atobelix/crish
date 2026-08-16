@@ -4,7 +4,7 @@
  * ## 包轨（强制）
  * - **包 ID：W5-B-S**（Skeleton，必须带 `-S`）
  * - **合法交付**：预览壳 + 静默假数据 / Memory 半 transport 投影
- * - **≠ W5-B Strict**（真数据 / hydrate 投影见 `NotePaperStrictPanel` + `w5bStrict`；
+ * - **≠ W5-B Strict**（真数据 / hydrate 投影见 `NotePaperStrictPanel` + `notePaperStrictTrack`；
  *   真产品默认路径依赖 W1-H；本组件默认不走真 hydrate）
  * - **双轨并存**：Strict 用 `data-package-id=W5-B` / `data-track=strict`；
  *   **禁止** 把本文件 Skeleton 常量改成 W5-B 冒充 Strict
@@ -45,7 +45,10 @@ import type { NoteTransport } from '../../api/noteApi';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import { NotePaperPanelChrome } from './NotePaperPanelChrome';
 import { useNotePaperSkeleton } from './useNotePaperSkeleton';
-import { W5B_SKELETON_PACKAGE_ID, W5B_SKELETON_TRACK } from './w5bSkeleton';
+import {
+  W5B_SKELETON_PACKAGE_ID,
+  W5B_SKELETON_TRACK,
+} from './notePaperSkeletonTrack';
 import styles from './NotePaperPanel.module.css';
 
 // ---------------------------------------------------------------------------

@@ -2,14 +2,14 @@
 /**
  * WorkspaceEmptyState · CONN-E2 mirror StatusBar
  *
- * 自 WorkspaceEmptyState.w5b.test.tsx 按域拆出（SD-35）；CONN-E3 再拆至
+ * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；CONN-E3 再拆至
  * WorkspaceEmptyState.conn-e3.test.tsx（SD-42）。断言语义不变。
  *
  * - **CONN-E2**：mirror StatusBar 默认关；`showMirrorDriftBar` / `mirrorDriftReport`
  *   opt-in 才挂；注入 report → 三路可测；`mirrorIpc` → accept 走 import（X-05）；
  *   **≠ EL-03**；**≠ inotify 满关**；无 report 不造假
  *
- * 薄入口见 WorkspaceEmptyState.w5b.test.tsx。
+ * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
  * CONN-E3 detect 调度见 WorkspaceEmptyState.conn-e3.test.tsx。
  */
 import React from 'react';

@@ -44,7 +44,7 @@
 //!
 //! # W2-C / W2-D-S / W2-E / W2-F（诚实边界）
 //! - W2-C：`blocks` + `blocks_fts`；CJK `instr`（A-FTS-ZH-01）；**≠ A-PERF-10 数值满关**；
-//!   测 `tests/w2c_structure_gate.rs`、`tests/fts_chinese.rs`。损坏不得导致文档不可开。
+//!   测 `tests/structure_gate.rs`、`tests/fts_chinese.rs`。损坏不得导致文档不可开。
 //! - W2-D-S：[`WorkspaceStore::put_blob`] / [`WorkspaceStore::get_blob`] / [`WorkspaceStore::link_block_attachment`]；
 //!   **≠ 生产 / ≠ GC 满关 / ≠ EL / ≠ A-PERF-11**（Strict **W2-D** 才扩）
 //! - W2-E：[`WorkspaceStore::export_md_mirror`] / [`WorkspaceStore::note_authority_advanced`] / [`WorkspaceStore::mirror_lag`] + detect/三路/poll/OS；

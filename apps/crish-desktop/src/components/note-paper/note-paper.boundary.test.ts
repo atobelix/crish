@@ -9,7 +9,7 @@
  * 本测只扫 note-paper 目录；bridges 是允许「知两边」的薄层，不在此扫禁 import。
  * 本包 ≠ W5-B Strict；边界绿 ≠ EL 关闭。
  *
- * W5-C 加深：同目录 Strict 轨文件（NotePaperStrictPanel / w5bStrict / hydrateProjection）
+ * W5-C 加深：同目录 Strict 轨文件（NotePaperStrictPanel / notePaperStrictTrack / hydrateProjection）
  * 亦在扫范围内；**≠ EL-08 关闭**（完整隔离见 `__tests__/dual-engine-surface.isolation.test.ts`）。
  */
 import { describe, expect, it } from 'vitest';

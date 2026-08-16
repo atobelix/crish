@@ -11,7 +11,10 @@ import { BlockChromeModel, createSilentFixture } from '@crish/block-paper';
 import { createMemoryNoteTransport } from '../../api/noteApi';
 import { NotePaperPanel } from './NotePaperPanel';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
-import { W5B_SKELETON_PACKAGE_ID, W5B_SKELETON_TRACK } from './w5bSkeleton';
+import {
+  W5B_SKELETON_PACKAGE_ID,
+  W5B_SKELETON_TRACK,
+} from './notePaperSkeletonTrack';
 
 describe('NotePaperPanel · W5-B-S Skeleton', () => {
   it('渲染 surface=note-paper 与静默块列表 + Skeleton 包锚', () => {

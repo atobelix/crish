@@ -53,8 +53,8 @@ beforeEach(() => {
 // 包轨钉：W6-A-S · Skeleton · ≠ EL-01 / ≠ W6-A
 // ---------------------------------------------------------------------------
 
-describe('w6_a_s 包轨钉', () => {
-  it('w6_a_s: package id 带 -S 且诚实 ≠ W6-A / ≠ EL-01', () => {
+describe('a_blk_skeleton 包轨钉', () => {
+  it('a_blk_skeleton: package id 带 -S 且诚实 ≠ W6-A / ≠ EL-01', () => {
     expect(W6_A_S_PACKAGE_ID).toBe('W6-A-S');
     expect(W6_A_S_PACKAGE_ID.endsWith('-S')).toBe(true);
     expect(W6_A_S_PACKAGE_ID).not.toBe('W6-A');

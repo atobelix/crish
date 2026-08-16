@@ -17,7 +17,7 @@
  * - **≠ EL-01**；**≠** A-BLK e2e 全关；collab Strict apply 测不得回退 mock
  * - **≠** 占 SD-03/08/40
  *
- * 测：`chrome.w3f_dom.test.ts` · `chrome.w3f_drag.test.ts`
+ * 测：`chrome.dom.test.ts` · `chrome.drag.test.ts`
  */
 
 import type { BlockId } from '@crish/block-paper-contract';

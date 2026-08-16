@@ -30,7 +30,7 @@ fn insert_root(s: &mut DocSession, id: BlockId, order: &str) {
     .expect("insert root");
 }
 
-/// 包轨钉（W6-A-S · 与 `w6_a_s` 模块互证；不关 EL-01 / W6-A）。
+/// 包轨钉（W6-A-S · 与 `a_blk_skeleton` 模块互证；不关 EL-01 / W6-A）。
 #[test]
 fn w6_a_s_package_track_is_skeleton_not_el01() {
     assert_eq!(W6_A_S_PACKAGE_ID, "W6-A-S");

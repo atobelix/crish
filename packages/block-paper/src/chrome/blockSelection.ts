@@ -22,7 +22,7 @@
  * - **方向包**，可点名可测；**≠ EL-01**；**≠** Notion 级框选 e2e 完成
  * - **≠** 重复 W3-E code 叶首批；**≠** 重写 PaperList
  *
- * 测：`blockSelection.w3e_sel.test.ts`
+ * 测：`blockSelection.multiSelect.test.ts`
  */
 
 import type { BlockId } from '@crish/block-paper-contract';

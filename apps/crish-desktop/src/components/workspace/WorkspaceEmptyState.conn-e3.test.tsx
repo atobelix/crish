@@ -8,7 +8,7 @@
  *   → mock/Tauri detect → report 喂 StatusBar；`data-mirror-detect-schedule=0|1`；
  *   关时无 detect 定时器；X-05 / import 不回退；**≠ EL-03**；**≠ inotify 满关**
  *
- * 薄入口见 WorkspaceEmptyState.w5b.test.tsx。
+ * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
  * CONN-E2 StatusBar 见 WorkspaceEmptyState.conn-e2.test.tsx。
  */
 import React from 'react';

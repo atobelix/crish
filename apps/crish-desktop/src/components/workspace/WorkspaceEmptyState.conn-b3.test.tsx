@@ -2,13 +2,13 @@
 /**
  * WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥
  *
- * 自 WorkspaceEmptyState.w5b.test.tsx 按域拆出（SD-35）；断言语义不变。
+ * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；断言语义不变。
  *
  * - **CONN-B**：无 applyOps 默认 slash 只读；注入 applyOps 后点 slash → wire/submit
  * - **CONN-B3**：显式 `strictApplyOpsIpc` mock → source=product-ipc + 点 slash 可写；
  *   无 Tauri 仍默认 readonly（禁止 mock 生产默认）；**≠ EL-01**
  *
- * 薄入口见 WorkspaceEmptyState.w5b.test.tsx。
+ * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';

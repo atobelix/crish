@@ -48,5 +48,5 @@ impl Drop for TempDir {
 mod extract;
 #[path = "refs_tests_query.rs"]
 mod query;
-#[path = "refs_tests_w2f.rs"]
-mod w2f;
+#[path = "refs_tests_materialize.rs"]
+mod materialize;

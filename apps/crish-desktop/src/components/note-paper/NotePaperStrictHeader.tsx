@@ -9,7 +9,10 @@ import React from 'react';
 import type { SlashOverlayWriteMode } from './SlashMenuOverlay';
 import { Button } from '../ui';
 import { Tooltip } from '../ui/Tooltip/Tooltip';
-import { W5B_STRICT_PACKAGE_ID, W5B_STRICT_TRACK } from './w5bStrict';
+import {
+  W5B_STRICT_PACKAGE_ID,
+  W5B_STRICT_TRACK,
+} from './notePaperStrictTrack';
 import styles from './NotePaperPanel.module.css';
 
 export type NotePaperStrictHeaderProps = {

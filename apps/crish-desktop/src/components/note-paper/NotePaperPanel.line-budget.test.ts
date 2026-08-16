@@ -74,7 +74,7 @@ describe('SD-25 · NotePaperPanel 行数防回涨 + 包锚', () => {
     expect(src).not.toMatch(/W5B_STRICT_PACKAGE_ID/);
     expect(src).not.toMatch(/data-package-id=["']W5-B["']/);
     expect(src).not.toMatch(/data-track=["']strict["']/);
-    expect(readSrc('w5bSkeleton.ts')).toMatch(
+    expect(readSrc('notePaperSkeletonTrack.ts')).toMatch(
       /W5B_SKELETON_PACKAGE_ID\s*=\s*['"]W5-B-S['"]/
     );
   });
