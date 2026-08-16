@@ -300,8 +300,8 @@ describe('A-SURF-02 note-paper 禁行级 EditorStore（W5-C 加深 / 含 Strict�
       '须扫到 NotePaperStrictPanel（W5-B Strict）'
     ).toBe(true);
     expect(
-      rels.some((r) => r.includes('w5bStrict')),
-      '须扫到 w5bStrict 包标识'
+      rels.some((r) => r.includes('notePaperStrictTrack')),
+      '须扫到 notePaperStrictTrack 包标识'
     ).toBe(true);
     expect(
       rels.some((r) => r.includes('hydrateProjection')),
