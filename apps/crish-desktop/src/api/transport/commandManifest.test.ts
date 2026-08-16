@@ -34,7 +34,7 @@ describe('commandManifest', () => {
         (c) => c.registered
       ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
-      expect(pending).toBeGreaterThan(0);
+      expect(pending).toBe(0);
       // 与 Rust COMMAND_MANIFEST（94 = 注册面 90 + 登记先行 4）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
@@ -65,8 +65,8 @@ describe('commandManifest', () => {
       //   124 → 125，119 → 120）
       // note_undo_text + note_redo_text：CRDT 因果撤销/重做（125 → 127，120 → 122）
       // 原生探活与模型扫描（provider_probe_ping / provider_probe_scan_models）（130 → 132，125 → 127）
-      expect(registered).toBe(127);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(132);
+      expect(registered).toBe(124);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(124);
     });
 
     it('命令名唯一', () => {
@@ -74,39 +74,18 @@ describe('commandManifest', () => {
       expect(new Set(names).size).toBe(names.length);
     });
 
-    it('9 条新增命令登记齐备（§7.2 登记表；PE-07 T07.3/T07.4 已接线）', () => {
+    it('PE-07 命令登记齐备（§7.2 登记表；已接线 registered=true）', () => {
       const byName = new Map(
         BUILTIN_COMMAND_MANIFEST.commands.map((c) => [c.name, c])
       );
       for (const name of [
-        'upsert_session_entry',
-        'append_session_messages',
         'config_profile_apply',
         'config_secret_reveal',
         'workbench_git_run',
         'workbench_fs_delete_file',
-        'workbench_open_workspace',
-        'workbench_list_workspaces',
-        'workbench_dev_mcp_enabled',
       ]) {
         expect(byName.has(name), `${name} 必须登记内置快照`).toBe(true);
-      }
-      for (const name of [
-        'upsert_session_entry',
-        'workbench_git_run',
-        'workbench_fs_delete_file',
-        'config_profile_apply',
-        'config_secret_reveal',
-      ]) {
         expect(byName.get(name)?.registered, `${name} 已接线`).toBe(true);
-      }
-      for (const name of [
-        'append_session_messages',
-        'workbench_open_workspace',
-        'workbench_list_workspaces',
-        'workbench_dev_mcp_enabled',
-      ]) {
-        expect(byName.get(name)?.registered, `${name} 尚未接线`).toBe(false);
       }
     });
 
@@ -134,7 +113,6 @@ describe('commandManifest', () => {
     it('registered 命令可调用；登记先行（false）与未知名不可调用', () => {
       expect(isRegisteredCommand('core_run_task')).toBe(true);
       expect(isRegisteredCommand('core_list_commands')).toBe(true);
-      expect(isRegisteredCommand('upsert_session_entry')).toBe(true);
       // PE-07 T07.3：git_run / fs_delete_file 已接线；T07.4：profile_apply / secret_reveal 已接线
       expect(isRegisteredCommand('workbench_git_run')).toBe(true);
       expect(isRegisteredCommand('workbench_fs_delete_file')).toBe(true);
@@ -153,10 +131,6 @@ describe('commandManifest', () => {
       expect(isRegisteredCommand('resume_subagent')).toBe(true);
       expect(isRegisteredCommand('kill_all')).toBe(true);
       expect(isRegisteredCommand('kill_subagent')).toBe(true);
-      // 登记先行：尚未接线，不得视为可调用
-      expect(isRegisteredCommand('append_session_messages')).toBe(false);
-      // D4a 登记先行（P2）：不得视为可调用
-      expect(isRegisteredCommand('core_resume_run')).toBe(false);
       // E2 F4：core_compact_now 已接线（registered=true，可调用）
       expect(isRegisteredCommand('core_compact_now')).toBe(true);
       // 未知名
@@ -299,10 +273,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（132；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（124；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(132);
+      expect(total).toBe(124);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

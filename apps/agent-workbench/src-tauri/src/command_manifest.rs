@@ -148,7 +148,7 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("core_cancel_run", "core", "engine", true),
         entry("core_approve_tool", "core", "engine", true),
         entry("core_deny_tool", "core", "engine", true),
-        // ── 会话持久化（B，§2.2；含 F3 冻结的 upsert_session_entry）──
+        // ── 会话持久化（B，§2.2）──
         entry("list_sessions", "session", "engine", true),
         entry("load_session_body", "session", "engine", true),
         entry("save_session_body", "session", "engine", true),
@@ -158,7 +158,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("set_session_meta", "session", "engine", true),
         entry("cleanup_orphan_sessions", "session", "engine", true),
         entry("import_from_localstorage", "session", "engine", true),
-        entry("upsert_session_entry", "session", "engine", true),
         // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时
         // 前端不调用本命令，只读通用面保留无害）
         entry("get_flow_snapshot", "session", "engine", true),
@@ -167,7 +166,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
         entry("core_md_render", "core", "engine", true),
         entry("core_md_render_batch", "core", "engine", true),
-        entry("core_highlight_code", "core", "engine", true),
         // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
         entry("core_hash_compute", "core", "engine", true),
         entry("core_base64_encode", "core", "engine", true),
@@ -177,7 +175,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("core_parse_diff", "core", "engine", true),
         entry("core_messages_to_jsonl", "core", "engine", true),
         entry("core_jsonl_to_messages", "core", "engine", true),
-        entry("core_text_encode", "core", "engine", true),
         entry("core_jsonl_append", "core", "engine", true),
         // ── 注册表单一化自身（T03.1）──
         entry("core_list_commands", "core", "engine", true),
@@ -239,15 +236,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("resume_subagent", "core", "engine", true),
         entry("kill_all", "core", "engine", true),
         entry("kill_subagent", "core", "engine", true),
-        // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
-        entry("append_session_messages", "session", "engine", false),
-        entry("workbench_open_workspace", "workbench", "gui", false),
-        entry("workbench_list_workspaces", "workbench", "gui", false),
-        entry("workbench_dev_mcp_enabled", "workbench", "gui", false),
-        // D4 §3.7：core_resume_run（P2）登记先行——主 run 重启续跑命令，
-        // 本轮不排期，实现随排期翻 true（与 resume_subagent 同一命令登记轮，
-        // 裁决 #17）
-        entry("core_resume_run", "core", "engine", false),
         // E2 扩展：core_compact_now 实现体已落（E2 实现轮），registered=true
         // 子集 = make_handlers! 注册面不变量（红线 6 禁止假接线；main.rs
         // 同批注册，E0 裁决 4 的「5→6」口径与本实现一致）
@@ -293,16 +281,15 @@ mod tests {
             .filter(|c| c.registered)
             .count();
         let pending = total - registered;
-        assert!(pending > 0, "登记先行必须 > 0");
         assert_eq!(
-             total, 132,
-             "总数 132（电脑操作四命令 + note_apply_ops + note_undo_text + note_redo_text + mirror + hydrate + D4a + core_read_run_events 恢复 + PTY 保活切接三命令 + provider_probe_ping/scan_models 原生探活，与前端同步）"
-         );
-        assert_eq!(
-            registered, 127,
-            "注册面 127（含 core_compact_now 已接线 + core_read_run_events 恢复激活 + note_undo_text/redo_text + PTY 三命令 + provider_probe_ping/scan_models）"
+            total, 124,
+            "总数 124（清理 5 条先行死命令与 3 条幽灵命令，与前端同步）"
         );
-        assert_eq!(pending, 5, "登记先行 5");
+        assert_eq!(
+            registered, 124,
+            "注册面 124（全部为 registered=true 实装命令）"
+        );
+        assert_eq!(pending, 0, "登记先行 0");
     }
 
     /// 命令名唯一（重复名会破坏前端清单校验）。
@@ -315,50 +302,25 @@ mod tests {
         assert_eq!(names.len(), original);
     }
 
-    /// 9 条新增命令登记齐备（§7.2 登记表；PE-07 T07.3/T07.4 已接线部分 registered=true，
-    /// 与前端 commandManifest.test.ts 的 9 条登记断言保持同步）。
+    /// PE-07 命令登记齐备（§7.2 登记表；已接线部分 registered=true）。
     #[test]
-    fn manifest_registers_all_nine_new_commands() {
+    fn manifest_registers_pe07_commands() {
         let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
             .commands
             .iter()
             .map(|c| (c.name, c))
             .collect();
         for name in [
-            "upsert_session_entry",
-            "append_session_messages",
             "config_profile_apply",
             "config_secret_reveal",
             "workbench_git_run",
             "workbench_fs_delete_file",
-            "workbench_open_workspace",
-            "workbench_list_workspaces",
-            "workbench_dev_mcp_enabled",
         ] {
             assert!(
                 by_name.contains_key(name),
-                "{name} 必须登记 manifest（§7.2 登记表）"
+                "{name} 必须登记 manifest（PE-07 接线面）"
             );
-        }
-        for name in [
-            "upsert_session_entry",
-            "workbench_git_run",
-            "workbench_fs_delete_file",
-            "config_profile_apply",
-            "config_secret_reveal",
-        ] {
             assert!(by_name[name].registered, "{name} 已接线应 registered=true");
-        }
-        for name in [
-            "append_session_messages",
-            "workbench_open_workspace",
-            "workbench_list_workspaces",
-            "workbench_dev_mcp_enabled",
-        ] {
-            assert!(
-                !by_name[name].registered,
-                "{name} 未接线应 registered=false"
-            );
         }
     }
 
@@ -448,7 +410,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 132);
+        assert_eq!(manifest.commands.len(), 124);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
@@ -501,8 +463,7 @@ mod tests {
     }
 
     /// D4a：子代理显式恢复与关闭命令双端登记（D4 §1.2 A5）——三条命令
-    /// registered=true（与 main.rs 注册面一致）；core_resume_run 登记先行
-    /// registered=false；core_compact_now（E2 F4）已接线 registered=true。
+    /// registered=true（与 main.rs 注册面一致）；core_compact_now（E2 F4）已接线 registered=true。
     #[test]
     fn manifest_registers_d4a_subagent_commands() {
         let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
@@ -525,13 +486,6 @@ mod tests {
         assert!(
             compact.registered,
             "core_compact_now 已接线应 registered=true"
-        );
-        let resume = by_name
-            .get("core_resume_run")
-            .unwrap_or_else(|| panic!("core_resume_run 必须登记 manifest（登记先行）"));
-        assert!(
-            !resume.registered,
-            "core_resume_run 登记先行应 registered=false"
         );
     }
 }

@@ -547,9 +547,7 @@ describe('桌面 manifest 登记核对（R2-12 部分 2 只读；command_manifes
     // mobile_* 8 条无对应条目 = 桌面接线轮待登记缺口（Z0 X-5 登记路径）
     expect(MANIFEST_SOURCE).toContain('entry("core_search_files"');
     expect(MANIFEST_SOURCE).toContain('entry("multi_device_pair_status"');
-    // 登记先行先例（registered=false 条目存在，证明「未接线可登记」机制在位，
-    // mobile_* 连登记先行都未落 → 缺口登记需桌面轮补）
-    expect(MANIFEST_SOURCE).toContain('entry("workbench_open_workspace"');
+    expect(MANIFEST_SOURCE).toContain('entry("multi_device_set_enabled"');
   });
 
   it('登记表断言：全部 8 条 mobileStatus=已实现、manifestStatus=缺失（缺口清单）', () => {

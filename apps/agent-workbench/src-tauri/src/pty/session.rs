@@ -12,6 +12,7 @@
 //! 错误统一为 `CoreError`（IPC 面唯一协议）：会话不存在 → `NotFound`，
 //! 其余内部失败 → `Internal`。
 
+use super::utf8_buffer::Utf8ChunkBuffer;
 use conex_types::CoreError;
 use portable_pty::{native_pty_system, CommandBuilder, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
@@ -21,7 +22,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Mutex, OnceLock,
+        Arc, Mutex, OnceLock,
     },
     thread,
     time::{SystemTime, UNIX_EPOCH},
@@ -74,7 +75,7 @@ pub(crate) struct PtySession {
     /// Frontend association key (not used for routing; for diagnostics).
     #[allow(dead_code)]
     pub(crate) session_key: String,
-    pub(crate) writer: Mutex<Box<dyn Write + Send>>,
+    pub(crate) writer: Arc<Mutex<Box<dyn Write + Send>>>,
     pub(crate) master: Box<dyn MasterPty + Send>,
     pub(crate) killer: Mutex<Box<dyn portable_pty::ChildKiller + Send + Sync>>,
     /// 最近一次活跃时刻（键盘输入、Ping、或 stdout 输出）
@@ -96,7 +97,7 @@ impl PtySession {
     ) -> Self {
         Self {
             session_key,
-            writer: Mutex::new(writer),
+            writer: Arc::new(Mutex::new(writer)),
             master,
             killer: Mutex::new(killer),
             last_activity_at_ms: AtomicU64::new(now_ms),
@@ -218,10 +219,11 @@ fn resolve_cwd(cwd: Option<&str>) -> PathBuf {
         if p.is_dir() {
             return p;
         }
-        // Still set it — shell may create/use it; fall through only if empty
-        if !raw.is_empty() {
-            return p;
-        }
+        tracing::warn!(
+            target: "pty",
+            requested_cwd = raw,
+            "传入的 PTY 工作目录不存在或非目录，启动安全降级链"
+        );
     }
     if let Ok(app) = crate::host_paths::app_dir() {
         let root = crate::host_paths::workspace_root(&app);
@@ -230,7 +232,17 @@ fn resolve_cwd(cwd: Option<&str>) -> PathBuf {
         }
     }
     // FIN-07: 无工作区启动时安全降级为用户目录 (~)，严禁回退到 src-tauri 或 panic
-    dirs::home_dir().unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")))
+    if let Some(home) = dirs::home_dir() {
+        if home.is_dir() {
+            return home;
+        }
+    }
+    if let Ok(cur) = std::env::current_dir() {
+        if cur.is_dir() {
+            return cur;
+        }
+    }
+    PathBuf::from(".")
 }
 
 /// Default interactive shell: Windows prefers pwsh then powershell.exe; Unix bash/$SHELL.
@@ -241,6 +253,32 @@ fn build_shell_command(cwd: &Path) -> CommandBuilder {
             let mut c = CommandBuilder::new("pwsh.exe");
             c.arg("-NoLogo");
             c
+        } else if let Ok(pf) = std::env::var("ProgramFiles") {
+            let pwsh7_path = Path::new(&pf).join("PowerShell").join("7").join("pwsh.exe");
+            if pwsh7_path.is_file() {
+                let mut c = CommandBuilder::new(pwsh7_path);
+                c.arg("-NoLogo");
+                c
+            } else if let Ok(root) = std::env::var("SystemRoot") {
+                let system_ps = Path::new(&root)
+                    .join("System32")
+                    .join("WindowsPowerShell")
+                    .join("v1.0")
+                    .join("powershell.exe");
+                if system_ps.is_file() {
+                    let mut c = CommandBuilder::new(system_ps);
+                    c.arg("-NoLogo");
+                    c
+                } else {
+                    let mut c = CommandBuilder::new("powershell.exe");
+                    c.arg("-NoLogo");
+                    c
+                }
+            } else {
+                let mut c = CommandBuilder::new("powershell.exe");
+                c.arg("-NoLogo");
+                c
+            }
         } else if let Ok(root) = std::env::var("SystemRoot") {
             let system_ps = Path::new(&root)
                 .join("System32")
@@ -403,7 +441,7 @@ pub(crate) fn create_session(
 
     let session = PtySession {
         session_key,
-        writer: Mutex::new(writer),
+        writer: Arc::new(Mutex::new(writer)),
         master: pair.master,
         killer: Mutex::new(killer),
         last_activity_at_ms: AtomicU64::new(crate::server::now_ms()),
@@ -425,9 +463,20 @@ pub(crate) fn create_session(
         .name(format!("pty-read-{pty_id}"))
         .spawn(move || {
             let mut buf = [0u8; 8192];
+            let mut decoder = Utf8ChunkBuffer::new();
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => {
+                        let flushed = decoder.flush_lossy();
+                        if !flushed.is_empty() {
+                            let _ = app_reader.emit(
+                                "workbench://pty-output",
+                                PtyOutputEvent {
+                                    pty_id: emit_id.clone(),
+                                    data: flushed,
+                                },
+                            );
+                        }
                         // 子进程退出
                         if let Ok(reg) = registry().lock() {
                             if let Some(sess) = reg.get(&emit_id) {
@@ -443,23 +492,34 @@ pub(crate) fn create_session(
                                 sess.touch();
                             }
                         }
-                        let data = String::from_utf8_lossy(&buf[..n]).into_owned();
-                        // Do not log full terminal data at info level.
-                        tracing::trace!(
-                            target: "pty",
-                            pty_id = %emit_id,
-                            bytes = n,
-                            "pty output chunk"
-                        );
-                        let _ = app_reader.emit(
-                            "workbench://pty-output",
-                            PtyOutputEvent {
-                                pty_id: emit_id.clone(),
-                                data,
-                            },
-                        );
+                        let data = decoder.push(&buf[..n]);
+                        if !data.is_empty() {
+                            tracing::trace!(
+                                target: "pty",
+                                pty_id = %emit_id,
+                                bytes = n,
+                                "pty output chunk"
+                            );
+                            let _ = app_reader.emit(
+                                "workbench://pty-output",
+                                PtyOutputEvent {
+                                    pty_id: emit_id.clone(),
+                                    data,
+                                },
+                            );
+                        }
                     }
                     Err(e) => {
+                        let flushed = decoder.flush_lossy();
+                        if !flushed.is_empty() {
+                            let _ = app_reader.emit(
+                                "workbench://pty-output",
+                                PtyOutputEvent {
+                                    pty_id: emit_id.clone(),
+                                    data: flushed,
+                                },
+                            );
+                        }
                         tracing::debug!(
                             target: "pty",
                             pty_id = %emit_id,
@@ -517,13 +577,16 @@ pub(crate) fn create_session(
 }
 
 pub(crate) fn write_session(pty_id: &str, data: &[u8]) -> Result<(), CoreError> {
-    let reg = registry()
-        .lock()
-        .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
-    let session = reg.get(pty_id).ok_or_else(|| not_found_error(pty_id))?;
-    session.touch();
-    let mut writer = session
-        .writer
+    let writer_arc = {
+        let reg = registry()
+            .lock()
+            .map_err(|e| CoreError::Internal(format!("pty registry lock: {e}")))?;
+        let session = reg.get(pty_id).ok_or_else(|| not_found_error(pty_id))?;
+        session.touch();
+        session.writer.clone()
+    };
+
+    let mut writer = writer_arc
         .lock()
         .map_err(|e| CoreError::Internal(format!("pty writer lock: {e}")))?;
     writer
@@ -645,5 +708,22 @@ pub(crate) fn kill_all() {
     }
     if count > 0 {
         tracing::info!(target: "pty", count, "killed all pty sessions");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_cwd_fallbacks() {
+        let non_exist = resolve_cwd(Some("Z:\\path\\not\\exist\\123456_random"));
+        assert!(non_exist.is_dir(), "降级后的路径必须真实存在！");
+
+        let empty = resolve_cwd(Some("   "));
+        assert!(empty.is_dir(), "空白参数必须降级到合法目录");
+
+        let none = resolve_cwd(None);
+        assert!(none.is_dir(), "None 参数必须降级到合法目录");
     }
 }

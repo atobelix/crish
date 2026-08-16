@@ -157,47 +157,20 @@ describe('Tauri command registry', () => {
       .sort();
 
     expect([...registered]).toEqual(wired);
-    // 批次 9.1 / Batch 4 校准：全量 registered 命令面（127 条 command_registry! 注册）
-    expect(registered.size).toBe(127);
+    // Batch 2 校准：全量 registered 命令面（124 条 command_registry! 注册）
+    expect(registered.size).toBe(124);
   });
 
-  it('keeps the B6.4 surface: 127 registered commands plus 4 registered-first entries', () => {
+  it('keeps the surface: 124 registered commands plus 0 registered-first entries', () => {
     const wired = REGISTERED_TAURI_COMMANDS.filter(shouldHaveTauriRegistration);
     const pending = REGISTERED_TAURI_COMMANDS.filter(
       (entry) => !shouldHaveTauriRegistration(entry)
     );
 
-    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(131);
-    expect(wired).toHaveLength(127);
-    expect(pending).toHaveLength(4);
-    expect(pending.map((entry) => entry.command).sort()).toEqual([
-      'append_session_messages',
-      'workbench_dev_mcp_enabled',
-      'workbench_list_workspaces',
-      'workbench_open_workspace',
-    ]);
-  });
-
-  it('keeps registered-first commands out of the wired product surface', () => {
-    const pendingCommands = [
-      'append_session_messages',
-      'workbench_open_workspace',
-      'workbench_list_workspaces',
-      'workbench_dev_mcp_enabled',
-    ];
-
-    for (const command of pendingCommands) {
-      const entry = TAURI_COMMAND_REGISTRY.get(command);
-      expect(entry).toBeDefined();
-      expect(entry!.tauriRegistration).toBe('not-registered');
-      expect(commandCapabilityStatus(entry!)).toBe(UNSUPPORTED_CODE);
-      expect(isProductCapabilityCommand(entry!)).toBe(false);
-    }
-
-    const wired = REGISTERED_TAURI_COMMANDS.filter(
-      shouldHaveTauriRegistration
-    ).map((entry) => entry.command);
-    expect(wired).not.toEqual(expect.arrayContaining(pendingCommands));
+    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(124);
+    expect(wired).toHaveLength(124);
+    expect(pending).toHaveLength(0);
+    expect(pending.map((entry) => entry.command).sort()).toEqual([]);
   });
 
   it('keeps product run commands wired through core_run_commands', () => {
@@ -278,8 +251,8 @@ describe('Tauri command registry', () => {
       isProductCapabilityCommand
     );
 
-    // 批次 9.1 / Batch 4 校准：全量 127 条 registered 命令
-    expect(productCommands).toHaveLength(127);
+    // Batch 2 校准：全量 124 条 registered 命令
+    expect(productCommands).toHaveLength(124);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE

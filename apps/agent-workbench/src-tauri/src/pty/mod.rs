@@ -25,6 +25,7 @@
 //! 创建命令（含进程拉起 / Job 分配）走 `spawn_blocking` 避免阻塞命令线程；
 //! 写入 / 调整 / 终止为轻量注册表操作，保持同步。
 
+pub(crate) mod utf8_buffer;
 mod session;
 
 use conex_types::CoreError;
@@ -70,15 +71,27 @@ pub(crate) async fn workbench_pty_create(
 
 /// Write UTF-8 data to the PTY master (user keystrokes / paste).
 /// Cap: 64 KiB per call.
+/// 异步命令：将 I/O 卸载至 tokio 阻塞线程池，解除全局锁阻塞，杜绝阻塞 Tauri 命令主线程。
 #[tauri::command]
-pub(crate) fn workbench_pty_write(pty_id: String, data: String) -> Result<(), CoreError> {
+pub(crate) async fn workbench_pty_write(
+    pty_id: String,
+    data: String,
+) -> Result<(), CoreError> {
     if data.len() > MAX_WRITE_BYTES {
         return Err(CoreError::InvalidInput(format!(
             "write too large: {} bytes (max {MAX_WRITE_BYTES})",
             data.len()
         )));
     }
-    session::write_session(&pty_id, data.as_bytes())
+    let pty_id_cloned = pty_id.clone();
+    let bytes = data.into_bytes();
+    tokio::task::spawn_blocking(move || {
+        session::write_session(&pty_id_cloned, &bytes)
+    })
+    .await
+    .map_err(|e| CoreError::Internal(format!("workbench_pty_write join: {e}")))??;
+
+    Ok(())
 }
 
 /// Resize the PTY window (cols × rows).
@@ -224,11 +237,11 @@ mod tests {
         kill_all_sessions();
     }
 
-    #[test]
-    fn pty_write_rejects_oversized_payload() {
+    #[tokio::test]
+    async fn pty_write_rejects_oversized_payload() {
         // 命令层校验：超过 64 KiB 的写入在触碰注册表之前即拒绝（InvalidInput）。
         let oversized = "x".repeat(MAX_WRITE_BYTES + 1);
-        let result = workbench_pty_write("pty-any".to_string(), oversized);
+        let result = workbench_pty_write("pty-any".to_string(), oversized).await;
         match result {
             Err(CoreError::InvalidInput(msg)) => assert!(msg.contains("write too large")),
             other => panic!("expected InvalidInput, got {other:?}"),

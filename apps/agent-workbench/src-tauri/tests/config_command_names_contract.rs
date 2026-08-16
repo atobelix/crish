@@ -80,10 +80,10 @@ fn f5_legacy_config_command_names_excluded() {
     }
 }
 
-/// F3/F4 冻结命令登记（session 族：upsert_session_entry / cleanup_orphan_sessions）
+/// F3/F4 冻结命令登记（session 族：cleanup_orphan_sessions）
 #[test]
 fn f3_f4_session_commands_registered() {
-    for name in ["upsert_session_entry", "cleanup_orphan_sessions"] {
+    for name in ["cleanup_orphan_sessions"] {
         let entry = COMMAND_MANIFEST
             .commands
             .iter()
@@ -94,13 +94,13 @@ fn f3_f4_session_commands_registered() {
     }
 }
 
-/// F5 保留项：workbench_dev_mcp_enabled 属 GUI 面（workbench_*），不改名
+/// F5 保留项：workbench_fs_delete_file 属 GUI 面（workbench_*），不改名
 #[test]
 fn f5_gui_face_command_keeps_workbench_prefix() {
     let entry = COMMAND_MANIFEST
         .commands
         .iter()
-        .find(|c| c.name == "workbench_dev_mcp_enabled")
-        .expect("workbench_dev_mcp_enabled 必须登记（F5 保留项）");
+        .find(|c| c.name == "workbench_fs_delete_file")
+        .expect("workbench_fs_delete_file 必须登记（F5 保留项）");
     assert_eq!(entry.surface, "gui", "GUI 面命令保留 workbench_ 前缀");
 }

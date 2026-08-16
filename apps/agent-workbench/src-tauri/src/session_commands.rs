@@ -356,23 +356,6 @@ pub async fn touch_session(
     Ok(())
 }
 
-/// 幂等写入会话索引条目（F3 冻结签名，session 族第 12 个命令）。
-///
-/// 语义 = `ON CONFLICT(id) DO UPDATE`：只更新索引列，不级联删除消息 /
-/// agents（`upsert_does_not_cascade_delete_messages` 先例锚定）。
-#[tauri::command]
-pub async fn upsert_session_entry(
-    entry: SessionIndexEntry,
-    db_state: State<'_, SharedDb>,
-) -> Result<(), CoreError> {
-    require_session_id(&entry.id)?;
-    let db = db_state.inner().local_db();
-    tokio::task::spawn_blocking(move || db.upsert_session_entry(&entry))
-        .await
-        .map_err(|e| CoreError::Internal(format!("upsert_session_entry join: {e}")))?
-        .map_err(map_db_err)?;
-    Ok(())
-}
 
 // ── F11b（T-D-12）：DAG 只读快照查询 ────────────────────────────────
 

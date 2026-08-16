@@ -148,11 +148,9 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('set_session_output_root', 'session', 'engine'),
     entry('cleanup_orphan_sessions', 'session', 'engine'),
     entry('import_from_localstorage', 'session', 'engine'),
-    entry('upsert_session_entry', 'session', 'engine'),
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
     entry('core_md_render', 'core', 'engine'),
     entry('core_md_render_batch', 'core', 'engine'),
-    entry('core_highlight_code', 'core', 'engine'),
     // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
     entry('core_hash_compute', 'core', 'engine'),
     entry('core_base64_encode', 'core', 'engine'),
@@ -162,7 +160,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('core_parse_diff', 'core', 'engine'),
     entry('core_messages_to_jsonl', 'core', 'engine'),
     entry('core_jsonl_to_messages', 'core', 'engine'),
-    entry('core_text_encode', 'core', 'engine'),
     entry('core_jsonl_append', 'core', 'engine'),
     // ── 注册表单一化自身（T03.1）──
     entry('core_list_commands', 'core', 'engine'),
@@ -225,15 +222,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('resume_subagent', 'core', 'engine'),
     entry('kill_all', 'core', 'engine'),
     entry('kill_subagent', 'core', 'engine'),
-    // ── 登记先行（§7.2 登记表，AU-04 F12-C13；实现方各自负责，接线后翻 true）──
-    // PE-07 T07.4：config_profile_apply / config_secret_reveal 已接线（registered=true）
-    entry('append_session_messages', 'session', 'engine', false),
-    entry('workbench_open_workspace', 'workbench', 'gui', false),
-    entry('workbench_list_workspaces', 'workbench', 'gui', false),
-    entry('workbench_dev_mcp_enabled', 'workbench', 'gui', false),
-    // D4 §3.7：core_resume_run（P2）登记先行——主 run 重启续跑命令，
-    // 本轮不排期，实现随排期翻 true
-    entry('core_resume_run', 'core', 'engine', false),
     // E2 扩展：core_compact_now 实现体已落（E2 实现轮，registered=true；
     // 与 Rust command_manifest.rs 同步）
     entry('core_compact_now', 'core', 'engine', true),

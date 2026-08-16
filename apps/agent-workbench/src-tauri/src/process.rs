@@ -232,6 +232,11 @@ fn build_shell_invocation(command: &str) -> Result<(String, Vec<String>, String)
         let ps = resolve_system_powershell()?;
         let script = build_windows_powershell_script(command);
         let encoded = encode_powershell_encoded_command(&script);
+        let shell_label = if ps.contains("pwsh") {
+            "pwsh.exe".to_string()
+        } else {
+            "powershell.exe".to_string()
+        };
         Ok((
             ps,
             vec![
@@ -242,7 +247,7 @@ fn build_shell_invocation(command: &str) -> Result<(String, Vec<String>, String)
                 "-EncodedCommand".into(),
                 encoded,
             ],
-            "powershell.exe".into(),
+            shell_label,
         ))
     } else {
         Ok((
@@ -253,24 +258,53 @@ fn build_shell_invocation(command: &str) -> Result<(String, Vec<String>, String)
     }
 }
 
-/// 优先系统目录下的 Windows PowerShell 5.x，再回落 PATH 上的 powershell.exe。
+/// 严格优先探测 PowerShell 7+ (pwsh.exe)，最后降级回退 Windows PowerShell 5.1。
 fn resolve_system_powershell() -> Result<String, CoreError> {
+    // 1. 优先查找 PATH 环境变量中的 pwsh / pwsh.exe (PowerShell 7+)
+    if which_on_path("pwsh.exe") {
+        return Ok("pwsh.exe".into());
+    }
+    if which_on_path("pwsh") {
+        return Ok("pwsh".into());
+    }
+
+    // 2. 探测 PowerShell 7 标准安装路径
+    if let Ok(pf) = std::env::var("ProgramFiles") {
+        let pwsh7_path = Path::new(&pf).join("PowerShell").join("7").join("pwsh.exe");
+        if pwsh7_path.is_file() {
+            return Ok(pwsh7_path.display().to_string());
+        }
+    }
+    if let Ok(local_app) = std::env::var("LOCALAPPDATA") {
+        let pwsh7_user = Path::new(&local_app)
+            .join("Microsoft")
+            .join("PowerShell")
+            .join("7")
+            .join("pwsh.exe");
+        if pwsh7_user.is_file() {
+            return Ok(pwsh7_user.display().to_string());
+        }
+    }
+
+    // 3. 安全回退：探测系统自带 Windows PowerShell 5.1
     if let Ok(root) = std::env::var("SystemRoot") {
-        let candidate = Path::new(&root)
+        let system_ps = Path::new(&root)
             .join("System32")
             .join("WindowsPowerShell")
             .join("v1.0")
             .join("powershell.exe");
-        if candidate.is_file() {
-            return Ok(candidate.display().to_string());
+        if system_ps.is_file() {
+            return Ok(system_ps.display().to_string());
         }
     }
-    // PATH 探测
+
+    // 4. 最终尝试 PATH 上的 powershell.exe
     if which_on_path("powershell.exe") {
         return Ok("powershell.exe".into());
     }
+
     Err(CoreError::Internal(
-        "system powershell.exe not found".into(),
+        "未找到任何可用的 PowerShell (pwsh.exe 或 powershell.exe)".into(),
     ))
 }
 

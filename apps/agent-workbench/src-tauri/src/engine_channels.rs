@@ -596,7 +596,7 @@ impl BufferedRunEventBridge {
     /// （core_run 域切分）并行域收口后接线**（2026-08-14 主控裁决顺延）。
     /// 本桥字段/builder/emit 注入面已就绪，无 trace 配置的桥零开销
     /// （None 分支直通，与接线前行为一致）。
-    #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn with_trace_id(mut self, trace_id: Option<String>) -> Self {
         self.trace_id = trace_id;
         self

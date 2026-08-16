@@ -366,11 +366,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     status: 'implemented',
     feature: 'localstorage session import',
   },
-  {
-    command: 'upsert_session_entry',
-    status: 'implemented',
-    feature: 'session entry upsert',
-  },
   // ── F 轮新增命令（F1/F3 后台任务 + F10 产出根 + F11b DAG 快照 + catalog/trash）──
   {
     command: 'workbench_list_background_tasks',
@@ -469,11 +464,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     status: 'implemented',
     feature: 'markdown batch render',
   },
-  {
-    command: 'core_highlight_code',
-    status: 'implemented',
-    feature: 'code highlight',
-  },
   // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
   {
     command: 'core_hash_compute',
@@ -514,11 +504,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'core_jsonl_to_messages',
     status: 'implemented',
     feature: 'JSONL messages import',
-  },
-  {
-    command: 'core_text_encode',
-    status: 'implemented',
-    feature: 'text encoding',
   },
   {
     command: 'core_jsonl_append',
@@ -657,43 +642,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'workbench_pty_ping',
     status: 'implemented',
     feature: 'workbench PTY ping liveness',
-  },
-  // ── 登记先行（§7.2 登记表；registered=false，实现方接线后翻 true）──
-  {
-    command: 'append_session_messages',
-    status: 'experimental',
-    tauriRegistration: 'not-registered',
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: 'session message append',
-    reason:
-      'Registered in the command manifest but not yet wired to a Tauri handler.',
-  },
-  {
-    command: 'workbench_open_workspace',
-    status: 'experimental',
-    tauriRegistration: 'not-registered',
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: 'workspace open',
-    reason:
-      'Registered in the command manifest but not yet wired to a Tauri handler.',
-  },
-  {
-    command: 'workbench_list_workspaces',
-    status: 'experimental',
-    tauriRegistration: 'not-registered',
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: 'workspace listing',
-    reason:
-      'Registered in the command manifest but not yet wired to a Tauri handler.',
-  },
-  {
-    command: 'workbench_dev_mcp_enabled',
-    status: 'experimental',
-    tauriRegistration: 'not-registered',
-    capabilityStatus: UNSUPPORTED_CODE,
-    feature: 'dev MCP socket status',
-    reason:
-      'Registered in the command manifest but not yet wired to a Tauri handler.',
   },
 ];
 

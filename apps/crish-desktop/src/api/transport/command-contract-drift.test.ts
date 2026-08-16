@@ -201,10 +201,6 @@ const GHOST_EXEMPTIONS: ReadonlySet<string> = new Set([
   // transport.send(cmd, rest) 发送（产品路径只走 compositionRoot.runControl）
   'core_run_control',
   'core_cancel_run',
-  // ── T-F 06 C-6 裁决：wrapper 已退役，命令注册保留（changelog 33 登记）──
-  // core_highlight_code：rustCore.highlightCode wrapper 已删（无生产消费），
-  // 命令注册保留供路径 A 恢复（接线时移除本豁免）
-  'core_highlight_code',
   // ── 多端与查询面（F-03 DM-07 恢复激活，供多端与调试消费）──
   'core_read_run_events',
   // ── 登记先行面（有真实消费意图但未接线，接线后移除豁免）──
@@ -213,13 +209,6 @@ const GHOST_EXEMPTIONS: ReadonlySet<string> = new Set([
   'config_get_outputs_root',
   'config_set_outputs_root',
   'set_session_output_root',
-  // core_text_encode：worker 域 text.encode 的 Rust 下沉面，io-worker 注释
-  // 自证「原实现忽略 encoding 参数是 bug」——worker 迁移后接线（api-adapters）
-  'core_text_encode',
-  // upsert_session_entry：F3 冻结签名（session 族第 12 个命令），IndexedDB
-  // 迁移完成后经 sessionLocalStorage.ts 接线（注释自证「未来增补命令后
-  // 索引可彻底迁移到 SQLite」）
-  'upsert_session_entry',
   // workbench_select_folder：原生目录选择器（PE-07 T07.2 唯一「新授权」入口），
   // 前端经 openDirectoryDialogSafe 动态触发（对话框后段），非静态字面量
   'workbench_select_folder',

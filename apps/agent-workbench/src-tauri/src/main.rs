@@ -308,7 +308,7 @@ command_registry![
         "multi_device_set_enabled",
         multi_device_commands::multi_device_set_enabled
     ),
-    // ── 会话持久化（B，§2.2；含 F3 冻结的 upsert_session_entry）──
+    // ── 会话持久化（B，§2.2）──
     ("list_sessions", session_commands::list_sessions),
     ("load_session_body", session_commands::load_session_body),
     ("save_session_body", session_commands::save_session_body),
@@ -324,10 +324,6 @@ command_registry![
         "import_from_localstorage",
         session_commands::import_from_localstorage
     ),
-    (
-        "upsert_session_entry",
-        session_commands::upsert_session_entry
-    ),
     // F11b（T-D-12）：DAG 只读快照查询（flow_dag_visible 开关关闭时不调用，
     // 只读通用面保留无害）
     ("get_flow_snapshot", session_commands::get_flow_snapshot),
@@ -340,7 +336,6 @@ command_registry![
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
     ("core_md_render", markdown_commands::md_render),
     ("core_md_render_batch", markdown_commands::md_render_batch),
-    ("core_highlight_code", markdown_commands::highlight_code),
     // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
     ("core_hash_compute", core_commands::core_hash_compute),
     ("core_base64_encode", core_commands::core_base64_encode),
@@ -356,7 +351,6 @@ command_registry![
         "core_jsonl_to_messages",
         core_commands::core_jsonl_to_messages
     ),
-    ("core_text_encode", core_commands::core_text_encode),
     ("core_jsonl_append", core_commands::core_jsonl_append),
     // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh）──
     ("catalog_get", catalog_commands::catalog_get),

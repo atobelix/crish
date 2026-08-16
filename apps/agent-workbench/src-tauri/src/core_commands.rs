@@ -506,27 +506,6 @@ pub async fn core_jsonl_to_messages(text: String) -> Result<Vec<serde_json::Valu
     result
 }
 
-/// 把 UTF-8 字符串编码为目标编码的 bytes（encoding_rs；替代 io-worker text.encode）。
-#[tauri::command]
-pub async fn core_text_encode(
-    text: String,
-    encoding: Option<String>,
-) -> Result<Vec<u8>, CoreError> {
-    let result = tokio::task::spawn_blocking(move || -> Result<Vec<u8>, CoreError> {
-        match encoding {
-            None => Ok(text.into_bytes()),
-            Some(label) => {
-                let enc = encoding_rs::Encoding::for_label(label.as_bytes())
-                    .ok_or_else(|| CoreError::Encoding(format!("unsupported encoding: {label}")))?;
-                let (cow, _, _) = enc.encode(&text);
-                Ok(cow.into_owned())
-            }
-        }
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("core_text_encode join: {e}")))?;
-    result
-}
 
 /// JSONL 追加（自 perf 迁移；fsync 语义保留，走 spawn_blocking + WorkspaceFsGuard 守卫）。
 ///
@@ -945,18 +924,5 @@ mod tests {
         assert_eq!(parsed.len(), 2);
         assert_eq!(parsed[0]["a"], 1);
         assert_eq!(parsed[1]["b"], 2);
-    }
-
-    #[test]
-    fn core_text_encode_unsupported_returns_encoding_error() {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        let result = runtime.block_on(core_text_encode(
-            "hello".to_string(),
-            Some("nonexistent".to_string()),
-        ));
-        assert!(matches!(result, Err(CoreError::Encoding(_))));
     }
 }

@@ -77,25 +77,6 @@ pub(crate) fn register_if_enabled(
 /// MCP 状态查询结果（camelCase 序列化，对齐 commandManifest 契约
 /// `{ enabled, execEnabled }`）。
 #[allow(dead_code)]
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct McpEnabledState {
-    /// socket 是否开启（CRISH_MCP_SOCKET=1）
-    pub(crate) enabled: bool,
-    /// execute_js 等高危命令是否二次开启（CRISH_DEV_MCP_EXEC=1）
-    pub(crate) exec_enabled: bool,
-}
-
-/// 前端查询 MCP 状态（main.tsx setupPluginListeners 前置检查）：
-/// 仅 enabled 时注册插件监听器；execEnabled 决定是否挂 execute_js。
-#[allow(dead_code)]
-#[tauri::command]
-pub(crate) fn workbench_dev_mcp_enabled() -> McpEnabledState {
-    McpEnabledState {
-        enabled: mcp_socket_enabled(),
-        exec_enabled: mcp_exec_enabled(),
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -146,18 +127,5 @@ mod tests {
         assert!(!mcp_exec_enabled());
         clear_env();
     }
-
-    /// 命令返回结构：camelCase 序列化 { enabled, execEnabled }。
-    #[test]
-    fn state_serializes_camel_case() {
-        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        std::env::set_var(MCP_SOCKET_ENV, "1");
-        std::env::set_var(MCP_EXEC_ENV, "1");
-        let state = workbench_dev_mcp_enabled();
-        let json = serde_json::to_value(&state).expect("serialize");
-        assert_eq!(json["enabled"], true);
-        assert_eq!(json["execEnabled"], true);
-        assert!(json.get("exec_enabled").is_none());
-        clear_env();
-    }
 }
+

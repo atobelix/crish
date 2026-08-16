@@ -60,19 +60,6 @@ pub async fn md_render_stream(text: String, stream_mode: bool) -> Result<String,
         .map_err(|e| CoreError::Internal(format!("md_render_stream join: {e}")))
 }
 
-/// 代码高亮（不包 `<code>` 标签，仅返回内部 HTML 片段）。
-///
-/// - 已知语言：syntect class style 输出 `<span class="...">`
-/// - 未知/无语言：HTML escape
-/// - 结果自带 LRU 缓存
-///
-/// wire 名 = `core_highlight_code`（T03.4 更名 core_*）。
-#[tauri::command(rename = "core_highlight_code")]
-pub async fn highlight_code(code: String, lang: Option<String>) -> Result<String, CoreError> {
-    tokio::task::spawn_blocking(move || conex_markdown::highlight_code(&code, lang.as_deref()))
-        .await
-        .map_err(|e| CoreError::Internal(format!("highlight_code join: {e}")))
-}
 
 /// 清空 markdown 渲染缓存与代码高亮缓存。
 ///
