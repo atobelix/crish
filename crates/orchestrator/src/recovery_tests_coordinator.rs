@@ -88,7 +88,10 @@ async fn ladder2_activation_path_and_acknowledge() {
             .as_ref()
             .and_then(|m| m.get("kind"))
             .and_then(|k| k.as_str()),
-        Some("steering")
+        Some(session_loop::steering::metadata_kind_wire(
+            conex_types::message::AgentMessageMetadataKind::Steering
+        )
+        .as_str())
     );
     drop(queue);
     // acknowledge：主 agent 已处理 → pending = false

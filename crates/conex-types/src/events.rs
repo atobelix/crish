@@ -1155,8 +1155,8 @@ pub enum AgentEvent {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         milestone_index: Option<u32>,
     },
-    /// nudge 入队动作（EV-08：PendingNudgeChannel 入队；overwrote = 容量满
-    /// 覆盖最旧）
+    /// nudge 入队动作（决策 9：PendingNudgeChannel 已删——本事件为已发布
+    /// 事件类型，事件面冻结保留；当前无生产者，字段结构保留供观测/契约）
     #[serde(rename = "nudge-enqueued", rename_all = "camelCase")]
     NudgeEnqueued {
         session_id: String,
