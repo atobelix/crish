@@ -67,7 +67,6 @@ function createProps(
     searchHighlightQuery: '',
     expandedUserMsgs: {},
     onToggleExpandUser: vi.fn(),
-    onWithdraw: vi.fn(),
     onShowToast: vi.fn(),
     hideThinkingBlock: false,
     inPlanMode: false,

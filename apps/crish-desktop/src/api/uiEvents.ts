@@ -98,6 +98,7 @@ export const UI_EVENT_NAMES = [
   'stop-generation',
   'close-all-popovers',
   'security-migration-failed',
+  'retract-backfill',
 ] as const satisfies readonly UiEventName[];
 
 const UI_EVENT_NAME_SET: ReadonlySet<string> = new Set<string>(UI_EVENT_NAMES);

@@ -366,3 +366,9 @@ async fn collect_post_boundary_write_paths(
     Ok(paths)
 }
 
+// ── 测试（SR-01 · 测外置 · 旁挂 retraction_commands_tests.rs · ≠ EL）──
+
+#[cfg(test)]
+#[path = "retraction_commands_tests.rs"]
+mod tests;
+

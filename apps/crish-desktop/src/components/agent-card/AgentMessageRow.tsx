@@ -1,6 +1,9 @@
 import React, { useCallback, useState } from 'react';
 import type { FileDiff, SessionMessage } from '../../store/types';
-import { ChatAssistantMessageRow, ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
+import {
+  ChatAssistantMessageRow,
+  ChatUserMessageRow,
+} from '../chat-message-row/ChatMessageRow';
 import { useAgentToolApproval } from '../../hooks/useAgentToolApproval';
 
 export function AgentMessageRow({
@@ -22,15 +25,15 @@ export function AgentMessageRow({
   onOpenPath: (filePath: string) => void;
   onOpenTerminal: () => void;
 }) {
-  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+  const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>(
+    {}
+  );
   const onToggleTool = useCallback((toolId: string, currentlyOpen: boolean) => {
     setExpandedTools((prev) => ({ ...prev, [toolId]: !currentlyOpen }));
   }, []);
   // ApprovalAskCard 二次确认后落地：busy + remember 白名单
-  const { approvalBusy, onApprovalAllow, onApprovalDeny } = useAgentToolApproval(
-    parentSessionId,
-    agentId,
-  );
+  const { approvalBusy, onApprovalAllow, onApprovalDeny } =
+    useAgentToolApproval(parentSessionId, agentId);
 
   if (msg.sender === 'user') {
     return (
@@ -41,7 +44,6 @@ export function AgentMessageRow({
         isExpanded={true}
         onToggleExpand={() => {}}
         onTogglePin={() => {}}
-        onWithdraw={() => {}}
         messageIndex={idx}
         virtualScrollManager={null}
       />

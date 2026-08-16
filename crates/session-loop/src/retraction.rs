@@ -4,7 +4,7 @@
 //!
 //! `prepare_retraction` 是「先停后截」的**原子**编排（一次串行事务）：
 //!
-//! ```
+//! ```text
 //! 1. [校验] 会话存在、target 可定位 → boundary_candidate = resolve_boundary_seq
 //!    找不到 → Err(NotFound)，不进入冻结（fail-closed，不半冻结）
 //! 2. [停 run] 对会话运行中 run 投 L3 force_cancel（reason="retraction:<seq>"）

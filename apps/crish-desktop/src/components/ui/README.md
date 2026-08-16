@@ -13,11 +13,11 @@ components/
 └── App*/TopBar…    ← 第三层：页面/编排层
 ```
 
-| 层 | 允许依赖 | 禁止依赖 |
-|---|---|---|
-| ui/ 原子层 | react、react-dom、`@radix-ui/*`、`src/styles/tokens.css`（CSS 变量）、`src/styles/z-index.css` | 一切业务组件（`components/` 下除 `ui/` 外的一切）、一切 store（zustand）、`hooks/`、`api/`、`services/`、其他域目录 |
-| 业务组件层 | ui/、共享 hooks（`hooks/`）、store facade（`api/storeAccess.ts`）、api/、services/ | 跨业务域直接 import（复用先下沉到 ui/ 或抽共享 hook） |
-| 页面/编排层 | 全部上层 | 编排职责不外泄 |
+| 层          | 允许依赖                                                                                       | 禁止依赖                                                                                                            |
+| ----------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| ui/ 原子层  | react、react-dom、`@radix-ui/*`、`src/styles/tokens.css`（CSS 变量）、`src/styles/z-index.css` | 一切业务组件（`components/` 下除 `ui/` 外的一切）、一切 store（zustand）、`hooks/`、`api/`、`services/`、其他域目录 |
+| 业务组件层  | ui/、共享 hooks（`hooks/`）、store facade（`api/storeAccess.ts`）、api/、services/             | 跨业务域直接 import（复用先下沉到 ui/ 或抽共享 hook）                                                               |
+| 页面/编排层 | 全部上层                                                                                       | 编排职责不外泄                                                                                                      |
 
 门禁脚本：`npm run check:ui-layer`——扫描本目录全部文件的 import，
 命中 `components/(?!ui)`、`store/`、`hooks/`、`api/`、`services/` 任一
@@ -40,15 +40,15 @@ components/
 
 ## 三、原子组件清单（API 摘要）
 
-| 组件 | 目录 | 职责/锚点 |
-|---|---|---|
-| Button | `ui/Button/` | 对齐 `ui-btn` 体系语义：variant（primary/secondary/ghost/danger）+ size（sm/md）+ icon + loading + block |
-| Input | `ui/Input/` | text/search/password 三型 + label + error + hint + clearable + prefixIcon/suffix |
-| Dialog | `ui/Dialog/` | 弹窗基座锚点：FocusTrap 三件套（focusTrap + useRestoreFocus + useAnimatedPresence 为目录内私有实现）+ Esc + backdrop + aria；**T05.2 已收敛 7 套核心弹窗**（TelemetryDialog/CheatsheetModal/WithdrawConfirmDialog→`overlay/`、SkillEditorModal→`settings-skills/`、SettingsPanel/SettingsRulesTab→`settings/`、FirstRunWizard→`overlay/`），消费方从 barrel `'../ui'` 引入；T05.2 新增消费能力：`variant: 'fullscreen'`（SettingsPanel 全屏盖层）、`showCloseButton`（Withdraw 无关闭按钮设计）、`overlayClassName`（--dialog-z 层级覆盖）、`ariaLabel`（无 title 时的可访问名称）、`--dialog-width`（尺寸覆盖） |
-| Menu | `ui/Menu/` | 菜单基座锚点：从 UnifiedSelectPopover 提炼；坐标计算单源 `position.ts`；后续 12 套菜单收敛于此 |
-| Tooltip | `ui/Tooltip/` | 从旧 Tooltip 提炼的单实现，API 保持 {content, side, disabled, delayHide} 不变 |
-| Select | `ui/Select/` | 基于 ui/Menu 的受控 Select（listbox 语义），供 SettingsSelect 等迁移 |
-| ConfirmDialog | `ui/ConfirmDialog/` | 确认对话框基座（02-E3/C-7，03-detail T15）：基于 ui/Dialog 封装 alertdialog 语义；契约见 04-detail §2.1.1——初始焦点取消钮（danger 不默认聚焦确认）、Esc 取消+焦点归还、无关闭按钮；配合 `hooks/useConfirmGate` Promise 桥消费（批次 4.1 的 9 文件 window.confirm 替换落点） |
+| 组件          | 目录                | 职责/锚点                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Button        | `ui/Button/`        | 对齐 `ui-btn` 体系语义：variant（primary/secondary/ghost/danger）+ size（sm/md）+ icon + loading + block                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| Input         | `ui/Input/`         | text/search/password 三型 + label + error + hint + clearable + prefixIcon/suffix                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Dialog        | `ui/Dialog/`        | 弹窗基座锚点：FocusTrap 三件套（focusTrap + useRestoreFocus + useAnimatedPresence 为目录内私有实现）+ Esc + backdrop + aria；**T05.2 已收敛核心弹窗**（TelemetryDialog/CheatsheetModal/SkillEditorModal→`settings-skills/`、SettingsPanel/SettingsRulesTab→`settings/`、FirstRunWizard→`overlay/`），消费方从 barrel `'../ui'` 引入；T05.2 新增消费能力：`variant: 'fullscreen'`（SettingsPanel 全屏盖层）、`showCloseButton`（危险操作确认弹窗无关闭按钮设计）、`overlayClassName`（--dialog-z 层级覆盖）、`ariaLabel`（无 title 时的可访问名称）、`--dialog-width`（尺寸覆盖） |
+| Menu          | `ui/Menu/`          | 菜单基座锚点：从 UnifiedSelectPopover 提炼；坐标计算单源 `position.ts`；后续 12 套菜单收敛于此                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Tooltip       | `ui/Tooltip/`       | 从旧 Tooltip 提炼的单实现，API 保持 {content, side, disabled, delayHide} 不变                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| Select        | `ui/Select/`        | 基于 ui/Menu 的受控 Select（listbox 语义），供 SettingsSelect 等迁移                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ConfirmDialog | `ui/ConfirmDialog/` | 确认对话框基座（02-E3/C-7，03-detail T15）：基于 ui/Dialog 封装 alertdialog 语义；契约见 04-detail §2.1.1——初始焦点取消钮（danger 不默认聚焦确认）、Esc 取消+焦点归还、无关闭按钮；配合 `hooks/useConfirmGate` Promise 桥消费（批次 4.1 的 9 文件 window.confirm 替换落点）                                                                                                                                                                                                                                                                                                      |
 
 ## 四、内部共享约定
 

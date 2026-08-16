@@ -303,14 +303,10 @@ export function useChatCardState({
   });
 
   const {
-    handleWithdraw,
     handleRegenerate,
     handleBranch,
     handleRetract,
     handleExportMarkdown,
-    pendingWithdraw,
-    confirmWithdraw,
-    cancelWithdraw,
   } = useChatHandlers({
     wsId,
     activeSessionId,
@@ -426,14 +422,10 @@ export function useChatCardState({
     showScrollToBottom,
     scrollToBottom,
     composerProps,
-    handleWithdraw,
     handleRegenerate,
     handleBranch,
     handleRetract,
     handleExportMarkdown,
-    pendingWithdraw,
-    confirmWithdraw,
-    cancelWithdraw,
     approvalState,
     openDiffInRightPanel,
     isFiltering,

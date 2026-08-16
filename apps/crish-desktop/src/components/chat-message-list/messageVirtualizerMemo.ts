@@ -31,7 +31,6 @@ export interface MessageVirtualizerProps {
   searchHighlightQuery?: string;
   expandedUserMsgs: Record<string, boolean>;
   onToggleExpandUser: (msgId: string) => void;
-  onWithdraw: (msgId: string, text: string) => void;
   onShowToast: (message: string) => void;
   hideThinkingBlock: boolean;
   inPlanMode: boolean;
@@ -81,7 +80,6 @@ export const MEMO_COMPARE_FIELDS = [
   'searchHighlightQuery',
   'expandedUserMsgs',
   'onToggleExpandUser',
-  'onWithdraw',
   'onShowToast',
   'hideThinkingBlock',
   'inPlanMode',
@@ -165,7 +163,6 @@ export function messageVirtualizerPropsEqual(
     prev.jumpToPinned === next.jumpToPinned &&
     prev.togglePin === next.togglePin &&
     prev.onToggleExpandUser === next.onToggleExpandUser &&
-    prev.onWithdraw === next.onWithdraw &&
     prev.onShowToast === next.onShowToast &&
     prev.handleRegenerateRow === next.handleRegenerateRow &&
     prev.onBranch === next.onBranch &&

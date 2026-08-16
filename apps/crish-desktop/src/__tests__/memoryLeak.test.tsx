@@ -8,7 +8,15 @@
  */
 import React from 'react';
 import { render, act } from '@testing-library/react';
-import { describe, expect, it, vi, beforeAll, afterAll, beforeEach } from 'vitest';
+import {
+  describe,
+  expect,
+  it,
+  vi,
+  beforeAll,
+  afterAll,
+  beforeEach,
+} from 'vitest';
 import { eventBus } from '../services/EventBus';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
@@ -32,7 +40,8 @@ let origError: typeof console.error;
 beforeAll(() => {
   origError = console.error;
   console.error = (...args: unknown[]) => {
-    if (typeof args[0] === 'string' && args[0].includes('not wrapped in act')) return;
+    if (typeof args[0] === 'string' && args[0].includes('not wrapped in act'))
+      return;
     origError.call(console, ...args);
   };
 });
@@ -133,17 +142,19 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
 
     // 拦截 layoutStore 订阅逻辑以准确跟踪 active subscriptions 数量
     const originalSubscribe = useLayoutStore.subscribe;
-    const subscribeSpy = vi.spyOn(useLayoutStore, 'subscribe').mockImplementation((...args: any[]) => {
-      activeSubscriptions++;
-      // @ts-expect-error type override
-      const unsub = originalSubscribe.apply(useLayoutStore, args);
-      const wrappedUnsub = () => {
-        activeSubscriptions--;
-        unsub();
-      };
-      unsubCalls.push(wrappedUnsub);
-      return wrappedUnsub;
-    });
+    const subscribeSpy = vi
+      .spyOn(useLayoutStore, 'subscribe')
+      .mockImplementation((...args: any[]) => {
+        activeSubscriptions++;
+        // @ts-expect-error type override
+        const unsub = originalSubscribe.apply(useLayoutStore, args);
+        const wrappedUnsub = () => {
+          activeSubscriptions--;
+          unsub();
+        };
+        unsubCalls.push(wrappedUnsub);
+        return wrappedUnsub;
+      });
 
     const baselineActive = activeSubscriptions;
 
@@ -167,7 +178,8 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
     expect(activeSubscriptions).toBe(baselineActive);
   });
 
-  it('DOM 节点零残留：50 次 Mount/Unmount 循环后，容器 DOM 节点及 body 残留数为 0', () => {    const mockMessages: SessionMessage[] = [
+  it('DOM 节点零残留：50 次 Mount/Unmount 循环后，容器 DOM 节点及 body 残留数为 0', () => {
+    const mockMessages: SessionMessage[] = [
       {
         id: 'msg-leak-1',
         sender: 'user',
@@ -199,7 +211,6 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
       searchHighlightQuery: '',
       expandedUserMsgs: {},
       onToggleExpandUser: vi.fn(),
-      onWithdraw: vi.fn(),
       onShowToast: vi.fn(),
       hideThinkingBlock: false,
       inPlanMode: false,
@@ -260,7 +271,9 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
       unsubs.push(eventBus.on('workspace-switch', () => {}));
     }
     expect(warnSpy).toHaveBeenCalled();
-    expect(warnSpy.mock.calls.some((c) => String(c[0]).includes('possible leak'))).toBe(true);
+    expect(
+      warnSpy.mock.calls.some((c) => String(c[0]).includes('possible leak'))
+    ).toBe(true);
     // 全量退订 → 监听器数回落
     for (const unsub of unsubs) unsub();
     expect(eventBus.listenerCount()).toBe(initialCount);

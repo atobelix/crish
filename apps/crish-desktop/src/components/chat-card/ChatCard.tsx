@@ -9,7 +9,6 @@ import { useChatCardState } from './useChatCardState';
 import { anyProfileHasKey } from '../../api/providerProfiles';
 import { ChatHeader } from './ChatHeader';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
-import { WithdrawConfirmDialog } from '../overlay/WithdrawConfirmDialog';
 
 const ScheduledTasksPanel = lazy(() =>
   import('../settings/ScheduledTasksPanel').then((m) => ({
@@ -202,7 +201,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
                 onProjectChanged={state.handleProjectChanged}
                 onSetChatInput={state.composerProps.setChatInput}
                 onSendFollowUp={state.handleSendFollowUp}
-                onWithdraw={state.handleWithdraw}
                 onRegenerate={state.handleRegenerate}
                 onBranch={state.handleBranch}
                 onShowToast={onShowToast}
@@ -240,17 +238,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             handleGlobalTabClick={handleGlobalTabClick}
           />
         </div>
-
-        {state.pendingWithdraw ? (
-          <WithdrawConfirmDialog
-            scope={state.pendingWithdraw}
-            isOpen={!!state.pendingWithdraw}
-            onConfirm={() => {
-              void state.confirmWithdraw();
-            }}
-            onCancel={state.cancelWithdraw}
-          />
-        ) : null}
       </>
     );
   }

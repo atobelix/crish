@@ -1,18 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { formatBranchUndoToast } from '../../hooks/useToastQueue';
 import { onUiEvent } from '../../api/uiEvents';
 import { generateMessageId } from '../../utils/generateMessageId';
-import {
-  collectRewindScope,
-  type RewindScopeSummary,
-} from '../../api/collectRewindScope';
-import {
-  reverseFileDiffsToDisk,
-  formatReverseFailureToast,
-} from '../../api/reverseFileDiff';
-import { getTerminalState } from '../../store/storeAccess';
 import { getTransport } from '../../api/transport';
 import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
 
@@ -101,74 +92,11 @@ export function useChatHandlers({
     });
   }, [activeSessionId, onShowToast]);
 
-  // ── 撤回编排：收集范围 → 弹二次确认 → 反向还原文件 + 截断消息 ──
-  // 撤回待确认范围：非 null 时显示 WithdrawConfirmDialog
-  const [pendingWithdraw, setPendingWithdraw] =
-    useState<RewindScopeSummary | null>(null);
-
-  const handleWithdraw = useCallback(
-    (msgId: string, _text: string) => {
-      if (!activeSessionId) return;
-      handleStopGeneration();
-      const session = getCompositionRoot().session.getState();
-      const sess = session.sessionsById[activeSessionId];
-      const scope = collectRewindScope(sess, msgId);
-      if (!scope) {
-        onShowToast('找不到要撤回的消息');
-        return;
-      }
-      // 弹二次确认；text 回填推迟到确认后（避免取消时覆盖输入框）
-      setPendingWithdraw(scope);
-    },
-    [activeSessionId, handleStopGeneration, onShowToast]
-  );
-
-  const confirmWithdraw = useCallback(async () => {
-    const scope = pendingWithdraw;
-    if (!scope || !activeSessionId) return;
-    setPendingWithdraw(null);
-
-    // 1. 反向还原文件（逆序；失败不阻断消息撤回，仅 toast）
-    if (scope.fileDiffs.length) {
-      try {
-        const result = await reverseFileDiffsToDisk(scope.fileDiffs);
-        const failToast = formatReverseFailureToast(
-          result.failed,
-          result.results
-        );
-        if (failToast) onShowToast(failToast);
-        // 从 diff 面板移除已还原文件
-        const terminal = getTerminalState();
-        for (const fp of scope.filePaths) {
-          terminal.removeDiffFile(fp);
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        onShowToast(`还原文件失败：${msg}`);
-      }
-    }
-
-    // 2. 截断消息（withdrawMessage 内部会保存快照）
-    getCompositionRoot()
-      .session.getState()
-      .withdrawMessage(wsId, activeSessionId, scope.targetMessageId);
-
-    // 3. 回填被撤回的用户消息文本到输入框（保留输入框已有内容）
-    if (scope.lastUserMessageText) {
-      setChatInput((prev) => {
-        const trimmed = (prev || '').trim();
-        if (!trimmed) return scope.lastUserMessageText;
-        // 已有内容：被撤回文本置前（更早的用户意图），现有内容保留在后
-        return `${scope.lastUserMessageText}\n${trimmed}`;
-      });
-    }
-  }, [pendingWithdraw, activeSessionId, onShowToast, wsId, setChatInput]);
-
-  const cancelWithdraw = useCallback(() => {
-    setPendingWithdraw(null);
-  }, []);
-
   // ── R1 撤回（统一输入流收敛战役）：引擎撤回入口 + 回填消费 ──
+  // 注：D5（R6 收口）已废弃消息级撤回 UI 链——用户发起的「撤回已发消息」
+  // 唯一路径 = ChatComposer 撤回按钮 → core_session_retract → 引擎
+  // timeline-truncate；withdrawMessage action 本体保留（send-failure
+  // 乐观回滚 / regenerate 消费）。
 
   // timeline-truncate 消费端派发的回填事件 → setChatInput + setComposerDraft
   //（数据源 = boundary user 节点 text，不依赖 draft 快照）
@@ -272,12 +200,8 @@ export function useChatHandlers({
 
   return {
     handleExportMarkdown,
-    handleWithdraw,
     handleRegenerate,
     handleBranch,
     handleRetract,
-    pendingWithdraw,
-    confirmWithdraw,
-    cancelWithdraw,
   };
 }

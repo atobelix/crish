@@ -1,7 +1,7 @@
 /**
  * ui/Dialog 弹窗基座（PE-05 T05.1.3）
  *
- * 后续 7 套核心弹窗（TelemetryDialog/CheatsheetModal/WithdrawConfirmDialog/
+ * 后续 7 套核心弹窗（TelemetryDialog/CheatsheetModal/
  * SkillEditorModal/SettingsPanel/FirstRunWizard/SettingsRulesTab 编辑器）
  * 的收敛锚点（T05.2）。内部装配 = 私有 FocusTrap 三件套 + Esc 关闭 +
  * backdrop 点击关闭 + aria-modal/labelledby/describedby + 进出场动画
@@ -35,7 +35,7 @@ export interface DialogProps {
   title?: React.ReactNode;
   /** 描述文案（aria-describedby 关联） */
   description?: React.ReactNode;
-  /** 语义角色：alertdialog 供危险操作确认（WithdrawConfirmDialog） */
+  /** 语义角色：alertdialog 供危险操作确认 */
   role?: DialogRole;
   /** 尺寸档（fullscreen 形态下忽略） */
   size?: DialogSize;
@@ -45,7 +45,7 @@ export interface DialogProps {
   initialFocusRef?: React.RefObject<HTMLElement | null>;
   /** 是否允许 Esc/backdrop 关闭（FirstRunWizard 强制步进时置 false） */
   dismissible?: boolean;
-  /** 是否渲染头部关闭按钮（WithdrawConfirmDialog 设计上无关闭按钮，置 false） */
+  /** 是否渲染头部关闭按钮（危险操作确认弹窗设计上无关闭按钮，置 false） */
   showCloseButton?: boolean;
   /** 无 title 时的可访问名称（aria-label；SettingsPanel 全屏盖层用） */
   ariaLabel?: string;

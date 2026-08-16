@@ -17,7 +17,7 @@
 
 export type LayerType =
   | 'modal-dialog' // 全局模态弹窗（SettingsPanel, SkillEditorModal, FirstRunWizard）
-  | 'confirm-dialog' // 二次确认对话框（ConfirmDialog, WithdrawConfirmDialog）
+  | 'confirm-dialog' // 二次确认对话框（ConfirmDialog）
   | 'drawer' // 抽屉浮层（ChatStatusRibbons, PlanDrawer）
   | 'context-menu' // 右键上下文菜单（SessionContextMenu, SidebarMenu）
   | 'dropdown-menu' // 下拉菜单（Menu, Select, ModelPicker）

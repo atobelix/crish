@@ -20,7 +20,6 @@ export type ChatUserMessageRowProps = {
   isExpanded: boolean;
   onToggleExpand: (msgId: string) => void;
   onTogglePin: (msgId: string) => void;
-  onWithdraw: (msgId: string, text: string) => void;
   onShowToast?: (message: string) => void;
   messageIndex: number;
   virtualScrollManager: VirtualScrollManager | null;
@@ -40,7 +39,6 @@ function userRowPropsEqual(
     prev.isExpanded === next.isExpanded &&
     prev.onToggleExpand === next.onToggleExpand &&
     prev.onTogglePin === next.onTogglePin &&
-    prev.onWithdraw === next.onWithdraw &&
     prev.onShowToast === next.onShowToast
   );
 }
@@ -52,7 +50,6 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   isExpanded,
   onToggleExpand,
   onTogglePin,
-  onWithdraw,
   onShowToast,
   messageIndex: _messageIndex,
   virtualScrollManager,
@@ -95,10 +92,8 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     });
   }, [msg.text, onShowToast]);
 
-  // 撤回：委托上层 handleWithdraw，由其收集范围 + 弹二次确认 + 反向还原
-  const handleWithdrawClick = useCallback(() => {
-    onWithdraw(msg.id, msg.text || '');
-  }, [msg.id, msg.text, onWithdraw]);
+  // 撤回（D5/R6 收口）：消息级撤回 UI 链已废弃——用户发起的撤回唯一路径
+  // = ChatComposer 撤回按钮 → 引擎 core_session_retract（timeline-truncate）。
 
   const toggleExpand = useCallback(() => {
     if (isLong) {
@@ -160,7 +155,6 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           copied={copied}
           onCopy={handleCopy}
           onTogglePin={() => onTogglePin(msg.id)}
-          onWithdraw={handleWithdrawClick}
         />
       </div>
     </div>

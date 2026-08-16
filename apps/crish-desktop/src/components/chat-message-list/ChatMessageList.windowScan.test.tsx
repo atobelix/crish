@@ -127,7 +127,6 @@ function renderList(messages: SessionMessage[]) {
       onProjectChanged={vi.fn()}
       onSetChatInput={vi.fn()}
       onSendFollowUp={vi.fn()}
-      onWithdraw={vi.fn()}
       onRegenerate={vi.fn()}
       onBranch={vi.fn()}
       onShowToast={vi.fn()}
@@ -292,7 +291,6 @@ function renderListProps(messages: SessionMessage[]) {
       onProjectChanged={vi.fn()}
       onSetChatInput={vi.fn()}
       onSendFollowUp={vi.fn()}
-      onWithdraw={vi.fn()}
       onRegenerate={vi.fn()}
       onBranch={vi.fn()}
       onShowToast={vi.fn()}

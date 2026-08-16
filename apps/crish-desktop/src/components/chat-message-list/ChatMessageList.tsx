@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import type { FileDiff, SessionAgent, SessionMessage } from '../../store/types';
 import {
@@ -53,7 +60,6 @@ export interface ChatMessageListProps {
   onProjectChanged: () => void;
   onSetChatInput: (text: string) => void;
   onSendFollowUp?: (prompt: string) => void;
-  onWithdraw: (msgId: string, text: string) => void;
   onRegenerate: (userText: string, assistantMsgId: string) => void;
   onBranch: () => void;
   onShowToast: (message: string) => void;
@@ -77,7 +83,6 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   showAllMessages = false,
   onSetChatInput,
   onSendFollowUp,
-  onWithdraw,
   onRegenerate,
   onBranch,
   onShowToast,
@@ -147,7 +152,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     return tokens.length ? tokens : null;
   }, [searchHighlightQuery]);
   const searchNormQuery = useMemo(
-    () => (searchHighlightQuery ? normalizeSearchQuery(searchHighlightQuery) : ''),
+    () =>
+      searchHighlightQuery ? normalizeSearchQuery(searchHighlightQuery) : '',
     [searchHighlightQuery]
   );
   const searchMatch = useMemo(() => {
@@ -164,7 +170,10 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   // 搜索命中结果不随 token 变化；windowScanKey 降为 id 签名（不再按引用重扫）。
   // 非流式期恢复 messages 引用扫描（搜索编辑/审批时命中需即时响应）。
   const processingNow = useMemo(
-    () => messages.some((m) => m.sender === 'assistant' && m.status === 'processing'),
+    () =>
+      messages.some(
+        (m) => m.sender === 'assistant' && m.status === 'processing'
+      ),
     [messages]
   );
 
@@ -268,8 +277,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   ]);
 
   const permissionMode = usePermissionField(selectPermissionMode);
-  const hideThinkingBlock = useSettingsField(
-    (s) => Boolean(s.appSettings?.hideThinkingBlock)
+  const hideThinkingBlock = useSettingsField((s) =>
+    Boolean(s.appSettings?.hideThinkingBlock)
   );
   const planModeEnabled = usePermissionField(selectPlanModeEnabled);
   const planApproved = usePermissionField(selectPlanApproved);
@@ -338,7 +347,6 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
         searchHighlightQuery={searchHighlightQuery}
         expandedUserMsgs={expandedUserMsgs}
         onToggleExpandUser={onToggleExpandUser}
-        onWithdraw={onWithdraw}
         onShowToast={onShowToast}
         hideThinkingBlock={hideThinkingBlock}
         inPlanMode={inPlanMode}

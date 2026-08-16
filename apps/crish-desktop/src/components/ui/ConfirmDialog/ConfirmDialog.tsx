@@ -4,7 +4,7 @@
  * 契约（04-detail §2.1.1，实现与验收基线）：
  * - 基于 ui/Dialog 封装确认语义：role="alertdialog" + title→aria-labelledby
  *   + description→aria-describedby；
- * - 初始焦点落取消钮（与 WithdrawConfirmDialog 同惯例；danger 变体确认钮
+ * - 初始焦点落取消钮（danger 变体确认钮
  *   不默认聚焦——本组件始终以取消钮为初始焦点）；
  * - Esc = 取消 + 归还原焦点（继承 Dialog 三件套：FocusTrap/useRestoreFocus/
  *   dialogStack）；Enter = 浏览器原生激活当前聚焦钮，**不劫持为确认**
@@ -13,7 +13,7 @@
  * - 受控组件：不管理 open 状态（无内部状态机），onConfirm/onCancel 由调用方
  *   或 hooks/useConfirmGate Promise 桥提供。
  *
- * 文案模板（04-detail §2.1.5，对齐 WithdrawConfirmDialog 风格）：
+ * 文案模板（04-detail §2.1.5）：
  * 标题 = 动词短语（「放弃修改」「删除对话」「清空用量」「强制取消」…）；
  * description = 原 confirm 全文（保留「不可逆/永久丢失」等后果说明）；
  * 按钮 = [取消][确认]，危险项确认钮 danger 变体 + 「确认删除/确认放弃/…」。
@@ -99,10 +99,20 @@ export function ConfirmDialog({
       footer={
         // Dialog 的 .dialogFooter 已提供 flex + gap 布局（消费方可经 className 覆盖）
         <div>
-          <Button ref={cancelButtonRef} type="button" variant="secondary" onClick={cancel}>
+          <Button
+            ref={cancelButtonRef}
+            type="button"
+            variant="secondary"
+            onClick={cancel}
+          >
             {cancelLabel}
           </Button>
-          <Button type="button" variant={danger ? 'danger' : 'primary'} disabled={disabled} onClick={confirm}>
+          <Button
+            type="button"
+            variant={danger ? 'danger' : 'primary'}
+            disabled={disabled}
+            onClick={confirm}
+          >
             {confirmLabel}
           </Button>
         </div>

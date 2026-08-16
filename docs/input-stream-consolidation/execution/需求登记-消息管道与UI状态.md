@@ -64,4 +64,16 @@
 
 - `SessionMessage.metadata?: unknown`（store/types.ts:400-401，vs generated `JsonValue`）：为避 immer TS4023（递归 JsonValue 触 immer draft 命名问题）的**有意偏差**——R3 审计接受（字段保留、消费面收窄、根 typecheck 绿），**维持至类型面收口**（T4/类型面战役评估时再收敛）。交叉引用：`00-总方案框架.md` §3.1 审计修正记录（R4 补记行）+ `execution/audits/R4-审计报告.md` §5-5 / §9-4。
 
+## 五、已知降级登记（R6 收口 · 统一输入流收敛战役）
+
+> 本节登记「数据源已删、消费面宽容保留」的已知降级。纪律：登记 ≠ 豁免清理——改道/清理归 R9/收束评估，不在本轮实现；消费面保持「宽容读取、静默不触发、不报错」现状。
+
+### 5.1 mobile 终端流式输出 tool-update 数据源消失（决策 1 连锁）
+
+- **背景**：R1（`317d7c5a`，决策 1）删除引擎 `tool-update` 死契约（`AgentEvent::ToolUpdate` 变体 + 全链翻译/归一器 + 双注册表 JSON + generated）。**R1 零命中断言仅覆盖 `crates packages`**——mobile 属 `apps/` 域，不在该断言扫描面（TU1 详案字面口径「crates apps packages 全零」未达成，以本登记为准）。
+- **降级事实**：`apps/crish-mobile` 终端流式输出展示面（terminalWiring / terminalChunks / sessionPreview / EventRow / streamingTypes / terminalEvents 生产 + 15 测试文件，均为手写串非 generated）仍消费 `tool-update` 帧——引擎不再发射后**数据源消失**：宽容读取路径**无报错、静默不触发**（mobile typecheck 恰 16 基线错零新增实证——R6 审计 §8）。`eventsDao.ts:148-159` / `cachePolicy.ts:209-230` 两处已先行登记（R1 内），本节覆盖终端/预览面其余 ~20 处。
+- **接受理由**：终端流式输出为辅助展示面，数据源消失仅致该展示静默不更新（主消息流/事件轨道不受影响）；改造面大（mobile 域手写串 + 测试面）而收益为展示面卫生，归 R9/收束评估统一改道（届时一并处理 TU1 断言口径与手写串清理）。
+- **后续改道项（归 R9/收束评估，不在本轮实现）**：① mobile 终端/预览面 `tool-update` 手写串清理或改道 `tool-end` 结果面；② TU1 断言口径修正为「crates packages 零命中 + apps/crish-mobile 登记降级」；③ 若保留终端流式需求，登记为「工具执行进度」新数据源需求（E3 候选，与 M 系需求同层评估）。
+- 交叉引用：`execution/00-删除清单.md` §6 ToolUpdate 行（R6 回填）、`execution/audits/R6-审计报告.md` §1.4（TU1 黄项 4）。
+
 _维护：对应轮次评估后回填状态（已实现 / 已裁决不做 / 立项轮次）；本文件为登记不承诺。_

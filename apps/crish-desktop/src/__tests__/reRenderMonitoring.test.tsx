@@ -272,7 +272,6 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
       searchHighlightQuery: '',
       expandedUserMsgs: {},
       onToggleExpandUser: vi.fn(),
-      onWithdraw: vi.fn(),
       onShowToast: vi.fn(),
       hideThinkingBlock: false,
       inPlanMode: false,

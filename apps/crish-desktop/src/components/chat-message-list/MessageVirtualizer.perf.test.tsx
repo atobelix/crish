@@ -25,7 +25,8 @@ let origError: typeof console.error;
 beforeAll(() => {
   origError = console.error;
   console.error = (...args: unknown[]) => {
-    if (typeof args[0] === 'string' && args[0].includes('not wrapped in act')) return;
+    if (typeof args[0] === 'string' && args[0].includes('not wrapped in act'))
+      return;
     origError.call(console, ...args);
   };
 });
@@ -44,7 +45,17 @@ function createMockMessages(count: number): SessionMessage[] {
       text: isUser
         ? `用户问题 ${i}: 请分析性能与内存泄露策略，包含 1000+ 条消息虚拟滚动测试。`
         : `助手回答 ${i}:\n\`\`\`ts\nconst total = ${i};\nconsole.log("Processing message", total);\n\`\`\`\n详细解释内容，确保文本行数足够产生不同测量高度。`,
-      toolCalls: i % 5 === 0 ? [{ id: `tc-${i}`, name: 'read_file', arguments: '{}', status: 'success' }] : undefined,
+      toolCalls:
+        i % 5 === 0
+          ? [
+              {
+                id: `tc-${i}`,
+                name: 'read_file',
+                arguments: '{}',
+                status: 'success',
+              },
+            ]
+          : undefined,
     });
   }
   return msgs;
@@ -74,7 +85,6 @@ function createDefaultProps(messages: SessionMessage[]) {
     searchHighlightQuery: '',
     expandedUserMsgs: {},
     onToggleExpandUser: vi.fn(),
-    onWithdraw: vi.fn(),
     onShowToast: vi.fn(),
     hideThinkingBlock: false,
     inPlanMode: false,
@@ -123,13 +133,17 @@ describe('MessageVirtualizer — 长会话 (1000+ 消息) 性能与高度断言'
   });
 
   it('高度测量与 Manager 缓存一致性：setActual 之后 offset 正确累加且未变动高度保留', () => {
-    const manager = new VirtualScrollManager({ fallbackHeight: MESSAGE_ESTIMATED_ROW_HEIGHT });
+    const manager = new VirtualScrollManager({
+      fallbackHeight: MESSAGE_ESTIMATED_ROW_HEIGHT,
+    });
     const ids = Array.from({ length: 1500 }, (_, i) => `msg-${i}`);
     manager.syncOrder(ids);
 
     expect(manager.getHeight('msg-0')).toBe(MESSAGE_ESTIMATED_ROW_HEIGHT);
     expect(manager.getOffset(10)).toBe(10 * MESSAGE_ESTIMATED_ROW_HEIGHT);
-    expect(manager.getTotalHeight(1500)).toBe(1500 * MESSAGE_ESTIMATED_ROW_HEIGHT);
+    expect(manager.getTotalHeight(1500)).toBe(
+      1500 * MESSAGE_ESTIMATED_ROW_HEIGHT
+    );
 
     // 动态模拟元素测量反馈 setActual
     manager.setActual('msg-0', 350);
@@ -152,7 +166,9 @@ describe('MessageVirtualizer — 长会话 (1000+ 消息) 性能与高度断言'
     const props = createDefaultProps(messages);
 
     const { container } = render(<MessageVirtualizer {...props} />);
-    const listEl = container.querySelector('[data-virtual-scroll="true"]') as HTMLElement;
+    const listEl = container.querySelector(
+      '[data-virtual-scroll="true"]'
+    ) as HTMLElement;
     expect(listEl).not.toBeNull();
 
     // 模拟 100 次高频滚动（模拟用户快速拖拽滚动条从 0 滚到 200,000px）
@@ -161,7 +177,10 @@ describe('MessageVirtualizer — 长会话 (1000+ 消息) 性能与高度断言'
 
     for (let i = 0; i < 100; i++) {
       const scrollTop = i * scrollStep;
-      Object.defineProperty(listEl, 'scrollTop', { value: scrollTop, configurable: true });
+      Object.defineProperty(listEl, 'scrollTop', {
+        value: scrollTop,
+        configurable: true,
+      });
 
       const startTime = performance.now();
       act(() => {
@@ -172,7 +191,8 @@ describe('MessageVirtualizer — 长会话 (1000+ 消息) 性能与高度断言'
     }
 
     const maxFrameTime = Math.max(...frameDurations);
-    const avgFrameTime = frameDurations.reduce((a, b) => a + b, 0) / frameDurations.length;
+    const avgFrameTime =
+      frameDurations.reduce((a, b) => a + b, 0) / frameDurations.length;
 
     // 性能帧率断言：单帧最大执行耗时控制帧预算量级，平均单帧耗时保持低位。
     // 阈值按并行测试负载放宽（jsdom 非真实帧渲染；真回归会超一个量级）

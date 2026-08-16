@@ -37,7 +37,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   searchHighlightQuery,
   expandedUserMsgs,
   onToggleExpandUser,
-  onWithdraw,
   onShowToast,
   hideThinkingBlock,
   inPlanMode,
@@ -301,7 +300,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                     isExpanded={!!expandedUserMsgs[msg.id]}
                     onToggleExpand={onToggleExpandUser}
                     onTogglePin={togglePin}
-                    onWithdraw={onWithdraw}
                     onShowToast={onShowToast}
                     messageIndex={virtualIndex}
                     virtualScrollManager={manager}
