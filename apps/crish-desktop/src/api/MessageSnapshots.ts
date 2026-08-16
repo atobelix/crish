@@ -122,12 +122,7 @@ export interface SnapshotEntry {
   sessionId: string;
   /** 触发快照的操作类型（R1：timeline-truncate 为撤回投影截断快照） */
   operation:
-    | 'withdraw'
-    | 'regenerate'
-    | 'archive'
-    | 'batch-pin'
-    | 'edit'
-    | 'timeline-truncate';
+    'withdraw' | 'regenerate' | 'archive' | 'batch-pin' | 'timeline-truncate';
   /** 被截断或修改前的完整消息副本（用于直接恢复） */
   messages: SessionMessage[];
   /** 快照时的置顶消息 id 列表 */

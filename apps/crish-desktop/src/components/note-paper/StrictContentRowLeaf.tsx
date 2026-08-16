@@ -17,6 +17,10 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { TurnIntoIntent } from '@crish/block-paper';
 import {
+  defaultEditSessionRegistry,
+  type EditSessionRegistry,
+} from '../../api/editSession';
+import {
   bindingFromStrictMdPrefixProps,
   commitProductMdPrefixFromLeaf,
   type ProductMdPrefixBinding,
@@ -44,6 +48,10 @@ export type StrictContentRowLeafProps = {
   /** 提交结果回调（测 / 宿主；不得旁路写盘） */
   onMdPrefixCommit?: (result: ProductMdPrefixCommitResult) => void;
   onCommittedIntent?: (intent: TurnIntoIntent) => void;
+  /** CT-01 对象级 rev：打开编辑会话时记账（未知可缺省，宿主接线时传入） */
+  baseRev?: number;
+  /** 编辑会话注册表（测注入独立实例；缺省 = 前端全局单例） */
+  editSession?: EditSessionRegistry;
   className?: string;
 };
 
@@ -111,6 +119,8 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
   mdPrefixBinding: bindingProp,
   onMdPrefixCommit,
   onCommittedIntent,
+  baseRev,
+  editSession: editSessionProp,
   className,
 }) => {
   const binding = useMemo(
@@ -129,22 +139,26 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
   const elRef = useRef<HTMLDivElement | null>(null);
   /** 防 input 重入 / 未完成 commit 交错 */
   const commitInFlight = useRef(false);
-  /** 是否已由用户本地编辑（投影刷新时避免抢回） */
-  const dirtyRef = useRef(false);
+  /** 编辑会话注册表：会话 open 期投影不覆盖本地编辑；commit/invalidate 后放行 */
+  const editSession = editSessionProp ?? defaultEditSessionRegistry;
 
   // contenteditable 非受控：挂载 / 投影刷新时写 textContent（勿用 React children 控光标）
   useEffect(() => {
     if (!writable) return;
     const el = elRef.current;
     if (!el) return;
-    if (composingRef.current || commitInFlight.current || dirtyRef.current) {
+    if (
+      composingRef.current ||
+      commitInFlight.current ||
+      editSession.isOpen(blockId)
+    ) {
       return;
     }
     const next = projectionText ?? '';
     if (el.textContent !== next) {
       el.textContent = next;
     }
-  }, [projectionText, writable]);
+  }, [projectionText, writable, editSession, blockId]);
 
   const runCommit = useCallback(
     async (plain: string) => {
@@ -169,13 +183,23 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
           if (el && el.textContent !== stripped) {
             el.textContent = stripped;
           }
-          dirtyRef.current = true;
+          // 编辑会话提交并失效：推进 rev、清会话、广播失效（订阅方刷新）。
+          // 显式复位「投影不可覆盖本地编辑」保护——叶重新可被投影刷新写入。
+          editSession.commit(blockId);
         }
       } finally {
         commitInFlight.current = false;
       }
     },
-    [writable, blockId, flavour, binding, onCommittedIntent, onMdPrefixCommit]
+    [
+      writable,
+      blockId,
+      flavour,
+      binding,
+      onCommittedIntent,
+      onMdPrefixCommit,
+      editSession,
+    ]
   );
 
   const onCompositionStart = useCallback(() => {
@@ -185,21 +209,23 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
   const onCompositionEnd = useCallback(
     (ev: React.CompositionEvent<HTMLDivElement>) => {
       composingRef.current = false;
-      dirtyRef.current = true;
+      // 声明编辑持有（无竞态建会话，记录 baseRev）；提交成功后 commit 关闭
+      editSession.open(blockId, baseRev);
       const plain = ev.currentTarget.textContent ?? '';
       void runCommit(plain);
     },
-    [runCommit]
+    [runCommit, editSession, blockId, baseRev]
   );
 
   const onInput = useCallback(
     (ev: React.FormEvent<HTMLDivElement>) => {
-      dirtyRef.current = true;
+      // 首次合法输入声明编辑持有；提交成功后 commit 关闭（幂等，已持有不覆盖）
+      editSession.open(blockId, baseRev);
       const plain = ev.currentTarget.textContent ?? '';
       if (composingRef.current) return;
       void runCommit(plain);
     },
-    [runCommit]
+    [runCommit, editSession, blockId, baseRev]
   );
 
   const rootClass = [styles.text, className].filter(Boolean).join(' ');

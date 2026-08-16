@@ -38,6 +38,7 @@ import {
   tryCommitStrictLeafMdPrefix,
 } from './StrictContentRowLeaf';
 import { NotePaperStrictPanel } from './NotePaperStrictPanel';
+import { EditSessionRegistry } from '../../api/editSession';
 
 // ---------------------------------------------------------------------------
 // 纯逻辑
@@ -118,6 +119,7 @@ describe('StrictContentRowLeaf · DOM 叶宿主', () => {
   it('conn_d3_leaf_writable_input_hash_calls_sink', async () => {
     const mock = createMockTurnIntoSink();
     const onCommit = vi.fn();
+    const sessions = new EditSessionRegistry();
     render(
       <StrictContentRowLeaf
         blockId="b-wr"
@@ -127,6 +129,7 @@ describe('StrictContentRowLeaf · DOM 叶宿主', () => {
         mdPrefixWriteMode="writable"
         mdPrefixSinkSource="injected-sink"
         onMdPrefixCommit={onCommit}
+        editSession={sessions}
       />
     );
     const leaf = screen.getByTestId('note-strict-leaf-b-wr');
@@ -151,6 +154,8 @@ describe('StrictContentRowLeaf · DOM 叶宿主', () => {
     // 剥离后叶缓冲清空；**不**改 data-from-flavour（kind 仍 paragraph 投影）
     expect(leaf).toHaveAttribute('data-from-flavour', 'paragraph');
     expect(leaf.textContent).toBe('');
+    // R2-a②：commit 成功后编辑会话已关闭（显式复位 dirty，投影可再写入）
+    expect(sessions.isOpen('b-wr')).toBe(false);
   });
 
   it('conn_d3_leaf_composing_input_no_sink', async () => {
@@ -161,6 +166,7 @@ describe('StrictContentRowLeaf · DOM 叶宿主', () => {
         flavour="paragraph"
         text=""
         turnIntoSink={mock.sink}
+        editSession={new EditSessionRegistry()}
       />
     );
     const leaf = screen.getByTestId('note-strict-leaf-b-ime');
@@ -183,6 +189,75 @@ describe('StrictContentRowLeaf · DOM 叶宿主', () => {
     await waitFor(() => {
       expect(mock.calls).toHaveLength(1);
     });
+  });
+
+  it('conn_d3_leaf_commit_then_projection_refresh_rewrites', async () => {
+    // R2-a② 验收：本地编辑 commit 成功后，投影再次刷新能写入该叶
+    // （dirty 后投影可重覆盖——dirty-after-commit 不再永久脱节）。
+    const mock = createMockTurnIntoSink();
+    const sessions = new EditSessionRegistry();
+    const props = {
+      blockId: 'b-reproj',
+      flavour: 'paragraph',
+      turnIntoSink: mock.sink,
+      mdPrefixWriteMode: 'writable' as const,
+      mdPrefixSinkSource: 'injected-sink' as const,
+      editSession: sessions,
+      baseRev: 2,
+    };
+    const { rerender } = render(<StrictContentRowLeaf {...props} text="" />);
+    const leaf = screen.getByTestId('note-strict-leaf-b-reproj');
+    expect(sessions.isOpen('b-reproj')).toBe(false);
+
+    // 本地编辑行首 `# ` → commit 成功 → 会话关闭（baseRev 2 → committedRev 3）
+    await act(async () => {
+      leaf.textContent = '# ';
+      fireEvent.input(leaf);
+    });
+    await waitFor(() => {
+      expect(mock.calls).toHaveLength(1);
+    });
+    expect(sessions.isOpen('b-reproj')).toBe(false);
+
+    // 投影再次刷新（远端合并/回退/元数据更新）→ 叶可被覆盖写入
+    rerender(<StrictContentRowLeaf {...props} text="远端合并后的正文" />);
+    expect(leaf.textContent).toBe('远端合并后的正文');
+  });
+
+  it('conn_d3_leaf_session_open_blocks_projection_until_invalidate', async () => {
+    // R2-a②：会话持有期内投影不覆盖本地编辑；invalidate（撤回/截断/conflict）
+    // 后会话关闭，投影可重写入——编辑会话关闭即复位（非开环）。
+    const mock = createMockTurnIntoSink();
+    const sessions = new EditSessionRegistry();
+    const props = {
+      blockId: 'b-hold',
+      flavour: 'paragraph',
+      turnIntoSink: mock.sink,
+      mdPrefixWriteMode: 'writable' as const,
+      mdPrefixSinkSource: 'injected-sink' as const,
+      editSession: sessions,
+    };
+    const { rerender } = render(<StrictContentRowLeaf {...props} text="" />);
+    const leaf = screen.getByTestId('note-strict-leaf-b-hold');
+
+    // 输入无前缀普通文本：会话 open；commit 被库拒（无完整前缀）→ 会话保持 open
+    await act(async () => {
+      leaf.textContent = '本地编辑未提交';
+      fireEvent.input(leaf);
+    });
+    expect(sessions.isOpen('b-hold')).toBe(true);
+
+    // 投影刷新（外部变更）→ 持有期内不覆盖本地编辑
+    rerender(<StrictContentRowLeaf {...props} text="远端投影正文" />);
+    expect(leaf.textContent).toBe('本地编辑未提交');
+
+    // 外部失效（collab conflict 事件）→ 编辑面立即失效、会话关闭
+    sessions.invalidate('b-hold', 'collab-conflict');
+    expect(sessions.isOpen('b-hold')).toBe(false);
+
+    // 失效后投影刷新可重写入
+    rerender(<StrictContentRowLeaf {...props} text="失效后投影正文" />);
+    expect(leaf.textContent).toBe('失效后投影正文');
   });
 });
 

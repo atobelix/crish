@@ -154,7 +154,7 @@ describe('MessageSnapshots', () => {
       sessionId,
       {
         sessionId,
-        operation: 'edit',
+        operation: 'withdraw',
         messages: prev,
         diffFilePaths: [],
         timestamp: 1,

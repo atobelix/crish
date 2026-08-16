@@ -11,12 +11,7 @@ export type SnapshotSaveEntry = {
   sessionId: string;
   /** R1：timeline-truncate 为撤回投影截断快照（统一输入流收敛战役） */
   operation:
-    | 'withdraw'
-    | 'regenerate'
-    | 'archive'
-    | 'batch-pin'
-    | 'edit'
-    | 'timeline-truncate';
+    'withdraw' | 'regenerate' | 'archive' | 'batch-pin' | 'timeline-truncate';
   messages: SessionMessage[];
   pinnedMessageIds?: string[];
   diffFilePaths: string[];
