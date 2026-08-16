@@ -13,9 +13,10 @@ use crate::tool::ToolOutput;
 /// 正交的另一维度——role 是 LLM wire 对话角色，kind 是注入/状态等「来源标记」）。
 ///
 /// 统一输入流收敛战役 T1a（详案-T1-事件模型扩展 §1.2 b/c）：把 02 审计问题⑥
-/// 的魔法字符串常量化（`runtime-steering`/`nudge`/`diagnostic`/`steering`）。
-/// T1 只定义枚举位，不改现有字符串写法（替换为 `as_str()` 归 I1）。wire
-/// kebab-case，serde 反序列化接受下列规范值。
+/// 的魔法字符串常量化（`steering`/`nudge`/`diagnostic`/`steering`，
+/// 历史出站 `runtime-steering` 经 I1-α④ 统一为 `Steering` canonical wire）。
+/// T1 只定义枚举位（wire 映射经 serde kebab-case 派生，as_str 消费归 I1）。
+/// wire kebab-case，serde 反序列化接受下列规范值。
 ///
 /// serde 不可实例化冲突规避：枚举是「来源标记名称」集合，`AgentMessage.metadata`
 /// 依旧为 `JsonValue`（详案 §1.3：不改 metadata 字段类型），枚举位经生成常量
@@ -23,9 +24,10 @@ use crate::tool::ToolOutput;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AgentMessageMetadataKind {
-    /// 运行时 steering 注入（`runtime-steering` 出站，既有语义）
+    /// 运行时 steering 注入（canonical wire `steering`；历史 `runtime-steering`
+    /// 出站值已随 I1-α④ 统一收编）
     Steering,
-    /// 轻量 nudge 提示（`nudge`）
+    /// 轻量 nudge 提示（`nudge`；决策 9 后无生产者，枚举位保留供事件面）
     Nudge,
     /// 诊断说明消息（`diagnostic`）
     Diagnostic,
@@ -33,6 +35,12 @@ pub enum AgentMessageMetadataKind {
     ContextState,
     /// 静态注入文本（D2 文本化；走请求组装层，不进时间线）
     Injection,
+    /// tool-promise 自愈注入（二进制恒值 `tool-promise-recovery`；
+    /// I1-α④ 补位，消费方 streaming.rs / no_tool_calls.rs）
+    ToolPromiseRecovery,
+    /// goal 续轮注入（跨 run 边界 `goal-continue`；I1-α④ 补位，
+    /// 消费方 run_idle.rs）
+    GoalContinue,
 }
 
 /// 消息角色（对齐 AgentMessage.role，serde lowercase）

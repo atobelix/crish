@@ -4,8 +4,7 @@
 //! 05 §2.2:108/109：
 //! - transfer_to：跨 run 迁移，源队列清空、FIFO 顺序保持；
 //! - 目标队列容量限制与 steering 优先级在转移时生效（普通消息先被挤掉）；
-//! - followUp 环：转移条目作为下一条用户消息，idle promote 后消费（D8）；
-//! - drain_nudges：nudge 通道 → steering 条目，按 reason 分组去重。
+//! - followUp 环：转移条目作为下一条用户消息，idle promote 后消费（D8）。
 
 mod common;
 
@@ -13,7 +12,6 @@ use conex_types::message::AgentMessageRole;
 use orchestrator::steering_queue::SteeringInputEntry;
 use orchestrator::PendingMessageQueue;
 use session_loop::input::AgentInputQueue;
-use session_loop::steering::{PendingNudge, PendingNudgeChannel, SteeringReason};
 
 /// 构造按 run 关联的普通条目（group_id 承载 run 归属；
 /// T06.3 Q15：session_id 恒空字段已删除）
@@ -144,43 +142,6 @@ fn transfer_follow_up_lands_in_follow_up_ring_and_promotes_on_idle() {
         Some("steering"),
         "steering 条目带元数据标记"
     );
-}
-
-/// drain_nudges：nudge 通道消费 → steering 条目入队，按 reason 分组去重
-/// （重复 reason 经 replaceOrEnqueue 原位替换，05 §2.2:106）
-#[test]
-fn drain_nudges_converts_with_group_dedup() {
-    let mut channel = PendingNudgeChannel::new();
-    channel.enqueue(PendingNudge::new(
-        SteeringReason::EmptyResponse,
-        "第一次空响应提示",
-    ));
-    channel.enqueue(PendingNudge::new(
-        SteeringReason::ToolErrors,
-        "工具错误提示",
-    ));
-    channel.enqueue(PendingNudge::new(
-        SteeringReason::EmptyResponse,
-        "第二次空响应提示（应替换第一次）",
-    ));
-
-    let mut queue = PendingMessageQueue::new();
-    let count = queue.drain_nudges(&mut channel);
-    assert_eq!(count, 3, "三条 nudge 全部消费");
-    assert!(channel.is_empty(), "通道已清空");
-
-    // 重复 reason 去重：只剩 2 条
-    assert_eq!(queue.len(), 2);
-    assert!(queue.has_pending_steering(), "nudge 均为 steering 条目");
-
-    let drained = queue.dequeue_all();
-    assert!(drained.iter().all(|e| e.is_steering));
-    assert_eq!(drained[0].group_id.as_deref(), Some("empty-response"));
-    assert_eq!(
-        drained[0].text, "第二次空响应提示（应替换第一次）",
-        "同组后入者替换先入者"
-    );
-    assert_eq!(drained[1].group_id.as_deref(), Some("tool-errors"));
 }
 
 /// 多 run 汇总转移：两 run 的 pending 汇入同一目标队列，run 关联保持，

@@ -80,9 +80,9 @@ pub(crate) fn resume_kind_label(kind: ProviderErrorKind) -> &'static str {
 }
 
 /// D2 §3.3：会话首条非 steering user 消息（任务文本提取）。steering
-/// 注入消息带 `{kind:"steering"}` 元数据——error 续 run 的注入文本
-/// 「继续任务」即 steering 形态，直取会让指纹从第二次起漂移到注入
-/// 模板上（selection-03 评审护栏 5 同款混淆）。
+/// 注入消息带 kind=steering（AgentMessageMetadataKind 枚举 canonical）——
+/// error 续 run 的注入文本「继续任务」即 steering 形态，直取会让指纹从
+/// 第二次起漂移到注入模板上（selection-03 评审护栏 5 同款混淆）。
 pub(crate) fn main_task_text(messages: &[Arc<AgentMessage>]) -> String {
     messages
         .iter()
@@ -91,14 +91,20 @@ pub(crate) fn main_task_text(messages: &[Arc<AgentMessage>]) -> String {
         .unwrap_or_default()
 }
 
-/// steering 注入判定（消息 metadata.kind == "steering"）
+/// steering 注入判定（消息 metadata.kind == AgentMessageMetadataKind::Steering
+    /// canonical wire——I1-α④ 枚举化）
 pub(crate) fn is_steering_message(message: &AgentMessage) -> bool {
     message
         .metadata
         .as_ref()
         .and_then(|meta| meta.get("kind"))
         .and_then(|kind| kind.as_str())
-        == Some("steering")
+        == Some(
+            session_loop::steering::metadata_kind_wire(
+                AgentMessageMetadataKind::Steering,
+            )
+            .as_str(),
+        )
 }
 
 /// E1 §2.1：最后一条 assistant 消息的信号提取（D7 流中断标注）

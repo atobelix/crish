@@ -98,9 +98,9 @@ pub use r#loop::summary_dispatch::{
 pub use safe_point::{apply_safe_point_control, AbortSignal, ControlAction};
 pub use state::AgentSessionMachine;
 pub use steering::{
-    AppliedResult, PendingNudge, PendingNudgeChannel, RecoverySteeringStrategy,
-    RecoverySteeringStrategyOptions, SelfTerminationDiagnostic, SteeringAction, SteeringContext,
-    SteeringCoordinator, SteeringCoordinatorOptions, SteeringPhase, SteeringReason,
+    AppliedResult, RecoverySteeringStrategy, RecoverySteeringStrategyOptions,
+    SelfTerminationDiagnostic, SteeringAction, SteeringContext, SteeringCoordinator,
+    SteeringCoordinatorOptions, SteeringPhase, SteeringReason,
 };
 pub use stream::{
     consume, ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, ProviderUsage,

@@ -15,7 +15,9 @@
 //!
 //! 期望语义：无 tool-call 的纯文字回复 = 正常收场（永不 error，本次 bug 锚点）。
 
-use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::message::{
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
+};
 use conex_types::session::AgentSessionEvent as E;
 
 use crate::steering::strategy::ToolPromiseDetector;
@@ -100,7 +102,7 @@ pub(crate) async fn handle(
                             created_at: crate::steering::now_iso_utc(),
                             blocks: vec![AgentMessageBlock::Text { text: nudge_prompt }],
                             metadata: Some(serde_json::json!({
-                                "kind": "tool-promise-recovery",
+                                "kind": AgentMessageMetadataKind::ToolPromiseRecovery,
                                 "actionSnippet": snippet,
                                 "healCount": state.tool_promise_heals,
                                 "thinking_budget": 0,

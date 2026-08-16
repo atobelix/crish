@@ -2,7 +2,7 @@
   "contract": "engine-events",
   "schemaVersion": 1,
   "eventCount": 58,
-  "description": "Rust 域事件契约注册表（唯一事实源：crates/conex-types/src/events.rs 的 AgentEvent enum）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs 消费，产出 TS 类型与解析器（packages/shared-types/src/generated/engine/**）。任何修改必须同步 events.rs（cargo test -p conex-types 的 registry_drift 测试锁定两侧一致）。事件编号即本表顺序（1-58），对应 enum 声明顺序（2026-08-05 T-CF-04 定时器域兼容新增 timer-fired/timer-cancelled，38 → 40；同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41；2026-08-11 任务连续性方案恢复域 + goal 域兼容新增 recovery-* ×5 + goal-* ×3，41 → 49）。每事件 backpressure 字段为背压三级分类（delta/soft/critical，04 报告 1e）；subagent-event 的 kindBackpressure 为类别级分类（progress=delta、message/tool=soft）。 2026-08-14 D-03 契约窗口（事件面补全与原子要素）：tool-input-repaired 核销删除（生产零发射死契约）+ 兼容新增 9 事件（全 Delta 可丢级观测），49 → 57（编号 50-58）。 2026-08-16 统一输入流收敛战役 T1a（详案-T1-事件模型扩展）：新增撤回域事件 timeline-truncate（Critical+Persist+Critical，default required），57 → 58（编号 59）。",
+  "description": "Rust 域事件契约注册表（唯一事实源：crates/conex-types/src/events.rs 的 AgentEvent enum）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs 消费，产出 TS 类型与解析器（packages/shared-types/src/generated/engine/**）。任何修改必须同步 events.rs（cargo test -p conex-types 的 registry_drift 测试锁定两侧一致）。事件编号即本表顺序（1-58），对应 enum 声明顺序（2026-08-05 T-CF-04 定时器域兼容新增 timer-fired/timer-cancelled，38 → 40；同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41；2026-08-11 任务连续性方案恢复域 + goal 域兼容新增 recovery-* ×5 + goal-* ×3，41 → 49）。每事件 backpressure 字段为背压三级分类（delta/soft/critical，04 报告 1e）；subagent-event 的 kindBackpressure 为类别级分类（progress=delta、message/tool=soft）。 2026-08-14 D-03 契约窗口（事件面补全与原子要素）：tool-input-repaired 核销删除（生产零发射死契约）+ 兼容新增 9 事件（全 Delta 可丢级观测），49 → 57（编号 50-58）。 2026-08-16 统一输入流收敛战役 T1a（详案-T1-事件模型扩展）：新增撤回域事件 timeline-truncate（Critical+Persist+Critical，default required），57 → 58（编号 58）。",
   "events": [
     {
       "id": 1,
@@ -2245,7 +2245,7 @@
       "type": "nudge-enqueued",
       "rustVariant": "NudgeEnqueued",
       "domain": "steering",
-      "description": "nudge 入队动作（D-03 事件面补全 EV-08：PendingNudgeChannel 入队；overwrote = 容量满覆盖最旧）",
+      "description": "nudge 入队动作（决策 9：nudge 通道已删，事件面冻结保留；当前无生产者，字段结构保留供观测/契约）",
       "fields": [
         {
           "name": "sessionId",
@@ -3845,13 +3845,15 @@
     },
     "AgentMessageMetadataKind": {
       "wire": "kebab-case",
-      "description": "消息来源/类型标记（统一输入流收敛战役 T1a；与 role 正交维度，AgentMessage.metadata.kind 的常量集——metadata 字段保持 JsonValue，枚举位经生成常量 AGENT_MESSAGE_METADATA_KIND_VALUES 暴露给前端）",
+      "description": "消息来源/类型标记（统一输入流收敛战役 T1a + I1-α④ 补位：ToolPromiseRecovery/GoalContinue；与 role 正交维度，AgentMessage.metadata.kind 的常量集——metadata 字段保持 JsonValue，枚举位经生成常量 AGENT_MESSAGE_METADATA_KIND_VALUES 暴露给前端）",
       "values": [
         "steering",
         "nudge",
         "diagnostic",
         "context-state",
-        "injection"
+        "injection",
+        "tool-promise-recovery",
+        "goal-continue"
       ]
     }
   }

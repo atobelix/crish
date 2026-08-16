@@ -15,19 +15,20 @@
 //! 边界）：
 //! - [PendingMessageQueue::transfer_follow_up]：条目转为用户消息排入目标
 //!   run 输入队列的 **followUp 环**——followUp 仅在 run 即将 idle 时
-//!   promote 消费（01 §五.5），天然满足「下一条用户消息」语义；
-//! - [PendingMessageQueue::drain_nudges]：消费 [PendingNudgeChannel] 的
-//!   nudge 转为 steering 条目（按 reason 分组，重复 reason 经
-//!   replaceOrEnqueue 去重）。
+//!   promote 消费（01 §五.5），天然满足「下一条用户消息」语义。
 
 use std::collections::VecDeque;
 
-use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole};
 use session_loop::input::{AgentInputQueue, InputEnqueueMode};
-use session_loop::steering::PendingNudgeChannel;
 
 /// 队列默认容量（任务书 B4.4 规定：默认 100）
 pub const DEFAULT_QUEUE_CAPACITY: usize = 100;
+
+/// context-state 感知注入分组键（详案 I1-α②：group_id 去重——连切两次
+/// 状态只注入一次 context-state；同一键也用于 [SteeringInputEntry::into_user_message]
+/// 识别并产出 `kind=context-state`）。
+pub const CONTEXT_STATE_GROUP: &str = "context-state";
 
 /// 消息附件（对齐 TS MessageAttachment：type/data/mimeType）
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -43,8 +44,8 @@ pub struct MessageAttachment {
 /// 跨 run steering 输入条目（对齐 TS SteeringInputEntry）
 ///
 /// 注（T06.3 Q15）：`session_id` 字段已删除——所有生产构造路径均写空串
-/// （user / steering / drain_nudges），恒空字段无消费方；run 关联语义由
-/// 消费方按 group_id / id 承载。
+/// （user / steering），恒空字段无消费方；run 关联语义由消费方按
+/// group_id / id 承载。
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SteeringInputEntry {
     /// 条目 id（转用户消息时沿用，保证幂等）
@@ -82,13 +83,41 @@ impl SteeringInputEntry {
         }
     }
 
-    /// 转用户角色消息（对齐 PendingNudge::into_user_message）
+    /// context-state 感知注入条目（详案 I1-α② 扩展点 A）
+    ///
+    /// 状态切换（模型名/权限/思考模式）产生的「切换发生」告知——作为
+    /// **下一条用户消息**在下一 run 边界注入时间线；`group_id` 固定为
+    /// [CONTEXT_STATE_GROUP]（经 [PendingMessageQueue::replace_or_enqueue]
+    /// 去重，连切两次只注入一次）；`is_steering=false`（感知注入不占
+    /// steering 挤占保护位）。转用户消息时 metadata.kind 取枚举
+    /// [AgentMessageMetadataKind::ContextState]（T1a 已定义）。
+    ///
+    /// 17 审计纪律边界：仅「状态切换发生」的**感知注入**进 seq；配置/
+    /// 偏好存储留在独立配置带，不塞消息流。
+    pub fn context_state(id: impl Into<String>, text: impl Into<String>, enqueued_at: u64) -> Self {
+        Self {
+            id: id.into(),
+            text: text.into(),
+            attachments: Vec::new(),
+            enqueued_at,
+            group_id: Some(CONTEXT_STATE_GROUP.to_string()),
+            is_steering: false,
+        }
+    }
+
+    /// 转用户角色消息
     ///
     /// D8：条目作为**下一条用户消息**注入；id 沿用条目 id 保证幂等；
-    /// steering 条目带 `{kind: "steering"}` 元数据供下游识别。
+    /// 标记规则（I1-α④ 枚举化）：
+    /// - steering 条目 → `kind=steering`（[AgentMessageMetadataKind::Steering]）；
+    /// - context-state 条目（group_id=[CONTEXT_STATE_GROUP]）→
+    ///   `kind=context-state`（[AgentMessageMetadataKind::ContextState]）；
+    /// - 普通条目 → 无 kind 元数据。
     pub fn into_user_message(&self) -> AgentMessage {
-        let metadata = if self.is_steering {
-            Some(serde_json::json!({ "kind": "steering" }))
+        let metadata = if self.group_id.as_deref() == Some(CONTEXT_STATE_GROUP) {
+            Some(serde_json::json!({ "kind": AgentMessageMetadataKind::ContextState }))
+        } else if self.is_steering {
+            Some(serde_json::json!({ "kind": AgentMessageMetadataKind::Steering }))
         } else {
             None
         };
@@ -221,26 +250,6 @@ impl PendingMessageQueue {
         self.transfer_into_input_queue(queue, InputEnqueueMode::FollowUp)
     }
 
-    /// 消费 [PendingNudgeChannel] 的待注入 nudge，转为 steering 条目入队。
-    ///
-    /// 每条 nudge 按 `reason` 分组（重复原因经 replaceOrEnqueue 去重）、
-    /// 标记为 steering（容量挤占时受保护），返回入队条数。
-    pub fn drain_nudges(&mut self, channel: &mut PendingNudgeChannel) -> usize {
-        let nudges = channel.drain_all();
-        let count = nudges.len();
-        for nudge in nudges {
-            self.replace_or_enqueue(SteeringInputEntry {
-                id: nudge.id,
-                text: nudge.text,
-                attachments: Vec::new(),
-                enqueued_at: unix_millis_now(),
-                group_id: Some(nudge.reason.as_str().to_string()),
-                is_steering: true,
-            });
-        }
-        count
-    }
-
     /// 是否有待处理条目
     pub fn has_pending(&self) -> bool {
         !self.entries.is_empty()
@@ -290,14 +299,6 @@ impl Default for PendingMessageQueue {
     }
 }
 
-/// 当前 Unix 毫秒
-fn unix_millis_now() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
 /// Unix 毫秒转 ISO8601（毫秒精度，`2026-07-31T08:00:00.000Z`）
 ///
 /// 与 session-loop steering 的时间戳格式一致；无 chrono 依赖，
@@ -329,7 +330,7 @@ mod tests {
     use super::*;
     use conex_types::message::AgentMessageRole;
     use session_loop::input::{AgentInputQueue, InputEnqueueMode};
-    use session_loop::steering::{PendingNudge, PendingNudgeChannel, SteeringReason};
+    use session_loop::steering::metadata_kind_wire;
 
     fn user_entry(id: &str, text: &str, seq: u64) -> SteeringInputEntry {
         SteeringInputEntry::user(id, text, 1000 + seq)
@@ -527,7 +528,7 @@ mod tests {
                 .as_ref()
                 .and_then(|m| m.get("kind"))
                 .and_then(|k| k.as_str()),
-            Some("steering"),
+            Some(metadata_kind_wire(AgentMessageMetadataKind::Steering).as_str()),
             "steering 条目带元数据标记"
         );
     }
@@ -543,44 +544,6 @@ mod tests {
         assert_eq!(count, 1);
         assert!(input.has_steer_pending());
         assert_eq!(input.dequeue().expect("steer 环可消费").text(), "steer");
-    }
-
-    /// PendingNudgeChannel 适配：nudge 转为 steering 条目、按 reason 分组
-    /// 去重（重复 reason 经 replaceOrEnqueue 替换）
-    #[test]
-    fn drain_nudges_converts_with_group_dedup() {
-        let mut channel = PendingNudgeChannel::new();
-        channel.enqueue(PendingNudge::new(
-            SteeringReason::EmptyResponse,
-            "第一次空响应提示",
-        ));
-        channel.enqueue(PendingNudge::new(
-            SteeringReason::ToolErrors,
-            "工具错误提示",
-        ));
-        channel.enqueue(PendingNudge::new(
-            SteeringReason::EmptyResponse,
-            "第二次空响应提示（应替换第一次）",
-        ));
-
-        let mut queue = PendingMessageQueue::new();
-        let count = queue.drain_nudges(&mut channel);
-        assert_eq!(count, 3, "三条 nudge 全部消费");
-        assert!(channel.is_empty(), "通道已清空");
-
-        // 重复 reason 去重：只剩 2 条
-        assert_eq!(queue.len(), 2);
-        let drained = queue.dequeue_all();
-        assert!(
-            drained.iter().all(|e| e.is_steering),
-            "nudge 均为 steering 条目"
-        );
-        assert_eq!(drained[0].group_id.as_deref(), Some("empty-response"));
-        assert_eq!(
-            drained[0].text, "第二次空响应提示（应替换第一次）",
-            "同组后入者替换先入者"
-        );
-        assert_eq!(drained[1].group_id.as_deref(), Some("tool-errors"));
     }
 
     /// dequeueByGroup：按分组提取，剩余条目保持顺序（05 §2.2:105）
@@ -644,11 +607,93 @@ mod tests {
         let metadata = message.metadata.as_ref().expect("steering 条目须带元数据");
         assert_eq!(
             metadata.get("kind").and_then(|k| k.as_str()),
-            Some("steering")
+            Some(metadata_kind_wire(AgentMessageMetadataKind::Steering).as_str())
         );
 
         let plain = user_entry("u1", "plain", 1_785_456_000_000).into_user_message();
         assert!(plain.metadata.is_none(), "普通条目不带 steering 元数据");
+    }
+
+    /// context-state 感知注入（详案 I1-α② 扩展点 A）：
+    /// - 构造入口带 group_id=CONTEXT_STATE_GROUP（replace_or_enqueue 去重）；
+    /// - 转用户消息 metadata.kind = context-state（T1a 枚举标记）；
+    /// - 容量挤占按普通消息处理（不占 steering 保护位）。
+    #[test]
+    fn context_state_entry_dedups_and_marks_kind() {
+        // 构造：状态切换告知文本
+        let cs = SteeringInputEntry::context_state(
+            "ctx-1",
+            "当前已切换到模型 X（思考档位 high）。",
+            1_785_456_100_000,
+        );
+        assert_eq!(cs.group_id.as_deref(), Some(CONTEXT_STATE_GROUP));
+        assert!(!cs.is_steering, "context-state 不占 steering 保护位");
+
+        // 转用户消息：User 角色 + kind=context-state 枚举标记
+        let message = cs.into_user_message();
+        assert_eq!(message.role, AgentMessageRole::User);
+        assert_eq!(message.text(), "当前已切换到模型 X（思考档位 high）。");
+        let metadata = message.metadata.as_ref().expect("context-state 须带元数据");
+        assert_eq!(
+            metadata.get("kind").and_then(|k| k.as_str()),
+            Some(metadata_kind_wire(AgentMessageMetadataKind::ContextState).as_str()),
+            "kind 走 T1a 枚举 ContextState canonical wire"
+        );
+
+        // 去重：同一 group_id（context-state）replace_or_enqueue 原位替换
+        // （不新增条目，防连切两次重复注入）
+        let mut queue = PendingMessageQueue::new();
+        queue.enqueue(cs.clone());
+        let replaced = queue.replace_or_enqueue(SteeringInputEntry::context_state(
+            "ctx-2",
+            "当前已切换到模型 Y（思考档位 low）。",
+            1_785_456_200_000,
+        ));
+        assert!(replaced, "同 group_id 应原位替换");
+        assert_eq!(queue.len(), 1, "去重后仍只一条 context-state");
+        let drained = queue.dequeue_all();
+        assert_eq!(drained[0].text, "当前已切换到模型 Y（思考档位 low）。");
+    }
+
+    /// context-state 与 steering/普通条目并存：互不干扰
+    #[test]
+    fn context_state_coexists_with_steering_and_plain() {
+        let mut queue = PendingMessageQueue::new();
+        queue.enqueue(user_entry("u1", "plain", 1));
+        queue.enqueue(steering_entry("s1", "steer", 2));
+        queue.enqueue(SteeringInputEntry::context_state(
+            "ctx-1",
+            "已切换到模型 X。",
+            3,
+        ));
+
+        assert_eq!(queue.len(), 3);
+        let drained = queue.dequeue_all();
+        // context-state 条目普通优先级：metadata.kind=context-state、
+        // 非 steering（不因 is_steering 误标）
+        let cs = drained
+            .iter()
+            .find(|e| e.group_id.as_deref() == Some(CONTEXT_STATE_GROUP))
+            .expect("context-state 条目存在");
+        assert!(!cs.is_steering);
+        let msg = cs.into_user_message();
+        assert_eq!(
+            msg.metadata
+                .as_ref()
+                .and_then(|m| m.get("kind"))
+                .and_then(|k| k.as_str()),
+            Some(metadata_kind_wire(AgentMessageMetadataKind::ContextState).as_str())
+        );
+        // steering 条目仍标 steering
+        let s = drained.iter().find(|e| e.is_steering).expect("steering 条目");
+        assert_eq!(
+            s.into_user_message()
+                .metadata
+                .as_ref()
+                .and_then(|m| m.get("kind"))
+                .and_then(|k| k.as_str()),
+            Some(metadata_kind_wire(AgentMessageMetadataKind::Steering).as_str())
+        );
     }
 
     /// 时间戳换算：已知基准（2026-07-31 = Unix 天数 20665）

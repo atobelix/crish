@@ -17,7 +17,9 @@
 //!   7. 分类分派（01 §2.4 步骤 7）。
 
 use conex_types::events::{AgentEvent, TurnUsage};
-use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole, ToolCallBlock};
+use conex_types::message::{
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole, ToolCallBlock,
+};
 use conex_types::response::ProviderOutput;
 use conex_types::session::AgentSessionEvent as E;
 use futures::StreamExt;
@@ -26,6 +28,7 @@ use std::sync::Arc;
 use crate::provider::{
     DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ToolSchema,
 };
+use crate::steering::metadata_kind_wire;
 use crate::stream::{
     ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, StopReason,
 };
@@ -389,7 +392,8 @@ fn build_request(state: &LoopState) -> ProviderRequest<'_> {
         .last()
         .and_then(|m| m.metadata.as_ref())
         .map(|meta| {
-            meta.get("kind").and_then(|k| k.as_str()) == Some("tool-promise-recovery")
+            meta.get("kind").and_then(|k| k.as_str())
+                == Some(metadata_kind_wire(AgentMessageMetadataKind::ToolPromiseRecovery).as_str())
                 || meta
                     .get("thinking_budget")
                     .or_else(|| meta.get("thinkingBudget"))

@@ -418,6 +418,8 @@ impl ToolPromiseDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use conex_types::message::AgentMessageMetadataKind;
+    use crate::steering::metadata_kind_wire;
     use crate::steering::testutil::{
         assistant_with_tool_calls, tool_result, tool_result_json, user,
     };
@@ -474,7 +476,8 @@ mod tests {
         let metadata = message.metadata.as_ref().expect("注入消息须带元数据");
         assert_eq!(
             metadata.get("kind").and_then(|k| k.as_str()),
-            Some("runtime-steering")
+            Some(metadata_kind_wire(AgentMessageMetadataKind::Steering).as_str()),
+            "kind 走 T1a 枚举 canonical wire（I1-α④ 收编 runtime-steering）"
         );
         assert_eq!(
             metadata.get("reason").and_then(|r| r.as_str()),

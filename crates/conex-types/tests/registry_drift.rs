@@ -516,7 +516,8 @@ fn enum_values_match_serde_wire() {
     check_enum!(reg, "SubagentEndStatus", SubagentEndStatus, 3);
     // 统一输入流收敛战役 T1a：timeline-truncate.reason + AgentMessage.metadata.kind
     check_enum!(reg, "TimelineTruncateReason", TimelineTruncateReason, 2);
-    check_enum!(reg, "AgentMessageMetadataKind", AgentMessageMetadataKind, 5);
+    // I1-α④ 补位（主控裁决）：+ ToolPromiseRecovery / + GoalContinue，5 → 7
+    check_enum!(reg, "AgentMessageMetadataKind", AgentMessageMetadataKind, 7);
 }
 
 /// 事件总数仍为 57：`operation` 是 security-audit 载荷内的字段值
@@ -1530,7 +1531,15 @@ fn registry_drift_timeline_truncate_registered() {
     assert_eq!(kind_spec.wire, "kebab-case");
     assert_eq!(
         kind_spec.values,
-        vec!["steering", "nudge", "diagnostic", "context-state", "injection"]
+        vec![
+            "steering",
+            "nudge",
+            "diagnostic",
+            "context-state",
+            "injection",
+            "tool-promise-recovery",
+            "goal-continue",
+        ]
     );
 }
 

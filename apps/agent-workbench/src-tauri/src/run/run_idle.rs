@@ -397,14 +397,17 @@ pub(crate) mod idle_resume {
         })
     }
 
-    /// D5 §3.7：goal 续轮注入消息（user 角色，metadata {kind:"goal-continue"}）
+    /// D5 §3.7：goal 续轮注入消息（user 角色，metadata.kind=goal-continue，
+    /// 取 T1a 枚举 [AgentMessageMetadataKind::GoalContinue] canonical wire）
     pub(crate) fn goal_continue_message(_session_id: &str, text: String) -> AgentMessage {
         AgentMessage {
             id: crate::engine::new_message_id("goal-continue"),
             role: AgentMessageRole::User,
             created_at: crate::engine::now_iso_utc(),
             blocks: vec![AgentMessageBlock::Text { text }],
-            metadata: Some(serde_json::json!({ "kind": "goal-continue" })),
+            metadata: Some(serde_json::json!({
+                "kind": AgentMessageMetadataKind::GoalContinue
+            })),
             client_message_id: None,
             content: None,
         }
@@ -527,50 +530,79 @@ pub(crate) mod idle_resume {
     /// 推送：一次续 run 承载全部条目，不逐条唤醒）。
     ///
     /// 注入文本 = 队列条目原文（生成侧已按 §4.8 模板拼入 wakeup_summary
-    /// 摘要，与 prompt 并存）；多条条目按序拼接（换行分隔）为一条用户角色
-    /// 消息——对齐 D8「条目作为下一条用户消息注入」语义（steering_queue.rs
-    /// :86-106，注入消息带 `{kind:"steering"}` 元数据供下游识别）。
+    /// 摘要，与 prompt 并存）；多条普通条目按序拼接（换行分隔）为一条用户
+    /// 角色消息——对齐 D8「条目作为下一条用户消息注入」语义（steering_queue.rs
+    /// into_user_message，普通注入带 kind=steering 枚举 canonical；context-state
+    /// 条目单独成消息带 kind=context-state，I1-α②）。
     /// 消息 id 沿用首条条目 id 保证幂等（对齐 transfer_follow_up 的 id 沿用）。
     pub(crate) fn drain_pending_to_inject_messages(
         queue: &mut PendingMessageQueue,
         _session_id: &str,
     ) -> Vec<AgentMessage> {
-        let mut entries = queue.dequeue_all();
+        let entries = queue.dequeue_all();
         if entries.is_empty() {
             return Vec::new();
         }
-        // D6 §3.4：合并注入上限（评审 selection-03:220 建议 ≤16 条）——保留
-        // 最新 ≤16 条（FIFO 尾部即最新；省略最旧——旧条目信息过时风险高，
-        // D6 §8 决策 4），超出在文本注明省略 N 条。省略轨迹不丢：恢复域
-        // 条目有 recover_notifications 落库冗余，定时器/子代理终态条目有
-        // 事件表留痕——队列只承载提醒，不承载全量。
-        let (kept, omitted) = if entries.len() > RESTORE_MERGE_INJECT_LIMIT {
-            let split = entries.len() - RESTORE_MERGE_INJECT_LIMIT;
-            let omitted = entries[..split].len();
-            (entries.split_off(split), omitted)
-        } else {
-            (entries, 0)
-        };
-        let mut text = kept
-            .iter()
-            .map(|entry| entry.text.as_str())
-            .collect::<Vec<_>>()
-            .join("\n");
-        if omitted > 0 {
-            text = format!("{text}\n（其余 {omitted} 条唤醒通知省略，详情见事件流）");
+        // I1-α②（扩展点 A）：context-state 感知注入单独成消息——状态切换
+        // 告知带 kind=context-state（T1a 枚举）进时间线，不并入普通唤醒
+        // 合并文本（否则 kind 丢失且被当作 steering 合并注入）。
+        let (context_states, others): (Vec<_>, Vec<_>) = entries
+            .into_iter()
+            .partition(|e| e.group_id.as_deref() == Some(CONTEXT_STATE_GROUP));
+        if !others.is_empty() {
+            // D6 §3.4：合并注入上限（评审 selection-03:220 建议 ≤16 条）——保留
+            // 最新 ≤16 条（FIFO 尾部即最新；省略最旧——旧条目信息过时风险高，
+            // D6 §8 决策 4），超出在文本注明省略 N 条。省略轨迹不丢：恢复域
+            // 条目有 recover_notifications 落库冗余，定时器/子代理终态条目有
+            // 事件表留痕——队列只承载提醒，不承载全量。
+            let mut entries = others;
+            let (kept, omitted) = if entries.len() > RESTORE_MERGE_INJECT_LIMIT {
+                let split = entries.len() - RESTORE_MERGE_INJECT_LIMIT;
+                let omitted = entries[..split].len();
+                (entries.split_off(split), omitted)
+            } else {
+                (entries, 0)
+            };
+            let mut text = kept
+                .iter()
+                .map(|entry| entry.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if omitted > 0 {
+                text = format!("{text}\n（其余 {omitted} 条唤醒通知省略，详情见事件流）");
+            }
+            // 消息 id 沿用保留集首条条目 id 保证幂等（对齐 transfer_follow_up
+            // 的 id 沿用）
+            let first = &kept[0];
+            return vec![AgentMessage {
+                id: first.id.clone(),
+                role: AgentMessageRole::User,
+                created_at: crate::engine::now_iso_utc(),
+                blocks: vec![AgentMessageBlock::Text { text }],
+                metadata: Some(serde_json::json!({
+                    "kind": AgentMessageMetadataKind::Steering
+                })),
+                client_message_id: None,
+                content: None,
+            }];
         }
-        // 消息 id 沿用保留集首条条目 id 保证幂等（对齐 transfer_follow_up
-        // 的 id 沿用）
-        let first = &kept[0];
-        vec![AgentMessage {
-            id: first.id.clone(),
-            role: AgentMessageRole::User,
-            created_at: crate::engine::now_iso_utc(),
-            blocks: vec![AgentMessageBlock::Text { text }],
-            metadata: Some(serde_json::json!({ "kind": "steering" })),
-            client_message_id: None,
-            content: None,
-        }]
+        // 全为 context-state 条目：逐条注入（各带 kind=context-state）
+        context_states
+            .into_iter()
+            .map(|entry| AgentMessage {
+                id: entry.id,
+                role: AgentMessageRole::User,
+                created_at: crate::engine::now_iso_utc(),
+                blocks: vec![AgentMessageBlock::Text {
+                    text: entry.text,
+                }],
+                metadata: Some(serde_json::json!({
+                    "kind": AgentMessageMetadataKind::ContextState
+                })),
+                client_message_id: None,
+                content: None,
+            })
+            .collect()
     }
 
     /// D7 §8 决策 1：会话树访问器（D3 session_trees 表优先——共享实例直读

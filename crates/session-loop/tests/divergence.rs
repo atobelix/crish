@@ -28,13 +28,16 @@ use std::time::Duration;
 use agent_tools::registry::ToolRegistry;
 use conex_test_utils::clock::TimePauseGuard;
 use conex_types::events::AgentEvent;
-use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageRole};
+use conex_types::message::{
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
+};
 use conex_types::session::AgentEndReason;
 use conex_types::tool::{ProviderDiagnostic, ProviderDiagnosticPhase};
 use session_loop::{
-    AgentSessionLoop, InputEnqueueMode, PendingNudgeChannel, ProviderStreamEvent,
-    SelfTerminationDiagnostic, SteeringReason, StopReason, TestProvider, TestTool,
+    AgentSessionLoop, InputEnqueueMode, ProviderStreamEvent, SelfTerminationDiagnostic, StopReason,
+    TestProvider, TestTool,
 };
+use session_loop::steering::metadata_kind_wire;
 
 /// 构造用户消息
 fn user(text: &str) -> AgentMessage {
@@ -64,8 +67,8 @@ fn loop_with(provider: TestProvider, tools: Vec<Arc<TestTool>>) -> AgentSessionL
     )
 }
 
-/// 统计对话中的 runtime-steering 注入消息（system 角色，metadata.kind=runtime-steering；
-/// Arc 共享形态，PE-09 T09.3.2）
+/// 统计对话中的 steering 注入消息（system 角色，metadata.kind=steering——
+/// I1-α④ 枚举 canonical；Arc 共享形态，PE-09 T09.3.2）
 fn injected_steering_count(messages: &[Arc<AgentMessage>]) -> usize {
     messages
         .iter()
@@ -75,7 +78,7 @@ fn injected_steering_count(messages: &[Arc<AgentMessage>]) -> usize {
                     .as_ref()
                     .and_then(|meta| meta.get("kind"))
                     .and_then(|k| k.as_str())
-                    == Some("runtime-steering")
+                    == Some(metadata_kind_wire(AgentMessageMetadataKind::Steering).as_str())
         })
         .count()
 }
@@ -195,7 +198,7 @@ async fn d2_tool_promise_language_ends_stop_no_nudge_no_diagnostic() {
             .as_ref()
             .and_then(|meta| meta.get("kind"))
             .and_then(|k| k.as_str())
-            .is_some_and(|k| k == "nudge" || k == "tool-promise-nudge")),
+            == Some("nudge")),
         "承诺未兑现不得注入任何 nudge"
     );
     // 反向：不发 runtime-error 自终止诊断（D2 裁决：诊断也不以 runtime-error 发）
@@ -499,12 +502,14 @@ async fn d7_intervention_event_emitted_but_run_ends_stop() {
 
 // ── D8：run 内不注入 nudge ──
 
-/// D8 正向：run 内任何位置不注入 nudge——nudge 以用户消息身份排入
-/// 下一条用户消息边界（followUp 环，idle promote 后消费）。
+/// D8 正向：run 内任何位置不注入 nudge——普通文字回复 run 内无 nudge 注入。
+/// 跨 run 的「下一条用户消息」经 orchestrator [PendingMessageQueue] 承载
+/// （决策 9：nudge 独立通道已删除）；本条验证 followUp 环的边界消费语义——
+/// 预置的 followUp 用户消息在 idle promote 后作为下一条用户消息消费。
 ///
-/// 裁决（01 §四 D8）：run 内一律不注入；nudge 文本排入下一条用户消息。
+/// 裁决（01 §四 D8）：run 内一律不注入；跨 run 注入排入下一条用户消息。
 #[tokio::test]
-async fn d8_run_never_injects_nudge_nudge_goes_to_next_user_message() {
+async fn d8_run_never_injects_nudge_in_run_followup_consumed_next_message() {
     // Part A：普通文字回复 run 内无任何 nudge 注入（对话只含 user + assistant）
     let provider = TestProvider::text_reply("普通回复。");
     let mut loop_ = loop_with(provider, vec![]);
@@ -516,79 +521,71 @@ async fn d8_run_never_injects_nudge_nudge_goes_to_next_user_message() {
             .as_ref()
             .and_then(|m| m.get("kind"))
             .and_then(|k| k.as_str());
-        assert!(
-            kind != Some("nudge") && kind != Some("tool-promise-nudge"),
-            "run 内不得注入 nudge（消息 role={:?} kind={kind:?}）",
-            message.role
-        );
+        assert_ne!(kind, Some("nudge"), "run 内不得注入 nudge");
     }
 
-    // Part B：nudge 排入下一条用户消息——经 PendingNudgeChannel 生成，
-    // 以 followUp 环预置到输入队列；idle 边界 promote 后作为 User 消息消费
-    let mut channel = PendingNudgeChannel::new();
-    channel.enqueue_reason(SteeringReason::EmptyResponse);
-    let nudge = channel.drain_all().into_iter().next().expect("有 nudge");
-    let nudge_message = nudge.into_user_message();
+    // Part B：跨 run 注入（决策 9 后唯一承载 = PendingMessageQueue →
+    // transfer_follow_up）排入 followUp 环；idle 边界 promote 后作为 User
+    // 消息消费（构造一个带"steering 语义"的文本，验证并非当前 run 注入）
+    let injected = AgentMessage {
+        id: "next-user-msg".into(),
+        role: AgentMessageRole::User,
+        created_at: "2026-01-01T00:00:00Z".into(),
+        blocks: vec![AgentMessageBlock::Text {
+            text: "Runtime steering: 请检查遗漏的工具调用。".to_string(),
+        }],
+        metadata: Some(serde_json::json!({ "kind": "steering" })),
+        client_message_id: None,
+        content: None,
+    };
     let provider = TestProvider::with_scripts(vec![
         vec![
             ProviderStreamEvent::text("第一轮回复。"),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
         vec![
-            ProviderStreamEvent::text("nudge 消费后的回复。"),
+            ProviderStreamEvent::text("下一条消息消费后的回复。"),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
     ]);
     let mut loop_ = loop_with(provider, vec![]);
-    loop_.enqueue_input(nudge_message.clone(), InputEnqueueMode::FollowUp);
+    loop_.enqueue_input(injected.clone(), InputEnqueueMode::FollowUp);
 
     let outcome = loop_.run(user("开始")).await;
 
     assert_eq!(outcome.reason, AgentEndReason::Stop);
     assert!(outcome.error.is_none());
-    // 正向：nudge 以下一条用户消息身份出现（User 角色 + kind=nudge 元数据）
+    // 正向：预注入消息作为下一条用户消息消费（User 角色，文本保留）
     let consumed = outcome
         .messages
         .iter()
-        .find(|m| m.id == nudge_message.id)
-        .expect("nudge 应被消费进对话");
-    assert_eq!(
-        consumed.role,
-        AgentMessageRole::User,
-        "nudge 必须是用户消息"
-    );
-    assert_eq!(
-        consumed
-            .metadata
-            .as_ref()
-            .and_then(|m| m.get("kind"))
-            .and_then(|k| k.as_str()),
-        Some("nudge")
-    );
-    // 反向：nudge 不以 system 角色在 run 中途注入（无 system 消息含 nudge 文本）
+        .find(|m| m.id == injected.id)
+        .expect("预注入消息应被消费进对话");
+    assert_eq!(consumed.role, AgentMessageRole::User, "只能是用户消息");
+    // 反向：预注入消息不以 system 角色在 run 中途注入（无 system 消息含该文本）
     assert!(
         !outcome.messages.iter().any(|m| {
             m.role == AgentMessageRole::System && m.text().contains("Runtime steering")
         }),
-        "nudge 不得以 system 消息注入当前 run"
+        "跨 run 注入不得以 system 消息注入当前 run"
     );
-    // nudge 位于第一轮回复之后、第二轮回复之前（用户消息边界）
+    // 预注入消息位于第一轮回复之后、第二轮回复之前（用户消息边界）
     let texts: Vec<String> = outcome.messages.iter().map(|m| m.text()).collect();
-    let idx_nudge = texts
+    let idx_inject = texts
         .iter()
         .position(|t| t.contains("Runtime steering"))
-        .expect("nudge 文本应出现");
+        .expect("跨 run 注入文本应出现");
     let idx_first = texts
         .iter()
         .position(|t| t == "第一轮回复。")
         .expect("第一轮");
     let idx_second = texts
         .iter()
-        .position(|t| t == "nudge 消费后的回复。")
+        .position(|t| t == "下一条消息消费后的回复。")
         .expect("第二轮");
     assert!(
-        idx_first < idx_nudge && idx_nudge < idx_second,
-        "nudge 应落在第一轮与第二轮之间的用户消息边界"
+        idx_first < idx_inject && idx_inject < idx_second,
+        "跨 run 注入应落在第一轮与第二轮之间的用户消息边界"
     );
 }
 

@@ -7,8 +7,9 @@
 //!   超预算即跳过，`intervention-required` / `emit-diagnostic` 不受预算限制。
 //! - [strategy]：[RecoverySteeringStrategy]——唯一活跃策略，
 //!   phases = `after-tools` / `empty-response`（01 §3.1）。
-//! - [nudge]：nudge 文本生成 + pending-nudge 注入通道（D8：run 内不注入，
-//!   排入下一条用户消息队列，orchestrator 在下一 run 开始时消费）。
+//! - [nudge]：nudge 文本生成 + steering/诊断注入消息构建（当前 run 纠偏）；
+//!   跨 run「下一条用户消息」规范载体为 orchestrator `PendingMessageQueue`
+//!   （决策 9 已删 nudge 独立半成品通道，见详案 I1-α）。
 //! - [diagnostics]：自终止诊断（D4：非 error 语义，字段结构保留）。
 //!
 //! 裁决落点（01 第四章，本子系统承担部分；其余由 B3.4 主循环挂接）：
@@ -18,7 +19,8 @@
 //!   （`has_pending_input`），调用方（B3.4）应跳过策略评估，避免重复注入。
 //! - **D7**：empty-response 预算内重试注入；预算耗尽返回
 //!   `intervention-required`（事件照发），但不以 error 收场。
-//! - **D8**：nudge 一律不注入当前 run；注入走 [nudge::PendingNudgeChannel]。
+//! - **D8**：当前 run 不注入跨 run nudge；「下一条用户消息」一律经
+//!   orchestrator `PendingMessageQueue`（决策 9：nudge 独立通道已删除）。
 //! - **D9**：预算耗尽禁止 `inject-message`（`evaluate` 超预算跳过）；
 //!   run 以 stop 收场由 B3.4 保证——本子系统 [AppliedResult] 无 error 语义。
 //! - **D10**：删除机器上下文 `steeringCount` 死检查；预算/计数只在
@@ -34,11 +36,25 @@ pub use strategy::ToolPromiseDetector;
 use std::sync::Arc;
 
 use conex_types::events::AgentEvent;
-use conex_types::message::AgentMessage;
+use conex_types::message::{AgentMessage, AgentMessageMetadataKind};
 use serde::{Deserialize, Serialize};
 
 /// 全局最大纠偏注入数（对齐 TS coordinator 默认 3，steering-coordinator.ts:50）
 pub const DEFAULT_MAX_STEERING_BUDGET: usize = 3;
+
+/// metadata.kind 枚举 → wire 字符串（I1-α④ 枚举化消费侧）
+///
+/// T1a 枚举（conex-types 只读）只定义枚举位 + serde kebab-case 序列化；
+/// 「替换为 as_str()」按详案归属 I1 实现。conex-types 只读域不可加
+/// inherent impl（孤儿规则），以本自由函数承载 wire 映射——**值由枚举
+/// serde 序列化派生（单一来源，registry_drift 已锁定），不重复声明
+/// 魔法字符串**；消费侧（产出/断言）统一走本函数。
+pub fn metadata_kind_wire(kind: AgentMessageMetadataKind) -> String {
+    serde_json::to_value(kind)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
 
 /// intervention-required 的默认附带消息（对齐 TS 默认文案）
 pub(crate) const DEFAULT_INTERVENTION_MESSAGE: &str =
@@ -485,10 +501,7 @@ pub(crate) fn iso_from_epoch_ms(ms: u64) -> String {
 }
 
 pub use diagnostics::SelfTerminationDiagnostic;
-pub use nudge::{
-    build_steering_message, runtime_steering_text, PendingNudge, PendingNudgeChannel,
-    DEFAULT_PENDING_NUDGE_CAPACITY,
-};
+pub use nudge::{build_steering_message, runtime_steering_text};
 pub use strategy::{
     detect_recent_tool_error_loop, detect_repeated_tool_call_loop, RecoverySteeringStrategy,
     RecoverySteeringStrategyOptions, DEFAULT_MAX_CONSECUTIVE_TOOL_ERRORS,
@@ -693,7 +706,7 @@ mod tests {
                 .as_ref()
                 .and_then(|m| m.get("kind"))
                 .and_then(|k| k.as_str()),
-            Some("diagnostic")
+            Some(metadata_kind_wire(AgentMessageMetadataKind::Diagnostic).as_str())
         );
     }
 
@@ -759,7 +772,7 @@ mod tests {
                 .as_ref()
                 .and_then(|m| m.get("kind"))
                 .and_then(|k| k.as_str()),
-            Some("diagnostic")
+            Some(metadata_kind_wire(AgentMessageMetadataKind::Diagnostic).as_str())
         );
     }
 

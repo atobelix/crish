@@ -269,7 +269,7 @@ async fn empty_response_injects_steering_then_recovers() {
     // 预算内恢复：stop 收场（不 error）
     assert_eq!(outcome.reason, AgentEndReason::Stop);
     assert!(outcome.error.is_none());
-    // 注入消息在对话中（system 角色，metadata.kind=runtime-steering）
+    // 注入消息在对话中（system 角色，metadata.kind=steering——I1-α④ 枚举 canonical）
     let injected = outcome
         .messages
         .iter()
@@ -279,7 +279,12 @@ async fn empty_response_injects_steering_then_recovers() {
                     .as_ref()
                     .and_then(|meta| meta.get("kind"))
                     .and_then(|k| k.as_str())
-                    == Some("runtime-steering")
+                    == Some(
+                    session_loop::steering::metadata_kind_wire(
+                        conex_types::message::AgentMessageMetadataKind::Steering
+                    )
+                    .as_str()
+                )
         })
         .expect("应有 steering 注入消息");
     assert!(injected.text().contains("运行期纠偏"));
@@ -400,14 +405,19 @@ async fn steering_disabled_prepare_turn_skips_evaluation() {
     let outcome = loop_.run(user("执行")).await;
 
     assert_eq!(outcome.reason, AgentEndReason::Stop);
-    // 无 steering 注入消息（system 角色 runtime-steering）
+    // 无 steering 注入消息（system 角色，kind=steering 枚举 canonical）
     assert!(!outcome.messages.iter().any(|m| {
         m.role == AgentMessageRole::System
             && m.metadata
                 .as_ref()
                 .and_then(|meta| meta.get("kind"))
                 .and_then(|k| k.as_str())
-                == Some("runtime-steering")
+                == Some(
+                    session_loop::steering::metadata_kind_wire(
+                        conex_types::message::AgentMessageMetadataKind::Steering
+                    )
+                    .as_str()
+                )
     }));
     // 无 steering / intervention 事件
     assert!(!outcome
@@ -1314,7 +1324,7 @@ async fn abort_during_empty_response_skips_steering_injection() {
     let outcome = handle.await.expect("run 不应 panic");
 
     assert_eq!(outcome.reason, AgentEndReason::Aborted);
-    // abort 后不得注入 steering 消息（system 角色 runtime-steering）
+    // abort 后不得注入 steering 消息（system 角色，kind=steering 枚举 canonical）
     assert!(
         !outcome.messages.iter().any(|m| {
             m.role == AgentMessageRole::System
@@ -1322,7 +1332,12 @@ async fn abort_during_empty_response_skips_steering_injection() {
                     .as_ref()
                     .and_then(|meta| meta.get("kind"))
                     .and_then(|k| k.as_str())
-                    == Some("runtime-steering")
+                    == Some(
+                    session_loop::steering::metadata_kind_wire(
+                        conex_types::message::AgentMessageMetadataKind::Steering
+                    )
+                    .as_str()
+                )
         }),
         "abort 后不得执行 steering 注入（F2-04：abort 后副作用）"
     );
