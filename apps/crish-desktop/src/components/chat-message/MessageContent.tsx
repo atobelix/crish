@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { AlertCircle } from 'lucide-react';
 import styles from '../chat-message-row/ChatMessageRow.module.css';
 import type { SessionMessage } from '../../store/types';
@@ -44,7 +44,7 @@ const EMPTY_STREAM_BODY: {
 const EMPTY_TIMELINE: AssistantTimelineItem[] = [];
 
 /** 流式区图片增量扫描的尾窗长度（覆盖最长的 markdown 图片语法跨帧拆分段） */
-const IMAGE_TAIL_WINDOW = 256;
+const _IMAGE_TAIL_WINDOW = 256;
 /** 流式区图片上限（与 extractImageRefs 的 8 张上限对齐） */
 const STREAM_IMAGE_MAX = 8;
 
@@ -195,17 +195,10 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     if (!stripperRef.current) {
       stripperRef.current = new IncrementalThoughtStripper();
     }
-    /** 流式节点重挂载 key（resync 时 +1；DOM 文本清零重 append） */
-    const [streamKey, setStreamKey] = useState(0);
     /** 流式帧单调序号（R2-4 N1 修复）：同值新帧（delta 相同）也能被 StreamingTextBlock
      * 区分（seq+1）照常 append；StrictMode 双执行（同 seq）仍被拦截 */
     const streamSeqRef = useRef(0);
-    /** 流式期增量图片（尾窗扫描，O(增量)） */
-    const [streamImgs, setStreamImgs] = useState<string[]>([]);
-    const streamImgScanRef = useRef<{ tail: string; seen: Set<string> }>({
-      tail: '',
-      seen: new Set(),
-    });
+
     /** 主体拆分缓存：timeline 引用稳定 → 拆分数组引用稳定（TimelineBody memo 依赖） */
     const splitRef = useRef<{
       timeline: AssistantTimelineItem[];
@@ -261,51 +254,51 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       streamText != null &&
       streamText.length > 0;
 
-    let streamDelta = '';
-    let streamSeq = 0;
-    const stripper = stripperRef.current;
-    if (streaming) {
-      const frame = stripper.next(streamText!);
-      streamDelta = frame.appended;
-      // N1：每帧递增 seq（含同值帧），供 StreamingTextBlock 区分「同值新帧」与 StrictMode 双执行
-      streamSeq = ++streamSeqRef.current;
-      if (frame.resynced) {
-        // 文本收缩/流重启：复位增量状态 + 重挂载流式节点（渲染期调整模式，
-        // 幂等：StrictMode 双渲染第二次 next() 命中同值缓存不再触发）
-        streamImgScanRef.current = { tail: '', seen: new Set() };
-        setStreamImgs([]);
-        setStreamKey((k) => k + 1);
-      }
-      // 流式期图片增量扫描（尾窗 + seen 去重；跨帧拆断的语法由尾窗覆盖）
-      const appended = frame.appended;
-      const scanRef = streamImgScanRef.current;
-      const imgScan = appended ? scanRef.tail + appended : '';
-      scanRef.tail = appended ? appended.slice(-IMAGE_TAIL_WINDOW) : '';
-      const fresh: string[] = [];
-      if (imgScan) {
-        for (const src of extractImageRefs(imgScan)) {
-          if (scanRef.seen.has(src)) continue;
-          if (fresh.length >= STREAM_IMAGE_MAX) break;
-          scanRef.seen.add(src);
-          fresh.push(src);
+    // 纯派生流式图片列表（0 render setState，StrictMode 纯净幂等）
+    const currentStreamImages = useMemo(() => {
+      if (!streaming || !streamText) return [];
+      const found: string[] = [];
+      for (const src of extractImageRefs(streamText)) {
+        if (!found.includes(src)) {
+          found.push(src);
+          if (found.length >= STREAM_IMAGE_MAX) break;
         }
       }
-      if (fresh.length > 0) {
-        setStreamImgs((prev) => {
-          const next = [...prev];
-          for (const src of fresh) {
-            if (next.includes(src) || next.length >= STREAM_IMAGE_MAX) break;
-            next.push(src);
-          }
-          return next;
-        });
+      return found;
+    }, [streaming, streamText]);
+
+    // 增量文本计算与单调序号生成（纯计算隔离，0 render setState）
+    const { streamDelta, streamSeq, isResynced } = useMemo(() => {
+      const stripper = stripperRef.current;
+      if (!streaming || !streamText) {
+        if (stripper && stripper.getRawLen() > 0) {
+          stripper.reset();
+        }
+        return { streamDelta: '', streamSeq: 0, isResynced: false };
       }
-    } else if (stripper.getRawLen() > 0) {
-      // live=false（complete/stop）或未到流式态：复位增量状态，避免同组件复用残留
-      stripper.reset();
-      streamImgScanRef.current = { tail: '', seen: new Set() };
-      setStreamImgs([]);
-    }
+      if (!stripper) {
+        return { streamDelta: '', streamSeq: 0, isResynced: false };
+      }
+      const frame = stripper.next(streamText);
+      if (frame.resynced) {
+        streamSeqRef.current += 1;
+        return {
+          streamDelta: frame.appended,
+          streamSeq: streamSeqRef.current,
+          isResynced: true,
+        };
+      }
+      if (frame.appended) {
+        streamSeqRef.current += 1;
+      }
+      return {
+        streamDelta: frame.appended,
+        streamSeq: streamSeqRef.current,
+        isResynced: false,
+      };
+    }, [streaming, streamText]);
+
+    const activeStreamKey = `${msg.id}-${isResynced ? streamSeq : 0}`;
 
     const streamIdx = streaming
       ? timeline.findIndex((i) => i.key === lastTextKey)
@@ -385,13 +378,13 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
         {streaming && (
           <div className={styles.timelineText}>
             <StreamingTextBlock
-              key={`${msg.id}-${streamKey}`}
+              key={activeStreamKey}
               delta={streamDelta}
               seq={streamSeq}
             />
-            {streamImgs.length > 0 && (
+            {currentStreamImages.length > 0 && (
               <div className={styles.inlineImages}>
-                {streamImgs.map((src) => (
+                {currentStreamImages.map((src) => (
                   <img
                     key={src}
                     src={src}

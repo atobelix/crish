@@ -108,6 +108,7 @@ export const ToolCallOutput: React.FC<ToolCallOutputProps> = ({
       <ToolCallOutputPane
         toolId={tc.id}
         output={displayOutput}
+        rawOutput={full || raw}
         status={tc.status}
         durationStr={durationStr}
         diffs={tc.diffs}

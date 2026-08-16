@@ -43,9 +43,16 @@ export class EventRouter {
   private readonly consumedEvents = new Set<string>();
   private readonly MAX_CONSUMED_EVENTS = 2000;
 
-  /** 因果时序乱序到达缓存区：处理 tool-end 先于 tool-start 到达的网络时序抖动 */
+  /** 因果时序乱序到达缓存区：处理 tool-end 先于 tool-start 到达的网络时序抖动，复合键 ${turn}:${toolId} */
   private readonly pendingToolEnds = new Map<string, BridgeEventEnvelope>();
+  private readonly pendingToolUpdates = new Map<
+    string,
+    BridgeEventEnvelope[]
+  >();
   private readonly knownStartedTools = new Set<string>();
+  /** 记录每个 toolId 归属的 turnIndex（DEC-05 / DIM-06） */
+  private readonly toolTurnRegistry = new Map<string, number>();
+  private currentTurnIndex = 0;
 
   constructor(
     state: StreamState,
@@ -81,43 +88,146 @@ export class EventRouter {
     };
   }
 
+  /** 解析 tool 归属的有效 turnIndex，并登记到 toolTurnRegistry */
+  private resolveToolTurn(
+    envelope: BridgeEventEnvelope,
+    toolId: string
+  ): number {
+    const rawTurn =
+      typeof envelope.raw.turnIndex === 'number'
+        ? envelope.raw.turnIndex
+        : null;
+    const eventTurn =
+      envelope.kind === 'engine' &&
+      'turnIndex' in envelope.event &&
+      typeof (envelope.event as { turnIndex?: unknown }).turnIndex === 'number'
+        ? (envelope.event as { turnIndex: number }).turnIndex
+        : null;
+    const explicitTurn = eventTurn ?? rawTurn;
+    if (explicitTurn !== null) {
+      if (toolId) this.toolTurnRegistry.set(toolId, explicitTurn);
+      return explicitTurn;
+    }
+    if (toolId && this.toolTurnRegistry.has(toolId)) {
+      return this.toolTurnRegistry.get(toolId)!;
+    }
+    return this.currentTurnIndex;
+  }
+
+  /** 构造因果缓冲复合键：${turn}:${toolId} */
+  private buildCausalKey(envelope: BridgeEventEnvelope): string {
+    const toolId = extractToolIdFromEnvelope(envelope);
+    if (!toolId) return '';
+    const turn = this.resolveToolTurn(envelope, toolId);
+    return `${turn}:${toolId}`;
+  }
+
+  /** 排空所有由于乱序到达而遗留在因果缓冲中的悬挂事件 */
+  public flushPendingCausalBuffers(
+    reason: 'terminal' | 'abort' | 'timeout' = 'terminal'
+  ): void {
+    if (this.pendingToolEnds.size === 0 && this.pendingToolUpdates.size === 0) {
+      return;
+    }
+
+    recordStreamDiag({
+      runId: this.runId,
+      scope: 'event-router',
+      kind: 'causality-drain',
+      message: `draining ${this.pendingToolEnds.size} pendingToolEnds and ${this.pendingToolUpdates.size} pendingToolUpdates on stream ${reason}`,
+    });
+
+    for (const [, endEnv] of this.pendingToolEnds.entries()) {
+      dispatchEvent(this.env, endEnv);
+    }
+    this.pendingToolEnds.clear();
+    this.pendingToolUpdates.clear();
+    this.knownStartedTools.clear();
+  }
+
   /** 主路径分派：入参为具体事件信封类型（engine 或 legacy），未知形态不达此方法 */
   handleAgentEvent(envelope: BridgeEventEnvelope): void {
     if (this.state.cancelled || this.state.finished) return;
     if (isDataPlaneEventType(envelope.type)) return;
 
-    // 因果时序乱序到达缓冲拦截
+    // 维护当前活跃轮次
+    if (envelope.type === 'turn-start') {
+      const rawTurn =
+        typeof envelope.raw.turnIndex === 'number'
+          ? envelope.raw.turnIndex
+          : null;
+      const eventTurn =
+        envelope.kind === 'engine' &&
+        'turnIndex' in envelope.event &&
+        typeof (envelope.event as { turnIndex?: unknown }).turnIndex ===
+          'number'
+          ? (envelope.event as { turnIndex: number }).turnIndex
+          : null;
+      const turn = eventTurn ?? rawTurn;
+      if (turn !== null) {
+        this.currentTurnIndex = turn;
+      }
+      dispatchEvent(this.env, envelope);
+      return;
+    }
+
+    // 因果时序乱序到达缓冲拦截（复合键 ${turn}:${toolId}）
     if (envelope.type === 'tool-start') {
-      const toolId = extractToolIdFromEnvelope(envelope);
-      if (toolId) {
-        this.knownStartedTools.add(toolId);
+      const causalKey = this.buildCausalKey(envelope);
+      if (causalKey) {
+        this.knownStartedTools.add(causalKey);
       }
       dispatchEvent(this.env, envelope);
 
+      // 回放提前到达的 tool-update
+      if (causalKey && this.pendingToolUpdates.has(causalKey)) {
+        const updates = this.pendingToolUpdates.get(causalKey)!;
+        this.pendingToolUpdates.delete(causalKey);
+        for (const updateEnv of updates) {
+          dispatchEvent(this.env, updateEnv);
+        }
+      }
+
       // 若此前已有提前到达的 tool-end，在同一微任务内同步触发收口
-      if (toolId && this.pendingToolEnds.has(toolId)) {
-        const pendingEnd = this.pendingToolEnds.get(toolId)!;
-        this.pendingToolEnds.delete(toolId);
+      if (causalKey && this.pendingToolEnds.has(causalKey)) {
+        const pendingEnd = this.pendingToolEnds.get(causalKey)!;
+        this.pendingToolEnds.delete(causalKey);
         dispatchEvent(this.env, pendingEnd);
       }
       return;
     }
 
+    if (envelope.type === 'tool-update') {
+      const causalKey = this.buildCausalKey(envelope);
+      if (causalKey && !this.knownStartedTools.has(causalKey)) {
+        const list = this.pendingToolUpdates.get(causalKey) || [];
+        list.push(envelope);
+        this.pendingToolUpdates.set(causalKey, list);
+        return;
+      }
+      dispatchEvent(this.env, envelope);
+      return;
+    }
+
     if (envelope.type === 'tool-end') {
-      const toolId = extractToolIdFromEnvelope(envelope);
-      if (toolId && !this.knownStartedTools.has(toolId)) {
+      const causalKey = this.buildCausalKey(envelope);
+      if (causalKey && !this.knownStartedTools.has(causalKey)) {
         // tool-start 尚未到达，挂入因果缓冲队列
-        this.pendingToolEnds.set(toolId, envelope);
+        this.pendingToolEnds.set(causalKey, envelope);
         recordStreamDiag({
           runId: this.runId,
           scope: 'event-router',
           kind: 'causality-buffered',
-          message: `tool-end arrived before tool-start for ${toolId}, buffering...`,
+          message: `tool-end arrived before tool-start for ${causalKey}, buffering...`,
         });
         return;
       }
       dispatchEvent(this.env, envelope);
       return;
+    }
+
+    if (envelope.type === 'run-terminal' || envelope.type === 'agent-end') {
+      this.flushPendingCausalBuffers('terminal');
     }
 
     dispatchEvent(this.env, envelope);
@@ -144,7 +254,7 @@ export class EventRouter {
     }
 
     // 复合因果 Key 去重检查（流式 delta 无 seq 时 100% 直通放行）
-    const dedupeKey = buildEventDedupeKey(parsed.data);
+    const dedupeKey = buildEventDedupeKey(parsed.data, this.currentTurnIndex);
     if (dedupeKey !== null && this.consumedEvents.has(dedupeKey)) {
       this.recordSkippedDuplicate(dedupeKey);
       return;
@@ -261,7 +371,8 @@ export function extractToolIdFromEnvelope(
  * - 其余通用事件：按 `${type}:${messageId}:${sequence}` 或 `${type}:${sequence}` 幂等。
  */
 export function buildEventDedupeKey(
-  envelope: BridgeEventEnvelope
+  envelope: BridgeEventEnvelope,
+  activeTurnIndex?: number
 ): string | null {
   if (envelope.kind === 'legacy') return null;
   const { event, raw } = envelope;
@@ -288,14 +399,14 @@ export function buildEventDedupeKey(
     const seq = raw.sequence;
     const sequence =
       seq === null || seq === undefined || seq === '' ? null : String(seq);
-    const turnIndex =
+    const rawTurn = typeof raw.turnIndex === 'number' ? raw.turnIndex : null;
+    const eventTurn =
       'turnIndex' in event &&
       typeof (event as { turnIndex?: unknown }).turnIndex === 'number'
         ? (event as { turnIndex: number }).turnIndex
-        : typeof raw.turnIndex === 'number'
-          ? raw.turnIndex
-          : null;
-    const turn = turnIndex !== null ? `turn-${turnIndex}` : 't0';
+        : null;
+    const resolvedTurn = eventTurn ?? rawTurn ?? activeTurnIndex ?? null;
+    const turn = resolvedTurn !== null ? `turn-${resolvedTurn}` : 't0';
 
     if (toolId && sequence !== null) {
       return `${event.type}:${turn}:${toolId}:${sequence}`;
@@ -314,13 +425,13 @@ export function buildEventDedupeKey(
     event.type === 'turn-end' ||
     event.type === 'message-end'
   ) {
-    const turnIdx =
+    const rawTurn = typeof raw.turnIndex === 'number' ? raw.turnIndex : null;
+    const eventTurn =
       'turnIndex' in event &&
       typeof (event as { turnIndex?: unknown }).turnIndex === 'number'
         ? (event as { turnIndex: number }).turnIndex
-        : typeof raw.turnIndex === 'number'
-          ? raw.turnIndex
-          : null;
+        : null;
+    const resolvedTurn = eventTurn ?? rawTurn ?? activeTurnIndex ?? null;
     const seq = raw.sequence;
     const sequence =
       seq === null || seq === undefined || seq === '' ? null : String(seq);
@@ -331,12 +442,12 @@ export function buildEventDedupeKey(
       messageId = raw.messageId;
     }
 
-    const turnTag = turnIdx !== null ? `turn-${turnIdx}` : 't0';
+    const turnTag = resolvedTurn !== null ? `turn-${resolvedTurn}` : 't0';
 
     if (sequence !== null) {
       return `${event.type}:${messageId || 'm'}:${turnTag}:${sequence}`;
     }
-    if (turnIdx !== null) {
+    if (resolvedTurn !== null) {
       return `${event.type}:${messageId || 'm'}:${turnTag}`;
     }
     if (event.type === 'message-end') {

@@ -8,6 +8,33 @@ import {
   type ExtractedToolArgs,
 } from '../../api/toolPresentation';
 
+const TOOL_INPUT_LINE_CAP = 1000;
+const TOOL_INPUT_BYTE_CAP = 128 * 1024;
+
+/**
+ * 入参 1000 行 / 128KB 防爆截断保护
+ */
+function budgetInputText(text: string): {
+  displayText: string;
+  isTruncated: boolean;
+} {
+  if (!text) return { displayText: '', isTruncated: false };
+  const lines = text.split('\n');
+  const bytes =
+    typeof Blob !== 'undefined' ? new Blob([text]).size : text.length;
+  if (lines.length <= TOOL_INPUT_LINE_CAP && bytes <= TOOL_INPUT_BYTE_CAP) {
+    return { displayText: text, isTruncated: false };
+  }
+  let sliced = lines.slice(0, TOOL_INPUT_LINE_CAP).join('\n');
+  if (sliced.length > TOOL_INPUT_BYTE_CAP) {
+    sliced = sliced.slice(0, TOOL_INPUT_BYTE_CAP);
+  }
+  return {
+    displayText: `${sliced}\n… [入参过长，已截断显示前 ${TOOL_INPUT_LINE_CAP} 行 / 128 KB]`,
+    isTruncated: true,
+  };
+}
+
 export interface ToolCallInputPaneProps {
   toolId?: string;
   name?: string;
@@ -45,6 +72,18 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
     parsedArgs.isObject &&
     parsedArgs.rawObject &&
     Object.keys(parsedArgs.rawObject).length > 0;
+
+  const rawDisplay = useMemo(
+    () => budgetInputText(argumentsStr || '{}').displayText,
+    [argumentsStr]
+  );
+
+  const commandDisplay = useMemo(
+    () =>
+      budgetInputText(parsedArgs.primaryTarget || argumentsStr || '(无命令)')
+        .displayText,
+    [parsedArgs.primaryTarget, argumentsStr]
+  );
 
   return (
     <section
@@ -117,9 +156,7 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
               <span className={styles.terminalPrompt} aria-hidden>
                 $
               </span>
-              <pre className={styles.toolResultPreCmd}>
-                {parsedArgs.primaryTarget || argumentsStr || '(无命令)'}
-              </pre>
+              <pre className={styles.toolResultPreCmd}>{commandDisplay}</pre>
             </div>
             {parsedArgs.props.cwd ? (
               <div className={styles.toolMetaParam}>
@@ -131,7 +168,7 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
             ) : null}
           </div>
         ) : viewMode === 'raw' || !hasProps ? (
-          <pre className={styles.toolInputCode}>{argumentsStr || '{}'}</pre>
+          <pre className={styles.toolInputCode}>{rawDisplay}</pre>
         ) : (
           <div className={styles.toolKeyValueTable}>
             {Object.entries(parsedArgs.rawObject!).map(([key, val]) => {
@@ -139,13 +176,19 @@ export const ToolCallInputPane: React.FC<ToolCallInputPaneProps> = ({
                 typeof val === 'object'
                   ? JSON.stringify(val, null, 2)
                   : String(val);
-              const isLong = valStr.length > 80 || valStr.includes('\n');
+              const budgeted = budgetInputText(valStr);
+              const isLong =
+                valStr.length > 80 ||
+                valStr.includes('\n') ||
+                budgeted.isTruncated;
               return (
                 <div key={key} className={styles.toolKeyValueRow}>
                   <span className={styles.toolKeyCell}>{key}</span>
                   <div className={styles.toolValCell}>
                     {isLong ? (
-                      <pre className={styles.toolValPre}>{valStr}</pre>
+                      <pre className={styles.toolValPre}>
+                        {budgeted.displayText}
+                      </pre>
                     ) : (
                       <span className={styles.toolValText}>{valStr}</span>
                     )}

@@ -410,6 +410,27 @@ describe('DIM-05 / Batch 3 工具卡片语义化与防逃逸测试套件', () =>
       expect(toolLabelFromArgs(mcpTarget)).toBe(
         '调用 MCP [tauri-mcp:query_page]'
       );
+
+      const mcpResource: MessageToolCall = {
+        id: 't-25',
+        name: 'read_resource',
+        arguments: JSON.stringify({ Uri: 'mcp://workspace/schema.json' }),
+        status: 'success',
+      };
+      expect(toolLabelFromArgs(mcpResource)).toBe('读取资源 schema.json');
+    });
+
+    it('14. 网络访问 (read_url_content, web_fetch) - 消除被查看文件误判', () => {
+      const urlCall: MessageToolCall = {
+        id: 't-26',
+        name: 'read_url_content',
+        arguments: JSON.stringify({
+          Url: 'https://docs.rs/serde/latest/serde',
+        }),
+        status: 'success',
+      };
+      expect(toolLabelFromArgs(urlCall)).toBe('访问 docs.rs');
+      expect(toolHumanLabel(urlCall)).toBe('访问 docs.rs');
     });
   });
 

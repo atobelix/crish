@@ -15,7 +15,10 @@ import styles from './ChatMessageRow.module.css';
 import { AsyncMarkdownBlock } from './AsyncMarkdownBlock';
 import { Priority } from '../../workers';
 import { openThoughtInspector } from '../../store/thoughtInspectorStore';
-import { budgetThinkingText } from '../../api/messageWindowDomBudget';
+import {
+  budgetThinkingText,
+  THINKING_INLINE_CHAR_CAP,
+} from '../../api/messageWindowDomBudget';
 import { ThinkingTimer } from './ThinkingTimer';
 import { Tooltip, Button } from '../ui';
 
@@ -39,11 +42,23 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
   const [isOpen, setIsOpen] = useState(defaultExpanded ?? isLive);
   const bodyRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
+  const prevIsLiveRef = useRef(isLive);
 
-  // 8k~12k 自适应 DOM 预算计算
+  // 8k~12k 自适应 DOM 预算计算（流式阶段启用 Safe Markdown Tail Slicer 尾窗滑动，DEC-06 / DIM-06）
   const budget = useMemo(() => {
-    return budgetThinkingText(content);
-  }, [content]);
+    return budgetThinkingText(content, {
+      cap: THINKING_INLINE_CHAR_CAP,
+      mode: isLive ? 'tail' : 'head',
+    });
+  }, [content, isLive]);
+
+  // 当 isLive 重新开启时，复位用户手动滚动标志，确保自动追尾吸底
+  useLayoutEffect(() => {
+    if (!prevIsLiveRef.current && isLive) {
+      userScrolledUpRef.current = false;
+    }
+    prevIsLiveRef.current = isLive;
+  }, [isLive]);
 
   // 随流式内容自适应吸底滚动（用户向上滚时暂停吸底）
   useLayoutEffect(() => {
@@ -52,7 +67,7 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
     if (!userScrolledUpRef.current) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [content.length, isLive, isOpen]);
+  }, [budget.displayText, isLive, isOpen]);
 
   const handleScroll = () => {
     if (!bodyRef.current || !isLive) return;

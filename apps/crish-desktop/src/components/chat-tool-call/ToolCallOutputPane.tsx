@@ -15,6 +15,7 @@ import { ToolCallDiffPreview } from './ToolCallDiffPreview';
 export interface ToolCallOutputPaneProps {
   toolId?: string;
   output?: string;
+  rawOutput?: string;
   status?: string;
   durationStr?: string | null;
   diffs?: FileDiff[];
@@ -29,6 +30,7 @@ export interface ToolCallOutputPaneProps {
 export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
   toolId,
   output = '',
+  rawOutput,
   status = 'success',
   durationStr,
   diffs,
@@ -57,8 +59,9 @@ export const ToolCallOutputPane: React.FC<ToolCallOutputPaneProps> = ({
 
   const handleDownloadLog = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!output) return;
-    const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
+    const content = rawOutput || output;
+    if (!content) return;
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

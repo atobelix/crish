@@ -6,199 +6,28 @@ import type { MessageToolCall, SessionMessage } from '../../store/layoutStore';
 import {
   isEditToolName,
   isShellToolName,
-  looksLikeDirectoryListing,
   sanitizeToolDisplayOutput,
 } from '../toolFeedback';
 import type { ToolRowTone } from './toolPresentationTypes';
 import { extractToolCommand } from './toolArgsNormalizer';
 import { unwrapPowerShellCommand } from './toolCommandExtractor';
 import { toolHumanLabel } from './toolHumanDescriptions';
+import {
+  isPlaceholderToolOutput,
+  isTrivialToolOutput,
+  truncateToolOutput,
+} from './toolOutputSanitizer';
+import { toolDiffLineStats } from './toolDiffStats';
 
-// 重导出子模块所有能力（保持 100% 向后兼容）
+// 重导出子模块所有能力（保持 100% 向后兼容，严格单文件 ≤ 250 行）
 export * from './toolLabelSanitizer';
 export * from './toolArgsNormalizer';
 export * from './toolCommandExtractor';
 export * from './toolHumanDescriptions';
 export * from './toolPresentationTypes';
+export * from './toolOutputSanitizer';
+export * from './toolDiffStats';
 export { isShellToolName } from '../toolFeedback';
-
-const HIDE_TOOL_RE = /上次会话中断|会话中断|interrupted|cancelled by user/i;
-
-/** 仅真正会话中断才隐藏（timelineNormalizer 过滤用） */
-export function isInterruptedTool(tc: MessageToolCall): boolean {
-  return tc.status === 'error' && HIDE_TOOL_RE.test(tc.output || '');
-}
-
-/** 运行中 / 空占位输出（不进预览、不撑开行高） */
-export function isPlaceholderToolOutput(
-  output: string | undefined | null
-): boolean {
-  if (!output) return true;
-  const t = output.trim();
-  return !t || /^(执行中|运行中)…?$/.test(t);
-}
-
-/** 纯终态词，无实质内容（完成态行上用勾/叉表达，不占展开体） */
-export function isTrivialToolOutput(
-  output: string | undefined | null
-): boolean {
-  if (!output) return true;
-  const t = output.trim();
-  if (!t || isPlaceholderToolOutput(t)) return true;
-  return /^(完成|OK|ok|Done|done|失败|failed|已拒绝|已取消|cancelled|canceled)$/i.test(
-    t
-  );
-}
-
-/** 折叠行预览可截断；展开区请用 fullToolOutput */
-export function truncateToolOutput(
-  output: string,
-  maxLines = 16,
-  maxChars = 1600
-): string {
-  if (!output || isPlaceholderToolOutput(output) || isTrivialToolOutput(output))
-    return '';
-  let text = sanitizeToolDisplayOutput(output);
-  if (!text) return '';
-  if (text.length > maxChars) text = `${text.slice(0, maxChars)}\n…（已截断）`;
-  const lines = text.split('\n');
-  return lines.length > maxLines
-    ? `${lines.slice(0, maxLines).join('\n')}\n…（共 ${lines.length} 行）`
-    : text;
-}
-
-/** 展开区完整正文（仅清洗，不截断） */
-export function fullToolOutput(output: string): string {
-  return !output ||
-    isPlaceholderToolOutput(output) ||
-    isTrivialToolOutput(output)
-    ? ''
-    : sanitizeToolDisplayOutput(output) || '';
-}
-
-/** git shortstat 摘要行 */
-export function parseGitShortstat(
-  text: string
-): { add: number; del: number } | null {
-  if (!text) return null;
-  const re =
-    /(\d+)\s+files?\s+changed(?:\s*,\s*(\d+)\s+insertions?\(\+\))?(?:\s*,\s*(\d+)\s+deletions?\(-\))?/gi;
-  let m: RegExpExecArray | null = null;
-  let last: RegExpExecArray | null = null;
-  while ((m = re.exec(text)) != null) last = m;
-  if (!last) {
-    const loose = text.match(
-      /(?:^|[\s,])(\d+)\s+insertions?\(\+\)(?:\s*,\s*(\d+)\s+deletions?\(-\))?/i
-    );
-    const onlyDel = !loose
-      ? text.match(/(?:^|[\s,])(\d+)\s+deletions?\(-\)/i)
-      : null;
-    if (loose) {
-      const a = Number(loose[1]) || 0;
-      const d = Number(loose[2]) || 0;
-      return a === 0 && d === 0 ? null : { add: a, del: d };
-    }
-    if (onlyDel) {
-      const d = Number(onlyDel[1]) || 0;
-      return d === 0 ? null : { add: 0, del: d };
-    }
-    return null;
-  }
-  const add = Number(last[2]) || 0;
-  const del = Number(last[3]) || 0;
-  return add === 0 && del === 0 ? null : { add, del };
-}
-
-const PATCH_HEAD_RE =
-  /^(diff --git |@@\s|\+\+\+ |--- |\*{3}\s+(Begin Patch|Update File|Add File|Delete File|End Patch)|\*\*\* (Begin Patch|Update File|Add File))/i;
-function looksLikeUnifiedOrPatchText(lines: string[]): boolean {
-  return lines.some((l) => PATCH_HEAD_RE.test(l));
-}
-
-function isDiffMetaPlusMinusLine(line: string): boolean {
-  return (
-    line.startsWith('+++') ||
-    line.startsWith('---') ||
-    /^\+\+\+ \//.test(line) ||
-    /^--- \//.test(line)
-  );
-}
-
-/** 编辑类工具行内 +N / −M */
-export function toolDiffLineStats(
-  tc: MessageToolCall
-): { add: number; del: number } | null {
-  let add = 0;
-  let del = 0;
-  if (tc.diffs?.length) {
-    for (const d of tc.diffs) {
-      let dAdd = Number.isFinite(d.additions) ? Math.max(0, d.additions) : 0;
-      let dDel = Number.isFinite(d.deletions) ? Math.max(0, d.deletions) : 0;
-      if (d.changes?.length) {
-        let cAdd = 0,
-          cDel = 0;
-        for (const c of d.changes) {
-          if (c.type === 'addition') cAdd += 1;
-          else if (c.type === 'deletion') cDel += 1;
-        }
-        if (dAdd === 0 && dDel === 0) {
-          dAdd = cAdd;
-          dDel = cDel;
-        } else {
-          if (dAdd === 0 && cAdd > 0) dAdd = cAdd;
-          if (dDel === 0 && cDel > 0) dDel = cDel;
-        }
-      }
-      add += dAdd;
-      del += dDel;
-    }
-  }
-  if (
-    add === 0 &&
-    del === 0 &&
-    tc.output &&
-    !isPlaceholderToolOutput(tc.output)
-  ) {
-    const text = tc.output
-      .replace(/^\uFEFF/, '')
-      .replace(/\r\n/g, '\n')
-      .replace(/\r/g, '\n');
-    if (!looksLikeDirectoryListing(text)) {
-      const lines = text.split('\n');
-      if (looksLikeUnifiedOrPatchText(lines)) {
-        for (const line of lines) {
-          if (!line || line.startsWith('\\') || line.startsWith('***'))
-            continue;
-          if (line.startsWith('+') && !isDiffMetaPlusMinusLine(line)) add += 1;
-          else if (line.startsWith('-') && !isDiffMetaPlusMinusLine(line))
-            del += 1;
-        }
-        if (add === 0 && del === 0) {
-          for (const line of lines) {
-            const m = line.match(
-              /^@@\s+-(\d+)(?:,(\d+))?\s+\+(\d+)(?:,(\d+))?\s@@/
-            );
-            if (!m) continue;
-            const oldN = m[2] != null ? Number(m[2]) : 1;
-            const newN = m[4] != null ? Number(m[4]) : 1;
-            if (Number.isFinite(oldN) && Number.isFinite(newN)) {
-              if (newN > oldN) add += newN - oldN;
-              else if (oldN > newN) del += oldN - newN;
-            }
-          }
-        }
-      }
-      if (add === 0 && del === 0) {
-        const short = parseGitShortstat(text);
-        if (short) {
-          add = short.add;
-          del = short.del;
-        }
-      }
-    }
-  }
-  return add === 0 && del === 0 ? null : normalizeToolDiffStat({ add, del });
-}
 
 export function normalizeToolDiffStat(stats: { add: number; del: number }): {
   add: number;
