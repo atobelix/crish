@@ -308,6 +308,12 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'run control signal',
   },
   {
+    command: 'core_session_retract',
+    status: 'implemented',
+    feature:
+      'R1 撤回（统一输入流收敛战役）：停 run + 边界冻结 + timeline-truncate',
+  },
+  {
     command: 'core_cancel_run',
     status: 'implemented',
     feature: 'run cancellation',

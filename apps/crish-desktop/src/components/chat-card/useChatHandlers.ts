@@ -13,6 +13,8 @@ import {
   formatReverseFailureToast,
 } from '../../api/reverseFileDiff';
 import { getTerminalState } from '../../store/storeAccess';
+import { getTransport } from '../../api/transport';
+import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
 
 export interface UseChatHandlersOptions {
   wsId: string;
@@ -46,9 +48,8 @@ export function useChatHandlers({
     if (!session) return;
     void (async () => {
       try {
-        const { tryDownloadSessionMarkdown } = await import(
-          '../../api/sessionExport'
-        );
+        const { tryDownloadSessionMarkdown } =
+          await import('../../api/sessionExport');
         const result = tryDownloadSessionMarkdown(session, new Date(), {
           sessionsById: byId,
         });
@@ -76,9 +77,8 @@ export function useChatHandlers({
           return;
         }
         try {
-          const { previewConversationRewind } = await import(
-            '../../api/conversationRewindApi'
-          );
+          const { previewConversationRewind } =
+            await import('../../api/conversationRewindApi');
           const preview = await previewConversationRewind({ sessionId: sid });
           if (!preview.ok) {
             onShowToast(
@@ -89,9 +89,7 @@ export function useChatHandlers({
             return;
           }
           const rawType =
-            typeof preview.raw.type === 'string'
-              ? preview.raw.type
-              : 'preview';
+            typeof preview.raw.type === 'string' ? preview.raw.type : 'preview';
           onShowToast(
             `已收到回溯预览（${rawType}）。确认应用请使用引擎 apply-conversation-rewind；缺 leaf 事实时不会改写会话。`
           );
@@ -164,17 +162,53 @@ export function useChatHandlers({
         return `${scope.lastUserMessageText}\n${trimmed}`;
       });
     }
-  }, [
-    pendingWithdraw,
-    activeSessionId,
-    onShowToast,
-    wsId,
-    setChatInput,
-  ]);
+  }, [pendingWithdraw, activeSessionId, onShowToast, wsId, setChatInput]);
 
   const cancelWithdraw = useCallback(() => {
     setPendingWithdraw(null);
   }, []);
+
+  // ── R1 撤回（统一输入流收敛战役）：引擎撤回入口 + 回填消费 ──
+
+  // timeline-truncate 消费端派发的回填事件 → setChatInput + setComposerDraft
+  //（数据源 = boundary user 节点 text，不依赖 draft 快照）
+  useEffect(() => {
+    return onUiEvent('retract-backfill', ({ sessionId, text }) => {
+      if (!sessionId || !text) return;
+      backfillFromBoundaryText(sessionId, text, setChatInput);
+    });
+  }, [setChatInput]);
+
+  // 撤回上一条 user 消息（composer 撤回按钮）：定位活跃会话最后一条
+  // user 消息 → 引擎 core_session_retract（复用 core_run_control L3 通道 +
+  // 独立 retract 语义 wire；引擎侧停 run → 冻结 → timeline-truncate →
+  // 前端经事件流投影重放 + 文本回填）
+  const handleRetract = useCallback(async () => {
+    const sid = activeSessionId;
+    if (!sid || sid.startsWith('__pending')) {
+      onShowToast('当前无可用会话，无法撤回');
+      return;
+    }
+    const session = getCompositionRoot().session.getState();
+    const sess = session.sessionsById[sid];
+    const lastUser = [...(sess?.messages || [])]
+      .reverse()
+      .find((m) => m.sender === 'user');
+    if (!lastUser) {
+      onShowToast('没有可撤回的用户消息');
+      return;
+    }
+    try {
+      const transport = getTransport();
+      await transport.send('core_session_retract', {
+        sessionId: sid,
+        targetMessageId: lastUser.id,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      onShowToast(`撤回失败：${msg}`);
+    }
+  }, [activeSessionId, onShowToast]);
 
   const handleRegenerate = useCallback(
     (userText: string, assistantMsgId: string) => {
@@ -183,7 +217,9 @@ export function useChatHandlers({
       const now = Date.now();
       const lastTime = lastRetryTimeRef.current[activeSessionId] || 0;
       if (now - lastTime < 1500) {
-        console.warn('[handleRegenerate] clicks too fast, throttling duplicate submit');
+        console.warn(
+          '[handleRegenerate] clicks too fast, throttling duplicate submit'
+        );
         return;
       }
       lastRetryTimeRef.current[activeSessionId] = now;
@@ -215,12 +251,7 @@ export function useChatHandlers({
         clientMessageId: userMsgId,
       });
     },
-    [
-      handleStopGeneration,
-      wsId,
-      activeSessionId,
-      runStreamingAssistant,
-    ]
+    [handleStopGeneration, wsId, activeSessionId, runStreamingAssistant]
   );
 
   const handleBranch = useCallback(() => {
@@ -244,6 +275,7 @@ export function useChatHandlers({
     handleWithdraw,
     handleRegenerate,
     handleBranch,
+    handleRetract,
     pendingWithdraw,
     confirmWithdraw,
     cancelWithdraw,

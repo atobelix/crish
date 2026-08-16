@@ -30,7 +30,6 @@ import type {
   ToolMetadata,
   ToolBatchCall,
   ToolBatchResult,
-  ToolProgressUpdate,
   ContextCompressionRecord,
   RuntimeCheckpointRecord,
   RuntimeCheckpointRestoreRecord,
@@ -187,16 +186,6 @@ const CORE_NORMALIZERS: Record<string, Normalizer> = {
       },
     };
   },
-  'tool-update': (raw) => ({
-    type: 'tool-update',
-    sessionId: str(raw.sessionId),
-    batchId: str(raw.batchId),
-    toolCallId: str(raw.toolCallId),
-    timestamp: str(raw.timestamp),
-    update: isRecord(raw.update)
-      ? (raw.update as unknown as ToolProgressUpdate)
-      : {},
-  }),
   'tool-end': (raw) => {
     const r = isRecord(raw.result) ? raw.result : raw;
     return {

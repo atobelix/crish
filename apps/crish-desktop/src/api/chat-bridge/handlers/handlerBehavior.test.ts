@@ -5,8 +5,9 @@
  * EventRouter.test.ts 只对约 10 个事件类型有行为断言。本文件为以下类型补行为级断言：
  * - context-compression-* / checkpoint-* / runtime-steering / runtime-intervention-required /
  *   turn-start / turn-end / agent-start / message-start：显式空实现，锁定"无副作用"；
- * - tool-update / tool-batch-start / tool-batch-end / tool-input-repaired：
- *   toolHandlers.ts 的 4 个显式 no-op handler，锁定"不应有副作用"（含批事件携带 calls 也不消费）；
+ * - tool-batch-start / tool-batch-end / tool-input-repaired：
+ *   toolHandlers.ts 的显式 no-op handler，锁定"不应有副作用"（含批事件携带 calls 也不消费）；
+ *   （R1 tool-update 死契约删除：tool-update no-op handler 与对应断言随删）
  * - provider-diagnostic：唯一有实际副作用的诊断 handler，锁定"记可观测日志，不触碰状态/回调"。
  *
  * 信封一律经 parseBridgeEvent 宽容路径构造（缺信封字段的典型形态），
@@ -119,15 +120,6 @@ describe('显式空实现 handler 无副作用锁定（审计行为级补位）'
     {
       name: 'turn-end',
       payload: { type: 'turn-end', turnIndex: 1, toolCallCount: 2 },
-    },
-    {
-      name: 'tool-update',
-      payload: {
-        type: 'tool-update',
-        batchId: 'b-1',
-        toolCallId: 't-1',
-        update: { text: 'x' },
-      },
     },
     {
       name: 'tool-batch-start（携带 calls 也不消费）',

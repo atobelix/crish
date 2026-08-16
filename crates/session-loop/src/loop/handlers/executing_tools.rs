@@ -68,6 +68,13 @@ pub(crate) async fn handle(
             input: call.input.clone(),
             // 并发/类别由注册表工具定义驱动；当前按可并行内部工具处理
             //（真实并发分区语义见 B3.5 验收与 05 §2.3）
+            //
+            // P1 权限归一（主控裁决 2，ToolCategory 登记降级）：类别轴为
+            // 「权限 + 回滚共用投影标签」——安全判定（allow/deny/ask）不读
+            // 类别（决策 4：判定以 dangerous 标记 + PermissionMode +
+            // decide_with_redline 为准）；此处恒 Internal 为投影标签登记，
+            // 不接线真类别；R1 回滚注册表将在此轴上挂「类别 → 回滚策略」
+            // 策略表（P1 只登记不实现）。
             category: ToolCategory::Internal,
             concurrency: ToolConcurrency::Parallel,
         })
@@ -354,18 +361,6 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         }
                         ApprovalDecision::Expired => conex_types::events::ApprovalDecision::Expired,
                     },
-                    timestamp: crate::steering::now_iso_utc(),
-                }
-            }
-            ToolEvent::ToolProgress { call_id, update } => {
-                // S1 流式进度（TOOLS-01 §3.1.5）：ToolUpdate 出站（展示面，
-                // 携带 batch_id/tool_call_id；不进消息历史——终值仍由
-                // ToolEnd 承载，避免污染对话缓存前缀）
-                AgentEvent::ToolUpdate {
-                    session_id: session_id.clone(),
-                    batch_id: batch_id.clone(),
-                    tool_call_id: call_id.clone(),
-                    update: update.clone(),
                     timestamp: crate::steering::now_iso_utc(),
                 }
             }

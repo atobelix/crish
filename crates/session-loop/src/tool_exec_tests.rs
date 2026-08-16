@@ -295,31 +295,12 @@ fn tool_context_tool_call_id_none_on_unwired_paths() {
     assert!(fresh.tool_call_id.is_none(), "便捷构造未接线应为 None");
 }
 
-/// S1 出站映射纯函数（TOOLS-01 §3.1.5）：Text/Custom/Content 三形态
-#[test]
-fn progress_update_mapping_shapes() {
-    // Text → text 承载 + metadata.kind = tool-progress
-    let u = tool_progress_update(&ToolProgress::Text { text: "hi".into() }).unwrap();
-    assert_eq!(u.text.as_deref(), Some("hi"));
-    assert!(u.json.is_none());
-    assert_eq!(u.metadata.as_ref().unwrap()["kind"], "tool-progress");
-    // Custom → json 承载 + metadata.kind = subkind（tool-args-delta 同槽位）
-    let u = tool_progress_update(&ToolProgress::Custom {
-        subkind: "tool-args-delta".into(),
-        payload: serde_json::json!({ "a": 1 }),
-    })
-    .unwrap();
-    assert!(u.text.is_none());
-    assert_eq!(u.json.as_ref().unwrap()["a"], 1);
-    assert_eq!(u.metadata.as_ref().unwrap()["kind"], "tool-args-delta");
-    // Content → 阶段 1 不发射（返回 None）
-    assert!(tool_progress_update(&ToolProgress::Content { blocks: vec![] }).is_none());
-}
-
-/// S1 事件链路集成：流式工具进度 → ToolEvent::ToolProgress 入事件链，
-/// 时序 tool-start → tool-update* → tool-end（Content 不发射）
+/// S1 流式执行契约（R1 tool-update 死契约删除后）：流式工具仍经
+/// execute_stream_with_output_policy 消费（Terminal 终值收口），但进度
+/// 不再入事件链——事件序列收缩为 BatchStart → ToolStart → ToolEnd →
+/// BatchEnd（无 tool-progress；终值仍由 ToolEnd 承载）
 #[tokio::test]
-async fn streaming_progress_events_between_start_and_end() {
+async fn streaming_execution_keeps_terminal_without_progress_events() {
     let reg = registry_with(vec![Arc::new(StreamTool {
         text_chunks: vec!["第一块".into(), "第二块".into()],
         custom: Some(("phase".into(), serde_json::json!({ "step": 1 }))),
@@ -338,15 +319,14 @@ async fn streaming_progress_events_between_start_and_end() {
         .await;
     assert!(out.results[0].is_ok());
     assert_eq!(out.results[0].output["final"], true);
-    // 事件序列：BatchStart → ToolStart → ToolProgress×3（2 Text + 1
-    // Custom；Content 不发射）→ ToolEnd → BatchEnd
+    // 事件序列：BatchStart → ToolStart → ToolEnd → BatchEnd（进度事件
+    // 已随 tool-update 死契约删除，不再出站）
     let kinds: Vec<&str> = out
         .events
         .iter()
         .map(|e| match e {
             ToolEvent::BatchStart { .. } => "batch-start",
             ToolEvent::ToolStart { .. } => "tool-start",
-            ToolEvent::ToolProgress { .. } => "tool-progress",
             ToolEvent::ToolEnd { .. } => "tool-end",
             ToolEvent::BatchEnd { .. } => "batch-end",
             _ => "other",
@@ -354,41 +334,9 @@ async fn streaming_progress_events_between_start_and_end() {
         .collect();
     assert_eq!(
         kinds,
-        vec![
-            "batch-start",
-            "tool-start",
-            "tool-progress",
-            "tool-progress",
-            "tool-progress",
-            "tool-end",
-            "batch-end"
-        ],
-        "时序契约：tool-start → tool-update* → tool-end"
+        vec!["batch-start", "tool-start", "tool-end", "batch-end"],
+        "流式执行事件链不含进度事件（R1 tool-update 删除）"
     );
-    // 进度载荷形状：Text 两帧 + Custom 一帧，全部携带 call_id
-    let updates: Vec<&ToolProgressUpdate> = out
-        .events
-        .iter()
-        .filter_map(|e| match e {
-            ToolEvent::ToolProgress { update, .. } => Some(update),
-            _ => None,
-        })
-        .collect();
-    assert_eq!(updates.len(), 3);
-    assert_eq!(updates[0].text.as_deref(), Some("第一块"));
-    assert_eq!(
-        updates[0].metadata.as_ref().unwrap()["kind"],
-        "tool-progress"
-    );
-    assert_eq!(updates[1].text.as_deref(), Some("第二块"));
-    assert!(updates[1].json.is_none());
-    assert_eq!(updates[2].json.as_ref().unwrap()["step"], 1);
-    assert_eq!(updates[2].metadata.as_ref().unwrap()["kind"], "phase");
-    for e in &out.events {
-        if let ToolEvent::ToolProgress { call_id, .. } = e {
-            assert_eq!(call_id, "c1", "进度事件携带工具调用 id");
-        }
-    }
 }
 
 #[tokio::test]

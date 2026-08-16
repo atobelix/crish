@@ -317,6 +317,10 @@ pub struct CoreRunState {
     /// （750→1500→3000，8s 封顶）。注入存在时 [Self::sleep_resume_backoff]
     /// 跳过真实睡眠（测试驱动模式）。
     pub(crate) resume_backoff: Mutex<Option<BackoffDelayFn>>,
+    /// R1 撤回边界冻结护栏（统一输入流收敛战役）：会话级冻结注册表——
+    /// run 事件队列（run_launch.rs 装配）与撤回命令（retraction_commands.rs）
+    /// 注入**同一实例**：冻结激活/释放与写侧拒绝走同一会话级状态。
+    pub(crate) retraction_freeze: std::sync::Arc<session_loop::SessionFreezeRegistry>,
     /// 子代理生产 spawner（T-D-13：SubagentSpawner 契约引擎侧实现；
     /// 同一实例经 EngineHandle 注入 run_subagent 工具 + 本状态持有——
     /// 注入面（launcher / db / wait 广播 / steering 队列）经
@@ -504,6 +508,7 @@ impl CoreRunState {
             resume_empty_streak: Mutex::new(HashMap::new()),
             resume_launcher: Mutex::new(Some(resume_launcher)),
             resume_backoff: Mutex::new(None),
+            retraction_freeze: std::sync::Arc::new(session_loop::SessionFreezeRegistry::new()),
             subagent_spawner,
             recovery_coordinators: Mutex::new(HashMap::new()),
             session_trees: Mutex::new(HashMap::new()),
@@ -1223,7 +1228,7 @@ impl CoreRunState {
     ///    Steer → `request_steer`（下一安全点注入，当前 run 继续）；
     /// 3. run 已收口（工具调用在收口后被重放等边角）→ PendingMessageQueue
     ///    入队 steering 条目（group_id=`main-agent-msg`，下一 run
-    ///    decide_idle_resume 队列源消费——消息仍带 `kind:"steering"`
+    ///    decide_idle_resume 队列源消费——消息带 kind=steering（枚举
     ///    标记，来源标记以队列条目承载）。
     ///
     /// 会话留档语义：消息随 run 对话进入事件流与会话历史（运行中入环的

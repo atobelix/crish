@@ -1,7 +1,7 @@
 {
   "contract": "engine-events",
   "schemaVersion": 1,
-  "eventCount": 58,
+  "eventCount": 57,
   "description": "Rust 域事件契约注册表（唯一事实源：crates/conex-types/src/events.rs 的 AgentEvent enum）。本文件是机器可读导出，由生成脚本 scripts/generate-engine-bindings.mjs 消费，产出 TS 类型与解析器（packages/shared-types/src/generated/engine/**）。任何修改必须同步 events.rs（cargo test -p conex-types 的 registry_drift 测试锁定两侧一致）。事件编号即本表顺序（1-58），对应 enum 声明顺序（2026-08-05 T-CF-04 定时器域兼容新增 timer-fired/timer-cancelled，38 → 40；同日 T-CF-08 cron 域兼容新增 cron-fired，40 → 41；2026-08-11 任务连续性方案恢复域 + goal 域兼容新增 recovery-* ×5 + goal-* ×3，41 → 49）。每事件 backpressure 字段为背压三级分类（delta/soft/critical，04 报告 1e）；subagent-event 的 kindBackpressure 为类别级分类（progress=delta、message/tool=soft）。 2026-08-14 D-03 契约窗口（事件面补全与原子要素）：tool-input-repaired 核销删除（生产零发射死契约）+ 兼容新增 9 事件（全 Delta 可丢级观测），49 → 57（编号 50-58）。 2026-08-16 统一输入流收敛战役 T1a（详案-T1-事件模型扩展）：新增撤回域事件 timeline-truncate（Critical+Persist+Critical，default required），57 → 58（编号 58）。",
   "events": [
     {
@@ -262,65 +262,6 @@
     },
     {
       "id": 9,
-      "type": "tool-update",
-      "rustVariant": "ToolUpdate",
-      "domain": "tool",
-      "description": "工具执行进度增量（S1 流式输出，TOOLS-01 §3.1.5；展示面事件不进消息历史，终值仍由 tool-end 承载；update.metadata.kind 字面量登记见 kindLiterals）",
-      "kindLiterals": [
-        {
-          "kind": "tool-progress",
-          "status": "active",
-          "description": "文本进度增量（ToolProgress::Text 映射：update.text 承载）"
-        },
-        {
-          "kind": "tool-args-delta",
-          "status": "reserved",
-          "description": "增量参数流（预留：前端 partialToolArgs 消费，ToolProgress::Custom subkind 同槽位）"
-        },
-        {
-          "kind": "content-blocks",
-          "status": "reserved",
-          "description": "富内容块进度（ToolProgress::Content，阶段 1 仅类型定义不发射）"
-        }
-      ],
-      "fields": [
-        {
-          "name": "sessionId",
-          "type": "string",
-          "required": true,
-          "description": "会话 id"
-        },
-        {
-          "name": "batchId",
-          "type": "string",
-          "required": true,
-          "description": "批次 id"
-        },
-        {
-          "name": "toolCallId",
-          "type": "string",
-          "required": true,
-          "description": "工具调用 id"
-        },
-        {
-          "name": "update",
-          "type": "ToolProgressUpdate",
-          "required": true,
-          "description": "进度增量载荷"
-        },
-        {
-          "name": "timestamp",
-          "type": "string",
-          "required": true,
-          "description": "ISO8601 时间戳"
-        }
-      ],
-      "backpressure": "critical",
-      "persist": true,
-      "bridgePriority": "critical"
-    },
-    {
-      "id": 10,
       "type": "tool-end",
       "rustVariant": "ToolEnd",
       "domain": "tool",
@@ -356,7 +297,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 11,
+      "id": 10,
       "type": "tool-batch-start",
       "rustVariant": "ToolBatchStart",
       "domain": "tool",
@@ -398,7 +339,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 12,
+      "id": 11,
       "type": "tool-batch-end",
       "rustVariant": "ToolBatchEnd",
       "domain": "tool",
@@ -434,7 +375,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 13,
+      "id": 12,
       "type": "context-compression-start",
       "rustVariant": "ContextCompressionStart",
       "domain": "compression",
@@ -471,7 +412,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 14,
+      "id": 13,
       "type": "context-compression-end",
       "rustVariant": "ContextCompressionEnd",
       "domain": "compression",
@@ -513,7 +454,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 15,
+      "id": 14,
       "type": "provider-diagnostic",
       "rustVariant": "ProviderDiagnostic",
       "domain": "diagnostic",
@@ -543,7 +484,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 16,
+      "id": 15,
       "type": "runtime-error",
       "rustVariant": "RuntimeError",
       "domain": "diagnostic",
@@ -579,7 +520,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 17,
+      "id": 16,
       "type": "runtime-steering",
       "rustVariant": "RuntimeSteering",
       "domain": "diagnostic",
@@ -615,7 +556,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 18,
+      "id": 17,
       "type": "runtime-intervention-required",
       "rustVariant": "RuntimeInterventionRequired",
       "domain": "diagnostic",
@@ -657,7 +598,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 19,
+      "id": 18,
       "type": "approval-requested",
       "rustVariant": "ApprovalRequested",
       "domain": "approval",
@@ -687,7 +628,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 20,
+      "id": 19,
       "type": "approval-resolved",
       "rustVariant": "ApprovalResolved",
       "domain": "approval",
@@ -729,7 +670,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 21,
+      "id": 20,
       "type": "checkpoint-created",
       "rustVariant": "CheckpointCreated",
       "domain": "checkpoint",
@@ -759,7 +700,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 22,
+      "id": 21,
       "type": "checkpoint-restored",
       "rustVariant": "CheckpointRestored",
       "domain": "checkpoint",
@@ -789,7 +730,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 23,
+      "id": 22,
       "type": "run-terminal",
       "rustVariant": "RunTerminal",
       "domain": "diagnostic",
@@ -831,7 +772,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 24,
+      "id": 23,
       "type": "cache-stats-updated",
       "rustVariant": "CacheStatsUpdated",
       "domain": "cache",
@@ -861,7 +802,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 25,
+      "id": 24,
       "type": "cache-waste-alert",
       "rustVariant": "CacheWasteAlert",
       "domain": "cache",
@@ -918,7 +859,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 26,
+      "id": 25,
       "type": "cold-cache-warning",
       "rustVariant": "ColdCacheWarning",
       "domain": "cache",
@@ -963,7 +904,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 27,
+      "id": 26,
       "type": "security-audit",
       "rustVariant": "SecurityAudit",
       "domain": "security",
@@ -1023,7 +964,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 28,
+      "id": 27,
       "type": "subagent-started",
       "rustVariant": "SubagentStarted",
       "domain": "subagent",
@@ -1089,7 +1030,7 @@
       ]
     },
     {
-      "id": 29,
+      "id": 28,
       "type": "subagent-event",
       "rustVariant": "SubagentEvent",
       "domain": "subagent",
@@ -1130,7 +1071,7 @@
       ]
     },
     {
-      "id": 30,
+      "id": 29,
       "type": "subagent-ended",
       "rustVariant": "SubagentEnded",
       "domain": "subagent",
@@ -1178,7 +1119,7 @@
       ]
     },
     {
-      "id": 31,
+      "id": 30,
       "type": "task-started",
       "rustVariant": "TaskStarted",
       "domain": "task",
@@ -1226,7 +1167,7 @@
       ]
     },
     {
-      "id": 32,
+      "id": 31,
       "type": "task-output",
       "rustVariant": "TaskOutput",
       "domain": "task",
@@ -1269,7 +1210,7 @@
       ]
     },
     {
-      "id": 33,
+      "id": 32,
       "type": "task-heartbeat",
       "rustVariant": "TaskHeartbeat",
       "domain": "task",
@@ -1299,7 +1240,7 @@
       ]
     },
     {
-      "id": 34,
+      "id": 33,
       "type": "task-suspicious",
       "rustVariant": "TaskSuspicious",
       "domain": "task",
@@ -1337,7 +1278,7 @@
       ]
     },
     {
-      "id": 35,
+      "id": 34,
       "type": "task-completed",
       "rustVariant": "TaskCompleted",
       "domain": "task",
@@ -1382,7 +1323,7 @@
       ]
     },
     {
-      "id": 36,
+      "id": 35,
       "type": "task-failed",
       "rustVariant": "TaskFailed",
       "domain": "task",
@@ -1426,7 +1367,7 @@
       ]
     },
     {
-      "id": 37,
+      "id": 36,
       "type": "task-killed",
       "rustVariant": "TaskKilled",
       "domain": "task",
@@ -1462,7 +1403,7 @@
       ]
     },
     {
-      "id": 38,
+      "id": 37,
       "type": "timer-fired",
       "rustVariant": "TimerFired",
       "domain": "timer",
@@ -1499,7 +1440,7 @@
       ]
     },
     {
-      "id": 39,
+      "id": 38,
       "type": "timer-cancelled",
       "rustVariant": "TimerCancelled",
       "domain": "timer",
@@ -1536,7 +1477,7 @@
       ]
     },
     {
-      "id": 40,
+      "id": 39,
       "type": "cron-fired",
       "rustVariant": "CronFired",
       "domain": "cron",
@@ -1586,7 +1527,7 @@
       ]
     },
     {
-      "id": 41,
+      "id": 40,
       "type": "recovery-escalated",
       "rustVariant": "RecoveryEscalated",
       "domain": "recovery",
@@ -1636,7 +1577,7 @@
       ]
     },
     {
-      "id": 42,
+      "id": 41,
       "type": "recovery-steering",
       "rustVariant": "RecoverySteering",
       "domain": "recovery",
@@ -1698,7 +1639,7 @@
       ]
     },
     {
-      "id": 43,
+      "id": 42,
       "type": "recovery-fork",
       "rustVariant": "RecoveryFork",
       "domain": "recovery",
@@ -1758,7 +1699,7 @@
       ]
     },
     {
-      "id": 44,
+      "id": 43,
       "type": "recovery-report",
       "rustVariant": "RecoveryReport",
       "domain": "recovery",
@@ -1801,7 +1742,7 @@
       ]
     },
     {
-      "id": 45,
+      "id": 44,
       "type": "recovery-budget-denied",
       "rustVariant": "RecoveryBudgetDenied",
       "domain": "recovery",
@@ -1845,7 +1786,7 @@
       ]
     },
     {
-      "id": 46,
+      "id": 45,
       "type": "goal-round-started",
       "rustVariant": "GoalRoundStarted",
       "domain": "goal",
@@ -1877,7 +1818,7 @@
       ]
     },
     {
-      "id": 47,
+      "id": 46,
       "type": "goal-round-completed",
       "rustVariant": "GoalRoundCompleted",
       "domain": "goal",
@@ -1942,7 +1883,7 @@
       ]
     },
     {
-      "id": 48,
+      "id": 47,
       "type": "goal-continuation-decided",
       "rustVariant": "GoalContinuationDecided",
       "domain": "goal",
@@ -1984,7 +1925,7 @@
       ]
     },
     {
-      "id": 49,
+      "id": 48,
       "type": "steering-evaluated",
       "rustVariant": "SteeringEvaluated",
       "domain": "steering",
@@ -2047,7 +1988,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 50,
+      "id": 49,
       "type": "control-intent",
       "rustVariant": "ControlIntent",
       "domain": "control",
@@ -2101,7 +2042,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 51,
+      "id": 50,
       "type": "hook-outcome",
       "rustVariant": "HookOutcome",
       "domain": "hook",
@@ -2149,7 +2090,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 52,
+      "id": 51,
       "type": "summary-background",
       "rustVariant": "SummaryBackground",
       "domain": "summary",
@@ -2198,7 +2139,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 53,
+      "id": 52,
       "type": "stage-summary-milestone",
       "rustVariant": "StageSummaryMilestone",
       "domain": "summary",
@@ -2241,7 +2182,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 54,
+      "id": 53,
       "type": "nudge-enqueued",
       "rustVariant": "NudgeEnqueued",
       "domain": "steering",
@@ -2283,7 +2224,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 55,
+      "id": 54,
       "type": "recovery-acknowledged",
       "rustVariant": "RecoveryAcknowledged",
       "domain": "recovery",
@@ -2319,7 +2260,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 56,
+      "id": 55,
       "type": "recovery-retry-attempted",
       "rustVariant": "RecoveryRetryAttempted",
       "domain": "recovery",
@@ -2376,7 +2317,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 57,
+      "id": 56,
       "type": "provider-request-anchored",
       "rustVariant": "ProviderRequestAnchored",
       "domain": "diagnostic",
@@ -2420,7 +2361,7 @@
       "bridgePriority": "critical"
     },
     {
-      "id": 58,
+      "id": 57,
       "type": "timeline-truncate",
       "rustVariant": "TimelineTruncate",
       "domain": "retraction",
@@ -2745,30 +2686,6 @@
           "required": true,
           "description": "执行耗时（毫秒）",
           "integer": true
-        }
-      ]
-    },
-    "ToolProgressUpdate": {
-      "kind": "struct",
-      "description": "工具执行进度增量（tool-update.update 载荷；metadata.kind 字面量：tool-progress 已启用，tool-args-delta/content-blocks 预留）",
-      "fields": [
-        {
-          "name": "text",
-          "type": "string",
-          "required": false,
-          "description": "文本增量"
-        },
-        {
-          "name": "json",
-          "type": "JsonValue",
-          "required": false,
-          "description": "结构化增量"
-        },
-        {
-          "name": "metadata",
-          "type": "JsonValue",
-          "required": false,
-          "description": "附加元数据（kind 字面量：tool-progress 文本进度 / tool-args-delta 增量参数预留 / content-blocks 富内容预留）"
         }
       ]
     },

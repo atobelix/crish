@@ -100,12 +100,6 @@ const NORMALIZER_SAMPLES: Record<string, Record<string, unknown>> = {
     batchId: 'b1',
     call: { id: 'tc1', toolName: 'read' },
   },
-  'tool-update': {
-    type: 'tool-update',
-    batchId: 'b1',
-    toolCallId: 'tc1',
-    update: { partialArgs: '{}' },
-  },
   'tool-end': {
     type: 'tool-end',
     batchId: 'b1',

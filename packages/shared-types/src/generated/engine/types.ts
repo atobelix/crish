@@ -146,12 +146,6 @@ export interface ToolBatchResult {
   durationMs: number;
 }
 
-export interface ToolProgressUpdate {
-  text?: string;
-  json?: JsonValue;
-  metadata?: JsonValue;
-}
-
 export interface ProviderDiagnostic {
   phase: ProviderDiagnosticPhase;
   providerId?: string;

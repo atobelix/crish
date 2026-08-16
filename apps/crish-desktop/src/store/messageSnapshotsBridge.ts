@@ -9,7 +9,14 @@ import { logger } from '../services/LoggerService';
 /** 与 MessageSnapshots.save 入参对齐的最小形状（避免 sessionActions 静态 import MessageSnapshots） */
 export type SnapshotSaveEntry = {
   sessionId: string;
-  operation: 'withdraw' | 'regenerate' | 'archive' | 'batch-pin' | 'edit';
+  /** R1：timeline-truncate 为撤回投影截断快照（统一输入流收敛战役） */
+  operation:
+    | 'withdraw'
+    | 'regenerate'
+    | 'archive'
+    | 'batch-pin'
+    | 'edit'
+    | 'timeline-truncate';
   messages: SessionMessage[];
   pinnedMessageIds?: string[];
   diffFilePaths: string[];

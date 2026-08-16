@@ -12,6 +12,8 @@ import type {
   LegacyEventType,
 } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
+import { useLayoutStore } from '../../../store';
+import { emitUiEvent } from '../../../api/uiEvents';
 import {
   onMessageStart,
   onMessageDelta,
@@ -19,7 +21,6 @@ import {
 } from './messageHandlers';
 import {
   onToolStart,
-  onToolUpdate,
   onToolEnd,
   onToolBatchStart,
   onToolBatchEnd,
@@ -130,13 +131,42 @@ export function onProviderRequestAnchored(
   _envelope: EngineEnvelope<'provider-request-anchored'>
 ): void {}
 
-// 撤回域（T1a 统一输入流收敛战役）：timeline-truncate 出站事件，R1 撤回消费
-// 面未接线（T1 只定义类型），前端显式空实现占位以满足 engineDispatchTable
-// 穷举键（对齐 D-03 观测事件与 timer/cron 显式空实现先例）
+// 撤回域（T1a 统一输入流收敛战役）：timeline-truncate 出站事件，R1 撤回
+// 消费接线——投影重放至 boundary（applyTimelineTruncate）+ 从 boundary
+// user 节点原文回填 composer（不依赖 draft 快照，详案 §1.2-⑤⑥）
 export function onTimelineTruncate(
-  _env: HandlerEnv,
-  _envelope: EngineEnvelope<'timeline-truncate'>
-): void {}
+  env: HandlerEnv,
+  envelope: EngineEnvelope<'timeline-truncate'>
+): void {
+  const { event } = envelope;
+  if (!event.sessionId) return;
+  try {
+    const store = useLayoutStore.getState();
+    // ① 取回 boundary user 节点原文（回填数据源；节点在投影截断前读取）
+    let backfillText = '';
+    const sess = store.sessionsById[event.sessionId];
+    const target = sess?.messages?.find((m) => m.id === event.targetMessageId);
+    if (target?.sender === 'user') {
+      backfillText = target.text || '';
+    }
+    // ② 投影重放至 boundary（保留边界节点，丢弃其后节点）
+    store.applyTimelineTruncate(
+      event.sessionId,
+      event.boundarySeq,
+      event.targetMessageId
+    );
+    // ③ 文本回填 composer（宿主 ChatCard 订阅后 setChatInput +
+    // setComposerDraft；附件恢复登记为后续增强）
+    if (backfillText) {
+      emitUiEvent('retract-backfill', {
+        sessionId: event.sessionId,
+        text: backfillText,
+      });
+    }
+  } catch (err) {
+    console.warn('[dispatch] timeline-truncate 消费失败:', err);
+  }
+}
 
 export const engineDispatchTable: {
   [ET in EngineEventType]: EngineHandler<ET>;
@@ -149,7 +179,6 @@ export const engineDispatchTable: {
   'message-delta': onMessageDelta,
   'message-end': onMessageEnd,
   'tool-start': onToolStart,
-  'tool-update': onToolUpdate,
   'tool-end': onToolEnd,
   'tool-batch-start': onToolBatchStart,
   'tool-batch-end': onToolBatchEnd,

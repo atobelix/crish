@@ -97,6 +97,33 @@ export function clearDraftSnapshot(
 }
 
 /**
+ * 撤回回填（R1 统一输入流收敛战役 · 详案 §1.2-⑥）：从 boundary user 节点
+ * 原文取回文本回填 composer——**不依赖 draft 快照**（成功发送后
+ * clearDraftSnapshot 已清，快照不可用）。
+ *
+ * 数据源保证：`timeline-truncate.targetMessageId` 对应的 user 节点
+ * （事件流 message-start 内 payload message.id == targetMessageId）→
+ * 取其 text（不变量 1「一切皆文本」）。
+ *
+ * 附件恢复（详案 §1.2-⑥）：V1 仅回填文本；user 节点附件 meta 的
+ * setAttachments 恢复登记为后续增强（SessionMessage 不承载附件元数据，
+ * 展示投影层 V1 承载）。
+ */
+export function backfillFromBoundaryText(
+  sessionId: string,
+  text: string,
+  setChatInput: (val: string) => void
+): void {
+  if (!sessionId || !text) return;
+  setChatInput(text);
+  try {
+    getCompositionRoot().session.getState().setComposerDraft(sessionId, text);
+  } catch (err) {
+    console.warn('[slashSendDraftManager] failed to set composer draft:', err);
+  }
+}
+
+/**
  * 草稿 → 真会话：commit 后补建 shell tab + 绑 chat leaf
  */
 export function commitDraftAndOpenShell(opts?: {

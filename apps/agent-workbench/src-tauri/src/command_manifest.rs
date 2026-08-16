@@ -144,6 +144,9 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("core_read_run_events", "core", "engine", true),
         entry("core_run_task", "core", "engine", true),
         entry("core_run_control", "core", "engine", true),
+        // R1 撤回（统一输入流收敛战役）：复用 core_run_control L3 通道 +
+        // 独立 retract 语义 wire（session 域，引擎面）
+        entry("core_session_retract", "session", "engine", true),
         entry("core_cancel_run", "core", "engine", true),
         entry("core_approve_tool", "core", "engine", true),
         entry("core_deny_tool", "core", "engine", true),
@@ -488,3 +491,4 @@ mod tests {
         );
     }
 }
+

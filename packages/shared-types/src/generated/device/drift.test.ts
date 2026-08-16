@@ -127,11 +127,11 @@ import {
 import { parseDeviceFrame } from './parser';
 
 describe('R0-03 device 生成产物运行时冒烟', () => {
-  it('静态账目锁定：103 kind / 45 错误码 / 17 能力位 / 20 同步面（M6 §1.1/§5.0）', () => {
+  it('静态账目锁定：103 kind / 45 错误码 / 17 能力位 / 19 同步面（M6 §1.1/§5.0；R1 tool-update 事件契约删除后 20 → 19）', () => {
     expect(DEVICE_KINDS.length).toBe(103);
     expect(DEVICE_ERROR_CODES.length).toBe(45);
     expect(DEVICE_CAPABILITIES.length).toBe(17);
-    expect(EVENT_SYNC_ELIGIBLE.length).toBe(20);
+    expect(EVENT_SYNC_ELIGIBLE.length).toBe(19);
   });
 
   it('合法信封帧解析成功（heartbeat 消息）', () => {

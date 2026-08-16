@@ -50,7 +50,6 @@ const V1_EVENT_TYPES: &[&str] = &[
     "message-delta",
     "message-end",
     "tool-start",
-    "tool-update",
     "tool-end",
     "tool-batch-start",
     "tool-batch-end",
@@ -116,27 +115,28 @@ const V1_EVENT_TYPES: &[&str] = &[
 
 // ── 1. 变体数一致性：49 清单 ↔ fixtures ↔ changelog ──
 
-/// v1 基线必须为 58 事件（57 基线 + T1a 统一输入流收敛战役 timeline-truncate）。
+/// v1 基线必须为 57 事件（T1a 统一输入流收敛战役 timeline-truncate 后为 58；
+/// R1 tool-update 死契约删除后 58 → 57）。
 ///
 /// 原断言名 `v1_baseline_has_exactly_31_event_types`（2026-08-03 冻结 31
 /// 事件基线）、`v1_baseline_has_exactly_38_event_types`（2026-08-04 任务域
 /// 演进）、`v1_baseline_has_exactly_40_event_types`（2026-08-05 定时器域
 /// 演进）与 `v1_baseline_has_exactly_41_event_types`（2026-08-05 cron 域
 /// 演进）与 `v1_baseline_has_exactly_57_event_types`（2026-08-14 D-03 契约
-/// 窗口净增）随基线演进改名升级——基线演进留痕：28 → 31 → 38 → 40 → 41 →
-/// 49 → 57 → 58 一路只增不减（49 → 57 为 D-03 契约窗口净增 8；57 → 58 为
-/// T1a 统一输入流收敛战役协议硬约束新增 1），均为 minor 兼容新增（旧解析器
-/// 对未知 `type` 静默忽略，信封 schemaVersion 恒 1 不变）。
+/// 窗口净增）与 `v1_baseline_has_exactly_58_event_types`（2026-08-16 T1a
+/// 新增 timeline-truncate）随基线演进改名升级——基线演进留痕：28 → 31 → 38
+/// → 40 → 41 → 49 → 57 → 58（T1a 协议硬约束新增 1）→ 57（R1 tool-update
+/// 死契约删除：前端零消费 + 落库语义错位，决策 1）。
 #[test]
-fn v1_baseline_has_exactly_58_event_types() {
-    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（58）
+fn v1_baseline_has_exactly_57_event_types() {
+    // changelog v1 表登记数 == 本清单数 == AgentEvent 变体数（57）
     assert_eq!(
         V1_EVENT_TYPES.len(),
-        58,
-        "v1 基线必须是 58 事件（57 基线 + T1a timeline-truncate）"
+        57,
+        "v1 基线必须是 57 事件（R1 tool-update 死契约删除后）"
     );
     let unique: std::collections::HashSet<&&str> = V1_EVENT_TYPES.iter().collect();
-    assert_eq!(unique.len(), 58, "清单内事件名不得重复");
+    assert_eq!(unique.len(), 57, "清单内事件名不得重复");
 }
 
 #[test]

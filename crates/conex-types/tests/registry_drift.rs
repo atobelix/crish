@@ -34,7 +34,7 @@ use conex_types::{
     RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
     SubagentEndStatus, SubagentEventKind, SubagentEventPayload, SystemPromptWireMode,
     TimelineTruncateReason, ToolArtifact, ToolArtifactKind, ToolBatchCall, ToolBatchResult,
-    ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput, ToolProgressUpdate,
+    ToolCallBlock, ToolCategory, ToolConcurrency, ToolMetadata, ToolOutput,
 };
 use conex_types::tool::{
     CompressionCacheInvalidation, ContextCompressionCacheBoundaryMetadata,
@@ -213,12 +213,12 @@ fn registry_event_types_match_enum_declaration_order() {
     let reg = registry();
     assert_eq!(reg.contract, "engine-events", "注册表契约名必须为 engine-events");
     assert_eq!(reg.schema_version, 1);
-    assert_eq!(reg.event_count, 58);
-    assert_eq!(reg.events.len(), 58, "事件注册表必须是 58 条");
+    assert_eq!(reg.event_count, 57);
+    assert_eq!(reg.events.len(), 57, "事件注册表必须是 57 条（R1 tool-update 删除）");
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        58,
-        "AgentEvent enum 必须是 58 种域事件"
+        57,
+        "AgentEvent enum 必须是 57 种域事件（R1 tool-update 删除）"
     );
     for (i, ev) in reg.events.iter().enumerate() {
         assert_eq!(ev.id as usize, i + 1, "事件编号必须从 1 连续递增");
@@ -367,7 +367,6 @@ fn check_payload_struct(reg: &Registry, rust_name: &str) {
         "ToolArtifact" => check_roundtrip::<ToolArtifact>(rust_name, fields, sample),
         "ToolBatchCall" => check_roundtrip::<ToolBatchCall>(rust_name, fields, sample),
         "ToolBatchResult" => check_roundtrip::<ToolBatchResult>(rust_name, fields, sample),
-        "ToolProgressUpdate" => check_roundtrip::<ToolProgressUpdate>(rust_name, fields, sample),
         "ProviderDiagnostic" => check_roundtrip::<ProviderDiagnostic>(rust_name, fields, sample),
         "RuntimeCheckpointRecord" => {
             check_roundtrip::<RuntimeCheckpointRecord>(rust_name, fields, sample)
@@ -534,7 +533,7 @@ fn security_audit_undeclared_write_operation_stays_in_sync() {
     // 2026-08-14 D-03 契约窗口：tool-input-repaired 核销删除 + 9 新观测
     // 事件，49 → 57；2026-08-16 统一输入流收敛战役 T1a：timeline-truncate，
     // 57 → 58）
-    assert_eq!(reg.event_count, 58, "新增 operation 值不得改变事件总数");
+    assert_eq!(reg.event_count, 57, "新增 operation 值不得改变事件总数");
     assert_eq!(reg.events.len(), 58);
 
     // 注册表必须登记 undeclared-write（T-ESC-02 新值）
@@ -1010,7 +1009,7 @@ fn registry_drift_timer_events_registered() {
     let reg = registry();
     // 累计基线：38 → 40 → 41 → 49 → 57 → 58（D-03 契约窗口：tool-input-repaired
     // 核销 + 9 新观测事件已登记；T1a 统一输入流收敛战役追加 timeline-truncate）
-    assert_eq!(reg.event_count, 58, "累计基线必须为 58");
+    assert_eq!(reg.event_count, 57, "累计基线必须为 57（R1 tool-update 死契约删除）");
     assert_eq!(reg.events.len(), 58);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
@@ -1116,14 +1115,14 @@ fn cron_fired_backpressure_is_critical() {
 #[test]
 fn registry_drift_cron_fired_registered() {
     let reg = registry();
-    // 累计基线终态：40 → 41 → 49 → 57 → 58（D-03 契约窗口后 57 变体；
-    // T1a 统一输入流收敛战役追加 timeline-truncate）
-    assert_eq!(reg.event_count, 58);
-    assert_eq!(reg.events.len(), 58);
+    // 累计基线终态：40 → 41 → 49 → 57 → 58（T1a 追加 timeline-truncate）
+    // → 57（R1 tool-update 死契约删除）
+    assert_eq!(reg.event_count, 57);
+    assert_eq!(reg.events.len(), 57);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
-        58,
-        "AgentEvent enum 变体数必须为 58"
+        57,
+        "AgentEvent enum 变体数必须为 57（R1 tool-update 删除）"
     );
 
     // cron-fired（40）：Critical 必达落库，字段 sessionId/cronId/prompt/
@@ -1454,7 +1453,7 @@ fn registry_drift_tool_input_repaired_revoked() {
 fn registry_drift_timeline_truncate_registered() {
     let reg = registry();
     // 累计基线终态：57 → 58（T1a 统一输入流收敛战役追加）
-    assert_eq!(reg.event_count, 58);
+    assert_eq!(reg.event_count, 57);
     assert_eq!(reg.events.len(), 58);
     assert_eq!(
         AgentEvent::ALL_TYPE_NAMES.len(),
@@ -2158,3 +2157,4 @@ fn device_registry_constants_match_rust_version_consts() {
     expect_u64("MAX_SUBSCRIPTIONS", MAX_SUBSCRIPTIONS as u64);
     expect_u64("MAX_STREAMS", MAX_STREAMS as u64);
 }
+

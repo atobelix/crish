@@ -39,11 +39,17 @@ pub mod approval_router;
 pub mod cache_tracker;
 pub mod checkpoint;
 pub mod control;
+// 统一输入流收敛战役 R1：撤回协议 / 冻结护栏 / 类别回滚注册表
+// （扩展点 D 承载，不进核心循环；会话级冻结注册表供 orchestrator
+// EventQueue 写侧注入检查点）
+pub mod freeze;
 pub mod hooks;
 pub mod hydrate;
 pub mod input;
 pub mod r#loop;
 pub mod provider;
+pub mod retraction;
+pub mod rollback;
 pub mod safe_point;
 pub mod state;
 pub mod steering;
@@ -65,6 +71,7 @@ pub use control::{
     level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput, ControlKind,
     ControlLevel,
 };
+pub use freeze::{is_retraction_evacuation_event, FreezeError, FrozenSession, SessionFreezeRegistry, WriteVerdict};
 pub use hooks::{
     HookAction, HookDispatchOutcome, HookError, HookEvent, HookEventKind, HookFailStrategy,
     HookHandler, HookMode, HookRegisterOptions, HookRegistry,
@@ -76,6 +83,13 @@ pub use input::{
 pub use provider::{
     DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamItem,
     ReasoningEffort, ToolSchema,
+};
+pub use retraction::{
+    RetractionBackend, RetractionError, RetractionOutcome, RetractionProtocol,
+    CONVERGE_TIMEOUT_MS,
+};
+pub use rollback::{
+    CategoryRollbackRegistry, PathRollbackResult, RollbackExecutor, RollbackStrategy,
 };
 pub use r#loop::{
     AgentSessionLoop, EndDecision, RecoveryDecision, RecoveryHook, RunOutcome, SessionLoopOptions,

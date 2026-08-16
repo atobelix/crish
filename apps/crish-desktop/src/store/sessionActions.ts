@@ -128,6 +128,16 @@ export interface SessionActions {
     message: SessionMessage
   ) => void;
   withdrawMessage: (wsId: string, sessionId: string, messageId: string) => void;
+  /**
+   * R1 撤回消费（统一输入流收敛战役）：timeline-truncate 投影重放——
+   * 保留边界 user 节点，丢弃其后的投影节点（`> boundarySeq` 部分）。
+   * 撤回的呈现标记由展示投影层（V1）决定，本 action 只做投影截断。
+   */
+  applyTimelineTruncate: (
+    sessionId: string,
+    boundarySeq: number,
+    targetMessageId: string
+  ) => void;
   respondToApproval: (
     sessionId: string,
     messageId: string,

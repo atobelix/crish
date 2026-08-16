@@ -65,8 +65,9 @@ describe('commandManifest', () => {
       //   124 → 125，119 → 120）
       // note_undo_text + note_redo_text：CRDT 因果撤销/重做（125 → 127，120 → 122）
       // 原生探活与模型扫描（provider_probe_ping / provider_probe_scan_models）（130 → 132，125 → 127）
-      expect(registered).toBe(124);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(124);
+      // R1 撤回（统一输入流收敛战役）：core_session_retract 已接线（132 → 133，127 → 128）
+      expect(registered).toBe(125);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(125);
     });
 
     it('命令名唯一', () => {
@@ -273,10 +274,10 @@ describe('commandManifest', () => {
       ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（124；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（125；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(124);
+      expect(total).toBe(125);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
     });
 

@@ -6,7 +6,7 @@
 // Regenerate: node scripts/generate-engine-bindings.mjs
 // =======================================================================
 
-import type { AgentEndReason, AgentMessage, AgentMessageBlock, ToolBatchCall, ToolProgressUpdate, ToolBatchResult, ContextCompressionRecord, ProviderDiagnostic, PermissionRequest, ApprovalDecision, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, RunTerminalStatus, RunCacheStats, MissAttribution, SecurityAuditOperation, ImpactAssessment, SecurityAuditDecision, SubagentEventPayload, SubagentEventKind, SubagentEndStatus, TimelineTruncateReason } from "./types";
+import type { AgentEndReason, AgentMessage, AgentMessageBlock, ToolBatchCall, ToolBatchResult, ContextCompressionRecord, ProviderDiagnostic, PermissionRequest, ApprovalDecision, RuntimeCheckpointRecord, RuntimeCheckpointRestoreRecord, RunTerminalStatus, RunCacheStats, MissAttribution, SecurityAuditOperation, ImpactAssessment, SecurityAuditDecision, SubagentEventPayload, SubagentEventKind, SubagentEndStatus, TimelineTruncateReason } from "./types";
 
 import type { JsonValue } from "../../primitive-types";
 
@@ -65,15 +65,6 @@ export interface EngineToolStartEvent {
   sessionId: string;
   batchId: string;
   call: ToolBatchCall;
-  timestamp: string;
-}
-
-export interface EngineToolUpdateEvent {
-  type: "tool-update";
-  sessionId: string;
-  batchId: string;
-  toolCallId: string;
-  update: ToolProgressUpdate;
   timestamp: string;
 }
 
@@ -525,9 +516,9 @@ export interface EngineTimelineTruncateEvent {
   timestamp: string;
 }
 
-export type EngineEvent = EngineAgentStartEvent | EngineAgentEndEvent | EngineTurnStartEvent | EngineTurnEndEvent | EngineMessageStartEvent | EngineMessageDeltaEvent | EngineMessageEndEvent | EngineToolStartEvent | EngineToolUpdateEvent | EngineToolEndEvent | EngineToolBatchStartEvent | EngineToolBatchEndEvent | EngineContextCompressionStartEvent | EngineContextCompressionEndEvent | EngineProviderDiagnosticEvent | EngineRuntimeErrorEvent | EngineRuntimeSteeringEvent | EngineRuntimeInterventionRequiredEvent | EngineApprovalRequestedEvent | EngineApprovalResolvedEvent | EngineCheckpointCreatedEvent | EngineCheckpointRestoredEvent | EngineRunTerminalEvent | EngineCacheStatsUpdatedEvent | EngineCacheWasteAlertEvent | EngineColdCacheWarningEvent | EngineSecurityAuditEvent | EngineSubagentStartedEvent | EngineSubagentEventEvent | EngineSubagentEndedEvent | EngineTaskStartedEvent | EngineTaskOutputEvent | EngineTaskHeartbeatEvent | EngineTaskSuspiciousEvent | EngineTaskCompletedEvent | EngineTaskFailedEvent | EngineTaskKilledEvent | EngineTimerFiredEvent | EngineTimerCancelledEvent | EngineCronFiredEvent | EngineRecoveryEscalatedEvent | EngineRecoverySteeringEvent | EngineRecoveryForkEvent | EngineRecoveryReportEvent | EngineRecoveryBudgetDeniedEvent | EngineGoalRoundStartedEvent | EngineGoalRoundCompletedEvent | EngineGoalContinuationDecidedEvent | EngineSteeringEvaluatedEvent | EngineControlIntentEvent | EngineHookOutcomeEvent | EngineSummaryBackgroundEvent | EngineStageSummaryMilestoneEvent | EngineNudgeEnqueuedEvent | EngineRecoveryAcknowledgedEvent | EngineRecoveryRetryAttemptedEvent | EngineProviderRequestAnchoredEvent | EngineTimelineTruncateEvent;
+export type EngineEvent = EngineAgentStartEvent | EngineAgentEndEvent | EngineTurnStartEvent | EngineTurnEndEvent | EngineMessageStartEvent | EngineMessageDeltaEvent | EngineMessageEndEvent | EngineToolStartEvent | EngineToolEndEvent | EngineToolBatchStartEvent | EngineToolBatchEndEvent | EngineContextCompressionStartEvent | EngineContextCompressionEndEvent | EngineProviderDiagnosticEvent | EngineRuntimeErrorEvent | EngineRuntimeSteeringEvent | EngineRuntimeInterventionRequiredEvent | EngineApprovalRequestedEvent | EngineApprovalResolvedEvent | EngineCheckpointCreatedEvent | EngineCheckpointRestoredEvent | EngineRunTerminalEvent | EngineCacheStatsUpdatedEvent | EngineCacheWasteAlertEvent | EngineColdCacheWarningEvent | EngineSecurityAuditEvent | EngineSubagentStartedEvent | EngineSubagentEventEvent | EngineSubagentEndedEvent | EngineTaskStartedEvent | EngineTaskOutputEvent | EngineTaskHeartbeatEvent | EngineTaskSuspiciousEvent | EngineTaskCompletedEvent | EngineTaskFailedEvent | EngineTaskKilledEvent | EngineTimerFiredEvent | EngineTimerCancelledEvent | EngineCronFiredEvent | EngineRecoveryEscalatedEvent | EngineRecoverySteeringEvent | EngineRecoveryForkEvent | EngineRecoveryReportEvent | EngineRecoveryBudgetDeniedEvent | EngineGoalRoundStartedEvent | EngineGoalRoundCompletedEvent | EngineGoalContinuationDecidedEvent | EngineSteeringEvaluatedEvent | EngineControlIntentEvent | EngineHookOutcomeEvent | EngineSummaryBackgroundEvent | EngineStageSummaryMilestoneEvent | EngineNudgeEnqueuedEvent | EngineRecoveryAcknowledgedEvent | EngineRecoveryRetryAttemptedEvent | EngineProviderRequestAnchoredEvent | EngineTimelineTruncateEvent;
 
-export const ENGINE_EVENT_TYPES = ["agent-start","agent-end","turn-start","turn-end","message-start","message-delta","message-end","tool-start","tool-update","tool-end","tool-batch-start","tool-batch-end","context-compression-start","context-compression-end","provider-diagnostic","runtime-error","runtime-steering","runtime-intervention-required","approval-requested","approval-resolved","checkpoint-created","checkpoint-restored","run-terminal","cache-stats-updated","cache-waste-alert","cold-cache-warning","security-audit","subagent-started","subagent-event","subagent-ended","task-started","task-output","task-heartbeat","task-suspicious","task-completed","task-failed","task-killed","timer-fired","timer-cancelled","cron-fired","recovery-escalated","recovery-steering","recovery-fork","recovery-report","recovery-budget-denied","goal-round-started","goal-round-completed","goal-continuation-decided","steering-evaluated","control-intent","hook-outcome","summary-background","stage-summary-milestone","nudge-enqueued","recovery-acknowledged","recovery-retry-attempted","provider-request-anchored","timeline-truncate"] as const;
+export const ENGINE_EVENT_TYPES = ["agent-start","agent-end","turn-start","turn-end","message-start","message-delta","message-end","tool-start","tool-end","tool-batch-start","tool-batch-end","context-compression-start","context-compression-end","provider-diagnostic","runtime-error","runtime-steering","runtime-intervention-required","approval-requested","approval-resolved","checkpoint-created","checkpoint-restored","run-terminal","cache-stats-updated","cache-waste-alert","cold-cache-warning","security-audit","subagent-started","subagent-event","subagent-ended","task-started","task-output","task-heartbeat","task-suspicious","task-completed","task-failed","task-killed","timer-fired","timer-cancelled","cron-fired","recovery-escalated","recovery-steering","recovery-fork","recovery-report","recovery-budget-denied","goal-round-started","goal-round-completed","goal-continuation-decided","steering-evaluated","control-intent","hook-outcome","summary-background","stage-summary-milestone","nudge-enqueued","recovery-acknowledged","recovery-retry-attempted","provider-request-anchored","timeline-truncate"] as const;
 export type EngineEventType = (typeof ENGINE_EVENT_TYPES)[number];
 
 export const ENGINE_EVENT_BACKPRESSURE = {
@@ -539,7 +530,6 @@ export const ENGINE_EVENT_BACKPRESSURE = {
   "message-delta": "delta",
   "message-end": "critical",
   "tool-start": "critical",
-  "tool-update": "critical",
   "tool-end": "critical",
   "tool-batch-start": "critical",
   "tool-batch-end": "critical",

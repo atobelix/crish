@@ -616,7 +616,6 @@ pub fn push_intent_with_kill_source(
         | AgentEvent::MessageDelta { .. }
         | AgentEvent::MessageEnd { .. }
         | AgentEvent::ToolStart { .. }
-        | AgentEvent::ToolUpdate { .. }
         | AgentEvent::ToolEnd { .. }
         | AgentEvent::ToolBatchStart { .. }
         | AgentEvent::ToolBatchEnd { .. }

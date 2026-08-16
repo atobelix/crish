@@ -7,7 +7,7 @@
 // - F8-09：AgentEndReason 手写 4 值缺 'stopped'（Rust AgentEndReason::Stopped 已存在）；
 // - F8-10：approval-resolved 语义错位——实际 wire 为 toolCallId 必填 +
 //   decision 字符串三值（approved/denied/expired），手写类型却是
-//   requestId 必填 + PermissionDecision 对象形态；
+//   requestId 必填 + 决策对象形态（历史对象类型，R1 死契约删除）；
 // - F8-11：ProviderDiagnostic.phase 缺 'invalid-tool-call'（生成 11 值）；
 // - F8-12：ProviderErrorKind 名集陈旧（旧 12 值 vs 生成 13 值 kebab-case）；
 // - F8-13：ContextCompressionPolicyMetadata/HandoffMetadata.providerRetry
@@ -49,9 +49,9 @@ describe('F8-09：agent-end.reason 含 stopped（Rust AgentEndReason::Stopped �
   });
 
   it('手写 reason 联合与生成 AgentEndReason 相等（杜绝双源漂移）', () => {
-    expectTypeOf<AgentEndEvent['reason']>().toEqualTypeOf<
-      GeneratedAgentEndReason
-    >();
+    expectTypeOf<
+      AgentEndEvent['reason']
+    >().toEqualTypeOf<GeneratedAgentEndReason>();
   });
 });
 
@@ -69,9 +69,9 @@ describe('F8-10：approval-resolved 语义对齐 wire（toolCallId 必填 + deci
   });
 
   it('decision 联合与生成 ApprovalDecision 相等', () => {
-    expectTypeOf<ApprovalResolvedEvent['decision']>().toEqualTypeOf<
-      GeneratedApprovalDecision
-    >();
+    expectTypeOf<
+      ApprovalResolvedEvent['decision']
+    >().toEqualTypeOf<GeneratedApprovalDecision>();
   });
 
   it('toolCallId 必填：缺 toolCallId 的旧形态（仅 requestId）必须被类型拒绝', () => {
@@ -91,7 +91,7 @@ describe('F8-10：approval-resolved 语义对齐 wire（toolCallId 必填 + deci
     >().toEqualTypeOf<never>();
   });
 
-  it('decision 为字符串三值：嵌套对象形态（旧 PermissionDecision）必须被类型拒绝', () => {
+  it('decision 为字符串三值：嵌套对象形态（历史决策对象，R1 死契约删除）必须被类型拒绝', () => {
     type BadShapeNestedDecision = {
       type: 'approval-resolved';
       sessionId: string;
@@ -147,9 +147,9 @@ describe('F8-11/12：ProviderDiagnostic phase/errorKind 以生成枚举为准', 
   });
 
   it('phase/errorKind 与生成类型相等', () => {
-    expectTypeOf<ProviderDiagnostic['phase']>().toEqualTypeOf<
-      GeneratedProviderDiagnosticPhase
-    >();
+    expectTypeOf<
+      ProviderDiagnostic['phase']
+    >().toEqualTypeOf<GeneratedProviderDiagnosticPhase>();
     expectTypeOf<
       NonNullable<ProviderDiagnostic['errorKind']>
     >().toEqualTypeOf<GeneratedProviderErrorKind>();

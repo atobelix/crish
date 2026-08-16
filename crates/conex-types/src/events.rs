@@ -1,6 +1,6 @@
 //! 域事件契约（Rust enum 为双端唯一事实源）
 //!
-//! [AgentEvent] 是 58 种域事件的 serde tagged enum（顶层 `type`），全部字段
+//! [AgentEvent] 是 57 种域事件的 serde tagged enum（顶层 `type`），全部字段
 //! serde camelCase，字段结构以 03-frontend-contract.md §1.1-1.6 清单与 §5.1
 //! 硬依赖表为准。机器可读导出见 contracts/engine-events.json（事件注册表），
 //! 前端 TS 类型与解析器由 scripts/generate-engine-bindings.mjs 生成，落点
@@ -19,7 +19,7 @@ use crate::message::{AgentMessage, AgentMessageBlock};
 use crate::session::AgentEndReason;
 use crate::tool::{
     ContextCompressionRecord, ProviderDiagnostic, RuntimeCheckpointRecord,
-    RuntimeCheckpointRestoreRecord, ToolBatchCall, ToolBatchResult, ToolProgressUpdate,
+    RuntimeCheckpointRestoreRecord, ToolBatchCall, ToolBatchResult,
 };
 
 /// run 终态（03 §5.1-11：'completed'|'cancelled'|'failed'，前端 zod 拼写
@@ -46,29 +46,6 @@ pub enum TimelineTruncateReason {
     UserRequested,
     /// 错误回滚触发的截断（扩展点 D 预留）
     ErrorRollback,
-}
-
-/// 审批放行行为（wire 值为 allow/deny/ask，lowercase）
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum PermissionBehavior {
-    /// 允许
-    Allow,
-    /// 拒绝
-    Deny,
-    /// 询问
-    Ask,
-}
-
-/// 审批决策（behavior 携带放行行为；reason/metadata 可选）
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct PermissionDecision {
-    pub behavior: PermissionBehavior,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<serde_json::Value>,
 }
 
 // ── 安全审计域（I2-S8：高危操作审计事件 payload 枚举）──
@@ -386,7 +363,7 @@ pub struct TurnUsage {
     pub cache_miss_tokens: u64,
 }
 
-/// 58 种域事件（tagged enum，双端契约唯一事实源）
+/// 57 种域事件（tagged enum，双端契约唯一事实源）
 ///
 /// 顶层 `type` 为事件名（kebab-case），事件字段全部 camelCase；
 /// 字段清单与类型映射见 contracts/engine-events.json（事件注册表），
@@ -490,15 +467,6 @@ pub enum AgentEvent {
         timestamp: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         turn_index: Option<u32>,
-    },
-    /// 工具执行进度增量（预留：tool-args-delta 增量参数流）
-    #[serde(rename = "tool-update", rename_all = "camelCase")]
-    ToolUpdate {
-        session_id: String,
-        batch_id: String,
-        tool_call_id: String,
-        update: ToolProgressUpdate,
-        timestamp: String,
     },
     /// 单工具调用结束（硬依赖 03 §5.1-8：result.id/toolCallId/output/isError；
     /// attempt/deduplicated/executed_input 可选——EV-09/EV-11 工具原子要素：
@@ -1272,7 +1240,6 @@ engine_event_type_names! {
     MessageDelta => "message-delta",
     MessageEnd => "message-end",
     ToolStart => "tool-start",
-    ToolUpdate => "tool-update",
     ToolEnd => "tool-end",
     ToolBatchStart => "tool-batch-start",
     ToolBatchEnd => "tool-batch-end",

@@ -56,6 +56,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onOpenSchedule={() => {
           state.setMainSurface('scheduled');
         }}
+        // R1 撤回（统一输入流收敛战役）：composer 撤回按钮 → 引擎
+        // session_retract（停 run → 冻结 → timeline-truncate → 投影重放）
+        onRetract={state.handleRetract}
+        canRetract={state.messages?.some((m) => m.sender === 'user')}
         rightActions={
           state.showModelPicker ? (
             <ModelBadgePicker
@@ -94,7 +98,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         goalModeActive: state.goalModeActive,
         goalText: state.goalMode?.goal || '',
         goalIteration: state.goalMode?.iteration ?? 0,
-        goalTasksDone: (state.goalMode?.tasks || []).filter((t) => t.done).length,
+        goalTasksDone: (state.goalMode?.tasks || []).filter((t) => t.done)
+          .length,
         goalTasksTotal: (state.goalMode?.tasks || []).length,
         onStopGoal: () => {
           state.composerProps.handleStopGeneration();
@@ -105,7 +110,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         showScrollToBottom: state.showScrollToBottom,
         onScrollToBottom: state.scrollToBottom,
       }),
-      // eslint-disable-next-line react-hooks/exhaustive-deps
+
       [state]
     );
 

@@ -3059,16 +3059,6 @@
     },
     {
       "id": 9,
-      "type": "tool-update",
-      "strategy": "redacted",
-      "realtime": { "push": true, "backpressure": "critical" },
-      "sync": true,
-      "pushLevel": "none",
-      "consumption": "F3 S（终端流式输出）",
-      "redact": "实时面增量放行；同步面裁剪为「行数 + 末段 200 字符」"
-    },
-    {
-      "id": 10,
       "type": "tool-end",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3079,7 +3069,7 @@
       "redact": "result.output 首 200 字符 + isError + 耗时"
     },
     {
-      "id": 11,
+      "id": 10,
       "type": "tool-batch-start",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3089,7 +3079,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 12,
+      "id": 11,
       "type": "tool-batch-end",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3099,7 +3089,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 13,
+      "id": 12,
       "type": "context-compression-start",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3109,7 +3099,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 14,
+      "id": 13,
       "type": "context-compression-end",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3119,7 +3109,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 15,
+      "id": 14,
       "type": "provider-diagnostic",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3129,7 +3119,7 @@
       "redact": "fail-closed 元组（诊断细节不下发）"
     },
     {
-      "id": 16,
+      "id": 15,
       "type": "runtime-error",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3140,7 +3130,7 @@
       "redact": "error 保留（≤512 字符截断）"
     },
     {
-      "id": 17,
+      "id": 16,
       "type": "runtime-steering",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3150,7 +3140,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 18,
+      "id": 17,
       "type": "runtime-intervention-required",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3161,7 +3151,7 @@
       "redact": "choices[] / message / reason 保留（候选动作展示必需）"
     },
     {
-      "id": 19,
+      "id": 18,
       "type": "approval-requested",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3172,7 +3162,7 @@
       "redact": "request.parameters 全量删除，保留参数键名列表 keys[] + summary；cwd/toolName/summary/toolCallId/requesterRunId/reason 保留（隐私红线，D6 §7.4）"
     },
     {
-      "id": 20,
+      "id": 19,
       "type": "approval-resolved",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3183,7 +3173,7 @@
       "redact": "回显决策（approved/denied/expired），无敏感参数"
     },
     {
-      "id": 21,
+      "id": 20,
       "type": "checkpoint-created",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3193,7 +3183,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 22,
+      "id": 21,
       "type": "checkpoint-restored",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3203,7 +3193,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 23,
+      "id": 22,
       "type": "run-terminal",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3214,7 +3204,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 24,
+      "id": 23,
       "type": "cache-stats-updated",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3224,7 +3214,7 @@
       "redact": "展示级数据，无敏感字段"
     },
     {
-      "id": 25,
+      "id": 24,
       "type": "cache-waste-alert",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3235,7 +3225,7 @@
       "redact": "展示级数据，无敏感字段"
     },
     {
-      "id": 26,
+      "id": 25,
       "type": "cold-cache-warning",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3246,7 +3236,7 @@
       "redact": "展示级数据，无敏感字段"
     },
     {
-      "id": 27,
+      "id": 26,
       "type": "security-audit",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3257,7 +3247,7 @@
       "redact": "targets 每路径截 120 字符、条目 ≤ 20；impact 保留（计数型）"
     },
     {
-      "id": 28,
+      "id": 27,
       "type": "subagent-started",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3267,7 +3257,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 29,
+      "id": 28,
       "type": "subagent-event",
       "strategy": "redacted",
       "realtime": {
@@ -3285,7 +3275,7 @@
       "redact": "实时面按 kind 放行（message/tool 摘要 200 字符）；progress 可丢；同步面不参与"
     },
     {
-      "id": 30,
+      "id": 29,
       "type": "subagent-ended",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3296,7 +3286,7 @@
       "redact": "summary 保留；无敏感字段"
     },
     {
-      "id": 31,
+      "id": 30,
       "type": "task-started",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3307,7 +3297,7 @@
       "redact": "command 摘要保留；无敏感字段"
     },
     {
-      "id": 32,
+      "id": 31,
       "type": "task-output",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3317,7 +3307,7 @@
       "redact": "实时面增量放行（桌面转发器节流 60ms 合并）；同步面不参与（C07 补取）"
     },
     {
-      "id": 33,
+      "id": 32,
       "type": "task-heartbeat",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3327,7 +3317,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 34,
+      "id": 33,
       "type": "task-suspicious",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "soft" },
@@ -3338,7 +3328,7 @@
       "redact": "silenceMs/lastOutputAtMs 保留"
     },
     {
-      "id": 35,
+      "id": 34,
       "type": "task-completed",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3349,7 +3339,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 36,
+      "id": 35,
       "type": "task-failed",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3360,7 +3350,7 @@
       "redact": "tail 只传前 5 行 + 总行数（tail 全量永不同步，完整输出经 C07 按需拉取）"
     },
     {
-      "id": 37,
+      "id": 36,
       "type": "task-killed",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3371,7 +3361,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 38,
+      "id": 37,
       "type": "timer-fired",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3382,7 +3372,7 @@
       "redact": "prompt 保留（超 200 字符截断）"
     },
     {
-      "id": 39,
+      "id": 38,
       "type": "timer-cancelled",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "soft" },
@@ -3392,7 +3382,7 @@
       "redact": "fail-closed 元组"
     },
     {
-      "id": 40,
+      "id": 39,
       "type": "cron-fired",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3403,7 +3393,7 @@
       "redact": "prompt 保留（超 200 字符截断）"
     },
     {
-      "id": 41,
+      "id": 40,
       "type": "recovery-escalated",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3414,7 +3404,7 @@
       "redact": "观测字段保留（kind/retries/elapsedMs/detail）；无正文敏感"
     },
     {
-      "id": 42,
+      "id": 41,
       "type": "recovery-steering",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3425,7 +3415,7 @@
       "redact": "观测字段保留（fingerprint/retries/remainingStatus/pending）"
     },
     {
-      "id": 43,
+      "id": 42,
       "type": "recovery-fork",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3436,7 +3426,7 @@
       "redact": "无敏感字段，透明透传"
     },
     {
-      "id": 44,
+      "id": 43,
       "type": "recovery-report",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3447,7 +3437,7 @@
       "redact": "suggestion 保留（≤512 截断）；无 attempts 明细"
     },
     {
-      "id": 45,
+      "id": 44,
       "type": "recovery-budget-denied",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3458,7 +3448,7 @@
       "redact": "观测字段保留（fingerprint/count/max）"
     },
     {
-      "id": 46,
+      "id": 45,
       "type": "goal-round-started",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3469,7 +3459,7 @@
       "redact": "goal 文本摘要（首 200 字符）"
     },
     {
-      "id": 47,
+      "id": 46,
       "type": "goal-round-completed",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3480,7 +3470,7 @@
       "redact": "观测字段保留（decision/reasonDetail/evidence 摘要 200 字符）"
     },
     {
-      "id": 48,
+      "id": 47,
       "type": "goal-continuation-decided",
       "strategy": "tuple",
       "realtime": { "push": true, "backpressure": "critical" },
@@ -3491,7 +3481,7 @@
       "redact": "fail-closed 元组（type/sequence/schemaVersion/sessionId + redacted:true）"
     },
     {
-      "id": 49,
+      "id": 48,
       "type": "steering-evaluated",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3502,7 +3492,7 @@
       "redact": "观测字段保留（phase/hitStrategies/budgetRemaining）；无正文敏感"
     },
     {
-      "id": 50,
+      "id": 49,
       "type": "control-intent",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3513,7 +3503,7 @@
       "redact": "观测字段保留（kind/intentId/source/reason/state）；无正文敏感"
     },
     {
-      "id": 51,
+      "id": 50,
       "type": "hook-outcome",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3524,7 +3514,7 @@
       "redact": "hookName/blockedReason 保留（≤512 截断）；无正文敏感"
     },
     {
-      "id": 52,
+      "id": 51,
       "type": "summary-background",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3535,7 +3525,7 @@
       "redact": "观测字段保留（phase/attempt/reason）；无正文敏感"
     },
     {
-      "id": 53,
+      "id": 52,
       "type": "stage-summary-milestone",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3546,7 +3536,7 @@
       "redact": "观测字段保留（milestoneType/tier）；无正文敏感"
     },
     {
-      "id": 54,
+      "id": 53,
       "type": "nudge-enqueued",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3557,7 +3547,7 @@
       "redact": "观测字段保留（reason/targetRing/overwrote）；无正文敏感"
     },
     {
-      "id": 55,
+      "id": 54,
       "type": "recovery-acknowledged",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3568,7 +3558,7 @@
       "redact": "观测字段保留（notificationId/subagentRunId）；无正文敏感"
     },
     {
-      "id": 56,
+      "id": 55,
       "type": "recovery-retry-attempted",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3579,7 +3569,7 @@
       "redact": "观测字段保留（attempt/delayMs/budgetRemaining/fromRunId/newRunId）；无正文敏感"
     },
     {
-      "id": 57,
+      "id": 56,
       "type": "provider-request-anchored",
       "strategy": "redacted",
       "realtime": { "push": true, "backpressure": "delta" },
@@ -3590,7 +3580,7 @@
       "redact": "观测字段保留（turnIndex/model/requestStartedAtMs）；无正文敏感"
     },
     {
-      "id": 58,
+      "id": 57,
       "type": "timeline-truncate",
       "strategy": "transparent",
       "realtime": { "push": true, "backpressure": "critical" },

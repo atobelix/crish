@@ -38,8 +38,8 @@ pub use error::{
 };
 pub use events::{
     AgentEvent, AgentEventEnvelope, ApprovalDecision, BackpressureLevel, DropClass,
-    EVENT_ENVELOPE_SCHEMA_VERSION, EventPolicy, MissAttribution, PermissionBehavior,
-    PermissionDecision, PermissionRequest, PersistenceDecision, RunCacheStats, RunTerminalStatus,
+    EVENT_ENVELOPE_SCHEMA_VERSION, EventPolicy, MissAttribution,
+    PermissionRequest, PersistenceDecision, RunCacheStats, RunTerminalStatus,
     SecurityAuditDecision, SecurityAuditOperation, SubagentEndStatus, SubagentEventKind,
     SubagentEventPayload, TimelineTruncateReason, ToolMetadata, TurnUsage,
 };

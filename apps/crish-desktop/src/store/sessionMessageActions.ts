@@ -1,12 +1,14 @@
 import { MAX_MESSAGES_PER_SESSION } from '@crish/shared-utils/browser';
 import { nowIsoTimestamp } from '../api/sessionTime';
-import type {
-  MessageToolCall,
-} from './types';
+import type { MessageToolCall } from './types';
 import { getSessionForWrite, rebindSessionById } from './sessionIndex';
 import { validateStatusTransition } from '../utils/StatusTransitionGuard';
 import { saveMessageSnapshot } from './messageSnapshotsBridge';
-import type { SessionActions, SessionStoreSlice, SessionImmerSet } from './sessionActions';
+import type {
+  SessionActions,
+  SessionStoreSlice,
+  SessionImmerSet,
+} from './sessionActions';
 import {
   applyMessageToolCallPatch,
   getMessageById,
@@ -26,6 +28,7 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
   SessionActions,
   | 'addMessage'
   | 'withdrawMessage'
+  | 'applyTimelineTruncate'
   | 'respondToApproval'
   | 'updateMessageText'
   | 'updateMessageThinking'
@@ -124,7 +127,9 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
                 sessionId,
                 operation: 'withdraw',
                 messages: prevMessages,
-                ...(prevPinned !== undefined ? { pinnedMessageIds: prevPinned } : {}),
+                ...(prevPinned !== undefined
+                  ? { pinnedMessageIds: prevPinned }
+                  : {}),
                 diffFilePaths: [...pathSet],
                 timestamp: Date.now(),
                 description: '撤回消息',
@@ -134,6 +139,44 @@ export function createSessionMessageActions<T extends SessionStoreSlice>(
             rebindSessionById(state, sessionId, sess);
           }
         }
+      }),
+
+    // ── R1 撤回消费（统一输入流收敛战役）：timeline-truncate 投影重放 ──
+
+    applyTimelineTruncate: (sessionId, boundarySeq, targetMessageId) =>
+      set((state) => {
+        const sess = getSessionForWrite(state, sessionId);
+        if (!sess?.messages) return;
+        // 投影重放至 boundary：保留边界 user 节点（seq == boundary_seq，
+        // 事件流只追加语义下其起始即边界），丢弃其后的全部节点
+        // （`> boundary_seq` 部分）；撤回的呈现标记由展示投影层（V1）
+        // 决定，本 action 只做投影截断。
+        const idx = sess.messages.findIndex((m) => m.id === targetMessageId);
+        if (idx === -1) return;
+        if (idx + 1 >= sess.messages.length) return; // 无后续节点，无截断
+        const prevMessages = sess.messages.slice();
+        sess.messages = sess.messages.slice(0, idx + 1);
+        // 后续节点的固定消息与 pinned 引用一并清理（对齐 withdrawMessage 语义）
+        if (sess.pinnedMessageIds?.length) {
+          const keep = new Set(sess.messages.map((m) => m.id));
+          sess.pinnedMessageIds = sess.pinnedMessageIds.filter((id) =>
+            keep.has(id)
+          );
+          if (sess.pinnedMessageIds.length === 0) delete sess.pinnedMessageIds;
+        }
+        saveMessageSnapshot(
+          sessionId,
+          {
+            sessionId,
+            operation: 'timeline-truncate',
+            messages: prevMessages,
+            diffFilePaths: [],
+            timestamp: Date.now(),
+            description: `撤回截断至 boundary=${boundarySeq}（target=${targetMessageId}）`,
+          },
+          { afterMessages: sess.messages }
+        );
+        rebindSessionById(state, sessionId, sess);
       }),
 
     respondToApproval: (sessionId, messageId, toolCallId, decision) =>

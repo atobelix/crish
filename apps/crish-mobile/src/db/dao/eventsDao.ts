@@ -145,6 +145,18 @@ export class SqlEventsDao implements EventsDao {
     return row?.count ?? 0;
   }
 
+  /**
+   * 缓存回收（本地事件缓存窗口）：**缓存 ≠ 时间线删除**——事实源在桌面
+   * daemon（19 审计 §3.1），本删仅回收本地缓存。
+   *
+   * > 统一输入流收敛战役 R1 §4.6（显式降级登记）：撤回是**逻辑截断**
+   * > （timeline-truncate 事件，只追加不变量保持），不物理删除事件行。
+   * > 本方法为缓存窗口回收（sequence < beforeSequence 的本地行），
+   * > 接入事件持久化重放时按「缓存 ≠ 时间线删除」语义降级：被本窗口
+   * > 物理淘汰的历史**不可重放**（「已淘汰不可审计」注释），撤回重放
+   * > 依赖完整事件流时须先收敛本缓存窗口为逻辑截断（截断标记 / 缓存
+   * > 窗口边界），本轮仅登记降级语义，不实现重放。
+   */
   async deleteOlderThan(
     sessionId: string,
     beforeSequence: number

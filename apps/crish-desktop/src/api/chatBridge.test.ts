@@ -69,8 +69,12 @@ describe('resolveEventType (event guards)', () => {
 
   it('resolves type / event / kind aliases', () => {
     expect(resolveEventType({ type: 'tool-start' })?.type).toBe('tool-start');
-    expect(resolveEventType({ event: 'message-delta', text: 'x' })?.type).toBe('message-delta');
-    expect(resolveEventType({ kind: 'run-terminal' })?.type).toBe('run-terminal');
+    expect(resolveEventType({ event: 'message-delta', text: 'x' })?.type).toBe(
+      'message-delta'
+    );
+    expect(resolveEventType({ kind: 'run-terminal' })?.type).toBe(
+      'run-terminal'
+    );
   });
 
   it('returns raw payload for field access', () => {
@@ -135,7 +139,9 @@ describe('parseApprovalResolvedFields (ok === false narrow)', () => {
     }
   });
 
-  it('maps nested PermissionDecision.behavior and requestId alias', () => {
+  it('object-shaped decision (旧 PermissionDecision 形态) → deny, never forge allow', () => {
+    // P1 权限归一 D4：旧 { behavior } 对象解析已删除——引擎实发字符串三值
+    //（approved/denied/expired），对象形态一律按未知决策拒绝（不伪造放行）
     const allow = parseApprovalResolvedFields({
       requestId: 'req-1',
       decision: { behavior: 'allow' },
@@ -143,7 +149,7 @@ describe('parseApprovalResolvedFields (ok === false narrow)', () => {
     expect(allow.ok === true).toBe(true);
     if (allow.ok === true) {
       expect(allow.data.toolCallId).toBe('req-1');
-      expect(allow.data.decision).toBe('allow');
+      expect(allow.data.decision).toBe('deny');
     }
 
     const deny = parseApprovalResolvedFields({
@@ -153,7 +159,7 @@ describe('parseApprovalResolvedFields (ok === false narrow)', () => {
     expect(deny.ok === true).toBe(true);
     if (deny.ok === true) expect(deny.data.denied).toBe(true);
 
-    // ask is not allow
+    // ask 对象形态同样不是放行
     const ask = parseApprovalResolvedFields({
       toolCallId: 'req-ask',
       decision: { behavior: 'ask' },
@@ -198,7 +204,11 @@ describe('toolCallFields / toolCallFieldsFromEvent', () => {
   });
 
   it('uses toolName / toolCallId aliases', () => {
-    const f = toolCallFields({ toolCallId: 'tc', toolName: 'edit_file', input: { path: 'a' } });
+    const f = toolCallFields({
+      toolCallId: 'tc',
+      toolName: 'edit_file',
+      input: { path: 'a' },
+    });
     expect(f.id).toBe('tc');
     expect(f.name).toBe('edit_file');
     expect(f.args).toContain('path');
@@ -295,7 +305,7 @@ describe('mergeAssistantTextPiece', () => {
     // 不再 `\n\n` 拼接（消灭 R1「增量版+终稿版」两段共存）；
     // 多轮（跨 turn）分段由 onMessageEnd 按 turnIndex 段数组 join 负责
     expect(mergeAssistantTextPiece('first turn', 'second turn')).toBe(
-      'second turn',
+      'second turn'
     );
   });
 });

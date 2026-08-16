@@ -18,7 +18,9 @@
 //!   （49 → 57，全 Delta 可丢级）——跨端策略分组 T 14 / R 33 / U 10
 //!   （新事件全部按观测字段摘要化保留，无正文敏感）；
 //!   2026-08-16 统一输入流收敛战役 T1a/T1b：新增撤回域事件 timeline-truncate
-//!   （57 → 58，Critical 必达透传）——跨端策略分组 T 15 / R 33 / U 10。
+//!   （57 → 58，Critical 必达透传）——跨端策略分组 T 15 / R 33 / U 10；
+//!   同日战役 R1：tool-update 死契约删除（58 → 57）——跨端策略分组
+//!   T 15 / R 32 / U 10。
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -43,10 +45,11 @@ pub enum EventRedactStrategy {
 /// 事件 → 跨端裁剪策略（M6 §5.1 映射表；41 变体分组计数 13/18/10，
 /// 2026-08-11 D8 登记恢复域 + goal 域 8 变体后为 49 变体分组 14/24/11；
 /// 2026-08-14 D-03 契约窗口后为 57 变体分组 14/33/10；
-/// 2026-08-16 T1a/T1b 新增 timeline-truncate 后为 58 变体分组 15/33/10）
+/// 2026-08-16 T1a/T1b 新增 timeline-truncate 后为 58 变体分组 15/33/10；
+/// R1 tool-update 死契约删除后为 57 变体分组 15/32/10）
 ///
 /// 与 `AgentEvent` 变体逐一匹配（缺 arm 编译报错），未登记的未来变体在
-/// 网关层按 fail-closed 元组兜底（本函数只覆盖既有 58 变体）。
+/// 网关层按 fail-closed 元组兜底（本函数只覆盖既有 57 变体）。
 pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
     match event {
         // T 透明透传（14）：agent-start/end、turn-start/end、压缩 start/end、
@@ -72,7 +75,7 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
         // 会话树撤回语义须完整跨端透传，字段全为结构标识符无正文敏感）
         | AgentEvent::TimelineTruncate { .. } => EventRedactStrategy::Transparent,
 
-        // R 摘要化（33）：message-delta/end、tool-start/update/end、
+        // R 摘要化（33）：message-delta/end、tool-start/end、
         // runtime-error/intervention-required、approval-requested/resolved、
         // cache 三件、security-audit、subagent-event、task-output/failed、
         // timer-fired、cron-fired、recovery-escalated/steering/report/
@@ -85,7 +88,6 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
         AgentEvent::MessageDelta { .. }
         | AgentEvent::MessageEnd { .. }
         | AgentEvent::ToolStart { .. }
-        | AgentEvent::ToolUpdate { .. }
         | AgentEvent::ToolEnd { .. }
         | AgentEvent::RuntimeError { .. }
         | AgentEvent::RuntimeInterventionRequired { .. }
@@ -134,18 +136,17 @@ pub fn event_cross_strategy(event: &AgentEvent) -> EventRedactStrategy {
     }
 }
 
-/// 同步面白名单（M6 §5.0：58 变体中 20 类参与 `events.resume` / C03 续传；
+/// 同步面白名单（M6 §5.0：57 变体中 19 类参与 `events.resume` / C03 续传；
 /// 38 类不同步——delta/诊断/定时器数据面、恢复域与 goal 域观测事件等由
 /// 实时面或补取命令覆盖；D8 登记新增 8 事件均不入白名单；D-03 九观测事件
-/// 同为 Delta 可丢级不入白名单）
-pub const SYNC_ELIGIBLE_TYPES: [&str; 20] = [
+/// 同为 Delta 可丢级不入白名单；R1 tool-update 死契约删除后 20 → 19 类）
+pub const SYNC_ELIGIBLE_TYPES: [&str; 19] = [
     "agent-start",
     "agent-end",
     "turn-start",
     "turn-end",
     "message-end",
     "tool-start",
-    "tool-update",
     "tool-end",
     "context-compression-start",
     "context-compression-end",
@@ -171,7 +172,6 @@ pub fn event_is_sync_eligible(event: &AgentEvent) -> bool {
             | AgentEvent::TurnEnd { .. }
             | AgentEvent::MessageEnd { .. }
             | AgentEvent::ToolStart { .. }
-            | AgentEvent::ToolUpdate { .. }
             | AgentEvent::ToolEnd { .. }
             | AgentEvent::ContextCompressionStart { .. }
             | AgentEvent::ContextCompressionEnd { .. }
@@ -478,8 +478,9 @@ mod tests {
 
     #[test]
     fn sync_eligible_table_locks_registry() {
-        // 20 类白名单全部命中既有事件注册表（防新增事件忘登记）
-        assert_eq!(SYNC_ELIGIBLE_TYPES.len(), 20);
+        // 19 类白名单全部命中既有事件注册表（防新增事件忘登记；
+        // R1 tool-update 死契约删除后 20 → 19）
+        assert_eq!(SYNC_ELIGIBLE_TYPES.len(), 19);
         for name in SYNC_ELIGIBLE_TYPES {
             assert!(
                 crate::events::AgentEvent::ALL_TYPE_NAMES.contains(&name),

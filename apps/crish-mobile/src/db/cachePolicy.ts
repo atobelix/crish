@@ -209,6 +209,11 @@ export async function runCleanup(
       sessionSummaries.find((s) => s.sessionId === step.sessionId)?.count ?? 0;
     if (step.keepCount <= 0) {
       // 保留 0 条 → 删除该会话全部事件
+      // > 统一输入流收敛战役 R1 §4.6（显式降级登记）：本窗口物理删除为
+      // > **缓存回收**（事实源在桌面 daemon），语义上「缓存 ≠ 时间线
+      // > 删除」——撤回是逻辑截断（timeline-truncate 事件，只追加不变
+      // > 量保持），不物理删事件行。接入事件持久化重放时须把本窗口收敛
+      // > 为逻辑截断（截断标记 / 缓存窗口边界），本轮仅登记降级语义。
       await db.exec('DELETE FROM events WHERE session_id = ?', [
         step.sessionId,
       ]);
@@ -216,6 +221,8 @@ export async function runCleanup(
       continue;
     }
     // 保留窗口下界：该会话按 sequence 降序第 keepCount 条的 sequence
+    // > R1 降级登记同上：per-session 窗口删除保留，但改逻辑截断思维
+    // >（截断标记 / 缓存窗口边界，事件流只追加语义），不物理删事件行。
     const keepRows = await db.getAll<{ sequence: number }>(
       'SELECT sequence FROM events WHERE session_id = ? ORDER BY sequence DESC LIMIT ?',
       [step.sessionId, step.keepCount]

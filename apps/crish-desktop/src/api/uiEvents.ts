@@ -52,6 +52,12 @@ export type UiEventMap = {
     degraded: number;
     failed: string[];
   };
+  /**
+   * R1 撤回回填（统一输入流收敛战役）：timeline-truncate 消费端派发——
+   * 从 boundary user 节点原文回填 composer（不依赖 draft 快照）。
+   * ChatCard 宿主订阅后调 setChatInput + setComposerDraft。
+   */
+  'retract-backfill': { sessionId: string; text: string };
 };
 
 export type UiEventName = keyof UiEventMap;

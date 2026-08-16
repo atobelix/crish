@@ -24,12 +24,20 @@ use conex_types::events::{
 };
 use conex_types::session::AgentEndReason;
 use session_loop::RunOutcome;
+use session_loop::{
+    is_retraction_evacuation_event, SessionFreezeRegistry, WriteVerdict,
+};
 
 use crate::blocks::persist_compression_block;
 use crate::normalize::normalize_envelope;
 use crate::now_iso_utc;
 use crate::persist::{SessionSequencer, Store, StoreError};
 use crate::run::{map_outcome_to_terminal, RunError, RunHandle, EVENT_STORE_WRITE_FAILED_REASON};
+
+/// 冻结护栏拒绝的 StoreError kind（T06.5.8 映射面未知 kind 兜底
+/// store.write_failed + metadata.kind=retraction_freeze；判定走
+/// [PersistError::is_retraction_freeze]，不依赖文案）
+pub const RETRACTION_FREEZE_KIND: &str = "retraction_freeze";
 
 /// 是否非持久化事件（D-04 PC-05 迁移：单一分类事实源 [event_policy] 的
 /// persist 决策；delta/soft 增量不阻塞 drive loop——05 §2.8 语义不变）
@@ -65,6 +73,29 @@ pub struct PersistError {
     pub error: StoreError,
 }
 
+impl PersistError {
+    /// 冻结护栏拒绝构造（R1 边界冻结：冻结期内 `> frozen_seq` 的非撤离
+    /// 写入；kind 取 [RETRACTION_FREEZE_KIND] 可判定）
+    pub fn retraction_freeze(sequence: u64, frozen_seq: u64, event_type: &str) -> Self {
+        Self {
+            sequence,
+            event_type: event_type.to_string(),
+            error: StoreError::new(
+                RETRACTION_FREEZE_KIND,
+                format!(
+                    "撤回冻结激活期内拒绝越过 frozen_seq={frozen_seq} 的非撤离写入（sequence={sequence}）"
+                ),
+            ),
+        }
+    }
+
+    /// 是否为冻结护栏拒绝（区别于普通落库失败——冻结拒绝不标记
+    /// run failed，见 drive_outcome 调用面）
+    pub fn is_retraction_freeze(&self) -> bool {
+        self.error.kind == RETRACTION_FREEZE_KIND
+    }
+}
+
 impl std::fmt::Display for PersistError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -92,6 +123,10 @@ pub struct EventQueue {
     /// run 归属（构造期绑定，不可变；None = 会话域/空闲态事件，
     /// D-01 R-02：写面注入 = 构造期绑定，非 push 逐次传参）
     run_id: Option<String>,
+    /// R1 撤回边界冻结护栏（会话级注册表；None = 未挂载，无冻结检查）。
+    /// 冻结激活期内拒绝 `> frozen_seq` 的非撤离写入（详案 §1.2-③），
+    /// 由壳层撤回命令在 stop 收敛后激活、truncate 落库后释放。
+    freeze: Option<Arc<SessionFreezeRegistry>>,
 }
 
 impl EventQueue {
@@ -110,7 +145,15 @@ impl EventQueue {
             sequencer: SessionSequencer::new(store),
             last_reserved: base_sequence.saturating_sub(1),
             run_id,
+            freeze: None,
         }
+    }
+
+    /// 挂载撤回冻结护栏（R1：壳层撤回命令在组合根为会话内全部队列注入
+    /// 同一注册表；默认不挂载，既有调用面零改动）
+    pub fn with_freeze_registry(mut self, freeze: Arc<SessionFreezeRegistry>) -> Self {
+        self.freeze = Some(freeze);
+        self
     }
 
     /// 下一个待分配的序列号（本地镜像，仅供观测/断言；实际分配在 store 端）
@@ -191,6 +234,23 @@ impl EventQueue {
         session_id: &str,
         event: AgentEvent,
     ) -> Result<SequencedEvent, PersistError> {
+        // R1 边界冻结护栏（详案 §1.2-③ FREEZE1）：冻结激活期内拒绝
+        // 非撤离写入——**取号前拦截**（冻结读点后计数器恒 > frozen_seq，
+        // 不消耗序列槽：TimelineTruncate 恰好占 frozen_seq + 1，无空洞）。
+        // 撤离事件（timeline-truncate 自身 / run 收口终态）放行；拒绝返回
+        // 可判定的 [PersistError::is_retraction_freeze]（调用面按冻结拒绝
+        // 语义处置，不标记 run failed）
+        if let Some(registry) = &self.freeze {
+            if registry.is_frozen(session_id) && !is_retraction_evacuation_event(&event) {
+                if let Some(frozen_seq) = registry.frozen_seq(session_id) {
+                    return Err(PersistError::retraction_freeze(
+                        self.last_reserved + 1,
+                        frozen_seq,
+                        event_type_name(&event),
+                    ));
+                }
+            }
+        }
         // T08.12：sequence 由会话级原子计数器分配（store 端单语句自增，
         // 会话内全局单调，防同会话并发 run 冲突）
         let sequence = match self.reserve(session_id).await {
@@ -1660,5 +1720,116 @@ mod tests {
             }
             other => panic!("事件类型不符：{other:?}"),
         }
+    }
+
+    // ── R1 撤回边界冻结护栏（详案 §1.2-③ FREEZE1/FREEZE2）──
+
+    /// FREEZE1（写侧隔离硬验收）：冻结激活期内 `sequence > frozen_seq`
+    /// 的非撤离写入被拒（RetractionFreeze 可判定），撤离事件
+    /// （timeline-truncate / run-terminal）放行；释放后写入恢复。
+    ///
+    /// 并发语义：冻结读点 = 稳定点 MAX(sequence)，护栏拒绝即「截断后无
+    /// 新事件越过 boundary」（events 表在 TimelineTruncate 之后无
+    /// `> boundary_seq` 的非撤离事件）。
+    #[tokio::test]
+    async fn freeze_guard_rejects_crossing_writes_and_allows_evacuation() {
+        let (mem, store) = setup();
+        let registry = std::sync::Arc::new(session_loop::SessionFreezeRegistry::new());
+        let mut queue = EventQueue::new(store, 1, None).with_freeze_registry(registry.clone());
+
+        // 基线：agent-start 落库（sequence=1）——冻结读点前的历史
+        queue.push("s1", agent_start()).await.unwrap();
+        assert_eq!(mem.events().len(), 1);
+
+        // 冻结激活：frozen_seq = 1（稳定点 MAX；本撤回事务内不再被越过）
+        registry.freeze("s1", "retraction:s1", 1).unwrap();
+
+        // 非撤离写入（agent-start，sequence=2 > frozen_seq=1）→ 拒绝
+        //（agent-end / run-terminal 为 run 收口终态撤离事件，放行面见下）
+        let err = queue
+            .push("s1", agent_start())
+            .await
+            .unwrap_err();
+        assert!(
+            err.is_retraction_freeze(),
+            "越界写入必须是可判定的 RetractionFreeze（kind={}）",
+            err.error.kind
+        );
+        assert_eq!(err.sequence, 2, "拒绝携带已分配的越界序列");
+        assert_eq!(
+            mem.events().len(),
+            1,
+            "被拒事件不得落库（截断后无越过 boundary 的新事件）"
+        );
+
+        // 撤离事件放行：timeline-truncate（自身占 sequence = frozen_seq + 1）
+        let truncate = AgentEvent::TimelineTruncate {
+            session_id: "s1".to_string(),
+            run_id: "run-1".to_string(),
+            boundary_seq: 1,
+            reason: conex_types::events::TimelineTruncateReason::UserRequested,
+            target_message_id: "msg-1".to_string(),
+            timestamp: ts(),
+        };
+        let seq = queue.push("s1", truncate).await.unwrap();
+        assert_eq!(seq.sequence, 2, "TimelineTruncate.sequence == frozen_seq + 1");
+        assert!(seq.persisted, "timeline-truncate Critical 必达落库");
+        assert_eq!(mem.events().len(), 2);
+
+        // run-terminal（run 收口终态事件）同为撤离面放行
+        let terminal = AgentEvent::RunTerminal {
+            session_id: "s1".to_string(),
+            run_id: "run-1".to_string(),
+            timestamp: ts(),
+            terminal: RunTerminalStatus::Cancelled,
+            error: None,
+        };
+        queue.push("s1", terminal).await.unwrap();
+        assert_eq!(mem.events().len(), 3);
+
+        // 冻结期内另一会话不受影响（会话级隔离）
+        assert_eq!(queue.push("s2", agent_start()).await.unwrap().sequence, 1);
+
+        // 释放后写入恢复（新 run 从 boundary 后重新开始）
+        registry.release("s1", "retraction:s1").unwrap();
+        let ok = queue.push("s1", agent_end(AgentEndReason::Stop)).await.unwrap();
+        assert_eq!(ok.sequence, 4, "释放后新写入放行（归新 run 语义）");
+    }
+
+    /// FREEZE2（原子性）：冻结读点 == 事件流停止写入点——冻结登记后
+    /// 连续越界写入全部被拒（无撕裂），boundary 恒为登记时的 frozen_seq
+    #[tokio::test]
+    async fn freeze_boundary_is_stable_under_concurrent_residual_writes() {
+        let (mem, store) = setup();
+        let registry = std::sync::Arc::new(session_loop::SessionFreezeRegistry::new());
+        let mut queue = EventQueue::new(store, 1, None).with_freeze_registry(registry.clone());
+
+        queue.push("s1", agent_start()).await.unwrap();
+        let frozen_seq = 1;
+        registry.freeze("s1", "tok", frozen_seq).unwrap();
+
+        // 模拟 stop 收敛后的残余写入风暴：全部应被拒，边界不被抬高
+        for _ in 0..5 {
+            let err = queue
+                .push("s1", agent_start())
+                .await
+                .unwrap_err();
+            assert!(err.is_retraction_freeze());
+        }
+        assert_eq!(
+            registry.frozen_seq("s1"),
+            Some(frozen_seq),
+            "冻结边界在残余写入下不被抬高（MAX 语义不回退，护栏不漂移）"
+        );
+        assert_eq!(mem.events().len(), 1, "残余写入全部被拒，无越界落库");
+
+        // 双撤回互斥（FREEZE3 写侧）：同会话第二次冻结拒绝
+        assert_eq!(
+            registry.freeze("s1", "tok-2", 9),
+            Err(session_loop::FreezeError::AlreadyFrozen {
+                token: "tok".to_string()
+            })
+        );
+        registry.release("s1", "tok").unwrap();
     }
 }

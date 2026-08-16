@@ -1,9 +1,13 @@
 //! 中间件与钩子面（SR-03 拆分 · ≠ EL）：run_hook_with_timeout /
-//! tool_progress_update / middleware_names（cfg(test) 观测面）
+//! middleware_names（cfg(test) 观测面）
 //!
-//! 中间件链超时竞速助手（E4 收口）、S1 进度出站映射与中间件链名称
-//! 快照（loop 装配测试观测面）随本模落位。语义与拆分前逐行一致
-//!（只搬移不改行为）。
+//! 中间件链超时竞速助手（E4 收口）与中间件链名称快照（loop 装配测试
+//! 观测面）随本模落位。语义与拆分前逐行一致（只搬移不改行为）。
+//!
+//! > 统一输入流收敛战役 R1（tool-update 事件契约删除）：`tool_progress_update`
+//! > 映射随 `AgentEvent` 的 tool-update 变体删除——S1 流式进度无出站事件（前端零
+//! > 消费），终值仍由 tool-end 承载；`ToolProgress`（agent-tools 流式协议
+//! > 类型）保留供执行器内部使用。
 
 use super::*;
 
@@ -38,27 +42,5 @@ pub(crate) async fn run_hook_with_timeout<T>(
             result = tokio::time::timeout(timeout, fut) => Some(result),
         },
         None => Some(tokio::time::timeout(timeout, fut).await),
-    }
-}
-
-///
-/// - `Text` → `text` 承载 + `metadata.kind = "tool-progress"`；
-/// - `Custom` → `json` 承载 + `metadata.kind = subkind`（与前端预留的
-///   `metadata.kind === 'tool-args-delta'` 消费面同槽位扩展）；
-/// - `Content` → 阶段 1 仅类型定义，返回 None（不发射，`content-blocks`
-///   kind 字面量预留）。
-pub(crate) fn tool_progress_update(p: &ToolProgress) -> Option<ToolProgressUpdate> {
-    match p {
-        ToolProgress::Text { text } => Some(ToolProgressUpdate {
-            text: Some(text.clone()),
-            json: None,
-            metadata: Some(serde_json::json!({ "kind": "tool-progress" })),
-        }),
-        ToolProgress::Custom { subkind, payload } => Some(ToolProgressUpdate {
-            text: None,
-            json: Some(payload.clone()),
-            metadata: Some(serde_json::json!({ "kind": subkind })),
-        }),
-        ToolProgress::Content { .. } => None,
     }
 }

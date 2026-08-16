@@ -65,7 +65,6 @@ const UNMAPPED_EVENTS: &[&str] = &[
     "message-start",
     "message-delta",
     "message-end",
-    "tool-update",
     "tool-batch-start",
     "tool-batch-end",
     "provider-diagnostic",
@@ -185,7 +184,7 @@ fn unmapped_engine_events_exist_in_enum() {
     }
 }
 
-// ── 2. 全集划分：58 = 11 映射 + 47 无对应 ──
+// ── 2. 全集划分：57 = 11 映射 + 46 无对应 ──
 
 #[test]
 fn mapping_partitions_all_engine_events() {
@@ -198,11 +197,15 @@ fn mapping_partitions_all_engine_events() {
         11,
         "映射引擎事件必须为 11 个（tool-end 双钩子去重）"
     );
-    assert_eq!(unmapped.len(), 47, "无对应引擎事件必须为 47 个");
+    assert_eq!(
+        unmapped.len(),
+        46,
+        "无对应引擎事件必须为 46 个（R1 tool-update 死契约删除后 47 → 46）"
+    );
     assert_eq!(
         registry.len(),
-        58,
-        "AgentEvent enum 必须为 58 种域事件（57 基线 + T1a 统一输入流收敛战役 timeline-truncate）"
+        57,
+        "AgentEvent enum 必须为 57 种域事件（R1 tool-update 删除）"
     );
 
     let union: BTreeSet<&str> = mapped.union(&unmapped).copied().collect();

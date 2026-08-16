@@ -1,19 +1,22 @@
-//! B1.5 序列化契约测试：58 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
+//! B1.5 序列化契约测试：57 事件穷举 roundtrip + 03 §5.1 硬依赖表字段锚定
 //!
 //! 穷举清单与 [AgentEvent::ALL_TYPE_NAMES]（引擎事件名宏同源生成）动态对照，
 //! 新增事件变体在两处登记后本测试自动纳入，不再硬编码事件数。
+//!
+//! > 统一输入流收敛战役 R1：tool-update 事件变体 / 审批行为与决策对象
+//! > 死契约删除（决策 1 + R6 主控裁决），对应陪葬段随删。
 
 use conex_types::{
     AgentEndReason, AgentEvent, AgentEventEnvelope, AgentMessage, AgentMessageBlock,
     AgentMessageRole, ApprovalDecision, ContextCompressionRecord,
     ContextCompressionReason, ContextCompressionTrigger, ImpactAssessment,
-    MissAttribution, PermissionBehavior, PermissionDecision, PermissionRequest,
+    MissAttribution, PermissionRequest,
     ProviderDiagnostic, ProviderDiagnosticPhase, ProviderErrorKind, RunCacheStats,
     RunTerminalStatus, RuntimeCheckpointKind, RuntimeCheckpointRecord,
     RuntimeCheckpointRestoreRecord, SecurityAuditDecision, SecurityAuditOperation,
     SubagentEndStatus, SubagentEventKind, SubagentEventPayload, TimelineTruncateReason,
     ToolArtifactKind, ToolBatchCall, ToolBatchResult, ToolCallBlock, ToolCategory,
-    ToolConcurrency, ToolMetadata, ToolOutput, ToolProgressUpdate, TurnUsage,
+    ToolConcurrency, ToolMetadata, ToolOutput, TurnUsage,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -96,14 +99,6 @@ fn batch_result() -> ToolBatchResult {
         output: ToolOutput::text("文件内容"),
         is_error: false,
         duration_ms: 12,
-    }
-}
-
-fn progress_update() -> ToolProgressUpdate {
-    ToolProgressUpdate {
-        text: Some("正在读取".into()),
-        json: None,
-        metadata: Some(json!({ "kind": "tool-args-delta", "argumentsText": "{\"path\":" })),
     }
 }
 
@@ -301,13 +296,6 @@ fn all_events() -> Vec<AgentEvent> {
             timestamp: TS.into(),
             // EV-09/EV-11：轮次关联键（新帧携带）
             turn_index: Some(1),
-        },
-        AgentEvent::ToolUpdate {
-            session_id: s.clone(),
-            batch_id: "b1".into(),
-            tool_call_id: "tc-1".into(),
-            update: progress_update(),
-            timestamp: TS.into(),
         },
         AgentEvent::ToolEnd {
             session_id: s.clone(),
@@ -1273,17 +1261,6 @@ fn tool_batch_and_compression_events_camel_case_fields() {
     .unwrap();
     assert_eq!(batch_end["calls"][0]["isError"], false);
 
-    let update = serde_json::to_value(AgentEvent::ToolUpdate {
-        session_id: "s1".into(),
-        batch_id: "b1".into(),
-        tool_call_id: "tc-1".into(),
-        update: progress_update(),
-        timestamp: TS.into(),
-    })
-    .unwrap();
-    assert_eq!(update["toolCallId"], "tc-1");
-    assert_eq!(update["update"]["metadata"]["kind"], "tool-args-delta");
-
     let compress_start = serde_json::to_value(AgentEvent::ContextCompressionStart {
         session_id: "s1".into(),
         timestamp: TS.into(),
@@ -1503,20 +1480,6 @@ fn block_wire_types_and_camel_case() {
     assert_eq!(result["toolCallId"], "tc-1");
     assert_eq!(result["isError"], false);
     assert_eq!(result["output"]["text"], "文件内容");
-}
-
-#[test]
-fn permission_decision_roundtrip() {
-    let decision = PermissionDecision {
-        behavior: PermissionBehavior::Ask,
-        reason: Some("需要确认".into()),
-        metadata: None,
-    };
-    let json = serde_json::to_value(&decision).unwrap();
-    assert_eq!(json["behavior"], "ask");
-    assert_eq!(json["reason"], "需要确认");
-    let back: PermissionDecision = serde_json::from_value(json).unwrap();
-    assert_eq!(decision, back);
 }
 
 #[test]

@@ -74,9 +74,8 @@ use agent_tools::note_backend::NoteBackendHandle;
 use agent_tools::permission::{decide, PermissionMode, PermissionVerdict};
 use agent_tools::registry::ToolRegistry;
 use agent_tools::revert::RevertPolicy;
-use agent_tools::streaming::ToolProgress;
 use agent_tools::write_paths::WritePathRegistry;
-use conex_types::tool::{ToolBatchCall, ToolConcurrency, ToolProgressUpdate};
+use conex_types::tool::{ToolBatchCall, ToolConcurrency};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -187,7 +186,7 @@ mod exec_verdict;
 
 // 内部面 re-export：子模块与测试经 `use super::*` 消费（公开 API 不变）
 pub(crate) use exec_batch::DEFAULT_MAX_PARALLEL;
-pub(crate) use exec_middleware::{run_hook_with_timeout, tool_progress_update};
+pub(crate) use exec_middleware::run_hook_with_timeout;
 pub(crate) use exec_verdict::{
     approval_wait, classify_tool_error, denied_message, denied_result, mark_rest_cancelled,
     ApprovalWaitOutcome,

@@ -113,6 +113,18 @@ struct SnapshotMeta {
     readonly: bool,
 }
 
+/// 撤回批量回滚单路径结果（幂等降级：无快照 → Skipped 不报错）
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RollbackOutcome {
+    /// 已还原（写前快照 restore_force 成功；路径为绝对化后的原路径）
+    Restored(std::path::PathBuf),
+    /// 无对应写前快照（路径在边界后未被写，或快照已被消费）——幂等跳过
+    Skipped {
+        path: std::path::PathBuf,
+        reason: String,
+    },
+}
+
 /// 回收站服务：管理 trash 根目录内的条目集合
 #[derive(Debug, Clone)]
 pub struct TrashService {
@@ -357,6 +369,50 @@ impl TrashService {
             .with_context(|| format!("恢复写回失败：{}", original.display()))?;
         let _ = force_remove_dir_all(&entry_dir);
         Ok(original.clone())
+    }
+
+    /// 撤回批量回滚入口（统一输入流收敛战役 R1 · 详案 §1.2-④ 接线）
+    ///
+    /// 对撤回边界之后执行过的写类工具输出路径逐一还原写前快照
+    /// （S10b 语义：[Self::snapshot] 登记的快照条目 + [Self::restore_force]
+    /// 覆盖式恢复，含 nil-content 删除语义）。
+    ///
+    /// - `boundary`：撤回边界 sequence——**审计/幂等标记**（调用方保证
+    ///   `target_paths` 均在该边界之后被写；trash 层不持有 sequence 轴，
+    ///   按调用方给定的路径清单精确回滚，不越界扫描）。多写路径按
+    ///   快照时间倒序逐条恢复（最新写先还原，终态 = 边界前状态）；
+    /// - 单条恢复失败（checksum 校验失败 / 原路径非法 / 恢复写回失败）
+    ///   → 整体返回 Err（fail-closed：损坏快照不静默跳过）；
+    /// - 无快照条目 → [RollbackOutcome::Skipped]（幂等降级，不报错）。
+    pub fn rollback_before(
+        &self,
+        boundary: u64,
+        target_paths: &[std::path::PathBuf],
+    ) -> Result<Vec<RollbackOutcome>> {
+        let _boundary = boundary; // 审计/幂等标记（见上方注释；调用方保证路径在边界后被写）
+        let entries = self.list();
+        let mut results = Vec::new();
+        for path in target_paths {
+            let original = abs_clean(path);
+            // 该路径全部写前快照条目（时间倒序：最新写先还原）
+            let mut snapshots: Vec<&TrashEntry> = entries
+                .iter()
+                .filter(|e| e.mode == EntryMode::Snapshot && e.original_path == original)
+                .collect();
+            snapshots.sort_by_key(|e| std::cmp::Reverse(e.trashed_at));
+            if snapshots.is_empty() {
+                results.push(RollbackOutcome::Skipped {
+                    path: original,
+                    reason: "无写前快照（幂等跳过）".into(),
+                });
+                continue;
+            }
+            for entry in snapshots {
+                self.restore_force(&entry.id)?;
+            }
+            results.push(RollbackOutcome::Restored(original));
+        }
+        Ok(results)
     }
 
     /// 扫描 trash 根目录，返回全部登记条目（按入回收站时间倒序）
@@ -1368,5 +1424,105 @@ mod tests {
         assert!(!src.exists());
         assert!(dst.exists());
         assert_eq!(fs::read_to_string(&dst).unwrap(), "payload data");
+    }
+
+    // ── R1 撤回批量回滚（rollback_before）──
+
+    /// 单写回滚：写前快照 + 修改 → rollback_before → 内容还原为写前状态
+    #[test]
+    fn rollback_before_restores_single_write() {
+        let ws = TempDir::new("rb_ws");
+        let trash_root = TempDir::new("rb_trash");
+        let svc = TrashService::new(trash_root.path());
+        let file = ws.write("a.txt", "原始内容");
+
+        // 写前快照（S10b 语义）
+        svc.snapshot(&file).unwrap();
+        fs::write(&file, "修改后内容").unwrap();
+
+        let results = svc.rollback_before(42, &[file.clone()]).unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0], RollbackOutcome::Restored(file.clone()));
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            "原始内容",
+            "写类工具输出路径还原为写前状态"
+        );
+        assert!(svc.list().is_empty(), "快照条目被消费");
+    }
+
+    /// 多写回滚：同一路径多次写 → 快照倒序恢复，终态 = 边界前状态
+    #[test]
+    fn rollback_before_undoes_multiple_writes_in_reverse() {
+        let ws = TempDir::new("rb_ws2");
+        let trash_root = TempDir::new("rb_trash2");
+        let svc = TrashService::new(trash_root.path());
+        let file = ws.write("b.txt", "v0");
+
+        svc.snapshot(&file).unwrap(); // 快照1：v0
+        fs::write(&file, "v1").unwrap();
+        svc.snapshot(&file).unwrap(); // 快照2：v1
+        fs::write(&file, "v2").unwrap();
+
+        let results = svc.rollback_before(42, &[file.clone()]).unwrap();
+        assert_eq!(results, vec![RollbackOutcome::Restored(file.clone())]);
+        assert_eq!(
+            fs::read_to_string(&file).unwrap(),
+            "v0",
+            "多写路径终态 = 边界前状态（倒序恢复全部写前快照）"
+        );
+    }
+
+    /// nil-content 删除语义：写前不存在的文件被写后撤回 → 删除还原
+    #[test]
+    fn rollback_before_removes_newly_created_file() {
+        let ws = TempDir::new("rb_ws3");
+        let trash_root = TempDir::new("rb_trash3");
+        let svc = TrashService::new(trash_root.path());
+        let file = ws.0.join("new.txt");
+        assert!(!file.exists());
+
+        svc.snapshot(&file).unwrap(); // nil-content 快照（原路径不存在）
+        fs::write(&file, "新文件").unwrap();
+
+        let results = svc.rollback_before(42, &[file.clone()]).unwrap();
+        assert_eq!(results, vec![RollbackOutcome::Restored(file.clone())]);
+        assert!(!file.exists(), "nil-content 条目恢复 = 删除原路径");
+    }
+
+    /// 无快照路径 → Skipped 幂等降级（不报错）
+    #[test]
+    fn rollback_before_skips_path_without_snapshot() {
+        let ws = TempDir::new("rb_ws4");
+        let trash_root = TempDir::new("rb_trash4");
+        let svc = TrashService::new(trash_root.path());
+        let untouched = ws.write("untouched.txt", "从未被写");
+
+        let results = svc.rollback_before(42, &[untouched.clone()]).unwrap();
+        assert!(matches!(
+            &results[0],
+            RollbackOutcome::Skipped { path, reason }
+                if *path == untouched && reason.contains("无写前快照")
+        ));
+        assert_eq!(fs::read_to_string(&untouched).unwrap(), "从未被写");
+    }
+
+    /// 边界参数为审计/幂等标记：同边界重复回滚（快照已消费）→ 幂等跳过
+    #[test]
+    fn rollback_before_is_idempotent_on_repeat() {
+        let ws = TempDir::new("rb_ws5");
+        let trash_root = TempDir::new("rb_trash5");
+        let svc = TrashService::new(trash_root.path());
+        let file = ws.write("c.txt", "原始");
+
+        svc.snapshot(&file).unwrap();
+        fs::write(&file, "修改").unwrap();
+        svc.rollback_before(42, &[file.clone()]).unwrap();
+        assert_eq!(fs::read_to_string(&file).unwrap(), "原始");
+
+        // 第二次回滚：快照已消费 → Skipped（幂等）
+        let results = svc.rollback_before(42, &[file.clone()]).unwrap();
+        assert!(matches!(&results[0], RollbackOutcome::Skipped { .. }));
+        assert_eq!(fs::read_to_string(&file).unwrap(), "原始", "内容不再变化");
     }
 }

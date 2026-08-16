@@ -1,9 +1,11 @@
 /**
- * 工具域 handler（T7 分派表）：tool-start / tool-update / tool-end /
- * tool-batch-start / tool-batch-end / tool-input-repaired。
+ * 工具域 handler（T7 分派表）：tool-start / tool-end /
+ * tool-batch-start / tool-batch-end。
  *
  * tool-start / tool-end 保留原 toolUtils 的宽容字段抽取（call 嵌套或顶层平铺），
  * 行为与原 16 分支实现完全等价。
+ *
+ * > 统一输入流收敛战役 R1：tool-update 死契约删除（前端零消费空实现随删）。
  */
 import { toolCallFieldsFromEvent, toolResultFields } from './toolUtils';
 import type { EngineEnvelope } from './eventParser';
@@ -20,13 +22,6 @@ export function onToolStart(
     approvalFlow.dispatch({ type: 'tool_start', toolId });
     callbacks.onToolStart(toolId, name, args, explanation);
   }
-}
-
-export function onToolUpdate(
-  _env: HandlerEnv,
-  _envelope: EngineEnvelope<'tool-update'>
-): void {
-  // tool-update 暂无 UI 落地：显式空实现（原实现无分支、静默放行）
 }
 
 export function onToolEnd(

@@ -50,6 +50,9 @@ mod core_error;
 mod core_event_bridge;
 mod core_query_commands;
 mod core_run_commands;
+// R1 撤回命令（统一输入流收敛战役；命令面独立于 run/ 目录——I1-β 并行
+// 位在改 run_idle/run_launch/engine_build，避免争写）
+mod retraction_commands;
 mod dev_mcp;
 mod engine;
 mod fs_commands;
@@ -266,6 +269,9 @@ command_registry![
     ),
     ("core_run_task", core_run_commands::core_run_task),
     ("core_run_control", core_run_commands::core_run_control),
+    // R1 撤回（统一输入流收敛战役）：用户撤回入口——复用 core_run_control
+    // L3 通道 + 独立 retract 语义 wire（命令面独立于 run/ 目录）
+    ("core_session_retract", retraction_commands::core_session_retract),
     // E2 F4（07 §3 卡 C）：手动压缩（slash /compact → 引擎命令；registered
     // 面 = make_handlers! 注册面不变量，command_manifest 同批翻 true）
     ("core_compact_now", core_run_commands::core_compact_now),
@@ -1555,3 +1561,4 @@ mod tests {
         }
     }
 }
+

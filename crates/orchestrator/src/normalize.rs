@@ -31,7 +31,6 @@ fn event_session_id_mut(event: &mut AgentEvent) -> Option<&mut String> {
         AgentEvent::MessageDelta { session_id, .. } => Some(session_id),
         AgentEvent::MessageEnd { session_id, .. } => Some(session_id),
         AgentEvent::ToolStart { session_id, .. } => Some(session_id),
-        AgentEvent::ToolUpdate { session_id, .. } => Some(session_id),
         AgentEvent::ToolEnd { session_id, .. } => Some(session_id),
         AgentEvent::ToolBatchStart { session_id, .. } => Some(session_id),
         AgentEvent::ToolBatchEnd { session_id, .. } => Some(session_id),
@@ -393,13 +392,6 @@ mod tests {
                 timestamp: TS.into(),
                 turn_index: None,
             },
-            AgentEvent::ToolUpdate {
-                session_id: "s".into(),
-                batch_id: "b".into(),
-                tool_call_id: "tc".into(),
-                update: progress_update(),
-                timestamp: TS.into(),
-            },
             AgentEvent::ToolEnd {
                 session_id: "s".into(),
                 batch_id: "b".into(),
@@ -634,14 +626,6 @@ mod tests {
             output: conex_types::ToolOutput::text("内容"),
             is_error: false,
             duration_ms: 1,
-        }
-    }
-
-    fn progress_update() -> conex_types::ToolProgressUpdate {
-        conex_types::ToolProgressUpdate {
-            text: Some("进行中".into()),
-            json: None,
-            metadata: None,
         }
     }
 

@@ -45,10 +45,6 @@ export class EventRouter {
 
   /** 因果时序乱序到达缓存区：处理 tool-end 先于 tool-start 到达的网络时序抖动，复合键 ${turn}:${toolId} */
   private readonly pendingToolEnds = new Map<string, BridgeEventEnvelope>();
-  private readonly pendingToolUpdates = new Map<
-    string,
-    BridgeEventEnvelope[]
-  >();
   private readonly knownStartedTools = new Set<string>();
   /** 记录每个 toolId 归属的 turnIndex（DEC-05 / DIM-06） */
   private readonly toolTurnRegistry = new Map<string, number>();
@@ -126,7 +122,7 @@ export class EventRouter {
   public flushPendingCausalBuffers(
     reason: 'terminal' | 'abort' | 'timeout' = 'terminal'
   ): void {
-    if (this.pendingToolEnds.size === 0 && this.pendingToolUpdates.size === 0) {
+    if (this.pendingToolEnds.size === 0) {
       return;
     }
 
@@ -134,14 +130,13 @@ export class EventRouter {
       runId: this.runId,
       scope: 'event-router',
       kind: 'causality-drain',
-      message: `draining ${this.pendingToolEnds.size} pendingToolEnds and ${this.pendingToolUpdates.size} pendingToolUpdates on stream ${reason}`,
+      message: `draining ${this.pendingToolEnds.size} pendingToolEnds on stream ${reason}`,
     });
 
     for (const [, endEnv] of this.pendingToolEnds.entries()) {
       dispatchEvent(this.env, endEnv);
     }
     this.pendingToolEnds.clear();
-    this.pendingToolUpdates.clear();
     this.knownStartedTools.clear();
   }
 
@@ -179,33 +174,12 @@ export class EventRouter {
       }
       dispatchEvent(this.env, envelope);
 
-      // 回放提前到达的 tool-update
-      if (causalKey && this.pendingToolUpdates.has(causalKey)) {
-        const updates = this.pendingToolUpdates.get(causalKey)!;
-        this.pendingToolUpdates.delete(causalKey);
-        for (const updateEnv of updates) {
-          dispatchEvent(this.env, updateEnv);
-        }
-      }
-
       // 若此前已有提前到达的 tool-end，在同一微任务内同步触发收口
       if (causalKey && this.pendingToolEnds.has(causalKey)) {
         const pendingEnd = this.pendingToolEnds.get(causalKey)!;
         this.pendingToolEnds.delete(causalKey);
         dispatchEvent(this.env, pendingEnd);
       }
-      return;
-    }
-
-    if (envelope.type === 'tool-update') {
-      const causalKey = this.buildCausalKey(envelope);
-      if (causalKey && !this.knownStartedTools.has(causalKey)) {
-        const list = this.pendingToolUpdates.get(causalKey) || [];
-        list.push(envelope);
-        this.pendingToolUpdates.set(causalKey, list);
-        return;
-      }
-      dispatchEvent(this.env, envelope);
       return;
     }
 
@@ -390,11 +364,7 @@ export function buildEventDedupeKey(
   }
 
   // 2. 工具域事件：严格按 toolId + turnIndex 复合因果隔离
-  if (
-    event.type === 'tool-start' ||
-    event.type === 'tool-update' ||
-    event.type === 'tool-end'
-  ) {
+  if (event.type === 'tool-start' || event.type === 'tool-end') {
     const toolId = extractToolIdFromEnvelope(envelope);
     const seq = raw.sequence;
     const sequence =
@@ -412,7 +382,6 @@ export function buildEventDedupeKey(
       return `${event.type}:${turn}:${toolId}:${sequence}`;
     }
     if (toolId) {
-      if (event.type === 'tool-update') return null; // 进度更新无 seq 全放行
       return `${event.type}:${turn}:${toolId}`;
     }
     if (sequence !== null) return `${event.type}:${sequence}`;

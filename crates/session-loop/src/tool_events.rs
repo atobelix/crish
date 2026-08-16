@@ -1,10 +1,9 @@
 //! 工具批处理事件与审批门（任务书 B3.5 的 tool_events 部分）
 //!
 //! - 事件序列：tool-batch-start → (tool-start → approval-requested →
-//!   approval-resolved? → tool-update* → tool-end)* → tool-batch-end
-//!   （S1 起 tool-update* 为流式进度增量，零或多条，恒位于 tool-start 与
-//!   tool-end 之间——TOOLS-01 §3.1.5；approval-resolved 仅引擎侧超时路径
-//!   记录，approve/deny 由壳层命令路径落事件，见下方 G-9 说明）
+//!   approval-resolved? → tool-end)* → tool-batch-end
+//!   （approval-resolved 仅引擎侧超时路径记录，approve/deny 由壳层命令路径
+//!   落事件，见下方 G-9 说明）
 //! - 审批防死锁：approval-requested 必须先于挂起等待发出（01 §五.8）
 //! - G-9 审批超时权威语义：超时（APPROVAL_TIMEOUT）→ Expired 时引擎把
 //!   转移记为 approval-resolved(expired) 事件（复用既有 41 变体协议，
@@ -30,9 +29,13 @@
 //!
 //! 语义来源：01-session-loop-semantics.md §2.8 / §五.8；TOOLS-01 §3.1.5；
 //! D-03 详案 EV-10（duration_ms 真实化 / occurred_at 打点 / 批收口语义）
+//!
+//! > 统一输入流收敛战役 R1（tool-update 事件契约删除）：`ToolEvent::ToolProgress`
+//! > 变体随 `AgentEvent` 的 tool-update 变体删除——S1 流式进度无出站事件（前端零消费），
+//! > 终值仍由 tool-end 承载；`ToolProgress`（agent-tools 流式协议类型）保留。
 
 use agent_tools::permission::PermissionMode;
-use conex_types::tool::{ToolCategory, ToolConcurrency, ToolProgressUpdate};
+use conex_types::tool::{ToolCategory, ToolConcurrency};
 use serde_json::Value;
 use std::time::Duration;
 
@@ -100,16 +103,6 @@ pub enum ToolEvent {
         /// EV-09（D-03）：执行完成时刻（ms epoch；执行器打点，翻译层
         /// 回填 timestamp）
         occurred_at_ms: Option<u64>,
-    },
-    /// 工具执行进度增量（S1 流式输出，TOOLS-01 §3.1.5）
-    ///
-    /// 恒位于本工具的 ToolStart 与 ToolEnd 之间（tool-start →
-    /// tool-update* → tool-end）；翻译层映射为 AgentEvent::ToolUpdate——
-    /// 展示面事件，不进消息历史（终值仍由 ToolEnd 承载，避免污染
-    /// 对话缓存前缀）。
-    ToolProgress {
-        call_id: String,
-        update: ToolProgressUpdate,
     },
     /// 批次结束
     BatchEnd { batch_id: String },
