@@ -1,4 +1,17 @@
 //! 工具注册表（对齐 TS 端 tool-registry.ts / tools/tool-definition.ts 的 ToolRegistry 语义）
+//!
+//! ## E2 统一门面登记（统一输入流收敛 · 扩展门面详案 §1①）
+//!
+//! **已登记为 canonical**：`ToolRegistry` 是 Rust 引擎侧工具接入的**唯一登记面**
+//! （引擎侧插件运行时 = ToolRegistry + register_runtime + register_plugin_server
+//! 统一门面）——内置工具（register_builtin_tools）、浏览器 `browser_*`、
+//! 电脑 `computer_*`、MCP `mcp_<server>__<tool>` 全部经本注册表并入运行集：
+//! - `register`（&mut 面，:40）/ `register_runtime`（&self 共享面，:49）为两个
+//!   登记入口；MCP 工具经 `crate::mcp::register_plugin_server`（canonical 出口）
+//!   适配为 `Tool` 后走 `register_runtime` 并入同一注册表；
+//! - `list_definitions`（:162）为定义改写链（ToolMiddleware::on_definition）
+//!   消费面，与执行侧共享构建点。
+//! 不改结构：本登记为注释级（门面 = 文档登记 + 装配点登记，不新增组件）。
 
 use crate::definition::{Tool, ToolDefinition, ToolError};
 use crate::middleware::ToolMiddleware;

@@ -92,6 +92,16 @@ impl ToolExecutor {
     /// 基础设施）时按 Ask 矩阵判定（A3 fail-closed 配套：安全项放行、
     /// 危险项 NeedsApproval → 由执行器不透传执行）。
     ///
+    /// ## E2 扩展点 C 承载登记（统一输入流收敛 · 扩展门面详案 §1②）
+    ///
+    /// **已登记为 C（审查策略）承载面**：本判点是工具审查的**单一链
+    /// 判点**——`call_verdict` → `approval_router` → `permission.rs`
+    /// 三态（decide/decide_command_with_revert）+ `Option<Arc<dyn
+    /// ApprovalGate>>`（tool_events.rs:148）。类别轴（ToolCategory）当前
+    /// 仅作事件载荷（executing_tools.rs:71 硬编码 Internal，不参与裁决
+    /// 分派）——**类别 → 策略分派依赖 P1 完成**（P1 主导，E2 只登记
+    /// 承载面形状，不超前实现）。
+    ///
     /// 命令判定唯一链（P1 权限归一 A2/D8）：`input.command` 携带命令文本时
     /// 经 [agent_tools::permission::decide_command_with_revert] 单一链判定
     /// （红线先行 → C3 回退护栏 → 三态矩阵）——与 shell 工具执行器消费

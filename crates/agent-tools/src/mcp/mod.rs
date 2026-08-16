@@ -45,6 +45,16 @@ pub use shell::{McpRegistryShell, W4D_MCP_SHELL_PACKAGE_ID};
 /// 插件 MCP server 注册入口（E5：shared-types `PluginMcpDeclaration`
 /// 对应的 Rust 消费点——plugin-sdk `registerMcpServer` 的宿主侧实现）
 ///
+/// ## E2 统一门面登记（统一输入流收敛 · 扩展门面详案 §1①）
+///
+/// **已登记为 canonical 出口**：本函数是插件 MCP 接入引擎工具运行集的
+/// **唯一出口**（`McpClientBridge.start` → `McpToolAdapter` →
+/// `ToolRegistry::register_runtime` 并入统一注册表，供 `list_definitions`
+/// 消费）。引擎侧生产装配入口方法 = `EngineHandle::register_plugin_mcp_server`
+/// （apps/agent-workbench/src-tauri/src/engine_build.rs，已登记统一门面，
+/// 生产装配链接线点 = run/ 装配区用户声明 mcpServers 注册处，E-4 收口项），
+/// 本函数为其底层代理。不改结构：注释级登记。
+///
 /// 流程：配置校验 → `bridge.start`（spawn + initialize 握手 + tools/list
 /// 枚举）→ 每个工具经 `McpToolAdapter` 并入注册表（`register_runtime`，
 /// &self 共享面）→ 返回适配后的本地定义。

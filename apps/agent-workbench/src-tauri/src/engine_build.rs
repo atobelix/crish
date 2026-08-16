@@ -648,10 +648,19 @@ impl EngineHandle {
     /// ToolRegistry 运行集（`mcp_<server>__<tool>` 命名，供
     /// `list_definitions` 消费——与 E4 on_definition 共享构建点）。
     ///
+    /// E2 统一门面登记（统一输入流收敛 · 扩展门面详案 §1①）：本方法是
+    /// **插件 MCP 接入的唯一生产装配入口方法**（canonical 出口，底层经
+    /// `agent_tools::mcp::register_plugin_server`）——**已登记**，不属
+    /// 未接线悬挂。生产装配链接线点 = run/ 装配区用户声明 mcpServers
+    /// 注册处（E-4 收口项，本批不存在；R8 该装配区归 T5 独占域，
+    /// 接线后移除本 allow——详见详案 E2 §1① 评估框）。测试消费实证：
+    /// engine_tests.rs:2263 `register_plugin_mcp_server_integration`
+    /// （启动失败不污染注册表 / 成功并入 / 幂等三重断言）。
+    ///
     /// 启动失败 → mcp.* 错误上抛（调用方承接为插件级错误进
     /// runtime-error，不阻塞 run）；服务器生命周期随 run 启停由上层
     /// 驱动（本方法只注册并入，启停经 [Self::mcp_bridge]）。
-    #[allow(dead_code)] // E5 接线：core_run_commands 装配插件 mcpServers 时消费
+    #[cfg_attr(not(test), allow(dead_code))] // E2 已登记：canonical 出口（见上），生产装配链接线点 = run/ 装配区（E-4 收口项，T5 独占域接线后移除）
     pub(crate) async fn register_plugin_mcp_server(
         &self,
         config: McpServerConfig,
@@ -673,13 +682,14 @@ impl EngineHandle {
     ///   `McpServerConfig`（Windows `cmd /c npx` 分派 + 官方包名
     ///   `chrome-devtools-mcp` + `--browserUrl`，34 §4.1/§4.2）。
     ///
-    /// 接线点登记（TODO E-4，并行域）：插件 mcpServers 装配点
-    /// （core_run_commands 装配用户声明 server 处，本批不存在）识别
-    /// chrome-devtools-mcp 族 server 后调用本方法，把返回值经
-    /// [Self::register_plugin_mcp_server] 注册；E-3 只读能力集
+    /// 接线点登记（E2 统一门面 · 详案 E2 §1① 评估框）：插件 mcpServers
+    /// 装配点（run/ 装配区用户声明 server 处，本批不存在；R8 该装配区
+    /// 归 T5 独占域）识别 chrome-devtools-mcp 族 server 后调用本方法，
+    /// 把返回值经 [Self::register_plugin_mcp_server] 注册——**已登记**
+    /// 不属未接线悬挂，接线后移除本 allow；E-3 只读能力集
     /// （R-12 核心拦截面，MCP 自身不拒绝求值）为引擎侧 CDP 会话面
     /// 独立接线项，登记见 34-MCPattach验证.md §5.2。
-    #[allow(dead_code)] // E-4 接线登记：插件 mcpServers 装配点（并行域 TODO）消费，接线后移除
+    #[cfg_attr(not(test), allow(dead_code))] // E2 已登记：E-4 装配面（同上），T5 独占域接线后移除
     pub(crate) fn browser_attach_mcp_server_config(
         &self,
         server_id: &str,

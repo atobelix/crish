@@ -1,5 +1,18 @@
 //! nudge 文本生成与注入消息构建（决策 9：nudge 未接线半成品通道已删除）
 //!
+//! ## E2 扩展点 A 承载登记（统一输入流收敛 · 扩展门面详案 §1②）
+//!
+//! **已登记为 A（注入时机）承载面的纠偏文本侧**：A 的承载缝 =
+//! `AgentInputQueue` 三环（crates/session-loop/src/input.rs:163，
+//! Force/Steer/FollowUp）+ 编排层 `PendingMessageQueue`
+//! （crates/orchestrator/src/steering_queue.rs:111）——**评审 04 决策 9
+//! 对齐**：`PendingNudgeChannel` 已由 I1 删除（nudge 通道归零），A 承载
+//! 缝不再引用它。本模块只承载「当前 run 纠偏注入」的文本生成与消息
+//! 构建（`runtime_steering_text` / `build_steering_message`，经
+//! `SteeringCoordinator::apply` 消费）；跨 run「下一条用户消息」统一走
+//! `PendingMessageQueue`。动态状态注入 `context-state` 节点（模型名/
+//! 权限/思考模式）由 I1/T1 承载，E2 仅登记不超前实现。
+//!
 //! 裁决 D8/D9（01 第四章）：**当前 run 的纠偏注入**复用本模块的文本生成器；
 //! 跨 run 的「下一条用户消息」规范载体统一为 orchestrator
 //! `PendingMessageQueue`（见详案 I1-α① 队列归一），nudge 独立半成品通道

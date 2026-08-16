@@ -75,6 +75,17 @@ pub fn next_batch_seq() -> u64 {
 
 /// 入队模式（对齐 TS InputEnqueueMode）
 ///
+/// ## E2 扩展点 B 承载登记（统一输入流收敛 · 扩展门面详案 §1②）
+///
+/// **已登记为 B（提交时机）承载面**：本三档（Force/Steer/FollowUp）是
+/// 提交时机的**唯一实现**——按独立方案 02 §3.5-3 + 内核抽象纪律 2
+/// （接口两实现法则），`InputEnqueueMode` 保持枚举、**不新增可注册
+/// kind**；第三方提交策略 kind 须待 ≥2 真实实现出现再抽象（反过度
+/// 设计红线，本登记不超前实现）。承载缝 = `AgentInputQueue` 三环
+/// （input.rs:163）+ 编排层 `PendingMessageQueue`
+/// （orchestrator/steering_queue.rs:111，跨 run「下一条用户消息」
+/// canonical 载体）。
+///
 /// - [InputEnqueueMode::Force]：mid-stream 可打断
 /// - [InputEnqueueMode::Steer]：安全点注入
 /// - [InputEnqueueMode::FollowUp]：仅 run idle 时注入
