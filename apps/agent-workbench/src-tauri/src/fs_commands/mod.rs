@@ -1,4 +1,3 @@
-pub(crate) mod delete;
 pub(crate) mod dialog;
 pub(crate) mod directory;
 pub(crate) mod read;
@@ -63,15 +62,6 @@ pub(crate) fn write_file_content(
     write::write_file_content(&app, path, content, overwrite.unwrap_or(false))
 }
 
-/// 删除单个文件（PE-07 T07.3 C-03：替代 PowerShell Remove-Item 拼串）。
-#[tauri::command]
-pub(crate) fn workbench_fs_delete_file(
-    app: tauri::AppHandle,
-    path: String,
-) -> Result<types::DeleteFileResult, FileCommandError> {
-    delete::delete_file(&app, path)
-}
-
 /// 发现技能（PE-07 T07.2：workspace_path / extra_dirs 经注册表包含性校验）。
 /// 错误协议统一 `CoreError {kind, detail}`（F4 F1-02 / PS-04 T4.5）。
 ///
@@ -98,7 +88,7 @@ mod tests {
     };
 
     use crate::fs_commands::types::{self, FileCommandError, ReadPolicy, MAX_TEXT_FILE_BYTES};
-    use crate::fs_commands::{delete, dialog, directory, read, write, WorkspaceFsGuard};
+    use crate::fs_commands::{dialog, directory, read, write, WorkspaceFsGuard};
 
     struct TestDir {
         path: PathBuf,
@@ -464,89 +454,6 @@ mod tests {
         assert!(!outside.join("new.txt").exists(), "拒绝后不得在根外落盘");
     }
 
-    // ── S11 补缺：delete_file（删除接管）──
-
-    fn delete_at_root(
-        root: &Path,
-        trash_root: &Path,
-        path: &str,
-    ) -> Result<types::DeleteFileResult, FileCommandError> {
-        delete::delete_file_with_guard(&guard_for(root), trash_root, path)
-    }
-
-    /// 成功路径：删除 = 移入回收站 + 登记（原路径消失、可经恢复接口还原）
-    #[test]
-    fn delete_file_moves_into_trash_and_restores() {
-        let temp = TestDir::new();
-        let root = temp.path().join("workspace");
-        let trash = temp.path().join("trash");
-        fs::create_dir(&root).expect("create root");
-        let file = root.join("a.txt");
-        fs::write(&file, "deletable content").expect("write file");
-
-        let result = delete_at_root(&root, &trash, "a.txt").expect("delete");
-        assert!(result.deleted);
-        assert!(!file.exists(), "删除后原路径应消失（移入回收站）");
-
-        // 回收站登记可见，且内容可恢复（字节一致）
-        let entries = conex_fs::trash::TrashService::new(&trash).list();
-        assert_eq!(entries.len(), 1);
-        let entry = &entries[0];
-        assert_eq!(entry.original_path, file);
-        assert!(entry.checksum.is_some(), "backup=true 应写校验和");
-
-        conex_fs::trash::TrashService::new(&trash)
-            .restore(&entry.id)
-            .expect("restore");
-        assert_eq!(
-            std::fs::read_to_string(&file).expect("read restored"),
-            "deletable content"
-        );
-    }
-
-    /// 拒绝路径：目录不是删除目标（only files）→ not_file
-    #[test]
-    fn delete_file_rejects_directory() {
-        let temp = TestDir::new();
-        let root = temp.path().join("workspace");
-        let trash = temp.path().join("trash");
-        fs::create_dir_all(root.join("dir")).expect("create dir");
-
-        assert_error_code(delete_at_root(&root, &trash, "dir"), types::ERR_NOT_FILE);
-        assert!(root.join("dir").exists(), "拒绝后目录不得被移动");
-    }
-
-    /// 拒绝路径：越界绝对路径 → outside_workspace（沙箱解析层拦截）
-    #[test]
-    fn delete_file_rejects_path_outside_workspace() {
-        let temp = TestDir::new();
-        let root = temp.path().join("workspace");
-        let trash = temp.path().join("trash");
-        let outside = temp.path().join("outside.txt");
-        fs::create_dir(&root).expect("create root");
-        fs::write(&outside, "secret").expect("write outside");
-
-        assert_error_code(
-            delete_at_root(&root, &trash, &outside.to_string_lossy()),
-            types::ERR_OUTSIDE_WORKSPACE,
-        );
-        assert!(outside.exists(), "越界目标不得被删除");
-    }
-
-    /// 错误路径：目标不存在 → path_not_found
-    #[test]
-    fn delete_file_rejects_missing_target() {
-        let temp = TestDir::new();
-        let root = temp.path().join("workspace");
-        let trash = temp.path().join("trash");
-        fs::create_dir(&root).expect("create root");
-
-        assert_error_code(
-            delete_at_root(&root, &trash, "ghost.txt"),
-            types::ERR_NOT_FOUND,
-        );
-    }
-
     // ── PS-04 T4.5（F4 F1-02）：错误协议统一 CoreError ──
 
     /// T4.5-R2（红 → 绿）：`select_folder` 错误路径统一 CoreError——
@@ -661,24 +568,5 @@ mod tests {
             Some("Internal"),
             "未托管注册表应为 CoreError::Internal（当前形态 {json}）"
         );
-    }
-
-    /// 错误路径：回收站根不可用（被文件占用）→ delete_file_failed，
-    /// 且目标文件不被触碰（不静默退化物理删除）
-    #[test]
-    fn delete_file_fails_when_trash_root_unusable() {
-        let temp = TestDir::new();
-        let root = temp.path().join("workspace");
-        let trash_blocker = temp.path().join("trash-blocker");
-        fs::create_dir(&root).expect("create root");
-        fs::write(&trash_blocker, "i am a file, not a dir").expect("write blocker");
-        let file = root.join("keep.txt");
-        fs::write(&file, "keep me").expect("write file");
-
-        assert_error_code(
-            delete_at_root(&root, &trash_blocker, "keep.txt"),
-            types::ERR_DELETE_FILE,
-        );
-        assert!(file.exists(), "回收站根不可用时不得物理删除目标");
     }
 }

@@ -48,7 +48,8 @@ export type StrictContentRowLeafProps = {
   /** 提交结果回调（测 / 宿主；不得旁路写盘） */
   onMdPrefixCommit?: (result: ProductMdPrefixCommitResult) => void;
   onCommittedIntent?: (intent: TurnIntoIntent) => void;
-  /** CT-01 对象级 rev：打开编辑会话时记账（未知可缺省，宿主接线时传入） */
+  /** CT-01 对象级 rev：打开编辑会话时记账（无真实 rev 源时保持 undefined 占位；
+   *  宿主 NotePaperStrictPanel 已接线透传 hydrate 文档 rev，R7 收口） */
   baseRev?: number;
   /** 编辑会话注册表（测注入独立实例；缺省 = 前端全局单例） */
   editSession?: EditSessionRegistry;

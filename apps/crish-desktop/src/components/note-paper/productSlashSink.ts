@@ -14,6 +14,12 @@
  * - **≠ EL-01**；**≠ A-BLK-02 产品 e2e 满关**
  * - 无 `note_apply_ops` / 无注入时默认只读；**禁止** 静默 mock 可写
  * - fixture hydrate ≠ 可写；读通 ≠ 写锥通
+ *
+ * ## R2-b ⑥ 冲突失效（主控裁决② 接线）
+ * collab apply 拒绝（applyOps 返回 ok:false / wire 映射失败 / 抛错）→
+ * 经 `createCollabApplySink` 的 `onApplyRejected` 钩子绑定块域编辑会话
+ * `invalidateEditSession(blockId, 'collab-conflict')`——不自动合并、不静默 LWW；
+ * 块域编辑面立即失效，UI 展示冲突并让用户重新确认/丢弃本地编辑。
  */
 
 import {
@@ -22,7 +28,9 @@ import {
   type CollabApplySink,
   type CollabApplySinkOptions,
   type IntentSink,
+  type PaperIntent,
 } from '@crish/block-paper';
+import { invalidateEditSession } from '../../api/editSession';
 
 // ---------------------------------------------------------------------------
 // 类型
@@ -91,6 +99,22 @@ export type ProductStrictSlashBinding = {
 // ---------------------------------------------------------------------------
 
 /**
+ * R2-b ⑥ 冲突失效助手：从被拒 intent 中提取受影响块 id（供编辑会话失效广播）。
+ * - `TextEditIntent` / `SlashInsertIntent`：单块 `blockId`；
+ * - `DeleteBlocksIntent` / `MoveBlocksIntent` / `ToggleCollapseIntent`：批量 `blockIds`；
+ * - `OpIntent` / `InsertBlockIntent`（parentId 语义，非被编辑块）：无 → 空数组（不误失效）。
+ */
+function rejectedIntentBlockIds(intent: PaperIntent): string[] {
+  if ('blockId' in intent && typeof intent.blockId === 'string') {
+    return [intent.blockId];
+  }
+  if ('blockIds' in intent && Array.isArray(intent.blockIds)) {
+    return intent.blockIds;
+  }
+  return [];
+}
+
+/**
  * 解析产品 Strict 空态 slash 写锥绑定。
  *
  * | 输入 | mode | sink |
@@ -116,6 +140,14 @@ export function createProductStrictSlashBinding(
   if (typeof options.applyOps === 'function') {
     const collab = createCollabApplySink({
       applyOps: options.applyOps,
+      // R2-b ⑥ 宿主接线（主控裁决②）：apply 拒绝（冲突/rev 不符/wire 失败/抛错）
+      // → 绑定块域编辑会话 invalidate('collab-conflict')——只通知不改结果
+      // （ok:false 透传，submitIntent 侧 code='sink_reject' 语义不变）
+      onApplyRejected: ({ intent }) => {
+        for (const blockId of rejectedIntentBlockIds(intent)) {
+          invalidateEditSession(blockId, 'collab-conflict');
+        }
+      },
       ...(options.allocateId !== undefined
         ? { allocateId: options.allocateId }
         : {}),

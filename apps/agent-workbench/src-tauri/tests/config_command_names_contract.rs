@@ -93,14 +93,3 @@ fn f3_f4_session_commands_registered() {
         assert_eq!(entry.family, "session");
     }
 }
-
-/// F5 保留项：workbench_fs_delete_file 属 GUI 面（workbench_*），不改名
-#[test]
-fn f5_gui_face_command_keeps_workbench_prefix() {
-    let entry = COMMAND_MANIFEST
-        .commands
-        .iter()
-        .find(|c| c.name == "workbench_fs_delete_file")
-        .expect("workbench_fs_delete_file 必须登记（F5 保留项）");
-    assert_eq!(entry.surface, "gui", "GUI 面命令保留 workbench_ 前缀");
-}

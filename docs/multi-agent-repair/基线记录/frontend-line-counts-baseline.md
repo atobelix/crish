@@ -82,6 +82,21 @@
 - `useChatComposerProps.ts` 478→481：R2-a ③ 编辑回移标记（editedBackMsgIdRef）+ drain 队首跳过守卫（+3 有效行，功能增长）。
 - `sessionMessageActions.ts` 471→473：R2-b ⑥ gap2 补点（withdrawMessage 失效广播，+2 有效行，功能增长）。
 
+## R7 收口修正登记（2026-08-16 · 输入流收敛战役 R7 收口位 · 路径精确 `--update`）
+
+> 触发：R7 固定审计（`execution/audits/R7-审计报告.md` §4/§10）实测 `--all` exit 1——
+> R2b 提交消息「471→473 登记」失实（实测有效 +5 行：import 1 + invalidateEditObjects
+> 块 4，471+5=476，登记 473 少 3）→ VIOLATION；useModelProfilesState 经 R2b 设置页
+> 失效订阅 +217 行后进入 ≥85% WARNING 区未登记。收口位路径精确重登记（未跑 `--all`，
+> 避免误登记并行 Agent 文件；与 R2b 同期登记口径一致）。
+
+- `sessionMessageActions.ts` 473→**476**：R2b 登记值失实修正（R7 审计实测 476，Δ+3；
+  import 1 + invalidateEditObjects 块 4，共 +5 有效行），基线回归真实形状。
+- `useModelProfilesState.ts`（新登记）**456**：R2b 设置页失效订阅后 362→456（+217 有效行），
+  进入 UI 组件档（≤500）85% WARNING 区——登记基线冻结现状（登记 ≠ 拆分完成）。
+- 复跑 `node scripts/check-line-counts.mjs --all`：**exit 0（0 VIOLATION / 0 WARNING /
+  0 HARD BLOCK / 63 BASELINE = 61 + 2 新登记）**。
+
 <!-- BASELINE_START -->
 
 apps/crish-desktop/src/api/applyFileDiff.ts 441
@@ -122,6 +137,7 @@ apps/crish-desktop/src/components/diff/DiffCard.tsx 439
 apps/crish-desktop/src/components/settings-extensions/ExtensionCard.tsx 466
 apps/crish-desktop/src/components/settings-extensions/useExtensionMarket.tsx 438
 apps/crish-desktop/src/components/settings-mcp/McpServerList.tsx 453
+apps/crish-desktop/src/components/settings-models/useModelProfilesState.ts 456
 apps/crish-desktop/src/components/settings-skills/useSkillsSettingsState.ts 732
 apps/crish-desktop/src/components/settings/SettingsAppearanceTab.tsx 537
 apps/crish-desktop/src/components/settings/SettingsDevicesTab.tsx 486
@@ -139,7 +155,7 @@ apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts 352
 apps/crish-desktop/src/store/layout-tree/operations.ts 761
 apps/crish-desktop/src/store/sessionCrudActions.ts 416
 apps/crish-desktop/src/store/sessionIndex.ts 473
-apps/crish-desktop/src/store/sessionMessageActions.ts 473
+apps/crish-desktop/src/store/sessionMessageActions.ts 476
 apps/crish-desktop/src/store/sessionSharedHelpers.ts 440
 apps/crish-desktop/src/store/streamingStore.ts 369
 apps/crish-desktop/src/store/workspace-shell/adapterShape.ts 616

@@ -101,7 +101,6 @@ pub const SECRET_COMMAND_SURFACE: &[&str] = &[
     "config_secret_set",
     "config_secret_clear",
     "config_secret_has",
-    "workbench_fs_delete_file",
     "workbench_git_run",
     "workbench_run_shell",
     "workbench_pty",
@@ -3183,7 +3182,6 @@ mod tests {
             ("config_secret_clear", "密钥 clear 命令"),
             ("config_secret_has", "密钥 has 命令"),
             ("workbench_run_shell", "shell 执行面"),
-            ("workbench_fs_delete_file", "文件删除面"),
             ("workbench_git_run", "git 执行面"),
             ("host_openers", "宿主打开器面"),
         ] {

@@ -37,11 +37,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'git workspace command execution',
   },
   {
-    command: 'workbench_fs_delete_file',
-    status: 'implemented',
-    feature: 'workspace file deletion',
-  },
-  {
     command: 'workbench_pty_create',
     status: 'implemented',
     feature: 'interactive PTY session creation',

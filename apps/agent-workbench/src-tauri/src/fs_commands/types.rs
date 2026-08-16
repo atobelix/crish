@@ -20,7 +20,6 @@ pub(crate) const ERR_OUTSIDE_WORKSPACE: &str = "outside_workspace";
 pub(crate) const ERR_READ_DIRECTORY: &str = "read_directory_failed";
 pub(crate) const ERR_READ_FILE: &str = "read_file_failed";
 pub(crate) const ERR_WRITE_FILE: &str = "write_file_failed";
-pub(crate) const ERR_DELETE_FILE: &str = "delete_file_failed";
 pub(crate) const ERR_FILE_TOO_LARGE: &str = "file_too_large";
 pub(crate) const ERR_BINARY_FILE: &str = "binary_file";
 pub(crate) const ERR_UNSUPPORTED_ENCODING: &str = "unsupported_encoding";
@@ -75,13 +74,6 @@ pub(crate) struct ReadFileContentResult {
 pub(crate) struct WriteFileContentResult {
     pub(crate) path: String,
     pub(crate) bytes_written: usize,
-}
-
-#[derive(Debug, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct DeleteFileResult {
-    pub(crate) path: String,
-    pub(crate) deleted: bool,
 }
 
 /// 工作区文件沙箱守卫（PE-07 T07.2 严格化）。

@@ -59,9 +59,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
   commands: [
     // ── GUI 专属面（workbench_*，§2.3）──
     entry('workbench_run_shell', 'workbench', 'gui'),
-    // PE-07 T07.3（C-02/C-03/C-04）：git 参数数组执行 + 参数 schema 白名单；删除走 Rust 侧
+    // PE-07 T07.3（C-02/C-03）：git 参数数组执行 + 参数 schema 白名单
     entry('workbench_git_run', 'workbench', 'gui'),
-    entry('workbench_fs_delete_file', 'workbench', 'gui'),
     entry('workbench_pty_create', 'workbench', 'gui'),
     entry('workbench_pty_write', 'workbench', 'gui'),
     entry('workbench_pty_resize', 'workbench', 'gui'),

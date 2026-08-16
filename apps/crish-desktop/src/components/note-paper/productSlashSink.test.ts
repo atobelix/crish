@@ -7,6 +7,7 @@
  * | 无后端 → mode=readonly、sink undefined | mock 当生产默认 |
  * | wireCalls 审计（injected-applyOps / product-ipc） | 假关 EL |
  * | CONN-B3 product-ipc sourceLabel | 无 IPC 仍默认可写 |
+ * | R2-b ⑥ apply 拒绝 → 块域编辑会话 invalidate('collab-conflict') | 静默 LWW / 自动合并 |
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -15,6 +16,11 @@ import {
   submitIntent,
   type ApplyOpsAdapter,
 } from '@crish/block-paper';
+import {
+  defaultEditSessionRegistry,
+  isEditSessionOpen,
+  openEditSession,
+} from '../../api/editSession';
 import {
   createMockNoteApplyOpsIpc,
   resolveProductStrictApplyOps,
@@ -143,5 +149,58 @@ describe('createProductStrictSlashBinding · CONN-B', () => {
     expect(mockIpc.calls).toHaveLength(1);
     expect(mockIpc.calls[0]?.docId).toBe('slash-ipc-doc');
     expect(mockIpc.calls[0]?.opsJson).toContain('"op":"insert"');
+  });
+
+  it('conn_b_apply_rejected_invalidates_block_edit_sessions', async () => {
+    // R2-b ⑥ 宿主接线（主控裁决②）：apply 拒绝（ok:false）→ 块域编辑会话
+    // invalidate('collab-conflict')——不自动合并、不静默 LWW
+    const applyOps: ApplyOpsAdapter = async () => ({
+      ok: false,
+      reason: 'doc rev conflict',
+    });
+    const b = createProductStrictSlashBinding({
+      applyOps,
+      allocateId: () => ID_NEW,
+      resolveOrder: () => 'a0',
+    });
+    try {
+      // 块域编辑会话：模拟本地编辑持有中
+      openEditSession('anchor-1');
+      openEditSession('blk-a');
+      openEditSession('blk-b');
+      expect(isEditSessionOpen('anchor-1')).toBe(true);
+
+      // 单块意图（slash_insert）拒绝 → 锚点块会话失效（hadSession=true 广播）
+      const r = await submitIntent(
+        {
+          type: 'slash_insert' as const,
+          blockId: 'anchor-1',
+          offset: 0,
+          flavour: 'paragraph',
+          catalogItemId: 'paragraph',
+          origin: 'slash' as const,
+          intentId: 'conn-b-reject-1',
+        },
+        b.sink!
+      );
+      expect(r.ok).toBe(false);
+      expect(isEditSessionOpen('anchor-1')).toBe(false);
+
+      // 批量意图（delete_blocks）拒绝 → 全部目标块会话失效
+      const r2 = await submitIntent(
+        {
+          type: 'delete_blocks' as const,
+          blockIds: ['blk-a', 'blk-b'],
+          origin: 'slash' as const,
+          intentId: 'conn-b-reject-2',
+        },
+        b.sink!
+      );
+      expect(r2.ok).toBe(false);
+      expect(isEditSessionOpen('blk-a')).toBe(false);
+      expect(isEditSessionOpen('blk-b')).toBe(false);
+    } finally {
+      defaultEditSessionRegistry.clearAll();
+    }
   });
 });

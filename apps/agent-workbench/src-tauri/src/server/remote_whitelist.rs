@@ -23,8 +23,9 @@
 //!   （TH-10/TH-11；纵深防御第二层 remote_source 命令级拒绝 + 第三层
 //!   remote-source-attempt 审计见 router.rs SECRET_COMMAND_SURFACE /
 //!   core_backend emit_remote_source_attempt_audit）；
-//! - `workbench_fs_delete_file` / `workbench_git_run` / `workbench_pty_*` /
-//!   `workbench_run_shell` / `host_openers` 族——直接文件/终端/执行面；
+//! - `workbench_git_run` / `workbench_pty_*` / `workbench_run_shell` /
+//!   `host_openers` 族——直接终端/执行面（GUI fs 删除命令已于 R7 收口幽灵退役，
+//!   无远程面）;
 //! - 设备域 C33-C37（listDevices / renameDevice / revokeDevice /
 //!   getPairState / unlink）与设备管理/服务配置命令——admin 面仅桌面端
 //!   （D5 §4.5「设备管理与服务配置命令（admin 面，仅桌面端）」）；
@@ -427,7 +428,6 @@ mod tests {
     #[test]
     fn whitelist_excludes_direct_execution_surface() {
         for name in [
-            "workbench_fs_delete_file",
             "workbench_git_run",
             "workbench_pty",
             "workbench_run_shell",

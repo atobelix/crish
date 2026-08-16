@@ -168,10 +168,6 @@ command_registry![
     ("workbench_send_input", background::workbench_send_input),
     // PE-07 T07.3（C-02/C-03/C-04）：git 参数数组执行 + 参数 schema 白名单
     ("workbench_git_run", git::workbench_git_run),
-    (
-        "workbench_fs_delete_file",
-        fs_commands::workbench_fs_delete_file
-    ),
     ("workbench_pty_create", pty::workbench_pty_create),
     ("workbench_pty_write", pty::workbench_pty_write),
     ("workbench_pty_resize", pty::workbench_pty_resize),
@@ -641,7 +637,12 @@ fn main() {
             file_name_prefix: "workbench".to_string(),
         }),
     );
-    // 崩溃文件（T04.1-3）：与日志同目录，panic 现场独立落盘
+    // 崩溃文件（T04.1-3）：与日志同目录，panic 现场独立落盘。
+    // T5-1b（崩溃台账）：崩溃文件写成功后，conex-telemetry 内部把
+    // 「最后一次崩溃文件名 + 时刻」记入进程内共享标记（leaf crate 边界，
+    // 不依赖 tauri，无需 manage State）——`core_get_status.lastCrash`
+    // 经 `conex_telemetry::last_crash_marker()` 读出（core_query_commands.rs），
+    // 前端心跳轮询一并读取，把「死文件」变成前端可读的崩溃台账。
     conex_telemetry::install_panic_hook_with_crash_dir(Some(log_dir.clone()));
 
     // 共享诊断（PE-04 T04.5）：CoreRunState 与 core_get_status 共用同一实例，
@@ -957,6 +958,12 @@ fn main() {
             // 周期快照（T08.6 触发点 B：默认 60s，仅活动 run 存在时保存；
             // 幂等，restore 完成与否均可启动）
             core_state.spawn_snapshot_loop();
+
+            // T5-2：孤儿 run 收割周期任务（默认 60s，复用 spawn_snapshot_loop
+            // 骨架；驱动任务 is_finished 且连续 ORPHAN_REAP_DEBOUNCE_ROUNDS
+            // 轮仍停留 activeRuns → finalize_failed 补写终态——run panic
+            // 无终态事件导致的卡死/孤儿条目消除。幂等，可随时启动）
+            core_state.spawn_run_reaper_loop();
 
             // PTY 30s 周期 GC 协程：回收超期游离会话（>2h 无输出）与 Dead 会话
             pty::spawn_pty_gc_loop(app.handle().clone());

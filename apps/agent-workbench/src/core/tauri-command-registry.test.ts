@@ -157,19 +157,20 @@ describe('Tauri command registry', () => {
       .sort();
 
     expect([...registered]).toEqual(wired);
-    // Batch 2 校准：全量 registered 命令面（125 条 command_registry! 注册；
-    // R1 撤回新增 core_session_retract，124 → 125）
-    expect(registered.size).toBe(125);
+    // Batch 2 校准：全量 registered 命令面（124 条 command_registry! 注册；
+    // R1 撤回新增 core_session_retract 124 → 125；R7 收口 GUI fs 删除命令
+    // 幽灵退役 125 → 124）
+    expect(registered.size).toBe(124);
   });
 
-  it('keeps the surface: 125 registered commands plus 0 registered-first entries', () => {
+  it('keeps the surface: 124 registered commands plus 0 registered-first entries', () => {
     const wired = REGISTERED_TAURI_COMMANDS.filter(shouldHaveTauriRegistration);
     const pending = REGISTERED_TAURI_COMMANDS.filter(
       (entry) => !shouldHaveTauriRegistration(entry)
     );
 
-    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(125);
-    expect(wired).toHaveLength(125);
+    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(124);
+    expect(wired).toHaveLength(124);
     expect(pending).toHaveLength(0);
     expect(pending.map((entry) => entry.command).sort()).toEqual([]);
   });
@@ -252,8 +253,9 @@ describe('Tauri command registry', () => {
       isProductCapabilityCommand
     );
 
-    // Batch 2 校准：全量 125 条 registered 命令（R1 撤回新增 core_session_retract）
-    expect(productCommands).toHaveLength(125);
+    // Batch 2 校准：全量 124 条 registered 命令（R1 撤回新增 core_session_retract；
+    // R7 收口 GUI fs 删除命令幽灵退役 125 → 124）
+    expect(productCommands).toHaveLength(124);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE
