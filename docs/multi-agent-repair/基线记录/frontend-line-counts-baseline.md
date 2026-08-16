@@ -97,11 +97,23 @@
 - 复跑 `node scripts/check-line-counts.mjs --all`：**exit 0（0 VIOLATION / 0 WARNING /
   0 HARD BLOCK / 63 BASELINE = 61 + 2 新登记）**。
 
+## R9 收束登记（2026-08-16 · 输入流收敛战役 R9 收束位 · 路径精确 `--update`）
+
+> 触发：R8 固定审计（`docs/input-stream-consolidation/execution/audits/R8-审计报告.md`
+> §2.3/§7/§9-1）实测 `--all` exit 1——T5 提交 `22ed68bf` 对 `backgroundTasksApi.ts`
+> `+87/−45` 后越过硬阻断线（663 > 650 HARD BLOCK，Business Logic 档）；基线登记 621
+> 失实。收束位路径精确重登记（未跑 `--all`，避免误登记并行 Agent 文件）。
+
+- `backgroundTasksApi.ts` 621→**663**：T5 `+87/−45` 后实测有效行 663 > 650 硬阻断线——
+  per-file 基线以实测值冻结现状（**登记 ≠ 拆分完成**，拆分仍归 SR-06 结构轮）。
+- 复跑 `node scripts/check-line-counts.mjs --all`：**exit 0（0 VIOLATION / 0 WARNING /
+  0 HARD BLOCK / 63 BASELINE = 62 + 1 新登记）**。
+
 <!-- BASELINE_START -->
 
 apps/crish-desktop/src/api/applyFileDiff.ts 441
 apps/crish-desktop/src/api/approvalMeta.ts 400
-apps/crish-desktop/src/api/backgroundTasksApi.ts 621
+apps/crish-desktop/src/api/backgroundTasksApi.ts 663
 apps/crish-desktop/src/api/chat-bridge/ConnectionLifecycle.ts 506
 apps/crish-desktop/src/api/chat-bridge/EventRouter.ts 358
 apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.ts 366

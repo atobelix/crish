@@ -1,6 +1,7 @@
 # 00 · 汇总索引（统一输入流收敛战役 · 二十二份审计全部收齐）
 
 > 更新：2026-08-16 · 批 1–4（六维/核心扩展撤回/前端专项/状态维度）+ 批 5（前端补位/参考深挖/对比分析）全部完成。
+> 执行轮：R1–R9 全部完成（R9 收束轮 2026-08-16，HEAD=`2c2c7882`）；本文件为战役终版索引。
 > 纪律：本索引为快速入口；证据回 analysis/ 各文档；结论以主控定夺（00-总方案 §3.1、00-核心逻辑模型草案）为准。
 
 ## 产出清单
@@ -48,6 +49,19 @@
 | 上帝组件（有效行口径）      | 2（InlineAgentPanel 621 / TiptapEditorField 477）             |
 | 原子层门禁违规              | 2（Dialog/Menu）+ 测试面扫描缺口                              |
 
+## 收敛度量终值（R9 收束实测，2026-08-16 · `node scripts/check-convergence-metrics.mjs`）
+
+| 指标                        | 终值                                                                        |
+| --------------------------- | --------------------------------------------------------------------------- |
+| 未接线/临时标记（marker）   | **690 files / 2695 lines / 2857 tokens**（基线 689/2709 → 终值）            |
+| 波次命名文件                | **0**（36 → 0，X1 R8：d8b60a7e/a7784898/c13de2ad/b7ba5159 + 补提 2f4df2f5） |
+| 被 git 跟踪运行产物         | **0**（6 → 0，X1b 解禁 + .gitignore 锚定）                                  |
+| 无日期 fallback（核心口径） | 60（fallbackCandidates 脚本口径）                                           |
+| 巨文件 >1500 行             | 39 production / 12 test                                                     |
+| 陪葬测试候选                | 18（graveTestCandidates）                                                   |
+| 行数门禁（--all）           | 0 VIOLATION / 0 WARNING / 0 HARD BLOCK / 63 BASELINE（829 文件）            |
+| 收敛硬闸（CI lint）         | hardGate true（trackedRuntimeArtifacts=0 + waveNamedFiles=0）               |
+
 ## 核心定夺（十二份审计的汇总结论）
 
 1. **核心骨架已确认干净**：七步链 + dispatch_once 33 行；复杂度主战场 = handlers/mod.rs 压缩编排外置 + 两条反向依赖移出 + 三个缺缝面（compaction/cache_tracker/summary）。
@@ -55,6 +69,31 @@
 3. **扩展承载面修正**：A/B/C/D 中 B/D 只能在 Rust 侧承载；TS 插件轨（B 轨/ContributePointRegistry）无宿主消费；天然可插拔域已存在（ToolRegistry/HookRegistry/Summarizer/SubagentSpawner/MCP），只差显式登记。
 4. **撤回已验证**：停 run 复用、回滚走 trash.rs、timeline-truncate 新建、文本回填取节点、移动端只追加反例须收敛。
 
-## 下一步
+## 轮次交付摘要（R1–R9 · 执行轮）
 
-用户确认决策点（核心模型 §6 / 详案任务书开头）→ 执行轮 D1 → D3 → D2 → D4 → D5，每轮含删除动作并回填本表 Δ。
+| 轮次  | 交付（提交）                                                                           | 要点                                                                                                          |
+| ----- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| R1-R2 | T1a/T1b/T2-1/T2-3/I1-α（67d40afc/167fb016/c8b68546 等）                                | 事件模型扩展、持久化轨剥 LS 镜像、append_session_messages 死层删除、队列归一（PendingMessageQueue canonical） |
+| R3    | T2-2 部分/T3（15d38f54/018dad5c）                                                      | 前端类型单源化（HistoryMessage 派生/事件纯解包/blockText 单源）；LS 主体删除转收尾轮                          |
+| R4    | C1a/C1b/C1c（40a2d879/d34d5832/1c20b8e4）                                              | 压缩编排外置（−645 行）、BackupMiddleware/RecoverySteering 默认实例清空、三缝面登记不抽象                     |
+| R5    | T4/V1（01be2074/aaa68087）                                                             | componentAccess 整删、展示投影归一（UserView 旁路 1598 行删）、折叠单源                                       |
+| R6    | R1/P1/I1-β（317d7c5a/5a459069/938820a4）                                               | 撤回六步链 + timeline-truncate、权限归一 fail-closed、context-state 产生器接线                                |
+| R7    | E1/R2a/F1/R2b（96d1df60/e0100ebf/1894bda0/f09eb898）+ 收口                             | 插件轨 1347+896 行删、编辑会话抽象（dirtyRef 开环删）、F1 原子化、编辑失效传播四路接线                        |
+| R8    | X1/T5/E2（d8b60a7e+a7784898+c13de2ad+b7ba5159/22ed68bf/732606be）                      | 波次命名 36→0、db 解禁 6→0、崩溃三态/孤儿收割/全局错误、扩展门面登记（A/B/C/D 承载面）                        |
+| R9    | 遗留评估 b6aacec0 + X1 补提 2f4df2f5 + 插件轨终裁 25762dc1 + D0 修复 2c2c7882 + 收束轮 | E2 A/B 轨整包清零（51 文件 −12,036 行）、line-counts 基线登记、D0 终回填、收口报告                            |
+
+> 提交链尾（HEAD=`2c2c7882`，分支 refactor/architecture）：`b7ba5159`(X1 三文件补提) → `b6aacec0`(R9 遗留评估) → `2f4df2f5`(X1 补提) → `25762dc1`(插件轨终裁删除) → `dbfeeac1`(R9 回填) → `2c2c7882`(D0 修复)。战役收束后改动留工作区由主控统一提交。
+
+## 遗留转后续清单（R9 遗留评估终裁：结案 10 / 转后续 15 / 需用户决策 0）
+
+- **T2-2 主体删除收尾轮**：Rust `upsert_session_entry` 命令 + manifest + 前端索引迁移 + LS 整删 + 回退文件删除 + 测试适配（D0 §1 三行）。
+- **需求登记转后续**：M1/M4 剩余/M5、组件状态通用策略、通知状态机残项、UI 按钮行规则（E3/前端小战役候选）。
+- **`AgentInputQueue` 结构收敛**：低优先结构轮（语义已归一）。
+- **line-counts 拆分队列**：63 条基线拆分归 SR-06 结构轮（登记 ≠ 拆分完成）。
+- **CDP 真跑 QA 轮**：真实 Tauri WebView2 冒烟（T5 §5 验收 1/2/5/6）。
+- **mobile typecheck 基线 16 错**：修复归属待主控裁定。
+- 详情：`execution/R9-收口报告.md` §3、`execution/R9-遗留评估.md` §9。
+
+## 下一步（战役收束后）
+
+战役已收束；后续为**遗留转后续清单**逐项派发（T2-2 收尾轮 / 前端小战役 / SR-06 结构轮 / QA 轮）+ 主控统一提交收束改动 + 全量回归快照存档。
