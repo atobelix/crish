@@ -32,13 +32,14 @@
 //!   `Stdio::piped()` 才能接通）；本侧对「未接管道」按 stdin_closed 分类处理；
 //! - 提示检测：行尾字面后缀匹配（常量模式，等价轻量正则），命中仅「候选提示」就位
 //!   （info.prompt + meta 落盘），由 AI 判断是否发送输入；通知接线
-//!   （PendingNudgeChannel::enqueue，nudge.rs:192）已由 T-AB-16 经
-//!   [crate::resource::TaskNotifier] 抽象落地（生产未接线 → 留痕，测试注入队列）。
+//!   （orchestrator 独立 nudge 通道已随 I1 决策 9 删除，正文经 steering 消息
+//!   承载）已由 T-AB-16 经 [crate::resource::TaskNotifier] 抽象落地
+//!   （生产未接线 → 留痕，测试注入队列）。
 //!
 //! 资源段接线状态（T-AB-15/16，登记偏差）：
-//! - 通知通道一（nudge）：`PendingNudgeChannel` 实例在 orchestrator 的
-//!   `PendingMessageQueue` 内部，壳层无访问入口 → 生产默认 None（通知文本经
-//!   tracing 留痕），待 C2 / T-AB-18 接线；测试注入内存队列断言；
+//! - 通知通道一（nudge）：orchestrator 独立 nudge 通道已随 I1 决策 9 删除
+//!   （正文经 steering 消息承载）；workbench 生产默认 None（通知文本经
+//!   tracing 留痕），测试注入内存队列断言；
 //! - 通知通道二（事件）：task-suspicious（Soft）/ task-failed（Critical）经
 //!   [crate::resource::EventSink] 槽发射（默认 [crate::resource::LogEventSink]
 //!   结构化留痕）——C2（T-AB-17）在 conex-types 落地 AgentEvent 七事件变体后，

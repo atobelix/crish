@@ -20,10 +20,10 @@
 //! - Unix 进程树累加退化为「主进程 + 已回收子进程（RUSAGE_CHILDREN 差值）」近似，
 //!   未回收孙进程不计入——与 Windows Job 树聚合存在数值口径差异，跨平台不承诺等价；
 //! - I/O 首版恒 0（§8.3 诚实边界 4：Windows 进程树 I/O 聚合繁琐，列为可选）；
-//! - 通知双通道接线状态（C2 / T-AB-17/18 落地前的占位，登记偏差）：
-//!   * nudge 通道：`PendingNudgeChannel` 实例在 orchestrator 的
-//!     `PendingMessageQueue` 内部，壳层无访问入口 → 生产默认 None（通知文本经
-//!     tracing 留痕），测试注入内存队列断言「收到且不重复」；
+//! - 通知双通道接线状态（登记偏差；事件通道待 C2 / T-AB-17/18 落地）：
+//!   * nudge 通道：orchestrator 独立 nudge 通道已随 I1 决策 9 删除（语义并入
+//!     steering 消息）；workbench 侧生产默认 None（通知文本经 tracing 留痕），
+//!     测试注入内存队列断言「收到且不重复」；
 //!   * 事件通道：任务域事件（task-suspicious / task-failed）依赖 C2 在
 //!     conex-types 落地 AgentEvent 七事件变体（T-AB-17）——落地前经
 //!     [LogEventSink] 结构化日志留痕（payload 按冻结契约 §4.5 组装，C2 落地后
@@ -313,10 +313,10 @@ impl EventSink for LogEventSink {
 
 /// 任务通知投递器（T-AB-16 双通道，Clone 共享）
 ///
-/// - 通道一：nudge 排队（`PendingNudgeChannel::enqueue` 语义——排入下一条用户
-///   消息边界，不打断当前 run）。诚实边界（登记偏差）：`PendingNudgeChannel`
-///   实例在 orchestrator 的 `PendingMessageQueue` 内部，壳层无访问入口 →
-///   生产路径 None（通知文本经 tracing 留痕），测试注入内存队列断言；
+/// - 通道一：nudge 排队语义（排入下一条用户消息边界，不打断当前 run；
+///   orchestrator 独立 nudge 通道已随 I1 决策 9 删除，语义并入 steering 消息）。
+///   诚实边界（登记偏差）：生产路径 None（通知文本经 tracing 留痕），
+///   测试注入内存队列断言；
 /// - 通道二：任务域事件发射（task-suspicious = Soft 分级 / task-failed =
 ///   Critical 分级，§4.5；30 方案 P2 补全七事件投递方法：started/output/
 ///   heartbeat/completed/killed，payload 按 conex-types events.rs 变体字段

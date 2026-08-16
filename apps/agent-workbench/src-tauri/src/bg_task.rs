@@ -25,7 +25,8 @@ use super::bg_writer::{finish_task, forward_streams};
 
 /// 任务摘要模板：`任务 <id> 已运行 <duration>，日志已累积 <line_count> 行，
 /// 最近输出时间 <timestamp>`。status() 组装并 trace 留痕，R-AB3 作为
-/// 唤醒注入（PendingNudgeChannel 通知正文）消费。
+/// 唤醒注入（nudge 通知正文语义；独立通道已随 I1 决策 9 删除，正文经
+/// steering 消息承载）消费。
 pub(crate) fn task_summary(info: &BackgroundTaskInfo, duration_ms: u64) -> String {
     format!(
         "任务 {} 已运行 {}，日志已累积 {} 行，最近输出时间 {}",
