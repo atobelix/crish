@@ -14,7 +14,7 @@ use conex_types::message::AgentMessage;
 
 use crate::cache_tracker::build_tracker;
 use crate::provider::{DeltaSink, ProviderCall};
-use crate::steering::{RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions};
+use crate::steering::{SteeringCoordinator, SteeringCoordinatorOptions};
 use crate::tool_events::{ApprovalGate, ToolBatchOptions};
 use crate::tool_exec::{ToolExecCtx, ToolExecutor};
 
@@ -47,8 +47,10 @@ pub struct AgentSessionLoop {
 }
 
 impl AgentSessionLoop {
-    /// 新建主循环（默认 steering：RecoverySteeringStrategy + 默认预算；
-    /// 默认恢复阶梯配置见 [SessionLoopOptions]）
+    /// 新建主循环（默认 steering：**空策略协调器**——C1b 反向依赖移出后
+    /// 核心不再内建 RecoverySteeringStrategy 具体策略（不变量 5），具体
+    /// 策略由壳层 / 编排层经 [Self::with_steering] 注入；默认恢复阶梯配置
+    /// 见 [SessionLoopOptions]）
     pub fn new(
         session_id: impl Into<String>,
         run_id: impl Into<String>,
@@ -59,10 +61,10 @@ impl AgentSessionLoop {
         let session_id = session_id.into();
         let run_id = run_id.into();
         let options = SessionLoopOptions::default();
-        let steering = SteeringCoordinator::new(
-            vec![Box::new(RecoverySteeringStrategy::default())],
-            SteeringCoordinatorOptions::default(),
-        );
+        // C1b（反向依赖移出）：空策略协调器（预算仍为默认 3）——具体策略
+        // 由壳层经 with_steering 注入（engine_build.rs SessionLoopProducer
+        // produce 装配 RecoverySteeringStrategy；测试自建注入）。
+        let steering = SteeringCoordinator::new(Vec::new(), SteeringCoordinatorOptions::default());
         let state = handlers::LoopState::new(
             session_id.clone(),
             max_turns,
@@ -73,8 +75,9 @@ impl AgentSessionLoop {
         Self {
             state,
             provider,
-            // T-EG-06：默认中间件链（写前自动备份）经 with_middleware 注入
-            // 执行器——with_options 派生同步会整体替换链（options 同源）
+            // C1b：中间件链（默认空；写前自动备份由壳层注入 options 后
+            // 经本处同步）注入执行器——with_options 派生同步会整体替换链
+            // （options 同源）
             tool_executor: ToolExecutor::new(tool_registry)
                 .with_middleware(options.tool_middleware.clone()),
             tool_ctx: ToolExecCtx {
@@ -215,6 +218,18 @@ impl AgentSessionLoop {
     /// 注入审批门（approval_enabled 时生效）
     pub fn with_approval(mut self, gate: Arc<dyn ApprovalGate>) -> Self {
         self.approval = Some(gate);
+        self
+    }
+
+    /// 注入 steering 协调器（C1b 反向依赖移出注入缝）：[Self::new] 默认
+    /// 空策略协调器——具体策略（如 RecoverySteeringStrategy）由壳层装配面
+    /// （engine_build.rs SessionLoopProducer::produce）与测试自建注入，
+    /// 核心构造函数不再认知具体策略实例（不变量 5）。
+    ///
+    /// 必须 `run()` 前调用（LoopState.steering 构造期定，run 内不可变）；
+    /// 未调用时保持空策略协调器（无 steering 纠偏，向后兼容测试路径）。
+    pub fn with_steering(mut self, steering: SteeringCoordinator) -> Self {
+        self.state.steering = steering;
         self
     }
 

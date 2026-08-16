@@ -197,6 +197,12 @@
             AgentSessionLoop::new("s1", "run-eg06", 16, Box::new(provider), Arc::new(reg));
         loop_ = loop_.with_options(SessionLoopOptions {
             cwd: Some(ws.path_str()),
+            // C1b（反向依赖移出）：写前备份中间件经 options 注入（默认链
+            // 已移出核心）——与壳层 run_launch.rs:605 同构造，验证
+            // options.tool_middleware → with_options → 工具执行器同步链路
+            tool_middleware: vec![Arc::new(
+                agent_tools::backup::BackupMiddleware::with_defaults(None),
+            )],
             // 配额上下文（内存 store 后端）：主循环装配面透传 tool_ctx
             explore_docs_quota: Some(ExploreDocsQuotaContext {
                 session_id: "s1".to_string(),
@@ -237,11 +243,11 @@
             "run 后不得残留活跃声明（guard 无泄漏）"
         );
 
-        // 3) 中间件链生效：默认链 = 写前自动备份（backup）
+        // 3) 中间件链生效：options 注入的写前自动备份（backup）同步到执行器
         assert_eq!(
             loop_.tool_executor.middleware_names(),
             vec!["backup".to_string()],
-            "默认中间件链 = 备份中间件"
+            "注入中间件链 = 备份中间件（with_options 同步链路）"
         );
     }
 

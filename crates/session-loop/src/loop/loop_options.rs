@@ -6,7 +6,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use agent_tools::backup::BackupMiddleware;
 use agent_tools::context::ExploreDocsQuotaContext;
 use agent_tools::middleware::ToolMiddleware;
 use agent_tools::note_backend::NoteBackendHandle;
@@ -244,13 +243,14 @@ impl Default for SessionLoopOptions {
             cwd: None,
             assistant_client_message_id: None,
             idempotency_enabled: false,
-            // T-EG-06（总接线点）：默认中间件链 = 写前自动备份（S10b）——
-            // BackupMiddleware::with_defaults(None)，trash_root=None 执行期
-            // 回退工作区 `.crish-trash`（与删除工具兜底同源）。壳层装配
-            // 时可在 options 侧整体替换（如 core_run_commands.rs）。
-            tool_middleware: vec![
-                Arc::new(BackupMiddleware::with_defaults(None)) as Arc<dyn ToolMiddleware>
-            ],
+            // C1b（统一输入流收敛 · 反向依赖移出，不变量 5）：默认中间件链
+            // = 空链——核心不再内建「写前自动备份」具体功能实例（原
+            // BackupMiddleware::with_defaults(None) 默认链已移出）。写前备份
+            // 由壳层唯一注入（run_launch.rs tool_middleware 装配，执行期回退
+            // 工作区 `.crish-trash`，与删除工具兜底同源）；测试/编排经
+            // [Self::with_tool_middleware] 注入。漏注入 = 生产缺失写前自动
+            // 备份（安全），验收见详案 C1b §5.3。
+            tool_middleware: Vec::new(),
             hooks: None,
             system_prompt: None,
             // P4 阶段 2-2/3-2：预算与压缩配置全部缺省 None/1——未配置即现状
@@ -316,6 +316,18 @@ impl Default for SessionLoopOptions {
 }
 
 impl SessionLoopOptions {
+    /// C1b 注入面（反向依赖移出）：装配工具中间件链
+    /// （[agent_tools::middleware::ToolMiddleware]；审批通过后、执行前生效）。
+    /// 核心默认空链（不内建具体策略实例）；生产装配方 = 壳层 `run_launch.rs`
+    /// （写前自动备份 BackupMiddleware），测试/编排经本方法注入。
+    pub fn with_tool_middleware(
+        mut self,
+        middleware: Vec<Arc<dyn ToolMiddleware>>,
+    ) -> Self {
+        self.tool_middleware = middleware;
+        self
+    }
+
     /// 分阶段总结里程碑阶梯访问面（E2 F5）：None / 空数组 = 禁用（消费方
     /// 跳过里程碑评估）；Some(非空) = 启用并返回升序阶梯。默认值
     /// [crate::r#loop::stage_summary::DEFAULT_COMPACT_STAGE_RATIOS]

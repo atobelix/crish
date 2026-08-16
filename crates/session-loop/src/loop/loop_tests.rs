@@ -55,13 +55,12 @@ use std::sync::Arc;
             options.cache_tracking.is_none(),
             "cache_tracking 缺省 None = 不启用缓存测量（T-36 向后兼容）"
         );
-        // T-EG-06：默认中间件链 = 写前自动备份（S10b，1 项名为 backup；
-        // trash_root=None 执行期回退工作区 .crish-trash）
-        assert_eq!(options.tool_middleware.len(), 1, "默认链恰 1 项");
-        assert_eq!(
-            options.tool_middleware[0].name(),
-            "backup",
-            "默认链 = 写前自动备份中间件"
+        // C1b（反向依赖移出）：默认中间件链 = 空——核心不再内建
+        // BackupMiddleware 具体实例（不变量 5；写前备份由壳层 run_launch.rs
+        // 唯一注入，测试/编排经 with_tool_middleware 注入）
+        assert!(
+            options.tool_middleware.is_empty(),
+            "默认中间件链为空（C1b：核心不内建具体策略实例）"
         );
         // T-EG-06：注册表与配额缺省 None（装配发生在 with_options 装配块：
         // 注册表按工作区根新建并注入 ESC 判定器；配额 None = 主 agent
@@ -90,6 +89,46 @@ use std::sync::Arc;
             options.compact_summary_retry_window_ms,
             summary_dispatch::DEFAULT_RETRY_GUARD_WINDOW_MS,
             "compact_summary_retry_window_ms 默认 30min（观察窗口）"
+        );
+    }
+
+    /// C1b（反向依赖移出）：两条注入面自证——with_tool_middleware 装配
+    /// 中间件链（默认空链替换）、with_steering 替换 steering 协调器
+    /// （核心 new() 不再内建具体策略实例，注入面行为必须可验证）
+    #[test]
+    fn c1b_injection_surfaces_replace_defaults() {
+        use agent_tools::backup::BackupMiddleware;
+        use crate::steering::{
+            RecoverySteeringStrategy, SteeringCoordinator, SteeringCoordinatorOptions,
+        };
+
+        // with_tool_middleware：默认空链 → 注入写前备份中间件（与壳层
+        // run_launch.rs:605 同构造）
+        let options = SessionLoopOptions::default().with_tool_middleware(vec![Arc::new(
+            BackupMiddleware::with_defaults(None),
+        )]);
+        assert_eq!(options.tool_middleware.len(), 1, "注入链恰 1 项");
+        assert_eq!(options.tool_middleware[0].name(), "backup");
+
+        // with_steering：默认空策略协调器 → 注入 RecoverySteeringStrategy
+        // 协调器（预算可观测：默认 3 → 注入预算 7 替换生效）
+        let provider = TestProvider::text_reply("hi");
+        let loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
+        assert_eq!(
+            loop_.state.steering.budget_remaining(),
+            3,
+            "默认空策略协调器预算 = 默认 3（行为不变）"
+        );
+        let loop_ = loop_.with_steering(SteeringCoordinator::new(
+            vec![Box::new(RecoverySteeringStrategy::default())],
+            SteeringCoordinatorOptions {
+                max_steering_budget: Some(7),
+            },
+        ));
+        assert_eq!(
+            loop_.state.steering.budget_remaining(),
+            7,
+            "注入协调器生效（预算 7 替换默认 3）"
         );
     }
 

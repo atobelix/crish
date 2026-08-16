@@ -34,10 +34,21 @@ use conex_types::message::{
 use conex_types::session::AgentEndReason;
 use conex_types::tool::{ProviderDiagnostic, ProviderDiagnosticPhase};
 use session_loop::{
-    AgentSessionLoop, InputEnqueueMode, ProviderStreamEvent, SelfTerminationDiagnostic, StopReason,
+    AgentSessionLoop, InputEnqueueMode, ProviderStreamEvent, RecoverySteeringStrategy,
+    SelfTerminationDiagnostic, SteeringCoordinator, SteeringCoordinatorOptions, StopReason,
     TestProvider, TestTool,
 };
 use session_loop::steering::metadata_kind_wire;
+
+/// C1b（反向依赖移出）：测试自建默认 steering 协调器——核心 new() 不再
+/// 内建 RecoverySteeringStrategy，测试显式注入以保持行为不变（与 C1b 前
+/// new() 内建默认完全一致：RecoverySteeringStrategy::default() + 默认预算）
+fn default_steering() -> SteeringCoordinator {
+    SteeringCoordinator::new(
+        vec![Box::new(RecoverySteeringStrategy::default())],
+        SteeringCoordinatorOptions::default(),
+    )
+}
 
 /// 构造用户消息
 fn user(text: &str) -> AgentMessage {
@@ -65,6 +76,7 @@ fn loop_with(provider: TestProvider, tools: Vec<Arc<TestTool>>) -> AgentSessionL
         Box::new(provider),
         Arc::new(registry),
     )
+    .with_steering(default_steering())
 }
 
 /// 统计对话中的 steering 注入消息（system 角色，metadata.kind=steering——

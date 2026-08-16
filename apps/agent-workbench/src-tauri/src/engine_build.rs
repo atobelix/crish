@@ -38,8 +38,9 @@ use conex_types::response::ClassifiedStreamError;
 use orchestrator::PendingMessageQueue;
 use session_loop::provider::{DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest};
 use session_loop::{
-    AbortSignal, AgentSessionLoop, ApprovalGate, CacheTrackingConfig, ControlBus, RunOutcome,
-    SessionLoopOptions, ToolBatchOptions,
+    AbortSignal, AgentSessionLoop, ApprovalGate, CacheTrackingConfig, ControlBus,
+    RecoverySteeringStrategy, RunOutcome, SessionLoopOptions, SteeringCoordinator,
+    SteeringCoordinatorOptions, ToolBatchOptions,
 };
 
 use super::engine_audit::{RoutingAuditSink, WaitDispatchStore};
@@ -1518,7 +1519,17 @@ impl SessionLoopProducer {
         );
         session_loop = session_loop
             .with_options(self.options.clone())
-            .with_tool_options(self.tool_options.clone());
+            .with_tool_options(self.tool_options.clone())
+            // C1b（统一输入流收敛 · 反向依赖移出）：steering 壳层注入——
+            // 核心 AgentSessionLoop::new() 不再内建 RecoverySteeringStrategy
+            // （不变量 5），本处为产品唯一 steering 注入点（安全缺口修复：
+            // 此前壳层完全未装配 steering）。漏注入 = steering 失效
+            // （steering_enabled 默认 true 但策略 Vec 空 → 空响应/预算耗尽
+            // 不再注入纠偏），验收见详案 C1b §5.3。
+            .with_steering(SteeringCoordinator::new(
+                vec![Box::new(RecoverySteeringStrategy::default())],
+                SteeringCoordinatorOptions::default(),
+            ));
         // 30-P1：run 控制面装配（with_options 之后、run() 之前——builder
         // 顺序契约）——壳层与 loop 同源：同一控制总线 + 同一 abort 信号
         // 实例（A4-H2 断头路消除：check_control 安全点真实消费外部意图）

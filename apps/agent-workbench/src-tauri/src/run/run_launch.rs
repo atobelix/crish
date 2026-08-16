@@ -594,12 +594,14 @@ pub(crate) async fn run_task_impl(
         // D1 §3.2.3：会话级熔断计数当前值（transient_retry 入口闸 C1
         // 输入；None = 不启用闸）
         provider_fail_streak,
-        // T-EG-05（F7）：写前自动备份中间件装配（S10b）——备份根经
-        // with_defaults(None) 执行期回退工作区 `.crish-trash`，与 UI 删除
-        // 命令（trash_root_for 未注入时兜底，core_run_commands.rs:2356）及
-        // 工具侧 BuiltinToolConfig.trash_root（引擎装配处亦为 None）同源，
+        // T-EG-05（F7）/ C1b：写前自动备份中间件装配（S10b）——C1b 移出
+        // 核心默认后，本处为产品唯一 BackupMiddleware 注入点（写前备份
+        // 安全红线：漏注入 = 生产缺失写前自动备份，详案 C1b §5.3）。备份
+        // 根经 with_defaults(None) 执行期回退工作区 `.crish-trash`，与 UI
+        // 删除命令（trash_root_for 未注入时兜底，core_run_commands.rs:2356）
+        // 及工具侧 BuiltinToolConfig.trash_root（引擎装配处亦为 None）同源，
         // 保证恢复面板与写前快照落入同一回收站根；中间件链经
-        // options.tool_middleware → loop/mod.rs:343 with_middleware 同步到
+        // options.tool_middleware → AgentSessionLoop::with_options 同步到
         // 工具执行器（消费侧循环装配由 F7 T-EG-06 负责，本处只做 options
         // 侧构造）。
         tool_middleware: vec![Arc::new(BackupMiddleware::with_defaults(None))],

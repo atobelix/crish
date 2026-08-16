@@ -28,8 +28,19 @@ use conex_types::session::AgentEndReason;
 use conex_types::tool::ToolOutput;
 use session_loop::{
     AgentSessionLoop, ControlKind, ControlLevel, ProviderCall, ProviderEventStream, ProviderRequest,
-    ProviderStreamEvent, ReasoningEffort, SessionLoopOptions, StopReason, TestProvider, TestTool,
+    ProviderStreamEvent, ReasoningEffort, RecoverySteeringStrategy, SessionLoopOptions,
+    SteeringCoordinator, SteeringCoordinatorOptions, StopReason, TestProvider, TestTool,
 };
+
+/// C1b（反向依赖移出）：测试自建默认 steering 协调器——核心 new() 不再
+/// 内建 RecoverySteeringStrategy，测试显式注入以保持行为不变（与 C1b 前
+/// new() 内建默认完全一致：RecoverySteeringStrategy::default() + 默认预算）
+fn default_steering() -> SteeringCoordinator {
+    SteeringCoordinator::new(
+        vec![Box::new(RecoverySteeringStrategy::default())],
+        SteeringCoordinatorOptions::default(),
+    )
+}
 
 /// 构造用户消息
 fn user(text: &str) -> AgentMessage {
@@ -57,6 +68,7 @@ fn loop_with(provider: TestProvider, tools: Vec<Arc<TestTool>>) -> AgentSessionL
         Box::new(provider),
         Arc::new(registry),
     )
+    .with_steering(default_steering())
 }
 
 /// Arc 包装替身（T09.3 零拷贝断言用）：共享 TestProvider 的请求记录——
@@ -87,6 +99,7 @@ fn loop_with_arc(handle: Arc<TestProvider>, tools: Vec<Arc<TestTool>>) -> AgentS
         Box::new(ArcTestProvider(handle)),
         Arc::new(registry),
     )
+    .with_steering(default_steering())
 }
 
 /// 构造已分类传输错误
@@ -1894,6 +1907,7 @@ where
         Box::new(provider),
         Arc::new(registry),
     )
+    .with_steering(default_steering())
 }
 
 /// 慢速失败工具（EV-09 测钉）：执行 50ms 后抛错——失败路径 duration_ms
