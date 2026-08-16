@@ -430,6 +430,16 @@ const NORMALIZER_SAMPLES: Record<string, Record<string, unknown>> = {
     turnIndex: 0,
     requestStartedAtMs: 1000,
   },
+  // ── 撤回域（T1a → T3）──
+  'timeline-truncate': {
+    type: 'timeline-truncate',
+    sessionId: 's1',
+    runId: 'r1',
+    boundarySeq: 12,
+    reason: 'user-requested',
+    targetMessageId: 'm1',
+    timestamp: 't1',
+  },
 };
 
 describe('T-F 06 T4.1：归一器键集与生成事件类型双向锁定', () => {

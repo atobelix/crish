@@ -3,15 +3,19 @@
  */
 import type { SessionMessage } from '../../store/types';
 
-export interface HistoryMessage {
-  id: string;
-  sender: 'user' | 'assistant';
-  text?: string;
-  thinking?: string;
+/**
+ * History message builder / token budget truncation 的引擎对话 wire 载荷类型。
+ *
+ * T3 单源化（D5）：`HistoryMessage` 是「从 SessionMessage 派生的 LLM 上下文载荷」，
+ * 不是第 N 套消息类型。它只保留 wire 特有字段（snake_case
+ * tool_calls_json / tool_call_results_json）+ SessionMessage 派生字段；
+ * 不复制 SessionMessage 其余超集字段。type 定义唯一在本文件。
+ */
+export interface HistoryMessage extends SessionMessage {
+  /** 工具调用 wire JSON 串（由 SessionMessage.toolCalls 序列化） */
   tool_calls_json?: string;
+  /** 工具结果回执 wire JSON 串（由 SessionMessage.toolCallResults 序列化） */
   tool_call_results_json?: string;
-  status?: string;
-  timestamp: number;
 }
 
 export const HISTORY_TOKEN_BUDGET = 200_000;

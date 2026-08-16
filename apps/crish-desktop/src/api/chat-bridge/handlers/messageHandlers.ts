@@ -10,6 +10,7 @@ import { blockText, mergeAssistantTextPiece } from './eventUtils';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 import { useLayoutStore } from '../../../store';
+import { projectAgentMessageContent } from '../../messageProjection';
 
 /**
  * 把消息级缓存指标挂到 store 的 SessionMessage.cacheMetrics（T-48）。
@@ -30,7 +31,9 @@ function attachCacheMetricsToStoreMessage(
   messageId: string,
   metrics: MessageCacheMetrics
 ): void {
-  useLayoutStore.getState().setMessageCacheMetrics(sessionId, messageId, metrics);
+  useLayoutStore
+    .getState()
+    .setMessageCacheMetrics(sessionId, messageId, metrics);
 }
 
 /**
@@ -92,16 +95,8 @@ export function onMessageEnd(
   const { state, callbacks } = env;
   const msg = envelope.event.message;
   if (msg.role !== 'assistant') return;
-  const blocks = Array.isArray(msg.blocks) ? msg.blocks : [];
-  let text = '';
-  let thought = '';
-  for (const bl of blocks) {
-    const b = bl as unknown as Record<string, unknown>;
-    if (b.type === 'thought' || b.kind === 'thought') thought += blockText(b);
-    else if (b.type === 'text') text += blockText(b);
-  }
-  if (typeof msg.content === 'string' && msg.content && !text)
-    text = msg.content;
+  // 与 replay 投影共用同一 text/thought 投影原语（T3 单源化，杜绝各写一套）
+  const { text, thought } = projectAgentMessageContent(msg);
   if (thought.trim()) {
     if (
       state.assistantThought &&

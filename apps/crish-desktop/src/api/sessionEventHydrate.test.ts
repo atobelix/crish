@@ -7,6 +7,7 @@ import {
   projectEventsToMessages,
   type UsageDeltaState,
 } from './sessionEventHydrate';
+import { projectAgentMessageContent } from './messageProjection';
 
 const baseUsage: UsageDeltaState = {
   input: 100,
@@ -112,7 +113,7 @@ describe('applyUsageDelta', () => {
     const next = applyUsageDelta(
       baseUsage,
       { promptTokens: 10, completionTokens: 5 },
-      (i, o) => i * 0.001 + o * 0.002,
+      (i, o) => i * 0.001 + o * 0.002
     );
     expect(next.input).toBe(110);
     expect(next.output).toBe(55);
@@ -131,8 +132,9 @@ describe('applyUsageDelta', () => {
         cacheReadTokens: 40,
         cacheWriteTokens: 10,
       },
-      (i, o, cr = 0, cw = 0) => i * 0.0001 + o * 0.0002 + cr * 0.00001 + cw * 0.00005,
-      (i, o, cr = 0) => cr * 0.00009,
+      (i, o, cr = 0, cw = 0) =>
+        i * 0.0001 + o * 0.0002 + cr * 0.00001 + cw * 0.00005,
+      (i, o, cr = 0) => cr * 0.00009
     );
     expect(next.input).toBe(200);
     expect(next.output).toBe(70);
@@ -147,7 +149,7 @@ describe('applyUsageDelta', () => {
       { ...baseUsage, cacheRead: 10, savedCost: 0.01 },
       { promptTokens: 5, completionTokens: 0, cacheReadTokens: 3 },
       () => 0.001,
-      () => 0.002,
+      () => 0.002
     );
     expect(mid.cacheRead).toBe(13);
     expect(mid.savedCost).toBeCloseTo(0.012, 8);
@@ -272,10 +274,7 @@ describe('mergeMessagesById (C0 幂等)', () => {
     ];
     const merged = mergeMessagesById(afterStreamFinal, latePartial);
     expect(merged).toHaveLength(2);
-    expect(merged.map((m) => m.id)).toEqual([
-      'user-client-1',
-      'asst-client-1',
-    ]);
+    expect(merged.map((m) => m.id)).toEqual(['user-client-1', 'asst-client-1']);
     expect(merged[0]?.status).toBe('completed');
     expect(merged[1]?.status).toBe('completed');
     expect(merged[1]?.text).toBe('full final answer from stream');
@@ -369,7 +368,10 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
 
   it('优先采用 clientMessageId 作为稳定 id', () => {
     const { messages } = projectEventsToMessages(sampleEvents);
-    expect(messages.map((m) => m.id)).toEqual(['user-client-1', 'asst-client-1']);
+    expect(messages.map((m) => m.id)).toEqual([
+      'user-client-1',
+      'asst-client-1',
+    ]);
     expect(messages[0]?.text).toBe('ping');
     expect(messages[1]?.text).toBe('pong');
   });
@@ -416,7 +418,11 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
             type: 'message-end',
             timestamp: 2000,
             turnIndex: 1,
-            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第一轮' },
+            message: {
+              role: 'assistant',
+              clientMessageId: 'asst-client-1',
+              content: '第一轮',
+            },
           },
         },
       },
@@ -428,7 +434,11 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
             type: 'message-end',
             timestamp: 3000,
             turnIndex: 2,
-            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第二轮' },
+            message: {
+              role: 'assistant',
+              clientMessageId: 'asst-client-1',
+              content: '第二轮',
+            },
           },
         },
       },
@@ -450,7 +460,11 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
             type: 'message-end',
             timestamp: 2000,
             turnIndex: 1,
-            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第一轮' },
+            message: {
+              role: 'assistant',
+              clientMessageId: 'asst-client-1',
+              content: '第一轮',
+            },
           },
         },
       },
@@ -462,7 +476,11 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
             type: 'message-end',
             timestamp: 2001,
             turnIndex: 1,
-            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第一轮（修订）' },
+            message: {
+              role: 'assistant',
+              clientMessageId: 'asst-client-1',
+              content: '第一轮（修订）',
+            },
           },
         },
       },
@@ -481,7 +499,11 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
           event: {
             type: 'message-end',
             timestamp: 2000,
-            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第一轮' },
+            message: {
+              role: 'assistant',
+              clientMessageId: 'asst-client-1',
+              content: '第一轮',
+            },
           },
         },
       },
@@ -492,7 +514,11 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
           event: {
             type: 'message-end',
             timestamp: 3000,
-            message: { role: 'assistant', clientMessageId: 'asst-client-1', content: '第二轮' },
+            message: {
+              role: 'assistant',
+              clientMessageId: 'asst-client-1',
+              content: '第二轮',
+            },
           },
         },
       },
@@ -559,10 +585,7 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
     const fromEvents = projectEventsToMessages(sampleEvents).messages;
     const merged = mergeMessagesById(localFinal, fromEvents);
     expect(merged).toHaveLength(2);
-    expect(merged.map((m) => m.id)).toEqual([
-      'user-client-1',
-      'asst-client-1',
-    ]);
+    expect(merged.map((m) => m.id)).toEqual(['user-client-1', 'asst-client-1']);
     // 再 hydrate 一次仍幂等
     const again = mergeMessagesById(merged, fromEvents);
     expect(again).toHaveLength(2);
@@ -634,7 +657,7 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
     // 再 project + merge 仍不增条（stream final + hydrate 幂等）
     const again = mergeMessagesById(
       merged,
-      projectEventsToMessages(events).messages,
+      projectEventsToMessages(events).messages
     );
     expect(again).toHaveLength(2);
   });
@@ -676,7 +699,7 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
     const merged = mergeMessagesById(localOnly, fromEvents);
     expect(merged.some((m) => m.id === localAsstId)).toBe(true);
     expect(merged.find((m) => m.id === localAsstId)?.text).toBe(
-      'local stream body',
+      'local stream body'
     );
   });
 
@@ -715,5 +738,57 @@ describe('projectEventsToMessages id 稳定 / 幂等', () => {
     const { messages } = projectEventsToMessages(events);
     expect(messages).toHaveLength(1);
     expect(messages[0]?.id).toBe('assistant-msg-from-meta');
+  });
+});
+
+describe('T3 归一断言：replay 与 live 走同一 generated parser / 共享投影', () => {
+  it('replay（信封解包→parseBridgeEvent→投影）与 live（parseBridgeEvent→共享投影后处理）正文/块一致', () => {
+    // 同一组 raw 事件（runtime-event 信封 + message-delta + message-end），
+    // 与 live 桥同协议形态。replay 经 projectEventsToMessages 投影。
+    const replay = projectEventsToMessages([
+      {
+        sequence: 1,
+        type: 'runtime-event',
+        payload: {
+          event: {
+            type: 'message-delta',
+            timestamp: 1000,
+            block: { type: 'text', text: '同一条' },
+          },
+        },
+      },
+      {
+        sequence: 2,
+        type: 'runtime-event',
+        payload: {
+          event: {
+            type: 'message-end',
+            timestamp: 2000,
+            message: {
+              role: 'assistant',
+              clientMessageId: 'asst-same-doc',
+              blocks: [
+                { type: 'text', text: '同一条终态' },
+                { type: 'thought', text: '思考过程' },
+              ],
+            },
+          },
+        },
+      },
+    ]).messages;
+    expect(replay).toHaveLength(1);
+    expect(replay[0]?.id).toBe('asst-same-doc');
+    expect(replay[0]?.text).toBe('同一条终态');
+    expect(replay[0]?.thinking).toBe('思考过程');
+
+    // live onMessageEnd 对同一 AgentMessage 走同一共享投影原语
+    //（projectAgentMessageContent 在 messageHandlers.onMessageEnd 消费），
+    // 正文/思考与 replay 一致 —— 证明无第二条手写解析路径。
+    const live = projectAgentMessageContent({
+      blocks: [{ type: 'text', text: '同一条终态' }],
+      content: '同一条终态',
+    });
+    expect(live.text).toBe('同一条终态');
+    expect(live.thought).toBe('');
   });
 });

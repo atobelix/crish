@@ -26,6 +26,7 @@ import type {
   AgentEndReason,
   ApprovalDecision,
   PermissionRequest,
+  TimelineTruncateReason,
   ToolMetadata,
   ToolBatchCall,
   ToolBatchResult,
@@ -34,6 +35,7 @@ import type {
   RuntimeCheckpointRecord,
   RuntimeCheckpointRestoreRecord,
 } from '../../../../../../packages/shared-types/src/generated/engine';
+import { TIMELINE_TRUNCATE_REASON_VALUES } from '../../../../../../packages/shared-types/src/generated/engine';
 import { blockText } from './eventUtils';
 import { logInternalError } from '../../userFacingErrors';
 import {
@@ -334,6 +336,25 @@ const CORE_NORMALIZERS: Record<string, Normalizer> = {
   'run-completed': (raw) => normalizeRunTerminal(raw, 'run-completed'),
   'run-failed': (raw) => normalizeRunTerminal(raw, 'run-failed'),
   'run-cancelled': (raw) => normalizeRunTerminal(raw, 'run-cancelled'),
+  // 撤回域（T1a 统一输入流收敛战役 → T3 补归一器键集漂移锁定）：timeline-truncate
+  // 出站终态事件；宽容路径补 reason 规范值校验（非安全向显式登记回退 user-requested）
+  'timeline-truncate': (raw) => {
+    const reason = String(raw.reason ?? '').trim() as TimelineTruncateReason;
+    const normalizedReason: TimelineTruncateReason = (
+      TIMELINE_TRUNCATE_REASON_VALUES as readonly string[]
+    ).includes(reason)
+      ? reason
+      : 'user-requested';
+    return {
+      type: 'timeline-truncate',
+      sessionId: str(raw.sessionId),
+      runId: str(raw.runId),
+      boundarySeq: num(raw.boundarySeq) ?? 0,
+      reason: normalizedReason,
+      targetMessageId: str(raw.targetMessageId),
+      timestamp: str(raw.timestamp),
+    };
+  },
 };
 
 /**

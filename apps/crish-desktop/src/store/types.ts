@@ -16,6 +16,7 @@
  */
 import type { Settings } from '../api/clientApi';
 import type { MessageCacheState } from '@crish/shared-types';
+import type { AgentMessage } from '../../../../packages/shared-types/src/generated/engine';
 export type AppSettings = Settings;
 export type GroupState = {
   id: string;
@@ -381,11 +382,23 @@ export interface TimelineThoughtBlock extends MessageTimelineBlock {
   thinkingText?: string;
 }
 
-/** 会话内一条用户或助手消息 */
-export interface SessionMessage {
-  id: string;
+/**
+ * 会话内一条用户或助手消息。
+ *
+ * T3 单源化：`SessionMessage` 是「从 generated AgentMessage 派生的投影装饰」——
+ * 身份/溯源字段（id / clientMessageId / metadata）从 generated 派生（extends），
+ * 其余为前端投影装饰超集字段（sender / text / thinking / toolCalls / blocks /
+ * cacheMetrics 等，generated 无等价物，保留不降级）。禁止用 `type SessionMessage =
+ * AgentMessage` 纯别名丢弃超集。消费方字段名不变（引用面稳定）。
+ */
+export interface SessionMessage extends Pick<
+  AgentMessage,
+  'id' | 'clientMessageId'
+> {
   sender: MessageSender;
   text?: string | undefined;
+  /** 消息溯源元数据（generated AgentMessage.metadata 的 flat 承继；避免递归 JsonValue 触 immer draft 命名问题） */
+  metadata?: unknown | undefined;
   /** 流式思考过程，与正式正文分离，避免互相覆盖 */
   thinking?: string | undefined;
   /** 结构化思考分段列表（支持多轮回放与交错还原） */

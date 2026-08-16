@@ -11,7 +11,18 @@ import { mergeSessionMessageFields } from './store-access/helperAccess';
 import { getTransport } from './transport';
 import { normalizeAssistantTimeline } from './toolPresentation';
 import { logInternalError } from './userFacingErrors';
-import { toolCallFieldsFromEvent } from './chat-bridge/handlers/toolUtils';
+import { parseBridgeEvent } from './chat-bridge/handlers/eventParser';
+import { unwrapOrchestratorEnvelope } from './chat-bridge/handlers/eventEnvelope';
+import { blockText } from './chat-bridge/handlers/eventUtils';
+import {
+  toolCallFieldsFromEvent,
+  toolResultFields,
+} from './chat-bridge/handlers/toolUtils';
+import type { AgentMessage } from '../../../../packages/shared-types/src/generated/engine';
+import {
+  projectAgentMessageContent,
+  projectAgentMessageToSessionMessage,
+} from './messageProjection';
 
 export type SessionHydrateResult = {
   ok: boolean;
@@ -36,45 +47,13 @@ function asRec(v: unknown): AnyRec | null {
   return v && typeof v === 'object' && !Array.isArray(v) ? (v as AnyRec) : null;
 }
 
-function agentEventFromOrchestrator(ev: AnyRec): AnyRec | null {
-  if (ev.type === 'runtime-event') {
-    const payload = asRec(ev.payload) || asRec(ev);
-    const nested = asRec(payload?.event) || asRec(ev.event);
-    return nested;
-  }
-  // 顶层摊平：放行 message* 与 tool* 事件（live 桥与 daemon 回放同协议形态；
-  // 只放行 message* 会导致会话恢复丢工具卡 —— tool-start/tool-end 被当 run 级事件跳过）
-  if (typeof ev.type === 'string' && ev.type) {
-    const t = String(ev.type);
-    if (t.startsWith('message') || t.startsWith('tool')) return ev;
-  }
-  return null;
-}
-
-function blockText(block: unknown): string {
-  const b = asRec(block);
-  if (!b) return '';
-  if (typeof b.text === 'string') return b.text;
-  if (typeof b.content === 'string') return b.content;
-  return '';
-}
-
-function toolResult(result: unknown): {
-  id: string;
-  text: string;
-  isError: boolean;
-} {
-  const r = asRec(result) || {};
-  const id = String(r.toolCallId ?? r.id ?? '');
-  const isError = Boolean(r.isError ?? r.error);
-  let text = '';
-  if (typeof r.output === 'string') text = r.output;
-  else if (r.output && typeof r.output === 'object') {
-    const o = r.output as AnyRec;
-    text = typeof o.text === 'string' ? o.text : JSON.stringify(o);
-  } else if (typeof r.text === 'string') text = r.text;
-  else if (r.error) text = String(r.error);
-  return { id, text, isError };
+/** 从解包出的内层事件读取时间戳（事件元数据，不读消息/块内容字段）。 */
+function eventTimestamp(inner: AnyRec | null): number {
+  if (!inner) return Date.now();
+  const rawTs = inner.timestamp;
+  if (typeof rawTs === 'string') return Date.parse(rawTs) || Date.now();
+  if (typeof rawTs === 'number') return rawTs;
+  return Date.now();
 }
 
 /**
@@ -83,11 +62,11 @@ function toolResult(result: unknown): {
  * 无稳定 id 时回退到确定性 hyd 前缀 + 序号（同事件流重放 id 不变）。
  */
 function resolveProjectedMessageId(
-  msg: AnyRec | null,
+  msg: AgentMessage | null,
   role: 'user' | 'assistant',
   msgSeq: number
 ): string {
-  const stable = pickStableMessageId(msg);
+  const stable = pickStableMessageId(msg as unknown as AnyRec);
   if (stable) return stable;
   return role === 'user' ? `hyd-user-${msgSeq}` : `hyd-asst-${msgSeq}`;
 }
@@ -172,8 +151,10 @@ export function projectEventsToMessages(events: unknown[]): {
     { turnIndex: number; text: string }
   >();
 
-  const pushUser = (text: string, ts: number, stableId?: string) => {
+  const pushUser = (msg: AgentMessage, ts: number, stableId?: string) => {
     currentAssistant = null;
+    const { text } = projectAgentMessageContent(msg);
+    if (!text) return;
     const id = stableId || `hyd-user-${++msgSeq}`;
     // 同 id 已存在则 update（事件流内幂等）
     const existing = messages.find((m) => m.id === id);
@@ -183,13 +164,10 @@ export function projectEventsToMessages(events: unknown[]): {
       existing.status = 'completed';
       return;
     }
-    messages.push({
-      id,
-      sender: 'user',
-      text,
-      timestamp: ts,
-      status: 'completed',
-    });
+    // 用户消息走共享投影入口（从 generated AgentMessage 派生的投影装饰）
+    messages.push(
+      projectAgentMessageToSessionMessage(msg, { timestamp: ts, id })
+    );
   };
 
   const ensureAssistant = (ts: number, stableId?: string) => {
@@ -226,44 +204,30 @@ export function projectEventsToMessages(events: unknown[]): {
     if (payload && typeof payload.runId === 'string')
       lastRunId = payload.runId as string;
 
-    const agent = agentEventFromOrchestrator(ev);
-    if (!agent) {
+    // 权威解析：信封解包（纯解包，不做字段级解析）→ generated parser（strict → 宽容归一）。
+    // 与实时流同一条解析路径（parseBridgeEvent），不再手写第二套事件解析。
+    const unpacked = unwrapOrchestratorEnvelope(ev);
+    if (!unpacked) {
       // run 级事件：仅跟踪 runId
       continue;
     }
+    const inner = asRec(unpacked.event);
+    if (!inner) continue;
+    const parsed = parseBridgeEvent(unpacked.event);
+    if (!parsed.ok || parsed.data.kind !== 'engine') continue;
+    const event = parsed.data.event;
+    const ts = eventTimestamp(inner);
 
-    const type = String(agent.type ?? '');
-    const ts =
-      typeof agent.timestamp === 'string'
-        ? Date.parse(agent.timestamp) || Date.now()
-        : typeof agent.timestamp === 'number'
-          ? agent.timestamp
-          : Date.now();
-
-    if (type === 'message-end' && agent.message) {
-      const msg = asRec(agent.message);
-      if (!msg) continue;
-      const role = String(msg.role ?? '');
-      let text = '';
-      let thought = '';
-      if (typeof msg.content === 'string') text = msg.content;
-      else if (Array.isArray(msg.blocks)) {
-        for (const bl of msg.blocks) {
-          const b = asRec(bl);
-          if (!b) continue;
-          if (b.type === 'thought' || b.kind === 'thought')
-            thought += blockText(b);
-          else if (b.type === 'text') text += blockText(b);
-        }
-      }
-      text = text.trim();
-      thought = thought.trim();
+    if (event.type === 'message-end' && event.message) {
+      const msg = event.message;
+      const role = msg.role;
+      const { text, thought } = projectAgentMessageContent(msg);
       if (role === 'user') {
         if (text) {
           // 优先用引擎/客户端稳定 id，便于与本地乐观消息 upsert 合并
           const id = resolveProjectedMessageId(msg, 'user', msgSeq + 1);
           if (id.startsWith('hyd-')) msgSeq += 1;
-          pushUser(text, ts, id);
+          pushUser(msg, ts, id);
         }
       } else if (role === 'assistant') {
         const id = resolveProjectedMessageId(msg, 'assistant', msgSeq + 1);
@@ -278,7 +242,7 @@ export function projectEventsToMessages(events: unknown[]): {
           // 亦覆盖 delta 累积碎片），跨 turn 追加新段（reload 后多轮文本
           // 完整）；旧载荷（无 turnIndex）按 0 处理，单段路径与旧行为一致
           const turnIndex =
-            typeof agent.turnIndex === 'number' ? agent.turnIndex : 0;
+            typeof event.turnIndex === 'number' ? event.turnIndex : 0;
           const st = turnTextByMessage.get(a.id) ?? { turnIndex: -1, text: '' };
           if (turnIndex === st.turnIndex) {
             st.text = text;
@@ -307,13 +271,13 @@ export function projectEventsToMessages(events: unknown[]): {
       continue;
     }
 
-    if (type === 'message-delta') {
-      const b = asRec(agent.block);
+    if (event.type === 'message-delta') {
+      const b = event.block;
       if (!b) continue;
       const t = blockText(b);
       if (!t) continue;
       const a = ensureAssistant(ts);
-      if (b.type === 'thought' || b.kind === 'thought') {
+      if (b.type === 'thought') {
         a.thinking = (a.thinking || '') + t;
       } else {
         a.text = (a.text || '') + t;
@@ -332,10 +296,12 @@ export function projectEventsToMessages(events: unknown[]): {
       continue;
     }
 
-    if (type === 'tool-start') {
+    if (event.type === 'tool-start') {
       // 与 live EventRouter 同一协议解析：兼容 call 包装与顶层字段两种形态
       //（真实 daemon 回放与 live 桥事件同源，禁止只认 call 包装导致恢复丢工具卡）
-      const { id, name, args, explanation } = toolCallFieldsFromEvent(agent);
+      const { id, name, args, explanation } = toolCallFieldsFromEvent(
+        event as unknown as Record<string, unknown>
+      );
       const a = ensureAssistant(ts);
       if (!a.toolCalls) a.toolCalls = [];
       if (!a.blocks) a.blocks = [];
@@ -364,8 +330,8 @@ export function projectEventsToMessages(events: unknown[]): {
       continue;
     }
 
-    if (type === 'tool-end') {
-      const { id, text, isError } = toolResult(agent.result);
+    if (event.type === 'tool-end') {
+      const { id, text, isError } = toolResultFields(event.result);
       const a = currentAssistant as SessionMessage | null;
       if (!a || !a.toolCalls) continue;
       const tc =
@@ -494,9 +460,8 @@ export async function hydrateSessionMessagesFromEngine(
       ...(truncated ? { truncated } : {}),
     };
   }
-  const { messages, lastRunId, maxSequence } = projectEventsToMessages(
-    allEvents
-  );
+  const { messages, lastRunId, maxSequence } =
+    projectEventsToMessages(allEvents);
   return {
     ok: true,
     messages,
