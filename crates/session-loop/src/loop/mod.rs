@@ -29,6 +29,10 @@
 //! run 控制面 → loop_exec.rs；测试旁挂 loop_tests.rs（`#[path]` 接线，
 //! 无孤儿；crate::r#loop::* 路径不 break）。
 
+/// 压缩编排面（C1a：预算钳制/估算/预检/边界/溢出触发 + LLM 守卫 +
+/// apply_compaction，自 handlers/mod.rs 纯结构搬移；handlers 经
+/// `pub(crate) use` 保留既有调用面）。
+mod compaction_dispatch;
 mod end;
 mod handlers;
 /// 分阶段总结（E2 F5）独立面：里程碑判定 + Schema 构造 + checkpoint

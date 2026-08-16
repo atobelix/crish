@@ -290,6 +290,13 @@ CI 以脚本实时输出为准。
   标记区 142→131。**脚本提示第 12 条 `note_commands.rs`（实测 105）不在本批清理范围**——登记时限为
   「SR-06 批⑥→B2→CT-01 串行链完成后移除」，B2 未派（轮 6 汇总 §四 待处理 3），留待链尾收口。
   清理后 FAIL 29 不变（= 并行域未登记 16 + 已登记回涨 13），`--check-format` exit 0（131 条）。
+- 2026-08-16（统一输入流收敛战役 R4 · C1a 压缩编排外置）：**新增登记 1 个** `session-loop/loop/compaction_dispatch.rs`
+  647（C1a 纯结构搬移产物——handlers/mod.rs 压缩编排面 ~616 行平移至新 mod，行为零变更；
+  `cargo test -p session-loop` 425+ 全绿 + `cargo check --workspace` 绿为搬移等价性硬锚点）。
+  时限注记（二元结构）：**C1c（CompactionRuntime/BudgetState 子结构收敛 + CompactionDispatch trait 补缝）
+  完成后评估收紧；触发事实 = 该文件 ≤ 600 行**。**同步更新**：`loop/handlers/mod.rs` 登记值 2180→1765
+  （C1a 切出 616 行 + 顶层 import 收敛 + 测试 import 直连，代码口径 Δ≥300 达标，登记值随实测收紧）。
+  新登记注记 5 禁词自查 0 命中（禁词表见 D-01 详案 §G-02 验收③）。
 
 <!-- BASELINE_START -->
 
@@ -416,7 +423,8 @@ crates/session-loop/src/escape_watch.rs 870
 crates/session-loop/src/exec_single.rs 751
 crates/session-loop/src/hooks.rs 1242
 crates/session-loop/src/hydrate.rs 678
-crates/session-loop/src/loop/handlers/mod.rs 2180
+crates/session-loop/src/loop/compaction_dispatch.rs 647
+crates/session-loop/src/loop/handlers/mod.rs 1765
 crates/session-loop/src/loop/summary_dispatch.rs 1146
 crates/session-loop/src/safe_point.rs 698
 crates/session-loop/src/state.rs 645
