@@ -74,9 +74,7 @@ export type {
 
 // 钩子（I8-E1：14 事件名 + 全 14 载荷 + HookPayloadMap + 双模式 handler；
 // 冻结：HOOK_EVENT_NAMES ↔ crates/session-loop hooks.rs HookEventKind 双向锁定）
-export {
-  HOOK_EVENT_NAMES,
-} from './hooks';
+export { HOOK_EVENT_NAMES } from './hooks';
 export type {
   HookEventName,
   ExistingHookEventName,
@@ -130,18 +128,6 @@ export type {
   PluginListEntryLike,
   PluginRegistryLike,
 } from './plugin';
-
-// 权限
-export type {
-  PermissionBehavior,
-  PermissionRequest,
-  PermissionDecision,
-  PermissionRule,
-  ApprovalHandler,
-  ToolMetadata,
-  RuntimePermissionRequest,
-  RuntimePermissionPolicy,
-} from './permissions';
 
 // 存储事件
 export type {

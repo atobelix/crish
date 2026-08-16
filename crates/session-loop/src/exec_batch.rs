@@ -429,24 +429,24 @@ impl BatchRunner<'_> {
             // 审批未启用/未注入门 → 全部执行；有决策 → 仅通过执行；
             // 无决策（abort 中断，未发起审批）→ 按取消收场；
             // 权限拒绝（plan 模式写类）→ 直接拒绝结果；
-            // 显式模式无门（ask 模式缺审批基础设施）→ 透传需审批状态
+            // 无门需审批项（A3 fail-closed）→ 拒绝，不透传执行
             let should_execute = match (verdict, approval_active) {
                 (PermissionVerdict::Deny, _) => false,
                 (PermissionVerdict::NeedsApproval, true) => {
                     matches!(decided, Some(ApprovalDecision::Approved))
                 }
-                (PermissionVerdict::NeedsApproval, false) => {
-                    self.options.permission_mode.is_none()
-                }
+                // A3 fail-closed（P1 权限归一）：审批未启用/无门时需审批项
+                // 一律不透传执行（不再按 mode=None 直通执行）
+                (PermissionVerdict::NeedsApproval, false) => false,
                 _ => true,
             };
             if !should_execute {
                 let call = &self.calls[idx];
                 let r = match verdict {
                     PermissionVerdict::Deny => denied_result(call, self.options),
-                    PermissionVerdict::NeedsApproval
-                        if !approval_active && self.options.permission_mode.is_some() =>
-                    {
+                    // A3 fail-closed（P1 权限归一）：无审批基础设施 → 需审批
+                    // 项拒绝（ApprovalRequired，不透传执行）
+                    PermissionVerdict::NeedsApproval if !approval_active => {
                         ClassifiedToolResult::error(
                             &call.id,
                             &call.tool_name,

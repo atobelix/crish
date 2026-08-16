@@ -335,6 +335,10 @@ impl RevertPolicy {
     /// C3 判定点：分析后命中 GitRevertShape 段且面积超阈值 → Some(判定)；
     /// 面积小 / 非回退形态 → None（按既有三态矩阵）。
     ///
+    /// P1 权限归一（D5/D8）：本方法是命令判定唯一链
+    /// [crate::permission::decide_command_with_revert] 的 C3 回退护栏挂载点
+    /// （链内调用）；原字符串便捷入口已随收敛删除。
+    ///
     /// - ask / full-access → [PermissionVerdict::NeedsApproval]（full-access
     ///   不豁免回退护栏——红线类豁免不可覆盖大面积回退，任务卡口径）；
     /// - plan → [PermissionVerdict::Deny]（plan 只读语义优先：拒绝强度高于
@@ -358,16 +362,6 @@ impl RevertPolicy {
             PermissionMode::Plan => PermissionVerdict::Deny,
             _ => PermissionVerdict::NeedsApproval,
         })
-    }
-
-    /// 命令面便捷判定（内部先语义分析）
-    pub fn gate_verdict_command(
-        &self,
-        command_line: &str,
-        mode: PermissionMode,
-    ) -> Option<PermissionVerdict> {
-        let analysis = analyze(command_line);
-        self.gate_verdict(&analysis, mode)
     }
 
     /// C3 兜底拒绝文案：审批通道缺失时阈值检查仍生效（安全优先，不做无限
@@ -698,32 +692,36 @@ mod tests {
 
     /// C3 判定点：面积小 → 不拦截（None，按既有矩阵）；面积大 →
     /// ask/full-access NeedsApproval、plan Deny
+    ///
+    /// P1 权限归一（D5/D8）：断言经 [Self::gate_verdict]（命令判定唯一链
+    /// 的护栏挂载点）执行——原字符串便捷入口已删除。
     #[test]
     fn gate_verdict_small_vs_large_and_modes() {
         let small = policy_with(area(Some(3), None, None));
         let large = policy_with(area(Some(25), None, None));
+        let cmd = analyze("git checkout abc1234");
         for mode in [
             PermissionMode::Ask,
             PermissionMode::FullAccess,
             PermissionMode::Plan,
         ] {
             assert_eq!(
-                small.gate_verdict_command("git checkout abc1234", mode),
+                small.gate_verdict(&cmd, mode),
                 None,
                 "小面积在 {mode:?} 下不触发 C3（零打扰）"
             );
         }
         assert_eq!(
-            large.gate_verdict_command("git checkout abc1234", PermissionMode::FullAccess),
+            large.gate_verdict(&cmd, PermissionMode::FullAccess),
             Some(PermissionVerdict::NeedsApproval),
             "full-access 不豁免大面积回退"
         );
         assert_eq!(
-            large.gate_verdict_command("git checkout abc1234", PermissionMode::Ask),
+            large.gate_verdict(&cmd, PermissionMode::Ask),
             Some(PermissionVerdict::NeedsApproval)
         );
         assert_eq!(
-            large.gate_verdict_command("git checkout abc1234", PermissionMode::Plan),
+            large.gate_verdict(&cmd, PermissionMode::Plan),
             Some(PermissionVerdict::Deny),
             "plan 只读：拒绝强度高于审批（不弹窗）"
         );
@@ -735,7 +733,7 @@ mod tests {
         let large = policy_with(area(Some(25), None, None));
         for cmd in ["git status", "git checkout main", "npm test", "ls -la"] {
             assert_eq!(
-                large.gate_verdict_command(cmd, PermissionMode::FullAccess),
+                large.gate_verdict(&analyze(cmd), PermissionMode::FullAccess),
                 None,
                 "非回退命令 {cmd:?} 不触发 C3"
             );

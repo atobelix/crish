@@ -62,6 +62,14 @@ async fn write_file_through_loop_lands_crish_trash_snapshot() {
     let mut registry = ToolRegistry::new();
     register_builtin_tools(&mut registry).expect("内置工具注册失败");
 
+    // P1 权限归一（A3 fail-closed 契约）：无审批基础设施的循环不再透传执行
+    // 危险工具（write_file 属 dangerous）——本验收聚焦写前备份注入面而非
+    // 权限，故显式声明 full-access 权限模式（放行 write_file，备份语义不变）
+    let tool_options = session_loop::tool_events::ToolBatchOptions {
+        permission_mode: Some(session_loop::PermissionMode::FullAccess),
+        ..Default::default()
+    };
+
     // 第 1 轮：调用 write_file 写 doc.txt；第 2 轮：文字收尾
     let provider = TestProvider::with_scripts(vec![
         vec![
@@ -85,7 +93,8 @@ async fn write_file_through_loop_lands_crish_trash_snapshot() {
         Box::new(provider),
         Arc::new(registry),
     )
-    .with_options(options);
+    .with_options(options)
+    .with_tool_options(tool_options);
 
     let outcome = loop_.run(user("写文件")).await;
 

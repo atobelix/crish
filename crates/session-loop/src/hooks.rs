@@ -162,6 +162,11 @@ pub enum HookEvent {
         tool_call_count: u32,
     },
     /// tool.pre：hooks.ts ToolPrePayload
+    ///
+    /// P1 权限归一（A1）：tool.pre 为「扩展观察/策略插入通道」——不构成
+    /// 平行 allow/deny 审批第二权威；「命令是否需审批」由引擎
+    /// `call_verdict` 单一决策链裁定（本事件运行于审批通过之后，handler
+    /// Block 仅为插件策略性拒绝，无放行/自动批准路径）。
     ToolPre {
         session_id: String,
         tool_name: String,
@@ -683,6 +688,10 @@ impl HookRegistry {
                         continue;
                     }
                     if event.kind() == HookEventKind::ToolPre {
+                        // P1 权限归一（A1）：tool.pre 为扩展观察/策略插入
+                        // 通道——Block 仅保留插件策略性拒绝（post-approval），
+                        // 不构成平行 allow/deny 审批第二权威（判定权威 =
+                        // 引擎 call_verdict 单一决策链）
                         outcome.blocked = Some(reason);
                         // D-03 EV-05：记录阻止 handler 名（hook-outcome(blocked) 载荷）
                         outcome.blocked_handler = Some(handler.name().to_string());

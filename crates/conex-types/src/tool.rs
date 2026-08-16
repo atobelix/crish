@@ -9,6 +9,12 @@ use serde::{Deserialize, Serialize};
 use crate::error::ProviderErrorKind;
 
 /// 工具类别（对齐 ToolCategory）
+///
+/// **类别轴登记（P1 权限归一，主控裁决 2 / 决策 4）**：类别轴为「权限 +
+/// 回滚共用投影标签」——仅在事件/展示投影中透传，**不进入 allow/deny/ask
+/// 安全红线判定**（安全判定以 `dangerous` 标记 + `PermissionMode` +
+/// `decide_with_redline` 为准）；R6 R1 回滚注册表将在此轴上挂「类别 →
+/// 回滚策略」策略表（不另建类别枚举）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ToolCategory {

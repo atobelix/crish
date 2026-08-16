@@ -151,6 +151,10 @@ fn exec_ctx(
 }
 
 /// 单调用引擎层执行（默认批选项；返回批内唯一结果）
+///
+/// P1 权限归一（A3 fail-closed 契约）：无审批基础设施的执行器不再透传执行
+/// 危险工具（write_file 属 dangerous）——本组用例聚焦产出目录协作契约而非
+/// 权限行为，显式声明 full-access 权限模式放行（与 c1b/e01 同口径）
 async fn run_single(
     exec: &ToolExecutor,
     ctx: &ToolExecCtx,
@@ -161,7 +165,10 @@ async fn run_single(
             std::slice::from_ref(call),
             ctx,
             None,
-            &ToolBatchOptions::default(),
+            &ToolBatchOptions {
+                permission_mode: Some(agent_tools::permission::PermissionMode::FullAccess),
+                ..Default::default()
+            },
             None,
         )
         .await;

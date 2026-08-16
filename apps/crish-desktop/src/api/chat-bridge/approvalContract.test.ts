@@ -62,7 +62,7 @@ function makeEnv() {
     finish,
     tryResumeFinish,
     fakeTransport,
-    'session-contract',
+    'session-contract'
   );
   return { router, state, callbacks, approvalFlow, finish, tryResumeFinish };
 }
@@ -138,7 +138,7 @@ describe('审批链路契约：工具 requires_approval → 挂起 → 用户裁
       'shell_command',
       'node build.js',
       '运行命令',
-      expect.any(Object),
+      expect.any(Object)
     );
 
     // 3. 用户 approve → transport 直发 core_approve_tool
@@ -159,7 +159,11 @@ describe('审批链路契约：工具 requires_approval → 挂起 → 用户裁
     router.onMsg(toolEndEvent('tc-1'));
     expect(approvalFlow.snapshot().inflightCount).toBe(0);
     expect(approvalFlow.shouldBlockTerminal()).toBe(false);
-    expect(callbacks.onToolSuccess).toHaveBeenCalledWith('tc-1', 'ok', undefined);
+    expect(callbacks.onToolSuccess).toHaveBeenCalledWith(
+      'tc-1',
+      'ok',
+      undefined
+    );
 
     // 6. 事件顺序契约：start → pending → approve 命令 → resolved → 工具完成
     const order = [
@@ -262,8 +266,8 @@ describe('审批链路契约：挂起期间 run-terminal 的 defer / 收口', ()
   });
 });
 
-describe('审批链路契约：白名单自动放行', () => {
-  it('白名单命中：不进 pending，handler 自动直发 core_approve_tool', () => {
+describe('审批链路契约：白名单 = 批准记忆（P1 权限归一 D1，前端二次决策 1→0）', () => {
+  it('白名单命中：仍进入挂起展示审批卡，不再自动直发引擎批准命令', () => {
     usePermissionStore.setState({ commandPermissions: ['git status'] });
     const { router, callbacks, approvalFlow } = makeEnv();
 
@@ -276,27 +280,33 @@ describe('审批链路契约：白名单自动放行', () => {
         toolCallId: 'tc-w',
         toolName: 'shell_command',
         parameters: { command: 'git status --short' },
+        summary: '运行命令',
       },
     });
 
-    // 自动放行：不进入挂起，UI 无审批卡
-    expect(approvalFlow.snapshot().pendingCount).toBe(0);
-    expect(callbacks.onToolPendingApproval).not.toHaveBeenCalled();
-    // 直发命令与 UI 手动批准同构
-    expect(fakeTransport.send).toHaveBeenCalledWith('core_approve_tool', {
-      toolCallId: 'tc-w',
-      scope: 'project',
-    });
-    // 工具直接开始执行，说明带「白名单自动允许」
-    expect(callbacks.onToolStart).toHaveBeenCalledWith(
+    // P1：白名单仅为批准记忆（remember）——命中不再自动放行，
+    // 一律挂起展示审批卡片，让用户在 UI 明确批准
+    expect(approvalFlow.snapshot().pendingCount).toBe(1);
+    expect(approvalFlow.hasPending()).toBe(true);
+    expect(callbacks.onToolPendingApproval).toHaveBeenCalledWith(
       'tc-w',
       'shell_command',
       'git status --short',
-      expect.stringContaining('白名单自动允许'),
+      '运行命令',
+      expect.any(Object)
+    );
+    // 不直发引擎批准命令（裁决唯一入口 = 用户 approve 按钮）
+    expect(fakeTransport.send).not.toHaveBeenCalled();
+    // 文案不再带「白名单自动允许」（onToolStart 兜底路径同样无此标注）
+    expect(callbacks.onToolStart).not.toHaveBeenCalledWith(
+      'tc-w',
+      'shell_command',
+      'git status --short',
+      expect.stringContaining('白名单自动允许')
     );
   });
 
-  it('极危命令即使白名单命中也不自动放行（回退挂起等用户确认）', () => {
+  it('危险命令白名单命中同样挂起等用户确认（引擎权威裁决，不读前端风险表）', () => {
     usePermissionStore.setState({ commandPermissions: ['rm'] });
     const { router, callbacks, approvalFlow } = makeEnv();
 
@@ -310,12 +320,15 @@ describe('审批链路契约：白名单自动放行', () => {
       'shell_command',
       'rm -rf /tmp/x',
       '运行命令',
-      expect.any(Object),
+      expect.any(Object)
     );
   });
 
   it('plan 模式：不弹审批，直接 onToolStart（只读规划语义）', () => {
-    usePermissionStore.setState({ permissionMode: 'plan', planModeEnabled: true });
+    usePermissionStore.setState({
+      permissionMode: 'plan',
+      planModeEnabled: true,
+    });
     const { router, callbacks, approvalFlow } = makeEnv();
 
     router.onMsg(approvalRequestedEvent('tc-p', 'npm install lodash'));
@@ -327,7 +340,7 @@ describe('审批链路契约：白名单自动放行', () => {
       'tc-p',
       'shell_command',
       'npm install lodash',
-      '运行命令',
+      '运行命令'
     );
   });
 });

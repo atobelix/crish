@@ -149,6 +149,12 @@ pub fn filter_registry_for_task_type(
 /// 命令级白名单判定（按任务类型派生命令策略；T-D-08，shell 命令执行门禁
 /// 兜底过滤——工具面已剔除 shell_command 的类型此处一并拒绝）
 ///
+/// **边界登记（P1 权限归一 D8）**：本函数是「spawn 时工具裁剪」独立层
+/// （子代理按任务类型装配工具集时的命令策略），**不参与每命令放行判定**——
+/// 每命令「是否放行/拒绝/需审批」的唯一判定链为
+/// `crate::permission::decide_command_with_revert`（执行器 `call_verdict`
+/// 与 shell 工具共用）；本层与单链互不调用、互不并链，语义不删不改。
+///
 /// - `commit` → 仅 `git` 命令（前缀过滤口径：命令首词必须为 git）；
 /// - `implementation` → 构建/测试类命令白名单：复用语义层
 ///   `semantics::analyze` 的 CommandClass 分类（不维护命令前缀表），

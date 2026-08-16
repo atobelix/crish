@@ -2,17 +2,21 @@ import type { AgentMessage, AgentMessageBlock } from './message';
 import type {
   ToolBatchCall,
   ToolBatchResult,
-  ToolProgressUpdate,
   ProviderDiagnostic,
   ContextCompressionRecord,
   RuntimeCheckpointRecord,
   RuntimeCheckpointRestoreRecord,
 } from './tool';
-import type { PermissionRequest } from './permissions';
+import type { PermissionRequest } from './generated/engine/types';
 // F8-09/F8-10：手写类型收敛到生成 schema（杜绝双源漂移）——
 // AgentEndReason 含 stopped（Rust AgentEndReason::Stopped 已存在）、
-// ApprovalDecision 三值（approved/denied/expired）
-import type { AgentEndReason, ApprovalDecision } from './generated/engine/types';
+// ApprovalDecision 三值（approved/denied/expired）。
+// P1 权限归一（D2）：PermissionRequest 以引擎生成契约为准（手写
+// permissions.ts 已整删，wire 消费面同源 generated/engine）。
+import type {
+  AgentEndReason,
+  ApprovalDecision,
+} from './generated/engine/types';
 
 export type AgentDomainEvent =
   | { type: 'agent-start'; sessionId: string; timestamp: string }
@@ -62,14 +66,6 @@ export type ToolDomainEvent =
       sessionId: string;
       batchId: string;
       call: ToolBatchCall;
-      timestamp: string;
-    }
-  | {
-      type: 'tool-update';
-      sessionId: string;
-      batchId: string;
-      toolCallId: string;
-      update: ToolProgressUpdate;
       timestamp: string;
     }
   | {

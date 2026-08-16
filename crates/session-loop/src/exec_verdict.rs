@@ -88,7 +88,16 @@ impl ToolExecutor {
 
     /// 权限判定（R4 T10）：permission_mode 显式设置时按工具 dangerous
     /// 标记 + 模式三态判定；未设置（None）时沿用既有语义——approval
-    /// 开启即视为需审批。
+    /// 开启即视为需审批（legacy 全批审批）；approval 未开启（无审批
+    /// 基础设施）时按 Ask 矩阵判定（A3 fail-closed 配套：安全项放行、
+    /// 危险项 NeedsApproval → 由执行器不透传执行）。
+    ///
+    /// 命令判定唯一链（P1 权限归一 A2/D8）：`input.command` 携带命令文本时
+    /// 经 [agent_tools::permission::decide_command_with_revert] 单一链判定
+    /// （红线先行 → C3 回退护栏 → 三态矩阵）——与 shell 工具执行器消费
+    /// 同一条链，杜绝「pre 判定 one way / during 判定 another way」；
+    /// 回退护栏的字符串便捷入口已随收敛删除（护栏仍经链内 `gate_verdict`
+    /// 挂载，语义不变）。
     ///
     /// C3（I3-S6）判定点（C4/S10b 经此挂载，不并写本文件主体）：入参含
     /// 命令文本时先过回退护栏——GitRevertShape 段 + 面积超阈值 →
@@ -106,21 +115,39 @@ impl ToolExecutor {
             .get("command")
             .and_then(serde_json::Value::as_str)
         {
+            // 未设置权限模式：沿用既有语义（approval 开启 → 全批审批），
+            // 不进入单链（与 legacy 逐行等价：C3 大回退在此同样
+            // NeedsApproval，其余一律按需审批收口）
+            if options.permission_mode.is_none() {
+                return PermissionVerdict::NeedsApproval;
+            }
             let mode = options.permission_mode.unwrap_or_default();
-            if let Some(verdict) = self.revert_policy.gate_verdict_command(command, mode) {
-                return verdict;
-            }
+            let dangerous = self
+                .registry
+                .get(&call.tool_name)
+                .map(|t| t.definition().dangerous)
+                .unwrap_or(false);
+            // 命令判定唯一链：红线先行 → C3 回退护栏 → 三态矩阵
+            return agent_tools::permission::decide_command_with_revert(
+                command,
+                dangerous,
+                false,
+                mode,
+                &self.revert_policy,
+            );
         }
+        let dangerous = self
+            .registry
+            .get(&call.tool_name)
+            .map(|t| t.definition().dangerous)
+            .unwrap_or(false);
         match options.permission_mode {
-            Some(mode) => {
-                let dangerous = self
-                    .registry
-                    .get(&call.tool_name)
-                    .map(|t| t.definition().dangerous)
-                    .unwrap_or(false);
-                decide(dangerous, false, mode)
-            }
-            None => PermissionVerdict::NeedsApproval,
+            Some(mode) => decide(dangerous, false, mode),
+            // legacy：approval 开启 → 全部工具调用走审批
+            None if options.approval_enabled => PermissionVerdict::NeedsApproval,
+            // A3 fail-closed 配套：无审批基础设施时安全项放行执行、
+            // 危险项 NeedsApproval（执行器不透传执行，见 exec_single/exec_batch）
+            None => decide(dangerous, false, PermissionMode::Ask),
         }
     }
 

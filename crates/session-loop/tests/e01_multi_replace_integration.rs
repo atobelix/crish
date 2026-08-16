@@ -43,6 +43,17 @@ use session_loop::{ToolBatchOptions, ToolErrorKind, ToolExecCtx, ToolExecutor};
 /// multi_replace 工具名（注册键；与 replace.rs:28 常量同值，测试面硬断言）
 const MULTI_REPLACE_TOOL: &str = "multi_replace_file_content";
 
+/// 引擎层执行选项（P1 权限归一 A3 fail-closed 契约）：无审批基础设施的
+/// 执行器不再透传执行危险工具（multi_replace 属 dangerous）——本组用例
+/// 聚焦写路径互斥 / 备份 / 幂等 / 配额而非权限行为，显式声明 full-access
+/// 权限模式放行（与 c1b_backup_through_loop 同口径）
+fn exec_opts() -> ToolBatchOptions {
+    ToolBatchOptions {
+        permission_mode: Some(agent_tools::permission::PermissionMode::FullAccess),
+        ..Default::default()
+    }
+}
+
 /// 写路径互斥冲突错误码（write_paths.rs:37 局部码，pub(crate) 不导出——
 /// 测试面按字面量断言）
 const TOOL_WRITE_PATH_CONFLICT_CODE: &str = "tool.write_path_conflict";
@@ -231,7 +242,7 @@ async fn multi_replace_conflict_through_engine_executor() {
             &[mrepl_call("c1", args)],
             &exec_ctx_wired(&ws, Some(Arc::clone(&registry)), None),
             None,
-            &ToolBatchOptions::default(),
+            &exec_opts(),
             None,
         )
         .await;
@@ -283,7 +294,7 @@ async fn multi_replace_snapshot_and_restore_force_roundtrip() {
             &[mrepl_call("c1", args)],
             &exec_ctx(&ws),
             None,
-            &ToolBatchOptions::default(),
+            &exec_opts(),
             None,
         )
         .await;
@@ -324,7 +335,7 @@ async fn multi_replace_second_call_deduplicated() {
     let guard = Arc::new(ToolIdempotencyGuard::new());
     let exec = ToolExecutor::new(builtin_registry()).with_idempotency(guard);
     let ctx = exec_ctx(&ws);
-    let opts = ToolBatchOptions::default();
+    let opts = exec_opts();
 
     // 第一次调用：真正执行，三块全部生效
     let first = exec
@@ -440,7 +451,7 @@ async fn multi_replace_quota_exhaustion_through_engine_executor() {
     let ws = TempWorkspace::new("e01_mr_quota_engine");
     ws.write_file("doc1.md", "发现一\n");
     let exec = ToolExecutor::new(builtin_registry());
-    let opts = ToolBatchOptions::default();
+    let opts = exec_opts();
     // 配额上下文（T-EG-06 契约：配额 store 实例注入执行上下文；quota=1
     // 首份消耗后即耗尽）
     let quota_ctx = ExploreDocsQuotaContext {

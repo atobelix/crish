@@ -1,25 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
   addCommandPermission,
-  classifyShellRisk,
   COMMAND_PERMISSIONS_STORAGE_KEY,
   coerceCommandText,
   commandMatchVariants,
   commandMatchesWhitelist,
   dedupeWhitelist,
   extractCommandForMatch,
-  isSafeReadCommand,
   isTokenBoundaryPrefix,
   loadCommandPermissions,
-  matchesDenyPattern,
-  matchesHardlinePattern,
   normalizeCommandLine,
   removeCommandPermission,
   sanitizeWhitelistEntry,
   saveCommandPermissions,
-  shellRiskMessage,
-  shouldAutoApproveCommand,
-  splitCommandSegments,
   stripWindowsExecutableExtension,
   unwrapShellWrapper,
 } from './commandPermissions';
@@ -78,7 +71,9 @@ describe('commandPermissions', () => {
   it('allows exact match and whitespace-separated args only', () => {
     expect(isTokenBoundaryPrefix('git', 'git')).toBe(true);
     expect(isTokenBoundaryPrefix('git status', 'git')).toBe(true);
-    expect(isTokenBoundaryPrefix('GIT STATUS --short', 'git status')).toBe(true);
+    expect(isTokenBoundaryPrefix('GIT STATUS --short', 'git status')).toBe(
+      true
+    );
     // no reverse match: long whitelist does not auto-match shorter command
     expect(commandMatchesWhitelist('git', ['git status'])).toBe(false);
   });
@@ -90,38 +85,49 @@ describe('commandPermissions', () => {
   });
 
   it('extractCommandForMatch digs into JSON args', () => {
-    expect(extractCommandForMatch('shell_command', 'git status')).toBe('git status');
+    expect(extractCommandForMatch('shell_command', 'git status')).toBe(
+      'git status'
+    );
     expect(
-      extractCommandForMatch('shell_command', JSON.stringify({ command: 'npm test' })),
+      extractCommandForMatch(
+        'shell_command',
+        JSON.stringify({ command: 'npm test' })
+      )
     ).toBe('npm test');
     expect(
       extractCommandForMatch(
         'shell_command',
-        JSON.stringify({ argv: ['git', 'status', '--short'] }),
-      ),
+        JSON.stringify({ argv: ['git', 'status', '--short'] })
+      )
     ).toBe('git status --short');
     expect(
-      extractCommandForMatch('shell_command', JSON.stringify({ cmd: 'ls -la' })),
+      extractCommandForMatch('shell_command', JSON.stringify({ cmd: 'ls -la' }))
     ).toBe('ls -la');
   });
 
   it('whitelist match uses extract path for JSON tool args', () => {
     const line = extractCommandForMatch(
       'run_terminal_cmd',
-      JSON.stringify({ command: 'git status --porcelain' }),
+      JSON.stringify({ command: 'git status --porcelain' })
     );
     expect(commandMatchesWhitelist(line, ['git status'])).toBe(true);
     const evil = extractCommandForMatch(
       'run_terminal_cmd',
-      JSON.stringify({ command: 'gitignore' }),
+      JSON.stringify({ command: 'gitignore' })
     );
     expect(commandMatchesWhitelist(evil, ['git'])).toBe(false);
   });
 
   it('dedupeWhitelist normalizes and case-folds keys', () => {
-    expect(dedupeWhitelist(['git status', '  git   status  ', 'GIT STATUS', 'npm test', ''])).toEqual(
-      ['git status', 'npm test'],
-    );
+    expect(
+      dedupeWhitelist([
+        'git status',
+        '  git   status  ',
+        'GIT STATUS',
+        'npm test',
+        '',
+      ])
+    ).toEqual(['git status', 'npm test']);
   });
 
   it('load/saveCommandPermissions use storage key and seed', () => {
@@ -130,12 +136,17 @@ describe('commandPermissions', () => {
     expect(seeded).toContain('git status');
     expect(seeded).toContain('npm test');
 
-    saveCommandPermissions(['  git status  ', 'git status', 'npm run typecheck'], empty);
-    expect(JSON.parse(empty.mem.get(COMMAND_PERMISSIONS_STORAGE_KEY)!)).toEqual([
+    saveCommandPermissions(
+      ['  git status  ', 'git status', 'npm run typecheck'],
+      empty
+    );
+    expect(JSON.parse(empty.mem.get(COMMAND_PERMISSIONS_STORAGE_KEY)!)).toEqual(
+      ['git status', 'npm run typecheck']
+    );
+    expect(loadCommandPermissions(empty)).toEqual([
       'git status',
       'npm run typecheck',
     ]);
-    expect(loadCommandPermissions(empty)).toEqual(['git status', 'npm run typecheck']);
   });
 
   it('add/removeCommandPermission persist via sanitize + injected storage', () => {
@@ -174,40 +185,48 @@ describe('commandPermissions', () => {
     expect(dedupeWhitelist(null)).toEqual([]);
     expect(dedupeWhitelist(undefined)).toEqual([]);
     expect(dedupeWhitelist('git' as unknown)).toEqual([]);
-    expect(addCommandPermission(null, 'git status', memStorage())).toEqual(['git status']);
+    expect(addCommandPermission(null, 'git status', memStorage())).toEqual([
+      'git status',
+    ]);
     expect(removeCommandPermission(null, 'git', memStorage())).toEqual([]);
     expect(extractCommandForMatch(null, null)).toBe('');
     expect(extractCommandForMatch(undefined, undefined)).toBe('');
     expect(extractCommandForMatch('shell', null)).toBe('shell');
-    expect(classifyShellRisk(null).level).toBe('unknown');
-    expect(classifyShellRisk('').level).toBe('unknown');
-    expect(shouldAutoApproveCommand(null, ['git'])).toBe(false);
-    expect(shouldAutoApproveCommand('git status', null)).toBe(false);
   });
 
   // ── Windows path / cmd edges ────────────────────────────────────────────
 
   it('stripWindowsExecutableExtension removes first-token .exe/.cmd/.ps1', () => {
-    expect(stripWindowsExecutableExtension('git.exe status')).toBe('git status');
-    expect(stripWindowsExecutableExtension('GIT.EXE')).toBe('GIT');
-    expect(stripWindowsExecutableExtension('C:\\Tools\\git.exe status --short')).toBe(
-      'C:\\Tools\\git status --short',
+    expect(stripWindowsExecutableExtension('git.exe status')).toBe(
+      'git status'
     );
+    expect(stripWindowsExecutableExtension('GIT.EXE')).toBe('GIT');
+    expect(
+      stripWindowsExecutableExtension('C:\\Tools\\git.exe status --short')
+    ).toBe('C:\\Tools\\git status --short');
     expect(stripWindowsExecutableExtension('npm.cmd test')).toBe('npm test');
     expect(stripWindowsExecutableExtension('script.ps1 -x')).toBe('script -x');
     // not first-token only mess: middle .exe stays if not first token pattern
-    expect(stripWindowsExecutableExtension('echo file.exe')).toBe('echo file.exe');
+    expect(stripWindowsExecutableExtension('echo file.exe')).toBe(
+      'echo file.exe'
+    );
   });
 
   it('unwrapShellWrapper peels cmd /c and powershell -Command', () => {
     expect(unwrapShellWrapper('cmd /c git status')).toBe('git status');
-    expect(unwrapShellWrapper('cmd.exe /c git status --short')).toBe('git status --short');
-    expect(unwrapShellWrapper('cmd /d /c "git status"')).toBe('git status');
-    expect(unwrapShellWrapper('C:\\Windows\\System32\\cmd.exe /c git log')).toBe('git log');
-    expect(unwrapShellWrapper('powershell -Command git status')).toBe('git status');
-    expect(unwrapShellWrapper('powershell.exe -NoProfile -Command "git status"')).toBe(
-      'git status',
+    expect(unwrapShellWrapper('cmd.exe /c git status --short')).toBe(
+      'git status --short'
     );
+    expect(unwrapShellWrapper('cmd /d /c "git status"')).toBe('git status');
+    expect(
+      unwrapShellWrapper('C:\\Windows\\System32\\cmd.exe /c git log')
+    ).toBe('git log');
+    expect(unwrapShellWrapper('powershell -Command git status')).toBe(
+      'git status'
+    );
+    expect(
+      unwrapShellWrapper('powershell.exe -NoProfile -Command "git status"')
+    ).toBe('git status');
     expect(unwrapShellWrapper('pwsh -c "npm test"')).toBe('npm test');
     // plain command unchanged
     expect(unwrapShellWrapper('git status')).toBe('git status');
@@ -217,102 +236,51 @@ describe('commandPermissions', () => {
     const wl = ['git status', 'npm test'];
     expect(commandMatchesWhitelist('git.exe status', wl)).toBe(true);
     expect(commandMatchesWhitelist('cmd /c git status', wl)).toBe(true);
-    expect(commandMatchesWhitelist('cmd.exe /c "git status --short"', wl)).toBe(true);
-    expect(commandMatchesWhitelist('powershell -Command git status', wl)).toBe(true);
+    expect(commandMatchesWhitelist('cmd.exe /c "git status --short"', wl)).toBe(
+      true
+    );
+    expect(commandMatchesWhitelist('powershell -Command git status', wl)).toBe(
+      true
+    );
     // still no bare prefix leak
     expect(commandMatchesWhitelist('cmd /c gitignore', ['git'])).toBe(false);
     expect(commandMatchesWhitelist('git.exe', ['git'])).toBe(true); // stripped to git exact
-    expect(commandMatchVariants('cmd /c git.exe status').some((v) => /git status/i.test(v))).toBe(
-      true,
-    );
-  });
-
-  // ── risk classify / deny / allow ────────────────────────────────────────
-
-  it('classifyShellRisk: safe reads, write, network, destructive, critical', () => {
-    expect(classifyShellRisk('git status').level).toBe('safe');
-    expect(classifyShellRisk('npm test').level).toBe('safe');
-    expect(classifyShellRisk('ls -la').level).toBe('safe');
-    expect(isSafeReadCommand('git log --oneline')).toBe(true);
-
-    expect(classifyShellRisk('git commit -m x').level).toBe('medium');
-    expect(classifyShellRisk('curl https://example.com').level).toBe('medium');
-    expect(classifyShellRisk('npm install lodash').level).toBe('medium');
-
-    expect(classifyShellRisk('rm -rf dist').level).toBe('high');
-    expect(classifyShellRisk('git push origin main').level).toBe('high');
-    expect(matchesDenyPattern('rm -rf dist')).toBe(true);
-    expect(matchesDenyPattern('git push')).toBe(true);
-
-    expect(classifyShellRisk('format C:').level).toBe('critical');
-    expect(classifyShellRisk('shutdown /s').level).toBe('critical');
-    expect(classifyShellRisk('powershell -EncodedCommand AABB').level).toBe('critical');
-    expect(matchesHardlinePattern('format D:')).toBe(true);
-    expect(matchesHardlinePattern('git status')).toBe(false);
-  });
-
-  it('classifyShellRisk compound takes stricter segment', () => {
-    const c = classifyShellRisk('git status && rm -rf /tmp/x');
-    expect(c.level).toBe('high');
-    expect(c.hardDeny).toBe(true);
-    expect(classifyShellRisk('ls && pwd').level).toBe('safe');
-  });
-
-  it('Chinese-safe shellRiskMessage for every level', () => {
-    expect(shellRiskMessage('safe')).toMatch(/白名单|只读|低风险/);
-    expect(shellRiskMessage('low')).toMatch(/放行|风险/);
-    expect(shellRiskMessage('medium')).toMatch(/确认|风险/);
-    expect(shellRiskMessage('high')).toMatch(/高风险|不建议/);
-    expect(shellRiskMessage('critical')).toMatch(/极危|禁止/);
-    expect(shellRiskMessage('unknown')).toMatch(/无法识别|确认/);
-    expect(shellRiskMessage('not-a-level')).toMatch(/无法识别|确认/);
-    // classify always pairs Chinese message
-    expect(classifyShellRisk('format C:').message).toBe(shellRiskMessage('critical'));
-    expect(classifyShellRisk('git status').message).toBe(shellRiskMessage('safe'));
-  });
-
-  it('shouldAutoApproveCommand requires whitelist and blocks deny even if listed', () => {
-    const wl = ['git status', 'rm -rf', 'git push', 'format C:'];
-    expect(shouldAutoApproveCommand('git status', wl)).toBe(true);
-    expect(shouldAutoApproveCommand('git status --short', wl)).toBe(true);
-    // whitelist contains destructive / hardline — still hard deny
-    expect(shouldAutoApproveCommand('rm -rf dist', wl)).toBe(false);
-    expect(shouldAutoApproveCommand('git push origin main', wl)).toBe(false);
-    expect(shouldAutoApproveCommand('format C:', wl)).toBe(false);
-    // not on whitelist
-    expect(shouldAutoApproveCommand('git log', wl)).toBe(false);
-    // Windows wrapper of safe command still auto
-    expect(shouldAutoApproveCommand('cmd /c git status', wl)).toBe(true);
-  });
-
-  it('splitCommandSegments respects quotes and separators', () => {
-    expect(splitCommandSegments('git status && npm test')).toEqual(['git status', 'npm test']);
-    expect(splitCommandSegments('echo "a|b" | cat')).toEqual(['echo "a|b"', 'cat']);
-    expect(splitCommandSegments('a; b')).toEqual(['a', 'b']);
-    expect(splitCommandSegments('')).toEqual([]);
-    expect(splitCommandSegments(null)).toEqual([]);
+    expect(
+      commandMatchVariants('cmd /c git.exe status').some((v) =>
+        /git status/i.test(v)
+      )
+    ).toBe(true);
   });
 
   it('extractCommandForMatch nested parameters / argv / empty JSON', () => {
     expect(
       extractCommandForMatch(
         'run',
-        JSON.stringify({ parameters: { command: 'git diff' } }),
-      ),
+        JSON.stringify({ parameters: { command: 'git diff' } })
+      )
     ).toBe('git diff');
     expect(
-      extractCommandForMatch('run', JSON.stringify({ input: { script: 'npm test' } })),
+      extractCommandForMatch(
+        'run',
+        JSON.stringify({ input: { script: 'npm test' } })
+      )
     ).toBe('npm test');
     expect(extractCommandForMatch('fallback_tool', '{}')).toBe('{}');
-    expect(extractCommandForMatch('t', JSON.stringify(['git', 'status']))).toBe('git status');
+    expect(extractCommandForMatch('t', JSON.stringify(['git', 'status']))).toBe(
+      'git status'
+    );
     // non-JSON object stringified args must not become [object Object] path when passed as object
-    expect(extractCommandForMatch('shell', { command: 'x' } as unknown)).toBe('shell');
+    expect(extractCommandForMatch('shell', { command: 'x' } as unknown)).toBe(
+      'shell'
+    );
   });
 
   it('loadCommandPermissions recovers from corrupt JSON and non-array', () => {
     const bad = memStorage({ [COMMAND_PERMISSIONS_STORAGE_KEY]: '{not json' });
     expect(loadCommandPermissions(bad)).toContain('git status');
-    const notArr = memStorage({ [COMMAND_PERMISSIONS_STORAGE_KEY]: JSON.stringify({ a: 1 }) });
+    const notArr = memStorage({
+      [COMMAND_PERMISSIONS_STORAGE_KEY]: JSON.stringify({ a: 1 }),
+    });
     expect(loadCommandPermissions(notArr)).toContain('npm test');
     // null storage
     expect(loadCommandPermissions(null)).toContain('git status');

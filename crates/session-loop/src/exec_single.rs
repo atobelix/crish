@@ -158,11 +158,13 @@ impl ToolExecutor {
                     }
                 }
             },
-            // 审批未启用 / 无门：plan 模式写类仍拒绝；显式 ask 模式缺审批
-            // 基础设施时危险项透传需审批状态（不再 SoftDeny 折叠）
+            // 审批未启用 / 无门（A3 fail-closed，P1 权限归一）：Deny 直接拒绝；
+            // NeedsApproval 一律不透传执行——无审批基础设施 → 拒绝
+            //（ApprovalRequired，对齐 computer-tools 缺门拒绝语义），
+            // 仅 Allow 进入执行面
             _ => match verdict {
                 PermissionVerdict::Deny => denied_result(call, options),
-                PermissionVerdict::NeedsApproval if options.permission_mode.is_some() => {
+                PermissionVerdict::NeedsApproval => {
                     ClassifiedToolResult::error(
                         &call.id,
                         &call.tool_name,
@@ -171,7 +173,7 @@ impl ToolExecutor {
                         0,
                     )
                 }
-                _ => {
+                PermissionVerdict::Allow => {
                     let (r, extra) = self
                         .execute_single_with_retry(call, ctx, options, abort, approval.clone())
                         .await;
@@ -370,8 +372,12 @@ impl ToolExecutor {
                 }
             }
         }
-        // 2) tool.pre 事件广播（HookRegistry；handler Block = 阻止执行；
-        //    propagate 失败降级为阻止，不中断批执行）
+        // 2) tool.pre 事件广播（HookRegistry；handler Block = 策略性阻止执行；
+        //    propagate 失败降级为阻止，不中断批执行）。
+        //    P1 权限归一（A1）：tool.pre 为「扩展观察/策略插入通道」，**不
+        //    构成平行 allow/deny 审批第二权威**——命令是否需审批由引擎
+        //    call_verdict 单一决策（本处运行于审批已通过之后，仅保留
+        //    插件策略性拒绝能力，且无任何「放行/自动批准」路径）
         if blocked.is_none() {
             if let Some(hooks) = &self.hooks {
                 let event = HookEvent::ToolPre {
@@ -416,28 +422,12 @@ impl ToolExecutor {
         // 执行入参 = 中间件链修改后的最终入参（未经 before 链时与原始入参一致）
         let exec_input = current_input.clone();
         let start = std::time::Instant::now();
-        // S1（TOOLS-01 §3.1.5）：流式执行 + 进度出站——Progress 经
-        // [tool_progress_update] 映射为 ToolEvent::ToolProgress 入进度缓冲，
-        // 执行完成后并入事件链（时序 tool-start → tool-update* → tool-end；
-        // ToolUpdate 为展示面不进消息历史，终值仍由 ToolEnd 承载）。Content
-        // 阶段 1 不发射（映射返回 None 直接丢弃）；幂等命中路径零 Progress
-        //（executor 内早退不回调，D3）；abort/超时路径已入队的进度保留
-        //（流被 drop 前已回调，契约「已发 Progress 保留」）。
-        let progress_buffer: Arc<Mutex<Vec<ToolEvent>>> = Arc::new(Mutex::new(Vec::new()));
-        let progress: Option<Arc<dyn Fn(ToolProgress) + Send + Sync>> = Some(Arc::new({
-            let buffer = Arc::clone(&progress_buffer);
-            let call_id = call.id.clone();
-            move |p: ToolProgress| {
-                if let Some(update) = tool_progress_update(&p) {
-                    buffer.lock().unwrap().push(ToolEvent::ToolProgress {
-                        call_id: call_id.clone(),
-                        update,
-                    });
-                }
-            }
-        }));
         // 执行体 future：幂等守卫开启时透传守卫（execute_stream_with_output_policy
-        // 的幂等去重 + 输出预算语义，T06.4.2/T06.4.4）
+        // 的幂等去重 + 输出预算语义，T06.4.2/T06.4.4）。
+        // R1（tool-update 死契约删除）：不再装配进度回调——S1 流式进度无
+        // 出站事件（tool-update 事件契约已删，前端零消费），终值仍由
+        // ToolEnd 承载；执行器 progress 参数传 None（ToolProgress 流式协议
+        // 类型保留供 agent-tools 内部使用）。
         let execute = async {
             if let Some(g) = guard.as_ref() {
                 execute_stream_with_output_policy(
@@ -447,7 +437,7 @@ impl ToolExecutor {
                     &exec_ctx,
                     Some(g.as_ref()),
                     &policy,
-                    progress.clone(),
+                    None,
                 )
                 .await
             } else {
@@ -458,7 +448,7 @@ impl ToolExecutor {
                     &exec_ctx,
                     None,
                     &policy,
-                    progress.clone(),
+                    None,
                 )
                 .await
             }
@@ -487,12 +477,8 @@ impl ToolExecutor {
             .as_ref()
             .map(|c| c.take_recorded())
             .unwrap_or_default();
-        // S1：进度事件并入事件链（执行 future 已 resolve/drop，缓冲不再
-        // 增长）——后续所有返回分支（abort/超时/成功/失败）自动携带已发
-        // 进度，保持 tool-start → tool-update* → tool-end 时序与
-        // 「abort 后已发 Progress 保留」契约
-        let mut recorded = recorded;
-        recorded.extend(std::mem::take(&mut *progress_buffer.lock().unwrap()));
+        // R1（tool-update 死契约删除）：S1 进度缓冲已随删除移除——
+        // 事件链仅含审批附加事件（tool-start → tool-end 时序不变）
 
         if let Some(sig) = abort {
             if sig.is_aborted() {

@@ -16,6 +16,7 @@ use crate::audit::{NoopAuditSink, SecurityAuditSink};
 use crate::background::BackgroundTaskManager;
 use crate::context::{AskDecision, ToolContext};
 use crate::definition::{Tool, ToolDefinition, ToolError};
+use crate::permission::{PermissionMode, PermissionVerdict};
 use crate::streaming::{terminal_only, ToolStream};
 use crate::tools::{
     display_path, optional_bool, optional_string, optional_u64, require_string,
@@ -225,32 +226,54 @@ impl ShellCommandTool {
             mode == ShellMode::Daemon || optional_bool(args, "isDaemon").unwrap_or(false);
         let resource_monitor = optional_bool(args, "resourceMonitor").unwrap_or(false);
 
-        // 权限集中化评估（物理红线、Plan模式阻断、GitRevert护栏、删除重定向、CD拦截与审批）
+        // 权限集中评估（P1 权限归一 A2/D8：命令判定唯一链 =
+        // decide_command_with_revert，与执行器 call_verdict 同链——不再存在
+        // 第二套命令评估实现；门禁层上下文感知（工作区越界 / 危险形态 →
+        // RequiresApproval）折算为 requires_approval 入链；工具级形态机制
+        // （物理红线 / Plan 阻断 / 删除重定向 / CD 拦截）保持为工具行为，
+        // 不构成平行 allow/deny 判定）
         let gatekeeper = CommandGatekeeper::new();
-        let perm_req = crate::permission::CommandPermissionRequest {
-            command_line: &command,
-            cwd: &cwd,
-            workspace_root,
-            permission_mode: ctx.permission_mode,
-            is_dangerous: false,
-            revert_policy: None,
-            gatekeeper: Some(&gatekeeper),
-            trash_root: self.trash_root.clone(),
-        };
+        let gate_result = gatekeeper.check_command_with_context(
+            &command,
+            &[],
+            &gate_path(&cwd),
+            &gate_path(workspace_root),
+        );
+        let analysis = conex_sandbox::semantics::analyze(&command);
 
-        match crate::permission::PermissionDecisionEngine::evaluate_command(&perm_req) {
-            crate::permission::CommandDecision::Allow => {}
-            crate::permission::CommandDecision::Deny {
-                reason,
-                is_redline,
-                audit_op,
-            } => {
-                if is_redline {
-                    emit_blocked_audit(&self.audit_sink, ctx, audit_op, vec![command.clone()]);
-                }
-                return Prepared::Done(Err(ToolError::new(TOOL_COMMAND_BLOCKED, reason)));
-            }
-            crate::permission::CommandDecision::RedirectDelete { analysis } => {
+        // 1. 物理红线（门禁层 Blocked = 静态清单 + 语义 Redline）与系统核心
+        //    关键目录：一律 Deny（S2/S4 定理，任何权限模式不可豁免）
+        if gate_result == conex_sandbox::gatekeeper::GatekeeperResult::Blocked
+            || conex_fs::ConexPathNormalizer::is_system_critical_path(&cwd)
+        {
+            emit_blocked_audit(
+                &self.audit_sink,
+                ctx,
+                conex_types::events::SecurityAuditOperation::CommandExec,
+                vec![command.clone()],
+            );
+            return Prepared::Done(Err(ToolError::new(
+                TOOL_COMMAND_BLOCKED,
+                format!("PermissionDenied: Command blocked by safety red-line gatekeeper: {command}"),
+            )));
+        }
+
+        // 2. Plan 模式硬性阻断（DIM-04：只读规划模式严禁执行任何 Shell 命令）
+        if ctx.permission_mode == PermissionMode::Plan {
+            return Prepared::Done(Err(ToolError::new(
+                TOOL_COMMAND_BLOCKED,
+                "PermissionDenied: Shell command execution is prohibited in Plan (Read-Only) mode."
+                    .to_string(),
+            )));
+        }
+
+        // 3. 删除形态重定向（I2-S4）：FullAccess 信任放行；非 FullAccess 走
+        //    回收站接管——先于审批判定（既有语义：删除形态不弹审批，直接
+        //    重定向/拦截引导）
+        if ctx.permission_mode != PermissionMode::FullAccess {
+            if analysis.overall_class == conex_sandbox::semantics::CommandClass::DeleteShape
+                || analysis.has_indirect_delete
+            {
                 return Prepared::Done(redirect_or_intercept_delete(
                     &analysis,
                     &command,
@@ -261,10 +284,34 @@ impl ShellCommandTool {
                     Arc::clone(&self.audit_sink),
                 ));
             }
-            crate::permission::CommandDecision::InterceptCd { message } => {
-                return Prepared::Done(Err(ToolError::new(TOOL_CD_BLOCKED, message)));
+        }
+
+        // 4. CD 形态拦截（T-AB-04：引导使用 cwd 参数）
+        if let Some(err) = intercept_cd_shape(&analysis, &command) {
+            return Prepared::Done(Err(ToolError::new(TOOL_CD_BLOCKED, err.to_string())));
+        }
+
+        // 5. 单一判定链（红线先行 → C3 回退护栏 → 三态矩阵）：越界/危险形态
+        //    由门禁层折算为 requires_approval 入链（Ask 矩阵 → NeedsApproval
+        //    → ctx.ask 审批通道）；回退护栏用默认策略（与执行器
+        //    ToolExecutor 默认同源，保证 pre/during 判定同链同果）
+        let requires_approval =
+            gate_result == conex_sandbox::gatekeeper::GatekeeperResult::RequiresApproval;
+        let verdict = crate::permission::decide_command_with_revert(
+            &command,
+            false,
+            requires_approval,
+            ctx.permission_mode,
+            &crate::revert::RevertPolicy::default(),
+        );
+        match verdict {
+            PermissionVerdict::Deny => {
+                return Prepared::Done(Err(ToolError::new(
+                    TOOL_COMMAND_BLOCKED,
+                    format!("PermissionDenied: Command denied by permission policy: {command}"),
+                )));
             }
-            crate::permission::CommandDecision::NeedsApproval { prompt } => {
+            PermissionVerdict::NeedsApproval => {
                 match &ctx.ask {
                     Some(ask) => match ask.ask(&self.def.name, args).await {
                         Ok(AskDecision::Allowed) => {}
@@ -279,11 +326,12 @@ impl ShellCommandTool {
                     None => {
                         return Prepared::Done(Err(ToolError::new(
                             TOOL_REQUIRES_APPROVAL,
-                            prompt,
+                            format!("Command requires approval: {command}"),
                         )));
                     }
                 }
             }
+            PermissionVerdict::Allow => {}
         }
 
         // 执行上下文：三模式（manager 优先读会话级 ToolContext.background，

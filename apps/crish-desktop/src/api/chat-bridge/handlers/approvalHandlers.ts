@@ -2,16 +2,17 @@
  * 审批域 handler（T7 分派表）：approval-requested / approval-resolved。
  *
  * approval-requested 保留宽容形态（嵌套 request 或平铺 daemon WS 形状），
- * 参数抽取与白名单自动放行逻辑与原 16 分支实现完全等价
- * （自动放行额外加硬拒绝门禁：极危/破坏性命令即使白名单命中也不静默放行，
- * 对齐 commandPermissions.shouldAutoApproveCommand 契约）。
+ * 参数抽取逻辑与原 16 分支实现完全等价。
+ *
+ * P1 权限归一（B1/D1，前端二次决策 1→0）：**前端不再替用户决定「引擎已判
+ * NeedsApproval 的操作」**——白名单命中即直发引擎批准命令的自动放行分支
+ * 已下线；本 handler 只承担两种职责：展示审批卡片（approval_pending +
+ * onToolPendingApproval / onToolStart）+ 转呈用户裁决（approve/deny 按钮 →
+ * engineApproveTool / engineDenyTool）。审批权威 = 引擎
+ * ApprovalGateImpl::resolve 单一 pending 校验（竞态红线测试锁定）。
  */
-import {
-  extractCommandForMatch,
-  shouldAutoApproveCommand,
-} from '../../commandPermissions';
-import { getCommandPermissions, getPermissionMode } from '../../storeAccess';
 import { logInternalError } from '../../userFacingErrors';
+import { getPermissionMode } from '../../storeAccess';
 import { extractApprovalCommandArgs } from '../../engineEventSchema';
 import { parseApprovalRiskMeta } from '../../approvalMeta';
 import { parseApprovalPayload } from '../../approvalPayload';
@@ -26,7 +27,7 @@ export function onApprovalRequested(
   env: HandlerEnv,
   envelope: EngineEnvelope<'approval-requested'>
 ): void {
-  const { approvalFlow, callbacks, client } = env;
+  const { approvalFlow, callbacks } = env;
   const { event, raw } = envelope;
   const req = isRecord(raw.request) ? raw.request : raw;
   const toolCallId = event.request.toolCallId.trim();
@@ -63,39 +64,9 @@ export function onApprovalRequested(
     return;
   }
 
-  {
-    const line = extractCommandForMatch(toolName, args);
-    // 自动放行须过完整门禁：白名单命中且非极危/硬拒绝（shouldAutoApproveCommand），
-    // 防止「rm / format / git push 被加入白名单后静默放行」
-    if (shouldAutoApproveCommand(line, getCommandPermissions())) {
-      callbacks.onToolStart(
-        toolCallId,
-        toolName,
-        args,
-        explanation ? `${explanation}（白名单自动允许）` : '白名单自动允许'
-      );
-      // 白名单自动放行：经 transport 直发 core_approve_tool（命令名直传，T18）
-      void client
-        ?.send('core_approve_tool', { toolCallId, scope: 'project' })
-        .catch(() => {
-          approvalFlow.dispatch({
-            type: 'approval_pending',
-            toolId: toolCallId,
-          });
-          if (callbacks.onToolPendingApproval) {
-            callbacks.onToolPendingApproval(
-              toolCallId,
-              toolName,
-              args,
-              explanation,
-              metaWithPayload
-            );
-          }
-        });
-      return;
-    }
-  }
-
+  // P1 权限归一（D1）：默认展示审批卡片，让用户在 UI 明确批准——不再有
+  // 白名单命中即直发引擎批准命令的自动放行分支；裁决唯一入口 =
+  // 用户 approve/deny 按钮（engineApproveTool / engineDenyTool）
   approvalFlow.dispatch({
     type: 'approval_pending',
     toolId: toolCallId,

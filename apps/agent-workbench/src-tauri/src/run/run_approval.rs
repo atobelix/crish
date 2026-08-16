@@ -80,6 +80,9 @@ pub(crate) struct ApprovalGateImpl {
     pub(crate) store: Arc<dyn Store>,
     /// 工具执行工作目录（PermissionRequest.cwd）
     pub(crate) cwd: Option<String>,
+    /// 审批等待超时（生产 = [APPROVAL_TIMEOUT] 120s；测试注入短超时验证
+    /// 过期收场——P1 审批竞态红线：超时 Expired 后待审批集合清除）
+    approval_timeout: Duration,
 }
 
 impl ApprovalGateImpl {
@@ -104,7 +107,16 @@ impl ApprovalGateImpl {
             handle,
             store,
             cwd,
+            approval_timeout: APPROVAL_TIMEOUT,
         }
+    }
+
+    /// 覆盖审批等待超时（测试注入短超时验证过期收场；生产保持
+    /// [APPROVAL_TIMEOUT] 120s 兜底）
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(crate) fn with_approval_timeout(mut self, timeout: Duration) -> Self {
+        self.approval_timeout = timeout;
+        self
     }
 
     /// 注入死锁检测器（T-D-14 开放问题 6.4）：判定「裁决者 run 正在 wait
@@ -305,9 +317,24 @@ impl ApprovalGate for ApprovalGateImpl {
         }
 
         // 4. 等待决策（超时 → Expired；工具侧按非致命处理，01 §五.8）
-        match tokio::time::timeout(APPROVAL_TIMEOUT, rx).await {
+        match tokio::time::timeout(self.approval_timeout, rx).await {
             Ok(Ok(decision)) => decision,
-            Ok(Err(_)) | Err(_) => ApprovalDecision::Expired,
+            Ok(Err(_)) | Err(_) => {
+                // P1 审批竞态红线（主控裁决 4 / 详案 P1 §5.1）：超时 →
+                // Expired 权威收场后**同步清除待审批集合与元信息**——迟到
+                // 的 approve/deny 对已过期请求一律 NotFound（杜绝「过期后
+                // 补批」伪造 approval-resolved(approved) 审计事件；R1-04
+                // 对账面也不再把已过期条目列为待审批）
+                self.pending
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(call_id);
+                self.pending_meta
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .remove(call_id);
+                ApprovalDecision::Expired
+            }
         }
     }
 }

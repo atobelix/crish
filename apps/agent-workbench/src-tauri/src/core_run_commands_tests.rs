@@ -176,11 +176,14 @@ async fn gate_routes_subagent_request_to_main_agent_arbiter() {
 // ── R1-10 T-10：审批伪造（对不存在 tool_call_id 发批准）──
 
 /// 组装 T-10 活动 run：记录型发射桥 + 审批门（与 build_active_run 同
-/// 装配面，仅事件桥替换为可捕获发射器——断言「无 approval-resolved 落地」）
+/// 装配面，仅事件桥替换为可捕获发射器——断言「无 approval-resolved 落地」）。
+/// `approval_timeout`：审批等待超时注入（P1 竞态测试用短超时验证过期收场；
+/// 既有调用传 [APPROVAL_TIMEOUT] 保持原语义）。
 async fn t10_active_run(
     state: &CoreRunState,
     session_id: &str,
     run_id: &str,
+    approval_timeout: Duration,
 ) -> (Arc<ActiveRun>, Arc<RecordingEmitter>) {
     let handle = Arc::new(tokio::sync::Mutex::new(
         state
@@ -203,15 +206,18 @@ async fn t10_active_run(
         broadcast_bridge.emit(&envelope);
         broadcast_bridge.flush();
     });
-    let approval = Arc::new(ApprovalGateImpl::new(
-        run_id.to_string(),
-        session_id.to_string(),
-        None,
-        broadcast,
-        Arc::clone(&handle),
-        state.store.clone(),
-        None,
-    ));
+    let approval = Arc::new(
+        ApprovalGateImpl::new(
+            run_id.to_string(),
+            session_id.to_string(),
+            None,
+            broadcast,
+            Arc::clone(&handle),
+            state.store.clone(),
+            None,
+        )
+        .with_approval_timeout(approval_timeout),
+    );
     let active = Arc::new(ActiveRun {
         session_id: session_id.to_string(),
         run_id: run_id.to_string(),
@@ -254,7 +260,7 @@ async fn wait_pending(gate: &ApprovalGateImpl, tool_call_id: &str, timeout_ms: u
 #[tokio::test]
 async fn t10_approve_forged_tool_call_id_returns_not_found_no_event() {
     let (state, _registry) = state_with_background();
-    let (active, emitter) = t10_active_run(&state, "sess-t10", "run-t10").await;
+    let (active, emitter) = t10_active_run(&state, "sess-t10", "run-t10", APPROVAL_TIMEOUT).await;
     let gate = Arc::clone(&active.approval);
 
     // 真实审批请求（tc-real）进入待审批集合
@@ -321,6 +327,129 @@ async fn t10_approve_forged_tool_call_id_returns_not_found_no_event() {
     assert!(
         payloads.iter().any(|p| p.contains("approval-resolved")),
         "真实裁决后必须落地 approval-resolved"
+    );
+}
+
+// ── P1 审批竞态红线（主控裁决 4 / 详案 P1 §5.1）──
+
+/// P1 审批竞态红线：构造「前端自动 approve 超车落地」场景——approve 先于
+/// 引擎注册 / 审批已过期收场 / 审批已被 Deny 三种时序下，引擎
+/// [ApprovalGateImpl::resolve]（run_approval.rs，I-02/AA-05 pending 校验）
+/// 均返回 NotFound，不伪造放行；且全程不落地 approval-resolved(approved)
+/// 审计事件。P1-β 下线前端自动放行（D1）后本红线恒绿。
+#[tokio::test]
+async fn p1_approval_race_auto_approve_before_engine_registers_not_found() {
+    let (state, _registry) = state_with_background();
+    // 短超时门（800ms）：验证「已过期」权威收场（生产 120s 兜底语义不变；
+    // 场景 3 的裁决远快于超时，无竞态 flaky）
+    let (active, emitter) =
+        t10_active_run(&state, "sess-p1race", "run-p1race", Duration::from_millis(800)).await;
+    let gate = Arc::clone(&active.approval);
+
+    // 场景 1 非待审批（超车）：approve 在引擎 request_approval 注册前落地
+    //（前端自动放行先于引擎 authoritative 判定）→ NotFound
+    let err = approve_tool_impl(
+        &state,
+        "run-p1race",
+        "tc-before-register",
+        Some("approved".to_string()),
+    )
+    .await
+    .expect_err("未注册审批的 approve 必须 NotFound");
+    assert!(
+        matches!(&err, CoreError::NotFound(_)),
+        "非待审批 approve 必须 NotFound，实际：{err:?}"
+    );
+    assert!(
+        err.to_string().contains("not in pending approvals"),
+        "NotFound 文案必须含 pending 关键字（移动端据此收敛冲突）：{err}"
+    );
+
+    // 场景 2 已过期：request_approval 超时 → Expired 权威收场 → 待审批集合
+    // 已清除 → 迟到 approve → NotFound（不伪造放行）
+    let gate_owner = Arc::clone(&gate);
+    let wait = tokio::spawn(async move {
+        gate_owner
+            .request_approval(
+                "tc-expired",
+                "write_file",
+                &serde_json::json!({ "path": "x.md" }),
+                None,
+            )
+            .await
+    });
+    wait_pending(&gate, "tc-expired", 3_000).await;
+    let decision = tokio::time::timeout(Duration::from_secs(5), wait)
+        .await
+        .expect("短超时应在时限内返回")
+        .expect("request_approval 不应 panic");
+    assert_eq!(
+        decision,
+        ApprovalDecision::Expired,
+        "超时必须是 Expired 权威收场"
+    );
+    assert!(
+        !gate.contains_pending("tc-expired"),
+        "过期后待审批集合必须清除（迟到裁决 NotFound 的前提）"
+    );
+    let err = approve_tool_impl(
+        &state,
+        "run-p1race",
+        "tc-expired",
+        Some("approved".to_string()),
+    )
+    .await
+    .expect_err("过期后迟到 approve 必须 NotFound");
+    assert!(
+        matches!(&err, CoreError::NotFound(_)),
+        "已过期 approve 必须 NotFound，实际：{err:?}"
+    );
+
+    // 场景 3 已 Deny：首次裁决（deny）后条目清除 → 二次 approve → NotFound
+    let gate_owner = Arc::clone(&gate);
+    let wait = tokio::spawn(async move {
+        gate_owner
+            .request_approval(
+                "tc-denied",
+                "write_file",
+                &serde_json::json!({ "path": "x.md" }),
+                None,
+            )
+            .await
+    });
+    wait_pending(&gate, "tc-denied", 3_000).await;
+    deny_tool_impl(&state, "run-p1race", "tc-denied", Some("风险过高"))
+        .await
+        .expect("首次 deny 应成功（真实裁决）");
+    let decision = tokio::time::timeout(Duration::from_secs(5), wait)
+        .await
+        .expect("裁决应在时限内返回")
+        .expect("request_approval 不应 panic");
+    assert!(
+        matches!(decision, ApprovalDecision::Denied { .. }),
+        "首次裁决应为 Denied"
+    );
+    let err = approve_tool_impl(
+        &state,
+        "run-p1race",
+        "tc-denied",
+        Some("approved".to_string()),
+    )
+    .await
+    .expect_err("已 Deny 后再 approve 必须 NotFound");
+    assert!(
+        matches!(&err, CoreError::NotFound(_)),
+        "已 Deny approve 必须 NotFound，实际：{err:?}"
+    );
+
+    // 全程不得落地 approval-resolved(approved)（不伪造放行审计事件；
+    // 场景 3 的 deny 会落地 approval-resolved(denied)——只检查 approved）
+    let payloads = emitter.0.lock().unwrap().clone();
+    assert!(
+        !payloads
+            .iter()
+            .any(|p| p.contains("\"decision\":\"approved\"")),
+        "不得伪造 approval-resolved(approved) 审计事件"
     );
 }
 
@@ -6701,6 +6830,11 @@ fn test_options(run_id: &str, session_id: &str, prompt: &str) -> RunTaskOptions 
         visible_goal: None,
         max_rounds: None,
         max_stalled_rounds: None,
+        // I1-β：思考档位缺省 None（引擎默认；档位注入面由 run_launch.rs
+        // run_task_impl 装配，测试聚焦其它面不携带档位）
+        reasoning_effort: None,
+        // I1-α②：测试 run 不携带 context-state（注入面单独验收）
+        context_state: None,
     }
 }
 

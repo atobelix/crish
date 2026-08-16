@@ -13,10 +13,9 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 /**
  * approval-resolved：单一 ParseResult 路径，ok === false 判别。
- * 决策映射等价于原 zod approvalResolvedSchema：
+ * 决策映射（P1 权限归一 D4：旧 PermissionDecision{behavior} 对象解析已删）：
  * - 字符串 approved/allow → 放行；denied/expired/deny → 拒绝；
- * - 嵌套 PermissionDecision { behavior }：allow → 放行，deny/ask → 拒绝；
- * - 未知/缺失决策一律拒绝（绝不伪造放行）；
+ * - 非字符串 / 未知 / 缺失决策一律拒绝（绝不伪造放行）；
  * - 空 toolCallId 判失败。
  */
 export function parseApprovalResolvedFields(
@@ -41,12 +40,8 @@ export function parseApprovalResolvedFields(
     } else if (d === 'denied' || d === 'expired' || d === 'deny') {
       denied = true;
     }
-  } else if (decision && isRecord(decision)) {
-    const behavior = String(decision.behavior ?? '').trim().toLowerCase();
-    if (behavior === 'allow') allowed = true;
-    else if (behavior === 'deny' || behavior === 'ask') denied = true;
   }
-  // Unknown / missing decision → treat as deny (never forge allow)
+  // Unknown / missing / object-shaped decision → treat as deny (never forge allow)
   if (!allowed && !denied) denied = true;
   return parseOk({
     toolCallId,

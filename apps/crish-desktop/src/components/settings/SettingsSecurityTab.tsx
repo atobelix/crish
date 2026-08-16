@@ -1,5 +1,10 @@
 /**
- * 设置 · 安全：权限模式、工作区与可自动放行的命令；成功静默，仅错误提示。
+ * 设置 · 安全：权限模式、工作区与信任命令（批准记忆）。
+ *
+ * P1 权限归一（B2/B3，主控裁决 3）：白名单 = 批准记忆（记住用户批准过的
+ * 命令），**不再参与任何自动放行判定**；风险展示收敛为纯 UX 提示——不再
+ * 读取前端风险正则表、不再做 allow/deny 判定（放行权威 = 引擎
+ * call_verdict / ApprovalGateImpl 单一裁决链）。
  */
 import React, { useId, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
@@ -23,11 +28,7 @@ import {
   transitionPermissionMode,
   type PermissionMode,
 } from '../../api/permissionModes';
-import {
-  classifyShellRisk,
-  sanitizeWhitelistEntry,
-  type ShellRiskLevel,
-} from '../../api/commandPermissions';
+import { sanitizeWhitelistEntry } from '../../api/commandPermissions';
 
 type Props = {
   onShowToast: (msg: string) => void;
@@ -42,18 +43,16 @@ const QUICK_WHITELIST_CMDS = [
   'npm run typecheck',
 ] as const;
 
-const WHITELIST_MATCH_HINT =
-  '按整条命令匹配；后面可带参数，不会误伤相似命令名';
+const WHITELIST_MATCH_HINT = '按整条命令匹配；后面可带参数，不会误伤相似命令名';
 
-/** 风险短标签 */
-const RISK_LABEL_ZH: Record<ShellRiskLevel, string> = {
-  safe: '较安全',
-  low: '较低风险',
-  medium: '中等风险',
-  high: '高风险',
-  critical: '极高风险',
-  unknown: '未知',
-};
+/**
+ * 纯 UX 提示（P1 权限归一 B2，主控裁决 3）：白名单仅为批准记忆——是否放行
+ * 由引擎按权限模式裁决；高危命令（rm / format 等）即使加入白名单也不会被
+ * 自动放行（引擎红线/审批门禁兜底），本处不做任何 allow/deny 判定、不读
+ * 风险正则表。
+ */
+const WHITELIST_REMEMBER_HINT =
+  '高危命令（如 rm、format）不会被自动放行——白名单仅为批准记忆，放行由引擎按权限模式裁决';
 
 /** 路径短名 */
 function pathLeaf(path: string): string {
@@ -61,18 +60,19 @@ function pathLeaf(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-/** 高风险命令不可加入 */
-function isBlockedWhitelistRisk(level: ShellRiskLevel, hardDeny: boolean): boolean {
-  return hardDeny || level === 'critical' || level === 'high';
-}
-
 export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
   const permissionModeRaw = usePermissionField(selectPermissionMode);
   const setPermissionMode = usePermissionField((s) => s.setPermissionMode);
   const commandPermissions = usePermissionField(selectCommandPermissions);
-  const addCommandPermissionStore = usePermissionField((s) => s.addCommandPermission);
-  const removeCommandPermissionStore = usePermissionField((s) => s.removeCommandPermission);
-  const setCommandPermissions = usePermissionField((s) => s.setCommandPermissions);
+  const addCommandPermissionStore = usePermissionField(
+    (s) => s.addCommandPermission
+  );
+  const removeCommandPermissionStore = usePermissionField(
+    (s) => s.removeCommandPermission
+  );
+  const setCommandPermissions = usePermissionField(
+    (s) => s.setCommandPermissions
+  );
   const [newWhitelistCmd, setNewWhitelistCmd] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showAllPaths, setShowAllPaths] = useState(false);
@@ -109,9 +109,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
 
   const whitelist = useMemo(() => {
     const raw: string[] = commandPermissions || [];
-    const cleaned = raw
-      .map((x) => sanitizeWhitelistEntry(x))
-      .filter(Boolean);
+    const cleaned = raw.map((x) => sanitizeWhitelistEntry(x)).filter(Boolean);
     const seen = new Set<string>();
     const deduped: string[] = [];
     for (const cmd of cleaned) {
@@ -123,13 +121,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
     return deduped.slice().sort((a, b) => a.localeCompare(b, 'zh'));
   }, [commandPermissions]);
 
-  const draftRisk = useMemo(
-    () => classifyShellRisk(newWhitelistCmd.trim() ? newWhitelistCmd : ''),
-    [newWhitelistCmd],
-  );
   const draftTrimmed = newWhitelistCmd.trim();
-  const draftBlocked =
-    Boolean(draftTrimmed) && isBlockedWhitelistRisk(draftRisk.level, draftRisk.hardDeny);
 
   const addWhitelist = (raw?: string) => {
     const source = raw ?? newWhitelistCmd;
@@ -139,13 +131,8 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
         if (source.trim()) onShowToast('无效命令');
         return;
       }
-      const risk = classifyShellRisk(cmd);
-      if (isBlockedWhitelistRisk(risk.level, risk.hardDeny)) {
-        onShowToast(`不可加入白名单：${risk.message}`);
-        return;
-      }
       const exists = whitelist.some(
-        (x) => sanitizeWhitelistEntry(x).toLowerCase() === cmd.toLowerCase(),
+        (x) => sanitizeWhitelistEntry(x).toLowerCase() === cmd.toLowerCase()
       );
       if (exists) return;
       addCommandPermissionStore(cmd);
@@ -183,7 +170,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
   };
 
   const inputRiskTitle = draftTrimmed
-    ? `${RISK_LABEL_ZH[draftRisk.level]}：${draftRisk.message} · 回车添加`
+    ? `${WHITELIST_REMEMBER_HINT} · 回车添加`
     : `${WHITELIST_MATCH_HINT} · 回车添加`;
 
   return (
@@ -223,7 +210,9 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                         <span className="settings-path-ellipsis">{leaf}</span>
                       </Tooltip>
                     }
-                    desc={<span className="settings-security-path">{path}</span>}
+                    desc={
+                      <span className="settings-security-path">{path}</span>
+                    }
                   />
                 );
               })}
@@ -263,8 +252,12 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
         <SettingsCard>
           <div className={styles.wlRow}>
             <div className={styles.labelCol}>
-              <label htmlFor={wlInputId} className={styles.labelTitle}>添加命令</label>
-              <span className={styles.labelDesc}>匹配后可自动放行</span>
+              <label htmlFor={wlInputId} className={styles.labelTitle}>
+                添加命令
+              </label>
+              <span className={styles.labelDesc}>
+                加入批准记忆（放行仍由引擎裁决）
+              </span>
             </div>
             <div className={styles.inputGroup}>
               <input
@@ -279,7 +272,6 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                 autoCorrect="off"
                 autoCapitalize="off"
                 aria-label="要信任的命令"
-                aria-invalid={draftBlocked || undefined}
                 className={`settings-field-input settings-field-input--sm settings-field-input--grow ${styles.inputGrow}`}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -291,20 +283,16 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                   }
                 }}
               />
-              <Tooltip content={
-                draftBlocked
-                  ? `不可添加：${draftRisk.message}`
-                  : draftTrimmed
-                    ? '加入白名单'
-                    : '请输入命令'
-              }>
+              <Tooltip
+                content={draftTrimmed ? '加入白名单（批准记忆）' : '请输入命令'}
+              >
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   className={styles.actionBtn}
                   aria-label="添加命令"
-                  disabled={!draftTrimmed || draftBlocked}
+                  disabled={!draftTrimmed}
                   onClick={() => addWhitelist()}
                 >
                   添加
@@ -325,8 +313,21 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                 </Tooltip>
               ) : null}
               {showClearConfirm ? (
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.8125rem', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: '0.8125rem',
+                      color: 'var(--color-text-secondary)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     确定清除所有白名单命令？此操作不可撤销
                   </span>
                   <Button
@@ -360,10 +361,15 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
             <div className={styles.presetGroup}>
               {QUICK_WHITELIST_CMDS.map((cmd) => {
                 const already = whitelist.some(
-                  (x) => sanitizeWhitelistEntry(x).toLowerCase() === cmd.toLowerCase(),
+                  (x) =>
+                    sanitizeWhitelistEntry(x).toLowerCase() ===
+                    cmd.toLowerCase()
                 );
                 return (
-                  <Tooltip key={cmd} content={already ? '已添加' : `添加 ${cmd}`}>
+                  <Tooltip
+                    key={cmd}
+                    content={already ? '已添加' : `添加 ${cmd}`}
+                  >
                     <button
                       type="button"
                       className={`settings-chip-btn ${styles.presetChip}`}
@@ -386,18 +392,18 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
         <SettingsCard>
           {whitelist.length === 0 ? (
             <SettingsRow
-              title={<span className="settings-list-empty">还没有信任的命令</span>}
+              title={
+                <span className="settings-list-empty">还没有信任的命令</span>
+              }
               desc="上方输入命令并添加，或点击常用预设"
             />
           ) : (
             whitelist.map((cmd) => {
-              const risk = classifyShellRisk(cmd);
-              const riskTag = RISK_LABEL_ZH[risk.level];
               return (
                 <SettingsRow
                   key={cmd}
                   title={<span className={styles.cmdSpan}>{cmd}</span>}
-                  desc={`${riskTag} · ${risk.message}`}
+                  desc="批准记忆：匹配后仍需引擎按当前权限模式裁决"
                   control={
                     <Tooltip content={`移除 ${cmd}`}>
                       <Button
