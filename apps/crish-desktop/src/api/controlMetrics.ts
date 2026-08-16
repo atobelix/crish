@@ -7,7 +7,7 @@
  * - `message_upsert` — 消息按 id upsert（append 或 merge）
  * - `hydrate_prune` — hydrate/list 剪掉的幽灵空壳数
  * - `shell_empty_assert` — dev 空壳不变量失败次数
- * - `silent_complete` — run 完成但 UserView 无可见正文/工具（仅 hidden thinking 或全空）
+ * - `silent_complete` — run 完成但无用户可见正文/工具（仅 hidden thinking 或全空）
  * - `transport_degraded_direct_fetch` — inventory #10：daemon WS 不可达时自动降级 HTTP SSE
  *
  * 仅进程内累加，无 IO；供 dev assert / 单测 / 未来 health hook 读取。
@@ -18,10 +18,7 @@
  * @see docs/architecture/run-control.md §6
  */
 
-import {
-  RUN_CONTROL_LEVEL,
-  type RunControlLevel,
-} from '@crish/shared-types';
+import { RUN_CONTROL_LEVEL, type RunControlLevel } from '@crish/shared-types';
 
 export type ControlMetricKey =
   | 'run_control_L1'
@@ -61,7 +58,9 @@ export function record(key: ControlMetricKey, n = 1): void {
 }
 
 /** 快照副本（只读语义） */
-export function getControlMetrics(): Readonly<Record<ControlMetricKey, number>> {
+export function getControlMetrics(): Readonly<
+  Record<ControlMetricKey, number>
+> {
   return { ...counters };
 }
 
@@ -84,7 +83,7 @@ export function reset(): void {
 
 /** 按 wire level 记 L1/L2/L3（L0 不计） */
 export function recordRunControlLevel(
-  level: RunControlLevel | string | null | undefined,
+  level: RunControlLevel | string | null | undefined
 ): void {
   if (!level) return;
   if (level === RUN_CONTROL_LEVEL.L1 || level === 'soft_inject') {
@@ -129,7 +128,7 @@ export function recordShellEmptyAssert(count = 1): void {
 }
 
 /**
- * run completed 但 UserView 无 assistant 可见正文/工具（D2-5 silent-complete）。
+ * run completed 但无用户可见正文/工具（D2-5 silent-complete，单消息可见性直判）。
  * 不改变 run 成功语义，仅计数。
  */
 export function recordSilentComplete(count = 1): void {

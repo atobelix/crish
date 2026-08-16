@@ -1,10 +1,17 @@
 /**
  * D2-5 silent-complete-alert：检测 run「完成」但用户可见内容为空。
  *
- * Silent complete 定义（UserView 语义）：
- * - 终态 assistant 消息在投影后 **无 visibleText**
- * - **无 tool 卡**
+ * Silent complete 定义（单消息可见性直接判定，V1-α）：
+ * - 终态 assistant 消息在直接判定后 **无可见正文**（剥思考占位后）
+ * - **无可见工具卡**
  * - 仅 hidden thinking / 占位思考 **不算** 用户可见
+ *
+ * V1-α（统一输入流收敛战役）：判定消费从旧旁路投影（用户视图投影模块，
+ * 已随 V1-β 删除）迁移为 **SessionMessage 单路直接判定**——判定所需仅为单条
+ * assistant 消息的 visibleText / thinkingPreview / tools 可见度，无需整套
+ * 用户视图 DTO / hiddenBuckets / stats。行为与 metric 语义保留：
+ * `recordSilentComplete` / `checkAndAlertSilentComplete` 调用点 / dev console.warn
+ * 全部原样在案（迁移而非删除）。
  *
  * 纯判定不写 store、不改 run 成功语义；告警路径只记 controlMetric + dev console。
  *
@@ -14,17 +21,11 @@
 
 import type { SessionMessage } from '../store/layoutStore';
 import { recordSilentComplete } from './controlMetrics';
-import {
-  projectSessionMessageToUserView,
-  type UserViewDto,
-  type UserViewMessage,
-} from './messageUserProjection';
+import { stripThoughtPlaceholders } from './markdownRenderLite';
 
 /** 静默完成原因（silent=true 时）或 not_silent */
 export type SilentCompleteReason =
-  | 'empty_visible'
-  | 'thinking_only'
-  | 'not_silent';
+  'empty_visible' | 'thinking_only' | 'not_silent';
 
 export type SilentCompleteResult = {
   silent: boolean;
@@ -35,10 +36,7 @@ export type SilentCompleteResult = {
   messageId?: string;
 };
 
-function notSilent(
-  detail?: string,
-  messageId?: string
-): SilentCompleteResult {
+function notSilent(detail?: string, messageId?: string): SilentCompleteResult {
   return {
     silent: false,
     reason: 'not_silent',
@@ -47,29 +45,78 @@ function notSilent(
   };
 }
 
+/** thinking 预览截断上限（语义对齐原投影模块默认 240） */
+const THINKING_PREVIEW_MAX = 240;
+
+/** 截断预览（空白归一；语义对齐原投影模块 clipPreview） */
+function clipPreview(text: string, max: number): string {
+  const t = (text || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  if (t.length <= max) return t;
+  return t.slice(0, Math.max(0, max - 1)) + '…';
+}
+
 /**
- * 单条 UserView 消息是否为静默完成（仅 assistant 有意义）。
- * user 消息恒为 not_silent。
+ * 单条消息的用户可见性直接判定（V1-α，纯函数）。
+ * 语义对齐原用户视图投影的消费面（旧旁路投影已删）：
+ * - visibleText：剥思考占位后的正文；正文缺失时回退 blocks 文本段（\n\n 连接）；
+ * - thinkingPreview：剥占位思考后的 preview（截断，240）；
+ * - hasTools：toolCalls 按 id 去重后是否有可见工具。
  */
-export function isSilentCompleteUserViewMessage(
-  msg: UserViewMessage | null | undefined
+export function computeAssistantVisibility(msg: SessionMessage): {
+  visibleText: string;
+  thinkingPreview: string;
+  hasTools: boolean;
+} {
+  let visibleText = stripThoughtPlaceholders(msg.text || '').trim();
+  if (!visibleText && msg.blocks?.length) {
+    visibleText = msg.blocks
+      .filter((b) => b.type === 'text' && (b.content || '').trim())
+      .map((b) => stripThoughtPlaceholders(b.content || '').trim())
+      .filter(Boolean)
+      .join('\n\n');
+  }
+
+  const thinkingRaw = (msg.thinking || '').trim();
+  const isPlaceholderThinking =
+    !thinkingRaw ||
+    thinkingRaw === '正在处理…' ||
+    thinkingRaw === '正在思考中...';
+  const thinkingPreview = isPlaceholderThinking
+    ? ''
+    : clipPreview(thinkingRaw, THINKING_PREVIEW_MAX);
+
+  let hasTools = false;
+  const seen = new Set<string>();
+  for (const tc of msg.toolCalls || []) {
+    if (!tc?.id || seen.has(tc.id)) continue;
+    seen.add(tc.id);
+    hasTools = true;
+  }
+
+  return { visibleText, thinkingPreview, hasTools };
+}
+
+/**
+ * 从 SessionMessage（finalize 后）直接判定静默完成。
+ * 纯函数：不写 ModelView / store；不依赖用户视图投影（V1-α）。
+ */
+export function isSilentCompleteFromSessionMessage(
+  msg: SessionMessage | null | undefined
 ): SilentCompleteResult {
   if (!msg) return notSilent('no_message');
   if (msg.sender !== 'assistant') {
     return notSilent('not_assistant', msg.id);
   }
 
-  const hasVisible = !!(msg.visibleText || '').trim();
-  const hasTools = (msg.tools?.length ?? 0) > 0;
+  const { visibleText, thinkingPreview, hasTools } =
+    computeAssistantVisibility(msg);
+  const hasVisible = !!visibleText;
   if (hasVisible || hasTools) {
-    return notSilent(
-      hasVisible ? 'has_visible_text' : 'has_tools',
-      msg.id
-    );
+    return notSilent(hasVisible ? 'has_visible_text' : 'has_tools', msg.id);
   }
 
-  const hasThinking = !!(msg.thinkingPreview || '').trim();
-  if (hasThinking) {
+  if (thinkingPreview) {
     return {
       silent: true,
       reason: 'thinking_only',
@@ -87,96 +134,19 @@ export function isSilentCompleteUserViewMessage(
 }
 
 /**
- * 从 UserView DTO 取目标 assistant（messageId 或最后一条 assistant）判定。
- */
-export function isSilentCompleteFromUserView(
-  dto: UserViewDto | null | undefined,
-  opts?: { messageId?: string }
-): SilentCompleteResult {
-  if (!dto?.messages?.length) return notSilent('empty_projection');
-  const id = opts?.messageId?.trim();
-  let target: UserViewMessage | undefined;
-  if (id) {
-    target = dto.messages.find((m) => m.id === id);
-    if (!target) return notSilent('message_not_found', id);
-  } else {
-    for (let i = dto.messages.length - 1; i >= 0; i--) {
-      const m = dto.messages[i];
-      if (m?.sender === 'assistant') {
-        target = m;
-        break;
-      }
-    }
-    if (!target) return notSilent('no_assistant_in_projection');
-  }
-  return isSilentCompleteUserViewMessage(target);
-}
-
-/**
- * 从 SessionMessage（finalize 后）投影再判定。
- * 纯函数：不写 ModelView / store。
- */
-export function isSilentCompleteFromSessionMessage(
-  msg: SessionMessage | null | undefined
-): SilentCompleteResult {
-  if (!msg) return notSilent('no_message');
-  if (msg.sender !== 'assistant') {
-    return notSilent('not_assistant', msg.id);
-  }
-  const { message } = projectSessionMessageToUserView(msg);
-  return isSilentCompleteUserViewMessage(message);
-}
-
-/**
- * 统一入口：接受 UserView 消息 / DTO / SessionMessage。
+ * 统一入口：接受 SessionMessage（V1-α 后仅单路，用户视图 DTO 分支已随
+ * 旧旁路投影删除）。
  * → `{ silent, reason }`。
  */
 export function isSilentComplete(
-  input:
-    | UserViewMessage
-    | UserViewDto
-    | SessionMessage
-    | null
-    | undefined,
+  input: SessionMessage | null | undefined,
   opts?: { messageId?: string }
 ): SilentCompleteResult {
   if (input == null) return notSilent('no_input');
-
-  // UserViewDto：有 stats + messages + hiddenBuckets
-  if (
-    typeof input === 'object' &&
-    'stats' in input &&
-    'messages' in input &&
-    Array.isArray((input as UserViewDto).messages)
-  ) {
-    return isSilentCompleteFromUserView(input as UserViewDto, opts);
+  if (opts?.messageId && input.id !== opts.messageId) {
+    return notSilent('message_id_mismatch', input.id);
   }
-
-  // SessionMessage：sender user|assistant 且通常有 text 字段、无 visibleText
-  if (
-    typeof input === 'object' &&
-    'sender' in input &&
-    !('visibleText' in input) &&
-    ((input as SessionMessage).sender === 'user' ||
-      (input as SessionMessage).sender === 'assistant')
-  ) {
-    const sm = input as SessionMessage;
-    if (opts?.messageId && sm.id !== opts.messageId) {
-      return notSilent('message_id_mismatch', sm.id);
-    }
-    return isSilentCompleteFromSessionMessage(sm);
-  }
-
-  // UserViewMessage
-  if (
-    typeof input === 'object' &&
-    'sender' in input &&
-    'visibleText' in input
-  ) {
-    return isSilentCompleteUserViewMessage(input as UserViewMessage);
-  }
-
-  return notSilent('unknown_input');
+  return isSilentCompleteFromSessionMessage(input);
 }
 
 // ── 告警 side-effect（metric + dev console）─────────────────────────
@@ -235,7 +205,7 @@ export function alertSilentComplete(
   const sid = meta?.sessionId ? ` session=${meta.sessionId}` : '';
   const rid = meta?.runId ? ` run=${meta.runId}` : '';
   const midPart = mid ? ` message=${mid}` : '';
-   
+
   console.warn(
     `[silent-complete] ${result.reason}: run completed with no user-visible content` +
       `${sid}${rid}${midPart}` +

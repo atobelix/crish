@@ -9,7 +9,6 @@ import * as Lucide from 'lucide-react';
 import { clientApi } from '../../api/clientApi';
 import { ensureEngineConnected } from '../../api/chatBridge';
 import { getTransport } from '../../api/transport';
-import { isUserViewDebugEnabled } from '../../api/messageUserProjection';
 import { isDeveloperEngineUiEnabled } from '../../api/productMode';
 import { getWorkspacePath } from '../../api/projectStore';
 import { networkUserMessage } from '../../api/userFacingErrors';
@@ -21,7 +20,6 @@ import {
 } from './SettingsUI';
 import { Button, Tooltip } from '../ui';
 import { ExternalSessionImport } from './ExternalSessionImport';
-import { UserViewDebugPanel } from './UserViewDebugPanel';
 import styles from './SettingsProfileTab.module.css';
 
 type Props = {
@@ -100,7 +98,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
           await clientApi.saveSettingsEx(
             cwd === '__global__' ? '__global__' : cwd,
             'global',
-            parsed as Parameters<typeof clientApi.saveSettingsEx>[2],
+            parsed as Parameters<typeof clientApi.saveSettingsEx>[2]
           );
           // 成功静默（用户裁决：导出/导入成功提示不必每次说）
         } catch (err) {
@@ -120,7 +118,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
     void ensureEngineConnected()
       .then((r) => {
         setDaemonConnHint(
-          r.ok ? '已连接' : networkUserMessage(r.error) || '未连接',
+          r.ok ? '已连接' : networkUserMessage(r.error) || '未连接'
         );
         // 失败结果行内展示；成功也行内，均不 toast
       })
@@ -143,8 +141,6 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
   const engineOnline = getTransport().isReady();
   const engineStatus = engineConnHint || (engineOnline ? '在线' : '离线');
   const showDeveloper = isDeveloperEngineUiEnabled();
-  /** 投影调试：开发者引擎 UI 或既有 crish:userViewDebug / VITE_USER_VIEW_DEBUG */
-  const showUserViewDebug = showDeveloper || isUserViewDebugEnabled();
   const engineMeta =
     showDeveloper && !engineOnline
       ? '服务未连接'
@@ -170,7 +166,6 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
         ) : null
       }
     >
-
       <SettingsSection title="当前环境">
         <SettingsCard>
           <SettingsRow
@@ -213,7 +208,11 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
             control={
               <Tooltip content={dataLocation}>
                 <span
-                  className={storageIsPath ? styles.settingsPathEllipsis : styles.settingsListMeta}
+                  className={
+                    storageIsPath
+                      ? styles.settingsPathEllipsis
+                      : styles.settingsListMeta
+                  }
                 >
                   {storageDisplay}
                 </span>
@@ -294,10 +293,6 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
             />
           </SettingsCard>
         </SettingsSection>
-      ) : null}
-
-      {showUserViewDebug ? (
-        <UserViewDebugPanel onShowToast={onShowToast} />
       ) : null}
     </SettingsPage>
   );

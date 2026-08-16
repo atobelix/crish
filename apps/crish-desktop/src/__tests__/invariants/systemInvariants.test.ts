@@ -2,7 +2,7 @@
  * E0-1 gate-invariants — master plan §14.1 I-* as runnable unit tests.
  *
  * Pure assertions + small fixtures; no full App mount.
- * Reuses prepareSessionsForUi, emptyShellAssert, messageUserProjection,
+ * Reuses prepareSessionsForUi, emptyShellAssert,
  * layout-tree conversation unit helpers, ptyRegistry pure map ops,
  * and upsertMessageById.
  *
@@ -10,15 +10,15 @@
  * @see docs/plans/progress/e0-invariants.md
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from '../../store/draftSession';
-import { prepareSessionsForUi, EMPTY_SESSION_TITLE } from '../../api/sessionTitle';
-import { findEmptyShellViolations } from '../../dev/emptyShellAssert';
 import {
-  listDuplicateMessageIds,
-  projectSessionMessagesToUserView,
-  projectEngineBlocksToUserView,
-  type EngineLikeBlock,
-} from '../../api/messageUserProjection';
+  PENDING_DRAFT_SESSION_ID,
+  isPendingDraft,
+} from '../../store/draftSession';
+import {
+  prepareSessionsForUi,
+  EMPTY_SESSION_TITLE,
+} from '../../api/sessionTitle';
+import { findEmptyShellViolations } from '../../dev/emptyShellAssert';
 import {
   createLeaf,
   createBranch,
@@ -170,61 +170,6 @@ describe('I-DRAFT — draft not in sessions[]', () => {
   });
 });
 
-// ── I-PROJ: UserView must not write back ModelView ───────────────────
-
-describe('I-PROJ — UserView pure projection (no ModelView writeback)', () => {
-  it('projectSessionMessagesToUserView does not mutate source messages', () => {
-    const source: SessionMessage[] = [
-      msg('u1', { sender: 'user', text: '问' }),
-      msg('a1', {
-        sender: 'assistant',
-        text: '答',
-        thinking: '内部推演步骤很长',
-        status: 'completed',
-      }),
-    ];
-    const snapshot = JSON.parse(JSON.stringify(source));
-
-    const dto = projectSessionMessagesToUserView(source);
-
-    expect(source).toEqual(snapshot);
-    expect(dto.messages.find((m) => m.id === 'a1')?.visibleText).toBe('答');
-    expect(dto.messages.find((m) => m.id === 'a1')?.thinkingHidden).toBe(true);
-    expect(dto.hiddenBuckets.some((b) => b.kind === 'thinking')).toBe(true);
-    // visible layer must not contain thinking body
-    const allVisible = dto.messages.map((m) => m.visibleText).join('\n');
-    expect(allVisible).not.toContain('内部推演');
-  });
-
-  it('projectEngineBlocksToUserView returns a new DTO; model blocks untouched', () => {
-    const blocks: EngineLikeBlock[] = [
-      { type: 'system', id: 'sys', text: 'You are a helpful agent.' },
-      { type: 'user', id: 'u1', text: '修 bug' },
-      { type: 'thinking', id: 'a1', text: '先读日志' },
-      { type: 'assistant_text', id: 'a1', text: '已修复' },
-    ];
-    const before = JSON.parse(JSON.stringify(blocks));
-
-    const dto = projectEngineBlocksToUserView(blocks);
-
-    expect(blocks).toEqual(before);
-    const allVisible = dto.messages.map((m) => m.visibleText).join('\n');
-    expect(allVisible).not.toContain('helpful agent');
-    expect(allVisible).not.toContain('先读日志');
-    expect(allVisible).toContain('已修复');
-    // DTO is not a shared reference to model blocks
-    expect(dto.messages).not.toBe(blocks as unknown as typeof dto.messages);
-  });
-
-  it('projection output has no path back into source array slots', () => {
-    const source = [msg('u1', { text: 'hello' })];
-    const dto = projectSessionMessagesToUserView(source);
-    // mutate DTO must not affect ModelView input
-    dto.messages[0]!.visibleText = 'HACKED';
-    expect(source[0]!.text).toBe('hello');
-  });
-});
-
 // ── I-SHELL: 1 session ≤ 1 chat leaf ─────────────────────────────────
 
 describe('I-SHELL — 1 session ≤ 1 chat leaf', () => {
@@ -243,9 +188,12 @@ describe('I-SHELL — 1 session ≤ 1 chat leaf', () => {
     };
 
     const dups = findDuplicateSessionChatLeaves(tree.root);
-    expect(dups.get('sess-dup')?.map((l) => l.id).sort()).toEqual(
-      [a1.id, a2.id].sort()
-    );
+    expect(
+      dups
+        .get('sess-dup')
+        ?.map((l) => l.id)
+        .sort()
+    ).toEqual([a1.id, a2.id].sort());
     expect(dups.has('sess-ok')).toBe(false);
   });
 
@@ -356,7 +304,8 @@ describe('message upsert by id (idempotent merge)', () => {
 
     expect(messages).toHaveLength(1);
     expect(getMessageById(messages, 'm1')?.text).toBe('second');
-    expect(listDuplicateMessageIds(messages)).toEqual([]);
+    // I-MSG-ID：无重复 message.id（旧重复 id 辅助随旁路投影删除，内联等价断言）
+    expect(new Set(messages.map((m) => m.id)).size).toBe(messages.length);
     expect(getControlMetrics().message_upsert).toBe(2);
   });
 
@@ -373,6 +322,7 @@ describe('message upsert by id (idempotent merge)', () => {
     expect(messages.map((m) => m.id)).toEqual(['a', 'b']);
     expect(getMessageById(messages, 'a')?.text).toBe('A-replay');
     expect(getMessageById(messages, 'b')?.text).toBe('B-replay');
-    expect(listDuplicateMessageIds(messages)).toEqual([]);
+    // I-MSG-ID：无重复 message.id（旧重复 id 辅助随旁路投影删除，内联等价断言）
+    expect(new Set(messages.map((m) => m.id)).size).toBe(messages.length);
   });
 });

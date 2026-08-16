@@ -1,6 +1,6 @@
 /**
  * D2-3 dev-overlay lite：角落健康条，展示 controlMetrics 快照。
- * 非完整 dashboard；不碰 UserView 投影调试。
+ * 非完整 dashboard；不碰用户视图投影调试。
  *
  * Enable: DEV build + localStorage `crish_dev_health=1`
  *   （或 `crish_show_engine_settings=1`，复用 developer engine UI 旗标）

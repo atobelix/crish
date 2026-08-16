@@ -8,7 +8,6 @@
  *
  * - `projectAgentMessageContent`   —— AgentMessage → { text, thought }（text/thought 块归一）；
  * - `agentBlockToTimelineBlock`    —— AgentMessageBlock → MessageTimelineBlock（text/thought/tool_call 投影装饰）；
- * - `timelineBlockToAgentBlock`    —— MessageTimelineBlock → AgentMessageBlock（可逆映射；image/step_* 前端块返回 null）；
  * - `projectAgentMessageToSessionMessage` —— 单条 AgentMessage → SessionMessage 投影入口。
  *
  * 语义约定：
@@ -75,35 +74,6 @@ export function agentBlockToTimelineBlock(
     case 'text':
     default:
       return { type: 'text', content: block.text };
-  }
-}
-
-/**
- * 前端时间线块 → generated 事件块（可逆映射，单点）。
- * image / step_start / step_end 是前端投影装饰、无事件块等价物 → 返回 null。
- */
-export function timelineBlockToAgentBlock(
-  block: MessageTimelineBlock
-): AgentMessageBlock | null {
-  switch (block.type) {
-    case 'thought':
-      return { type: 'thought', text: block.content ?? '' };
-    case 'tool_call': {
-      if (!block.id) return null;
-      return {
-        type: 'tool-call',
-        id: block.id,
-        toolName: '',
-        input: {},
-      };
-    }
-    case 'text':
-      return { type: 'text', text: block.content ?? '' };
-    case 'image':
-    case 'step_start':
-    case 'step_end':
-      // 前端专有块，无事件块等价物
-      return null;
   }
 }
 

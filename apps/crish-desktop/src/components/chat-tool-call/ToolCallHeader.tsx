@@ -2,7 +2,6 @@ import React from 'react';
 import {
   CheckCircle2,
   ChevronRight,
-  CircleDot,
   Copy,
   PanelRightOpen,
   RotateCcw,
@@ -10,6 +9,7 @@ import {
 } from 'lucide-react';
 import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/types';
+import { toolCommandIcon, toolCommandType } from '../../api/toolPresentation';
 import { Button, Tooltip } from '../ui';
 
 export interface ToolCallHeaderProps {
@@ -159,8 +159,12 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
     } else if (tc.status === 'error') {
       inner = <XCircle size={sz} strokeWidth={sw} color="var(--accent-red)" />;
     } else {
+      // V1-γ（决策 12 最小图标映射）：非运行/终态图标 = 命令类型轴图标
+      // （toolCommandType + toolCommandIcon），替换固定 CircleDot 兜底；
+      // 状态轴（running→spinner / success→CheckCircle2 / error→XCircle）保留。
+      const KindIcon = toolCommandIcon(toolCommandType(tc));
       inner = (
-        <CircleDot size={sz} strokeWidth={sw} color="var(--text-tertiary)" />
+        <KindIcon size={sz} strokeWidth={sw} color="var(--text-tertiary)" />
       );
     }
     return (

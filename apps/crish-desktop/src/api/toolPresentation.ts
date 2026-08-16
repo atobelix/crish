@@ -10,3 +10,5 @@ export * from './tool-presentation/toolHumanDescriptions';
 export * from './tool-presentation/toolLabelSanitizer';
 export * from './tool-presentation/timelineNormalizer';
 export * from './tool-presentation/toolCardPresenter';
+export * from './tool-presentation/toolCommandType';
+export * from './tool-presentation/toolCommandIcon';

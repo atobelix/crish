@@ -11,7 +11,11 @@ export type TabMeta = {
   id: TabType;
   /** 中文侧栏标签 */
   label: string;
-  icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
+  icon: React.ComponentType<{
+    size?: number;
+    strokeWidth?: number;
+    className?: string;
+  }>;
   /** 中文分组 */
   group: string;
   /** 搜索别名：中文同义词 + 常见英文缩写，便于键盘/搜索定位 */
@@ -43,10 +47,13 @@ export function allowedTabIds(_mcpAvailable: boolean): TabType[] {
 }
 
 /** 深链/旧入口：skills|mcp → 扩展中心 */
-export function normalizeSettingsTabId(raw: string | null | undefined): TabType | null {
+export function normalizeSettingsTabId(
+  raw: string | null | undefined
+): TabType | null {
   if (!raw) return null;
   if (raw === 'skills' || raw === 'mcp') return 'plugins';
-  if ((FORMAL_TAB_IDS as readonly string[]).includes(raw)) return raw as TabType;
+  if ((FORMAL_TAB_IDS as readonly string[]).includes(raw))
+    return raw as TabType;
   // 兼容：仍允许内部挂载 skills/mcp（扩展内嵌），但不在侧栏展示
   if (raw === 'plugins') return 'plugins';
   return null;
@@ -70,7 +77,6 @@ export const TAB_META: TabMeta[] = [
       'Codex',
       'profile',
       'account',
-      'UserView',
       '投影',
       'debug',
       '调试',
@@ -81,21 +87,49 @@ export const TAB_META: TabMeta[] = [
     label: '外观',
     icon: Lucide.Palette,
     group: '个人',
-    keywords: ['外观', '主题', '深色', '浅色', '字体', '密度', 'theme', 'appearance', 'font'],
+    keywords: [
+      '外观',
+      '主题',
+      '深色',
+      '浅色',
+      '字体',
+      '密度',
+      'theme',
+      'appearance',
+      'font',
+    ],
   },
   {
     id: 'personalize',
     label: '通用设置',
     icon: Lucide.SlidersHorizontal,
     group: '个人',
-    keywords: ['通用设置', '偏好', '交互', '标签页', 'personalize', 'preference', 'general'],
+    keywords: [
+      '通用设置',
+      '偏好',
+      '交互',
+      '标签页',
+      'personalize',
+      'preference',
+      'general',
+    ],
   },
   {
     id: 'models',
     label: '模型',
     icon: Lucide.Orbit,
     group: '智能',
-    keywords: ['模型', '供应商', '密钥', 'API', 'llm', 'model', 'provider', 'openai', 'claude'],
+    keywords: [
+      '模型',
+      '供应商',
+      '密钥',
+      'API',
+      'llm',
+      'model',
+      'provider',
+      'openai',
+      'claude',
+    ],
   },
   {
     id: 'usage',
@@ -173,7 +207,15 @@ export const TAB_META: TabMeta[] = [
     label: '安全',
     icon: Lucide.Lock,
     group: '安全',
-    keywords: ['安全', '权限', '白名单', '信任', 'security', 'permission', 'allowlist'],
+    keywords: [
+      '安全',
+      '权限',
+      '白名单',
+      '信任',
+      'security',
+      'permission',
+      'allowlist',
+    ],
   },
   {
     id: 'diagnostics',
@@ -212,5 +254,7 @@ export function tabMatchesQuery(tab: TabMeta, q: string): boolean {
   if (tab.label.toLowerCase().includes(q)) return true;
   if (tab.group.toLowerCase().includes(q)) return true;
   if (tab.id.toLowerCase().includes(q)) return true;
-  return tab.keywords.some((k) => k.toLowerCase().includes(q) || q.includes(k.toLowerCase()));
+  return tab.keywords.some(
+    (k) => k.toLowerCase().includes(q) || q.includes(k.toLowerCase())
+  );
 }

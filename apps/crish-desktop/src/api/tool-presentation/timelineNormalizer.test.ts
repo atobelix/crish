@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MessageToolCall, SessionMessage } from '../../store/layoutStore';
 import {
+  alignToolCallBlocks,
   buildAssistantTimeline,
   buildToolRenderItems,
   dedupeToolCalls,
@@ -108,6 +109,141 @@ describe('timelineNormalizer', () => {
       const items = buildToolRenderItems(tools);
       expect(items.length).toBe(1);
       expect(items[0]?.kind).toBe('single');
+    });
+
+    it('V1-γ 折叠单源：连续可折叠 inspect 组 label 复活为折叠头文案', () => {
+      const tools: MessageToolCall[] = [
+        makeToolCall({ id: 't1', name: 'list_dir', status: 'running' }),
+        makeToolCall({ id: 't2', name: 'list_dir', status: 'running' }),
+        makeToolCall({ id: 't3', name: 'list_dir', status: 'running' }),
+      ];
+      const items = buildToolRenderItems(tools);
+      expect(items.length).toBe(1);
+      expect(items[0]?.kind).toBe('group');
+      if (items[0]?.kind === 'group') {
+        expect(items[0].tools).toHaveLength(3);
+        // 死字段 label 复活：渲染端折叠头文案 `${toolHumanLabel(last)} · ${n} 步`
+        expect(items[0].label).toMatch(/· 3 步$/);
+        expect(items[0].id).toBe('grp-t1');
+      }
+    });
+
+    it('V1-γ 同轮并行（turnId 相同 + startedAt ≤200ms）也并入投影层 group', () => {
+      const tools: MessageToolCall[] = [
+        makeToolCall({
+          id: 'p1',
+          name: 'run_command',
+          status: 'success',
+          turnId: 'turn-1',
+          startedAt: 1000,
+        }),
+        makeToolCall({
+          id: 'p2',
+          name: 'run_command',
+          status: 'success',
+          turnId: 'turn-1',
+          startedAt: 1100,
+        }),
+      ];
+      const items = buildToolRenderItems(tools);
+      expect(items.length).toBe(1);
+      expect(items[0]?.kind).toBe('group');
+      if (items[0]?.kind === 'group') {
+        expect(items[0].tools.map((t) => t.id)).toEqual(['p1', 'p2']);
+        expect(items[0].label).toMatch(/· 2 步$/);
+      }
+    });
+
+    it('V1-γ 跨轮同 turnId 但 startedAt 相距 >200ms 不并入（保持单条）', () => {
+      const tools: MessageToolCall[] = [
+        makeToolCall({
+          id: 'p1',
+          name: 'run_command',
+          status: 'success',
+          turnId: 'turn-1',
+          startedAt: 1000,
+        }),
+        makeToolCall({
+          id: 'p2',
+          name: 'run_command',
+          status: 'success',
+          turnId: 'turn-1',
+          startedAt: 2000,
+        }),
+      ];
+      const items = buildToolRenderItems(tools);
+      expect(items.every((i) => i.kind === 'single')).toBe(true);
+    });
+
+    it('V1-γ 可展示结果 inspect 中断折叠流（单条，不并入 running 组）', () => {
+      const tools: MessageToolCall[] = [
+        makeToolCall({
+          id: 't1',
+          name: 'list_dir',
+          status: 'success',
+          output: 'src\nnode_modules',
+        }),
+        makeToolCall({ id: 't2', name: 'list_dir', status: 'running' }),
+        makeToolCall({ id: 't3', name: 'list_dir', status: 'running' }),
+      ];
+      const items = buildToolRenderItems(tools);
+      expect(items[0]?.kind).toBe('single');
+      expect(items[1]?.kind).toBe('group');
+      if (items[1]?.kind === 'group') {
+        expect(items[1].tools.map((t) => t.id)).toEqual(['t2', 't3']);
+      }
+    });
+  });
+
+  describe('alignToolCallBlocks（V1-δ 单一对齐源）', () => {
+    it('注入缺失 tool_call 块：仅 text 时置前', () => {
+      const blocks = [{ type: 'text' as const, content: '正文' }];
+      const next = alignToolCallBlocks(blocks, [
+        makeToolCall({ id: 't1', name: 'bash', status: 'success' }),
+      ]);
+      expect(next[0]).toEqual({ type: 'tool_call', id: 't1' });
+      expect(next[1]).toEqual({ type: 'text', content: '正文' });
+    });
+
+    it('注入缺失 tool_call 块：插到最后 text 块之前', () => {
+      const blocks = [
+        { type: 'tool_call' as const, id: 't1' },
+        { type: 'text' as const, content: '前半' },
+        { type: 'text' as const, content: '结尾' },
+      ];
+      const next = alignToolCallBlocks(blocks, [
+        makeToolCall({ id: 't1', name: 'bash', status: 'success' }),
+        makeToolCall({ id: 't2', name: 'bash', status: 'success' }),
+      ]);
+      expect(next.map((b) => b.type)).toEqual([
+        'tool_call',
+        'text',
+        'tool_call',
+        'text',
+      ]);
+      expect(next[2]).toEqual({ type: 'tool_call', id: 't2' });
+    });
+
+    it('剔除悬空 tool_call 块（id 不在 tools 中）', () => {
+      const blocks = [
+        { type: 'tool_call' as const, id: 'ghost' },
+        { type: 'tool_call' as const, id: 't1' },
+        { type: 'text' as const, content: 'x' },
+      ];
+      const next = alignToolCallBlocks(blocks, [
+        makeToolCall({ id: 't1', name: 'bash', status: 'success' }),
+      ]);
+      expect(next.map((b) => (b.type === 'tool_call' ? b.id : b.type))).toEqual(
+        ['t1', 'text']
+      );
+    });
+
+    it('无缺失时返回过滤后的块（不增不减有效块）', () => {
+      const blocks = [{ type: 'tool_call' as const, id: 't1' }];
+      const next = alignToolCallBlocks(blocks, [
+        makeToolCall({ id: 't1', name: 'bash', status: 'success' }),
+      ]);
+      expect(next).toEqual([{ type: 'tool_call', id: 't1' }]);
     });
   });
 
@@ -274,6 +410,55 @@ describe('timelineNormalizer', () => {
       };
 
       expect(timelineSignature(msgA)).not.toBe(timelineSignature(msgB));
+    });
+
+    it('V1-γ R3：turnId/startedAt 变化必须击穿签名（并行折叠组结构不滞后）', () => {
+      const base: SessionMessage = {
+        id: 'msg-parallel-sig',
+        sender: 'assistant',
+        status: 'processing',
+        toolCalls: [
+          makeToolCall({
+            id: 'p1',
+            name: 'run_command',
+            status: 'running',
+            turnId: 'turn-1',
+            startedAt: 1000,
+          }),
+        ],
+      };
+      // startedAt 到达（并行判组依赖字段）→ 签名必须变化
+      const withStartedAt: SessionMessage = {
+        ...base,
+        toolCalls: [
+          makeToolCall({
+            id: 'p1',
+            name: 'run_command',
+            status: 'running',
+            turnId: 'turn-1',
+            startedAt: 1100,
+          }),
+        ],
+      };
+      expect(timelineSignature(base)).not.toBe(
+        timelineSignature(withStartedAt)
+      );
+      // turnId 变化同理
+      const otherTurn: SessionMessage = {
+        ...withStartedAt,
+        toolCalls: [
+          makeToolCall({
+            id: 'p1',
+            name: 'run_command',
+            status: 'running',
+            turnId: 'turn-2',
+            startedAt: 1100,
+          }),
+        ],
+      };
+      expect(timelineSignature(withStartedAt)).not.toBe(
+        timelineSignature(otherTurn)
+      );
     });
   });
 });

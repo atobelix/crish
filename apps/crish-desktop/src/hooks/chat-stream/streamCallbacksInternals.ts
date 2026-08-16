@@ -246,7 +246,7 @@ export function finalizeRunCompletionStatuses(opts: {
   if (latestAssistantMsg?.status === 'processing') {
     st.setSessionMessageStatus(sid, assistantMsgId, 'completed', elapsed);
   }
-  // D2-5：终态后检测 silent complete（无 UserView 可见正文/工具）；
+  // D2-5：终态后检测 silent complete（无用户可见正文/工具）；
   // T2.3 主块瘦身：移出同步主块（微任务）
   queueMicrotask(() => {
     try {

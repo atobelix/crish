@@ -189,8 +189,6 @@ const SURF03_SCAN_FILES: string[] = [
   'api/StreamRenderBuffer.ts',
   'api/streamTextBatcher.ts',
   'api/streamStop.ts',
-  'api/silentComplete.ts',
-  'api/messageUserProjection.ts',
   'api/messageWindow.ts',
 ];
 

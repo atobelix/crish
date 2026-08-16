@@ -8,7 +8,6 @@ import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { listDuplicateMessageIds } from './messageUserProjection';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -131,17 +130,5 @@ describe('stream / final single-row identity (static + pure)', () => {
     // finish / helper 不得再次 addMessage 助手
     expect(helperSrc).not.toMatch(/addMessage\([^)]*sender:\s*'assistant'/);
     expect(helperSrc).not.toMatch(/generateMessageId\('assistant'\)/);
-  });
-
-  it('pure: duplicate assistant ids would fail listDuplicateMessageIds', () => {
-    // 模拟 stream 行 + 错误插入的 final 行同语义不同 id → 测能发现；
-    // 正确路径应同 id 去重后只一条。
-    const bad = [
-      { id: 'asst-1' },
-      { id: 'asst-1-final' }, // 错误：第二行
-    ];
-    expect(listDuplicateMessageIds(bad)).toEqual([]);
-    // 若错误地复制了同 id 两次：
-    expect(listDuplicateMessageIds([{ id: 'a' }, { id: 'a' }])).toEqual(['a']);
   });
 });

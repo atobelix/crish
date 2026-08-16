@@ -1,5 +1,10 @@
 import { useMemo } from 'react';
-import type { MessageToolCall, SessionMessage } from '../../store/types';
+import type {
+  MessageTimelineBlock,
+  MessageToolCall,
+  SessionMessage,
+} from '../../store/types';
+import { alignToolCallBlocks } from '../../api/tool-presentation/timelineNormalizer';
 import {
   useStreamingStore,
   useShallow,
@@ -15,7 +20,7 @@ export type MsgWithBlocks = {
 export type MsgWithTools = {
   text?: string | undefined;
   toolCalls?: MessageToolCall[] | undefined;
-  blocks?: Array<{ type: string; id?: string; content?: string }> | undefined;
+  blocks?: MessageTimelineBlock[] | undefined;
 };
 
 /**
@@ -141,20 +146,14 @@ export function applyStreamToolsToMessage<T extends MsgWithTools>(
 
   if (!changed) return msg;
 
-  const blocks = msg.blocks ? msg.blocks.map((b) => ({ ...b })) : [];
-  const inBlocks = new Set(
-    blocks
-      .filter((b) => b.type === 'tool_call' && b.id)
-      .map((b) => b.id as string)
-  );
-  for (const tc of toolCalls) {
-    if (!inBlocks.has(tc.id)) {
-      blocks.push({ type: 'tool_call', id: tc.id });
-      inBlocks.add(tc.id);
-    }
-  }
-
-  return { ...msg, toolCalls, blocks };
+  // V1-δ（对齐单源）：tool_call 块补齐复用 normalizeAssistantTimeline 的
+  // 单一对齐纯函数 alignToolCallBlocks（原内联 append 补齐已删；插位语义
+  // 与持久化/水合路径一致——仅 text/空块置前，否则插到最后 text 块之前）。
+  return {
+    ...msg,
+    toolCalls,
+    blocks: alignToolCallBlocks(msg.blocks, toolCalls),
+  };
 }
 
 /** 流式渲染 view model（T4 A1：投影链单源装配产物，页面壳层只收此结果） */

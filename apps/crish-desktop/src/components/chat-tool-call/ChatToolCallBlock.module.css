@@ -258,19 +258,18 @@
   color: var(--accent-red);
 }
 
-/* Parallel group */
-.parallelGroup {
+/* 投影层折叠组（V1-γ 折叠单源：连续 inspect / 同轮并行 → group） */
+.toolGroup {
   border-left: 2px solid var(--accent-color);
   margin: 4px 0;
   padding-left: 8px;
 }
 
-.parallelHeader {
+.toolGroupHeader {
   font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-medium, 500);
   color: var(--accent-color);
   padding: 2px 0 4px;
-  text-transform: uppercase;
   letter-spacing: 0.03em;
 }
 

@@ -5,9 +5,18 @@
  * - 确立 [步骤 1: 思考 ➔ 工具调用 ➔ 观察结果] ➔ [步骤 2: 思考 ➔ 工具调用 ➔ 观察结果] ➔ [最终 Markdown 回复] 真实有序结构；
  * - 流式期间保持 0 重排签名（timelineSignature 针对活跃增量块只投影标记，不破坏 memo）；
  * - 规范化助手消息时间线，对齐 blocks / toolCalls / thinkingTurns。
+ *
+ * V1（统一输入流收敛战役）单源化：
+ * - **折叠单源**：buildToolRenderItems 为唯一产出 ToolRenderItem[] 的裁决点，
+ *   连续 inspect 折叠 + 同轮并行分组两类语义均收进投影层；渲染端不再展平/重分组，
+ *   group.label 由死字段复活为折叠头文案（`${toolHumanLabel(last)} · ${n} 步`）。
+ * - **对齐单源**：alignToolCallBlocks 为 tool_call 块 ↔ toolCalls 唯一对齐纯函数，
+ *   normalizeAssistantTimeline 与流式 view model（applyStreamToolsToMessage）共用，
+ *   消除双实现（V1-δ）。
  */
 
 import type { MessageToolCall, SessionMessage } from '../../store/layoutStore';
+import type { MessageTimelineBlock } from '../../store/types';
 import {
   isInspectTool,
   isInterruptedTool,
@@ -19,6 +28,55 @@ import type {
   ToolRenderItem,
 } from './toolPresentationTypes';
 
+/**
+ * tool_call 块 ↔ toolCalls 对齐（单一对齐源，V1-δ）。
+ *
+ * 规则（text 感知插位）：
+ * 1. 剔除悬空 tool_call 块（id 不在 tools 中）；
+ * 2. 注入缺失 tool_call 块：仅 text/空块时置前，否则插到最后 text 块之前。
+ *
+ * normalizeAssistantTimeline（持久化/水合/选择器）与流式 view model
+ * （applyStreamToolsToMessage）共用本函数，消除重复实现。
+ */
+export function alignToolCallBlocks(
+  blocks: MessageTimelineBlock[] | undefined,
+  tools: MessageToolCall[]
+): MessageTimelineBlock[] {
+  const toolIds = new Set(tools.map((t) => t.id));
+  const next = (blocks || []).filter(
+    (b) => b.type !== 'tool_call' || (b.id != null && toolIds.has(b.id))
+  );
+  const inBlocks = new Set(
+    next
+      .filter((b) => b.type === 'tool_call' && b.id)
+      .map((b) => b.id as string)
+  );
+  const missing = tools.filter((t) => !inBlocks.has(t.id));
+  if (missing.length === 0) return next;
+
+  const onlyTextOrEmpty =
+    next.length === 0 || next.every((b) => b.type === 'text');
+  if (onlyTextOrEmpty) {
+    return [
+      ...missing.map((t) => ({ type: 'tool_call' as const, id: t.id })),
+      ...next,
+    ];
+  }
+
+  let insertAt = next.length;
+  for (let i = next.length - 1; i >= 0; i--) {
+    if (next[i]?.type === 'text') {
+      insertAt = i;
+      break;
+    }
+  }
+  const inject = missing.map((t) => ({
+    type: 'tool_call' as const,
+    id: t.id,
+  }));
+  return [...next.slice(0, insertAt), ...inject, ...next.slice(insertAt)];
+}
+
 function statusRank(s: MessageToolCall['status']): number {
   if (s === 'success') return 4;
   if (s === 'error') return 3;
@@ -29,60 +87,14 @@ function statusRank(s: MessageToolCall['status']): number {
 /**
  * 规范化助手消息时间线：blocks 与 toolCalls 对齐，保证可交错渲染。
  * live / hydrate / 持久化共用，避免各写一套顺序。
+ * V1-δ：tool_call 块对齐走单一对齐源 alignToolCallBlocks。
  */
 export function normalizeAssistantTimeline(
   msg: SessionMessage
 ): SessionMessage {
   if (msg.sender !== 'assistant') return msg;
   const tools = [...(msg.toolCalls || [])];
-  const toolIds = new Set(tools.map((t) => t.id));
-  let blocks = [...(msg.blocks || [])].filter(
-    (b) => b.type !== 'tool_call' || (b.id != null && toolIds.has(b.id))
-  );
-
-  const inBlocks = new Set(
-    blocks
-      .filter((b) => b.type === 'tool_call' && b.id)
-      .map((b) => b.id as string)
-  );
-  const missing = tools.filter((t) => !inBlocks.has(t.id));
-
-  if (missing.length > 0) {
-    const onlyTextOrEmpty =
-      blocks.length === 0 || blocks.every((b) => b.type === 'text');
-    if (onlyTextOrEmpty) {
-      const textContent =
-        msg.text?.trim() ||
-        blocks
-          .filter((b) => b.type === 'text')
-          .map((b) => b.content || '')
-          .join('\n')
-          .trim();
-      blocks = [
-        ...tools.map((t) => ({ type: 'tool_call' as const, id: t.id })),
-        ...(textContent
-          ? [{ type: 'text' as const, content: textContent }]
-          : []),
-      ];
-    } else {
-      let insertAt = blocks.length;
-      for (let i = blocks.length - 1; i >= 0; i--) {
-        if (blocks[i]?.type === 'text') {
-          insertAt = i;
-          break;
-        }
-      }
-      const inject = missing.map((t) => ({
-        type: 'tool_call' as const,
-        id: t.id,
-      }));
-      blocks = [
-        ...blocks.slice(0, insertAt),
-        ...inject,
-        ...blocks.slice(insertAt),
-      ];
-    }
-  }
+  const blocks = alignToolCallBlocks(msg.blocks, tools);
 
   // 有正文但无 text 块时补偿
   if ((msg.text || '').trim() && !blocks.some((b) => b.type === 'text')) {
@@ -149,6 +161,34 @@ export function dedupeToolCalls(
     .filter((tc) => tc && !isInterruptedTool(tc));
 }
 
+/** 可折叠 inspect：只读工具且无可展示结果（含 running，无结果即折叠候选） */
+function isFoldableInspect(tc: MessageToolCall): boolean {
+  return isInspectTool(tc) && !toolHasDisplayableResult(tc);
+}
+
+/**
+ * 投影层折叠/并行唯一裁决（V1-γ 折叠单源）：
+ * - 连续可折叠 inspect → 并入同一 group（原「连续 inspect 折叠」语义）；
+ * - 否则同轮并行（turnId 相同 + startedAt 相距 ≤200ms）→ 并入同一 group
+ *   （原渲染端 parallelGroup 重分组语义下沉投影层）。
+ * group.label = `${toolHumanLabel(last)} · ${n} 步`（渲染端复活为折叠头文案）。
+ */
+function canJoinToolGroup(
+  buf: MessageToolCall[],
+  tc: MessageToolCall
+): boolean {
+  const prev = buf[buf.length - 1]!;
+  // 连续可折叠 inspect（原投影折叠规则）
+  if (isFoldableInspect(prev) && isFoldableInspect(tc)) return true;
+  // 同轮并行：turnId 相同且 startedAt 相距 ≤200ms（原渲染端 parallelGroup 规则）
+  if (tc.turnId && prev.turnId === tc.turnId) {
+    const a = prev.startedAt;
+    const b = tc.startedAt;
+    if (a != null && b != null && Math.abs(b - a) <= 200) return true;
+  }
+  return false;
+}
+
 export function buildToolRenderItems(
   toolCalls: MessageToolCall[]
 ): ToolRenderItem[] {
@@ -179,21 +219,12 @@ export function buildToolRenderItems(
       out.push({ kind: 'single', tc });
       continue;
     }
-    if (
-      isInspectTool(tc) &&
-      !toolHasDisplayableResult(tc) &&
-      tc.status !== 'running'
-    ) {
+    if (buf.length > 0 && canJoinToolGroup(buf, tc)) {
       buf.push(tc);
-    } else if (isInspectTool(tc) && tc.status === 'running') {
-      buf.push(tc);
-    } else if (isInspectTool(tc) && toolHasDisplayableResult(tc)) {
-      flush();
-      out.push({ kind: 'single', tc });
-    } else {
-      flush();
-      out.push({ kind: 'single', tc });
+      continue;
     }
+    flush();
+    buf = [tc];
   }
   flush();
   return out;
@@ -355,6 +386,10 @@ export function timelineSignature(msg: SessionMessage): string {
     o: tc.output,
     a: tc.arguments,
     e: tc.explanation,
+    // V1-γ：turnId/startedAt 进签名——同轮并行折叠（≤200ms 判组）依赖这两字段，
+    // 不进签名会导致组结构变化被缓存击穿（折叠闭合滞后一帧）。
+    t: tc.turnId,
+    st: tc.startedAt,
   }));
 
   const hasExplicitText = blocks.some(

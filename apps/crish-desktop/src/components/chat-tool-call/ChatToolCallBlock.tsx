@@ -1,5 +1,10 @@
 /**
  * 工具行渲染：每工具独立一行；默认折叠；点击展开仅该工具结果。
+ * V1-γ（统一输入流收敛战役 · 折叠单源）：本组件直接消费投影层已裁决的
+ * `ToolRenderItem[]`——`single` → 单行；`group` → 折叠标题行（复活
+ * `label`：`${toolHumanLabel(last)} · ${n} 步`）+ 组内子行展开列表。
+ * 不再展平（flattenRenderTools 已删）也不再按 turnId/startedAt 重分组
+ * （parallelGroup 已删，语义下沉 timelineNormalizer.buildToolRenderItems）。
  * 关联子 agent 行（CompactToolRow 内嵌 InlineAgentPanel）由组合根经
  * renderLinkedAgentPanel 注入，避免 chat-tool-call → agent-card 反向依赖
  * （InlineAgentPanel 渲染 ChatToolStack 形成的环形依赖）。
@@ -53,16 +58,6 @@ export type ChatToolStackSharedProps = Omit<
   ChatToolStackProps,
   'items' | 'msgId'
 >;
-
-/** 组也展平为独立行，避免「N 步」汇总头 */
-function flattenRenderTools(items: ToolRenderItem[]): MessageToolCall[] {
-  const out: MessageToolCall[] = [];
-  for (const item of items) {
-    if (item.kind === 'single') out.push(item.tc);
-    else out.push(...item.tools);
-  }
-  return out;
-}
 
 /** 批量审批栏：2+ 相邻待确认工具时渲染 */
 function BatchApprovalBar({
@@ -174,45 +169,28 @@ function renderToolsWithBatchBars(
   return elements;
 }
 
+/**
+ * 直接消费投影层已裁决的 ToolRenderItem[]（V1-γ 折叠单源）：
+ * - single → 单行（含相邻 pending 批量审批栏支持）；
+ * - group → 折叠标题行（复活 label）+ 组内子行展开列表（逐行独立可展开）。
+ */
 function renderToolStackItems(
   items: ToolRenderItem[],
   msgId: string | undefined,
   props: ChatToolStackProps
 ) {
-  const tools = flattenRenderTools(items);
   const segments: React.ReactElement[] = [];
-  let i = 0;
-  while (i < tools.length) {
-    const cur = tools[i]!;
-    if (cur.turnId && cur.startedAt) {
-      const group: MessageToolCall[] = [cur];
-      let j = i + 1;
-      while (j < tools.length) {
-        const tj = tools[j]!;
-        if (
-          tj.turnId !== cur.turnId ||
-          tj.startedAt == null ||
-          Math.abs(tj.startedAt - cur.startedAt) > 200
-        )
-          break;
-        group.push(tj);
-        j++;
-      }
-      if (group.length >= 2) {
-        segments.push(
-          <div key={`pg-${cur.id}`} className={styles.parallelGroup}>
-            <div className={styles.parallelHeader}>
-              Parallel（{group.length}）
-            </div>
-            {renderToolsWithBatchBars(group, msgId, props)}
-          </div>
-        );
-        i = j;
-        continue;
-      }
+  for (const item of items) {
+    if (item.kind === 'single') {
+      segments.push(...renderToolsWithBatchBars([item.tc], msgId, props));
+      continue;
     }
-    segments.push(...renderToolsWithBatchBars([cur], msgId, props));
-    i++;
+    segments.push(
+      <div key={`grp-${item.id}`} className={styles.toolGroup}>
+        <div className={styles.toolGroupHeader}>{item.label}</div>
+        {renderToolsWithBatchBars(item.tools, msgId, props)}
+      </div>
+    );
   }
   return segments;
 }
