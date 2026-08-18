@@ -13,6 +13,11 @@
  *
  * 测名族 conn_a_e2e_*：补 G-HYD-6 真 WebView 面。单独三态绿仍 ≠ 打开完成。
  * jsdom 绿 ≠ 打开完成。本文件落盘 ≠ 打开完成。表 A 不得改。
+ * 本文件改断言 ≠ 真跑绿 ≠ 打开完成。
+ *
+ * 主路径（conn_a_e2e_open_persisted_nonempty_note_leaf）成功打开必须
+ * result.via === 'product-button'。via=tree-store / dev-openTool 只算 06 到达，
+ * 不得当成打开完成绿。already-open 亦否（本测先 close）。
  *
  * 9222 不可达 / 被 Chrome 占（/json/list 404）→ cdp.ts fail-fast 可读错误。
  * 禁止 skip 当绿；禁止 page.goto(5174)。
@@ -81,7 +86,20 @@ test.describe('LR-H2-改面 真壳打开完成（e2e-webview）', () => {
 
       wsId = await bindPreOpen(session.page, docId);
       await closeNoteLeafIfOpen(session.page);
-      await openNoteLeaf(session.page);
+      const opened = await openNoteLeaf(session.page);
+      // 03 会计只认产品钮。06 树门面 / 真模块 openTool 是到达回落，不得入账。
+      if (opened.via === 'tree-store' || opened.via === 'dev-openTool') {
+        throw new Error(
+          `本切片未交付：via=${opened.via} 只算 06 到达，不得当成打开完成绿。` +
+            '打开完成主路径必须 via===product-button。' +
+            '本文件改断言 ≠ 真跑绿 ≠ 打开完成'
+        );
+      }
+      expect(
+        opened.via,
+        '打开完成主路径必须 via===product-button（already-open 亦否：本测已 close）。' +
+          '本文件改断言 ≠ 真跑绿 ≠ 打开完成'
+      ).toBe('product-button');
 
       const panel = session.page.locator(PANEL);
       await expect(panel).toBeVisible({ timeout: 20_000 });
