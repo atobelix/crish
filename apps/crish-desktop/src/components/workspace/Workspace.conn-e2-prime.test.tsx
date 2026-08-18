@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 /**
- * CONN-E2′ · 产品默开 detect（到达面：02 叶，不是死 Host）
+ * CONN-E2′ · 产品默开 detect（到达面：02 叶；WorkspaceProductEmptyHost 已删）
  *
- * 测头自钉：夹具 Host ≠ 产品入口 ≠ 打开完成。
- * - WorkspaceProductEmptyHost 仍是夹具（本文件不删该组件；不用它证产品默开）
- * - 产品默开 detect：activate 扩展后渲 NoteLeafHost / 已注册 factory，断言在叶上
- * - EmptyState 直渲默认仍关（CONN-E2 会计不回退）
+ * 测头自钉：Host 已删 ≠ 打开完成 ≠ 关 EL。
+ * - WorkspaceProductEmptyHost 已删，不得再当入口 / 不得再当活夹具
+ * - EmptyState + CTA 仍是夹具；直渲默认仍关（CONN-E2 会计不回退）
+ * - 产品默开 detect 在 NoteLeafHost：activate 扩展后渲叶 / 已注册 factory
  * - 无 Tauri / 无 ipc 不造假 drift report
  *
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 重做 E3 · ≠ 默认双开 poll+OS
@@ -40,13 +40,13 @@ function leafCtx(
   };
 }
 
-/** 产品默开到达面：先激活扩展再渲叶宿主（≠ 夹具 Host、≠ 打开完成） */
+/** 产品默开到达面：先激活扩展再渲 NoteLeafHost（Host 已删；EmptyState+CTA 仍是夹具；≠ 打开完成 ≠ 关 EL） */
 function renderProductDetectLeaf() {
   activateNotePaper();
   return render(<NoteLeafHost {...leafCtx()} />);
 }
 
-describe('CONN-E2′ · 产品默开 detect（叶；夹具 Host ≠ 入口 ≠ 打开完成）', () => {
+describe('CONN-E2′ · 产品默开 detect（叶；Host 已删 ≠ 入口 ≠ 打开完成 ≠ 关 EL）', () => {
   afterEach(() => {
     act(() => {
       deactivateNotePaper();
