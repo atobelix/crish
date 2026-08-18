@@ -1025,22 +1025,25 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   // ---- Left Sidebar & Breadcrumbs Subagent Monitor ----
-  const topSidebarBtn = document.getElementById('topSidebarBtn');
+  const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+  const topSidebarCollapsedBtn = document.getElementById('topSidebarCollapsedBtn');
   const bcAgentCapsule = document.getElementById('bcAgentCapsule');
 
-  if (topSidebarBtn && chatAppLayout) {
-    topSidebarBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      chatAppLayout.classList.toggle('has-left-sidebar');
-      if (window.syncComposerHorizontalAlignment) {
-        setTimeout(window.syncComposerHorizontalAlignment, 50);
-        setTimeout(window.syncComposerHorizontalAlignment, 230);
-      }
-      if (window.FlowTimelineRail && window.FlowTimelineRail.updateAll) {
-        setTimeout(() => window.FlowTimelineRail.updateAll(document.body), 230);
-      }
-    });
+  function toggleSidebar(e) {
+    if (e) e.stopPropagation();
+    if (!chatAppLayout) return;
+    chatAppLayout.classList.toggle('has-left-sidebar');
+    if (window.syncComposerHorizontalAlignment) {
+      setTimeout(window.syncComposerHorizontalAlignment, 50);
+      setTimeout(window.syncComposerHorizontalAlignment, 230);
+    }
+    if (window.FlowTimelineRail && window.FlowTimelineRail.updateAll) {
+      setTimeout(() => window.FlowTimelineRail.updateAll(document.body), 230);
+    }
   }
+
+  if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
+  if (topSidebarCollapsedBtn) topSidebarCollapsedBtn.addEventListener('click', toggleSidebar);
 
   if (bcAgentCapsule) {
     bcAgentCapsule.addEventListener('click', (e) => {

@@ -858,9 +858,39 @@ textarea.composer-input {
   border-right-color: var(--border-color, rgba(0, 0, 0, 0.08));
 }
 
+/* Row 2: Sidebar Top Header Bar (Contains Sidebar Toggle Button) */
+.sidebar-header-bar {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.sidebar-toggle-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary, #666666);
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.sidebar-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary, #111111);
+}
+
 /* 1. Sidebar Top: Nav List (Matching Crish SidebarNav) */
 .sidebar-top {
-  padding: 10px 10px 0 10px;
+  padding: 0 10px 0 10px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -1177,6 +1207,8 @@ textarea.composer-input {
 .settings-gear-btn:hover {
   background: rgba(0, 0, 0, 0.06);
   color: var(--text-primary, #111111);
+}
+
 /* Row 2: Secondary Top Header (Sticky Top 0 in Main Pane) */
 .chat-top-header {
   position: sticky;
@@ -1184,6 +1216,7 @@ textarea.composer-input {
   left: 0;
   width: 100%;
   height: 44px;
+  min-height: 44px;
   margin-bottom: -44px;
   z-index: 80;
   pointer-events: none;
@@ -1196,6 +1229,8 @@ textarea.composer-input {
     rgba(255, 255, 255, 0) 100%
   );
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   padding: 0 16px;
@@ -1205,18 +1240,21 @@ textarea.composer-input {
 
 .chat-top-left {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   pointer-events: auto;
   min-width: 0;
+  flex: 1 1 auto;
   overflow: hidden;
 }
 
-.top-sidebar-btn {
+.top-sidebar-collapsed-btn {
+  display: none;
   width: 32px;
   height: 32px;
   border-radius: 8px;
-  display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
@@ -1227,9 +1265,13 @@ textarea.composer-input {
   flex-shrink: 0;
 }
 
-.top-sidebar-btn:hover {
+.top-sidebar-collapsed-btn:hover {
   background: rgba(0, 0, 0, 0.05);
   color: var(--text-primary, #111111);
+}
+
+.chat-app-layout:not(.has-left-sidebar) .top-sidebar-collapsed-btn {
+  display: inline-flex;
 }
 
 /* Breadcrumbs (3 Levels) */
@@ -1379,9 +1421,12 @@ textarea.composer-input {
 }
 
 .side-panel-header {
-  height: 52px;
-  padding: 0 16px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0 12px;
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
@@ -1392,15 +1437,18 @@ textarea.composer-input {
 
 .side-panel-nav-group {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .side-panel-actions-group {
   display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  gap: 4px;
-  margin-right: 36px; /* 32px fixed toggle button + 4px gap = exact 4px uniform spacing */
+  gap: 2px;
 }
 
 .side-panel-divider-v {
