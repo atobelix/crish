@@ -2,33 +2,52 @@
 /**
  * WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥
  *
- * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**
- * （≠ 产品入口 ≠ G-HYD ≠ 打开完成）。
- * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
+ * 夹具 ≠ 产品入口 ≠ 打开完成 ≠ EL-01。jsdom 绿 ≠ 真壳。
  *
- * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；断言语义不变。
+ * 直渲 EmptyState 着陆：`data-slash-write-mode=readonly` / `source=none`
+ * 会计留下（夹具默认关）。
  *
- * - **CONN-B**：无 applyOps 默认 slash 只读；注入 applyOps 后点 slash → wire/submit
- * - **CONN-B3**：显式 `strictApplyOpsIpc` mock → source=product-ipc + 点 slash 可写；
- *   无 Tauri 仍默认 readonly（禁止 mock 生产默认）；**≠ EL-01**
+ * 「点 CTA 再断言面板 slash」产品叶等价见
+ * `NoteLeafHost.conn-ext.test.tsx` `conn_ext_slash_no_tauri_readonly`
+ * （本文件已删该重复 CTA 段）。
  *
- * 夹具测头见 WorkspaceEmptyState.strict.test.tsx。
+ * 产品叶 overlay 禁写（conn-ext 未点 overlay）改挂 `NoteLeafHost`。
+ * `strictApplyOps` / `strictApplyOpsIpc` 是夹具注入面：叶不吃这些 prop，
+ * 产品叶走 `resolveProductStrictApplyOps`；禁止给叶加测试专用 prop。
+ *
+ * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { BP_SLASH_ITEM, type ApplyOpsAdapter } from '@crish/block-paper';
 import { createMockNoteApplyOpsIpc } from '../../api/noteApplyOpsIpc';
+import { NoteLeafHost } from '../../extensions/note-paper/NoteLeafHost';
+import type { ViewRenderContext } from '../../services/view-registry';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
+
+function leafCtx(
+  partial: Partial<ViewRenderContext> = {}
+): ViewRenderContext {
+  return {
+    panelId: 'note',
+    leafId: 'leaf-conn-b3',
+    sessionId: 'chat-session-99',
+    isActive: true,
+    openView: () => {},
+    params: {},
+    ...partial,
+  };
+}
 
 describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
   // -------------------------------------------------------------------------
-  // CONN-B：夹具路径 slash 写锥（默认只读 / 注入可写）
+  // CONN-B：夹具着陆会计（默认只读）+ 产品叶 overlay 禁写
   // -------------------------------------------------------------------------
 
-  it('conn_b_product_empty_default_slash_readonly_no_silent_write', async () => {
+  it('conn_b_product_empty_default_slash_readonly_no_silent_write', () => {
     render(<WorkspaceEmptyState wsId="ws-conn-b-ro" />);
-    // 空态根：无 apply → 只读诚实标注
+    // 空态根：无 apply → 只读诚实标注（夹具默认关；面板 slash 见 conn-ext）
     expect(screen.getByRole('status')).toHaveAttribute(
       'data-slash-write-mode',
       'readonly'
@@ -37,26 +56,20 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
       'data-slash-sink-source',
       'none'
     );
+  });
 
-    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
-        'data-hydrate-status',
-        'ready'
-      );
-    });
-
-    const panel = screen.getByTestId('note-paper-strict-panel');
+  it('conn_b_product_leaf_slash_readonly_overlay_no_silent_write', async () => {
+    // 产品叶已挂写锥；conn-ext 只钉 data-*，此处补 overlay 禁写（≠ 点死 CTA）
+    const { container } = render(<NoteLeafHost {...leafCtx()} />);
+    const panel = await screen.findByTestId('note-paper-strict-panel');
+    expect(screen.queryByTestId('open-note-paper-strict')).toBeNull();
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(host).toHaveAttribute('data-slash-write-mode', 'readonly');
+    expect(host).toHaveAttribute('data-slash-sink-source', 'none');
     expect(panel).toHaveAttribute('data-slash-write-mode', 'readonly');
     expect(panel).toHaveAttribute('data-slash-sink-source', 'none');
     expect(panel).toHaveAttribute('data-slash-sink', '0');
-    expect(screen.getByTestId('note-paper-strict-host')).toHaveAttribute(
-      'data-slash-write-mode',
-      'readonly'
-    );
 
-    // 夹具面板打开 slash（/ 按钮）
     fireEvent.click(screen.getByTestId('note-paper-strict-open-slash'));
     const overlay = await screen.findByTestId(
       'note-paper-strict-slash-overlay'
@@ -72,7 +85,6 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
     expect(item).toBeTruthy();
     expect(item).toBeDisabled();
     fireEvent.click(item!);
-    // 只读：菜单仍开、未假装 apply（无 sink 可录；断言项仍 disabled + overlay 仍在）
     expect(
       screen.getByTestId('note-paper-strict-slash-overlay')
     ).toBeInTheDocument();
@@ -80,6 +92,7 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
   });
 
   it('conn_b_product_empty_with_applyOps_slash_click_submits_intent', async () => {
+    // 夹具注入面（strictApplyOps）；产品叶走 resolveProductStrictApplyOps
     const applied: string[] = [];
     const applyOps: ApplyOpsAdapter = async (opsJson) => {
       applied.push(opsJson);
@@ -91,7 +104,7 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
         wsId="ws-conn-b-wr"
         strict={{
           strictApplyOps: applyOps,
-          strictSlashWireOptions={{
+          strictSlashWireOptions: {
             allocateId: () => 'empty-slash-new-blk',
             resolveOrder: () => 'a0',
           },
@@ -151,7 +164,7 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
   });
 
   // -------------------------------------------------------------------------
-  // CONN-B3：note_apply_ops IPC 产品装配（mock 可测；无 Tauri 默认只读）
+  // CONN-B3：note_apply_ops IPC（夹具注入 mock；无 Tauri 默认只读）
   // ≠ EL-01；禁止 mock 当生产默认
   // -------------------------------------------------------------------------
 
@@ -169,16 +182,17 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
   });
 
   it('conn_b3_product_empty_with_applyOpsIpc_slash_click_product_ipc', async () => {
+    // 夹具注入面（strictApplyOpsIpc）；产品叶走 resolveProductStrictApplyOps
     const mockIpc = createMockNoteApplyOpsIpc();
     render(
       <WorkspaceEmptyState
         wsId="ws-conn-b3-ipc"
         strict={{
           strictApplyOpsIpc: mockIpc,
-          strictSlashWireOptions={{
+          strictSlashWireOptions: {
             allocateId: () => 'b3-slash-new-blk',
             resolveOrder: () => 'a0',
-          }},
+          },
         }}
       />
     );
