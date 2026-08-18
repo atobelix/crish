@@ -1025,8 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   // ---- Left Sidebar & Breadcrumbs Subagent Monitor ----
-  const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
-  const topSidebarCollapsedBtn = document.getElementById('topSidebarCollapsedBtn');
+  const topSidebarBtn = document.getElementById('topSidebarBtn');
   const bcAgentCapsule = document.getElementById('bcAgentCapsule');
 
   function toggleSidebar(e) {
@@ -1042,26 +1041,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
-  if (topSidebarCollapsedBtn) topSidebarCollapsedBtn.addEventListener('click', toggleSidebar);
+  if (topSidebarBtn) topSidebarBtn.addEventListener('click', toggleSidebar);
 
   if (bcAgentCapsule) {
     bcAgentCapsule.addEventListener('click', (e) => {
       e.stopPropagation();
       bcAgentCapsule.classList.toggle('active');
       window.togglePopover(bcAgentCapsule, 'agentRuntimePopover');
-    });
-  }
-
-  const sidePanelCloseBtn = document.getElementById('sidePanelCloseBtn');
-  if (sidePanelCloseBtn) {
-    sidePanelCloseBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      if (chatAppLayout) chatAppLayout.classList.remove('has-side-panel');
-      if (window.syncComposerHorizontalAlignment) {
-        setTimeout(window.syncComposerHorizontalAlignment, 50);
-        setTimeout(window.syncComposerHorizontalAlignment, 230);
-      }
     });
   }
 
