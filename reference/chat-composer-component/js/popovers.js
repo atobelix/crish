@@ -1051,24 +1051,246 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ---- App Top Bar: Tab Lifecycle, Drag Reorder & Split Screen ----
+  // ---- App Top Bar: Unified Prototype-Exact DragController (Green Morphing Drop Indicator & Split) ----
   const topBarNewTabBtn = document.getElementById('topBarNewTabBtn');
   const tabsContainer = document.querySelector('.top-bar-tabs-container');
-  const splitDropOverlay = document.getElementById('splitDropOverlay');
-  const splitDropIndicatorRight = document.getElementById('splitDropIndicatorRight');
-
   let tabCounter = 1;
 
-  function createGhostPill(title) {
-    const ghost = document.createElement('div');
-    ghost.className = 'topbar-tab-drag-ghost';
-    ghost.innerHTML = `
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg>
-      <span>${title || '会话'}</span>
-    `;
-    document.body.appendChild(ghost);
-    return ghost;
+  class UnifiedTabDragController {
+    constructor() {
+      this._indicator = null;
+      this._cachedTabRects = null;
+      this._lastStateKey = null;
+      this._currentMode = null;
+      this._target = null;
+      this._draggedTab = null;
+    }
+
+    _createIndicator() {
+      const d = document.createElement('div');
+      d.className = 'tree-drop-indicator';
+      document.body.appendChild(d);
+      return d;
+    }
+
+    _enterStrip() {
+      if (this._cachedTabRects) return;
+      const tabs = Array.from(tabsContainer.querySelectorAll('.session-tab-item:not(.is-dragging):not(.is-leaving)'));
+      this._cachedTabRects = tabs.map(t => {
+        const r = t.getBoundingClientRect();
+        const tx = new WebKitCSSMatrix(getComputedStyle(t).transform).m41 || 0;
+        return { left: r.left - tx, right: r.right - tx, width: r.width, el: t };
+      });
+    }
+
+    _leaveStrip() {
+      if (tabsContainer) {
+        tabsContainer.querySelectorAll('.session-tab-item').forEach(t => {
+          t.style.transform = '';
+          t.style.transition = '';
+        });
+      }
+      this._cachedTabRects = null;
+      this._lastStateKey = null;
+    }
+
+    _computeInsertIndex(tabRects, cx) {
+      for (let i = 0; i < tabRects.length; i++) {
+        const r = tabRects[i];
+        const leftThird = r.left + r.width / 3;
+        const rightThird = r.left + r.width * 2 / 3;
+        if (cx < leftThird) return i;
+        if (cx < rightThird) return cx < r.left + r.width / 2 ? i : i + 1;
+      }
+      return tabRects.length;
+    }
+
+    start(e, tab) {
+      if (e.button !== 0 || e.target.closest('.tab-item-close-btn')) return;
+
+      this._draggedTab = tab;
+      const sx = e.clientX, sy = e.clientY;
+      let mode = 'idle';
+      let cleaned = false;
+
+      document.body.style.userSelect = 'none';
+
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+        document.body.style.userSelect = '';
+        tab.classList.remove('is-dragging');
+        if (this._indicator) {
+          this._indicator.remove();
+          this._indicator = null;
+        }
+        this._leaveStrip();
+        this._target = null;
+        this._lastStateKey = null;
+        this._currentMode = null;
+        this._draggedTab = null;
+      };
+
+      const onMove = (ev) => {
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        if (mode === 'idle' && Math.hypot(dx, dy) < 4) return;
+
+        if (mode === 'idle') {
+          mode = 'drag';
+          tab.classList.add('is-dragging');
+        }
+
+        if (!this._indicator) this._indicator = this._createIndicator();
+        this._updateTarget(ev.clientX, ev.clientY);
+      };
+
+      const onUp = (ev) => {
+        if (cleaned) return;
+        const target = this._target;
+        const wasDrag = mode === 'drag';
+        cleanup();
+
+        if (!wasDrag || !target) {
+          // Static click -> activate tab
+          tabsContainer.querySelectorAll('.session-tab-item').forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          return;
+        }
+
+        if (target.region === 'strip') {
+          // Drop inside strip
+          const tabs = Array.from(tabsContainer.querySelectorAll('.session-tab-item:not(.is-dragging):not(.is-leaving)'));
+          const targetTab = tabs[target.insertIdx];
+          if (targetTab && targetTab !== tab) {
+            tabsContainer.insertBefore(tab, targetTab);
+          } else if (!targetTab) {
+            tabsContainer.insertBefore(tab, topBarNewTabBtn);
+          }
+        } else if (target.region === 'right' || target.region === 'left') {
+          // Quadrant split: open side panel
+          if (chatAppLayout) {
+            chatAppLayout.classList.add('has-side-panel');
+            if (window.syncComposerHorizontalAlignment) {
+              setTimeout(window.syncComposerHorizontalAlignment, 50);
+            }
+          }
+        }
+      };
+
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    }
+
+    _updateTarget(cx, cy) {
+      const ind = this._indicator;
+      if (!ind) return;
+
+      const hit = document.elementFromPoint(cx, cy);
+      const isOverStrip = hit ? hit.closest('.top-bar-tabs-container, .app-top-bar') : null;
+
+      if (isOverStrip && cy <= 38) {
+        this._handleStripDrop(cx, ind);
+      } else {
+        this._handlePaneDrop(cx, cy, ind);
+      }
+    }
+
+    _handleStripDrop(cx, ind) {
+      this._enterStrip();
+      const tabRects = this._cachedTabRects || [];
+      const insertIdx = this._computeInsertIndex(tabRects, cx);
+      const shiftW = 150; // Standard tab width
+
+      const stateKey = `strip:${insertIdx}`;
+      if (this._lastStateKey !== stateKey) {
+        this._lastStateKey = stateKey;
+        tabRects.forEach((r, i) => {
+          r.el.style.transition = 'transform 180ms cubic-bezier(.2,0,0,1)';
+          r.el.style.transform = i >= insertIdx ? `translateX(${shiftW + 4}px)` : '';
+        });
+      }
+
+      const tabsRect = tabsContainer.getBoundingClientRect();
+      const indicatorW = 150;
+      const minX = tabsRect.left;
+      const maxX = tabsRect.right - indicatorW;
+      const lineX = Math.max(minX, Math.min(cx - indicatorW / 2, maxX));
+
+      const title = this._draggedTab ? this._draggedTab.querySelector('.tab-item-title')?.textContent || '会话' : '放置标签';
+      ind.innerHTML = `<span style="font-size:12px;font-weight:500;color:var(--brand-primary,#10b981);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px;max-width:100%;pointer-events:none;">${title}</span>`;
+      ind.style.display = 'flex';
+      ind.style.alignItems = 'center';
+      ind.style.justifyContent = 'flex-start';
+      ind.style.borderRadius = '4px';
+
+      const enteringStrip = this._currentMode !== 'strip';
+      this._currentMode = 'strip';
+      if (enteringStrip) {
+        ind.style.transition = 'left 120ms cubic-bezier(.2,0,0,1), top 120ms cubic-bezier(.2,0,0,1), width 120ms cubic-bezier(.2,0,0,1), height 120ms cubic-bezier(.2,0,0,1), border-radius 100ms ease, opacity 80ms ease';
+      } else {
+        ind.style.transition = 'border-radius 100ms ease, opacity 80ms ease';
+      }
+
+      this._posInd(ind, lineX, tabsRect.top + (tabsRect.height - 26) / 2, indicatorW, 26);
+      this._target = { region: 'strip', insertIdx };
+    }
+
+    _handlePaneDrop(cx, cy, ind) {
+      this._leaveStrip();
+      const appBody = document.getElementById('chatAppBody') || document.querySelector('.chat-main-pane');
+      if (!appBody) return;
+
+      const r = appBody.getBoundingClientRect();
+      if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) {
+        this._target = null;
+        if (ind) ind.style.display = 'none';
+        return;
+      }
+
+      const rx = (cx - r.left) / r.width;
+      const ry = (cy - r.top) / r.height;
+      let region = 'center';
+      if (rx < 0.25) region = 'left';
+      else if (rx > 0.75) region = 'right';
+      else if (ry < 0.25) region = 'top';
+      else if (ry > 0.75) region = 'bottom';
+
+      const stateKey = `pane:${region}`;
+      if (this._lastStateKey === stateKey) return;
+      this._lastStateKey = stateKey;
+
+      this._target = { region };
+
+      ind.style.display = 'flex';
+      ind.style.alignItems = 'center';
+      ind.style.justifyContent = 'center';
+      ind.style.borderRadius = '6px';
+      this._currentMode = 'pane';
+      ind.style.transition = 'left 120ms cubic-bezier(.2,0,0,1), top 120ms cubic-bezier(.2,0,0,1), width 120ms cubic-bezier(.2,0,0,1), height 120ms cubic-bezier(.2,0,0,1), border-radius 100ms ease, opacity 80ms ease';
+
+      const title = this._draggedTab ? this._draggedTab.querySelector('.tab-item-title')?.textContent || '会话' : '';
+      ind.innerHTML = title ? `<span style="font-size:13px;font-weight:500;color:var(--brand-primary,#10b981);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80%;pointer-events:none;">松开以分屏打开：${title}</span>` : '';
+
+      switch (region) {
+        case 'left':   this._posInd(ind, r.left + 4, r.top + 4, r.width * .5 - 8, r.height - 8); break;
+        case 'right':  this._posInd(ind, r.left + r.width * .5 + 4, r.top + 4, r.width * .5 - 8, r.height - 8); break;
+        case 'top':    this._posInd(ind, r.left + 4, r.top + 4, r.width - 8, r.height * .5 - 8); break;
+        case 'bottom': this._posInd(ind, r.left + 4, r.top + r.height * .5 + 4, r.width - 8, r.height * .5 - 8); break;
+        default:       this._posInd(ind, r.left + 4, r.top + 4, r.width - 8, r.height - 8); break;
+      }
+    }
+
+    _posInd(el, l, t, w, h) {
+      el.style.left = l + 'px';
+      el.style.top = t + 'px';
+      el.style.width = w + 'px';
+      el.style.height = h + 'px';
+    }
   }
+
+  const tabDragController = new UnifiedTabDragController();
 
   function setupTabItem(tab) {
     if (!tab || tab._tabInitialized) return;
@@ -1102,116 +1324,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 3. Pointer Drag for Reordering & Split Screen
     tab.addEventListener('mousedown', (e) => {
-      if (e.button !== 0 || e.target.closest('.tab-item-close-btn')) return;
-
-      const startX = e.clientX;
-      const startY = e.clientY;
-      let isDragging = false;
-      let ghostEl = null;
-      let currentDropTarget = null;
-      let dropPosition = null; // 'before' | 'after' | 'split-right'
-
-      const title = tab.querySelector('.tab-item-title')?.textContent || '会话';
-
-      function onMouseMove(me) {
-        const dx = me.clientX - startX;
-        const dy = me.clientY - startY;
-
-        if (!isDragging && Math.hypot(dx, dy) >= 4) {
-          isDragging = true;
-          tab.classList.add('is-dragging');
-          ghostEl = createGhostPill(title);
-          document.body.style.userSelect = 'none';
-        }
-
-        if (!isDragging) return;
-
-        if (ghostEl) {
-          ghostEl.style.transform = `translate3d(${me.clientX + 12}px, ${me.clientY + 12}px, 0)`;
-        }
-
-        // Check if dragged into viewport for Split Screen
-        if (me.clientY > 36) {
-          if (splitDropOverlay) splitDropOverlay.classList.add('active');
-          if (me.clientX > window.innerWidth * 0.5) {
-            if (splitDropIndicatorRight) splitDropIndicatorRight.classList.add('show');
-            dropPosition = 'split-right';
-          } else {
-            if (splitDropIndicatorRight) splitDropIndicatorRight.classList.remove('show');
-            dropPosition = null;
-          }
-          // Clear tab reorder indicators
-          tabsContainer.querySelectorAll('.session-tab-item').forEach(t => {
-            t.classList.remove('drag-over-before', 'drag-over-after');
-          });
-          currentDropTarget = null;
-        } else {
-          // Inside Tab Bar: Reordering
-          if (splitDropOverlay) splitDropOverlay.classList.remove('active');
-          if (splitDropIndicatorRight) splitDropIndicatorRight.classList.remove('show');
-          dropPosition = null;
-
-          const elements = document.elementsFromPoint(me.clientX, me.clientY) || [];
-          const targetTab = elements.find(el => el.classList?.contains('session-tab-item') && el !== tab);
-
-          tabsContainer.querySelectorAll('.session-tab-item').forEach(t => {
-            t.classList.remove('drag-over-before', 'drag-over-after');
-          });
-
-          if (targetTab) {
-            currentDropTarget = targetTab;
-            const rect = targetTab.getBoundingClientRect();
-            const midX = rect.left + rect.width / 2;
-            if (me.clientX < midX) {
-              targetTab.classList.add('drag-over-before');
-              dropPosition = 'before';
-            } else {
-              targetTab.classList.add('drag-over-after');
-              dropPosition = 'after';
-            }
-          } else {
-            currentDropTarget = null;
-          }
-        }
-      }
-
-      function onMouseUp(me) {
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('mouseup', onMouseUp);
-        document.body.style.userSelect = '';
-
-        if (ghostEl) {
-          ghostEl.remove();
-          ghostEl = null;
-        }
-
-        if (splitDropOverlay) splitDropOverlay.classList.remove('active');
-        if (splitDropIndicatorRight) splitDropIndicatorRight.classList.remove('show');
-
-        tab.classList.remove('is-dragging');
-        tabsContainer.querySelectorAll('.session-tab-item').forEach(t => {
-          t.classList.remove('drag-over-before', 'drag-over-after');
-        });
-
-        if (!isDragging) return;
-
-        if (dropPosition === 'split-right' && chatAppLayout) {
-          // Open Side Panel (Split Screen)
-          chatAppLayout.classList.add('has-side-panel');
-          if (window.syncComposerHorizontalAlignment) {
-            setTimeout(window.syncComposerHorizontalAlignment, 50);
-          }
-        } else if (currentDropTarget && dropPosition) {
-          if (dropPosition === 'before') {
-            tabsContainer.insertBefore(tab, currentDropTarget);
-          } else if (dropPosition === 'after') {
-            tabsContainer.insertBefore(tab, currentDropTarget.nextSibling);
-          }
-        }
-      }
-
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
+      tabDragController.start(e, tab);
     });
   }
 
