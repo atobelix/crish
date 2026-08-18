@@ -106,6 +106,7 @@ export type BuildStrictPanelSectionDataAttrsInput = {
 /**
  * Strict 面板根节点诚实标注字典（data-* + surface/package）。
  * 测锚：hydrate / slash / mdPrefix / selection / presentation；**≠ EL-01**。
+ * `data-leaf-view-root=1` 钉在 section 上（05-A）；不要另包一层。
  */
 export function buildStrictPanelSectionDataAttrs(
   input: BuildStrictPanelSectionDataAttrsInput
@@ -120,6 +121,7 @@ export function buildStrictPanelSectionDataAttrs(
   return {
     'data-surface': EDITOR_SURFACE_NOTE_PAPER,
     'data-testid': 'note-paper-strict-panel',
+    'data-leaf-view-root': '1',
     'data-package-id': W5B_STRICT_PACKAGE_ID,
     'data-track': W5B_STRICT_TRACK,
     'data-doc-id': input.docId,

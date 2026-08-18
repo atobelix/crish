@@ -8,6 +8,8 @@
  * fallback   light        tokens             :root / data-theme      
  */
 
+/* 05-B 顶栏绝缘：文末 .panel > .header/.footer（0,2,0）；不改 6% / heading */
+
 /* ----------          ---------- */
 
 .panel {
@@ -760,4 +762,22 @@ html[data-perf-tier='eco'] .stateLoading::before {
 html[data-perf-tier='eco'] .blockRow,
 html[data-perf-tier='eco'] .handle {
   transition: none;
+}
+
+/*
+ * 顶栏/底栏绝缘（05-B）：对抗 BinaryTree .leafBody > * > * 的
+ * flex: 1 1 0%（0,1,0）。.panel > .header 特异性 (0,2,0)，与装载序无关。
+ * 不改 V1 6% / V4 标题；源码绝缘 ≠ 皮像素已交付 ≠ 打开完成。
+ */
+.panel > .header,
+.panel > .footer {
+  flex: 0 0 auto;
+  max-height: none;
+  width: 100%;
+  min-height: unset;
+}
+.panel > .body {
+  flex: 1 1 0%;
+  min-height: 0;
+  max-height: none;
 }

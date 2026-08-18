@@ -52,6 +52,7 @@ describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
 
     const panel = screen.getByTestId('note-paper-strict-panel');
     expect(panel).toHaveAttribute('data-surface', EDITOR_SURFACE_NOTE_PAPER);
+    expect(panel).toHaveAttribute('data-leaf-view-root', '1');
     expect(panel).toHaveAttribute('data-package-id', W5B_STRICT_PACKAGE_ID);
     expect(panel).toHaveAttribute('data-track', W5B_STRICT_TRACK);
     // 不得冒充 Skeleton 包 ID
@@ -61,6 +62,46 @@ describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
     expect(panel).toHaveAttribute('data-doc-id', 'doc-strict');
     expect(panel).toHaveAttribute('data-block-count', '1');
     expect(screen.getByText('hydrated text')).toBeInTheDocument();
+  });
+
+  it('w5b_strict_panel_leaf_view_root_is_single_section', async () => {
+    // 05-A：section 根带 data-leaf-view-root；禁止 Fragment 多根。
+    // 本测绿 ≠ 皮像素已交付 ≠ 打开完成。
+    const transport = createFixtureHydrateTransport({
+      'doc-leaf-root': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'lr1',
+            flavour: 'paragraph',
+            text: 'leaf view root',
+            index: 0,
+          }),
+        ],
+      },
+    });
+    const { container } = render(
+      <NotePaperStrictPanel
+        docId="doc-leaf-root"
+        hydrateTransport={transport}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const roots = screen.getAllByTestId('note-paper-strict-panel');
+    expect(roots).toHaveLength(1);
+    const panel = roots[0];
+    expect(panel).toHaveAttribute('data-leaf-view-root', '1');
+    expect(panel.tagName).toBe('SECTION');
+    const elementChildren = Array.from(container.children);
+    expect(elementChildren).toHaveLength(1);
+    expect(elementChildren[0]).toBe(panel);
   });
 
   it('w5b_strict_panel_does_not_render_conex_float_handle', async () => {
