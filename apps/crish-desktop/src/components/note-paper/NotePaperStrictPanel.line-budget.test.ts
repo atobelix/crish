@@ -11,7 +11,7 @@
  * - 行数口径：物理全量行（含注释与空行），与编辑器 / `Get-Content` 计数一致
  */
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -68,5 +68,15 @@ describe('SD-04-R-G · NotePaperStrictPanel 行数防回涨', () => {
   it('产品 Strict 面板源码不再挂 ConexFloatHandle', () => {
     const src = readFileSync(join(DIR, 'NotePaperStrictPanel.tsx'), 'utf8');
     expect(src).not.toMatch(/ConexFloatHandle/);
+  });
+
+  it('ConexFloatHandle 三文件不在 note-paper 目录', () => {
+    for (const name of [
+      'ConexFloatHandle.tsx',
+      'ConexFloatHandle.module.css',
+      'ConexFloatHandle.test.tsx',
+    ] as const) {
+      expect(existsSync(join(DIR, name)), name).toBe(false);
+    }
   });
 });

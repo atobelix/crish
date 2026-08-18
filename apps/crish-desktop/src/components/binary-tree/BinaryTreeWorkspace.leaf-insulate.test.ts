@@ -2,7 +2,7 @@
  * 05 纸面皮 · leafBody 绝缘源码契约（读盘）。
  * 测绿 ≠ 皮像素已交付；9222 另验。≠ 关 EL ≠ 打开完成。
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -127,5 +127,16 @@ describe('05-E 负向 · 产品 note 路径不挂 ConexFloatHandle', () => {
       }
     }
     expect(hits).toEqual([]);
+  });
+
+  it('ConexFloatHandle 三文件不在 note-paper 目录', () => {
+    const notePaper = join(DIR, '../note-paper');
+    for (const name of [
+      'ConexFloatHandle.tsx',
+      'ConexFloatHandle.module.css',
+      'ConexFloatHandle.test.tsx',
+    ] as const) {
+      expect(existsSync(join(notePaper, name)), name).toBe(false);
+    }
   });
 });
