@@ -1,5 +1,6 @@
 /**
  * 08 包边界：只读 package.json 依赖面 + 内置名单源码字符串。
+ * 第 12 轮追加：factory 键集合、激活三文件旧轨、公共出口。
  *
  * 测头自钉：本测绿 ≠ 打开完成（G-HYD）≠ 关 EL ≠ 独立软件已拆。
  * 不扫整个 monorepo 源码；依赖方向只看 dependencies / devDependencies / peer。
@@ -200,5 +201,91 @@ describe('08 包边界（绿 ≠ 打开完成 ≠ 关 EL ≠ 独立软件已拆�
     expect(ids).toEqual([...BUILTIN_IDS]);
     expect(ids).toHaveLength(11);
     expect(ids).not.toContain('note');
+  });
+
+  it('builtinViewFactories 键仍是 11 内置；登记器不焊激活 / 死 CTA / 裸 IPC', () => {
+    const main = readFileSync(
+      join(REPO_ROOT, 'apps/crish-desktop/src/main.tsx'),
+      'utf8'
+    );
+    const block = main.match(
+      /const builtinViewFactories:\s*ViewFactoryMap\s*=\s*\{([\s\S]*?)\n\};/
+    );
+    expect(block).not.toBeNull();
+    const keys = [
+      ...(block?.[1] ?? '').matchAll(
+        /^  (?:'([^']+)'|([A-Za-z_][\w-]*))\s*:/gm
+      ),
+    ].map((m) => m[1] ?? m[2]);
+    expect(keys).toEqual([...BUILTIN_IDS]);
+
+    const registrar = readFileSync(
+      join(
+        REPO_ROOT,
+        'apps/crish-desktop/src/services/view-registry/registerBuiltInViews.tsx'
+      ),
+      'utf8'
+    );
+    expect(registrar).not.toMatch(/\bactivateNotePaper\b/);
+    expect(registrar).not.toMatch(/\bcreateNotePaperView\b/);
+    expect(registrar).not.toMatch(/\bNoteLeafHost\b/);
+    expect(registrar).not.toMatch(/extensions\/note-paper/);
+    expect(registrar).not.toMatch(/open-note-paper-strict/);
+    expect(registrar).not.toMatch(
+      /note_document_hydrate|note_apply_ops|note_document_recent/
+    );
+    expect(registrar).not.toMatch(/\binvoke(?:Typed)?\s*\(/);
+  });
+
+  it('activate / noteViewFactory / NoteLeafHost 不 from ../../plugins、无 ContributeViewRegistry', () => {
+    for (const name of [
+      'activate.ts',
+      'noteViewFactory.tsx',
+      'NoteLeafHost.tsx',
+    ] as const) {
+      const src = readFileSync(join(HERE, name), 'utf8');
+      expect(src, name).not.toMatch(/from\s+['"]\.\.\/\.\.\/plugins/);
+      expect(src, name).not.toMatch(/\bContributeViewRegistry\b/);
+    }
+  });
+
+  it('index.ts 公共出口不 re-export EmptyState / Workspace / Host', () => {
+    const src = readFileSync(join(HERE, 'index.ts'), 'utf8');
+    expect(src).not.toMatch(/^export\s+\*\s+from/m);
+    const names: string[] = [];
+    for (const m of src.matchAll(/^export\s+\{([^}]+)\}/gm)) {
+      for (const part of m[1].split(',')) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        for (const bit of trimmed.split(/\s+as\s+/)) {
+          const id = bit.trim();
+          if (id) names.push(id);
+        }
+      }
+    }
+    expect(names).not.toContain('WorkspaceProductEmptyHost');
+    expect(names).not.toContain('EmptyState');
+    expect(names).not.toContain('Workspace');
+    expect(names).not.toContain('Host');
+    const froms = [
+      ...src.matchAll(
+        /^export\s+(?:\{[^}]+\}|\*)\s+from\s+['"]([^'"]+)['"]/gm
+      ),
+    ].map((m) => m[1].replace(/\\/g, '/'));
+    expect(froms.some((s) => s.includes('components/workspace'))).toBe(
+      false
+    );
+    expect(
+      froms.some((s) =>
+        /WorkspaceEmptyState|WorkspaceProductEmptyHost/.test(s)
+      )
+    ).toBe(false);
+  });
+
+  it('index.ts 出口不得出现 WorkspaceEmptyState / open-note-paper-strict / ConexFloatHandle', () => {
+    const src = readFileSync(join(HERE, 'index.ts'), 'utf8');
+    expect(src).not.toMatch(/\bWorkspaceEmptyState\b/);
+    expect(src).not.toMatch(/open-note-paper-strict/);
+    expect(src).not.toMatch(/\bConexFloatHandle\b/);
   });
 });
