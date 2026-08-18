@@ -1099,3 +1099,117 @@ document.addEventListener('DOMContentLoaded', () => {
   if (winMin) winMin.addEventListener('click', () => console.log('Minimize window'));
   if (winMax) winMax.addEventListener('click', () => console.log('Toggle maximize window'));
   if (winClose) winClose.addEventListener('click', () => console.log('Close window'));
+
+  // ---- Draggable Partition Resizers (Sidebar & Side Panel) ----
+  const sidebarResizer = document.getElementById('sidebarResizer');
+  const sidePanelResizer = document.getElementById('sidePanelResizer');
+  const leftSidebar = document.getElementById('chatLeftSidebar');
+  const sidePanel = document.getElementById('chatSidePanel');
+
+  // 1. Sidebar Resizer
+  if (sidebarResizer && leftSidebar && chatAppLayout) {
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 240;
+
+    sidebarResizer.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = leftSidebar.getBoundingClientRect().width || 240;
+      sidebarResizer.classList.add('is-dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const deltaX = e.clientX - startX;
+      let newWidth = startWidth + deltaX;
+
+      if (newWidth < 120) {
+        // Snap collapse if dragged too small
+        chatAppLayout.classList.remove('has-left-sidebar');
+      } else {
+        chatAppLayout.classList.add('has-left-sidebar');
+        newWidth = Math.max(160, Math.min(480, newWidth));
+        chatAppLayout.style.setProperty('--sidebar-width', `${newWidth}px`);
+      }
+
+      if (window.syncComposerHorizontalAlignment) {
+        window.syncComposerHorizontalAlignment();
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        sidebarResizer.classList.remove('is-dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        if (window.syncComposerHorizontalAlignment) {
+          setTimeout(window.syncComposerHorizontalAlignment, 50);
+        }
+      }
+    });
+
+    // Double click to reset to default 240px
+    sidebarResizer.addEventListener('dblclick', () => {
+      chatAppLayout.style.setProperty('--sidebar-width', '240px');
+      chatAppLayout.classList.add('has-left-sidebar');
+      if (window.syncComposerHorizontalAlignment) {
+        setTimeout(window.syncComposerHorizontalAlignment, 50);
+      }
+    });
+  }
+
+  // 2. Side Panel Resizer
+  if (sidePanelResizer && sidePanel && chatAppLayout) {
+    let isDragging = false;
+    let startX = 0;
+    let startWidth = 480;
+
+    sidePanelResizer.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      startX = e.clientX;
+      startWidth = sidePanel.getBoundingClientRect().width || 480;
+      sidePanelResizer.classList.add('is-dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      // Moving left increases side panel width (delta is inverted)
+      const deltaX = startX - e.clientX;
+      let newWidth = startWidth + deltaX;
+      const maxPanelWidth = window.innerWidth - 360;
+      newWidth = Math.max(260, Math.min(maxPanelWidth, newWidth));
+      chatAppLayout.style.setProperty('--panel-width', `${newWidth}px`);
+
+      if (window.syncComposerHorizontalAlignment) {
+        window.syncComposerHorizontalAlignment();
+      }
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        sidePanelResizer.classList.remove('is-dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        if (window.syncComposerHorizontalAlignment) {
+          setTimeout(window.syncComposerHorizontalAlignment, 50);
+        }
+      }
+    });
+
+    // Double click to reset to default 480px
+    sidePanelResizer.addEventListener('dblclick', () => {
+      chatAppLayout.style.setProperty('--panel-width', '480px');
+      if (window.syncComposerHorizontalAlignment) {
+        setTimeout(window.syncComposerHorizontalAlignment, 50);
+      }
+    });
+  }
