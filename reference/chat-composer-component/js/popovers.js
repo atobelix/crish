@@ -1050,9 +1050,63 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Close active state on outside click
-  document.addEventListener('click', () => {
-    if (bcAgentCapsule) {
-      bcAgentCapsule.classList.remove('active');
-    }
-  });
+  const sidePanelCloseBtn = document.getElementById('sidePanelCloseBtn');
+  if (sidePanelCloseBtn) {
+    sidePanelCloseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (chatAppLayout) chatAppLayout.classList.remove('has-side-panel');
+      if (window.syncComposerHorizontalAlignment) {
+        setTimeout(window.syncComposerHorizontalAlignment, 50);
+        setTimeout(window.syncComposerHorizontalAlignment, 230);
+      }
+    });
+  }
+
+  // ---- App Top Bar: Tab add/close & Window controls ----
+  const topBarNewTabBtn = document.getElementById('topBarNewTabBtn');
+  const tabCloseBtn = document.getElementById('tabCloseBtn');
+  const tabsContainer = document.querySelector('.top-bar-tabs-container');
+
+  if (topBarNewTabBtn && tabsContainer) {
+    topBarNewTabBtn.addEventListener('click', () => {
+      const tab = document.createElement('div');
+      tab.className = 'session-tab-item active';
+      tab.innerHTML = `
+        <span class="tab-item-title">新对话</span>
+        <button class="tab-item-close-btn" title="关闭标签页">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      `;
+      // Deactivate siblings
+      tabsContainer.querySelectorAll('.session-tab-item').forEach(t => t.classList.remove('active'));
+      tabsContainer.insertBefore(tab, topBarNewTabBtn);
+
+      tab.addEventListener('click', () => {
+        tabsContainer.querySelectorAll('.session-tab-item').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+      });
+
+      tab.querySelector('.tab-item-close-btn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        tab.remove();
+        const remaining = tabsContainer.querySelectorAll('.session-tab-item');
+        if (remaining.length > 0) remaining[remaining.length - 1].classList.add('active');
+      });
+    });
+  }
+
+  if (tabCloseBtn) {
+    tabCloseBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tab = document.getElementById('activeSessionTab');
+      if (tab) tab.remove();
+    });
+  }
+
+  // Window Controls Feedback
+  const winMin = document.getElementById('winMinimizeBtn');
+  const winMax = document.getElementById('winMaximizeBtn');
+  const winClose = document.getElementById('winCloseBtn');
+  if (winMin) winMin.addEventListener('click', () => console.log('Minimize window'));
+  if (winMax) winMax.addEventListener('click', () => console.log('Toggle maximize window'));
+  if (winClose) winClose.addEventListener('click', () => console.log('Close window'));
