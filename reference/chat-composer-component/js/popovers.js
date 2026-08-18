@@ -1437,13 +1437,19 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     render() {
-      const container = document.getElementById('binaryTreeWorkspaceContainer') || document.getElementById('chatAppBody');
-      if (!container) return;
+      const container = document.getElementById('binaryTreeWorkspaceContainer');
+      const mainPane = document.getElementById('chatMainPane');
+      if (!container || !mainPane) return;
+
+      // Save mainPane from being destroyed when re-rendering
+      if (mainPane.parentElement) {
+        mainPane.remove();
+      }
 
       container.innerHTML = '';
       const root = document.createElement('div');
       root.className = 'tree-workspace-root';
-      root.appendChild(this._buildNode(this.store.tree, { topRow: true, leftEdge: true, rightEdge: true }));
+      root.appendChild(this._buildNode(this.store.tree, mainPane, { topRow: true, leftEdge: true, rightEdge: true }));
       container.appendChild(root);
 
       if (window.syncComposerHorizontalAlignment) {
@@ -1451,7 +1457,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    _buildLeaf(node, flags) {
+    _buildLeaf(node, mainPane, flags) {
       const leafEl = document.createElement('div');
       leafEl.className = 'tree-leaf-pane';
       leafEl.dataset.paneId = node.id;
@@ -1469,7 +1475,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Reserve space for floating overlay controls on top row
       if (flags.topRow && flags.leftEdge) {
         const isCollapsed = document.getElementById('chatLeftSidebar')?.classList.contains('collapsed');
-        hdr.style.paddingLeft = isCollapsed ? '44px' : '0px';
+        hdr.style.paddingLeft = isCollapsed ? '38px' : '0px';
       }
       if (flags.topRow && flags.rightEdge) {
         hdr.style.paddingRight = '120px';
@@ -1509,7 +1515,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const addBtn = document.createElement('button');
       addBtn.className = 'top-bar-new-tab-btn';
-      addBtn.title = '新建会话标签页';
+      addBtn.title = '新建标签页';
       addBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
       addBtn.addEventListener('click', () => this.store.addTab(node.id));
       strip.appendChild(addBtn);
@@ -1521,21 +1527,25 @@ document.addEventListener('DOMContentLoaded', () => {
       const content = document.createElement('div');
       content.className = 'tree-pane-content';
 
-      const mainPaneTemplate = document.getElementById('chatMainPane');
-      if (mainPaneTemplate) {
-        const paneClone = mainPaneTemplate.cloneNode(true);
-        paneClone.id = 'paneChat-' + node.id;
-        paneClone.style.display = 'flex';
-        paneClone.style.flex = '1 1 0';
-        paneClone.style.height = '100%';
-        content.appendChild(paneClone);
+      if (node.id === 'pane-main' || !this.store.findLeaf(this.store.tree, 'pane-main')) {
+        content.appendChild(mainPane);
+        mainPane.style.display = 'flex';
+        mainPane.style.flex = '1 1 0';
+        mainPane.style.height = '100%';
+      } else {
+        const streamClone = mainPane.cloneNode(true);
+        streamClone.id = 'paneChat-' + node.id;
+        streamClone.style.display = 'flex';
+        streamClone.style.flex = '1 1 0';
+        streamClone.style.height = '100%';
+        content.appendChild(streamClone);
       }
       leafEl.appendChild(content);
 
       return leafEl;
     }
 
-    _buildBranch(node, flags) {
+    _buildBranch(node, mainPane, flags) {
       const el = document.createElement('div');
       el.className = 'tree-branch ' + node.direction;
 
@@ -1548,12 +1558,12 @@ document.addEventListener('DOMContentLoaded', () => {
         rf = { topRow: false, leftEdge: flags.leftEdge, rightEdge: flags.rightEdge };
       }
 
-      const L = this._buildNode(node.left, lf);
+      const L = this._buildNode(node.left, mainPane, lf);
       L.style.flex = String(node.ratio || 0.5);
       L.style.minWidth = '0';
       L.style.minHeight = '0';
 
-      const R = this._buildNode(node.right, rf);
+      const R = this._buildNode(node.right, mainPane, rf);
       R.style.flex = String(1 - (node.ratio || 0.5));
       R.style.minWidth = '0';
       R.style.minHeight = '0';
@@ -1569,9 +1579,11 @@ document.addEventListener('DOMContentLoaded', () => {
       return el;
     }
 
-    _buildNode(node, flags) {
+    _buildNode(node, mainPane, flags) {
       if (!flags) flags = { topRow: true, leftEdge: true, rightEdge: true };
-      return node.type === 'leaf' ? this._buildLeaf(node, flags) : this._buildBranch(node, flags);
+      return node.type === 'leaf'
+        ? this._buildLeaf(node, mainPane, flags)
+        : this._buildBranch(node, mainPane, flags);
     }
 
     _bindResizer(handle, branchEl, node, leftEl, rightEl) {

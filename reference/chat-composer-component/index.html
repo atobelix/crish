@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modular Chat Composer Suite & Modern Organic Natural Layout</title>
+  
+  <!-- Modern Font Stack -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- CSS Design Tokens & Core Styles -->
+  <link rel="stylesheet" href="css/design-tokens.css?v=20260807_4">
+  <link rel="stylesheet" href="css/conversation-tokens.css?v=20260807_4">
+  <link rel="stylesheet" href="css/brand.css?v=20260807_4">
+  <link rel="stylesheet" href="css/composer.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-cards.css?v=20260807_4">
+  <link rel="stylesheet" href="css/popovers.css?v=20260807_4">
+  <link rel="stylesheet" href="css/preview-modal.css?v=20260807_4">
+
+  <!-- File Preview Subsystem Styles -->
+  <link rel="stylesheet" href="css/file-preview/tokens.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/shell.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/toolbar.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/motion.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/viewers/text.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/viewers/markdown.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/viewers/image.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/viewers/pdf.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/viewers/docx.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/viewers/table.css?v=20260807_4">
+  <link rel="stylesheet" href="css/file-preview/viewers/empty.css?v=20260807_4">
+  <link rel="stylesheet" href="css/tool-calls.css?v=20260807_4">
+
+  <!-- Flow Stylesheets -->
+  <link rel="stylesheet" href="css/flow/flow-base.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/motion.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/live.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/thinking.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/action.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/purpose.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/artifact-notebook.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/subagent.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/permission-bar.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/flow-timeline-rail.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/plan.css?v=20260807_4">
+  <link rel="stylesheet" href="css/flow/scrubber.css?v=20260807_4">
+
+  <!-- Markdown Editor Styles -->
+  <link rel="stylesheet" href="css/markdown-editor/index.css">
+  <link rel="stylesheet" href="css/markdown-editor/inline-marks.css">
+  <link rel="stylesheet" href="css/markdown-editor/line-source.css">
+  <link rel="stylesheet" href="css/markdown-editor/motion.css">
+  <link rel="stylesheet" href="css/markdown-editor/selection.css">
+  <link rel="stylesheet" href="css/markdown-editor/table.css">
+
+  <!-- File Preview Styles -->
+  <link rel="stylesheet" href="css/file-preview/tokens.css">
+  <link rel="stylesheet" href="css/file-preview/shell.css">
+  <link rel="stylesheet" href="css/file-preview/toolbar.css">
+  <link rel="stylesheet" href="css/file-preview/motion.css">
+</head>
+<body>
+
+  <!-- Hidden File Input for Plus Menu File Upload -->
+  <input type="file" id="hiddenFileInput" style="display: none;" multiple>
+
+  <!-- Chat App Fullscreen Layout (Zero Shift Desktop Architecture) -->
+  <div class="chat-app-layout has-left-sidebar" id="chatAppLayout">
+
+    <!-- 1. Left History & Projects Sidebar (Authentic Crish Desktop Architecture) -->
+    <aside class="chat-left-sidebar" id="chatLeftSidebar">
+      <!-- Permanent Invariant Fixed Left Sidebar Toggle Button (Inside Sidebar Header Rail) -->
+      <div class="sidebar-header" data-tauri-drag-region>
+        <button class="sidebar-toggle-btn" id="sidebarToggleBtn" title="收起左侧历史栏 (Cmd/Ctrl + B)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+        </button>
+      </div>
+
+      <!-- 1. Top Nav Actions Region (Authentic Crish SidebarNav) -->
+      <div class="sidebar-top">
+        <div class="sidebar-top-nav">
+          <button class="sidebar-nav-item active" id="navNewSession">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M11 3H7.5A4.5 4.5 0 0 0 3 7.5v9A4.5 4.5 0 0 0 7.5 21h9a4.5 4.5 0 0 0 4.5-4.5v-6"></path>
+              <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"></path>
+            </svg>
+            <span>新对话</span>
+          </button>
+          <button class="sidebar-nav-item" id="navScheduled">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>
+            </svg>
+            <span>定时任务</span>
+          </button>
+          <div class="sidebar-nav-item sidebar-search-item" role="search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="search" placeholder="搜索会话与消息…" class="sidebar-search-input" />
+          </div>
+        </div>
+      </div>
+
+        <!-- 2. Scrollable Middle Session List (Grouped by Pinned / Projects / Recent) -->
+        <div class="sidebar-scroll">
+          <!-- Pinned Section -->
+          <div class="sidebar-section">
+            <div class="sidebar-section-header">
+              <div class="section-label-left">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+                <span>置顶</span>
+              </div>
+              <svg class="section-chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div class="sidebar-section-body">
+              <div class="sidebar-session-row active">
+                <div class="session-main-text">重构 IPC 缓冲通道</div>
+                <span class="session-time">刚刚</span>
+                <button class="session-more-btn" title="更多操作">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Projects Section -->
+          <div class="sidebar-section">
+            <div class="sidebar-section-header">
+              <div class="section-label-left">
+                <div class="section-label-left">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                  <span>项目</span>
+                </div>
+              </div>
+              <svg class="section-chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+            </div>
+            <div class="sidebar-section-body">
+              <div class="sidebar-session-row">
+                <div class="session-main-text">crates/session-loop</div>
+                <span class="session-time">2小时前</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- General Sessions Section -->
+          <div class="sidebar-section">
+            <div class="sidebar-section-header">
+              <div class="section-label-left">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 14 14"></polyline></svg>
+                <span>最近会话</span>
+              </div>
+            </div>
+            <div class="sidebar-section-body">
+              <div class="sidebar-session-row">
+                <div class="session-main-text">CSS 滚动条抖动治理</div>
+                <span class="session-time">昨天</span>
+                <button class="session-more-btn" title="更多操作">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+                </button>
+              </div>
+              <div class="sidebar-session-row">
+                <div class="session-main-text">Rust 异步调度器压测</div>
+                <span class="session-time">3天前</span>
+                <button class="session-more-btn" title="更多操作">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Bottom Footer (UserProfileCard + Settings Gear) -->
+        <div class="sidebar-footer">
+          <div class="footer-user-col">
+            <div class="user-profile-card" title="用户菜单与工作区设置">
+              <div class="user-avatar-container">
+                <div class="user-avatar">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                </div>
+                <span class="user-online-status" aria-label="在线"></span>
+              </div>
+              <div class="user-text-stack">
+                <span class="user-name">orange</span>
+                <span class="user-workspace">conex-core</span>
+              </div>
+              <svg class="user-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 15 12 20 17 15"></polyline><polyline points="7 9 12 4 17 9"></polyline></svg>
+            </div>
+          </div>
+          <div class="footer-gear-col">
+            <button class="settings-gear-btn" title="打开设置中心 (Cmd/Ctrl + ,)">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V21a2 2 0 0 1-2 2h-1.66A2 2 0 0 1 17 21h-0.09a1.65 1.65 0 0 0-1.51-1z"></path></svg>
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Draggable Partition Resizer: Sidebar -->
+      <div class="layout-resizer layout-resizer-sidebar" id="sidebarResizer" title="拖拽调整侧边栏宽度，双击重置"></div>
+
+      <!-- 2. Right Workspace Container -->
+      <div class="app-workspace-container" id="chatWorkspaceContainer">
+
+        <!-- Workspace Top Bar — Floating Overlay (Window Controls & Collapsed Sidebar Toggle) -->
+        <header class="workspace-top-bar" id="appTopBar" data-tauri-drag-region>
+          <!-- Collapsed Sidebar Expand Rail (Shown when sidebar collapsed) -->
+          <div class="workspace-top-bar__rail" id="collapsedToggleRail" style="display: none;">
+            <button class="header-btn" id="expandSidebarBtn" title="展开侧栏" style="width: 28px; height: 28px;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
+            </button>
+          </div>
+
+          <!-- Fixed Right Window Action Buttons (3 Buttons: Min, Max, Close) -->
+          <div class="workspace-top-bar__trail">
+            <button class="header-btn" id="winMinimizeBtn" title="最小化"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+            <button class="header-btn" id="winMaximizeBtn" title="最大化"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg></button>
+            <button class="header-btn app-top-bar__close" id="winCloseBtn" title="关闭窗口"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+          </div>
+        </header>
+
+        <!-- Workspace Content Body (Binary Tree Container) -->
+        <main class="workspace-content-body" id="workspaceContentBody">
+          <div id="binaryTreeWorkspaceContainer" style="width: 100%; height: 100%;">
+            <!-- Main Chat Column (Live DOM Node) -->
+            <div class="chat-main-pane" id="chatMainPane">
+              <!-- Row 2: Secondary Top Header (Breadcrumbs + Right Actions) -->
+              <div class="chat-top-header" id="chatTopHeader">
+                <!-- Left: 3-Level Breadcrumbs -->
+                <div class="chat-top-left">
+                  <nav class="top-breadcrumbs" aria-label="Breadcrumb">
+                    <!-- Level 1: Project -->
+                    <span class="breadcrumb-item breadcrumb-project" id="bcProject" title="当前所属项目">
+                      <span class="bc-text">conex-core</span>
+                    </span>
+
+                    <span class="bc-sep">/</span>
+
+              <!-- Level 2: Session -->
+              <span class="breadcrumb-item breadcrumb-session" id="bcSession" title="当前会话">
+                <span class="bc-text">重构 IPC 缓冲通道</span>
+              </span>
+
+              <span class="bc-sep bc-agent-sep">/</span>
+
+              <!-- Level 3: Subagent Status Item (Restrained, subtle live dot & count) -->
+              <button class="breadcrumb-item breadcrumb-agent-btn" id="bcAgentCapsule" title="查看子 Agent 状态">
+                <span class="agent-live-dot"></span>
+                <span class="bc-agent-text">2 个运行中</span>
+                <svg class="bc-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </button>
+            </nav>
+          </div>
+
+          <!-- Right: Top Header Actions (More, Share) -->
+          <div class="chat-top-actions">
+            <button class="top-action-btn" id="topMoreBtn" title="更多操作">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+            </button>
+            <button class="top-action-btn" id="topShareBtn" title="分享链接">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+            </button>
+          </div>
+        </div>
+
+      <!-- Minimalist Chat Stream Area (Scrollable) -->
+      <div class="chat-stream-container" id="chatStreamContainer">
+        <div class="chat-stream-inner flow-stream-inner" id="streamMount">
+          <!-- Conversation rendered here by StreamRenderer / FlowMount -->
+        </div>
+      </div>
+
+      <!-- Composer Wrapper (Anchored at Bottom) -->
+      <div class="composer-wrapper">
+      <div class="composer-float-zone">
+        <!-- Permission bar host above plan bar inside composer-wrapper -->
+        <div id="permissionBarHost" class="flow-permission-host"></div>
+
+        <!-- Composite Plan & Goal Progress Hub (Default Collapsed) -->
+        <div class="plan-progress-bar active" id="planProgressBar" data-mode="goal">
+          <!-- Goal Panel (order 1) -->
+        <div class="plan-goal-panel" id="planGoalPanel">
+          <div class="plan-goal-panel-inner">
+            <div class="goal-edit-field" id="goalEditField" contenteditable="true" data-placeholder="输入 / 或空格唤出命令，@ 引用文件，@@ 唤起目录..."></div>
+          </div>
+        </div>
+
+        <!-- Upward Step Drawer List (order 2) -->
+        <div class="plan-step-list" id="planStepList">
+          <div class="plan-step-list-inner">
+            <div class="plan-expanded-step completed">
+              <span class="plan-step-dot"></span>
+              <span class="step-text">1. 摸清 crates/session-loop 的 IPC 通道瓶颈</span>
+            </div>
+            <div class="plan-expanded-step active">
+              <span class="plan-step-dot"></span>
+              <span class="step-text">2. 重构 crates/session-loop 批量缓冲与调度器</span>
+            </div>
+            <div class="plan-expanded-step pending">
+              <span class="plan-step-dot"></span>
+              <span class="step-text">3. 优化 apps/crish-desktop 虚拟流式渲染管线</span>
+            </div>
+            <div class="plan-expanded-step pending">
+              <span class="plan-step-dot"></span>
+              <span class="step-text">4. 执行 cargo test --workspace 与端到端压测</span>
+            </div>
+            <div class="plan-expanded-step pending">
+              <span class="plan-step-dot"></span>
+              <span class="step-text">5. 生成 Conex IPC 性能优化评审与变更摘要报告</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Single-Line Anchored Hub (order 10) -->
+        <div class="plan-collapsed" id="planCollapsed">
+          <button class="plan-mode-badge" id="planModeBadge" title="点击展开目标详情">
+            <svg class="mode-icon goal-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+            <span class="mode-text">计划模式</span>
+          </button>
+
+          <div class="plan-divider-v"></div>
+
+          <span class="plan-step-counter" id="planStepCounter" title="当前进度">2/5</span>
+
+          <div class="plan-active-task-box" id="planActiveTaskBox" title="点击查看步骤列表">
+            <div class="plan-roller">
+              <div class="plan-roller-track" id="planRollerTrack">
+                <div class="plan-step">摸清 crates/session-loop 的 IPC 通道瓶颈</div>
+                <div class="plan-step">重构 crates/session-loop 批量缓冲与调度器</div>
+                <div class="plan-step">优化 apps/crish-desktop 虚拟流式渲染管线</div>
+                <div class="plan-step">执行 cargo test --workspace 与端到端压测</div>
+                <div class="plan-step">生成 Conex IPC 性能优化评审与变更摘要报告</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="plan-spacer"></div>
+
+          <div class="plan-right-controls">
+            <span class="plan-duration" id="planDuration">00:00</span>
+            
+            <div class="plan-quick-actions">
+              <button class="plan-action-btn" id="planEditQuickBtn" title="编辑目标描述">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+              </button>
+              <button class="plan-action-btn" id="planPauseToggleBtn" title="暂停/继续">
+                <svg class="icon-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+                <svg class="icon-play" style="display: none;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              </button>
+              <button class="plan-action-btn stop" id="planStopQuickBtn" title="终止任务">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div> <!-- Close composer-float-zone -->
+
+      <!-- Main Composer Input Card -->
+      <div class="composer-container" id="composerContainer">
+        <!-- Attached Top File Cards Zone -->
+        <div class="file-zone" id="fileZone">
+          <!-- Authentic Local File Cards -->
+          <div class="file-card" data-file-type="markdown" data-file-name="DESIGN_SYSTEM.md" onclick="window.openPreview(this)">
+            <div class="file-icon"></div>
+            <span class="file-name">DESIGN_SYSTEM.md</span>
+            <div class="file-remove" onclick="event.stopPropagation(); window.removeFileCard(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>
+          </div>
+
+          <div class="file-card" data-file-type="markdown" data-file-name="CONVERSATION_FLOW_SPEC.md" onclick="window.openPreview(this)">
+            <div class="file-icon"></div>
+            <span class="file-name">CONVERSATION_FLOW_SPEC.md</span>
+            <div class="file-remove" onclick="event.stopPropagation(); window.removeFileCard(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>
+          </div>
+
+          <div class="file-card" data-file-type="table" data-file-name="sample.csv" onclick="window.openPreview(this)">
+            <div class="file-icon"></div>
+            <span class="file-name">sample.csv</span>
+            <div class="file-remove" onclick="event.stopPropagation(); window.removeFileCard(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>
+          </div>
+
+          <div class="file-card" data-file-type="code" data-file-name="extract-icons.js" onclick="window.openPreview(this)">
+            <div class="file-icon"></div>
+            <span class="file-name">extract-icons.js</span>
+            <div class="file-remove" onclick="event.stopPropagation(); window.removeFileCard(this)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></div>
+          </div>
+        </div>
+
+        <!-- Grid-based Input Layout (single-line ~ multi-line) -->
+        <div class="input-main-layout">
+          <div class="action-left">
+            <button class="icon-btn-plus" id="btnPlus" title="添加附件或 Skill">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+          </div>
+
+          <div class="composer-editable" id="composerEditable" contenteditable="true" data-placeholder="输入 / 或空格唤出命令，@ 引用文件，@@ 唤起目录...">根据 <span class="rich-inline-tag animate-entrance" contenteditable="false" onclick="window.locateOrPreviewFile('DESIGN_SYSTEM.md')"><span class="tag-icon-box"></span><span class="tag-text">DESIGN_SYSTEM.md</span><span class="tag-remove-btn" title="删除标记" onclick="event.stopPropagation(); this.parentElement.remove(); if(window.updateSendButtonState)window.updateSendButtonState();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span></span> 和 <span class="rich-inline-tag animate-entrance" contenteditable="false" onclick="window.locateOrPreviewFile('CONVERSATION_FLOW_SPEC.md')"><span class="tag-icon-box"></span><span class="tag-text">CONVERSATION_FLOW_SPEC.md</span><span class="tag-remove-btn" title="删除标记" onclick="event.stopPropagation(); this.parentElement.remove(); if(window.updateSendButtonState)window.updateSendButtonState();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span></span> ，参考 <span class="rich-inline-tag animate-entrance" contenteditable="false" onclick="window.locateOrPreviewFile('sample.csv')"><span class="tag-icon-box"></span><span class="tag-text">sample.csv</span><span class="tag-remove-btn" title="删除标记" onclick="event.stopPropagation(); this.parentElement.remove(); if(window.updateSendButtonState)window.updateSendButtonState();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span></span> 及 <span class="rich-inline-tag animate-entrance" contenteditable="false" onclick="window.locateOrPreviewFile('extract-icons.js')"><span class="tag-icon-box"></span><span class="tag-text">extract-icons.js</span><span class="tag-remove-btn" title="删除标记" onclick="event.stopPropagation(); this.parentElement.remove(); if(window.updateSendButtonState)window.updateSendButtonState();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span></span> 进行评估，使用 <span class="rich-inline-tag skill-type animate-entrance" contenteditable="false" onclick="window.locateOrPreviewFile('chinese-encoding-guard')"><span class="tag-icon-box"></span><span class="tag-text">chinese-encoding-guard</span><span class="tag-remove-btn" title="删除标记" onclick="event.stopPropagation(); this.parentElement.remove(); if(window.updateSendButtonState)window.updateSendButtonState();"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span></span> 校验编码。</div>
+
+          <button class="pure-mode-text-btn perm-full icon-only" id="btnPermission" title="点击切换工作模式">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <span>完全访问</span>
+          </button>
+
+          <div class="action-right">
+            <div class="fused-model-thinking-btn">
+              <span class="fused-sub-trigger fused-sub-trigger--model" id="btnModel" title="点击切换 AI 模型">Claude 3.7 Sonnet</span><span class="fused-divider"></span><span class="fused-sub-trigger fused-sub-trigger--thinking" id="btnThinking" title="点击调节思考深度">High</span>
+            </div>
+
+            <button class="action-circle-btn" title="语音输入">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="6" y1="9" x2="6" y2="15"></line><line x1="10" y1="6" x2="10" y2="18"></line><line x1="14" y1="4" x2="14" y2="20"></line><line x1="18" y1="8" x2="18" y2="16"></line></svg>
+            </button>
+
+            <button class="send-btn-circle" id="btnSend" title="发送消息">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Drag & Drop Full Overlay -->
+        <div class="drag-drop-overlay" id="dragDropOverlay" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span>松开鼠标，添加文件到对话</span>
+        </div>
+      </div>
+      <!-- End Composer Wrapper -->
+    </div>
+    <!-- End Main Chat Pane -->
+
+        </div>
+        <!-- End binaryTreeWorkspaceContainer -->
+      </main>
+      <!-- End workspaceContentBody -->
+    </div>
+    <!-- End chatWorkspaceContainer -->
+
+  </div>
+  <!-- End Chat App Fullscreen Layout -->
+
+  <!-- POPOVER MENUS -->
+
+  <!-- Slash Command Popover Menu (/ and @) -->
+  <div class="popover-menu" id="slashPopover">
+    <div class="popover-title">快捷命令与 Skill</div>
+    <div class="popover-option slash-item" data-cmd="/重构" data-skill="代码重构专家">
+      <div class="flex-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+        <span>/重构</span>
+      </div>
+      <span class="text-hint">代码重构专家</span>
+    </div>
+    <div class="popover-option slash-item" data-cmd="/架构" data-skill="架构图解设计">
+      <div class="flex-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        <span>/架构</span>
+      </div>
+      <span class="text-hint">架构图解设计</span>
+    </div>
+    <div class="popover-option slash-item" data-cmd="/研报" data-skill="联网深度研报">
+      <div class="flex-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+        <span>/研报</span>
+      </div>
+      <span class="text-hint">联网深度研报</span>
+    </div>
+    <div class="popover-option slash-item" data-cmd="/上传" data-action="upload">
+      <div class="flex-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        <span>/上传</span>
+      </div>
+      <span class="text-hint">添加本地文件</span>
+    </div>
+  </div>
+
+  <!-- At File Popover Menu (@) -->
+  <div class="popover-menu" id="atPopover">
+    <div class="popover-title">引用已有文件</div>
+    <div class="popover-option at-item" data-file="API接口并发吞吐量压测明细.csv">
+      <div class="flex-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
+        <span class="text-truncate">API接口并发吞吐量压测明细.csv</span>
+      </div>
+    </div>
+    <div class="popover-option at-item" data-file="全路网交通流量分析报告.pdf">
+      <div class="flex-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+        <span class="text-truncate">全路网交通流量分析报告.pdf</span>
+      </div>
+    </div>
+    <div class="popover-option at-item" data-file="自然景观高清样张.jpg">
+      <div class="flex-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
+        <span class="text-truncate">自然景观高清样张.jpg</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tree File Browser Popover Menu (@@) -->
+  <div class="popover-menu tree-menu" id="treePopover">
+    <div class="tree-header">
+      <div class="tree-scope-toggle">
+        <button class="tree-scope-btn active" id="btnScopeCurrent">当前目录 (./)</button>
+        <button class="tree-scope-btn" id="btnScopeGlobal">全局检索</button>
+      </div>
+      <div class="popover-search">
+        <svg class="popover-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="treeSearchInput" placeholder="搜索目录或文件名...">
+      </div>
+    </div>
+    <div class="tree-content">
+      <!-- Folder src/components -->
+      <div class="tree-folder-group">
+        <div class="tree-folder-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          <span>src/components/</span>
+        </div>
+        <div class="tree-sub-items">
+          <div class="popover-option tree-file-item" data-file="ChatComposer.tsx">
+            <div class="flex-row-tight">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              <span>ChatComposer.tsx</span>
+            </div>
+          </div>
+          <div class="popover-option tree-file-item" data-file="PreviewModal.tsx">
+            <div class="flex-row-tight">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              <span>PreviewModal.tsx</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Folder docs -->
+      <div class="tree-folder-group">
+        <div class="tree-folder-title">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+          <span>docs/</span>
+        </div>
+        <div class="tree-sub-items">
+          <div class="popover-option tree-file-item" data-file="全路网交通流量分析报告.pdf">
+            <div class="flex-row-tight">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              <span>全路网交通流量分析报告.pdf</span>
+            </div>
+          </div>
+          <div class="popover-option tree-file-item" data-file="API接口并发吞吐量压测明细.csv">
+            <div class="flex-row-tight">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+              <span>API接口并发吞吐量压测明细.csv</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Root File package.json -->
+      <div class="popover-option tree-file-item" data-file="package.json">
+        <div class="flex-row-tight">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <span>package.json</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Plus Floating Popover Menu -->
+  <div class="popover-menu" id="plusPopover">
+    <div class="popover-option" id="menuAddFile">
+      <div class="flex-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+        添加本地文件
+      </div>
+    </div>
+    <div class="popover-option slash-item" id="menuUseSkill">
+      <div class="flex-row">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+        使用 Skill
+      </div>
+      <span class="text-hint">›</span>
+    </div>
+  </div>
+  <input type="file" id="composerFileInput" multiple style="display: none;">
+
+  <!-- Skill Cascade Submenu -->
+  <div class="cascade-submenu" id="skillSubmenu">
+    <div class="popover-search-frameless">
+      <svg class="popover-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="text" id="skillSearchInput" placeholder="搜索 Skill...">
+    </div>
+    <div class="model-list-container" id="skillListContainer">
+      <div class="popover-option skill-item" data-name="代码重构专家">
+        <div class="flex-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+          代码重构专家
+        </div>
+      </div>
+      <div class="popover-option skill-item" data-name="架构图解设计">
+        <div class="flex-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          架构图解设计
+        </div>
+      </div>
+      <div class="popover-option skill-item" data-name="联网深度研报">
+        <div class="flex-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line></svg>
+          联网深度研报
+        </div>
+      </div>
+      <div class="popover-option skill-item" data-name="chinese-encoding-guard">
+        <div class="flex-row">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          chinese-encoding-guard
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Model Popover Menu (Frameless Search & Provider Group Headers) -->
+  <div class="popover-menu model-menu" id="modelPopover">
+    <!-- Frameless Top Search Input with Model Settings Action -->
+    <div class="popover-search-frameless">
+      <svg class="popover-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input type="text" id="modelSearchInput" placeholder="搜索模型或厂商...">
+      <button class="popover-action-icon-btn" id="btnModelConfig" title="配置自定义模型与 API Key">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line><line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line><line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line><line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line></svg>
+      </button>
+    </div>
+
+    <!-- Grouped Model List Container -->
+    <div class="model-list-container" id="modelListContainer">
+      <!-- Anthropic -->
+      <div class="provider-group-header">Anthropic</div>
+      <div class="popover-option model-card-item selected" data-provider="anthropic" data-model="Claude 3.7 Sonnet">
+        <span>Claude 3.7 Sonnet</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+      <div class="popover-option model-card-item" data-provider="anthropic" data-model="Claude 3.5 Haiku">
+        <span>Claude 3.5 Haiku</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+
+      <!-- OpenAI -->
+      <div class="provider-group-header">OpenAI</div>
+      <div class="popover-option model-card-item" data-provider="openai" data-model="o3-mini">
+        <span>o3-mini</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+      <div class="popover-option model-card-item" data-provider="openai" data-model="o1">
+        <span>o1</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+      <div class="popover-option model-card-item" data-provider="openai" data-model="GPT-4o">
+        <span>GPT-4o</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+
+      <!-- Google DeepMind -->
+      <div class="provider-group-header">Google DeepMind</div>
+      <div class="popover-option model-card-item" data-provider="google" data-model="Gemini 2.0 Flash">
+        <span>Gemini 2.0 Flash</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+      <div class="popover-option model-card-item" data-provider="google" data-model="Gemini 2.0 Pro">
+        <span>Gemini 2.0 Pro</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+
+      <!-- DeepSeek -->
+      <div class="provider-group-header">DeepSeek</div>
+      <div class="popover-option model-card-item" data-provider="deepseek" data-model="DeepSeek R1">
+        <span>DeepSeek R1</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+
+      <!-- Meta AI -->
+      <div class="provider-group-header">Meta AI</div>
+      <div class="popover-option model-card-item" data-provider="meta" data-model="Llama 3.3 70B">
+        <span>Llama 3.3 70B</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+
+      <!-- Mistral AI -->
+      <div class="provider-group-header">Mistral AI</div>
+      <div class="popover-option model-card-item" data-provider="mistral" data-model="Codestral 2501">
+        <span>Codestral 2501</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+
+      <!-- Moonshot -->
+      <div class="provider-group-header">Moonshot</div>
+      <div class="popover-option model-card-item" data-provider="moonshot" data-model="Kimi K1.5">
+        <span>Kimi K1.5</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+
+      <!-- 阿里通义 -->
+      <div class="provider-group-header">阿里通义</div>
+      <div class="popover-option model-card-item" data-provider="qwen" data-model="Qwen 2.5 Coder 32B">
+        <span>Qwen 2.5 Coder 32B</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+
+      <!-- 智谱 AI -->
+      <div class="provider-group-header">智谱 AI</div>
+      <div class="popover-option model-card-item" data-provider="zhipu" data-model="GLM-4 Plus">
+        <span>GLM-4 Plus</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+
+      <!-- Ollama 本地模型 -->
+      <div class="provider-group-header">Ollama 本地模型</div>
+      <div class="popover-option model-card-item" data-provider="ollama" data-model="DeepSeek-R1-14B (本地)">
+        <span>DeepSeek-R1 14B 本地</span>
+        <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+      </div>
+    </div>
+
+    <!-- Dynamic Interactive Thinking Effort Section (Collapsible, Segmented Capsule, Body Above Toggle) -->
+    <div class="thinking-effort-section" id="thinkingEffortSection">
+      <div class="thinking-effort-body" id="thinkingEffortBody" style="display: none;">
+        <div class="thinking-effort-label">
+          <span>思考强度</span>
+          <span class="thinking-effort-val" id="currentEffortVal">High</span>
+        </div>
+        <div class="thinking-seg-group" id="thinkingSegGroup">
+          <button class="thinking-seg-btn" data-val="0" data-label="Off">Off</button>
+          <button class="thinking-seg-btn" data-val="1" data-label="Low">Low</button>
+          <button class="thinking-seg-btn" data-val="2" data-label="Medium">Medium</button>
+          <button class="thinking-seg-btn active" data-val="3" data-label="High">High</button>
+          <button class="thinking-seg-btn" data-val="4" data-label="X-High">X-High</button>
+          <button class="thinking-seg-btn" data-val="5" data-label="Max">Max</button>
+        </div>
+      </div>
+      <div class="thinking-effort-toggle" id="thinkingEffortToggle">
+        <span>高级选项</span>
+        <svg class="thinking-toggle-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dedicated Thinking Depth Popover Menu (Clean, Iconless, Lucide Checkmark) -->
+  <div class="popover-menu thinking-menu" id="thinkingPopover">
+    <div class="popover-title">思考强度</div>
+    
+    <div class="popover-option thinking-option" data-val="0" data-label="Off">
+      <span>Off</span>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+
+    <div class="popover-option thinking-option" data-val="1" data-label="Low">
+      <span>Low</span>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+
+    <div class="popover-option thinking-option" data-val="2" data-label="Medium">
+      <span>Medium</span>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+
+    <div class="popover-option thinking-option selected" data-val="3" data-label="High">
+      <span>High</span>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+
+    <div class="popover-option thinking-option" data-val="4" data-label="X-High">
+      <span>X-High</span>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+
+    <div class="popover-option thinking-option" data-val="5" data-label="Max">
+      <span>Max</span>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+  </div>
+
+  <!-- Permission Operating Modes Popover Menu (Info Tooltip Adjacent to Label + Lucide Checkmark) -->
+  <div class="popover-menu permission-menu" id="permissionPopover">
+    <div class="popover-title">工作区权限</div>
+    
+    <div class="popover-option permission-row permission-option" data-mode="只读模式">
+      <div class="permission-left">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        <span>只读模式</span>
+      </div>
+      <div class="permission-info-trigger" data-tooltip="仅允许读取与分析上下文代码，彻底拦截所有文件修改与终端命令">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      </div>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+
+    <div class="popover-option permission-row permission-option" data-mode="计划模式">
+      <div class="permission-left">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+        <span>计划模式</span>
+      </div>
+      <div class="permission-info-trigger" data-tooltip="优先思考生成 Implementation Plan 方案，经确认后再开始编写">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      </div>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+
+    <div class="popover-option permission-row permission-option" data-mode="目标模式">
+      <div class="permission-left">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+        <span>目标模式</span>
+      </div>
+      <div class="permission-info-trigger" data-tooltip="针对复杂目标自动拆解子任务并自主迭代，直至达成最终目标">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      </div>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+
+    <div class="popover-option permission-row permission-option" data-mode="权限询问">
+      <div class="permission-left">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+        <span>权限询问</span>
+      </div>
+      <div class="permission-info-trigger" data-tooltip="凡涉及文件写入、删除或终端命令执行，均先请求您的授权">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      </div>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+
+    <div class="popover-option permission-row permission-option selected" data-mode="完全访问">
+      <div class="permission-left">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+        <span>完全访问</span>
+      </div>
+      <div class="permission-info-trigger" data-tooltip="信任 Agent 并无阻碍自动执行所有文件读写、修改与终端操作">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+      </div>
+      <svg class="check-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+    </div>
+  </div>
+
+  <!-- Dedicated Task Termination Centered Modal Panel with 15% Black Backdrop Overlay -->
+  <div class="modal-backdrop-overlay" id="stopTaskModalOverlay">
+    <div class="popover-menu stop-task-popover" id="stopTaskPopover">
+      <div class="stop-task-header">
+        <div class="stop-task-title">确认终止任务？</div>
+        <div class="stop-task-desc">终止后将暂停当前目标的执行，Agent 将立即停止分发任务。</div>
+      </div>
+      
+      <div class="stop-task-actions">
+        <button class="stop-task-btn cancel" id="stopTaskCancelBtn">取消</button>
+        <button class="stop-task-btn confirm" id="stopTaskConfirmBtn">确认终止</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Top More Options Popover Menu -->
+  <div class="popover-menu top-more-popover" id="topMoreMenu">
+    <div class="popover-option" id="topPinOption">
+      <div class="popover-option-left">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+        <span>置顶</span>
+      </div>
+    </div>
+    <div class="popover-option has-submenu" id="topMoveOption">
+      <div class="popover-option-left">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        <span>移动到项目</span>
+      </div>
+      <svg class="chevron-sub" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+    </div>
+    <div class="popover-option danger" id="topDeleteOption">
+      <div class="popover-option-left">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        <span>删除聊天</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Submenu for Project Move -->
+  <div class="cascade-submenu top-project-submenu" id="topProjectSubmenu">
+    <div class="popover-option" id="topCreateProjectOption">
+      <div class="popover-option-left">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
+        <span>创建新项目</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subagent Runtime Status Popover Menu (Level 3 Minimalist Status Panel) -->
+  <div class="popover-menu agent-runtime-popover" id="agentRuntimePopover">
+    <div class="agent-pop-header">
+      <span class="agent-pop-title">子 Agent 状态</span>
+      <span class="agent-pop-meta" id="agentPopMeta">2 活跃 · 共 4 个</span>
+    </div>
+
+    <div class="agent-pop-list" id="agentPopList">
+      <!-- Item 1: Active 1 (Recent running on top) -->
+      <div class="agent-pop-item is-active">
+        <span class="agent-pop-dot is-active"></span>
+        <div class="agent-pop-body">
+          <div class="agent-pop-name">Event Interception Auditor</div>
+          <div class="agent-pop-sub">crates/session-loop/ipc.rs · 2.8s</div>
+        </div>
+        <span class="agent-pop-status is-active">运行中</span>
+      </div>
+
+      <!-- Item 2: Active 2 -->
+      <div class="agent-pop-item is-active">
+        <span class="agent-pop-dot is-active"></span>
+        <div class="agent-pop-body">
+          <div class="agent-pop-name">DOM Stacking & Hitbox Auditor</div>
+          <div class="agent-pop-sub">css/flow/scrubber.css · 1.9s</div>
+        </div>
+        <span class="agent-pop-status is-active">运行中</span>
+      </div>
+
+      <!-- Item 3: Done -->
+      <div class="agent-pop-item">
+        <span class="agent-pop-dot is-done"></span>
+        <div class="agent-pop-body">
+          <div class="agent-pop-name">CSS Overflow & Scroll Chaining Auditor</div>
+          <div class="agent-pop-sub">产出 04-audit.md · 3.4s</div>
+        </div>
+        <span class="agent-pop-status">已完成</span>
+      </div>
+
+      <!-- Item 4: Killed -->
+      <div class="agent-pop-item">
+        <span class="agent-pop-dot is-killed"></span>
+        <div class="agent-pop-body">
+          <div class="agent-pop-name">Chromium Hit-Testing Probe</div>
+          <div class="agent-pop-sub">0.8s 终止</div>
+        </div>
+        <span class="agent-pop-status is-killed">已终止</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flow Projector and Data -->
+  <script src="js/icon-assets.js"></script>
+  <script src="js/demo-data.js"></script>
+  <script src="js/markdown-lite.js"></script>
+  <script src="js/tool-presentation.js"></script>
+  <script src="js/flow-projector.js"></script>
+
+  <!-- Flow Component Nodes -->
+  <script src="js/components/dom-utils.js"></script>
+  <script src="js/components/FlowTimelineRail.js"></script>
+  <script src="js/components/ThinkingBlock.js"></script>
+  <script src="js/components/ActionRow.js"></script>
+  <script src="js/components/PurposeBlock.js"></script>
+  <script src="js/components/SubagentRoot.js"></script>
+  <script src="js/components/ArtifactChip.js"></script>
+  <script src="js/components/NotebookPanel.js"></script>
+  <script src="js/components/PermissionBar.js"></script>
+  <script src="js/components/SessionStart.js"></script>
+  <script src="js/components/TaskRoot.js"></script>
+  <script src="js/components/TextBlock.js"></script>
+  <script src="js/components/ComposingHint.js"></script>
+  <script src="js/components/FlowMount.js"></script>
+  <script src="js/components/FlowScrubber.js"></script>
+  <script src="js/stream-renderer.js"></script>
+
+  <!-- File Preview Subsystem -->
+  <script src="js/file-preview/model/types.js"></script>
+  <script src="js/file-preview/adapters/base.js"></script>
+  <script src="js/file-preview/adapters/text.js"></script>
+  <script src="js/file-preview/adapters/markdown.js"></script>
+  <script src="js/file-preview/adapters/image.js"></script>
+  <script src="js/file-preview/adapters/pdf.js"></script>
+  <script src="js/file-preview/adapters/docx.js"></script>
+  <script src="js/file-preview/adapters/spreadsheet.js"></script>
+  <script src="js/file-preview/adapters/unknown.js"></script>
+  <script src="js/file-preview/router/sniff.js"></script>
+  <script src="js/file-preview/router/PreviewRouter.js"></script>
+  <script src="js/file-preview/shell/focus-trap.js"></script>
+  <script src="js/file-preview/shell/PreviewShell.js"></script>
+  <script src="js/file-preview/toolbar/capabilities.js"></script>
+  <script src="js/file-preview/toolbar/Toolbar.js"></script>
+  <script src="js/file-preview/viewers/TextViewer.js"></script>
+  <script src="js/file-preview/viewers/MarkdownViewer.js"></script>
+  <script src="js/file-preview/viewers/ImageViewer.js"></script>
+  <script src="js/file-preview/viewers/PdfViewer.js"></script>
+  <script src="js/file-preview/viewers/DocxViewer.js"></script>
+  <script src="js/file-preview/viewers/TableViewer.js"></script>
+  <script src="js/file-preview/viewers/EmptyViewer.js"></script>
+  <script src="js/file-preview/index.js"></script>
+  <script src="js/file-preview/legacy-bridge.js"></script>
+
+  <script src="js/composer-core.js?v=2"></script>
+  <script src="js/popovers.js?v=2"></script>
+  <script src="js/ci-scroll-twitch-detector.js?v=2"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
