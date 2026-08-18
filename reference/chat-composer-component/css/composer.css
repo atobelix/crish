@@ -502,13 +502,6 @@ body {
   min-height: 100%;
   justify-content: flex-start;
 }
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  padding-bottom: 4px;
-  min-height: 100%;
-  justify-content: flex-start;
-}
 
 /* Messages — rhythm aligned with composer card density */
 .chat-message {
