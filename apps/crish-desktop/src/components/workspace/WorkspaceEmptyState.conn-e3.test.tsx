@@ -2,13 +2,17 @@
 /**
  * WorkspaceEmptyState · CONN-E3 detect→report 调度
  *
+ * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**
+ * （≠ 产品入口 ≠ G-HYD ≠ 打开完成）。
+ * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
+ *
  * 自 WorkspaceEmptyState.conn-e2.test.tsx 按域拆出（SD-42）；断言语义不变。
  *
  * - **CONN-E3**：detect→report 调度默认关；`enableMirrorDetectSchedule` + `mirrorIpc`
  *   → mock/Tauri detect → report 喂 StatusBar；`data-mirror-detect-schedule=0|1`；
  *   关时无 detect 定时器；X-05 / import 不回退；**≠ EL-03**；**≠ inotify 满关**
  *
- * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
+ * 夹具测头见 WorkspaceEmptyState.strict.test.tsx。
  * CONN-E2 StatusBar 见 WorkspaceEmptyState.conn-e2.test.tsx。
  */
 import React from 'react';
@@ -19,9 +23,9 @@ import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 
 describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
   // -------------------------------------------------------------------------
-  // CONN-E3：产品 detect→report 调度（opt-in）
+  // CONN-E3：夹具路径 detect→report 调度（opt-in）
   // 默认不调度；enable + mirrorIpc → detect → report 可达 StatusBar
-  // ≠ EL-03；≠ inotify 满关；X-05 / import 不回退
+  // ≠ 产品入口 ≠ G-HYD ≠ 打开完成；≠ EL-03；≠ inotify 满关；X-05 / import 不回退
   // -------------------------------------------------------------------------
 
   it('conn_e3_product_empty_default_no_detect_schedule', async () => {

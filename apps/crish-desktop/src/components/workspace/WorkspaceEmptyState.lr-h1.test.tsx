@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 /**
- * WorkspaceEmptyState · LR-H1 产品打开绑定已 persist 文档
+ * WorkspaceEmptyState · LR-H1 persist 文档绑定（夹具路径）
+ *
+ * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**
+ * （≠ 产品入口 ≠ G-HYD ≠ 打开完成）。
+ * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
  *
  * 完成定义：
  * - 绑定后打开 docId ≠ 永远只有死合成 `strict-${wsId}`

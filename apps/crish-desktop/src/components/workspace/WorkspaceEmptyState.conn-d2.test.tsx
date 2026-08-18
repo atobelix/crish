@@ -2,13 +2,17 @@
 /**
  * WorkspaceEmptyState · CONN-D2 / CONN-D3 mdPrefix 写锥
  *
+ * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**
+ * （≠ 产品入口 ≠ G-HYD ≠ 打开完成）。
+ * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
+ *
  * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；断言语义不变。
  *
  * - **CONN-D2/D3**：无 applyOps 默认 mdPrefix disabled；注入后 `data-md-prefix-write-mode=writable`
  *   + content-row 叶 `data-md-prefix-leaf-mode=writable`（叶键入见 StrictContentRowLeaf 测）；
  *   **≠ A-BLK-08/09 e2e**
  *
- * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
+ * 夹具测头见 WorkspaceEmptyState.strict.test.tsx。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';
@@ -18,8 +22,8 @@ import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 
 describe('WorkspaceEmptyState · CONN-D2 / CONN-D3 mdPrefix 写锥', () => {
   // -------------------------------------------------------------------------
-  // CONN-D2：产品空态 mdPrefix 写锥（默认 disabled / 注入可写）
-  // 桌面接线 ≠ 打开完成；≠ A-BLK-08/09 e2e；≠ EL-01
+  // CONN-D2：夹具路径 mdPrefix 写锥（默认 disabled / 注入可写）
+  // 桌面接线 ≠ 产品入口 ≠ G-HYD ≠ 打开完成；≠ A-BLK-08/09 e2e；≠ EL-01
   // -------------------------------------------------------------------------
 
   it('conn_d2_product_empty_default_md_prefix_disabled', async () => {

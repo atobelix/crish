@@ -1,27 +1,32 @@
 // @vitest-environment jsdom
 /**
- * WorkspaceEmptyState · CONN-C2 PaperList 产品默认策略
+ * WorkspaceEmptyState · CONN-C2 PaperList 夹具会计（组件默认仍关）
+ *
+ * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**
+ * （≠ 产品入口 ≠ G-HYD ≠ 打开完成）。
+ * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
  *
  * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；断言语义不变。
  *
- * - **CONN-C2**：PaperList 产品默认 **关**（`enableProductPaperList` 默认 false →
+ * - **CONN-C2**：PaperList 夹具默认 **关**（`enableProductPaperList` 默认 false →
  *   `data-product-paper-list=0` / panel `data-paper-list=0` / `react-rows`）；
  *   opt-in true → 挂 PaperList + `paper-list` 互斥 content-row；
  *   测钉 `conn_c2_default_no_paper_list` / `conn_c2_opt_in_paper_list_mutex`；
  *   **≠ EL-01**；**≠ W3-P 满窗**；禁默认真双内容
  *
- * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
+ * 夹具测头见 WorkspaceEmptyState.strict.test.tsx。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 
-describe('WorkspaceEmptyState · CONN-C2 PaperList 产品默认策略', () => {
+describe('WorkspaceEmptyState · CONN-C2 PaperList 夹具会计（≠ 产品入口）', () => {
   // -------------------------------------------------------------------------
-  // CONN-C2：PaperList 产品默认策略可审计（默认关 + opt-in 互斥）
-  // - 默认：不传 paperList → data-paper-list=0 / react-rows
+  // CONN-C2：夹具路径 PaperList 会计（默认关 + opt-in 互斥）
+  // - 直渲 EmptyState 默认：不传 paperList → data-paper-list=0 / react-rows
   // - opt-in：enableProductPaperList → paper-list 挂载且 content-row 互斥
+  // - 产品默开见 c2-prod / conn_ext（NoteLeafHost）；本文件 ≠ 产品入口
   // - ≠ EL-01；≠ W3-P 满窗；presentationMode 互斥不回退
   // -------------------------------------------------------------------------
 

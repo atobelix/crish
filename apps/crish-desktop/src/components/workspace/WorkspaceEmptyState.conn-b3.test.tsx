@@ -2,13 +2,17 @@
 /**
  * WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥
  *
+ * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**
+ * （≠ 产品入口 ≠ G-HYD ≠ 打开完成）。
+ * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
+ *
  * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；断言语义不变。
  *
  * - **CONN-B**：无 applyOps 默认 slash 只读；注入 applyOps 后点 slash → wire/submit
  * - **CONN-B3**：显式 `strictApplyOpsIpc` mock → source=product-ipc + 点 slash 可写；
  *   无 Tauri 仍默认 readonly（禁止 mock 生产默认）；**≠ EL-01**
  *
- * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
+ * 夹具测头见 WorkspaceEmptyState.strict.test.tsx。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';
@@ -19,7 +23,7 @@ import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 
 describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
   // -------------------------------------------------------------------------
-  // CONN-B：产品空态 slash 写锥（默认只读 / 注入可写）
+  // CONN-B：夹具路径 slash 写锥（默认只读 / 注入可写）
   // -------------------------------------------------------------------------
 
   it('conn_b_product_empty_default_slash_readonly_no_silent_write', async () => {
@@ -52,7 +56,7 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
       'readonly'
     );
 
-    // 产品路径打开 slash（/ 按钮）
+    // 夹具面板打开 slash（/ 按钮）
     fireEvent.click(screen.getByTestId('note-paper-strict-open-slash'));
     const overlay = await screen.findByTestId(
       'note-paper-strict-slash-overlay'
@@ -152,8 +156,8 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
   // -------------------------------------------------------------------------
 
   it('conn_b3_product_empty_default_no_tauri_readonly_via_resolve', () => {
-    // CONN-B3′：产品入口默认 resolveProductStrictApplyOps({docId})；
-    // vitest/jsdom 无 Tauri → source=none → slash/mdPrefix 只读；禁止 mock 生产默认
+    // CONN-B3′：夹具 EmptyState 默认仍走 resolveProductStrictApplyOps({docId})；
+    // ≠ 产品入口 / ≠ 打开完成。vitest/jsdom 无 Tauri → source=none → slash/mdPrefix 只读；禁止 mock 生产默认
     render(<WorkspaceEmptyState wsId="ws-conn-b3-ro" />);
     const root = screen.getByRole('status');
     expect(root).toHaveAttribute('data-slash-write-mode', 'readonly');

@@ -2,6 +2,10 @@
 /**
  * WorkspaceEmptyState · CONN-E2 mirror StatusBar
  *
+ * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**
+ * （≠ 产品入口 ≠ G-HYD ≠ 打开完成）。
+ * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
+ *
  * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；CONN-E3 再拆至
  * WorkspaceEmptyState.conn-e3.test.tsx（SD-42）。断言语义不变。
  *
@@ -9,7 +13,7 @@
  *   opt-in 才挂；注入 report → 三路可测；`mirrorIpc` → accept 走 import（X-05）；
  *   **≠ EL-03**；**≠ inotify 满关**；无 report 不造假
  *
- * 薄入口见 WorkspaceEmptyState.strict.test.tsx。
+ * 夹具测头见 WorkspaceEmptyState.strict.test.tsx。
  * CONN-E3 detect 调度见 WorkspaceEmptyState.conn-e3.test.tsx。
  */
 import React from 'react';
@@ -24,9 +28,9 @@ import {
 
 describe('WorkspaceEmptyState · CONN-E2 mirror StatusBar', () => {
   // -------------------------------------------------------------------------
-  // CONN-E2：产品空态 mirror StatusBar opt-in 装配
+  // CONN-E2：夹具路径 mirror StatusBar opt-in 装配
   // 默认关；注入 report → 可见 + 三路可测；mirrorIpc → import；X-05 不回退
-  // ≠ EL-03；≠ inotify 满关；无 report 不造假
+  // ≠ 产品入口 ≠ G-HYD ≠ 打开完成；≠ EL-03；≠ inotify 满关；无 report 不造假
   // -------------------------------------------------------------------------
 
   it('conn_e2_product_empty_default_no_mirror_status_bar', async () => {

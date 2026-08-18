@@ -3,7 +3,9 @@
  * WorkspaceEmptyState · Strict 夹具路径（可挂 Strict 面板）
  *
  * **夹具 ≠ 产品入口 ≠ G-HYD ≠ 打开完成。**
- * EmptyState / Host / CTA 暂留（04 D3/D4/D9）。点 `open-note-paper-strict`
+ * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**。
+ * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
+ * EmptyState / Host / CTA 暂留（04 D3/D4/D9）。点 CTA
  * 只证明夹具能挂 `NotePaperStrictPanel`，**不是**产品打开完成。
  *
  * 合法意思（夹具）：
