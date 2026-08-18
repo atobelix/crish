@@ -7,7 +7,7 @@
  * - EmptyState + CTA 仍是夹具；直渲默认仍关（CONN-E2 会计不回退）
  * - 产品默开 detect 在 NoteLeafHost：activate 扩展后渲叶 / 已注册 factory
  * - 无 Tauri / 无 ipc 不造假 drift report
- * 策略/IPC 从扩展家 import，旧路径只 re-export。
+ * 策略/IPC 从扩展家 import；workspace 旧 re-export 已删。
  *
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 重做 E3 · ≠ 默认双开 poll+OS
  */

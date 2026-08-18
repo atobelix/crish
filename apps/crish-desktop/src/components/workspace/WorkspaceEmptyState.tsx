@@ -2,10 +2,10 @@
  * WorkspaceEmptyState — 工作区空态装配壳（SD-30）
  *
  * ## SD-30 切开（目标 &lt;400）
- * - mirror 槽 → `extensions/note-paper/mirrorSlot`（workspace 旧路径只 re-export）
+ * - mirror 槽 → `extensions/note-paper/mirrorSlot`（旧 workspace re-export 已删）
  * - paper 入口 → `workspaceEmptyStatePaperEntry`（写锥 + Strict / Skeleton 宿主）
  * - actions → `workspaceEmptyStateActions`
- * - H1 resolver → `extensions/note-paper/productStrictDoc`（workspace 旧路径只 re-export）
+ * - H1 resolver → `extensions/note-paper/productStrictDoc`（旧 workspace re-export 已删）
  * 本文件仅装配壳：公开 props / 默认关钉死 / 开合编排。
  * 夹具壳从扩展家消费同一份实现；本壳不是产品入口。
  *

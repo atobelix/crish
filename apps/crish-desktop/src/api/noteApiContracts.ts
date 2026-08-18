@@ -25,9 +25,9 @@ export const NOTE_CMD_SEND_TO_NOTE = 'note_send_to_note' as const;
 export const NOTE_CMD_DOCUMENT_HYDRATE = 'note_document_hydrate' as const;
 /**
  * Tauri / 前端 IPC：当前 workspace.db 最近一篇已 persist 且投影非空的 doc_id。
- * 前端 `noteDocumentRecent` 已 invoke 本命令名；桌面 commandManifest HEAD 已列。
- * 无命中 / 非 Tauri / invoke missing 或失败 → 调用方收 `null`；
- * HEAD rust `generate_handler` 未登记时真壳走 missing。**≠** 打开完成。
+ * 前端 `noteDocumentRecent` 已 invoke 本命令名；桌面 commandManifest 与 rust
+ * `generate_handler` / rust manifest HEAD 已列。无命中 / 非 Tauri / invoke
+ * 失败 → 调用方收 `null`。**≠** 打开完成。
  */
 export const NOTE_CMD_DOCUMENT_RECENT = 'note_document_recent' as const;
 /**

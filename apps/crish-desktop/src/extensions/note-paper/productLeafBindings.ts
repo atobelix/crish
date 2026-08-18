@@ -51,9 +51,9 @@ export function resolveExplicitNoteDocId(
 }
 
 /**
- * 经 `noteDocumentRecent` 查最近一篇 persist 非空 doc（命令体+前端已有）。
- * 无命中 / 非 Tauri / invoke missing 或失败 → `null`；
- * HEAD rust `generate_handler` 未登记时真壳走 missing。**≠** 打开完成。
+ * 经 `noteDocumentRecent` 查最近一篇 persist 非空 doc。
+ * rust `generate_handler` HEAD 已登记。无命中 / 非 Tauri / invoke 失败 → `null`。
+ * **≠** 打开完成。
  */
 export async function loadRecentPersistedDocId(): Promise<string | null> {
   return noteDocumentRecent();

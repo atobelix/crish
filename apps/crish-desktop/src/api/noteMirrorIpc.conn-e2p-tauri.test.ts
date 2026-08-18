@@ -5,7 +5,7 @@
  * `note_commands.rs` `report_to_json`。填 report 形状真；空壳/失败不造假。
  *
  * StatusBar / Host 装配见 `Workspace.conn-e2-prime-tauri.test.tsx`。
- * 产品 IPC 从扩展家 import，旧路径只 re-export。
+ * 产品 IPC 从扩展家 import；workspace 旧 re-export 已删。
  *
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 默认双开 poll+OS · ≠ 重做 E2′ 策略
  */

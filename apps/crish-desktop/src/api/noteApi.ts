@@ -347,8 +347,8 @@ export async function noteRedoText(
 
 /**
  * 当前已打开 workspace.db 最近一篇已 persist 且投影非空的 `doc_id`。
- * 无命中 / 非 Tauri / invoke missing 或失败 → `null`（不抛，不编假 id）。
- * HEAD rust `generate_handler` 未登记时真壳走 missing。**≠** 打开完成。
+ * 无命中 / 非 Tauri / invoke 失败 → `null`（不抛，不编假 id）。
+ * rust `generate_handler` HEAD 已登记。**≠** 打开完成。
  */
 export async function noteDocumentRecent(): Promise<string | null> {
   if (!isNoteTauriRuntime()) return null;

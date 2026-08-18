@@ -3,10 +3,10 @@
 | 元数据 | 值 |
 | --- | --- |
 | **定位** | 产品 note 叶「最近一篇 persist」查询源。本页只记现码与未交付面，不关 EL、不宣称打开完成 |
-| **日期** | 2026-08-18（第 11 轮：HEAD 指针追上 `34551356`；脏登记仍拆开写） |
-| **HEAD** | `34551356`（`.git/refs/heads/refactor/architecture` = `345513567d555836d1d1890d57a94276c90c7091`） |
-| **活码（HEAD 已有）** | `extensions/note-paper/productLeafBindings.ts` `loadRecentPersistedDocId` → `noteDocumentRecent`；叶 `NoteLeafHost` 先空后切 |
-| **结论** | HEAD 未登记 ⇒ 真壳 invoke missing ⇒ 仍合成空。**≠ 打开完成 ≠ 关 EL** |
+| **日期** | 2026-08-18（第 14 轮：`fe40934f` 已登 rust handler） |
+| **HEAD** | `fe40934f`（登记进 HEAD；指针可能被并行 reference 提交往前推） |
+| **活码（HEAD 已有）** | 查询 + 命令体 + 前端 + 叶先空后切 + **rust `generate_handler` / rust manifest / workbench registry** |
+| **结论** | handler **已进 HEAD**。无 persist 行 / 非 Tauri / 未重建壳仍合成空。**≠ 打开完成 ≠ 关 EL** |
 | **EL** | 仍 **0/10**。本页零权限关 EL |
 
 ---
@@ -15,8 +15,8 @@
 
 | 侧 | 状态 | 证据 |
 | --- | --- | --- |
-| **已有（进 HEAD）** | store 查询、`#[tauri::command]` 命令体、前端契约/API、叶先空后切、前端 TS 清单列名 | `20aeb2f4` / `65c89850` / `commandManifest.ts:208`；`d1cb31a` 之后到 `34551356` 这些面仍在 |
-| **未交（未进 HEAD）** | rust `generate_handler` / rust `command_manifest` **未列** `note_document_recent` | 见 §3。工作区脏文件已写 recent + 删 `computer_estop`——**继续写成脏、拆不开、不当交付** |
+| **已有（进 HEAD）** | store 查询、命令体、前端契约/API、叶先空后切、前端 TS 清单、**rust `generate_handler` / rust manifest / workbench registry** | `20aeb2f4` / `65c89850` / `commandManifest.ts:208` / **`fe40934f`** |
+| **未交** | 真壳重建 + 有 persist 行 + 9222 像素 | 登记 ≠ 打开完成。工作区脏文件仍可能同时删 `computer_estop` / 改 computer_slot——那是 computer 战役，**不要**再当 persist 未交 |
 | **仍否** | 打开完成；关 EL | 合成空成功 ≠ G-HYD。EL 仍 0/10 |
 
 ---
@@ -30,7 +30,7 @@
 
 **合成空成功 ≠ 打开完成。** 有 Tauri 仍可标 `tauri-ipc` + 0 块；无 Tauri 仍 `fixture`。两边都不是 G-HYD 产品句。
 
-HEAD rust `generate_handler` / rust `command_manifest` **未列** `note_document_recent`。真壳 invoke 走 missing → 前端收 `null` → 叶停在合成空。
+HEAD rust `generate_handler` / rust `command_manifest` **已列** `note_document_recent`（`fe40934f`）。未重建的旧进程仍可能 missing；无行 / 非 Tauri / invoke 失败仍 `null` → 叶停在合成空。
 
 旧页写「全仓无 list / recent 命令、`recentPersistedDocId` 恒 null、禁止编 IPC」——对照 **HEAD 已入库的查询/命令体/前端** **已过时**。旧路径仍对的半句：**命令体在、handler 不在 HEAD**。查询在既有 `doc_meta`+`blocks` / `note_document_*` 面上，不是平行账本。
 
@@ -61,9 +61,11 @@ HEAD rust `generate_handler` / rust `command_manifest` **未列** `note_document
 
 ---
 
-## 3. 未交付：HEAD Tauri 登记
+## 3. 登记已进 HEAD（第 14 轮）
 
-对照 **HEAD=`34551356`**。**不要把工作区脏文件当已提交。**
+`fe40934f` 只把 `note_document_recent` 加进 rust `command_registry!` / rust manifest / workbench registry，**留下** `computer_estop`，**没有** computer_slot 重写。提交后工作区那批脏文件已还回 computer 战役。
+
+对照 **更早 HEAD=`34551356`** 的「未登记」叙述下面留作历史。**不要把工作区脏文件当未交 persist。**
 
 `git show` 级复核（本会话读 `.git/refs/heads/refactor/architecture` 得 `34551356`；`.git/logs/HEAD` 走 `d1cb31a..34551356`；工作区对照 `apps/agent-workbench/src-tauri/src/main.rs`）：
 
