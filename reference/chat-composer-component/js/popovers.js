@@ -1505,6 +1505,26 @@ document.addEventListener('DOMContentLoaded', () => {
       strip.appendChild(addBtn);
 
       hdr.appendChild(strip);
+
+      // Right action button for this split pane (切换右侧工作区/分屏面板)
+      const actions = document.createElement('div');
+      actions.className = 'tree-pane-header-actions';
+      const togglePanelBtn = document.createElement('button');
+      togglePanelBtn.className = 'pane-action-btn';
+      togglePanelBtn.title = '切换右侧面板 (Cmd/Ctrl + J)';
+      togglePanelBtn.innerHTML = `
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="15" y1="3" x2="15" y2="21"></line>
+        </svg>
+      `;
+      togglePanelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (window.toggleSidePanel) window.toggleSidePanel();
+      });
+      actions.appendChild(togglePanelBtn);
+      hdr.appendChild(actions);
+
       leafEl.appendChild(hdr);
 
       // 2. Content with Conversation View ("重构 IPC 缓冲通道")
