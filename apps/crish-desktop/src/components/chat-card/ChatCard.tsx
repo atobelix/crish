@@ -1,4 +1,4 @@
-﻿import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy } from 'react';
 import styles from './ChatCard.module.css';
 import type { } from '../../hooks/useToastQueue';
 import { ChatMessageList } from '../chat-message-list/ChatMessageList';
@@ -8,6 +8,7 @@ import { ModelBadgePicker } from './ChatHeaderControls';
 import { useChatCardState } from './useChatCardState';
 import { anyProfileHasKey } from '../../api/providerProfiles';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
+import { openSettings, patchSession } from '../../api/storeAccess';
 
 const ScheduledTasksPanel = lazy(() =>
   import('../settings/ScheduledTasksPanel').then((m) => ({
@@ -83,7 +84,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         needsModelSetup: state.needsModelSetup,
         onEmptySurface: state.onEmptySurface,
         localHasKey: anyProfileHasKey(),
-        onOpenModelSettings: () => state.openSettings('models'),
+        onOpenModelSettings: () => openSettings('models'),
         onOpenModelDropdown: () => state.setShowModelDropdown(true),
         inPlanMode: state.inPlanMode,
         planApproved: state.planApproved,
@@ -100,7 +101,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onStopGoal: () => {
           state.composerProps.handleStopGeneration();
           if (state.activeSessionId) {
-            state.patchSession(state.activeSessionId, { goalMode: null });
+            patchSession(state.activeSessionId, { goalMode: null });
           }
         },
         showScrollToBottom: state.showScrollToBottom,

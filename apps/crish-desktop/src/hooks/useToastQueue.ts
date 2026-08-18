@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Toast 展示类型。源自已删除的旧 ToastBus.ts 死通道（发射即不可见）；
@@ -22,7 +22,7 @@ export interface AppToast {
 }
 
 /** 统一 toast 回调：仅错误，或可撤销操作（第二参 onUndo），或带 options 配置。 */
-export = (
+export type EnqueueToast = (
   message: string,
   onUndo?: () => void,
   options?: EnqueueToastOptions & { type?: ToastType }
@@ -494,7 +494,7 @@ export function useToastQueue() {
     [clearTimer],
   );
 
-  const showToast: = useCallback(
+  const showToast: EnqueueToast = useCallback(
     (message, onUndo, options) => {
       const result = enqueueToast(toastsRef.current, message, onUndo, options);
 

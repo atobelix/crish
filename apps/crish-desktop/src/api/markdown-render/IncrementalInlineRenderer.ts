@@ -24,6 +24,7 @@ import {
   linkDestinationUrl,
   sanitizeUrlCandidate,
 } from './markdownSanitizer';
+import { getWorkerPool, Priority } from '../../workers';
 
 /** 行级高亮缓存：键 `${lang}:${line}`，避免全文键导致的 O(n²) 重高亮。
  *  导出以供性能基准测试（perfBenchmark）读取缓存大小。 */
@@ -196,8 +197,107 @@ function highlightCodeLine(lang: string, line: string): string {
 /**
  * 代码块高亮：按行调用 highlightCodeLine 并 join。
  * 流式期使用，完成态由 Rust syntect (highlightCodeAsync) 接管。
+ *
+ * 同步路径（缓存命中 + 主线程 fallback）：
+ *   - 缓存命中行直接返回高亮 HTML
+ *   - 缓存 miss 行也走主线程同步 highlightCode（保证调用方拿到完整高亮 HTML）
+ *   - 非流式路径（如设置页代码预览）仍可同步调用此函数
  */
 export function highlightCodeBlock(lang: string, code: string): string {
   const lines = String(code ?? '').split('\n');
   return lines.map((line) => highlightCodeLine(lang, line)).join('\n');
+}
+
+/** highlight.batch Worker 返回结果项 */
+interface HighlightBatchResultItem {
+  id: string;
+  html: string;
+}
+
+/** highlight.batch Worker 返回载荷 */
+interface HighlightBatchPayload {
+  results: HighlightBatchResultItem[];
+}
+
+/**
+ * 异步代码块高亮（缓存 miss 走 Worker，缓存命中留主线程）。
+ *
+ * 流式渲染管线调用此函数：
+ *   1. 缓存命中行主线程直接返回高亮 HTML（零延迟）
+ *   2. 缓存 miss 行先用 escapeHtml 降级渲染（纯文本），随后批量卸载到 Worker
+ *   3. Worker 返回后替换为高亮 HTML 并回填主线程行级缓存
+ *   4. Worker 不可用 / reject 时回退主线程同步 highlightCode（行为不退化）
+ *
+ * @returns 最终的完整高亮 HTML（命中行同步 + miss 行降级后回填）
+ */
+export async function highlightCodeBlockAsync(
+  lang: string,
+  code: string
+): Promise<string> {
+  const lines = String(code ?? '').split('\n');
+  if (lines.length === 0) return '';
+
+  const results: string[] = new Array(lines.length);
+  const missIndices: number[] = [];
+
+  // 1. 缓存命中行直接填充；miss 行先 escapeHtml 降级
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (!line) {
+      results[i] = '';
+      continue;
+    }
+    const key = `${lang}:${line}`;
+    const cached = LINE_CACHE.get(key);
+    if (cached !== undefined) {
+      results[i] = cached;
+    } else {
+      missIndices.push(i);
+      results[i] = escapeHtml(line);
+    }
+  }
+
+  if (missIndices.length === 0) {
+    return results.join('\n');
+  }
+
+  // 2. 批量卸载到 Worker Pool 的 highlight.batch 消息类型
+  const missItems = missIndices.map((i) => ({
+    id: String(i),
+    code: lines[i]!,
+    language: lang || undefined,
+  }));
+
+  try {
+    const workerPool = getWorkerPool();
+    const payload = await workerPool.schedule<HighlightBatchPayload>(
+      'render',
+      'highlight.batch',
+      { items: missItems },
+      Priority.Normal
+    );
+
+    // 3. 回填高亮结果 + 写入主线程行级缓存
+    if (payload && Array.isArray(payload.results)) {
+      for (const r of payload.results) {
+        const idx = Number(r.id);
+        if (Number.isInteger(idx) && idx >= 0 && idx < lines.length) {
+          results[idx] = r.html;
+          const key = `${lang}:${lines[idx]!}`;
+          if (LINE_CACHE.size >= LINE_CACHE_MAX) {
+            const firstKey = LINE_CACHE.keys().next().value;
+            if (firstKey !== undefined) LINE_CACHE.delete(firstKey);
+          }
+          LINE_CACHE.set(key, r.html);
+        }
+      }
+    }
+  } catch {
+    // 4. Worker 不可用 / reject → 回退主线程同步 highlightCode（行为不退化）
+    for (const i of missIndices) {
+      results[i] = highlightCodeLine(lang, lines[i]!);
+    }
+  }
+
+  return results.join('\n');
 }
