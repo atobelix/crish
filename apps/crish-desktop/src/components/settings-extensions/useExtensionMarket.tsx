@@ -1,4 +1,4 @@
-﻿import { toast } from '../../services/toast/ToastContext';
+import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clientApi, type PackageSource } from '../../api/clientApi';
 import {
@@ -35,10 +35,7 @@ import { buildInstalledExtensions, packageName } from './buildInstalledExtension
 import { useMcpCache } from './useMcpCache';
 import { useMarketQuery } from './useMarketQuery';
 import { useSkillsCache } from './useSkillsCache';
-
-function errText(e: unknown): string {
-  return e instanceof Error ? e.message : String(e);
-}
+import { errText, withTimeout } from './extensionMarketLogic';
 
 export function useExtensionMarket() {
   const [view, setView] = useState<MainView>('installed');
@@ -151,34 +148,6 @@ export function useExtensionMarket() {
     ) {
       setLoading(true);
     }
-
-    const withTimeout = <T,>(
-      p: Promise<T>,
-      ms: number,
-      fallback: T
-    ): Promise<T> =>
-      new Promise((resolve) => {
-        let done = false;
-        const t = window.setTimeout(() => {
-          if (done) return;
-          done = true;
-          resolve(fallback);
-        }, ms);
-        p.then(
-          (v) => {
-            if (done) return;
-            done = true;
-            window.clearTimeout(t);
-            resolve(v);
-          },
-          () => {
-            if (done) return;
-            done = true;
-            window.clearTimeout(t);
-            resolve(fallback);
-          }
-        );
-      });
 
     try {
       const [skillRes, mcpRes, settings] = await Promise.all([
@@ -296,21 +265,35 @@ export function useExtensionMarket() {
     return true;
   };
 
-  const handleInstallCatalog = async (entry: CatalogEntry) => {
-    if (busyId) return;
-    setBusyId(entry.id);
-    try {
-      if (entry.kind === 'plugin') {
-        const list = [...packages, entry.installRef];
-        const merged = await clientApi.saveSettingsEx(
-          cwd || '__global__',
-          'global',
-          {
-            packages: list,
-          }
-        );
-        setPackages(merged.packages || list);
-        setAppSettings(merged);
+  const handleInstallCatalog = useCallback(
+    async (entry: CatalogEntry) => {
+      if (busyId) return;
+      setBusyId(entry.id);
+      try {
+        if (entry.kind === 'plugin') {
+          const list = [...packages, entry.installRef];
+          const merged = await clientApi.saveSettingsEx(
+            cwd || '__global__',
+            'global',
+            {
+              packages: list,
+            }
+          );
+          setPackages(merged.packages || list);
+          setAppSettings(merged);
+          markCatalogInstalled(entry.id);
+          setCatalogInstalled(loadCatalogInstalledIds());
+          setView('installed');
+          setPendingExpand({
+            name: entry.name,
+            kind: entry.kind,
+            mode: 'config',
+            fallbackId: entry.id,
+          });
+          await refresh();
+          toast.show('仅登记包名（未连接引擎安装）');
+          return;
+        }
         markCatalogInstalled(entry.id);
         setCatalogInstalled(loadCatalogInstalledIds());
         setView('installed');
@@ -321,101 +304,95 @@ export function useExtensionMarket() {
           fallbackId: entry.id,
         });
         await refresh();
-        toast.show('仅登记包名（未连接引擎安装）');
-        return;
+        toast.show('仅标记本机已装，未连接引擎安装');
+      } catch (e) {
+        toast.show(`安装失败：${errText(e)}`);
+      } finally {
+        setBusyId(null);
       }
-      markCatalogInstalled(entry.id);
-      setCatalogInstalled(loadCatalogInstalledIds());
-      setView('installed');
-      setPendingExpand({
-        name: entry.name,
-        kind: entry.kind,
-        mode: 'config',
-        fallbackId: entry.id,
-      });
-      await refresh();
-      toast.show('仅标记本机已装，未连接引擎安装');
-    } catch (e) {
-      toast.show(`安装失败：${errText(e)}`);
-    } finally {
-      setBusyId(null);
-    }
-  };
+    },
+    [busyId, packages, cwd, refresh]
+  );
 
-  const handleRemovePackage = async (item: InstalledExtension) => {
-    try {
-      if (item.id.startsWith('local-plugin:')) {
-        const idx = packages.findIndex(
-          (p, i) => `local-plugin:${i}:${packageName(p)}` === item.id
-        );
-        if (idx >= 0) {
-          const list = packages.filter((_, i) => i !== idx);
-          const merged = await clientApi.saveSettingsEx(
-            cwd || '__global__',
-            'global',
-            {
-              packages: list,
-            }
+  const handleRemovePackage = useCallback(
+    async (item: InstalledExtension) => {
+      try {
+        if (item.id.startsWith('local-plugin:')) {
+          const idx = packages.findIndex(
+            (p, i) => `local-plugin:${i}:${packageName(p)}` === item.id
           );
-          setPackages(merged.packages || list);
-          setAppSettings(merged);
+          if (idx >= 0) {
+            const list = packages.filter((_, i) => i !== idx);
+            const merged = await clientApi.saveSettingsEx(
+              cwd || '__global__',
+              'global',
+              {
+                packages: list,
+              }
+            );
+            setPackages(merged.packages || list);
+            setAppSettings(merged);
+          }
+        } else if (!item.fromSystem) {
+          unmarkCatalogInstalled(item.id);
+          setCatalogInstalled(loadCatalogInstalledIds());
         }
-      } else if (!item.fromSystem) {
-        unmarkCatalogInstalled(item.id);
-        setCatalogInstalled(loadCatalogInstalledIds());
+        setExpand(null);
+        await refresh();
+      } catch (e) {
+        toast.show(`卸载失败：${errText(e)}`);
       }
-      setExpand(null);
-      await refresh();
-    } catch (e) {
-      toast.show(`卸载失败：${errText(e)}`);
-    }
-  };
+    },
+    [packages, cwd, refresh]
+  );
 
-  const toggleMcpTool = async (
-    serverId: string,
-    tool: string,
-    enabled: boolean
-  ) => {
-    if (mcpToolBusy) return;
-    setMcpToolBusy(true);
-    try {
-      const sets = await clientApi.getSettingsEx(cwd || '__global__');
-      const prev = sets?.mcpDisabledTools || {};
-      const next = applyMcpToolDisabled(prev, serverId, tool, !enabled);
-      const merged = await clientApi.saveSettingsEx(
-        cwd || '__global__',
-        'global',
-        {
-          mcpDisabledTools: next,
+  const toggleMcpTool = useCallback(
+    async (serverId: string, tool: string, enabled: boolean) => {
+      if (mcpToolBusy) return;
+      setMcpToolBusy(true);
+      try {
+        const sets = await clientApi.getSettingsEx(cwd || '__global__');
+        const prev = sets?.mcpDisabledTools || {};
+        const next = applyMcpToolDisabled(prev, serverId, tool, !enabled);
+        const merged = await clientApi.saveSettingsEx(
+          cwd || '__global__',
+          'global',
+          {
+            mcpDisabledTools: next,
+          }
+        );
+        setAppSettings(merged);
+        cacheMcpToolDisabled(merged.mcpDisabledTools || next);
+        setToolTick((n) => n + 1);
+      } catch (e) {
+        toast.show(`工具开关失败：${errText(e)}`);
+      } finally {
+        setMcpToolBusy(false);
+      }
+    },
+    [mcpToolBusy, cwd]
+  );
+
+  const toggleMcpServer = useCallback(
+    async (serverId: string, start: boolean) => {
+      if (mcpServerBusy || !serverId) return;
+      setMcpServerBusy(true);
+      try {
+        const r = start
+          ? await startMcpServer(serverId)
+          : await stopMcpServer(serverId);
+        if (!r.ok) {
+          toast.show(r.error || (start ? '启动失败' : '停止失败'));
         }
-      );
-      setAppSettings(merged);
-      cacheMcpToolDisabled(merged.mcpDisabledTools || next);
-      setToolTick((n) => n + 1);
-    } catch (e) {
-      toast.show(`工具开关失败：${errText(e)}`);
-    } finally {
-      setMcpToolBusy(false);
-    }
-  };
-
-  const toggleMcpServer = async (serverId: string, start: boolean) => {
-    if (mcpServerBusy || !serverId) return;
-    setMcpServerBusy(true);
-    try {
-      const r = start
-        ? await startMcpServer(serverId)
-        : await stopMcpServer(serverId);
-      if (!r.ok) {
-        toast.show(r.error || (start ? '启动失败' : '停止失败'));
+        await refresh();
+      } catch (e) {
+        toast.show(errText(e));
+      } finally {
+        setMcpServerBusy(false);
       }
-      await refresh();
-    } catch (e) {
-      toast.show(errText(e));
-    } finally {
-      setMcpServerBusy(false);
-    }
-  };
+    },
+    [mcpServerBusy, refresh]
+  );
 
   /** 插件启停：持久化 + 本地状态刷新（E3 UI 泛化；E2 运行时接入后同步注册表）。 */
   const togglePlugin = useCallback(

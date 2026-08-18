@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 多端互通（R1-08 桌面配对 UI + 设备管理页；R1-09 网络环境引导；
  * R1-11 多端服务开关——服务默认关闭（红线 1 零监听），先开启服务才显示
@@ -10,8 +10,14 @@
  * 服务开关无独立查询命令（Rust pair_status 不含 enabled 字段），由本地状态
  * 跟踪（初始与服务默认关闭语义一致），以 setMultiDeviceEnabled 结果为准；
  * 二维码数据仅本会话保留（Rust 不持久化配对码，重启后需重新开启）。
+ *
+ * 状态分组（3 个 useReducer + 2 个提取 hook）：
+ * - 配对 reducer（status/pairResult/busy/confirmClosePairing/serviceEnabled）→ useDevicePairing
+ * - 设备列表 reducer（devices/revokeHash）→ 本组件
+ * - 网络环境 reducer（netEnv）→ 本组件
+ * - 改名 reducer（renamingHash/renameDraft）→ useDeviceRename
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useReducer, useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import styles from './SettingsDevicesTab.module.css';
@@ -23,19 +29,15 @@ import {
 } from './SettingsUI';
 import { Button, ConfirmDialog, Input, Switch, Tooltip } from '../ui';
 import {
-  pairStart,
   pairStatus,
-  pairCancel,
   listDevices,
   revokeDevice,
-  renameDevice,
   networkEnvInfo,
-  setMultiDeviceEnabled,
-  type PairStartResult,
-  type PairStatus,
   type DeviceInfo,
   type NetworkEnvInfo,
 } from '../../api/multiDevice';
+import { useDevicePairing } from './useDevicePairing';
+import { useDeviceRename } from './useDeviceRename';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -60,37 +62,95 @@ const PROFILE_LABELS: Record<NetworkEnvInfo['profile'], string> = {
   unknown: '未知',
 };
 
+// ── 设备列表 reducer（devices / revokeHash）──────────────────────────────
+
+interface DeviceListState {
+  devices: DeviceInfo[];
+  revokeHash: string | null;
+}
+
+type DeviceListAction =
+  | { type: 'setDevices'; devices: DeviceInfo[] }
+  | { type: 'setRevokeHash'; hash: string | null };
+
+function deviceListReducer(
+  state: DeviceListState,
+  action: DeviceListAction
+): DeviceListState {
+  switch (action.type) {
+    case 'setDevices':
+      return { ...state, devices: action.devices };
+    case 'setRevokeHash':
+      return { ...state, revokeHash: action.hash };
+    default:
+      return state;
+  }
+}
+
+const INITIAL_DEVICE_LIST: DeviceListState = { devices: [], revokeHash: null };
+
+// ── 网络环境 reducer（netEnv）─────────────────────────────────────────────
+
+type NetworkEnvAction = {
+  type: 'setNetEnv';
+  netEnv: NetworkEnvInfo | null;
+};
+
+function networkEnvReducer(
+  state: NetworkEnvInfo | null,
+  action: NetworkEnvAction
+): NetworkEnvInfo | null {
+  switch (action.type) {
+    case 'setNetEnv':
+      return action.netEnv;
+    default:
+      return state;
+  }
+}
+
 export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
   const { showToast: _showToast } = useToast();
-  const [status, setStatus] = useState<PairStatus | null>(null);
-  const [devices, setDevices] = useState<DeviceInfo[]>([]);
-  const [pairResult, setPairResult] = useState<PairStartResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [revokeHash, setRevokeHash] = useState<string | null>(null);
-  // 关闭配对确认（R1-11 G-4 语义变更）：关闭配对 = 撤销全部设备（D2 §5.4
-  // 关闭动作，令牌全部失效 + 已连接设备立即断开）——执行前弹确认弹窗，
-  // 避免误触开关导致全部配对关系被清除。
-  const [confirmClosePairing, setConfirmClosePairing] = useState(false);
-  const [renamingHash, setRenamingHash] = useState<string | null>(null);
-  const [renameDraft, setRenameDraft] = useState('');
-  const [netEnv, setNetEnv] = useState<NetworkEnvInfo | null>(null);
-  // 多端服务总开关（R1-11）：Rust 侧无独立查询命令（pair_status 不含
-  // enabled 字段），本地跟踪；初始 false 与服务默认关闭语义一致
-  // （config.rs multi_device_enabled=false，应用启动即关闭态）。
-  const [serviceEnabled, setServiceEnabled] = useState(false);
+  const [deviceList, dispatchDeviceList] = useReducer(
+    deviceListReducer,
+    INITIAL_DEVICE_LIST
+  );
+  const [netEnv, dispatchNetEnv] = useReducer(networkEnvReducer, null);
   const mountedRef = useRef(true);
 
+  // 稳定 load 引用：钩子与轮询共用。钩子内 load 通过 ref 取最新实现，
+  // 避免与钩子的 dispatch 产生 TDZ（钩子需 load，load 又需钩子的 dispatch）。
+  const loadRef = useRef<() => Promise<void>>(async () => {});
   const load = useCallback(async () => {
+    await loadRef.current();
+  }, []);
+
+  const {
+    pairing,
+    dispatchPairing,
+    handleToggle,
+    handleEnableService,
+    handleDisableService,
+    handleCopyCode,
+  } = useDevicePairing({ mountedRef, load, showToast });
+
+  const { rename, dispatchRename, startRename, handleRename } = useDeviceRename({
+    mountedRef,
+    load,
+    showToast,
+  });
+
+  // load 实现延后赋值（此时所有 dispatch 已就绪），避免 TDZ
+  loadRef.current = async () => {
     const [s, d, n] = await Promise.all([
       pairStatus(),
       listDevices(),
       networkEnvInfo(),
     ]);
     if (!mountedRef.current) return;
-    if (s) setStatus(s);
-    setDevices(d);
-    if (n) setNetEnv(n);
-  }, []);
+    if (s) dispatchPairing({ type: 'setStatus', status: s });
+    dispatchDeviceList({ type: 'setDevices', devices: d });
+    if (n) dispatchNetEnv({ type: 'setNetEnv', netEnv: n });
+  };
 
   useEffect(() => {
     mountedRef.current = true;
@@ -104,128 +164,25 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
     };
   }, [load]);
 
-  const handleToggle = useCallback(
-    async (on: boolean) => {
-      if (busy) return;
-      setBusy(true);
-      try {
-        if (on) {
-          const result = await pairStart();
-          if (!mountedRef.current) return;
-          if (result) {
-            setPairResult(result);
-            showToast('配对已开启：可用手机扫码');
-          } else {
-            showToast('开启配对失败（命令不可用或引擎未就绪）');
-          }
-        } else {
-          await pairCancel();
-          if (!mountedRef.current) return;
-          setPairResult(null);
-          showToast('配对已关闭');
-        }
-        await load();
-      } finally {
-        if (mountedRef.current) setBusy(false);
-      }
-    },
-    [busy, load, showToast]
-  );
-
-  // 服务开关（R1-11）：开启 → 本机开始监听，随后才显示配对模式开关；
-  // 关闭 → 停服（零监听），已配对设备立即断开（令牌保留，重新开启服务后
-  // 可直接重连，无需重新配对）。
-  const handleEnableService = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const ok = await setMultiDeviceEnabled(true);
-      if (!mountedRef.current) return;
-      if (ok) {
-        setServiceEnabled(true);
-        showToast('多端服务已开启：本机可被手机连接');
-      } else {
-        showToast('开启服务失败（命令不可用或引擎未就绪）');
-      }
-      await load();
-    } finally {
-      if (mountedRef.current) setBusy(false);
-    }
-  }, [busy, load, showToast]);
-
-  const handleDisableService = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const ok = await setMultiDeviceEnabled(false);
-      if (!mountedRef.current) return;
-      if (ok) {
-        setServiceEnabled(false);
-        setPairResult(null);
-        showToast('服务已关闭：已断开所有已配对设备');
-      } else {
-        showToast('关闭服务失败（命令不可用或引擎未就绪）');
-      }
-      await load();
-    } finally {
-      if (mountedRef.current) setBusy(false);
-    }
-  }, [busy, load, showToast]);
-
-  const handleCopyCode = useCallback(async () => {
-    if (!pairResult) return;
-    try {
-      await navigator.clipboard.writeText(pairResult.code);
-      showToast('配对码已复制');
-    } catch {
-      showToast('复制失败');
-    }
-  }, [pairResult, showToast]);
-
   const handleRevoke = useCallback(async () => {
-    if (!revokeHash) return;
-    const ok = await revokeDevice(revokeHash);
+    if (!deviceList.revokeHash) return;
+    const ok = await revokeDevice(deviceList.revokeHash);
     if (!mountedRef.current) return;
-    setRevokeHash(null);
+    dispatchDeviceList({ type: 'setRevokeHash', hash: null });
     if (ok) {
       showToast('设备已撤销（令牌失效并已断开）');
     } else {
       showToast('撤销失败：设备不存在或已撤销');
     }
     await load();
-  }, [revokeHash, load, showToast]);
-
-  const startRename = useCallback((device: DeviceInfo) => {
-    setRenamingHash(device.id);
-    setRenameDraft(device.label);
-  }, []);
-
-  const handleRename = useCallback(
-    async (hash: string) => {
-      const label = renameDraft.trim();
-      if (!label) {
-        showToast('标签不能为空');
-        return;
-      }
-      const ok = await renameDevice(hash, label);
-      if (!mountedRef.current) return;
-      setRenamingHash(null);
-      if (ok) {
-        showToast('设备已改名');
-      } else {
-        showToast('改名失败：设备不存在或已撤销');
-      }
-      await load();
-    },
-    [renameDraft, load, showToast]
-  );
+  }, [deviceList.revokeHash, load, showToast]);
 
   // 配对态生效条件：服务开启 + 服务端配对态翻转（服务关闭时即使轮询
   // 残留 pairing_enabled 也不展示配对面——服务关闭即零监听）。
-  const enabled = Boolean(status?.pairing_enabled) && serviceEnabled;
+  const enabled = Boolean(pairing.status?.pairing_enabled) && pairing.serviceEnabled;
   // 二维码数据仅本会话保留：开启成功即显示（不等待轮询翻转）；
   // 服务端配对开启但本会话无码（如重启后）时给提示条，可重新生成。
-  const showPairCard = pairResult !== null && serviceEnabled;
+  const showPairCard = pairing.pairResult !== null && pairing.serviceEnabled;
 
   return (
     <SettingsPage
@@ -234,7 +191,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
     >
       <SettingsSection title="配对模式">
         <SettingsCard>
-          {serviceEnabled ? (
+          {pairing.serviceEnabled ? (
             <>
               <SettingsRow
                 icon={<Lucide.QrCode size={18} aria-hidden />}
@@ -248,14 +205,17 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                         void handleToggle(true);
                       } else {
                         // 关闭配对 = 撤销全部设备：先弹确认（G-4 语义）
-                        setConfirmClosePairing(true);
+                        dispatchPairing({
+                          type: 'setConfirmClosePairing',
+                          open: true,
+                        });
                       }
                     }}
                     aria-label="配对模式开关"
                   />
                 }
               />
-              {enabled && !pairResult && (
+              {enabled && !pairing.pairResult && (
                 <div
                   className={styles.firewallHint}
                   data-testid="pair-code-missing"
@@ -264,14 +224,14 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   配对已开启但配对码已过期（重启后不保留）。点击上方开关关闭后重新开启即可生成新码。
                 </div>
               )}
-              {status && (
+              {pairing.status && (
                 <div className={styles.pairMeta} data-testid="pair-meta">
-                  <span>状态：{status.state}</span>
-                  <span>绑定：{status.bind_mode}</span>
-                  <span>已配对设备：{status.token_count}</span>
-                  {status.failed_attempts > 0 && (
+                  <span>状态：{pairing.status.state}</span>
+                  <span>绑定：{pairing.status.bind_mode}</span>
+                  <span>已配对设备：{pairing.status.token_count}</span>
+                  {pairing.status.failed_attempts > 0 && (
                     <span className={styles.pairMetaWarn}>
-                      验证失败次数：{status.failed_attempts}
+                      验证失败次数：{pairing.status.failed_attempts}
                     </span>
                   )}
                 </div>
@@ -281,7 +241,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   size="sm"
                   variant="danger"
                   onClick={() => void handleDisableService()}
-                  disabled={busy}
+                  disabled={pairing.busy}
                 >
                   <Lucide.Power size={14} aria-hidden /> 关闭服务
                 </Button>
@@ -307,7 +267,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                 size="sm"
                 variant="primary"
                 onClick={() => void handleEnableService()}
-                disabled={busy}
+                disabled={pairing.busy}
               >
                 <Lucide.Power size={14} aria-hidden /> 开启服务
               </Button>
@@ -380,20 +340,20 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
           <SettingsCard>
             <div className={styles.qrWrap} data-testid="pair-qr-card">
               <QRCodeSVG
-                value={pairResult.qr}
+                value={pairing.pairResult!.qr}
                 size={200}
                 level="M"
                 aria-label="配对二维码"
               />
               <div className={styles.qrCodeText} data-testid="pair-code">
-                {pairResult.code}
+                {pairing.pairResult!.code}
               </div>
               <div className={styles.qrMeta}>
                 <span>
                   剩余有效时间：
-                  {formatRemaining(status?.code_remaining_ms ?? null)}
+                  {formatRemaining(pairing.status?.code_remaining_ms ?? null)}
                 </span>
-                <span>验证失败次数：{status?.failed_attempts ?? 0}</span>
+                <span>验证失败次数：{pairing.status?.failed_attempts ?? 0}</span>
               </div>
               <div className={styles.qrActions}>
                 <Button
@@ -406,19 +366,24 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                 <Button
                   size="sm"
                   variant="secondary"
-                  onClick={() => setConfirmClosePairing(true)}
-                  disabled={busy}
+                  onClick={() =>
+                    dispatchPairing({
+                      type: 'setConfirmClosePairing',
+                      open: true,
+                    })
+                  }
+                  disabled={pairing.busy}
                 >
                   <Lucide.X size={14} aria-hidden /> 关闭配对
                 </Button>
               </div>
-              {pairResult.firewall_hint && (
+              {pairing.pairResult!.firewall_hint && (
                 <div
                   className={styles.firewallHint}
                   data-testid="firewall-hint"
                 >
                   <Lucide.ShieldAlert size={14} aria-hidden />
-                  {pairResult.firewall_hint}
+                  {pairing.pairResult!.firewall_hint}
                 </div>
               )}
             </div>
@@ -428,24 +393,29 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
 
       <SettingsSection title="已配对设备">
         <SettingsCard>
-          {devices.length === 0 ? (
+          {deviceList.devices.length === 0 ? (
             <div className={styles.emptyState} data-testid="devices-empty">
               <Lucide.TabletSmartphone size={28} aria-hidden />
               <p>暂无已配对设备。开启配对模式后，手机端扫码即可加入。</p>
             </div>
           ) : (
             <ul className={styles.deviceList} data-testid="device-list">
-              {devices.map((device) => (
+              {deviceList.devices.map((device) => (
                 <li key={device.id} className={styles.deviceRow}>
                   <div className={styles.deviceIcon}>
                     <Lucide.Smartphone size={18} aria-hidden />
                   </div>
                   <div className={styles.deviceBody}>
-                    {renamingHash === device.id ? (
+                    {rename.renamingHash === device.id ? (
                       <div className={styles.renameRow}>
                         <Input
-                          value={renameDraft}
-                          onChange={(e) => setRenameDraft(e.target.value)}
+                          value={rename.renameDraft}
+                          onChange={(e) =>
+                            dispatchRename({
+                              type: 'setRenameDraft',
+                              value: e.target.value,
+                            })
+                          }
                           aria-label="设备新名称"
                           autoFocus
                         />
@@ -459,7 +429,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => setRenamingHash(null)}
+                          onClick={() => dispatchRename({ type: 'cancelRename' })}
                         >
                           取消
                         </Button>
@@ -498,7 +468,12 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                     <Button
                       size="sm"
                       variant="danger"
-                      onClick={() => setRevokeHash(device.id)}
+                      onClick={() =>
+                        dispatchDeviceList({
+                          type: 'setRevokeHash',
+                          hash: device.id,
+                        })
+                      }
                     >
                       撤销
                     </Button>
@@ -511,26 +486,30 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
       </SettingsSection>
 
       <ConfirmDialog
-        open={revokeHash !== null}
+        open={deviceList.revokeHash !== null}
         danger
         title="撤销设备"
         description="撤销后该设备将立即断开，令牌失效，需重新扫码配对才能连接。确定撤销？"
         confirmLabel="撤销"
         onConfirm={() => void handleRevoke()}
-        onCancel={() => setRevokeHash(null)}
+        onCancel={() =>
+          dispatchDeviceList({ type: 'setRevokeHash', hash: null })
+        }
       />
 
       <ConfirmDialog
-        open={confirmClosePairing}
+        open={pairing.confirmClosePairing}
         danger
         title="关闭配对"
         description="关闭配对将撤销全部已配对设备并断开连接（令牌全部失效，已连接设备立即断开，需重新扫码配对才能连接）。确定关闭配对？"
         confirmLabel="关闭配对"
         onConfirm={() => {
-          setConfirmClosePairing(false);
+          dispatchPairing({ type: 'setConfirmClosePairing', open: false });
           void handleToggle(false);
         }}
-        onCancel={() => setConfirmClosePairing(false)}
+        onCancel={() =>
+          dispatchPairing({ type: 'setConfirmClosePairing', open: false })
+        }
       />
     </SettingsPage>
   );

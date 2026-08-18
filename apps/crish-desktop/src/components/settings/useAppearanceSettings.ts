@@ -1,0 +1,504 @@
+/**
+ * 设置 · 外观：状态与副作用逻辑（从 SettingsAppearanceTab 提取）。
+ * 封装 4 个 api（clientApi / themeStore / projectStore / hydrateWorkspaceShell）
+ * 与 2 个 store 模块（storeAccess.useSettingsField / useLayoutStore）访问，
+ * 组件仅渲染。
+ */
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Settings } from '../../api/clientApi';
+import { clientApi } from '../../api/clientApi';
+import { getWorkspacePath } from '../../api/projectStore';
+import { useSettingsField, useLayoutStore } from '../../store/storeAccess';
+import {
+  parseShellChromeMode,
+  type ShellChromeMode,
+} from '../../api/shellChrome';
+import {
+  readStoredTheme,
+  readStoredPersonalization,
+  writeStoredPersonalization,
+  applyPersonalization,
+  type PersonalizationSettings,
+} from '../../api/themeStore';
+import { useIsVisible } from '../../hooks/useIsVisible';
+import {
+  readRestoreLastWorkspace,
+  setRestoreLastWorkspace,
+} from '../../app/hydrateWorkspaceShell';
+import type { SchemaSection } from './SettingsSchemaRenderer';
+import { toast } from '../../services/toast/ToastContext';
+
+export type UiSize = 'small' | 'medium' | 'large';
+export type ThemeId = 'default' | 'dark';
+
+/** 浅/深色主题各自的皮肤 ID 集合，用于皮肤回退校验（#237） */
+const DARK_SKIN_IDS = [
+  'dark-cozy',
+  'deep-night',
+  'dark-forest',
+  'aurora',
+  'cocoa',
+  'burgundy',
+  'cyber',
+  'obsidian',
+];
+const LIGHT_SKIN_IDS = [
+  'warm-gray',
+  'cream',
+  'paper',
+  'classic-gray',
+  'sakura',
+  'matcha',
+  'glacier',
+  'pearl',
+];
+
+/** 非法值回落标准 */
+export function normalizeUiSize(raw: unknown): UiSize {
+  if (raw === 'small' || raw === 'large' || raw === 'medium') return raw;
+  return 'medium';
+}
+
+export function normalizeTheme(raw: unknown): ThemeId {
+  return raw === 'dark' ? 'dark' : 'default';
+}
+
+/** 代码缩进：仅白名单，防异常 settings 写出非法缩进 */
+export function normalizeCodeIndent(raw: unknown): string {
+  if (raw === '  ' || raw === '    ' || raw === '\t') return raw;
+  return '  ';
+}
+
+export interface AppearanceSettingsResult {
+  visibilityRef: React.RefObject<HTMLDivElement | null>;
+  settings: Settings | null;
+  loadError: string | null;
+  saving: boolean;
+  loadTick: number;
+  setLoadError: (v: string | null) => void;
+  setLoadTick: React.Dispatch<React.SetStateAction<number>>;
+  activeTheme: ThemeId;
+  personalization: PersonalizationSettings;
+  uiSize: UiSize;
+  shellChromeMode: ShellChromeMode;
+  skinOptions: { value: string; label: string }[];
+  allValues: Record<string, unknown>;
+  appearanceSchema: SchemaSection[];
+  save: (updates: Partial<Settings>) => Promise<boolean>;
+  applyDensity: (size: UiSize) => void;
+  applyChrome: (mode: ShellChromeMode) => void;
+  updatePersonalization: (
+    updates: Partial<PersonalizationSettings>
+  ) => void;
+  handleSave: (updates: Record<string, unknown>) => void;
+}
+
+export function useAppearanceSettings(): AppearanceSettingsResult {
+  const cwd = getWorkspacePath() || '__global__';
+  const setAppSettings = useSettingsField((s) => s.setAppSettings);
+  const [activeTheme, setActiveTheme] = useState<ThemeId>(() =>
+    readStoredTheme()
+  );
+  const [personalization, setPersonalization] =
+    useState<PersonalizationSettings>(() => readStoredPersonalization());
+  const [visibilityRef] = useIsVisible();
+
+  // 同步黑夜白天主题的变化
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const customEvt = e as CustomEvent<{ theme: ThemeId }>;
+      if (customEvt?.detail?.theme) {
+        setActiveTheme(customEvt.detail.theme);
+      }
+    };
+    window.addEventListener('crish-theme-changed', handler);
+    return () => {
+      window.removeEventListener('crish-theme-changed', handler);
+    };
+  }, []);
+
+  const updatePersonalization = useCallback(
+    (updates: Partial<PersonalizationSettings>) => {
+      const next = { ...personalization, ...updates };
+      setPersonalization(next);
+      writeStoredPersonalization(next);
+      applyPersonalization(next, activeTheme);
+    },
+    [personalization, activeTheme]
+  );
+
+  // 切换主题时，如果当前选中的皮肤不在新主题预设中，自动回退到该主题的第一个预设皮肤（#237）
+  // 注意：必须位于 updatePersonalization（const useCallback）之后——
+  // 依赖数组在渲染期求值，提前引用会触发 TDZ ReferenceError 导致整个 tab 崩溃。
+  useEffect(() => {
+    const validSkins = activeTheme === 'dark' ? DARK_SKIN_IDS : LIGHT_SKIN_IDS;
+    if (
+      personalization.skin !== 'custom' &&
+      !validSkins.includes(personalization.skin)
+    ) {
+      const fallback = activeTheme === 'dark' ? 'dark-cozy' : 'warm-gray';
+      updatePersonalization({ skin: fallback });
+    }
+  }, [activeTheme, personalization.skin, updatePersonalization]);
+
+  const skinOptions = useMemo(() => {
+    const list =
+      activeTheme === 'dark'
+        ? [
+            { value: 'dark-cozy', label: '护眼暗灰' },
+            { value: 'deep-night', label: '深邃夜空' },
+            { value: 'dark-forest', label: '森林绿影' },
+            { value: 'aurora', label: '北欧极光' },
+            { value: 'cocoa', label: '可可暗香' },
+            { value: 'burgundy', label: '暗红丝绒' },
+            { value: 'cyber', label: '赛博星空' },
+            { value: 'obsidian', label: '黑曜石墨' },
+          ]
+        : [
+            { value: 'warm-gray', label: '护眼暖灰' },
+            { value: 'cream', label: '杏仁奶油' },
+            { value: 'paper', label: '极简纸质' },
+            { value: 'classic-gray', label: '经典浅灰' },
+            { value: 'sakura', label: '落樱微风' },
+            { value: 'matcha', label: '抹茶拿铁' },
+            { value: 'glacier', label: '冰川薄荷' },
+            { value: 'pearl', label: '金沙流光' },
+          ];
+
+    list.push({ value: 'custom', label: '自定义颜色' });
+    return list;
+  }, [activeTheme]);
+
+  const uiSize = useLayoutStore((s) => s.uiSize) as UiSize;
+  const setUiSize = useLayoutStore((s) => s.setUiSize);
+  const shellChromeMode = useLayoutStore((s) => s.shellChromeMode) as ShellChromeMode;
+  const setShellChromeMode = useLayoutStore((s) => s.setShellChromeMode);
+  const [settings, setSettings] = useState<Settings | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [loadTick, setLoadTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const sets = await clientApi.getSettingsEx(cwd);
+        if (cancelled || !sets) return;
+        setSettings(sets);
+        setLoadError(null);
+        // 读盘后立即同步 DOM（主题 / 字体），与 local 独立 key 对齐
+        try {
+          if (sets.theme) {
+            const { applyTheme, normalizeTheme: normTheme } =
+              await import('../../api/themeStore');
+            applyTheme(normTheme(sets.theme));
+          }
+          if (sets.fonts) {
+            const { applyFontStacks, ensureFontsLoaded, normalizeFontPrefs } =
+              await import('../../api/fontStore');
+            const prefs = normalizeFontPrefs(sets.fonts);
+            await ensureFontsLoaded(prefs);
+            applyFontStacks(prefs);
+          }
+        } catch (applyErr) {
+          if (!cancelled) {
+            toast.show('外观应用失败：' + String(applyErr));
+          }
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const msg = '读取失败：' + String(err);
+          setLoadError(msg);
+          toast.show(msg);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cwd, loadTick]);
+
+  /** @returns 是否写入成功；失败已 toast，不抛给点击处理器 */
+  const save = useCallback(
+    async (updates: Partial<Settings>): Promise<boolean> => {
+      if (!settings) return false;
+      setSaving(true);
+      try {
+        const merged = await clientApi.saveSettingsEx(cwd, 'global', updates);
+        setSettings(merged);
+        setAppSettings(merged);
+        // D3：主题不再直调 setTheme——setAppSettings(merged) 写入 settingsStore 后，
+        // themeProjection 订阅投影自动完成 DOM + crish_theme 缓存同步（单一写端）。
+        // fonts：FontSettingsSection 已 setFontPreferences；此处仅当其它入口写入 fonts 时补 apply
+        if (updates.fonts) {
+          const { setFontPreferences, normalizeFontPrefs } =
+            await import('../../api/fontStore');
+          await setFontPreferences(normalizeFontPrefs(updates.fonts));
+        }
+        // 成功静默：不 toast「已保存」
+        return true;
+      } catch (err) {
+        toast.show('保存失败：' + String(err));
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [cwd, setAppSettings, settings]
+  );
+
+  const applyDensity = useCallback(
+    (size: UiSize) => {
+      try {
+        const next = normalizeUiSize(size);
+        // 已是目标档：跳过写 LS / DOM，避免无意义回流
+        if (normalizeUiSize(uiSize) === next) {
+          const cur = document.documentElement.getAttribute('data-ui-size');
+          if (cur !== next) {
+            document.documentElement.setAttribute('data-ui-size', next);
+          }
+          return;
+        }
+        setUiSize(next);
+        document.documentElement.setAttribute('data-ui-size', next);
+      } catch (err) {
+        toast.show('密度保存失败：' + String(err));
+      }
+    },
+    [setUiSize, uiSize]
+  );
+
+  const applyChrome = useCallback(
+    (mode: ShellChromeMode) => {
+      try {
+        const next = parseShellChromeMode(mode);
+        if (parseShellChromeMode(shellChromeMode) === next) {
+          document.documentElement.setAttribute('data-shell-chrome', next);
+          return;
+        }
+        setShellChromeMode(next);
+        document.documentElement.setAttribute('data-shell-chrome', next);
+        document.body.setAttribute('data-shell-chrome', next);
+      } catch (err) {
+        toast.show('界面形态保存失败：' + String(err));
+      }
+    },
+    [setShellChromeMode, shellChromeMode]
+  );
+
+  const allValues = useMemo<Record<string, unknown>>(() => {
+    if (!settings) return {};
+    return {
+      theme: normalizeTheme(settings.theme),
+      uiSize: normalizeUiSize(uiSize),
+      shellChrome: parseShellChromeMode(shellChromeMode),
+      codeIndent: normalizeCodeIndent(settings.markdown?.codeBlockIndent),
+      skinPreset: personalization.skin,
+      accentColor: personalization.customBg,
+      customFgColor: personalization.customFg,
+      brightness: personalization.themeBrightnessAdjust ?? 0,
+      fontSize: 14 + (personalization.fontSizeAdjust ?? 0),
+      transitionEnabled: personalization.themeAutoTimeTransition ?? false,
+      vibrantMode: personalization.themeBrightnessVibrant ?? false,
+      restoreLastWorkspace: readRestoreLastWorkspace(),
+    };
+  }, [settings, uiSize, shellChromeMode, personalization]);
+
+  const appearanceSchema = useMemo<SchemaSection[]>(
+    () => [
+      {
+        title: '主题与外观',
+        properties: [
+          {
+            key: 'theme',
+            type: 'toggle-group' as const,
+            title: '主题模式',
+            desc: '切换浅色/深色主题',
+            toggleOptions: [
+              { value: 'default', label: '浅色' },
+              { value: 'dark', label: '深色' },
+            ],
+          },
+          {
+            key: 'uiSize',
+            type: 'toggle-group' as const,
+            title: 'UI 密度',
+            desc: '控制界面元素的紧凑程度',
+            toggleOptions: [
+              { value: 'small', label: '紧凑' },
+              { value: 'medium', label: '默认' },
+              { value: 'large', label: '宽松' },
+            ],
+          },
+          {
+            key: 'shellChrome',
+            type: 'select' as const,
+            title: '窗口风格',
+            desc: '选择应用窗口的边框样式',
+            options: [
+              { value: 'classic', label: '经典' },
+              { value: 'inset', label: '工作台' },
+            ],
+          },
+          {
+            key: 'codeIndent',
+            type: 'select' as const,
+            title: '代码缩进',
+            desc: '设置代码块中的缩进宽度',
+            options: [
+              { value: '  ', label: '2 空格' },
+              { value: '    ', label: '4 空格' },
+              { value: '\t', label: 'Tab' },
+            ],
+          },
+        ],
+      },
+      {
+        title: '颜色与皮肤',
+        properties: [
+          {
+            key: 'skinPreset',
+            type: 'select' as const,
+            title: '皮肤预设',
+            desc:
+              activeTheme === 'dark'
+                ? '深色模式下可选的高阶主题预设'
+                : '浅色模式下可选的高阶主题预设',
+            options: skinOptions,
+          },
+          ...(allValues.skinPreset === 'custom'
+            ? [
+                {
+                  key: 'accentColor',
+                  type: 'color' as const,
+                  title: '自定义背景色',
+                  desc: '自定义高阶背景颜色',
+                },
+                {
+                  key: 'customFgColor',
+                  type: 'color' as const,
+                  title: '自定义文本色',
+                  desc: '自适应计算副文本、边框与悬浮文本色',
+                },
+              ]
+            : []),
+          {
+            key: 'brightness',
+            type: 'range' as const,
+            title: '亮度微调',
+            desc: '调整界面整体亮度',
+            min: -5,
+            max: 4,
+            step: 1,
+            showValue: true,
+          },
+          {
+            key: 'fontSize',
+            type: 'range' as const,
+            title: '界面字号',
+            desc: '调整界面基础字号',
+            min: 12,
+            max: 18,
+            step: 1,
+            unit: 'px',
+            showValue: true,
+          },
+        ],
+      },
+      {
+        title: '高级',
+        properties: [
+          {
+            key: 'transitionEnabled',
+            type: 'boolean' as const,
+            title: '智能时光温感过渡',
+            desc: '根据当地日出日落时间，自动调节亮度与色温',
+          },
+          {
+            key: 'vibrantMode',
+            type: 'boolean' as const,
+            title: '氛围色彩融合',
+            desc: '调暗时融入暗影，调亮时融入奶霜高光，避免偏灰偏脏',
+          },
+          {
+            key: 'restoreLastWorkspace',
+            type: 'boolean' as const,
+            title: '启动时恢复上次工作台',
+            desc: '默认关闭：每次启动为干净单对话。开启后尝试恢复标签与多 unit 分屏（布局损坏时仍回落干净启动；会话消息始终保留）',
+          },
+        ],
+      },
+    ],
+    [activeTheme, skinOptions, allValues.skinPreset]
+  );
+
+  const handleSave = useCallback(
+    (updates: Record<string, unknown>) => {
+      if ('theme' in updates) void save({ theme: String(updates.theme) });
+      if ('uiSize' in updates) applyDensity(updates.uiSize as UiSize);
+      if ('shellChrome' in updates)
+        applyChrome(updates.shellChrome as ShellChromeMode);
+      if ('codeIndent' in updates && settings) {
+        const next = normalizeCodeIndent(updates.codeIndent);
+        if (next !== normalizeCodeIndent(settings.markdown?.codeBlockIndent)) {
+          void save({
+            markdown: { ...(settings.markdown || {}), codeBlockIndent: next },
+          });
+        }
+      }
+      if ('skinPreset' in updates)
+        updatePersonalization({ skin: updates.skinPreset as string });
+      if ('accentColor' in updates)
+        updatePersonalization({ customBg: updates.accentColor as string });
+      if ('customFgColor' in updates)
+        updatePersonalization({ customFg: updates.customFgColor as string });
+      if ('brightness' in updates)
+        updatePersonalization({
+          themeBrightnessAdjust: updates.brightness as number,
+        });
+      if ('fontSize' in updates)
+        updatePersonalization({
+          fontSizeAdjust: (updates.fontSize as number) - 14,
+        });
+      if ('transitionEnabled' in updates)
+        updatePersonalization({
+          themeAutoTimeTransition: updates.transitionEnabled as boolean,
+        });
+      if ('vibrantMode' in updates)
+        updatePersonalization({
+          themeBrightnessVibrant: updates.vibrantMode as boolean,
+        });
+      if ('restoreLastWorkspace' in updates) {
+        setRestoreLastWorkspace(Boolean(updates.restoreLastWorkspace));
+        toast.show(
+          updates.restoreLastWorkspace
+            ? '已开启：下次启动将尝试恢复工作台布局'
+            : '已关闭：下次启动为干净新对话'
+        );
+      }
+    },
+    [save, applyDensity, applyChrome, settings, updatePersonalization]
+  );
+
+  return {
+    visibilityRef,
+    settings,
+    loadError,
+    saving,
+    loadTick,
+    setLoadError,
+    setLoadTick,
+    activeTheme,
+    personalization,
+    uiSize,
+    shellChromeMode,
+    skinOptions,
+    allValues,
+    appearanceSchema,
+    save,
+    applyDensity,
+    applyChrome,
+    updatePersonalization,
+    handleSave,
+  };
+}
