@@ -3,6 +3,7 @@
  *
  * 权威：docs/review-md-audit/2026-08-13-wave/plans/D-07-维度详案-连通余量.md §1.4。
  * 依赖 CONN-01 基建（cdp.ts / playwright.config.ts / webview-smoke.spec.ts）。
+ * 到达 = 扩展 note 叶（openNoteLeaf：产品钮 / 真 openTool / 树门面）。
  *
  * 文件命名说明：e2e-webview config 的 testMatch 为
  * `/(webview-smoke|mirror-detect|a-blk-02-slash|conn-b3-e2e|conn-g2-e2e)\.spec\.ts$/`；
@@ -11,16 +12,17 @@
  * 使 `npm run test:e2e:webview -- --grep conn_b3|conn_g2` 可直接发现并执行。
  *
  * 用例清单：
- * - conn_b3_e2e_product_slash_writes：空态主 CTA 打开 Strict → 裸 `/`（或产品
+ * - conn_b3_e2e_product_slash_writes：扩展 note 叶打开 Strict → 裸 `/`（或产品
  *   按钮）打开 slash → 选 heading-1 → 产品写锥（createCollabApplySink →
  *   note_apply_ops 真 IPC）落地 → 投影读回（data-block-count / data-rev 前进，
  *   新 data-block-id 出现）。全链一条用例。
  * - conn_b3_e2e_no_tauri_readonly：CDP Runtime.evaluate 移除
  *   __TAURI_INTERNALS__/__TAURI__/isTauri → reload → 断言
  *   data-slash-write-mode=readonly（禁提交灰态）。若 WebView2 宿主 preload
- *   恒定重注入宿主全局（真壳不可造无宿主场景），按 mirror-detect 惯例
- *   skip=未交付并写明原因；readonly 灰态主交付面在 jsdom
+ *   恒定重注入宿主全局（真壳不可造无宿主场景），按惯例
+ *   skip=真壳不可造无宿主并写明原因；readonly 灰态主交付面在 jsdom
  *   `WorkspaceEmptyState.conn-b3.test.tsx`（既有断言不回退）。**不 mock**。
+ *   strip 成功后同样走 openNoteLeaf（无宿主仍须见到叶+面板，写锥才是 readonly）。
  *
  * 诚实边界句（D-07 §1.4，禁止删除）：
  *   ≠ EL-01；≠ 打开完成；≠ A-BLK-08/09 e2e；
@@ -35,15 +37,14 @@
  */
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
 import { connectWebView, listCdpTargets } from './cdp';
-
-const PANEL = '[data-testid="note-paper-strict-panel"]';
-const OPEN_STRICT = '[data-testid="open-note-paper-strict"]';
-const SLASH_OVERLAY = '[data-testid="note-paper-strict-slash-overlay"]';
-const SLASH_TRIGGER = '[data-testid="note-paper-strict-open-slash"]';
-const SLASH_CLOSE = '[data-testid="note-paper-strict-close"]';
-
-/** 本 spec 各用例独立的临时空工作区 id 前缀（finally 必摘） */
-const TEMP_WS_PREFIX = 'ws-w6b-conn-b3-';
+import {
+  PANEL,
+  SLASH_OVERLAY,
+  SLASH_TRIGGER,
+  assertRealWebView,
+  closeNoteLeafIfOpen,
+  openNoteLeaf,
+} from './arrive-note-leaf';
 
 type StrictWriteCone = {
   mode: string | null;
@@ -61,12 +62,9 @@ test.describe('CONN-03 B3-e2e slash 一点通真 WebView（e2e-webview）', () =
     expect(targets.length).toBeGreaterThan(0);
 
     const session = await connectWebView();
-    const tempWsId = `${TEMP_WS_PREFIX}write-${Date.now()}`;
-    let addedTempWs = false;
     try {
       await assertRealWebView(session.page);
-      await ensureWorkspaceEmptyState(session.page, tempWsId);
-      addedTempWs = await openStrictPanel(session.page, tempWsId);
+      await openNoteLeaf(session.page);
 
       // ① 写锥连通性探测（冒烟级）：产品默认可写必须是 product-ipc（真 IPC），
       //    禁止 injected-sink / mock 当生产默认可写叙事
@@ -105,9 +103,7 @@ test.describe('CONN-03 B3-e2e slash 一点通真 WebView（e2e-webview）', () =
         '本切片未交付：写入后 data-rev 未前进（写未落 DocSession）'
       ).not.toBe(revBefore);
     } finally {
-      if (addedTempWs) {
-        await removeTempWorkspace(session.page, tempWsId);
-      }
+      await closeNoteLeafIfOpen(session.page).catch(() => undefined);
       await session.browser.close();
     }
   });
@@ -117,8 +113,6 @@ test.describe('CONN-03 B3-e2e slash 一点通真 WebView（e2e-webview）', () =
 
     const session = await connectWebView();
     let maskInstalled = false;
-    const tempWsId = `${TEMP_WS_PREFIX}readonly-${Date.now()}`;
-    let addedTempWs = false;
     try {
       await assertRealWebView(session.page);
 
@@ -153,9 +147,8 @@ test.describe('CONN-03 B3-e2e slash 一点通真 WebView（e2e-webview）', () =
         return;
       }
 
-      // ③ 无宿主下到达空态 → 打开 Strict → 断言 readonly 写锥
-      await ensureWorkspaceEmptyState(session.page, tempWsId);
-      addedTempWs = await openStrictPanel(session.page, tempWsId);
+      // ③ 无宿主下同样走 openNoteLeaf（叶+面板仍须可见，写锥才是 readonly）
+      await openNoteLeaf(session.page);
 
       const cone = await readWriteCone(session.page);
       expect(
@@ -201,9 +194,7 @@ test.describe('CONN-03 B3-e2e slash 一点通真 WebView（e2e-webview）', () =
         // 掩码自禁用（sessionStorage 开关摘除）→ reload 后宿主 preload 重注入
         await setNoTauriMaskEnabled(session.page, false).catch(() => undefined);
       }
-      if (addedTempWs) {
-        await removeTempWorkspace(session.page, tempWsId);
-      }
+      await closeNoteLeafIfOpen(session.page).catch(() => undefined);
       await session.page.reload().catch(() => undefined);
       await session.browser.close();
     }
@@ -214,157 +205,11 @@ test.describe('CONN-03 B3-e2e slash 一点通真 WebView（e2e-webview）', () =
 // 载体 / 到达
 // ---------------------------------------------------------------------------
 
-async function assertRealWebView(page: Page): Promise<void> {
-  const internals = await page.evaluate(
-    () =>
-      typeof (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
-  );
-  expect(
-    internals,
-    '本切片未交付：无 __TAURI_INTERNALS__（禁止 5174 独立浏览器当真产品）'
-  ).toBe('object');
-  const hasE2eHandle = await page.evaluate(() => '__CRISH_E2E__' in window);
-  expect(hasE2eHandle, '本切片未交付：检测到 __CRISH_E2E__ mock 沙箱').toBe(
-    false
-  );
-  await expect(page.locator('#root')).toBeVisible({ timeout: 20_000 });
-}
-
 /** 等待应用根渲染（reload 后冷启动同样适用） */
 async function waitAppBoot(page: Page): Promise<void> {
   await expect(page.locator('#root')).toBeVisible({ timeout: 30_000 });
   const children = await page.locator('#root > *').count();
   expect(children, '本切片未交付：应用根未挂真实 UI 子树').toBeGreaterThan(0);
-}
-
-/**
- * 确保空态（data-empty="true" 的 WorkspaceEmptyState 落地）可见。
- * 不可见时经真实 `__CRISH_LAYOUT_STORE__` 挂临时空 columns 工作区
- * （不关用户已有标签）；finally 由调用方摘除。
- */
-async function ensureWorkspaceEmptyState(
-  page: Page,
-  tempWsId: string
-): Promise<void> {
-  await waitAppBoot(page);
-
-  // 若前一用例残留已打开的 Strict 面板：先关掉回到空态
-  if ((await page.locator(PANEL).count()) > 0) {
-    const close = page.locator(SLASH_CLOSE).first();
-    if ((await close.count()) > 0) {
-      await close.click();
-    }
-  }
-
-  if ((await page.locator('[data-empty="true"]').count()) > 0) {
-    return;
-  }
-
-  const added = await revealEmptyWorkspaceViaStore(page, tempWsId);
-  if (!added) {
-    throw new Error(
-      '本切片未交付：产品空态不可见，且无法经真实 layout store 露出空工作区。' +
-        '请先 npm run dev:workbench 并保证工作区可到空态。'
-    );
-  }
-  await expect(page.locator('[data-empty="true"]').first()).toBeVisible({
-    timeout: 15_000,
-  });
-}
-
-/** 打开产品 Strict 纸面；返回是否新增了临时工作区（finally 需摘除） */
-async function openStrictPanel(page: Page, tempWsId: string): Promise<boolean> {
-  if ((await page.locator(PANEL).count()) > 0) {
-    return false;
-  }
-  if ((await page.locator(OPEN_STRICT).count()) === 0) {
-    await ensureWorkspaceEmptyState(page, tempWsId);
-  }
-  await expect(page.locator(OPEN_STRICT).first()).toBeVisible({
-    timeout: 15_000,
-  });
-  await page.locator(OPEN_STRICT).first().click();
-  await expect(page.locator(PANEL)).toBeVisible({ timeout: 20_000 });
-  return true;
-}
-
-/** 经真实 __CRISH_LAYOUT_STORE__ 门面添加/激活临时空工作区（非 mock 沙箱） */
-async function revealEmptyWorkspaceViaStore(
-  page: Page,
-  tempWsId: string
-): Promise<boolean> {
-  return page.evaluate((tempId) => {
-    const w = window as unknown as {
-      __CRISH_LAYOUT_STORE__?: {
-        getState: () => {
-          workspaces?: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-          setActiveWorkspaceIndex?: (index: number) => void;
-        };
-        setState: (partial: {
-          workspaces: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-        }) => void;
-      };
-    };
-    const store = w.__CRISH_LAYOUT_STORE__;
-    if (!store || typeof store.getState !== 'function') {
-      return false;
-    }
-    const state = store.getState();
-    const workspaces = Array.isArray(state.workspaces) ? state.workspaces : [];
-    const existingIdx = workspaces.findIndex((ws) => ws.id === tempId);
-    if (existingIdx >= 0) {
-      if (typeof state.setActiveWorkspaceIndex === 'function') {
-        state.setActiveWorkspaceIndex(existingIdx);
-        return true;
-      }
-      store.setState({ workspaces, activeWorkspaceIndex: existingIdx });
-      return true;
-    }
-    if (typeof store.setState !== 'function') {
-      return false;
-    }
-    const next = workspaces.concat([{ id: tempId, columns: [] }]);
-    store.setState({ workspaces: next, activeWorkspaceIndex: next.length - 1 });
-    return true;
-  }, tempWsId);
-}
-
-/** 摘除临时工作区（真实 store 门面；不改用户既有工作区） */
-async function removeTempWorkspace(
-  page: Page,
-  tempWsId: string
-): Promise<void> {
-  await page.evaluate((tempId) => {
-    const w = window as unknown as {
-      __CRISH_LAYOUT_STORE__?: {
-        getState: () => {
-          workspaces?: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-        };
-        setState: (partial: {
-          workspaces: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-        }) => void;
-      };
-    };
-    const store = w.__CRISH_LAYOUT_STORE__;
-    if (!store || typeof store.getState !== 'function') {
-      return;
-    }
-    const state = store.getState();
-    const prev = state.workspaces ?? [];
-    const workspaces = prev.filter((ws) => ws.id !== tempId);
-    if (workspaces.length === prev.length) {
-      return;
-    }
-    const nextIdx = Math.min(
-      Math.max(0, state.activeWorkspaceIndex),
-      Math.max(0, workspaces.length - 1)
-    );
-    store.setState({ workspaces, activeWorkspaceIndex: nextIdx });
-  }, tempWsId);
 }
 
 // ---------------------------------------------------------------------------

@@ -3,6 +3,7 @@
  *
  * 权威：docs/review-md-audit/2026-08-13-wave/plans/D-07-维度详案-连通余量.md §1.5。
  * 依赖 CONN-01 基建（cdp.ts / playwright.config.ts / webview-smoke.spec.ts）。
+ * 到达 = 扩展 note 叶（openNoteLeaf：产品钮 / 真 openTool / 树门面）。
  *
  * 文件命名说明：同 conn-b3-e2e.spec.ts——以显式文件名落入 e2e-webview
  * config testMatch 的「需真 Tauri 的 WebView spec」发现面，
@@ -39,6 +40,14 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { connectWebView, listCdpTargets } from './cdp';
+import {
+  PANEL,
+  SLASH_OVERLAY,
+  SLASH_TRIGGER,
+  assertRealWebView,
+  closeNoteLeafIfOpen,
+  openNoteLeaf,
+} from './arrive-note-leaf';
 
 /**
  * 运行时在页面上下文经 Vite dev 服务动态 import 真实桥模块（dev 形态，
@@ -48,15 +57,6 @@ type NoteDocWrittenBus =
   typeof import('../../../apps/crish-desktop/src/bridges/note-doc-written');
 type SendToNoteBridge =
   typeof import('../../../apps/crish-desktop/src/bridges/send-to-note');
-
-const PANEL = '[data-testid="note-paper-strict-panel"]';
-const OPEN_STRICT = '[data-testid="open-note-paper-strict"]';
-const SLASH_OVERLAY = '[data-testid="note-paper-strict-slash-overlay"]';
-const SLASH_TRIGGER = '[data-testid="note-paper-strict-open-slash"]';
-const SLASH_CLOSE = '[data-testid="note-paper-strict-close"]';
-
-/** 本 spec 各用例独立的临时空工作区 id 前缀（finally 必摘） */
-const TEMP_WS_PREFIX = 'ws-w6c-conn-g2-';
 
 type PanelSnapshot = {
   docId: string | null;
@@ -74,12 +74,9 @@ test.describe('CONN-04 G2-e2e 写后读回三态真 WebView（e2e-webview）', (
     expect(targets.length).toBeGreaterThan(0);
 
     const session = await connectWebView();
-    const tempWsId = `${TEMP_WS_PREFIX}adv-${Date.now()}`;
-    let addedTempWs = false;
     try {
       await assertRealWebView(session.page);
-      await ensureWorkspaceEmptyState(session.page, tempWsId);
-      addedTempWs = await openStrictPanel(session.page, tempWsId);
+      await openNoteLeaf(session.page);
 
       // ① 写锥探测：产品默认可写必须是 product-ipc（真 IPC 后端）
       await expect(session.page.locator(PANEL)).toHaveAttribute(
@@ -122,9 +119,7 @@ test.describe('CONN-04 G2-e2e 写后读回三态真 WebView（e2e-webview）', (
       );
       expect(after.docId, '面板 docId 应变（同 doc 读回）').toBe(before.docId);
     } finally {
-      if (addedTempWs) {
-        await removeTempWorkspace(session.page, tempWsId);
-      }
+      await closeNoteLeafIfOpen(session.page).catch(() => undefined);
       await session.browser.close();
     }
   });
@@ -134,14 +129,11 @@ test.describe('CONN-04 G2-e2e 写后读回三态真 WebView（e2e-webview）', (
     expect(targets.length).toBeGreaterThan(0);
 
     const session = await connectWebView();
-    const tempWsId = `${TEMP_WS_PREFIX}other-${Date.now()}`;
     const otherDocId = `conn-g2-other-${Date.now()}`;
     const otherIntentId = `conn-g2-other-intent-${Date.now()}`;
-    let addedTempWs = false;
     try {
       await assertRealWebView(session.page);
-      await ensureWorkspaceEmptyState(session.page, tempWsId);
-      addedTempWs = await openStrictPanel(session.page, tempWsId);
+      await openNoteLeaf(session.page);
       await expect(session.page.locator(PANEL)).toHaveAttribute(
         'data-hydrate-status',
         'ready'
@@ -191,9 +183,7 @@ test.describe('CONN-04 G2-e2e 写后读回三态真 WebView（e2e-webview）', (
         await uninstallBusCounter(session.page, '__connG2OtherBus');
       }
     } finally {
-      if (addedTempWs) {
-        await removeTempWorkspace(session.page, tempWsId);
-      }
+      await closeNoteLeafIfOpen(session.page).catch(() => undefined);
       await session.browser.close();
     }
   });
@@ -203,13 +193,10 @@ test.describe('CONN-04 G2-e2e 写后读回三态真 WebView（e2e-webview）', (
     expect(targets.length).toBeGreaterThan(0);
 
     const session = await connectWebView();
-    const tempWsId = `${TEMP_WS_PREFIX}idem-${Date.now()}`;
     const idemIntentId = `conn-g2-idem-${Date.now()}`;
-    let addedTempWs = false;
     try {
       await assertRealWebView(session.page);
-      await ensureWorkspaceEmptyState(session.page, tempWsId);
-      addedTempWs = await openStrictPanel(session.page, tempWsId);
+      await openNoteLeaf(session.page);
       await expect(session.page.locator(PANEL)).toHaveAttribute(
         'data-hydrate-status',
         'ready'
@@ -307,154 +294,11 @@ test.describe('CONN-04 G2-e2e 写后读回三态真 WebView（e2e-webview）', (
         await uninstallBusCounter(session.page, '__connG2SameBus');
       }
     } finally {
-      if (addedTempWs) {
-        await removeTempWorkspace(session.page, tempWsId);
-      }
+      await closeNoteLeafIfOpen(session.page).catch(() => undefined);
       await session.browser.close();
     }
   });
 });
-
-// ---------------------------------------------------------------------------
-// 载体 / 到达
-// ---------------------------------------------------------------------------
-
-async function assertRealWebView(page: Page): Promise<void> {
-  const internals = await page.evaluate(
-    () =>
-      typeof (window as unknown as Record<string, unknown>).__TAURI_INTERNALS__
-  );
-  expect(
-    internals,
-    '本切片未交付：无 __TAURI_INTERNALS__（禁止 5174 独立浏览器当真产品）'
-  ).toBe('object');
-  const hasE2eHandle = await page.evaluate(() => '__CRISH_E2E__' in window);
-  expect(hasE2eHandle, '本切片未交付：检测到 __CRISH_E2E__ mock 沙箱').toBe(
-    false
-  );
-  await expect(page.locator('#root')).toBeVisible({ timeout: 20_000 });
-}
-
-async function ensureWorkspaceEmptyState(
-  page: Page,
-  tempWsId: string
-): Promise<void> {
-  await expect(page.locator('#root')).toBeVisible({ timeout: 30_000 });
-
-  if ((await page.locator(PANEL).count()) > 0) {
-    const close = page.locator(SLASH_CLOSE).first();
-    if ((await close.count()) > 0) {
-      await close.click();
-    }
-  }
-
-  if ((await page.locator('[data-empty="true"]').count()) > 0) {
-    return;
-  }
-
-  const added = await revealEmptyWorkspaceViaStore(page, tempWsId);
-  if (!added) {
-    throw new Error(
-      '本切片未交付：产品空态不可见，且无法经真实 layout store 露出空工作区。' +
-        '请先 npm run dev:workbench 并保证工作区可到空态。'
-    );
-  }
-  await expect(page.locator('[data-empty="true"]').first()).toBeVisible({
-    timeout: 15_000,
-  });
-}
-
-async function openStrictPanel(page: Page, tempWsId: string): Promise<boolean> {
-  if ((await page.locator(PANEL).count()) > 0) {
-    return false;
-  }
-  if ((await page.locator(OPEN_STRICT).count()) === 0) {
-    await ensureWorkspaceEmptyState(page, tempWsId);
-  }
-  await expect(page.locator(OPEN_STRICT).first()).toBeVisible({
-    timeout: 15_000,
-  });
-  await page.locator(OPEN_STRICT).first().click();
-  await expect(page.locator(PANEL)).toBeVisible({ timeout: 20_000 });
-  return true;
-}
-
-async function revealEmptyWorkspaceViaStore(
-  page: Page,
-  tempWsId: string
-): Promise<boolean> {
-  return page.evaluate((tempId) => {
-    const w = window as unknown as {
-      __CRISH_LAYOUT_STORE__?: {
-        getState: () => {
-          workspaces?: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-          setActiveWorkspaceIndex?: (index: number) => void;
-        };
-        setState: (partial: {
-          workspaces: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-        }) => void;
-      };
-    };
-    const store = w.__CRISH_LAYOUT_STORE__;
-    if (!store || typeof store.getState !== 'function') {
-      return false;
-    }
-    const state = store.getState();
-    const workspaces = Array.isArray(state.workspaces) ? state.workspaces : [];
-    const existingIdx = workspaces.findIndex((ws) => ws.id === tempId);
-    if (existingIdx >= 0) {
-      if (typeof state.setActiveWorkspaceIndex === 'function') {
-        state.setActiveWorkspaceIndex(existingIdx);
-        return true;
-      }
-      store.setState({ workspaces, activeWorkspaceIndex: existingIdx });
-      return true;
-    }
-    if (typeof store.setState !== 'function') {
-      return false;
-    }
-    const next = workspaces.concat([{ id: tempId, columns: [] }]);
-    store.setState({ workspaces: next, activeWorkspaceIndex: next.length - 1 });
-    return true;
-  }, tempWsId);
-}
-
-async function removeTempWorkspace(
-  page: Page,
-  tempWsId: string
-): Promise<void> {
-  await page.evaluate((tempId) => {
-    const w = window as unknown as {
-      __CRISH_LAYOUT_STORE__?: {
-        getState: () => {
-          workspaces?: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-        };
-        setState: (partial: {
-          workspaces: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-        }) => void;
-      };
-    };
-    const store = w.__CRISH_LAYOUT_STORE__;
-    if (!store || typeof store.getState !== 'function') {
-      return;
-    }
-    const state = store.getState();
-    const prev = state.workspaces ?? [];
-    const workspaces = prev.filter((ws) => ws.id !== tempId);
-    if (workspaces.length === prev.length) {
-      return;
-    }
-    const nextIdx = Math.min(
-      Math.max(0, state.activeWorkspaceIndex),
-      Math.max(0, workspaces.length - 1)
-    );
-    store.setState({ workspaces, activeWorkspaceIndex: nextIdx });
-  }, tempWsId);
-}
 
 // ---------------------------------------------------------------------------
 // 面板观测

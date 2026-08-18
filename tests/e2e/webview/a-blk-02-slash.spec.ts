@@ -2,17 +2,19 @@
  * W6-A-02 · A-BLK-02 真 WebView2 :9222 slash 插入 + composing 不误开
  *
  * 权威：launch-gap/00 §4 行 7；04 原 LR-01（A-BLK-02）。
+ * 到达 = 扩展 note 叶（openNoteLeaf：产品钮 / 真 openTool / 树门面）。
  *
  * 测头自钉（禁止抬账）：
  *   ≠ EL-01（不得改表 A / 不得写关闭）
  *   ≠ W6-A 全表 e2e（本片只钉 A-BLK-02 slash / IME 不误触）
  *   ≠ 用 jsdom DOM/形状测关本片
  *   ≠ CONN-01 冒烟（不碰 data-hydrate-* 当打开完成）
+ *   ≠ 打开完成
  *
  * 写锥：产品 `createCollabApplySink` + `note_apply_ops`
  *   （面板 `data-slash-sink-source=product-ipc`）。禁止 mock.calls。
  *
- * 9222 不可达 / 非 WebView2 CDP：`cdp.ts` fail-fast 可读错误
+ * 9222 不可达 / 非 WebView2 CDP：`cdp.ts` / `assertRealWebView` fail-fast 可读错误
  * （请先 `npm run dev:workbench`；AGENTS §15 禁止 5174 独立浏览器当真产品）。
  * 纸面打不开 / 写锥非产品 / 树未增块：本用例 **失败** 并写明「本切片未交付」——不 skip 伪装绿。
  *
@@ -21,12 +23,14 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { connectWebView, listCdpTargets } from './cdp';
-
-const PANEL = '[data-testid="note-paper-strict-panel"]';
-const OPEN_STRICT = '[data-testid="open-note-paper-strict"]';
-const SLASH_OVERLAY = '[data-testid="note-paper-strict-slash-overlay"]';
-const SLASH_TRIGGER = '[data-testid="note-paper-strict-open-slash"]';
-const TEMP_WS_ID = 'ws-w6a-a-blk-02-probe';
+import {
+  PANEL,
+  SLASH_OVERLAY,
+  SLASH_TRIGGER,
+  assertRealWebView,
+  closeNoteLeafIfOpen,
+  openNoteLeaf,
+} from './arrive-note-leaf';
 
 type ProductTree = {
   count: number;
@@ -47,10 +51,9 @@ test.describe('W6-A-02 A-BLK-02 slash 真 WebView（e2e-webview）', () => {
     expect(targets.length).toBeGreaterThan(0);
 
     const session = await connectWebView();
-    let addedTempWs = false;
     try {
       await assertRealWebView(session.page);
-      addedTempWs = await ensureStrictPaperOpen(session.page);
+      await openNoteLeaf(session.page);
       await assertProductWriteCone(session.page);
 
       const before = await collectTree(session.page);
@@ -85,9 +88,7 @@ test.describe('W6-A-02 A-BLK-02 slash 真 WebView（e2e-webview）', () => {
         ).toContain(id);
       }
     } finally {
-      if (addedTempWs) {
-        await restoreTempWorkspace(session.page);
-      }
+      await closeNoteLeafIfOpen(session.page).catch(() => undefined);
       await session.browser.close();
     }
   });
@@ -97,10 +98,9 @@ test.describe('W6-A-02 A-BLK-02 slash 真 WebView（e2e-webview）', () => {
     expect(targets.length).toBeGreaterThan(0);
 
     const session = await connectWebView();
-    let addedTempWs = false;
     try {
       await assertRealWebView(session.page);
-      addedTempWs = await ensureStrictPaperOpen(session.page);
+      await openNoteLeaf(session.page);
       await closeSlashIfOpen(session.page);
 
       const panel = session.page.locator(PANEL);
@@ -113,138 +113,11 @@ test.describe('W6-A-02 A-BLK-02 slash 真 WebView（e2e-webview）', () => {
       ).toHaveCount(0);
       await expect(panel).toHaveAttribute('data-slash-open', 'false');
     } finally {
-      if (addedTempWs) {
-        await restoreTempWorkspace(session.page);
-      }
+      await closeNoteLeafIfOpen(session.page).catch(() => undefined);
       await session.browser.close();
     }
   });
 });
-
-async function assertRealWebView(page: Page): Promise<void> {
-  const internals = await page.evaluate(
-    () => typeof (window as Record<string, unknown>).__TAURI_INTERNALS__
-  );
-  expect(
-    internals,
-    '本切片未交付：无 __TAURI_INTERNALS__（禁止 5174 独立浏览器当真产品）'
-  ).toBe('object');
-
-  const hasE2eHandle = await page.evaluate(() => '__CRISH_E2E__' in window);
-  expect(hasE2eHandle, '本切片未交付：检测到 __CRISH_E2E__ mock 沙箱').toBe(
-    false
-  );
-
-  await expect(page.locator('#root')).toBeVisible({ timeout: 20_000 });
-}
-
-/**
- * 打开产品 Strict 纸面。空态 CTA 不可见时，经真实 `__CRISH_LAYOUT_STORE__`
- * 临时挂一个空 columns 工作区（不关用户已有标签）。finally 必须摘掉。
- */
-async function ensureStrictPaperOpen(page: Page): Promise<boolean> {
-  if ((await page.locator(PANEL).count()) > 0) {
-    return false;
-  }
-  if ((await page.locator(OPEN_STRICT).count()) > 0) {
-    await page.locator(OPEN_STRICT).first().click();
-    await expect(page.locator(PANEL)).toBeVisible({ timeout: 20_000 });
-    return false;
-  }
-
-  const added = await revealEmptyWorkspaceViaStore(page);
-  if (!added) {
-    throw new Error(
-      '本切片未交付：产品空态「打开笔记纸面（Strict）」不可见，且无法经真实 layout store 露出空工作区。请先 npm run dev:workbench 并保证工作区可到空态。'
-    );
-  }
-  await expect(page.locator(OPEN_STRICT).first()).toBeVisible({
-    timeout: 15_000,
-  });
-  await page.locator(OPEN_STRICT).first().click();
-  await expect(page.locator(PANEL)).toBeVisible({ timeout: 20_000 });
-  return true;
-}
-
-async function revealEmptyWorkspaceViaStore(page: Page): Promise<boolean> {
-  return page.evaluate((tempId) => {
-    const w = window as unknown as {
-      __CRISH_LAYOUT_STORE__?: {
-        getState: () => {
-          workspaces?: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-          setActiveWorkspaceIndex?: (index: number) => void;
-        };
-        setState: (partial: {
-          workspaces: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-        }) => void;
-      };
-    };
-    const store = w.__CRISH_LAYOUT_STORE__;
-    if (!store || typeof store.getState !== 'function') {
-      return false;
-    }
-    const state = store.getState();
-    const workspaces = Array.isArray(state.workspaces) ? state.workspaces : [];
-    const existingIdx = workspaces.findIndex((ws) => ws.id === tempId);
-    if (existingIdx >= 0) {
-      if (typeof state.setActiveWorkspaceIndex === 'function') {
-        state.setActiveWorkspaceIndex(existingIdx);
-        return true;
-      }
-      store.setState({
-        workspaces,
-        activeWorkspaceIndex: existingIdx,
-      });
-      return true;
-    }
-    if (typeof store.setState !== 'function') {
-      return false;
-    }
-    const next = workspaces.concat([{ id: tempId, columns: [] }]);
-    store.setState({
-      workspaces: next,
-      activeWorkspaceIndex: next.length - 1,
-    });
-    return true;
-  }, TEMP_WS_ID);
-}
-
-async function restoreTempWorkspace(page: Page): Promise<void> {
-  await page.evaluate((tempId) => {
-    const w = window as unknown as {
-      __CRISH_LAYOUT_STORE__?: {
-        getState: () => {
-          workspaces?: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-        };
-        setState: (partial: {
-          workspaces: Array<{ id: string; columns: unknown[] }>;
-          activeWorkspaceIndex: number;
-        }) => void;
-      };
-    };
-    const store = w.__CRISH_LAYOUT_STORE__;
-    if (!store || typeof store.getState !== 'function') {
-      return;
-    }
-    const state = store.getState();
-    const prev = state.workspaces ?? [];
-    const workspaces = prev.filter((ws) => ws.id !== tempId);
-    if (workspaces.length === prev.length) {
-      return;
-    }
-    const nextIdx = Math.min(
-      Math.max(0, state.activeWorkspaceIndex),
-      Math.max(0, workspaces.length - 1)
-    );
-    store.setState({
-      workspaces,
-      activeWorkspaceIndex: nextIdx,
-    });
-  }, TEMP_WS_ID);
-}
 
 async function assertProductWriteCone(page: Page): Promise<void> {
   const panel = page.locator(PANEL);
