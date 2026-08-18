@@ -36,7 +36,7 @@ export default defineConfig({
     {
       name: 'e2e-webview',
       testMatch:
-        /(webview-smoke|mirror-detect|a-blk-02-slash|conn-b3-e2e|conn-g2-e2e)\.spec\.ts$/,
+        /(webview-smoke|mirror-detect|a-blk-02-slash|conn-b3-e2e|conn-g2-e2e|conn-h2-open-complete)\.spec\.ts$/,
     },
   ],
 });
