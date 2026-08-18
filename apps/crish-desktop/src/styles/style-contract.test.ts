@@ -265,7 +265,7 @@ describe('批次 2 · ⑤ !important ratchet', () => {
 });
 
 describe('批次 2 · ⑥ 注入 token 名 ∈ 静态定义名（双层同源约束 1）', () => {
-  it('themeStore setProperty 注入的每个 token 在 tokens.css / shell-workspace.css 有静态定义', () => {
+  it('themeStore setProperty 注入的每个 token 在 tokens.css 有静态定义', () => {
     const themeStore = readFile('src/api/themeStore.ts');
     const injected = [
       ...new Set(

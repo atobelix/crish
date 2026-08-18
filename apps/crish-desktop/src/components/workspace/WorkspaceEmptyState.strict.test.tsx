@@ -1,28 +1,33 @@
 // @vitest-environment jsdom
 /**
- * WorkspaceEmptyState · W5-B Strict 产品默认入口（可挂 Strict 面板）
+ * WorkspaceEmptyState · Strict 夹具路径（可挂 Strict 面板）
  *
- * 完成定义（产品向至少 1 条）：
- * - 空态可点 Strict → NotePaperStrictPanel
+ * **夹具 ≠ 产品入口 ≠ G-HYD ≠ 打开完成。**
+ * EmptyState / Host / CTA 暂留（04 D3/D4/D9）。点 `open-note-paper-strict`
+ * 只证明夹具能挂 `NotePaperStrictPanel`，**不是**产品打开完成。
+ *
+ * 合法意思（夹具）：
+ * - 空态夹具仍可挂 NotePaperStrictPanel
  * - 无 Tauri（vitest/jsdom）默认 hydrate-source=fixture（**≠ 伪装 tauri-ipc**）
  * - 产品选型见 `createProductStrictHydrateTransport`（可检测 Tauri → tauri-ipc）
  * - DOM 诚实：package-id=W5-B / track=strict / source=hydrate
- * - 默认倾向 strict（W5B_PRODUCT_DEFAULT_EMPTY_TRACK）；Skeleton 双轨保留
- * - preferredNotePaperTrack 可切 skeleton 为主 CTA
+ * - preview CTA（`open-note-paper-preview`）产品还留着 → **只断言存在**；
+ *   **禁止** 把 preview 去 `-S` 或写成 Strict 交付
+ * - preferredNotePaperTrack 可切主 CTA 倾向；两按钮仍在
  * - **CONN-A1**：mock/IPC 成功体可透传 `data-hydrate-path=doc-session`；
  *   **禁止** 该属性/文案宣称关 EL / 打开完成；fixture 不得伪装 tauri-ipc
- * - **可演示 ≠ EL**；**≠ 打开完成**；fixture ≠ 生产权威；
- *   后端默认 `hydrate_path=doc-session` 仍 **≠ EL-01/04/08**
- * - **≠ EL-01**；**≠ A-BLK-02/08 e2e 满关**；桌面接线 ≠ 打开完成
+ * - fixture ≠ 生产权威；后端默认 `hydrate_path=doc-session` 仍 **≠ EL-01/04/08**
+ * - **≠ EL-01**；**≠ A-BLK-02/08 e2e 满关**
+ *
+ * 已删：`notePaperSkeletonTrack` / `NotePaperPanel`（08 P9）。
+ * 本文件不再 import 已死 skeleton 轨道常量；不为测绿写回 skeleton 文件。
  *
  * SD-35 按 CONN 域拆分（断言语义不变；测名仍可 rg）：
- * - 本文件：产品默认入口 / CONN-A1 hydrate path 诚实
+ * - 本文件：夹具可挂 Strict / CONN-A1 hydrate path 诚实
  * - WorkspaceEmptyState.conn-b3.test.tsx：CONN-B / CONN-B3 slash + applyOps IPC
  * - WorkspaceEmptyState.conn-d2.test.tsx：CONN-D2 / CONN-D3 mdPrefix
  * - WorkspaceEmptyState.conn-e2.test.tsx：CONN-E2 / CONN-E3 mirror
  * - WorkspaceEmptyState.conn-c2.test.tsx：CONN-C2 PaperList
- *
- * Skeleton 入口/测见 WorkspaceEmptyState.skeleton.test.tsx（必须仍绿）。
  */
 import React from 'react';
 import { describe, expect, it } from 'vitest';
@@ -37,16 +42,13 @@ import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
 } from '../note-paper/notePaperStrictTrack';
-import {
-  W5B_SKELETON_PACKAGE_ID,
-  W5B_SKELETON_TRACK,
-} from '../note-paper/notePaperSkeletonTrack';
 
-describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
+describe('WorkspaceEmptyState · Strict 夹具（≠ 产品入口 ≠ 打开完成）', () => {
   it('w5b_product_empty_opens_strict_panel_with_fixture_hydrate', async () => {
+    // 夹具可挂 Strict 面板；点 CTA ≠ 产品打开完成 / ≠ G-HYD
     render(<WorkspaceEmptyState wsId="ws-strict-1" />);
 
-    // 产品默认倾向 Strict
+    // 夹具默认倾向 Strict
     const root = screen.getByRole('status');
     expect(root).toHaveAttribute(
       'data-preferred-note-paper-track',
@@ -64,12 +66,8 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
       /W5-B|Strict|可演示≠EL|≠打开完成/i
     );
 
-    // Skeleton 入口仍在（双轨）
+    // preview CTA 产品还留着：只断言存在；禁止当 W5-B-S 或 Strict 交付
     expect(screen.getByTestId('open-note-paper-preview')).toBeInTheDocument();
-    expect(screen.getByTestId('open-note-paper-preview')).toHaveAttribute(
-      'data-package-id',
-      W5B_SKELETON_PACKAGE_ID
-    );
 
     fireEvent.click(openBtn);
 
@@ -96,11 +94,8 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     expect(panel).not.toHaveAttribute('data-hydrate-path');
     expect(panel).toHaveAttribute('data-doc-id', 'strict-ws-strict-1');
     expect(panel).toHaveAttribute('data-block-count', '3');
-    // 不得冒充 Skeleton
-    expect(panel).not.toHaveAttribute(
-      'data-package-id',
-      W5B_SKELETON_PACKAGE_ID
-    );
+    // 禁止把 Strict 面板标成已删的 W5-B-S（去 -S 冒充）
+    expect(panel).not.toHaveAttribute('data-package-id', 'W5-B-S');
     expect(panel.querySelector('[data-lines]')).toBeNull();
 
     // CONN-C · C-X2 / CONN-C2：空态产品默认 **不** 传 paperList → data-paper-list=0 钉死
@@ -116,6 +111,7 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
   });
 
   it('w5b_product_empty_strict_close_returns_to_empty', async () => {
+    // 夹具开合；关闭回到空态 CTA。≠ 产品打开完成
     render(<WorkspaceEmptyState wsId="ws-close-strict" />);
     fireEvent.click(screen.getByTestId('open-note-paper-strict'));
 
@@ -130,6 +126,7 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
   });
 
   it('w5b_product_empty_accepts_injected_hydrate_transport', async () => {
+    // 夹具可注入 fixture transport；≠ 打开完成
     const transport = createFixtureHydrateTransport({
       'strict-ws-inject': {
         rev: 7,
@@ -166,9 +163,9 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
   });
 
   it('w5b_product_empty_accepts_tauri_ipc_product_transport_when_injected', async () => {
-    // 模拟「可检测 Tauri」产品默认：source=tauri-ipc；≠ fixture 伪装
+    // 夹具注入「可检测 Tauri」transport：source=tauri-ipc；≠ fixture 伪装
     // CONN-A1：mock 默认 hydrate_path=doc-session → DOM data-hydrate-path 可观测
-    // **本测绿 ≠ 打开完成 / ≠ 关 EL-01/04/08**（仅分轨诚实）
+    // **本测绿 ≠ 打开完成 / ≠ G-HYD / ≠ 关 EL-01/04/08**（仅分轨诚实）
     const { createMockNoteHydrateIpc } =
       await import('../../api/noteHydrateIpc');
     const { createProductStrictHydrateTransport } =
@@ -213,6 +210,7 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
   });
 
   it('w5b_product_empty_preferred_skeleton_still_keeps_strict_entry', () => {
+    // 倾向预览壳仍保留 Strict CTA；preview 只测存在，≠ W5-B-S 交付、≠ 去 -S
     render(
       <WorkspaceEmptyState
         wsId="ws-pref-skel"
@@ -222,7 +220,7 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     const root = screen.getByRole('status');
     expect(root).toHaveAttribute(
       'data-preferred-note-paper-track',
-      W5B_SKELETON_TRACK
+      'skeleton'
     );
     // 常量产品默认仍是 strict（prop 只改倾向，不改常量）
     expect(root).toHaveAttribute(
