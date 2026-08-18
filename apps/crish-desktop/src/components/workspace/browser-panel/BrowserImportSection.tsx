@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 浏览器数据导入区（G-4 收尾 U6：书签/历史/登录态导入 UI，03-方案 §4.2 U6）。
  *
  * 布局（BrowserPanel 内「数据导入」区）：
@@ -16,9 +16,10 @@
  * 错误面：invokeTyped 三态——missing（引擎未接线）/ error（结构化 kind/message，
  * tool.browser.not_ready / tool.invalid_input 前缀由 message 透传展示）。
  *
- * 结构（D-01 G-03b 拆分）：业务状态与行为已迁至 `import-hooks/` 四个 hook
+ * 结构（D-01 G-03b 拆分 + T4-11 R6）：业务状态与行为已迁至 `import-hooks/` 四个 hook
  * （useBookmarksImport / useHistoryImport（含列表）/ useStorageImport /
  * useExportAuth），导出两段确认对话框抽为 ExportAuthDialogs 纯展示壳；
+ * 「已导入数据」列表区抽为 ImportedListBlock 纯展示壳（T4-11 R6）；
  * 本文件仅保留：props + useId + busy 编排 + 派生 + JSX 渲染（UI ≤500 行门禁）。
  */
 import React, { useId, useState } from 'react';
@@ -29,13 +30,11 @@ import {
   History,
   KeyRound,
   Loader2,
-  RefreshCw,
   Upload,
 } from 'lucide-react';
 import styles from './BrowserImportSection.module.css';
 import { Button, Input, Tooltip } from '../../ui';
 import {
-  formatUnixSecTime,
   isUsableJsonText,
 } from '../../../api/browserImportLib';
 import type { } from '../../../hooks/useToastQueue';
@@ -44,6 +43,7 @@ import { useHistoryImport } from './import-hooks/useHistoryImport';
 import { useStorageImport } from './import-hooks/useStorageImport';
 import { useExportAuth } from './import-hooks/useExportAuth';
 import { ExportAuthDialogs } from './ExportAuthDialogs';
+import { ImportedListBlock } from './ImportedListBlock';
 import type { BusyKind } from './import-hooks/browserImportShared';
 
 export interface BrowserImportSectionProps {
@@ -367,123 +367,11 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
       </div>
 
       {/* ── 列表 ── */}
-      <div className={styles.block}>
-        <h4 className={styles.blockTitle}>已导入数据</h4>
-        <div className={styles.row}>
-          <Button
-            type="button"
-            variant={history.listTab === 'bookmarks' ? 'primary' : 'secondary'}
-            size="sm"
-            disabled={busy === 'list'}
-            onClick={() => {
-              void history.toggleList('bookmarks');
-            }}
-          >
-            书签列表{history.listTab === 'bookmarks' ? '（收起）' : ''}
-          </Button>
-          <Button
-            type="button"
-            variant={history.listTab === 'history' ? 'primary' : 'secondary'}
-            size="sm"
-            disabled={busy === 'list'}
-            onClick={() => {
-              void history.toggleList('history');
-            }}
-          >
-            历史列表{history.listTab === 'history' ? '（收起）' : ''}
-          </Button>
-          {history.listTab ? (
-            <>
-              {history.listTab === 'history' ? (
-                <Input
-                  id={`${baseId}-hist-limit`}
-                  label="limit"
-                  size="sm"
-                  type="number"
-                  min={1}
-                  value={history.historyLimit}
-                  onChange={(e) => history.setHistoryLimit(e.target.value)}
-                />
-              ) : null}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                icon={<RefreshCw size={13} aria-hidden />}
-                disabled={busy === 'list'}
-                onClick={() => {
-                  void history.refreshList();
-                }}
-              >
-                刷新
-              </Button>
-            </>
-          ) : null}
-        </div>
-        {history.listError ? (
-          <p className={styles.error} role="alert">
-            {history.listError}
-          </p>
-        ) : null}
-        {history.listTab === 'bookmarks' && history.bookmarkRows !== null ? (
-          <div className={styles.listWrap}>
-            <p className={styles.listCaption} role="status">
-              共 {history.bookmarkRows.length} 条（导入时间倒序）
-            </p>
-            {history.bookmarkRows.length === 0 ? (
-              <p className={styles.listEmpty}>暂无已导入书签</p>
-            ) : (
-              <ul className={styles.list}>
-                {history.bookmarkRows.map((row) => (
-                  <li
-                    key={`${row.url}\u0000${row.name}`}
-                    className={styles.listItem}
-                  >
-                    <span className={styles.itemName}>{row.name}</span>
-                    <span className={styles.itemPath}>
-                      {row.folder_path.length > 0
-                        ? row.folder_path.join(' / ')
-                        : '（顶层）'}
-                    </span>
-                    <span className={styles.itemUrl}>
-                      <code>{row.url}</code>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : null}
-        {history.listTab === 'history' && history.historyRows !== null ? (
-          <div className={styles.listWrap}>
-            <p className={styles.listCaption} role="status">
-              共 {history.historyRows.length} 条（visited_at 倒序，limit 截断）
-            </p>
-            {history.historyRows.length === 0 ? (
-              <p className={styles.listEmpty}>暂无已导入历史</p>
-            ) : (
-              <ul className={styles.list}>
-                {history.historyRows.map((row) => (
-                  <li
-                    key={`${row.url}\u0000${row.visited_at}`}
-                    className={styles.listItem}
-                  >
-                    <span className={styles.itemTime}>
-                      {formatUnixSecTime(row.visited_at)}
-                    </span>
-                    <span className={styles.itemName}>
-                      {row.title || '（无标题）'}
-                    </span>
-                    <span className={styles.itemUrl}>
-                      <code>{row.url}</code>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ) : null}
-      </div>
+      <ImportedListBlock
+        busy={busy}
+        baseId={baseId}
+        list={history}
+      />
 
       {/* ── 导出两段确认对话框 ── */}
       <ExportAuthDialogs

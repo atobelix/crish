@@ -59,10 +59,8 @@ import {
   moveSessionTab,
   currentWorkspaceFolderKey,
   type OpenSessionTabsMap,
-  OPEN_SESSION_TABS_KEY,
   MAX_OPEN_SESSION_TABS,
 } from '../../api/workspaceChromeTabs';
-import { readScopedLocalStorageWithLegacyMigrate } from '../../api/shellWindowScope';
 import {
   type RightToolDockState,
   type TabSurface,
@@ -71,135 +69,18 @@ import {
   mintTabId,
 } from './types';
 import { applyDockToTree, ensureAdapterShape, ensureChatOnlyTree } from './adapterShape';
-import { syncShellDocksFromTree } from './layoutRestorePolicy';
 import { registerShellReadApi } from './shellReadBridge';
 import {
-  useLayoutTreeStore,
-  findChatLeafBySessionId,
-  findNodeById,
-  findUnitRootId,
-  isBranch,
-  listChatLeaves,
-  removeUnitBySessionId,
-  dedupeDuplicateSessionChatLeaves,
-} from '../layout-tree';
-import type { LayoutTree } from '../layout-tree/types';
-import { isTreeDockProjectionSuppressed } from './treeDockProjection';
+  dedupeSessionLeavesInStore,
+  removeSessionUnitFromTree,
+  neighborDockNeedsProject,
+  bindActiveChatLeafSession,
+} from './leafBindingHelpers';
+import { useLayoutTreeStore, listChatLeaves } from '../layout-tree';
 
-/**
- * 归一化：去掉同 session 重复 chat leaf，写回 store（有变更才 setTree）。
- * 任意 lifecycle 写树后应调用。
- * T06.9.1：跨 store 读经 compositionRoot.tree 门面（阻断对 layoutTreeStore 的直接 import 环）。
- */
-function dedupeSessionLeavesInStore(): void {
-  const store = useLayoutTreeStore.getState();
-  const next = dedupeDuplicateSessionChatLeaves(store.tree);
-  if (next !== store.tree) {
-    store.setTree(next);
-  }
-}
-
-/**
- * 关闭 tab 时摘掉该 session 的 Conversation Unit（chat + tool 子树），再 dedupe。
- * 不强制 wipe 其它 unit 的 multi 布局。
- */
-function removeSessionUnitFromTree(sessionId: string): void {
-  const sid = (sessionId || '').trim();
-  if (!sid) return;
-  const store = useLayoutTreeStore.getState();
-  const next = removeUnitBySessionId(store.tree, sid);
-  if (next !== store.tree) {
-    store.setTree(next);
-  }
-  dedupeSessionLeavesInStore();
-}
-
-/**
- * closeTab 切邻居时是否需要补投影 dock。
- * 纯 focus 不投影；仅当邻居 tab 声明 dock 展开、但树上该 unit 仍是 chat-only（缺 tool）时补一次。
- * 多 unit 树上邻居工具已在则跳过，避免关 tab 副作用折叠/重投影。
- */
-function neighborDockNeedsProject(
-  sessionId: string,
-  dock: RightToolDockState
-): boolean {
-  const sid = (sessionId || '').trim();
-  if (!sid) return false;
-  // 折叠 / 无 active 面板：不因 focus 去剥树
-  if (dock.collapsed || !dock.activePanelId) return false;
-
-  const layout = useLayoutTreeStore.getState();
-  const unitId = findUnitRootId(layout.tree.root, sid);
-  if (!unitId) return true;
-  const unit = findNodeById(layout.tree.root, unitId);
-  if (!unit) return true;
-  // 已有 H(chat|tool) unit → 多 unit 状态已就位，跳过
-  if (isBranch(unit)) return false;
-  // chat-only leaf 但 tab 声明 dock 展开 → 需要补投影
-  return true;
-}
-
-/**
- * 顶栏 tab ↔ chat leaf 1:1 绑定。
- *
- * 规则：
- * 1. 已有 bound leaf → setActiveLeaf 聚焦（不改其它 unit）
- * 2. 无 leaf 且仅 1 个 chat → 把该 leaf 绑到 session（单屏切 tab）
- * 3. 多 chat 且恰好 1 个 unbound → 绑 unbound
- * 4. 多 chat 且无可用 unbound → 不 auto-split（tab 可开而无 leaf，待用户 split）
- * 5. 零 chat → ensureAdapterShape 注入后再绑
- *
- * 注意：focus 永不 applyDockToTree；坞投影仅 updateRightDock / openTool / 恢复路径。
- */
-function bindActiveChatLeafSession(sessionId: string): void {
-  const sid = (sessionId || '').trim();
-  if (!sid) return;
-
-  dedupeSessionLeavesInStore();
-
-  let store = useLayoutTreeStore.getState();
-  let chats = listChatLeaves(store.tree.root);
-
-  if (chats.length === 0) {
-    ensureAdapterShape();
-    store = useLayoutTreeStore.getState();
-    chats = listChatLeaves(store.tree.root);
-  }
-
-  // 1. 已有绑定 → 聚焦
-  const bound = findChatLeafBySessionId(store.tree.root, sid);
-  if (bound) {
-    if (store.activeLeafId !== bound.id) {
-      store.setActiveLeaf(bound.id);
-    }
-    return;
-  }
-
-  if (chats.length === 0) return;
-
-  // 2. 单 chat 表面：切 tab 时 rebind（经典单屏多 tab）
-  if (chats.length === 1) {
-    const only = chats[0]!;
-    if (only.sessionId !== sid) {
-      store.setLeafSessionId(only.id, sid);
-    }
-    if (store.activeLeafId !== only.id) {
-      store.setActiveLeaf(only.id);
-    }
-    return;
-  }
-
-  // 3. 多 chat：仅绑恰好一个 unbound leaf，禁止偷别人的 session、禁止 auto-split
-  const unbound = chats.filter((l) => !l.sessionId);
-  if (unbound.length === 1) {
-    const target = unbound[0]!;
-    store.setLeafSessionId(target.id, sid);
-    if (store.activeLeafId !== target.id) {
-      store.setActiveLeaf(target.id);
-    }
-  }
-  // else: tab 打开但无可见 unit，等待用户 split 放置
-}
+// 拆分自本文件的子模块 re-export，保证消费方 import 路径不变
+export { loadLegacyOpenTabsMap, selectActiveTabSessionId } from './shellSelectors';
+export { registerTreeDockSync } from './treeDockSync';
 
 export interface WorkspaceShellStore
   extends WorkspaceShellState {
@@ -586,39 +467,9 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
   },
 }));
 
-/** 读取 open-tabs map（window-scoped；main 可从 unscoped 一次性 migrate） */
-export function loadLegacyOpenTabsMap(): OpenSessionTabsMap {
-  try {
-    // Same scoped path as workspaceChromeTabs so hydrate + chrome stay aligned.
-    const raw = readScopedLocalStorageWithLegacyMigrate(OPEN_SESSION_TABS_KEY);
-    if (!raw) return {};
-    const obj = JSON.parse(raw);
-    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {};
-    return obj as OpenSessionTabsMap;
-  } catch {
-    return {};
-  }
-}
-
-export function selectActiveTabSessionId(
-  s: WorkspaceShellState
-): string | null {
-  const t = s.openTabs.find((x) => x.tabId === s.activeTabId);
-  return t?.sessionId ?? null;
-}
-
-// ── tree→shell dock 反向投影（显式生命周期，T06.9.1）────────────────
-// 原模块级永久订阅（AA-03 Q06：L610-624，永不退订）改为显式注册/退订：
-// - bootstrapServices 启动时 registerTreeDockSync()，cleanup 时退订；
-// - 重复注册幂等（StrictMode 双执行安全）；
-// - 投影抑制：shell→tree 投影（adapterShape 的 applyDockToTree 等）写树期间
-//   经 withTreeDockProjectionSuppressed 置位 → 本订阅跳过反向同步，
-//   消除 shell↔tree 双向投影互触发回环。
-// 语义：用户拖拽 / 分屏等纯 tree 变更（非 shell 投影路径）仍照常反推
-// shell rightDock 元数据，保证后续 applyDockToTree 重投影不拿旧 dock 覆盖树。
-
 // G13 断环：向 shellReadBridge 注册本 store 的读取/写入闭包，
 // adapterShape / layoutRestorePolicy 经桥访问 shell，不再 import 本文件。
+// 必须在 useWorkspaceShellStore 定义之后执行（依赖其 getState/setState）。
 registerShellReadApi({
   getActiveTab: () => useWorkspaceShellStore.getState().getActiveTab(),
   getOpenTabs: () => useWorkspaceShellStore.getState().openTabs,
@@ -627,31 +478,4 @@ registerShellReadApi({
     useWorkspaceShellStore.getState().resetToCleanDraft(workspaceKey),
 });
 
-let treeDockSyncRegistered = false;
-let lastSyncedTree: LayoutTree | null = null;
 
-/**
- * 注册 tree→shell dock 反向投影订阅，返回退订函数。
- * 幂等：已注册时返回 no-op；退订后可重新注册。
- */
-export function registerTreeDockSync(): () => void {
-  if (treeDockSyncRegistered) return () => {};
-  treeDockSyncRegistered = true;
-  lastSyncedTree = useLayoutTreeStore.getState().tree;
-  const unsubscribe = useLayoutTreeStore.subscribe((state) => {
-    if (state.tree !== lastSyncedTree) {
-      lastSyncedTree = state.tree;
-      if (isTreeDockProjectionSuppressed()) return;
-      try {
-        syncShellDocksFromTree(state.tree);
-      } catch {
-        /* 反向投影失败不阻断 tree 渲染 */
-      }
-    }
-  });
-  return () => {
-    unsubscribe();
-    treeDockSyncRegistered = false;
-    lastSyncedTree = null;
-  };
-}

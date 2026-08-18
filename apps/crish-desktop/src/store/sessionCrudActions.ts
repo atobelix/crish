@@ -18,7 +18,6 @@ import {
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
 import { PENDING_DRAFT_SESSION_ID, isPendingDraft } from './draftSession';
-import { recordDraftCommit, recordDraftEnter } from '../api/controlMetrics';
 import { runEmptyShellAssert } from '../dev/emptyShellAssert';
 import { useTerminalStore } from './terminalStore';
 import { useStreamingStore } from './streamingStore';
@@ -40,6 +39,11 @@ import {
 } from './sessionSharedHelpers';
 
 import { normalizeImportMeta } from './sessionImportMeta';
+// 草稿态 actions + 共享辅助从子模块导入（保持本文件聚焦 CRUD/状态切换）
+import {
+  applyDraftModeToState,
+  createSessionDraftActions,
+} from './sessionDraftActions';
 
 export function createSessionCrudActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>,
@@ -61,24 +65,11 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
   | 'patchSession'
   | 'clearSessionMessages'
 > {
-  /**
-   * 草稿态状态写入（共享辅助）：
-   * 将 activeSessionId 设为草稿哨兵，并补齐 draftFolder / agent / terminalLines。
-   *
-   * 不变量：activeSessionId 绝不允许为空字符串，必须始终是有效会话 ID 或草稿哨兵。
-   * 此辅助函数是所有"进入草稿态"路径的统一收口点，确保 draftFolder 不会缺失。
-   */
-  const applyDraftModeToState = (state: SessionStoreSlice, folder?: string) => {
-    state.activeSessionId = PENDING_DRAFT_SESSION_ID;
-    state.draftFolder =
-      (typeof folder === 'string' && folder.trim()) ||
-      getActiveProjectId() ||
-      GENERAL_FOLDER ||
-      '';
-    state.activeAgentId = null;
-    state.panelAgentId = null;
-    syncActiveTerminalSession(PENDING_DRAFT_SESSION_ID);
-  };
+  // 草稿态 actions 由子模块提供；createSession 传入以避免循环导入。
+  // 先声明 createSession（下方 actions 对象内定义），再经引用注入 draft actions。
+  // 由于 actions.createSession 在 actions 对象字面量内定义，而 draft actions
+  // 需要调用它，这里用一个间接：draft actions 接受 createSessionFn 参数，
+  // 传入 actions.createSession（在 return 时引用已构造的 actions）。
 
   const actions = {
     setComposerDraft: (sessionId: string, draft: string) =>
@@ -243,56 +234,8 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         state.panelAgentId = id;
       }),
 
-    enterDraftMode: (folder?: string) => {
-      set((state) => applyDraftModeToState(state, folder));
-      // D2：draft_enter 计数（内存）
-      recordDraftEnter();
-    },
-
-    setDraftFolder: (folder: string) => {
-      set((state) => {
-        state.draftFolder = typeof folder === 'string' ? folder : '';
-      });
-    },
-
-    clearDraft: () => {
-      // 不变量：clearDraft 后 activeSessionId 仍不允许为空字符串。
-      // 语义上"清除草稿"= 退出当前草稿、进入一个全新的空白草稿态。
-      // 这样保证 UI 永远显示"我们该在 X 中处理什么？"欢迎面，绝不触发"暂无会话"空屏。
-      set((state) => applyDraftModeToState(state));
-    },
-
-    /**
-     * 草稿 → 真会话：仅在发送首条/需持久化写时调用。
-     * 内部唯一「用户路径 → createSession」收口；folder 取 commit 瞬间的 draftFolder。
-     * 始终返回可用真 session id（脏 active 也会 enter→mint），调用方无需 createSession 兜底。
-     */
-    commitDraftIfNeeded: (opts?: { title?: string; folder?: string }) => {
-      const st = get();
-      // 草稿态 或 空 active（遗留脏态）→ mint 真会话
-      if (!isPendingDraft(st.activeSessionId)) {
-        if (st.activeSessionId && getSessionById(st, st.activeSessionId)) {
-          return st.activeSessionId;
-        }
-        // 遗留脏态（active 为空或指向不存在的会话）：先进入草稿态再 commit
-        set((state) => applyDraftModeToState(state));
-      }
-      const cur = get();
-      const folder =
-        opts?.folder ||
-        cur.draftFolder ||
-        getActiveProjectId() ||
-        GENERAL_FOLDER;
-      // createSession 允许：commit / 系统 / 测试；用户「新建」禁止直调
-      const id = actions.createSession({
-        ...(opts?.title !== undefined ? { title: opts.title } : {}),
-        folder,
-        activate: true,
-      });
-      // D2：draft_commit 计数（仅实际 mint 路径）
-      recordDraftCommit();
-      return id;
-    },
+    // enterDraftMode / setDraftFolder / clearDraft / commitDraftIfNeeded
+    // 由 createSessionDraftActions 提供（见 return 处合并）。
 
     renameSession: (sessionId: string, title: string) =>
       set((state) => {
@@ -507,5 +450,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       }),
   };
 
-  return actions;
+  // 草稿态 actions 注入 createSession 引用（避免循环导入）后合并
+  const draftActions = createSessionDraftActions(set, get, actions.createSession);
+  return { ...actions, ...draftActions };
 }

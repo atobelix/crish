@@ -10,85 +10,26 @@
  * 4. CJK IME 中文输入法 229 / Process / isComposing 绝对放行门闩；
  * 5. Branch-Aware 外点判定与 LIFO 焦点平滑还原。
  */
-import React from 'react';
+import type {
+  LayerType,
+  DismissReason,
+  LayerRegistration,
+  LayerTraceRecord,
+} from './layerStackTypes';
+import {
+  LAYER_TYPE_PRIORITY,
+  PROCESSED_EVENTS,
+  resolveElement,
+} from './layerStackTypes';
+import { restoreLayerFocus } from './layerFocusRestore';
 
-export type LayerType =
-  | 'modal-dialog' // 全局模态弹窗（SettingsPanel, SkillEditorModal, FirstRunWizard）
-  | 'confirm-dialog' // 二次确认对话框（ConfirmDialog）
-  | 'drawer' // 抽屉浮层（ChatStatusRibbons, PlanDrawer）
-  | 'context-menu' // 右键上下文菜单（SessionContextMenu, SidebarMenu）
-  | 'dropdown-menu' // 下拉菜单（Menu, Select, ModelPicker）
-  | 'cascade-submenu' // 级联二级子菜单（ContextMenuFlyout, Submenu）
-  | 'popover' // 普通气泡（TiptapSlashMenu, Popover）
-  | 'tooltip' // 悬浮提示（Tooltip）
-  | 'toast' // 全局通知（ToastStack）
-  | 'virtual-interceptor'; // 虚拟拦截器（快捷键录制态、分屏拖拽态）
-
-export type DismissReason =
-  | 'escape' // 按下 Esc 键退出
-  | 'outside-pointer' // 点击外部区域退出
-  | 'item-select' // 选中菜单项退出
-  | 'programmatic' // 代码显式命令式调用退出
-  | 'parent-dismissed'; // 父层被销毁导致级联关闭
-
-export interface LayerRegistration {
-  /** 唯一标识 */
-  id: string;
-  /** 浮层语义类型 */
-  type: LayerType;
-  /** 父浮层 ID（用于三层级联拓扑追踪） */
-  parentId?: string;
-  /** 浮层容器的 DOM 引用（虚拟拦截层为 undefined） */
-  elementRef?: React.RefObject<HTMLElement | null> | HTMLElement | null;
-  /** 挂载的 Portal 容器节点 */
-  portalContainer?: HTMLElement | null;
-  /** 关联的触发源节点（用于外点判定豁免与焦点还原） */
-  anchorRef?: React.RefObject<HTMLElement | null> | HTMLElement | null;
-  /** 是否允许通过 Esc / 外点关闭 */
-  dismissible: boolean;
-  /** 是否为模态层（阻断外部交互） */
-  modal?: boolean;
-  /** 显式指定的焦点还原目标 */
-  restoreFocusTarget?: HTMLElement | null;
-  /** 浮层关闭回调 */
-  onDismiss: (reason: DismissReason) => void;
-  /**
-   * Esc 键盘按下时的定制钩子
-   * @returns true 表示浮层内部已消费此事件（如子状态回退、快捷键录制），中枢不执行默认 onDismiss
-   */
-  onEscapeKeyDown?: (event: KeyboardEvent) => boolean | void;
-  /**
-   * 外点交互按下时的定制钩子
-   * @returns true 表示拦截外点关闭
-   */
-  onPointerDownOutside?: (event: PointerEvent) => boolean | void;
-  /** 注册时间戳（用于稳定排序与 Trace 审计） */
-  mountedAt: number;
-}
-
-export interface LayerTraceRecord {
-  id: string;
-  type: LayerType;
-  parentId?: string;
-  mountedAt: number;
-  dismissedAt: number;
-  dismissReason: DismissReason;
-}
-
-const LAYER_TYPE_PRIORITY: Record<LayerType, number> = {
-  'modal-dialog': 10,
-  'confirm-dialog': 15,
-  drawer: 20,
-  popover: 30,
-  'dropdown-menu': 40,
-  'context-menu': 40,
-  'cascade-submenu': 50,
-  tooltip: 60,
-  toast: 70,
-  'virtual-interceptor': 100,
-};
-
-const PROCESSED_EVENTS = new WeakSet<Event>();
+// 拆分自本文件的子模块 re-export，保证消费方 import 路径不变
+export type {
+  LayerType,
+  DismissReason,
+  LayerRegistration,
+  LayerTraceRecord,
+} from './layerStackTypes';
 
 export class LayerStackManager {
   private static instance: LayerStackManager | null = null;
@@ -323,7 +264,7 @@ export class LayerStackManager {
 
     // 3. 焦点平滑还原（仅 Esc 与选中项操作还原焦点；外点交互尊重用户外部聚焦目标）
     if (reason === 'escape' || reason === 'item-select') {
-      this.restoreFocus(layer);
+      restoreLayerFocus(layer, () => this.layers);
     }
   }
 
@@ -380,43 +321,6 @@ export class LayerStackManager {
    */
   public clearTraceHistory(): void {
     this.traceHistory = [];
-  }
-
-  /**
-   * 焦点平滑还原算法
-   */
-  private restoreFocus(layer: LayerRegistration): void {
-    if (typeof requestAnimationFrame === 'undefined') return;
-
-    requestAnimationFrame(() => {
-      // 1. 显式指定的 restoreFocusTarget
-      if (
-        layer.restoreFocusTarget &&
-        typeof layer.restoreFocusTarget.focus === 'function'
-      ) {
-        layer.restoreFocusTarget.focus();
-        return;
-      }
-
-      // 2. 绑定的 anchorRef 触发器
-      const anchorEl = this.resolveElement(layer.anchorRef);
-      if (anchorEl && typeof anchorEl.focus === 'function') {
-        anchorEl.focus();
-        return;
-      }
-
-      // 3. 若存在父级 Layer，回退到父级容器的首个可聚焦元素
-      if (layer.parentId) {
-        const parentLayer = this.layers.find((l) => l.id === layer.parentId);
-        if (parentLayer) {
-          const parentEl = this.resolveElement(parentLayer.elementRef);
-          const firstFocusable = parentEl?.querySelector<HTMLElement>(
-            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-          );
-          firstFocusable?.focus();
-        }
-      }
-    });
   }
 
   /**
@@ -542,13 +446,13 @@ export class LayerStackManager {
     if (!targetLayer) return;
 
     // 1. 检查点击是否位于容器内部
-    const topEl = this.resolveElement(targetLayer.elementRef);
+    const topEl = resolveElement(targetLayer.elementRef);
     if (topEl && topEl.contains(target)) {
       return; // 内部点击，不触发外点关闭
     }
 
     // 2. 检查点击是否位于关联的 Anchor / Trigger 触发源内部
-    const anchorEl = this.resolveElement(targetLayer.anchorRef);
+    const anchorEl = resolveElement(targetLayer.anchorRef);
     if (anchorEl && anchorEl.contains(target)) {
       this.anchorPointerDownTarget = target;
       return; // 触发源自身事件管理开关，避免 Double Toggle 震荡
@@ -559,7 +463,7 @@ export class LayerStackManager {
     const descendants = this.getDescendants(targetLayer.id);
     for (const child of descendants) {
       if (!child) continue;
-      const childEl = this.resolveElement(child.elementRef);
+      const childEl = resolveElement(child.elementRef);
       if (childEl && childEl.contains(target)) {
         return; // 点击在子分支内，视为内部交互，严禁误关父层
       }
@@ -580,8 +484,8 @@ export class LayerStackManager {
     for (let i = this.layers.length - 1; i >= 0; i--) {
       const l = this.layers[i];
       if (l && l.dismissible && l.anchorRef) {
-        const anchorEl = this.resolveElement(l.anchorRef);
-        const topEl = this.resolveElement(l.elementRef);
+        const anchorEl = resolveElement(l.anchorRef);
+        const topEl = resolveElement(l.elementRef);
         if (
           anchorEl &&
           !anchorEl.contains(target) &&
@@ -595,17 +499,6 @@ export class LayerStackManager {
     }
     this.anchorPointerDownTarget = null;
   };
-
-  /**
-   * 解析 Ref 或 DOM 元素
-   */
-  private resolveElement(
-    ref?: React.RefObject<HTMLElement | null> | HTMLElement | null
-  ): HTMLElement | null {
-    if (!ref) return null;
-    if ('current' in ref) return ref.current;
-    return ref;
-  }
 
   /**
    * 销毁并清理全局监听（供热更新与测试使用）

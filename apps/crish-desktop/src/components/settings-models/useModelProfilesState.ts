@@ -6,19 +6,13 @@ import {
   getActiveModelId,
   getActiveProfileId,
   loadProfiles,
-  mergeModelIds,
   normalizeModelIds,
   profileDisplayLabel,
   profileHasKey,
   saveProfileKey,
   type ProviderProfile,
-  upsertProfile,
 } from '../../api/providerProfiles';
-import {
-  getModelMeta,
-  scanProviderModels,
-  testProviderModel,
-} from '../../api/modelCatalog';
+import { getModelMeta } from '../../api/modelCatalog';
 import {
   applyMetaForModel,
   emptyAddDraft,
@@ -32,6 +26,9 @@ import {
 } from './modelsPresets';
 import { onUiEvent } from '../../api/uiEvents';
 import { editSessionConsumer } from '../../api/chat-bridge/editSessionConsumer';
+import { settingsObjectId } from './modelProfilesHelpers';
+import { useModelConfigSession } from './useModelConfigSession';
+import { useModelProviderActions } from './useModelProviderActions';
 
 export type AddDraft = AddModelDraft;
 export type CfgDraft = ConfigDraft;
@@ -43,32 +40,7 @@ export {
   type PresetProvider,
 };
 
-/**
- * 设置表单「编辑会话」对象 id：profileId::model（与 modelCatalog metaKey 同形，
- * 跨 profile 隔离，避免 model id 裸串撞车）。
- */
-function settingsObjectId(profileId: string, model: string): string {
-  return `${profileId}::${model}`;
-}
-
-/**
- * CT-01 对齐的模型配置 rev：可编辑字段（displayName/contextLength/caps）的
- * 稳定序列化签名。openConfigFor 时捕获为编辑会话 baseRev；saveConfig 保存前
- * 重算比对——外部已变更（rev 不符）→ 拒绝陈旧覆盖（不静默 LWW）。
- */
-function modelMetaRevision(profileId: string, model: string): string {
-  const meta = getModelMeta(profileId, model);
-  return JSON.stringify([
-    meta.displayName ?? '',
-    meta.contextLength ?? null,
-    meta.capabilities?.tools ?? false,
-    meta.capabilities?.vision ?? false,
-    meta.capabilities?.reasoning ?? false,
-  ]);
-}
-
-export function useModelProfilesState(
-) {
+export function useModelProfilesState() {
   const [profiles, setProfiles] = useState<ProviderProfile[]>(() =>
     loadProfiles()
   );
@@ -90,9 +62,6 @@ export function useModelProfilesState(
 
   const [keyDraft, setKeyDraft] = useState('');
   const [addOpen, setAddOpen] = useState(false);
-  const [testBusy, setTestBusy] = useState<string | null>(null);
-  const [scanBusy, setScanBusy] = useState(false);
-  const [checkBusy, setCheckBusy] = useState(false);
   const [modelFilter, setModelFilter] = useState('');
   const [configOpenId, setConfigOpenId] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
@@ -108,7 +77,6 @@ export function useModelProfilesState(
   // tab/窗口/Rust 端）命中 profiles-changed 事件时：有未保存草稿 → 提示 +
   // 编辑会话 invalidate（不静默覆盖）；无未保存草稿 → 直接 refresh 重载。
   const localMutationRef = useRef(false);
-  const cfgRevRef = useRef<Map<string, string>>(new Map());
   const externalChangeStateRef = useRef({
     profileId: '',
     configOpenId: null as string | null,
@@ -237,6 +205,28 @@ export function useModelProfilesState(
     return () => window.removeEventListener('keydown', onKey);
   }, [addOpen, configOpenId, manualOpen, modelFilter, confirmDeleteId]);
 
+  // ── 配置编辑会话子 hook（openConfigFor / closeConfig / saveConfig）──────
+  const { openConfigFor, closeConfig, saveConfig } = useModelConfigSession({
+    selected,
+    configOpenId,
+    cfgDraft,
+    setConfigOpenId,
+    setCfgDraft,
+    setManualOpen,
+    refresh,
+    notify,
+    runAsLocalMutation,
+  });
+
+  // ── 服务商连通性动作子 hook（runTest / runScan / runCheck + busy 状态）──
+  const { testBusy, scanBusy, checkBusy, runTest, runScan, runCheck } =
+    useModelProviderActions({
+      selected,
+      refresh,
+      notify,
+      runAsLocalMutation,
+    });
+
   const saveKey = async () => {
     if (!selected || !keyDraft.trim()) return;
     await runAsLocalMutation(async () => {
@@ -315,127 +305,6 @@ export function useModelProfilesState(
         },
       });
     }, 0);
-  };
-
-  const openConfigFor = (model: string) => {
-    if (!selected) return;
-    const meta = getModelMeta(selected.id, model);
-    const objectId = settingsObjectId(selected.id, model);
-    const rev = modelMetaRevision(selected.id, model);
-    // R2-a ④：cfgDraft 挂编辑会话（open；设置 rev 为本地签名，不进会话数值 rev）
-    cfgRevRef.current.set(objectId, rev);
-    editSessionConsumer.open(objectId);
-    setManualOpen(false);
-    setConfigOpenId(model);
-    setCfgDraft({
-      displayName: meta.displayName || '',
-      contextLength:
-        meta.contextLength != null ? String(meta.contextLength) : '',
-      caps: {
-        tools: Boolean(meta.capabilities?.tools),
-        vision: Boolean(meta.capabilities?.vision),
-        reasoning: Boolean(meta.capabilities?.reasoning),
-      },
-    });
-  };
-
-  const closeConfig = () => {
-    if (selected && configOpenId) {
-      const objectId = settingsObjectId(selected.id, configOpenId);
-      // 用户取消：关闭编辑会话（'external' 失效广播）+ 清本地 rev 记账
-      editSessionConsumer.invalidate(objectId, 'external');
-      cfgRevRef.current.delete(objectId);
-    }
-    setConfigOpenId(null);
-    setCfgDraft(null);
-  };
-
-  const saveConfig = () => {
-    if (!selected || !configOpenId || !cfgDraft) return;
-    const objectId = settingsObjectId(selected.id, configOpenId);
-    const draft = cfgDraft;
-    // CT-01 rev 核对（对齐 review §11 缓存失效 + analysis/15 §2.4）：
-    // 保存前比对「打开时快照 rev」与「当前 meta rev」，外部已变更 →
-    // 拒绝陈旧覆盖（不静默 LWW），与 persistence.rs Conflict 语义同构。
-    const expectRev = cfgRevRef.current.get(objectId);
-    const currentRev = modelMetaRevision(selected.id, configOpenId);
-    if (expectRev !== undefined && expectRev !== currentRev) {
-      notify(false, '配置已被外部修改，保存已取消，请重新确认');
-      editSessionConsumer.invalidate(objectId, 'external');
-      return;
-    }
-    void runAsLocalMutation(() => {
-      applyMetaForModel(selected.id, configOpenId, draft);
-      refresh();
-      // 提交并关闭编辑会话（推进 rev，广播失效）
-      editSessionConsumer.commit(objectId);
-      cfgRevRef.current.delete(objectId);
-      openConfigFor(configOpenId);
-    });
-  };
-
-  const runTest = async (model: string) => {
-    if (!selected) return;
-    const key = `${selected.id}::${model}`;
-    setTestBusy(key);
-
-    try {
-      const fresh =
-        loadProfiles().find((p) => p.id === selected.id) || selected;
-      const r = await testProviderModel(fresh, model);
-      refresh();
-      if (!r.ok) {
-        notify(false, `连通失败 · ${model}：${r.error || '未知错误'}`);
-      }
-    } catch (e) {
-      notify(false, e instanceof Error ? e.message : String(e));
-    } finally {
-      setTestBusy(null);
-    }
-  };
-
-  const runScan = async () => {
-    if (!selected) return;
-    setScanBusy(true);
-    try {
-      await runAsLocalMutation(async () => {
-        const fresh =
-          loadProfiles().find((p) => p.id === selected.id) || selected;
-        const r = await scanProviderModels(fresh);
-        if (r.ok && r.models?.length) {
-          const merged = mergeModelIds(fresh.models, r.models);
-          upsertProfile({ ...fresh, models: merged });
-          refresh();
-          notify(true, `已自动获取 ${r.models.length} 个模型`);
-        } else {
-          notify(false, r.error || '未能检测到服务器可用模型');
-        }
-      });
-    } catch (e) {
-      notify(false, e instanceof Error ? e.message : String(e));
-    } finally {
-      setScanBusy(false);
-    }
-  };
-
-  const runCheck = async () => {
-    if (!selected) return;
-    setCheckBusy(true);
-    try {
-      const fresh =
-        loadProfiles().find((p) => p.id === selected.id) || selected;
-      const firstModel = fresh.models[0] || '';
-      const r = await testProviderModel(fresh, firstModel);
-      if (r.ok) {
-        notify(true, `服务商连通正常 (${r.latencyMs || 120}ms)`);
-      } else {
-        notify(false, `连通检查失败：${r.error || '无法建立握手连接'}`);
-      }
-    } catch (e) {
-      notify(false, e instanceof Error ? e.message : String(e));
-    } finally {
-      setCheckBusy(false);
-    }
   };
 
   const modelsList = useMemo(() => {

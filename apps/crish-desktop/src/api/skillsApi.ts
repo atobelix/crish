@@ -1,464 +1,68 @@
 /**
- * 技能发现与激活（正规 SKILL.md 范式）
- * - 发现：项目 / 工作区 / 全局 skills 目录
- * - 解析 frontmatter + markdown 正文
+ * 技能发现与激活（正规 SKILL.md 范式）—— hub（T4-11 R5 基线清零）。
+ *
+ * - 发现：项目 / 工作区 / 全局 skills 目录（实现见 `./skillsApiDiscovery`）
+ * - 解析 frontmatter + markdown 正文（实现见 `./skillsApiHelpers`）
  * - 激活态：localStorage 覆盖（T03.7：upsert/delete-scoped-context 幽灵命令已删，
  *   daemon 同步显式本地-only，engineSynced 恒 false）
  * - 斜杠命令：/skill:name 与 enableSkillCommands
+ *
+ * 本文件为消费方入口，保留对外导出路径不变；FS 访问与发现逻辑已分别拆至
+ * `./skillsApiFs` 与 `./skillsApiDiscovery`。
  *
  * @see docs/plans/2026-07-product-trust-topdown.md §1.2 / §2
  */
 
 import { getWorkspacePath } from './projectStore';
-import { invokeTyped } from './tauriInvoke';
-import { logInternalError } from './userFacingErrors';
-import { skillStableId } from './skillId';
 import { openDirectoryDialogSafe } from './openDirectoryDialog';
 import {
-  isAbsoluteFsPath,
-  listDirectory,
-  readTextFile,
-  type FsDirEntry,
-} from './workspaceFsApi';
+  dirname,
+  joinPath,
+  legacySkillIdFromPath,
+  loadActivationMap,
+  normalizeSlashName,
+  saveActivationMap,
+} from './skillsApiHelpers';
+import {
+  mkdirAny,
+  readTextAny,
+  writeTextAny,
+} from './skillsApiFs';
+import {
+  discoverSkills,
+  type DiscoverSkillsResult,
+} from './skillsApiDiscovery';
+import type {
+  DesktopSkill,
+  SkillActivation,
+  SkillSlashCommand,
+} from './skillsApi.types';
 
+// ── 类型再导出（消费方 import 路径不变） ──────────────────────────────
 export type {
   DesktopSkill,
   SkillActivation,
   SkillScope,
   SkillSlashCommand,
 } from './skillsApi.types';
-import type {
-  DesktopSkill,
-  SkillActivation,
-  SkillScope,
-  SkillSlashCommand,
-} from './skillsApi.types';
-import {
-  ALLOWED_DOT_DIRS,
-  EXTRA_DIRS_KEY,
-  basename,
-  dirname,
-  firstMarkdownSentence,
-  joinPath,
-  legacySkillIdFromPath,
-  loadActivationMap,
-  normalizeSlashName,
-  parseFrontmatter,
-  resolveActivationFromMap,
-  saveActivationMap,
-  skillActivation,
-  skillScope,
-  stringList,
-} from './skillsApiHelpers';
 
-export function getExtraSkillDirs(): string[] {
-  try {
-    const raw = localStorage.getItem(EXTRA_DIRS_KEY);
-    if (!raw) return [];
-    const arr = JSON.parse(raw);
-    return Array.isArray(arr) ? arr.map(String).filter(Boolean) : [];
-  } catch {
-    return [];
-  }
-}
+// ── FS 访问 + extra dirs 管理（再导出） ────────────────────────────────
+export {
+  addExtraSkillDir,
+  getExtraSkillDirs,
+  removeExtraSkillDir,
+  skillsFsAvailable,
+} from './skillsApiFs';
 
-function setExtraSkillDirs(dirs: string[]) {
-  localStorage.setItem(EXTRA_DIRS_KEY, JSON.stringify(dirs.filter(Boolean)));
-}
+// ── 发现（再导出；discoverSkills 同时为本模块内部使用） ────────────────
+export {
+  discoverInDir,
+  loadSkillFile,
+  type DiscoverSkillsResult,
+} from './skillsApiDiscovery';
+export { discoverSkills };
 
-export function addExtraSkillDir(dir: string) {
-  const d = dir.trim();
-  if (!d) return getExtraSkillDirs();
-  const list = getExtraSkillDirs();
-  if (!list.includes(d)) list.push(d);
-  setExtraSkillDirs(list);
-  return list;
-}
-
-export function removeExtraSkillDir(dir: string) {
-  const list = getExtraSkillDirs().filter((d) => d !== dir);
-  setExtraSkillDirs(list);
-  return list;
-}
-
-/* ---------- FS helpers（plugin-fs 优先，突破工作区沙箱） ---------- */
-
-const PLUGIN_FS_PKG = '@tauri-apps/plugin-fs';
-const TAURI_PATH_PKG = '@tauri-apps/api/path';
-
-async function tryPluginFs(): Promise<{
-  readDir?: (p: string) => Promise<
-    Array<{
-      name?: unknown;
-      isDirectory?: boolean;
-      isDir?: boolean;
-      children?: unknown;
-    }>
-  >;
-  readTextFile?: (p: string) => Promise<string>;
-  writeTextFile?: (p: string, content: string) => Promise<void>;
-  mkdir?: (p: string, opts?: { recursive?: boolean }) => Promise<void>;
-  exists?: (p: string) => Promise<boolean>;
-} | null> {
-  const fs: unknown = await (
-    import(/* @vite-ignore */ PLUGIN_FS_PKG) as Promise<unknown>
-  ).catch(() => null);
-  return (fs as NonNullable<Awaited<ReturnType<typeof tryPluginFs>>>) || null;
-}
-
-async function tryHomeDir(): Promise<string | null> {
-  const pathApi = (await (
-    import(/* @vite-ignore */ TAURI_PATH_PKG) as Promise<unknown>
-  ).catch(() => null)) as { homeDir?: () => Promise<string> } | null;
-  const h = pathApi?.homeDir ? await pathApi.homeDir().catch(() => null) : null;
-  return h ? String(h) : null;
-}
-
-async function listDirAny(dirPath: string): Promise<FsDirEntry[]> {
-  const path = dirPath.trim();
-  if (!path) return [];
-  const fs = await tryPluginFs();
-  if (fs?.readDir) {
-    try {
-      const entries = await fs.readDir(path);
-      return (entries || []).map((e) => {
-        const name = String(e.name ?? e);
-        const isDir = Boolean(e.isDirectory ?? e.isDir ?? e.children);
-        return { name, isDir, path: joinPath(path, name) };
-      });
-    } catch {
-      /* swallow-ok: 插件 fs 读取失败时回退底层扫描路径 */
-    }
-  }
-  try {
-    return await listDirectory(path);
-  } catch {
-    return [];
-  }
-}
-
-async function readTextAny(
-  filePath: string,
-  maxLines = 8000
-): Promise<string | null> {
-  const path = filePath.trim();
-  if (!path) return null;
-  const fs = await tryPluginFs();
-  if (fs?.readTextFile) {
-    try {
-      return await fs.readTextFile(path);
-    } catch {
-      /* swallow-ok: 插件 fs 读取失败时回退底层 readTextFile */
-    }
-  }
-  try {
-    const r = await readTextFile(path, maxLines);
-    return r.content;
-  } catch {
-    return null;
-  }
-}
-
-async function writeTextAny(
-  filePath: string,
-  content: string
-): Promise<boolean> {
-  const fs = await tryPluginFs();
-  if (fs?.writeTextFile) {
-    try {
-      await fs.writeTextFile(filePath, content);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
-
-async function mkdirAny(dirPath: string): Promise<boolean> {
-  const fs = await tryPluginFs();
-  if (fs?.mkdir) {
-    try {
-      await fs.mkdir(dirPath, { recursive: true });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
-
-/* ---------- discovery ---------- */
-
-async function loadSkillFile(
-  filePath: string,
-  scope: SkillScope,
-  opts?: { system?: boolean; activationOverride?: SkillActivation }
-): Promise<DesktopSkill | null> {
-  const raw = await readTextAny(filePath);
-  if (raw == null) return null;
-  const parsed = parseFrontmatter(raw);
-  const baseDir = filePath.replace(/[\\/][^\\/]+$/, '') || filePath;
-  const fallbackName = basename(baseDir)
-    .toLowerCase()
-    .replace(/[^a-z0-9-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-  const name = String(parsed.data.name || fallbackName || 'skill');
-  const description = String(
-    parsed.data.description || firstMarkdownSentence(parsed.body) || name
-  );
-  const fileActivation =
-    skillActivation(parsed.data.activation) ||
-    (opts?.system ? 'recommended' : 'recommended');
-  // Must match agent-runtime: stableId("skill", `${name}:${filePath}`)
-  const id = skillStableId(name, filePath);
-  const map = loadActivationMap();
-  const resolved = resolveActivationFromMap(map, id, filePath);
-  if (resolved.migrated) saveActivationMap(map);
-  const activation =
-    opts?.activationOverride || resolved.activation || fileActivation;
-  const isSystem =
-    opts?.system ||
-    /[/\\]\.system[/\\]/i.test(filePath) ||
-    parsed.data.system === true;
-
-  return {
-    id,
-    name,
-    description,
-    filePath,
-    baseDir,
-    content: parsed.body.trim(),
-    raw,
-    scope: skillScope(parsed.data.scope) || scope,
-    activation,
-    tags: stringList(parsed.data.tags),
-    appliesTo: stringList(parsed.data['applies-to'] ?? parsed.data.appliesTo),
-    disableModelInvocation: parsed.data['disable-model-invocation'] === true,
-    system: isSystem,
-  };
-}
-
-async function discoverInDir(
-  dir: string,
-  scope: SkillScope,
-  depth = 0,
-  out: DesktopSkill[] = [],
-  system = false
-): Promise<DesktopSkill[]> {
-  if (depth > 5) return out;
-  const entries = await listDirAny(dir);
-  if (!entries.length) return out;
-
-  const hasSkillMd = entries.some(
-    (e) => !e.isDir && e.name.toUpperCase() === 'SKILL.MD'
-  );
-  if (hasSkillMd) {
-    const skillPath = joinPath(dir, 'SKILL.md');
-    const hit = entries.find(
-      (e) => !e.isDir && e.name.toUpperCase() === 'SKILL.MD'
-    );
-    const filePath = hit?.path || skillPath;
-    const skill = await loadSkillFile(filePath, scope, { system });
-    if (skill) out.push(skill);
-    return out;
-  }
-
-  for (const e of entries) {
-    if (e.name === 'node_modules' || e.name === '__pycache__') continue;
-    if (e.name.startsWith('.') && !ALLOWED_DOT_DIRS.has(e.name.toLowerCase()))
-      continue;
-    if (e.isDir) {
-      const nextSystem = system || e.name.toLowerCase() === '.system';
-      await discoverInDir(e.path, scope, depth + 1, out, nextSystem);
-    } else if (
-      depth === 0 &&
-      e.name.endsWith('.md') &&
-      e.name.toUpperCase() !== 'README.MD'
-    ) {
-      const skill = await loadSkillFile(e.path, scope, { system });
-      if (skill) out.push(skill);
-    }
-  }
-  return out;
-}
-
-export type DiscoverSkillsResult = {
-  skills: DesktopSkill[];
-  roots: {
-    path: string;
-    scope: SkillScope;
-    ok: boolean;
-    count: number;
-    error?: string;
-  }[];
-};
-
-export async function discoverSkills(opts?: {
-  workspacePath?: string | null;
-}): Promise<DiscoverSkillsResult> {
-  const workspace = (opts?.workspacePath ?? getWorkspacePath() ?? '').trim();
-  const extraDirs = getExtraSkillDirs();
-
-  type RustSkillRow = {
-    name?: unknown;
-    filePath?: unknown;
-    description?: unknown;
-    baseDir?: unknown;
-    content?: unknown;
-    raw?: unknown;
-    scope?: unknown;
-    tags?: unknown;
-    appliesTo?: unknown;
-    fileActivation?: unknown;
-    system?: unknown;
-    disableModelInvocation?: unknown;
-  };
-
-  // T-F 06 T6.1 / T5-5：invokeTyped 三态化（原 tryInvokeTauri 别名）——
-  // missing/error → logInternalError 后走 legacy JS 发现 fallback
-  // （错误不再被吞为 null，可观测性保留；fallback 语义与旧行为等价）
-  const res = await invokeTyped<RustSkillRow[]>('workbench_discover_skills', {
-    workspacePath: workspace || null,
-    extraDirs,
-  });
-  let rustSkills: unknown = null;
-  if (res.status === 'error') {
-    logInternalError('discoverSkills', res.message);
-  } else if (res.status === 'ok') {
-    rustSkills = res.data;
-  }
-
-  if (Array.isArray(rustSkills)) {
-    const skills: DesktopSkill[] = [];
-    const map = loadActivationMap();
-    const seenSkill = new Set<string>();
-
-    for (const rs of rustSkills) {
-      const name = String(rs.name);
-      const filePath = String(rs.filePath);
-      const id = skillStableId(name, filePath);
-      if (seenSkill.has(id)) continue;
-      seenSkill.add(id);
-
-      const resolved = resolveActivationFromMap(map, id, filePath);
-      if (resolved.migrated) saveActivationMap(map);
-
-      const fileActivation =
-        skillActivation(rs.fileActivation) ||
-        (rs.system ? 'recommended' : 'recommended');
-      const activation = resolved.activation || fileActivation;
-
-      skills.push({
-        id,
-        name,
-        description: String(rs.description),
-        filePath,
-        baseDir: String(rs.baseDir),
-        content: String(rs.content),
-        raw: String(rs.raw),
-        scope: (rs.scope as SkillScope) || 'global',
-        activation,
-        tags: Array.isArray(rs.tags) ? rs.tags.map(String) : [],
-        appliesTo: Array.isArray(rs.appliesTo) ? rs.appliesTo.map(String) : [],
-        disableModelInvocation: Boolean(rs.disableModelInvocation),
-        system: Boolean(rs.system),
-      });
-    }
-
-    skills.sort((a, b) => {
-      const scopeOrder = { project: 0, workspace: 1, global: 2 };
-      const d = scopeOrder[a.scope] - scopeOrder[b.scope];
-      if (d !== 0) return d;
-      const actOrder = { enabled: 0, recommended: 1, disabled: 2 };
-      const ad = actOrder[a.activation] - actOrder[b.activation];
-      if (ad !== 0) return ad;
-      return a.name.localeCompare(b.name, 'zh-CN');
-    });
-
-    return { skills, roots: [] };
-  }
-
-  // Fallback to legacy JS discovery
-  const roots: { path: string; scope: SkillScope }[] = [];
-
-  if (workspace) {
-    roots.push(
-      { path: joinPath(workspace, '.conex/skills'), scope: 'project' },
-      { path: joinPath(workspace, '.codex/skills'), scope: 'project' },
-      { path: joinPath(workspace, '.agents/skills'), scope: 'project' },
-      { path: joinPath(workspace, '.claude/skills'), scope: 'project' }
-    );
-  }
-
-  const home = await tryHomeDir();
-  if (home) {
-    roots.push(
-      { path: joinPath(home, '.codex/skills'), scope: 'global' },
-      { path: joinPath(home, '.conex/skills'), scope: 'global' },
-      { path: joinPath(home, '.claude/skills'), scope: 'global' },
-      { path: joinPath(home, '.agents/skills'), scope: 'global' },
-      { path: joinPath(home, '.grok/skills'), scope: 'global' },
-      { path: joinPath(home, '.grok/bundled/skills'), scope: 'global' }
-    );
-  }
-
-  for (const extra of getExtraSkillDirs()) {
-    roots.push({
-      path: extra,
-      scope: isAbsoluteFsPath(extra) ? 'global' : 'project',
-    });
-  }
-
-  const seenRoot = new Set<string>();
-  const uniqueRoots = roots.filter((r) => {
-    const k = r.path.replace(/\\/g, '/').toLowerCase();
-    if (seenRoot.has(k)) return false;
-    seenRoot.add(k);
-    return true;
-  });
-
-  const skills: DesktopSkill[] = [];
-  const rootStatus: DiscoverSkillsResult['roots'] = [];
-  const seenSkill = new Set<string>();
-
-  for (const r of uniqueRoots) {
-    try {
-      const found = await discoverInDir(r.path, r.scope, 0, []);
-      rootStatus.push({
-        path: r.path,
-        scope: r.scope,
-        ok: true,
-        count: found.length,
-      });
-      for (const s of found) {
-        if (seenSkill.has(s.id)) continue;
-        seenSkill.add(s.id);
-        skills.push(s);
-      }
-    } catch (e) {
-      rootStatus.push({
-        path: r.path,
-        scope: r.scope,
-        ok: false,
-        count: 0,
-        error: e instanceof Error ? e.message : String(e),
-      });
-    }
-  }
-
-  skills.sort((a, b) => {
-    const scopeOrder = { project: 0, workspace: 1, global: 2 };
-    const d = scopeOrder[a.scope] - scopeOrder[b.scope];
-    if (d !== 0) return d;
-    const actOrder = { enabled: 0, recommended: 1, disabled: 2 };
-    const ad = actOrder[a.activation] - actOrder[b.activation];
-    if (ad !== 0) return ad;
-    return a.name.localeCompare(b.name, 'zh-CN');
-  });
-
-  return { skills, roots: rootStatus };
-}
+// ── 激活态写入（localStorage 唯一真相） ────────────────────────────────
 
 export type SkillActivationResult = {
   ok: boolean;
@@ -492,17 +96,12 @@ export async function syncSkillsToDaemon(
   return { ok: 0, fail: 0 };
 }
 
-/** 开发时探测：是否具备本机文件读取能力 */
-export async function skillsFsAvailable(): Promise<boolean> {
-  const fs = await tryPluginFs();
-  if (fs?.readDir && fs?.readTextFile) return true;
-  return Boolean(getWorkspacePath());
-}
-
 /** 选择额外技能目录（原生对话框） */
 export async function pickSkillDirectory(): Promise<string | null> {
   return openDirectoryDialogSafe('选择技能目录');
 }
+
+// ── 资源管理器定位（plugin-opener / plugin-shell 回退） ────────────────
 
 const PLUGIN_OPENER_PKG = '@tauri-apps/plugin-opener';
 const PLUGIN_SHELL_PKG = '@tauri-apps/plugin-shell';
@@ -540,6 +139,8 @@ export async function revealSkillPath(filePath: string): Promise<boolean> {
   }
   return false;
 }
+
+// ── 创建项目技能模板 ──────────────────────────────────────────────────
 
 export type CreateSkillResult =
   | { ok: true; skillPath: string; skillDir: string }
@@ -597,6 +198,8 @@ export async function createProjectSkill(opts: {
   return { ok: true, skillPath, skillDir };
 }
 
+// ── 斜杠命令 ----------
+
 /** 启用且未禁用模型调用的技能 → 斜杠命令 */
 export function skillsToSlashCommands(
   skills: DesktopSkill[]
@@ -651,6 +254,8 @@ export function formatSkillInjection(
     .join('\n');
   return header;
 }
+
+// ── 斜杠命令缓存（菜单用） ---------- */
 
 /** 缓存：斜杠菜单用，避免每次按键全量扫描 */
 let slashCache: {

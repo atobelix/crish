@@ -331,14 +331,57 @@
   margin-top: 0;
 }
 
-/* ErrorBoundary / Suspense            body    */
-.leafBody > *,
-.leafBody > * > * {
+/*
+ * ErrorBoundary / SlotOutlet 现为 display:contents：> / > * > * 打在包装上，
+ * 不改盒树。纸面根若再 contents，header/footer 会升成叶子弹性子项。
+ * :not 让二级 fill 打不中 chrome；不要改成 .leafBody *。
+ */
+.leafBody > *:not(:global(header)):not(:global(footer)),
+.leafBody > * > *:not(:global(header)):not(:global(footer)) {
   flex: 1 1 0%;
   min-width: 0;
   min-height: 0;
   max-height: 100%;
   width: 100%;
+}
+
+/*
+ * 02 叶壳是实盒、非 flex：透视不得用 contents（会把顶栏抬成叶子子项）。
+ * 适配器按列吃满叶子；探针已有，不加魔术 class。
+ */
+.leafBody :global([data-note-leaf-host]) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  width: 100%;
+}
+
+/*
+ * 绝缘：note 顶栏/底栏不得被叶子二级 flex 拉成与正文均分。
+ * 不改 NotePaperPanel 的 6% / H1–H6。
+ */
+.leafBody :global([data-testid='note-paper-strict-panel']) {
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  max-height: 100%;
+  width: 100%;
+}
+
+.leafBody :global([data-testid='note-paper-strict-panel']) > :global(header),
+.leafBody :global([data-testid='note-paper-strict-panel']) > :global(footer) {
+  flex: 0 0 auto;
+  max-height: none;
+  width: 100%;
+}
+
+.leafBody :global([data-testid='note-paper-strict-panel']) > :global([data-testid='note-paper-strict-body']) {
+  flex: 1 1 0%;
+  min-height: 0;
+  max-height: none;
 }
 
 /*            /                                       */

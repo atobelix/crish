@@ -16,6 +16,8 @@ import { useToast } from '../../services/toast/ToastContext';
  * - 设备列表 reducer（devices/revokeHash）→ 本组件
  * - 网络环境 reducer（netEnv）→ 本组件
  * - 改名 reducer（renamingHash/renameDraft）→ useDeviceRename
+ * 展示子组件：网络环境卡片 → SettingsDevicesNetworkEnv；
+ *           已配对设备列表 → SettingsDevicesList。
  */
 import React, { useCallback, useEffect, useReducer, useRef } from 'react';
 import * as Lucide from 'lucide-react';
@@ -27,7 +29,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Button, ConfirmDialog, Input, Switch, Tooltip } from '../ui';
+import { Button, ConfirmDialog, Switch } from '../ui';
 import {
   pairStatus,
   listDevices,
@@ -38,6 +40,8 @@ import {
 } from '../../api/multiDevice';
 import { useDevicePairing } from './useDevicePairing';
 import { useDeviceRename } from './useDeviceRename';
+import { SettingsDevicesNetworkEnv } from './SettingsDevicesNetworkEnv';
+import { SettingsDevicesList } from './SettingsDevicesList';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -53,14 +57,6 @@ function formatRemaining(ms: number | null): string {
   const s = totalSec % 60;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
-
-/** 网络配置文件类别 → 展示名（Rust multi_device_network_info 四态） */
-const PROFILE_LABELS: Record<NetworkEnvInfo['profile'], string> = {
-  public: '公用网络',
-  private: '专用网络',
-  domain: '域网络',
-  unknown: '未知',
-};
 
 // ── 设备列表 reducer（devices / revokeHash）──────────────────────────────
 
@@ -109,7 +105,7 @@ function networkEnvReducer(
 }
 
 export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const [deviceList, dispatchDeviceList] = useReducer(
     deviceListReducer,
     INITIAL_DEVICE_LIST
@@ -176,6 +172,13 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
     }
     await load();
   }, [deviceList.revokeHash, load, showToast]);
+
+  const handleRevokeRequest = useCallback(
+    (deviceId: string) => {
+      dispatchDeviceList({ type: 'setRevokeHash', hash: deviceId });
+    },
+    []
+  );
 
   // 配对态生效条件：服务开启 + 服务端配对态翻转（服务关闭时即使轮询
   // 残留 pairing_enabled 也不展示配对面——服务关闭即零监听）。
@@ -276,64 +279,7 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
         </SettingsCard>
       </SettingsSection>
 
-      {enabled && netEnv && (
-        <SettingsSection title="网络环境">
-          <SettingsCard>
-            <div className={styles.networkEnv} data-testid="network-env">
-              <div className={styles.networkProfile}>
-                <Lucide.Wifi size={16} aria-hidden />
-                <span>
-                  当前网络：{PROFILE_LABELS[netEnv.profile] ?? netEnv.profile}
-                </span>
-                {netEnv.profile === 'public' && (
-                  <span className={styles.networkPublicBadge}>公用网络</span>
-                )}
-              </div>
-              {netEnv.profile === 'public' && (
-                <div
-                  className={styles.firewallHint}
-                  data-testid="network-public-hint"
-                >
-                  <Lucide.ShieldAlert size={14} aria-hidden />
-                  请切换到专用网络，否则 Windows 防火墙会阻止手机访问本机服务。
-                </div>
-              )}
-              <div className={styles.ipList}>
-                <span className={styles.ipListTitle}>
-                  手机可直连地址（AP 隔离时手动输入）：
-                </span>
-                {(() => {
-                  const ips = netEnv.usable_ips.filter(
-                    (ip) => ip !== '0.0.0.0'
-                  );
-                  return ips.length > 0 ? (
-                    <ul>
-                      {ips.map((ip) => (
-                        <li key={ip}>
-                          <code>{ip}</code>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <span className={styles.ipListEmpty}>
-                      未检测到可直连地址，请检查网络连接。
-                    </span>
-                  );
-                })()}
-              </div>
-              {netEnv.hint && (
-                <div
-                  className={styles.apIsolationHint}
-                  data-testid="network-hint"
-                >
-                  <Lucide.Router size={14} aria-hidden />
-                  {netEnv.hint}
-                </div>
-              )}
-            </div>
-          </SettingsCard>
-        </SettingsSection>
-      )}
+      {enabled && netEnv && <SettingsDevicesNetworkEnv netEnv={netEnv} />}
 
       {showPairCard && (
         <SettingsSection title="扫码配对">
@@ -391,99 +337,14 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
         </SettingsSection>
       )}
 
-      <SettingsSection title="已配对设备">
-        <SettingsCard>
-          {deviceList.devices.length === 0 ? (
-            <div className={styles.emptyState} data-testid="devices-empty">
-              <Lucide.TabletSmartphone size={28} aria-hidden />
-              <p>暂无已配对设备。开启配对模式后，手机端扫码即可加入。</p>
-            </div>
-          ) : (
-            <ul className={styles.deviceList} data-testid="device-list">
-              {deviceList.devices.map((device) => (
-                <li key={device.id} className={styles.deviceRow}>
-                  <div className={styles.deviceIcon}>
-                    <Lucide.Smartphone size={18} aria-hidden />
-                  </div>
-                  <div className={styles.deviceBody}>
-                    {rename.renamingHash === device.id ? (
-                      <div className={styles.renameRow}>
-                        <Input
-                          value={rename.renameDraft}
-                          onChange={(e) =>
-                            dispatchRename({
-                              type: 'setRenameDraft',
-                              value: e.target.value,
-                            })
-                          }
-                          aria-label="设备新名称"
-                          autoFocus
-                        />
-                        <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={() => void handleRename(device.id)}
-                        >
-                          保存
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => dispatchRename({ type: 'cancelRename' })}
-                        >
-                          取消
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className={styles.deviceTitle}>
-                          <Tooltip content={device.label}>
-                            <span className={styles.deviceLabel}>
-                              {device.label}
-                            </span>
-                          </Tooltip>
-                          {device.revoked && (
-                            <span className={styles.revokedBadge}>已撤销</span>
-                          )}
-                        </div>
-                        <div className={styles.deviceDesc}>
-                          <Tooltip content={device.id}>
-                            <span>{device.id.slice(0, 12)}…</span>
-                          </Tooltip>
-                          <span>
-                            {new Date(device.issued_at_ms).toLocaleString()}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  <div className={styles.deviceActions}>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => startRename(device)}
-                    >
-                      改名
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() =>
-                        dispatchDeviceList({
-                          type: 'setRevokeHash',
-                          hash: device.id,
-                        })
-                      }
-                    >
-                      撤销
-                    </Button>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </SettingsCard>
-      </SettingsSection>
+      <SettingsDevicesList
+        devices={deviceList.devices}
+        rename={rename}
+        dispatchRename={dispatchRename}
+        startRename={startRename}
+        onRevoke={handleRevokeRequest}
+        onRenameSubmit={(id) => void handleRename(id)}
+      />
 
       <ConfirmDialog
         open={deviceList.revokeHash !== null}

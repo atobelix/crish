@@ -3,14 +3,14 @@
  * 系统 run 提示、审批 sticky 条。
  * 从 ChatCard 抽出以降低巨石组件变更风险；不含输入区（ChatComposer）。
  *
- * 壳组件：保留动态快捷 chip 区、计划抽屉（T05.2.1 接入 Dialog 基座）、
+ * 壳组件：保留动态快捷 chip 区（DynamicChipBar）、计划抽屉（PlanDrawer）、
  * 回到底部 FAB 与编排；文案纯函数见 chatStatusRibbonsLib，
  * 各功能条见 SetupHintBanner / PlanGoalRibbons / RunNoticeBar / ApprovalDock。
  *
  * 引导态（密钥 / 手填模型）只用页内 soft-hint，禁止 toast 刷屏。
  * FirstRun 盖层打开时让位给向导（见 isFirstRunOverlayOpen）。
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo } from 'react';
 import styles from './ChatStatusRibbons.module.css';
 import * as Lucide from 'lucide-react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
@@ -53,6 +53,11 @@ import {
   resolveSyncEngineSoftHintText,
   type SetupHintKind,
 } from './chatStatusRibbonsLib';
+import {
+  DynamicChipBar,
+  PlanDrawer,
+  usePlanDrawerState,
+} from './DynamicChipBar';
 
 export interface StreamingRibbonProps {
   onOpenTerminal?: () => void;
@@ -172,31 +177,8 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     pendingApprovalMsgId,
     activeSessionId,
   } = ap;
-  const [showPlanDrawer, setShowPlanDrawer] = useState(false);
-  const planDrawerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!showPlanDrawer) return;
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        setShowPlanDrawer(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [showPlanDrawer]);
-
-  useEffect(() => {
-    if (!showPlanDrawer) return;
-    requestAnimationFrame(() => {
-      const first = planDrawerRef.current?.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      first?.focus();
-    });
-  }, [showPlanDrawer]);
+  const { showPlanDrawer, togglePlanDrawer, closePlanDrawer, planDrawerRef } =
+    usePlanDrawerState();
 
   const bgTasks = useBackgroundTaskPolling({
     sessionId: activeSessionId || undefined,
@@ -317,127 +299,30 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   return (
     <AppErrorBoundary variant="minimal" title="状态栏出错">
       {/* 动态快捷状态浮条：空态下 100% 物理不挂载 DOM 节点 */}
-      {shouldRenderDynamicChipBar ? (
-        <div
-          className={styles.dynamicChipBar}
-          role="region"
-          aria-label="快捷状态"
-        >
-          {activeBgTasks.length > 0 && onOpenTerminal ? (
-            <Tooltip
-              content={`点击在终端查看 ${activeBgTasks.length} 个后台运行任务`}
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={`${styles.dynamicChip} ${styles.dynamicChipActive}`}
-                aria-label={`后台运行中，${activeBgTasks.length} 个任务`}
-                onClick={onOpenTerminal}
-              >
-                <span className={styles.dynamicChipPulseDot} aria-hidden />
-                <span>后台任务 ({activeBgTasks.length})</span>
-              </Button>
-            </Tooltip>
-          ) : null}
+      <DynamicChipBar
+        shouldRender={shouldRenderDynamicChipBar}
+        activeBgTaskCount={activeBgTasks.length}
+        onOpenTerminal={onOpenTerminal}
+        hasActivePlan={hasActivePlan}
+        planDrawerOpen={showPlanDrawer}
+        onTogglePlanDrawer={togglePlanDrawer}
+        goalModeActive={goalModeActive}
+        goalIteration={goalIteration}
+        checklistDone={checklistProgress.done}
+        checklistTotal={checklistProgress.total}
+        diffCount={diffCount}
+        onOpenDiff={onOpenDiff}
+      />
 
-          {hasActivePlan ? (
-            <Tooltip content="点击查看计划与进度详情">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={`${styles.dynamicChip}${showPlanDrawer ? ` ${styles.dynamicChipActive}` : ''}`}
-                aria-label="查看计划与进度详情"
-                onClick={() => setShowPlanDrawer((v) => !v)}
-              >
-                <Lucide.Target size={13} strokeWidth={2} aria-hidden />
-                <span>
-                  {goalModeActive
-                    ? `目标模式 · 第 ${goalIteration + 1} 轮`
-                    : checklistProgress.total > 0
-                      ? `计划任务 · ${checklistProgress.done}/${checklistProgress.total}`
-                      : '计划模式'}
-                </span>
-              </Button>
-            </Tooltip>
-          ) : null}
-
-          {diffCount > 0 && onOpenDiff ? (
-            <Tooltip content="在右侧查看代码变更">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={styles.dynamicChip}
-                aria-label="查看代码变更"
-                onClick={onOpenDiff}
-              >
-                <Lucide.GitBranch size={13} strokeWidth={2} aria-hidden />
-                <span>{diffCount} 个文件变更</span>
-              </Button>
-            </Tooltip>
-          ) : null}
-        </div>
-      ) : null}
-
-      {shouldRenderPlanDrawer ? (
-        <div
-          ref={planDrawerRef}
-          className={styles.dynamicPlanDrawer}
-          role="dialog"
-          aria-label="计划与进度详情"
-        >
-          <div className={styles.dynamicPlanHeader}>
-            <span>
-              {goalModeActive ? goalText || '目标推进中' : '计划清单'}
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                color: 'var(--text-tertiary)',
-              }}
-              aria-label="关闭计划详情"
-              onClick={() => setShowPlanDrawer(false)}
-              icon={<Lucide.X size={14} />}
-            />
-          </div>
-          {progressItems.length > 0 ? (
-            <ul className={styles.dynamicPlanList}>
-              {progressItems.map((item) => (
-                <li
-                  key={item.id}
-                  className={`${styles.dynamicPlanItem}${item.done ? ` ${styles.isDone}` : ''}`}
-                >
-                  {item.done ? (
-                    <Lucide.CheckCircle2
-                      size={13}
-                      style={{ color: 'var(--accent-green)' }}
-                    />
-                  ) : (
-                    <Lucide.Circle
-                      size={13}
-                      style={{ color: 'var(--text-tertiary)' }}
-                    />
-                  )}
-                  <span>{item.text}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-              {inPlanMode
-                ? '计划模式生效中，AI 将集中思考规划'
-                : '暂无清单步数'}
-            </div>
-          )}
-        </div>
-      ) : null}
+      <PlanDrawer
+        shouldRender={shouldRenderPlanDrawer}
+        goalModeActive={goalModeActive}
+        goalText={goalText}
+        inPlanMode={inPlanMode}
+        progressItems={progressItems}
+        onClose={closePlanDrawer}
+        drawerRef={planDrawerRef}
+      />
 
       {/* 引导态：页内 soft-hint 互斥一条；FirstRun 盖层时 resolveSetupHintKind=null */}
       <SetupHintBanner state={setupState} onAction={handleSetupAction} />
