@@ -142,6 +142,12 @@ export function projectEventsToMessages(events: unknown[]): {
   let maxSequence = 0;
   let msgSeq = 0;
   /**
+   * messageId → messages 数组下标的 O(1) 索引（与 mergeMessagesById:97 同模式），
+   * 消灭 messages.find 线性查找（O(N²) → O(N)）。每次 messages.push 前用
+   * messages.length 更新此 Map。
+   */
+  const messageIndex = new Map<string, number>();
+  /**
    * 每消息的 turn 分段账本（G4 / 04 §5.2-5）：messageId → 已固化轮次与该轮
    * 终态文本。同 turn message-end 幂等覆盖（终态权威），跨 turn 追加新段——
    * 消灭 M2「多轮 run reload 后只剩末轮文本」；旧载荷（无 turnIndex）按 0。
@@ -156,8 +162,9 @@ export function projectEventsToMessages(events: unknown[]): {
     const { text } = projectAgentMessageContent(msg);
     if (!text) return;
     const id = stableId || `hyd-user-${++msgSeq}`;
-    // 同 id 已存在则 update（事件流内幂等）
-    const existing = messages.find((m) => m.id === id);
+    // 同 id 已存在则 update（事件流内幂等）——O(1) Map 查找
+    const existingIdx = messageIndex.get(id);
+    const existing = existingIdx !== undefined ? messages[existingIdx] : undefined;
     if (existing) {
       existing.text = text;
       existing.timestamp = ts;
@@ -165,6 +172,7 @@ export function projectEventsToMessages(events: unknown[]): {
       return;
     }
     // 用户消息走共享投影入口（从 generated AgentMessage 派生的投影装饰）
+    messageIndex.set(id, messages.length);
     messages.push(
       projectAgentMessageToSessionMessage(msg, { timestamp: ts, id })
     );
@@ -173,10 +181,11 @@ export function projectEventsToMessages(events: unknown[]): {
   const ensureAssistant = (ts: number, stableId?: string) => {
     if (!currentAssistant) {
       const id = stableId || `hyd-asst-${++msgSeq}`;
-      const existing = messages.find(
-        (m) => m.id === id && m.sender === 'assistant'
-      );
-      if (existing) {
+      // 两步查找：先 Map O(1) 查 id，再断言 sender === 'assistant'
+      const existingIdx = messageIndex.get(id);
+      const existing =
+        existingIdx !== undefined ? messages[existingIdx] : undefined;
+      if (existing && existing.sender === 'assistant') {
         currentAssistant = existing;
         return currentAssistant;
       }
@@ -189,6 +198,7 @@ export function projectEventsToMessages(events: unknown[]): {
         toolCalls: [],
         blocks: [],
       };
+      messageIndex.set(id, messages.length);
       messages.push(currentAssistant);
     }
     return currentAssistant;

@@ -307,11 +307,76 @@ export default tseslint.config(
         'warn',
         { allowConstantExport: true },
       ],
+      // 维度 5：no-console 守门（warn 级先接入，console 裸调迁移完成后升 error）。
+      // 所有 console.* 调用应经 LoggerService 统一输出。
+      'no-console': 'warn',
     },
     languageOptions: {
       globals: {
         ...globals.browser,
       },
+    },
+  },
+  // 维度 3 步骤 1 / 决策 5：no-restricted-imports 守门（warn 级先接入）。
+  // 禁止 components / hooks / app 出现深路径直连 store/api 子目录私有模块，
+  // 强制走公共门面（store/storeAccess.ts、api/storeAccess.ts、各域 store 顶层）。
+  // warn 级先接入以收敛存量，不阻塞 CI；后续存量清零后可升 error。
+  //
+  // 守门口径（glob 段数判定，非 negativeLookahead）：
+  // - `**/store/*/**` + `**/store/*/*` 匹配 store/ 后 ≥2 段的深路径（禁止）；
+  //   1 段路径（store/storeAccess、store/sessionStore、store/layout-tree barrel、
+  //   store/types）不匹配 → 放行（这些是公共门面/顶层 store/barrel 入口）。
+  // - `**/api/store-access/**` + `**/api/store-access/*` 同理禁 api/store-access/
+  //   下的深路径；api/storeAccess（1 段，且名不同）放行。
+  // - 各域 store 自身模块可内部深路径互引（本规则只约束 components/hooks/app 三域）。
+  {
+    files: [
+      'apps/crish-desktop/src/components/**/*.{ts,tsx}',
+      'apps/crish-desktop/src/hooks/**/*.{ts,tsx}',
+      'apps/crish-desktop/src/app/**/*.{ts,tsx}',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'warn',
+        {
+          patterns: [
+            {
+              group: [
+                '**/store/*/**',
+                '**/store/*/*',
+              ],
+              message:
+                '禁止深路径直连 store 子目录私有模块：components/hooks/app 应经 store/storeAccess.ts 公共读面或各域 store 顶层入口（如 store/sessionStore）。深路径收敛见维度 3 步骤 2。',
+            },
+            {
+              group: [
+                '**/api/store-access/**',
+                '**/api/store-access/*',
+              ],
+              message:
+                '禁止深路径直连 api/store-access 子目录私有模块：应经 api/storeAccess.ts 公共编排门面。深路径收敛见维度 3 步骤 2。',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // LoggerService.ts 文件级豁免（console 调用是其设计行为——统一日志输出层）
+  {
+    files: [
+      'apps/crish-desktop/src/services/LoggerService.ts',
+    ],
+    rules: {
+      'no-console': 'off',
+    },
+  },
+  // ErrorStore.ts 文件级豁免（防递归——subscriber 回调内 console.error 不得经 LoggerService）
+  {
+    files: [
+      'apps/crish-desktop/src/services/ErrorStore.ts',
+    ],
+    rules: {
+      'no-console': 'off',
     },
   },
   // react-refresh 文件级豁免（置于 React 块之后以确保优先级）：以下组件文件

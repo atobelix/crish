@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * D0 residual — shared markdown fixtures for completed-message path parity.
  *

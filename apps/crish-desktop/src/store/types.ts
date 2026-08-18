@@ -15,8 +15,15 @@
  * 避免 App 侧 `as SettingsTabType` 与 string 漂移。
  */
 import type { Settings } from '../api/clientApi';
-import type { MessageCacheState } from '@crish/shared-types';
-import type { AgentMessage } from '../../../../packages/shared-types/src/generated/engine';
+// 维度 3 步骤 1（3-D 第 1 步）：斩断 types.ts → generated/engine 深路径。
+// 原先 `import type { AgentMessage } from '../../../../packages/shared-types/src/generated/engine'`
+// 是跨包深路径直引；现统一经 @crish/shared-types 公共面。
+// 注意：@crish/shared-types 顶层 `AgentMessage` 绑定到 ./message 版本
+// （metadata: JsonObject、无 content），与本文件原先取的 generated 版
+// （metadata: JsonValue、含 content?: string）字段不对齐。故经 `EngineAgentMessage`
+// 别名取 generated 版（与 shared-types/index.ts 的 alias 一致），本地仍用
+// `AgentMessage` 名以保持下游引用面稳定。
+import type { EngineAgentMessage as AgentMessage, MessageCacheState } from '@crish/shared-types';
 export type AppSettings = Settings;
 export type GroupState = {
   id: string;
@@ -662,6 +669,6 @@ export type {
   FlatBranch,
   DropDirection,
 } from './layout-tree/types';
-export type { Rect } from './layout-tree/dropDetection';
+export type { Rect } from './layout-tree/geometry';
 export type { LayoutStore } from './layoutStore';
 export type { DraggedTabState } from './workspaceStore';

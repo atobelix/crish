@@ -4,6 +4,29 @@
  * 三域 facade（session / workspace / settingsUi）与 `useLayoutStore` **同一实例**。
  * 本文件提供跨域操作、StoreTransaction，以及对下兼容的命令式门面。
  * 具体实现位于 `./store-access/` 目录。
+ *
+ * ## 双 storeAccess 消费方决策树（维度 3 步骤 1 / 3-L）
+ *
+ * 仓库内存在两个同名 storeAccess 模块，职责正交，消费方按以下决策树选路：
+ *
+ * 1. 你需要 **写** 会话/工作区/设置（命令式 mutation，含跨域编排、
+ *    setActiveSessionId / enterDraftMode / createSession / setAppSettings /
+ *    pushDiffFile / setScheduledTasks 等）？
+ *    → 走本文件（`api/storeAccess.ts`，编排层门面；实现于 `./store-access/`）。
+ *    - 注：workspace-shell 域的 `enterDraftMode`/`setActiveSessionId` 经
+ *      `useSessionStore.getState()` 同层 action 调用（3-C 斩断 store→api 反向边后），
+ *      不再经本编排层；其它写路径（settings/telemetry/session 编排）仍经本门面。
+ *
+ * 2. 你需要 **读** T11 新域 store（terminal / worker / permission / settings）
+ *    或布局 chrome（只读快照 / hooks）？
+ *    → 走 `store/storeAccess.ts`（公共**读**面；写仍走各域 store actions）。
+ *
+ * 3. 既有 `api/storeAccess` 的**读**门面（getActiveSession / getSessionById 等）
+ *    与 `store/storeAccess` 的会话读面**等价**（同源 store）；
+ *    新代码读会话/布局优先 `store/storeAccess`，编排写仍经本文件。
+ *
+ * 混用文件（同文件既读 store/storeAccess 又写 api/storeAccess）应各补行内注释
+ * 标明哪条是读路径、哪条是写路径，避免后续维护者误用反向。
  */
 import type {
   DiffChange,

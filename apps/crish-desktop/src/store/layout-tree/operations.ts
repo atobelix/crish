@@ -23,7 +23,7 @@ import {
   isLeaf,
   clampSplitRatio,
 } from './types';
-import { viewRegistry } from '../../services/view-registry';
+import { isPrimaryPanel } from './index';
 import type { DropZone } from './dropDetection';
 import { isUnitScopedDropAllowed } from './dropDetection';
 
@@ -506,7 +506,7 @@ export function addTabToLeaf(
   // 域隔离：对话域（chat）与功能区不能混在同一个 leaf 里。
   // 这样能保证「对话只能在对话区域内相互排版，功能区在功能区域内排版」。
   if (
-    viewRegistry.isPrimary(tabId) !== viewRegistry.isPrimary(target.panelId)
+    isPrimaryPanel(tabId) !== isPrimaryPanel(target.panelId)
   ) {
     return tree;
   }
@@ -620,7 +620,7 @@ export function applyDrop(
   // 仅拒绝「同 session 再拆一份」：目标 leaf 已绑定同一 sessionId（若可判定）。
   if (
     zoneType !== 'merge-tab' &&
-    viewRegistry.isPrimary(srcPanelId) &&
+    isPrimaryPanel(srcPanelId) &&
     (zoneType === 'split-left' ||
       zoneType === 'split-right' ||
       zoneType === 'split-top' ||
@@ -630,7 +630,7 @@ export function applyDrop(
     if (
       sameSessionTarget &&
       isLeaf(sameSessionTarget) &&
-      viewRegistry.isPrimary(sameSessionTarget.panelId) &&
+      isPrimaryPanel(sameSessionTarget.panelId) &&
       sameSessionTarget.sessionId &&
       // top-bar session drag 用 sessionId 作为 leafId/tabId
       (srcLeafId === sameSessionTarget.sessionId ||
@@ -652,7 +652,7 @@ export function applyDrop(
     targetNode &&
     isLeaf(targetNode) &&
     srcLeafId !== targetLeafId &&
-    viewRegistry.isPrimary(srcPanelId) !== viewRegistry.isPrimary(targetNode.panelId)
+    isPrimaryPanel(srcPanelId) !== isPrimaryPanel(targetNode.panelId)
   ) {
     return tree;
   }
@@ -745,7 +745,7 @@ function leafMatchesCollapsedDomain(
   collapsedDomain?: CollapsedDomain
 ): boolean {
   if (!collapsedDomain) return false;
-  const isTool = !viewRegistry.isPrimary(leaf.panelId);
+  const isTool = !isPrimaryPanel(leaf.panelId);
   return collapsedDomain === 'tool' ? isTool : !isTool;
 }
 

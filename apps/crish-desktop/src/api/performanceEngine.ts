@@ -1,5 +1,7 @@
 export type PerfTier = 'high' | 'balanced' | 'eco';
 
+import { logger } from '../services/LoggerService';
+
 export async function detectPerformanceTier(): Promise<PerfTier> {
   if (typeof window === 'undefined') return 'balanced';
 
@@ -65,8 +67,8 @@ export function initPerformanceAttributes() {
 
   detectPerformanceTier().then((tier) => {
     html.setAttribute('data-perf-tier', tier);
-    console.log(
-      `[conex] System booted in [${tier.toUpperCase()}] performance tier.`
-    );
+    logger.info(`[conex] System booted in [${tier.toUpperCase()}] performance tier (tier=${tier})`, {
+      module: 'performanceEngine',
+    });
   });
 }

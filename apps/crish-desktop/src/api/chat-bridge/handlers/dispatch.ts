@@ -15,6 +15,7 @@ import type { HandlerEnv } from './handlerEnv';
 import { useSessionStore } from '../../../store/sessionStore';
 import { emitUiEvent } from '../../../api/uiEvents';
 import { invalidateEditObjects } from '../editSessionConsumer';
+import { logger } from '../../../services/LoggerService';
 import {
   onMessageStart,
   onMessageDelta,
@@ -184,7 +185,12 @@ export function onTimelineTruncate(
       });
     }
   } catch (err) {
-    console.warn('[dispatch] timeline-truncate 消费失败:', err);
+    logger.warn('[dispatch] timeline-truncate 消费失败', {
+      module: 'dispatch',
+      err: err instanceof Error
+        ? { message: err.message, stack: err.stack, name: err.name }
+        : { message: String(err) },
+    });
   }
 }
 

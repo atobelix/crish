@@ -18,7 +18,7 @@
  * no cross-store gain.
  */
 
-import { viewRegistry } from '../../services/view-registry';
+import { isPrimaryPanel } from './index';
 import {
   openToolInActiveTab,
   openToolInSession,
@@ -42,7 +42,7 @@ export function focusOrOpenTreePanel(
   panelId: string,
   sessionId?: string | null
 ): void {
-  if (panelId === 'chat' || viewRegistry.isPrimary(panelId)) {
+  if (panelId === 'chat' || isPrimaryPanel(panelId)) {
     const sid = (sessionId || '').trim();
     ensureChatOnlyTree(sid || undefined);
     ensureAdapterShape();

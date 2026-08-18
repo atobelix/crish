@@ -1,4 +1,5 @@
 import { Priority, type Task, type WorkerRequest, type WorkerResponse, type WorkerType } from './types';
+import { logger } from '../services/LoggerService';
 
 interface WorkerPoolOptions {
   renderWorkers: number;
@@ -100,7 +101,12 @@ export class WorkerPool {
     };
 
     worker.onerror = (err) => {
-      console.error(`[WorkerPool] worker error (${type}):`, err);
+      logger.error(`[WorkerPool] worker error (${type})`, {
+        module: 'WorkerPool',
+        err: err instanceof Error
+          ? { message: err.message, stack: err.stack, name: err.name }
+          : { message: String(err) },
+      });
       this.handleWorkerCrash(entry);
     };
 

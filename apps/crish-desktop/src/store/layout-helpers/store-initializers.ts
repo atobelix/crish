@@ -8,8 +8,6 @@ import type {
 } from '../types';
 import { isDemoMode } from '../../api/appMode';
 import {
-  parseShellChromeMode,
-  SHELL_CHROME_STORAGE_KEY,
   DEFAULT_SHELL_CHROME,
   type ShellChromeMode,
 } from '../../api/shellChrome';
@@ -28,8 +26,6 @@ import {
   DEFAULT_WORKSPACE_ID,
   DEMO_TOKEN_USAGE,
   SETTINGS_TAB_SET,
-  TAB_MODE_STORAGE_KEY,
-  UI_SIZE_STORAGE_KEY,
   type ActiveWorkerState,
   type TokenUsageState,
   type UiSize,
@@ -58,14 +54,6 @@ function optionalNonNegative(
 export function parseUiSize(raw: unknown): UiSize {
   if (raw === 'small' || raw === 'medium' || raw === 'large') return raw;
   return DEFAULT_UI_SIZE;
-}
-
-function readStoredShellChromeMode(): ShellChromeMode {
-  try {
-    return parseShellChromeMode(localStorage.getItem(SHELL_CHROME_STORAGE_KEY));
-  } catch {
-    return DEFAULT_SHELL_CHROME;
-  }
 }
 
 export function isSettingsTabType(v: unknown): v is SettingsTabType {
@@ -135,31 +123,6 @@ export function sanitizeActiveWorkers(list: unknown): ActiveWorkerState[] {
     });
   }
   return out;
-}
-
-function readStoredUiSize(): UiSize {
-  try {
-    return parseUiSize(localStorage.getItem(UI_SIZE_STORAGE_KEY));
-  } catch {
-    return DEFAULT_UI_SIZE;
-  }
-}
-
-/**
- * 合并标签默认开：
- * - 无键 / 非法 → true（产品默认右侧工具并入同列标签）
- * - 仅显式 '0' / 'false' → false
- */
-function readStoredTabModeEnabled(): boolean {
-  try {
-    const raw = localStorage.getItem(TAB_MODE_STORAGE_KEY);
-    if (raw == null || raw === '') return true;
-    if (raw === '0' || raw === 'false') return false;
-    if (raw === '1' || raw === 'true') return true;
-    return true;
-  } catch {
-    return true;
-  }
 }
 
 /**
@@ -308,9 +271,11 @@ export function createInitialLayoutDefaults() {
   const sessionSeed = sanitizeSessionSeed(seedSessions());
   const initialPermissionMode = loadStoredPermissionMode();
   const initialWorkspaces = seedInitialWorkspaces(DEFAULT_WORKSPACE_ID);
-  const initialUiSize = readStoredUiSize();
-  const initialTabMode = readStoredTabModeEnabled();
-  const initialShellChrome = readStoredShellChromeMode();
+  // 初始值使用 DEFAULT 常量：zustand persist (crish-layout-v1) rehydrate 后
+  // 覆盖为持久化值。独立 key 读取已删除（维度 2 收敛到 persist 唯一持久化面）。
+  const initialUiSize: UiSize = DEFAULT_UI_SIZE;
+  const initialTabMode = true; // 合并标签默认开（persist rehydrate 覆盖）
+  const initialShellChrome: ShellChromeMode = DEFAULT_SHELL_CHROME;
   const initialTokenUsage = isDemoMode()
     ? { ...DEMO_TOKEN_USAGE }
     : { ...DEFAULT_TOKEN_USAGE };

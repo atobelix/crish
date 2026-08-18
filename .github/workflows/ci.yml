@@ -73,6 +73,11 @@ jobs:
       # >650 硬阻断）+ per-file 基线（基线记录/frontend-line-counts-baseline.md，
       # 存量登记、增长必 fail、--update 显式收紧）。
       - run: npm run check:line-counts
+      # UI 层收敛门禁（G-01~G-12 合规）：裸原生交互标签 / cloneElement /
+      # radius-full 药丸圆角 / Z-Index 标尺 / !important / 废弃全局样式 /
+      # switch(panelId) 解析 / 伪门面别名 / 空态渗透 / onShowToast 透传 /
+      # 原生 title 悬浮提示——与 check:desktop 同口径，CI 单独接线确保 PR 级拦截
+      - run: npm run check:ui-layer
       # 吞错门禁本体 = eslint 本地规则 local/no-silent-catch（上方 npx eslint . 自动生效，
       # 零新增 job）；报告模式便于 diff 观察趋势，非门禁本体。
       - run: npm run check:swallowed-errors-frontend

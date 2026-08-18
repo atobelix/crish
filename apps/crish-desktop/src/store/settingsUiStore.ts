@@ -1,10 +1,10 @@
 /**
  * settingsUiStore — 设置 UI 域 facade。
  *
- * 三域 facade 之一：`useSettingsUiStore` 与 `useLayoutStore` **同一实例**。
+ * T11 拆分后：`useSettingsUiStore` 是物理独立 zustand 实例（各自 create + immer + devtools）。
  *
  * T11 拆分后：
- * - 设置浮层（`showSettingsOverlay` / `settingsActiveTab`）仍属布局域（layoutStore），
+ * - 设置浮层（`showSettingsOverlay` / `settingsActiveTab`）仍属设置 UI 域（本 store），
  *   本 facade 直读/直写。
  * - 权限 / plan / 命令白名单已迁往 `permissionStore`（独立实例）；本 facade 的权限便捷
  *   入口（`setPermissionMode` / `setPlanMode*` / `addCommandPermission` …）经

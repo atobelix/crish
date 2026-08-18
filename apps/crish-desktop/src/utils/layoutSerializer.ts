@@ -7,6 +7,8 @@
  * 参考 VS Code SerializableGrid。
  */
 
+import { logger } from '../services/LoggerService';
+
 export interface SerializedLayout {
   version: number;
   root: SerializedBranch | SerializedLeaf;
@@ -155,7 +157,12 @@ export function saveLayoutToStorage(ws: WorkspaceState, key = 'crish-layout'): v
     const serialized = serializeLayout(ws);
     localStorage.setItem(key, JSON.stringify(serialized));
   } catch (err) {
-    console.error('[LayoutSerializer] save failed', err);
+    logger.error('[LayoutSerializer] save failed', {
+      module: 'LayoutSerializer',
+      err: err instanceof Error
+        ? { message: err.message, stack: err.stack, name: err.name }
+        : { message: String(err) },
+    });
   }
 }
 

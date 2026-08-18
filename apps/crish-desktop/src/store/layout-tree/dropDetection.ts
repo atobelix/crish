@@ -17,21 +17,12 @@
  * - 域隔离（chat vs tool）由 types.isSameDomain 另行处理
  */
 
-import { viewRegistry } from '../../services/view-registry';
+import { isPrimaryPanel } from './index';
+import type { Rect, Pointer } from './geometry';
 
-export interface Rect {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-  width: number;
-  height: number;
-}
-
-export interface Pointer {
-  x: number;
-  y: number;
-}
+// 透传 re-export 几何原语：消费方仍可从 dropDetection 取 Rect/Pointer，
+// 避免 geometry 上移后打散既有 import 面（types.ts / 测试 / index barrel）。
+export type { Rect, Pointer } from './geometry';
 
 export type DropZoneType =
   'split-left' | 'split-right' | 'split-top' | 'split-bottom' | 'merge-tab';
@@ -82,7 +73,7 @@ export function isUnitScopedDropAllowed(
   targetOwnerSessionId: string | undefined
 ): boolean {
   // chat 源：不在此做 session 隔离
-  if (viewRegistry.isPrimary(srcPanelId)) return true;
+  if (isPrimaryPanel(srcPanelId)) return true;
 
   const srcSid = (srcOwnerSessionId || '').trim();
   if (!srcSid) return true;

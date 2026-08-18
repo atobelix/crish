@@ -19,6 +19,8 @@ import {
   type CatalogSnapshotPrice,
   type CatalogTier,
 } from './pricingStore';
+import { logger } from '../services/LoggerService';
+import { errorStore } from '../services/ErrorStore';
 
 const META_KEY = 'crish_model_meta_v1';
 
@@ -603,7 +605,7 @@ export function buildScannedModelWire(
  * 扫描结果上送合并（P3 步骤 5b / §3.1.3 数据来源策略 2）。
  *
  * 经 Tauri `catalog_refresh` 命令合并（仅窗口 / 能力位，不覆盖价格）；
- * 命令缺失 / invoke 失败 / 非 Tauri 环境一律降级：console.warn 记录，
+ * 命令缺失 / invoke 失败 / 非 Tauri 环境一律降级：logger.warn 记录，
  * 绝不抛出——扫描流程不因上送失败而中断（invokeResult 本身不抛，外层
  * try/catch 兜底保证恒不抛）。
  */
@@ -617,12 +619,40 @@ export async function uploadScannedModels(
       scan,
     });
     if (res.status !== 'ok') {
-      console.warn(
+      // 修复 4：降级推入 errorStore（info 级，可自动解决）
+      logger.warn(
         `模型目录上送合并跳过（${res.status}）${res.status === 'error' ? `：${res.message}` : ''}，不阻塞扫描`
       );
+      try {
+        errorStore.push({
+          code: 'MODEL_CATALOG_DEGRADED',
+          module: 'modelCatalog',
+          severity: 'info',
+          message: '模型目录上送合并跳过，不阻塞扫描',
+          autoResolve: true,
+        });
+      } catch {
+        /* ignore */
+      }
     }
   } catch (e) {
-    console.warn('模型目录上送合并失败，不阻塞扫描：', e);
+    logger.warn('模型目录上送合并失败，不阻塞扫描：', {
+      module: 'modelCatalog',
+      err: e instanceof Error
+        ? { message: e.message, stack: e.stack, name: e.name }
+        : { message: String(e) },
+    });
+    try {
+      errorStore.push({
+        code: 'MODEL_CATALOG_DEGRADED',
+        module: 'modelCatalog',
+        severity: 'info',
+        message: '模型目录上送合并失败，不阻塞扫描',
+        autoResolve: true,
+      });
+    } catch {
+      /* ignore */
+    }
   }
 }
 
@@ -737,7 +767,7 @@ export function toCatalogCacheSnapshot(
  * 拉取运行时模型目录快照（catalog_get → applyCatalogCacheSnapshot）。
  *
  * - 成功：快照注入 pricingStore（版本号幂等，重复调用安全）；
- * - 命令缺失 / invoke 失败 / 载荷非法：console.warn 降级（静态表兜底），
+ * - 命令缺失 / invoke 失败 / 载荷非法：logger.warn 降级（静态表兜底），
  *   恒不抛（invokeResult 不抛 + 外层 try/catch 兜底）。
  *
  * @returns 是否成功注入（false = 降级静态表）
@@ -746,19 +776,58 @@ export async function fetchCatalogSnapshot(): Promise<boolean> {
   try {
     const res = await invokeResult<CatalogSnapshotWire>('catalog_get', {});
     if (res.status !== 'ok') {
-      console.warn(
+      // 修复 4：降级推入 errorStore（info 级，可自动解决）
+      logger.warn(
         `模型目录快照拉取跳过（${res.status}）${res.status === 'error' ? `：${res.message}` : ''}，定价回退静态表`
       );
+      try {
+        errorStore.push({
+          code: 'MODEL_CATALOG_DEGRADED',
+          module: 'modelCatalog',
+          severity: 'info',
+          message: '模型目录快照拉取跳过，定价回退静态表',
+          autoResolve: true,
+        });
+      } catch {
+        /* ignore */
+      }
       return false;
     }
     if (!Array.isArray(res.data?.entries) || res.data.entries.length === 0) {
-      console.warn('模型目录快照载荷非法（entries 缺失），定价回退静态表');
+      logger.warn('模型目录快照载荷非法（entries 缺失），定价回退静态表');
+      try {
+        errorStore.push({
+          code: 'MODEL_CATALOG_DEGRADED',
+          module: 'modelCatalog',
+          severity: 'info',
+          message: '模型目录快照载荷非法，定价回退静态表',
+          autoResolve: true,
+        });
+      } catch {
+        /* ignore */
+      }
       return false;
     }
     applyCatalogCacheSnapshot(toCatalogCacheSnapshot(res.data));
     return true;
   } catch (e) {
-    console.warn('模型目录快照拉取失败，定价回退静态表：', e);
+    logger.warn('模型目录快照拉取失败，定价回退静态表：', {
+      module: 'modelCatalog',
+      err: e instanceof Error
+        ? { message: e.message, stack: e.stack, name: e.name }
+        : { message: String(e) },
+    });
+    try {
+      errorStore.push({
+        code: 'MODEL_CATALOG_DEGRADED',
+        module: 'modelCatalog',
+        severity: 'info',
+        message: '模型目录快照拉取失败，定价回退静态表',
+        autoResolve: true,
+      });
+    } catch {
+      /* ignore */
+    }
     return false;
   }
 }

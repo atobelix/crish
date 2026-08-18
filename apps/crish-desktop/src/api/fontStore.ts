@@ -3,6 +3,8 @@
  * 独立 key `crish_fonts`，冷启动同步应用；可与 settings.fonts 合并。
  */
 
+import { logger } from '../services/LoggerService';
+
 export type PlatformId =
   | 'windows'
   | 'macos'
@@ -373,7 +375,12 @@ async function ensureEmbeddedUi(id: EmbeddedUiFontId): Promise<void> {
     }
     loadedEmbedded.add(id);
   } catch (e) {
-    console.warn('[fontStore] load ui font failed', id, e);
+    logger.warn(`[fontStore] load ui font failed (fontId=${id})`, {
+      module: 'fontStore',
+      err: e instanceof Error
+        ? { message: e.message, stack: e.stack, name: e.name }
+        : { message: String(e) },
+    });
   }
 }
 
@@ -389,7 +396,12 @@ async function ensureEmbeddedMono(id: EmbeddedMonoFontId): Promise<void> {
     }
     loadedEmbedded.add(id);
   } catch (e) {
-    console.warn('[fontStore] load mono font failed', id, e);
+    logger.warn(`[fontStore] load mono font failed (fontId=${id})`, {
+      module: 'fontStore',
+      err: e instanceof Error
+        ? { message: e.message, stack: e.stack, name: e.name }
+        : { message: String(e) },
+    });
   }
 }
 
@@ -434,6 +446,8 @@ export function readStoredFonts(): FontPreferences {
   } catch {
     /* swallow-ok: 字体设置 JSON 损坏时回退默认值 */
   }
+  // 只读回退：兼容旧版 crish_settings JSON 中的 fonts 字段，不再有写入方更新此字段；
+  // @deprecated 删除日期 2027-01-01
   try {
     const raw = localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(SETTINGS_KEY_LEGACY);
     if (raw) {
@@ -452,14 +466,6 @@ export function persistFonts(prefs: FontPreferences): void {
     localStorage.setItem(FONTS_KEY, JSON.stringify(p));
   } catch {
     /* swallow-ok: quota 超限时字体偏好尽力写，失败回退默认 */
-  }
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(SETTINGS_KEY_LEGACY);
-    const current = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-    current.fonts = p;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
-  } catch {
-    /* swallow-ok: 同步到旧 settings 键尽力而为，主键已写成功 */
   }
 }
 

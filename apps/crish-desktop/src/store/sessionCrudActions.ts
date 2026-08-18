@@ -94,7 +94,12 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       }),
 
     setActiveSessionId: (id: string) => {
-      const nextId = typeof id === 'string' ? id : '';
+      // 维度 3 步骤 1（3-C）：补 normalizeSessionId 等价防御（trim + 空值检查）。
+      // 此前 store 原生 action 仅做空值检查，未 trim；调用方（workspaceShellStore）
+      // 现改为直调本 store action（斩断 store → api/storeAccess 反向边），
+      // 故防御须在 action 内自洽（与 api/store-access/sessionAccess 的
+      // normalizeSessionId 口径一致：trim 后空 → 保持当前/进入草稿态）。
+      const nextId = typeof id === 'string' ? id.trim() : '';
       // 不变量：activeSessionId 绝不允许为空字符串，否则 UI 会触发"暂无会话"空屏。
       //
       // 分支策略：

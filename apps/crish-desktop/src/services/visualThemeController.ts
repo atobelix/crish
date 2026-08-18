@@ -1,4 +1,3 @@
-import { useSettingsStore } from '../store/settingsStore';
 import { useLayoutStore } from '../store/layoutStore';
 import type {
   UiSize,
@@ -19,7 +18,7 @@ export const UI_DENSITY_MAP: Record<UiSize, string> = {
 
 /**
  * 视觉配置直写 DOM 控制器 (React 0 重绘机制)
- * 监听 settingsStore 与 layoutStore 变更，直接操作 document.documentElement
+ * 监听 layoutStore 变更，直接操作 document.documentElement
  */
 export function initVisualPresentationController(): () => void {
   if (typeof document === 'undefined') {
@@ -47,17 +46,9 @@ export function initVisualPresentationController(): () => void {
   applyUiSize(initialUiSize);
   applyShellChrome(initialChrome);
 
-  // 2. 细粒度订阅设置变更 (使用 subscribe 监听特定字段变化，不触发 React 渲染)
-  const unsubSettings = useSettingsStore.subscribe((state, prev) => {
-    const nextSettings = state.appSettings as Record<string, unknown> | null;
-    const prevSettings = prev?.appSettings as Record<string, unknown> | null;
-    const nextSize = nextSettings?.uiSize as UiSize | undefined;
-    const prevSize = prevSettings?.uiSize as UiSize | undefined;
-    if (nextSize && nextSize !== prevSize) {
-      applyUiSize(nextSize);
-    }
-  });
-
+  // 2. 细粒度订阅布局变更 (使用 subscribe 监听特定字段变化，不触发 React 渲染)
+  // uiSize / shellChromeMode 唯一 DOM 应用路径——layoutStore 是单一真源
+  // （维度 2 收敛：已删除 settingsStore.appSettings.uiSize 的重复订阅）
   const unsubLayout = useLayoutStore.subscribe((state, prev) => {
     if (state.uiSize && state.uiSize !== prev?.uiSize) {
       applyUiSize(state.uiSize);
@@ -71,7 +62,6 @@ export function initVisualPresentationController(): () => void {
   });
 
   return () => {
-    unsubSettings();
     unsubLayout();
   };
 }

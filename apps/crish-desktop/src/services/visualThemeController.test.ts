@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, beforeEach } from 'vitest';
 import { initVisualPresentationController, UI_SCALE_MAP, UI_DENSITY_MAP } from './visualThemeController';
-import { useSettingsStore } from '../store/settingsStore';
 import { useLayoutStore } from '../store/layoutStore';
 
 describe('visualThemeController 呈现层 0 重绘直写机制', () => {
@@ -18,27 +17,22 @@ describe('visualThemeController 呈现层 0 重绘直写机制', () => {
     expect(document.documentElement.getAttribute('data-ui-size')).toBe('medium');
     expect(document.documentElement.getAttribute('data-density')).toBe('default');
     expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe('1.0');
-    expect(document.documentElement.getAttribute('data-shell-chrome')).toBe('classic');
+    // DEFAULT_SHELL_CHROME = 'inset'（产品默认）
+    expect(document.documentElement.getAttribute('data-shell-chrome')).toBe('inset');
 
     cleanup();
   });
 
-  it('监听 settingsStore 中 uiSize 变更并直写 DOM 属性', () => {
+  it('监听 layoutStore 中 uiSize 变更并直写 DOM 属性（单一真源）', () => {
     const cleanup = initVisualPresentationController();
 
-    useSettingsStore.getState().setAppSettings({
-      ...useSettingsStore.getState().appSettings,
-      uiSize: 'large',
-    });
+    useLayoutStore.getState().setUiSize('large');
 
     expect(document.documentElement.getAttribute('data-ui-size')).toBe('large');
     expect(document.documentElement.getAttribute('data-density')).toBe(UI_DENSITY_MAP['large']);
     expect(document.documentElement.style.getPropertyValue('--ui-scale')).toBe(UI_SCALE_MAP['large']);
 
-    useSettingsStore.getState().setAppSettings({
-      ...useSettingsStore.getState().appSettings,
-      uiSize: 'small',
-    });
+    useLayoutStore.getState().setUiSize('small');
 
     expect(document.documentElement.getAttribute('data-ui-size')).toBe('small');
     expect(document.documentElement.getAttribute('data-density')).toBe(UI_DENSITY_MAP['small']);

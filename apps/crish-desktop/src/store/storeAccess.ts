@@ -1,15 +1,34 @@
-﻿/**
+/**
  * storeAccess（store 侧公共读面）— R3-T11 交付。
  *
  * components / api 读取 T11 新域 store（terminal / worker / permission / settings）
  * 与布局 chrome 时，**只经本模块**（T14 依赖规则据此守门）。
  * 写入仍走各域 store 自身 actions；跨域编排继续由 `api/storeAccess.ts`（既有编排层）承担。
  *
- * ## 双 storeAccess 说明
+ * ## 双 storeAccess 消费方决策树（维度 3 步骤 1 / 3-L）
+ *
+ * 1. 你需要 **读** T11 新域 store（terminal / worker / permission / settings）
+ *    或布局 chrome / session / layout-tree / workspace-shell（只读快照 + hooks）？
+ *    → 走本文件（`store/storeAccess.ts`，公共**读**面）。
+ *
+ * 2. 你需要 **写** 会话/工作区/设置（命令式 mutation，含跨域编排、
+ *    setActiveSessionId / createSession / setAppSettings / pushDiffFile 等）？
+ *    → 走 `api/storeAccess.ts`（编排层门面；实现于 `./store-access/`）。
+ *    - 注：workspace-shell 域的 `enterDraftMode`/`setActiveSessionId` 经
+ *      `useSessionStore.getState()` 同层 action 调用（3-C 斩断 store→api 反向边后），
+ *      不再经 api/storeAccess；其它写路径仍经 api 编排层。
+ *
+ * 3. 既有 `api/storeAccess` 的会话**读**门面（getActiveSession / getSessionById 等）
+ *    与本文件的会话读面**等价**（同源 store）；新代码读会话/布局优先本文件。
+ *
+ * ## 双 storeAccess 说明（既有，保留）
  *
  * - `store/storeAccess.ts`（本文件）：T11 新公共**读**面，覆盖四个新域 store 与布局 chrome。
  * - `api/storeAccess.ts`（既有）：编排层门面（会话/工作区/settingsUi facade + 跨域写），
  *   由 api/store-access/** 实现，其 getLayoutState 依赖旧 god-object 形状的兼容工作归 T14/汇合。
+ *
+ * 混用文件（同文件既读 store/storeAccess 又写 api/storeAccess）应各补行内注释
+ * 标明哪条是读路径、哪条是写路径，避免后续维护者误用反向。
  *
  * @see docs/multi-agent-repair/reports/R3-T11-归类表.md
  */

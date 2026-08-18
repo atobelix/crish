@@ -1,11 +1,31 @@
 // @vitest-environment jsdom
 import { describe, expect, it, beforeEach } from 'vitest';
+import type React from 'react';
 import { viewRegistry } from './ViewRegistry';
-import { registerBuiltInViews } from './registerBuiltInViews';
+import { registerBuiltInViews, type ViewFactoryMap } from './registerBuiltInViews';
+import type { ViewRenderContext } from './ViewTypes';
+
+// 维度 3 步骤 1 / 3-E：registerBuiltInViews 改为接收 factory 参数注入。
+// 测试无需真实 lazy 组件——用 stub component 即可验证注册完备性与路由解析。
+const stubComponent: React.FC<ViewRenderContext> = () => null;
+const stubFactory = () => stubComponent;
+const testFactories: ViewFactoryMap = {
+  chat: stubFactory,
+  terminal: stubFactory,
+  preview: stubFactory,
+  overview: stubFactory,
+  files: stubFactory,
+  diff: stubFactory,
+  runtime: stubFactory,
+  agent: stubFactory,
+  browser: stubFactory,
+  'flow-dag': stubFactory,
+  'file-viewer': stubFactory,
+};
 
 describe('ViewRegistry 视图注册中心与路由解析', () => {
   beforeEach(() => {
-    registerBuiltInViews();
+    registerBuiltInViews(testFactories);
   });
 
   it('内置 10 大视图 + file-viewer 完备注册', () => {
@@ -58,12 +78,26 @@ describe('ViewRegistry 视图注册中心与路由解析', () => {
       initialMode: 'diff',
       line: 42,
     });
+
+    // 支持 Hash 锚点剥离与行号自动提取
+    const resolvedWithHash = viewRegistry.resolveView(
+      'file-viewer:README.md#architecture'
+    );
+    expect(resolvedWithHash.params?.filePath).toBe('README.md');
+
+    const resolvedWithHashLine = viewRegistry.resolveView(
+      'file-viewer:src/main.tsx#L20-L40'
+    );
+    expect(resolvedWithHashLine.params?.filePath).toBe('src/main.tsx');
+    expect(resolvedWithHashLine.params?.line).toBe(20);
   });
 
   it('isPrimary 正确支持草稿态及参数化会话 URI', () => {
     expect(viewRegistry.isPrimary('chat')).toBe(true);
     expect(viewRegistry.isPrimary('chat?session=PENDING_DRAFT')).toBe(true);
     expect(viewRegistry.isPrimary('chat:__draft__')).toBe(true);
+    expect(viewRegistry.isPrimary('__pending_draft__')).toBe(true);
+    expect(viewRegistry.isPrimary('pending:new-session')).toBe(true);
     expect(viewRegistry.isPrimary('terminal')).toBe(false);
     expect(viewRegistry.isPrimary('')).toBe(false);
   });
@@ -74,9 +108,12 @@ describe('ViewRegistry 视图注册中心与路由解析', () => {
     expect(viewRegistry.getTitle('browser')).toBe('AI 浏览器');
     expect(viewRegistry.getTitle('flow-dag')).toBe('编排图');
 
-    // file-viewer 动态标题提取文件名
+    // file-viewer 动态标题提取文件名 (包含 Windows 反斜杠)
     expect(
       viewRegistry.getTitle('file-viewer:C:/Software/conex/src/App.tsx')
+    ).toBe('App.tsx');
+    expect(
+      viewRegistry.getTitle('file-viewer:C:\\Software\\conex\\src\\App.tsx')
     ).toBe('App.tsx');
 
     // 动态未知 URI 友好 fallback
@@ -88,7 +125,7 @@ describe('ViewRegistry 视图注册中心与路由解析', () => {
     expect(viewRegistry.getAllViews()).toHaveLength(0);
 
     // 二次注册内置视图正常恢复
-    registerBuiltInViews();
+    registerBuiltInViews(testFactories);
     expect(viewRegistry.getAllViews().length).toBeGreaterThan(0);
   });
 });

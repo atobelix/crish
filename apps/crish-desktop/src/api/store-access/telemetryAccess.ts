@@ -7,6 +7,7 @@ import type { DiffChange, FileDiff } from '../../store/types';
 import type { CronJob } from '../clientApi';
 import { useTerminalStore } from '../../store/terminalStore';
 import { useSettingsStore } from '../../store/settingsStore';
+import { logger } from '../../services/LoggerService';
 
 export type DiffFileInfo = FileDiff;
 
@@ -163,7 +164,12 @@ export function accumulateTokenUsage(
         .getState()
         .syncTelemetryData({ tokenUsage: mergeTokenUsageDelta(cur, delta) });
     } catch (err) {
-      console.warn('[accumulateTokenUsage] tokenUsage 合并失败:', err);
+      logger.warn('[accumulateTokenUsage] tokenUsage 合并失败', {
+        module: 'telemetryAccess',
+        err: err instanceof Error
+          ? { message: err.message, stack: err.stack, name: err.name }
+          : { message: String(err) },
+      });
     }
     // 历史流水双 sink（口径不同：当前值 vs 日/模型历史）；失败静默
     try {

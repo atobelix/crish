@@ -53,6 +53,20 @@ import { normalizeAssistantTimeline } from '../toolPresentation';
 // ── 复合 API：hydrateSessionsFromRust ──────────────────────────────────────
 
 /**
+ * 只读检查某会话是否残留降级戳标记（crish_degraded_<id>）。
+ * 降级戳写面已在维度 1（T2-1）删除，但用户环境中可能仍有历史残留键。
+ * hydrate 路径不做清理（清理在 persist 路径的 cleanupDegradedMarkerKeys 中），
+ * 仅用于一致性校验时区分「降级期空 body（设计内）」与「索引-body 不一致（异常）」。
+ */
+function hasDegradedMarker(sessionId: string): boolean {
+  try {
+    return localStorage.getItem('crish_degraded_' + sessionId) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * 从存储层加载全部会话（index + bodies + agents），构造 SessionState[]。
  *
  * 索引加载策略（Stream D 过渡期）：
@@ -63,6 +77,12 @@ import { normalizeAssistantTimeline } from '../toolPresentation';
  * bodies / agents 加载策略：
  *   - 优先 SQLite（load_session_body / load_session_agents）
  *   - invoke 缺失时回退 localStorage
+ *
+ * 索引 + body 分叉策略设计意图（维度 2 一致性校验）：
+ *   LS 索引与 SQLite body 由不同写入路径维护，过渡期可能出现分叉（索引有条目
+ *   但 body 为空）。hydrate 完成后做一致性校验：索引中存在但 body 为空且无降级
+ *   戳标记的会话记录 logInternalError 警告（scope: hydrate-degraded-index-body-mismatch）。
+ *   降级戳存在意味着该会话在降级期间创建、空 body 是设计内行为，不报警。
  *
  * 注意：此 API 在 boot 时调用一次。为兼容现有 store 初始化（同步 seedSessions），
  * seedSessions 仍调用同步回退路径；此 async 版本供 store-persistence 使用。
@@ -130,6 +150,24 @@ export async function hydrateSessionsFromRust(): Promise<{
       return state;
     })
   );
+
+  // 维度 2 一致性校验：LS 索引 + SQLite body 分叉策略校验。
+  // 设计意图：LS 索引是侧栏元数据真相源，SQLite 是 body 真相源。两者由不同
+  // 写入路径维护（persistAllSessionsRust 同时写 LS 索引 + SQLite body）。
+  // 如果索引中存在某会话但 body 加载结果为空（msgs.length === 0）且无降级戳
+  // 标记（crish_degraded_<id>），说明索引与 body 出现了不一致——可能由
+  // 写入中断 / 孤儿残留 / 迁移期数据丢失引起。降级戳（T2-1 已删写面）存在
+  // 意味着该会话在降级期间创建、空 body 是设计内行为，不报警。
+  for (const s of sessions) {
+    if (s.messages.length === 0 && !hasDegradedMarker(s.id)) {
+      logInternalError('hydrate-degraded-index-body-mismatch', {
+        sessionId: s.id,
+        title: s.title,
+        scope: 'hydrate-degraded-index-body-mismatch',
+        severity: 'info',
+      });
+    }
+  }
 
   const activeRaw = await getSessionMeta('active_session_id');
   const active = activeRaw && !isPendingDraft(activeRaw) ? activeRaw : null;

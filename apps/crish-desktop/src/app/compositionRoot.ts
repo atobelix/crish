@@ -42,6 +42,10 @@ import {
   type PtyKillFn,
   type PtySpawnFn,
 } from '../api/ptyRegistry';
+// 读路径：compositionRoot 经 api/storeAccess 编排层取 session/workspace/layout
+// getState + enterDraft（写编排）；permission/settings 读快照走 store/storeAccess。
+// （维度 3 步骤 1 / 3-L 双 storeAccess 决策树：本文件混用——api 侧写编排 +
+// store 侧读快照。）
 import {
   enterDraftMode,
   getSessionStoreState,
@@ -63,10 +67,11 @@ import {
   type ControlMetricKey,
 } from '../api/controlMetrics';
 import { useWorkspaceShellStore } from '../store/workspace-shell/workspaceShellStore';
-import { useLayoutTreeStore } from '../store/layout-tree';
+import { useLayoutTreeStore, setPrimaryPanelChecker } from '../store/layout-tree';
 import type { SessionState } from '../store/types';
 import type { Settings } from '../api/clientApi';
 import { getPermissionState, getSettingsState } from '../store/storeAccess';
+import { viewRegistry } from '../services/view-registry';
 
 export type PtyFacade = {
   getHandlers: () => { spawn: PtySpawnFn | null; kill: PtyKillFn | null };
@@ -215,6 +220,15 @@ function buildDefaultTreeFacade(): TreeFacade {
 }
 
 function buildDefaultRoot(): CompositionRoot {
+  // 维度 3 步骤 1（3-B）：最先注入 isPrimaryPanel checker，斩断
+  // store/layout-tree → services/view-registry 反向边。
+  // layout-tree 内部（dropDetection / conversationUnit / operations /
+  // treePanelAccess）改为调用注入的 isPrimaryPanel，不再直引 viewRegistry。
+  // 时序安全：registerBuiltInViews 已在 main.tsx startup 最先执行（注册
+  // view），随后 bootstrap-orchestrator 调用本函数注入 checker；任何
+  // tree 操作都在渲染后才可能触发 isPrimaryPanel，故未注入窗口无风险。
+  setPrimaryPanelChecker((panelId: string) => viewRegistry.isPrimary(panelId));
+
   return {
     pty: {
       getHandlers: getPtyHandlers,

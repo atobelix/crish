@@ -66,12 +66,22 @@ function flushErrorQueue(): void {
 // ── Install ──────────────────────────────────────────────────────────────────
 
 /**
+ * 幂等标志：防止 StrictMode 双执行或重复 bootstrap 导致 handler 重复注册
+ * （参照 layoutAnimationStore.registerLayoutAnimationBridge 模式）。
+ */
+let beforeunloadFlushInstalled = false;
+
+/**
  * 注册 beforeunload/pagehide 处理器。
  * 在关闭/刷新页面时同步持久化所有内存数据。
  *
+ * 返回退订函数，供 bootstrap cleanup 调用以移除监听器（幂等；退订后可重新注册）。
  * 在 App 启动时（如 initLayoutStorePersistence 之后）调用一次。
  */
-export function installBeforeunloadFlush(): void {
+export function installBeforeunloadFlush(): () => void {
+  if (beforeunloadFlushInstalled) return () => {};
+  beforeunloadFlushInstalled = true;
+
   const handler = () => {
     flushAllStreamBatchers();
 
@@ -83,4 +93,10 @@ export function installBeforeunloadFlush(): void {
 
   window.addEventListener('beforeunload', handler);
   window.addEventListener('pagehide', handler);
+
+  return () => {
+    window.removeEventListener('beforeunload', handler);
+    window.removeEventListener('pagehide', handler);
+    beforeunloadFlushInstalled = false;
+  };
 }

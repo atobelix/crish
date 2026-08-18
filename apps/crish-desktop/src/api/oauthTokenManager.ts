@@ -13,6 +13,8 @@ import {
   saveProfiles,
   type OAuthTokenData,
 } from './providerProfiles';
+import { logger } from '../services/LoggerService';
+import { errorStore } from '../services/ErrorStore';
 
 /** 提前刷新缓冲时间（5 分钟） */
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -24,6 +26,9 @@ const refreshPromises = new Map<string, Promise<OAuthTokenData | null>>();
 
 /** 动态定时器 Handle 映射表 */
 const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** 连续刷新失败计数（按 profileId）—— 达 3 次后 severity 升级为 error */
+const refreshFailureCounts = new Map<string, number>();
 
 /** 检查 Token 是否已过期或即将在 5 分钟内过期 */
 function isTokenExpiringSoon(token?: OAuthTokenData): boolean {
@@ -49,7 +54,10 @@ async function refreshOAuthToken(profileId: string): Promise<OAuthTokenData | nu
 
       const { oauthConfig, oauthToken } = profile;
       if (!oauthToken.refreshToken) {
-        console.warn(`[OAuthTokenManager] 缺少 refreshToken，无法自动刷新: ${profileId}`);
+        // 修复 3：配置问题——仅 logger.warn，不推入 errorStore（非运行时故障）
+        logger.warn(`[OAuthTokenManager] 缺少 refreshToken，无法自动刷新: ${profileId}`, {
+          module: 'oauthTokenManager',
+        });
         return null;
       }
 
@@ -100,12 +108,42 @@ async function refreshOAuthToken(profileId: string): Promise<OAuthTokenData | nu
       profile.hasKey = true;
       saveProfiles(profiles);
 
+      // 刷新成功 → 重置连续失败计数
+      refreshFailureCounts.delete(profileId);
+
       // 自动安排下一次定时静默刷新
       scheduleTokenRefresh(profileId, updatedToken);
 
       return updatedToken;
     } catch (err) {
-      console.error(`[OAuthTokenManager] 刷新服务商 ${profileId} Token 失败:`, err);
+      // 修复 3：刷新失败 → logger.error + errorStore.push
+      // 连续失败 ≥ 3 次后 severity 升级为 'error'
+      const failures = (refreshFailureCounts.get(profileId) ?? 0) + 1;
+      refreshFailureCounts.set(profileId, failures);
+      const severity = failures >= 3 ? 'error' : 'warning';
+      logger.error(
+        `[OAuthTokenManager] 刷新服务商 ${profileId} Token 失败（连续 ${failures} 次）:`,
+        {
+          module: 'oauthTokenManager',
+          err: err instanceof Error
+            ? { message: err.message, stack: err.stack, name: err.name }
+            : { message: String(err) },
+        }
+      );
+      try {
+        errorStore.push({
+          code: 'OAUTH_TOKEN_REFRESH_FAILED',
+          module: 'oauthTokenManager',
+          severity,
+          message: `OAuth Token 刷新失败（服务商 ${profileId}，连续 ${failures} 次）`,
+          autoResolve: false,
+          ...(err instanceof Error
+            ? { technical: err.message }
+            : { technical: String(err) }),
+        });
+      } catch {
+        /* errorStore.push 失败不阻断降级主流程 */
+      }
       return null;
     } finally {
       refreshPromises.delete(profileId);
@@ -148,6 +186,26 @@ export function initOAuthTokenScheduler(): void {
       }
     }
   } catch (err) {
-    console.warn('[OAuthTokenManager] 初始化 OAuth 调度器失败:', err);
+    // 修复 3：调度器初始化失败 → logger.warn + errorStore.push（severity=info，可自动解决）
+    logger.warn('[OAuthTokenManager] 初始化 OAuth 调度器失败:', {
+      module: 'oauthTokenManager',
+      err: err instanceof Error
+        ? { message: err.message, stack: err.stack, name: err.name }
+        : { message: String(err) },
+    });
+    try {
+      errorStore.push({
+        code: 'OAUTH_SCHEDULER_INIT_FAILED',
+        module: 'oauthTokenManager',
+        severity: 'info',
+        message: 'OAuth 调度器初始化失败',
+        autoResolve: true,
+        ...(err instanceof Error
+          ? { technical: err.message }
+          : { technical: String(err) }),
+      });
+    } catch {
+      /* errorStore.push 失败不阻断主流程 */
+    }
   }
 }

@@ -1,11 +1,109 @@
 import { initSsrGlobals } from './createSsrGlobals';
 import { initVisualPresentationController } from './services/visualThemeController';
 import { memoryManager } from '@crish/shared-utils/browser';
+import { logger } from './services/LoggerService';
 import './index.css';
 import { SIDEBAR_WIDTH_DEFAULT, CHAT_COL_MAX } from './constants/layout';
-import { registerBuiltInViews } from './services/view-registry';
+import {
+  registerBuiltInViews,
+  type ViewFactoryMap,
+} from './services/view-registry';
+import type { ViewRenderContext } from './services/view-registry';
+import { lazy } from 'react';
 
 import { ToastProvider } from './services/toast/ToastContext';
+
+// 维度 3 步骤 1 / 3-E：视图 lazy factory 注入面。
+// registerBuiltInViews 不再自引 components（斩断 services/view-registry → components
+// 反向边）；实际 lazy import 在此注入（app → components 为合法下行边，无环）。
+// 每个 factory 返回 React.ComponentType<ViewRenderContext>（lazy + 适配器，
+// 把 ViewRenderContext 投影成各组件真实 props）。
+const builtinViewFactories: ViewFactoryMap = {
+  chat: () =>
+    lazy(() =>
+      import('./components/chat-card/ChatCard').then((m) => ({
+        default: (ctx: ViewRenderContext) => (
+          <m.ChatCard
+            sessionId={ctx.sessionId}
+            handleGlobalTabClick={ctx.openView}
+          />
+        ),
+      }))
+    ),
+  terminal: () =>
+    lazy(() =>
+      import('./components/workspace/TerminalCard').then((m) => ({
+        default: (ctx: ViewRenderContext) => <m.TerminalCard sessionId={ctx.sessionId} />,
+      }))
+    ),
+  preview: () =>
+    lazy(() =>
+      import('./components/workspace/PreviewCard').then((m) => ({
+        default: () => <m.PreviewCard />,
+      }))
+    ),
+  overview: () =>
+    lazy(() =>
+      import('./components/overview/OverviewCard').then((m) => ({
+        default: (ctx: ViewRenderContext) => (
+          <m.OverviewCard onOpenPanel={ctx.openView} />
+        ),
+      }))
+    ),
+  files: () =>
+    lazy(() =>
+      import('./components/files/FilesCard').then((m) => ({
+        default: () => <m.FilesCard />,
+      }))
+    ),
+  diff: () =>
+    lazy(() =>
+      import('./components/diff/DiffCard').then((m) => ({
+        default: () => <m.DiffCard />,
+      }))
+    ),
+  runtime: () =>
+    lazy(() =>
+      import('./components/workspace/RuntimePanel').then((m) => ({
+        default: () => <m.RuntimePanel />,
+      }))
+    ),
+  agent: () =>
+    lazy(() =>
+      import('./components/agent-card/AgentCard').then((m) => ({
+        default: () => <m.AgentCard />,
+      }))
+    ),
+  browser: () =>
+    lazy(() =>
+      import('./components/workspace/BrowserPanel').then((m) => ({
+        default: () => <m.BrowserPanel />,
+      }))
+    ),
+  'flow-dag': () =>
+    lazy(() =>
+      import('./components/workspace/FlowDagView').then((m) => ({
+        default: () => <m.FlowDagView />,
+      }))
+    ),
+  'file-viewer': () =>
+    lazy(() =>
+      import('./components/files/FileViewerCard').then((m) => ({
+        default: (ctx: ViewRenderContext) => {
+          const filePath = (ctx.params?.filePath as string) || '';
+          const initialMode =
+            (ctx.params?.initialMode as 'plain' | 'diff') || 'plain';
+          return (
+            <m.FileViewerCard
+              key={filePath}
+              filePath={filePath}
+              initialMode={initialMode}
+            />
+          );
+        },
+      }))
+    ),
+};
 
 // 必须在任何模块前执行 — 替换 appMode / productMode 的同步 localStorage 读
 initSsrGlobals();
@@ -23,7 +121,8 @@ document.documentElement.style.setProperty(
 
 async function startup() {
   // 微内核生命周期前置：显式注册 Conex 全量内置视图与插槽，彻底消除 ESM 模块加载副作用依赖
-  registerBuiltInViews();
+  // 维度 3 步骤 1 / 3-E：factory 由本文件注入（斩断 view-registry → components 反向边）
+  registerBuiltInViews(builtinViewFactories);
 
   // Phase 0: 等待 ServiceRegistry / ConfigService 初始化
   await import('./bootstrap-orchestrator').then((m) => m.ready);
@@ -34,7 +133,12 @@ async function startup() {
       bootstrapCore()
     );
   } catch (e) {
-    console.warn('[crish] bootstrap-core failed, continuing startup:', e);
+    logger.warn('[crish] bootstrap-core failed, continuing startup:', {
+      module: 'main',
+      err: e instanceof Error
+        ? { message: e.message, stack: e.stack, name: e.name }
+        : { message: String(e) },
+    });
   }
 
   // 将核心 store 暴露到 window，便于浏览器环境调试与自动化测试
@@ -50,7 +154,12 @@ async function startup() {
     win.__CRISH_LAYOUT_STORE__ = useLayoutStore;
     win.__CRISH_TREE_STORE__ = useLayoutTreeStore;
   } catch (e) {
-    console.warn('[crish] exposing stores failed:', e);
+    logger.warn('[crish] exposing stores failed:', {
+      module: 'main',
+      err: e instanceof Error
+        ? { message: e.message, stack: e.stack, name: e.name }
+        : { message: String(e) },
+    });
   }
 
   // Phase 1.5: 动态加载 React + App（失败则展示错误边界 fallback）
@@ -80,10 +189,20 @@ async function startup() {
         await import('./components/GlobalErrorBanner');
       GlobalErrorBanner = GEB;
     } catch (e) {
-      console.warn('[crish] failed to load GlobalErrorBanner (non-fatal):', e);
+      logger.warn('[crish] failed to load GlobalErrorBanner (non-fatal):', {
+        module: 'main',
+        err: e instanceof Error
+          ? { message: e.message, stack: e.stack, name: e.name }
+          : { message: String(e) },
+      });
     }
   } catch (e) {
-    console.error('[crish] fatal: failed to load React or App module:', e);
+    logger.error('[crish] fatal: failed to load React or App module:', {
+      module: 'main',
+      err: e instanceof Error
+        ? { message: e.message, stack: e.stack, name: e.name }
+        : { message: String(e) },
+    });
     const el = document.getElementById('root');
     if (el) {
       el.innerHTML =
@@ -121,7 +240,9 @@ async function startup() {
     // T5-4：AppErrorBoundary chunk 加载失败 → 内联静态错误面（复用上方
     // 「应用启动失败」同一套内联 HTML fallback 构造，不依赖任何 chunk）。
     // **不再回到裸 <App/>**——App 内再抛错即白屏，白屏路径必须消除。
-    console.error('[crish] fatal: failed to load AppErrorBoundary chunk');
+    logger.error('[crish] fatal: failed to load AppErrorBoundary chunk', {
+      module: 'main',
+    });
     const el = document.getElementById('root');
     if (el) {
       el.innerHTML =
@@ -146,7 +267,12 @@ async function startup() {
     import('./bootstrap-full')
       .then((m) => m.bootstrapFull())
       .catch((e) => {
-        console.warn('[crish] bootstrap-full failed (non-fatal):', e);
+        logger.warn('[crish] bootstrap-full failed (non-fatal):', {
+          module: 'main',
+          err: e instanceof Error
+            ? { message: e.message, stack: e.stack, name: e.name }
+            : { message: String(e) },
+        });
       });
   };
   if ('requestIdleCallback' in window) {
@@ -167,7 +293,9 @@ async function startup() {
     void import('tauri-plugin-mcp')
       .then((m) => m.setupPluginListeners())
       .then(() => {
-        console.info('[crish] tauri-plugin-mcp guest listeners ready');
+        logger.info('[crish] tauri-plugin-mcp guest listeners ready', {
+          module: 'main',
+        });
         // shell helpers for app_bridge (open_session / shell_snapshot)
         return import('./dev/mcpBridge').then((b) =>
           b.registerCrishMcpBridge()
@@ -175,7 +303,12 @@ async function startup() {
       })
       .catch((e) => {
         // Browser-only / plugin not linked: non-fatal
-        console.debug('[crish] tauri-plugin-mcp guest not available:', e);
+        logger.debug('[crish] tauri-plugin-mcp guest not available:', {
+          module: 'main',
+          err: e instanceof Error
+            ? { message: e.message, stack: e.stack, name: e.name }
+            : { message: String(e) },
+        });
       });
   }
 
@@ -186,22 +319,33 @@ async function startup() {
     const p = window.__crish_perf;
     const marks: Record<string, number[]> = {};
     p.marks = marks;
-    p.budgetExceeded = (entry: {
-      name: string;
-      duration: number;
-      budget: number;
-    }) => {
-      let list = marks[entry.name];
-      if (!list) {
-        list = [];
-        marks[entry.name] = list;
-      }
-      list.push(entry.duration);
-      if (list.length > 100) {
-        list.shift();
-      }
-    };
   }
+
+  // 修复 8：budgetExceeded 注册移出 DEV 守卫——生产环境也注册。
+  // 生产回调仅推入环形缓冲 + logger.warn，不推入 errorStore（预算超限是
+  // 性能信号，非用户可见错误）。
+  if (!window.__crish_perf) {
+    window.__crish_perf = {};
+  }
+  const perfBuf: Array<{ name: string; duration: number; budget: number }> =
+    [];
+  const PERF_BUF_MAX = 100;
+  window.__crish_perf.budgetExceeded = (entry: {
+    name: string;
+    duration: number;
+    budget: number;
+  }) => {
+    // 环形缓冲（max 100 条，溢出丢弃最旧）
+    perfBuf.push(entry);
+    if (perfBuf.length > PERF_BUF_MAX) {
+      perfBuf.shift();
+    }
+    // 仅 logger.warn，不推入 errorStore
+    logger.warn(
+      `[Perf] ${entry.name}: ${entry.duration.toFixed(1)}ms exceeds ${entry.budget}ms budget`,
+      { module: 'performance-budget' }
+    );
+  };
 }
 
 startup();

@@ -11,6 +11,7 @@
  */
 
 import { invokeResult, type InvokeResult } from './tauriInvoke';
+import { logger } from '../services/LoggerService';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -262,10 +263,12 @@ async function ensureTauriListen<T>(
             try {
               h(payload);
             } catch (err) {
-              console.warn(
-                `[ptySessionApi] handler error on ${eventName}`,
-                err
-              );
+              logger.warn(`[ptySessionApi] handler error on ${eventName}`, {
+                module: 'ptySessionApi',
+                err: err instanceof Error
+                  ? { message: err.message, stack: err.stack, name: err.name }
+                  : { message: String(err) },
+              });
             }
           }
         }

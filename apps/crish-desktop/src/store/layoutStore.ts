@@ -11,10 +11,6 @@ import { withPersist } from './middleware/withPersist';
 import type {
   } from './types';
 import {
-  createWorkspaceActions,
-  type WorkspaceActions,
-} from './workspaceActions';
-import {
   clampActiveWorkspaceIndex,
   createInitialLayoutDefaults,
 } from './layout-helpers/store-initializers';
@@ -48,20 +44,19 @@ export {
   DEFAULT_UI_SIZE,
   DEFAULT_SHELL_CHROME,
   SHELL_CHROME_IDS,
-  SHELL_CHROME_STORAGE_KEY,
   parseShellChromeMode,
   SETTINGS_TAB_IDS,
+  DEFAULT_SETTINGS_TAB,
   DEFAULT_TOKEN_USAGE,
   DEMO_TOKEN_USAGE,
   DEFAULT_WORKSPACE_ID,
-  UI_SIZE_STORAGE_KEY,
-  TAB_MODE_STORAGE_KEY,
 } from './layout-helpers/store-types';
 
 export {
   finiteNumber,
   parseUiSize,
-  isparseSettingsTab,
+  isSettingsTabType,
+  parseSettingsTab,
   sanitizeTokenUsage,
   sanitizeActiveWorkers,
   stripGhostPanelsFromWorkspace,
@@ -92,14 +87,10 @@ export type {
   SessionState,
   } from './types';
 
-import type {
-  WorkspaceStoreSlice,
-} from './workspaceActions';
-
 // ── LayoutStore interface ───────────────────────────────────────────────────
 
-/** 布局/壳层 UI + 工作区域（actions 见 WorkspaceActions / LayoutCoreActions） */
-export interface LayoutStore extends WorkspaceStoreSlice, WorkspaceActions {
+/** 纯几何布局与壳层 UI 视口域 Store */
+export interface LayoutStore {
   tabModeEnabled: boolean;
   uiSize: UiSize;
   /** 壳层形态：classic 扁平 / inset 嵌套圆角内容卡 */
@@ -118,8 +109,6 @@ export interface LayoutStore extends WorkspaceStoreSlice, WorkspaceActions {
   setChatMainSurface: (surface: 'chat' | 'scheduled') => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setTabModeEnabled: (enabled: boolean) => void;
-  /** 活动工作区切换（clamp 内建；C3 收敛点） */
-  setActiveWorkspaceIndex: (index: number) => void;
 }
 
 // ── Initial state (safe defaults + seed) ────────────────────────────────────
@@ -131,33 +120,23 @@ export const useLayoutStore = create<LayoutStore>()(
     withLogger(
       withPersist(
         immer((set, get) => ({
-          workspaces: _defaults.initialWorkspaces,
-          activeWorkspaceIndex: clampActiveWorkspaceIndex(
-            _defaults.initialWorkspaces,
-            0
-          ),
           tabModeEnabled: _defaults.initialTabMode,
           uiSize: _defaults.initialUiSize,
           shellChromeMode: _defaults.initialShellChrome,
           chatMainSurface: 'chat',
           sidebarCollapsed: false,
           hydrationComplete: false,
-          draggedTab: null,
-          dropPreview: null,
 
           // Layout Core Actions
           ...createLayoutCoreActions(set, get),
-
-          // 工作区 / 标签 DnD / 面板域（实现见 workspaceActions.ts）
-          ...createWorkspaceActions(set, get),
         })),
         {
           name: 'crish-layout-v1',
           partialize: (s) => ({
-            workspaces: s.workspaces,
             sidebarCollapsed: s.sidebarCollapsed,
-            activeWorkspaceIndex: s.activeWorkspaceIndex,
             tabModeEnabled: s.tabModeEnabled,
+            uiSize: s.uiSize,
+            shellChromeMode: s.shellChromeMode,
           }),
         }
       )

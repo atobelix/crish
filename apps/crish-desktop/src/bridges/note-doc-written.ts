@@ -22,6 +22,8 @@
  * - 本总线 **≠** 假关打开完成；写后读回 ≠ 权威已同步证明
  */
 
+import { logger } from '../services/LoggerService';
+
 // ---------------------------------------------------------------------------
 // 类型
 // ---------------------------------------------------------------------------
@@ -83,7 +85,12 @@ export function notifyNoteDocWritten(event: NoteDocWrittenEvent): void {
       listener(event);
     } catch (err) {
       // 单 listener 故障不得阻断其它 Strict 实例读回
-      console.error('[note-doc-written] listener error:', err);
+      logger.error('[note-doc-written] listener error', {
+        module: 'note-doc-written',
+        err: err instanceof Error
+          ? { message: err.message, stack: err.stack, name: err.name }
+          : { message: String(err) },
+      });
     }
   }
 }

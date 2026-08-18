@@ -19,6 +19,8 @@
  * - frame.chunkUpdates：chunk 级 DOM 更新通道，当前不用，保留以备细粒度 patch。
  */
 
+import { logger } from '../services/LoggerService';
+
 export interface RenderFrame {
   delta: string;
   full: string;
@@ -254,8 +256,11 @@ export class StreamRenderBuffer {
     // 实际耗时超 frameBudgetMs 才计数并 warn——超阈值才告警，常态零日志。
     if (!force && frameElapsed > this.frameBudgetMs) {
       this.frameOverrunCount += 1;
-      console.warn(
-        `[StreamRenderBuffer] 帧预算超限：${frameElapsed.toFixed(1)}ms > ${this.frameBudgetMs}ms`
+      logger.warn(
+        `[StreamRenderBuffer] 帧预算超限：${frameElapsed.toFixed(1)}ms > ${this.frameBudgetMs}ms (overrun #${this.frameOverrunCount})`,
+        {
+          module: 'StreamRenderBuffer',
+        },
       );
     }
     this.pending = remaining;

@@ -6,6 +6,7 @@
  */
 
 import { errorStore } from '../services/ErrorStore';
+import { logger } from '../services/LoggerService';
 
 const NETWORK_RE =
   /network|timeout|offline|econn|enotfound|econnrefused|not connected|failed to connect|connect(?:ion)? (?:failed|refused|reset|closed)|disconnected|unable to connect|proxy|dns|net::|fetch failed|socket/i;
@@ -319,15 +320,55 @@ export function assistantBubbleForFailure(input: unknown): string | null {
  */
 const PERSIST_DEGRADED_SCOPE_RE = /^(persist-degraded-|hydrate-degraded-)/;
 
-export function logInternalError(scope: string, input: unknown): void {
+/**
+ * logInternalError 可观测性选项（维度 5 扩面：severity 参数 + scope 路由）。
+ * - severity 缺省 = 'info'：仅 logger.warn，不推入 errorStore（向后兼容；
+ *   全仓 77 处既有调用点零改动仍保持原行为）。
+ * - severity = 'warning' / 'error'：额外推入 errorStore（用户可见错误面板）。
+ * - autoResolve：推入 errorStore 时是否允许自动解决（缺省 true）。
+ */
+export interface LogInternalErrorOptions {
+  severity?: 'info' | 'warning' | 'error';
+  autoResolve?: boolean;
+}
+
+export function logInternalError(
+  scope: string,
+  input: unknown,
+  options?: LogInternalErrorOptions
+): void {
+  const severity = options?.severity ?? 'info';
+  // 修复 1：删除 console.warn 裸调 → 改为 logger.warn，使所有 logInternalError
+  // 调用（全仓 77 处）自动经 LoggerService 统一输出（单一真源）。
   try {
-    console.warn(
-      `[crish-desktop][${scope}]`,
-      normalizeErrorText(input) || input
-    );
+    logger.warn(`[${scope}]`, {
+      module: 'userFacingErrors',
+      err: normalizeErrorText(input)
+        ? { message: normalizeErrorText(input) }
+        : undefined,
+    });
   } catch {
     /* ignore */
   }
+  // severity = 'warning'/'error' → 推入 errorStore
+  if (severity === 'warning' || severity === 'error') {
+    try {
+      errorStore.push({
+        code: scope,
+        module: 'userFacingErrors',
+        severity,
+        message: `内部错误（${scope}）`,
+        autoResolve: options?.autoResolve ?? true,
+        ...(normalizeErrorText(input)
+          ? { technical: normalizeErrorText(input) }
+          : {}),
+      });
+    } catch {
+      /* 上报失败不阻断主流程 */
+    }
+    return;
+  }
+  // persist-degraded-*/hydrate-degraded-* scope 保持原有推入行为
   if (PERSIST_DEGRADED_SCOPE_RE.test(scope)) {
     try {
       errorStore.push({

@@ -31,6 +31,7 @@ import {
   type ShellSessionLike,
 } from '../api/sessionTitle';
 import { recordShellEmptyAssert } from '../api/controlMetrics';
+import { logger } from '../services/LoggerService';
 
 /** 与 draftSession.PENDING_DRAFT_SESSION_ID 字面量对齐（避免 dev→store 环依赖） */
 const PENDING_DRAFT_ID = '__pending_draft__';
@@ -137,8 +138,11 @@ export function runEmptyShellAssert(
     for (const v of violations) {
       if (warnedIds.has(v.id)) continue;
       warnedIds.add(v.id);
-      console.warn(
+      logger.warn(
         `[empty-shell-assert] ${v.reason}: session "${v.id}" should have been pruned (I-DRAFT / shouldList)`,
+        {
+          module: 'empty-shell-assert',
+        },
       );
     }
   }

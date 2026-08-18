@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
+import { ResizeObserverManager } from '../services/ResizeObserverManager';
 
 export const COMPOSER_MIN_LINES = 2;
 export const COMPOSER_MAX_LINES = 10;
@@ -47,7 +48,7 @@ function applyAutoGrowHeight(
   ) {
     return;
   }
-  // 降级只读管线：不设 height = '0px'，消除按键强制重排
+  // 降级只读管线：重置 height 为 auto 准确测量内容缩小的真实 scrollHeight
   requestAnimationFrame(() => {
     const cs = getComputedStyle(el);
     const line = resolveComposerLineHeightPx(cs, COMPOSER_LINE_HEIGHT);
@@ -55,6 +56,7 @@ function applyAutoGrowHeight(
       (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
     const minH = composerMaxHeightPx(line, minLines, padY);
     const maxH = composerMaxHeightPx(line, maxLines, padY);
+    el.style.height = 'auto';
     const contentH = el.scrollHeight;
     const next = Math.min(Math.max(contentH, minH), maxH);
     el.style.height = `${next}px`;
@@ -84,19 +86,22 @@ export function useAutoGrowTextarea(value: string, maxLines = COMPOSER_MAX_LINES
     const onWin = () => applyHeight();
     window.addEventListener('resize', onWin);
 
-    let ro: ResizeObserver | null = null;
+    // 复用 ResizeObserverManager 单例（消灭独立 new ResizeObserver，
+    // 与布局动画冻结状态机共用同一 RO 实例，避免多 RO 竞争与内存浪费）
+    const roManager = ResizeObserverManager.getInstance();
+    const onResize = () => applyHeight();
     const el = ref.current;
-    if (el && typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(() => {
-        applyHeight();
-      });
-      ro.observe(el);
-      if (el.parentElement) ro.observe(el.parentElement);
+    if (el) {
+      roManager.observe(el, onResize);
+      if (el.parentElement) roManager.observe(el.parentElement, onResize);
     }
 
     return () => {
       window.removeEventListener('resize', onWin);
-      ro?.disconnect();
+      if (el) {
+        roManager.unobserve(el, onResize);
+        if (el.parentElement) roManager.unobserve(el.parentElement, onResize);
+      }
     };
   }, [applyHeight]);
 

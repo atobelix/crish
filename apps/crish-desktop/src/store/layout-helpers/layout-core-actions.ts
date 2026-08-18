@@ -1,25 +1,17 @@
-import type { WorkspaceState } from '../types';
 import {
-  SHELL_CHROME_STORAGE_KEY,
   parseShellChromeMode,
   type ShellChromeMode,
 } from '../../api/shellChrome';
-import { collapseToolColumnToTabs } from './ui-selectors';
 import {
   parseUiSize,
 } from './store-initializers';
 import {
-  TAB_MODE_STORAGE_KEY,
-  UI_SIZE_STORAGE_KEY,
   type UiSize,
 } from './store-types';
 
 /**
  * layout-core-actions 依赖的 state 面（AA-03 Q09 门禁：禁止 `: any`）。
- * 只声明本模块 recipe 读写的字段；layoutStore 结构上包含全部字段（结构子类型）。
- *
- * T11 瘦身：仅保留布局/壳层 UI + 设置浮层 action（共 8 个）；
- * 权限 / 设置 / worker / 输出缓冲（terminal + diff）action 已迁往对应域 store。
+ * 纯化为几何布局与壳层 UI 视口状态（uiSize / shellChromeMode / chatMainSurface / sidebarCollapsed / tabModeEnabled）。
  */
 export interface LayoutCoreState {
   uiSize: UiSize;
@@ -27,8 +19,6 @@ export interface LayoutCoreState {
   chatMainSurface: 'chat' | 'scheduled';
   sidebarCollapsed: boolean;
   tabModeEnabled: boolean;
-  workspaces: WorkspaceState[];
-  activeWorkspaceIndex: number;
 }
 
 export function createLayoutCoreActions(
@@ -41,22 +31,12 @@ export function createLayoutCoreActions(
       set((state) => {
         state.uiSize = next;
       });
-      try {
-        localStorage.setItem(UI_SIZE_STORAGE_KEY, next);
-      } catch {
-        /* ignore */
-      }
     },
     setShellChromeMode: (mode: ShellChromeMode) => {
       const next = parseShellChromeMode(mode);
       set((state) => {
         state.shellChromeMode = next;
       });
-      try {
-        localStorage.setItem(SHELL_CHROME_STORAGE_KEY, next);
-      } catch {
-        /* ignore */
-      }
     },
     setChatMainSurface: (surface: 'chat' | 'scheduled') =>
       set((state) => {
@@ -70,30 +50,7 @@ export function createLayoutCoreActions(
       const on = !!enabled;
       set((state) => {
         state.tabModeEnabled = on;
-        if (on) {
-          for (const ws of state.workspaces) {
-            collapseToolColumnToTabs(ws);
-          }
-        }
       });
-      try {
-        localStorage.setItem(TAB_MODE_STORAGE_KEY, on ? '1' : '0');
-      } catch {
-        /* ignore */
-      }
     },
-    /**
-     * 活动工作区切换（C3 收敛：Workspace.tsx 直写 clamp 迁入 store）。
-     * clamp 内建：越界 / 空列表 → 0。
-     */
-    setActiveWorkspaceIndex: (index: number) =>
-      set((state) => {
-        if (!state.workspaces.length) {
-          state.activeWorkspaceIndex = 0;
-          return;
-        }
-        const idx = Math.max(0, Math.floor(index) || 0);
-        state.activeWorkspaceIndex = Math.min(idx, state.workspaces.length - 1);
-      }),
   };
 }

@@ -3,7 +3,6 @@ import type { McpServer, CronJob } from '../../api/clientApi';
 import {
   DEFAULT_SHELL_CHROME,
   SHELL_CHROME_IDS,
-  SHELL_CHROME_STORAGE_KEY,
   parseShellChromeMode,
   type ShellChromeMode,
 } from '../../api/shellChrome';
@@ -23,7 +22,6 @@ export type { ShellChromeMode };
 export {
   DEFAULT_SHELL_CHROME,
   SHELL_CHROME_IDS,
-  SHELL_CHROME_STORAGE_KEY,
   parseShellChromeMode,
 };
 
@@ -94,10 +92,6 @@ export type ActiveWorkerState = {
 
 /** 首个工作区稳定 id（empty seed / close 重种共用） */
 export const DEFAULT_WORKSPACE_ID = 'ws-0';
-
-/** localStorage keys（集中，避免字面量漂移） */
-export const UI_SIZE_STORAGE_KEY = 'crish_ui_size';
-export const TAB_MODE_STORAGE_KEY = 'crish_tab_mode';
 
 /** syncTelemetryData 入参（去掉 data: any） */
 export type TelemetrySyncPayload = {

@@ -24,9 +24,9 @@ import { fileURLToPath } from 'node:url';
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const SRC_DIR = join(REPO_ROOT, 'apps', 'crish-desktop', 'src');
 
-/** 全部受检 store 实例的 setState 调用形态 */
+/** 全部受检 store 实例的 setState 调用形态（通用模式，不再枚举 store 名） */
 const STORE_SETSTATE_RE =
-  /use(?:Layout|Session|Workspace|SettingsUi|Terminal|Settings|Worker|Permission)Store\.setState\s*\(/g;
+  /use\w*Store\.setState\s*\(/g;
 
 /** 允许面目录（相对 SRC_DIR，posix 分隔） */
 const ALLOWED_DIRS = [

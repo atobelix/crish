@@ -15,7 +15,9 @@ import {
   findChatLeafBySessionId,
   listChatLeaves,
   listToolLeaves,
+  setPrimaryPanelChecker,
 } from '../layout-tree';
+import { viewRegistry } from '../../services/view-registry';
 
 vi.mock('../../api/projectStore', () => ({
   GENERAL_FOLDER: 'general',
@@ -33,6 +35,20 @@ vi.mock('../../api/storeAccess', () => ({
   getLayoutState: vi.fn(() => ({})),
 }));
 
+// 维度 3 步骤 1（3-C）：workspaceShellStore 不再直引 api/storeAccess 的
+// enterDraftMode/setActiveSessionId，改为 useSessionStore.getState() 原生 action。
+// mock sessionStore 提供 getState() 返回的 action spy，断言改为引用此 spy。
+const sessionSetActiveSessionId = vi.fn();
+const sessionEnterDraftMode = vi.fn();
+vi.mock('../sessionStore', () => ({
+  useSessionStore: {
+    getState: () => ({
+      setActiveSessionId: sessionSetActiveSessionId,
+      enterDraftMode: sessionEnterDraftMode,
+    }),
+  },
+}));
+
 vi.mock('../../api/workspaceChromeTabs', () => ({
   closeSessionTab: vi.fn(),
   syncOpenTabsToLegacy: vi.fn(),
@@ -44,7 +60,6 @@ vi.mock('../../api/workspaceChromeTabs', () => ({
 }));
 
 import { useWorkspaceShellStore } from './workspaceShellStore';
-import { setActiveSessionId } from '../../api/storeAccess';
 
 function resetLayout(tree: LayoutTree): void {
   useLayoutTreeStore.setState({
@@ -72,6 +87,9 @@ beforeEach(() => {
     version: 2,
     root: createLeaf('chat', ['chat'], 'chat'),
   });
+  // 维度 3 步骤 1（3-B）：注入 isPrimaryPanel checker（生产由 compositionRoot 注入；
+  // 单测无 bootstrap，须显式注入否则 listChatLeaves/listToolLeaves 全判为 tool）。
+  setPrimaryPanelChecker((id: string) => viewRegistry.isPrimary(id));
   vi.clearAllMocks();
 });
 
@@ -95,7 +113,7 @@ describe('activateTab / bindActiveChatLeafSession', () => {
     expect(bound).not.toBeNull();
     expect(bound!.id).toBe(chat.id);
     expect(layout.activeLeafId).toBe(chat.id);
-    expect(setActiveSessionId).toHaveBeenCalledWith('s-a');
+    expect(sessionSetActiveSessionId).toHaveBeenCalledWith('s-a');
     void tabB;
   });
 

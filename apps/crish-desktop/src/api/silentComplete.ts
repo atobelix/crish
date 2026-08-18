@@ -22,6 +22,7 @@
 import type { SessionMessage } from '../store/layoutStore';
 import { recordSilentComplete } from './controlMetrics';
 import { stripThoughtPlaceholders } from './markdownRenderLite';
+import { logger } from '../services/LoggerService';
 
 /** 静默完成原因（silent=true 时）或 not_silent */
 export type SilentCompleteReason =
@@ -206,10 +207,13 @@ export function alertSilentComplete(
   const rid = meta?.runId ? ` run=${meta.runId}` : '';
   const midPart = mid ? ` message=${mid}` : '';
 
-  console.warn(
+  logger.warn(
     `[silent-complete] ${result.reason}: run completed with no user-visible content` +
       `${sid}${rid}${midPart}` +
-      (result.detail ? ` (${result.detail})` : '')
+      (result.detail ? ` (${result.detail})` : ''),
+    {
+      module: 'silent-complete',
+    },
   );
 }
 

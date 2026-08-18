@@ -4,6 +4,7 @@
  */
 
 import { normalizeErrorText } from './userFacingErrors';
+import { logger } from '../services/LoggerService';
 
 export type StreamDiagEntry = {
   at: number;
@@ -37,16 +38,16 @@ export function recordStreamDiag(entry: Omit<StreamDiagEntry, 'at'> & { at?: num
   if (ring.length > MAX) ring.splice(0, ring.length - MAX);
   try {
     // 结构化日志，DevTools 可过滤 [crish-stream]
-    console.warn('[crish-stream]', {
-      scope: full.scope,
-      kind: full.kind,
-      message: full.message,
-      runId: full.runId,
-      sessionId: full.sessionId,
-      raw: full.raw,
-      context: full.context,
-      at: new Date(full.at).toISOString(),
-    });
+    logger.warn(
+      `[crish-stream] scope=${full.scope}${full.kind ? ` kind=${full.kind}` : ''} message=${full.message}` +
+        `${full.runId ? ` runId=${full.runId}` : ''}${full.sessionId ? ` sessionId=${full.sessionId}` : ''}` +
+        (full.raw ? ` raw=${full.raw}` : ''),
+      {
+        module: 'crish-stream',
+        ...(full.sessionId ? { sessionId: full.sessionId } : {}),
+        ...(full.runId ? { runId: full.runId } : {}),
+      },
+    );
   } catch {
     /* ignore */
   }

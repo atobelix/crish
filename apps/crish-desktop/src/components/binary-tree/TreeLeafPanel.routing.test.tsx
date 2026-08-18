@@ -8,7 +8,9 @@ import { useLayoutStore } from '../../store/layoutStore';
 import { useLayoutTreeStore } from '../../store/layout-tree';
 import { createLeaf } from '../../store/layout-tree/types';
 import type { SessionState } from '../../store/types';
-import { registerBuiltInViews } from '../../services/view-registry';
+import { registerBuiltInViews, type ViewFactoryMap } from '../../services/view-registry';
+import type { ViewRenderContext } from '../../services/view-registry';
+import { lazy } from 'react';
 
 // Mock the lazy components to verify props and routing
 vi.mock('../chat-card/ChatCard', () => ({
@@ -45,10 +47,58 @@ vi.mock('../files/FileViewerCard', () => ({
   ),
 }));
 
+// 维度 3 步骤 1 / 3-E：registerBuiltInViews 改为接收 factory 参数注入。
+// 测试仅 chat/files/file-viewer 被实际渲染（vi.mock 已拦截），其余视图用 stub。
+const stubFactory = () => (() => null) as unknown as React.ComponentType<ViewRenderContext>;
+const routingTestFactories: ViewFactoryMap = {
+  chat: () =>
+    lazy(() =>
+      import('../chat-card/ChatCard').then((m) => ({
+        default: (ctx: ViewRenderContext) => (
+          <m.ChatCard
+            sessionId={ctx.sessionId}
+            handleGlobalTabClick={ctx.openView}
+          />
+        ),
+      }))
+    ),
+  files: () =>
+    lazy(() =>
+      import('../files/FilesCard').then((m) => ({
+        default: () => <m.FilesCard />,
+      }))
+    ),
+  'file-viewer': () =>
+    lazy(() =>
+      import('../files/FileViewerCard').then((m) => ({
+        default: (ctx: ViewRenderContext) => {
+          const filePath = (ctx.params?.filePath as string) || '';
+          const initialMode =
+            (ctx.params?.initialMode as 'plain' | 'diff') || 'plain';
+          return (
+            <m.FileViewerCard
+              key={filePath}
+              filePath={filePath}
+              initialMode={initialMode}
+            />
+          );
+        },
+      }))
+    ),
+  terminal: stubFactory,
+  preview: stubFactory,
+  overview: stubFactory,
+  diff: stubFactory,
+  runtime: stubFactory,
+  agent: stubFactory,
+  browser: stubFactory,
+  'flow-dag': stubFactory,
+};
+
 describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
-    registerBuiltInViews();
+    registerBuiltInViews(routingTestFactories);
     useLayoutStore.setState((st) => {
       st.sessionsById = {
         'session-123': {

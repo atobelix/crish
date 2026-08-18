@@ -4,6 +4,7 @@
  */
 
 import type { StreamCancelFn } from './chat-bridge/ConnectionLifecycle';
+import { logger } from '../services/LoggerService';
 
 export type { StreamCancelFn, StreamCancelMode } from './chat-bridge/ConnectionLifecycle';
 
@@ -135,7 +136,10 @@ export class SessionStreamManager {
     schedule(() => {
       const start = this.starter;
       if (!start) {
-        console.warn('[SessionStreamManager] starter not bound; drop continue', sessionId);
+        logger.warn('[SessionStreamManager] starter not bound; drop continue', {
+          module: 'SessionStreamManager',
+          sessionId,
+        });
         return;
       }
       start(modelText, userMsgId, sessionId);

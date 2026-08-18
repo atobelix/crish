@@ -45,6 +45,7 @@ import {
 } from './sessionPersistenceTypes';
 import { invokeResult } from '../tauriInvoke';
 import { logInternalError } from '../userFacingErrors';
+import { logger } from '../../services/LoggerService';
 import { hasQuotaTruncation } from './sessionQuota';
 import { readAgentsTruncation } from './sessionAgentsTruncation';
 import {
@@ -198,8 +199,11 @@ export async function saveSessionBody(
   //（任何并发窗口下旧批次晚到都不得回滚新批次）。
   const written = writtenBodyVersion(sessionId);
   if (batchVersion <= written) {
-    console.warn(
-      `[sessionPersistence] 丢弃陈旧写批次 v${batchVersion}（会话 ${sessionId} 已落库 v${written}）`
+    logger.warn(
+      `[sessionPersistence] 丢弃陈旧写批次 v${batchVersion}（会话 ${sessionId} 已落库 v${written}）`,
+      {
+        module: 'sessionPersistence',
+      },
     );
     return;
   }

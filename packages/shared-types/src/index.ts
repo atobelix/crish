@@ -320,3 +320,30 @@ export type {
   MessageCacheState,
   RunCacheStats,
 } from './cache-metrics';
+
+// 引擎生成面（generated/engine）公共 re-export 面。
+// 维度 3 步骤 1（3-D 第 1 步）：消除 apps/crish-desktop 对
+// `packages/shared-types/src/generated/engine` 深路径的直引，统一经本公共面。
+//
+// 命名冲突处理：generated 的 `AgentMessage` / `AgentMessageBlock` 与上方
+// `./message` 的同名导出**字段不对齐**（generated.metadata 为 JsonValue、
+// 含 content?: string；message.metadata 为 JsonObject、无 content）。
+// ESM 规则：显式命名导出优先于 `export *` 通配，故裸 `AgentMessage`/
+// `AgentMessageBlock` 绑定到 `./message` 版本；generated 版需经显式 alias
+// （`EngineAgentMessage`/`EngineAgentMessageBlock`）才可达——消费方按需取用
+// （如 store/types.ts 取 `EngineAgentMessage as AgentMessage` 本地别名），
+// 避免静默拿到错误版本。其它与 ./tool 等冲突的生成名（ToolOutput 等）同理
+// 由既有显式导出覆盖，generated 版被遮蔽（不破坏既有消费方）。
+export * from './generated/engine/types';
+export type {
+  AgentMessage as EngineAgentMessage,
+  AgentMessageBlock as EngineAgentMessageBlock,
+} from './generated/engine/types';
+
+// generated/engine 运行期常量逐条 re-export（events.ts 的值常量；
+// types.ts 的 `as const` 值数组已由上方 `export *` 覆盖）。
+export {
+  ENGINE_EVENT_TYPES,
+  ENGINE_EVENT_BACKPRESSURE,
+  SUBAGENT_EVENT_KIND_BACKPRESSURE,
+} from './generated/engine/events';

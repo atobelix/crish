@@ -9,6 +9,7 @@ import { getCompositionRoot } from '../app/compositionRoot';
 import { currentWorkspaceFolderKey } from '../api/workspaceChromeTabs';
 import { getActiveProjectId } from '../api/projectStore';
 import { selectActiveTabSessionId } from '../store/workspace-shell';
+import { logger } from '../services/LoggerService';
 
 type McpBridge = {
   register: (
@@ -92,7 +93,7 @@ export function registerCrishMcpBridge(): void {
       'Snapshot workspace shell tabs + active session ids.'
     );
 
-    console.info('[crish] MCP app_bridge helpers registered');
+    logger.info('[crish] MCP app_bridge helpers registered', { module: 'mcpBridge' });
     return true;
   };
 

@@ -47,7 +47,12 @@ import {
   getActiveProjectId,
 } from '../../api/projectStore';
 import { isPendingDraft } from '../draftSession';
-import { enterDraftMode, setActiveSessionId } from '../../api/storeAccess';
+// 维度 3 步骤 1（3-C）：斩断 store → api/storeAccess 反向边。
+// 原先直引 `enterDraftMode, setActiveSessionId from '../../api/storeAccess'`，
+// 形成跨层反向边（store 域 → api 编排层）。现改用同层 store 原生 action
+// （useSessionStore.getState()），防御已在 sessionCrudActions 的 setActiveSessionId
+// 内补齐（trim + 空值；与 api/store-access/sessionAccess.normalizeSessionId 对齐）。
+import { useSessionStore } from '../sessionStore';
 import {
   closeSessionTab,
   syncOpenTabsToLegacy,
@@ -285,7 +290,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     if (existing) {
       // 已打开：聚焦 tab，并始终对齐 activeSessionId（禁止因 tab 已 active 而跳过）
       if (state.activeTabId === existing.tabId) {
-        setActiveSessionId(sid);
+        useSessionStore.getState().setActiveSessionId(sid);
         bindActiveChatLeafSession(sid);
         return;
       }
@@ -300,7 +305,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
       openTabs: [...state.openTabs, tab].slice(-MAX_OPEN_SESSION_TABS),
       activeTabId: tab.tabId,
     });
-    setActiveSessionId(sid);
+    useSessionStore.getState().setActiveSessionId(sid);
     // 侧栏打开：绑 session 到已有/unbound leaf；不 wipe 其它 unit 的 multi 布局
     bindActiveChatLeafSession(sid);
     // 仅保证至少 1 个 chat leaf 存在（normalize 不折叠 multi）
@@ -314,12 +319,12 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     if (!tab) return;
     // 同 tab 再点：仍同步 session id，避免 shell / session store 漂移
     if (state.activeTabId === tabId) {
-      setActiveSessionId(tab.sessionId);
+      useSessionStore.getState().setActiveSessionId(tab.sessionId);
       bindActiveChatLeafSession(tab.sessionId);
       return;
     }
     set({ activeTabId: tabId });
-    setActiveSessionId(tab.sessionId);
+    useSessionStore.getState().setActiveSessionId(tab.sessionId);
     // 聚焦该 session 的 chat leaf / unit（1:1）；不 auto-split、不 reproject dock（U10 / D1）
     bindActiveChatLeafSession(tab.sessionId);
     dedupeSessionLeavesInStore();
@@ -424,7 +429,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
 
     if (neighbor) {
       set({ openTabs: nextTabs, activeTabId: neighbor.tabId });
-      setActiveSessionId(neighbor.sessionId);
+      useSessionStore.getState().setActiveSessionId(neighbor.sessionId);
       bindActiveChatLeafSession(neighbor.sessionId);
       // 仅当邻居 dock 应展开但树上缺 tool 时补投影；多 unit 已就位则跳过
       if (neighborDockNeedsProject(neighbor.sessionId, neighbor.rightDock)) {
@@ -438,7 +443,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     // 无邻居：进入空白新对话界面（draft 不进 openTabs，不减标签以外的「假新对话 tab」）
     const realOnly = nextTabs.filter((t) => !isPendingDraft(t.sessionId));
     set({ openTabs: realOnly, activeTabId: null });
-    enterDraftMode(closing.workspaceKey);
+    useSessionStore.getState().enterDraftMode(closing.workspaceKey);
     ensureChatOnlyTree();
   },
 
@@ -501,7 +506,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
       // 无选中 tab → 条带无高亮；界面由 activeSessionId=PENDING_DRAFT 驱动 empty UI
       activeTabId: null,
     });
-    enterDraftMode(key);
+    useSessionStore.getState().enterDraftMode(key);
 
     // 关键：ChatCard 若钉死 leaf.sessionId，会忽略 PENDING_DRAFT → 看起来「点了没反应」
     // 解绑当前活动 chat leaf，让面板跟全局 draft 空态
@@ -540,7 +545,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
       openTabs: [],
       activeTabId: null,
     });
-    enterDraftMode(key);
+    useSessionStore.getState().enterDraftMode(key);
     ensureChatOnlyTree();
   },
 
@@ -570,7 +575,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     });
     const active = tabs[tabs.length - 1]!;
     if (!isPendingDraft(active.sessionId)) {
-      setActiveSessionId(active.sessionId);
+      useSessionStore.getState().setActiveSessionId(active.sessionId);
     }
     // Multi-unit tree restore: keep tree docks; only project when requested
     // (default collapsed shell dock would collapse restored units).

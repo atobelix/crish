@@ -30,6 +30,7 @@ import {
   registerCompositionRoot,
   resetCompositionRoot,
 } from './app/compositionRoot';
+import { logger } from './services/LoggerService';
 
 export function bootstrapServices(): () => void {
   const cleanups: Array<() => void> = [];
@@ -123,7 +124,8 @@ export function bootstrapServices(): () => void {
   // 1. EventBus is singleton — no init needed
 
   // 2. Install beforeunload flush (beforeunload/pagehide handlers)
-  installBeforeunloadFlush();
+  // 返回退订函数，供 cleanup 移除监听器（幂等；StrictMode 双执行安全）
+  cleanups.push(installBeforeunloadFlush());
 
   // 3. Start ConnectionManager (fire-and-forget, retries internally)
   // R-06 / T-E D2：空 catch 显式登记——连接失败不再静默（ErrorStore.push 内部
@@ -219,7 +221,12 @@ export function bootstrapServices(): () => void {
       try {
         fn();
       } catch (err) {
-        console.error('[bootstrap] cleanup error:', err);
+        logger.error('[bootstrap] cleanup error', {
+          module: 'bootstrap',
+          err: err instanceof Error
+            ? { message: err.message, stack: err.stack, name: err.name }
+            : { message: String(err) },
+        });
       }
     }
   };

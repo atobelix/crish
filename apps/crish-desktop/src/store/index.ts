@@ -1,8 +1,14 @@
 /**
  * store 公共入口（barrel）。
  *
- * 权威实现仍是单一 immer store：`useLayoutStore`（god-object）。
- * session / workspace / settingsUi 为域 facade（**aliases**，非第二实例）。
+ * T11 拆分后架构：各域为物理独立 zustand 实例（各自 create + persist/devtools）。
+ * - `useLayoutStore` — 几何布局与壳层 UI 视口域（persist: crish-layout-v1）
+ * - `useSessionStore` — 会话域（独立实例，persist: crish_session_store_v1）
+ * - `useWorkspaceStore` — 工作区面板域
+ * - `useSettingsUiStore` — 设置浮层 UI 域（独立实例）
+ * - `useSettingsStore` — 应用设置域（独立实例）
+ * - `usePermissionStore` — 权限/plan 域（独立实例）
+ * - `useTerminalStore` / `useWorkerStore` / `useThoughtInspectorStore` — 独立域
  *
  * Sibling stores (separate create):
  * - `workspace-shell` — TabSurface / dock write owner

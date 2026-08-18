@@ -32,6 +32,8 @@ export function readStoredTheme(): UiTheme {
   } catch {
     /* swallow-ok: 主题键读取失败时回退默认主题 */
   }
+  // 只读回退：兼容旧版 crish_settings JSON 中的 theme 字段，不再有写入方更新此字段；
+  // @deprecated 删除日期 2027-01-01
   try {
     const raw =
       localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(SETTINGS_KEY_LEGACY);
@@ -45,22 +47,13 @@ export function readStoredTheme(): UiTheme {
   return 'default';
 }
 
-/** 写独立 key + 合并进 settings JSON */
+/** 写独立 key crish_theme（唯一写面；维度 2 收敛：已删除 crish_settings JSON 合并写入） */
 export function persistTheme(theme: UiTheme): void {
   const t = normalizeTheme(theme);
   try {
     localStorage.setItem(THEME_KEY, t);
   } catch {
     /* swallow-ok: quota/隐私模式写主题尽力而为，失败回退内存态 */
-  }
-  try {
-    const raw =
-      localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(SETTINGS_KEY_LEGACY);
-    const current = raw ? (JSON.parse(raw) as Record<string, unknown>) : {};
-    current.theme = t;
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(current));
-  } catch {
-    /* swallow-ok: 同步到旧 settings 键尽力而为，主键已写成功 */
   }
 }
 

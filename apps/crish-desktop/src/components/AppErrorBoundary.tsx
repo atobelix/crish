@@ -14,6 +14,7 @@
 import React from 'react';
 import styles from './AppErrorBoundary.module.css';
 import { errorStore } from '../services/ErrorStore';
+import { logger, toErrMeta } from '../services/LoggerService';
 import { Button, Tooltip } from './ui';
 
 type Variant = 'fullscreen' | 'compact' | 'minimal';
@@ -113,7 +114,13 @@ export class AppErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error('[crish] render crash', error, info.componentStack);
+    // 修复 5：console.error → logger.error（可观测性链路统一到 LoggerService）。
+    // React componentStack 在下方 errorStore.push 的 technical 字段已记录，
+    // logger 只记标准 err meta（message/stack/name）。
+    logger.error('[crish] render crash', {
+      module: 'AppErrorBoundary',
+      err: toErrMeta(error),
+    });
     this.props.onError?.(error);
 
     const circuit = this.readCircuitState();
