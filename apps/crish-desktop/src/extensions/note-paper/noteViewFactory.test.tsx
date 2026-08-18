@@ -19,6 +19,7 @@ import {
   resolveExplicitNoteDocId,
   resolveNotePaperDoc,
 } from './productLeafBindings';
+import * as leafBindings from './productLeafBindings';
 
 function ctx(
   partial: Partial<ViewRenderContext> = {}
@@ -100,7 +101,7 @@ describe('note-paper factory（02 F4 / F10）', () => {
     expect(resolution.docId).not.toBe('chat-session-99');
   });
 
-  it('无显式、无 persist 查询源仍合成诚实空；recent 恒 null', () => {
+  it('无显式、无 persist 查询源仍合成诚实空；sync 默认 recent=null', () => {
     const spy = vi.spyOn(strictDoc, 'resolveProductStrictDocId');
     const resolution = resolveNotePaperDoc(
       ctx({ sessionId: 'chat-session-99', panelId: 'note', params: {} })
@@ -111,6 +112,31 @@ describe('note-paper factory（02 F4 / F10）', () => {
     expect(spy).toHaveBeenCalledWith(
       expect.objectContaining({ recentPersistedDocId: null })
     );
+  });
+
+  it('有 persist 查询结果时不用合成 id，binding=recent-persisted', () => {
+    const resolution = resolveNotePaperDoc(
+      ctx({ sessionId: 'chat-session-99', panelId: 'note', params: {} }),
+      'doc-persist-1'
+    );
+    expect(resolution.docId).toBe('doc-persist-1');
+    expect(resolution.binding).toBe('recent-persisted');
+    expect(resolution.docId).not.toBe('chat-session-99');
+    expect(resolution.docId).not.toBe(resolution.syntheticFallback);
+  });
+
+  it('显式 id 仍赢过 recent persist', () => {
+    const resolution = resolveNotePaperDoc(
+      ctx({
+        sessionId: 'chat-session-99',
+        panelId: 'note',
+        params: { docId: 'explicit-wins' },
+      }),
+      'doc-persist-1'
+    );
+    expect(resolution.docId).toBe('explicit-wins');
+    expect(resolution.binding).toBe('explicit-prop');
+    expect(resolution.docId).not.toBe('chat-session-99');
   });
 
   it('无显式时仍走 resolver 打开前 bind；不是 persist 查询，也不是 sessionId', () => {
@@ -158,6 +184,65 @@ describe('note-paper factory（02 F4 / F10）', () => {
     expect(host?.getAttribute('data-strict-doc-id')).not.toBe(
       host?.getAttribute('data-synthetic-strict-doc-id')
     );
+  });
+
+  it('叶宿主：查到 persist 行后切到该 id，不用合成 id', async () => {
+    vi.spyOn(leafBindings, 'loadRecentPersistedDocId').mockResolvedValue(
+      'doc-from-store'
+    );
+    const { container } = render(
+      <NoteLeafHost {...ctx({ sessionId: 'chat-session-99', panelId: 'note' })} />
+    );
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector('[data-note-leaf-host="true"]')
+          ?.getAttribute('data-strict-doc-id')
+      ).toBe('doc-from-store');
+    });
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(host).toHaveAttribute('data-strict-doc-binding', 'recent-persisted');
+    const panel = await screen.findByTestId('note-paper-strict-panel');
+    expect(panel.getAttribute('data-doc-id')).toBe('doc-from-store');
+    expect(panel.getAttribute('data-doc-id')).not.toBe('chat-session-99');
+    expect(panel.getAttribute('data-doc-id')).not.toBe('strict-default');
+  });
+
+  it('叶宿主：无 persist 行仍合成空；显式 id 仍赢', async () => {
+    const recentSpy = vi
+      .spyOn(leafBindings, 'loadRecentPersistedDocId')
+      .mockResolvedValue(null);
+    const { container, rerender } = render(
+      <NoteLeafHost {...ctx({ sessionId: 'chat-session-99', panelId: 'note' })} />
+    );
+    await waitFor(() => {
+      expect(recentSpy).toHaveBeenCalled();
+    });
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(host).toHaveAttribute('data-strict-doc-id', 'strict-default');
+    expect(host).toHaveAttribute('data-strict-doc-binding', 'synthetic-unbound');
+
+    recentSpy.mockResolvedValue('should-not-win');
+    rerender(
+      <NoteLeafHost
+        {...ctx({
+          sessionId: 'chat-session-99',
+          panelId: 'note',
+          params: { docId: 'explicit-leaf' },
+        })}
+      />
+    );
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector('[data-note-leaf-host="true"]')
+          ?.getAttribute('data-strict-doc-id')
+      ).toBe('explicit-leaf');
+    });
+    expect(
+      container.querySelector('[data-note-leaf-host="true"]')
+    ).toHaveAttribute('data-strict-doc-binding', 'explicit-prop');
+    expect(recentSpy.mock.results.length).toBeGreaterThan(0);
   });
 
   it('F10 叶壳带 data-open-complete=not-claimed 及既有 el 钉', async () => {
