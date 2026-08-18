@@ -1051,44 +1051,198 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ---- App Top Bar: Tab add/close & Window controls ----
+  // ---- App Top Bar: Tab Lifecycle, Drag Reorder & Split Screen ----
   const topBarNewTabBtn = document.getElementById('topBarNewTabBtn');
-  const tabCloseBtn = document.getElementById('tabCloseBtn');
   const tabsContainer = document.querySelector('.top-bar-tabs-container');
+  const splitDropOverlay = document.getElementById('splitDropOverlay');
+  const splitDropIndicatorRight = document.getElementById('splitDropIndicatorRight');
 
+  let tabCounter = 1;
+
+  function createGhostPill(title) {
+    const ghost = document.createElement('div');
+    ghost.className = 'topbar-tab-drag-ghost';
+    ghost.innerHTML = `
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect></svg>
+      <span>${title || '会话'}</span>
+    `;
+    document.body.appendChild(ghost);
+    return ghost;
+  }
+
+  function setupTabItem(tab) {
+    if (!tab || tab._tabInitialized) return;
+    tab._tabInitialized = true;
+
+    // 1. Click to activate
+    tab.addEventListener('click', (e) => {
+      if (e.target.closest('.tab-item-close-btn')) return;
+      tabsContainer.querySelectorAll('.session-tab-item').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+
+    // 2. Close with exit animation
+    const closeBtn = tab.querySelector('.tab-item-close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        tab.classList.add('is-leaving');
+        setTimeout(() => {
+          const wasActive = tab.classList.contains('active');
+          tab.remove();
+          if (wasActive) {
+            const remaining = tabsContainer.querySelectorAll('.session-tab-item:not(.is-leaving)');
+            if (remaining.length > 0) {
+              remaining[remaining.length - 1].classList.add('active');
+            }
+          }
+        }, 180);
+      });
+    }
+
+    // 3. Pointer Drag for Reordering & Split Screen
+    tab.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || e.target.closest('.tab-item-close-btn')) return;
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let isDragging = false;
+      let ghostEl = null;
+      let currentDropTarget = null;
+      let dropPosition = null; // 'before' | 'after' | 'split-right'
+
+      const title = tab.querySelector('.tab-item-title')?.textContent || '会话';
+
+      function onMouseMove(me) {
+        const dx = me.clientX - startX;
+        const dy = me.clientY - startY;
+
+        if (!isDragging && Math.hypot(dx, dy) >= 4) {
+          isDragging = true;
+          tab.classList.add('is-dragging');
+          ghostEl = createGhostPill(title);
+          document.body.style.userSelect = 'none';
+        }
+
+        if (!isDragging) return;
+
+        if (ghostEl) {
+          ghostEl.style.transform = `translate3d(${me.clientX + 12}px, ${me.clientY + 12}px, 0)`;
+        }
+
+        // Check if dragged into viewport for Split Screen
+        if (me.clientY > 36) {
+          if (splitDropOverlay) splitDropOverlay.classList.add('active');
+          if (me.clientX > window.innerWidth * 0.5) {
+            if (splitDropIndicatorRight) splitDropIndicatorRight.classList.add('show');
+            dropPosition = 'split-right';
+          } else {
+            if (splitDropIndicatorRight) splitDropIndicatorRight.classList.remove('show');
+            dropPosition = null;
+          }
+          // Clear tab reorder indicators
+          tabsContainer.querySelectorAll('.session-tab-item').forEach(t => {
+            t.classList.remove('drag-over-before', 'drag-over-after');
+          });
+          currentDropTarget = null;
+        } else {
+          // Inside Tab Bar: Reordering
+          if (splitDropOverlay) splitDropOverlay.classList.remove('active');
+          if (splitDropIndicatorRight) splitDropIndicatorRight.classList.remove('show');
+          dropPosition = null;
+
+          const elements = document.elementsFromPoint(me.clientX, me.clientY) || [];
+          const targetTab = elements.find(el => el.classList?.contains('session-tab-item') && el !== tab);
+
+          tabsContainer.querySelectorAll('.session-tab-item').forEach(t => {
+            t.classList.remove('drag-over-before', 'drag-over-after');
+          });
+
+          if (targetTab) {
+            currentDropTarget = targetTab;
+            const rect = targetTab.getBoundingClientRect();
+            const midX = rect.left + rect.width / 2;
+            if (me.clientX < midX) {
+              targetTab.classList.add('drag-over-before');
+              dropPosition = 'before';
+            } else {
+              targetTab.classList.add('drag-over-after');
+              dropPosition = 'after';
+            }
+          } else {
+            currentDropTarget = null;
+          }
+        }
+      }
+
+      function onMouseUp(me) {
+        window.removeEventListener('mousemove', onMouseMove);
+        window.removeEventListener('mouseup', onMouseUp);
+        document.body.style.userSelect = '';
+
+        if (ghostEl) {
+          ghostEl.remove();
+          ghostEl = null;
+        }
+
+        if (splitDropOverlay) splitDropOverlay.classList.remove('active');
+        if (splitDropIndicatorRight) splitDropIndicatorRight.classList.remove('show');
+
+        tab.classList.remove('is-dragging');
+        tabsContainer.querySelectorAll('.session-tab-item').forEach(t => {
+          t.classList.remove('drag-over-before', 'drag-over-after');
+        });
+
+        if (!isDragging) return;
+
+        if (dropPosition === 'split-right' && chatAppLayout) {
+          // Open Side Panel (Split Screen)
+          chatAppLayout.classList.add('has-side-panel');
+          if (window.syncComposerHorizontalAlignment) {
+            setTimeout(window.syncComposerHorizontalAlignment, 50);
+          }
+        } else if (currentDropTarget && dropPosition) {
+          if (dropPosition === 'before') {
+            tabsContainer.insertBefore(tab, currentDropTarget);
+          } else if (dropPosition === 'after') {
+            tabsContainer.insertBefore(tab, currentDropTarget.nextSibling);
+          }
+        }
+      }
+
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+    });
+  }
+
+  // Initialize existing tabs
+  if (tabsContainer) {
+    tabsContainer.querySelectorAll('.session-tab-item').forEach(setupTabItem);
+  }
+
+  // Create new tab with entry animation
   if (topBarNewTabBtn && tabsContainer) {
     topBarNewTabBtn.addEventListener('click', () => {
+      tabCounter++;
       const tab = document.createElement('div');
-      tab.className = 'session-tab-item active';
+      tab.className = 'session-tab-item active is-entering';
+      tab.title = `新对话 ${tabCounter}`;
       tab.innerHTML = `
-        <span class="tab-item-title">新对话</span>
-        <button class="tab-item-close-btn" title="关闭标签页">
+        <span class="tab-item-title">新对话 ${tabCounter}</span>
+        <button class="tab-item-close-btn" title="关闭标签页 (Ctrl+W)">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       `;
+
       // Deactivate siblings
       tabsContainer.querySelectorAll('.session-tab-item').forEach(t => t.classList.remove('active'));
       tabsContainer.insertBefore(tab, topBarNewTabBtn);
 
-      tab.addEventListener('click', () => {
-        tabsContainer.querySelectorAll('.session-tab-item').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-      });
+      setupTabItem(tab);
 
-      tab.querySelector('.tab-item-close-btn').addEventListener('click', (e) => {
-        e.stopPropagation();
-        tab.remove();
-        const remaining = tabsContainer.querySelectorAll('.session-tab-item');
-        if (remaining.length > 0) remaining[remaining.length - 1].classList.add('active');
-      });
-    });
-  }
-
-  if (tabCloseBtn) {
-    tabCloseBtn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const tab = document.getElementById('activeSessionTab');
-      if (tab) tab.remove();
+      setTimeout(() => {
+        tab.classList.remove('is-entering');
+      }, 220);
     });
   }
 
