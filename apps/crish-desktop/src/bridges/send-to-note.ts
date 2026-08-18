@@ -15,19 +15,21 @@
  */
 
 import { resolveNoteTransport, type NoteTransport } from '../api/noteApi';
+import {
+  EDITOR_SURFACE_CHAT,
+  EDITOR_SURFACE_NOTE_PAPER,
+  type EditorSurface,
+} from '../components/note-paper/editorSurface';
 import { notifyNoteDocWritten } from './note-doc-written';
 
 export type { NoteTransport };
 
-// ---------------------------------------------------------------------------
-// Surface 常量（本地；若 contract 后续导出 EditorSurface 可对齐替换）
-// ---------------------------------------------------------------------------
-
-export const EDITOR_SURFACE_CHAT = 'chat' as const;
-export const EDITOR_SURFACE_NOTE_PAPER = 'note-paper' as const;
-
-export type EditorSurface =
-  typeof EDITOR_SURFACE_CHAT | typeof EDITOR_SURFACE_NOTE_PAPER;
+// Surface：契约单源；桌面别名走 editorSurface（禁止本文件再写死字面量）
+export {
+  EDITOR_SURFACE_CHAT,
+  EDITOR_SURFACE_NOTE_PAPER,
+  type EditorSurface,
+};
 
 // ---------------------------------------------------------------------------
 // Intent / Result

@@ -1,22 +1,28 @@
 /**
  * 编辑呈现面常量（W5-A / A-SURF-01）
  *
- * 本地定义，避免阻塞 `@crish/block-paper-contract` 并行合并。
- * 仅允许 `chat` | `note-paper` 两个 surface；禁止第三权威面。
+ * 桌面入口：re-export `@crish/block-paper-contract`。
+ * 对外保留 `EDITOR_SURFACE_*` 别名（= 契约 `SURFACE_*`），避免改遍调用方。
+ * 禁止本文件再写死 `'chat' | 'note-paper'` 字面量。
+ * surface 单源 ≠ 打开完成 ≠ 关 EL ≠ 独立软件已拆。
  */
 
-export const EDITOR_SURFACE_CHAT = 'chat' as const;
-export const EDITOR_SURFACE_NOTE_PAPER = 'note-paper' as const;
+import {
+  EDITOR_SURFACES,
+  SURFACE_CHAT,
+  SURFACE_NOTE_PAPER,
+  type EditorSurface,
+} from '@crish/block-paper-contract';
 
-/** 编辑呈现面；禁止用 string 魔法值串门 */
-export type EditorSurface =
-  typeof EDITOR_SURFACE_CHAT | typeof EDITOR_SURFACE_NOTE_PAPER;
+export type { EditorSurface };
+export { EDITOR_SURFACES, SURFACE_CHAT, SURFACE_NOTE_PAPER };
 
-export const EDITOR_SURFACES: readonly EditorSurface[] = [
-  EDITOR_SURFACE_CHAT,
-  EDITOR_SURFACE_NOTE_PAPER,
-] as const;
+/** 契约 `SURFACE_CHAT` 的桌面别名 */
+export const EDITOR_SURFACE_CHAT = SURFACE_CHAT;
+
+/** 契约 `SURFACE_NOTE_PAPER` 的桌面别名 */
+export const EDITOR_SURFACE_NOTE_PAPER = SURFACE_NOTE_PAPER;
 
 export function isEditorSurface(value: unknown): value is EditorSurface {
-  return value === EDITOR_SURFACE_CHAT || value === EDITOR_SURFACE_NOTE_PAPER;
+  return value === SURFACE_CHAT || value === SURFACE_NOTE_PAPER;
 }
