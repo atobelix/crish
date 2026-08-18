@@ -111,6 +111,4 @@
 
 <!-- BASELINE_START -->
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
-apps/crish-desktop/src/components/settings-mcp/McpServerList.tsx 434
-apps/crish-desktop/src/components/ui/Menu/Menu.tsx 426
 <!-- BASELINE_END -->

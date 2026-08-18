@@ -16,6 +16,7 @@ import {
 } from './types';
 import { McpServerTools } from './McpServerTools';
 import { McpServerToolbar } from './McpServerToolbar';
+import { McpServerFilterEmpty } from './McpServerFilterEmpty';
 import type {
   McpServersGroup,
   McpUiGroup,
@@ -68,44 +69,7 @@ export const McpServerList: React.FC<McpServerListProps> = ({
     ? EMPTY_LIVE_HINT_CONFIGURED
     : EMPTY_LIVE_HINT_UNCONFIGURED;
 
-  const renderFilterEmpty = (hasAny: boolean) => {
-    if (loading) {
-      return (
-        <div
-          className={`${styles.mcpEmptyLine} mcp-empty-line`}
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-        >
-          <span>加载中…</span>
-        </div>
-      );
-    }
-    if (!hasAny) return null;
-    if (!filterActive) return null;
-    return (
-      <div
-        className={`${styles.mcpEmptyLine} mcp-empty-line`}
-        role="status"
-        aria-live="polite"
-      >
-        <Tooltip content={EMPTY_FILTER_HINT}>
-          <span>无匹配</span>
-        </Tooltip>
-        <Tooltip content={EMPTY_FILTER_HINT}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onClearFilter}
-            aria-label="清除筛选"
-          >
-            清除筛选
-          </Button>
-        </Tooltip>
-      </div>
-    );
-  };
+
 
   const renderSharedToolbar = () => (
     <McpServerToolbar
@@ -155,9 +119,9 @@ export const McpServerList: React.FC<McpServerListProps> = ({
           </div>
         ) : null}
         {!isBusy && totalCount > 0 && items.length === 0 && filterActive
-          ? renderFilterEmpty(true)
+          ? <McpServerFilterEmpty loading={isBusy} hasAny filterActive onClearFilter={onClearFilter} />
           : null}
-        {isBusy && totalCount === 0 ? renderFilterEmpty(true) : null}
+        {isBusy && totalCount === 0 ? <McpServerFilterEmpty loading={isBusy} hasAny filterActive onClearFilter={onClearFilter} /> : null}
       </div>
     );
   };
