@@ -265,6 +265,19 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
     );
   });
 
+  // D2 默认：产品叶无 Tauri → mdPrefix disabled / sink=none
+  // 测头自钉：jsdom 绿 ≠ 打开完成 ≠ 关 EL；不复制 d2 夹具注入可写
+  it('conn_ext_md_prefix_no_tauri_disabled', async () => {
+    const { container } = render(<NoteLeafHost {...ctx()} />);
+    const panel = await screen.findByTestId('note-paper-strict-panel');
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(screen.queryByTestId('open-note-paper-strict')).toBeNull();
+    expect(host).toHaveAttribute('data-md-prefix-write-mode', 'disabled');
+    expect(host).toHaveAttribute('data-md-prefix-sink-source', 'none');
+    expect(panel).toHaveAttribute('data-md-prefix-write-mode', 'disabled');
+    expect(panel).toHaveAttribute('data-md-prefix-sink-source', 'none');
+  });
+
   it('conn_ext_g2_same_doc_notify_reloads', async () => {
     const mem = createMemoryNoteTransport();
     mem.seedDoc('doc-ext-g2', [['s1', 'paragraph', 'seed-ext-g2']]);

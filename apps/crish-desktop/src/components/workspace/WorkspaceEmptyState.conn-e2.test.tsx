@@ -2,16 +2,24 @@
 /**
  * WorkspaceEmptyState · CONN-E2 mirror StatusBar
  *
- * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**
- * （≠ 产品入口 ≠ G-HYD ≠ 打开完成）。
- * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
+ * 夹具 ≠ 产品入口 ≠ 打开完成 ≠ EL-03。jsdom 绿 ≠ 真壳。
+ *
+ * 直渲 EmptyState 着陆：`data-mirror-drift-bar=0` / 无 StatusBar / 诚实锚
+ * 会计留下（夹具默认关）。
+ *
+ * 「点 CTA 再证面板默认无 StatusBar」产品叶等价见
+ * `NoteLeafHost.conn-ext.test.tsx` `conn_ext_e2_prime_policy_on_no_tauri`
+ * 与 `Workspace.conn-e2-prime.test.tsx`
+ * `conn_e2p_empty_state_direct_still_defaults_off` /
+ * `conn_e2p_no_tauri_does_not_fabricate_report`
+ * （本文件已删该重复 CTA 段）。
+ * 产品默开 detect 见 e2-prime / conn-ext。
+ *
+ * `showMirrorDriftBar` / `mirrorDriftReport` / `mirrorIpc` / X-05 unpushed
+ * 是夹具注入面：叶不吃这些 EmptyState prop；禁止给叶加测试专用 prop。
  *
  * 自 WorkspaceEmptyState.strict.test.tsx 按域拆出（SD-35）；CONN-E3 再拆至
  * WorkspaceEmptyState.conn-e3.test.tsx（SD-42）。断言语义不变。
- *
- * - **CONN-E2**：mirror StatusBar 默认关；`showMirrorDriftBar` / `mirrorDriftReport`
- *   opt-in 才挂；注入 report → 三路可测；`mirrorIpc` → accept 走 import（X-05）；
- *   **≠ EL-03**；**≠ inotify 满关**；无 report 不造假
  *
  * 夹具测头见 WorkspaceEmptyState.strict.test.tsx。
  * CONN-E3 detect 调度见 WorkspaceEmptyState.conn-e3.test.tsx。
@@ -28,44 +36,30 @@ import {
 
 describe('WorkspaceEmptyState · CONN-E2 mirror StatusBar', () => {
   // -------------------------------------------------------------------------
-  // CONN-E2：夹具路径 mirror StatusBar opt-in 装配
-  // 默认关；注入 report → 可见 + 三路可测；mirrorIpc → import；X-05 不回退
-  // ≠ 产品入口 ≠ G-HYD ≠ 打开完成；≠ EL-03；≠ inotify 满关；无 report 不造假
+  // CONN-E2：夹具着陆会计（默认关）+ opt-in 注入（叶不吃这些 EmptyState prop）
+  // ≠ 产品入口 ≠ 打开完成；≠ EL-03；≠ inotify 满关；无 report 不造假
+  // 产品默开 detect 见 e2-prime / conn-ext
   // -------------------------------------------------------------------------
 
-  it('conn_e2_product_empty_default_no_mirror_status_bar', async () => {
+  it('conn_e2_product_empty_default_no_mirror_status_bar', () => {
     render(<WorkspaceEmptyState wsId="ws-conn-e2-off" />);
     const root = screen.getByRole('status');
     expect(root).toHaveAttribute('data-mirror-drift-bar', '0');
     expect(root).toHaveAttribute('data-el03', 'not-claimed');
     expect(root).toHaveAttribute('data-inotify-full', 'not-claimed');
-
-    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
-    await waitFor(() => {
-      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
-        'data-hydrate-status',
-        'ready'
-      );
-    });
-
-    expect(screen.getByTestId('note-paper-strict-host')).toHaveAttribute(
-      'data-mirror-drift-bar',
-      '0'
-    );
     expect(screen.queryByTestId('mirror-drift-status-bar')).toBeNull();
-    // hydrate 锚不回退
-    expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
-      'data-hydrate-source',
-      'fixture'
-    );
+    // 不再点 CTA；面板默认无条见 conn-ext / e2-prime
   });
 
   it('conn_e2_product_empty_showMirrorDriftBar_idle_no_fake_report', async () => {
+    // 夹具注入面（showMirrorDriftBar）；叶不吃该 EmptyState prop
     render(
       <WorkspaceEmptyState
         wsId="ws-conn-e2-idle"
-        showMirrorDriftBar
-        mirrorWatchSource="poll"
+        mirror={{
+          showMirrorDriftBar: true,
+          mirrorWatchSource: 'poll',
+        }}
       />
     );
     expect(screen.getByRole('status')).toHaveAttribute(
@@ -94,20 +88,23 @@ describe('WorkspaceEmptyState · CONN-E2 mirror StatusBar', () => {
   });
 
   it('conn_e2_product_empty_injected_report_shows_bar_and_three_way', async () => {
+    // 夹具注入面（mirrorDriftReport）；叶不吃该 EmptyState prop
     const seen: ThreeWayDecision[] = [];
     const docId = 'strict-ws-conn-e2-rpt';
     render(
       <WorkspaceEmptyState
         wsId="ws-conn-e2-rpt"
-        mirrorDriftReport={makeMirrorDriftReportView({
-          docId,
-          class: 'mirror_only',
-          pendingLag: 2,
-        })}
-        mirrorWatchSource="injected"
-        mirrorUnpushedOpCount={0}
-        onMirrorThreeWay={(d) => {
-          seen.push(d);
+        mirror={{
+          mirrorDriftReport: makeMirrorDriftReportView({
+            docId,
+            class: 'mirror_only',
+            pendingLag: 2,
+          }),
+          mirrorWatchSource: 'injected',
+          mirrorUnpushedOpCount: 0,
+          onMirrorThreeWay: (d) => {
+            seen.push(d);
+          },
         }}
       />
     );
@@ -155,6 +152,7 @@ describe('WorkspaceEmptyState · CONN-E2 mirror StatusBar', () => {
   });
 
   it('conn_e2_product_empty_mirrorIpc_accept_imports_and_x05_blocks', async () => {
+    // 夹具注入面（mirrorIpc + X-05 unpushed）；叶不吃这些 EmptyState prop
     const docId = 'strict-ws-conn-e2-ipc';
     const ipc = createMockNoteMirrorIpc({
       [docId]: { class: 'mirror_only' },
@@ -207,6 +205,7 @@ describe('WorkspaceEmptyState · CONN-E2 mirror StatusBar', () => {
   });
 
   it('conn_e2_product_empty_onMirrorThreeWay_overrides_mirrorIpc', async () => {
+    // 夹具注入面（onMirrorThreeWay 优先 mirrorIpc）；叶不吃这些 EmptyState prop
     const ipc = createMockNoteMirrorIpc({
       'strict-ws-conn-e2-ov': { class: 'both' },
     });

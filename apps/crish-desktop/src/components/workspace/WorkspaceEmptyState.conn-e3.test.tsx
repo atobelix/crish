@@ -2,17 +2,21 @@
 /**
  * WorkspaceEmptyState · CONN-E3 detect→report 调度
  *
- * 直渲 EmptyState + 点 `open-note-paper-strict` = **夹具路径**
- * （≠ 产品入口 ≠ G-HYD ≠ 打开完成）。
- * 产品默开在扩展叶（NoteLeafHost），见 conn_ext / c2-prod / e2-prime。
+ * 夹具 ≠ 产品入口 ≠ 打开完成 ≠ EL-03 ≠ inotify 满关。
  *
- * 自 WorkspaceEmptyState.conn-e2.test.tsx 按域拆出（SD-42）；断言语义不变。
+ * 直渲 EmptyState 着陆：`data-mirror-detect-schedule=0` / 零 detect
+ * 会计留下（夹具默认关；仅有 mirrorIpc、未 enable 亦不调度）。
  *
- * - **CONN-E3**：detect→report 调度默认关；`enableMirrorDetectSchedule` + `mirrorIpc`
- *   → mock/Tauri detect → report 喂 StatusBar；`data-mirror-detect-schedule=0|1`；
- *   关时无 detect 定时器；X-05 / import 不回退；**≠ EL-03**；**≠ inotify 满关**
+ * 「点 CTA 再证未 enable 则面板也不调度」产品叶等价见
+ * `NoteLeafHost.conn-ext.test.tsx` `conn_ext_e2_prime_policy_on_no_tauri`
+ * / `Workspace.conn-e2-prime.test.tsx` `conn_e2p_no_tauri_does_not_fabricate_report`
+ * （本文件已删该重复 CTA 段）。
  *
- * 夹具测头见 WorkspaceEmptyState.strict.test.tsx。
+ * `enableMirrorDetectSchedule` + mock ipc 才调度：夹具 opt-in。
+ * 产品叶走策略常量 true + 产品 IPC（无 Tauri 为 undefined）。
+ * 禁止给叶加 EmptyState 同款 prop。X-05 it 留夹具（叶不传 unpushed）。
+ *
+ * 自 WorkspaceEmptyState.conn-e2.test.tsx 按域拆出（SD-42）。
  * CONN-E2 StatusBar 见 WorkspaceEmptyState.conn-e2.test.tsx。
  */
 import React from 'react';
@@ -23,12 +27,12 @@ import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 
 describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
   // -------------------------------------------------------------------------
-  // CONN-E3：夹具路径 detect→report 调度（opt-in）
-  // 默认不调度；enable + mirrorIpc → detect → report 可达 StatusBar
-  // ≠ 产品入口 ≠ G-HYD ≠ 打开完成；≠ EL-03；≠ inotify 满关；X-05 / import 不回退
+  // CONN-E3：landing 会计（默认不调度）+ 夹具 opt-in
+  // enable + mock ipc 才调度；产品叶走策略常量 + 产品 IPC
+  // ≠ 产品入口 ≠ 打开完成；≠ EL-03；≠ inotify 满关
   // -------------------------------------------------------------------------
 
-  it('conn_e3_product_empty_default_no_detect_schedule', async () => {
+  it('conn_e3_product_empty_default_no_detect_schedule', () => {
     const ipc = createMockNoteMirrorIpc({
       'strict-ws-conn-e3-off': { class: 'mirror_only' },
     });
@@ -43,24 +47,11 @@ describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
 
     // 仅有 mirrorIpc、未 enable 调度 → 零 detect
     expect(ipc.detectCalls).toHaveLength(0);
-
-    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
-    await waitFor(() => {
-      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
-        'data-hydrate-status',
-        'ready'
-      );
-    });
-
-    expect(screen.getByTestId('note-paper-strict-host')).toHaveAttribute(
-      'data-mirror-detect-schedule',
-      '0'
-    );
-    expect(screen.queryByTestId('mirror-drift-status-bar')).toBeNull();
-    expect(ipc.detectCalls).toHaveLength(0);
+    // 不再点 CTA；未 enable 则面板也不调度见 conn-ext / e2-prime
   });
 
   it('conn_e3_product_empty_opt_in_detect_fills_report_and_bar', async () => {
+    // 夹具 opt-in：enable + mock ipc。产品叶走策略常量 + 产品 IPC，无 EmptyState 同款 prop。
     const docId = 'strict-ws-conn-e3-on';
     const ipc = createMockNoteMirrorIpc({
       [docId]: {
@@ -88,7 +79,7 @@ describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
     expect(root).toHaveAttribute('data-el03', 'not-claimed');
     expect(root).toHaveAttribute('data-inotify-full', 'not-claimed');
 
-    // opt-in → mock detect 被调
+    // 夹具 opt-in → mock detect 被调（≠ 产品入口 / 打开完成）
     await waitFor(() => {
       expect(ipc.detectCalls.length).toBeGreaterThanOrEqual(1);
     });
@@ -123,8 +114,9 @@ describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
     expect(ipc.importCalls[0]?.unpushedOpCount).toBe(0);
   });
 
-  it('conn_e3_product_empty_enable_without_ipc_no_detect', async () => {
-    // enable 但无 ipc → scheduleActive=false；不假装已调度
+  it('conn_e3_product_empty_enable_without_ipc_no_detect', () => {
+    // 夹具：enable 但无 ipc → scheduleActive=false；不假装已调度
+    // 产品叶无 Tauri 时 IPC 为 undefined，见 e2-prime / conn-ext
     render(
       <WorkspaceEmptyState wsId="ws-conn-e3-noipc" mirror={{ enableMirrorDetectSchedule: true }} />
     );
@@ -134,6 +126,7 @@ describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
   });
 
   it('conn_e3_product_empty_opt_in_x05_still_blocks_silent_drop', async () => {
+    // 夹具 X-05：须注入 unpushed；产品叶不传该 prop。夹具 ≠ 产品入口。
     const docId = 'strict-ws-conn-e3-x05';
     const ipc = createMockNoteMirrorIpc({
       [docId]: { class: 'both' },
