@@ -2,23 +2,30 @@
 /**
  * WorkspaceEmptyState · CONN-C2′（C-prod）PaperList 产品默开
  *
- * - 新策略常量 `WORKSPACE_PRODUCT_ENABLE_PAPER_LIST = true`（workspaceProductPaperList.ts）
- * - 产品宿主 `WorkspaceProductEmptyHost` 显式传参 → 空态 Strict 挂 PaperList
- *   （产品默认 `presentationMode=paper-list`）
- * - EmptyState **组件默认仍 false**：`conn_c2_default_no_paper_list` 保留不回退
- * - presentationMode 互斥不回退：paper-list ⇄ content-row；debug-dual 仅显式
+ * 夹具 ≠ 产品入口 ≠ 打开完成。
+ * Host / EmptyState 是夹具（04 D3 暂留，不删壳）；产品到达面是
+ * `activateNotePaper` 后的 `NoteLeafHost` 叶。
  *
- * ≠ W3-P（满窗 / 真 Diff / awareness）· ≠ EL-01
- * 默开 ≠ PaperList 完成；C2′ 新 ID ≠ C2 整包；
- * 产品默开是策略级决策（同 E2′ 形态），非组件语义变更
+ * - 策略常量 `WORKSPACE_PRODUCT_ENABLE_PAPER_LIST = true`
+ * - 产品叶消费常量 → Strict `data-paper-list=1` / `presentationMode=paper-list`
+ * - EmptyState **组件默认仍 false**：src 钉不回退
+ * - presentationMode 互斥不回退：paper-list ⇄ content-row
+ *
+ * ≠ W3-P · ≠ EL-01 · 默开 ≠ PaperList 完成 · jsdom 绿 ≠ 打开完成
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React from 'react';
-import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { WorkspaceProductEmptyHost } from './workspaceProductMirrorDetect';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import { viewRegistry } from '../../services/view-registry';
+import type { ViewRenderContext } from '../../services/view-registry';
+import {
+  activateNotePaper,
+  deactivateNotePaper,
+} from '../../extensions/note-paper/activate';
+import { NoteLeafHost } from '../../extensions/note-paper/NoteLeafHost';
 import { WORKSPACE_PRODUCT_ENABLE_PAPER_LIST } from './workspaceProductPaperList';
 
 const DIR =
@@ -26,47 +33,75 @@ const DIR =
     ? dirname(fileURLToPath(import.meta.url))
     : join(process.cwd(), 'apps/crish-desktop/src/components/workspace');
 
+const EXT_DIR = join(DIR, '../../extensions/note-paper');
+
 function readWorkspaceSrc(name: string): string {
   return readFileSync(join(DIR, name), 'utf8');
 }
 
-async function openStrictAndWait() {
-  fireEvent.click(screen.getByTestId('open-note-paper-strict'));
+function readExt(name: string): string {
+  return readFileSync(join(EXT_DIR, name), 'utf8');
+}
+
+function ctx(partial: Partial<ViewRenderContext> = {}): ViewRenderContext {
+  return {
+    panelId: 'note',
+    leafId: 'leaf-c2-prod',
+    sessionId: 'chat-session-99',
+    isActive: true,
+    openView: () => {},
+    params: {},
+    ...partial,
+  };
+}
+
+/** 产品入口：activate 后渲叶（≠ 点夹具 CTA）。 */
+async function activateAndRenderLeaf(
+  partial: Partial<ViewRenderContext> = {}
+) {
+  activateNotePaper();
+  expect(viewRegistry.getView('note')).toBeDefined();
+  const view = render(<NoteLeafHost {...ctx(partial)} />);
   await waitFor(() => {
     expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
       'data-hydrate-status',
       'ready'
     );
   });
+  return view;
 }
 
 describe('WorkspaceEmptyState · CONN-C2′ PaperList 产品默开', () => {
   // -------------------------------------------------------------------------
-  // CONN-C2′：产品宿主默开 PaperList（组件默认仍 false 不回退）
-  // - 策略常量 = true；宿主裸渲染 → data-product-paper-list=1
-  // - 打开 Strict → host/panel data-paper-list=1 + presentationMode=paper-list
-  // - ≠ EL-01；≠ W3-P 满窗；默开 ≠ PaperList 完成
+  // CONN-C2′：产品叶默开 PaperList（夹具 Host / EmptyState 默认仍 false）
+  // - 策略常量 = true；activate → NoteLeafHost → data-paper-list=1
+  // - ≠ EL-01；≠ W3-P 满窗；夹具 ≠ 产品入口 ≠ 打开完成
   // -------------------------------------------------------------------------
 
+  beforeEach(() => {
+    deactivateNotePaper();
+  });
+
+  afterEach(() => {
+    act(() => {
+      deactivateNotePaper();
+    });
+  });
+
   it('conn_c2_prod_default_paper_list_on', async () => {
-    // 策略常量语义 = C2′ 产品默开
     expect(WORKSPACE_PRODUCT_ENABLE_PAPER_LIST).toBe(true);
 
-    render(<WorkspaceProductEmptyHost wsId="ws-c2-prod" />);
+    const { container } = await activateAndRenderLeaf();
 
-    const root = screen.getByRole('status');
-    expect(root).toHaveAttribute('data-product-paper-list', '1');
-    expect(root).toHaveAttribute('data-el01', 'not-claimed');
-    expect(root).toHaveAttribute('data-w3p-full', 'not-claimed');
-
-    await openStrictAndWait();
-
-    const host = screen.getByTestId('note-paper-strict-host');
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(host).toBeTruthy();
     expect(host).toHaveAttribute('data-product-paper-list', '1');
     expect(host).toHaveAttribute('data-el01', 'not-claimed');
     expect(host).toHaveAttribute('data-w3p-full', 'not-claimed');
+    expect(host).toHaveAttribute('data-open-complete', 'not-claimed');
 
     const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(host?.contains(panel)).toBe(true);
     expect(panel).toHaveAttribute('data-paper-list', '1');
     expect(panel).toHaveAttribute('data-presentation-mode', 'paper-list');
     expect(screen.getByTestId('note-paper-strict-paper-list')).toHaveAttribute(
@@ -76,19 +111,17 @@ describe('WorkspaceEmptyState · CONN-C2′ PaperList 产品默开', () => {
   });
 
   it('conn_c2_prod_paper_list_mutex_content_row', async () => {
-    render(<WorkspaceProductEmptyHost wsId="ws-c2-prod-mutex" />);
+    const { container } = await activateAndRenderLeaf();
 
-    await openStrictAndWait();
-
+    const host = container.querySelector('[data-note-leaf-host="true"]');
     const panel = screen.getByTestId('note-paper-strict-panel');
-    // 产品默开 → paper-list 内容槽挂载；与 content-row 互斥（非 debug-dual 双内容）
+    expect(host?.contains(panel)).toBe(true);
     expect(screen.getByTestId('note-paper-strict-paper-list')).toHaveAttribute(
       'data-bp-paper-list-mount',
       '1'
     );
     expect(panel.querySelectorAll('[data-content-row="1"]').length).toBe(0);
     expect(panel).toHaveAttribute('data-presentation-mode', 'paper-list');
-    // chrome 分槽仍可同屏（不计入内容互斥）
     expect(screen.getByTestId('note-paper-strict-chrome-dom')).toHaveAttribute(
       'data-bp-chrome-mount',
       '1'
@@ -96,20 +129,10 @@ describe('WorkspaceEmptyState · CONN-C2′ PaperList 产品默开', () => {
   });
 
   it('conn_c2_prod_default_probe_data_paper_list_1', async () => {
-    // 探针断言同步：root / strict host / panel 三处 data-paper-list 族 = 1
-    render(<WorkspaceProductEmptyHost wsId="ws-c2-prod-probe" />);
+    const { container } = await activateAndRenderLeaf();
 
-    expect(screen.getByRole('status')).toHaveAttribute(
-      'data-product-paper-list',
-      '1'
-    );
-
-    await openStrictAndWait();
-
-    expect(screen.getByTestId('note-paper-strict-host')).toHaveAttribute(
-      'data-product-paper-list',
-      '1'
-    );
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(host).toHaveAttribute('data-product-paper-list', '1');
     expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
       'data-paper-list',
       '1'
@@ -120,7 +143,12 @@ describe('WorkspaceEmptyState · CONN-C2′ PaperList 产品默开', () => {
       /enableProductPaperList\s*=\s*false/
     );
 
-    // 产品宿主显式传参（策略常量在宿主侧被消费）：src 级钉
+    // 产品叶消费策略常量（到达面已改挂 NoteLeafHost）
+    expect(readExt('NoteLeafHost.tsx')).toMatch(
+      /paperList=\{WORKSPACE_PRODUCT_ENABLE_PAPER_LIST/
+    );
+
+    // 夹具 Host 仍显式传参（不删 Host）
     expect(readWorkspaceSrc('workspaceProductMirrorDetect.tsx')).toMatch(
       /enableProductPaperList=\{WORKSPACE_PRODUCT_ENABLE_PAPER_LIST\}/
     );
