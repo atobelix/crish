@@ -132,6 +132,13 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
     expect(container.querySelector('[data-note-leaf-host="true"]')).toBeTruthy();
   });
 
+  // jsdom 属性 ≠ 皮像素 ≠ 打开完成
+  it('conn_ext_leaf_section_has_leaf_view_root', async () => {
+    await renderActivatedFactory();
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-leaf-view-root', '1');
+  });
+
   it('conn_ext_hydrate_no_tauri_is_fixture', async () => {
     const { container } = render(<NoteLeafHost {...ctx()} />);
     const panel = await screen.findByTestId('note-paper-strict-panel');
