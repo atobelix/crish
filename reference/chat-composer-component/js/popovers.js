@@ -1007,6 +1007,8 @@ document.addEventListener('DOMContentLoaded', () => {
   function toggleSidePanel() {
     if (!chatAppLayout) return;
     chatAppLayout.classList.toggle('has-side-panel');
+    const isOpen = chatAppLayout.classList.contains('has-side-panel');
+    if (topPanelBtn) topPanelBtn.classList.toggle('active', isOpen);
     
     // Sync composer horizontal alignment and timeline rails
     if (window.syncComposerHorizontalAlignment) {
@@ -1520,12 +1522,6 @@ document.addEventListener('DOMContentLoaded', () => {
       chatPane.style.flex = '1 1 0';
       chatPane.style.height = '100%';
 
-      // Only show top-side-panel-btn on the right-edge pane (or single pane)
-      const panelBtnEl = chatPane.querySelector('.top-side-panel-btn');
-      if (panelBtnEl) {
-        panelBtnEl.style.display = flags.rightEdge ? 'inline-flex' : 'none';
-      }
-
       // Side Panel Resizer
       const panelResizer = document.createElement('div');
       panelResizer.className = 'layout-resizer layout-resizer-panel';
@@ -1551,12 +1547,6 @@ document.addEventListener('DOMContentLoaded', () => {
           <div class="side-panel-actions-group">
             <button class="side-panel-btn" title="在浏览器中打开"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></button>
             <button class="side-panel-btn" title="最大化面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg></button>
-            <button class="side-panel-btn side-panel-toggle-btn active" title="收起右侧面板 (Cmd/Ctrl + J)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="15" y1="3" x2="15" y2="21"></line>
-              </svg>
-            </button>
           </div>
         </div>
         <div class="side-panel-body">
@@ -1571,28 +1561,6 @@ document.addEventListener('DOMContentLoaded', () => {
       content.appendChild(panelResizer);
       content.appendChild(sidePanel);
       leafEl.appendChild(content);
-
-      // Bind Single Right Button & Panel Close/Toggle Button
-      const sidePanelBtn = chatPane.querySelector('.top-side-panel-btn');
-      const sidePanelToggleBtn = sidePanel.querySelector('.side-panel-toggle-btn');
-
-      const togglePanelAction = (e) => {
-        if (e) e.stopPropagation();
-        leafEl.classList.toggle('has-side-panel');
-        const isOpen = leafEl.classList.contains('has-side-panel');
-        if (sidePanelBtn) sidePanelBtn.classList.toggle('active', isOpen);
-        if (window.syncComposerHorizontalAlignment) {
-          setTimeout(window.syncComposerHorizontalAlignment, 50);
-        }
-      };
-
-      if (sidePanelBtn) {
-        sidePanelBtn.addEventListener('click', togglePanelAction);
-      }
-
-      if (sidePanelToggleBtn) {
-        sidePanelToggleBtn.addEventListener('click', togglePanelAction);
-      }
 
 
 

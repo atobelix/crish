@@ -219,6 +219,14 @@
           </div>
         </header>
 
+        <!-- Permanent Invariant Fixed Right Workspace Panel Toggle Button (Outside pane clone tree) -->
+        <button class="top-fixed-panel-btn" id="topPanelBtn" title="切换右侧工作区 (Cmd/Ctrl + J)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+            <line x1="15" y1="3" x2="15" y2="21"></line>
+          </svg>
+        </button>
+
         <!-- Workspace Content Body (Binary Tree Container) -->
         <main class="workspace-content-body" id="workspaceContentBody">
           <div id="binaryTreeWorkspaceContainer" style="width: 100%; height: 100%;">
@@ -252,19 +260,13 @@
             </nav>
           </div>
 
-          <!-- Right: Top Header Actions (More, Share, Toggle Right Panel) -->
+          <!-- Right: Top Header Actions (More, Share) -->
           <div class="chat-top-actions">
             <button class="top-action-btn" id="topMoreBtn" title="更多操作">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
             </button>
             <button class="top-action-btn" id="topShareBtn" title="分享链接">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-            </button>
-            <button class="top-action-btn top-side-panel-btn" id="topPanelBtn" title="切换右侧工作区 (Cmd/Ctrl + J)">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                <line x1="15" y1="3" x2="15" y2="21"></line>
-              </svg>
             </button>
           </div>
         </div>
