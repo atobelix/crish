@@ -12,8 +12,14 @@
  * - 禁止 onStreamEnd 静默缝合
  *
  * surface 标注：本模块是跨界桥，非第三权威面。
+ * Intent / Mode：契约单源（`@crish/block-paper-contract`）；本文件只 re-export + 构造/派发。
  */
 
+import {
+  isSendToNoteIntent,
+  type SendToNoteIntent,
+  type SendToNoteMode,
+} from '@crish/block-paper-contract';
 import { resolveNoteTransport, type NoteTransport } from '../api/noteApi';
 import {
   EDITOR_SURFACE_CHAT,
@@ -31,33 +37,13 @@ export {
   type EditorSurface,
 };
 
+// Intent / Mode：契约单源；守卫同引用 re-export（禁止本文件再写一套形状）
+export type { SendToNoteIntent, SendToNoteMode };
+export { isSendToNoteIntent };
+
 // ---------------------------------------------------------------------------
 // Intent / Result
 // ---------------------------------------------------------------------------
-
-export type SendToNoteMode =
-  'insert_blocks' | 'apply_md_fragment' | 'append_to_block';
-
-/** surface=chat 完成态 → 请求写入 note-paper；不得隐式触发 */
-export type SendToNoteIntent = {
-  type: 'send_to_note';
-  /** 幂等键：重复提交不双插 */
-  intentId: string;
-  source: {
-    surface: typeof EDITOR_SURFACE_CHAT;
-    messageId: string;
-    /** 发送瞬间的 MD 快照；禁止持有 lines[] 引用过桥 */
-    markdown: string;
-  };
-  target: {
-    surface: typeof EDITOR_SURFACE_NOTE_PAPER;
-    docId: string;
-    parentId?: string;
-    afterBlockId?: string;
-    mode: SendToNoteMode;
-  };
-  origin: 'user' | 'agent';
-};
 
 export type SendToNoteRejectCode =
   | 'stream_not_completed'

@@ -1,6 +1,7 @@
 /**
  * send_to_note 薄桥单测（W5-B · B-06/B-07/B-08 · Round6 NoteTransport）
  */
+import { isSendToNoteIntent as contractIsSendToNoteIntent } from '@crish/block-paper-contract';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   createMemoryNoteTransport,
@@ -19,6 +20,7 @@ import {
   dispatchSendToNote,
   EDITOR_SURFACE_CHAT,
   EDITOR_SURFACE_NOTE_PAPER,
+  isSendToNoteIntent,
   resetSendToNoteIntentSeqForTests,
   type SendToNoteIntent,
 } from './send-to-note';
@@ -28,6 +30,37 @@ beforeEach(() => {
   clearSendToNoteIdempotencyForTests();
   clearNoteDocWrittenListenersForTests();
   setDefaultNoteTransport(null);
+});
+
+// ---------------------------------------------------------------------------
+// 契约单源（Intent / Mode / 守卫）
+// ---------------------------------------------------------------------------
+
+describe('SendToNote 契约单源', () => {
+  it('桥 re-export 的 isSendToNoteIntent 与契约同一引用', () => {
+    expect(isSendToNoteIntent).toBe(contractIsSendToNoteIntent);
+  });
+
+  it('buildSendToNoteIntent 产出通过契约守卫；三种 mode 形状一致', () => {
+    const modes = [
+      'insert_blocks',
+      'apply_md_fragment',
+      'append_to_block',
+    ] as const;
+    for (const mode of modes) {
+      const r = buildSendToNoteIntent({
+        messageId: 'msg-src',
+        markdown: 'snapshot',
+        docId: 'doc-src',
+        intentId: `src-${mode}`,
+        mode,
+      });
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      expect(isSendToNoteIntent(r.intent)).toBe(true);
+      expect(r.intent.target.mode).toBe(mode);
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
