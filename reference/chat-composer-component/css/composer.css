@@ -1197,6 +1197,30 @@ textarea.composer-input {
   color: var(--text-primary, #111111);
 }
 
+/* Single Permanent Invariant Panel Toggle Button (100% physically fixed on screen) */
+.top-fixed-panel-btn {
+  position: fixed;
+  top: 42px;
+  right: 16px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary, #666666);
+  z-index: 120;
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.top-fixed-panel-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary, #111111);
+}
+
 /* Fixed Top Header with Downward Smooth Fade Mask */
 .chat-top-header {
   position: sticky;
@@ -1336,6 +1360,11 @@ textarea.composer-input {
   align-items: center;
   gap: 4px;
   pointer-events: auto;
+  margin-right: 36px; /* Exact 32px fixed button + 4px gap */
+}
+
+.chat-app-layout.has-side-panel .chat-top-actions {
+  margin-right: 0;
 }
 
 .top-action-btn {
@@ -1418,6 +1447,7 @@ textarea.composer-input {
   flex-wrap: nowrap;
   align-items: center;
   gap: 4px;
+  margin-right: 36px; /* Exact 32px fixed button + 4px gap */
 }
 
 .side-panel-divider-v {
