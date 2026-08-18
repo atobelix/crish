@@ -1,13 +1,20 @@
 /**
- * WorkspaceEmptyState · paper 入口（SD-30）
+ * WorkspaceEmptyState · paper 夹具宿主 UI（SD-30 / 04 §12.4）
  *
  * 写锥 hook / `buildPaperWriteConeDataAttrs` 实现已迁
- * `extensions/note-paper/paperWriteCone`；本文件只 re-export + EmptyState 专用宿主 UI。
+ * `extensions/note-paper/paperWriteCone`；本文件 **只** re-export hook，
+ * 不是第二份写锥实现。剩下的是 EmptyState 夹具打开后的宿主 UI。
+ *
+ * `WorkspaceEmptyStateStrictHost` / `WorkspaceEmptyStateSkeletonHost`
+ * = 夹具打开后的 UI（点 CTA 后的壳），**不是**产品入口。
+ * 产品叶走 `NoteLeafHost`，不经本宿主。
  *
  * Skeleton 入口 **保留**（禁止去 `-S`）。
  * `enableProductPaperList` **默认仍由装配壳钉 false**。
+ * 夹具壳从扩展家消费同一份实现；本壳不是产品入口。
  *
- * ≠ EL-01；≠ EL-04；≠ EL-08；≠ W3-P 满窗；≠ 打开完成；≠ 去 `-S`
+ * ≠ 打开完成；≠ 关 EL；≠ 去 `-S`
+ * ≠ EL-01；≠ EL-04；≠ EL-08；≠ W3-P 满窗
  */
 
 import React, { useMemo } from 'react';
@@ -21,7 +28,7 @@ import {
   buildPaperWriteConeDataAttrs,
   type WorkspaceEmptyStatePaperBindings,
 } from '../../extensions/note-paper/paperWriteCone';
-import type { WorkspaceEmptyStateMirrorSlot } from './workspaceEmptyStateMirrorSlot';
+import type { WorkspaceEmptyStateMirrorSlot } from '../../extensions/note-paper/mirrorSlot';
 import styles from './WorkspaceEmptyState.module.css';
 
 export {
@@ -58,7 +65,7 @@ export type WorkspaceEmptyStateStrictHostProps = {
   onClose: () => void;
 };
 
-/** 已开 Strict 纸面宿主（W5-B；可演示 ≠ EL；≠ 打开完成） */
+/** 夹具打开后的 Strict 纸面宿主 UI（W5-B）。≠ 产品入口；产品叶走 NoteLeafHost。≠ 打开完成；≠ 关 EL */
 export function WorkspaceEmptyStateStrictHost({
   wsId,
   strictDocId,
@@ -116,7 +123,7 @@ export type WorkspaceEmptyStateSkeletonHostProps = {
   onClose: () => void;
 };
 
-/** 已开 Skeleton 预览壳宿主（W5-B-S；禁止去 `-S`） */
+/** 夹具打开后的 Skeleton 预览壳宿主 UI（W5-B-S）。≠ 产品入口；禁止去 `-S`。≠ 打开完成；≠ 关 EL */
 export function WorkspaceEmptyStateSkeletonHost({
   wsId,
   skeletonDocId,

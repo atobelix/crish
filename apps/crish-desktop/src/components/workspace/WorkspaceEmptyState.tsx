@@ -2,10 +2,12 @@
  * WorkspaceEmptyState — 工作区空态装配壳（SD-30）
  *
  * ## SD-30 切开（目标 &lt;400）
- * - mirror 槽 → `workspaceEmptyStateMirrorSlot`
+ * - mirror 槽 → `extensions/note-paper/mirrorSlot`（workspace 旧路径只 re-export）
  * - paper 入口 → `workspaceEmptyStatePaperEntry`（写锥 + Strict / Skeleton 宿主）
  * - actions → `workspaceEmptyStateActions`
+ * - H1 resolver → `extensions/note-paper/productStrictDoc`（workspace 旧路径只 re-export）
  * 本文件仅装配壳：公开 props / 默认关钉死 / 开合编排。
+ * 夹具壳从扩展家消费同一份实现；本壳不是产品入口。
  *
  * ## 夹具身份（≠ 产品入口）
  * 本组件是 **夹具装配壳**：产品树 0 import（`App` / `binary-tree/**` 不挂）。
@@ -53,7 +55,7 @@ import type {
 } from '../note-paper/mirrorDriftUi';
 import { W5B_PRODUCT_DEFAULT_EMPTY_TRACK } from '../note-paper/notePaperStrictTrack';
 import { WorkspaceEmptyStateLanding } from './workspaceEmptyStateActions';
-import { useWorkspaceEmptyStateMirrorSlot } from './workspaceEmptyStateMirrorSlot';
+import { useWorkspaceEmptyStateMirrorSlot } from '../../extensions/note-paper/mirrorSlot';
 import {
   buildPaperWriteConeDataAttrs,
   EMPTY_STATE_PAPER_HONESTY_ATTRS,
@@ -64,7 +66,7 @@ import {
 import {
   buildStrictDocBindingDataAttrs,
   resolveProductStrictDocId,
-} from './workspaceEmptyStateStrictDoc';
+} from '../../extensions/note-paper/productStrictDoc';
 import styles from './WorkspaceEmptyState.module.css';
 
 /** 空态可打开的笔记纸面轨（双轨并存） */
