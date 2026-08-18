@@ -5,24 +5,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createProductStrictHydrateTransport } from '../../components/note-paper/hydrateProjection';
 import { NotePaperStrictPanel } from '../../components/note-paper/NotePaperStrictPanel';
-import { buildStrictDocBindingDataAttrs } from '../../components/workspace/workspaceEmptyStateStrictDoc';
+import type { ViewRenderContext } from '../../services/view-registry';
+import { NOTE_LEAF_HONESTY_ATTRS } from './honesty';
+import { useWorkspaceEmptyStateMirrorSlot } from './mirrorSlot';
 import {
   buildPaperWriteConeDataAttrs,
   useWorkspaceEmptyStatePaperBindings,
-} from '../../components/workspace/workspaceEmptyStatePaperEntry';
-import { useWorkspaceEmptyStateMirrorSlot } from '../../components/workspace/workspaceEmptyStateMirrorSlot';
-import {
-  resolveWorkspaceProductEmptyMirrorProps,
-  WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
-} from '../../components/workspace/workspaceProductMirrorDetect';
-import { WORKSPACE_PRODUCT_ENABLE_PAPER_LIST } from '../../components/workspace/workspaceProductPaperList';
-import type { ViewRenderContext } from '../../services/view-registry';
-import { NOTE_LEAF_HONESTY_ATTRS } from './honesty';
+} from './paperWriteCone';
 import {
   loadRecentPersistedDocId,
   resolveExplicitNoteDocId,
   resolveNotePaperDoc,
 } from './productLeafBindings';
+import {
+  resolveWorkspaceProductEmptyMirrorProps,
+  WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
+} from './productMirrorPolicy';
+import { WORKSPACE_PRODUCT_ENABLE_PAPER_LIST } from './productPaperListPolicy';
+import { buildStrictDocBindingDataAttrs } from './productStrictDoc';
 
 export function NoteLeafHost(ctx: ViewRenderContext): React.ReactElement {
   const explicit = resolveExplicitNoteDocId(ctx);
@@ -56,6 +56,7 @@ export function NoteLeafHost(ctx: ViewRenderContext): React.ReactElement {
     () => resolveWorkspaceProductEmptyMirrorProps(),
     []
   );
+  // 产品叶无真实 unpushed 源（hydrate / IPC / collab 均未暴露计数）；保持 hook 默认 0
   const mirror = useWorkspaceEmptyStateMirrorSlot({
     strictDocId: resolution.docId,
     enableMirrorDetectSchedule:

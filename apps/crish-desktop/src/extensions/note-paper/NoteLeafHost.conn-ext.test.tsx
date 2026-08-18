@@ -4,7 +4,8 @@
  *
  * 证伪：扩展激活后叶工厂是否按 07 §5.2 一次挂齐（读原策略常量，不新开锥）。
  * 测头自钉：jsdom 绿 ≠ 打开完成 ≠ 关 EL ≠ 重做 E2′ / C2′ / G2。
- * Host 夹具 `conn_c2_prod_*` / `conn_e2p_*` 仍保留作策略回归。
+ * WorkspaceProductEmptyHost 已删，不得再当入口。EmptyState + CTA 仍是夹具；
+ * 产品默开在 NoteLeafHost。`conn_c2_prod_*` / `conn_e2p_*` 测名仍作策略回归。
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -22,15 +23,15 @@ import {
 import * as hydrateProduct from '../../components/note-paper/hydrateProjection';
 import { adaptNoteTransportAsHydrate } from '../../components/note-paper/hydrateProjection';
 import { WorkspaceEmptyState } from '../../components/workspace/WorkspaceEmptyState';
-import * as productMirror from '../../components/workspace/workspaceProductMirrorDetect';
-import { WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE } from '../../components/workspace/workspaceProductMirrorDetect';
-import { WORKSPACE_PRODUCT_ENABLE_PAPER_LIST } from '../../components/workspace/workspaceProductPaperList';
-import { resetWorkspacePersistedStrictDocBindings } from '../../components/workspace/workspaceEmptyStateStrictDoc';
 import { viewRegistry } from '../../services/view-registry';
 import type { ViewRenderContext } from '../../services/view-registry';
 import { activateNotePaper, deactivateNotePaper } from './activate';
 import { NOTE_LEAF_HONESTY_ATTRS } from './honesty';
 import { NoteLeafHost } from './NoteLeafHost';
+import * as productMirror from './productMirrorPolicy';
+import { WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE } from './productMirrorPolicy';
+import { WORKSPACE_PRODUCT_ENABLE_PAPER_LIST } from './productPaperListPolicy';
+import { resetWorkspacePersistedStrictDocBindings } from './productStrictDoc';
 
 const DIR =
   typeof import.meta.dirname === 'string'

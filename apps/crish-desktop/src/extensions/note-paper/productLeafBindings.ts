@@ -7,12 +7,12 @@
  */
 import { noteDocumentRecent } from '../../api/noteApi';
 import { getActiveProjectId, getWorkspacePath } from '../../api/projectStore';
+import type { ViewRenderContext } from '../../services/view-registry';
+import { resolveNoteUri } from './noteUri';
 import {
   resolveProductStrictDocId,
   type ProductStrictDocResolution,
-} from '../../components/workspace/workspaceEmptyStateStrictDoc';
-import type { ViewRenderContext } from '../../services/view-registry';
-import { resolveNoteUri } from './noteUri';
+} from './productStrictDoc';
 
 export type NotePaperDocContext = Pick<ViewRenderContext, 'params'> & {
   panelId?: string;

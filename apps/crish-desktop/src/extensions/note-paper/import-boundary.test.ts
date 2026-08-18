@@ -174,6 +174,15 @@ describe('note-paper extension import 边界', () => {
     }
   });
 
+  it('产品叶 / productLeafBindings 不再从 components/workspace 拉活资产', () => {
+    for (const name of ['NoteLeafHost.tsx', 'productLeafBindings.ts']) {
+      const src = readFileSync(join(DIR, name), 'utf8');
+      expect(src, name).not.toMatch(
+        /from\s+['"]\.\.\/\.\.\/components\/workspace\//
+      );
+    }
+  });
+
   it('registerView(id: note) 只出现在 activate.ts，不进内置名单', () => {
     const activate = readFileSync(join(DIR, 'activate.ts'), 'utf8');
     expect(activate).toMatch(

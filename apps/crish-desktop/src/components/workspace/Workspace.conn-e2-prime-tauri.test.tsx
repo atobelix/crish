@@ -5,8 +5,8 @@
  * 夹具 ≠ 产品入口 ≠ 打开完成。
  *
  * 产品默开 detect / 无 Tauri 不造假：挂已激活 `NoteLeafHost`
- *（`activateNotePaper` + 叶工厂），不把 `WorkspaceProductEmptyHost` /
- * EmptyState CTA 当产品到达面。
+ *（`activateNotePaper` + 叶工厂）。`WorkspaceProductEmptyHost` 已删、
+ * 不得再当入口；EmptyState + CTA 仍是夹具，不是产品到达面。
  *
  * 走 `createTauriNoteMirrorIpc` / `createProductNoteMirrorIpc({ isTauriRuntime:true })`
  * + test-setup `mockTauriCommand`，线格式对齐 `note_commands.rs` `report_to_json`。
@@ -14,7 +14,7 @@
  * IPC 层（无 DOM）见 `noteMirrorIpc.conn-e2p-tauri.test.ts`。
  *
  * **禁改** EmptyState `enableMirrorDetectSchedule` 默认 false
- * **禁改** Host `WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE = true`
+ * **禁改** 策略常量 `WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE = true`
  *
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 默认双开 poll+OS · ≠ 重做 E2′ 策略
  */
@@ -32,14 +32,14 @@ import {
 } from '../../api/noteMirrorIpc';
 import { activateNotePaper, deactivateNotePaper } from '../../extensions/note-paper/activate';
 import { NoteLeafHost } from '../../extensions/note-paper/NoteLeafHost';
-import type { ViewRenderContext } from '../../services/view-registry';
-import { WorkspaceEmptyState } from './WorkspaceEmptyState';
-import { resetWorkspacePersistedStrictDocBindings } from './workspaceEmptyStateStrictDoc';
+import * as productMirror from '../../extensions/note-paper/productMirrorPolicy';
 import {
   WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
   createProductNoteMirrorIpc,
-} from './workspaceProductMirrorDetect';
-import * as productMirror from './workspaceProductMirrorDetect';
+} from '../../extensions/note-paper/productMirrorPolicy';
+import { resetWorkspacePersistedStrictDocBindings } from '../../extensions/note-paper/productStrictDoc';
+import type { ViewRenderContext } from '../../services/view-registry';
+import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 
 const DIR =
   typeof import.meta.url === 'string' && import.meta.url.startsWith('file:')
@@ -121,15 +121,21 @@ describe('CONN-E2′-tauri · 默认与无 Tauri 不回退', () => {
     expect(emptySrc).toMatch(/enableMirrorDetectSchedule = false,/);
     expect(emptySrc).not.toMatch(/enableMirrorDetectSchedule = true,/);
 
-    const hostSrc = readFileSync(
+    const implSrc = readFileSync(
+      join(DIR, '../../extensions/note-paper/productMirrorPolicy.ts'),
+      'utf8'
+    );
+    expect(implSrc).toMatch(
+      /WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE\s*=\s*true/
+    );
+    expect(implSrc).toMatch(/createTauriNoteMirrorIpc/);
+    expect(implSrc).not.toMatch(/return\s+createMockNoteMirrorIpc/);
+    const reexportSrc = readFileSync(
       join(DIR, 'workspaceProductMirrorDetect.tsx'),
       'utf8'
     );
-    expect(hostSrc).toMatch(
-      /WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE\s*=\s*true/
-    );
-    expect(hostSrc).toMatch(/createTauriNoteMirrorIpc/);
-    expect(hostSrc).not.toMatch(/return\s+createMockNoteMirrorIpc/);
+    expect(reexportSrc).toMatch(/productMirrorPolicy/);
+    expect(reexportSrc).not.toMatch(/function WorkspaceProductEmptyHost/);
 
     const e2p = readFileSync(
       join(DIR, 'Workspace.conn-e2-prime.test.tsx'),

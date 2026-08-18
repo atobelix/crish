@@ -15,6 +15,10 @@ const DIR =
     : dirname(fileURLToPath(import.meta.url));
 
 const SRC = join(DIR, 'workspaceProductMirrorDetect.tsx');
+const IMPL = join(
+  DIR,
+  '../../extensions/note-paper/productMirrorPolicy.ts'
+);
 const SELF = join(DIR, 'workspaceProductMirrorDetect.host-gone.test.ts');
 
 function readUtf8(path: string): string {
@@ -23,6 +27,7 @@ function readUtf8(path: string): string {
 
 describe('CONN-E2′ · WorkspaceProductEmptyHost 已删（≠ 打开完成 · ≠ 关 EL）', () => {
   const src = readUtf8(SRC);
+  const impl = readUtf8(IMPL);
   const self = readUtf8(SELF);
 
   it('测头自钉：删 Host ≠ 打开完成 ≠ 关 EL', () => {
@@ -36,8 +41,20 @@ describe('CONN-E2′ · WorkspaceProductEmptyHost 已删（≠ 打开完成 · �
     expect(src).not.toMatch(/from ['"]\.\/WorkspaceEmptyState['"]/);
     expect(src).not.toMatch(/WORKSPACE_PRODUCT_ENABLE_PAPER_LIST/);
     expect(src).toMatch(/WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE/);
-    expect(src).toMatch(/export function createProductNoteMirrorIpc/);
-    expect(src).toMatch(/export function resolveWorkspaceProductEmptyMirrorProps/);
+    expect(src).toMatch(/createProductNoteMirrorIpc/);
+    expect(src).toMatch(/resolveWorkspaceProductEmptyMirrorProps/);
     expect(src).toMatch(/策略常量给扩展叶用，不再有产品 Host 组件/);
+    expect(src).toMatch(/productMirrorPolicy/);
+  });
+
+  it('实现住在扩展 productMirrorPolicy（workspace 只 re-export）', () => {
+    expect(impl).toMatch(/export function createProductNoteMirrorIpc/);
+    expect(impl).toMatch(
+      /export function resolveWorkspaceProductEmptyMirrorProps/
+    );
+    expect(impl).toMatch(
+      /WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE\s*=\s*true/
+    );
+    expect(impl).not.toMatch(/function WorkspaceProductEmptyHost/);
   });
 });

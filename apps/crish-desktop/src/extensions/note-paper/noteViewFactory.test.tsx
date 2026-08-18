@@ -8,11 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import * as projectStore from '../../api/projectStore';
 import * as hydrateProduct from '../../components/note-paper/hydrateProjection';
-import * as strictDoc from '../../components/workspace/workspaceEmptyStateStrictDoc';
-import {
-  bindWorkspacePersistedStrictDoc,
-  resetWorkspacePersistedStrictDocBindings,
-} from '../../components/workspace/workspaceEmptyStateStrictDoc';
 import type { ViewRenderContext } from '../../services/view-registry';
 import { NoteLeafHost } from './NoteLeafHost';
 import {
@@ -20,6 +15,11 @@ import {
   resolveNotePaperDoc,
 } from './productLeafBindings';
 import * as leafBindings from './productLeafBindings';
+import * as strictDoc from './productStrictDoc';
+import {
+  bindWorkspacePersistedStrictDoc,
+  resetWorkspacePersistedStrictDocBindings,
+} from './productStrictDoc';
 
 function ctx(
   partial: Partial<ViewRenderContext> = {}

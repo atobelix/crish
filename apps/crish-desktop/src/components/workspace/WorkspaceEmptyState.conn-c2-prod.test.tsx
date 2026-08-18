@@ -3,8 +3,8 @@
  * WorkspaceEmptyState · CONN-C2′（C-prod）PaperList 产品默开
  *
  * 夹具 ≠ 产品入口 ≠ 打开完成。
- * Host / EmptyState 是夹具（04 D3 暂留，不删壳）；产品到达面是
- * `activateNotePaper` 后的 `NoteLeafHost` 叶。
+ * WorkspaceProductEmptyHost 已删，不得再当入口。EmptyState + CTA 仍是夹具。
+ * 产品到达面是 `activateNotePaper` 后的 `NoteLeafHost` 叶。
  *
  * - 策略常量 `WORKSPACE_PRODUCT_ENABLE_PAPER_LIST = true`
  * - 产品叶消费常量 → Strict `data-paper-list=1` / `presentationMode=paper-list`
@@ -148,7 +148,10 @@ describe('WorkspaceEmptyState · CONN-C2′ PaperList 产品默开', () => {
       /paperList=\{WORKSPACE_PRODUCT_ENABLE_PAPER_LIST/
     );
 
-    // 策略常量文件语义 = true
+    // 策略常量文件语义 = true（实现在扩展；workspace 只 re-export）
+    expect(readExt('productPaperListPolicy.ts')).toMatch(
+      /WORKSPACE_PRODUCT_ENABLE_PAPER_LIST\s*=\s*true/
+    );
     expect(readWorkspaceSrc('workspaceProductPaperList.ts')).toMatch(
       /WORKSPACE_PRODUCT_ENABLE_PAPER_LIST\s*=\s*true/
     );
