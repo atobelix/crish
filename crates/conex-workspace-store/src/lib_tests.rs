@@ -139,3 +139,41 @@ fn safe_doc_id_sanitizes_path_chars() {
     assert_eq!(safe_doc_id("a/b\\c:d"), "a_b_c_d");
     assert_eq!(safe_doc_id("plain-id_1"), "plain-id_1");
 }
+
+fn seed_persisted(store: &WorkspaceStore, doc_id: &str, rev: i64, updated_at: i64, text: &str) {
+    {
+        let conn = store.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO doc_meta(doc_id, rev, updated_at) VALUES (?1, ?2, ?3)",
+            rusqlite::params![doc_id, rev, updated_at],
+        )
+        .unwrap();
+    }
+    if !text.is_empty() {
+        store
+            .reindex_block(doc_id, "b1", text, ReindexBlockOpts::default())
+            .unwrap();
+    }
+}
+
+#[test]
+fn recent_persisted_nonempty_doc_id_empty_store_is_none() {
+    let (_dir, db) = temp_db();
+    let store = WorkspaceStore::open(&db).unwrap();
+    assert_eq!(store.recent_persisted_nonempty_doc_id().unwrap(), None);
+}
+
+#[test]
+fn recent_persisted_nonempty_doc_id_skips_empty_and_picks_latest() {
+    let (_dir, db) = temp_db();
+    let store = WorkspaceStore::open(&db).unwrap();
+    // persist 但无投影 / 空白投影：不算非空
+    seed_persisted(&store, "doc-rev-only", 2, 300, "");
+    seed_persisted(&store, "doc-blank-text", 1, 400, "   ");
+    seed_persisted(&store, "doc-old", 1, 100, "old sentence");
+    seed_persisted(&store, "doc-new", 3, 200, "new sentence");
+    assert_eq!(
+        store.recent_persisted_nonempty_doc_id().unwrap().as_deref(),
+        Some("doc-new")
+    );
+}

@@ -238,6 +238,44 @@ impl WorkspaceStore {
         Ok(rev.unwrap_or(0))
     }
 
+    /// 本库最近一篇已 persist 且投影非空的 `doc_id`。
+    ///
+    /// - persist：`doc_meta.rev > 0`（`on_committed` 首写 rev=1）
+    /// - 非空：存在 `blocks.plain_text` 去空白后长度 > 0
+    /// - 排序：`updated_at DESC, rev DESC, doc_id DESC`
+    /// - 工作区范围 = 本 `workspace.db`（表无 workspace 列，库即工作区）
+    ///
+    /// 无命中 → `None`。不是第二本账；不编列。
+    pub fn recent_persisted_nonempty_doc_id(&self) -> Result<Option<String>, StoreError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| StoreError::Lock(e.to_string()))?;
+        let doc_id: Option<String> = conn
+            .query_row(
+                r#"
+                SELECT m.doc_id
+                FROM doc_meta m
+                WHERE m.rev > 0
+                  AND length(trim(m.doc_id)) > 0
+                  AND EXISTS (
+                    SELECT 1 FROM blocks b
+                    WHERE b.doc_id = m.doc_id
+                      AND length(trim(b.plain_text)) > 0
+                  )
+                ORDER BY m.updated_at DESC, m.rev DESC, m.doc_id DESC
+                LIMIT 1
+                "#,
+                [],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(match doc_id {
+            Some(id) if !id.trim().is_empty() => Some(id),
+            _ => None,
+        })
+    }
+
     /// 强制将该 doc 的 pending updates 合并进 snapshot 并裁剪 updates。
     pub fn flush_doc(&self, doc_id: &str) -> Result<(), StoreError> {
         let conn = self
