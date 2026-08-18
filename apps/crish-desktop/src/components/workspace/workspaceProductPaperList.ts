@@ -2,7 +2,7 @@
  * CONN-C2′（C-prod）· Workspace 产品宿主 PaperList 默开策略
  *
  * 产品 Workspace 空态路径写死默传：
- * - `enableProductPaperList = true`（C2′ 产品默开，经 WorkspaceProductEmptyHost 显式传参）
+ * - `enableProductPaperList = true`（C2′ 产品默开，经扩展叶 / 策略常量）
  *
  * EmptyState **组件默认仍 false**（CONN-C2 会计门不回退：
  * `WorkspaceEmptyState.tsx` 默认 `enableProductPaperList = false`；

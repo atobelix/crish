@@ -148,11 +148,6 @@ describe('WorkspaceEmptyState · CONN-C2′ PaperList 产品默开', () => {
       /paperList=\{WORKSPACE_PRODUCT_ENABLE_PAPER_LIST/
     );
 
-    // 夹具 Host 仍显式传参（不删 Host）
-    expect(readWorkspaceSrc('workspaceProductMirrorDetect.tsx')).toMatch(
-      /enableProductPaperList=\{WORKSPACE_PRODUCT_ENABLE_PAPER_LIST\}/
-    );
-
     // 策略常量文件语义 = true
     expect(readWorkspaceSrc('workspaceProductPaperList.ts')).toMatch(
       /WORKSPACE_PRODUCT_ENABLE_PAPER_LIST\s*=\s*true/
