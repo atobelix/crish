@@ -1505,46 +1505,130 @@ document.addEventListener('DOMContentLoaded', () => {
       strip.appendChild(addBtn);
 
       hdr.appendChild(strip);
-
-      // Right action button for this split pane (切换右侧工作区/分屏面板)
-      const actions = document.createElement('div');
-      actions.className = 'tree-pane-header-actions';
-      const togglePanelBtn = document.createElement('button');
-      togglePanelBtn.className = 'pane-action-btn';
-      togglePanelBtn.title = '切换右侧面板 (Cmd/Ctrl + J)';
-      togglePanelBtn.innerHTML = `
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="15" y1="3" x2="15" y2="21"></line>
-        </svg>
-      `;
-      togglePanelBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (window.toggleSidePanel) window.toggleSidePanel();
-      });
-      actions.appendChild(togglePanelBtn);
-      hdr.appendChild(actions);
-
       leafEl.appendChild(hdr);
 
-      // 2. Content with Conversation View ("重构 IPC 缓冲通道")
+      // 2. Content with Conversation View and Per-Pane Right Side Panel
       const content = document.createElement('div');
       content.className = 'tree-pane-content';
 
-      if (node.id === 'pane-main' || !this.store.findLeaf(this.store.tree, 'pane-main')) {
-        content.appendChild(mainPane);
-        mainPane.style.display = 'flex';
-        mainPane.style.flex = '1 1 0';
-        mainPane.style.height = '100%';
-      } else {
-        const streamClone = mainPane.cloneNode(true);
-        streamClone.id = 'paneChat-' + node.id;
-        streamClone.style.display = 'flex';
-        streamClone.style.flex = '1 1 0';
-        streamClone.style.height = '100%';
-        content.appendChild(streamClone);
+      const isMainPane = (node.id === 'pane-main' || !this.store.findLeaf(this.store.tree, 'pane-main'));
+      const chatPane = isMainPane ? mainPane : mainPane.cloneNode(true);
+      if (!isMainPane) {
+        chatPane.id = 'paneChat-' + node.id;
       }
+      chatPane.style.display = 'flex';
+      chatPane.style.flex = '1 1 0';
+      chatPane.style.height = '100%';
+
+      // Only show top-side-panel-btn on the right-edge pane (or single pane)
+      const panelBtnEl = chatPane.querySelector('.top-side-panel-btn');
+      if (panelBtnEl) {
+        panelBtnEl.style.display = flags.rightEdge ? 'inline-flex' : 'none';
+      }
+
+      // Side Panel Resizer
+      const panelResizer = document.createElement('div');
+      panelResizer.className = 'layout-resizer layout-resizer-panel';
+      panelResizer.title = '拖拽调整右侧面板宽度';
+
+      // Side Panel DOM matching prototype
+      const sidePanel = document.createElement('div');
+      sidePanel.className = 'chat-side-panel';
+      sidePanel.innerHTML = `
+        <div class="side-panel-header">
+          <div class="side-panel-nav-group">
+            <button class="side-panel-btn active" title="工作区应用预览">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+            </button>
+            <button class="side-panel-btn" title="代码产物与文件">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+            </button>
+            <div class="side-panel-divider-v"></div>
+            <button class="side-panel-btn" title="后退"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button>
+            <button class="side-panel-btn" title="前进"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
+            <button class="side-panel-btn" title="刷新"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg></button>
+          </div>
+          <div class="side-panel-actions-group">
+            <button class="side-panel-btn" title="在浏览器中打开"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></button>
+            <button class="side-panel-btn" title="最大化面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg></button>
+            <button class="side-panel-btn side-panel-toggle-btn active" title="收起右侧面板 (Cmd/Ctrl + J)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <line x1="15" y1="3" x2="15" y2="21"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="side-panel-body">
+          <div class="side-panel-empty-state">
+            <div class="side-empty-title">Create apps with Build Mode</div>
+            <div class="side-empty-desc" style="color: var(--text-secondary); font-size: 13px; line-height: 1.6;">In Build Mode, create websites, games, apps, and interactive dashboards, and preview them right here.</div>
+          </div>
+        </div>
+      `;
+
+      content.appendChild(chatPane);
+      content.appendChild(panelResizer);
+      content.appendChild(sidePanel);
       leafEl.appendChild(content);
+
+      // Bind Single Right Button & Panel Close/Toggle Button
+      const sidePanelBtn = chatPane.querySelector('.top-side-panel-btn');
+      const sidePanelToggleBtn = sidePanel.querySelector('.side-panel-toggle-btn');
+
+      const togglePanelAction = (e) => {
+        if (e) e.stopPropagation();
+        leafEl.classList.toggle('has-side-panel');
+        const isOpen = leafEl.classList.contains('has-side-panel');
+        if (sidePanelBtn) sidePanelBtn.classList.toggle('active', isOpen);
+        if (window.syncComposerHorizontalAlignment) {
+          setTimeout(window.syncComposerHorizontalAlignment, 50);
+        }
+      };
+
+      if (sidePanelBtn) {
+        sidePanelBtn.addEventListener('click', togglePanelAction);
+      }
+
+      if (sidePanelToggleBtn) {
+        sidePanelToggleBtn.addEventListener('click', togglePanelAction);
+      }
+
+
+
+      // Bind Per-Pane Resizer
+      let isDraggingPanel = false;
+      let startPanelX = 0;
+      let startPanelWidth = 360;
+
+      panelResizer.addEventListener('mousedown', (e) => {
+        isDraggingPanel = true;
+        startPanelX = e.clientX;
+        startPanelWidth = sidePanel.getBoundingClientRect().width || 360;
+        panelResizer.classList.add('is-dragging');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDraggingPanel) return;
+        const deltaX = startPanelX - e.clientX;
+        const newWidth = Math.max(200, Math.min(leafEl.clientWidth * 0.7, startPanelWidth + deltaX));
+        leafEl.style.setProperty('--panel-width', `${newWidth}px`);
+        if (window.syncComposerHorizontalAlignment) {
+          window.syncComposerHorizontalAlignment();
+        }
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isDraggingPanel) {
+          isDraggingPanel = false;
+          panelResizer.classList.remove('is-dragging');
+          document.body.style.cursor = '';
+          document.body.style.userSelect = '';
+        }
+      });
 
       return leafEl;
     }
