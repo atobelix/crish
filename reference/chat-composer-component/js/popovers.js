@@ -1025,23 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   // ---- Left Sidebar & Breadcrumbs Subagent Monitor ----
-  const topSidebarBtn = document.getElementById('topSidebarBtn');
   const bcAgentCapsule = document.getElementById('bcAgentCapsule');
-
-  function toggleSidebar(e) {
-    if (e) e.stopPropagation();
-    if (!chatAppLayout) return;
-    chatAppLayout.classList.toggle('has-left-sidebar');
-    if (window.syncComposerHorizontalAlignment) {
-      setTimeout(window.syncComposerHorizontalAlignment, 50);
-      setTimeout(window.syncComposerHorizontalAlignment, 230);
-    }
-    if (window.FlowTimelineRail && window.FlowTimelineRail.updateAll) {
-      setTimeout(() => window.FlowTimelineRail.updateAll(document.body), 230);
-    }
-  }
-
-  if (topSidebarBtn) topSidebarBtn.addEventListener('click', toggleSidebar);
 
   if (bcAgentCapsule) {
     bcAgentCapsule.addEventListener('click', (e) => {
@@ -1640,6 +1624,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize Split Workspace Engine
   const treeStore = new TreeStore();
+  window.treeStore = treeStore;
+  window.__workbenchStore = treeStore;
   const workspaceSplitEngine = new WorkspaceSplitRenderer(treeStore);
   window.workspaceSplitEngine = workspaceSplitEngine;
 
