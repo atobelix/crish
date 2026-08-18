@@ -8,7 +8,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { useLayoutStore } from '../../store/layoutStore';
-import { useScopedSessionField } from './useChatCardState';
+import { useScopedSessionField } from './useScopedSessionField';
 import type { SessionState } from '../store/types';
 
 function seedStore(): void {

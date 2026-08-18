@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { produce } from 'immer';
+import { MAX_MESSAGES_PER_SESSION } from '@crish/shared-utils/browser';
 import { createSessionActions, type SessionStoreSlice } from './sessionActions';
 import { buildSessionsById } from './sessionIndex';
 import { exportSessionToJsonObject, exportSessionToMarkdown } from '../api/sessionExport';
 import { deriveSessionTitle } from '../api/sessionTitle';
 import { scheduledSessionTitle } from '../api/workflowApi';
-import type { SessionState } from './types';
+import type { SessionMessage, SessionState } from './types';
 
 vi.mock('../api/appMode', () => ({
   isDemoMode: () => true,
@@ -131,6 +132,184 @@ describe('Session History Management', () => {
       expect(mdStr).toContain('# Markdown Export');
       expect(mdStr).toContain('Hello AI assistant');
       expect(mdStr).toContain('Hello! How can I help you today?');
+    });
+  });
+
+  // ── C8 历史栈溢出/边界测试扩充 ──────────────────────────────────────────────
+  describe('History Stack Overflow & Boundary (C8)', () => {
+    it('addMessage triggers truncation at MAX_MESSAGES_PER_SESSION boundary (FIFO eviction)', () => {
+      // 构造一个已达到上限的消息列表
+      const messages: SessionMessage[] = [];
+      for (let i = 0; i < MAX_MESSAGES_PER_SESSION; i++) {
+        messages.push({
+          id: `m${i}`,
+          sender: i % 2 === 0 ? 'user' : 'assistant',
+          text: `msg ${i}`,
+          timestamp: i,
+        });
+      }
+      const sess: SessionState = {
+        id: 'overflow',
+        title: 'Overflow Session',
+        folder: 'general',
+        isPinned: false,
+        isArchived: false,
+        timestamp: new Date().toISOString(),
+        messages,
+      };
+      const slice: SessionStoreSlice = {
+        sessions: [sess],
+        sessionsById: buildSessionsById([sess]),
+        folderOrder: ['general'],
+        activeSessionId: 'overflow',
+        draftFolder: '',
+        activeAgentId: null,
+        panelAgentId: null,
+        composerDrafts: {},
+      };
+      let state = slice;
+      const dispatchAction = (
+        actionFn: (actions: ReturnType<typeof createSessionActions>) => void
+      ) => {
+        state = produce(state, (draft) => {
+          const actions = createSessionActions((updater) => updater(draft));
+          actionFn(actions);
+        });
+      };
+
+      // 追加第 501 条消息 → 触发 truncateMessagesForAppend 淘汰最旧
+      dispatchAction((a) =>
+        a.addMessage('ws', 'overflow', {
+          id: 'm500',
+          sender: 'user',
+          text: '第 501 条',
+          timestamp: 500,
+        })
+      );
+
+      const result = state.sessionsById['overflow'];
+      expect(result.messages.length).toBeLessThanOrEqual(
+        MAX_MESSAGES_PER_SESSION
+      );
+      // 新消息存在
+      expect(
+        result.messages.find((m) => m.id === 'm500')
+      ).toBeDefined();
+      // 最旧的 m0 被淘汰
+      expect(result.messages.find((m) => m.id === 'm0')).toBeUndefined();
+    });
+
+    it('branchSession on empty session (no messages) produces empty branch without crash', () => {
+      const emptySess: SessionState = {
+        id: 'empty-src',
+        title: '空会话',
+        folder: 'general',
+        isPinned: false,
+        isArchived: false,
+        timestamp: new Date().toISOString(),
+        messages: [],
+      };
+      let state: SessionStoreSlice = {
+        sessions: [emptySess],
+        sessionsById: buildSessionsById([emptySess]),
+        folderOrder: ['general'],
+        activeSessionId: 'empty-src',
+        draftFolder: '',
+        activeAgentId: null,
+        panelAgentId: null,
+        composerDrafts: {},
+      };
+      const dispatchAction = (
+        actionFn: (actions: ReturnType<typeof createSessionActions>) => void
+      ) => {
+        state = produce(state, (draft) => {
+          const actions = createSessionActions((updater) => updater(draft));
+          actionFn(actions);
+        });
+      };
+
+      dispatchAction((a) => a.branchSession('empty-src', '空分叉'));
+      const branched = state.sessionsById[state.activeSessionId];
+      expect(branched).toBeDefined();
+      expect(branched.title).toBe('空分叉');
+      expect(branched.branchParentId).toBe('empty-src');
+      expect(branched.messages).toHaveLength(0);
+    });
+
+    it('export empty session (no messages, no agents) produces valid export with empty=true', () => {
+      const emptySess: SessionState = {
+        id: 'export-empty',
+        title: '空导出',
+        folder: 'general',
+        isPinned: false,
+        isArchived: false,
+        timestamp: new Date().toISOString(),
+        messages: [],
+      };
+      const json = exportSessionToJsonObject(emptySess);
+      expect(json.session.empty).toBe(true);
+      expect(json.session.messages).toEqual([]);
+      expect(json.session.id).toBe('export-empty');
+
+      const md = exportSessionToMarkdown(emptySess);
+      expect(md).toContain('# 空导出');
+      expect(md).toContain('（无消息）');
+    });
+
+    it('deriveSessionTitle on empty string returns empty or fallback (title boundary)', () => {
+      const t = deriveSessionTitle('');
+      // 空输入不得产生长标题或抛异常
+      expect(typeof t).toBe('string');
+      expect(t.length).toBeLessThanOrEqual(28);
+    });
+
+    it('session with messages at exactly MAX_MESSAGES_PER_SESSION does not crash on branch', () => {
+      const messages: SessionMessage[] = [];
+      for (let i = 0; i < MAX_MESSAGES_PER_SESSION; i++) {
+        messages.push({
+          id: `bm${i}`,
+          sender: i % 2 === 0 ? 'user' : 'assistant',
+          text: `branch msg ${i}`,
+          timestamp: i,
+        });
+      }
+      const fullSess: SessionState = {
+        id: 'full-src',
+        title: '满会话',
+        folder: 'general',
+        isPinned: false,
+        isArchived: false,
+        timestamp: new Date().toISOString(),
+        messages,
+      };
+      let state: SessionStoreSlice = {
+        sessions: [fullSess],
+        sessionsById: buildSessionsById([fullSess]),
+        folderOrder: ['general'],
+        activeSessionId: 'full-src',
+        draftFolder: '',
+        activeAgentId: null,
+        panelAgentId: null,
+        composerDrafts: {},
+      };
+      const dispatchAction = (
+        actionFn: (actions: ReturnType<typeof createSessionActions>) => void
+      ) => {
+        state = produce(state, (draft) => {
+          const actions = createSessionActions((updater) => updater(draft));
+          actionFn(actions);
+        });
+      };
+
+      dispatchAction((a) => a.branchSession('full-src', '满分叉'));
+      const branched = state.sessionsById[state.activeSessionId];
+      expect(branched).toBeDefined();
+      // 分叉克隆全部消息，不截断
+      expect(branched.messages.length).toBe(MAX_MESSAGES_PER_SESSION);
+      expect(branched.messages[0].text).toBe('branch msg 0');
+      expect(branched.messages[MAX_MESSAGES_PER_SESSION - 1].text).toBe(
+        `branch msg ${MAX_MESSAGES_PER_SESSION - 1}`
+      );
     });
   });
 });

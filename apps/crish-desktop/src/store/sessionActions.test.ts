@@ -1054,3 +1054,264 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     );
   });
 });
+
+// ── C8 失败分支测试扩充 ──────────────────────────────────────────────────────
+// 覆盖 session 创建/删除/切换/重命名/消息更新/草稿提交/分支 的异常路径与边界守卫。
+describe('sessionActions failure branches (C8)', () => {
+  it('createSession with whitespace-only explicit id falls back to minted id', () => {
+    // 显式 id 仅 trim 后非空才使用；纯空白 → mint 新 id
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 'a' })], 'a')
+    );
+    const id = h.actions.createSession({
+      id: '   ',
+      title: '空白 id',
+      activate: true,
+    });
+    expect(id).not.toBe('   ');
+    expect(id).toBeTruthy();
+    expect(h.getState().activeSessionId).toBe(id);
+  });
+
+  it('deleteSession on already-deleted session returns false (idempotent)', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'victim',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'hi' })],
+          }),
+          emptyShell({
+            id: 'next',
+            messages: [makeMessage({ id: 'm2', sender: 'user', text: 'yo' })],
+          }),
+        ],
+        'victim'
+      )
+    );
+    expect(h.actions.deleteSession('victim')).toBe(true);
+    // 再次删除已不存在的同一 id：no-op，返回 false
+    expect(h.actions.deleteSession('victim')).toBe(false);
+    expect(h.getState().sessionsById.victim).toBeUndefined();
+    // 第二次后 active 仍指向有效会话
+    expect(h.getState().activeSessionId).toBe('next');
+  });
+
+  it('deleteSession with whitespace-only id is a guarded no-op', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 'only' })], 'only')
+    );
+    expect(h.actions.deleteSession('   ')).toBe(false);
+    expect(h.actions.deleteSession(' \t ')).toBe(false);
+    expect(h.getState().sessions).toHaveLength(1);
+    expect(h.getState().activeSessionId).toBe('only');
+  });
+
+  it('setActiveSessionId with empty string keeps current valid active', () => {
+    // 不变量：空字符串不得写入 activeSessionId
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [emptyShell({ id: 'a' }), emptyShell({ id: 'b' })],
+        'a'
+      )
+    );
+    h.actions.setActiveSessionId('');
+    expect(h.getState().activeSessionId).toBe('a');
+
+    h.actions.setActiveSessionId('   ');
+    expect(h.getState().activeSessionId).toBe('a');
+  });
+
+  it('setActiveSessionId unknown id when active is valid keeps current active', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'a',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+          }),
+        ],
+        'a'
+      )
+    );
+    h.actions.setActiveSessionId('does-not-exist');
+    // 当前 active 有效 → 忽略未知 id
+    expect(h.getState().activeSessionId).toBe('a');
+  });
+
+  it('renameSession on missing session is a silent no-op', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 's1', title: '原标题' })], 's1')
+    );
+    const before = h.getState();
+    h.actions.renameSession('nope', '新标题');
+    expect(h.getState()).toBe(before);
+    // 原标题不变
+    expect(getSessionOrThrow(h.getState(), 's1').title).toBe('原标题');
+  });
+
+  it('renameSession with empty/whitespace-only title does not overwrite existing', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 's1', title: '有标题' })], 's1')
+    );
+    h.actions.renameSession('s1', '   ');
+    expect(getSessionOrThrow(h.getState(), 's1').title).toBe('有标题');
+
+    h.actions.renameSession('s1', '');
+    expect(getSessionOrThrow(h.getState(), 's1').title).toBe('有标题');
+  });
+
+  it('updateMessageText on missing session is a silent no-op', () => {
+    const h = makeHarness([
+      makeMessage({ id: 'm1', text: 'hello' }),
+    ]);
+    const before = h.getState();
+    h.actions.updateMessageText('no-such-session', 'm1', 'changed');
+    expect(h.getState()).toBe(before);
+    // 原消息不变
+    expect(h.message().text).toBe('hello');
+  });
+
+  it('updateMessageText on missing message is a silent no-op', () => {
+    const h = makeHarness([
+      makeMessage({ id: 'm1', text: 'hello' }),
+    ]);
+    const before = h.getState();
+    h.actions.updateMessageText('s1', 'no-such-message', 'changed');
+    expect(h.getState()).toBe(before);
+    expect(h.message().text).toBe('hello');
+  });
+
+  it('setSessionMessageStatus on missing message is a silent no-op', () => {
+    const h = makeHarness([
+      makeMessage({ id: 'm1', status: 'completed' }),
+    ]);
+    const before = h.getState();
+    h.actions.setSessionMessageStatus('s1', 'no-such-msg', 'error', 0);
+    expect(h.getState()).toBe(before);
+  });
+
+  it('commitDraftIfNeeded when active is valid returns existing id (no mint)', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'real',
+            title: '真实',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'hi' })],
+          }),
+        ],
+        'real'
+      )
+    );
+    const beforeLen = h.getState().sessions.length;
+    const id = h.actions.commitDraftIfNeeded();
+    expect(id).toBe('real');
+    expect(h.getState().sessions.length).toBe(beforeLen);
+  });
+
+  it('branchSession on missing source session is a silent no-op', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'src',
+            title: '源',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+          }),
+        ],
+        'src'
+      )
+    );
+    const before = h.getState();
+    h.actions.branchSession('no-such-src', '分叉');
+    expect(h.getState()).toBe(before);
+    expect(h.getState().sessions).toHaveLength(1);
+    expect(h.getState().activeSessionId).toBe('src');
+  });
+
+  it('archiveSession on already-archived session is a no-op (idempotent)', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'a',
+            isArchived: true,
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+          }),
+          emptyShell({ id: 'b' }),
+        ],
+        'b'
+      )
+    );
+    const before = h.getState();
+    h.actions.archiveSession('a');
+    expect(h.getState()).toBe(before);
+    expect(getSessionOrThrow(h.getState(), 'a').isArchived).toBe(true);
+  });
+
+  it('addMessage to missing session is a silent no-op (no ghost session created)', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 's1' })], 's1')
+    );
+    const before = h.getState();
+    h.actions.addMessage(
+      'ws',
+      'ghost-session',
+      makeMessage({ id: 'm1', sender: 'user', text: 'hi' })
+    );
+    expect(h.getState()).toBe(before);
+    expect(h.getState().sessionsById['ghost-session']).toBeUndefined();
+  });
+
+  it('clearSessionMessages on missing session is a silent no-op', () => {
+    const h = makeHarness([
+      makeMessage({ id: 'm1', text: 'keep me' }),
+    ]);
+    const before = h.getState();
+    h.actions.clearSessionMessages('no-such-session');
+    expect(h.getState()).toBe(before);
+    expect(h.message().text).toBe('keep me');
+  });
+
+  it('clearSessionMessages on session with no messages is a no-op', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 's1' })], 's1')
+    );
+    const before = h.getState();
+    h.actions.clearSessionMessages('s1');
+    expect(h.getState()).toBe(before);
+    expect(getSessionOrThrow(h.getState(), 's1').messages).toHaveLength(0);
+  });
+
+  it('patchSession on missing session is a silent no-op', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions([emptyShell({ id: 's1' })], 's1')
+    );
+    const before = h.getState();
+    h.actions.patchSession('nope', { goalMode: null });
+    expect(h.getState()).toBe(before);
+  });
+
+  it('deleteSession of active when no fallback exists enters draft mode', () => {
+    // 唯一会话被删除后 active 不得为空字符串 → 进入草稿哨兵
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          emptyShell({
+            id: 'only',
+            messages: [makeMessage({ id: 'm', sender: 'user', text: 'x' })],
+          }),
+        ],
+        'only'
+      )
+    );
+    expect(h.actions.deleteSession('only')).toBe(true);
+    const st = h.getState();
+    expect(st.sessionsById.only).toBeUndefined();
+    expect(st.sessions).toHaveLength(0);
+    // active 落到草稿哨兵（非空字符串）
+    expect(st.activeSessionId).toBeTruthy();
+    expect(isPendingDraft(st.activeSessionId)).toBe(true);
+  });
+});
