@@ -45,7 +45,7 @@ export interface WorkspaceSwitchActionsSlice {
   setGroupActiveCard: (wsId: string, colIdx: number, groupIdx: number, cardId: string) => void;
   /** 聚焦既有面板卡（含工具列展开副作用）；返回是否找到（P3-4 转发） */
   focusExistingPanelCard: (wsId: string, cardId: string) => boolean;
-  /** 折叠工具列并保留活动卡（C4：workspaceChromeHooks 迁入） */
+  /** 折叠工具列并保留活动卡（C4：旧列壳 chrome hooks 已迁入本 action） */
   collapseToolColumnPreserve: (wsId: string) => void;
 }
 

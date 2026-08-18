@@ -372,8 +372,8 @@ describe('专项 2：多分屏容器隔离裁剪守卫矩阵 (GEO-SPLIT-01 ~ GEO
     expect(rect.right).toBeLessThanOrEqual(792);
   });
 
-  // GEO-SPLIT-04: 2x1 顶部 SessionStrip 脱离 38px 限制
-  it('GEO-SPLIT-04: SessionStrip 加号菜单脱离 .ws-chrome-row 的 38px 高度限制', async () => {
+  // GEO-SPLIT-04: 2x1 顶部条带内 Menu 脱离 38px 限制
+  it('GEO-SPLIT-04: Menu 加号菜单脱离 .ws-chrome-row 的 38px 高度限制', async () => {
     render(
       <div
         className="ws-chrome-row"
