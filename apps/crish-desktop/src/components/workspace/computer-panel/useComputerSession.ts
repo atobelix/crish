@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 电脑操作会话 hook：enabled 本地化状态机 + activation 三态 + invoke 封装 +
  * 事件订阅。对齐 useBrowserSession 风格：hook 收拢全部状态副作用，渲染层
  * 只消费返回值。
@@ -9,8 +9,6 @@
  *   展示「引擎未接线」徽标降级提示）；
  * - 开关：enable/disable 走 invoke，missing 时本地化置位并 toast 提示
  *   「本地记录不落盘」；error 时 toast 错误；
- * - 急停：estop invoke，ok/missing 均本地复位（activation→idle、
- *   enabled→false——04 §4.3 急停回 Idle + §4.4 恢复需重新显式开启）；
  * - busy 互斥 + 30s 超时释放（对齐 F4 评审修复）。
  *
  * 反馈约定：仅错误 / 降级提示 toast；成功路径静默（状态展示即反馈）。
@@ -23,7 +21,6 @@ import {
   enableComputerSession,
   fetchComputerStatus,
   listenComputerStateEvent,
-  triggerComputerEstop,
 } from '../../../api/computerSessionApi';
 import {
   parseComputerStatePayload,
@@ -43,14 +40,12 @@ export interface UseComputerSessionResult {
   activation: ComputerActivation;
   /** 命令面是否接线（status 查询 missing → false，面板显示降级徽标） */
   wired: boolean;
-  /** 是否有进行中的操作（开关/急停互斥，防重复点击） */
+  /** 是否有进行中的操作（开关互斥，防重复点击） */
   busy: boolean;
   /** 显式开启（风险确认流在组件层完成后调用） */
   enable: () => void;
   /** 停用（解除授权） */
   disable: () => void;
-  /** 全局急停（确认流在组件层完成后调用；急停后回 idle 且需重新开启） */
-  estop: () => void;
 }
 
 /** 三态失败 → 用户可读文案（missing = 引擎未接线）；action 为完整动作名 */
@@ -186,26 +181,5 @@ export function useComputerSession(
     });
   }, [runOperation]);
 
-  const estop = useCallback(() => {
-    runOperation(async () => {
-      const res = await triggerComputerEstop('panel-button');
-      if (res.status === 'ok') {
-        // 04 §4.3 急停语义：中止在途注入 → 感知源停止 → 会话回 Idle；
-        // §4.4 恢复需重新显式开启 → enabled 复位
-        setActivation('idle');
-        setEnabled(false);
-      } else if (res.status === 'missing') {
-        // 命令面未接线：本地复位（未触达引擎急停链——提示明确）
-        setActivation('idle');
-        setEnabled(false);
-        toastRef.current(
-          '引擎未接线：已本地复位会话标记（未触达引擎全局急停链）'
-        );
-      } else {
-        toastRef.current(describeInvokeFailure(res, '全局急停'));
-      }
-    });
-  }, [runOperation]);
-
-  return { enabled, activation, wired, busy, enable, disable, estop };
+  return { enabled, activation, wired, busy, enable, disable };
 }

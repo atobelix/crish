@@ -1,109 +1,38 @@
 /**
  * 会话与消息操作门面 (Session & Message Access Facade)
+ *
+ * 纯查询/校验函数已拆分到 ./sessionAccessQuery（纯结构性重构）；
+ * 本文件 re-export 以保持外部 import 路径稳定，并保留依赖 getSessionStoreState() 的写入门面。
  */
 import type {
   MessageToolCall,
   SessionAgent,
   SessionGoalMode,
   SessionMessage,
-  SessionState,
 } from '../../store/types';
 import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
-import {
-  getActiveSessionId as getActiveSessionIdFromFacade,
-  getSessionById,
-  getSessionStoreState,
-} from '../../store/sessionStore';
+import { getSessionStoreState } from '../../store/sessionStore';
 import { getLayoutState, resolveSessionState } from './storeAccessCore';
+// 本文件门面内部用到的纯查询/校验函数从拆分文件引入；
+// 其余纯查询函数仅 re-export（外部消费方 import 路径不变）。
+import {
+  normalizeSessionId,
+  requireExistingSessionId,
+} from './sessionAccessQuery';
 
-export function isNonEmptySessionId(
-  sessionId: string | null | undefined
-): sessionId is string {
-  return typeof sessionId === 'string' && sessionId.length > 0;
-}
-
-export function normalizeSessionId(
-  sessionId: string | null | undefined
-): string | undefined {
-  if (typeof sessionId !== 'string') return undefined;
-  const id = sessionId.trim();
-  return id.length > 0 ? id : undefined;
-}
-
-export function selectSessionById(
-  sessions: readonly SessionState[],
-  sessionId: string | null | undefined,
-  sessionsById?: Readonly<Record<string, SessionState>>
-): SessionState | undefined {
-  const id = normalizeSessionId(sessionId);
-  if (!id) return undefined;
-  if (sessionsById) {
-    const hit = sessionsById[id];
-    if (hit) return hit;
-  }
-  return sessions.find((s) => s.id === id);
-}
-
-export function selectActiveSession(
-  sessions: readonly SessionState[],
-  activeSessionId: string | null | undefined,
-  sessionsById?: Readonly<Record<string, SessionState>>
-): SessionState | undefined {
-  return selectSessionById(sessions, activeSessionId, sessionsById);
-}
-
-export function selectSessionAgent(
-  session: SessionState | null | undefined,
-  agentId: string | null | undefined
-): SessionAgent | undefined {
-  if (!session?.agents?.length) return undefined;
-  const id = normalizeSessionId(agentId);
-  if (!id) return undefined;
-  return session.agents.find((a) => a.id === id);
-}
-
-export function resolveSession(
-  sessionId: string | null | undefined
-): SessionState | undefined {
-  const id = normalizeSessionId(sessionId);
-  if (!id) return undefined;
-  return getSessionById(id);
-}
-
-export function resolveActiveSession(): SessionState | undefined {
-  const id = getActiveSessionIdFromFacade();
-  return resolveSession(id);
-}
-
-export function hasSession(sessionId: string | null | undefined): boolean {
-  return resolveSession(sessionId) !== undefined;
-}
-
-export function withSession<T>(
-  sessionId: string | null | undefined,
-  fn: (session: SessionState) => T
-): T | undefined {
-  const session = resolveSession(sessionId);
-  if (!session) return undefined;
-  return fn(session);
-}
-
-export function withActiveSession<T>(
-  fn: (session: SessionState) => T
-): T | undefined {
-  const session = resolveActiveSession();
-  if (!session) return undefined;
-  return fn(session);
-}
-
-function requireExistingSessionId(
-  sessionId: string | null | undefined
-): string | undefined {
-  const id = normalizeSessionId(sessionId);
-  if (!id) return undefined;
-  if (!getSessionById(id)) return undefined;
-  return id;
-}
+export {
+  isNonEmptySessionId,
+  normalizeSessionId,
+  selectSessionById,
+  selectActiveSession,
+  selectSessionAgent,
+  resolveSession,
+  resolveActiveSession,
+  hasSession,
+  withSession,
+  withActiveSession,
+  requireExistingSessionId,
+} from './sessionAccessQuery';
 
 /**
  * @deprecated Name lies — **does not create a session**. Redirects to pending draft only.

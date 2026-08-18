@@ -13,6 +13,7 @@ import { isRegisteredCommand } from './transport/commandManifest';
 import {
   NOTE_CMD_DOCUMENT_APPLY_MD,
   NOTE_CMD_DOCUMENT_HYDRATE,
+  NOTE_CMD_DOCUMENT_RECENT,
   NOTE_CMD_QUERY_BLOCKS,
   NOTE_CMD_SEND_TO_NOTE,
   NOTE_COMMANDS,
@@ -22,6 +23,7 @@ import {
   createNoteTransport,
   createTauriNoteTransport,
   isNoteTauriRuntime,
+  noteDocumentRecent,
   parseApplyOutcome,
   parseQueryOutcome,
   queryParamsToWire,
@@ -42,15 +44,17 @@ vi.mock('./tauriInvoke', () => ({
 const mockInvoke = vi.mocked(invokeTyped);
 
 describe('note 命令名常量', () => {
-  it('与任务书对齐：note_document_apply_md / note_query_blocks / note_send_to_note / note_document_hydrate', () => {
+  it('与任务书对齐：note_document_apply_md / note_query_blocks / note_send_to_note / note_document_hydrate / note_document_recent', () => {
     expect(NOTE_CMD_DOCUMENT_APPLY_MD).toBe('note_document_apply_md');
     expect(NOTE_CMD_QUERY_BLOCKS).toBe('note_query_blocks');
     expect(NOTE_CMD_SEND_TO_NOTE).toBe('note_send_to_note');
     expect(NOTE_CMD_DOCUMENT_HYDRATE).toBe('note_document_hydrate');
+    expect(NOTE_CMD_DOCUMENT_RECENT).toBe('note_document_recent');
     expect(NOTE_COMMANDS.documentApplyMd).toBe(NOTE_CMD_DOCUMENT_APPLY_MD);
     expect(NOTE_COMMANDS.queryBlocks).toBe(NOTE_CMD_QUERY_BLOCKS);
     expect(NOTE_COMMANDS.sendToNote).toBe(NOTE_CMD_SEND_TO_NOTE);
     expect(NOTE_COMMANDS.documentHydrate).toBe(NOTE_CMD_DOCUMENT_HYDRATE);
+    expect(NOTE_COMMANDS.documentRecent).toBe(NOTE_CMD_DOCUMENT_RECENT);
   });
 
   it('commandManifest 已登记且 registered=true', () => {
@@ -58,6 +62,7 @@ describe('note 命令名常量', () => {
     expect(isRegisteredCommand(NOTE_CMD_QUERY_BLOCKS)).toBe(true);
     expect(isRegisteredCommand(NOTE_CMD_SEND_TO_NOTE)).toBe(true);
     expect(isRegisteredCommand(NOTE_CMD_DOCUMENT_HYDRATE)).toBe(true);
+    expect(isRegisteredCommand(NOTE_CMD_DOCUMENT_RECENT)).toBe(true);
   });
 });
 
@@ -452,6 +457,57 @@ describe('createTauriNoteTransport · invokeTyped 契约', () => {
     expect(mockInvoke).toHaveBeenLastCalledWith(NOTE_CMD_SEND_TO_NOTE, {
       req: { intent_id: 'i', markdown: 'x', doc_id: 'd' },
     });
+  });
+});
+
+describe('noteDocumentRecent', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset();
+    const w = window as unknown as Record<string, unknown>;
+    delete w.__TAURI__;
+    delete w.__TAURI_INTERNALS__;
+    delete w.isTauri;
+  });
+
+  afterEach(() => {
+    const w = window as unknown as Record<string, unknown>;
+    delete w.__TAURI__;
+    delete w.__TAURI_INTERNALS__;
+    delete w.isTauri;
+  });
+
+  it('无 Tauri 不 invoke，返回 null', async () => {
+    expect(isNoteTauriRuntime()).toBe(false);
+    await expect(noteDocumentRecent()).resolves.toBeNull();
+    expect(mockInvoke).not.toHaveBeenCalled();
+  });
+
+  it('有 Tauri 且有 persist 行：返回 doc_id', async () => {
+    (window as unknown as { __TAURI__: object }).__TAURI__ = {};
+    mockInvoke.mockResolvedValueOnce({
+      status: 'ok',
+      data: { ok: true, doc_id: 'doc-persist-1' },
+    });
+    await expect(noteDocumentRecent()).resolves.toBe('doc-persist-1');
+    expect(mockInvoke).toHaveBeenCalledWith(NOTE_CMD_DOCUMENT_RECENT);
+  });
+
+  it('有 Tauri 无行 / missing / 空串：返回 null，不编假 id', async () => {
+    (window as unknown as { __TAURI__: object }).__TAURI__ = {};
+    mockInvoke.mockResolvedValueOnce({
+      status: 'ok',
+      data: { ok: true, doc_id: null },
+    });
+    await expect(noteDocumentRecent()).resolves.toBeNull();
+
+    mockInvoke.mockResolvedValueOnce({ status: 'missing' });
+    await expect(noteDocumentRecent()).resolves.toBeNull();
+
+    mockInvoke.mockResolvedValueOnce({
+      status: 'ok',
+      data: { ok: true, doc_id: '   ' },
+    });
+    await expect(noteDocumentRecent()).resolves.toBeNull();
   });
 });
 

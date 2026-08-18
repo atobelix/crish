@@ -8,7 +8,6 @@ import {
   COMPUTER_ACTIVATION_LABEL,
   canDisableComputerSession,
   canEnableComputerSession,
-  canEstopComputerSession,
   isComputerActivation,
   normalizeComputerActivation,
   parseComputerStatePayload,
@@ -82,10 +81,5 @@ describe('computerPanelLib 按钮可用性矩阵', () => {
     expect(canEnableComputerSession(true)).toBe(false);
     expect(canDisableComputerSession(false)).toBe(false);
     expect(canDisableComputerSession(true)).toBe(true);
-  });
-
-  it('急停：仅已开启时可用（未开启无在途 AI 操作，安全兜底按钮不激活）', () => {
-    expect(canEstopComputerSession(false)).toBe(false);
-    expect(canEstopComputerSession(true)).toBe(true);
   });
 });

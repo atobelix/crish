@@ -115,13 +115,9 @@ apps/crish-desktop/src/api/approvalMeta.ts 400
 apps/crish-desktop/src/api/backgroundTaskParser.ts 390
 apps/crish-desktop/src/api/chat-bridge/EventRouter.ts 358
 apps/crish-desktop/src/api/chat-bridge/handlers/eventParser.ts 366
-apps/crish-desktop/src/api/clientApiNormalize.ts 342
 apps/crish-desktop/src/api/fontStore.ts 356
 apps/crish-desktop/src/api/gitApi.ts 393
 apps/crish-desktop/src/api/markdown-render/IncrementalMarkdownParser.ts 362
-apps/crish-desktop/src/api/previewBrowserStore.ts 343
-apps/crish-desktop/src/api/pricingCatalogDataA.ts 387
-apps/crish-desktop/src/api/pricingCatalogDataB.ts 362
 apps/crish-desktop/src/api/session-persistence/sessionHydration.ts 387
 apps/crish-desktop/src/api/session-persistence/sessionRustDbSql.ts 388
 apps/crish-desktop/src/api/sessionTitle.ts 342
@@ -130,7 +126,6 @@ apps/crish-desktop/src/api/tool-presentation/timelineNormalizer.ts 347
 apps/crish-desktop/src/api/workspaceFsApi.ts 360
 apps/crish-desktop/src/bridges/send-to-note.ts 341
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
-apps/crish-desktop/src/components/diff/DiffCard.tsx 426
 apps/crish-desktop/src/components/settings-mcp/McpServerList.tsx 434
 apps/crish-desktop/src/components/ui/Menu/Menu.tsx 426
 apps/crish-desktop/src/hooks/tab-drag/tabDragPrimitives.ts 349
@@ -140,6 +135,5 @@ apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts 352
 apps/crish-desktop/src/store/sessionCrudActions.ts 375
 apps/crish-desktop/src/store/streamingStore.ts 369
 apps/crish-desktop/src/store/workspace-shell/workspaceShellStore.ts 344
-apps/crish-desktop/src/test-utils/MockPhysicalGeometryEngine.ts 385
 apps/crish-desktop/src/workers/worker-pool.ts 345
 <!-- BASELINE_END -->

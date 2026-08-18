@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import {
@@ -60,7 +60,7 @@ function isDefaultPrefs(p: FontPreferences): boolean {
 }
 
 export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const [prefs, setPrefs] = useState<FontPreferences>(() => {
     try {
       return readStoredFonts();

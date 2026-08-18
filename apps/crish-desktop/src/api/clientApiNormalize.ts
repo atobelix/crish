@@ -304,40 +304,9 @@ export function deepMergeSettings<
   return output as T & S;
 }
 
-export const DEFAULT_SETTINGS: Settings = {
-  customRules: [],
-  defaultProvider: '',
-  defaultModel: '',
-  defaultThinkingLevel: 'default',
-  theme: 'default',
-  fonts: { uiFont: 'auto', monoFont: 'auto', monoLigatures: false, v: 1 },
-  hideThinkingBlock: false,
-  quietStartup: true,
-  enableSkillCommands: true,
-  enableAnalytics: false,
-  enableCrashTelemetry: true,
-  compaction: { enabled: true, reserveTokens: 16384, keepRecentTokens: 20000 },
-  branchSummary: { reserveTokens: 16384, skipPrompt: false },
-  retry: { enabled: true, maxRetries: 3, baseDelayMs: 2000 },
-  terminal: {
-    showImages: true,
-    imageWidthCells: 60,
-    clearOnShrink: false,
-    showTerminalProgress: false,
-  },
-  images: { autoResize: true, blockImages: false },
-  markdown: { codeBlockIndent: '  ' },
-  warnings: { anthropicExtraUsage: true },
-  packages: [],
-  skills: [],
-  extensions: [],
-  prompts: [],
-  themes: [],
-  sessionDir: '',
-  responseStyle: 'medium',
-  sendShortcut: 'enter',
-  tabModeEnabled: true,
-};
+// 默认 settings 常量拆至 clientApiDefaultSettings（纯数据子文件）
+import { DEFAULT_SETTINGS } from './clientApiDefaultSettings';
+export { DEFAULT_SETTINGS };
 
 /** 深拷贝默认 settings（嵌套对象独立）。 */
 export function getDefaultSettings(): Settings {

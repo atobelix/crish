@@ -2,9 +2,10 @@
  * H1 工作区键 → persist docId。禁止把对话 ctx.sessionId 当文档 id。
  *
  * 优先级只走 resolver 一条：显式 params.docId / `note:<docId>` →
- * recent persist（现码无 list/recent 命令，恒 null）→ pre-open bind →
- * 合成 `strict-${wsId}` 诚实空。≠ 打开完成。
+ * recent persist（`note_document_recent` / `doc_meta`+`blocks`）→
+ * pre-open bind → 合成 `strict-${wsId}` 诚实空。≠ 打开完成。
  */
+import { noteDocumentRecent } from '../../api/noteApi';
 import { getActiveProjectId, getWorkspacePath } from '../../api/projectStore';
 import {
   resolveProductStrictDocId,
@@ -49,14 +50,19 @@ export function resolveExplicitNoteDocId(
   return asNonEmptyDocId(resolveNoteUri(ctx.panelId)?.params.docId);
 }
 
+/** 查当前 workspace.db 最近一篇 persist 非空 doc。失败 / 无行 → null。 */
+export async function loadRecentPersistedDocId(): Promise<string | null> {
+  return noteDocumentRecent();
+}
+
 export function resolveNotePaperDoc(
-  ctx: NotePaperDocContext
+  ctx: NotePaperDocContext,
+  recentPersistedDocId: string | null = null
 ): ProductStrictDocResolution {
   const wsId = resolveNoteWorkspaceKey();
   return resolveProductStrictDocId({
     wsId,
     productStrictDocId: resolveExplicitNoteDocId(ctx),
-    // 无 list/recent persist 命令；禁止编 IPC / localStorage 假账
-    recentPersistedDocId: null,
+    recentPersistedDocId,
   });
 }

@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * RuntimePanel 待确认区段：审批列表 + 允许/拒绝（防连点、本地乐观标记）。
  * 成功静默（列表切换即反馈）；仅失败 toast。
@@ -21,7 +21,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
   countLabel,
   onFocusSession,
 }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const sessions = useSessionStore((state) => state.sessions);
   /** 审批按钮防连点；成功静默，仅失败 toast */
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);

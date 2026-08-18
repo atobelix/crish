@@ -5,7 +5,6 @@
  * missing，上层降级为「未接线」提示 + 开关状态本地化）：
  *   invoke('computer_session_enable')  -> { enabled: true }
  *   invoke('computer_session_disable') -> { enabled: false }
- *   invoke('computer_estop')           -> { stopped: true }（可带 reason 审计原因）
  *   invoke('computer_status')          -> { enabled: boolean, mode: 'idle'|'browser'|'desktop', reason?: string }
  *   事件 'computer://state-changed' payload { enabled?, mode?, reason? }
  *
@@ -18,9 +17,6 @@
  * - computer_status：回传 SessionEnablement 标记 + ActivationGate 三态
  *   （04 §2 S3 SessionMode；本桥契约值 'idle'/'browser'/'desktop' 对齐
  *   Rust serde 枚举，UI 语义名 Idle/BrowserActive/DesktopActive）；
- * - computer_estop：面板急停按钮 → 同一吊销链（04 §4.3 ③，
- *   AbortToken::abort 幂等；与 browser_* 会话级 estop 及 computer_estop
- *   工具共用全局急停链，来源记录为 User/Panel）；
  * - 事件 'computer://state-changed'：由 ActivationGate 状态广播接线
  *   （04 §2 S3 项 4：变更 → 事件总线 → 面板指示条）。
  *
@@ -36,15 +32,12 @@ import type { ComputerActivation } from '../components/workspace/computer-panel/
 
 export const COMPUTER_SESSION_ENABLE_CMD = 'computer_session_enable';
 export const COMPUTER_SESSION_DISABLE_CMD = 'computer_session_disable';
-export const COMPUTER_ESTOP_CMD = 'computer_estop';
 export const COMPUTER_STATUS_CMD = 'computer_status';
 
 /** 引擎电脑操作状态事件名（Tauri event channel；ActivationGate 状态广播）。 */
 export const COMPUTER_STATE_EVENT = 'computer://state-changed';
 
 export type ComputerSessionResult = { enabled: boolean };
-
-export type ComputerEstopResult = { stopped: boolean };
 
 export type ComputerStatusResult = {
   enabled: boolean;
@@ -71,19 +64,6 @@ export function disableComputerSession(): Promise<
   InvokeTypedResult<ComputerSessionResult>
 > {
   return invokeTyped<ComputerSessionResult>(COMPUTER_SESSION_DISABLE_CMD);
-}
-
-/**
- * 全局急停（04 §4.3 ③ 面板按钮 → 同一吊销链：中止在途注入 → 感知源停止 →
- * 会话回 Idle；恢复需重新显式开启）。reason 为审计原因（可选）。
- */
-export function triggerComputerEstop(
-  reason?: string
-): Promise<InvokeTypedResult<ComputerEstopResult>> {
-  return invokeTyped<ComputerEstopResult>(
-    COMPUTER_ESTOP_CMD,
-    reason ? { reason } : undefined
-  );
 }
 
 /** 查询电脑操作会话状态（挂载恢复/诊断用；未接线 → missing）。 */

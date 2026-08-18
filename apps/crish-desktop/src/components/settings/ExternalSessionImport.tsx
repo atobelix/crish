@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 导入外部对话：扫描 Claude Code / Codex，勾选后导入。
  * 用于设置 · 账户「数据」与首次向导可选步；禁止自动导入。
@@ -40,7 +40,7 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
   variant = 'settings',
   onImported,
 }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const baseId = useId();
   const listId = `${baseId}-list`;
   const statusId = `${baseId}-status`;

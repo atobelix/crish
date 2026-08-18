@@ -8,9 +8,6 @@
  *
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 重做 E3 · ≠ 默认双开 poll+OS
  */
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { describe, expect, it } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -21,15 +18,6 @@ import {
   createProductNoteMirrorIpc,
   resolveWorkspaceProductEmptyMirrorProps,
 } from './workspaceProductMirrorDetect';
-
-const DIR =
-  typeof import.meta.url === 'string' && import.meta.url.startsWith('file:')
-    ? dirname(fileURLToPath(import.meta.url))
-    : join(process.cwd(), 'apps/crish-desktop/src/components/workspace');
-
-function readWorkspaceHostSrc(): string {
-  return readFileSync(join(DIR, 'Workspace.tsx'), 'utf8');
-}
 
 describe('CONN-E2′ · Workspace 产品宿主 detect 策略', () => {
   it('conn_e2p_workspace_product_host_enables_detect_schedule', () => {
@@ -46,13 +34,6 @@ describe('CONN-E2′ · Workspace 产品宿主 detect 策略', () => {
     expect(root).toHaveAttribute('data-mirror-detect-policy', '1');
     expect(root).toHaveAttribute('data-el03', 'not-claimed');
     expect(root).toHaveAttribute('data-inotify-full', 'not-claimed');
-
-    const src = readWorkspaceHostSrc();
-    expect(src).toMatch(/WorkspaceProductEmptyHost/);
-    expect(src).toMatch(/CONN-E2′|CONN-E2'/);
-    expect(src).not.toMatch(
-      /<WorkspaceEmptyState\s+wsId=\{ws\.id\}\s+onActivate=\{focusThisWorkspace\}\s*\/>/
-    );
   });
 
   it('conn_e2p_empty_state_direct_still_defaults_off', () => {

@@ -2,7 +2,7 @@
  * 笔记叶工厂（lazy 块）：H1 + 产品 hydrate + C2′/E2′ 默装 + 现成写锥。
  * jsdom 绿 ≠ 打开完成 ≠ 关 EL。
  */
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createProductStrictHydrateTransport } from '../../components/note-paper/hydrateProjection';
 import { NotePaperStrictPanel } from '../../components/note-paper/NotePaperStrictPanel';
 import { buildStrictDocBindingDataAttrs } from '../../components/workspace/workspaceEmptyStateStrictDoc';
@@ -18,10 +18,31 @@ import {
 import { WORKSPACE_PRODUCT_ENABLE_PAPER_LIST } from '../../components/workspace/workspaceProductPaperList';
 import type { ViewRenderContext } from '../../services/view-registry';
 import { NOTE_LEAF_HONESTY_ATTRS } from './honesty';
-import { resolveNotePaperDoc } from './productLeafBindings';
+import {
+  loadRecentPersistedDocId,
+  resolveExplicitNoteDocId,
+  resolveNotePaperDoc,
+} from './productLeafBindings';
 
 export function NoteLeafHost(ctx: ViewRenderContext): React.ReactElement {
-  const resolution = resolveNotePaperDoc(ctx);
+  const explicit = resolveExplicitNoteDocId(ctx);
+  const [recent, setRecent] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (explicit) {
+      setRecent(null);
+      return;
+    }
+    let live = true;
+    void loadRecentPersistedDocId().then((id) => {
+      if (live) setRecent(id);
+    });
+    return () => {
+      live = false;
+    };
+  }, [explicit, ctx.panelId]);
+
+  const resolution = resolveNotePaperDoc(ctx, recent);
   const transport = useMemo(
     () => createProductStrictHydrateTransport(resolution.docId),
     [resolution.docId]

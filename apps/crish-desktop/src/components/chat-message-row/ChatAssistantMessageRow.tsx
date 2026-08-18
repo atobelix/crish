@@ -55,7 +55,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   void _messageIndex;
   void _hideThinkingBlock;
 
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
   const rowAria = messageRowAriaLabel({

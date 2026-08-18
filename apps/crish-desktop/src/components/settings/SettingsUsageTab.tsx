@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 用量：本会话统计、本机历史与模型单价；成功静默，仅错误提示。
  */
@@ -33,7 +33,7 @@ function safeLoadPrices(): { list: ModelPrice[]; error: string | null } {
 }
 
 export const SettingsUsageTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const [pricesModalOpen, setPricesModalOpen] = useState(false);
   const [priceList, setPriceList] = useState<ModelPrice[]>(
     () => safeLoadPrices().list

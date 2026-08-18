@@ -9,6 +9,10 @@ export {
   splitEdgeToDropType,
   dropTypeToPreviewDirection,
   dropTypeToDetachPlacement,
+  findGroupIndicesInWorkspace,
+  isOnlyCardInSourceColumn,
+} from './tabDragPrimitives';
+export {
   isRedundantNonChatColumnSplit,
   nullDropResult,
   splitCardResult,
@@ -16,7 +20,5 @@ export {
   canCommitTabDrop,
   dropPreviewEquals,
   computeDragOverlayTargetSize,
-  findGroupIndicesInWorkspace,
-  isOnlyCardInSourceColumn,
-} from './tabDragPrimitives';
+} from './tabDragResults';
 export { resolveTabDrop } from './tabDragResolve';

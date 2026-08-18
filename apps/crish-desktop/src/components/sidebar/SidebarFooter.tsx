@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './Sidebar.module.css';
@@ -57,7 +57,7 @@ export interface SidebarFooterProps {
 
 export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
   ({ chromeHidden, updateAvailable, setUpdateAvailableState }) => {
-    const { showToast: _showToast } = useToast();
+    const { showToast } = useToast();
     return (
       <div
         className={styles.sidebarFooter}

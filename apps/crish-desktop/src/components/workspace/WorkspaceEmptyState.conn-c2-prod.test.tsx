@@ -125,11 +125,6 @@ describe('WorkspaceEmptyState · CONN-C2′ PaperList 产品默开', () => {
       /enableProductPaperList=\{WORKSPACE_PRODUCT_ENABLE_PAPER_LIST\}/
     );
 
-    // Workspace 侧调用点仍走产品宿主（非直渲 EmptyState）
-    expect(readWorkspaceSrc('Workspace.tsx')).toMatch(
-      /WorkspaceProductEmptyHost/
-    );
-
     // 策略常量文件语义 = true
     expect(readWorkspaceSrc('workspaceProductPaperList.ts')).toMatch(
       /WORKSPACE_PRODUCT_ENABLE_PAPER_LIST\s*=\s*true/

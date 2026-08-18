@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import styles from './McpSettingsTab.module.css';
 import { Button, Select, Tooltip } from '../ui';
@@ -33,7 +33,7 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
   setShowAdd,
   onAddDemo,
   }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   return (
     <div className={`${styles.mcpAddBox} mcp-add-box`} role="form" aria-label="注册演示服务">
       <div className={`${styles.mcpAddRow} mcp-add-row`}>

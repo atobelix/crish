@@ -698,9 +698,11 @@ fn render_markdown_uncached(raw: &str) -> String {
     if raw.is_empty() {
         return String::new();
     }
-    // 1. 长度截断
+    // 1. 长度截断（C-01：CJK 多字节字符在非 char boundary 处切片会 panic，
+    //    回退到前一个字符边界，保证截断后首尾字符完整、不产生半个字符）
     let truncated = if raw.len() > MAX_MARKDOWN_INPUT {
-        &raw[..MAX_MARKDOWN_INPUT]
+        let end = raw.floor_char_boundary(MAX_MARKDOWN_INPUT);
+        &raw[..end]
     } else {
         raw
     };
@@ -1104,4 +1106,43 @@ fn build_code_fence_html_shell(lang: &str, file_path: Option<&str>, inner: Strin
         escape_html(lang),
         inner
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// C-01：CJK 多字节字符在非 char boundary 处截断会 panic；
+    /// `floor_char_boundary` 回退到前一个字符边界，截断后首尾字符完整。
+    #[test]
+    fn cjk_truncation_does_not_panic_on_non_char_boundary() {
+        // 单个 CJK 字符占 3 字节（UTF-8），构造长度刚好越过 MAX_MARKDOWN_INPUT
+        // 且截断点落在某 CJK 字符中间的字节位置。
+        let prefix = "正文开始\n\n";
+        // 重复 CJK 字符直到总字节数越过上限（每个「字」3 字节）
+        let unit = "字";
+        let unit_bytes = unit.len();
+        let need = MAX_MARKDOWN_INPUT + unit_bytes - prefix.len() + 1;
+        let count = need / unit_bytes + 1;
+        let raw = format!("{prefix}{}", unit.repeat(count));
+        assert!(raw.len() > MAX_MARKDOWN_INPUT, "构造输入应越过截断阈值");
+
+        // 不应 panic；截断后首字符（prefix 首字）与末字符都应是完整字符边界
+        let html = render_markdown(&raw);
+        // 渲染结果应包含 prefix 首字的 HTML（非半个字符乱码）
+        assert!(html.contains("正"), "截断后首字符应完整保留");
+    }
+
+    /// 截断点回退后首尾字符完整：构造截断点恰好落在 CJK 字符首字节处，
+    /// `floor_char_boundary` 应回退到该字符之前的边界。
+    #[test]
+    fn floor_char_boundary_keeps_complete_chars() {
+        let s = "abc字def";
+        // 「字」起始于字节 3，长度 3；floor_char_boundary(4) 应回退到 3
+        assert_eq!(s.floor_char_boundary(4), 3);
+        assert_eq!(s.floor_char_boundary(5), 3);
+        assert_eq!(s.floor_char_boundary(6), 6);
+        // 边界本身不变
+        assert_eq!(s.floor_char_boundary(3), 3);
+    }
 }

@@ -204,6 +204,8 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('note_send_to_note', 'note', 'engine'),
     // 真 hydrate / open 投影（B-09；产品 Strict 可检测 Tauri 时默认 tauri-ipc）
     entry('note_document_hydrate', 'note', 'engine'),
+    // 最近一篇 persist 非空（doc_meta + blocks；产品默认打开喂源）
+    entry('note_document_recent', 'note', 'engine'),
     // A-INV-02 / W2-E：mirror detect + import 提案（不 apply；X-05；≠ EL-03）
     entry('note_detect_mirror_drift', 'note', 'engine'),
     entry('note_import_mirror_proposal', 'note', 'engine'),
@@ -213,11 +215,10 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('note_undo_text', 'note', 'engine'),
     entry('note_redo_text', 'note', 'engine'),
     // ── 电脑操作会话命令（06 遗留⑨：computer_session_enable/disable、
-    //    computer_estop、computer_status；代理到 ComputerSlot，状态事件
+    //    computer_status；代理到 ComputerSlot，状态事件
     //    computer://state-changed；与 Rust command_manifest.rs 同步）──
     entry('computer_session_enable', 'computer', 'engine'),
     entry('computer_session_disable', 'computer', 'engine'),
-    entry('computer_estop', 'computer', 'engine'),
     entry('computer_status', 'computer', 'engine'),
     // ── D4a：子代理显式恢复与关闭命令面（D4 §3.1 双端四步登记；与 Rust
     //    command_manifest.rs 同步）──

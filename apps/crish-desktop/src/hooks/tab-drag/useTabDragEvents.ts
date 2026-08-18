@@ -1,7 +1,7 @@
 import React from 'react';
 import { closeAgentSidePanel } from '../../api/openAgentPanel';
 import { getWorkspaceStoreState, setDropPreview } from '../../store/workspaceStore';
-import { resolveTabBarHeight, type DropType } from './tabDragGeometry';
+import type { DropType } from './tabDragGeometry';
 import {
   animateOverlayAway,
   clearDropIndicator,
@@ -13,67 +13,13 @@ import {
   useTabDragReorder,
   type CardSnapshot,
 } from './useTabDragReorder';
-import type { TabBarTabRect } from './tabDragTypes';
+import { buildCardSnapshots, type TabDragPayload } from './tabDragSnapshot';
 import { usePointerDragBase } from '../usePointerDragBase';
 
 export interface UseTabDragOptions {
   wsId: string;
   groupId: string;
   cardsLength: number;
-}
-
-function snapshotTabBarGeometry(cardEl: HTMLElement): {
-  tabBarH: number;
-  tabsBar: HTMLElement | null;
-  tabRects: TabBarTabRect[];
-  barRight: number;
-} {
-  const header = cardEl.querySelector('.card-header');
-  const tabsBarCandidate = cardEl.querySelector('.tabs-bar');
-  const tabsBar =
-    tabsBarCandidate instanceof HTMLElement ? tabsBarCandidate : null;
-
-  let measuredH: number | null = null;
-  if (header instanceof HTMLElement) {
-    measuredH = header.getBoundingClientRect().height;
-  } else if (tabsBar) {
-    measuredH = tabsBar.getBoundingClientRect().height;
-  }
-  const tabBarH = resolveTabBarHeight(measuredH);
-
-  let tabRects: TabBarTabRect[] = [];
-  let barRight = 0;
-  if (tabsBar) {
-    barRight = tabsBar.getBoundingClientRect().right;
-    const tabs = Array.from(
-      tabsBar.querySelectorAll(
-        '.card-tab:not(.dragging-tab-hidden):not(.tab-placeholder-indicator)'
-      )
-    ).filter((el): el is HTMLElement => el instanceof HTMLElement);
-    tabRects = tabs.map((t) => {
-      const tr = t.getBoundingClientRect();
-      return { left: tr.left, width: tr.width };
-    });
-  }
-
-  return { tabBarH, tabsBar, tabRects, barRight };
-}
-
-/** pointerdown 一次性快照，move / drop 路径只读缓存 */
-interface TabDragPayload {
-  cardId: string;
-  wsId: string;
-  groupId: string;
-  cardsLength: number;
-  isDragFromTabButton: boolean;
-  /** pointerdown 的 e.currentTarget（tab 元素） */
-  targetEl: HTMLElement;
-  sourceCard: HTMLElement | null;
-  cardSnapshots: CardSnapshot[];
-  clickOffsetX: number;
-  clickOffsetY: number;
-  startWidth: number;
-  startHeight: number;
 }
 
 export function useTabDragEvents({
@@ -334,28 +280,7 @@ export function useTabDragEvents({
           '.workspace-card:not(.placeholder-card-group)'
         )
       ).filter((el): el is HTMLElement => el instanceof HTMLElement);
-      const cardSnapshots: CardSnapshot[] = cardElements.map((el) => {
-        const r = el.getBoundingClientRect();
-        const barGeom = snapshotTabBarGeometry(el);
-        return {
-          element: el,
-          rect: {
-            left: r.left,
-            top: r.top,
-            right: r.right,
-            bottom: r.bottom,
-            width: r.width,
-            height: r.height,
-          },
-          colIdx: parseInt(el.getAttribute('data-col-idx') || '0', 10),
-          groupIdx: parseInt(el.getAttribute('data-group-idx') || '0', 10),
-          groupId: el.getAttribute('data-group-id') || '',
-          tabBarH: barGeom.tabBarH,
-          tabsBar: barGeom.tabsBar,
-          tabRects: barGeom.tabRects,
-          barRight: barGeom.barRight,
-        };
-      });
+      const cardSnapshots: CardSnapshot[] = buildCardSnapshots(cardElements);
 
       const cardRect = sourceCard ? sourceCard.getBoundingClientRect() : null;
       const tabRect = targetEl ? targetEl.getBoundingClientRect() : null;

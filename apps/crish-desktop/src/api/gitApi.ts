@@ -4,12 +4,11 @@
  * 本机 git 快路径为唯一路径；失败显式返回原因（不静默降级）。
  *
  * 命令操作（stage/unstage/commit/push/branch/switch/discard）拆出至 gitApi.commands，
+ * diff 拉取/解析（fetchGitDiff）拆出至 gitApi.diff，
  * hub 仅 re-export 以保证消费方 import 路径不变。
  */
 
 import { getWorkspacePath } from './projectStore';
-import { parseUnifiedDiffs } from './toolFeedback';
-import type { FileDiff } from '../store/layoutStore';
 
 export type GitFileStatusCode = 'A' | 'M' | 'D' | 'U' | 'R' | 'C' | '?' | '!' | 'mixed' | string;
 
@@ -219,6 +218,9 @@ export {
   pushGitChanges,
 } from './gitApi.commands';
 
+// diff 拉取/解析拆出至子模块，hub re-export 保证消费方 import 路径不变
+export { fetchGitDiff } from './gitApi.diff';
+
 /**
  * 解析 `git status --porcelain=v1 -b` 输出。
  * 导出供单测；不发明路径。
@@ -326,37 +328,6 @@ export async function fetchGitStatusLocal(cwd: string): Promise<GitStatusResult 
   return parseGitPorcelainStatus(r.stdout, cwd);
 }
 
-async function fetchGitDiffLocal(params: {
-  cwd: string;
-  path?: string;
-  staged?: boolean;
-}): Promise<{ found: boolean; files: FileDiff[]; unified?: string } | null> {
-  const { cwd, path, staged } = params;
-  const parts = ['diff', '--no-color', '--no-ext-diff'];
-  if (staged) parts.push('--cached');
-  if (path) {
-    parts.push('--', path);
-  }
-  const r = await runLocalGit(cwd, parts, GIT_LOCAL_TIMEOUT_MS);
-  if (!r || r.timedOut) return null;
-  if (!r.ok && /not a git repository/i.test(r.stderr || '')) {
-    return { found: false, files: [] };
-  }
-  const unified = r.stdout || undefined;
-  let files = unified ? parseUnifiedDiffs(unified) : [];
-  if (files.length === 0 && path) {
-    files = [
-      {
-        filePath: path,
-        additions: 0,
-        deletions: 0,
-        changes: [{ type: 'normal', content: '（暂无行级 diff，文件已变更）' }],
-      },
-    ];
-  }
-  return { found: true, files, ...(unified !== undefined && { unified }) };
-}
-
 /** 短缓存：同一 cwd 在 TTL 内复用成功结果，减轻总览/变更面板连点导致的超时 */
 const GIT_STATUS_CACHE_TTL_MS = 2_500;
 const gitStatusCache = new Map<string, { at: number; result: GitStatusResult }>();
@@ -423,38 +394,6 @@ export async function fetchGitStatus(cwd?: string): Promise<GitStatusResult> {
     GIT_STATUS_TIMEOUT_MS,
     timeoutResult,
   );
-}
-
-/**
- * 拉取单文件或工作区 unified diff，并解析为 FileDiff 列表。
- * T03.7：本机 git 为唯一路径（幽灵命令已删）；无 cwd 或失败返回 found:false。
- */
-export async function fetchGitDiff(params?: {
-  cwd?: string;
-  path?: string;
-  staged?: boolean;
-}): Promise<{ found: boolean; files: FileDiff[]; unified?: string }> {
-  const cwd = (params?.cwd || getWorkspacePath() || '').trim() || undefined;
-  const path = params?.path?.trim() || undefined;
-  const staged = params?.staged;
-
-  const empty = { found: false as const, files: [] as FileDiff[] };
-
-  if (cwd) {
-    try {
-      const local = await fetchGitDiffLocal({
-        cwd,
-        ...(path !== undefined && { path }),
-        ...(staged !== undefined && { staged }),
-      });
-      if (local && (local.files.length > 0 || local.unified != null)) {
-        return local;
-      }
-    } catch {
-      /* fall through */
-    }
-  }
-  return empty;
 }
 
 /** 状态码短标签（界面展示） */

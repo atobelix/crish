@@ -56,6 +56,7 @@
 import { invokeTyped } from './tauriInvoke';
 import {
   NOTE_CMD_DOCUMENT_APPLY_MD,
+  NOTE_CMD_DOCUMENT_RECENT,
   NOTE_CMD_QUERY_BLOCKS,
   NOTE_CMD_REDO_TEXT,
   NOTE_CMD_SEND_TO_NOTE,
@@ -342,6 +343,27 @@ export async function noteRedoText(
     code: 'note.unsupported',
     reason: 'redoText not supported by transport',
   };
+}
+
+/**
+ * 当前已打开 workspace.db 最近一篇已 persist 且投影非空的 `doc_id`。
+ * 非 Tauri / 命令缺失 / 业务失败 / 无行 → `null`（不抛，不编假 id）。
+ */
+export async function noteDocumentRecent(): Promise<string | null> {
+  if (!isNoteTauriRuntime()) return null;
+  const res = await invokeTyped<unknown>(NOTE_CMD_DOCUMENT_RECENT);
+  if (res.status !== 'ok') return null;
+  return parseRecentPersistedDocId(res.data);
+}
+
+function parseRecentPersistedDocId(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const rec = data as Record<string, unknown>;
+  if (rec.ok === false) return null;
+  const raw = rec.doc_id ?? rec.docId;
+  if (typeof raw !== 'string') return null;
+  const id = raw.trim();
+  return id.length > 0 ? id : null;
 }
 
 /**

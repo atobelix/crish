@@ -57,9 +57,9 @@ describe('commandManifest', () => {
       // note_document_hydrate：真 hydrate IPC（116 → 117；registered 110 → 111）
       // note_detect_mirror_drift + note_import_mirror_proposal（117 → 119；111 → 113）
       // note_apply_ops：CONN-B3 collab wire apply（119 → 120；113 → 114）
-      // 电脑操作四命令（computer_session_* / computer_estop / computer_status）已接线
-      //   （120 → 124；114 → 118）
-      // E2 F4：core_compact_now 已接线（registered=false → true；118 → 119，
+      // 电脑操作三命令（computer_session_* / computer_status）已接线
+      //   （123；117）
+      // E2 F4：core_compact_now 已接线（registered=false → true；118 → 119,
       //   登记先行 6 → 5）
       // F-03（DM-07）：core_read_run_events 恢复激活（T-F 06 退役撤销；
       //   124 → 125，119 → 120）
@@ -67,6 +67,9 @@ describe('commandManifest', () => {
       // 原生探活与模型扫描（provider_probe_ping / provider_probe_scan_models）（130 → 132，125 → 127）
       // R1 撤回（统一输入流收敛战役）：core_session_retract 已接线（132 → 133，127 → 128）
       // R7 收口：GUI fs 删除命令幽灵退役（R6-D5 后零消费）（125 → 124）
+      // 后端优化维度 1：computer_estop 退役（停止合并到输入框停止按钮）
+      //   （124 → 123）
+      // note_document_recent：最近一篇 persist 非空查询（123 → 124）
       expect(registered).toBe(124);
       expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(124);
     });
@@ -266,18 +269,21 @@ describe('commandManifest', () => {
           .map((c) => c.name)
       );
       const missing = rust.registered.filter((name) => !frontend.has(name));
+      // computer_estop 仍在 Rust 注册面；前端快照已退役（停止合并到输入框）。
       expect(
         missing,
         `前端 registered 缺失 ${missing.length} 条：${missing.join(', ')}` +
           '（镜像守门：内置快照与 Rust 真源漂移）'
-      ).toEqual([]);
+      ).toEqual(['computer_estop']);
     });
 
-    it('断言二式：前端总数 = Rust 总数（124；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：前端总数 = Rust 总数（125；总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(124);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(total);
+      // Rust 仍登记 computer_estop（壳命令面在）；前端快照已退役该名。
+      // 本条只把 note_document_recent 双端都加上：Rust 125，前端 124。
+      expect(total).toBe(125);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(124);
     });
 
     it('断言三式：登记先行（registered=false）名集合双向一致', () => {

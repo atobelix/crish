@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * ComputerPanel 组件测试：开关状态机渲染 / 启用风险确认流 / 全局急停确认流 /
+ * ComputerPanel 组件测试：开关状态机渲染 / 启用风险确认流 /
  * 三态会话指示 / 未接线（missing）降级徽标。
  * invoke 走 test-setup 全局 mock；事件订阅 mock @tauri-apps/api/event。
  */
@@ -21,7 +21,6 @@ import {
 } from '../../../test-setup';
 import { ComputerPanel } from './ComputerPanel';
 import {
-  COMPUTER_ESTOP_CMD,
   COMPUTER_SESSION_DISABLE_CMD,
   COMPUTER_SESSION_ENABLE_CMD,
   COMPUTER_STATUS_CMD,
@@ -71,7 +70,6 @@ function renderPanel() {
 
 const enableBtn = () => screen.getByRole('button', { name: '启用电脑操作' });
 const disableBtn = () => screen.getByRole('button', { name: '停用电脑操作' });
-const estopBtn = () => screen.getByRole('button', { name: '全局急停' });
 
 describe('ComputerPanel 会话指示与三态渲染', () => {
   beforeEach(() => {
@@ -107,7 +105,6 @@ describe('ComputerPanel 会话指示与三态渲染', () => {
     expect(browserItem.getAttribute('data-mode')).toBe('browser');
     expect(desktopItem.getAttribute('data-mode')).toBe('desktop');
     expect(enableBtn()).toBeEnabled();
-    expect(estopBtn()).toBeDisabled();
   });
 
   it('三态渲染：事件驱动后 desktop 态高亮并展示活跃文案', async () => {
@@ -128,7 +125,6 @@ describe('ComputerPanel 会话指示与三态渲染', () => {
     const idleItem = withinItem(mode, '待机');
     expect(idleItem.getAttribute('aria-current')).toBeNull();
     expect(disableBtn()).toBeEnabled();
-    expect(estopBtn()).toBeEnabled();
   });
 
   it('三态渲染：browser 态（互斥中）文案', async () => {
@@ -251,70 +247,6 @@ describe('ComputerPanel 启用/停用确认流', () => {
     expect(toast).toHaveBeenCalledWith(
       expect.stringMatching(/启用电脑操作已本地记录/)
     );
-  });
-});
-
-describe('ComputerPanel 全局急停确认流', () => {
-  beforeEach(() => {
-    eventMock.handlers.clear();
-    eventMock.listen.mockImplementation(
-      async (
-        event: string,
-        handler: TauriEventHandler
-      ): Promise<() => void> => {
-        eventMock.handlers.set(event, handler);
-        return () => {
-          eventMock.handlers.delete(event);
-        };
-      }
-    );
-    setupDefaultStatus();
-  });
-
-  afterEach(() => {
-    cleanup();
-    vi.clearAllMocks();
-  });
-
-  it('未启用：急停按钮禁用（无在途 AI 操作）', async () => {
-    renderPanel();
-    await waitFor(() =>
-      expect(screen.getByText(/电脑操作未开启/)).toBeInTheDocument()
-    );
-    expect(estopBtn()).toBeDisabled();
-  });
-
-  it('急停确认流：对话框出现 → 取消不 invoke；确认后 invoke estop 且会话复位', async () => {
-    mockTauriCommand(COMPUTER_STATUS_CMD, async () => ({
-      enabled: true,
-      mode: 'desktop' as const,
-    }));
-    const estopImpl = vi.fn(async () => ({ stopped: true }));
-    mockTauriCommand(COMPUTER_ESTOP_CMD, estopImpl);
-    renderPanel();
-    await waitFor(() => expect(estopBtn()).toBeEnabled());
-
-    fireEvent.click(estopBtn());
-    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
-    expect(screen.getByText(/中止所有在途 AI 注入/)).toBeInTheDocument();
-
-    // 取消：不 invoke
-    fireEvent.click(screen.getByRole('button', { name: '取消' }));
-    await waitFor(() =>
-      expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
-    );
-    expect(estopImpl).not.toHaveBeenCalled();
-    expect(estopBtn()).toBeEnabled();
-
-    // 确认：invoke estop → 回 idle + 未开启 + 按钮禁用
-    fireEvent.click(estopBtn());
-    fireEvent.click(screen.getByRole('button', { name: '确认急停' }));
-    await waitFor(() =>
-      expect(screen.getByText(/电脑操作未开启/)).toBeInTheDocument()
-    );
-    expect(estopImpl).toHaveBeenCalledTimes(1);
-    expect(estopBtn()).toBeDisabled();
-    expect(enableBtn()).toBeEnabled();
   });
 });
 

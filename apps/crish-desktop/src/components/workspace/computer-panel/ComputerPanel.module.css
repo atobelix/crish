@@ -135,22 +135,3 @@
 .activationMuted {
   opacity: var(--opacity-disabled, 0.45);
 }
-
-/*                  04  4.3              */
-
-.estopButton {
-  border-width: 1px;
-  border-color: var(--color-error);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semi-bold, 600);
-  letter-spacing: 0.02em;
-}
-
-.estopButton:not(:disabled) {
-  background: color-mix(in srgb, var(--color-error) 92%, var(--bg-primary));
-  color: #fff;
-}
-
-.estopButton:not(:disabled):hover {
-  background: var(--color-error);
-}

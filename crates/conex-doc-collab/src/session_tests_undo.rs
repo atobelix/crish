@@ -459,3 +459,62 @@ fn test_empty_text_undo_does_not_advance_rev() {
     assert_eq!(s.rev(), rev_before, "Empty text_redo must NOT advance rev");
 }
 
+// ── B3 · CAS 冲突类型化（产生侧：session.rs emit_commit → ApplyError::PersistConflict）──
+
+/// B3：`on_committed_expect` 返回 `PersistError::Conflict` 时，`emit_commit`
+/// 经 `apply` 对外暴露 [`ApplyError::PersistConflict { expected }`]（类型化
+/// 变体，不再退化为 `ApplyError::Persist(String)`），且 `expected` = 传入期望 rev。
+#[test]
+fn cas_conflict_produces_typed_persist_conflict_variant() {
+    use crate::persistence::PersistError;
+
+    /// 恒返回 CAS Conflict 的持久化插件（模拟陈旧写被存储层拦截）。
+    struct CasConflictPlugin;
+    impl PersistencePlugin for CasConflictPlugin {
+        fn load_doc(&self, _: &str) -> Result<crate::persistence::HydrateBlob, PersistError> {
+            Ok(Default::default())
+        }
+        fn on_committed(&self, _: &str, _: &CommitBatch) -> Result<(), PersistError> {
+            Err(PersistError::Conflict { expect: 0 })
+        }
+        fn on_committed_expect(
+            &self,
+            _: &str,
+            _: &CommitBatch,
+            expect_rev: Option<u64>,
+        ) -> Result<(), PersistError> {
+            Err(PersistError::Conflict {
+                expect: expect_rev.unwrap_or(0),
+            })
+        }
+        fn flush_hint(&self, _: &str) -> Result<(), PersistError> {
+            Ok(())
+        }
+    }
+
+    let mut s = DocSession::new("cas-conflict").with_persistence(Box::new(CasConflictPlugin));
+    let id = BlockId::new();
+    let rev_before = s.rev();
+    let err = s
+        .apply(
+            Origin::User,
+            &[Op::Insert {
+                id,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            }],
+        )
+        .expect_err("CAS conflict must fail apply");
+    // 类型化匹配：必须是 PersistConflict 变体（非 Persist(String)）
+    match &err {
+        ApplyError::PersistConflict { expected } => {
+            // expect_rev = apply 前会话 rev（increment 前）
+            assert_eq!(*expected, rev_before, "expected 应为 apply 前 rev");
+        }
+        other => panic!("期望 ApplyError::PersistConflict，得到 {other:?}"),
+    }
+    // P-H2 回滚：rev 不前进
+    assert_eq!(s.rev(), rev_before, "CAS 冲突后 rev 不得前进");
+}

@@ -1,29 +1,34 @@
 /**
- * 会话反序列化、格式补齐与水合校验纯函数集
+ * 会话反序列化、格式补齐与水合校验纯函数集（hub）
  *
  * Stream D 改造后职责：仅保留「形状守卫」与「水合校验」纯函数。
- * - JSONL 序列化 / 反序列化（messagesToJsonl / jsonlToMessages / *Worker）已删除：
- *   SQLite 直接以结构化行存储 SessionMessage，无需 JS 侧 JSONL 中间层。
- * - 大数据量异步解析下沉到 Rust 侧（save_session_body / load_session_body）。
+ * - JSONL 序列化 / 反序列化已删除：SQLite 直接以结构化行存储。
+ * - 大数据量异步解析下沉到 Rust 侧。
+ *
+ * 本文件为 hub：索引解析 + 工具函数在此；消息/agent 解析与水合收尾
+ * 已拆到 sessionHydrationMessages / sessionHydrationAgents 子文件，
+ * 此处 re-export 以保持对外 import 路径不变。
  */
 
-import type {
-  SessionAgent,
-  SessionMessage,
-} from '../../store/layoutStore';
-import type {
-  FileDiff,
-  MessageToolApprovalMeta,
-  MessageToolCall,
-} from '../../store/types';
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import { EMPTY_SESSION_TITLE } from '../sessionTitle';
-import { normalizeAssistantTimeline } from '../toolPresentation';
 import {
   DEFAULT_SESSION_FOLDER,
   type SessionIndexEntry,
   type SessionIndexImportMeta,
 } from './sessionPersistenceTypes';
+
+// re-export 消息 / agent 解析与水合收尾纯函数（拆分自本文件，对外路径不变）
+export {
+  parseSessionMessage,
+  parseSessionMessages,
+  sanitizeMessagesForHydrate,
+} from './sessionHydrationMessages';
+export {
+  parseSessionAgent,
+  parseSessionAgents,
+  hydrateSessionAgents,
+} from './sessionHydrationAgents';
 
 /** 规范化索引侧 importMeta；非法则 undefined */
 function parseSessionIndexImportMeta(
@@ -45,26 +50,6 @@ function parseSessionIndexImportMeta(
   }
   return meta;
 }
-
-const TOOL_STATUSES = new Set<MessageToolCall['status']>([
-  'running',
-  'success',
-  'error',
-  'pending_approval',
-]);
-
-const MSG_STATUSES = new Set<NonNullable<SessionMessage['status']>>([
-  'queued',
-  'processing',
-  'completed',
-]);
-
-const AGENT_STATUSES = new Set<SessionAgent['status']>([
-  'running',
-  'completed',
-  'failed',
-  'stopped',
-]);
 
 /** JSON.parse 失败 / 空串 → fallback（不抛） */
 export function safeParseJson<T>(
@@ -194,179 +179,6 @@ export function parseSessionIndexList(raw: unknown): SessionIndexEntry[] {
   return out;
 }
 
-function parseToolCall(raw: unknown): MessageToolCall | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const o = raw as Record<string, unknown>;
-  const id = asNonEmptyString(o.id);
-  if (!id) return null;
-  const name = typeof o.name === 'string' ? o.name : 'tool';
-  const args =
-    typeof o.arguments === 'string'
-      ? o.arguments
-      : o.arguments != null
-        ? (() => {
-            try {
-              return JSON.stringify(o.arguments);
-            } catch {
-              return '';
-            }
-          })()
-        : '';
-  const status: MessageToolCall['status'] =
-    typeof o.status === 'string' &&
-    TOOL_STATUSES.has(o.status as MessageToolCall['status'])
-      ? (o.status as MessageToolCall['status'])
-      : 'error';
-  const tc: MessageToolCall = {
-    id,
-    name,
-    arguments: args,
-    status,
-  };
-  if (typeof o.output === 'string') tc.output = o.output;
-  if (typeof o.explanation === 'string') tc.explanation = o.explanation;
-  if (Array.isArray(o.diffs)) tc.diffs = o.diffs as FileDiff[];
-  if (o.approvalMeta && typeof o.approvalMeta === 'object') {
-    tc.approvalMeta = o.approvalMeta as MessageToolApprovalMeta;
-  }
-  return tc;
-}
-
-/**
- * 消息形状守卫：必须有 id + user|assistant sender；
- * 坏时间戳 → 0；非法 status / tool 过滤或纠正。
- */
-export function parseSessionMessage(raw: unknown): SessionMessage | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const o = raw as Record<string, unknown>;
-  const id = asNonEmptyString(o.id);
-  if (!id) return null;
-  const sender =
-    o.sender === 'user' || o.sender === 'assistant' ? o.sender : null;
-  if (!sender) return null;
-
-  const ts = asFiniteNumber(o.timestamp);
-  const msg: SessionMessage = {
-    id,
-    sender,
-    timestamp: ts != null ? ts : 0,
-  };
-
-  if (typeof o.text === 'string') msg.text = o.text;
-  if (typeof o.thinking === 'string') msg.thinking = o.thinking;
-  if (
-    typeof o.status === 'string' &&
-    MSG_STATUSES.has(o.status as NonNullable<SessionMessage['status']>)
-  ) {
-    msg.status = o.status as NonNullable<SessionMessage['status']>;
-  }
-  if (
-    typeof o.streamTextOffset === 'number' &&
-    Number.isFinite(o.streamTextOffset)
-  ) {
-    msg.streamTextOffset = o.streamTextOffset;
-  }
-  if (typeof o.thinkingTime === 'number' && Number.isFinite(o.thinkingTime)) {
-    msg.thinkingTime = o.thinkingTime;
-  }
-  if (Array.isArray(o.toolCalls) && o.toolCalls.length) {
-    const tools = o.toolCalls
-      .map(parseToolCall)
-      .filter(Boolean) as MessageToolCall[];
-    if (tools.length) msg.toolCalls = tools;
-  }
-  if (Array.isArray(o.blocks) && o.blocks.length) {
-    const blocks: NonNullable<SessionMessage['blocks']> = [];
-    for (const b of o.blocks) {
-      if (!b || typeof b !== 'object') continue;
-      const bo = b as Record<string, unknown>;
-      if (bo.type === 'text') {
-        blocks.push({
-          type: 'text',
-          content: typeof bo.content === 'string' ? bo.content : '',
-        });
-      } else if (bo.type === 'tool_call') {
-        const bid = typeof bo.id === 'string' ? bo.id : undefined;
-        blocks.push({ type: 'tool_call', ...(bid !== undefined ? { id: bid } : {}) });
-      }
-    }
-    if (blocks.length) msg.blocks = blocks;
-  }
-
-  return msg;
-}
-
-/** 数组形态消息列表守卫（JSON 数组存盘兼容路径） */
-export function parseSessionMessages(raw: unknown): SessionMessage[] {
-  if (!Array.isArray(raw)) return [];
-  const out: SessionMessage[] = [];
-  for (const item of raw) {
-    const m = parseSessionMessage(item);
-    if (m) out.push(m);
-  }
-  return out;
-}
-
-/**
- * 协作 agent 形状守卫。缺核心 id 字段 → null。
- * messages 递归守卫；status 非法 → stopped。
- */
-export function parseSessionAgent(raw: unknown): SessionAgent | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const o = raw as Record<string, unknown>;
-  const id = asNonEmptyString(o.id);
-  const subagentRunId = asNonEmptyString(o.subagentRunId);
-  const parentSessionId = asNonEmptyString(o.parentSessionId);
-  const parentRunId = asNonEmptyString(o.parentRunId);
-  if (!id || !subagentRunId || !parentSessionId || !parentRunId) return null;
-
-  const statusRaw = typeof o.status === 'string' ? o.status : '';
-  const status: SessionAgent['status'] = AGENT_STATUSES.has(
-    statusRaw as SessionAgent['status']
-  )
-    ? (statusRaw as SessionAgent['status'])
-    : 'stopped';
-
-  const startedAt = asFiniteNumber(o.startedAt);
-  const endedAt = asFiniteNumber(o.endedAt);
-
-  const agent: SessionAgent = {
-    id,
-    subagentRunId,
-    parentSessionId,
-    parentRunId,
-    description: typeof o.description === 'string' ? o.description : '',
-    mode: typeof o.mode === 'string' ? o.mode : '',
-    status,
-    messages: parseSessionMessages(o.messages),
-    startedAt: startedAt != null ? startedAt : 0,
-    depth: typeof o.depth === 'number' && o.depth >= 0 ? o.depth : 0,
-    subagentPath: Array.isArray(o.subagentPath)
-      ? (o.subagentPath as unknown[]).filter((s): s is string => typeof s === 'string')
-      : [id],
-  };
-
-  const parentToolCallId = asNonEmptyString(o.parentToolCallId);
-  if (parentToolCallId) agent.parentToolCallId = parentToolCallId;
-  if (typeof o.summary === 'string') agent.summary = o.summary;
-  if (endedAt != null) agent.endedAt = endedAt;
-
-  return agent;
-}
-
-export function parseSessionAgents(raw: unknown): SessionAgent[] {
-  if (!Array.isArray(raw)) return [];
-  const out: SessionAgent[] = [];
-  const seen = new Set<string>();
-  for (const item of raw) {
-    const a = parseSessionAgent(item);
-    if (!a || seen.has(a.id)) continue;
-    seen.add(a.id);
-    out.push(a);
-  }
-  return out;
-}
-
 /**
  * folderOrder：string[] 形状；全非法 → null（表示「无持久顺序」）。
  * 空数组保留为 []（显式空顺序，与 null 区分）。
@@ -386,79 +198,4 @@ export function parseFolderOrder(raw: unknown): string[] | null {
   // 原数组非空但无一合法 → 视为损坏
   if (raw.length > 0 && out.length === 0) return null;
   return out;
-}
-
-/**
- * 恢复时把未完成的流式状态收成终态，避免 UI 永久转圈。
- */
-export function sanitizeMessagesForHydrate(
-  messages: SessionMessage[]
-): SessionMessage[] {
-  if (!messages?.length) return [];
-  return messages.map((m) => {
-    let next = m;
-    if (m.status === 'processing') {
-      const sanitizedText = m.text && m.text.trim()
-        ? m.text
-        : m.sender === 'assistant'
-          ? '（上次回复未完成）'
-          : undefined;
-      next = {
-        ...next,
-        status: 'completed',
-        ...(sanitizedText !== undefined ? { text: sanitizedText } : {}),
-      };
-    }
-    if (next.toolCalls?.length) {
-      next = {
-        ...next,
-        toolCalls: next.toolCalls.map((tc) => {
-          if (tc.status === 'running' || tc.status === 'pending_approval') {
-            return {
-              ...tc,
-              status: 'error' as const,
-              output: tc.output?.trim()
-                ? tc.output
-                : '上次会话中断，工具未完成',
-            };
-          }
-          return tc;
-        }),
-      };
-    }
-    // 历史脏数据：客户端曾注入的「已结束。」不是模型正文，去掉以免误导续聊
-    if (
-      next.sender === 'assistant' &&
-      (next.text || '').trim() === '已结束。'
-    ) {
-      next = {
-        ...next,
-        text: '',
-      };
-    }
-    // 对齐 blocks / toolCalls，保证重开会话时间线可渲染
-    if (next.sender === 'assistant') {
-      next = normalizeAssistantTimeline(next);
-    }
-    return next;
-  });
-}
-
-/**
- * 水合后的 agent：sanitize 消息 + running → stopped（中断非失败）。
- */
-export function hydrateSessionAgents(agents: SessionAgent[]): SessionAgent[] {
-  if (!agents?.length) return [];
-  return agents.map((a) => {
-    const summaryVal =
-      a.status === 'running'
-        ? a.summary || '上次会话中断，协作 agent 未完成'
-        : a.summary;
-    return {
-      ...a,
-      messages: sanitizeMessagesForHydrate(a.messages || []),
-      status: a.status === 'running' ? ('stopped' as const) : a.status,
-      ...(summaryVal !== undefined ? { summary: summaryVal } : {}),
-    };
-  });
 }

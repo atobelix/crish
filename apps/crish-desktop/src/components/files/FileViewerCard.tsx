@@ -32,7 +32,7 @@ const MORE_ACTIONS_LABEL = '更多操作';
 
 export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
   ({ filePath, initialMode = 'plain' }) => {
-    const { showToast: _showToast } = useToast();
+    const { showToast } = useToast();
 
     const diffFiles = useTerminalField(selectDiffFiles) as FileDiff[];
 

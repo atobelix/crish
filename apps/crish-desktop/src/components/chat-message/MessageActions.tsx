@@ -71,7 +71,7 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
       onOpenDiff: _onOpenDiff,
       onOpenDiffPanel: _onOpenDiffPanel,
     } = actions ?? {};
-    const { showToast: _showToast } = useToast();
+    const { showToast } = useToast();
     // B-05：完成态气泡挂「发送到笔记」（agent-card / 主 chat 共用 MessageActions）
     const noteMarkdown = assistantCopyText(msg) || msg.text || '';
     const onNoteSuccess = useCallback(

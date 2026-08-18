@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 账户：本机环境、数据备份、导入外部对话；成功静默，仅错误提示。
  *
@@ -34,7 +34,7 @@ function pathLeaf(path: string): string {
 }
 
 export const SettingsProfileTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
   const headMetaId = useId();
   const engineStatusId = useId();

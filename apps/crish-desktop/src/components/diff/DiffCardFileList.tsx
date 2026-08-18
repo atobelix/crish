@@ -1,4 +1,4 @@
-﻿import React, { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { Button, Select, Tooltip } from '../ui';
@@ -80,7 +80,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
   onCopyCode,
   renderInlineDiffContent,
 }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const { stagedFiles, unstagedFiles } = useMemo(() => {
     const staged: FileDiff[] = [];
     const unstaged: FileDiff[] = [];

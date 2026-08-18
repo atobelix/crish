@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 通用设置：系统选项、回答风格、消息快捷键与界面偏好；成功静默，仅失败提示。
  */
@@ -18,7 +18,7 @@ type Props = {
 };
 
 export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
   const setTabModeEnabled = useLayoutStore((s) => s.setTabModeEnabled);
   const setAppSettings = useSettingsField((s) => s.setAppSettings);

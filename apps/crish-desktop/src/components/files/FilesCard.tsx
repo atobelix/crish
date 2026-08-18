@@ -30,7 +30,7 @@ const REFRESH_LABEL = '刷新';
 
 export const FilesCard: React.FC<FilesCardProps> = React.memo(
   ({ initialPath }) => {
-    const { showToast: _showToast } = useToast();
+    const { showToast } = useToast();
     const preview = useFilePreview();
     const nav = useFileNavigation(() => preview.dirty);
     const filterInputRef = useRef<HTMLInputElement>(null);

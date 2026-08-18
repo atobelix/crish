@@ -77,18 +77,12 @@ export function parseComputerStatePayload(
 
 // ── 按钮可用性矩阵 ──────────────────────────────────────────────
 // 启用：未开启（已开启时按钮切换为「停用」）；
-// 停用：已开启；
-// 急停：已开启（急停为安全兜底——未开启无在途 AI 操作，无需急停；
-//       04 §4.3 ③ 面板常驻按钮接线后按 enabled 判定，全局急停链同源）
+// 停用：已开启。
 
 export function canEnableComputerSession(enabled: boolean): boolean {
   return !enabled;
 }
 
 export function canDisableComputerSession(enabled: boolean): boolean {
-  return enabled;
-}
-
-export function canEstopComputerSession(enabled: boolean): boolean {
   return enabled;
 }

@@ -309,141 +309,20 @@ function splitCsvLine(line: string): string[] {
 }
 
 // ── 选区批注：下一条用户消息注入模型（非常驻评论区） ──
-export type PendingFileAnnotation = {
-  id: string;
-  path: string;
-  selectedText: string;
-  text: string;
-  createdAt: number;
-};
+// 批注逻辑拆分到 fileAnnotations.ts，hub 经 re-export 保持对外契约不变
+export {
+  type PendingFileAnnotation,
+  addPendingFileAnnotation,
+  countPendingFileAnnotations,
+  takePendingFileAnnotations,
+  formatAnnotationsForModel,
+} from './fileAnnotations';
 
-let pendingAnnotations: PendingFileAnnotation[] = [];
-
-export function addPendingFileAnnotation(input: {
-  path: string;
-  selectedText: string;
-  text: string;
-}): PendingFileAnnotation {
-  const a: PendingFileAnnotation = {
-    id: `ann-${Date.now().toString(36)}`,
-    path: input.path,
-    selectedText: input.selectedText.trim().slice(0, 2000),
-    text: input.text.trim(),
-    createdAt: Date.now(),
-  };
-  pendingAnnotations = [a, ...pendingAnnotations].slice(0, 20);
-  try {
-    window.dispatchEvent(new CustomEvent('crish-file-annotations-changed'));
-  } catch {
-    /* swallow-ok: 批注变更事件分发失败不影响已入队的批注 */
-  }
-  return a;
-}
-
-export function countPendingFileAnnotations(): number {
-  return pendingAnnotations.length;
-}
-
-/** 取出并清空待发送批注（发送用户消息时调用） */
-export function takePendingFileAnnotations(): PendingFileAnnotation[] {
-  const list = pendingAnnotations;
-  pendingAnnotations = [];
-  try {
-    window.dispatchEvent(new CustomEvent('crish-file-annotations-changed'));
-  } catch {
-    /* swallow-ok: 批注清空事件分发失败不影响已取出的批注 */
-  }
-  return list;
-}
-
-/** 格式化为注入模型的上下文块 */
-export function formatAnnotationsForModel(list: PendingFileAnnotation[]): string {
-  if (!list.length) return '';
-  const parts = list.map((a, i) => {
-    const path = a.path;
-    const sel = a.selectedText.length > 800 ? `${a.selectedText.slice(0, 800)}…` : a.selectedText;
-    return [
-      `### 文件批注 ${i + 1}`,
-      `路径: ${path}`,
-      `选中内容:`,
-      '```',
-      sel,
-      '```',
-      `用户批注: ${a.text}`,
-    ].join('\n');
-  });
-  return (
-    `<file_annotations>\n以下批注来自用户在文件面板中对选区的标注，请优先参考。\n\n` +
-    parts.join('\n\n') +
-    `\n</file_annotations>`
-  );
-}
-
-/** 面板尚未挂载时暂存待打开路径 */
-let pendingOpenPath: string | null = null;
-
-export function takePendingOpenPath(): string | null {
-  const p = pendingOpenPath;
-  pendingOpenPath = null;
-  return p;
-}
-
-let fileViewerOpener: ((filePath: string, mode?: 'plain' | 'diff') => void) | null = null;
-
-export function registerFileViewerOpener(opener: typeof fileViewerOpener): void {
-  fileViewerOpener = opener;
-}
-
-/**
- * 打开右侧文件面板并定位到路径。
- * 由对话工具行等入口调用；FilesCard 未挂载时先缓存路径。
- * 相对路径会接到当前工作区根下。
- */
-export function openFileInPanel(filePath: string, mode?: 'plain' | 'diff'): void {
-  if (!filePath?.trim()) return;
-  const path = resolveWorkspacePath(filePath.trim());
-  if (fileViewerOpener) {
-    fileViewerOpener(path, mode);
-  } else {
-    pendingOpenPath = path;
-    window.dispatchEvent(new CustomEvent('crish-open-file', { detail: { path } }));
-  }
-}
-
-/** 从工具参数中尽量抽出文件路径（相对或绝对） */
-export function extractFilePathFromToolArgs(args: string): string | null {
-  if (!args?.trim()) return null;
-  const raw = args.trim();
-  try {
-    if (raw.startsWith('{')) {
-      const parsed = JSON.parse(raw) as Record<string, unknown>;
-      const inner =
-        parsed.parameters && typeof parsed.parameters === 'object'
-          ? (parsed.parameters as Record<string, unknown>)
-          : parsed.input && typeof parsed.input === 'object'
-            ? (parsed.input as Record<string, unknown>)
-            : parsed;
-      for (const key of [
-        'path',
-        'filePath',
-        'file_path',
-        'target_file',
-        'targetFile',
-        'filename',
-        'file',
-      ]) {
-        const v = inner[key];
-        if (typeof v === 'string' && v.trim() && !v.includes('\n') && v.length < 512) {
-          return v.trim();
-        }
-      }
-    }
-  } catch {
-    /* swallow-ok: JSON 参数解析失败时按原串路径兜底 */
-  }
-  // 像路径的单行
-  if (!raw.includes('\n') && /[\\/]/.test(raw) && raw.length < 400) {
-    return raw.replace(/^['"]|['"]$/g, '');
-  }
-  return null;
-}
+// 文件面板打开器 + 工具参数路径抽取拆分到 filePanelOpener.ts，
+// hub 经 re-export 保持对外契约不变
+export {
+  takePendingOpenPath,
+  registerFileViewerOpener,
+  openFileInPanel,
+  extractFilePathFromToolArgs,
+} from './filePanelOpener';

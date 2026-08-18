@@ -69,7 +69,6 @@ import {
   mintTabId,
 } from './types';
 import { applyDockToTree, ensureAdapterShape, ensureChatOnlyTree } from './adapterShape';
-import { registerShellReadApi } from './shellReadBridge';
 import {
   dedupeSessionLeavesInStore,
   removeSessionUnitFromTree,
@@ -77,6 +76,7 @@ import {
   bindActiveChatLeafSession,
 } from './leafBindingHelpers';
 import { useLayoutTreeStore, listChatLeaves } from '../layout-tree';
+import { registerShellStoreReadApi } from './shellRegistry';
 
 // 拆分自本文件的子模块 re-export，保证消费方 import 路径不变
 export { loadLegacyOpenTabsMap, selectActiveTabSessionId } from './shellSelectors';
@@ -470,12 +470,6 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
 // G13 断环：向 shellReadBridge 注册本 store 的读取/写入闭包，
 // adapterShape / layoutRestorePolicy 经桥访问 shell，不再 import 本文件。
 // 必须在 useWorkspaceShellStore 定义之后执行（依赖其 getState/setState）。
-registerShellReadApi({
-  getActiveTab: () => useWorkspaceShellStore.getState().getActiveTab(),
-  getOpenTabs: () => useWorkspaceShellStore.getState().openTabs,
-  setOpenTabs: (tabs) => useWorkspaceShellStore.setState({ openTabs: tabs }),
-  resetToCleanDraft: (workspaceKey) =>
-    useWorkspaceShellStore.getState().resetToCleanDraft(workspaceKey),
-});
+registerShellStoreReadApi(useWorkspaceShellStore);
 
 

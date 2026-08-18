@@ -327,94 +327,23 @@ export const useStreamingStore = create<StreamingState>((set, get) => ({
     get().byKey[streamStoreKey(sessionId, messageId)],
 }));
 
-/** Imperative helpers (callbacks / batchers; no React). */
-export function setStreamText(
-  sessionId: string,
-  messageId: string,
-  text: string
-): void {
-  useStreamingStore.getState().setStreamText(sessionId, messageId, text);
-}
+// ── 命令式辅助函数（callbacks / batchers；无 React）─────────────────
+// 从 streamingStoreHelpers.ts 拆出（T4-11 基线清零），hub 保留 re-export，
+// 消费方 import 路径不变。
+export {
+  setStreamText,
+  setStreamThinking,
+  setStreamTool,
+  clearStreamTool,
+  clearStreamTools,
+  clearStream,
+  clearStreams,
+  clearSessionStreams,
+  getStreamText,
+  getStreamThinking,
+  getStreamTools,
+  getStreamTool,
+  getStreamEntry,
+} from './streamingStoreHelpers';
 
-export function setStreamThinking(
-  sessionId: string,
-  messageId: string,
-  thinking: string
-): void {
-  useStreamingStore
-    .getState()
-    .setStreamThinking(sessionId, messageId, thinking);
-}
 
-export function setStreamTool(
-  sessionId: string,
-  messageId: string,
-  toolId: string,
-  patch: StreamToolLive
-): void {
-  useStreamingStore
-    .getState()
-    .setStreamTool(sessionId, messageId, toolId, patch);
-}
-
-export function clearStreamTool(
-  sessionId: string,
-  messageId: string,
-  toolId: string
-): void {
-  useStreamingStore.getState().clearStreamTool(sessionId, messageId, toolId);
-}
-
-export function clearStreamTools(sessionId: string, messageId: string): void {
-  useStreamingStore.getState().clearStreamTools(sessionId, messageId);
-}
-
-export function clearStream(sessionId: string, messageId: string): void {
-  useStreamingStore.getState().clearStream(sessionId, messageId);
-}
-
-export function clearStreams(sessionId: string, messageIds: string[]): void {
-  useStreamingStore.getState().clearStreams(sessionId, messageIds);
-}
-
-export function clearSessionStreams(sessionId: string): void {
-  useStreamingStore.getState().clearSession(sessionId);
-}
-
-export function getStreamText(
-  sessionId: string,
-  messageId: string
-): string | undefined {
-  return useStreamingStore.getState().getStreamText(sessionId, messageId);
-}
-
-export function getStreamThinking(
-  sessionId: string,
-  messageId: string
-): string | undefined {
-  return useStreamingStore.getState().getStreamThinking(sessionId, messageId);
-}
-
-export function getStreamTools(
-  sessionId: string,
-  messageId: string
-): Record<string, StreamToolLive> | undefined {
-  return useStreamingStore.getState().getStreamTools(sessionId, messageId);
-}
-
-export function getStreamTool(
-  sessionId: string,
-  messageId: string,
-  toolId: string
-): StreamToolLive | undefined {
-  return useStreamingStore
-    .getState()
-    .getStreamTool(sessionId, messageId, toolId);
-}
-
-export function getStreamEntry(
-  sessionId: string,
-  messageId: string
-): StreamEntry | undefined {
-  return useStreamingStore.getState().getStreamEntry(sessionId, messageId);
-}

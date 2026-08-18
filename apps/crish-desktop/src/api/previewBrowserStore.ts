@@ -354,38 +354,9 @@ export function canOpenExternally(url: string): boolean {
   return /^https?:\/\//i.test(u);
 }
 
-/**
- * 窄栏状态条 / 书签标题：host 或短路径，失败则截断原文。
- */
-export function previewDisplayHost(url: string): string {
-  const u = sanitizeBrowseInput(url || '');
-  if (!u || isAboutBlank(u)) return '';
-  try {
-    const parsed = new URL(u);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      const path = parsed.pathname === '/' ? '' : parsed.pathname;
-      const host = parsed.host;
-      const full = path ? `${host}${path}` : host;
-      return full.length > 48 ? `${full.slice(0, 46)}…` : full;
-    }
-  } catch {
-    /* swallow-ok: URL 展示解析失败时回退原始串 */
-  }
-  return u.length > 48 ? `${u.slice(0, 46)}…` : u;
-}
-
-/** 书签默认标题：优先 hostname */
-export function previewDisplayLabel(url: string): string {
-  const u = sanitizeBrowseInput(url || '');
-  if (!u || isAboutBlank(u)) return u;
-  try {
-    const parsed = new URL(u);
-    if (parsed.hostname) return parsed.hostname;
-  } catch {
-    /* swallow-ok: URL 解析失败时回退截断原串 */
-  }
-  return u.slice(0, 80);
-}
+// 展示工具函数拆至 previewBrowserDisplay（纯函数子文件）
+import { previewDisplayHost, previewDisplayLabel } from './previewBrowserDisplay';
+export { previewDisplayHost, previewDisplayLabel };
 
 /**
  * 校验并规范化用户输入；危险 scheme / 非字符串给明确 reason，供调用方决定是否 toast。

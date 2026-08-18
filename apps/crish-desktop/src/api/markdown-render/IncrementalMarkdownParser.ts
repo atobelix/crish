@@ -18,10 +18,8 @@
 import {
   matchListItem,
   isIndentedContinuation,
-  renderListItemHtml,
   langFromFenceInfo,
   extractFilePathFromFenceInfo,
-  type ListKind,
 } from './markdownPlugins';
 import {
   isTableSepLine,
@@ -29,64 +27,35 @@ import {
   splitTableCells,
   parseTableAlignments,
 } from './markdownTable';
-import { escapeHtml, stripThoughtPlaceholders } from '../markdownRenderLite';
-import { renderInline, highlightCodeBlock } from './IncrementalInlineRenderer';
+import { stripThoughtPlaceholders } from '../markdownRenderLite';
+import { renderInline } from './IncrementalInlineRenderer';
 
-export type BlockType =
-  | 'p'
-  | 'h1'
-  | 'h2'
-  | 'h3'
-  | 'h4'
-  | 'fence'
-  | 'ul'
-  | 'ol'
-  | 'table'
-  | 'quote'
-  | 'hr';
+// 类型契约与内部状态接口（拆分子文件，hub re-export 保持外部 import 路径不变）
+export type {
+  BlockType,
+  BlockNode,
+  IncrementalParseResult,
+  TableAlignment,
+  FenceState,
+  ListItemState,
+  ListState,
+  TableState,
+} from './IncrementalMarkdownParserTypes';
+import type {
+  BlockType,
+  BlockNode,
+  IncrementalParseResult,
+  FenceState,
+  ListState,
+  TableState,
+} from './IncrementalMarkdownParserTypes';
 
-export interface BlockNode {
-  type: BlockType;
-  html: string;
-  startLine: number;
-  endLine: number;
-}
-
-export interface IncrementalParseResult {
-  finalizedBlocks: BlockNode[];
-  tailBlock: BlockNode | null;
-  blockCount: number;
-}
-
-type TableAlignment = 'left' | 'center' | 'right';
-
-interface FenceState {
-  lang: string;
-  filePath: string;
-  buffer: string[];
-  startLine: number;
-}
-
-interface ListItemState {
-  kind: ListKind;
-  content: string;
-  taskChecked?: boolean;
-  olStart?: number;
-}
-
-interface ListState {
-  kind: ListKind;
-  items: ListItemState[];
-  baseIndent: number;
-  startLine: number;
-}
-
-interface TableState {
-  alignments: TableAlignment[];
-  rows: string[][];
-  inThead: boolean;
-  startLine: number;
-}
+// 块渲染纯函数（拆分子文件，hub 内部调用）
+import {
+  renderFenceHtml,
+  renderTableHtml,
+  renderListHtml,
+} from './IncrementalMarkdownParserRender';
 
 export class IncrementalMarkdownParser {
   private lines: string[] = [];
@@ -297,7 +266,7 @@ export class IncrementalMarkdownParser {
   private closeFence(endLine: number): void {
     if (!this.fence) return;
     // 流式期用 highlightCodeBlock（行级缓存），完成态由 Rust 接管
-    const html = this.renderFenceHtml(this.fence);
+    const html = renderFenceHtml(this.fence);
     this.finalizedBlocks.push({
       type: 'fence',
       html,
@@ -309,14 +278,14 @@ export class IncrementalMarkdownParser {
 
   private closeList(endLine: number): void {
     for (const list of this.listStack) {
-      this.finalizedBlocks.push(this.renderListHtml(list, endLine));
+      this.finalizedBlocks.push(renderListHtml(list, endLine));
     }
     this.listStack = [];
   }
 
   private closeTable(endLine: number): void {
     if (!this.table) return;
-    const html = this.renderTableHtml(this.table);
+    const html = renderTableHtml(this.table);
     this.finalizedBlocks.push({
       type: 'table',
       html,
@@ -324,77 +293,6 @@ export class IncrementalMarkdownParser {
       endLine,
     });
     this.table = null;
-  }
-
-  /**
-   * 渲染 table HTML（closeTable 与 buildTailBlock 共用，不修改状态）。
-   */
-  private renderTableHtml(table: TableState): string {
-    const alignments = table.alignments;
-    const rows = table.rows;
-    let html = '<table class="md-table"><thead><tr>';
-    const header = rows[0] || [];
-    header.forEach((cell, i) => {
-      const align = alignments[i];
-      html += `<th${align ? ` class="${align}"` : ''}>${renderInline(cell)}</th>`;
-    });
-    html += '</tr></thead><tbody>';
-    for (let r = 1; r < rows.length; r++) {
-      html += '<tr>';
-      rows[r]!.forEach((cell, i) => {
-        const align = alignments[i];
-        html += `<td${align ? ` class="${align}"` : ''}>${renderInline(cell)}</td>`;
-      });
-      html += '</tr>';
-    }
-    html += '</tbody></table>';
-    return html;
-  }
-
-  /**
-   * 渲染 fence HTML（closeFence 与 buildTailBlock 共用，不修改状态）。
-   */
-  private renderFenceHtml(fence: FenceState): string {
-    const code = fence.buffer.join('\n');
-    const highlighted = highlightCodeBlock(fence.lang, code);
-    const lang = fence.lang;
-    const langAttr = lang ? ` data-lang="${escapeHtml(lang)}"` : '';
-    const langBadge = lang
-      ? `<span class="md-code-lang" data-lang="${escapeHtml(lang)}">${escapeHtml(lang)}</span>`
-      : '';
-    return (
-      `<div class="md-code-block"${langAttr}>${langBadge}` +
-      `<button type="button" class="md-code-copy" aria-label="复制代码">复制</button>` +
-      `<pre class="md-code-pre hljs"><code class="language-${escapeHtml(lang)}">${highlighted}</code></pre></div>`
-    );
-  }
-
-  /**
-   * 渲染 list HTML（closeList 与 buildTailBlock 共用，不修改状态）。
-   * 仅渲染栈顶列表（简化实现中栈深度 <= 1）。
-   */
-  private renderListHtml(list: ListState, endLine: number): BlockNode {
-    const items = list.items
-      .map((item) =>
-        renderListItemHtml(
-          item.kind,
-          renderInline(item.content),
-          item.taskChecked
-        )
-      )
-      .join('');
-    const tag = list.kind === 'ol' ? 'ol' : 'ul';
-    const cls = list.kind === 'ol' ? 'md-ol' : 'md-ul';
-    const startAttr =
-      list.kind === 'ol' && list.items[0]?.olStart
-        ? ` start="${list.items[0].olStart}"`
-        : '';
-    return {
-      type: list.kind === 'ol' ? 'ol' : 'ul',
-      html: `<${tag} class="${cls}"${startAttr}>${items}</${tag}>`,
-      startLine: list.startLine,
-      endLine,
-    };
   }
 
   /**
@@ -406,7 +304,7 @@ export class IncrementalMarkdownParser {
     if (this.fence) {
       return {
         type: 'fence',
-        html: this.renderFenceHtml(this.fence),
+        html: renderFenceHtml(this.fence),
         startLine: this.fence.startLine,
         endLine: this.lines.length - 1,
       };
@@ -415,7 +313,7 @@ export class IncrementalMarkdownParser {
     if (this.table) {
       return {
         type: 'table',
-        html: this.renderTableHtml(this.table),
+        html: renderTableHtml(this.table),
         startLine: this.table.startLine,
         endLine: this.lines.length - 1,
       };
@@ -423,7 +321,7 @@ export class IncrementalMarkdownParser {
     // 开放 list
     if (this.listStack.length > 0) {
       const list = this.listStack[this.listStack.length - 1]!;
-      return this.renderListHtml(list, this.lines.length - 1);
+      return renderListHtml(list, this.lines.length - 1);
     }
     // 开放段落
     if (this.paragraphBuffer.length > 0) {

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 设置 · 状态诊断（PE-04 T04.5-2：core_get_status 诊断段前端面板）。
  *
  * 只读面板（T-F 06 T2.5 例外：搜索索引行在未就绪时提供「重建索引」按钮，
@@ -113,7 +113,7 @@ function SubsystemRow({
 export const StatusDiagnosticsPanel: React.FC<Props> = ({
   pollIntervalMs = 5_000,
 }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);

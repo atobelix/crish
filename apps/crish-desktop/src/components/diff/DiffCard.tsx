@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 右侧变更面板：Git 工作区变更 + 本会话 AI 回合汇总（下拉）。
  * 瘦身为 ≤300 行的组装层。
  */
@@ -14,11 +14,6 @@ import {
   selectDiffFiles,
 } from '../../store/storeAccess';
 import * as Lucide from 'lucide-react';
-import {
-  applyFileDiffToDisk,
-  classifyFileDiff,
-  formatApplyFailureToast,
-} from '../../api/applyFileDiff';
 import { filterPublishableDiffs } from '../../api/publishToolDiffs';
 import type { DiffSourceMode } from '../../api/diffPanelHelpers';
 import { readTextFile } from '../../api/workspaceFsApi';
@@ -30,6 +25,10 @@ import { useDiffData } from './useDiffData';
 import { useDiffGitActions } from './useDiffGitActions';
 import { formatGitPatch } from './GitPatchFormatter';
 import { getWorkspacePath } from '../../api/projectStore';
+import {
+  acceptCurrentFile as acceptCurrentFileImpl,
+  rejectCurrentFile as rejectCurrentFileImpl,
+} from './DiffCardHandlers';
 
 import { useToast } from '../../services/toast/ToastContext';
 
@@ -37,12 +36,8 @@ export interface DiffCardProps {
   className?: string;
 }
 
-function basename(p: string): string {
-  return p.replace(/^.*[\\/]/, '') || p;
-}
-
 const DiffCardInner: React.FC<DiffCardProps> = () => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const activeDiffSource = useTerminalField(selectActiveDiffSource);
   const diffFiles = useTerminalField(selectDiffFiles) as FileDiff[];
   const setActiveDiffSource = useTerminalField((s) => s.setActiveDiffSource);
@@ -210,35 +205,11 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
     }
   };
 
-  const acceptCurrentFile = async (f: FileDiff) => {
-    if (applyBusy) return;
-    if (!classifyFileDiff(f).ok) {
-      toastFail('无法安全自动应用，请在编辑器确认');
-      return;
-    }
-    setApplyBusy(true);
-    try {
-      const result = await applyFileDiffToDisk(f);
-      if (result.ok === true) {
-        removeDiffFile(f.filePath);
-        setPanelErr('');
-        return;
-      }
-      const msg = formatApplyFailureToast(1, [
-        { filePath: f.filePath, result },
-      ]);
-      toastFail(msg || result.message || '无法安全自动应用，请在编辑器确认');
-    } catch (e) {
-      toastFail(
-        `应用失败 · ${basename(f.filePath)}：${e instanceof Error ? e.message : String(e)}`
-      );
-    } finally {
-      setApplyBusy(false);
-    }
-  };
+  const acceptCurrentFile = (f: FileDiff) =>
+    acceptCurrentFileImpl(f, applyBusy, setApplyBusy, removeDiffFile, setPanelErr, toastFail);
 
   const rejectCurrentFile = useCallback(
-    (f: FileDiff) => removeDiffFile(f.filePath),
+    (f: FileDiff) => rejectCurrentFileImpl(f, removeDiffFile),
     [removeDiffFile]
   );
 

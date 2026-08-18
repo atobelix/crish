@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * RuntimePanel 后台常驻区段：后台任务列表 + 打开终端输出（防连点）。
  * 打开是可预期操作不 toast；读取失败仅错误提示并回退展示。
@@ -32,7 +32,7 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
   bgTasks,
   countLabel,
   }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   // D2（C-10）：连接态投影（errorStore 真源），不再由 RuntimePanel props 下传
   const connectionStatus = useConnectionStatus();
   const [bgOpeningId, setBgOpeningId] = useState<string | null>(null);

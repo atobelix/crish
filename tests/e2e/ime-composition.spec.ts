@@ -1,5 +1,14 @@
 import { test, expect } from '@playwright/test';
 
+// 适配状态（维度7批次3，2026-08-13 核验）：本 spec 已适配当前 M3/M4 引擎交互模型。
+// 关键契约对齐点：① window 全局 = __CRISH_SESSION_STORE__（main.tsx:24 暴露，
+//   非 pre-M4 的 useEditorStore）；② App.tsx:531 MarkdownEngine 恒挂载（不再按
+//   textLength > 0 条件卸载），setText('') 后 .editor-container 与隐藏 textarea
+//   仍可点击/聚焦——F-005 登记的 pre-M3 空文本卸载问题已消除；③ IME 组合缓冲
+//   经 HiddenInput R4-C 状态机（compositionstart/end + 50ms flush 延迟窗口）。
+// 实测：npx playwright test tests/e2e/ime-composition.spec.ts --reporter=line → 1 passed。
+// 保留为保护名单对抗性测试（AGENTS.md §9），不 skip、不删除。
+
 test.describe('IME Composition', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('http://localhost:5173/');

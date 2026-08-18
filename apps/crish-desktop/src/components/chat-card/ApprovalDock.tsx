@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 审批 sticky dock：队列 / 子 agent 待确认时显示（单条主时间线靠 ApprovalAskCard）。
  * 点击后滚动定位到审批卡，找不到则尝试打开子 agent 侧栏，兜底 toast。
  * 挂载门闩与文案 / aria 来自 chatStatusRibbonsLib。
@@ -35,7 +35,7 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
   msgId,
   activeSessionId,
 }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   if (!shouldRenderApprovalDock(show, pendingCount)) return null;
 
   const ariaLabel = resolveApprovalDockAriaLabel(pendingCount, summary);

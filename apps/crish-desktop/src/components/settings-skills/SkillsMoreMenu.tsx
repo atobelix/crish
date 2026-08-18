@@ -55,7 +55,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
   handleSyncAll,
   refresh,
 }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const {
     batchConfirm,
     batchBusy,

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 设置 · 安全：权限模式、工作区与信任命令（批准记忆）。
  *
  * P1 权限归一（B2/B3，主控裁决 3）：白名单 = 批准记忆（记住用户批准过的
@@ -58,7 +58,7 @@ function pathLeaf(path: string): string {
 }
 
 export const SettingsSecurityTab: React.FC = () => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const permissionModeRaw = usePermissionField(selectPermissionMode);
   const setPermissionMode = usePermissionField((s) => s.setPermissionMode);
   const commandPermissions = usePermissionField(selectCommandPermissions);

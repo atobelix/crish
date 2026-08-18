@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './ChatMessageRow.module.css';
 import { Tooltip } from '../ui';
@@ -54,7 +54,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   virtualScrollManager,
 }) => {
   void _messageIndex;
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const isLong = isUserBubbleLong(msg.text);
   const displayText = userBubbleDisplayText(msg.text, isExpanded);
   const [copied, setCopied] = useState(false);

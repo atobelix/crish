@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * useComputerSession hook 测试：初始查询 / 事件驱动三态 / 开关与急停的
+ * useComputerSession hook 测试：初始查询 / 事件驱动三态 / 开关的
  * invoke 与未接线（missing）本地化降级 / 错误 toast。
  * invoke 走 test-setup 全局 mock；事件订阅 mock @tauri-apps/api/event。
  */
@@ -13,7 +13,6 @@ import {
 } from '../../../test-setup';
 import { useComputerSession } from './useComputerSession';
 import {
-  COMPUTER_ESTOP_CMD,
   COMPUTER_SESSION_DISABLE_CMD,
   COMPUTER_SESSION_ENABLE_CMD,
   COMPUTER_STATE_EVENT,
@@ -249,42 +248,6 @@ describe('useComputerSession', () => {
     expect(result.current.wired).toBe(false);
     expect(toast).toHaveBeenCalledWith(
       expect.stringMatching(/引擎未接线：停用电脑操作已本地记录/)
-    );
-  });
-
-  it('estop：ok → activation 回 idle 且 enabled 复位（需重新显式开启）', async () => {
-    mockTauriCommand(COMPUTER_STATUS_CMD, async () => ({
-      enabled: true,
-      mode: 'desktop' as const,
-    }));
-    mockTauriCommand(COMPUTER_ESTOP_CMD, async () => ({ stopped: true }));
-    const { result } = renderHook(() =>
-      useComputerSession({ onShowToast: toast })
-    );
-    await waitFor(() => expect(result.current.activation).toBe('desktop'));
-
-    act(() => result.current.estop());
-    await waitFor(() => expect(result.current.activation).toBe('idle'));
-    expect(result.current.enabled).toBe(false);
-    expect(result.current.wired).toBe(true);
-  });
-
-  it('estop：missing → 本地复位 + 提示未触达引擎急停链', async () => {
-    // status 查询已接线，estop 命令未注册 → missing 本地化复位
-    const { result } = renderHook(() =>
-      useComputerSession({ onShowToast: toast })
-    );
-    await waitFor(() => expect(result.current.wired).toBe(true));
-
-    // 本地先置位，再急停验证复位
-    act(() => result.current.enable());
-    await waitFor(() => expect(result.current.enabled).toBe(true));
-
-    act(() => result.current.estop());
-    await waitFor(() => expect(result.current.enabled).toBe(false));
-    expect(result.current.activation).toBe('idle');
-    expect(toast).toHaveBeenCalledWith(
-      expect.stringMatching(/未触达引擎全局急停链/)
     );
   });
 });

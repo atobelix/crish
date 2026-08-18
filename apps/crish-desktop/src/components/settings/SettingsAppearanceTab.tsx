@@ -20,7 +20,7 @@ type Props = {
 };
 
 export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const {
     visibilityRef,
     settings,

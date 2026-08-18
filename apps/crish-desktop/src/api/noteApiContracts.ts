@@ -24,6 +24,11 @@ export const NOTE_CMD_SEND_TO_NOTE = 'note_send_to_note' as const;
  */
 export const NOTE_CMD_DOCUMENT_HYDRATE = 'note_document_hydrate' as const;
 /**
+ * Tauri：当前 workspace.db 最近一篇已 persist 且投影非空的 doc_id。
+ * 无命中 / 非 Tauri / 未接线 → `null`。**≠** 打开完成。
+ */
+export const NOTE_CMD_DOCUMENT_RECENT = 'note_document_recent' as const;
+/**
  * Tauri：detect 镜像漂移（A-INV-02 / W2-E · CONN-E）。
  * 契约实现见 `noteMirrorIpc.ts`；**≠ EL-03**；**≠ inotify 满关**。
  */
@@ -61,6 +66,7 @@ export const NOTE_COMMANDS = {
   queryBlocks: NOTE_CMD_QUERY_BLOCKS,
   sendToNote: NOTE_CMD_SEND_TO_NOTE,
   documentHydrate: NOTE_CMD_DOCUMENT_HYDRATE,
+  documentRecent: NOTE_CMD_DOCUMENT_RECENT,
   detectMirrorDrift: NOTE_CMD_DETECT_MIRROR_DRIFT,
   importMirrorProposal: NOTE_CMD_IMPORT_MIRROR_PROPOSAL,
   applyOps: NOTE_CMD_APPLY_OPS,

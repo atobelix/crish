@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 误删恢复面板（I3-S9 任务 3；数据源 = I2-S5 引擎命令 trash_list）。
  *
  * - 列表：路径 / 删除时间 / 类型 / 大小 / checksum（备份校验和）；
@@ -32,7 +32,7 @@ function formatSize(bytes: number): string {
 }
 
 export const TrashSection: React.FC<TrashSectionProps> = () => {
-  const { showToast: _showToast } = useToast();
+  const { showToast } = useToast();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const [entries, setEntries] = useState<TrashEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
