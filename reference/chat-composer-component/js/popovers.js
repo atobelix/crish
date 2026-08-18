@@ -1562,6 +1562,29 @@ document.addEventListener('DOMContentLoaded', () => {
       content.appendChild(sidePanel);
       leafEl.appendChild(content);
 
+      // Mount Per-Leaf Side Panel Toggle Button (Relative to leaf outer container)
+      const sidePanelBtn = document.createElement('button');
+      sidePanelBtn.className = 'top-action-btn top-side-panel-btn';
+      sidePanelBtn.title = '切换右侧工作区 (Cmd/Ctrl + J)';
+      sidePanelBtn.innerHTML = `
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="15" y1="3" x2="15" y2="21"></line>
+        </svg>
+      `;
+
+      sidePanelBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        leafEl.classList.toggle('has-side-panel');
+        const isOpen = leafEl.classList.contains('has-side-panel');
+        sidePanelBtn.classList.toggle('active', isOpen);
+        if (window.syncComposerHorizontalAlignment) {
+          setTimeout(window.syncComposerHorizontalAlignment, 50);
+        }
+      });
+
+      leafEl.appendChild(sidePanelBtn);
+
 
 
       // Bind Per-Pane Resizer

@@ -1856,19 +1856,49 @@ textarea.composer-input {
   }
 }
 
-.has-side-panel .tree-leaf-pane.right-edge .chat-side-panel,
-.chat-app-layout.has-side-panel .chat-side-panel {
+.tree-leaf-pane .chat-side-panel {
+  display: none;
+}
+
+.tree-leaf-pane .layout-resizer-panel {
+  display: none;
+}
+
+.tree-leaf-pane.has-side-panel .chat-side-panel {
   display: flex;
 }
 
-.has-side-panel .tree-leaf-pane.right-edge .layout-resizer-panel,
-.chat-app-layout.has-side-panel .layout-resizer-panel {
+.tree-leaf-pane.has-side-panel .layout-resizer-panel {
   display: block;
 }
 
-.tree-leaf-pane:not(.right-edge) .chat-side-panel,
-.tree-leaf-pane:not(.right-edge) .layout-resizer-panel {
-  display: none !important;
+.tree-leaf-pane > .top-side-panel-btn {
+  position: absolute;
+  top: 42px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary, #666666);
+  z-index: 110;
+  padding: 0;
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.tree-leaf-pane > .top-side-panel-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-primary, #111111);
+}
+
+.tree-leaf-pane > .top-side-panel-btn.active {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--text-primary, #111111);
 }
 
 .side-panel-header {
