@@ -1427,6 +1427,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ---- Workspace Split Renderer (Clones real "重构 IPC 缓冲通道" chat stream across splits) ----
+  // ---- Workspace Split Renderer (Position-Aware Peer Binary Tree, Ported from Conex Prototype) ----
   class WorkspaceSplitRenderer {
     constructor(store) {
       this.store = store;
@@ -1436,182 +1437,141 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     render() {
-      const appBody = document.getElementById('chatAppBody');
-      const mainPane = document.getElementById('chatMainPane');
-      if (!appBody || !mainPane) return;
+      const container = document.getElementById('binaryTreeWorkspaceContainer') || document.getElementById('chatAppBody');
+      if (!container) return;
 
-      // 1. Sync Top Bar Tabs Strip
-      if (tabsContainer) {
-        const mainLeaf = this.store.findLeaf(this.store.tree, 'pane-main') || this.store.firstLeaf();
-        tabsContainer.innerHTML = '';
-        if (mainLeaf) {
-          mainLeaf.tabs.forEach((tab, i) => {
-            const tabEl = document.createElement('div');
-            tabEl.className = 'session-tab-item' + (tab.id === mainLeaf.activeTabId ? ' active' : '');
-            tabEl.dataset.id = tab.id;
-            tabEl.title = tab.title;
-            tabEl.innerHTML = `
-              <span class="tab-item-title">${tab.title}</span>
-              <button class="tab-item-close-btn" title="关闭标签页 (Ctrl+W)">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
-            `;
-
-            tabEl.addEventListener('click', (e) => {
-              if (e.target.closest('.tab-item-close-btn')) {
-                e.stopPropagation();
-                this.store.removeTab(mainLeaf.id, tab.id);
-              } else {
-                this.store.activateTab(mainLeaf.id, tab.id);
-              }
-            });
-
-            tabEl.addEventListener('mousedown', (e) => {
-              this.drag.start(e, mainLeaf.id, tab, i, tabsContainer);
-            });
-
-            tabsContainer.appendChild(tabEl);
-          });
-        }
-
-        const addBtn = document.createElement('button');
-        addBtn.className = 'top-bar-new-tab-btn';
-        addBtn.title = '新建会话标签页 (Ctrl+T)';
-        addBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
-        addBtn.addEventListener('click', () => {
-          if (mainLeaf) this.store.addTab(mainLeaf.id);
-        });
-        tabsContainer.appendChild(addBtn);
-      }
-
-      // 2. Pure Single Pane Mode vs Split Mode
-      let splitRoot = document.getElementById('treeSplitRoot');
-      if (this.store.tree.type === 'leaf') {
-        if (splitRoot) splitRoot.remove();
-        if (mainPane.parentElement !== appBody) {
-          const sidebarResizer = document.getElementById('sidebarResizer');
-          if (sidebarResizer && sidebarResizer.nextSibling !== mainPane) {
-            appBody.insertBefore(mainPane, sidebarResizer.nextSibling);
-          } else {
-            appBody.appendChild(mainPane);
-          }
-        }
-        mainPane.style.display = 'flex';
-        mainPane.style.flex = '1 1 0';
-        return;
-      }
-
-      // 3. Multi-Pane Split Tree DOM
-      if (!splitRoot) {
-        splitRoot = document.createElement('div');
-        splitRoot.id = 'treeSplitRoot';
-        splitRoot.className = 'tree-workspace-root';
-        const sidebarResizer = document.getElementById('sidebarResizer');
-        if (sidebarResizer) {
-          appBody.insertBefore(splitRoot, sidebarResizer.nextSibling);
-        } else {
-          appBody.appendChild(splitRoot);
-        }
-      }
-
-      splitRoot.innerHTML = '';
-      splitRoot.appendChild(this._buildNode(this.store.tree, mainPane));
+      container.innerHTML = '';
+      const root = document.createElement('div');
+      root.className = 'tree-workspace-root';
+      root.appendChild(this._buildNode(this.store.tree, { topRow: true, leftEdge: true, rightEdge: true }));
+      container.appendChild(root);
 
       if (window.syncComposerHorizontalAlignment) {
         setTimeout(window.syncComposerHorizontalAlignment, 50);
       }
     }
 
-    _buildNode(node, mainPane) {
-      if (node.type === 'branch') {
-        const branchEl = document.createElement('div');
-        branchEl.className = 'tree-branch ' + node.direction;
-
-        const leftEl = this._buildNode(node.left, mainPane);
-        const rightEl = this._buildNode(node.right, mainPane);
-
-        leftEl.style.flex = String(node.ratio || 0.5);
-        rightEl.style.flex = String(1 - (node.ratio || 0.5));
-
-        const resizer = document.createElement('div');
-        resizer.className = 'tree-split-resizer';
-        resizer.title = '拖拽调整分屏比例，双击重置';
-        this._bindResizer(resizer, branchEl, node, leftEl, rightEl);
-
-        branchEl.appendChild(leftEl);
-        branchEl.appendChild(resizer);
-        branchEl.appendChild(rightEl);
-        return branchEl;
-      }
-
-      // Leaf Node
+    _buildLeaf(node, flags) {
       const leafEl = document.createElement('div');
       leafEl.className = 'tree-leaf-pane';
       leafEl.dataset.paneId = node.id;
 
-      if (node.id === 'pane-main') {
-        leafEl.appendChild(mainPane);
-        mainPane.style.display = 'flex';
-        mainPane.style.flex = '1 1 0';
-      } else {
-        // Cloned split leaf pane
-        const hdr = document.createElement('div');
-        hdr.className = 'tree-pane-header';
-
-        const strip = document.createElement('div');
-        strip.className = 'top-bar-tabs-container';
-        strip.dataset.paneId = node.id;
-
-        node.tabs.forEach((tab, i) => {
-          const tabEl = document.createElement('div');
-          tabEl.className = 'session-tab-item' + (tab.id === node.activeTabId ? ' active' : '');
-          tabEl.dataset.id = tab.id;
-          tabEl.title = tab.title;
-          tabEl.innerHTML = `
-            <span class="tab-item-title">${tab.title}</span>
-            <button class="tab-item-close-btn" title="关闭标签页">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-            </button>
-          `;
-
-          tabEl.addEventListener('click', (e) => {
-            if (e.target.closest('.tab-item-close-btn')) {
-              e.stopPropagation();
-              this.store.removeTab(node.id, tab.id);
-            } else {
-              this.store.activateTab(node.id, tab.id);
-            }
-          });
-
-          tabEl.addEventListener('mousedown', (e) => {
-            this.drag.start(e, node.id, tab, i, strip);
-          });
-
-          strip.appendChild(tabEl);
-        });
-
-        const addBtn = document.createElement('button');
-        addBtn.className = 'top-bar-new-tab-btn';
-        addBtn.title = '新建分屏会话';
-        addBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
-        addBtn.addEventListener('click', () => this.store.addTab(node.id));
-        strip.appendChild(addBtn);
-
-        hdr.appendChild(strip);
-        leafEl.appendChild(hdr);
-
-        // Cloned Conversation Flow ("重构 IPC 缓冲通道")
-        const content = document.createElement('div');
-        content.className = 'tree-pane-content';
-        const streamClone = document.getElementById('chatStreamContainer')?.cloneNode(true);
-        if (streamClone) {
-          streamClone.id = 'streamClone-' + node.id;
-          content.appendChild(streamClone);
-        }
-        leafEl.appendChild(content);
+      if (flags.topRow) {
+        leafEl.classList.add('top-row');
+        if (flags.leftEdge) leafEl.classList.add('left-edge');
+        if (flags.rightEdge) leafEl.classList.add('right-edge');
       }
 
+      // 1. Header with Dynamic Tab Strip
+      const hdr = document.createElement('div');
+      hdr.className = 'tree-pane-header';
+
+      // Reserve space for floating overlay controls on top row
+      if (flags.topRow && flags.leftEdge) {
+        const isCollapsed = document.getElementById('chatLeftSidebar')?.classList.contains('collapsed');
+        hdr.style.paddingLeft = isCollapsed ? '44px' : '0px';
+      }
+      if (flags.topRow && flags.rightEdge) {
+        hdr.style.paddingRight = '120px';
+      }
+
+      const strip = document.createElement('div');
+      strip.className = 'top-bar-tabs-container';
+      strip.dataset.paneId = node.id;
+
+      node.tabs.forEach((tab, i) => {
+        const tabEl = document.createElement('div');
+        tabEl.className = 'session-tab-item' + (tab.id === node.activeTabId ? ' active' : '');
+        tabEl.dataset.id = tab.id;
+        tabEl.title = tab.title;
+        tabEl.innerHTML = `
+          <span class="tab-item-title">${tab.title}</span>
+          <button class="tab-item-close-btn" title="关闭标签页">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        `;
+
+        tabEl.addEventListener('click', (e) => {
+          if (e.target.closest('.tab-item-close-btn')) {
+            e.stopPropagation();
+            this.store.removeTab(node.id, tab.id);
+          } else {
+            this.store.activateTab(node.id, tab.id);
+          }
+        });
+
+        tabEl.addEventListener('mousedown', (e) => {
+          this.drag.start(e, node.id, tab, i, strip);
+        });
+
+        strip.appendChild(tabEl);
+      });
+
+      const addBtn = document.createElement('button');
+      addBtn.className = 'top-bar-new-tab-btn';
+      addBtn.title = '新建会话标签页';
+      addBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+      addBtn.addEventListener('click', () => this.store.addTab(node.id));
+      strip.appendChild(addBtn);
+
+      hdr.appendChild(strip);
+      leafEl.appendChild(hdr);
+
+      // 2. Content with Conversation View ("重构 IPC 缓冲通道")
+      const content = document.createElement('div');
+      content.className = 'tree-pane-content';
+
+      const mainPaneTemplate = document.getElementById('chatMainPane');
+      if (mainPaneTemplate) {
+        const paneClone = mainPaneTemplate.cloneNode(true);
+        paneClone.id = 'paneChat-' + node.id;
+        paneClone.style.display = 'flex';
+        paneClone.style.flex = '1 1 0';
+        paneClone.style.height = '100%';
+        content.appendChild(paneClone);
+      }
+      leafEl.appendChild(content);
+
       return leafEl;
+    }
+
+    _buildBranch(node, flags) {
+      const el = document.createElement('div');
+      el.className = 'tree-branch ' + node.direction;
+
+      let lf, rf;
+      if (node.direction === 'horizontal') {
+        lf = { topRow: flags.topRow, leftEdge: flags.leftEdge, rightEdge: false };
+        rf = { topRow: flags.topRow, leftEdge: false, rightEdge: flags.rightEdge };
+      } else {
+        lf = { topRow: flags.topRow, leftEdge: flags.leftEdge, rightEdge: flags.rightEdge };
+        rf = { topRow: false, leftEdge: flags.leftEdge, rightEdge: flags.rightEdge };
+      }
+
+      const L = this._buildNode(node.left, lf);
+      L.style.flex = String(node.ratio || 0.5);
+      L.style.minWidth = '0';
+      L.style.minHeight = '0';
+
+      const R = this._buildNode(node.right, rf);
+      R.style.flex = String(1 - (node.ratio || 0.5));
+      R.style.minWidth = '0';
+      R.style.minHeight = '0';
+
+      const resizer = document.createElement('div');
+      resizer.className = 'tree-split-resizer';
+      resizer.title = '拖拽调整分屏比例，双击重置';
+      this._bindResizer(resizer, el, node, L, R);
+
+      el.appendChild(L);
+      el.appendChild(resizer);
+      el.appendChild(R);
+      return el;
+    }
+
+    _buildNode(node, flags) {
+      if (!flags) flags = { topRow: true, leftEdge: true, rightEdge: true };
+      return node.type === 'leaf' ? this._buildLeaf(node, flags) : this._buildBranch(node, flags);
     }
 
     _bindResizer(handle, branchEl, node, leftEl, rightEl) {
@@ -1671,6 +1631,35 @@ document.addEventListener('DOMContentLoaded', () => {
   const workspaceSplitEngine = new WorkspaceSplitRenderer(treeStore);
   window.workspaceSplitEngine = workspaceSplitEngine;
 
+  // Sidebar Collapse / Expand Toggle
+  const sidebar = document.getElementById('chatLeftSidebar');
+  const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
+  const expandSidebarBtn = document.getElementById('expandSidebarBtn');
+  const collapsedToggleRail = document.getElementById('collapsedToggleRail');
+
+  function toggleSidebar() {
+    if (!sidebar) return;
+    sidebar.classList.toggle('collapsed');
+    const isCollapsed = sidebar.classList.contains('collapsed');
+    if (chatAppLayout) {
+      chatAppLayout.classList.toggle('has-left-sidebar', !isCollapsed);
+    }
+    if (collapsedToggleRail) {
+      collapsedToggleRail.style.display = isCollapsed ? 'flex' : 'none';
+    }
+    const leftmostHdr = document.querySelector('.tree-leaf-pane.top-row.left-edge > .tree-pane-header');
+    if (leftmostHdr) {
+      leftmostHdr.style.paddingLeft = isCollapsed ? '44px' : '0px';
+    }
+    if (window.syncComposerHorizontalAlignment) {
+      setTimeout(window.syncComposerHorizontalAlignment, 50);
+    }
+  }
+
+  if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
+  if (expandSidebarBtn) expandSidebarBtn.addEventListener('click', toggleSidebar);
+  const topSidebarBtn = document.getElementById('topSidebarBtn');
+  if (topSidebarBtn) topSidebarBtn.addEventListener('click', toggleSidebar);
 
   // Window Controls Feedback
   const winMin = document.getElementById('winMinimizeBtn');
@@ -1680,13 +1669,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (winMax) winMax.addEventListener('click', () => console.log('Toggle maximize window'));
   if (winClose) winClose.addEventListener('click', () => console.log('Close window'));
 
-  // ---- Draggable Partition Resizers (Sidebar & Side Panel) ----
+  // Sidebar Resizer
   const sidebarResizer = document.getElementById('sidebarResizer');
-  const sidePanelResizer = document.getElementById('sidePanelResizer');
   const leftSidebar = document.getElementById('chatLeftSidebar');
-  const sidePanel = document.getElementById('chatSidePanel');
 
-  // 1. Sidebar Resizer
   if (sidebarResizer && leftSidebar && chatAppLayout) {
     let isDragging = false;
     let startX = 0;
@@ -1708,10 +1694,13 @@ document.addEventListener('DOMContentLoaded', () => {
       let newWidth = startWidth + deltaX;
 
       if (newWidth < 120) {
-        // Snap collapse if dragged too small
-        chatAppLayout.classList.remove('has-left-sidebar');
+        if (!leftSidebar.classList.contains('collapsed')) {
+          toggleSidebar();
+        }
       } else {
-        chatAppLayout.classList.add('has-left-sidebar');
+        if (leftSidebar.classList.contains('collapsed')) {
+          toggleSidebar();
+        }
         newWidth = Math.max(160, Math.min(480, newWidth));
         chatAppLayout.style.setProperty('--sidebar-width', `${newWidth}px`);
       }
@@ -1733,63 +1722,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Double click to reset to default 240px
     sidebarResizer.addEventListener('dblclick', () => {
       chatAppLayout.style.setProperty('--sidebar-width', '240px');
-      chatAppLayout.classList.add('has-left-sidebar');
+      if (leftSidebar.classList.contains('collapsed')) {
+        toggleSidebar();
+      }
       if (window.syncComposerHorizontalAlignment) {
         setTimeout(window.syncComposerHorizontalAlignment, 50);
       }
     });
   }
 
-  // 2. Side Panel Resizer
-  if (sidePanelResizer && sidePanel && chatAppLayout) {
-    let isDragging = false;
-    let startX = 0;
-    let startWidth = 480;
-
-    sidePanelResizer.addEventListener('mousedown', (e) => {
-      isDragging = true;
-      startX = e.clientX;
-      startWidth = sidePanel.getBoundingClientRect().width || 480;
-      sidePanelResizer.classList.add('is-dragging');
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-      e.preventDefault();
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (!isDragging) return;
-      // Moving left increases side panel width (delta is inverted)
-      const deltaX = startX - e.clientX;
-      let newWidth = startWidth + deltaX;
-      const maxPanelWidth = window.innerWidth - 360;
-      newWidth = Math.max(260, Math.min(maxPanelWidth, newWidth));
-      chatAppLayout.style.setProperty('--panel-width', `${newWidth}px`);
-
-      if (window.syncComposerHorizontalAlignment) {
-        window.syncComposerHorizontalAlignment();
-      }
-    });
-
-    window.addEventListener('mouseup', () => {
-      if (isDragging) {
-        isDragging = false;
-        sidePanelResizer.classList.remove('is-dragging');
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        if (window.syncComposerHorizontalAlignment) {
-          setTimeout(window.syncComposerHorizontalAlignment, 50);
-        }
-      }
-    });
-
-    // Double click to reset to default 480px
-    sidePanelResizer.addEventListener('dblclick', () => {
-      chatAppLayout.style.setProperty('--panel-width', '480px');
-      if (window.syncComposerHorizontalAlignment) {
-        setTimeout(window.syncComposerHorizontalAlignment, 50);
-      }
-    });
-  }
