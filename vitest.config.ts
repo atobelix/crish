@@ -94,11 +94,11 @@ export default defineConfig({
           setupFiles: ['./vitest.setup.ts'],
           retry: 2,
           testTimeout: 10000,
+          // include 收敛（维度 1 步骤 1b）：删除 4 个根 tests/ 下空/不存在目录
+          // （tests/integration｜fuzz｜race｜recovery —— 实测 0 文件或目录不存在），
+          // 保留 tests/stress（7 文件）+ apps/crish-desktop/tests/{integration,race,
+          // recovery,fuzz}（12 文件，与 vitest.integration.config.ts F3 四目录对齐）。
           include: [
-            'tests/integration/**/*.test.ts',
-            'tests/fuzz/**/*.test.ts',
-            'tests/race/**/*.test.ts',
-            'tests/recovery/**/*.test.ts',
             'tests/stress/**/*.test.ts',
             'apps/crish-desktop/tests/integration/**/*.test.ts',
             'apps/crish-desktop/tests/race/**/*.test.ts',

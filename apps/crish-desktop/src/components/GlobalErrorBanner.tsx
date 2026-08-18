@@ -1,8 +1,9 @@
 /**
  * GlobalErrorBanner —— React 渲染树之外的全局错误呈现面（T5-4）。
  *
- * 消费 `errorStore` 的 `GLOBAL_UNCAUGHT_ERROR` 槽位（TelemetryMonitor
- * window.onerror / unhandledrejection 双写 errorStore 的产物）：
+ * 消费 `errorStore` 的 `GLOBAL_UNCAUGHT_ERROR` 槽位（bootstrap-services
+ * 注册 window.onerror / unhandledrejection → errorStore.push 的唯一活路径
+ * 产物）：
  * - 非阻塞：不弹模态、不打断正常渲染，仅常驻可见告知；
  * - dismiss：resolveByCode 关闭；
  * - 可展开详情：technical（stack / message）经 <details> 折叠。

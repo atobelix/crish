@@ -25,7 +25,7 @@ afterEach(() => {
 function pushGlobalError(technical?: string): void {
   errorStore.push({
     code: CODE,
-    module: 'TelemetryMonitor',
+    module: 'bootstrap-services',
     severity: 'error',
     message: '发生一次未预期的错误',
     ...(technical !== undefined ? { technical } : {}),

@@ -4,7 +4,6 @@
  * 注册 beforeunload + pagehide 拦截器，在页面卸载前同步刷出所有内存数据：
  * - 流式文本批处理器（StreamTextBatcher）全部 flushNow
  * - 会话数据同步写入 localStorage（不 debounce）
- * - composer 草稿同步写入 localStorage
  * - 未发送错误日志写入 localStorage
  *
  * 注意：beforeunload 事件中只能使用同步 API（localStorage 同步，IndexedDB 不行）。
@@ -49,19 +48,6 @@ function flushAllStreamBatchers(): void {
   }
 }
 
-const COMPOSER_DRAFTS_KEY = 'crish_composer_drafts_v1';
-
-/**
- * 同步持久化 composer 草稿。
- */
-function persistComposerDraftsSync(drafts: Record<string, string>): void {
-  try {
-    localStorage.setItem(COMPOSER_DRAFTS_KEY, JSON.stringify(drafts ?? {}));
-  } catch {
-    /* quota / private mode */
-  }
-}
-
 const ERROR_QUEUE_KEY = 'crish_error_queue_v1';
 
 /**
@@ -91,8 +77,6 @@ export function installBeforeunloadFlush(): void {
 
     const state = getSessionStoreState();
     persistAllSessionsSync(state.sessions, state.activeSessionId, state.folderOrder);
-
-    persistComposerDraftsSync(state.composerDrafts);
 
     flushErrorQueue();
   };

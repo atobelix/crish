@@ -110,10 +110,10 @@ async function startup() {
             <App />
           </AppErrorBoundary>
         </ToastProvider>
-        {/* T5-4：React 渲染树之外的全局错误呈现面（window.onerror /
-            unhandledrejection 双写 errorStore 的消费端；不弹模态、不打断
-            渲染，仅可见告知 + dismiss；横幅 chunk 加载失败仅缺失告知，
-            不阻断主渲染） */}
+        {/* T5-4：React 渲染树之外的全局错误呈现面（bootstrap-services 注册
+            window.onerror / unhandledrejection → errorStore.push 的消费端；
+            不弹模态、不打断渲染，仅可见告知 + dismiss；横幅 chunk 加载失败
+            仅缺失告知，不阻断主渲染） */}
         {GlobalErrorBanner ? <GlobalErrorBanner /> : null}
       </StrictMode>
     );

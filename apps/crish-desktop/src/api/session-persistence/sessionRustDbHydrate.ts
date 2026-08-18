@@ -17,13 +17,13 @@ import {
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
 import { type RustSessionIndexEntry } from './sessionRustDbWire';
 import {
+  cleanupDegradedMarkerKeys,
   lsLoadSessionIndex,
   lsSaveActiveSessionId,
   lsSaveFolderOrder,
   lsSaveSessionAgents,
   lsSaveSessionBody,
   lsSaveSessionIndex,
-  markDegradedSession,
 } from './sessionRustDbFallback';
 import {
   cleanupOrphanSessions,
@@ -200,14 +200,14 @@ export async function persistAllSessionsRust(
     const probe = await invokeResult<RustSessionIndexEntry[]>('list_sessions');
     if (probe.status !== 'ok') {
       // 回退：localStorage 同步路径（索引已写入，只需写 body/agents/meta）。
-      // P1-F1：整批降级必须可观测；fallback 写入的 LS 正文是 SQLite 缺失的
-      // 最新快照（启动竞态期 invoke 未就绪即触发），由 fallback 打戳供 hydrate 回灌。
+      // D2：降级戳写面已删，persist 前一次性清理历史残留的 crish_degraded_* 键。
       logInternalError('persist-degraded-ls', {
         command: 'list_sessions(probe)',
         status: probe.status,
       });
       // D-05 S1：批级降级状态推进（Fail-Open 是设计内行为，但必须可感知）
       errorStore.setPersistenceStatus('warning');
+      cleanupDegradedMarkerKeys();
       persistAllSessionsLocalFallback(list, activePersistable, folderOrder);
       return;
     }
@@ -280,9 +280,6 @@ function persistAllSessionsLocalFallback(
     );
     if (msgs.length > 0 && !isHydrateTruncated(s)) {
       lsSaveSessionBody(s.id, msgs);
-      // P1-F1：本次降级落 LS 的正文是 SQLite 缺失的最新快照，打戳供 hydrate
-      // 单向修复（以 LS 为真源回灌回写 SQLite）
-      markDegradedSession(s.id);
     }
     lsSaveSessionAgents(s.id, s.agents || []);
   }
@@ -339,6 +336,9 @@ export function persistAllSessionsSyncViaLocalStorage(
   const keep = new Set(list.map((s) => s.id).filter(Boolean) as string[]);
   const activePersistable =
     activeSessionId && !isPendingDraft(activeSessionId) ? activeSessionId : '';
+
+  // D2：persist 前一次性清理历史残留的 crish_degraded_* 键（模块级 once 幂等）
+  cleanupDegradedMarkerKeys();
 
   if (options?.sessionsToIndex) {
     try {

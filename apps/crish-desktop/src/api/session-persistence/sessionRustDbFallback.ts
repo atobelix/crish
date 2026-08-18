@@ -1,12 +1,12 @@
 /**
- * sessionRustDb 子模块 · Fallback：localStorage 同步回退路径 + 降级戳
+ * sessionRustDb 子模块 · Fallback：localStorage 同步回退路径
  *
  * 职责（同步 IO，无 invoke）：
  *   - 当 Tauri invoke 不可用（浏览器 / 旧壳 / 测试 missing 状态）时，所有
  *     API 降级到 localStorage 同步读写。保证 dev / test 环境与渐进迁移期不阻塞。
  *   - 这层回退只读 / 写 localStorage，不再触碰 IndexedDB 或磁盘镜像（已删除）。
- *   - P1-F1（F5-01）降级戳：invoke 失败降级 LS 时留下痕迹，hydrate 据此
- *     以 LS 正文为真源回灌并回写 SQLite（单向修复路径），消除分叉。
+ *   - 降级戳（P1-F1 / F5-01）写面已在维度 1（D2）随读面（T2-1）一并删除，
+ *     persist 路径保留一次性 cleanup 清除历史残留的 crish_degraded_* 键。
  */
 
 import { isPendingDraftSessionId as isPendingDraft } from '@crish/shared-types';
@@ -228,32 +228,30 @@ export function lsSaveFolderOrder(order: string[]): void {
   }
 }
 
-// ── 降级戳（P1-F1 F5-01） ─────────────────────────────────────────────────────
+// ── 降级戳残留键一次性清理（维度 1 / D2） ───────────────────────────────────
 //
-// 背景：invoke 失败降级 LS 时若不留下任何痕迹，SQLite 保持旧正文，而 LS 持有
-// 最新正文——下次 hydrate 以 SQLite 为正文源展示旧数据，新消息「丢失」且用户
-// 无从知晓（F5-01）。降级戳记录「该会话 LS 正文为最新、SQLite 可能为旧快照」，
-// hydrate 据此以 LS 正文为真源回灌并回写 SQLite（单向修复路径），消除分叉。
+// 背景：降级戳写面与读面（T2-1 已删）均已删除，但用户环境中可能仍残留历史
+// crish_degraded_* 键。cleanupDegradedMarkerKeys 遍历 localStorage 删除该前缀键，
+// 全程 try/catch + 模块级 once 守卫，仅在首次 persist 路径执行一次
+// （进程生命周期内幂等，不重复扫描）。
 
-/** 降级戳 key 前缀（任务书 T5.1 约定 crish_degraded_） */
-const DEGRADED_MARKER_PREFIX = 'crish_degraded_';
-
-function degradedMarkerKey(sessionId: string): string {
-  return DEGRADED_MARKER_PREFIX + sessionId;
-}
+let degradedCleanupDone = false;
 
 /**
- * 标记会话已降级（值 = 降级时间戳）。
- * 写入自身 try/catch：quota/隐私模式下戳写不进也不阻塞降级路径（AU-03:127 残余细节）。
+ * 一次性清除 localStorage 中残留的降级戳键（crish_degraded_*）。
+ * 模块级 once 守卫保证进程内仅执行一次；扫描失败静默忽略，下次进程再清。
  */
-export function markDegradedSession(sessionId: string): void {
+export function cleanupDegradedMarkerKeys(): void {
+  if (degradedCleanupDone) return;
+  degradedCleanupDone = true;
   try {
-    localStorage.setItem(degradedMarkerKey(sessionId), String(Date.now()));
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('crish_degraded_')) keys.push(k);
+    }
+    for (const k of keys) localStorage.removeItem(k);
   } catch {
-    /* swallow-ok: quota/隐私模式下降级标记写失败，下次回放仍可判定 */
+    /* swallow-ok: 残留键清理失败不阻塞 persist 主流程，下次进程再清 */
   }
 }
-// 注（T2-2）：`hasDegradedSession` / `clearDegradedSession` 已随 T2-1 的降级
-// 恢复读面（loadSessionBodyWithDegradedRecovery）删除而失活（grep 零消费），
-// 予删。`markDegradedSession` 仍被 persistAllSessionsLocalFallback /
-// persistAllSessionsSyncViaLocalStorage 消费（T3 同步回退面），保留。

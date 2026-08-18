@@ -7,7 +7,6 @@
  * - attachments：按会话隔离的附件
  * - chatMainSurface：主面板视图模式
  * - fileCompareModes：文件对比模式
- * - composerDraft：草稿暂存
  * - scrollPosition / lastActivePanelTab：UI 恢复
  */
 
@@ -31,7 +30,6 @@ export interface SessionRuntimeState {
   attachments: Attachment[];
   queuedMessages: QueuedMessage[];
   fileCompareModes: Record<string, 'split' | 'unified'>;
-  composerDraft: string;
   scrollPosition: number;
   lastActivePanelTab: string | null;
 }
@@ -88,7 +86,6 @@ class SessionRuntimeRegistry {
       state.diffFiles = [];
       state.attachments = [];
       state.queuedMessages = [];
-      state.composerDraft = '';
       state.fileCompareModes = {};
     }
     this.states.delete(sessionId);
@@ -176,7 +173,6 @@ class SessionRuntimeRegistry {
       attachments: [],
       queuedMessages: [],
       fileCompareModes: {},
-      composerDraft: '',
       scrollPosition: 0,
       lastActivePanelTab: null,
     };

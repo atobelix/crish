@@ -38,6 +38,55 @@ export function bootstrapServices(): () => void {
   // reset 必须在 exit-kill 之后（见末尾 cleanups），否则 killAll 门面被清空。
   registerCompositionRoot();
 
+  // 0a.1 全局未捕获错误监听（D1 接线 GlobalErrorBanner 生产者）：
+  // React 渲染树之外的异常（timer / 回调 / Promise 链 / store 初始化等）
+  // 经 window.onerror + unhandledrejection 统一收敛到 errorStore，由
+  // GlobalErrorBanner 呈现（非阻塞告知 + dismiss）。这是该横幅的唯一活路径
+  // 生产者——与下方 ENGINE_CONNECT_FAILED 同模式同文件。
+  if (typeof window !== 'undefined') {
+    const pushUncaught = (kind: 'error' | 'unhandledrejection') => {
+      return (event: ErrorEvent | PromiseRejectionEvent) => {
+        let message = '发生一次未预期的错误';
+        let technical: string | undefined;
+        if (kind === 'error') {
+          const ev = event as ErrorEvent;
+          if (ev.message) message = ev.message;
+          if (ev.error instanceof Error && ev.error.stack) {
+            technical = ev.error.stack;
+          } else if (ev.filename || ev.lineno || ev.colno) {
+            technical = `${ev.filename ?? '<unknown>'}:${ev.lineno ?? 0}:${
+              ev.colno ?? 0
+            }`;
+          }
+        } else {
+          const reason = (event as PromiseRejectionEvent).reason;
+          if (reason instanceof Error) {
+            message = reason.message || message;
+            technical = reason.stack ?? reason.message;
+          } else if (reason !== undefined && reason !== null) {
+            technical = String(reason);
+          }
+        }
+        errorStore.push({
+          code: 'GLOBAL_UNCAUGHT_ERROR',
+          module: 'bootstrap-services',
+          severity: 'error',
+          message,
+          technical,
+          autoResolve: true,
+        });
+      };
+    };
+    const onError = pushUncaught('error');
+    const onUnhandledRejection = pushUncaught('unhandledrejection');
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    cleanups.push(() => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+    });
+  }
+
   // 0b. PTY registry ↔ Tauri bridge（关 tab 时 kill 会话终端）
   void import('./api/ptySessionApi').then(({ ptyCreate, ptyKill }) => {
     void import('./api/ptyRegistry').then(({ registerPtyHandlers }) => {
