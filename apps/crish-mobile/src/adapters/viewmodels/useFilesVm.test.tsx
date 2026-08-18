@@ -9,7 +9,7 @@ import type {
   ReadFileResult,
   SwitchWorkspaceParams,
   SwitchWorkspaceResult,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import type { FilesRepository } from '@/adapters/wiring/filesRepository';
 import {
   createDirListCache,

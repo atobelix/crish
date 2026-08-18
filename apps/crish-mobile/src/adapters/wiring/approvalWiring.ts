@@ -43,15 +43,15 @@ import {
   type OutboxItem,
   type OutboxState,
 } from '@/domain/data/outbox';
-import { parseEngineEvent } from '../../../../../packages/shared-types/src/generated/engine/parser';
-import type { PermissionRequest } from '../../../../../packages/shared-types/src/generated/engine/types';
-import { parseListPendingApprovalsResult } from '../../../../../packages/shared-types/src/generated/device/parser';
+import { parseEngineEvent } from '@crish/shared-types';
+import type { PermissionRequest } from '@crish/shared-types';
+import { parseListPendingApprovalsResult } from '@crish/shared-types';
 import type {
   ApproveResult,
   CommandRequest,
   ListPendingApprovalsResult,
   PendingApproval,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import { getObservationWiring } from './observationWiring';
 
 // ── 决策冲突/终局错误码（不可重试；D6 §6.3 不自动重试 conflict/stale） ────────

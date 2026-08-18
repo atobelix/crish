@@ -1,6 +1,6 @@
 // sessionReducers 单测：upsert 幂等（本地附加保留不重置）/ 排序（F1 §4.4 活动置顶
 // + F5 §2.1 pinned 段 + updatedAt 降序）/ 对账 / 未读（F5 §6.3）/ 活动与审批计数派生
-import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import {
   applyApprovalDelta,
   applyLatestSeq,

@@ -15,7 +15,7 @@ import {
 import type {
   RunControlParams,
   RunControlResult,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import {
   RUN_CONTROL_LEVEL_OF_ACTION,
   runControlSendingText,

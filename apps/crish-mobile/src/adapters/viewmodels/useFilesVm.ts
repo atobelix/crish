@@ -18,7 +18,7 @@ import type {
   DirLoadStatus,
   DirSortMode,
 } from '@/domain/store/filesReducers';
-import type { WorkspaceEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { WorkspaceEntry } from '@crish/shared-types';
 import { useConnectionStore } from '@/adapters/hooks/useAppStore';
 import { useFilesStore } from '@/adapters/hooks/useFilesStore';
 import { dirCacheKey } from '@/domain/store/filesCache';

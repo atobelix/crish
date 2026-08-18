@@ -2,8 +2,8 @@
 import type {
   EngineApprovalRequestedEvent,
   EngineApprovalResolvedEvent,
-} from '../../../../../packages/shared-types/src/generated/engine/events';
-import type { PermissionRequest } from '../../../../../packages/shared-types/src/generated/engine/types';
+} from '@crish/shared-types';
+import type { PermissionRequest } from '@crish/shared-types';
 import {
   mapApprovalRequested,
   mapApprovalResolved,

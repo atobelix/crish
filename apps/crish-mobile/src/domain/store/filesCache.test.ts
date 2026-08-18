@@ -3,7 +3,7 @@
 import type {
   DirEntry,
   ReadFileResult,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import {
   DIR_CACHE_CAPACITY,
   DIR_CACHE_TTL_MS,

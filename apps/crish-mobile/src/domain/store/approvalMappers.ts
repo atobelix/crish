@@ -5,9 +5,9 @@ import type {
   EngineApprovalRequestedEvent,
   EngineApprovalResolvedEvent,
   EngineEvent,
-} from '../../../../../packages/shared-types/src/generated/engine/events';
+} from '@crish/shared-types';
 // 与 ApprovalItem.request 同源：引擎生成契约的 PermissionRequest（parameters 为宽容 JsonValue）
-import type { PermissionRequest } from '../../../../../packages/shared-types/src/generated/engine/types';
+import type { PermissionRequest } from '@crish/shared-types';
 import type { ApprovalItem, ApprovalRiskMeta } from '../types/domain';
 import { APPROVAL_TIMEOUT_MS } from './approvalReducers';
 

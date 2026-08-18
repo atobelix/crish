@@ -74,7 +74,7 @@ import {
   SETTINGS_COMMAND_KIND,
   parseSettingsCommandResult,
 } from './settingsCommands';
-import type { ParseResult } from '../../../../../packages/shared-types/src/generated/device/parser';
+import type { ParseResult } from '@crish/shared-types';
 
 // ── 注册表直读（device-protocol.json：协议字段唯一真源）────────────────────
 

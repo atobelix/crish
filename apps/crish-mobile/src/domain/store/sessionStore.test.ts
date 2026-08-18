@@ -2,7 +2,7 @@
 // 纯逻辑（排序/合并/对账）已由 sessionReducers.test.ts 覆盖，本文件验证
 // store 动作面：upsert/remove/reconcile/选中态/已读/未读/活动 run/审批角标/
 // selectedSessionOf 选择器，以及「选中会话被移除 → 自动清空」不变量。
-import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import { sessionStore, selectedSessionOf } from './sessionStore';
 
 function makeSession(

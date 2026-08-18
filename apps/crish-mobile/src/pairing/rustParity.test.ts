@@ -25,7 +25,7 @@ import { buildPairHello, parsePairError, parsePairOk } from './pairProtocol';
 import type { PairErrorKind } from './pairProtocol';
 import { formatPairCode, isValidPairCode, normalizePairCode } from './cxnCode';
 import { formatQrPayload, parseQrPayload, QR_SCHEME } from './qrPayload';
-import { DEVICE_ERROR_PROTOCOL } from '../../../../packages/shared-types/src/generated/device/errors';
+import { DEVICE_ERROR_PROTOCOL } from '@crish/shared-types';
 
 // ── 注册表直读（device-protocol.json：协议字段唯一真源）────────────────────
 

@@ -12,8 +12,8 @@ import { normalizePairCode, formatPairCode } from './cxnCode';
 import {
   parseErr,
   parseOk,
-} from '../../../../packages/shared-types/src/generated/device/parser';
-import type { ParseResult } from '../../../../packages/shared-types/src/generated/device/parser';
+} from '@crish/shared-types';
+import type { ParseResult } from '@crish/shared-types';
 
 /** 二维码载荷 scheme（与 Rust 生成侧字面量一致） */
 export const QR_SCHEME = 'crish-pair://';

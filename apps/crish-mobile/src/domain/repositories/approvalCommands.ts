@@ -45,14 +45,14 @@ import type {
   CheckCommandParams,
   CheckCommandResult,
   CommandRequest,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import {
   parseApproveResult as parseWireApproveResult,
   parseListPendingApprovalsResult as parseWireListPendingApprovalsResult,
   parseApprovalHistoryResult as parseWireApprovalHistoryResult,
   parseCheckCommandResult as parseWireCheckCommandResult,
-} from '../../../../../packages/shared-types/src/generated/device/parser';
-import type { ParseResult } from '../../../../../packages/shared-types/src/generated/device/parser';
+} from '@crish/shared-types';
+import type { ParseResult } from '@crish/shared-types';
 
 // ── 命令标识（注册表 commands 段 name；kind = remote.<name>）────────────────
 

@@ -11,7 +11,7 @@ import {
   parsePairError,
   parsePairOk,
 } from './pairProtocol';
-import { DEVICE_ERROR_PROTOCOL } from '../../../../packages/shared-types/src/generated/device/errors';
+import { DEVICE_ERROR_PROTOCOL } from '@crish/shared-types';
 
 describe('buildPairHello（D3 §4.8 step 1 字段构造）', () => {
   it('构造完整 hello：code 标准化 12 位 + 注入字段透传', () => {

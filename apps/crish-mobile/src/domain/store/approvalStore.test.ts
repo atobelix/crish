@@ -2,7 +2,7 @@
 // 纯逻辑（排序/幂等/决策状态机）已由 approvalReducers.test.ts 覆盖，本文件
 // 验证 store 动作的「转发 + 状态装配」不变量：upsert 幂等 / 决策流（begin→sent/
 // failed/conflict/resolved/expired）/ outbox 计数 / 对账时间戳 / busy 位镜像。
-import type { PermissionRequest } from '../../../../../packages/shared-types/src/generated/engine/types';
+import type { PermissionRequest } from '@crish/shared-types';
 import type { ApprovalItem } from '../types/domain';
 import { approvalStore } from './approvalStore';
 

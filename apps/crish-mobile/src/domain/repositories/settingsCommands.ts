@@ -30,15 +30,15 @@ import type {
   PauseAutomationResult,
   PresenceResult,
   CommandRequest,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import {
   parseGetSettingsResult as parseWireGetSettingsResult,
   parseSetSettingsResult as parseWireSetSettingsResult,
   parseSettingsConfirmResult as parseWireSettingsConfirmResult,
   parsePauseAutomationResult as parseWirePauseAutomationResult,
   parsePresenceResult as parseWirePresenceResult,
-} from '../../../../../packages/shared-types/src/generated/device/parser';
-import type { ParseResult } from '../../../../../packages/shared-types/src/generated/device/parser';
+} from '@crish/shared-types';
+import type { ParseResult } from '@crish/shared-types';
 
 // ── 命令标识（注册表 commands 段 name；kind = remote.<name>）────────────────
 

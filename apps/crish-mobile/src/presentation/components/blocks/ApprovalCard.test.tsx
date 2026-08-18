@@ -3,7 +3,7 @@
 // 注：@testing-library/react-native v14 render/fireEvent 为异步 API，全部 await
 import { render, screen } from '@testing-library/react-native';
 import type { ApprovalItem } from '@/domain/types/domain';
-import type { PermissionRequest } from '../../../../../../packages/shared-types/src/generated/engine/types';
+import type { PermissionRequest } from '@crish/shared-types';
 import ApprovalCard, {
   COUNTDOWN_WARNING_MS,
   decisionStatusText,

@@ -23,8 +23,8 @@
 // - 其余 kind（events.push 等）→ 广播给精确 kind 订阅者 + 通配订阅者。
 
 import type { InboundEnvelope, OutgoingEnvelope } from './WsEnvelope';
-import { DEVICE_KINDS } from '../../../../packages/shared-types/src/generated/device/kinds';
-import { parseDeviceMessage } from '../../../../packages/shared-types/src/generated/device/parser';
+import { DEVICE_KINDS } from '@crish/shared-types';
+import { parseDeviceMessage } from '@crish/shared-types';
 import type { JsonValue } from '../../../../packages/shared-types/src/primitive-types';
 import { PROTOCOL_VERSION } from './protocolVersion';
 

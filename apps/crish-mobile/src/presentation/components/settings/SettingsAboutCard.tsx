@@ -14,7 +14,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { PresenceResult } from '../../../../../../packages/shared-types/src/generated/device/types';
+import type { PresenceResult } from '@crish/shared-types';
 import type {
   AboutStatus,
   SettingsMirror,

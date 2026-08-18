@@ -3,7 +3,7 @@
 // 入站接口：upsert（session.updated 会话面消息）/ applyRunActive（agent-start/run-terminal 事件）
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { immer } from 'zustand/middleware/immer';
-import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import {
   applyApprovalDelta,
   applyLatestSeq,

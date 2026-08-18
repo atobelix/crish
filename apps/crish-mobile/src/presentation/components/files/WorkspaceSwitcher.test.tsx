@@ -1,7 +1,7 @@
 // WorkspaceSwitcher 组件测试（R2-06b）：列表/活动标记/切换/装载态（loading/
 // empty/error）/空态引导文案（F4 §6.1）/关闭
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import type { WorkspaceEntry } from '../../../../../../packages/shared-types/src/generated/device/types';
+import type { WorkspaceEntry } from '@crish/shared-types';
 import { WorkspaceSwitcher, workspaceCard } from './WorkspaceSwitcher';
 
 const WORKSPACES: WorkspaceEntry[] = [

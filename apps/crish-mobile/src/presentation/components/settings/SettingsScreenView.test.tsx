@@ -3,7 +3,7 @@
 // 未连接 → 开关禁用 + 「未连接」提示 / 移除本机双保险经 onConfirmRemove 上抛
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import type { SettingsVm } from '@/adapters/viewmodels/useSettingsVm';
-import type { PresenceResult } from '../../../../../../packages/shared-types/src/generated/device/types';
+import type { PresenceResult } from '@crish/shared-types';
 import SettingsScreenView from './SettingsScreenView';
 
 function makeVm(overrides: Partial<SettingsVm> = {}): SettingsVm {

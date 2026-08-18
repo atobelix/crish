@@ -26,7 +26,7 @@ import {
 import type {
   RunTaskParams,
   PermissionMode,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 
 // ── 常量与派生纯函数（可单测）────────────────────────────────────────────
 

@@ -26,14 +26,14 @@ import { normalizePairCode, PAIR_CODE_ALPHABET } from './cxnCode';
 import {
   parseErr,
   parseOk,
-} from '../../../../packages/shared-types/src/generated/device/parser';
-import type { ParseResult } from '../../../../packages/shared-types/src/generated/device/parser';
-import { parsePairOk as parseWirePairOk } from '../../../../packages/shared-types/src/generated/device/parser';
+} from '@crish/shared-types';
+import type { ParseResult } from '@crish/shared-types';
+import { parsePairOk as parseWirePairOk } from '@crish/shared-types';
 import type {
   PairHello,
   PairOk,
   Platform,
-} from '../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 
 /** 设备名上限（注册表 maxLength 64；pair_endpoint.rs:164 同口径截断） */
 export const DEVICE_NAME_MAX_LENGTH = 64;

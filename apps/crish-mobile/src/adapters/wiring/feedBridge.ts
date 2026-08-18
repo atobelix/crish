@@ -21,7 +21,7 @@ import { sessionStore } from '@/domain/store/sessionStore';
 import type { StoreIngestAction } from '@/domain/store/eventMappers';
 import { mapDeviceFrame } from '@/domain/store/eventMappers';
 import { readBool, readRecord } from '@/domain/store/eventReducers';
-import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import { dispatchIngestActions } from './ingestRouter';
 import { devicePresenceStore } from './devicePresenceStore';
 

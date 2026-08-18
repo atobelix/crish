@@ -7,7 +7,7 @@
 // 注：updatedAt 用相对真实时钟（Date.now() − 5min）——屏幕用真实 Date.now() 计算相对
 // 时间，固定未来时间戳（如 2027）会被时钟偏移容忍按「刚刚」处理（time.ts:8）。
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import { eventStore } from '@/domain/store/eventStore';
 import { sessionStore } from '@/domain/store/sessionStore';
 import SessionsScreen from './sessionsScreen';

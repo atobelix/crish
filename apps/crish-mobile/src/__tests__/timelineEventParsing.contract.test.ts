@@ -8,10 +8,10 @@ import {
   isParseOk,
   parseEngineEvent,
   parseEngineTimelineTruncateEvent,
-} from '../../../../packages/shared-types/src/generated/engine/parser';
-import { TIMELINE_TRUNCATE_REASON_VALUES } from '../../../../packages/shared-types/src/generated/engine/types';
-import { AGENT_MESSAGE_METADATA_KIND_VALUES } from '../../../../packages/shared-types/src/generated/engine/types';
-import { ENGINE_EVENT_TYPES } from '../../../../packages/shared-types/src/generated/engine/events';
+} from '@crish/shared-types';
+import { TIMELINE_TRUNCATE_REASON_VALUES } from '@crish/shared-types';
+import { AGENT_MESSAGE_METADATA_KIND_VALUES } from '@crish/shared-types';
+import { ENGINE_EVENT_TYPES } from '@crish/shared-types';
 import {
   KNOWN_EVENT_TYPES,
   mapIngestFrame,

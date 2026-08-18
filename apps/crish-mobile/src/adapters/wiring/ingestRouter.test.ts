@@ -6,7 +6,7 @@
 // - ignore：宽容跳过（不崩溃不猜测）。
 // 用真实 store + 状态断言验证路由落点（不做 mock 转发，防「测试测自己」）。
 import { act } from '@testing-library/react-native';
-import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import { eventStore } from '@/domain/store/eventStore';
 import { sessionStore } from '@/domain/store/sessionStore';
 import type { StoreIngestAction } from '@/domain/store/eventMappers';

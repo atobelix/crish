@@ -35,7 +35,7 @@
 import type {
   PairHello,
   Platform,
-} from '../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import { buildPairHello } from './pairProtocol';
 import type { PairErrorInfo, PairOkResult } from './pairProtocol';
 import { normalizePairCode } from './cxnCode';

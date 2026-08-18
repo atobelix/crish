@@ -8,7 +8,7 @@ import type { FileEntry } from '@/domain/types/domain';
 import type {
   ReadFileParams,
   ReadFileResult,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import type { FilesRepository } from '@/adapters/wiring/filesRepository';
 import { FilesCommandError } from '@/adapters/wiring/filesRepository';
 import {

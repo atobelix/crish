@@ -1,7 +1,7 @@
 // sessionStore 纯逻辑 reducers（M5 §3.1：集合更新纯函数，store 动作只转发，jest 直测）
 // 覆盖：会话列表 upsert（幂等，F5 §2.1 / M6 §10.5 session.updated）、排序（F1 §4.4 活动置顶
 //       + F5 §2.1 updatedAt 降序 + isPinned 优先段）、选中态、未读数（F5 §6.3 本地未读模型）
-import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { SessionIndexEntry } from '@crish/shared-types';
 
 // 组合纪律（M5 §1.3 / D4 §9.3）：SessionSummary = 契约 SessionIndexEntry & 本地附加，禁止复制契约字段
 export interface SessionSummary extends SessionIndexEntry {

@@ -15,7 +15,7 @@
 import type {
   DirEntry,
   ReadFileResult,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 
 // ── 常量（规格锚点） ───────────────────────────────────────────────────────
 

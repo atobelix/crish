@@ -19,7 +19,7 @@ import {
   RunControlCommandError,
   type RunControlContext,
 } from '@/adapters/runControlWiring';
-import type { RunControlLevel } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { RunControlLevel } from '@crish/shared-types';
 
 // ── 常量与派生纯函数（可单测）────────────────────────────────────────────
 

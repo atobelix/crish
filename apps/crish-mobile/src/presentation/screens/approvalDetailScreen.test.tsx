@@ -9,7 +9,7 @@ import {
   waitFor,
 } from '@testing-library/react-native';
 import type { ApprovalItem } from '@/domain/types/domain';
-import type { PermissionRequest } from '../../../../../packages/shared-types/src/generated/engine/types';
+import type { PermissionRequest } from '@crish/shared-types';
 import { approvalStore } from '@/domain/store/approvalStore';
 import {
   approvalOutboxCount,

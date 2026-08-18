@@ -6,7 +6,7 @@
 //   press → onRefresh 上抛。
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { Platform } from 'react-native';
-import type { PresenceResult } from '../../../../../../packages/shared-types/src/generated/device/types';
+import type { PresenceResult } from '@crish/shared-types';
 import type { SettingsMirror } from '@/adapters/viewmodels/useSettingsVm';
 import SettingsAboutCard, { shortDesktopId } from './SettingsAboutCard';
 

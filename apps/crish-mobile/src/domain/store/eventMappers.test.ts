@@ -1,8 +1,8 @@
 // eventMappers 单测：事件映射（F1 §2.5 矩阵 → store 动作）——映射表全量由生成面驱动
 // （ENGINE_EVENT_TYPES 事件 type 列表 + DEVICE_KINDS kind 列表，F3 §8.4 防漂移护栏同构）
-import { ENGINE_EVENT_TYPES } from '../../../../../packages/shared-types/src/generated/engine/events';
-import { DEVICE_KINDS } from '../../../../../packages/shared-types/src/generated/device/kinds';
-import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+import { ENGINE_EVENT_TYPES } from '@crish/shared-types';
+import { DEVICE_KINDS } from '@crish/shared-types';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import {
   EVENT_ROUTES,
   KNOWN_EVENT_TYPES,

@@ -16,7 +16,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import type { WorkspaceEntry } from '../../../../../../packages/shared-types/src/generated/device/types';
+import type { WorkspaceEntry } from '@crish/shared-types';
 import type { WorkspacesStatus } from '@/adapters/viewmodels/useFilesVm';
 import { workspaceNameOf } from '@/adapters/wiring/filesWiring';
 import { useTheme } from '@/adapters/platform/theme';

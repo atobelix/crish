@@ -36,14 +36,14 @@ import type {
   PairStateResult,
   UnlinkResult,
   CommandRequest,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import {
   parseListDevicesResult as parseWireListDevicesResult,
   parseGenericOkResult as parseWireGenericOkResult,
   parsePairStateResult as parseWirePairStateResult,
   parseUnlinkResult as parseWireUnlinkResult,
-} from '../../../../../packages/shared-types/src/generated/device/parser';
-import type { ParseResult } from '../../../../../packages/shared-types/src/generated/device/parser';
+} from '@crish/shared-types';
+import type { ParseResult } from '@crish/shared-types';
 
 // ── 命令标识（注册表 commands 段 name；kind = remote.<name>）────────────────
 

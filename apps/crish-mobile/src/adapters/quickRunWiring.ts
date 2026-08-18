@@ -20,7 +20,7 @@ import {
 import type {
   RunTaskParams,
   RunTaskResult,
-} from '../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 
 // ── 错误类型与文案映射 ────────────────────────────────────────────────────
 

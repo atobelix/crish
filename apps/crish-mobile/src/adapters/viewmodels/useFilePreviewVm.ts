@@ -24,7 +24,7 @@ import {
 } from '@/adapters/wiring/filesWiring';
 import { useFilesStore } from '@/adapters/hooks/useFilesStore';
 import { errorCodeOf } from './useFilesVm';
-import type { ReadFileResult } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { ReadFileResult } from '@crish/shared-types';
 
 /** 行数硬顶（桌面端 read_file_content 5000 行上限，F4 §2.3 / F4-F27） */
 export const PREVIEW_LINES_HARD_CAP = 5000;

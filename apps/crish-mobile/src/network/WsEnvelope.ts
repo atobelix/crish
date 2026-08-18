@@ -9,8 +9,8 @@ import type {
   DeviceEnvelope as ContractEnvelope,
   AuthHeader as ContractAuthHeader,
   Endpoint,
-} from '../../../../packages/shared-types/src/generated/device/types';
-import type { DeviceKind } from '../../../../packages/shared-types/src/generated/device/kinds';
+} from '@crish/shared-types';
+import type { DeviceKind } from '@crish/shared-types';
 import type { JsonValue } from '../../../../packages/shared-types/src/primitive-types';
 
 /** 帧种类（生成面注册表 103 种 kind；新增 kind 经生成器自动跟进，本地不维护第二份清单） */

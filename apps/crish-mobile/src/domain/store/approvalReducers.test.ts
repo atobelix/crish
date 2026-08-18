@@ -1,7 +1,7 @@
 // approvalReducers 单测：排序（F2 §4.2 主键 + A2 裁决次键）/ upsert 幂等（E2E-10）/
 // 决策状态机全路径（E2E-1/4/5 数据层可测部分）
 import type { ApprovalItem, ApprovalRecord } from '../types/domain';
-import type { PermissionRequest } from '../../../../../packages/shared-types/src/generated/engine/types';
+import type { PermissionRequest } from '@crish/shared-types';
 import {
   APPROVAL_HISTORY_MAX,
   DECISION_BUSY_MS,

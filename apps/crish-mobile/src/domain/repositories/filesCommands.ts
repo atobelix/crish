@@ -29,7 +29,7 @@ import type {
   FileStatParams,
   FileStatResult,
   CommandRequest,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import {
   parseListDirResult as parseWireListDirResult,
   parseReadFileResult as parseWireReadFileResult,
@@ -39,8 +39,8 @@ import {
   parseSearchFilesResult as parseWireSearchFilesResult,
   parseAssetUrlResult as parseWireAssetUrlResult,
   parseFileStatResult as parseWireFileStatResult,
-} from '../../../../../packages/shared-types/src/generated/device/parser';
-import type { ParseResult } from '../../../../../packages/shared-types/src/generated/device/parser';
+} from '@crish/shared-types';
+import type { ParseResult } from '@crish/shared-types';
 
 // ── 命令标识（注册表 commands 段 name；kind = remote.<name>）────────────────
 

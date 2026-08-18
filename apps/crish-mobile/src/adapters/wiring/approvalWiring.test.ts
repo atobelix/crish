@@ -12,8 +12,8 @@ import { WsGateway } from '@/network/WsGateway';
 import type { InboundEnvelope } from '@/network/WsEnvelope';
 import { approvalStore } from '@/domain/store/approvalStore';
 import type { ApprovalItem } from '@/domain/types/domain';
-import type { PermissionRequest } from '../../../../../packages/shared-types/src/generated/engine/types';
-import type { PendingApproval } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { PermissionRequest } from '@crish/shared-types';
+import type { PendingApproval } from '@crish/shared-types';
 import {
   ApprovalBridge,
   approvalOutboxCount,

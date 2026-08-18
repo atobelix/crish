@@ -4,13 +4,13 @@
 //       crates/conex-types/src/device/envelope.rs:164-206：未登记 kind → Unknown 兜底不崩溃）。
 // T1b 统一输入流收敛战役：timeline-truncate 路由 + parseEngineEvent 严格解析（未知/畸形宽容跳过），
 //       generated 唯一解析权威（详案 T1b / T3）——新类型自动获严格结构校验。
-import { ENGINE_EVENT_TYPES } from '../../../../../packages/shared-types/src/generated/engine/events';
+import { ENGINE_EVENT_TYPES } from '@crish/shared-types';
 import {
   isParseOk,
   parseEngineEvent,
-} from '../../../../../packages/shared-types/src/generated/engine/parser';
-import type { EngineEvent } from '../../../../../packages/shared-types/src/generated/engine/events';
-import type { SessionIndexEntry } from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
+import type { EngineEvent } from '@crish/shared-types';
+import type { SessionIndexEntry } from '@crish/shared-types';
 import {
   readBool,
   readNumber,

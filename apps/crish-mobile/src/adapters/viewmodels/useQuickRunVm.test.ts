@@ -16,7 +16,7 @@ import {
 import type {
   RunTaskParams,
   RunTaskResult,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 import {
   QUICK_RUN_PERMISSION_MODE,
   recentSessionsOf,

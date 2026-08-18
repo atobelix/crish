@@ -18,7 +18,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JsonValue } from '../../../../../packages/shared-types/src/primitive-types';
-import type { PresenceResult } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { PresenceResult } from '@crish/shared-types';
 import { useConnectionStore, useAuthStore } from '@/adapters/hooks/useAppStore';
 import { authStore } from '@/domain/store/authStore';
 import {

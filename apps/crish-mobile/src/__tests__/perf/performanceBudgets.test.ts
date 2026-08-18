@@ -21,7 +21,7 @@ import {
 } from '@/presentation/components/terminal/terminalLineBuffer';
 import { mapDeviceFrame, mapIngestFrame } from '@/domain/store/eventMappers';
 import { createLruCache } from '@/domain/store/filesCache';
-import { ENGINE_EVENT_TYPES } from '../../../../../packages/shared-types/src/generated/engine/events';
+import { ENGINE_EVENT_TYPES } from '@crish/shared-types';
 
 // ── 计时与测量助手 ─────────────────────────────────────────────────────────
 

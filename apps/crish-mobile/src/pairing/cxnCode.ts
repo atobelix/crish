@@ -12,8 +12,8 @@
 import {
   parseErr,
   parseOk,
-} from '../../../../packages/shared-types/src/generated/device/parser';
-import type { ParseResult } from '../../../../packages/shared-types/src/generated/device/parser';
+} from '@crish/shared-types';
+import type { ParseResult } from '@crish/shared-types';
 
 /** 配对码有效字符集（D3 §4.1：去 0/O/1/I/L 的 base32 子集，32 字符） */
 export const PAIR_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

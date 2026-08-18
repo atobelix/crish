@@ -3,7 +3,7 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import { immer } from 'zustand/middleware/immer';
 import type { ApprovalItem, ApprovalRecord } from '../types/domain';
-import type { ApprovalDecision } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { ApprovalDecision } from '@crish/shared-types';
 import {
   beginDecision,
   resolveApproval,

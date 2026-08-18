@@ -2,7 +2,7 @@
 // 覆盖：排序（主键剩余时间升序 + A2 裁决次键）、upsert 幂等、决策状态机（idle→sending→sent/failed 防双点）、
 //       决策后移除与审计回执记录（F2 §7）
 import type { ApprovalItem, ApprovalRecord } from '../types/domain';
-import type { ApprovalDecision } from '../../../../../packages/shared-types/src/generated/device/types';
+import type { ApprovalDecision } from '@crish/shared-types';
 
 // 引擎审批超时（F2 §2.1 / core_run_commands.rs:88 APPROVAL_TIMEOUT = 120s）
 export const APPROVAL_TIMEOUT_MS = 120_000;

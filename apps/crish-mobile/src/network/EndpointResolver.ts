@@ -6,7 +6,7 @@
 // 端口被占时可能启动到后续端口；候选端点枚举为纯函数（host × 端口笛卡尔积），
 // 实际探测（connect 超时）是 IO，由上层接线（R2-03 或数据层）。
 
-import type { Platform } from '../../../../packages/shared-types/src/generated/device/types';
+import type { Platform } from '@crish/shared-types';
 
 /** 网关默认端口（D3 §3.1 / 裁决修正 6：统一 8765） */
 export const DEFAULT_GATEWAY_PORT = 8765;

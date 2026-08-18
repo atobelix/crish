@@ -34,7 +34,7 @@ import type {
   PresenceResult,
   SetSettingsParams,
   SetSettingsResult,
-} from '../../../../../packages/shared-types/src/generated/device/types';
+} from '@crish/shared-types';
 
 // ── 错误类型 ──────────────────────────────────────────────────────────────
 
