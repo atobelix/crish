@@ -5,6 +5,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
 import reactRefresh from 'eslint-plugin-react-refresh';
+import reactPlugin from 'eslint-plugin-react';
 import tseslint from 'typescript-eslint';
 
 const REPO_ROOT = dirname(fileURLToPath(import.meta.url));
@@ -300,6 +301,7 @@ export default tseslint.config(
     plugins: {
       'react-hooks': reactHooks,
       'react-refresh': reactRefresh,
+      react: reactPlugin,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
@@ -310,6 +312,21 @@ export default tseslint.config(
       // 维度 5：no-console 守门（warn 级先接入，console 裸调迁移完成后升 error）。
       // 所有 console.* 调用应经 LoggerService 统一输出。
       'no-console': 'warn',
+      // 维度 4：组件复杂度守门（warn 级先接入，T4-6/T4-1/T4-2/T4-8 拆分完成后升 error）。
+      // 禁止同文件多组件（compound component 模式通过 // eslint-disable-next-line 逐文件豁免）。
+      'react/no-multi-comp': ['warn', { ignoreStateless: false }],
+      // 维度 4：函数行数守门（warn 级先接入，max 150 覆盖 >100 行的 5 个超长函数；
+      // skipComments/skipBlankLines 避免注释与空行惩罚，IIFEs 放行立即执行函数）。
+      // 例外：React render 函数天然较长，通过 // eslint-disable-next-line 对已验证的渲染函数豁免。
+      'max-lines-per-function': [
+        'warn',
+        {
+          max: 150,
+          skipComments: true,
+          skipBlankLines: true,
+          IIFEs: true,
+        },
+      ],
     },
     languageOptions: {
       globals: {
@@ -317,10 +334,10 @@ export default tseslint.config(
       },
     },
   },
-  // 维度 3 步骤 1 / 决策 5：no-restricted-imports 守门（warn 级先接入）。
+  // 维度 3 步骤 1 / 决策 5：no-restricted-imports 守门（warn 级，深路径收敛有遗漏待修复后升 error）。
   // 禁止 components / hooks / app 出现深路径直连 store/api 子目录私有模块，
   // 强制走公共门面（store/storeAccess.ts、api/storeAccess.ts、各域 store 顶层）。
-  // warn 级先接入以收敛存量，不阻塞 CI；后续存量清零后可升 error。
+  // warn 级先接入以收敛存量；维度 3 步骤 2 深路径收敛清零后升级为 error 级硬阻断。
   //
   // 守门口径（glob 段数判定，非 negativeLookahead）：
   // - `**/store/*/**` + `**/store/*/*` 匹配 store/ 后 ≥2 段的深路径（禁止）；
