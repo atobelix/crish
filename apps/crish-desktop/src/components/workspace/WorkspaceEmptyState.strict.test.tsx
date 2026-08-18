@@ -13,8 +13,8 @@
  * - 无 Tauri（vitest/jsdom）默认 hydrate-source=fixture（**≠ 伪装 tauri-ipc**）
  * - 产品选型见 `createProductStrictHydrateTransport`（可检测 Tauri → tauri-ipc）
  * - DOM 诚实：package-id=W5-B / track=strict / source=hydrate
- * - preview CTA（`open-note-paper-preview`）产品还留着 → **只断言存在**；
- *   **禁止** 把 preview 去 `-S` 或写成 Strict 交付
+ * - preview CTA（`open-note-paper-preview`）同在夹具壳上（不是产品叶）
+ *   → **只断言存在**；**禁止** 把 preview 去 `-S` 或写成 Strict 交付
  * - preferredNotePaperTrack 可切主 CTA 倾向；两按钮仍在
  * - **CONN-A1**：mock/IPC 成功体可透传 `data-hydrate-path=doc-session`；
  *   **禁止** 该属性/文案宣称关 EL / 打开完成；fixture 不得伪装 tauri-ipc
@@ -68,7 +68,7 @@ describe('WorkspaceEmptyState · Strict 夹具（≠ 产品入口 ≠ 打开完�
       /W5-B|Strict|可演示≠EL|≠打开完成/i
     );
 
-    // preview CTA 产品还留着：只断言存在；禁止当 W5-B-S 或 Strict 交付
+    // preview CTA 同在夹具壳（≠ 产品叶）：只断言存在；禁止当 W5-B-S 或 Strict 交付
     expect(screen.getByTestId('open-note-paper-preview')).toBeInTheDocument();
 
     fireEvent.click(openBtn);
@@ -89,7 +89,7 @@ describe('WorkspaceEmptyState · Strict 夹具（≠ 产品入口 ≠ 打开完�
     expect(panel).toHaveAttribute('data-package-id', W5B_STRICT_PACKAGE_ID);
     expect(panel).toHaveAttribute('data-track', W5B_STRICT_TRACK);
     expect(panel).toHaveAttribute('data-source', 'hydrate');
-    // 诚实：vitest 无 Tauri → 产品默认回退 fixture，禁止伪装 tauri-ipc
+    // 诚实：vitest 无 Tauri → 夹具 hydrate 回退 fixture，禁止伪装 tauri-ipc
     expect(panel).toHaveAttribute('data-hydrate-source', 'fixture');
     expect(panel).not.toHaveAttribute('data-hydrate-source', 'tauri-ipc');
     // CONN-A1：fixture 无后端 path 标签，不得冒充 doc-session 数据面
@@ -100,7 +100,7 @@ describe('WorkspaceEmptyState · Strict 夹具（≠ 产品入口 ≠ 打开完�
     expect(panel).not.toHaveAttribute('data-package-id', 'W5-B-S');
     expect(panel.querySelector('[data-lines]')).toBeNull();
 
-    // CONN-C · C-X2 / CONN-C2：空态产品默认 **不** 传 paperList → data-paper-list=0 钉死
+    // CONN-C · C-X2 / CONN-C2：夹具默认 **不** 传 paperList → data-paper-list=0 钉死
     // （enableProductPaperList 默认 false；防默默改默认 true；≠ EL-01 / ≠ W3-P）
     expect(panel).toHaveAttribute('data-paper-list', '0');
     expect(panel).toHaveAttribute('data-presentation-mode', 'react-rows');
@@ -224,7 +224,7 @@ describe('WorkspaceEmptyState · Strict 夹具（≠ 产品入口 ≠ 打开完�
       'data-preferred-note-paper-track',
       'skeleton'
     );
-    // 常量产品默认仍是 strict（prop 只改倾向，不改常量）
+    // 夹具轨常量默认仍是 strict（prop 只改倾向，不改常量）
     expect(root).toHaveAttribute(
       'data-product-default-track',
       W5B_PRODUCT_DEFAULT_EMPTY_TRACK

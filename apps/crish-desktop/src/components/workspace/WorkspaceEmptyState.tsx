@@ -7,19 +7,24 @@
  * - actions → `workspaceEmptyStateActions`
  * 本文件仅装配壳：公开 props / 默认关钉死 / 开合编排。
  *
- * ## 产品默认（W5-B 产品入口）
- * - 默认倾向 **Strict**：可点打开 `NotePaperStrictPanel` +
- *   `createProductStrictHydrateTransport`（Tauri→tauri-ipc / 无 Tauri→fixture）
- * - **W5-B-S Skeleton** 预览壳入口 **保留**（`open-note-paper-preview`）
+ * ## 夹具身份（≠ 产品入口）
+ * 本组件是 **夹具装配壳**：产品树 0 import（`App` / `binary-tree/**` 不挂）。
+ * 产品入口是扩展叶 `extensions/note-paper/NoteLeafHost`，不是本壳、不是 CTA。
+ * - 夹具默认仍 **关** PaperList / detect
+ *   （`enableProductPaperList` / `enableMirrorDetectSchedule` **默认 false**；禁止改默认）
+ * - 点 `open-note-paper-strict` = **夹具路径**（可挂 `NotePaperStrictPanel`）
+ *   **≠** 打开完成；**≠** 关 EL
+ * - 孪生 `open-note-paper-preview` 同属夹具 CTA，不是产品叶
+ * - hydrate：`createProductStrictHydrateTransport`
+ *   （Tauri→tauri-ipc / 无 Tauri→fixture）
  * - **CONN-B / B3 slash 写锥**：`resolveProductStrictApplyOps` —
  *   显式 applyOps / sink / note_apply_ops IPC / Tauri → 可写；
  *   **无后端 → 只读 catalog**（禁止假写路径）
  * - **CONN-D2 mdPrefix 写锥**：同 apply 解析；无后端 → disabled
  * - **CONN-E2 mirror 条**：默认 **不** 挂；opt-in 才装配
- * - **CONN-E3 detect 调度**：默认 **不** 调 detect
- *   （`enableMirrorDetectSchedule` **默认 false**；E2′ 只改扩展叶 / 策略常量）
- * - **CONN-C2 PaperList**：默认 **不** 挂（`enableProductPaperList` **默认 false**）
- * - **CONN-C2′**：经扩展叶 / 策略常量默传 `true`（**组件默认仍 false**）
+ * - **CONN-E3 detect 调度**：默认 **不** 调 detect；E2′ 只改扩展叶 / 策略常量
+ * - **CONN-C2 PaperList**：默认 **不** 挂；C2′ 经扩展叶 / 策略常量默传 `true`
+ *   （**本组件默认仍 false**）
  * - **LR-H1**：打开 docId 可绑已 persist 文档（`productStrictDocId` /
  *   最近一篇 / 打开前 apply+commit 登记）；无绑定仍 `strict-${wsId}` 诚实空
  *
@@ -164,10 +169,11 @@ export type WorkspaceEmptyStateProps = {
   wsId: string;
   onActivate?: () => void;
   /**
-   * 空态默认倾向轨（主 CTA）。
-   * - 默认 `strict`（`W5B_PRODUCT_DEFAULT_EMPTY_TRACK`）：产品演示路径
+   * 夹具空态默认倾向轨（主 CTA）。
+   * - 默认 `strict`（`W5B_PRODUCT_DEFAULT_EMPTY_TRACK`）：夹具主 CTA 倾向
    * - `skeleton`：主 CTA 突出预览壳（旧主路径；测/回退）
-   * **两轨入口均保留**；本 prop 只影响主次与默认高亮，不删 Skeleton。
+   * **两轨夹具 CTA 均保留**；本 prop 只影响主次与默认高亮，不删 Skeleton。
+   * 点任一 CTA **≠** 产品入口；产品入口是扩展叶。
    *
    * 诚实：Strict 默认 hydrate 见 `createProductStrictHydrateTransport`
    * （可检测 Tauri → tauri-ipc；无 Tauri → fixture）；**可演示 ≠ EL**；

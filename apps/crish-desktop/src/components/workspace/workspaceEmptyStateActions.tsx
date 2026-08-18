@@ -1,8 +1,10 @@
 /**
  * WorkspaceEmptyState · 空态 actions（SD-30）
  *
- * 双轨 CTA：Strict 主入口 + W5-B-S Skeleton 预览壳入口。
- * **两轨均保留**；禁止去 `-S` 冒充 Strict。
+ * 夹具双轨 CTA：`open-note-paper-strict` + `open-note-paper-preview`（W5-B-S）。
+ * **两钮随夹具暂留**；禁止去 `-S` 冒充 Strict。
+ * CTA 在夹具壳上，**不是**产品入口、**不是**打开完成。
+ * 产品入口是扩展叶 `extensions/note-paper/NoteLeafHost`。
  *
  * ≠ EL；≠ 打开完成；fixture ≠ 生产权威
  */
@@ -109,8 +111,10 @@ export function WorkspaceEmptyStateLanding(
         从侧栏打开对话，或用标签栏「+」添加文件、终端、预览等面板。
       </div>
       {/*
-        产品默认 Strict（W5-B）+ Skeleton 预览壳（W5-B-S）双入口。
-        可演示 ≠ EL；≠ 打开完成；fixture ≠ 生产权威；
+        夹具双轨 CTA：Strict（W5-B）+ Skeleton 预览壳（W5-B-S）。
+        点 CTA = 夹具路径；≠ 产品入口；≠ 打开完成；≠ 关 EL。
+        产品入口是扩展叶（NoteLeafHost），不是本按钮。
+        可演示 ≠ EL；fixture ≠ 生产权威；
         后端默认 hydrate_path=doc-session 仍 ≠ EL-01/04/08（CONN-A1）。
         CONN-B/B3：无 apply/IPC 默认 slash 只读；Tauri note_apply_ops 或注入后可写。
         CONN-D2：无 apply 默认 mdPrefix disabled；注入后 provisional turn_into 可写。
