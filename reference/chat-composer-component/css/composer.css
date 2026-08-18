@@ -89,26 +89,45 @@ body {
   align-items: center;
   justify-content: space-between;
   background: var(--bg-page, #ffffff);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   box-sizing: border-box;
-  padding: 0 0 0 12px;
+  padding: 0;
   flex-shrink: 0;
   z-index: 100;
   user-select: none;
+  position: relative;
+}
+
+.app-top-bar::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-color, rgba(0, 0, 0, 0.08));
+  transition: left var(--dur-base) var(--ease-spring);
+  pointer-events: none;
+}
+
+.chat-app-layout.has-left-sidebar .app-top-bar::after {
+  left: 240px; /* No horizontal line over the expanded left sidebar! */
 }
 
 .top-bar-left-rail {
-  width: 0;
-  min-width: 0;
-  flex: 0 0 0px;
+  width: 36px;
+  min-width: 36px;
+  flex: 0 0 36px;
   height: 100%;
-  transition: width var(--dur-base) var(--ease-spring), flex-basis var(--dur-base) var(--ease-spring), min-width var(--dur-base) var(--ease-spring);
+  border-right: 1px solid transparent;
+  box-sizing: border-box;
+  transition: width var(--dur-base) var(--ease-spring), flex-basis var(--dur-base) var(--ease-spring), min-width var(--dur-base) var(--ease-spring), border-color var(--dur-fast) var(--ease-default);
 }
 
 .chat-app-layout.has-left-sidebar .top-bar-left-rail {
   width: 240px;
   min-width: 240px;
   flex: 0 0 240px;
+  border-right-color: var(--border-color, rgba(0, 0, 0, 0.08));
 }
 
 .top-bar-tabs-container {
@@ -854,7 +873,7 @@ textarea.composer-input {
 
 /* 1. Sidebar Top: Nav List (Matching Crish SidebarNav) */
 .sidebar-top {
-  padding: 48px 10px 0 10px; /* 48px top clearance for permanent #topSidebarBtn */
+  padding: 8px 10px 0 10px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -1173,14 +1192,14 @@ textarea.composer-input {
   color: var(--text-primary, #111111);
 }
 
-/* Single Permanent Invariant Left Sidebar Button (100% physically fixed on screen) */
+/* Single Permanent Invariant Left Sidebar Button (100% physically fixed on screen in Row 1) */
 .top-fixed-sidebar-btn {
   position: fixed;
-  top: 42px;
+  top: 4px;
   left: 10px;
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1257,14 +1276,10 @@ textarea.composer-input {
   align-items: center;
   gap: 8px;
   pointer-events: auto;
-  margin-left: 36px; /* 32px fixed toggle button + 4px gap = exact 4px uniform spacing when sidebar is closed */
+  margin-left: 0;
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
-}
-
-.chat-app-layout.has-left-sidebar .chat-top-left {
-  margin-left: 0;
 }
 
 /* Breadcrumbs (3 Levels) */
