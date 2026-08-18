@@ -1,4 +1,4 @@
-﻿import React, {
+import React, {
   useState,
   useEffect,
   useRef,
@@ -252,8 +252,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       variant="fullscreen"
       ariaLabel="设置"
       initialFocusRef={nav.searchInputRef}
-      className={styles.settingsCover}
-      overlayClassName={styles.settingsCoverOverlay}
+      classNames={{ panel: styles.settingsCover, overlay: styles.settingsCoverOverlay }}
     >
       <div
         ref={rootRef}
@@ -272,25 +271,29 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
         <div className={styles.coverBody} data-density="compact">
           <SettingsSidebar
-            baseId={baseId}
+            aria={{
+              baseId,
+              tablistId,
+              searchId,
+              statusId,
+              panelId,
+              tablistRef,
+            }}
+            search={{
+              searchQuery: nav.navQuery,
+              filterStatusText: nav.filterStatusText,
+              searchInputRef: nav.searchInputRef,
+              onSearchChange: nav.setNavQuery,
+              onSearchKeyDown: nav.onSearchKeyDown,
+            }}
             items={nav.visibleTabs}
             activeId={safeActiveTab}
             rovingId={nav.rovingId}
-            tablistId={tablistId}
-            searchId={searchId}
-            statusId={statusId}
-            panelId={panelId}
-            searchQuery={nav.navQuery}
-            filterStatusText={nav.filterStatusText}
-            searchInputRef={nav.searchInputRef}
-            tablistRef={tablistRef}
             onBack={onClose}
-            onSearchChange={nav.setNavQuery}
-            onSearchKeyDown={nav.onSearchKeyDown}
             onTablistKeyDown={nav.onTablistKeyDown}
             onSelect={selectTab}
             onFocusTab={setNavFocusId}
-            
+
           />
 
           <div

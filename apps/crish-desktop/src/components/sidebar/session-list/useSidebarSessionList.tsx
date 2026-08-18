@@ -294,30 +294,35 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
       return (
         <SessionRow
           key={s.id}
-          s={s}
-          activeSessionId={activeSessionId}
           rowHeight={rh}
-          searchQuery={searchQuery}
-          {...(searchHits.get(s.id) !== undefined
-            ? { searchHit: searchHits.get(s.id)! }
-            : {})}
-          isDraggingThis={
-            activeDragItem?.type === 'session' &&
-            activeDragItem.sessionId === s.id
-          }
-          isRenaming={renamingSessionId === s.id}
-          isDraggable={isDraggable}
-          renameDraft={renameDraft}
-          renameInputRef={renameInputRef}
-          onRenameDraftChange={onRenameDraftChange}
-          onSelectSession={onSelectSession}
-          onContextMenuSession={onContextMenuSession}
-          onStartSessionDrag={startSessionDrag}
-          onStartRename={onStartRename}
-          onCommitRename={commitRename}
-          onCancelRename={onCancelRename}
-          onNavigateSession={navigateSession}
-          dropPlace={dropPlace}
+          session={{
+            s,
+            activeSessionId,
+            searchQuery,
+            ...(searchHits.get(s.id) !== undefined
+              ? { searchHit: searchHits.get(s.id)! }
+              : {}),
+            isDraggingThis:
+              activeDragItem?.type === 'session' &&
+              activeDragItem.sessionId === s.id,
+            isRenaming: renamingSessionId === s.id,
+            isDraggable,
+            dropPlace,
+          }}
+          rename={{
+            renameDraft,
+            renameInputRef,
+            onRenameDraftChange,
+            onStartRename,
+            onCommitRename: commitRename,
+            onCancelRename,
+          }}
+          actions={{
+            onSelectSession,
+            onContextMenuSession,
+            onStartSessionDrag: startSessionDrag,
+            onNavigateSession: navigateSession,
+          }}
         />
       );
     },

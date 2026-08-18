@@ -20,7 +20,7 @@ export interface UseChatProjectPickerResult {
   setLocalMsgFilter: React.Dispatch<React.SetStateAction<string>>;
   showMsgFilter: boolean;
   setShowMsgFilter: React.Dispatch<React.SetStateAction<boolean>>;
-  msgFilterInputRef: React.RefObject<HTMLInputElement>;
+  msgFilterInputRef: React.RefObject<HTMLInputElement | null>;
   isFiltering: boolean;
 }
 

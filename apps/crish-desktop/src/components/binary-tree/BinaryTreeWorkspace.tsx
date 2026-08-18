@@ -189,12 +189,6 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
       <div
         className={styles.section}
         data-tree-workspace="true"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          width: '100%',
-          height: '100%',
-        }}
       >
         <AppErrorBoundary compact>
           <div
@@ -203,12 +197,6 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
             data-tree-canvas="true"
             role="group"
             aria-label="二叉树布局画布"
-            style={{
-              flex: 1,
-              position: 'relative',
-              width: '100%',
-              minHeight: 0,
-            }}
           >
             {panels.map((panel) => {
               const entry = stableLeafEntries.get(panel.leafId)!;

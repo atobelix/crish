@@ -1,27 +1,24 @@
-﻿import React from 'react';
+import React from 'react';
 import styles from './ChatCard.module.css';
-import { ChatStatusRibbons, type ChatStatusRibbonsProps } from './ChatStatusRibbons';
+import {
+  ChatStatusRibbons,
+  type StreamingRibbonProps,
+  type GoalRibbonProps,
+  type ApprovalRibbonProps,
+} from './ChatStatusRibbons';
 import type { } from '../../hooks/useToastQueue';
 import type { RunNotice } from '../../hooks/useChatStream';
 
 /**
  * R2-5 B3（P1-12 聚合）：ChatStatusRibbons 专属字段分组（ribbons 对象由调用方
  * 构造稳定引用，案甲：ChatCard 层 useMemo）——消除 20+ 字段平铺 drilling。
- * runNotice/onDismissRunNotice/approval 族/activeSessionId/onShowToast 仍平铺
- * （它们同时被 ChatComposerWrapper 其他消费面引用）。
+ * streaming/goal 子对象由 ribbons 传入；approval/runNotice/activeSessionId
+ * 仍平铺（它们同时被 ChatComposerWrapper 其他消费面引用）。
  */
-export type RibbonsGroup = Omit<
-  ChatStatusRibbonsProps,
-  | 'runNotice'
-  | 'onDismissRunNotice'
-  | 'pendingApprovalCount'
-  | 'showApprovalDock'
-  | 'pendingApprovalSummary'
-  | 'pendingApprovalToolId'
-  | 'pendingApprovalMsgId'
-  | 'activeSessionId'
-  | 'onShowToast'
->;
+export interface RibbonsGroup {
+  streaming: Omit<StreamingRibbonProps, 'runNotice' | 'onDismissRunNotice'>;
+  goal: GoalRibbonProps;
+}
 
 export interface ChatComposerWrapperProps {
   mainSurface: string;
@@ -37,7 +34,7 @@ export interface ChatComposerWrapperProps {
   pendingApprovalToolId: string;
   pendingApprovalMsgId: string;
   activeSessionId: string | null;
-  _openSidePanel: (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => void;
+  openSidePanel: (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => void;
   handleGlobalTabClick: (cardId: string) => void;
 }
 
@@ -53,8 +50,17 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
   pendingApprovalToolId,
   pendingApprovalMsgId,
   activeSessionId,
-  _openSidePanel,
 }) => {
+  // 组装审批域子对象（平铺字段 → ApprovalRibbonProps）
+  const approval: ApprovalRibbonProps = {
+    pendingApprovalCount,
+    showApprovalDock,
+    pendingApprovalSummary,
+    pendingApprovalToolId,
+    pendingApprovalMsgId,
+    activeSessionId,
+  };
+
   return (
     <div
       className={styles.chatFooter}
@@ -66,15 +72,9 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
       {/* chatCol 与消息 listInner 同 max-width / 水平 padding，对齐 stream + composer */}
       <div className={styles.chatCol}>
         <ChatStatusRibbons
-          {...ribbons}
-          runNotice={runNotice}
-          onDismissRunNotice={onDismissRunNotice}
-          pendingApprovalCount={pendingApprovalCount}
-          showApprovalDock={showApprovalDock}
-          pendingApprovalSummary={pendingApprovalSummary}
-          pendingApprovalToolId={pendingApprovalToolId}
-          pendingApprovalMsgId={pendingApprovalMsgId}
-          activeSessionId={activeSessionId}
+          streaming={{ ...ribbons.streaming, runNotice, onDismissRunNotice }}
+          goal={ribbons.goal}
+          approval={approval}
         />
 
         {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}

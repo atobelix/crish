@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff } from '../../store/types';
 import { useLayoutTreeStore } from '../../store/storeAccess';
@@ -255,9 +255,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
               </Tooltip>
 
               <Menu
-                align="end"
-                side="bottom"
-                sideOffset={4}
+                position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
                 trigger={
                   <Tooltip content={OPEN_WITH_LABEL}>
                     <Button
@@ -335,9 +333,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             {/* 智能 More 面板收纳其余所有辅助动作 */}
             <div className={styles.filesMoreWrap}>
               <Menu
-                align="end"
-                side="bottom"
-                sideOffset={4}
+                position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
                 trigger={
                   <Tooltip content={MORE_ACTIONS_LABEL}>
                     <Button

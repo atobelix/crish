@@ -64,4 +64,9 @@ describe('SD-04-R-G · NotePaperStrictPanel 行数防回涨', () => {
     // 禁止假关：不得把本壳标成 EL-01 已关闭
     expect(src).not.toMatch(/EL-01\s*[已关关闭完成]/);
   });
+
+  it('产品 Strict 面板源码不再挂 ConexFloatHandle', () => {
+    const src = readFileSync(join(DIR, 'NotePaperStrictPanel.tsx'), 'utf8');
+    expect(src).not.toMatch(/ConexFloatHandle/);
+  });
 });

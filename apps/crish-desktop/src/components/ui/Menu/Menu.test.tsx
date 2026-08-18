@@ -26,10 +26,12 @@ function ControlledMenu({
   return (
     <Menu
       trigger={<button type="button">{TRIGGER_TEXT}</button>}
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        onOpenChange?.(next);
+      openState={{
+        open,
+        onOpenChange: (next) => {
+          setOpen(next);
+          onOpenChange?.(next);
+        },
       }}
       options={[
         { id: 'a', label: '选项甲' },
@@ -182,7 +184,7 @@ describe('ui/Menu', () => {
     render(
       <Menu
         trigger={<button type="button">{TRIGGER_TEXT}</button>}
-        title="菜单标题"
+        panel={{ title: '菜单标题' }}
         options={[{ id: 'a', label: '选项甲' }]}
       />
     );
@@ -241,8 +243,7 @@ describe('ui/Menu', () => {
     render(
       <Menu
         trigger={<button type="button">{TRIGGER_TEXT}</button>}
-        open={true}
-        onOpenChange={() => {}}
+        openState={{ open: true, onOpenChange: () => {} }}
       >
         {childrenSpy()}
       </Menu>
@@ -258,8 +259,7 @@ describe('ui/Menu', () => {
       return (
         <Menu
           trigger={<button type="button">{TRIGGER_TEXT}</button>}
-          open={open}
-          onOpenChange={setOpen}
+          openState={{ open, onOpenChange: setOpen }}
           options={[{ id: 'a', label: '选项甲' }]}
         />
       );
@@ -409,8 +409,7 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
             Toggle
           </button>
           <Menu
-            open={open}
-            onOpenChange={setOpen}
+            openState={{ open, onOpenChange: setOpen }}
             anchor={anchorRef}
             options={[{ id: '1', label: 'Item 1' }]}
           />
@@ -443,10 +442,12 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
             Toggle
           </button>
           <Menu
-            open={open}
-            onOpenChange={(next) => {
-              setOpen(next);
-              onOpenChange(next);
+            openState={{
+              open,
+              onOpenChange: (next) => {
+                setOpen(next);
+                onOpenChange(next);
+              },
             }}
             anchor={anchorRef}
             options={[{ id: '1', label: 'Item 1' }]}

@@ -190,9 +190,7 @@ export const FileActions = React.memo(function FileActions({
                   </Button>
                 </Tooltip>
                 <Menu
-                  align="end"
-                  side="bottom"
-                  sideOffset={4}
+                  position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
                   trigger={
                     <Tooltip content={OPEN_WITH_LABEL}>
                       <Button
@@ -248,9 +246,7 @@ export const FileActions = React.memo(function FileActions({
 
       <div className={styles.filesMoreWrap}>
         <Menu
-          align="end"
-          side="bottom"
-          sideOffset={4}
+          position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
           trigger={
             <Tooltip content={MORE_ACTIONS_LABEL}>
               <Button

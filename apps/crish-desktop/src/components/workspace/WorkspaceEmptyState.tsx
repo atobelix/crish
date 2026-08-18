@@ -65,20 +65,7 @@ import styles from './WorkspaceEmptyState.module.css';
 /** 空态可打开的笔记纸面轨（双轨并存） */
 export type NotePaperEmptyOpenMode = 'strict' | 'skeleton';
 
-export type WorkspaceEmptyStateProps = {
-  wsId: string;
-  onActivate?: () => void;
-  /**
-   * 空态默认倾向轨（主 CTA）。
-   * - 默认 `strict`（`W5B_PRODUCT_DEFAULT_EMPTY_TRACK`）：产品演示路径
-   * - `skeleton`：主 CTA 突出预览壳（旧主路径；测/回退）
-   * **两轨入口均保留**；本 prop 只影响主次与默认高亮，不删 Skeleton。
-   *
-   * 诚实：Strict 默认 hydrate 见 `createProductStrictHydrateTransport`
-   * （可检测 Tauri → tauri-ipc；无 Tauri → fixture）；**可演示 ≠ EL**；
-   * **≠ 打开完成**；后端默认 `hydrate_path=doc-session` 仍 **≠ EL-01/04/08**。
-   */
-  preferredNotePaperTrack?: NotePaperEmptyOpenMode;
+export type WorkspaceEmptyStateStrict = {
   /**
    * 可选注入 Strict hydrate 通路（测 / mock / 自定义）。
    * 未注入时使用 `createProductStrictHydrateTransport`：
@@ -118,6 +105,9 @@ export type WorkspaceEmptyStateProps = {
     CreateProductStrictSlashBindingOptions,
     'applyOps' | 'slashIntentSink' | 'sourceLabel'
   >;
+};
+
+export type WorkspaceEmptyStateMirror = {
   /**
    * CONN-E2：显式 opt-in 装配 `MirrorDriftStatusBar`（默认 **关**，避免空态噪声）。
    * - `true` → 打开 Strict 时挂条（无 report 时 idle「未检测」，**不**强制假数据）
@@ -168,6 +158,22 @@ export type WorkspaceEmptyStateProps = {
    * >0 → 立即一次 + interval（仍须 opt-in；≠ 默认双开 poll+OS）。
    */
   mirrorDetectIntervalMs?: number;
+};
+
+export type WorkspaceEmptyStateProps = {
+  wsId: string;
+  onActivate?: () => void;
+  /**
+   * 空态默认倾向轨（主 CTA）。
+   * - 默认 `strict`（`W5B_PRODUCT_DEFAULT_EMPTY_TRACK`）：产品演示路径
+   * - `skeleton`：主 CTA 突出预览壳（旧主路径；测/回退）
+   * **两轨入口均保留**；本 prop 只影响主次与默认高亮，不删 Skeleton。
+   *
+   * 诚实：Strict 默认 hydrate 见 `createProductStrictHydrateTransport`
+   * （可检测 Tauri → tauri-ipc；无 Tauri → fixture）；**可演示 ≠ EL**；
+   * **≠ 打开完成**；后端默认 `hydrate_path=doc-session` 仍 **≠ EL-01/04/08**。
+   */
+  preferredNotePaperTrack?: NotePaperEmptyOpenMode;
   /**
    * CONN-C2：显式 opt-in 产品空态挂载 PaperList（默认 **关**）。
    * - 省略 / `false` → 打开 Strict **不** 传 `paperList` → `data-paper-list=0` +
@@ -191,6 +197,10 @@ export type WorkspaceEmptyStateProps = {
    * 显式 `productStrictDocId` 优先；二者皆空时再读打开前登记。
    */
   recentPersistedDocId?: string;
+  /** Strict 注入组（hydrate/applyOps/IPC/sink/wireOptions） */
+  strict?: WorkspaceEmptyStateStrict;
+  /** Mirror 注入组（drift/IPC/detect 调度） */
+  mirror?: WorkspaceEmptyStateMirror;
 };
 
 /**
@@ -201,24 +211,30 @@ export function WorkspaceEmptyState({
   wsId,
   onActivate,
   preferredNotePaperTrack = W5B_PRODUCT_DEFAULT_EMPTY_TRACK,
-  strictHydrateTransport,
-  strictApplyOps,
-  strictApplyOpsIpc,
-  slashIntentSink,
-  turnIntoSink,
-  strictSlashWireOptions,
-  showMirrorDriftBar,
-  mirrorDriftReport = null,
-  mirrorWatchSource = 'unknown',
-  mirrorUnpushedOpCount = 0,
-  onMirrorThreeWay,
-  mirrorIpc,
-  enableMirrorDetectSchedule = false,
-  mirrorDetectIntervalMs,
   enableProductPaperList = false,
   productStrictDocId,
   recentPersistedDocId,
+  strict: strictConfig,
+  mirror: mirrorConfig,
 }: WorkspaceEmptyStateProps) {
+  const {
+    strictHydrateTransport,
+    strictApplyOps,
+    strictApplyOpsIpc,
+    slashIntentSink,
+    turnIntoSink,
+    strictSlashWireOptions,
+  } = strictConfig ?? {};
+  const {
+    showMirrorDriftBar,
+    mirrorDriftReport = null,
+    mirrorWatchSource = 'unknown',
+    mirrorUnpushedOpCount = 0,
+    onMirrorThreeWay,
+    mirrorIpc,
+    enableMirrorDetectSchedule = false,
+    mirrorDetectIntervalMs,
+  } = mirrorConfig ?? {};
   const [openMode, setOpenMode] = useState<NotePaperEmptyOpenMode | null>(null);
 
   /** LR-H1：可绑 persist；无绑定仍 `strict-${wsId}`（不得删回退） */

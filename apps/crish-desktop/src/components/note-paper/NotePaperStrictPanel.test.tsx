@@ -63,6 +63,39 @@ describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
     expect(screen.getByText('hydrated text')).toBeInTheDocument();
   });
 
+  it('w5b_strict_panel_does_not_render_conex_float_handle', async () => {
+    const transport = createFixtureHydrateTransport({
+      'doc-no-float': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'nf1',
+            flavour: 'paragraph',
+            text: 'no third handle',
+            index: 0,
+          }),
+        ],
+      },
+    });
+    render(
+      <NotePaperStrictPanel
+        docId="doc-no-float"
+        hydrateTransport={transport}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    expect(
+      screen.queryByTestId('conex-float-handle-singleton')
+    ).not.toBeInTheDocument();
+  });
+
   it('w5b_strict_loading_state_visible_before_resolve', async () => {
     const transport = createFixtureHydrateTransport({
       slow: {

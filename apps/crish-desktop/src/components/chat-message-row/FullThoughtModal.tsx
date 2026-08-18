@@ -170,7 +170,7 @@ export const FullThoughtModal: React.FC = () => {
       onClose={closeThoughtInspector}
       size="lg"
       variant={isFullscreen ? 'fullscreen' : 'modal'}
-      className={styles.thoughtModal}
+      classNames={{ panel: styles.thoughtModal }}
       title={
         <div className={styles.modalHeaderTitle}>
           <Brain className={styles.headerBrainIcon} size={18} />

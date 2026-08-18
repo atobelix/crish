@@ -29,7 +29,7 @@ describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
       'strict-ws-conn-e3-off': { class: 'mirror_only' },
     });
 
-    render(<WorkspaceEmptyState wsId="ws-conn-e3-off" mirrorIpc={ipc} />);
+    render(<WorkspaceEmptyState wsId="ws-conn-e3-off" mirror={{ mirrorIpc: ipc }} />);
 
     const root = screen.getByRole('status');
     expect(root).toHaveAttribute('data-mirror-detect-schedule', '0');
@@ -69,9 +69,11 @@ describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
     render(
       <WorkspaceEmptyState
         wsId="ws-conn-e3-on"
-        mirrorIpc={ipc}
-        enableMirrorDetectSchedule
-        mirrorUnpushedOpCount={0}
+        mirror={{
+          mirrorIpc: ipc,
+          enableMirrorDetectSchedule: true,
+          mirrorUnpushedOpCount: 0,
+        }}
       />
     );
 
@@ -120,7 +122,7 @@ describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
   it('conn_e3_product_empty_enable_without_ipc_no_detect', async () => {
     // enable 但无 ipc → scheduleActive=false；不假装已调度
     render(
-      <WorkspaceEmptyState wsId="ws-conn-e3-noipc" enableMirrorDetectSchedule />
+      <WorkspaceEmptyState wsId="ws-conn-e3-noipc" mirror={{ enableMirrorDetectSchedule: true }} />
     );
     const root = screen.getByRole('status');
     expect(root).toHaveAttribute('data-mirror-detect-schedule', '0');
@@ -136,9 +138,11 @@ describe('WorkspaceEmptyState · CONN-E3 detect 调度', () => {
     render(
       <WorkspaceEmptyState
         wsId="ws-conn-e3-x05"
-        mirrorIpc={ipc}
-        enableMirrorDetectSchedule
-        mirrorUnpushedOpCount={2}
+        mirror={{
+          mirrorIpc: ipc,
+          enableMirrorDetectSchedule: true,
+          mirrorUnpushedOpCount: 2,
+        }}
       />
     );
 

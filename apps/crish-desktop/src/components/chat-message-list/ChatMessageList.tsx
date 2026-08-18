@@ -22,7 +22,8 @@ import { MessageVirtualizer } from './MessageVirtualizer';
 import { scrollToMessage, useScrollAnchor } from './useScrollAnchor';
 import { useChatMessageState } from './useChatMessageState';
 
-export interface ChatMessageListProps {
+/** 消息列表数据域（展示消息/全量消息/agents/会话ID/过滤开关收敛为单一子对象） */
+export interface ChatMessageListMessagesProps {
   /** Display / filtered list. */
   messages: SessionMessage[];
   /**
@@ -35,46 +36,98 @@ export interface ChatMessageListProps {
   agents: SessionAgent[];
   activeSessionId: string;
   showAllMessages?: boolean;
+}
+
+/** 项目选择器域（开关/变更回调收敛为单一子对象） */
+export interface ChatMessageListProjectPickerProps {
   showProjectPicker: boolean;
   onShowProjectPicker: (open: boolean | ((v: boolean) => boolean)) => void;
   onProjectChanged: () => void;
+}
+
+/** Composer 交互域（输入设置/后续发送收敛为单一子对象） */
+export interface ChatMessageListComposerProps {
   onSetChatInput: (text: string) => void;
   onSendFollowUp?: (prompt: string) => void;
+}
+
+/** 生成操作域（重生成/分支收敛为单一子对象） */
+export interface ChatMessageListGenerationProps {
   onRegenerate: (userText: string, assistantMsgId: string) => void;
   onBranch: () => void;
+}
+
+/** 审批操作域（忙态/待审消息/允许/拒绝/批审/批拒收敛为单一子对象） */
+export interface ChatMessageListApprovalProps {
   approvalBusy: boolean;
   pendingApprovalMsgId: string;
-  onOpenDiff: (diff: FileDiff) => void;
-  onOpenPath: (filePath: string) => void;
-  onOpenTerminal: () => void;
-  onOpenDiffPanel?: () => void;
   onApprovalAllow: (toolId: string, msgId: string, remember?: boolean) => void;
   onApprovalDeny: (toolId: string, msgId: string) => void;
   onBatchApprove?: (msgIds: string[], toolIds: string[]) => void;
   onBatchDeny?: (msgIds: string[], toolIds: string[]) => void;
 }
 
+/** 导航操作域（打开 diff/路径/终端/diff面板收敛为单一子对象） */
+export interface ChatMessageListNavigationProps {
+  onOpenDiff: (diff: FileDiff) => void;
+  onOpenPath: (filePath: string) => void;
+  onOpenTerminal: () => void;
+  onOpenDiffPanel?: () => void;
+}
+
+export interface ChatMessageListProps {
+  /** 消息列表数据域 */
+  messages: ChatMessageListMessagesProps;
+  /** 项目选择器域 */
+  projectPicker: ChatMessageListProjectPickerProps;
+  /** Composer 交互域 */
+  composer: ChatMessageListComposerProps;
+  /** 生成操作域 */
+  generation: ChatMessageListGenerationProps;
+  /** 审批操作域 */
+  approval: ChatMessageListApprovalProps;
+  /** 导航操作域 */
+  navigation: ChatMessageListNavigationProps;
+}
+
 const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
-  messages,
-  allMessages,
-  agents,
-  activeSessionId,
-  showAllMessages = false,
-  onSetChatInput,
-  onSendFollowUp,
-  onRegenerate,
-  onBranch,
-  approvalBusy,
-  pendingApprovalMsgId,
-  onOpenDiff,
-  onOpenPath,
-  onOpenTerminal,
-  onOpenDiffPanel,
-  onApprovalAllow,
-  onApprovalDeny,
-  onBatchApprove,
-  onBatchDeny,
+  messages: messagesProps,
+  projectPicker,
+  composer,
+  generation,
+  approval,
+  navigation,
 }) => {
+  const {
+    messages,
+    allMessages,
+    agents,
+    activeSessionId,
+    showAllMessages = false,
+  } = messagesProps;
+  const {
+    showProjectPicker,
+    onShowProjectPicker: _onShowProjectPicker,
+    onProjectChanged: _onProjectChanged,
+  } = projectPicker;
+  const { onSetChatInput, onSendFollowUp } = composer;
+  const { onRegenerate, onBranch } = generation;
+  const {
+    approvalBusy,
+    pendingApprovalMsgId,
+    onApprovalAllow,
+    onApprovalDeny,
+    onBatchApprove,
+    onBatchDeny,
+  } = approval;
+  const { onOpenDiff, onOpenPath, onOpenTerminal, onOpenDiffPanel } =
+    navigation;
+
+  // showProjectPicker/onShowProjectPicker/onProjectChanged 由父级透传但
+  // 本组件未直接消费（原扁平 props 亦未解构使用）；保留 void 标记以明确意图
+  void showProjectPicker;
+  void _onShowProjectPicker;
+  void _onProjectChanged;
   const [pinsOpen, setPinsOpen] = useState(true);
 
   // Full list for pin resolve; when not filtering, same ref as display messages.

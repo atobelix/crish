@@ -6,51 +6,67 @@ import { Button, Tooltip } from '../ui';
 import type { TabMeta, TabType } from '../settingsTabsMeta';
 import { SidebarFooter } from '../sidebar/SidebarFooter';
 
-export interface SettingsSidebarProps {
+export interface SettingsSidebarAria {
   baseId: string;
-  items: TabMeta[];
-  activeId: TabType;
-  rovingId: TabType;
   tablistId: string;
   searchId: string;
   statusId: string;
   panelId: string;
+  tablistRef: React.RefObject<HTMLDivElement | null>;
+}
+
+export interface SettingsSidebarSearch {
   searchQuery: string;
   filterStatusText: string;
   searchInputRef: React.RefObject<HTMLInputElement | null>;
-  tablistRef: React.RefObject<HTMLDivElement | null>;
-  onBack?: () => void;
   onSearchChange: (q: string) => void;
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}
+
+export interface SettingsSidebarProps {
+  items: TabMeta[];
+  activeId: TabType;
+  rovingId: TabType;
+  onBack?: () => void;
   onTablistKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   onSelect: (
     tab: TabType,
     opts?: { focusTab?: boolean; focusPanel?: boolean }
   ) => void;
   onFocusTab: (tab: TabType) => void;
+  /** aria/id/DOM 引用组（baseId/tablistId/searchId/statusId/panelId/tablistRef） */
+  aria: SettingsSidebarAria;
+  /** 搜索相关组（query/filterStatusText/ref/change/keyDown） */
+  search: SettingsSidebarSearch;
 }
 
 export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
   ({
-    baseId,
     items,
     activeId,
     rovingId,
-    tablistId,
-    searchId,
-    statusId,
-    panelId,
-    searchQuery,
-    filterStatusText,
-    searchInputRef,
-    tablistRef,
     onBack,
-    onSearchChange,
-    onSearchKeyDown,
     onTablistKeyDown,
     onSelect,
     onFocusTab,
+    aria,
+    search,
     }) => {
+    const {
+      baseId,
+      tablistId,
+      searchId,
+      statusId,
+      panelId,
+      tablistRef,
+    } = aria;
+    const {
+      searchQuery,
+      filterStatusText,
+      searchInputRef,
+      onSearchChange,
+      onSearchKeyDown,
+    } = search;
     return (
       <nav
         className={styles.coverNav}

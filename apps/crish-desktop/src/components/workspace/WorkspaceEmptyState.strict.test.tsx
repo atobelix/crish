@@ -147,7 +147,7 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     render(
       <WorkspaceEmptyState
         wsId="ws-inject"
-        strictHydrateTransport={transport}
+        strict={{ strictHydrateTransport: transport }}
       />
     );
     fireEvent.click(screen.getByTestId('open-note-paper-strict'));
@@ -192,7 +192,7 @@ describe('WorkspaceEmptyState · W5-B Strict 产品默认入口', () => {
     });
 
     render(
-      <WorkspaceEmptyState wsId="ws-ipc" strictHydrateTransport={transport} />
+      <WorkspaceEmptyState wsId="ws-ipc" strict={{ strictHydrateTransport: transport }} />
     );
     fireEvent.click(screen.getByTestId('open-note-paper-strict'));
 

@@ -8,7 +8,8 @@ import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
 import { Button, Tooltip } from '../ui';
 
-export type PreviewToolbarProps = {
+/** 预览状态（可回退/前进/空白/src/加载/地址/书签/历史/外部/AI 模式等收敛为单一子对象） */
+export interface PreviewToolbarPreviewProps {
   canBack: boolean;
   canForward: boolean;
   blank: boolean;
@@ -22,6 +23,10 @@ export type PreviewToolbarProps = {
   canExternal: boolean;
   /** AI 受管浏览器模式（BrowserPanel）；true 时工具栏地址栏等仍可见但内容区切换 */
   aiBrowser: boolean;
+}
+
+/** 导航操作域（后退/前进/主页/刷新/地址提交与变更/清空收敛为单一子对象） */
+export interface PreviewToolbarNavigationProps {
   onBack: () => void;
   onForward: () => void;
   onHome: () => void;
@@ -29,36 +34,54 @@ export type PreviewToolbarProps = {
   onUrlSubmit: (raw: string) => void;
   onUrlChange: (v: string) => void;
   onClearUrl: () => void;
+}
+
+/** 工具栏动作域（书签/历史切换/外部打开/AI 浏览器切换收敛为单一子对象） */
+export interface PreviewToolbarActionsProps {
   onBookmark: () => void;
   onToggleHist: () => void;
   onOpenExternal: () => void;
   onToggleAiBrowser: () => void;
+}
+
+export type PreviewToolbarProps = {
+  /** 预览状态 */
+  preview: PreviewToolbarPreviewProps;
+  /** 导航操作域 */
+  navigation: PreviewToolbarNavigationProps;
+  /** 工具栏动作域 */
+  actions: PreviewToolbarActionsProps;
 };
 
 export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
-  canBack,
-  canForward,
-  blank,
-  frameSrc,
-  loading,
-  urlInput,
-  canBookmark,
-  bookmarked,
-  showHist,
-  canExternal,
-  aiBrowser,
-  onBack,
-  onForward,
-  onHome,
-  onReload,
-  onUrlSubmit,
-  onUrlChange,
-  onClearUrl,
-  onBookmark,
-  onToggleHist,
-  onOpenExternal,
-  onToggleAiBrowser,
+  preview,
+  navigation,
+  actions,
 }) => {
+  const {
+    canBack,
+    canForward,
+    blank,
+    frameSrc,
+    loading,
+    urlInput,
+    canBookmark,
+    bookmarked,
+    showHist,
+    canExternal,
+    aiBrowser,
+  } = preview;
+  const {
+    onBack,
+    onForward,
+    onHome,
+    onReload,
+    onUrlSubmit,
+    onUrlChange,
+    onClearUrl,
+  } = navigation;
+  const { onBookmark, onToggleHist, onOpenExternal, onToggleAiBrowser } =
+    actions;
   const iconSz = 14;
   return (
     <div className={styles.bar} role="toolbar" aria-label="预览浏览器工具栏">

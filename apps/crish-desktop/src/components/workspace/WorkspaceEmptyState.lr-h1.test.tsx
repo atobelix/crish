@@ -64,7 +64,7 @@ describe('WorkspaceEmptyState · LR-H1 persist doc 绑定', () => {
       <WorkspaceEmptyState
         wsId={wsId}
         productStrictDocId={persistedId}
-        strictHydrateTransport={transport}
+        strict={{ strictHydrateTransport: transport }}
       />
     );
 
@@ -151,7 +151,7 @@ describe('WorkspaceEmptyState · LR-H1 persist doc 绑定', () => {
     });
 
     render(
-      <WorkspaceEmptyState wsId={wsId} strictHydrateTransport={transport} />
+      <WorkspaceEmptyState wsId={wsId} strict={{ strictHydrateTransport: transport }} />
     );
 
     const landing = screen.getByRole('status');

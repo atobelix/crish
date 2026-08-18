@@ -12,6 +12,7 @@ import { mcpStateLabel, mcpStateKind } from '../../api/mcpApi';
 import { McpServerList } from './McpServerList';
 import { McpServerForm } from './McpServerForm';
 import { useMcpSettings } from './useMcpSettings';
+import { useMcpServerListState } from './useMcpServerListState';
 
 type Props = {
   onBlockingOverlayChange?: (open: boolean) => void;
@@ -63,6 +64,39 @@ export const McpSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _onBl
     toggleDemoEnabled,
   } = useMcpSettings();
 
+  // 收敛 McpServerList 29 props 为 3 分组对象
+  const listState = useMcpServerListState({
+    demo,
+    loading,
+    servers,
+    status,
+    demoServers,
+    demoEnabled,
+    filtered,
+    filteredDemo,
+    expanded,
+    busyId,
+    filter,
+    sortMode,
+    canStartStop,
+    controlHint,
+    showAdd,
+    listLabelId,
+    toolsPanelPrefix,
+    onRefresh: refresh,
+    onSetSort: setSort,
+    onSetFilter: setFilter,
+    onClearFilter: clearFilter,
+    onSetShowAdd: setShowAdd,
+    onToggleServer: handleToggleServer,
+    onCopy: handleCopy,
+    onToggleExpanded: toggleExpanded,
+    onToggleDemoEnabled: toggleDemoEnabled,
+    onDeleteDemo: handleDeleteDemo,
+    refreshDemo,
+    refreshLive,
+  });
+
   const stopHint = controlHint || '当前引擎不支持从界面启停；扩展服务通常随任务运行时连接';
   const filterActive = filter.trim().length > 0;
   const demoEnabledCount = demoServers.filter((s) => demoEnabled[s.id] !== false).length;
@@ -101,35 +135,9 @@ export const McpSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _onBl
         ) : null}
 
         <McpServerList
-          demo={true}
-          loading={loading}
-          servers={servers}
-          status={status}
-          demoServers={demoServers}
-          demoEnabled={demoEnabled}
-          filtered={filtered}
-          filteredDemo={filteredDemo}
-          expanded={expanded}
-          busyId={busyId}
-          filter={filter}
-          sortMode={sortMode}
-          canStartStop={canStartStop}
-          controlHint={controlHint}
-          showAdd={showAdd}
-          listLabelId={listLabelId}
-          toolsPanelPrefix={toolsPanelPrefix}
-          onRefresh={refresh}
-          onSetSort={setSort}
-          onSetFilter={setFilter}
-          onClearFilter={clearFilter}
-          onSetShowAdd={setShowAdd}
-          onToggleServer={handleToggleServer}
-          onCopy={handleCopy}
-          onToggleExpanded={toggleExpanded}
-          onToggleDemoEnabled={toggleDemoEnabled}
-          onDeleteDemo={handleDeleteDemo}
-          refreshDemo={refreshDemo}
-          refreshLive={refreshLive}
+          servers={listState.servers}
+          ui={listState.ui}
+          actions={listState.actions}
         />
       </SettingsPage>
     );
@@ -197,35 +205,9 @@ export const McpSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _onBl
       ) : null}
 
       <McpServerList
-        demo={false}
-        loading={loading}
-        servers={servers}
-        status={status}
-        demoServers={demoServers}
-        demoEnabled={demoEnabled}
-        filtered={filtered}
-        filteredDemo={filteredDemo}
-        expanded={expanded}
-        busyId={busyId}
-        filter={filter}
-        sortMode={sortMode}
-        canStartStop={canStartStop}
-        controlHint={controlHint}
-        showAdd={showAdd}
-        listLabelId={listLabelId}
-        toolsPanelPrefix={toolsPanelPrefix}
-        onRefresh={refresh}
-        onSetSort={setSort}
-        onSetFilter={setFilter}
-        onClearFilter={clearFilter}
-        onSetShowAdd={setShowAdd}
-        onToggleServer={handleToggleServer}
-        onCopy={handleCopy}
-        onToggleExpanded={toggleExpanded}
-        onToggleDemoEnabled={toggleDemoEnabled}
-        onDeleteDemo={handleDeleteDemo}
-        refreshDemo={refreshDemo}
-        refreshLive={refreshLive}
+        servers={listState.servers}
+        ui={listState.ui}
+        actions={listState.actions}
       />
     </SettingsPage>
   );

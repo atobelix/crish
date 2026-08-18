@@ -55,10 +55,12 @@ export interface DialogProps {
   footer?: React.ReactNode;
   /** 内容区 */
   children?: React.ReactNode;
-  /** 自定义类名（追加到弹窗面板；可设 --dialog-width 等覆盖变量） */
-  className?: string;
-  /** 自定义类名（追加到遮罩壳；可设 --dialog-z 覆盖层级） */
-  overlayClassName?: string;
+  /**
+   * 自定义类名收敛对象（T4-9c Props 收敛）：
+   * - panel 追加到弹窗面板（可设 --dialog-width 等覆盖变量）
+   * - overlay 追加到遮罩壳（可设 --dialog-z 覆盖层级）
+   */
+  classNames?: { panel?: string; overlay?: string };
 }
 
 // noUncheckedIndexedAccess 下 CSS Modules 取值类型为 string | undefined
@@ -83,8 +85,7 @@ export function Dialog({
   portalTarget,
   footer,
   children,
-  className,
-  overlayClassName,
+  classNames,
 }: DialogProps) {
   const titleId = useId();
   const descriptionId = useId();
@@ -131,14 +132,14 @@ export function Dialog({
       : state === 'exiting'
         ? styles.dialogExit
         : styles.dialogEnter,
-    className,
+    classNames?.panel,
   ]
     .filter(Boolean)
     .join(' ');
 
   const overlayClasses = [
     state === 'exiting' ? styles.overlayExit : styles.overlayEnter,
-    overlayClassName,
+    classNames?.overlay,
   ]
     .filter(Boolean)
     .join(' ');

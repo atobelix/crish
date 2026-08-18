@@ -12,10 +12,17 @@ import {
 import { FileEditor } from './FileEditor';
 import type { ViewMode } from './hooks/useFilePreview';
 
-interface FilePreviewProps {
+/** 文件标识与能力域（当前选中文件 + 可编辑性 + markdown 标记）。 */
+interface FilePreviewFileProps {
   selected: string | null;
-  view: ViewMode;
   kind: string;
+  isMd: boolean;
+  canEdit: boolean;
+}
+
+/** 预览内容与加载/编辑态域（视图模式、内容、编辑缓冲、加载/截断/分页、markdown 渲染、资源 URL）。 */
+interface FilePreviewPreviewProps {
+  view: ViewMode;
   content: string;
   editBuf: string;
   editing: boolean;
@@ -27,36 +34,45 @@ interface FilePreviewProps {
   loadingMore: boolean;
   mdMode: 'render' | 'source';
   assetUrl: string | null;
-  isMd: boolean;
   canLoadMore: boolean;
-  canEdit: boolean;
+}
+
+/** 预览操作回调域（加载更多、编辑缓冲变更、错误清除、外部打开）。 */
+interface FilePreviewActionsProps {
   onLoadMore: () => void;
   onEditBufChange: (v: string, dirty: boolean) => void;
   onError: (msg: string) => void;
   onOpenFile: () => void;
 }
 
+/** Props 分组：file（标识/能力）+ preview（内容/加载/编辑态）+ actions（回调）。 */
+interface FilePreviewProps {
+  file: FilePreviewFileProps;
+  preview: FilePreviewPreviewProps;
+  actions: FilePreviewActionsProps;
+}
+
 export const FilePreview = React.memo(function FilePreview({
-  selected,
-  kind,
-  content,
-  editBuf,
-  editing,
-  dirty,
-  error,
-  detailLoading,
-  truncated,
-  lineBudget,
-  loadingMore,
-  mdMode,
-  assetUrl,
-  isMd,
-  canLoadMore,
-  onLoadMore,
-  onEditBufChange,
-  onError,
-  onOpenFile,
+  file,
+  preview: previewState,
+  actions,
 }: FilePreviewProps) {
+  const { selected, kind, isMd } = file;
+  const {
+    content,
+    editBuf,
+    editing,
+    dirty,
+    error,
+    detailLoading,
+    truncated,
+    lineBudget,
+    loadingMore,
+    mdMode,
+    assetUrl,
+    canLoadMore,
+  } = previewState;
+  const { onLoadMore, onEditBufChange, onError, onOpenFile } = actions;
   const previewPaneRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLPreElement>(null);
   const [selText, setSelText] = useState('');

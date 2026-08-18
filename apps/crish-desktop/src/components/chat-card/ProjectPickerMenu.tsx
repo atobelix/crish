@@ -133,14 +133,13 @@ export const ProjectPickerMenu: React.FC<Props> = ({
       {/* 移除项目确认（Promise 桥渲染点） */}
       {renderConfirmGate(<ConfirmDialog />)}
       <Menu
-        open={open}
-        onOpenChange={handleOpenChange}
+        openState={{ open, onOpenChange: handleOpenChange }}
         trigger={children}
-        side="bottom"
-        align="center"
-        sideOffset={6}
-        contentClassName="sort-filter-menu open no-drag"
-        contentStyle={{ width: '230px', overflow: 'visible' }}
+        position={{ side: 'bottom', align: 'center', sideOffset: 6 }}
+        panel={{
+          contentClassName: 'sort-filter-menu open no-drag',
+          contentStyle: { width: '230px', overflow: 'visible' },
+        }}
       >
         <div
           onMouseEnter={onContentMouseEnter}

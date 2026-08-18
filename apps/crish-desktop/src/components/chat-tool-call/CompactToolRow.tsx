@@ -42,12 +42,16 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
     onToggleTool,
     approvalBusy,
     pendingApprovalMsgId,
+  } = props;
+  const {
     onOpenDiff,
     onOpenPath,
     onOpenTerminal,
     onApprovalAllow,
     onApprovalDeny,
-  } = props;
+    onRetryTool,
+    renderLinkedAgentPanel,
+  } = props.actions ?? {};
 
   const [liveNow, setLiveNow] = useState(Date.now());
   useEffect(() => {
@@ -105,7 +109,7 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
   if (linkedAgent && activeSessionId) {
     // 关联子 agent 行：由组合根注入的渲染器（ChatToolStackProps.renderLinkedAgentPanel）
     // 渲染内嵌 InlineAgentPanel；未注入（无子 agent 上下文）时回退普通工具行。
-    const linkedPanel = props.renderLinkedAgentPanel?.(
+    const linkedPanel = renderLinkedAgentPanel?.(
       linkedAgent,
       activeSessionId,
       tc,
@@ -208,7 +212,7 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
         bodyId={bodyId}
         onToggleTool={onToggleTool}
         onOpenPath={onOpenPath}
-        onRetryTool={props.onRetryTool}
+        onRetryTool={onRetryTool}
       />
       {canToggle ? (
         <div

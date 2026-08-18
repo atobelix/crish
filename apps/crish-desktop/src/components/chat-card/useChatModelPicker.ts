@@ -26,7 +26,7 @@ export interface UseChatModelPickerResult {
 export function useChatModelPicker({
   projectTick,
 }: UseChatModelPickerOptions): UseChatModelPickerResult {
-  const appSettings: AppSettings | undefined = useSettingsField(selectAppSettings);
+  const appSettings: AppSettings | null = useSettingsField(selectAppSettings);
   const [pickerInlineError, setPickerInlineError] = useState('');
 
   const {

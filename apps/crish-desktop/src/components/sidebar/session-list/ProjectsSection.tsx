@@ -14,12 +14,15 @@ import {
   FolderPlus,
 } from 'lucide-react';
 
-export interface ProjectsSectionProps {
+export interface ProjectsSectionData {
   projects: ProjectEntry[];
   collapsedProjects: Record<string, boolean>;
   projectsSectionCollapsed: boolean;
   byProjectId: Record<string, SessionState[]>;
   expandedProjectFolders: Record<string, boolean>;
+}
+
+export interface ProjectsSectionActions {
   onToggleProjectsSection: () => void;
   onToggleProjectCollapsed: (id: string) => void;
   onOpenProject: (id: string) => void;
@@ -37,19 +40,32 @@ export interface ProjectsSectionProps {
   ) => React.ReactNode;
 }
 
+export interface ProjectsSectionProps {
+  /** 数据组（projects/折叠态/byProjectId/文件夹展开） */
+  data: ProjectsSectionData;
+  /** 回调组（折叠/打开/移动/渲染） */
+  actions: ProjectsSectionActions;
+}
+
 export function ProjectsSection({
-  projects,
-  collapsedProjects,
-  projectsSectionCollapsed,
-  byProjectId,
-  expandedProjectFolders,
-  onToggleProjectsSection,
-  onToggleProjectCollapsed,
-  onOpenProject,
-  onMoveSessionRealtime: _onMoveSessionRealtime,
-  onToggleExpandedProjectFolder,
-  renderSessionItem,
+  data,
+  actions,
 }: ProjectsSectionProps) {
+  const {
+    projects,
+    collapsedProjects,
+    projectsSectionCollapsed,
+    byProjectId,
+    expandedProjectFolders,
+  } = data;
+  const {
+    onToggleProjectsSection,
+    onToggleProjectCollapsed,
+    onOpenProject,
+    onMoveSessionRealtime: _onMoveSessionRealtime,
+    onToggleExpandedProjectFolder,
+    renderSessionItem,
+  } = actions;
   void _onMoveSessionRealtime;
   return (
     <section className={styles.section} aria-label="项目">

@@ -85,10 +85,12 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
     render(
       <WorkspaceEmptyState
         wsId="ws-conn-b-wr"
-        strictApplyOps={applyOps}
-        strictSlashWireOptions={{
-          allocateId: () => 'empty-slash-new-blk',
-          resolveOrder: () => 'a0',
+        strict={{
+          strictApplyOps: applyOps,
+          strictSlashWireOptions={{
+            allocateId: () => 'empty-slash-new-blk',
+            resolveOrder: () => 'a0',
+          },
         }}
       />
     );
@@ -167,10 +169,12 @@ describe('WorkspaceEmptyState · CONN-B / CONN-B3 slash 写锥', () => {
     render(
       <WorkspaceEmptyState
         wsId="ws-conn-b3-ipc"
-        strictApplyOpsIpc={mockIpc}
-        strictSlashWireOptions={{
-          allocateId: () => 'b3-slash-new-blk',
-          resolveOrder: () => 'a0',
+        strict={{
+          strictApplyOpsIpc: mockIpc,
+          strictSlashWireOptions={{
+            allocateId: () => 'b3-slash-new-blk',
+            resolveOrder: () => 'a0',
+          }},
         }}
       />
     );

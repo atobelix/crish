@@ -222,10 +222,8 @@ describe('专项 1：400px~1200px 极限视口与碰撞翻折守卫矩阵 (GEO-V
             </button>
             {subOpen && (
               <Menu
-                open={subOpen}
-                onOpenChange={setSubOpen}
-                side="left"
-                align="start"
+                openState={{ open: subOpen, onOpenChange: setSubOpen }}
+                position={{ side: 'left', align: 'start' }}
                 trigger={<span data-mock-rect="980,110,160,30" />}
                 options={[{ id: 'sub-1', label: '工作区 A' }]}
               />
@@ -450,7 +448,7 @@ describe('专项 2：多分屏容器隔离裁剪守卫矩阵 (GEO-SPLIT-01 ~ GEO
     const { container } = render(
       <div className="split-pane" style={{ width: '200px' }}>
         <Menu
-          align="start"
+          position={{ align: 'start' }}
           trigger={
             <button data-testid="target-btn" data-mock-rect="50,100,80,32">
               目标按钮
@@ -831,10 +829,12 @@ describe('专项 5：Esc 全局层叠栈栈顶单次响应守卫矩阵 (GEO-ESC-
         <div data-testid="settings-panel">
           <Dialog open={true} onClose={onDialogClose} title="模型配置">
             <Menu
-              open={menuOpen}
-              onOpenChange={(v) => {
-                setMenuOpen(v);
-                if (!v) onMenuClose();
+              openState={{
+                open: menuOpen,
+                onOpenChange: (v) => {
+                  setMenuOpen(v);
+                  if (!v) onMenuClose();
+                },
               }}
               trigger={<button>选项</button>}
               options={[{ id: '1', label: 'Item' }]}
@@ -949,7 +949,7 @@ describe('专项 5：Esc 全局层叠栈栈顶单次响应守卫矩阵 (GEO-ESC-
         <Menu
           trigger={<button>打开</button>}
           options={[{ id: '1', label: 'A' }]}
-          defaultOpen={true}
+          openState={{ defaultOpen: true }}
         />
       </div>
     );
@@ -969,8 +969,7 @@ describe('专项 5：Esc 全局层叠栈栈顶单次响应守卫矩阵 (GEO-ESC-
       return (
         <Dialog open={true} onClose={onDialogClose} title="外层弹窗">
           <Menu
-            open={menuOpen}
-            onOpenChange={setMenuOpen}
+            openState={{ open: menuOpen, onOpenChange: setMenuOpen }}
             trigger={<button>打开</button>}
             options={[{ id: '1', label: 'A' }]}
           />

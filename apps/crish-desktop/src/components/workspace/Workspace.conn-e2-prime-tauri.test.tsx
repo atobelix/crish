@@ -129,10 +129,11 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
     render(
       <WorkspaceEmptyState
         wsId={wsId}
-        enableMirrorDetectSchedule={
-          WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE
-        }
-        mirrorIpc={ipc}
+        mirror={{
+          enableMirrorDetectSchedule:
+            WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
+          mirrorIpc: ipc,
+        }}
       />
     );
 
@@ -217,8 +218,10 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
     render(
       <WorkspaceEmptyState
         wsId="ws-e2pt-hollow"
-        enableMirrorDetectSchedule
-        mirrorIpc={ipc}
+        mirror={{
+          enableMirrorDetectSchedule: true,
+          mirrorIpc: ipc,
+        }}
       />
     );
 
@@ -251,11 +254,12 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
     render(
       <WorkspaceEmptyState
         wsId={wsId}
-        enableMirrorDetectSchedule={
-          WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE
-        }
-        mirrorIpc={ipc}
-        mirrorUnpushedOpCount={3}
+        mirror={{
+          enableMirrorDetectSchedule:
+            WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
+          mirrorIpc: ipc,
+          mirrorUnpushedOpCount: 3,
+        }}
       />
     );
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { TreeLeafPanel } from './TreeLeafPanel';
 import * as workspaceShellModule from '../../store/workspace-shell';
 import { useLayoutStore } from '../../store/layoutStore';
@@ -11,6 +11,10 @@ import type { SessionState } from '../../store/types';
 import { registerBuiltInViews, type ViewFactoryMap } from '../../services/view-registry';
 import type { ViewRenderContext } from '../../services/view-registry';
 import { lazy } from 'react';
+import {
+  activateNotePaper,
+  deactivateNotePaper,
+} from '../../extensions/note-paper';
 
 // Mock the lazy components to verify props and routing
 vi.mock('../chat-card/ChatCard', () => ({
@@ -96,8 +100,15 @@ const routingTestFactories: ViewFactoryMap = {
 };
 
 describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
+  afterEach(() => {
+    act(() => {
+      deactivateNotePaper();
+    });
+  });
+
   beforeEach(() => {
     vi.restoreAllMocks();
+    deactivateNotePaper();
     registerBuiltInViews(routingTestFactories);
     useLayoutStore.setState((st) => {
       st.sessionsById = {
@@ -170,5 +181,56 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
       screen.getByTestId('mock-files-card')
     );
     expect(filesCard).toBeDefined();
+  });
+
+  it('F6 默认 chat 叶出现 UnitChrome；activate 后出现 chat-open-note；不挂 LeafToolTabStrip', async () => {
+    deactivateNotePaper();
+    const leaf = createLeaf('chat', ['chat'], 'chat', 'session-123');
+    useLayoutTreeStore.setState({
+      activeLeafId: leaf.id,
+      tree: { root: leaf, version: 1 },
+    });
+
+    const { container, getByTestId, queryByTestId } = render(
+      <TreeLeafPanel
+        leaf={leaf}
+        rect={{ x: 0, y: 0, width: 1, height: 1 }}
+        isActive={true}
+        isDragSource={false}
+      />
+    );
+
+    expect(
+      container.querySelector('[data-unit-chrome-actions="true"]')
+    ).toBeTruthy();
+    expect(container.querySelector('[data-leaf-tool-tab-strip]')).toBeNull();
+    expect(queryByTestId('chat-open-note')).toBeNull();
+
+    act(() => {
+      activateNotePaper();
+    });
+    await waitFor(() => {
+      expect(getByTestId('chat-open-note')).toBeTruthy();
+    });
+    expect(container.querySelector('[data-leaf-tool-tab-strip]')).toBeNull();
+    act(() => {
+      deactivateNotePaper();
+    });
+  });
+
+  it('F11 note 未注册时本地 fallback，不是纯空白', () => {
+    deactivateNotePaper();
+    const leaf = createLeaf('note', ['note'], 'note', 'session-123');
+    render(
+      <TreeLeafPanel
+        leaf={leaf}
+        rect={{ x: 0.5, y: 0, width: 0.5, height: 1 }}
+        isActive={false}
+        isDragSource={false}
+      />
+    );
+    expect(screen.getByText(/未知面板类型：note/)).toBeTruthy();
+    expect(screen.getByText(/笔记扩展未激活/)).toBeTruthy();
+    expect(screen.queryByTestId('note-paper-strict-panel')).toBeNull();
   });
 });

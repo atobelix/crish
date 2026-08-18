@@ -8,7 +8,8 @@ import { ProfileHeader } from './ProfileHeader';
 import { ProviderProfileForm } from './ProviderProfileForm';
 import type { AddDraft, CfgDraft } from './useModelProfilesState';
 
-interface ModelConfigEditorProps {
+/** 服务商配置域：profile 选择/名称编辑/密钥/删除 */
+export interface ProviderConfigGroup {
   selected: ProviderProfile | null;
   profiles: ProviderProfile[];
   selectedLabel: string;
@@ -22,6 +23,14 @@ interface ModelConfigEditorProps {
   keyDraft: string;
   setKeyDraft: (val: string) => void;
   saveKey: () => Promise<void>;
+  refresh: () => void;
+  notify: (ok: boolean, text: string) => void;
+  setProfiles: (profiles: ProviderProfile[]) => void;
+  setSelectedId: (id: string | null) => void;
+}
+
+/** 模型列表域：扫描/过滤/手填新增 */
+export interface ModelConfigGroup {
   runCheck: () => Promise<void>;
   runScan: () => Promise<void>;
   checkBusy: boolean;
@@ -36,6 +45,10 @@ interface ModelConfigEditorProps {
   emptyAddDraft: () => AddDraft;
   modelsList: string[];
   modelsCount: number;
+}
+
+/** 单模型配置抽屉域：config 编辑/测试 */
+export interface CapConfigGroup {
   configOpenId: string | null;
   cfgDraft: CfgDraft | null;
   setCfgDraft: React.Dispatch<React.SetStateAction<CfgDraft | null>>;
@@ -44,61 +57,27 @@ interface ModelConfigEditorProps {
   saveConfig: () => void;
   runTest: (model: string) => Promise<void>;
   testBusy: string | null;
-  refresh: () => void;
-  notify: (ok: boolean, text: string) => void;
-  setProfiles: (profiles: ProviderProfile[]) => void;
-  setSelectedId: (id: string | null) => void;
+}
+
+interface ModelConfigEditorProps {
+  providerConfig: ProviderConfigGroup;
+  modelConfig: ModelConfigGroup;
+  capConfig: CapConfigGroup;
 }
 
 export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
-  selected,
-  profiles,
-  selectedLabel,
-  hasKeySelected,
-  editingName,
-  nameDraft,
-  setNameDraft,
-  setEditingName,
-  confirmDeleteId,
-  setConfirmDeleteId,
-  keyDraft,
-  setKeyDraft,
-  saveKey,
-  runCheck,
-  runScan,
-  checkBusy,
-  scanBusy,
-  modelFilter,
-  setModelFilter,
-  manualOpen,
-  setManualOpen,
-  addDraft,
-  setAddDraft,
-  handleManualAdd,
-  emptyAddDraft,
-  modelsList,
-  modelsCount,
-  configOpenId,
-  cfgDraft,
-  setCfgDraft,
-  openConfigFor,
-  closeConfig,
-  saveConfig,
-  runTest,
-  testBusy,
-  refresh,
-  notify,
-  setProfiles,
-  setSelectedId,
+  providerConfig: pc,
+  modelConfig: mc,
+  capConfig: cc,
 }) => {
   return (
     <section
       className={`${styles.modelsDetail} models-detail`}
-      aria-label={selected ? `服务商 · ${selectedLabel}` : '服务商'}
+      aria-label={pc.selected ? `服务商 · ${pc.selectedLabel}` : '服务商'}
     >
-      {!selected ? (
+      {!pc.selected ? (
         <div className={`${styles.mrdEmpty} mrd-empty`}>
-          {profiles.length === 0
+          {pc.profiles.length === 0
             ? '从左侧添加服务商以开始'
             : '在左侧选择一个服务商'}
         </div>
@@ -106,72 +85,72 @@ export const ModelConfigEditor: React.FC<ModelConfigEditorProps> = ({
         <div className={`${styles.mrdBody} mrd-body`}>
           {/* Detail header */}
           <ProfileHeader
-            selected={selected}
-            selectedLabel={selectedLabel}
-            editingName={editingName}
-            nameDraft={nameDraft}
-            setNameDraft={setNameDraft}
-            setEditingName={setEditingName}
-            confirmDeleteId={confirmDeleteId}
-            setConfirmDeleteId={setConfirmDeleteId}
-            refresh={refresh}
-            notify={notify}
-            setProfiles={setProfiles}
-            setSelectedId={setSelectedId}
+            selected={pc.selected}
+            selectedLabel={pc.selectedLabel}
+            editingName={pc.editingName}
+            nameDraft={pc.nameDraft}
+            setNameDraft={pc.setNameDraft}
+            setEditingName={pc.setEditingName}
+            confirmDeleteId={pc.confirmDeleteId}
+            setConfirmDeleteId={pc.setConfirmDeleteId}
+            refresh={pc.refresh}
+            notify={pc.notify}
+            setProfiles={pc.setProfiles}
+            setSelectedId={pc.setSelectedId}
           />
 
           {/* Credentials */}
-          {selected.id.startsWith('custom-') && (
+          {pc.selected.id.startsWith('custom-') && (
             <ProviderProfileForm
-              selected={selected}
-              hasKeySelected={hasKeySelected}
-              keyDraft={keyDraft}
-              setKeyDraft={setKeyDraft}
-              saveKey={saveKey}
-              notify={notify}
-              refresh={refresh}
+              selected={pc.selected}
+              hasKeySelected={pc.hasKeySelected}
+              keyDraft={pc.keyDraft}
+              setKeyDraft={pc.setKeyDraft}
+              saveKey={pc.saveKey}
+              notify={pc.notify}
+              refresh={pc.refresh}
             />
           )}
 
           {/* Model list header */}
           <ModelListHeader
-            checkBusy={checkBusy}
-            scanBusy={scanBusy}
-            runCheck={runCheck}
-            runScan={runScan}
-            modelFilter={modelFilter}
-            setModelFilter={setModelFilter}
-            manualOpen={manualOpen}
-            setManualOpen={setManualOpen}
-            setAddDraft={setAddDraft}
-            emptyAddDraft={emptyAddDraft}
+            checkBusy={mc.checkBusy}
+            scanBusy={mc.scanBusy}
+            runCheck={mc.runCheck}
+            runScan={mc.runScan}
+            modelFilter={mc.modelFilter}
+            setModelFilter={mc.setModelFilter}
+            manualOpen={mc.manualOpen}
+            setManualOpen={mc.setManualOpen}
+            setAddDraft={mc.setAddDraft}
+            emptyAddDraft={mc.emptyAddDraft}
           />
 
           {/* Manual add form */}
-          {manualOpen && (
+          {mc.manualOpen && (
             <ManualAddForm
-              addDraft={addDraft}
-              setAddDraft={setAddDraft}
-              handleManualAdd={handleManualAdd}
-              setManualOpen={setManualOpen}
+              addDraft={mc.addDraft}
+              setAddDraft={mc.setAddDraft}
+              handleManualAdd={mc.handleManualAdd}
+              setManualOpen={mc.setManualOpen}
             />
           )}
 
           {/* Model rows */}
           <ModelList
-            providerId={selected.id}
-            modelsList={modelsList}
-            modelsCount={modelsCount}
-            modelFilter={modelFilter}
-            configOpenId={configOpenId}
-            cfgDraft={cfgDraft}
-            setCfgDraft={setCfgDraft}
-            openConfigFor={openConfigFor}
-            closeConfig={closeConfig}
-            saveConfig={saveConfig}
-            runTest={runTest}
-            testBusy={testBusy}
-            refresh={refresh}
+            providerId={pc.selected.id}
+            modelsList={mc.modelsList}
+            modelsCount={mc.modelsCount}
+            modelFilter={mc.modelFilter}
+            configOpenId={cc.configOpenId}
+            cfgDraft={cc.cfgDraft}
+            setCfgDraft={cc.setCfgDraft}
+            openConfigFor={cc.openConfigFor}
+            closeConfig={cc.closeConfig}
+            saveConfig={cc.saveConfig}
+            runTest={cc.runTest}
+            testBusy={cc.testBusy}
+            refresh={pc.refresh}
           />
         </div>
       )}

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, expect, it, beforeEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { act, render, waitFor } from '@testing-library/react';
 import { UnitChromeActions } from './UnitChromeActions';
 import {
   useWorkspaceShellStore,
@@ -11,6 +11,11 @@ import { useLayoutTreeStore } from '../../store/layout-tree';
 import { useLayoutStore } from '../../store/layoutStore';
 import type { SessionState } from '../../store/types';
 import { GENERAL_FOLDER } from '../../api/projectStore';
+import * as storeAccess from '../../store/storeAccess';
+import {
+  activateNotePaper,
+  deactivateNotePaper,
+} from '../../extensions/note-paper';
 
 describe('UnitChromeActions 分屏折叠作用域单源化 (Task 2)', () => {
   beforeEach(() => {
@@ -83,5 +88,56 @@ describe('UnitChromeActions 分屏折叠作用域单源化 (Task 2)', () => {
 
     const expandBtn = getByTestId('right-dock-toggle');
     expect(expandBtn).toBeDefined();
+  });
+});
+
+describe('UnitChromeActions 笔记闸（02 F6 / F7）', () => {
+  afterEach(() => {
+    act(() => {
+      deactivateNotePaper();
+    });
+    vi.restoreAllMocks();
+  });
+
+  it('未 activate 不渲染 chat-open-note；activate 后出现，deactivate 后消失', async () => {
+    deactivateNotePaper();
+    const { queryByTestId, getByTestId } = render(
+      <UnitChromeActions activeSessionId="unit-a" />
+    );
+    expect(queryByTestId('chat-open-note')).toBeNull();
+
+    act(() => {
+      activateNotePaper();
+    });
+    await waitFor(() => {
+      expect(getByTestId('chat-open-note')).toBeTruthy();
+    });
+
+    act(() => {
+      deactivateNotePaper();
+    });
+    await waitFor(() => {
+      expect(queryByTestId('chat-open-note')).toBeNull();
+    });
+  });
+
+  it('F7 点击 chat-open-note 只走 openToolInSession(sid, note)', async () => {
+    act(() => {
+      activateNotePaper();
+    });
+    const spy = vi
+      .spyOn(storeAccess, 'openToolInSession')
+      .mockImplementation(() => {});
+    const { getByTestId } = render(
+      <UnitChromeActions activeSessionId="unit-a" />
+    );
+    await waitFor(() => {
+      expect(getByTestId('chat-open-note')).toBeTruthy();
+    });
+    act(() => {
+      getByTestId('chat-open-note').click();
+    });
+    expect(spy).toHaveBeenCalledWith('unit-a', 'note');
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

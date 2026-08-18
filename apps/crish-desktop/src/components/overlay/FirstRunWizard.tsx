@@ -103,8 +103,7 @@ export const FirstRunWizard: React.FC<Props> = ({ onDone, onOpenSettings }) => {
         </span>
       }
       description={activeMeta.desc}
-      className={styles.firstRunDialog}
-      overlayClassName={styles.firstRunOverlay}
+      classNames={{ panel: styles.firstRunDialog, overlay: styles.firstRunOverlay }}
     >
       <div className={styles.firstRunCard}>
         <div className={styles.firstRunSteps} role="list" aria-label="设置步骤">

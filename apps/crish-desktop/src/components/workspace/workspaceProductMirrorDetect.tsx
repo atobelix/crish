@@ -84,8 +84,10 @@ export function WorkspaceProductEmptyHost({
     <WorkspaceEmptyState
       wsId={wsId}
       onActivate={onActivate}
-      enableMirrorDetectSchedule={productMirror.enableMirrorDetectSchedule}
-      mirrorIpc={productMirror.mirrorIpc}
+      mirror={{
+        enableMirrorDetectSchedule: productMirror.enableMirrorDetectSchedule,
+        mirrorIpc: productMirror.mirrorIpc,
+      }}
       enableProductPaperList={WORKSPACE_PRODUCT_ENABLE_PAPER_LIST}
     />
   );

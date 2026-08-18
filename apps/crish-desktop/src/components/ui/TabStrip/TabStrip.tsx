@@ -49,15 +49,7 @@ export interface TabStripRenderCtx {
   active: boolean;
 }
 
-export interface TabStripProps {
-  /** 标签数据模型（受控 items 协议） */
-  tabs: TabStripItem[];
-  /** 激活项 id；null = 无激活（如草稿态不点亮任何标签） */
-  activeId: string | null;
-  /** 激活变更回调（点击 / Enter / Space / 方向键激活均经此上报） */
-  onActiveChange: (id: string) => void;
-  /** 关闭回调（关闭钮 / Delete / Backspace）；缺省 = 标签不可关 */
-  onClose?: (id: string, e: React.MouseEvent | React.KeyboardEvent) => void;
+export interface TabStripAppearance {
   /** tablist 无障碍名（aria-label） */
   ariaLabel?: string;
   /** 外层 wrap 类（滚动容器之外；承载 data-overflow-* 渐变接线） */
@@ -68,6 +60,15 @@ export interface TabStripProps {
   tabClassName?: string;
   /** tab 元素激活态追加类 */
   tabActiveClassName?: string;
+  /** wrap 层自定义数据属性 */
+  data?: Record<string, string | boolean | number | undefined>;
+  /** wrap 层语义角色（如 navigation 包裹场景，GlobalSessionTabBar） */
+  wrapRole?: string;
+  /** wrap 层无障碍名（与 wrapRole 搭配） */
+  wrapAriaLabel?: string;
+}
+
+export interface TabStripSlots {
   /** tab 内容插槽（关闭钮/badge/图标；缺省渲染 label 文本） */
   renderTab?: (
     tab: TabStripItem,
@@ -82,12 +83,21 @@ export interface TabStripProps {
   wrapTrailing?: React.ReactNode;
   /** tab 指针按下回调（拖拽入口；消费方提供拖拽算法） */
   onTabPointerDown?: (id: string, e: React.PointerEvent) => void;
-  /** wrap 层自定义数据属性 */
-  data?: Record<string, string | boolean | number | undefined>;
-  /** wrap 层语义角色（如 navigation 包裹场景，GlobalSessionTabBar） */
-  wrapRole?: string;
-  /** wrap 层无障碍名（与 wrapRole 搭配） */
-  wrapAriaLabel?: string;
+}
+
+export interface TabStripProps {
+  /** 标签数据模型（受控 items 协议） */
+  tabs: TabStripItem[];
+  /** 激活项 id；null = 无激活（如草稿态不点亮任何标签） */
+  activeId: string | null;
+  /** 激活变更回调（点击 / Enter / Space / 方向键激活均经此上报） */
+  onActiveChange: (id: string) => void;
+  /** 关闭回调（关闭钮 / Delete / Backspace）；缺省 = 标签不可关 */
+  onClose?: (id: string, e: React.MouseEvent | React.KeyboardEvent) => void;
+  /** 外观与无障碍属性组（类名/aria/data/role） */
+  appearance?: TabStripAppearance;
+  /** 插槽组（renderTab/leading/trailing/wrapTrailing/拖拽入口） */
+  slots?: TabStripSlots;
 }
 
 /** 读滚动容器溢出边（S4.5 data-overflow-* 契约） */
@@ -118,20 +128,26 @@ export const TabStrip: React.FC<TabStripProps> = ({
   activeId,
   onActiveChange,
   onClose,
-  ariaLabel,
-  className,
-  scrollClassName,
-  renderTab = defaultRenderTab,
-  leading,
-  trailing,
-  wrapTrailing,
-  tabClassName,
-  tabActiveClassName,
-  onTabPointerDown,
-  data: wrapData,
-  wrapRole,
-  wrapAriaLabel,
+  appearance,
+  slots,
 }) => {
+  const {
+    ariaLabel,
+    className,
+    scrollClassName,
+    tabClassName,
+    tabActiveClassName,
+    data: wrapData,
+    wrapRole,
+    wrapAriaLabel,
+  } = appearance ?? {};
+  const {
+    renderTab = defaultRenderTab,
+    leading,
+    trailing,
+    wrapTrailing,
+    onTabPointerDown,
+  } = slots ?? {};
   // ── roving tabindex（对齐蓝本 S4.5） ──────────────────────
   const [rovingIndex, setRovingIndex] = useState(0);
   const tabElsRef = useRef<Array<HTMLDivElement | null>>([]);

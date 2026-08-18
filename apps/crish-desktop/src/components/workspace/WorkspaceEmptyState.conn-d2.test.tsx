@@ -54,7 +54,7 @@ describe('WorkspaceEmptyState · CONN-D2 / CONN-D3 mdPrefix 写锥', () => {
   it('conn_d2_product_empty_with_applyOps_md_prefix_writable_attrs', async () => {
     const applyOps: ApplyOpsAdapter = async () => ({ ok: true });
     render(
-      <WorkspaceEmptyState wsId="ws-conn-d2-wr" strictApplyOps={applyOps} />
+      <WorkspaceEmptyState wsId="ws-conn-d2-wr" strict={{ strictApplyOps: applyOps }} />
     );
 
     expect(screen.getByRole('status')).toHaveAttribute(
@@ -89,7 +89,7 @@ describe('WorkspaceEmptyState · CONN-D2 / CONN-D3 mdPrefix 写锥', () => {
     // CONN-D3：注入 applyOps 后 content-row 叶可写；**≠ A-BLK-08 e2e / ≠ EL-01**
     const applyOps: ApplyOpsAdapter = async () => ({ ok: true });
     render(
-      <WorkspaceEmptyState wsId="ws-conn-d3-leaf" strictApplyOps={applyOps} />
+      <WorkspaceEmptyState wsId="ws-conn-d3-leaf" strict={{ strictApplyOps: applyOps }} />
     );
     fireEvent.click(screen.getByTestId('open-note-paper-strict'));
     await waitFor(() => {

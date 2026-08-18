@@ -54,7 +54,7 @@ import {
   type SetupHintKind,
 } from './chatStatusRibbonsLib';
 
-export type ChatStatusRibbonsProps = {
+export interface StreamingRibbonProps {
   onOpenTerminal?: () => void;
   onOpenDiff?: () => void;
   diffCount?: number;
@@ -73,12 +73,19 @@ export type ChatStatusRibbonsProps = {
   localHasKey: boolean;
   onOpenModelSettings: () => void;
   onOpenModelDropdown: () => void;
+  /** 回到最新 FAB */
+  showScrollToBottom: boolean;
+  onScrollToBottom: () => void;
+  /** 系统 run 提示（错误/空回复等） */
+  runNotice: RunNotice | null;
+  onDismissRunNotice: () => void;
+}
 
+export interface GoalRibbonProps {
   /** 计划模式条 */
   inPlanMode: boolean;
   planApproved: boolean;
   onApprovePlan: () => void;
-
   /** 目标模式条 */
   goalModeActive: boolean;
   goalText: string;
@@ -87,15 +94,9 @@ export type ChatStatusRibbonsProps = {
   goalTasksDone?: number;
   goalTasksTotal?: number;
   onStopGoal: () => void;
+}
 
-  /** 回到最新 FAB */
-  showScrollToBottom: boolean;
-  onScrollToBottom: () => void;
-
-  /** 系统 run 提示（错误/空回复等） */
-  runNotice: RunNotice | null;
-  onDismissRunNotice: () => void;
-
+export interface ApprovalRibbonProps {
   /** 审批 sticky 条（队列/子任务跳转；单条主时间线内联卡时不展示，避免重复） */
   pendingApprovalCount: number;
   /**
@@ -110,7 +111,12 @@ export type ChatStatusRibbonsProps = {
   pendingApprovalToolId: string;
   pendingApprovalMsgId: string;
   activeSessionId: string | null | undefined;
+}
 
+export type ChatStatusRibbonsProps = {
+  streaming: StreamingRibbonProps;
+  goal: GoalRibbonProps;
+  approval: ApprovalRibbonProps;
   /**
    * 插在 FAB 与 run 提示之间的内容（如 DemoChrome），
    * 用于保持抽出前 DOM 顺序。
@@ -126,37 +132,46 @@ function resolveSetupAction(kind: SetupHintKind): 'settings' | 'dropdown' {
 }
 
 export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
-  onOpenTerminal,
-  onOpenDiff,
-  diffCount = 0,
-  engineHint,
-  needsKeySetup,
-  needsModelSetup = false,
-  onEmptySurface = false,
-  localHasKey,
-  onOpenModelSettings,
-  onOpenModelDropdown,
-  inPlanMode,
-  planApproved,
-  onApprovePlan,
-  goalModeActive,
-  goalText,
-  goalIteration,
-  goalTasksDone = 0,
-  goalTasksTotal = 0,
-  onStopGoal,
-  showScrollToBottom,
-  onScrollToBottom,
-  runNotice,
-  onDismissRunNotice,
-  pendingApprovalCount,
-  showApprovalDock = false,
-  pendingApprovalSummary,
-  pendingApprovalToolId,
-  pendingApprovalMsgId,
-  activeSessionId,
+  streaming: sp,
+  goal: gp,
+  approval: ap,
   between,
 }) => {
+  const {
+    onOpenTerminal,
+    onOpenDiff,
+    diffCount = 0,
+    engineHint,
+    needsKeySetup,
+    needsModelSetup = false,
+    onEmptySurface = false,
+    localHasKey,
+    onOpenModelSettings,
+    onOpenModelDropdown,
+    showScrollToBottom,
+    onScrollToBottom,
+    runNotice,
+    onDismissRunNotice,
+  } = sp;
+  const {
+    inPlanMode,
+    planApproved,
+    onApprovePlan,
+    goalModeActive,
+    goalText,
+    goalIteration,
+    goalTasksDone = 0,
+    goalTasksTotal = 0,
+    onStopGoal,
+  } = gp;
+  const {
+    pendingApprovalCount,
+    showApprovalDock = false,
+    pendingApprovalSummary,
+    pendingApprovalToolId,
+    pendingApprovalMsgId,
+    activeSessionId,
+  } = ap;
   const [showPlanDrawer, setShowPlanDrawer] = useState(false);
   const planDrawerRef = useRef<HTMLDivElement>(null);
 

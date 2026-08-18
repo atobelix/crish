@@ -18,18 +18,28 @@ function isPluginCardItem(
   return 'pluginId' in item && item.kind === 'plugin';
 }
 
-export type ExtensionCardProps = {
+/** 扩展卡身份与展示态（标识当前卡片属于哪一项、展开/配置/卸载可见性）。 */
+export interface ExtensionCardExtensionProps {
   scope: 'installed' | 'catalog';
   item: InstalledExtension | CatalogEntry;
   installedMark?: boolean;
   canUninstall?: boolean;
   detailOpen: boolean;
   configOpen?: boolean;
+  /** 全局安装/卸载 busy 标记（catalog 安装按钮、installed 卸载按钮共用）。 */
   busyId: string | null;
-  mcpServerBusy: boolean;
-  mcpToolBusy: boolean;
+}
+
+/** MCP 工具展示态（仅 mcp 类型分支消费）。 */
+export interface ExtensionCardMcpProps {
   expandedMcpTools: Set<string>;
   toolTick: number;
+  mcpServerBusy: boolean;
+  mcpToolBusy: boolean;
+}
+
+/** 扩展卡回调集合（高亮、展开切换、安装/卸载、MCP 启停、插件启停、管理跳转）。 */
+export interface ExtensionCardActionsProps {
   highlightMatch: (text: string) => React.ReactNode;
   toggleExpand: (scope: 'installed' | 'catalog', id: string, mode: ExpandMode) => void;
   onInstallCatalog?: (entry: CatalogEntry) => void;
@@ -41,31 +51,42 @@ export type ExtensionCardProps = {
   onGoToConfig?: (id: string) => void;
   /** 插件启停开关（E3 UI 泛化：kind: 'plugin' 分支）。 */
   onTogglePlugin?: (pluginId: string, enabled: boolean) => void;
+}
+
+/** Props 分组：extension（身份/展示态）+ mcp（MCP 工具态）+ actions（回调集合）。 */
+export type ExtensionCardProps = {
+  extension: ExtensionCardExtensionProps;
+  mcp: ExtensionCardMcpProps;
+  actions: ExtensionCardActionsProps;
 };
 
 export const ExtensionCard: React.FC<ExtensionCardProps> = ({
-  scope,
-  item,
-  installedMark,
-  canUninstall,
-  detailOpen,
-  configOpen = false,
-  busyId,
-  mcpServerBusy,
-  mcpToolBusy,
-  expandedMcpTools,
-  toolTick,
-  highlightMatch,
-  toggleExpand,
-  onInstallCatalog,
-  onRemovePackage,
-  onToggleMcpServer,
-  onToggleMcpTool,
-  onToggleExpandMcpTools,
-  onSetManage,
-  onGoToConfig,
-  onTogglePlugin,
+  extension,
+  mcp,
+  actions,
 }) => {
+  const {
+    scope,
+    item,
+    installedMark,
+    canUninstall,
+    detailOpen,
+    configOpen = false,
+    busyId,
+  } = extension;
+  const { expandedMcpTools, toolTick, mcpServerBusy, mcpToolBusy } = mcp;
+  const {
+    highlightMatch,
+    toggleExpand,
+    onInstallCatalog,
+    onRemovePackage,
+    onToggleMcpServer,
+    onToggleMcpTool,
+    onToggleExpandMcpTools,
+    onSetManage,
+    onGoToConfig,
+    onTogglePlugin,
+  } = actions;
   const renderSkillBody = (
     targetItem: InstalledExtension | CatalogEntry,
     mode: ExpandMode

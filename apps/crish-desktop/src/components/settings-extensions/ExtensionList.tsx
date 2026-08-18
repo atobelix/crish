@@ -4,11 +4,10 @@ import { ExtensionCard } from './ExtensionCard';
 import { Button } from '../ui';
 import type { ExpandMode, ExpandTarget, KindFilter, MainView, ManageKind } from './types';
 
-export type ExtensionListProps = {
+/** 扩展数据域 */
+export interface ExtensionsGroup {
   view: MainView;
   loading: boolean;
-  query: string;
-  kindFilter: KindFilter;
   installedFiltered: InstalledExtension[];
   catalogFiltered: CatalogEntry[];
   catalogInstalled: Set<string>;
@@ -18,6 +17,16 @@ export type ExtensionListProps = {
   mcpToolBusy: boolean;
   expandedMcpTools: Set<string>;
   toolTick: number;
+}
+
+/** 筛选域 */
+export interface FiltersGroup {
+  query: string;
+  kindFilter: KindFilter;
+}
+
+/** 操作回调域 */
+export interface ActionsGroup {
   highlightMatch: (text: string) => React.ReactNode;
   toggleExpand: (scope: 'installed' | 'catalog', id: string, mode: ExpandMode) => void;
   isExpanded: (scope: 'installed' | 'catalog', id: string, mode?: ExpandMode) => boolean;
@@ -31,35 +40,47 @@ export type ExtensionListProps = {
   onSetExpand: (expand: ExpandTarget | null) => void;
   /** 插件启停（E3 UI 泛化）。 */
   onTogglePlugin: (pluginId: string, enabled: boolean) => void;
+}
+
+export type ExtensionListProps = {
+  extensions: ExtensionsGroup;
+  filters: FiltersGroup;
+  actions: ActionsGroup;
 };
 
 export const ExtensionList: React.FC<ExtensionListProps> = ({
-  view,
-  loading,
-  query,
-  kindFilter,
-  installedFiltered,
-  catalogFiltered,
-  catalogInstalled,
-  installed,
-  busyId,
-  mcpServerBusy,
-  mcpToolBusy,
-  expandedMcpTools,
-  toolTick,
-  highlightMatch,
-  toggleExpand,
-  isExpanded,
-  onInstallCatalog,
-  onRemovePackage,
-  onToggleMcpServer,
-  onToggleMcpTool,
-  onToggleExpandMcpTools,
-  onSetManage,
-  onSetView,
-  onSetExpand,
-  onTogglePlugin,
+  extensions: ext,
+  filters: flt,
+  actions: ac,
 }) => {
+  const {
+    view,
+    loading,
+    installedFiltered,
+    catalogFiltered,
+    catalogInstalled,
+    installed,
+    busyId,
+    mcpServerBusy,
+    mcpToolBusy,
+    expandedMcpTools,
+    toolTick,
+  } = ext;
+  const { query, kindFilter } = flt;
+  const {
+    highlightMatch,
+    toggleExpand,
+    isExpanded,
+    onInstallCatalog,
+    onRemovePackage,
+    onToggleMcpServer,
+    onToggleMcpTool,
+    onToggleExpandMcpTools,
+    onSetManage,
+    onSetView,
+    onSetExpand,
+    onTogglePlugin,
+  } = ac;
   if (view === 'installed') {
     return (
       <div
@@ -97,24 +118,30 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
             return (
               <ExtensionCard
                 key={item.id}
-                scope="installed"
-                item={item}
-                canUninstall={canUninstall}
-                detailOpen={detailOpen}
-                configOpen={configOpen}
-                busyId={busyId}
-                mcpServerBusy={mcpServerBusy}
-                mcpToolBusy={mcpToolBusy}
-                expandedMcpTools={expandedMcpTools}
-                toolTick={toolTick}
-                highlightMatch={highlightMatch}
-                toggleExpand={toggleExpand}
-                onRemovePackage={onRemovePackage}
-                onToggleMcpServer={onToggleMcpServer}
-                onToggleMcpTool={onToggleMcpTool}
-                onToggleExpandMcpTools={onToggleExpandMcpTools}
-                onSetManage={onSetManage}
-                onTogglePlugin={onTogglePlugin}
+                extension={{
+                  scope: 'installed',
+                  item,
+                  canUninstall,
+                  detailOpen,
+                  configOpen,
+                  busyId,
+                }}
+                mcp={{
+                  expandedMcpTools,
+                  toolTick,
+                  mcpServerBusy,
+                  mcpToolBusy,
+                }}
+                actions={{
+                  highlightMatch,
+                  toggleExpand,
+                  onRemovePackage,
+                  onToggleMcpServer,
+                  onToggleMcpTool,
+                  onToggleExpandMcpTools,
+                  onSetManage,
+                  onTogglePlugin,
+                }}
               />
             );
           })
@@ -142,25 +169,31 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
           return (
             <ExtensionCard
               key={entry.id}
-              scope="catalog"
-              item={entry}
-              installedMark={installedMark}
-              detailOpen={detailOpen}
-              busyId={busyId}
-              mcpServerBusy={mcpServerBusy}
-              mcpToolBusy={mcpToolBusy}
-              expandedMcpTools={expandedMcpTools}
-              toolTick={toolTick}
-              highlightMatch={highlightMatch}
-              toggleExpand={toggleExpand}
-              onInstallCatalog={onInstallCatalog}
-              onGoToConfig={(entryId) => {
-                onSetView('installed');
-                onSetExpand({
-                  scope: 'installed',
-                  id: entryId,
-                  mode: 'config',
-                });
+              extension={{
+                scope: 'catalog',
+                item: entry,
+                installedMark,
+                detailOpen,
+                busyId,
+              }}
+              mcp={{
+                expandedMcpTools,
+                toolTick,
+                mcpServerBusy,
+                mcpToolBusy,
+              }}
+              actions={{
+                highlightMatch,
+                toggleExpand,
+                onInstallCatalog,
+                onGoToConfig: (entryId) => {
+                  onSetView('installed');
+                  onSetExpand({
+                    scope: 'installed',
+                    id: entryId,
+                    mode: 'config',
+                  });
+                },
               }}
             />
           );

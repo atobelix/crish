@@ -62,28 +62,30 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
 
   return (
     <Menu
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (onOpenChange) {
-          onOpenChange(nextOpen);
-        } else if (!nextOpen) {
-          onClose();
-        }
+      openState={{
+        open,
+        onOpenChange: (nextOpen) => {
+          if (onOpenChange) {
+            onOpenChange(nextOpen);
+          } else if (!nextOpen) {
+            onClose();
+          }
+        },
       }}
       trigger={children}
-      side={side}
-      align="start"
-      sideOffset={4}
-      contentClassName={styles.mbMenu}
-      onEscapeKeyDown={(event) => {
-        // 逐级关闭第一环：子菜单打开时 Esc 只关子菜单（Radix document 捕获
-        // 阶段，preventDefault 阻止整层关闭），并归还行按钮焦点；
-        // 子菜单已关时放行 → Radix 关闭整体并归还 trigger
-        if (expandedProfileId != null) {
-          event.preventDefault();
-          setExpandedProfileId(null);
-          rowRefsRef.current[expandedProfileId]?.focus();
-        }
+      position={{ side, align: 'start', sideOffset: 4 }}
+      panel={{ contentClassName: styles.mbMenu }}
+      outsideHandlers={{
+        onEscapeKeyDown: (event) => {
+          // 逐级关闭第一环：子菜单打开时 Esc 只关子菜单（Radix document 捕获
+          // 阶段，preventDefault 阻止整层关闭），并归还行按钮焦点；
+          // 子菜单已关时放行 → Radix 关闭整体并归还 trigger
+          if (expandedProfileId != null) {
+            event.preventDefault();
+            setExpandedProfileId(null);
+            rowRefsRef.current[expandedProfileId]?.focus();
+          }
+        },
       }}
     >
       {profiles.length === 0 ? (

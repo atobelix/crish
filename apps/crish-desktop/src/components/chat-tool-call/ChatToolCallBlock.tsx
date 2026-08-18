@@ -21,15 +21,7 @@ import type { ToolRenderItem } from '../../api/toolPresentation';
 import { Button } from '../ui';
 import { CompactToolRow } from './CompactToolRow';
 
-export interface ChatToolStackProps {
-  items: ToolRenderItem[];
-  msgId?: string;
-  agents: SessionAgent[];
-  activeSessionId: string;
-  expandedTools: Record<string, boolean>;
-  onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
-  approvalBusy: boolean;
-  pendingApprovalMsgId?: string | undefined;
+export interface ChatToolStackActions {
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
   onOpenPath?: ((filePath: string) => void) | undefined;
   onOpenTerminal?: (() => void) | undefined;
@@ -48,6 +40,19 @@ export interface ChatToolStackProps {
         tc: MessageToolCall
       ) => React.ReactNode)
     | undefined;
+}
+
+export interface ChatToolStackProps {
+  items: ToolRenderItem[];
+  msgId?: string;
+  agents: SessionAgent[];
+  activeSessionId: string;
+  expandedTools: Record<string, boolean>;
+  onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
+  approvalBusy: boolean;
+  pendingApprovalMsgId?: string | undefined;
+  /** 操作回调与关联渲染器组（打开/审批/重试/批量/子 agent） */
+  actions?: ChatToolStackActions;
 }
 
 /**
@@ -135,8 +140,8 @@ function renderToolsWithBatchBars(
             key={`batch-${ids[0]}`}
             toolIds={ids}
             msgIds={mIds}
-            onApprove={props.onBatchApprove}
-            onDeny={props.onBatchDeny}
+            onApprove={props.actions?.onBatchApprove}
+            onDeny={props.actions?.onBatchDeny}
           />
         );
       }

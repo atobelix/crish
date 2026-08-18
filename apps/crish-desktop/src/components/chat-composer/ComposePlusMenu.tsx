@@ -95,9 +95,11 @@ export const ComposePlusMenu: React.FC<Props> = ({
 
   return (
     <Menu
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) onClose();
+      openState={{
+        open,
+        onOpenChange: (nextOpen) => {
+          if (!nextOpen) onClose();
+        },
       }}
       // P1-F4 根因修复（F7 F1）：以 restoreFocusRef 真实按钮为 Radix 浮动锚点
       // （Menu 基座 anchor → Popover.Anchor virtualRef），floating-ui 基于可见
@@ -105,10 +107,8 @@ export const ComposePlusMenu: React.FC<Props> = ({
       // → 菜单被定位到视口 (0,0) 左上角。锚点即真实按钮，无需再渲染隐藏元素。
       anchor={restoreFocusRef}
       options={items}
-      align="start"
-      side="top"
-      sideOffset={6}
-      contentClassName={`${styles.plusMenu} no-drag`}
+      position={{ align: 'start', side: 'top', sideOffset: 6 }}
+      panel={{ contentClassName: `${styles.plusMenu} no-drag` }}
       renderItem={(item) => (
         <Tooltip key={item.id} content={item.hint || item.label}>
           <button

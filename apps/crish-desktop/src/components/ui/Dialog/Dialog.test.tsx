@@ -248,7 +248,7 @@ describe('ui/Dialog', () => {
   });
 
   it('overlayClassName 追加到遮罩壳（--dialog-z 层级覆盖落点）', () => {
-    render(<DialogHarness title="层级" overlayClassName="custom-overlay" />);
+    render(<DialogHarness title="层级" classNames={{ overlay: 'custom-overlay' }} />);
     const overlay = screen.getByRole('dialog').parentElement!;
     expect(overlay.classList.contains('custom-overlay')).toBe(true);
   });

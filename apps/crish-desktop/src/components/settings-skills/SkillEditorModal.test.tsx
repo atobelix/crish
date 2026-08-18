@@ -14,21 +14,25 @@ const candidates = [
 ];
 
 const baseProps = {
-  discoverCandidates: candidates as never,
-  discoverPick: {},
-  discoverBusy: false,
-  setDiscoverPick: vi.fn(),
-  applyDiscoverImport: vi.fn(async () => {}),
-  createMode: 'none' as const,
-  setCreateMode: vi.fn(),
-  createName: '',
-  setCreateName: vi.fn(),
-  createDesc: '',
-  setCreateDesc: vi.fn(),
-  createBusy: false,
-  handleCreate: vi.fn(async () => {}),
-  handleImportBrowse: vi.fn(async () => {}),
-  handleAiCreateSkill: vi.fn(),
+  discover: {
+    discoverCandidates: candidates as never,
+    discoverPick: {},
+    discoverBusy: false,
+    setDiscoverPick: vi.fn(),
+    applyDiscoverImport: vi.fn(async () => {}),
+  },
+  create: {
+    createMode: 'none' as const,
+    setCreateMode: vi.fn(),
+    createName: '',
+    setCreateName: vi.fn(),
+    createDesc: '',
+    setCreateDesc: vi.fn(),
+    createBusy: false,
+    handleCreate: vi.fn(async () => {}),
+    handleImportBrowse: vi.fn(async () => {}),
+    handleAiCreateSkill: vi.fn(),
+  },
 };
 
 afterEach(() => {
@@ -47,27 +51,32 @@ describe('SkillEditorModal 发现弹窗（ui/Dialog 基座迁移后）', () => {
   });
 
   it('无候选时不渲染弹窗', () => {
-    render(<SkillEditorModal {...baseProps} discoverCandidates={null} />);
+    render(
+      <SkillEditorModal
+        {...baseProps}
+        discover={{ ...baseProps.discover, discoverCandidates: null }}
+      />
+    );
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('「跳过」触发 applyDiscoverImport("skip")', () => {
     render(<SkillEditorModal {...baseProps} />);
     fireEvent.click(screen.getByRole('button', { name: '跳过导入' }));
-    expect(baseProps.applyDiscoverImport).toHaveBeenCalledWith('skip');
+    expect(baseProps.discover.applyDiscoverImport).toHaveBeenCalledWith('skip');
   });
 
   it('Esc 与「跳过」同一动作（关闭 = 跳过导入）', () => {
     render(<SkillEditorModal {...baseProps} />);
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(baseProps.applyDiscoverImport).toHaveBeenCalledWith('skip');
+    expect(baseProps.discover.applyDiscoverImport).toHaveBeenCalledWith('skip');
   });
 
   it('全启 / 启用所选分别触发对应模式', () => {
     render(<SkillEditorModal {...baseProps} />);
     fireEvent.click(screen.getByRole('button', { name: '全部启用 2 个新技能' }));
-    expect(baseProps.applyDiscoverImport).toHaveBeenCalledWith('all');
+    expect(baseProps.discover.applyDiscoverImport).toHaveBeenCalledWith('all');
     fireEvent.click(screen.getByRole('button', { name: '启用所选新技能' }));
-    expect(baseProps.applyDiscoverImport).toHaveBeenCalledWith('selected');
+    expect(baseProps.discover.applyDiscoverImport).toHaveBeenCalledWith('selected');
   });
 });

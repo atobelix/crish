@@ -25,7 +25,7 @@
  * 本文件仅装配壳（目标 &lt;400；SD-04-R-G 测钉防回涨）。**≠ EL-01**。
  */
 
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo } from 'react';
 /** DomHost chrome 皮；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
 /** W3-G PaperList 挂载皮；≠ EL-01 */
@@ -42,7 +42,6 @@ import { useNoteHydrate } from './useNoteHydrate';
 import { useNotePaperStrictShell } from './useNotePaperStrictShell';
 import { W5B_STRICT_BOUNDARY } from './notePaperStrictTrack';
 import { MirrorDriftStatusBar } from './MirrorDriftStatusBar';
-import { ConexFloatHandle } from './ConexFloatHandle';
 import type { NotePaperStrictPanelProps } from './notePaperStrictProps';
 import styles from './NotePaperPanel.module.css';
 
@@ -176,7 +175,6 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     selSnapshot,
   });
 
-  const bodyRef = useRef<HTMLDivElement | null>(null);
   const rootClass = [styles.panel, className].filter(Boolean).join(' ');
 
   return (
@@ -201,7 +199,6 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
       />
 
       <NotePaperStrictBody
-        ref={bodyRef}
         status={status}
         errorReason={errorReason}
         errorCode={errorCode}
@@ -213,39 +210,45 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
         chrome={chrome}
         onHover={handleHover}
         onFocus={handleFocus}
-        turnIntoSink={effectiveTurnIntoSink}
-        mdPrefixWriteMode={mdPrefixWriteMode}
-        mdPrefixSinkSource={mdPrefixSinkSource}
-        mdPrefixBinding={mdPrefixBinding}
-        onMdPrefixCommit={onMdPrefixCommit}
-        onMdPrefixCommittedIntent={onMdPrefixCommittedIntent}
+        mdPrefix={{
+          turnIntoSink: effectiveTurnIntoSink,
+          mdPrefixWriteMode,
+          mdPrefixSinkSource,
+          mdPrefixBinding,
+          onMdPrefixCommit,
+          onMdPrefixCommittedIntent,
+        }}
       >
         <NotePaperStrictChromeSlot
-          status={status}
-          blocks={blocks}
-          renderPaperList={renderPaperList}
-          paperListWindow={paperListConfig.window}
-          paperListScroll={paperListConfig.scroll}
-          paperListOverscan={paperListConfig.overscan}
-          paperListFocusId={paperListFocusId}
-          paperListComposingIds={paperListConfig.composingIds}
-          paperListDefaultVisibleCount={paperListConfig.defaultVisibleCount}
-          paperListDefaultEstimatePx={paperListConfig.defaultEstimatePx}
-          onPaperListReady={onPaperListReady}
-          chrome={chrome}
-          blockSelection={blockSelection}
-          onBlockSelectionReady={onBlockSelectionReady}
-          slashMenu={slashMenu}
-          slashIntentSink={slashIntentSink}
-          slashWriteMode={slashWriteMode}
-          chromeTick={chromeTick}
-          slashOpen={slashOpen === '1' ? '1' : '0'}
-          onSlashIntent={onSlashIntent}
-          onChromeDomHost={onChromeDomHost}
+          note={{
+            status,
+            blocks,
+            renderPaperList,
+            paperListWindow: paperListConfig.window,
+            paperListScroll: paperListConfig.scroll,
+            paperListOverscan: paperListConfig.overscan,
+            paperListFocusId,
+            paperListComposingIds: paperListConfig.composingIds,
+            paperListDefaultVisibleCount: paperListConfig.defaultVisibleCount,
+            paperListDefaultEstimatePx: paperListConfig.defaultEstimatePx,
+            onPaperListReady,
+          }}
+          slash={{
+            slashMenu,
+            slashIntentSink,
+            slashWriteMode,
+            chromeTick,
+            slashOpen: slashOpen === '1' ? '1' : '0',
+            onSlashIntent,
+          }}
+          chrome={{
+            chrome,
+            blockSelection,
+            onBlockSelectionReady,
+            onChromeDomHost,
+          }}
         />
       </NotePaperStrictBody>
-
-      <ConexFloatHandle scrollContainerRef={bodyRef} />
 
       {/* A-INV-02 方向子集；≠ EL-03；≠ inotify 满关 */}
       {showMirrorDriftBar === true || mirrorDriftReport != null ? (

@@ -90,11 +90,18 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
 
     return (
       <TabStrip
-        className={styles.header}
-        scrollClassName={styles.tabs}
-        tabClassName={styles.tab}
-        tabActiveClassName={styles.tabActive}
-        ariaLabel="工具面板"
+        appearance={{
+          className: styles.header,
+          scrollClassName: styles.tabs,
+          tabClassName: styles.tab,
+          tabActiveClassName: styles.tabActive,
+          ariaLabel: '工具面板',
+          data: {
+            'data-leaf-tool-tab-strip': 'true',
+            'data-tab-strip-leaf-id': leaf.id,
+            'data-tab-count': tabs.length,
+          },
+        }}
         activeId={activeTab ?? null}
         tabs={tabs.map((tabId) => ({
           id: tabId,
@@ -104,79 +111,74 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         }))}
         onActiveChange={handleActivate}
         onClose={(tabId, e) => handleClose(e, tabId)}
-        renderTab={(tab) => {
-          const label = labelOf(tab.id);
-          return (
+        slots={{
+          renderTab: (tab) => {
+            const label = labelOf(tab.id);
+            return (
+              <>
+                <span className={styles.tabLabel}>{label}</span>
+                {showCloseBtn ? (
+                  <Tooltip content={`关闭 ${label}`}>
+                    <IconButton
+                      size="xs"
+                      variant="ghost"
+                      className={styles.tabClose}
+                      tabIndex={-1}
+                      aria-label={`关闭 ${label}`}
+                      onClick={(e) => handleClose(e, tab.id)}
+                      icon={<X size={12} strokeWidth={2} />}
+                    />
+                  </Tooltip>
+                ) : null}
+              </>
+            );
+          },
+          trailing: (
             <>
-              <span className={styles.tabLabel}>{label}</span>
-              {showCloseBtn ? (
-                <Tooltip content={`关闭 ${label}`}>
+              {/* 添加面板加号按钮 */}
+              {availablePanels.length > 0 && (
+                <div className={styles.addTabContainer}>
+                  <Menu
+                    position={{ align: 'start', side: 'bottom', sideOffset: 4 }}
+                    trigger={
+                      <IconButton
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        className={styles.addTabBtn}
+                        aria-label="添加功能面板"
+                        icon={<Plus size={14} />}
+                      />
+                    }
+                    options={availablePanels.map((pid) => {
+                      const Icon = viewRegistry.getIcon(pid);
+                      return {
+                        id: pid,
+                        label: viewRegistry.getTitle(pid),
+                        icon: Icon ? <Icon size={14} /> : undefined,
+                        onClick: () => openPanel(pid),
+                      };
+                    })}
+                  />
+                </div>
+              )}
+
+              {/* 展开状态下的侧栏关闭按钮，常驻最右侧 */}
+              <div className={styles.trailingActions}>
+                <Tooltip content="收起右侧面板">
                   <IconButton
-                    size="xs"
+                    type="button"
                     variant="ghost"
-                    className={styles.tabClose}
-                    tabIndex={-1}
-                    aria-label={`关闭 ${label}`}
-                    onClick={(e) => handleClose(e, tab.id)}
-                    icon={<X size={12} strokeWidth={2} />}
+                    size="xs"
+                    className={styles.addTabBtn}
+                    onClick={handleCollapseDock}
+                    aria-label="收起右侧面板"
+                    icon={<IconSidebarRight size={14} />}
                   />
                 </Tooltip>
-              ) : null}
-            </>
-          );
-        }}
-        trailing={
-          <>
-            {/* 添加面板加号按钮 */}
-            {availablePanels.length > 0 && (
-              <div className={styles.addTabContainer}>
-                <Menu
-                  align="start"
-                  side="bottom"
-                  sideOffset={4}
-                  trigger={
-                    <IconButton
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      className={styles.addTabBtn}
-                      aria-label="添加功能面板"
-                      icon={<Plus size={14} />}
-                    />
-                  }
-                  options={availablePanels.map((pid) => {
-                    const Icon = viewRegistry.getIcon(pid);
-                    return {
-                      id: pid,
-                      label: viewRegistry.getTitle(pid),
-                      icon: Icon ? <Icon size={14} /> : undefined,
-                      onClick: () => openPanel(pid),
-                    };
-                  })}
-                />
               </div>
-            )}
-
-            {/* 展开状态下的侧栏关闭按钮，常驻最右侧 */}
-            <div className={styles.trailingActions}>
-              <Tooltip content="收起右侧面板">
-                <IconButton
-                  type="button"
-                  variant="ghost"
-                  size="xs"
-                  className={styles.addTabBtn}
-                  onClick={handleCollapseDock}
-                  aria-label="收起右侧面板"
-                  icon={<IconSidebarRight size={14} />}
-                />
-              </Tooltip>
-            </div>
-          </>
-        }
-        data={{
-          'data-leaf-tool-tab-strip': 'true',
-          'data-tab-strip-leaf-id': leaf.id,
-          'data-tab-count': tabs.length,
+            </>
+          ),
         }}
       />
     );

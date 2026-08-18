@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * ChatAssistantMessageRow.tsx
  * 纯净助手消息行容器（DIM-02 / FIN-02 权威重构版）
@@ -121,24 +121,27 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
       {!isThinkingMsg && msg.status !== 'processing' && (
         <MessageActions
           msg={msg}
-          copied={copied}
-          isLastAssistant={isLastAssistant}
-          isPinned={isPinned}
-          isThinkingMsg={isThinkingMsg}
-          inPlanMode={inPlanMode}
-          planApproved={planApproved}
-          followUpDismissed={followUpDismissed}
-          onCopy={handleCopy}
-          onRegenerate={onRegenerate}
-          onTogglePin={onTogglePin}
-          setPermissionMode={setPermissionMode}
-          setPlanApproved={setPlanApproved}
-          {...(onFillFollowUp !== undefined && { onFillFollowUp })}
-          {...(onSendFollowUp !== undefined && { onSendFollowUp })}
-          {...(onDismissFollowUp !== undefined && { onDismissFollowUp })}
-          onOpenDiff={onOpenDiff}
-          {...(onOpenDiffPanel !== undefined && { onOpenDiffPanel })}
-
+          state={{
+            copied,
+            isLastAssistant,
+            isPinned,
+            isThinkingMsg,
+            inPlanMode,
+            planApproved,
+            followUpDismissed,
+          }}
+          actions={{
+            onCopy: handleCopy,
+            onRegenerate,
+            onTogglePin,
+            setPermissionMode,
+            setPlanApproved,
+            ...(onFillFollowUp !== undefined && { onFillFollowUp }),
+            ...(onSendFollowUp !== undefined && { onSendFollowUp }),
+            ...(onDismissFollowUp !== undefined && { onDismissFollowUp }),
+            onOpenDiff,
+            ...(onOpenDiffPanel !== undefined && { onOpenDiffPanel }),
+          }}
           cacheMetricsNode={
             <CacheMetricsBadge metrics={msg.cacheMetrics?.metrics ?? null} />
           }

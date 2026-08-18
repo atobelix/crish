@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 模型：选择服务商、配置密钥，并管理可用模型。
  */
@@ -61,13 +61,10 @@ export const AddProviderMenu: React.FC<{
 
   return (
     <Menu
-      open={addOpen}
-      onOpenChange={setAddOpen}
-      align="end"
-      side="bottom"
-      sideOffset={6}
+      openState={{ open: addOpen, onOpenChange: setAddOpen }}
+      position={{ align: 'end', side: 'bottom', sideOffset: 6 }}
       options={menuOptions}
-      contentClassName={styles.addProviderMenu}
+      panel={{ contentClassName: styles.addProviderMenu }}
       trigger={
         <Button
           type="button"
@@ -211,45 +208,51 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
         />
 
         <ModelConfigEditor
-          selected={selected}
-          profiles={profiles}
-          selectedLabel={selectedLabel}
-          hasKeySelected={hasKeySelected}
-          editingName={editingName}
-          nameDraft={nameDraft}
-          setNameDraft={setNameDraft}
-          setEditingName={setEditingName}
-          confirmDeleteId={confirmDeleteId}
-          setConfirmDeleteId={setConfirmDeleteId}
-          keyDraft={keyDraft}
-          setKeyDraft={setKeyDraft}
-          saveKey={saveKey}
-          runCheck={runCheck}
-          runScan={runScan}
-          checkBusy={checkBusy}
-          scanBusy={scanBusy}
-          modelFilter={modelFilter}
-          setModelFilter={setModelFilter}
-          manualOpen={manualOpen}
-          setManualOpen={setManualOpen}
-          addDraft={addDraft}
-          setAddDraft={setAddDraft}
-          handleManualAdd={handleManualAdd}
-          emptyAddDraft={emptyAddDraft}
-          modelsList={modelsList}
-          modelsCount={modelsCount}
-          configOpenId={configOpenId}
-          cfgDraft={cfgDraft}
-          setCfgDraft={setCfgDraft}
-          openConfigFor={openConfigFor}
-          closeConfig={closeConfig}
-          saveConfig={saveConfig}
-          runTest={runTest}
-          testBusy={testBusy}
-          refresh={refresh}
-          notify={notify}
-          setProfiles={setProfiles}
-          setSelectedId={setSelectedId}
+          providerConfig={{
+            selected,
+            profiles,
+            selectedLabel,
+            hasKeySelected,
+            editingName,
+            nameDraft,
+            setNameDraft,
+            setEditingName,
+            confirmDeleteId,
+            setConfirmDeleteId,
+            keyDraft,
+            setKeyDraft,
+            saveKey,
+            refresh,
+            notify,
+            setProfiles,
+            setSelectedId,
+          }}
+          modelConfig={{
+            runCheck,
+            runScan,
+            checkBusy,
+            scanBusy,
+            modelFilter,
+            setModelFilter,
+            manualOpen,
+            setManualOpen,
+            addDraft,
+            setAddDraft,
+            handleManualAdd,
+            emptyAddDraft,
+            modelsList,
+            modelsCount,
+          }}
+          capConfig={{
+            configOpenId,
+            cfgDraft,
+            setCfgDraft,
+            openConfigFor,
+            closeConfig,
+            saveConfig,
+            runTest,
+            testBusy,
+          }}
         />
       </div>
     </SettingsPage>

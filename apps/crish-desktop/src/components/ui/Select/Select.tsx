@@ -163,13 +163,11 @@ export function Select({
       ) : null}
 
       <Menu
-        open={menuOpen}
-        onOpenChange={setMenuOpen}
-        align={align}
-        side={side}
+        openState={{ open: menuOpen, onOpenChange: setMenuOpen }}
+        position={{ align, side }}
         options={options.map(toMenuItem)}
         onSelect={handleSelect}
-        contentClassName={styles.menu}
+        panel={{ contentClassName: styles.menu }}
         trigger={
           <button
             type="button"

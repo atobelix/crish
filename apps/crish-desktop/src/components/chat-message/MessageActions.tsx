@@ -1,4 +1,4 @@
-﻿import React, { useCallback } from 'react';
+import React, { useCallback } from 'react';
 import type { FileDiff, SessionMessage } from '../../store/types';
 import type { PermissionMode } from '../../api/permissionModes';
 import {
@@ -11,8 +11,7 @@ import { assistantCopyText } from '../../api/toolPresentation';
 import { ChatSendToNoteEntry } from './ChatSendToNoteEntry';
 import type { SendToNoteResult } from '../../bridges/send-to-note';
 
-export interface MessageActionsProps {
-  msg: SessionMessage;
+export interface MessageActionsState {
   copied: boolean;
   isLastAssistant: boolean;
   isPinned: boolean;
@@ -20,6 +19,9 @@ export interface MessageActionsProps {
   inPlanMode: boolean;
   planApproved: boolean;
   followUpDismissed?: boolean | undefined;
+}
+
+export interface MessageActionsActions {
   onCopy: () => void;
   onRegenerate: (msgId: string) => void;
   onTogglePin: (msgId: string) => void;
@@ -30,31 +32,45 @@ export interface MessageActionsProps {
   onDismissFollowUp?: ((msgId: string) => void) | undefined;
   onOpenDiff: (diff: FileDiff) => void;
   onOpenDiffPanel?: (() => void) | undefined;
+}
+
+export interface MessageActionsProps {
+  msg: SessionMessage;
+  /** 状态组（copied/flags/plan/followUp） */
+  state: MessageActionsState;
+  /** 回调组（copy/regenerate/pin/permission/followUp/diff） */
+  actions: MessageActionsActions;
   cacheMetricsNode?: React.ReactNode;
 }
 
 export const MessageActions: React.FC<MessageActionsProps> = React.memo(
   ({
     msg,
-    copied,
-    isLastAssistant,
-    isPinned,
-    isThinkingMsg = false,
-    inPlanMode,
-    planApproved,
-    followUpDismissed = false,
-    onCopy,
-    onRegenerate,
-    onTogglePin,
-    setPermissionMode,
-    setPlanApproved,
-    onFillFollowUp,
-    onSendFollowUp,
-    onDismissFollowUp,
-    onOpenDiff: _onOpenDiff,
-    onOpenDiffPanel: _onOpenDiffPanel,
+    state,
+    actions,
     cacheMetricsNode,
   }) => {
+    const {
+      copied = false,
+      isLastAssistant = false,
+      isPinned = false,
+      isThinkingMsg = false,
+      inPlanMode = false,
+      planApproved = false,
+      followUpDismissed = false,
+    } = state ?? {};
+    const {
+      onCopy,
+      onRegenerate,
+      onTogglePin,
+      setPermissionMode,
+      setPlanApproved,
+      onFillFollowUp,
+      onSendFollowUp,
+      onDismissFollowUp,
+      onOpenDiff: _onOpenDiff,
+      onOpenDiffPanel: _onOpenDiffPanel,
+    } = actions ?? {};
     const { showToast: _showToast } = useToast();
     // B-05：完成态气泡挂「发送到笔记」（agent-card / 主 chat 共用 MessageActions）
     const noteMarkdown = assistantCopyText(msg) || msg.text || '';

@@ -84,14 +84,11 @@ export const PermissionModeMenu: React.FC<Props> = ({
       </Tooltip>
 
       <Menu
-        open={open}
-        onOpenChange={setOpen}
+        openState={{ open, onOpenChange: setOpen }}
         anchor={pillBtnRef}
         options={options}
-        side="top"
-        align="start"
-        sideOffset={6}
-        contentClassName={styles.permMenu}
+        position={{ side: 'top', align: 'start', sideOffset: 6 }}
+        panel={{ contentClassName: styles.permMenu }}
         renderItem={(opt) => {
           const itemMeta = permissionModeMeta(opt.id);
           const isSelected = opt.id === mode;

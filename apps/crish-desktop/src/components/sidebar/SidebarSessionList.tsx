@@ -120,17 +120,21 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
 
         {!isSearchEmpty && !isAllEmpty && showProjectsAndGeneral ? (
           <ProjectsSection
-            projects={projects}
-            collapsedProjects={collapsedProjects}
-            projectsSectionCollapsed={projectsSectionCollapsed}
-            byProjectId={byProjectId}
-            expandedProjectFolders={expandedProjectFolders}
-            onToggleProjectsSection={onToggleProjectsSection}
-            onToggleProjectCollapsed={onToggleProjectCollapsed}
-            onOpenProject={onOpenProject}
-            onMoveSessionRealtime={onMoveSessionRealtime}
-            onToggleExpandedProjectFolder={toggleExpandedProjectFolder}
-            renderSessionItem={renderSessionItem}
+            data={{
+              projects,
+              collapsedProjects,
+              projectsSectionCollapsed,
+              byProjectId,
+              expandedProjectFolders,
+            }}
+            actions={{
+              onToggleProjectsSection,
+              onToggleProjectCollapsed,
+              onOpenProject,
+              onMoveSessionRealtime,
+              onToggleExpandedProjectFolder: toggleExpandedProjectFolder,
+              renderSessionItem,
+            }}
           />
         ) : null}
 

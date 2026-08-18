@@ -42,9 +42,7 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
 
   return (
     <Menu
-      align="start"
-      side="bottom"
-      sideOffset={4}
+      position={{ align: 'start', side: 'bottom', sideOffset: 4 }}
       trigger={
         <button
           type="button"

@@ -220,22 +220,21 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
     <div className={styles.sbQuickWrap} ref={rootRef} data-density="compact">
       <Menu
         key={anchorTick}
-        open={open}
-        onOpenChange={handleOpenChange}
-        onInteractOutside={() => {
-          // 外点关闭：不抢焦点
-          restoreOnCloseRef.current = false;
-        }}
-        onCloseAutoFocus={(e: Event) => {
-          if (!restoreOnCloseRef.current) {
-            e.preventDefault();
-          }
+        openState={{ open, onOpenChange: handleOpenChange }}
+        outsideHandlers={{
+          onInteractOutside: () => {
+            // 外点关闭：不抢焦点
+            restoreOnCloseRef.current = false;
+          },
+          onCloseAutoFocus: (e: Event) => {
+            if (!restoreOnCloseRef.current) {
+              e.preventDefault();
+            }
+          },
         }}
         trigger={finalTrigger}
-        side="top"
-        align="start"
-        sideOffset={6}
-        contentClassName={styles.sbQuickMenu}
+        position={{ side: 'top', align: 'start', sideOffset: 6 }}
+        panel={{ contentClassName: styles.sbQuickMenu }}
       >
         <div
           id={menuId}

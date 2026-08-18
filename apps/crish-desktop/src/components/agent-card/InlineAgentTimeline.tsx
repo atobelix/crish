@@ -285,11 +285,13 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
                               onToggleTool={onToggleTool}
                               approvalBusy={approval.approvalBusy}
                               pendingApprovalMsgId={msg.id}
-                              onOpenDiff={() => {}}
-                              onOpenPath={() => {}}
-                              onOpenTerminal={() => {}}
-                              onApprovalAllow={approval.onApprovalAllow}
-                              onApprovalDeny={approval.onApprovalDeny}
+                              actions={{
+                                onOpenDiff: () => {},
+                                onOpenPath: () => {},
+                                onOpenTerminal: () => {},
+                                onApprovalAllow: approval.onApprovalAllow,
+                                onApprovalDeny: approval.onApprovalDeny,
+                              }}
                             />
                           </div>
                         );

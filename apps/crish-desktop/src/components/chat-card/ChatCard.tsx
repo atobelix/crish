@@ -76,36 +76,40 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
     // ③ goalMode 四派生值在此计算；ribbons 对象 useMemo 稳定引用
     const ribbons = React.useMemo(
       () => ({
-        onOpenTerminal: () => state.openSidePanel('terminal'),
-        onOpenDiff: () => state.openSidePanel('diff'),
-        diffCount: state.diffFiles.length,
-        engineHint: state.engineHint,
-        needsKeySetup: state.needsKeySetup,
-        needsModelSetup: state.needsModelSetup,
-        onEmptySurface: state.onEmptySurface,
-        localHasKey: anyProfileHasKey(),
-        onOpenModelSettings: () => openSettings('models'),
-        onOpenModelDropdown: () => state.setShowModelDropdown(true),
-        inPlanMode: state.inPlanMode,
-        planApproved: state.planApproved,
-        onApprovePlan: () => {
-          state.setPermissionMode('ask');
-          state.setPlanApproved(true);
+        streaming: {
+          onOpenTerminal: () => state.openSidePanel('terminal'),
+          onOpenDiff: () => state.openSidePanel('diff'),
+          diffCount: state.diffFiles.length,
+          engineHint: state.engineHint,
+          needsKeySetup: state.needsKeySetup,
+          needsModelSetup: state.needsModelSetup,
+          onEmptySurface: state.onEmptySurface,
+          localHasKey: anyProfileHasKey(),
+          onOpenModelSettings: () => openSettings('models'),
+          onOpenModelDropdown: () => state.setShowModelDropdown(true),
+          showScrollToBottom: state.showScrollToBottom,
+          onScrollToBottom: state.scrollToBottom,
         },
-        goalModeActive: state.goalModeActive,
-        goalText: state.goalMode?.goal || '',
-        goalIteration: state.goalMode?.iteration ?? 0,
-        goalTasksDone: (state.goalMode?.tasks || []).filter((t) => t.done)
-          .length,
-        goalTasksTotal: (state.goalMode?.tasks || []).length,
-        onStopGoal: () => {
-          state.composerProps.handleStopGeneration();
-          if (state.activeSessionId) {
-            patchSession(state.activeSessionId, { goalMode: null });
-          }
+        goal: {
+          inPlanMode: state.inPlanMode,
+          planApproved: state.planApproved,
+          onApprovePlan: () => {
+            state.setPermissionMode('ask');
+            state.setPlanApproved(true);
+          },
+          goalModeActive: state.goalModeActive,
+          goalText: state.goalMode?.goal || '',
+          goalIteration: state.goalMode?.iteration ?? 0,
+          goalTasksDone: (state.goalMode?.tasks || []).filter((t) => t.done)
+            .length,
+          goalTasksTotal: (state.goalMode?.tasks || []).length,
+          onStopGoal: () => {
+            state.composerProps.handleStopGeneration();
+            if (state.activeSessionId) {
+              patchSession(state.activeSessionId, { goalMode: null });
+            }
+          },
         },
-        showScrollToBottom: state.showScrollToBottom,
-        onScrollToBottom: state.scrollToBottom,
       }),
 
       [state]
@@ -164,28 +168,40 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               </div>
             ) : (
               <ChatMessageList
-                messages={state.displayMessages}
-                allMessages={state.messages}
-                agents={state.agents}
-                activeSessionId={state.activeSessionId || ''}
-                showAllMessages={state.isFiltering}
-                showProjectPicker={state.showProjectPicker}
-                onShowProjectPicker={state.setShowProjectPicker}
-                onProjectChanged={state.handleProjectChanged}
-                onSetChatInput={state.composerProps.setChatInput}
-                onSendFollowUp={state.handleSendFollowUp}
-                onRegenerate={state.handleRegenerate}
-                onBranch={state.handleBranch}
-                approvalBusy={state.approvalState.approvalBusy}
-                pendingApprovalMsgId={state.approvalState.pendingApprovalMsgId}
-                onOpenDiff={state.openDiffInRightPanel}
-                onOpenPath={state.openPathInFilesPanel}
-                onOpenTerminal={state.handleOpenTerminal}
-                onOpenDiffPanel={state.handleOpenDiffPanel}
-                onApprovalAllow={state.approvalState.handleApprovalAllow}
-                onApprovalDeny={state.approvalState.handleApprovalDeny}
-                onBatchApprove={state.approvalState.handleBatchApprove}
-                onBatchDeny={state.approvalState.handleBatchDeny}
+                messages={{
+                  messages: state.displayMessages,
+                  allMessages: state.messages,
+                  agents: state.agents,
+                  activeSessionId: state.activeSessionId || '',
+                  showAllMessages: state.isFiltering,
+                }}
+                projectPicker={{
+                  showProjectPicker: state.showProjectPicker,
+                  onShowProjectPicker: state.setShowProjectPicker,
+                  onProjectChanged: state.handleProjectChanged,
+                }}
+                composer={{
+                  onSetChatInput: state.composerProps.setChatInput,
+                  onSendFollowUp: state.handleSendFollowUp,
+                }}
+                generation={{
+                  onRegenerate: state.handleRegenerate,
+                  onBranch: state.handleBranch,
+                }}
+                approval={{
+                  approvalBusy: state.approvalState.approvalBusy,
+                  pendingApprovalMsgId: state.approvalState.pendingApprovalMsgId,
+                  onApprovalAllow: state.approvalState.handleApprovalAllow,
+                  onApprovalDeny: state.approvalState.handleApprovalDeny,
+                  onBatchApprove: state.approvalState.handleBatchApprove,
+                  onBatchDeny: state.approvalState.handleBatchDeny,
+                }}
+                navigation={{
+                  onOpenDiff: state.openDiffInRightPanel,
+                  onOpenPath: state.openPathInFilesPanel,
+                  onOpenTerminal: state.handleOpenTerminal,
+                  onOpenDiffPanel: state.handleOpenDiffPanel,
+                }}
               />
             )}
           </div>

@@ -40,8 +40,7 @@ export const RulesEditorDialog: React.FC<RulesEditorDialogProps> = ({
       description={
         <span style={{ display: 'none' }}>{`保存后写入 ${storagePath} · 成功不提示`}</span>
       }
-      className={styles.rulesEditorDialog}
-      overlayClassName={styles.rulesEditorOverlay}
+      classNames={{ panel: styles.rulesEditorDialog, overlay: styles.rulesEditorOverlay }}
       initialFocusRef={initialFocusRef}
       footer={
         <div className={styles.rulesEditorFoot}>

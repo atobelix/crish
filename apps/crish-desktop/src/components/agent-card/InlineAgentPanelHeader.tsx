@@ -9,51 +9,71 @@ import styles from './InlineAgentPanel.module.css';
 import { Button, Tooltip } from '../ui';
 import type { SessionAgent } from '../../store/types';
 
-export interface InlineAgentPanelHeaderProps {
-  open: boolean;
-  onToggleOpen: () => void;
+export interface InlineAgentPanelHeaderData {
   status: SessionAgent['status'];
-  running: boolean;
-  stopping: boolean;
-  /** 折叠态停止（L2，壳已绑定 summary） */
-  onStop: () => void;
   displayLabel: string;
   statusLabel: string;
   pendingTools: number;
   mode?: string | null;
   msgCount: number;
   summary?: string;
+}
+
+export interface InlineAgentPanelHeaderSide {
   sideFocused: boolean;
   sideOpenTitle: string;
   sideOpenAria: string;
-  /** 侧栏入口禁用（无有效 agentId） */
   sideDisabled: boolean;
   onOpenSide: (e?: React.MouseEvent) => void;
+}
+
+export interface InlineAgentPanelHeaderDom {
   labelDomId: string;
   bodyDomId: string;
+}
+
+export interface InlineAgentPanelHeaderProps {
+  open: boolean;
+  onToggleOpen: () => void;
+  running: boolean;
+  stopping: boolean;
+  /** 折叠态停止（L2，壳已绑定 summary） */
+  onStop: () => void;
+  /** 展示数据组（status/label/badge/mode/count/summary） */
+  data?: InlineAgentPanelHeaderData;
+  /** 侧栏入口组（focused/title/aria/disabled/onOpenSide） */
+  side?: InlineAgentPanelHeaderSide;
+  /** DOM id 组（labelDomId/bodyDomId） */
+  dom?: InlineAgentPanelHeaderDom;
 }
 
 export const InlineAgentPanelHeader: React.FC<InlineAgentPanelHeaderProps> = ({
   open,
   onToggleOpen,
-  status,
   running,
   stopping,
   onStop,
-  displayLabel,
-  statusLabel,
-  pendingTools,
-  mode,
-  msgCount,
-  summary,
-  sideFocused,
-  sideOpenTitle,
-  sideOpenAria,
-  sideDisabled,
-  onOpenSide,
-  labelDomId,
-  bodyDomId,
+  data,
+  side,
+  dom,
 }) => {
+  const {
+    status,
+    displayLabel,
+    statusLabel,
+    pendingTools = 0,
+    mode,
+    msgCount = 0,
+    summary,
+  } = data ?? {};
+  const {
+    sideFocused = false,
+    sideOpenTitle = '',
+    sideOpenAria = '',
+    sideDisabled = false,
+    onOpenSide,
+  } = side ?? {};
+  const { labelDomId = '', bodyDomId = '' } = dom ?? {};
   return (
     <div className={styles.inlineAgentHeadRow}>
       <button

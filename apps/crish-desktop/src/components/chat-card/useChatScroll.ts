@@ -9,7 +9,7 @@ export interface UseChatScrollOptions {
 }
 
 export interface UseChatScrollResult {
-  chatFlowRef: React.RefObject<HTMLDivElement>;
+  chatFlowRef: React.RefObject<HTMLDivElement | null>;
   showScrollToBottom: boolean;
   scrollToBottom: () => void;
 }

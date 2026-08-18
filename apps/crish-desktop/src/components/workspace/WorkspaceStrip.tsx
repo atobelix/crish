@@ -42,40 +42,43 @@ export const WorkspaceStrip: React.FC<WorkspaceChromeProps> = ({
 
   return (
     <TabStrip
-      className={`${styles.wsChromeRow} ${styles.wsChromeRowWorkspace} ws-chrome-row ws-chrome-row--workspace ${className || ''}`}
-      data={{ 'data-tauri-drag-region': true }}
-      scrollClassName={`${styles.wsChromeScroll} ws-chrome-scroll`}
-      tabClassName={`${styles.wsChromeTab} ws-chrome-tab`}
-      tabActiveClassName={`${styles.isActive} is-active`}
-      ariaLabel="工作区"
+      appearance={{
+        className: `${styles.wsChromeRow} ${styles.wsChromeRowWorkspace} ws-chrome-row ws-chrome-row--workspace ${className || ''}`,
+        data: { 'data-tauri-drag-region': true },
+        scrollClassName: `${styles.wsChromeScroll} ws-chrome-scroll`,
+        tabClassName: `${styles.wsChromeTab} ws-chrome-tab`,
+        tabActiveClassName: `${styles.isActive} is-active`,
+        ariaLabel: '工作区',
+      }}
       activeId={s.activeWsId ?? null}
       tabs={s.workspaceTabs.map((tab) => ({ id: tab.id, label: tab.label }))}
       onActiveChange={selectTab}
-      renderTab={(tab) => {
-        const meta = s.workspaceTabs.find((t) => t.id === tab.id);
-        return (
-          <Tooltip content={meta?.path || tab.label}>
-            <button
-              type="button"
-              className={`${styles.wsChromeTabMain} ws-chrome-tab-main`}
-              tabIndex={-1}
-              onClick={() => selectTab(tab.id)}
-            >
-              {meta?.kind === 'project' ? (
-                <Folder size={13} strokeWidth={1.75} aria-hidden />
-              ) : (
-                <MessagesSquare size={13} strokeWidth={1.75} aria-hidden />
-              )}
-              <span
-                className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}
+      slots={{
+        renderTab: (tab) => {
+          const meta = s.workspaceTabs.find((t) => t.id === tab.id);
+          return (
+            <Tooltip content={meta?.path || tab.label}>
+              <button
+                type="button"
+                className={`${styles.wsChromeTabMain} ws-chrome-tab-main`}
+                tabIndex={-1}
+                onClick={() => selectTab(tab.id)}
               >
-                {tab.label}
-              </span>
-            </button>
-          </Tooltip>
-        );
-      }}
-      trailing={
+                {meta?.kind === 'project' ? (
+                  <Folder size={13} strokeWidth={1.75} aria-hidden />
+                ) : (
+                  <MessagesSquare size={13} strokeWidth={1.75} aria-hidden />
+                )}
+                <span
+                  className={`${styles.wsChromeTabLabel} ws-chrome-tab-label`}
+                >
+                  {tab.label}
+                </span>
+              </button>
+            </Tooltip>
+          );
+        },
+        trailing: (
         <div
           className={`${styles.wsChromeAddWrap} ws-chrome-add-wrap`}
           ref={add.wrapRef}
@@ -140,9 +143,8 @@ export const WorkspaceStrip: React.FC<WorkspaceChromeProps> = ({
             </div>
           ) : null}
         </div>
-      }
-      wrapTrailing={
-        showTrail ? (
+      ),
+      wrapTrailing: showTrail ? (
           <div
             className={`${styles.wsChromeTrail} ws-chrome-trail ws-chrome-trail--win`}
             role="toolbar"
@@ -219,8 +221,8 @@ export const WorkspaceStrip: React.FC<WorkspaceChromeProps> = ({
               </Tooltip>
             ) : null}
           </div>
-        ) : null
-      }
+        ) : null,
+      }}
     />
   );
 };

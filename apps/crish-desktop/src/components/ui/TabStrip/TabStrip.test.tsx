@@ -20,7 +20,7 @@ function Tabs(props: Partial<React.ComponentProps<typeof TabStrip>>) {
       tabs={TABS}
       activeId="a"
       onActiveChange={() => undefined}
-      ariaLabel="测试标签"
+      appearance={{ ariaLabel: '测试标签' }}
       {...props}
     />
   );
@@ -117,21 +117,23 @@ describe('ui/TabStrip', () => {
   it('renderTab 插槽：渲染自定义内容且内部按钮 tabIndex=-1 不打断漫游', () => {
     const { container } = render(
       <Tabs
-        renderTab={(tab) => (
-          <>
-            <button type="button" tabIndex={-1} onClick={() => undefined}>
-              {tab.label}
-            </button>
-            <button
-              type="button"
-              tabIndex={-1}
-              aria-label={`关闭 ${tab.label}`}
-              onClick={() => undefined}
-            >
-              ×
-            </button>
-          </>
-        )}
+        slots={{
+          renderTab: (tab) => (
+            <>
+              <button type="button" tabIndex={-1} onClick={() => undefined}>
+                {tab.label}
+              </button>
+              <button
+                type="button"
+                tabIndex={-1}
+                aria-label={`关闭 ${tab.label}`}
+                onClick={() => undefined}
+              >
+                ×
+              </button>
+            </>
+          ),
+        }}
       />
     );
     const tabs = container.querySelectorAll('[role="tab"]');
@@ -145,7 +147,7 @@ describe('ui/TabStrip', () => {
 
   it('leading/trailing 插槽渲染于滚动容器内', () => {
     const { container } = render(
-      <Tabs leading={<button type="button">前</button>} trailing={<button type="button">后</button>} />
+      <Tabs slots={{ leading: <button type="button">前</button>, trailing: <button type="button">后</button> }} />
     );
     const tablist = container.querySelector('[role="tablist"]');
     expect(tablist!.textContent).toContain('前');
@@ -163,7 +165,13 @@ describe('ui/TabStrip', () => {
 
   it('wrap 层 data 属性与 overflow 标记接线', () => {
     const { container } = render(
-      <Tabs data={{ 'data-strip-kind': 'unit' }} className="wrap-cls" scrollClassName="scroll-cls" />
+      <Tabs
+        appearance={{
+          data: { 'data-strip-kind': 'unit' },
+          className: 'wrap-cls',
+          scrollClassName: 'scroll-cls',
+        }}
+      />
     );
     const wrap = container.firstElementChild!;
     expect(wrap).toHaveAttribute('data-strip-kind', 'unit');

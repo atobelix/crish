@@ -93,8 +93,7 @@ export function ConfirmDialog({
       size={size}
       showCloseButton={false}
       initialFocusRef={cancelButtonRef}
-      className={className}
-      overlayClassName={overlayClassName}
+      classNames={className || overlayClassName ? { panel: className, overlay: overlayClassName } : undefined}
       portalTarget={portalTarget}
       footer={
         // Dialog 的 .dialogFooter 已提供 flex + gap 布局，直接挂载按钮 Fragment

@@ -12,12 +12,17 @@ import type { DesktopSkill } from '../../api/skillsApi';
 import { Button, Dialog, Tooltip } from '../ui';
 import styles from './SkillEditorModal.module.css';
 
-interface SkillEditorModalProps {
+/** 发现导入域（T4-9c Props 收敛） */
+export type SkillDiscoverDomain = {
   discoverCandidates: DesktopSkill[] | null;
   discoverPick: Record<string, boolean>;
   discoverBusy: boolean;
   setDiscoverPick: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   applyDiscoverImport: (mode: 'selected' | 'all' | 'skip') => Promise<void>;
+};
+
+/** 新建技能域（T4-9c Props 收敛） */
+export type SkillCreateDomain = {
   createMode: 'none' | 'paths' | 'manual';
   setCreateMode: React.Dispatch<React.SetStateAction<'none' | 'paths' | 'manual'>>;
   createName: string;
@@ -28,25 +33,36 @@ interface SkillEditorModalProps {
   handleCreate: () => Promise<void>;
   handleImportBrowse: () => Promise<void>;
   handleAiCreateSkill: () => void;
+};
+
+interface SkillEditorModalProps {
+  discover: SkillDiscoverDomain;
+  create: SkillCreateDomain;
 }
 
 export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
-  discoverCandidates,
-  discoverPick,
-  discoverBusy,
-  setDiscoverPick,
-  applyDiscoverImport,
-  createMode,
-  setCreateMode,
-  createName,
-  setCreateName,
-  createDesc,
-  setCreateDesc,
-  createBusy,
-  handleCreate,
-  handleImportBrowse,
-  handleAiCreateSkill,
+  discover,
+  create,
 }) => {
+  const {
+    discoverCandidates,
+    discoverPick,
+    discoverBusy,
+    setDiscoverPick,
+    applyDiscoverImport,
+  } = discover;
+  const {
+    createMode,
+    setCreateMode,
+    createName,
+    setCreateName,
+    createDesc,
+    setCreateDesc,
+    createBusy,
+    handleCreate,
+    handleImportBrowse,
+    handleAiCreateSkill,
+  } = create;
   const createBoxId = useId();
   const createNameId = useId();
   const createDescId = useId();
@@ -60,7 +76,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
         onClose={() => void applyDiscoverImport('skip')}
         title={`发现新技能 ${discoverCandidates?.length ?? 0}`}
         size="lg"
-        overlayClassName={styles.skillsDiscoverOverlay}
+        classNames={{ overlay: styles.skillsDiscoverOverlay }}
         footer={
           <div className={styles.skillsDiscoverActions}>
             <Button

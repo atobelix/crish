@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 技能设置页「更多操作」菜单（T05.3.2 迁移到 ui/Menu 基座）。
  * 坐标/Esc/外点关闭由基座接管；键盘漫游（↑↓/Enter）由基座 options 模式提供，
@@ -15,6 +15,15 @@ import { Button, Menu, Tooltip } from '../ui';
 import { errText } from './useSkillsSettingsState';
 import type { DesktopSkill } from '../../api/skillsApi';
 
+/** 批量启用/禁用域状态（T4-9c Props 收敛：6 字段 → 1 对象） */
+export type SkillsBatchState = {
+  batchConfirm: 'none' | 'enabled' | 'disabled';
+  batchBusy: boolean;
+  batchEnableCount: number;
+  batchDisableCount: number;
+  runBatchActivation: (act: 'enabled' | 'disabled') => Promise<void>;
+};
+
 interface SkillsMoreMenuProps {
   moreOpen: boolean;
   setMoreOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -26,13 +35,9 @@ interface SkillsMoreMenuProps {
   discoverBusy: boolean;
   enableCommands: boolean;
   setEnableCommands: (val: boolean) => void;
-  batchConfirm: 'none' | 'enabled' | 'disabled';
-  batchBusy: boolean;
-  batchEnableCount: number;
-  batchDisableCount: number;
+  batch: SkillsBatchState;
   handleSyncAll: () => Promise<void>;
   refresh: (opts?: { promptNew?: boolean }) => Promise<void>;
-  runBatchActivation: (act: 'enabled' | 'disabled') => Promise<void>;
 }
 
 export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
@@ -46,15 +51,18 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
   discoverBusy,
   enableCommands,
   setEnableCommands,
-  batchConfirm,
-  batchBusy,
-  batchEnableCount,
-  batchDisableCount,
+  batch,
   handleSyncAll,
   refresh,
-  runBatchActivation,
 }) => {
   const { showToast: _showToast } = useToast();
+  const {
+    batchConfirm,
+    batchBusy,
+    batchEnableCount,
+    batchDisableCount,
+    runBatchActivation,
+  } = batch;
   const options = [
     {
       id: 'sync',
@@ -130,8 +138,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
   return (
     <div className={`${styles.skillsMoreWrap} skills-more-wrap`}>
       <Menu
-        open={moreOpen}
-        onOpenChange={setMoreOpen}
+        openState={{ open: moreOpen, onOpenChange: setMoreOpen }}
         trigger={
           <Tooltip content="更多操作">
             <Button
@@ -147,7 +154,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
           </Tooltip>
         }
         options={options}
-        contentClassName={styles.skillsMoreMenuBase}
+        panel={{ contentClassName: styles.skillsMoreMenuBase }}
       >
         <div id={moreMenuId} role="menu" aria-label="更多技能操作">
           {options.map((opt) => {

@@ -1,6 +1,6 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import type { McpServerInfo, McpStatusSnapshot } from '../../api/mcpApi';
+import type { McpServerInfo } from '../../api/mcpApi';
 import { mcpStateKind, mcpStateLabel } from '../../api/mcpApi';
 import type { McpServer } from '../../api/clientApi';
 import styles from './McpSettingsTab.module.css';
@@ -13,74 +13,55 @@ import {
   START_STOP_HINT,
   transportLabel,
   transportTitle,
-  type SortMode,
 } from './types';
 import { McpServerTools } from './McpServerTools';
 import { McpServerToolbar } from './McpServerToolbar';
+import type {
+  McpServersGroup,
+  McpUiGroup,
+  McpActionsGroup,
+} from './useMcpServerListState';
 
 export type McpServerListProps = {
-  demo: boolean;
-  loading: boolean;
-  servers: McpServerInfo[];
-  status?: McpStatusSnapshot | undefined;
-  demoServers: McpServer[];
-  demoEnabled: Record<string, boolean>;
-  filtered: McpServerInfo[];
-  filteredDemo: McpServer[];
-  expanded: Record<string, boolean>;
-  busyId: string | null;
-  filter: string;
-  sortMode: SortMode;
-  canStartStop: boolean;
-  controlHint?: string | undefined;
-  showAdd: boolean;
-  listLabelId: string;
-  toolsPanelPrefix: string;
-  onRefresh: () => void;
-  onSetSort: (mode: SortMode) => void;
-  onSetFilter: (filter: string) => void;
-  onClearFilter: () => void;
-  onSetShowAdd: React.Dispatch<React.SetStateAction<boolean>>;
-  onToggleServer: (id: string, action: 'start' | 'stop') => void;
-  onCopy: (text: string) => void;
-  onToggleExpanded: (id: string) => void;
-  onToggleDemoEnabled: (id: string) => void;
-  onDeleteDemo: (id: string) => void;
-  refreshDemo: () => void;
-  refreshLive: () => void;
+  servers: McpServersGroup;
+  ui: McpUiGroup;
+  actions: McpActionsGroup;
 };
 
 export const McpServerList: React.FC<McpServerListProps> = ({
-  demo,
-  loading,
-  servers,
-  status,
-  demoServers,
-  demoEnabled,
-  filtered,
-  filteredDemo,
-  expanded,
-  busyId,
-  filter,
-  sortMode,
-  canStartStop,
-  controlHint,
-  showAdd,
-  listLabelId,
-  toolsPanelPrefix,
-  onRefresh,
-  onSetSort,
-  onSetFilter,
-  onClearFilter,
-  onSetShowAdd,
-  onToggleServer,
-  onCopy,
-  onToggleExpanded,
-  onToggleDemoEnabled,
-  onDeleteDemo,
-  refreshDemo,
-  refreshLive,
+  servers: sv,
+  ui,
+  actions: ac,
 }) => {
+  const {
+    demo,
+    loading,
+    servers,
+    status,
+    demoServers,
+    demoEnabled,
+    filtered,
+    filteredDemo,
+    expanded,
+    busyId,
+    canStartStop,
+    controlHint,
+  } = sv;
+  const { filter, sortMode, showAdd, listLabelId, toolsPanelPrefix } = ui;
+  const {
+    onRefresh,
+    onSetSort,
+    onSetFilter,
+    onClearFilter,
+    onSetShowAdd,
+    onToggleServer,
+    onCopy,
+    onToggleExpanded,
+    onToggleDemoEnabled,
+    onDeleteDemo,
+    refreshDemo,
+    refreshLive,
+  } = ac;
   const stopHint = controlHint || START_STOP_HINT;
   const filterActive = filter.trim().length > 0;
   const liveEmptyHint = status?.configured

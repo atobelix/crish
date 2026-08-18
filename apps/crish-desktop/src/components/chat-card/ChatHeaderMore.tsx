@@ -71,10 +71,8 @@ export const ChatHeaderMore: React.FC<Props> = ({
         />
       }
       options={options}
-      align="end"
-      side="bottom"
-      sideOffset={6}
-      contentClassName={`${styles.moreMenu} no-drag`}
+      position={{ align: 'end', side: 'bottom', sideOffset: 6 }}
+      panel={{ contentClassName: `${styles.moreMenu} no-drag` }}
       renderItem={(opt) => (
         <button
           key={opt.id}

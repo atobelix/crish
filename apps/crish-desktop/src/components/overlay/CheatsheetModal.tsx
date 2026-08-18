@@ -62,8 +62,7 @@ export function CheatsheetModal({ onClose, isOpen = true }: CheatsheetModalProps
           <span className={styles.cheatsheetTitle}>快捷键</span>
         </span>
       }
-      className={styles.cheatsheetModal}
-      overlayClassName={styles.cheatsheetOverlay}
+      classNames={{ panel: styles.cheatsheetModal, overlay: styles.cheatsheetOverlay }}
     >
       <div className={styles.cheatsheetSearch}>
         <Lucide.Search size={14} aria-hidden="true" />

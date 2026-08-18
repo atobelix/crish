@@ -105,7 +105,8 @@ function syntheticContextMenuEvent(
   } as unknown as React.MouseEvent;
 }
 
-export type SessionRowProps = {
+/** 会话展示状态（数据/搜索/拖拽/重命名/放置指示等展示属性收敛为单一子对象） */
+export interface SessionRowSessionProps {
   s: SessionState;
   activeSessionId: string;
   searchQuery: string;
@@ -113,10 +114,23 @@ export type SessionRowProps = {
   isDraggingThis: boolean;
   isRenaming: boolean;
   isDraggable: boolean;
-  rowHeight: number;
+  /** Live drop line: insert before/after this row */
+  dropPlace?: SessionRowDropPlace | null | undefined;
+}
+
+/** 重命名操作域（草稿/输入 ref/起止提交回调收敛为单一子对象） */
+export interface SessionRowRenameProps {
   renameDraft: string;
   renameInputRef: React.RefObject<HTMLInputElement | null>;
   onRenameDraftChange: (v: string) => void;
+  /** 双击/F2 进入重命名 */
+  onStartRename?: ((sessionId: string) => void) | undefined;
+  onCommitRename: (sessionId: string) => void;
+  onCancelRename?: (() => void) | undefined;
+}
+
+/** 行操作域（选择/右键/拖拽起手/导航/键盘重排收敛为单一子对象） */
+export interface SessionRowActionsProps {
   onSelectSession: (id: string) => void;
   onContextMenuSession: (e: React.MouseEvent, sessionId: string) => void;
   onStartSessionDrag: (
@@ -124,16 +138,22 @@ export type SessionRowProps = {
     sessionId: string,
     folderName?: string
   ) => void;
-  onStartRename?: ((sessionId: string) => void) | undefined;
-  onCommitRename: (sessionId: string) => void;
-  onCancelRename?: (() => void) | undefined;
   /** 列表内 ↑↓ 导航（跨置顶/项目/对话，由父级按可见顺序解析） */
   onNavigateSession?: ((fromId: string, delta: number) => void) | undefined;
   /** 键盘重排（Alt+↑/↓） */
   onReorderKeyboard?:
     ((sessionId: string, direction: -1 | 1) => void) | undefined;
-  /** Live drop line: insert before/after this row */
-  dropPlace?: SessionRowDropPlace | null | undefined;
+}
+
+export type SessionRowProps = {
+  /** 会话展示状态 */
+  session: SessionRowSessionProps;
+  /** 重命名操作域 */
+  rename: SessionRowRenameProps;
+  /** 行操作域 */
+  actions: SessionRowActionsProps;
+  /** 行高（固定值，由列表布局统一） */
+  rowHeight: number;
 };
 
 /** memo：长列表下避免无关 tick/state 整表重渲每一行 */
@@ -146,20 +166,29 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     isDraggingThis,
     isRenaming,
     isDraggable,
+    dropPlace: dropPlaceProp,
+  } = props.session;
+  const {
     renameDraft,
     renameInputRef,
     onRenameDraftChange,
-    onSelectSession,
-    onContextMenuSession,
-    onStartSessionDrag,
     onStartRename,
     onCommitRename,
     onCancelRename,
+  } = props.rename;
+  const {
+    onSelectSession,
+    onContextMenuSession,
+    onStartSessionDrag,
     onNavigateSession,
     onReorderKeyboard,
-  } = props;
+  } = props.actions;
+  const _rowHeight = props.rowHeight;
+  // rowHeight 由列表布局传入但本组件实际使用常量 SIDEBAR_SESSION_ROW_HEIGHT
+  // （行高固定，由 api/sessionListWindow 统一管理）；保留 prop 以兼容调用方契约
+  void _rowHeight;
   // 显式从 props 读取，避免解构默认值/HMR 边界导致 ReferenceError
-  const dropPlace: SessionRowDropPlace | null = props.dropPlace ?? null;
+  const dropPlace: SessionRowDropPlace | null = dropPlaceProp ?? null;
 
   const isBranched = !!s.branchParentId;
   const baseTitle = sessionListDisplayTitle(s);

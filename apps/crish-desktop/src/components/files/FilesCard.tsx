@@ -1,4 +1,4 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useRef } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
@@ -372,30 +372,36 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 onErrorDismiss={() => nav.setError('')}
               />
               <FilePreview
-                selected={preview.selected}
-                view={preview.view}
-                kind={preview.kind}
-                content={preview.content}
-                editBuf={preview.editBuf}
-                editing={preview.editing}
-                dirty={preview.dirty}
-                error={nav.error}
-                detailLoading={preview.detailLoading}
-                truncated={preview.truncated}
-                lineBudget={preview.lineBudget}
-                loadingMore={preview.loadingMore}
-                mdMode={preview.mdMode}
-                assetUrl={preview.assetUrl}
-                isMd={preview.isMd}
-                canLoadMore={preview.canLoadMore}
-                canEdit={preview.canEdit}
-                onLoadMore={() => void preview.loadMoreLines()}
-                onEditBufChange={(v, d) => {
-                  preview.setEditBuf(v);
-                  preview.setDirty(d);
+                file={{
+                  selected: preview.selected,
+                  kind: preview.kind,
+                  isMd: preview.isMd,
+                  canEdit: preview.canEdit,
                 }}
-                onError={(msg) => nav.setError(msg)}
-                onOpenFile={handleOpenFromPreview}
+                preview={{
+                  view: preview.view,
+                  content: preview.content,
+                  editBuf: preview.editBuf,
+                  editing: preview.editing,
+                  dirty: preview.dirty,
+                  error: nav.error,
+                  detailLoading: preview.detailLoading,
+                  truncated: preview.truncated,
+                  lineBudget: preview.lineBudget,
+                  loadingMore: preview.loadingMore,
+                  mdMode: preview.mdMode,
+                  assetUrl: preview.assetUrl,
+                  canLoadMore: preview.canLoadMore,
+                }}
+                actions={{
+                  onLoadMore: () => void preview.loadMoreLines(),
+                  onEditBufChange: (v, d) => {
+                    preview.setEditBuf(v);
+                    preview.setDirty(d);
+                  },
+                  onError: (msg) => nav.setError(msg),
+                  onOpenFile: handleOpenFromPreview,
+                }}
               />
             </div>
           )}

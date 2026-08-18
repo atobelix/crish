@@ -1,10 +1,16 @@
 /**
  * Unit 级工具入口（右坞面板 + 坞折叠 + 更多）。
- * 单 unit：嵌在 ChatHeader；多 chat 分屏：嵌在 UnitSessionTabStrip 同行右侧，
- * 避免「标签行 + 工具行」叠成三行顶栏。
+ * 挂在 chat 叶 leafBody 外；不是 ChatHeader / 不是窗口顶栏。
+ * note 钮是捆绑 chrome 清单项，视图仍只在 activate 后存在。
  */
-import React, { useCallback, useMemo } from 'react';
-import { FolderTree, GitBranch, Terminal, LayoutDashboard } from 'lucide-react';
+import React, { useCallback, useMemo, useSyncExternalStore } from 'react';
+import {
+  FolderTree,
+  GitBranch,
+  Terminal,
+  LayoutDashboard,
+  FileText,
+} from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { Button, Tooltip } from '../ui';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
@@ -16,6 +22,7 @@ import {
 import { useLayoutTreeStore } from '../../store/storeAccess';
 import { pinSession, unpinSession } from '../../api/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
+import { viewRegistry } from '../../services/view-registry';
 import styles from './UnitChromeActions.module.css';
 
 const UNIT_TOOL_PANELS = [
@@ -42,6 +49,12 @@ const UNIT_TOOL_PANELS = [
     label: '打开终端',
     testId: 'chat-open-terminal',
     Icon: Terminal,
+  },
+  {
+    id: 'note',
+    label: '打开笔记',
+    testId: 'chat-open-note',
+    Icon: FileText,
   },
 ] as const;
 
@@ -92,6 +105,12 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       [openPanelIds]
     );
 
+    const registryVersion = useSyncExternalStore(
+      (cb) => viewRegistry.subscribe(cb),
+      () => viewRegistry.getVersion()
+    );
+    void registryVersion;
+
     const handleTogglePin = useCallback(() => {
       const id = (activeSessionId || '').trim();
       if (!id || id.startsWith('__pending')) return;
@@ -140,6 +159,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
         <div className={styles.toolGroup} role="group" aria-label="会话工具">
           {leading}
           {UNIT_TOOL_PANELS.map(({ id, label, testId, Icon }) => {
+            if (!viewRegistry.getView(id)) return null;
             const isOpen = openPanelSet.has(id);
             const isActive = !rightDockCollapsed && activePanelId === id;
             return (

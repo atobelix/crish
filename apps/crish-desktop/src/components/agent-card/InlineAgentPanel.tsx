@@ -281,23 +281,29 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
       <InlineAgentPanelHeader
         open={open}
         onToggleOpen={() => setOpen((v) => !v)}
-        status={live.status}
         running={running}
         stopping={stopping}
         onStop={stopAgent}
-        displayLabel={displayLabel}
-        statusLabel={statusLabel}
-        pendingTools={pendingTools}
-        mode={live.mode}
-        msgCount={msgCount}
-        summary={live.summary}
-        sideFocused={sideFocused}
-        sideOpenTitle={sideOpenTitle}
-        sideOpenAria={sideOpenAria}
-        sideDisabled={!agentIdNorm}
-        onOpenSide={openInSideOnly}
-        labelDomId={labelDomId}
-        bodyDomId={bodyDomId}
+        data={{
+          status: live.status,
+          displayLabel,
+          statusLabel,
+          pendingTools,
+          mode: live.mode,
+          msgCount,
+          summary: live.summary,
+        }}
+        side={{
+          sideFocused,
+          sideOpenTitle,
+          sideOpenAria,
+          sideDisabled: !agentIdNorm,
+          onOpenSide: openInSideOnly,
+        }}
+        dom={{
+          labelDomId,
+          bodyDomId,
+        }}
       />
 
       {open ? (

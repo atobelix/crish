@@ -49,7 +49,8 @@ function toPaperListMountBlock(
   return row;
 }
 
-export type NotePaperStrictChromeSlotProps = {
+/** 内容宿主 B 域（PaperList 挂载：投影/窗口/滚动/聚焦/虚拟化/就绪回调）。 */
+export interface NotePaperSlotNoteProps {
   status: HydrateUiStatus;
   blocks: readonly HydratedBlockProjection[];
   /** 是否挂载 PaperList 内容槽（paper-list | debug-dual） */
@@ -62,10 +63,10 @@ export type NotePaperStrictChromeSlotProps = {
   paperListDefaultVisibleCount?: number;
   paperListDefaultEstimatePx?: number;
   onPaperListReady?: (list: PaperList | null) => void;
-  chrome: BlockChromeModel;
-  /** W3-E-desk：与面板同一 bridge（注入 DomMount，避免双实例） */
-  blockSelection?: BlockSelectionBridge;
-  onBlockSelectionReady?: (selection: BlockSelectionBridge | null) => void;
+}
+
+/** slash 浮层域（catalog → Intent → sink；CONN-B 写模式诚实）。 */
+export interface NotePaperSlotSlashProps {
   slashMenu: SlashMenuModel;
   slashIntentSink?: IntentSink;
   slashWriteMode: SlashOverlayWriteMode;
@@ -73,7 +74,22 @@ export type NotePaperStrictChromeSlotProps = {
   chromeTick: number;
   slashOpen: '0' | '1';
   onSlashIntent?: (intent: SlashInsertIntent) => void;
+}
+
+/** chrome 槽域（把手/落点；与内容槽分槽共存，不计 SD-04 互斥）。 */
+export interface NotePaperSlotChromeProps {
+  chrome: BlockChromeModel;
+  /** W3-E-desk：与面板同一 bridge（注入 DomMount，避免双实例） */
+  blockSelection?: BlockSelectionBridge;
+  onBlockSelectionReady?: (selection: BlockSelectionBridge | null) => void;
   onChromeDomHost?: (host: BlockChromeDomHost | null) => void;
+}
+
+/** Props 分组：note（PaperList 内容宿主）+ slash（浮层）+ chrome（chrome 槽）。 */
+export type NotePaperStrictChromeSlotProps = {
+  note: NotePaperSlotNoteProps;
+  slash: NotePaperSlotSlashProps;
+  chrome: NotePaperSlotChromeProps;
 };
 
 /**
@@ -82,28 +98,33 @@ export type NotePaperStrictChromeSlotProps = {
 export const NotePaperStrictChromeSlot: React.FC<
   NotePaperStrictChromeSlotProps
 > = ({
-  status,
-  blocks,
-  renderPaperList,
-  paperListWindow,
-  paperListScroll,
-  paperListOverscan,
-  paperListFocusId,
-  paperListComposingIds,
-  paperListDefaultVisibleCount,
-  paperListDefaultEstimatePx,
-  onPaperListReady,
-  chrome,
-  blockSelection,
-  onBlockSelectionReady,
-  slashMenu,
-  slashIntentSink,
-  slashWriteMode,
-  chromeTick,
-  slashOpen,
-  onSlashIntent,
-  onChromeDomHost,
+  note,
+  slash,
+  chrome: chromeProps,
 }) => {
+  const {
+    status,
+    blocks,
+    renderPaperList,
+    paperListWindow,
+    paperListScroll,
+    paperListOverscan,
+    paperListFocusId,
+    paperListComposingIds,
+    paperListDefaultVisibleCount,
+    paperListDefaultEstimatePx,
+    onPaperListReady,
+  } = note;
+  const {
+    slashMenu,
+    slashIntentSink,
+    slashWriteMode,
+    chromeTick,
+    slashOpen,
+    onSlashIntent,
+  } = slash;
+  const { chrome, blockSelection, onBlockSelectionReady, onChromeDomHost } =
+    chromeProps;
   return (
     <>
       {/*

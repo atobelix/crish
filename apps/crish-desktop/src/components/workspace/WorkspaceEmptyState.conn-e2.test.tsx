@@ -159,13 +159,15 @@ describe('WorkspaceEmptyState · CONN-E2 mirror StatusBar', () => {
     render(
       <WorkspaceEmptyState
         wsId="ws-conn-e2-ipc"
-        mirrorDriftReport={makeMirrorDriftReportView({
-          docId,
-          class: 'mirror_only',
-        })}
-        mirrorWatchSource="injected"
-        mirrorUnpushedOpCount={2}
-        mirrorIpc={ipc}
+        mirror={{
+          mirrorDriftReport: makeMirrorDriftReportView({
+            docId,
+            class: 'mirror_only',
+          }),
+          mirrorWatchSource: 'injected',
+          mirrorUnpushedOpCount: 2,
+          mirrorIpc: ipc,
+        }}
       />
     );
 
@@ -209,13 +211,15 @@ describe('WorkspaceEmptyState · CONN-E2 mirror StatusBar', () => {
     render(
       <WorkspaceEmptyState
         wsId="ws-conn-e2-ov"
-        mirrorDriftReport={makeMirrorDriftReportView({
-          docId: 'strict-ws-conn-e2-ov',
-          class: 'both',
-        })}
-        mirrorUnpushedOpCount={0}
-        mirrorIpc={ipc}
-        onMirrorThreeWay={onAction}
+        mirror={{
+          mirrorDriftReport: makeMirrorDriftReportView({
+            docId: 'strict-ws-conn-e2-ov',
+            class: 'both',
+          }),
+          mirrorUnpushedOpCount: 0,
+          mirrorIpc: ipc,
+          onMirrorThreeWay: onAction,
+        }}
       />
     );
 

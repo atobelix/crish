@@ -47,13 +47,15 @@ function Wrapper({
       discoverBusy={false}
       enableCommands={true}
       setEnableCommands={() => {}}
-      batchConfirm="none"
-      batchBusy={false}
-      batchEnableCount={0}
-      batchDisableCount={0}
+      batch={{
+        batchConfirm: 'none',
+        batchBusy: false,
+        batchEnableCount: 0,
+        batchDisableCount: 0,
+        runBatchActivation: async () => {},
+      }}
       handleSyncAll={async () => onSync?.()}
       refresh={async () => onRefresh?.()}
-      runBatchActivation={async () => {}}
     />
   );
 }
@@ -115,13 +117,15 @@ describe('SkillsMoreMenu（ui/Menu 基座）', () => {
         discoverBusy={false}
         enableCommands={true}
         setEnableCommands={() => {}}
-        batchConfirm="none"
-        batchBusy={false}
-        batchEnableCount={0}
-        batchDisableCount={0}
+        batch={{
+          batchConfirm: 'none',
+          batchBusy: false,
+          batchEnableCount: 0,
+          batchDisableCount: 0,
+          runBatchActivation: async () => {},
+        }}
         handleSyncAll={async () => {}}
         refresh={async () => {}}
-        runBatchActivation={async () => {}}
       />
     );
     expect(await screen.findByText('同步到引擎')).toBeDisabled();

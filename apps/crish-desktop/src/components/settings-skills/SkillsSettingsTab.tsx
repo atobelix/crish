@@ -123,13 +123,15 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _o
             discoverBusy={discoverBusy}
             enableCommands={enableCommands}
             setEnableCommands={setEnableCommands}
-            batchConfirm={batchConfirm ?? 'none'}
-            batchBusy={batchBusy}
-            batchEnableCount={batchEnableCount}
-            batchDisableCount={batchDisableCount}
+            batch={{
+              batchConfirm: batchConfirm ?? 'none',
+              batchBusy,
+              batchEnableCount,
+              batchDisableCount,
+              runBatchActivation,
+            }}
             handleSyncAll={handleSyncAll}
             refresh={refresh}
-            runBatchActivation={runBatchActivation}
           />
         </div>
       }
@@ -153,21 +155,25 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _o
       ) : null}
 
       <SkillEditorModal
-        discoverCandidates={discoverCandidates}
-        discoverPick={discoverPick}
-        discoverBusy={discoverBusy}
-        setDiscoverPick={setDiscoverPick}
-        applyDiscoverImport={applyDiscoverImport}
-        createMode={createMode}
-        setCreateMode={setCreateMode}
-        createName={createName}
-        setCreateName={setCreateName}
-        createDesc={createDesc}
-        setCreateDesc={setCreateDesc}
-        createBusy={createBusy}
-        handleCreate={handleCreate}
-        handleImportBrowse={handleImportBrowse}
-        handleAiCreateSkill={handleAiCreateSkill}
+        discover={{
+          discoverCandidates,
+          discoverPick,
+          discoverBusy,
+          setDiscoverPick,
+          applyDiscoverImport,
+        }}
+        create={{
+          createMode,
+          setCreateMode,
+          createName,
+          setCreateName,
+          createDesc,
+          setCreateDesc,
+          createBusy,
+          handleCreate,
+          handleImportBrowse,
+          handleAiCreateSkill,
+        }}
       />
 
       <div className={`${styles.skillsToolbar} skills-toolbar ${styles.skillsToolbarFocus} skills-toolbar--focus`} role="group" aria-label="筛选">

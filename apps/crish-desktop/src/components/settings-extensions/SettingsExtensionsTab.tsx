@@ -198,31 +198,37 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
       ) : null}
 
       <ExtensionList
-        view={view}
-        loading={loading}
-        query={query}
-        kindFilter={kindFilter}
-        installedFiltered={installedFiltered}
-        catalogFiltered={catalogFiltered}
-        catalogInstalled={catalogInstalled}
-        installed={installed}
-        busyId={busyId}
-        mcpServerBusy={mcpServerBusy}
-        mcpToolBusy={mcpToolBusy}
-        expandedMcpTools={expandedMcpTools}
-        toolTick={toolTick}
-        highlightMatch={highlightMatch}
-        toggleExpand={toggleExpand}
-        isExpanded={isExpanded}
-        onInstallCatalog={handleInstallCatalog}
-        onRemovePackage={handleRemovePackage}
-        onToggleMcpServer={toggleMcpServer}
-        onToggleMcpTool={toggleMcpTool}
-        onToggleExpandMcpTools={toggleExpandMcpTools}
-        onSetManage={setManage}
-        onSetView={setView}
-        onSetExpand={setExpand}
-        onTogglePlugin={togglePlugin}
+        extensions={{
+          view,
+          loading,
+          installedFiltered,
+          catalogFiltered,
+          catalogInstalled,
+          installed,
+          busyId,
+          mcpServerBusy,
+          mcpToolBusy,
+          expandedMcpTools,
+          toolTick,
+        }}
+        filters={{
+          query,
+          kindFilter,
+        }}
+        actions={{
+          highlightMatch,
+          toggleExpand,
+          isExpanded,
+          onInstallCatalog: handleInstallCatalog,
+          onRemovePackage: handleRemovePackage,
+          onToggleMcpServer: toggleMcpServer,
+          onToggleMcpTool: toggleMcpTool,
+          onToggleExpandMcpTools: toggleExpandMcpTools,
+          onSetManage: setManage,
+          onSetView: setView,
+          onSetExpand: setExpand,
+          onTogglePlugin: togglePlugin,
+        }}
       />
     </SettingsPage>
   );

@@ -73,11 +73,13 @@ export function AgentMessageRow({
         onToggleTool: onToggleTool,
         approvalBusy: approvalBusy,
         pendingApprovalMsgId: msg.id,
-        onOpenDiff: onOpenDiff,
-        onOpenPath: onOpenPath,
-        onOpenTerminal: onOpenTerminal,
-        onApprovalAllow: onApprovalAllow,
-        onApprovalDeny: onApprovalDeny,
+        actions: {
+          onOpenDiff: onOpenDiff,
+          onOpenPath: onOpenPath,
+          onOpenTerminal: onOpenTerminal,
+          onApprovalAllow: onApprovalAllow,
+          onApprovalDeny: onApprovalDeny,
+        },
       }}
       onTogglePin={() => {}}
       onRegenerate={() => {}}

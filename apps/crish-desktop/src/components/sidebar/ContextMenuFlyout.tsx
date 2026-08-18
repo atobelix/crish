@@ -245,31 +245,34 @@ export const ContextMenuFlyout: React.FC<{
 
   return (
     <Menu
-      open={sortDropdownOpen}
-      onOpenChange={(open) => {
-        if (!open) onCloseSortDropdown();
+      openState={{
+        open: sortDropdownOpen,
+        onOpenChange: (open) => {
+          if (!open) onCloseSortDropdown();
+        },
       }}
-      onEscapeKeyDown={(event) => {
-        if (fly !== null) {
-          event.preventDefault();
-          setFly(null);
-          rowRefs.current[fly]?.focus();
-        }
+      outsideHandlers={{
+        onEscapeKeyDown: (event) => {
+          if (fly !== null) {
+            event.preventDefault();
+            setFly(null);
+            rowRefs.current[fly]?.focus();
+          }
+        },
       }}
       anchor={sortTriggerRef}
-      align="start"
-      side="bottom"
-      sideOffset={4}
-      contentClassName={`${styles.sortFilterMenu} ${styles.open} no-drag`}
-      contentStyle={
-        !sortTriggerRef?.current && sortDropdownCoords
-          ? {
-              position: 'fixed',
-              left: sortDropdownCoords.x,
-              top: sortDropdownCoords.y,
-            }
-          : undefined
-      }
+      position={{ align: 'start', side: 'bottom', sideOffset: 4 }}
+      panel={{
+        contentClassName: `${styles.sortFilterMenu} ${styles.open} no-drag`,
+        contentStyle:
+          !sortTriggerRef?.current && sortDropdownCoords
+            ? {
+                position: 'fixed',
+                left: sortDropdownCoords.x,
+                top: sortDropdownCoords.y,
+              }
+            : undefined,
+      }}
     >
       <div className={styles.sortFilterMenuTitle} id="sort-filter-title">
         排序与过滤

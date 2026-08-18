@@ -13,10 +13,12 @@ import React, {
   useLayoutEffect,
   useMemo,
   useRef,
+  useSyncExternalStore,
 } from 'react';
 import { useLayoutTreeStore } from '../../store/storeAccess';
 import type { LayoutLeaf } from '../../store/types';
 import { AppErrorBoundary } from '../AppErrorBoundary';
+import { UnitChromeActions } from '../chat-card/UnitChromeActions';
 import { LeafToolTabStrip } from './LeafToolTabStrip';
 import styles from './BinaryTreeWorkspace.module.css';
 import {
@@ -139,8 +141,17 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
       [sessionForPanel]
     );
 
+    const registryVersion = useSyncExternalStore(
+      (cb) => viewRegistry.subscribe(cb),
+      () => viewRegistry.getVersion()
+    );
+    void registryVersion;
+
     const resolved = viewRegistry.resolveView(leaf.activeTab);
     const isChat = viewRegistry.isPrimary(leaf.panelId);
+    const hasDefinition = Boolean(resolved.definition);
+    const isNoteTab =
+      leaf.activeTab === 'note' || leaf.activeTab.startsWith('note:');
 
     // 纯函数视图渲染上下文
     const renderCtx: ViewRenderContext = useMemo(
@@ -177,8 +188,14 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         role="region"
         aria-label={`${viewRegistry.getTitle(leaf.activeTab, renderCtx)} 面板`}
       >
-        {/* 工具 leaf：基于 leaf.tabs 的独立标签栏 */}
-        {!isChat ? <LeafToolTabStrip leaf={leaf} /> : null}
+        {isChat ? (
+          <UnitChromeActions
+            activeSessionId={sessionForPanel}
+            className={styles.leafToolHeader}
+          />
+        ) : (
+          <LeafToolTabStrip leaf={leaf} />
+        )}
 
         <div className={styles.leafBody}>
           <AppErrorBoundary
@@ -188,16 +205,23 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             <Suspense
               fallback={<div className={styles.emptyState}>加载中…</div>}
             >
-              <SlotOutlet
-                slotKey="workspace.leaf.panel"
-                context={renderCtx}
-                entryKey={resolved.definition?.id ?? leaf.activeTab}
-                fallback={
-                  <div className={styles.emptyState}>
-                    未知面板类型：{leaf.activeTab}
-                  </div>
-                }
-              />
+              {hasDefinition ? (
+                <SlotOutlet
+                  slotKey="workspace.leaf.panel"
+                  context={renderCtx}
+                  entryKey={resolved.definition?.id ?? leaf.activeTab}
+                  fallback={
+                    <div className={styles.emptyState}>
+                      未知面板类型：{leaf.activeTab}
+                    </div>
+                  }
+                />
+              ) : (
+                <div className={styles.emptyState}>
+                  未知面板类型：{leaf.activeTab}
+                  {isNoteTab ? '（笔记扩展未激活）' : null}
+                </div>
+              )}
             </Suspense>
           </AppErrorBoundary>
         </div>

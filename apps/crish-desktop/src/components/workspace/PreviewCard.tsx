@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
 import { Button, Tooltip } from '../ui';
@@ -76,28 +76,34 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
   return (
     <div className={styles.browser} ref={rootRef}>
       <PreviewToolbar
-        canBack={canBack}
-        canForward={canForward}
-        blank={blank}
-        frameSrc={frameSrc}
-        loading={loading}
-        urlInput={urlInput}
-        canBookmark={canBookmark}
-        bookmarked={bookmarked}
-        showHist={showHist}
-        canExternal={canExternal}
-        aiBrowser={aiBrowser}
-        onBack={goBack}
-        onForward={goForward}
-        onHome={goHome}
-        onReload={reload}
-        onUrlSubmit={navigate}
-        onUrlChange={setUrlInput}
-        onClearUrl={() => setUrlInput('')}
-        onBookmark={onBookmark}
-        onToggleHist={() => setShowHist(!showHist)}
-        onOpenExternal={openExternal}
-        onToggleAiBrowser={toggleAiBrowser}
+        preview={{
+          canBack,
+          canForward,
+          blank,
+          frameSrc,
+          loading,
+          urlInput,
+          canBookmark,
+          bookmarked,
+          showHist,
+          canExternal,
+          aiBrowser,
+        }}
+        navigation={{
+          onBack: goBack,
+          onForward: goForward,
+          onHome: goHome,
+          onReload: reload,
+          onUrlSubmit: navigate,
+          onUrlChange: setUrlInput,
+          onClearUrl: () => setUrlInput(''),
+        }}
+        actions={{
+          onBookmark,
+          onToggleHist: () => setShowHist(!showHist),
+          onOpenExternal: openExternal,
+          onToggleAiBrowser: toggleAiBrowser,
+        }}
       />
 
       {aiBrowser ? (

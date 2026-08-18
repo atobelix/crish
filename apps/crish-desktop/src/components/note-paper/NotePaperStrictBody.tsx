@@ -28,6 +28,19 @@ import { StrictContentRowLeaf } from './StrictContentRowLeaf';
 import type { HydrateUiStatus } from './useNoteHydrate';
 import styles from './NotePaperPanel.module.css';
 
+/**
+ * MD 前缀写锥域（T4-9c Props 收敛：6 字段 → 1 对象）。
+ * 无 sink → 叶 disabled 静态（CONN-D3）。
+ */
+export type NotePaperStrictBodyMdPrefix = {
+  turnIntoSink?: TurnIntoSink;
+  mdPrefixWriteMode?: ProductMdPrefixWriteMode;
+  mdPrefixSinkSource?: ProductMdPrefixSinkSource;
+  mdPrefixBinding?: ProductMdPrefixBinding;
+  onMdPrefixCommit?: (result: ProductMdPrefixCommitResult) => void;
+  onMdPrefixCommittedIntent?: (intent: TurnIntoIntent) => void;
+};
+
 export type NotePaperStrictBodyProps = {
   status: HydrateUiStatus;
   errorReason: string | null;
@@ -38,13 +51,8 @@ export type NotePaperStrictBodyProps = {
   chrome: BlockChromeModel;
   onHover?: (blockId: string | null) => void;
   onFocus?: (blockId: string | null) => void;
-  /** CONN-D3：MD 前缀写锥（无 → 叶 disabled 静态） */
-  turnIntoSink?: TurnIntoSink;
-  mdPrefixWriteMode?: ProductMdPrefixWriteMode;
-  mdPrefixSinkSource?: ProductMdPrefixSinkSource;
-  mdPrefixBinding?: ProductMdPrefixBinding;
-  onMdPrefixCommit?: (result: ProductMdPrefixCommitResult) => void;
-  onMdPrefixCommittedIntent?: (intent: TurnIntoIntent) => void;
+  /** CONN-D3：MD 前缀写锥域 */
+  mdPrefix?: NotePaperStrictBodyMdPrefix;
   /**
    * CT-01 对象级 rev（R7 收口接线，主控裁决③）：hydrate 投影的文档 rev，
    * 透传给块域编辑会话 open 记账（无真实 rev 时保持 undefined 占位）。
@@ -70,12 +78,7 @@ export const NotePaperStrictBody = React.forwardRef<
     chrome,
     onHover: _onHover,
     onFocus: _onFocus,
-    turnIntoSink,
-    mdPrefixWriteMode,
-    mdPrefixSinkSource,
-    mdPrefixBinding,
-    onMdPrefixCommit,
-    onMdPrefixCommittedIntent,
+    mdPrefix,
     baseRev,
     children,
   },
@@ -159,12 +162,12 @@ export const NotePaperStrictBody = React.forwardRef<
                       flavour={block.flavour}
                       text={block.text ?? ''}
                       baseRev={baseRev}
-                      turnIntoSink={turnIntoSink}
-                      mdPrefixWriteMode={mdPrefixWriteMode}
-                      mdPrefixSinkSource={mdPrefixSinkSource}
-                      mdPrefixBinding={mdPrefixBinding}
-                      onMdPrefixCommit={onMdPrefixCommit}
-                      onCommittedIntent={onMdPrefixCommittedIntent}
+                      turnIntoSink={mdPrefix?.turnIntoSink}
+                      mdPrefixWriteMode={mdPrefix?.mdPrefixWriteMode}
+                      mdPrefixSinkSource={mdPrefix?.mdPrefixSinkSource}
+                      mdPrefixBinding={mdPrefix?.mdPrefixBinding}
+                      onMdPrefixCommit={mdPrefix?.onMdPrefixCommit}
+                      onCommittedIntent={mdPrefix?.onMdPrefixCommittedIntent}
                     />
                   </div>
                 </div>

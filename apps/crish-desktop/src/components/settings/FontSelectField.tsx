@@ -98,15 +98,14 @@ export const FontSelectField: React.FC<Props> = ({
     >
       <div className={styles.settingsSelectTriggerRow}>
         <Menu
-          open={open}
-          onOpenChange={handleOpenChange}
+          openState={{ open, onOpenChange: handleOpenChange }}
           options={menuOptions}
           onSelect={(idValue) => handleSelect(idValue)}
-          side="bottom"
-          align="start"
-          sideOffset={4}
-          contentClassName={styles.settingsSelectMenu}
-          contentStyle={{ width: menuWidth, maxHeight }}
+          position={{ side: 'bottom', align: 'start', sideOffset: 4 }}
+          panel={{
+            contentClassName: styles.settingsSelectMenu,
+            contentStyle: { width: menuWidth, maxHeight },
+          }}
           trigger={
             <button
               ref={triggerRef}

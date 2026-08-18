@@ -9,53 +9,66 @@ import styles from './settings/SettingsPanel.module.css';
 import { Button, Tooltip } from './ui';
 import type { TabMeta, TabType } from './settingsTabsMeta';
 
-export type SettingsTablistProps = {
-  /** tab 按钮 id 前缀（useId 生成，防重复） */
+export interface SettingsTablistAria {
   baseId: string;
-  items: TabMeta[];
-  activeId: TabType;
-  rovingId: TabType;
   tablistId: string;
   searchId: string;
   statusId: string;
-  /** 当前页 panel id（aria-controls 仅活跃 tab 挂） */
   panelId: string;
+  tablistRef: React.RefObject<HTMLDivElement | null>;
+}
+
+export interface SettingsTablistSearch {
   searchQuery: string;
   filterStatusText: string;
   searchInputRef: React.RefObject<HTMLInputElement | null>;
-  /** tablist DOM 容器（壳层 selectTab 的 focusTab 定位用） */
-  tablistRef: React.RefObject<HTMLDivElement | null>;
-  onBack?: () => void;
   onSearchChange: (q: string) => void;
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+}
+
+export type SettingsTablistProps = {
+  items: TabMeta[];
+  activeId: TabType;
+  rovingId: TabType;
+  onBack?: () => void;
   onTablistKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => void;
   onSelect: (
     tab: TabType,
     opts?: { focusTab?: boolean; focusPanel?: boolean }
   ) => void;
   onFocusTab: (tab: TabType) => void;
+  /** aria/id/DOM 引用组 */
+  aria: SettingsTablistAria;
+  /** 搜索相关组 */
+  search: SettingsTablistSearch;
 };
 
 export const SettingsTablist: React.FC<SettingsTablistProps> = ({
-  baseId,
   items,
   activeId,
   rovingId,
-  tablistId,
-  searchId,
-  statusId,
-  panelId,
-  searchQuery,
-  filterStatusText,
-  searchInputRef,
-  tablistRef,
   onBack,
-  onSearchChange,
-  onSearchKeyDown,
   onTablistKeyDown,
   onSelect,
   onFocusTab,
+  aria,
+  search,
 }) => {
+  const {
+    baseId,
+    tablistId,
+    searchId,
+    statusId,
+    panelId,
+    tablistRef,
+  } = aria;
+  const {
+    searchQuery,
+    filterStatusText,
+    searchInputRef,
+    onSearchChange,
+    onSearchKeyDown,
+  } = search;
   return (
     <nav
       className={styles.coverNav}

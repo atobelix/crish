@@ -18,6 +18,61 @@ import { layerStackService } from '../internal/layer-stack/LayerStackManager';
 import styles from './Menu.module.css';
 import type { SelectOptionItem } from './types';
 
+/** 菜单定位配置（对齐/方向/偏移/最大高度收敛为单一子对象） */
+export interface MenuPositionConfig {
+  /** 水平对齐: start | center | end */
+  align?: 'start' | 'center' | 'end';
+  /** 弹出方向: top | bottom | left | right */
+  side?: 'top' | 'bottom' | 'left' | 'right';
+  /** 与触发器的偏移距离 */
+  sideOffset?: number;
+  /** 面板最大高度（超出滚动）；默认 min(70vh, 360px) */
+  maxHeight?: number | string;
+}
+
+/** 菜单开关状态（受控/非受控双模收敛为单一子对象） */
+export interface MenuOpenState {
+  /** 初始是否打开（非受控模式） */
+  defaultOpen?: boolean;
+  /** 外部受控 open */
+  open?: boolean;
+  /** 外部受控 onOpenChange */
+  onOpenChange?: (open: boolean) => void;
+}
+
+/** 面板外观配置（标题/类名/样式收敛为单一子对象） */
+export interface MenuPanelConfig {
+  /** 面板标题（可选） */
+  title?: string;
+  /** 追加到面板的类名 */
+  contentClassName?: string;
+  /** 追加到面板的样式 */
+  contentStyle?: React.CSSProperties;
+}
+
+/** 面板外侧/键盘交互回调收敛为单一子对象 */
+export interface MenuOutsideHandlers {
+  /**
+   * 面板外侧交互回调（T05.3.2 SettingsQuickMenu 焦点还原语义需要）。
+   * 透传给 Radix Popover.Content；先于 onOpenChange(false) 触发，
+   * 消费方据此区分「外点关闭」与「Esc/键盘关闭」。
+   */
+  onInteractOutside?: (event: Event) => void;
+  /** 点击外部指针按下回调（用于阻止默认关闭行为，解决 Anchor 模式 Double Toggle 竞态） */
+  onPointerDownOutside?: (
+    event: CustomEvent<{ originalEvent: PointerEvent }>
+  ) => void;
+  /**
+   * Esc 键拦截回调（08-步5 T4-3 嵌套子菜单逐级关闭需要）：
+   * 透传给 Radix Popover.Content 的 onEscapeKeyDown——Radix 在 document
+   * 捕获阶段处理 Escape，preventDefault() 可阻止整层关闭；
+   * 基座自身的 Esc 分支尊重 defaultPrevented（消费方已处理则不重复关闭）。
+   */
+  onEscapeKeyDown?: (event: KeyboardEvent) => void;
+  /** 关闭后焦点还原控制回调 */
+  onCloseAutoFocus?: (event: Event) => void;
+}
+
 export interface MenuProps {
   /** 触发节点（cloneElement 注入打开/防冒泡事件，保留原行为）；anchor 模式可不传 */
   trigger?: React.ReactNode;
@@ -41,47 +96,16 @@ export interface MenuProps {
   children?: React.ReactNode;
   /** 选中项回调 */
   onSelect?: (id: string, option: SelectOptionItem) => void;
-  /** 水平对齐: start | center | end */
-  align?: 'start' | 'center' | 'end';
-  /** 弹出方向: top | bottom | left | right */
-  side?: 'top' | 'bottom' | 'left' | 'right';
-  /** 与触发器的偏移距离 */
-  sideOffset?: number;
-  /** 面板标题（可选） */
-  title?: string;
-  /** 初始是否打开（非受控模式） */
-  defaultOpen?: boolean;
-  /** 外部受控 open */
-  open?: boolean;
-  /** 外部受控 onOpenChange */
-  onOpenChange?: (open: boolean) => void;
-  /** 追加到面板的类名 */
-  contentClassName?: string;
-  /** 追加到面板的样式 */
-  contentStyle?: React.CSSProperties;
-  /** 面板最大高度（超出滚动）；默认 min(70vh, 360px) */
-  maxHeight?: number | string;
   /** 预留：可搜索（SettingsSelect/ModelPicker 迁移时实现） */
   searchable?: boolean;
-  /**
-   * 面板外侧交互回调（T05.3.2 SettingsQuickMenu 焦点还原语义需要）。
-   * 透传给 Radix Popover.Content；先于 onOpenChange(false) 触发，
-   * 消费方据此区分「外点关闭」与「Esc/键盘关闭」。
-   */
-  onInteractOutside?: (event: Event) => void;
-  /** 点击外部指针按下回调（用于阻止默认关闭行为，解决 Anchor 模式 Double Toggle 竞态） */
-  onPointerDownOutside?: (
-    event: CustomEvent<{ originalEvent: PointerEvent }>
-  ) => void;
-  /**
-   * Esc 键拦截回调（08-步5 T4-3 嵌套子菜单逐级关闭需要）：
-   * 透传给 Radix Popover.Content 的 onEscapeKeyDown——Radix 在 document
-   * 捕获阶段处理 Escape，preventDefault() 可阻止整层关闭；
-   * 基座自身的 Esc 分支尊重 defaultPrevented（消费方已处理则不重复关闭）。
-   */
-  onEscapeKeyDown?: (event: KeyboardEvent) => void;
-  /** 关闭后焦点还原控制回调 */
-  onCloseAutoFocus?: (event: Event) => void;
+  /** 定位配置（对齐/方向/偏移/最大高度） */
+  position?: MenuPositionConfig;
+  /** 开关状态（受控/非受控双模） */
+  openState?: MenuOpenState;
+  /** 面板外观配置（标题/类名/样式） */
+  panel?: MenuPanelConfig;
+  /** 面板外侧/键盘交互回调 */
+  outsideHandlers?: MenuOutsideHandlers;
 }
 
 /**
@@ -90,26 +114,42 @@ export interface MenuProps {
  */
 export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   trigger,
+  anchor,
   options = [],
   renderItem,
   children,
   onSelect,
-  align = 'end',
-  side = 'bottom',
-  sideOffset = 6,
-  title,
-  defaultOpen = false,
-  open: externalOpen,
-  onOpenChange: externalOnOpenChange,
-  contentClassName,
-  contentStyle,
-  maxHeight,
-  anchor,
-  onInteractOutside,
-  onPointerDownOutside,
-  onEscapeKeyDown,
-  onCloseAutoFocus,
+  searchable,
+  position,
+  openState,
+  panel,
+  outsideHandlers,
 }: MenuProps) {
+  // 定位配置（缺省值与原扁平 props 保持一致）
+  const align = position?.align ?? 'end';
+  const side = position?.side ?? 'bottom';
+  const sideOffset = position?.sideOffset ?? 6;
+  const maxHeight = position?.maxHeight;
+
+  // 开关状态（受控/非受控双模）
+  const defaultOpen = openState?.defaultOpen ?? false;
+  const externalOpen = openState?.open;
+  const externalOnOpenChange = openState?.onOpenChange;
+
+  // 面板外观
+  const title = panel?.title;
+  const contentClassName = panel?.contentClassName;
+  const contentStyle = panel?.contentStyle;
+
+  // 外侧/键盘交互回调
+  const onInteractOutside = outsideHandlers?.onInteractOutside;
+  const onPointerDownOutside = outsideHandlers?.onPointerDownOutside;
+  const onEscapeKeyDown = outsideHandlers?.onEscapeKeyDown;
+  const onCloseAutoFocus = outsideHandlers?.onCloseAutoFocus;
+
+  // searchable 预留位（当前未消费，保留以兼容消费方透传）
+  void searchable;
+
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
 
   // F7 F3：受控/非受控双模互斥——外部受控时内部状态完全旁路（不写回、

@@ -32,15 +32,18 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> = (
     <div className={styles.timelineTools}>
       <ChatToolStack
         {...host}
-        renderLinkedAgentPanel={(agent, parentSessionId, tc) => (
-          <InlineAgentPanel
-            agent={agent}
-            parentSessionId={parentSessionId}
-            defaultOpen={
-              tc.status === 'running' || agent.status === 'running'
-            }
-          />
-        )}
+        actions={{
+          ...host.actions,
+          renderLinkedAgentPanel: (agent, parentSessionId, tc) => (
+            <InlineAgentPanel
+              agent={agent}
+              parentSessionId={parentSessionId}
+              defaultOpen={
+                tc.status === 'running' || agent.status === 'running'
+              }
+            />
+          ),
+        }}
       />
     </div>
   );
