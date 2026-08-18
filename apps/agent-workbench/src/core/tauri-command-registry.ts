@@ -600,6 +600,11 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'note document hydrate',
   },
   {
+    command: 'note_document_recent',
+    status: 'implemented',
+    feature: 'note recent persisted nonempty doc',
+  },
+  {
     command: 'note_import_mirror_proposal',
     status: 'implemented',
     feature: 'note mirror import proposal',

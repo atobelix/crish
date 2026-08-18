@@ -436,6 +436,10 @@ command_registry![
         "note_document_hydrate",
         note_commands::note_document_hydrate
     ),
+    (
+        "note_document_recent",
+        note_commands::note_document_recent
+    ),
     // A-INV-02 / W2-E 产品 IPC：detect + import 提案（不 apply；X-05；≠ EL-03）
     (
         "note_detect_mirror_drift",

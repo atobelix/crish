@@ -60,14 +60,15 @@ const fn entry(
     }
 }
 
-/// 命令清单（124 条 = 全部 registered=true 实装命令；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（125 条 = 全部 registered=true 实装命令；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：workbench_open_workspace /
 /// workbench_list_workspaces / workbench_dev_mcp_enabled / core_resume_run（P2）。
 /// F-03（DM-07）：core_read_run_events 恢复激活；R1 撤回 core_session_retract 登记
 ///（统一输入流收敛战役）后总数 125（注册面 120 → 121）；R7 收口 GUI fs 删除命令
-/// 幽灵退役（R6-D5 后零消费）后总数 124（注册面 121 → 120）。
+/// 幽灵退役（R6-D5 后零消费）后总数 124（注册面 121 → 120）；
+/// note_document_recent 追加后 124 → 125（computer_estop 仍在 rust 面；前端已退役 estop）。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -226,6 +227,8 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("note_send_to_note", "note", "engine", true),
         // 真 hydrate / open 投影形状（B-09 延伸；≠ 打开完成 / ≠ EL）
         entry("note_document_hydrate", "note", "engine", true),
+        // 最近一篇 persist 非空（doc_meta.updated_at + blocks.plain_text；≠ 平行账本）
+        entry("note_document_recent", "note", "engine", true),
         // A-INV-02 / W2-E：mirror detect + import 提案（不 apply；X-05；≠ EL-03）
         entry("note_detect_mirror_drift", "note", "engine", true),
         entry("note_import_mirror_proposal", "note", "engine", true),
@@ -276,7 +279,8 @@ mod tests {
     /// 追加后 120 → 124；E2 F4 core_compact_now 接线 114 → 119（登记先行 6 → 5）；
     /// F-03（DM-07）core_read_run_events 恢复激活（注册面 119 → 120）；R1 撤回
     /// core_session_retract 登记（统一输入流收敛战役）后总数 124 → 125（注册面 120 → 121）；
-    /// R7 收口 GUI fs 删除命令幽灵退役（R6-D5 后零消费）后总数 125 → 124（注册面 121 → 120）。
+    /// R7 收口 GUI fs 删除命令幽灵退役（R6-D5 后零消费）后总数 125 → 124（注册面 121 → 120）；
+    /// note_document_recent 追加后 124 → 125（computer_estop 仍在 rust 面）。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -287,12 +291,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 124,
-            "总数 124（125 − GUI fs 删除命令幽灵退役；R7 收口，与前端同步）"
+            total, 125,
+            "总数 125（124 + note_document_recent；estop 仍在 rust）"
         );
         assert_eq!(
-            registered, 124,
-            "注册面 124（全部为 registered=true 实装命令）"
+            registered, 125,
+            "注册面 125（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -414,11 +418,11 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 124);
+        assert_eq!(manifest.commands.len(), 125);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
-    /// Round7+：笔记 IPC 九命令登记且 registered=true（含 hydrate / mirror / apply_ops / undo_text / redo_text）。
+    /// Round7+：笔记 IPC 十命令登记且 registered=true（含 hydrate / mirror / apply_ops / undo_text / redo_text）。
     #[test]
     fn manifest_registers_note_commands() {
         let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
@@ -431,6 +435,7 @@ mod tests {
             "note_query_blocks",
             "note_send_to_note",
             "note_document_hydrate",
+            "note_document_recent",
             "note_detect_mirror_drift",
             "note_import_mirror_proposal",
             "note_apply_ops",
