@@ -152,6 +152,8 @@ body {
   font-weight: 500;
   color: var(--text-primary, #111111);
   cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
   transition: background var(--dur-fast) var(--ease-default), border-color var(--dur-fast) var(--ease-default);
   max-width: 200px;
 }
@@ -167,23 +169,24 @@ body {
 }
 
 .top-bar-new-tab-btn {
+  width: 27px;
   height: 27px;
-  padding: 0 8px;
+  min-width: 27px;
+  flex: 0 0 27px;
+  padding: 0;
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
   color: var(--text-secondary, #666666);
-  font-size: 12px;
-  font-weight: 500;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
 }
 
 .top-bar-new-tab-btn:hover {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.05);
   color: var(--text-primary, #111111);
 }
 
