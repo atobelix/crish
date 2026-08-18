@@ -10,7 +10,7 @@
  * - 产品叶消费常量 → Strict `data-paper-list=1` / `presentationMode=paper-list`
  * - EmptyState **组件默认仍 false**：src 钉不回退
  * - presentationMode 互斥不回退：paper-list ⇄ content-row
- * 策略常量从扩展家 import，旧路径只 re-export。
+ * 策略常量只在扩展家 productPaperListPolicy。
  *
  * ≠ W3-P · ≠ EL-01 · 默开 ≠ PaperList 完成 · jsdom 绿 ≠ 打开完成
  */
@@ -149,11 +149,8 @@ describe('WorkspaceEmptyState · CONN-C2′ PaperList 产品默开', () => {
       /paperList=\{WORKSPACE_PRODUCT_ENABLE_PAPER_LIST/
     );
 
-    // 策略常量文件语义 = true（实现在扩展；workspace 只 re-export）
+    // 策略常量文件语义 = true（实现只在扩展）
     expect(readExt('productPaperListPolicy.ts')).toMatch(
-      /WORKSPACE_PRODUCT_ENABLE_PAPER_LIST\s*=\s*true/
-    );
-    expect(readWorkspaceSrc('workspaceProductPaperList.ts')).toMatch(
       /WORKSPACE_PRODUCT_ENABLE_PAPER_LIST\s*=\s*true/
     );
   });

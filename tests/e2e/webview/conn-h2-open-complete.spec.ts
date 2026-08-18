@@ -476,7 +476,7 @@ async function bindPreOpen(page: Page, docId: string): Promise<string> {
     )) as { resolveNoteWorkspaceKey: () => string };
     // @ts-expect-error Vite devUrl 下 /src 与应用共享模块
     const bind = (await import(
-      '/src/components/workspace/workspaceEmptyStateStrictDoc.ts'
+      '/src/extensions/note-paper/productStrictDoc.ts'
     )) as {
       bindWorkspacePersistedStrictDoc: (wsId: string, docId: string) => void;
     };
@@ -490,7 +490,7 @@ async function unbindPreOpen(page: Page, wsId: string): Promise<void> {
   await page.evaluate(async (id) => {
     // @ts-expect-error Vite devUrl 下 /src 与应用共享模块
     const bind = (await import(
-      '/src/components/workspace/workspaceEmptyStateStrictDoc.ts'
+      '/src/extensions/note-paper/productStrictDoc.ts'
     )) as { unbindWorkspacePersistedStrictDoc: (wsId: string) => void };
     bind.unbindWorkspacePersistedStrictDoc(id);
   }, wsId);

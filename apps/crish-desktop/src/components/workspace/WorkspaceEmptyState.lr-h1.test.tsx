@@ -10,7 +10,7 @@
  * 本文件不证产品入口。禁止点 `open-note-paper-strict` 证产品 H1。
  *
  * EmptyState 直渲 = 夹具 landing 属性（夹具路径；≠ 产品入口 ≠ 打开完成）。
- * resolver 从扩展家 import，旧路径只 re-export。
+ * resolver 只在扩展家 productStrictDoc。
  *
  * 完成定义：
  * - 绑定后打开 docId ≠ 永远只有死合成 `strict-${wsId}`
@@ -49,8 +49,14 @@ const DIR =
     ? dirname(fileURLToPath(import.meta.url))
     : join(process.cwd(), 'apps/crish-desktop/src/components/workspace');
 
+const EXT_DIR = join(DIR, '../../extensions/note-paper');
+
 function readWorkspaceSrc(name: string): string {
   return readFileSync(join(DIR, name), 'utf8');
+}
+
+function readExt(name: string): string {
+  return readFileSync(join(EXT_DIR, name), 'utf8');
 }
 
 function leafCtx(partial: Partial<ViewRenderContext> = {}): ViewRenderContext {
@@ -290,7 +296,7 @@ describe('WorkspaceEmptyState · LR-H1 persist doc 绑定', () => {
     // 无绑定回退不得删
     expect(emptySrc).toMatch(/strict-\$\{wsId\}/);
 
-    const resolverSrc = readWorkspaceSrc('workspaceEmptyStateStrictDoc.ts');
+    const resolverSrc = readExt('productStrictDoc.ts');
     expect(resolverSrc).toMatch(/≠ 打开完成/);
     expect(resolverSrc).toMatch(/EL-01 \/ EL-04 \/ EL-08/);
     expect(resolverSrc).toMatch(/synthetic-unbound/);

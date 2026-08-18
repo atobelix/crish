@@ -1,10 +1,11 @@
 /**
  * CONN-E2′ · 已断链 WorkspaceProductEmptyHost 已删（源码钉）
  *
- * 策略常量 / resolve 仍给扩展叶用；不再有产品 Host 组件。
- * 删 Host ≠ 打开完成 ≠ 关 EL。
+ * workspaceProductMirrorDetect.tsx 亦不在。
+ * 实现只在 extensions/note-paper/productMirrorPolicy.ts。
+ * 删 Host / 删 re-export ≠ 打开完成 ≠ 关 EL。
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -14,7 +15,7 @@ const DIR =
     ? import.meta.dirname
     : dirname(fileURLToPath(import.meta.url));
 
-const SRC = join(DIR, 'workspaceProductMirrorDetect.tsx');
+const GONE = join(DIR, 'workspaceProductMirrorDetect.tsx');
 const IMPL = join(
   DIR,
   '../../extensions/note-paper/productMirrorPolicy.ts'
@@ -26,7 +27,6 @@ function readUtf8(path: string): string {
 }
 
 describe('CONN-E2′ · WorkspaceProductEmptyHost 已删（≠ 打开完成 · ≠ 关 EL）', () => {
-  const src = readUtf8(SRC);
   const impl = readUtf8(IMPL);
   const self = readUtf8(SELF);
 
@@ -35,19 +35,11 @@ describe('CONN-E2′ · WorkspaceProductEmptyHost 已删（≠ 打开完成 · �
     expect(self).not.toMatch(/\brender\s*\(/);
   });
 
-  it('源码不再出现 function WorkspaceProductEmptyHost', () => {
-    expect(src).not.toMatch(/function WorkspaceProductEmptyHost/);
-    expect(src).not.toMatch(/type WorkspaceProductEmptyHostProps/);
-    expect(src).not.toMatch(/from ['"]\.\/WorkspaceEmptyState['"]/);
-    expect(src).not.toMatch(/WORKSPACE_PRODUCT_ENABLE_PAPER_LIST/);
-    expect(src).toMatch(/WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE/);
-    expect(src).toMatch(/createProductNoteMirrorIpc/);
-    expect(src).toMatch(/resolveWorkspaceProductEmptyMirrorProps/);
-    expect(src).toMatch(/策略常量给扩展叶用，不再有产品 Host 组件/);
-    expect(src).toMatch(/productMirrorPolicy/);
+  it('workspaceProductMirrorDetect.tsx 不存在', () => {
+    expect(existsSync(GONE)).toBe(false);
   });
 
-  it('实现住在扩展 productMirrorPolicy（workspace 只 re-export）', () => {
+  it('实现只在扩展 productMirrorPolicy；无 function WorkspaceProductEmptyHost', () => {
     expect(impl).toMatch(/export function createProductNoteMirrorIpc/);
     expect(impl).toMatch(
       /export function resolveWorkspaceProductEmptyMirrorProps/
@@ -56,5 +48,6 @@ describe('CONN-E2′ · WorkspaceProductEmptyHost 已删（≠ 打开完成 · �
       /WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE\s*=\s*true/
     );
     expect(impl).not.toMatch(/function WorkspaceProductEmptyHost/);
+    expect(impl).not.toMatch(/type WorkspaceProductEmptyHostProps/);
   });
 });

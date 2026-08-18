@@ -130,12 +130,10 @@ describe('CONN-E2′-tauri · 默认与无 Tauri 不回退', () => {
     );
     expect(implSrc).toMatch(/createTauriNoteMirrorIpc/);
     expect(implSrc).not.toMatch(/return\s+createMockNoteMirrorIpc/);
-    const reexportSrc = readFileSync(
-      join(DIR, 'workspaceProductMirrorDetect.tsx'),
-      'utf8'
+    expect(implSrc).not.toMatch(/function WorkspaceProductEmptyHost/);
+    expect(existsSync(join(DIR, 'workspaceProductMirrorDetect.tsx'))).toBe(
+      false
     );
-    expect(reexportSrc).toMatch(/productMirrorPolicy/);
-    expect(reexportSrc).not.toMatch(/function WorkspaceProductEmptyHost/);
 
     const e2p = readFileSync(
       join(DIR, 'Workspace.conn-e2-prime.test.tsx'),
