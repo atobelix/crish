@@ -50,7 +50,11 @@ export function resolveExplicitNoteDocId(
   return asNonEmptyDocId(resolveNoteUri(ctx.panelId)?.params.docId);
 }
 
-/** 查当前 workspace.db 最近一篇 persist 非空 doc。失败 / 无行 → null。 */
+/**
+ * 经 `noteDocumentRecent` 查最近一篇 persist 非空 doc（命令体+前端已有）。
+ * 无命中 / 非 Tauri / invoke missing 或失败 → `null`；
+ * HEAD rust `generate_handler` 未登记时真壳走 missing。**≠** 打开完成。
+ */
 export async function loadRecentPersistedDocId(): Promise<string | null> {
   return noteDocumentRecent();
 }
