@@ -22,14 +22,22 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useDragGeometry,
+  useDragStart,
+  useDragMove,
+  useDragEnd,
+  type PendingDrag,
+  type ActiveDrag,
+} from './useDragPhases';
 
 // ── 常量单源 ────────────────────────────────────────────────────────
 
 /** 拖拽触发阈值（px）：移动超过此距离才认定为拖拽，避免误触 */
 export const DRAG_THRESHOLD_PX = 5;
 /** 拖拽 ghost 偏移：让 ghost 略低于指针，避免遮挡指针 */
-const GHOST_OFFSET_X = 16;
-const GHOST_OFFSET_Y = 16;
+export const GHOST_OFFSET_X = 16;
+export const GHOST_OFFSET_Y = 16;
 /** drop zone 检测节流间隔（ms） */
 export const DROP_DETECT_INTERVAL_MS = 16; // ~1 frame
 
@@ -99,22 +107,19 @@ export interface PointerDragBaseApi<T> {
 }
 
 // ── 内部状态 ────────────────────────────────────────────────────────
-
-interface PendingDrag<T> {
-  payload: T;
-  startX: number;
-  startY: number;
-  pointerId: number;
-}
-
-interface ActiveDrag<T> {
-  payload: T;
-  currentX: number;
-  currentY: number;
-  pointerId: number;
-}
+//
+// PendingDrag / ActiveDrag 类型已移至 useDragPhases.ts（T4-8 拆分），
+// 此处经 import 复用。
 
 // ── Hook 实现 ───────────────────────────────────────────────────────
+//
+// 主体逻辑已按拖拽阶段拆分到 useDragPhases.ts（T4-8）：
+// - useDragGeometry：ghost/offset/resetLocal 纯几何
+// - useDragStart：start + enterActive
+// - useDragMove：handlePointerMove
+// - useDragEnd：drop/cancel/收尾
+//
+// 本 hook 仅做 ref 声明 + 阶段工厂装配 + 全局监听挂载。
 
 export function usePointerDragBase<T>(
   options: PointerDragBaseOptions<T>
@@ -133,238 +138,38 @@ export function usePointerDragBase<T>(
 
   const [isDragging, setIsDragging] = useState(false);
 
-  const offsetOf = useCallback(
-    () =>
-      optionsRef.current.ghostOffset ?? {
-        x: GHOST_OFFSET_X,
-        y: GHOST_OFFSET_Y,
-      },
+  // 共享上下文：阶段工厂经此注入 ref/optionsRef/setIsDragging。
+  // useMemo 稳定引用——ref 对象与 setIsDragging 跨渲染不变，故 ctx 仅创建一次，
+  // 保证阶段工厂的 useCallback 依赖稳定。
+  const ctx = useMemo(
+    () => ({
+      optionsRef,
+      phaseRef,
+      pendingRef,
+      activeRef,
+      didDragRef,
+      ghostRef,
+      ghostPosRef,
+      setIsDragging,
+    }),
+    // ref 对象 + setState dispatcher 均跨渲染稳定
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
-  const applyGhostPos = useCallback(() => {
-    const el = ghostRef.current;
-    const pos = ghostPosRef.current;
-    if (el && pos) {
-      const fn = optionsRef.current.ghostTransform ?? defaultGhostTransform;
-      el.style.transform = fn(pos.x, pos.y);
-    }
-  }, []);
-
-  const resetLocal = useCallback(() => {
-    activeRef.current = null;
-    pendingRef.current = null;
-    ghostPosRef.current = null;
-    didDragRef.current = false;
-    phaseRef.current = 'idle';
-    setIsDragging(false);
-  }, []);
-
-  const start = useCallback((payload: T, e: React.PointerEvent) => {
-    if (e.button !== 0) return; // 仅左键
-    // 已在拖拽中：忽略（含多指场景 — 第二指的 pointerdown 直接拒绝）
-    if (phaseRef.current !== 'idle') return;
-    pendingRef.current = {
-      payload,
-      startX: e.clientX,
-      startY: e.clientY,
-      pointerId: e.pointerId,
-    };
-    phaseRef.current = 'pending';
-    didDragRef.current = false;
-    // 指针捕获（P1-F5 根因修复）：拖拽期间指针移出窗口/WebView 后
-    // pointerup 不再派发到页面，若不捕获则 phase 悬挂在 active。
-    // jsdom 无 setPointerCapture 实现、或事件源非 Element 时抛错——
-    // try/catch 兜底，捕获失败仍由 window 监听 + lostpointercapture/blur
-    // 双保险接管收尾。
-    try {
-      e.currentTarget?.setPointerCapture?.(e.pointerId);
-    } catch {
-      // 忽略：捕获不可用时退化为 window 监听路径
-    }
-  }, []);
-
-  // ── 进入 active 阶段 ─────────────────────────────────────────
-
-  const enterActive = useCallback(
-    (clientX: number, clientY: number) => {
-      const pending = pendingRef.current;
-      if (!pending) return;
-      const offset = offsetOf();
-      const opts = optionsRef.current;
-
-      activeRef.current = {
-        payload: pending.payload,
-        currentX: clientX,
-        currentY: clientY,
-        pointerId: pending.pointerId,
-      };
-      phaseRef.current = 'active';
-
-      const ok = opts.onDragStart?.(pending.payload, clientX, clientY);
-      if (ok === false) {
-        // 控制器拒绝（如源 leaf 不可解析）：回退 idle，不进入 active
-        pendingRef.current = null;
-        activeRef.current = null;
-        phaseRef.current = 'idle';
-        return;
-      }
-
-      pendingRef.current = null;
-      didDragRef.current = true;
-      ghostPosRef.current = {
-        x: clientX + offset.x,
-        y: clientY + offset.y,
-      };
-      if (opts.followGhost !== false) applyGhostPos();
-      setIsDragging(true);
-    },
-    [applyGhostPos, offsetOf]
-  );
-
-  // ── 拖拽移动 ─────────────────────────────────────────────────
-
-  const handlePointerMove = useCallback(
-    (e: PointerEvent) => {
-      const phase = phaseRef.current;
-      if (phase === 'idle' || phase === 'committed' || phase === 'cancelled')
-        return;
-
-      if (phase === 'pending') {
-        const pending = pendingRef.current;
-        if (!pending || e.pointerId !== pending.pointerId) return;
-        const dx = e.clientX - pending.startX;
-        const dy = e.clientY - pending.startY;
-        if (Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
-        enterActive(e.clientX, e.clientY);
-        // 不 return：落到 active 分支，让首帧立即执行 onDragMove
-        // （避免超过阈值后的第一帧（~16ms）无反馈）
-        if (phaseRef.current !== 'active') return; // onDragStart 拒绝路径
-      } else {
-        const active = activeRef.current;
-        if (!active || e.pointerId !== active.pointerId) return;
-      }
-
-      const active = activeRef.current;
-      if (!active) return;
-      active.currentX = e.clientX;
-      active.currentY = e.clientY;
-      const offset = offsetOf();
-      ghostPosRef.current = {
-        x: e.clientX + offset.x,
-        y: e.clientY + offset.y,
-      };
-      if (optionsRef.current.followGhost !== false) applyGhostPos();
-      optionsRef.current.onDragMove?.(active.payload, e.clientX, e.clientY, e);
-    },
-    [applyGhostPos, enterActive, offsetOf]
-  );
-
-  // ── 手势结束 ─────────────────────────────────────────────────
-
-  const finishActiveDrop = useCallback(
-    (clientX: number, clientY: number, cancelled: boolean) => {
-      const active = activeRef.current;
-      if (!active) return;
-      phaseRef.current = 'committed';
-      optionsRef.current.onDrop?.(active.payload, clientX, clientY, cancelled);
-    },
-    []
-  );
-
-  const notifyGestureEnd = useCallback(
-    (outcome: 'drop' | 'cancel' | 'no-drag') => {
-      const payload =
-        activeRef.current?.payload ?? pendingRef.current?.payload ?? null;
-      resetLocal();
-      optionsRef.current.onGestureEnd?.(payload, outcome);
-    },
-    [resetLocal]
-  );
-
-  const handlePointerUp = useCallback(
-    (e: PointerEvent) => {
-      const phase = phaseRef.current;
-      if (phase === 'idle') return;
-
-      // 多指隔离：仅处理启动拖拽的 pointer 的 up 事件。
-      // 其它 pointer 的 up 不应结束拖拽（如双指场景中第二指抬起）。
-      const expectedPointerId =
-        pendingRef.current?.pointerId ?? activeRef.current?.pointerId;
-      if (expectedPointerId !== undefined && e.pointerId !== expectedPointerId)
-        return;
-
-      // pending：未超过阈值，按 click 处理（不算拖拽）
-      if (phase === 'pending') {
-        notifyGestureEnd('no-drag');
-        return;
-      }
-
-      // active：提交 drop
-      if (phase === 'active') {
-        finishActiveDrop(e.clientX, e.clientY, false);
-      }
-      notifyGestureEnd('drop');
-    },
-    [finishActiveDrop, notifyGestureEnd]
-  );
-
-  const handlePointerCancel = useCallback(() => {
-    if (phaseRef.current === 'idle') return;
-    phaseRef.current = 'cancelled';
-    optionsRef.current.onCancel?.(
-      activeRef.current?.payload ?? pendingRef.current?.payload ?? null
-    );
-    notifyGestureEnd('cancel');
-  }, [notifyGestureEnd]);
-
-  const cancel = useCallback(() => {
-    handlePointerCancel();
-  }, [handlePointerCancel]);
-
-  /** 外部强制收尾（lostpointercapture 等）：active 带 cancelled 标记走 onDrop */
-  const endGesture = useCallback(
-    (cancelled: boolean = false, clientX?: number, clientY?: number) => {
-      const phase = phaseRef.current;
-      if (phase === 'idle') return;
-      if (phase === 'pending') {
-        notifyGestureEnd('no-drag');
-        return;
-      }
-      if (phase === 'active') {
-        const active = activeRef.current;
-        finishActiveDrop(
-          clientX ?? active?.currentX ?? 0,
-          clientY ?? active?.currentY ?? 0,
-          cancelled
-        );
-      }
-      notifyGestureEnd(cancelled ? 'cancel' : 'drop');
-    },
-    [finishActiveDrop, notifyGestureEnd]
-  );
-
-  // ── 指针捕获兜底（P1-F5）：capture 丢失 / 窗口失焦 → 按取消收尾 ──
-  //
-  // 根因：仅靠 window pointerup 无法覆盖「指针移出 WebView 释放」场景——
-  // 指针事件不再派发，phase 永久悬挂在 active（isDragging 恒 true、body class
-  // 残留）。setPointerCapture 解决「移出后 pointerup 不派发」，但 capture 本身
-  // 会失效（元素移除/其它元素抢占/失焦），故需 lostpointercapture / blur 双兜底：
-  // 捕获丢失与失焦都是「本轮手势已无法正常完结」的信号，统一走 endGesture(true)
-  // （onDrop(cancelled=true) + onGestureEnd('cancel')）复位。
-  // 仅 active/pending 阶段响应：正常 pointerup 后浏览器自动释放捕获会补发
-  // lostpointercapture，此时 phase 已是 committed，守卫直接放行，避免重复收尾。
-  const handleLostCapture = useCallback(() => {
-    const phase = phaseRef.current;
-    if (phase !== 'active' && phase !== 'pending') return;
-    endGesture(true);
-  }, [endGesture]);
-
-  const handleWindowBlur = useCallback(() => {
-    const phase = phaseRef.current;
-    if (phase !== 'active' && phase !== 'pending') return;
-    endGesture(true);
-  }, [endGesture]);
+  const geometry = useDragGeometry(ctx);
+  const { applyGhostPos } = geometry;
+  const dragStart = useDragStart(ctx, geometry);
+  const { start } = dragStart;
+  const { handlePointerMove } = useDragMove(ctx, geometry, dragStart);
+  const {
+    handlePointerUp,
+    handlePointerCancel,
+    cancel,
+    endGesture,
+    handleLostCapture,
+    handleWindowBlur,
+  } = useDragEnd(ctx, geometry);
 
   // ── Ghost 元素回调 ref ───────────────────────────────────────
 
@@ -387,9 +192,6 @@ export function usePointerDragBase<T>(
   const isActive = useCallback(() => phaseRef.current !== 'idle', []);
 
   // ── 全局事件监听（常驻挂载，handler 内按 phase 守卫） ─────────
-  //
-  // 设计理由：phaseRef 的变更不触发重渲染；改为常驻挂载 + handler 内
-  // phaseRef 守卫，彻底消除「pending 后 listener 不重挂」时序依赖。
   useEffect(() => {
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
@@ -455,8 +257,4 @@ export function usePointerDragBase<T>(
       isActive,
     ]
   );
-}
-
-function defaultGhostTransform(x: number, y: number): string {
-  return `translate(${x}px, ${y}px) rotate(1.5deg)`;
 }

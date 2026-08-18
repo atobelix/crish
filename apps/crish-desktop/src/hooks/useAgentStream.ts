@@ -26,28 +26,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSessionStore } from '../store/sessionStore';
-import type {
-  SessionMessage,
-  FileDiff,
-  MessageToolCall,
-} from '../store/types';
-import type { MessageToolApprovalMeta } from '../store/types';
+import type { SessionMessage } from '../store/types';
 import {
   sendToSubagent,
   streamCollaboratorRun,
   getSubagentStatus,
 } from '../api/subagentApi';
-import {
-  resolveToolDiffs,
-  sanitizeToolDisplayOutput,
-} from '../api/toolFeedback';
-import { publishToolDiffs } from '../api/publishToolDiffs';
 import type { StreamCancelFn } from '../api/chatBridge';
-import {
-  dispatchStreamStopCancel,
-  markStreamingActive,
-} from '../api/streamStop';
 import { getCompositionRoot } from '../app/compositionRoot';
+import {
+  buildAgentStreamCallbacks,
+  finalizeAgentStop,
+} from './agentStreamCallbacks';
 
 export interface UseAgentPanelOptions {
   parentSessionId: string;
@@ -157,149 +147,27 @@ export function useAgentPanel(
     [parentSessionId, agentId, patchSessionAgentMessage, guard]
   );
 
+  // buildStreamCallbacks 委托给纯函数 buildAgentStreamCallbacks（依赖注入，
+  // 见 agentStreamCallbacks.ts）；此处仅提供 ref 读写与 store action。
   const buildStreamCallbacks = useCallback(
-    (asstId: string, onComplete?: () => void) => {
-      const capturedEpoch = epochRef.current;
-      const valid = () => guard() && capturedEpoch === epochRef.current;
-      const pa = buildPatchAsst(asstId);
-
-      return {
-        onRunMeta: ({ runId }: { runId: string }) => {
-          if (!valid()) return;
+    (asstId: string, onComplete?: () => void) =>
+      buildAgentStreamCallbacks(asstId, onComplete, {
+        parentSessionId,
+        agentId,
+        capturedEpoch: epochRef.current,
+        getEpoch: () => epochRef.current,
+        guard,
+        buildPatchAsst,
+        setLocalRunId: (runId: string | null) => {
           localRunIdRef.current = runId;
-          patchSessionAgent(parentSessionId, agentId, {
-            subagentRunId: runId,
-            status: 'running',
-          });
         },
-        onThought: (t: string) =>
-          pa((m) => {
-            m.thinking = t;
-          }),
-        onChunk: (c: string) =>
-          pa((m) => {
-            m.text = c;
-            if (m.thinking === '正在处理…') m.thinking = '';
-          }),
-        onToolStart: (
-          toolId: string,
-          name: string,
-          args: string,
-          explanation?: string
-        ) =>
-          pa((m) => {
-            if (!m.toolCalls) m.toolCalls = [];
-            if (!m.blocks) m.blocks = [];
-            if (!m.toolCalls.some((t) => t.id === toolId)) {
-              m.toolCalls.push({
-                id: toolId,
-                name,
-                arguments: args,
-                ...(explanation !== undefined ? { explanation } : {}),
-                status: 'running',
-              });
-              m.blocks.push({ type: 'tool_call', id: toolId });
-            }
-          }),
-        onToolSuccess: (
-          toolId: string,
-          output?: string | null,
-          diffs?: FileDiff[]
-        ) => {
-          let resolved: FileDiff[] = [];
-          pa((m) => {
-            const tc = m.toolCalls?.find((t) => t.id === toolId);
-            if (!tc) return;
-            const displayOut = sanitizeToolDisplayOutput(output || '');
-            resolved = resolveToolDiffs({
-              name: tc.name || '',
-              args: tc.arguments,
-              output: displayOut,
-              structuredDiffs: diffs,
-            });
-            tc.status = 'success';
-            tc.output = displayOut || output || '完成';
-            if (resolved.length) tc.diffs = resolved;
-          });
-          if (valid()) publishToolDiffs(resolved);
+        getLocalRunId: () => localRunIdRef.current,
+        setCancel: (cancel: StreamCancelFn | null) => {
+          cancelRef.current = cancel;
         },
-        onToolError: (toolId: string, err?: string | null) =>
-          pa((m) => {
-            const tc = m.toolCalls?.find((t) => t.id === toolId);
-            if (tc) {
-              tc.status = 'error';
-              tc.output = sanitizeToolDisplayOutput(err || '') || err || '失败';
-            }
-          }),
-        onToolPendingApproval: (
-          toolId: string,
-          name: string,
-          args: string,
-          explanation: string,
-          approvalMeta?: MessageToolApprovalMeta
-        ) =>
-          pa((m) => {
-            if (!m.toolCalls) m.toolCalls = [];
-            if (!m.blocks) m.blocks = [];
-            const existing = m.toolCalls.find((t) => t.id === toolId);
-            if (existing) {
-              existing.status = 'pending_approval';
-              existing.arguments = args || existing.arguments;
-              if (explanation) existing.explanation = explanation;
-              if (approvalMeta) existing.approvalMeta = approvalMeta;
-            } else {
-              const entry: MessageToolCall = {
-                id: toolId,
-                name,
-                arguments: args,
-                explanation,
-                status: 'pending_approval',
-              };
-              if (approvalMeta) entry.approvalMeta = approvalMeta;
-              m.toolCalls.push(entry);
-              if (
-                !m.blocks.some((b) => b.type === 'tool_call' && b.id === toolId)
-              ) {
-                m.blocks.push({ type: 'tool_call', id: toolId });
-              }
-            }
-          }),
-        onApprovalResolved: (toolId: string, decision: string) =>
-          pa((m) => {
-            const tc = m.toolCalls?.find((t) => t.id === toolId);
-            if (!tc) return;
-            if (decision === 'allow') {
-              tc.status = 'running';
-              tc.output = '执行中…';
-            } else {
-              tc.status = 'error';
-              tc.output = '未获批准';
-            }
-          }),
-        onSubagentEvent: () => {},
-        onComplete: () => {
-          if (!valid()) {
-            cancelRef.current = null;
-            onComplete?.();
-            return;
-          }
-          pa((m) => {
-            m.status = 'completed';
-            if (m.thinking === '正在处理…') m.thinking = '';
-          });
-          patchSessionAgent(parentSessionId, agentId, {
-            status: 'completed',
-            endedAt: Date.now(),
-            ...(localRunIdRef.current
-              ? { subagentRunId: localRunIdRef.current }
-              : {}),
-          });
-          cancelRef.current = null;
-          onComplete?.();
-        },
-      } as const;
-    },
-    [parentSessionId, agentId, patchSessionAgent, buildPatchAsst, guard]
+        patchSessionAgent,
+      }),
+    [parentSessionId, agentId, guard, buildPatchAsst, patchSessionAgent]
   );
 
   const finalizeInFlight = useCallback(() => {
@@ -387,38 +255,38 @@ export function useAgentPanel(
    *
    * Wire：shared `dispatchStreamStopCancel`（live StreamCancelFn XOR runId→root）。
    * Agent partials：epoch / stopping / patchSessionAgent / cooldown。
+   *
+   * 委托给纯函数 finalizeAgentStop（依赖注入，见 agentStreamCallbacks.ts）。
    */
-  const finalizeAgentStop = useCallback(
-    (force: boolean, summary?: string) => {
-      if (stopping) return;
-      setStopping(true);
-      epochRef.current += 1;
-      const cancel = cancelRef.current;
-      cancelRef.current = null;
-      markStreamingActive(false);
-      dispatchStreamStopCancel({
-        force,
-        cancel,
-        // live cancel already wires L2/L3; only pass runId when no cancel handle
-        runId: cancel ? null : getSubagentRunId(),
-        sessionId: parentSessionId,
-        reasonCooperative: 'ui-agent-stop',
-        reasonForce: 'ui-agent-force-cancel',
-      });
-      finalizeInFlight();
-      patchSessionAgent(parentSessionId, agentId, {
-        status: 'stopped',
-        summary: summary || (force ? '已强制取消' : '已停止'),
-        endedAt: Date.now(),
-      });
-      if (cooldownRef.current != null) {
-        window.clearTimeout(cooldownRef.current);
-      }
-      cooldownRef.current = window.setTimeout(() => {
-        cooldownRef.current = null;
-        if (mountedRef.current) setStopping(false);
-      }, 200);
-    },
+  const finalizeAgentStopCb = useCallback(
+    (force: boolean, summary?: string) =>
+      finalizeAgentStop(force, summary, {
+        parentSessionId,
+        agentId,
+        isStopping: stopping,
+        setStopping: (v: boolean) => setStopping(v),
+        incrementEpoch: () => {
+          epochRef.current += 1;
+        },
+        takeCancel: () => {
+          const cancel = cancelRef.current;
+          cancelRef.current = null;
+          return cancel;
+        },
+        getSubagentRunId,
+        finalizeInFlight,
+        patchSessionAgent,
+        isMounted: () => mountedRef.current,
+        clearCooldown: () => {
+          if (cooldownRef.current != null) {
+            window.clearTimeout(cooldownRef.current);
+            cooldownRef.current = null;
+          }
+        },
+        setCooldown: (timer: number) => {
+          cooldownRef.current = timer;
+        },
+      }),
     [
       parentSessionId,
       agentId,
@@ -432,17 +300,17 @@ export function useAgentPanel(
   /** 默认 Stop = L2 cooperative_stop */
   const handleStopGeneration = useCallback(
     (summary?: string) => {
-      finalizeAgentStop(false, summary);
+      finalizeAgentStopCb(false, summary);
     },
-    [finalizeAgentStop]
+    [finalizeAgentStopCb]
   );
 
   /** 强制取消 = L3 force_cancel（UI 应二次确认） */
   const handleForceCancelGeneration = useCallback(
     (summary?: string) => {
-      finalizeAgentStop(true, summary);
+      finalizeAgentStopCb(true, summary);
     },
-    [finalizeAgentStop]
+    [finalizeAgentStopCb]
   );
 
   const startStatusSync = useCallback(() => {
