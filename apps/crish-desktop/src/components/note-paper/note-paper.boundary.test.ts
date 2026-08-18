@@ -1,13 +1,14 @@
 /**
- * note-paper 目录边界静态扫描（**W5-B-S Skeleton** · B-03 / A-SURF-02）
+ * note-paper 目录边界静态扫描（**W5-B-S Skeleton** · B-03 / A-SURF-02 / 08）
  *
  * 禁止本目录源码 import：
  * - EditorStore / useEditorStore
  * - markdown-editor 的 store 路径
  * - lines[] 写 API 当局
+ * - 三包深路径 `@crish/{block-paper,editor-kit,block-paper-contract}/src/`
  *
  * 本测只扫 note-paper 目录；bridges 是允许「知两边」的薄层，不在此扫禁 import。
- * 本包 ≠ W5-B Strict；边界绿 ≠ EL 关闭。
+ * 本包 ≠ W5-B Strict；边界绿 ≠ EL 关闭 ≠ 打开完成 ≠ 独立软件已拆。
  *
  * W5-C 加深：同目录 Strict 轨文件（NotePaperStrictPanel / notePaperStrictTrack / hydrateProjection）
  * 亦在扫范围内；**≠ EL-08 关闭**（完整隔离见 `__tests__/dual-engine-surface.isolation.test.ts`）。
@@ -40,6 +41,22 @@ const FORBIDDEN_PATTERNS: Array<{ id: string; re: RegExp }> = [
   {
     id: 'reference-markdown-editor-import',
     re: /from\s+['"][^'"]*reference[/\\]markdown-editor/,
+  },
+  {
+    id: 'block-paper-deep-src',
+    re: /(?:from\s+|import\s*\(\s*)['"]@crish\/block-paper\/src\//,
+  },
+  {
+    id: 'editor-kit-deep-src',
+    re: /(?:from\s+|import\s*\(\s*)['"]@crish\/editor-kit\/src\//,
+  },
+  {
+    id: 'block-paper-contract-deep-src',
+    re: /(?:from\s+|import\s*\(\s*)['"]@crish\/block-paper-contract\/src\//,
+  },
+  {
+    id: 'rel-three-pkg-src',
+    re: /(?:from\s+|import\s*\(\s*)['"][^'"]*packages\/(?:block-paper-contract|block-paper|editor-kit)\/src\//,
   },
 ];
 
