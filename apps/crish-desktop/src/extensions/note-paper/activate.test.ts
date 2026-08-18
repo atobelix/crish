@@ -150,4 +150,23 @@ describe('note-paper activate / deactivate（02 F1–F3 / F5 / F12）', () => {
     expect(factorySrc).toMatch(/import\('\.\/NoteLeafHost'\)/);
     expect(factorySrc).not.toMatch(/from\s+['"][^'"]*NotePaperStrictPanel/);
   });
+
+  it('activate.ts 生产源不得静态 import NoteLeafHost（只经 factory 动态 import）', () => {
+    const src = readFileSync(join(DIR, 'activate.ts'), 'utf8');
+    expect(src).toMatch(/createNotePaperView\s*\(/);
+    expect(src).not.toMatch(/\bNoteLeafHost\b/);
+    expect(src).not.toMatch(/from\s+['"][^'"]*NoteLeafHost/);
+    expect(src).not.toMatch(/import\s*\(\s*['"][^'"]*NoteLeafHost/);
+    expect(src).not.toMatch(/@crish\/block-paper(?!-contract)/);
+  });
+
+  it('noteViewFactory 保持 lazy + import(NoteLeafHost)，不得静态 from Host / Strict', () => {
+    const factorySrc = readFileSync(join(DIR, 'noteViewFactory.tsx'), 'utf8');
+    expect(factorySrc).toMatch(
+      /lazy\s*\(\s*\(\s*\)\s*=>\s*import\(\s*['"]\.\/NoteLeafHost['"]\s*\)\s*\)/
+    );
+    expect(factorySrc).not.toMatch(/from\s+['"][^'"]*NoteLeafHost/);
+    expect(factorySrc).not.toMatch(/from\s+['"][^'"]*NotePaperStrict/);
+    expect(factorySrc).not.toMatch(/@crish\/block-paper(?!-contract)/);
+  });
 });

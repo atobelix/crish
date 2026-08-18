@@ -100,6 +100,44 @@ function collectDeepPathHits(files: string[]): string[] {
   return hits;
 }
 
+/** 静态 import / export-from / 侧效 import；不含动态 import() */
+function collectStaticModuleEdges(src: string): string[] {
+  const lines = src.replace(/^\uFEFF/, '').split(/\r?\n/);
+  const edges: string[] = [];
+  let pending: string[] | null = null;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (pending) {
+      pending.push(line);
+      if (/\bfrom\s+['"][^'"]+['"]/.test(line) || /;/.test(line)) {
+        edges.push(pending.join(' '));
+        pending = null;
+      }
+      continue;
+    }
+    if (/^import\s*\(/.test(line)) continue;
+    if (/^(import|export)(\s|\{)/.test(line)) {
+      if (
+        /\bfrom\s+['"][^'"]+['"]/.test(line) ||
+        /^import\s+['"]/.test(line)
+      ) {
+        edges.push(line);
+      } else if (!/;/.test(line)) {
+        pending = [line];
+      }
+    }
+  }
+  return edges;
+}
+
+function edgePullsPaperKernel(edge: string): boolean {
+  return (
+    /\bNotePaperStrict/.test(edge) ||
+    /\bNoteLeafHost\b/.test(edge) ||
+    /@crish\/block-paper(?!-contract)/.test(edge)
+  );
+}
+
 describe('note-paper extension import 边界', () => {
   const files = listSourceFiles(DIR);
 
@@ -192,5 +230,28 @@ describe('note-paper extension import 边界', () => {
     expect(builtin).not.toMatch(/id:\s*['"]note['"]/);
     const main = readFileSync(ACTIVATION_FILES[2], 'utf8');
     expect(main).not.toMatch(/registerView\s*\(/);
+  });
+
+  it('main.tsx 不得出现 NoteLeafHost / NotePaperStrictPanel / @crish/block-paper', () => {
+    const src = readFileSync(join(DESKTOP_SRC, 'main.tsx'), 'utf8');
+    expect(src).not.toMatch(/\bNoteLeafHost\b/);
+    expect(src).not.toMatch(/\bNotePaperStrictPanel\b/);
+    expect(src).not.toMatch(/@crish\/block-paper(?!-contract)/);
+  });
+
+  it('TreeLeafPanel / BinaryTreeWorkspace / App 不得静态 import Strict 或 @crish/block-paper', () => {
+    const shells = [
+      join(DESKTOP_SRC, 'components/binary-tree/TreeLeafPanel.tsx'),
+      join(DESKTOP_SRC, 'components/binary-tree/BinaryTreeWorkspace.tsx'),
+      join(DESKTOP_SRC, 'App.tsx'),
+    ];
+    const hits: string[] = [];
+    for (const file of shells) {
+      const src = readFileSync(file, 'utf8');
+      for (const edge of collectStaticModuleEdges(src)) {
+        if (edgePullsPaperKernel(edge)) hits.push(`${file}: ${edge}`);
+      }
+    }
+    expect(hits).toEqual([]);
   });
 });
