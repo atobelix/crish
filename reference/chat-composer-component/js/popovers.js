@@ -1051,68 +1051,170 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ---- App Top Bar: Unified Prototype-Exact DragController (Green Morphing Drop Indicator & Split) ----
+  // ---- Genuine Binary Tree Tiling Split Workspace Engine (Ported from Conex Prototype) ----
   const topBarNewTabBtn = document.getElementById('topBarNewTabBtn');
   const tabsContainer = document.querySelector('.top-bar-tabs-container');
-  let tabCounter = 1;
 
-  class UnifiedTabDragController {
+  class TreeStore {
     constructor() {
+      this.tree = {
+        type: 'leaf',
+        id: 'pane-main',
+        isMain: true,
+        tabs: [
+          { id: 'tab-1', title: 'adobe illustrator 教程' },
+          { id: 'tab-2', title: '重构 IPC 缓冲通道' }
+        ],
+        activeTabId: 'tab-1'
+      };
+      this._uid = 100;
+      this._subs = new Set();
+    }
+
+    subscribe(fn) { this._subs.add(fn); return () => this._subs.delete(fn); }
+    _emit(type, data) { this._subs.forEach(fn => fn(type, data)); }
+
+    firstLeaf(n = this.tree) {
+      return n.type === 'leaf' ? n : this.firstLeaf(n.left);
+    }
+
+    findLeaf(n, id) {
+      if (!n) return null;
+      if (n.type === 'leaf') return n.id === id ? n : null;
+      return this.findLeaf(n.left, id) || this.findLeaf(n.right, id);
+    }
+
+    nextId() { return 'pane-' + (++this._uid); }
+
+    addTab(pid) {
+      const leaf = this.findLeaf(this.tree, pid);
+      if (!leaf) return;
+      const tab = { id: 'tab-' + Date.now(), title: '新会话 ' + (leaf.tabs.length + 1) };
+      leaf.tabs.push(tab);
+      leaf.activeTabId = tab.id;
+      this._emit('rebuild');
+    }
+
+    removeTab(pid, tid) {
+      this._rmTab(this.tree, pid, tid);
+      this._prune(this.tree);
+      this._emit('rebuild');
+    }
+
+    activateTab(pid, tid) {
+      const leaf = this.findLeaf(this.tree, pid);
+      if (leaf) {
+        leaf.activeTabId = tid;
+        this._emit('rebuild');
+      }
+    }
+
+    executeSplit(srcId, tab, dstId, region, insertIdx = -1) {
+      this._rmTab(this.tree, srcId, tab.id);
+      this._prune(this.tree);
+
+      if (region === 'center' || region === 'strip') {
+        const target = this.findLeaf(this.tree, dstId) || this.firstLeaf();
+        if (target) {
+          const idx = (insertIdx >= 0 && insertIdx <= target.tabs.length) ? insertIdx : target.tabs.length;
+          target.tabs.splice(idx, 0, tab);
+          target.activeTabId = tab.id;
+        }
+      } else {
+        const target = this.findLeaf(this.tree, dstId);
+        if (target) {
+          this._split(this.tree, dstId, tab, region);
+        } else {
+          const fallback = this.firstLeaf();
+          if (fallback) { fallback.tabs.push(tab); fallback.activeTabId = tab.id; }
+        }
+      }
+
+      this._prune(this.tree);
+      this._emit('rebuild');
+    }
+
+    _rmTab(node, pid, tid) {
+      if (!node) return;
+      if (node.type === 'leaf') {
+        if (node.id === pid) {
+          node.tabs = node.tabs.filter(t => t.id !== tid);
+          if (node.tabs.length && node.activeTabId === tid) {
+            node.activeTabId = node.tabs[0].id;
+          }
+        }
+      } else {
+        this._rmTab(node.left, pid, tid);
+        this._rmTab(node.right, pid, tid);
+      }
+    }
+
+    _prune(node) {
+      if (!node || node.type !== 'branch') return;
+      this._prune(node.left);
+      this._prune(node.right);
+      let survivor = null;
+      if (node.left.type === 'leaf' && !node.left.tabs.length) survivor = node.right;
+      if (node.right.type === 'leaf' && !node.right.tabs.length) survivor = node.left;
+      if (!survivor) return;
+      for (const k of Object.keys(node)) delete node[k];
+      Object.assign(node, JSON.parse(JSON.stringify(survivor)));
+    }
+
+    _split(node, targetId, tab, region) {
+      if (!node) return;
+      if (node.type === 'leaf') {
+        if (node.id !== targetId) return;
+        const original = JSON.parse(JSON.stringify(node));
+        const fresh = {
+          type: 'leaf',
+          id: this.nextId(),
+          isMain: false,
+          tabs: [tab],
+          activeTabId: tab.id
+        };
+        const isHorizontal = region === 'left' || region === 'right';
+        const newFirst = region === 'left' || region === 'top';
+        for (const k of Object.keys(node)) delete node[k];
+        node.type = 'branch';
+        node.direction = isHorizontal ? 'horizontal' : 'vertical';
+        node.ratio = 0.5;
+        node.left = newFirst ? fresh : original;
+        node.right = newFirst ? original : fresh;
+      } else {
+        this._split(node.left, targetId, tab, region);
+        this._split(node.right, targetId, tab, region);
+      }
+    }
+  }
+
+  class DragController {
+    constructor(store, rerender) {
+      this.store = store;
+      this.rerender = rerender;
+      this._target = null;
+      this._draggedTab = null;
       this._indicator = null;
+      this._foreignStrip = null;
       this._cachedTabRects = null;
       this._lastStateKey = null;
       this._currentMode = null;
-      this._target = null;
-      this._draggedTab = null;
     }
 
-    _createIndicator() {
-      const d = document.createElement('div');
-      d.className = 'tree-drop-indicator';
-      document.body.appendChild(d);
-      return d;
-    }
-
-    _enterStrip() {
-      if (this._cachedTabRects) return;
-      const tabs = Array.from(tabsContainer.querySelectorAll('.session-tab-item:not(.is-dragging):not(.is-leaving)'));
-      this._cachedTabRects = tabs.map(t => {
-        const r = t.getBoundingClientRect();
-        const tx = new WebKitCSSMatrix(getComputedStyle(t).transform).m41 || 0;
-        return { left: r.left - tx, right: r.right - tx, width: r.width, el: t };
-      });
-    }
-
-    _leaveStrip() {
-      if (tabsContainer) {
-        tabsContainer.querySelectorAll('.session-tab-item').forEach(t => {
-          t.style.transform = '';
-          t.style.transition = '';
-        });
-      }
-      this._cachedTabRects = null;
-      this._lastStateKey = null;
-    }
-
-    _computeInsertIndex(tabRects, cx) {
-      for (let i = 0; i < tabRects.length; i++) {
-        const r = tabRects[i];
-        const leftThird = r.left + r.width / 3;
-        const rightThird = r.left + r.width * 2 / 3;
-        if (cx < leftThird) return i;
-        if (cx < rightThird) return cx < r.left + r.width / 2 ? i : i + 1;
-      }
-      return tabRects.length;
-    }
-
-    start(e, tab) {
+    start(e, srcPaneId, tab, idx, srcStrip) {
       if (e.button !== 0 || e.target.closest('.tab-item-close-btn')) return;
 
       this._draggedTab = tab;
       const sx = e.clientX, sy = e.clientY;
+      const allTabs = Array.from(srcStrip.querySelectorAll('.session-tab-item'));
+      const dragged = allTabs[idx] || e.currentTarget;
+      if (!dragged) return;
+
+      const leaf = this.store.findLeaf(this.store.tree, srcPaneId);
+      if (!leaf) return;
+
       let mode = 'idle';
       let cleaned = false;
-
       document.body.style.userSelect = 'none';
 
       const cleanup = () => {
@@ -1121,11 +1223,8 @@ document.addEventListener('DOMContentLoaded', () => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         document.body.style.userSelect = '';
-        tab.classList.remove('is-dragging');
-        if (this._indicator) {
-          this._indicator.remove();
-          this._indicator = null;
-        }
+        dragged.classList.remove('is-dragging');
+        if (this._indicator) { this._indicator.remove(); this._indicator = null; }
         this._leaveStrip();
         this._target = null;
         this._lastStateKey = null;
@@ -1135,15 +1234,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const onMove = (ev) => {
         const dx = ev.clientX - sx, dy = ev.clientY - sy;
-        if (mode === 'idle' && Math.hypot(dx, dy) < 4) return;
+        if (mode === 'idle' && (Math.abs(dx) + Math.abs(dy)) < 4) return;
 
         if (mode === 'idle') {
           mode = 'drag';
-          tab.classList.add('is-dragging');
+          dragged.classList.add('is-dragging');
         }
 
         if (!this._indicator) this._indicator = this._createIndicator();
-        this._updateTarget(ev.clientX, ev.clientY);
+        this._updateTarget(ev.clientX, ev.clientY, srcStrip);
       };
 
       const onUp = (ev) => {
@@ -1153,57 +1252,80 @@ document.addEventListener('DOMContentLoaded', () => {
         cleanup();
 
         if (!wasDrag || !target) {
-          // Static click -> activate tab
-          tabsContainer.querySelectorAll('.session-tab-item').forEach(t => t.classList.remove('active'));
-          tab.classList.add('active');
+          this.store.activateTab(srcPaneId, tab.id);
           return;
         }
 
-        if (target.region === 'strip') {
-          // Drop inside strip
-          const tabs = Array.from(tabsContainer.querySelectorAll('.session-tab-item:not(.is-dragging):not(.is-leaving)'));
-          const targetTab = tabs[target.insertIdx];
-          if (targetTab && targetTab !== tab) {
-            tabsContainer.insertBefore(tab, targetTab);
-          } else if (!targetTab) {
-            tabsContainer.insertBefore(tab, topBarNewTabBtn);
-          }
-        } else if (target.region === 'right' || target.region === 'left') {
-          // Quadrant split: open side panel
-          if (chatAppLayout) {
-            chatAppLayout.classList.add('has-side-panel');
-            if (window.syncComposerHorizontalAlignment) {
-              setTimeout(window.syncComposerHorizontalAlignment, 50);
-            }
-          }
+        const { paneId, region, insertIdx } = target;
+        if (paneId === srcPaneId && leaf.tabs.length <= 1 && region === 'center') {
+          this.store.activateTab(srcPaneId, tab.id);
+          return;
         }
+
+        this.store.executeSplit(srcPaneId, tab, paneId, region, insertIdx);
       };
 
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     }
 
-    _updateTarget(cx, cy) {
+    _createIndicator() {
+      const d = document.createElement('div');
+      d.className = 'tree-drop-indicator';
+      document.body.appendChild(d);
+      return d;
+    }
+
+    _enterStrip(strip) {
+      if (this._foreignStrip === strip && this._cachedTabRects) return;
+      this._leaveStrip();
+      this._foreignStrip = strip;
+      this._cachedTabRects = Array.from(strip.querySelectorAll('.session-tab-item:not(.is-dragging):not(.is-leaving)')).map(t => {
+        const r = t.getBoundingClientRect();
+        const tx = new WebKitCSSMatrix(getComputedStyle(t).transform).m41 || 0;
+        return { left: r.left - tx, right: r.right - tx, width: r.width, el: t };
+      });
+    }
+
+    _leaveStrip() {
+      if (this._foreignStrip) {
+        this._foreignStrip.querySelectorAll('.session-tab-item').forEach(t => {
+          t.style.transform = '';
+          t.style.transition = '';
+        });
+      }
+      this._foreignStrip = null;
+      this._cachedTabRects = null;
+      this._lastStateKey = null;
+    }
+
+    _updateTarget(cx, cy, srcStrip) {
       const ind = this._indicator;
       if (!ind) return;
 
       const hit = document.elementFromPoint(cx, cy);
-      const isOverStrip = hit ? hit.closest('.top-bar-tabs-container, .app-top-bar') : null;
+      const strip = hit ? hit.closest('.top-bar-tabs-container') : null;
 
-      if (isOverStrip && cy <= 38) {
-        this._handleStripDrop(cx, ind);
-      } else {
-        this._handlePaneDrop(cx, cy, ind);
+      if (this._foreignStrip && this._foreignStrip !== strip) {
+        this._leaveStrip();
       }
+
+      if (strip && (strip.dataset.paneId || strip.closest('.app-top-bar'))) {
+        const paneId = strip.dataset.paneId || 'pane-main';
+        this._handleStripDrop(cx, strip, paneId, ind);
+        return;
+      }
+
+      this._handlePaneDrop(cx, cy, ind);
     }
 
-    _handleStripDrop(cx, ind) {
-      this._enterStrip();
+    _handleStripDrop(cx, strip, paneId, ind) {
+      this._enterStrip(strip);
       const tabRects = this._cachedTabRects || [];
       const insertIdx = this._computeInsertIndex(tabRects, cx);
-      const shiftW = 150; // Standard tab width
+      const shiftW = 150;
 
-      const stateKey = `strip:${insertIdx}`;
+      const stateKey = `strip:${paneId}:${insertIdx}`;
       if (this._lastStateKey !== stateKey) {
         this._lastStateKey = stateKey;
         tabRects.forEach((r, i) => {
@@ -1212,13 +1334,13 @@ document.addEventListener('DOMContentLoaded', () => {
         });
       }
 
-      const tabsRect = tabsContainer.getBoundingClientRect();
+      const scrollRect = strip.getBoundingClientRect();
       const indicatorW = 150;
-      const minX = tabsRect.left;
-      const maxX = tabsRect.right - indicatorW;
+      const minX = scrollRect.left + 2;
+      const maxX = scrollRect.right - indicatorW - 2;
       const lineX = Math.max(minX, Math.min(cx - indicatorW / 2, maxX));
 
-      const title = this._draggedTab ? this._draggedTab.querySelector('.tab-item-title')?.textContent || '会话' : '放置标签';
+      const title = this._draggedTab ? this._draggedTab.title : '放置标签';
       ind.innerHTML = `<span style="font-size:12px;font-weight:500;color:var(--brand-primary,#10b981);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px;max-width:100%;pointer-events:none;">${title}</span>`;
       ind.style.display = 'flex';
       ind.style.alignItems = 'center';
@@ -1233,53 +1355,67 @@ document.addEventListener('DOMContentLoaded', () => {
         ind.style.transition = 'border-radius 100ms ease, opacity 80ms ease';
       }
 
-      this._posInd(ind, lineX, tabsRect.top + (tabsRect.height - 26) / 2, indicatorW, 26);
-      this._target = { region: 'strip', insertIdx };
+      this._posInd(ind, lineX, scrollRect.top + (scrollRect.height - 26) / 2, indicatorW, 26);
+      this._target = { paneId, region: 'center', insertIdx };
     }
 
     _handlePaneDrop(cx, cy, ind) {
       this._leaveStrip();
-      const appBody = document.getElementById('chatAppBody') || document.querySelector('.chat-main-pane');
-      if (!appBody) return;
+      const panes = Array.from(document.querySelectorAll('.tree-leaf-pane, #chatMainPane'));
 
-      const r = appBody.getBoundingClientRect();
-      if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) {
-        this._target = null;
-        if (ind) ind.style.display = 'none';
+      for (const pane of panes) {
+        const r = pane.getBoundingClientRect();
+        if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) continue;
+
+        const rx = (cx - r.left) / r.width;
+        const ry = (cy - r.top) / r.height;
+        let region = 'center';
+        if (rx < 0.25) region = 'left';
+        else if (rx > 0.75) region = 'right';
+        else if (ry < 0.25) region = 'top';
+        else if (ry > 0.75) region = 'bottom';
+
+        const paneId = pane.dataset.paneId || 'pane-main';
+        const stateKey = `pane:${paneId}:${region}`;
+        if (this._lastStateKey === stateKey) return;
+        this._lastStateKey = stateKey;
+
+        this._target = { paneId, region, insertIdx: -1 };
+
+        ind.style.display = 'flex';
+        ind.style.alignItems = 'center';
+        ind.style.justifyContent = 'center';
+        ind.style.borderRadius = '6px';
+        this._currentMode = 'pane';
+        ind.style.transition = 'left 120ms cubic-bezier(.2,0,0,1), top 120ms cubic-bezier(.2,0,0,1), width 120ms cubic-bezier(.2,0,0,1), height 120ms cubic-bezier(.2,0,0,1), border-radius 100ms ease, opacity 80ms ease';
+
+        const title = this._draggedTab ? this._draggedTab.title : '';
+        ind.innerHTML = title ? `<span style="font-size:13px;font-weight:500;color:var(--brand-primary,#10b981);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80%;pointer-events:none;">${title}</span>` : '';
+
+        switch (region) {
+          case 'left':   this._posInd(ind, r.left + 2, r.top + 2, r.width * .5 - 4, r.height - 4); break;
+          case 'right':  this._posInd(ind, r.left + r.width * .5 + 2, r.top + 2, r.width * .5 - 4, r.height - 4); break;
+          case 'top':    this._posInd(ind, r.left + 2, r.top + 2, r.width - 4, r.height * .5 - 4); break;
+          case 'bottom': this._posInd(ind, r.left + 2, r.top + r.height * .5 + 2, r.width - 4, r.height * .5 - 4); break;
+          default:       this._posInd(ind, r.left + 2, r.top + 2, r.width - 4, r.height - 4); break;
+        }
         return;
       }
 
-      const rx = (cx - r.left) / r.width;
-      const ry = (cy - r.top) / r.height;
-      let region = 'center';
-      if (rx < 0.25) region = 'left';
-      else if (rx > 0.75) region = 'right';
-      else if (ry < 0.25) region = 'top';
-      else if (ry > 0.75) region = 'bottom';
+      this._target = null;
+      this._lastStateKey = null;
+      if (ind) ind.style.display = 'none';
+    }
 
-      const stateKey = `pane:${region}`;
-      if (this._lastStateKey === stateKey) return;
-      this._lastStateKey = stateKey;
-
-      this._target = { region };
-
-      ind.style.display = 'flex';
-      ind.style.alignItems = 'center';
-      ind.style.justifyContent = 'center';
-      ind.style.borderRadius = '6px';
-      this._currentMode = 'pane';
-      ind.style.transition = 'left 120ms cubic-bezier(.2,0,0,1), top 120ms cubic-bezier(.2,0,0,1), width 120ms cubic-bezier(.2,0,0,1), height 120ms cubic-bezier(.2,0,0,1), border-radius 100ms ease, opacity 80ms ease';
-
-      const title = this._draggedTab ? this._draggedTab.querySelector('.tab-item-title')?.textContent || '会话' : '';
-      ind.innerHTML = title ? `<span style="font-size:13px;font-weight:500;color:var(--brand-primary,#10b981);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80%;pointer-events:none;">松开以分屏打开：${title}</span>` : '';
-
-      switch (region) {
-        case 'left':   this._posInd(ind, r.left + 4, r.top + 4, r.width * .5 - 8, r.height - 8); break;
-        case 'right':  this._posInd(ind, r.left + r.width * .5 + 4, r.top + 4, r.width * .5 - 8, r.height - 8); break;
-        case 'top':    this._posInd(ind, r.left + 4, r.top + 4, r.width - 8, r.height * .5 - 8); break;
-        case 'bottom': this._posInd(ind, r.left + 4, r.top + r.height * .5 + 4, r.width - 8, r.height * .5 - 8); break;
-        default:       this._posInd(ind, r.left + 4, r.top + 4, r.width - 8, r.height - 8); break;
+    _computeInsertIndex(tabRects, cx) {
+      for (let i = 0; i < tabRects.length; i++) {
+        const r = tabRects[i];
+        const leftThird = r.left + r.width / 3;
+        const rightThird = r.left + r.width * 2 / 3;
+        if (cx < leftThird) return i;
+        if (cx < rightThird) return cx < r.left + r.width / 2 ? i : i + 1;
       }
+      return tabRects.length;
     }
 
     _posInd(el, l, t, w, h) {
@@ -1290,74 +1426,251 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  const tabDragController = new UnifiedTabDragController();
-
-  function setupTabItem(tab) {
-    if (!tab || tab._tabInitialized) return;
-    tab._tabInitialized = true;
-
-    // 1. Click to activate
-    tab.addEventListener('click', (e) => {
-      if (e.target.closest('.tab-item-close-btn')) return;
-      tabsContainer.querySelectorAll('.session-tab-item').forEach(t => t.classList.remove('active'));
-      tab.classList.add('active');
-    });
-
-    // 2. Close with exit animation
-    const closeBtn = tab.querySelector('.tab-item-close-btn');
-    if (closeBtn) {
-      closeBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        tab.classList.add('is-leaving');
-        setTimeout(() => {
-          const wasActive = tab.classList.contains('active');
-          tab.remove();
-          if (wasActive) {
-            const remaining = tabsContainer.querySelectorAll('.session-tab-item:not(.is-leaving)');
-            if (remaining.length > 0) {
-              remaining[remaining.length - 1].classList.add('active');
-            }
-          }
-        }, 180);
-      });
+  // ---- Workspace Split Renderer (Clones real "重构 IPC 缓冲通道" chat stream across splits) ----
+  class WorkspaceSplitRenderer {
+    constructor(store) {
+      this.store = store;
+      this.drag = new DragController(this.store, () => this.render());
+      this.store.subscribe(() => this.render());
+      this.render();
     }
 
-    // 3. Pointer Drag for Reordering & Split Screen
-    tab.addEventListener('mousedown', (e) => {
-      tabDragController.start(e, tab);
-    });
+    render() {
+      const appBody = document.getElementById('chatAppBody');
+      const mainPane = document.getElementById('chatMainPane');
+      if (!appBody || !mainPane) return;
+
+      // 1. Sync Top Bar Tabs Strip
+      if (tabsContainer) {
+        const mainLeaf = this.store.findLeaf(this.store.tree, 'pane-main') || this.store.firstLeaf();
+        tabsContainer.innerHTML = '';
+        if (mainLeaf) {
+          mainLeaf.tabs.forEach((tab, i) => {
+            const tabEl = document.createElement('div');
+            tabEl.className = 'session-tab-item' + (tab.id === mainLeaf.activeTabId ? ' active' : '');
+            tabEl.dataset.id = tab.id;
+            tabEl.title = tab.title;
+            tabEl.innerHTML = `
+              <span class="tab-item-title">${tab.title}</span>
+              <button class="tab-item-close-btn" title="关闭标签页 (Ctrl+W)">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            `;
+
+            tabEl.addEventListener('click', (e) => {
+              if (e.target.closest('.tab-item-close-btn')) {
+                e.stopPropagation();
+                this.store.removeTab(mainLeaf.id, tab.id);
+              } else {
+                this.store.activateTab(mainLeaf.id, tab.id);
+              }
+            });
+
+            tabEl.addEventListener('mousedown', (e) => {
+              this.drag.start(e, mainLeaf.id, tab, i, tabsContainer);
+            });
+
+            tabsContainer.appendChild(tabEl);
+          });
+        }
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'top-bar-new-tab-btn';
+        addBtn.title = '新建会话标签页 (Ctrl+T)';
+        addBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+        addBtn.addEventListener('click', () => {
+          if (mainLeaf) this.store.addTab(mainLeaf.id);
+        });
+        tabsContainer.appendChild(addBtn);
+      }
+
+      // 2. Pure Single Pane Mode vs Split Mode
+      let splitRoot = document.getElementById('treeSplitRoot');
+      if (this.store.tree.type === 'leaf') {
+        if (splitRoot) splitRoot.remove();
+        if (mainPane.parentElement !== appBody) {
+          const sidebarResizer = document.getElementById('sidebarResizer');
+          if (sidebarResizer && sidebarResizer.nextSibling !== mainPane) {
+            appBody.insertBefore(mainPane, sidebarResizer.nextSibling);
+          } else {
+            appBody.appendChild(mainPane);
+          }
+        }
+        mainPane.style.display = 'flex';
+        mainPane.style.flex = '1 1 0';
+        return;
+      }
+
+      // 3. Multi-Pane Split Tree DOM
+      if (!splitRoot) {
+        splitRoot = document.createElement('div');
+        splitRoot.id = 'treeSplitRoot';
+        splitRoot.className = 'tree-workspace-root';
+        const sidebarResizer = document.getElementById('sidebarResizer');
+        if (sidebarResizer) {
+          appBody.insertBefore(splitRoot, sidebarResizer.nextSibling);
+        } else {
+          appBody.appendChild(splitRoot);
+        }
+      }
+
+      splitRoot.innerHTML = '';
+      splitRoot.appendChild(this._buildNode(this.store.tree, mainPane));
+
+      if (window.syncComposerHorizontalAlignment) {
+        setTimeout(window.syncComposerHorizontalAlignment, 50);
+      }
+    }
+
+    _buildNode(node, mainPane) {
+      if (node.type === 'branch') {
+        const branchEl = document.createElement('div');
+        branchEl.className = 'tree-branch ' + node.direction;
+
+        const leftEl = this._buildNode(node.left, mainPane);
+        const rightEl = this._buildNode(node.right, mainPane);
+
+        leftEl.style.flex = String(node.ratio || 0.5);
+        rightEl.style.flex = String(1 - (node.ratio || 0.5));
+
+        const resizer = document.createElement('div');
+        resizer.className = 'tree-split-resizer';
+        resizer.title = '拖拽调整分屏比例，双击重置';
+        this._bindResizer(resizer, branchEl, node, leftEl, rightEl);
+
+        branchEl.appendChild(leftEl);
+        branchEl.appendChild(resizer);
+        branchEl.appendChild(rightEl);
+        return branchEl;
+      }
+
+      // Leaf Node
+      const leafEl = document.createElement('div');
+      leafEl.className = 'tree-leaf-pane';
+      leafEl.dataset.paneId = node.id;
+
+      if (node.id === 'pane-main') {
+        leafEl.appendChild(mainPane);
+        mainPane.style.display = 'flex';
+        mainPane.style.flex = '1 1 0';
+      } else {
+        // Cloned split leaf pane
+        const hdr = document.createElement('div');
+        hdr.className = 'tree-pane-header';
+
+        const strip = document.createElement('div');
+        strip.className = 'top-bar-tabs-container';
+        strip.dataset.paneId = node.id;
+
+        node.tabs.forEach((tab, i) => {
+          const tabEl = document.createElement('div');
+          tabEl.className = 'session-tab-item' + (tab.id === node.activeTabId ? ' active' : '');
+          tabEl.dataset.id = tab.id;
+          tabEl.title = tab.title;
+          tabEl.innerHTML = `
+            <span class="tab-item-title">${tab.title}</span>
+            <button class="tab-item-close-btn" title="关闭标签页">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          `;
+
+          tabEl.addEventListener('click', (e) => {
+            if (e.target.closest('.tab-item-close-btn')) {
+              e.stopPropagation();
+              this.store.removeTab(node.id, tab.id);
+            } else {
+              this.store.activateTab(node.id, tab.id);
+            }
+          });
+
+          tabEl.addEventListener('mousedown', (e) => {
+            this.drag.start(e, node.id, tab, i, strip);
+          });
+
+          strip.appendChild(tabEl);
+        });
+
+        const addBtn = document.createElement('button');
+        addBtn.className = 'top-bar-new-tab-btn';
+        addBtn.title = '新建分屏会话';
+        addBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+        addBtn.addEventListener('click', () => this.store.addTab(node.id));
+        strip.appendChild(addBtn);
+
+        hdr.appendChild(strip);
+        leafEl.appendChild(hdr);
+
+        // Cloned Conversation Flow ("重构 IPC 缓冲通道")
+        const content = document.createElement('div');
+        content.className = 'tree-pane-content';
+        const streamClone = document.getElementById('chatStreamContainer')?.cloneNode(true);
+        if (streamClone) {
+          streamClone.id = 'streamClone-' + node.id;
+          content.appendChild(streamClone);
+        }
+        leafEl.appendChild(content);
+      }
+
+      return leafEl;
+    }
+
+    _bindResizer(handle, branchEl, node, leftEl, rightEl) {
+      handle.addEventListener('pointerdown', (e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        handle.setPointerCapture(e.pointerId);
+        handle.classList.add('active');
+        document.body.style.userSelect = 'none';
+
+        const isH = node.direction === 'horizontal';
+        document.body.style.cursor = isH ? 'col-resize' : 'row-resize';
+        const rect = branchEl.getBoundingClientRect();
+
+        const onMove = (ev) => {
+          let raw = isH
+            ? (ev.clientX - rect.left) / rect.width
+            : (ev.clientY - rect.top) / rect.height;
+
+          raw = Math.max(0.12, Math.min(0.88, raw));
+          leftEl.style.flex = String(raw);
+          rightEl.style.flex = String(1 - raw);
+          node.ratio = raw;
+
+          if (window.syncComposerHorizontalAlignment) {
+            window.syncComposerHorizontalAlignment();
+          }
+        };
+
+        const onUp = (ev) => {
+          handle.releasePointerCapture(ev.pointerId);
+          handle.classList.remove('active');
+          document.body.style.userSelect = '';
+          document.body.style.cursor = '';
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', onUp);
+        };
+
+        window.addEventListener('pointermove', onMove);
+        window.addEventListener('pointerup', onUp);
+      });
+
+      handle.addEventListener('dblclick', () => {
+        node.ratio = 0.5;
+        leftEl.style.flex = '0.5';
+        rightEl.style.flex = '0.5';
+        if (window.syncComposerHorizontalAlignment) {
+          setTimeout(window.syncComposerHorizontalAlignment, 50);
+        }
+      });
+    }
   }
 
-  // Initialize existing tabs
-  if (tabsContainer) {
-    tabsContainer.querySelectorAll('.session-tab-item').forEach(setupTabItem);
-  }
+  // Initialize Split Workspace Engine
+  const treeStore = new TreeStore();
+  const workspaceSplitEngine = new WorkspaceSplitRenderer(treeStore);
+  window.workspaceSplitEngine = workspaceSplitEngine;
 
-  // Create new tab with entry animation
-  if (topBarNewTabBtn && tabsContainer) {
-    topBarNewTabBtn.addEventListener('click', () => {
-      tabCounter++;
-      const tab = document.createElement('div');
-      tab.className = 'session-tab-item active is-entering';
-      tab.title = `新对话 ${tabCounter}`;
-      tab.innerHTML = `
-        <span class="tab-item-title">新对话 ${tabCounter}</span>
-        <button class="tab-item-close-btn" title="关闭标签页 (Ctrl+W)">
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      `;
-
-      // Deactivate siblings
-      tabsContainer.querySelectorAll('.session-tab-item').forEach(t => t.classList.remove('active'));
-      tabsContainer.insertBefore(tab, topBarNewTabBtn);
-
-      setupTabItem(tab);
-
-      setTimeout(() => {
-        tab.classList.remove('is-entering');
-      }, 220);
-    });
-  }
 
   // Window Controls Feedback
   const winMin = document.getElementById('winMinimizeBtn');
