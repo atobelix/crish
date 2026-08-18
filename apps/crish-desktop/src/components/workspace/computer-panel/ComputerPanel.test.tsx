@@ -34,8 +34,18 @@ const eventMock = vi.hoisted(() => ({
   handlers: new Map<string, TauriEventHandler>(),
 }));
 
+const toastMock = vi.hoisted(() => ({
+  show: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('@tauri-apps/api/event', () => ({
   listen: eventMock.listen,
+}));
+
+vi.mock('../../../services/toast/ToastContext', () => ({
+  toast: toastMock,
+  useToast: () => toastMock,
 }));
 
 function emitComputerEvent(payload: unknown): void {
@@ -53,9 +63,10 @@ function setupDefaultStatus() {
 }
 
 function renderPanel() {
-  const onShowToast = vi.fn();
-  render(<ComputerPanel onShowToast={onShowToast} />);
-  return onShowToast;
+  toastMock.show.mockClear();
+  toastMock.error.mockClear();
+  render(<ComputerPanel />);
+  return toastMock.show;
 }
 
 const enableBtn = () => screen.getByRole('button', { name: '启用电脑操作' });

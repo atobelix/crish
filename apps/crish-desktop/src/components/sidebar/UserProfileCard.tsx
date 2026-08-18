@@ -1,22 +1,20 @@
-import React, { useRef } from 'react';
+﻿import React, { useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './Sidebar.module.css';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import type {} from '../../hooks/useToastQueue';
 
 export interface UserProfileCardProps {
-  onShowToast?: ShowToastFn;
   username?: string;
   workspaceName?: string;
 }
 
 export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
-  ({ onShowToast, username = 'orange', workspaceName = 'Conex Workspace' }) => {
+  ({ username = 'orange', workspaceName = 'Conex Workspace' }) => {
     const triggerRef = useRef<HTMLButtonElement>(null);
 
     return (
       <SettingsQuickMenu
-        onShowToast={onShowToast}
         renderTrigger={({ open, triggerProps }) => (
           <button
             ref={triggerRef}

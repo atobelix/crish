@@ -1,4 +1,4 @@
-/**
+﻿/**
  * subagent 域三 handler 行为测试（I5-M7：C8 事件契约信封对齐）。
  *
  * Rust 契约（crates/conex-types/src/events.rs + contracts/engine-events.json）：
@@ -344,7 +344,7 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
 
   beforeEach(() => {
     sid = `sess-sub-global-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    useLayoutStore.getState().createSession({
+    useSessionStore.getState().createSession({
       title: 'sub-global-test',
       id: sid,
       activate: false,
@@ -353,7 +353,7 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
   afterEach(() => {
     for (const s of created.splice(0)) {
-      useLayoutStore.getState().deleteSession(s);
+      useSessionStore.getState().deleteSession(s);
     }
   });
 
@@ -625,3 +625,5 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
     expect(tc!.output).toBe('协作未完成');
   });
 });
+
+import { useSessionStore } from '@/store/sessionStore';

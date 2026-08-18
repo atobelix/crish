@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 外观：主题、密度、字体与阅读相关选项；改完即生效，仅失败提示。
  */
@@ -5,7 +6,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Settings } from '../../api/clientApi';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
-import { useLayoutStore } from '../../store/storeAccess';
+
 import { useSettingsField } from '../../store/storeAccess';
 import {
   parseShellChromeMode,
@@ -35,7 +36,7 @@ import {
 } from '../../app/hydrateWorkspaceShell';
 
 type Props = {
-  onShowToast: (msg: string) => void;
+  _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
 type UiSize = 'small' | 'medium' | 'large';
@@ -79,7 +80,8 @@ function normalizeCodeIndent(raw: unknown): string {
   return '  ';
 }
 
-export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
   const setAppSettings = useSettingsField((s) => s.setAppSettings);
   const [activeTheme, setActiveTheme] = useState<'default' | 'dark'>(() =>
@@ -188,21 +190,21 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
           }
         } catch (applyErr) {
           if (!cancelled) {
-            onShowToast('外观应用失败：' + String(applyErr));
+            showToast('外观应用失败：' + String(applyErr));
           }
         }
       } catch (err) {
         if (!cancelled) {
           const msg = '读取失败：' + String(err);
           setLoadError(msg);
-          onShowToast(msg);
+          showToast(msg);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [cwd, onShowToast, loadTick]);
+  }, [cwd, loadTick]);
 
   /** @returns 是否写入成功；失败已 toast，不抛给点击处理器 */
   const save = useCallback(
@@ -224,13 +226,13 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
         // 成功静默：不 toast「已保存」
         return true;
       } catch (err) {
-        onShowToast('保存失败：' + String(err));
+        showToast('保存失败：' + String(err));
         return false;
       } finally {
         setSaving(false);
       }
     },
-    [cwd, onShowToast, setAppSettings, settings]
+    [cwd, setAppSettings, settings]
   );
 
   const applyDensity = useCallback(
@@ -248,10 +250,10 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
         setUiSize(next);
         document.documentElement.setAttribute('data-ui-size', next);
       } catch (err) {
-        onShowToast('密度保存失败：' + String(err));
+        showToast('密度保存失败：' + String(err));
       }
     },
-    [onShowToast, setUiSize, uiSize]
+    [setUiSize, uiSize]
   );
 
   const applyChrome = useCallback(
@@ -266,10 +268,10 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
         document.documentElement.setAttribute('data-shell-chrome', next);
         document.body.setAttribute('data-shell-chrome', next);
       } catch (err) {
-        onShowToast('界面形态保存失败：' + String(err));
+        showToast('界面形态保存失败：' + String(err));
       }
     },
-    [onShowToast, setShellChromeMode, shellChromeMode]
+    [setShellChromeMode, shellChromeMode]
   );
 
   const allValues = React.useMemo<Record<string, unknown>>(() => {
@@ -500,7 +502,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
       });
     if ('restoreLastWorkspace' in updates) {
       setRestoreLastWorkspace(Boolean(updates.restoreLastWorkspace));
-      onShowToast(
+      showToast(
         updates.restoreLastWorkspace
           ? '已开启：下次启动将尝试恢复工作台布局'
           : '已关闭：下次启动为干净新对话'
@@ -526,7 +528,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
         <SettingsSection title="字体">
           <SettingsCard>
             <FontSettingsSection
-              onShowToast={onShowToast}
+              
               onPersistSettings={async (fonts) => {
                 const ok = await save({ fonts });
                 if (!ok) {
@@ -573,7 +575,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ onShowToast }) => {
                         await setFontPreferences({ ...DEFAULT_FONT_PREFS });
                         applyDensity('medium');
                       } catch (err) {
-                        onShowToast('重置失败：' + String(err));
+                        showToast('重置失败：' + String(err));
                       }
                     })();
                   }}

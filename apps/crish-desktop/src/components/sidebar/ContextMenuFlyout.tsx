@@ -7,7 +7,6 @@ import React, {
 } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import { Menu } from '../ui';
-import { calculateMenuPosition } from '../ui/Menu/position';
 import styles from './SidebarContextMenus.module.css';
 
 type FlyKey = 'sort' | 'group' | 'filter' | null;
@@ -64,21 +63,7 @@ const FlyoutRow: React.FC<{
     if (!open || !localRowElRef.current) return;
     const rowRect = localRowElRef.current.getBoundingClientRect();
     const flyoutWidth = localFlyoutElRef.current?.offsetWidth || 148;
-    const flyoutHeight = localFlyoutElRef.current?.offsetHeight || 100;
-    const pos = calculateMenuPosition({
-      anchor: {
-        x: rowRect.right,
-        y: rowRect.top,
-        width: rowRect.width,
-        height: rowRect.height,
-      },
-      menu: { width: flyoutWidth, height: flyoutHeight },
-      preferredSide: 'right',
-      preferredAlign: 'start',
-    });
-    setFlipLeft(
-      pos.isFlippedX || rowRect.right + flyoutWidth > window.innerWidth - 8
-    );
+    setFlipLeft(rowRect.right + flyoutWidth > window.innerWidth - 8);
   }, [open]);
 
   return (

@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import {
@@ -21,7 +22,6 @@ import { Button, Tooltip } from '../ui';
 import styles from './FontSettingsSection.module.css';
 
 interface Props {
-  onShowToast?: (msg: string) => void;
   onPersistSettings?: (fonts: FontPreferences) => void | Promise<void>;
 }
 
@@ -59,7 +59,8 @@ function isDefaultPrefs(p: FontPreferences): boolean {
   );
 }
 
-export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSettings }) => {
+export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
+  const { showToast: _showToast } = useToast();
   const [prefs, setPrefs] = useState<FontPreferences>(() => {
     try {
       return readStoredFonts();
@@ -96,12 +97,12 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
           }
         }
       } catch (e) {
-        onShowToast?.(`字体应用失败：${String(e)}`);
+        showToast(`字体应用失败：${String(e)}`);
       } finally {
         setBusy(false);
       }
     },
-    [onPersistSettings, onShowToast, prefs],
+    [onPersistSettings, prefs],
   );
 
   const scanLocal = useCallback(async () => {
@@ -111,11 +112,11 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
       const names = list.map((f) => f.family);
       setLocalFonts(names);
     } catch (e) {
-      onShowToast?.(`扫描失败：${String(e)}`);
+      showToast(`扫描失败：${String(e)}`);
     } finally {
       setScanning(false);
     }
-  }, [onShowToast]);
+  }, [showToast]);
 
   const uiOptions: FontSelectOption[] = useMemo(() => {
     const base: FontSelectOption[] = uiFontOptions().map((o) => ({
@@ -180,7 +181,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onShowToast, onPersistSet
     if (parsed.ok === false) {
       const reason = parsed.reason;
       if (reason === '请输入字体名称' || reason.includes('非法')) {
-        onShowToast?.(reason);
+        showToast(reason);
       }
       return;
     }

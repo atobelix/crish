@@ -17,7 +17,7 @@
  * - 域隔离（chat vs tool）由 types.isSameDomain 另行处理
  */
 
-import { isChatDomain } from './types';
+import { viewRegistry } from '../../services/view-registry';
 
 export interface Rect {
   left: number;
@@ -82,7 +82,7 @@ export function isUnitScopedDropAllowed(
   targetOwnerSessionId: string | undefined
 ): boolean {
   // chat 源：不在此做 session 隔离
-  if (isChatDomain(srcPanelId)) return true;
+  if (viewRegistry.isPrimary(srcPanelId)) return true;
 
   const srcSid = (srcOwnerSessionId || '').trim();
   if (!srcSid) return true;

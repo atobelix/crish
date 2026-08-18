@@ -49,7 +49,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: var(--z-usage-modal);
+  z-index: var(--z-modal);
 }
 
 .modalBox {
@@ -394,7 +394,7 @@
   color: var(--text-secondary);
 }
 
-/* 模型级缓存列（T-48）：命中率/读取/节省，无缓存数据时不渲染 */
+/*        T-48     /  /             */
 .modelCacheMeta {
   flex: 0 0 auto;
   font-size: var(--font-size-xxs);

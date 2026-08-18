@@ -13,13 +13,7 @@
  */
 import React, { useState } from 'react';
 import { describe, expect, it, beforeEach } from 'vitest';
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  act,
-} from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import {
   BlockChromeModel,
   SlashMenuModel,
@@ -35,7 +29,6 @@ import {
   type BlockChromeDomHost,
 } from '@crish/block-paper';
 import { BlockChromeDomMount } from './BlockChromeDomMount';
-import { NotePaperPanel } from './NotePaperPanel';
 import { NotePaperStrictPanel } from './NotePaperStrictPanel';
 import {
   createFixtureHydrateTransport,
@@ -198,65 +191,6 @@ describe('BlockChromeDomMount · 独立挂载契约', () => {
     expect(host!.isSlashHostVisible()).toBe(false);
     expect(slashEl.getAttribute('data-slash-catalog')).toBe('react');
     expect(slashEl.querySelectorAll(`[${BP_SLASH_ITEM}]`).length).toBe(0);
-  });
-});
-
-describe('NotePaperPanel · Skeleton chrome DomHost 挂载', () => {
-  it('w3f_desktop_skeleton_mounts_dom_host_and_syncs_handle_on_hover', () => {
-    let host: BlockChromeDomHost | null = null;
-    const chrome = new BlockChromeModel();
-    render(
-      <NotePaperPanel
-        blockCount={2}
-        chrome={chrome}
-        onChromeDomHost={(h) => {
-          host = h;
-        }}
-      />
-    );
-
-    const chromeMount = screen.getByTestId('note-paper-chrome-dom');
-    expect(chromeMount).toHaveAttribute('data-bp-chrome-mount', '1');
-    expect(chromeMount).toHaveAttribute('data-chrome-block-count', '2');
-    expect(chromeMount.querySelector(`[${BP_CHROME_ROOT}]`)).toBeTruthy();
-    expect(host).not.toBeNull();
-    expect(host!.getHandleVisibilityAttr(ID_A)).toBe('hidden');
-
-    // 内容行 hover → chrome model → DomHost sync（chromeTick）
-    const row = screen.getByTestId(`note-block-${ID_A}`);
-    fireEvent.mouseEnter(row);
-    expect(row).toHaveAttribute('data-handle', 'hover');
-    expect(host!.getHandleVisibilityAttr(ID_A)).toBe('hover');
-
-    fireEvent.mouseLeave(row);
-    expect(row).toHaveAttribute('data-handle', 'hidden');
-    expect(host!.getHandleVisibilityAttr(ID_A)).toBe('hidden');
-  });
-
-  it('w3f_desktop_skeleton_drop_line_via_host_api', () => {
-    let host: BlockChromeDomHost | null = null;
-    render(
-      <NotePaperPanel
-        blockCount={3}
-        onChromeDomHost={(h) => {
-          host = h;
-        }}
-      />
-    );
-    expect(host).not.toBeNull();
-
-    act(() => {
-      host!.setDropTarget(ID_B, 'after');
-    });
-    expect(host!.isDropLineVisible()).toBe(true);
-    expect(host!.getDropLineElement().getAttribute(BP_DROP_SIDE)).toBe('after');
-    expect(host!.getDropLineElement().getAttribute(BP_DROP_TARGET)).toBe(ID_B);
-
-    // 诚实：真 Pointer 全链未接
-    expect(screen.getByTestId('note-paper-chrome-dom')).toHaveAttribute(
-      'data-chrome-pointer-chain',
-      'deferred'
-    );
   });
 });
 

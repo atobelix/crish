@@ -215,7 +215,7 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
         } else if (action === 'kill') {
           await killSubagent(parentSessionId, live.id, 'ui-kill');
           getCompositionRoot()
-            .layout.getState()
+            .session.getState()
             .patchSessionAgent(parentSessionId, live.id, {
               status: 'stopped',
               summary: '已关闭',

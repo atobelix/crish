@@ -1,6 +1,6 @@
-/* ui/Select 私有形态样式（PE-05 T05.1.6）
- * 触发器对齐 .settings-select-trigger / .settings-field-input 语义；
- * 全部引用 tokens.css 变量，无裸 hex/rgba */
+/* ui/Select        PE-05 T05.1.6 
+ *       .settings-select-trigger / .settings-field-input    
+ *      tokens.css       hex/rgba */
 
 .selectWrap {
   display: flex;

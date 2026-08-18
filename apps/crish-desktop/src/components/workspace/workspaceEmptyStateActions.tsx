@@ -10,10 +10,6 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import {
-  W5B_SKELETON_PACKAGE_ID,
-  W5B_SKELETON_TRACK,
-} from '../note-paper/notePaperSkeletonTrack';
-import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
 } from '../note-paper/notePaperStrictTrack';
@@ -60,9 +56,9 @@ export function WorkspaceEmptyStateActions({
       variant={strictIsPrimary ? 'secondary' : 'primary'}
       size="sm"
       data-testid="open-note-paper-preview"
-      data-package-id={W5B_SKELETON_PACKAGE_ID}
-      data-track={W5B_SKELETON_TRACK}
-      aria-label="打开笔记纸面预览壳（W5-B-S Skeleton）"
+      data-package-id={W5B_STRICT_PACKAGE_ID}
+      data-track={W5B_STRICT_TRACK}
+      aria-label="打开笔记纸面预览壳"
       onClick={(e) => {
         e.stopPropagation();
         onOpenSkeleton();

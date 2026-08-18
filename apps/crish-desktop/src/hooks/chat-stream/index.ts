@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useSessionStore } from '../../store/sessionStore';
 import { useTerminalStore } from '../../store/terminalStore';
 import { getTransport } from '../../api/transport';
 import type {
@@ -143,7 +143,7 @@ export function useChatStream(
 
   const wsId = options.wsId;
   const setActiveDiffSource = useTerminalStore((s) => s.setActiveDiffSource);
-  const upsertSessionAgent = useLayoutStore((s) => s.upsertSessionAgent);
+  const upsertSessionAgent = useSessionStore((s) => s.upsertSessionAgent);
 
   const [runNotice, setRunNotice] = useState<RunNotice | null>(null);
   const runNoticeControllerRef = useRef<RunNoticeController | null>(null);

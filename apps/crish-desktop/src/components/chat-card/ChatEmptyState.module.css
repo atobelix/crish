@@ -26,7 +26,7 @@
   padding: calc(var(--space-6) + var(--space-1)) 0 var(--space-3);
   margin-bottom: 0;
   width: 100%;
-  max-width: none; /* 宽度由外层 .chatCol 约束，与 composer 对齐 */
+  max-width: none; /*       .chatCol      composer    */
   gap: var(--space-4);
   text-align: center;
 }
@@ -81,7 +81,7 @@
   gap: var(--space-2_5);
   text-align: center;
   line-height: var(--line-height-tight);
-  /* 中英文同一主字体，避免字重/字面宽不一致的缝合感 */
+  /*              /           */
   font-synthesis: none;
 }
 
@@ -132,7 +132,7 @@
   display: none; /* Hide for cleaner look globally, user found it too noisy */
 }
 
-/* pill action — soft control, no elevation */
+/* pill action   soft control, no elevation */
 .chatEmptyAction {
   display: inline-flex;
   align-items: center;
@@ -141,7 +141,7 @@
   margin: 0 0 var(--space-1);
   padding: var(--space-2) var(--space-5);
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: var(--control-soft-bg);
   color: var(--text-primary);
   font-size: var(--font-size-base);
@@ -191,9 +191,9 @@
   justify-content: flex-start;
   text-align: left;
   padding: var(--space-3) calc(var(--space-4) + var(--space-0_5));
-  background: transparent !important;
-  border: 1px solid var(--border-color) !important;
-  border-radius: var(--radius-2xl) !important;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2xl);
   cursor: pointer;
   color: var(--text-primary);
   font-size: var(--font-size-sm);
@@ -201,7 +201,7 @@
   font-family: var(--font-sans);
   width: 100%;
   min-width: unset;
-  box-shadow: none !important;
+  box-shadow: none;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   min-height: var(--control-height-sm);
   line-height: var(--line-height-ui);
@@ -214,12 +214,12 @@
   justify-content: flex-start;
   text-align: left;
   padding: var(--space-3) calc(var(--space-4) + var(--space-0_5));
-  background: transparent !important;
-  border: 1px solid var(--border-color) !important;
-  border-radius: var(--radius-2xl) !important;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-2xl);
   font-size: var(--font-size-sm);
   color: var(--text-primary);
-  box-shadow: none !important;
+  box-shadow: none;
   width: 100%;
   box-sizing: border-box;
   transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
@@ -243,10 +243,10 @@
 
 .quickPromptCard:hover,
 .sessionEmpty .quickPromptCard:hover {
-  background: var(--control-soft-bg-hover) !important;
+  background: var(--control-soft-bg-hover);
   border-color: var(--border-color);
   color: var(--text-primary);
-  /* 濞戞挶鍎抽敓?translateY 濞戞挸锕ｇ粭鍛崉閸愭彃袟 */
+  /*       ?translateY              */
 }
 
 .quickPromptCard:focus-visible {

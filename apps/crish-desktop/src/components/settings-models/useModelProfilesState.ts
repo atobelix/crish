@@ -1,3 +1,4 @@
+import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addModelToProfile,
@@ -67,7 +68,6 @@ function modelMetaRevision(profileId: string, model: string): string {
 }
 
 export function useModelProfilesState(
-  onShowToast?: ((ok: boolean, msg: string) => void) | ((msg: string) => void)
 ) {
   const [profiles, setProfiles] = useState<ProviderProfile[]>(() =>
     loadProfiles()
@@ -143,16 +143,10 @@ export function useModelProfilesState(
   );
 
   const notify = useCallback(
-    (ok: boolean, msg: string) => {
-      if (onShowToast) {
-        if (onShowToast.length === 1) {
-          (onShowToast as (msg: string) => void)(msg);
-        } else {
-          (onShowToast as (ok: boolean, msg: string) => void)(ok, msg);
-        }
-      }
+    (_ok: boolean, msg: string) => {
+      toast.show(msg);
     },
-    [onShowToast]
+    []
   );
 
   const refresh = useCallback(() => {

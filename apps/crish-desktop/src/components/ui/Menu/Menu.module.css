@@ -1,9 +1,9 @@
-/* ui/Menu 私有形态样式（PE-05 T05.1.4）
- * 收敛自全局 .tabs-add-menu/.tabs-add-item（shell-polish.css）；
- * 全部引用 tokens.css / z-index.css 变量，无裸 hex/rgba */
+/* ui/Menu        PE-05 T05.1.4 
+ *       .tabs-add-menu/.tabs-add-item shell-polish.css  
+ *      tokens.css / z-index.css       hex/rgba */
 
 .menuContent {
-  z-index: var(--z-dropdown-menu);
+  z-index: var(--z-dropdown, 100);
   outline: none;
   pointer-events: auto;
   min-width: 180px;
@@ -17,14 +17,14 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  padding: var(--dropdown-padding);
-  border-radius: var(--dropdown-radius);
+  padding: var(--dropdown-padding, var(--space-1, 4px));
+  border-radius: var(--dropdown-radius, var(--radius-lg, 8px));
   border: 1px solid var(--hairline-strong);
   background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
-  gap: var(--dropdown-gap);
+  gap: var(--dropdown-gap, 2px);
 }
 
 .menuTitle {
@@ -38,7 +38,7 @@
 .menuList {
   display: flex;
   flex-direction: column;
-  gap: var(--dropdown-gap);
+  gap: var(--dropdown-gap, 2px);
 }
 
 .menuItem {
@@ -48,10 +48,10 @@
   border: none;
   background: transparent;
   text-align: left;
-  padding: var(--item-padding);
-  border-radius: var(--item-radius);
+  padding: var(--item-padding, 6px 8px);
+  border-radius: var(--item-radius, var(--radius-md, 6px));
   font-family: inherit;
-  font-size: var(--item-font-size);
+  font-size: var(--item-font-size, var(--font-size-sm, 13px));
   color: var(--text-primary);
   cursor: pointer;
   transition: background var(--transition-micro);
@@ -98,3 +98,14 @@
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
+
+/* 0.5px          */
+.separator {
+  height: 1px;
+  background-color: var(--border-subtle);
+  transform: scaleY(0.5);
+  margin: var(--space-1, 4px) 0;
+  border: none;
+  padding: 0;
+}
+

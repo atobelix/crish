@@ -1,15 +1,6 @@
 /**
- * 虚拟滚动高度管理器：基于消息 ID 的渐进精确高度追踪。
- *
- * 替代原来纯按数字下标存储的方案，改为以 string messageId 为键存储高度，
- * 通过 syncOrder(ids) 维护 index→id 的映射。这使得窗口平移（expand older）时
- * 已测量的高度能跨 syncOrder 调用保留，不需要 clear。
- *
- * 设计：
- * - estimated: Pretext 等纯文本预测量（setEstimated）
- * - actual: ResizeObserver DOM 渲染后回写（setActual — 覆盖 estimate）
- * - fallbackHeight=120 兜底（无任何数据时）
- * - generation: clear() 时递增，用于检测过时的异步 setActual 调用
+ * 基于树状数组 (Fenwick Tree / Binary Indexed Tree) 的 O(log N) 动态高度虚拟滚动管理器
+ * 文件路径：apps/crish-desktop/src/api/VirtualScrollManager.ts
  */
 
 import type { SessionMessage } from '../store/types';
@@ -28,6 +19,7 @@ export interface VsmDebugInfo {
 }
 
 const FALLBACK_HEIGHT = 120;
+export const MESSAGE_ESTIMATED_ROW_HEIGHT = FALLBACK_HEIGHT;
 
 /**
  * 结构化多步骤消息高度估算模型（误差收敛至 ≤15%）
@@ -71,15 +63,19 @@ export class VirtualScrollManager {
   >();
   /** 当前可见窗口的消息 ID 顺序 */
   private order: string[] = [];
+  /** messageId -> order index 高速 O(1) 映射 */
+  private idToIndexMap = new Map<string, number>();
   private fallbackHeight: number;
   /**
    * 代际编号：每次 clear 时（非空才）递增。
    * 调用方在异步测量前捕获 generation，回写时若不一致则抛弃（过时写入）。
    */
   private generation = 0;
-  /** 下标→偏移量的惰性缓存 */
-  private offsetsCache: number[] | null = null;
-  private dirty = false;
+
+  /** Fenwick Tree 树状数组：1-indexed 存储前缀和增量 (Float64Array) */
+  private bitTree: Float64Array = new Float64Array(0);
+  /** 缓存每个元素的当前高度值，便于快速求差量 delta */
+  private currentHeights: Float64Array = new Float64Array(0);
 
   constructor(fallbackHeight?: number) {
     this.fallbackHeight =
@@ -91,11 +87,14 @@ export class VirtualScrollManager {
   }
 
   /**
-   * 更新当前可见窗口的消息 ID 顺序。
+   * 更新当前可见窗口的消息 ID 顺序并初始化 BIT 树 (O(N))。
    * - 高度数据跨调用保留（已知 ID 的 estimated/actual 不丢失）
-   * - 完全相同的顺序跳过（防止不必要的偏移重建）
+   * - 完全相同的顺序跳过（防止不必要的重建）
    */
   syncOrder(ids: string[]): void {
+    if (!ids || !Array.isArray(ids)) {
+      ids = [];
+    }
     if (
       ids.length === this.order.length &&
       ids.every((id, i) => id === this.order[i])
@@ -103,7 +102,18 @@ export class VirtualScrollManager {
       return;
     }
     this.order = ids.slice();
-    this.markDirty();
+    const n = this.order.length;
+    this.idToIndexMap.clear();
+    this.currentHeights = new Float64Array(n);
+    this.bitTree = new Float64Array(n + 1);
+
+    for (let i = 0; i < n; i++) {
+      const id = this.order[i]!;
+      this.idToIndexMap.set(id, i);
+      const h = this.getHeight(id);
+      this.currentHeights[i] = h;
+      this.bitAdd(i + 1, h);
+    }
   }
 
   /** 按 messageId 获取高度（actual > estimated > fallback） */
@@ -116,6 +126,9 @@ export class VirtualScrollManager {
   /** 按当前 order 下标获取高度 */
   getHeightAt(index: number): number {
     const safeIndex = normalizeNonNegInt(index);
+    if (safeIndex < this.currentHeights.length) {
+      return this.currentHeights[safeIndex]!;
+    }
     const id = this.order[safeIndex];
     return id !== undefined ? this.getHeight(id) : this.fallbackHeight;
   }
@@ -153,30 +166,40 @@ export class VirtualScrollManager {
   }
 
   /**
-   * 回写实际 DOM 高度（ResizeObserver 渲染后调用）。
+   * 回写实际 DOM 高度（ResizeObserver 渲染后调用）：单点更新 O(log N)。
    * @param callerGeneration 调用方捕获的 generation；若与当前不一致（过时）则忽略。
    * @returns 是否实际变更（同值跳过时 false；T4.1 R-04 断言口径）
    */
   setActual(id: string, height: number, callerGeneration?: number): boolean {
-    if (callerGeneration !== undefined && callerGeneration !== this.generation)
+    if (callerGeneration !== undefined && callerGeneration !== this.generation) {
       return false;
-    if (!id) return false;
-    if (!Number.isFinite(height) || height <= 0) return false;
+    }
+    if (!id || typeof height !== 'number' || !Number.isFinite(height) || height <= 0) {
+      return false;
+    }
     const safeHeight = height;
     const entry = this.heightsById.get(id);
     if (entry) {
-      // T4.1（R-04）：同值跳过——actual/estimated 均等于新值时不再
-      // markDirty（完成态高度稳定的行零 offset 缓存重建）
+      // T4.1（R-04）：同值跳过——actual/estimated 均等于新值时 0 更新短路
       if (entry.actual === safeHeight && entry.estimated === safeHeight) {
         return false;
       }
       entry.actual = safeHeight;
-      // 同步 estimated，作为「最后一次实测高度」的缓存（invalidateActual 会重置）
+      // 同步 estimated，作为「最后一次实测高度」的缓存（invalidateActual 会保留）
       entry.estimated = safeHeight;
     } else {
       this.heightsById.set(id, { estimated: safeHeight, actual: safeHeight });
     }
-    this.markDirty();
+
+    const idx = this.idToIndexMap.get(id);
+    if (idx !== undefined && idx >= 0 && idx < this.currentHeights.length) {
+      const oldH = this.currentHeights[idx]!;
+      const delta = safeHeight - oldH;
+      if (Math.abs(delta) > 0.0001) {
+        this.currentHeights[idx] = safeHeight;
+        this.bitAdd(idx + 1, delta); // O(log N) 树状数组局部增量传播
+      }
+    }
     return true;
   }
 
@@ -198,20 +221,32 @@ export class VirtualScrollManager {
 
   /** 设置预测量高度（actual 已存在时跳过） */
   setEstimated(id: string, height: number): void {
-    if (!id) return;
-    if (!Number.isFinite(height) || height <= 0) return;
+    if (!id || typeof height !== 'number' || !Number.isFinite(height) || height <= 0) {
+      return;
+    }
+    const safeHeight = height;
     const entry = this.heightsById.get(id);
     if (entry) {
       if (entry.actual != null) return; // actual 已定，不覆盖
-      entry.estimated = height;
+      if (entry.estimated === safeHeight) return;
+      entry.estimated = safeHeight;
     } else {
-      this.heightsById.set(id, { estimated: height, actual: null });
+      this.heightsById.set(id, { estimated: safeHeight, actual: null });
     }
-    this.markDirty();
+
+    const idx = this.idToIndexMap.get(id);
+    if (idx !== undefined && idx >= 0 && idx < this.currentHeights.length) {
+      const oldH = this.currentHeights[idx]!;
+      const delta = safeHeight - oldH;
+      if (Math.abs(delta) > 0.0001) {
+        this.currentHeights[idx] = safeHeight;
+        this.bitAdd(idx + 1, delta);
+      }
+    }
   }
 
   /**
-   * 关键修复：作废 actual 时，保持 entry.estimated 为上一次测量值或已设值，
+   * 作废 actual 时，保持 entry.estimated 为上一次测量值或已设值，
    * 绝对禁止无条件重置为 fallbackHeight (120px)！
    * 以便 ResizeObserver 重新测量期间平滑过渡，杜绝 120px 阶跃暴跌与视口抖动。
    */
@@ -222,18 +257,17 @@ export class VirtualScrollManager {
       entry.actual = null;
       entry.estimated =
         lastKnownHeight > 0 ? lastKnownHeight : this.fallbackHeight;
-      this.markDirty();
+      // 保持当前高度与 BIT 树不变，平滑过渡防止视口抖动
     }
   }
 
   /**
    * 预置精确高度映射（批量回灌快照元数据）。
    * 在撤销或历史还原时，原子回灌实测高度，保持 estimated 处于实测高度，
-   * 使 offsetsCache 与视口位置立即精准生效，杜绝 120px 粗估暴跌。
+   * 使 Fenwick 树与视口位置立即精准生效，杜绝 120px 粗估暴跌。
    */
   hydrateHeightMap(heightMap: Readonly<Record<string, number>>): void {
     if (!heightMap) return;
-    let touched = false;
     for (const [id, h] of Object.entries(heightMap)) {
       if (!id || typeof h !== 'number' || !Number.isFinite(h) || h <= 0)
         continue;
@@ -241,21 +275,25 @@ export class VirtualScrollManager {
       const entry = this.heightsById.get(id);
       if (!entry) {
         this.heightsById.set(id, { estimated: safeHeight, actual: null });
-        touched = true;
       } else if (entry.actual == null && entry.estimated !== safeHeight) {
         entry.estimated = safeHeight;
-        touched = true;
       } else if (
         entry.actual != null &&
         (entry.actual !== safeHeight || entry.estimated !== safeHeight)
       ) {
         entry.actual = safeHeight;
         entry.estimated = safeHeight;
-        touched = true;
       }
-    }
-    if (touched) {
-      this.markDirty();
+
+      const idx = this.idToIndexMap.get(id);
+      if (idx !== undefined && idx >= 0 && idx < this.currentHeights.length) {
+        const oldH = this.currentHeights[idx]!;
+        const delta = safeHeight - oldH;
+        if (Math.abs(delta) > 0.0001) {
+          this.currentHeights[idx] = safeHeight;
+          this.bitAdd(idx + 1, delta);
+        }
+      }
     }
   }
 
@@ -269,24 +307,28 @@ export class VirtualScrollManager {
     }
     this.heightsById.clear();
     this.order = [];
-    this.offsetsCache = null;
-    this.dirty = false;
+    this.idToIndexMap.clear();
+    this.bitTree = new Float64Array(0);
+    this.currentHeights = new Float64Array(0);
   }
 
-  /** 从 0 到 count-1 的总高度 */
-  getTotalHeight(count: number): number {
-    const safeCount = normalizeNonNegInt(count);
-    if (safeCount === 0) return 0;
-    this.ensureOffsets(safeCount + 1);
-    return this.offsetsCache![safeCount] ?? this.sumHeights(0, safeCount);
+  /**
+   * 获取 0 到 count-1 项的总高度 (O(log N))
+   */
+  getTotalHeight(count?: number): number {
+    const totalCount = count !== undefined ? normalizeNonNegInt(count) : this.order.length;
+    if (totalCount <= 0 || this.order.length === 0) return 0;
+    return this.bitQuery(Math.min(totalCount, this.order.length));
   }
 
-  /** index 之前的总偏移（不含 index 自身高度） */
+  /**
+   * 获取 0 到 index-1 项的前缀和偏移量 (O(log N))
+   */
   getOffset(index: number): number {
     const safeIndex = normalizeNonNegInt(index);
-    if (safeIndex === 0) return 0;
-    this.ensureOffsets(safeIndex + 1);
-    return this.offsetsCache![safeIndex] ?? this.sumHeights(0, safeIndex);
+    if (safeIndex <= 0 || this.order.length === 0) return 0;
+    const safeIdx = Math.min(safeIndex, this.order.length);
+    return this.bitQuery(safeIdx);
   }
 
   /**
@@ -303,7 +345,7 @@ export class VirtualScrollManager {
     overscan: number
   ): VisibleRange {
     const count = normalizeNonNegInt(itemCount);
-    if (count === 0) {
+    if (count === 0 || this.order.length === 0) {
       return {
         startIndex: 0,
         endIndex: 0,
@@ -331,63 +373,42 @@ export class VirtualScrollManager {
   }
 
   /**
-   * 二分查找：给定 scrollTop 偏移，找到对应的行下标。
-   * O(log n) 在 offsetsCache 上。
+   * 二分查找：给定 scrollTop 偏移，定位对应的起始行下标 (O(log^2 N))
    */
   findIndexAtOffset(offset: number): number {
     const safeOffset = normalizeNonNegFloat(offset);
-    if (safeOffset <= 0) return 0;
-    const count = this.order.length;
-    if (count === 0) return 0;
-    this.ensureOffsets(count + 1);
-    const offsets = this.offsetsCache!;
+    if (safeOffset <= 0 || this.order.length === 0) return 0;
     let lo = 0;
-    let hi = Math.min(offsets.length - 1, count);
-    while (lo < hi) {
+    let hi = this.order.length - 1;
+    let result = 0;
+
+    while (lo <= hi) {
       const mid = (lo + hi) >>> 1;
-      if (offsets[mid]! <= safeOffset) {
+      const currentOffset = this.getOffset(mid);
+      if (currentOffset <= safeOffset) {
+        result = mid;
         lo = mid + 1;
       } else {
-        hi = mid;
+        hi = mid - 1;
       }
     }
-    return Math.max(0, lo - 1);
+    return result;
   }
 
-  // ── 内部 ──────────────────────────────────────────────────────────────
-
-  private markDirty(): void {
-    this.dirty = true;
-    this.offsetsCache = null;
-  }
-
-  private ensureOffsets(upTo: number): void {
-    if (
-      !this.dirty &&
-      this.offsetsCache != null &&
-      this.offsetsCache.length >= upTo
-    )
-      return;
-    this.rebuildOffsets(upTo);
-  }
-
-  private rebuildOffsets(upTo: number): void {
-    const len = Math.max(upTo, this.order.length + 1);
-    const cache = new Array<number>(len);
-    cache[0] = 0;
-    for (let i = 1; i < len; i++) {
-      cache[i] = cache[i - 1]! + this.getHeightAt(i - 1);
+  // ── Fenwick Tree 树状数组核心原语 ─────────────────────────────────────
+  private bitAdd(idx: number, delta: number): void {
+    const len = this.bitTree.length;
+    for (let i = idx; i < len; i += i & -i) {
+      this.bitTree[i] = (this.bitTree[i] ?? 0) + delta;
     }
-    this.offsetsCache = cache;
-    this.dirty = false;
   }
 
-  private sumHeights(from: number, to: number): number {
-    let total = 0;
-    for (let i = from; i < to; i++) {
-      total += this.getHeightAt(i);
+  private bitQuery(idx: number): number {
+    let sum = 0;
+    for (let i = idx; i > 0; i -= i & -i) {
+      sum += this.bitTree[i] ?? 0;
     }
-    return total;
+    return sum;
   }
 }
 

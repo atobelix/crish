@@ -1,0 +1,137 @@
+/**
+ * AppTopBar styles   36px Seamless Single-layer Header
+ */
+
+.topBar {
+  position: relative;
+  height: var(--header-height, 36px);
+  min-height: var(--header-height, 36px);
+  max-height: var(--header-height, 36px);
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  background: var(--bg-secondary);
+  border-bottom: 0.5px solid var(--border-color);
+  box-sizing: border-box;
+  overflow: hidden;
+  user-select: none;
+  -webkit-app-region: drag;
+  z-index: var(--z-sidebar, 100);
+}
+
+.rail {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  -webkit-app-region: drag;
+}
+
+.sidebarBtn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color var(--transition-fast, 150ms ease-out),
+              color var(--transition-fast, 150ms ease-out);
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+
+.sidebarBtn:hover {
+  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
+  color: var(--text-primary);
+}
+
+.main {
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  -webkit-app-region: drag;
+}
+
+.spacer {
+  flex: 1 1 auto;
+  min-width: 32px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-left: var(--space-1, 4px);
+  -webkit-app-region: drag;
+}
+
+.addBtn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color var(--transition-fast, 150ms ease-out),
+              color var(--transition-fast, 150ms ease-out);
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+
+.addBtn:hover {
+  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
+  color: var(--text-primary);
+}
+
+.trail {
+  flex: 0 0 auto;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  padding-right: var(--space-1, 4px);
+  padding-left: var(--space-1, 4px);
+  background: var(--bg-secondary);
+  -webkit-app-region: no-drag;
+}
+
+.helpBtn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color var(--transition-fast, 150ms ease-out),
+              color var(--transition-fast, 150ms ease-out);
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+
+.helpBtn:hover {
+  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
+  color: var(--text-primary);
+}

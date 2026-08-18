@@ -44,7 +44,7 @@
   margin-top: var(--space-1);
 }
 
-/* 闂傚牄鍨洪敓?鐎规悶鍎扮紞鏃堝礌閸濆嫬鏁剁€规挸鐭夌槐鐗堢▔瀹ュ懎绐楁繝濞愩値娼掗柛娆欑秶缁辨繈宕ｉ娑欏婵犲绱曢崺妤冪棯瑜旈悵顔芥償?*/
+/*                  */
 .appErrorBoundary.appErrorBoundaryCompact {
   min-height: 0;
   height: 100%;
@@ -68,7 +68,7 @@
   font-size: var(--font-size-xs, 12px);
 }
 
-/* Minimal variant: 閻炴稑鑻崬鎾及閸撗佷粵闁挎稑濂旂粭澶庛亹閸楃偞鎯欓柛娑栧妼濞茶法鏁崘銊ф拱 */
+/* Minimal                  */
 .appErrorMinimal {
   display: inline-flex;
   align-items: center;
@@ -97,7 +97,7 @@
   color: var(--text-tertiary);
 }
 
-/* 闁告瑯鍨辨慨宀勫矗閻樼粯鏅╅悹鍥跺灥椤曟盯骞嗛崪鍐閿?fullscreen閿?*/
+/*           */
 .appErrorDetails {
   margin-top: var(--space-2);
   border-top: 1px solid var(--border-subtle);
@@ -130,7 +130,7 @@
   color: var(--text-secondary);
 }
 
-/* Compact 閿?闂佹彃绉甸弻濠囧礉閻樼儤绁?闂佸墽鍋撶敮鎾冀瀹勬壆纭€ */
+/* Compact        */
 .appErrorReloadLink {
   background: none;
   border: none;

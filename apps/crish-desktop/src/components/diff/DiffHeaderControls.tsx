@@ -5,7 +5,9 @@ import {
   GitCommit,
   List,
   Search,
+  Copy,
   Trash2,
+  Sparkles,
 } from 'lucide-react';
 import { Button, Select, Tooltip } from '../ui';
 import styles from './DiffCard.module.css';
@@ -26,13 +28,14 @@ export interface DiffHeaderControlsProps {
   commitPanelOpen: boolean;
   fileListLength: number;
   current: FileDiff | null;
-  hasAiTurns: boolean;
+  hasAiTurns?: boolean;
   onViewModeChange: () => void;
   onSearchOpenChange: (open: boolean) => void;
   onSourceModeChange: (mode: 'session' | 'git') => void;
   onTurnSelect: (key: string) => void;
   onBranchChange: (branch: string) => void;
   onCommitPanelToggle: () => void;
+  onCopyPatch?: () => void;
   onClear: () => void;
 }
 
@@ -58,144 +61,164 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
     onTurnSelect,
     onBranchChange,
     onCommitPanelToggle,
+    onCopyPatch,
     onClear,
   }) {
     return (
       <div
-        className={styles.toolbarContainer}
+        className={styles.compactHeader}
         role="toolbar"
-        aria-label="变更工具栏"
+        aria-label="紧凑变更工具栏"
       >
-        <div className={styles.toolbarRow1}>
-          <div className={styles.sourceSeg} role="group" aria-label="变更来源">
+        {/* 左侧：来源切换胶囊 (AI 改动 / Git) */}
+        <div className={styles.leftGroup}>
+          <div
+            className={styles.sourceSegment}
+            role="group"
+            aria-label="变更来源"
+          >
             <Tooltip content="当前对话中 AI 产生的改动">
               <button
                 type="button"
-                className={`${styles.sourceBtn} ${sourceMode === 'session' ? styles.isOn : ''}`}
+                className={`${styles.sourceTab} ${sourceMode === 'session' ? styles.activeTab : ''}`}
                 aria-pressed={sourceMode === 'session'}
                 disabled={applyBusy}
                 onClick={() => onSourceModeChange('session')}
               >
-                AI 改动
+                <Sparkles size={12} className={styles.tabIcon} aria-hidden />
+                <span>AI</span>
               </button>
             </Tooltip>
             <Tooltip content="工作区 Git 未提交变更">
               <button
                 type="button"
-                className={`${styles.sourceBtn} ${sourceMode === 'git' ? styles.isOn : ''}`}
+                className={`${styles.sourceTab} ${sourceMode === 'git' ? styles.activeTab : ''}`}
                 aria-pressed={sourceMode === 'git'}
                 disabled={gitLoading || applyBusy}
                 onClick={() => onSourceModeChange('git')}
               >
-                {gitLoading ? 'Git…' : 'Git'}
+                <GitBranch size={12} className={styles.tabIcon} aria-hidden />
+                <span>{gitLoading ? 'Git…' : 'Git'}</span>
               </button>
             </Tooltip>
           </div>
 
-          <div className={styles.toolbarActions1}>
-            <Tooltip
-              content={
-                diffViewMode === 'unified'
-                  ? '切换至分栏视图 (Split View)'
-                  : '切换至合并视图 (Unified View)'
+          <div className={styles.headerDivider} aria-hidden />
+
+          {/* 中部：回合或分支下拉选择器 */}
+          <div className={styles.contextSelector}>
+            {sourceMode === 'session' ? (
+              <Select
+                className={styles.inlineSelect}
+                disabled={busy}
+                value={turnKey}
+                options={turnOptions.map((o) => ({
+                  id: o.value,
+                  label: o.label,
+                  ...(o.hint !== undefined ? { hint: o.hint } : {}),
+                }))}
+                onChange={onTurnSelect}
+              />
+            ) : sourceMode === 'git' ? (
+              <div className={styles.branchWrap}>
+                <Select
+                  className={styles.inlineSelect}
+                  disabled={busy}
+                  value={currentBranch}
+                  options={branches.map((b) => ({ id: b, label: b }))}
+                  onChange={(val) => onBranchChange(val)}
+                />
+              </div>
+            ) : (
+              <span className={styles.idleHint}>载入变更源开始对比</span>
+            )}
+          </div>
+        </div>
+
+        {/* 右侧：视图与操作按钮组 */}
+        <div className={styles.rightActions}>
+          <Tooltip
+            content={
+              diffViewMode === 'unified'
+                ? '切换至分栏视图 (Split View)'
+                : '切换至合并视图 (Unified View)'
+            }
+          >
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              className={styles.actionBtn}
+              aria-label={
+                diffViewMode === 'unified' ? '切换至分栏视图' : '切换至合并视图'
               }
+              onClick={onViewModeChange}
+              icon={
+                diffViewMode === 'unified' ? (
+                  <Columns2 size={13} aria-hidden />
+                ) : (
+                  <List size={13} aria-hidden />
+                )
+              }
+            />
+          </Tooltip>
+
+          {onCopyPatch && current && (
+            <Tooltip content="复制当前文件为标准 Git Patch">
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                className={styles.actionBtn}
+                aria-label="复制 Patch"
+                onClick={onCopyPatch}
+                icon={<Copy size={13} aria-hidden />}
+              />
+            </Tooltip>
+          )}
+
+          {sourceMode === 'git' && fileListLength > 0 && (
+            <Tooltip
+              content={commitPanelOpen ? '隐藏提交面板' : '显示提交面板'}
             >
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                className={styles.iconBtn}
-                aria-label={
-                  diffViewMode === 'unified'
-                    ? '切换至分栏视图'
-                    : '切换至合并视图'
-                }
-                onClick={onViewModeChange}
-                icon={
-                  diffViewMode === 'unified' ? (
-                    <Columns2 size={14} aria-hidden />
-                  ) : (
-                    <List size={14} aria-hidden />
-                  )
-                }
+                size="xs"
+                className={`${styles.actionBtn} ${commitPanelOpen ? styles.isActive : ''}`}
+                aria-label="切换提交面板"
+                onClick={onCommitPanelToggle}
+                icon={<GitCommit size={13} aria-hidden />}
               />
             </Tooltip>
+          )}
 
-            {sourceMode === 'git' && fileListLength > 0 && (
-              <Tooltip
-                content={commitPanelOpen ? '隐藏提交面板' : '显示提交面板'}
-              >
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={`${styles.iconBtn} ${commitPanelOpen ? styles.isOn : ''}`}
-                  aria-label="切换提交面板"
-                  onClick={onCommitPanelToggle}
-                  icon={<GitCommit size={14} aria-hidden />}
-                />
-              </Tooltip>
-            )}
+          <Tooltip content="搜索差异行">
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              className={`${styles.actionBtn} ${searchOpen || searchActive ? styles.isActive : ''}`}
+              aria-label="搜索差异行"
+              aria-pressed={searchOpen || searchActive}
+              onClick={() => onSearchOpenChange(!searchOpen)}
+              icon={<Search size={13} aria-hidden />}
+            />
+          </Tooltip>
 
-            <Tooltip content="筛选行">
+          {fileListLength > 0 && (
+            <Tooltip content="清空当前审查列表">
               <Button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className={`${styles.iconBtn} ${searchOpen || searchActive ? styles.isOn : ''}`}
-                aria-label="筛选 diff 行"
-                aria-pressed={searchOpen || searchActive}
-                disabled={!current}
-                onClick={() => onSearchOpenChange(!searchOpen)}
-                icon={<Search size={14} aria-hidden />}
+                variant="danger"
+                size="xs"
+                className={styles.actionBtn}
+                aria-label="清空变更列表"
+                disabled={applyBusy}
+                onClick={onClear}
+                icon={<Trash2 size={13} aria-hidden />}
               />
             </Tooltip>
-
-            {fileListLength > 0 ? (
-              <Tooltip content="清空列表">
-                <Button
-                  type="button"
-                  variant="danger"
-                  size="sm"
-                  className={styles.iconBtn}
-                  aria-label="清空变更列表"
-                  disabled={applyBusy}
-                  onClick={onClear}
-                  icon={<Trash2 size={14} aria-hidden />}
-                />
-              </Tooltip>
-            ) : null}
-          </div>
-        </div>
-
-        <div className={styles.toolbarRow2}>
-          {sourceMode === 'session' ? (
-            <Select
-              className={styles.turnSettingsSelect}
-              disabled={busy}
-              value={turnKey}
-              options={turnOptions.map((o) => ({
-                id: o.value,
-                label: o.label,
-                ...(o.hint !== undefined ? { hint: o.hint } : {}),
-              }))}
-              onChange={onTurnSelect}
-            />
-          ) : sourceMode === 'git' ? (
-            <div className={styles.branchSelectWrap}>
-              <GitBranch size={13} className={styles.branchIcon} aria-hidden />
-              <Select
-                className={styles.turnSettingsSelect}
-                disabled={busy}
-                value={currentBranch}
-                options={branches.map((b) => ({ id: b, label: b }))}
-                onChange={(val) => onBranchChange(val)}
-              />
-            </div>
-          ) : (
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-              载入变更源开始对比
-            </div>
           )}
         </div>
       </div>

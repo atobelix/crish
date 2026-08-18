@@ -14,7 +14,11 @@
  * @see docs/multi-agent-repair/reports/R3-T11-归类表.md
  */
 
-import { useLayoutStore } from './layoutStore';
+import { create } from 'zustand';
+import { immer } from 'zustand/middleware/immer';
+import { withDevtools } from './middleware/withDevtools';
+
+export const DEFAULT_SETTINGS_TAB: SettingsTabType = 'profile';
 import { usePermissionStore, type PermissionStore } from './permissionStore';
 import type { SettingsTabType } from './types';
 import type { PermissionMode } from '../api/permissionModes';
@@ -66,11 +70,32 @@ export const selectSetSettingsActiveTab = (
   s: Pick<SettingsUiActions, 'setSettingsActiveTab'>,
 ) => s.setSettingsActiveTab;
 
-export const useSettingsUiStore = useLayoutStore;
-
 export const selectSetPermissionMode = (
   s: Pick<PermissionStore, 'setPermissionMode'>,
 ) => s.setPermissionMode;
+
+export const useSettingsUiStore = create<SettingsUiFacade>()(
+  withDevtools(
+    immer((set) => ({
+      showSettingsOverlay: false,
+      settingsActiveTab: DEFAULT_SETTINGS_TAB,
+      setShowSettingsOverlay: (show: boolean) =>
+        set((state) => {
+          state.showSettingsOverlay = show;
+        }),
+      setSettingsActiveTab: (tab: SettingsTabType) =>
+        set((state) => {
+          state.settingsActiveTab = tab;
+        }),
+      openSettings: (tab?: SettingsTabType) =>
+        set((state) => {
+          state.showSettingsOverlay = true;
+          if (tab) state.settingsActiveTab = tab;
+        }),
+    })),
+    'CrishSettingsUiStore'
+  )
+);
 
 export const selectSetPlanModeEnabled = (
   s: Pick<PermissionStore, 'setPlanModeEnabled'>,

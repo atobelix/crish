@@ -1,22 +1,22 @@
-import {
+﻿import {
   useState,
   useEffect,
   useRef,
   lazy,
   Suspense,
-  useMemo,
 } from 'react';
 import { useLayoutStore } from './store/layoutStore';
 import { useSettingsStore } from './store/settingsStore';
-import { isDemoModeFast, isProductShellFast, isTreeWorkspaceFast } from './createSsrGlobals';
+import { useSettingsUiStore } from './store/settingsUiStore';
+import { useWorkspaceStore } from './store/workspaceStore';
+import { isDemoModeFast, isProductShellFast } from './createSsrGlobals';
 import {
   PlatformAdaptationCtx,
   usePlatformAdaptation,
 } from '@crish/shared-utils/browser';
 import { createDebounced } from './api/debouncedValue';
-import { onUiEvent } from './api/uiEvents';
+import { } from './api/uiEvents';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
-import { useToastQueue } from './hooks/useToastQueue';
 import { shouldShowFirstRunWizard } from './components/firstRunWizardLib';
 import styles from './App.module.css';
 
@@ -28,7 +28,6 @@ import { useWorkspaceShellStore } from './store/workspace-shell';
 
 // ── 关键路径组件：同步导入，与 App 同 chunk ──
 import { Sidebar } from './components/sidebar/Sidebar';
-import { Workspace } from './components/workspace/Workspace';
 import { AppTopBar } from './components/AppTopBar';
 import { SessionTabDragProvider } from './components/shell/SessionTabDragContext';
 
@@ -75,30 +74,18 @@ function App() {
     autoApplyRender: true,
     autoStartEngine: true,
   });
-  const workspaceIdsStr = useLayoutStore((s) =>
-    s.workspaces.map((w) => w.id).join(',')
-  );
-  const workspaceIds = useMemo(
-    () => (workspaceIdsStr ? workspaceIdsStr.split(',') : []),
-    [workspaceIdsStr]
-  );
-  const activeWorkspaceId = useLayoutStore(
+  const activeWorkspaceId = useWorkspaceStore(
     (s) => s.workspaces[s.activeWorkspaceIndex]?.id || 'ws-0'
   );
-  const uiSize = useLayoutStore((s) => s.uiSize);
-  const shellChromeMode = useLayoutStore((s) => s.shellChromeMode);
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
-  const showSettingsOverlay = useLayoutStore((s) => s.showSettingsOverlay);
-  const setShowSettingsOverlay = useLayoutStore(
+  const showSettingsOverlay = useSettingsUiStore((s) => s.showSettingsOverlay);
+  const setShowSettingsOverlay = useSettingsUiStore(
     (s) => s.setShowSettingsOverlay
   );
-  const settingsActiveTab = useLayoutStore((s) => s.settingsActiveTab);
+  const settingsActiveTab = useSettingsUiStore((s) => s.settingsActiveTab);
   const setAppSettings = useSettingsStore((s) => s.setAppSettings);
 
-
-
-  const { toasts, showToast: handleShowToast, dismissToast } = useToastQueue();
   const [showCheatsheet, setShowCheatsheet] = useState(false);
   const [showTelemetry, setShowTelemetry] = useState(false);
   const [sessionSearchInput, setSessionSearchInput] = useState('');
@@ -113,7 +100,6 @@ function App() {
   }, [sessionSearchInput]);
 
   const productShell = isProductShellFast();
-  const useTreeWorkspace = isTreeWorkspaceFast();
   const shellReady = useWorkspaceShellStore((s) => s.shellReady);
   const [showFirstRun, setShowFirstRun] = useState(
     () => !isDemoModeFast() && shouldShowFirstRunWizard()
@@ -128,13 +114,10 @@ function App() {
   useAppBootstrap({
     setAppSettings,
     productShell,
-    uiSize,
-    shellChromeMode,
   });
 
   // Global keybindings
   useAppShortcuts({
-    handleShowToast,
     showCheatsheet,
     setShowCheatsheet,
     showSettingsOverlay,
@@ -144,28 +127,34 @@ function App() {
     setSidebarCollapsed,
   });
 
-  // ToastBus 死通道迁移（2026-08-09）：pickWorkspaceFolder 原生对话框不可用时
-  // 经 uiEvents 事件桥转发，此处挂到 useToastQueue 宿主弹可见 toast
+  // 快捷键 / 全局手势触发向导（测试 / 诊断入口）
   useEffect(() => {
-    return onUiEvent('workspace-picker-unavailable', () => {
-      handleShowToast('无法打开系统文件夹选择器，请使用应用内项目列表');
-    });
-  }, [handleShowToast]);
-
-  const handleHoverTriggerEnter = () => {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    setIsHoveredExpanded(true);
-  };
+    const handler = () => {
+      setShowFirstRun(true);
+    };
+    window.addEventListener('crish-open-first-run', handler);
+    return () => {
+      window.removeEventListener('crish-open-first-run', handler);
+    };
+  }, []);
 
   const handleSidebarHoverEnter = () => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setIsHoveredExpanded(true);
   };
 
   const handleSidebarHoverLeave = () => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => {
       setIsHoveredExpanded(false);
-    }, 300);
+    }, 200);
+  };
+
+  const handleHoverTriggerEnter = () => {
+    if (sidebarCollapsed) {
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+      setIsHoveredExpanded(true);
+    }
   };
 
   useEffect(() => {
@@ -175,21 +164,12 @@ function App() {
   }, []);
 
   const appModeClass = isDemoModeFast() ? 'app-mode-demo' : 'app-mode-normal';
-  const shellDensity =
-    uiSize === 'small'
-      ? 'compact'
-      : uiSize === 'large'
-        ? 'comfortable'
-        : 'default';
 
   return (
     <PlatformAdaptationCtx.Provider value={platformAdaptation}>
       <SessionTabDragProvider>
       <div
         className={`app-container ${appModeClass}`}
-        data-ui-size={uiSize}
-        data-density={shellDensity}
-        data-shell-chrome={shellChromeMode || 'classic'}
         data-engine-ready={engineReady ? 'true' : 'false'}
         data-first-run={showFirstRun ? 'true' : 'false'}
         data-perf-level={
@@ -230,8 +210,6 @@ function App() {
             />
           )}
 
-
-
           <div
             id="crish-sidebar"
             className={`sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''} ${sidebarCollapsed && isHoveredExpanded ? 'hoverExpanded' : ''}`}
@@ -256,7 +234,6 @@ function App() {
             <AppErrorBoundary compact title="侧栏出错">
               <Suspense fallback={<SkeletonFallback height="100%" />}>
                 <Sidebar
-                  onShowToast={handleShowToast}
                   hoverExpanded={sidebarCollapsed && isHoveredExpanded}
                   onHoverLeave={handleSidebarHoverLeave}
                   onHoverEnter={handleSidebarHoverEnter}
@@ -269,7 +246,7 @@ function App() {
           </div>
 
           <div
-            className={`workspaces-column${shellChromeMode === 'inset' ? ' workspaces-column--inset' : ''}`}
+            className="workspaces-column"
             role="region"
             aria-label="工作台内容"
           >
@@ -288,17 +265,7 @@ function App() {
                     <SkeletonFallback height={400} />
                   ) : (
                     <Suspense fallback={<SkeletonFallback height={400} />}>
-                      {useTreeWorkspace ? (
-                        <BinaryTreeWorkspace onShowToast={handleShowToast} />
-                      ) : (
-                        workspaceIds.map((id) => (
-                          <Workspace
-                            key={id}
-                            wsId={id}
-                            onShowToast={handleShowToast}
-                          />
-                        ))
-                      )}
+                      <BinaryTreeWorkspace />
                     </Suspense>
                   )}
                 </AppErrorBoundary>
@@ -310,8 +277,6 @@ function App() {
         <AppGlobalDialogs
           showFirstRun={showFirstRun}
           setShowFirstRun={setShowFirstRun}
-          toasts={toasts}
-          dismissToast={dismissToast}
           showTelemetry={showTelemetry}
           setShowTelemetry={setShowTelemetry}
           showCheatsheet={showCheatsheet}
@@ -320,7 +285,6 @@ function App() {
           setShowSettingsOverlay={setShowSettingsOverlay}
           activeWorkspaceId={activeWorkspaceId}
           settingsActiveTab={settingsActiveTab}
-          handleShowToast={handleShowToast}
         />
 
         <DevHealthOverlayMount />

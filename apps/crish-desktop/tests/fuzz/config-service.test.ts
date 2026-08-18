@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { configService } from '../../src/services/ConfigService';
-import { registerConfigSchemas } from '../../src/services/config-schema';
 import { z } from 'zod';
 
 describe('ConfigService Fuzz', () => {
   beforeAll(() => {
-    registerConfigSchemas();
+    configService.define('shortcuts.overrides', z.record(z.string(), z.string()), {}, 'localStorage');
+    configService.define('ui.size', z.enum(['small', 'medium', 'large']), 'medium');
+    configService.define('ui.sidebarCollapsed', z.boolean(), false);
   });
 
   beforeEach(() => {

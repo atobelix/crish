@@ -10,7 +10,7 @@
   border-radius: 0;
 }
 
-/* 濠㈠墎顥愰、鎴︽晬濮橆厼顫戦柛娆戝█閹?+ 闁稿绮嶉?濞撴皜鍕焿闁告柣鍔嬬紞鏃堟晬閸喎顫戦柛娆戝У閳ь兛妞掔弧鍐嚄閽樺绮?/ 濞撴皜鍕焿 only闁?*/
+/*                    ?+     ?                                ?/       only ?*/
 .inlineAgentHeadRow {
   display: flex;
   align-items: stretch;
@@ -141,7 +141,7 @@
 .inlineAgentBadge {
   font-size: var(--font-size-xxs);
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   background: transparent;
   border: 1px solid var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
@@ -283,7 +283,7 @@
   text-align: center;
 }
 
-/* D8 §3.7.1 失败态卡片增强：失败摘要行 + 恢复按钮组（failed 态专属） */
+/* D8  3.7.1               +       failed      */
 .inlineAgentFailSummary {
   display: flex;
   flex-wrap: wrap;
@@ -297,14 +297,14 @@
 .inlineAgentFailKind,
 .inlineAgentFailRetries {
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--hairline, var(--border-subtle));
   background: var(--bg-hover, transparent);
 }
 
 .inlineAgentFailNeedsUser {
   padding: 1px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--accent-orange, var(--border-subtle));
   color: var(--accent-orange, var(--text-secondary));
 }
@@ -341,7 +341,7 @@
   margin-bottom: 0;
 }
 
-/* 闁告劕鎳撴禒?agent 閺夊牊鎸搁崣鍡涙晬濮橆剦妲婚柣?.chat-footer.agent-card-composer + ComposerField */
+/*       ?agent                ?.chat-footer.agent-card-composer + ComposerField */
 .inlineAgentComposerWrap {
   padding: var(--space-2, 6px);
   width: 100%;
@@ -349,7 +349,7 @@
   box-sizing: border-box;
 }
 
-/* denser 闁告劕鎳撴禒鍫ユ晬濮橆剙鏅欓柡鈧?pad闁挎稑鐭傞崢銈夊触?maxLines=3 */
+/* denser                 ?pad         ?maxLines=3 */
 .inlineAgentComposerWrapDense {
   padding: var(--space-1, 4px) var(--space-2, 5px) var(--space-2, 5px);
 }
@@ -366,7 +366,7 @@
   margin: 0;
 }
 
-/* 濞撴皜鍕焿閻庡厜鍓濇竟鎺楀础閳藉懐绐楅柣锝冨劜閺佽娼忕涵鍛崺闁挎稑濂旂粭澶愬础閻樺啿濮€规悶鍎遍崣鍧楀礆?*/
+/*                                                    ?*/
 .inlineAgent.inlineAgentDense :global(.approval-card) {
   margin: 4px 0;
   padding: 8px 8px 7px;
@@ -384,20 +384,19 @@
   font-size: var(--font-size-xs);
 }
 
-/* Strips border, outline, background, and shadows of the composer when rendered inline */
 .noOutlineComposer {
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  padding: 4px 0 !important;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 0;
 }
 
 .noOutlineComposer :global(.input-container),
 .noOutlineComposer :global(.input-container--dense) {
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-  padding: 4px 0 !important;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 0;
 }
 
 /* Positions subagent user prompts on the left in a subtle speech container */

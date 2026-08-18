@@ -1,103 +1,185 @@
-/* ui/Button 私有形态样式（PE-05 T05.1.2）
- * 全部引用 tokens.css 变量，无裸 hex/rgba；类名 camelCase 与组件私有 */
+/* ui/Button        PE-05 / RED-DETAILED-02 
+ * 100%    Design Tokens 0     
+ *                   ::before 0-          Focus Ring 
+ *      0-             --radius-sm(4px)/--radius-md(6px)/--radius-lg(8px) 
+ */
+
+/* 1.            */
 .button {
+  /*        */
+  --btn-h: 32px;
+  --btn-px: 12px;
+  --btn-fs: var(--font-size-base, 14px);
+  --btn-radius: var(--radius-md, 6px);
+  --btn-icon-size: 18px;
+  --btn-gap: var(--space-1_5, 6px);
+
+  /*          */
+  --btn-bg: transparent;
+  --btn-fg: var(--text-primary);
+  --btn-border: transparent;
+  --btn-shadow: none;
+  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--text-primary) 12%, transparent);
+
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1_5);
-  border: none;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-weight: var(--font-weight-normal);
-  border-radius: var(--radius-md);
-  transition:
-    background-color var(--transition-micro),
-    color var(--transition-micro),
-    opacity var(--transition-micro);
-  white-space: nowrap;
+  box-sizing: border-box;
+  height: var(--btn-h);
+  padding: 0 var(--btn-px);
+  gap: var(--btn-gap);
+  font-size: var(--btn-fs);
+  border-radius: var(--btn-radius);
+  background-color: var(--btn-bg);
+  color: var(--btn-fg);
+  border: 1px solid var(--btn-border);
+  box-shadow: var(--btn-shadow);
+  font-family: var(--font-sans, inherit);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 1;
   user-select: none;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition:
+    transform var(--transition-micro, 120ms) cubic-bezier(0.2, 0, 0, 1),
+    border-color var(--transition-micro, 120ms) ease;
 }
 
+/*     0-       (Opacity Transition) */
+.button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-color: var(--btn-hover-overlay);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-micro, 120ms) ease;
+}
+
+.button:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.button:active:not(:disabled)::before {
+  background-color: var(--btn-active-overlay);
+  opacity: 1;
+}
+
+.button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+/*    Focus Ring AGENTS.md   13            3%~10%  */
 .button:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .button:disabled {
   cursor: not-allowed;
-  opacity: var(--opacity-disabled);
+  opacity: var(--opacity-disabled, 0.45);
 }
 
-/* 尺寸档：sm 对齐 .ui-btn-sm（药丸形），md 对齐 .ui-btn-md */
-.buttonSm {
-  height: var(--control-height-sm);
-  padding: 0 var(--space-3);
-  font-size: var(--font-size-sm);
-  border-radius: var(--radius-full);
+/* 2.                    */
+.buttonXs,
+.button[data-size='xs'] {
+  --btn-h: 24px;
+  --btn-px: 6px;
+  --btn-fs: var(--font-size-xs, 12px);
+  --btn-radius: var(--radius-sm, 4px);
+  --btn-icon-size: 14px;
+  --btn-gap: var(--space-1, 4px);
 }
 
-.buttonMd {
-  height: var(--control-height);
-  padding: 0 var(--space-3_5);
-  font-size: var(--font-size-base);
+.buttonSm,
+.button[data-size='sm'] {
+  --btn-h: 28px;
+  --btn-px: 10px;
+  --btn-fs: var(--font-size-sm, 13px);
+  --btn-radius: var(--radius-md, 6px);
+  --btn-icon-size: 16px;
+  --btn-gap: var(--space-1_5, 6px);
 }
 
-/* 变体档：对齐 .ui-btn-primary / secondary / ghost 语义 */
-.buttonPrimary {
-  background: var(--accent-color);
-  color: var(--text-on-accent);
+.buttonMd,
+.button[data-size='md'] {
+  --btn-h: 32px;
+  --btn-px: 12px;
+  --btn-fs: var(--font-size-base, 14px);
+  --btn-radius: var(--radius-md, 6px);
+  --btn-icon-size: 18px;
+  --btn-gap: var(--space-1_5, 6px);
 }
 
-.buttonPrimary:hover {
-  background: var(--accent-hover);
+.buttonLg,
+.button[data-size='lg'] {
+  --btn-h: 40px;
+  --btn-px: 16px;
+  --btn-fs: var(--font-size-md, 15px);
+  --btn-radius: var(--radius-lg, 8px);
+  --btn-icon-size: 20px;
+  --btn-gap: var(--space-2, 8px);
 }
 
-.buttonSecondary {
-  background: var(--control-soft-bg);
-  color: var(--text-secondary);
-  border: none;
-  border-radius: var(--radius-full);
+/* 3.                       */
+.buttonPrimary,
+.button[data-variant='primary'] {
+  --btn-bg: var(--accent-color);
+  --btn-fg: var(--text-on-accent);
+  --btn-border: color-mix(in srgb, var(--accent-color) 80%, black 20%);
+  --btn-hover-overlay: color-mix(in srgb, white 15%, transparent);
+  --btn-active-overlay: color-mix(in srgb, black 15%, transparent);
 }
 
-.buttonSecondary:hover {
-  background: var(--control-soft-bg-hover);
-  color: var(--text-primary);
+.buttonSecondary,
+.button[data-variant='secondary'] {
+  --btn-bg: var(--control-soft-bg);
+  --btn-fg: var(--text-primary);
+  --btn-border: var(--border-subtle);
+  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--text-primary) 12%, transparent);
 }
 
-.buttonGhost {
-  background: transparent;
-  color: var(--text-tertiary);
-  border: none;
-  padding: 0 var(--space-2);
-  height: var(--control-height-sm);
-  min-width: var(--control-height-sm);
-  width: auto;
-  border-radius: var(--radius-full);
+.buttonGhost,
+.button[data-variant='ghost'] {
+  --btn-bg: transparent;
+  --btn-fg: var(--text-secondary);
+  --btn-border: transparent;
+  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--text-primary) 12%, transparent);
 }
 
-.buttonGhost:hover {
-  background: var(--control-soft-bg);
-  color: var(--text-primary);
+.buttonPlain,
+.button[data-variant='plain'] {
+  --btn-bg: transparent;
+  --btn-fg: var(--text-tertiary);
+  --btn-border: transparent;
+  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
-/* danger 新增变体（AA-04 3.3 缺口）：轻量危险操作，
- * 复用 .ui-btn-ghost.danger 悬停色板：error 红文本 + error 浅底 */
-.buttonDanger {
-  background: transparent;
-  color: var(--color-error);
-  border: none;
-  padding: 0 var(--space-2);
-  height: var(--control-height-sm);
-  min-width: var(--control-height-sm);
-  width: auto;
-  border-radius: var(--radius-full);
+.buttonDanger,
+.button[data-variant='danger'] {
+  --btn-bg: transparent;
+  --btn-fg: var(--color-error);
+  --btn-border: transparent;
+  --btn-hover-overlay: color-mix(in srgb, var(--color-error) 10%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--color-error) 20%, transparent);
 }
 
-.buttonDanger:hover {
-  background: var(--color-error-bg);
-  color: var(--color-error);
+/*     (active) */
+.buttonActive,
+.button[data-active='true'] {
+  --btn-bg: var(--control-soft-bg-active, var(--tint-active));
+  --btn-fg: var(--text-primary);
 }
 
+/*    block */
 .buttonBlock {
   width: 100%;
 }
@@ -109,7 +191,15 @@
 .buttonIcon {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  width: var(--btn-icon-size);
+  height: var(--btn-icon-size);
+}
+
+.buttonIcon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .buttonLabel {
@@ -117,14 +207,21 @@
   text-overflow: ellipsis;
 }
 
-/* 加载旋转指示：纯 tokens 色彩 */
+/* IconButton             0    padding */
+.iconButton {
+  width: var(--btn-h);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+/*            */
 .spinner {
-  width: var(--icon-size);
-  height: var(--icon-size);
-  border-radius: var(--radius-full);
+  width: var(--btn-icon-size);
+  height: var(--btn-icon-size);
+  border-radius: 50%;
   border: 2px solid currentColor;
   border-top-color: transparent;
-  animation: button-spin var(--transition-spin) infinite linear;
+  animation: button-spin var(--transition-spin, 800ms) infinite linear;
   flex-shrink: 0;
 }
 

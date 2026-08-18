@@ -44,7 +44,7 @@
   color: var(--text-primary);
 }
 
-/* 助手命令镜像条：侧栏缓冲，默认不注入交互式 PTY */
+/*                       PTY */
 .mirrorStrip {
   display: flex;
   flex-direction: column;
@@ -58,7 +58,7 @@
   flex: 1 1 auto;
   min-height: 0;
 }
-/* 交互式 PTY 已挂载时：镜像限高，主区域留给 xterm */
+/*     PTY                 xterm */
 .panel[data-interactive-pty='true'] .mirrorStrip[data-expanded='true'] {
   flex: 0 1 auto;
   max-height: min(40%, 220px);
@@ -125,14 +125,14 @@
   min-height: 0;
   min-width: 0;
 }
-/* 交互模式下镜像 body 限高，避免挤掉 xterm */
+/*         body         xterm */
 .mirrorBody {
   max-height: 160px;
 }
 .panel[data-interactive-pty='false'] .mirrorBody {
   max-height: none;
 }
-/* 交互宿主：纯终端时占满面板；镜像/顶栏已移除 */
+/*                 /      */
 .interactiveHost {
   display: flex;
   flex-direction: column;
@@ -384,7 +384,7 @@
   color: var(--terminal-fg);
 }
 
-/* ── 交互式 xterm 区域 ─────────────────────────────────────────── */
+/*        xterm                                                */
 .xtermWrap {
   flex: 1;
   min-height: 0;
@@ -413,21 +413,21 @@
   cursor: text;
 }
 
-/* xterm 内部 DOM 撑满 */
+/* xterm    DOM    */
 .xtermHost :global(.xterm) {
   height: 100%;
   width: 100%;
   padding: 0;
 }
 .xtermHost :global(.xterm-viewport) {
-  background-color: transparent !important;
-  overflow-y: auto !important;
+  background-color: transparent;
+  overflow-y: auto;
 }
 .xtermHost :global(.xterm-screen) {
-  background-color: transparent !important;
+  background-color: transparent;
 }
 .xtermHost :global(.xterm-helpers textarea) {
-  /* 保证可聚焦接收键盘 */
+  /*           */
   opacity: 0;
 }
 

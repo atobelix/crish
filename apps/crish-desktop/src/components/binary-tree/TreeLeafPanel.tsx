@@ -1,70 +1,37 @@
 /**
- * 二叉树叶子面板 — 渲染单个 leaf 的面板内容。
+ * 二叉树叶子面板 — 声明式微内核叶子容器。
  *
- * chrome 行契约：
- * - 单 unit：AppTopBar 全局会话标签；leaf 内 ChatHeader / LeafToolTabStrip
- * - 多 unit：每个 chat leaf 顶挂 UnitSessionTabStrip（per-unit 标签，替代全局条）；
- *   工具 leaf 顶挂 LeafToolTabStrip（基于 leaf.tabs，替代 rightDock 模型）
- *
- * 功能区 leaf 必须带所属 session 的 sessionId（owner），与对话 unit 绑定。
+ * 架构契约：
+ * - 纯几何叶子空间容器，100% 剥离 switch(panelId) 静态硬编码；
+ * - 面板内容全量改由 SlotOutlet('workspace.leaf.panel') + ViewRegistry 动态渲染；
+ * - 标题统一由 ViewRegistry 派生。
  */
 
 import React, {
-  lazy,
   Suspense,
   useCallback,
   useLayoutEffect,
+  useMemo,
   useRef,
 } from 'react';
-import { useLayoutTreeStore, isChatDomain } from '../../store/storeAccess';
+import { useLayoutTreeStore } from '../../store/storeAccess';
 import type { LayoutLeaf } from '../../store/types';
-import { getPanelTitle } from '../../store/storeAccess';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { UnitSessionTabStrip } from './UnitSessionTabStrip';
 import { LeafToolTabStrip } from './LeafToolTabStrip';
-import { useSessionTabDrag } from '../shell/SessionTabDragContext';
 import styles from './BinaryTreeWorkspace.module.css';
 import {
   useWorkspaceShellStore,
   openToolInSession,
   openToolInActiveTab,
-} from '../../store/storeAccess';
-import {
   selectActiveSessionId,
   useSessionField,
+  isPendingDraft,
 } from '../../store/storeAccess';
-import { isPendingDraft } from '../../store/storeAccess';
-
-// ── 面板内容懒加载 ──────────────────────────────────────────────────
-
-const ChatCard = lazy(() =>
-  import('../chat-card/ChatCard').then((m) => ({ default: m.ChatCard }))
-);
-const TerminalCard = lazy(() =>
-  import('../workspace/TerminalCard').then((m) => ({ default: m.TerminalCard }))
-);
-const PreviewCard = lazy(() =>
-  import('../workspace/PreviewCard').then((m) => ({ default: m.PreviewCard }))
-);
-const OverviewCard = lazy(() =>
-  import('../overview/OverviewCard').then((m) => ({ default: m.OverviewCard }))
-);
-const FilesCard = lazy(() =>
-  import('../files/FilesCard').then((m) => ({ default: m.FilesCard }))
-);
-const DiffCard = lazy(() =>
-  import('../diff/DiffCard').then((m) => ({ default: m.DiffCard }))
-);
-const FileViewerCard = lazy(() =>
-  import('../files/FileViewerCard').then((m) => ({ default: m.FileViewerCard }))
-);
-const RuntimePanel = lazy(() =>
-  import('../workspace/RuntimePanel').then((m) => ({ default: m.RuntimePanel }))
-);
-const AgentCard = lazy(() =>
-  import('../agent-card/AgentCard').then((m) => ({ default: m.AgentCard }))
-);
+import {
+  viewRegistry,
+  SlotOutlet,
+  type ViewRenderContext,
+} from '../../services/view-registry';
 
 // ── Props ───────────────────────────────────────────────────────────
 
@@ -76,8 +43,6 @@ interface TreeLeafPanelProps {
   isActive: boolean;
   /** 是否为拖拽源 */
   isDragSource: boolean;
-  /** Toast 回调 */
-  onShowToast: ShowToastFn;
   /** 当前是否多 chat 分屏（>1 chat leaf） */
   isMultiChat?: boolean;
 }
@@ -117,12 +82,19 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     rect,
     isActive,
     isDragSource,
-    onShowToast,
     isMultiChat = false,
   }) => {
     const setActiveLeaf = useLayoutTreeStore((s) => s.setActiveLeaf);
     const leafElRef = useRef<HTMLDivElement>(null);
-    const { startSessionDrag } = useSessionTabDrag();
+
+    const activeSessionId = useSessionField(selectActiveSessionId);
+    // 新对话草稿态：活动 pane 必须跟 PENDING_DRAFT（空白欢迎面），不能被 leaf.sessionId 钉死
+    // 非活动分屏 pane 仍显示自己的 leaf 会话
+    const inDraft = isPendingDraft(activeSessionId || '');
+    const sessionForPanel =
+      inDraft && isActive
+        ? activeSessionId
+        : leaf.sessionId || activeSessionId;
 
     const handleActivate = useCallback(() => {
       if (!isActive) setActiveLeaf(leaf.id);
@@ -154,7 +126,41 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
       el.style.height = `${rect.height * 100}%`;
     }, [rect.x, rect.y, rect.width, rect.height]);
 
-    const isChat = isChatDomain(leaf.panelId);
+    // 统一会话感知工具分发器（裁决 ARB-06：采用自由函数分发）
+    const handleOpenTool = useCallback(
+      (panelId: string) => {
+        const targetSessionId = sessionForPanel;
+        if (targetSessionId && !targetSessionId.startsWith('__pending')) {
+          openToolInSession(targetSessionId, panelId);
+        } else {
+          openToolInActiveTab(panelId);
+        }
+      },
+      [sessionForPanel]
+    );
+
+    const resolved = viewRegistry.resolveView(leaf.activeTab);
+    const isChat = viewRegistry.isPrimary(leaf.panelId);
+
+    // 纯函数视图渲染上下文
+    const renderCtx: ViewRenderContext = useMemo(
+      () => ({
+        panelId: leaf.activeTab,
+        leafId: leaf.id,
+        sessionId: sessionForPanel ?? undefined,
+        isActive,
+        openView: handleOpenTool,
+        params: resolved.params,
+      }),
+      [
+        leaf.activeTab,
+        leaf.id,
+        sessionForPanel,
+        isActive,
+        handleOpenTool,
+        resolved.params,
+      ]
+    );
 
     return (
       <div
@@ -169,31 +175,28 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         data-unit-tab-strip={isChat && isMultiChat ? 'true' : 'false'}
         onPointerDownCapture={handleActivate}
         role="region"
-        aria-label={`${getPanelTitle(leaf.activeTab)} 面板`}
+        aria-label={`${viewRegistry.getTitle(leaf.activeTab, renderCtx)} 面板`}
       >
-        {/* 多 unit chat leaf：per-unit 会话标签栏（第 1 行） */}
-        {isChat && isMultiChat ? (
-          <UnitSessionTabStrip
-            leafId={leaf.id}
-            leafSessionId={leaf.sessionId}
-            startSessionDrag={startSessionDrag}
-          />
-        ) : null}
-
         {/* 工具 leaf：基于 leaf.tabs 的独立标签栏 */}
         {!isChat ? <LeafToolTabStrip leaf={leaf} /> : null}
 
         <div className={styles.leafBody}>
-          <AppErrorBoundary compact>
+          <AppErrorBoundary
+            compact
+            title={`面板 [${leaf.activeTab}] 渲染异常`}
+          >
             <Suspense
               fallback={<div className={styles.emptyState}>加载中…</div>}
             >
-              <LeafBody
-                panelId={leaf.activeTab}
-                leafId={leaf.id}
-                leafSessionId={leaf.sessionId}
-                isActiveLeaf={isActive}
-                onShowToast={onShowToast}
+              <SlotOutlet
+                slotKey="workspace.leaf.panel"
+                context={renderCtx}
+                entryKey={resolved.definition?.id ?? leaf.activeTab}
+                fallback={
+                  <div className={styles.emptyState}>
+                    未知面板类型：{leaf.activeTab}
+                  </div>
+                }
               />
             </Suspense>
           </AppErrorBoundary>
@@ -206,90 +209,6 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     rectPropsEqual(prev.rect, next.rect) &&
     prev.isActive === next.isActive &&
     prev.isDragSource === next.isDragSource &&
-    prev.onShowToast === next.onShowToast &&
     prev.isMultiChat === next.isMultiChat
 );
 TreeLeafPanel.displayName = 'TreeLeafPanel';
-
-// ── 面板内容路由 ────────────────────────────────────────────────────
-
-interface LeafBodyProps {
-  panelId: string;
-  /** 当前 leaf id（布局标识；工具打开走 leafSessionId） */
-  leafId: string;
-  /** 多 chat 分屏：leaf 绑定的 sessionId → openToolInSession 作用域 */
-  leafSessionId?: string;
-  isActiveLeaf: boolean;
-  onShowToast: ShowToastFn;
-}
-
-function LeafBody({
-  panelId,
-  leafSessionId,
-  isActiveLeaf,
-  onShowToast,
-}: LeafBodyProps) {
-  const activeSessionId = useSessionField(selectActiveSessionId);
-  // 新对话草稿态：活动 pane 必须跟 PENDING_DRAFT（空白欢迎面），不能被 leaf.sessionId 钉死
-  // 非活动分屏 pane 仍显示自己的 leaf 会话
-  const inDraft = isPendingDraft(activeSessionId || '');
-  const sessionForPanel =
-    inDraft && isActiveLeaf
-      ? activeSessionId
-      : leafSessionId || activeSessionId;
-
-  // 统一会话感知工具分发器（裁决 ARB-06：采用自由函数分发）
-  const handleOpenTool = useCallback(
-    (panelId: string) => {
-      const targetSessionId = sessionForPanel;
-      if (targetSessionId && !targetSessionId.startsWith('__pending')) {
-        openToolInSession(targetSessionId, panelId);
-      } else {
-        openToolInActiveTab(panelId);
-      }
-    },
-    [sessionForPanel]
-  );
-
-  if (panelId.startsWith('file-viewer:')) {
-    const filePath = panelId.substring('file-viewer:'.length);
-    return (
-      <FileViewerCard
-        key={filePath}
-        filePath={filePath}
-        onShowToast={onShowToast}
-      />
-    );
-  }
-
-  switch (panelId) {
-    case 'chat':
-      return (
-        <ChatCard
-          wsId="default"
-          colIdx={0}
-          groupIdx={0}
-          handleGlobalTabClick={handleOpenTool}
-          onShowToast={onShowToast}
-          // draft 时传 PENDING_DRAFT；否则优先 leaf 绑定
-          sessionId={sessionForPanel ?? undefined}
-        />
-      );
-    case 'terminal':
-      return <TerminalCard sessionId={sessionForPanel ?? undefined} />;
-    case 'preview':
-      return <PreviewCard wsId="default" onShowToast={onShowToast} />;
-    case 'overview':
-      return <OverviewCard wsId="default" onOpenPanel={handleOpenTool} />;
-    case 'files':
-      return <FilesCard onShowToast={onShowToast} />;
-    case 'diff':
-      return <DiffCard onShowToast={onShowToast} />;
-    case 'runtime':
-      return <RuntimePanel wsId="default" onShowToast={onShowToast} />;
-    case 'agent':
-      return <AgentCard />;
-    default:
-      return <div className={styles.emptyState}>未知面板类型：{panelId}</div>;
-  }
-}

@@ -131,7 +131,7 @@
   align-items: center;
 }
 
-/* ── R1-09 G-4 网络环境卡片 ── */
+/*    R1-09 G-4           */
 .networkEnv {
   display: flex;
   flex-direction: column;
@@ -198,7 +198,7 @@
   line-height: 1.5;
 }
 
-/* ── R1-11 多端服务开关 ── */
+/*    R1-11           */
 .serviceOff {
   display: flex;
   flex-direction: column;

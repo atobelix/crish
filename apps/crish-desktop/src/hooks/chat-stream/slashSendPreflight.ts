@@ -37,6 +37,8 @@ import { resolveTargetSessionId } from './slashSendDraftManager';
 import type { ChatAttachment } from './types';
 import type { ChatContentPart, StreamRequestOptions } from '../../api/chatApi';
 
+import { toast } from '../../services/toast/ToastContext';
+
 export interface PreflightCheckOptions {
   rawInput: string;
   activeSessionId?: string | null;
@@ -47,7 +49,6 @@ export interface PreflightCheckOptions {
   needsModelSetup?: boolean;
   setPickerInlineError: (msg: string) => void;
   onOpenModelPicker?: () => void;
-  onShowToast: (msg: string) => void;
   handleGlobalTabClick: (tab: string) => void;
   setChatInput: (val: string) => void;
   setSlashMenuOpen: (open: boolean) => void;
@@ -79,11 +80,12 @@ export async function runPreflightChecks(
     needsModelSetup,
     setPickerInlineError,
     onOpenModelPicker,
-    onShowToast,
     handleGlobalTabClick,
     setChatInput,
     setSlashMenuOpen,
   } = opts;
+
+  const showToast = (msg: string) => toast.show(msg);
 
   if (!rawInput && attachments.length === 0) return { status: 'abort' };
 
@@ -133,10 +135,10 @@ export async function runPreflightChecks(
   if (slashMissingArg(slash)) {
     setChatInput('');
     setSlashMenuOpen(false);
-    if (slash.kind === 'learn') onShowToast('用法：/learn <要记住的规则>');
-    else if (slash.kind === 'goal') onShowToast('用法：/goal <要完成的目标>');
+    if (slash.kind === 'learn') showToast('用法：/learn <要记住的规则>');
+    else if (slash.kind === 'goal') showToast('用法：/goal <要完成的目标>');
     else if (slash.kind === 'grill-me')
-      onShowToast('用法：/grill-me <要对齐的主题>');
+      showToast('用法：/grill-me <要对齐的主题>');
     return { status: 'handled' };
   }
 
@@ -147,7 +149,7 @@ export async function runPreflightChecks(
     if (!skillCommandsEnabled) {
       setChatInput('');
       setSlashMenuOpen(false);
-      onShowToast('技能斜杠命令已关闭（设置 → 技能）');
+      showToast('技能斜杠命令已关闭（设置 → 技能）');
       return { status: 'handled' };
     }
     try {
@@ -157,7 +159,7 @@ export async function runPreflightChecks(
       if (!resolved) {
         setChatInput('');
         setSlashMenuOpen(false);
-        onShowToast('未找到该技能，请在设置 → 技能 中确认名称与启用状态');
+        showToast('未找到该技能，请在设置 → 技能 中确认名称与启用状态');
         return { status: 'handled' };
       }
       modelText = formatSkillInjection(resolved.skill, resolved.rest);
@@ -167,7 +169,7 @@ export async function runPreflightChecks(
     } catch (e) {
       setChatInput('');
       setSlashMenuOpen(false);
-      onShowToast(
+      showToast(
         `加载技能失败：${e instanceof Error ? e.message : String(e)}`
       );
       return { status: 'handled' };
@@ -179,7 +181,7 @@ export async function runPreflightChecks(
     setSlashMenuOpen(false);
     const ruleText = slash.rule;
     if (!ruleText) {
-      onShowToast('用法：/learn <要记住的规则>');
+      showToast('用法：/learn <要记住的规则>');
       return { status: 'handled' };
     }
     try {
@@ -187,7 +189,7 @@ export async function runPreflightChecks(
       const sets = await clientApi.getSettingsEx(cwd);
       const prev = Array.isArray(sets.customRules) ? sets.customRules : [];
       if (prev.includes(ruleText)) {
-        onShowToast('该规则已存在');
+        showToast('该规则已存在');
         return { status: 'handled' };
       }
       const next = [...prev, ruleText];
@@ -203,7 +205,7 @@ export async function runPreflightChecks(
         !learnSid ||
         !canStreamLocalSession(learnSid, !!getSessionById(learnSid))
       ) {
-        onShowToast('会话不可用，规则已保存但未写入时间线');
+        showToast('会话不可用，规则已保存但未写入时间线');
         return { status: 'handled' };
       }
       addMessage(wsId, learnSid, {
@@ -221,7 +223,7 @@ export async function runPreflightChecks(
         status: 'completed',
       });
     } catch (e) {
-      onShowToast(
+      showToast(
         `记住规则失败：${e instanceof Error ? e.message : String(e)}`
       );
     }
@@ -232,12 +234,12 @@ export async function runPreflightChecks(
     setChatInput('');
     setSlashMenuOpen(false);
     if (slash.invalidArg) {
-      onShowToast('用法：/compact [目标 token 数]（正整数）');
+      showToast('用法：/compact [目标 token 数]（正整数）');
       return { status: 'handled' };
     }
     const compactSid = resolveTargetSessionId(activeSessionId);
     if (!compactSid) {
-      onShowToast('会话不可用，请新建会话后重试');
+      showToast('会话不可用，请新建会话后重试');
       return { status: 'handled' };
     }
     try {
@@ -256,16 +258,16 @@ export async function runPreflightChecks(
           res.data.summaryState === 'committed'
             ? '摘要已生成'
             : '摘要后台生成中';
-        onShowToast(
+        showToast(
           `压缩完成：${fmt(res.data.tokensBefore)} → ${fmt(res.data.tokensAfter)} token（丢弃 ${res.data.dropped} 条，${stateLabel}）`
         );
       } else if (res.status === 'missing') {
-        onShowToast('压缩命令未接线（引擎未注册 core_compact_now）');
+        showToast('压缩命令未接线（引擎未注册 core_compact_now）');
       } else {
-        onShowToast(res.message || '压缩失败');
+        showToast(res.message || '压缩失败');
       }
     } catch (e) {
-      onShowToast(`压缩失败：${e instanceof Error ? e.message : String(e)}`);
+      showToast(`压缩失败：${e instanceof Error ? e.message : String(e)}`);
     }
     return { status: 'handled' };
   }

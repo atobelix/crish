@@ -16,16 +16,16 @@
 :global(.is-resizing) .sidebar,
 :global(.resizing-active) .sidebar,
 :global(.window-resizing) .sidebar {
-  transition: none !important;
+  transition: none;
 }
 
 .sidebar.collapsed {
-  width: 0px !important;
+  width: 0px;
   border-right: none;
 }
 
 .sidebar.collapsed.tempExpanded {
-  width: var(--sidebar-visible-width, var(--sidebar-width)) !important;
+  width: var(--sidebar-visible-width, var(--sidebar-width));
   border-right: none; /* Removed vertical border line */
   box-shadow: var(--shadow-lg);
 }
@@ -292,10 +292,10 @@
 
 /* Overlay mode */
 .overlay {
-  position: fixed !important;
+  position: fixed;
   top: 0;
   left: 0;
-  height: 100vh !important;
+  height: 100vh;
   z-index: var(--z-sidebar, 100);
   box-shadow: var(--shadow-lg, 0 8px 32px rgba(0, 0, 0, 0.12));
 }
@@ -303,7 +303,7 @@
 .overlayBackdrop {
   position: fixed;
   inset: 0;
-  /* S6：遮罩档 token（--tint-overlay 25% text-primary，双主题自适应） */
+  /* S6     token --tint-overlay 25% text-primary         */
   background: var(--tint-overlay);
   z-index: calc(var(--z-sidebar, 100) - 1);
 }
@@ -336,14 +336,14 @@
 
 /* Icon-collapse mode */
 .iconCollapse {
-  width: var(--sidebar-width-collapsed) !important;
+  width: var(--sidebar-width-collapsed);
 }
 
 .iconCollapse.tempExpanded {
-  width: var(--sidebar-width) !important;
+  width: var(--sidebar-width);
 }
 
-/* ── 图标折叠模式：隐藏文字，仅保留图标，避免窄边栏文字竖排 ── */
+/*                                   */
 .iconCollapse .sidebarTop {
   padding-left: 8px;
   padding-right: 8px;

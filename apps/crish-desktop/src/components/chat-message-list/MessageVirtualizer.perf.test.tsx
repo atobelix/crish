@@ -10,8 +10,10 @@ import { render, act, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi, beforeAll, afterAll } from 'vitest';
 import { MessageVirtualizer } from './MessageVirtualizer';
 import type { SessionMessage } from '../../store/types';
-import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/messageWindow';
-import { VirtualScrollManager } from '../../api/VirtualScrollManager';
+import {
+  MESSAGE_ESTIMATED_ROW_HEIGHT,
+  VirtualScrollManager,
+} from '../../api/VirtualScrollManager';
 
 // Mock ResizeObserver
 globalThis.ResizeObserver = class ResizeObserver {
@@ -64,19 +66,6 @@ function createMockMessages(count: number): SessionMessage[] {
 function createDefaultProps(messages: SessionMessage[]) {
   return {
     messages,
-    visibleMessages: messages,
-    messageWindow: {
-      startIndex: 0,
-      hiddenCount: 0,
-      visibleCount: messages.length,
-      totalCount: messages.length,
-      hasOlder: false,
-      effectiveExpanded: 0,
-    },
-    olderStep: 20,
-    offerShowAllOlder: false,
-    expandOlderStep: vi.fn(),
-    expandOlderAll: vi.fn(),
     pinnedItems: [],
     pinsOpen: false,
     setPinsOpen: vi.fn(),

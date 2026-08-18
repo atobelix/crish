@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 多端互通（R1-08 桌面配对 UI + 设备管理页；R1-09 网络环境引导；
  * R1-11 多端服务开关——服务默认关闭（红线 1 零监听），先开启服务才显示
@@ -37,7 +38,7 @@ import {
 } from '../../api/multiDevice';
 
 type Props = {
-  onShowToast: (msg: string) => void;
+  _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
 const POLL_INTERVAL_MS = 3000;
@@ -59,7 +60,8 @@ const PROFILE_LABELS: Record<NetworkEnvInfo['profile'], string> = {
   unknown: '未知',
 };
 
-export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const [status, setStatus] = useState<PairStatus | null>(null);
   const [devices, setDevices] = useState<DeviceInfo[]>([]);
   const [pairResult, setPairResult] = useState<PairStartResult | null>(null);
@@ -112,22 +114,22 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
           if (!mountedRef.current) return;
           if (result) {
             setPairResult(result);
-            onShowToast('配对已开启：可用手机扫码');
+            showToast('配对已开启：可用手机扫码');
           } else {
-            onShowToast('开启配对失败（命令不可用或引擎未就绪）');
+            showToast('开启配对失败（命令不可用或引擎未就绪）');
           }
         } else {
           await pairCancel();
           if (!mountedRef.current) return;
           setPairResult(null);
-          onShowToast('配对已关闭');
+          showToast('配对已关闭');
         }
         await load();
       } finally {
         if (mountedRef.current) setBusy(false);
       }
     },
-    [busy, load, onShowToast]
+    [busy, load, showToast]
   );
 
   // 服务开关（R1-11）：开启 → 本机开始监听，随后才显示配对模式开关；
@@ -141,15 +143,15 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
       if (!mountedRef.current) return;
       if (ok) {
         setServiceEnabled(true);
-        onShowToast('多端服务已开启：本机可被手机连接');
+        showToast('多端服务已开启：本机可被手机连接');
       } else {
-        onShowToast('开启服务失败（命令不可用或引擎未就绪）');
+        showToast('开启服务失败（命令不可用或引擎未就绪）');
       }
       await load();
     } finally {
       if (mountedRef.current) setBusy(false);
     }
-  }, [busy, load, onShowToast]);
+  }, [busy, load, showToast]);
 
   const handleDisableService = useCallback(async () => {
     if (busy) return;
@@ -160,25 +162,25 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
       if (ok) {
         setServiceEnabled(false);
         setPairResult(null);
-        onShowToast('服务已关闭：已断开所有已配对设备');
+        showToast('服务已关闭：已断开所有已配对设备');
       } else {
-        onShowToast('关闭服务失败（命令不可用或引擎未就绪）');
+        showToast('关闭服务失败（命令不可用或引擎未就绪）');
       }
       await load();
     } finally {
       if (mountedRef.current) setBusy(false);
     }
-  }, [busy, load, onShowToast]);
+  }, [busy, load, showToast]);
 
   const handleCopyCode = useCallback(async () => {
     if (!pairResult) return;
     try {
       await navigator.clipboard.writeText(pairResult.code);
-      onShowToast('配对码已复制');
+      showToast('配对码已复制');
     } catch {
-      onShowToast('复制失败');
+      showToast('复制失败');
     }
-  }, [pairResult, onShowToast]);
+  }, [pairResult, showToast]);
 
   const handleRevoke = useCallback(async () => {
     if (!revokeHash) return;
@@ -186,12 +188,12 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
     if (!mountedRef.current) return;
     setRevokeHash(null);
     if (ok) {
-      onShowToast('设备已撤销（令牌失效并已断开）');
+      showToast('设备已撤销（令牌失效并已断开）');
     } else {
-      onShowToast('撤销失败：设备不存在或已撤销');
+      showToast('撤销失败：设备不存在或已撤销');
     }
     await load();
-  }, [revokeHash, load, onShowToast]);
+  }, [revokeHash, load, showToast]);
 
   const startRename = useCallback((device: DeviceInfo) => {
     setRenamingHash(device.id);
@@ -202,20 +204,20 @@ export const SettingsDevicesTab: React.FC<Props> = ({ onShowToast }) => {
     async (hash: string) => {
       const label = renameDraft.trim();
       if (!label) {
-        onShowToast('标签不能为空');
+        showToast('标签不能为空');
         return;
       }
       const ok = await renameDevice(hash, label);
       if (!mountedRef.current) return;
       setRenamingHash(null);
       if (ok) {
-        onShowToast('设备已改名');
+        showToast('设备已改名');
       } else {
-        onShowToast('改名失败：设备不存在或已撤销');
+        showToast('改名失败：设备不存在或已撤销');
       }
       await load();
     },
-    [renameDraft, load, onShowToast]
+    [renameDraft, load, showToast]
   );
 
   // 配对态生效条件：服务开启 + 服务端配对态翻转（服务关闭时即使轮询

@@ -102,6 +102,8 @@ export interface DiffChange {
 export interface FileDiff {
   /** 工作区相对或绝对路径；规范化侧会 trim */
   filePath: string;
+  /** 重命名旧路径（若存在） */
+  oldPath?: string;
   /** 新增行统计（可与 changes 不完全一致，以工具上报为准） */
   additions: number;
   /** 删除行统计 */

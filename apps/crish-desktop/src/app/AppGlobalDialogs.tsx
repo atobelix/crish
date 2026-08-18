@@ -5,15 +5,9 @@ import { FullThoughtModal } from '../components/chat-message-row/FullThoughtModa
 import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
-import type { AppToast as Toast } from '../hooks/useToastQueue';
 import type { SettingsTabType } from '../store/types';
 
 // Lazy loaded components
-const ToastStack = lazy(() =>
-  import('../components/overlay/ToastStack').then((m) => ({
-    default: m.ToastStack,
-  }))
-);
 const CheatsheetModal = lazy(() =>
   import('../components/overlay/CheatsheetModal').then((m) => ({
     default: m.CheatsheetModal,
@@ -56,8 +50,6 @@ export function SkeletonFallback({
 export interface AppGlobalDialogsProps {
   showFirstRun: boolean;
   setShowFirstRun: (show: boolean) => void;
-  toasts: Toast[];
-  dismissToast: (id: string) => void;
   showTelemetry: boolean;
   setShowTelemetry: (show: boolean) => void;
   showCheatsheet: boolean;
@@ -66,14 +58,11 @@ export interface AppGlobalDialogsProps {
   setShowSettingsOverlay: (show: boolean) => void;
   activeWorkspaceId: string;
   settingsActiveTab?: SettingsTabType;
-  handleShowToast: (msg: string, undoAction?: () => void) => void;
 }
 
 export function AppGlobalDialogs({
   showFirstRun,
   setShowFirstRun,
-  toasts,
-  dismissToast,
   showTelemetry,
   setShowTelemetry,
   showCheatsheet,
@@ -82,7 +71,6 @@ export function AppGlobalDialogs({
   setShowSettingsOverlay,
   activeWorkspaceId,
   settingsActiveTab,
-  handleShowToast,
 }: AppGlobalDialogsProps) {
   return (
     <>
@@ -106,14 +94,6 @@ export function AppGlobalDialogs({
           </Suspense>
         </AppErrorBoundary>
       )}
-
-      <div role="region" aria-label="通知" aria-live="polite">
-        <AppErrorBoundary variant="minimal" title="通知出错">
-          <Suspense fallback={null}>
-            <ToastStack toasts={toasts} onDismiss={dismissToast} />
-          </Suspense>
-        </AppErrorBoundary>
-      </div>
 
       {showTelemetry && (
         <TelemetryDialog onClose={() => setShowTelemetry(false)} />
@@ -162,7 +142,6 @@ export function AppGlobalDialogs({
           >
             <SettingsPanel
               wsId={activeWorkspaceId}
-              onShowToast={handleShowToast}
               onClose={() => setShowSettingsOverlay(false)}
               initialTab={settingsActiveTab || 'profile'}
             />

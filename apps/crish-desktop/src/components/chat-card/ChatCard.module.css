@@ -11,7 +11,7 @@
   position: relative;
 }
 
-/* 主内容区：flex 列，overflow hidden；实际滚动在 .list（全宽，滚动条贴面板右缘） */
+/*      flex   overflow hidden       .list              */
 .chatDocFlow {
   display: flex;
   flex-direction: column;
@@ -31,13 +31,13 @@
   line-height: 1.5;
 }
 
-/* 空态：列内可滚（滚动条仍在面板右缘），内容垂直居中 */
+/*                           */
 .chatDocFlow[data-empty='true'] {
   overflow-y: auto;
   justify-content: center;
 }
 
-/* 与消息列 / listInner 同宽同水平 padding，保证 composer 与 stream 对齐 */
+/*      / listInner       padding    composer   stream    */
 .chatCol {
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
@@ -75,7 +75,7 @@
   min-width: 165px;
   max-width: 260px;
   padding: 0 12px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   border: none; /* CRITICAL: DO NOT ADD BORDER TO MODEL BADGE. STIPULATED BY USER RULE TO AVOID OUTDATED BROWSER DEFAULTS */
   background: transparent;
   font-size: var(--font-size-sm);
@@ -117,4 +117,4 @@
   }
 }
 
-/* session-empty：居中视觉由 ChatEmptyState 自身布局；composer 始终在 footer。 */
+/* session-empty       ChatEmptyState      composer     footer  */

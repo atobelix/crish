@@ -1,0 +1,143 @@
+/* ui/Badge        RED-DETAILED-02 / T-ATOM-07 
+ *      0-        4px       (--radius-sm) 
+ * 100%    Design Tokens    5         tone 
+ */
+
+.badge {
+  --badge-h: 20px;
+  --badge-px: 6px;
+  --badge-fs: var(--font-size-xs, 12px);
+  --badge-radius: var(--radius-sm, 4px);
+  --badge-bg: var(--control-soft-bg);
+  --badge-fg: var(--text-secondary);
+  --badge-border: transparent;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: var(--badge-h);
+  padding: 0 var(--badge-px);
+  gap: var(--space-1, 4px);
+  font-family: var(--font-sans, inherit);
+  font-size: var(--badge-fs);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 1;
+  color: var(--badge-fg);
+  background-color: var(--badge-bg);
+  border: 1px solid var(--badge-border);
+  border-radius: var(--badge-radius);
+  user-select: none;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/*       */
+.sizeXs,
+.badge[data-size='xs'] {
+  --badge-h: 18px;
+  --badge-px: 5px;
+  --badge-fs: var(--font-size-xxs, 11px);
+}
+
+.sizeSm,
+.badge[data-size='sm'] {
+  --badge-h: 20px;
+  --badge-px: 6px;
+  --badge-fs: var(--font-size-xs, 12px);
+}
+
+.sizeMd,
+.badge[data-size='md'] {
+  --badge-h: 24px;
+  --badge-px: 8px;
+  --badge-fs: var(--font-size-sm, 13px);
+}
+
+/*      (Tone)     */
+.toneNeutral,
+.badge[data-tone='neutral'] {
+  --badge-bg: var(--control-soft-bg);
+  --badge-fg: var(--text-secondary);
+  --badge-border: var(--border-subtle);
+}
+
+.toneBrand,
+.badge[data-tone='brand'] {
+  --badge-bg: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  --badge-fg: var(--accent-color);
+  --badge-border: color-mix(in srgb, var(--accent-color) 25%, transparent);
+}
+
+.toneInfo,
+.badge[data-tone='info'] {
+  --badge-bg: color-mix(in srgb, var(--color-info, var(--accent-color)) 12%, transparent);
+  --badge-fg: var(--color-info, var(--accent-color));
+  --badge-border: color-mix(in srgb, var(--color-info, var(--accent-color)) 25%, transparent);
+}
+
+.toneSuccess,
+.badge[data-tone='success'] {
+  --badge-bg: color-mix(in srgb, var(--color-success) 12%, transparent);
+  --badge-fg: var(--color-success);
+  --badge-border: color-mix(in srgb, var(--color-success) 25%, transparent);
+}
+
+.toneWarning,
+.badge[data-tone='warning'] {
+  --badge-bg: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  --badge-fg: var(--color-warning);
+  --badge-border: color-mix(in srgb, var(--color-warning) 25%, transparent);
+}
+
+.toneDanger,
+.badge[data-tone='danger'] {
+  --badge-bg: color-mix(in srgb, var(--color-error) 12%, transparent);
+  --badge-fg: var(--color-error);
+  --badge-border: color-mix(in srgb, var(--color-error) 25%, transparent);
+}
+
+/*        */
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: currentColor;
+  flex-shrink: 0;
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1em;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*      */
+.removeButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  margin-left: var(--space-0_5, 2px);
+  margin-right: -2px;
+  border: none;
+  border-radius: var(--radius-xs, 2px);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity var(--transition-micro, 120ms) ease;
+}
+
+.removeButton:hover {
+  opacity: 1;
+}

@@ -73,7 +73,7 @@ export function rollbackOptimisticMessage(
   if (!sessionId || !userMsgId) return;
   try {
     getCompositionRoot()
-      .layout.getState()
+      .session.getState()
       .withdrawMessage(wsId, sessionId, userMsgId);
   } catch (err) {
     console.warn('[slashSendDraftManager] failed to withdraw message:', err);

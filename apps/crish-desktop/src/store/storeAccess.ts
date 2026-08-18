@@ -1,4 +1,4 @@
-/**
+﻿/**
  * storeAccess（store 侧公共读面）— R3-T11 交付。
  *
  * components / api 读取 T11 新域 store（terminal / worker / permission / settings）
@@ -19,7 +19,7 @@ import { useWorkerStore, type WorkerStore } from './workerStore';
 import { usePermissionStore, type PermissionStore } from './permissionStore';
 import { useSettingsStore, type SettingsStore } from './settingsStore';
 import { useLayoutStore, type LayoutStore } from './layoutStore';
-import type { FileDiff, SettingsTabType } from './types';
+import type { FileDiff, } from './types';
 import type { PermissionMode } from '../api/permissionModes';
 import type {
   CronJob,
@@ -153,13 +153,12 @@ export const selectSidebarCollapsed = (
 export const selectTabModeEnabled = (s: Pick<LayoutStore, 'tabModeEnabled'>) =>
   s.tabModeEnabled;
 
-export const selectShowSettingsOverlay = (
-  s: Pick<LayoutStore, 'showSettingsOverlay'>
-) => s.showSettingsOverlay;
-
-export const selectSettingsActiveTab = (
-  s: Pick<LayoutStore, 'settingsActiveTab'>
-) => s.settingsActiveTab;
+export {
+  useSettingsUiStore,
+  selectShowSettingsOverlay,
+  selectSettingsActiveTab,
+} from './settingsUiStore';
+export { useWorkspaceStore } from './workspaceStore';
 
 // ── session 域只读与生命周期协调面 ───────────────────────────────────────────
 
@@ -178,7 +177,16 @@ export {
   useActiveSession,
   selectActiveSession,
   selectActiveSessionId,
+  selectSessions,
   selectSessionsById,
+  selectComposerDrafts,
+  selectDraftFolder,
+  selectFolderOrder,
+  selectSessionHydrated,
+  makeSelectSessionById,
+  makeSelectSessionMessages,
+  makeSelectSessionGoalMode,
+  makeSelectSessionTitle,
   selectPanelAgentId,
   selectActiveAgentId,
   getSessionAgent,
@@ -208,7 +216,6 @@ export { closeSettings } from './settingsUiStore';
 
 export {
   useLayoutTreeStore,
-  isChatDomain,
   collectLeaves,
   listChatLeaves,
   findChatLeafBySessionId,
@@ -251,7 +258,6 @@ export {
   applyDockToTree,
   listChatUnits,
   tabsForUnit,
-  fileViewerInitialModeMap,
   reprojectAllSessionDocks,
 } from './workspace-shell';
 
@@ -287,7 +293,6 @@ export type {
   PermissionStore,
   SettingsStore,
   FileDiff,
-  SettingsTabType,
   PermissionMode,
   CronJob,
   McpServer,

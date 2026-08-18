@@ -13,12 +13,12 @@ import React, { useLayoutEffect, useRef, useState, useMemo } from 'react';
 import { ChevronRight, BrainCircuit, Sparkles, Maximize2 } from 'lucide-react';
 import styles from './ChatMessageRow.module.css';
 import { AsyncMarkdownBlock } from './AsyncMarkdownBlock';
-import { Priority } from '../../workers';
-import { openThoughtInspector } from '../../store/storeAccess';
 import {
+  Priority,
   budgetThinkingText,
   THINKING_INLINE_CHAR_CAP,
-} from '../../api/messageWindowDomBudget';
+} from '../../workers';
+import { openThoughtInspector } from '../../store/storeAccess';
 import { ThinkingTimer } from './ThinkingTimer';
 import { Tooltip, Button } from '../ui';
 

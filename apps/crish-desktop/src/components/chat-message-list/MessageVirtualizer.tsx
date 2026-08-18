@@ -6,7 +6,7 @@ import { messageMatchesSearch } from '../../api/sessionSearch';
 import { ChatUserMessageRow } from '../chat-message-row/ChatMessageRow';
 import { StreamingAssistantRow } from './StreamingAssistantRow';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
-import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/messageWindow';
+import { MESSAGE_ESTIMATED_ROW_HEIGHT } from '../../api/VirtualScrollManager';
 import { ChevronDown, Pin, PinOff } from 'lucide-react';
 import {
   registerActiveVsm,
@@ -23,12 +23,7 @@ import {
 export type { MessageVirtualizerProps, PinnedItem };
 
 const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
-  visibleMessages,
-  messageWindow,
-  olderStep,
-  offerShowAllOlder,
-  expandOlderStep,
-  expandOlderAll,
+  messages,
   pinnedItems,
   pinsOpen,
   setPinsOpen,
@@ -37,7 +32,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   searchHighlightQuery,
   expandedUserMsgs,
   onToggleExpandUser,
-  onShowToast,
   hideThinkingBlock,
   inPlanMode,
   planApproved,
@@ -59,13 +53,13 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   activeSessionId,
   handleMarkdownClick,
 }) => {
-  const visibleMsgIds = useMemo(
-    () => visibleMessages.map((m) => m.id),
-    [visibleMessages]
+  const msgIds = useMemo(
+    () => messages.map((m) => m.id),
+    [messages]
   );
   const vs = useVirtualScroll({
-    ids: visibleMsgIds,
-    itemCount: visibleMessages.length,
+    ids: msgIds,
+    itemCount: messages.length,
     overscan: 6,
     fallbackHeight: MESSAGE_ESTIMATED_ROW_HEIGHT,
   });
@@ -122,7 +116,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
         observed.delete(row);
       }
     }
-  }, [visibleMsgIds, containerRef, setActual]);
+  }, [msgIds, containerRef, setActual]);
 
   useEffect(() => {
     const ro = roRef.current;
@@ -133,9 +127,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
       observed.clear();
     };
   }, []);
-
-  const olderAria = `显示更早的 ${olderStep} 条消息，当前仍有 ${messageWindow.hiddenCount} 条未显示`;
-  const showAllAria = `一次展开全部 ${messageWindow.hiddenCount} 条更早消息`;
 
   const { startIndex, endIndex, startOffset, estimatedTotalHeight } =
     vs.visibleRange;
@@ -152,65 +143,13 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
       className={styles.list}
       role="region"
       aria-label="会话消息"
-      data-window-start={messageWindow.startIndex}
-      data-hidden-count={messageWindow.hiddenCount}
-      data-visible-count={messageWindow.visibleCount}
-      data-total-count={messageWindow.totalCount}
+      data-total-count={messages.length}
       data-show-all={showAllMessages ? 'true' : 'false'}
-      data-has-older={messageWindow.hasOlder ? 'true' : 'false'}
       data-virtual-scroll="true"
       onClick={handleMarkdownClick}
       onScroll={vs.onScroll}
     >
       <div className={styles.listInner}>
-        {messageWindow.hasOlder && olderStep > 0 ? (
-          <div
-            className="chat-msg-window-older"
-            role="region"
-            aria-label="更早消息"
-          >
-            <div className="chat-msg-window-older-actions">
-              <Tooltip content={olderAria}>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="chat-msg-window-older-btn"
-                  onClick={expandOlderStep}
-                  aria-label={olderAria}
-                >
-                  显示更早的 {olderStep} 条
-                  <span
-                    className="chat-msg-window-older-meta"
-                    aria-hidden="true"
-                  >
-                    （另有 {messageWindow.hiddenCount} 条未显示）
-                  </span>
-                </Button>
-              </Tooltip>
-              {offerShowAllOlder ? (
-                <Tooltip content={showAllAria}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="chat-msg-window-older-btn chat-msg-window-older-btn--all"
-                    onClick={expandOlderAll}
-                    aria-label={showAllAria}
-                  >
-                    全部展开
-                    <span
-                      className="chat-msg-window-older-meta"
-                      aria-hidden="true"
-                    >
-                      （{messageWindow.hiddenCount} 条）
-                    </span>
-                  </Button>
-                </Tooltip>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
         {pinnedItems.length > 0 ? (
           <div
             className={styles.pinnedBar}
@@ -278,10 +217,10 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
         <div style={{ height: startOffset, flexShrink: 0 }} aria-hidden />
 
         {/* 渲染身份（C2）：key / 高度缓存键 = message.id；stream 与 final 共用同一行 id */}
-        {visibleMessages.slice(startIndex, endIndex).map((msg, i) => {
+        {messages.slice(startIndex, endIndex).map((msg, i) => {
           const virtualIndex = startIndex + i;
           const prevMsg =
-            virtualIndex > 0 ? visibleMessages[virtualIndex - 1] : null;
+            virtualIndex > 0 ? messages[virtualIndex - 1] : null;
           const isFollowUp =
             msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
           const isPinnedMsg = pinnedIdSet.has(msg.id);
@@ -300,7 +239,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                     isExpanded={!!expandedUserMsgs[msg.id]}
                     onToggleExpand={onToggleExpandUser}
                     onTogglePin={togglePin}
-                    onShowToast={onShowToast}
+                    
                     messageIndex={virtualIndex}
                     virtualScrollManager={manager}
                   />
@@ -324,7 +263,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                   isLastAssistant={msg.id === lastAssistantId}
                   toolStackProps={toolStackProps}
                   onTogglePin={togglePin}
-                  onShowToast={onShowToast}
+                  
                   onRegenerate={handleRegenerateRow}
                   onBranch={onBranch}
                   onOpenDiff={onOpenDiff}

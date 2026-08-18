@@ -1,6 +1,6 @@
-/* Crish Design System — Phase 1 (supplementary layer on top of tokens.css) */
+/* Crish Design System   Phase 1 (supplementary layer on top of tokens.css) */
 
-/* S7-4：--slate-* 十二阶死 token 已删除（全仓零引用；如需蓝黑阶请走 tokens.css 语义 token） */
+/* S7-4 --slate-*      token                   tokens.css    token  */
 
 /* 3. Elevation utility classes */
 .elevation-0 { background: var(--bg-primary); }
@@ -9,14 +9,14 @@
 .elevation-3 { background: var(--bg-card); box-shadow: var(--shadow-md); }
 .elevation-4 { background: var(--bg-elevated); box-shadow: var(--shadow-lg); }
 
-/* Dark mode: top-light gradient overlay for E2–E4 */
+/* Dark mode: top-light gradient overlay for E2 E4 */
 html[data-theme="dark"] .elevation-2,
 html[data-theme="dark"] .elevation-3,
 html[data-theme="dark"] .elevation-4 {
   background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
 }
 
-/* ── S7-3：以下全局规则自 tokens.css 迁入（tokens.css 只留 token 定义）── */
+/*    S7-3         tokens.css    tokens.css    token       */
 
 /* Premium dynamic text selection matching skin-specific themes */
 ::selection {
@@ -57,7 +57,7 @@ html[data-theme="dark"] .elevation-4 {
   transform-origin: center center;
 }
 
-/* ── 面板/浮层基准样式 ── */
+/*      /          */
 [data-panel] {
   background: var(--bg-elevated);
   border-radius: var(--radius-lg);
@@ -75,7 +75,7 @@ html[data-theme="dark"] .elevation-4 {
   box-shadow: none;
 }
 
-/* ── 面板动画（新增）── */
+/*               */
 @keyframes panel-enter {
   from { opacity: 0; transform: scale(0.96); }
   to   { opacity: 1; transform: scale(1); }
@@ -84,12 +84,12 @@ html[data-theme="dark"] .elevation-4 {
   from { opacity: 1; transform: scale(1); }
   to   { opacity: 0; transform: scale(0.96); }
 }
-/* ── 弹出层退出动画（已有进入，补退出）── */
+/*                        */
 @keyframes crish-popover-exit {
   from { opacity: 1; transform: scale(1) translateY(0); }
   to   { opacity: 0; transform: scale(0.96) translateY(-4px); }
 }
-/* ── 模态框退出动画（已有进入，补退出）── */
+/*                        */
 @keyframes crish-modal-exit {
   from { opacity: 1; transform: scale(1) translateY(0); }
   to   { opacity: 0; transform: scale(0.96) translateY(8px); }

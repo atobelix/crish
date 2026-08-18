@@ -61,11 +61,12 @@
 .mrlList {
   flex: 1;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   padding: var(--space-2);
   display: flex;
   flex-direction: column;
   gap: 3px;
+  scrollbar-gutter: stable;
 }
 
 .mrlItem {
@@ -166,18 +167,19 @@
   text-align: center;
 }
 
-/* 闁告瑥鍘栭弲鍓佹嫚閿旇棄锟?Canvas */
+/*         Canvas */
 .modelsDetail {
   flex: 1;
   min-width: 0;
   padding: 20px 24px;
   overflow-x: hidden;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  overscroll-behavior: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
   background: var(--bg-primary);
+  scrollbar-gutter: stable;
 }
 
 .mrdHead {
@@ -558,7 +560,7 @@
   box-shadow: none;
 }
 
-/* 婵炲枴銈庢矗闁瑰灝绉崇紞鏃堟晬濮橆偄鐦滈柛鎺擃殙閵嗗啯鎱ㄧ€ｎ剛鐭掗柛娆樺灣閸嬶綁鏁嶉崼銉ょ級闁稿繐绉崇粭宀勬煀瀹ュ洨鏋傞梻鍫涘灪濠㈡﹢骞庨～顓犵Т闁哄啫澧庨崑锝嗙▔瀹ュ懎鐓傞柨娑橆檧缁遍亶锟?model-row 锟?hover 锟?*/
+/*                                                                                                ?model-row  ?hover  ?*/
 .modelsIconBtn {
   width: 28px;
   height: 28px;
@@ -605,7 +607,7 @@
   color: var(--accent-red);
 }
 
-/* 闁告凹鍨版禒鐘崇▔鎼淬垻銈撮悹鍥ㄦ礈閳笺垺瀵煎Ο鍝勫弗闁挎稒顒ver 闁哄啯婀圭划娑㈠礂閸儲鑻熼柛?*/
+/*                               ver               ?*/
 .modelsIconBtnPrimary {
   opacity: 0.35;
   pointer-events: auto;
@@ -625,7 +627,7 @@
   flex: 1;
 }
 
-/* 閻犱籍銈呯€柛妤佹磻閻滎垶鏁嶅顐ょ憿婵☆垪鈧磭鈧兘宕氬Δ鍕┾偓鍐亹鐠囪尙淇洪柛鎺戞鐏忣垶鏁嶅畝鍕笡閻犱降鍊栨慨宀勫矗閻欏懐绀夊☉鎾崇С缁楀瞼鎮扮仦鐐儥濞达絾绮嶆慨鐘虫媴?*/
+/*                                                                                    ?*/
 .modelsBilling {
   margin-top: 14px;
   padding-top: 14px;
@@ -924,7 +926,7 @@
   animation: spin var(--transition-spin) infinite;
 }
 
-/* T05.3.2：添加服务商下拉（由全局 settings-select-trigger / sort-filter-menu 迁移） */
+/* T05.3.2             settings-select-trigger / sort-filter-menu     */
 .addServiceBtn {
   display: inline-flex;
   align-items: center;
@@ -1058,8 +1060,8 @@
   min-width: 180px;
   max-height: 280px;
   overflow-y: auto;
-  overscroll-behavior: contain;
-  z-index: var(--z-model-flyout);
+  overscroll-behavior: auto;
+  z-index: var(--z-dropdown-menu);
   background: var(--bg-primary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);

@@ -19,9 +19,9 @@ import {
 import type { WorkspaceLayoutSnapshot } from './store-types';
 
 export interface PersistableStoreState {
-  workspaces: WorkspaceState[];
-  sidebarCollapsed: boolean;
-  activeWorkspaceIndex: number;
+  workspaces?: WorkspaceState[];
+  sidebarCollapsed?: boolean;
+  activeWorkspaceIndex?: number;
   sessions: SessionState[];
   sessionsById: Record<string, SessionState>;
   activeSessionId: string;
@@ -31,7 +31,7 @@ export interface PersistableStoreState {
   panelAgentId: string | null;
 }
 
-export interface StoreApiLike<S extends PersistableStoreState> {
+export interface StoreApiLike<S extends { hydrationComplete: boolean }> {
   getState: () => S;
   setState: (
     partial: S | Partial<S> | ((state: S) => void),
@@ -43,7 +43,7 @@ export interface StoreApiLike<S extends PersistableStoreState> {
 /**
  * 依赖倒置（G13 断环）：会话激活由调用方 store 自身 action 提供，
  * 避免 store-persistence 反向 import api/storeAccess（api → store 大环）。
- * layoutStore（含 SessionActions）天然满足该接口。
+ * layoutStore 与 sessionStore 天然满足该接口。
  */
 export type SessionActivatableStore<S extends PersistableStoreState> =
   StoreApiLike<S> & {
@@ -51,9 +51,13 @@ export type SessionActivatableStore<S extends PersistableStoreState> =
     setActiveSessionId?: (id: string) => void;
   };
 
-export function serializeWorkspaceLayout<S extends PersistableStoreState>(
-  state: S
-): WorkspaceLayoutSnapshot {
+export function serializeWorkspaceLayout<
+  S extends {
+    workspaces: WorkspaceState[];
+    sidebarCollapsed: boolean;
+    activeWorkspaceIndex: number;
+  },
+>(state: S): WorkspaceLayoutSnapshot {
   return {
     version: 1,
     workspaces: state.workspaces.map((ws) => ({
@@ -65,10 +69,13 @@ export function serializeWorkspaceLayout<S extends PersistableStoreState>(
   };
 }
 
-export function deserializeWorkspaceLayout<S extends PersistableStoreState>(
-  snapshot: WorkspaceLayoutSnapshot,
-  state: S
-): void {
+export function deserializeWorkspaceLayout<
+  S extends {
+    workspaces: WorkspaceState[];
+    sidebarCollapsed: boolean;
+    activeWorkspaceIndex: number;
+  },
+>(snapshot: WorkspaceLayoutSnapshot, state: S): void {
   const index = clampActiveWorkspaceIndex(
     snapshot.workspaces,
     snapshot.activeWorkspaceIndex
@@ -82,8 +89,11 @@ export function deserializeWorkspaceLayout<S extends PersistableStoreState>(
 }
 
 /** 等待 store 会话回灌完成 */
-export function waitForStoreHydration<S extends PersistableStoreState>(
-  store: StoreApiLike<S>
+export function waitForStoreHydration<S extends { hydrationComplete: boolean }>(
+  store: {
+    getState: () => S;
+    subscribe: (listener: (state: S) => void) => () => void;
+  }
 ): Promise<void> {
   return new Promise((resolve) => {
     if (store.getState().hydrationComplete) {
@@ -197,11 +207,13 @@ export function initStorePersistence<S extends PersistableStoreState>(
             state.activeAgentId = null;
             state.panelAgentId = null;
             // empty workspace seed：若被外部掏空则重种
-            state.workspaces = ensureNonEmptyWorkspaces(state.workspaces);
-            state.activeWorkspaceIndex = clampActiveWorkspaceIndex(
-              state.workspaces,
-              state.activeWorkspaceIndex
-            );
+            if (state.workspaces) {
+              state.workspaces = ensureNonEmptyWorkspaces(state.workspaces);
+              state.activeWorkspaceIndex = clampActiveWorkspaceIndex(
+                state.workspaces,
+                state.activeWorkspaceIndex ?? 0
+              );
+            }
             applied = true;
           });
         } else {

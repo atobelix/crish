@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 浏览器数据导入区（G-4 收尾 U6：书签/历史/登录态导入 UI，03-方案 §4.2 U6）。
  *
  * 布局（BrowserPanel 内「数据导入」区）：
@@ -38,7 +38,7 @@ import {
   formatUnixSecTime,
   isUsableJsonText,
 } from '../../../api/browserImportLib';
-import type { ShowToastFn } from '../../../hooks/useToastQueue';
+import type { } from '../../../hooks/useToastQueue';
 import { useBookmarksImport } from './import-hooks/useBookmarksImport';
 import { useHistoryImport } from './import-hooks/useHistoryImport';
 import { useStorageImport } from './import-hooks/useStorageImport';
@@ -47,7 +47,6 @@ import { ExportAuthDialogs } from './ExportAuthDialogs';
 import type { BusyKind } from './import-hooks/browserImportShared';
 
 export interface BrowserImportSectionProps {
-  onShowToast: ShowToastFn;
   /** 受管浏览器是否运行中：登录态导出/导入需运行中会话（storage 命令不触发惰性启动）。 */
   browserRunning?: boolean;
   /** 测试注入：登录态「另存为」写盘（缺省 downloadTextFile）。 */
@@ -55,19 +54,17 @@ export interface BrowserImportSectionProps {
 }
 
 export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
-  onShowToast,
   browserRunning = false,
   saveExport,
 }) => {
   const baseId = useId();
   const [busy, setBusy] = useState<BusyKind>(null);
 
-  const bookmarks = useBookmarksImport({ busy, setBusy, onShowToast });
-  const history = useHistoryImport({ busy, setBusy, onShowToast });
-  const storage = useStorageImport({ busy, setBusy, onShowToast });
+  const bookmarks = useBookmarksImport({ busy, setBusy });
+  const history = useHistoryImport({ busy, setBusy });
+  const storage = useStorageImport({ busy, setBusy });
   const exportAuth = useExportAuth({
     setBusy,
-    onShowToast,
     setStorageError: storage.setStorageError,
     saveExport,
   });

@@ -25,12 +25,12 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useLayoutStore } from '../store/layoutStore';
+import { useSessionStore } from '../store/sessionStore';
 import type {
   SessionMessage,
   FileDiff,
   MessageToolCall,
-} from '../store/layoutStore';
+} from '../store/types';
 import type { MessageToolApprovalMeta } from '../store/types';
 import {
   sendToSubagent,
@@ -101,14 +101,14 @@ export function useAgentPanel(
   const cooldownRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
 
-  const patchSessionAgent = useLayoutStore((s) => s.patchSessionAgent);
-  const appendSessionAgentMessage = useLayoutStore(
+  const patchSessionAgent = useSessionStore((s) => s.patchSessionAgent);
+  const appendSessionAgentMessage = useSessionStore(
     (s) => s.appendSessionAgentMessage
   );
-  const patchSessionAgentMessage = useLayoutStore(
+  const patchSessionAgentMessage = useSessionStore(
     (s) => s.patchSessionAgentMessage
   );
-  const finalizeAgentMessages = useLayoutStore((s) => s.finalizeAgentMessages);
+  const finalizeAgentMessages = useSessionStore((s) => s.finalizeAgentMessages);
 
   useEffect(() => {
     mountedRef.current = true;

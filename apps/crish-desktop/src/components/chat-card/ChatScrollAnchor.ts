@@ -1,22 +1,28 @@
-import { useEffect } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionMessage } from '../../store/types';
-import { useChatAutoScroll } from '../../hooks/useChatAutoScroll';
 
 export interface UseChatScrollAnchorOptions {
   messages: SessionMessage[];
-  isProcessing: boolean;
+  _isProcessing: boolean;
   activeSessionId: string | null;
   onOpenPathInFilesPanel: (path: string) => void;
 }
 
 export function useChatScrollAnchor({
   messages,
-  isProcessing,
+  _isProcessing,
   activeSessionId,
   onOpenPathInFilesPanel,
 }: UseChatScrollAnchorOptions) {
-  const { chatFlowRef, showScrollToBottom, scrollToBottom } =
-    useChatAutoScroll(messages, isProcessing);
+  const chatFlowRef = useRef<HTMLDivElement>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  const scrollToBottom = useCallback(() => {
+    const el = chatFlowRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    setShowScrollToBottom(false);
+  }, []);
 
   useEffect(() => {
     const root = chatFlowRef.current;

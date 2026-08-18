@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 受管浏览器会话 hook：状态机 + invoke 封装 + 事件订阅。
  * 对齐 usePreviewNavigation 风格：hook 收拢全部状态副作用，渲染层只消费返回值。
  *
@@ -14,7 +14,6 @@
  * - crash 原因（F7）：事件/查询载荷携带 reason 时透出（前端兼容解析）。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
 import type { InvokeTypedResult } from '../../api/tauriInvoke';
 import {
   fetchBrowserStatus,
@@ -28,12 +27,12 @@ import {
   type BrowserSessionState,
 } from './browserSessionLib';
 
+import { toast } from '../../services/toast/ToastContext';
+
 /** busy 互斥超时（评审 F4）：操作挂死 30s 后强制释放，防永久锁死。 */
 const BUSY_OPERATION_TIMEOUT_MS = 30_000;
 
-export interface UseBrowserSessionOptions {
-  onShowToast: ShowToastFn;
-}
+export interface UseBrowserSessionOptions {}
 
 export interface UseBrowserSessionResult {
   state: BrowserSessionState;
@@ -72,14 +71,13 @@ function extractPayloadReason(payload: unknown): string | undefined {
 }
 
 export function useBrowserSession(
-  opts: UseBrowserSessionOptions,
+  _opts: UseBrowserSessionOptions = {},
 ): UseBrowserSessionResult {
   const [state, setState] = useState<BrowserSessionState>('idle');
   const [url, setUrl] = useState<string | undefined>(undefined);
   const [reason, setReason] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
-  const toastRef = useRef(opts.onShowToast);
-  toastRef.current = opts.onShowToast;
+  const toastRef = useRef((m: string) => toast.show(m));
   const busyRef = useRef(false);
 
   const applyPayload = useCallback((payload: unknown) => {

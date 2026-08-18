@@ -18,7 +18,7 @@
  * no cross-store gain.
  */
 
-import { isChatDomain } from './types';
+import { viewRegistry } from '../../services/view-registry';
 import {
   openToolInActiveTab,
   openToolInSession,
@@ -28,17 +28,6 @@ import {
   ensureChatOnlyTree,
 } from '../workspace-shell/adapterShape';
 
-/** 可被事件桥/命令式 API 打开的面板 ID 集合。 */
-export type OpenablePanelId =
-  | 'overview'
-  | 'files'
-  | 'terminal'
-  | 'diff'
-  | 'preview'
-  | 'tasks'
-  | 'runtime'
-  | 'agent'
-  | 'chat';
 
 /**
  * 在二叉树布局下聚焦或打开指定面板。
@@ -53,7 +42,7 @@ export function focusOrOpenTreePanel(
   panelId: string,
   sessionId?: string | null
 ): void {
-  if (panelId === 'chat' || isChatDomain(panelId)) {
+  if (panelId === 'chat' || viewRegistry.isPrimary(panelId)) {
     const sid = (sessionId || '').trim();
     ensureChatOnlyTree(sid || undefined);
     ensureAdapterShape();

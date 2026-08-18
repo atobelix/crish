@@ -18,7 +18,6 @@
 
 import { installBeforeunloadFlush } from './api/beforeunloadFlush';
 import { connectionManager } from './services/ConnectionManager';
-import { crossTabCoordinator } from './services/CrossTabCoordinator';
 import { errorStore } from './services/ErrorStore';
 import { eventBus } from './services/EventBus';
 import { WindowResizeBridge } from './services/WindowResizeBridge';
@@ -94,9 +93,6 @@ export function bootstrapServices(): () => void {
   // 4. (C3.1) StreamRecovery 已删：连接就绪恢复由 Rust 事件通道有序保证，前端不再重放
 
   // 5. (C3.1) SessionSyncService 已删：会话即本地 SQLite，无 push/pull 双向同步
-
-  // 6. Start CrossTabCoordinator (leader election, cross-tab sync)
-  crossTabCoordinator.init();
 
   // 7. Wire ErrorStore to EventBus — map daemon connection state
   const unsubErrorStore = eventBus.on('engine:connection:change', (payload) => {

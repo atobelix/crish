@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 模型：选择服务商、配置密钥，并管理可用模型。
  */
@@ -23,7 +24,7 @@ import { ModelProfileList, ModelsCascadeSelect } from './ModelProfileList';
 import { ModelConfigEditor } from './ModelConfigEditor';
 
 type Props = {
-  onShowToast?: (msg: string) => void;
+  _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
 /**
@@ -118,7 +119,8 @@ export const AddProviderMenu: React.FC<{
   );
 };
 
-export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
+export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const {
     profiles,
     setProfiles,
@@ -165,7 +167,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     hasKeySelected,
     activeProfileId,
     globalActiveModelId,
-  } = useModelProfilesState(onShowToast);
+  } = useModelProfilesState();
 
   const headerMeta = (
     <div style={{ position: 'relative', display: 'inline-block' }}>

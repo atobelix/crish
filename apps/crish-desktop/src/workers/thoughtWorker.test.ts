@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { extractHeadingsSync, searchThoughtTextSync } from './thoughtWorker';
 import {
+  extractHeadingsSync,
+  searchThoughtTextSync,
   budgetThinkingText,
   sliceSafeTailMarkdown,
-} from '../api/messageWindowDomBudget';
+} from './thoughtWorker';
 
 describe('thoughtWorker TOC 状态机与检索测试', () => {
   it('应当过滤代码块内部的 Python / Bash 注释 # ...，不误提权为 H1', () => {

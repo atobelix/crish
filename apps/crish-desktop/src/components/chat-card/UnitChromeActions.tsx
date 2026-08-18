@@ -16,7 +16,7 @@ import {
 import { useLayoutTreeStore } from '../../store/storeAccess';
 import { pinSession, unpinSession } from '../../api/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import styles from './ChatHeader.module.css';
+import styles from './UnitChromeActions.module.css';
 
 const UNIT_TOOL_PANELS = [
   {

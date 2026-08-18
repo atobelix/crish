@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 规则：短规则、预设与全文编辑；成功静默，仅失败提示。
  * 壳组件：作用域选择 + 规则列表 + 快速添加 + 全文编辑弹层装配；
@@ -22,17 +23,12 @@ import {
 import { RulesEditorDialog } from './RulesEditorDialog';
 
 type Props = {
-  onShowToast: (msg: string) => void;
-  /** 二级弹层打开时通知父级，避免 Esc 直接关掉整个设置页 */
-  onBlockingOverlayChange?: (blocking: boolean) => void;
+  onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const SettingsRulesTab: React.FC<Props> = ({
-  onShowToast,
-  onBlockingOverlayChange,
-}) => {
+export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const state = useRulesState({
-    onShowToast,
     onBlockingOverlayChange,
   });
   const {
@@ -83,7 +79,7 @@ export const SettingsRulesTab: React.FC<Props> = ({
 
   const openFullEditor = () => {
     if (!state.isGlobal && !scopeKey) {
-      onShowToast('请先选择项目');
+      showToast('请先选择项目');
       return;
     }
     setEditingOpen(true);

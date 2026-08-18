@@ -1,13 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import { toast } from '../../services/toast/ToastContext';
 import {
   findChatLeafBySessionId,
   listChatLeaves,
   collectLeaves,
-  isChatDomain,
 } from '../../store/storeAccess';
+import { viewRegistry } from '../../services/view-registry';
 import {
   archiveUndoToastMessage,
   branchUndoToastMessage,
@@ -62,7 +62,7 @@ function openSessionInChatSplit(
 
   const after = root.tree.getState();
   const newLeaf = collectLeaves(after.tree.root).find(
-    (l) => isChatDomain(l.panelId) && !beforeIds.has(l.id)
+    (l) => viewRegistry.isPrimary(l.panelId) && !beforeIds.has(l.id)
   );
   if (newLeaf) {
     root.tree.setLeafSessionId(newLeaf.id, sid);
@@ -74,12 +74,10 @@ function openSessionInChatSplit(
 }
 
 export interface UseSidebarContextMenuOptions {
-  onShowToast: ShowToastFn;
   setSortDropdownOpen: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export function useSidebarContextMenu({
-  onShowToast,
   setSortDropdownOpen,
 }: UseSidebarContextMenuOptions) {
   // pin/archive/branch 等命令式写走 compositionRoot.session；列表渲染仍用 selectors
@@ -171,7 +169,7 @@ export function useSidebarContextMenu({
       case 'archive': {
         const title = targetSession.title || '未命名会话';
         root.session.archiveSession(sessionId);
-        onShowToast(archiveUndoToastMessage(title), () => {
+        toast.show(archiveUndoToastMessage(title), () => {
           root.session.unarchiveSession(sessionId);
         });
         break;
@@ -182,7 +180,7 @@ export function useSidebarContextMenu({
         const oldId = sessionId;
         root.session.branchSession(sessionId, newTitle);
         const newBranchId = root.session.getActiveSessionId();
-        onShowToast(branchUndoToastMessage(title), () => {
+        toast.show(branchUndoToastMessage(title), () => {
           if (newBranchId && newBranchId !== oldId) {
             root.session.archiveSession(newBranchId);
           }
@@ -201,17 +199,17 @@ export function useSidebarContextMenu({
               sessionsById: root.session.getState().sessionsById,
             });
             if (result.ok === false) {
-              onShowToast(result.error || '导出失败');
+              toast.show(result.error || '导出失败');
             }
           } catch {
-            onShowToast('导出失败');
+            toast.show('导出失败');
           }
         })();
         break;
       }
       case 'copy-id':
         navigator.clipboard.writeText(sessionId);
-        onShowToast('会话 ID 已复制到剪贴板');
+        toast.show('会话 ID 已复制到剪贴板');
         break;
       case 'delete': {
         const title = targetSession.title || '未命名会话';
@@ -229,9 +227,9 @@ export function useSidebarContextMenu({
     const root = getCompositionRoot();
     // 删除走 sessionStore 命令式入口（SessionFacade 无 deleteSession）
     root.session.getState().deleteSession(pendingDelete.sessionId);
-    onShowToast(`已删除对话: ${pendingDelete.title}`);
+    toast.show(`已删除对话: ${pendingDelete.title}`);
     setPendingDelete(null);
-  }, [pendingDelete, onShowToast]);
+  }, [pendingDelete]);
 
   const cancelDelete = React.useCallback(() => {
     setPendingDelete(null);

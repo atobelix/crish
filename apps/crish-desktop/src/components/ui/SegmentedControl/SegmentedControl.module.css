@@ -1,0 +1,147 @@
+/* ui/SegmentedControl        RED-DETAILED-02 / T-ATOM-06 
+ *          Ro = Ri + P
+ *      (sm/md): Ro = 8px (--radius-lg), P = 2px => Ri = 6px (--radius-md)
+ *      (xs): Ro = 6px (--radius-md), P = 2px => Ri = 4px (--radius-sm)
+ * 100%    tokens.css       hex/rgba    9999px      
+ */
+
+.container {
+  --seg-h: 28px;
+  --seg-pad: 2px;
+  --seg-outer-radius: var(--radius-lg, 8px);
+  --seg-inner-radius: var(--radius-md, 6px);
+  --seg-fs: var(--font-size-sm, 13px);
+  --seg-item-px: var(--space-2_5, 10px);
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: var(--seg-h);
+  padding: var(--seg-pad);
+  border-radius: var(--seg-outer-radius);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  user-select: none;
+}
+
+.containerBlock {
+  display: flex;
+  width: 100%;
+}
+
+.containerBlock .item {
+  flex: 1;
+}
+
+.containerDisabled {
+  opacity: var(--opacity-disabled, 0.45);
+  cursor: not-allowed;
+}
+
+/*       */
+.containerXs,
+.container[data-size='xs'] {
+  --seg-h: 24px;
+  --seg-pad: 2px;
+  --seg-outer-radius: var(--radius-md, 6px);
+  --seg-inner-radius: var(--radius-sm, 4px);
+  --seg-fs: var(--font-size-xs, 12px);
+  --seg-item-px: var(--space-2, 8px);
+}
+
+.containerSm,
+.container[data-size='sm'] {
+  --seg-h: 28px;
+  --seg-pad: 2px;
+  --seg-outer-radius: var(--radius-lg, 8px);
+  --seg-inner-radius: var(--radius-md, 6px);
+  --seg-fs: var(--font-size-sm, 13px);
+  --seg-item-px: var(--space-2_5, 10px);
+}
+
+.containerMd,
+.container[data-size='md'] {
+  --seg-h: 32px;
+  --seg-pad: 2px;
+  --seg-outer-radius: var(--radius-lg, 8px);
+  --seg-inner-radius: var(--radius-md, 6px);
+  --seg-fs: var(--font-size-base, 14px);
+  --seg-item-px: var(--space-3, 12px);
+}
+
+/*         (FLIP   ) */
+.activeSlider {
+  position: absolute;
+  top: var(--seg-pad);
+  bottom: var(--seg-pad);
+  left: 0;
+  border-radius: var(--seg-inner-radius);
+  background-color: var(--bg-elevated);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 10%, transparent);
+  pointer-events: none;
+  z-index: 1;
+  transition:
+    transform var(--transition-fast, 180ms) cubic-bezier(0.2, 0, 0, 1),
+    width var(--transition-fast, 180ms) cubic-bezier(0.2, 0, 0, 1),
+    opacity var(--transition-micro, 120ms) ease;
+}
+
+/*       */
+.item {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1_5, 6px);
+  height: 100%;
+  padding: 0 var(--seg-item-px);
+  font-family: var(--font-sans, inherit);
+  font-size: var(--seg-fs);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 1;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--seg-inner-radius);
+  cursor: pointer;
+  white-space: nowrap;
+  outline: none;
+  transition:
+    color var(--transition-micro, 120ms) ease,
+    background var(--transition-micro, 120ms) ease;
+}
+
+.item:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.itemActive {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/*    Focus Ring AGENTS.md   13    */
+.item:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+}
+
+.itemDisabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled, 0.45);
+}
+
+.itemIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 1em;
+}
+
+.itemLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

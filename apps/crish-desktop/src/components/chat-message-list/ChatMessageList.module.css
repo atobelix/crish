@@ -1,4 +1,4 @@
-/* 全宽滚动容器：滚动条贴在 chat 面板右缘，不贴消息列 */
+/*              chat            */
 .list {
   width: 100%;
   max-width: none;
@@ -13,7 +13,7 @@
   position: relative;
 }
 
-/* 消息列：与 footer .chatCol 同 max-width / 水平 padding */
+/*       footer .chatCol   max-width /    padding */
 .listInner {
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);

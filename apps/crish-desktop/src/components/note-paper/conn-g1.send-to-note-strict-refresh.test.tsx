@@ -33,7 +33,6 @@ import {
 } from '../../bridges/note-doc-written';
 import { adaptNoteTransportAsHydrate } from './hydrateProjection';
 import { NotePaperStrictPanel } from './NotePaperStrictPanel';
-import { W5B_SKELETON_PACKAGE_ID } from './notePaperSkeletonTrack';
 import { W5B_STRICT_PACKAGE_ID } from './notePaperStrictTrack';
 
 beforeEach(() => {
@@ -58,8 +57,7 @@ describe('CONN-G1 · send_to_note → Strict 写后读回', () => {
       'data-package-id',
       W5B_STRICT_PACKAGE_ID
     );
-    // Skeleton 常量仍独立存在（双轨保留；本测不挂 Skeleton 面板）
-    expect(W5B_SKELETON_PACKAGE_ID).not.toBe(W5B_STRICT_PACKAGE_ID);
+    expect(W5B_STRICT_PACKAGE_ID).not.toBe('W5-B-S');
 
     const result = await dispatchSendToNote(
       {

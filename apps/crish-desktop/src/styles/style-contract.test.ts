@@ -67,7 +67,6 @@ const DEF_LINE_RE = /^\s*--[\w-]+\s*:/;
  *  design-system.css：批次 9.1 S7-3 迁入的 ::selection 全局规则（原 tokens.css 内，非消费点）） */
 const MIX_SKIP_FILE_NAMES = [
   'tokens.css',
-  'theme-dark.css',
   'themeStore.ts',
   'design-system.css',
 ];
@@ -97,12 +96,11 @@ describe('z-index token 契约（F7-F14）', () => {
     expect(src).toContain('z-index:var(--z-tooltip)');
   });
 
-  it('LeafToolTabStrip.addDropdownMenu 走 --z-floating-panel 档位', () => {
+  it('LeafToolTabStrip 顶部工具栏 z-index token 化', () => {
     const src = readFile(
       'src/components/binary-tree/LeafToolTabStrip.module.css'
     );
-    const block = src.match(/\.addDropdownMenu\s*\{[\s\S]*?\}/);
-    expect(block?.[0]).toContain('z-index: var(--z-floating-panel)');
+    expect(src).toMatch(/z-index:\s*var\(--z-sticky/);
   });
 
   it('FileViewerCard.filesOpenMenu / filesMoreMenu 走 --z-sidebar 档位', () => {
@@ -275,10 +273,7 @@ describe('批次 2 · ⑥ 注入 token 名 ∈ 静态定义名（双层同源约
       ),
     ];
     expect(injected.length).toBeGreaterThan(10);
-    const staticCss =
-      readFile('src/styles/tokens.css') +
-      '\n' +
-      readFile('src/styles/shell/shell-workspace.css');
+    const staticCss = readFile('src/styles/tokens.css');
     const missing = injected.filter((name) => !staticCss.includes(`${name}:`));
     expect(missing, `注入但无静态定义：${missing.join(', ')}`).toEqual([]);
   });
@@ -371,19 +366,15 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
     }
   });
 
-  it('--z-drag-overlay-max 为 1 定义 + 2 消费点（无 fallback 裸引用）', () => {
+  it('全仓 100,000 等恶性通胀 z-index 变量清零', () => {
     const files = walkSrc().filter((p) => /\.(?:css|tsx|ts)$/.test(p));
-    let refCount = 0;
     for (const p of files) {
       const src = readFileSync(p, 'utf8');
-      for (const line of src.split(/\r?\n/)) {
-        if (!line.includes('z-drag-overlay-max')) continue;
-        if (DEF_LINE_RE.test(line)) continue;
-        refCount += 1;
-        expect(line, `${p} 残留 fallback 裸引用`).not.toContain('99999');
-      }
+      expect(src).not.toContain('z-drag-overlay-max');
+      expect(src).not.toContain('z-first-run');
+      expect(src).not.toContain('z-model-flyout');
+      expect(src).not.toContain('z-skip-link');
     }
-    expect(refCount).toBe(2);
   });
 
   it('ui/Tooltip.module.css 含 --tooltip-translate 静态 fallback（translate(0) 形态）', () => {
@@ -394,20 +385,10 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
     expect(src, rel).toContain('var(--tooltip-translate, translate(0))');
   });
 
-  it('tokens.css 含 --accent-green/red-light-adaptive 静态定义（light + dark）', () => {
+  it('tokens.css 中 15.5%/12.5% 高饱和度 adaptive 变量已清理', () => {
     const css = readFile('src/styles/tokens.css');
-    expect(css.match(/--accent-green-light-adaptive:/g)?.length).toBe(2);
-    expect(css.match(/--accent-red-light-adaptive:/g)?.length).toBe(2);
-  });
-
-  it('.card-tab.active 基础声明仅 1 条（死规则已删除；皮肤复合选择器不受影响）', () => {
-    // 先规范化行尾再匹配：`\s*` 会吞 CRLF 的 \r，导致匹配串含换行
-    const css = readFile('src/styles/shell/shell-workspace.css').replace(
-      /\r\n/g,
-      '\n'
-    );
-    const decls = css.match(/^\.card-tab\.active\s*\{/gm) ?? [];
-    expect(decls).toEqual(['.card-tab.active {']);
+    expect(css).not.toContain('15.5%');
+    expect(css).not.toContain('12.5%');
   });
 });
 

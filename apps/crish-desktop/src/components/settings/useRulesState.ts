@@ -20,6 +20,7 @@ import {
 } from '../../api/rulesApi';
 import { formatEngineDegradeToast } from '../../hooks/useToastQueue';
 import { getSettingsState } from '../../store/storeAccess';
+import { toast } from '../../services/toast/ToastContext';
 import {
   EMPTY_GLOBAL_TEMPLATE,
   EMPTY_PROJECT_TEMPLATE,
@@ -32,7 +33,6 @@ import {
 } from './settingsRulesLib';
 
 export type UseRulesStateOptions = {
-  onShowToast: (msg: string) => void;
   /** 二级弹层打开时通知父级，避免 Esc 直接关掉整个设置页 */
   onBlockingOverlayChange?: (blocking: boolean) => void;
 };
@@ -65,7 +65,7 @@ export type UseRulesStateResult = {
 };
 
 export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
-  const { onShowToast, onBlockingOverlayChange } = opts;
+  const { onBlockingOverlayChange } = opts;
   /** 已打开过的项目 + 当前 cwd（文件夹名） */
   const [scopeProjects, setScopeProjects] = useState(() => listSettingsScopeProjects());
 
@@ -145,14 +145,14 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
           const msg = '读取规则失败：' + String(err);
           setLoadError(msg);
           setLoaded(false);
-          onShowToast(msg);
+          toast.show(msg);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [scopeKey, isGlobal, scopeLabel, onShowToast, loadTick]);
+  }, [scopeKey, isGlobal, scopeLabel, loadTick]);
 
   useEffect(() => {
     onBlockingOverlayChange?.(editingOpen);
@@ -193,7 +193,7 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
       );
       return safe;
     } catch (err) {
-      onShowToast('更新设置失败：' + String(err));
+      toast.show('更新设置失败：' + String(err));
       return null;
     }
   };
@@ -207,9 +207,9 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
   }) => {
     const sync = await syncRulesToDaemon(opts2);
     if (!sync.engineSynced) {
-      onShowToast(formatEngineDegradeToast(sync.error));
+      toast.show(formatEngineDegradeToast(sync.error));
     } else if (sync.truncated) {
-      onShowToast('规则较长，引擎侧已截断');
+      toast.show('规则较长，引擎侧已截断');
     }
   };
 
@@ -245,9 +245,9 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
             });
           })();
       if (!syncResult.engineSynced) {
-        onShowToast('规则已保存到本机，同步到引擎失败');
+        toast.show('规则已保存到本机，同步到引擎失败');
       } else if (syncResult.truncated) {
-        onShowToast('规则较长，引擎侧已截断');
+        toast.show('规则较长，引擎侧已截断');
       }
     } finally {
       setSaving(false);
@@ -258,11 +258,11 @@ export function useRulesState(opts: UseRulesStateOptions): UseRulesStateResult {
     if (saving) return false;
     const trimmed = normalizeRuleLine(text);
     if (!trimmed) {
-      onShowToast('请输入规则内容');
+      toast.show('请输入规则内容');
       return false;
     }
     if (customRules.some((r) => normalizeRuleLine(r) === trimmed)) {
-      onShowToast('该规则已存在');
+      toast.show('该规则已存在');
       return false;
     }
     setSaving(true);

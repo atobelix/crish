@@ -48,14 +48,11 @@ describe('ui/Tooltip', () => {
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
     fireEvent.mouseLeave(screen.getByText('延迟目标'));
-    // 延迟未到：仍可见
+    // 延迟未到（250ms < 300ms）：仍可见
     act(() => vi.advanceTimersByTime(250));
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
-    // 延迟到点 → 进入退出动画
+    // 延迟到点（300ms）+ exitDurationMs=0 立即卸载
     act(() => vi.advanceTimersByTime(100));
-    expect(screen.getByRole('tooltip')).toBeInTheDocument();
-    // 退出动画 120ms 后卸载
-    act(() => vi.advanceTimersByTime(200));
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
@@ -134,9 +131,10 @@ describe('ui/Tooltip', () => {
       </Tooltip>
     );
     fireEvent.focus(screen.getByText('焦点目标'));
+    act(() => vi.advanceTimersByTime(100));
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
     fireEvent.blur(screen.getByText('焦点目标'));
-    act(() => vi.advanceTimersByTime(200));
+    act(() => vi.advanceTimersByTime(100));
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 

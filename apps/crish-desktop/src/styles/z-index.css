@@ -1,49 +1,27 @@
 :root {
-  /* ── 基础层 ── */
+  /* Level 0: 基础文档流与排版底座 */
   --z-base: 0;
-  --z-decorative: 1;
-  --z-sticky-bar: 2;
-  --z-card-header: 3;
-  --z-card-footer: 5;
-  --z-pinned-bar: 10;
-  --z-scroll-fab: 12;
 
-  /* ── 侧栏与导航 ── */
-  --z-sidebar: 100;
-  --z-sidebar-resizer: 100;
-  --z-sidebar-menu: 150;
+  /* Level 1: 粘性与外壳停靠层 */
+  --z-dock: 10;
+  --z-sticky: var(--z-dock);
 
-  /* ── 弹出层（必须 > 侧栏）── */
-  --z-popover: 200;
-  --z-splitter: 300;
-  --z-dropdown-menu: 400;
-  --z-breadcrumb: 600;
+  /* Level 2: 视口外壳与分栏手柄 */
+  --z-chrome: 100;
+  --z-sidebar: var(--z-chrome);
+  --z-resizer: var(--z-chrome);
 
-  /* ── 浮层面板 ── */
-  --z-floating-panel: 1000;
-  --z-dropdown: 1010;
-  --z-drag-highlight: 1020;
-  --z-drag-card: 1030;
+  /* Level 3: 下拉菜单与级联选择 */
+  --z-dropdown: 300;
 
-  /* ── 模态与通知 ── */
-  --z-modal-backdrop: 9000;
-  --z-tooltip: 9999;
-  --z-context-menu: 9500;
-  --z-toast: 10000;
-  --z-drag-overlay: 10010;
-  --z-cheatsheet: 12000;
-  --z-settings-panel: 13000;
+  /* Level 4: 浮层、卡片气泡与上下文菜单 */
+  --z-popover: 500;
+  --z-drawer: var(--z-popover);
 
-  /* ── 设置内弹层 ── */
-  --z-settings-dialog: 20000;
-  --z-permission-menu: 20040;
-  --z-settings-tooltip: 20060;
-  --z-usage-modal: 30000;
+  /* Level 5: 全局模态、设置面板与通知吐司 */
+  --z-modal: 1000;
+  --z-toast: var(--z-modal);
 
-  /* ── 顶层 ── */
-  --z-first-run: 100000;
-  --z-model-flyout: 100000;
-  --z-skip-link: 100000;
-  /* tab 拖拽 ghost 浮层，需高于 settings-panel 20000 与 toast 10000；渲染值保持不变 */
-  --z-drag-overlay-max: 99999;
+  /* Level 6: 顶级悬浮提示与光标胶囊 */
+  --z-tooltip: 9000;
 }

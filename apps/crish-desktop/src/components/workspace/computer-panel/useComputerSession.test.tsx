@@ -27,8 +27,18 @@ const eventMock = vi.hoisted(() => ({
   handlers: new Map<string, TauriEventHandler>(),
 }));
 
+const toastMock = vi.hoisted(() => ({
+  show: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('@tauri-apps/api/event', () => ({
   listen: eventMock.listen,
+}));
+
+vi.mock('../../../services/toast/ToastContext', () => ({
+  toast: toastMock,
+  useToast: () => toastMock,
 }));
 
 function emitComputerEvent(payload: unknown): void {
@@ -46,7 +56,7 @@ function setupDefaultStatus() {
 }
 
 describe('useComputerSession', () => {
-  const toast = vi.fn();
+  const toast = toastMock.show;
 
   beforeEach(() => {
     toast.mockClear();

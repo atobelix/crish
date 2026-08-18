@@ -1,5 +1,5 @@
-/* 设置 · 状态诊断（PE-04 T04.5-2）——复用 SettingsUI 布局原语的轻量样式
- * S6 P1-8：--ui-* 遗留命名与 rgba 硬编码 → --color-* 语义系（tokens.css 真源） */
+/*           PE-04 T04.5-2      SettingsUI          
+ * S6 P1-8 --ui-*       rgba       --color-*     tokens.css     */
 
 .pageMeta {
   display: inline-flex;
@@ -26,7 +26,7 @@
   }
 }
 
-/* 醒目错误横幅（获取失败 / 状态异常） */
+/*             /       */
 .errorBanner {
   display: flex;
   align-items: flex-start;
@@ -56,7 +56,7 @@
   font-weight: 600;
 }
 
-/* 就绪徽标：OK / 异常 / 未知 */
+/*      OK /    /    */
 .badgeOk {
   display: inline-flex;
   align-items: center;
@@ -99,7 +99,7 @@
   vertical-align: middle;
 }
 
-/* 最近错误：醒目错误块 */
+/*            */
 .lastError {
   display: flex;
   flex-direction: column;
@@ -142,7 +142,7 @@
   color: var(--text-danger);
 }
 
-/* 无错误 / 无诊断空态 */
+/*     /       */
 .noError {
   display: flex;
   align-items: center;
@@ -152,7 +152,7 @@
   color: var(--text-tertiary);
 }
 
-/* 最近诊断列表 */
+/*        */
 .diagList {
   list-style: none;
   margin: 0;

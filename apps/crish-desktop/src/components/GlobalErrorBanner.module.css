@@ -1,12 +1,12 @@
-/* GlobalErrorBanner（T5-4）：全局错误常驻告知条——软色 + hairline
-   描边，无重阴影无粗边框（UI 纪律 §13）；固定底部，不打断交互 */
+/* GlobalErrorBanner T5-4                + hairline
+               UI     13             */
 
 .globalErrorBanner {
   position: fixed;
   left: 50%;
   bottom: 16px;
   transform: translateX(-50%);
-  z-index: var(--z-popover, 1000);
+  z-index: var(--z-popover, 500);
   display: flex;
   align-items: center;
   gap: var(--space-2);

@@ -1,13 +1,13 @@
 /**
- * 编排图区段样式（T-D-12 前端侧，DAG-2）。
+ *         T-D-12     DAG-2  
  *
- * 纯 CSS 渲染（零图形库）：节点 DOM 卡片 + 层间骨架连接线
- * （CSS 边框线方案，无精确逐边路由，对齐调研文档 §2.2）。
- * 颜色 / 圆角 / 间距全部走 token 变量，状态色由组件内联
- * stateColorVar 映射的 token 注入（本文件不写任何裸色值）。
+ *   CSS             DOM    +        
+ *  CSS                       2.2  
+ *    /    /       token            
+ * stateColorVar     token                
  */
 
-/* 画布：纵向分层容器 */
+/*           */
 .canvas {
   display: flex;
   flex-direction: column;
@@ -15,14 +15,14 @@
   min-width: 0;
 }
 
-/* 层：横向排布节点卡片（并行节点同层并排） */
+/*                      */
 .layer {
   display: flex;
   gap: var(--space-2);
   min-width: 0;
 }
 
-/* 层间骨架连接线：竖线表示依赖延续（纯 CSS 边框线） */
+/*                    CSS      */
 .layerConnector {
   height: 14px;
   position: relative;
@@ -39,7 +39,7 @@
   border-left: 1px solid var(--hairline-strong);
 }
 
-/* 节点卡片：--bg-card 底 / --hairline-strong 描边 / --radius-lg 圆角 */
+/*      --bg-card   / --hairline-strong    / --radius-lg    */
 .node {
   flex: 1 1 0;
   min-width: 0;
@@ -53,12 +53,12 @@
   box-sizing: border-box;
 }
 
-/* blocked 降透明度（橙点 + 整体减淡，传达「等待依赖」弱态） */
+/* blocked         +                  */
 .nodeBlocked {
   opacity: 0.6;
 }
 
-/* 状态圆点（实心色点；色值由组件按 stateColorVar 注入 token） */
+/*                  stateColorVar    token  */
 .stateDot {
   width: 8px;
   height: 8px;
@@ -67,7 +67,7 @@
   background: var(--border-color);
 }
 
-/* running：旋转圆环 spinner（对齐 AgentTeamBoard 运行中语义） */
+/* running      spinner    AgentTeamBoard        */
 .stateDotSpinner {
   border: 1.5px solid;
   border-top-color: transparent;
@@ -80,7 +80,7 @@
   }
 }
 
-/* 节点标题：单行截断，hover 显示完整 task */
+/*           hover      task */
 .nodeTitle {
   flex: 1;
   min-width: 0;
@@ -93,7 +93,7 @@
   line-height: var(--line-height-base);
 }
 
-/* 节点 meta：状态中文标签 */
+/*    meta        */
 .nodeMeta {
   flex-shrink: 0;
   font-size: var(--font-size-xxs);

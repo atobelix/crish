@@ -92,7 +92,7 @@
   min-width: 0;
 }
 
-/* 婵☆垪鍓濆姗€鎳為婊冾暬闁挎稒淇洪拏瀣償閺囩喐锟ラ柟璇茬箺缁旂喖鏁嶉崼銏╂矗婵縿鍨界划锔芥綇閻у摜绀?*/
+/*                                                  ?*/
 .schedPresetChip {
   display: inline-flex;
   align-items: center;
@@ -121,7 +121,7 @@
   box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
-/* 闁哄倹婢樼紓鎾舵媼閳ュ啿鐏婇柨娑欐皑閻濐偊骞掗幒鎴犳憻婵炲牏顣槐婵囨姜椤栨繄缈婚柛蹇嬪劵缁辨繈寮悩鐢稿厙缂備胶鍠庣敮顐︽偨閻斿墎鐟?select */
+/*                                                                ?select */
 .schedForm {
   border: 1px solid var(--border-color);
   border-radius: var(--radius-2xl);

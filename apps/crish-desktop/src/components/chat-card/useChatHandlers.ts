@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import { toast } from '../../services/toast/ToastContext';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { formatBranchUndoToast } from '../../hooks/useToastQueue';
 import { onUiEvent } from '../../api/uiEvents';
@@ -11,7 +11,6 @@ export interface UseChatHandlersOptions {
   wsId: string;
   activeSessionId: string | null;
   activeSessionTitle: string | undefined;
-  onShowToast: ShowToastFn;
   handleStopGeneration: () => void;
   setChatInput: (textOrFn: React.SetStateAction<string>) => void;
   runStreamingAssistant: (
@@ -26,7 +25,6 @@ export function useChatHandlers({
   wsId,
   activeSessionId,
   activeSessionTitle,
-  onShowToast,
   handleStopGeneration,
   setChatInput,
   runStreamingAssistant,
@@ -45,13 +43,13 @@ export function useChatHandlers({
           sessionsById: byId,
         });
         if (result.ok === false) {
-          onShowToast(result.error || '导出失败');
+          toast.show(result.error || '导出失败');
         }
       } catch {
-        onShowToast('导出失败');
+        toast.show('导出失败');
       }
     })();
-  }, [activeSessionId, onShowToast]);
+  }, [activeSessionId]);
 
   useEffect(() => {
     return onUiEvent('export-session-md', () => {
@@ -64,7 +62,7 @@ export function useChatHandlers({
       void (async () => {
         const sid = activeSessionId;
         if (!sid || sid.startsWith('__pending')) {
-          onShowToast('当前无可用会话，无法回溯');
+          toast.show('当前无可用会话，无法回溯');
           return;
         }
         try {
@@ -72,7 +70,7 @@ export function useChatHandlers({
             await import('../../api/conversationRewindApi');
           const preview = await previewConversationRewind({ sessionId: sid });
           if (!preview.ok) {
-            onShowToast(
+            toast.show(
               preview.error
                 ? `回溯预览失败：${preview.error}`
                 : '回溯预览失败：引擎未返回边界事实'
@@ -81,16 +79,16 @@ export function useChatHandlers({
           }
           const rawType =
             typeof preview.raw.type === 'string' ? preview.raw.type : 'preview';
-          onShowToast(
+          toast.show(
             `已收到回溯预览（${rawType}）。确认应用请使用引擎 apply-conversation-rewind；缺 leaf 事实时不会改写会话。`
           );
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          onShowToast(`回溯不可用：${msg}`);
+          toast.show(`回溯不可用：${msg}`);
         }
       })();
     });
-  }, [activeSessionId, onShowToast]);
+  }, [activeSessionId]);
 
   // ── R1 撤回（统一输入流收敛战役）：引擎撤回入口 + 回填消费 ──
   // 注：D5（R6 收口）已废弃消息级撤回 UI 链——用户发起的「撤回已发消息」
@@ -114,7 +112,7 @@ export function useChatHandlers({
   const handleRetract = useCallback(async () => {
     const sid = activeSessionId;
     if (!sid || sid.startsWith('__pending')) {
-      onShowToast('当前无可用会话，无法撤回');
+      toast.show('当前无可用会话，无法撤回');
       return;
     }
     const session = getCompositionRoot().session.getState();
@@ -123,7 +121,7 @@ export function useChatHandlers({
       .reverse()
       .find((m) => m.sender === 'user');
     if (!lastUser) {
-      onShowToast('没有可撤回的用户消息');
+      toast.show('没有可撤回的用户消息');
       return;
     }
     try {
@@ -134,9 +132,9 @@ export function useChatHandlers({
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      onShowToast(`撤回失败：${msg}`);
+      toast.show(`撤回失败：${msg}`);
     }
-  }, [activeSessionId, onShowToast]);
+  }, [activeSessionId]);
 
   const handleRegenerate = useCallback(
     (userText: string, assistantMsgId: string) => {
@@ -190,13 +188,13 @@ export function useChatHandlers({
     const session = getCompositionRoot().session;
     session.getState().branchSession(activeSessionId, newTitle);
     const newBranchId = session.getState().activeSessionId;
-    onShowToast(formatBranchUndoToast(base), () => {
+    toast.show(formatBranchUndoToast(base), () => {
       if (newBranchId && newBranchId !== oldId) {
         session.getState().archiveSession(newBranchId);
       }
       session.getState().setActiveSessionId(oldId);
     });
-  }, [activeSessionId, activeSessionTitle, onShowToast]);
+  }, [activeSessionId, activeSessionTitle]);
 
   return {
     handleExportMarkdown,

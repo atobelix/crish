@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './Sidebar.module.css';
@@ -8,21 +9,17 @@ import {
   isDemoMode,
   switchAppMode,
 } from '../../api/appMode';
-import { useLayoutStore } from '../../store/storeAccess';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import { openSettings } from '../../store/settingsUiStore';
 import { UserProfileCard } from './UserProfileCard';
 
 export interface SettingsIconButtonProps {
   updateAvailable?: boolean | undefined;
-  onShowToast?: ShowToastFn | undefined;
   setUpdateAvailableState?:
     React.Dispatch<React.SetStateAction<boolean>> | undefined;
 }
 
 export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
   ({ updateAvailable }) => {
-    const openSettings = useLayoutStore((s) => s.openSettings);
-
     const tooltipText = updateAvailable
       ? '打开设置中心 (Cmd/Ctrl + ,) · 有新版本可用'
       : '打开设置中心 (Cmd/Ctrl + ,)';
@@ -54,13 +51,13 @@ SettingsIconButton.displayName = 'SettingsIconButton';
 export interface SidebarFooterProps {
   chromeHidden?: boolean | undefined;
   updateAvailable?: boolean | undefined;
-  onShowToast: ShowToastFn;
   setUpdateAvailableState?:
     React.Dispatch<React.SetStateAction<boolean>> | undefined;
 }
 
 export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
-  ({ chromeHidden, updateAvailable, onShowToast, setUpdateAvailableState }) => {
+  ({ chromeHidden, updateAvailable, setUpdateAvailableState }) => {
+    const { showToast: _showToast } = useToast();
     return (
       <div
         className={styles.sidebarFooter}
@@ -92,7 +89,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
 
         {/* 底部左列：用户个人卡片与快捷设置菜单 */}
         <div className={styles.footerUserCol}>
-          <UserProfileCard onShowToast={onShowToast} />
+          <UserProfileCard />
         </div>
 
         {/* 底部右列：更新按钮（若有）+ 独立设置齿轮按钮 */}
@@ -110,7 +107,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
                     const { applyUpdateWhenIdle } =
                       await import('../../api/updateStore');
                     const r = await applyUpdateWhenIdle();
-                    onShowToast?.(r.message);
+                    showToast(r.message);
                     if (r.ok) setUpdateAvailableState?.(false);
                   })();
                 }}
@@ -125,7 +122,7 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
 
           <SettingsIconButton
             updateAvailable={updateAvailable}
-            onShowToast={onShowToast}
+
             setUpdateAvailableState={setUpdateAvailableState}
           />
         </div>

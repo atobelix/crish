@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef, useCallback, useReducer } from 'react';
+﻿import { toast } from '../../services/toast/ToastContext';
+import { useState, useEffect, useRef, useCallback, useReducer, useMemo } from 'react';
+import { useSessionStore } from '../../store/sessionStore';
 import {
   useLayoutStore,
   useSessionField,
@@ -6,15 +8,14 @@ import {
 } from '../../store/storeAccess';
 import type { FileDiff, SessionState } from '../../store/types';
 import {
-  useTerminalField,
   usePermissionField,
   useSettingsField,
-  selectDiffFiles,
   selectAppSettings,
   selectPermissionMode,
   selectPlanModeEnabled,
   selectPlanApproved,
 } from '../../store/storeAccess';
+import { selectSessionDiffFiles } from '../../api/sessionDiffDerivation';
 import {
   openSettings,
   patchSession,
@@ -23,7 +24,7 @@ import {
 } from '../../api/storeAccess';
 import { getActiveProjectId } from '../../api/projectStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import type { } from '../../hooks/useToastQueue';
 import { isDemoMode } from '../../api/appMode';
 import { getProviderSetupStatus } from '../../api/providerProfiles';
 import { openFileInPanel } from '../../api/workspaceFsApi';
@@ -73,10 +74,10 @@ export function useScopedSessionField<T>(
   } | null>(null);
 
   useEffect(() => {
-    return useLayoutStore.subscribe((state, prev) => {
-      const st = state as SessionStoreStateShape;
+    return useSessionStore.subscribe((state, prev) => {
+      const st = state;
       const sid = resolveSidRef.current(st);
-      const prevSid = resolveSidRef.current(prev as SessionStoreStateShape);
+      const prevSid = resolveSidRef.current(prev);
       const session = st.sessionsById[sid];
       const cached = cacheRef.current;
       // 会话级订阅短路：本会话引用未变 + activeSessionId 未变 → 直接短路
@@ -84,7 +85,7 @@ export function useScopedSessionField<T>(
         cached &&
         cached.sid === prevSid &&
         cached.session === session &&
-        (prev as SessionStoreStateShape).activeSessionId === st.activeSessionId
+        prev.activeSessionId === st.activeSessionId
       ) {
         return;
       }
@@ -94,7 +95,7 @@ export function useScopedSessionField<T>(
   }, []);
 
   // 渲染期求值（首次挂载 / forceUpdate 后）：缓存命中直接复用
-  const st = useLayoutStore.getState() as SessionStoreStateShape;
+  const st = useSessionStore.getState();
   const sid = resolveSid(st);
   const session = st.sessionsById[sid];
   const cached = cacheRef.current;
@@ -106,7 +107,6 @@ export function useScopedSessionField<T>(
 
 export interface UseChatCardStateOptions {
   wsId: string;
-  onShowToast: ShowToastFn;
   handleGlobalTabClick: (cardId: string) => void;
   /** 渲染真源；缺省则用全局 activeSessionId */
   sessionId?: string | null;
@@ -114,7 +114,6 @@ export interface UseChatCardStateOptions {
 
 export function useChatCardState({
   wsId,
-  onShowToast,
   handleGlobalTabClick,
   sessionId: sessionIdProp,
 }: UseChatCardStateOptions) {
@@ -162,7 +161,10 @@ export function useChatCardState({
   );
 
   const appSettings = useSettingsField(selectAppSettings);
-  const diffFiles = useTerminalField(selectDiffFiles);
+  const diffFiles = useMemo(
+    () => selectSessionDiffFiles(messages),
+    [messages]
+  );
 
   const [pickerInlineError, setPickerInlineError] = useState('');
   const [showProjectPicker, setShowProjectPicker] = useState(false);
@@ -296,7 +298,6 @@ export function useChatCardState({
     needsKeySetup,
     needsModelSetup,
     isProcessing,
-    onShowToast,
     handleGlobalTabClick,
     setShowModelDropdown,
     setPickerInlineError,
@@ -311,7 +312,6 @@ export function useChatCardState({
     wsId,
     activeSessionId,
     activeSessionTitle,
-    onShowToast,
     handleStopGeneration: composerProps.handleStopGeneration,
     setChatInput: composerProps.setChatInput,
     runStreamingAssistant: composerProps.runStreamingAssistant,
@@ -321,15 +321,14 @@ export function useChatCardState({
     activeSessionId,
     messages,
     agents,
-    onShowToast,
-  });
+    });
 
   useEffect(() => {
     if (pickerInlineError) {
-      onShowToast(pickerInlineError);
+      toast.show(pickerInlineError);
       setPickerInlineError('');
     }
-  }, [pickerInlineError, onShowToast]);
+  }, [pickerInlineError]);
 
   const { handleStopGeneration, handleSendChat } = composerProps;
 

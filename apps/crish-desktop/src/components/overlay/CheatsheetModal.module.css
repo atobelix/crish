@@ -1,18 +1,18 @@
-/* 快捷键帮助弹窗（PE-05 T05.2 #2）
- * 已收敛到 ui/Dialog 基座：遮罩/面板/头部/动画由基座提供，
- * 本文件只保留「私有形态」覆盖（宽度/内边距抵消/列表/搜索/键帽）与 --dialog-z 层级 */
+/*         PE-05 T05.2 #2 
+ *      ui/Dialog      /  /  /        
+ *                  /     /  /  /     --dialog-z    */
 
-/* 遮罩壳：--dialog-z 维持原 --z-cheatsheet 层级 */
+/*     --dialog-z     --z-cheatsheet    */
 .cheatsheetOverlay {
-  --dialog-z: var(--z-cheatsheet);
+  --dialog-z: var(--z-modal);
 }
 
-/* 面板：宽度沿用原 420px 档 */
+/*          420px   */
 .cheatsheetModal {
   --dialog-width: 420px;
 }
 
-/* 标题行（含键盘图标；挂基座 h2 内） */
+/*               h2    */
 .cheatsheetTitleWrap {
   display: flex;
   align-items: center;
@@ -26,7 +26,7 @@
   color: var(--text-primary);
 }
 
-/* 内容区：抵消 dialogBody 内边距后恢复原 8/12px 内边距 */
+/*        dialogBody         8/12px     */
 .cheatsheetBody {
   margin: calc(var(--space-1) * -1) calc(var(--space-4) * -1) 0;
   padding: 8px 12px 12px;

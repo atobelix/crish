@@ -25,6 +25,176 @@ export type ThoughtWorkerRequest =
       payload: { text: string; query: string; caseSensitive?: boolean };
     };
 
+export const THINKING_DOM_CHAR_CAP = 4000;
+export const THINKING_INLINE_CHAR_CAP = 10000;
+export const TOOL_OUTPUT_DOM_CHAR_CAP = 8000;
+export const TOOL_OUTPUT_PIXEL_CAP = 600;
+
+export interface ThinkingBudgetOptions {
+  cap?: number;
+  mode?: 'head' | 'tail';
+}
+
+export interface ThinkingBudgetResult {
+  displayText: string;
+  isTruncated: boolean;
+  totalChars: number;
+  omittedHeadChars?: number;
+}
+
+export function sliceSafeTailMarkdown(
+  text: string,
+  cap: number = THINKING_INLINE_CHAR_CAP
+): {
+  displayText: string;
+  isTruncated: boolean;
+  totalChars: number;
+  omittedHeadChars: number;
+} {
+  const totalChars = text?.length ?? 0;
+  if (!Number.isFinite(cap) || cap <= 0 || !text || totalChars <= cap) {
+    return {
+      displayText: text || '',
+      isTruncated: false,
+      totalChars,
+      omittedHeadChars: 0,
+    };
+  }
+
+  const safeCap = Math.floor(cap);
+  const rawStart = totalChars - safeCap;
+
+  let alignedStart = rawStart;
+  const nextNewline = text.indexOf('\n', rawStart);
+  if (nextNewline !== -1 && nextNewline < totalChars - 100) {
+    alignedStart = nextNewline + 1;
+  } else {
+    const prevNewline = text.lastIndexOf('\n', rawStart);
+    if (prevNewline !== -1 && prevNewline > rawStart - 500) {
+      alignedStart = prevNewline + 1;
+    }
+  }
+
+  const tail = text.slice(alignedStart);
+  const omittedHeadChars = alignedStart;
+
+  const prefix = text.slice(0, alignedStart);
+  const prefixLines = prefix.split(/\r?\n/);
+  let inCodeBlock = false;
+  let codeFence = '';
+  let codeLang = '';
+
+  for (const line of prefixLines) {
+    const trimmed = line.trim();
+    const fenceMatch = trimmed.match(/^(`{3,}|~{3,})(.*)$/);
+    if (fenceMatch) {
+      const fence = fenceMatch[1] ?? '';
+      const lang = fenceMatch[2]?.trim() || '';
+      if (!inCodeBlock) {
+        inCodeBlock = true;
+        codeFence = fence;
+        codeLang = lang;
+      } else if (fence.startsWith(codeFence.slice(0, 3))) {
+        inCodeBlock = false;
+        codeFence = '';
+        codeLang = '';
+      }
+    }
+  }
+
+  let prefixDoubleDollarCount = 0;
+  let idx = 0;
+  while ((idx = prefix.indexOf('$$', idx)) !== -1) {
+    prefixDoubleDollarCount++;
+    idx += 2;
+  }
+  const inDoubleDollar = prefixDoubleDollarCount % 2 !== 0;
+
+  let prefixPatch = '';
+  if (inCodeBlock && codeFence) {
+    prefixPatch += `${codeFence}${codeLang ? ` ${codeLang}` : ''}\n`;
+  }
+  if (inDoubleDollar) {
+    prefixPatch += '$$\n';
+  }
+
+  const combined = prefixPatch + tail;
+  const tailLines = combined.split(/\r?\n/);
+  let tailInCode = false;
+  let tailFence = '';
+
+  for (const line of tailLines) {
+    const trimmed = line.trim();
+    const fenceMatch = trimmed.match(/^(`{3,}|~{3,})/);
+    if (fenceMatch) {
+      const fence = fenceMatch[1] ?? '';
+      if (!tailInCode) {
+        tailInCode = true;
+        tailFence = fence;
+      } else if (fence.startsWith(tailFence.slice(0, 3))) {
+        tailInCode = false;
+        tailFence = '';
+      }
+    }
+  }
+
+  let tailDoubleDollarCount = 0;
+  idx = 0;
+  while ((idx = combined.indexOf('$$', idx)) !== -1) {
+    tailDoubleDollarCount++;
+    idx += 2;
+  }
+  const tailInDoubleDollar = tailDoubleDollarCount % 2 !== 0;
+
+  let suffixPatch = '';
+  if (tailInDoubleDollar) {
+    suffixPatch += '\n$$';
+  }
+  if (tailInCode && tailFence) {
+    suffixPatch += `\n${tailFence}`;
+  }
+
+  return {
+    displayText: combined + suffixPatch,
+    isTruncated: true,
+    totalChars,
+    omittedHeadChars,
+  };
+}
+
+export function budgetThinkingText(
+  text: string,
+  options?: number | ThinkingBudgetOptions
+): ThinkingBudgetResult {
+  const cap =
+    typeof options === 'number'
+      ? options
+      : (options?.cap ?? THINKING_INLINE_CHAR_CAP);
+  const mode = typeof options === 'object' ? (options?.mode ?? 'head') : 'head';
+  const totalChars = text?.length ?? 0;
+
+  if (!Number.isFinite(cap) || cap < 0 || !text || totalChars <= cap) {
+    return {
+      displayText: text || '',
+      isTruncated: false,
+      totalChars,
+      omittedHeadChars: 0,
+    };
+  }
+
+  if (mode === 'tail') {
+    return sliceSafeTailMarkdown(text, cap);
+  }
+
+  const safeCap = Math.floor(cap);
+  return {
+    displayText: text.slice(0, safeCap),
+    isTruncated: true,
+    totalChars,
+    omittedHeadChars: 0,
+  };
+}
+
 export type ThoughtWorkerResponse =
   | { type: 'TOC_RESULT'; payload: { headings: ThoughtHeading[] } }
   | { type: 'SEARCH_RESULT'; payload: { results: ThoughtSearchResult[] } };

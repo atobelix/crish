@@ -20,11 +20,6 @@ import {
   type SessionFacade,
   type ShellFacade,
 } from './compositionRoot';
-import {
-  SHELL_TAB_OWNERSHIP,
-  LAYOUT_TREE_OWNERSHIP,
-  SESSION_OWNERSHIP,
-} from '../store/storeOwnership';
 import { useWorkspaceShellStore } from '../store/workspace-shell/workspaceShellStore';
 import { findEmptyShellViolations } from '../dev/emptyShellAssert';
 import { EMPTY_SESSION_TITLE } from '../api/sessionTitle';
@@ -193,15 +188,6 @@ describe('ownership enforce (OPT-E9)', () => {
         title: 'T',
       });
     });
-
-    it('SHELL_TAB_OWNERSHIP forbids layout / tree dual-write companions', () => {
-      expect(SHELL_TAB_OWNERSHIP.domain).toBe('shell');
-      expect(SHELL_TAB_OWNERSHIP.writeOwner).toBe('compositionRoot.shell');
-      expect(SHELL_TAB_OWNERSHIP.forbidAlongside).toContain(
-        'compositionRoot.layout',
-      );
-      expect(SHELL_TAB_OWNERSHIP.forbidAlongside).toContain('layoutTreeStore');
-    });
   });
 
   // ── 3. Naming guard: .layout ≠ layout-tree; .tree is geometry ──
@@ -233,22 +219,6 @@ describe('ownership enforce (OPT-E9)', () => {
       if (typeof layoutRecord.setAppSettings === 'function') {
         expect(layoutRecord.setAppSettings).toBeTypeOf('function');
       }
-    });
-
-    it('LAYOUT_TREE_OWNERSHIP vs shell: separate write owners', () => {
-      expect(LAYOUT_TREE_OWNERSHIP.domain).toBe('layout-tree');
-      expect(LAYOUT_TREE_OWNERSHIP.writeOwner).toBe('layoutTreeStore');
-      expect(LAYOUT_TREE_OWNERSHIP.forbidAlongside).toContain(
-        'workspaceShellStore',
-      );
-      expect(LAYOUT_TREE_OWNERSHIP.forbidAlongside).toContain(
-        'compositionRoot.shell',
-      );
-
-      expect(SESSION_OWNERSHIP.domain).toBe('session');
-      expect(SESSION_OWNERSHIP.writeOwner).toBe('sessionStore');
-      // session body writes must not also own shell tabs
-      expect(SESSION_OWNERSHIP.forbidAlongside).toContain('workspaceShellStore');
     });
 
     it('CompositionRoot key surface: tree and layout are distinct facades', () => {

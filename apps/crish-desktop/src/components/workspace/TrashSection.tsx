@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 误删恢复面板（I3-S9 任务 3；数据源 = I2-S5 引擎命令 trash_list）。
  *
  * - 列表：路径 / 删除时间 / 类型 / 大小 / checksum（备份校验和）；
@@ -9,8 +9,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import styles from './RuntimePanel.module.css';
 import { RuntimeSection } from './RuntimeSection';
+import { useToast } from '../../services/toast/ToastContext';
 import { Button, Tooltip } from '../ui';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/sessionStore';
 import {
   formatTrashedAt,
   listTrashEntries,
@@ -20,7 +21,8 @@ import {
 } from '../../api/trashApi';
 
 export type TrashSectionProps = {
-  onShowToast: (msg: string) => void;
+  className?: string;
+  onShowToast?: (msg: string) => void;
 };
 
 function formatSize(bytes: number): string {
@@ -29,8 +31,9 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export const TrashSection: React.FC<TrashSectionProps> = ({ onShowToast }) => {
-  const activeSessionId = useLayoutStore((state) => state.activeSessionId);
+export const TrashSection: React.FC<TrashSectionProps> = () => {
+  const { showToast: _showToast } = useToast();
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const [entries, setEntries] = useState<TrashEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -62,15 +65,15 @@ export const TrashSection: React.FC<TrashSectionProps> = ({ onShowToast }) => {
         if (res.ok) {
           await refresh();
         } else {
-          onShowToast(res.message);
+          showToast(res.message, undefined, { type: 'error' });
         }
       } catch {
-        onShowToast('恢复失败，请重试');
+        showToast('恢复失败，请重试', undefined, { type: 'error' });
       } finally {
         setBusyId(null);
       }
     },
-    [busyId, activeSessionId, onShowToast, refresh]
+    [busyId, activeSessionId, showToast, refresh]
   );
 
   const handlePurge = useCallback(
@@ -85,15 +88,15 @@ export const TrashSection: React.FC<TrashSectionProps> = ({ onShowToast }) => {
         if (res.ok) {
           await refresh();
         } else {
-          onShowToast(res.message);
+          showToast(res.message, undefined, { type: 'error' });
         }
       } catch {
-        onShowToast('清除失败，请重试');
+        showToast('清除失败，请重试', undefined, { type: 'error' });
       } finally {
         setBusyId(null);
       }
     },
-    [busyId, activeSessionId, onShowToast, refresh]
+    [busyId, activeSessionId, showToast, refresh]
   );
 
   const countLabel = entries.length > 0 ? `${entries.length} 项` : null;

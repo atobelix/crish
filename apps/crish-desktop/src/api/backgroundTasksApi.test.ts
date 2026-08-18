@@ -212,6 +212,20 @@ describe('parseBackgroundTask', () => {
     expect(parseBackgroundTask({ id: 'only-id' })?.label).toBe('only-id');
   });
 
+  it('parses camelCase and snake_case sessionId', () => {
+    const t1 = parseBackgroundTask({
+      id: 'task-1',
+      sessionId: 'session-123',
+    });
+    expect(t1?.sessionId).toBe('session-123');
+
+    const t2 = parseBackgroundTask({
+      id: 'task-2',
+      session_id: 'session-456',
+    });
+    expect(t2?.sessionId).toBe('session-456');
+  });
+
   it('returns null without id or non-object', () => {
     expect(parseBackgroundTask(null)).toBeNull();
     expect(parseBackgroundTask('x')).toBeNull();

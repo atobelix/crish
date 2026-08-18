@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
 import { Button, Tooltip } from '../ui';
@@ -9,9 +9,10 @@ import { BrowserPanel } from './BrowserPanel';
 import { ComputerPanel } from './computer-panel/ComputerPanel';
 import { QUICK_LOCAL } from './previewCardLib';
 
-interface PreviewCardProps {
-  wsId: string;
-  onShowToast: (message: string) => void;
+import { useToast } from '../../services/toast/ToastContext';
+
+export interface PreviewCardProps {
+  wsId?: string;
 }
 
 /**
@@ -25,9 +26,9 @@ interface PreviewCardProps {
  */
 export const PreviewCard: React.FC<PreviewCardProps> = ({
   wsId: _wsId,
-  onShowToast,
 }) => {
-  const nav = usePreviewNavigation({ onShowToast });
+  const { showToast: _showToast } = useToast();
+  const nav = usePreviewNavigation();
 
   const {
     urlInput,
@@ -102,9 +103,9 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
       {aiBrowser ? (
         <div className={styles.aiStack}>
           <div className={styles.aiBrowserPane}>
-            <BrowserPanel onShowToast={onShowToast} />
+            <BrowserPanel  />
           </div>
-          <ComputerPanel onShowToast={onShowToast} />
+          <ComputerPanel  />
         </div>
       ) : (
         <>

@@ -5,6 +5,7 @@ import {
   savePrices,
   type ModelPrice,
 } from '../../api/pricingStore';
+import { toast } from '../../services/toast/ToastContext';
 import { Button, Tooltip } from '../ui';
 import styles from './SettingsUsageTab.module.css';
 
@@ -69,8 +70,7 @@ export const PriceConfigModal: React.FC<{
   priceList: ModelPrice[];
   onListChange: (next: ModelPrice[]) => void;
   onClose: () => void;
-  onToast: (msg: string) => void;
-}> = ({ open, priceList, onListChange, onClose, onToast }) => {
+}> = ({ open, priceList, onListChange, onClose }) => {
   const [priceDraft, setPriceDraft] = useState({
     model: '',
     input: '',
@@ -95,7 +95,7 @@ export const PriceConfigModal: React.FC<{
     const outputPerMTok = Number(priceDraft.output);
     if (!m && !draftInputRaw && !draftOutputRaw) return;
     if (!m) {
-      onToast('请填写模型 ID');
+      toast.show('请填写模型 ID');
       return;
     }
     if (
@@ -104,18 +104,18 @@ export const PriceConfigModal: React.FC<{
       draftInputRaw === '' ||
       draftOutputRaw === ''
     ) {
-      onToast('请填写完整的定价');
+      toast.show('请填写完整的定价');
       return;
     }
     if (inputPerMTok < 0 || outputPerMTok < 0) {
-      onToast('定价不能为负数');
+      toast.show('定价不能为负数');
       return;
     }
     try {
       onListChange(upsertPrice({ model: m, inputPerMTok, outputPerMTok }));
       setPriceDraft({ model: '', input: '', output: '' });
     } catch (err) {
-      onToast('保存失败：' + String(err));
+      toast.show('保存失败：' + String(err));
     }
   };
 
@@ -153,13 +153,13 @@ export const PriceConfigModal: React.FC<{
                   outputPerMTok: output,
                 });
                 onListChange(next);
-                onToast(`已保存 ${row.model} 的定价`);
+                toast.show(`已保存 ${row.model} 的定价`);
               }}
               onDelete={() => {
                 const next = priceList.filter((p) => p.model !== row.model);
                 onListChange(next);
                 savePrices(next);
-                onToast(`已删除 ${row.model} 的定价`);
+                toast.show(`已删除 ${row.model} 的定价`);
               }}
             />
           ))}

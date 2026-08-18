@@ -1,4 +1,4 @@
-/* 电脑操作面板（二期 P2，S5 遗留⑩）：对齐 BrowserPanel/BrowserImportSection 的 token 体系 */
+/*           P2 S5         BrowserPanel/BrowserImportSection   token    */
 
 .section {
   display: flex;
@@ -90,7 +90,7 @@
   overflow-wrap: anywhere;
 }
 
-/* ── 三态会话指示（ActivationGate：Idle/BrowserActive/DesktopActive） ── */
+/*           ActivationGate Idle/BrowserActive/DesktopActive     */
 
 .activation {
   display: flex;
@@ -136,7 +136,7 @@
   opacity: var(--opacity-disabled, 0.45);
 }
 
-/* ── 全局急停：大红色强化（对齐 04 §4.3 ③ 常驻显眼位置） ── */
+/*                  04  4.3              */
 
 .estopButton {
   border-width: 1px;

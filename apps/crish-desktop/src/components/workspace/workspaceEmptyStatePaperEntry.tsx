@@ -22,7 +22,6 @@ import type {
 } from '@crish/block-paper';
 import type { NoteApplyOpsIpc } from '../../api/noteApplyOpsIpc';
 import { resolveProductStrictApplyOps } from '../../api/noteApplyOpsIpc';
-import { NotePaperPanel } from '../note-paper/NotePaperPanel';
 import { NotePaperStrictPanel } from '../note-paper/NotePaperStrictPanel';
 import {
   createProductStrictHydrateTransport,
@@ -37,10 +36,6 @@ import {
   type CreateProductStrictSlashBindingOptions,
   type ProductStrictSlashBinding,
 } from '../note-paper/productSlashSink';
-import {
-  W5B_SKELETON_PACKAGE_ID,
-  W5B_SKELETON_TRACK,
-} from '../note-paper/notePaperSkeletonTrack';
 import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
@@ -285,21 +280,25 @@ export function WorkspaceEmptyStateSkeletonHost({
   skeletonDocId,
   onClose,
 }: WorkspaceEmptyStateSkeletonHostProps) {
+  const transport = useMemo(
+    () => createProductStrictHydrateTransport(skeletonDocId),
+    [skeletonDocId]
+  );
   return (
     <div
       className={styles.workspaceEmptyState}
       data-ws-id={wsId}
       data-empty="false"
       data-note-paper-preview="true"
-      data-package-id={W5B_SKELETON_PACKAGE_ID}
-      data-track={W5B_SKELETON_TRACK}
+      data-package-id={W5B_STRICT_PACKAGE_ID}
+      data-track={W5B_STRICT_TRACK}
       data-testid="note-paper-preview-host"
       style={OPENED_PAPER_HOST_STYLE}
     >
-      <NotePaperPanel
+      <NotePaperStrictPanel
         docId={skeletonDocId}
-        blockCount={6}
-        title="笔记纸面（W5-B-S 预览壳）"
+        hydrateTransport={transport}
+        title="笔记纸面"
         onClose={onClose}
       />
     </div>

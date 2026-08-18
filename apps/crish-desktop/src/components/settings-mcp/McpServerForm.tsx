@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import styles from './McpSettingsTab.module.css';
 import { Button, Select, Tooltip } from '../ui';
@@ -16,7 +17,6 @@ export type McpServerFormProps = {
   setNewUrl: (val: string) => void;
   setShowAdd: (show: boolean) => void;
   onAddDemo: () => void;
-  onShowToast?: ((msg: string) => void) | undefined;
 };
 
 export const McpServerForm: React.FC<McpServerFormProps> = ({
@@ -32,8 +32,8 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
   setNewUrl,
   setShowAdd,
   onAddDemo,
-  onShowToast,
-}) => {
+  }) => {
+  const { showToast: _showToast } = useToast();
   return (
     <div className={`${styles.mcpAddBox} mcp-add-box`} role="form" aria-label="注册演示服务">
       <div className={`${styles.mcpAddRow} mcp-add-row`}>
@@ -65,7 +65,7 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
             if (isDemoTransport(v)) {
               setNewType(v);
             } else {
-              onShowToast?.('未知的传输类型');
+              showToast('未知的传输类型');
             }
           }}
         />

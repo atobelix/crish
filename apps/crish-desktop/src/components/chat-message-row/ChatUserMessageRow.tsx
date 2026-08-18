@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './ChatMessageRow.module.css';
 import { Tooltip } from '../ui';
@@ -20,7 +21,6 @@ export type ChatUserMessageRowProps = {
   isExpanded: boolean;
   onToggleExpand: (msgId: string) => void;
   onTogglePin: (msgId: string) => void;
-  onShowToast?: (message: string) => void;
   messageIndex: number;
   virtualScrollManager: VirtualScrollManager | null;
 };
@@ -39,7 +39,7 @@ function userRowPropsEqual(
     prev.isExpanded === next.isExpanded &&
     prev.onToggleExpand === next.onToggleExpand &&
     prev.onTogglePin === next.onTogglePin &&
-    prev.onShowToast === next.onShowToast
+    true
   );
 }
 
@@ -50,11 +50,11 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   isExpanded,
   onToggleExpand,
   onTogglePin,
-  onShowToast,
   messageIndex: _messageIndex,
   virtualScrollManager,
 }) => {
   void _messageIndex;
+  const { showToast: _showToast } = useToast();
   const isLong = isUserBubbleLong(msg.text);
   const displayText = userBubbleDisplayText(msg.text, isExpanded);
   const [copied, setCopied] = useState(false);
@@ -83,14 +83,14 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     if (!text) return;
     void copyTextBestEffort(text).then((ok) => {
       if (!ok) {
-        onShowToast?.('复制失败');
+        showToast('复制失败');
         return;
       }
       setCopied(true);
       if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
       copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
     });
-  }, [msg.text, onShowToast]);
+  }, [msg.text, showToast]);
 
   // 撤回（D5/R6 收口）：消息级撤回 UI 链已废弃——用户发起的撤回唯一路径
   // = ChatComposer 撤回按钮 → 引擎 core_session_retract（timeline-truncate）。

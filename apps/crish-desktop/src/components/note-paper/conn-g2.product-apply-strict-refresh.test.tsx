@@ -38,7 +38,6 @@ import {
 import { clearNoteDocWrittenListenersForTests } from '../../bridges/note-doc-written';
 import { adaptNoteTransportAsHydrate } from './hydrateProjection';
 import { NotePaperStrictPanel } from './NotePaperStrictPanel';
-import { W5B_SKELETON_PACKAGE_ID } from './notePaperSkeletonTrack';
 import { W5B_STRICT_PACKAGE_ID } from './notePaperStrictTrack';
 
 const NEW_BLOCK_TEXT = 'CONN-G2 product apply new block';
@@ -143,7 +142,7 @@ describe('CONN-G2-int · product_apply → Strict 写后读回', () => {
       'data-package-id',
       W5B_STRICT_PACKAGE_ID
     );
-    expect(W5B_SKELETON_PACKAGE_ID).not.toBe(W5B_STRICT_PACKAGE_ID);
+    expect(W5B_STRICT_PACKAGE_ID).not.toBe('W5-B-S');
     expect(panelBlockCount()).toBe(1);
     expect(panelRev()).toBe('1');
 

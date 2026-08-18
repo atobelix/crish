@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 设置 · 快捷键：查看与改键；成功静默，冲突/写入失败才提示。
  */
 import { useId, useState, useMemo, useCallback, useRef, useEffect } from 'react';
@@ -13,10 +13,7 @@ import {
 } from './SettingsUI';
 import { Tooltip } from '../ui';
 import { BUILTIN_SHORTCUTS } from '../../services/ShortcutRegistry';
-
-type Props = {
-  onShowToast: (msg: string) => void;
-};
+import { useToast } from '../../services/toast/ToastContext';
 
 /**
  * 展示元表：id → { group, desc }。
@@ -142,7 +139,8 @@ function isCustomized(map: Record<string, string>, id: string): boolean {
   return Boolean(cur) && cur !== def;
 }
 
-export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsShortcutsTab: React.FC = () => {
+  const { showToast: _showToast } = useToast();
   const [customShortcuts, setCustomShortcuts] = useState<Record<string, string>>(loadShortcuts);
   const [recordingShortcutId, setRecordingShortcutId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -205,11 +203,11 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
         } catch { /* 远端保存失败时本地已生效，不阻断 */ }
         return true;
       } catch {
-        onShowToast('保存失败：无法写入快捷键');
+        showToast('保存失败：无法写入快捷键', undefined, { type: 'error' });
         return false;
       }
     },
-    [onShowToast],
+    [showToast],
   );
 
   const restoreDefault = useCallback(
@@ -219,7 +217,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
       if ((customShortcuts[id] || '') === def) return;
       const conflict = findConflict(customShortcuts, id, def);
       if (conflict) {
-        onShowToast(`恢复失败：与「${conflict.label}」键位冲突`);
+        showToast(`恢复失败：与「${conflict.label}」键位冲突`, undefined, { type: 'error' });
         return;
       }
       const updated = { ...customShortcuts, [id]: def };
@@ -227,7 +225,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
       persist(updated);
       if (recordingShortcutId === id) setRecordingShortcutId(null);
     },
-    [customShortcuts, onShowToast, persist, recordingShortcutId],
+    [customShortcuts, showToast, persist, recordingShortcutId],
   );
 
   useEffect(() => {
@@ -262,7 +260,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
       const conflict = findConflict(customShortcuts, recordingShortcutId, newKey);
       if (conflict) {
         setRecordingShortcutId(null);
-        onShowToast(`录制失败：与「${conflict.label}」键位冲突`);
+        showToast(`录制失败：与「${conflict.label}」键位冲突`, undefined, { type: 'error' });
         return;
       }
 
@@ -273,7 +271,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
     };
     window.addEventListener('keydown', handleKeyDown, true);
     return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [recordingShortcutId, customShortcuts, onShowToast, persist]);
+  }, [recordingShortcutId, customShortcuts, showToast, persist]);
 
   const hasQuery = query.trim().length > 0;
   const customCount = useMemo(
@@ -285,7 +283,7 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
     ? SHORTCUT_ITEMS.find((s) => s.id === recordingShortcutId) ?? null
     : null;
 
-  const filterTitle = recordingItem
+  const _filterTitle = recordingItem
     ? `录制中 · Esc 取消`
     : hasQuery
       ? 'Esc 清空筛选'
@@ -357,7 +355,6 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
         aria-label="搜索快捷键"
         aria-controls={listId}
         aria-describedby={headMetaId}
-        title={filterTitle}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             e.preventDefault();
@@ -388,7 +385,6 @@ export const SettingsShortcutsTab: React.FC<Props> = ({ onShowToast }) => {
         <span
           id={headMetaId}
           className="settings-head-meta"
-          title={filterTitle}
           role="status"
           aria-live="polite"
           aria-atomic="true"

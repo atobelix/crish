@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 技能设置页「更多操作」菜单（T05.3.2 迁移到 ui/Menu 基座）。
  * 坐标/Esc/外点关闭由基座接管；键盘漫游（↑↓/Enter）由基座 options 模式提供，
@@ -29,7 +30,6 @@ interface SkillsMoreMenuProps {
   batchBusy: boolean;
   batchEnableCount: number;
   batchDisableCount: number;
-  onShowToast?: (msg: string) => void;
   handleSyncAll: () => Promise<void>;
   refresh: (opts?: { promptNew?: boolean }) => Promise<void>;
   runBatchActivation: (act: 'enabled' | 'disabled') => Promise<void>;
@@ -50,11 +50,11 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
   batchBusy,
   batchEnableCount,
   batchDisableCount,
-  onShowToast,
   handleSyncAll,
   refresh,
   runBatchActivation,
 }) => {
+  const { showToast: _showToast } = useToast();
   const options = [
     {
       id: 'sync',
@@ -100,7 +100,7 @@ export const SkillsMoreMenu: React.FC<SkillsMoreMenuProps> = ({
           })
           .catch((err) => {
             setEnableCommands(prev);
-            onShowToast?.(`快捷命令保存失败：${errText(err)}`);
+            showToast(`快捷命令保存失败：${errText(err)}`);
           })
           .finally(() => {
             window.dispatchEvent(new CustomEvent('crish-skills-changed'));

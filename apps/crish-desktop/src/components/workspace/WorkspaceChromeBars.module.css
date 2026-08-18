@@ -29,48 +29,48 @@
   box-sizing: border-box;
 }
 
-/* L0閳閿涙岸銆嶉惄顔款攽鐠愭潙锛撶仦鍌氱俺閿涘ab 閸氭垳绗呭鈧崣锝堢箾閸愬懎顔愰崡 */
+/* L0:        Tab   */
 .wsChromeRowWorkspace,
 .wsChromeRowTitlebar {
-  height: var(--titlebar-row-h) !important;
-  min-height: var(--titlebar-row-h) !important;
-  max-height: var(--titlebar-row-h) !important;
-  padding-top: var(--titlebar-top-gap) !important;
-  padding-bottom: 0 !important;
+  height: var(--titlebar-row-h);
+  min-height: var(--titlebar-row-h);
+  max-height: var(--titlebar-row-h);
+  padding-top: var(--titlebar-top-gap);
+  padding-bottom: 0;
   padding-left: var(--space-2_5);
   padding-right: var(--space-2);
   align-items: flex-end;
   background: transparent;
-  border-radius: 0 !important;
-  box-sizing: border-box !important;
+  border-radius: 0;
+  box-sizing: border-box;
 }
 
-/* L1閳閿涙矮绱扮拠婵婎攽閺勵垰宕辨い鍓佷紗鐢讣绱濆┑鈧útab 閸氭垳绗呭鈧崣锝堢箾濮濓絾锟 */
+/* L1:    Tab   */
 .wsChromeRowSessions {
   --ws-chrome-sess-h: var(--titlebar-item-h);
-  /* 娴ｈ法鏁ゆ稉?card-header 缂佺喍绔撮惃鍕簳閺嗘牜浼嗛懝璇х礉閸撴棃娅庨崑蹇氬 */
+  /*   card-header       */
   --ws-session-strip: var(--card-header-bg, hsl(35, 5%, 94.5%));
-  /* hairline 鏉堣顢嬬痪鍧楊杺婢舵牕顕 */
+  /* hairline     */
   --ws-session-line: var(--border-subtle, hsl(35, 5%, 92%));
-  /* 濠碘偓濞茬粯鐖ｇ= 濮濓絾鏋冮惂鏂ょ礉閻╂瓕 */
+  /*       */
   --ws-chrome-merge: var(--shell-inset-bg, var(--bg-primary));
-  height: var(--titlebar-row-h) !important;
-  min-height: var(--titlebar-row-h) !important;
-  max-height: var(--titlebar-row-h) !important;
-  padding-top: var(--titlebar-top-gap) !important;
-  padding-bottom: 0 !important;
+  height: var(--titlebar-row-h);
+  min-height: var(--titlebar-row-h);
+  max-height: var(--titlebar-row-h);
+  padding-top: var(--titlebar-top-gap);
+  padding-bottom: 0;
   padding-left: var(--shell-content-pad-x, 14px);
   padding-right: var(--shell-content-pad-x, 14px);
   background: var(--ws-session-strip);
   border-top: none;
-  /* 缁惧じ绗夐悽border閿涘牊妲楃悮顐㈡妇锟鐎涙劕鐪拌ぐ鍗炴惙閿涘绱濋悽銊ゅ悏閸忓啰绀岄悽璇叉躬鎼存洟 */
+  /*                 */
   border-bottom: none;
   align-items: flex-end;
   gap: var(--space-0_5);
   position: relative;
   z-index: var(--z-decorative);
-  overflow: hidden; /* 閸欏倷绗岄崘鍛啇閸椻€虫妇鐟欐帟顥嗛崜?*/
-  box-sizing: border-box !important;
+  overflow: hidden; /*        */
+  box-sizing: border-box;
 }
 
 /* Session row hairline (token: --ws-session-line) */
@@ -96,7 +96,7 @@
   flex: 1 1 auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
-  /* 滚动条隐藏档位：归入 shell-scrollbar.css 全局契约（--scrollbar-thumb-width: 0px） */
+  /*            shell-scrollbar.css      --scrollbar-thumb-width: 0px  */
   --scrollbar-thumb-width: 0px;
 }
 
@@ -120,7 +120,7 @@
   flex-shrink: 0;
   margin-left: auto;
   color: var(--text-tertiary);
-  /* 濞戞挸瀛╅弸鍐╃鐠烘亽浠氬銈囨暩椤掗攱鎯旈弴鐑嗗殸 */
+  /*           */
   align-self: flex-end;
   height: var(--ws-chrome-ws-h, 32px);
   padding-right: var(--space-0_5);
@@ -153,16 +153,16 @@
 }
 
 .wsChromeTrailBtn:global(.is-active) {
-  background: transparent !important;
+  background: transparent;
   color: var(--text-primary);
 }
 
 .wsChromeTrailBtn:global(.is-active):hover {
-  background: var(--tint-hover) !important;
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
-/* 闂侇偅姘ㄩ弫銈夋晬濮橆剛鎽熼normal闁挎稒绋掗悥锝囩驳閻愵剚鏉归悗瑙勬灮缁辨繄绮氬ú顏咃紵濠㈠墎鍠庡銊╁礆椤愶絽 */
+/*      Tab */
 .wsChromeTab {
   appearance: none;
   border: none;
@@ -204,14 +204,17 @@
 }
 
 /*
- * 闁哄倸娲ｅ▎銏″緞瑜版帇鈧绮甸幆褍娈ゅù锝嗘穿缁辨瑩鎯勫宀€鈧椽鎯冮崟顐㈠綘闂佹鍣槐姘舵? * - 闁哄牜浜濈缓鍝劽烘导娆戠獥闁哄啰濮寸?闂侇偄绻戝Σ鎴︽晬瀹€鍐ㄥ灡闁革负鍔庢导鍡欐暜閿旇法鐟愰柨娑樿嫰閻⊙囧磻韫囨梹? * - 婵犵鍋撴繛韫串缁辩増绂掗崨娣偓濠囧捶閸℃凹娼￠柨娑欑☉??闁告瑥鐤囩粩鐔虹棯閸栵紕骞㈤幖瀛樻礉缁旂喐绋夋惔婵堢憮閻忕偛鍊搁幃鎾绘??闁告瑱缍€椤ｆ澘顕ｉ埀顒勫矗閿濆牏绠鹃柛蹇嬪劙缁楀懐锟? */
+ * Tab         
+ * -             
+ * -             
+ */
 .wsChromeRowWorkspace .wsChromeTab,
 .wsChromeRowTitlebar .wsChromeTab,
 .wsChromeRowSessions .wsChromeTab,
 .wsChromeTabSession {
   height: var(--ws-chrome-ws-h, 32px);
   min-height: var(--ws-chrome-ws-h, 32px);
-  /* 闁告瑯浜濆﹢浣广亜鐠虹儤濡囬悷娆愬釜缁辩増鎯旈弴锛勭彾濞戞挸绨肩粭鍛沪閸屾縿鈧啴妫冮姀銏＄ゲ锟?*/
+  /*       */
   border-radius: var(--radius-lg) 8px 0 0;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-normal);
@@ -219,7 +222,7 @@
   min-width: 0;
   max-width: 220px;
   position: relative;
-  margin: 0 0 -1px; /* 闁告ê顑勭紞鍥╂偘鐏炵晫淇洪梺顔哄妼閸ㄥ酣姊鹃弮鍌氭疇 */
+  margin: 0 0 -1px; /*         */
   gap: var(--space-2);
   align-items: center;
   box-shadow: none;
@@ -248,7 +251,7 @@
   color: inherit;
 }
 
-/* 闁哄牜浜濈缓鍝劽虹紒妯轰壕闁稿绮ｇ槐鐗堢瀹ュ牆鍨遍柛锔哄妿娴煎棛鏁敂璺ㄧ憪闁挎稑鐬奸弳鎰 */
+/*        */
 .wsChromeRowWorkspace .wsChromeTab:hover,
 .wsChromeRowTitlebar .wsChromeTab:hover,
 .wsChromeRowSessions .wsChromeTab:hover,
@@ -301,7 +304,7 @@
   color: var(--text-primary);
 }
 
-/* +闁挎稒鑹捐ぐ鑼沪閺囩偟纾婚柤鎸庣矊瀹曠喖鎯冮崟顔ф洟宕ｉ幋锔藉唉 */
+/*      (+) */
 .wsChromeRowWorkspace .wsChromeTabAdd,
 .wsChromeRowTitlebar .wsChromeTabAdd,
 .wsChromeRowSessions .wsChromeTabAdd {
@@ -339,7 +342,7 @@
   border-color: transparent;
 }
 
-/* 闁告梻濮磋ぐ璺ㄤ沪閺囩偟纾婚梻鍫涘灪 */
+/*            */
 .wsChromeAddWrap {
   position: relative;
   align-self: flex-end;
@@ -412,7 +415,7 @@
   line-height: var(--line-height-tight);
 }
 
-/* 濡炪倕婀卞tab 闁告梻濮撮 */
+/*         Tab      */
 .wsChromeRowWorkspace .wsChromeTab,
 .wsChromeRowTitlebar .wsChromeTab {
   max-width: 280px;
@@ -471,7 +474,7 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
-  /* 濮掓稒顭堥濠氭⒕閹邦垱顥戦柨娑欑◥hover / 婵犵鍋撴繛鑼帛濡 */
+  /*          */
   opacity: 0;
   pointer-events: none;
   margin-right: var(--space-1_5);
@@ -497,7 +500,7 @@
 }
 
 .wsChromeTabClose:hover {
-  opacity: 1 !important;
+  opacity: 1;
   background: var(--tint-active);
   color: var(--text-primary);
 }

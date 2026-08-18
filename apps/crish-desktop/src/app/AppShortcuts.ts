@@ -11,11 +11,11 @@ import { getActiveProjectId } from '../api/projectStore';
 import { ShortcutService } from '../services/ShortcutService';
 import { emitUiEvent } from '../api/uiEvents';
 import { formatBranchUndoToast } from '../hooks/useToastQueue';
+import { toast } from '../services/toast/ToastContext';
 import type { SettingsTabType } from '../store/types';
 import { getCompositionRoot } from './compositionRoot';
 
 export interface UseAppShortcutsOptions {
-  handleShowToast: (msg: string, undoAction?: () => void) => void;
   showCheatsheet: boolean;
   setShowCheatsheet: React.Dispatch<React.SetStateAction<boolean>>;
   showSettingsOverlay: boolean;
@@ -26,7 +26,6 @@ export interface UseAppShortcutsOptions {
 }
 
 export function useAppShortcuts({
-  handleShowToast,
   showCheatsheet,
   setShowCheatsheet,
   showSettingsOverlay,
@@ -146,7 +145,7 @@ export function useAppShortcuts({
             const forkTitle = `${activeSess.title} - Ctrl+Shift+F 分叉`;
             branchSession(activeSess.id, forkTitle);
             const newBranchId = session.getActiveSessionId();
-            handleShowToast(formatBranchUndoToast(activeSess.title), () => {
+            toast.show(formatBranchUndoToast(activeSess.title), () => {
               if (newBranchId && newBranchId !== oldSessionId) {
                 archiveSession(newBranchId);
               }
@@ -176,7 +175,6 @@ export function useAppShortcuts({
       svc.destroy();
     };
   }, [
-    handleShowToast,
     showCheatsheet,
     showSettingsOverlay,
     showFirstRun,

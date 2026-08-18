@@ -13,12 +13,12 @@ import {
   createDefaultTree,
   createLeaf,
   createBranch,
-  isChatDomain,
   isLeaf,
   isBranch,
   type LayoutTree,
   type LayoutLeaf,
 } from '../layout-tree/types';
+import { viewRegistry } from '../../services/view-registry';
 import {
   collectLeaves,
   findNodeById,
@@ -145,7 +145,7 @@ describe('normalizeToAdapterShape', () => {
     const next = normalizeToAdapterShape(tree);
     expect(countChatLeaves(next.root)).toBe(2);
     const chats = collectLeaves(next.root).filter((l) =>
-      isChatDomain(l.panelId)
+      viewRegistry.isPrimary(l.panelId)
     );
     expect(chats.map((c) => c.sessionId).sort()).toEqual(['sess-a', 'sess-b']);
   });
@@ -159,8 +159,8 @@ describe('normalizeToAdapterShape', () => {
     };
     const next = normalizeToAdapterShape(tree);
     const leaves = collectLeaves(next.root);
-    expect(leaves.filter((l) => isChatDomain(l.panelId)).length).toBe(1);
-    expect(leaves.filter((l) => !isChatDomain(l.panelId)).length).toBe(1);
+    expect(leaves.filter((l) => viewRegistry.isPrimary(l.panelId)).length).toBe(1);
+    expect(leaves.filter((l) => !viewRegistry.isPrimary(l.panelId)).length).toBe(1);
   });
 
   it('injects chat when tree has only tools', () => {
@@ -264,7 +264,7 @@ describe('expandSessionUnitDock', () => {
       );
       expect(
         isLeaf(unitNode.children[1]) &&
-          !isChatDomain(unitNode.children[1].panelId)
+          !viewRegistry.isPrimary(unitNode.children[1].panelId)
       ).toBe(true);
       const tool = unitNode.children[1] as LayoutLeaf;
       expect(tool.tabs).toEqual(['terminal']);

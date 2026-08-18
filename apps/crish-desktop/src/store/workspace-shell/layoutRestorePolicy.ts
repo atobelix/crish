@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Shell-side helpers for multi-unit layout restore.
  * Pure tree → dock inference; validation re-exported from layout-tree.
  *
@@ -15,13 +15,11 @@ import {
   findNodeById,
   findUnitRootId,
   listChatLeaves,
-  listToolLeaves,
-  isChatDomain,
-  isBranch,
   isLeaf,
   collectLeaves,
   useLayoutTreeStore,
 } from '../layout-tree';
+import { viewRegistry } from '../../services/view-registry';
 import type { LayoutNode, LayoutTree } from '../layout-tree/types';
 import {
   validateRestorableLayoutTree,
@@ -46,7 +44,7 @@ export type { LayoutRestoreVerdict };
 
 /** Tool-domain subtree (no chat leaves). */
 function isToolDomainSubtree(node: LayoutNode): boolean {
-  if (isLeaf(node)) return !isChatDomain(node.panelId);
+  if (isLeaf(node)) return !viewRegistry.isPrimary(node.panelId);
   return (
     isToolDomainSubtree(node.children[0]) &&
     isToolDomainSubtree(node.children[1])
@@ -54,25 +52,28 @@ function isToolDomainSubtree(node: LayoutNode): boolean {
 }
 
 /**
- * Infer per-session RightToolDock from a restored Conversation Unit tree.
- * Used so restore does not stomp expanded docks with default collapsed shell state.
+ * 提取某个 session 的 Conversation Unit 中的 dock 状态。
+ * - 若 unit 是纯 chat leaf（无 tool 子树）：collapsed = true
+ * - 若 unit 是 H-branch(chat, toolSubtree)：collapsed = false，从 toolSubtree 提取 openPanelIds/activePanelId/widthRatio
  */
-function inferDockFromSessionUnit(
+export function projectUnitDockState(
   root: LayoutNode,
   sessionId: string
 ): RightToolDockState {
   const sid = (sessionId || '').trim();
   if (!sid) return createDefaultDock({ collapsed: true });
 
-  const unitId = findUnitRootId(root, sid);
-  if (!unitId) return createDefaultDock({ collapsed: true });
+  const unitRootId = findUnitRootId(root, sid);
+  if (!unitRootId) return createDefaultDock({ collapsed: true });
 
-  const unit = findNodeById(root, unitId);
-  if (!unit || isLeaf(unit)) {
+  const unit = findNodeById(root, unitRootId);
+  if (!unit) return createDefaultDock({ collapsed: true });
+
+  if (isLeaf(unit)) {
     return createDefaultDock({ collapsed: true });
   }
 
-  if (!isBranch(unit) || unit.direction !== 'horizontal') {
+  if (unit.direction !== 'horizontal') {
     return createDefaultDock({ collapsed: true });
   }
 
@@ -82,14 +83,14 @@ function inferDockFromSessionUnit(
 
   if (
     isLeaf(first) &&
-    isChatDomain(first.panelId) &&
+    viewRegistry.isPrimary(first.panelId) &&
     isToolDomainSubtree(second)
   ) {
     toolSide = second;
     toolWidthRatio = 1 - unit.splitRatio;
   } else if (
     isLeaf(second) &&
-    isChatDomain(second.panelId) &&
+    viewRegistry.isPrimary(second.panelId) &&
     isToolDomainSubtree(first)
   ) {
     toolSide = first;
@@ -99,7 +100,7 @@ function inferDockFromSessionUnit(
   if (!toolSide) return createDefaultDock({ collapsed: true });
 
   const toolLeaves = collectLeaves(toolSide).filter(
-    (l) => !isChatDomain(l.panelId)
+    (l) => !viewRegistry.isPrimary(l.panelId)
   );
   if (toolLeaves.length === 0) {
     return createDefaultDock({ collapsed: true });
@@ -146,13 +147,15 @@ export function syncShellDocksFromTree(tree: LayoutTree): void {
     // Only sync sessions that actually have a chat unit in the tree
     const chats = listChatLeaves(tree.root);
     if (!chats.some((c) => c.sessionId === sid)) return tab;
-    const dock = inferDockFromSessionUnit(tree.root, sid);
+    const dock = projectUnitDockState(tree.root, sid);
     return { ...tab, rightDock: dock };
   });
 
   // 写入走注册的 setter：workspaceShellStore 注册的闭包
   shellApi.setOpenTabs?.(nextTabs);
 }
+
+export const inferDockFromSessionUnit = projectUnitDockState;
 
 /**
  * After restore: ensure every session-bound chat leaf has a shell tab

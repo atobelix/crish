@@ -1,3 +1,4 @@
+﻿import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { clientApi, type PackageSource } from '../../api/clientApi';
 import {
@@ -39,7 +40,7 @@ function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-export function useExtensionMarket(onShowToast: (msg: string) => void) {
+export function useExtensionMarket() {
   const [view, setView] = useState<MainView>('installed');
 
   const { skills, setSkills, saveSkills } = useSkillsCache();
@@ -211,12 +212,12 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
     } catch (e) {
       const msg = errText(e);
       setLoadError(msg);
-      onShowToast(`扩展刷新失败：${msg}`);
+      toast.show(`扩展刷新失败：${msg}`);
       hydratedRef.current = true;
     } finally {
       setLoading(false);
     }
-  }, [cwd, onShowToast, skills.length, mcpServers.length]);
+  }, [cwd, skills.length, mcpServers.length]);
 
   useEffect(() => {
     void refresh();
@@ -320,7 +321,7 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
           fallbackId: entry.id,
         });
         await refresh();
-        onShowToast('仅登记包名（未连接引擎安装）');
+        toast.show('仅登记包名（未连接引擎安装）');
         return;
       }
       markCatalogInstalled(entry.id);
@@ -333,9 +334,9 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
         fallbackId: entry.id,
       });
       await refresh();
-      onShowToast('仅标记本机已装，未连接引擎安装');
+      toast.show('仅标记本机已装，未连接引擎安装');
     } catch (e) {
-      onShowToast(`安装失败：${errText(e)}`);
+      toast.show(`安装失败：${errText(e)}`);
     } finally {
       setBusyId(null);
     }
@@ -366,7 +367,7 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
       setExpand(null);
       await refresh();
     } catch (e) {
-      onShowToast(`卸载失败：${errText(e)}`);
+      toast.show(`卸载失败：${errText(e)}`);
     }
   };
 
@@ -392,7 +393,7 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
       cacheMcpToolDisabled(merged.mcpDisabledTools || next);
       setToolTick((n) => n + 1);
     } catch (e) {
-      onShowToast(`工具开关失败：${errText(e)}`);
+      toast.show(`工具开关失败：${errText(e)}`);
     } finally {
       setMcpToolBusy(false);
     }
@@ -406,11 +407,11 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
         ? await startMcpServer(serverId)
         : await stopMcpServer(serverId);
       if (!r.ok) {
-        onShowToast(r.error || (start ? '启动失败' : '停止失败'));
+        toast.show(r.error || (start ? '启动失败' : '停止失败'));
       }
       await refresh();
     } catch (e) {
-      onShowToast(errText(e));
+      toast.show(errText(e));
     } finally {
       setMcpServerBusy(false);
     }
@@ -423,9 +424,9 @@ export function useExtensionMarket(onShowToast: (msg: string) => void) {
       setPlugins((prev) =>
         prev.map((p) => (p.id === pluginId ? { ...p, enabled } : p))
       );
-      onShowToast(enabled ? '插件已启用' : '插件已停用');
+      toast.show(enabled ? '插件已启用' : '插件已停用');
     },
-    [onShowToast]
+    []
   );
 
   return {

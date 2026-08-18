@@ -86,6 +86,8 @@ export const BACKGROUND_TASK_EMPTY_OUTPUT_PLACEHOLDER = '（无输出）';
 export type BackgroundTaskInfo = {
   id: string;
   label: string;
+  /** 所属会话 ID（可选；wire sessionId / session_id） */
+  sessionId?: string;
   /** 已 normalize 的状态字符串 */
   state: BackgroundTaskState;
   command?: string;
@@ -380,6 +382,11 @@ export function parseBackgroundTask(raw: unknown): BackgroundTaskInfo | null {
   const promptRaw = typeof o.prompt === 'string' ? o.prompt.trim() : '';
   const prompt = promptRaw ? promptRaw : undefined;
 
+  const sessionIdRaw =
+    (typeof o.sessionId === 'string' && o.sessionId.trim()) ||
+    (typeof o.session_id === 'string' && o.session_id.trim()) ||
+    undefined;
+
   const suspicious =
     typeof o.suspicious === 'boolean' ? o.suspicious : undefined;
 
@@ -387,6 +394,7 @@ export function parseBackgroundTask(raw: unknown): BackgroundTaskInfo | null {
     id,
     label,
     state,
+    ...(sessionIdRaw !== undefined && { sessionId: sessionIdRaw }),
     ...(command !== undefined && { command }),
     ...(startedAt !== undefined && { startedAt }),
     ...(summary !== undefined && { summary }),

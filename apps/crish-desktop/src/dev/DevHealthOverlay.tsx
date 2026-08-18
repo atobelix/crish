@@ -88,7 +88,7 @@ export const DevHealthOverlay: React.FC = () => {
       aria-label="Dev control metrics"
       data-testid="dev-health-overlay"
     >
-      <span className={styles.label} title="controlMetrics snapshot (D2 lite)">
+      <span className={styles.label} aria-label="controlMetrics snapshot (D2 lite)">
         ctrl
       </span>
       <div className={styles.strip}>
@@ -96,7 +96,7 @@ export const DevHealthOverlay: React.FC = () => {
           <span
             key={c.id}
             className={c.warn ? styles.cellWarn : styles.cell}
-            title={c.title}
+            aria-label={c.title}
           >
             {c.text}
           </span>
@@ -106,7 +106,6 @@ export const DevHealthOverlay: React.FC = () => {
         type="button"
         className={styles.refresh}
         onClick={refresh}
-        title="Refresh metrics now"
         aria-label="Refresh control metrics"
       >
         ↻

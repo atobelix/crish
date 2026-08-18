@@ -1,5 +1,5 @@
-/* 工作区空态皮。落地焦点 text 混入 5%（§13 例外）；hover 4%。
- * 无厚重阴影 / 实心黑边；alpha 走 color-mix，不用 rgba。 */
+/*             text    5%  13     hover 4% 
+ *       /      alpha   color-mix    rgba  */
 
 .workspaceEmptyState {
   --empty-hover-border: color-mix(
@@ -22,7 +22,7 @@
   animation: cds-fade-in var(--transition-smooth) forwards;
 }
 
-/* D1：落地贴 shell .emptyState* 密度 */
+/* D1     shell .emptyState*    */
 .workspaceEmptyState[data-empty='true'] {
   align-items: center;
   justify-content: center;
@@ -34,14 +34,14 @@
   box-shadow: none;
 }
 
-/* 宿主不画环；光标进 CTA 已够提示 */
+/*           CTA      */
 .workspaceEmptyState[data-empty='true']:focus-within {
   outline: none;
   box-shadow: none;
   border-color: transparent;
 }
 
-/* D4：纸面打开后只收 gap/透明/无影；align/justify/padding/text-align 由 inline 管 */
+/* D4         gap/  /   align/justify/padding/text-align   inline   */
 .workspaceEmptyState[data-empty='false'] {
   gap: 0;
   min-height: 0;
@@ -57,7 +57,7 @@
   transition: opacity var(--transition-smooth);
 }
 
-/* D2：中性次级字色，禁止 accent-blue / scale */
+/* D2           accent-blue / scale */
 .workspaceEmptyState[data-empty='true']:hover .emptyStateIconWrapper {
   opacity: 1;
   color: var(--text-secondary);
@@ -84,7 +84,7 @@
   line-height: var(--line-height-body);
 }
 
-/* 双轨入口：Strict 产品默认 + Skeleton 预览壳 */
+/*      Strict      + Skeleton     */
 .workspaceEmptyState .emptyStateActions {
   display: flex;
   flex-wrap: wrap;
@@ -97,7 +97,7 @@
   pointer-events: auto;
 }
 
-/* hover 描边 4%；透明底边避免几何抖动 */
+/* hover    4%            */
 .workspaceEmptyState[data-empty='true'] .emptyStateActions :global(button) {
   box-shadow: none;
   box-sizing: border-box;
@@ -111,7 +111,7 @@
   box-shadow: none;
 }
 
-/* D3+D5：覆盖 Button / 全局 --focus-ring（暗色 30%）；5% 软环，无 3px 强环 */
+/* D3+D5    Button /    --focus-ring    30%  5%      3px    */
 .workspaceEmptyState[data-empty='true'] :global(button):focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--empty-focus-ring);

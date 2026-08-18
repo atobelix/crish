@@ -121,7 +121,7 @@
   -webkit-app-region: no-drag;
 }
 
-/* 打开方式胶囊 */
+/*        */
 .filesOpenCapsule {
   display: inline-flex;
   align-items: center;
@@ -185,7 +185,7 @@
   border-radius: 8px;
   box-shadow: var(--shadow-lg, 0 4px 12px rgba(0,0,0,0.1));
   padding: 4px;
-  /* F7-F14：z-index 走 token 档位（--z-sidebar），禁裸数字 */
+  /* F7-F14 z-index   token    --z-sidebar       */
   z-index: var(--z-sidebar);
   display: flex;
   flex-direction: column;
@@ -224,7 +224,7 @@
   font-size: 10px;
 }
 
-/* 独立简易 Diff 渲染样式 */
+/*      Diff      */
 .diffContainer {
   display: flex;
   flex-direction: column;
@@ -257,8 +257,8 @@
   word-break: break-all;
 }
 
-/* S6 P1-4：diff 增删底色走 --accent-*-light-adaptive（与 DiffCard 同 token 系，
- * 含 dark 自适应；观感与历史 GitHub rgba 淡染一致） */
+/* S6 P1-4 diff       --accent-*-light-adaptive   DiffCard   token   
+ *   dark           GitHub rgba       */
 .diffAddition {
   background: var(--accent-green-light-adaptive);
   color: var(--text-primary);
@@ -286,7 +286,7 @@
   font-size: 12px;
 }
 
-/* 更多菜单收纳样式 */
+/*          */
 .filesMoreWrap {
   position: relative;
   display: inline-flex;
@@ -302,7 +302,7 @@
   border-radius: 8px;
   box-shadow: var(--shadow-lg, 0 4px 12px rgba(0,0,0,0.1));
   padding: 4px;
-  /* F7-F14：z-index 走 token 档位（--z-sidebar），禁裸数字 */
+  /* F7-F14 z-index   token    --z-sidebar       */
   z-index: var(--z-sidebar);
   display: flex;
   flex-direction: column;

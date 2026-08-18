@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 右侧变更面板：Git 工作区变更 + 本会话 AI 回合汇总（下拉）。
  * 瘦身为 ≤300 行的组装层。
  */
@@ -28,17 +28,21 @@ import { DiffHeaderControls } from './DiffHeaderControls';
 import { DiffCodeViewer } from './DiffCodeViewer';
 import { useDiffData } from './useDiffData';
 import { useDiffGitActions } from './useDiffGitActions';
+import { formatGitPatch } from './GitPatchFormatter';
 import { getWorkspacePath } from '../../api/projectStore';
 
-interface DiffCardProps {
-  onShowToast: (message: string) => void;
+import { useToast } from '../../services/toast/ToastContext';
+
+export interface DiffCardProps {
+  className?: string;
 }
 
 function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
 }
 
-const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
+const DiffCardInner: React.FC<DiffCardProps> = () => {
+  const { showToast: _showToast } = useToast();
   const activeDiffSource = useTerminalField(selectActiveDiffSource);
   const diffFiles = useTerminalField(selectDiffFiles) as FileDiff[];
   const setActiveDiffSource = useTerminalField((s) => s.setActiveDiffSource);
@@ -57,7 +61,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
   const [sourceMode, setSourceMode] = useState<DiffSourceMode>('list');
   const [turnKey, setTurnKey] = useState('');
   const [panelErr, setPanelErr] = useState('');
-  const [softHint, setSoftHint] = useState('');
+  const [_softHint, setSoftHint] = useState('');
   const [commitPanelOpen, setCommitPanelOpen] = useState(false);
   // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）
   const [confirmGate, renderConfirmGate] = useConfirmGate();
@@ -103,10 +107,10 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
       if (m) {
         dismissSoftHint();
         setPanelErr(m);
-        onShowToast(m);
+        showToast(m);
       }
     },
-    [dismissSoftHint, onShowToast]
+    [dismissSoftHint, showToast]
   );
 
   const applyFiles = useCallback(
@@ -199,10 +203,10 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
           if (!ok) return;
         }
         await navigator.clipboard.writeText(res.content);
-        onShowToast('最新源码已复制到剪贴板');
+        showToast('最新源码已复制到剪贴板');
       }
     } catch (err) {
-      onShowToast('复制失败：' + String(err));
+      showToast('复制失败：' + String(err));
     }
   };
 
@@ -269,6 +273,13 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
     dismissSoftHint();
   }, [dismissSoftHint, setActiveDiffSource, setDiffFiles]);
 
+  const handleCopyPatch = useCallback(() => {
+    if (!activeDiffSource) return;
+    const patch = formatGitPatch(activeDiffSource);
+    navigator.clipboard.writeText(patch);
+    showToast('已复制标准 Git Patch 到剪贴板');
+  }, [activeDiffSource, showToast]);
+
   const renderInlineDiffContent = (f: FileDiff) => (
     <DiffCodeViewer
       f={f}
@@ -315,6 +326,7 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         onTurnSelect={onTurnSelect}
         onBranchChange={(val) => void handleSwitchBranch(val)}
         onCommitPanelToggle={() => setCommitPanelOpen((v) => !v)}
+        onCopyPatch={handleCopyPatch}
         onClear={clearList}
       />
 
@@ -325,7 +337,6 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
             className={styles.searchInput}
             placeholder="搜索/筛选行…"
             value={rawDiffSearchQuery}
-            disabled={!activeDiffSource}
             onChange={(e) => setDiffSearchQuery(e.target.value)}
           />
         </div>
@@ -356,28 +367,6 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
         </div>
       ) : null}
 
-      {!panelErr && softHint ? (
-        <div
-          className={styles.applyHint}
-          role="status"
-          aria-live="polite"
-          style={{ display: 'flex', alignItems: 'center', gap: 4 }}
-        >
-          <span style={{ flex: 1, minWidth: 0 }}>{softHint}</span>
-          <Tooltip content="关闭">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="files-action-hint-dismiss"
-              aria-label="关闭提示"
-              onClick={dismissSoftHint}
-              icon={<Lucide.X size={12} aria-hidden />}
-            />
-          </Tooltip>
-        </div>
-      ) : null}
-
       <div className={styles.bodyWrap}>
         {fileList.length > 0 ? (
           <DiffCardFileList
@@ -398,7 +387,6 @@ const DiffCardInner: React.FC<DiffCardProps> = ({ onShowToast }) => {
             onAcceptFile={acceptCurrentFile}
             onRejectFile={rejectCurrentFile}
             onCopyCode={handleCopyCodeOfFile}
-            onShowToast={onShowToast}
             renderInlineDiffContent={renderInlineDiffContent}
           />
         ) : !gitLoading ? (

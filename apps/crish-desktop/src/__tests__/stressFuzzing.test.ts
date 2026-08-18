@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { StreamRenderBuffer } from '../api/StreamRenderBuffer';
 import { sessionHasListableContent } from '../api/sessionTitle';
-import { telemetryMonitor } from '../services/TelemetryMonitor';
 import {
   canonicalizeJsonSchema,
   formatStableTools,
@@ -114,25 +113,6 @@ describe('Destructive Stress & Mutation Probing Pipeline', () => {
       expect(exceptionThrown).toBe(false);
       expect(nanDetected).toBe(false);
     });
-  });
-
-  describe('Probe D: TelemetryMonitor 缓冲区过载与 OOM 防护探针', () => {
-    it(
-      'should hard-limit buffer to 1000 items even when bombarded with 2000 logs',
-      { timeout: 15_000 },
-      async () => {
-        const tm = telemetryMonitor as any;
-        tm.buffer = [];
-
-        for (let i = 0; i < 2000; i++) {
-          tm.logAction(`action_${i}`, 10);
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, 50));
-
-        expect(tm.buffer.length).toBeLessThanOrEqual(1000);
-      }
-    );
   });
 
   describe('Probe E: Tool Schema 确定性规范化与 Prompt Cache 键推导探针', () => {

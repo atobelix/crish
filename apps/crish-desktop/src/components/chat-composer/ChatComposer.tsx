@@ -224,7 +224,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           const root = getCompositionRoot();
           const activeSessionId =
             root.session.getActiveSessionId?.() ??
-            root.layout.getState().activeSessionId;
+            root.session.getState().activeSessionId;
           if (activeSessionId) {
             root.session.getState().setComposerDraft(activeSessionId, rawInput);
           }

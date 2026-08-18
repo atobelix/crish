@@ -102,13 +102,16 @@ function syncGoalTasksFromAssistantText(
   return next;
 }
 
+import { toast } from '../../services/toast/ToastContext';
+
 export function useGoalMode(
   streamManagerRef: MutableRefObject<SessionStreamManager | null>,
-  onShowToast: (message: string) => void
 ): {
   maybeContinueGoalMode: (sid: string, assistantMsgId: string) => boolean;
   drainQueuedAfterComplete: (sid: string) => void;
 } {
+  const showToast = (m: string) => toast.show(m);
+
   const maybeContinueGoalMode = (
     sid: string,
     assistantMsgId: string
@@ -134,7 +137,7 @@ export function useGoalMode(
         patchSession(sid, { goalMode: decision.goalMode });
       }
       if (decision.toast && goalStopAllowsToast(decision.reason)) {
-        onShowToast(decision.toast);
+        showToast(decision.toast);
       }
       return false;
     }
@@ -158,7 +161,7 @@ export function useGoalMode(
     const mgr = streamManagerRef.current!;
     if (!mgr.beginDrain(sid)) return;
     try {
-      const st = getCompositionRoot().layout.getState();
+      const st = getCompositionRoot().session.getState();
       const sess = getSessionById(sid);
       const stillBusy = sess?.messages?.some(
         (m: SessionMessage) =>

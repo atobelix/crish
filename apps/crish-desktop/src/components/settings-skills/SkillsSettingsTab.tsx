@@ -1,3 +1,4 @@
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 技能：单行密度（发现 / 列表 / 预览 / 启用 / 创建）
  *
@@ -20,10 +21,11 @@ import { SkillEditorModal } from './SkillEditorModal';
 import { SkillsMoreMenu } from './SkillsMoreMenu';
 
 type Props = {
-  onShowToast?: (msg: string) => void;
+  onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
+export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const {
     skills,
     loading,
@@ -83,7 +85,7 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
     handleAiCreateSkill,
     copySlashCommand,
     clearFilters,
-  } = useSkillsSettingsState(onShowToast);
+  } = useSkillsSettingsState();
 
   const createBoxId = useId();
   const searchId = useId();
@@ -125,7 +127,6 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
             batchBusy={batchBusy}
             batchEnableCount={batchEnableCount}
             batchDisableCount={batchDisableCount}
-            onShowToast={onShowToast}
             handleSyncAll={handleSyncAll}
             refresh={refresh}
             runBatchActivation={runBatchActivation}
@@ -229,7 +230,6 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onShowToast }) => {
           activeScopeProjectName={activeScopeProjectName}
           selectedSlash={selectedSlash}
           copySlashCommand={copySlashCommand}
-          onShowToast={onShowToast}
           busyId={busyId}
           batchBusy={batchBusy}
           setActivation={setActivation}

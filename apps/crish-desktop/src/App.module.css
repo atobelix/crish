@@ -18,7 +18,7 @@
   clip: auto;
   white-space: normal;
   overflow: visible;
-  z-index: var(--z-skip-link, 100000);
+  z-index: var(--z-tooltip);
   top: 8px;
   left: 8px;
   background: var(--bg-elevated, #fff);

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
 import styles from './Sidebar.module.css';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useLayoutStore, useSessionStore } from '../../store/storeAccess';
 import { useSidebarSessions } from '../../store/storeAccess';
 import {
   getActiveProjectId,
@@ -11,7 +11,7 @@ import { isUpdateAvailable } from '../../api/updateStore';
 import { onUiEvent } from '../../api/uiEvents';
 import { SidebarSessionList } from './SidebarSessionList';
 import { SidebarContextMenus } from './SidebarContextMenus';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import type {} from '../../hooks/useToastQueue';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import {
   loadSidebarListPrefs,
@@ -30,7 +30,6 @@ import { useSidebarHandlers } from './useSidebarHandlers';
 import { ConfirmDialog } from '../ui';
 
 interface SidebarProps {
-  onShowToast: ShowToastFn;
   hoverExpanded?: boolean;
   onHoverEnter?: () => void;
   onHoverLeave?: () => void;
@@ -41,7 +40,6 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = React.memo(
   ({
-    onShowToast,
     hoverExpanded,
     onHoverEnter,
     onHoverLeave,
@@ -52,10 +50,10 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     const searchTrimmed = searchQuery.trim();
     const isSearching = searchTrimmed.length > 0;
     const sessions = useSidebarSessions(isSearching);
-    const activeSessionId = useLayoutStore((s) => s.activeSessionId);
+    const activeSessionId = useSessionStore((s) => s.activeSessionId);
     const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
     const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
-    const moveSessionRealtime = useLayoutStore((s) => s.moveSessionRealtime);
+    const moveSessionRealtime = useSessionStore((s) => s.moveSessionRealtime);
 
     const [sectionsState, setSectionsState] = useState(() =>
       loadSidebarSectionsState()
@@ -178,7 +176,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
       sortMenuRef,
       handleContextMenu,
       handleAction,
-    } = useSidebarContextMenu({ onShowToast, setSortDropdownOpen });
+    } = useSidebarContextMenu({ setSortDropdownOpen });
 
     const { sidebarBehavior } = useResponsiveLayout();
     const [overlayOpen, setOverlayOpen] = useState(false);
@@ -339,7 +337,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
         <SidebarFooter
           chromeHidden={chromeHidden}
           updateAvailable={updateAvailable}
-          onShowToast={onShowToast}
+
           setUpdateAvailableState={setUpdateAvailableState}
         />
 

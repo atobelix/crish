@@ -51,11 +51,13 @@ export type AgentApprovalHandlers = {
  * @param agentId 子 agent id
  * @param onShowToast 可选；send 失败时提示（与 ChatCard 批准/拒绝失败对称）
  */
+import { toast } from '../services/toast/ToastContext';
+
 export function useAgentToolApproval(
   parentSessionId: string,
   agentId: string,
-  onShowToast?: (message: string) => void
 ): AgentApprovalHandlers {
+  const showToast = (m: string) => toast.show(m);
   // 请求级闭包持久锁：记录在途请求中的 toolId 集合，与 Promise 生命周期强绑定
   const inFlightToolIdsRef = useRef<Set<string>>(new Set());
   const [inFlightCount, setInFlightCount] = useState(0);
@@ -121,7 +123,7 @@ export function useAgentToolApproval(
           status: 'error' as MessageToolCallStatus,
           output: '批准失败',
         });
-        onShowToast?.('批准失败，请重试');
+        showToast('批准失败，请重试');
       } finally {
         inFlightToolIdsRef.current.delete(tid);
         if (isMountedRef.current) {
@@ -129,7 +131,7 @@ export function useAgentToolApproval(
         }
       }
     },
-    [parentSessionId, agentId, onShowToast]
+    [parentSessionId, agentId, showToast]
   );
 
   const onApprovalDeny = useCallback(
@@ -171,7 +173,7 @@ export function useAgentToolApproval(
           status: 'pending_approval' as MessageToolCallStatus,
           output: '拒绝未送达',
         });
-        onShowToast?.('拒绝未送达，请重试');
+        showToast('拒绝未送达，请重试');
       } finally {
         inFlightToolIdsRef.current.delete(tid);
         if (isMountedRef.current) {
@@ -179,7 +181,7 @@ export function useAgentToolApproval(
         }
       }
     },
-    [parentSessionId, agentId, onShowToast]
+    [parentSessionId, agentId, showToast]
   );
 
   return {

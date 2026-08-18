@@ -14,7 +14,7 @@ import {
   getSessionById,
   getSessionStoreState,
 } from '../../store/sessionStore';
-import { resolveSessionState, resolveWorkspaceState } from './storeAccessCore';
+import { getLayoutState, resolveSessionState } from './storeAccessCore';
 
 export function isNonEmptySessionId(
   sessionId: string | null | undefined
@@ -121,7 +121,7 @@ function requireExistingSessionId(
 export function createSessionAndOpenChat(folder?: string): string {
   // Compat shim → draft path only (do not mint sessions[])
   resolveSessionState().enterDraftMode(folder);
-  resolveWorkspaceState().setChatMainSurface('chat');
+  getLayoutState().setChatMainSurface('chat');
   return PENDING_DRAFT_SESSION_ID;
 }
 
@@ -297,4 +297,138 @@ export function patchAgentTool(
   const sid = requireExistingSessionId(sessionId);
   if (!sid) return;
   getSessionStoreState().patchAgentTool(sid, agentId, toolCallId, patch);
+}
+
+export function withdrawMessage(
+  wsId: string,
+  sessionId: string,
+  messageId: string
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().withdrawMessage(wsId, sid, messageId);
+}
+
+export function setSessionMessageStatus(
+  sessionId: string,
+  messageId: string,
+  status: any,
+  thinkingTime?: number,
+  opts?: {
+    force?: boolean;
+    errorDetail?: { message: string; kind: string; technical?: string };
+  }
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().setSessionMessageStatus(
+    sid,
+    messageId,
+    status,
+    thinkingTime,
+    opts
+  );
+}
+
+export function updateMessageTimeline(
+  sessionId: string,
+  messageId: string
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().updateMessageTimeline(sid, messageId);
+}
+
+export function applyToolCallPatches(
+  sessionId: string,
+  messageId: string,
+  patches: Array<{
+    id: string;
+    status: any;
+    output?: string;
+  }>
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().applyToolCallPatches(sid, messageId, patches);
+}
+
+export function setEngineLastRunId(sessionId: string, runId: string): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().setEngineLastRunId(sid, runId);
+}
+
+export function upsertSessionAgent(
+  sessionId: string,
+  agent: SessionAgent
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().upsertSessionAgent(sid, agent);
+}
+
+export function patchSessionAgent(
+  sessionId: string,
+  agentId: string,
+  patch: any
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().patchSessionAgent(sid, agentId, patch);
+}
+
+export function appendSessionAgentMessage(
+  sessionId: string,
+  agentId: string,
+  message: SessionMessage
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().appendSessionAgentMessage(sid, agentId, message);
+}
+
+export function patchSessionAgentMessage(
+  sessionId: string,
+  agentId: string,
+  messageId: string,
+  patch: (message: SessionMessage) => void
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().patchSessionAgentMessage(
+    sid,
+    agentId,
+    messageId,
+    patch
+  );
+}
+
+export function finalizeAgentMessages(
+  sessionId: string,
+  agentId: string
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().finalizeAgentMessages(sid, agentId);
+}
+
+export function applySubagentEventToAgent(
+  sessionId: string,
+  agentId: string,
+  event: Record<string, unknown>
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().applySubagentEventToAgent(sid, agentId, event);
+}
+
+export function patchSessionAgentToolStatus(
+  sessionId: string,
+  agentId: string,
+  opts: { status: string; summary?: string }
+): void {
+  const sid = requireExistingSessionId(sessionId);
+  if (!sid) return;
+  getSessionStoreState().patchSessionAgentToolStatus(sid, agentId, opts);
 }

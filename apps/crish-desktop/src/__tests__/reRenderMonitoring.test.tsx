@@ -19,7 +19,6 @@ import {
 import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
 import { DiffCard } from '../components/diff/DiffCard';
-import { CardPanel } from '../components/CardPanel';
 import { MessageContent } from '../components/chat-message/MessageContent';
 import { useStreamMessageViewModel } from '../components/chat-message/streamMessageViewModel';
 import { useStreamingStore } from '../store/storeAccess';
@@ -202,23 +201,23 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
     });
   });
 
-  it('CardPanel 重渲染监控：更新无关 Session 列表不触发 CardPanel 无效全重绘', async () => {
-    let panelParentRenderCount = 0;
+  it('DiffCard 重渲染监控：更新无关 Session 列表不触发 DiffCard 无效全重绘', async () => {
+    let diffParentRenderCount = 0;
 
-    function PanelParentWrapper() {
-      panelParentRenderCount++;
+    function DiffParentWrapper() {
+      diffParentRenderCount++;
       return (
-        <CardPanel
-          wsId="ws-rerender-1"
-          colIdx={0}
-          groupIdx={0}
+        <DiffCard
+          diffFiles={[]}
+          activeDiffSource={null}
+          onSelectDiff={vi.fn()}
           onShowToast={vi.fn()}
         />
       );
     }
 
-    render(<PanelParentWrapper />);
-    expect(panelParentRenderCount).toBe(1);
+    render(<DiffParentWrapper />);
+    expect(diffParentRenderCount).toBe(1);
 
     // 变更后台无关会话内容 (非当前 activeSession)
     act(() => {
@@ -237,8 +236,8 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
     });
 
     await waitFor(() => {
-      // 核心断言：CardPanel 不受后台无关 session push 的全层重绘影响
-      expect(panelParentRenderCount).toBe(1);
+      // 核心断言：DiffCard 不受后台无关 session push 的全层重绘影响
+      expect(diffParentRenderCount).toBe(1);
     });
   });
 
@@ -251,19 +250,6 @@ describe('重渲染监控 (Component Re-render Monitoring)', () => {
 
     const stableProps = {
       messages: mockMessages,
-      visibleMessages: mockMessages,
-      messageWindow: {
-        startIndex: 0,
-        hiddenCount: 0,
-        visibleCount: 1,
-        totalCount: 1,
-        hasOlder: false,
-        effectiveExpanded: 0,
-      },
-      olderStep: 20,
-      offerShowAllOlder: false,
-      expandOlderStep: vi.fn(),
-      expandOlderAll: vi.fn(),
       pinnedItems: [],
       pinsOpen: false,
       setPinsOpen: vi.fn(),

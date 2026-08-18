@@ -1,62 +1,12 @@
-import React from 'react';
+import React, { useMemo, useCallback } from 'react';
 import styles from './OverviewCard.module.css';
 import { Button, Tooltip } from '../ui';
-import {
-  ChevronDown,
-  File,
-  FileCode2,
-  FileText,
-  GitBranch,
-  Image,
-  RefreshCw,
-  Table,
-} from 'lucide-react';
+import { ChevronDown, GitBranch, RefreshCw } from 'lucide-react';
 import { openGitDownloadPage } from '../../api/gitApi';
-import { detectFileKind } from '../../api/workspaceFsApi';
-import { fileExtColor } from '../../api/codeHighlight';
-import { gitStatusLabel } from '../../api/gitApi';
-import { basename, getGitStatusColor } from './helpers';
-import type { GitStatusResult, GitStatusFile } from '../../api/gitApi';
+import type { GitStatusResult } from '../../api/gitApi';
+import type { GitStatusFile, GitStatusCode } from '../../api/gitTreeHelpers';
 import type { DiffFileInfo } from '../../api/storeAccess';
-
-function FileIcon({ name }: { name: string }) {
-  const k = detectFileKind(name);
-  const color = fileExtColor(name);
-  const sz = 14;
-  if (k === 'image')
-    return (
-      <Image size={sz} className={styles.ico} style={{ color }} aria-hidden />
-    );
-  if (k === 'pdf')
-    return (
-      <FileText
-        size={sz}
-        className={styles.ico}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  if (k === 'table')
-    return (
-      <Table size={sz} className={styles.ico} style={{ color }} aria-hidden />
-    );
-  if (
-    /\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(
-      name
-    )
-  )
-    return (
-      <FileCode2
-        size={sz}
-        className={styles.ico}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  return (
-    <File size={sz} className={styles.ico} style={{ color }} aria-hidden />
-  );
-}
+import { OverviewGitTree } from './OverviewGitTree';
 
 interface ChangesSectionProps {
   open: boolean;
@@ -71,7 +21,7 @@ interface ChangesSectionProps {
   gitHelp: { title: string; hint?: string; action?: string } | null;
   onToggle: () => void;
   onRefreshGit: (opts?: { force?: boolean }) => void;
-  onOpenGitFile: (f: GitStatusFile) => void;
+  onOpenGitFile: (f: import('../../api/gitApi').GitStatusFile) => void;
   onSetShowAllFiles: (v: boolean) => void;
   onOpenPanel: (id: string) => void;
   onOpenDiffSource: (f: DiffFileInfo) => void;
@@ -84,19 +34,68 @@ export const ChangesSection = React.memo(function ChangesSection({
   convoFiles,
   openingPath,
   actionErr,
-  showAllFiles,
   branch,
   gitHelp,
   onToggle,
   onRefreshGit,
   onOpenGitFile,
-  onSetShowAllFiles,
   onOpenPanel,
   onOpenDiffSource,
 }: ChangesSectionProps) {
-  const gitFiles = git?.found ? git.files : [];
-  const fileCount = Math.max(gitFiles.length, convoFiles.length);
-  const hasFileList = gitFiles.length > 0 || convoFiles.length > 0;
+  const rawGitFiles = useMemo(() => (git?.found ? git.files : []), [git]);
+
+  const treeGitFiles = useMemo<GitStatusFile[]>(() => {
+    return rawGitFiles.map((f) => ({
+      path: f.path,
+      status: (f.status as GitStatusCode) || 'M',
+      additions: (f as unknown as { additions?: number }).additions || 0,
+      deletions: (f as unknown as { deletions?: number }).deletions || 0,
+      conflicted: f.conflicted,
+      staged: f.staged,
+    }));
+  }, [rawGitFiles]);
+
+  // 对话改动文件转为标准 GitStatusFile 结构
+  const normalizedConvoFiles = useMemo<GitStatusFile[]>(() => {
+    return convoFiles.map((c) => ({
+      path: c.filePath,
+      status: 'M' as GitStatusCode,
+      additions: c.additions,
+      deletions: c.deletions,
+    }));
+  }, [convoFiles]);
+
+  const activeFiles =
+    treeGitFiles.length > 0 ? treeGitFiles : normalizedConvoFiles;
+  const fileCount = activeFiles.length;
+  const hasFileList = fileCount > 0;
+
+  const handleOpenFile = useCallback(
+    (file: GitStatusFile) => {
+      if (rawGitFiles.length > 0) {
+        const found = rawGitFiles.find((f) => f.path === file.path);
+        if (found) {
+          onOpenGitFile(found);
+          return;
+        }
+      }
+      const match = convoFiles.find(
+        (c) => c.filePath === file.path || c.filePath.endsWith(file.path)
+      );
+      if (match) {
+        onOpenDiffSource(match);
+      } else {
+        onOpenDiffSource({
+          filePath: file.path,
+          additions: file.additions || 0,
+          deletions: file.deletions || 0,
+          changes: [],
+        });
+      }
+      onOpenPanel('diff');
+    },
+    [rawGitFiles, onOpenGitFile, convoFiles, onOpenDiffSource, onOpenPanel]
+  );
 
   return (
     <section className={styles.sec} aria-labelledby="overview-sec-files">
@@ -207,135 +206,12 @@ export const ChangesSection = React.memo(function ChangesSection({
             </div>
           ) : null}
 
-          {gitFiles.length > 0 ? (
-            <>
-              <ul className={styles.list} aria-label="Git 改动文件">
-                {(showAllFiles ? gitFiles : gitFiles.slice(0, 8)).map((f) => {
-                  const opening = openingPath === f.path;
-                  const stLabel = gitStatusLabel(f.status);
-                  const statusColor = getGitStatusColor(f.status);
-                  const match = convoFiles.find(
-                    (c) =>
-                      c.filePath === f.path ||
-                      basename(c.filePath) === basename(f.path)
-                  );
-                  return (
-                    <li key={f.path}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={styles.itemBtn}
-                        disabled={Boolean(openingPath)}
-                        aria-busy={opening}
-                        aria-label={
-                          opening
-                            ? `正在打开 ${basename(f.path)}`
-                            : `${basename(f.path)}，${stLabel}`
-                        }
-                        onClick={() => onOpenGitFile(f)}
-                      >
-                        <FileIcon name={basename(f.path)} />
-                        <span className={`${styles.itemMain} ${styles.mono}`}>
-                          <Tooltip content={f.path}>
-                            <span className={styles.itemName}>
-                              {basename(f.path)}
-                            </span>
-                          </Tooltip>
-                          <em style={{ color: statusColor, fontWeight: 300 }}>
-                            {opening
-                              ? '…'
-                              : match
-                                ? `+${match.additions} −${match.deletions}`
-                                : `${stLabel}${f.conflicted ? ' · 冲突' : ''}`}
-                          </em>
-                        </span>
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-              {gitFiles.length > 8 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.link}
-                  style={{
-                    marginTop: 6,
-                    marginBottom: 6,
-                    width: '100%',
-                    textAlign: 'center',
-                    fontSize: 12,
-                  }}
-                  onClick={() => onSetShowAllFiles(!showAllFiles)}
-                >
-                  {showAllFiles
-                    ? '收起改动列表'
-                    : `展开全部 ${gitFiles.length} 项改动`}
-                </Button>
-              ) : null}
-            </>
-          ) : convoFiles.length > 0 ? (
-            <>
-              <ul className={styles.list} aria-label="对话改动文件">
-                {(showAllFiles ? convoFiles : convoFiles.slice(0, 8)).map(
-                  (f) => {
-                    const statusColor =
-                      f.additions > 0
-                        ? 'var(--text-success-strong)'
-                        : 'var(--text-warning-strong)';
-                    return (
-                      <li key={f.filePath}>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className={styles.itemBtn}
-                          aria-label={`打开 ${basename(f.filePath)}`}
-                          onClick={() => {
-                            onOpenDiffSource(f);
-                            onOpenPanel('diff');
-                          }}
-                        >
-                          <FileIcon name={basename(f.filePath)} />
-                          <span className={`${styles.itemMain} ${styles.mono}`}>
-                            <Tooltip content={f.filePath}>
-                              <span className={styles.itemName}>
-                                {basename(f.filePath)}
-                              </span>
-                            </Tooltip>
-                            <em style={{ color: statusColor, fontWeight: 300 }}>
-                              +{f.additions} −{f.deletions}
-                            </em>
-                          </span>
-                        </Button>
-                      </li>
-                    );
-                  }
-                )}
-              </ul>
-              {convoFiles.length > 8 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.link}
-                  style={{
-                    marginTop: 6,
-                    marginBottom: 6,
-                    width: '100%',
-                    textAlign: 'center',
-                    fontSize: 12,
-                  }}
-                  onClick={() => onSetShowAllFiles(!showAllFiles)}
-                >
-                  {showAllFiles
-                    ? '收起改动列表'
-                    : `展开全部 ${convoFiles.length} 项改动`}
-                </Button>
-              ) : null}
-            </>
+          {hasFileList ? (
+            <OverviewGitTree
+              files={activeFiles}
+              openingPath={openingPath}
+              onOpenFile={handleOpenFile}
+            />
           ) : !gitHelp && !gitLoading ? (
             <p className={`${styles.empty} ${styles.emptyQuiet}`} role="status">
               {git?.found && git.clean ? '干净' : '无改动'}

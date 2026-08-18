@@ -1,4 +1,4 @@
-/* Plan / goal mode ribbons（自 ChatStatusRibbons.module.css 随组件搬出） */
+/* Plan / goal mode ribbons   ChatStatusRibbons.module.css        */
 .planModeRibbon {
   display: flex;
   align-items: center;
@@ -95,7 +95,7 @@
   flex-shrink: 0;
   width: 36px;
   height: 4px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--text-tertiary) 22%, transparent);
   overflow: hidden;
   align-self: center;

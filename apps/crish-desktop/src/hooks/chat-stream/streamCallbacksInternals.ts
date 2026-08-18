@@ -8,7 +8,7 @@
  * usage 消费（快照回填 / approx 兜底）→ streamCallbacksUsage.ts。
  */
 import { getSessionById } from '../../store/sessionStore';
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import type {
   MessageToolApprovalMeta,
   MessageToolCall,
@@ -195,7 +195,7 @@ export function finalizeAssistantMessageText(opts: {
     scheduleRunFinalHtml,
     thinkingBatcher,
   } = opts;
-  const st = getCompositionRoot().layout.getState();
+  const st = getCompositionRoot().session.getState();
   let finalTextForHtml = '';
   try {
     const latest = buildMessageIndex(getSessionById(sid)).get(assistantMsgId);
@@ -212,7 +212,7 @@ export function finalizeAssistantMessageText(opts: {
     }
     // T-E 步骤 3（U4）：raw setState → updateMessageTimeline action
     getCompositionRoot()
-      .layout.getState()
+      .session.getState()
       .updateMessageTimeline(sid, assistantMsgId);
   } catch {
     /* ignore */
@@ -234,7 +234,7 @@ export function finalizeRunCompletionStatuses(opts: {
   runId: string | null;
 }): void {
   const { sid, userMsgId, assistantMsgId, elapsed, runId } = opts;
-  const st = getCompositionRoot().layout.getState();
+  const st = getCompositionRoot().session.getState();
   const index = buildMessageIndex(getSessionById(sid));
   const latestUserMsg = index.get(userMsgId);
   const latestAssistantMsg = index.get(assistantMsgId);

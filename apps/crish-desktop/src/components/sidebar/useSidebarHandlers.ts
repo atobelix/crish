@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/storeAccess';
 import { getActiveProjectId } from '../../api/projectStore';
 import { setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../store/storeAccess';
@@ -46,7 +46,7 @@ export function useSidebarHandlers({
   sidebarCollapsed,
   setSidebarCollapsed,
 }: UseSidebarHandlersOptions) {
-  const renameSession = useLayoutStore((s) => s.renameSession);
+  const renameSession = useSessionStore((s) => s.renameSession);
 
   const [activeNav, setActiveNav] = useState('chat');
   const newSessionLockRef = useRef(false);

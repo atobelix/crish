@@ -1,13 +1,13 @@
 /**
- * 二叉树工作区样式。
+ *          
  *
- * 布局策略：
- * - canvas 为 position: relative，所有 leaf 绝对定位（百分比 rect）
- * - sash 绝对定位在 branch 的 splitRatio 位置
- * - drop overlay 绝对定位，pointer-events: none
+ *      
+ * - canvas   position: relative    leaf          rect 
+ * - sash       branch   splitRatio   
+ * - drop overlay      pointer-events: none
  *
- * 视觉风格：与现有 Workspace.module.css 保持一致（hairline sash、accent drop 指示）
- * multi-unit：leaf 去 radius、overflow clip、sash 宽命中窄可视线、chat/tool 同高对齐。
+ *          Workspace.module.css      hairline sash accent drop    
+ * multi-unit leaf   radius overflow clip sash         chat/tool      
  */
 
 .section {
@@ -21,7 +21,7 @@
   background: var(--bg-primary);
 }
 
-/* Global session tab bar row — shrink-0 above tree body */
+/* Global session tab bar row   shrink-0 above tree body */
 .section > [data-global-session-tab-bar] {
   flex: 0 0 auto;
   flex-shrink: 0;
@@ -39,7 +39,7 @@
   height: auto;
   overflow: hidden;
   background: var(--bg-primary);
-  /* container query 边界，便于 leaf 内部响应式 */
+  /* container query       leaf       */
   container-type: size;
   container-name: tree-canvas;
 }
@@ -51,15 +51,15 @@
 
 .leaf {
   position: absolute;
-  /* rect 由 useTreeResize.paintFlatLayout / TreeLeafPanel layoutEffect 写 inline
-   * （勿用 React style prop，否则 live resize re-render 会覆盖两侧几何）。
-   * 不设 px min-width：绝对定位 % rect 的 min-size 由 useTreeResize
-   * 像素感知 clamp（MIN_CHILD_PX）保证非重叠；此处 min-width:0 让 flex
-   * 子项可收缩，overflow:hidden 防止内容画出 sibling 边界。 */
+  /* rect   useTreeResize.paintFlatLayout / TreeLeafPanel layoutEffect   inline
+   *     React style prop    live resize re-render          
+   *    px min-width      % rect   min-size   useTreeResize
+   *      clamp MIN_CHILD_PX          min-width:0   flex
+   *       overflow:hidden        sibling     */
   box-sizing: border-box;
   min-width: 0;
   min-height: 0;
-  /* 顶边无 padding：leaf 贴 canvas；单 unit 标签在 AppTopBar */
+  /*     padding leaf   canvas   unit     AppTopBar */
   padding: 0;
   margin: 0;
   overflow: hidden;
@@ -67,10 +67,10 @@
   flex-direction: column;
   align-items: stretch;
   background: var(--bg-primary);
-  /* multi-unit / 邻接 leaf：禁止圆角造成与 sibling 间的空隙或叠层 */
+  /* multi-unit /    leaf         sibling         */
   border-radius: 0;
   isolation: isolate;
-  /* 拖拽时禁用过渡，避免跟手延迟 */
+  /*                */
   transition:
     top var(--transition-fast),
     left var(--transition-fast),
@@ -79,8 +79,8 @@
 }
 
 /*
- * Tool dock header：作为 tool leaf 首子时贴顶、不参与 body 伸缩。
- * 多 unit 时与 UnitSessionTabStrip（含 inline tools）同高 30px。
+ * Tool dock header    tool leaf           body    
+ *   unit    UnitSessionTabStrip   inline tools    30px 
  */
 .leaf > [data-right-tool-dock-header],
 .leaf > [data-unit-session-tab-strip],
@@ -94,14 +94,14 @@
   padding-top: 0;
 }
 
-/* live resize：关过渡 + 提示合成层，两侧 leaf 同帧跟手 */
+/* live resize     +          leaf      */
 :global(.tree-resizing) .leaf,
 :global(.tree-dragging) .leaf {
-  transition: none !important;
+  transition: none;
   will-change: left, width, top, height;
 }
 
-/* 单 leaf：轻量焦点描边 */
+/*   leaf        */
 .leaf[data-active='true'] {
   outline: 1px solid
     var(--tint-active);
@@ -113,13 +113,13 @@
 }
 
 /*
- * multi-unit：canvas 内 ≥2 leaf 时，用 inset hairline 划界，
- * 取消 outline/半透明叠影，避免邻接单位 chrome 重叠发虚。
+ * multi-unit canvas    2 leaf     inset hairline    
+ *    outline/             chrome      
  */
 .canvas:has(.leaf ~ .leaf) .leaf {
   opacity: 1;
   outline: none;
-  /* 不占布局盒宽，避免 % rect 与 border 双重扣减导致缝隙 */
+  /*           % rect   border          */
   box-shadow: inset 0 0 0 var(--hairline-width)
     color-mix(
       in srgb,
@@ -140,23 +140,23 @@
   opacity: 1;
 }
 
-/* 拖拽中的源 leaf 隐藏（ghost 浮层接管） */
+/*       leaf    ghost       */
 .leaf[data-dragging-source='true'] {
   opacity: 0.25;
   pointer-events: none;
 }
 
-/* ── Sash（分割线） ──────────────────────────────────────────── */
+/*    Sash                                                   */
 /*
- * 命中区加宽（10px）+ 几何居中 translate，可视线仍为 ::after 1px hairline，
- * 无 bulk 竖条，仅 hover/active 时略增对比。
+ *       10px +      translate       ::after 1px hairline 
+ *   bulk      hover/active       
  */
 
 .sash {
   position: absolute;
-  z-index: var(--z-splitter, 5);
+  z-index: var(--z-resizer, 110);
   background: transparent;
-  /* 扩大可点区域但不绘制实底 */
+  /*              */
   touch-action: none;
   transition:
     top var(--transition-fast),
@@ -165,7 +165,7 @@
 
 :global(.tree-resizing) .sash,
 :global(.tree-dragging) .sash {
-  transition: none !important;
+  transition: none;
 }
 
 .sashHorizontal {
@@ -240,7 +240,7 @@
   height: 1.5px;
 }
 
-/* ── Drop zone overlay ──────────────────────────────────────── */
+/*    Drop zone overlay                                          */
 
 .dropOverlay {
   position: absolute;
@@ -263,27 +263,27 @@
 }
 
 .dropOverlayFull {
-  /* merge-tab：覆盖整个目标 leaf */
+  /* merge-tab        leaf */
 }
 
 .dropOverlaySplitLeft,
 .dropOverlaySplitRight,
 .dropOverlaySplitTop,
 .dropOverlaySplitBottom {
-  /* split 方向：覆盖目标 leaf 的一半 */
+  /* split         leaf     */
 }
 
-/* ── Ghost 浮层 ─────────────────────────────────────────────── */
+/*    Ghost                                                    */
 /*
- * transform 不在此声明 — 位置由 useTreeDrag 通过 ref 直接写入
- * el.style.transform = `translate(x,y) rotate(1.5deg)`（跳过 React）。
- * CSS 中声明 transform 会被 inline style 覆盖，故仅保留视觉属性。
+ * transform             useTreeDrag    ref     
+ * el.style.transform = `translate(x,y) rotate(1.5deg)`    React  
+ * CSS     transform    inline style             
  */
 
 .ghost {
   position: fixed;
   pointer-events: none;
-  z-index: var(--z-drag-overlay-max);
+  z-index: var(--z-drag-overlay);
   opacity: 0.85;
   box-shadow: 0 8px 24px color-mix(in srgb, var(--shadow-color) 18%, transparent);
   border-radius: var(--radius-md);
@@ -307,14 +307,14 @@
   font-weight: var(--font-weight-medium);
 }
 
-/* ── Leaf body ──────────────────────────────────────────────── */
+/*    Leaf body                                                  */
 /*
- * chat / tool 同 unit：可选 dock header(30) + body 填满剩余高度。
- * flex 列 + 子项 1fr，保证 Terminal/Files/Chat 根节点吃满 leafBody。
+ * chat / tool   unit    dock header(30) + body        
+ * flex   +    1fr    Terminal/Files/Chat       leafBody 
  */
 
 .leafBody {
-  /* 与可选 strip / RightToolDockHeader 并列：只吃剩余高度，勿 height:100% 以免顶栏+body 溢出 clip */
+  /*     strip / RightToolDockHeader             height:100%     +body    clip */
   flex: 1 1 0%;
   min-width: 0;
   min-height: 0;
@@ -324,12 +324,12 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  /* strip 在 leaf 顶缘；body 不再垫顶 padding，避免与 strip hairline 双重空隙 */
+  /* strip   leaf    body      padding     strip hairline      */
   padding-top: 0;
   margin-top: 0;
 }
 
-/* ErrorBoundary / Suspense 透传后的面板根：吃满 body 高度 */
+/* ErrorBoundary / Suspense            body    */
 .leafBody > *,
 .leafBody > * > * {
   flex: 1 1 0%;
@@ -339,7 +339,7 @@
   width: 100%;
 }
 
-/* ── 空状态（含空坞 / 加载） ───────────────────────────────── */
+/*            /                                       */
 
 .emptyState {
   display: flex;
@@ -360,20 +360,20 @@
   -webkit-app-region: no-drag;
 }
 
-/* ── 窄屏自适应 ─────────────────────────────────────────────── */
+/*                                                          */
 
 :global(.is-narrow) .canvas {
   overflow-y: auto;
 }
 
 :global(.is-narrow) .leaf {
-  position: relative !important;
-  width: 100% !important;
-  height: auto !important;
+  position: relative;
+  width: 100%;
+  height: auto;
   min-height: 300px;
-  top: auto !important;
-  left: auto !important;
-  /* 窄屏纵向堆叠：保留底部分隔，取消 multi-unit inset 双线感 */
+  top: auto;
+  left: auto;
+  /*                  multi-unit inset     */
   box-shadow: none;
   border-bottom: var(--hairline-width) solid var(--hairline);
   outline: none;
@@ -384,5 +384,5 @@
 }
 
 :global(.is-narrow) .sash {
-  display: none !important;
+  display: none;
 }

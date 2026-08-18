@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 电脑操作会话 hook：enabled 本地化状态机 + activation 三态 + invoke 封装 +
  * 事件订阅。对齐 useBrowserSession 风格：hook 收拢全部状态副作用，渲染层
  * 只消费返回值。
@@ -16,7 +16,7 @@
  * 反馈约定：仅错误 / 降级提示 toast；成功路径静默（状态展示即反馈）。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ShowToastFn } from '../../../hooks/useToastQueue';
+import type { } from '../../../hooks/useToastQueue';
 import type { InvokeTypedResult } from '../../../api/tauriInvoke';
 import {
   disableComputerSession,
@@ -34,7 +34,6 @@ import {
 const BUSY_OPERATION_TIMEOUT_MS = 30_000;
 
 export interface UseComputerSessionOptions {
-  onShowToast: ShowToastFn;
 }
 
 export interface UseComputerSessionResult {
@@ -73,15 +72,16 @@ function describeUnwiredFallback(action: string): string {
   return `引擎未接线：${action}已本地记录（不落盘，重启后不保留）`;
 }
 
+import { toast } from '../../../services/toast/ToastContext';
+
 export function useComputerSession(
-  opts: UseComputerSessionOptions
+  _opts?: UseComputerSessionOptions
 ): UseComputerSessionResult {
   const [enabled, setEnabled] = useState(false);
   const [activation, setActivation] = useState<ComputerActivation>('idle');
   const [wired, setWired] = useState(true);
   const [busy, setBusy] = useState(false);
-  const toastRef = useRef(opts.onShowToast);
-  toastRef.current = opts.onShowToast;
+  const toastRef = useRef((m: string) => toast.show(m));
   const busyRef = useRef(false);
 
   const applyPayload = useCallback((payload: unknown) => {

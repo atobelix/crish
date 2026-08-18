@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 审批 sticky dock：队列 / 子 agent 待确认时显示（单条主时间线靠 ApprovalAskCard）。
  * 点击后滚动定位到审批卡，找不到则尝试打开子 agent 侧栏，兜底 toast。
  * 挂载门闩与文案 / aria 来自 chatStatusRibbonsLib。
@@ -9,6 +9,7 @@ import styles from './ApprovalDock.module.css';
 import { Button, Tooltip } from '../ui';
 import { getSessionById } from '../../store/storeAccess';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
+import { useToast } from '../../services/toast/ToastContext';
 import {
   resolveApprovalDockAriaLabel,
   resolveApprovalDockLabelText,
@@ -24,8 +25,6 @@ export type ApprovalDockProps = {
   toolId: string;
   msgId: string;
   activeSessionId: string | null | undefined;
-  /** 仅错误级提示（如找不到审批目标）；成功路径禁止 toast */
-  onShowToast: (message: string) => void;
 };
 
 export const ApprovalDock: React.FC<ApprovalDockProps> = ({
@@ -35,8 +34,8 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
   toolId,
   msgId,
   activeSessionId,
-  onShowToast,
 }) => {
+  const { showToast: _showToast } = useToast();
   if (!shouldRenderApprovalDock(show, pendingCount)) return null;
 
   const ariaLabel = resolveApprovalDockAriaLabel(pendingCount, summary);
@@ -79,7 +78,7 @@ export const ApprovalDock: React.FC<ApprovalDockProps> = ({
       return;
     }
     // 找不到可滚目标：仅错误级短提示
-    onShowToast('未找到待确认项');
+    showToast('未找到待确认项');
   };
 
   return (

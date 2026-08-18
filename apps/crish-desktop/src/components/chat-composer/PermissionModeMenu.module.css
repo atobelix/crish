@@ -5,7 +5,7 @@
   height: var(--control-height);
   padding: 0 10px;
   border: none;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
@@ -61,7 +61,7 @@
 }
 
 .permMenu {
-  z-index: var(--z-permission-menu);
+  z-index: var(--z-dropdown-menu);
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);

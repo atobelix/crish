@@ -3,8 +3,14 @@
  */
 import { useLayoutStore } from '../../store/layoutStore';
 import type { LayoutStore } from '../../store/layoutStore';
+import { useSessionStore } from '../../store/sessionStore';
+import type { SessionStore } from '../../store/sessionStore';
+import { useWorkspaceStore } from '../../store/workspaceStore';
+import type { WorkspaceStore } from '../../store/workspaceStore';
 
 export type LayoutStoreHook = typeof useLayoutStore;
+export type SessionStoreHook = typeof useSessionStore;
+export type WorkspaceStoreHook = typeof useWorkspaceStore;
 
 export interface StoreLike<S = unknown> {
   getState(): S;
@@ -12,13 +18,13 @@ export interface StoreLike<S = unknown> {
   subscribe(listener: (state: S, prevState: S) => void): () => void;
 }
 
-let _sessionStore: StoreLike<unknown> | null = null;
-let _workspaceStore: StoreLike<unknown> | null = null;
+let _sessionStore: StoreLike<SessionStore> | null = null;
+let _workspaceStore: StoreLike<WorkspaceStore> | null = null;
 let _settingsUiStore: StoreLike<unknown> | null = null;
 
 export function initStoreAccess(
-  session: StoreLike<unknown>,
-  workspace: StoreLike<unknown>,
+  session: StoreLike<SessionStore>,
+  workspace: StoreLike<WorkspaceStore>,
   settingsUi: StoreLike<unknown>
 ): void {
   _sessionStore = session;
@@ -30,12 +36,13 @@ export function getLayoutState(): LayoutStore {
   return useLayoutStore.getState();
 }
 
-export function resolveSessionState(): LayoutStore {
-  if (_sessionStore) return _sessionStore.getState() as LayoutStore;
-  return getLayoutState();
+export function resolveSessionState(): SessionStore {
+  if (_sessionStore) return _sessionStore.getState();
+  return useSessionStore.getState();
 }
 
-export function resolveWorkspaceState(): LayoutStore {
-  if (_workspaceStore) return _workspaceStore.getState() as LayoutStore;
-  return getLayoutState();
+export function resolveWorkspaceState(): WorkspaceStore {
+  if (_workspaceStore) return _workspaceStore.getState();
+  return useWorkspaceStore.getState();
 }
+

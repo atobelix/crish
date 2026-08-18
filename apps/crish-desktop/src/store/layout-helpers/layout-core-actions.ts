@@ -1,4 +1,4 @@
-import type { SettingsTabType, WorkspaceState } from '../types';
+import type { WorkspaceState } from '../types';
 import {
   SHELL_CHROME_STORAGE_KEY,
   parseShellChromeMode,
@@ -6,8 +6,6 @@ import {
 } from '../../api/shellChrome';
 import { collapseToolColumnToTabs } from './ui-selectors';
 import {
-  isSettingsTabType,
-  parseSettingsTab,
   parseUiSize,
 } from './store-initializers';
 import {
@@ -31,8 +29,6 @@ export interface LayoutCoreState {
   tabModeEnabled: boolean;
   workspaces: WorkspaceState[];
   activeWorkspaceIndex: number;
-  showSettingsOverlay: boolean;
-  settingsActiveTab: SettingsTabType;
 }
 
 export function createLayoutCoreActions(
@@ -86,26 +82,6 @@ export function createLayoutCoreActions(
         /* ignore */
       }
     },
-    setShowSettingsOverlay: (show: boolean) =>
-      set((state) => {
-        state.showSettingsOverlay = !!show;
-      }),
-    setSettingsActiveTab: (tab: SettingsTabType) =>
-      set((state) => {
-        if (isSettingsTabType(tab)) {
-          state.settingsActiveTab = tab;
-        }
-      }),
-    openSettings: (tab?: SettingsTabType) =>
-      set((state) => {
-        if (tab !== undefined) {
-          state.settingsActiveTab = parseSettingsTab(
-            tab,
-            state.settingsActiveTab
-          );
-        }
-        state.showSettingsOverlay = true;
-      }),
     /**
      * 活动工作区切换（C3 收敛：Workspace.tsx 直写 clamp 迁入 store）。
      * clamp 内建：越界 / 空列表 → 0。

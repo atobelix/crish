@@ -17,12 +17,11 @@ import {
   type StorageStatePreview,
 } from '../../../../api/browserImportLib';
 import { downloadTextFile } from '../../../../api/sessionExport';
-import type { ShowToastFn } from '../../../../hooks/useToastQueue';
+import { toast } from '../../../../services/toast/ToastContext';
 import { resultMessage, type BusyKind } from './browserImportShared';
 
 export interface UseExportAuthOptions {
   setBusy: Dispatch<SetStateAction<BusyKind>>;
-  onShowToast: ShowToastFn;
   /** 登录态错误展示槽（与导入域共用同一行内错误 slot）。 */
   setStorageError: Dispatch<SetStateAction<string>>;
   /** 测试注入：登录态「另存为」写盘（缺省 downloadTextFile）。 */
@@ -31,7 +30,6 @@ export interface UseExportAuthOptions {
 
 export function useExportAuth({
   setBusy,
-  onShowToast,
   setStorageError,
   saveExport,
 }: UseExportAuthOptions) {
@@ -46,9 +44,9 @@ export function useExportAuth({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setStorageError(full);
-      onShowToast(full);
+      toast.show(full);
     },
-    [onShowToast, setStorageError]
+    [setStorageError]
   );
 
   // 登录态导出：两段确认（① 授权读取 → ② 预览域名清单后确认写盘）

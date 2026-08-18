@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   useCallback,
   useEffect,
   useId,
@@ -28,12 +28,13 @@ import {
   EMPTY_SESSION_TITLE,
   sessionListDisplayTitle,
 } from '../../api/sessionTitle';
-import { focusOrOpenPanel, setActiveSessionId } from '../../api/storeAccess';
+import { _focusOrOpenPanel, setActiveSessionId } from '../../api/storeAccess';
 import { useLayoutStore } from '../../store/storeAccess';
-import { isChatColumn } from '../../store/storeAccess';
+import { _isChatColumn } from '../../store/storeAccess';
 import {
   getSessionById,
   selectActiveSessionId,
+  selectSessions,
   useSessionField,
 } from '../../store/storeAccess';
 import {
@@ -44,10 +45,9 @@ import { emitUiEvent } from '../../api/uiEvents';
 import {
   useLayoutTreeStore,
   collectLeaves,
-  isChatDomain,
 } from '../../store/storeAccess';
+import { viewRegistry } from '../../services/view-registry';
 import { focusOrOpenTreePanel } from '../../store/storeAccess';
-import { isTreeWorkspaceFast } from '../../createSsrGlobals';
 import {
   selectActiveTabSessionId,
   useWorkspaceShellStore,
@@ -68,7 +68,7 @@ export type WorkspaceChromeProps = {
 };
 
 export function useWorkspaceChromeState(onAddProject?: () => void) {
-  const sessions = useLayoutStore((s) => s.sessions);
+  const sessions = useSessionField(selectSessions);
   const globalActiveSessionId = useSessionField(selectActiveSessionId);
   /** Shell TabSurface 一级状态：顶栏唯一真相源 */
   const shellOpenTabs = useWorkspaceShellStore((s) => s.openTabs);
@@ -273,46 +273,25 @@ export function useRightSidebarState() {
     (s) => s.toggleToolColumnCollapsed
   );
 
-  const activeWs = useLayoutStore((st) => {
+  const _activeWs = useLayoutStore((st) => {
     const i = st.activeWorkspaceIndex;
     return st.workspaces[i] || st.workspaces[0] || null;
   });
 
-  const isRightSidebarCollapsed = useMemo(() => {
-    if (isTreeWorkspaceFast()) return toolColumnCollapsed;
-    if (!activeWs) return true;
-    const toolCol = activeWs.columns.find((c) => !isChatColumn(c));
-    if (!toolCol) return true;
-    return toolCol.widthRatio < 0.08;
-  }, [toolColumnCollapsed, activeWs]);
+  const isRightSidebarCollapsed = toolColumnCollapsed;
 
   const toggleRightSidebar = useCallback(() => {
-    if (isTreeWorkspaceFast()) {
-      // 展开且当前无功能区 leaf 时，自动打开 overview，避免展开后右侧空无一物
-      if (toolColumnCollapsed) {
-        const hasToolLeaf = collectLeaves(
-          getCompositionRoot().tree.getState().tree.root
-        ).some((l) => !isChatDomain(l.panelId));
-        if (!hasToolLeaf) {
-          focusOrOpenTreePanel('overview');
-        }
+    // 展开且当前无功能区 leaf 时，自动打开 overview，避免展开后右侧空无一物
+    if (toolColumnCollapsed) {
+      const hasToolLeaf = collectLeaves(
+        getCompositionRoot().tree.getState().tree.root
+      ).some((l) => !viewRegistry.isPrimary(l.panelId));
+      if (!hasToolLeaf) {
+        focusOrOpenTreePanel('overview');
       }
-      toggleToolColumnCollapsed();
-      return;
     }
-    if (!activeWs) return;
-    const wsId = activeWs.id;
-    const toolCol = activeWs.columns.find((c) => !isChatColumn(c));
-    const isCollapsed = !toolCol || toolCol.widthRatio < 0.08;
-
-    if (isCollapsed) {
-      const activeCardId = toolCol?.groups[0]?.activeCardId || 'overview';
-      focusOrOpenPanel(wsId, activeCardId);
-    } else {
-      // T-E 步骤 4（C4）：raw setState 直写 workspaces → collapseToolColumnPreserve action
-      useLayoutStore.getState().collapseToolColumnPreserve(wsId);
-    }
-  }, [activeWs, toggleToolColumnCollapsed, toolColumnCollapsed]);
+    toggleToolColumnCollapsed();
+  }, [toolColumnCollapsed, toggleToolColumnCollapsed]);
 
   return { isRightSidebarCollapsed, toggleRightSidebar };
 }

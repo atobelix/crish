@@ -31,19 +31,19 @@
     in srgb,
     var(--border-color) 94%,
     var(--text-primary) 6%
-  ) !important;
-  box-shadow: none !important;
+  );
+  box-shadow: none;
   outline: none;
 }
 
-/* RL-01 落地面特例（data-empty-kind="session-empty"）：焦点混色 ≤5% */
+/* RL-01       data-empty-kind="session-empty"        5% */
 .container[data-empty-kind='session-empty']:focus-within {
   border-color: color-mix(
     in srgb,
     var(--border-color) 95%,
     var(--text-primary) 5%
-  ) !important;
-  box-shadow: none !important;
+  );
+  box-shadow: none;
   outline: none;
 }
 
@@ -64,15 +64,15 @@
     in srgb,
     var(--border-color) 94%,
     var(--text-primary) 6%
-  ) !important;
+  );
 }
 
 .textarea {
   flex: 1 1 auto;
   min-width: 0;
   align-self: center;
-  background: transparent !important;
-  background-color: transparent !important;
+  background: transparent;
+  background-color: transparent;
   border: none;
   outline: none;
   box-shadow: none;
@@ -97,7 +97,7 @@
   overflow-y: hidden;
   box-sizing: content-box;
   scrollbar-width: thin;
-  field-sizing: fixed;
+  field-sizing: content;
   vertical-align: middle;
 }
 
@@ -107,8 +107,8 @@
 }
 
 .textarea:disabled {
-  background: transparent !important;
-  background-color: transparent !important;
+  background: transparent;
+  background-color: transparent;
   opacity: 0.72;
   color: var(--text-secondary);
 }
@@ -118,11 +118,11 @@
 .textarea:-webkit-autofill:focus {
   -webkit-text-fill-color: var(--text-primary);
   caret-color: var(--text-primary);
-  /* autofill hack：99999s 过渡延迟浏览器自动填充底色的瞬变，业界通行写法，不得删除 */
+  /* autofill hack 99999s                              */
   transition: background-color 99999s ease-out 0s;
-  box-shadow: 0 0 0 1000px transparent inset !important;
-  background: transparent !important;
-  background-color: transparent !important;
+  box-shadow: 0 0 0 1000px transparent inset;
+  background: transparent;
+  background-color: transparent;
 }
 
 .containerDense .textarea {
@@ -377,8 +377,8 @@
   height: var(--icon-size);
 }
 
-/* R1 撤回按钮（统一输入流收敛战役）：ghost 同型，克制无重阴影
-   （AGENTS §13：不重阴影不粗边框；禁用态降透明度） */
+/* R1                 ghost          
+    AGENTS  13                   */
 .retractBtn {
   background: transparent;
   border: none;

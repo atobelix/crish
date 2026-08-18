@@ -119,7 +119,7 @@
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
-  z-index: var(--z-settings-tooltip);
+  z-index: var(--z-tooltip);
 }
 
 .settingsSelectScroll {

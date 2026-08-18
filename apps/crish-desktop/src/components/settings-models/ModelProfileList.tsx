@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import {
   profileDisplayLabel,
@@ -8,6 +8,7 @@ import {
 import { formatModelDisplayName } from '../../api/modelCatalog';
 import styles from './ModelsSettingsTab.module.css';
 import { Tooltip, Menu } from '../ui';
+import { SafeTriangleTracker } from '../ui/internal/SafeTriangle';
 
 interface ModelsCascadeSelectProps {
   profiles: ProviderProfile[];
@@ -23,6 +24,8 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
   onChange,
 }) => {
   const [flyProfileId, setFlyProfileId] = useState<string | null>(null);
+  const safeTrackerRef = useRef(new SafeTriangleTracker(300));
+  const flyoutRef = useRef<HTMLDivElement | null>(null);
 
   const enabledProfiles = useMemo(() => {
     return profiles.filter((p) => p.enabled !== false && p.models.length > 0);
@@ -58,7 +61,10 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
     >
       <div
         className={styles.cascadeList}
-        onMouseLeave={() => setFlyProfileId(null)}
+        onMouseLeave={() => {
+          safeTrackerRef.current.reset();
+          setFlyProfileId(null);
+        }}
       >
         <div className={styles.addMenuTitle}>选择服务商与模型</div>
         {enabledProfiles.length === 0 ? (
@@ -76,7 +82,28 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
               <div
                 key={p.id}
                 className={`${styles.cascadeRow} ${isFly ? styles.isOpen : ''}`}
-                onMouseEnter={() => setFlyProfileId(p.id)}
+                onMouseEnter={(e) => {
+                  if (flyProfileId && flyProfileId !== p.id) {
+                    if (safeTrackerRef.current.isGraceActive()) {
+                      const isSafe = safeTrackerRef.current.check({
+                        x: e.clientX,
+                        y: e.clientY,
+                      });
+                      if (isSafe) return;
+                    }
+                  }
+                  setFlyProfileId(p.id);
+                }}
+                onMouseLeave={(e) => {
+                  if (isFly && flyoutRef.current) {
+                    const rect = flyoutRef.current.getBoundingClientRect();
+                    safeTrackerRef.current.enter(
+                      { x: e.clientX, y: e.clientY },
+                      rect,
+                      'right'
+                    );
+                  }
+                }}
               >
                 <span
                   style={{
@@ -89,7 +116,11 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
                 <Lucide.ChevronRight size={14} className={styles.cascadeChev} />
 
                 {isFly && (
-                  <div className={styles.cascadeFlyout}>
+                  <div
+                    ref={flyoutRef}
+                    className={styles.cascadeFlyout}
+                    onMouseEnter={() => safeTrackerRef.current.reach()}
+                  >
                     {p.models.map((m) => {
                       const selected =
                         p.id === activeProfileId && m === activeModelId;
@@ -100,6 +131,7 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
                           className={`${styles.cascadeOption} ${selected ? styles.isOn : ''}`}
                           onClick={() => {
                             onChange(p.id, m);
+                            safeTrackerRef.current.reset();
                             setFlyProfileId(null);
                           }}
                         >

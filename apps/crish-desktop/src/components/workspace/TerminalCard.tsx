@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useEffect, useId, useState } from 'react';
 import styles from './TerminalCard.module.css';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/storeAccess';
 import { getWorkspacePath } from '../../api/projectStore';
 import {
   InteractiveXtermTerminal,
@@ -21,7 +21,7 @@ export type TerminalCardProps = {
 export const TerminalCard: React.FC<TerminalCardProps> = ({
   sessionId: sessionIdProp,
 }) => {
-  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
+  const activeSessionId = useSessionStore((s) => s.activeSessionId);
   const boundSessionId =
     (sessionIdProp || '').trim() || (activeSessionId || '').trim() || null;
   const sessionKey = boundSessionId || '_global';

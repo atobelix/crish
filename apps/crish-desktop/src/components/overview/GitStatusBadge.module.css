@@ -1,0 +1,111 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm, 4px);
+  font-family: var(--font-mono, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.modified {
+  background: var(--badge-git-m-bg, hsl(38 92% 50% / 0.12));
+  color: var(--badge-git-m-fg, hsl(38 92% 38%));
+  border-color: var(--badge-git-m-border, hsl(38 92% 50% / 0.22));
+}
+
+.added {
+  background: var(--badge-git-a-bg, hsl(142 71% 45% / 0.12));
+  color: var(--badge-git-a-fg, hsl(142 71% 32%));
+  border-color: var(--badge-git-a-border, hsl(142 71% 45% / 0.22));
+}
+
+.deleted {
+  background: var(--badge-git-d-bg, hsl(0 84% 60% / 0.12));
+  color: var(--badge-git-d-fg, hsl(0 84% 45%));
+  border-color: var(--badge-git-d-border, hsl(0 84% 60% / 0.22));
+}
+
+.untracked {
+  background: var(--badge-git-u-bg, hsl(215 16% 47% / 0.12));
+  color: var(--badge-git-u-fg, hsl(215 16% 40%));
+  border-color: var(--badge-git-u-border, hsl(215 16% 47% / 0.22));
+}
+
+.conflicted {
+  background: var(--badge-git-c-bg, hsl(0 84% 60% / 0.2));
+  color: var(--badge-git-c-fg, hsl(0 84% 40%));
+  border-color: var(--badge-git-c-border, hsl(0 84% 60% / 0.4));
+}
+
+.renamed {
+  background: var(--badge-git-r-bg, hsl(270 60% 50% / 0.12));
+  color: var(--badge-git-r-fg, hsl(270 60% 40%));
+  border-color: var(--badge-git-r-border, hsl(270 60% 50% / 0.22));
+}
+
+.unknown {
+  background: var(--bg-tertiary, hsl(210 12% 92%));
+  color: var(--text-tertiary, hsl(215 14% 50%));
+  border-color: var(--border-color, hsl(210 10% 85%));
+}
+
+/*        */
+.diffStatContainer {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.microBar {
+  display: inline-flex;
+  align-items: center;
+  gap: 1.5px;
+}
+
+.barAdd,
+.barDel,
+.barEmpty {
+  width: 3px;
+  height: 9px;
+  border-radius: 1px;
+}
+
+.barAdd {
+  background: var(--accent-green, #16a34a);
+}
+
+.barDel {
+  background: var(--accent-red, #dc2626);
+}
+
+.barEmpty {
+  background: var(--border-color, hsl(210 10% 85% / 0.6));
+}
+
+.statNumbers {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.numAdd {
+  color: var(--accent-green, #16a34a);
+  font-weight: 500;
+}
+
+.numDel {
+  color: var(--accent-red, #dc2626);
+  font-weight: 500;
+}

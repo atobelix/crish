@@ -1,11 +1,11 @@
 /**
  * apps/crish-desktop/src/components/chat-composer/TiptapSlashMenu.module.css
- * 斜杠菜单视觉：token 体系对齐宿主（ChatComposer.module.css slashPopover 同族）。
- * 红线：零阴影（box-shadow: none !important）、焦点/悬浮混色 ≤10%（宿主语义 7%）、
- * 克制动效（仅透明度入场，无位移/缩放）、z-index 走 var(--z-popover)。
+ *        token        ChatComposer.module.css slashPopover     
+ *        box-shadow: none    /      10%      7%  
+ *                /    z-index   var(--z-popover) 
  */
 
-/* 克制动效：仅透明度 0.15s 入场（对齐 --transition-popover-enter 语义），无位移缩放 */
+/*           0.15s       --transition-popover-enter           */
 @keyframes popoverFadeIn {
   from {
     opacity: 0;
@@ -29,7 +29,7 @@
   border-radius: var(--radius-md);
   padding: var(--space-1);
   outline: none;
-  box-shadow: none !important;
+  box-shadow: none;
   animation: popoverFadeIn var(--transition-fast);
   scrollbar-width: thin;
   -webkit-app-region: no-drag;

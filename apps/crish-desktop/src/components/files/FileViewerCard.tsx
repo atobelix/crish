@@ -1,10 +1,7 @@
-import React, { useMemo, useState, useEffect } from 'react';
+﻿import React, { useMemo, useState, useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff } from '../../store/types';
-import {
-  useLayoutTreeStore,
-  fileViewerInitialModeMap,
-} from '../../store/storeAccess';
+import { useLayoutTreeStore } from '../../store/storeAccess';
 import { useTerminalField, selectDiffFiles } from '../../store/storeAccess';
 import {
   openPathDefault,
@@ -19,12 +16,13 @@ import {
   getWorkspacePath,
 } from '../../api/workspaceFsApi';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
+import { useToast } from '../../services/toast/ToastContext';
 import { Button, Tooltip, Menu } from '../ui';
 import styles from './FileViewerCard.module.css';
 
 export interface FileViewerCardProps {
   filePath: string;
-  onShowToast?: (message: string) => void;
+  initialMode?: 'plain' | 'diff';
 }
 
 // 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
@@ -33,7 +31,9 @@ const COPY_SOURCE_LABEL = '复制完整源码';
 const MORE_ACTIONS_LABEL = '更多操作';
 
 export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
-  ({ filePath, onShowToast }) => {
+  ({ filePath, initialMode = 'plain' }) => {
+    const { showToast: _showToast } = useToast();
+
     const diffFiles = useTerminalField(selectDiffFiles) as FileDiff[];
 
     // 匹配当前文件的 git 变更（如果有）
@@ -46,9 +46,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     }, [diffFiles, filePath]);
 
     // 模式切换状态
-    const [viewMode, setViewMode] = useState<'plain' | 'diff'>(() => {
-      return fileViewerInitialModeMap.get(filePath) || 'plain';
-    });
+    const [viewMode, setViewMode] = useState<'plain' | 'diff'>(initialMode);
 
     // 独立读取完整文件源码
     const [plainCode, setPlainCode] = useState<string>('');
@@ -123,10 +121,10 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
         const res = await readTextFile(filePath);
         if (res.content) {
           await navigator.clipboard.writeText(res.content);
-          onShowToast?.('文件源码已复制到剪贴板');
+          showToast('文件源码已复制到剪贴板');
         }
       } catch (err) {
-        onShowToast?.('复制失败：' + String(err));
+        showToast('复制失败：' + String(err));
       }
     };
 
@@ -166,13 +164,13 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
           treeStore.setActiveTab(activeLeafId, 'files');
         }
       }
-      onShowToast?.('已在本地文件树中定位该文件');
+      showToast('已在本地文件树中定位该文件');
     };
 
     const handleOpenSystemExplorer = () => {
       const parentDir = pathDirname(absolutePath);
       void openPathDefault(parentDir).catch(() => {
-        onShowToast?.('打开系统管理器目录失败');
+        showToast('打开系统管理器目录失败');
       });
     };
 
@@ -359,7 +357,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                     icon: <Lucide.FileCode size={14} aria-hidden />,
                     onClick: () => {
                       navigator.clipboard.writeText(absolutePath);
-                      onShowToast?.('绝对路径已复制到剪贴板');
+                      showToast('绝对路径已复制到剪贴板');
                     },
                   },
                   {

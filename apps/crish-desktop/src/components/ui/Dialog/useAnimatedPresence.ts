@@ -18,10 +18,17 @@ export interface UseAnimatedPresenceOptions {
  * 挂载/卸载双阶段状态机：visible 切 true 走 entering→open（双 rAF 保证
  * 样式类先落位再播放动画）；切 false 走 exiting→closed（超时卸载）。
  */
-export function useAnimatedPresence({ visible, exitDurationMs = 250 }: UseAnimatedPresenceOptions) {
-  const [state, setState] = useState<TransitionState>(visible ? 'open' : 'closed');
+export function useAnimatedPresence({
+  visible,
+  exitDurationMs = 250,
+}: UseAnimatedPresenceOptions) {
+  const [state, setState] = useState<TransitionState>(
+    visible ? 'open' : 'closed'
+  );
   const prevVisibleRef = useRef(visible);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined
+  );
 
   useEffect(() => {
     if (visible && !prevVisibleRef.current) {
@@ -32,10 +39,14 @@ export function useAnimatedPresence({ visible, exitDurationMs = 250 }: UseAnimat
         });
       });
     } else if (!visible && prevVisibleRef.current) {
-      setState('exiting');
-      timeoutRef.current = setTimeout(() => {
+      if (exitDurationMs <= 0) {
         setState('closed');
-      }, exitDurationMs);
+      } else {
+        setState('exiting');
+        timeoutRef.current = setTimeout(() => {
+          setState('closed');
+        }, exitDurationMs);
+      }
     }
     prevVisibleRef.current = visible;
     return () => {

@@ -1,3 +1,4 @@
+﻿import { toast } from '../../services/toast/ToastContext';
 /**
  * 内置预览浏览器导航 hook：导航栈 + 历史/书签状态 + 加载超时 + 外部事件。
  * 收拢 PreviewCard 的全部状态副作用；渲染层（工具栏 / 历史面板 / 内容区）
@@ -26,7 +27,6 @@ import {
 import { LOAD_TIMEOUT_MS, safeIframeSrc } from './previewCardLib';
 
 export type UsePreviewNavigationOptions = {
-  onShowToast: (message: string) => void;
 };
 
 export type UsePreviewNavigationResult = {
@@ -69,7 +69,7 @@ export type UsePreviewNavigationResult = {
 };
 
 export function usePreviewNavigation(
-  opts: UsePreviewNavigationOptions
+  _opts: UsePreviewNavigationOptions = {}
 ): UsePreviewNavigationResult {
   const [urlInput, setUrlInput] = useState(() => {
     const u = getPreviewUrl();
@@ -91,8 +91,8 @@ export function usePreviewNavigation(
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const histRef = useRef<HTMLDivElement>(null);
-  const toastRef = useRef(opts.onShowToast);
-  toastRef.current = opts.onShowToast;
+  const toastRef = useRef((m: string) => toast.show(m));
+  toastRef.current = (m: string) => toast.show(m);
 
   const history = useMemo(() => getPreviewHistory(), []);
   const bookmarks = useMemo(() => getPreviewBookmarks(), []);

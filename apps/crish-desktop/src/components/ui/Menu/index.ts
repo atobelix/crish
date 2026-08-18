@@ -8,4 +8,3 @@
 export { Menu } from './Menu';
 export type { MenuProps } from './Menu';
 export type { SelectOptionItem } from './types';
-export type { ClampedPosition, ViewportSize } from './position';

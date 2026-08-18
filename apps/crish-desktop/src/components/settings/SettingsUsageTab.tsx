@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 用量：本会话统计、本机历史与模型单价；成功静默，仅错误提示。
  */
@@ -20,7 +21,7 @@ import { UsageModelTable } from './UsageModelTable';
 import { formatTokenCount, formatUsd } from './usageFormat';
 
 type Props = {
-  onShowToast: (msg: string) => void;
+  _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
 function safeLoadPrices(): { list: ModelPrice[]; error: string | null } {
@@ -31,7 +32,8 @@ function safeLoadPrices(): { list: ModelPrice[]; error: string | null } {
   }
 }
 
-export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsUsageTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const [pricesModalOpen, setPricesModalOpen] = useState(false);
   const [priceList, setPriceList] = useState<ModelPrice[]>(
     () => safeLoadPrices().list
@@ -59,12 +61,12 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
       setPriceList(list);
       if (error) {
         setPricesError('定价表读取失败');
-        if (announceToast) onShowToast('定价表读取失败');
+        if (announceToast) showToast('定价表读取失败');
       } else {
         setPricesError(null);
       }
     },
-    [onShowToast]
+    [showToast]
   );
 
   useEffect(() => {
@@ -220,7 +222,6 @@ export const SettingsUsageTab: React.FC<Props> = ({ onShowToast }) => {
         priceList={priceList}
         onListChange={setPriceList}
         onClose={() => setPricesModalOpen(false)}
-        onToast={onShowToast}
       />
       {/* 清空用量确认（Promise 桥渲染点） */}
       {renderConfirmGate(<ConfirmDialog />)}

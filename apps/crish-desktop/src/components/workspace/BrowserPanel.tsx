@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AI 受管浏览器面板（P1-B1 + P1-B2：帧渲染 + 输入转发 + IME 桥 + 指示条/接管）。
  *
  * P1 形态：引擎拉起的受管浏览器画面经 Tauri Channel 帧流渲染进 canvas
@@ -46,10 +46,11 @@ import {
   type UseFrameStreamOptions,
 } from './browser-panel/useFrameStream';
 import { usePanelStatus } from './browser-panel/usePanelStatus';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import type { } from '../../hooks/useToastQueue';
+
+import { useToast } from '../../services/toast/ToastContext';
 
 export interface BrowserPanelProps {
-  onShowToast: ShowToastFn;
   /** 测试注入：帧通道工厂（缺省惰性加载 @tauri-apps/api/core；非 Tauri 降级）。 */
   frameChannelFactory?: UseFrameStreamOptions['channelFactory'];
 }
@@ -86,12 +87,11 @@ function frameIndicatorText(state: 'starting' | 'active' | 'stopped'): string {
 }
 
 export const BrowserPanel: React.FC<BrowserPanelProps> = ({
-  onShowToast,
   frameChannelFactory,
 }) => {
-  const { state, url, busy, start, stop, kill } = useBrowserSession({
-    onShowToast,
-  });
+  const { showToast: _showToast } = useToast();
+  
+  const { state, url, busy, start, stop, kill } = useBrowserSession();
 
   const running = state === 'running';
   const { frameState, lastFrame, canvasRef } = useFrameStream({
@@ -220,7 +220,7 @@ export const BrowserPanel: React.FC<BrowserPanelProps> = ({
       </div>
 
       <BrowserImportSection
-        onShowToast={onShowToast}
+        
         browserRunning={running}
       />
     </div>

@@ -9,7 +9,7 @@
 import { blockText, mergeAssistantTextPiece } from './eventUtils';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
-import { useLayoutStore } from '../../../store';
+import { useSessionStore } from '../../../store/sessionStore';
 import { projectAgentMessageContent } from '../../messageProjection';
 
 /**
@@ -31,7 +31,7 @@ function attachCacheMetricsToStoreMessage(
   messageId: string,
   metrics: MessageCacheMetrics
 ): void {
-  useLayoutStore
+  useSessionStore
     .getState()
     .setMessageCacheMetrics(sessionId, messageId, metrics);
 }

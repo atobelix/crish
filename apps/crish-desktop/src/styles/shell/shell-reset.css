@@ -1,4 +1,4 @@
-/* --- shell.css (layout / header / sidebar / workspace / shared chrome) — split from index.css (selectors preserved) --- */
+/* --- shell.css (layout / header / sidebar / workspace / shared chrome)   split from index.css (selectors preserved) --- */
 @starting-style {
   .compact-menu-container.is-open,
   .large-menu-container.is-open {
@@ -42,7 +42,7 @@ body {
   font-variant-ligatures: common-ligatures;
 }
 
-/* 全局等宽表面：强制 400，避免继承 UI 500 显粗 */
+/*           400      UI 500    */
 code,
 pre,
 kbd,
@@ -59,7 +59,7 @@ samp,
   font-weight: var(--font-weight-code, 400);
 }
 
-/* 通用图标按钮热区：高 32，图标约 16 */
+/*            32     16 */
 .icon-btn,
 .header-btn,
 .files-nav-btn,

@@ -1,4 +1,4 @@
-/* sr-only：只对屏幕阅读器可见，视觉隐藏 */
+/* sr-only                */
 .sr-only {
   position: absolute;
   width: 1px;

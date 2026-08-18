@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useSlashSend } from './useSlashSend';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useSessionStore } from '../../store/sessionStore';
 import { resetCompositionRoot } from '../../app/compositionRoot';
 import { SessionStreamManager } from '../../api/sessionStreamManager';
 import type { UseChatStreamOptions } from './types';
@@ -85,7 +85,7 @@ function seedSession(opts?: {
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     (st as any).sessionsById = {
       ...(st as any).sessionsById,
       [SID]: sess,
@@ -172,7 +172,7 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
       expect.objectContaining({ clientMessageId: expect.any(String) })
     );
     // setComposerDraft cleared on session facade (compositionRoot.session)
-    expect(useLayoutStore.getState().composerDrafts?.[SID] ?? '').toBe('');
+    expect(useSessionStore.getState().composerDrafts?.[SID] ?? '').toBe('');
     expect(options.setChatInput).toHaveBeenCalledWith('');
     expect(options.setSlashMenuOpen).toHaveBeenCalledWith(false);
     expect(requestFollowUp).not.toHaveBeenCalled();
@@ -211,7 +211,7 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
       })
     );
     // queued user message present
-    const msgs = useLayoutStore.getState().sessionsById?.[SID]?.messages ?? [];
+    const msgs = useSessionStore.getState().sessionsById?.[SID]?.messages ?? [];
     expect(
       msgs.some(
         (m: { status?: string; sender?: string }) =>
@@ -222,11 +222,11 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
 
   it('pending draft first send: commitDraftIfNeeded only (no createSession product mint)', async () => {
     const createSessionSpy = vi.spyOn(
-      useLayoutStore.getState(),
+      useSessionStore.getState(),
       'createSession'
     );
     // enter draft sentinel
-    useLayoutStore.setState((st) => {
+    useSessionStore.setState((st) => {
       (st as any).activeSessionId = PENDING_DRAFT_SESSION_ID;
       (st as any).draftFolder = 'general';
     });
@@ -335,7 +335,7 @@ describe('useSlashSend (OPT-G3 compositionRoot)', () => {
       messages: [{ id: 'msg-opt', text: 'hello', sender: 'user' }],
     });
     rollbackOptimisticMessage('ws-1', SID, 'msg-opt');
-    const sess = useLayoutStore.getState().sessionsById?.[SID];
+    const sess = useSessionStore.getState().sessionsById?.[SID];
     expect(sess?.messages?.length ?? 0).toBe(0);
 
     clearDraftSnapshot('s-test', setInput);

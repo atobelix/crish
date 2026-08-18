@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 全局数据面路由测试（14-T7，注入式验收，不依赖 Rust D1）。
  *
  * 覆盖：
@@ -284,7 +284,7 @@ describe('子代理面全局路由（父 run 收口后兜底，T-6 / 04 M1）', 
     const sid = `sess-subagent-plane-${Date.now()}-${Math.random()
       .toString(36)
       .slice(2, 8)}`;
-    useLayoutStore.getState().createSession({
+    useSessionStore.getState().createSession({
       title: 'subagent-plane-test',
       id: sid,
       activate: false,
@@ -303,7 +303,7 @@ describe('子代理面全局路由（父 run 收口后兜底，T-6 / 04 M1）', 
   });
   afterEach(() => {
     for (const sid of createdSessions.splice(0)) {
-      useLayoutStore.getState().deleteSession(sid);
+      useSessionStore.getState().deleteSession(sid);
     }
     resetSubagentPlaneRouterForTests();
     resetDataPlaneRouterForTests();
@@ -514,3 +514,5 @@ describe('子代理面全局路由（父 run 收口后兜底，T-6 / 04 M1）', 
     expect(isSubagentPlaneEventType('error')).toBe(false);
   });
 });
+
+import { useSessionStore } from '@/store/sessionStore';

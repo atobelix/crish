@@ -94,7 +94,7 @@
   align-items: center;
   max-width: 100%;
   padding: 1px 6px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--hairline, var(--border-subtle));
   font-size: var(--font-size-xxs, 11px);
   font-family: var(--font-mono, ui-monospace, monospace);
@@ -212,7 +212,7 @@
 .approvalCardBtn {
   height: 28px;
   padding: 0 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid var(--hairline-strong, var(--border-color, var(--border-subtle)));
   font-family: inherit;
   font-size: var(--font-size-xs);
@@ -277,7 +277,7 @@
   font-size: var(--font-size-xs);
 }
 
-/* — 超时倒计时进度条 */
+/*            */
 .approvalCardTimeoutBar {
   position: relative;
   height: 2px;

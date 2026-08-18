@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { useLayoutStore } from '../store/layoutStore';
 import type { FileDiff, SessionState, WorkspaceState } from '../store/types';
 import type { CronJob } from './clientApi';
 import {
@@ -402,8 +401,8 @@ describe('storeAccess + domain facades', () => {
     const st = getSessionStoreState();
     const layout = getLayoutState();
     expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
-    // draftFolder 在 layout 切片上（session facade 类型未暴露）
-    expect(layout.draftFolder).toBe('proj-draft');
+    // draftFolder 在 sessionStore 上
+    expect(st.draftFolder).toBe('proj-draft');
     // sessions 不增、不 mint 默认标题空壳
     expect(st.sessions).toHaveLength(beforeLen);
     expect(st.sessions.every((s) => beforeIds.has(s.id))).toBe(true);
@@ -416,7 +415,7 @@ describe('storeAccess + domain facades', () => {
     createSessionAndOpenChat('proj-draft-3');
     expect(getSessionStoreState().sessions).toHaveLength(beforeLen);
     expect(getSessionStoreState().activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
-    expect(getLayoutState().draftFolder).toBe('proj-draft-3');
+    expect(getSessionStoreState().draftFolder).toBe('proj-draft-3');
 
     // 恢复 seed 避免污染后续用例
     if (seedId && !isPendingDraft(seedId)) {
@@ -531,19 +530,18 @@ describe('storeAccess + domain facades', () => {
     expect(getPermissionMode()).toBe('ask');
   });
 
-  it('getWorkspaceStoreState / getActiveWorkspace share the same zustand instance as layout', () => {
+  it('getWorkspaceStoreState / getActiveWorkspace operate on workspace store', () => {
     const ws = getWorkspaceStoreState();
-    const layout = useLayoutStore.getState();
-    expect(ws.workspaces).toBe(layout.workspaces);
+    expect(Array.isArray(ws.workspaces)).toBe(true);
     expect(typeof ws.togglePanel).toBe('function');
     expect(getActiveWorkspace()?.id).toBe(
-      layout.workspaces[layout.activeWorkspaceIndex]?.id,
+      ws.workspaces[ws.activeWorkspaceIndex]?.id,
     );
   });
 
   it('getWorkspaceById + focusOrOpenPanel empty/missing guards', () => {
-    const layout = useLayoutStore.getState();
-    const wsId = layout.workspaces[layout.activeWorkspaceIndex]?.id;
+    const wsState = getWorkspaceStoreState();
+    const wsId = wsState.workspaces[wsState.activeWorkspaceIndex]?.id;
     expect(wsId).toBeTruthy();
     if (!wsId) return;
 
@@ -565,19 +563,19 @@ describe('storeAccess + domain facades', () => {
   });
 
   it('setGroupActiveCard + togglePanel + focusOrOpenPanel touch workspace cards', () => {
-    const layout = useLayoutStore.getState();
-    const wsId = layout.workspaces[layout.activeWorkspaceIndex]?.id;
+    const wsState = getWorkspaceStoreState();
+    const wsId = wsState.workspaces[wsState.activeWorkspaceIndex]?.id;
     expect(wsId).toBeTruthy();
     if (!wsId) return;
 
     // 默认工作区至少有 chat 列
     setGroupActiveCard(wsId, 0, 0, 'chat');
-    const after = useLayoutStore.getState();
+    const after = getWorkspaceStoreState();
     const group = after.workspaces.find((w) => w.id === wsId)?.columns[0]?.groups[0];
     expect(group?.activeCardId).toBe('chat');
 
     focusOrOpenPanel(wsId, 'terminal');
-    const withTerm = useLayoutStore.getState();
+    const withTerm = getWorkspaceStoreState();
     const hasTerminal = withTerm.workspaces
       .find((w) => w.id === wsId)
       ?.columns.some((c) =>
@@ -592,8 +590,7 @@ describe('storeAccess + domain facades', () => {
 
     // plan → tasks
     focusOrOpenPanel(wsId, 'plan');
-    const hasTasks = useLayoutStore
-      .getState()
+    const hasTasks = getWorkspaceStoreState()
       .workspaces.find((w) => w.id === wsId)
       ?.columns.some((c) =>
         c.groups.some((g) => g.cards.some((card) => card.id === 'tasks')),
@@ -601,8 +598,7 @@ describe('storeAccess + domain facades', () => {
     expect(hasTasks).toBe(true);
 
     togglePanel(wsId, 'diff', true);
-    const hasDiff = useLayoutStore
-      .getState()
+    const hasDiff = getWorkspaceStoreState()
       .workspaces.find((w) => w.id === wsId)
       ?.columns.some((c) =>
         c.groups.some((g) => g.cards.some((card) => card.id === 'diff')),

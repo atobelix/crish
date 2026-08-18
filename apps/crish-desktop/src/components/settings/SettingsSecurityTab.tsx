@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 设置 · 安全：权限模式、工作区与信任命令（批准记忆）。
  *
  * P1 权限归一（B2/B3，主控裁决 3）：白名单 = 批准记忆（记住用户批准过的
@@ -8,6 +8,7 @@
  */
 import React, { useId, useMemo, useState } from 'react';
 import * as Lucide from 'lucide-react';
+import { useToast } from '../../services/toast/ToastContext';
 import styles from './SettingsSecurityTab.module.css';
 import {
   SettingsPage,
@@ -29,10 +30,6 @@ import {
   type PermissionMode,
 } from '../../api/permissionModes';
 import { sanitizeWhitelistEntry } from '../../api/commandPermissions';
-
-type Props = {
-  onShowToast: (msg: string) => void;
-};
 
 /** 常用只读命令 */
 const QUICK_WHITELIST_CMDS = [
@@ -60,7 +57,8 @@ function pathLeaf(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsSecurityTab: React.FC = () => {
+  const { showToast: _showToast } = useToast();
   const permissionModeRaw = usePermissionField(selectPermissionMode);
   const setPermissionMode = usePermissionField((s) => s.setPermissionMode);
   const commandPermissions = usePermissionField(selectCommandPermissions);
@@ -128,7 +126,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
     try {
       const cmd = sanitizeWhitelistEntry(source);
       if (!cmd) {
-        if (source.trim()) onShowToast('无效命令');
+        if (source.trim()) showToast('无效命令', undefined, { type: 'error' });
         return;
       }
       const exists = whitelist.some(
@@ -138,7 +136,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
       addCommandPermissionStore(cmd);
       if (!raw) setNewWhitelistCmd('');
     } catch (err) {
-      onShowToast('添加失败：' + String(err));
+      showToast('添加失败：' + String(err), undefined, { type: 'error' });
     }
   };
 
@@ -146,7 +144,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
     try {
       removeCommandPermissionStore(cmd);
     } catch (err) {
-      onShowToast('移除失败：' + String(err));
+      showToast('移除失败：' + String(err), undefined, { type: 'error' });
     }
   };
 
@@ -155,7 +153,7 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
       setCommandPermissions([]);
       setShowClearConfirm(false);
     } catch (err) {
-      onShowToast('清空失败：' + String(err));
+      showToast('清空失败：' + String(err), undefined, { type: 'error' });
     }
   };
 
@@ -165,11 +163,11 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
       if (next === permissionMode) return;
       setPermissionMode(next as PermissionMode);
     } catch (err) {
-      onShowToast('权限切换失败：' + String(err));
+      showToast('权限切换失败：' + String(err), undefined, { type: 'error' });
     }
   };
 
-  const inputRiskTitle = draftTrimmed
+  const _inputRiskTitle = draftTrimmed
     ? `${WHITELIST_REMEMBER_HINT} · 回车添加`
     : `${WHITELIST_MATCH_HINT} · 回车添加`;
 
@@ -266,7 +264,6 @@ export const SettingsSecurityTab: React.FC<Props> = ({ onShowToast }) => {
                 placeholder="如 git status"
                 value={newWhitelistCmd}
                 onChange={(e) => setNewWhitelistCmd(e.target.value)}
-                title={inputRiskTitle}
                 spellCheck={false}
                 autoComplete="off"
                 autoCorrect="off"

@@ -1,14 +1,14 @@
-/* 技能编辑弹窗（PE-05 T05.2 #4）
- * 样式归属纠正：原跨文件复用 SkillsSettingsTab.module.css + 全局 skills-discover-*
- * 类混用，现下沉为本组件 module（发现面板已收敛到 ui/Dialog 基座，:global 清零）；
- * 新建/手填两个 create 框仍为页内内联区块（非弹窗），保留原位私有形态。 */
+/*        PE-05 T05.2 #4 
+ *               SkillsSettingsTab.module.css +    skills-discover-*
+ *             module          ui/Dialog    :global     
+ *   /     create                          */
 
-/* 发现弹窗遮罩壳：设置页内弹层层级（--z-settings-dialog） */
+/*                  --z-settings-dialog  */
 .skillsDiscoverOverlay {
-  --dialog-z: var(--z-settings-dialog);
+  --dialog-z: var(--z-modal);
 }
 
-/* 发现面板 → 弹窗内容区：候选技能勾选列表 */
+/*                       */
 .skillsDiscoverList {
   max-height: 120px;
   overflow-y: auto;
@@ -46,7 +46,7 @@
   text-overflow: ellipsis;
 }
 
-/* 弹窗 footer 操作区 */
+/*    footer     */
 .skillsDiscoverActions {
   display: flex;
   flex-wrap: wrap;
@@ -54,7 +54,7 @@
   gap: var(--space-2);
 }
 
-/* 页内 create 框（paths 选择 / manual 手填，非弹窗） */
+/*    create   paths    / manual         */
 .skillsCreateBox {
   padding: 2px 0 6px;
   border-radius: 0;

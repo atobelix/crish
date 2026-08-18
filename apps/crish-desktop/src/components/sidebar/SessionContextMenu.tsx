@@ -14,12 +14,41 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Tooltip } from '../ui';
-import { measureMenu } from '../ui/Menu/position';
 import type {
   SessionContextMenuState,
   SessionMenuAction,
 } from './SidebarContextMenus';
 import styles from './SidebarContextMenus.module.css';
+
+function measureMenu(
+  el: HTMLElement,
+  x: number,
+  y: number
+): { x: number; y: number; transformOrigin: string } {
+  const pad = 8;
+  const vw = typeof window !== 'undefined' ? window.innerWidth : 1024;
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 768;
+  const w = el.offsetWidth || 160;
+  const h = el.offsetHeight || 280;
+  let nextX = x;
+  let nextY = y;
+  let originX = 'left';
+  let originY = 'top';
+
+  if (x + w > vw - pad) {
+    nextX = Math.max(pad, x - w);
+    originX = 'right';
+  }
+  if (y + h > vh - pad) {
+    nextY = Math.max(pad, y - h);
+    originY = 'bottom';
+  }
+  return {
+    x: Math.min(Math.max(pad, nextX), Math.max(pad, vw - w - pad)),
+    y: Math.min(Math.max(pad, nextY), Math.max(pad, vh - h - pad)),
+    transformOrigin: `${originY} ${originX}`,
+  };
+}
 
 /** 菜单项键盘漫游：↑↓ / Home / End；忽略 divider */
 function focusMenuItem(

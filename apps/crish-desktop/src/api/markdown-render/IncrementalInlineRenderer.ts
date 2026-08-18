@@ -99,7 +99,7 @@ function renderLinkTag(text: string, rawDest: string): string {
   if (isLocalPathRef(rawUrl) || isLocalPathRef(text)) {
     const pathRaw = isLocalPathRef(rawUrl) ? rawUrl : text;
     const path = sanitizeUrlCandidate(pathRaw) || pathRaw;
-    return `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(text)}</button>`;
+    return `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}">${escapeHtml(text)}</button>`;
   }
   if (!isSafeHref(rawUrl)) {
     return `<span class="md-a-unsafe">${escapeHtml(text)}</span>`;

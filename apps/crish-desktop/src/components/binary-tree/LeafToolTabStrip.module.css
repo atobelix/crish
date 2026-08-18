@@ -1,5 +1,5 @@
-/* LeafToolTabStrip — 独立工具 leaf 标签栏。
- * 与 RightToolDockHeader 视觉一致，高 30px，贴 leaf 顶。
+/* LeafToolTabStrip        leaf     
+ *   RightToolDockHeader        30px   leaf   
  */
 
 .header {
@@ -19,7 +19,7 @@
   min-width: 0;
   overflow: hidden;
   position: relative;
-  z-index: var(--z-sticky-bar, 2);
+  z-index: var(--z-sticky, 2);
   isolation: isolate;
 }
 
@@ -37,7 +37,7 @@
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: var(--tint-scrollbar-thumb) transparent;
-  /* 紧凑档位：3px 横条，归入 shell-scrollbar.css 全局契约（--scrollbar-thumb-width） */
+  /*      3px       shell-scrollbar.css      --scrollbar-thumb-width  */
   --scrollbar-thumb-width: 3px;
 }
 
@@ -49,7 +49,7 @@
   max-width: 140px;
   padding: 0 10px;
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-md, 6px);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
@@ -101,7 +101,7 @@
   align-items: center;
   justify-content: center;
   opacity: 0.5;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   padding: 1px;
   flex-shrink: 0;
   line-height: 0;
@@ -118,7 +118,7 @@
 }
 
 .tabClose:hover {
-  opacity: 1 !important;
+  opacity: 1;
   background: var(--tint-strong);
   transform: rotate(90deg) scale(1.05);
 }
@@ -137,7 +137,7 @@
   width: 20px;
   height: 20px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
@@ -152,55 +152,9 @@
   color: var(--text-primary);
 }
 
-.addDropdownMenu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  /* F7-F14：z-index 走 token 档位（--z-floating-panel），禁裸数字 */
-  z-index: var(--z-floating-panel);
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  box-shadow:
-    0 4px 16px color-mix(in srgb, var(--shadow-color) 8%, transparent),
-    inset 0 1px 0 var(--tint-hover);
-  min-width: 100px;
-  animation: menuFadeIn var(--transition-fast) ease-out;
-}
-
-.menuItem {
+.trailingActions {
+  margin-left: auto;
   display: flex;
   align-items: center;
-  width: 100%;
-  padding: 5px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 11px;
-  text-align: left;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background-color var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.menuItem:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-@keyframes menuFadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  padding-right: 4px;
 }

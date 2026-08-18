@@ -1,17 +1,24 @@
 // @vitest-environment jsdom
 /**
- * ui/Input 基础测试：渲染/交互/a11y
+ * ui/Input & ui/Textarea 基础测试：渲染/交互/a11y/IME 组合输入锁
  */
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useState } from 'react';
 import { Input } from './Input';
+import { Textarea } from './Textarea';
 
 /** 受控包装：模拟业务侧受控 value 持有 */
 function ControlledInput(props: React.ComponentProps<typeof Input>) {
   const [value, setValue] = useState('');
-  return <Input value={value} onChange={(e) => setValue(e.target.value)} {...props} />;
+  return (
+    <Input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      {...props}
+    />
+  );
 }
 
 describe('ui/Input', () => {
@@ -80,13 +87,28 @@ describe('ui/Input', () => {
 
   it('clearable：空值时不显示清空按钮', () => {
     render(<Input clearable value="" aria-label="空" onChange={() => {}} />);
-    expect(screen.queryByRole('button', { name: '清空输入' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '清空输入' })
+    ).not.toBeInTheDocument();
   });
 
   it('disabled 时隐藏清空与密码切换动作', () => {
-    render(<Input disabled clearable variant="password" value="x" aria-label="禁用" onChange={() => {}} />);
-    expect(screen.queryByRole('button', { name: '清空输入' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '显示密码' })).not.toBeInTheDocument();
+    render(
+      <Input
+        disabled
+        clearable
+        variant="password"
+        value="x"
+        aria-label="禁用"
+        onChange={() => {}}
+      />
+    );
+    expect(
+      screen.queryByRole('button', { name: '清空输入' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('button', { name: '显示密码' })
+    ).not.toBeInTheDocument();
   });
 
   it('suffix 插槽渲染', () => {
@@ -94,10 +116,83 @@ describe('ui/Input', () => {
     expect(screen.getByText('单位')).toBeInTheDocument();
   });
 
-  it('clearable 非受控（仅 defaultValue）不显示无效清空按钮（F7-F7）', () => {
-    render(<Input clearable defaultValue="预填" aria-label="非受控" />);
-    // 非受控模式下没有 onChange 通道，清空按钮点击无效果——
-    // 显示状态与行为矛盾（F7-F7），应直接隐藏
-    expect(screen.queryByRole('button', { name: '清空输入' })).not.toBeInTheDocument();
+  it('clearable 非受控（defaultValue 或用户输入）正确显示并执行清空', () => {
+    const onClear = vi.fn();
+    render(
+      <Input
+        clearable
+        defaultValue="预填"
+        onClear={onClear}
+        aria-label="非受控"
+      />
+    );
+    const clearBtn = screen.getByRole('button', { name: '清空输入' });
+    expect(clearBtn).toBeInTheDocument();
+    fireEvent.click(clearBtn);
+    expect(onClear).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole('button', { name: '清空输入' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('断言 1 (IME 组合输入防护)：isComposing 期间按下 Enter 绝对不触发 onEnter', () => {
+    const onEnter = vi.fn();
+    render(
+      <Input onEnter={onEnter} aria-label="IME测试" defaultValue="nihao" />
+    );
+    const input = screen.getByLabelText('IME测试');
+
+    // 1. 触发 compositionstart 进入输入法合成态
+    fireEvent.compositionStart(input);
+
+    // 2. 在合成态期间按下 3 次 Enter 确认候选词
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    fireEvent.keyDown(input, { key: 'Process', keyCode: 229 });
+
+    expect(onEnter).toHaveBeenCalledTimes(0);
+
+    // 3. 触发 compositionend 结束合成态
+    fireEvent.compositionEnd(input);
+
+    // 4. 用户正式按下 Enter 提交
+    fireEvent.keyDown(input, { key: 'Enter', code: 'Enter' });
+    expect(onEnter).toHaveBeenCalledTimes(1);
+    expect(onEnter).toHaveBeenCalledWith('nihao');
+  });
+});
+
+describe('ui/Textarea', () => {
+  it('渲染多行文本框并支持 label / hint / error', () => {
+    render(<Textarea label="备注" hint="最多200字" error="必填项" />);
+    const textarea = screen.getByRole('textbox', { name: '备注' });
+    expect(textarea.tagName).toBe('TEXTAREA');
+    expect(screen.getByText('备注')).toBeInTheDocument();
+    expect(screen.getByText('最多200字')).toBeInTheDocument();
+    expect(screen.getByText('必填项')).toBeInTheDocument();
+  });
+
+  it('Textarea 装配 IME 组合输入锁与 onEnter 回车提交', () => {
+    const onEnter = vi.fn();
+    render(
+      <Textarea onEnter={onEnter} defaultValue="文本内容" aria-label="多行" />
+    );
+    const textarea = screen.getByLabelText('多行');
+
+    // IME 合成态中按下 Enter
+    fireEvent.compositionStart(textarea);
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    expect(onEnter).toHaveBeenCalledTimes(0);
+
+    fireEvent.compositionEnd(textarea);
+
+    // Shift + Enter 换行，不触发 onEnter
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true });
+    expect(onEnter).toHaveBeenCalledTimes(0);
+
+    // Enter 提交
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
+    expect(onEnter).toHaveBeenCalledTimes(1);
+    expect(onEnter).toHaveBeenCalledWith('文本内容');
   });
 });

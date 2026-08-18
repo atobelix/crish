@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+﻿import React, { useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { Button, Select, Tooltip } from '../ui';
@@ -8,6 +8,9 @@ import { getWorkspacePath } from '../../api/projectStore';
 import type { FileDiff } from '../../store/types';
 import type { CompareMode } from './diffCardTypes';
 import type { DiffSourceMode } from '../../api/diffPanelHelpers';
+
+import { formatGitPatch } from './GitPatchFormatter';
+import { useToast } from '../../services/toast/ToastContext';
 
 type SourceMode = DiffSourceMode;
 
@@ -52,7 +55,6 @@ interface DiffCardFileListProps {
   onAcceptFile: (f: FileDiff) => void;
   onRejectFile: (f: FileDiff) => void;
   onCopyCode: (filePath: string) => void;
-  onShowToast: (message: string) => void;
   renderInlineDiffContent: (f: FileDiff) => React.ReactNode;
 }
 
@@ -76,9 +78,9 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
   onAcceptFile,
   onRejectFile,
   onCopyCode,
-  onShowToast,
   renderInlineDiffContent,
 }) => {
+  const { showToast: _showToast } = useToast();
   const { stagedFiles, unstagedFiles } = useMemo(() => {
     const staged: FileDiff[] = [];
     const unstaged: FileDiff[] = [];
@@ -208,12 +210,6 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
 
         {active && (
           <div className={styles.inlineBody}>
-            {!classifyFileDiff(f).ok && (
-              <div className={styles.applyHint} role="status">
-                此 diff 无法安全自动应用，请在编辑器确认
-              </div>
-            )}
-
             <div className={styles.inlineHeader}>
               <div className={styles.compareSelectorWrap}>
                 <span className={styles.selectLabel}>对比维度:</span>
@@ -246,6 +242,22 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                   />
                 </Tooltip>
 
+                <Tooltip content="复制标准 Git Patch">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={styles.inlineIconBtn}
+                    onClick={() => {
+                      const patch = formatGitPatch(f);
+                      navigator.clipboard.writeText(patch);
+                      showToast('标准 Git Patch 已复制到剪贴板');
+                    }}
+                    aria-label="复制 Patch"
+                    icon={<Lucide.FileDiff size={13} />}
+                  />
+                </Tooltip>
+
                 <Tooltip content="复制最新文件源码">
                   <Button
                     type="button"
@@ -266,7 +278,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                     className={styles.inlineIconBtn}
                     onClick={() => {
                       navigator.clipboard.writeText(absolutePath);
-                      onShowToast('绝对路径已复制到剪贴板');
+                      showToast('绝对路径已复制到剪贴板');
                     }}
                     aria-label="复制路径"
                     icon={<Lucide.FileCode size={13} />}

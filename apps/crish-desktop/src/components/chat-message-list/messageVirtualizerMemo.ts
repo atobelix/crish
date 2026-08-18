@@ -10,19 +10,6 @@ export interface PinnedItem {
 
 export interface MessageVirtualizerProps {
   messages: SessionMessage[];
-  visibleMessages: SessionMessage[];
-  messageWindow: {
-    startIndex: number;
-    hiddenCount: number;
-    visibleCount: number;
-    totalCount: number;
-    hasOlder: boolean;
-    effectiveExpanded: number;
-  };
-  olderStep: number;
-  offerShowAllOlder: boolean;
-  expandOlderStep: () => void;
-  expandOlderAll: () => void;
   pinnedItems: PinnedItem[];
   pinsOpen: boolean;
   setPinsOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -31,7 +18,6 @@ export interface MessageVirtualizerProps {
   searchHighlightQuery?: string;
   expandedUserMsgs: Record<string, boolean>;
   onToggleExpandUser: (msgId: string) => void;
-  onShowToast: (message: string) => void;
   hideThinkingBlock: boolean;
   inPlanMode: boolean;
   planApproved: boolean;
@@ -66,12 +52,6 @@ export interface MessageVirtualizerProps {
  */
 export const MEMO_COMPARE_FIELDS = [
   'messages',
-  'visibleMessages',
-  'messageWindow',
-  'olderStep',
-  'offerShowAllOlder',
-  'expandOlderStep',
-  'expandOlderAll',
   'pinnedItems',
   'pinsOpen',
   'setPinsOpen',
@@ -80,7 +60,6 @@ export const MEMO_COMPARE_FIELDS = [
   'searchHighlightQuery',
   'expandedUserMsgs',
   'onToggleExpandUser',
-  'onShowToast',
   'hideThinkingBlock',
   'inPlanMode',
   'planApproved',
@@ -114,13 +93,13 @@ type _Exhausted =
     : false;
 const _exhaustedCheck: _Exhausted = true;
 
-/** 仅在可见消息身份/长度、思考中消息、窗口与关键 UI 状态变化时放行重渲染 */
+/** 仅在消息身份/长度、思考中消息与关键 UI 状态变化时放行重渲染 */
 export function messageVirtualizerPropsEqual(
   prev: MessageVirtualizerProps,
   next: MessageVirtualizerProps
 ): boolean {
-  if (prev.visibleMessages !== next.visibleMessages) return false;
-  if (prev.visibleMessages.length !== next.visibleMessages.length) return false;
+  if (prev.messages !== next.messages) return false;
+  if (prev.messages.length !== next.messages.length) return false;
   if (prev.thinkingMsgId !== next.thinkingMsgId) return false;
   if (prev.activeSessionId !== next.activeSessionId) return false;
   if (prev.lastAssistantId !== next.lastAssistantId) return false;
@@ -130,40 +109,16 @@ export function messageVirtualizerPropsEqual(
   if (prev.showAllMessages !== next.showAllMessages) return false;
   if (prev.pinsOpen !== next.pinsOpen) return false;
   if (prev.searchHighlightQuery !== next.searchHighlightQuery) return false;
-  if (prev.olderStep !== next.olderStep) return false;
-  if (prev.offerShowAllOlder !== next.offerShowAllOlder) return false;
   if (prev.clearHeightsSignal !== next.clearHeightsSignal) return false;
   if (prev.pinnedItems !== next.pinnedItems) return false;
   if (prev.expandedUserMsgs !== next.expandedUserMsgs) return false;
   if (prev.dismissedFollowUps !== next.dismissedFollowUps) return false;
   if (prev.toolStackProps !== next.toolStackProps) return false;
-  if (prev.messageWindow !== next.messageWindow) {
-    const a = prev.messageWindow;
-    const b = next.messageWindow;
-    if (
-      a.startIndex !== b.startIndex ||
-      a.hiddenCount !== b.hiddenCount ||
-      a.visibleCount !== b.visibleCount ||
-      a.totalCount !== b.totalCount ||
-      a.hasOlder !== b.hasOlder ||
-      a.effectiveExpanded !== b.effectiveExpanded
-    ) {
-      return false;
-    }
-  }
-  // messages 全量仅用于少数路径；F7-F16：身份变化（含同长度替换——
-  // 撤回/编辑）即放行重渲染，不得以长度不变为由拦截
-  if (prev.messages !== next.messages) {
-    return false;
-  }
   return (
-    prev.expandOlderStep === next.expandOlderStep &&
-    prev.expandOlderAll === next.expandOlderAll &&
     prev.setPinsOpen === next.setPinsOpen &&
     prev.jumpToPinned === next.jumpToPinned &&
     prev.togglePin === next.togglePin &&
     prev.onToggleExpandUser === next.onToggleExpandUser &&
-    prev.onShowToast === next.onShowToast &&
     prev.handleRegenerateRow === next.handleRegenerateRow &&
     prev.onBranch === next.onBranch &&
     prev.onOpenDiff === next.onOpenDiff &&

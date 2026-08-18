@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 导入外部对话：扫描 Claude Code / Codex，勾选后导入。
  * 用于设置 · 账户「数据」与首次向导可选步；禁止自动导入。
@@ -31,16 +32,15 @@ import styles from './ExternalSessionImport.module.css';
 export type ExternalSessionImportProps = {
   /** settings：完整区块；wizard：紧凑向导步 */
   variant?: 'settings' | 'wizard';
-  onShowToast?: (msg: string) => void;
   /** 成功导入后回调（条数） */
   onImported?: (count: number) => void;
 };
 
 export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
   variant = 'settings',
-  onShowToast,
   onImported,
 }) => {
+  const { showToast: _showToast } = useToast();
   const baseId = useId();
   const listId = `${baseId}-list`;
   const statusId = `${baseId}-status`;
@@ -153,7 +153,7 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
       const msg = String(err || '扫描失败');
       setError(msg);
       setStatus('');
-      onShowToast?.(`扫描失败：${msg}`);
+      showToast(`扫描失败：${msg}`);
     } finally {
       setScanning(null);
     }
@@ -179,7 +179,7 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
     if (!path) return;
     setPersistedClaudeImportRoot(path);
     await refreshRoots();
-    onShowToast?.('已设置 Claude 扫描目录');
+    showToast('已设置 Claude 扫描目录');
   };
 
   const pickCodexRoot = async () => {
@@ -188,21 +188,21 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
     if (!path) return;
     setPersistedCodexImportRoot(path);
     await refreshRoots();
-    onShowToast?.('已设置 Codex 扫描目录');
+    showToast('已设置 Codex 扫描目录');
   };
 
   const resetClaudeRoot = async () => {
     if (busy) return;
     setPersistedClaudeImportRoot(null);
     await refreshRoots();
-    onShowToast?.('已恢复 Claude 默认目录');
+    showToast('已恢复 Claude 默认目录');
   };
 
   const resetCodexRoot = async () => {
     if (busy) return;
     setPersistedCodexImportRoot(null);
     await refreshRoots();
-    onShowToast?.('已恢复 Codex 默认目录');
+    showToast('已恢复 Codex 默认目录');
   };
 
   const handleImport = async () => {
@@ -237,12 +237,12 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
         setStatus(statusText);
         if (result.errors.length) {
           setError(result.errors.slice(0, 3).join('；'));
-          onShowToast?.(
+          showToast(
             `导入部分失败：${result.errors[0]}`,
           );
         } else if (dups > 0) {
           // 软去重提示（非纯成功文案，可进 toast）
-          onShowToast?.(
+          showToast(
             `跳过 ${dups} 条：此前已导入（相同来源会话）`,
           );
         }
@@ -251,20 +251,20 @@ export const ExternalSessionImport: React.FC<ExternalSessionImportProps> = ({
         const msg = `跳过 ${dups} 条：此前已导入（相同来源会话）`;
         setStatus(msg);
         setError('');
-        onShowToast?.(msg);
+        showToast(msg);
       } else {
         const errText =
           result.errors[0] ||
           '未能导入（源文件不可读或无可导入消息）';
         setError(errText);
         setStatus('');
-        onShowToast?.(`导入失败：${errText}`);
+        showToast(`导入失败：${errText}`);
       }
     } catch (err) {
       const msg = String(err || '导入失败');
       setError(msg);
       setStatus('');
-      onShowToast?.(`导入失败：${msg}`);
+      showToast(`导入失败：${msg}`);
     } finally {
       setImporting(false);
     }

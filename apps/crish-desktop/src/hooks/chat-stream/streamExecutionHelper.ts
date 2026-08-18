@@ -7,7 +7,7 @@ import type { MutableRefObject } from 'react';
 import type { RunNotice } from './types';
 import type { StreamTextBatcher } from '../../api/streamTextBatcher';
 import type { SessionStreamManager } from '../../api/sessionStreamManager';
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import { getSessionById } from '../../store/sessionStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { markStreamingActive } from '../../api/streamStop';
@@ -36,7 +36,7 @@ export function handleStreamConflict(
   if (!prevStream) return false;
 
   try {
-    const st = getCompositionRoot().layout.getState();
+    const st = getCompositionRoot().session.getState();
     const userMsg = getSessionById(sid)?.messages?.find(
       (m: SessionMessage) => m.id === userMsgId
     );
@@ -100,7 +100,7 @@ export function handleThinkingResetOnChunk(
     if (!thinkingBatcher?.hasPending(key)) {
       thinkingBatcher?.drop(key);
       getCompositionRoot()
-        .layout.getState()
+        .session.getState()
         .updateMessageThinking(sid, assistantMsgId, '');
     }
   }
@@ -174,7 +174,7 @@ export function executeStreamCompletion(ctx: StreamCompletionContext): void {
   const toolPatches = buildTerminalToolPatches(asst?.toolCalls, 'complete');
   if (toolPatches.length) {
     getCompositionRoot()
-      .layout.getState()
+      .session.getState()
       .applyToolCallPatches(sid, assistantMsgId, toolPatches);
   }
   finalizeAssistantMessageText({

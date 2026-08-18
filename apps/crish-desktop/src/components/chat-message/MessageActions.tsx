@@ -1,4 +1,4 @@
-import React, { Suspense, useCallback } from 'react';
+﻿import React, { useCallback } from 'react';
 import type { FileDiff, SessionMessage } from '../../store/types';
 import type { PermissionMode } from '../../api/permissionModes';
 import {
@@ -6,15 +6,10 @@ import {
   FollowUpSuggestionsSection,
   PlanApprovalRow,
 } from '../chat-message-row/MessageActionsBar';
+import { useToast } from '../../services/toast/ToastContext';
 import { assistantCopyText } from '../../api/toolPresentation';
 import { ChatSendToNoteEntry } from './ChatSendToNoteEntry';
 import type { SendToNoteResult } from '../../bridges/send-to-note';
-
-const ChangeOverviewCard = React.lazy(() =>
-  import('../diff/ChangeOverviewCard').then((m) => ({
-    default: m.ChangeOverviewCard,
-  }))
-);
 
 export interface MessageActionsProps {
   msg: SessionMessage;
@@ -35,7 +30,6 @@ export interface MessageActionsProps {
   onDismissFollowUp?: ((msgId: string) => void) | undefined;
   onOpenDiff: (diff: FileDiff) => void;
   onOpenDiffPanel?: (() => void) | undefined;
-  onShowToast: (message: string) => void;
   cacheMetricsNode?: React.ReactNode;
 }
 
@@ -57,24 +51,24 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
     onFillFollowUp,
     onSendFollowUp,
     onDismissFollowUp,
-    onOpenDiff,
-    onOpenDiffPanel,
-    onShowToast,
+    onOpenDiff: _onOpenDiff,
+    onOpenDiffPanel: _onOpenDiffPanel,
     cacheMetricsNode,
   }) => {
+    const { showToast: _showToast } = useToast();
     // B-05：完成态气泡挂「发送到笔记」（agent-card / 主 chat 共用 MessageActions）
     const noteMarkdown = assistantCopyText(msg) || msg.text || '';
     const onNoteSuccess = useCallback(
       (_result: Extract<SendToNoteResult, { ok: true }>) => {
-        onShowToast('已发送到笔记');
+        showToast('已发送到笔记');
       },
-      [onShowToast]
+      [showToast]
     );
     const onNoteError = useCallback(
       (result: Extract<SendToNoteResult, { ok: false }>) => {
-        onShowToast(result.reason || '发送到笔记失败');
+        showToast(result.reason || '发送到笔记失败');
       },
-      [onShowToast]
+      [showToast]
     );
 
     return (
@@ -116,14 +110,6 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
           {...(onSendFollowUp !== undefined && { onSendFollowUp })}
           {...(onDismissFollowUp !== undefined && { onDismissFollowUp })}
         />
-        <Suspense fallback={null}>
-          <ChangeOverviewCard
-            message={msg}
-            onOpenDiff={onOpenDiff}
-            {...(onOpenDiffPanel !== undefined && { onOpenDiffPanel })}
-            onShowToast={onShowToast}
-          />
-        </Suspense>
       </>
     );
   }

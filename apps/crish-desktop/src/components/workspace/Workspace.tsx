@@ -1,13 +1,12 @@
-import React, { useRef } from 'react';
+﻿import React, { useRef } from 'react';
 import { useLayoutStore } from '../../store/storeAccess';
 import type { LayoutStore, WorkspaceState } from '../../store/types';
 import styles from './Workspace.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { Button, Tooltip } from '../ui';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import type { } from '../../hooks/useToastQueue';
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import { Columns, X } from 'lucide-react';
-import { WorkspaceCanvas } from './WorkspaceCanvas';
 import { WorkspaceProductEmptyHost } from './workspaceProductMirrorDetect';
 import {
   computeRenderedColumns,
@@ -18,7 +17,6 @@ import {
 
 interface WorkspaceProps {
   wsId: string;
-  onShowToast: ShowToastFn;
 }
 
 // re-export：WorkspaceCanvas 等消费方经壳层取渲染类型
@@ -33,7 +31,7 @@ export type { RenderedColumn } from './workspaceLayoutLib';
  * PaperList 默开）。EmptyState 组件默认仍关。≠ EL-03 / ≠ inotify / ≠ 重做 E3；≠ W3-P / ≠ EL-01。
  */
 export const Workspace: React.FC<WorkspaceProps> = React.memo(
-  ({ wsId, onShowToast }) => {
+  ({ wsId }) => {
     const resizeColumns = useLayoutStore((s) => s.resizeColumns);
     const resizeGroups = useLayoutStore((s) => s.resizeGroups);
     const closeWorkspace = useLayoutStore((s) => s.closeWorkspace);
@@ -163,17 +161,7 @@ export const Workspace: React.FC<WorkspaceProps> = React.memo(
               onActivate={focusThisWorkspace}
             />
           ) : (
-            <WorkspaceCanvas
-              ws={ws}
-              renderedColumns={renderedColumns}
-              containerRef={containerRef}
-              focusThisWorkspace={focusThisWorkspace}
-              resizeColumns={resizeColumns}
-              resizeGroups={resizeGroups}
-              regionLabel={regionLabel}
-              colCountLabel={colCountLabel}
-              onShowToast={onShowToast}
-            />
+            null
           )}
 
           {/* Drag Indicator drop overlay layer */}

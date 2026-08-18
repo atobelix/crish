@@ -25,7 +25,6 @@ export type RunNotice = {
 
 export interface UseChatStreamOptions {
   wsId: string;
-  onShowToast: (message: string) => void;
   handleGlobalTabClick: (cardId: string) => void;
   chatInput: string;
   setChatInput: (value: string) => void;

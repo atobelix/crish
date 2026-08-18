@@ -184,8 +184,8 @@ let root: CompositionRoot | null = null;
 function buildDefaultLayoutFacade(): LayoutFacade {
   return {
     getState: getLayoutState,
-    getSessions: () => getLayoutState().sessions,
-    setSessions: (sessions) => getLayoutState().setSessions(sessions),
+    getSessions: () => getSessionStoreState().sessions,
+    setSessions: (sessions) => getSessionStoreState().setSessions(sessions),
     setTabModeEnabled: (enabled) => getLayoutState().setTabModeEnabled(enabled),
     getSidebarCollapsed: () => getLayoutState().sidebarCollapsed,
     setSidebarCollapsed: (collapsed) =>

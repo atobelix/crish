@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 电脑操作面板（二期 P2，S5 遗留⑩）：会话开关（显式开启/关闭）+ 全局急停 +
  * 三态会话指示（Idle/BrowserActive/DesktopActive 对应 ActivationGate）+
  * 感知预览占位。
@@ -24,7 +24,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, OctagonX, Power, ScanEye } from 'lucide-react';
 import styles from './ComputerPanel.module.css';
 import { Button, ConfirmDialog, Tooltip } from '../../../components/ui';
-import type { ShowToastFn } from '../../../hooks/useToastQueue';
+import type { } from '../../../hooks/useToastQueue';
 import { useComputerSession } from './useComputerSession';
 import {
   COMPUTER_ACTIVATIONS,
@@ -38,7 +38,6 @@ import {
 } from './computerPanelLib';
 
 export interface ComputerPanelProps {
-  onShowToast: ShowToastFn;
 }
 
 /** 三态指示条：未启用时全部 muted（idle 呈现「待机（未开启）」语境）。 */
@@ -82,11 +81,9 @@ function ActivationIndicator({
   );
 }
 
-export const ComputerPanel: React.FC<ComputerPanelProps> = ({
-  onShowToast,
-}) => {
+export const ComputerPanel: React.FC<ComputerPanelProps> = () => {
   const { enabled, activation, wired, busy, enable, disable, estop } =
-    useComputerSession({ onShowToast });
+    useComputerSession();
 
   // 启用风险确认对话框（04 §4.1 ①：风险说明 + 显式确认后才授权）
   const [enableConfirmOpen, setEnableConfirmOpen] = useState(false);

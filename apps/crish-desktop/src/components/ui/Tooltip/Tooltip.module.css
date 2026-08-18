@@ -1,9 +1,9 @@
-/* ui/Tooltip 私有形态样式（PE-05 T05.1.5）
- * 自 components/Tooltip/Tooltip.module.css 整体迁入；
- * 全部引用 tokens.css 变量，无裸 hex/rgba */
+/* ui/Tooltip        PE-05 T05.1.5 
+ *   components/Tooltip/Tooltip.module.css      
+ *      tokens.css       hex/rgba */
 .tooltip {
   position: fixed;
-  z-index: var(--z-tooltip, 9999);
+  z-index: var(--z-tooltip, 9000);
   pointer-events: none;
 }
 
@@ -40,13 +40,30 @@
 .tooltipContent {
   background: var(--bg-elevated);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-tooltip, var(--radius-md));
+  border-radius: var(--radius-tooltip, var(--radius-sm, 4px));
   box-shadow: var(--shadow-lg);
   padding: 6px 12px;
   font-size: var(--font-size-xs);
   line-height: var(--line-height-base);
   color: var(--text-primary);
   white-space: nowrap;
+}
+
+:global(body[data-floating-active='true']) .tooltip {
+  display: none;
+}
+
+.singleCharKbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  padding: 0;
+  font-size: 11px;
+  font-family: var(--font-mono, monospace);
+  border-radius: var(--radius-xs, 2px);
 }
 
 html[data-theme="dark"] .tooltipContent {

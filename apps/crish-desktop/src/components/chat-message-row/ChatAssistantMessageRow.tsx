@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * ChatAssistantMessageRow.tsx
  * 纯净助手消息行容器（DIM-02 / FIN-02 权威重构版）
@@ -37,7 +38,6 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   isLastAssistant,
   toolStackProps,
   onTogglePin,
-  onShowToast,
   onRegenerate,
   onBranch: _onBranch,
   onOpenDiff,
@@ -55,6 +55,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   void _messageIndex;
   void _hideThinkingBlock;
 
+  const { showToast: _showToast } = useToast();
   const [copied, setCopied] = useState(false);
   const copiedTimer = useRef<number | null>(null);
   const rowAria = messageRowAriaLabel({
@@ -83,19 +84,19 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
     // 无需再命令式读 streamingStore（S4.4 无订阅语义保持：本行零 store 访问）。
     const text = assistantCopyText(msg);
     if (!text.trim()) {
-      onShowToast('没有可复制的正文');
+      showToast('没有可复制的正文');
       return;
     }
     void copyTextBestEffort(text).then((ok) => {
       if (!ok) {
-        onShowToast('复制失败');
+        showToast('复制失败');
         return;
       }
       setCopied(true);
       if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
       copiedTimer.current = window.setTimeout(() => setCopied(false), 1200);
     });
-  }, [msg, onShowToast]);
+  }, [msg, showToast]);
 
   return (
     <div
@@ -137,7 +138,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
           {...(onDismissFollowUp !== undefined && { onDismissFollowUp })}
           onOpenDiff={onOpenDiff}
           {...(onOpenDiffPanel !== undefined && { onOpenDiffPanel })}
-          onShowToast={onShowToast}
+
           cacheMetricsNode={
             <CacheMetricsBadge metrics={msg.cacheMetrics?.metrics ?? null} />
           }

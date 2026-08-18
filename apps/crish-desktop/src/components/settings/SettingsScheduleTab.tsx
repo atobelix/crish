@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 定时任务：筛选、新建、编辑、启停与立即执行；成功静默，仅错误提示。
  * 壳组件：只保留 tab 外壳（筛选栏 + 双入口 + 表单/列表装配）；
@@ -24,13 +25,13 @@ import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
 
 type Props = {
-  onShowToast: (msg: string) => void;
+  _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const SettingsScheduleTab: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const state = useWorkflowsState({
     surface: 'settings',
-    onShowToast,
     workspacePath: getWorkspacePath() || '',
   });
   const {

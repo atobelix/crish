@@ -78,8 +78,7 @@ function renderOption(
       ]
         .filter(Boolean)
         .join(' ')}
-      onClick={(e) => {
-        e.stopPropagation();
+      onClick={() => {
         if (option.disabled) return;
         onSelect(option.id);
       }}
@@ -125,7 +124,7 @@ export function Select({
 
   const [internalValue, setInternalValue] = useState<string | null>(null);
   const isControlled = externalValue !== undefined;
-  const selectedId = isControlled ? externalValue ?? null : internalValue;
+  const selectedId = isControlled ? (externalValue ?? null) : internalValue;
 
   // 面板开关：Menu 受控双模（外部 onOpenChange 桥接，保证状态一致）
   const [menuOpen, setMenuOpen] = useState(false);
@@ -182,7 +181,11 @@ export function Select({
             aria-controls={listboxId}
             className={triggerClasses}
           >
-            <span className={selected ? styles.triggerLabel : styles.triggerPlaceholder}>
+            <span
+              className={
+                selected ? styles.triggerLabel : styles.triggerPlaceholder
+              }
+            >
               {selected?.label ?? placeholder}
             </span>
             <ChevronIcon />
@@ -208,7 +211,17 @@ export function Select({
 
 function ChevronIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="m6 9 6 6 6-6" />
     </svg>
   );
@@ -216,7 +229,17 @@ function ChevronIcon() {
 
 function CheckIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d="M20 6 9 17l-5-5" />
     </svg>
   );

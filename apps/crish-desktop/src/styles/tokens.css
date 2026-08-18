@@ -7,35 +7,37 @@ html[data-theme='light'] {
    * Premium Light Theme
    * Pure neutral/monochrome greys
    */
-  --bg-primary: hsl(35, 12%, 94%); /* 主背景色：极简护眼暖灰 */
-  --bg-secondary: hsl(35, 12%, 91.5%); /* 次级背景/侧栏/顶栏：温暖舒适的暖灰 */
-  --bg-tertiary: hsl(35, 12%, 88.5%); /* 三级背景：配置卡片等下凹底色 */
-  --bg-hover: var(--tint-hover); /* 悬浮（tint 档位语义别名） */
-  --bg-active: var(--tint-active); /* 激活（tint 档位语义别名） */
+  --bg-primary: hsl(35, 12%, 94%); /*             */
+  --bg-secondary: hsl(35, 12%, 91.5%); /*     /  /           */
+  --bg-tertiary: hsl(35, 12%, 88.5%); /*                */
+  --bg-hover: var(--tint-hover); /*    tint         */
+  --bg-active: var(--tint-active); /*    tint         */
   --bg-card: hsl(
     35,
     10%,
     98%
-  ); /* 卡片底色：温润暖白，调高白度以增强卡片浮动感 */
+  ); /*                        */
   --bg-elevated: hsl(
     35,
     8%,
     100%
-  ); /* 弹层与下拉底色：高雅温润的乳白，确保亮度高于背景 */
+  ); /*                          */
   --bg-workspace: var(--bg-primary);
+  --shell-chrome-bg: var(--bg-secondary);
+  --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   --card-header-bg: var(--bg-secondary);
   --bg-subtle: var(--bg-secondary);
   --text-primary: #111111;
   --text-secondary: #555555;
-  /* 批次 6.1 对比度修复（08 ③表行 1/2）：#888888 档仅 3.06:1 → #696969 档
-   * 在 light 主背景 4.78:1、侧栏背景 4.53:1（WCAG AA 正文 ≥4.5:1）；
-   * 固定 hex 取代 color-mix，避免不同底面上的混合结果不可控 */
+  /*    6.1       08     1/2  #888888    3.06:1   #696969  
+   *   light     4.78:1      4.53:1 WCAG AA     4.5:1  
+   *    hex    color-mix                 */
   --text-tertiary: #696969;
   --text-muted: var(--text-tertiary);
 
-  /* 淡染档位 token（tint 族）：text-primary 基底 + transparent 混合；
-   * hover/active/strong 三档为主，其余为专用档（含 C-3 定案的 --tint-highlight）；
-   * 全部消费点禁裸 color-mix，统一引用本族 */
+  /*      token tint    text-primary    + transparent    
+   * hover/active/strong               C-3     --tint-highlight  
+   *         color-mix        */
   --tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent);
   --tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --tint-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
@@ -49,7 +51,7 @@ html[data-theme='light'] {
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
-  /* T-C 批次 5.2 · T11：ui/Switch 轨道与拇指阴影（对齐旧 settings-switch 观感） */
+  /* T-C    5.2   T11 ui/Switch             settings-switch     */
   --switch-track-bg: color-mix(
     in srgb,
     var(--text-primary) 5%,
@@ -122,41 +124,30 @@ html[data-theme='light'] {
     var(--text-primary) 10%
   );
 
-  --accent-color: hsl(35, 16%, 15%); /* 暖调深炭古铜 */
-  --accent-light: hsl(35, 20%, 98.5%); /* 暖象牙白 */
-  --accent-hover: hsl(35, 16%, 22%); /* 暖深炭黑 */
-  --accent-soft: hsl(35, 12%, 93.5%); /* 极柔和暖 */
+  --accent-color: hsl(35, 16%, 15%); /*        */
+  --accent-light: hsl(35, 20%, 98.5%); /*      */
+  --accent-hover: hsl(35, 16%, 22%); /*      */
+  --accent-soft: hsl(35, 12%, 93.5%); /*      */
 
   --accent-orange: hsl(38, 92%, 50%);
   --accent-orange-light: hsl(38, 100%, 96%);
-  --accent-green: hsl(142, 35%, 42%); /* 护眼森林暖绿 */
+  --accent-green: hsl(142, 35%, 42%); /*        */
   --accent-green-hover: hsl(142, 35%, 35%);
-  --accent-green-light: hsl(142, 35%, 96.5%); /* 极轻透暖鼠尾草绿 */
+  --accent-green-light: hsl(142, 35%, 96.5%); /*          */
   --accent-green-soft: hsl(142, 30%, 92.5%);
   --accent-green-muted: hsl(142, 30%, 82.5%);
-  --accent-red: hsl(0, 55%, 55%); /* 柔和砖红/赤土 */
-  --accent-red-light: hsl(0, 55%, 97.5%); /* 极轻透暖蜜桃 */
-  /* 运行时注入（themeStore applyTheme）的默认皮肤等价静态定义——注入缺失路径的兜底 */
-  --accent-green-light-adaptive: color-mix(
-    in srgb,
-    var(--accent-green, #16a34a) 15.5%,
-    #ffffff
-  );
-  --accent-red-light-adaptive: color-mix(
-    in srgb,
-    var(--accent-red, #dc2626) 12.5%,
-    #ffffff
-  );
-  /* 批次 6.1 对比度修复（08 ③表行 4）：accent-blue 作链接/强调文字用时
-   * #2f81f7 档仅 3.23:1 → #1d4ed8 档 5.89:1（WCAG AA 正文 ≥4.5:1）；
-   * 图标/装饰仍可走 --color-info（dark 分支值不变，暗底 5.35:1 已达标） */
+  --accent-red: hsl(0, 55%, 55%); /*     /   */
+  --accent-red-light: hsl(0, 55%, 97.5%); /*        */
+  /*    6.1       08     4  accent-blue    /      
+   * #2f81f7    3.23:1   #1d4ed8   5.89:1 WCAG AA     4.5:1  
+   *   /      --color-info dark          5.35:1      */
   --accent-blue: #1d4ed8;
   --accent-blue-light: hsl(217, 70%, 96%);
   --accent-violet: hsl(258, 90%, 66%);
   --accent-violet-light: hsl(258, 40%, 97%);
   --accent-primary: var(--accent-blue);
   --accent-secondary: var(--accent-blue-light);
-  /* primary 反相底（FirstRunWizard 等深底按钮）；light = text-primary 底、dark = text-secondary 亮底 */
+  /* primary     FirstRunWizard        light = text-primary   dark = text-secondary    */
   --accent-inverted: var(--text-primary);
   --accent-chart-in: hsl(35, 10%, 82%);
   --accent-chart-out: hsl(35, 12%, 35%);
@@ -187,24 +178,24 @@ html[data-theme='light'] {
   --accent-danger: var(--color-error);
   --warning-color: var(--color-warning);
 
-  /* 文本语义色：--text-danger/--text-success 供模块文本/图标使用（映射 --color-* 语义值） */
+  /*       --text-danger/--text-success      /        --color-*      */
   --text-danger: var(--color-error);
   --text-success: var(--color-success);
-  /* 文字专用强调色（08 ③表行 3/5，WCAG AA 文字 ≥4.5:1）：
-   * 装饰/图标用 --accent-orange/--accent-green，文字一律走本族——
-   * --text-warning-strong #c2410c：light 底 4.55:1（accent-orange 仅 1.85:1）
-   * --text-success-strong #46724c：light 底 4.92:1（ChangesSection +N 同档） */
+  /*         08     3/5 WCAG AA     4.5:1  
+   *   /    --accent-orange/--accent-green          
+   * --text-warning-strong #c2410c light   4.55:1 accent-orange   1.85:1 
+   * --text-success-strong #46724c light   4.92:1 ChangesSection +N     */
   --text-warning-strong: #c2410c;
   --text-success-strong: #46724c;
-  /* 危险按钮前景色（红底白字；--text-on-accent 在深色主题解析为深色，不适用） */
+  /*              --text-on-accent                 */
   --text-on-danger: #ffffff;
-  /* 状态诊断面板文本色（值保持与历史 fallback 一致，避免渲染漂移） */
+  /*                  fallback            */
   --ui-text-success: #2f9e44;
   --ui-text-danger: #e03131;
-  /* 批次 6.1 对比度修复：ui-text-muted 作状态诊断小字，#868e96 档仅 2.94:1 → #757d85 档 3.69:1 */
+  /*    6.1       ui-text-muted         #868e96    2.94:1   #757d85   3.69:1 */
   --ui-text-muted: #757d85;
   --ui-text-info: #1971c2;
-  /* 批次 6.1 对比度修复（08 ③表行 6）：WARN 文字 #e8590c 档仅 3.09:1 → 收敛入 --text-warning-strong（4.55:1） */
+  /*    6.1       08     6  WARN    #e8590c    3.09:1       --text-warning-strong 4.55:1  */
   --ui-text-warning: var(--text-warning-strong);
   --ui-text-primary: inherit;
 
@@ -218,8 +209,8 @@ html[data-theme='light'] {
   --bg-overlay: var(--shadow-color);
 
   /* model/active status color (9 uses of #16a34a) */
-  /* 批次 6.1 对比度修复（08 ③表行 5）：状态点 #16a34a 档 2.91:1 → #15803d 档 4.41:1（WCAG AA UI ≥3:1）；
-   * 状态文字请走 --text-success-strong（≥4.5:1） */
+  /*    6.1       08     5      #16a34a   2.91:1   #15803d   4.41:1 WCAG AA UI  3:1  
+   *        --text-success-strong  4.5:1  */
   --color-active: #15803d;
 
   /* syntax highlighting light */
@@ -243,7 +234,7 @@ html[data-theme='light'] {
   --terminal-prompt: #4ade80; /* classic terminal prompt green */
   --terminal-bar-fill: color-mix(in srgb, var(--shadow-color) 3%, transparent);
 
-  /* xterm 终端 16 色调色板：TerminalCard.xterm.tsx 读取；值保持与历史硬编码一致 */
+  /* xterm    16      TerminalCard.xterm.tsx                */
   --xterm-black: #1e1e1e;
   --xterm-red: #f87171;
   --xterm-green: #4ade80;
@@ -267,17 +258,20 @@ html[data-theme='light'] {
   --mac-dot-yellow: #ffbd2e;
   --mac-dot-green: #27c93f;
 
-  --radius-xs: 4px;
-  --radius-sm: 5px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
-  --radius-xl: 10px;
-  --radius-2xl: 12px;
-  --radius-full: 9999px;
+  /* 5           (Ro = Ri + P: 12/8/6/4/2px) */
+  --radius-xs: 2px; /*            (2px) */
+  --radius-sm: 4px; /*      (IconButton)      (Badge)    (Kbd) (4px) */
+  --radius-md: 6px; /*            Tab     Select     (6px) */
+  --radius-lg: 8px; /*           Content        (8px) */
+  --radius-xl: 12px; /*               (12px) */
+  --radius-2xl: 12px; /*      */
+  --radius-switch-track: 9999px; /*     1: Switch    */
+  --radius-circle: 50%; /*     2: Avatar        */
+  --radius-full: 9999px; /*        (  Switch/Avatar      ) */
 
   /* --- Unified Header & Titlebar Rows Token System --- */
   --titlebar-row-h: 28px; /* Row height (e.g. workspace bar, sessions bar, card-header) */
-  --titlebar-item-h: 28px; /* Content/button/tab height — aligns with 36px header */
+  --titlebar-item-h: 28px; /* Content/button/tab height   aligns with 36px header */
   --titlebar-top-gap: 0px; /* Vertical spacing from the upper frame border */
 
   /* Premium Soft Low-Presence Shadows */
@@ -319,8 +313,8 @@ html[data-theme='light'] {
   --transition-press: 80ms ease-out;
   --transition-skeleton: 1.5s ease-in-out;
   --transition-spin: 0.8s linear;
-  /* 批次 9.1（S7 动效时长 token 化）：脉冲/呼吸类动画统一档
-   * （原散装 1.1-2.2s 收敛到 1.6s）；光标/终端闪烁档（step-end 语义） */
+  /*    9.1 S7      token      /        
+   *      1.1-2.2s     1.6s    /      step-end     */
   --transition-pulse: 1.6s ease-in-out;
   --transition-blink: 1s step-end;
 
@@ -335,7 +329,7 @@ html[data-theme='light'] {
   --easing-exit: cubic-bezier(0.4, 0, 0.2, 1);
   --easing-emphasized: cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* 默认中英文同一主族（雅黑/苹方等含 CJK 字形）；fontStore 运行时会覆盖 */
+  /*             /     CJK     fontStore        */
   --font-sans:
     'Microsoft YaHei UI', 'Microsoft YaHei', 'PingFang SC', 'Hiragino Sans GB',
     'Noto Sans SC', 'Noto Sans CJK SC', system-ui, -apple-system,
@@ -347,9 +341,9 @@ html[data-theme='light'] {
 
   --dropdown-padding: var(--space-1_5);
   --dropdown-gap: var(--space-0_5);
-  --dropdown-radius: var(--radius-2xl);
-  --button-radius: var(--radius-xl);
-  --pill-radius: var(--radius-full);
+  --dropdown-radius: var(--radius-lg);
+  --button-radius: var(--radius-md);
+  --pill-radius: var(--radius-md);
   --item-padding: 8px 12px;
   --item-radius: var(--radius-md);
   --item-font-size: var(--font-size-base);
@@ -359,8 +353,8 @@ html[data-theme='light'] {
   --settings-sidebar-width: 240px;
 
   /*
-   * 文字层级（正?14 为基准）
-   * xxs/xs 仅用于时间、角标等极密元信息，慎用
+   *       ?14     
+   * xxs/xs                  
    */
   --font-size-adjust: 0px;
   --font-size-xxs: calc(11px + var(--font-size-adjust));
@@ -379,7 +373,7 @@ html[data-theme='light'] {
   --font-size-chat: calc(13.5px + var(--font-size-adjust, 0px));
 
   /*
-   * 字重阶梯?
+   *     ?
    */
   --font-weight-code: 400;
   --font-weight-normal: 400;
@@ -394,9 +388,39 @@ html[data-theme='light'] {
   --letter-spacing-tighter: -0.02em;
   --letter-spacing-tightest: -0.025em;
 
-  /* 层级变量统一以 styles/z-index.css 为唯一真源 */
-  /* --font-mono-features 由 fontStore.ts 运行时注入（字体特性开关）；此处补静态
-   * 默认定义（对齐注入默认值），注入缺失时降级可用 */
+  /* 7     Z-Index       9000      100,000          */
+  --z-base: 0;
+  --z-dock: 10;
+  --z-chrome: 100;
+  --z-dropdown: 300;
+  --z-popover: 500;
+  --z-modal: 1000;
+  --z-tooltip: 9000;
+
+  /* 5.5%       Diff        Gutter */
+  --diff-line-add-bg: hsl(142 35% 42% / 0.055);
+  --diff-line-add-border: hsl(142 71% 45% / 0.35);
+  --diff-gutter-add-bg: hsl(142 35% 42% / 0.075);
+  --diff-gutter-add-fg: hsl(142 45% 30%);
+  --diff-word-add-bg: hsl(142 40% 40% / 0.18);
+
+  --diff-line-del-bg: hsl(0 55% 55% / 0.055);
+  --diff-line-del-border: hsl(0 84% 60% / 0.35);
+  --diff-gutter-del-bg: hsl(0 55% 55% / 0.075);
+  --diff-gutter-del-fg: hsl(0 55% 38%);
+  --diff-word-del-bg: hsl(0 60% 50% / 0.18);
+
+  --diff-line-delete-bg: var(--diff-line-del-bg);
+  --diff-line-delete-border: var(--diff-line-del-border);
+
+  --diff-gutter-width: 48px;
+  --diff-gutter-bg: var(--bg-secondary);
+  --diff-gutter-text: var(--text-tertiary);
+  --diff-header-height: 34px;
+
+  /*         styles/z-index.css       */
+  /* --font-mono-features   fontStore.ts                    
+   *                         */
   --font-mono-features: 'calt' 0, 'liga' 0;
 
   --breakpoint-sm: 640px;
@@ -406,8 +430,8 @@ html[data-theme='light'] {
   --opacity-disabled: 0.5;
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* 图标与控件热?
-   * xs = 角标/chip；sm = 工具条次级；默认 = 主按?输入；lg = 强调 CTA */
+  /*       ?
+   * xs =   /chip sm =          =   ?   lg =    CTA */
   --icon-size: 16px;
   --icon-size-sm: 14px;
   --icon-size-lg: 18px;
@@ -420,8 +444,8 @@ html[data-theme='light'] {
   --control-pad-y: 6px;
 
   /*
-   * 密度间距阶梯? 的半级）：列?gap、内边距、图标旁文字间距共用
-   * ui-size gear 会整体缩放，组件勿再?5/7/9 等零?px
+   *       ?       ?gap              
+   * ui-size gear           ?5/7/9   ?px
    */
   --space-0_5: 2px;
   --space-1_25: 5px;
@@ -442,8 +466,8 @@ html[data-theme='light'] {
   --space-0: 0px;
 
   /*
-   * 行高：中?UI 略抬 body，避免汉字行贴；控件/标签?tight|ui
-   * shell body 可迁?--line-height-body；markdown ?relaxed
+   *     ?UI    body          /  ?tight|ui
+   * shell body   ?--line-height-body markdown ?relaxed
    */
   --line-height-tight: 1.25;
   --line-height-ui: 1.35;
@@ -455,13 +479,13 @@ html[data-theme='light'] {
   --line-height-base: 1.4;
 
   /*
-   * 面板壳层密度：card-header / files-bar / 右侧工具表面共用
-   * 改此处即可统一顶栏高度与内边距，避?shell/panels 各写一?magic number
+   *        card-header / files-bar /         
+   *                  ?shell/panels    ?magic number
    */
   --card-header-min-height: 36px;
   --card-header-pad-y: 0px;
   --card-header-pad-x: 8px;
-  /* card-header 右区间距；窄栏时避免 tabs 与动作钮贴死 */
+  /* card-header            tabs        */
   --card-header-gap: var(--space-1_5);
   --panel-pad-x: 12px;
   --panel-pad-y: 10px;
@@ -471,31 +495,31 @@ html[data-theme='light'] {
   --tab-pad-x: 16px;
   --tab-tool-pad-left: 12px;
   --tab-tool-pad-right: 16px;
-  /* 列表行高：侧栏会/ settings-list / agent 卡；对齐 control-height 密度 */
+  /*         / settings-list / agent      control-height    */
   --row-height: var(--control-height);
   --row-height-sm: var(--control-height-sm);
-  /* 变更面板：侧栏文件列表宽；@container 窄档可改md */
+  /*              @container     md */
   --diff-sidebar-width: 148px;
   --diff-sidebar-width-md: 120px;
   --diff-file-chip-min: 96px;
   --diff-file-chip-min-xs: 80px;
-  /* 横向 tabs / 文件 chips 滚动条厚 */
+  /*    tabs /    chips      */
   --panel-h-scrollbar-size: 3px;
 
   /*
-   * 主对话居中列：消?/ 空?/ footer 子项 / 审批条共?
-   * 宽屏可在 media 里抬?--chat-col-max-wide
-   * 680 ?760：利用宽屏可用空间，减少两侧大片留白
+   *         ?/  ?/ footer    /     ?
+   *      media   ?--chat-col-max-wide
+   * 680 ?760                  
    */
   --chat-col-max: 760px; /* overridden by JS constants at runtime */
   --chat-col-max-wide: 840px;
 
   /*
-   * 设置内容区最大宽度：统一来源，禁止各 CSS 文件散落 680 / 720px 硬编码?
-   * coverContent 拉伸填满时，settingsUiPage 用此值居中并限最大宽?
+   *                    CSS      680 / 720px    ?
+   * coverContent       settingsUiPage           ?
    */
   --settings-content-max: 720px;
-  /* footer 顶缘淡入：与 .chat-footer / .agent-card-composer 同渐 */
+  /* footer        .chat-footer / .agent-card-composer    */
   --chat-footer-fade: linear-gradient(
     to bottom,
     transparent 0%,
@@ -507,31 +531,33 @@ html[data-theme='light'] {
   color-scheme: light;
 }
 
-/* 深色：炭灰而非死黑；secondary 不低?primary，避免侧栏「黑洞?
- * ?CSS 变量赋值，组件覆盖?theme-dark.css
- * hairline 契约（与 light 同语义，?chat / shell / settings 共用）：
- *   --hairline       = 结构分隔（card-header 底、settings-list 行、filter-bar?
- *   --hairline-strong = 可交互描边（输入壳、浮层菜单、用户气泡）
- * 禁止组件再写独立 color-mix 百分比描?*/
+/*           secondary   ?primary        ?
+ * ?CSS          ?theme-dark.css
+ * hairline      light     ?chat / shell / settings     
+ *   --hairline       =      card-header   settings-list   filter-bar?
+ *   --hairline-strong =                     
+ *          color-mix     ?*/
 html[data-theme='dark'] {
   /* Premium Dark Theme (Neutral/Vercel style) */
   --bg-primary: hsl(0, 0%, 5%);
   --bg-secondary: hsl(0, 0%, 8%);
   --bg-tertiary: hsl(0, 0%, 11%);
-  --bg-hover: var(--tint-hover); /* 悬浮（tint 档位语义别名） */
-  --bg-active: var(--tint-active); /* 激活（tint 档位语义别名） */
+  --bg-hover: var(--tint-hover); /*    tint         */
+  --bg-active: var(--tint-active); /*    tint         */
   --bg-card: hsl(0, 0%, 11%);
   --bg-elevated: hsl(0, 0%, 15%);
   --bg-subtle: var(--bg-secondary);
   --bg-workspace: var(--bg-primary);
+  --shell-chrome-bg: var(--bg-secondary);
+  --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   --text-primary: #f0f0f0;
   --text-secondary: #a3a3a3;
-  /* 批次 6.1 对比度修复（08 ③表行 7）：dark text-tertiary 62% 混色约 3.59:1
-   * → #8f8f8f 档 6.0:1（WCAG AA 正文 ≥4.5:1） */
+  /*    6.1       08     7  dark text-tertiary 62%     3.59:1
+   *   #8f8f8f   6.0:1 WCAG AA     4.5:1  */
   --text-tertiary: #8f8f8f;
   --text-muted: var(--text-tertiary);
 
-  /* 淡染档位 token（tint 族）：dark 复用同一 text-primary 基底定义，淡染强度双主题一致 */
+  /*      token tint    dark      text-primary                */
   --tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent);
   --tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent);
   --tint-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
@@ -545,7 +571,7 @@ html[data-theme='dark'] {
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
-  /* T-C 批次 5.2 · T11：ui/Switch 轨道与拇指阴影（dark 轨道对齐旧 theme-dark.css 覆盖） */
+  /* T-C    5.2   T11 ui/Switch         dark       theme-dark.css     */
   --switch-track-bg: var(--tint-active);
   --switch-thumb-shadow: 0 1px 2px
     color-mix(in srgb, var(--shadow-color) 12%, transparent);
@@ -554,7 +580,7 @@ html[data-theme='dark'] {
   --border-subtle: hsl(0, 0%, 14%);
   --composer-bg: var(--bg-secondary);
   --composer-footer-bg: var(--bg-secondary);
-  /* S6 收编（自 theme-dark.css 迁入，值不变）：暗色代码面抬浅灰底，避免死黑终端感 */
+  /* S6      theme-dark.css                           */
   --md-code-bg: var(--bg-tertiary);
   --md-code-border: var(--hairline, var(--border-subtle));
   --md-code-fg: var(--text-primary);
@@ -577,8 +603,8 @@ html[data-theme='dark'] {
     var(--text-primary) 9.5%,
     var(--bg-primary)
   );
-  /* dark 分支缺口补齐（01 退化 P2-01）：light 侧栏 hover/active 与 control-mix-color 在 dark 下
-   * 会继承 light 暖棕值，补定义后与 tint 同基底、观感一致 */
+  /* dark        01    P2-01  light    hover/active   control-mix-color   dark  
+   *     light           tint          */
   --sidebar-hover: color-mix(
     in srgb,
     var(--text-primary) 5%,
@@ -609,7 +635,7 @@ html[data-theme='dark'] {
   --accent-green-muted: hsl(142, 30%, 24%);
   --accent-red: hsl(0, 55%, 55%);
   --accent-red-light: hsl(0, 55%, 16%);
-  /* 运行时注入（themeStore applyTheme）的默认皮肤等价静态定义——dark 兜底 */
+  /*       themeStore applyTheme              dark    */
   --accent-green-light-adaptive: color-mix(
     in srgb,
     var(--accent-green, #22c55e) 8%,
@@ -626,16 +652,16 @@ html[data-theme='dark'] {
   --accent-violet-light: hsl(261, 73%, 23%);
   --accent-primary: var(--accent-blue);
   --accent-secondary: var(--accent-blue-light);
-  /* primary 反相底 dark 分支：text-secondary 亮底 */
+  /* primary     dark    text-secondary    */
   --accent-inverted: var(--text-secondary);
   --accent-chart-in: var(--accent-blue-light);
   --accent-chart-out: var(--accent-blue);
   --text-on-accent: var(--bg-primary, #0a0a0a);
-  /* legacy/semantic aliases dark 覆盖：值均与 light 相同（继承等价），补齐 dark 分支定义 */
+  /* legacy/semantic aliases dark        light             dark      */
   --accent-danger: var(--color-error);
   --text-danger: var(--color-error);
   --text-success: var(--color-success);
-  /* 文字专用强调色 dark 分支：暗底需亮调才达 4.5:1——与 --ui-text-* dark 值同档（各 ≥10:1） */
+  /*         dark            4.5:1    --ui-text-* dark        10:1  */
   --text-warning-strong: var(--ui-text-warning);
   --text-success-strong: var(--ui-text-success);
   --text-on-danger: #ffffff;
@@ -690,9 +716,9 @@ html[data-theme='dark'] {
   --terminal-prompt: #4ade80;
   --terminal-bar-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
 
-  /* F7-F27：状态诊断面板文本色 dark 覆盖——light 值（#868e96/#e8590c 等）
-   * 在暗色背景下对比度不足（muted 约 4.6:1），语义上 dark 不得引用 light 值；
-   * 取各语义色的暗色可读浅调，与 --text-secondary 等既有暗色契约一致 */
+  /* F7-F27           dark     light   #868e96/#e8590c   
+   *             muted   4.6:1      dark      light   
+   *                --text-secondary           */
   --ui-text-success: #69db7c;
   --ui-text-danger: #ff8787;
   --ui-text-muted: #a3a3a3;
@@ -715,11 +741,32 @@ html[data-theme='dark'] {
   --syntax-deletion: #f87171;
   --syntax-meta: #a3a3a3;
 
+  /* 5.5%       Diff        Gutter (Dark) */
+  --diff-line-add-bg: hsl(142 40% 50% / 0.09);
+  --diff-line-add-border: hsl(142 71% 45% / 0.45);
+  --diff-gutter-add-bg: hsl(142 40% 50% / 0.12);
+  --diff-gutter-add-fg: hsl(142 45% 72%);
+  --diff-word-add-bg: hsl(142 45% 45% / 0.28);
+
+  --diff-line-del-bg: hsl(0 60% 55% / 0.09);
+  --diff-line-del-border: hsl(0 84% 60% / 0.45);
+  --diff-gutter-del-bg: hsl(0 60% 55% / 0.12);
+  --diff-gutter-del-fg: hsl(0 60% 75%);
+  --diff-word-del-bg: hsl(0 65% 50% / 0.28);
+
+  --diff-line-delete-bg: var(--diff-line-del-bg);
+  --diff-line-delete-border: var(--diff-line-del-border);
+
+  --diff-gutter-width: 48px;
+  --diff-gutter-bg: var(--bg-secondary);
+  --diff-gutter-text: var(--text-tertiary);
+  --diff-header-height: 34px;
+
   color-scheme: dark;
 }
 
-/* UI Size Gear 相对 14px 基准缩放；small 不低11px 元信 */
-/* 密度只改字号/控件高，不改侧栏宽（侧栏宽独token + 用户拖拽持久化） */
+/* UI Size Gear    14px      small   11px    */
+/*       /              token +          */
 [data-ui-size='small'] {
   --settings-sidebar-width: 220px;
   --dropdown-padding: 5px;
@@ -730,7 +777,7 @@ html[data-theme='dark'] {
   --item-font-size: 13px;
   --header-height: 32px;
 
-  /* 紧凑档：13，元信息不低10；中文仍保持 body 行高不压 */
+  /*     13      10       body      */
   --font-size-xxs: calc(10px + var(--font-size-adjust, 0px));
   --font-size-xs: calc(11px + var(--font-size-adjust, 0px));
   --font-size-sm: calc(12px + var(--font-size-adjust, 0px));
@@ -768,12 +815,12 @@ html[data-theme='dark'] {
   --line-height-body: 1.5;
   --line-height-relaxed: 1.6;
 
-  --radius-xs: 3px;
-  --radius-sm: 4px;
+  --radius-xs: 2px;
+  --radius-sm: 3px;
   --radius-md: 5px;
   --radius-lg: 7px;
-  --radius-xl: 9px;
-  --radius-2xl: 11px;
+  --radius-xl: 10px;
+  --radius-2xl: 10px;
   --radius-full: 9999px;
 
   --card-header-min-height: 32px;
@@ -806,7 +853,7 @@ html[data-theme='dark'] {
   --item-font-size: var(--font-size-lg);
   --header-height: 40px;
 
-  /* 大档：中文可读性优先，body 行高再抬半档 */
+  /*            body        */
   --font-size-xxs: calc(12px + var(--font-size-adjust, 0px));
   --font-size-xs: calc(13px + var(--font-size-adjust, 0px));
   --font-size-sm: calc(14px + var(--font-size-adjust, 0px));
@@ -844,12 +891,12 @@ html[data-theme='dark'] {
   --line-height-body: 1.6;
   --line-height-relaxed: 1.7;
 
-  --radius-xs: 5px;
-  --radius-sm: 6px;
+  --radius-xs: 3px;
+  --radius-sm: 5px;
   --radius-md: 7px;
   --radius-lg: 9px;
-  --radius-xl: 11px;
-  --radius-2xl: 13px;
+  --radius-xl: 14px;
+  --radius-2xl: 14px;
   --radius-full: 9999px;
 
   --card-header-min-height: 40px;
@@ -872,10 +919,10 @@ html[data-theme='dark'] {
   --diff-file-chip-min-xs: 88px;
 }
 
-/* 以下 html[data-perf-tier=...] 为性能档位的 token 覆盖定义（与
- * html[data-theme] 皮肤块同类，属 token 体系；::selection / keyframes /
- * .ui-popover-animate / [data-panel] 等全局规则已迁出至 design-system.css
- * （S7-3 纯 token 化），tokens.css 只保留 token 定义。 */
+/*    html[data-perf-tier=...]        token       
+ * html[data-theme]         token    ::selection / keyframes /
+ * .ui-popover-animate / [data-panel]           design-system.css
+ *  S7-3   token    tokens.css     token     */
 
 /* --- Conex System Performance Tiers --- */
 
@@ -900,18 +947,16 @@ html[data-perf-tier='balanced'] {
 html[data-perf-tier='eco'] {
   --backdrop-blur: blur(0px);
   --bg-glass: var(--bg-elevated);
-  --transition-spring-layout: 0ms !important;
-  --transition-micro: 0ms !important;
-  --transition-fast: 0ms !important;
-  --transition-smooth: 0ms !important;
-  --transition-enter: 0ms !important;
-  --transition-exit: 0ms !important;
-  --transition-spring: 0ms !important;
-  /* --transition-slide removed in Phase 1 */
-  --transition-popover-enter: 0ms !important;
-  --transition-popover-exit: 0ms !important;
-  --transition-modal-enter: 0ms !important;
-  --transition-accordion: 0ms !important;
+  --transition-spring-layout: 0ms;
+  --transition-micro: 0ms;
+  --transition-fast: 0ms;
+  --transition-smooth: 0ms;
+  --transition-enter: 0ms;
+  --transition-exit: 0ms;
+  --transition-spring: 0ms;
+  --transition-popover-enter: 0ms;
+  --transition-popover-exit: 0ms;
+  --transition-modal-enter: 0ms;
+  --transition-accordion: 0ms;
 }
 
-/* ── 全局动画/浮层规则已迁至 design-system.css（S7-3）── */

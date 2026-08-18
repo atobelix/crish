@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useChatApprovalHandlers } from '../components/chat-card/useChatApprovalHandlers';
 import { useLayoutStore } from '../store/storeAccess';
+import { reindexSessionsById } from '../store/sessionIndex';
 import { getCommandPermissions } from './storeAccess';
 import type {
   MessageToolCall,
@@ -61,6 +62,7 @@ function seedSession(messages: SessionMessage[], agents: SessionAgent[] = []) {
       messages,
       agents,
     });
+    reindexSessionsById(st);
     st.activeSessionId = sid;
   });
   return sid;
@@ -286,6 +288,7 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
         tc.status = 'success';
         tc.output = '已完成真实输出';
       }
+      reindexSessionsById(st);
     });
 
     // 触发延迟 reject
@@ -326,6 +329,7 @@ describe('useChatApprovalHandlers 单个允许 / 拒绝动作', () => {
         tc.status = 'running';
         tc.output = '并发已执行';
       }
+      reindexSessionsById(st);
     });
 
     // 触发延迟 reject

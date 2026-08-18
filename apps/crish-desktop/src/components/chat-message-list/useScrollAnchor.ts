@@ -1,9 +1,6 @@
+import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useRef } from 'react';
 import styles from './ChatMessageList.module.css';
-import {
-  DEFAULT_RECENT_MESSAGE_COUNT,
-  expandedOlderForPinJump,
-} from '../../api/messageWindow';
 import type { SessionMessage } from '../../store/types';
 
 export function pinSnippet(text?: string, max = 72): string {
@@ -53,17 +50,13 @@ export interface UseScrollAnchorOptions {
    */
   sessionAllMessages: SessionMessage[];
   showAllMessages: boolean;
-  onShowToast: (message: string) => void;
-  setExpandedOlder: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export function useScrollAnchor({
   messages,
   sessionAllMessages,
   showAllMessages,
-  onShowToast,
-  setExpandedOlder,
-}: UseScrollAnchorOptions) {
+  }: UseScrollAnchorOptions) {
   // Refs keep jumpToPinned identity stable across stream token message array churn
   // so MessageVirtualizer memo is not busted every token (pin path only reads on click).
   const messagesRef = useRef(messages);
@@ -72,17 +65,14 @@ export function useScrollAnchor({
   allMessagesRef.current = sessionAllMessages;
   const showAllRef = useRef(showAllMessages);
   showAllRef.current = showAllMessages;
-  const onShowToastRef = useRef(onShowToast);
-  onShowToastRef.current = onShowToast;
-  const setExpandedOlderRef = useRef(setExpandedOlder);
-  setExpandedOlderRef.current = setExpandedOlder;
+  const onShowToastRef = useRef((m: string) => toast.show(m));
+  
 
   const jumpToPinned = useCallback((messageId: string) => {
     const display = messagesRef.current;
     const all = allMessagesRef.current;
     const showAll = showAllRef.current;
     const toast = onShowToastRef.current;
-    const setExpanded = setExpandedOlderRef.current;
 
     const idx = display.findIndex((m) => m.id === messageId);
     if (idx < 0 && showAll) {
@@ -97,22 +87,7 @@ export function useScrollAnchor({
       return;
     }
 
-    const raisePinWindow = (prev: number) =>
-      expandedOlderForPinJump(
-        listForPin,
-        messageId,
-        prev,
-        DEFAULT_RECENT_MESSAGE_COUNT
-      );
-
-    if (!showAll) {
-      setExpanded(raisePinWindow);
-    }
-
     scrollToMessageAfterPaint(messageId, () => {
-      if (!showAllRef.current) {
-        setExpandedOlderRef.current(raisePinWindow);
-      }
       window.setTimeout(() => {
         if (!scrollToMessage(messageId)) {
           onShowToastRef.current('未找到该固定消息');

@@ -12,8 +12,6 @@
  * **禁止** 把 Skeleton 常量改成 W5-B 冒充 Strict。
  */
 
-export { NotePaperPanel, type NotePaperPanelProps } from './NotePaperPanel';
-
 export {
   NotePaperStrictPanel,
   type NotePaperStrictPanelProps,
@@ -162,14 +160,6 @@ export {
   isEditorSurface,
   type EditorSurface,
 } from './editorSurface';
-
-export {
-  W5B_SKELETON_BOUNDARY,
-  W5B_SKELETON_PACKAGE_ID,
-  W5B_SKELETON_TRACK,
-  type W5bSkeletonPackageId,
-  type W5bSkeletonTrack,
-} from './notePaperSkeletonTrack';
 
 export {
   W5B_PRODUCT_DEFAULT_EMPTY_TRACK,

@@ -14,6 +14,7 @@ import React, { useCallback, useEffect, useRef, useState, useId } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { Tooltip } from '../Tooltip/Tooltip';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
+import { layerStackService } from '../internal/layer-stack/LayerStackManager';
 import styles from './Menu.module.css';
 import type { SelectOptionItem } from './types';
 
@@ -149,35 +150,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     },
     [isControlled, externalOnOpenChange]
   );
-
-  // WO-26: Anchor 模式下的 PointerId 追踪与 Drag-off 闭环
-  useEffect(() => {
-    if (!isOpen || !anchor?.current) return;
-    const anchorEl = anchor.current;
-    let trackedPointerId: number | null = null;
-
-    const handlePointerDown = (e: PointerEvent) => {
-      trackedPointerId = e.pointerId;
-    };
-
-    const handlePointerUp = (e: PointerEvent) => {
-      if (trackedPointerId !== null && e.pointerId === trackedPointerId) {
-        trackedPointerId = null;
-        const target = e.target as Node | null;
-        if (!anchorEl.contains(target)) {
-          handleOpenChange(false);
-        }
-      }
-    };
-
-    anchorEl.addEventListener('pointerdown', handlePointerDown);
-    window.addEventListener('pointerup', handlePointerUp, true);
-
-    return () => {
-      anchorEl.removeEventListener('pointerdown', handlePointerDown);
-      window.removeEventListener('pointerup', handlePointerUp, true);
-    };
-  }, [isOpen, anchor, handleOpenChange]);
 
   // F7 F2：ARIA menu 模式——打开时初始焦点落首个未禁用项。
   // 用 ref 缓存首项索引，effect 只在 open 转变时触发（避免父级重渲染
@@ -355,7 +327,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         .children;
     }
 
-    // React 19 安全克隆：优先通过 props.ref 访问，绝不直接读取 (actualTrigger as any).ref
     const clonedTrigger = React.isValidElement(actualTrigger)
       ? React.cloneElement(
           actualTrigger as React.ReactElement<Record<string, unknown>>,
@@ -380,28 +351,15 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
               }
             },
             onClick: (e: React.MouseEvent) => {
-              e.stopPropagation();
+              if (layerStackService.isWithinCooldown(50)) {
+                e.preventDefault();
+                return;
+              }
               (
                 (actualTrigger as React.ReactElement).props as {
                   onClick?: (e: React.MouseEvent) => void;
                 }
               )?.onClick?.(e);
-            },
-            onPointerDown: (e: React.PointerEvent) => {
-              e.stopPropagation();
-              (
-                (actualTrigger as React.ReactElement).props as {
-                  onPointerDown?: (e: React.PointerEvent) => void;
-                }
-              )?.onPointerDown?.(e);
-            },
-            onMouseDown: (e: React.MouseEvent) => {
-              e.stopPropagation();
-              (
-                (actualTrigger as React.ReactElement).props as {
-                  onMouseDown?: (e: React.MouseEvent) => void;
-                }
-              )?.onMouseDown?.(e);
             },
           }
         )
@@ -446,8 +404,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
           className={contentClasses}
           style={{ maxHeight: resolvedMaxHeight, ...contentStyle }}
           onKeyDown={handleKeyDown}
-          onMouseDown={(e) => e.stopPropagation()}
-          onPointerDown={(e) => e.stopPropagation()}
           onCloseAutoFocus={onCloseAutoFocus}
           onPointerDownOutside={(e) => {
             if (onPointerDownOutside) {
@@ -525,15 +481,12 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
                       .filter(Boolean)
                       .join(' ')}
                     onMouseEnter={() => setFocusedIndex(index)}
-                    onClick={(e) => {
-                      e.stopPropagation();
+                    onClick={() => {
                       if (opt.disabled) return;
                       opt.onClick?.();
                       onSelect?.(opt.id, opt);
                       handleOpenChange(false);
                     }}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onPointerDown={(e) => e.stopPropagation()}
                   >
                     {opt.icon != null ? (
                       <span className={styles.menuItemIcon} aria-hidden="true">

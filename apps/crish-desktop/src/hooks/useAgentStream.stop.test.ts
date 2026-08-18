@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { useAgentPanel } from './useAgentStream';
-import { useLayoutStore } from '../store/layoutStore';
+import { useSessionStore } from '../store/sessionStore';
 import { resetCompositionRoot } from '../app/compositionRoot';
 import { streamCollaboratorRun } from '../api/subagentApi';
 
@@ -37,7 +37,7 @@ const AGENT = 'agent-stop-1';
 const RUN = 'run-agent-stop-1';
 
 function seedRunningAgent() {
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     const agent = {
       id: AGENT,
       description: 'test agent',
@@ -132,7 +132,7 @@ describe('useAgentPanel stop L2/L3', () => {
       })
     );
 
-    const live = useLayoutStore
+    const live = useSessionStore
       .getState()
       .sessionsById?.[PARENT]?.agents?.find(
         (a: { id: string }) => a.id === AGENT
@@ -167,7 +167,7 @@ describe('useAgentPanel stop L2/L3', () => {
       })
     );
 
-    const live = useLayoutStore
+    const live = useSessionStore
       .getState()
       .sessionsById?.[PARENT]?.agents?.find(
         (a: { id: string }) => a.id === AGENT

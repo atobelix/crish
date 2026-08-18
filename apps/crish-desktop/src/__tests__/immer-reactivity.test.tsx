@@ -1,4 +1,4 @@
-// @vitest-environment jsdom
+﻿// @vitest-environment jsdom
 import { render, screen, waitFor } from '@testing-library/react';
 import { useRef, type ReactNode } from 'react';
 import React from 'react';
@@ -295,7 +295,7 @@ describe('Immer reactivity', () => {
       screen.getByTestId('render-count').textContent
     );
 
-    useLayoutStore.getState().addMessageToolCall(
+    useSessionStore.getState().addMessageToolCall(
       SESSION_ID,
       MSG_ID,
       makeTC(TC2_ID, { name: 'write_file' })
@@ -353,3 +353,5 @@ describe('Immer reactivity', () => {
     });
   });
 });
+
+import { useSessionStore } from '@/store/sessionStore';

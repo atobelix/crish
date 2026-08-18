@@ -1,13 +1,8 @@
 import type { CardState, CardGroupState } from '../types';
-
-const PANEL_TITLE_MAP: Record<string, string> = {
-  agent: '协作体', overview: '总览', files: '文件', preview: '预览',
-  diff: '变更', terminal: '终端', tasks: '任务', runtime: '运行',
-  chat: '对话', settings: '设置', plan: '计划',
-};
+import { viewRegistry } from '../../services/view-registry';
 
 export function getPanelTitle(cardId: string): string {
-  return PANEL_TITLE_MAP[cardId] || cardId;
+  return viewRegistry.getTitle(cardId);
 }
 
 export function resolveWorkspacePanelKey(key: string | null | undefined): string | null {
@@ -15,8 +10,6 @@ export function resolveWorkspacePanelKey(key: string | null | undefined): string
   const id = String(key).trim();
   if (!id) return null;
   if (id === 'settings' || id === 'runtime') return null;
-  if (id === 'browser') return 'preview';
-  if (id === 'plan') return 'tasks';
   return id;
 }
 

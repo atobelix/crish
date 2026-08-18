@@ -104,7 +104,7 @@ describe('getPanelTitle / resolveWorkspacePanelKey / makePanelCard', () => {
   });
 
   it('makePanelCard / makePanelGroup carry titles', () => {
-    expect(makePanelCard('diff')).toEqual({ id: 'diff', title: '变更' });
+    expect(makePanelCard('diff')).toEqual({ id: 'diff', title: '差异' });
     const g = makePanelGroup('files', 'ws-1', { groupId: 'g1', heightRatio: 0.5 });
     expect(g.id).toBe('g1');
     expect(g.activeCardId).toBe('files');

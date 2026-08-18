@@ -10,7 +10,8 @@
  */
 
 import type { LayoutLeaf, LayoutNode, LayoutTree } from './types';
-import { createLeaf, isBranch, isChatDomain, isLeaf } from './types';
+import { createLeaf, isBranch, isLeaf } from './types';
+import { viewRegistry } from '../../services/view-registry';
 import {
   collectLeaves,
   findParent,
@@ -22,7 +23,7 @@ import {
 
 /** 子树是否完全处于功能区（无 chat leaf） */
 function isToolDomainSubtree(node: LayoutNode): boolean {
-  if (isLeaf(node)) return !isChatDomain(node.panelId);
+  if (isLeaf(node)) return !viewRegistry.isPrimary(node.panelId);
   return (
     isToolDomainSubtree(node.children[0]) &&
     isToolDomainSubtree(node.children[1])
@@ -33,12 +34,12 @@ function isToolDomainSubtree(node: LayoutNode): boolean {
 
 /** 所有 chat 域叶子 */
 export function listChatLeaves(root: LayoutNode): LayoutLeaf[] {
-  return collectLeaves(root).filter((l) => isChatDomain(l.panelId));
+  return collectLeaves(root).filter((l) => viewRegistry.isPrimary(l.panelId));
 }
 
 /** 所有功能区叶子（非 chat） */
 export function listToolLeaves(root: LayoutNode): LayoutLeaf[] {
-  return collectLeaves(root).filter((l) => !isChatDomain(l.panelId));
+  return collectLeaves(root).filter((l) => !viewRegistry.isPrimary(l.panelId));
 }
 
 /**

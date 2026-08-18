@@ -20,7 +20,7 @@
   font-size: var(
     --font-size-base,
     14px
-  ) !important; /* locked explicitly to 14px */
+  ); /* locked explicitly to 14px */
   font-weight: var(--font-weight-medium);
   padding: 0 8px; /* Internal padding set to 8px so icons start exactly at 10px + 8px = 18px from left */
   border-radius: var(--radius-xl);
@@ -70,17 +70,17 @@
 .navItem input[type='search'] {
   flex: 1 1 auto;
   min-width: 0;
-  border: none !important;
-  outline: none !important;
-  background: transparent !important;
+  border: none;
+  outline: none;
+  background: transparent;
   font: inherit;
-  font-size: var(--font-size-base) !important;
-  color: var(--text-primary) !important;
-  padding: 0 !important;
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+  padding: 0;
 }
 
 .navItem input[type='search']::placeholder {
-  color: var(--text-secondary) !important;
+  color: var(--text-secondary);
   opacity: 0.9;
 }
 
@@ -89,11 +89,11 @@
 .navItem input[type='search']::-webkit-search-results-decoration {
   -webkit-appearance: none;
   appearance: none;
-  display: none !important;
+  display: none;
 }
 
-/* R2-6：navItem 迁移 ui/Button 后回补侧栏导航行观感
- * （Button 默认 inline-flex center / ghost 收窄 / ghost 色板，特异度提升以压过原子层规则） */
+/* R2-6 navItem    ui/Button           
+ *  Button    inline-flex center / ghost    / ghost                   */
 .navItem:not(.isActive) {
   justify-content: flex-start;
   width: 100%;

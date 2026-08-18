@@ -92,16 +92,6 @@ export interface TreeDragSource {
   panelId: string;
 }
 
-/** 判定指定 panelId / tabId 是否属于对话域 */
-export function isChatDomain(panelId: string): boolean {
-  return panelId === 'chat';
-}
-
-/** 判定两个 panel 是否属于同域（对话域只能与对话域拖拽，功能区只能与功能区拖拽） */
-export function isSameDomain(panelId1: string, panelId2: string): boolean {
-  return isChatDomain(panelId1) === isChatDomain(panelId2);
-}
-
 // ── 业务常量（单一来源，禁止在其它文件硬编码） ──────────────────────
 
 /** splitRatio 最小值（branch 第一个 child 占比下限） */

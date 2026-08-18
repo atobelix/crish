@@ -21,7 +21,6 @@ import { eventBus } from '../services/EventBus';
 import { useLayoutStore } from '../store/layoutStore';
 import { useSessionStore } from '../store/sessionStore';
 import { DiffCard } from '../components/diff/DiffCard';
-import { CardPanel } from '../components/CardPanel';
 import { MessageVirtualizer } from '../components/chat-message-list/MessageVirtualizer';
 import {
   subscribeSearchQuery,
@@ -136,7 +135,7 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
     expect(finalListenerCount - initialListenerCount).toBe(0);
   });
 
-  it('Zustand Store 监听器零遗留：CardPanel & DiffCard 挂载/卸载 50 次，Subscribe 订阅完全收回', () => {
+  it('Zustand Store 监听器零遗留：DiffCard 挂载/卸载 50 次，Subscribe 订阅完全收回', () => {
     const unsubCalls: Array<() => void> = [];
     let activeSubscriptions = 0;
 
@@ -158,13 +157,13 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
 
     const baselineActive = activeSubscriptions;
 
-    // 频发 50 次挂载与卸载 CardPanel & DiffCard
+    // 频发 50 次挂载与卸载 DiffCard
     for (let i = 0; i < 50; i++) {
       const { unmount } = render(
-        <CardPanel
-          wsId="ws-mem-1"
-          colIdx={0}
-          groupIdx={0}
+        <DiffCard
+          diffFiles={[]}
+          activeDiffSource={null}
+          onSelectDiff={vi.fn()}
           onShowToast={vi.fn()}
         />
       );
@@ -190,19 +189,6 @@ describe('内存泄露断言 (Memory Leak Assertions)', () => {
 
     const messageVirtualizerProps = {
       messages: mockMessages,
-      visibleMessages: mockMessages,
-      messageWindow: {
-        startIndex: 0,
-        hiddenCount: 0,
-        visibleCount: 1,
-        totalCount: 1,
-        hasOlder: false,
-        effectiveExpanded: 0,
-      },
-      olderStep: 20,
-      offerShowAllOlder: false,
-      expandOlderStep: vi.fn(),
-      expandOlderAll: vi.fn(),
       pinnedItems: [],
       pinsOpen: false,
       setPinsOpen: vi.fn(),

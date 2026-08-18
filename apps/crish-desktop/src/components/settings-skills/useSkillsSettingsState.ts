@@ -1,3 +1,4 @@
+import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addExtraSkillDir,
@@ -73,7 +74,7 @@ export function skillSlashCmd(name: string): string {
   return `/skill:${slug || name.trim()}`;
 }
 
-export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
+export function useSkillsSettingsState() {
   const [listState, setListState] = useState<{
     skills: DesktopSkill[];
     loading: boolean;
@@ -382,12 +383,12 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
       } catch (e) {
         const msg = `扫描技能失败：${errText(e)}`;
         setLoadError(msg);
-        onShowToast?.(msg);
+        toast.show(msg);
       } finally {
         setLoading(false);
       }
     },
-    [onShowToast, resolveDiscoverWorkspace]
+    [resolveDiscoverWorkspace]
   );
 
   const applyDiscoverImport = async (mode: 'selected' | 'all' | 'skip') => {
@@ -420,7 +421,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
       setDiscoverCandidates(null);
       await refresh();
       if (fail > 0) {
-        onShowToast?.(
+        toast.show(
           fail === targets.length
             ? `导入失败：全部 ${fail} 个未能启用`
             : `导入部分失败：${fail}/${targets.length}`
@@ -532,10 +533,10 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
       );
       invalidateSkillSlashCache();
       if (!r.engineSynced) {
-        onShowToast?.(formatEngineDegradeToast(r.error));
+        toast.show(formatEngineDegradeToast(r.error));
       }
     } catch (e) {
-      onShowToast?.(`更新失败：${errText(e)}`);
+      toast.show(`更新失败：${errText(e)}`);
     } finally {
       setBusyId(null);
     }
@@ -569,7 +570,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
       }
       invalidateSkillSlashCache();
       if (fail > 0) {
-        onShowToast?.(
+        toast.show(
           fail === targets.length
             ? `${label}失败：全部 ${fail} 个`
             : `${label}部分失败：${fail}/${targets.length}`
@@ -586,14 +587,14 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
     try {
       const r = await syncSkillsToDaemon(skills);
       if (r.fail > 0) {
-        onShowToast?.(
+        toast.show(
           r.ok === 0
             ? `同步失败：全部 ${r.fail} 个`
             : `同步部分失败：${r.fail}/${r.ok + r.fail}`
         );
       }
     } catch (e) {
-      onShowToast?.(`同步失败：${errText(e)}`);
+      toast.show(`同步失败：${errText(e)}`);
     } finally {
       setSyncBusy(false);
     }
@@ -608,7 +609,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
       setExtraDirs(getExtraSkillDirs());
       void refresh();
     } catch (e) {
-      onShowToast?.(`添加目录失败：${errText(e)}`);
+      toast.show(`添加目录失败：${errText(e)}`);
     }
   };
 
@@ -618,7 +619,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
       if (!dir) return;
       commitExtraDir(dir);
     } catch (e) {
-      onShowToast?.(`选择目录失败：${errText(e)}`);
+      toast.show(`选择目录失败：${errText(e)}`);
     }
   };
 
@@ -628,7 +629,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
       setExtraDirs(getExtraSkillDirs());
       void refresh();
     } catch (e) {
-      onShowToast?.(`移除目录失败：${errText(e)}`);
+      toast.show(`移除目录失败：${errText(e)}`);
     }
   };
 
@@ -642,7 +643,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
         workspacePath: getWorkspacePath(),
       });
       if (r.ok === false) {
-        onShowToast?.(r.error || '创建技能失败');
+        toast.show(r.error || '创建技能失败');
         return;
       }
       const slug = createName
@@ -657,7 +658,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
       await refresh();
       setSelectedId(selectId);
     } catch (e) {
-      onShowToast?.(`创建技能失败：${errText(e)}`);
+      toast.show(`创建技能失败：${errText(e)}`);
     } finally {
       setCreateBusy(false);
     }
@@ -672,7 +673,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
       setExtraOpen(true);
       await refresh();
     } catch (e) {
-      onShowToast?.(`导入失败：${errText(e)}`);
+      toast.show(`导入失败：${errText(e)}`);
     }
   };
 
@@ -694,7 +695,7 @@ export function useSkillsSettingsState(onShowToast?: (msg: string) => void) {
     try {
       await navigator.clipboard.writeText(cmd);
     } catch {
-      onShowToast?.('复制失败');
+      toast.show('复制失败');
     }
   };
 

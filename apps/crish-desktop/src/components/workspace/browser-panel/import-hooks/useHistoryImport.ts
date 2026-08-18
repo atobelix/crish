@@ -16,19 +16,17 @@ import {
   type ImportedBookmarkRow,
   type ImportedHistoryRow,
 } from '../../../../api/browserImportApi';
-import type { ShowToastFn } from '../../../../hooks/useToastQueue';
+import { toast } from '../../../../services/toast/ToastContext';
 import { resultMessage, type BusyKind } from './browserImportShared';
 
 export interface UseHistoryImportOptions {
   busy: BusyKind;
   setBusy: Dispatch<SetStateAction<BusyKind>>;
-  onShowToast: ShowToastFn;
 }
 
 export function useHistoryImport({
   busy,
   setBusy,
-  onShowToast,
 }: UseHistoryImportOptions) {
   // ── 历史导入 ──
   const [historyPath, setHistoryPath] = useState('');
@@ -41,9 +39,9 @@ export function useHistoryImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setHistoryError(full);
-      onShowToast(full);
+      toast.show(full);
     },
-    [onShowToast]
+    []
   );
 
   const runHistoryImport = async () => {
@@ -75,9 +73,9 @@ export function useHistoryImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setListError(full);
-      onShowToast(full);
+      toast.show(full);
     },
-    [onShowToast]
+    []
   );
 
   const loadList = async (tab: 'bookmarks' | 'history') => {

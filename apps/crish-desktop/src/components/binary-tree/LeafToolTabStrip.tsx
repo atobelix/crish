@@ -21,18 +21,9 @@ import {
   openToolInSession,
   openToolInActiveTab,
 } from '../../store/storeAccess';
-import { Button, TabStrip, Tooltip, Menu } from '../ui';
+import { IconButton, TabStrip, Tooltip, Menu } from '../ui';
+import { viewRegistry } from '../../services/view-registry';
 import styles from './LeafToolTabStrip.module.css';
-
-const PANEL_LABELS: Record<string, string> = {
-  overview: '总览',
-  files: '文件',
-  diff: '差异',
-  terminal: '终端',
-  preview: '预览',
-  runtime: '运行时',
-  agent: '协作体',
-};
 
 export interface LeafToolTabStripProps {
   leaf: LayoutLeaf;
@@ -56,8 +47,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     );
 
     const handleClose = useCallback(
-      (e: React.MouseEvent | React.KeyboardEvent, tabId: string) => {
-        e.stopPropagation();
+      (_e: React.MouseEvent | React.KeyboardEvent, tabId: string) => {
         removeTabFromLeaf(leaf.id, tabId);
       },
       [leaf.id, removeTabFromLeaf]
@@ -87,16 +77,13 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     // 单 tab 或无 tab 时不渲染标签栏（已调整为无 tabs 时才不渲染，以保证加号可用）
     if (tabs.length === 0) return null;
 
-    const availablePanels = Object.keys(PANEL_LABELS).filter(
-      (pid) => !tabs.includes(pid)
-    );
+    const availablePanels = viewRegistry
+      .getToolViews()
+      .map((v) => v.id)
+      .filter((pid) => !tabs.includes(pid));
 
     const labelOf = (tabId: string) => {
-      if (tabId.startsWith('file-viewer:')) {
-        const filePath = tabId.substring('file-viewer:'.length);
-        return filePath.replace(/^.*[\\/]/, '') || filePath;
-      }
-      return PANEL_LABELS[tabId] || tabId;
+      return viewRegistry.getTitle(tabId);
     };
 
     const showCloseBtn = tabs.length > 1;
@@ -124,16 +111,15 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
               <span className={styles.tabLabel}>{label}</span>
               {showCloseBtn ? (
                 <Tooltip content={`关闭 ${label}`}>
-                  <button
-                    type="button"
+                  <IconButton
+                    size="xs"
+                    variant="ghost"
                     className={styles.tabClose}
                     tabIndex={-1}
                     aria-label={`关闭 ${label}`}
                     onClick={(e) => handleClose(e, tab.id)}
-                    onPointerDown={(e) => e.stopPropagation()}
-                  >
-                    <X size={12} strokeWidth={2} aria-hidden />
-                  </button>
+                    icon={<X size={12} strokeWidth={2} />}
+                  />
                 </Tooltip>
               ) : null}
             </>
@@ -149,38 +135,35 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                   side="bottom"
                   sideOffset={4}
                   trigger={
-                    <Button
+                    <IconButton
                       type="button"
                       variant="ghost"
-                      size="sm"
+                      size="xs"
                       className={styles.addTabBtn}
                       aria-label="添加功能面板"
                       icon={<Plus size={14} />}
                     />
                   }
-                  options={availablePanels.map((pid) => ({
-                    id: pid,
-                    label: PANEL_LABELS[pid] || pid,
-                    onClick: () => openPanel(pid),
-                  }))}
+                  options={availablePanels.map((pid) => {
+                    const Icon = viewRegistry.getIcon(pid);
+                    return {
+                      id: pid,
+                      label: viewRegistry.getTitle(pid),
+                      icon: Icon ? <Icon size={14} /> : undefined,
+                      onClick: () => openPanel(pid),
+                    };
+                  })}
                 />
               </div>
             )}
 
             {/* 展开状态下的侧栏关闭按钮，常驻最右侧 */}
-            <div
-              style={{
-                marginLeft: 'auto',
-                display: 'flex',
-                alignItems: 'center',
-                paddingRight: '4px',
-              }}
-            >
+            <div className={styles.trailingActions}>
               <Tooltip content="收起右侧面板">
-                <Button
+                <IconButton
                   type="button"
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   className={styles.addTabBtn}
                   onClick={handleCollapseDock}
                   aria-label="收起右侧面板"

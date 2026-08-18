@@ -178,7 +178,6 @@ const SURF03_SCAN_DIRS: string[] = [
 const SURF03_SCAN_FILES: string[] = [
   'hooks/useChatStream.ts',
   'hooks/useAgentStream.ts',
-  'hooks/useChatAutoScroll.ts',
   'hooks/useChatPanelSync.ts',
   'hooks/useAgentToolApproval.ts',
   'api/chatApi.ts',
@@ -189,7 +188,6 @@ const SURF03_SCAN_FILES: string[] = [
   'api/StreamRenderBuffer.ts',
   'api/streamTextBatcher.ts',
   'api/streamStop.ts',
-  'api/messageWindow.ts',
 ];
 
 /**

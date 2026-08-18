@@ -36,8 +36,8 @@ export type NotePaperStrictBodyProps = {
   /** 是否渲染 React 全量 content-row（react-rows | debug-dual） */
   renderReactRows: boolean;
   chrome: BlockChromeModel;
-  onHover: (blockId: string | null) => void;
-  onFocus: (blockId: string | null) => void;
+  onHover?: (blockId: string | null) => void;
+  onFocus?: (blockId: string | null) => void;
   /** CONN-D3：MD 前缀写锥（无 → 叶 disabled 静态） */
   turnIntoSink?: TurnIntoSink;
   mdPrefixWriteMode?: ProductMdPrefixWriteMode;
@@ -57,26 +57,32 @@ export type NotePaperStrictBodyProps = {
 /**
  * loading / error / empty / ready(content-row) + children 槽。
  */
-export const NotePaperStrictBody: React.FC<NotePaperStrictBodyProps> = ({
-  status,
-  errorReason,
-  errorCode,
-  blocks,
-  renderReactRows,
-  chrome,
-  onHover,
-  onFocus,
-  turnIntoSink,
-  mdPrefixWriteMode,
-  mdPrefixSinkSource,
-  mdPrefixBinding,
-  onMdPrefixCommit,
-  onMdPrefixCommittedIntent,
-  baseRev,
-  children,
-}) => {
+export const NotePaperStrictBody = React.forwardRef<
+  HTMLDivElement,
+  NotePaperStrictBodyProps
+>(function NotePaperStrictBody(
+  {
+    status,
+    errorReason,
+    errorCode,
+    blocks,
+    renderReactRows,
+    chrome,
+    onHover: _onHover,
+    onFocus: _onFocus,
+    turnIntoSink,
+    mdPrefixWriteMode,
+    mdPrefixSinkSource,
+    mdPrefixBinding,
+    onMdPrefixCommit,
+    onMdPrefixCommittedIntent,
+    baseRev,
+    children,
+  },
+  ref
+) {
   return (
-    <div className={styles.body} data-testid="note-paper-strict-body">
+    <div ref={ref} className={styles.body} data-testid="note-paper-strict-body">
       <div className={styles.readingColumn}>
         {status === 'loading' ? (
           <div
@@ -137,10 +143,6 @@ export const NotePaperStrictBody: React.FC<NotePaperStrictBodyProps> = ({
                   }
                   data-testid={`note-strict-block-${block.id}`}
                   tabIndex={0}
-                  onMouseEnter={() => onHover(block.id)}
-                  onMouseLeave={() => onHover(null)}
-                  onFocus={() => onFocus(block.id)}
-                  onBlur={() => onFocus(null)}
                 >
                   <span
                     className={styles.handle}
@@ -174,6 +176,6 @@ export const NotePaperStrictBody: React.FC<NotePaperStrictBodyProps> = ({
       </div>
     </div>
   );
-};
+});
 
 export default NotePaperStrictBody;

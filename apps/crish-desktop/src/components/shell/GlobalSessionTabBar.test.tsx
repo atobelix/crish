@@ -118,4 +118,42 @@ describe('GlobalSessionTabBar', () => {
     fireEvent.click(main!);
     expect(useWorkspaceShellStore.getState().activeTabId).toBe('tab-b');
   });
+
+  it('pinned tabs render with 56px lock contract, pin icon and no close button', () => {
+    useWorkspaceShellStore.setState({
+      openTabs: [
+        {
+          tabId: 'tab-pinned',
+          kind: 'conversation',
+          sessionId: 'sess-pinned',
+          workspaceKey: GENERAL_FOLDER,
+          title: '固定会话',
+          rightDock: dock(),
+          pinned: true,
+        },
+        {
+          tabId: 'tab-normal',
+          kind: 'conversation',
+          sessionId: 'sess-normal',
+          workspaceKey: GENERAL_FOLDER,
+          title: '普通会话',
+          rightDock: dock(),
+        },
+      ],
+      activeTabId: 'tab-pinned',
+      shellReady: true,
+    });
+
+    const { getAllByTestId } = render(<GlobalSessionTabBar />);
+    const tabs = getAllByTestId('global-session-tab');
+    expect(tabs).toHaveLength(2);
+
+    const pinnedTab = tabs[0]!;
+    expect(pinnedTab.getAttribute('data-pinned')).toBe('true');
+    expect(pinnedTab.className).toMatch(/isPinned/);
+    // Pinned tab has only the main button (no close button)
+    const buttons = pinnedTab.querySelectorAll('button');
+    expect(buttons).toHaveLength(1);
+    expect(pinnedTab.querySelector('svg')).toBeTruthy(); // Pin icon
+  });
 });

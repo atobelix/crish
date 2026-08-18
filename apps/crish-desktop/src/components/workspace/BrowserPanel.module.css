@@ -190,7 +190,7 @@
   }
 }
 
-/* ── P1-B1 帧流舞台（canvas 渲染 + 输入层 + 指示条） ─────────────────── */
+/*    P1-B1      canvas    +     +                          */
 
 .frameStageWrap {
   position: relative;
@@ -240,7 +240,7 @@
   pointer-events: none;
 }
 
-/* 输入层：覆盖画布（z-index 高于 canvas 低于指示条，12 §3.1） */
+/*          z-index    canvas       12  3.1  */
 .inputLayer {
   position: absolute;
   inset: 0;
@@ -286,7 +286,7 @@
   animation: spinKeyframe 0.8s linear infinite;
 }
 
-/* ── P1-B2 指示条 / 接管层（12 §5：z-index 高于输入层） ────────────────── */
+/*    P1-B2     /     12  5 z-index                           */
 
 .indicatorBar {
   position: absolute;
@@ -364,7 +364,7 @@
   border-color: var(--border-color);
 }
 
-/* ── P1-B2 IME 隐藏输入框桥（12 §3.7：1px 隐形但可聚焦可接收 IME） ───── */
+/*    P1-B2 IME        12  3.7 1px           IME        */
 
 .imeBridge {
   position: absolute;
@@ -379,7 +379,7 @@
   font-size: 1px;
   caret-color: transparent;
   outline: none;
-  /* 不拦截鼠标（点击落向输入层）；程序化聚焦与 IME 会话不受影响 */
+  /*                       IME        */
   pointer-events: none;
   z-index: 2;
 }

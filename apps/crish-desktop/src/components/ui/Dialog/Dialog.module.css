@@ -1,14 +1,14 @@
-/* ui/Dialog 私有形态样式（PE-05 T05.1.3）
- * 全部引用 tokens.css / z-index.css 变量，无裸 hex/rgba；
- * 进出场动画由 --transition-modal-enter / --duration-exit 驱动 */
+/* ui/Dialog        PE-05 T05.1.3 
+ *      tokens.css / z-index.css       hex/rgba 
+ *        --transition-modal-enter / --duration-exit    */
 
-/* 遮罩 + 面板的绝对定位壳（铺满视口）
- * 消费方可经 overlayClassName 设 --dialog-z 覆盖层级（SettingsPanel/Cheatsheet 等） */
+/*    +               
+ *       overlayClassName   --dialog-z      SettingsPanel/Cheatsheet    */
 .overlayEnter,
 .overlayExit {
   position: fixed;
   inset: 0;
-  z-index: var(--dialog-z, var(--z-modal-backdrop));
+  z-index: var(--dialog-z, var(--z-modal));
 }
 
 .backdrop {
@@ -28,12 +28,12 @@
   max-height: calc(100vh - var(--space-8));
   background: var(--bg-elevated);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-2xl);
+  border-radius: var(--radius-xl, 12px);
   box-shadow: var(--shadow-2xl);
   outline: none;
 }
 
-/* 尺寸档（消费方可经 className 设 --dialog-width 精确覆盖宽度） */
+/*           className   --dialog-width         */
 .dialogSm {
   width: var(--dialog-width, 320px);
 }
@@ -46,23 +46,31 @@
   width: var(--dialog-width, 640px);
 }
 
-/* 全屏盖层形态（SettingsPanel 消费）：面板铺满视口，
- * 取消居中位移/尺寸档/圆角/阴影/描边；背景与设置页一致 */
+/*        SettingsPanel            
+ *       /   /  /  /            */
 .dialogFullscreen {
   top: 0;
   left: 0;
   transform: none;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  max-height: none;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
   border: none;
   border-radius: 0;
   box-shadow: none;
   background: var(--bg-primary);
+  padding: 0;
 }
 
-/* 进出场动画（与 --transition-modal-enter/exit 对齐） */
+.dialogFullscreen .dialogBody {
+  padding: 0;
+  overflow: visible;
+  width: 100%;
+  height: 100%;
+}
+
+/*         --transition-modal-enter/exit     */
 .dialogEnter {
   animation: dialog-enter var(--transition-modal-enter) forwards;
   transform-origin: center center;
@@ -160,7 +168,8 @@
 
 .dialogClose:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .dialogDescription {

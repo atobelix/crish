@@ -1,0 +1,35 @@
+.controlsGroup {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  margin-left: var(--space-1, 4px);
+  -webkit-app-region: no-drag;
+}
+
+.winBtn {
+  width: 32px;
+  height: 28px;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background-color var(--transition-micro, 100ms ease-out),
+              color var(--transition-micro, 100ms ease-out);
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
+}
+
+.winBtn:hover {
+  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
+  color: var(--text-primary);
+}
+
+.closeBtn:hover {
+  background: #e81123; /* Windows Fluent        */
+  color: #ffffff;
+}

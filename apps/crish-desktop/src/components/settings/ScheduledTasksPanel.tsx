@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 主对话区 · 定时任务：与设置页同源 workflow API，嵌入 chat-doc-flow 展示。
  * 壳组件：只保留头部 + 预设行 + 表单/列表/运行历史装配；共享状态与动作
@@ -24,12 +25,12 @@ import { WorkflowList } from './WorkflowList';
 import { RunHistoryList } from './RunHistoryList';
 
 type Props = {
-  onShowToast: (msg: string) => void;
   onBackToChat: () => void;
 };
 
-export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat }) => {
-  const state = useWorkflowsState({ surface: 'chat', onShowToast });
+export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
+  const { showToast: _showToast } = useToast();
+  const state = useWorkflowsState({ surface: 'chat' });
   const {
     workflows,
     runs,
@@ -69,7 +70,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onShowToast, onBackToChat
   const openRunSession = (run: WorkflowRunEntry) => {
     if (!run.sessionId) {
       // 无会话：错误路径，可 toast
-      onShowToast('该次运行暂无关联会话');
+      showToast('该次运行暂无关联会话');
       return;
     }
     const wfName = workflows.find((w) => w.id === run.workflowId)?.name || '任务';

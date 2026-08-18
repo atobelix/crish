@@ -51,12 +51,12 @@
   gap: var(--space-2);
 }
 
-/* 全文编辑弹窗（PE-05 T05.2 #7）
- * 原全局 settings-dialog 类实现替换为 ui/Dialog 基座；
- * 本文件保留宽度/正文/层级私有形态，全引用 tokens */
+/*        PE-05 T05.2 #7 
+ *     settings-dialog        ui/Dialog    
+ *        /  /           tokens */
 
 .rulesEditorOverlay {
-  --dialog-z: var(--z-settings-dialog);
+  --dialog-z: var(--z-modal);
 }
 
 .rulesEditorDialog {

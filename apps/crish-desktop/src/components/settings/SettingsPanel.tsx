@@ -1,4 +1,4 @@
-import React, {
+﻿import React, {
   useState,
   useEffect,
   useRef,
@@ -8,7 +8,7 @@ import React, {
   Suspense,
 } from 'react';
 import styles from './SettingsPanel.module.css';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useLayoutStore, useSettingsUiStore } from '../../store/storeAccess';
 import {
   getCachedCapabilities,
   refreshProductCapabilities,
@@ -24,7 +24,7 @@ import {
 } from '../settingsTabsMeta';
 import { useSettingsNav } from '../useSettingsNav';
 import { SettingsSidebar } from './SettingsSidebar';
-import { SettingsWindowControls } from '../SettingsWindowControls';
+import { WindowControls } from '../shell/WindowControls';
 
 /** 设置 tab 懒加载：按需加载，首屏只加载当前激活 tab */
 const ModelsSettingsTab = lazy(() =>
@@ -85,8 +85,7 @@ const StatusDiagnosticsPanel = lazy(() =>
 );
 
 type TabComponentProps = {
-  onShowToast: (msg: string, onUndo?: () => void) => void;
-  onBlockingOverlayChange?: (open: boolean) => void;
+  _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
 const TAB_COMPONENTS: Record<
@@ -125,7 +124,6 @@ export type { SettingsTabType };
 
 interface SettingsPanelProps {
   wsId?: string;
-  onShowToast: (msg: string, onUndo?: () => void) => void;
   onClose?: () => void;
   initialTab?: SettingsTabType;
   isOpen?: boolean;
@@ -137,12 +135,13 @@ interface SettingsPanelProps {
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   isOpen,
   wsId: _wsId,
-  onShowToast,
   onClose,
   initialTab,
 }) => {
-  const storeTab = useLayoutStore((s) => s.settingsActiveTab);
-  const setSettingsActiveTab = useLayoutStore((s) => s.setSettingsActiveTab);
+  const storeTab = useSettingsUiStore((s) => s.settingsActiveTab);
+  const setSettingsActiveTab = useSettingsUiStore(
+    (s) => s.setSettingsActiveTab
+  );
   const [mcpAvailable, setMcpAvailable] = useState(false);
   const [rulesModalOpen, setRulesModalOpen] = useState(false);
   const [navFocusId, setNavFocusId] = useState<TabType | null>(null);
@@ -264,11 +263,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
         onWheel={handleRootWheel}
       >
         <header
-          className={`${styles.coverHeader} ${styles.coverHeaderSlim}`}
+          className={styles.coverHeader}
           data-tauri-drag-region
         >
           <div className={styles.coverHeaderSpacer} data-tauri-drag-region />
-          <SettingsWindowControls onClose={onClose} />
+          <WindowControls onClose={onClose} />
         </header>
 
         <div className={styles.coverBody} data-density="compact">
@@ -291,7 +290,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             onTablistKeyDown={nav.onTablistKeyDown}
             onSelect={selectTab}
             onFocusTab={setNavFocusId}
-            onShowToast={onShowToast}
+            
           />
 
           <div
@@ -317,9 +316,9 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 title="设置页面出错"
               >
                 <ActiveTabComponent
-                  onShowToast={onShowToast}
+                  
                   {...(safeActiveTab === 'rules'
-                    ? { onBlockingOverlayChange: setRulesModalOpen }
+                    ? { _onBlockingOverlayChange: setRulesModalOpen }
                     : {})}
                 />
               </AppErrorBoundary>

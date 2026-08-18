@@ -7,7 +7,7 @@
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
-  /* 缂備焦鍔曠€氼亪寮查崼鏇炲唨闊洦鏌ㄩ惁濠氭⒒閸稑鐏繝銏☆焽閳ь剛顢婃慨銈夊极閸︻厸鍋撻棃娑欘棞閻庤濞婇弫宥囦沪缁涘娈搁敓?preview-browser container */
+  /*                                                           ?preview-browser container */
   container-type: inline-size;
   container-name: filesCard;
   box-sizing: border-box;
@@ -32,7 +32,7 @@
   user-select: none;
 }
 
-/* 閿?2 闁荤偞绋戦惌澶屾閹殿喒鍋撴担鍐棈閿?+ 闁荤姳璀﹂崹鎵閻愬鈻旈柍褜鍓氶幏鍛村箼閸曨厼鑰块柣搴ㄦ涧濡鈧懓纾埀顒勬涧缂嶅﹦绱?card-header / control-height-sm */
+/* ?2                 ?+                                         ?card-header / control-height-sm */
 .filesBar {
   display: flex;
   align-items: center;
@@ -78,7 +78,7 @@
   height: var(--control-height-sm);
 }
 
-/* 闂佸搫鍊稿ú锝呪枎閵忋垻涓嶉柨娑樺閸婄偤鏌涢敐搴ｅ帨缂佸彉鍗冲Λ鍐閻樿尙妯侀柣蹇曞仦閸ㄥ磭鎷归悢鑲╁祦闁规儼濮ゅ銊╂煛閸屾碍澶勬繝鈧导瀛樻櫖婵炴垶锚鐠佽尙鈧鍠氶幊鎾诲吹椤撶姳娌柛灞剧矒閻涙捇鏌ｉ埡濠傛灈缂傚秴绉瑰畷姘旈崟鈹惧亾?*/
+/*                                                                                                                 ?*/
 .filesCrumbs {
   flex: 1;
   min-width: 0;
@@ -174,7 +174,7 @@
 
 .filesSegBtn.isOn {
   color: var(--text-primary);
-  background: var(--tint-hover) !important;
+  background: var(--tint-hover);
 }
 
 .filesLoadMore {
@@ -324,7 +324,7 @@
   margin: 0 1px;
 }
 
-/* 闂傚倸鐗勯崹鍦偓鍨焽娴狅箓骞嬪┑鍫熷嬀缂備胶瀚忛崒婊呮啴闂佺懓鍢查¨鈧紒杈ㄥ缁潧鈽夐埗鈺佷壕?+ 闂佺儵鏅╅崰鏍礊?闂佸搫鍊稿ú锝呪枎閵忋倕绀嗘俊銈呭閿?*/
+/*                                             ?+         ?                 ?*/
 .filesBcFlyout {
   position: absolute;
   top: calc(100% + 6px);
@@ -492,7 +492,7 @@
   background: var(--bg-hover);
 }
 
-/* 閿?3 闁荤偞绋戦惌澶屾閹殿喗瀚氶柨鏃囨閸撴澘鈽夐幘绛规缂佹鎳樺顒勫炊妞嬪海顦╃紓浣圭槺閸愩劍顏ラ敓?*/
+/* ?3                                               ?*/
 .filesContextBar {
   display: flex;
   align-items: center;
@@ -541,7 +541,7 @@
   padding: 0 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  background: transparent !important;
+  background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-xs);
   font-family: inherit;
@@ -550,7 +550,7 @@
 }
 
 .filesSoftBtn:hover:not(:disabled) {
-  background: var(--bg-hover) !important;
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -560,14 +560,14 @@
 }
 
 .filesSoftBtnEmphasis {
-  background: var(--tint-hover) !important;
+  background: var(--tint-hover);
   border-color: var(--border-color);
   color: var(--text-primary);
   font-weight: var(--font-weight-normal);
 }
 
 .filesSoftBtnEmphasis:hover:not(:disabled) {
-  background: var(--bg-hover) !important;
+  background: var(--bg-hover);
 }
 
 .filesBody {
@@ -606,9 +606,9 @@
   overflow: hidden;
 }
 
-/* 窄屏或分屏模式 (宽度 <= 440px)：单栏流式自适应切换 */
+/*         (   <= 440px)           */
 @container filesCard (max-width: 440px) {
-  /* 浏览状态：全宽显示文件树，隐藏详情区 */
+  /*                    */
   .filesBodySplit[data-mode='browse'] .filesListPane {
     flex: 1 1 100%;
     max-width: 100%;
@@ -619,7 +619,7 @@
     display: none;
   }
 
-  /* 详情状态：全宽显示代码预览与编辑，隐藏文件树 */
+  /*                        */
   .filesBodySplit[data-mode='detail'] .filesListPane {
     display: none;
   }
@@ -630,14 +630,14 @@
   }
 }
 
-/* 闂佺懓鐏氶幐鍝ユ閹达箑妫橀柣鐔稿绾偓闂佺厧鐤囧▔娑樷枖椤撱垺鏅慨妯哄鐢盯鎮规担闈涒偓鏍ㄦ櫠閿曗偓椤曪綁鍩€?+ 婵炴垶鎸搁鍡樺垔濞差亜绠ユい鎰╁灩閻撳倿鏌ｉ妸銉ヮ仼缂併劍鐓￠敓?*/
+/*                                                    ?+                                 ?*/
 .filesOpenCapsule {
   position: relative;
   display: inline-flex;
   align-items: stretch;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
-  background: transparent !important;
+  background: transparent;
   overflow: visible;
   flex-shrink: 0;
   height: 24px;
@@ -663,7 +663,7 @@
 }
 
 .filesOpenMain:hover {
-  background: var(--bg-hover) !important;
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -685,7 +685,7 @@
 }
 
 .filesOpenChev:hover {
-  background: var(--bg-hover) !important;
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -872,7 +872,7 @@
   color: var(--text-tertiary);
 }
 
-/* 闂佸憡甯楅〃澶愬Υ?闁荤姴娴勯梽鍕磿韫囨洘鍋橀悘鐐舵閺佸爼姊洪幐搴ｆ噯妞ゆ洏鍊濋弫宥咁潩椤掆偓鐠佹煡鏌涜箛鏂库枙婵☆偅鎸抽弫宥囦沪閼测晝鎲?toast */
+/*          ?                                                           ?toast */
 .filesInlineErr {
   display: flex;
   align-items: flex-start;
@@ -926,7 +926,7 @@
   color: var(--text-primary);
 }
 
-/* 婵烇絽娲︾换鍌炴偤?婵犮垼娉涚粔鎾春?OS 闂佺懓鐏氶幐鍝ユ閹达附鏅慨姗嗗幗閽傚鎮介銈夋鐟滈鑳剁划鍫ユ偖鐎靛摜顦梺鍝勬搐閵囨﹢宕?toast闂佹寧绋戦悧鍛垝鎼淬垹绶為弶鍫亯琚濋敓?*/
+/*          ?        ?OS                                           ?toast                   ?*/
 .filesActionHint {
   display: flex;
   align-items: center;
@@ -996,8 +996,8 @@
   white-space: pre-wrap;
   word-break: break-word;
   cursor: text;
-  -webkit-user-select: text !important;
-  user-select: text !important;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .filesEditor {
@@ -1014,8 +1014,8 @@
   color: var(--text-primary);
   background: var(--bg-primary);
   box-sizing: border-box;
-  -webkit-user-select: text !important;
-  user-select: text !important;
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 .filesPreviewMedia {
@@ -1110,7 +1110,7 @@
   box-sizing: border-box;
 }
 
-/* 闁荤姾娅ｉ崰鏍р枔閵忋倖鐒诲璺猴工闂呮﹢鏌ㄥ☉娆愮殤婵炴潙顦遍埀顒勬涧缂嶅﹪銆傞埡鍐╁枂闁割偁鍨诲畷鍫曟倵鐟欏嫮鐓紓宥呮嚇閺佸秶鈧湱顕磄ht/bottom 闂佸憡鐟﹂悧妤冪矓?*/
+/*                                                                     ht/bottom          ?*/
 .filesSelBar.isAnchored {
   right: auto;
   bottom: auto;
@@ -1159,7 +1159,7 @@
   color: var(--text-tertiary);
 }
 
-/* 缂備焦鍔曠€氼亪寮查崼鏇炲唨闊洢鍎崇粈鍕煛閸屾碍鐭楁繛鍡愬灲濡啴濮€閳╁啰鍑￠梺鐓庮殠娴滐綁妫呴埡鍐ｅ亾绾懏顥夐悗瑙勫▕閺佸秵寰勫☉姘辩崶闂佽姤锚缁绘垿顢曢懖鈺傚暫濞达絿顭堢敮妤€菐閸ワ絽澧插ù鐓庢嚇閺佸秴鐣濋崟顒併€冮梺鍛婄墪閹冲酣鎯堟径瀣嚤婵☆垰鎼敓?*/
+/*                                                                                                                             ?*/
 @container filesCard (max-width: 380px) {
   .filesBar {
     gap: 1px;

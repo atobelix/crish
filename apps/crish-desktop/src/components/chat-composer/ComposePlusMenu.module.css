@@ -1,9 +1,9 @@
 /**
- * 输入区「+」菜单局部样式
- * 遵循《Menu 容器样式与业务 contentClassName 隔离清洗契约》：
- * - 仅提供良性尺寸修饰（min-width: 188px）
- * - 剔除容器层叠/定位/指针污染
- * - 菜单项保证 width: 100%，消除交叉轴虚位
+ *     +       
+ *    Menu         contentClassName         
+ * -           min-width: 188px 
+ * -       /  /    
+ * -       width: 100%        
  */
 
 .plusMenu {

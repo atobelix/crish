@@ -1,4 +1,4 @@
-/* Setup soft banner（自 ChatStatusRibbons.module.css 随组件搬出） */
+/* Setup soft banner   ChatStatusRibbons.module.css        */
 .chatSoftHint {
   display: flex;
   align-items: center;

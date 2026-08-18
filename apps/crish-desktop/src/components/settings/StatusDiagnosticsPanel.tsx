@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 设置 · 状态诊断（PE-04 T04.5-2：core_get_status 诊断段前端面板）。
  *
  * 只读面板（T-F 06 T2.5 例外：搜索索引行在未就绪时提供「重建索引」按钮，
@@ -13,6 +13,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Activity, AlertTriangle, CheckCircle2, ClipboardCopy, RefreshCw, SearchCheck } from 'lucide-react';
+import { useToast } from '../../services/toast/ToastContext';
 import {
   fetchEngineStatus,
   type EngineDiagnosticEntry,
@@ -27,7 +28,7 @@ import styles from './StatusDiagnosticsPanel.module.css';
 type Props = {
   /** 轮询间隔（ms）；测试可注入大值只取首拉 */
   pollIntervalMs?: number;
-  onShowToast?: (msg: string) => void;
+  onBlockingOverlayChange?: (open: boolean) => void;
 };
 
 /** 复制到剪贴板（best-effort：clipboard API → execCommand 兜底） */
@@ -111,8 +112,8 @@ function SubsystemRow({
  */
 export const StatusDiagnosticsPanel: React.FC<Props> = ({
   pollIntervalMs = 5_000,
-  onShowToast,
 }) => {
+  const { showToast: _showToast } = useToast();
   const [status, setStatus] = useState<EngineStatus | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -150,10 +151,10 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
     async (err: EngineLastErrorEntry) => {
       const text = `[${err.kind}] ${err.detail}`;
       const ok = await copyTextBestEffort(text);
-      if (ok) onShowToast?.('已复制错误信息');
-      else onShowToast?.('复制失败');
+      if (ok) showToast('已复制错误信息');
+      else showToast('复制失败');
     },
-    [onShowToast],
+    [showToast],
   );
 
   /**
@@ -169,17 +170,17 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
       const ok = await rebuildSearchIndex();
       if (!mountedRef.current) return;
       if (ok) {
-        onShowToast?.('已触发搜索索引重建');
+        showToast('已触发搜索索引重建');
         await load();
       } else {
-        onShowToast?.('重建失败：索引命令不可用或报错');
+        showToast('重建失败：索引命令不可用或报错');
       }
     } catch {
-      if (mountedRef.current) onShowToast?.('重建失败');
+      if (mountedRef.current) showToast('重建失败');
     } finally {
       if (mountedRef.current) setRebuilding(false);
     }
-  }, [rebuilding, onShowToast, load]);
+  }, [rebuilding, showToast, load]);
 
   const lastError = status?.lastError ?? null;
   const diagnostics: EngineDiagnosticEntry[] = status?.diagnostics ?? [];

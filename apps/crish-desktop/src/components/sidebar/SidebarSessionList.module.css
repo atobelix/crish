@@ -1,10 +1,10 @@
 .listScroll {
-  /* 列表内容容器：按内容自然高度撑高父容器 .sidebarScroll（overflow-y: auto）。
+  /*                     .sidebarScroll overflow-y: auto  
    *
-   * 旧实现 flex: 1 让本元素占满 .sidebarScroll 剩余空间但不撑高父容器，
-   * 导致 .sidebarScroll 的 overflow-y: auto 永不触发滚动条。
-   * 改为 flex: none（即 flex: 0 0 auto）让本元素按内容自然高度，
-   * 当内容超过 .sidebarScroll 高度时触发父容器滚动。 */
+   *     flex: 1        .sidebarScroll             
+   *    .sidebarScroll   overflow-y: auto         
+   *    flex: none   flex: 0 0 auto             
+   *       .sidebarScroll             */
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -25,7 +25,7 @@
   opacity: 0.85;
 }
 
-/* 分区折叠：用 display 硬切换，避免 0fr 手风琴在嵌套列表下收不干净 */
+/*        display        0fr               */
 .accordionWrapper {
   display: block;
 }
@@ -46,10 +46,10 @@
 .section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1_5) !important; /* Elegant 6px gap between section titles and contents */
+  gap: var(--space-1_5); /* Elegant 6px gap between section titles and contents */
   padding-left: 0; /* Remove sub-container padding-left */
   padding-right: 0; /* Remove sub-container padding-right */
-  margin-bottom: var(--space-2) !important; /* Pulled slightly closer to 8px */
+  margin-bottom: var(--space-2); /* Pulled slightly closer to 8px */
 }
 
 .sectionLabelRow {
@@ -158,8 +158,8 @@
 .folderGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1) !important; /* Vertical gap between folder header (e.g. conex) and its session list items */
-  margin-bottom: var(--space-2) !important; /* Pulled slightly closer to 8px */
+  gap: var(--space-1); /* Vertical gap between folder header (e.g. conex) and its session list items */
+  margin-bottom: var(--space-2); /* Pulled slightly closer to 8px */
 }
 
 .folderHeaderRow {
@@ -243,7 +243,7 @@
 .folderSessions {
   display: flex;
   flex-direction: column;
-  gap: 3px !important; /* Standard 3px vertical gap between individual conversation capsule items */
+  gap: 3px; /* Standard 3px vertical gap between individual conversation capsule items */
   padding-left: var(--space-2_5);
   padding-right: var(--space-2);
 }
@@ -270,7 +270,7 @@
   color: var(--text-secondary);
   background: transparent;
   border: none;
-  font-weight: var(--font-weight-medium, 500) !important;
+  font-weight: var(--font-weight-medium, 500);
   box-shadow: none;
   transition: color var(--transition-press), background-color var(--transition-press), transform var(--transition-press);
   box-sizing: border-box;
@@ -295,13 +295,13 @@
 .sessionItem:hover {
   background: var(--sidebar-hover);
   color: var(--text-primary);
-  font-weight: var(--font-weight-medium, 500) !important;
+  font-weight: var(--font-weight-medium, 500);
 }
 
 .sessionItem.active {
   background: var(--sidebar-active);
   color: var(--text-primary);
-  font-weight: var(--font-weight-medium, 500) !important;
+  font-weight: var(--font-weight-medium, 500);
   box-shadow: none;
 }
 
@@ -323,7 +323,7 @@
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium, 500) !important;
+  font-weight: var(--font-weight-medium, 500);
   padding: 0;
   outline: none;
   box-sizing: border-box;
@@ -348,27 +348,27 @@
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap !important;
+  white-space: nowrap;
   min-width: 0;
   font-size: var(--font-size-base);
   line-height: 28px;
 }
 
-/* 强制单行：禁用历史 multiLine / 副行样式 */
+/*           multiLine /      */
 .sessionTextMultiLine,
 .sessionSearchSnippet,
 .sessionProjectLabel {
-  display: none !important;
+  display: none;
 }
 
 .sessionItem.hasProjectLabel,
 .sessionItem.hasSearchSnippet,
 .sessionItem.multiLine {
-  align-items: center !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-  min-height: 28px !important;
-  max-height: 28px !important;
+  align-items: center;
+  padding-top: 0;
+  padding-bottom: 0;
+  min-height: 28px;
+  max-height: 28px;
 }
 
 .sessionTrailing {
@@ -451,7 +451,7 @@
   align-items: flex-start;
 }
 
-/* 窗口化时仍保留项目副行垂直布局 */
+/*                 */
 .sessionListWindowed .sessionItem.hasProjectLabel {
   align-items: flex-start;
 }
@@ -531,8 +531,8 @@
   padding: 8px 12px;
   font-size: var(--font-size-base);
   opacity: 0.92;
-  pointer-events: none !important;
-  z-index: var(--z-drag-overlay, 9999);
+  pointer-events: none;
+  z-index: var(--z-drag-overlay, 1000);
   display: flex;
   align-items: center;
   will-change: transform;

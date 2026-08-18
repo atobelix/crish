@@ -1,12 +1,12 @@
-/* 首次向导（PE-05 T05.2 #6）：盖层由 ui/Dialog 基座提供（遮罩/居中/动画），
- * 本文件只保留卡片私有形态与 --dialog-z 层级 */
+/*      PE-05 T05.2 #6      ui/Dialog        /  /    
+ *               --dialog-z    */
 
-/* 遮罩壳：--dialog-z 维持原 --z-first-run 层级（顶层独占） */
+/*     --dialog-z        */
 .firstRunOverlay {
-  --dialog-z: var(--z-first-run);
+  --dialog-z: var(--z-modal);
 }
 
-/* 面板：宽度沿用原 min(480px, 100%) 档 + 卡片底色/圆角 */
+/*          min(480px, 100%)   +     /   */
 .firstRunDialog {
   --dialog-width: min(480px, calc(100vw - var(--space-8)));
   background: var(--bg-primary);
@@ -14,7 +14,7 @@
   border-color: var(--hairline-strong, var(--border-color));
 }
 
-/* 卡片内容壳：抵消 dialogBody 内边距后恢复原 22/16px 内边距与 18px 行距 */
+/*          dialogBody         22/16px      18px    */
 .firstRunCard {
   margin: calc(var(--space-1) * -1) calc(var(--space-4) * -1);
   padding: 22px 22px 16px;
@@ -48,8 +48,8 @@
   color: var(--text-primary);
 }
 
-/* 副标题（activeMeta.desc）已由基座 description 渲染（dialogDescription），
- * firstRunSub 私有类不再使用 */
+/*     activeMeta.desc      description    dialogDescription  
+ * firstRunSub         */
 .firstRunSteps {
   display: flex;
   flex-wrap: wrap;
@@ -108,7 +108,7 @@
   margin-top: var(--space-1);
 }
 
-/* 閸氭垵顕辨稉瀣閿涙瓔ettingsSelect 閸忋劌顔旀潪顖澬曢 */
+/*          ettingsSelect           */
 .firstRunSelect :global(.settings-select) {
   width: 100%;
   max-width: none;
@@ -188,7 +188,7 @@
   padding-bottom: var(--space-1);
 }
 
-/* 濡€崇€峰銉︻偧缁狙嗙熅瀵板嫸绱扮粙宥呮倵閹靛/ 閹垫挸绱戠拋鍓х枂閿涘牊妫toast */
+/*                       /             toast */
 .firstRunModelAlt {
   display: flex;
   flex-direction: column;

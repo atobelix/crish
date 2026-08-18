@@ -27,3 +27,13 @@ export function scaleUpPool(): void {
 
 export { WorkerPool, Priority };
 export type { WorkerType };
+export {
+  budgetThinkingText,
+  sliceSafeTailMarkdown,
+  THINKING_DOM_CHAR_CAP,
+  THINKING_INLINE_CHAR_CAP,
+  TOOL_OUTPUT_DOM_CHAR_CAP,
+  TOOL_OUTPUT_PIXEL_CAP,
+  type ThinkingBudgetOptions,
+  type ThinkingBudgetResult,
+} from './thoughtWorker';

@@ -1,13 +1,12 @@
-import React, { Suspense, lazy } from 'react';
+﻿import React, { Suspense, lazy } from 'react';
 import styles from './ChatCard.module.css';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import type { } from '../../hooks/useToastQueue';
 import { ChatMessageList } from '../chat-message-list/ChatMessageList';
 import { ChatEmptyState } from './ChatEmptyState';
 import { ChatComposer } from '../chat-composer/ChatComposer';
 import { ModelBadgePicker } from './ChatHeaderControls';
 import { useChatCardState } from './useChatCardState';
 import { anyProfileHasKey } from '../../api/providerProfiles';
-import { ChatHeader } from './ChatHeader';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
 
 const ScheduledTasksPanel = lazy(() =>
@@ -16,24 +15,22 @@ const ScheduledTasksPanel = lazy(() =>
   }))
 );
 
-interface ChatCardProps {
-  wsId: string;
-  colIdx: number;
-  groupIdx: number;
-  onShowToast: ShowToastFn;
+import { useToast } from '../../services/toast/ToastContext';
+
+export interface ChatCardProps {
   handleGlobalTabClick: (cardId: string) => void;
-  /**
-   * 绑定的会话 id（Shell redesign：TabSurface.sessionId）。
-   * 未传时回退全局 activeSessionId（兼容旧调用）。
-   */
   sessionId?: string | null;
+  /** @deprecated @see ChatCard 保持可选向后兼容 */
+  wsId?: string;
+  colIdx?: number;
+  groupIdx?: number;
 }
 
 export const ChatCard: React.FC<ChatCardProps> = React.memo(
-  ({ wsId, onShowToast, handleGlobalTabClick, sessionId }) => {
+  ({ wsId = 'default', handleGlobalTabClick, sessionId }) => {
+    const { showToast: _showToast } = useToast();
     const state = useChatCardState({
       wsId,
-      onShowToast,
       handleGlobalTabClick,
       sessionId,
     });
@@ -133,30 +130,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           }
           data-approval-mode={state.approvalState.approvalUiPlan.mode}
         >
-          <ChatHeader
-            mainSurface={state.mainSurface}
-            showMsgFilter={state.showMsgFilter}
-            localMsgFilter={state.localMsgFilter}
-            setLocalMsgFilter={state.setLocalMsgFilter}
-            setShowMsgFilter={state.setShowMsgFilter}
-            displayCount={state.displayMessages.length}
-            totalCount={state.messages.length}
-            inputRef={state.msgFilterInputRef}
-            activeSessionId={state.activeSessionId}
-            onExportMarkdown={state.handleExportMarkdown}
-            onClearHistory={
-              state.activeSessionId &&
-              !state.activeSessionId.startsWith('__pending')
-                ? () => {
-                    // 清空当前会话消息（不删会话）
-                    const sid = state.activeSessionId;
-                    if (!sid) return;
-                    state.clearSessionMessages(sid);
-                  }
-                : undefined
-            }
-          />
-
           <div
             className={styles.chatDocFlow}
             data-testid="chat-doc-flow"
@@ -167,7 +140,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             {state.mainSurface === 'scheduled' ? (
               <Suspense fallback={null}>
                 <ScheduledTasksPanel
-                  onShowToast={onShowToast}
                   onBackToChat={() => state.setMainSurface('chat')}
                 />
               </Suspense>
@@ -203,7 +175,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
                 onSendFollowUp={state.handleSendFollowUp}
                 onRegenerate={state.handleRegenerate}
                 onBranch={state.handleBranch}
-                onShowToast={onShowToast}
                 approvalBusy={state.approvalState.approvalBusy}
                 pendingApprovalMsgId={state.approvalState.pendingApprovalMsgId}
                 onOpenDiff={state.openDiffInRightPanel}
@@ -233,7 +204,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             pendingApprovalToolId={state.approvalState.pendingApprovalToolId}
             pendingApprovalMsgId={state.approvalState.pendingApprovalMsgId}
             activeSessionId={state.activeSessionId}
-            onShowToast={onShowToast}
             openSidePanel={state.openSidePanel}
             handleGlobalTabClick={handleGlobalTabClick}
           />

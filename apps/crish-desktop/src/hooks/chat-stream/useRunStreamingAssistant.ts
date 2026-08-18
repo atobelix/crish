@@ -57,7 +57,6 @@ export function useRunStreamingAssistant(
 ): {
   runStreamingAssistant: StreamRunStarter;
 } {
-  const { onShowToast } = options;
   const { wsId, upsertSessionAgent } = queryHelpers;
   const { pushRunNotice, dismissTransientRunNotice } = noticeHelpers;
   const {
@@ -70,8 +69,7 @@ export function useRunStreamingAssistant(
   } = refs;
 
   const { maybeContinueGoalMode, drainQueuedAfterComplete } = useGoalMode(
-    streamManagerRef,
-    onShowToast
+    streamManagerRef
   );
 
   const runStreamingAssistant: StreamRunStarter = useCallback(
@@ -87,7 +85,7 @@ export function useRunStreamingAssistant(
       }
 
       const assistantMsgId = generateMessageId('assistant');
-      const store = getCompositionRoot().layout.getState();
+      const store = getCompositionRoot().session.getState();
       const toolNames: Record<string, string> = {};
       const startTime = Date.now();
       dismissTransientRunNotice();
@@ -204,7 +202,7 @@ export function useRunStreamingAssistant(
             if (entry && entry.assistantMsgId === assistantMsgId)
               entry.runId = runId;
             getCompositionRoot()
-              .layout.getState()
+              .session.getState()
               .setEngineLastRunId(sid, runId);
           },
           onThought: (thought) => {
@@ -316,7 +314,6 @@ export function useRunStreamingAssistant(
               kind,
               detail,
               pushRunNotice,
-              onShowToast,
               flushStreamBatchers,
               refs: {
                 renderBuffer: renderBufferRef.current,
@@ -340,7 +337,6 @@ export function useRunStreamingAssistant(
       }
     },
     [
-      onShowToast,
       wsId,
       upsertSessionAgent,
       pushRunNotice,

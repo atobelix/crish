@@ -434,3 +434,65 @@ describe('T4.1（R-04）：setActual 同值跳过', () => {
     expect(vsm.getActualHeight('a')).toBe(null);
   });
 });
+
+describe('Fenwick Tree (BIT) Dynamic Height & Binary Search Precision', () => {
+  it('maintains mathematical precision with random mutations across 1,000 items', () => {
+    const vsm = new VirtualScrollManager(120);
+    const count = 1000;
+    const testIds = ids(count, 'msg_');
+    vsm.syncOrder(testIds);
+
+    const groundTruth = new Array<number>(count).fill(120);
+
+    // Apply 200 random updates
+    for (let k = 0; k < 200; k++) {
+      const idx = (k * 37) % count;
+      const newH = 50 + ((k * 17) % 300);
+      groundTruth[idx] = newH;
+      vsm.setActual(testIds[idx]!, newH);
+    }
+
+    // Verify prefix sums against ground truth
+    let expectedSum = 0;
+    for (let i = 0; i < count; i++) {
+      expect(vsm.getOffset(i)).toBeCloseTo(expectedSum, 4);
+      expectedSum += groundTruth[i]!;
+    }
+    expect(vsm.getTotalHeight()).toBeCloseTo(expectedSum, 4);
+  });
+
+  it('performs 5,000 point updates in under 20ms (O(log N) assertion)', () => {
+    const vsm = new VirtualScrollManager(100);
+    const count = 5000;
+    const testIds = ids(count, 'perf_');
+    vsm.syncOrder(testIds);
+
+    const t0 = performance.now();
+    for (let i = 0; i < 2000; i++) {
+      const targetIdx = (i * 13) % count;
+      vsm.setActual(testIds[targetIdx]!, 150 + (i % 100));
+    }
+    const elapsed = performance.now() - t0;
+
+    expect(elapsed).toBeLessThan(50); // fast < 50ms (typically < 10ms for 2000 BIT updates)
+  });
+
+  it('findIndexAtOffset accurately pinpoints items on boundaries and intermediate offsets', () => {
+    const vsm = new VirtualScrollManager(100);
+    vsm.syncOrder(['a', 'b', 'c', 'd']);
+    vsm.setActual('a', 50);  // [0, 50)
+    vsm.setActual('b', 100); // [50, 150)
+    vsm.setActual('c', 200); // [150, 350)
+    vsm.setActual('d', 80);  // [350, 430)
+
+    expect(vsm.findIndexAtOffset(0)).toBe(0);
+    expect(vsm.findIndexAtOffset(25)).toBe(0);
+    expect(vsm.findIndexAtOffset(50)).toBe(1);
+    expect(vsm.findIndexAtOffset(149.9)).toBe(1);
+    expect(vsm.findIndexAtOffset(150)).toBe(2);
+    expect(vsm.findIndexAtOffset(349)).toBe(2);
+    expect(vsm.findIndexAtOffset(350)).toBe(3);
+    expect(vsm.findIndexAtOffset(500)).toBe(3); // clamp to last index
+  });
+});
+

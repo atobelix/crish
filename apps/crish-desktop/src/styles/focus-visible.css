@@ -1,5 +1,5 @@
-/* focus-visible.css — 全局键盘焦点指示器（Phase 1 对比度标准） */
-/* 使用 :focus-visible 只在键盘导航时显示 focus ring，鼠标点击时隐藏 */
+/* focus-visible.css             Phase 1        */
+/*    :focus-visible           focus ring         */
 
 :focus:not(:focus-visible) {
   outline: none;

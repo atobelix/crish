@@ -1,41 +1,6 @@
 /**
- * layoutStore — 布局/壳层 UI 域（zustand + immer 实例）。
- *
- * ## Ownership (write authority) — T11 拆分后
- *
- * This store is the **authority** for:
- * - **Layout chrome**: uiSize, shellChromeMode, chatMainSurface, sidebarCollapsed,
- *   tabModeEnabled, settings overlay (showSettingsOverlay / settingsActiveTab)
- * - **Session domain**（OPT-C1 保留）: sessions[], sessionsById, activeSessionId,
- *   draftFolder, agents, messages, composer drafts
- *   (also via `sessionStore` facade — same instance)
- * - **Legacy workspace columns**: workspaces / groups / cards / DnD preview
- *   (also via `workspaceStore` facade — same instance)
- *
- * ## Split out to domain stores (T11) — do NOT dual-write from here
- *
- * | Concern | Owner store | Entry |
- * |---------|-------------|-------|
- * | terminal buffers + diff buffers | `terminalStore` | `storeAccess` / `useTerminalStore` |
- * | workers / killed / manual workers | `workerStore` | `storeAccess` / `useWorkerStore` |
- * | permission mode / plan / command whitelist | `permissionStore` | `storeAccess` / `usePermissionStore` |
- * | app settings / providers / cron / mcp / tokenUsage | `settingsStore` | `storeAccess` / `useSettingsStore` |
- *
- * ## Does NOT own (sibling stores — do not dual-write from here)
- *
- * | Concern | Owner store | Entry for new code |
- * |---------|-------------|--------------------|
- * | Open tabs / TabSurface / rightDock / shellReady | `workspaceShellStore` | `compositionRoot.shell` / shell actions |
- * | Binary tree geometry (split/merge/drop/activeLeaf) | `layoutTreeStore` | layout-tree ops / `useLayoutTreeStore` |
- *
- * ## compositionRoot naming trap
- *
- * `getCompositionRoot().layout` = **this** store (chrome + sessions).
- * It is **not** `layoutTreeStore`. Shell tabs = `.shell`; tree = no facade yet.
- *
- * @see store/README.md § 状态归属
- * @see store/storeOwnership.ts
- * @see docs/multi-agent-repair/reports/R3-T11-归类表.md
+ * layoutStore — 纯几何布局与瞬态 UI 视口域 (Tier 3 Layout & Viewport Store)。
+ * 会话域物理剥离至 sessionStore (独立 Zustand 实例)；本 Store 纯化为几何布局与壳层状态。
  */
 
 import { create } from 'zustand';
@@ -43,17 +8,10 @@ import { immer } from 'zustand/middleware/immer';
 import { withDevtools } from './middleware/withDevtools';
 import { withLogger } from './middleware/withLogger';
 import { withPersist } from './middleware/withPersist';
-import { withAutoIndex } from './autoIndexMiddleware';
 import type {
-  DropPreviewState,
-  SessionState,
-  SettingsTabType,
-  WorkspaceState,
-} from './types';
-import { createSessionActions, type SessionActions } from './sessionActions';
+  } from './types';
 import {
   createWorkspaceActions,
-  type DraggedTabState,
   type WorkspaceActions,
 } from './workspaceActions';
 import {
@@ -68,20 +26,23 @@ import type {
   TelemetrySyncPayload,
   WorkspaceLayoutSnapshot,
 } from './layout-helpers/store-types';
-import {
-  DEFAULT_SETTINGS_TAB,
-} from './layout-helpers/store-types';
-import {
-  initStorePersistence,
-  waitForStoreHydration,
-  type SessionActivatableStore,
-  type StoreApiLike,
-} from './layout-helpers/store-persistence';
+import { } from './layout-helpers/store-types';
 import { createLayoutCoreActions } from './layout-helpers/layout-core-actions';
+import {
+  initSessionStorePersistence,
+  waitForHydration as waitForSessionHydration,
+} from './sessionStore';
 
 // ── Re-exports for public API backwards compatibility ────────────────────────
 
-export type { UiSize, ShellChromeMode, TokenUsageState, ActiveWorkerState, TelemetrySyncPayload, WorkspaceLayoutSnapshot };
+export type {
+  UiSize,
+  ShellChromeMode,
+  TokenUsageState,
+  ActiveWorkerState,
+  TelemetrySyncPayload,
+  WorkspaceLayoutSnapshot,
+};
 export {
   UI_SIZE_IDS,
   DEFAULT_UI_SIZE,
@@ -90,7 +51,6 @@ export {
   SHELL_CHROME_STORAGE_KEY,
   parseShellChromeMode,
   SETTINGS_TAB_IDS,
-  DEFAULT_SETTINGS_TAB,
   DEFAULT_TOKEN_USAGE,
   DEMO_TOKEN_USAGE,
   DEFAULT_WORKSPACE_ID,
@@ -101,8 +61,7 @@ export {
 export {
   finiteNumber,
   parseUiSize,
-  isSettingsTabType,
-  parseSettingsTab,
+  isparseSettingsTab,
   sanitizeTokenUsage,
   sanitizeActiveWorkers,
   stripGhostPanelsFromWorkspace,
@@ -123,7 +82,6 @@ export type {
   CardState,
   CardGroupState,
   ColumnState,
-  WorkspaceState,
   DiffChange,
   FileDiff,
   MessageToolCall,
@@ -132,16 +90,16 @@ export type {
   SessionGoalMode,
   SessionGoalTask,
   SessionState,
-  DropPreviewState,
-  SettingsTabType,
-} from './types';
+  } from './types';
+
+import type {
+  WorkspaceStoreSlice,
+} from './workspaceActions';
 
 // ── LayoutStore interface ───────────────────────────────────────────────────
 
-/** 布局/壳层 UI + 会话域 + 工作区域（actions 见 SessionActions / WorkspaceActions） */
-export interface LayoutStore extends SessionActions, WorkspaceActions {
-  workspaces: WorkspaceState[];
-  activeWorkspaceIndex: number;
+/** 布局/壳层 UI + 工作区域（actions 见 WorkspaceActions / LayoutCoreActions） */
+export interface LayoutStore extends WorkspaceStoreSlice, WorkspaceActions {
   tabModeEnabled: boolean;
   uiSize: UiSize;
   /** 壳层形态：classic 扁平 / inset 嵌套圆角内容卡 */
@@ -152,34 +110,14 @@ export interface LayoutStore extends SessionActions, WorkspaceActions {
    */
   chatMainSurface: 'chat' | 'scheduled';
   sidebarCollapsed: boolean;
-  sessions: SessionState[];
-  /** 会话 id → 引用，热路径 O(1)；与 sessions 同步 */
-  sessionsById: Record<string, SessionState>;
-  folderOrder: string[];
-  activeSessionId: string;
-  /** 草稿态绑定的 folder；非草稿为 '' */
-  draftFolder: string;
-  /** 当前聚焦的子 agent（null = 看主对话） */
-  activeAgentId: string | null;
-  /** 右侧「协作 agent」面板要展示的 agent id */
-  panelAgentId: string | null;
-  composerDrafts: Record<string, string>;
-  draggedTab: DraggedTabState | null;
-  dropPreview: DropPreviewState | null;
-  showSettingsOverlay: boolean;
-  settingsActiveTab: SettingsTabType;
-  /** true 当会话磁盘镜像恢复完成（无论是否找到数据） */
   hydrationComplete: boolean;
 
-  // Layout chrome / settings overlay UI
+  // Layout chrome UI
   setUiSize: (size: UiSize) => void;
   setShellChromeMode: (mode: ShellChromeMode) => void;
   setChatMainSurface: (surface: 'chat' | 'scheduled') => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setTabModeEnabled: (enabled: boolean) => void;
-  setShowSettingsOverlay: (show: boolean) => void;
-  setSettingsActiveTab: (tab: SettingsTabType) => void;
-  openSettings: (tab?: SettingsTabType) => void;
   /** 活动工作区切换（clamp 内建；C3 收敛点） */
   setActiveWorkspaceIndex: (index: number) => void;
 }
@@ -192,45 +130,27 @@ export const useLayoutStore = create<LayoutStore>()(
   withDevtools(
     withLogger(
       withPersist(
-        withAutoIndex(
-          immer((set, get) => ({
-            workspaces: _defaults.initialWorkspaces,
-            activeWorkspaceIndex: clampActiveWorkspaceIndex(
-              _defaults.initialWorkspaces,
-              0
-            ),
-            tabModeEnabled: _defaults.initialTabMode,
-            uiSize: _defaults.initialUiSize,
-            shellChromeMode: _defaults.initialShellChrome,
-            chatMainSurface: 'chat',
-            sidebarCollapsed: false,
-            hydrationComplete: false,
-            sessions: _defaults.sessionSeed.sessions,
-            sessionsById: _defaults.sessionSeed.sessionsById,
-            folderOrder: _defaults.sessionSeed.folderOrder,
-            activeSessionId: _defaults.sessionSeed.activeSessionId,
-            draftFolder: '',
-            // 无活动会话时绝不挂 ghost agent 焦点
-            activeAgentId: null,
-            panelAgentId: null,
-            draggedTab: null,
-            dropPreview: null,
+        immer((set, get) => ({
+          workspaces: _defaults.initialWorkspaces,
+          activeWorkspaceIndex: clampActiveWorkspaceIndex(
+            _defaults.initialWorkspaces,
+            0
+          ),
+          tabModeEnabled: _defaults.initialTabMode,
+          uiSize: _defaults.initialUiSize,
+          shellChromeMode: _defaults.initialShellChrome,
+          chatMainSurface: 'chat',
+          sidebarCollapsed: false,
+          hydrationComplete: false,
+          draggedTab: null,
+          dropPreview: null,
 
-            showSettingsOverlay: false,
-            settingsActiveTab: DEFAULT_SETTINGS_TAB,
+          // Layout Core Actions
+          ...createLayoutCoreActions(set, get),
 
-            composerDrafts: {},
-
-            // Layout / Settings-overlay Actions
-            ...createLayoutCoreActions(set, get),
-
-            // 会话 / 消息 / agent 域（实现见 sessionActions.ts）—— 泛型切片，无 as any
-            ...createSessionActions(set, get),
-
-            // 工作区 / 标签 DnD / 面板域（实现见 workspaceActions.ts）
-            ...createWorkspaceActions(set, get),
-          }))
-        ),
+          // 工作区 / 标签 DnD / 面板域（实现见 workspaceActions.ts）
+          ...createWorkspaceActions(set, get),
+        })),
         {
           name: 'crish-layout-v1',
           partialize: (s) => ({
@@ -247,59 +167,14 @@ export const useLayoutStore = create<LayoutStore>()(
 );
 
 if (typeof window !== 'undefined') {
-  window.useLayoutStore = useLayoutStore;
-  // T06.9.1（AA-03 Q11）：更新计数订阅仅 DEV 分支生效（开发期可观测，
-  // 生产不再持有永久计数订阅）
-  if (import.meta.env?.DEV) {
-    window.__storeUpdateCount = 0;
-    useLayoutStore.subscribe(() => {
-      window.__storeUpdateCount = (window.__storeUpdateCount || 0) + 1;
-    });
-  }
+  (window as unknown as Record<string, unknown>).useLayoutStore =
+    useLayoutStore;
 }
 
-// ── Layout state shape (state-only, excludes actions) ─────────────────────────
-
-export type LayoutStoreState = Pick<
-  LayoutStore,
-  | 'workspaces'
-  | 'activeWorkspaceIndex'
-  | 'tabModeEnabled'
-  | 'uiSize'
-  | 'shellChromeMode'
-  | 'chatMainSurface'
-  | 'sidebarCollapsed'
-  | 'sessions'
-  | 'sessionsById'
-  | 'folderOrder'
-  | 'activeSessionId'
-  | 'activeAgentId'
-  | 'panelAgentId'
-  | 'composerDrafts'
-  | 'draggedTab'
-  | 'dropPreview'
-  | 'showSettingsOverlay'
-  | 'settingsActiveTab'
-  | 'hydrationComplete'
->;
-
-/** 等待 store 会话回灌完成 */
-export function waitForHydration(): Promise<void> {
-  return waitForStoreHydration(useLayoutStore as StoreApiLike<LayoutStore>);
-}
-
-/**
- * 挂载会话持久化订阅（session index + 磁盘镜像）与空会话磁盘回灌。
- * demo 模式不持久化，直接返回 no-op cleanup。
- * 由 App 在 mount 时调用一次，unmount 时执行返回的 cleanup。
- * （window.useLayoutStore 由 App.tsx 以 CrishWindow 类型挂载，此处不再重复 attach）
- */
+/** 挂载会话持久化与回灌 */
 export function initLayoutStorePersistence(): () => void {
-  // SessionActivatableStore：useLayoutStore 含 SessionActions.setActiveSessionId，
-  // 会话激活由 store 自身 action 提供（G13 断环，不再经 api/storeAccess）
-  return initStorePersistence(
-    useLayoutStore as SessionActivatableStore<LayoutStore>
-  );
+  return initSessionStorePersistence();
 }
 
 export type { GroupState, AppSettings } from './types';
+

@@ -1,3 +1,4 @@
+﻿import { toast } from '../../services/toast/ToastContext';
 import React, {
   useCallback,
   useEffect,
@@ -5,8 +6,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
-import { useLayoutStore } from '../../store/storeAccess';
+import type { } from '../../hooks/useToastQueue';
+import { useSessionStore } from '../../store/sessionStore';
 import { useSettingsField, selectAppSettings } from '../../store/storeAccess';
 import { sessionRuntimeRegistry } from '../../api/SessionRuntimeRegistry';
 import type { Attachment } from '../../api/SessionRuntimeRegistry';
@@ -33,7 +34,6 @@ export interface UseChatComposerPropsOptions {
   needsKeySetup: boolean;
   needsModelSetup: boolean;
   isProcessing: boolean;
-  onShowToast: ShowToastFn;
   handleGlobalTabClick: (cardId: string) => void;
   setShowModelDropdown: React.Dispatch<React.SetStateAction<boolean>>;
   setPickerInlineError: React.Dispatch<React.SetStateAction<string>>;
@@ -45,12 +45,11 @@ export function useChatComposerProps({
   needsKeySetup,
   needsModelSetup,
   isProcessing,
-  onShowToast,
   handleGlobalTabClick,
   setShowModelDropdown,
   setPickerInlineError,
 }: UseChatComposerPropsOptions) {
-  const setComposerDraft = useLayoutStore((s) => s.setComposerDraft);
+  const setComposerDraft = useSessionStore((s) => s.setComposerDraft);
   // Do not subscribe to the full composerDrafts map — it re-renders on every keystroke persist.
   // Session restore reads drafts via getState() only.
   const appSettings = useSettingsField(selectAppSettings);
@@ -119,7 +118,7 @@ export function useChatComposerProps({
     flushComposerDraft();
     activeSessionIdRef.current = activeSessionId;
     const restored = activeSessionId
-      ? useLayoutStore.getState().composerDrafts[activeSessionId] || ''
+      ? useSessionStore.getState().composerDrafts[activeSessionId] || ''
       : '';
     setChatInputState(restored);
   }, [activeSessionId, flushComposerDraft]);
@@ -234,10 +233,10 @@ export function useChatComposerProps({
         }
         addAttachments(next);
       } catch {
-        onShowToast('图片粘贴失败');
+        toast.show('图片粘贴失败');
       }
     },
-    [addAttachments, onShowToast]
+    [addAttachments]
   );
 
   const handleFilesSelected = useCallback(
@@ -374,7 +373,6 @@ export function useChatComposerProps({
     handleForceCancelGeneration,
   } = useChatStream({
     wsId,
-    onShowToast,
     handleGlobalTabClick,
     chatInput,
     setChatInput,

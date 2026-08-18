@@ -18,7 +18,7 @@ import {
   BROWSER_IMPORT_MAX_BYTES,
   isUsableJsonText,
 } from '../../../../api/browserImportLib';
-import type { ShowToastFn } from '../../../../hooks/useToastQueue';
+import { toast } from '../../../../services/toast/ToastContext';
 import {
   readFileAsText,
   resultMessage,
@@ -28,13 +28,11 @@ import {
 export interface UseStorageImportOptions {
   busy: BusyKind;
   setBusy: Dispatch<SetStateAction<BusyKind>>;
-  onShowToast: ShowToastFn;
 }
 
 export function useStorageImport({
   busy,
   setBusy,
-  onShowToast,
 }: UseStorageImportOptions) {
   const [storageError, setStorageError] = useState('');
   const [storageJson, setStorageJson] = useState('');
@@ -48,9 +46,9 @@ export function useStorageImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setStorageError(full);
-      onShowToast(full);
+      toast.show(full);
     },
-    [onShowToast]
+    []
   );
 
   const applyStorageFile = useCallback(

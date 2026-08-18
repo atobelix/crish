@@ -28,6 +28,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { ResizeObserverManager } from '../../../services/ResizeObserverManager';
 import styles from './TabStrip.module.css';
 
 export interface TabStripItem {
@@ -68,7 +69,11 @@ export interface TabStripProps {
   /** tab 元素激活态追加类 */
   tabActiveClassName?: string;
   /** tab 内容插槽（关闭钮/badge/图标；缺省渲染 label 文本） */
-  renderTab?: (tab: TabStripItem, index: number, ctx: TabStripRenderCtx) => React.ReactNode;
+  renderTab?: (
+    tab: TabStripItem,
+    index: number,
+    ctx: TabStripRenderCtx
+  ) => React.ReactNode;
   /** 滚动容器内、标签之前的内容（如收起按钮） */
   leading?: React.ReactNode;
   /** 滚动容器内、标签之后的内容（如新建加号按钮） */
@@ -248,14 +253,20 @@ export const TabStrip: React.FC<TabStripProps> = ({
     if (!el) return;
     updateOverflow();
     el.addEventListener('scroll', updateOverflow, { passive: true });
-    const ro =
-      typeof ResizeObserver !== 'undefined'
-        ? new ResizeObserver(() => updateOverflow())
-        : null;
-    ro?.observe(el);
+    const ro = ResizeObserverManager.getInstance();
+    ro.observe(el, updateOverflow);
+
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY && !e.deltaX) {
+        el.scrollLeft += e.deltaY;
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: true });
+
     return () => {
       el.removeEventListener('scroll', updateOverflow);
-      ro?.disconnect();
+      el.removeEventListener('wheel', onWheel);
+      ro.unobserve(el, updateOverflow);
     };
   }, [updateOverflow, tabs.length]);
 
@@ -279,7 +290,11 @@ export const TabStrip: React.FC<TabStripProps> = ({
         {tabs.map((tab, index) => {
           const active = tab.id === activeId;
           const isRovingStop = index === rovingIndex;
-          const tabClasses = [tabClassName, active ? tabActiveClassName : null, tab.className]
+          const tabClasses = [
+            tabClassName,
+            active ? tabActiveClassName : null,
+            tab.className,
+          ]
             .filter(Boolean)
             .join(' ');
           return (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+﻿import { useCallback, useEffect, useRef, useState } from 'react';
 
 /**
  * Toast 展示类型。源自已删除的旧 ToastBus.ts 死通道（发射即不可见）；
@@ -21,8 +21,12 @@ export interface AppToast {
   timestamp: number;
 }
 
-/** 统一 toast 回调：仅错误，或可撤销操作（第二参 onUndo）。 */
-export type ShowToastFn = (message: string, onUndo?: () => void) => void;
+/** 统一 toast 回调：仅错误，或可撤销操作（第二参 onUndo），或带 options 配置。 */
+export = (
+  message: string,
+  onUndo?: () => void,
+  options?: EnqueueToastOptions & { type?: ToastType }
+) => void;
 
 /** 策略判定结果（测试 / 调用方可观测；hook 入口静默 drop）。 */
 export type ToastPolicyDecision = 'show' | 'drop-success' | 'drop-empty';
@@ -267,11 +271,12 @@ export function createToastId(
   return `toast-${now}-${rand}`;
 }
 
-/** 构造 AppToast：归一 message；可选稳定 id。 */
+/** 构造 AppToast：归一 message；可选稳定 id 与显式 type。 */
 export function createToastItem(
   message: string,
   onUndo?: () => void,
   id?: string,
+  type?: ToastType,
 ): AppToast {
   const normalized = normalizeToastMessage(message);
   const isError = /失败|错误|无法|拒绝/.test(normalized);
@@ -279,8 +284,8 @@ export function createToastItem(
     id: id ?? createToastId(),
     message: normalized,
     ...(onUndo !== undefined ? { onUndo } : {}),
-    ariaLive: isError ? 'assertive' : 'polite',
-    type: onUndo ? 'info' : (isError ? 'error' : 'warning'),
+    ariaLive: isError || type === 'error' ? 'assertive' : 'polite',
+    type: type ?? (onUndo ? 'info' : (isError ? 'error' : 'warning')),
     duration: TOAST_TTL_MS,
     timestamp: Date.now(),
   };
@@ -394,9 +399,11 @@ export function enqueueToast(
   queue: readonly AppToast[],
   message: string,
   onUndo?: () => void,
-  options?: EnqueueToastOptions,
+  options?: EnqueueToastOptions & { type?: ToastType },
 ): ToastEnqueueResult {
-  const policy = classifyToastPolicy(message, onUndo);
+  const policy = options?.type
+    ? (normalizeToastMessage(message) ? 'show' : 'drop-empty')
+    : classifyToastPolicy(message, onUndo);
   if (policy !== 'show') {
     return { kind: 'drop', reason: policy };
   }
@@ -410,7 +417,11 @@ export function enqueueToast(
     // 同键再触发：刷新 TTL；若带来新的 onUndo 则替换回调（归档/分叉重做）
     if (onUndo !== undefined && onUndo !== existing.onUndo) {
       const next = queue.slice();
-      next[dupeIdx] = { ...existing, onUndo };
+      next[dupeIdx] = {
+        ...existing,
+        onUndo,
+        ...(options?.type ? { type: options.type } : {}),
+      };
       return {
         kind: 'dedupe',
         existingId: existing.id,
@@ -425,7 +436,7 @@ export function enqueueToast(
     };
   }
 
-  const item = createToastItem(normalized, onUndo, options?.id);
+  const item = createToastItem(normalized, onUndo, options?.id, options?.type);
   const appended = [...queue, item];
   const maxQueue = options?.maxQueue ?? TOAST_MAX_QUEUE;
   const { next, evictedIds } = trimToastQueue(appended, maxQueue);
@@ -483,9 +494,9 @@ export function useToastQueue() {
     [clearTimer],
   );
 
-  const showToast: ShowToastFn = useCallback(
-    (message, onUndo) => {
-      const result = enqueueToast(toastsRef.current, message, onUndo);
+  const showToast: = useCallback(
+    (message, onUndo, options) => {
+      const result = enqueueToast(toastsRef.current, message, onUndo, options);
 
       if (result.kind === 'drop') {
         if (import.meta.env?.DEV && result.reason === 'drop-success') {

@@ -13,6 +13,7 @@ import type { FileDiff } from '../../store/types';
 import { clearStream, getStreamText } from '../../store/streamingStore';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { recordStreamDiag } from '../../api/streamDiag';
+import { toast } from '../../services/toast/ToastContext';
 import type { StreamCallbacks } from '../../api/chatApi';
 import type { SessionStreamManager } from '../../api/sessionStreamManager';
 import type { StreamRenderBuffer } from '../../api/StreamRenderBuffer';
@@ -97,7 +98,7 @@ export function applySubagentEvent(opts: {
   const { sid, info } = opts;
   if (!info.subagentId) return;
   getCompositionRoot()
-    .layout.getState()
+    .session.getState()
     .applySubagentEventToAgent(sid, info.subagentId, info.event);
 }
 
@@ -110,7 +111,7 @@ export function applySubagentEnded(opts: {
   if (!info.subagentId) return;
   //（agent 终态 + 时间线收口 + 父工具卡终态，与全局面 S3 共用同一 action）
   getCompositionRoot()
-    .layout.getState()
+    .session.getState()
     .patchSessionAgentToolStatus(sid, info.subagentId, {
       status: info.status,
       ...(info.summary ? { summary: info.summary } : {}),
@@ -236,7 +237,6 @@ export function handleRunError(opts: {
   kind: string | undefined;
   detail: string | undefined;
   pushRunNotice: (notice: RunNotice, ttlMs?: number) => void;
-  onShowToast: (message: string) => void;
   flushStreamBatchers: () => void;
   refs: {
     renderBuffer: StreamRenderBuffer | null;
@@ -253,7 +253,6 @@ export function handleRunError(opts: {
     kind,
     detail,
     pushRunNotice,
-    onShowToast,
     flushStreamBatchers,
     refs,
   } = opts;
@@ -289,13 +288,13 @@ export function handleRunError(opts: {
   } else if (surface === 'banner-toast') {
     // 可行动错误（blocked/auth/no_key/no_project）：横幅 + 一次性 toast
     pushRunNotice(notice, 14000);
-    onShowToast(message);
+    toast.show(message);
   } else if (surface === 'banner') {
     // 无正文的失败：仅横幅（14s TTL），无 toast
     pushRunNotice(notice, 14000);
   }
   if (asstErr) {
-    const st = getCompositionRoot().layout.getState();
+    const st = getCompositionRoot().session.getState();
     if (surface === 'persistent') {
       // network 类不写气泡错误卡；无正文时 withdraw 占位（保持现状）
       if (!hadText) {

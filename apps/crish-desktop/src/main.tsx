@@ -1,10 +1,15 @@
 import { initSsrGlobals } from './createSsrGlobals';
+import { initVisualPresentationController } from './services/visualThemeController';
 import { memoryManager } from '@crish/shared-utils/browser';
 import './index.css';
 import { SIDEBAR_WIDTH_DEFAULT, CHAT_COL_MAX } from './constants/layout';
+import { registerBuiltInViews } from './services/view-registry';
+
+import { ToastProvider } from './services/toast/ToastContext';
 
 // 必须在任何模块前执行 — 替换 appMode / productMode 的同步 localStorage 读
 initSsrGlobals();
+initVisualPresentationController();
 
 // CSS token runtime injection — keeps JS source of truth in sync with CSS
 document.documentElement.style.setProperty(
@@ -17,6 +22,9 @@ document.documentElement.style.setProperty(
 );
 
 async function startup() {
+  // 微内核生命周期前置：显式注册 Conex 全量内置视图与插槽，彻底消除 ESM 模块加载副作用依赖
+  registerBuiltInViews();
+
   // Phase 0: 等待 ServiceRegistry / ConfigService 初始化
   await import('./bootstrap-orchestrator').then((m) => m.ready);
 
@@ -97,9 +105,11 @@ async function startup() {
     const { AppErrorBoundary } = await boundaryLoad;
     root.render(
       <StrictMode>
-        <AppErrorBoundary>
-          <App />
-        </AppErrorBoundary>
+        <ToastProvider>
+          <AppErrorBoundary>
+            <App />
+          </AppErrorBoundary>
+        </ToastProvider>
         {/* T5-4：React 渲染树之外的全局错误呈现面（window.onerror /
             unhandledrejection 双写 errorStore 的消费端；不弹模态、不打断
             渲染，仅可见告知 + dismiss；横幅 chunk 加载失败仅缺失告知，

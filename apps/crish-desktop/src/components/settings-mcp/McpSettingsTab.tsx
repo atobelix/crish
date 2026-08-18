@@ -1,25 +1,24 @@
+import { useToast } from '../../services/toast/ToastContext';
 /**
- * 设置 · 扩展服务（MCP）：单行密度列表 / 状态 / 启停 / 工具展开
- * 正式：仅引擎 list；启停仅在 probe 允许时可用
- * 演示：localStorage mock
- * 行内状态即反馈；仅错误 toast，成功静默（禁启停教育 toast / 成功 spam）
+ * MCP 设置 tab：服务列表 + 状态监控 + 环境变量/工具预览。
+ * 支持正式（通过 Rust core）与 demo 模式。
+ * 遵循设计系统规范：使用扁平化设计，无双边框，统一悬浮与焦点。
  */
 import React from 'react';
-import { mcpStateKind, mcpStateLabel } from '../../api/mcpApi';
+import { Tooltip } from '../ui';
 import styles from './McpSettingsTab.module.css';
 import { SettingsPage } from '../settings/SettingsUI';
-import { useMcpSettings } from './useMcpSettings';
-import { McpServerForm } from './McpServerForm';
+import { mcpStateLabel, mcpStateKind } from '../../api/mcpApi';
 import { McpServerList } from './McpServerList';
-import { Tooltip } from '../ui';
+import { McpServerForm } from './McpServerForm';
+import { useMcpSettings } from './useMcpSettings';
 
 type Props = {
-  onShowToast?: ((msg: string) => void) | undefined;
-  /** 通知父级是否"有可展示 MCP"，用于导航等 */
-  onAvailabilityChange?: ((available: boolean) => void) | undefined;
+  onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityChange }) => {
+export const McpSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const {
     demo,
     listLabelId,
@@ -62,7 +61,7 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
     handleDeleteDemo,
     toggleExpanded,
     toggleDemoEnabled,
-  } = useMcpSettings({ onShowToast, onAvailabilityChange });
+  } = useMcpSettings();
 
   const stopHint = controlHint || '当前引擎不支持从界面启停；扩展服务通常随任务运行时连接';
   const filterActive = filter.trim().length > 0;
@@ -98,7 +97,6 @@ export const McpSettingsTab: React.FC<Props> = ({ onShowToast, onAvailabilityCha
             setNewUrl={setNewUrl}
             setShowAdd={setShowAdd}
             onAddDemo={handleAddDemo}
-            onShowToast={onShowToast}
           />
         ) : null}
 

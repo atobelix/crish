@@ -1,3 +1,4 @@
+import { toast } from '../../services/toast/ToastContext';
 /**
  * 定时任务共享状态 hook：SettingsScheduleTab 与 ScheduledTasksPanel 双面复用。
  * 收拢：加载（settings 12s 超时 / chat 本地缓存优先）、筛选、启停、立即执行、
@@ -39,7 +40,6 @@ import {
 
 export type UseWorkflowsStateOptions = {
   surface: WorkflowsSurface;
-  onShowToast: (msg: string) => void;
   /** settings 面：可选工作区路径（创建时写入 cwd） */
   workspacePath?: string;
 };
@@ -192,7 +192,7 @@ export function useWorkflowsState(
   const fail = (msg: string) => {
     setError(msg);
     setOk('');
-    opts.onShowToast(msg);
+    toast.show(msg);
   };
 
   /**

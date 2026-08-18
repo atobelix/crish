@@ -4,10 +4,12 @@
   }
 }
 
+/* 1.           100%        */
 .settingsCover {
   position: fixed;
   inset: 0;
-  z-index: var(--z-settings-panel);
+  width: 100vw;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
@@ -15,6 +17,8 @@
   font-family: var(--font-sans);
   pointer-events: auto;
   isolation: isolate;
+  overflow: hidden;
+  z-index: var(--z-modal, 1000);
 }
 
 .settingsPanel {
@@ -30,23 +34,20 @@
   font-family: var(--font-sans);
 }
 
+/* 2.           36px      */
 .coverHeader {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: var(--space-2);
-  height: var(--header-height);
-  min-height: var(--header-height);
-  padding: 0 var(--space-3_5);
-  border-bottom: none;
+  gap: var(--space-2, 8px);
+  height: var(--header-height, 36px);
+  min-height: var(--header-height, 36px);
+  padding: 0 var(--space-3, 12px);
+  border-bottom: 0.5px solid var(--border-color);
   background: var(--bg-secondary);
   flex-shrink: 0;
   box-sizing: border-box;
-}
-
-.coverHeaderSlim {
-  min-height: calc(var(--header-height) - var(--space-1));
-  height: calc(var(--header-height) - var(--space-1));
+  -webkit-app-region: drag;
 }
 
 .coverHeaderSpacer {
@@ -58,39 +59,39 @@
 .navBack {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  height: var(--control-height-lg);
-  padding: 0 var(--space-3) 0 var(--space-2_5);
+  gap: var(--space-2, 8px);
+  height: var(--control-height-lg, 32px);
+  padding: 0 var(--space-3, 12px) 0 var(--space-2_5, 10px);
   border: 1px solid transparent;
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-xl, 12px);
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
   flex-shrink: 0;
   box-shadow: none;
   width: 100%;
   text-align: left;
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--space-1, 4px);
 }
 
 .navBack:hover {
-  background: var(--tint-hover);
+  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
   color: var(--text-primary);
   border-color: transparent;
 }
 
 .searchWrap {
   position: relative;
-  margin: var(--space-1) 0 var(--space-2_5);
+  margin: var(--space-1, 4px) 0 var(--space-2_5, 10px);
   flex-shrink: 0;
 }
 
 .searchIco {
   position: absolute;
-  left: var(--space-3);
+  left: var(--space-3, 12px);
   top: 50%;
   transform: translateY(-50%);
   color: var(--text-tertiary);
@@ -99,21 +100,21 @@
 
 .search {
   width: 100%;
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
-  padding: 0 var(--space-2_5) 0 calc(var(--space-6) + var(--space-1_5));
-  border: 1px solid var(--tint-active);
-  border-radius: var(--radius-xl);
-  background: var(--tint-hover);
+  height: var(--control-height-sm, 28px);
+  min-height: var(--control-height-sm, 28px);
+  padding: 0 var(--space-2_5, 10px) 0 calc(var(--space-6, 24px) + var(--space-1_5, 6px));
+  border: 1px solid var(--tint-active, rgba(128, 128, 128, 0.2));
+  border-radius: var(--radius-xl, 12px);
+  background: var(--tint-hover, rgba(128, 128, 128, 0.08));
   color: var(--text-primary);
   font-family: inherit;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-xs, 12px);
   outline: none;
   box-sizing: border-box;
   box-shadow: none;
   transition:
-    background var(--transition-micro),
-    border-color var(--transition-micro);
+    background var(--transition-micro, 100ms ease-out),
+    border-color var(--transition-micro, 100ms ease-out);
 }
 
 .search::placeholder {
@@ -123,42 +124,47 @@
 .search:focus,
 .search:focus-visible {
   border-color: transparent;
-  background: var(--tint-hover);
-  box-shadow: none; /* soft focus: border/bg only, no heavy input shadow */
+  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
+  box-shadow: none;
 }
 
 .navScroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-gutter: stable both-edges;
   display: flex;
   flex-direction: column;
-  gap: var(--space-0_5);
+  gap: var(--space-0_5, 2px);
   padding: 8px 0;
 }
 
 .navEmpty {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
-  padding: var(--space-3) var(--space-2_5);
+  padding: var(--space-3, 12px) var(--space-2_5, 10px);
 }
 
+/* 3.        0         */
 .coverBody {
   flex: 1;
   min-height: 0;
   display: flex;
-  overflow: hidden;
+  flex-direction: row;
+  margin: 0;
+  padding: 0;
+  gap: 0; /* 0    */
   background: var(--bg-secondary);
+  overflow: hidden;
 }
 
+/* 4.            240px */
 .coverNav {
   width: var(--settings-sidebar-width, 240px);
   flex-shrink: 0;
-  border-right: none;
+  height: 100%;
   background: var(--bg-secondary);
-  padding: 8px 10px 8px 10px;
+  border-right: 0.5px solid var(--border-color);
+  padding: 8px 10px;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -175,32 +181,33 @@
   text-transform: none;
 }
 
+/* 5.            100%     +           (X = W) */
 .coverContent {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: auto;
-  scrollbar-gutter: stable both-edges;
-  border-radius: var(--shell-inset-radius, 14px);
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-sm);
-  margin: 0 var(--space-2, 8px) var(--space-2, 8px) 0;
+  height: 100%;
+  margin: 0; /*      8px      */
+  border-radius: 0; /*      14px       */
+  border: none; /*           */
+  box-shadow: none; /*           */
   padding: 24px 32px 32px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3_5);
+  gap: var(--space-3_5, 14px);
   position: relative;
   background: var(--bg-primary);
-  max-width: none;
+  overflow-y: auto; /*                (X = W) */
+  overflow-x: hidden;
+  overscroll-behavior: auto;
+  contain: strict; /*      */
   align-items: stretch;
 }
 
 .sidebarTab {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
   padding: 6px 10px;
   border-radius: var(--radius-lg, 8px);
   border: none;
@@ -212,14 +219,14 @@
   background: transparent;
   color: var(--text-secondary);
   transition:
-    background var(--transition-micro),
-    color var(--transition-micro);
+    background var(--transition-micro, 100ms ease-out),
+    color var(--transition-micro, 100ms ease-out);
   box-sizing: border-box;
   min-height: 32px;
 }
 
 .sidebarTab:hover {
-  background: var(--tint-hover);
+  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
   color: var(--text-primary);
 }
 
@@ -235,8 +242,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: calc(var(--icon-size) + var(--space-1));
-  height: calc(var(--icon-size) + var(--space-1));
+  width: calc(var(--icon-size, 16px) + var(--space-1, 4px));
+  height: calc(var(--icon-size, 16px) + var(--space-1, 4px));
   flex-shrink: 0;
   color: inherit;
   opacity: 0.88;
@@ -250,19 +257,18 @@
   color: var(--text-primary);
 }
 
-/* 全屏盖层（PE-05 T05.2 #5）：已收敛到 ui/Dialog 基座，
- * 以下私有形态覆盖基座结构；is-entering/open/exiting 旧状态类不再使用 */
-
-/* 遮罩壳：--dialog-z 维持原 --z-settings-panel 层级 */
+/*     --dialog-z     --z-settings-panel    */
 .settingsCoverOverlay {
-  --dialog-z: var(--z-settings-panel);
+  --dialog-z: var(--z-modal, 1000);
 }
 
-/* 内容壳：抵消 dialogBody 内边距，恢复设置页满幅布局 */
+/*           */
 .settingsDialogBody {
-  margin: calc(var(--space-1) * -1) calc(var(--space-4) * -1);
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100%;
   min-height: 0;
   overflow: hidden;

@@ -36,8 +36,32 @@ import { isPendingDraft } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
 import { Button, TabStrip, Tooltip } from '../ui';
-import { openTabsStripRelevantEqual } from '../binary-tree/UnitSessionTabStrip';
 import styles from './GlobalSessionTabBar.module.css';
+
+/**
+ * openTabs 条带相关字段相等：rightDock / 其它壳层字段变化不触发 strip re-render。
+ */
+export function openTabsStripRelevantEqual(
+  a: readonly TabSurface[],
+  b: readonly TabSurface[]
+): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (
+      x.tabId !== y.tabId ||
+      x.sessionId !== y.sessionId ||
+      x.title !== y.title ||
+      x.workspaceKey !== y.workspaceKey ||
+      x.kind !== y.kind
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
 
 const ICON_SIZE = 16;
 const TAB_ICON_STROKE = 1.75;
@@ -138,15 +162,18 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
           rightDock: createDefaultDock(),
         });
       }
-      return list.map((t) => {
+      const mapped = list.map((t) => {
         const sess = getSessionById(t.sessionId);
         return {
           tabId: t.tabId,
           sessionId: t.sessionId,
           title: resolveTabTitle(t.sessionId, t.title),
-          pinned: Boolean(sess?.isPinned),
+          pinned: Boolean(sess?.isPinned || ('pinned' in t && Boolean(t.pinned))),
         };
       });
+      const pinnedTabs = mapped.filter((t) => t.pinned);
+      const normalTabs = mapped.filter((t) => !t.pinned);
+      return [...pinnedTabs, ...normalTabs];
     }, [openTabs, activeTabId, activeSessionId]);
 
     // 丢 tab 恢复：仅真实会话；draft 态不 openOrFocus（会污染 openTabs）
@@ -187,6 +214,7 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
         getActiveProjectId() || undefined
       );
       emitUiEvent('open-chat');
+      window.dispatchEvent(new CustomEvent('app:new-session'));
     }, []);
 
     const titleOf = (sessionId: string) =>
@@ -207,11 +235,14 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
         tabs={sessionTabs.map((t) => ({
           id: t.sessionId,
           label: t.title,
+          closable: !t.pinned,
+          className: t.pinned ? styles.isPinned : undefined,
           data: {
             'data-testid': 'global-session-tab',
             'data-session-id': t.sessionId,
             'data-tab-id': t.tabId,
             'data-topbar-session-id': t.sessionId,
+            'data-pinned': t.pinned ? 'true' : 'false',
           },
         }))}
         data={{
@@ -230,6 +261,25 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
         }
         renderTab={(tab) => {
           const meta = sessionTabs.find((t) => t.sessionId === tab.id);
+          const isPinned = !!meta?.pinned;
+          if (isPinned) {
+            return (
+              <button
+                type="button"
+                className={`${styles.tabMain} ${styles.tabMainPinned}`}
+                tabIndex={-1}
+                onClick={() => selectSession(tab.id)}
+                aria-label={`固定会话 ${tab.label}`}
+              >
+                <Pin
+                  size={12}
+                  strokeWidth={2}
+                  aria-hidden
+                  className={styles.pinIcon}
+                />
+              </button>
+            );
+          }
           return (
             <>
               <button
@@ -237,16 +287,7 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
                 className={styles.tabMain}
                 tabIndex={-1}
                 onClick={() => selectSession(tab.id)}
-                title={tab.label}
               >
-                {meta?.pinned ? (
-                  <Pin
-                    size={12}
-                    strokeWidth={2}
-                    aria-hidden
-                    className={styles.pinIcon}
-                  />
-                ) : null}
                 <span className={styles.tabLabel}>{tab.label}</span>
               </button>
               <Tooltip content="关闭标签">

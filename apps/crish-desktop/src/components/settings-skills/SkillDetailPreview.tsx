@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import { revealSkillPath, type DesktopSkill, type SkillActivation } from '../../api/skillsApi';
@@ -11,7 +12,6 @@ interface SkillDetailPreviewProps {
   activeScopeProjectName: string;
   selectedSlash: string;
   copySlashCommand: (name: string) => Promise<void>;
-  onShowToast?: ((msg: string) => void) | undefined;
   busyId: string | null;
   batchBusy: boolean;
   setActivation: (skill: DesktopSkill, activation: SkillActivation) => Promise<void>;
@@ -26,7 +26,6 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
   activeScopeProjectName,
   selectedSlash,
   copySlashCommand,
-  onShowToast,
   busyId,
   batchBusy,
   setActivation,
@@ -34,6 +33,7 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
   setShowRaw,
   previewHtml,
 }) => {
+  const { showToast: _showToast } = useToast();
   return (
     <section className={`${styles.skillsDetail} skills-detail`} aria-label="技能预览">
       {!selected ? (
@@ -98,7 +98,7 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
                     aria-label="打开技能文件位置"
                     onClick={() => {
                       void revealSkillPath(selected.filePath).then((ok) => {
-                        if (!ok) onShowToast?.('无法打开路径（需桌面壳）');
+                        if (!ok) showToast('无法打开路径（需桌面壳）');
                       });
                     }}
                     icon={<Lucide.ExternalLink size={14} aria-hidden />}

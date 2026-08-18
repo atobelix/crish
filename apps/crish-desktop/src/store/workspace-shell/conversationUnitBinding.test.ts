@@ -15,10 +15,10 @@ import { describe, it, expect } from 'vitest';
 import {
   createLeaf,
   createBranch,
-  isChatDomain,
   type LayoutNode,
   type LayoutTree,
 } from '../layout-tree/types';
+import { viewRegistry } from '../../services/view-registry';
 import { collectLeaves, findNodeById } from '../layout-tree/operations';
 import {
   findChatLeafBySessionId,
@@ -122,8 +122,8 @@ describe('binding §5.1 — multi-chat 1:1 session ↔ chat leaf', () => {
     const b = findChatLeafBySessionId(tree.root, 'sess-b');
     expect(a!.id).toBe(chatA.id);
     expect(b!.id).toBe(chatB.id);
-    expect(isChatDomain(a!.panelId)).toBe(true);
-    expect(isChatDomain(b!.panelId)).toBe(true);
+    expect(viewRegistry.isPrimary(a!.panelId)).toBe(true);
+    expect(viewRegistry.isPrimary(b!.panelId)).toBe(true);
 
     // unit root = H(chat|tool) branch，不是 chat leaf 本身
     expect(findUnitRootId(tree.root, 'sess-a')).not.toBe(chatA.id);

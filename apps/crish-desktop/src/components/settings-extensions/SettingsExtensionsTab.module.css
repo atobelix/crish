@@ -3,9 +3,9 @@
 }
 
 .emptyCompact {
-  padding: 12px 0 !important;
+  padding: 12px 0;
 }
 
 .detailMdSans {
-  font-family: var(--font-sans) !important;
+  font-family: var(--font-sans);
 }

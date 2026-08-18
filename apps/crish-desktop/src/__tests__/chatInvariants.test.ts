@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveChatEmptyKind } from '../api/chatEmptyState';
 import { messageHasSubstance } from '../api/sessionTitle';
-import { windowMessages } from '../api/messageWindow';
 import { StreamTextBatcher } from '../api/streamTextBatcher';
 import { globalPretextCache, validatePreparedText } from '../api/pretextCache';
 
@@ -199,23 +198,6 @@ describe('chat invariants', () => {
     expect(clampSidebarWidth(100)).toBe(180);
     expect(clampSidebarWidth(750)).toBe(600);
     expect(clampSidebarWidth(320)).toBe(320);
-  });
-
-  it('10. 虚拟滚动 MessageWindow 可见区间不变量测试', () => {
-    const messages = Array.from({ length: 50 }, (_, i) => ({ id: `msg_${i}` }));
-
-    const result = windowMessages(messages, {
-      recentCount: 20,
-      expandedOlder: 10,
-    });
-
-    expect(result.startIndex).toBeGreaterThanOrEqual(0);
-    expect(result.startIndex).toBe(20);
-    expect(result.visible.length).toBeLessThanOrEqual(30);
-    expect(result.visible.length).toBe(30);
-    expect(result.hiddenCount).toBeGreaterThanOrEqual(0);
-    expect(result.hiddenCount).toBe(20);
-    expect(result.effectiveExpanded).toBe(10);
   });
 
   it('11. 流式批处理器 StreamTextBatcher 累积与 Flush 不变量测试', () => {

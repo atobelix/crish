@@ -1,0 +1,102 @@
+/* ui/Textarea        PE-05 / RED-DETAILED-02 
+ * 100%    tokens.css       hex/rgba 
+ *    CSS field-sizing: content   JS         
+ *      Focus Ring           3%~10%  
+ */
+
+.textareaWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+.textareaLabel {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-secondary);
+}
+
+.textareaShell {
+  position: relative;
+  display: flex;
+  width: 100%;
+}
+
+.nativeTextarea {
+  field-sizing: content; /* Chrome 123+ / WebView2 原生自动高度，0 JS 开销 */
+  min-height: 56px;
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  resize: none;
+  box-sizing: border-box;
+  width: 100%;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  font-family: var(--font-sans, inherit);
+  font-size: var(--font-size-base, 14px);
+  line-height: var(--line-height-normal, 1.5);
+  color: var(--text-primary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 6px);
+  outline: none;
+  transition:
+    border-color var(--transition-micro, 120ms) ease,
+    background var(--transition-micro, 120ms) ease,
+    box-shadow var(--transition-micro, 120ms) ease;
+}
+
+.nativeTextarea::placeholder {
+  color: var(--text-tertiary);
+}
+
+/*    Focus Ring AGENTS.md   13            3%~10%  */
+.nativeTextarea:focus,
+.nativeTextarea:focus-visible {
+  outline: none;
+  background: var(--bg-card);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.nativeTextarea:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled, 0.45);
+}
+
+/*       */
+.textareaSm {
+  min-height: 44px;
+  padding: var(--space-1_5, 6px) var(--space-2_5, 10px);
+  font-size: var(--font-size-sm, 13px);
+  border-radius: var(--radius-md, 6px);
+}
+
+.textareaLg {
+  min-height: 72px;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  font-size: var(--font-size-md, 15px);
+  border-radius: var(--radius-lg, 8px);
+}
+
+.textareaWrapError .nativeTextarea {
+  border-color: var(--color-error);
+}
+
+.textareaWrapError .nativeTextarea:focus,
+.textareaWrapError .nativeTextarea:focus-visible {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-error) 20%, transparent);
+}
+
+.textareaError {
+  margin: 0;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--color-error);
+}
+
+.textareaHint {
+  margin: 0;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+}

@@ -1,4 +1,4 @@
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import { getSessionById } from '../../store/sessionStore';
 import {
   addMessageToolCall,

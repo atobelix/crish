@@ -1,14 +1,14 @@
-/* note-paper 纸面壳样式（W5-B-S Skeleton ∥ W5-B Strict 共用）
+/* note-paper       W5-B-S Skeleton   W5-B Strict    
  *
- * 对齐主壳 tokens.css：中性暖灰、radius/space/font/line-height、静默 chrome。
- * 吸收 AFFiNE/AppFlowy 式「可编辑纸面」完成度（舒适行距、块 hover、非 hover 少 chrome）。
- * 焦点皮：§13 软环（--border-color 94% + --text-primary 6%）；覆盖暗色 --focus-ring 30%。
- * **≠** 关 EL；**≠** 视觉完成；**≠** 换肤成另一产品。
+ *      tokens.css      radius/space/font/line-height    chrome 
+ *    AFFiNE/AppFlowy                    hover   hover   chrome  
+ *      13    --border-color 94% + --text-primary 6%       --focus-ring 30% 
+ * ** **   EL ** **      ** **         
  *
- * fallback 取 light 档中性值（与 tokens 默认一致）；主题切换由 :root / data-theme 变量接管。
+ * fallback   light        tokens             :root / data-theme      
  */
 
-/* ---------- 面板壳：纸面卡片 ---------- */
+/* ----------          ---------- */
 
 .panel {
   display: flex;
@@ -16,7 +16,7 @@
   flex: 1;
   min-height: 200px;
   min-width: 0;
-  /* 纸面用 card 暖白，浮在 workspace 主底上 */
+  /*     card       workspace     */
   background: var(--bg-card, hsl(35, 10%, 98%));
   color: var(--text-primary, #111111);
   border: var(--hairline-width, 1px) solid
@@ -25,13 +25,13 @@
   overflow: hidden;
   font-family: var(--font-sans, system-ui, sans-serif);
   box-shadow: var(--shadow-sm);
-  /* 常规 6%（§13 3–6，上限 10）；禁吃 token 暗色 30% / strong 12–22% */
+  /*    6%  13 3 6    10     token    30% / strong 12 22% */
   --np-focus-edge: color-mix(
     in srgb,
     var(--border-color) 94%,
     var(--text-primary) 6%
   );
-  /* 行环槽：与 edge 同 6%，专供块行 inset；勿引入新色相 */
+  /*       edge   6%      inset        */
   --np-focus-row: color-mix(
     in srgb,
     var(--border-color) 94%,
@@ -39,13 +39,13 @@
   );
 }
 
-/* 区域壳可程序聚焦（tabIndex=-1）；不画整卡硬环 */
+/*          tabIndex=-1         */
 .panel:focus,
 .panel:focus-visible {
   outline: none;
 }
 
-/* ---------- 顶栏：静默 chrome，密度对齐 card-header ---------- */
+/* ----------       chrome      card-header ---------- */
 
 .header {
   display: flex;
@@ -82,7 +82,7 @@
   flex-shrink: 0;
 }
 
-/* ---------- 徽章 / 顶栏动作（低存在感 chip） ---------- */
+/* ----------    /           chip  ---------- */
 
 .badge {
   display: inline-flex;
@@ -112,7 +112,7 @@
     color var(--transition-micro, 100ms ease-out);
 }
 
-/* 可点击徽章（刷新 / 关闭） */
+/*          /     */
 button.badge {
   cursor: pointer;
 }
@@ -143,14 +143,14 @@ button.badge:focus-visible {
   box-shadow: 0 0 0 2px var(--np-focus-edge);
 }
 
-/* 覆盖 ui/Button + 全局 focus-visible.css 的 --focus-ring（暗色 30%） */
+/*    ui/Button +    focus-visible.css   --focus-ring    30%  */
 .panel :global(button):focus-visible,
 .panel :global([role='button']):focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--np-focus-edge);
 }
 
-/* 默认输入无厚影；焦点 6% 软环，无硬黑边 */
+/*            6%         */
 .panel :global(input),
 .panel :global(textarea) {
   box-shadow: none;
@@ -162,7 +162,7 @@ button.badge:focus-visible {
   box-shadow: 0 0 0 2px var(--np-focus-edge);
 }
 
-/* 轨 / silent 标识：次一级字色；禁 --color-info / --accent-blue */
+/*   / silent            --color-info / --accent-blue */
 .badgeSilent {
   display: inline-flex;
   align-items: center;
@@ -176,33 +176,33 @@ button.badge:focus-visible {
   line-height: var(--line-height-ui, 1.35);
 }
 
-/* ---------- 纸面正文区 ---------- */
+/* ----------       ---------- */
 
 .body {
   flex: 1;
   overflow: auto;
-  /* 纸面左右留白略宽于顶栏，阅读更稳 */
+  /*                  */
   padding: var(--space-3, 12px) var(--space-5, 20px) var(--space-4, 16px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  /* 块间距极小 → 连续纸面感；块内 padding 承担呼吸 */
+  /*                  padding      */
   gap: var(--space-0_5, 2px);
   background: var(--bg-card, hsl(35, 10%, 98%));
-  /* 与 shell-scrollbar / PaperList 同温：thin + stable；禁私有 webkit 块 */
+  /*   shell-scrollbar / PaperList    thin + stable     webkit   */
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--tint-strong, var(--tint-scrollbar-thumb, transparent))
     transparent;
 }
 
-/* 阅读列：主壳 chat 列宽意图 + 左 gutter 给把手（visual-align §02） */
+/*        chat      +   gutter     visual-align  02  */
 .readingColumn {
-  position: relative; /* slash React 浮层 absolute 锚点 */
+  position: relative; /* slash React    absolute    */
   width: 100%;
   max-width: var(--note-paper-col-max, var(--chat-col-max, 720px));
   margin-inline: auto;
-  /* 左侧预留把手热区，避免正文贴边 */
+  /*                 */
   padding-left: var(--space-6, 24px);
   padding-right: var(--space-2, 8px);
   display: flex;
@@ -212,19 +212,19 @@ button.badge:focus-visible {
 }
 
 /*
- * React slash 浮层锚点（SlashMenuOverlay className）
- * 皮：chrome.css .bp-slash-host（elevated + shadow-lg + z-popover + 280 宽）
- * 此处只做阅读列内偏移；禁止第三套色 / 裸 z / 删影冒充 chat 域。
- * Strict / Skeleton 共用；open 路径 ≠ EL-01。
+ * React slash      SlashMenuOverlay className 
+ *   chrome.css .bp-slash-host elevated + shadow-lg + z-popover + 280   
+ *                   /   z /      chat   
+ * Strict / Skeleton    open      EL-01 
  */
 .slashOverlay {
   top: var(--space-2, 8px);
   left: var(--space-6, 24px);
-  /* 列内不溢出：宽已由 host min(280,100%)；锚点贴左 gutter */
+  /*           host min(280,100%)      gutter */
   max-width: calc(100% - var(--space-2, 8px));
 }
 
-/* Strict / 产品顶栏：slash 写模式 chip（data-slash-write-mode on .badge） */
+/* Strict /      slash     chip data-slash-write-mode on .badge  */
 .badge[data-slash-write-mode='readonly'] {
   background: var(--control-soft-bg);
   color: var(--text-tertiary);
@@ -242,13 +242,13 @@ button.badge:focus-visible {
   color: var(--text-secondary, #555555);
 }
 
-/* slash 打开：纸面不改底、不抬整面板影；只读/可写靠 chip + 浮层 banner */
+/* slash                   /    chip +    banner */
 
 /*
- * W3-G PaperList 产品挂载槽（② PaperListDomMount · class np-paper-list-mount）
- * 行/ gap / spacer / 滚动皮 **全部** 归 `@crish/block-paper/paper-list.css`（见 visual-align 11）。
- * 此处只做槽布局：勿在 list 根上加 gap（会在 spacer↔host 间撕开连续纸）。
- * ≠ EL-01；≠ 第三套魔法色。
+ * W3-G PaperList         PaperListDomMount   class np-paper-list-mount 
+ *  / gap / spacer /     **  **   `@crish/block-paper/paper-list.css`   visual-align 11  
+ *            list     gap    spacer host         
+ *   EL-01          
  */
 :global(.np-paper-list-mount) {
   position: relative;
@@ -260,12 +260,12 @@ button.badge:focus-visible {
   min-height: 0;
 }
 
-/* 槽自滚：让出 scrollport 给子 .bp-paper-list[data-scroll-host] */
+/*        scrollport    .bp-paper-list[data-scroll-host] */
 :global(.np-paper-list-mount[data-scroll-host='1']) {
   overflow: hidden;
 }
 
-/* 兼容 class 名 paperListHost（若挂载轨用 styles.paperListHost） */
+/*    class   paperListHost       styles.paperListHost  */
 .paperListHost {
   position: relative;
   display: flex;
@@ -280,20 +280,20 @@ button.badge:focus-visible {
   overflow: hidden;
 }
 
-/* 阅读列内：继承列 gutter，勿再开 list 的 data-reading-column */
+/*          gutter     list   data-reading-column */
 .readingColumn .paperListHost,
 .readingColumn :global(.np-paper-list-mount) {
   max-width: none;
 }
 
-/* ---------- 块行：静默默认 / hover·focus 按需 chrome ---------- */
+/* ----------         / hover focus    chrome ---------- */
 
 .blockRow {
   position: relative;
   display: flex;
   align-items: flex-start;
   gap: var(--space-2, 8px);
-  /* AFFiNE 式：块行有舒适内边距，非 hover 无底色、无描边 */
+  /* AFFiNE              hover         */
   padding: var(--space-1_5, 6px) var(--space-2, 8px);
   border-radius: var(--radius-md, 6px);
   min-height: var(--row-height-sm, 28px);
@@ -315,7 +315,7 @@ button.badge:focus-visible {
   );
 }
 
-/* 焦点：1px inset 6% 软环。须含 [tabindex]:not 才能打赢全局 (0,3,0) */
+/*    1px inset 6%       [tabindex]:not        (0,3,0) */
 .blockRow[data-handle='focus'],
 .blockRow[tabindex]:not([tabindex='-1']):focus-visible,
 .blockRow:has(.text[data-strict-leaf-input='1']:focus-visible) {
@@ -334,8 +334,8 @@ button.badge:focus-visible {
 }
 
 /*
- * 落点线 React 投影皮（P6）：行上 data-drop-side=before|after 时画 2px 中性线。
- * 真 DnD 属性挂载另轨；此处仅 token 同色同厚，≠ 真拖完成。
+ *     React     P6     data-drop-side=before|after    2px     
+ *   DnD            token             
  */
 .blockRow[data-drop-side='before']::before,
 .blockRow[data-drop-side='after']::after {
@@ -361,13 +361,13 @@ button.badge:focus-visible {
   transform: translateY(50%);
 }
 
-/* 拖拽把手：默认 invisible；hover/focus/multi 才显（L0 静默）
- * 二期：热区略放大（min 高 = control-height-xs），仍非 hover 零 chrome
- * 可点时仍须 L0：默认 opacity 0，禁止常驻 0.3「好看」 */
+/*         invisible hover/focus/multi    L0    
+ *          min   = control-height-xs     hover   chrome
+ *       L0    opacity 0      0.3     */
 .handle {
   box-sizing: border-box;
   flex: 0 0 auto;
-  /* 视觉点阵宽 ≈ icon；横向 padding 扩 hover 热区（= --bp-handle-hit-pad-x） */
+  /*         icon    padding   hover    = --bp-handle-hit-pad-x  */
   width: calc(var(--icon-size, 16px) + 2 * var(--space-1, 4px));
   min-width: calc(var(--icon-size, 16px) + 2 * var(--space-1, 4px));
   height: var(--control-height-xs, 24px);
@@ -376,7 +376,7 @@ button.badge:focus-visible {
   padding: 0 var(--space-1, 4px);
   border-radius: var(--radius-xs, 4px);
   opacity: 0;
-  /* 六点把手暗示：竖向虚点条 */
+  /*              */
   background-image:
     radial-gradient(
       circle,
@@ -399,7 +399,7 @@ button.badge:focus-visible {
   transition:
     opacity var(--transition-micro, 100ms ease-out),
     background-color var(--transition-micro, 100ms ease-out);
-  /* 壳仍装饰向；真拖归 W3-F / A-BLK。热区随尺寸放大，父行 hover 接管 */
+  /*           W3-F / A-BLK            hover    */
   pointer-events: none;
   cursor: grab;
 }
@@ -428,7 +428,7 @@ button.badge:focus-visible {
   padding-top: 1px;
 }
 
-/* flavour：默认隐藏（L0 静默纸面）；仅 data-debug 显示 */
+/* flavour      L0         data-debug    */
 .flavour {
   display: none;
   font-size: var(--font-size-xxs, 11px);
@@ -446,7 +446,7 @@ button.badge:focus-visible {
   display: block;
 }
 
-/* 块正文：可读纸面；标题按 level 映射主壳字阶（08 §1.2 / 01 §4） */
+/*              level        08  1.2 / 01  4  */
 .text {
   font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-normal, 400);
@@ -455,23 +455,23 @@ button.badge:focus-visible {
   white-space: pre-wrap;
   word-break: break-word;
   letter-spacing: var(--letter-spacing-normal, 0em);
-  /* 连续纸：段靠行 gap；标题自带 margin-block */
+  /*         gap      margin-block */
   margin-block: 0;
 }
 
-/* CONN-D3：Strict content-row 叶（HiddenInput 方向）；≠ EL-01 */
+/* CONN-D3 Strict content-row   HiddenInput       EL-01 */
 .text[data-strict-leaf-input='1'] {
   outline: none;
   box-shadow: none;
   min-height: 1.25em;
   cursor: text;
-  /* 空叶仍可点 */
+  /*       */
   width: 100%;
 }
 
 .text[data-strict-leaf-input='1']:focus-visible,
 .text[data-strict-leaf-input='1'][tabindex]:not([tabindex='-1']):focus-visible {
-  /* 叶焦点由 blockRow 行环表达；清 box-shadow 以免叠全局 2px 外环 */
+  /*      blockRow        box-shadow       2px    */
   outline: none;
   box-shadow: none;
 }
@@ -480,7 +480,7 @@ button.badge:focus-visible {
   cursor: default;
 }
 
-/* H1：2xl + heavy + tighter；top space-5 / bottom space-2 */
+/* H1 2xl + heavy + tighter top space-5 / bottom space-2 */
 .blockRow[data-heading-level='1'] .text {
   font-size: var(--font-size-2xl, 22px);
   font-weight: var(--font-weight-heavy, var(--font-weight-content, 700));
@@ -490,7 +490,7 @@ button.badge:focus-visible {
   margin-bottom: var(--space-2, 8px);
 }
 
-/* H2：xl(19) + content；top space-4 / bottom space-2 */
+/* H2 xl(19) + content top space-4 / bottom space-2 */
 .blockRow[data-heading-level='2'] .text {
   font-size: var(--font-size-xl, 19px);
   font-weight: var(--font-weight-content, var(--font-weight-semibold, 600));
@@ -499,7 +499,7 @@ button.badge:focus-visible {
   margin-bottom: var(--space-2, 8px);
 }
 
-/* H3：lg(17) + content；top space-3 / bottom space-1_5 */
+/* H3 lg(17) + content top space-3 / bottom space-1_5 */
 .blockRow[data-heading-level='3'] .text {
   font-size: var(--font-size-lg, 17px);
   font-weight: var(--font-weight-content, var(--font-weight-semibold, 600));
@@ -508,7 +508,7 @@ button.badge:focus-visible {
   margin-bottom: var(--space-1_5, 6px);
 }
 
-/* H4：md + content；top space-3 / bottom space-1_5 */
+/* H4 md + content top space-3 / bottom space-1_5 */
 .blockRow[data-heading-level='4'] .text {
   font-size: var(--font-size-md, 15px);
   font-weight: var(--font-weight-content, var(--font-weight-medium, 500));
@@ -517,7 +517,7 @@ button.badge:focus-visible {
   margin-bottom: var(--space-1_5, 6px);
 }
 
-/* H5–H6：base + medium/content；top space-2 / bottom space-1 */
+/* H5 H6 base + medium/content top space-2 / bottom space-1 */
 .blockRow[data-heading-level='5'] .text,
 .blockRow[data-heading-level='6'] .text {
   font-size: var(--font-size-base, 14px);
@@ -527,14 +527,14 @@ button.badge:focus-visible {
   margin-bottom: var(--space-1, 4px);
 }
 
-/* 首块标题不顶出纸面大空白 */
+/*              */
 .readingColumn > .blockRow:first-child[data-heading-level] .text {
   margin-top: 0;
 }
 
-/* ---------- 块种 flavour 轻量区分（二期 · 仅 note-paper 块行） ---------- */
+/* ----------    flavour             note-paper     ---------- */
 
-/* 代码块：md-code 表面 + mono；pad space-3、上下 space-2（08 §1.2） */
+/*     md-code    + mono pad space-3    space-2 08  1.2  */
 .blockRow[data-flavour='code'] .text,
 .blockRow[data-flavour='Code'] .text {
   font-family: var(--font-mono, ui-monospace, 'Cascadia Code', monospace);
@@ -558,7 +558,7 @@ button.badge:focus-visible {
   margin-bottom: var(--space-2, 8px);
 }
 
-/* 引用：左边条 + 次级字色（blockquote / quote 均认） */
+/*        +      blockquote / quote     */
 .blockRow[data-flavour='quote'] .text,
 .blockRow[data-flavour='blockquote'] .text,
 .blockRow[data-flavour='Quote'] .text {
@@ -570,14 +570,14 @@ button.badge:focus-visible {
   margin-bottom: var(--space-2, 8px);
 }
 
-/* 列表：轻 indent（真列表叶标记后置；仅投影节奏） */
+/*      indent                 */
 .blockRow[data-flavour='list'] .text,
 .blockRow[data-flavour='bullet'] .text,
 .blockRow[data-flavour='numbered'] .text {
   padding-left: var(--space-4, 16px);
 }
 
-/* ---------- 底栏 ---------- */
+/* ----------    ---------- */
 
 .footer {
   padding: var(--space-1_5, 6px) var(--panel-pad-x, 12px);
@@ -590,7 +590,7 @@ button.badge:focus-visible {
   flex-shrink: 0;
 }
 
-/* ---------- A-INV-02 镜像漂移状态条（方向子集；≠ EL-03 / ≠ inotify 满关） ---------- */
+/* ---------- A-INV-02                EL-03 /   inotify     ---------- */
 
 .mirrorDriftBar {
   display: flex;
@@ -656,7 +656,7 @@ button.badge:focus-visible {
 }
 
 .mirrorDriftActionBtn {
-  /* 复用 badge 密度；ghost Button 已有皮 */
+  /*    badge    ghost Button     */
   min-height: var(--control-height-xs, 24px);
   font-size: var(--font-size-xs, 12px);
 }
@@ -684,9 +684,9 @@ button.badge:focus-visible {
   line-height: var(--line-height-ui, 1.35);
 }
 
-/* ---------- 统一状态面（Skeleton 空/错 · Strict 加载/空/错） ---------- */
+/* ----------       Skeleton  /    Strict   / /   ---------- */
 
-/* 兼容旧类名 .empty —— 与 .state 同语义 */
+/*       .empty      .state     */
 .empty,
 .state {
   display: flex;
@@ -707,7 +707,7 @@ button.badge:focus-visible {
   color: var(--text-tertiary, #696969);
 }
 
-/* 加载微脉冲：对齐 --transition-pulse；eco 档会压到 0 */
+/*          --transition-pulse eco      0 */
 .stateLoading::before {
   content: '';
   width: var(--icon-size-lg, 18px);
@@ -728,7 +728,7 @@ button.badge:focus-visible {
   border: var(--hairline-width, 1px) solid var(--color-error-border);
 }
 
-/* SendToNote 反馈条（与纸面同 token 语言） */
+/* SendToNote          token     */
 .feedbackError {
   margin-top: var(--space-1, 4px);
   font-size: var(--font-size-xs, 12px);
@@ -749,14 +749,14 @@ button.badge:focus-visible {
   }
 }
 
-/* eco 档：去掉加载转圈（与全局 transition 压平一致） */
+/* eco              transition       */
 html[data-perf-tier='eco'] .stateLoading::before {
   animation: none;
   border-top-color: var(--border-color, hsl(35, 10%, 86%));
   opacity: 0.6;
 }
 
-/* eco：块行 / 把手过渡压平（与 blockChrome.css 同向） */
+/* eco    /          blockChrome.css     */
 html[data-perf-tier='eco'] .blockRow,
 html[data-perf-tier='eco'] .handle {
   transition: none;

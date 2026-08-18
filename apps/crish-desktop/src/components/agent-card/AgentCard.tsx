@@ -12,7 +12,8 @@ import {
   browseAgentSidePanel,
   openAgentInSidePanel,
 } from '../../api/openAgentPanel';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useLayoutStore } from '../../store/layoutStore';
+import { useSessionStore } from '../../store/sessionStore';
 import type { FileDiff } from '../../store/types';
 import {
   focusOrOpenPanel,
@@ -61,7 +62,7 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
     const sessionsById = useSessionField(selectSessionsById);
     const activeSessionId = useSessionField(selectActiveSessionId);
     const panelAgentId = useSessionField(selectPanelAgentId);
-    const patchSessionAgent = useLayoutStore((s) => s.patchSessionAgent);
+    const patchSessionAgent = useSessionStore((s) => s.patchSessionAgent);
 
     const id = agentId ?? panelAgentId;
 

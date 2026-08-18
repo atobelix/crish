@@ -45,8 +45,6 @@ export {
   MAX_SPLIT_RATIO,
   isLeaf,
   isBranch,
-  isChatDomain,
-  isSameDomain,
 } from './types';
 
 // ── 查询操作（外部消费者实际引用的） ─────────────────────────────────

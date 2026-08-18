@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import styles from './OverviewCard.module.css';
 import {
-  useLayoutStore,
   selectActiveSession,
   selectActiveSessionId,
+  selectSessions,
   useSessionField,
 } from '../../store/storeAccess';
 import {
@@ -34,10 +34,9 @@ import { ChangesSection } from './ChangesSection';
 import { useOverviewState } from './useOverviewState';
 
 export type OverviewCardProps = {
-  wsId: string;
+  wsId?: string;
   onOpenPanel: (id: string) => void;
   /** @deprecated 保留 prop 兼容。@removeWhen 调用方全部迁移后移除 */
-  onShowToast?: (msg: string) => void;
 };
 
 type SecKey =
@@ -50,7 +49,7 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
   const activeDiffSource = useTerminalField(selectActiveDiffSource);
   const cronJobs = useSettingsField(selectScheduledTasks);
   const tokenUsage = useSettingsField(selectTokenUsage);
-  const sessions = useLayoutStore((state) => state.sessions);
+  const sessions = useSessionField(selectSessions);
   const ds = useEngineState();
 
   const [openSec, setOpenSec] = useState<Record<SecKey, boolean>>({

@@ -44,7 +44,7 @@
 }
 
 .sbQuickMenu {
-  z-index: var(--z-settings-dialog);
+  z-index: var(--z-modal);
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
@@ -82,7 +82,7 @@
 
 .sbQuickSegment {
   width: 100%;
-  background: var(--bg-primary) !important;
+  background: var(--bg-primary);
 }
 
 .sbQuickSegment :global(.ui-segment-item) {
@@ -91,8 +91,8 @@
 }
 
 .sbQuickSegment :global(.ui-segment-item.active) {
-  background-color: var(--bg-elevated) !important;
-  color: var(--text-primary) !important;
+  background-color: var(--bg-elevated);
+  color: var(--text-primary);
 }
 
 .sbQuickDivider {

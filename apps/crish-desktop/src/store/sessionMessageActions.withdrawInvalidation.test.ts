@@ -5,7 +5,7 @@
  * send-failure 乐观回滚（R6 收口 D5 已收敛）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { useLayoutStore } from './layoutStore';
+import { useSessionStore } from './sessionStore';
 
 const invalidationSpy = vi.hoisted(() => ({
   invalidateEditObjects: vi.fn(),
@@ -29,27 +29,27 @@ describe('withdrawMessage 收口适配（R2-b ⑥ 失效广播）', () => {
 
   beforeEach(() => {
     sid = `sess-withdraw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    useLayoutStore.getState().createSession({
+    useSessionStore.getState().createSession({
       title: 'withdraw-invalidation-test',
       id: sid,
       activate: false,
     });
     created.push(sid);
     invalidationSpy.invalidateEditObjects.mockClear();
-    const wsId = useLayoutStore.getState().workspaces[0].id;
-    useLayoutStore.getState().addMessage(wsId, sid, {
+    const wsId = 'ws-1';
+    useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-u1',
       sender: 'user',
       text: '你好',
       timestamp: 1,
     });
-    useLayoutStore.getState().addMessage(wsId, sid, {
+    useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-a1',
       sender: 'assistant',
       text: '回复',
       timestamp: 2,
     });
-    useLayoutStore.getState().addMessage(wsId, sid, {
+    useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-a2',
       sender: 'assistant',
       text: '第二轮',
@@ -59,15 +59,15 @@ describe('withdrawMessage 收口适配（R2-b ⑥ 失效广播）', () => {
 
   afterEach(() => {
     for (const s of created.splice(0)) {
-      useLayoutStore.getState().deleteSession(s);
+      useSessionStore.getState().deleteSession(s);
     }
   });
 
   it('撤回中间消息 → 被撤回消息（含其后节点）id 收到 invalidate(withdraw) + 时间线截断', () => {
-    useLayoutStore.getState().withdrawMessage('ws-1', sid, 'msg-a1');
+    useSessionStore.getState().withdrawMessage('ws-1', sid, 'msg-a1');
 
-    const sess = useLayoutStore.getState().sessionsById[sid];
-    expect(sess.messages.map((m) => m.id)).toEqual(['msg-u1']);
+    const sess = useSessionStore.getState().sessionsById[sid];
+    expect(sess?.messages.map((m) => m.id)).toEqual(['msg-u1']);
     expect(invalidationSpy.invalidateEditObjects).toHaveBeenCalledWith(
       ['msg-a1', 'msg-a2'],
       'withdraw'
@@ -75,10 +75,10 @@ describe('withdrawMessage 收口适配（R2-b ⑥ 失效广播）', () => {
   });
 
   it('目标不存在 → 不截断、不广播', () => {
-    useLayoutStore.getState().withdrawMessage('ws-1', sid, 'msg-no-such');
+    useSessionStore.getState().withdrawMessage('ws-1', sid, 'msg-no-such');
 
-    const sess = useLayoutStore.getState().sessionsById[sid];
-    expect(sess.messages).toHaveLength(3);
+    const sess = useSessionStore.getState().sessionsById[sid];
+    expect(sess?.messages).toHaveLength(3);
     expect(invalidationSpy.invalidateEditObjects).not.toHaveBeenCalled();
   });
 });

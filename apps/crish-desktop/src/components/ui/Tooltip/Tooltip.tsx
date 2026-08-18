@@ -29,7 +29,6 @@ import React, {
   forwardRef,
 } from 'react';
 import { createPortal } from 'react-dom';
-import * as DismissableLayer from '@radix-ui/react-dismissable-layer';
 import { useAnimatedPresence } from '../Dialog/useAnimatedPresence';
 import styles from './Tooltip.module.css';
 
@@ -273,7 +272,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
 
     const { state, isMounted } = useAnimatedPresence({
       visible,
-      exitDurationMs: 120,
+      exitDurationMs: 0,
     });
 
     const clearHideTimer = useCallback(() => {
@@ -521,34 +520,36 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
           rect &&
           isValidDOMRect(rect) &&
           createPortal(
-            <DismissableLayer.Branch asChild>
-              <div
-                ref={tipRef}
-                id={tipId}
-                role="tooltip"
-                data-tooltip-portal="true"
-                className={`${styles.tooltip} ${styles[effectiveSide]} ${state === 'exiting' ? styles.tooltipExit : styles.tooltipEnter}`}
-                style={
-                  {
-                    top: `${clampedPos?.top ?? rect.top}px`,
-                    left: `${clampedPos?.left ?? rect.left}px`,
-                    opacity:
-                      clampedPos !== null && isValidDOMRect(rect)
-                        ? undefined
-                        : 0,
-                    pointerEvents:
-                      clampedPos !== null && isValidDOMRect(rect)
-                        ? undefined
-                        : 'none',
-                    '--tooltip-translate': translateFor(effectiveSide),
-                  } as React.CSSProperties & Record<string, unknown>
-                }
-              >
-                <div className={styles.tooltipContent}>{content}</div>
-                <div className={styles.arrow} />
-              </div>
-            </DismissableLayer.Branch>,
-            document.body
+            <div
+              ref={tipRef}
+              id={tipId}
+              role="tooltip"
+              data-tooltip-portal="true"
+              className={`${styles.tooltip} ${styles[effectiveSide]} ${state === 'exiting' ? styles.tooltipExit : styles.tooltipEnter}`}
+              style={
+                {
+                  top: `${clampedPos?.top ?? rect.top}px`,
+                  left: `${clampedPos?.left ?? rect.left}px`,
+                  opacity:
+                    clampedPos !== null && isValidDOMRect(rect)
+                      ? undefined
+                      : 0,
+                  pointerEvents:
+                    state === 'exiting' ||
+                    clampedPos === null ||
+                    !isValidDOMRect(rect)
+                      ? 'none'
+                      : undefined,
+                  '--tooltip-translate': translateFor(effectiveSide),
+                } as React.CSSProperties & Record<string, unknown>
+              }
+            >
+              <div className={styles.tooltipContent}>{content}</div>
+              <div className={styles.arrow} />
+            </div>,
+            (typeof document !== 'undefined'
+              ? (document.getElementById('tooltip-root') ?? document.body)
+              : null)!
           )}
       </>
     );

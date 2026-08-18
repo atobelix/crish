@@ -28,7 +28,6 @@ export interface SettingsSidebarProps {
     opts?: { focusTab?: boolean; focusPanel?: boolean }
   ) => void;
   onFocusTab: (tab: TabType) => void;
-  onShowToast?: (msg: string) => void;
 }
 
 export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
@@ -51,8 +50,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
     onTablistKeyDown,
     onSelect,
     onFocusTab,
-    onShowToast,
-  }) => {
+    }) => {
     return (
       <nav
         className={styles.coverNav}
@@ -163,7 +161,7 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
         </div>
 
         {/* 侧栏底栏：左列 UserProfileCard + 右列 SettingsIconButton */}
-        <SidebarFooter onShowToast={onShowToast ?? (() => {})} />
+        <SidebarFooter />
 
         {/* 读屏播报当前页 / 筛选结果（视觉隐藏） */}
         <div

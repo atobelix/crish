@@ -73,15 +73,12 @@ export function openToolInActiveTab(panelId: string): void {
   openToolInSession(tab?.sessionId ?? '', panelId);
 }
 
-export const fileViewerInitialModeMap = new Map<string, 'plain' | 'diff'>();
-
-function openFileViewerInSession(filePath: string, initialMode: 'plain' | 'diff' = 'plain'): void {
+function openFileViewerInSession(filePath: string, _initialMode: 'plain' | 'diff' = 'plain'): void {
   const store = useWorkspaceShellStore.getState();
   const tab = store.getActiveTab();
   if (!tab) return;
 
   const tabId = `file-viewer:${filePath}`;
-  fileViewerInitialModeMap.set(filePath, initialMode);
 
   const treeStore = useLayoutTreeStore.getState();
   if (treeStore.toolColumnCollapsed) {

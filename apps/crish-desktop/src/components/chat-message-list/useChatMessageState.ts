@@ -1,6 +1,7 @@
+import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { FileDiff, SessionAgent, SessionMessage } from '../../store/types';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/storeAccess';
 import { assistantCopyText } from '../../api/toolPresentation';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type { PinnedItem } from './MessageVirtualizer';
@@ -73,7 +74,6 @@ export interface UseChatMessageStateOptions {
   onSetChatInput: (text: string) => void;
   onSendFollowUp?: (prompt: string) => void;
   onRegenerate: (userText: string, assistantMsgId: string) => void;
-  onShowToast: (message: string) => void;
   approvalBusy: boolean;
   pendingApprovalMsgId: string;
   onOpenDiff: (diff: FileDiff) => void;
@@ -93,7 +93,6 @@ export function useChatMessageState({
   onSetChatInput,
   onSendFollowUp,
   onRegenerate,
-  onShowToast,
   approvalBusy,
   pendingApprovalMsgId,
   onOpenDiff,
@@ -129,17 +128,17 @@ export function useChatMessageState({
 
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
-  const onShowToastRef = useRef(onShowToast);
-  onShowToastRef.current = onShowToast;
+  const onShowToastRef = useRef((m: string) => toast.show(m));
+  
   const onRegenerateRef = useRef(onRegenerate);
   onRegenerateRef.current = onRegenerate;
   const onSendFollowUpRef = useRef(onSendFollowUp);
   onSendFollowUpRef.current = onSendFollowUp;
 
-  const pinMessage = useLayoutStore((s) => s.pinMessage);
-  const unpinMessage = useLayoutStore((s) => s.unpinMessage);
+  const pinMessage = useSessionStore((s) => s.pinMessage);
+  const unpinMessage = useSessionStore((s) => s.unpinMessage);
   // Pin ids only — does not fire on stream token text updates to messages[].
-  const pinnedMessageIds = useLayoutStore(
+  const pinnedMessageIds = useSessionStore(
     (s) => s.sessionsById[activeSessionId]?.pinnedMessageIds ?? EMPTY_PINNED_IDS
   );
   const pinnedIdSet = useMemo(
@@ -196,10 +195,10 @@ export function useChatMessageState({
       if (!text) return;
       void navigator.clipboard.writeText(text).then(
         () => {},
-        () => onShowToast('复制失败')
+        () => toast.show('复制失败')
       );
     },
-    [onShowToast]
+    []
   );
 
   const onToggleExpandUser = useCallback(

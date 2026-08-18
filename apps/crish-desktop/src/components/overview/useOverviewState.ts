@@ -20,7 +20,7 @@ import {
   type BackgroundTaskInfo,
 } from '../../api/backgroundTasksApi';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/storeAccess';
 import type { SessionState } from '../../store/types';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 import { useEngineState } from '../../hooks/useEngineState';
@@ -189,7 +189,7 @@ export function useOverviewState(
     if (!toolCallId) return;
     // T-E 步骤 4（C1）：raw setState 全表扫描 → markToolCallLocalStatus action
     //（scope 命中时只扫 scope 内；handleApprovalAllow 有 a.runId 可传）
-    useLayoutStore
+    useSessionStore
       .getState()
       .markToolCallLocalStatus(
         toolCallId,

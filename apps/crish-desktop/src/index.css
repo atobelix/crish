@@ -1,25 +1,9 @@
-/* Conex desktop entry styles — domain splits live under ./styles/ */
+/* Conex desktop entry styles   domain splits live under ./styles/ */
 @import './styles/tokens.css';
 @import './styles/design-system.css';
 @import './styles/responsive.css';
 @import './styles/z-index.css' layer(base);
 @import './styles/shell/shell-reset.css';
-@import './styles/shell/shell-layout.css';
-@import './styles/shell/shell-sidebar.css';
-@import './styles/shell/shell-workspace.css';
-@import './styles/shell/shell-menus.css';
-@import './styles/shell/shell-scrollbar.css';
-@import './styles/shell/shell-dragdrop.css';
-@import './styles/shell/shell-polish.css';
-@import './styles/chat.css';
-@import './styles/settings/settings-base.css';
-@import './styles/settings/settings-models.css';
-@import './styles/settings/settings-plugins.css';
-@import './styles/settings/settings-usage.css';
-@import './styles/settings/settings-extensions.css';
-@import './styles/settings/settings-advanced.css';
-@import './styles/panels.css';
-@import './styles/theme-dark.css';
 @import './styles/focus-visible.css' layer(base);
 @import './styles/reduced-motion.css' layer(base);
 @import './styles/sr-only.css' layer(base);

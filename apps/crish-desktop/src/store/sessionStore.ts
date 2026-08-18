@@ -1,86 +1,151 @@
 /**
- * 会话域 facade — 与 useLayoutStore **同一 zustand 实例**（非独立 create）。
- * 权威状态与 actions 在 layoutStore + sessionActions；本文件只导出域 API。
- *
- * ## 消息持久投影定位（T4 A2 固化 · analysis/16 §①）
- *
- * `sessions[].messages` 是「事件流的持久投影缓存（终态落点）」：
- * 流式期间正文/工具中间态在 streamingStore 热缓冲（byKey），run 收口后
- * 由 commitStreamToSession 一次性落账本投影；本域不存流式中边帧。
- * 不新增第三个 store——热缓冲（streamingStore）与持久投影（本 facade）
- * 是设计内必需桥的两端，桥语义（queueMicrotask clearStream 时序闭环）保留。
- *
- * ## Ownership note (OPT-C1)
- *
- * Sessions **still live on layoutStore** (god-object). This is intentional residual —
- * do not dual-write a second sessions map. New code:
- * - Read/subscribe: `useSessionStore` / `useSessionField` / storeAccess
- * - Commands that open UI: `compositionRoot.session` / `.shell` (not raw setActive only)
- * - Tab strip open/focus/new-draft: **workspaceShellStore** owns TabSurface; shell may
- *   call `setActiveSessionId` as an internal side-effect — components must not pair both.
- *
- * @see ./storeOwnership.ts (`SESSION_OWNERSHIP`)
- * @see ./layoutStore.ts package header
+ * sessionStore — 会话域专属独立 Zustand 实例 (Tier 2 Session-Scoped Store)。
+ * 彻底销毁 export const useSessionStore = useLayoutStore 伪门面别名同体，
+ * 独占单一事件总线与订阅者集合，会话流式 Token 不触发全局 Layout 订阅者遍历。
  */
 import { useCallback, useRef, useSyncExternalStore } from 'react';
+import { create } from 'zustand';
+import { immer } from 'zustand/middleware/immer';
 import { useShallow } from '../store/useShallowSelector';
-import { useLayoutStore } from './layoutStore';
+import { withDevtools } from './middleware/withDevtools';
+import { withLogger } from './middleware/withLogger';
+import { withPersist } from './middleware/withPersist';
 import { sidebarSessionsEqual } from './sessionListEqual';
-import type { SessionState, SessionAgent } from './types';
-import type { SessionActions } from './sessionActions';
+import type { SessionState, SessionAgent, SessionMessage } from './types';
+import { createSessionActions, type SessionActions } from './sessionActions';
 import { getSessionById as getSessionByIdFromIndex } from './sessionIndex';
 import { sessionRuntimeRegistry } from '../api/SessionRuntimeRegistry';
+import {
+  initStorePersistence,
+  waitForStoreHydration,
+  type SessionActivatableStore,
+  type StoreApiLike,
+} from './layout-helpers/store-persistence';
 
-/** 与 layout 同引用：切片式 facade，禁止第二份 sessions 真相源 */
-export const useSessionStore = useLayoutStore;
-
-export type SessionFacadeState = {
+export interface SessionStoreState {
   sessions: SessionState[];
   sessionsById: Record<string, SessionState>;
   folderOrder: string[];
   activeSessionId: string;
+  draftFolder: string;
   activeAgentId: string | null;
   panelAgentId: string | null;
   composerDrafts: Record<string, string>;
-};
+  hydrationComplete: boolean;
+}
 
-export type SessionFacade = SessionFacadeState & SessionActions;
+export type SessionStore = SessionStoreState & SessionActions;
 
-export const selectSessions = (s: Pick<SessionFacadeState, 'sessions'>) =>
+export type SessionFacadeState = SessionStoreState;
+export type SessionFacade = SessionStore;
+
+/**
+ * 物理独立 SessionStore 实例 (彻底清除 autoIndexMiddleware 隐式全量重构)
+ * 彻底消除与 layoutStore 的别名同体引用，独占单一事件总线与订阅者集合
+ */
+export const useSessionStore = create<SessionStore>()(
+  withDevtools(
+    withLogger(
+      withPersist(
+        immer<SessionStore>((set, get) => ({
+          sessions: [],
+          sessionsById: {},
+          folderOrder: [],
+          activeSessionId: '',
+          draftFolder: '',
+          activeAgentId: null,
+          panelAgentId: null,
+          composerDrafts: {},
+          hydrationComplete: false,
+          ...createSessionActions(set, get),
+        })),
+        {
+          name: 'crish_session_store_v1',
+          partialize: (s) => ({
+            sessions: s.sessions,
+            folderOrder: s.folderOrder,
+            activeSessionId: s.activeSessionId,
+            composerDrafts: s.composerDrafts,
+          }),
+        }
+      )
+    ),
+    'SessionStore'
+  )
+);
+
+// ── 不可变原子选择器契约 (Atomic Selectors) ──────────────────────────────────
+
+export const selectActiveSessionId = (s: SessionStoreState): string =>
+  s.activeSessionId;
+
+export const selectActiveAgentId = (s: SessionStoreState): string | null =>
+  s.activeAgentId;
+
+export const selectPanelAgentId = (s: SessionStoreState): string | null =>
+  s.panelAgentId;
+
+export const selectSessionHydrated = (s: SessionStoreState): boolean =>
+  s.hydrationComplete;
+
+export const selectFolderOrder = (s: SessionStoreState): string[] =>
+  s.folderOrder;
+
+export const selectSessions = (s: SessionStoreState): SessionState[] =>
   s.sessions;
 
 export const selectSessionsById = (
-  s: Pick<SessionFacadeState, 'sessionsById'>
-) => s.sessionsById;
+  s: SessionStoreState
+): Record<string, SessionState> => s.sessionsById;
 
-export const selectActiveSessionId = (
-  s: Pick<SessionFacadeState, 'activeSessionId'>
-) => s.activeSessionId;
+export const selectComposerDrafts = (
+  s: SessionStoreState
+): Record<string, string> => s.composerDrafts;
 
-export const selectFolderOrder = (s: Pick<SessionFacadeState, 'folderOrder'>) =>
-  s.folderOrder;
-
-export const selectActiveAgentId = (
-  s: Pick<SessionFacadeState, 'activeAgentId'>
-) => s.activeAgentId;
-
-export const selectPanelAgentId = (
-  s: Pick<SessionFacadeState, 'panelAgentId'>
-) => s.panelAgentId;
+export const selectDraftFolder = (s: SessionStoreState): string =>
+  s.draftFolder;
 
 export const selectActiveSession = (
-  s: Pick<SessionFacadeState, 'sessions' | 'sessionsById' | 'activeSessionId'>
+  s: Pick<SessionStoreState, 'sessions' | 'sessionsById' | 'activeSessionId'>
 ): SessionState | undefined => getSessionByIdFromIndex(s, s.activeSessionId);
 
-export function useSessionField<T>(selector: (state: SessionFacade) => T): T {
-  return useSessionStore(
-    selector as (state: ReturnType<typeof useSessionStore.getState>) => T
-  );
+/**
+ * 细粒度单会话实体选择器
+ * 基于 sessionsById 进行 O(1) 查找，利用 Object.is 拦截无变化重绘
+ */
+export const makeSelectSessionById =
+  (sessionId: string) =>
+  (s: SessionStoreState): SessionState | undefined =>
+    s.sessionsById[sessionId];
+
+/**
+ * 细粒度消息流选择器
+ * 核心设计：返回不可变全局空数组常量 EMPTY_MESSAGES，彻底杜绝 fallback [] 导致的引用漂移与无效重绘
+ */
+const EMPTY_MESSAGES: readonly SessionMessage[] = Object.freeze([]);
+export const makeSelectSessionMessages =
+  (sessionId: string) =>
+  (s: SessionStoreState): readonly SessionMessage[] =>
+    s.sessionsById[sessionId]?.messages ?? EMPTY_MESSAGES;
+
+/** 细粒度 GoalMode 选择器 */
+export const makeSelectSessionGoalMode =
+  (sessionId: string) => (s: SessionStoreState) =>
+    s.sessionsById[sessionId]?.goalMode;
+
+/** 细粒度会话标题选择器 */
+export const makeSelectSessionTitle =
+  (sessionId: string) =>
+  (s: SessionStoreState): string =>
+    s.sessionsById[sessionId]?.title || '';
+
+// ── Hooks 封装 ─────────────────────────────────────────────────────────────
+
+export function useSessionField<T>(selector: (state: SessionStore) => T): T {
+  return useSessionStore(selector);
 }
 
 export function useSidebarSessions(searching: boolean): SessionState[] {
-  // useSyncExternalStore 模板（AA-03 Q19）：订阅单一 store 快照 + 相等函数拦截，
-  // 流式改 message 正文时 sessions 引用变化但侧栏壳字段不变 → 不重渲染。
   const snapshotRef = useRef<SessionState[]>(
     useSessionStore.getState().sessions
   );
@@ -125,12 +190,10 @@ export function usePanelAgentId(): string | null {
   return useSessionStore((s) => s.panelAgentId);
 }
 
-/**
- * 域投影：LayoutStore 结构上包含 SessionFacade 全部字段与 actions。
- * 门禁要求 get*StoreState 使用 `as unknown as` 窄化到命名 Facade（禁止 any）。
- */
-export function getSessionStoreState(): SessionFacade {
-  return useSessionStore.getState() as unknown as SessionFacade;
+// ── 命令式读写接口 ──────────────────────────────────────────────────────────
+
+export function getSessionStoreState(): SessionStore {
+  return useSessionStore.getState();
 }
 
 export function getSessionById(sessionId: string): SessionState | undefined {
@@ -158,6 +221,22 @@ export function getSessionAgent(
   const sess = getSessionById(sessionId);
   return sess?.agents?.find((a) => a.id === agentId);
 }
+
+/** 等待 store 会话回灌完成 */
+export function waitForHydration(): Promise<void> {
+  return waitForStoreHydration(
+    useSessionStore as unknown as StoreApiLike<any>
+  );
+}
+
+/** 挂载会话持久化与回灌 */
+export function initSessionStorePersistence(): () => void {
+  return initStorePersistence(
+    useSessionStore as unknown as SessionActivatableStore<any>
+  );
+}
+
+// ── 会话索引与纯函数工具再导出 ────────────────────────────────────────────────
 
 export {
   getSessionById as getSessionByIdFromState,
@@ -192,6 +271,13 @@ export type { SessionActions } from './sessionActions';
 export type { SessionState, SessionAgent, SessionMessage } from './types';
 export { SessionCoordinator, deleteSessionCascade } from './SessionCoordinator';
 
+// ── 运行时动态注册 ──────────────────────────────────────────────────────────
+
 sessionRuntimeRegistry.registerActiveIdResolver(
   () => useSessionStore.getState().activeSessionId
 );
+
+if (typeof window !== 'undefined') {
+  (window as unknown as Record<string, unknown>).useSessionStore =
+    useSessionStore;
+}

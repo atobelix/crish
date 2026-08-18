@@ -52,12 +52,13 @@ export interface UseAppBootstrapOptions {
    */
   setAppSettings?: (settings: AppSettings) => void;
   productShell: boolean;
-  uiSize: string;
-  shellChromeMode: string | undefined;
+  uiSize?: string;
+  shellChromeMode?: string;
 }
 
 export function useAppBootstrap({
   setAppSettings,
+  productShell: _productShell,
   uiSize,
   shellChromeMode,
 }: UseAppBootstrapOptions) {
@@ -149,7 +150,7 @@ export function useAppBootstrap({
           ({ listProjects, rememberProjectFolderAlias }) => {
             const projects = listProjects();
             for (const p of projects) rememberProjectFolderAlias(p.id, p.path);
-            getCompositionRoot().layout.getState().rebindSessionFolders(projects);
+            getCompositionRoot().session.getState().rebindSessionFolders(projects);
           }
         );
       } catch (e) {
@@ -173,23 +174,6 @@ export function useAppBootstrap({
     };
   }, []);
 
-  // 5. Workspace layout sync
-  useEffect(() => {
-    let cancelled = false;
-    let cleanup: (() => void) | undefined;
-    void import('../api/workspaceLayoutStore').then(
-      ({ initWorkspaceLayoutSync }) => {
-        if (cancelled) return;
-        cleanup = initWorkspaceLayoutSync({
-          onRestored: () => {},
-        });
-      }
-    );
-    return () => {
-      cancelled = true;
-      cleanup?.();
-    };
-  }, []);
 
   // 6. Theme, Font, and Settings bootstrap
   useEffect(() => {
@@ -253,20 +237,21 @@ export function useAppBootstrap({
     };
   }, []);
 
-  // 8. Root data-attributes setup
+  // 8. Root data-attributes setup (fallback if not handled by visualThemeController)
   useEffect(() => {
+    const size = uiSize || 'medium';
+    const chrome = shellChromeMode || 'classic';
     const root = document.documentElement;
-    root.setAttribute('data-ui-size', uiSize);
+    root.setAttribute('data-ui-size', size);
     const density =
-      uiSize === 'small'
+      size === 'small'
         ? 'compact'
-        : uiSize === 'large'
+        : size === 'large'
           ? 'comfortable'
           : 'default';
     root.setAttribute('data-density', density);
-    const chrome = shellChromeMode || 'classic';
     root.setAttribute('data-shell-chrome', chrome);
-    document.body.setAttribute('data-ui-size', uiSize);
+    document.body.setAttribute('data-ui-size', size);
     document.body.setAttribute('data-density', density);
     document.body.setAttribute('data-shell-chrome', chrome);
   }, [uiSize, shellChromeMode]);

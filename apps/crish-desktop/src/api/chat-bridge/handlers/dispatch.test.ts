@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 分派表全键穷举（T7）：每个生成 EventType 至少命中一条 handler；
  * legacy 信封键（subagent-* / error）同样有 handler。
  */
@@ -114,7 +114,7 @@ describe('onTimelineTruncate（R1 撤回消费：投影截断到 boundary + 回�
 
   beforeEach(() => {
     sid = `sess-retract-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    useLayoutStore.getState().createSession({
+    useSessionStore.getState().createSession({
       title: 'retract-test',
       id: sid,
       activate: false,
@@ -122,19 +122,19 @@ describe('onTimelineTruncate（R1 撤回消费：投影截断到 boundary + 回�
     created.push(sid);
     invalidationSpy.invalidateEditObjects.mockClear();
     const wsId = useLayoutStore.getState().workspaces[0].id;
-    useLayoutStore.getState().addMessage(wsId, sid, {
+    useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-u1',
       sender: 'user',
       text: '撤回我',
       timestamp: 1,
     });
-    useLayoutStore.getState().addMessage(wsId, sid, {
+    useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-a1',
       sender: 'assistant',
       text: '第一轮回复',
       timestamp: 2,
     });
-    useLayoutStore.getState().addMessage(wsId, sid, {
+    useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-a2',
       sender: 'assistant',
       text: '第二轮回复',
@@ -144,7 +144,7 @@ describe('onTimelineTruncate（R1 撤回消费：投影截断到 boundary + 回�
 
   afterEach(() => {
     for (const s of created.splice(0)) {
-      useLayoutStore.getState().deleteSession(s);
+      useSessionStore.getState().deleteSession(s);
     }
   });
 
@@ -232,26 +232,26 @@ describe('applyTimelineTruncate（sessionMessageActions · 投影截断到 bound
 
   beforeEach(() => {
     sid = `sess-applytruncate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    useLayoutStore.getState().createSession({
+    useSessionStore.getState().createSession({
       title: 'apply-truncate-test',
       id: sid,
       activate: false,
     });
     created.push(sid);
     const wsId = useLayoutStore.getState().workspaces[0].id;
-    useLayoutStore.getState().addMessage(wsId, sid, {
+    useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-u1',
       sender: 'user',
       text: '撤回我',
       timestamp: 1,
     });
-    useLayoutStore.getState().addMessage(wsId, sid, {
+    useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-a1',
       sender: 'assistant',
       text: '第一轮回复',
       timestamp: 2,
     });
-    useLayoutStore.getState().addMessage(wsId, sid, {
+    useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-a2',
       sender: 'assistant',
       text: '第二轮回复',
@@ -263,7 +263,7 @@ describe('applyTimelineTruncate（sessionMessageActions · 投影截断到 bound
 
   afterEach(() => {
     for (const s of created.splice(0)) {
-      useLayoutStore.getState().deleteSession(s);
+      useSessionStore.getState().deleteSession(s);
     }
   });
 
@@ -295,3 +295,5 @@ describe('applyTimelineTruncate（sessionMessageActions · 投影截断到 bound
     expect(sess.pinnedMessageIds).toEqual(['msg-a2']);
   });
 });
+
+import { useSessionStore } from '@/store/sessionStore';

@@ -16,17 +16,6 @@
 
 export { useLayoutStore, initLayoutStorePersistence } from './layoutStore';
 
-export type {
-  StoreOwnershipDomain,
-  StoreWriteOwner,
-  StoreOwnership,
-} from './storeOwnership';
-export {
-  SHELL_TAB_OWNERSHIP,
-  LAYOUT_TREE_OWNERSHIP,
-  SESSION_OWNERSHIP,
-} from './storeOwnership';
-
 export {
   useSessionStore,
   useSessionField,

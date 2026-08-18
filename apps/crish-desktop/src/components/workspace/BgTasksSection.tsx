@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * RuntimePanel 后台常驻区段：后台任务列表 + 打开终端输出（防连点）。
  * 打开是可预期操作不 toast；读取失败仅错误提示并回退展示。
@@ -25,14 +26,13 @@ import { SUSPICIOUS_TASK_TEXT } from '../bg-tasks/bgTaskCardLib';
 export type BgTasksSectionProps = {
   bgTasks: BackgroundTaskInfo[];
   countLabel: string | null;
-  onShowToast: (msg: string) => void;
 };
 
 export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
   bgTasks,
   countLabel,
-  onShowToast,
-}) => {
+  }) => {
+  const { showToast: _showToast } = useToast();
   // D2（C-10）：连接态投影（errorStore 真源），不再由 RuntimePanel props 下传
   const connectionStatus = useConnectionStatus();
   const [bgOpeningId, setBgOpeningId] = useState<string | null>(null);
@@ -53,7 +53,7 @@ export const BgTasksSection: React.FC<BgTasksSectionProps> = ({
         t.label,
         t.summary || t.command || '读取失败',
       );
-      onShowToast('读取后台任务输出失败');
+      showToast('读取后台任务输出失败');
     } finally {
       setBgOpeningId(null);
     }

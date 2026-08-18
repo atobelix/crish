@@ -15,7 +15,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   useSyncExternalStore,
 } from 'react';
 import {
@@ -113,11 +112,6 @@ export function useNotePaperStrictShell(
     () => '0'
   );
 
-  const [chromeTick, setChromeTick] = useState(0);
-  const bump = useCallback(() => setChromeTick((n) => n + 1), []);
-  // chromeTick 触发内部重绘；快照每帧从 model 读，
-  // 使外部 chrome.setFocused + rerender（CONN-C 测）也能驱动 PaperList pin
-  void chromeTick;
   const snapshot = chrome.getSnapshot();
   const selSnapshot = blockSelection.getSnapshot();
 
@@ -129,17 +123,15 @@ export function useNotePaperStrictShell(
   const handleHover = useCallback(
     (blockId: string | null) => {
       chrome.setHovered(blockId);
-      bump();
     },
-    [chrome, bump]
+    [chrome]
   );
   /** 焦点经 bridge：multi 外默认清 multi；仍投影 chrome.focusedBlockId（CONN-C） */
   const handleFocus = useCallback(
     (blockId: string | null) => {
       blockSelection.setFocused(blockId);
-      bump();
     },
-    [blockSelection, bump]
+    [blockSelection]
   );
 
   const panelRef = useRef<HTMLElement | null>(null);
@@ -159,13 +151,10 @@ export function useNotePaperStrictShell(
         blockId: anchorId,
         offset,
       });
-      if (opened.ok) {
-        bump();
-      }
       onSlashOpenResult?.(opened);
       return opened;
     },
-    [blocks, docId, slashMenu, chrome, bump, onSlashOpenResult]
+    [blocks, docId, slashMenu, chrome, onSlashOpenResult]
   );
 
   const openSlashMenu = useCallback(() => {
@@ -188,7 +177,6 @@ export function useNotePaperStrictShell(
         surfaceRoot: root,
       });
       if (r.ok) {
-        bump();
         onSlashOpenResult?.(r);
       } else if (r.code === 'composing') {
         onSlashOpenResult?.(r);
@@ -197,7 +185,7 @@ export function useNotePaperStrictShell(
 
     root.addEventListener('keydown', onKeyDown);
     return () => root.removeEventListener('keydown', onKeyDown);
-  }, [slashMenu, chrome, blocks, docId, bump, onSlashOpenResult]);
+  }, [slashMenu, chrome, blocks, docId, onSlashOpenResult]);
 
   return {
     chrome,
@@ -209,7 +197,7 @@ export function useNotePaperStrictShell(
     mdPrefixWriteMode,
     mdPrefixSinkSource,
     slashOpen,
-    chromeTick,
+    chromeTick: 0,
     snapshot,
     selSnapshot,
     handleHover,

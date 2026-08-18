@@ -12,7 +12,7 @@
  * 直写 agents store（与 per-run 面的 useStreamCallbacks 消费语义对齐）。
  */
 import { surfaceStreamFailure } from '../BridgeErrorPolicy';
-import { getLayoutChromeState } from '../../../store/storeAccess';
+import { getSessionStoreState } from '../../../store/storeAccess';
 import type { EngineEnvelope, LegacyEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
@@ -124,7 +124,7 @@ export function onSubagentStartedGlobal(raw: Record<string, unknown>): void {
   const sid = resolveSubagentSessionId(raw);
   const subagentId = String(raw.subagentId ?? '');
   if (!sid || !subagentId) return;
-  const store = getLayoutChromeState();
+  const store = getSessionStoreState();
   const existing = store.sessionsById[sid]?.agents?.find(
     (a) => a.id === subagentId
   );
@@ -147,7 +147,7 @@ export function onSubagentStartedGlobal(raw: Record<string, unknown>): void {
   if (parentToolCallId) {
     // T-E 步骤 3（S1）：raw setState → markToolCallLocalStatus（终态工具卡不回退
     // running 的守卫在 action 内建；scope 限定本会话避免全表扫描）
-    getLayoutChromeState().markToolCallLocalStatus(
+    getSessionStoreState().markToolCallLocalStatus(
       parentToolCallId,
       'running',
       '协作进行中…',
@@ -172,7 +172,7 @@ export function onSubagentEventGlobal(raw: Record<string, unknown>): void {
       : {};
   // T-E 步骤 3（S2）：raw setState → applySubagentEventToAgent action
   //（applySubagentEventToMessages 纯函数复用内建，与 per-run 面 U2 同承载面）
-  getLayoutChromeState().applySubagentEventToAgent(sid, subagentId, ev);
+  getSessionStoreState().applySubagentEventToAgent(sid, subagentId, ev);
 }
 
 /**
@@ -188,7 +188,7 @@ export function onSubagentEndedGlobal(raw: Record<string, unknown>): void {
   const summary = raw.summary ? String(raw.summary) : undefined;
   // T-E 步骤 3（S3）：raw setState → patchSessionAgentToolStatus action
   //（与 per-run 面 U3 同一承载面：agent 终态 + 时间线收口 + 父工具卡终态）
-  getLayoutChromeState().patchSessionAgentToolStatus(sid, subagentId, {
+  getSessionStoreState().patchSessionAgentToolStatus(sid, subagentId, {
     status,
     ...(summary !== undefined ? { summary } : {}),
   });

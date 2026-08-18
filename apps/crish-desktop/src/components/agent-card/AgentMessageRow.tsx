@@ -80,7 +80,6 @@ export function AgentMessageRow({
         onApprovalDeny: onApprovalDeny,
       }}
       onTogglePin={() => {}}
-      onShowToast={() => {}}
       onRegenerate={() => {}}
       onBranch={() => {}}
       onOpenDiff={onOpenDiff}

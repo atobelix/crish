@@ -97,8 +97,8 @@ export function ConfirmDialog({
       overlayClassName={overlayClassName}
       portalTarget={portalTarget}
       footer={
-        // Dialog 的 .dialogFooter 已提供 flex + gap 布局（消费方可经 className 覆盖）
-        <div>
+        // Dialog 的 .dialogFooter 已提供 flex + gap 布局，直接挂载按钮 Fragment
+        <>
           <Button
             ref={cancelButtonRef}
             type="button"
@@ -115,7 +115,7 @@ export function ConfirmDialog({
           >
             {confirmLabel}
           </Button>
-        </div>
+        </>
       }
     />
   );

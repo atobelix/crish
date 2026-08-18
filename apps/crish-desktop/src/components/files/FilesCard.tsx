@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 import React, { useCallback, useEffect, useRef } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
@@ -15,12 +16,11 @@ import { AppErrorBoundary } from '../AppErrorBoundary';
 import { useFileNavigation } from './hooks/useFileNavigation';
 import { useFilePreview } from './hooks/useFilePreview';
 import { FileBreadcrumb } from './FileBreadcrumb';
-import { FileTree } from './FileTree';
+import { FileTreeView } from './FileTreeView';
 import { FilePreview } from './FilePreview';
 import { FileActions } from './FileActions';
 
 interface FilesCardProps {
-  onShowToast?: (message: string) => void;
   initialPath?: string | null;
 }
 
@@ -29,7 +29,8 @@ const PARENT_DIR_LABEL = '上级目录';
 const REFRESH_LABEL = '刷新';
 
 export const FilesCard: React.FC<FilesCardProps> = React.memo(
-  ({ initialPath, onShowToast }) => {
+  ({ initialPath }) => {
+    const { showToast: _showToast } = useToast();
     const preview = useFilePreview();
     const nav = useFileNavigation(() => preview.dirty);
     const filterInputRef = useRef<HTMLInputElement>(null);
@@ -90,9 +91,9 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     const handleCopyPath = useCallback(
       (mode: 'abs' | 'rel') => {
         preview.copyPath(preview.selected || nav.cwd, nav.root, mode);
-        onShowToast?.(mode === 'abs' ? '绝对路径已复制' : '相对路径已复制');
+        showToast(mode === 'abs' ? '绝对路径已复制' : '相对路径已复制');
       },
-      [preview, nav, onShowToast]
+      [preview, nav, showToast]
     );
 
     const handleNavigate = useCallback(
@@ -354,7 +355,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
               className={`${styles.filesBody} ${styles.filesBodySplit}`}
               data-mode={preview.view}
             >
-              <FileTree
+              <FileTreeView
                 flatTree={nav.flatTree}
                 selected={preview.selected}
                 expanded={nav.expanded}

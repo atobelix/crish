@@ -462,7 +462,7 @@ export async function createStreamSession(
       try {
         const root = getCompositionRoot();
         if (userClientMessageId) {
-          root.layout
+          root.session
             .getState()
             .setSessionMessageStatus(
               safeSessionId,

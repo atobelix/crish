@@ -1,3 +1,4 @@
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 扩展：插件、MCP、技能；列表内直接查看与配置。
  */
@@ -11,17 +12,24 @@ import { Button } from '../ui';
 import type { KindFilter } from './types';
 
 const SkillsSettingsTab = lazy(() =>
-  import('../settings-skills/SkillsSettingsTab').then((m) => ({ default: m.SkillsSettingsTab }))
+  import('../settings-skills/SkillsSettingsTab').then((m) => ({
+    default: m.SkillsSettingsTab,
+  }))
 );
 const McpSettingsTab = lazy(() =>
-  import('../settings-mcp/McpSettingsTab').then((m) => ({ default: m.McpSettingsTab }))
+  import('../settings-mcp/McpSettingsTab').then((m) => ({
+    default: m.McpSettingsTab,
+  }))
 );
 
 type Props = {
-  onShowToast: (msg: string) => void;
+  onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsExtensionsTab: React.FC<Props> = ({
+  onBlockingOverlayChange,
+}) => {
+  const { showToast: _showToast } = useToast();
   const {
     view,
     setView,
@@ -53,7 +61,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
     toggleMcpServer,
     togglePlugin,
     setExpand,
-  } = useExtensionMarket(onShowToast);
+  } = useExtensionMarket();
 
   const kindFilters: { id: KindFilter; label: string }[] = [
     { id: 'all', label: '全部' },
@@ -93,9 +101,13 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
         >
           <AppErrorBoundary compact title={`${label}加载失败`}>
             {manage === 'skill' ? (
-              <SkillsSettingsTab onShowToast={onShowToast} />
+              <SkillsSettingsTab
+                onBlockingOverlayChange={onBlockingOverlayChange}
+              />
             ) : (
-              <McpSettingsTab onShowToast={onShowToast} />
+              <McpSettingsTab
+                onBlockingOverlayChange={onBlockingOverlayChange}
+              />
             )}
           </AppErrorBoundary>
         </Suspense>
@@ -116,7 +128,13 @@ export const SettingsExtensionsTab: React.FC<Props> = ({ onShowToast }) => {
             onClick={() => void refresh()}
             disabled={loading}
             aria-label="刷新"
-            icon={<RefreshCw size={14} className={loading ? 'spin' : undefined} aria-hidden />}
+            icon={
+              <RefreshCw
+                size={14}
+                className={loading ? 'spin' : undefined}
+                aria-hidden
+              />
+            }
           />
         </div>
       }

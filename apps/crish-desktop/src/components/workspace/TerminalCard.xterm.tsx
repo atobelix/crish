@@ -21,11 +21,14 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 import {
   ptyCreate,
+  ptyKill,
   ptyResize,
   ptyWrite,
   subscribePtyExit,
   subscribePtyOutput,
 } from '../../api/ptySessionApi';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { useLayoutAnimationStore } from '../../store/layoutAnimationStore';
 import styles from './TerminalCard.module.css';
 
 export type InteractiveXtermStatus =
@@ -241,18 +244,17 @@ term.dispose();
 
     let cancelled = false;
     let activePtyId: string | null = null;
-    let unsubOut: (() => void) | null = null;
-    let unsubExit: (() => void) | null = null;
+    const disposables: (() => void)[] = [];
 
     const key = (sessionKey || '').trim() || '_global';
 
     const start = async () => {
-onStatusRef.current?.('connecting');
-try {
-fitAddon.fit();
-} catch {
-/* swallow-ok: 连接阶段 fit 失败不阻断 pty 建立 */
-}
+      onStatusRef.current?.('connecting');
+      try {
+        fitAddon.fit();
+      } catch {
+        /* swallow-ok: 连接阶段 fit 失败不阻断 pty 建立 */
+      }
 
       const cols = Math.max(2, term.cols || 80);
       const rows = Math.max(1, term.rows || 24);
@@ -260,6 +262,7 @@ fitAddon.fit();
 
       // 统一 ensure/reuse registry；openTool 已 ensure 时直接复用，禁止再裸 create
       const reg = await import('../../api/ptyRegistry');
+      if (cancelled) return;
 
       // 同 session 下 restartToken/localRestart 变化 → 先 take+kill 再新建（避免复用旧壳）
       const prev = prevLifecycleRef.current;
@@ -269,6 +272,7 @@ fitAddon.fit();
       prevLifecycleRef.current = { sessionKey: key, restartToken, localRestart };
       if (restartBumped) {
         await reg.killPtyForSession(key);
+        if (cancelled) return;
       }
 
       const priorId = reg.ptyRegistry.get(key) ?? null;
@@ -279,6 +283,13 @@ fitAddon.fit();
       if (!ptyId) {
         // ensure：走 spawn handler（bootstrap 注入）；失败再直连 ptyCreate
         ptyId = await reg.ensurePtyForSession(key);
+        if (cancelled) {
+          if (ptyId) {
+            void reg.killPtySession(key);
+            void ptyKill(ptyId);
+          }
+          return;
+        }
       }
 
       if (!ptyId) {
@@ -289,30 +300,32 @@ fitAddon.fit();
           ...(cwdOpt ? { cwd: cwdOpt } : {}),
         });
 
-        if (res.status === 'missing') {
-          if (!cancelled) {
-            ptyIdRef.current = null;
-            onStatusRef.current?.('missing');
-            onMissingRef.current?.();
+        if (cancelled) {
+          if (res.status === 'ok' && res.data?.ptyId) {
+            void ptyKill(res.data.ptyId);
           }
           return;
         }
 
+        if (res.status === 'missing') {
+          ptyIdRef.current = null;
+          onStatusRef.current?.('missing');
+          onMissingRef.current?.();
+          return;
+        }
+
         if (res.status === 'error') {
-          if (!cancelled) {
-            ptyIdRef.current = null;
-            onStatusRef.current?.('error', res.message);
-            try {
-              term.writeln(`\x1b[31m✗ ${res.message}\x1b[0m`);
-            } catch {
-              /* ignore */
-            }
+          ptyIdRef.current = null;
+          onStatusRef.current?.('error', res.message);
+          try {
+            term.writeln(`\x1b[31m✗ ${res.message}\x1b[0m`);
+          } catch {
+            /* ignore */
           }
           return;
         }
 
         ptyId = res.data.ptyId;
-        // 立刻登记，即使随后 cancelled 也不造孤儿（策略 A：留给 closeTab take）
         reg.registerPtyBinding(key, ptyId);
       } else if (!priorId) {
         // ensure 新建：已在 ensure 内 bind；加固一次无害
@@ -320,41 +333,45 @@ fitAddon.fit();
       }
 
       if (cancelled) {
-        // 策略 A：不 kill；registry 已绑定即可
+        if (ptyId && !reused) {
+          void reg.killPtySession(key);
+          void ptyKill(ptyId);
+        }
         return;
       }
 
       // 仅新建会话清屏；复用时保留缓冲（折坞再开续看）
-if (!reused) {
-try {
-term.reset();
-} catch {
-/* swallow-ok: reset 失败时终端仍可用，仅缓冲未清 */
-}
-}
+      if (!reused) {
+        try {
+          term.reset();
+        } catch {
+          /* swallow-ok: reset 失败时终端仍可用，仅缓冲未清 */
+        }
+      }
 
       activePtyId = ptyId;
       ptyIdRef.current = activePtyId;
       onStatusRef.current?.('ready');
 
-unsubOut = subscribePtyOutput((p) => {
-if (cancelled || p.ptyId !== activePtyId) return;
-try {
-term.write(p.data);
-} catch {
-/* swallow-ok: 终端已销毁时输出帧丢弃，不阻断会话 */
-}
-});
+      const unsubOut = subscribePtyOutput((p) => {
+        if (cancelled || p.ptyId !== activePtyId) return;
+        try {
+          term.write(p.data);
+        } catch {
+          /* swallow-ok: 终端已销毁时输出帧丢弃，不阻断会话 */
+        }
+      });
+      disposables.push(unsubOut);
 
-      unsubExit = subscribePtyExit((p) => {
+      const unsubExit = subscribePtyExit((p) => {
         if (cancelled || p.ptyId !== activePtyId) return;
         const codeLabel =
           p.code === undefined || p.code === null ? '' : ` · exit ${p.code}`;
-try {
-term.writeln(`\r\n\x1b[90m── 进程已退出{codeLabel} ──\x1b[0m`);
-} catch {
-/* swallow-ok: 退出提示写终端失败不影响状态更新 */
-}
+        try {
+          term.writeln(`\r\n\x1b[90m── 进程已退出${codeLabel} ──\x1b[0m`);
+        } catch {
+          /* swallow-ok: 退出提示写终端失败不影响状态更新 */
+        }
         // 进程自退出：解绑 registry，避免死绑定复用
         void import('../../api/ptyRegistry').then((m) => {
           if (m.ptyRegistry.get(key) === activePtyId) {
@@ -366,6 +383,7 @@ term.writeln(`\r\n\x1b[90m── 进程已退出{codeLabel} ──\x1b[0m`);
         }
         onStatusRef.current?.('exited', codeLabel);
       });
+      disposables.push(unsubExit);
 
       // 对齐尺寸（复用 / 新建后 layout 可能变化）
       try {
@@ -373,25 +391,29 @@ term.writeln(`\r\n\x1b[90m── 进程已退出{codeLabel} ──\x1b[0m`);
         if (activePtyId) {
           void ptyResize(activePtyId, term.cols, term.rows);
         }
-} catch {
-/* swallow-ok: 尺寸同步失败时 pty 保持旧尺寸，下次 resize 校正 */
-}
+      } catch {
+        /* swallow-ok: 尺寸同步失败时 pty 保持旧尺寸，下次 resize 校正 */
+      }
 
-try {
-term.focus();
-} catch {
-/* swallow-ok: 终端未就绪时聚焦为空操作 */
-}
-};
+      try {
+        term.focus();
+      } catch {
+        /* swallow-ok: 终端未就绪时聚焦为空操作 */
+      }
+    };
 
     void start();
 
     return () => {
       cancelled = true;
-      unsubOut?.();
-      unsubExit?.();
-      unsubOut = null;
-      unsubExit = null;
+      for (const fn of disposables) {
+        try {
+          fn();
+        } catch {
+          /* ignore */
+        }
+      }
+      disposables.length = 0;
       // 策略 A：卸载 / 切 session **不** kill PTY；仅 closeTab 经 registry.take 杀
       const id = activePtyId;
       activePtyId = null;
@@ -418,18 +440,31 @@ term.focus();
     const isLayoutResizing = () => {
       try {
         const b = document.body;
-        return (
+        if (
           b.classList.contains('tree-resizing') ||
           b.classList.contains('is-resizing') ||
           b.classList.contains('resizing-active') ||
           b.classList.contains('workspace-resizing')
-        );
+        ) {
+          return true;
+        }
+        if (
+          typeof document !== 'undefined' &&
+          document.documentElement.dataset.layoutFrozen === 'true'
+        ) {
+          return true;
+        }
+        if (useLayoutAnimationStore.getState().activeAnimations.size > 0) {
+          return true;
+        }
+        return false;
       } catch {
         return false;
       }
     };
 
     const doFit = () => {
+      if (isLayoutResizing()) return;
       const term = termRef.current;
       if (!term || !fitAddonRef.current) return;
       try {
@@ -450,10 +485,13 @@ term.focus();
     };
 
     const scheduleFit = () => {
-      // 布局拖拽中：约 12fps，与 sash 几何刷新对齐、降低 WebGL 闪烁
-      const minInterval = isLayoutResizing() ? 80 : 32;
+      // 拖拽 / 动画期间彻底挂起（Zero-JS / 0 fit / 0 IPC），等 resize-settled 广播后单次补偿下发
+      if (isLayoutResizing()) {
+        return;
+      }
+
       const now = performance.now();
-      const wait = Math.max(0, minInterval - (now - lastFitAt));
+      const wait = Math.max(0, 32 - (now - lastFitAt));
 
       if (wait > 0) {
         if (throttleTimer) return;
@@ -462,7 +500,9 @@ term.focus();
           if (raf) cancelAnimationFrame(raf);
           raf = requestAnimationFrame(() => {
             raf = 0;
-            doFit();
+            if (!isLayoutResizing()) {
+              doFit();
+            }
           });
         }, wait);
         return;
@@ -471,36 +511,38 @@ term.focus();
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        doFit();
+        if (!isLayoutResizing()) {
+          doFit();
+        }
       });
     };
 
-    const ro = new ResizeObserver(scheduleFit);
-    ro.observe(el);
+    const roManager = ResizeObserverManager.getInstance();
+    const handleResize = () => {
+      scheduleFit();
+    };
+    roManager.observe(el, handleResize);
 
-    // 手势结束时补一次最终 fit（与其它面板 commit 几何同步）
-    const onResizeClassChange = () => {
+    const onResizeSettled = () => {
+      if (throttleTimer) {
+        clearTimeout(throttleTimer);
+        throttleTimer = 0;
+      }
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
       if (!isLayoutResizing()) {
-        if (throttleTimer) {
-          clearTimeout(throttleTimer);
-          throttleTimer = 0;
-        }
-        scheduleFit();
+        doFit();
       }
     };
-    const mo = new MutationObserver(onResizeClassChange);
-    try {
-mo.observe(document.body, {
-attributes: true,
-attributeFilter: ['class'],
-});
-} catch {
-/* swallow-ok: 主题观察不可用时终端配色不回切，功能不受影响 */
-}
+    window.addEventListener('app:window-resize-settled', onResizeSettled, {
+      passive: true,
+    });
 
     return () => {
-      ro.disconnect();
-      mo.disconnect();
+      roManager.unobserve(el, handleResize);
+      window.removeEventListener('app:window-resize-settled', onResizeSettled);
       if (raf) {
         cancelAnimationFrame(raf);
         raf = 0;

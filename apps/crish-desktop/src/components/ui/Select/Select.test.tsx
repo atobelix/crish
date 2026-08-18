@@ -4,7 +4,13 @@
  */
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from '@testing-library/react';
 import { useState } from 'react';
 import { Select } from './Select';
 
@@ -47,10 +53,15 @@ describe('ui/Select', () => {
     fireEvent.click(screen.getByRole('combobox'));
     const listbox = await screen.findByRole('listbox');
     expect(listbox).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'GPT-4' })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('option', { name: 'GPT-4' })).toHaveAttribute(
+      'aria-selected',
+      'false'
+    );
     fireEvent.click(screen.getByRole('option', { name: 'GPT-4' }));
     expect(screen.getByRole('combobox')).toHaveTextContent('GPT-4');
-    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    );
   });
 
   it('受控 value 驱动选中态与 aria-selected', async () => {
@@ -99,12 +110,17 @@ describe('ui/Select', () => {
     fireEvent.click(screen.getByRole('combobox'));
     const listbox = await screen.findByRole('listbox');
     fireEvent.keyDown(listbox, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    );
   });
 
   it('error 文案触发 aria-invalid 与错误描边类', () => {
     render(<Select options={OPTIONS} error="必须选择模型" />);
-    expect(screen.getByRole('combobox')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'aria-invalid',
+      'true'
+    );
     expect(screen.getByText('必须选择模型')).toBeInTheDocument();
   });
 
@@ -112,7 +128,10 @@ describe('ui/Select', () => {
     render(<Select label="模型" options={OPTIONS} />);
     const label = screen.getByText('模型');
     expect(label.tagName).toBe('LABEL');
-    expect(screen.getByRole('combobox')).toHaveAttribute('id', label.getAttribute('for'));
+    expect(screen.getByRole('combobox')).toHaveAttribute(
+      'id',
+      label.getAttribute('for')
+    );
   });
 
   it('disabled 触发器不可交互', () => {
@@ -134,7 +153,9 @@ describe('ui/Select', () => {
     fireEvent.click(screen.getByRole('combobox'));
     const option = await screen.findByRole('option', { name: '选项甲' });
     fireEvent.mouseEnter(option);
-    await waitFor(() => expect(screen.getByText('仅作说明')).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText('仅作说明')).toBeInTheDocument()
+    );
     fireEvent.click(option);
     expect(onChange).toHaveBeenCalledWith('a');
   });
@@ -148,11 +169,13 @@ describe('ui/Select', () => {
     document.body.appendChild(outside);
     fireEvent.pointerDown(outside);
     fireEvent.click(outside);
-    await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    );
     outside.remove();
   });
 
-  it('触发器防冒泡：点击触发器不向外部冒泡', async () => {
+  it('触发器事件流：点击触发器正常冒泡并展开列表', async () => {
     const onOuterClick = vi.fn();
     render(
       <div onClick={onOuterClick}>
@@ -160,7 +183,7 @@ describe('ui/Select', () => {
       </div>
     );
     fireEvent.click(screen.getByRole('combobox'));
-    expect(onOuterClick).not.toHaveBeenCalled();
+    expect(onOuterClick).toHaveBeenCalledTimes(1);
     await screen.findByRole('listbox');
   });
 });

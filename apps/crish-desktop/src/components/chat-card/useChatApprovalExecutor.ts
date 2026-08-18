@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+﻿import { useCallback, useEffect, useState } from 'react';
 import { getSessionById } from '../../store/storeAccess';
 import {
   addCommandPermission,
@@ -7,7 +7,8 @@ import {
 import { rememberPrefixFromToolArgs } from '../../api/approvalMeta';
 import { extractCommandForMatch } from '../../api/commandPermissions';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import type { } from '../../hooks/useToastQueue';
+import { toast } from '../../services/toast/ToastContext';
 import {
   shouldSkipApprovalRollback,
   shouldSkipDenyRollback,
@@ -28,8 +29,8 @@ function findChatTool(sessionId: string, msgId: string, toolId: string) {
 
 export function useChatApprovalExecutor(
   activeSessionId: string | null,
-  onShowToast: ShowToastFn
 ) {
+  const showToast = (m: string) => toast.show(m);
   const [, setLockVersion] = useState(0);
 
   useEffect(() => {
@@ -85,12 +86,12 @@ export function useChatApprovalExecutor(
           status: 'error',
           output: '批准失败',
         });
-        onShowToast?.('批准失败，请重试');
+        showToast('批准失败，请重试');
       } finally {
         inFlightApprovalRegistry.release([tid]);
       }
     },
-    [activeSessionId, onShowToast]
+    [activeSessionId, showToast]
   );
 
   const handleApprovalDeny = useCallback(
@@ -116,12 +117,12 @@ export function useChatApprovalExecutor(
           status: 'pending_approval',
           output: '拒绝未送达',
         });
-        onShowToast?.('拒绝未送达，请重试');
+        showToast('拒绝未送达，请重试');
       } finally {
         inFlightApprovalRegistry.release([tid]);
       }
     },
-    [activeSessionId, onShowToast]
+    [activeSessionId, showToast]
   );
 
   const handleBatchApprove = useCallback(
@@ -164,7 +165,7 @@ export function useChatApprovalExecutor(
           }
         });
         if (failCount > 0) {
-          onShowToast?.(
+          showToast(
             failCount === runnablePairs.length
               ? '批量批准失败，请重试'
               : `${failCount} 个工具批准失败，请重试`
@@ -179,12 +180,12 @@ export function useChatApprovalExecutor(
             output: '批准失败',
           });
         }
-        onShowToast?.('批量批准失败，请重试');
+        showToast('批量批准失败，请重试');
       } finally {
         inFlightApprovalRegistry.release(runnablePairs.map((p) => p.toolId));
       }
     },
-    [activeSessionId, onShowToast]
+    [activeSessionId, showToast]
   );
 
   const handleBatchDeny = useCallback(
@@ -227,7 +228,7 @@ export function useChatApprovalExecutor(
           }
         });
         if (failCount > 0) {
-          onShowToast?.(
+          showToast(
             failCount === runnablePairs.length
               ? '批量拒绝未送达，请重试'
               : `${failCount} 个工具拒绝未送达，请重试`
@@ -242,12 +243,12 @@ export function useChatApprovalExecutor(
             output: '拒绝未送达',
           });
         }
-        onShowToast?.('批量拒绝未送达，请重试');
+        showToast('批量拒绝未送达，请重试');
       } finally {
         inFlightApprovalRegistry.release(runnablePairs.map((p) => p.toolId));
       }
     },
-    [activeSessionId, onShowToast]
+    [activeSessionId, showToast]
   );
 
   return {

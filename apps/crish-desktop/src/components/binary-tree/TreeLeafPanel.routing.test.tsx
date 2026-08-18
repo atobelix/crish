@@ -8,6 +8,7 @@ import { useLayoutStore } from '../../store/layoutStore';
 import { useLayoutTreeStore } from '../../store/layout-tree';
 import { createLeaf } from '../../store/layout-tree/types';
 import type { SessionState } from '../../store/types';
+import { registerBuiltInViews } from '../../services/view-registry';
 
 // Mock the lazy components to verify props and routing
 vi.mock('../chat-card/ChatCard', () => ({
@@ -30,11 +31,8 @@ vi.mock('../chat-card/ChatCard', () => ({
 }));
 
 vi.mock('../files/FilesCard', () => ({
-  FilesCard: (props: any) => (
-    <div
-      data-testid="mock-files-card"
-      data-has-toast={String(Boolean(props.onShowToast))}
-    />
+  FilesCard: () => (
+    <div data-testid="mock-files-card" />
   ),
 }));
 
@@ -50,6 +48,7 @@ vi.mock('../files/FileViewerCard', () => ({
 describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    registerBuiltInViews();
     useLayoutStore.setState((st) => {
       st.sessionsById = {
         'session-123': {
@@ -84,7 +83,6 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
         rect={{ x: 0, y: 0, width: 0.5, height: 1 }}
         isActive={true}
         isDragSource={false}
-        onShowToast={vi.fn()}
       />
     );
 
@@ -101,8 +99,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(openToolSpy).toHaveBeenCalledWith('session-123', 'diff');
   });
 
-  it('TreeLeafPanel 渲染 FilesCard 时透传 onShowToast', async () => {
-    const onShowToast = vi.fn();
+  it('TreeLeafPanel 渲染 FilesCard', async () => {
     const leaf = createLeaf(
       'tool-leaf-files',
       ['files'],
@@ -116,13 +113,12 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
         rect={{ x: 0.5, y: 0, width: 0.5, height: 1 }}
         isActive={false}
         isDragSource={false}
-        onShowToast={onShowToast}
       />
     );
 
     const filesCard = await waitFor(() =>
       screen.getByTestId('mock-files-card')
     );
-    expect(filesCard.getAttribute('data-has-toast')).toBe('true');
+    expect(filesCard).toBeDefined();
   });
 });

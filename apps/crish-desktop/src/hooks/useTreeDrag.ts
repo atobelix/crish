@@ -22,10 +22,10 @@ import { useCallback, useEffect, useRef } from 'react';
 import {
   useLayoutTreeStore,
   type TreeDragSource,
-  isSameDomain,
   isLeaf,
   findNodeById,
 } from '../store/layout-tree';
+import { viewRegistry } from '../services/view-registry';
 import {
   detectDropZone,
   findLeafAtPointer,
@@ -191,7 +191,10 @@ export function useTreeDrag(): UseTreeDragResult {
         return;
       }
       // 1. 跨域防护（Chat vs Tool 隔离）
-      if (!isSameDomain(source.panelId, hit.panelId)) {
+      if (
+        viewRegistry.isPrimary(source.panelId) !==
+        viewRegistry.isPrimary(hit.panelId)
+      ) {
         updateZone(null);
         return;
       }

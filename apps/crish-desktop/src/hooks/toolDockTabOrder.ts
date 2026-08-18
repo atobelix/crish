@@ -5,7 +5,8 @@
  */
 
 import type { LayoutNode } from '../store/layout-tree/types';
-import { isChatDomain, isLeaf } from '../store/layout-tree/types';
+import { isLeaf } from '../store/layout-tree/types';
+import { viewRegistry } from '../services/view-registry';
 import { findNodeById } from '../store/layout-tree/operations';
 import {
   findUnitRootId,
@@ -64,7 +65,7 @@ export function listToolLeafIdsInUnit(
   if (!unitNode) return new Set();
 
   if (isLeaf(unitNode)) {
-    return !isChatDomain(unitNode.panelId) ? new Set([unitNode.id]) : new Set();
+    return !viewRegistry.isPrimary(unitNode.panelId) ? new Set([unitNode.id]) : new Set();
   }
 
   return new Set(listToolLeaves(unitNode).map((l) => l.id));
@@ -88,7 +89,7 @@ export function findToolLeafIdForPanel(
   if (!unitNode) return null;
 
   const tools = isLeaf(unitNode)
-    ? !isChatDomain(unitNode.panelId)
+    ? !viewRegistry.isPrimary(unitNode.panelId)
       ? [unitNode]
       : []
     : listToolLeaves(unitNode);

@@ -110,8 +110,6 @@ export type ChatStatusRibbonsProps = {
   pendingApprovalToolId: string;
   pendingApprovalMsgId: string;
   activeSessionId: string | null | undefined;
-  /** 仅错误级提示（如找不到审批目标）；成功路径禁止 toast */
-  onShowToast: (message: string) => void;
 
   /**
    * 插在 FAB 与 run 提示之间的内容（如 DemoChrome），
@@ -157,7 +155,6 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   pendingApprovalToolId,
   pendingApprovalMsgId,
   activeSessionId,
-  onShowToast,
   between,
 }) => {
   const [showPlanDrawer, setShowPlanDrawer] = useState(false);
@@ -186,7 +183,12 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     });
   }, [showPlanDrawer]);
 
-  const bgTasks = useBackgroundTaskPolling();
+  const bgTasks = useBackgroundTaskPolling({
+    sessionId: activeSessionId || undefined,
+    enabled:
+      !onEmptySurface &&
+      Boolean(activeSessionId && !activeSessionId.startsWith('__pending')),
+  });
   const activeBgTasks = useMemo(
     () => filterActiveBackgroundTasks(bgTasks),
     [bgTasks]
@@ -286,12 +288,21 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     onStopGoal,
   };
 
+  // ── 核心门闩 1：动态快捷状态浮条受到 !onEmptySurface 刚性拦截 ──
+  const shouldRenderDynamicChipBar =
+    !onEmptySurface &&
+    (activeBgTasks.length > 0 ||
+      hasActivePlan ||
+      (diffCount > 0 && Boolean(onOpenDiff)));
+
+  // ── 核心门闩 2：计划详情抽屉受到 !onEmptySurface 刚性拦截 ──
+  const shouldRenderPlanDrawer =
+    !onEmptySurface && showPlanDrawer && hasActivePlan;
+
   return (
     <AppErrorBoundary variant="minimal" title="状态栏出错">
-      {/* 动态快捷状态浮条：仅在有活跃状态（后台运行/活动计划/差异）时呈现 */}
-      {activeBgTasks.length > 0 ||
-      hasActivePlan ||
-      (diffCount > 0 && Boolean(onOpenDiff)) ? (
+      {/* 动态快捷状态浮条：空态下 100% 物理不挂载 DOM 节点 */}
+      {shouldRenderDynamicChipBar ? (
         <div
           className={styles.dynamicChipBar}
           role="region"
@@ -355,7 +366,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         </div>
       ) : null}
 
-      {showPlanDrawer && hasActivePlan ? (
+      {shouldRenderPlanDrawer ? (
         <div
           ref={planDrawerRef}
           className={styles.dynamicPlanDrawer}
@@ -494,7 +505,6 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         toolId={pendingApprovalToolId}
         msgId={pendingApprovalMsgId}
         activeSessionId={activeSessionId}
-        onShowToast={onShowToast}
       />
     </AppErrorBoundary>
   );

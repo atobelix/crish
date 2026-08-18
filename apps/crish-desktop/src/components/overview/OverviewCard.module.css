@@ -197,7 +197,7 @@
 
 .secB {
   min-height: 0;
-  padding: 0 2px 8px 20px;
+  padding: 0 4px 6px;
 }
 
 .list {
@@ -207,7 +207,8 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-0_5);
-  max-height: min(36vh, 280px);
+  flex: 1;
+  min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -454,7 +455,7 @@ button.liveRow:hover {
   justify-content: center;
 }
 
-/* 閻劑鍣?grid */
+/*        */
 .usageGrid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -484,7 +485,7 @@ button.liveRow:hover {
   white-space: nowrap;
 }
 
-/* 瀵板懐鈥樼拋銈勬崲閸斅ゎ攽 */
+/*       */
 .actionRow {
   display: flex;
   align-items: center;
@@ -500,7 +501,7 @@ button.liveRow:hover {
   flex-shrink: 0;
 }
 
-/* 鐠佲€冲灊娴犺濮熺悰?*/
+/*       */
 .cronRow {
   display: flex;
   align-items: center;
@@ -541,7 +542,7 @@ button.liveRow:hover {
   white-space: nowrap;
 }
 
-/* 閻樿埖鈧礁娓鹃悙?*/
+/*       */
 .dot.warn {
   background: var(--accent-orange);
 }
@@ -555,7 +556,7 @@ button.liveRow:hover {
   opacity: 0.5;
 }
 
-/* 总览快捷入口：与对话空态 quickPrompt 视觉对齐（此前缺 class 导致原生按钮外观） */
+/*              quickPrompt          class           */
 .quickPromptsList {
   display: flex;
   flex-direction: column;

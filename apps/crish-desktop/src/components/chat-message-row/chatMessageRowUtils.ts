@@ -179,7 +179,6 @@ export type ChatAssistantMessageRowProps = {
   isLastAssistant: boolean;
   toolStackProps: ChatToolStackSharedProps;
   onTogglePin: (msgId: string) => void;
-  onShowToast: (message: string) => void;
   onRegenerate: (assistantMsgId: string) => void;
   onBranch: () => void;
   onOpenDiff: (diff: FileDiff) => void;
@@ -215,7 +214,6 @@ export const MEMO_COMPARE_FIELDS = [
   'isLastAssistant',
   'toolStackProps',
   'onTogglePin',
-  'onShowToast',
   'onRegenerate',
   'onBranch',
   'onOpenDiff',
@@ -267,7 +265,6 @@ export function assistantRowPropsEqual(
     prev.followUpDismissed === next.followUpDismissed &&
     toolStackSharedPropsEqual(prev.toolStackProps, next.toolStackProps) &&
     prev.onTogglePin === next.onTogglePin &&
-    prev.onShowToast === next.onShowToast &&
     prev.onRegenerate === next.onRegenerate &&
     prev.onBranch === next.onBranch &&
     prev.onOpenDiff === next.onOpenDiff &&

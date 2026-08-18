@@ -10,14 +10,13 @@
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
-import { useLayoutStore } from '../../store/storeAccess';
+import { openSettings } from '../../store/settingsUiStore';
 import type { SettingsTabType } from '../../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';
 import { Menu, Tooltip } from '../ui';
 
 export interface SettingsQuickMenuProps {
-  onShowToast?: (msg: string) => void;
   trigger?: React.ReactNode;
   renderTrigger?: (params: {
     open: boolean;
@@ -80,13 +79,11 @@ const QUICK_ENTRIES: readonly QuickEntry[] = [
 ] as const;
 
 export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
-  onShowToast,
   trigger,
   renderTrigger,
 }) => {
   const [open, setOpen] = useState(false);
   const [theme, setThemeLocal] = useState<UiTheme>(() => readStoredTheme());
-  const openSettings = useLayoutStore((s) => s.openSettings);
   const rootRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -184,7 +181,6 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
   };
 
   const triggerLabel = open ? '关闭快捷设置菜单' : '打开快捷设置菜单';
-  void onShowToast;
   const isDark = theme === 'dark';
 
   const triggerProps = {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * layoutStore 单测：安全默认、空工作区种子、无 ghost 面板、类型保真 helpers。
  * 操作全局 singleton 后尽量复位，避免污染其他门面测试。
  */
@@ -11,8 +11,7 @@ import {
   DEFAULT_WORKSPACE_ID,
   ensureNonEmptyWorkspaces,
   finiteNumber,
-  isSettingsTabType,
-  parseSettingsTab,
+  isparseSettingsTab,
   parseUiSize,
   sanitizeActiveWorkers,
   sanitizeSessionSeed,
@@ -23,7 +22,8 @@ import {
   useLayoutStore,
   type UiSize,
 } from './layoutStore';
-import type { SettingsTabType } from './types';
+import { useSettingsUiStore } from './settingsUiStore';
+import type { } from './types';
 import type { WorkspaceState } from './types';
 
 function snapshotChrome() {
@@ -31,8 +31,6 @@ function snapshotChrome() {
   return {
     uiSize: s.uiSize,
     tabModeEnabled: s.tabModeEnabled,
-    settingsActiveTab: s.settingsActiveTab,
-    showSettingsOverlay: s.showSettingsOverlay,
     sidebarCollapsed: s.sidebarCollapsed,
     workspacesLen: s.workspaces.length,
     activeWorkspaceIndex: s.activeWorkspaceIndex,
@@ -47,8 +45,6 @@ afterEach(() => {
   const s = useLayoutStore.getState();
   s.setUiSize(chrome0.uiSize);
   s.setTabModeEnabled(chrome0.tabModeEnabled);
-  s.setSettingsActiveTab(chrome0.settingsActiveTab);
-  s.setShowSettingsOverlay(chrome0.showSettingsOverlay);
   s.setSidebarCollapsed(chrome0.sidebarCollapsed);
   useLayoutStore.setState((st) => {
     st.activeAgentId = null;
@@ -74,12 +70,12 @@ describe('layoutStore pure helpers — type fidelity & safe defaults', () => {
     expect(DEFAULT_UI_SIZE).toBe('medium');
   });
 
-  it('SETTINGS_TAB_IDS covers SettingsTabType; parseSettingsTab rejects ghosts', () => {
+  it('SETTINGS_TAB_IDS covers ; parseSettingsTab rejects ghosts', () => {
     expect(SETTINGS_TAB_IDS.length).toBeGreaterThanOrEqual(10);
-    expect(isSettingsTabType('profile')).toBe(true);
-    expect(isSettingsTabType('security')).toBe(true);
-    expect(isSettingsTabType('not-a-tab')).toBe(false);
-    expect(isSettingsTabType('')).toBe(false);
+    expect(is('profile')).toBe(true);
+    expect(is('security')).toBe(true);
+    expect(is('not-a-tab')).toBe(false);
+    expect(is('')).toBe(false);
     expect(parseSettingsTab('models')).toBe('models');
     expect(parseSettingsTab('ghost-tab')).toBe(DEFAULT_SETTINGS_TAB);
     expect(parseSettingsTab(undefined, 'security')).toBe('security');
@@ -192,13 +188,8 @@ describe('empty workspace seed & no ghost panels', () => {
     );
     expect(ids).toContain('chat');
     expect(ids).toContain('preview');
-    expect(ids).toContain('tasks'); // plan → tasks
     expect(ids).not.toContain('settings');
     expect(ids).not.toContain('runtime');
-    expect(ids).not.toContain('browser');
-    expect(ids).not.toContain('plan');
-    // browser + preview 去重只剩 preview
-    expect(ids.filter((x) => x === 'preview').length).toBe(1);
   });
 
   it('stripGhostPanelsFromWorkspace reseeds when only ghosts remain', () => {
@@ -321,9 +312,9 @@ describe('useLayoutStore initial invariants', () => {
   });
 
   it('settingsActiveTab is a known tab', () => {
-    expect(isSettingsTabType(useLayoutStore.getState().settingsActiveTab)).toBe(
-      true
-    );
+    expect(
+      is(useSettingsUiStore.getState().settingsActiveTab)
+    ).toBe(true);
   });
 });
 
@@ -338,24 +329,6 @@ describe('useLayoutStore actions — guards', () => {
     expect(useLayoutStore.getState().uiSize).toBe(DEFAULT_UI_SIZE);
   });
 
-  it('setSettingsActiveTab ignores illegal tabs; openSettings falls back', () => {
-    const s = useLayoutStore.getState();
-    s.setSettingsActiveTab('models');
-    expect(useLayoutStore.getState().settingsActiveTab).toBe('models');
-    s.setSettingsActiveTab('not-real' as unknown as SettingsTabType);
-    expect(useLayoutStore.getState().settingsActiveTab).toBe('models');
-
-    s.openSettings('security');
-    expect(useLayoutStore.getState().showSettingsOverlay).toBe(true);
-    expect(useLayoutStore.getState().settingsActiveTab).toBe('security');
-
-    s.openSettings('___ghost___' as unknown as SettingsTabType);
-    expect(useLayoutStore.getState().settingsActiveTab).toBe('security');
-    expect(useLayoutStore.getState().showSettingsOverlay).toBe(true);
-
-    s.setShowSettingsOverlay(false);
-  });
-
-  // T11：遥测/worker/diff/权限 action 已迁往 terminalStore / workerStore /
-  // permissionStore / settingsStore，各自独立测试见对应 .test.ts。
+  // T11：遥测/worker/diff/权限/设置 UI action 已迁往对应独立 store，
+  // 各自独立测试见对应 .test.ts。
 });

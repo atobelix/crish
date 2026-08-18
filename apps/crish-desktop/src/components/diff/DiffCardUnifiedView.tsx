@@ -6,11 +6,50 @@ import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import type { FileDiff } from '../../store/types';
 import type { ChangeRenderItem, PlaceholderRenderItem } from './diffCardTypes';
 import { highlightCode } from '../../api/codeHighlight';
+import {
+  computeIntralinePair,
+  type DiffWordToken,
+} from '../../api/intralineDiff';
 
 type UnifiedRenderItem = PlaceholderRenderItem | ChangeRenderItem;
 
 function basename(p: string): string {
   return p.replace(/^.*[\\/]/, '') || p;
+}
+
+function renderTokens(
+  tokens: DiffWordToken[],
+  targetType: 'added' | 'removed',
+  fallbackText: string
+) {
+  if (!tokens || tokens.length === 0) {
+    return (
+      <span
+        dangerouslySetInnerHTML={{
+          __html: highlightCode(fallbackText, 'diff'),
+        }}
+      />
+    );
+  }
+  return (
+    <>
+      {tokens.map((tok, i) => {
+        if (tok.type === targetType) {
+          return (
+            <span
+              key={i}
+              className={
+                targetType === 'added' ? styles.diffWordAdd : styles.diffWordDel
+              }
+            >
+              {tok.text}
+            </span>
+          );
+        }
+        return <span key={i}>{tok.text}</span>;
+      })}
+    </>
+  );
 }
 
 interface DiffCardUnifiedViewProps {
@@ -25,15 +64,19 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
   onExpandBlock,
 }) => {
   const totalItems = renderItems.length;
-  const { containerRef, scrollTop, containerHeight, onScroll } = useVirtualScroll({
-    itemCount: totalItems,
-    heightOnly: true,
-  });
+  const { containerRef, scrollTop, containerHeight, onScroll } =
+    useVirtualScroll({
+      itemCount: totalItems,
+      heightOnly: true,
+    });
   const rowHeight = 22;
   const totalHeight = totalItems * rowHeight;
 
   const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - 15);
-  const endIndex = Math.min(totalItems, Math.ceil((scrollTop + containerHeight) / rowHeight) + 15);
+  const endIndex = Math.min(
+    totalItems,
+    Math.ceil((scrollTop + containerHeight) / rowHeight) + 15
+  );
 
   const visibleItems = renderItems.slice(startIndex, endIndex);
   const offsetTop = startIndex * rowHeight;
@@ -47,7 +90,13 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
         tabIndex={0}
         style={{ position: 'relative', overflowY: 'auto', outline: 'none' }}
       >
-        <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative' }}>
+        <div
+          style={{
+            height: `${totalHeight}px`,
+            width: '100%',
+            position: 'relative',
+          }}
+        >
           <div
             className={styles.linesContainer}
             style={{
@@ -61,16 +110,25 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
             aria-label={`${basename(f.filePath)} 的变更内容`}
           >
             {visibleItems.map((item, localIdx) => {
-              const idx = startIndex + localIdx;
+              const globalIdx = startIndex + localIdx;
               if (item.isCollapsedPlaceholder) {
                 return (
                   <div
-                    key={`collapse-${item.startIndex}`}
+                    key={`${f.filePath}-collapse-${item.startIndex}`}
                     className={styles.collapseBar}
                     onClick={() => onExpandBlock(f.filePath, item.startIndex)}
-                    style={{ height: `${rowHeight}px`, minHeight: `${rowHeight}px`, maxHeight: `${rowHeight}px`, display: 'flex', alignItems: 'center' }}
+                    style={{
+                      height: `${rowHeight}px`,
+                      minHeight: `${rowHeight}px`,
+                      maxHeight: `${rowHeight}px`,
+                      display: 'flex',
+                      alignItems: 'center',
+                    }}
                   >
-                    <Lucide.Maximize2 size={12} className={styles.collapseIcon} />
+                    <Lucide.Maximize2
+                      size={12}
+                      className={styles.collapseIcon}
+                    />
                     <span>展开其余 {item.count} 行代码...</span>
                   </div>
                 );
@@ -80,20 +138,58 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
 
               let lineClass = styles.lineNormal;
               let marker = ' ';
+              let tokens: DiffWordToken[] | null = null;
+              let targetType: 'added' | 'removed' = 'added';
+
               if (change.type === 'addition') {
                 lineClass = styles.lineAddition;
                 marker = '+';
+                targetType = 'added';
+
+                // 检查前一项是否是 deletion
+                const prevItem =
+                  globalIdx > 0 ? renderItems[globalIdx - 1] : null;
+                if (
+                  prevItem &&
+                  !prevItem.isCollapsedPlaceholder &&
+                  prevItem.item.change.type === 'deletion'
+                ) {
+                  const pairResult = computeIntralinePair(
+                    prevItem.item.change.content,
+                    change.content
+                  );
+                  tokens = pairResult.newTokens;
+                }
               } else if (change.type === 'deletion') {
                 lineClass = styles.lineDeletion;
                 marker = '−';
+                targetType = 'removed';
+
+                // 检查后一项是否是 addition
+                const nextItem =
+                  globalIdx + 1 < renderItems.length
+                    ? renderItems[globalIdx + 1]
+                    : null;
+                if (
+                  nextItem &&
+                  !nextItem.isCollapsedPlaceholder &&
+                  nextItem.item.change.type === 'addition'
+                ) {
+                  const pairResult = computeIntralinePair(
+                    change.content,
+                    nextItem.item.change.content
+                  );
+                  tokens = pairResult.oldTokens;
+                }
               }
 
               const oldLineNum = oldLine !== undefined ? String(oldLine) : '';
               const newLineNum = newLine !== undefined ? String(newLine) : '';
+              const stableKey = `${f.filePath}:${f.oldPath || ''}:${oldLineNum || 'del'}:${newLineNum || 'add'}:${globalIdx}`;
 
               return (
                 <div
-                  key={idx}
+                  key={stableKey}
                   className={`${styles.line} ${lineClass}`}
                   style={{ minHeight: `${rowHeight}px` }}
                 >
@@ -104,7 +200,17 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                     {newLineNum}
                   </div>
                   <div className={styles.gutterMarker}>{marker}</div>
-                  <div className={styles.lineText} dangerouslySetInnerHTML={{ __html: highlightCode(change.content, 'diff') }} />
+                  <div className={styles.lineText}>
+                    {tokens ? (
+                      renderTokens(tokens, targetType, change.content)
+                    ) : (
+                      <span
+                        dangerouslySetInnerHTML={{
+                          __html: highlightCode(change.content, 'diff'),
+                        }}
+                      />
+                    )}
+                  </div>
                 </div>
               );
             })}

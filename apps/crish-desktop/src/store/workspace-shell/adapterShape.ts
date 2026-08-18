@@ -14,13 +14,13 @@ import {
   useLayoutTreeStore,
   collectLeaves,
   findNodeById,
-  isChatDomain,
   isLeaf,
   isBranch,
   findChatLeafBySessionId,
   listChatLeaves,
   findUnitRootId,
 } from '../layout-tree';
+import { viewRegistry } from '../../services/view-registry';
 import {
   createDefaultTree,
   createLeaf,
@@ -39,18 +39,18 @@ import { getActiveSessionId } from '../../api/storeAccess';
 // ── 计数 / 查询 ──────────────────────────────────────────────────────
 
 export function countChatLeaves(treeRoot: LayoutNode): number {
-  return collectLeaves(treeRoot).filter((l) => isChatDomain(l.panelId)).length;
+  return collectLeaves(treeRoot).filter((l) => viewRegistry.isPrimary(l.panelId)).length;
 }
 
 export function countToolLeaves(treeRoot: LayoutNode): number {
-  return collectLeaves(treeRoot).filter((l) => !isChatDomain(l.panelId)).length;
+  return collectLeaves(treeRoot).filter((l) => !viewRegistry.isPrimary(l.panelId)).length;
 }
 
 // ── 纯树工具（不可变） ───────────────────────────────────────────────
 
 /** 子树是否完全处于功能区（无 chat leaf） */
 function isToolDomainSubtree(node: LayoutNode): boolean {
-  if (isLeaf(node)) return !isChatDomain(node.panelId);
+  if (isLeaf(node)) return !viewRegistry.isPrimary(node.panelId);
   return (
     isToolDomainSubtree(node.children[0]) &&
     isToolDomainSubtree(node.children[1])
@@ -116,7 +116,7 @@ function syncToolSubtree(
 
   // tool 侧已是 branch（用户 split）：只同步 owner/active，禁止整侧替换
   const toolLeaves = collectLeaves(toolNode).filter(
-    (l) => !isChatDomain(l.panelId)
+    (l) => !viewRegistry.isPrimary(l.panelId)
   );
   let targetId: string | null = null;
   for (const l of toolLeaves) {
@@ -133,7 +133,7 @@ function syncToolSubtree(
 
   function mapNode(n: LayoutNode): LayoutNode {
     if (isLeaf(n)) {
-      if (isChatDomain(n.panelId)) return n;
+      if (viewRegistry.isPrimary(n.panelId)) return n;
       const isTarget = n.id === targetId;
       let tabs = n.tabs?.length ? [...n.tabs] : [n.panelId];
       let panelId = n.activeTab || n.panelId;
@@ -194,7 +194,7 @@ export function resolveChatLeafForSession(
       // 若 root 全是 tool 或空：以 chat 为新 root（调用方 normalize 会兜底）
       if (countToolLeaves(root) > 0 && countChatLeaves(root) === 0) {
         // 保留首个 tool 作为右侧，形成单 unit
-        const tool = collectLeaves(root).find((l) => !isChatDomain(l.panelId));
+        const tool = collectLeaves(root).find((l) => !viewRegistry.isPrimary(l.panelId));
         if (tool) {
           const branch = createBranch('horizontal', newChat, tool, 0.62);
           return { root: branch, chatLeaf: newChat };
@@ -351,8 +351,8 @@ export function projectDockOntoTree(
  */
 function stripToolLeavesPreserveChats(tree: LayoutTree): LayoutTree {
   const leaves = collectLeaves(tree.root);
-  const chatLeaves = leaves.filter((l) => isChatDomain(l.panelId));
-  const toolLeaves = leaves.filter((l) => !isChatDomain(l.panelId));
+  const chatLeaves = leaves.filter((l) => viewRegistry.isPrimary(l.panelId));
+  const toolLeaves = leaves.filter((l) => !viewRegistry.isPrimary(l.panelId));
   if (toolLeaves.length === 0 && chatLeaves.length >= 1) return tree;
   if (chatLeaves.length === 0) {
     return createDefaultTree('chat');
@@ -385,8 +385,8 @@ function stripToolLeavesPreserveChats(tree: LayoutTree): LayoutTree {
  */
 export function normalizeToAdapterShape(tree: LayoutTree): LayoutTree {
   const leaves = collectLeaves(tree.root);
-  const chatLeaves = leaves.filter((l) => isChatDomain(l.panelId));
-  const toolLeaves = leaves.filter((l) => !isChatDomain(l.panelId));
+  const chatLeaves = leaves.filter((l) => viewRegistry.isPrimary(l.panelId));
+  const toolLeaves = leaves.filter((l) => !viewRegistry.isPrimary(l.panelId));
 
   // 已有 chat：保留多 chat，不折叠
   if (chatLeaves.length >= 1) {
@@ -444,14 +444,14 @@ function resolveTargetSessionId(explicit?: string): string | null {
     if (activeId) {
       const node = findNodeById(layout.tree.root, activeId);
       if (node && isLeaf(node)) {
-        if (isChatDomain(node.panelId) && node.sessionId) return node.sessionId;
+        if (viewRegistry.isPrimary(node.panelId) && node.sessionId) return node.sessionId;
         // 活动 leaf 是 tool：尝试找其 unit 侧的 chat（父 H 另一侧）
         const parent = findParent(layout.tree.root, node.id);
         if (parent && parent.parent.direction === 'horizontal') {
           const sibling = parent.parent.children[parent.index === 0 ? 1 : 0];
           if (
             isLeaf(sibling) &&
-            isChatDomain(sibling.panelId) &&
+            viewRegistry.isPrimary(sibling.panelId) &&
             sibling.sessionId
           ) {
             return sibling.sessionId;
@@ -608,14 +608,14 @@ export function applyDockToSession(
       if (unit && isBranch(unit)) {
         // tool 侧可能是 leaf 或 split branch：激活首个 tool leaf
         const toolSide = unit.children.find((c) =>
-          isLeaf(c) ? !isChatDomain(c.panelId) : isToolDomainSubtree(c)
+          isLeaf(c) ? !viewRegistry.isPrimary(c.panelId) : isToolDomainSubtree(c)
         );
         if (toolSide) {
           if (isLeaf(toolSide)) {
             targetActiveLeafId = toolSide.id;
           } else {
             const firstTool = collectLeaves(toolSide).find(
-              (l) => !isChatDomain(l.panelId)
+              (l) => !viewRegistry.isPrimary(l.panelId)
             );
             if (firstTool) targetActiveLeafId = firstTool.id;
           }
@@ -664,8 +664,8 @@ export function ensureChatOnlyTree(sessionId?: string): void {
 
     const store = useLayoutTreeStore.getState();
     const leaves = collectLeaves(store.tree.root);
-    const chatLeaves = leaves.filter((l) => isChatDomain(l.panelId));
-    const hasTools = leaves.some((l) => !isChatDomain(l.panelId));
+    const chatLeaves = leaves.filter((l) => viewRegistry.isPrimary(l.panelId));
+    const hasTools = leaves.some((l) => !viewRegistry.isPrimary(l.panelId));
 
     // 多 chat：保留分屏；剥掉全部 tool
     if (chatLeaves.length > 1) {
@@ -731,7 +731,7 @@ export function ensureChatPlusSingleToolLeaf(
     // 无 session：禁止把 tool 挂到「整棵 chat 树」右侧（会变成全局共享右栏）
     const store = useLayoutTreeStore.getState();
     const existingChats = collectLeaves(store.tree.root).filter((l) =>
-      isChatDomain(l.panelId)
+      viewRegistry.isPrimary(l.panelId)
     );
 
     if (existingChats.length >= 1) {
@@ -798,7 +798,7 @@ export function ensureAdapterShape(): void {
     if (next !== before) {
       store.setTree(next);
       const leaves = collectLeaves(next.root);
-      const chat = leaves.find((l) => isChatDomain(l.panelId));
+      const chat = leaves.find((l) => viewRegistry.isPrimary(l.panelId));
       if (chat) store.setActiveLeaf(chat.id);
     }
   });

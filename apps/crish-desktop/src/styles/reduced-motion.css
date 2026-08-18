@@ -1,6 +1,7 @@
-/* reduced-motion.css — 尊重用户减少动效偏好 */
-/* 双通道：@media (prefers-reduced-motion) 系统偏好 + [data-reduced-motion]
- * 属性开关（lightweightMode.ts:56 写入，R-04 接线——两者同语义） */
+/* stylelint-disable declaration-no-important */
+/* reduced-motion.css */
+/*     @media (prefers-reduced-motion)      + [data-reduced-motion]
+ *      lightweightMode.ts:56    R-04            */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -12,12 +13,12 @@
     scroll-behavior: auto !important;
   }
 
-  /* 显式禁用所有 cds- 前缀动画类 */
+  /*        cds-       */
   [class*="cds-animate-"] {
     animation: none !important;
   }
 
-  /* 覆盖 transition 系统变量，确保以 var() 引用的过渡也被禁用 */
+  /*    transition          var()           */
   :root,
   html[data-theme="default"],
   html[data-theme="light"],
@@ -46,7 +47,7 @@
     --transition-spring: 0ms !important;
   }
 
-  /* 允许关键性动画（如加载提示）以极慢速度保留 */
+  /*                       */
   .essential-animation {
     animation-duration: 1.5s !important;
     animation-iteration-count: 1 !important;
@@ -54,7 +55,7 @@
   }
 }
 
-/* [data-reduced-motion] 属性通道（与 @media 同语义；app 内开关免重启生效） */
+/* [data-reduced-motion]        @media     app           */
 [data-reduced-motion] *,
 [data-reduced-motion] *::before,
 [data-reduced-motion] *::after {

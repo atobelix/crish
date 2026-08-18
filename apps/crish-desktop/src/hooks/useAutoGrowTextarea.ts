@@ -39,21 +39,27 @@ function applyAutoGrowHeight(
   maxLines: number = COMPOSER_MAX_LINES,
   minLines: number = COMPOSER_MIN_LINES,
 ): void {
-  const prevMax = el.style.maxHeight;
-  el.style.maxHeight = 'none';
-  el.style.height = '0px';
-
-  const cs = getComputedStyle(el);
-  const line = resolveComposerLineHeightPx(cs, COMPOSER_LINE_HEIGHT);
-  const padY =
-    (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
-  const minH = composerMaxHeightPx(line, minLines, padY);
-  const maxH = composerMaxHeightPx(line, maxLines, padY);
-  const contentH = el.scrollHeight;
-  const next = Math.min(Math.max(contentH, minH), maxH);
-  el.style.height = `${next}px`;
-  el.style.maxHeight = prevMax || `${maxH}px`;
-  el.style.overflowY = contentH > maxH + 1 ? 'auto' : 'hidden';
+  // 原生 CSS field-sizing 支持检测：0 行 JS 执行
+  if (
+    typeof CSS !== 'undefined' &&
+    CSS.supports &&
+    CSS.supports('field-sizing', 'content')
+  ) {
+    return;
+  }
+  // 降级只读管线：不设 height = '0px'，消除按键强制重排
+  requestAnimationFrame(() => {
+    const cs = getComputedStyle(el);
+    const line = resolveComposerLineHeightPx(cs, COMPOSER_LINE_HEIGHT);
+    const padY =
+      (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const minH = composerMaxHeightPx(line, minLines, padY);
+    const maxH = composerMaxHeightPx(line, maxLines, padY);
+    const contentH = el.scrollHeight;
+    const next = Math.min(Math.max(contentH, minH), maxH);
+    el.style.height = `${next}px`;
+    el.style.overflowY = contentH > maxH + 1 ? 'auto' : 'hidden';
+  });
 }
 
 /**

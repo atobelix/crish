@@ -17,17 +17,26 @@
  * @see ./layoutStore.ts package header
  */
 
+import { create } from 'zustand';
+import { immer } from 'zustand/middleware/immer';
+import { withDevtools } from './middleware/withDevtools';
+import { withPersist } from './middleware/withPersist';
 import { useShallow } from './useShallowSelector';
 
-import { DEFAULT_WORKSPACE_ID, seedInitialWorkspaces, useLayoutStore } from './layoutStore';
+import {
+  DEFAULT_WORKSPACE_ID,
+  seedInitialWorkspaces,
+  clampActiveWorkspaceIndex,
+} from './layoutStore';
 import type {
   DropPreviewState,
   WorkspaceState,
 } from './types';
-import type {
-  DraggedTabState,
-  WorkspaceActions,
-  WorkspaceStoreSlice,
+import {
+  createWorkspaceActions,
+  type DraggedTabState,
+  type WorkspaceActions,
+  type WorkspaceStoreSlice,
 } from './workspaceActions';
 
 const _initialWorkspaces = seedInitialWorkspaces(DEFAULT_WORKSPACE_ID);
@@ -36,7 +45,29 @@ type WorkspaceStoreData = WorkspaceStoreSlice;
 
 export type WorkspaceStore = WorkspaceStoreData & WorkspaceActions;
 
-export const useWorkspaceStore = useLayoutStore;
+export const useWorkspaceStore = create<WorkspaceStore>()(
+  withDevtools(
+    withPersist(
+      immer((set, get) => ({
+        workspaces: _initialWorkspaces,
+        activeWorkspaceIndex: clampActiveWorkspaceIndex(_initialWorkspaces, 0),
+        tabModeEnabled: false,
+        draggedTab: null,
+        dropPreview: null,
+        ...createWorkspaceActions(set, get),
+      })),
+      {
+        name: 'crish_workspace_store_v1',
+        partialize: (s) => ({
+          workspaces: s.workspaces,
+          activeWorkspaceIndex: s.activeWorkspaceIndex,
+          tabModeEnabled: s.tabModeEnabled,
+        }),
+      }
+    ),
+    'CrishWorkspaceStore'
+  )
+);
 
 export type WorkspaceFacade = WorkspaceStoreSlice & WorkspaceActions;
 

@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 通用设置：系统选项、回答风格、消息快捷键与界面偏好；成功静默，仅失败提示。
  */
@@ -13,10 +14,11 @@ import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
 
 type Props = {
-  onShowToast: (msg: string) => void;
+  _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
-export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
   const setTabModeEnabled = useLayoutStore((s) => s.setTabModeEnabled);
   const setAppSettings = useSettingsField((s) => s.setAppSettings);
@@ -42,14 +44,14 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
         if (!cancelled) {
           const msg = '读取失败：' + String(err);
           setLoadError(msg);
-          onShowToast(msg);
+          showToast(msg);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [cwd, onShowToast, setAppSettings, setTabModeEnabled, loadTick]);
+  }, [cwd, setAppSettings, setTabModeEnabled, loadTick]);
 
   const save = useCallback(
     async (updates: Partial<Settings>): Promise<boolean> => {
@@ -61,13 +63,13 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ onShowToast }) => {
         setAppSettings(merged);
         return true;
       } catch (err) {
-        onShowToast('保存失败：' + String(err));
+        showToast('保存失败：' + String(err));
         return false;
       } finally {
         setSaving(false);
       }
     },
-    [cwd, onShowToast, setAppSettings, settings]
+    [cwd, setAppSettings, settings]
   );
 
   const ready = Boolean(settings) && !saving;

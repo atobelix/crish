@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * RuntimePanel 待确认区段：审批列表 + 允许/拒绝（防连点、本地乐观标记）。
  * 成功静默（列表切换即反馈）；仅失败 toast。
@@ -7,22 +8,21 @@ import styles from './RuntimePanel.module.css';
 import { Button, Tooltip } from '../ui';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useSessionStore } from '../../store/storeAccess';
 
 export type ApprovalSectionProps = {
   approvals: PendingApprovalInfo[];
   countLabel: string | null;
-  onShowToast: (msg: string) => void;
   onFocusSession: (sessionId: string) => void;
 };
 
 export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
   approvals,
   countLabel,
-  onShowToast,
   onFocusSession,
 }) => {
-  const sessions = useLayoutStore((state) => state.sessions);
+  const { showToast: _showToast } = useToast();
+  const sessions = useSessionStore((state) => state.sessions);
   /** 审批按钮防连点；成功静默，仅失败 toast */
   const [approvalBusyId, setApprovalBusyId] = useState<string | null>(null);
 
@@ -56,7 +56,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     if (found) {
       onFocusSession(found.id);
     } else {
-      onShowToast('未找到待确认会话');
+      showToast('未找到待确认会话');
     }
   };
 
@@ -69,7 +69,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     if (!toolCallId) return;
     // T-E 步骤 4（C2）：raw setState 全表扫描 → markToolCallLocalStatus action
     //（与 useOverviewState C1 共用同一 action；scope 限定 runId 时只扫 scope 内）
-    useLayoutStore
+    useSessionStore
       .getState()
       .markToolCallLocalStatus(
         toolCallId,
@@ -83,7 +83,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     e.stopPropagation();
     const id = a.toolCallId;
     if (!id) {
-      onShowToast('缺少工具 id，无法批准');
+      showToast('缺少工具 id，无法批准');
       return;
     }
     if (approvalBusyId) return;
@@ -92,7 +92,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     void engineApproveTool(id)
       .catch(() => {
         markLocalTool(id, 'error', '批准失败', a.runId);
-        onShowToast('批准失败，请重试');
+        showToast('批准失败，请重试');
       })
       .finally(() => {
         setApprovalBusyId(null);
@@ -103,7 +103,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     e.stopPropagation();
     const id = a.toolCallId;
     if (!id) {
-      onShowToast('缺少工具 id，无法拒绝');
+      showToast('缺少工具 id，无法拒绝');
       return;
     }
     if (approvalBusyId) return;
@@ -111,7 +111,7 @@ export const ApprovalSection: React.FC<ApprovalSectionProps> = ({
     markLocalTool(id, 'error', '已拒绝', a.runId);
     void engineDenyTool(id)
       .catch(() => {
-        onShowToast('拒绝失败，请重试');
+        showToast('拒绝失败，请重试');
       })
       .finally(() => {
         setApprovalBusyId(null);

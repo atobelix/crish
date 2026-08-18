@@ -364,7 +364,7 @@ export class IncrementalMarkdownParser {
       : '';
     return (
       `<div class="md-code-block"${langAttr}>${langBadge}` +
-      `<button type="button" class="md-code-copy" title="复制" aria-label="复制代码">复制</button>` +
+      `<button type="button" class="md-code-copy" aria-label="复制代码">复制</button>` +
       `<pre class="md-code-pre hljs"><code class="language-${escapeHtml(lang)}">${highlighted}</code></pre></div>`
     );
   }

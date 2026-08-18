@@ -269,3 +269,7 @@ export function killPtyForSessionBackground(
     /* ignore */
   });
 }
+
+/** 兼容别名：killPtySession -> killPtyForSession */
+export const killPtySession = killPtyForSession;
+

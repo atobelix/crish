@@ -1,7 +1,7 @@
-import React from 'react';
+﻿import React from 'react';
 import styles from './ChatCard.module.css';
 import { ChatStatusRibbons, type ChatStatusRibbonsProps } from './ChatStatusRibbons';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
+import type { } from '../../hooks/useToastQueue';
 import type { RunNotice } from '../../hooks/useChatStream';
 
 /**
@@ -37,8 +37,7 @@ export interface ChatComposerWrapperProps {
   pendingApprovalToolId: string;
   pendingApprovalMsgId: string;
   activeSessionId: string | null;
-  onShowToast: ShowToastFn;
-  openSidePanel: (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => void;
+  _openSidePanel: (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => void;
   handleGlobalTabClick: (cardId: string) => void;
 }
 
@@ -54,8 +53,7 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
   pendingApprovalToolId,
   pendingApprovalMsgId,
   activeSessionId,
-  onShowToast,
-  openSidePanel,
+  _openSidePanel,
 }) => {
   return (
     <div
@@ -77,7 +75,6 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
           pendingApprovalToolId={pendingApprovalToolId}
           pendingApprovalMsgId={pendingApprovalMsgId}
           activeSessionId={activeSessionId}
-          onShowToast={onShowToast}
         />
 
         {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}

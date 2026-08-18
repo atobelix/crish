@@ -394,7 +394,7 @@ function buildCodeFenceHtml(
     });
     breadcrumb = `<span class="md-code-breadcrumb">${parts.join('<span class="md-code-breadcrumb-separator">/</span>')}</span>`;
   }
-  return `<div class="md-code-block"${blockAttr}>${breadcrumb}${langBadge}<button type="button" class="md-code-copy" title="复制" aria-label="复制代码">复制</button><pre class="md-code-pre hljs"><code class="language-${escapeHtml(langClean)}">${inner}</code></pre></div>`;
+  return `<div class="md-code-block"${blockAttr}>${breadcrumb}${langBadge}<button type="button" class="md-code-copy" aria-label="复制代码">复制</button><pre class="md-code-pre hljs"><code class="language-${escapeHtml(langClean)}">${inner}</code></pre></div>`;
 }
 
 /**
@@ -474,7 +474,7 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
       const pathRaw = isLocalPathRef(rawUrl) ? rawUrl : t;
       const path = sanitizeUrlCandidate(pathRaw) || pathRaw;
       return pushInline(
-        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(t)}</button>`
+        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}">${escapeHtml(t)}</button>`
       );
     }
     if (!isSafeHref(rawUrl)) {
@@ -509,7 +509,7 @@ export function parseMarkdownToHtmlUncached(raw: string): string {
     (full, path: string) => {
       if (path.length > 160) return full;
       return pushInline(
-        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}" title="${escapeHtml(path)}">${escapeHtml(path)}</button>`
+        `<button type="button" class="md-path-link" data-path="${escapeHtml(path)}">${escapeHtml(path)}</button>`
       );
     }
   );

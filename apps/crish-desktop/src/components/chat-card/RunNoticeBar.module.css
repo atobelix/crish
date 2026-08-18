@@ -1,4 +1,4 @@
-/* System notice ribbon（自 ChatStatusRibbons.module.css 随组件搬出） */
+/* System notice ribbon   ChatStatusRibbons.module.css        */
 .runNotice {
   display: flex;
   align-items: flex-start;

@@ -87,7 +87,7 @@ export function useStreamCallbacks(
     // finalMarked，后续 push 被拒绝，预算循环至多 N 帧自然收口于 isFinal 帧。
     stopBuf?.flushFinal();
     flushStreamBatchers();
-    const st = getCompositionRoot().layout.getState();
+    const st = getCompositionRoot().session.getState();
     if (getSessionById(sid)?.goalMode?.active) {
       streamManagerRef.current!.markGoalCancelled(sid);
       patchSession(sid, { goalMode: null });
@@ -140,7 +140,7 @@ export function useStreamCallbacks(
     if (stopPatches.length) {
       // T-E 步骤 3（U5）：raw setState → applyToolCallPatches action（批量终态）
       getCompositionRoot()
-        .layout.getState()
+        .session.getState()
         .applyToolCallPatches(sid, cur.assistantMsgId, stopPatches);
     }
     void applyStopUsageApprox({

@@ -22,7 +22,7 @@
   padding: 20px 12px;
 }
 
-/* 閳?header閿涙airline 鎼存洟鍎撮崚鍡涙 */
+/* ?header airline          */
 .agentCardHeader {
   display: flex;
   align-items: center;
@@ -53,7 +53,7 @@
 .agentCardBadge {
   font-size: var(--font-size-xxs);
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   background: transparent;
   border: 1px solid var(--hairline, var(--border-subtle));
   color: var(--text-secondary);
@@ -80,7 +80,7 @@
 }
 
 .agentCardMode {
-  display: none; /* 濡€崇础閸愭瑥鍙嗗鐣岀彿 title閿涘矂浼╅崗宥夈€婇弽蹇斿皨 */
+  display: none; /*              title              */
 }
 
 .agentCardActions {
@@ -122,10 +122,10 @@
 }
 
 .agentCardSummary {
-  display: none; /* 閸戝繐鐎惄鏉戞珨閻愮櫢绱遍幗妯款洣閸欘垵顫嗘禍搴㈢Х閹垱绁?*/
+  display: none; /*                              ?*/
 }
 
-/* 閳?body閿涙碍娲跨槐褎绉烽幁顖炴？鐠?*/
+/* ?body             ?*/
 .agentCardBody {
   flex: 1;
   min-height: 0;
@@ -156,7 +156,7 @@
   margin-bottom: var(--space-1);
 }
 
-/* 閳?prompt 濮樻梹鍦洪敍姝╝irline + 缁?pad */
+/* ?prompt        irline + ?pad */
 .agentPromptBubble {
   display: inline-block;
   max-width: 96%;
@@ -244,7 +244,7 @@
   gap: var(--space-1_5);
 }
 
-/* 娴滆櫣琚崡蹇庣稊娴犺濮熺悰銊ュ礋閿涘澅extarea/profile chips閿涘鍑＄粔濠氭珟閿涙稐绮庢穱婵堟殌濞村繗顫嶉崚妤勩€?*/
+/*                   extarea/profile chips                        ?*/
 .agentLaunchList {
   margin-top: var(--space-0_5);
   display: flex;
@@ -289,7 +289,7 @@
   white-space: nowrap;
 }
 
-/* 閳?娓氀勭埉閸?agent 閸掑洦宕查敍姝╝irline 閸掑棝娈ч敍灞炬￥闁插秶浼嗘惔?*/
+/* ?     ?agent         irline               ?*/
 .agentTeamBoard {
   flex-shrink: 0;
   padding: 4px 6px 5px;
@@ -344,7 +344,7 @@
   background: transparent;
   border: 1px solid var(--hairline, var(--border-subtle));
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm, 4px);
   line-height: var(--line-height-base);
 }
 
@@ -361,7 +361,7 @@
   gap: var(--space-0_5);
 }
 
-/* 閳?team card閿涙艾閽╅柧鐑樻￥绾剝绔熷?+ 缁毖嗩攽 */
+/* ?team card     ?+  */
 .agentTeamCard {
   display: flex;
   flex-direction: column;
@@ -494,14 +494,14 @@
 
 .agentTeamCardBar {
   height: 1.5px;
-  border-radius: 999px;
+  border-radius: var(--radius-xs, 2px);
   background: var(--hairline, var(--border-subtle));
   overflow: hidden;
 }
 
 .agentTeamCardBarFill {
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radius-xs, 2px);
   background: var(--text-tertiary);
   transition: width var(--transition-fast);
 }

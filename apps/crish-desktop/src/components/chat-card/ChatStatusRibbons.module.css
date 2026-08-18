@@ -7,7 +7,7 @@
   width: 34px;
   height: 34px;
   border-radius: 50%;
-  border: 1px solid var(--border-subtle) !important;
+  border: 1px solid var(--border-subtle);
   background: var(--bg-elevated);
   color: var(--text-secondary);
   display: inline-flex;
@@ -20,7 +20,7 @@
 
 .chatScrollFab:hover {
   color: var(--text-primary);
-  border-color: var(--border-color) !important;
+  border-color: var(--border-color);
 }
 
 /* Dynamic Status Bar & Chips above composer */
@@ -41,7 +41,7 @@
   gap: var(--space-1_5);
   height: 26px;
   padding: 0 10px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: transparent;
   border: var(--hairline-width, 1px) solid var(--border-subtle);
   color: var(--text-secondary);
@@ -150,7 +150,7 @@
   text-decoration: line-through;
 }
 
-/* Retry Slot Notice (D8 §3.7.4) */
+/* Retry Slot Notice (D8  3.7.4) */
 .retrySlotNotice {
   display: flex;
   align-items: center;
@@ -167,7 +167,7 @@
   box-sizing: border-box;
 }
 
-/* Circuit Breaker Banner (D8 §3.7.1) */
+/* Circuit Breaker Banner (D8  3.7.1) */
 .circuitBreakerBanner {
   display: flex;
   align-items: center;
@@ -189,8 +189,8 @@
   box-sizing: border-box;
 }
 
-/* Engine Crash Ribbon (T5-1)：心跳判死域——软提示 + 自动重连动作；
-   与熔断横幅同形态（无重阴影/无粗边框，hairline 描边） */
+/* Engine Crash Ribbon (T5-1)            +        
+                /     hairline     */
 .crashRibbon {
   display: flex;
   align-items: center;

@@ -25,7 +25,6 @@ import { useTreeResize } from '../../hooks/useTreeResize';
 import { useTreePanelEvents } from '../../hooks/useTreePanelEvents';
 import { useChatPanelSync } from '../../hooks/useChatPanelSync';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import type { ShowToastFn } from '../../hooks/useToastQueue';
 import { TreeLeafPanel } from './TreeLeafPanel';
 import { TreeResizeSash, flatBranchEqual } from './TreeResizeSash';
 import { DropZoneOverlay } from './DropZoneOverlay';
@@ -34,8 +33,7 @@ import styles from './BinaryTreeWorkspace.module.css';
 // ── Props ───────────────────────────────────────────────────────────
 
 export interface BinaryTreeWorkspaceProps {
-  /** Toast 回调（与 app 全局 ShowToastFn 对齐） */
-  onShowToast: ShowToastFn;
+  className?: string;
 }
 
 // ── 稳定 leaf / branch 身份 ─────────────────────────────────────────
@@ -126,7 +124,7 @@ function stabilizeBranches(
 // ── 主组件 ───────────────────────────────────────────────────────────
 
 export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
-  React.memo(({ onShowToast }) => {
+  React.memo(() => {
     const tree = useLayoutTreeStore((s) => s.tree);
     const activeLeafId = useLayoutTreeStore((s) => s.activeLeafId);
     const toolColumnCollapsed = useLayoutTreeStore(
@@ -221,7 +219,6 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
                   rect={entry.rect}
                   isActive={panel.leafId === activeLeafId}
                   isDragSource={panel.leafId === draggedLeafId}
-                  onShowToast={onShowToast}
                   isMultiChat={isMultiChat}
                 />
               );

@@ -4,9 +4,9 @@
   padding: var(--space-1_5);
   gap: var(--space-0_5);
   border-radius: var(--radius-2xl);
-  background: var(--bg-elevated) !important;
-  border: 1px solid var(--border-color) !important;
-  box-shadow: var(--shadow-lg) !important;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-lg);
   display: none;
   flex-direction: column;
   box-sizing: border-box;
@@ -43,8 +43,8 @@
 
 .contextMenuItem:hover,
 .contextMenuItem:focus-visible {
-  background-color: var(--bg-hover) !important;
-  color: var(--text-primary) !important;
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
   outline: none;
 }
 

@@ -11,28 +11,24 @@ import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
 } from './notePaperStrictTrack';
-import {
-  W5B_SKELETON_PACKAGE_ID,
-  W5B_SKELETON_TRACK,
-} from './notePaperSkeletonTrack';
 
 describe('W5-B Strict 包标识 · w5b_strict_constants', () => {
   it('w5b_strict_package_id_is_W5-B_without_S', () => {
     expect(W5B_STRICT_PACKAGE_ID).toBe('W5-B');
     expect(W5B_STRICT_PACKAGE_ID.endsWith('-S')).toBe(false);
-    expect(W5B_STRICT_PACKAGE_ID).not.toBe(W5B_SKELETON_PACKAGE_ID);
+    expect(W5B_STRICT_PACKAGE_ID).not.toBe('W5-B-S');
   });
 
   it('w5b_strict_track_is_strict', () => {
     expect(W5B_STRICT_TRACK).toBe('strict');
-    expect(W5B_STRICT_TRACK).not.toBe(W5B_SKELETON_TRACK);
+    expect(W5B_STRICT_TRACK).not.toBe('skeleton');
   });
 
   it('w5b_strict_product_default_empty_track_is_strict', () => {
     // 产品空态默认倾向 Strict；≠ 打开完成 / ≠ DocSession IPC 默认已挂
     expect(W5B_PRODUCT_DEFAULT_EMPTY_TRACK).toBe(W5B_STRICT_TRACK);
     expect(W5B_PRODUCT_DEFAULT_EMPTY_TRACK).toBe('strict');
-    expect(W5B_PRODUCT_DEFAULT_EMPTY_TRACK).not.toBe(W5B_SKELETON_TRACK);
+    expect(W5B_PRODUCT_DEFAULT_EMPTY_TRACK).not.toBe('skeleton');
   });
 
   it('w5b_strict_boundary_declares_demo_neq_EL_and_S5', () => {

@@ -1,3 +1,4 @@
+import { toast } from '../../services/toast/ToastContext';
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import {
   listMcpServers,
@@ -20,12 +21,10 @@ import {
 } from './types';
 
 export type UseMcpSettingsOptions = {
-  onShowToast?: ((msg: string) => void) | undefined;
   onAvailabilityChange?: ((available: boolean) => void) | undefined;
 };
 
 export function useMcpSettings({
-  onShowToast,
   onAvailabilityChange,
 }: UseMcpSettingsOptions = {}) {
   const demo = isDemoMode();
@@ -138,12 +137,12 @@ export function useMcpSettings({
       });
       onAvailabilityChange?.(list.length > 0);
     } catch (e) {
-      onShowToast?.(`加载失败：${errText(e) || '未知错误'}`);
+      toast.show?.(`加载失败：${errText(e) || '未知错误'}`);
       onAvailabilityChange?.(false);
     } finally {
       setLoading(false);
     }
-  }, [onAvailabilityChange, onShowToast]);
+  }, [onAvailabilityChange, toast.show]);
 
   useEffect(() => {
     if (!showAdd) return;
@@ -166,9 +165,9 @@ export function useMcpSettings({
   const handleCopy = useCallback(
     async (text: string) => {
       const ok = await copyText(text);
-      if (!ok) onShowToast?.('复制失败');
+      if (!ok) toast.show?.('复制失败');
     },
-    [onShowToast]
+    [toast.show]
   );
 
   const filtered = useMemo(() => {
@@ -244,19 +243,19 @@ export function useMcpSettings({
             setCanStartStop(false);
             setControlHint(r.error || START_STOP_HINT);
           } else {
-            onShowToast?.(r.error ? `${prefix}失败：${r.error}` : `${prefix}失败`);
+            toast.show?.(r.error ? `${prefix}失败：${r.error}` : `${prefix}失败`);
           }
           await refreshLive();
           return;
         }
         await refreshLive();
       } catch (e) {
-        onShowToast?.(`${prefix}失败：${errText(e) || '未知错误'}`);
+        toast.show?.(`${prefix}失败：${errText(e) || '未知错误'}`);
       } finally {
         setBusyId(null);
       }
     },
-    [canStartStop, onShowToast, refreshLive]
+    [canStartStop, toast.show, refreshLive]
   );
 
   const handleAddDemo = async () => {
@@ -289,7 +288,7 @@ export function useMcpSettings({
       setNewArgs('');
       setNewUrl('');
     } catch (e) {
-      onShowToast?.(`保存失败：${errText(e) || '未知错误'}`);
+      toast.show?.(`保存失败：${errText(e) || '未知错误'}`);
     }
   };
 
@@ -304,7 +303,7 @@ export function useMcpSettings({
       });
       onAvailabilityChange?.(list.length > 0);
     } catch (e) {
-      onShowToast?.(`删除失败：${errText(e) || '未知错误'}`);
+      toast.show?.(`删除失败：${errText(e) || '未知错误'}`);
     }
   };
 

@@ -12,7 +12,13 @@ import type {
   DropPreviewState,
   WorkspaceState,
 } from './types';
-import type { LayoutSnapshot } from '../api/workspaceLayoutStore';
+export type LayoutSnapshot = {
+  columns: Array<{
+    widthRatio: number;
+    groups: Array<{ heightRatio: number; cards: string[]; activeCardId: string }>;
+  }>;
+  savedAt: number;
+};
 import {
   adjustSameGroupReorderIndex,
   afterCardRemovedFromGroup,

@@ -1,3 +1,4 @@
+﻿import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 账户：本机环境、数据备份、导入外部对话；成功静默，仅错误提示。
  *
@@ -23,7 +24,7 @@ import { ExternalSessionImport } from './ExternalSessionImport';
 import styles from './SettingsProfileTab.module.css';
 
 type Props = {
-  onShowToast: (msg: string) => void;
+  _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
 /** 路径短名 */
@@ -32,7 +33,8 @@ function pathLeaf(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
+export const SettingsProfileTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+  const { showToast: _showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
   const headMetaId = useId();
   const engineStatusId = useId();
@@ -65,7 +67,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
       URL.revokeObjectURL(url);
       // 成功静默（用户裁决：导出/导入成功提示不必每次说）
     } catch (err) {
-      onShowToast('导出失败：' + String(err));
+      showToast('导出失败：' + String(err));
     } finally {
       setExporting(false);
     }
@@ -88,11 +90,11 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
           try {
             parsed = JSON.parse(text);
           } catch {
-            onShowToast('导入失败：不是合法 JSON');
+            showToast('导入失败：不是合法 JSON');
             return;
           }
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-            onShowToast('导入失败：根节点须为对象');
+            showToast('导入失败：根节点须为对象');
             return;
           }
           await clientApi.saveSettingsEx(
@@ -102,7 +104,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
           );
           // 成功静默（用户裁决：导出/导入成功提示不必每次说）
         } catch (err) {
-          onShowToast('导入失败：' + String(err));
+          showToast('导入失败：' + String(err));
         } finally {
           setImporting(false);
         }
@@ -125,7 +127,7 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
       .catch((err) => {
         const msg = networkUserMessage(err) || '未连接';
         setDaemonConnHint(msg);
-        onShowToast('连接失败：' + msg);
+        showToast('连接失败：' + msg);
       })
       .finally(() => setBusy(false));
   };
@@ -257,7 +259,6 @@ export const SettingsProfileTab: React.FC<Props> = ({ onShowToast }) => {
           <div className={styles.settingsImportBody}>
             <ExternalSessionImport
               variant="settings"
-              onShowToast={onShowToast}
             />
           </div>
         </SettingsCard>

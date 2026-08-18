@@ -13,7 +13,7 @@
  *
  * 分层契约：只依赖 react/react-dom 与 tokens CSS 变量。
  */
-import React, { useId } from 'react';
+import React, { useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import * as DismissableLayer from '@radix-ui/react-dismissable-layer';
 import styles from './Dialog.module.css';
@@ -89,6 +89,7 @@ export function Dialog({
   const titleId = useId();
   const descriptionId = useId();
   const dialogId = useId();
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const isFullscreen = variant === 'fullscreen';
 
   // 三件套：进出场动画 + 焦点归还 + 焦点圈定
@@ -106,6 +107,7 @@ export function Dialog({
       type: role === 'alertdialog' ? 'confirm-dialog' : 'modal-dialog',
       modal: true,
       dismissible,
+      elementRef: panelRef,
       onDismiss: () => onClose(),
     },
     open && isMounted
@@ -113,7 +115,12 @@ export function Dialog({
 
   if (!isMounted) return null;
 
-  const target = portalTarget ?? document.body;
+  const target =
+    portalTarget ??
+    (typeof document !== 'undefined'
+      ? (document.getElementById('modal-root') ?? document.body)
+      : null);
+  if (!target) return null;
 
   // fullscreen 形态不应用尺寸档与面板进出场动画（盖层整体由遮罩壳动画驱动）
   const panelClasses = [
@@ -147,15 +154,13 @@ export function Dialog({
             onClick={dismissible ? onClose : undefined}
           />
           <div
+            ref={panelRef}
             role={role}
             aria-modal="true"
             aria-label={title == null ? ariaLabel : undefined}
             aria-labelledby={title != null ? titleId : undefined}
             aria-describedby={description != null ? descriptionId : undefined}
             className={panelClasses}
-            onMouseDown={(e) => e.stopPropagation()}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={(e) => e.stopPropagation()}
           >
             {title != null || (dismissible && showCloseButton) ? (
               <div className={styles.dialogHeader}>

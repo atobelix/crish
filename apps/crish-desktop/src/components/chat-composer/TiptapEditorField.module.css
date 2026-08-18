@@ -1,9 +1,9 @@
 /**
  * apps/crish-desktop/src/components/chat-composer/TiptapEditorField.module.css
- * 编辑器视觉：token 体系对齐宿主 ChatComposer.module.css（textarea 同族）。
- * - 编辑区透明，复用宿主容器 --composer-bg 壳（边框/焦点态由容器统一管）；
- * - 增高语义：--composer-max-lines × --composer-line-height（适配层注入，同 textarea 防漂移）；
- * - 红线：零阴影、占位符 text-tertiary、行内 code 用 8% mix 底、hover 才着色。
+ *       token        ChatComposer.module.css textarea     
+ * -              --composer-bg     /           
+ * -      --composer-max-lines   --composer-line-height         textarea      
+ * -            text-tertiary    code   8% mix   hover     
  */
 
 .fieldWrapper {
@@ -13,7 +13,7 @@
   align-self: center;
   width: 100%;
   border-radius: var(--radius-md);
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
 .fieldWrapper.disabled {
@@ -30,7 +30,7 @@
   );
   overflow-y: auto;
   outline: none;
-  box-shadow: none !important;
+  box-shadow: none;
   caret-color: var(--text-primary);
   font-family: var(--font-sans);
   font-size: var(--font-size-base);
@@ -46,20 +46,20 @@
 
 .proseMirrorField:focus {
   outline: none;
-  box-shadow: none !important;
+  box-shadow: none;
 }
 
-/* 选中文本：accent 12% 底（token 语义，克制不抢正文） */
+/*      accent 12%   token            */
 .proseMirrorField :global(::selection) {
   background: color-mix(in srgb, var(--accent-color) 12%, transparent);
 }
 
-/* 任务清单勾选：系统 checkbox 仅着色 accent，不重绘形态 */
+/*           checkbox     accent       */
 .proseMirrorField :global(ul[data-type='taskList'] input[type='checkbox']) {
   accent-color: var(--accent-color);
 }
 
-/* 链接 mark（Link 扩展）：token 语义色，仅下划线标记可点性 */
+/*    mark Link     token               */
 .proseMirrorField :global(a) {
   color: var(--accent-color);
   text-decoration: none;
@@ -71,12 +71,12 @@
   border-bottom-color: var(--accent-color);
 }
 
-/* 段落紧凑排布（对齐 textarea 语义，段落间不留大间隙） */
+/*           textarea              */
 .proseMirrorField :global(p) {
   margin: 0;
 }
 
-/* 节点基线样式（review_arch 建议 2：heading/taskList/blockquote/pre/code 显式 token 化） */
+/*        review_arch    2 heading/taskList/blockquote/pre/code    token    */
 .proseMirrorField :global(h1),
 .proseMirrorField :global(h2),
 .proseMirrorField :global(h3) {
@@ -164,7 +164,7 @@
   color: var(--text-secondary);
 }
 
-/* 占位符（Placeholder 扩展）：text-tertiary，对齐宿主 textarea::placeholder */
+/*     Placeholder     text-tertiary      textarea::placeholder */
 .proseMirrorField :global(p.is-editor-empty:first-child::before) {
   color: var(--text-tertiary);
   content: attr(data-placeholder);
@@ -173,7 +173,7 @@
   pointer-events: none;
 }
 
-/* Mention chip（MentionExtension 渲染，全局类） */
+/* Mention chip MentionExtension         */
 :global(.mention-chip) {
   display: inline-flex;
   align-items: center;
@@ -188,7 +188,7 @@
   cursor: default;
 }
 
-/* dense 模式（侧栏/内联）：收紧字号，行高随容器变量 */
+/* dense      /                 */
 :global([data-composer-dense='1']) .proseMirrorField {
   font-size: var(--font-size-sm, 13px);
 }

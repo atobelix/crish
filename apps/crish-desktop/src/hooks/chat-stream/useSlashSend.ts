@@ -2,7 +2,7 @@
  * apps/crish-desktop/src/hooks/chat-stream/useSlashSend.ts
  * 核心聊天发送主协调 Hook（模块化拆解后约 140 有效行）
  */
-import { useLayoutStore } from '../../store/layoutStore';
+import { useSessionStore } from '../../store/sessionStore';
 import { getSessionById } from '../../store/sessionStore';
 import { addMessage } from '../../api/storeAccess';
 import { generateMessageId } from '../../utils/generateMessageId';
@@ -15,7 +15,7 @@ import { canStreamLocalSession, decideSendWhileRunning } from './helpers';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import type { UseChatStreamOptions, ChatAttachment } from './types';
 import type { StreamBatcherRefs } from './useStreamBatchers';
-import type { SessionMessage } from '../../store/layoutStore';
+import type { SessionMessage } from '../../store/types';
 import {
   saveDraftSnapshot,
   restoreDraftOnFailure,
@@ -47,7 +47,6 @@ export function useSlashSend(
 } {
   const {
     wsId,
-    onShowToast,
     handleGlobalTabClick,
     chatInput,
     setChatInput,
@@ -62,7 +61,7 @@ export function useSlashSend(
   } = options;
 
   // 渲染订阅：仅 activeSessionId
-  const activeSessionId = useLayoutStore((s) => s.activeSessionId);
+  const activeSessionId = useSessionStore((s) => s.activeSessionId);
   const { streamManagerRef } = refs;
 
   const handleSendChat = async (
@@ -87,7 +86,6 @@ export function useSlashSend(
       needsModelSetup,
       setPickerInlineError,
       onOpenModelPicker,
-      onShowToast,
       handleGlobalTabClick,
       setChatInput,
       setSlashMenuOpen,

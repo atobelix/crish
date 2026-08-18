@@ -23,7 +23,6 @@ import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
 } from './notePaperStrictTrack';
-import { W5B_SKELETON_PACKAGE_ID } from './notePaperSkeletonTrack';
 
 describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
   it('w5b_strict_panel_anchors_package_and_track', async () => {
@@ -56,10 +55,7 @@ describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
     expect(panel).toHaveAttribute('data-package-id', W5B_STRICT_PACKAGE_ID);
     expect(panel).toHaveAttribute('data-track', W5B_STRICT_TRACK);
     // 不得冒充 Skeleton 包 ID
-    expect(panel).not.toHaveAttribute(
-      'data-package-id',
-      W5B_SKELETON_PACKAGE_ID
-    );
+    expect(panel).not.toHaveAttribute('data-package-id', 'W5-B-S');
     expect(panel).toHaveAttribute('data-source', 'hydrate');
     expect(panel).toHaveAttribute('data-hydrate-source', 'fixture');
     expect(panel).toHaveAttribute('data-doc-id', 'doc-strict');

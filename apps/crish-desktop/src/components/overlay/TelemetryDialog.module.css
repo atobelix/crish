@@ -1,5 +1,5 @@
-/* 诊断日志弹窗（PE-05 T05.2 #1）
- * 原 TelemetryDialog 内联 style 对象下沉为本组件 module；全引用 tokens，无裸 hex/rgba */
+/*        PE-05 T05.2 #1 
+ *   TelemetryDialog    style          module     tokens    hex/rgba */
 .row {
   display: flex;
   justify-content: space-between;

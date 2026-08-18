@@ -3,7 +3,7 @@
   flex-direction: column;
   width: 100%;
   margin-bottom: 22px;
-  /* 缂佺喍绔寸挧?token閿涘瞼顩﹀銏℃殠閽€?720/680px 绾剛绱惍?*/
+  /*      ?token         ?720/680px    ?*/
   max-width: min(var(--chat-col-max, 760px), 100%);
   min-width: 0;
   margin-left: auto;
@@ -130,7 +130,7 @@
 .planApproveChip {
   border: var(--hairline-width, 1px) solid var(--border-subtle);
   background: transparent;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   padding: 5px 12px;
   font-size: var(--font-size-xs);
   font-family: inherit;
@@ -167,7 +167,7 @@
   max-width: 100%;
   border: var(--hairline-width, 1px) solid
     var(--hairline-strong, var(--border-color));
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: transparent;
   overflow: hidden;
 }
@@ -324,7 +324,7 @@
   color: var(--text-tertiary);
   margin-bottom: var(--space-1);
   padding: 2px 7px;
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm);
   background: transparent;
   border: var(--hairline-width, 1px) solid
     var(--hairline, var(--border-subtle, var(--border-color)));
@@ -454,7 +454,7 @@
   margin-bottom: var(--space-1_5);
 }
 
-/* ─── Timeline Interleaved Thought Section ─── */
+/*     Timeline Interleaved Thought Section     */
 .thoughtTimelineSection {
   margin: 4px 0 6px;
   padding: 0;

@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { flushSync } from 'react-dom';
 import { ResizeObserverManager } from '../services/ResizeObserverManager';
 
 /** 动画/拖拽类型枚举 */
@@ -241,29 +240,13 @@ export const useLayoutAnimationStore = create<LayoutAnimationStore>(
         return;
       }
 
-      try {
-        flushSync(() => {
-          catchupQueue.forEach((task) => {
-            try {
-              task();
-            } catch (e) {
-              console.error('[LayoutAnimationStore] Catch-up task failed:', e);
-            }
-          });
-        });
-      } catch {
-        // 在非 React 调度回调中 fallback 至普通调用
-        catchupQueue.forEach((task) => {
-          try {
-            task();
-          } catch (err) {
-            console.error(
-              '[LayoutAnimationStore] Fallback catchup failed:',
-              err
-            );
-          }
-        });
-      }
+      catchupQueue.forEach((task) => {
+        try {
+          task();
+        } catch (e) {
+          console.error('[LayoutAnimationStore] Catch-up task failed:', e);
+        }
+      });
 
       catchupQueue.clear();
       set({ phase: 'idle' });

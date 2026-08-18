@@ -33,24 +33,12 @@ import {
 } from './runtimePanelLib';
 
 interface RuntimePanelProps {
-  wsId: string;
-  onShowToast: (msg: string) => void;
+  className?: string;
+  wsId?: string;
+  onShowToast?: (msg: string) => void;
 }
 
-/**
- * 运行状态悬浮面板（正式版 H2）壳组件：引擎/用量区段内联渲染，
- * 活动任务/后台常驻/待确认/计划由 4 个 Section 子件装配。
- * 文案纯函数见 runtimePanelLib；数据合并见 useRuntimePanelData。
- *
- * - 引擎连接 + activeRuns / pendingApprovals（get-status）
- * - 用量：本地累计；H3 可按 runId 接 snapshot
- * - 计划：workflow 列表（H3 再补 CRUD）
- * - 成功操作静默（列表/面板切换即反馈）；仅失败 toast
- */
-export const RuntimePanel: React.FC<RuntimePanelProps> = ({
-  wsId: _wsId,
-  onShowToast,
-}) => {
+export const RuntimePanel: React.FC<RuntimePanelProps> = () => {
   const tokenUsage = useSettingsField(selectTokenUsage);
   const cronJobs = useSettingsField(selectScheduledTasks);
   const ds = useEngineState();
@@ -195,7 +183,6 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
       <BgTasksSection
         bgTasks={ds.bgTasks}
         countLabel={data.bgCountLabel}
-        onShowToast={onShowToast}
       />
 
       {/* L2：定时/Cron 数据面展示——timer-fired/timer-cancelled/cron-fired
@@ -205,11 +192,10 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = ({
       <ApprovalSection
         approvals={ds.pendingApprovals}
         countLabel={data.approvalCountLabel}
-        onShowToast={onShowToast}
         onFocusSession={data.focusSession}
       />
 
-      <TrashSection onShowToast={onShowToast} />
+      <TrashSection />
 
       <SecurityAuditSection entries={auditEntries} />
 

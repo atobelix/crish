@@ -1,0 +1,82 @@
+/* ui/Slider        RED-DETAILED-02 / T-ATOM-07 
+ *    2px       44px       Fitts's Law  
+ * 12px      50%      
+ */
+
+.slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 20px;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+}
+
+/* 44px           ::before   /             */
+.slider::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  bottom: -12px;
+  left: 0;
+  right: 0;
+  z-index: 0;
+}
+
+.sliderDisabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled, 0.45);
+}
+
+/* 2px         */
+.track {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 2px;
+  border-radius: var(--radius-xs, 2px);
+  background-color: var(--border-color);
+  overflow: hidden;
+}
+
+/*        */
+.filledTrack {
+  height: 100%;
+  background-color: var(--accent-color);
+  border-radius: inherit;
+  transition: width var(--transition-micro, 80ms) ease-out;
+}
+
+/* 12px        (border-radius: 50%    ) */
+.thumb {
+  position: absolute;
+  z-index: 2;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background-color: var(--bg-elevated);
+  border: 1.5px solid var(--accent-color);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
+  box-sizing: border-box;
+  pointer-events: none;
+  transition:
+    transform var(--transition-micro, 120ms) ease,
+    box-shadow var(--transition-micro, 120ms) ease;
+}
+
+/*             */
+.slider:hover:not(.sliderDisabled) .thumb {
+  transform: scale(1.15);
+}
+
+/*    Focus Ring AGENTS.md   13            3%~10%  */
+.slider:focus-visible .thumb {
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
