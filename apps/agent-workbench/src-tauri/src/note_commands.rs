@@ -6,6 +6,7 @@
 //! - `note_query_blocks`
 //! - `note_send_to_note`
 //! - `note_document_hydrate`（打开/加载投影 · 默认真 DocSession 路径）
+//! - `note_document_recent`（最近一篇 persist 非空 doc_id · 读 `doc_meta`+`blocks`）
 //! - `note_detect_mirror_drift`（A-INV-02 / W2-E · detect 可达前端）
 //! - `note_import_mirror_proposal`（三路策略提案；**不** apply；X-05）
 //! - `note_apply_ops`（CONN-B3 · collab wire JSON → DocSession::apply）
@@ -83,7 +84,7 @@ mod note_commands_mirror;
 pub use note_commands_apply::{
     note_apply_ops, note_document_apply_md, note_redo_text, note_send_to_note, note_undo_text,
 };
-pub use note_commands_hydrate::{note_document_hydrate, note_query_blocks};
+pub use note_commands_hydrate::{note_document_hydrate, note_document_recent, note_query_blocks};
 pub use note_commands_mirror::{note_detect_mirror_drift, note_import_mirror_proposal};
 // SR-06f 拆分补完：tauri 宏生成的 invoke 包装符号（`__cmd__*`）与命令名
 // 常量（`__tauri_command_name_*`）随命令定义于三个子模块，`generate_handler!`
@@ -97,8 +98,9 @@ pub use note_commands_apply::{
     __tauri_command_name_note_send_to_note, __tauri_command_name_note_undo_text,
 };
 pub use note_commands_hydrate::{
-    __cmd__note_document_hydrate, __cmd__note_query_blocks,
-    __tauri_command_name_note_document_hydrate, __tauri_command_name_note_query_blocks,
+    __cmd__note_document_hydrate, __cmd__note_document_recent, __cmd__note_query_blocks,
+    __tauri_command_name_note_document_hydrate, __tauri_command_name_note_document_recent,
+    __tauri_command_name_note_query_blocks,
 };
 pub use note_commands_mirror::{
     __cmd__note_detect_mirror_drift, __cmd__note_import_mirror_proposal,

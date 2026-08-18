@@ -77,6 +77,42 @@ async fn command_apply_and_query_roundtrip() {
 }
 
 #[tokio::test]
+async fn note_document_recent_empty_store_is_null() {
+    let (_guard, dir) = temp_install();
+    let out = note_document_recent().await.unwrap();
+    assert_eq!(out["ok"], true);
+    assert!(out["doc_id"].is_null());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
+async fn note_document_recent_returns_applied_nonempty() {
+    let (_guard, dir) = temp_install();
+    let empty_first = note_document_recent().await.unwrap();
+    assert!(empty_first["doc_id"].is_null());
+
+    let apply = note_document_apply_md(NoteApplyMdRequest {
+        doc_id: "recent-persist-1".into(),
+        markdown: "already persisted body".into(),
+        parent_id: None,
+        after_block_id: None,
+        mode: NoteApplyMode::ApplyMdFragment,
+        intent_id: None,
+        batch_id: None,
+        message_id: None,
+        origin: Some("user".into()),
+    })
+    .await
+    .unwrap();
+    assert_eq!(apply["ok"], true);
+
+    let out = note_document_recent().await.unwrap();
+    assert_eq!(out["ok"], true);
+    assert_eq!(out["doc_id"], "recent-persist-1");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[tokio::test]
 async fn send_to_note_idempotent() {
     let (_guard, dir) = temp_install();
     let req = NoteSendToNoteArgs {

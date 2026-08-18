@@ -1,8 +1,9 @@
 //! SR-06f · note_commands 拆分 · 投影/查询面（hydrate / query）
 //!
 //! `note_document_hydrate`（默认 doc-session 真投影 / 显式 query-blocks 对照）、
-//! `note_query_blocks`（组合查询块摘要）与 `hydrate_via_query_blocks`（派生索引
-//! 助手）。共享失败面（`unwired_failure` / `err_outcome`）持有于门面
+//! `note_query_blocks`（组合查询块摘要）、`note_document_recent`（最近一篇
+//! persist 非空 doc_id）与 `hydrate_via_query_blocks`（派生索引助手）。
+//! 共享失败面（`unwired_failure` / `err_outcome`）持有于门面
 //! `note_commands`（本模经 `super::` 引用）。
 //!
 //! B2 · spawn_blocking 两段式（2026-08-13）：同步核心段（SQLite 派生索引查询 /
@@ -119,6 +120,35 @@ pub async fn note_document_hydrate(req: NoteHydrateDocumentArgs) -> Result<JsonV
 
     // ── 显式对照：query_blocks 派生（诚实标 query-blocks）────────
     hydrate_via_query_blocks(&doc_id, limit).await
+}
+
+/// 当前已打开 `workspace.db` 最近一篇已 persist 且投影非空的文档。
+///
+/// wire 名 = `note_document_recent`（前端 `NOTE_CMD_DOCUMENT_RECENT`）。
+/// 工作区 = 已装 store（`doc_meta` 无 workspace 列）。无命中 `doc_id=null`。
+/// ≠ 打开完成；≠ 平行账本。
+#[tauri::command]
+pub async fn note_document_recent() -> Result<JsonValue, CoreError> {
+    let Some(store) = note_runtime::try_store_backend() else {
+        return Ok(unwired_failure());
+    };
+    let joined = tokio::task::spawn_blocking(move || {
+        store.store().recent_persisted_nonempty_doc_id()
+    })
+    .await;
+    let result = match joined {
+        Ok(r) => r,
+        Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
+            "spawn_blocking join 失败: {join_err}"
+        ))),
+    };
+    match result {
+        Ok(doc_id) => Ok(json!({
+            "ok": true,
+            "doc_id": doc_id,
+        })),
+        Err(e) => Ok(err_outcome(e)),
+    }
 }
 
 /// query_blocks → hydrate 投影形状（派生索引；`hydrate_path=query-blocks`）。
