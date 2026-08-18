@@ -1,0 +1,132 @@
+/* ==========================================================================
+   Conversation tokens — 对话流 / agent 工作流
+   --------------------------------------------------------------------------
+   全部派生自 brand.css。这一层最关键的品牌决策：
+   rail（工具调用左侧竖线）是 agent 工作流独有的视觉结构，别的产品没有。
+   运行中的 rail 走品牌绿，完成后褪回中性 —— 这条线就是 logo 在界面里的延伸。
+   ========================================================================== */
+
+:root {
+  /* ---------- 字号：2–3 档，不再多 ---------- */
+  --flow-font-body: 14px;
+  --flow-font-meta: 13px;
+  --flow-font-micro: 12px;
+
+  /* ---------- 墨 ---------- */
+  /* 绝不在文字父级上加 opacity（Windows 上会糊）——层级一律用实色 */
+  --flow-ink: var(--ink);
+  --flow-body: var(--ink);            /* 结论 / 主叙述 */
+  --flow-meta: var(--ink-muted);      /* 过程：思考、意图、工具 (清晰不发虚) */
+  --flow-meta-soft: var(--ink-soft);  /* 过程内的次级：状态、roller */
+  --flow-meta-hover: var(--ink);
+  --flow-placeholder: var(--ink-ghost);
+
+  /* 旧名映射（保持下游不动） */
+  --flow-color-solid: var(--ink);
+  --flow-color-l0: var(--ink);
+  --flow-color-l1: var(--ink-soft);
+  --flow-color-l2: var(--ink-soft);
+  --flow-color-l1-hover: var(--ink);
+  --flow-color-l2-hover: var(--ink);
+  --flow-l0: 1;
+  --flow-l1: 1;
+  --flow-l2: 1;
+  --flow-l1-hover: 1;
+  --flow-l2-hover: 1;
+
+  --flow-error: var(--sem-error);
+  --flow-error-soft: var(--sem-error);
+
+  /* ---------- 间距 ---------- */
+  --flow-gap-msg: 22px;
+  --flow-gap-node: 8px;
+  --flow-gap-action: 4px;
+
+  /* ======================================================================
+     图标列与 rail 几何
+     ====================================================================== */
+  --flow-icon-col: 16px;
+  --flow-icon-size: 14px;
+  --flow-icon-gap: 6px;
+  --flow-row-h: 24px;
+  --flow-rail-x: 7px;                /* 14px 图标在 16px 列中的中心 */
+
+  /* rail 三态：静默 / 运行 / 子任务 */
+  --flow-rail: var(--line);
+  --flow-rail-live: var(--brand);
+  --flow-rail-live-fade: color-mix(in srgb, var(--brand) 18%, transparent);
+  --flow-subagent-rail: var(--line-soft);
+
+  --flow-summary-indent: 0.35em;
+  --flow-tool-indent: 0;
+  --flow-action-indent: 0;
+
+  /* chevron 比 meta 更弱 */
+  --flow-chevron-color: var(--ink-faint);
+  --flow-chevron-hover: var(--ink-soft);
+
+  /* ---------- 面 ---------- */
+  --flow-radius: var(--r-lg);
+  --flow-radius-sm: var(--r-md);
+  --flow-radius-pill: var(--r-full);
+  --flow-hairline: 1px solid var(--line-soft);
+  --flow-fill-soft: var(--paper-sunken);
+  --flow-fill-soft-2: var(--paper-deep);
+  --flow-shadow-static: none;
+  --flow-shadow-panel: var(--lift-md);
+
+  --flow-thinking-max-h: 168px;
+  --flow-subagent-max-h: 280px;
+  --flow-output-max-h: 140px;
+
+  /* ---------- 运动 ---------- */
+  --flow-spring: var(--ease-out);
+  --flow-spring-soft: var(--ease-soft);
+  --flow-accordion-ms: 180ms;
+  --flow-roller-ms: 240ms;
+  --flow-slot-ms: 260ms;
+  --flow-hover-ms: 90ms;
+  --flow-entrance-ms: 160ms;
+  --flow-pulse-ms: 1.2s;
+  --flow-slot-line: 1.65em;
+
+  --flow-chevron: 1;
+  --flow-marker: 1;
+  --flow-dot-size: 5px;
+
+  /* 文档引用：暖系青，与品牌绿区分（一个是「活着」，一个是「可点」） */
+  --flow-doc-ink: hsl(178, 34%, 30%);
+  --flow-doc-ink-hover: hsl(178, 40%, 22%);
+  --flow-chip-bg: var(--paper-sunken);
+  --flow-chip-text: var(--ink-muted);
+
+  --flow-mono: var(--font-mono);
+  --flow-font-smooth: auto;
+
+  /* ---------- 别名 ---------- */
+  --font-base: var(--flow-font-body);
+  --font-body: var(--flow-font-body);
+  --font-item: var(--flow-font-body);
+  --font-sub: var(--flow-font-meta);
+  --font-micro: var(--flow-font-micro);
+
+  --op-primary: 1;
+  --op-body: 1;
+  --op-interstitial: 1;
+  --op-tool: 1;
+  --op-tool-hover: 1;
+  --op-meta: 1;
+  --op-chevron: 1;
+  --op-chevron-hover: 1;
+  --op-marker: 1;
+
+  --accordion-duration: var(--flow-accordion-ms);
+  --accordion-easing: var(--flow-spring);
+  --tc-row-min-h: var(--flow-row-h);
+  --tc-indent: 0;
+
+  --tool-error-color: var(--flow-error);
+  --tool-running-color: var(--flow-meta);
+  --tool-pending-color: var(--sem-warn);
+  --doc-link-color: var(--flow-doc-ink);
+}

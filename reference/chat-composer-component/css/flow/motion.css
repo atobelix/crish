@@ -1,0 +1,366 @@
+/* ==========================================================================
+   Flow motion — restrained, complete arcs, slightly snappy
+   Human-factors notes:
+   - Prefer transform/opacity only (no layout thrash, no shadow anim)
+   - Full animation curve present; durations short (160–260ms)
+   - Soft settle (ease-out-expo style), avoid bouncy overshoot on text
+   - respects prefers-reduced-motion
+   ========================================================================== */
+
+/* ---------- Timing tokens (fallback if tokens.css not loaded) ---------- */
+:root {
+  --flow-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --flow-spring-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --flow-accordion-ms: 180ms;
+  --flow-roller-ms: 240ms;
+  --flow-slot-ms: 260ms;
+  --flow-entrance-ms: 160ms;
+  --flow-hover-ms: 90ms;
+  --flow-slot-line: 1.65em;
+}
+
+/* ---------- Phosphor / Shimmer Sheen for Living States ---------- */
+@keyframes flow-shimmer-sheen {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+.flow-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--text-secondary, #6b7280) 75%, transparent) 0%,
+    color-mix(in srgb, var(--text-secondary, #6b7280) 75%, transparent) 25%,
+    var(--text-primary, #111827) 50%,
+    color-mix(in srgb, var(--text-secondary, #6b7280) 75%, transparent) 75%,
+    color-mix(in srgb, var(--text-secondary, #6b7280) 75%, transparent) 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: flow-shimmer-sheen 2.6s ease-in-out infinite;
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+/* ---------- Smooth Tabular Number Roll (Vertical Morph) ---------- */
+@keyframes flow-num-exit {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes flow-num-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.flow-num-track {
+  display: inline-flex;
+  position: relative;
+  font-variant-numeric: tabular-nums;
+  min-width: 1.2em;
+  text-align: right;
+}
+
+.flow-num-unit {
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+  will-change: transform, opacity;
+}
+
+.flow-num-unit.is-entering {
+  animation:flow-num-enter var(--dur-base) var(--ease-spring) both;
+}
+
+.flow-num-unit.is-exiting {
+  position: absolute;
+  left: 0;
+  top: 0;
+  animation:flow-num-exit var(--dur-base) var(--ease-spring) both;
+}
+
+/* ---------- Running pulse (dot only — restrained) ---------- */
+
+@keyframes flow-pulse-dot {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+}
+
+/* ---------- Accordion: 高度感知与自然弹性贝塞尔曲线 ---------- */
+
+.flow-acc {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.flow-acc.is-open,
+.flow-acc[data-open="true"],
+.flow-acc.open {
+  grid-template-rows: 1fr;
+}
+
+.flow-acc__inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Content inside accordion: soft fade as it opens */
+.flow-acc:not(.is-open):not([data-open="true"]) > .flow-acc__inner > * {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 120ms ease-out, transform 120ms ease-out, visibility 120ms;
+}
+
+.flow-acc.is-open > .flow-acc__inner > *,
+.flow-acc[data-open="true"] > .flow-acc__inner > * {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+  transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1) 30ms,
+              transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ---------- Slot machine (interstitial + shared roller) ---------- */
+
+.flow-slot,
+.flow-roller {
+  position: relative;
+  overflow: hidden;
+  height: var(--flow-slot-line, 1.65em);
+  line-height: var(--flow-slot-line, 1.65em);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.flow-slot__track,
+.flow-roller__track {
+  display: flex;
+  flex-direction: column;
+  transition: transform var(--dur-slow) var(--ease-spring);
+}
+
+/* When settled or done: drop all GPU compositing transforms so text is 100% razor sharp DirectWrite subpixel hinted */
+.flow-slot.is-settled .flow-slot__track,
+.flow-slot.is-done .flow-slot__track {
+  will-change: auto;
+  transform: none !important;
+}
+
+.flow-slot.is-settled .flow-slot__item--spin,
+.flow-slot.is-done .flow-slot__item--spin {
+  display: none !important;
+}
+
+.flow-slot__item,
+.flow-roller__item {
+  height: var(--flow-slot-line, 1.65em);
+  line-height: var(--flow-slot-line, 1.65em);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Index-driven translate (JS sets --flow-slot-index / --flow-roller-index) */
+.flow-slot:not(.is-settled)[data-index] .flow-slot__track,
+.flow-slot:not(.is-settled).style-bound .flow-slot__track {
+  transform: translateY(calc(var(--flow-slot-index, 0) * -1 * var(--flow-slot-line, 1.65em)));
+}
+
+.flow-roller[data-index] .flow-roller__track,
+.flow-roller.style-bound .flow-roller__track {
+  transform: translateY(calc(var(--flow-roller-index, 0) * -1 * var(--flow-slot-line, 1.65em)));
+}
+
+/* Spin frames: meta ink; final: body ink */
+.flow-slot__item--spin {
+  color: var(--flow-meta, #4a4a4a);
+}
+
+.flow-slot__item--final {
+  color: var(--flow-body, #111111);
+  font-weight: 400;
+}
+
+/* Soft edge masks only during active spinning, disappear when settled to prevent edge blurring */
+.flow-slot:not(.is-settled)::before,
+.flow-slot:not(.is-settled)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.flow-slot:not(.is-settled)::before {
+  top: 0;
+  background: linear-gradient(to bottom, #fff 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.flow-slot:not(.is-settled)::after {
+  bottom: 0;
+  background: linear-gradient(to top, #fff 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+/* ---------- Entrance: generic nodes (distinct, smooth lift & scale) ---------- */
+
+@keyframes flow-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.985);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.flow-enter {
+  animation:flow-enter var(--dur-base) var(--ease-spring) both;
+}
+
+/* Interstitial owns its own motion — no double enter */
+.flow-enter-slot.flow-enter {
+  animation:none;
+  opacity: 1;
+  transform: none;
+}
+
+.flow-enter--d1 {
+  animation-delay: 30ms;
+}
+.flow-enter--d2 {
+  animation-delay: 55ms;
+}
+.flow-enter--d3 {
+  animation-delay: 80ms;
+}
+
+/* ---------- Interstitial text host ---------- */
+
+.flow-text--interstitial {
+  margin: 0;
+  font-size: var(--flow-font-body, 14px);
+  line-height: var(--flow-slot-line, 1.65em);
+  color: var(--flow-body, #0f0f0f);
+  min-height: var(--flow-slot-line, 1.65em);
+}
+
+.flow-text--interstitial .flow-slot {
+  width: 100%;
+}
+
+/* ---------- Chevron open rotation (shared) ---------- */
+
+.flow-acc.is-open > .flow-acc__head .flow-chevron,
+[data-open="true"] > .flow-acc__head .flow-chevron {
+  transform: rotate(90deg);
+}
+
+/* ---------- Fade mask utility ---------- */
+
+.flow-fade {
+  position: relative;
+}
+
+.flow-fade::before,
+.flow-fade::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 16px;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.flow-fade::before {
+  top: 0;
+  background: linear-gradient(to bottom, #fff 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.flow-fade::after {
+  bottom: 0;
+  background: linear-gradient(to top, #fff 0%, rgba(255, 255, 255, 0) 100%);
+}
+
+.flow-soft-surface {
+  background: var(--flow-fill-soft, rgba(0, 0, 0, 0.02));
+  border-radius: var(--flow-radius-sm, 8px);
+  border: none;
+  box-shadow: none;
+}
+
+/* ---------- Reduced motion ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-acc {
+    transition:none;
+  }
+
+  .flow-acc:not(.is-open):not([data-open="true"]) > .flow-acc__inner > *,
+  .flow-acc.is-open > .flow-acc__inner > *,
+  .flow-acc[data-open="true"] > .flow-acc__inner > * {
+    opacity: 1;
+    transform: none;
+    transition:none;
+  }
+
+  .flow-dot--running,
+  .flow-composing .flow-dot--running,
+  .flow-composing__dot {
+    animation:none;
+    opacity: 0.55;
+  }
+
+  .flow-enter {
+    animation:none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .flow-slot__track,
+  .flow-roller__track,
+  .flow-purpose__roller-track,
+  .flow-subagent__col-track {
+    transition:none !important;
+  }
+
+  .flow-slot::before,
+  .flow-slot::after {
+    display: none;
+  }
+}

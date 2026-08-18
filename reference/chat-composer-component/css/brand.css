@@ -1,0 +1,193 @@
+/* ==========================================================================
+   BRAND — Crish 品牌基元层（唯一真源）
+   --------------------------------------------------------------------------
+   配色策略：白纸混正黄（比例由 --tint-amt 单旋钮控制，默认 2%）
+   签名色  ：#10B981 — 取自 logo 绿点，只标记「agent 活着」，不承担语义
+   排版    ：Geist（拉丁）+ MiSans（中文）+ GeistMono（等宽），全部自托管
+   --------------------------------------------------------------------------
+   下游只消费本文件导出的语义名，不要在组件里写死颜色。
+   ========================================================================== */
+
+/* ---------- 自托管字体 ---------- */
+
+@font-face {
+  font-family: 'Geist';
+  src: url('../assets/fonts/Geist.woff2') format('woff2-variations'),
+       url('../assets/fonts/Geist.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'GeistMono';
+  src: url('../assets/fonts/GeistMono.woff2') format('woff2-variations'),
+       url('../assets/fonts/GeistMono.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* MiSans 分片由 index.html 直接 link 引入（@import 必须先于所有规则，
+   放在 @font-face 之后会被浏览器整条丢弃，故不在此处 import）。 */
+
+:root {
+  /* ======================================================================
+     1. 色温源与纯白底色
+     ====================================================================== */
+  --tint: hsl(46, 92%, 52%);   /* 正黄本体 */
+  --tint-amt: 0%;              /* 设为 0% 保持纯白高级感，彻底去除发黄底色 */
+
+  /* ======================================================================
+     2. 纸 — 纯净白底，微弱层次过渡
+     ====================================================================== */
+  --paper-raised: #ffffff;
+  --paper:        #ffffff;
+  --paper-sunken: #fafafa;
+  --paper-deep:   #f4f4f4;
+
+  /* 交互覆层 */
+  --wash-hover:  rgba(0, 0, 0, 0.035);
+  --wash-active: rgba(0, 0, 0, 0.065);
+
+  /* ======================================================================
+     3. 墨 — 近黑带微暖调（高对比、清晰扎实）
+     ====================================================================== */
+  --ink:       hsl(46, 9%, 10%);   /* 正文 / 结论 */
+  --ink-muted: hsl(46, 7%, 28%);   /* 过程 meta：思考、工具、意图 (清晰不发虚) */
+  --ink-soft:  hsl(46, 6%, 42%);   /* 次级状态 */
+  --ink-faint: hsl(46, 8%, 62%);   /* placeholder / chevron */
+  --ink-ghost: hsl(46, 10%, 78%);  /* 禁用 */
+
+  /* ======================================================================
+     4. 线 — 同色相极低饱和，保证描边不发冷
+     ====================================================================== */
+  --line-soft:   hsl(46, 20%, 93%);
+  --line:        hsl(46, 17%, 88%);
+  --line-strong: hsl(46, 17%, 85%);  /* 柔和 hover 描边：仅比基础线暗 3%，保持淡雅平滑 */
+
+  /* ======================================================================
+     5. 品牌签名色 — logo 绿点
+     ----------------------------------------------------------------------
+     铁律：brand 只用在「agent 活着」的地方 —
+     运行中的 rail、思考脉冲点、caret、发送键、logomark。
+     成功 / 完成 一律不用绿（见 §6），否则品牌色会被语义吃掉。
+     ====================================================================== */
+  --brand:      #10B981;
+  --brand-deep: #059669;
+  --brand-soft: color-mix(in srgb, var(--brand) 9%, var(--paper-raised));
+  --brand-line: color-mix(in srgb, var(--brand) 26%, transparent);
+  --brand-glow: color-mix(in srgb, var(--brand) 16%, transparent);
+
+  /* ======================================================================
+     6. 语义色 — 刻意与 brand 拉开
+     ----------------------------------------------------------------------
+     「完成」不给颜色，只给墨色 + 勾。这是让 emerald 独占品牌位的关键一步。
+     ====================================================================== */
+  --sem-done:      var(--ink-muted);          /* 完成：无彩，靠字重和勾表达 */
+  --sem-done-soft: var(--paper-sunken);
+
+  --sem-warn:      hsl(32, 84%, 44%);         /* 等待 / 需授权：琥珀，与纸同族 */
+  --sem-warn-soft: color-mix(in srgb, hsl(32, 84%, 44%) 9%, var(--paper-raised));
+  --sem-warn-line: color-mix(in srgb, hsl(32, 84%, 44%) 28%, transparent);
+
+  --sem-error:      hsl(6, 56%, 51%);         /* 失败：赤土红，暖系 */
+  --sem-error-soft: color-mix(in srgb, hsl(6, 56%, 51%) 8%, var(--paper-raised));
+  --sem-error-line: color-mix(in srgb, hsl(6, 56%, 51%) 26%, transparent);
+
+  /* 只读 / 中性态 —— 无彩 */
+  --sem-neutral:      var(--ink-soft);
+  --sem-neutral-soft: var(--paper-sunken);
+
+  /* ======================================================================
+     7. 排版 — Inter 拉丁 + 系统原生高清中文（或外联预载），JetBrains Mono 代码
+     ====================================================================== */
+  --font-sans: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SFMono-Regular', Consolas, Menlo, monospace;
+
+  /* 消除字距挤压，保持天然字体舒展与满格体量 */
+  --tracking-tight: 0em;
+  --tracking-base: 0em;
+  --tracking-wide: 0.02em;
+
+  /* ======================================================================
+     8. 材质 — 「高级」来自材质而非装饰
+     ----------------------------------------------------------------------
+     顶部 1px 内高光模拟纸张受光边，是整套质感的关键。
+     ====================================================================== */
+  --bevel-top: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+
+  --lift-sm: 0 1px 2px color-mix(in srgb, var(--ink) 4%, transparent);
+  --lift-md:
+    0 1px 2px  color-mix(in srgb, var(--ink) 3%, transparent),
+    0 4px 14px color-mix(in srgb, var(--ink) 4%, transparent);
+  --lift-lg:
+    0 2px 6px  color-mix(in srgb, var(--ink) 3%, transparent),
+    0 10px 32px color-mix(in srgb, var(--ink) 6%, transparent);
+
+  /* 聚焦环 — 品牌色极淡外扩，不抢视线 */
+  --ring-brand: 0 0 0 3px var(--brand-glow);
+
+  /* ======================================================================
+     9. 几何
+     ====================================================================== */
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-full: 999px;
+
+  /* ======================================================================
+     10. 运动
+     ====================================================================== */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-soft: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-micro: 100ms;
+  --t-fast: 150ms;
+  --t-base: 200ms;
+  --t-slow: 300ms;
+}
+
+/* ==========================================================================
+   Logomark — 星号（6 条放射）+ 脱离的绿点
+   --------------------------------------------------------------------------
+   绿点脱离主体，读作光标 / 节点 / 状态灯 —— 天然就是「agent 活着」的隐喻。
+   放射线用 currentColor，绿点用品牌色，因此可随上下文变色。
+   ========================================================================== */
+
+.brand-mark {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 1em;
+  height: 1em;
+  color: var(--ink);
+  vertical-align: -0.14em;
+}
+
+.brand-mark__rays {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 26;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-mark__dot {
+  fill: var(--brand);
+}
+
+/* 运行中：绿点呼吸 —— 全局唯一的「活着」信号 */
+.brand-mark.is-live .brand-mark__dot {
+  animation:brand-dot-breathe 2s var(--ease-soft) infinite;
+  transform-origin: 100px 34px;
+}
+
+@keyframes brand-dot-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.86); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-mark.is-live .brand-mark__dot { animation:none; }
+}

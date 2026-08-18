@@ -1,0 +1,148 @@
+/* PDF viewer — 真 canvas 渲染 */
+
+.fp-pdf {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  background: var(--fp-bg-stage, #f7f7f7);
+  outline: none;
+}
+
+.fp-pdf-thumbs {
+  width: 128px;
+  flex-shrink: 0;
+  overflow: auto;
+  border-right: var(--fp-hairline, 1px solid #e8e8e8);
+  background: var(--fp-bg, #fff);
+  padding: 8px 6px;
+  overscroll-behavior: contain;
+}
+
+.fp-pdf-thumbs[hidden] {
+  display: none !important;
+}
+
+.fp-pdf-thumbs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fp-pdf-thumb {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition:background var(--dur-micro)) var(--ease-default),
+    border-color var(--dur-micro)) var(--ease-default);
+}
+
+.fp-pdf-thumb:hover {
+  background: var(--fp-hover, rgba(0, 0, 0, 0.04));
+}
+
+.fp-pdf-thumb:focus-visible {
+  outline: 2px solid rgba(0, 0, 0, 0.2);
+  outline-offset: 1px;
+}
+
+.fp-pdf-thumb.is-active {
+  border-color: #c8c8c8;
+  background: var(--fp-hover, rgba(0, 0, 0, 0.04));
+}
+
+.fp-pdf-thumb canvas,
+.fp-pdf-thumb-canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  background: #fff;
+}
+
+.fp-pdf-thumb-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--fp-meta, #5a5a5a);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.fp-pdf-stage {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px;
+  overscroll-behavior: contain;
+  position: relative;
+}
+
+.fp-pdf-page {
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  line-height: 0;
+  border-radius: 1px;
+  transition:opacity var(--dur-fast)) var(--ease-spring));
+}
+
+.fp-pdf-page.is-rendering {
+  opacity: 0.72;
+}
+
+.fp-pdf-page canvas,
+.fp-pdf-canvas {
+  display: block;
+  max-width: none;
+}
+
+.fp-pdf-status {
+  margin-top: 16px;
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--fp-danger, #b42318);
+  background: #fff;
+  border: var(--fp-hairline, 1px solid #e8e8e8);
+  border-radius: 8px;
+}
+
+.fp-pdf-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--fp-meta, #5a5a5a);
+  font-size: 14px;
+}
+
+/* 窄屏：缩略图默认可叠在左侧，宽度压缩 */
+@media (max-width: 640px) {
+  .fp-pdf-thumbs {
+    width: 96px;
+    padding: 6px 4px;
+  }
+
+  .fp-pdf-stage {
+    padding: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-pdf-page {
+    transition:none;
+  }
+
+  .fp-pdf-thumb {
+    transition:none;
+  }
+}

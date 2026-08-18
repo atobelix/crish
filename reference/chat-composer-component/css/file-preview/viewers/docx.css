@@ -1,0 +1,194 @@
+/* DOCX viewer — 文章排版（max-width 720） */
+.fp-docx {
+  box-sizing: border-box;
+  min-height: 100%;
+  height: 100%;
+  padding: 50px 24px 56px;
+  background: var(--fp-bg-stage, #f7f7f7);
+  overflow: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.fp-docx-article {
+  box-sizing: border-box;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 48px 48px;
+  background: var(--fp-bg, #fff);
+  border: var(--fp-hairline, 1px solid #e8e8e8);
+  border-radius: var(--fp-radius-sm, 10px);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  color: var(--fp-ink, #0f0f0f);
+  font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-size: 14.5px;
+  line-height: 1.65;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.fp-docx-article > :first-child {
+  margin-top: 0;
+}
+
+.fp-docx-article > :last-child {
+  margin-bottom: 0;
+}
+
+.fp-docx-article h1,
+.fp-docx-article h2,
+.fp-docx-article h3,
+.fp-docx-article h4,
+.fp-docx-article h5,
+.fp-docx-article h6 {
+  margin: 1.25em 0 0.5em;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  font-weight: 600;
+  color: var(--fp-ink, #0f0f0f);
+}
+
+.fp-docx-article h1 {
+  font-size: 1.55em;
+  padding-bottom: 0.35em;
+  border-bottom: var(--fp-hairline, 1px solid #e8e8e8);
+}
+
+.fp-docx-article h2 {
+  font-size: 1.28em;
+}
+
+.fp-docx-article h3 {
+  font-size: 1.1em;
+}
+
+.fp-docx-article p {
+  margin: 0 0 0.85em;
+}
+
+.fp-docx-article a {
+  color: #1a5dbe;
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+
+.fp-docx-article a:hover {
+  border-bottom-color: currentColor;
+}
+
+.fp-docx-article strong,
+.fp-docx-article b {
+  font-weight: 600;
+}
+
+.fp-docx-article em,
+.fp-docx-article i {
+  font-style: italic;
+}
+
+.fp-docx-article ul,
+.fp-docx-article ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.5em;
+}
+
+.fp-docx-article li {
+  margin: 0.25em 0;
+}
+
+.fp-docx-article li > ul,
+.fp-docx-article li > ol {
+  margin-bottom: 0.2em;
+}
+
+.fp-docx-article blockquote {
+  margin: 0.9em 0;
+  padding: 0.4em 0 0.4em 1em;
+  border-left: 3px solid #d0d0d0;
+  color: var(--fp-meta, #5a5a5a);
+}
+
+.fp-docx-article code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  padding: 0.1em 0.35em;
+  background: var(--fp-bg-meta, #fafafa);
+  border: var(--fp-hairline, 1px solid #e8e8e8);
+  border-radius: 4px;
+}
+
+.fp-docx-article pre {
+  margin: 0.9em 0;
+  padding: 12px 14px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.5;
+  background: var(--fp-bg-meta, #fafafa);
+  border: var(--fp-hairline, 1px solid #e8e8e8);
+  border-radius: 8px;
+}
+
+.fp-docx-article pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font-size: inherit;
+}
+
+.fp-docx-article img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 0.9em 0;
+  border-radius: 4px;
+}
+
+.fp-docx-article table {
+  width: 100%;
+  max-width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 13px;
+  table-layout: auto;
+}
+
+.fp-docx-article thead {
+  background: var(--fp-bg-meta, #fafafa);
+}
+
+.fp-docx-article th,
+.fp-docx-article td {
+  border: var(--fp-hairline, 1px solid #e8e8e8);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.fp-docx-article th {
+  font-weight: 600;
+}
+
+.fp-docx-article hr {
+  border: 0;
+  border-top: var(--fp-hairline, 1px solid #e8e8e8);
+  margin: 1.4em 0;
+}
+
+/* 窄屏：减少内边距 */
+@media (max-width: 640px) {
+  .fp-docx {
+    padding: 16px 12px 40px;
+  }
+
+  .fp-docx-article {
+    padding: 24px 20px 32px;
+    border-radius: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fp-docx.fp-fade-in {
+    animation:none;
+  }
+}

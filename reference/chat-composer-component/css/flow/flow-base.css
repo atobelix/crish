@@ -1,0 +1,179 @@
+/* Hide redundant top meta header line */
+.flow-session-start {
+  display: none !important;
+}
+
+.chat-stream-container.flow-stream,
+.flow-stream,
+.chat-stream-container {
+  flex: 1;
+  padding: 16px 8px 16px;
+  display: flex;
+  flex-direction: column;
+  /* Razor-sharp subpixel antialiasing matching user bubble */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.chat-stream-inner.flow-stream-inner,
+.flow-stream-inner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--flow-gap-msg, 16px);
+  margin-top: 0;
+  width: 100%;
+  max-width: 100%;
+  padding-bottom: 4px;
+}
+
+.flow-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 92%;
+  min-width: 0;
+}
+
+.flow-msg--user {
+  align-self: flex-end;
+  max-width: min(78%, 520px);
+}
+
+.flow-msg--assistant {
+  align-self: flex-start;
+  max-width: 100%;
+  width: 100%;
+}
+
+.flow-msg-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--flow-gap-node, 8px);
+  min-width: 0;
+  width: 100%;
+  /* Never put opacity here — blurs all children */
+  color: var(--flow-body, #111);
+  font-size: var(--flow-font-body, 14px);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* User bubble — 浮起的白纸，与 composer 同一套材质语言 */
+.flow-user-bubble {
+  background: var(--paper-raised);
+  padding: 10px 14px;
+  border-radius: 16px 16px 4px 16px;
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--bevel-top), var(--lift-sm);
+  font-size: var(--flow-font-body, 14px);
+  line-height: 1.55;
+  color: var(--flow-ink, #111);
+  word-break: break-word;
+}
+
+.flow-user-bubble:hover {
+  box-shadow: var(--bevel-top), var(--lift-sm);
+}
+
+/* Text — conclusions solid near-black */
+.flow-text {
+  margin: 0;
+  font-size: var(--flow-font-body, 14px);
+  line-height: 1.65;
+  word-break: break-word;
+  color: var(--flow-body, #111);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.flow-text--primary {
+  color: var(--flow-body, #111);
+  font-weight: 400;
+}
+
+.flow-text--interstitial {
+  color: var(--flow-body, #0f0f0f);
+  font-weight: 400;
+  /* Slot structure / motion in motion.css */
+}
+
+.flow-doc-ref {
+  color: var(--flow-doc-ink, #2f6b6b);
+  border-bottom: 1px solid rgba(47, 107, 107, 0.28);
+  cursor: pointer;
+}
+
+.flow-composing {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--flow-font-meta, 13px);
+  color: var(--flow-meta, #555);
+  line-height: 1.5;
+}
+
+.flow-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--flow-meta, #555);
+  flex-shrink: 0;
+}
+
+.flow-dot--running {
+  animation:flow-pulse-dot 2s var(--ease-default)-in-out infinite;
+}
+
+/* Meta shared */
+.flow-meta {
+  color: var(--flow-meta, #555);
+  font-size: var(--flow-font-meta, 13px);
+}
+
+/* Nested scrollables: auto so wheel chains to stream at edges */
+.flow-scroll-nested {
+  overscroll-behavior-y: auto;
+}
+
+/* Accordion */
+.flow-acc {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.flow-acc.is-open,
+.flow-acc[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+
+.flow-acc__inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Chevron — small, after text; softer than meta ink */
+.flow-chevron,
+.tc-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--flow-chevron-color, #a3a3a3);
+  display: inline-block;
+  vertical-align: -1px;
+  transition:transform var(--dur-base) var(--ease-spring);
+}
+
+/* Permission host */
+.flow-permission-host:empty {
+  display: none;
+}
+
+.flow-permission-host {
+  width: 100%;
+}
+
+/* Entrance / pulse keyframes live in motion.css (single source of truth) */

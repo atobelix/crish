@@ -1,0 +1,419 @@
+/* ==========================================================================
+   Artifact chip + floating notebook panel
+   Chip: refined pill. Panel: pin/drag header, white gradient mask, static shadow.
+   Ban: hover shadow animation; preview/source mode toggle as primary chrome.
+   ========================================================================== */
+
+/* ---------- Artifact chip (in-stream) ---------- */
+
+/* Same geometry as .flow-action — ordinary tool-call row */
+.flow-artifact {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--flow-icon-col, 16px) minmax(0, 1fr);
+  column-gap: var(--flow-icon-gap, 6px);
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  /* top-level artifact is a summary row vs body text */
+  padding-left: var(--flow-summary-indent, 0.35em);
+  width: 100%;
+  max-width: 100%;
+  min-height: var(--flow-row-h, 24px);
+  height: var(--flow-row-h, 24px);
+  font-family: inherit;
+  font-size: var(--flow-font-meta, 13px);
+  line-height: var(--flow-row-h, 24px);
+  color: var(--flow-meta, #4a4a4a);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  box-sizing: border-box;
+}
+
+/* Nested under purpose body: purpose already indented — no double indent */
+.flow-purpose__body > .flow-artifact {
+  padding-left: 0;
+}
+
+.flow-msg-body > .flow-artifact {
+  margin: 0;
+}
+
+.flow-artifact__icon {
+  grid-column: 1;
+  width: var(--flow-icon-col, 16px);
+  height: var(--flow-row-h, 24px);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+
+.flow-artifact__icon svg {
+  width: var(--flow-icon-size, 14px);
+  height: var(--flow-icon-size, 14px);
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  display: block;
+}
+
+.flow-artifact__prefix {
+  flex-shrink: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.flow-artifact__label {
+  flex-shrink: 0;
+  font-family: inherit;
+}
+
+/* Text + chip share the second grid column like action text */
+.flow-artifact__main {
+  grid-column: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.flow-artifact__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: baseline;
+  max-width: 240px;
+  padding: 0 2px;
+  margin: 0 2px;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--brand-deep, #059669);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--brand-line, rgba(16, 185, 129, 0.35));
+  line-height: inherit;
+  height: auto;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: none;
+  transition:color var(--dur-fast) var(--ease-default), text-decoration-color var(--dur-fast) var(--ease-default);
+}
+
+.flow-artifact__chip:hover {
+  background: transparent;
+  color: var(--brand, #10b981);
+  text-decoration-color: var(--brand, #10b981);
+  box-shadow: none;
+}
+
+.flow-artifact__chip:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--flow-doc-ink, #0a5c5c) 40%, var(--border-color, #e2e2e2));
+}
+
+.flow-artifact__chip-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.flow-artifact__chip-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ---------- Notebook floating panel ---------- */
+
+.nb-panel,
+.flow-notebook {
+  position: fixed; /* or absolute when anchored by JS */
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  width: min(420px, calc(100vw - 32px));
+  max-width: 480px;
+  height: min(480px, calc(100vh - 96px));
+  max-height: min(560px, calc(100vh - 72px));
+  background: var(--bg-popover, #fff);
+  border: var(--flow-hairline, 1px solid #e2e2e2);
+  border-radius: var(--flow-radius, 10px);
+  /* 柔和克制阴影（未Hover淡雅通透，Hover仅6%极微增幅） */
+  box-shadow: 0 8px 24px hsla(0, 0%, 0%, 0.05), 0 2px 6px hsla(0, 0%, 0%, 0.02);
+  overflow: hidden;
+  min-width: 280px;
+  transition: box-shadow var(--dur-fast) var(--ease-default);
+}
+
+.nb-panel:hover,
+.flow-notebook:hover {
+  box-shadow: 0 10px 28px hsla(0, 0%, 0%, 0.09), 0 2px 8px hsla(0, 0%, 0%, 0.03);
+}
+
+/* Drag header — 悬浮顶栏：文字区纯白实心遮挡保护，向下平滑淡出 */
+.nb-header,
+.nb-panel__header,
+.flow-notebook__header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  height: 46px;
+  padding: 8px 10px 0 12px;
+  cursor: grab;
+  user-select: none;
+  background: linear-gradient(
+    to bottom,
+    var(--bg-popover, #ffffff) 0%,
+    var(--bg-popover, #ffffff) 52%,
+    rgba(255, 255, 255, 0.92) 68%,
+    rgba(255, 255, 255, 0.5) 85%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  border: none;
+  pointer-events: auto;
+}
+
+.nb-header:active,
+.nb-panel__header:active,
+.flow-notebook__header:active {
+  cursor: grabbing;
+}
+
+/* 顶部一体化渐变已内嵌于 header，移除多余伪元素 */
+.nb-header::after,
+.nb-panel__header::after,
+.flow-notebook__header::after {
+  display: none;
+}
+
+/* 头部透明化 */
+.nb-panel__header-bg,
+.flow-notebook__header-bg {
+  display: none;
+}
+
+.nb-icon,
+.nb-panel__icon,
+.flow-notebook__icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--flow-doc-ink, #0a5c5c);
+  opacity: 0.9;
+}
+
+.nb-title,
+.nb-panel__title,
+.flow-notebook__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--flow-font-meta, 13px);
+  font-weight: 600;
+  color: var(--flow-color-solid, #0a0a0a);
+  line-height: 1.4;
+}
+
+/* Minimal actions: pin + close only */
+.nb-actions,
+.nb-panel__actions,
+.flow-notebook__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.nb-btn,
+.nb-panel__btn,
+.flow-notebook__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-button, 6px);
+  background: transparent;
+  color: var(--flow-ink, #0a0a0a);
+  opacity: 0.42;
+  cursor: pointer;
+  transition:opacity var(--flow-hover-ms, var(--dur-fast)) var(--ease-default),
+    background var(--flow-hover-ms, var(--dur-fast)) var(--ease-default);
+}
+
+.nb-btn:hover,
+.nb-panel__btn:hover,
+.flow-notebook__btn:hover {
+  opacity: 0.78;
+  background: var(--bg-hover, rgba(0, 0, 0, 0.035));
+  /* no shadow */
+  box-shadow: none;
+}
+
+.nb-btn.is-pinned,
+.nb-panel__btn.is-pinned,
+.flow-notebook__btn.is-pinned {
+  opacity: 0.9;
+  color: var(--flow-doc-ink, #0a5c5c);
+}
+
+.nb-btn svg,
+.nb-panel__btn svg,
+.flow-notebook__btn svg {
+  width: 14px;
+  height: 14px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Reading-mode / editor host body */
+.nb-body,
+.nb-panel__body,
+.flow-notebook__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: 48px 0 0 0;
+  font-size: var(--flow-font-body, 14px);
+  line-height: 1.7;
+  color: var(--flow-color-l0, rgba(10, 10, 10, 0.92));
+  outline: none;
+  word-break: break-word;
+  caret-color: var(--flow-ink, #0a0a0a);
+}
+
+.nb-body .mdx-scroller {
+  padding: 4px 12px 18px 4px;
+}
+
+/* Reading-mode prose defaults */
+.nb-panel__body h1,
+.flow-notebook__body h1,
+.nb-panel__body h2,
+.flow-notebook__body h2,
+.nb-panel__body h3,
+.flow-notebook__body h3 {
+  font-weight: 600;
+  color: var(--flow-color-solid, #0a0a0a);
+  margin: 0.9em 0 0.4em;
+  line-height: 1.35;
+}
+
+.nb-panel__body h1,
+.flow-notebook__body h1 {
+  font-size: 16px; /* notebook title exception +1 tier */
+}
+
+.nb-panel__body h2,
+.flow-notebook__body h2 {
+  font-size: var(--flow-font-body, 14px);
+}
+
+.nb-panel__body h3,
+.flow-notebook__body h3 {
+  font-size: var(--flow-font-meta, 13px);
+}
+
+.nb-panel__body p,
+.flow-notebook__body p {
+  margin: 0 0 0.65em;
+}
+
+.nb-panel__body ul,
+.flow-notebook__body ul,
+.nb-panel__body ol,
+.flow-notebook__body ol {
+  margin: 0 0 0.65em;
+  padding-left: 1.25em;
+}
+
+.nb-panel__body table,
+.flow-notebook__body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--flow-font-meta, 13px);
+  margin: 0.5em 0 0.85em;
+}
+
+.nb-panel__body th,
+.flow-notebook__body th,
+.nb-panel__body td,
+.flow-notebook__body td {
+  border: 1px solid var(--border-subtle, #ececec);
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.nb-panel__body th,
+.flow-notebook__body th {
+  background: rgba(0, 0, 0, 0.02);
+  font-weight: 600;
+}
+
+.nb-panel__body code,
+.flow-notebook__body code {
+  font-family: var(--flow-mono);
+  font-size: 0.92em;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.nb-panel__body pre,
+.flow-notebook__body pre {
+  font-family: var(--flow-mono);
+  font-size: var(--flow-font-micro, 12px);
+  background: rgba(0, 0, 0, 0.025);
+  border-radius: var(--flow-radius-sm, 8px);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 0.5em 0 0.85em;
+  border: none;
+}
+
+/* Pinned state (visual only) */
+.nb-panel.is-pinned,
+.flow-notebook.is-pinned {
+  /* no extra chrome — pin is header control state */
+}
+
+/* Mobile-safe width */
+@media (max-width: 560px) {
+  .nb-panel,
+  .flow-notebook {
+    width: calc(100vw - 24px);
+    max-width: none;
+    height: min(70vh, 520px);
+    left: 12px !important;
+    right: 12px;
+  }
+}

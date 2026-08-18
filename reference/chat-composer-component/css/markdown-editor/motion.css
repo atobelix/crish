@@ -1,0 +1,763 @@
+﻿/* ==========================================================================
+   Markdown editor — W9 motion baseline (feature-catalog 06 · A01–A40 subset)
+   Principles:
+   - opacity + transform only (no layout thrash; no height/margin/top anim)
+   - short complete arcs; ease (no bounce / overshoot springs)
+   - static shadows only (never transition box-shadow)
+   - NO active-row border / background animation (D16)
+   - height-lock (min-height) is never animated
+   - respects prefers-reduced-motion: reduce
+   ========================================================================== */
+
+/* ---------- 1. Tokens ---------- */
+
+.mdx-root,
+.mdx-editor {
+  /* W9 baseline aliases (explicit contract) */
+  --mdx-motion-fast: 120ms;
+  --mdx-motion-med: 180ms;
+  --mdx-ease: ease;
+
+  /* Catalog ladder (maps onto baseline; finer steps when needed) */
+  --mdx-motion-instant: 0ms;
+  --mdx-motion-xs: 90ms;
+  --mdx-motion-sm: var(--mdx-motion-fast);   /* 120ms — tools / + / mark / code */
+  --mdx-motion-md: 160ms;                    /* block enter settle */
+  --mdx-motion-lg: 200ms;                    /* leave / structure */
+  --mdx-motion-xl: var(--mdx-motion-med);    /* 180ms — slash / palette / ctx */
+  --mdx-motion-panel: 280ms;                 /* rare large panel upper bound */
+
+  /* Curves — soft settle only; no negative-overshoot bounce */
+  --mdx-ease-out: var(--flow-spring, cubic-bezier(0.22, 1, 0.36, 1));
+  --mdx-ease-soft: var(--flow-spring-soft, cubic-bezier(0.16, 1, 0.3, 1));
+  --mdx-ease-linear: linear;
+
+  /* Rise amplitudes (transform only — no layout shift) */
+  --mdx-rise-xs: 2px;
+  --mdx-rise-sm: 3px;
+  --mdx-rise-md: 4px;
+  --mdx-rise-menu: 6px; /* slash / palette / context menu */
+  --mdx-scale-press: 0.98; /* drag ghost static only */
+}
+
+/* ---------- 2. Block enter soft fade (A01) — no layout shift ----------
+   Usage: add .mdx-block--enter after user-gesture insert; remove on animationend.
+   Full-document setDoc / animate:false must NOT apply this class. */
+
+@keyframes mdx-block-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--mdx-rise-sm, 3px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes mdx-block-leave {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--mdx-rise-xs, 2px) * -1));
+  }
+}
+
+.mdx-block.mdx-block--enter {
+  animation:mdx-block-enter var(--mdx-motion-md, var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+  /* Never animate layout geometry */
+  will-change: opacity, transform;
+}
+
+.mdx-block.mdx-block--leave {
+  animation:mdx-block-leave var(--mdx-motion-lg, var(--dur-base)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+  pointer-events: none;
+  will-change: opacity, transform;
+}
+
+/* Multi-insert stagger cap ≤5 (A25) — opt-in parent .mdx-blocks--stagger */
+.mdx-blocks.mdx-blocks--stagger > .mdx-block.mdx-block--enter:nth-child(1) { animation-delay: 0ms; }
+.mdx-blocks.mdx-blocks--stagger > .mdx-block.mdx-block--enter:nth-child(2) { animation-delay: 20ms; }
+.mdx-blocks.mdx-blocks--stagger > .mdx-block.mdx-block--enter:nth-child(3) { animation-delay: 40ms; }
+.mdx-blocks.mdx-blocks--stagger > .mdx-block.mdx-block--enter:nth-child(4) { animation-delay: 60ms; }
+.mdx-blocks.mdx-blocks--stagger > .mdx-block.mdx-block--enter:nth-child(5) { animation-delay: 80ms; }
+
+/* Morph / type change (A03): light opacity only; height-lock owns geometry */
+.mdx-block.mdx-block--morph [data-mdx-content] {
+  animation:mdx-fade-in var(--mdx-motion-fast, var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+}
+
+@keyframes mdx-fade-in {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+
+/* DnD static chrome (A04–A07) — opacity only where transitioned */
+.mdx-drop-indicator {
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-block.is-dragging,
+.mdx-block.mdx-block--dragging {
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-handle {
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+/* Drag ghost: static style only (no spring follow) */
+.mdx-drag-ghost {
+  opacity: 0.85;
+  transform: scale(var(--mdx-scale-press, 0.98));
+  /* box-shadow if any must be static — never transitioned */
+}
+
+/* ---------- Hard ban: active / focus row border animation (A34 / D16) ----------
+   Reinforce: no transition on block border/outline/box-shadow as “active” chrome. */
+
+.mdx-block,
+.mdx-block.is-active,
+.mdx-block.is-editing,
+.mdx-block:focus,
+.mdx-block:focus-within,
+.mdx-block:hover {
+  /* geometry + chrome stays instant; motion lives on handle / content only */
+  transition:none;
+  border-color: transparent;
+}
+
+/* Height lock (F-CORE-03): min-height is JS-owned — never transition geometry */
+.mdx-height-locked,
+[data-mdx-height-lock] {
+  transition-property: opacity, color, background-color !important;
+}
+
+/* ---------- 3. Slash / palette / context menu (A08–A09, A21)
+   opacity + translateY(6px); static shadow; no bounce ---------- */
+
+@keyframes mdx-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--mdx-rise-menu, 6px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Slash: editor uses [hidden]; animate when shown */
+.mdx-slash {
+  transform: translateY(var(--mdx-rise-menu, 6px));
+  opacity: 0;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+  /* shadow stays static — no transition */
+}
+
+.mdx-slash:not([hidden]),
+.mdx-slash.is-open,
+.mdx-slash[data-open="true"] {
+  opacity: 1;
+  transform: none;
+  animation:mdx-popover-in var(--mdx-motion-med, var(--dur-base)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+}
+
+/* Close path (optional class before unload) — faster than open */
+.mdx-slash.is-closing {
+  opacity: 0;
+  transform: translateY(var(--mdx-rise-menu, 6px));
+  animation:none;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+  pointer-events: none;
+}
+
+/* Slash item active / hover: background only, no layout (A10 / A26) */
+.mdx-slash__item {
+  transition:background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+/* Context menu — align rise to 6px; open arc ~med; static shadow only */
+.mdx-ctx-menu {
+  transform: translateY(var(--mdx-rise-menu, 6px));
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    visibility 0s var(--ease-default) var(--dur-fast));
+  /* box-shadow stays static — never in transition-property */
+}
+
+.mdx-ctx-menu.is-visible,
+.mdx-ctx-menu[data-open="true"] {
+  opacity: 1;
+  transform: none;
+  animation:mdx-popover-in var(--mdx-motion-med, var(--dur-base)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    visibility 0s;
+}
+
+.mdx-ctx-menu__item {
+  transition:background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+/* Command palette (Ctrl+P · .mdx-cmd-*) — backdrop fade + dialog enter */
+@keyframes mdx-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.mdx-cmd-portal.is-open .mdx-cmd-backdrop {
+  animation:mdx-backdrop-in var(--mdx-motion-fast, var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+}
+
+.mdx-cmd-portal.is-open .mdx-cmd-dialog {
+  animation:mdx-popover-in var(--mdx-motion-med, var(--dur-base)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+  will-change: opacity, transform;
+  /* static panel shadow from index.css — never transitioned */
+}
+
+.mdx-cmd-item {
+  transition:background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+/* Selection toolbar (A11–A13) — opacity + micro-rise; left/top never transitioned */
+.mdx-sel-bar {
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+  /* left/top set by JS — no transition on position */
+}
+
+.mdx-sel-bar.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+.mdx-root.mdx-sel-bar-enabled .mdx-sel-bar:not([hidden]):not(.is-visible),
+.mdx-editor.mdx-sel-bar-enabled .mdx-sel-bar:not([hidden]):not(.is-visible) {
+  opacity: 0;
+  transform: translateY(var(--mdx-rise-xs, 2px));
+  pointer-events: none;
+}
+
+.mdx-root.mdx-sel-bar-enabled .mdx-sel-bar.is-visible,
+.mdx-editor.mdx-sel-bar-enabled .mdx-sel-bar.is-visible {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.mdx-sel-btn {
+  transition:background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+/* Command palette (Ctrl+P) — 对齐 slash：opacity + rise；静态 shadow */
+.mdx-cmd-backdrop {
+  opacity: 0;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-cmd-portal.is-open .mdx-cmd-backdrop {
+  opacity: 1;
+}
+
+.mdx-cmd-dialog {
+  opacity: 0;
+  transform: translateY(var(--mdx-rise-menu, 6px));
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+  /* box-shadow 保持静态 — 不参与 transition */
+}
+
+.mdx-cmd-portal.is-open .mdx-cmd-dialog {
+  opacity: 1;
+  transform: none;
+  animation:mdx-popover-in var(--mdx-motion-med, var(--dur-base)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+}
+
+/* 关闭态：JS 加 is-closing，短暂保持 display 以完成淡出 */
+.mdx-cmd-portal.is-closing {
+  display: flex !important;
+  pointer-events: none !important;
+  visibility: visible !important;
+}
+
+.mdx-cmd-portal.is-closing .mdx-cmd-backdrop {
+  opacity: 0;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-cmd-portal.is-closing .mdx-cmd-dialog {
+  opacity: 0;
+  transform: translateY(var(--mdx-rise-menu, 6px));
+  animation:none;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-cmd-item {
+  transition:background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+/* Multi-select 底色过渡见 §5d（.is-block-selected / .is-selected） */
+
+/* ---------- 4. Table + affordance fade (A14–A17) ----------
+   Prefer opacity; avoid scale bounce that jumps chrome. */
+
+.mdx-table-add-col,
+.mdx-table-add-row {
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    border-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+  /* transform is positional (centering) — do not animate scale */
+}
+
+/* Kill bounce-ish scale on + hover (table.css); keep position transform static */
+.mdx-table-wrap:hover .mdx-table-add-col:hover,
+.mdx-table-wrap:hover .mdx-table-add-col:focus-visible {
+  transform: translateY(-50%);
+  opacity: 1;
+}
+
+.mdx-table-wrap:hover .mdx-table-add-row:hover,
+.mdx-table-wrap:hover .mdx-table-add-row:focus-visible {
+  transform: translateX(calc(-50% - 9px));
+  opacity: 1;
+}
+
+@keyframes mdx-tr-enter {
+  from {
+    opacity: 0;
+    transform: translateY(var(--mdx-rise-xs, 2px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes mdx-td-enter {
+  from {
+    opacity: 0;
+    transform: translateX(var(--mdx-rise-xs, 2px));
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.mdx-tr--enter,
+tr.mdx-tr--enter {
+  animation:mdx-tr-enter var(--mdx-motion-md, var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+}
+
+.mdx-td--enter,
+td.mdx-td--enter,
+th.mdx-td--enter {
+  animation:mdx-td-enter var(--mdx-motion-md, var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+}
+
+.mdx-tr--leave,
+tr.mdx-tr--leave,
+.mdx-td--leave,
+td.mdx-td--leave {
+  animation:mdx-fade-out var(--mdx-motion-fast, var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+  pointer-events: none;
+}
+
+@keyframes mdx-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Cell selection bg (A18) — color only, no ring bounce */
+.mdx-table .is-selected,
+.mdx-table td.is-selected,
+.mdx-table th.is-selected,
+.mdx-td.is-selected {
+  transition:background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+/* Merge preview (A19–A20) */
+.mdx-merge-preview {
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    border-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-merge-preview.is-confirming,
+.mdx-merge-preview--confirm {
+  animation:mdx-fade-out var(--mdx-motion-md, var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+}
+
+/* ---------- 5. Code card read ↔ source opacity (A23) ----------
+   Single-shell cross-fade; no dual-shell slide. */
+
+@keyframes mdx-code-surface-in {
+  from { opacity: 0.55; }
+  to { opacity: 1; }
+}
+
+.mdx-code-card,
+.mdx-code-source-plain {
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-code-card.is-source,
+.mdx-code-card[data-mode="source"],
+.mdx-block.is-editing [data-mdx-content] > .mdx-code-card,
+.mdx-block.is-editing [data-mdx-content] > .mdx-code-source-plain {
+  animation:mdx-code-surface-in var(--mdx-motion-fast, var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+}
+
+.mdx-code-card__copy {
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+/* ---------- 5b. Code fold btn + language menu (generic hooks)
+   JS may not ship yet; class names reserved for code-chrome / future agents. */
+
+.mdx-code-fold-btn,
+button.mdx-code-fold-btn,
+[data-mdx-code-fold] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 2px 6px;
+  margin: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--flow-color-l1, rgba(10, 10, 10, 0.48));
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.72;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+  /* no box-shadow transition */
+}
+
+.mdx-code-fold-btn:hover,
+.mdx-code-fold-btn:focus-visible,
+button.mdx-code-fold-btn:hover,
+[data-mdx-code-fold]:hover {
+  opacity: 1;
+  color: var(--flow-ink, #0a0a0a);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.mdx-code-fold-btn[aria-expanded="true"],
+.mdx-code-fold-btn.is-expanded {
+  opacity: 1;
+  color: var(--flow-color-l0, rgba(10, 10, 10, 0.78));
+}
+
+/* Collapsed code body: height owned by JS; only opacity if surface swaps */
+.mdx-code-card.is-folded .mdx-code-card__body,
+.mdx-code-card[data-folded="true"] .mdx-code-card__body {
+  /* geometry via JS max-height/display — do not animate height here */
+}
+
+/* Language picker popover — portal or absolute under lang pill */
+.mdx-code-lang-menu,
+[data-mdx-code-lang-menu] {
+  position: absolute;
+  z-index: 30;
+  min-width: 140px;
+  max-width: min(240px, 92vw);
+  max-height: 240px;
+  overflow: auto;
+  padding: 4px;
+  margin: 0;
+  list-style: none;
+  border-radius: 10px;
+  background: var(--bg-popover, #fff);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+  box-shadow: var(--flow-shadow-panel, 0 8px 24px -4px rgba(0, 0, 0, 0.1));
+  font-size: var(--mdx-meta, 13px);
+  color: var(--flow-ink, #0a0a0a);
+  opacity: 0;
+  transform: translateY(var(--mdx-rise-menu, 6px));
+  pointer-events: none;
+  visibility: hidden;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    visibility 0s var(--ease-default) var(--dur-fast));
+  /* static shadow — never transitioned */
+}
+
+.mdx-code-lang-menu.is-open,
+.mdx-code-lang-menu.is-visible,
+.mdx-code-lang-menu[data-open="true"],
+[data-mdx-code-lang-menu].is-open,
+[data-mdx-code-lang-menu].is-visible {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  visibility: visible;
+  animation:mdx-popover-in var(--mdx-motion-med, var(--dur-base)) var(--mdx-var(--ease-default), var(--ease-default)) both;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    visibility 0s;
+}
+
+.mdx-code-lang-menu__item,
+.mdx-code-lang-menu [role="option"],
+.mdx-code-lang-menu button {
+  display: flex;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition:background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-code-lang-menu__item:hover,
+.mdx-code-lang-menu__item.is-active,
+.mdx-code-lang-menu [role="option"]:hover,
+.mdx-code-lang-menu [role="option"].is-active,
+.mdx-code-lang-menu button:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+/* ---------- 5c. Image lightbox (generic · image agent may mount .mdx-lightbox) ---------- */
+
+.mdx-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10060;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: rgba(10, 10, 10, 0.72);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    visibility 0s var(--ease-default) var(--dur-fast));
+  /* no box-shadow animation */
+}
+
+.mdx-lightbox.is-open,
+.mdx-lightbox[data-open="true"],
+.mdx-lightbox:not([hidden]).is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    visibility 0s;
+}
+
+.mdx-lightbox__img,
+.mdx-lightbox img {
+  max-width: min(96vw, 1200px);
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); /* static */
+  transform: translateY(var(--mdx-rise-sm, 3px)) scale(0.98);
+  opacity: 0;
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    transform var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-lightbox.is-open .mdx-lightbox__img,
+.mdx-lightbox.is-open img,
+.mdx-lightbox[data-open="true"] .mdx-lightbox__img,
+.mdx-lightbox[data-open="true"] img,
+.mdx-lightbox.is-visible .mdx-lightbox__img,
+.mdx-lightbox.is-visible img {
+  opacity: 1;
+  transform: none;
+}
+
+.mdx-lightbox__close,
+.mdx-lightbox [data-mdx-lightbox-close] {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  min-width: 36px;
+  min-height: 36px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition:background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-lightbox__close:hover,
+.mdx-lightbox [data-mdx-lightbox-close]:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ---------- 5d. Multi-block selection bg (short; no shadow/border anim) ----------
+   Skin colors live in selection.css; duration owned here.
+   Class truth: chrome uses .is-block-selected; .is-selected reserved alias. */
+
+.mdx-block.is-block-selected,
+.mdx-block.is-selected {
+  /* override hard ban on .mdx-block transition — bg only, never box-shadow/border */
+  transition:background-color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)) !important;
+}
+
+/* ---------- 6. Bullet mark · ↔ * color transition 120ms (F-CORE-05) ----------
+   Fixed mark slot elsewhere; only color/opacity change — no width anim. */
+
+.mdx-src-mark,
+.mdx-src-mark--bullet,
+.mdx-list-mark {
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+.mdx-src-mark.is-source,
+.mdx-src-mark.is-source-visible,
+.mdx-src-mark[data-src-visible],
+.mdx-src-mark[data-src-visible="true"] {
+  /* color/opacity targets live in line-source.css; duration owned here */
+  transition:opacity var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default)),
+    color var(--dur-fast)) var(--mdx-var(--ease-default), var(--ease-default));
+}
+
+/* ---------- 7. prefers-reduced-motion: kill transforms / transitions ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .mdx-root,
+  .mdx-editor {
+    --mdx-motion-fast: 0ms;
+    --mdx-motion-med: 0ms;
+    --mdx-motion-instant: 0ms;
+    --mdx-motion-xs: 0ms;
+    --mdx-motion-sm: 0ms;
+    --mdx-motion-md: 0ms;
+    --mdx-motion-lg: 0ms;
+    --mdx-motion-xl: 0ms;
+    --mdx-motion-panel: 0ms;
+    --mdx-rise-xs: 0px;
+    --mdx-rise-sm: 0px;
+    --mdx-rise-md: 0px;
+    --mdx-rise-menu: 0px;
+  }
+
+  .mdx-block.mdx-block--enter,
+  .mdx-block.mdx-block--leave,
+  .mdx-block.mdx-block--morph [data-mdx-content],
+  .mdx-slash:not([hidden]),
+  .mdx-slash.is-open,
+  .mdx-slash[data-open="true"],
+  .mdx-slash.is-closing,
+  .mdx-ctx-menu,
+  .mdx-ctx-menu.is-visible,
+  .mdx-ctx-menu[data-open="true"],
+  .mdx-cmd-portal.is-open .mdx-cmd-backdrop,
+  .mdx-cmd-portal.is-open .mdx-cmd-dialog,
+  .mdx-cmd-item,
+  .mdx-sel-bar,
+  .mdx-sel-btn,
+  .mdx-cmd-backdrop,
+  .mdx-cmd-dialog,
+  .mdx-cmd-portal.is-open .mdx-cmd-dialog,
+  .mdx-cmd-portal.is-closing .mdx-cmd-backdrop,
+  .mdx-cmd-portal.is-closing .mdx-cmd-dialog,
+  .mdx-cmd-item,
+  .mdx-block.is-block-selected,
+  .mdx-slash__item,
+  .mdx-ctx-menu__item,
+  .mdx-handle,
+  .mdx-drop-indicator,
+  .mdx-block.is-dragging,
+  .mdx-block.mdx-block--dragging,
+  .mdx-block.is-block-selected,
+  .mdx-block.is-selected,
+  .mdx-table-add-col,
+  .mdx-table-add-row,
+  .mdx-tr--enter,
+  tr.mdx-tr--enter,
+  .mdx-td--enter,
+  td.mdx-td--enter,
+  th.mdx-td--enter,
+  .mdx-tr--leave,
+  tr.mdx-tr--leave,
+  .mdx-td--leave,
+  td.mdx-td--leave,
+  .mdx-merge-preview,
+  .mdx-merge-preview.is-confirming,
+  .mdx-merge-preview--confirm,
+  .mdx-table .is-selected,
+  .mdx-table td.is-selected,
+  .mdx-table th.is-selected,
+  .mdx-td.is-selected,
+  .mdx-code-card,
+  .mdx-code-source-plain,
+  .mdx-code-card.is-source,
+  .mdx-code-card[data-mode="source"],
+  .mdx-code-card__copy,
+  .mdx-code-fold-btn,
+  button.mdx-code-fold-btn,
+  [data-mdx-code-fold],
+  .mdx-code-lang-menu,
+  [data-mdx-code-lang-menu],
+  .mdx-code-lang-menu.is-open,
+  .mdx-code-lang-menu.is-visible,
+  .mdx-code-lang-menu__item,
+  .mdx-lightbox,
+  .mdx-lightbox.is-open,
+  .mdx-lightbox__img,
+  .mdx-lightbox img,
+  .mdx-lightbox__close,
+  .mdx-block.is-editing [data-mdx-content] > .mdx-code-card,
+  .mdx-block.is-editing [data-mdx-content] > .mdx-code-source-plain,
+  .mdx-src-mark,
+  .mdx-src-mark--bullet,
+  .mdx-list-mark,
+  .mdx-src-delim,
+  .mdx-drag-ghost {
+    animation:none !important;
+    transition:none !important;
+    transform: none !important;
+  }
+
+  /* Open popovers remain visible without rise when reduced */
+  .mdx-cmd-portal.is-open .mdx-cmd-dialog,
+  .mdx-code-lang-menu.is-open,
+  .mdx-code-lang-menu.is-visible,
+  .mdx-lightbox.is-open .mdx-lightbox__img,
+  .mdx-lightbox.is-open img {
+    opacity: 1 !important;
+  }
+
+  /* Positional transforms for table + buttons must remain for layout */
+  .mdx-table-add-col {
+    transform: translateY(-50%) !important;
+  }
+
+  .mdx-table-add-row {
+    transform: translateX(calc(-50% - 9px)) !important;
+  }
+}

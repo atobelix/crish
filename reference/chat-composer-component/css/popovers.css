@@ -1,0 +1,1382 @@
+/* ==========================================================================
+   Popover Menus, Range Slider & Permission Tooltips (Token-Based)
+   ========================================================================== */
+
+/* ---- Base Popover ---- */
+.popover-menu {
+  position: fixed;
+  background: var(--bg-popover);
+  border: 1px solid var(--border-color);
+  border-radius: 16px; /* Prototype popover radius */
+  box-shadow: var(--shadow-popover);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 170px;
+  z-index: 9999;
+  opacity: 0;
+  visibility: hidden;
+  transform: none;
+  pointer-events: none;
+  transition: opacity 150ms cubic-bezier(0.16, 1, 0.3, 1), visibility 150ms;
+}
+
+.popover-menu.active {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+}
+
+.popover-title {
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 4px 8px 6px 8px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.popover-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: 2px 6px;
+}
+
+/* ---- Option Items ---- */
+.popover-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 9px; /* Prototype option radius */
+  font-size: var(--font-item);
+  font-weight: 400;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.popover-option:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.popover-option.selected,
+.popover-option.is-selected {
+  background: var(--bg-hover);
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+.popover-option .check-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--brand, #10b981); /* Emerald green theme accent */
+  opacity: 0;
+  flex-shrink: 0;
+  margin-left: 6px;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-default);
+}
+
+.popover-option.selected .check-icon,
+.popover-option.is-selected .check-icon {
+  opacity: 1;
+}
+
+/* ---- Cascade Submenu ---- */
+.cascade-submenu {
+  position: fixed;
+  background: var(--bg-popover);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-popover);
+  box-shadow: var(--shadow-popover);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+  z-index: 10000;
+  opacity: 0;
+  visibility: hidden;
+  transform: none;
+  pointer-events: none;
+  transition: opacity 150ms cubic-bezier(0.16, 1, 0.3, 1), visibility 150ms;
+}
+
+.cascade-submenu.active {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* ---- Menu Variants ---- */
+.slash-menu { min-width: 190px; }
+.at-menu { min-width: 220px; }
+.tree-menu { min-width: 280px; max-width: 320px; }
+
+.slash-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.slash-badge {
+  font-size: var(--font-micro);
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+/* ---- Search Input ---- */
+.popover-search {
+  position: relative;
+  margin-bottom: 4px;
+}
+
+.popover-search-icon {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 13px;
+  height: 13px;
+  color: var(--text-placeholder);
+}
+
+.popover-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px 5px 26px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: var(--font-sub);
+  outline: none;
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  transition:border-color var(--dur-fast) var(--ease-default),
+              background var(--dur-fast) var(--ease-default);
+}
+
+.popover-search input:focus {
+  border-color: var(--border-hover);
+  background: var(--bg-popover);
+}
+
+/* ---- Directory Tree Popover ---- */
+.tree-popover-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.tree-scope-toggle {
+  display: flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border-radius: 6px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.tree-scope-btn {
+  flex: 1;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  font-size: var(--font-micro);
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:all var(--dur-fast) var(--ease-default);
+}
+
+.tree-scope-btn.active {
+  background: var(--bg-popover);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  font-weight: 600;
+}
+
+.tree-container {
+  max-height: 220px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tree-folder-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tree-folder-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: var(--font-sub);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  user-select: none;
+}
+.tree-folder-title svg { color: var(--text-placeholder); }
+
+.tree-sub-items {
+  padding-left: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* ---- Permission Modes Popover ---- */
+.permission-menu {
+  min-width: 200px;
+  max-width: 240px;
+  padding: 6px;
+}
+
+.permission-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+
+.permission-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 400;
+  font-size: var(--font-item);
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: color var(--dur-fast) var(--ease-default);
+}
+
+.permission-row:hover .permission-left {
+  color: var(--text-primary);
+}
+
+.permission-row .check-icon {
+  margin-left: auto;
+}
+
+/* Permission mode selection: regular font-weight, color changes from shallow black to pure black */
+.permission-row.selected .permission-left {
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+.permission-row[data-mode="只读模式"].selected { background: var(--perm-readonly-bg, var(--bg-hover)); }
+.permission-row[data-mode="计划模式"].selected { background: var(--perm-plan-bg, var(--bg-hover)); }
+.permission-row[data-mode="目标模式"].selected { background: var(--perm-goal-bg, var(--bg-hover)); }
+.permission-row[data-mode="权限询问"].selected { background: var(--perm-ask-bg, var(--bg-hover)); }
+.permission-row[data-mode="完全访问"].selected { background: var(--perm-full-bg, var(--bg-hover)); }
+
+/* ---- Info Tooltip Trigger ---- */
+.permission-info-trigger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-placeholder);
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:color var(--dur-fast) var(--ease-default);
+}
+
+.permission-info-trigger:hover {
+  color: var(--text-primary);
+}
+
+.permission-info-trigger::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 125%;
+  right: -8px;
+  background: var(--text-primary);
+  color: var(--bg-popover);
+  font-size: var(--font-micro);
+  font-weight: 400;
+  line-height: 1.35;
+  padding: 6px 10px;
+  border-radius: 6px;
+  white-space: normal;
+  width: 200px;
+  box-shadow: var(--shadow-tooltip);
+  opacity: 0;
+  transform: scale(0.95);
+  pointer-events: none;
+  transition:opacity var(--dur-base) var(--ease-spring),
+              transform var(--dur-base) var(--ease-spring);
+  z-index: 10010;
+}
+
+.permission-info-trigger:hover::after {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* ---- Model Selector ---- */
+.model-menu {
+  min-width: 280px;
+  max-width: 320px;
+  padding: 6px;
+}
+
+.popover-search-frameless {
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 4px 4px 6px 4px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+}
+
+.popover-search-frameless .popover-search-icon {
+  position: absolute;
+  left: 8px;
+  width: 14px;
+  height: 14px;
+  color: var(--text-placeholder);
+}
+
+.popover-search-frameless input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 4px 6px 4px 26px;
+  border: none;
+  background: transparent;
+  font-size: var(--font-sub);
+  color: var(--text-primary);
+  outline: none;
+  caret-color: var(--text-primary);
+  user-select: text;
+  cursor: text;
+}
+
+/* Model Config Action Button Beside Search */
+.popover-action-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding: 0;
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.popover-action-icon-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.provider-group-header {
+  font-size: 10px; /* Reduced by one size from 11px to 10px */
+  font-weight: 600;
+  color: var(--text-placeholder);
+  padding: 6px 8px 2px 8px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.model-list-container {
+  max-height: 200px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.model-card-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: var(--radius-option);
+  font-size: var(--font-item);
+  font-weight: 400;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.model-card-item:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.model-card-item.selected {
+  background: var(--bg-hover);
+  font-weight: 400;
+  color: var(--text-primary);
+}
+
+/* ---- Thinking Effort Control (Segmented Pill Switcher, Pinned Above Bottom Toggle) ---- */
+.thinking-effort-section {
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 4px;
+  padding: 4px 2px 2px 2px;
+  display: flex;
+  flex-direction: column;
+}
+
+.thinking-effort-body {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px 8px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 4px;
+  gap: 8px;
+}
+
+.thinking-effort-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.thinking-effort-val {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 11px;
+}
+
+/* Sleek Segmented Capsule Control (Light, Airy, Zero-Mud) */
+.thinking-seg-group {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+
+.thinking-seg-btn {
+  border: none;
+  background: transparent;
+  padding: 5px 0;
+  font-size: 10.5px;
+  font-weight: 400;
+  color: var(--text-placeholder);
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+  text-align: center;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: all var(--dur-fast) var(--ease-default);
+}
+
+.thinking-seg-btn:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.thinking-seg-btn.active {
+  background: var(--bg-popover);
+  color: var(--text-primary);
+  font-weight: 500;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+}
+
+/* Thinking Effort Collapsible Toggle (Always At Bottom) */
+.thinking-effort-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  border-radius: var(--radius-option);
+  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.thinking-effort-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.thinking-toggle-chevron {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  transform-origin: center;
+  transition: transform var(--dur-base) var(--ease-soft);
+}
+
+.thinking-effort-section.expanded .thinking-toggle-chevron {
+  transform: rotate(180deg);
+}
+
+/* ---- Dedicated Thinking Popover Menu ---- */
+.thinking-menu {
+  min-width: 140px;
+  padding: 6px;
+}
+
+.thinking-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: var(--font-item);
+  color: var(--text-secondary);
+}
+
+/* ---- Composite Plan & Goal Progress Hub (Single-Line Anchor & Upward Expansion) ---- */
+.plan-progress-bar {
+  display: none;
+  flex-direction: column;
+  margin-bottom: 8px;
+  border-radius: var(--radius-popover);
+  background: var(--bg-popover);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  font-size: var(--font-sub);
+  color: var(--text-secondary);
+  transition:border-color var(--dur-base) var(--ease-default);
+}
+
+.plan-progress-bar.active {
+  display: flex;
+}
+
+.plan-progress-bar:hover {
+  border-color: var(--border-hover);
+}
+
+/* Single-Line Anchored Hub (Located at Bottom of Component) */
+.plan-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  min-height: 34px;
+  box-sizing: border-box;
+  user-select: none;
+  background: var(--bg-popover);
+  order: 10; /* Ensures single-line hub stays anchored at bottom */
+}
+
+/* Mode Pill Badge (Transparent Default, 3% Gray on Hover) */
+.plan-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:all var(--dur-fast) var(--ease-default);
+}
+
+.plan-mode-badge:hover {
+  background: var(--bg-hover);
+  border-color: transparent;
+}
+
+.plan-mode-badge .mode-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.plan-mode-badge .mode-icon.plan-icon {
+  display: none;
+  animation:planSpin 2s var(--ease-default) infinite;
+}
+
+.plan-progress-bar[data-mode="plan"] .plan-mode-badge .mode-icon.goal-icon {
+  display: none;
+}
+.plan-progress-bar[data-mode="plan"] .plan-mode-badge .mode-icon.plan-icon {
+  display: block;
+}
+
+@keyframes planSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Vertical Separator */
+.plan-divider-v {
+  width: 1px;
+  height: 14px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Task Box & Roller (Step Text & Counter Tightly Bound) */
+.plan-active-task-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 60%;
+  cursor: pointer;
+}
+
+.plan-roller {
+  height: 18px;
+  overflow: hidden;
+  position: relative;
+  min-width: 0;
+}
+
+.plan-roller-track {
+  display: flex;
+  flex-direction: column;
+  transition:transform var(--dur-slow) var(--ease-spring);
+}
+
+.plan-step {
+  height: 18px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  font-size: var(--font-sub);
+  font-weight: 500;
+}
+
+.plan-step-counter {
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: transparent;
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition:background var(--dur-fast) var(--ease-default);
+}
+
+.plan-active-task-box:hover .plan-step-counter {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.plan-spacer {
+  flex: 1;
+}
+
+/* Right Control Hub */
+.plan-right-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.plan-duration {
+  font-size: var(--font-micro);
+  font-weight: 500;
+  color: var(--text-placeholder);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* Quick Action Buttons */
+.plan-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.plan-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:all var(--dur-fast) var(--ease-default);
+}
+
+.plan-action-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.plan-action-btn.stop:hover {
+  background: var(--accent-red-bg);
+  color: var(--accent-red);
+}
+
+.thinking-effort-body {
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---- Composite Plan & Goal Progress Hub (Single-Line Anchor & Upward Expansion) ---- */
+.plan-progress-bar {
+  display: none;
+  flex-direction: column;
+  margin: 0;
+  border-radius: 14px;
+  background: var(--bg-popover);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  font-size: var(--font-sub);
+  color: var(--text-secondary);
+  transition:border-color var(--dur-base) var(--ease-default);
+}
+
+.plan-progress-bar.active {
+  display: flex;
+}
+
+.plan-progress-bar:hover {
+  border-color: var(--border-hover);
+}
+
+/* Single-Line Anchored Hub (Located at Bottom of Component) */
+.plan-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  min-height: 34px;
+  box-sizing: border-box;
+  user-select: none;
+  background: var(--bg-popover);
+  order: 10; /* Ensures single-line hub stays anchored at bottom */
+}
+
+/* Mode Pill Badge (Transparent Default, 3% Gray on Hover) */
+.plan-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-primary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:all var(--dur-fast) var(--ease-default);
+}
+
+.plan-mode-badge:hover {
+  background: var(--bg-hover);
+  border-color: transparent;
+}
+
+.plan-mode-badge .mode-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.plan-mode-badge .mode-icon.plan-icon {
+  display: none;
+  animation:planSpin 2s var(--ease-default) infinite;
+}
+
+.plan-progress-bar[data-mode="plan"] .plan-mode-badge .mode-icon.goal-icon {
+  display: none;
+}
+.plan-progress-bar[data-mode="plan"] .plan-mode-badge .mode-icon.plan-icon {
+  display: block;
+}
+
+@keyframes planSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Vertical Separator */
+.plan-divider-v {
+  width: 1px;
+  height: 14px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Task Box & Roller (Step Text & Counter Tightly Bound) */
+.plan-active-task-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 60%;
+  cursor: pointer;
+}
+
+.plan-roller {
+  height: 18px;
+  overflow: hidden;
+  position: relative;
+  min-width: 0;
+}
+
+.plan-roller-track {
+  display: flex;
+  flex-direction: column;
+  transition:transform var(--dur-slow) var(--ease-spring);
+}
+
+.plan-step {
+  height: 18px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  font-size: var(--font-sub);
+  font-weight: 500;
+}
+
+.plan-step-counter {
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-tertiary);
+  background: transparent;
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition:background var(--dur-fast) var(--ease-default);
+}
+
+.plan-active-task-box:hover .plan-step-counter {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.plan-spacer {
+  flex: 1;
+}
+
+/* Right Control Hub */
+.plan-right-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.plan-duration {
+  font-size: var(--font-micro);
+  font-weight: 500;
+  color: var(--text-placeholder);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+/* Quick Action Buttons */
+.plan-quick-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.plan-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:all var(--dur-fast) var(--ease-default);
+}
+
+.plan-action-btn:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.plan-action-btn.stop:hover {
+  background: var(--accent-red-bg);
+  color: var(--accent-red);
+}
+
+.plan-action-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Chevron Trigger */
+.plan-expand-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-placeholder);
+  cursor: pointer;
+  transition:all var(--dur-fast) var(--ease-default);
+}
+
+.plan-expand-trigger:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.plan-expand-chevron {
+  width: 12px;
+  height: 12px;
+  transition:transform var(--dur-slow) var(--ease-spring);
+}
+
+.plan-progress-bar.expanded-steps .plan-expand-chevron {
+  transform: rotate(180deg);
+}
+
+/* ---- Upward Growing Goal Management Editor (Pure Transparent, 1px Subtle Border) ---- */
+.plan-goal-panel {
+  display: none;
+  grid-template-rows: 0fr;
+  transition:grid-template-rows var(--dur-slow) var(--ease-spring);
+  border-bottom: 0px solid transparent;
+  order: 1;
+}
+
+.plan-progress-bar.expanded-goal .plan-goal-panel {
+  display: grid;
+  grid-template-rows: 1fr;
+  border-bottom: 1px solid var(--border-subtle);
+  animation:panelSlideUp var(--dur-base) var(--ease-spring) forwards;
+}
+
+.plan-goal-panel-inner {
+  overflow: hidden;
+  padding: 8px 10px;
+}
+
+.goal-edit-field {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: var(--font-sub);
+  font-family: inherit;
+  color: var(--text-primary);
+  line-height: 1.5;
+  min-height: 40px;
+  max-height: 80px;
+  overflow-y: auto;
+  outline: none;
+  caret-color: var(--text-primary);
+  background: transparent;
+  transition:border-color var(--dur-fast) var(--ease-default);
+}
+
+.goal-edit-field:focus {
+  border-color: var(--border-hover);
+  background: transparent;
+}
+
+.goal-edit-field:empty::before {
+  content: attr(data-placeholder);
+  color: var(--text-placeholder);
+  pointer-events: none;
+}
+
+.plan-step-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.plan-expanded-step.completed .plan-step-dot {
+  background: #A0A0A0;
+}
+
+.plan-expanded-step.completed .step-text {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.plan-expanded-step.active .plan-step-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--text-primary);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.04);
+}
+
+.plan-expanded-step.active .step-text {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.plan-expanded-step.pending .plan-step-dot {
+  background: transparent;
+  border: 1px solid #D5D5D5;
+}
+
+.plan-expanded-step.pending .step-text {
+  color: var(--text-tertiary);
+}
+
+.step-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: var(--font-sub);
+}
+
+.step-state {
+  font-size: var(--font-micro);
+  color: var(--text-placeholder);
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.step-state.active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+
+
+
+/* ==========================================================================
+   Avant-Garde Thinking Segmented Control
+   ========================================================================== */
+.thinking-track-container {
+  padding: 4px;
+}
+.thinking-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+.thinking-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.thinking-status {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand); /* Dynamic color based on intensity */
+  transition:color var(--dur-slow) var(--ease-default);
+}
+
+.thinking-segmented-track {
+  position: relative;
+  display: flex;
+  background: var(--bg-surface);
+  border-radius: 12px;
+  padding: 4px;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.06);
+}
+.thinking-slider-thumb {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 6);
+  background: var(--paper);
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.04);
+  transition:transform var(--dur-slow) var(--ease-spring), box-shadow var(--dur-slow) var(--ease-default);
+  z-index: 1;
+}
+
+/* Add a glowing effect for the thumb based on intensity */
+.thinking-segmented-track[data-level="4"] .thinking-slider-thumb {
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25), 0 0 0 1px rgba(16, 185, 129, 0.1);
+}
+.thinking-segmented-track[data-level="5"] .thinking-slider-thumb {
+  box-shadow: 0 2px 12px rgba(16, 185, 129, 0.4), 0 0 0 1px rgba(16, 185, 129, 0.2);
+}
+
+.thinking-seg-item {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 6px 0;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+  transition:color var(--dur-slow);
+  user-select: none;
+}
+.thinking-seg-item.is-active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* Model Popover internal styles */
+.model-advanced-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 8px;
+  margin-top: 4px;
+  font-size: var(--font-sub);
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-top: 1px solid var(--border-subtle);
+  transition:color var(--dur-base);
+}
+.model-advanced-toggle:hover {
+  color: var(--text-primary);
+}
+.model-advanced-toggle svg {
+  width: 14px;
+  height: 14px;
+  transition:transform var(--dur-slow) var(--ease-spring);
+}
+.model-advanced-toggle.is-expanded svg {
+  transform: rotate(180deg);
+}
+
+.model-advanced-content {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition:max-height var(--dur-slow) var(--ease-spring), opacity var(--dur-slow) var(--ease-default);
+}
+.model-advanced-content.is-expanded {
+  max-height: 120px; /* enough for the thinking slider */
+  opacity: 1;
+}
+
+/* ==========================================================================
+   Modular Popover Panel (Thinking Depth, etc.)
+   ========================================================================== */
+.modular-popover-panel {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  background: var(--bg-popover);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 5px;
+  box-shadow: var(--shadow-popover);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px) scale(0.96);
+  pointer-events: none;
+  transition:transform var(--dur-base) var(--ease-spring),
+              opacity var(--dur-base) var(--ease-default),
+              visibility var(--dur-base);
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modular-popover-panel.is-active {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+#thinkingPopover {
+  right: 35px;
+  width: 270px;
+}
+
+.popover-label {
+  font-size: var(--font-micro);
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 3px 8px 3px;
+  letter-spacing: -0.01em;
+}
+
+.text-seg-control {
+  display: flex;
+  background: var(--bg-hover);
+  padding: 3px;
+  border-radius: 9px;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.text-seg-item {
+  flex: 1;
+  text-align: center;
+  padding: 5px 0;
+  font-size: var(--font-micro);
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 7px;
+  cursor: pointer;
+  transition:background var(--dur-fast) var(--ease-default),
+              color var(--dur-fast) var(--ease-default);
+}
+
+.text-seg-item:hover { color: var(--text-primary); }
+.text-seg-item.is-active {
+  background: var(--bg-composer);
+  color: var(--brand);
+  font-weight: 600;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.06);
+}
+
+/* ---- 15% Pure Black Backdrop Overlay for Centered Modal (No Blur) ---- */
+.modal-backdrop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.15); /* Pure black with 15% opacity for clean dimming */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity var(--dur-base) var(--ease-default), visibility var(--dur-base);
+}
+
+.modal-backdrop-overlay.active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+/* ---- Dedicated Task Termination Centered Confirmation Modal ---- */
+.stop-task-popover {
+  position: relative;
+  width: 320px;
+  padding: 18px;
+  border-radius: 16px;
+  background: var(--bg-popover, #ffffff);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  transform: scale(0.95) translateY(6px);
+  transition: transform var(--dur-base) var(--ease-spring), opacity var(--dur-base);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.modal-backdrop-overlay.active .stop-task-popover {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.stop-task-header {
+  display: flex;
+  flex-direction: column;
+  gap: 16px; /* Gap below title */
+  padding: 0;
+}
+
+.stop-task-title {
+  font-size: 18px; /* Extra prominent modal title size */
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.stop-task-desc {
+  font-size: 14px; /* Design system baseline --font-body */
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.stop-task-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0;
+}
+
+.stop-task-btn {
+  height: 32px;
+  padding: 0 16px;
+  border-radius: 10px; /* Concentric visual curvature matching outer 16px card */
+  font-size: 14px; /* Baseline --font-body */
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  transition:background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default), box-shadow var(--dur-fast) var(--ease-default);
+}
+
+.stop-task-btn.cancel {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.stop-task-btn.cancel:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+}
+
+.stop-task-btn.confirm {
+  background: #ef4444;
+  color: #ffffff;
+  font-weight: 600;
+}
+.stop-task-btn.confirm:hover {
+  background: #dc2626;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.3);
+}

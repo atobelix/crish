@@ -1,0 +1,154 @@
+﻿/* ==========================================================================
+   行内 marks 编辑态皮肤（F-INL-* / W4）
+   strong / em / del / code / mark / u / a 在 .mdx-edit 内可读、可点选
+   ========================================================================== */
+
+/* 编辑正文内语义标签 */
+.mdx-edit strong,
+.mdx-src-body strong,
+.mdx-block__content [data-mdx-edit] strong {
+  font-weight: 600;
+}
+
+.mdx-edit em,
+.mdx-src-body em,
+.mdx-block__content [data-mdx-edit] em {
+  font-style: italic;
+}
+
+.mdx-edit del,
+.mdx-src-body del,
+.mdx-block__content [data-mdx-edit] del {
+  text-decoration: line-through;
+  opacity: 0.88;
+}
+
+.mdx-edit code.mdx-code,
+.mdx-edit code,
+.mdx-src-body code.mdx-code,
+.mdx-block__content [data-mdx-edit] code {
+  font-family: var(--flow-mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 0.92em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--mdx-code-bg, rgba(0, 0, 0, 0.04));
+  font-weight: 400;
+  font-style: normal;
+  text-decoration: none;
+}
+
+/* 高亮 ==text== → mark.mdx-mark-hl（克制底色，禁荧光） */
+.mdx-edit mark.mdx-mark-hl,
+.mdx-src-body mark.mdx-mark-hl,
+.mdx-block__content [data-mdx-edit] mark.mdx-mark-hl,
+.mdx-p mark.mdx-mark-hl,
+mark.mdx-mark-hl {
+  background: color-mix(in srgb, var(--flow-doc-ink, #0a5c5c) 14%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 0.12em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+/* 下划线 ++text++ / <u>：与链接区分（中性色、无主题底边） */
+.mdx-edit u,
+.mdx-src-body u,
+.mdx-block__content [data-mdx-edit] u {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: rgba(10, 10, 10, 0.35);
+}
+
+/* 编辑态链接：主题色底边；默认不抢导航（JS preventDefault） */
+.mdx-edit a.mdx-a,
+.mdx-src-body a.mdx-a,
+.mdx-block__content [data-mdx-edit] a.mdx-a {
+  color: var(--flow-doc-ink, #0a5c5c);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(10, 92, 92, 0.28);
+  cursor: text;
+}
+
+.mdx-edit a.mdx-a:hover,
+.mdx-src-body a.mdx-a:hover {
+  border-bottom-color: rgba(10, 92, 92, 0.55);
+}
+
+/* 源码定界符灰显（ux-D2 caret 邻域 reveal · .mdx-src-delim）
+   显隐：仅 opacity，≤90ms；禁止 layout / box-shadow 动画 */
+@keyframes mdx-delim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.72;
+  }
+}
+
+.mdx-src-delim,
+.mdx-edit .mdx-src-delim,
+.mdx-src-body .mdx-src-delim,
+.mdx-block__content [data-mdx-edit] .mdx-src-delim {
+  color: var(--flow-color-l2, rgba(10, 10, 10, 0.38));
+  font-weight: 400;
+  font-style: normal;
+  font-family: var(--flow-mono, ui-monospace, Menlo, Consolas, monospace);
+  font-size: 0.92em;
+  letter-spacing: 0;
+  opacity: 0.72;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none; /* 不抢焦点；点击穿透到正文 */
+  vertical-align: baseline;
+  /* 显隐弧线：DOM 插入时短淡入；类切换时 opacity 过渡（≤90ms） */
+  transition:opacity var(--dur-micro) var(--ease-default);
+  animation:mdx-delim-in var(--dur-micro) var(--ease-default) both;
+}
+
+/* 可选：JS 在离开邻域前加 .is-hiding 再卸 DOM */
+.mdx-src-delim.is-hiding,
+.mdx-src-delim[data-hiding="true"] {
+  opacity: 0;
+  animation:none;
+}
+
+/* .mdx-mark-near：caret 邻域 mark 容器钩子；皮肤由语义标签 + .mdx-src-delim 承担 */
+
+/* 读态与编辑态 mark 一致（paragraph 等） */
+.mdx-p mark.mdx-mark-hl,
+.mdx-h mark.mdx-mark-hl,
+.mdx-li-text mark.mdx-mark-hl,
+.mdx-quote mark.mdx-mark-hl {
+  background: color-mix(in srgb, var(--flow-doc-ink, #0a5c5c) 14%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 0.12em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mdx-edit strong,
+  .mdx-edit em,
+  .mdx-edit del,
+  .mdx-edit code,
+  .mdx-edit mark,
+  .mdx-src-delim,
+  .mdx-edit .mdx-src-delim,
+  .mdx-src-body .mdx-src-delim,
+  .mdx-block__content [data-mdx-edit] .mdx-src-delim,
+  .mdx-src-delim.is-hiding {
+    transition:none !important;
+    animation:none !important;
+  }
+
+  .mdx-src-delim,
+  .mdx-edit .mdx-src-delim {
+    opacity: 0.72;
+  }
+
+  .mdx-src-delim.is-hiding,
+  .mdx-src-delim[data-hiding="true"] {
+    opacity: 0;
+  }
+}

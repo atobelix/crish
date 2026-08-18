@@ -1,0 +1,183 @@
+﻿/* ==========================================================================
+   Live — 「agent 活着」的视觉语言
+   --------------------------------------------------------------------------
+   全局唯一使用品牌绿的地方。铁律：
+     · 只有「正在发生」才配品牌色；已完成一律褪回墨色
+     · 完成态不给颜色（见 design-tokens.css 中 --sem-done）
+   rail 只在运行中出现 —— 既拿回了 agent 工作流独有的几何，
+   又不会把当初嫌吵的常驻竖线加回来。
+   ========================================================================== */
+
+/* ---------- 运行脉冲点：结构上本就是「活着」的信号，接品牌 ---------- */
+
+.flow-action.is-running .flow-action__marker .flow-dot,
+.flow-action[data-status="running"] .flow-action__marker .flow-dot {
+  background: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-glow);
+}
+
+/* ---------- 运行 rail：竖线只在活着时出现 ---------- */
+
+.flow-action.is-running > .flow-action__head::before,
+.flow-action[data-status="running"] > .flow-action__head::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--flow-rail-x, 7px) - 1px);
+  top: 0;
+  width: 2px;
+  height: 100%;
+  border-radius: 1px;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--brand-rail-fade, var(--flow-rail-live-fade)) 18%,
+    var(--flow-rail-live) 50%,
+    var(--brand-rail-fade, var(--flow-rail-live-fade)) 82%,
+    transparent 100%
+  );
+  animation:brand-rail-flow 2s var(--ease-soft) infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.flow-action > .flow-action__head {
+  position: relative;
+}
+
+@keyframes brand-rail-flow {
+  0%, 100% { opacity: 0.45; transform: scaleY(0.82); }
+  50%      { opacity: 1;    transform: scaleY(1); }
+}
+
+/* 运行中的行文字略提，与静默行拉开 */
+.flow-action.is-running > .flow-action__head,
+.flow-action[data-status="running"] > .flow-action__head {
+  color: var(--ink);
+}
+
+/* ---------- 完成态：刻意无彩 ---------- */
+
+.flow-action[data-status="done"] > .flow-action__head,
+.flow-action[data-status="success"] > .flow-action__head {
+  color: var(--flow-meta);
+}
+
+/* ---------- 思考中 / 整理中：单一独立 5px 翡翠绿呼吸点 ---------- */
+
+.flow-composing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: var(--flow-font-meta, 13px);
+  color: var(--text-secondary, #5c5954);
+}
+
+.flow-composing__dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.flow-composing .flow-dot,
+.flow-composing .flow-dot--running {
+  width: 5px;
+  height: 5px;
+  min-width: 5px;
+  min-height: 5px;
+  border-radius: 50%;
+  background: var(--brand, #10b981);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
+  animation: composing-dot-pulse 1.5s var(--ease-spring) infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes composing-dot-pulse {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.7;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 18%, transparent);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand, #10b981) 32%, transparent);
+  }
+}
+
+/* ==========================================================================
+   会话起点 —— logo 唯一的常驻落点
+   --------------------------------------------------------------------------
+   随内容滚走，不占常驻 chrome，因此不破坏「无 header」的简洁构图。
+   ========================================================================== */
+
+.flow-session-start {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 18px;
+  margin-bottom: 2px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-soft);
+  font-size: var(--flow-font-micro, 12px);
+  letter-spacing: var(--tracking-wide);
+}
+
+.flow-session-start .brand-mark {
+  width: 17px;
+  height: 17px;
+  color: var(--ink);
+}
+
+.flow-session-start__name {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: var(--tracking-tight);
+  color: var(--ink);
+}
+
+.flow-session-start__sep {
+  width: 1px;
+  height: 10px;
+  background: var(--line);
+}
+
+.flow-session-start__meta {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.flow-session-start__spacer { flex: 1; }
+
+/* 运行中的会话徽标：绿点呼吸 —— 全局最上位的「活着」信号 */
+.flow-session-start__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+
+.flow-session-start__status .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 3px var(--brand-glow);
+  animation:brand-dot-breathe 2s var(--ease-soft) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-action.is-running > .flow-action__head::before,
+  .flow-action[data-status="running"] > .flow-action__head::before,
+  .flow-session-start__status .dot {
+    animation:none;
+  }
+}

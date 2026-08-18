@@ -1,0 +1,456 @@
+/* ==========================================================================
+   Plan Mode & Step Milestones — Clean Modern Design System
+   Pure White Backgrounds · Crisp Warm Ink · Flat Organic Stream · Anchored Hub
+   ========================================================================== */
+
+/* ---------- Stream Plan Milestone Steps (Clean, Organic, Non-Boxed) ---------- */
+.flow-plan-root {
+  --plan-gap: 4px; /* Centralized gap variable */
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--plan-gap);
+  background: transparent;
+  border: none;
+  position: relative;
+}
+
+/* Individual Plan Milestone in the conversation stream */
+.flow-plan-step {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Vertical line connecting steps (visible even when collapsed) */
+.flow-plan-step::after {
+  content: "";
+  position: absolute;
+  top: 32px; /* Starts just below the head */
+  bottom: calc(var(--plan-gap) * -1); /* Dynamically bridges the gap */
+  left: 7.625px; /* Centers exactly under the 16px circle (8 - 0.75/2) */
+  width: 0.75px;
+  background-color: var(--border-color, rgba(0, 0, 0, 0.15));
+  z-index: 0;
+}
+
+/* For the last step, do not bridge the gap. Stop at the bottom of the body. */
+.flow-plan-step:last-child::after {
+  bottom: 8px; /* Stop before the bottom padding */
+}
+
+/* Hide line if last child is collapsed, OR if it has no children (no body) to prevent negative height bugs */
+.flow-plan-step:last-child.is-collapsed::after,
+.flow-plan-step:last-child:not(:has(> .flow-plan-step__body))::after {
+  display: none;
+}
+
+.flow-plan-step__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 0;
+  user-select: none;
+  cursor: pointer;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.flow-plan-step__num {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  background: #ffffff;
+  color: var(--text-secondary, #5c5850);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.15));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  z-index: 1;
+}
+
+.flow-plan-step.is-done .flow-plan-step__num {
+  background: #ffffff;
+  color: var(--text-primary, #1c1b18);
+  border-color: rgba(0, 0, 0, 0.25);
+}
+
+.flow-plan-step.is-running .flow-plan-step__num {
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+}
+
+.flow-plan-step__title {
+  font-size: var(--flow-font-plan-title, 15px);
+  font-weight: 600;
+  color: var(--text-primary, #1c1b18);
+  flex: 0 1 auto;
+  letter-spacing: -0.01em;
+  line-height: 1.5;
+}
+
+.flow-plan-step__chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted, #8c877d);
+  transition:transform var(--dur-fast) var(--ease-spring), color var(--dur-fast) var(--ease-default);
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+.flow-plan-step__head:hover .flow-plan-step__chevron {
+  color: var(--text-primary, #1c1b18);
+}
+
+.flow-plan-step:not(.is-collapsed) .flow-plan-step__chevron {
+  transform: rotate(90deg);
+}
+
+.flow-plan-step.is-collapsed .flow-plan-step__chevron {
+  transform: rotate(0deg);
+}
+
+.flow-plan-step__body {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0 8px 0;
+  margin-left: 22px;
+}
+
+.flow-plan-step.is-collapsed .flow-plan-step__body {
+  display: none;
+}
+
+/* ==========================================================================
+   Bottom Plan Bar (Anchored Persistent Hub above Composer — Stacked Tab)
+   ========================================================================== */
+.plan-progress-bar {
+  display: none;
+  position: relative; /* Anchor for absolute drawer */
+  flex-direction: column;
+  width: calc(100% - 36px);
+  max-width: 672px;
+  align-self: flex-start;
+  margin-left: 18px;
+  margin-right: auto;
+  margin-bottom: -10px; /* Negative margin docks bottom 10px into composer behind */
+  background: #ffffff;
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.08));
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
+  transition: border-color var(--dur-base) var(--ease-default), box-shadow var(--dur-base) var(--ease-default);
+  outline: none;
+  z-index: 1;
+}
+
+.plan-progress-bar.active {
+  display: flex;
+}
+
+.plan-progress-bar.active:focus,
+.plan-progress-bar.active:focus-within {
+  border-color: var(--border-color, rgba(0, 0, 0, 0.08));
+  outline: none;
+}
+
+/* Drawer Collapsed / Expanded via CSS Grid */
+.plan-step-list {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition:grid-template-rows var(--dur-base) var(--ease-spring);
+  background: #ffffff;
+  border-bottom: 0px solid rgba(0, 0, 0, 0.06);
+}
+
+.plan-progress-bar.expanded-steps .plan-step-list,
+.plan-progress-bar.is-expanded .plan-step-list {
+  grid-template-rows: 1fr;
+  border-bottom-width: 1px;
+}
+
+.plan-step-list-inner {
+  overflow: hidden;
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition:padding var(--dur-base) var(--ease-spring);
+}
+
+.plan-progress-bar.expanded-steps .plan-step-list-inner,
+.plan-progress-bar.is-expanded .plan-step-list-inner {
+  padding: 10px 14px 4px 14px;
+}
+
+.flow-plan-root,
+.flow-plan-step,
+.flow-plan-step__head,
+.flow-plan-step__body {
+  outline: none;
+  box-shadow: none;
+}
+
+.flow-plan-root:focus,
+.flow-plan-root:focus-within,
+.flow-plan-step:focus,
+.flow-plan-step:focus-within,
+.flow-plan-step__head:focus,
+.flow-plan-step__head:focus-within {
+  outline: none;
+  box-shadow: none;
+}
+
+.plan-expanded-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary, #5c5850);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  outline: none;
+  transition:background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.plan-expanded-step:hover {
+  background: hsl(0 0% 0% / 0.035);
+  color: var(--text-primary, #1c1b18);
+}
+
+.plan-expanded-step.completed {
+  color: var(--text-primary, #1c1b18);
+}
+
+/* Authentic Emerald Green Active Option — ColorAdaptor Modern HSL Slash Syntax */
+.plan-expanded-step.active {
+  color: var(--text-primary, #1c1b18);
+  font-weight: 600;
+  background: hsl(160 84% 39% / 0.08);
+  border: none;
+  outline: none;
+}
+
+.plan-step-dot {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  background: var(--text-muted, #8c877d);
+  flex-shrink: 0;
+  transition:background var(--dur-fast) var(--ease-default), box-shadow var(--dur-fast) var(--ease-default);
+}
+
+.plan-expanded-step.completed .plan-step-dot {
+  background: var(--text-primary, #1c1b18);
+}
+
+.plan-expanded-step.active .plan-step-dot {
+  background: hsl(160 84% 39% / 1);
+  box-shadow: 0 0 0 2.5px hsl(160 84% 39% / 0.25);
+}
+
+.plan-expanded-step .step-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Anchored Single-Line Horizontal Hub — 100% Vertical Flex Centering with bottom dock padding */
+.plan-collapsed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 14px 12px; /* Extra 8px bottom padding to compensate for -10px dock */
+  height: 44px;
+  box-sizing: border-box;
+}
+
+.plan-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  border: 1px solid var(--brand-line, rgba(16, 185, 129, 0.25));
+  background: var(--brand-soft, rgba(16, 185, 129, 0.08));
+  color: var(--brand, #10b981);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  height: 24px;
+  box-sizing: border-box;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.plan-mode-badge .mode-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.plan-divider-v {
+  width: 1px;
+  height: 16px;
+  background: var(--line, rgba(28, 27, 24, 0.1));
+  flex-shrink: 0;
+}
+
+.plan-active-task-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary, #1c1b18);
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  height: 24px;
+  line-height: 24px;
+  box-sizing: border-box;
+}
+
+.plan-active-task-box:hover .plan-step {
+  color: var(--text-primary, #1c1b18);
+}
+
+.plan-roller {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+.plan-roller-track {
+  display: flex;
+  flex-direction: column;
+  transition:transform var(--dur-base) var(--ease-spring);
+}
+
+.plan-step {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary, #1c1b18);
+  height: 24px;
+  line-height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.plan-step-counter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #5c5850);
+  background: var(--paper-sunken, rgba(28, 27, 24, 0.05));
+  padding: 0 6px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  height: 20px;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.plan-spacer {
+  flex: 0;
+}
+
+.plan-right-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 24px;
+}
+
+.plan-duration {
+  font-size: 12px;
+  color: var(--text-muted, #8c877d);
+  font-variant-numeric: tabular-nums;
+  line-height: 16px;
+  height: 16px;
+}
+
+.plan-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #8c877d);
+  cursor: pointer;
+  transition:background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.plan-action-btn:hover {
+  background: var(--wash-hover, rgba(28, 27, 24, 0.05));
+  color: var(--text-primary, #1c1b18);
+}
+
+.plan-action-btn svg {
+  width: 13px;
+  height: 13px;
+  pointer-events: none;
+}
+
+.plan-expand-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #8c877d);
+  cursor: pointer;
+  transition:transform var(--dur-base) var(--ease-default), background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
+}
+
+.plan-expand-trigger:hover {
+  background: var(--wash-hover, rgba(28, 27, 24, 0.05));
+  color: var(--text-primary, #1c1b18);
+}
+
+.plan-expand-chevron {
+  width: 13px;
+  height: 13px;
+  transition:transform var(--dur-base) var(--ease-default);
+}
+
+.plan-progress-bar.is-expanded .plan-expand-chevron {
+  transform: rotate(180deg);
+}

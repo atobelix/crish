@@ -1,0 +1,178 @@
+/* ==========================================================================
+   Design Tokens — 语义映射层
+   --------------------------------------------------------------------------
+   本文件不再定义颜色，只把 brand.css 的基元映射到组件消费的语义名。
+   改配色请改 brand.css；改「谁用什么色」请改这里。
+   ========================================================================== */
+
+:root {
+  /* ---------- 排版 ---------- */
+  --font-base: 14px;
+  --font-title: 15px;
+  --font-body: 14px;
+  --font-item: 14px;
+  --font-sub: 13px;
+  --font-micro: 12px;
+
+  /* ---------- 文本 ---------- */
+  /* 旧方案是「全部纯黑，靠字号/字重/透明度区分」——那是零个性的根源。
+     现在用带同源暖度的墨阶，层级靠色阶本身表达，字更立体。 */
+  --text-primary: var(--ink);
+  --text-secondary: var(--ink-muted);
+  --text-tertiary: var(--ink-soft);
+  --text-placeholder: var(--ink-faint);
+  --text-disabled: var(--ink-ghost);
+
+  /* ---------- 面 ---------- */
+  /* 页面是「纸」（带 2% 正黄），浮起的 composer/弹层更白——形成受光关系 */
+  --bg-page: var(--paper);
+  --bg-composer: var(--paper-raised);
+  --bg-popover: var(--paper-raised);
+  --bg-surface: var(--paper-sunken);
+  --bg-hover: var(--wash-hover);
+  --bg-active: var(--wash-active);
+
+  /* ---------- 线 ---------- */
+  --border-color: var(--line);
+  --border-hover: var(--line-strong);
+  --border-subtle: var(--line-soft);
+
+  /* ======================================================================
+     品牌绿 —— 只给「agent 活着」
+     ---------------------------------------------------------------------- */
+  --accent-mint: var(--brand-soft);      /* 发送键底 */
+  --accent-green: var(--brand);          /* 发送键字形 */
+  --accent-green-light: var(--brand);
+
+  /* ======================================================================
+     完成 / 肯定 —— 刻意无彩
+     ----------------------------------------------------------------------
+     「已完成」不给颜色，靠墨色和勾表达。这是让 emerald 独占品牌位的关键。
+     ====================================================================== */
+  --accent-green-bg: var(--sem-done-soft);
+  --accent-green-border: var(--line-strong);
+  --accent-green-text: var(--ink);
+
+  /* diff 增删是硬约定，必须留绿——但用更沉的森林绿，与品牌 emerald 拉开 */
+  --diff-add: hsl(150, 40%, 32%);
+  --diff-del: var(--sem-error);
+
+  /* ---------- 失败 ---------- */
+  --accent-rose: var(--sem-error-soft);
+  --accent-red: var(--sem-error);
+  --accent-red-light: color-mix(in srgb, var(--sem-error) 62%, var(--paper));
+  --accent-red-bg: var(--sem-error-soft);
+  --accent-red-border: var(--sem-error-line);
+
+  /* ---------- 等待 / 注意 ---------- */
+  --accent-orange: var(--sem-warn);
+  --accent-orange-bg: var(--sem-warn-soft);
+
+  /* ======================================================================
+     权限模式 —— 按「放权程度」递进的风险梯度
+     ----------------------------------------------------------------------
+     只读 → 计划 :  无彩（安全，不需要视觉重量）
+     权限询问     :  琥珀（会打断你）
+     目标         :  品牌绿 ← agent 自主迭代 = 最「活」的状态，唯一的品牌时刻
+     完全访问     :  赤褐（最高风险，读作「重」而非「错」——错误留给正红）
+     ====================================================================== */
+  --perm-readonly: var(--ink-soft);
+  --perm-readonly-bg: var(--paper-sunken);
+
+  --perm-plan: var(--ink-muted);
+  --perm-plan-bg: var(--paper-sunken);
+
+  --perm-ask: var(--sem-warn);
+  --perm-ask-bg: var(--sem-warn-soft);
+
+  --perm-goal: var(--brand-deep);
+  --perm-goal-bg: var(--brand-soft);
+
+  --perm-full: hsl(18, 60%, 44%);
+  --perm-full-bg: color-mix(in srgb, hsl(18, 60%, 44%) 8%, var(--paper-raised));
+
+  /* ---------- 滑块 ---------- */
+  --slider-track: var(--line);
+  --slider-fill: var(--ink);
+  --slider-thumb: var(--ink);
+  --slider-thumb-border: var(--paper-raised);
+
+  /* ---------- 圆角 ---------- */
+  --radius-container: var(--r-xl);
+  --radius-preview: var(--r-xl);
+  --radius-popover: var(--r-lg);
+  --radius-search: 10px;
+  --radius-card: var(--r-md);
+  --radius-thumb: calc(var(--r-md) - 2px);
+  --radius-tag: calc(var(--r-md) - 2px);
+  --radius-icon: var(--r-xs);
+  --radius-option: var(--r-md);
+  --radius-button: var(--r-sm);
+  --radius-badge: 50%;
+
+  /* ---------- 投影 ---------- */
+  /* composer 叠了顶部内高光：纸受光的边，是整套质感的关键 */
+  --shadow-composer: var(--bevel-top), var(--lift-md);
+  --shadow-popover: var(--bevel-top), var(--lift-lg);
+  --shadow-pdf-page: var(--lift-lg);
+  --shadow-thumb: 0 0 0 2px color-mix(in srgb, var(--ink) 7%, transparent), var(--lift-sm);
+  --shadow-thumb-hover: 0 0 0 3px color-mix(in srgb, var(--ink) 11%, transparent), var(--lift-md);
+  --shadow-tooltip: var(--lift-lg);
+
+  /* ---------- 滚动条 (全局轻量通透规范 - 默认 0.14 / Hover与Active 统一 0.3) ---------- */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: hsla(0, 0%, 0%, 0.14);
+  --scrollbar-thumb-hover: hsla(0, 0%, 0%, 0.3);
+  --scrollbar-thumb-active: hsla(0, 0%, 0%, 0.3);
+
+  /* ---------- 时长 / 缓动 ---------- */
+  --dur-micro: var(--t-micro);
+  --dur-fast: var(--t-fast);
+  --dur-base: var(--t-base);
+  --dur-slow: var(--t-slow);
+  --ease-default: var(--ease-out);
+  --ease-spring: var(--ease-soft);
+}
+
+/* ==========================================================================
+   工具类
+   ========================================================================== */
+
+.flex-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.flex-row-tight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.text-hint {
+  font-size: var(--font-micro);
+  color: var(--text-placeholder);
+}
+
+.text-truncate {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shrink-0 {
+  flex-shrink: 0;
+}
+
+.text-bold {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* 数字 / 路径 / 耗时 —— 走等宽，这是 agent 产品最高频的品牌露出位 */
+.tabular {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: var(--tracking-tight);
+}

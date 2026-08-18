@@ -1,0 +1,38 @@
+﻿/* File Preview — design tokens (D5 / D6) */
+:root {
+  --fp-radius: 16px;
+  --fp-radius-sm: 10px;
+  --fp-hairline: 1px solid rgba(0, 0, 0, 0.06);
+  --fp-bg: #ffffff;
+  --fp-bg-stage: #ffffff;
+  --fp-bg-meta: #fafafa;
+  --fp-ink: #1a1a1a;
+  --fp-meta: #5a5a5a;
+  --fp-meta-soft: #8a8a8a;
+  --fp-hover: rgba(0, 0, 0, 0.04);
+  --fp-active: rgba(0, 0, 0, 0.07);
+  --fp-shadow: 0 24px 64px -12px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  --fp-backdrop: rgba(15, 15, 15, 0.28);
+  --fp-danger: #b42318;
+
+  --fp-enter-ms: 200ms;
+  --fp-leave-ms: 160ms;
+  --fp-cross-ms: 160ms;
+  --fp-hover-ms: 90ms;
+  --fp-spring: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --fp-max-w: min(1040px, 96vw);
+  --fp-max-h: min(860px, 92vh);
+  --fp-title-size: 14.5px;
+  --fp-icon: 16px;
+  --fp-hit: 32px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fp-enter-ms: 0ms;
+    --fp-leave-ms: 0ms;
+    --fp-cross-ms: 0ms;
+    --fp-hover-ms: 0ms;
+  }
+}
