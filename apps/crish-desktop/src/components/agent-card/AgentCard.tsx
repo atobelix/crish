@@ -6,42 +6,31 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './AgentCard.module.css';
-import { Button, Tooltip } from '../ui';
 import * as Lucide from 'lucide-react';
 import {
   browseAgentSidePanel,
   openAgentInSidePanel,
 } from '../../api/openAgentPanel';
-import { useLayoutStore } from '../../store/layoutStore';
 import { useSessionStore } from '../../store/sessionStore';
-import type { FileDiff } from '../../store/types';
 import {
-  focusOrOpenPanel,
-  setActiveDiffSource as setActiveDiffSourceAccess,
-} from '../../api/storeAccess';
-import { openFileInPanel } from '../../api/workspaceFsApi';
-import {
-  getSessionAgent,
   selectActiveSessionId,
   selectPanelAgentId,
   selectSessionsById,
   useSessionField,
 } from '../../store/storeAccess';
-import { getSubagentStatus } from '../../api/subagentApi';
 import { ComposerField } from '../chat-composer/ChatComposer';
 import { AgentTeamBoard } from './AgentTeamBoard';
 import { useAgentPanel } from '../../hooks/useAgentStream';
-import { AgentStatusChip } from './AgentStatusChip';
-import { resolveErrorKindLabel } from '../../api/continuity/continuityNotices';
 import { AgentBrowsePad } from './AgentBrowsePad';
 import { AgentMessageRow } from './AgentMessageRow';
 import {
   STATUS_LABEL,
   agentDisplayName,
-  countPendingApprovals,
-  formatAgentDuration,
   openAgentInNewWindow,
 } from './agentCardUtils';
+import { AgentCardHeader } from './AgentCardHeader';
+import { useAgentCardPanelNav } from './useAgentCardPanelNav';
+import { useAgentCardStatusPoll } from './useAgentCardStatusPoll';
 
 export { openAgentInNewWindow };
 
@@ -101,34 +90,10 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
     /** 切换 agent 时递增，强制 ComposerField 重挂载以 autoFocus + 清空草稿 */
     const [composerEpoch, setComposerEpoch] = useState(0);
     const bodyRef = useRef<HTMLDivElement>(null);
-    const statusPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-    const activeWorkspace = useLayoutStore(
-      (s) => s.workspaces[s.activeWorkspaceIndex]
-    );
-    const onOpenDiff = useCallback(
-      (diff: FileDiff) => {
-        setActiveDiffSourceAccess(diff);
-        if (activeWorkspace) {
-          focusOrOpenPanel(activeWorkspace.id, 'diff');
-        }
-      },
-      [activeWorkspace]
-    );
-    const onOpenPath = useCallback(
-      (filePath: string) => {
-        if (activeWorkspace) {
-          focusOrOpenPanel(activeWorkspace.id, 'files');
-        }
-        openFileInPanel(filePath);
-      },
-      [activeWorkspace]
-    );
-    const onOpenTerminal = useCallback(() => {
-      if (activeWorkspace) {
-        focusOrOpenPanel(activeWorkspace.id, 'terminal');
-      }
-    }, [activeWorkspace]);
+    const { onOpenDiff, onOpenPath, onOpenTerminal } = useAgentCardPanelNav();
+    // 运行中轮询 daemon 状态（兜底 UI 纠正）
+    useAgentCardStatusPoll(agent, sess?.id, patchSessionAgent);
 
     /** 侧栏 only：切换/回浏览一律清草稿 + 停本卡 follow-up 流，不串输入 */
     const resetComposerForFocusChange = useCallback(() => {
@@ -161,55 +126,6 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
       el.scrollTop = el.scrollHeight;
     }, [agent?.messages?.length, agent?.status, agent?.summary]);
 
-    // 运行中轮询 daemon 状态（兜底 UI）
-    useEffect(() => {
-      if (!agent || agent.status !== 'running' || !agent.subagentRunId) return;
-      const poll = async () => {
-        const st = await getSubagentStatus(agent.subagentRunId);
-        if (!st || !sess) return;
-        if (st.status && st.status !== 'running' && st.status !== 'unknown') {
-          // 仅当仍显示 running 时纠正
-          const live = getSessionAgent(sess.id, agent.id);
-          if (
-            live?.status === 'running' &&
-            /complete|success|failed|cancel|error|stopp?ed|abort/i.test(
-              st.status
-            )
-          ) {
-            const raw = String(st.status);
-            const nextStatus: 'completed' | 'failed' | 'stopped' =
-              /cancel|stopp?ed|abort/i.test(raw)
-                ? 'stopped'
-                : /fail|error/i.test(raw)
-                  ? 'failed'
-                  : 'completed';
-            const agentSummary =
-              live.summary ||
-              st.latestError ||
-              st.progress ||
-              (nextStatus === 'stopped' ? '已停止' : undefined);
-            patchSessionAgent(sess.id, agent.id, {
-              status: nextStatus,
-              endedAt: Date.now(),
-              ...(agentSummary !== undefined ? { summary: agentSummary } : {}),
-            });
-          }
-        }
-      };
-      void poll();
-      statusPollRef.current = setInterval(() => void poll(), 4000);
-      return () => {
-        if (statusPollRef.current) clearInterval(statusPollRef.current);
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- 轮询只依赖已列出的字段，纳入整个对象会因无关变更重启轮询
-    }, [
-      agent?.id,
-      agent?.status,
-      agent?.subagentRunId,
-      sess?.id,
-      patchSessionAgent,
-    ]);
-
     if (!agent || !sess) {
       return (
         <AgentBrowsePad
@@ -224,8 +140,6 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
     const running = agent.status === 'running';
     const canSend = input.trim().length > 0 && !sending;
     const titleName = agentDisplayName(agent);
-    const durationLabel = formatAgentDuration(agent);
-    const pendingApproval = countPendingApprovals(agent);
     const msgCount = (agent.messages || []).length;
 
     const siblingAgents = sess.agents || [];
@@ -243,130 +157,19 @@ export const AgentCard: React.FC<AgentCardProps> = React.memo(
         data-agent-status={agent.status}
       >
         {/* 侧栏单 agent 详情：无人工委派；多 agent 用 AgentTeamBoard 在侧栏内切换 */}
-        <header
-          className={`${styles.agentCardHeader} ${styles.agentCardHeaderSlim}`}
-        >
-          <div className={styles.agentCardTitleRow}>
-            {/* 返回浏览列表：不关 tab、不碰主列；browse 会触发 id 清空 → 清草稿 */}
-            {siblingAgents.length > 0 ? (
-              <Tooltip content="返回子智能体列表">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.agentCardBtn}
-                  aria-label="返回子智能体列表"
-                  icon={<Lucide.ChevronLeft size={14} aria-hidden />}
-                  onClick={() => {
-                    // 先本地清草稿，再 browse（store 异步时仍不串输入）
-                    resetComposerForFocusChange();
-                    browseAgentSidePanel({ sessionId: parentSessId });
-                  }}
-                />
-              </Tooltip>
-            ) : null}
-            <Lucide.Bot size={14} strokeWidth={1.75} aria-hidden />
-            <Tooltip
-              content={[
-                titleName,
-                agent.mode ? `模式：${agent.mode}` : '',
-                durationLabel || '',
-                (agent.summary || '').trim().slice(0, 120),
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            >
-              <span className={styles.agentCardTitle}>{titleName}</span>
-            </Tooltip>
-            <AgentStatusChip status={agent.status} mode={agent.mode} />
-            {/* D8 §3.7.1 失败态摘要徽标（与 InlineAgentPanel 失败卡片同源：
-                errorKind/retries 由 recovery-escalated 事件投影） */}
-            {agent.status === 'failed' &&
-            (resolveErrorKindLabel(agent.errorKind) ||
-              (agent.retries ?? 0) > 0) ? (
-              <Tooltip
-                content={[
-                  resolveErrorKindLabel(agent.errorKind),
-                  (agent.retries ?? 0) > 0 ? `已重试 ${agent.retries} 次` : '',
-                ]
-                  .filter(Boolean)
-                  .join('；')}
-              >
-                <span
-                  className={styles.agentCardBadge}
-                  role="status"
-                  aria-label={`失败原因：${
-                    resolveErrorKindLabel(agent.errorKind) || '未知'
-                  }`}
-                >
-                  {resolveErrorKindLabel(agent.errorKind)}
-                  {(agent.retries ?? 0) > 0 ? ` · ${agent.retries} 次重试` : ''}
-                </span>
-              </Tooltip>
-            ) : null}
-            {pendingApproval > 0 ? (
-              <Tooltip content="待审批">
-                <span
-                  className={styles.agentCardBadge}
-                  role="status"
-                  aria-label={`${pendingApproval} 项工具待审批`}
-                >
-                  {pendingApproval} 待批
-                </span>
-              </Tooltip>
-            ) : null}
-            {durationLabel ? (
-              <Tooltip content={running ? '已运行时长' : '总时长'}>
-                <span
-                  className={styles.agentCardBadge}
-                  aria-label={
-                    running
-                      ? `已运行 ${durationLabel}`
-                      : `用时 ${durationLabel}`
-                  }
-                >
-                  {durationLabel}
-                </span>
-              </Tooltip>
-            ) : null}
-          </div>
-          <div className={styles.agentCardActions}>
-            {running ? (
-              <Tooltip content="停止子智能体">
-                <Button
-                  type="button"
-                  variant="danger"
-                  size="sm"
-                  className={styles.agentCardBtn}
-                  aria-label="停止子智能体"
-                  icon={
-                    <Lucide.Square size={12} fill="currentColor" aria-hidden />
-                  }
-                  onClick={() => hookHandleStopGeneration(agent.summary)}
-                />
-              </Tooltip>
-            ) : null}
-            {onClose ? (
-              <Tooltip content={embedded ? '返回' : '关闭侧栏'}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.agentCardBtn}
-                  aria-label={embedded ? '返回' : '关闭侧栏'}
-                  icon={
-                    embedded ? (
-                      <Lucide.ChevronLeft size={14} aria-hidden />
-                    ) : (
-                      <Lucide.X size={14} aria-hidden />
-                    )
-                  }
-                  onClick={onClose}
-                />
-              </Tooltip>
-            ) : null}
-          </div>
-        </header>
+        <AgentCardHeader
+          agent={agent}
+          running={running}
+          embedded={embedded}
+          hasSiblings={siblingAgents.length > 0}
+          onClose={onClose}
+          onBackToBrowse={() => {
+            // 先本地清草稿，再 browse（store 异步时仍不串输入）
+            resetComposerForFocusChange();
+            browseAgentSidePanel({ sessionId: parentSessId });
+          }}
+          onStop={() => hookHandleStopGeneration(agent.summary)}
+        />
 
         {siblingAgents.length > 1 ? (
           <AgentTeamBoard

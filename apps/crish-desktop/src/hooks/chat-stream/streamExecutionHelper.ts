@@ -19,8 +19,8 @@ import {
   decideEmptyRunNotice,
   finalizeAssistantMessageText,
   finalizeRunCompletionStatuses,
-  type StreamRunState,
-} from './streamCallbacksInternals';
+} from './streamRunCompletion';
+import { type StreamRunState } from './streamCallbacksInternals';
 import { applyRunUsageSnapshot } from './streamCallbacksUsage';
 
 /**

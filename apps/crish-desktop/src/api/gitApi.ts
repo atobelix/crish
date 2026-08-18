@@ -2,6 +2,9 @@
  * Git 工作区状态与 diff：本机 git 命令（workbench_git_run 参数数组执行）。
  * T03.7：git-status / git-diff 为幽灵命令（Rust 侧不存在）——daemon 回退分支已删，
  * 本机 git 快路径为唯一路径；失败显式返回原因（不静默降级）。
+ *
+ * 命令操作（stage/unstage/commit/push/branch/switch/discard）拆出至 gitApi.commands，
+ * hub 仅 re-export 以保证消费方 import 路径不变。
  */
 
 import { getWorkspacePath } from './projectStore';
@@ -165,6 +168,57 @@ export function withTimeout<T>(
   });
 }
 
+/** 本机 git 命令（经 workbench_git_run 参数数组执行，不经 shell——PE-07 T07.3 C-02 修复） */
+export async function runLocalGit(
+  cwd: string,
+  gitArgs: string[],
+  timeoutMs = GIT_LOCAL_TIMEOUT_MS,
+): Promise<{ ok: boolean; stdout: string; stderr: string; timedOut?: boolean } | null> {
+  try {
+    const { getTransport } = await import('./transport');
+    // 参数数组直传：文件名/提交信息中的 `; | & $ ( ) 反引号 " ' %` 等元字符
+    // 由 Rust 侧 std::process::Command::args 原样传递，无任何外壳解释面；
+    // `--` 之后的路径由 Rust 侧统一加 `:(literal)` pathspec 前缀防魔法注入。
+    const res = await getTransport().call<{
+      ok?: boolean;
+      stdout?: string;
+      stderr?: string;
+      timedOut?: boolean;
+      truncated?: boolean;
+    }>('workbench_git_run', { cwd, gitArgs, timeoutMs });
+    if (res.status === 'ok') {
+      const d = res.data || {};
+      return {
+        ok: Boolean(d.ok),
+        stdout: String(d.stdout ?? ''),
+        stderr: String(d.stderr ?? ''),
+        timedOut: Boolean(d.timedOut),
+      };
+    }
+    if (res.status === 'error') {
+      // 服务端拒绝（arg_not_allowed / workspace_not_granted）→ 错误信息回传供诊断
+      return { ok: false, stdout: '', stderr: res.message, timedOut: false };
+    }
+    // missing：非桌面壳 → 回落引擎路径
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// 命令操作拆出至子模块，hub re-export
+export {
+  fetchGitBranches,
+  switchGitBranch,
+  commitGitChanges,
+  stageGitPath,
+  unstageGitPath,
+  discardGitPath,
+  stageAllGit,
+  unstageAllGit,
+  pushGitChanges,
+} from './gitApi.commands';
+
 /**
  * 解析 `git status --porcelain=v1 -b` 输出。
  * 导出供单测；不发明路径。
@@ -241,44 +295,6 @@ function parseGitPorcelainStatus(
     untrackedCount: files.filter((f) => f.untracked).length,
     conflictedCount: files.filter((f) => f.conflicted).length,
   };
-}
-
-/** 本机 git 命令（经 workbench_git_run 参数数组执行，不经 shell——PE-07 T07.3 C-02 修复） */
-async function runLocalGit(
-  cwd: string,
-  gitArgs: string[],
-  timeoutMs = GIT_LOCAL_TIMEOUT_MS,
-): Promise<{ ok: boolean; stdout: string; stderr: string; timedOut?: boolean } | null> {
-  try {
-    const { getTransport } = await import('./transport');
-    // 参数数组直传：文件名/提交信息中的 `; | & $ ( ) 反引号 " ' %` 等元字符
-    // 由 Rust 侧 std::process::Command::args 原样传递，无任何外壳解释面；
-    // `--` 之后的路径由 Rust 侧统一加 `:(literal)` pathspec 前缀防魔法注入。
-    const res = await getTransport().call<{
-      ok?: boolean;
-      stdout?: string;
-      stderr?: string;
-      timedOut?: boolean;
-      truncated?: boolean;
-    }>('workbench_git_run', { cwd, gitArgs, timeoutMs });
-    if (res.status === 'ok') {
-      const d = res.data || {};
-      return {
-        ok: Boolean(d.ok),
-        stdout: String(d.stdout ?? ''),
-        stderr: String(d.stderr ?? ''),
-        timedOut: Boolean(d.timedOut),
-      };
-    }
-    if (res.status === 'error') {
-      // 服务端拒绝（arg_not_allowed / workspace_not_granted）→ 错误信息回传供诊断
-      return { ok: false, stdout: '', stderr: res.message, timedOut: false };
-    }
-    // missing：非桌面壳 → 回落引擎路径
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -465,119 +481,4 @@ export function gitStatusLabel(code: GitFileStatusCode): string {
     default:
       return String(code || '变更');
   }
-}
-
-/** 获取当前本地分支及分支列表 */
-export async function fetchGitBranches(cwd: string): Promise<{ current: string; list: string[] }> {
-  const r = await runLocalGit(cwd, ['branch', '--no-color'], GIT_LOCAL_TIMEOUT_MS);
-  if (!r || !r.ok) {
-    return { current: 'main', list: ['main'] };
-  }
-  const lines = r.stdout.split('\n');
-  let current = '';
-  const list: string[] = [];
-  for (let line of lines) {
-    line = line.trim();
-    if (!line) continue;
-    if (line.startsWith('*')) {
-      const name = line.substring(1).trim();
-      current = name;
-      list.push(name);
-    } else {
-      list.push(line);
-    }
-  }
-  if (!current && list.length > 0) {
-    current = list[0]!;
-  }
-  return { current: current || 'main', list: list.length > 0 ? list : ['main'] };
-}
-
-/** 切换本地分支 */
-export async function switchGitBranch(cwd: string, branch: string): Promise<{ ok: boolean; error?: string }> {
-  const r = await runLocalGit(cwd, ['checkout', branch], GIT_LOCAL_TIMEOUT_MS);
-  if (!r) return { ok: false, error: '本地 Git 切换分支失败（执行异常）' };
-  if (!r.ok) return { ok: false, error: r.stderr || r.stdout || '本地 Git 切换分支失败' };
-  return { ok: true };
-}
-
-/** 提交变更（支持仅提交已暂存 changes） */
-export async function commitGitChanges(
-  cwd: string,
-  message: string,
-  onlyStaged = false,
-): Promise<{ ok: boolean; error?: string }> {
-  if (!onlyStaged) {
-    // 暂存所有修改
-    const addRes = await runLocalGit(cwd, ['add', '-A'], GIT_LOCAL_TIMEOUT_MS);
-    if (!addRes || !addRes.ok) {
-      return { ok: false, error: addRes?.stderr || '暂存变更失败 (git add 失败)' };
-    }
-  }
-  // 提交
-  const commitRes = await runLocalGit(cwd, ['commit', '-m', message], GIT_LOCAL_TIMEOUT_MS);
-  if (!commitRes || !commitRes.ok) {
-    return { ok: false, error: commitRes?.stderr || '创建提交失败 (git commit 失败)' };
-  }
-  return { ok: true };
-}
-
-/** 暂存单个文件 */
-export async function stageGitPath(cwd: string, path: string): Promise<{ ok: boolean; error?: string }> {
-  const normalizedPath = path.replace(/\\/g, '/');
-  const res = await runLocalGit(cwd, ['add', '--', normalizedPath], GIT_LOCAL_TIMEOUT_MS);
-  if (!res || !res.ok) {
-    return { ok: false, error: res?.stderr || '暂存文件失败' };
-  }
-  return { ok: true };
-}
-
-/** 取消暂存单个文件 */
-export async function unstageGitPath(cwd: string, path: string): Promise<{ ok: boolean; error?: string }> {
-  const normalizedPath = path.replace(/\\/g, '/');
-  const res = await runLocalGit(cwd, ['reset', 'HEAD', '--', normalizedPath], GIT_LOCAL_TIMEOUT_MS);
-  if (!res || !res.ok) {
-    return { ok: false, error: res?.stderr || '取消暂存文件失败' };
-  }
-  return { ok: true };
-}
-
-/** 放弃单个文件修改 */
-export async function discardGitPath(cwd: string, path: string): Promise<{ ok: boolean; error?: string }> {
-  const normalizedPath = path.replace(/\\/g, '/');
-  const res = await runLocalGit(cwd, ['checkout', '--', normalizedPath], GIT_LOCAL_TIMEOUT_MS);
-  if (!res || !res.ok) {
-    // If checkout fails (e.g. untracked file), try git clean -f to delete it
-    const resClean = await runLocalGit(cwd, ['clean', '-f', '--', normalizedPath], GIT_LOCAL_TIMEOUT_MS);
-    if (!resClean || !resClean.ok) {
-      return { ok: false, error: res?.stderr || resClean?.stderr || '放弃修改失败' };
-    }
-  }
-  return { ok: true };
-}
-
-/** 暂存所有变更 */
-export async function stageAllGit(cwd: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await runLocalGit(cwd, ['add', '-A'], GIT_LOCAL_TIMEOUT_MS);
-  if (!res || !res.ok) {
-    return { ok: false, error: res?.stderr || '暂存全部失败' };
-  }
-  return { ok: true };
-}
-
-/** 取消暂存所有变更 */
-export async function unstageAllGit(cwd: string): Promise<{ ok: boolean; error?: string }> {
-  const res = await runLocalGit(cwd, ['reset', 'HEAD'], GIT_LOCAL_TIMEOUT_MS);
-  if (!res || !res.ok) {
-    return { ok: false, error: res?.stderr || '取消暂存全部失败' };
-  }
-  return { ok: true };
-}
-
-/** 推送提交至远程仓库 */
-export async function pushGitChanges(cwd: string): Promise<{ ok: boolean; error?: string }> {
-  const r = await runLocalGit(cwd, ['push'], GIT_STATUS_TIMEOUT_MS);
-  if (!r) return { ok: false, error: '推送失败（执行异常）' };
-  if (!r.ok) return { ok: false, error: r.stderr || r.stdout || '推送失败，可能存在冲突或网络连接问题' };
-  return { ok: true };
 }

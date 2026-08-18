@@ -1,0 +1,141 @@
+/**
+ * Engine config I/O 域（从 engineConfig 拆出）：localStorage + daemon 通道。
+ *
+ * - localStorage：recent-models 读写
+ * - daemon I/O：fetchEngineStatus / loadEngineConfig / updateEngineConfig（C3.1 transport 路径）
+ */
+import { getTransport } from './transport';
+import { logInternalError } from './userFacingErrors';
+import type { EngineConfigUpdate, EngineStatus } from './engineConfigTypes';
+import {
+  buildUpdateConfigPayload,
+  isEmptyEngineConfigUpdate,
+  mergeModelsForPicker,
+  normalizeEngineConfigUpdate,
+  normalizeEngineModelId,
+  normalizeRecentModels,
+  parseEngineStatusFromRaw,
+} from './engineConfigHelpers';
+
+const RECENT_MODELS_KEY = 'crish_recent_models';
+const MAX_RECENT = 12;
+
+export function loadRecentModels(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_MODELS_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return normalizeRecentModels(arr);
+  } catch {
+    return [];
+  }
+}
+
+export function pushRecentModel(model: string): string[] {
+  const m = normalizeEngineModelId(model);
+  if (!m) return loadRecentModels();
+  const next = [m, ...loadRecentModels().filter((x) => x !== m)].slice(0, MAX_RECENT);
+  try {
+    localStorage.setItem(RECENT_MODELS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+  return next;
+}
+
+/**
+ * 引擎状态读取（C3.1 transport 路径）：
+ * - transport.waitUntilConnected（core_get_status 轮询）判「核心已初始化」；
+ * - 就绪后 request('core_get_status') 取引擎状态原始 JSON。
+ * 不再有 WS keep-alive / hasEverConnected 语义：未就绪 → ok:false（显式离线）。
+ */
+export async function fetchEngineStatus(): Promise<EngineStatus> {
+  const transport = getTransport();
+  try {
+    const ready = await transport.waitUntilConnected(12_000);
+    if (!ready) {
+      return { ok: false, connected: false, error: 'not_connected' };
+    }
+
+    const res = (await transport.request<Record<string, unknown>>(
+      'core_get_status',
+      {},
+      { timeoutMs: 8_000 }
+    )) as Record<string, unknown>;
+
+    // 不在 get-status 时写入 recent：避免引擎演示默认（如 mimo）污染本机最近列表
+    // recent 仅由用户主动 activate / update-config 写入
+    const parsed = parseEngineStatusFromRaw(res);
+    return {
+      ...parsed,
+      ok: true,
+      connected: true,
+      reconnecting: false,
+      raw: res,
+    };
+  } catch (e) {
+    logInternalError('fetchEngineStatus', e);
+    return {
+      ok: false,
+      connected: false,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+/**
+ * 读取引擎配置脱敏快照（config_get，T-F 06 T2.6 接线：配置族只写不读的
+ * P2-8 补读面）。经 transport.request('config_get') 同一通道（与 config_update
+ * 对称）；命令缺失 / 报错 → logInternalError + null（不抛，只补读不重建状态流）。
+ */
+export async function loadEngineConfig(): Promise<Record<string, unknown> | null> {
+  const transport = getTransport();
+  try {
+    const ready = await transport.waitUntilConnected(12_000);
+    if (!ready) {
+      logInternalError('loadEngineConfig', 'not_connected');
+      return null;
+    }
+    const res = (await transport.request<Record<string, unknown>>(
+      'config_get',
+      {},
+      { timeoutMs: 8_000 },
+    )) as Record<string, unknown>;
+    return res && typeof res === 'object' ? res : null;
+  } catch (e) {
+    logInternalError('loadEngineConfig', e);
+    return null;
+  }
+}
+
+export async function updateEngineConfig(
+  update: EngineConfigUpdate,
+): Promise<{ ok: boolean; error?: string }> {
+  const transport = getTransport();
+  try {
+    const ready = await transport.waitUntilConnected(12_000);
+    if (!ready) return { ok: false, error: 'not_connected' };
+
+    const normalized = normalizeEngineConfigUpdate(update);
+    if (isEmptyEngineConfigUpdate(normalized)) {
+      // 无可下发字段：视为成功 no-op（避免空 config_update 打核心）
+      return { ok: true };
+    }
+
+    const payload = buildUpdateConfigPayload(normalized);
+    const { type: _type, ...rest } = payload;
+    await transport.request('config_update', rest, { timeoutMs: 12_000 });
+    if (typeof normalized.model === 'string' && normalized.model) {
+      pushRecentModel(normalized.model);
+    }
+    return { ok: true };
+  } catch (e) {
+    logInternalError('updateEngineConfig', e);
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Models shown in chat picker: recent + current engine model. */
+export function modelsForPicker(current?: string): string[] {
+  return mergeModelsForPicker(loadRecentModels(), current);
+}
