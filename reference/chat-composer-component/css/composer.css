@@ -1242,7 +1242,7 @@ textarea.composer-input {
   height: 44px;
   min-height: 44px;
   margin-bottom: -44px;
-  z-index: 80;
+  z-index: 100;
   pointer-events: none;
   background: linear-gradient(
     to bottom,
