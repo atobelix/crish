@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 /**
- * CONN-E2′-tauri · Host + 可信 invoke detect 一次（StatusBar）
+ * CONN-E2′-tauri · 已激活 NoteLeafHost + 可信 invoke detect 一次（StatusBar）
+ *
+ * 夹具 ≠ 产品入口 ≠ 打开完成。
+ *
+ * 产品默开 detect / 无 Tauri 不造假：挂已激活 `NoteLeafHost`
+ *（`activateNotePaper` + 叶工厂），不把 `WorkspaceProductEmptyHost` /
+ * EmptyState CTA 当产品到达面。
  *
  * 走 `createTauriNoteMirrorIpc` / `createProductNoteMirrorIpc({ isTauriRuntime:true })`
  * + test-setup `mockTauriCommand`，线格式对齐 `note_commands.rs` `report_to_json`。
@@ -16,19 +22,24 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mockTauriCommand, mockTauriError } from '../../test-setup';
+import * as projectStore from '../../api/projectStore';
 import {
   NOTE_CMD_DETECT_MIRROR_DRIFT,
   NOTE_CMD_IMPORT_MIRROR_PROPOSAL,
   createTauriNoteMirrorIpc,
 } from '../../api/noteMirrorIpc';
+import { activateNotePaper, deactivateNotePaper } from '../../extensions/note-paper/activate';
+import { NoteLeafHost } from '../../extensions/note-paper/NoteLeafHost';
+import type { ViewRenderContext } from '../../services/view-registry';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
+import { resetWorkspacePersistedStrictDocBindings } from './workspaceEmptyStateStrictDoc';
 import {
   WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
-  WorkspaceProductEmptyHost,
   createProductNoteMirrorIpc,
 } from './workspaceProductMirrorDetect';
+import * as productMirror from './workspaceProductMirrorDetect';
 
 const DIR =
   typeof import.meta.url === 'string' && import.meta.url.startsWith('file:')
@@ -67,6 +78,33 @@ function asReq(args: unknown): Record<string, unknown> | undefined {
     : rec;
 }
 
+function ctx(partial: Partial<ViewRenderContext> = {}): ViewRenderContext {
+  return {
+    panelId: 'note',
+    leafId: 'leaf-e2pt',
+    sessionId: 'chat-session-99',
+    isActive: true,
+    openView: () => {},
+    params: {},
+    ...partial,
+  };
+}
+
+function stubProductTauriMirror(
+  ipc = createProductNoteMirrorIpc({ isTauriRuntime: true })
+) {
+  expect(ipc).toBeDefined();
+  vi.spyOn(
+    productMirror,
+    'resolveWorkspaceProductEmptyMirrorProps'
+  ).mockReturnValue({
+    enableMirrorDetectSchedule:
+      WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
+    mirrorIpc: ipc,
+  });
+  return ipc;
+}
+
 describe('CONN-E2′-tauri · 默认与无 Tauri 不回退', () => {
   it('conn_e2p_tauri_defaults_unmoved_and_no_tauri_unregressed', () => {
     expect(WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE).toBe(true);
@@ -101,47 +139,61 @@ describe('CONN-E2′-tauri · 默认与无 Tauri 不回退', () => {
   });
 });
 
-describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
-  it('conn_e2p_tauri_host_no_tauri_schedule_stays_off', () => {
-    const { render, screen } = rtl!;
-    render(<WorkspaceProductEmptyHost wsId="ws-e2pt-notauri" />);
-    const root = screen.getByRole('status');
-    expect(root).toHaveAttribute('data-mirror-detect-policy', '1');
-    expect(root).toHaveAttribute('data-mirror-detect-schedule', '0');
-    expect(root).toHaveAttribute('data-el03', 'not-claimed');
-    expect(root).toHaveAttribute('data-inotify-full', 'not-claimed');
+describe.skipIf(!rtl)('CONN-E2′-tauri · 已激活 NoteLeafHost invoke 填 StatusBar', () => {
+  const { render, screen, fireEvent, waitFor, act } = rtl!;
+
+  beforeEach(() => {
+    deactivateNotePaper();
+    resetWorkspacePersistedStrictDocBindings();
+    vi.spyOn(projectStore, 'getActiveProjectId').mockReturnValue(null);
+    vi.spyOn(projectStore, 'getWorkspacePath').mockReturnValue('');
+    activateNotePaper();
+  });
+
+  afterEach(() => {
+    act(() => {
+      deactivateNotePaper();
+    });
+    vi.restoreAllMocks();
+    resetWorkspacePersistedStrictDocBindings();
+  });
+
+  it('conn_e2p_tauri_host_no_tauri_schedule_stays_off', async () => {
+    const { container } = render(
+      <NoteLeafHost
+        {...ctx({ params: { docId: 'strict-ws-e2pt-notauri' } })}
+      />
+    );
+    await screen.findByTestId('note-paper-strict-panel');
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(host).toHaveAttribute('data-mirror-detect-policy', '1');
+    expect(host).toHaveAttribute('data-mirror-detect-schedule', '0');
+    expect(host).toHaveAttribute('data-el03', 'not-claimed');
+    expect(host).toHaveAttribute('data-inotify-full', 'not-claimed');
     expect(screen.queryByTestId('mirror-drift-status-bar')).toBeNull();
+    expect(screen.queryByTestId('open-note-paper-strict')).toBeNull();
+    expect(screen.queryByTestId('note-paper-strict-host')).toBeNull();
   });
 
   it('conn_e2p_tauri_invoke_detect_once_fills_real_report', async () => {
-    const { render, screen, fireEvent, waitFor } = rtl!;
-    const wsId = 'ws-e2pt-ok';
-    const docId = `strict-${wsId}`;
+    const docId = 'strict-ws-e2pt-ok';
     const detectInvokes: unknown[] = [];
     mockTauriCommand(NOTE_CMD_DETECT_MIRROR_DRIFT, (args) => {
       detectInvokes.push(args);
       return backendDetectWire(docId);
     });
+    stubProductTauriMirror();
 
-    const ipc = createProductNoteMirrorIpc({ isTauriRuntime: true });
-    expect(ipc).toBeDefined();
-
-    render(
-      <WorkspaceEmptyState
-        wsId={wsId}
-        mirror={{
-          enableMirrorDetectSchedule:
-            WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
-          mirrorIpc: ipc,
-        }}
-      />
+    const { container } = render(
+      <NoteLeafHost {...ctx({ params: { docId } })} />
     );
 
-    const root = screen.getByRole('status');
-    expect(root).toHaveAttribute('data-mirror-detect-policy', '1');
-    expect(root).toHaveAttribute('data-mirror-detect-schedule', '1');
-    expect(root).toHaveAttribute('data-el03', 'not-claimed');
-    expect(root).toHaveAttribute('data-inotify-full', 'not-claimed');
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(host).toHaveAttribute('data-mirror-detect-policy', '1');
+    expect(host).toHaveAttribute('data-mirror-detect-schedule', '1');
+    expect(host).toHaveAttribute('data-el03', 'not-claimed');
+    expect(host).toHaveAttribute('data-inotify-full', 'not-claimed');
+    expect(screen.queryByTestId('open-note-paper-strict')).toBeNull();
 
     await waitFor(() => {
       expect(detectInvokes.length).toBeGreaterThanOrEqual(1);
@@ -149,7 +201,6 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
     const wire = asReq(detectInvokes[0]);
     expect(wire?.doc_id).toBe(docId);
 
-    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
     const bar = await screen.findByTestId('mirror-drift-status-bar');
     await waitFor(() => {
       expect(bar).toHaveAttribute('data-drift-class', 'mirror_only');
@@ -160,7 +211,6 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
     expect(bar).toHaveAttribute('data-inotify-full', 'not-claimed');
     expect(screen.getByTestId('mirror-drift-lag')).toHaveTextContent('lag=4');
 
-    const host = screen.getByTestId('note-paper-strict-host');
     expect(host).toHaveAttribute('data-mirror-detect-policy', '1');
     expect(host).toHaveAttribute('data-mirror-detect-schedule', '1');
     expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
@@ -170,24 +220,18 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
   });
 
   it('conn_e2p_tauri_invoke_failure_no_fake_report_no_hydrate_fallback', async () => {
-    const { render, screen, fireEvent, waitFor } = rtl!;
     mockTauriError(
       NOTE_CMD_DETECT_MIRROR_DRIFT,
       new Error('store backend unwired')
     );
-    const ipc = createTauriNoteMirrorIpc();
+    stubProductTauriMirror(createTauriNoteMirrorIpc());
 
     render(
-      <WorkspaceEmptyState
-        wsId="ws-e2pt-fail"
-        enableMirrorDetectSchedule={
-          WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE
-        }
-        mirrorIpc={ipc}
+      <NoteLeafHost
+        {...ctx({ params: { docId: 'strict-ws-e2pt-fail' } })}
       />
     );
 
-    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
     await waitFor(() => {
       expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
         'data-hydrate-status',
@@ -208,24 +252,18 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
   });
 
   it('conn_e2p_tauri_hollow_detect_does_not_fabricate_drift', async () => {
-    const { render, screen, fireEvent, waitFor } = rtl!;
     mockTauriCommand(NOTE_CMD_DETECT_MIRROR_DRIFT, () => ({
       ok: true,
       source: 'tauri-ipc',
     }));
-    const ipc = createTauriNoteMirrorIpc();
+    stubProductTauriMirror(createTauriNoteMirrorIpc());
 
     render(
-      <WorkspaceEmptyState
-        wsId="ws-e2pt-hollow"
-        mirror={{
-          enableMirrorDetectSchedule: true,
-          mirrorIpc: ipc,
-        }}
+      <NoteLeafHost
+        {...ctx({ params: { docId: 'strict-ws-e2pt-hollow' } })}
       />
     );
 
-    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
     await waitFor(() => {
       expect(screen.getByTestId('note-paper-strict-panel')).toBeInTheDocument();
     });
@@ -237,8 +275,8 @@ describe.skipIf(!rtl)('CONN-E2′-tauri · Host invoke 填 StatusBar', () => {
     expect(screen.queryByTestId('mirror-drift-lag')).toBeNull();
   });
 
+  // X-05 门禁须注入 unpushed；产品叶不传该 prop。夹具 ≠ 产品入口。
   it('conn_e2p_tauri_x05_unpushed_blocks_silent_overwrite', async () => {
-    const { render, screen, fireEvent, waitFor } = rtl!;
     const wsId = 'ws-e2pt-x05';
     const docId = `strict-${wsId}`;
     const importInvokes: unknown[] = [];

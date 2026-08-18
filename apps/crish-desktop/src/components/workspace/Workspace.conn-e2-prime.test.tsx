@@ -1,26 +1,59 @@
 // @vitest-environment jsdom
 /**
- * CONN-E2′ · Workspace 产品宿主 detect 默装
+ * CONN-E2′ · 产品默开 detect（到达面：02 叶，不是死 Host）
  *
- * - 产品宿主写死默传 enableMirrorDetectSchedule + 产品 mirrorIpc
- * - EmptyState 直接渲染默认仍关（CONN-E2 会计不回退）
+ * 测头自钉：夹具 Host ≠ 产品入口 ≠ 打开完成。
+ * - WorkspaceProductEmptyHost 仍是夹具（本文件不删该组件；不用它证产品默开）
+ * - 产品默开 detect：activate 扩展后渲 NoteLeafHost / 已注册 factory，断言在叶上
+ * - EmptyState 直渲默认仍关（CONN-E2 会计不回退）
  * - 无 Tauri / 无 ipc 不造假 drift report
  *
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 重做 E3 · ≠ 默认双开 poll+OS
  */
 import React from 'react';
-import { describe, expect, it } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it } from 'vitest';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import {
+  activateNotePaper,
+  deactivateNotePaper,
+} from '../../extensions/note-paper/activate';
+import { NoteLeafHost } from '../../extensions/note-paper/NoteLeafHost';
+import type { ViewRenderContext } from '../../services/view-registry';
 import { WorkspaceEmptyState } from './WorkspaceEmptyState';
 import {
   WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
-  WorkspaceProductEmptyHost,
   createProductNoteMirrorIpc,
   resolveWorkspaceProductEmptyMirrorProps,
 } from './workspaceProductMirrorDetect';
 
-describe('CONN-E2′ · Workspace 产品宿主 detect 策略', () => {
-  it('conn_e2p_workspace_product_host_enables_detect_schedule', () => {
+function leafCtx(
+  partial: Partial<ViewRenderContext> = {}
+): ViewRenderContext {
+  return {
+    panelId: 'note',
+    leafId: 'leaf-e2p',
+    sessionId: 'sess-e2p',
+    isActive: true,
+    openView: () => {},
+    params: {},
+    ...partial,
+  };
+}
+
+/** 产品默开到达面：先激活扩展再渲叶宿主（≠ 夹具 Host、≠ 打开完成） */
+function renderProductDetectLeaf() {
+  activateNotePaper();
+  return render(<NoteLeafHost {...leafCtx()} />);
+}
+
+describe('CONN-E2′ · 产品默开 detect（叶；夹具 Host ≠ 入口 ≠ 打开完成）', () => {
+  afterEach(() => {
+    act(() => {
+      deactivateNotePaper();
+    });
+  });
+
+  it('conn_e2p_workspace_product_host_enables_detect_schedule', async () => {
     expect(WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE).toBe(true);
 
     const assembled = resolveWorkspaceProductEmptyMirrorProps({
@@ -29,11 +62,13 @@ describe('CONN-E2′ · Workspace 产品宿主 detect 策略', () => {
     expect(assembled.enableMirrorDetectSchedule).toBe(true);
     expect(assembled.mirrorIpc).toBeUndefined();
 
-    render(<WorkspaceProductEmptyHost wsId="ws-e2p-host" />);
-    const root = screen.getByRole('status');
-    expect(root).toHaveAttribute('data-mirror-detect-policy', '1');
-    expect(root).toHaveAttribute('data-el03', 'not-claimed');
-    expect(root).toHaveAttribute('data-inotify-full', 'not-claimed');
+    const { container } = renderProductDetectLeaf();
+    await screen.findByTestId('note-paper-strict-panel');
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(host).toBeTruthy();
+    expect(host).toHaveAttribute('data-mirror-detect-policy', '1');
+    expect(host).toHaveAttribute('data-el03', 'not-claimed');
+    expect(host).toHaveAttribute('data-inotify-full', 'not-claimed');
   });
 
   it('conn_e2p_empty_state_direct_still_defaults_off', () => {
@@ -63,30 +98,19 @@ describe('CONN-E2′ · Workspace 产品宿主 detect 策略', () => {
     expect(typeof tauriIpc?.detectMirrorDrift).toBe('function');
     expect(tauriIpc).not.toHaveProperty('detectCalls');
 
-    render(<WorkspaceProductEmptyHost wsId="ws-e2p-notauri" />);
-    const root = screen.getByRole('status');
-    expect(root).toHaveAttribute('data-mirror-detect-policy', '1');
-    expect(root).toHaveAttribute('data-mirror-detect-schedule', '0');
-    expect(root).toHaveAttribute('data-mirror-drift-bar', '0');
-    expect(screen.queryByTestId('mirror-drift-status-bar')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('open-note-paper-strict'));
+    const { container } = renderProductDetectLeaf();
+    const panel = await screen.findByTestId('note-paper-strict-panel');
     await waitFor(() => {
-      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
-        'data-hydrate-status',
-        'ready'
-      );
+      expect(panel).toHaveAttribute('data-hydrate-status', 'ready');
     });
 
-    const host = screen.getByTestId('note-paper-strict-host');
+    const host = container.querySelector('[data-note-leaf-host="true"]');
+    expect(host).toBeTruthy();
     expect(host).toHaveAttribute('data-mirror-detect-policy', '1');
     expect(host).toHaveAttribute('data-mirror-detect-schedule', '0');
     expect(host).toHaveAttribute('data-mirror-drift-bar', '0');
     expect(screen.queryByTestId('mirror-drift-status-bar')).toBeNull();
-    expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
-      'data-hydrate-source',
-      'fixture'
-    );
+    expect(panel).toHaveAttribute('data-hydrate-source', 'fixture');
     expect(host).toHaveAttribute('data-el03', 'not-claimed');
     expect(host).toHaveAttribute('data-inotify-full', 'not-claimed');
   });
