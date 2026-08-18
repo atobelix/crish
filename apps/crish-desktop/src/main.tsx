@@ -9,6 +9,10 @@ import {
   type ViewFactoryMap,
 } from './services/view-registry';
 import type { ViewRenderContext } from './services/view-registry';
+import {
+  activateNotePaper,
+  shouldActivateOfficialNotePaper,
+} from './extensions/note-paper';
 import { lazy } from 'react';
 
 import { ToastProvider } from './services/toast/ToastContext';
@@ -123,6 +127,10 @@ async function startup() {
   // 微内核生命周期前置：显式注册 Conex 全量内置视图与插槽，彻底消除 ESM 模块加载副作用依赖
   // 维度 3 步骤 1 / 3-E：factory 由本文件注入（斩断 view-registry → components 反向边）
   registerBuiltInViews(builtinViewFactories);
+  // 官方捆绑笔记扩展（可卸）；不是内核第 12 个内置
+  if (shouldActivateOfficialNotePaper()) {
+    activateNotePaper();
+  }
 
   // Phase 0: 等待 ServiceRegistry / ConfigService 初始化
   await import('./bootstrap-orchestrator').then((m) => m.ready);
