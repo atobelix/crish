@@ -7,6 +7,7 @@
  * - EmptyState + CTA 仍是夹具；直渲默认仍关（CONN-E2 会计不回退）
  * - 产品默开 detect 在 NoteLeafHost：activate 扩展后渲叶 / 已注册 factory
  * - 无 Tauri / 无 ipc 不造假 drift report
+ * 策略/IPC 从扩展家 import，旧路径只 re-export。
  *
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 重做 E3 · ≠ 默认双开 poll+OS
  */
@@ -24,7 +25,7 @@ import {
   WORKSPACE_PRODUCT_ENABLE_MIRROR_DETECT_SCHEDULE,
   createProductNoteMirrorIpc,
   resolveWorkspaceProductEmptyMirrorProps,
-} from './workspaceProductMirrorDetect';
+} from '../../extensions/note-paper/productMirrorPolicy';
 
 function leafCtx(
   partial: Partial<ViewRenderContext> = {}

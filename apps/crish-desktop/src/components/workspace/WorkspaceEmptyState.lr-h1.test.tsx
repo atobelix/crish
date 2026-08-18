@@ -10,6 +10,7 @@
  * 本文件不证产品入口。禁止点 `open-note-paper-strict` 证产品 H1。
  *
  * EmptyState 直渲 = 夹具 landing 属性（夹具路径；≠ 产品入口 ≠ 打开完成）。
+ * resolver 从扩展家 import，旧路径只 re-export。
  *
  * 完成定义：
  * - 绑定后打开 docId ≠ 永远只有死合成 `strict-${wsId}`
@@ -41,7 +42,7 @@ import {
   bindWorkspacePersistedStrictDoc,
   resetWorkspacePersistedStrictDocBindings,
   syntheticStrictDocId,
-} from './workspaceEmptyStateStrictDoc';
+} from '../../extensions/note-paper/productStrictDoc';
 
 const DIR =
   typeof import.meta.url === 'string' && import.meta.url.startsWith('file:')

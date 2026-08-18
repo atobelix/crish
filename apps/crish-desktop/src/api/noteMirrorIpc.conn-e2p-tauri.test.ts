@@ -5,6 +5,7 @@
  * `note_commands.rs` `report_to_json`。填 report 形状真；空壳/失败不造假。
  *
  * StatusBar / Host 装配见 `Workspace.conn-e2-prime-tauri.test.tsx`。
+ * 产品 IPC 从扩展家 import，旧路径只 re-export。
  *
  * ≠ EL-03 · ≠ inotify 满关 · ≠ 默认双开 poll+OS · ≠ 重做 E2′ 策略
  */
@@ -19,7 +20,7 @@ import {
   NOTE_CMD_IMPORT_MIRROR_PROPOSAL,
   createTauriNoteMirrorIpc,
 } from './noteMirrorIpc';
-import { createProductNoteMirrorIpc } from '../components/workspace/workspaceProductMirrorDetect';
+import { createProductNoteMirrorIpc } from '../extensions/note-paper/productMirrorPolicy';
 import { submitThreeWayViaMirrorIpc } from '../components/note-paper/mirrorThreeWayBridge';
 import { resolveThreeWayAction } from '../components/note-paper/mirrorDriftUi';
 

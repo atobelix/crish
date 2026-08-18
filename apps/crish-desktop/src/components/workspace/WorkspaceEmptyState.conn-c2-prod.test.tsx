@@ -10,6 +10,7 @@
  * - 产品叶消费常量 → Strict `data-paper-list=1` / `presentationMode=paper-list`
  * - EmptyState **组件默认仍 false**：src 钉不回退
  * - presentationMode 互斥不回退：paper-list ⇄ content-row
+ * 策略常量从扩展家 import，旧路径只 re-export。
  *
  * ≠ W3-P · ≠ EL-01 · 默开 ≠ PaperList 完成 · jsdom 绿 ≠ 打开完成
  */
@@ -26,7 +27,7 @@ import {
   deactivateNotePaper,
 } from '../../extensions/note-paper/activate';
 import { NoteLeafHost } from '../../extensions/note-paper/NoteLeafHost';
-import { WORKSPACE_PRODUCT_ENABLE_PAPER_LIST } from './workspaceProductPaperList';
+import { WORKSPACE_PRODUCT_ENABLE_PAPER_LIST } from '../../extensions/note-paper/productPaperListPolicy';
 
 const DIR =
   typeof import.meta.url === 'string' && import.meta.url.startsWith('file:')

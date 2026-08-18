@@ -1,6 +1,8 @@
 /**
  * LR-H1 · 产品 Strict 打开 docId 解析（纯函数）
  *
+ * 从扩展家 import，旧路径只 re-export。
+ *
  * ≠ 打开完成 · ≠ EL-01 / EL-04 / EL-08
  */
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,9 +14,9 @@ import {
   resolveProductStrictDocId,
   syntheticStrictDocId,
   unbindWorkspacePersistedStrictDoc,
-} from './workspaceEmptyStateStrictDoc';
+} from '../../extensions/note-paper/productStrictDoc';
 
-describe('workspaceEmptyStateStrictDoc · LR-H1', () => {
+describe('productStrictDoc · LR-H1 产品 resolver', () => {
   afterEach(() => {
     resetWorkspacePersistedStrictDocBindings();
   });
