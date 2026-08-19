@@ -83,7 +83,6 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
             type="button"
             variant="ghost"
             size="sm"
-            className="settings-btn-rect"
             onClick={() => {
               setManage(null);
               void refresh();
@@ -96,7 +95,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
       >
         <Suspense
           fallback={
-            <div className="ext-empty" role="status">
+            <div className={styles.empty} role="status">
               加载{label}…
             </div>
           }
@@ -148,6 +147,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
         <SegmentedControl
           aria-label="视图"
           size="sm"
+          className={styles.segment}
           value={view}
           options={[
             { value: 'installed', label: '已安装' },
@@ -161,6 +161,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
         <SegmentedControl
           aria-label="类型"
           size="sm"
+          className={styles.segment}
           value={kindFilter}
           options={kindFilters.map((f) => ({
             value: f.id,
@@ -181,7 +182,7 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
       </div>
 
       {loadError ? (
-        <div className="ext-empty" role="alert">
+        <div className={styles.empty} role="alert">
           {loadError}
         </div>
       ) : null}

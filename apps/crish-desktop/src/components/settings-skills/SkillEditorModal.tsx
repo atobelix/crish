@@ -9,7 +9,7 @@
  */
 import React, { useId } from 'react';
 import type { DesktopSkill } from '../../api/skillsApi';
-import { Button, Dialog, Tooltip } from '../ui';
+import { Button, Dialog, Input, Switch, Tooltip } from '../ui';
 import styles from './SkillEditorModal.module.css';
 
 /** 发现导入域（T4-9c Props 收敛） */
@@ -113,26 +113,28 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
           </div>
         }
       >
-        <div className={styles.skillsDiscoverList} role="group" aria-label="待导入技能">
+        <div
+          className={`${styles.skillsDiscoverList} ${styles.skillsDiscoverDialogBody}`}
+          role="group"
+          aria-label="待导入技能"
+        >
           {(discoverCandidates ?? []).map((s) => {
             const checked = discoverPick[s.id] !== false;
             return (
-              <label
-                key={s.id}
-                className={styles.skillsDiscoverItem}
-                title={s.description || s.name}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={discoverBusy}
-                  onChange={(e) =>
-                    setDiscoverPick((p) => ({ ...p, [s.id]: e.target.checked }))
-                  }
-                  aria-label={`${checked ? '取消选择' : '选择'} ${s.name}`}
-                />
-                <span className={styles.skillsDiscoverName}>{s.name}</span>
-              </label>
+              <Tooltip key={s.id} content={s.description || s.name}>
+                <div className={styles.skillsDiscoverItem}>
+                  <Switch
+                    size="sm"
+                    checked={checked}
+                    disabled={discoverBusy}
+                    aria-label={`${checked ? '取消选择' : '选择'} ${s.name}`}
+                    onCheckedChange={(next) =>
+                      setDiscoverPick((p) => ({ ...p, [s.id]: next }))
+                    }
+                  />
+                  <span className={styles.skillsDiscoverName}>{s.name}</span>
+                </div>
+              </Tooltip>
             );
           })}
         </div>
@@ -144,27 +146,28 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
           id={createBoxId}
           aria-label="新建技能"
         >
-          <div className="settings-create-paths">
-            <button
+          <div className={styles.createSeg} role="group" aria-label="新建方式">
+            <Button
               type="button"
-              className="settings-create-path"
+              variant="secondary"
+              size="sm"
+              className={styles.createPath}
               onClick={() => void handleImportBrowse()}
             >
-              <span className="settings-create-path-title">浏览导入</span>
-              <span className="settings-create-path-desc">
-                选择本机已有技能目录（如 .codex/skills），导入后直接出现在列表
-              </span>
-            </button>
-            <button
+              浏览导入
+            </Button>
+            <Button
               type="button"
-              className="settings-create-path"
+              variant="secondary"
+              size="sm"
+              className={styles.createPath}
               onClick={handleAiCreateSkill}
             >
-              <span className="settings-create-path-title">AI 创建</span>
-              <span className="settings-create-path-desc">
-                打开对话，由 AI 写完整 SKILL.md（推荐，无需手写）
-              </span>
-            </button>
+              AI 创建
+            </Button>
+            <p className={styles.createHint}>
+              浏览本机技能目录导入，或打开对话由 AI 写 SKILL.md
+            </p>
           </div>
           <Button
             type="button"
@@ -185,13 +188,32 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
         >
           <div className={styles.skillsCreateRow}>
             <Tooltip content="写入 .conex/skills/<name>/SKILL.md">
-              <input
-                id={createNameId}
-                className="settings-field-input settings-field-input--sm"
-                placeholder="名称"
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                aria-label="技能名称"
+              <div className={styles.skillsCreateField}>
+                <Input
+                  id={createNameId}
+                  size="sm"
+                  placeholder="名称"
+                  value={createName}
+                  onChange={(e) => setCreateName(e.target.value)}
+                  aria-label="技能名称"
+                  disabled={createBusy}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && createName.trim()) {
+                      e.preventDefault();
+                      void handleCreate();
+                    }
+                  }}
+                />
+              </div>
+            </Tooltip>
+            <div className={styles.skillsCreateField}>
+              <Input
+                id={createDescId}
+                size="sm"
+                placeholder="描述（可选）"
+                value={createDesc}
+                onChange={(e) => setCreateDesc(e.target.value)}
+                aria-label="技能描述（可选）"
                 disabled={createBusy}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && createName.trim()) {
@@ -200,22 +222,7 @@ export const SkillEditorModal: React.FC<SkillEditorModalProps> = ({
                   }
                 }}
               />
-            </Tooltip>
-            <input
-              id={createDescId}
-              className="settings-field-input settings-field-input--sm"
-              placeholder="描述（可选）"
-              value={createDesc}
-              onChange={(e) => setCreateDesc(e.target.value)}
-              aria-label="技能描述（可选）"
-              disabled={createBusy}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && createName.trim()) {
-                  e.preventDefault();
-                  void handleCreate();
-                }
-              }}
-            />
+            </div>
             <Button
               type="button"
               variant="secondary"

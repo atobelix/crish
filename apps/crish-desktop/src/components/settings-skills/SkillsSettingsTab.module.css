@@ -101,6 +101,20 @@
   max-width: 320px;
 }
 
+.skillsToolbarFocus .segment,
+.skillsDetailControls .segment {
+  --seg-outer-radius: var(--button-radius, 7px);
+  --seg-inner-radius: 5px;
+  border-radius: var(--button-radius, 7px);
+  flex-shrink: 0;
+}
+
+.skillsToolbarFocus .segment :global(button),
+.skillsDetailControls .segment :global(button) {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
 .skillsMoreWrap {
   position: relative;
   flex-shrink: 0;
@@ -253,10 +267,10 @@
 .skillsSearch {
   max-width: 140px;
   min-width: 88px;
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
-  font-size: var(--font-size-xs);
-  padding: 0 var(--control-pad-x);
+}
+
+.skillsSearch > * {
+  width: 100%;
 }
 
 .skillsSlashPreview {
@@ -351,11 +365,13 @@
   align-items: flex-start;
   gap: var(--space-2);
   width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
   border: none;
   background: transparent;
   text-align: left;
   padding: var(--space-2_5);
-  border-radius: var(--radius-lg);
+  border-radius: var(--button-radius, 7px);
   cursor: pointer;
   font-family: inherit;
   position: relative;
@@ -366,7 +382,7 @@
   min-height: 24px;
   padding: 1px 6px;
   gap: 5px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--button-radius, 7px);
 }
 
 .skillsRailItemDense .skillsRailIcon {
@@ -535,11 +551,38 @@
   gap: var(--space-1_5);
 }
 
-.skillsExtraAdd :global(.settings-field-input) {
-  flex: 1;
+.skillsExtraList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   min-width: 0;
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
+}
+
+.skillsExtraField {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.skillsExtraField > * {
+  width: 100%;
+}
+
+.skillsKbd {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  padding: 2px 6px;
+  border-radius: var(--button-radius, 7px);
+  border: 1px solid var(--border-subtle);
+  background: var(--control-soft-bg);
+  color: var(--text-secondary);
+}
+
+/* overlay-scrollbar 命中：[class*='coverContent'] / navScroll */
+.skillsRailNavScroll,
+.skillsPreviewCoverContent,
+.skillsRawCoverContent,
+.skillsDetailCoverContent {
+  min-height: 0;
 }
 
 .skillsDetail {
@@ -717,13 +760,9 @@
   min-width: 0;
 }
 
-.skillsExtraAddRow :global(.settings-field-input) {
+.skillsExtraAddRow .skillsExtraField {
   flex: 1 1 auto;
   min-width: 0;
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
-  font-size: var(--font-size-xs);
-  padding: 0 var(--control-pad-x);
 }
 
 .skillsRoots {

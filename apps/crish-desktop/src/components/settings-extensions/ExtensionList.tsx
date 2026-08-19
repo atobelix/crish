@@ -3,6 +3,7 @@ import type { CatalogEntry, InstalledExtension } from '../../api/extensionCatalo
 import { ExtensionCard } from './ExtensionCard';
 import { Button } from '../ui';
 import type { ExpandMode, ExpandTarget, KindFilter, MainView, ManageKind } from './types';
+import styles from './SettingsExtensionsTab.module.css';
 
 /** 扩展数据域 */
 export interface ExtensionsGroup {
@@ -84,16 +85,16 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
   if (view === 'installed') {
     return (
       <div
-        className="ext-list ext-list--cards"
+        className={styles.list}
         role="list"
         aria-label="已安装"
       >
         {loading && installedFiltered.length === 0 ? (
-          <div className="ext-empty" role="status">
+          <div className={styles.empty} role="status">
             加载中…
           </div>
         ) : installedFiltered.length === 0 ? (
-          <div className="ext-empty" role="status">
+          <div className={styles.empty} role="status">
             {query || kindFilter !== 'all'
               ? '没有匹配的扩展'
               : '还没有安装扩展'}
@@ -102,7 +103,6 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="settings-btn-rect"
                 onClick={() => onSetView('discover')}
               >
                 去发现
@@ -151,9 +151,9 @@ export const ExtensionList: React.FC<ExtensionListProps> = ({
   }
 
   return (
-    <div className="ext-list ext-list--cards" role="list" aria-label="发现">
+    <div className={styles.list} role="list" aria-label="发现">
       {catalogFiltered.length === 0 ? (
-        <div className="ext-empty" role="status">
+        <div className={styles.empty} role="status">
           没有匹配的扩展
         </div>
       ) : (

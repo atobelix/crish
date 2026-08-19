@@ -67,14 +67,26 @@
   min-width: 0;
 }
 
+.mcpToolbar .segment {
+  --seg-outer-radius: var(--button-radius, 7px);
+  --seg-inner-radius: 5px;
+  border-radius: var(--button-radius, 7px);
+  flex-shrink: 0;
+}
+
+.mcpToolbar .segment :global(button) {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
 .mcpSearch {
   flex: 1 1 120px;
   max-width: 180px;
   min-width: 96px;
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
-  font-size: var(--font-size-xs);
-  padding: 0 var(--control-pad-x);
+}
+
+.mcpSearch > * {
+  width: 100%;
 }
 
 .mcpErrorLine {
@@ -288,14 +300,19 @@
   overflow-x: auto;
 }
 
-.mcpAddRow :global(.settings-field-input) {
+/* 类名含 coverContent：命中 overlay-scrollbar 出口，禁写 scrollbar-width */
+.mcpAddRowCoverContent {
+  min-width: 0;
+}
+
+.mcpAddField {
   flex: 1 1 88px;
   min-width: 72px;
   max-width: 160px;
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
-  font-size: var(--font-size-xs);
-  padding: 0 var(--control-pad-x);
+}
+
+.mcpAddField > * {
+  width: 100%;
 }
 
 .mcpAddRow .mcpAddType {

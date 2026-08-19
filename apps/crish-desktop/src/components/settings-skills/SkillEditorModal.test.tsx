@@ -79,4 +79,49 @@ describe('SkillEditorModal 发现弹窗（ui/Dialog 基座迁移后）', () => {
     fireEvent.click(screen.getByRole('button', { name: '启用所选新技能' }));
     expect(baseProps.discover.applyDiscoverImport).toHaveBeenCalledWith('selected');
   });
+
+  it('发现候选走 Switch 且有选中态，不再渲染原生 checkbox', () => {
+    render(<SkillEditorModal {...baseProps} />);
+    const sw = screen.getByRole('switch', { name: '取消选择 review' });
+    expect(sw).toHaveAttribute('aria-checked', 'true');
+    expect(document.querySelector('input[type="checkbox"]')).toBeNull();
+    fireEvent.click(sw);
+    expect(baseProps.discover.setDiscoverPick).toHaveBeenCalled();
+  });
+
+  it('新建路径走 ui/Button，不再渲染 settings-create-path', () => {
+    render(
+      <SkillEditorModal
+        {...baseProps}
+        discover={{ ...baseProps.discover, discoverCandidates: null }}
+        create={{ ...baseProps.create, createMode: 'paths' }}
+      />
+    );
+    expect(document.querySelector('.settings-create-path')).toBeNull();
+    expect(document.querySelector('.ui-segment')).toBeNull();
+    expect(screen.getByRole('group', { name: '新建方式' })).toBeTruthy();
+    const browse = screen.getByRole('button', { name: '浏览导入' });
+    const ai = screen.getByRole('button', { name: 'AI 创建' });
+    expect(browse).toHaveAttribute('data-variant', 'secondary');
+    expect(ai).toHaveAttribute('data-size', 'sm');
+    fireEvent.click(browse);
+    expect(baseProps.create.handleImportBrowse).toHaveBeenCalled();
+    fireEvent.click(ai);
+    expect(baseProps.create.handleAiCreateSkill).toHaveBeenCalled();
+  });
+
+  it('手填名称/描述走 ui/Input，不再挂 settings-field-input', () => {
+    render(
+      <SkillEditorModal
+        {...baseProps}
+        discover={{ ...baseProps.discover, discoverCandidates: null }}
+        create={{ ...baseProps.create, createMode: 'manual' }}
+      />
+    );
+    expect(document.querySelector('.settings-field-input')).toBeNull();
+    const name = screen.getByLabelText('技能名称');
+    expect(name.tagName).toBe('INPUT');
+    fireEvent.change(name, { target: { value: 'demo' } });
+    expect(baseProps.create.setCreateName).toHaveBeenCalled();
+  });
 });

@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './McpSettingsTab.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, Input, SegmentedControl, Tooltip } from '../ui';
 import type { SortMode } from './types';
 
 export type McpServerToolbarProps = {
@@ -57,46 +57,36 @@ export const McpServerToolbar: React.FC<McpServerToolbarProps> = ({
         }
       />
     </Tooltip>
-    <div
-      className="ui-segment ui-segment--inline settings-segment-pill"
-      role="group"
+    <SegmentedControl
       aria-label="排序方式"
-    >
-      <Tooltip content="按名称排序">
-        <button
-          type="button"
-          className={`ui-segment-item ${sortMode === 'name' ? 'active' : ''}`}
-          onClick={() => onSetSort('name')}
-          aria-pressed={sortMode === 'name'}
-        >
-          名称
-        </button>
-      </Tooltip>
-      <Tooltip content={demo ? '按启用状态排序' : '按运行状态排序'}>
-        <button
-          type="button"
-          className={`ui-segment-item ${sortMode === 'state' ? 'active' : ''}`}
-          onClick={() => onSetSort('state')}
-          aria-pressed={sortMode === 'state'}
-        >
-          状态
-        </button>
-      </Tooltip>
-    </div>
+      size="sm"
+      className={styles.segment}
+      value={sortMode}
+      options={[
+        { value: 'name', label: '名称' },
+        { value: 'state', label: '状态' },
+      ]}
+      onChange={(v) => onSetSort(v as SortMode)}
+    />
     <Tooltip content="搜索名称、标识或工具；Esc 清除">
-      <input
-        className={`settings-field-input settings-field-input--sm ${styles.mcpSearch} mcp-search`}
-        placeholder="搜索名称、标识…"
-        value={filter}
-        onChange={(e) => onSetFilter(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape' && filter) {
-            e.preventDefault();
-            onClearFilter();
-          }
-        }}
-        aria-label="搜索扩展服务"
-      />
+      <div className={styles.mcpSearch}>
+        <Input
+          variant="search"
+          size="sm"
+          placeholder="搜索名称、标识…"
+          value={filter}
+          onChange={(e) => onSetFilter(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && filter) {
+              e.preventDefault();
+              onClearFilter();
+            }
+          }}
+          clearable
+          onClear={onClearFilter}
+          aria-label="搜索扩展服务"
+        />
+      </div>
     </Tooltip>
     {demo ? (
       <Tooltip content={showAdd ? '收起添加表单' : '添加演示服务'}>

@@ -6,10 +6,17 @@ import {
   type InstalledExtension,
 } from '../../api/extensionCatalog';
 import type { ExpandMode, ManageKind } from './types';
-import { Button } from '../ui';
+import { Badge, Button } from '../ui';
 import { McpToolsSection } from './McpToolsSection';
 import { ExtensionBody } from './ExtensionBody';
 import { isPluginCardItem } from './ExtensionCardIdentity';
+import styles from './SettingsExtensionsTab.module.css';
+
+function sourceLabel(source: string): string {
+  if (source === 'official') return '官方';
+  if (source === 'community') return '三方';
+  return '本机';
+}
 
 /** 扩展卡身份与展示态（标识当前卡片属于哪一项、展开/配置/卸载可见性）。 */
 export interface ExtensionCardExtensionProps {
@@ -117,38 +124,37 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
     const pluginCard = isPluginCardItem(installedItem) ? installedItem : null;
     return (
       <div
-        className={`ext-row-block${
-          detailOpen || configOpen ? ' is-expanded' : ''
+        className={`${styles.rowBlock}${
+          detailOpen || configOpen ? ` ${styles.rowBlockExpanded}` : ''
         }`}
         role="listitem"
       >
-        <div className="ext-row ext-row--card ext-row--static">
-          <div className="ext-row-main">
-            <div className="ext-row-title-line">
-              <span className="ext-kind-badge">
+        <div className={styles.row}>
+          <div className={styles.rowMain}>
+            <div className={styles.titleLine}>
+              <Badge size="xs" tone="neutral">
                 {kindLabel(installedItem.kind)}
-              </span>
-              <span className="ext-row-name">
+              </Badge>
+              <span className={styles.name}>
                 {highlightMatch(installedItem.name)}
               </span>
-              <span className="ext-source-badge">
-                {installedItem.source === 'official'
-                  ? '官方'
-                  : installedItem.source === 'community'
-                    ? '三方'
-                    : '本机'}
-              </span>
+              <Badge
+                size="xs"
+                tone={installedItem.source === 'official' ? 'brand' : 'neutral'}
+              >
+                {sourceLabel(installedItem.source)}
+              </Badge>
             </div>
-            <div className="ext-row-desc">
+            <div className={styles.desc}>
               {highlightMatch(installedItem.description)}
             </div>
           </div>
-          <div className="ext-row-actions">
+          <div className={styles.actions}>
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="settings-btn-rect"
+              active={detailOpen}
               aria-expanded={detailOpen}
               onClick={() => toggleExpand('installed', installedItem.id, 'detail')}
             >
@@ -159,7 +165,7 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="settings-btn-rect"
+                active={pluginCard.pluginEnabled}
                 aria-pressed={pluginCard.pluginEnabled}
                 onClick={() =>
                   onTogglePlugin?.(
@@ -175,7 +181,7 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="settings-btn-rect"
+                active={configOpen}
                 aria-expanded={configOpen}
                 onClick={() => toggleExpand('installed', installedItem.id, 'config')}
               >
@@ -187,7 +193,6 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
                 type="button"
                 variant="danger"
                 size="sm"
-                className="settings-btn-rect"
                 onClick={() => void onRemovePackage?.(installedItem)}
               >
                 卸载
@@ -205,33 +210,36 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
   const entry = item as CatalogEntry;
   return (
     <div
-      className={`ext-row-block${detailOpen ? ' is-expanded' : ''}`}
+      className={`${styles.rowBlock}${detailOpen ? ` ${styles.rowBlockExpanded}` : ''}`}
       role="listitem"
     >
-      <div className="ext-row ext-row--card ext-row--static">
-        <div className="ext-row-main">
-          <div className="ext-row-title-line">
-            <span className="ext-kind-badge">{kindLabel(entry.kind)}</span>
-            <span className="ext-row-name">
+      <div className={styles.row}>
+        <div className={styles.rowMain}>
+          <div className={styles.titleLine}>
+            <Badge size="xs" tone="neutral">{kindLabel(entry.kind)}</Badge>
+            <span className={styles.name}>
               {highlightMatch(entry.name)}
             </span>
-            <span className="ext-source-badge">
+            <Badge
+              size="xs"
+              tone={entry.source === 'official' ? 'brand' : 'neutral'}
+            >
               {entry.source === 'official' ? '官方' : '三方'}
-            </span>
+            </Badge>
             {installedMark ? (
-              <span className="ext-installed-mark">已装</span>
+              <Badge size="xs" tone="success">已装</Badge>
             ) : null}
           </div>
-          <div className="ext-row-desc">
+          <div className={styles.desc}>
             {highlightMatch(entry.description)}
           </div>
         </div>
-        <div className="ext-row-actions">
+        <div className={styles.actions}>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="settings-btn-rect"
+            active={detailOpen}
             aria-expanded={detailOpen}
             onClick={() => toggleExpand('catalog', entry.id, 'detail')}
           >
@@ -242,7 +250,6 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
               type="button"
               variant="secondary"
               size="sm"
-              className="settings-btn-rect"
               onClick={() => onGoToConfig?.(entry.id)}
             >
               去配置
@@ -252,7 +259,6 @@ export const ExtensionCard: React.FC<ExtensionCardProps> = ({
               type="button"
               variant="secondary"
               size="sm"
-              className="settings-btn-rect"
               disabled={busyId === entry.id}
               onClick={() => void onInstallCatalog?.(entry)}
             >

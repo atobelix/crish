@@ -9,7 +9,7 @@ import { useToast } from '../../services/toast/ToastContext';
  */
 import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
-import { Button, Select, Tooltip } from '../ui';
+import { Button, Input, Select, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import { SettingsPage } from '../settings/SettingsUI';
 import {
@@ -189,14 +189,17 @@ export const SkillsSettingsTab: React.FC<Props> = ({ onBlockingOverlayChange: _o
           disabled={loading}
           placeholder="作用域…"
         />
-        <input
-          id={searchId}
-          className={`settings-field-input settings-field-input--sm ${styles.skillsSearch} skills-search`}
-          placeholder="搜索技能…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          aria-label="搜索技能"
-        />
+        <div className={`${styles.skillsSearch} skills-search`}>
+          <Input
+            id={searchId}
+            variant="search"
+            size="sm"
+            placeholder="搜索技能…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            aria-label="搜索技能"
+          />
+        </div>
       </div>
 
       {!fsOk ? (

@@ -1,7 +1,7 @@
 import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import styles from './McpSettingsTab.module.css';
-import { Button, Select, Tooltip } from '../ui';
+import { Button, Input, Select, Tooltip } from '../ui';
 import { isDemoTransport, transportTitle, type DemoTransport } from './types';
 
 export type McpServerFormProps = {
@@ -36,16 +36,18 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
   const { showToast } = useToast();
   return (
     <div className={`${styles.mcpAddBox} mcp-add-box`} role="form" aria-label="注册演示服务">
-      <div className={`${styles.mcpAddRow} mcp-add-row`}>
-        <input
-          className="settings-field-input settings-field-input--sm"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="名称"
-          aria-label="名称"
-          aria-required
-          autoFocus
-        />
+      <div className={`${styles.mcpAddRow} ${styles.mcpAddRowCoverContent} mcp-add-row`}>
+        <div className={styles.mcpAddField}>
+          <Input
+            size="sm"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="名称"
+            aria-label="名称"
+            aria-required
+            autoFocus
+          />
+        </div>
         <Select
           className="mcp-add-type-select"
           value={newType}
@@ -72,33 +74,39 @@ export const McpServerForm: React.FC<McpServerFormProps> = ({
         {newType === 'stdio' ? (
           <>
             <Tooltip content="stdio 启动命令">
-              <input
-                className="settings-field-input settings-field-input--sm"
-                value={newCmd}
-                onChange={(e) => setNewCmd(e.target.value)}
-                placeholder="命令"
-                aria-label="启动命令"
-              />
+              <div className={styles.mcpAddField}>
+                <Input
+                  size="sm"
+                  value={newCmd}
+                  onChange={(e) => setNewCmd(e.target.value)}
+                  placeholder="命令"
+                  aria-label="启动命令"
+                />
+              </div>
             </Tooltip>
             <Tooltip content="参数（逗号分隔）">
-              <input
-                className="settings-field-input settings-field-input--sm"
-                value={newArgs}
-                onChange={(e) => setNewArgs(e.target.value)}
-                placeholder="参数（逗号分隔）"
-                aria-label="参数，逗号分隔"
-              />
+              <div className={styles.mcpAddField}>
+                <Input
+                  size="sm"
+                  value={newArgs}
+                  onChange={(e) => setNewArgs(e.target.value)}
+                  placeholder="参数（逗号分隔）"
+                  aria-label="参数，逗号分隔"
+                />
+              </div>
             </Tooltip>
           </>
         ) : (
           <Tooltip content="SSE 端点地址">
-            <input
-              className={`settings-field-input settings-field-input--sm ${styles.mcpAddUrl} mcp-add-url`}
-              value={newUrl}
-              onChange={(e) => setNewUrl(e.target.value)}
-              placeholder="端点 URL"
-              aria-label="端点 URL"
-            />
+            <div className={`${styles.mcpAddField} ${styles.mcpAddUrl}`}>
+              <Input
+                size="sm"
+                value={newUrl}
+                onChange={(e) => setNewUrl(e.target.value)}
+                placeholder="端点 URL"
+                aria-label="端点 URL"
+              />
+            </div>
           </Tooltip>
         )}
         <Button

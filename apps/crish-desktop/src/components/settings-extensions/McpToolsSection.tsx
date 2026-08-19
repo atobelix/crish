@@ -58,9 +58,9 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
 
   if (mode === 'detail') {
     return (
-      <div className="ext-inline-panel">
+      <div className={styles.inlinePanel}>
         {installedItem ? (
-          <div className="ext-detail-meta">
+          <div className={styles.detailMeta}>
             {[
               installedItem.mcpState
                 ? `状态 ${mcpStateLabel(installedItem.mcpState)}`
@@ -76,13 +76,13 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
               .join(' · ') || '本机 MCP 服务'}
           </div>
         ) : (
-          <p className="ext-detail-desc">
+          <p className={styles.detailDesc}>
             {entry?.description}
             {entry?.installRef ? `\n引用：${entry.installRef}` : ''}
           </p>
         )}
         {installedItem?.mcpTools && installedItem.mcpTools.length > 0 ? (
-          <ul className="ext-inline-tool-preview">
+          <ul className={styles.toolPreviewCoverContent}>
             {installedItem.mcpTools
               .slice(
                 0,
@@ -112,14 +112,13 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
   }
 
   return (
-    <div className="ext-inline-panel">
+    <div className={styles.inlinePanel}>
       {installedItem?.mcpId ? (
-        <div className="ext-detail-actions">
+        <div className={styles.detailActions}>
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            className="settings-btn-rect"
             disabled={mcpServerBusy}
             onClick={() => void onToggleMcpServer?.(installedItem.mcpId!, true)}
           >
@@ -129,7 +128,6 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
             type="button"
             variant="ghost"
             size="sm"
-            className="settings-btn-rect"
             disabled={mcpServerBusy}
             onClick={() => void onToggleMcpServer?.(installedItem.mcpId!, false)}
           >
@@ -139,19 +137,18 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
             type="button"
             variant="ghost"
             size="sm"
-            className="settings-btn-rect"
             onClick={() => onSetManage?.('mcp')}
           >
             高级管理
           </Button>
         </div>
       ) : (
-        <p className="ext-detail-desc">
+        <p className={styles.detailDesc}>
           安装并连接后可在此启停服务与开关工具。
         </p>
       )}
       {installedItem?.mcpTools && installedItem.mcpTools.length > 0 ? (
-        <div className="ext-tool-list" role="list" aria-label="MCP 工具">
+        <div className={styles.toolList} role="list" aria-label="MCP 工具">
           {installedItem.mcpTools
             .slice(0, expandedMcpTools.has(installedItem.id) ? undefined : 12)
             .map((tool) => {
@@ -161,16 +158,16 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
               return (
                 <div
                   key={tool}
-                  className={`ext-tool-row${off ? ' is-off' : ''}`}
+                  className={`${styles.toolRow}${off ? ` ${styles.toolRowOff}` : ''}`}
                   role="listitem"
                 >
                   <Tooltip content={tool}>
-                    <span className="ext-tool-name">
+                    <span className={styles.toolName}>
                       {tool}
                     </span>
                   </Tooltip>
-                  <label className="settings-list-control">
-                    <span className={`ext-detail-meta ${styles.detailMeta}`}>
+                  <div className={styles.toolControl}>
+                    <span className={styles.detailMeta}>
                       {off ? '禁用' : '启用'}
                     </span>
                     <Switch
@@ -181,12 +178,12 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
                         void onToggleMcpTool?.(serverId, tool, checked);
                       }}
                     />
-                  </label>
+                  </div>
                 </div>
               );
             })}
           {installedItem.mcpTools.length > 12 ? (
-            <div style={{ padding: '4px 0' }}>
+            <div className={styles.moreTools}>
               <Button
                 type="button"
                 variant="ghost"
@@ -201,7 +198,7 @@ export const McpToolsSection: React.FC<McpToolsSectionProps> = ({
           ) : null}
         </div>
       ) : installedItem ? (
-        <div className={`ext-empty ${styles.emptyCompact}`} role="status">
+        <div className={styles.emptyCompact} role="status">
           暂无上报工具 · 启动服务后刷新
         </div>
       ) : null}

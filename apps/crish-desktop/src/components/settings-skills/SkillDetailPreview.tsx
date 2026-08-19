@@ -2,7 +2,7 @@ import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import { revealSkillPath, type DesktopSkill, type SkillActivation } from '../../api/skillsApi';
-import { Button, Tooltip } from '../ui';
+import { Button, SegmentedControl, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import { ACTIVATION_OPTIONS, scopeGroupLabel } from './useSkillsSettingsState';
 
@@ -35,7 +35,7 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
 }) => {
   const { showToast } = useToast();
   return (
-    <section className={`${styles.skillsDetail} skills-detail`} aria-label="技能预览">
+    <section className={`${styles.skillsDetail} ${styles.skillsDetailCoverContent} skills-detail`} aria-label="技能预览">
       {!selected ? (
         <div className={`${styles.skillsDetailEmpty} skills-detail-empty`} role="status">
           {skillsCount === 0 ? '新建技能后在此预览' : '选择左侧技能'}
@@ -71,7 +71,7 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
               </div>
               <div className={`${styles.skillsDetailCmdRow} skills-detail-cmd-row`}>
                 <Tooltip content={selectedSlash}>
-                  <code className="settings-kbd">
+                  <code className={styles.skillsKbd}>
                     {selectedSlash}
                   </code>
                 </Tooltip>
@@ -107,33 +107,28 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
               </div>
             </div>
             <div className={`${styles.skillsDetailControls} skills-detail-controls`}>
-              <div
-                className="skills-activation"
-                role="group"
-                aria-label={`${selected.name} 启用状态`}
-              >
-                <div className="ui-segment ui-segment--inline settings-segment-pill">
-                  {ACTIVATION_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      className={`ui-segment-item ${selected.activation === opt.id ? 'active' : ''}`}
-                      disabled={busyId === selected.id || batchBusy}
-                      aria-pressed={selected.activation === opt.id}
-                      aria-label={`设为${opt.label}`}
-                      aria-busy={busyId === selected.id || undefined}
-                      onClick={() => void setActivation(selected, opt.id as SkillActivation)}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+              <div className="skills-activation">
+                <SegmentedControl
+                  aria-label={`${selected.name} 启用状态`}
+                  size="sm"
+                  className={styles.segment}
+                  value={selected.activation}
+                  disabled={busyId === selected.id || batchBusy}
+                  options={ACTIVATION_OPTIONS.map((opt) => ({
+                    value: opt.id,
+                    label: opt.label,
+                    'aria-label': `设为${opt.label}`,
+                  }))}
+                  onChange={(v) =>
+                    void setActivation(selected, v as SkillActivation)
+                  }
+                />
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={showRaw ? 'is-active' : undefined}
+                active={showRaw}
                 onClick={() => setShowRaw((v) => !v)}
                 aria-pressed={showRaw}
                 aria-label={showRaw ? '切换为预览' : '切换为原文'}
@@ -144,12 +139,12 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
           </div>
 
           {showRaw ? (
-            <pre className={`${styles.skillsRaw} skills-raw`} tabIndex={0} aria-label="技能原文">
+            <pre className={`${styles.skillsRaw} ${styles.skillsRawCoverContent} skills-raw`} tabIndex={0} aria-label="技能原文">
               {selected.raw}
             </pre>
           ) : (
             <div
-              className={`${styles.skillsPreview} skills-preview md-rendered msg-assistant-text`}
+              className={`${styles.skillsPreview} ${styles.skillsPreviewCoverContent} skills-preview md-rendered msg-assistant-text`}
               dangerouslySetInnerHTML={{ __html: previewHtml }}
               aria-label="技能预览"
             />

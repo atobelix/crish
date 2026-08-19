@@ -6,14 +6,217 @@
   margin-bottom: var(--space-3, 12px);
 }
 
-.detailMeta {
-  margin-right: var(--space-2);
+/* 覆盖 SegmentedControl 外圈 8px / 内滑块 6px，锁设置按钮 7px */
+.toolbar .segment {
+  --seg-outer-radius: var(--button-radius, 7px);
+  --seg-inner-radius: 5px;
+  border-radius: var(--button-radius, 7px);
+  flex-shrink: 0;
+}
+
+.toolbar .segment :global(button) {
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.list mark {
+  background: color-mix(in srgb, var(--accent-color) 22%, transparent);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2, 8px);
+  padding: 12px 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
 }
 
 .emptyCompact {
   padding: 12px 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-tertiary);
+}
+
+.rowBlock {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl, 12px);
+  overflow: hidden;
+  background: transparent;
+}
+
+.rowBlockExpanded {
+  border-color: var(--border-color);
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3, 12px);
+  padding: 10px 14px;
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.titleLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.name {
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desc {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: var(--line-height-body);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.actions {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-1_5);
+}
+
+.actions :global(button) {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--button-radius, 7px);
+}
+
+.inlinePanel {
+  padding: 8px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.detailMeta {
+  margin-right: var(--space-2);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detailDesc {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.detailActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.detailActions :global(button) {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--button-radius, 7px);
+}
+
+/* 类名含 coverContent：命中 overlay-scrollbar 出口，禁写 scrollbar-width */
+.detailMdCoverContent {
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-2) 0;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-base);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .detailMdSans {
   font-family: var(--font-sans);
+}
+
+.toolPreviewCoverContent {
+  max-height: min(240px, 40vh);
+  overflow: auto;
+  margin: 0;
+  padding-left: 18px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.toolList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.toolRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 4px 0;
+  min-width: 0;
+}
+
+.toolRowOff {
+  opacity: 0.55;
+}
+
+.toolName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+}
+
+.toolControl {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.moreTools {
+  padding: 4px 0;
 }

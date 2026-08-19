@@ -74,11 +74,36 @@
   min-width: 0;
 }
 
-.skillsCreateRow :global(.settings-field-input) {
+.skillsCreateField {
   flex: 1 1 120px;
   min-width: 100px;
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
+}
+
+.skillsCreateField > * {
+  width: 100%;
+}
+
+.createSeg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1_5);
+}
+
+.createPath {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--button-radius, 7px);
+}
+
+.createHint {
+  flex: 1 1 100%;
+  margin: 0;
   font-size: var(--font-size-xs);
-  padding: 0 var(--control-pad-x);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-body);
+}
+
+.skillsDiscoverDialogBody {
+  min-height: 0;
 }

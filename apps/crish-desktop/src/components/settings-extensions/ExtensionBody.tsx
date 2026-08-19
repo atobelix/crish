@@ -38,15 +38,15 @@ export const ExtensionBody: React.FC<ExtensionBodyProps> = ({
     const entry = !isInstalled ? (item as CatalogEntry) : null;
     if (mode === 'detail') {
       return (
-        <div className="ext-inline-panel">
+        <div className={styles.inlinePanel}>
           {installedItem?.skillPath ? (
             <Tooltip content={installedItem.skillPath}>
-              <div className="ext-detail-meta">
+              <div className={styles.detailMeta}>
                 {installedItem.skillPath}
               </div>
             </Tooltip>
           ) : null}
-          <pre className="ext-detail-md" tabIndex={0}>
+          <pre className={styles.detailMdCoverContent} tabIndex={0}>
             {(installedItem &&
               (installedItem.skillRaw ||
                 installedItem.skillContent ||
@@ -59,18 +59,17 @@ export const ExtensionBody: React.FC<ExtensionBodyProps> = ({
       );
     }
     return (
-      <div className="ext-inline-panel">
-        <p className="ext-detail-desc">
+      <div className={styles.inlinePanel}>
+        <p className={styles.detailDesc}>
           {installedItem?.fromSystem
             ? '可在高级管理中编辑路径、同步与更多选项。'
             : '安装后的技能可在本机技能目录维护；高级入口提供完整管理。'}
         </p>
-        <div className="ext-detail-actions">
+        <div className={styles.detailActions}>
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            className="settings-btn-rect"
             onClick={() => onSetManage?.('skill')}
           >
             高级管理
@@ -87,8 +86,8 @@ export const ExtensionBody: React.FC<ExtensionBodyProps> = ({
     'installRef' in item && item.installRef ? item.installRef : undefined;
   const pluginCard = isPluginCardItem(item) ? item : null;
   return (
-    <div className="ext-inline-panel">
-      <div className={`ext-detail-md ${styles.detailMdSans}`}>
+    <div className={styles.inlinePanel}>
+      <div className={`${styles.detailMdCoverContent} ${styles.detailMdSans}`}>
         {desc}
         {'\n\n'}
         {mode === 'config'

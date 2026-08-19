@@ -1,7 +1,7 @@
 import React, { useId } from 'react';
 import * as Lucide from 'lucide-react';
 import type { DesktopSkill } from '../../api/skillsApi';
-import { Button, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import {
   ACTIVATION_LABEL,
@@ -149,7 +149,7 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
         技能列表
       </div>
       <div
-        className={`${styles.skillsRailList} skills-rail-list`}
+        className={`${styles.skillsRailList} ${styles.skillsRailNavScroll} skills-rail-list`}
         role="listbox"
         aria-label="技能列表"
         aria-busy={loading || undefined}
@@ -193,7 +193,6 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
                       </span>
                       <span
                         className={`${styles.skillsActDot} skills-act-dot act-${s.activation}`}
-                        title={actLabel}
                         aria-hidden
                       />
                     </button>
@@ -214,47 +213,42 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
           高级 · 额外目录
           {extraDirs.length > 0 ? `（${extraDirs.length}）` : ''}
         </summary>
-        <div className="settings-list" role="list" aria-label="已添加的额外技能目录">
+        <div className={styles.skillsExtraList} role="list" aria-label="已添加的额外技能目录">
           {extraDirs.map((d) => (
-            <div key={d} className="settings-list-row" role="listitem">
-              <div className="settings-list-copy">
-                <Tooltip content={d}>
-                  <div className="settings-list-title settings-path-ellipsis">
-                    {d}
-                  </div>
-                </Tooltip>
-              </div>
-              <div className="settings-list-control">
-                <Tooltip content="移除此目录">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    aria-label={`移除目录 ${d}`}
-                    onClick={() => handleRemoveExtra(d)}
-                    icon={<Lucide.X size={14} aria-hidden />}
-                  />
-                </Tooltip>
-              </div>
+            <div key={d} className={styles.skillsExtraRow} role="listitem">
+              <Tooltip content={d}>
+                <span>{d}</span>
+              </Tooltip>
+              <Tooltip content="移除此目录">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`移除目录 ${d}`}
+                  onClick={() => handleRemoveExtra(d)}
+                  icon={<Lucide.X size={14} aria-hidden />}
+                />
+              </Tooltip>
             </div>
           ))}
-          <div className="settings-list-row">
-            <div className={`${styles.skillsExtraAddRow} skills-extra-add-row`}>
+          <div className={`${styles.skillsExtraAddRow} skills-extra-add-row`}>
               <Tooltip content="技能目录绝对路径 · 回车添加">
-                <input
-                  id={extraDirId}
-                  className="settings-field-input settings-field-input--sm"
-                  placeholder="绝对路径"
-                  value={extraDir}
-                  onChange={(e) => setExtraDir(e.target.value)}
-                  aria-label="额外技能目录绝对路径"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && extraDir.trim()) {
-                      e.preventDefault();
-                      commitExtraDir(extraDir);
-                    }
-                  }}
-                />
+                <div className={styles.skillsExtraField}>
+                  <Input
+                    id={extraDirId}
+                    size="sm"
+                    placeholder="绝对路径"
+                    value={extraDir}
+                    onChange={(e) => setExtraDir(e.target.value)}
+                    aria-label="额外技能目录绝对路径"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && extraDir.trim()) {
+                        e.preventDefault();
+                        commitExtraDir(extraDir);
+                      }
+                    }}
+                  />
+                </div>
               </Tooltip>
               <Tooltip content="浏览文件夹">
                 <Button
@@ -276,7 +270,6 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
               >
                 添加
               </Button>
-            </div>
           </div>
         </div>
       </details>
