@@ -105,7 +105,7 @@ export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
     }, [isHorizontal, ratio, rect.x, rect.y, rect.width, rect.height]);
 
     // 键盘微调：Arrow 减/加步长，Home/End 跳到像素感知极值。
-    // store 的 resizeBranch 仍会再 clamp 到 [0.1,0.9]；此处先按 branch 像素
+    // store 的 resizeBranch 仍会再 clamp 到 [0.12,0.88]；此处先按 branch 像素
     // 尺寸收紧，避免 Home 在大 parent 上把子面板压到 < MIN_CHILD_PX。
     const handleKeyDown = React.useCallback(
       (e: React.KeyboardEvent) => {
@@ -178,6 +178,15 @@ export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
       [startResize, branch.branchId, rect]
     );
 
+    const onDoubleClick = React.useCallback(
+      (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        resizeBranch(branch.branchId, 0.5);
+      },
+      [branch.branchId, resizeBranch]
+    );
+
     return (
       <div
         ref={sashElRef}
@@ -198,6 +207,7 @@ export const TreeResizeSash: React.FC<TreeResizeSashProps> = React.memo(
         aria-valuenow={Math.round(ratio * 100)}
         tabIndex={0}
         onPointerDown={onPointerDown}
+        onDoubleClick={onDoubleClick}
         onKeyDown={handleKeyDown}
       />
     );

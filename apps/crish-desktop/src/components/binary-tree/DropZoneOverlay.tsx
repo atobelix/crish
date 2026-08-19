@@ -36,46 +36,47 @@ interface OverlayRect {
  */
 function computeOverlayRect(zone: DropZone, leafRect: DOMRect): OverlayRect {
   const { left, top, width, height } = leafRect;
+  const pad = 2;
 
   switch (zone.type) {
     case 'merge-tab':
       return {
-        left,
-        top,
-        width,
-        height,
+        left: left + pad,
+        top: top + pad,
+        width: width - pad * 2,
+        height: height - pad * 2,
         className: styles.dropOverlayFull || '',
       };
     case 'split-left':
       return {
-        left,
-        top,
-        width: width * 0.5,
-        height,
+        left: left + pad,
+        top: top + pad,
+        width: width * 0.5 - pad * 2,
+        height: height - pad * 2,
         className: styles.dropOverlaySplitLeft || '',
       };
     case 'split-right':
       return {
-        left: left + width * 0.5,
-        top,
-        width: width * 0.5,
-        height,
+        left: left + width * 0.5 + pad,
+        top: top + pad,
+        width: width * 0.5 - pad * 2,
+        height: height - pad * 2,
         className: styles.dropOverlaySplitRight || '',
       };
     case 'split-top':
       return {
-        left,
-        top,
-        width,
-        height: height * 0.5,
+        left: left + pad,
+        top: top + pad,
+        width: width - pad * 2,
+        height: height * 0.5 - pad * 2,
         className: styles.dropOverlaySplitTop || '',
       };
     case 'split-bottom':
       return {
-        left,
-        top: top + height * 0.5,
-        width,
-        height: height * 0.5,
+        left: left + pad,
+        top: top + height * 0.5 + pad,
+        width: width - pad * 2,
+        height: height * 0.5 - pad * 2,
         className: styles.dropOverlaySplitBottom || '',
       };
     default:

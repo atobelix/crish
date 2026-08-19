@@ -94,10 +94,10 @@ export interface TreeDragSource {
 
 // ── 业务常量（单一来源，禁止在其它文件硬编码） ──────────────────────
 
-/** splitRatio 最小值（branch 第一个 child 占比下限） */
-export const MIN_SPLIT_RATIO = 0.1;
-/** splitRatio 最大值（branch 第一个 child 占比上限） */
-export const MAX_SPLIT_RATIO = 0.9;
+/** splitRatio 最小值（branch 第一个 child 占比下限；参考手感 [0.12, 0.88]） */
+export const MIN_SPLIT_RATIO = 0.12;
+/** splitRatio 最大值（branch 第一个 child 占比上限；参考手感 [0.12, 0.88]） */
+export const MAX_SPLIT_RATIO = 0.88;
 
 /** 将 ratio 钳制到 [MIN_SPLIT_RATIO, MAX_SPLIT_RATIO] */
 export function clampSplitRatio(ratio: number): number {

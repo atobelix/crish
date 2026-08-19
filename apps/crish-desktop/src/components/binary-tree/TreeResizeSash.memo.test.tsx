@@ -95,6 +95,36 @@ describe('TreeResizeSash React.memo', () => {
     expect(ev).toBeTruthy();
   });
 
+  it('双击 sash 重置 splitRatio 为 0.5', () => {
+    const startResize = vi.fn();
+    const chat = createLeaf('chat', ['chat'], 'chat', 'sess-a');
+    const tool = createLeaf('files', ['files'], 'files', 'sess-a');
+    const root = createBranch('horizontal', chat, tool, 0.3);
+    useLayoutTreeStore.setState({
+      tree: { root, version: 2 },
+      activeLeafId: chat.id,
+    });
+    const branch = makeBranch({
+      branchId: root.id,
+      splitRatio: 0.3,
+    });
+    const { container } = render(
+      <TreeResizeSash
+        branch={branch}
+        startResize={startResize}
+        isResizing={false}
+      />
+    );
+    const sash = container.querySelector('[role="separator"]');
+    expect(sash).toBeTruthy();
+    fireEvent.doubleClick(sash!);
+    const next = useLayoutTreeStore.getState().tree.root;
+    expect(next.type).toBe('branch');
+    if (next.type === 'branch') {
+      expect(next.splitRatio).toBe(0.5);
+    }
+  });
+
   it('isResizing 反映 data-active', () => {
     const startResize = vi.fn();
     const branch = makeBranch();

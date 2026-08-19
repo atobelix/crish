@@ -1,0 +1,58 @@
+/**
+ * 会话 Tab 拖指示皮（参考 .tree-drop-indicator）。
+ * 不改 GlobalSessionTabBar 密度；源 Tab 隐身用 :global(.is-dragging)。
+ */
+
+.indicator {
+  position: fixed;
+  background: color-mix(
+    in srgb,
+    var(--accent-green, #10b981) 18%,
+    transparent
+  );
+  border: none;
+  border-radius: 6px;
+  box-sizing: border-box;
+  z-index: var(--z-tooltip, 9000);
+  pointer-events: none;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-family: inherit;
+}
+
+.strip {
+  justify-content: flex-start;
+  border-radius: 4px;
+}
+
+.pane {
+  justify-content: center;
+  border-radius: 6px;
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent-green, #10b981);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 8px;
+  max-width: 100%;
+  pointer-events: none;
+}
+
+.pane .title {
+  font-size: 13px;
+  padding: 0;
+  max-width: 80%;
+}
+
+/* 源 Tab 隐身；条内让位 transform 由 JS 写 inline */
+:global([data-global-session-tab-bar] [role='tab'].is-dragging) {
+  opacity: 0;
+  pointer-events: none;
+  border-color: transparent !important;
+}

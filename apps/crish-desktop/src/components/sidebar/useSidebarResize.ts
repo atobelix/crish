@@ -8,6 +8,8 @@ import {
   SIDEBAR_WIDTH_DEFAULT,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
+  clampSidebarExpandedWidth,
+  shouldCollapseSidebar,
 } from './sidebarHelpers';
 
 export function useSidebarResize() {
@@ -116,10 +118,7 @@ export function useSidebarResize() {
         );
         return;
       }
-      const capped = Math.min(
-        Math.max(px, SIDEBAR_WIDTH_MIN),
-        SIDEBAR_WIDTH_MAX
-      );
+      const capped = clampSidebarExpandedWidth(px);
       layout.setSidebarCollapsed(false);
       document.documentElement.style.setProperty(
         '--sidebar-width',
@@ -137,30 +136,41 @@ export function useSidebarResize() {
   );
 
   const handleSidebarResizeStart = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
     e.preventDefault();
+    const handleEl = e.currentTarget as HTMLElement;
+    try {
+      handleEl.setPointerCapture(e.pointerId);
+    } catch {
+      /* jsdom / 非 primary 指针 */
+    }
+    handleEl.classList.add('is-dragging');
     document.body.classList.add('is-resizing');
     document.body.classList.add('sidebar-resizing');
     const startX = e.clientX;
+    const cssW = parseInt(
+      getComputedStyle(document.documentElement).getPropertyValue(
+        '--sidebar-width'
+      ),
+      10
+    );
     const startWidth =
-      parseInt(
-        getComputedStyle(document.documentElement).getPropertyValue(
-          '--sidebar-width'
-        ),
-        10
-      ) || SIDEBAR_WIDTH_DEFAULT;
+      Number.isFinite(cssW) && cssW > 0
+        ? cssW
+        : sidebarWidthPx || SIDEBAR_WIDTH_DEFAULT;
     const layout = getCompositionRoot().layout;
     let isCurrentlyCollapsed = layout.getSidebarCollapsed();
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const dx = moveEvent.clientX - startX;
       let newWidth = startWidth + dx;
-      if (newWidth < 80) {
+      if (shouldCollapseSidebar(newWidth)) {
         if (!isCurrentlyCollapsed) {
           isCurrentlyCollapsed = true;
           layout.setSidebarCollapsed(true);
         }
         document.documentElement.style.setProperty('--sidebar-width', '0px');
       } else {
-        if (newWidth > SIDEBAR_WIDTH_MAX) newWidth = SIDEBAR_WIDTH_MAX;
+        newWidth = clampSidebarExpandedWidth(newWidth);
         if (isCurrentlyCollapsed) {
           isCurrentlyCollapsed = false;
           layout.setSidebarCollapsed(false);
@@ -177,12 +187,20 @@ export function useSidebarResize() {
       }
     };
     const handlePointerUp = (upEvent: PointerEvent) => {
+      try {
+        if (handleEl.hasPointerCapture?.(upEvent.pointerId)) {
+          handleEl.releasePointerCapture(upEvent.pointerId);
+        }
+      } catch {
+        /* ignore */
+      }
+      handleEl.classList.remove('is-dragging');
       document.body.classList.remove('is-resizing');
       document.body.classList.remove('sidebar-resizing');
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
       const finalWidth = startWidth + (upEvent.clientX - startX);
-      if (finalWidth < 80) {
+      if (shouldCollapseSidebar(finalWidth)) {
         applySidebarWidth(0, { collapse: true, persist: false });
       } else {
         applySidebarWidth(finalWidth, { persist: true });
@@ -190,6 +208,12 @@ export function useSidebarResize() {
     };
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', handlePointerUp);
+  };
+
+  const handleSidebarResizeDoubleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    applySidebarWidth(SIDEBAR_WIDTH_DEFAULT);
   };
 
   const handleSidebarResizeKeyDown = (e: React.KeyboardEvent) => {
@@ -213,6 +237,7 @@ export function useSidebarResize() {
     sidebarWidthPx,
     applySidebarWidth,
     handleSidebarResizeStart,
+    handleSidebarResizeDoubleClick,
     handleSidebarResizeKeyDown,
   };
 }

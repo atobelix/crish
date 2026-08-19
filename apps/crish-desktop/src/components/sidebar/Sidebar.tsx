@@ -161,6 +161,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
     const {
       sidebarWidthPx,
       handleSidebarResizeStart,
+      handleSidebarResizeDoubleClick,
       handleSidebarResizeKeyDown,
     } = useSidebarResize();
 
@@ -356,6 +357,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           }
           tabIndex={0}
           onPointerDown={handleSidebarResizeStart}
+          onDoubleClick={handleSidebarResizeDoubleClick}
           onKeyDown={handleSidebarResizeKeyDown}
           style={{ touchAction: 'none' }}
         />

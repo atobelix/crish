@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
+import { viewRegistry } from '../../services/view-registry';
+import { setPrimaryPanelChecker } from './index';
 import {
   createLeaf,
   createBranch,
@@ -25,6 +27,10 @@ import type { LayoutTree, LayoutBranch, LayoutLeaf } from './types';
 import type { TreeDragSource } from './types';
 import type { DropZone } from './dropDetection';
 
+beforeEach(() => {
+  setPrimaryPanelChecker((id) => viewRegistry.isPrimary(id));
+});
+
 function makeTestTree(): LayoutTree {
   const chat = createLeaf('chat', ['chat'], 'chat');
   const diff = createLeaf('diff', ['diff'], 'diff');
@@ -45,10 +51,10 @@ describe('LayoutTree types', () => {
     const a = createLeaf('a');
     const b = createLeaf('b');
     const branch = createBranch('vertical', a, b, 1.5);
-    expect(branch.splitRatio).toBe(0.9);
+    expect(branch.splitRatio).toBe(0.88);
 
     const branch2 = createBranch('vertical', a, b, -0.5);
-    expect(branch2.splitRatio).toBe(0.1);
+    expect(branch2.splitRatio).toBe(0.12);
   });
 
   it('type guards work', () => {
@@ -237,13 +243,13 @@ describe('resizeBranch', () => {
     expect((result.root as LayoutBranch).splitRatio).toBe(0.3);
   });
 
-  it('clamps ratio to [0.1, 0.9]', () => {
+  it('clamps ratio to [0.12, 0.88]', () => {
     const tree = makeTestTree();
     const r1 = resizeBranch(tree, tree.root.id, 0.01);
-    expect((r1.root as LayoutBranch).splitRatio).toBe(0.1);
+    expect((r1.root as LayoutBranch).splitRatio).toBe(0.12);
 
     const r2 = resizeBranch(tree, tree.root.id, 0.99);
-    expect((r2.root as LayoutBranch).splitRatio).toBe(0.9);
+    expect((r2.root as LayoutBranch).splitRatio).toBe(0.88);
   });
 });
 
@@ -609,7 +615,7 @@ describe('migrateFromColumns', () => {
   });
 
   it('4 个 group 深层嵌套 → 全链路 splitRatio 正确', () => {
-    // 比例：0.1 / 0.2 / 0.3 / 0.4（递增，避免对称掩盖 bug）
+    // 比例：0.15 / 0.2 / 0.3 / 0.35（均在 [0.12, 0.88] 内，避免被 sash 钳制掩盖累加公式）
     const result = migrateFromColumns([
       {
         id: 'col-0',
@@ -617,7 +623,7 @@ describe('migrateFromColumns', () => {
         groups: [
           {
             id: 'g-0',
-            heightRatio: 0.1,
+            heightRatio: 0.15,
             activeCardId: 'a',
             cards: [{ id: 'a', title: 'A' }],
           },
@@ -635,7 +641,7 @@ describe('migrateFromColumns', () => {
           },
           {
             id: 'g-3',
-            heightRatio: 0.4,
+            heightRatio: 0.35,
             activeCardId: 'd',
             cards: [{ id: 'd', title: 'D' }],
           },
@@ -645,36 +651,34 @@ describe('migrateFromColumns', () => {
 
     // 链路：root(v, g0, n1(v, g1, n2(v, g2, g3)))
     const root = result.root as LayoutBranch;
-    expect(root.splitRatio).toBeCloseTo(0.1 / 1.0, 5); // 0.1
+    expect(root.splitRatio).toBeCloseTo(0.15 / 1.0, 5);
 
     const n1 = root.children[1] as LayoutBranch;
-    expect(n1.splitRatio).toBeCloseTo(0.2 / 0.9, 5); // ≈0.2222
+    expect(n1.splitRatio).toBeCloseTo(0.2 / 0.85, 5);
 
     const n2 = n1.children[1] as LayoutBranch;
-    expect(n2.splitRatio).toBeCloseTo(0.3 / 0.7, 5); // ≈0.4286
+    expect(n2.splitRatio).toBeCloseTo(0.3 / 0.65, 5);
 
-    // 渲染占比：每个 leaf 的 height 应严格等于其 heightRatio
     const { leaves } = flattenTree(result.root);
     const expected: Array<[string, number]> = [
-      ['a', 0.1],
+      ['a', 0.15],
       ['b', 0.2],
       ['c', 0.3],
-      ['d', 0.4],
+      ['d', 0.35],
     ];
     for (const [panelId, ratio] of expected) {
       const leaf = leaves.find((l) => l.panelId === panelId)!;
       expect(leaf.rect.height).toBeCloseTo(ratio, 5);
     }
 
-    // y 坐标连续：0 → 0.1 → 0.3 → 0.6 → 1.0
     const yA = leaves.find((l) => l.panelId === 'a')!.rect.y;
     const yB = leaves.find((l) => l.panelId === 'b')!.rect.y;
     const yC = leaves.find((l) => l.panelId === 'c')!.rect.y;
     const yD = leaves.find((l) => l.panelId === 'd')!.rect.y;
     expect(yA).toBeCloseTo(0, 5);
-    expect(yB).toBeCloseTo(0.1, 5);
-    expect(yC).toBeCloseTo(0.3, 5);
-    expect(yD).toBeCloseTo(0.6, 5);
+    expect(yB).toBeCloseTo(0.15, 5);
+    expect(yC).toBeCloseTo(0.35, 5);
+    expect(yD).toBeCloseTo(0.65, 5);
   });
 
   it('2 列 × 多 group：列与 group 比例同时正确', () => {

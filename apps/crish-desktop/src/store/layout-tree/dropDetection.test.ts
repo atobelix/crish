@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
+import { viewRegistry } from '../../services/view-registry';
+import { setPrimaryPanelChecker } from './index';
 import {
   detectDropZone,
   findLeafAtPointer,
@@ -9,6 +11,10 @@ import {
   type DropZone,
   type Rect,
 } from './dropDetection';
+
+beforeEach(() => {
+  setPrimaryPanelChecker((id) => viewRegistry.isPrimary(id));
+});
 
 function makeRect(
   left: number,

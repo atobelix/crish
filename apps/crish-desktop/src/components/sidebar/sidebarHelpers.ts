@@ -6,11 +6,29 @@ import { sessionListDisplayTitle } from '../../api/sessionTitle';
  * 不继承应用 CSS 变量，其中的 hex 属预览模板数据，不做 token 化。
  */
 
-export const SIDEBAR_WIDTH_MIN = 220;
-export const SIDEBAR_WIDTH_MAX = 360;
+/** 展开态钳制下限（参考 [160, 480]；默认宽仍走产品 260） */
+export const SIDEBAR_WIDTH_MIN = 160;
+/** 展开态钳制上限 */
+export const SIDEBAR_WIDTH_MAX = 480;
+/** 产品默认宽（双击重置；不要改成演示 240） */
 export const SIDEBAR_WIDTH_DEFAULT = 260;
+/** 拖过此宽度折叠侧栏 */
+export const SIDEBAR_COLLAPSE_PX = 120;
+/** 侧栏分割条命中宽度 */
+export const SIDEBAR_RESIZER_HIT_PX = 6;
 export const SIDEBAR_RESIZE_STEP = 12;
 export const SIDEBAR_RESIZE_STEP_LARGE = 24;
+
+/** 展开态宽度钳到 [MIN, MAX]；非有限值回落到默认宽 */
+export function clampSidebarExpandedWidth(px: number): number {
+  if (!Number.isFinite(px)) return SIDEBAR_WIDTH_DEFAULT;
+  return Math.min(Math.max(px, SIDEBAR_WIDTH_MIN), SIDEBAR_WIDTH_MAX);
+}
+
+/** 拖动中宽度低于折叠阈值 → 收起 */
+export function shouldCollapseSidebar(widthPx: number): boolean {
+  return Number.isFinite(widthPx) && widthPx < SIDEBAR_COLLAPSE_PX;
+}
 
 export const SIDEBAR_LIST_PREFS_KEY = 'crish_sidebar_list_prefs';
 /** 侧栏分区折叠状态（pinned / general / projects / 各 projectId） */

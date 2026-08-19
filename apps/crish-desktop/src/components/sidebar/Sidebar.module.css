@@ -265,8 +265,8 @@
 
 .sidebarResizer {
   position: absolute;
-  right: -4px;
-  width: 8px;
+  right: -3px;
+  width: 6px;
   height: 100%;
   cursor: col-resize;
   z-index: var(--z-sidebar-resizer);
@@ -277,24 +277,20 @@
 .sidebarResizer::after {
   content: '';
   position: absolute;
-  left: 50%;
   top: 0;
   bottom: 0;
+  left: 2.5px;
   width: 1px;
-  transform: translateX(-50%);
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    var(--tint-overlay) 50%,
-    transparent 100%
-  );
-  opacity: 0;
-  transition: opacity var(--transition-fast);
+  background: transparent;
   pointer-events: none;
 }
 
-:global(body.is-resizing) .sidebarResizer::after {
-  opacity: 1;
+.sidebarResizer:hover::after,
+.sidebarResizer:global(.is-dragging)::after,
+:global(body.sidebar-resizing) .sidebarResizer::after {
+  background: var(--accent-green, #10b981);
+  width: 2px;
+  left: 2px;
 }
 
 /* Overlay mode */

@@ -1,7 +1,7 @@
 /**
  * Pixel-aware splitRatio clamping for binary-tree sash resize.
  *
- * Store-level clampSplitRatio only enforces [0.1, 0.9]. On large parents that
+ * Store-level clampSplitRatio only enforces [0.12, 0.88]. On large parents that
  * still allows sub-usable children (~100px). During drag we enforce a practical
  * min child size (~240px) when the parent is large enough; when it is not, we
  * degrade gracefully (each side at most half) and never produce NaN.

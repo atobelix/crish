@@ -24,7 +24,7 @@ describe('splitRatioBounds', () => {
   });
 
   it('defers to absolute store bounds when parent is huge', () => {
-    // 5000px → pixel min 240/5000 = 0.048 < 0.1 → abs floor wins
+    // 5000px → pixel min 240/5000 = 0.048 < 0.12 → abs floor wins
     const { min, max } = splitRatioBounds(5000);
     expect(min).toBe(MIN_SPLIT_RATIO);
     expect(max).toBe(MAX_SPLIT_RATIO);

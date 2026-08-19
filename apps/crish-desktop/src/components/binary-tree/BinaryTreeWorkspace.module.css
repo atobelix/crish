@@ -153,17 +153,12 @@
   pointer-events: none;
 }
 
-/*    Sash                                                   */
-/*
- *       10px +      translate       ::after 1px hairline 
- *   bulk      hover/active       
- */
+/* Sash：6px 命中 + 1px 线；hover/active 2px 品牌绿。拖时 body.tree-resizing 禁过渡。 */
 
 .sash {
   position: absolute;
   z-index: var(--z-resizer, 110);
   background: transparent;
-  /*              */
   touch-action: none;
   transition:
     top var(--transition-fast),
@@ -176,75 +171,53 @@
 }
 
 .sashHorizontal {
-  width: 10px;
+  width: 6px;
   cursor: col-resize;
-  transform: translateX(-5px);
+  transform: translateX(-3px);
 }
 
 .sashVertical {
-  height: 10px;
+  height: 6px;
   cursor: row-resize;
-  transform: translateY(-5px);
+  transform: translateY(-3px);
 }
 
 .sash::after {
   content: '';
   position: absolute;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    var(--tint-active) 20%,
-    var(--tint-strong) 50%,
-    var(--tint-active) 80%,
-    transparent 100%
-  );
-  opacity: 0.5;
-  transition:
-    opacity var(--transition-fast),
-    width var(--transition-fast),
-    height var(--transition-fast);
+  background: var(--border-color, var(--hairline));
   pointer-events: none;
 }
 
 .sashHorizontal::after {
-  top: 12%;
-  bottom: 12%;
-  left: 50%;
+  top: 0;
+  bottom: 0;
+  left: 2.5px;
   width: 1px;
-  transform: translateX(-50%);
-  border-radius: 1px;
 }
 
 .sashVertical::after {
-  left: 12%;
-  right: 12%;
-  top: 50%;
+  left: 0;
+  right: 0;
+  top: 2.5px;
   height: 1px;
-  transform: translateY(-50%);
-  border-radius: 1px;
-  background: linear-gradient(
-    to right,
-    transparent 0%,
-    var(--tint-active) 20%,
-    var(--tint-strong) 50%,
-    var(--tint-active) 80%,
-    transparent 100%
-  );
 }
 
 .sash:hover::after,
 .sash[data-active='true']::after {
-  opacity: 1;
+  background: var(--accent-green, #10b981);
 }
 
 .sashHorizontal:hover::after,
 .sashHorizontal[data-active='true']::after {
-  width: 1.5px;
+  width: 2px;
+  left: 2px;
 }
 
 .sashVertical:hover::after,
 .sashVertical[data-active='true']::after {
-  height: 1.5px;
+  height: 2px;
+  top: 2px;
 }
 
 /*    Drop zone overlay                                          */
@@ -253,20 +226,20 @@
   position: absolute;
   pointer-events: none;
   z-index: var(--z-drag-highlight, 100);
-  border-radius: var(--radius-md);
+  border-radius: 6px;
   background-color: color-mix(
     in srgb,
-    var(--accent-color) 12%,
+    var(--accent-green, #10b981) 18%,
     transparent
   );
-  border: 1.5px solid var(--accent-color);
-  box-shadow: 0 0 8px
-    color-mix(in srgb, var(--accent-color) 25%, transparent);
+  border: none;
   transition:
-    top var(--transition-fast),
-    left var(--transition-fast),
-    width var(--transition-fast),
-    height var(--transition-fast);
+    top 120ms cubic-bezier(0.2, 0, 0, 1),
+    left 120ms cubic-bezier(0.2, 0, 0, 1),
+    width 120ms cubic-bezier(0.2, 0, 0, 1),
+    height 120ms cubic-bezier(0.2, 0, 0, 1),
+    border-radius 100ms ease,
+    opacity 80ms ease;
 }
 
 .dropOverlayFull {
