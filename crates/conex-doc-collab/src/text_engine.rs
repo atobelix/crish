@@ -12,7 +12,7 @@
 //! **UTF-8 字节**索引（yrs 默认 `OffsetKind::Bytes`）。
 
 use crate::block_id::BlockId;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use thiserror::Error;
 use yrs::undo::{Options as UndoOptions, UndoManager};
@@ -121,6 +121,13 @@ pub struct TextEngine {
     pinned: HashSet<BlockId>,
     /// 最近 touch：front=最旧，back=最新（仅含当前热块）。
     lru: VecDeque<BlockId>,
+    /// I3：增量 checkpoint 的版本追踪 — 仅 O(involved) 快照，无全量 HashSet 克隆。
+    /// `next_version` 为单调递增的块创建版本；`block_versions` / `version_index` 记录
+    /// 每个已登记块的创建版本，用于 `restore` 时 O(新增) 释放 checkpoint 后新建块
+    ///（含 huge split 与 TextEngine 直接 init 的块），避免全表 `registered_ids()` 扫描。
+    next_version: u64,
+    block_versions: HashMap<BlockId, u64>,
+    version_index: BTreeMap<u64, BlockId>,
 }
 
 impl Default for TextEngine {
@@ -138,6 +145,9 @@ impl TextEngine {
             hot: HashMap::new(),
             pinned: HashSet::new(),
             lru: VecDeque::new(),
+            next_version: 1,
+            block_versions: HashMap::new(),
+            version_index: BTreeMap::new(),
         }
     }
 
@@ -164,14 +174,22 @@ impl TextEngine {
 
     /// Insert 叶子：登记空快照，默认 **冷**（不占热槽，直至 touch/edit）。
     pub fn init_block(&mut self, id: BlockId) {
+        let is_new = !self.is_registered(id);
         self.snapshots.entry(id).or_insert_with(|| Arc::from(""));
+        if is_new {
+            self.track_version(id);
+        }
     }
 
     /// 带初始快照登记（hydrate / 恢复用，G-HYD-2 冷文本）。
     pub fn init_block_with_text(&mut self, id: BlockId, text: impl Into<String>) {
+        let is_new = !self.is_registered(id);
         let s: String = text.into();
         self.snapshots.insert(id, Arc::from(s.as_str()));
         self.cold_updates.remove(&id);
+        if is_new {
+            self.track_version(id);
+        }
         // 若已热，同步重写 YText
         if self.hot.contains_key(&id) {
             self.rewrite_hot_from_snapshot(id);
@@ -187,13 +205,25 @@ impl TextEngine {
         text: impl Into<String>,
         update_bytes: Vec<u8>,
     ) {
+        let is_new = !self.is_registered(id);
         let s: String = text.into();
         self.snapshots.insert(id, Arc::from(s.as_str()));
         self.cold_updates.insert(id, update_bytes);
+        if is_new {
+            self.track_version(id);
+        }
         if self.hot.contains_key(&id) {
             self.hot.remove(&id);
             let _ = self.ensure_hot(id);
         }
+    }
+
+    #[inline]
+    fn track_version(&mut self, id: BlockId) {
+        let v = self.next_version;
+        self.next_version += 1;
+        self.block_versions.insert(id, v);
+        self.version_index.insert(v, id);
     }
 
     /// 确保块处于热态；优先从 cold_updates 二进制中无损还原，否则从快照 rehydrate。
@@ -447,6 +477,9 @@ impl TextEngine {
         self.cold_updates.remove(&id);
         self.pinned.remove(&id);
         self.lru.retain(|x| *x != id);
+        if let Some(v) = self.block_versions.remove(&id) {
+            self.version_index.remove(&v);
+        }
     }
 
     /// 预校验 char 偏移（不改状态；供 A-INV-09a 同批预检）。
@@ -511,11 +544,15 @@ impl TextEngine {
 
     /// 只捕获 `involved` 中块的可恢复数据。
     ///
-    /// 不 `cold_updates.clone()` 全表：未涉及块的 `Vec<u8>` 留在活表里（restore
-    /// 不替换）。不把活表改成 `Arc<HashMap>` 再给检查点握一份——apply 随后
-    /// `make_mut` 会因引用计数 >1 整表拷一次，等于把全表 clone 推迟到热路径。
+    /// I3 收敛：`registered: HashSet` 全量已改为 `version` + `registered_involved` 增量。
+    /// - 不 `cold_updates.clone()` 全表：未涉及块的 `Vec<u8>` 留在活表里（restore
+    ///   不替换）。不把活表改成 `Arc<HashMap>` 再给检查点握一份——apply 随后
+    ///   `make_mut` 会因引用计数 >1 整表拷一次，等于把全表 clone 推迟到热路径。
+    /// - 不 `registered_ids()` 全量：仅记录 `involved ∩ old`（O(involved)），
+    ///   新增块释放由 `version_index.range(version..)` O(新增) 完成。
     pub(crate) fn checkpoint(&self, involved: &HashSet<BlockId>) -> TextEngineCheckpoint {
         let mut blocks = HashMap::with_capacity(involved.len());
+        let mut registered_involved = HashSet::with_capacity(involved.len());
         for &id in involved {
             let existed = self.is_registered(id);
             if !existed {
@@ -525,10 +562,12 @@ impl TextEngine {
                         text: Arc::from(""),
                         update: None,
                         existed: false,
+                        version: None,
                     },
                 );
                 continue;
             }
+            registered_involved.insert(id);
             let text: Arc<str> = if self.hot.contains_key(&id) {
                 Arc::from(self.read_text(id).as_str())
             } else {
@@ -539,25 +578,34 @@ impl TextEngine {
             };
             // 热块 encode 自身；冷块只 clone 这一条 entry
             let update = self.encode_state_update(id);
+            let version = self.block_versions.get(&id).copied();
             blocks.insert(
                 id,
                 BlockCheckpoint {
                     text,
                     update,
                     existed: true,
+                    version,
                 },
             );
         }
         TextEngineCheckpoint {
             max_hot: self.max_hot,
             blocks,
-            registered: self.registered_ids(),
+            version: self.next_version,
+            registered_involved,
             pinned: self.pinned.clone(),
             was_hot: self.hot.keys().copied().collect(),
         }
     }
 
-    fn restore_block_data(&mut self, id: BlockId, text: Arc<str>, update: Option<Vec<u8>>) {
+    fn restore_block_data(
+        &mut self,
+        id: BlockId,
+        text: Arc<str>,
+        update: Option<Vec<u8>>,
+        version: Option<u64>,
+    ) {
         self.snapshots.insert(id, text);
         match update {
             Some(bytes) => {
@@ -570,14 +618,35 @@ impl TextEngine {
         if self.hot.remove(&id).is_some() {
             self.lru.retain(|x| *x != id);
         }
+        // I3：恢复被删块的版本，使其版本 < checkpoint.version，从而不在待释放集合中
+        if let Some(v) = version {
+            // 若该 id 已在 version_index 中（可能因 huge split 新建后又被删），先清理旧版本
+            if let Some(old_v) = self.block_versions.get(&id).copied() {
+                self.version_index.remove(&old_v);
+            }
+            self.block_versions.insert(id, v);
+            self.version_index.insert(v, id);
+            // 确保 next_version 不回退（checkpoint 的 version 已是 next_version）
+            if v >= self.next_version {
+                self.next_version = v + 1;
+            }
+        } else if self.is_registered(id) {
+            // 无版本记录的已存在块（如 hydrate 路径），按新块追踪
+            self.track_version(id);
+        }
     }
 
     /// 只恢复涉及块；未涉及块保持原状（COW）。P-H2：回滚后 ≡ checkpoint 时。
+    ///
+    /// I3 收敛：`registered` 全量释放已改为 `version_index.range(version..)` 增量释放，
+    /// 仅释放 checkpoint 后新建块（含 huge split），复杂度 O(新增) 而非 O(N)。
     pub(crate) fn restore(&mut self, cp: TextEngineCheckpoint) {
+        // I3：增量释放 checkpoint 后新建块（version >= cp.version）
+        // `version_index` 按创建版本有序，range 为 O(新增) 而非全表扫描
         let to_release: Vec<BlockId> = self
-            .registered_ids()
-            .into_iter()
-            .filter(|id| !cp.registered.contains(id))
+            .version_index
+            .range(cp.version..)
+            .map(|(_, id)| *id)
             .collect();
         for id in to_release {
             self.release_block(id);
@@ -588,7 +657,7 @@ impl TextEngine {
                 self.release_block(id);
                 continue;
             }
-            self.restore_block_data(id, blk.text, blk.update);
+            self.restore_block_data(id, blk.text, blk.update, blk.version);
         }
 
         self.pinned = cp.pinned;
@@ -605,6 +674,10 @@ impl TextEngine {
             let _ = self.ensure_hot(id);
         }
         self.max_hot = cp.max_hot.max(1);
+        // I3：恢复后 next_version 不回退，保证版本单调
+        if self.next_version < cp.version {
+            self.next_version = cp.version;
+        }
     }
 }
 
@@ -614,17 +687,30 @@ struct BlockCheckpoint {
     text: Arc<str>,
     update: Option<Vec<u8>>,
     existed: bool,
+    /// I3：该块在 checkpoint 时的创建版本（仅 existed==true 时有效）。
+    /// 用于 `restore` 重建被删块时恢复其版本，使其版本 < checkpoint.version，
+    /// 从而不在 `version_index.range(version..)` 的待释放集合中。
+    version: Option<u64>,
 }
 
 /// P-H2：文本引擎增量检查点（crate 内；不外泄 yrs 类型）。
 ///
-/// 数据只含本次涉及块；`registered` / `was_hot` / `pinned` 是 id 集合（无字节）。
+/// I3 收敛：`registered: HashSet<BlockId>` 全量已改为增量 `version` + `registered_involved`。
+/// - `version` 为 checkpoint 时的 `next_version`，用于 `restore` 时 O(新增) 释放
+///   checkpoint 后新建块（含 huge split 与 TextEngine 直接 init 的块），避免
+///   `registered_ids()` 全表扫描与全量 HashSet 克隆。
+/// - `registered_involved` 仅记录 `involved ∩ old_registered`（O(involved)），
+///   供 `contains_registered` 判断涉及块是否在旧表中；未涉及块的 old 判定
+///   通过 `version` 推断（旧块版本 < version，新块版本 >= version）。
+/// 数据只含本次涉及块；`was_hot` / `pinned` 是 id 集合（无字节，pinned/was_hot 上界 512）。
 #[derive(Debug, Clone)]
 pub(crate) struct TextEngineCheckpoint {
     max_hot: usize,
     blocks: HashMap<BlockId, BlockCheckpoint>,
-    /// 检查点时刻已登记的全部块 id（用于释放 apply 新建块，含 huge split）。
-    registered: HashSet<BlockId>,
+    /// I3：checkpoint 时的 next_version，用于增量释放新增块。
+    version: u64,
+    /// I3：仅涉及块中在旧表中已存在的 id（O(involved)），替代全量 HashSet。
+    registered_involved: HashSet<BlockId>,
     pinned: HashSet<BlockId>,
     /// 检查点时刻处于热态的块 id（恢复后 rehydrate）。
     was_hot: HashSet<BlockId>,
@@ -636,7 +722,36 @@ impl TextEngineCheckpoint {
     }
 
     pub(crate) fn contains_registered(&self, id: BlockId) -> bool {
-        self.registered.contains(&id)
+        // 涉及块：以快照中的 existed 为准（registered_involved 仅含 existed==true 的 id）
+        if self.blocks.contains_key(&id) {
+            return self.registered_involved.contains(&id);
+        }
+        // 未涉及块：已收敛为增量，无法精确回答旧表成员。
+        // 为保持 `text_ids_for_undo_checkpoint` 的正确性（需识别新增块），
+        // 对未涉及块统一返回 false，使 `!contains_registered(new_outside)` 为 true，
+        // 从而将所有未涉及的当前块视为新增并纳入 undo 快照（超集，正确但非最优）。
+        // 真正的新增块释放由 `restore` 的 version_index 精确处理。
+        self.registered_involved.contains(&id)
+    }
+
+    /// I3：精确判断旧表成员（仅当 TextEngine 可提供版本时使用）。
+    /// 未涉及块的精确判断需结合 `block_versions`，但 `TextEngineCheckpoint` 独立于引擎时
+    /// 无法访问；`restore` 已通过 version_index 精确处理，`contains_registered` 仅用于
+    /// `DocSession::text_ids_for_undo_checkpoint` 的超集快照，已足够正确。
+    #[allow(dead_code)]
+    pub(crate) fn contains_registered_exact(
+        &self,
+        id: BlockId,
+        block_versions: &HashMap<BlockId, u64>,
+    ) -> bool {
+        if let Some(blk) = self.blocks.get(&id) {
+            return blk.existed;
+        }
+        if let Some(v) = block_versions.get(&id) {
+            return *v < self.version;
+        }
+        // 从未登记的块不在旧表中
+        false
     }
 }
 
@@ -989,7 +1104,8 @@ mod tests {
         assert_send::<TextEngineCheckpoint>();
     }
 
-    /// 3-5：checkpoint 只收录 involved，不把未涉及块的冷藏字节拷进快照。
+    /// 3-5 / I3：checkpoint 只收录 involved，不把未涉及块的冷藏字节拷进快照。
+    /// I3 收敛：`registered` 全量 HashSet 已改为 `version` + `registered_involved` 增量。
     #[test]
     fn checkpoint_incremental_only_clones_involved() {
         let mut eng = TextEngine::with_max_hot(1);
@@ -1004,8 +1120,19 @@ mod tests {
         assert_eq!(cp.blocks.len(), 1, "只快照涉及块");
         assert!(cp.blocks.contains_key(&target));
         assert!(!cp.blocks.contains_key(&blocks[1]));
-        assert_eq!(cp.registered.len(), 8, "registered 只记 id 键");
+        // I3：registered 已收敛为 O(involved) 的 registered_involved + version
+        assert_eq!(
+            cp.registered_involved.len(),
+            1,
+            "registered_involved 仅含涉及块中已存在的 id"
+        );
+        assert!(cp.registered_involved.contains(&target));
         assert_eq!(cp.involved_ids().len(), 1);
+        // 版本单调：checkpoint 后新建块的版本 >= cp.version
+        let before_version = cp.version;
+        let new_id = BlockId::new();
+        eng.init_block(new_id);
+        assert!(eng.block_versions.get(&new_id).unwrap() >= &before_version);
     }
 
     /// 3-5 / P-H2：restore 只回滚涉及块；未涉及块原样；apply 新建块被释放。

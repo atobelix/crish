@@ -1,8 +1,8 @@
 //! 批调度面（SR-03 拆分 · ≠ EL）：ToolExecutor builder 装配面 + execute_batch
 //!
 //! 批次调度（分组 / 并行组审批逐个 await / join_all 并行执行（B4：信号量
-//! 并发上限 + 计数点）/ 取消收尾）与执行器装配面（new / with_* builder /
-//! clone_executor）随本模落位；
+//! 并发上限 + 计数点）/ 取消收尾）与执行器装配面（new / with_* builder
+//! 按需克隆/共享引用）随本模落位；
 //! 单工具执行面在 `exec_single`，权限/裁决/审批等待面在 `exec_verdict`，
 //! 中间件与钩子面在 `exec_middleware`。语义与拆分前逐行一致（只搬移不改行为）。
 
@@ -33,8 +33,18 @@ impl ToolExecutor {
     /// AgentSessionLoop::with_options 派生状态同步用（T06.4.4：开关翻转时
     /// 不必重建执行器，直接替换守卫槽位）。
     pub fn with_idempotency_opt(&mut self, guard: Option<Arc<ToolIdempotencyGuard>>) -> Self {
-        self.idempotency = guard;
-        self.clone_executor()
+        // I5 按需克隆收敛：仅对需共享的 Arc 按需 Arc::clone，其余字段按需 clone，消除 clone_executor 的 6 项重复克隆
+        let guard_for_self = guard.clone();
+        self.idempotency = guard_for_self;
+        Self {
+            registry: Arc::clone(&self.registry),
+            idempotency: guard,
+            middleware: self.middleware.clone(),
+            middleware_timeouts: self.middleware_timeouts,
+            hooks: self.hooks.clone(),
+            revert_policy: self.revert_policy.clone(),
+            concurrency_obs: Arc::clone(&self.concurrency_obs),
+        }
     }
 
     /// 是否启用幂等守卫（测试 / 观测用）
@@ -47,8 +57,18 @@ impl ToolExecutor {
     /// 链在审批通过（或无需审批）后、工具执行前运行 before_execute，
     /// 执行后运行 on_result / on_error（优先级语义见模块头注）。
     pub fn with_middleware(&mut self, middleware: Vec<Arc<dyn ToolMiddleware>>) -> Self {
-        self.middleware = middleware;
-        self.clone_executor()
+        // I5 按需克隆：新值 clone 一次给 self，其余字段按需 Arc::clone，无 clone_executor 全量重复
+        let middleware_for_self = middleware.clone();
+        self.middleware = middleware_for_self;
+        Self {
+            registry: Arc::clone(&self.registry),
+            idempotency: self.idempotency.clone(),
+            middleware,
+            middleware_timeouts: self.middleware_timeouts,
+            hooks: self.hooks.clone(),
+            revert_policy: self.revert_policy.clone(),
+            concurrency_obs: Arc::clone(&self.concurrency_obs),
+        }
     }
 
     /// 覆盖中间件钩子超时配置（E4：06 遗留 :148-152 收口；默认宽松放行
@@ -56,23 +76,52 @@ impl ToolExecutor {
     /// before_execute 超时 → Block；on_result 超时 → 降级透传原输出；
     /// on_error 超时 → 仅日志。
     pub fn with_middleware_timeouts(&mut self, timeouts: MiddlewareTimeoutConfig) -> Self {
+        // I5 按需克隆：Copy 字段直接赋值，其余 Arc 按需 clone
         self.middleware_timeouts = timeouts;
-        self.clone_executor()
+        Self {
+            registry: Arc::clone(&self.registry),
+            idempotency: self.idempotency.clone(),
+            middleware: self.middleware.clone(),
+            middleware_timeouts: timeouts,
+            hooks: self.hooks.clone(),
+            revert_policy: self.revert_policy.clone(),
+            concurrency_obs: Arc::clone(&self.concurrency_obs),
+        }
     }
 
     /// 注入插件钩子注册表（Some = 启用 tool.pre/tool.post/tool.error 广播；
     /// None = 移除）。跨批共享同一注册表实例即可多批广播。
     pub fn with_hooks(&mut self, hooks: Option<Arc<HookRegistry>>) -> Self {
-        self.hooks = hooks;
-        self.clone_executor()
+        // I5 按需克隆：hooks Option<Arc> 按需 clone
+        let hooks_for_self = hooks.clone();
+        self.hooks = hooks_for_self;
+        Self {
+            registry: Arc::clone(&self.registry),
+            idempotency: self.idempotency.clone(),
+            middleware: self.middleware.clone(),
+            middleware_timeouts: self.middleware_timeouts,
+            hooks,
+            revert_policy: self.revert_policy.clone(),
+            concurrency_obs: Arc::clone(&self.concurrency_obs),
+        }
     }
 
     /// 注入 C3 回退护栏策略（I3-S6）：替换阈值（session_meta 运行时覆盖，
     /// 04 Q1：同键覆盖默认值）/ 面积评估器（真实 git 接线 / 测试注入）。
     /// 默认策略始终生效（语义估算 + 默认阈值 10 文件 / 300 行 / 24 小时）。
     pub fn with_revert_policy(&mut self, policy: RevertPolicy) -> Self {
-        self.revert_policy = policy;
-        self.clone_executor()
+        // I5 按需克隆：revert_policy Clone 按需，其余 Arc 按需 clone
+        let policy_for_self = policy.clone();
+        self.revert_policy = policy_for_self;
+        Self {
+            registry: Arc::clone(&self.registry),
+            idempotency: self.idempotency.clone(),
+            middleware: self.middleware.clone(),
+            middleware_timeouts: self.middleware_timeouts,
+            hooks: self.hooks.clone(),
+            revert_policy: policy,
+            concurrency_obs: Arc::clone(&self.concurrency_obs),
+        }
     }
 }
 
@@ -358,7 +407,8 @@ impl BatchRunner<'_> {
         approval_active: bool,
         events: &mut Vec<ToolEvent>,
     ) -> Vec<Option<(ClassifiedToolResult, Vec<ToolEvent>)>> {
-        let exec = self.executor.clone_executor();
+        // I5 共享引用收敛：热路径按需零克隆，BatchRunner 持有 &ToolExecutor 共享引用，消除每批 6*(N+1) 次 Arc::clone
+        let exec = self.executor;
         let ctx_own = self.ctx.clone();
         let options_own = self.options.clone();
         let approval_own = self.approval.clone();
@@ -443,7 +493,7 @@ impl BatchRunner<'_> {
                 continue;
             }
             let call = self.calls[idx].clone();
-            let e = exec.clone_executor();
+            let e = exec; // 共享引用，零克隆
             let c = ctx_own.clone();
             let o = options_own.clone();
             let ab = self.abort.cloned();
@@ -523,19 +573,6 @@ impl BatchRunner<'_> {
 }
 
 impl ToolExecutor {
-    /// 克隆执行器（共享 Arc 状态）
-    fn clone_executor(&self) -> Self {
-        Self {
-            registry: self.registry.clone(),
-            idempotency: self.idempotency.clone(),
-            middleware: self.middleware.clone(),
-            middleware_timeouts: self.middleware_timeouts,
-            hooks: self.hooks.clone(),
-            revert_policy: self.revert_policy.clone(),
-            concurrency_obs: Arc::clone(&self.concurrency_obs),
-        }
-    }
-
     /// 并行组并发观测句柄（B4）：活跃数 / 峰值计数点。
     ///
     /// 当前消费方：`tool_exec_tests.rs` 并行批测
@@ -555,3 +592,4 @@ impl ToolExecutor {
         &self.concurrency_obs
     }
 }
+

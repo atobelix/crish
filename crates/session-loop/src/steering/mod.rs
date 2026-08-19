@@ -428,8 +428,9 @@ impl SteeringCoordinator {
     }
 }
 
-/// 旧路径 re-export：调用点可继续走 `crate::steering::now_iso_utc` 等。
-/// 实现真源：[`conex_shared::time`]。
+/// 兼容层，将移除 — 旧路径 re-export（`crate::steering::now_iso_utc` 等），请直接使用 [`conex_shared::time`]。
+/// 实现真源：[`conex_shared::time`]，本 re-export 仅为兼容保留。
+#[deprecated(note = "Use `conex_shared::time` instead. Compatibility layer, will be removed.")]
 pub(crate) use conex_shared::time::{civil_from_days, now_iso_utc, unix_millis};
 
 /// 构造 steering-evaluated 事件（EV-03 / D-03，Delta 可丢观测事件）

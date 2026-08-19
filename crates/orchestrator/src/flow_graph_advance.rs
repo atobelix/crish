@@ -6,6 +6,7 @@
 //! 预算判定与 spawn 在本模块内完成。
 
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use agent_tools::tools::subagent::{
     check_recursion_guard, RecursionGuardSnapshot, SubagentSpawnRequest, SubagentState,
@@ -19,6 +20,82 @@ use super::scheduler::{
     BudgetExceededKind, ConcurrencyBudget, FlowAdvance, FlowError, FlowMetaStore, FlowReport,
     FlowReportKind, FlowScheduler, FlowStarted, FlowWakeup, FLOW_STATE_KEY,
 };
+
+// ── 声明序索引缓存（预计算一次，复用）─────────────────────────────
+// 审计02指出 advance 每轮重建 HashMap（每轮分配）。此处改为会话级缓存复用：
+// FlowGraph 构造（声明校验通过）后首次计算 `id -> 声明序` 并缓存；同会话
+// 后续 advance 仅查表（Arc 复用），不再每轮重建 HashMap。图声明变更（节点
+// 增删或重排导致 ids 序列变化）时重算。实现语义等价于“FlowGraph 构造时一次
+// 计算声明序索引”，但不改 FlowGraph 结构，仅在本推进域内缓存。
+
+struct CachedDeclarationOrder {
+    ids: Vec<FlowNodeId>,
+    map: Arc<HashMap<FlowNodeId, usize>>,
+}
+
+fn declaration_order_cache() -> &'static Mutex<HashMap<String, CachedDeclarationOrder>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, CachedDeclarationOrder>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// 获取声明序索引（会话级预计算复用，advance 内仅查表）
+///
+/// 命中缓存且 ids 序列一致时直接复用 Arc（无 HashMap 重建）；未命中或图
+/// 声明变更时重算一次并更新缓存。
+fn cached_declaration_order(
+    session_id: &str,
+    graph: &FlowGraph,
+) -> Arc<HashMap<FlowNodeId, usize>> {
+    // 快路径：尝试命中
+    {
+        let cache = declaration_order_cache()
+            .lock()
+            .unwrap_or_else(|e| {
+                tracing::error!(
+                    target: "orchestrator",
+                    "declaration_order_cache 锁中毒，已恢复"
+                );
+                e.into_inner()
+            });
+        if let Some(cached) = cache.get(session_id) {
+            if cached.ids.len() == graph.len()
+                && cached
+                    .ids
+                    .iter()
+                    .zip(graph.nodes())
+                    .all(|(a, b)| a == &b.id)
+            {
+                return Arc::clone(&cached.map);
+            }
+        }
+    }
+    // 未命中：重算
+    let map: HashMap<FlowNodeId, usize> = graph
+        .nodes()
+        .iter()
+        .enumerate()
+        .map(|(i, n)| (n.id.clone(), i))
+        .collect();
+    let arc = Arc::new(map);
+    let ids = graph.nodes().iter().map(|n| n.id.clone()).collect();
+    let mut cache = declaration_order_cache()
+        .lock()
+        .unwrap_or_else(|e| {
+            tracing::error!(
+                target: "orchestrator",
+                "declaration_order_cache 锁中毒，已恢复"
+            );
+            e.into_inner()
+        });
+    cache.insert(
+        session_id.to_string(),
+        CachedDeclarationOrder {
+            ids,
+            map: Arc::clone(&arc),
+        },
+    );
+    arc
+}
 
 impl FlowScheduler {
     /// 事件驱动推进（终态事件后 / 声明后 / 重启恢复后调用；内部处理
@@ -43,13 +120,8 @@ impl FlowScheduler {
 
         let mut mutated = false;
         let mut iteration = 0usize;
-        // 预计算声明序索引，保证就绪集按声明序确定（与原全量扫描语义一致，O(N)一次）
-        let order_index: HashMap<FlowNodeId, usize> = graph
-            .nodes()
-            .iter()
-            .enumerate()
-            .map(|(i, n)| (n.id.clone(), i))
-            .collect();
+        // 声明序索引改为会话级缓存复用（预计算一次，advance 内仅查表，不再每轮重建 HashMap）
+        let order_index = cached_declaration_order(&self.session_id, &graph);
         loop {
             iteration += 1;
             // 防御性上界：每轮至少一个节点发生状态迁移，节点数 + 1 轮内收敛

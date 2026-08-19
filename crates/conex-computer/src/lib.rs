@@ -93,26 +93,12 @@ impl ComputerSession {
         })
     }
 
-    /// 注入中止查询（收敛到单一路径：调用方在 dispatch 前构造闭包注入）
+    /// 唯一注入式主路径：带中止查询的派发（I1 收敛：三重→单路径）
     ///
-    /// 例如上层持有 `abort_token` 时：`session.set_abort_checker(Some(Arc::new(move || token.aborted())));`
-    /// 未注入时不轮询（返回 false），注入后 `OsInputBackend` 内所有 5ms 切片均委托该查询。
-    pub fn set_abort_checker(
-        &self,
-        checker: Option<std::sync::Arc<dyn Fn() -> bool + Send + Sync>>,
-    ) {
-        self.backend.set_abort_checker(checker);
-    }
-
-    /// 清除已注入的中止查询
-    pub fn clear_abort_checker(&self) {
-        self.backend.set_abort_checker(None);
-    }
-
-    /// 带中止查询的派发（注入点：dispatch 构造时将查询注入 OsInputBackend）
-    ///
-    /// 调用方构造闭包 `should_abort`（通常捕获 `abort_token`），本方法先注入再派发，
-    /// 保证 `run_steps_guarded` 的闭包来自注入查询，收敛到单一路径。
+    /// 调用方构造闭包 `should_abort`（通常捕获 `abort_token` 的同步查询），本方法
+    /// 以作用域方式注入查询 → 执行核心派发 → 清除查询，收敛到单一路径。
+    /// `OsInputBackend` 内所有 5ms 切片均委托该查询，未注入时返回 false。
+    /// `dispatch` 旧签名委托到本方法（`|| false`），不留三重。
     pub fn dispatch_with_abort<F>(
         &mut self,
         action: &Action,
@@ -123,103 +109,103 @@ impl ComputerSession {
     {
         self.backend
             .set_abort_checker(Some(std::sync::Arc::new(should_abort)));
-        self.dispatch_inner(action)
-    }
-
-    /// 内部派发实现（参数校验 → 坐标换算 → 注入），供 `dispatch` 与 `dispatch_with_abort` 复用
-    fn dispatch_inner(&mut self, action: &Action) -> Result<ActionResult, SessionError> {
-        action.validate(&self.spec)?;
-        match action {
-            Action::Key { keys } => {
-                self.backend.key(keys).map_err(SessionError::Inject)?;
-            }
-            Action::Type { text } => {
-                self.backend.type_text(text).map_err(SessionError::Inject)?;
-            }
-            Action::MouseMove { coordinate } => {
-                self.backend
-                    .mouse_move(self.to_phys(*coordinate))
-                    .map_err(SessionError::Inject)?;
-            }
-            Action::Click {
-                button,
-                count,
-                coordinate,
-                modifiers,
-            } => {
-                if let Some(c) = coordinate {
+        // 核心派发（参数校验 → 坐标换算 → 注入），作用域内持有中止查询
+        let result = (|| {
+            action.validate(&self.spec)?;
+            match action {
+                Action::Key { keys } => {
+                    self.backend.key(keys).map_err(SessionError::Inject)?;
+                }
+                Action::Type { text } => {
+                    self.backend.type_text(text).map_err(SessionError::Inject)?;
+                }
+                Action::MouseMove { coordinate } => {
                     self.backend
-                        .mouse_move(self.to_phys(*c))
+                        .mouse_move(self.to_phys(*coordinate))
                         .map_err(SessionError::Inject)?;
                 }
-                self.backend
-                    .press_modifiers(modifiers)
-                    .map_err(SessionError::Inject)?;
-                self.backend
-                    .click(*button, *count)
-                    .map_err(SessionError::Inject)?;
-                self.backend
-                    .release_modifiers(modifiers)
-                    .map_err(SessionError::Inject)?;
-            }
-            Action::MouseDown { button } => {
-                self.backend
-                    .mouse_button(*button, true)
-                    .map_err(SessionError::Inject)?;
-            }
-            Action::MouseUp { button } => {
-                self.backend
-                    .mouse_button(*button, false)
-                    .map_err(SessionError::Inject)?;
-            }
-            Action::Drag {
-                start_coordinate,
-                coordinate,
-            } => {
-                let from = self.to_phys(*start_coordinate);
-                let to = self.to_phys(*coordinate);
-                self.backend.drag(from, to).map_err(SessionError::Inject)?;
-            }
-            Action::Scroll {
-                direction,
-                amount,
-                coordinate,
-                modifiers,
-            } => {
-                if let Some(c) = coordinate {
+                Action::Click {
+                    button,
+                    count,
+                    coordinate,
+                    modifiers,
+                } => {
+                    if let Some(c) = coordinate {
+                        self.backend
+                            .mouse_move(self.to_phys(*c))
+                            .map_err(SessionError::Inject)?;
+                    }
                     self.backend
-                        .mouse_move(self.to_phys(*c))
+                        .press_modifiers(modifiers)
+                        .map_err(SessionError::Inject)?;
+                    self.backend
+                        .click(*button, *count)
+                        .map_err(SessionError::Inject)?;
+                    self.backend
+                        .release_modifiers(modifiers)
                         .map_err(SessionError::Inject)?;
                 }
-                self.backend
-                    .press_modifiers(modifiers)
-                    .map_err(SessionError::Inject)?;
-                self.backend
-                    .scroll(*direction, *amount)
-                    .map_err(SessionError::Inject)?;
-                self.backend
-                    .release_modifiers(modifiers)
-                    .map_err(SessionError::Inject)?;
+                Action::MouseDown { button } => {
+                    self.backend
+                        .mouse_button(*button, true)
+                        .map_err(SessionError::Inject)?;
+                }
+                Action::MouseUp { button } => {
+                    self.backend
+                        .mouse_button(*button, false)
+                        .map_err(SessionError::Inject)?;
+                }
+                Action::Drag {
+                    start_coordinate,
+                    coordinate,
+                } => {
+                    let from = self.to_phys(*start_coordinate);
+                    let to = self.to_phys(*coordinate);
+                    self.backend.drag(from, to).map_err(SessionError::Inject)?;
+                }
+                Action::Scroll {
+                    direction,
+                    amount,
+                    coordinate,
+                    modifiers,
+                } => {
+                    if let Some(c) = coordinate {
+                        self.backend
+                            .mouse_move(self.to_phys(*c))
+                            .map_err(SessionError::Inject)?;
+                    }
+                    self.backend
+                        .press_modifiers(modifiers)
+                        .map_err(SessionError::Inject)?;
+                    self.backend
+                        .scroll(*direction, *amount)
+                        .map_err(SessionError::Inject)?;
+                    self.backend
+                        .release_modifiers(modifiers)
+                        .map_err(SessionError::Inject)?;
+                }
+                Action::HoldKey { key, duration_secs } => {
+                    self.backend
+                        .hold_key(key, *duration_secs)
+                        .map_err(SessionError::Inject)?;
+                }
+                Action::CursorPosition => {
+                    let phys = self
+                        .backend
+                        .cursor_physical()
+                        .map_err(SessionError::Inject)?;
+                    return Ok(ActionResult::CursorPosition(self.spec.phys_to_api(phys)));
+                }
             }
-            Action::HoldKey { key, duration_secs } => {
-                self.backend
-                    .hold_key(key, *duration_secs)
-                    .map_err(SessionError::Inject)?;
-            }
-            Action::CursorPosition => {
-                let phys = self
-                    .backend
-                    .cursor_physical()
-                    .map_err(SessionError::Inject)?;
-                return Ok(ActionResult::CursorPosition(self.spec.phys_to_api(phys)));
-            }
-        }
-        Ok(ActionResult::Done)
+            Ok(ActionResult::Done)
+        })();
+        self.backend.set_abort_checker(None);
+        result
     }
 
-    /// 兼容旧签名：无注入时直接派发（未注入查询时不轮询）
+    /// 兼容旧签名：委托到唯一主路径（不注入中止查询，传 `|| false`）
     pub fn dispatch(&mut self, action: &Action) -> Result<ActionResult, SessionError> {
-        self.dispatch_inner(action)
+        self.dispatch_with_abort(action, || false)
     }
 
     /// 当前布局表(显示器清单 / 虚拟桌面边界)

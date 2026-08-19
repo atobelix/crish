@@ -308,6 +308,12 @@ pub fn element_at_point(root: &PerceptionNode, x: i32, y: i32) -> Option<&Percep
 
 // ===== Windows 设备面(UIA 直调,37 报告 Gate-C 实测路径) =====
 
+#[cfg(windows)]
+struct UiaInner {
+    automation: windows::Win32::UI::Accessibility::IUIAutomation,
+    walker: windows::Win32::UI::Accessibility::IUIAutomationTreeWalker,
+}
+
 /// UIA 结构化感知设备面(windows 0.61.3 `IUIAutomation` COM 直调)。
 ///
 /// 初始化:CoInitializeEx → CoCreateInstance(CUIAutomation) →
@@ -318,11 +324,25 @@ pub fn element_at_point(root: &PerceptionNode, x: i32, y: i32) -> Option<&Percep
 /// windows 0.61 将 UIA「无子 / 无兄弟」的 NULL 结果包装为 `Err(Error::empty())`
 /// (HRESULT 0)——遍历循环把 `Err` 当「无元素」处理(见 [`UiaPerception::children_of`]),
 /// 否则首叶即中断。
+///
+/// ## I2 收敛（Clone AddRef 重复消除）
+/// 内部以 `Arc<UiaInner>` 共享 COM 句柄，`Clone` 仅做 `Arc` 计数增量，不触发
+/// `IUIAutomation::Clone`（COM `AddRef`），消除每次 `dispatch` 的重复
+/// `AddRef/Release`（n=2 双重引用计数重复）；`UiaPerception` 在 `spawn_blocking`
+/// 闭包中以引用共享方式使用，收敛到单一共享路径，语义不变（MTA 下单例 COM
+/// 对象生命周期由 `Arc` 维护，`focused_element_name` 等调用仍经同一句柄）。
 #[cfg(windows)]
-#[derive(Clone)]
 pub struct UiaPerception {
-    automation: windows::Win32::UI::Accessibility::IUIAutomation,
-    walker: windows::Win32::UI::Accessibility::IUIAutomationTreeWalker,
+    inner: std::sync::Arc<UiaInner>,
+}
+
+#[cfg(windows)]
+impl Clone for UiaPerception {
+    fn clone(&self) -> Self {
+        Self {
+            inner: std::sync::Arc::clone(&self.inner),
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -351,7 +371,9 @@ impl UiaPerception {
             let walker = automation
                 .CreateTreeWalker(&condition)
                 .map_err(|e| PerceptionError::Init(format!("CreateTreeWalker: {e}")))?;
-            Ok(Self { automation, walker })
+            Ok(Self {
+                inner: std::sync::Arc::new(UiaInner { automation, walker }),
+            })
         }
     }
 
@@ -366,6 +388,7 @@ impl UiaPerception {
         }
         unsafe {
             let root_el = self
+                .inner
                 .automation
                 .ElementFromHandle(hwnd)
                 .map_err(|e| PerceptionError::Traverse(format!("ElementFromHandle: {e}")))?;
@@ -480,7 +503,7 @@ impl UiaPerception {
         &self,
         el: &windows::Win32::UI::Accessibility::IUIAutomationElement,
     ) -> Option<windows::Win32::UI::Accessibility::IUIAutomationElement> {
-        unsafe { self.walker.GetFirstChildElement(el).ok() }
+        unsafe { self.inner.walker.GetFirstChildElement(el).ok() }
     }
 
     /// 下一个兄弟元素(NULL → Err(empty) → None)
@@ -489,7 +512,7 @@ impl UiaPerception {
         &self,
         el: &windows::Win32::UI::Accessibility::IUIAutomationElement,
     ) -> Option<windows::Win32::UI::Accessibility::IUIAutomationElement> {
-        unsafe { self.walker.GetNextSiblingElement(el).ok() }
+        unsafe { self.inner.walker.GetNextSiblingElement(el).ok() }
     }
 
     /// 焦点元素所属顶层窗口的名称（1C-7）。
@@ -502,7 +525,7 @@ impl UiaPerception {
     pub fn focused_element_name(&self) -> Option<String> {
         use windows::Win32::UI::Accessibility::IUIAutomationElement;
         unsafe {
-            let focused = self.automation.GetFocusedElement().ok()?;
+            let focused = self.inner.automation.GetFocusedElement().ok()?;
             let mut root_el: IUIAutomationElement = focused;
             while let Some(parent) = self.parent_of(&root_el) {
                 root_el = parent;
@@ -527,7 +550,7 @@ impl PerceptionSource for UiaPerception {
         use windows::Win32::UI::Accessibility::IUIAutomationElement;
         unsafe {
             // 活动窗口:GetFocusedElement → 上溯至顶层窗口(父链顶端)
-            let focused = self.automation.GetFocusedElement().map_err(|e| {
+            let focused = self.inner.automation.GetFocusedElement().map_err(|e| {
                 tracing::debug!(error = %e, "GetFocusedElement 失败(无活动窗口)");
                 PerceptionError::NoActiveWindow
             })?;
@@ -551,6 +574,7 @@ impl PerceptionSource for UiaPerception {
         use windows::Win32::Foundation::POINT;
         unsafe {
             let el = self
+                .inner
                 .automation
                 .ElementFromPoint(POINT { x, y })
                 .map_err(|e| PerceptionError::Traverse(format!("ElementFromPoint: {e}")))?;
@@ -579,7 +603,7 @@ impl UiaPerception {
         &self,
         el: &windows::Win32::UI::Accessibility::IUIAutomationElement,
     ) -> Option<windows::Win32::UI::Accessibility::IUIAutomationElement> {
-        unsafe { self.walker.GetParentElement(el).ok() }
+        unsafe { self.inner.walker.GetParentElement(el).ok() }
     }
 }
 

@@ -31,7 +31,6 @@ pub use input::{
     ClickCount, InputBackend, InputBackendError, KeyName, MouseButton, PhysicalPoint,
     ScrollDirection,
 };
-pub use time::{civil_from_days, now_iso_utc, unix_millis};
 
 #[cfg(test)]
 pub(crate) mod test_support;
