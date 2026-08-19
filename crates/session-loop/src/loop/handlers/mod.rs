@@ -1595,11 +1595,23 @@ mod tests {
         let summarizer = Arc::new(FailsThenSucceeds {
             calls: calls.clone(),
         });
-        let mut state = test_state({ let mut o = budgeted_options(); o.compaction.summarizer = Some(summarizer.clone()); o.cache.cache_tracking = Some(crate::cache_tracker::CacheTrackingConfig {
+        let mut state = test_state({
+            let mut o = budgeted_options();
+            o.compaction.summarizer = Some(summarizer.clone());
+            o.cache.cache_tracking = Some(crate::cache_tracker::CacheTrackingConfig {
                 provider: "deepseek".into(),
                 model: "deepseek-v4-flash".into(),
                 ttl_seconds: 60,
-            }); o.compaction.compact_allow_stub_fallback = true; o });
+            });
+            o.compaction.compact_allow_stub_fallback = true;
+            o.summary.summary_dispatch = Some(crate::r#loop::summary_dispatch::SummaryDispatchConfig {
+                backoff_ms: vec![1, 1, 1],
+                jitter: 0.0,
+                max_wall_ms: 5_000,
+                max_attempts: 4,
+            });
+            o
+        });
         state.conversation = big_conversation();
         assert!(
             maybe_compact_preflight(&mut state).await,

@@ -53,15 +53,22 @@ use conex_types::events::AgentEvent;
     /// 构造无注入状态覆盖。
     fn budgeted_state() -> LoopState {
         let mut state = streaming_state();
-        let options = { let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(ContextBudget {
+        let options = {
+            let mut o: SessionLoopOptions = SessionLoopOptions::default();
+            o.assembly.context_budget = Some(ContextBudget {
                 context_window: 10_000,
                 reserve_tokens: 2_000,
                 safety_tokens: 100,
-            }); o.compaction.compaction_policy = Some(CompactionPolicy {
+            });
+            o.compaction.compaction_policy = Some(CompactionPolicy {
                 keep_recent_tokens: 20_000,
                 min_recent_turns: 1,
                 ..Default::default()
-            }); o.compaction.max_auto_compactions_per_run = 1; o };
+            });
+            o.compaction.max_auto_compactions_per_run = 1;
+            o.compaction.summarizer = Some(Arc::new(OkSummarizer));
+            o
+        };
         // LoopState 构造期从 options 派生 budget/policy——测试内直接改
         // options 需同步派生字段（生产路径经 with_options 派生）
         state.options = options.clone();
