@@ -9,7 +9,7 @@
  * - RightToolDockHeader 基于 tab.rightDock（旧版右坞模型）
  * - LeafToolTabStrip 基于 leaf.tabs / leaf.activeTab（BinaryTreeWorkspace 独立 leaf 模型）
  *
- * 坞头含 UNIT_TOOL_PANELS 图标导航（打开文件等）；对话顶行不再放这些钮。
+ * 坞头含 UNIT_TOOL_PANELS 图标导航（打开文件等）；对话顶快捷行同样有这些钮（双表面）。
  */
 
 import React, { useCallback, useSyncExternalStore } from 'react';

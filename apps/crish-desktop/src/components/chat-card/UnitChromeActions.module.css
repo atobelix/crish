@@ -137,3 +137,11 @@
 .actionBtn[data-share-flash='true'] {
   color: var(--accent-green);
 }
+
+.toolbarDivider {
+  width: 1px;
+  height: 14px;
+  background: var(--border-subtle);
+  margin: 0 4px;
+  flex-shrink: 0;
+}

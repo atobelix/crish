@@ -183,7 +183,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(filesCard).toBeDefined();
   });
 
-  it('F6 默认 chat 叶出现顶快捷行；打开文件不在对话顶；不挂 LeafToolTabStrip', async () => {
+  it('F6 默认 chat 叶出现顶快捷行；打开文件在对话顶；不挂 LeafToolTabStrip', async () => {
     deactivateNotePaper();
     const leaf = createLeaf('chat', ['chat'], 'chat', 'session-123');
     useLayoutTreeStore.setState({
@@ -206,7 +206,8 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(chrome?.hasAttribute('data-canvas-quiet')).toBe(false);
     expect(container.querySelector('[data-leaf-tool-tab-strip]')).toBeNull();
     expect(queryByTestId('chat-open-note')).toBeNull();
-    expect(queryByTestId('chat-open-files')).toBeNull();
+    expect(getByTestId('chat-open-files')).toBeTruthy();
+    expect(getByTestId('chat-open-overview')).toBeTruthy();
     expect(getByTestId('right-dock-toggle')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
     expect(getByTestId('chat-share')).toBeTruthy();
@@ -214,7 +215,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     act(() => {
       activateNotePaper();
     });
-    expect(queryByTestId('chat-open-note')).toBeNull();
+    expect(getByTestId('chat-open-note')).toBeTruthy();
     expect(container.querySelector('[data-leaf-tool-tab-strip]')).toBeNull();
     act(() => {
       deactivateNotePaper();

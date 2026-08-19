@@ -135,18 +135,25 @@ describe('countRunningSubagents', () => {
 });
 
 /**
- * 对话顶行右侧固定钮顺序：更多 / 分享 / 坞开关。坞开合都不卸。
- * 打开文件等工具不在本行。
+ * 对话顶行：工具钮（总览/文件/差异/终端/笔记）+ 更多 / 分享 / 坞开关。
+ * 坞开合都不卸右钮。消息筛选不在本行。
  */
 describe('unit chrome dock order (contract)', () => {
-  it('chat top actions end with dock toggle; tools not in this row', () => {
+  it('chat top actions include tools and end with dock toggle', () => {
     const actionOrder = [
+      'chat-open-overview',
+      'chat-open-files',
+      'chat-open-diff',
+      'chat-open-terminal',
+      'chat-open-note',
       'chat-header-more',
       'chat-share',
       'right-dock-toggle',
     ] as const;
+    expect(actionOrder).toContain('chat-open-files');
+    expect(actionOrder).toContain('chat-open-overview');
+    expect(actionOrder).toContain('chat-open-note');
     expect(actionOrder[actionOrder.length - 1]).toBe('right-dock-toggle');
-    expect(actionOrder.includes('chat-open-files' as never)).toBe(false);
     expect(actionOrder.includes('chat-toggle-msg-filter' as never)).toBe(
       false,
     );

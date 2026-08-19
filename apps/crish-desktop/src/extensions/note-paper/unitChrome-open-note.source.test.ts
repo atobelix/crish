@@ -65,7 +65,7 @@ describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打
     );
   });
 
-  it('清单在 unitChromeTools；DOM 契约在坞头 LeafToolTabStrip', () => {
+  it('清单在 unitChromeTools；对话顶与坞头双表面都有 DOM 契约', () => {
     expect(toolsSrc).toMatch(
       /id:\s*['"]note['"][\s\S]*?label:\s*['"]打开笔记['"][\s\S]*?testId:\s*['"]chat-open-note['"]/
     );
@@ -74,8 +74,10 @@ describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打
     expect(stripSrc).toMatch(/data-panel=\{id\}/);
     expect(stripSrc).toMatch(/data-leaf-tool-tab-strip=["']true["']/);
     expect(stripSrc).toMatch(/aria-label=\{label\}/);
-    expect(chromeSrc).not.toMatch(/chat-open-note/);
-    expect(chromeSrc).not.toMatch(/UNIT_TOOL_PANELS/);
+    expect(chromeSrc).toMatch(/UNIT_TOOL_PANELS/);
+    expect(chromeSrc).toMatch(/data-testid=\{testId\}/);
+    expect(chromeSrc).toMatch(/data-panel=\{id\}/);
+    expect(chromeSrc).toMatch(/openToolInSession/);
     expect(arriveSrc).toMatch(
       /export const OPEN_NOTE\s*=\s*[\s\S]*?data-testid=["']chat-open-note["']/
     );
@@ -84,6 +86,7 @@ describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打
   it('打开走 openToolInSession + note，不点 open-note-paper-strict', () => {
     expect(stripSrc).toMatch(/openToolInSession\(leaf\.sessionId,\s*pid\)/);
     expect(stripSrc).toMatch(/onClick=\{\(\)\s*=>\s*openPanel\(id\)\}/);
+    expect(chromeSrc).toMatch(/openToolInSession\(/);
     expect(openToolSrc).toMatch(
       /export function openToolInSession\(\s*sessionId:\s*string,\s*panelId:\s*string/
     );
@@ -98,7 +101,7 @@ describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打
     );
   });
 
-  it('chat 叶仍挂 UnitChromeActions 覆盖层；工具钮在坞头', () => {
+  it('chat 叶仍挂 UnitChromeActions 覆盖层；工具钮在对话顶（坞头可共存）', () => {
     expect(treeSrc).toMatch(/import\s+\{\s*UnitChromeActions\s*\}/);
     expect(treeSrc).toMatch(
       /isChat\s*\?\s*\([\s\S]*?<UnitChromeActions[\s\S]*?activeSessionId=\{sessionForPanel\}/
@@ -107,5 +110,6 @@ describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打
       /openToolInSession\(\s*targetSessionId,\s*panelId\s*\)/
     );
     expect(stripSrc).toMatch(/viewRegistry\.getView\(id\)/);
+    expect(chromeSrc).toMatch(/viewRegistry\.getView\(id\)/);
   });
 });

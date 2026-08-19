@@ -5,7 +5,7 @@
  * - 纯几何叶子空间容器，100% 剥离 switch(panelId) 静态硬编码；
  * - 面板内容全量改由 SlotOutlet('workspace.leaf.panel') + ViewRegistry 动态渲染；
  * - 标题统一由 ViewRegistry 派生。
- * - chat 叶 chrome：UnitChromeActions（leafBody 上覆盖层；右侧固定钮，坞开不卸）。
+ * - chat 叶 chrome：UnitChromeActions（leafBody 上覆盖层；工具钮 + 更多/分享/坞开关，坞开不卸）。
  * - 工具叶 chrome：LeafToolTabStrip。不要复活 ChatHeader / UnitSessionTabStrip。
  */
 

@@ -4,8 +4,9 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { act, render } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { UnitChromeActions } from './UnitChromeActions';
+import { viewRegistry } from '../../services/view-registry';
 import { UNIT_CHROME_TOOL_TIP_SIDE } from './unitChromeLabel';
 import {
   useWorkspaceShellStore,
@@ -18,18 +19,43 @@ import type { SessionState } from '../../store/types';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
 import { EMPTY_SESSION_TITLE } from '../../api/sessionTitle';
+import * as storeAccess from '../../store/storeAccess';
+import {
+  activateNotePaper,
+  deactivateNotePaper,
+} from '../../extensions/note-paper';
 
 const DIR =
   typeof import.meta.dirname === 'string'
     ? import.meta.dirname
     : dirname(fileURLToPath(import.meta.url));
 
-function renderChrome(sessionId: string | null) {
+function renderChrome(
+  sessionId: string | null,
+  extra?: { leading?: React.ReactNode }
+) {
   let utils!: ReturnType<typeof render>;
   act(() => {
-    utils = render(<UnitChromeActions activeSessionId={sessionId} />);
+    utils = render(
+      <UnitChromeActions
+        activeSessionId={sessionId}
+        leading={extra?.leading}
+      />
+    );
   });
   return utils;
+}
+
+function stubCoreTools(): void {
+  vi.spyOn(viewRegistry, 'getView').mockImplementation((id: string) => {
+    if (id === 'note') return undefined as never;
+    return {
+      id,
+      title: id,
+      category: 'tool',
+      component: () => null,
+    } as never;
+  });
 }
 
 function seedSession(
@@ -154,8 +180,11 @@ describe('UnitChromeActions 分屏折叠作用域单源化 (Task 2)', () => {
   });
 });
 
-describe('UnitChromeActions 对话顶快捷行（覆盖层，非 quiet 工具簇）', () => {
+describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', () => {
   afterEach(() => {
+    act(() => {
+      deactivateNotePaper();
+    });
     vi.restoreAllMocks();
     useSessionStore.setState({
       sessions: [],
@@ -164,56 +193,90 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层，非 quiet 工具簇
     });
   });
 
-  it('空会话：无 quiet、无打开文件；更多 / 分享 / 坞开关固定在', () => {
+  it('空会话：无 quiet；打开文件等工具在对话顶；更多 / 分享 / 坞开关固定在', () => {
+    stubCoreTools();
     seedSession('unit-empty', { messageCount: 0, title: EMPTY_SESSION_TITLE });
     const { getByTestId, queryByTestId, container } =
       renderChrome('unit-empty');
     const root = container.querySelector('[data-unit-chrome-actions="true"]');
     expect(root?.getAttribute('data-chat-top-header')).toBe('true');
     expect(root?.hasAttribute('data-canvas-quiet')).toBe(false);
-    expect(queryByTestId('chat-open-files')).toBeNull();
-    expect(queryByTestId('chat-open-overview')).toBeNull();
+    expect(getByTestId('chat-open-files')).toBeTruthy();
+    expect(getByTestId('chat-open-overview')).toBeTruthy();
+    expect(getByTestId('chat-open-diff')).toBeTruthy();
+    expect(getByTestId('chat-open-terminal')).toBeTruthy();
     expect(queryByTestId('chat-open-note')).toBeNull();
+    expect(getByTestId('chat-open-files').getAttribute('aria-label')).toBe(
+      '打开文件'
+    );
     expect(getByTestId('chat-header-more')).toBeTruthy();
     expect(getByTestId('chat-share')).toBeTruthy();
     expect(getByTestId('right-dock-toggle')).toBeTruthy();
     expect(container.textContent).toContain(EMPTY_SESSION_TITLE);
     expect(container.textContent).not.toContain('未命名会话');
-    expect(container.textContent).not.toContain('打开文件');
+    expect(
+      getByTestId('chat-open-files').textContent?.replace(/\s+/g, '')
+    ).toBe('');
   });
 
-  it('no-session / 草稿：右钮仍在，标题是新会话', () => {
+  it('no-session / 草稿：工具入口仍在，标题是新会话', () => {
+    stubCoreTools();
     const none = renderChrome(null);
     const noneRoot = none.container.querySelector(
       '[data-unit-chrome-actions="true"]'
     );
     expect(noneRoot?.hasAttribute('data-canvas-quiet')).toBe(false);
-    expect(none.queryByTestId('chat-open-files')).toBeNull();
+    expect(none.getByTestId('chat-open-files')).toBeTruthy();
     expect(none.getByTestId('right-dock-toggle')).toBeTruthy();
     expect(none.getByTestId('chat-share')).toBeTruthy();
     expect(none.container.textContent).toContain(EMPTY_SESSION_TITLE);
     none.unmount();
 
     const draft = renderChrome(PENDING_DRAFT_SESSION_ID);
-    expect(draft.queryByTestId('chat-open-files')).toBeNull();
+    expect(draft.getByTestId('chat-open-files')).toBeTruthy();
     expect(draft.getByTestId('right-dock-toggle')).toBeTruthy();
     expect(draft.container.textContent).toContain(EMPTY_SESSION_TITLE);
   });
 
-  it('有消息后仍是覆盖层，工具钮不回到对话顶', () => {
+  it('有消息后仍是覆盖层，工具钮仍在对话顶', () => {
+    stubCoreTools();
     seedSession('unit-live', { messageCount: 2, title: '重构 IPC' });
-    const { queryByTestId, getByTestId, container } = renderChrome('unit-live');
+    const { getByTestId, container } = renderChrome('unit-live');
     expect(
       container
         .querySelector('[data-unit-chrome-actions="true"]')
         ?.hasAttribute('data-canvas-quiet')
     ).toBe(false);
-    expect(queryByTestId('chat-open-files')).toBeNull();
+    expect(getByTestId('chat-open-files')).toBeTruthy();
     expect(getByTestId('right-dock-toggle')).toBeTruthy();
     expect(container.textContent).toContain('重构 IPC');
   });
 
+  it('leading 插槽渲染在对话顶', () => {
+    stubCoreTools();
+    seedSession('unit-lead', { messageCount: 1 });
+    const { getByTestId } = renderChrome('unit-lead', {
+      leading: <span data-testid="chrome-leading">搜</span>,
+    });
+    expect(getByTestId('chrome-leading')).toBeTruthy();
+    expect(getByTestId('chat-open-files')).toBeTruthy();
+  });
+
+  it('点击打开文件走 openToolInSession(sid, files)', () => {
+    stubCoreTools();
+    const spy = vi
+      .spyOn(storeAccess, 'openToolInSession')
+      .mockImplementation(() => {});
+    seedSession('unit-open', { messageCount: 1 });
+    const { getByTestId } = renderChrome('unit-open');
+    act(() => {
+      getByTestId('chat-open-files').click();
+    });
+    expect(spy).toHaveBeenCalledWith('unit-open', 'files');
+  });
+
   it('子 Agent running 才出第三段面包屑', () => {
+    stubCoreTools();
     seedSession('unit-agents', {
       messageCount: 1,
       title: '有子代理',
@@ -227,19 +290,25 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层，非 quiet 工具簇
     expect(container.textContent).toContain('2 个运行中');
   });
 
-  it('Tip 走 bottom；源码无 quiet / 无工具广告行', () => {
+  it('Tip 走 bottom；覆盖层无 quiet / 无果冻；工具清单在对话顶', () => {
     expect(UNIT_CHROME_TOOL_TIP_SIDE).toBe('bottom');
     const src = readFileSync(join(DIR, 'UnitChromeActions.tsx'), 'utf8');
     const css = readFileSync(join(DIR, 'UnitChromeActions.module.css'), 'utf8');
     expect(src).not.toMatch(/data-canvas-quiet/);
     expect(src).not.toMatch(/isUnitChromeCanvasQuiet/);
-    expect(src).not.toMatch(/UNIT_TOOL_PANELS/);
-    expect(src).not.toMatch(/chat-open-files/);
+    expect(src).toMatch(/UNIT_TOOL_PANELS/);
+    expect(src).toMatch(/openToolInSession/);
+    expect(src).toMatch(/chat-open-files|data-testid=\{testId\}/);
+    expect(src).toMatch(/onMoveToFolder/);
+    expect(src).toMatch(/onTogglePin/);
+    expect(src).toMatch(/onExportMarkdown/);
+    expect(src).toMatch(/onClearHistory/);
     expect(src).not.toMatch(/if\s*\(\s*rightDockCollapsed\s*&&/);
     expect(src).not.toMatch(/from\s+['"]\.\/ChatHeader['"]/);
     expect(src).toMatch(/data-testid="right-dock-toggle"/);
     expect(src).toMatch(/data-testid="chat-share"/);
     expect(src).toMatch(/data-chat-top-header/);
+    expect(src).toMatch(/\{leading\}/);
     expect(css).not.toMatch(/data-canvas-quiet/);
     expect(css).not.toMatch(/opacity:\s*0\.28/);
     expect(css).not.toMatch(/transform:\s*scale/);
@@ -247,5 +316,56 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层，非 quiet 工具簇
     expect(css).toMatch(/pointer-events:\s*none/);
     expect(css).toMatch(/--button-radius,\s*7px/);
     expect(css).not.toMatch(/\.chatTopHeader\s*\{[^}]*display:\s*none/);
+  });
+});
+
+describe('UnitChromeActions 笔记闸（02 F6 / F7）', () => {
+  afterEach(() => {
+    act(() => {
+      deactivateNotePaper();
+    });
+    vi.restoreAllMocks();
+  });
+
+  it('未 activate 不渲染 chat-open-note；activate 后出现，deactivate 后消失', async () => {
+    deactivateNotePaper();
+    const { queryByTestId, getByTestId } = render(
+      <UnitChromeActions activeSessionId="unit-a" />
+    );
+    expect(queryByTestId('chat-open-note')).toBeNull();
+
+    act(() => {
+      activateNotePaper();
+    });
+    await waitFor(() => {
+      expect(getByTestId('chat-open-note')).toBeTruthy();
+    });
+
+    act(() => {
+      deactivateNotePaper();
+    });
+    await waitFor(() => {
+      expect(queryByTestId('chat-open-note')).toBeNull();
+    });
+  });
+
+  it('F7 点击 chat-open-note 只走 openToolInSession(sid, note)', async () => {
+    act(() => {
+      activateNotePaper();
+    });
+    const spy = vi
+      .spyOn(storeAccess, 'openToolInSession')
+      .mockImplementation(() => {});
+    const { getByTestId } = render(
+      <UnitChromeActions activeSessionId="unit-a" />
+    );
+    await waitFor(() => {
+      expect(getByTestId('chat-open-note')).toBeTruthy();
+    });
+    act(() => {
+      getByTestId('chat-open-note').click();
+    });
+    expect(spy).toHaveBeenCalledWith('unit-a', 'note');
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,9 +1,17 @@
 /**
- * 对话叶顶快捷行（参考 chat-top-header）。
- * 覆盖在对话流上：面包屑 + 右侧固定 28px 钮（更多 / 分享 / 坞开关）。
- * 坞开合都不卸载右钮。打开文件等工具在坞头，不在本行。
+ * 对话叶顶快捷行（气质参考 chat-top-header，能力不跟示例网页砍）。
+ * 覆盖在对话流上：leading + 面包屑；右侧固定 28px 钮。
+ * 产品工具（总览/文件/差异/终端/笔记）必须在本行；坞头可共存，不能只留坞头。
+ * 坞开合都不卸载右钮。无 quiet 半隐、无果冻。
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { Link } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { IconButton, Tooltip } from '../ui';
@@ -13,9 +21,12 @@ import {
   resolveUnitChromeToolTip,
   UNIT_CHROME_TOOL_TIP_SIDE,
 } from './unitChromeLabel';
+import { UNIT_TOOL_PANELS } from './unitChromeTools';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
+import { viewRegistry } from '../../services/view-registry';
 import {
   applyDockToTree,
+  openToolInSession,
   useWorkspaceShellStore,
   useSessionField,
   useLayoutTreeStore,
@@ -103,6 +114,18 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
     const rightDockCollapsed = dockSnapshot
       ? dockSnapshot.collapsed
       : globalTreeCollapsed;
+    const openPanelIds = dockSnapshot?.openPanelIds;
+    const activePanelId = dockSnapshot?.activePanelId;
+    const openPanelSet = useMemo(
+      () => new Set(openPanelIds ?? []),
+      [openPanelIds]
+    );
+
+    const registryVersion = useSyncExternalStore(
+      (cb) => viewRegistry.subscribe(cb),
+      () => viewRegistry.getVersion()
+    );
+    void registryVersion;
 
     const [shareFlash, setShareFlash] = useState(false);
     const flashTimerRef = useRef<number | null>(null);
@@ -203,6 +226,13 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       })();
     }, [sid]);
 
+    const handleOpenTool = useCallback(
+      (panelId: string) => {
+        openToolInSession((activeSessionId || '').trim(), panelId);
+      },
+      [activeSessionId]
+    );
+
     const handleToggleRightDock = useCallback(() => {
       const shell = getCompositionRoot().shell.getState();
       const id = (activeSessionId || '').trim();
@@ -267,6 +297,36 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
         </div>
 
         <div className={styles.topActions}>
+          {UNIT_TOOL_PANELS.map(({ id, label, testId, Icon }) => {
+            if (!viewRegistry.getView(id)) return null;
+            const isOpen = openPanelSet.has(id);
+            const isActive = !rightDockCollapsed && activePanelId === id;
+            return (
+              <Tooltip
+                key={id}
+                content={resolveUnitChromeToolTip(label)}
+                side={UNIT_CHROME_TOOL_TIP_SIDE}
+              >
+                <IconButton
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={styles.actionBtn}
+                  data-testid={testId}
+                  data-panel={id}
+                  data-active={isActive ? 'true' : 'false'}
+                  data-open={isOpen && !rightDockCollapsed ? 'true' : 'false'}
+                  aria-label={label}
+                  aria-pressed={isActive}
+                  onClick={() => handleOpenTool(id)}
+                  icon={<Icon size={15} strokeWidth={1.75} aria-hidden />}
+                />
+              </Tooltip>
+            );
+          })}
+          {UNIT_TOOL_PANELS.some(({ id }) => viewRegistry.getView(id)) ? (
+            <span className={styles.toolbarDivider} aria-hidden="true" />
+          ) : null}
           <ChatHeaderMore
             className={styles.actionBtn}
             onTogglePin={realSession ? handleTogglePin : undefined}

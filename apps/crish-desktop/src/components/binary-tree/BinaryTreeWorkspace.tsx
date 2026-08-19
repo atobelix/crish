@@ -4,7 +4,7 @@
  * 渲染流程：
  * 1. layoutTreeStore → flattenTree
  * 2. leaf chrome（真树；不要复活 ChatHeader / UnitSessionTabStrip）：
- *    - chat 叶：UnitChromeActions（leafBody 上覆盖层；右侧固定钮，坞开不卸）
+ *    - chat 叶：UnitChromeActions（leafBody 上覆盖层；工具钮 + 右侧固定钮，坞开不卸）
  *    - 工具叶：LeafToolTabStrip（基于 leaf.tabs）
  *    - 会话身份在窗口顶栏 GlobalSessionTabBar + 侧栏列表，叶内不再做第三套标题行
  * 3. sash / DropZoneOverlay / 面板 ghost
