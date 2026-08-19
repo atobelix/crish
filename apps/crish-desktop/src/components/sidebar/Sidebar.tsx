@@ -174,6 +174,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
       cancelDelete,
       menuRef,
       sortMenuRef,
+      contextMenuTriggerRef,
       handleContextMenu,
       handleAction,
     } = useSidebarContextMenu({ setSortDropdownOpen });
@@ -374,6 +375,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           onSetFilterType={setFilterType}
           onCloseSortDropdown={() => setSortDropdownOpen(false)}
           onCloseContextMenu={() => setContextMenu(null)}
+          contextMenuTriggerRef={contextMenuTriggerRef}
           sortTriggerRef={sortTriggerRef}
         />
 

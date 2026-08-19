@@ -16,6 +16,7 @@ import {
   type SessionContextMenuState,
   type SessionMenuAction,
 } from './SidebarContextMenus';
+import { toggleExclusiveMenu } from '../ui/Menu';
 import { openSessionInNewWindow } from './sidebarHelpers';
 
 /**
@@ -96,11 +97,17 @@ export function useSidebarContextMenu({
 
   const menuRef = useRef<HTMLDivElement>(null);
   const sortMenuRef = useRef<HTMLDivElement>(null);
+  const contextMenuTriggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
+      const target = e.target as Node;
+      if (menuRef.current && !menuRef.current.contains(target)) {
+        const trigger = contextMenuTriggerRef.current;
+        // 点在 trigger 上交给 toggleExclusiveMenu，避免外点关 + 再开对打
+        if (!trigger || !trigger.contains(target)) {
+          setContextMenu(null);
+        }
       }
       if (
         sortMenuRef.current &&
@@ -126,9 +133,32 @@ export function useSidebarContextMenu({
 
   const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
     e.preventDefault();
-    setRenamingSessionId(null);
-    // 严格保存原始物理点击坐标，不可变锚点传递给浮层组件（彻底根除 Double Flip 二次翻转）
-    setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
+    const triggerEl =
+      (e.currentTarget instanceof HTMLElement ? e.currentTarget : null) ??
+      (e.target instanceof HTMLElement ? e.target : null);
+
+    const openThis = () => {
+      setRenamingSessionId(null);
+      setSortDropdownOpen(false);
+      contextMenuTriggerRef.current = triggerEl;
+      // 严格保存原始物理点击坐标，不可变锚点传递给浮层组件（彻底根除 Double Flip 二次翻转）
+      setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
+    };
+
+    // 左键「更多」：与加号/权限丸同构，开着写死 false，外点关后抑制重开
+    if (e.button !== 2) {
+      toggleExclusiveMenu(
+        contextMenu?.sessionId === sessionId,
+        (next) => {
+          if (next) openThis();
+          else setContextMenu(null);
+        },
+        triggerEl
+      );
+      return;
+    }
+
+    openThis();
   };
 
   const handleAction = (action: SessionMenuAction) => {
@@ -246,6 +276,7 @@ export function useSidebarContextMenu({
     cancelDelete,
     menuRef,
     sortMenuRef,
+    contextMenuTriggerRef,
     handleContextMenu,
     handleAction,
   };

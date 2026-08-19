@@ -96,12 +96,15 @@ function syntheticContextMenuEvent(
   const stopPropagation = () => {
     if (base && 'stopPropagation' in base) base.stopPropagation();
   };
+  const isMoreButton = anchor === 'right-center';
   return {
     clientX,
     clientY,
     preventDefault,
     stopPropagation,
-    button: 2,
+    button: isMoreButton ? 0 : 2,
+    currentTarget: targetEl ?? el,
+    target: targetEl ?? el,
   } as unknown as React.MouseEvent;
 }
 

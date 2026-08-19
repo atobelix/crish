@@ -14,11 +14,15 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Tooltip } from '../ui';
+import { useLayerRegistration } from '../ui/internal/layer-registration/useLayerRegistration';
 import type {
   SessionContextMenuState,
   SessionMenuAction,
 } from './SidebarContextMenus';
 import styles from './SidebarContextMenus.module.css';
+
+/** 与 LayerStack exclusive 同槽；登记时驱逐 dropdown / 其它 context-menu */
+export const SESSION_CONTEXT_MENU_LAYER_ID = 'sidebar-session-context-menu';
 
 function measureMenu(
   el: HTMLElement,
@@ -91,7 +95,8 @@ function onMenuKeyDown(e: React.KeyboardEvent<HTMLElement>) {
 }
 
 /**
- * 会话右键菜单浮层（portal 渲染，含坐标钳位、首项聚焦、Esc 关闭归位）。
+ * 会话右键菜单浮层（portal 渲染，含坐标钳位、首项聚焦）。
+ * Esc / 外点 / 互斥驱逐走 LayerStack（type=context-menu），不改成 Radix。
  */
 export const SessionContextMenu: React.FC<{
   contextMenu: SessionContextMenuState;
@@ -109,7 +114,19 @@ export const SessionContextMenu: React.FC<{
   contextMenuTriggerRef,
 }) => {
   const focusedOnceRef = useRef<string | null>(null);
-  const contextMenuRestoreRef = useRef<HTMLElement | null>(null);
+
+  useLayerRegistration(
+    {
+      id: SESSION_CONTEXT_MENU_LAYER_ID,
+      type: 'context-menu',
+      dismissible: true,
+      onDismiss: () => onCloseContextMenu?.(),
+      elementRef: menuRef,
+      anchorRef: contextMenuTriggerRef,
+      restoreFocusTarget: contextMenuTriggerRef?.current ?? undefined,
+    },
+    true
+  );
 
   // 打开后按真实尺寸再钳一次，贴底/贴右不溢出，并应用智能 transformOrigin
   useLayoutEffect(() => {
@@ -123,8 +140,6 @@ export const SessionContextMenu: React.FC<{
 
   // 打开会话菜单时聚焦首项（键盘可立即操作）
   useEffect(() => {
-    contextMenuRestoreRef.current =
-      document.activeElement as HTMLElement | null;
     const key = contextMenu.sessionId;
     if (focusedOnceRef.current === key) return;
     focusedOnceRef.current = key;
@@ -139,21 +154,6 @@ export const SessionContextMenu: React.FC<{
     return () => cancelAnimationFrame(id);
   }, [contextMenu, menuRef]);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        onCloseContextMenu?.();
-        const target =
-          contextMenuTriggerRef?.current || contextMenuRestoreRef.current;
-        requestAnimationFrame(() => target?.focus());
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown, true);
-    return () => window.removeEventListener('keydown', handleKeyDown, true);
-  }, [onCloseContextMenu, contextMenuTriggerRef]);
-
   return createPortal(
     <div
       ref={menuRef}
@@ -166,6 +166,7 @@ export const SessionContextMenu: React.FC<{
       }}
       role="menu"
       aria-label="会话操作"
+      data-testid="session-context-menu"
       onKeyDown={onMenuKeyDown}
     >
       <button
