@@ -101,6 +101,11 @@
   opacity: 1;
 }
 
+.userMeta.metaAlways,
+.assistantMeta.metaAlways {
+  opacity: 1;
+}
+
 .time {
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-normal);
@@ -302,6 +307,20 @@
 .iconBtn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+/* 消息流撤回：ui/Button ghost + 7px，关 UA / 果冻，hover 只走 Button ::before */
+.retractBtn {
+  -webkit-appearance: none;
+  appearance: none;
+  border-radius: var(--button-radius, 7px);
+  transform: none;
+}
+
+.retractBtn:hover,
+.retractBtn:active {
+  background: transparent;
+  transform: none;
 }
 
 .queued {

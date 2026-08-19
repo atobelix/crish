@@ -449,37 +449,6 @@
   height: var(--icon-size);
 }
 
-/* R1                 ghost          
-    AGENTS  13                   */
-.retractBtn {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  width: var(--control-height);
-  height: var(--control-height);
-  border-radius: var(--radius-lg);
-  color: var(--text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.retractBtn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.retractBtn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.retractBtn svg {
-  width: var(--icon-size);
-  height: var(--icon-size);
-}
-
 .composerWrapper {
   position: relative;
   display: flex;
@@ -496,7 +465,11 @@
   align-items: center;
   justify-content: center;
   border-radius: 20px;
-  background: color-mix(in srgb, var(--composer-bg) 92%, var(--text-primary) 4%);
+  background: color-mix(
+    in srgb,
+    var(--composer-bg) 92%,
+    var(--text-primary) 4%
+  );
   color: var(--text-tertiary);
   font-size: var(--font-size-sm, 13px);
   pointer-events: none;

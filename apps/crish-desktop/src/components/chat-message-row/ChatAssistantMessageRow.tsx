@@ -22,6 +22,7 @@ import {
 import { MessageContent } from '../chat-message/MessageContent';
 import { MessageActions } from '../chat-message/MessageActions';
 import { CacheMetricsBadge } from './CacheMetricsBadge';
+import { RetractActionButton } from './RetractActionButton';
 
 export type { ChatAssistantMessageRowProps } from './chatMessageRowUtils';
 
@@ -48,6 +49,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   onSendFollowUp,
   followUpDismissed = false,
   onDismissFollowUp,
+  onRetract,
   messageIndex: _messageIndex,
   virtualScrollManager,
 }) => {
@@ -77,6 +79,9 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
     if (isThinkingMsg || msg.status === 'processing') return;
     virtualScrollManager?.invalidateActual(msg.id);
   }, [msg.text, msg.id, msg.status, isThinkingMsg, virtualScrollManager]);
+
+  const isLive = isThinkingMsg || msg.status === 'processing';
+  const showLiveRetract = Boolean(onRetract) && isLastAssistant && isLive;
 
   const handleCopy = useCallback(() => {
     // T4 A1：壳层已装配合并 view model——流式期间 msg.text 即热缓冲累积正文，
@@ -118,7 +123,12 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
         />
       </div>
 
-      {!isThinkingMsg && msg.status !== 'processing' && (
+      {showLiveRetract && onRetract ? (
+        <div className={`${styles.assistantMeta} ${styles.metaAlways}`}>
+          <RetractActionButton onRetract={onRetract} />
+        </div>
+      ) : null}
+      {!isLive && (
         <MessageActions
           msg={msg}
           state={{
@@ -141,6 +151,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
             ...(onDismissFollowUp !== undefined && { onDismissFollowUp }),
             onOpenDiff,
             ...(onOpenDiffPanel !== undefined && { onOpenDiffPanel }),
+            ...(isLastAssistant && onRetract !== undefined && { onRetract }),
           }}
           cacheMetricsNode={
             <CacheMetricsBadge metrics={msg.cacheMetrics?.metrics ?? null} />

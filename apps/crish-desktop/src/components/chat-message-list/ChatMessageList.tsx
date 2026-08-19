@@ -59,7 +59,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     onProjectChanged: _onProjectChanged,
   } = projectPicker;
   const { onSetChatInput, onSendFollowUp } = composer;
-  const { onRegenerate, onBranch } = generation;
+  const { onRegenerate, onBranch, onRetract } = generation;
   const {
     approvalBusy,
     pendingApprovalMsgId,
@@ -125,7 +125,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     messages,
     sessionAllMessages: pinSourceMessages,
     showAllMessages,
-    });
+  });
 
   useEffect(() => {
     if (!searchHighlightQuery) return;
@@ -158,6 +158,15 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     }
     return null;
   }, [messages]);
+
+  const lastUserId = useMemo(() => {
+    const src = sessionAllMessages;
+    for (let i = src.length - 1; i >= 0; i--) {
+      const msg = src[i];
+      if (msg && msg.sender === 'user') return msg.id;
+    }
+    return null;
+  }, [sessionAllMessages]);
 
   const thinkingMsgId = useMemo(
     () =>
@@ -197,6 +206,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
           inPlanMode={inPlanMode}
           planApproved={planApproved}
           lastAssistantId={lastAssistantId}
+          lastUserId={lastUserId}
+          onRetract={onRetract}
           thinkingMsgId={thinkingMsgId}
           toolStackProps={toolStackProps}
           handleRegenerateRow={handleRegenerateRow}

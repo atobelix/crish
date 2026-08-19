@@ -21,6 +21,9 @@ export type ChatUserMessageRowProps = {
   isExpanded: boolean;
   onToggleExpand: (msgId: string) => void;
   onTogglePin: (msgId: string) => void;
+  /** 会话最后一条 user：挂消息级撤回（用户锁：入口在对话里，不在 composer） */
+  isLastUser?: boolean;
+  onRetract?: () => void;
   messageIndex: number;
   virtualScrollManager: VirtualScrollManager | null;
 };
@@ -39,6 +42,8 @@ function userRowPropsEqual(
     prev.isExpanded === next.isExpanded &&
     prev.onToggleExpand === next.onToggleExpand &&
     prev.onTogglePin === next.onTogglePin &&
+    prev.isLastUser === next.isLastUser &&
+    prev.onRetract === next.onRetract &&
     true
   );
 }
@@ -50,6 +55,8 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   isExpanded,
   onToggleExpand,
   onTogglePin,
+  isLastUser = false,
+  onRetract,
   messageIndex: _messageIndex,
   virtualScrollManager,
 }) => {
@@ -92,8 +99,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     });
   }, [msg.text, showToast]);
 
-  // 撤回（D5/R6 收口）：消息级撤回 UI 链已废弃——用户发起的撤回唯一路径
-  // = ChatComposer 撤回按钮 → 引擎 core_session_retract（timeline-truncate）。
+  const retractHandler = isLastUser ? onRetract : undefined;
 
   const toggleExpand = useCallback(() => {
     if (isLong) {
@@ -155,6 +161,8 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           copied={copied}
           onCopy={handleCopy}
           onTogglePin={() => onTogglePin(msg.id)}
+          onRetract={retractHandler}
+          alwaysVisible={Boolean(retractHandler)}
         />
       </div>
     </div>

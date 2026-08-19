@@ -189,6 +189,8 @@ export type ChatAssistantMessageRowProps = {
   onSendFollowUp?: ((prompt: string) => void) | undefined;
   followUpDismissed?: boolean | undefined;
   onDismissFollowUp?: ((msgId: string) => void) | undefined;
+  /** 最后一条助手 / 生成中：消息流撤回（不在 composer 页脚） */
+  onRetract?: (() => void) | undefined;
   messageIndex: number;
   virtualScrollManager: VirtualScrollManager | null;
 };
@@ -224,6 +226,7 @@ export const MEMO_COMPARE_FIELDS = [
   'onSendFollowUp',
   'followUpDismissed',
   'onDismissFollowUp',
+  'onRetract',
 ] as const satisfies readonly (keyof ChatAssistantMessageRowProps)[];
 
 /** 组件内 void 化的非渲染字段（豁免比较器覆盖） */
@@ -273,6 +276,7 @@ export function assistantRowPropsEqual(
     prev.setPlanApproved === next.setPlanApproved &&
     prev.onFillFollowUp === next.onFillFollowUp &&
     prev.onSendFollowUp === next.onSendFollowUp &&
-    prev.onDismissFollowUp === next.onDismissFollowUp
+    prev.onDismissFollowUp === next.onDismissFollowUp &&
+    prev.onRetract === next.onRetract
   );
 }

@@ -44,6 +44,8 @@ export interface ChatMessageListComposerProps {
 export interface ChatMessageListGenerationProps {
   onRegenerate: (userText: string, assistantMsgId: string) => void;
   onBranch: () => void;
+  /** 撤回上一条 user（消息流入口；引擎 core_session_retract）。流式中可用。 */
+  onRetract?: () => void;
 }
 
 /** 审批操作域（忙态/待审消息/允许/拒绝/批审/批拒收敛为单一子对象） */

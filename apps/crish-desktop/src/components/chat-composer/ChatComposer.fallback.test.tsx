@@ -119,43 +119,8 @@ describe('ChatComposer F1-γ 兜底（富文本装配失败 → textarea）', ()
     expect(sentValues).toEqual(['兜底纯文本']);
   });
 
-  it('撤回按钮链不受兜底影响（onRetract 常显可点）', async () => {
-    const onRetract = vi.fn();
-    function RetractHarness() {
-      const [input, setInput] = React.useState('');
-      const fileInputRef = React.useRef<HTMLInputElement>(null);
-      const [permission, setPermission] = React.useState<
-        'ask' | 'deep' | 'full' | 'plan'
-      >('ask');
-      const [composing, setComposing] = React.useState(false);
-      return (
-        <ChatComposer
-          chatInput={input}
-          setChatInput={setInput}
-          isComposing={composing}
-          setIsComposing={setComposing}
-          filteredCommands={[]}
-          loadSkillSlash={vi.fn()}
-          onPasteImage={vi.fn()}
-          onSend={vi.fn()}
-          onStop={vi.fn()}
-          onRetract={onRetract}
-          canRetract
-          canSend={false}
-          isProcessing={false}
-          attachments={[]}
-          setAttachments={(() => {}) as ChatComposerProps['setAttachments']}
-          fileInputRef={fileInputRef}
-          onFilesSelected={vi.fn()}
-          showPlusMenu={false}
-          setShowPlusMenu={() => {}}
-          permissionMode={permission}
-          onPermissionChange={setPermission}
-          onOpenSchedule={vi.fn()}
-        />
-      );
-    }
-    render(<RetractHarness />);
+  it('兜底后 composer 页脚不再挂撤回（入口在消息流）', async () => {
+    renderFallbackHarness();
     await waitFor(() => {
       expect(
         document
@@ -163,11 +128,12 @@ describe('ChatComposer F1-γ 兜底（富文本装配失败 → textarea）', ()
           ?.getAttribute('data-input-field')
       ).toBe('textarea');
     });
-    const retractBtn = screen.getByRole('button', {
-      name: '撤回上一条用户消息',
-    });
-    expect(retractBtn).toBeTruthy();
-    fireEvent.click(retractBtn);
-    expect(onRetract).toHaveBeenCalledTimes(1);
+    const footer = document.querySelector('[data-composer-footer="1"]');
+    expect(footer).toBeTruthy();
+    expect(
+      screen.queryByRole('button', { name: '撤回上一条用户消息' })
+    ).toBeNull();
+    expect(footer?.querySelector('[data-testid="message-retract"]')).toBeNull();
+    expect(footer?.querySelector('[class*="retractBtn"]')).toBeNull();
   });
 });

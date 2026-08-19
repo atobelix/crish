@@ -22,6 +22,8 @@ export interface MessageVirtualizerProps {
   inPlanMode: boolean;
   planApproved: boolean;
   lastAssistantId: string | null;
+  lastUserId?: string | null;
+  onRetract?: () => void;
   thinkingMsgId?: string;
   toolStackProps: ChatToolStackSharedProps;
   handleRegenerateRow: (assistantMsgId: string) => void;
@@ -64,6 +66,8 @@ export const MEMO_COMPARE_FIELDS = [
   'inPlanMode',
   'planApproved',
   'lastAssistantId',
+  'lastUserId',
+  'onRetract',
   'thinkingMsgId',
   'toolStackProps',
   'handleRegenerateRow',
@@ -103,6 +107,7 @@ export function messageVirtualizerPropsEqual(
   if (prev.thinkingMsgId !== next.thinkingMsgId) return false;
   if (prev.activeSessionId !== next.activeSessionId) return false;
   if (prev.lastAssistantId !== next.lastAssistantId) return false;
+  if (prev.lastUserId !== next.lastUserId) return false;
   if (prev.hideThinkingBlock !== next.hideThinkingBlock) return false;
   if (prev.inPlanMode !== next.inPlanMode) return false;
   if (prev.planApproved !== next.planApproved) return false;
@@ -120,6 +125,7 @@ export function messageVirtualizerPropsEqual(
     prev.togglePin === next.togglePin &&
     prev.onToggleExpandUser === next.onToggleExpandUser &&
     prev.handleRegenerateRow === next.handleRegenerateRow &&
+    prev.onRetract === next.onRetract &&
     prev.onBranch === next.onBranch &&
     prev.onOpenDiff === next.onOpenDiff &&
     prev.onOpenDiffPanel === next.onOpenDiffPanel &&

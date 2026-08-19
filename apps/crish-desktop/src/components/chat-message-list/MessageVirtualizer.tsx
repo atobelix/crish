@@ -36,6 +36,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   inPlanMode,
   planApproved,
   lastAssistantId,
+  lastUserId,
+  onRetract,
   thinkingMsgId,
   toolStackProps,
   handleRegenerateRow,
@@ -53,10 +55,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   activeSessionId,
   handleMarkdownClick,
 }) => {
-  const msgIds = useMemo(
-    () => messages.map((m) => m.id),
-    [messages]
-  );
+  const msgIds = useMemo(() => messages.map((m) => m.id), [messages]);
   const vs = useVirtualScroll({
     ids: msgIds,
     itemCount: messages.length,
@@ -219,8 +218,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
         {/* 渲染身份（C2）：key / 高度缓存键 = message.id；stream 与 final 共用同一行 id */}
         {messages.slice(startIndex, endIndex).map((msg, i) => {
           const virtualIndex = startIndex + i;
-          const prevMsg =
-            virtualIndex > 0 ? messages[virtualIndex - 1] : null;
+          const prevMsg = virtualIndex > 0 ? messages[virtualIndex - 1] : null;
           const isFollowUp =
             msg.sender === 'assistant' && prevMsg?.sender === 'assistant';
           const isPinnedMsg = pinnedIdSet.has(msg.id);
@@ -239,7 +237,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                     isExpanded={!!expandedUserMsgs[msg.id]}
                     onToggleExpand={onToggleExpandUser}
                     onTogglePin={togglePin}
-                    
+                    isLastUser={msg.id === lastUserId}
+                    onRetract={onRetract}
                     messageIndex={virtualIndex}
                     virtualScrollManager={manager}
                   />
@@ -263,7 +262,6 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                   isLastAssistant={msg.id === lastAssistantId}
                   toolStackProps={toolStackProps}
                   onTogglePin={togglePin}
-                  
                   onRegenerate={handleRegenerateRow}
                   onBranch={onBranch}
                   onOpenDiff={onOpenDiff}
@@ -276,6 +274,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                   }
                   followUpDismissed={!!dismissedFollowUps[msg.id]}
                   onDismissFollowUp={handleDismissFollowUp}
+                  onRetract={onRetract}
                   messageIndex={virtualIndex}
                   virtualScrollManager={manager}
                 />

@@ -89,15 +89,6 @@ export type ChatComposerProps = {
   onStop: () => void;
   /** 强制取消 = L3 force_cancel（Shift+点击 / 长按，二次确认后由 ComposerField 调用） */
   onForceStop?: () => void;
-  /**
-   * R1 撤回（统一输入流收敛战役）：撤回上一条 user 消息——
-   * 引擎 session_retract（停 run → 边界冻结 → timeline-truncate →
-   * 前端投影重放 + 文本回填）。按钮常显（无撤回目标时禁用），
-   * 不弹二次确认（引擎侧 fail-closed 校验兜底）。
-   */
-  onRetract?: () => void;
-  /** 是否存在可撤回的 user 消息（撤回按钮禁用依据） */
-  canRetract?: boolean;
   canSend: boolean;
   isProcessing: boolean;
   attachments: ChatAttachment[];
@@ -133,8 +124,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onSend,
   onStop,
   onForceStop,
-  onRetract,
-  canRetract,
   canSend,
   isProcessing,
   attachments,
@@ -421,23 +410,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 onCloseSiblingMenus?.();
               }}
             />
-            {onRetract ? (
-              <Tooltip content="撤回上一条（还原文件 + 截断时间线 + 回填文本）">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.retractBtn}
-                  aria-label="撤回上一条用户消息"
-                  disabled={canRetract === false || isProcessing}
-                  onClick={() => {
-                    onRetract();
-                    requestAnimationFrame(focusComposerTextarea);
-                  }}
-                  icon={<Lucide.Undo2 size={16} aria-hidden />}
-                />
-              </Tooltip>
-            ) : null}
           </div>
           <div className={styles.rightActions}>
             <ComposerFusedTrigger>{rightActions}</ComposerFusedTrigger>

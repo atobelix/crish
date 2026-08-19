@@ -3,6 +3,7 @@ import { Check, Copy, PinOff, RefreshCw } from 'lucide-react';
 import styles from './ChatMessageRow.module.css';
 import { Button, Tooltip } from '../ui';
 import { formatMsgTime, pinToggleLabels } from './chatMessageRowUtils';
+import { RetractActionButton } from './RetractActionButton';
 
 // ─── Assistant Message Meta Actions Bar ─────────────────────────────────────
 
@@ -16,6 +17,7 @@ export interface AssistantMessageActionsBarProps {
   onTogglePin: () => void;
   sendToNoteNode?: React.ReactNode;
   metricsNode?: React.ReactNode;
+  onRetract?: () => void;
 }
 
 export const AssistantMessageActionsBar: React.FC<
@@ -30,6 +32,7 @@ export const AssistantMessageActionsBar: React.FC<
   onTogglePin,
   sendToNoteNode,
   metricsNode,
+  onRetract,
 }) => {
   const pinLabels = pinToggleLabels(isPinned);
   return (
@@ -59,6 +62,7 @@ export const AssistantMessageActionsBar: React.FC<
           />
         </Tooltip>
       ) : null}
+      {onRetract ? <RetractActionButton onRetract={onRetract} /> : null}
       {sendToNoteNode}
       {isPinned ? (
         <Tooltip content={pinLabels.title}>
