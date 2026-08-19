@@ -445,6 +445,18 @@ describe('sessionExport', () => {
     expect(blobs.some((b) => b.content.includes('"format"'))).toBe(true);
   });
 
+  it('JSON pretty-print 读 codeBlockIndent（4 空格 / Tab）', () => {
+    const sess = baseSession({
+      messages: [msg({ id: 'u', sender: 'user', text: 'hi' })],
+    });
+    const four = exportSessionToJson(sess, { nowMs: 1, jsonIndent: '    ' });
+    expect(four).toContain('\n    "format"');
+    const tabbed = exportSessionToJson(sess, { nowMs: 1, jsonIndent: '\t' });
+    expect(tabbed).toContain('\n\t"format"');
+    const two = exportSessionToJson(sess, { nowMs: 1, jsonIndent: '  ' });
+    expect(two).toContain('\n  "format"');
+  });
+
   it('tryDownloadSessionMarkdown: download throw → ok:false for toast', () => {
     const result = tryDownloadSessionMarkdown(
       baseSession({ messages: [msg({ id: 'u', sender: 'user', text: 'x' })] }),

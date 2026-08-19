@@ -11,6 +11,7 @@ import {
 } from '../../hooks/useAutoGrowTextarea';
 import type { ComposerFieldProps } from './composerTypes';
 import { readSendShortcut } from '../../api/store-access/settingsAccess';
+import { readCodeBlockIndent } from '../../api/codeBlockIndent';
 
 /**
  * Stop UX 文案（产品：默认 Stop = L2 cooperative；Force = L3 force_cancel）。
@@ -244,6 +245,21 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(
           onKeyDown={(e) => {
             if (isComposing) return;
             if (onKeyDownExtra?.(e) === true) return;
+
+            if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault();
+              const indent = e.shiftKey ? '' : readCodeBlockIndent();
+              if (!indent) return;
+              const el = e.currentTarget;
+              const start = el.selectionStart;
+              const end = el.selectionEnd;
+              const next = value.slice(0, start) + indent + value.slice(end);
+              onChange(next);
+              requestAnimationFrame(() => {
+                el.selectionStart = el.selectionEnd = start + indent.length;
+              });
+              return;
+            }
 
             const sendShortcut = readSendShortcut();
             if (sendShortcut === 'ctrlEnter') {

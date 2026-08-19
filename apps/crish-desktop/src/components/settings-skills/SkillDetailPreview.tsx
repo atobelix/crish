@@ -5,6 +5,11 @@ import { revealSkillPath, type DesktopSkill, type SkillActivation } from '../../
 import { Button, SegmentedControl, Tooltip } from '../ui';
 import styles from './SkillsSettingsTab.module.css';
 import { ACTIVATION_OPTIONS, scopeGroupLabel } from './useSkillsSettingsState';
+import {
+  normalizeCodeBlockIndent,
+  rematerializeMarkdownHtml,
+} from '../../api/codeBlockIndent';
+import { useSettingsField } from '../../store/storeAccess';
 
 interface SkillDetailPreviewProps {
   selected: DesktopSkill | null;
@@ -34,6 +39,10 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
   previewHtml,
 }) => {
   const { showToast } = useToast();
+  const codeIndent = useSettingsField((s) =>
+    normalizeCodeBlockIndent(s.appSettings?.markdown?.codeBlockIndent)
+  );
+  const previewHtmlIndented = rematerializeMarkdownHtml(previewHtml, codeIndent);
   return (
     <section className={`${styles.skillsDetail} ${styles.skillsDetailCoverContent} skills-detail`} aria-label="技能预览">
       {!selected ? (
@@ -145,7 +154,7 @@ export const SkillDetailPreview: React.FC<SkillDetailPreviewProps> = ({
           ) : (
             <div
               className={`${styles.skillsPreview} ${styles.skillsPreviewCoverContent} skills-preview md-rendered msg-assistant-text`}
-              dangerouslySetInnerHTML={{ __html: previewHtml }}
+              dangerouslySetInnerHTML={{ __html: previewHtmlIndented }}
               aria-label="技能预览"
             />
           )}

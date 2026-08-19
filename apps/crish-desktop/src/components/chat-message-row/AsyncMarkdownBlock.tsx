@@ -1,6 +1,11 @@
 import React, { useEffect, useRef } from 'react';
 import styles from './ChatMessageRow.module.css';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
+import {
+  applyCodeIndentToRenderedRoot,
+  normalizeCodeBlockIndent,
+} from '../../api/codeBlockIndent';
+import { useSettingsField } from '../../store/storeAccess';
 import type { Priority } from '../../workers';
 
 export interface AsyncMarkdownBlockProps {
@@ -50,6 +55,9 @@ export const AsyncMarkdownBlock = React.memo(function AsyncMarkdownBlock({
   priority,
 }: AsyncMarkdownBlockProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const codeIndent = useSettingsField((s) =>
+    normalizeCodeBlockIndent(s.appSettings?.markdown?.codeBlockIndent)
+  );
 
   // 流式期间不调 hook（避免每帧重渲染），完成态才请求 Rust 渲染
   const renderTarget = isStreaming ? '' : text;
@@ -68,7 +76,8 @@ export const AsyncMarkdownBlock = React.memo(function AsyncMarkdownBlock({
     if (isStreaming) return; // 流式期间由下方纯文本分支处理
     if (fallbackActive) return; // T5-3：失败回退分支不写 innerHTML
     el.innerHTML = html;
-  }, [html, isStreaming, fallbackActive]);
+    applyCodeIndentToRenderedRoot(el, codeIndent);
+  }, [html, isStreaming, fallbackActive, codeIndent]);
 
   if (!text) return null;
 

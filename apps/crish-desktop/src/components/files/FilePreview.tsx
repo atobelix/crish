@@ -6,6 +6,11 @@ import { pathBasename } from '../../api/workspaceFsApi';
 import { highlightCode, langFromFilename } from '../../api/codeHighlight';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
 import {
+  normalizeCodeBlockIndent,
+  rematerializeMarkdownHtml,
+} from '../../api/codeBlockIndent';
+import { useSettingsField } from '../../store/storeAccess';
+import {
   addPendingFileAnnotation,
   parseCsvPreview,
 } from '../../api/workspaceFsApi';
@@ -86,6 +91,10 @@ export const FilePreview = React.memo(function FilePreview({
   const { html: mdHtml } = useAsyncMarkdownHtml(
     isMd && mdMode === 'render' ? content || '（空文件）' : ''
   );
+  const codeIndent = useSettingsField((s) =>
+    normalizeCodeBlockIndent(s.appSettings?.markdown?.codeBlockIndent)
+  );
+  const mdHtmlIndented = rematerializeMarkdownHtml(mdHtml, codeIndent);
 
   const onPreviewScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
@@ -257,7 +266,7 @@ export const FilePreview = React.memo(function FilePreview({
             <div className={styles.filesMdWrap}>
               <div
                 className={`${styles.filesMdBody} md-rendered msg-assistant-text`}
-                dangerouslySetInnerHTML={{ __html: mdHtml }}
+                dangerouslySetInnerHTML={{ __html: mdHtmlIndented }}
               />
               {canLoadMore ? (
                 <Button

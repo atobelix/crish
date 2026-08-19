@@ -51,6 +51,8 @@ export type ExportSessionOptions = {
   nowMs?: number;
   /** 注入下载依赖，便于 Blob/DOM 路径单测 */
   downloadDeps?: DownloadTextFileDeps;
+  /** JSON pretty-print 缩进；缺省读 markdown.codeBlockIndent */
+  jsonIndent?: string;
 };
 
 /** 下载路径可注入依赖（避免单测硬 mock 全局 Blob/document） */

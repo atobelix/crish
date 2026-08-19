@@ -147,6 +147,8 @@
   border-radius: var(--radius-sm);
   margin: 0.4em 0;
   overflow-x: auto;
+  tab-size: var(--md-code-tab-size, 2);
+  -moz-tab-size: var(--md-code-tab-size, 2);
 }
 
 .proseMirrorField :global(pre code) {

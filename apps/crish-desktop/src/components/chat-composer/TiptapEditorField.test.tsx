@@ -14,6 +14,7 @@ import {
   act,
 } from '@testing-library/react';
 import { TiptapEditorField } from './TiptapEditorField';
+import { useSettingsStore } from '../../store/settingsStore';
 
 // jsdom 缺 ClipboardEvent：prosemirror-view.pasteHTML 会构造合成事件，补最小实现
 if (
@@ -146,6 +147,56 @@ describe('TiptapEditorField T3 补全', () => {
     expect(
       onMarkdownChange.mock.calls[onMarkdownChange.mock.calls.length - 1][0]
     ).toContain('\n');
+  });
+
+  it('代码块内 Tab 在光标处插入 codeBlockIndent（默认 2 空格）', async () => {
+    const onSendMarkdown = vi.fn();
+    const onMarkdownChange = vi.fn();
+    render(
+      <TiptapEditorField
+        content={'```ts\nconst a = 1;\n```'}
+        onSendMarkdown={onSendMarkdown}
+        onMarkdownChange={onMarkdownChange}
+      />
+    );
+    const dom = getEditorDom();
+    await waitFor(() => {
+      expect(dom.textContent).toContain('const a = 1;');
+    });
+    fireEvent.keyDown(dom, { key: 'Tab' });
+    expect(onSendMarkdown).not.toHaveBeenCalled();
+    await waitFor(() => {
+      const last =
+        onMarkdownChange.mock.calls[onMarkdownChange.mock.calls.length - 1]?.[0];
+      expect(last).toContain('const a = 1;  ');
+    });
+  });
+
+  it('代码块内 Tab 插入 4 空格当 markdown.codeBlockIndent 为 4 空格', async () => {
+    useSettingsStore.setState({
+      appSettings: { markdown: { codeBlockIndent: '    ' } } as never,
+    });
+    try {
+      const onMarkdownChange = vi.fn();
+      render(
+        <TiptapEditorField
+          content={'```ts\nconst a = 1;\n```'}
+          onMarkdownChange={onMarkdownChange}
+        />
+      );
+      const dom = getEditorDom();
+      await waitFor(() => {
+        expect(dom.textContent).toContain('const a = 1;');
+      });
+      fireEvent.keyDown(dom, { key: 'Tab' });
+      await waitFor(() => {
+        const last =
+          onMarkdownChange.mock.calls[onMarkdownChange.mock.calls.length - 1]?.[0];
+        expect(last).toContain('const a = 1;    ');
+      });
+    } finally {
+      useSettingsStore.setState({ appSettings: null });
+    }
   });
 
   it('普通段落 Enter 发送，且发送后内容清空', async () => {

@@ -23,6 +23,10 @@ import {
   redactHeavyPayloads,
   sanitizeToolCallForExport,
 } from './sessionExportSanitize';
+import {
+  normalizeCodeBlockIndent,
+  readCodeBlockIndent,
+} from './codeBlockIndent';
 
 function formatLocalDateTime(ms: number): string {
   if (!ms || !Number.isFinite(ms)) return '';
@@ -270,12 +274,15 @@ export function exportSessionToJsonObject(
   };
 }
 
-/** 将会话状态格式化为 JSON 文本（pretty，2 空格） */
+/** 将会话状态格式化为 JSON 文本（pretty 缩进读 markdown.codeBlockIndent） */
 export function exportSessionToJson(
   session: SessionState,
   options: ExportSessionOptions = {},
 ): string {
-  return `${JSON.stringify(exportSessionToJsonObject(session, options), null, 2)}\n`;
+  const indent = normalizeCodeBlockIndent(
+    options.jsonIndent ?? readCodeBlockIndent(),
+  );
+  return `${JSON.stringify(exportSessionToJsonObject(session, options), null, indent)}\n`;
 }
 
 /** 将任意 throw 收敛为用户可读的失败文案（供 toast） */

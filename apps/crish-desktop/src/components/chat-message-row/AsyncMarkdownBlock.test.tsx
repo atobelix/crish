@@ -31,6 +31,8 @@ vi.mock('../../api/markdownRenderAsync', () => ({
 }));
 
 const RUST_HTML = '<h1 class="md-h1">标题</h1><p class="md-p">正文</p>';
+const CODE_HTML =
+  '<div class="md-code-block"><pre class="md-code-pre"><code>    foo\n        bar</code></pre></div>';
 
 function useEmptyRender() {
   mocks.useAsyncMarkdownHtml.mockReturnValue({
@@ -215,5 +217,21 @@ describe('AsyncMarkdownBlock', () => {
     useEmptyRender();
     const { container } = render(<AsyncMarkdownBlock text="" isStreaming />);
     expect(container.innerHTML).toBe('');
+  });
+
+  it('完成态代码块行首缩进按 codeBlockIndent 重写（默认 2 空格）', () => {
+    mocks.useAsyncMarkdownHtml.mockReturnValue({
+      html: CODE_HTML,
+      loading: false,
+      failed: false,
+    });
+    const { container } = render(
+      <AsyncMarkdownBlock
+        text={'```\n    foo\n        bar\n```'}
+        isStreaming={false}
+      />
+    );
+    const pre = container.querySelector('.md-code-pre');
+    expect(pre?.textContent).toBe('  foo\n    bar');
   });
 });

@@ -14,11 +14,14 @@ import {
   SlashExtension,
   MentionExtension,
   MentionSuggestionExtension,
+  slashSuggestionKey,
+  mentionSuggestionKey,
 } from './SlashExtension';
-import { DirTreeExtension } from './DirTreeExtension';
+import { DirTreeExtension, dirTreeSuggestionKey } from './DirTreeExtension';
 import { openFileInPanel } from '../../api/filePanelOpener';
 import { serializeToMarkdown } from './serialization/markdownSerializer';
 import { isImeComposition, resolveTiptapKeydown } from './TiptapKeymap';
+import { readCodeBlockIndent } from '../../api/codeBlockIndent';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 import styles from './TiptapEditorField.module.css';
 
@@ -159,14 +162,38 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
         // CodeBlock Enter 保护（SRS 3.7.1）：代码块内 Enter 只换行，绝不触发发送
         const inCodeBlock =
           view.state.selection.$from.parent.type.name === 'codeBlock';
+        const suggestionActive = Boolean(
+          slashSuggestionKey.getState(view.state)?.active ||
+            mentionSuggestionKey.getState(view.state)?.active ||
+            dirTreeSuggestionKey.getState(view.state)?.active
+        );
+
+        const action = resolveTiptapKeydown(event, {
+          sendShortcut: bridge.sendShortcutRef.current,
+          inCodeBlock,
+          suggestionActive,
+        });
+
+        if (action === 'insertIndent') {
+          event.preventDefault();
+          view.dispatch(view.state.tr.insertText(readCodeBlockIndent()));
+          return true;
+        }
+
+        // codeBlock 内 Shift+Tab 也不把焦点挪出编辑器
+        if (
+          event.key === 'Tab' &&
+          inCodeBlock &&
+          !suggestionActive &&
+          !event.altKey &&
+          !(event.ctrlKey || event.metaKey)
+        ) {
+          event.preventDefault();
+          return true;
+        }
 
         // Send Keymaps（决策为纯函数，见 TiptapKeymap）
-        if (
-          resolveTiptapKeydown(event, {
-            sendShortcut: bridge.sendShortcutRef.current,
-            inCodeBlock,
-          }) === 'send'
-        ) {
+        if (action === 'send') {
           event.preventDefault();
           const editor = bridge.editorRef.current;
           if (!editor) return true;

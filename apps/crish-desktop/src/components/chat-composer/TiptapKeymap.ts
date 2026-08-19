@@ -5,29 +5,39 @@
  * 本文件只做「决策」。
  */
 
-export type TiptapKeydownAction = 'send' | 'pass';
+export type TiptapKeydownAction = 'send' | 'pass' | 'insertIndent';
 
 export interface TiptapKeydownContext {
   /** 发送快捷键偏好（与设置同一钥匙：crish_settings.sendShortcut） */
   sendShortcut: 'enter' | 'ctrlEnter';
   /** 光标位于 codeBlock 内（Enter 只换行，绝不触发发送） */
   inCodeBlock: boolean;
+  /** 斜杠 / 提及 / 目录树建议打开时 Tab 交给建议层 */
+  suggestionActive?: boolean;
 }
 
 /**
- * Enter 键决策：
+ * Enter / Tab 决策：
  * - Shift+Enter → 硬换行（pass，交给 ProseMirror 默认）
  * - codeBlock 内 Enter → 换行（pass，SRS 3.7.1 代码块保护）
  * - sendShortcut=enter 且无修饰键 → send
  * - sendShortcut=ctrlEnter 且 Ctrl/Cmd 按下 → send
- * - 其余（非 Enter / 修饰键组合不匹配）→ pass
+ * - codeBlock 内 Tab（无修饰、无建议弹层）→ insertIndent
+ * - 其余 → pass
  */
 export function resolveTiptapKeydown(
-  event: { key: string; shiftKey: boolean; ctrlKey: boolean; metaKey: boolean },
+  event: {
+    key: string;
+    shiftKey: boolean;
+    ctrlKey: boolean;
+    metaKey: boolean;
+    altKey?: boolean;
+  },
   ctx: TiptapKeydownContext
 ): TiptapKeydownAction {
   const isShift = event.shiftKey;
   const isCtrlOrCmd = event.ctrlKey || event.metaKey;
+  const isAlt = Boolean(event.altKey);
 
   // Shift+Enter inserts hard break
   if (event.key === 'Enter' && isShift) return 'pass';
@@ -42,6 +52,17 @@ export function resolveTiptapKeydown(
     if (ctx.sendShortcut === 'ctrlEnter' && isCtrlOrCmd) {
       return 'send';
     }
+  }
+
+  if (
+    event.key === 'Tab' &&
+    !isShift &&
+    ctx.inCodeBlock &&
+    !ctx.suggestionActive &&
+    !isCtrlOrCmd &&
+    !isAlt
+  ) {
+    return 'insertIndent';
   }
 
   return 'pass';

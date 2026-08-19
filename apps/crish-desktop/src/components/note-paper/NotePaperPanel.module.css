@@ -558,6 +558,8 @@ button.badge:focus-visible {
   padding: var(--space-3, 12px);
   margin-top: var(--space-2, 8px);
   margin-bottom: var(--space-2, 8px);
+  tab-size: var(--md-code-tab-size, 2);
+  -moz-tab-size: var(--md-code-tab-size, 2);
 }
 
 /*        +      blockquote / quote     */
