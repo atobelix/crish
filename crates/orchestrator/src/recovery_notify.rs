@@ -5,7 +5,7 @@
 use conex_types::error::ProviderErrorKind;
 use serde::{Deserialize, Serialize};
 
-use super::{FORK_VERBATIM_MAX_RATIO, FORK_WINDOW_MS, RECOVER_GROUP_PREFIX};
+use super::RECOVER_GROUP_PREFIX;
 use crate::steering_queue::SteeringInputEntry;
 
 /// 阶梯 2 通知（落库 `recover_notifications`；pending 位重启后仍入队）
@@ -96,15 +96,13 @@ pub fn build_steering_entry(notification: &RecoveryNotification) -> SteeringInpu
     }
 }
 
-/// fork 三态上下文继承模式（grok verbatim mirror / summarized / New）
+/// fork 上下文继承模式（B6 收敛：`Summarized` 已删除，历史库 `summarized` 经 `alias` 兼容为 `Verbatim`）
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ForkContextMode {
-    /// 同窗口且注入内容 ≤ 会话窗口 80%：字节级继承（省 token 且保缓存）
+    /// 注入内容 ≤ 会话窗口 80% 且同窗口：字节级继承（Verbatim，B6 收敛后超窗/超占比亦走此路径）
+    #[serde(alias = "summarized")]
     Verbatim,
-    /// 超窗或超占比：经 C9 摘要后注入（context_normalized 记录位，
-    /// 摘要实装归 M10，本层记录模式与边界）
-    Summarized,
     /// 无注入内容：全新上下文
     New,
 }
@@ -114,17 +112,14 @@ impl ForkContextMode {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Verbatim => "verbatim",
-            Self::Summarized => "summarized",
             Self::New => "new",
         }
     }
 }
 
-/// fork 三态判定（对齐 grok subagent/mod.rs fork 语义）：
+/// fork 上下文继承判定（B6 收敛：仅 `Verbatim`/`New` 两态，`Summarized` 已删除；超窗/超占比统一走 `Verbatim`）。
 /// - 注入内容为空（0 字节）→ [ForkContextMode::New]（全新）；
-/// - 会话窗口内（now - started_at ≤ 24h）且注入内容 ≤ 窗口 80% →
-///   [ForkContextMode::Verbatim]（字节级继承）；
-/// - 超窗或超占比 → [ForkContextMode::Summarized]（摘要后注入）。
+/// - 其余（同窗口/超窗、≤80%/超占比）→ [ForkContextMode::Verbatim]（字节级继承，单路径）。
 pub fn decide_fork_context(
     started_at_ms: i64,
     now_ms: i64,
@@ -134,14 +129,9 @@ pub fn decide_fork_context(
     if inject_bytes == 0 {
         return ForkContextMode::New;
     }
-    let in_window = now_ms.saturating_sub(started_at_ms) <= FORK_WINDOW_MS;
-    let within_ratio = window_bytes == 0
-        || (inject_bytes as f64) <= (window_bytes as f64) * FORK_VERBATIM_MAX_RATIO;
-    if in_window && within_ratio {
-        ForkContextMode::Verbatim
-    } else {
-        ForkContextMode::Summarized
-    }
+    // B6 收敛：`Summarized` 已删除，历史超窗/超占比路径统一收敛为 `Verbatim`（`alias` 保证旧库 `summarized` 反序列化兼容）。
+    let _ = (started_at_ms, now_ms, window_bytes);
+    ForkContextMode::Verbatim
 }
 
 /// 阶梯 3 fork 记录（落库 `recover_forks`，幂等与报表依据）

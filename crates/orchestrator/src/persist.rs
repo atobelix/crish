@@ -11,6 +11,20 @@
 //! 持久化失败语义（05 §2.8 / 05 §3.4）：append_event 失败 → run 标记
 //! failed(event-store-write-failed)，不假装可回放（由 [crate::events]
 //! 的 drive 流程消费）。
+//!
+//! E1 收敛（05 §5.2）：`Store::as_local_db` 保留 trait 默认方法（`None`），
+//! 3 处消费方 `blocks.rs:50` / `restore_manager.rs:144` / `run_core.rs:408`
+//! 已统一为 `store.as_local_db()` 直接调用；自由函数已彻底删除
+//! （`cargo check` / 全仓 grep 零命中）。
+//!
+//! E2 评估（05 §5.2 保守路线：仅签名对齐，不改 `Cargo.toml`，不拆 crate）：
+//! 三存储 trait（`Store` / `RecoveryStore` / `FlowMetaStore`）评估统一为
+//! `Store: MetaStore + RunStore + EventStore` 分层；保守路线仅做签名对齐——
+//! `MetaStore` 为同步 `get_meta`/`set_meta` 最小公共面（与 `RecoveryStore` /
+//! `FlowMetaStore` 形状一致，错误型 domain-specific），`RunStore`/`EventStore`
+//! 为 `Store` 的 run/事件 async 面；不强制 `Store: MetaStore + RunStore +`
+//! `EventStore` supertrait 合并（async/sync 差异 + 循环依赖风险），仅在本文件
+//! 沉淀分层 trait 定义与文档，待主控协调时机再合并。
 
 use std::collections::HashMap;
 use std::fmt;
@@ -261,6 +275,61 @@ pub trait Store: Send + Sync {
         Ok(())
     }
 }
+
+// ── E2 存储分层评估（保守路线：仅签名对齐） ──────────────────────────
+//
+// 三存储 trait（Store / RecoveryStore / FlowMetaStore）评估统一为
+// Store: MetaStore + RunStore + EventStore 分层（05 §5.2 E2）。
+// 保守路线：仅签名对齐，不改 Cargo.toml，不拆 crate，不强制 supertrait。
+// - MetaStore：同步 get_meta / set_meta 最小公共面，与 RecoveryStore /
+//   FlowMetaStore 的 `fn get_meta(&self, key: &str) -> Result<Option<String>, _>`
+//   / `set_meta` 形状一致（错误型保持 domain-specific：StoreError vs
+//   RecoveryError vs FlowError）；
+// - RunStore：Store 中 run 记录相关 async 面（insert_run / update_run_status /
+//   query_runs / save_pending_input / load_pending_inputs / delete_pending_input
+//   / touch_session）；
+// - EventStore：Store 中事件流相关 async 面（append_event / query_events /
+//   query_events_by_run / query_events_by_type / max_sequence /
+//   reserve_sequence / seed_sequence）。
+// 本文件仅沉淀签名对齐的 trait 定义与文档，Store 本体保持现有方法集，
+// 不强制 `Store: MetaStore + RunStore + EventStore` 的 supertrait 约束
+// （async/sync 差异 + 循环依赖风险），待主控协调再合并。自由函数已删除，
+// `Store::as_local_db` trait 默认方法保留（E1）。
+
+/// 同步 meta 最小公共面（E2 保守路线：与 RecoveryStore / FlowMetaStore 对齐）
+///
+/// 形状：`get_meta(&self, key: &str) -> Result<Option<String>, _>` /
+/// `set_meta(&self, key: &str, value: &str) -> Result<(), _>`（&str key/value,
+/// Option<String>）。本 trait 以 StoreError 为错误型，Recovery/Flow 侧为
+/// RecoveryError/FlowError，形状对齐即可，不强制错误型统一。
+pub trait MetaStore: Send + Sync {
+    /// 读键（None = 键不存在）
+    fn get_meta(&self, key: &str) -> Result<Option<String>, StoreError>;
+    /// 写键（幂等 upsert）
+    fn set_meta(&self, key: &str, value: &str) -> Result<(), StoreError>;
+}
+
+/// RunStore 层：Store 中 run 记录相关 async 面（E2 分层文档）
+///
+/// 包含：`insert_run` / `update_run_status` / `query_runs` /
+/// `save_pending_input` / `load_pending_inputs` / `delete_pending_input` /
+/// `touch_session`。保守路线仅文档分层，不强制 supertrait。
+pub trait RunStore: Send + Sync {}
+
+/// EventStore 层：Store 中事件流相关 async 面（E2 分层文档）
+///
+/// 包含：`append_event` / `query_events` / `query_events_by_run` /
+/// `query_events_by_type` / `max_sequence` / `reserve_sequence` /
+/// `seed_sequence`。保守路线仅文档分层。
+pub trait EventStore: Send + Sync {}
+
+/// Store 逻辑分层说明（E2 保守路线）:
+///
+/// - `Store` 当前为单一 async trait（含 run + event + touch_session +
+///   as_local_db）；评估分层为 `Store: MetaStore + RunStore + EventStore` 时，
+///   `MetaStore` 为同步 meta 面（本文件新增），`RunStore`/`EventStore` 为 async 面；
+/// - 保守路线不强制合并（不改 Store 定义），仅保证三 trait 的
+///   `get_meta`/`set_meta` 签名形状对齐，不改 Cargo.toml，不拆 crate。
 
 /// 会话级 sequence 分配器（T08.12 Q23）
 ///

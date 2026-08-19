@@ -442,15 +442,15 @@ fn fork_context_three_states() {
         decide_fork_context(now - 1_000, now, 8_000, 10_000),
         ForkContextMode::Verbatim
     );
-    // 超过 80% → Summarized
+    // 超过 80% → Verbatim（B6 收敛，原 Summarized）
     assert_eq!(
         decide_fork_context(now - 1_000, now, 8_001, 10_000),
-        ForkContextMode::Summarized
+        ForkContextMode::Verbatim
     );
-    // 超窗（>24h）即使占比小也 → Summarized
+    // 超窗（>24h）即使占比小也 → Verbatim（B6 收敛，原 Summarized）
     assert_eq!(
         decide_fork_context(now - FORK_WINDOW_MS - 1, now, 100, 10_000),
-        ForkContextMode::Summarized
+        ForkContextMode::Verbatim
     );
     // 恰好 24h 窗内 → Verbatim（边界含等号）
     assert_eq!(
@@ -459,12 +459,16 @@ fn fork_context_three_states() {
     );
 }
 
-/// 三态 wire 名
+/// 二态 wire 名（B6 收敛：Summarized 已删除，alias 兼容）
 #[test]
 fn fork_context_wire_names() {
     assert_eq!(ForkContextMode::Verbatim.as_str(), "verbatim");
-    assert_eq!(ForkContextMode::Summarized.as_str(), "summarized");
     assert_eq!(ForkContextMode::New.as_str(), "new");
+    // 历史库 "summarized" 经 alias 反序列化为 Verbatim
+    assert_eq!(
+        serde_json::from_str::<ForkContextMode>("\"summarized\"").unwrap(),
+        ForkContextMode::Verbatim
+    );
     assert_eq!(RecoveryLadder::Ladder1AutoRetry.as_str(), "ladder-1");
     assert_eq!(RecoveryLadder::Ladder2MainAgent.as_str(), "ladder-2");
     assert_eq!(RecoveryLadder::Ladder3Fork.as_str(), "ladder-3");

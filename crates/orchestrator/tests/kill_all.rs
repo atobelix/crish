@@ -652,7 +652,7 @@ async fn resume_forks_new_run_verbatim_and_consumes_budget() {
     assert!(sink.calls().is_empty(), "非 running 目标不投递 L3");
 }
 
-/// 上下文三态判定：Verbatim / Summarized / New
+/// 上下文两态判定：Verbatim / New（B6 收敛：Summarized 已删除，统一 Verbatim）
 #[tokio::test]
 async fn resume_context_three_states() {
     // ── Verbatim：同窗且注入 ≤ 80% ──
@@ -695,12 +695,12 @@ async fn resume_context_three_states() {
         };
         assert_eq!(record.context_mode, ForkContextMode::Verbatim);
     }
-    // ── Summarized：注入超会话窗口 80%（900/1000 = 90%）──
+    // ── Summarized 已收敛为 Verbatim：注入超 80% 亦走 Verbatim（B6）──
     {
         let session_id = "s-sum";
         let mut env = resume_env(session_id);
         let started_at = now_ms() - 1_000;
-        // 首条 user 消息 = 任务（14B），assistant 大段产出 886B → inject 900B
+        // 首条 user 消息 = 任务（14B），assistant 大段产出 886B → inject 900B（原 Summarized 场景，现收敛为 Verbatim）
         env.db
             .save_session_agents(
                 session_id,
@@ -736,8 +736,8 @@ async fn resume_context_three_states() {
         };
         assert_eq!(
             record.context_mode,
-            ForkContextMode::Summarized,
-            "注入 900B > 窗口 1000B 的 80% → 摘要继承"
+            ForkContextMode::Verbatim,
+            "B6 收敛：注入 900B > 80% 亦统一 Verbatim（原 Summarized）"
         );
     }
     // ── New：空内容（无消息）+ 显式 prompt → 全新上下文 ──
