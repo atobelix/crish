@@ -287,7 +287,7 @@
   font-weight: var(--font-weight-medium);
 }
 
-/* Leaf body：chat / 工具内容。chat chrome 覆盖在 body 上，不占行。 */}
+/* Leaf body：chat / 工具内容。chat chrome 覆盖在 body 上，不占行。 */
 
 .leafBody {
   /* chrome 在 leafBody 外；body 吃剩余高，勿写成 height:100% 把兄弟裁掉 */
