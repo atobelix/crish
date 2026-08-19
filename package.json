@@ -15,7 +15,8 @@
     "packages/test-utils",
     "packages/block-paper-contract",
     "packages/editor-kit",
-    "packages/block-paper"
+    "packages/block-paper",
+    "packages/conversation-flow"
   ],
   "scripts": {
     "build": "turbo run build",

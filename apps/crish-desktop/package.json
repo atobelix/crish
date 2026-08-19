@@ -20,6 +20,7 @@
     "@chenglou/pretext": "^0.0.8",
     "@crish/block-paper": "file:../../packages/block-paper",
     "@crish/block-paper-contract": "file:../../packages/block-paper-contract",
+    "@crish/conversation-flow": "file:../../packages/conversation-flow",
     "@crish/editor-kit": "file:../../packages/editor-kit",
     "@crish/shared-types": "file:../../packages/shared-types",
     "@crish/shared-utils": "file:../../packages/shared-utils",

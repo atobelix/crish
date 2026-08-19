@@ -1,25 +1,25 @@
 /**
  * 官方捆绑对话流扩展：登记 chat 叶 stream 槽，不注册新 view。
- * 默认关；激活后仅线性包装 ChatMessageList，证明可卸。
+ * 默认关；激活后挂 host（投影 + 线性 ChatMessageList）。
  */
-import {
-  createElement,
-  lazy,
-  Suspense,
-  type CSSProperties,
-  type ReactElement,
-} from 'react';
+import { createElement, lazy, Suspense, type ReactElement } from 'react';
 import type { ChatMessageListProps } from '../../components/chat-message-list/chatMessageListProps';
 import '../../components/chat-message-list/workspaceChatStream.slot';
 import { slotCore } from '../../services/view-registry';
 
-const ChatMessageList = lazy(async () => {
-  const m = await import('../../components/chat-message-list/ChatMessageList');
-  return { default: m.ChatMessageList };
+/** 关插件时不拉 host，避免默认路径引用投影包 */
+const ConversationFlowHost = lazy(async () => {
+  const m = await import('./host');
+  return { default: m.ConversationFlowHost };
 });
 
-/** 包装根不占盒，避免插入 SlotOutlet 后撑破 .chatDocFlow 的 flex 包含块 */
-const HOST_STYLE: CSSProperties = { display: 'contents' };
+function StreamSlotHost(props: ChatMessageListProps): ReactElement {
+  return createElement(
+    Suspense,
+    { fallback: null },
+    createElement(ConversationFlowHost, props)
+  );
+}
 
 let currentDeactivate: (() => void) | null = null;
 let officialOverride: boolean | null = null;
@@ -35,18 +35,6 @@ export function setOfficialConversationFlowActivateForTesting(
   officialOverride = value;
 }
 
-function LinearStreamHost(props: ChatMessageListProps): ReactElement {
-  return createElement(
-    'div',
-    { 'data-conversation-flow': 'on', style: HOST_STYLE },
-    createElement(
-      Suspense,
-      { fallback: null },
-      createElement(ChatMessageList, props)
-    )
-  );
-}
-
 export function activateConversationFlow(): () => void {
   if (currentDeactivate) {
     currentDeactivate();
@@ -54,7 +42,7 @@ export function activateConversationFlow(): () => void {
 
   const unregisterSlot = slotCore.registerSingle('workspace.chat.stream', {
     id: 'conversation-flow',
-    component: LinearStreamHost,
+    component: StreamSlotHost,
   });
 
   const deactivate = (): void => {
