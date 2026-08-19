@@ -13,6 +13,10 @@ import {
   activateNotePaper,
   shouldActivateOfficialNotePaper,
 } from './extensions/note-paper';
+import {
+  activateConversationFlow,
+  shouldActivateOfficialConversationFlow,
+} from './extensions/conversation-flow';
 import { lazy } from 'react';
 
 import { ToastProvider } from './services/toast/ToastContext';
@@ -130,6 +134,9 @@ async function startup() {
   // 官方捆绑笔记扩展（可卸）；不是内核第 12 个内置
   if (shouldActivateOfficialNotePaper()) {
     activateNotePaper();
+  }
+  if (shouldActivateOfficialConversationFlow()) {
+    activateConversationFlow();
   }
 
   // Phase 0: 等待 ServiceRegistry / ConfigService 初始化

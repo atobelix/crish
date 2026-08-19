@@ -2,6 +2,9 @@ import React, { Suspense, lazy } from 'react';
 import styles from './ChatCard.module.css';
 import type { } from '../../hooks/useToastQueue';
 import { ChatMessageList } from '../chat-message-list/ChatMessageList';
+import type { ChatMessageListProps } from '../chat-message-list/chatMessageListProps';
+import '../chat-message-list/workspaceChatStream.slot';
+import { SlotOutlet } from '../../services/view-registry';
 import { ChatEmptyState } from './ChatEmptyState';
 import { ChatComposer } from '../chat-composer/ChatComposer';
 import { ModelBadgePicker } from './ChatHeaderControls';
@@ -115,6 +118,44 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       [state]
     );
 
+    // 有消息枝才进 stream 槽；空态 / 定时任务面保持现逻辑，不被槽吞掉
+    const chatStreamProps: ChatMessageListProps = {
+      messages: {
+        messages: state.displayMessages,
+        allMessages: state.messages,
+        agents: state.agents,
+        activeSessionId: state.activeSessionId || '',
+        showAllMessages: state.isFiltering,
+      },
+      projectPicker: {
+        showProjectPicker: state.showProjectPicker,
+        onShowProjectPicker: state.setShowProjectPicker,
+        onProjectChanged: state.handleProjectChanged,
+      },
+      composer: {
+        onSetChatInput: state.composerProps.setChatInput,
+        onSendFollowUp: state.handleSendFollowUp,
+      },
+      generation: {
+        onRegenerate: state.handleRegenerate,
+        onBranch: state.handleBranch,
+      },
+      approval: {
+        approvalBusy: state.approvalState.approvalBusy,
+        pendingApprovalMsgId: state.approvalState.pendingApprovalMsgId,
+        onApprovalAllow: state.approvalState.handleApprovalAllow,
+        onApprovalDeny: state.approvalState.handleApprovalDeny,
+        onBatchApprove: state.approvalState.handleBatchApprove,
+        onBatchDeny: state.approvalState.handleBatchDeny,
+      },
+      navigation: {
+        onOpenDiff: state.openDiffInRightPanel,
+        onOpenPath: state.openPathInFilesPanel,
+        onOpenTerminal: state.handleOpenTerminal,
+        onOpenDiffPanel: state.handleOpenDiffPanel,
+      },
+    };
+
     return (
       <>
         <div
@@ -167,41 +208,10 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
                 />
               </div>
             ) : (
-              <ChatMessageList
-                messages={{
-                  messages: state.displayMessages,
-                  allMessages: state.messages,
-                  agents: state.agents,
-                  activeSessionId: state.activeSessionId || '',
-                  showAllMessages: state.isFiltering,
-                }}
-                projectPicker={{
-                  showProjectPicker: state.showProjectPicker,
-                  onShowProjectPicker: state.setShowProjectPicker,
-                  onProjectChanged: state.handleProjectChanged,
-                }}
-                composer={{
-                  onSetChatInput: state.composerProps.setChatInput,
-                  onSendFollowUp: state.handleSendFollowUp,
-                }}
-                generation={{
-                  onRegenerate: state.handleRegenerate,
-                  onBranch: state.handleBranch,
-                }}
-                approval={{
-                  approvalBusy: state.approvalState.approvalBusy,
-                  pendingApprovalMsgId: state.approvalState.pendingApprovalMsgId,
-                  onApprovalAllow: state.approvalState.handleApprovalAllow,
-                  onApprovalDeny: state.approvalState.handleApprovalDeny,
-                  onBatchApprove: state.approvalState.handleBatchApprove,
-                  onBatchDeny: state.approvalState.handleBatchDeny,
-                }}
-                navigation={{
-                  onOpenDiff: state.openDiffInRightPanel,
-                  onOpenPath: state.openPathInFilesPanel,
-                  onOpenTerminal: state.handleOpenTerminal,
-                  onOpenDiffPanel: state.handleOpenDiffPanel,
-                }}
+              <SlotOutlet
+                slotKey="workspace.chat.stream"
+                context={chatStreamProps}
+                fallback={<ChatMessageList {...chatStreamProps} />}
               />
             )}
           </div>
