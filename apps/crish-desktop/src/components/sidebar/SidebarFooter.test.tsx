@@ -4,7 +4,7 @@ import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { SidebarFooter } from './SidebarFooter';
 import { UserProfileCard } from './UserProfileCard';
-import { useLayoutStore } from '../../store/storeAccess';
+import { useSettingsUiStore } from '../../store/settingsUiStore';
 import * as appModeApi from '../../api/appMode';
 
 describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
@@ -18,6 +18,7 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
   afterEach(() => {
     cleanup();
     localStorage.clear();
+    useSettingsUiStore.setState({ showSettingsOverlay: false });
   });
 
   it('底栏渲染左列 UserProfileCard 和右列 SettingsIconButton', () => {
@@ -42,9 +43,8 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
     expect(gearBtn).toBeInTheDocument();
   });
 
-  it('点击右列独立齿轮按钮直接调用 openSettings() 直达设置中心', () => {
-    const openSettingsSpy = vi.fn();
-    useLayoutStore.setState({ openSettings: openSettingsSpy });
+  it('连续点击齿轮在设置浮层与主界面之间切换', () => {
+    useSettingsUiStore.setState({ showSettingsOverlay: false });
 
     render(
       <SidebarFooter
@@ -54,9 +54,13 @@ describe('SidebarFooter 双列底栏与 UserProfileCard 交互测试', () => {
     );
 
     const gearBtn = screen.getByTestId('sidebar-settings-gear-btn');
+    expect(gearBtn).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(gearBtn);
-
-    expect(openSettingsSpy).toHaveBeenCalledTimes(1);
+    expect(useSettingsUiStore.getState().showSettingsOverlay).toBe(true);
+    expect(gearBtn).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(gearBtn);
+    expect(useSettingsUiStore.getState().showSettingsOverlay).toBe(false);
+    expect(gearBtn).toHaveAttribute('aria-pressed', 'false');
   });
 
   it('点击左列 UserProfileCard 触发 SettingsQuickMenu 快捷菜单', async () => {

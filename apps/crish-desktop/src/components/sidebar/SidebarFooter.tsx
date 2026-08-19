@@ -9,7 +9,10 @@ import {
   isDemoMode,
   switchAppMode,
 } from '../../api/appMode';
-import { openSettings } from '../../store/settingsUiStore';
+import {
+  toggleSettingsOverlay,
+  useShowSettingsOverlay,
+} from '../../store/settingsUiStore';
 import { UserProfileCard } from './UserProfileCard';
 
 export interface SettingsIconButtonProps {
@@ -20,18 +23,20 @@ export interface SettingsIconButtonProps {
 
 export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
   ({ updateAvailable }) => {
-    const tooltipText = updateAvailable
-      ? '打开设置中心 (Cmd/Ctrl + ,) · 有新版本可用'
-      : '打开设置中心 (Cmd/Ctrl + ,)';
+    const showSettings = useShowSettingsOverlay();
+    const tooltipText = `${showSettings ? '关闭' : '打开'}设置中心 (Cmd/Ctrl + ,)${
+      updateAvailable ? ' · 有新版本可用' : ''
+    }`;
 
     return (
       <Tooltip content={tooltipText}>
         <button
           type="button"
-          className={styles.settingsGearBtn}
+          className={`${styles.settingsGearBtn}${showSettings ? ` ${styles.isOpen}` : ''}`}
           data-testid="sidebar-settings-gear-btn"
-          aria-label="打开设置中心 (Cmd/Ctrl + ,)"
-          onClick={() => openSettings()}
+          aria-label={tooltipText}
+          aria-pressed={showSettings}
+          onClick={() => toggleSettingsOverlay()}
         >
           <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />
           {updateAvailable && (

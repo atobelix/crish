@@ -1,19 +1,21 @@
 // @vitest-environment jsdom
 /**
- * SettingsQuickMenu（ui/Menu 基座迁移版）交互测试：
- * 打开/Esc 还原焦点/键盘漫游/外点关闭不抢焦点
+ * SettingsQuickMenu：打开/Esc 还原焦点/键盘漫游/外点关闭；外观段走 SegmentedControl
  */
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import React from 'react';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import React from 'react';
+import { render, screen, fireEvent, cleanup, waitFor, act } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SettingsQuickMenu } from './SettingsQuickMenu';
+import { useSettingsUiStore } from '../../store/settingsUiStore';
 
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   localStorage.clear();
+  useSettingsUiStore.setState({ showSettingsOverlay: false });
 });
 
 describe('SettingsQuickMenu（ui/Menu 基座）', () => {
@@ -25,6 +27,36 @@ describe('SettingsQuickMenu（ui/Menu 基座）', () => {
     expect(screen.getByText('外观')).toBeInTheDocument();
     expect(screen.getByText('模型与密钥')).toBeInTheDocument();
     expect(screen.getByText('全部设置')).toBeInTheDocument();
+  });
+
+  it('外观段走 SegmentedControl，无 .ui-segment 死皮', async () => {
+    render(<SettingsQuickMenu />);
+    fireEvent.click(screen.getByTestId('settings-button'));
+    await screen.findByRole('menu', { name: '快捷设置' });
+    expect(document.querySelector('.ui-segment')).toBeNull();
+    expect(document.querySelector('.ui-segment-item')).toBeNull();
+    const group = screen.getByRole('radiogroup', { name: '外观' });
+    expect(group).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: '浅色主题' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    fireEvent.click(screen.getByRole('radio', { name: '深色主题' }));
+    expect(screen.getByRole('radio', { name: '深色主题' })).toHaveAttribute(
+      'aria-checked',
+      'true'
+    );
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('外观段 CSS 不写 999 胶囊、不用 --bg-primary 挖坑', () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'SettingsQuickMenu.module.css'),
+      'utf8'
+    );
+    expect(css).not.toMatch(/999px/);
+    expect(css).not.toMatch(/ui-segment-item/);
+    expect(css).not.toMatch(/--bg-primary/);
   });
 
   it('Esc 关闭菜单并还原焦点到触发按钮', async () => {
@@ -41,10 +73,8 @@ describe('SettingsQuickMenu（ui/Menu 基座）', () => {
     render(<SettingsQuickMenu />);
     fireEvent.click(screen.getByTestId('settings-button'));
     const menu = await screen.findByRole('menu', { name: '快捷设置' });
-    // 打开后已聚焦首个可操作控件（浅色主题）
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
-    // 至少移动到第一个快捷入口
     expect(screen.getByTestId('quick-settings-models')).toHaveFocus();
   });
 
@@ -56,7 +86,9 @@ describe('SettingsQuickMenu（ui/Menu 基座）', () => {
     outside.textContent = '外部按钮';
     document.body.appendChild(outside);
     outside.focus();
-    fireEvent.pointerDown(outside);
+    await act(async () => {
+      fireEvent.pointerDown(outside);
+    });
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
     expect(document.activeElement).not.toBe(screen.getByTestId('settings-button'));
     outside.remove();

@@ -82,17 +82,11 @@
 
 .sbQuickSegment {
   width: 100%;
-  background: var(--bg-primary);
 }
 
-.sbQuickSegment :global(.ui-segment-item) {
-  flex: 1;
-  border-radius: 999px;
-}
-
-.sbQuickSegment :global(.ui-segment-item.active) {
-  background-color: var(--bg-elevated);
-  color: var(--text-primary);
+.sbQuickSegment :global(button) {
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .sbQuickDivider {

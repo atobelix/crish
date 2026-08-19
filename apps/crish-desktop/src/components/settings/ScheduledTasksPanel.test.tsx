@@ -2,6 +2,9 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const mockWorkflow = {
   id: 'wf-1',
@@ -116,5 +119,15 @@ describe('ScheduledTasksPanel', () => {
       'secondary'
     );
     expect(screen.getByRole('form', { name: '新建计划' })).toBeTruthy();
+  });
+
+  it('嵌入主面对齐拉伸，不用 margin:0 auto 把主布局改成居中列', () => {
+    const css = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'ScheduledTasksPanel.module.css'),
+      'utf8'
+    );
+    expect(css).not.toMatch(/margin:\s*0 auto/);
+    expect(css).toMatch(/justify-content:\s*flex-start/);
+    expect(css).toMatch(/max-width:\s*none/);
   });
 });

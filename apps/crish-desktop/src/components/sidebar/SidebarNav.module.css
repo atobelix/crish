@@ -8,30 +8,39 @@
 }
 
 .navItem {
+  --btn-hover-overlay: transparent;
+  --btn-active-overlay: transparent;
+  --btn-radius: var(--radius-lg);
+  --btn-h: var(--control-height);
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: var(--space-2);
   width: 100%;
+  height: var(--control-height);
   min-height: var(--control-height);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: var(
-    --font-size-base,
-    14px
-  ); /* locked explicitly to 14px */
+  font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-medium);
-  padding: 0 8px; /* Internal padding set to 8px so icons start exactly at 10px + 8px = 18px from left */
-  border-radius: var(--radius-xl);
+  padding: 0 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
   transition:
     background var(--transition-micro),
-    border-color var(--transition-micro),
-    color var(--transition-micro),
-    box-shadow var(--transition-micro);
+    color var(--transition-micro);
   box-sizing: border-box;
+}
+
+/* 关掉 ui/Button ::before，避免暖褐 --sidebar-hover 再叠 6% 黑罩 */
+.navItem::before {
+  content: none;
+  display: none;
 }
 
 .navItem svg {
@@ -51,15 +60,20 @@
   color: var(--text-secondary);
 }
 
-.navItem.isActive {
+.navItem.isActive,
+.navItem.isActive:hover {
   background: var(--sidebar-active);
   color: var(--text-primary);
   border-color: transparent;
-  box-shadow: none;
 }
 
 .navItem.isActive svg {
   color: var(--text-primary);
+}
+
+.navItem:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
 /* Specific to search input */
@@ -90,23 +104,4 @@
   -webkit-appearance: none;
   appearance: none;
   display: none;
-}
-
-/* R2-6 navItem    ui/Button           
- *  Button    inline-flex center / ghost    / ghost                   */
-.navItem:not(.isActive) {
-  justify-content: flex-start;
-  width: 100%;
-  gap: var(--space-2);
-  border-radius: var(--radius-xl);
-  color: var(--text-secondary);
-  font-weight: var(--font-weight-medium);
-}
-
-.navItem:not(.isActive):hover {
-  background: var(--sidebar-hover);
-}
-
-.navItem.isActive:hover {
-  background: var(--sidebar-active);
 }

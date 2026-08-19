@@ -4,7 +4,8 @@
  * 保留 roving 键盘增强与「Esc/Tab 关闭并还原焦点」语义。）
  *
  * 键盘：↑↓ / Home / End 漫游（本组件保留）；Esc / Tab 关闭并还原焦点到触发钮。
- * 主题段用 menuitemradio；入口项 SettingsTabType 字面量，避免 string 漂移。
+ * 主题段走 ui/SegmentedControl（轨道 --bg-secondary、滑块 --bg-elevated、7px）。
+ * 入口项 SettingsTabType 字面量，避免 string 漂移。
  * 焦点语义：外点关闭不抢焦点（onInteractOutside 置位），
  * Esc/Tab/选中关闭还原焦点（restoreOnCloseRef 置位）。
  */
@@ -14,7 +15,7 @@ import { openSettings } from '../../store/settingsUiStore';
 import type { SettingsTabType } from '../../store/types';
 import { readStoredTheme, setTheme, type UiTheme } from '../../api/themeStore';
 import styles from './SettingsQuickMenu.module.css';
-import { Menu, Tooltip } from '../ui';
+import { Menu, SegmentedControl, Tooltip } from '../ui';
 
 export interface SettingsQuickMenuProps {
   trigger?: React.ReactNode;
@@ -34,7 +35,12 @@ export type Props = SettingsQuickMenuProps;
 
 /** 可聚焦控件：主题 radio + 菜单项（不含禁用） */
 const FOCUSABLE_SEL =
-  'button.ui-segment-item:not(:disabled), button.sb-quick-item:not(:disabled):not([aria-disabled="true"])';
+  '[role="radio"]:not(:disabled), button.sb-quick-item:not(:disabled):not([aria-disabled="true"])';
+
+const THEME_OPTIONS = [
+  { value: 'default', label: '浅色', 'aria-label': '浅色主题' },
+  { value: 'dark', label: '深色', 'aria-label': '深色主题' },
+] as const;
 
 function listFocusable(root: HTMLElement | null): HTMLButtonElement[] {
   if (!root) return [];
@@ -146,6 +152,13 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
       closeMenu({ restoreFocus: true });
       return;
     }
+    const inThemeSeg = Boolean(
+      (e.target as HTMLElement | null)?.closest('[role="radiogroup"]')
+    );
+    // 主题段左右键交给 SegmentedControl；上下键仍由菜单漫游，捕获阶段拦住以免分段把 ↓ 当成换肤
+    if (inThemeSeg && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+      return;
+    }
     const items = listFocusable(menuRef.current);
     if (items.length === 0) return;
     const idx = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -153,19 +166,24 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
 
     if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
       e.preventDefault();
+      e.stopPropagation();
       items[(safeIdx + 1) % items.length]?.focus();
     } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
       e.preventDefault();
+      e.stopPropagation();
       items[(safeIdx - 1 + items.length) % items.length]?.focus();
     } else if (e.key === 'Home') {
       e.preventDefault();
+      e.stopPropagation();
       items[0]?.focus();
     } else if (e.key === 'End') {
       e.preventDefault();
+      e.stopPropagation();
       items[items.length - 1]?.focus();
     } else if (e.key === 'Tab') {
       // 离开菜单：关闭并还原触发钮，避免焦点逃到背后
       e.preventDefault();
+      e.stopPropagation();
       closeMenu({ restoreFocus: true });
     }
   };
@@ -244,45 +262,22 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
           aria-label="快捷设置"
           aria-orientation="vertical"
           data-density="compact"
-          onKeyDown={onMenuKeyDown}
+          onKeyDownCapture={onMenuKeyDown}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <div className={styles.sbQuickSection} role="none">
             <div className={styles.sbQuickLabel} id={themeGroupId}>
               外观
             </div>
-            <div
-              className={`ui-segment ui-segment--inline ${styles.sbQuickSegment} sb-quick-segment`}
-              role="group"
-              aria-labelledby={themeGroupId}
-            >
-              <Tooltip content="浅色主题">
-                <button
-                  type="button"
-                  className={`ui-segment-item${isDark ? '' : ' active'}`}
-                  role="menuitemradio"
-                  aria-checked={!isDark}
-                  tabIndex={-1}
-                  aria-label="浅色主题"
-                  onClick={() => applyTheme('default')}
-                >
-                  浅色
-                </button>
-              </Tooltip>
-              <Tooltip content="深色主题">
-                <button
-                  type="button"
-                  className={`ui-segment-item${isDark ? ' active' : ''}`}
-                  role="menuitemradio"
-                  aria-checked={isDark}
-                  tabIndex={-1}
-                  aria-label="深色主题"
-                  onClick={() => applyTheme('dark')}
-                >
-                  深色
-                </button>
-              </Tooltip>
-            </div>
+            <SegmentedControl
+              aria-label="外观"
+              size="sm"
+              block
+              className={`${styles.sbQuickSegment} sb-quick-segment`}
+              value={isDark ? 'dark' : 'default'}
+              options={[...THEME_OPTIONS]}
+              onChange={(v) => applyTheme(v === 'dark' ? 'dark' : 'default')}
+            />
           </div>
 
           <div className={styles.sbQuickDivider} role="separator" />
