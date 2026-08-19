@@ -215,9 +215,8 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
       const shell = useWorkspaceShellStore.getState();
       const existing = shell.openTabs.find((t) => t.sessionId === sessionId);
       if (existing) {
-        if (shell.activeTabId !== existing.tabId) {
-          shell.activateTab(existing.tabId);
-        }
+        // 已 active 也走 activateTab：对齐 session / leaf，禁止短路导致“点了没切”
+        shell.activateTab(existing.tabId);
         return;
       }
       shell.openOrFocusSession(sessionId);
@@ -322,6 +321,7 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
                     type="button"
                     className={styles.tabClose}
                     tabIndex={-1}
+                    data-tab-close=""
                     aria-label={`关闭会话标签 ${tab.label}`}
                     onClick={(e) => onCloseSession(tab.id, e)}
                     onPointerDown={(e) => e.stopPropagation()}

@@ -164,6 +164,23 @@ describe('GlobalSessionTabBar', () => {
     expect(useWorkspaceShellStore.getState().activeTabId).toBe('tab-b');
   });
 
+  it('点击 tab 宿主（role=tab）同样切会话', () => {
+    const { getAllByTestId } = render(<GlobalSessionTabBar />);
+    const tabs = getAllByTestId('global-session-tab');
+    fireEvent.click(tabs[1]!);
+    expect(useWorkspaceShellStore.getState().activeTabId).toBe('tab-b');
+  });
+
+  it('再点当前 tab 仍走 activateTab', () => {
+    const activateTab = vi.fn();
+    const prev = useWorkspaceShellStore.getState().activateTab;
+    useWorkspaceShellStore.setState({ activateTab });
+    const { getAllByTestId } = render(<GlobalSessionTabBar />);
+    fireEvent.click(getAllByTestId('global-session-tab')[0]!);
+    expect(activateTab).toHaveBeenCalledWith('tab-a');
+    useWorkspaceShellStore.setState({ activateTab: prev });
+  });
+
   it('pinned tabs render with 56px lock contract, pin icon and no close button', () => {
     useWorkspaceShellStore.setState({
       openTabs: [

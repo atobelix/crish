@@ -277,6 +277,8 @@
   text-align: left;
   cursor: pointer;
   overflow: hidden;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
 }
 
 /* 按下色变，无缩放 */
@@ -400,16 +402,21 @@
   transition: opacity var(--transition-micro);
 }
 
-.sessionActionsBtn {
+.sessionItem .sessionActionsBtn {
   position: absolute;
   right: 0;
   top: 50%;
   transform: translateY(-50%);
   opacity: 0;
   pointer-events: none;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-md);
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  max-width: 18px;
+  max-height: 18px;
+  padding: 0;
+  border-radius: var(--radius-sm, 4px);
   color: var(--text-tertiary);
   background: none;
   border: none;
@@ -417,12 +424,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  -webkit-app-region: no-drag;
   transition: opacity var(--transition-micro), color var(--transition-micro);
+}
+
+.sessionItem .sessionActionsBtn::before {
+  display: none;
 }
 
 .sessionItem:hover .sessionTime,
 .sessionItem:focus-within .sessionTime {
   opacity: 0;
+  pointer-events: none;
 }
 
 .sessionItem:hover .sessionActionsBtn,

@@ -162,7 +162,9 @@ export const SessionContextMenu: React.FC<{
         left: contextMenu.x,
         top: contextMenu.y,
         position: 'fixed',
-        zIndex: 'var(--z-context-menu)',
+        // --z-context-menu 未定义时整条 z-index 作废=auto，会被侧栏/叶/composer 盖住
+        zIndex: 'var(--z-context-menu, var(--z-popover))',
+        pointerEvents: 'auto',
       }}
       role="menu"
       aria-label="会话操作"

@@ -76,6 +76,14 @@ describe('ui/TabStrip', () => {
     expect(onActiveChange).toHaveBeenCalledWith('a');
   });
 
+  it('鼠标点击 tab 上报 onActiveChange', () => {
+    const onActiveChange = vi.fn();
+    const { container } = render(<Tabs onActiveChange={onActiveChange} />);
+    const tabs = container.querySelectorAll('[role="tab"]');
+    fireEvent.click(tabs[1]!);
+    expect(onActiveChange).toHaveBeenCalledWith('b');
+  });
+
   it('Enter / Space 激活当前聚焦 tab', () => {
     const onActiveChange = vi.fn();
     const { container } = render(<Tabs onActiveChange={onActiveChange} />);

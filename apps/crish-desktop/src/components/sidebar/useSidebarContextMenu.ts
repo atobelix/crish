@@ -132,10 +132,14 @@ export function useSidebarContextMenu({
   }, [setSortDropdownOpen]);
 
   const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
-    e.preventDefault();
     const triggerEl =
       (e.currentTarget instanceof HTMLElement ? e.currentTarget : null) ??
       (e.target instanceof HTMLElement ? e.target : null);
+
+    const isMoreTrigger = Boolean(
+      triggerEl?.dataset?.testid === 'session-more-button' ||
+        triggerEl?.closest?.('[data-testid="session-more-button"]')
+    );
 
     const openThis = () => {
       setRenamingSessionId(null);
@@ -145,8 +149,10 @@ export function useSidebarContextMenu({
       setContextMenu({ x: e.clientX, y: e.clientY, sessionId });
     };
 
-    // 左键「更多」：与加号/权限丸同构，开着写死 false，外点关后抑制重开
-    if (e.button !== 2) {
+    // 只有左键「更多」走 exclusive（开着写死 false，外点关后抑制重开）。
+    // 右键 / 键盘 / 其它左键不得进 toggle——否则会把行选择或右键开菜单吞掉。
+    if (isMoreTrigger && e.button !== 2) {
+      e.preventDefault();
       toggleExclusiveMenu(
         contextMenu?.sessionId === sessionId,
         (next) => {
@@ -158,6 +164,7 @@ export function useSidebarContextMenu({
       return;
     }
 
+    e.preventDefault();
     openThis();
   };
 

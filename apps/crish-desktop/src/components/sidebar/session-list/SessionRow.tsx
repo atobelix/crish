@@ -21,8 +21,18 @@ import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
 import { MoreHorizontal } from 'lucide-react';
 
+/** 更多钮边长；必须小于行高，避免撑满整行吞掉标题点击 */
+export const SESSION_ACTIONS_BTN_PX = 18;
+
 /** Drop indicator place; local type avoids circular runtime import with useSessionListDrag */
 export type SessionRowDropPlace = 'before' | 'after';
+
+function isSessionMoreTarget(el: EventTarget | null): boolean {
+  return (
+    el instanceof Element &&
+    Boolean(el.closest('[data-testid="session-more-button"]'))
+  );
+}
 
 /**
  * NowTickContext – 时间刻度上下文。
@@ -256,6 +266,8 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
         className={`${styles.sessionItem} ${sessionActive ? styles.active : ''} ${isBranched ? styles.branchSession : ''} ${isRunning ? styles.isRunning : ''} ${isRenaming ? styles.isRenaming : ''}`}
         onClick={(e) => {
           if (isRenaming) return;
+          // 更多钮自己开菜单；不要让 exclusive / stop 漏网后把行选择吞掉
+          if (isSessionMoreTarget(e.target)) return;
           // 仅拒绝明确的中/右键；合成 click（MCP/自动化）常不带 button 或为 0。
           // 旧逻辑 `button !== 0` 会把 button===undefined 也挡掉 → 界面“点了没反应”。
           if (typeof e.button === 'number' && e.button !== 0) return;
@@ -270,6 +282,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
             ? (e) => {
                 // 仅左键启动拖拽；不 preventDefault，保证 click 仍可触发
                 if (typeof e.button === 'number' && e.button !== 0) return;
+                if (isSessionMoreTarget(e.target)) return;
                 onStartSessionDrag(e, s.id, s.folder);
               }
             : undefined
@@ -356,13 +369,26 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                     <Button
                       type="button"
                       variant="ghost"
-                      size="sm"
+                      size="xs"
                       className={styles.sessionActionsBtn}
                       data-testid="session-more-button"
                       aria-label="更多操作"
                       aria-haspopup="menu"
                       tabIndex={-1}
+                      style={{
+                        width: SESSION_ACTIONS_BTN_PX,
+                        height: SESSION_ACTIONS_BTN_PX,
+                        minWidth: SESSION_ACTIONS_BTN_PX,
+                        minHeight: SESSION_ACTIONS_BTN_PX,
+                        maxWidth: SESSION_ACTIONS_BTN_PX,
+                        maxHeight: SESSION_ACTIONS_BTN_PX,
+                      }}
+                      onPointerDown={(e) => {
+                        // 不要让行拖拽 / pointer capture 把后续 click 吃掉
+                        e.stopPropagation();
+                      }}
                       onClick={(e) => {
+                        e.preventDefault();
                         e.stopPropagation();
                         openRowMenu(e);
                       }}
@@ -372,7 +398,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                       }}
                       icon={
                         <MoreHorizontal
-                          size={16}
+                          size={14}
                           strokeWidth={1.75}
                           aria-hidden
                         />

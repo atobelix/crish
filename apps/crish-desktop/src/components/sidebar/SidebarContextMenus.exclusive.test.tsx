@@ -38,7 +38,11 @@ function renderSessionMenu(
   const onAction = vi.fn();
   const utils = render(
     <>
-      <button ref={triggerRef} type="button" data-testid="session-more">
+      <button
+        ref={triggerRef}
+        type="button"
+        data-testid="session-more-button"
+      >
         更多
       </button>
       <SessionContextMenu
@@ -159,6 +163,13 @@ describe('SessionContextMenu exclusive 层栈', () => {
     outside.remove();
   });
 
+  it('菜单 z-index 回落到 --z-popover，不被侧栏/叶盖住', async () => {
+    renderSessionMenu();
+    const menu = await screen.findByTestId('session-context-menu');
+    expect(menu.style.zIndex).toMatch(/--z-context-menu|--z-popover/);
+    expect(menu.style.pointerEvents).toBe('auto');
+  });
+
   it('保留归档/分叉/删除/导出等现有动作', async () => {
     renderSessionMenu();
     const menu = await screen.findByRole('menu', { name: '会话操作' });
@@ -190,6 +201,7 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
       useSidebarContextMenu({ setSortDropdownOpen: vi.fn() })
     );
     const btn = document.createElement('button');
+    btn.dataset.testid = 'session-more-button';
     const content = document.createElement('div');
     document.body.append(content, btn);
     layerStackService.register({
@@ -258,6 +270,7 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
       useSidebarContextMenu({ setSortDropdownOpen: vi.fn() })
     );
     const btn = document.createElement('button');
+    btn.dataset.testid = 'session-more-button';
     document.body.append(btn);
 
     act(() => {
@@ -283,6 +296,7 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
       useSidebarContextMenu({ setSortDropdownOpen: vi.fn() })
     );
     const btn = document.createElement('button');
+    btn.dataset.testid = 'session-more-button';
     document.body.append(btn);
 
     act(() => {
@@ -322,5 +336,26 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
     rerender(<></>);
     expect(result.current.contextMenu).toBeNull();
     btn.remove();
+  });
+
+  it('非更多左键不当 exclusive：行节点 button=0 仍打开（不吞选择路径）', () => {
+    const { result } = renderHook(() =>
+      useSidebarContextMenu({ setSortDropdownOpen: vi.fn() })
+    );
+    const row = document.createElement('div');
+    row.dataset.testid = 'sidebar-session-item';
+    document.body.append(row);
+    act(() => {
+      result.current.handleContextMenu(
+        fakeMouseEvent(row, { button: 0, x: 8, y: 16 }),
+        'sess-2'
+      );
+    });
+    expect(result.current.contextMenu).toEqual({
+      x: 8,
+      y: 16,
+      sessionId: 'sess-2',
+    });
+    row.remove();
   });
 });

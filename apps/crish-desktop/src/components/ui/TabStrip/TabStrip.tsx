@@ -324,6 +324,11 @@ export const TabStrip: React.FC<TabStripProps> = ({
               tabIndex={isRovingStop ? 0 : -1}
               onKeyDown={(e) => handleTabKeyDown(e, index)}
               onFocus={() => setRovingIndex(index)}
+              onClick={(e) => {
+                const t = e.target as HTMLElement | null;
+                if (t?.closest?.('[data-tab-close]')) return;
+                onActiveChange(tab.id);
+              }}
               onPointerDown={
                 onTabPointerDown
                   ? (e) => onTabPointerDown(tab.id, e)
