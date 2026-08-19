@@ -1,8 +1,10 @@
 /**
- * 官方捆绑对话流扩展：登记 chat 叶 stream 槽，不注册新 view。
- * 默认关；激活后挂 host（投影 + 线性 ChatMessageList）。
+ * 官方捆绑对话流扩展：登记 chat 叶 stream + composerAbove 槽，不注册新 view。
+ * 默认关；激活后挂 host（投影 + 线性 ChatMessageList）与冷静审批条。
  */
 import { createElement, lazy, Suspense, type ReactElement } from 'react';
+import type { ChatComposerAboveProps } from '../../components/chat-card/chatComposerAboveProps';
+import '../../components/chat-card/workspaceChatComposerAbove.slot';
 import type { ChatMessageListProps } from '../../components/chat-message-list/chatMessageListProps';
 import '../../components/chat-message-list/workspaceChatStream.slot';
 import { slotCore } from '../../services/view-registry';
@@ -13,11 +15,24 @@ const ConversationFlowHost = lazy(async () => {
   return { default: m.ConversationFlowHost };
 });
 
+const ConversationFlowPermissionBar = lazy(async () => {
+  const m = await import('./PermissionBar');
+  return { default: m.PermissionBar };
+});
+
 function StreamSlotHost(props: ChatMessageListProps): ReactElement {
   return createElement(
     Suspense,
     { fallback: null },
     createElement(ConversationFlowHost, props)
+  );
+}
+
+function ComposerAboveSlotHost(props: ChatComposerAboveProps): ReactElement {
+  return createElement(
+    Suspense,
+    { fallback: null },
+    createElement(ConversationFlowPermissionBar, props)
   );
 }
 
@@ -40,13 +55,21 @@ export function activateConversationFlow(): () => void {
     currentDeactivate();
   }
 
-  const unregisterSlot = slotCore.registerSingle('workspace.chat.stream', {
+  const unregisterStream = slotCore.registerSingle('workspace.chat.stream', {
     id: 'conversation-flow',
     component: StreamSlotHost,
   });
+  const unregisterComposerAbove = slotCore.registerSingle(
+    'workspace.chat.composerAbove',
+    {
+      id: 'conversation-flow',
+      component: ComposerAboveSlotHost,
+    }
+  );
 
   const deactivate = (): void => {
-    unregisterSlot();
+    unregisterStream();
+    unregisterComposerAbove();
     if (currentDeactivate === deactivate) {
       currentDeactivate = null;
     }

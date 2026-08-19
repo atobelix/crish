@@ -1,0 +1,70 @@
+/* Composer 上沿冷静审批条。禁 --brand / rail / 绿勾 / 重阴影。 */
+
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid
+    color-mix(in srgb, var(--accent-orange, var(--border-color)) 16%, var(--border-color));
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, transparent);
+  box-shadow: none;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.bar:focus-visible {
+  outline: none;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
+}
+
+.line1 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.summary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.more {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs, 12px);
+}
+
+.cmd {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-xs, 12px);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-1);
+}
+
+.warn {
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs, 12px);
+}

@@ -10,12 +10,23 @@
 .purpose,
 .action,
 .thinking,
-.subagent {
+.subagent,
+.plan {
   display: flex;
   flex-direction: column;
   min-width: 0;
   color: var(--text-secondary);
   font-size: var(--font-size-sm);
+}
+
+/* 流内 Task 根：对齐 listInner 列宽。禁竖轨 ::after、禁绿勾墙 */
+.plan {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: min(var(--chat-col-max, 760px), 100%);
+  margin: 0 auto;
+  padding: 8px 20px 0;
+  box-sizing: border-box;
 }
 
 .head {
@@ -234,4 +245,85 @@
 
 .subagentShell {
   min-width: 0;
+}
+
+.chipWrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.notebook {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  width: min(28rem, 100%);
+  max-height: 360px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+  box-shadow: none;
+  color: var(--text-secondary);
+}
+
+.notebookHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.notebookTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.notebookBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: 320px;
+  overflow: auto;
+  padding: 8px 10px;
+}
+
+.notebookEmpty {
+  margin: 0;
+  color: var(--text-tertiary);
+}
+
+.nbBtn {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: var(--font-size-xs, var(--font-size-sm));
+  cursor: pointer;
+}
+
+.nbBtn:hover {
+  color: var(--text-secondary);
+  background: var(--tint-hover);
+}
+
+.nbBtn:focus-visible {
+  outline: none;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
 }

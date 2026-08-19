@@ -49,18 +49,27 @@ describe('conversation-flow extension import 边界', () => {
     expect(src).toMatch(
       /registerSingle\s*\(\s*['"]workspace\.chat\.stream['"]/
     );
+    expect(src).toMatch(
+      /registerSingle\s*\(\s*['"]workspace\.chat\.composerAbove['"]/
+    );
     expect(src).toMatch(/id:\s*['"]conversation-flow['"]/);
     expect(src).toMatch(/from\s+['"]\.\/host['"]|import\s*\(\s*['"]\.\/host['"]/);
+    expect(src).toMatch(
+      /from\s+['"]\.\/PermissionBar['"]|import\s*\(\s*['"]\.\/PermissionBar['"]/
+    );
     expect(src).not.toMatch(/@crish\/conversation-flow/);
   });
 
-  it('SlotTypes 不反向 import chat-message-list', () => {
+  it('SlotTypes 不反向 import chat-message-list / chat-card', () => {
     const src = readFileSync(
       join(DESKTOP_SRC, 'services/view-registry/SlotTypes.ts'),
       'utf8'
     );
     expect(src).not.toMatch(/chat-message-list/);
     expect(src).not.toMatch(/ChatMessageListProps/);
+    expect(src).not.toMatch(/chat-card/);
+    expect(src).not.toMatch(/ChatComposerAboveProps/);
+    expect(src).not.toMatch(/PermissionBar/);
   });
 
   it('registerBuiltInViews 11 名单无 conversation-flow view id', () => {
@@ -94,11 +103,14 @@ describe('conversation-flow extension import 边界', () => {
     const src = readFileSync(join(DIR, 'host.tsx'), 'utf8');
     expect(src).toMatch(/from\s+['"]@crish\/conversation-flow['"]/);
     expect(src).toMatch(/\bprojectMessage\b/);
+    expect(src).toMatch(/\bprojectPlanRoot\b/);
+    expect(src).toMatch(/selectPlanModeEnabled/);
     expect(src).toMatch(/\bChatMessageList\b/);
     expect(src).toMatch(/data-conversation-flow=["']on["']/);
     expect(src).toMatch(/data-flow-node-count=/);
     expect(src).not.toMatch(/@crish\/conversation-flow\//);
     expect(src).not.toMatch(/\bPurpose\b|\bPermissionBar\b/);
+    expect(src).not.toMatch(/PlanGoalRibbons/);
   });
 
   it('host / activate / 包路径不出现 block-paper', () => {

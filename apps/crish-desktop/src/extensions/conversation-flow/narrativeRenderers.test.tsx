@@ -10,6 +10,13 @@ import {
 import type { MessageToolCall, SessionMessage } from '../../store/types';
 import { createNarrativeRenderers, renderNarrativeTools } from './narrativeRenderers';
 
+vi.mock('../../store/storeAccess', () => ({
+  openToolInSession: vi.fn(),
+}));
+vi.mock('./artifactNoteOpen', () => ({
+  tryOpenExistingNoteForArtifact: vi.fn(),
+}));
+
 const T0 = 1_700_000_000_000;
 
 function inspect(id: string, file: string, at: number): MessageToolCall {
@@ -99,6 +106,37 @@ describe('narrativeRenderers', () => {
     const off = render(<Probe />);
     expect(off.container.querySelector('[data-flow-purpose]')).toBeNull();
     expect(off.container.querySelector('[data-flow-thinking]')).toBeNull();
+  });
+
+  it('开插件：pending 不画流内审批卡', () => {
+    const pendingTc: MessageToolCall = {
+      id: 'p1',
+      name: 'run_terminal_cmd',
+      status: 'pending_approval',
+      arguments: JSON.stringify({ command: 'rm x' }),
+    };
+    const msg: SessionMessage = {
+      id: 'a1',
+      sender: 'assistant',
+      timestamp: T0,
+      toolCalls: [pendingTc, inspect('r1', 'src/types.ts', T0)],
+    };
+    const { container } = render(
+      <>
+        {renderNarrativeTools({
+          items: [
+            { kind: 'single', tc: pendingTc },
+            { kind: 'single', tc: msg.toolCalls![1]! },
+          ],
+          msgId: msg.id,
+          toolStackProps: stubStack(),
+          messages: [msg],
+        })}
+      </>
+    );
+    expect(container.querySelector('[data-tool-id="p1"]')).toBeNull();
+    expect(container.querySelector('[data-msg]')).toBeNull();
+    expect(container.querySelector('[data-permission-bar]')).toBeNull();
   });
 
   it('用户消息不编助手树', () => {

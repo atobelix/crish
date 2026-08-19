@@ -16,6 +16,7 @@ export interface PurposeBlockProps {
   agents?: SessionAgent[];
   parentSessionId?: string;
   onOpenPath?: (filePath: string) => void;
+  onOpenNote?: (docId: string) => void;
   defaultOpen?: boolean;
 }
 
@@ -33,6 +34,7 @@ export function PurposeBlock({
   agents,
   parentSessionId,
   onOpenPath,
+  onOpenNote,
   defaultOpen = false,
 }: PurposeBlockProps): ReactElement {
   const [open, setOpen] = useState(defaultOpen);
@@ -82,6 +84,7 @@ export function PurposeBlock({
                   action={action}
                   tool={tool}
                   onOpenPath={onOpenPath}
+                  onOpenNote={onOpenNote}
                 />
               </div>
             );

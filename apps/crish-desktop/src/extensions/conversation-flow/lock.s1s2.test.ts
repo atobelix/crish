@@ -210,6 +210,9 @@ function assertNoNarrativeDom(container: HTMLElement): void {
   expect(container.querySelector('[data-flow-kind="purpose"]')).toBeNull();
   expect(container.querySelector('[data-node-kind="purpose"]')).toBeNull();
   expect(container.querySelector('[data-purpose]')).toBeNull();
+  expect(container.querySelector('[data-flow-task]')).toBeNull();
+  expect(container.querySelector('[data-flow-plan]')).toBeNull();
+  expect(container.querySelector('.plan-progress-bar')).toBeNull();
   expect(container.textContent ?? '').not.toMatch(/\bPurpose\b/);
 }
 
@@ -287,6 +290,14 @@ describe('S1/S2 契约锁', () => {
     expect(chatCardSrc).toMatch(/fallback=\{<ChatMessageList/);
     expect(chatCardSrc).not.toMatch(/\bPurpose\b/);
     expect(chatCardSrc).not.toMatch(/data-conversation-flow/);
+    expect(chatCardSrc).not.toMatch(/data-permission-bar/);
+
+    const wrapperSrc = readFileSync(
+      join(DESKTOP_SRC, 'components/chat-card/ChatComposerWrapper.tsx'),
+      'utf8'
+    );
+    expect(wrapperSrc).toMatch(/slotKey=["']workspace\.chat\.composerAbove["']/);
+    expect(wrapperSrc).toMatch(/fallback=\{null\}/);
 
     const { container } = render(
       createElement(ChatCard, {
@@ -299,6 +310,7 @@ describe('S1/S2 契约锁', () => {
     ).not.toBeNull();
     expect(screen.getByTestId('fallback-chat-message-list')).toBeTruthy();
     assertNoNarrativeDom(container);
+    expect(container.querySelector('[data-permission-bar]')).toBeNull();
   });
 
   it('host 根 style 钉 display:contents，不撑破包含块', () => {

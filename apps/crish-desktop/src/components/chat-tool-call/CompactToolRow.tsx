@@ -2,6 +2,8 @@ import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/types';
 import { ApprovalAskCard } from '../agent-card/ApprovalAskCard';
+import { slotCore } from '../../services/view-registry/SlotCore';
+import '../chat-card/workspaceChatComposerAbove.slot';
 import { isEditToolName } from '../../api/toolFeedback';
 import {
   extractToolCommand,
@@ -73,6 +75,10 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
   }, [tc.startedAt, tc.completedAt, tc.status, liveNow]);
 
   if (tc.status === 'pending_approval') {
+    // 插件开：审批上提 composer 冷静条，流内不画 ApprovalAskCard
+    if (slotCore.getSingle('workspace.chat.composerAbove')) {
+      return null;
+    }
     const summary = toolHumanLabel(tc);
     const techFull = extractToolCommand(tc.arguments || '');
     const tech =

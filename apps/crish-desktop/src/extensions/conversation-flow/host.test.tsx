@@ -19,6 +19,10 @@ vi.mock('../../components/chat-message-list/ChatMessageList', () => ({
   ChatMessageList: () => <div data-testid="linear-chat-message-list" />,
 }));
 
+vi.mock('../../components/chat-message-row/AsyncMarkdownBlock', () => ({
+  AsyncMarkdownBlock: () => null,
+}));
+
 function noop(): void {
   /* 测用空回调 */
 }
@@ -59,9 +63,11 @@ function makeStreamProps(messages: SessionMessage[]): ChatMessageListProps {
 }
 
 describe('conversation-flow host（S2 投影 + 线性列表）', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     deactivateConversationFlow();
     setOfficialConversationFlowActivateForTesting(null);
+    // 预热 lazy host，避免 SlotOutlet + Suspense 首包超过 waitFor 默认 1s
+    await import('./host');
   });
 
   afterEach(() => {

@@ -72,4 +72,30 @@ describe('conversation-flow 叙事块源码锁', () => {
     const src = readFileSync(join(DIR, 'activate.ts'), 'utf8');
     expect(src).toMatch(/return officialOverride \?\? false/);
   });
+
+  it('PermissionBar 无 5 分钟老虎机 / 无倒计时槽', () => {
+    const src = readFileSync(join(DIR, 'PermissionBar.tsx'), 'utf8');
+    expect(src).not.toMatch(/slot-timer/);
+    expect(src).not.toMatch(/secondsLeft\s*=\s*300/);
+    expect(src).not.toMatch(/secondsLeft/);
+    expect(src).not.toMatch(/\btitle=/);
+  });
+
+  it('S8：计划模式不自动开插件；无演示 Hub / 五步剧本 / 竖轨 ::after', () => {
+    const activateSrc = readFileSync(join(DIR, 'activate.ts'), 'utf8');
+    expect(activateSrc).not.toMatch(/selectPlanModeEnabled|planModeEnabled|inPlanMode/);
+
+    const demo =
+      /摸清 crates\/session-loop|IPC 通道瓶颈|虚拟流式渲染管线|cargo test --workspace|IPC 性能优化评审/;
+    const hub = /plan-progress-bar|plan-collapsed|plan-mode-badge|FlowTimelineRail/;
+    for (const file of files) {
+      const src = readFileSync(file, 'utf8');
+      expect(src, file).not.toMatch(demo);
+      expect(src, file).not.toMatch(hub);
+    }
+
+    const css = readFileSync(join(DIR, 'narrative.module.css'), 'utf8');
+    const code = css.replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(code).not.toMatch(/::after/);
+  });
 });

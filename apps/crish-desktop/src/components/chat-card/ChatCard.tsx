@@ -4,6 +4,7 @@ import type { } from '../../hooks/useToastQueue';
 import { ChatMessageList } from '../chat-message-list/ChatMessageList';
 import type { ChatMessageListProps } from '../chat-message-list/chatMessageListProps';
 import '../chat-message-list/workspaceChatStream.slot';
+import './workspaceChatComposerAbove.slot';
 import { SlotOutlet } from '../../services/view-registry';
 import { ChatEmptyState } from './ChatEmptyState';
 import { ChatComposer } from '../chat-composer/ChatComposer';
@@ -48,6 +49,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onStop={state.composerProps.handleStopGeneration}
         onForceStop={state.composerProps.handleForceCancelGeneration}
         onFilesSelected={state.composerProps.handleFilesSelected}
+        onOpenPath={state.openPathInFilesPanel}
         isProcessing={state.isProcessing}
         permissionMode={state.permissionMode}
         onPermissionChange={(m) => {
@@ -230,6 +232,9 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             }
             pendingApprovalToolId={state.approvalState.pendingApprovalToolId}
             pendingApprovalMsgId={state.approvalState.pendingApprovalMsgId}
+            approvalBusy={state.approvalState.approvalBusy}
+            onApprovalAllow={state.approvalState.handleApprovalAllow}
+            onApprovalDeny={state.approvalState.handleApprovalDeny}
             activeSessionId={state.activeSessionId}
             openSidePanel={state.openSidePanel}
             handleGlobalTabClick={handleGlobalTabClick}

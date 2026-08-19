@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useSyncExternalStore } from 'react';
 import styles from './ChatCard.module.css';
 import {
   ChatStatusRibbons,
@@ -8,6 +8,10 @@ import {
 } from './ChatStatusRibbons';
 import type { } from '../../hooks/useToastQueue';
 import type { RunNotice } from '../../hooks/useChatStream';
+import { SlotOutlet } from '../../services/view-registry';
+import { slotCore } from '../../services/view-registry/SlotCore';
+import type { ChatComposerAboveProps } from './chatComposerAboveProps';
+import './workspaceChatComposerAbove.slot';
 
 /**
  * R2-5 B3（P1-12 聚合）：ChatStatusRibbons 专属字段分组（ribbons 对象由调用方
@@ -33,6 +37,9 @@ export interface ChatComposerWrapperProps {
   pendingApprovalSummary: string;
   pendingApprovalToolId: string;
   pendingApprovalMsgId: string;
+  approvalBusy?: boolean;
+  onApprovalAllow?: (toolId: string, msgId: string, remember?: boolean) => void;
+  onApprovalDeny?: (toolId: string, msgId: string) => void;
   activeSessionId: string | null;
   openSidePanel: (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => void;
   handleGlobalTabClick: (cardId: string) => void;
@@ -49,17 +56,46 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
   pendingApprovalSummary,
   pendingApprovalToolId,
   pendingApprovalMsgId,
+  approvalBusy = false,
+  onApprovalAllow,
+  onApprovalDeny,
   activeSessionId,
 }) => {
+  const liftApproval = useSyncExternalStore(
+    (cb) => slotCore.subscribe('workspace.chat.composerAbove', cb),
+    () => Boolean(slotCore.getSingle('workspace.chat.composerAbove'))
+  );
+
   // 组装审批域子对象（平铺字段 → ApprovalRibbonProps）
   const approval: ApprovalRibbonProps = {
     pendingApprovalCount,
-    showApprovalDock,
+    showApprovalDock: liftApproval ? false : showApprovalDock,
     pendingApprovalSummary,
     pendingApprovalToolId,
     pendingApprovalMsgId,
     activeSessionId,
   };
+
+  const composerAbove: ChatComposerAboveProps = useMemo(
+    () => ({
+      pendingCount: pendingApprovalCount,
+      firstToolId: pendingApprovalToolId,
+      firstMsgId: pendingApprovalMsgId,
+      firstSummary: pendingApprovalSummary,
+      approvalBusy,
+      onApprovalAllow: onApprovalAllow ?? noopApproval,
+      onApprovalDeny: onApprovalDeny ?? noopApproval,
+    }),
+    [
+      pendingApprovalCount,
+      pendingApprovalToolId,
+      pendingApprovalMsgId,
+      pendingApprovalSummary,
+      approvalBusy,
+      onApprovalAllow,
+      onApprovalDeny,
+    ]
+  );
 
   return (
     <div
@@ -77,9 +113,19 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
           approval={approval}
         />
 
+        <SlotOutlet
+          slotKey="workspace.chat.composerAbove"
+          context={composerAbove}
+          fallback={null}
+        />
+
         {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}
         {composerElement}
       </div>
     </div>
   );
 });
+
+function noopApproval(_toolId: string, _msgId: string, _remember?: boolean): void {
+  /* 关插件路径不消费 composerAbove；缺回调时按钮无操作 */
+}

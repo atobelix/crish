@@ -6,10 +6,13 @@ import type { PurposeNode } from '@crish/conversation-flow';
 import type { ToolRenderItem } from '../../api/toolPresentation';
 import type { MessageToolCall } from '../../store/types';
 
+export {
+  isCodeArtifactPath,
+  isDocumentArtifactPath,
+} from '@crish/conversation-flow';
+
 /** 思考折叠预览字数（方案锁 48–64） */
 export const THINKING_PREVIEW_CHARS = 56;
-
-const DOC_PATH_RE = /\.(md|markdown|txt|rst|adoc)$/i;
 
 export function clipThinkingPreview(
   text: string,
@@ -49,7 +52,7 @@ export function purposesForSlice(
   return out;
 }
 
-/** pending_approval 不进 Purpose，S5 前仍走扁平行审批卡 */
+/** pending_approval 不进 Purpose；插件开时上提 composer 冷静条 */
 export function extractPendingItems(
   items: readonly ToolRenderItem[]
 ): ToolRenderItem[] {
@@ -74,12 +77,6 @@ export function toolsByIdFromCalls(
   const map = new Map<string, MessageToolCall>();
   for (const tc of toolCalls ?? []) map.set(tc.id, tc);
   return map;
-}
-
-/** 前端派生：文档胶囊 vs 代码路径 */
-export function isDocumentArtifactPath(path: string | undefined): boolean {
-  if (!path) return false;
-  return DOC_PATH_RE.test(path);
 }
 
 export function actionPathOf(

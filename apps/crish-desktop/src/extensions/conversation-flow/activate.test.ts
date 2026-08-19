@@ -95,10 +95,20 @@ describe('conversation-flow activate / deactivate（S1 槽可卸）', () => {
     expect(ids).not.toContain('conversation-flow');
   });
 
+  it('activate 后 composerAbove 槽 id 为 conversation-flow；默认不 activate', () => {
+    expect(slotCore.getSingle('workspace.chat.composerAbove')).toBeUndefined();
+    activateConversationFlow();
+    const entry = slotCore.getSingle('workspace.chat.composerAbove');
+    expect(entry?.id).toBe('conversation-flow');
+    expect(entry?.component).toBeTypeOf('function');
+    expect(viewRegistry.getView('conversation-flow')).toBeUndefined();
+  });
+
   it('deactivate 后 getSingle 空；二次 deactivate 不抛', () => {
     activateConversationFlow();
     deactivateConversationFlow();
     expect(slotCore.getSingle('workspace.chat.stream')).toBeUndefined();
+    expect(slotCore.getSingle('workspace.chat.composerAbove')).toBeUndefined();
     expect(() => deactivateConversationFlow()).not.toThrow();
   });
 
@@ -108,8 +118,12 @@ describe('conversation-flow activate / deactivate（S1 槽可卸）', () => {
     expect(slotCore.getSingle('workspace.chat.stream')?.id).toBe(
       'conversation-flow'
     );
+    expect(slotCore.getSingle('workspace.chat.composerAbove')?.id).toBe(
+      'conversation-flow'
+    );
     deactivateConversationFlow();
     expect(slotCore.getSingle('workspace.chat.stream')).toBeUndefined();
+    expect(slotCore.getSingle('workspace.chat.composerAbove')).toBeUndefined();
   });
 
   it('main.tsx 在 builtins 之后条件调用 activateConversationFlow', () => {

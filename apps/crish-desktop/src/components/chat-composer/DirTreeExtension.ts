@@ -141,14 +141,14 @@ export const DirTreeExtension = Extension.create<DirTreeExtensionOptions>({
               component?.updateProps(buildProps(props));
             },
             onKeyDown(props: { event: KeyboardEvent; view?: unknown }) {
+              if (
+                props.event.isComposing ||
+                props.event.keyCode === 229 ||
+                props.event.key === 'Process'
+              ) {
+                return false;
+              }
               if (props.event.key === 'Escape') {
-                if (
-                  props.event.isComposing ||
-                  props.event.keyCode === 229 ||
-                  props.event.key === 'Process'
-                ) {
-                  return false;
-                }
                 component?.destroy();
                 component = null;
                 if (props.view) {

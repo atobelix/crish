@@ -1,8 +1,8 @@
 /**
  * renderTools / renderThought 汇合：投影节点驱动 Purpose / Thinking。
- * 人话注入 desktop tool-presentation；pending 仍走扁平行审批卡。
+ * 人话注入 desktop tool-presentation；pending 上提 composer 冷静条。
  */
-import { lazy, Suspense, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import {
   projectMessage,
   type HumanizeHooks,
@@ -16,22 +16,15 @@ import type {
   ChatNarrativeRenderToolsArgs,
 } from '../../components/chat-message-list/chatMessageListProps';
 import type { SessionMessage } from '../../store/types';
+import { tryOpenExistingNoteForArtifact } from './artifactNoteOpen';
 import { PurposeBlock } from './PurposeBlock';
 import { ThinkingBlock } from './ThinkingBlock';
 import {
   collectToolIds,
-  extractPendingItems,
   purposesForSlice,
   toolsByIdFromCalls,
 } from './narrativeModel';
 import styles from './narrative.module.css';
-
-const MessageToolCallsSection = lazy(async () => {
-  const m = await import(
-    '../../components/chat-message-row/MessageToolCallsSection'
-  );
-  return { default: m.MessageToolCallsSection };
-});
 
 /** 权威人话：调用现 tool-presentation，禁止再抄一份规则 */
 const DESKTOP_HUMANIZE: HumanizeHooks = {
@@ -71,7 +64,6 @@ export function renderNarrativeTools(
 ): ReactNode {
   const { items, msgId, toolStackProps, messages } = args;
   const msg = messages.find((m) => m.id === msgId);
-  const pending = extractPendingItems(items);
   const sliceIds = collectToolIds(items);
   const visible =
     msg && msg.sender === 'assistant'
@@ -79,8 +71,19 @@ export function renderNarrativeTools(
       : [];
   const toolsById = toolsByIdFromCalls(msg?.toolCalls);
   const onOpenPath = toolStackProps.actions?.onOpenPath;
+  const onOpenNote = (docId: string): void => {
+    tryOpenExistingNoteForArtifact({
+      sessionId: toolStackProps.activeSessionId ?? '',
+      docId,
+      openTool: (sid, panelId) => {
+        void import('../../store/workspace-shell/openTool').then((m) => {
+          m.openToolInSession(sid, panelId);
+        });
+      },
+    });
+  };
 
-  if (visible.length === 0 && pending.length === 0) return null;
+  if (visible.length === 0) return null;
 
   return (
     <div className={styles.stack} data-flow-tools="">
@@ -92,17 +95,9 @@ export function renderNarrativeTools(
           agents={toolStackProps.agents}
           parentSessionId={toolStackProps.activeSessionId}
           onOpenPath={onOpenPath}
+          onOpenNote={onOpenNote}
         />
       ))}
-      {pending.length > 0 ? (
-        <Suspense fallback={null}>
-          <MessageToolCallsSection
-            items={pending}
-            msgId={msgId}
-            toolStackProps={toolStackProps}
-          />
-        </Suspense>
-      ) : null}
     </div>
   );
 }

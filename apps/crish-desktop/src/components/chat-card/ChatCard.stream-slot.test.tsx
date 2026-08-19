@@ -8,6 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { slotCore } from '../../services/view-registry/SlotCore';
 import '../chat-message-list/workspaceChatStream.slot';
+import './workspaceChatComposerAbove.slot';
 import type { SlotMap } from '../../services/view-registry/SlotTypes';
 import { ChatCard } from './ChatCard';
 
@@ -57,6 +58,7 @@ vi.mock('./useChatCardState', () => ({
 }));
 
 const STREAM_KIND: SlotMap['workspace.chat.stream']['kind'] = 'single';
+const ABOVE_KIND: SlotMap['workspace.chat.composerAbove']['kind'] = 'single';
 
 function makeState(overrides: Record<string, unknown> = {}) {
   const msg = { id: 'm1', sender: 'user', timestamp: 1, text: 'hi' };
@@ -144,6 +146,10 @@ describe('ChatCard workspace.chat.stream 槽', () => {
 
   it('SlotMap 将 workspace.chat.stream 定为 single', () => {
     expect(STREAM_KIND).toBe('single');
+  });
+
+  it('SlotMap 将 workspace.chat.composerAbove 定为 single', () => {
+    expect(ABOVE_KIND).toBe('single');
   });
 
   it('未登记槽时有消息枝渲染 data-slot 且走 ChatMessageList fallback', () => {

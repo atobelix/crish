@@ -3,23 +3,24 @@
  * 人话走 tool-presentation；成功态无绿勾。
  */
 import { useState, type ReactElement } from 'react';
-import type { ActionNode } from '@crish/conversation-flow';
+import {
+  deriveArtifactFromTool,
+  type ActionNode,
+} from '@crish/conversation-flow';
 import { extractToolCommand } from '../../api/tool-presentation/toolArgsNormalizer';
 import { toolHumanLabel } from '../../api/tool-presentation/toolHumanDescriptions';
 import { fullToolOutput } from '../../api/tool-presentation/toolOutputSanitizer';
-import { TOOL_OUTPUT_DOM_CHAR_CAP, TOOL_OUTPUT_PIXEL_CAP } from '../../workers';
 import type { MessageToolCall } from '../../store/types';
+import { TOOL_OUTPUT_DOM_CHAR_CAP, TOOL_OUTPUT_PIXEL_CAP } from '../../workers';
 import { ArtifactChip } from './ArtifactChip';
-import {
-  actionPathOf,
-  isDocumentArtifactPath,
-} from './narrativeModel';
+import { actionPathOf } from './narrativeModel';
 import styles from './narrative.module.css';
 
 export interface ActionRowProps {
   action: ActionNode;
   tool?: MessageToolCall;
   onOpenPath?: (filePath: string) => void;
+  onOpenNote?: (docId: string) => void;
   defaultOpen?: boolean;
 }
 
@@ -39,11 +40,20 @@ export function ActionRow({
   action,
   tool,
   onOpenPath,
+  onOpenNote,
   defaultOpen = false,
 }: ActionRowProps): ReactElement {
   const [open, setOpen] = useState(defaultOpen);
   const path = actionPathOf(action, tool);
-  const isDoc = isDocumentArtifactPath(path);
+  const artifact = deriveArtifactFromTool({
+    id: action.id,
+    name: tool?.name || action.toolName,
+    arguments:
+      tool?.arguments ??
+      (action.path ? JSON.stringify({ path: action.path }) : undefined),
+    status: action.status,
+    output: tool?.output ?? action.output,
+  });
   const command =
     action.command ||
     (tool?.arguments ? extractToolCommand(tool.arguments) : '');
@@ -94,10 +104,11 @@ export function ActionRow({
           <span className={styles.primary}>{human || action.verb}</span>
           {meta ? <span className={styles.meta}>{meta}</span> : null}
         </button>
-        {path && !isDoc && onOpenPath ? (
+        {path && !artifact && onOpenPath ? (
           <button
             type="button"
             className={styles.pathBtn}
+            data-flow-path="code"
             onClick={(e) => {
               e.stopPropagation();
               onOpenPath(path);
@@ -106,11 +117,15 @@ export function ActionRow({
             {path.split(/[/\\]/).pop() || path}
           </button>
         ) : null}
-        {path && isDoc ? (
+        {artifact ? (
           <ArtifactChip
-            label={path.split(/[/\\]/).pop() || path}
-            path={path}
-            onOpenPath={onOpenPath}
+            label={artifact.title}
+            path={artifact.path}
+            content={artifact.content}
+            docId={artifact.docId}
+            mime={artifact.mime}
+            derived={artifact.derived}
+            onOpenNote={onOpenNote}
           />
         ) : null}
       </div>

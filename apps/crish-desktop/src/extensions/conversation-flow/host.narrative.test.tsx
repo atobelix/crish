@@ -15,6 +15,10 @@ import {
   setOfficialConversationFlowActivateForTesting,
 } from './activate';
 
+vi.mock('../../components/chat-message-row/AsyncMarkdownBlock', () => ({
+  AsyncMarkdownBlock: () => null,
+}));
+
 vi.mock('../../components/chat-message-list/ChatMessageList', () => ({
   ChatMessageList: (props: ChatMessageListProps) => {
     const stub: ChatToolStackSharedProps = {
@@ -127,9 +131,10 @@ function twoInspectAssistant(): SessionMessage {
 }
 
 describe('conversation-flow host 叙事块', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     deactivateConversationFlow();
     setOfficialConversationFlowActivateForTesting(null);
+    await import('./host');
   });
 
   afterEach(() => {
@@ -150,6 +155,8 @@ describe('conversation-flow host 叙事块', () => {
     );
     expect(container.querySelector('[data-conversation-flow]')).toBeNull();
     expect(container.querySelector('[data-flow-purpose]')).toBeNull();
+    expect(container.querySelector('[data-flow-artifact]')).toBeNull();
+    expect(container.querySelector('[data-flow-artifact-notebook]')).toBeNull();
     expect(screen.getByTestId('chat-card-fallback')).toBeTruthy();
   });
 
