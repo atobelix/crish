@@ -416,22 +416,6 @@ enum InvokeResult {
     TimedOut(u64),
 }
 
-/// 快照条目别名（kind/strategy/mode/matcher/timeout/handler）
-type SnapshotEntry = (
-    HookEventKind,
-    HookFailStrategy,
-    HookMode,
-    Option<Regex>,
-    Option<u64>,
-    Arc<dyn HookHandler>,
-);
-
-/// 带超时竞速的调用结果
-enum InvokeResult {
-    Completed(Result<HookAction, HookError>),
-    TimedOut(u64),
-}
-
 /// 注册表条目
 struct HandlerEntry {
     kind: HookEventKind,
@@ -601,6 +585,22 @@ impl HookRegistry {
         let (outcome, hook_name, blocked_reason) = match result {
             Ok(o) if o.blocked.is_some() => {
                 ("blocked", o.blocked_handler.clone(), o.blocked.clone())
+            }
+            Ok(o) if o.timeouts > 0 => ("timeout", o.first_failed_handler.clone(), None),
+            Ok(o) if o.failed_handlers > 0 => ("failed", o.first_failed_handler.clone(), None),
+            Ok(_) => ("ok", None, None),
+            Err(e) => ("failed", e.handler_name.clone(), None),
+        };
+        sink(AgentEvent::HookOutcome {
+            session_id: event.session_id().to_string(),
+            timestamp: conex_shared::time::now_iso_utc(),
+            hook_type: event.kind().as_str().to_string(),
+            outcome: outcome.to_string(),
+            hook_name,
+            blocked_reason,
+        });
+    }
+
     /// 内部分派（error_eventing 开关：error.occurred 再分派时关闭，
     /// 防止错误事件 handler 失败无限级联）
     async fn dispatch_inner(
@@ -720,57 +720,6 @@ impl HookRegistry {
         let message = format!("hook {} 超时（{}ms）", handler.name(), ms);
         tracing::warn!(
             hook = %handler.name(),
-            event = %event.kind(),
-            timeout_ms = ms,
-            "hook 超时（虚拟失败）"
-        );
-        if event.kind() == HookEventKind::ToolPre {
-            self.emit_error_event(event, &message, error_eventing, outcome)
-                .await;
-            return None;
-        }
-        self.handle_failure(
-            event,
-            strategy,
-            handler,
-            &HookError::new(message),
-            error_eventing,
-            outcome,
-        )
-        .await
-    }
-
-    /// 处理 Block 信号（observe/非 tool.pre 忽略；tool.pre 记 blocked）
-    fn handle_block(
-        &self,
-        handler: &Arc<dyn HookHandler>,
-        mode: HookMode,
-        reason: String,
-        event: &HookEvent,
-        outcome: &mut HookDispatchOutcome,
-    ) -> bool {
-        if mode == HookMode::Observe {
-            tracing::warn!(
-                hook = %handler.name(),
-                event = %event.kind(),
-                reason = %reason,
-                "observe 模式 handler 返回 Block，按观察忽略"
-            );
-            return false;
-        }
-        if event.kind() == HookEventKind::ToolPre {
-            outcome.blocked = Some(reason);
-            outcome.blocked_handler = Some(handler.name().to_string());
-            return true;
-        }
-        tracing::warn!(
-            hook = %handler.name(),
-            event = %event.kind(),
-            reason = %reason,
-            "非 tool.pre 事件返回 Block，按观察忽略"
-        );
-        false
-    }
             event = %event.kind(),
             timeout_ms = ms,
             "hook 超时（虚拟失败）"
@@ -1394,6 +1343,56 @@ mod tests {
             Arc::new(SpyHandler::failing("fail", "boom")) as Arc<dyn HookHandler>,
         );
 
+        let outcome = registry.dispatch(&turn_end()).await.unwrap();
+        // error.occurred 的 handler 失败被吞（不再级联新错误事件）
+        assert_eq!(outcome.failed_handlers, 1, "原 handler 失败计数 1");
+        assert_eq!(outcome.error_events, 1, "只广播一次错误事件");
+    }
+
+    /// 事件名全集冻结：HookEventKind::as_str() 14 变体与
+    /// packages/shared-types/src/hooks.ts 的 HOOK_EVENT_NAMES 双向锁定
+    #[test]
+    fn hook_kind_names_frozen_14() {
+        let kinds = ALL_HOOK_EVENT_KINDS;
+        assert_eq!(kinds.len(), 14, "HookEventKind 必须恰好 14 个变体");
+        let mut names: Vec<&str> = kinds.iter().map(|k| k.as_str()).collect();
+        let mut dedup = names.clone();
+        dedup.sort();
+        dedup.dedup();
+        assert_eq!(dedup.len(), 14, "as_str() 必须无重复");
+        // 与 TS 侧 HOOK_EVENT_NAMES 字面量比对（从 hooks.ts 文件读取）
+        let hooks_ts = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../packages/shared-types/src/hooks.ts"
+        ))
+        .unwrap_or_else(|e| panic!("读取 hooks.ts 失败：{e}"));
+        // 提取 HOOK_EVENT_NAMES 数组内全部字符串字面量
+        let start = hooks_ts
+            .find("HOOK_EVENT_NAMES")
+            .expect("hooks.ts 必须声明 HOOK_EVENT_NAMES");
+        let slice = &hooks_ts[start..];
+        let mut ts_names = Vec::new();
+        for cap in slice
+            .lines()
+            .take_while(|l| !l.trim_start().starts_with("] as const"))
+            .filter_map(|l| {
+                l.trim()
+                    .strip_prefix('\'')
+                    .and_then(|r| r.split('\'').next())
+            })
+        {
+            ts_names.push(cap.to_string());
+        }
+        names.sort();
+        ts_names.sort();
+        assert_eq!(
+            names, ts_names,
+            "HookEventKind::as_str() 与 hooks.ts HOOK_EVENT_NAMES 必须一一对应（I7-M13 冻结）"
+        );
+    }
+
+    /// 新变体载荷透传：session.start / tool.error / context.compact.* /
+    /// error.occurred / model.* / subagent.* 收到事件且载荷可读
     fn new_variant_events() -> Vec<HookEvent> {
         vec![
             HookEvent::SessionStart { session_id: "s1".into() },
@@ -1426,6 +1425,10 @@ mod tests {
         let seen = spy.seen.lock().unwrap();
         assert_eq!(seen.len(), events.len(), "全部新变体必须送达对应 handler");
     }
+
+    /// 测试 handler：记录事件名（错误事件化断言用）
+    struct ErrorSpy {
+        seen: Arc<std::sync::Mutex<Vec<String>>>,
     }
 
     #[async_trait::async_trait]

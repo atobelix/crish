@@ -22,13 +22,6 @@ enum PreExecOutcome {
     Aborted,
 }
 
-/// 预执行结果（中间件/钩子阶段）
-enum PreExecOutcome {
-    Proceed(Value),
-    Blocked(String),
-    Aborted,
-}
-
 impl ToolExecutor {
     /// 执行单个工具（顺序路径：完整事件序列 + 审批）
     // G2 允许理由（clippy::too_many_arguments）：参数为工具执行上下文聚合
@@ -90,7 +83,7 @@ impl ToolExecutor {
                     concurrency: call.concurrency,
                     summary: call.summary.clone(),
                     // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp）
-                    occurred_at_ms: Some(crate::steering::unix_millis() as u64),
+                    occurred_at_ms: Some(conex_shared::time::unix_millis() as u64),
                 });
             }
             ToolEmit::EndAborted => {
@@ -122,6 +115,12 @@ impl ToolExecutor {
                     attempt: Some(r.attempt),
                     deduplicated: Some(r.deduplicated),
                     executed_input: r.executed_input.clone(),
+                    occurred_at_ms: r.occurred_at_ms,
+                });
+            }
+        }
+    }
+
     async fn handle_verdict_and_approval(
         &self,
         call: &ToolBatchCall,
@@ -264,16 +263,7 @@ impl ToolExecutor {
             }
         }
     }
-        approval: Option<Arc<dyn ApprovalGate>>,
-        events: &mut Vec<ToolEvent>,
-        verdict: PermissionVerdict,
-    ) -> ClassifiedToolResult {
-        match verdict {
-            PermissionVerdict::Deny => denied_result(call, options),
-            PermissionVerdict::NeedsApproval => ClassifiedToolResult::error(
-                &call.id,
-                &call.tool_name,
-                ToolErrorKind::ApprovalRequired,
+
     async fn execute_single(
         &self,
         call: &ToolBatchCall,
@@ -287,7 +277,7 @@ impl ToolExecutor {
             Some(t) => t,
             None => return (Self::not_found_result(call), Vec::new()),
         };
-        let (tool_ctx, approval_channel, mw_ctx, exec_ctx, abort_token) =
+        let (tool_ctx, approval_channel, mw_ctx, exec_ctx, _abort_token) =
             self.build_execution_contexts(call, ctx, options, abort, &approval);
         let pre = self
             .run_pre_checks(tool.as_ref(), call, ctx, &mw_ctx, abort)
@@ -308,10 +298,10 @@ impl ToolExecutor {
         let guard = self.idempotency.clone();
         let start = std::time::Instant::now();
         let outcome = self
-            .race_execution(tool.as_ref(), exec_input.clone(), &tool_ctx, &exec_ctx, guard.as_ref(), &policy, options.timeout, abort)
+            .race_execution(tool.as_ref(), exec_input.clone(), &tool_ctx, &exec_ctx, guard.as_ref().map(|v| v.as_ref()), &policy, options.timeout, abort)
             .await;
         let duration_ms = start.elapsed().as_millis() as u64;
-        let occurred_at_ms = crate::steering::unix_millis() as u64;
+        let occurred_at_ms = conex_shared::time::unix_millis() as u64;
         let recorded = approval_channel
             .as_ref()
             .map(|c| c.take_recorded())
@@ -736,19 +726,7 @@ impl ToolExecutor {
             }
         }
     }
-        options: &ToolBatchOptions,
-        abort: Option<&crate::safe_point::AbortSignal>,
-        approval: Option<Arc<dyn ApprovalGate>>,
-    ) -> (ClassifiedToolResult, Vec<ToolEvent>) {
-        let (r, extra) = self
-            .execute_single(call, ctx, options, abort, approval.clone(), 1)
-            .await;
-        if r.error_kind != Some(ToolErrorKind::ApprovalRequired) {
-            return (r, extra);
-        }
-        self.handle_retry_after_approval_required(call, ctx, options, abort, approval, r, extra)
-            .await
-    }
+
     pub(crate) async fn execute_single_with_retry(
         &self,
         call: &ToolBatchCall,
@@ -884,4 +862,4 @@ impl ToolExecutor {
             }
         }
     }
-                (
+}
