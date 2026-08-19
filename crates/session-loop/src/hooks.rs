@@ -400,6 +400,22 @@ pub struct HookDispatchOutcome {
     pub error_events: usize,
 }
 
+/// 快照条目别名（kind/strategy/mode/matcher/timeout/handler）
+type SnapshotEntry = (
+    HookEventKind,
+    HookFailStrategy,
+    HookMode,
+    Option<Regex>,
+    Option<u64>,
+    Arc<dyn HookHandler>,
+);
+
+/// 带超时竞速的调用结果
+enum InvokeResult {
+    Completed(Result<HookAction, HookError>),
+    TimedOut(u64),
+}
+
 /// 注册表条目
 struct HandlerEntry {
     kind: HookEventKind,
@@ -592,9 +608,48 @@ impl HookRegistry {
         event: &HookEvent,
         error_eventing: bool,
     ) -> Result<HookDispatchOutcome, HookError> {
-        // 快照克隆（读锁不跨 handler 调用持有，避免 handler 内注册死锁）
-        let snapshot = self
-            .entries
+        let snapshot = self.snapshot_entries();
+        let mut outcome = HookDispatchOutcome::default();
+        for (kind, strategy, mode, matcher, timeout_ms, handler) in snapshot {
+            if Self::entry_should_skip(kind, matcher.as_ref(), event) {
+                continue;
+            }
+            let invoke = Self::invoke_handler(&handler, event, timeout_ms).await;
+            let action = match invoke {
+                InvokeResult::TimedOut(ms) => {
+                    if let Some(err) = self
+                        .handle_timeout(event, &handler, ms, strategy, error_eventing, &mut outcome)
+                        .await
+                    {
+                        return Err(err);
+                    }
+                    continue;
+                }
+                InvokeResult::Completed(res) => res,
+            };
+            match action {
+                Ok(HookAction::Continue) => {}
+                Ok(HookAction::Block { reason }) => {
+                    if self.handle_block(&handler, mode, reason, event, &mut outcome) {
+                        return Ok(outcome);
+                    }
+                }
+                Err(e) => {
+                    if let Some(p) = self
+                        .handle_failure(event, strategy, &handler, &e, error_eventing, &mut outcome)
+                        .await
+                    {
+                        return Err(p);
+                    }
+                }
+            }
+        }
+        Ok(outcome)
+    }
+
+    /// 快照克隆（读锁不跨 handler 调用持有，避免 handler 内注册死锁）
+    fn snapshot_entries(&self) -> Vec<SnapshotEntry> {
+        self.entries
             .read()
             .unwrap_or_else(|e| {
                 tracing::error!("hook 注册表读锁中毒，按恢复模式继续：{e}");
@@ -611,114 +666,110 @@ impl HookRegistry {
                     Arc::clone(&entry.handler),
                 )
             })
-            .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+    }
 
-        let mut outcome = HookDispatchOutcome::default();
-        for (kind, strategy, mode, matcher, timeout_ms, handler) in snapshot {
-            if kind != event.kind() {
-                continue;
-            }
-            // matcher 过滤（仅 tool.* 事件按工具名正则过滤；其余事件忽略）
-            if let (Some(pattern), Some(tool_name)) = (matcher.as_ref(), event.tool_name()) {
-                if !pattern.is_match(tool_name) {
-                    continue;
-                }
-            }
-
-            // timeout 竞速窗口（超时 = 虚拟失败）
-            let action = match timeout_ms {
-                Some(ms) => {
-                    match tokio::time::timeout(Duration::from_millis(ms), handler.handle(event))
-                        .await
-                    {
-                        Ok(result) => result,
-                        Err(_elapsed) => {
-                            outcome.timeouts += 1;
-                            outcome.failed_handlers += 1;
-                            if outcome.first_failed_handler.is_none() {
-                                outcome.first_failed_handler = Some(handler.name().to_string());
-                            }
-                            let message = format!("hook {} 超时（{}ms）", handler.name(), ms);
-                            tracing::warn!(
-                                hook = %handler.name(),
-                                event = %event.kind(),
-                                timeout_ms = ms,
-                                "hook 超时（虚拟失败）"
-                            );
-                            // tool.pre 超时固定降级放行（kimi runner.ts:117）；
-                            // 其余事件按失败策略处置
-                            if event.kind() == HookEventKind::ToolPre {
-                                self.emit_error_event(
-                                    event,
-                                    &message,
-                                    error_eventing,
-                                    &mut outcome,
-                                )
-                                .await;
-                                continue;
-                            }
-                            if let Some(propagated) = self
-                                .handle_failure(
-                                    event,
-                                    strategy,
-                                    &handler,
-                                    &HookError::new(message),
-                                    error_eventing,
-                                    &mut outcome,
-                                )
-                                .await
-                            {
-                                return Err(propagated);
-                            }
-                            continue;
-                        }
-                    }
-                }
-                None => handler.handle(event).await,
-            };
-
-            match action {
-                Ok(HookAction::Continue) => {}
-                Ok(HookAction::Block { reason }) => {
-                    if mode == HookMode::Observe {
-                        // observe 模式：观察者不拦截（仅记录）
-                        tracing::warn!(
-                            hook = %handler.name(),
-                            event = %event.kind(),
-                            reason = %reason,
-                            "observe 模式 handler 返回 Block，按观察忽略"
-                        );
-                        continue;
-                    }
-                    if event.kind() == HookEventKind::ToolPre {
-                        // P1 权限归一（A1）：tool.pre 为扩展观察/策略插入
-                        // 通道——Block 仅保留插件策略性拒绝（post-approval），
-                        // 不构成平行 allow/deny 审批第二权威（判定权威 =
-                        // 引擎 call_verdict 单一决策链）
-                        outcome.blocked = Some(reason);
-                        // D-03 EV-05：记录阻止 handler 名（hook-outcome(blocked) 载荷）
-                        outcome.blocked_handler = Some(handler.name().to_string());
-                        return Ok(outcome);
-                    }
-                    // 非 tool.pre 的 Block：观察语义下忽略（仅记录）
-                    tracing::warn!(
-                        hook = %handler.name(),
-                        event = %event.kind(),
-                        reason = %reason,
-                        "非 tool.pre 事件返回 Block，按观察忽略"
-                    );
-                }
-                Err(e) => {
-                    if let Some(propagated) = self
-                        .handle_failure(event, strategy, &handler, &e, error_eventing, &mut outcome)
-                        .await
-                    {
-                        return Err(propagated);
-                    }
-                }
+    /// 判定条目是否因 kind/matcher 不匹配而跳过
+    fn entry_should_skip(
+        entry_kind: HookEventKind,
+        matcher: Option<&Regex>,
+        event: &HookEvent,
+    ) -> bool {
+        if entry_kind != event.kind() {
+            return true;
+        }
+        if let (Some(pattern), Some(tool_name)) = (matcher, event.tool_name()) {
+            if !pattern.is_match(tool_name) {
+                return true;
             }
         }
-        Ok(outcome)
+        false
+    }
+
+    /// 带超时竞速的 handler 调用
+    async fn invoke_handler(
+        handler: &Arc<dyn HookHandler>,
+        event: &HookEvent,
+        timeout_ms: Option<u64>,
+    ) -> InvokeResult {
+        match timeout_ms {
+            Some(ms) => match tokio::time::timeout(Duration::from_millis(ms), handler.handle(event)).await
+            {
+                Ok(res) => InvokeResult::Completed(res),
+                Err(_) => InvokeResult::TimedOut(ms),
+            },
+            None => InvokeResult::Completed(handler.handle(event).await),
+        }
+    }
+
+    /// 处理超时虚拟失败（更新计数、日志、错误事件化与策略分派）
+    async fn handle_timeout(
+        &self,
+        event: &HookEvent,
+        handler: &Arc<dyn HookHandler>,
+        ms: u64,
+        strategy: HookFailStrategy,
+        error_eventing: bool,
+        outcome: &mut HookDispatchOutcome,
+    ) -> Option<HookError> {
+        outcome.timeouts += 1;
+        outcome.failed_handlers += 1;
+        if outcome.first_failed_handler.is_none() {
+            outcome.first_failed_handler = Some(handler.name().to_string());
+        }
+        let message = format!("hook {} 超时（{}ms）", handler.name(), ms);
+        tracing::warn!(
+            hook = %handler.name(),
+            event = %event.kind(),
+            timeout_ms = ms,
+            "hook 超时（虚拟失败）"
+        );
+        if event.kind() == HookEventKind::ToolPre {
+            self.emit_error_event(event, &message, error_eventing, outcome)
+                .await;
+            return None;
+        }
+        self.handle_failure(
+            event,
+            strategy,
+            handler,
+            &HookError::new(message),
+            error_eventing,
+            outcome,
+        )
+        .await
+    }
+
+    /// 处理 Block 信号（observe/非 tool.pre 忽略；tool.pre 记 blocked）
+    fn handle_block(
+        &self,
+        handler: &Arc<dyn HookHandler>,
+        mode: HookMode,
+        reason: String,
+        event: &HookEvent,
+        outcome: &mut HookDispatchOutcome,
+    ) -> bool {
+        if mode == HookMode::Observe {
+            tracing::warn!(
+                hook = %handler.name(),
+                event = %event.kind(),
+                reason = %reason,
+                "observe 模式 handler 返回 Block，按观察忽略"
+            );
+            return false;
+        }
+        if event.kind() == HookEventKind::ToolPre {
+            outcome.blocked = Some(reason);
+            outcome.blocked_handler = Some(handler.name().to_string());
+            return true;
+        }
+        tracing::warn!(
+            hook = %handler.name(),
+            event = %event.kind(),
+            reason = %reason,
+            "非 tool.pre 事件返回 Block，按观察忽略"
+        );
+        false
     }
 
     /// 按失败策略处置 handler 失败；失败统一广播 error.occurred 诊断事件
@@ -1342,90 +1393,35 @@ mod tests {
 
     /// 新变体载荷透传：session.start / tool.error / context.compact.* /
     /// error.occurred / model.* / subagent.* 收到事件且载荷可读
+    fn new_variant_events() -> Vec<HookEvent> {
+        vec![
+            HookEvent::SessionStart { session_id: "s1".into() },
+            HookEvent::SessionEnd { session_id: "s1".into() },
+            HookEvent::TurnStart { session_id: "s1".into(), turn_index: 1 },
+            HookEvent::ToolError { session_id: "s1".into(), tool_name: "x".into(), error: "boom".into() },
+            HookEvent::ContextCompactStart { session_id: "s1".into(), trigger: "threshold".into(), tokens_before: 100 },
+            HookEvent::ContextCompactEnd { session_id: "s1".into(), aborted: false, kept_message_count: 5, compaction_id: "c1".into() },
+            HookEvent::ErrorOccurred { session_id: "s1".into(), error: "boom".into(), retryable: false },
+            HookEvent::ModelBeforeRequest { session_id: "s1".into(), provider_id: Some("deepseek".into()), model: Some("v4".into()) },
+            HookEvent::ModelAfterResponse { session_id: "s1".into(), provider_id: None, model: None, ok: true },
+            HookEvent::SubagentStart { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), role: Some("researcher".into()) },
+            HookEvent::SubagentEnd { parent_session_id: "p1".into(), subagent_session_id: "a1".into(), reason: Some("completed".into()) },
+        ]
+    }
+
     #[tokio::test]
     async fn new_variant_payloads_are_delivered() {
         let registry = HookRegistry::new();
-        let spy = Arc::new(PayloadSpy {
-            seen: Arc::new(std::sync::Mutex::new(Vec::new())),
-        });
+        let spy = Arc::new(PayloadSpy { seen: Arc::new(std::sync::Mutex::new(Vec::new())) });
         let kinds = [
-            HookEventKind::SessionStart,
-            HookEventKind::SessionEnd,
-            HookEventKind::TurnStart,
-            HookEventKind::ToolError,
-            HookEventKind::ContextCompactStart,
-            HookEventKind::ContextCompactEnd,
-            HookEventKind::ErrorOccurred,
-            HookEventKind::ModelBeforeRequest,
-            HookEventKind::ModelAfterResponse,
-            HookEventKind::SubagentStart,
-            HookEventKind::SubagentEnd,
+            HookEventKind::SessionStart, HookEventKind::SessionEnd, HookEventKind::TurnStart,
+            HookEventKind::ToolError, HookEventKind::ContextCompactStart, HookEventKind::ContextCompactEnd,
+            HookEventKind::ErrorOccurred, HookEventKind::ModelBeforeRequest, HookEventKind::ModelAfterResponse,
+            HookEventKind::SubagentStart, HookEventKind::SubagentEnd,
         ];
-        for kind in kinds {
-            registry.register_observe(
-                kind,
-                HookFailStrategy::Swallow,
-                Arc::clone(&spy) as Arc<dyn HookHandler>,
-            );
-        }
-
-        let events = vec![
-            HookEvent::SessionStart {
-                session_id: "s1".into(),
-            },
-            HookEvent::SessionEnd {
-                session_id: "s1".into(),
-            },
-            HookEvent::TurnStart {
-                session_id: "s1".into(),
-                turn_index: 1,
-            },
-            HookEvent::ToolError {
-                session_id: "s1".into(),
-                tool_name: "x".into(),
-                error: "boom".into(),
-            },
-            HookEvent::ContextCompactStart {
-                session_id: "s1".into(),
-                trigger: "threshold".into(),
-                tokens_before: 100,
-            },
-            HookEvent::ContextCompactEnd {
-                session_id: "s1".into(),
-                aborted: false,
-                kept_message_count: 5,
-                compaction_id: "c1".into(),
-            },
-            HookEvent::ErrorOccurred {
-                session_id: "s1".into(),
-                error: "boom".into(),
-                retryable: false,
-            },
-            HookEvent::ModelBeforeRequest {
-                session_id: "s1".into(),
-                provider_id: Some("deepseek".into()),
-                model: Some("v4".into()),
-            },
-            HookEvent::ModelAfterResponse {
-                session_id: "s1".into(),
-                provider_id: None,
-                model: None,
-                ok: true,
-            },
-            HookEvent::SubagentStart {
-                parent_session_id: "p1".into(),
-                subagent_session_id: "a1".into(),
-                role: Some("researcher".into()),
-            },
-            HookEvent::SubagentEnd {
-                parent_session_id: "p1".into(),
-                subagent_session_id: "a1".into(),
-                reason: Some("completed".into()),
-            },
-        ];
-        for event in &events {
-            registry.dispatch(event).await.unwrap();
-        }
+        for kind in kinds { registry.register_observe(kind, HookFailStrategy::Swallow, Arc::clone(&spy) as Arc<dyn HookHandler>); }
+        let events = new_variant_events();
+        for event in &events { registry.dispatch(event).await.unwrap(); }
         let seen = spy.seen.lock().unwrap();
         assert_eq!(seen.len(), events.len(), "全部新变体必须送达对应 handler");
     }
