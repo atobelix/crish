@@ -136,6 +136,7 @@ describe('AppTopBar', () => {
     );
 
     const addBtn = getByTestId('global-strip-new-session');
+    expect(addBtn.getAttribute('aria-label')).toBe('新建对话');
     fireEvent.click(addBtn);
 
     expect(eventHandler).toHaveBeenCalledTimes(1);

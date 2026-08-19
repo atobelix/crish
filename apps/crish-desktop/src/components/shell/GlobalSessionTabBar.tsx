@@ -13,7 +13,7 @@
 
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useStoreWithEqualityFn } from 'zustand/traditional';
-import { MessageSquarePlus, Pin, X } from 'lucide-react';
+import { Pin, Plus, X } from 'lucide-react';
 import {
   GENERAL_FOLDER,
   canonicalSessionFolder,
@@ -344,9 +344,11 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
                   aria-label="新建对话"
                   onClick={onNewSession}
                   icon={
-                    <MessageSquarePlus
+                    <Plus
                       size={ICON_SIZE}
                       strokeWidth={TAB_ICON_STROKE}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                       aria-hidden
                     />
                   }

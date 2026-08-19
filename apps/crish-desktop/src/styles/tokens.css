@@ -107,6 +107,7 @@ html[data-theme='light'] {
   );
   --md-code-border: var(--border-color);
   --md-code-fg: var(--text-primary);
+  --md-code-tab-size: 2;
   --focus-ring-color: color-mix(
     in srgb,
     var(--control-mix-color) 8%,

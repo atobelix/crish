@@ -343,13 +343,17 @@
   max-width: var(--global-tab-h);
   padding: 0;
   margin: 0;
-  border-radius: var(--global-tab-radius);
+  /* 与顶栏 sidebar/help 图标钮同一半径，不另飞一种 */
+  border-radius: var(--radius-sm, 4px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
   align-self: center;
+  line-height: 0;
+  overflow: visible;
+  transform: none;
   transition:
     background-color var(--transition-fast, 150ms ease-out),
     color var(--transition-fast, 150ms ease-out);
@@ -358,11 +362,23 @@
 .tabAdd:hover {
   color: var(--text-primary);
   background: var(--tint-hover, rgba(128, 128, 128, 0.08));
+  transform: none;
+}
+
+.tabAdd:active {
+  transform: none;
 }
 
 .tabAdd:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+/* 命中盒几何中心 = plus 交叉点；block 避免 inline SVG 基线把十字偏下 */
+.tabAdd svg {
+  display: block;
+  flex-shrink: 0;
+  overflow: visible;
 }
 
 /*    Drag ghost (portal)                                              */

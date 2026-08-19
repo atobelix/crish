@@ -57,6 +57,8 @@ samp,
 .md-code-pre,
 .md-inline-code {
   font-weight: var(--font-weight-code, 400);
+  tab-size: var(--md-code-tab-size, 2);
+  -moz-tab-size: var(--md-code-tab-size, 2);
 }
 
 /*            32     16 */

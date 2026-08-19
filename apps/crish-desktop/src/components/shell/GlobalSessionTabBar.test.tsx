@@ -141,6 +141,20 @@ describe('GlobalSessionTabBar', () => {
     expect(openNewDraftTab).toHaveBeenCalledTimes(1);
   });
 
+  it('new session control is a round-cap plus labelled 新建对话', () => {
+    const { getByTestId, getByRole } = render(<GlobalSessionTabBar />);
+    const add = getByRole('button', { name: '新建对话' });
+    expect(add).toBe(getByTestId('global-strip-new-session'));
+    expect(add.getAttribute('aria-label')).toBe('新建对话');
+    const svg = add.querySelector('svg');
+    expect(svg).toBeTruthy();
+    const cls = svg!.getAttribute('class') ?? '';
+    expect(cls).toMatch(/lucide-plus\b/);
+    expect(cls).not.toMatch(/message-square/);
+    expect(svg!.getAttribute('stroke-linecap')).toBe('round');
+    expect(svg!.getAttribute('stroke-linejoin')).toBe('round');
+  });
+
   it('clicking a tab activates it', () => {
     const { getAllByTestId } = render(<GlobalSessionTabBar />);
     const tabs = getAllByTestId('global-session-tab');
