@@ -60,4 +60,36 @@ describe('menuOpenGuard', () => {
     content.remove();
     btn.remove();
   });
+
+  it('关 A 的外点落在 B 的 trigger 上时，不抑制 B 打开', () => {
+    const btnA = document.createElement('button');
+    const btnB = document.createElement('button');
+    const contentA = document.createElement('div');
+    document.body.append(contentA, btnA, btnB);
+    layerStackService.register({
+      id: 'menu-a',
+      type: 'dropdown-menu',
+      dismissible: true,
+      onDismiss: () => undefined,
+      elementRef: { current: contentA },
+      anchorRef: { current: btnA },
+    });
+    btnB.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+    );
+    expect(shouldSuppressMenuReopen(btnA)).toBe(true);
+    expect(shouldSuppressMenuReopen(btnB)).toBe(false);
+    let openB = false;
+    toggleExclusiveMenu(
+      openB,
+      (next) => {
+        openB = next;
+      },
+      btnB
+    );
+    expect(openB).toBe(true);
+    contentA.remove();
+    btnA.remove();
+    btnB.remove();
+  });
 });

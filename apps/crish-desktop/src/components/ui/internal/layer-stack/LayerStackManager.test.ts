@@ -192,6 +192,31 @@ describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () =
     content.remove();
   });
 
+  it('外点关 A 时点在 B 的 trigger 上，不抑制 B', () => {
+    const btnA = document.createElement('button');
+    const btnB = document.createElement('button');
+    const contentA = document.createElement('div');
+    document.body.append(contentA, btnA, btnB);
+    const onDismissA = vi.fn();
+    layerStackManager.register({
+      id: 'menu-a',
+      type: 'dropdown-menu',
+      dismissible: true,
+      onDismiss: onDismissA,
+      elementRef: { current: contentA },
+      anchorRef: { current: btnA },
+    });
+    btnB.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+    );
+    expect(onDismissA).toHaveBeenCalledWith('outside-pointer');
+    expect(layerStackManager.wasTriggerClickAfterDismiss(btnA)).toBe(true);
+    expect(layerStackManager.wasTriggerClickAfterDismiss(btnB)).toBe(false);
+    contentA.remove();
+    btnA.remove();
+    btnB.remove();
+  });
+
   it('Trace 审计历史记录正常工作', () => {
     const onDismiss = vi.fn();
     const unregister = layerStackManager.register({

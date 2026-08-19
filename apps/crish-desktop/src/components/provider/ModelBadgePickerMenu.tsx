@@ -69,6 +69,8 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
 
   const profiles = listPickerProfiles().filter((p) => p.enabled !== false);
 
+  if (!open) return null;
+
   return (
     <Menu
       openState={{

@@ -113,4 +113,32 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
     );
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
+
+  it('药丸不带 no-drag 字符串 class（Composer 不在窗拖区）', () => {
+    render(<PermissionModeMenu mode="ask" onChange={() => {}} />);
+    const trigger = screen.getByRole('button', { name: /当前权限模式/ });
+    expect(trigger.className).not.toMatch(/\bno-drag\b/);
+  });
+
+  it('外点关后再点同一药丸：本击保持关，下一次手势才开', async () => {
+    render(<PermissionModeMenu mode="ask" onChange={() => {}} />);
+    const trigger = screen.getByRole('button', { name: /当前权限模式/ });
+    fireEvent.click(trigger);
+    await screen.findByRole('menu');
+    const outside = document.createElement('button');
+    outside.textContent = '外部';
+    document.body.appendChild(outside);
+    fireEvent.pointerDown(outside);
+    fireEvent.pointerUp(outside);
+    fireEvent.click(outside);
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
+    // 同一 pointer 已结束；新一次 pointerdown 清 dismissedByPointer 后可开
+    fireEvent.pointerDown(trigger);
+    fireEvent.pointerUp(trigger);
+    fireEvent.click(trigger);
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
+    outside.remove();
+  });
 });

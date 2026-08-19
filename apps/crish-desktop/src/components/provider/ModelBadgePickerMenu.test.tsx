@@ -240,6 +240,47 @@ describe('ModelBadgePickerMenu（ui/Menu 基座）', () => {
     expect(screen.queryByText('模型管理...')).not.toBeInTheDocument();
   });
 
+  it('关→开→pointerdown+click 关，不重开', async () => {
+    seedProfiles();
+    function Closed() {
+      const [open, setOpen] = useState(false);
+      const anchorRef = useRef<HTMLButtonElement>(null);
+      return (
+        <>
+          <button
+            ref={anchorRef}
+            type="button"
+            data-testid="model-badge-trigger"
+            onClick={() =>
+              toggleExclusiveMenu(open, setOpen, anchorRef.current)
+            }
+          >
+            模型徽标
+          </button>
+          <ModelBadgePickerMenu
+            activeModel="model-a"
+            open={open}
+            onClose={() => setOpen(false)}
+            onOpenChange={(next) => {
+              if (!next) setOpen(false);
+            }}
+            anchor={anchorRef}
+          />
+        </>
+      );
+    }
+    render(<Closed />);
+    const trigger = screen.getByTestId('model-badge-trigger');
+    fireEvent.click(trigger);
+    expect(await screen.findByText('测试服务商')).toBeInTheDocument();
+    fireEvent.pointerDown(trigger);
+    fireEvent.pointerUp(trigger);
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(screen.queryByText('测试服务商')).not.toBeInTheDocument()
+    );
+  });
+
   it('hover 保留为增强路径：悬停行仍展开子菜单（80ms 定时器）', async () => {
     seedProfiles();
     render(<Wrapper />);

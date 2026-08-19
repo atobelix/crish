@@ -184,16 +184,18 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
           />
         </button>
       </Tooltip>
-      <ModelBadgePickerMenu
-        activeModel={engineModel}
-        onClose={() => setShowModelDropdown(false)}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setShowModelDropdown(false);
-        }}
-        open={showModelDropdown}
-        side="top"
-        anchor={badgeRef}
-      />
+      {showModelDropdown ? (
+        <ModelBadgePickerMenu
+          activeModel={engineModel}
+          onClose={() => setShowModelDropdown(false)}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setShowModelDropdown(false);
+          }}
+          open={showModelDropdown}
+          side="top"
+          anchor={badgeRef}
+        />
+      ) : null}
     </Suspense>
   );
 };

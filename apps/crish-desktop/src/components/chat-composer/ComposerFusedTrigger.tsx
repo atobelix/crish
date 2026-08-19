@@ -110,42 +110,44 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
             <Lucide.ChevronDown size={11} className={styles.chev} aria-hidden />
           </button>
         </Tooltip>
-        <Menu
-          openState={{
-            open,
-            onOpenChange: (nextOpen) => {
-              if (!nextOpen) setOpen(false);
-            },
-          }}
-          anchor={btnRef}
-          options={menuOptions}
-          position={{ side: 'top', align: 'end', sideOffset: 6 }}
-          panel={{ contentClassName: styles.menu }}
-          renderItem={(opt) => {
-            const selected = opt.id === current;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                className={`${styles.item} ${selected ? styles.isSelected : ''}`}
-                role="menuitem"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  opt.onClick?.();
-                }}
-              >
-                <span>{opt.label}</span>
-                {selected ? (
-                  <Lucide.Check
-                    size={12}
-                    className={styles.check}
-                    aria-hidden
-                  />
-                ) : null}
-              </button>
-            );
-          }}
-        />
+        {open ? (
+          <Menu
+            openState={{
+              open,
+              onOpenChange: (nextOpen) => {
+                if (!nextOpen) setOpen(false);
+              },
+            }}
+            anchor={btnRef}
+            options={menuOptions}
+            position={{ side: 'top', align: 'end', sideOffset: 6 }}
+            panel={{ contentClassName: styles.menu }}
+            renderItem={(opt) => {
+              const selected = opt.id === current;
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  className={`${styles.item} ${selected ? styles.isSelected : ''}`}
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    opt.onClick?.();
+                  }}
+                >
+                  <span>{opt.label}</span>
+                  {selected ? (
+                    <Lucide.Check
+                      size={12}
+                      className={styles.check}
+                      aria-hidden
+                    />
+                  ) : null}
+                </button>
+              );
+            }}
+          />
+        ) : null}
       </div>
     </div>
   );

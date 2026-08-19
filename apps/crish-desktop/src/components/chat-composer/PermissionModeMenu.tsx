@@ -68,7 +68,9 @@ export const PermissionModeMenu: React.FC<Props> = ({
         <button
           ref={pillBtnRef}
           type="button"
-          className={`${styles.permPill} ${open ? styles.isOpen : ''} no-drag`}
+          className={[styles.permPill, open ? styles.isOpen : null]
+            .filter(Boolean)
+            .join(' ')}
           onClick={handleToggle}
           aria-expanded={open}
           aria-haspopup="menu"
@@ -83,44 +85,46 @@ export const PermissionModeMenu: React.FC<Props> = ({
         </button>
       </Tooltip>
 
-      <Menu
-        openState={{
-          open,
-          onOpenChange: (nextOpen) => {
-            if (!nextOpen) setOpen(false);
-          },
-        }}
-        anchor={pillBtnRef}
-        options={options}
-        position={{ side: 'top', align: 'start', sideOffset: 6 }}
-        panel={{ contentClassName: styles.permMenu }}
-        renderItem={(opt) => {
-          const itemMeta = permissionModeMeta(opt.id);
-          const isSelected = opt.id === mode;
-          return (
-            <Tooltip key={opt.id} content={itemMeta.matrixHint}>
-              <button
-                type="button"
-                className={`${styles.permMenuItem} ${isSelected ? styles.isSelected : ''}`}
-                role="menuitem"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  opt.onClick?.();
-                }}
-              >
-                <span>{itemMeta.label}</span>
-                {isSelected ? (
-                  <Lucide.Check
-                    size={12}
-                    style={{ marginLeft: 'auto', opacity: 0.8 }}
-                    aria-hidden="true"
-                  />
-                ) : null}
-              </button>
-            </Tooltip>
-          );
-        }}
-      />
+      {open ? (
+        <Menu
+          openState={{
+            open,
+            onOpenChange: (nextOpen) => {
+              if (!nextOpen) setOpen(false);
+            },
+          }}
+          anchor={pillBtnRef}
+          options={options}
+          position={{ side: 'top', align: 'start', sideOffset: 6 }}
+          panel={{ contentClassName: styles.permMenu }}
+          renderItem={(opt) => {
+            const itemMeta = permissionModeMeta(opt.id);
+            const isSelected = opt.id === mode;
+            return (
+              <Tooltip key={opt.id} content={itemMeta.matrixHint}>
+                <button
+                  type="button"
+                  className={`${styles.permMenuItem} ${isSelected ? styles.isSelected : ''}`}
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    opt.onClick?.();
+                  }}
+                >
+                  <span>{itemMeta.label}</span>
+                  {isSelected ? (
+                    <Lucide.Check
+                      size={12}
+                      style={{ marginLeft: 'auto', opacity: 0.8 }}
+                      aria-hidden="true"
+                    />
+                  ) : null}
+                </button>
+              </Tooltip>
+            );
+          }}
+        />
+      ) : null}
     </div>
   );
 };

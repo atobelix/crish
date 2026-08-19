@@ -157,6 +157,16 @@ export class LayerStackManager {
     ) {
       return true;
     }
+    // 被关层的锚是另一个仍在树上的 trigger：互斥切换，不抑制新菜单打开
+    if (
+      rec.anchor &&
+      rec.anchor.isConnected &&
+      rec.anchor !== triggerEl &&
+      !rec.anchor.contains(triggerEl) &&
+      !triggerEl.contains(rec.anchor)
+    ) {
+      return false;
+    }
     if (
       !rec.anchor &&
       rec.target instanceof Node &&

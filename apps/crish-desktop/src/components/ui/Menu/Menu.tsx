@@ -169,8 +169,14 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
-      if (nextOpen && layerStackService.wasLayerDismissedThisGesture(menuId)) {
-        return;
+      if (nextOpen) {
+        if (layerStackService.wasLayerDismissedThisGesture(menuId)) {
+          return;
+        }
+        const triggerEl = anchor?.current ?? triggerRef.current;
+        if (shouldSuppressMenuReopen(triggerEl)) {
+          return;
+        }
       }
       if (!isControlled) {
         setInternalOpen(nextOpen);
@@ -180,7 +186,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         setFocusedIndex(-1);
       }
     },
-    [isControlled, externalOnOpenChange, menuId]
+    [isControlled, externalOnOpenChange, menuId, anchor]
   );
 
   useLayerRegistration(
@@ -306,6 +312,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
             onClick: (e: React.MouseEvent) => {
               if (shouldSuppressMenuReopen(triggerRef.current)) {
                 e.preventDefault();
+                e.stopPropagation();
                 return;
               }
               (
@@ -318,8 +325,10 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         )
       : actualTrigger;
 
+    // 窗拖排除只留给真正处在 drag region 的控件自己写
+    // -webkit-app-region: no-drag。基座 Trigger 不再无条件拼 no-drag。
     renderedTrigger = (
-      <Popover.Trigger asChild className="no-drag">
+      <Popover.Trigger asChild>
         {tipContent && React.isValidElement(clonedTrigger) ? (
           <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
             {clonedTrigger}
@@ -339,6 +348,11 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     maxHeight != null
       ? `min(${typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight}, var(--radix-popover-content-available-height, 360px), 70vh, 360px)`
       : 'min(var(--radix-popover-content-available-height, 360px), 70vh, 360px)';
+
+  // 与加号同构：Anchor 模式关则整棵 Popover 卸掉，避免关着的 Root 还在听外点/toggle。
+  if (anchor && !isOpen) {
+    return null;
+  }
 
   return (
     <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>

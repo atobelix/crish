@@ -11,7 +11,7 @@ import {
   cleanup,
   waitFor,
 } from '@testing-library/react';
-import { Menu } from './Menu';
+import { Menu, toggleExclusiveMenu } from './index';
 import { Dialog } from '../Dialog/Dialog';
 import { layerStackService } from '../internal/layer-stack/LayerStackService';
 import styles from './Menu.module.css';
@@ -51,6 +51,18 @@ afterEach(() => {
 });
 
 describe('ui/Menu', () => {
+  it('Trigger 不无条件拼 no-drag（窗拖排除留给 drag region 自己写）', () => {
+    render(
+      <Menu
+        trigger={<button type="button">{TRIGGER_TEXT}</button>}
+        options={[{ id: 'a', label: '选项甲' }]}
+      />
+    );
+    const btn = screen.getByRole('button', { name: TRIGGER_TEXT });
+    expect(btn.className).not.toMatch(/\bno-drag\b/);
+    expect(btn.closest('.no-drag')).toBeNull();
+  });
+
   it('点击触发器打开面板并渲染选项', async () => {
     render(
       <Menu
@@ -454,12 +466,19 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
           <button
             ref={anchorRef}
             data-testid="anchor-btn"
-            onClick={() => setOpen((prev) => !prev)}
+            onClick={() =>
+              toggleExclusiveMenu(open, setOpen, anchorRef.current)
+            }
           >
             Toggle
           </button>
           <Menu
-            openState={{ open, onOpenChange: setOpen }}
+            openState={{
+              open,
+              onOpenChange: (next) => {
+                if (!next) setOpen(false);
+              },
+            }}
             anchor={anchorRef}
             options={[{ id: '1', label: 'Item 1' }]}
           />
@@ -472,9 +491,73 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
 
     const anchorBtn = screen.getByTestId('anchor-btn');
     fireEvent.pointerDown(anchorBtn);
+    fireEvent.pointerUp(anchorBtn);
     fireEvent.click(anchorBtn);
 
     expect(screen.queryByText('Item 1')).not.toBeInTheDocument();
+  });
+
+  it('两个 Anchor 菜单：点 B 关 A 并开 B（一开一关）', async () => {
+    function Pair() {
+      const [openA, setOpenA] = useState(true);
+      const [openB, setOpenB] = useState(false);
+      const refA = React.useRef<HTMLButtonElement>(null);
+      const refB = React.useRef<HTMLButtonElement>(null);
+      return (
+        <div>
+          <button
+            ref={refA}
+            type="button"
+            onClick={() => toggleExclusiveMenu(openA, setOpenA, refA.current)}
+          >
+            锚甲
+          </button>
+          <button
+            ref={refB}
+            type="button"
+            onClick={() => toggleExclusiveMenu(openB, setOpenB, refB.current)}
+          >
+            锚乙
+          </button>
+          <Menu
+            openState={{
+              open: openA,
+              onOpenChange: (n) => {
+                if (!n) setOpenA(false);
+              },
+            }}
+            anchor={refA}
+            options={[{ id: 'a', label: '选项甲' }]}
+          />
+          <Menu
+            openState={{
+              open: openB,
+              onOpenChange: (n) => {
+                if (!n) setOpenB(false);
+              },
+            }}
+            anchor={refB}
+            options={[{ id: 'b', label: '选项乙' }]}
+          />
+        </div>
+      );
+    }
+    render(<Pair />);
+    expect(
+      await screen.findByRole('menuitem', { name: /选项甲/ })
+    ).toBeInTheDocument();
+    const btnB = screen.getByRole('button', { name: '锚乙' });
+    fireEvent.pointerDown(btnB);
+    fireEvent.pointerUp(btnB);
+    fireEvent.click(btnB);
+    expect(
+      await screen.findByRole('menuitem', { name: /选项乙/ })
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('menuitem', { name: /选项甲/ })
+      ).not.toBeInTheDocument()
+    );
   });
 
   it('Anchor 模式：在 Anchor 按钮上按下后拖拽移出（Drag-off）应正常关闭菜单', async () => {
