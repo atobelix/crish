@@ -55,6 +55,7 @@ export function renderNarrativeThought(
       durationMs={args.durationMs}
       messageId={args.messageId}
       turnIndex={args.turnIndex}
+      defaultOpen={args.defaultOpen}
     />
   );
 }

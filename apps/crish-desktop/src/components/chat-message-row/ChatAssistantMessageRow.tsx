@@ -32,7 +32,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
   isPinned,
   isSearchHit,
   isThinkingMsg,
-  hideThinkingBlock: _hideThinkingBlock,
+  hideThinkingBlock,
   inPlanMode,
   planApproved,
   isLastAssistant,
@@ -53,7 +53,6 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
 }) => {
   void _onBranch;
   void _messageIndex;
-  void _hideThinkingBlock;
 
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
@@ -114,6 +113,7 @@ const ChatAssistantMessageRowInner: React.FC<ChatAssistantMessageRowProps> = ({
           msg={msg}
           streamText={streamText}
           isThinkingMsg={isThinkingMsg}
+          hideThinkingBlock={hideThinkingBlock}
           toolStackProps={toolStackProps}
         />
       </div>

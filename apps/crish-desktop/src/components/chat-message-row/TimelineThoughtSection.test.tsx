@@ -33,6 +33,33 @@ describe('TimelineThoughtSection', () => {
     expect(screen.getByText('正在深入思考…')).toBeDefined();
   });
 
+  it('defaultExpanded 控制新渲染块的初始开合', () => {
+    const open = render(
+      <TimelineThoughtSection content="推理段落" defaultExpanded />
+    );
+    expect(
+      open.container.querySelector('[data-kind="thought"] [aria-expanded="true"]')
+    ).not.toBeNull();
+    expect(
+      open.container.querySelector('[data-kind="thought"] [data-expanded="true"]')
+    ).not.toBeNull();
+    open.unmount();
+
+    const closed = render(
+      <TimelineThoughtSection content="推理段落" defaultExpanded={false} />
+    );
+    expect(
+      closed.container.querySelector(
+        '[data-kind="thought"] [aria-expanded="false"]'
+      )
+    ).not.toBeNull();
+    expect(
+      closed.container.querySelector(
+        '[data-kind="thought"] [data-expanded="false"]'
+      )
+    ).not.toBeNull();
+  });
+
   it('超过 10k 预算时渲染截断提示与完整思考链按钮，点击触发 openThoughtInspector', () => {
     const longThought = 'A'.repeat(15000);
     render(

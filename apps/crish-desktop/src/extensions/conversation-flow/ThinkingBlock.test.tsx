@@ -53,6 +53,29 @@ describe('ThinkingBlock', () => {
     vi.useRealTimers();
   });
 
+  it('defaultOpen=true 初始挂全文；false 只有预览', () => {
+    const open = render(<ThinkingBlock content={long} defaultOpen />);
+    expect(open.container.querySelector('[data-flow-thinking-full]')).not.toBeNull();
+    expect(open.container.querySelector('[data-flow-expanded="true"]')).not.toBeNull();
+    expect(open.container.querySelector('[data-flow-thinking-preview]')).toBeNull();
+    open.unmount();
+
+    const closed = render(<ThinkingBlock content={long} defaultOpen={false} />);
+    expect(closed.container.querySelector('[data-flow-thinking-full]')).toBeNull();
+    expect(closed.container.querySelector('[data-flow-expanded="false"]')).not.toBeNull();
+    expect(closed.container.querySelector('[data-flow-thinking-preview]')).not.toBeNull();
+  });
+
+  it('已挂载块不随 defaultOpen 变化改开合（仅新渲染生效）', () => {
+    const { container, rerender } = render(
+      <ThinkingBlock content={long} defaultOpen={false} />
+    );
+    expect(container.querySelector('[data-flow-thinking-full]')).toBeNull();
+    rerender(<ThinkingBlock content={long} defaultOpen />);
+    expect(container.querySelector('[data-flow-thinking-full]')).toBeNull();
+    expect(container.querySelector('[data-flow-expanded="false"]')).not.toBeNull();
+  });
+
   it('查阅器入口打开 thoughtInspector，无原生 title', () => {
     const { container } = render(
       <ThinkingBlock content={long} messageId="m1" />

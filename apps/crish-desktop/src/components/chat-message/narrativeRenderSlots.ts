@@ -19,6 +19,8 @@ export interface ChatNarrativeRenderThoughtArgs {
   durationMs?: number;
   turnIndex?: number;
   messageId?: string;
+  /** 设置 hideThinkingBlock=false 时为 true（默认展开） */
+  defaultOpen?: boolean;
 }
 
 export type ChatNarrativeRenderTools = (

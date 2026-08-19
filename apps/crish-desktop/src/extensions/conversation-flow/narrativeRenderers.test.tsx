@@ -108,6 +108,30 @@ describe('narrativeRenderers', () => {
     expect(off.container.querySelector('[data-flow-thinking]')).toBeNull();
   });
 
+  it('renderThought 把 defaultOpen 交给 ThinkingBlock', () => {
+    const msg = twoInspectMsg();
+    const { renderThought } = createNarrativeRenderers([msg]);
+    const long = '甲'.repeat(80);
+    const open = render(
+      <>{renderThought({ content: long, messageId: msg.id, defaultOpen: true })}</>
+    );
+    expect(open.container.querySelector('[data-flow-thinking-full]')).not.toBeNull();
+    expect(open.container.querySelector('[data-flow-expanded="true"]')).not.toBeNull();
+    open.unmount();
+
+    const closed = render(
+      <>
+        {renderThought({
+          content: long,
+          messageId: msg.id,
+          defaultOpen: false,
+        })}
+      </>
+    );
+    expect(closed.container.querySelector('[data-flow-thinking-full]')).toBeNull();
+    expect(closed.container.querySelector('[data-flow-expanded="false"]')).not.toBeNull();
+  });
+
   it('开插件：pending 不画流内审批卡', () => {
     const pendingTc: MessageToolCall = {
       id: 'p1',

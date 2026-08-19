@@ -31,6 +31,8 @@ export interface MessageContentProps {
    */
   streamText?: string;
   isThinkingMsg?: boolean;
+  /** true = 新渲染的思考段默认折叠；false = 默认展开 */
+  hideThinkingBlock?: boolean;
   toolStackProps?: ChatToolStackSharedProps;
   className?: string;
 }
@@ -53,6 +55,7 @@ interface TimelineBodyProps {
   msgId: string;
   status: SessionMessage['status'];
   isThinkingMsg?: boolean;
+  hideThinkingBlock?: boolean;
 }
 
 const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
@@ -62,8 +65,10 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
     msgId,
     status,
     isThinkingMsg = false,
+    hideThinkingBlock = false,
   }) {
     const { renderTools, renderThought } = useNarrativeRenderSlots();
+    const thoughtDefaultOpen = !hideThinkingBlock;
     return (
       <>
         {items.map((item) => {
@@ -77,6 +82,7 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
                     durationMs: item.durationMs,
                     turnIndex: item.turnIndex,
                     messageId: msgId,
+                    defaultOpen: thoughtDefaultOpen,
                   })}
                 </React.Fragment>
               );
@@ -89,6 +95,7 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
                 durationMs={item.durationMs}
                 turnIndex={item.turnIndex}
                 messageId={msgId}
+                defaultExpanded={thoughtDefaultOpen}
               />
             );
           }
@@ -149,7 +156,14 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
 TimelineBody.displayName = 'TimelineBody';
 
 export const MessageContent: React.FC<MessageContentProps> = React.memo(
-  ({ msg, streamText, isThinkingMsg = false, toolStackProps, className }) => {
+  ({
+    msg,
+    streamText,
+    isThinkingMsg = false,
+    hideThinkingBlock = false,
+    toolStackProps,
+    className,
+  }) => {
     // T4 A1：热缓冲订阅与 view model 合并已上移页面壳层（useStreamMessageViewModel），
     // 本组件只收「已合并 view model」（msg）+ 流式累积正文（streamText）。
     // 防撕裂平滑三元降级公式与 live 门禁语义由壳层装配点承载——即使 msg.status
@@ -366,6 +380,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           msgId={msg.id}
           status={msg.status}
           isThinkingMsg={isThinkingMsg}
+          hideThinkingBlock={hideThinkingBlock}
         />
         {streaming && (
           <div className={styles.timelineText}>
@@ -395,6 +410,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           msgId={msg.id}
           status={msg.status}
           isThinkingMsg={isThinkingMsg}
+          hideThinkingBlock={hideThinkingBlock}
         />
       </div>
     );
