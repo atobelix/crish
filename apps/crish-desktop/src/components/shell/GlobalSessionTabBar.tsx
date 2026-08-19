@@ -22,17 +22,18 @@ import {
 import { currentWorkspaceFolderKey } from '../../api/workspaceChromeTabs';
 import {
   EMPTY_SESSION_TITLE,
-  sessionListDisplayTitle,
+  resolveChromeSessionTitle,
 } from '../../api/sessionTitle';
-import { getSessionById } from '../../store/storeAccess';
 import {
+  getSessionById,
+  useSessionStore,
   useWorkspaceShellStore,
   selectActiveTabSessionId,
   resolveStripWorkspaceKey,
   createDefaultDock,
   type TabSurface,
+  isPendingDraft,
 } from '../../store/storeAccess';
-import { isPendingDraft } from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { emitUiEvent } from '../../api/uiEvents';
 import { Button, TabStrip, Tooltip } from '../ui';
@@ -90,17 +91,24 @@ function currentWsKey(): string {
   );
 }
 
-function resolveTabTitle(sessionId: string, shellTitle?: string): string {
+function titlesRecordEqual(
+  a: Readonly<Record<string, string>>,
+  b: Readonly<Record<string, string>>
+): boolean {
+  if (a === b) return true;
+  const keys = Object.keys(a);
+  if (keys.length !== Object.keys(b).length) return false;
+  for (const k of keys) {
+    if (a[k] !== b[k]) return false;
+  }
+  return true;
+}
+
+export function resolveTabTitle(sessionId: string, shellTitle?: string): string {
   if (isPendingDraft(sessionId)) {
-    return (shellTitle || '').trim() || '新对话';
+    return (shellTitle || '').trim() || EMPTY_SESSION_TITLE;
   }
-  const fromShell = (shellTitle || '').trim();
-  if (fromShell) return fromShell;
-  const sess = getSessionById(sessionId);
-  if (sess) {
-    return sessionListDisplayTitle(sess) || sess.title || EMPTY_SESSION_TITLE;
-  }
-  return EMPTY_SESSION_TITLE || '未命名会话';
+  return resolveChromeSessionTitle(getSessionById(sessionId), shellTitle);
 }
 
 function tabsInWorkspace(
@@ -120,6 +128,24 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
     );
     const activeTabId = useWorkspaceShellStore((s) => s.activeTabId);
     const activeSessionId = useWorkspaceShellStore(selectActiveTabSessionId);
+    const projectedTitles = useStoreWithEqualityFn(
+      useSessionStore,
+      (s) => {
+        const next: Record<string, string> = {};
+        for (const t of openTabs) {
+          if (isPendingDraft(t.sessionId)) continue;
+          const sess = s.sessionsById?.[t.sessionId];
+          if (sess) next[t.sessionId] = resolveTabTitle(t.sessionId, t.title);
+        }
+        return next;
+      },
+      titlesRecordEqual
+    );
+
+    useEffect(() => {
+      if (Object.keys(projectedTitles).length === 0) return;
+      useWorkspaceShellStore.getState().syncOpenTabTitles(projectedTitles);
+    }, [projectedTitles]);
 
     const sessionTabs = useMemo(() => {
       const fallback = currentWsKey();
@@ -174,7 +200,7 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
       const pinnedTabs = mapped.filter((t) => t.pinned);
       const normalTabs = mapped.filter((t) => !t.pinned);
       return [...pinnedTabs, ...normalTabs];
-    }, [openTabs, activeTabId, activeSessionId]);
+    }, [openTabs, activeTabId, activeSessionId, projectedTitles]);
 
     // 丢 tab 恢复：仅真实会话；draft 态不 openOrFocus（会污染 openTabs）
     useEffect(() => {

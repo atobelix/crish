@@ -40,11 +40,17 @@ vi.mock('../../api/storeAccess', () => ({
 // mock sessionStore 提供 getState() 返回的 action spy，断言改为引用此 spy。
 const sessionSetActiveSessionId = vi.fn();
 const sessionEnterDraftMode = vi.fn();
+const mockSessionsById: Record<
+  string,
+  { id: string; title: string; messages: { sender: string; text: string }[] }
+> = {};
 vi.mock('../sessionStore', () => ({
   useSessionStore: {
     getState: () => ({
       setActiveSessionId: sessionSetActiveSessionId,
       enterDraftMode: sessionEnterDraftMode,
+      sessionsById: mockSessionsById,
+      sessions: Object.values(mockSessionsById),
     }),
   },
 }));
@@ -59,6 +65,7 @@ vi.mock('../../api/workspaceChromeTabs', () => ({
   MAX_OPEN_SESSION_TABS: 20,
 }));
 
+import { EMPTY_SESSION_TITLE } from '../../api/sessionTitle';
 import { useWorkspaceShellStore } from './workspaceShellStore';
 
 function resetLayout(tree: LayoutTree): void {
@@ -82,6 +89,7 @@ function resetShell(): void {
 }
 
 beforeEach(() => {
+  for (const k of Object.keys(mockSessionsById)) delete mockSessionsById[k];
   resetShell();
   resetLayout({
     version: 2,
@@ -634,5 +642,81 @@ describe('openNewDraftTab — 不清空已打开会话 tab', () => {
     const next = useWorkspaceShellStore.getState();
     expect(next.openTabs).toHaveLength(0);
     expect(next.activeTabId).toBeNull();
+  });
+});
+
+describe('TabSurface.title 回落与回写', () => {
+  it('open 空标题回落 EMPTY_SESSION_TITLE 而非「未命名会话」', () => {
+    useWorkspaceShellStore.getState().openOrFocusSession('s-empty');
+    const tab = useWorkspaceShellStore.getState().openTabs[0]!;
+    expect(tab.title).toBe(EMPTY_SESSION_TITLE);
+    expect(tab.title).not.toBe('未命名会话');
+  });
+
+  it('open 时从会话投影取真实标题', () => {
+    mockSessionsById['s-real'] = {
+      id: 's-real',
+      title: '缓存优化方案',
+      messages: [],
+    };
+    useWorkspaceShellStore.getState().openOrFocusSession('s-real');
+    expect(useWorkspaceShellStore.getState().openTabs[0]!.title).toBe(
+      '缓存优化方案'
+    );
+  });
+
+  it('已打开的幽灵标题在再次 open/focus 时回写真实投影', () => {
+    useWorkspaceShellStore.setState({
+      openTabs: [
+        {
+          tabId: 't-ghost',
+          kind: 'conversation',
+          sessionId: 's-ghost',
+          workspaceKey: 'general',
+          title: '未命名会话',
+          rightDock: {
+            collapsed: true,
+            openPanelIds: [],
+            activePanelId: null,
+            widthRatio: 0.35,
+          },
+        },
+      ],
+      activeTabId: 't-ghost',
+    });
+    mockSessionsById['s-ghost'] = {
+      id: 's-ghost',
+      title: '侧栏真名',
+      messages: [],
+    };
+    useWorkspaceShellStore.getState().openOrFocusSession('s-ghost');
+    expect(useWorkspaceShellStore.getState().openTabs[0]!.title).toBe(
+      '侧栏真名'
+    );
+  });
+
+  it('syncOpenTabTitles 不把 EMPTY 回落盖掉已有真实标题', () => {
+    useWorkspaceShellStore.setState({
+      openTabs: [
+        {
+          tabId: 't-keep',
+          kind: 'conversation',
+          sessionId: 's-keep',
+          workspaceKey: 'general',
+          title: '2',
+          rightDock: {
+            collapsed: true,
+            openPanelIds: [],
+            activePanelId: null,
+            widthRatio: 0.35,
+          },
+        },
+      ],
+      activeTabId: 't-keep',
+    });
+    useWorkspaceShellStore.getState().syncOpenTabTitles({
+      's-keep': EMPTY_SESSION_TITLE,
+    });
+    expect(useWorkspaceShellStore.getState().openTabs[0]!.title).toBe('2');
   });
 });

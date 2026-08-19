@@ -62,6 +62,10 @@ import {
   MAX_OPEN_SESSION_TABS,
 } from '../../api/workspaceChromeTabs';
 import {
+  isDefaultSessionTitle,
+  resolveChromeSessionTitle,
+} from '../../api/sessionTitle';
+import {
   type RightToolDockState,
   type TabSurface,
   type WorkspaceShellState,
@@ -124,10 +128,29 @@ export interface WorkspaceShellStore
     known: Map<string, { title?: string; folder?: string }>,
     opts?: { projectActiveDock?: boolean }
   ) => void;
+  /**
+   * 将已打开 tab 的 title 与会话投影对齐（打开已有 tab / 改名 / 首条消息）。
+   * 传入 overrides 时只回写命中的 sessionId；缺省则全部从 session store 取。
+   */
+  syncOpenTabTitles: (
+    overrides?: Readonly<Record<string, string>>
+  ) => void;
 }
 
 function workspaceKeyNow(): string {
   return currentWorkspaceFolderKey(getActiveProjectId());
+}
+
+function sessionFromStore(sessionId: string) {
+  const state = useSessionStore.getState();
+  return (
+    state.sessionsById?.[sessionId] ??
+    state.sessions?.find((s) => s.id === sessionId)
+  );
+}
+
+function resolveTabSurfaceTitle(sessionId: string, title?: string): string {
+  return resolveChromeSessionTitle(sessionFromStore(sessionId), title);
 }
 
 function makeSessionTab(
@@ -140,7 +163,7 @@ function makeSessionTab(
     kind: 'conversation',
     sessionId,
     workspaceKey: canonicalSessionFolder(workspaceKey) || GENERAL_FOLDER,
-    title: (title || '').trim() || '未命名会话',
+    title: resolveTabSurfaceTitle(sessionId, title),
     rightDock: createDefaultDock(),
   };
 }
@@ -158,6 +181,30 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
 
   setShellReady: (ready) => set({ shellReady: ready }),
 
+  syncOpenTabTitles: (overrides) => {
+    const { openTabs } = get();
+    if (!openTabs.length) return;
+    let dirty = false;
+    const next = openTabs.map((t) => {
+      if (isPendingDraft(t.sessionId)) return t;
+      const override = overrides?.[t.sessionId];
+      if (overrides && override === undefined) return t;
+      const resolved = resolveTabSurfaceTitle(t.sessionId, override);
+      if (resolved === t.title) return t;
+      // 无会话投影时的 EMPTY 回落不得盖掉已有真实标题
+      if (
+        isDefaultSessionTitle(resolved) &&
+        t.title.trim() &&
+        !isDefaultSessionTitle(t.title)
+      ) {
+        return t;
+      }
+      dirty = true;
+      return { ...t, title: resolved };
+    });
+    if (dirty) set({ openTabs: next });
+  },
+
   openOrFocusSession: (sessionId, opts) => {
     const sid = (sessionId || '').trim();
     if (!sid) return;
@@ -169,8 +216,11 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     const state = get();
     const existing = state.openTabs.find((t) => t.sessionId === sid);
     if (existing) {
+      get().syncOpenTabTitles({
+        [sid]: resolveTabSurfaceTitle(sid, opts?.title),
+      });
       // 已打开：聚焦 tab，并始终对齐 activeSessionId（禁止因 tab 已 active 而跳过）
-      if (state.activeTabId === existing.tabId) {
+      if (get().activeTabId === existing.tabId) {
         useSessionStore.getState().setActiveSessionId(sid);
         bindActiveChatLeafSession(sid);
         return;

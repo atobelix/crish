@@ -5,13 +5,19 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, cleanup } from '@testing-library/react';
-import { GlobalSessionTabBar } from './GlobalSessionTabBar';
+import {
+  GlobalSessionTabBar,
+  resolveTabTitle,
+} from './GlobalSessionTabBar';
 import {
   useWorkspaceShellStore,
   createDefaultDock,
 } from '../../store/workspace-shell';
 import { useLayoutTreeStore } from '../../store/layout-tree';
+import { useSessionStore } from '../../store/sessionStore';
 import { GENERAL_FOLDER } from '../../api/projectStore';
+import { EMPTY_SESSION_TITLE } from '../../api/sessionTitle';
+import type { SessionState } from '../../store/types';
 
 const dock = () => createDefaultDock();
 
@@ -64,9 +70,34 @@ function seedTabs() {
   });
 }
 
+function seedSession(
+  id: string,
+  title: string,
+  messages: SessionState['messages'] = []
+): void {
+  const sess: SessionState = {
+    id,
+    title,
+    folder: GENERAL_FOLDER,
+    isPinned: false,
+    isArchived: false,
+    timestamp: '',
+    messages,
+  };
+  const prev = useSessionStore.getState();
+  useSessionStore.setState({
+    sessions: [...prev.sessions.filter((s) => s.id !== id), sess],
+    sessionsById: { ...prev.sessionsById, [id]: sess },
+  });
+}
+
 describe('GlobalSessionTabBar', () => {
   beforeEach(() => {
     openNewDraftTab.mockClear();
+    useSessionStore.setState({
+      sessions: [],
+      sessionsById: {},
+    });
     seedTabs();
   });
 
@@ -155,5 +186,40 @@ describe('GlobalSessionTabBar', () => {
     const buttons = pinnedTab.querySelectorAll('button');
     expect(buttons).toHaveLength(1);
     expect(pinnedTab.querySelector('svg')).toBeTruthy(); // Pin icon
+  });
+
+  it('resolveTabTitle: ghost shell title asks session projection', () => {
+    seedSession('sess-named', '缓存优化方案');
+    expect(resolveTabTitle('sess-named', '未命名会话')).toBe('缓存优化方案');
+    expect(resolveTabTitle('sess-named', EMPTY_SESSION_TITLE)).toBe(
+      '缓存优化方案'
+    );
+    expect(resolveTabTitle('missing', '未命名会话')).toBe(EMPTY_SESSION_TITLE);
+    expect(resolveTabTitle('missing', '真实壳标题')).toBe('真实壳标题');
+  });
+
+  it('top bar does not keep 未命名会话 when sidebar already has a real name', () => {
+    seedSession('sess-a', '侧栏真名');
+    useWorkspaceShellStore.setState({
+      openTabs: [
+        {
+          tabId: 'tab-a',
+          kind: 'conversation',
+          sessionId: 'sess-a',
+          workspaceKey: GENERAL_FOLDER,
+          title: '未命名会话',
+          rightDock: dock(),
+        },
+      ],
+      activeTabId: 'tab-a',
+      shellReady: true,
+    });
+    const { getAllByTestId } = render(<GlobalSessionTabBar />);
+    const tabs = getAllByTestId('global-session-tab');
+    expect(tabs[0]!.textContent).toContain('侧栏真名');
+    expect(tabs[0]!.textContent).not.toContain('未命名会话');
+    expect(useWorkspaceShellStore.getState().openTabs[0]!.title).toBe(
+      '侧栏真名'
+    );
   });
 });

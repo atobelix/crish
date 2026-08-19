@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { GENERAL_FOLDER } from './projectStore';
+import { EMPTY_SESSION_TITLE } from './sessionTitle';
 import {
   activeWorkspaceTabId,
   buildSessionTabsForWorkspace,
@@ -86,5 +87,20 @@ describe('workspaceChromeTabs', () => {
     const tabs = buildSessionTabsForWorkspace('p1', ['s2', 's1', 's3', 'missing'], map);
     expect(tabs.map((t) => t.sessionId)).toEqual(['s2', 's1']);
     expect(tabs[0]?.pinned).toBe(true);
+  });
+
+  it('buildSessionTabsForWorkspace falls back to EMPTY_SESSION_TITLE not 未命名会话', () => {
+    const map = new Map([
+      ['s1', { title: '', folder: 'p1' }],
+      ['s2', { title: '未命名会话', folder: 'p1' }],
+      ['s3', { title: '真实标题', folder: 'p1' }],
+    ]);
+    const tabs = buildSessionTabsForWorkspace('p1', ['s1', 's2', 's3'], map);
+    expect(tabs.map((t) => t.title)).toEqual([
+      EMPTY_SESSION_TITLE,
+      EMPTY_SESSION_TITLE,
+      '真实标题',
+    ]);
+    expect(tabs.some((t) => t.title === '未命名会话')).toBe(false);
   });
 });

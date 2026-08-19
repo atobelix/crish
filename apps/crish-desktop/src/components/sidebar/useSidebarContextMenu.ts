@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
+import { sessionListDisplayTitle } from '../../api/sessionTitle';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { toast } from '../../services/toast/ToastContext';
 import {
@@ -167,7 +168,7 @@ export function useSidebarContextMenu({
         root.session.unpinSession(sessionId);
         break;
       case 'archive': {
-        const title = targetSession.title || '未命名会话';
+        const title = sessionListDisplayTitle(targetSession);
         root.session.archiveSession(sessionId);
         toast.show(archiveUndoToastMessage(title), () => {
           root.session.unarchiveSession(sessionId);
@@ -175,7 +176,7 @@ export function useSidebarContextMenu({
         break;
       }
       case 'branch': {
-        const title = targetSession.title || '未命名会话';
+        const title = sessionListDisplayTitle(targetSession);
         const newTitle = `${title}${BRANCH_TITLE_SUFFIX}`;
         const oldId = sessionId;
         root.session.branchSession(sessionId, newTitle);
@@ -212,7 +213,7 @@ export function useSidebarContextMenu({
         toast.show('会话 ID 已复制到剪贴板');
         break;
       case 'delete': {
-        const title = targetSession.title || '未命名会话';
+        const title = sessionListDisplayTitle(targetSession);
         // 弹窗确认由宿主装配：确认后走 confirmDelete → deleteSession + toast
         setPendingDelete({ sessionId, title });
         break;

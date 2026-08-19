@@ -14,6 +14,7 @@ import {
   sanitizeSessionTitleText,
   sessionHasListableContent,
   sessionListDisplayTitle,
+  resolveChromeSessionTitle,
   shellPruneKeepIds,
   shouldListSessionInSidebar,
   truncateSessionTitle,
@@ -685,5 +686,42 @@ describe('sessionTitle pure helpers: sanitize / CJK / collision', () => {
     ).toBe(true);
     // 不发明「未命名会话」等幽灵
     expect(deriveSessionTitle('/ping')).not.toMatch(/未命名|untitled|ghost/i);
+  });
+});
+
+describe('resolveChromeSessionTitle', () => {
+  it('ghost / default shell title must ask sessionListDisplayTitle', () => {
+    expect(
+      resolveChromeSessionTitle(
+        { title: '缓存优化方案', messages: [] },
+        '未命名会话'
+      )
+    ).toBe('缓存优化方案');
+    expect(
+      resolveChromeSessionTitle(
+        { title: '新会话', messages: [{ sender: 'user', text: '帮我重构模块' }] },
+        '未命名会话'
+      )
+    ).toContain('帮我重构');
+    expect(
+      resolveChromeSessionTitle({ title: '', messages: [] }, '未命名会话')
+    ).toBe(EMPTY_SESSION_TITLE);
+    expect(resolveChromeSessionTitle(undefined, '未命名会话')).toBe(
+      EMPTY_SESSION_TITLE
+    );
+    expect(resolveChromeSessionTitle(undefined, '')).toBe(EMPTY_SESSION_TITLE);
+  });
+
+  it('does not forever trust first real shell write after rename', () => {
+    expect(
+      resolveChromeSessionTitle(
+        { title: '改名后', messages: [] },
+        '打开时的旧名'
+      )
+    ).toBe('改名后');
+  });
+
+  it('keeps a real shell title when there is no session projection', () => {
+    expect(resolveChromeSessionTitle(undefined, '真实标题')).toBe('真实标题');
   });
 });

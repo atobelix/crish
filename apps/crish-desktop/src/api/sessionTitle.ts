@@ -559,3 +559,23 @@ export function sessionListDisplayTitle(s: TitleSession): string {
   if (derived) return derived;
   return EMPTY_SESSION_TITLE;
 }
+
+/**
+ * 顶栏 / chrome 标签标题：壳上默认/幽灵（含历史「未命名会话」）不可信，
+ * 必须再问 `sessionListDisplayTitle`；会话已有真实标题时以投影为准，
+ * 不要永远信 TabSurface 第一次写入。
+ */
+export function resolveChromeSessionTitle(
+  session: TitleSession | undefined | null,
+  shellTitle?: string
+): string {
+  const fromShell = (shellTitle ?? '').trim();
+  if (session) {
+    const fromSession = sessionListDisplayTitle(session);
+    if (!fromShell || isDefaultSessionTitle(fromShell)) return fromSession;
+    if (!isDefaultSessionTitle(fromSession)) return fromSession;
+    return fromShell;
+  }
+  if (fromShell && !isDefaultSessionTitle(fromShell)) return fromShell;
+  return EMPTY_SESSION_TITLE;
+}

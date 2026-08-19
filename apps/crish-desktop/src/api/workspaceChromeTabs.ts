@@ -14,6 +14,7 @@ import {
   listProjects,
   type ProjectEntry,
 } from './projectStore';
+import { sessionListDisplayTitle } from './sessionTitle';
 import {
   readScopedLocalStorageWithLegacyMigrate,
   scopedStorageKey,
@@ -276,7 +277,7 @@ export function buildSessionTabsForWorkspace(
     const s = knownSessions.get(id);
     if (!s) continue;
     if (!sessionBelongsToWorkspace(s.folder, key)) continue;
-    const title = (s.title || '').trim() || '未命名会话';
+    const title = sessionListDisplayTitle({ title: s.title });
     out.push({
       sessionId: id,
       title,
