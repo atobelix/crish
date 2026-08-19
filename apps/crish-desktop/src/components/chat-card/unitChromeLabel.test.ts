@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { GENERAL_FOLDER, type ProjectEntry } from '../../api/projectStore';
 import {
+  isUnitChromeCanvasQuiet,
   resolveUnitChromeLabel,
   resolveUnitChromeToolTip,
   UNIT_CHROME_TOOL_TIP_SIDE,
 } from './unitChromeLabel';
+import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
 
 const demoProject: ProjectEntry = {
   id: 'proj-demo1',
@@ -117,22 +119,47 @@ describe('unit chrome tool tip', () => {
   });
 });
 
+describe('isUnitChromeCanvasQuiet', () => {
+  it('no-session / 草稿 / 零消息 → 静默；有消息 → 不静默', () => {
+    expect(isUnitChromeCanvasQuiet({ sessionId: null, messageCount: 0 })).toBe(
+      true,
+    );
+    expect(isUnitChromeCanvasQuiet({ sessionId: '', messageCount: 0 })).toBe(
+      true,
+    );
+    expect(
+      isUnitChromeCanvasQuiet({
+        sessionId: PENDING_DRAFT_SESSION_ID,
+        messageCount: 0,
+      }),
+    ).toBe(true);
+    expect(
+      isUnitChromeCanvasQuiet({ sessionId: 'sess-empty', messageCount: 0 }),
+    ).toBe(true);
+    expect(
+      isUnitChromeCanvasQuiet({ sessionId: 'sess-live', messageCount: 1 }),
+    ).toBe(false);
+    expect(
+      isUnitChromeCanvasQuiet({
+        sessionId: PENDING_DRAFT_SESSION_ID,
+        messageCount: 3,
+      }),
+    ).toBe(true);
+  });
+});
+
 /**
- * DOM order contract for unit chrome toolbar:
- * right-dock-toggle must be the last focusable control after tool group + divider.
- * (Structural assertion without mounting full ChatHeader graph.)
+ * UnitChromeActions 坞开关顺序：divider 之后才是 right-dock-toggle。
+ * 不要按已删 ChatHeader 去复活 chat-toggle-msg-filter。
  */
 describe('unit chrome dock order (contract)', () => {
   it('toolbar action order ends with dock toggle after divider', () => {
-    // Mirrors ChatHeader.tsx toolbarActions children order:
-    // toolGroup (search, panels, more) → toolbarDivider → dockGroup (right-dock-toggle)
     const actionOrder = [
-      'chat-toggle-msg-filter',
       'chat-open-overview',
       'chat-open-files',
       'chat-open-diff',
       'chat-open-terminal',
-      'chat-header-more', // ChatHeaderMore trigger (if present)
+      'chat-header-more',
       'toolbar-divider',
       'right-dock-toggle',
     ] as const;
@@ -140,8 +167,8 @@ describe('unit chrome dock order (contract)', () => {
     expect(actionOrder.indexOf('right-dock-toggle')).toBeGreaterThan(
       actionOrder.indexOf('toolbar-divider'),
     );
-    expect(actionOrder.indexOf('right-dock-toggle')).toBeGreaterThan(
-      actionOrder.indexOf('chat-toggle-msg-filter'),
+    expect(actionOrder.includes('chat-toggle-msg-filter' as never)).toBe(
+      false,
     );
   });
 });

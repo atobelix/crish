@@ -5,6 +5,8 @@
  * - 纯几何叶子空间容器，100% 剥离 switch(panelId) 静态硬编码；
  * - 面板内容全量改由 SlotOutlet('workspace.leaf.panel') + ViewRegistry 动态渲染；
  * - 标题统一由 ViewRegistry 派生。
+ * - chat 叶 chrome：UnitChromeActions（leafBody 外兄弟；空会话静默不抢主区）。
+ * - 工具叶 chrome：LeafToolTabStrip。不要复活 ChatHeader / UnitSessionTabStrip。
  */
 
 import React, {
@@ -188,6 +190,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         role="region"
         aria-label={`${viewRegistry.getTitle(leaf.activeTab, renderCtx)} 面板`}
       >
+        {/* chat：UnitChromeActions（空会话静默）。工具叶：LeafToolTabStrip。不复活 ChatHeader。 */}
         {isChat ? (
           <UnitChromeActions
             activeSessionId={sessionForPanel}

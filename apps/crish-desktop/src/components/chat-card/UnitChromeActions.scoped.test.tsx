@@ -14,8 +14,10 @@ import {
 } from '../../store/workspace-shell';
 import { useLayoutTreeStore } from '../../store/layout-tree';
 import { useLayoutStore } from '../../store/layoutStore';
+import { useSessionStore } from '../../store/sessionStore';
 import type { SessionState } from '../../store/types';
 import { GENERAL_FOLDER } from '../../api/projectStore';
+import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
 import * as storeAccess from '../../store/storeAccess';
 import {
   activateNotePaper,
@@ -183,5 +185,125 @@ describe('UnitChromeActions icon-only + tip 不落画布', () => {
     expect(src).not.toMatch(/<Tooltip key=\{id\} content=\{label\}>/);
     expect(src).toMatch(/icon=\{\s*<Icon /);
     expect(src).not.toMatch(/icon=\{\s*<Icon[\s\S]*?\}\s*>\s*\{label\}/);
+  });
+});
+
+describe('UnitChromeActions 空画布静默不抢主区', () => {
+  beforeEach(() => {
+    useLayoutTreeStore.setState({ toolColumnCollapsed: true });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    useSessionStore.setState({
+      sessions: [],
+      sessionsById: {},
+      activeSessionId: '',
+    });
+  });
+
+  function stubToolViews(): void {
+    vi.spyOn(viewRegistry, 'getView').mockReturnValue({
+      id: 'files',
+      title: '文件',
+      category: 'tool',
+      component: () => null,
+    } as never);
+  }
+
+  function seedSession(id: string, messageCount: number): void {
+    const messages =
+      messageCount > 0
+        ? Array.from({ length: messageCount }, (_, i) => ({
+            id: `m${i}`,
+            sender: 'user',
+            timestamp: 1,
+            text: 'hi',
+          }))
+        : [];
+    const session = {
+      id,
+      title: id,
+      folder: GENERAL_FOLDER,
+      isPinned: false,
+      isArchived: false,
+      timestamp: '2026-08-19',
+      messages,
+    } as unknown as SessionState;
+    act(() => {
+      useSessionStore.setState({
+        sessions: [session],
+        sessionsById: { [id]: session },
+        activeSessionId: id,
+      });
+    });
+  }
+
+  it('session-empty：静默但仍挂工具钮，不整栏消失，可见文本不含「打开文件」', () => {
+    stubToolViews();
+    seedSession('unit-empty', 0);
+    const { getByTestId, container } = render(
+      <UnitChromeActions activeSessionId="unit-empty" />
+    );
+    const root = container.querySelector('[data-unit-chrome-actions="true"]');
+    expect(root?.getAttribute('data-canvas-quiet')).toBe('true');
+    expect(getByTestId('chat-open-files')).toBeTruthy();
+    expect(getByTestId('chat-open-overview')).toBeTruthy();
+    expect(getByTestId('right-dock-toggle')).toBeTruthy();
+    expect(getByTestId('chat-open-files').getAttribute('aria-label')).toBe(
+      '打开文件'
+    );
+    expect(container.textContent?.replace(/\s+/g, '')).not.toContain('打开文件');
+  });
+
+  it('no-session / 草稿：静默且入口仍在', () => {
+    stubToolViews();
+    const none = render(<UnitChromeActions activeSessionId={null} />);
+    expect(
+      none.container
+        .querySelector('[data-unit-chrome-actions="true"]')
+        ?.getAttribute('data-canvas-quiet')
+    ).toBe('true');
+    expect(none.getByTestId('chat-open-files')).toBeTruthy();
+    none.unmount();
+
+    const draft = render(
+      <UnitChromeActions activeSessionId={PENDING_DRAFT_SESSION_ID} />
+    );
+    expect(
+      draft.container
+        .querySelector('[data-unit-chrome-actions="true"]')
+        ?.getAttribute('data-canvas-quiet')
+    ).toBe('true');
+    expect(draft.getByTestId('chat-open-files')).toBeTruthy();
+  });
+
+  it('有消息后不再静默，工具钮仍在', async () => {
+    stubToolViews();
+    seedSession('unit-live', 2);
+    const { getByTestId, container } = await act(async () =>
+      render(<UnitChromeActions activeSessionId="unit-live" />)
+    );
+    expect(
+      container
+        .querySelector('[data-unit-chrome-actions="true"]')
+        ?.getAttribute('data-canvas-quiet')
+    ).toBe('false');
+    expect(getByTestId('chat-open-files')).toBeTruthy();
+  });
+
+  it('源码/CSS：空态贴右叠层，不 display:none 整栏，不复活 ChatHeader', () => {
+    const dir =
+      typeof import.meta.dirname === 'string'
+        ? import.meta.dirname
+        : dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(join(dir, 'UnitChromeActions.tsx'), 'utf8');
+    const css = readFileSync(join(dir, 'UnitChromeActions.module.css'), 'utf8');
+    expect(src).toMatch(/data-canvas-quiet=\{canvasQuiet \? 'true' : 'false'\}/);
+    expect(src).not.toMatch(/if\s*\(\s*canvasQuiet\s*\)\s*return\s*null/);
+    expect(src).not.toMatch(/from\s+['"]\.\/ChatHeader['"]/);
+    expect(css).toMatch(/justify-content:\s*flex-end/);
+    expect(css).toMatch(/\[data-canvas-quiet=['"]true['"]\]/);
+    expect(css).not.toMatch(/\.toolbarActions\s*\{[^}]*display:\s*none/);
   });
 });

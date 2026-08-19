@@ -1,6 +1,7 @@
 /**
  * Unit 级工具入口（右坞面板 + 坞折叠 + 更多）。
  * 挂在 chat 叶 leafBody 外；不是 ChatHeader / 不是窗口顶栏。
+ * 空会话（无会话 / 草稿 / 零消息）静默贴右，不抢欢迎面；禁止整栏消失。
  * note 钮是捆绑 chrome 清单项，视图仍只在 activate 后存在。
  */
 import React, { useCallback, useMemo, useSyncExternalStore } from 'react';
@@ -14,6 +15,7 @@ import {
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { Button, Tooltip } from '../ui';
 import {
+  isUnitChromeCanvasQuiet,
   resolveUnitChromeToolTip,
   UNIT_CHROME_TOOL_TIP_SIDE,
 } from './unitChromeLabel';
@@ -22,6 +24,7 @@ import {
   openToolInSession,
   applyDockToTree,
   useWorkspaceShellStore,
+  useSessionField,
 } from '../../store/storeAccess';
 import { useLayoutTreeStore } from '../../store/storeAccess';
 import { pinSession, unpinSession } from '../../api/storeAccess';
@@ -80,11 +83,19 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
     leading,
     className,
   }) => {
-    const session = activeSessionId
-      ? getCompositionRoot().session.getState().sessionsById[activeSessionId]
+    const sid = (activeSessionId || '').trim();
+    const messageCount = useSessionField(
+      (s) => (sid ? (s.sessionsById[sid]?.messages?.length ?? 0) : 0)
+    );
+    const session = sid
+      ? getCompositionRoot().session.getState().sessionsById[sid]
       : undefined;
     const isPinned = Boolean(session?.isPinned);
-    const canExport = Boolean(session && (session.messages?.length ?? 0) > 0);
+    const canExport = messageCount > 0;
+    const canvasQuiet = isUnitChromeCanvasQuiet({
+      sessionId: sid,
+      messageCount,
+    });
 
     const dockSnapshot = useWorkspaceShellStore((s) => {
       const sid = (activeSessionId || '').trim();
@@ -159,6 +170,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       <div
         className={`${styles.toolbarActions}${className ? ` ${className}` : ''}`}
         data-unit-chrome-actions="true"
+        data-canvas-quiet={canvasQuiet ? 'true' : 'false'}
       >
         <div className={styles.toolGroup} role="group" aria-label="会话工具">
           {leading}

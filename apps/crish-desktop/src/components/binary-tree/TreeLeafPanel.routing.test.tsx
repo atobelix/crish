@@ -200,11 +200,12 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
       />
     );
 
-    expect(
-      container.querySelector('[data-unit-chrome-actions="true"]')
-    ).toBeTruthy();
+    const chrome = container.querySelector('[data-unit-chrome-actions="true"]');
+    expect(chrome).toBeTruthy();
+    expect(chrome?.getAttribute('data-canvas-quiet')).toBe('true');
     expect(container.querySelector('[data-leaf-tool-tab-strip]')).toBeNull();
     expect(queryByTestId('chat-open-note')).toBeNull();
+    expect(queryByTestId('chat-open-files')).toBeTruthy();
 
     act(() => {
       activateNotePaper();

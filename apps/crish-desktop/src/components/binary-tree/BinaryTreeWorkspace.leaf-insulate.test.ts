@@ -93,6 +93,30 @@ describe('05 leafBody 绝缘 · 选择器文本', () => {
   });
 });
 
+describe('叶 chrome IA 与真树对齐', () => {
+  it('注释走 UnitChromeActions / LeafToolTabStrip，不把已删 ChatHeader 当渲染路径', () => {
+    const ws = readBeside('./BinaryTreeWorkspace.tsx');
+    const leaf = readBeside('./TreeLeafPanel.tsx');
+    expect(ws).toMatch(/UnitChromeActions/);
+    expect(ws).toMatch(/LeafToolTabStrip/);
+    expect(ws).not.toMatch(/单 unit chat：ChatHeader/);
+    expect(ws).not.toMatch(/UnitSessionTabStrip（per-unit/);
+    expect(leaf).toMatch(/UnitChromeActions/);
+    expect(leaf).toMatch(/LeafToolTabStrip/);
+    expect(leaf).not.toMatch(/from ['"]\.\/ChatHeader['"]/);
+    expect(leaf).not.toMatch(/from ['"]\.\/UnitSessionTabStrip['"]/);
+  });
+
+  it('空叶 chrome 贴右叠层，不占涂色通栏选择器', () => {
+    const css = readBeside('./BinaryTreeWorkspace.module.css');
+    expect(css).toMatch(
+      /\.leaf\s*>\s*\[data-unit-chrome-actions\]\[data-canvas-quiet='true'\]/
+    );
+    expect(css).toMatch(/\.leafToolHeader\s*\{[^}]*justify-content:\s*flex-end/);
+    expect(css).not.toMatch(/--card-header-bg/);
+  });
+});
+
 describe('05 皮加载边 · 全局表仍为 0', () => {
   it('index.css / shell-layout.css 不含 chrome.css / paper-list.css', () => {
     const indexCss = readFileSync(join(SRC_ROOT, 'index.css'), 'utf8');

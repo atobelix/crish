@@ -5,6 +5,7 @@ import {
   resolveFolderToProjectId,
   type ProjectEntry,
 } from '../../api/projectStore';
+import { isPendingDraft } from '../../store/draftSession';
 
 /**
  * Unit chrome 左侧主标签：项目展示名，或「对话」。
@@ -72,4 +73,18 @@ export function resolveUnitChromeToolTip(label: string): string {
   }
   if (t === '展开右侧工具栏') return '展开右坞';
   return t;
+}
+
+/**
+ * 空画布（无会话 / 草稿 / 零消息）时叶工具须静默：挂着但不抢主区。
+ * 有消息后恢复普通簇密度。禁止据此卸载整栏。
+ */
+export function isUnitChromeCanvasQuiet(input: {
+  sessionId?: string | null;
+  messageCount: number;
+}): boolean {
+  const id = (input.sessionId || '').trim();
+  if (!id) return true;
+  if (isPendingDraft(id)) return true;
+  return input.messageCount <= 0;
 }

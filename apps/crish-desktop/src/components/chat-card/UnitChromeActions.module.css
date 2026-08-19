@@ -1,7 +1,31 @@
 .toolbarActions {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-1);
+}
+
+/* 空画布：叠右上、几乎看不见；hover / 焦点才染色。不卸载、不 display:none。 */
+.toolbarActions[data-canvas-quiet='true'] {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-2);
+  left: auto;
+  width: auto;
+  z-index: var(--z-chrome);
+  pointer-events: none;
+  opacity: 0.28;
+  transition: opacity var(--transition-fast);
+}
+
+.toolbarActions[data-canvas-quiet='true'] .toolGroup,
+.toolbarActions[data-canvas-quiet='true'] .dockGroup {
+  pointer-events: auto;
+}
+
+.toolbarActions[data-canvas-quiet='true']:hover,
+.toolbarActions[data-canvas-quiet='true']:focus-within {
+  opacity: 1;
 }
 
 .toolGroup,

@@ -3,10 +3,10 @@
  *
  * 渲染流程：
  * 1. layoutTreeStore → flattenTree
- * 2. leaf 内容：
- *    - 单 unit chat：ChatHeader（第 2 行）
- *    - 多 unit chat：UnitSessionTabStrip（per-unit 标签行）+ ChatHeader
- *    - 工具 leaf：LeafToolTabStrip（基于 leaf.tabs）
+ * 2. leaf chrome（真树；不要复活 ChatHeader / UnitSessionTabStrip）：
+ *    - chat 叶：UnitChromeActions（leafBody 外兄弟；空会话静默不抢主区）
+ *    - 工具叶：LeafToolTabStrip（基于 leaf.tabs）
+ *    - 会话身份在窗口顶栏 GlobalSessionTabBar + 侧栏列表，叶内不再做第三套标题行
  * 3. sash / DropZoneOverlay / 面板 ghost
  */
 

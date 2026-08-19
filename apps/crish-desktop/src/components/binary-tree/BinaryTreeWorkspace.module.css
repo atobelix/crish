@@ -81,12 +81,12 @@
 }
 
 /*
- * Tool dock header    tool leaf           body    
- *   unit    UnitSessionTabStrip   inline tools    30px 
+ * chat 叶 UnitChromeActions：不占涂色通栏、贴右。
+ * 空会话 data-canvas-quiet：叠在右上角，不占 leafBody 行，欢迎面才是主角。
+ * 工具叶 LeafToolTabStrip 自带条高。不要复活 ChatHeader / UnitSessionTabStrip。
  */
-.leaf > [data-right-tool-dock-header],
-.leaf > [data-unit-session-tab-strip],
 .leafToolHeader {
+  display: flex;
   flex: 0 0 auto;
   width: 100%;
   max-width: 100%;
@@ -94,6 +94,18 @@
   align-self: stretch;
   margin-top: 0;
   padding-top: 0;
+  justify-content: flex-end;
+}
+
+.leaf > [data-unit-chrome-actions][data-canvas-quiet='true'] {
+  position: absolute;
+  top: var(--space-1);
+  right: var(--space-2);
+  left: auto;
+  width: auto;
+  max-width: calc(100% - var(--space-2));
+  align-self: flex-end;
+  z-index: var(--z-chrome);
 }
 
 /* live resize     +          leaf      */
@@ -309,14 +321,10 @@
   font-weight: var(--font-weight-medium);
 }
 
-/*    Leaf body                                                  */
-/*
- * chat / tool   unit    dock header(30) + body        
- * flex   +    1fr    Terminal/Files/Chat       leafBody 
- */
+/* Leaf body：chat / 工具内容。chrome 是叶上兄弟（UnitChromeActions / LeafToolTabStrip）。 */
 
 .leafBody {
-  /*     strip / RightToolDockHeader             height:100%     +body    clip */
+  /* chrome 在 leafBody 外；body 吃剩余高，勿写成 height:100% 把兄弟裁掉 */
   flex: 1 1 0%;
   min-width: 0;
   min-height: 0;

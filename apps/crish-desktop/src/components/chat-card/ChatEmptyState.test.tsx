@@ -25,7 +25,7 @@ function stubProject(name = 'conex'): void {
 describe('ChatEmptyState', () => {
   it('session-empty 欢迎面：我们该在 {项目} 中处理什么？', () => {
     stubProject('conex');
-    render(
+    const { container } = render(
       <ChatEmptyState kind="session-empty" onSetChatInput={vi.fn()} />
     );
     const title = screen.getByRole('heading', { level: 3 });
@@ -33,6 +33,8 @@ describe('ChatEmptyState', () => {
       '我们该在conex中处理什么？'
     );
     expect(screen.queryByText('正在加载消息')).toBeNull();
+    expect(container.textContent).not.toMatch(/打开文件/);
+    expect(container.querySelector('[data-unit-chrome-actions]')).toBeNull();
   });
 
   it('messagesLoading 不卸载欢迎面，只出轻量指示、不出快捷 prompt', () => {
