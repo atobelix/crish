@@ -1,10 +1,11 @@
 import React from 'react';
-import { Select, Switch } from '../ui';
+import { Input, SegmentedControl, Select, Switch } from '../ui';
 import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
+import uiStyles from './SettingsUI.module.css';
 
 export interface SchemaProperty {
   key: string;
@@ -103,27 +104,18 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                 );
               } else if (prop.type === 'string') {
                 control = (
-                  <input
-                    id={domId}
-                    type="text"
-                    className="ui-text-input settings-text-input"
-                    value={String(val || '')}
-                    disabled={!ready}
-                    placeholder={prop.placeholder || ''}
-                    onChange={(e) => {
-                      void onSave({ [prop.key]: e.target.value });
-                    }}
-                    style={{
-                      padding: '4px 8px',
-                      borderRadius: 'var(--radius-sm, 6px)',
-                      border: '1px solid var(--border-color)',
-                      background: 'var(--bg-card)',
-                      color: 'var(--text-primary)',
-                      fontSize: 'var(--font-size-sm)',
-                      fontFamily: 'inherit',
-                      width: '180px',
-                    }}
-                  />
+                  <div className={uiStyles.controlInput}>
+                    <Input
+                      id={domId}
+                      size="sm"
+                      value={String(val || '')}
+                      disabled={!ready}
+                      placeholder={prop.placeholder || ''}
+                      onChange={(e) => {
+                        void onSave({ [prop.key]: e.target.value });
+                      }}
+                    />
+                  </div>
                 );
               } else if (prop.type === 'range') {
                 const numVal = Number(val ?? prop.min ?? 0);
@@ -207,23 +199,19 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                 );
               } else if (prop.type === 'toggle-group') {
                 control = (
-                  <div className="ui-segment">
-                    {(prop.toggleOptions || []).map((opt) => {
-                      const isActive = String(val) === opt.value;
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          className={`ui-segment-item${isActive ? ' active' : ''}`}
-                          disabled={!ready}
-                          aria-pressed={isActive}
-                          onClick={() => void onSave({ [prop.key]: opt.value })}
-                        >
-                          {opt.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <SegmentedControl
+                    aria-label={prop.title}
+                    size="sm"
+                    value={String(val ?? '')}
+                    disabled={!ready}
+                    options={(prop.toggleOptions || []).map((opt) => ({
+                      value: opt.value,
+                      label: opt.label,
+                    }))}
+                    onChange={(v) => {
+                      void onSave({ [prop.key]: v });
+                    }}
+                  />
                 );
               }
 

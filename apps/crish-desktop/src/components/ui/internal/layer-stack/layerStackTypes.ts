@@ -80,6 +80,16 @@ export const LAYER_TYPE_PRIORITY: Record<LayerType, number> = {
   'virtual-interceptor': 100,
 };
 
+/** 点击展开互斥：登记时驱逐同级，不只入栈 */
+export const EXCLUSIVE_PEER_LAYER_TYPES: ReadonlySet<LayerType> = new Set([
+  'dropdown-menu',
+  'context-menu',
+]);
+
+export function isExclusivePeerLayerType(type: LayerType): boolean {
+  return EXCLUSIVE_PEER_LAYER_TYPES.has(type);
+}
+
 export const PROCESSED_EVENTS = new WeakSet<Event>();
 
 /**

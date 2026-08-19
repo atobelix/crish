@@ -251,6 +251,23 @@ describe('ui/Dialog', () => {
     render(<DialogHarness title="层级" classNames={{ overlay: 'custom-overlay' }} />);
     const overlay = screen.getByRole('dialog').parentElement!;
     expect(overlay.classList.contains('custom-overlay')).toBe(true);
+    expect(overlay).toHaveAttribute('data-dialog-overlay');
+  });
+
+  it('dismissible=false 时 onEscapeKeyDown 仍由 LayerStack 调用', () => {
+    const onEscapeKeyDown = vi.fn(() => true);
+    const onClose = vi.fn();
+    render(
+      <DialogHarness
+        title="设置"
+        dismissible={false}
+        onClose={onClose}
+        onEscapeKeyDown={onEscapeKeyDown}
+      />
+    );
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onEscapeKeyDown).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it('嵌套 Dialog：一次 Esc 只关闭最顶层（F7-F5）', () => {

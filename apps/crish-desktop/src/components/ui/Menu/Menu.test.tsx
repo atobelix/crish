@@ -12,6 +12,8 @@ import {
   waitFor,
 } from '@testing-library/react';
 import { Menu } from './Menu';
+import { Dialog } from '../Dialog/Dialog';
+import { layerStackService } from '../internal/layer-stack/LayerStackService';
 import styles from './Menu.module.css';
 
 const TRIGGER_TEXT = '菜单触发器';
@@ -44,6 +46,7 @@ function ControlledMenu({
 
 afterEach(() => {
   cleanup();
+  layerStackService.dispose();
   vi.restoreAllMocks();
 });
 
@@ -306,6 +309,25 @@ describe('ui/Menu', () => {
       delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
     }
   });
+
+  it('Dialog 内 Menu portal 进 overlay，不挂 body（设置壳 z 压不住下拉）', async () => {
+    render(
+      <Dialog open onClose={() => {}} title="设置">
+        <Menu
+          trigger={<button type="button">{TRIGGER_TEXT}</button>}
+          options={[{ id: 'a', label: '选项甲' }]}
+        />
+      </Dialog>
+    );
+    fireEvent.click(screen.getByText(TRIGGER_TEXT));
+    const item = await screen.findByRole('menuitem', { name: /选项甲/ });
+    const overlay = document.querySelector('[data-dialog-overlay]');
+    expect(overlay).toBeTruthy();
+    await waitFor(() => {
+      expect(overlay?.contains(item)).toBe(true);
+    });
+    expect(item.parentElement).not.toBe(document.body);
+  });
 });
 
 describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
@@ -393,6 +415,34 @@ describe('ui/Menu children 模式键盘漫游（08-步5 T4-4，P2-8）', () => {
     const content = input.closest('[role="dialog"]') as HTMLElement;
     fireEvent.keyDown(content, { key: 'ArrowDown' });
     expect(input).toHaveFocus();
+  });
+
+  it('打开第二个 Menu 时关闭第一个（同级互斥）', async () => {
+    render(
+      <>
+        <Menu
+          trigger={<button type="button">菜单甲</button>}
+          options={[{ id: 'a', label: '选项甲' }]}
+        />
+        <Menu
+          trigger={<button type="button">菜单乙</button>}
+          options={[{ id: 'b', label: '选项乙' }]}
+        />
+      </>
+    );
+    fireEvent.click(screen.getByText('菜单甲'));
+    expect(
+      await screen.findByRole('menuitem', { name: /选项甲/ })
+    ).toBeTruthy();
+    fireEvent.click(screen.getByText('菜单乙'));
+    expect(
+      await screen.findByRole('menuitem', { name: /选项乙/ })
+    ).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('menuitem', { name: /选项甲/ })
+      ).not.toBeInTheDocument()
+    );
   });
 
   it('Anchor 模式：点击外部 Anchor 按钮关闭时，不发生开→关→开振荡', async () => {

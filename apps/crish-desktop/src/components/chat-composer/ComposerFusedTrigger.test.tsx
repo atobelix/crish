@@ -71,12 +71,29 @@ describe('ComposerFusedTrigger（S4 融合触发）', () => {
     const item = await screen.findByRole('menuitem', { name: /深入/ });
     fireEvent.click(item);
     await waitFor(() => {
-      expect(useSettingsStore.getState().appSettings?.defaultThinkingLevel).toBe(
-        'high'
-      );
+      expect(
+        useSettingsStore.getState().appSettings?.defaultThinkingLevel
+      ).toBe('high');
     });
     expect(updateSettings).toHaveBeenCalledWith({
       defaultThinkingLevel: 'high',
     });
+  });
+
+  it('再点思考档关闭菜单且不重开', async () => {
+    render(
+      <ComposerFusedTrigger>
+        <span>model-a</span>
+      </ComposerFusedTrigger>
+    );
+    const trigger = screen.getByTestId('composer-thinking-trigger');
+    fireEvent.click(trigger);
+    expect(await screen.findByRole('menuitem', { name: /深入/ })).toBeTruthy();
+    fireEvent.pointerDown(trigger);
+    fireEvent.pointerUp(trigger);
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(screen.queryByRole('menuitem', { name: /深入/ })).toBeNull()
+    );
   });
 });

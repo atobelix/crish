@@ -85,6 +85,7 @@ const StatusDiagnosticsPanel = lazy(() =>
 );
 
 type TabComponentProps = {
+  onBlockingOverlayChange?: (open: boolean) => void;
   _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
@@ -252,6 +253,7 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
       variant="fullscreen"
       ariaLabel="设置"
       initialFocusRef={nav.searchInputRef}
+      onEscapeKeyDown={nav.handleSettingsEscape}
       classNames={{ panel: styles.settingsCover, overlay: styles.settingsCoverOverlay }}
     >
       <div
@@ -319,9 +321,11 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                 title="设置页面出错"
               >
                 <ActiveTabComponent
-                  
-                  {...(safeActiveTab === 'rules'
-                    ? { _onBlockingOverlayChange: setRulesModalOpen }
+                  {...(safeActiveTab === 'rules' ||
+                  safeActiveTab === 'plugins' ||
+                  safeActiveTab === 'skills' ||
+                  safeActiveTab === 'mcp'
+                    ? { onBlockingOverlayChange: setRulesModalOpen }
                     : {})}
                 />
               </AppErrorBoundary>

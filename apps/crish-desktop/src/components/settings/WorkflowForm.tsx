@@ -11,8 +11,9 @@ import {
   WORKFLOW_SCHEDULE_TYPES,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
-import { Button, Select, Tooltip } from '../ui';
+import { Button, Input, Select, Tooltip } from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
+import scheduleStyles from './SettingsScheduleTab.module.css';
 
 export type WorkflowFormProps = {
   variant: 'settings' | 'chat';
@@ -48,16 +49,18 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
 
   const nameInput =
     settingsVariant ? (
-      <input
-        className="settings-field-input"
-        placeholder="名称"
-        value={draft.name}
-        disabled={busy}
-        onChange={(e) => onDraftChange({ ...draft, name: e.target.value })}
-        onBlur={onNameBlur}
-        aria-label="名称"
-        autoComplete="off"
-      />
+      <div className={scheduleStyles.formField}>
+        <Input
+          size="sm"
+          placeholder="名称"
+          value={draft.name}
+          disabled={busy}
+          onChange={(e) => onDraftChange({ ...draft, name: e.target.value })}
+          onBlur={onNameBlur}
+          aria-label="名称"
+          autoComplete="off"
+        />
+      </div>
     ) : (
       <label className={styles.schedField}>
         <span className={styles.schedFieldLabel}>名称</span>
@@ -74,15 +77,17 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     );
 
   const promptInput = settingsVariant ? (
-    <input
-      className="settings-field-input sched-settings-prompt"
-      placeholder="要执行的内容"
-      value={draft.prompt}
-      disabled={busy}
-      onChange={(e) => onDraftChange({ ...draft, prompt: e.target.value })}
-      aria-label="执行内容"
-      autoComplete="off"
-    />
+    <div className={scheduleStyles.formField}>
+      <Input
+        size="sm"
+        placeholder="要执行的内容"
+        value={draft.prompt}
+        disabled={busy}
+        onChange={(e) => onDraftChange({ ...draft, prompt: e.target.value })}
+        aria-label="执行内容"
+        autoComplete="off"
+      />
+    </div>
   ) : (
     <label className={styles.schedField}>
       <span className={styles.schedFieldLabel}>要做什么</span>
@@ -122,8 +127,8 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
 
   const dailyField = draft.scheduleType === 'daily' ? (
     settingsVariant ? (
-      <input
-        className="settings-field-input"
+      <Input
+        size="sm"
         type="time"
         value={draft.dailyTime}
         disabled={busy}
@@ -146,8 +151,8 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
 
   const intervalField = draft.scheduleType === 'intervalMinutes' ? (
     settingsVariant ? (
-      <input
-        className="settings-field-input"
+      <Input
+        size="sm"
         type="number"
         min={WORKFLOW_INTERVAL_MINUTES_MIN}
         max={WORKFLOW_INTERVAL_MINUTES_MAX}
@@ -186,28 +191,29 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     return (
       <div
         id={formId}
-        className="sched-settings-form"
+        className={scheduleStyles.form}
         role="form"
         aria-label={isEditing ? '编辑定时任务' : '新建定时任务'}
       >
-        <div className="sched-preset-chips" role="group" aria-label="模板">
+        <div className={scheduleStyles.presetChips} role="group" aria-label="模板">
           {WORKFLOW_SCHEDULE_PRESETS.map((p) => (
-            <button
+            <Button
               key={p.id}
               type="button"
-              className="sched-preset-chip"
+              variant="secondary"
+              size="sm"
               disabled={busy}
               onClick={() => onApplyPreset(p.id)}
             >
               {p.label}
-            </button>
+            </Button>
           ))}
         </div>
-        <div className="sched-settings-form-row sched-settings-form-row--fields">
+        <div className={scheduleStyles.formRow}>
           {nameInput}
           {promptInput}
         </div>
-        <div className="sched-settings-form-row">
+        <div className={scheduleStyles.formRow}>
           {scheduleSelect}
           {dailyField}
           {intervalField}

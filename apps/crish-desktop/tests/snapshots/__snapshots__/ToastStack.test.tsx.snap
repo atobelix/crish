@@ -7,76 +7,115 @@ exports[`ToastStack snapshots > renders multiple toasts 1`] = `
   <div
     aria-live="polite"
     class="_toastAlert_9bce87"
+    data-toast-type="info"
     role="status"
   >
-    <span>
+    <span
+      class="_toastMessage_9bce87"
+    >
       第一条通知
     </span>
     <button
       aria-label="关闭通知"
-      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
-      <span
+      <svg
         aria-hidden="true"
-        class="_buttonIcon_ae1db5"
+        class="lucide lucide-x"
+        fill="none"
+        height="12"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="12"
+        xmlns="http://www.w3.org/2000/svg"
       >
-        <span
-          aria-hidden="true"
-        >
-          ×
-        </span>
-      </span>
+        <path
+          d="M18 6 6 18"
+        />
+        <path
+          d="m6 6 12 12"
+        />
+      </svg>
     </button>
   </div>
   <div
     aria-live="polite"
     class="_toastAlert_9bce87"
+    data-toast-type="success"
     role="status"
   >
-    <span>
+    <span
+      class="_toastMessage_9bce87"
+    >
       第二条通知
     </span>
     <button
       aria-label="关闭通知"
-      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
-      <span
+      <svg
         aria-hidden="true"
-        class="_buttonIcon_ae1db5"
+        class="lucide lucide-x"
+        fill="none"
+        height="12"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="12"
+        xmlns="http://www.w3.org/2000/svg"
       >
-        <span
-          aria-hidden="true"
-        >
-          ×
-        </span>
-      </span>
+        <path
+          d="M18 6 6 18"
+        />
+        <path
+          d="m6 6 12 12"
+        />
+      </svg>
     </button>
   </div>
   <div
     aria-live="polite"
     class="_toastAlert_9bce87"
+    data-toast-type="warning"
     role="status"
   >
-    <span>
+    <span
+      class="_toastMessage_9bce87"
+    >
       警告信息
     </span>
     <button
       aria-label="关闭通知"
-      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
-      <span
+      <svg
         aria-hidden="true"
-        class="_buttonIcon_ae1db5"
+        class="lucide lucide-x"
+        fill="none"
+        height="12"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="12"
+        xmlns="http://www.w3.org/2000/svg"
       >
-        <span
-          aria-hidden="true"
-        >
-          ×
-        </span>
-      </span>
+        <path
+          d="M18 6 6 18"
+        />
+        <path
+          d="m6 6 12 12"
+        />
+      </svg>
     </button>
   </div>
 </div>
@@ -89,26 +128,39 @@ exports[`ToastStack snapshots > renders single toast 1`] = `
   <div
     aria-live="polite"
     class="_toastAlert_9bce87"
+    data-toast-type="info"
     role="status"
   >
-    <span>
+    <span
+      class="_toastMessage_9bce87"
+    >
       操作成功
     </span>
     <button
       aria-label="关闭通知"
-      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
-      <span
+      <svg
         aria-hidden="true"
-        class="_buttonIcon_ae1db5"
+        class="lucide lucide-x"
+        fill="none"
+        height="12"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="12"
+        xmlns="http://www.w3.org/2000/svg"
       >
-        <span
-          aria-hidden="true"
-        >
-          ×
-        </span>
-      </span>
+        <path
+          d="M18 6 6 18"
+        />
+        <path
+          d="m6 6 12 12"
+        />
+      </svg>
     </button>
   </div>
 </div>
@@ -121,36 +173,45 @@ exports[`ToastStack snapshots > renders toast with undo 1`] = `
   <div
     aria-live="assertive"
     class="_toastAlert_9bce87"
+    data-toast-type="error"
     role="status"
   >
-    <span>
+    <span
+      class="_toastMessage_9bce87"
+    >
       文件已删除
     </span>
     <button
-      class="_button_ae1db5 _buttonSecondary_ae1db5 _buttonSm_ae1db5 _toastUndoBtn_9bce87"
+      class="_toastUndoBtn_9bce87"
       type="button"
     >
-      <span
-        class="_buttonLabel_ae1db5"
-      >
-        撤销
-      </span>
+      撤销
     </button>
     <button
       aria-label="关闭通知"
-      class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toastDismissBtn_9bce87"
+      class="_toastDismissBtn_9bce87"
       type="button"
     >
-      <span
+      <svg
         aria-hidden="true"
-        class="_buttonIcon_ae1db5"
+        class="lucide lucide-x"
+        fill="none"
+        height="12"
+        stroke="currentColor"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="2"
+        viewBox="0 0 24 24"
+        width="12"
+        xmlns="http://www.w3.org/2000/svg"
       >
-        <span
-          aria-hidden="true"
-        >
-          ×
-        </span>
-      </span>
+        <path
+          d="M18 6 6 18"
+        />
+        <path
+          d="m6 6 12 12"
+        />
+      </svg>
     </button>
   </div>
 </div>

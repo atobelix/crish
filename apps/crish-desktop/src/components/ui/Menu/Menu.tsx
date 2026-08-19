@@ -13,9 +13,11 @@
 import React, { useCallback, useEffect, useRef, useState, useId } from 'react';
 import * as Popover from '@radix-ui/react-popover';
 import { handleMenuKeyDown } from './menuKeyNavigation';
+import { shouldSuppressMenuReopen } from './menuOpenGuard';
 import { Tooltip } from '../Tooltip/Tooltip';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 import { layerStackService } from '../internal/layer-stack/LayerStackManager';
+import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
 import styles from './Menu.module.css';
 import type { SelectOptionItem } from './types';
 
@@ -163,6 +165,23 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   const contentRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const menuId = useId();
+  const dialogOverlay = React.useContext(DialogOverlayContext);
+
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen && layerStackService.wasLayerDismissedThisGesture(menuId)) {
+        return;
+      }
+      if (!isControlled) {
+        setInternalOpen(nextOpen);
+      }
+      externalOnOpenChange?.(nextOpen);
+      if (!nextOpen) {
+        setFocusedIndex(-1);
+      }
+    },
+    [isControlled, externalOnOpenChange, menuId]
+  );
 
   useLayerRegistration(
     {
@@ -177,19 +196,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
       anchorRef: anchor ?? triggerRef,
     },
     isOpen
-  );
-
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      if (!isControlled) {
-        setInternalOpen(nextOpen);
-      }
-      externalOnOpenChange?.(nextOpen);
-      if (!nextOpen) {
-        setFocusedIndex(-1);
-      }
-    },
-    [isControlled, externalOnOpenChange]
   );
 
   // F7 F2：ARIA menu 模式——打开时初始焦点落首个未禁用项。
@@ -298,7 +304,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
               }
             },
             onClick: (e: React.MouseEvent) => {
-              if (layerStackService.isWithinCooldown(50)) {
+              if (shouldSuppressMenuReopen(triggerRef.current)) {
                 e.preventDefault();
                 return;
               }
@@ -338,7 +344,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
       {renderedTrigger}
 
-      <Popover.Portal>
+      <Popover.Portal container={dialogOverlay ?? undefined}>
         <Popover.Content
           ref={contentRef}
           // F7 F2：非模态菜单不得声明 aria-modal——aria-modal=true 会

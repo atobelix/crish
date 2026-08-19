@@ -3,3 +3,13 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+.shortcutKeyBtn {
+  min-width: 88px;
+  font-variant-numeric: tabular-nums;
+}
+
+.recording {
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}

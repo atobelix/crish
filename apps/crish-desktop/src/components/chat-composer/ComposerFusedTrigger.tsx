@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ComposerFusedTrigger.module.css';
 import { Menu, Tooltip } from '../ui';
+import { toggleExclusiveMenu } from '../ui/Menu';
 import {
   THINKING_LEVEL_LABELS,
   fetchDescribeEffortsSnapshot,
@@ -103,18 +104,19 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
             aria-expanded={open}
             aria-label={`思考档位：${currentLabel}`}
             data-testid="composer-thinking-trigger"
-            onClick={() => setOpen((v) => !v)}
+            onClick={() => toggleExclusiveMenu(open, setOpen, btnRef.current)}
           >
             <span>{currentLabel}</span>
-            <Lucide.ChevronDown
-              size={11}
-              className={styles.chev}
-              aria-hidden
-            />
+            <Lucide.ChevronDown size={11} className={styles.chev} aria-hidden />
           </button>
         </Tooltip>
         <Menu
-          openState={{ open, onOpenChange: setOpen }}
+          openState={{
+            open,
+            onOpenChange: (nextOpen) => {
+              if (!nextOpen) setOpen(false);
+            },
+          }}
           anchor={btnRef}
           options={menuOptions}
           position={{ side: 'top', align: 'end', sideOffset: 6 }}

@@ -121,6 +121,9 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
+  const [restoreLastWorkspace, setRestoreLastWorkspaceState] = useState(() =>
+    readRestoreLastWorkspace()
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -244,9 +247,9 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       fontSize: 14 + (personalization.fontSizeAdjust ?? 0),
       transitionEnabled: personalization.themeAutoTimeTransition ?? false,
       vibrantMode: personalization.themeBrightnessVibrant ?? false,
-      restoreLastWorkspace: readRestoreLastWorkspace(),
+      restoreLastWorkspace,
     };
-  }, [settings, uiSize, shellChromeMode, personalization]);
+  }, [settings, uiSize, shellChromeMode, personalization, restoreLastWorkspace]);
 
   const appearanceSchema = useAppearanceSchema({
     activeTheme,
@@ -291,9 +294,11 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
           themeBrightnessVibrant: updates.vibrantMode as boolean,
         });
       if ('restoreLastWorkspace' in updates) {
-        setRestoreLastWorkspace(Boolean(updates.restoreLastWorkspace));
+        const next = Boolean(updates.restoreLastWorkspace);
+        setRestoreLastWorkspaceState(next);
+        setRestoreLastWorkspace(next);
         toast.show(
-          updates.restoreLastWorkspace
+          next
             ? '已开启：下次启动将尝试恢复工作台布局'
             : '已关闭：下次启动为干净新对话'
         );

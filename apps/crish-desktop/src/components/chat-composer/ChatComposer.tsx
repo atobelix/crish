@@ -29,6 +29,7 @@ import { AppErrorBoundary } from '../AppErrorBoundary';
 import { ComposePlusMenu } from './ComposePlusMenu';
 import { PermissionModeMenu } from './PermissionModeMenu';
 import { Button, Tooltip } from '../ui';
+import { shouldSuppressMenuReopen } from '../ui/Menu';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment, QueuedMessage } from '../../hooks/useChatStream';
 import { ComposerField } from './ComposerField';
@@ -248,9 +249,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       if (rawInput) {
         setChatInput(rawInput);
         try {
-          const { getCompositionRoot } = await import(
-            '../../app/compositionRoot'
-          );
+          const { getCompositionRoot } =
+            await import('../../app/compositionRoot');
           const root = getCompositionRoot();
           const activeSessionId =
             root.session.getActiveSessionId?.() ??
@@ -387,6 +387,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 aria-expanded={showPlusMenu}
                 aria-controls={showPlusMenu ? plusMenuId : undefined}
                 onClick={() => {
+                  if (shouldSuppressMenuReopen(plusBtnRef.current)) return;
                   if (showPlusMenu) {
                     setShowPlusMenu(false);
                     requestAnimationFrame(() => plusBtnRef.current?.focus());

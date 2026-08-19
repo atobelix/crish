@@ -38,9 +38,9 @@
   box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
+/* 按下色变，无缩放 */
 .item:active {
-  transform: scale(0.98);
-  transition: transform var(--transition-press, 80ms ease-out);
+  background: var(--bg-active);
 }
 
 .icon {

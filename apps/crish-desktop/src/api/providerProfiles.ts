@@ -25,7 +25,9 @@ export {
 } from './provider-profiles/profileCatalog';
 
 export {
+  findProfileByDisplayName,
   flattenModelChoicesFrom,
+  foldProfilesByDisplayName,
   isEmptyModelCatalog,
   isLegacySeedModelId,
   mergeModelIds,
@@ -36,6 +38,7 @@ export {
   pickDefaultModelId,
   pickDefaultModelSelection,
   profileDisplayLabel,
+  profileDisplayNameKey,
   profileHasKey,
   profileHasUsableModels,
   sameModelSet,

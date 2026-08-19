@@ -18,7 +18,6 @@
   pointer-events: auto;
   isolation: isolate;
   overflow: hidden;
-  z-index: var(--z-modal, 1000);
 }
 
 .settingsPanel {
@@ -136,6 +135,8 @@
   flex-direction: column;
   gap: var(--space-0_5, 2px);
   padding: 8px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
 }
 
 .navEmpty {
@@ -200,6 +201,8 @@
   overflow-y: auto; /*                (X = W) */
   overflow-x: hidden;
   overscroll-behavior: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
   contain: strict; /*      */
   align-items: stretch;
 }
@@ -257,7 +260,7 @@
   color: var(--text-primary);
 }
 
-/*     --dialog-z     --z-settings-panel    */
+/* 全屏壳层叠只挂 overlay；内部 Menu portal 进此节点，局部 --z-dropdown 即可压过面板 */
 .settingsCoverOverlay {
   --dialog-z: var(--z-modal, 1000);
 }

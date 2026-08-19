@@ -12,6 +12,10 @@ import { SettingsPage } from './SettingsUI';
 import { Button } from '../ui';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
+import {
+  normalizeSendShortcut,
+  notifySendShortcutChanged,
+} from '../../api/store-access/settingsAccess';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
@@ -94,20 +98,12 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
           },
           {
             key: 'sendShortcut',
-            type: 'select',
+            type: 'toggle-group',
             title: '发送消息快捷键',
-            desc: '选择对话输入框中的消息发送组合按键',
-            options: [
-              {
-                value: 'enter',
-                label: 'Enter 发送，Shift+Enter 换行',
-                hint: '默认',
-              },
-              {
-                value: 'ctrlEnter',
-                label: 'Ctrl+Enter 发送，Enter 换行',
-                hint: '防止误触',
-              },
+            desc: 'Enter 发送（Shift+Enter 换行），或 Ctrl+Enter 发送（Enter 换行）',
+            toggleOptions: [
+              { value: 'enter', label: 'Enter 发送' },
+              { value: 'ctrlEnter', label: 'Ctrl+Enter 发送' },
             ],
           },
           {
@@ -177,11 +173,20 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
   // Map values correctly to feed the dynamic fields
   const schemaValues = useMemo(() => {
     if (!settings) return null;
-    return settings;
+    return {
+      ...settings,
+      sendShortcut: normalizeSendShortcut(settings.sendShortcut),
+    };
   }, [settings]);
 
   const handleSave = useCallback(
     async (updates: Record<string, unknown>) => {
+      if ('sendShortcut' in updates) {
+        const next = normalizeSendShortcut(updates.sendShortcut);
+        const ok = await save({ sendShortcut: next });
+        if (ok) notifySendShortcutChanged();
+        return;
+      }
       if ('tabModeEnabled' in updates) {
         const on = Boolean(updates.tabModeEnabled);
         setTabModeEnabled(on);

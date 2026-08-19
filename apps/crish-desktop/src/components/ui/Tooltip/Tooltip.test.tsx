@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
- * ui/Tooltip 测试：hover 展示、disabled 短路、ref 透传（历史修复回归）
+ * ui/Tooltip 测试：单例、delayShow 快移、滚动即灭、离屏不钳回
  */
+/* eslint-disable max-lines-per-function, react/no-multi-comp */
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
@@ -10,19 +11,36 @@ import {
   fireEvent,
   cleanup,
   act,
+  waitFor,
 } from '@testing-library/react';
-import { Tooltip } from './Tooltip';
+import { Tooltip, type TooltipProps } from './Tooltip';
+import {
+  DEFAULT_DELAY_SHOW_MS,
+  resetTooltipControllerForTests,
+} from './tooltipController';
+import { isTriggerOffscreen } from './tooltipPositioning';
+import { layerStackManager } from '../internal/layer-stack/LayerStackManager';
 import styles from './Tooltip.module.css';
 import { MockPhysicalGeometryEngine } from '../../../test-utils/MockPhysicalGeometryEngine';
 
+/** 几何/透传用例跳过 delay，避免与意图停留断言缠在一起 */
+function Tip(props: TooltipProps) {
+  return <Tooltip {...props} delayShow={props.delayShow ?? 0} />;
+}
+
 afterEach(() => {
   cleanup();
+  resetTooltipControllerForTests();
+  layerStackManager.dispose();
+  document.documentElement.removeAttribute('data-floating-active');
+  document.body?.removeAttribute('data-floating-active');
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe('ui/Tooltip', () => {
-  it('hover 触发器时经 portal 渲染 tooltip 角色', async () => {
+  it('mouseEnter 未满 delayShow 不渲染；停满才经 portal 出现', () => {
+    vi.useFakeTimers();
     render(
       <Tooltip content="提示内容">
         <button type="button">悬停目标</button>
@@ -30,44 +48,97 @@ describe('ui/Tooltip', () => {
     );
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     fireEvent.mouseEnter(screen.getByText('悬停目标'));
-    const tip = await screen.findByRole('tooltip');
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(DEFAULT_DELAY_SHOW_MS - 1);
+    });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    const tip = screen.getByRole('tooltip');
     expect(tip).toHaveTextContent('提示内容');
     expect(tip.parentElement).toBe(document.body);
+  });
+
+  it('快移未满 delayShow：一颗都不出', () => {
+    vi.useFakeTimers();
+    render(
+      <>
+        <Tooltip content="快移甲">
+          <button type="button">快移目标甲</button>
+        </Tooltip>
+        <Tooltip content="快移乙">
+          <button type="button">快移目标乙</button>
+        </Tooltip>
+      </>
+    );
+    fireEvent.mouseEnter(screen.getByText('快移目标甲'));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    fireEvent.mouseLeave(screen.getByText('快移目标甲'));
+    fireEvent.mouseEnter(screen.getByText('快移目标乙'));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    fireEvent.mouseLeave(screen.getByText('快移目标乙'));
+    act(() => {
+      vi.advanceTimersByTime(DEFAULT_DELAY_SHOW_MS + 50);
+    });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('同时 hover 两颗只渲染一个 portal（后来者关掉前者）', () => {
+    render(
+      <>
+        <Tip content="提示甲">
+          <button type="button">目标甲</button>
+        </Tip>
+        <Tip content="提示乙">
+          <button type="button">目标乙</button>
+        </Tip>
+      </>
+    );
+    fireEvent.mouseEnter(screen.getByText('目标甲'));
+    expect(screen.getByRole('tooltip')).toHaveTextContent('提示甲');
+    fireEvent.mouseEnter(screen.getByText('目标乙'));
+    const tips = screen.getAllByRole('tooltip');
+    expect(tips).toHaveLength(1);
+    expect(tips[0]).toHaveTextContent('提示乙');
   });
 
   it('mouseLeave 后隐藏（含 delayHide 延迟）', () => {
     vi.useFakeTimers();
     render(
-      <Tooltip content="延迟提示" delayHide={300}>
+      <Tip content="延迟提示" delayHide={300}>
         <button type="button">延迟目标</button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.mouseEnter(screen.getByText('延迟目标'));
-    // 推进到进入动画完成（双 rAF + 展示态），act 包裹保证更新冲刷
     act(() => vi.advanceTimersByTime(100));
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
 
     fireEvent.mouseLeave(screen.getByText('延迟目标'));
-    // 延迟未到（250ms < 300ms）：仍可见
     act(() => vi.advanceTimersByTime(250));
     expect(screen.getByRole('tooltip')).toBeInTheDocument();
-    // 延迟到点（300ms）+ exitDurationMs=0 立即卸载
     act(() => vi.advanceTimersByTime(100));
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
   });
 
   it('disabled 或空 content 时不渲染任何包裹行为', () => {
     const { rerender } = render(
-      <Tooltip content="禁用提示" disabled>
+      <Tip content="禁用提示" disabled>
         <button type="button">禁用目标</button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.mouseEnter(screen.getByText('禁用目标'));
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     rerender(
-      <Tooltip content="">
+      <Tip content="">
         <button type="button">空内容目标</button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.mouseEnter(screen.getByText('空内容目标'));
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
@@ -77,47 +148,45 @@ describe('ui/Tooltip', () => {
     const btnRef = { current: null as HTMLButtonElement | null };
     function Harness() {
       return (
-        <Tooltip
+        <Tip
           content="ref 提示"
           ref={btnRef as React.RefObject<HTMLButtonElement>}
         >
           <button type="button">ref 目标</button>
-        </Tooltip>
+        </Tip>
       );
     }
     render(<Harness />);
-    // 合并后的 ref 应指向真实 DOM 按钮（子元素自身无 ref 时由 forwardRef 接管）
     expect(btnRef.current).toBe(screen.getByText('ref 目标'));
   });
 
-  it('子元素自身 onClick 与外部注入事件均不被截断（历史修复回归）', async () => {
+  it('子元素自身 onClick 与外部注入事件均不被截断（历史修复回归）', () => {
     const childOnClick = vi.fn();
     render(
-      <Tooltip content="事件提示">
+      <Tip content="事件提示">
         <button type="button" onClick={childOnClick}>
           事件目标
         </button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.click(screen.getByText('事件目标'));
     expect(childOnClick).toHaveBeenCalledTimes(1);
-    // 注入的事件仍可触发（经由透传的 onMouseEnter）
     fireEvent.mouseEnter(screen.getByText('事件目标'));
-    await screen.findByRole('tooltip');
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
   });
 
   it('side 定位类切换（CSS Modules 哈希类）', () => {
     const { rerender } = render(
-      <Tooltip content="下侧" side="bottom">
+      <Tip content="下侧" side="bottom">
         <button type="button">下侧目标</button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.mouseEnter(screen.getByText('下侧目标'));
     expect(screen.getByRole('tooltip')).toHaveClass(styles.bottom);
     rerender(
-      <Tooltip content="右侧" side="right">
+      <Tip content="右侧" side="right">
         <button type="button">右侧目标</button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.mouseEnter(screen.getByText('右侧目标'));
     expect(screen.getByRole('tooltip')).toHaveClass(styles.right);
@@ -126,9 +195,9 @@ describe('ui/Tooltip', () => {
   it('键盘 focus/blur 触发与隐藏提示（F7-F8）', () => {
     vi.useFakeTimers();
     render(
-      <Tooltip content="键盘提示">
+      <Tip content="键盘提示">
         <button type="button">焦点目标</button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.focus(screen.getByText('焦点目标'));
     act(() => vi.advanceTimersByTime(100));
@@ -140,9 +209,9 @@ describe('ui/Tooltip', () => {
 
   it('提示经 aria-describedby 关联触发元素（F7-F8）', () => {
     render(
-      <Tooltip content="关联描述">
+      <Tip content="关联描述">
         <button type="button">关联目标</button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.focus(screen.getByText('关联目标'));
     const tip = screen.getByRole('tooltip');
@@ -160,48 +229,108 @@ describe('ui/Tooltip', () => {
     engine.registerSelectorRect('[role="tooltip"]', { width: 200, height: 40 });
 
     render(
-      <Tooltip content="边缘提示" side="top">
+      <Tip content="边缘提示" side="top">
         <button type="button" data-mock-rect="700,100,100,30">
           边缘目标
         </button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.mouseEnter(screen.getByText('边缘目标'));
     const tip = screen.getByRole('tooltip');
-    // top 定位：left = rect.center - tipW/2 = 750 - 100 = 650，
-    // 右缘 650 + 200 = 850 > 800 → 钳回 800 - 8，left 应为 692
     expect(tip.style.left).toBe('692px');
     expect(tip.style.top).toBe('92px');
   });
 
-  it('滚动/视口变化后提示跟随目标重定位（F7-F8）', () => {
+  it('滚动 capture 立刻灭，不跟随重定位', () => {
     const engine = MockPhysicalGeometryEngine.getInstance();
     engine.setViewport({ width: 800, height: 600 });
     engine.registerSelectorRect('[role="tooltip"]', { width: 120, height: 40 });
 
     render(
-      <Tooltip content="跟随提示" side="top">
+      <Tip content="跟随提示" side="top">
         <button type="button" data-mock-rect="100,100,50,30">
           跟随目标
         </button>
-      </Tooltip>
+      </Tip>
     );
     fireEvent.mouseEnter(screen.getByText('跟随目标'));
-    const tip = screen.getByRole('tooltip');
-    const before = tip.style.left;
-
-    // 滚动后目标位移：重定位应以新 rect 计算
-    const btn = screen.getByText('跟随目标');
-    btn.setAttribute('data-mock-rect', '300,400,50,30');
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
     fireEvent.scroll(window);
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
 
-    expect(tip.style.left).not.toBe(before);
-    // 新 base left = 300 + 25 = 325（translate(-50%,-100%) 由 CSS 施加，
-    // 盒实际落于 325 - 60 = 265）；提示盒须完整留在视口内
-    expect(tip.style.left).toBe('325px');
-    const boxLeft = 325 - 120 / 2;
-    expect(boxLeft).toBeGreaterThanOrEqual(8);
-    expect(boxLeft + 120).toBeLessThanOrEqual(800 - 8);
+  it('resize / 窗口 blur 立刻灭', () => {
+    render(
+      <Tip content="失焦提示">
+        <button type="button">失焦目标</button>
+      </Tip>
+    );
+    fireEvent.mouseEnter(screen.getByText('失焦目标'));
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+
+    fireEvent.mouseEnter(screen.getByText('失焦目标'));
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(new Event('blur'));
+    });
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('目标离屏：不渲染，不钳回视口当残影', () => {
+    const engine = MockPhysicalGeometryEngine.getInstance();
+    engine.setViewport({ width: 800, height: 600 });
+    engine.registerSelectorRect('[role="tooltip"]', { width: 120, height: 40 });
+
+    render(
+      <Tip content="离屏提示" side="top">
+        <button type="button" data-mock-rect="100,800,50,30">
+          离屏目标
+        </button>
+      </Tip>
+    );
+    fireEvent.mouseEnter(screen.getByText('离屏目标'));
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('isTriggerOffscreen：无交集为离屏，相交则否', () => {
+    const engine = MockPhysicalGeometryEngine.getInstance();
+    engine.setViewport({ width: 800, height: 600 });
+    expect(isTriggerOffscreen(new DOMRect(100, 800, 50, 30))).toBe(true);
+    expect(isTriggerOffscreen(new DOMRect(-200, 100, 50, 30))).toBe(true);
+    expect(isTriggerOffscreen(new DOMRect(100, 100, 50, 30))).toBe(false);
+  });
+
+  it('菜单已开（isTooltipSilenced）时 hover 不显示', () => {
+    vi.spyOn(layerStackManager, 'isTooltipSilenced').mockReturnValue(true);
+    render(
+      <Tip content="不应出现">
+        <button type="button">被静音</button>
+      </Tip>
+    );
+    fireEvent.mouseEnter(screen.getByText('被静音'));
+    expect(layerStackManager.isTooltipSilenced).toHaveBeenCalled();
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+  });
+
+  it('菜单打开时立刻灭已显示的提示', async () => {
+    render(
+      <Tip content="将被灭">
+        <button type="button">先亮目标</button>
+      </Tip>
+    );
+    fireEvent.mouseEnter(screen.getByText('先亮目标'));
+    expect(screen.getByRole('tooltip')).toBeInTheDocument();
+    act(() => {
+      document.documentElement.setAttribute('data-floating-active', 'true');
+      document.body.setAttribute('data-floating-active', 'true');
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
+    });
   });
 
   describe('四向智能碰撞翻折与零遮挡断言 (4-Way Collision Flip)', () => {
@@ -265,21 +394,20 @@ describe('ui/Tooltip', () => {
       });
 
       render(
-        <Tooltip content="展开侧栏" side="top">
+        <Tip content="展开侧栏" side="top">
           <button type="button" data-mock-rect="100,5,28,28">
             侧栏按钮
           </button>
-        </Tooltip>
+        </Tip>
       );
       fireEvent.mouseEnter(screen.getByText('侧栏按钮'));
       const tip = screen.getByRole('tooltip');
 
-      // 翻折为 bottom
       expect(tip).toHaveClass(styles.bottom);
       expect(tip.style.getPropertyValue('--tooltip-translate')).toBe(
         'translate(-50%, 0)'
       );
-      expect(tip.style.top).toBe('41px'); // 5 + 28 + 8 = 41px
+      expect(tip.style.top).toBe('41px');
 
       const triggerRect = { left: 100, top: 5, right: 128, bottom: 33 };
       const tipRect = getRenderedTooltipRect(tip, 60, 28);
@@ -295,11 +423,11 @@ describe('ui/Tooltip', () => {
       });
 
       render(
-        <Tooltip content="操作按钮" side="top">
+        <Tip content="操作按钮" side="top">
           <button type="button" data-mock-rect="100,300,28,28">
             中部按钮
           </button>
-        </Tooltip>
+        </Tip>
       );
       fireEvent.mouseEnter(screen.getByText('中部按钮'));
       const tip = screen.getByRole('tooltip');
@@ -308,7 +436,7 @@ describe('ui/Tooltip', () => {
       expect(tip.style.getPropertyValue('--tooltip-translate')).toBe(
         'translate(-50%, -100%)'
       );
-      expect(tip.style.top).toBe('292px'); // 300 - 8 = 292px
+      expect(tip.style.top).toBe('292px');
 
       const triggerRect = { left: 100, top: 300, right: 128, bottom: 328 };
       const tipRect = getRenderedTooltipRect(tip, 60, 28);
@@ -324,21 +452,20 @@ describe('ui/Tooltip', () => {
       });
 
       render(
-        <Tooltip content="底部操作" side="bottom">
+        <Tip content="底部操作" side="bottom">
           <button type="button" data-mock-rect="100,570,28,28">
             底栏按钮
           </button>
-        </Tooltip>
+        </Tip>
       );
       fireEvent.mouseEnter(screen.getByText('底栏按钮'));
       const tip = screen.getByRole('tooltip');
 
-      // 翻折为 top
       expect(tip).toHaveClass(styles.top);
       expect(tip.style.getPropertyValue('--tooltip-translate')).toBe(
         'translate(-50%, -100%)'
       );
-      expect(tip.style.top).toBe('562px'); // 570 - 8 = 562px
+      expect(tip.style.top).toBe('562px');
 
       const triggerRect = { left: 100, top: 570, right: 128, bottom: 598 };
       const tipRect = getRenderedTooltipRect(tip, 60, 28);
@@ -354,11 +481,11 @@ describe('ui/Tooltip', () => {
       });
 
       render(
-        <Tooltip content="向下提示" side="bottom">
+        <Tip content="向下提示" side="bottom">
           <button type="button" data-mock-rect="100,200,28,28">
             中部下向按钮
           </button>
-        </Tooltip>
+        </Tip>
       );
       fireEvent.mouseEnter(screen.getByText('中部下向按钮'));
       const tip = screen.getByRole('tooltip');
@@ -367,7 +494,7 @@ describe('ui/Tooltip', () => {
       expect(tip.style.getPropertyValue('--tooltip-translate')).toBe(
         'translate(-50%, 0)'
       );
-      expect(tip.style.top).toBe('236px'); // 200 + 28 + 8 = 236px
+      expect(tip.style.top).toBe('236px');
 
       const triggerRect = { left: 100, top: 200, right: 128, bottom: 228 };
       const tipRect = getRenderedTooltipRect(tip, 60, 28);
@@ -383,21 +510,20 @@ describe('ui/Tooltip', () => {
       });
 
       render(
-        <Tooltip content="左向提示" side="left">
+        <Tip content="左向提示" side="left">
           <button type="button" data-mock-rect="5,200,28,28">
             左缘按钮
           </button>
-        </Tooltip>
+        </Tip>
       );
       fireEvent.mouseEnter(screen.getByText('左缘按钮'));
       const tip = screen.getByRole('tooltip');
 
-      // 翻折为 right
       expect(tip).toHaveClass(styles.right);
       expect(tip.style.getPropertyValue('--tooltip-translate')).toBe(
         'translate(0, -50%)'
       );
-      expect(tip.style.left).toBe('41px'); // 5 + 28 + 8 = 41px
+      expect(tip.style.left).toBe('41px');
 
       const triggerRect = { left: 5, top: 200, right: 33, bottom: 228 };
       const tipRect = getRenderedTooltipRect(tip, 60, 28);
@@ -413,21 +539,20 @@ describe('ui/Tooltip', () => {
       });
 
       render(
-        <Tooltip content="右向提示" side="right">
+        <Tip content="右向提示" side="right">
           <button type="button" data-mock-rect="770,200,28,28">
             右缘按钮
           </button>
-        </Tooltip>
+        </Tip>
       );
       fireEvent.mouseEnter(screen.getByText('右缘按钮'));
       const tip = screen.getByRole('tooltip');
 
-      // 翻折为 left
       expect(tip).toHaveClass(styles.left);
       expect(tip.style.getPropertyValue('--tooltip-translate')).toBe(
         'translate(-100%, -50%)'
       );
-      expect(tip.style.left).toBe('762px'); // 770 - 8 = 762px
+      expect(tip.style.left).toBe('762px');
 
       const triggerRect = { left: 770, top: 200, right: 798, bottom: 228 };
       const tipRect = getRenderedTooltipRect(tip, 60, 28);
@@ -443,19 +568,17 @@ describe('ui/Tooltip', () => {
       });
 
       render(
-        <Tooltip content="关闭窗口" side="top">
+        <Tip content="关闭窗口" side="top">
           <button type="button" data-mock-rect="770,5,25,25">
             关闭按钮
           </button>
-        </Tooltip>
+        </Tip>
       );
       fireEvent.mouseEnter(screen.getByText('关闭按钮'));
       const tip = screen.getByRole('tooltip');
 
-      // 纵向翻折为 bottom
       expect(tip).toHaveClass(styles.bottom);
-      expect(tip.style.top).toBe('38px'); // 5 + 25 + 8 = 38px
-      // 横向钳位在 800 - 80 - 8 = 712px，加 tipWidth/2 (40px) => 752px
+      expect(tip.style.top).toBe('38px');
       expect(tip.style.left).toBe('752px');
 
       const triggerRect = { left: 770, top: 5, right: 795, bottom: 30 };
@@ -474,11 +597,11 @@ describe('ui/Tooltip', () => {
       });
 
       render(
-        <Tooltip content="同步校验" side="top">
+        <Tip content="同步校验" side="top">
           <button type="button" data-mock-rect="100,5,28,28">
             测试同步
           </button>
-        </Tooltip>
+        </Tip>
       );
       fireEvent.mouseEnter(screen.getByText('测试同步'));
       const tip = screen.getByRole('tooltip');

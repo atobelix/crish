@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
+import * as Lucide from 'lucide-react';
 import type { AppToast } from '../../hooks/useToastQueue';
-import { Button } from '../ui';
 import styles from './ToastStack.module.css';
 
 type Props = {
@@ -8,7 +8,7 @@ type Props = {
   onDismiss: (id: string) => void;
 };
 
-/** Bottom-stacked toast notifications (Chinese UI). */
+/** 底栏堆叠通知。关闭是发丝图标，不用 ghost sm 灰块。 */
 export const ToastStack = ({ toasts, onDismiss }: Props) => {
   const [exitingToasts, setExitingToasts] = useState<Map<string, AppToast>>(
     new Map()
@@ -48,15 +48,14 @@ export const ToastStack = ({ toasts, onDismiss }: Props) => {
         <div
           key={toast.id}
           role="status"
+          data-toast-type={toast.type}
           aria-live={toast.ariaLive ?? 'polite'}
           className={`${styles.toastAlert}${exitingToasts.has(toast.id) ? ` ${styles.toastAlertExiting}` : ''}`}
         >
-          <span>{toast.message}</span>
+          <span className={styles.toastMessage}>{toast.message}</span>
           {toast.onUndo ? (
-            <Button
+            <button
               type="button"
-              variant="secondary"
-              size="sm"
               className={styles.toastUndoBtn}
               onClick={() => {
                 toast.onUndo?.();
@@ -64,17 +63,16 @@ export const ToastStack = ({ toasts, onDismiss }: Props) => {
               }}
             >
               撤销
-            </Button>
+            </button>
           ) : null}
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
             className={styles.toastDismissBtn}
             aria-label="关闭通知"
             onClick={() => handleDismiss(toast)}
-            icon={<span aria-hidden="true">×</span>}
-          />
+          >
+            <Lucide.X size={12} strokeWidth={2} aria-hidden="true" />
+          </button>
         </div>
       ))}
     </div>

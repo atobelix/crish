@@ -17,6 +17,15 @@ export const SettingsPage: React.FC<{
   </div>
 );
 
+export const SettingsHeadTools: React.FC<{
+  children: React.ReactNode;
+  className?: string;
+}> = ({ children, className = '' }) => (
+  <div className={`${styles.settingsHeadTools}${className ? ` ${className}` : ''}`}>
+    {children}
+  </div>
+);
+
 export const SettingsSection: React.FC<{
   title?: React.ReactNode;
   children: React.ReactNode;

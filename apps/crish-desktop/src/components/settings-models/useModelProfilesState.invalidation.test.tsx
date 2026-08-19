@@ -38,6 +38,10 @@ vi.mock('../../api/chat-bridge/editSessionConsumer', () => ({
 vi.mock('../../api/providerProfiles', () => ({
   addModelToProfile: vi.fn(),
   createCustomProfile: vi.fn((opts) => ({ id: 'custom-123', ...opts })),
+  findProfileByDisplayName: vi.fn(
+    (list: ProviderProfile[], name: string) =>
+      list.find((p) => p.name === name)
+  ),
   getActiveModelId: vi.fn(() => 'gpt-4o'),
   getActiveProfileId: vi.fn(() => 'preset-openai'),
   loadProfiles: mocks.loadProfiles,

@@ -8,3 +8,4 @@
 export { Menu } from './Menu';
 export type { MenuProps } from './Menu';
 export type { SelectOptionItem } from './types';
+export { shouldSuppressMenuReopen, toggleExclusiveMenu } from './menuOpenGuard';

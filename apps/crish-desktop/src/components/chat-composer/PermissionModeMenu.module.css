@@ -28,9 +28,10 @@
   color: var(--text-primary);
 }
 
+/* 按下色变，无缩放 */
 .permPill:active {
-  transform: scale(0.97);
-  transition: transform var(--transition-press, 80ms ease-out);
+  background: var(--bg-active);
+  color: var(--text-primary);
 }
 
 .permPill.isOpen {

@@ -45,6 +45,8 @@
   flex-direction: column;
   gap: 14px;
   min-height: 0; /* Enable flex-1 scrolling */
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
 }
 
 .sidebarFooter {

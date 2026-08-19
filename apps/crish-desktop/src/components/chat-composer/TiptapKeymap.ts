@@ -8,7 +8,7 @@
 export type TiptapKeydownAction = 'send' | 'pass';
 
 export interface TiptapKeydownContext {
-  /** 发送快捷键偏好（与 ComposerField 同 key：crish_send_shortcut） */
+  /** 发送快捷键偏好（与设置同一钥匙：crish_settings.sendShortcut） */
   sendShortcut: 'enter' | 'ctrlEnter';
   /** 光标位于 codeBlock 内（Enter 只换行，绝不触发发送） */
   inCodeBlock: boolean;

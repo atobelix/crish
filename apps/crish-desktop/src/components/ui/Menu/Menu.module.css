@@ -17,6 +17,8 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
   padding: var(--dropdown-padding, var(--space-1, 4px));
   border-radius: var(--dropdown-radius, var(--radius-lg, 8px));
   border: 1px solid var(--hairline-strong);

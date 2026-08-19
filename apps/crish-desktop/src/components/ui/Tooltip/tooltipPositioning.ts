@@ -51,6 +51,35 @@ export function isValidDOMRect(rect: DOMRect | null | undefined): boolean {
   return true;
 }
 
+/**
+ * 触发器与视口无交集则为离屏。离屏必须灭提示，禁止钳回视口当残影。
+ * 测试环境全 0 几何与 isValidDOMRect 对齐：无法判断离屏，不误杀。
+ */
+export function isTriggerOffscreen(rect: DOMRect): boolean {
+  if (
+    typeof process !== 'undefined' &&
+    process.env.NODE_ENV === 'test' &&
+    rect.width === 0 &&
+    rect.height === 0 &&
+    rect.top === 0 &&
+    rect.left === 0
+  ) {
+    return false;
+  }
+  const vw =
+    typeof window !== 'undefined'
+      ? window.visualViewport?.width || window.innerWidth || 0
+      : 0;
+  const vh =
+    typeof window !== 'undefined'
+      ? window.visualViewport?.height || window.innerHeight || 0
+      : 0;
+  if (vw <= 0 || vh <= 0) return false;
+  return (
+    rect.bottom <= 0 || rect.right <= 0 || rect.top >= vh || rect.left >= vw
+  );
+}
+
 /** side → CSS translate（动画起点/终点形变用，与历史 getPositionStyle 一致） */
 export function translateFor(side: TooltipSide): string {
   switch (side) {

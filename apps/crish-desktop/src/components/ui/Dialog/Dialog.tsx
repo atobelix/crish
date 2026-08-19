@@ -13,10 +13,11 @@
  *
  * 分层契约：只依赖 react/react-dom 与 tokens CSS 变量。
  */
-import React, { useId, useRef } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import * as DismissableLayer from '@radix-ui/react-dismissable-layer';
 import styles from './Dialog.module.css';
+import { DialogOverlayContext } from './dialogOverlayContext';
 import { FocusTrap } from './focusTrap';
 import { useAnimatedPresence } from './useAnimatedPresence';
 import { useRestoreFocus } from './useRestoreFocus';
@@ -61,6 +62,11 @@ export interface DialogProps {
    * - overlay 追加到遮罩壳（可设 --dialog-z 覆盖层级）
    */
   classNames?: { panel?: string; overlay?: string };
+  /**
+   * LayerStack 到达本层时的 Esc 钩子（设置壳：先清搜索再关页）。
+   * 返回 true / preventDefault 则中枢不再走默认 dismiss。
+   */
+  onEscapeKeyDown?: (event: KeyboardEvent) => boolean | void;
 }
 
 // noUncheckedIndexedAccess 下 CSS Modules 取值类型为 string | undefined
@@ -86,11 +92,13 @@ export function Dialog({
   footer,
   children,
   classNames,
+  onEscapeKeyDown,
 }: DialogProps) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const [overlayEl, setOverlayEl] = useState<HTMLElement | null>(null);
   const isFullscreen = variant === 'fullscreen';
 
   // 三件套：进出场动画 + 焦点归还 + 焦点圈定
@@ -110,6 +118,7 @@ export function Dialog({
       dismissible,
       elementRef: panelRef,
       onDismiss: () => onClose(),
+      onEscapeKeyDown,
     },
     open && isMounted
   );
@@ -148,53 +157,59 @@ export function Dialog({
     // FocusTrap 容器直接挂在 body 下：兄弟节点（应用主体）被 aria-hidden 旁路
     <DismissableLayer.Branch asChild>
       <FocusTrap active={open} initialFocusRef={initialFocusRef}>
-        <div className={overlayClasses}>
-          <div
-            className={styles.backdrop}
-            aria-hidden="true"
-            onClick={dismissible ? onClose : undefined}
-          />
-          <div
-            ref={panelRef}
-            role={role}
-            aria-modal="true"
-            aria-label={title == null ? ariaLabel : undefined}
-            aria-labelledby={title != null ? titleId : undefined}
-            aria-describedby={description != null ? descriptionId : undefined}
-            className={panelClasses}
-          >
-            {title != null || (dismissible && showCloseButton) ? (
-              <div className={styles.dialogHeader}>
-                {title != null ? (
-                  <h2 className={styles.dialogTitle} id={titleId}>
-                    {title}
-                  </h2>
-                ) : null}
-                {dismissible && showCloseButton ? (
-                  <button
-                    type="button"
-                    className={styles.dialogClose}
-                    aria-label="关闭弹窗"
-                    onClick={onClose}
-                  >
-                    <CloseIcon />
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
+        <div
+          ref={setOverlayEl}
+          className={overlayClasses}
+          data-dialog-overlay=""
+        >
+          <DialogOverlayContext.Provider value={overlayEl}>
+            <div
+              className={styles.backdrop}
+              aria-hidden="true"
+              onClick={dismissible ? onClose : undefined}
+            />
+            <div
+              ref={panelRef}
+              role={role}
+              aria-modal="true"
+              aria-label={title == null ? ariaLabel : undefined}
+              aria-labelledby={title != null ? titleId : undefined}
+              aria-describedby={description != null ? descriptionId : undefined}
+              className={panelClasses}
+            >
+              {title != null || (dismissible && showCloseButton) ? (
+                <div className={styles.dialogHeader}>
+                  {title != null ? (
+                    <h2 className={styles.dialogTitle} id={titleId}>
+                      {title}
+                    </h2>
+                  ) : null}
+                  {dismissible && showCloseButton ? (
+                    <button
+                      type="button"
+                      className={styles.dialogClose}
+                      aria-label="关闭弹窗"
+                      onClick={onClose}
+                    >
+                      <CloseIcon />
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
 
-            {description != null ? (
-              <p className={styles.dialogDescription} id={descriptionId}>
-                {description}
-              </p>
-            ) : null}
+              {description != null ? (
+                <p className={styles.dialogDescription} id={descriptionId}>
+                  {description}
+                </p>
+              ) : null}
 
-            <div className={styles.dialogBody}>{children}</div>
+              <div className={styles.dialogBody}>{children}</div>
 
-            {footer != null ? (
-              <div className={styles.dialogFooter}>{footer}</div>
-            ) : null}
-          </div>
+              {footer != null ? (
+                <div className={styles.dialogFooter}>{footer}</div>
+              ) : null}
+            </div>
+          </DialogOverlayContext.Provider>
         </div>
       </FocusTrap>
     </DismissableLayer.Branch>,

@@ -3,11 +3,22 @@
  * ModelBadgePickerMenu（ui/Menu 基座迁移版）交互测试：
  * 打开/选择（激活模型）/Esc/外点关闭/管理入口
  */
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
-import { useState } from 'react';
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from '@testing-library/react';
 import { ModelBadgePickerMenu } from './ModelBadgePickerMenu';
+import { toggleExclusiveMenu } from '../ui/Menu';
+import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
+
+vi.mock('../../api/storeAccess', () => ({
+  openSettings: vi.fn(),
+}));
 
 const PROFILES_KEY = 'crish_provider_profiles_v1';
 
@@ -29,19 +40,30 @@ function seedProfiles() {
 
 function Wrapper({ onClose }: { onClose?: () => void }) {
   const [open, setOpen] = useState(true);
+  const anchorRef = useRef<HTMLButtonElement>(null);
   return (
-    <ModelBadgePickerMenu
-      activeModel="model-a"
-      open={open}
-      onClose={() => {
-        setOpen(false);
-        onClose?.();
-      }}
-    >
-      <button type="button" data-testid="model-badge-trigger">
+    <>
+      <button
+        ref={anchorRef}
+        type="button"
+        data-testid="model-badge-trigger"
+        onClick={() => toggleExclusiveMenu(open, setOpen, anchorRef.current)}
+      >
         模型徽标
       </button>
-    </ModelBadgePickerMenu>
+      <ModelBadgePickerMenu
+        activeModel="model-a"
+        open={open}
+        onClose={() => {
+          setOpen(false);
+          onClose?.();
+        }}
+        onOpenChange={(next) => {
+          if (!next) setOpen(false);
+        }}
+        anchor={anchorRef}
+      />
+    </>
   );
 }
 
@@ -51,6 +73,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  layerStackService.dispose();
   vi.restoreAllMocks();
 });
 
@@ -60,6 +83,36 @@ describe('ModelBadgePickerMenu（ui/Menu 基座）', () => {
     render(<Wrapper />);
     expect(screen.getByText('测试服务商')).toBeInTheDocument();
     expect(screen.getByText('模型管理...')).toBeInTheDocument();
+  });
+
+  it('同展示名种子与 custom 只渲染一行（OpenCode Go 订阅）', () => {
+    localStorage.setItem(
+      PROFILES_KEY,
+      JSON.stringify([
+        {
+          id: 'opencode-go',
+          name: 'OpenCode Go 订阅',
+          baseUrl: 'https://opencode.ai/zen/go/v1',
+          hasKey: false,
+          enabled: true,
+          models: ['deepseek-v4-flash'],
+        },
+        {
+          id: 'custom-preset-copy',
+          name: 'OpenCode Go 订阅',
+          baseUrl: 'https://opencode.ai/zen/go/v1',
+          hasKey: false,
+          enabled: true,
+          models: [],
+        },
+      ])
+    );
+    render(<Wrapper />);
+    expect(screen.getAllByText('OpenCode Go 订阅')).toHaveLength(1);
+    expect(screen.getByTestId('profile-item-opencode-go')).toBeInTheDocument();
+    expect(
+      screen.queryByTestId('profile-item-custom-preset-copy')
+    ).not.toBeInTheDocument();
   });
 
   it('点击「模型管理...」调用打开设置并关闭', async () => {
@@ -121,7 +174,9 @@ describe('ModelBadgePickerMenu（ui/Menu 基座）', () => {
     expect(row).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(row);
     expect(row).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('menu', { name: '测试服务商 模型列表' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('menu', { name: '测试服务商 模型列表' })
+    ).toBeInTheDocument();
     // 再点收起
     fireEvent.click(row);
     expect(row).toHaveAttribute('aria-expanded', 'false');
@@ -171,6 +226,20 @@ describe('ModelBadgePickerMenu（ui/Menu 基座）', () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
+  it('点徽标第二次关闭且不重开（pointerdown+click，Anchor 同构）', async () => {
+    seedProfiles();
+    render(<Wrapper />);
+    expect(screen.getByText('测试服务商')).toBeInTheDocument();
+    const trigger = screen.getByTestId('model-badge-trigger');
+    fireEvent.pointerDown(trigger);
+    fireEvent.pointerUp(trigger);
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(screen.queryByText('测试服务商')).not.toBeInTheDocument()
+    );
+    expect(screen.queryByText('模型管理...')).not.toBeInTheDocument();
+  });
+
   it('hover 保留为增强路径：悬停行仍展开子菜单（80ms 定时器）', async () => {
     seedProfiles();
     render(<Wrapper />);
@@ -182,8 +251,11 @@ describe('ModelBadgePickerMenu（ui/Menu 基座）', () => {
     );
     // 移出后经 150ms 宽限期关闭
     fireEvent.mouseLeave(screen.getByTestId('profile-item-p1'));
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument(), {
-      timeout: 1000,
-    });
+    await waitFor(
+      () => expect(screen.queryByRole('menu')).not.toBeInTheDocument(),
+      {
+        timeout: 1000,
+      }
+    );
   });
 });

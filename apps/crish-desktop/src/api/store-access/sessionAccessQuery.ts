@@ -4,11 +4,11 @@
 import type {
   SessionAgent,
   SessionState,
-} from '../../../store/types';
+} from '../../store/types';
 import {
   getActiveSessionId as getActiveSessionIdFromFacade,
   getSessionById,
-} from '../../../store/sessionStore';
+} from '../../store/sessionStore';
 
 export function isNonEmptySessionId(
   sessionId: string | null | undefined

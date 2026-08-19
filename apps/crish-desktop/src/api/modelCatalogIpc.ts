@@ -4,6 +4,7 @@
  */
 
 import { loadProfiles, type ProviderProfile } from './providerProfiles';
+import { foldProfilesByDisplayName } from './provider-profiles/profileValidation';
 import { invokeResult } from './tauriInvoke';
 import {
   providerProbePing,
@@ -318,9 +319,11 @@ export async function testProviderModel(
   return { ok: false, error: '探活服务未就绪' };
 }
 
-/** 启用中的提供商（有密钥的优先展示） */
+/** 启用中的提供商；同展示名只留一行（I8：opencode-go 与 custom 拷贝不并列）。 */
 export function listPickerProfiles(): ProviderProfile[] {
-  return loadProfiles().filter((p) => p.enabled !== false);
+  return foldProfilesByDisplayName(
+    loadProfiles().filter((p) => p.enabled !== false)
+  );
 }
 
 /**

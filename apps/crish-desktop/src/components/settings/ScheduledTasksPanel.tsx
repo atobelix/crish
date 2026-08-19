@@ -135,15 +135,17 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
       <div className={styles.schedPresetRow}>
         <div className={styles.schedPresetChips} role="group" aria-label="计划模板">
           {WORKFLOW_SCHEDULE_PRESETS.map((p) => (
-            <button
+            <Button
               key={p.id}
               type="button"
+              variant="secondary"
+              size="sm"
               className={styles.schedPresetChip}
               disabled={busy}
               onClick={() => applyPreset(p.id)}
             >
               {p.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>

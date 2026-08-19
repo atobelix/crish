@@ -1,6 +1,6 @@
 /**
- * 设置导航 hook：搜索过滤 + roving tablist 键盘漫游 + Esc 三层优先级
- * （rules 弹窗 → 清空搜索 → 关闭设置）+ `/` 与 Ctrl+F 聚焦搜索框快捷键。
+ * 设置导航 hook：搜索过滤 + roving tablist 键盘漫游 + Esc 经 LayerStack
+ * （栈顶下拉 → 清空搜索 → 关闭设置）+ `/` 与 Ctrl+F 聚焦搜索框快捷键。
  * 从 SettingsPanel.tsx 抽出；选中动作 selectTab 由壳层注入（联动 store 与焦点）。
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -39,6 +39,11 @@ export type UseSettingsNavResult = {
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   /** 读屏播报文案：无匹配 / 找到 N 项 / 当前页 */
   filterStatusText: string;
+  /**
+   * 交给 Dialog/LayerStack 的 Esc：仅在本层成为栈顶时调用。
+   * 先清搜索，再关设置；子层（Menu/规则弹层）由 LayerStack 先退。
+   */
+  handleSettingsEscape: (event: KeyboardEvent) => boolean;
 };
 
 export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResult {
@@ -46,26 +51,23 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
   const [navQuery, setNavQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Esc: rules modal -> clear search -> close settings
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      if (rulesModalOpen) return;
+  // Esc 不再 window 捕获关整页：由 LayerStack 先退栈顶，再到本钩子
+  const handleSettingsEscape = useCallback(
+    (e: KeyboardEvent): boolean => {
+      if (rulesModalOpen) return true;
       if (navQuery.trim()) {
         e.preventDefault();
-        e.stopPropagation();
         setNavQuery('');
         searchInputRef.current?.focus();
-        return;
+        return true;
       }
-      if (!onClose) return;
+      if (!onClose) return false;
       e.preventDefault();
-      e.stopPropagation();
       onClose();
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [onClose, rulesModalOpen, navQuery]);
+      return true;
+    },
+    [onClose, rulesModalOpen, navQuery],
+  );
 
   // / or Ctrl+F focuses sidebar search
   useEffect(() => {
@@ -179,5 +181,6 @@ export function useSettingsNav(opts: UseSettingsNavOptions): UseSettingsNavResul
     onTablistKeyDown,
     onSearchKeyDown,
     filterStatusText,
+    handleSettingsEscape,
   };
 }

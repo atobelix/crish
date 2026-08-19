@@ -48,6 +48,16 @@ export function profileDisplayLabel(
   return id || UNNAMED_PROFILE_LABEL;
 }
 
+/** 展示名折叠键：NFC trim 后的可见标签。 */
+export function profileDisplayNameKey(
+  profileOrName: string | Pick<ProviderProfile, 'id' | 'name'> | null | undefined
+): string {
+  if (typeof profileOrName === 'string') {
+    return normalizeProfileLabelText(profileOrName);
+  }
+  return normalizeProfileLabelText(profileDisplayLabel(profileOrName));
+}
+
 /**
  * 按 Unicode 码点截断展示名（中文安全；emoji 按码点，不拆 surrogate）。
  * maxChars < 1 时返回空串。
@@ -99,6 +109,66 @@ export function profileHasKey(
 ): boolean {
   if (!p) return false;
   return Boolean(p.hasKey || (typeof p.apiKey === 'string' && p.apiKey.trim()));
+}
+
+/**
+ * 同名折叠胜者比较：返回 >0 则 a 优于 b。
+ * 密钥 > 模型数 > 已知种子 id > 非 custom-。同分视为不优于（保留先出现的）。
+ */
+function cmpPickerFoldWinner(a: ProviderProfile, b: ProviderProfile): number {
+  const keyA = profileHasKey(a) ? 1 : 0;
+  const keyB = profileHasKey(b) ? 1 : 0;
+  if (keyA !== keyB) return keyA - keyB;
+  const modelsA = normalizeModelIds(a.models).length;
+  const modelsB = normalizeModelIds(b.models).length;
+  if (modelsA !== modelsB) return modelsA - modelsB;
+  const seedA = KNOWN_PROFILE_LABELS[a.id] ? 1 : 0;
+  const seedB = KNOWN_PROFILE_LABELS[b.id] ? 1 : 0;
+  if (seedA !== seedB) return seedA - seedB;
+  const builtinA = a.id.startsWith('custom-') ? 0 : 1;
+  const builtinB = b.id.startsWith('custom-') ? 0 : 1;
+  return builtinA - builtinB;
+}
+
+/**
+ * 按展示名折叠：同名只留一行（I8：种子 opencode-go 与 custom/preset 拷贝不得两行）。
+ * 不改 enabled 过滤——由调用方决定。保序：第一次出现的标签位置。
+ */
+export function foldProfilesByDisplayName(
+  profiles: readonly ProviderProfile[] | null | undefined
+): ProviderProfile[] {
+  if (!profiles || profiles.length === 0) return [];
+  const winners = new Map<string, ProviderProfile>();
+  const order: string[] = [];
+  for (const p of profiles) {
+    if (!p) continue;
+    const key = profileDisplayNameKey(p);
+    if (!key) continue;
+    const prev = winners.get(key);
+    if (!prev) {
+      winners.set(key, p);
+      order.push(key);
+      continue;
+    }
+    if (cmpPickerFoldWinner(p, prev) > 0) winners.set(key, p);
+  }
+  return order.map((k) => winners.get(k)!);
+}
+
+/**
+ * 按展示名找已有行（含停用）。同分走 fold 胜者，供添加预设绑已有、禁止再造 custom。
+ */
+export function findProfileByDisplayName(
+  profiles: readonly ProviderProfile[] | null | undefined,
+  name: string
+): ProviderProfile | undefined {
+  const key = profileDisplayNameKey(name);
+  if (!key) return undefined;
+  const matches: ProviderProfile[] = [];
+  for (const p of profiles || []) {
+    if (p && profileDisplayNameKey(p) === key) matches.push(p);
+  }
+  return foldProfilesByDisplayName(matches)[0];
 }
 
 /** 启用中且 models 非空（纯） */

@@ -59,6 +59,8 @@ describe('toast product policy', () => {
       '密钥已保存并同步',
       '地址已保存并同步引擎',
       '已获取 12 个模型，列表已更新',
+      '已自动获取 7 个模型',
+      '已自动获取 12 个模型',
       '连通成功 · gpt-4o · 120ms',
       '正在获取模型列表…',
       '正在测试 gpt-4o…',
@@ -68,6 +70,13 @@ describe('toast product policy', () => {
       expect(shouldDropSuccessToast(m), m).toBe(true);
       expect(classifyToastPolicy(m), m).toBe('drop-success');
     }
+  });
+
+  it('forbids 已自动获取 N 个模型 (not just /^已获取\\s/)', () => {
+    expect(isForbiddenSuccessToast('已自动获取 7 个模型')).toBe(true);
+    expect(shouldDropSuccessToast('已自动获取 7 个模型')).toBe(true);
+    expect(classifyToastPolicy('已自动获取 7 个模型')).toBe('drop-success');
+    expect(isForbiddenSuccessToast('已获取 12 个模型，列表已更新')).toBe(true);
   });
 
   it('forbids second-wave residues: schedule trigger / font scan / account / CRUD verbs', () => {
@@ -306,6 +315,7 @@ describe('toast product policy', () => {
       '密钥已保存并同步',
       '地址已保存并同步引擎',
       '已获取 12 个模型，列表已更新',
+      '已自动获取 7 个模型',
       '连通成功 · gpt-4o · 120ms',
       '正在获取模型列表…',
       '正在测试 gpt-4o…',

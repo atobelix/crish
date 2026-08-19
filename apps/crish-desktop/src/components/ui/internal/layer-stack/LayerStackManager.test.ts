@@ -1,9 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import {
-  LayerStackManager,
-  layerStackManager,
-} from './LayerStackManager';
+import { LayerStackManager, layerStackManager } from './LayerStackManager';
 
 describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () => {
   beforeEach(() => {
@@ -29,7 +26,9 @@ describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () =
   });
 
   it('Tooltip 全局静默互斥协议 (data-floating-active)', () => {
-    expect(document.documentElement.getAttribute('data-floating-active')).toBeNull();
+    expect(
+      document.documentElement.getAttribute('data-floating-active')
+    ).toBeNull();
     expect(layerStackManager.isTooltipSilenced()).toBe(false);
 
     // 注册一个 dropdown-menu 浮层
@@ -40,12 +39,16 @@ describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () =
       onDismiss: vi.fn(),
     });
 
-    expect(document.documentElement.getAttribute('data-floating-active')).toBe('true');
+    expect(document.documentElement.getAttribute('data-floating-active')).toBe(
+      'true'
+    );
     expect(layerStackManager.isTooltipSilenced()).toBe(true);
 
     // 注销浮层
     unregister();
-    expect(document.documentElement.getAttribute('data-floating-active')).toBeNull();
+    expect(
+      document.documentElement.getAttribute('data-floating-active')
+    ).toBeNull();
     // 刚注销时处于 150ms 静默冷却窗口
     expect(layerStackManager.isTooltipSilenced()).toBe(true);
   });
@@ -112,6 +115,81 @@ describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () =
     Object.defineProperty(composingEvent, 'isComposing', { value: true });
     window.dispatchEvent(composingEvent);
     expect(onDismissMenu).not.toHaveBeenCalled();
+  });
+
+  it('登记 dropdown 时驱逐同级，不只入栈', () => {
+    const onDismissA = vi.fn();
+    const onDismissB = vi.fn();
+    layerStackManager.register({
+      id: 'menu-a',
+      type: 'dropdown-menu',
+      dismissible: true,
+      onDismiss: onDismissA,
+    });
+    layerStackManager.register({
+      id: 'menu-b',
+      type: 'dropdown-menu',
+      dismissible: true,
+      onDismiss: onDismissB,
+    });
+    expect(onDismissA).toHaveBeenCalledWith('programmatic');
+    expect(onDismissB).not.toHaveBeenCalled();
+    expect(layerStackManager.getLayers().map((l) => l.id)).toEqual(['menu-b']);
+  });
+
+  it('子菜单锚点在已开层内时不驱逐父层', () => {
+    const parentEl = document.createElement('div');
+    const childAnchor = document.createElement('button');
+    parentEl.appendChild(childAnchor);
+    document.body.appendChild(parentEl);
+
+    const onDismissParent = vi.fn();
+    layerStackManager.register({
+      id: 'parent',
+      type: 'dropdown-menu',
+      dismissible: true,
+      onDismiss: onDismissParent,
+      elementRef: { current: parentEl },
+    });
+    layerStackManager.register({
+      id: 'child',
+      type: 'dropdown-menu',
+      dismissible: true,
+      onDismiss: vi.fn(),
+      anchorRef: { current: childAnchor },
+    });
+    expect(onDismissParent).not.toHaveBeenCalled();
+    expect(layerStackManager.getLayers().map((l) => l.id)).toEqual([
+      'parent',
+      'child',
+    ]);
+    parentEl.remove();
+  });
+
+  it('外点关掉无锚层后，同一 pointer 落到原 target 不得再开', () => {
+    const btn = document.createElement('button');
+    document.body.appendChild(btn);
+    const content = document.createElement('div');
+    document.body.appendChild(content);
+    const onDismiss = vi.fn();
+    layerStackManager.register({
+      id: 'orphan-menu',
+      type: 'dropdown-menu',
+      dismissible: true,
+      onDismiss,
+      elementRef: { current: content },
+      anchorRef: { current: null },
+    });
+    btn.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+    );
+    expect(onDismiss).toHaveBeenCalledWith('outside-pointer');
+    expect(layerStackManager.wasLayerDismissedThisGesture('orphan-menu')).toBe(
+      true
+    );
+    expect(layerStackManager.wasTriggerClickAfterDismiss(btn)).toBe(true);
+    btn.remove();
+    content.remove();
   });
 
   it('Trace 审计历史记录正常工作', () => {

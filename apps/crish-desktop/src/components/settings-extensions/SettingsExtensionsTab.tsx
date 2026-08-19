@@ -4,12 +4,14 @@ import { useToast } from '../../services/toast/ToastContext';
  */
 import React, { lazy, Suspense } from 'react';
 import { AppErrorBoundary } from '../AppErrorBoundary';
-import { SettingsPage } from '../settings/SettingsUI';
+import { SettingsHeadTools, SettingsPage } from '../settings/SettingsUI';
+import uiStyles from '../settings/SettingsUI.module.css';
 import { ArrowLeft, RefreshCw } from 'lucide-react';
 import { useExtensionMarket } from './useExtensionMarket';
 import { ExtensionList } from './ExtensionList';
-import { Button } from '../ui';
-import type { KindFilter } from './types';
+import { Button, Input, SegmentedControl } from '../ui';
+import type { KindFilter, MainView } from './types';
+import styles from './SettingsExtensionsTab.module.css';
 
 const SkillsSettingsTab = lazy(() =>
   import('../settings-skills/SkillsSettingsTab').then((m) => ({
@@ -119,12 +121,11 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
     <SettingsPage
       title="扩展"
       meta={
-        <div className="settings-head-tools">
+        <SettingsHeadTools>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="settings-btn-rect"
             onClick={() => void refresh()}
             disabled={loading}
             aria-label="刷新"
@@ -136,59 +137,47 @@ export const SettingsExtensionsTab: React.FC<Props> = ({
               />
             }
           />
-        </div>
+        </SettingsHeadTools>
       }
     >
       <div
-        className="ext-toolbar ext-toolbar--one"
+        className={styles.toolbar}
         role="group"
         aria-label="筛选"
       >
-        <div className="settings-choice-group" role="group" aria-label="视图">
-          <button
-            type="button"
-            className={`settings-choice-btn ${view === 'installed' ? 'active' : ''}`}
-            aria-pressed={view === 'installed'}
-            onClick={() => {
-              setView('installed');
-              setExpand(null);
-            }}
-          >
-            已安装
-          </button>
-          <button
-            type="button"
-            className={`settings-choice-btn ${view === 'discover' ? 'active' : ''}`}
-            aria-pressed={view === 'discover'}
-            onClick={() => {
-              setView('discover');
-              setExpand(null);
-            }}
-          >
-            发现
-          </button>
-        </div>
-        <div className="settings-choice-group" role="group" aria-label="类型">
-          {kindFilters.map((f) => (
-            <button
-              key={f.id}
-              type="button"
-              className={`settings-choice-btn ${kindFilter === f.id ? 'active' : ''}`}
-              aria-pressed={kindFilter === f.id}
-              onClick={() => setKindFilter(f.id)}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <input
-          className="settings-field-input settings-field-input--sm ext-search"
-          type="search"
-          placeholder="搜索…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          aria-label="搜索扩展"
+        <SegmentedControl
+          aria-label="视图"
+          size="sm"
+          value={view}
+          options={[
+            { value: 'installed', label: '已安装' },
+            { value: 'discover', label: '发现' },
+          ]}
+          onChange={(v) => {
+            setView(v as MainView);
+            setExpand(null);
+          }}
         />
+        <SegmentedControl
+          aria-label="类型"
+          size="sm"
+          value={kindFilter}
+          options={kindFilters.map((f) => ({
+            value: f.id,
+            label: f.label,
+          }))}
+          onChange={(v) => setKindFilter(v as KindFilter)}
+        />
+        <div className={uiStyles.filterInputGrow}>
+          <Input
+            variant="search"
+            size="sm"
+            placeholder="搜索…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="搜索扩展"
+          />
+        </div>
       </div>
 
       {loadError ? (

@@ -92,33 +92,8 @@
   min-width: 0;
 }
 
-/*                                                  ?*/
 .schedPresetChip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   white-space: nowrap;
-  writing-mode: horizontal-tb;
-  text-orientation: mixed;
-  font-size: var(--font-size-xs);
-  padding: 6px 12px;
-  border-radius: 999px;
-  border: none;
-  background: var(--control-soft-bg, var(--bg-secondary));
-  color: var(--text-secondary);
-  cursor: pointer;
-  line-height: var(--line-height-compact);
-  transition: background var(--transition-micro), color var(--transition-micro);
-}
-
-.schedPresetChip:hover {
-  color: var(--text-primary);
-  background: var(--control-soft-bg-hover, var(--bg-hover));
-}
-
-.schedPresetChip:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
 /*                                                                ?select */

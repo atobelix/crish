@@ -315,6 +315,8 @@ describe('enqueueToast (policy + dedupe + max)', () => {
       '无需更新',
       '检查完成',
       '最新版本',
+      '已自动获取 7 个模型',
+      '已获取 12 个模型，列表已更新',
     ];
     for (const m of leaks) {
       expect(enqueueToast([], m), m).toEqual({

@@ -121,6 +121,7 @@ const FORBIDDEN_SUCCESS_TOAST_PATTERNS: readonly RegExp[] = [
   /^密钥已保存/,
   /^地址已保存/,
   /^已获取\s/, // 「已获取 N 个模型…」
+  /^已自动获取/, // 「已自动获取 N 个模型」（/^已获取\s/ 漏这一句）
   /^连通成功/,
   /^保存成功/,
   /^同步成功/,

@@ -161,6 +161,40 @@ describe('modelCatalog', () => {
     expect(ids).not.toContain('off');
   });
 
+  it('listPickerProfiles folds same display name (seed opencode-go vs custom copy)', () => {
+    saveProfiles([
+      {
+        id: 'opencode-go',
+        name: 'OpenCode Go 订阅',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        models: ['deepseek-v4-flash'],
+        hasKey: false,
+        enabled: true,
+      },
+      {
+        id: 'custom-abc',
+        name: 'OpenCode Go 订阅',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        models: [],
+        hasKey: false,
+        enabled: true,
+      },
+      {
+        id: 'deepseek',
+        name: 'DeepSeek 官方',
+        baseUrl: 'https://api.deepseek.com',
+        models: [],
+        hasKey: false,
+        enabled: true,
+      },
+    ]);
+    const list = listPickerProfiles();
+    expect(
+      list.filter((p) => p.name === 'OpenCode Go 订阅').map((p) => p.id)
+    ).toEqual(['opencode-go']);
+    expect(list.map((p) => p.id)).toEqual(['opencode-go', 'deepseek']);
+  });
+
   it('getModelMeta defaults enabled true with optional context', () => {
     const meta = getModelMeta('any', 'deepseek-v4-flash');
     expect(meta.enabled).toBe(true);

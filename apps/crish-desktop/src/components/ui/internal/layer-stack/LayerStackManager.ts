@@ -11,7 +11,6 @@
  * 5. Branch-Aware 外点判定与 LIFO 焦点平滑还原。
  */
 import type {
-  LayerType,
   DismissReason,
   LayerRegistration,
   LayerTraceRecord,
@@ -19,6 +18,7 @@ import type {
 import {
   LAYER_TYPE_PRIORITY,
   PROCESSED_EVENTS,
+  isExclusivePeerLayerType,
   resolveElement,
 } from './layerStackTypes';
 import { restoreLayerFocus } from './layerFocusRestore';
@@ -43,6 +43,13 @@ export class LayerStackManager {
   private lastEscapeDismissTime = 0;
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
   private anchorPointerDownTarget: Node | null = null;
+  /** 本次 pointerdown 外点关掉的层；同一击落到其 trigger 不得再打开 */
+  private dismissedByPointer: {
+    pointerId: number;
+    layerId: string;
+    anchor: HTMLElement | null;
+    target: EventTarget | null;
+  } | null = null;
 
   private constructor() {
     this.attachGlobalListeners();
@@ -70,6 +77,7 @@ export class LayerStackManager {
 
     // 避免重复 ID 污染
     this.layers = this.layers.filter((l) => l.id !== fullLayer.id);
+    this.evictExclusivePeers(fullLayer);
     this.layers.push(fullLayer);
 
     // 按层级权重稳定排序（相同权重保持 mountedAt 注册入栈顺序）
@@ -126,6 +134,37 @@ export class LayerStackManager {
     }
 
     this.updateFloatingActiveState();
+  }
+
+  /**
+   * 本层刚被同一 pointer 外点关掉：后续 onOpenChange(true) 必须吞掉。
+   */
+  public wasLayerDismissedThisGesture(layerId: string): boolean {
+    return this.dismissedByPointer?.layerId === layerId;
+  }
+
+  /**
+   * 外点已关后同一 pointer 落到该 trigger：不得再 toggle 开。
+   */
+  public wasTriggerClickAfterDismiss(triggerEl: HTMLElement | null): boolean {
+    const rec = this.dismissedByPointer;
+    if (!rec || !triggerEl) return false;
+    if (
+      rec.anchor &&
+      (rec.anchor === triggerEl ||
+        rec.anchor.contains(triggerEl) ||
+        triggerEl.contains(rec.anchor))
+    ) {
+      return true;
+    }
+    if (
+      !rec.anchor &&
+      rec.target instanceof Node &&
+      triggerEl.contains(rec.target)
+    ) {
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -197,6 +236,50 @@ export class LayerStackManager {
     }
 
     return results;
+  }
+
+  /**
+   * 登记 dropdown/context-menu 时驱逐同级，子菜单（锚点在已开层内）保留。
+   */
+  private evictExclusivePeers(incoming: LayerRegistration): void {
+    if (!isExclusivePeerLayerType(incoming.type)) return;
+
+    const incomingAnchor = resolveElement(incoming.anchorRef);
+    const incomingEl = resolveElement(incoming.elementRef);
+    const snapshot = this.layers.slice();
+
+    for (const peer of snapshot) {
+      if (peer.id === incoming.id) continue;
+      if (!isExclusivePeerLayerType(peer.type)) continue;
+      if (incoming.parentId === peer.id) continue;
+      if (peer.parentId === incoming.id) continue;
+      if (this.hasAncestor(incoming.parentId, peer.id)) continue;
+
+      const peerEl = resolveElement(peer.elementRef);
+      if (peerEl && incomingAnchor && peerEl.contains(incomingAnchor)) {
+        continue;
+      }
+      if (peerEl && incomingEl && peerEl.contains(incomingEl)) {
+        continue;
+      }
+
+      this.dismissLayer(peer.id, 'programmatic');
+    }
+  }
+
+  private hasAncestor(
+    startId: string | undefined,
+    ancestorId: string
+  ): boolean {
+    let id = startId;
+    const seen = new Set<string>();
+    while (id) {
+      if (id === ancestorId) return true;
+      if (seen.has(id)) break;
+      seen.add(id);
+      id = this.layers.find((l) => l.id === id)?.parentId;
+    }
+    return false;
   }
 
   /**
@@ -344,11 +427,7 @@ export class LayerStackManager {
       this.handleGlobalPointerDown,
       true
     );
-    document.addEventListener(
-      'pointerup',
-      this.handleGlobalPointerUp,
-      true
-    );
+    document.addEventListener('pointerup', this.handleGlobalPointerUp, true);
     this.isListening = true;
   }
 
@@ -431,6 +510,8 @@ export class LayerStackManager {
     if (PROCESSED_EVENTS.has(event)) return;
     PROCESSED_EVENTS.add(event);
 
+    this.dismissedByPointer = null;
+
     const target = event.target as Node | null;
     if (!target) return;
 
@@ -470,6 +551,12 @@ export class LayerStackManager {
     }
 
     // 4. 确认属于外部点击，仅关闭当前目标可关闭浮层
+    this.dismissedByPointer = {
+      pointerId: event.pointerId,
+      layerId: targetLayer.id,
+      anchor: resolveElement(targetLayer.anchorRef),
+      target,
+    };
     this.dismissLayer(targetLayer.id, 'outside-pointer');
   };
 
@@ -491,6 +578,12 @@ export class LayerStackManager {
           !anchorEl.contains(target) &&
           (!topEl || !topEl.contains(target))
         ) {
+          this.dismissedByPointer = {
+            pointerId: event.pointerId,
+            layerId: l.id,
+            anchor: anchorEl,
+            target,
+          };
           this.dismissLayer(l.id, 'outside-pointer');
           this.anchorPointerDownTarget = null;
           return;
@@ -526,11 +619,7 @@ export class LayerStackManager {
         this.handleGlobalPointerDown,
         true
       );
-      window.removeEventListener(
-        'pointerup',
-        this.handleGlobalPointerUp,
-        true
-      );
+      window.removeEventListener('pointerup', this.handleGlobalPointerUp, true);
     }
     if (this.silenceTimer) {
       clearTimeout(this.silenceTimer);
@@ -541,6 +630,7 @@ export class LayerStackManager {
     this.lastEscapeDismissTime = 0;
     this.lastCloseTimestamp = 0;
     this.anchorPointerDownTarget = null;
+    this.dismissedByPointer = null;
     this.sequence = 0;
     this.isListening = false;
   }

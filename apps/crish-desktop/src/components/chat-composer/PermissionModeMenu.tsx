@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PermissionModeMenu.module.css';
 import { Menu, Tooltip } from '../ui';
+import { toggleExclusiveMenu } from '../ui/Menu';
 import {
   DESKTOP_PERMISSION_MODE_IDS,
   coercePermissionMode,
@@ -16,13 +17,12 @@ type Props = {
 };
 
 /**
- * 权限模式菜单（T05.3.2 迁移到 ui/Menu 基座 / 显式 Anchor 模式）：
- * - 药丸按钮拥有独立的 pillBtnRef 与 onClick 处理器，消除 Popover.Trigger 与 Tooltip 争抢导致的 Quad-Click 四击关闭 Bug；
- * - 坐标/Esc/外点关闭全部由基座 Radix Popover 接管；弹出方向 side="top" 对齐原「按钮上方」布局；
- * - 键盘漫游（↑↓/Enter）由基座 options 模式提供；
- * - 每项仍包 Tooltip 展示矩阵提示，选中态打勾。
- * - 枚举已统一为 api/permissionModes 单一真相源（40 方案 T2/T7）；
- *   coercePermissionMode 仍保留作为存储/旧值运行期防御。
+ * 权限模式菜单（显式 Anchor + 加号同构开关）：
+ * - 药丸自管 pillBtnRef；关则写死 false，禁止 setOpen(prev => !prev) 与外点对打；
+ * - 外点已关后同一 pointer 落到药丸不得再打开；
+ * - 坐标/Esc/外点关闭由基座接管；side="top"；
+ * - 键盘漫游由基座 options 模式提供；
+ * - 每项 Tooltip 展示矩阵提示，选中态打勾。
  */
 export const PermissionModeMenu: React.FC<Props> = ({
   mode: modeRaw,
@@ -45,8 +45,8 @@ export const PermissionModeMenu: React.FC<Props> = ({
   );
 
   const handleToggle = useCallback(() => {
-    setOpen((prev) => !prev);
-  }, []);
+    toggleExclusiveMenu(open, setOpen, pillBtnRef.current);
+  }, [open]);
 
   const options = DESKTOP_PERMISSION_MODE_IDS.map((m) => ({
     id: m,
@@ -84,7 +84,12 @@ export const PermissionModeMenu: React.FC<Props> = ({
       </Tooltip>
 
       <Menu
-        openState={{ open, onOpenChange: setOpen }}
+        openState={{
+          open,
+          onOpenChange: (nextOpen) => {
+            if (!nextOpen) setOpen(false);
+          },
+        }}
         anchor={pillBtnRef}
         options={options}
         position={{ side: 'top', align: 'start', sideOffset: 6 }}

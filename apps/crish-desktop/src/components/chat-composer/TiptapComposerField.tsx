@@ -40,6 +40,10 @@ import {
   STOP_TOOLTIP,
 } from './ComposerField';
 import type { ComposerFieldProps } from './composerTypes';
+import {
+  readSendShortcut,
+  SEND_SHORTCUT_CHANGED_EVENT,
+} from '../../api/store-access/settingsAccess';
 
 /** 宿主系统斜杠命令默认集（对齐 useChatComposerProps.BASE_SLASH 与 AI 系统指令集） */
 const HOST_SYSTEM_SLASH: ReadonlyArray<{ cmd: string; desc: string }> = [
@@ -92,18 +96,6 @@ export type TiptapComposerFieldProps = ComposerFieldProps & {
   emptyKind?: string;
 };
 
-/** 读取发送快捷键偏好（与 ComposerField 同 key） */
-function readSendShortcut(): 'enter' | 'ctrlEnter' {
-  try {
-    return typeof window !== 'undefined' &&
-      localStorage.getItem('crish_send_shortcut') === 'ctrlEnter'
-      ? 'ctrlEnter'
-      : 'enter';
-  } catch {
-    return 'enter';
-  }
-}
-
 export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   value,
   onChange,
@@ -153,11 +145,16 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
     readSendShortcut
   );
   useEffect(() => {
+    const sync = () => setSendShortcut(readSendShortcut());
     const onStorage = (e: StorageEvent) => {
-      if (e.key === 'crish_send_shortcut') setSendShortcut(readSendShortcut());
+      if (e.key === 'crish_settings' || e.key === 'crish_send_shortcut') sync();
     };
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    window.addEventListener(SEND_SHORTCUT_CHANGED_EVENT, sync);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener(SEND_SHORTCUT_CHANGED_EVENT, sync);
+    };
   }, []);
 
   // ── 发送回流机制（编辑器 → 宿主 chatInput → 重渲染 → 触发宿主 onSend）───────

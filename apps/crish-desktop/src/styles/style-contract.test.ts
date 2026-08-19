@@ -10,7 +10,7 @@
  *   ① dark 分支覆盖（泛化 F7-F27 到全部色系前缀 token）
  *   ② 禁新裸混色（text-primary 基底，ratchet 递减）
  *   ③ 禁裸 999px / 裸 99999
- *   ④ scrollbar 块 ratchet（防新增私有滚动条）
+ *   ④ scrollbar：新出口 overlay-scrollbar.css 必须存在（禁 0 条仍绿）
  *   ⑤ !important 总量 ratchet
  *   ⑥ 注入 token 名 ∈ 静态定义名（双层同源协议约束 1）
  *   ⑦ 固定值双源同值（双层同源协议约束 2）
@@ -225,21 +225,65 @@ describe('批次 2 · ③ 禁裸 999px / 裸 99999', () => {
 });
 
 describe('批次 2 · ④ scrollbar 块 ratchet', () => {
-  // 基线 5 = R2-7 契约化后唯一出口（shell-scrollbar.css：本体/track/thumb/hover/active 五处）；
-  // 各 module.css 滚动条块已删除，尺寸档位（0px 隐藏 / 3px 紧凑）通过
-  // --scrollbar-thumb-width 变量按域覆盖，不再出现伪元素规则。
-  const SCROLLBAR_BASELINE = 5; // 当前基线（S5 收敛为全局契约后递减）
+  // I6：禁名 shell-scrollbar.css；新出口 overlay-scrollbar.css 必须存在。
+  // 旧门禁只封顶（≤5）→ 文件已删、0 条 webkit 仍绿，真机回落粗条。
+  // 现改为：出口存在 + 保底 webkit 块 + 其它文件禁私有伪元素。
+  const SCROLLBAR_EXPORT = 'overlay-scrollbar.css';
+  const SCROLLBAR_BANNED = 'shell-scrollbar.css';
+  const SCROLLBAR_EXPORT_MIN = 5; // 本体 / track / thumb / hover / active
 
-  it(`::-webkit-scrollbar 块计数 ≤ ${SCROLLBAR_BASELINE}`, () => {
-    const files = walkSrc().filter((p) => p.endsWith('.css'));
-    let total = 0;
-    for (const p of files) {
-      total += (readFileSync(p, 'utf8').match(/::-webkit-scrollbar/g) ?? [])
-        .length;
-    }
-    expect(total, `scrollbar 块 ${total} 超过基线`).toBeLessThanOrEqual(
-      SCROLLBAR_BASELINE
+  it(`禁名 ${SCROLLBAR_BANNED} 不得复活`, () => {
+    const hits = walkSrc().filter((p) =>
+      p.replace(/\\/g, '/').endsWith(`/${SCROLLBAR_BANNED}`)
     );
+    expect(hits, `禁名复活：${hits.join(', ')}`).toEqual([]);
+  });
+
+  it(`新出口 ${SCROLLBAR_EXPORT} 存在且含 thin + webkit + thumb token + 指定容器`, () => {
+    const css = readFile(`src/styles/${SCROLLBAR_EXPORT}`);
+    expect(css).toContain('scrollbar-width: thin');
+    expect(css).toContain('--tint-scrollbar-thumb');
+    expect(css).toContain('sidebarScroll');
+    expect(css).toContain('menuContent');
+    expect(css).toContain('coverContent');
+    expect(css).toContain('navScroll');
+    const webkit = css.match(/::-webkit-scrollbar/g) ?? [];
+    expect(
+      webkit.length,
+      `${SCROLLBAR_EXPORT} webkit 块 ${webkit.length} < ${SCROLLBAR_EXPORT_MIN}`
+    ).toBeGreaterThanOrEqual(SCROLLBAR_EXPORT_MIN);
+  });
+
+  it(`index.css 引入 ${SCROLLBAR_EXPORT} 且不引禁名`, () => {
+    const indexCss = readFile('src/index.css');
+    expect(indexCss).toContain(`@import './styles/${SCROLLBAR_EXPORT}'`);
+    expect(indexCss).not.toContain(SCROLLBAR_BANNED);
+  });
+
+  it('侧栏 / Menu / 设置 cover 消费 thin + thumb token', () => {
+    const hosts = [
+      'src/components/sidebar/Sidebar.module.css',
+      'src/components/ui/Menu/Menu.module.css',
+      'src/components/settings/SettingsPanel.module.css',
+    ] as const;
+    for (const rel of hosts) {
+      const css = readFile(rel);
+      expect(css, rel).toContain('scrollbar-width: thin');
+      expect(css, rel).toContain('--tint-scrollbar-thumb');
+    }
+  });
+
+  it(`其它生产 css 不得新增私有 ::-webkit-scrollbar（出口 ${SCROLLBAR_EXPORT} 除外）`, () => {
+    const files = walkSrc().filter((p) => p.endsWith('.css'));
+    const extras: string[] = [];
+    for (const p of files) {
+      const base = p.split(/[\\/]/).pop() ?? '';
+      if (base === SCROLLBAR_EXPORT) continue;
+      const n = (readFileSync(p, 'utf8').match(/::-webkit-scrollbar/g) ?? [])
+        .length;
+      if (n > 0) extras.push(`${p}: ${n}`);
+    }
+    expect(extras, `私有 scrollbar 块：${extras.join('; ')}`).toEqual([]);
   });
 });
 

@@ -5,11 +5,19 @@
  */
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  waitFor,
+} from '@testing-library/react';
 import { PermissionModeMenu } from './PermissionModeMenu';
+import { layerStackService } from '../ui/internal/layer-stack/LayerStackService';
 
 afterEach(() => {
   cleanup();
+  layerStackService.dispose();
   vi.restoreAllMocks();
 });
 
@@ -20,7 +28,9 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
     const menu = await screen.findByRole('menu');
     expect(menu).toBeInTheDocument();
     // 权限模式至少渲染「允许/询问/拒绝」等项
-    expect(menu.querySelectorAll('[role="menuitem"]').length).toBeGreaterThan(1);
+    expect(menu.querySelectorAll('[role="menuitem"]').length).toBeGreaterThan(
+      1
+    );
   });
 
   it('点击菜单项触发 onChange 并关闭', async () => {
@@ -31,7 +41,9 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
     // 点击最后一个（非当前项）
     fireEvent.click(items[items.length - 1]);
     expect(onChange).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
   });
 
   it('Esc 关闭菜单', async () => {
@@ -39,7 +51,9 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
     fireEvent.click(screen.getByRole('button', { name: /当前权限模式/ }));
     const menu = await screen.findByRole('menu');
     fireEvent.keyDown(menu, { key: 'Escape' });
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
   });
 
   it('键盘漫游：ArrowDown 聚焦下一项，Enter 选中并关闭', async () => {
@@ -55,7 +69,9 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
     expect(items[1]).toHaveFocus();
     fireEvent.keyDown(menu, { key: 'Enter' });
     expect(onChange).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
   });
 
   it('外点关闭：真实外点（pointerdown+click）后面板消失', async () => {
@@ -67,7 +83,9 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
     document.body.appendChild(outside);
     fireEvent.pointerDown(outside);
     fireEvent.click(outside);
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
     outside.remove();
   });
 
@@ -77,6 +95,22 @@ describe('PermissionModeMenu（ui/Menu 基座）', () => {
     fireEvent.click(trigger);
     await screen.findByRole('menu');
     fireEvent.click(trigger);
-    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
+  });
+
+  it('pointerdown+click 药丸一次即关且不重开', async () => {
+    render(<PermissionModeMenu mode="ask" onChange={() => {}} />);
+    const trigger = screen.getByRole('button', { name: /当前权限模式/ });
+    fireEvent.click(trigger);
+    await screen.findByRole('menu');
+    fireEvent.pointerDown(trigger);
+    fireEvent.pointerUp(trigger);
+    fireEvent.click(trigger);
+    await waitFor(() =>
+      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    );
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });

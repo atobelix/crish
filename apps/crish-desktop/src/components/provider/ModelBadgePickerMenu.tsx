@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ModelBadgePickerMenu.module.css';
 import { activateProfileModel } from '../../api/providerProfiles';
@@ -16,26 +16,24 @@ type Props = {
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
   side?: 'top' | 'bottom';
-  /** 真实触发器（模型徽标），用于锚定基座浮层（T05.3.2 由父级 Popover.Root 迁移） */
-  children: React.ReactNode;
+  /** 真实可见徽标，作 Radix Anchor；禁止再走 Popover.Trigger */
+  anchor: React.RefObject<HTMLElement | null>;
 };
 
 /**
- * 模型徽标下拉（T05.3.2 迁移到 ui/Menu 基座）：
- * - 自管 Popover.Root/Portal/Content 改为基座受控双模（open/onOpenChange）；
- * - 触发器由父级通过 children 传入，基座 cloneElement 注入防冒泡与开关；
- * - 打开态单一真源：expandedProfileId（08-步5 T4-3，取代 hoveredProfileId）——
- *   aria-expanded 绑定真实打开态，hover 定时器（80/150ms）仅作增强路径；
- * - 键盘闭环：行按钮 Enter/onClick 展开子菜单 → 首项聚焦 → ↑↓ 漫游 →
- *   Esc 逐级关闭（子菜单 → 行按钮 → 基座整体归还 trigger）。
+ * 模型徽标下拉（Anchor + 受控 open，与加号同构）：
+ * - 无 Popover.Trigger；开关由宿主按钮写绝对值，onOpenChange 只收 false；
+ * - 打开态单一真源：expandedProfileId（取代 hoveredProfileId）；
+ * - hover 定时器仅作增强路径，卸载 / 关闭时清理；
+ * - Esc 逐级关闭（子菜单 → 行按钮 → 基座）。
  */
 export const ModelBadgePickerMenu: React.FC<Props> = ({
   activeModel,
   onClose,
   onOpenChange,
-  open = true,
+  open = false,
   side = 'bottom',
-  children,
+  anchor,
 }) => {
   const [expandedProfileId, setExpandedProfileId] = useState<string | null>(
     null
@@ -43,6 +41,17 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   const enterTimerRef = useRef<number | undefined>(undefined);
   const leaveTimerRef = useRef<number | undefined>(undefined);
   const rowRefsRef = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  useEffect(() => {
+    return () => {
+      if (enterTimerRef.current != null) clearTimeout(enterTimerRef.current);
+      if (leaveTimerRef.current != null) clearTimeout(leaveTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) setExpandedProfileId(null);
+  }, [open]);
 
   const handleRowEnter = useCallback((profileId: string) => {
     if (leaveTimerRef.current != null) clearTimeout(leaveTimerRef.current);
@@ -65,14 +74,13 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
       openState={{
         open,
         onOpenChange: (nextOpen) => {
-          if (onOpenChange) {
-            onOpenChange(nextOpen);
-          } else if (!nextOpen) {
+          if (!nextOpen) {
+            onOpenChange?.(false);
             onClose();
           }
         },
       }}
-      trigger={children}
+      anchor={anchor}
       position={{ side, align: 'start', sideOffset: 4 }}
       panel={{ contentClassName: styles.mbMenu }}
       outsideHandlers={{

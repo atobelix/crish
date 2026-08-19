@@ -10,8 +10,10 @@ import {
   SettingsSection,
   SettingsCard,
   SettingsRow,
+  SettingsHeadTools,
 } from './SettingsUI';
-import { Tooltip } from '../ui';
+import uiStyles from './SettingsUI.module.css';
+import { Button, Input, Tooltip } from '../ui';
 import { useToast } from '../../services/toast/ToastContext';
 import {
   SHORTCUT_ITEMS,
@@ -223,45 +225,48 @@ export const SettingsShortcutsTab: React.FC = () => {
   let flatIdx = -1;
 
   const headerMeta = (
-    <div className="settings-head-tools settings-head-tools--shortcuts">
-      <input
-        id={filterId}
-        type="search"
-        className="settings-field-input settings-field-input--sm settings-field-input--w160 settings-shortcuts-filter"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="搜索…"
-        spellCheck={false}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
-        aria-label="搜索快捷键"
-        aria-controls={listId}
-        aria-describedby={headMetaId}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            e.preventDefault();
-            if (recordingShortcutId) {
-              setRecordingShortcutId(null);
-            } else if (query) {
-              clearQuery();
+    <SettingsHeadTools>
+      <div className={uiStyles.filterInput}>
+        <Input
+          id={filterId}
+          variant="search"
+          size="sm"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="搜索…"
+          spellCheck={false}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          aria-label="搜索快捷键"
+          aria-controls={listId}
+          aria-describedby={headMetaId}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault();
+              if (recordingShortcutId) {
+                setRecordingShortcutId(null);
+              } else if (query) {
+                clearQuery();
+              }
+            } else if (e.key === 'ArrowDown' && flatIds.length > 0) {
+              e.preventDefault();
+              requestAnimationFrame(() => btnRefs.current[focusIndex]?.focus());
             }
-          } else if (e.key === 'ArrowDown' && flatIds.length > 0) {
-            e.preventDefault();
-            requestAnimationFrame(() => btnRefs.current[focusIndex]?.focus());
-          }
-        }}
-      />
+          }}
+        />
+      </div>
       {hasQuery ? (
         <Tooltip content="清空筛选">
-          <button
+          <Button
             type="button"
-            className="settings-shortcuts-filter-clear"
+            variant="ghost"
+            size="xs"
             onClick={clearQuery}
             aria-label="清空筛选"
           >
             清空
-          </button>
+          </Button>
         </Tooltip>
       ) : null}
       {headMetaText ? (
@@ -277,7 +282,7 @@ export const SettingsShortcutsTab: React.FC = () => {
       ) : (
         <span id={headMetaId} className="sr-only" />
       )}
-    </div>
+    </SettingsHeadTools>
   );
 
   return (
@@ -291,14 +296,15 @@ export const SettingsShortcutsTab: React.FC = () => {
               control={
                 hasQuery ? (
                   <Tooltip content="清空筛选">
-                    <button
+                    <Button
                       type="button"
-                      className="settings-shortcuts-filter-clear"
+                      variant="ghost"
+                      size="sm"
                       onClick={clearQuery}
                       aria-label="清空筛选并显示全部快捷键"
                     >
                       清空筛选
-                    </button>
+                    </Button>
                   </Tooltip>
                 ) : null
               }
@@ -334,14 +340,15 @@ export const SettingsShortcutsTab: React.FC = () => {
                           <div className={`settings-list-control settings-list-control--shortcuts ${styles.controlGroup}`}>
                             {customized && !isRecording ? (
                               <Tooltip content={`恢复默认：${formatShortcutLabel(defaultBindingOf(sh.id))}`}>
-                                <button
+                                <Button
                                   type="button"
-                                  className="settings-shortcuts-filter-clear"
+                                  variant="ghost"
+                                  size="xs"
                                   onClick={() => restoreDefault(sh.id)}
                                   aria-label={`恢复「${sh.label}」为默认 ${formatShortcutLabel(defaultBindingOf(sh.id))}`}
                                 >
                                   还原
-                                </button>
+                                </Button>
                               </Tooltip>
                             ) : null}
                             <Tooltip content={
@@ -349,7 +356,7 @@ export const SettingsShortcutsTab: React.FC = () => {
                                 ? '按键录制中，Esc 取消'
                                 : `当前：${displayKey}，点击重新录制`
                             }>
-                              <button
+                              <Button
                                 type="button"
                                 ref={(el) => {
                                   btnRefs.current[rowIndex] = el;
@@ -358,7 +365,10 @@ export const SettingsShortcutsTab: React.FC = () => {
                                   setRecordingShortcutId(isRecording ? null : sh.id)
                                 }
                                 onFocus={() => setFocusIndex(rowIndex)}
-                                className={`shortcut-key-btn ${isRecording ? 'recording' : ''}`}
+                                className={`${styles.shortcutKeyBtn} shortcut-key-btn${isRecording ? ` ${styles.recording} recording` : ''}`}
+                                variant="secondary"
+                                size="sm"
+                                active={isRecording}
                                 aria-pressed={isRecording}
                                 aria-label={
                                   isRecording
@@ -368,7 +378,7 @@ export const SettingsShortcutsTab: React.FC = () => {
                                 tabIndex={tabIndex}
                               >
                                 {isRecording ? '按下新键…' : displayKey}
-                              </button>
+                              </Button>
                             </Tooltip>
                           </div>
                         }

@@ -303,7 +303,8 @@ html[data-theme='light'] {
   --transition-micro: 100ms ease-out;
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-smooth: 300ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-enter: 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  /* Toast 入场：无过冲（y≤1）；旧值 y2=1.275 会越过停点再回 */
+  --transition-enter: 400ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-exit: 250ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-spring: 500ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
   --transition-popover-enter: cubic-bezier(0.16, 1, 0.3, 1) 180ms;
@@ -342,7 +343,8 @@ html[data-theme='light'] {
   --dropdown-padding: var(--space-1_5);
   --dropdown-gap: var(--space-0_5);
   --dropdown-radius: var(--radius-lg);
-  --button-radius: var(--radius-md);
+  /* 设置/按钮圆角锁：默认档 7px，禁止再别名到 --radius-md 的 6 */
+  --button-radius: 7px;
   --pill-radius: var(--radius-md);
   --item-padding: 8px 12px;
   --item-radius: var(--radius-md);

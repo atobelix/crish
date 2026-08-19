@@ -272,16 +272,17 @@
   border: none;
   font-weight: var(--font-weight-medium, 500);
   box-shadow: none;
-  transition: color var(--transition-press), background-color var(--transition-press), transform var(--transition-press);
+  transition: color var(--transition-press), background-color var(--transition-press);
   box-sizing: border-box;
   text-align: left;
   cursor: pointer;
   overflow: hidden;
 }
 
+/* 按下色变，无缩放 */
 .sessionItem:active {
-  transform: scale(0.985);
-  transition: transform var(--transition-press);
+  background: var(--sidebar-active);
+  color: var(--text-primary);
 }
 
 .sessionItem {

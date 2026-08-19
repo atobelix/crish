@@ -17,9 +17,13 @@ import {
 import { setComposerSeed } from '../../api/composerSeed';
 import { closeSettings } from '../../store/storeAccess';
 import styles from './SettingsScheduleTab.module.css';
-import { Button } from '../ui';
+import { Button, SegmentedControl } from '../ui';
 import { SettingsPage, SettingsSection, SettingsCard } from './SettingsUI';
-import { FILTER_OPTIONS, draftFromWorkflow } from './workflowsSharedLib';
+import {
+  FILTER_OPTIONS,
+  draftFromWorkflow,
+  type ScheduleFilter,
+} from './workflowsSharedLib';
 import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
@@ -128,26 +132,16 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
           role="toolbar"
           aria-label="筛选与新建"
         >
-          <div
-            className="settings-choice-group"
-            role="group"
+          <SegmentedControl
             aria-label="任务筛选"
-          >
-            {FILTER_OPTIONS.map((opt) => {
-              const active = filter === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  type="button"
-                  className={`settings-choice-btn ${active ? 'active' : ''}`}
-                  aria-pressed={active}
-                  onClick={() => setFilter(opt.id)}
-                >
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
+            size="sm"
+            value={filter}
+            options={FILTER_OPTIONS.map((opt) => ({
+              value: opt.id,
+              label: opt.label,
+            }))}
+            onChange={(v) => setFilter(v as ScheduleFilter)}
+          />
           <Button
             type="button"
             variant="secondary"
@@ -196,28 +190,28 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
         )}
 
         {createMode === 'paths' ? (
-          <div className="settings-create-paths" id="sched-settings-form">
+          <div className={styles.createPaths} id="sched-settings-form">
             <button
               type="button"
-              className="settings-create-path"
+              className={styles.createPath}
               onClick={handleAiCreateSchedule}
             >
-              <span className="settings-create-path-title">用对话创建</span>
-              <span className="settings-create-path-desc">
+              <span className={styles.createPathTitle}>用对话创建</span>
+              <span className={styles.createPathDesc}>
                 描述目标和频率，让 AI 帮你写好（推荐）
               </span>
             </button>
             <button
               type="button"
-              className="settings-create-path"
+              className={styles.createPath}
               onClick={() => {
                 setCreateMode('form');
                 setError('');
                 setOk('');
               }}
             >
-              <span className="settings-create-path-title">手动创建</span>
-              <span className="settings-create-path-desc">
+              <span className={styles.createPathTitle}>手动创建</span>
+              <span className={styles.createPathDesc}>
                 自己填名称、内容和触发方式
               </span>
             </button>

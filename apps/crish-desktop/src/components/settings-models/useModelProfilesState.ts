@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   addModelToProfile,
   createCustomProfile,
+  findProfileByDisplayName,
   getActiveModelId,
   getActiveProfileId,
   loadProfiles,
@@ -40,7 +41,9 @@ export {
   type PresetProvider,
 };
 
-export function useModelProfilesState() {
+export function useModelProfilesState(
+  onShowToast?: (ok: boolean, msg: string) => void,
+) {
   const [profiles, setProfiles] = useState<ProviderProfile[]>(() =>
     loadProfiles()
   );
@@ -110,11 +113,17 @@ export function useModelProfilesState() {
     []
   );
 
+  /** 成功静默（含「已自动获取 N 个模型」）；失败才进 Toast，并带 error 皮。 */
   const notify = useCallback(
-    (_ok: boolean, msg: string) => {
-      toast.show(msg);
+    (ok: boolean, msg: string) => {
+      if (onShowToast) {
+        onShowToast(ok, msg);
+        return;
+      }
+      if (ok) return;
+      toast.show(msg, undefined, { type: 'error' });
     },
-    []
+    [onShowToast],
   );
 
   const refresh = useCallback(() => {
@@ -259,6 +268,13 @@ export function useModelProfilesState() {
 
   const addFromPreset = (preset: PresetProvider) => {
     void runAsLocalMutation(() => {
+      const existing = findProfileByDisplayName(loadProfiles(), preset.name);
+      if (existing) {
+        refresh();
+        setSelectedIdState(existing.id);
+        setAddOpen(false);
+        return;
+      }
       const p = createCustomProfile({
         name: preset.name,
         baseUrl: preset.baseUrl,

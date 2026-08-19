@@ -101,6 +101,11 @@ vi.mock('../store/layoutStore', () => ({
   // storeAccess 链使 workspaceStore 进入本测试模块图；mock 补齐其顶层依赖）
   DEFAULT_WORKSPACE_ID: 'default',
   seedInitialWorkspaces: vi.fn(() => ({})),
+  clampActiveWorkspaceIndex: (workspaces: unknown[], index: number) => {
+    if (!Array.isArray(workspaces) || workspaces.length === 0) return 0;
+    const i = Number.isFinite(index) ? Math.trunc(index) : 0;
+    return Math.min(Math.max(0, i), workspaces.length - 1);
+  },
 }));
 
 import {
@@ -108,8 +113,10 @@ import {
   addModelToProfile,
   anyProfileHasKey,
   anyProfileHasModel,
+  findProfileByDisplayName,
   flattenModelChoices,
   flattenModelChoicesFrom,
+  foldProfilesByDisplayName,
   getActiveModelId,
   getActiveProfileId,
   getDefaultProviderProfiles,
@@ -126,6 +133,7 @@ import {
   pickDefaultModelId,
   pickDefaultModelSelection,
   profileDisplayLabel,
+  profileDisplayNameKey,
   profileHasKey,
   profileHasUsableModels,
   removeModelFromProfile,
@@ -854,6 +862,62 @@ describe('providerProfiles', () => {
       expect(truncateProfileLabel('深度求索模型服务', 4)).toBe('深度求…');
       expect(truncateProfileLabel('短', 10)).toBe('短');
       expect(truncateProfileLabel('abc', 1)).toBe('…');
+    });
+
+    it('foldProfilesByDisplayName keeps one OpenCode Go 订阅 (seed over empty custom)', () => {
+      const seed = {
+        id: 'opencode-go',
+        name: 'OpenCode Go 订阅',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        models: ['deepseek-v4-flash'],
+        hasKey: false,
+        enabled: true,
+      };
+      const custom = {
+        id: 'custom-dup',
+        name: '  OpenCode Go 订阅  ',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        models: [],
+        hasKey: false,
+        enabled: true,
+      };
+      const zen = {
+        id: 'opencode-zen',
+        name: 'OpenCode Zen 订阅',
+        baseUrl: 'https://opencode.ai/zen/v1',
+        models: [],
+        hasKey: false,
+        enabled: true,
+      };
+      const folded = foldProfilesByDisplayName([custom, seed, zen]);
+      expect(folded.map((p) => p.id)).toEqual(['opencode-go', 'opencode-zen']);
+      expect(
+        folded.filter((p) => profileDisplayNameKey(p) === 'OpenCode Go 订阅')
+      ).toHaveLength(1);
+      expect(
+        findProfileByDisplayName([custom, seed], 'OpenCode Go 订阅')?.id
+      ).toBe('opencode-go');
+      expect(findProfileByDisplayName([zen], 'OpenCode Go 订阅')).toBeUndefined();
+    });
+
+    it('foldProfilesByDisplayName prefers keyed custom over empty seed', () => {
+      const seed = {
+        id: 'opencode-go',
+        name: 'OpenCode Go 订阅',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        models: ['deepseek-v4-flash'],
+        hasKey: false,
+      };
+      const custom = {
+        id: 'custom-keyed',
+        name: 'OpenCode Go 订阅',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        models: ['deepseek-v4-flash', 'glm-5.2'],
+        hasKey: true,
+      };
+      expect(foldProfilesByDisplayName([seed, custom]).map((p) => p.id)).toEqual([
+        'custom-keyed',
+      ]);
     });
 
     it('empty catalog guards: no mimo fallback', () => {

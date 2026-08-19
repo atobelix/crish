@@ -1,0 +1,42 @@
+/* 细滚动条出口。禁名 shell-scrollbar.css，本文件为唯一 webkit 出口。
+ * 默认 7px（6–8px）；域可覆盖 --scrollbar-thumb-width（0px 隐藏 / 3px 紧凑）。
+ * thumb 走 --tint-scrollbar-thumb；轨道透明；无上下三角。 */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
+}
+
+::-webkit-scrollbar {
+  width: var(--scrollbar-thumb-width, 7px);
+  height: var(--scrollbar-thumb-width, 7px);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--tint-scrollbar-thumb);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background: var(--tint-overlay);
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 侧栏 / Menu / 设置 cover+nav（CSS Modules 哈希后仍命中 local 名） */
+[class*='sidebarScroll'],
+[class*='menuContent'],
+[class*='coverContent'],
+[class*='navScroll'] {
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
+}

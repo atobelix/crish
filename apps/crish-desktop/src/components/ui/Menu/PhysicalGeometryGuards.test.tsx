@@ -33,6 +33,10 @@ import { MockPhysicalGeometryEngine } from '../../../test-utils/MockPhysicalGeom
 import { ControllableResizeObserver } from '../../../test-utils/ControllableResizeObserver';
 import { mockTauriCommand, clearMockTauriCommands } from '../../../test-setup';
 
+vi.mock('../../../api/storeAccess', () => ({
+  openSettings: vi.fn(),
+}));
+
 beforeEach(() => {
   clearMockTauriCommands();
   localStorage.setItem('crish_workspace', '/workspace');
@@ -96,12 +100,22 @@ describe('专项 1：400px~1200px 极限视口与碰撞翻折守卫矩阵 (GEO-V
     engine.setViewport({ width: 600, height: 400 });
     const ModelBadgeTest = () => {
       const [open, setOpen] = useState(false);
+      const anchorRef = React.useRef<HTMLButtonElement>(null);
       return (
-        <ModelBadgePickerMenu onClose={() => setOpen(false)} open={open}>
-          <button data-mock-rect="20,10,120,32" onClick={() => setOpen(true)}>
+        <>
+          <button
+            ref={anchorRef}
+            data-mock-rect="20,10,120,32"
+            onClick={() => setOpen(true)}
+          >
             选择模型
           </button>
-        </ModelBadgePickerMenu>
+          <ModelBadgePickerMenu
+            onClose={() => setOpen(false)}
+            open={open}
+            anchor={anchorRef}
+          />
+        </>
       );
     };
     render(<ModelBadgeTest />);

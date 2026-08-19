@@ -10,6 +10,7 @@ import {
   useAutoGrowTextarea,
 } from '../../hooks/useAutoGrowTextarea';
 import type { ComposerFieldProps } from './composerTypes';
+import { readSendShortcut } from '../../api/store-access/settingsAccess';
 
 /**
  * Stop UX 文案（产品：默认 Stop = L2 cooperative；Force = L3 force_cancel）。
@@ -244,10 +245,7 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(
             if (isComposing) return;
             if (onKeyDownExtra?.(e) === true) return;
 
-            const sendShortcut =
-              typeof window !== 'undefined'
-                ? localStorage.getItem('crish_send_shortcut') || 'enter'
-                : 'enter';
+            const sendShortcut = readSendShortcut();
             if (sendShortcut === 'ctrlEnter') {
               if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();

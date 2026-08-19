@@ -3,7 +3,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render } from '@testing-library/react';
 import { ToastStack } from '../../src/components/overlay/ToastStack';
-import type { AppToast } from '../../src/services/ToastBus';
+import type { AppToast } from '../../src/hooks/useToastQueue';
 
 const baseToast: AppToast = {
   id: 'toast_1',
