@@ -1,12 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { GENERAL_FOLDER, type ProjectEntry } from '../../api/projectStore';
 import {
-  isUnitChromeCanvasQuiet,
+  countRunningSubagents,
   resolveUnitChromeLabel,
   resolveUnitChromeToolTip,
   UNIT_CHROME_TOOL_TIP_SIDE,
 } from './unitChromeLabel';
-import { PENDING_DRAFT_SESSION_ID } from '../../store/draftSession';
 
 const demoProject: ProjectEntry = {
   id: 'proj-demo1',
@@ -90,7 +89,6 @@ describe('resolveUnitChromeLabel', () => {
   });
 
   it('does not use session title — only folder', () => {
-    // helper has no title field; ensure folder GENERAL still 对话
     expect(
       resolveUnitChromeLabel(
         { folder: GENERAL_FOLDER } as { folder?: string | null },
@@ -101,72 +99,54 @@ describe('resolveUnitChromeLabel', () => {
 });
 
 describe('unit chrome tool tip', () => {
-  it('side is left — not top (top 贴顶会钳到主画布)', () => {
-    expect(UNIT_CHROME_TOOL_TIP_SIDE).toBe('left');
+  it('side is bottom — 覆盖层顶行向下出 tip', () => {
+    expect(UNIT_CHROME_TOOL_TIP_SIDE).toBe('bottom');
     expect(UNIT_CHROME_TOOL_TIP_SIDE).not.toBe('top');
-    expect(UNIT_CHROME_TOOL_TIP_SIDE).not.toBe('bottom');
+    expect(UNIT_CHROME_TOOL_TIP_SIDE).not.toBe('left');
   });
 
-  it('打开… → 短词；不把完整「打开文件」当画布胶囊', () => {
+  it('打开… → 短词；坞开关开合各有短词', () => {
     expect(resolveUnitChromeToolTip('打开文件')).toBe('文件');
     expect(resolveUnitChromeToolTip('打开总览')).toBe('总览');
     expect(resolveUnitChromeToolTip('打开差异')).toBe('差异');
     expect(resolveUnitChromeToolTip('打开终端')).toBe('终端');
     expect(resolveUnitChromeToolTip('打开笔记')).toBe('笔记');
     expect(resolveUnitChromeToolTip('展开右侧工具栏')).toBe('展开右坞');
+    expect(resolveUnitChromeToolTip('收起右侧工具栏')).toBe('收起右坞');
     expect(resolveUnitChromeToolTip('打开')).toBe('打开');
     expect(resolveUnitChromeToolTip('  打开文件  ')).toBe('文件');
   });
 });
 
-describe('isUnitChromeCanvasQuiet', () => {
-  it('no-session / 草稿 / 零消息 → 静默；有消息 → 不静默', () => {
-    expect(isUnitChromeCanvasQuiet({ sessionId: null, messageCount: 0 })).toBe(
-      true,
-    );
-    expect(isUnitChromeCanvasQuiet({ sessionId: '', messageCount: 0 })).toBe(
-      true,
-    );
+describe('countRunningSubagents', () => {
+  it('空 / 非 running 不计；只计 running', () => {
+    expect(countRunningSubagents(null)).toBe(0);
+    expect(countRunningSubagents(undefined)).toBe(0);
+    expect(countRunningSubagents([])).toBe(0);
     expect(
-      isUnitChromeCanvasQuiet({
-        sessionId: PENDING_DRAFT_SESSION_ID,
-        messageCount: 0,
-      }),
-    ).toBe(true);
-    expect(
-      isUnitChromeCanvasQuiet({ sessionId: 'sess-empty', messageCount: 0 }),
-    ).toBe(true);
-    expect(
-      isUnitChromeCanvasQuiet({ sessionId: 'sess-live', messageCount: 1 }),
-    ).toBe(false);
-    expect(
-      isUnitChromeCanvasQuiet({
-        sessionId: PENDING_DRAFT_SESSION_ID,
-        messageCount: 3,
-      }),
-    ).toBe(true);
+      countRunningSubagents([
+        { status: 'completed' },
+        { status: 'running' },
+        { status: 'running' },
+        { status: 'failed' },
+      ]),
+    ).toBe(2);
   });
 });
 
 /**
- * UnitChromeActions 坞开关顺序：divider 之后才是 right-dock-toggle。
- * 不要按已删 ChatHeader 去复活 chat-toggle-msg-filter。
+ * 对话顶行右侧固定钮顺序：更多 / 分享 / 坞开关。坞开合都不卸。
+ * 打开文件等工具不在本行。
  */
 describe('unit chrome dock order (contract)', () => {
-  it('toolbar action order ends with dock toggle after divider', () => {
+  it('chat top actions end with dock toggle; tools not in this row', () => {
     const actionOrder = [
-      'chat-open-overview',
-      'chat-open-files',
-      'chat-open-diff',
-      'chat-open-terminal',
       'chat-header-more',
-      'toolbar-divider',
+      'chat-share',
       'right-dock-toggle',
     ] as const;
     expect(actionOrder[actionOrder.length - 1]).toBe('right-dock-toggle');
-    expect(actionOrder.indexOf('right-dock-toggle')).toBeGreaterThan(
-      actionOrder.indexOf('toolbar-divider'),
-    );
+    expect(actionOrder.includes('chat-open-files' as never)).toBe(false);
     expect(actionOrder.includes('chat-toggle-msg-filter' as never)).toBe(
       false,
     );

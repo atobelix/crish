@@ -107,12 +107,15 @@ describe('叶 chrome IA 与真树对齐', () => {
     expect(leaf).not.toMatch(/from ['"]\.\/UnitSessionTabStrip['"]/);
   });
 
-  it('空叶 chrome 贴右叠层，不占涂色通栏选择器', () => {
+  it('chat 叶顶行是覆盖层，不占 flex 通栏、不 quiet', () => {
     const css = readBeside('./BinaryTreeWorkspace.module.css');
-    expect(css).toMatch(
-      /\.leaf\s*>\s*\[data-unit-chrome-actions\]\[data-canvas-quiet='true'\]/
+    expect(css).not.toMatch(/data-canvas-quiet/);
+    expect(css).toMatch(/\.leafToolHeader\s*\{[^}]*position:\s*absolute/);
+    expect(css).toMatch(/\.leafToolHeader\s*\{[^}]*height:\s*38px/);
+    expect(css).toMatch(/\.leafToolHeader\s*\{[^}]*pointer-events:\s*none/);
+    expect(css).not.toMatch(
+      /\.leafToolHeader\s*\{[^}]*justify-content:\s*flex-end/
     );
-    expect(css).toMatch(/\.leafToolHeader\s*\{[^}]*justify-content:\s*flex-end/);
     expect(css).not.toMatch(/--card-header-bg/);
   });
 });

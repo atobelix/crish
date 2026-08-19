@@ -81,31 +81,24 @@
 }
 
 /*
- * chat 叶 UnitChromeActions：不占涂色通栏、贴右。
- * 空会话 data-canvas-quiet：叠在右上角，不占 leafBody 行，欢迎面才是主角。
+ * chat 叶顶快捷行：覆盖在 leafBody 上的 38px 渐隐层，不占弹性行。
  * 工具叶 LeafToolTabStrip 自带条高。不要复活 ChatHeader / UnitSessionTabStrip。
  */
 .leafToolHeader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
-  flex: 0 0 auto;
   width: 100%;
   max-width: 100%;
-  min-width: 0;
-  align-self: stretch;
-  margin-top: 0;
-  padding-top: 0;
-  justify-content: flex-end;
-}
-
-.leaf > [data-unit-chrome-actions][data-canvas-quiet='true'] {
-  position: absolute;
-  top: var(--space-1);
-  right: var(--space-2);
-  left: auto;
-  width: auto;
-  max-width: calc(100% - var(--space-2));
-  align-self: flex-end;
+  height: 38px;
+  min-height: 38px;
+  margin: 0;
+  padding: 0;
   z-index: var(--z-chrome);
+  pointer-events: none;
+  justify-content: space-between;
 }
 
 /* live resize     +          leaf      */
@@ -321,7 +314,7 @@
   font-weight: var(--font-weight-medium);
 }
 
-/* Leaf body：chat / 工具内容。chrome 是叶上兄弟（UnitChromeActions / LeafToolTabStrip）。 */
+/* Leaf body：chat / 工具内容。chat chrome 覆盖在 body 上，不占行。 */}
 
 .leafBody {
   /* chrome 在 leafBody 外；body 吃剩余高，勿写成 height:100% 把兄弟裁掉 */

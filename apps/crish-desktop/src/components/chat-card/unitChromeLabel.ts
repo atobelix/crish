@@ -5,7 +5,6 @@ import {
   resolveFolderToProjectId,
   type ProjectEntry,
 } from '../../api/projectStore';
-import { isPendingDraft } from '../../store/draftSession';
 
 /**
  * Unit chrome 左侧主标签：项目展示名，或「对话」。
@@ -56,14 +55,14 @@ export function resolveUnitChromeLabel(
 }
 
 /**
- * 叶工具条贴顶：Tip 走横向，避免默认 side=top 翻折/钳到主画布中央。
+ * 对话顶快捷行贴叶顶：Tip 走下方，避免默认 side=top 翻出叶外。
  * 不改 Tooltip 全局基座。
  */
-export const UNIT_CHROME_TOOL_TIP_SIDE = 'left' as const;
+export const UNIT_CHROME_TOOL_TIP_SIDE = 'bottom' as const;
 
 /**
  * 工具钮 Tip 短词：按钮仍 icon-only，aria-label 保留完整「打开…」。
- * 「打开文件」→「文件」，避免贴顶大胶囊看起来像主区画钮。
+ * 「打开文件」→「文件」。
  */
 export function resolveUnitChromeToolTip(label: string): string {
   const t = label.trim();
@@ -72,19 +71,18 @@ export function resolveUnitChromeToolTip(label: string): string {
     if (rest) return rest;
   }
   if (t === '展开右侧工具栏') return '展开右坞';
+  if (t === '收起右侧工具栏') return '收起右坞';
   return t;
 }
 
-/**
- * 空画布（无会话 / 草稿 / 零消息）时叶工具须静默：挂着但不抢主区。
- * 有消息后恢复普通簇密度。禁止据此卸载整栏。
- */
-export function isUnitChromeCanvasQuiet(input: {
-  sessionId?: string | null;
-  messageCount: number;
-}): boolean {
-  const id = (input.sessionId || '').trim();
-  if (!id) return true;
-  if (isPendingDraft(id)) return true;
-  return input.messageCount <= 0;
+/** 会话内 running 子 Agent 数；0 则对话顶面包屑第三段不渲染。 */
+export function countRunningSubagents(
+  agents: ReadonlyArray<{ status?: string }> | null | undefined
+): number {
+  if (!agents || agents.length === 0) return 0;
+  let n = 0;
+  for (const a of agents) {
+    if (a.status === 'running') n += 1;
+  }
+  return n;
 }

@@ -1,8 +1,14 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatHeaderMore.module.css';
-import { Button, Menu } from '../ui';
+import { IconButton, Menu, Tooltip } from '../ui';
 import type { SelectOptionItem } from '../ui';
+import { UNIT_CHROME_TOOL_TIP_SIDE } from './unitChromeLabel';
+
+interface FolderOption {
+  id: string;
+  label: string;
+}
 
 interface Props {
   onClearHistory?: () => void;
@@ -10,12 +16,15 @@ interface Props {
   onTogglePin?: () => void;
   isPinned?: boolean;
   canExport?: boolean;
+  onMoveToFolder?: (folderId: string) => void;
+  folderOptions?: FolderOption[];
+  currentFolder?: string;
+  className?: string;
 }
 
 /**
  * 会话更多选项按钮 (⋯)
- * 基于 ui/Menu 基座（T05.3.2 由 common/UnifiedSelectPopover 改 import），
- * 靠近视口底部/右侧时自动视口翻转 (Auto Flip & Shift)，绝不受侧栏滚动条溢出遮挡。
+ * 对话顶行右侧固定钮；基于 ui/Menu 基座。
  */
 export const ChatHeaderMore: React.FC<Props> = ({
   onClearHistory,
@@ -23,7 +32,23 @@ export const ChatHeaderMore: React.FC<Props> = ({
   onTogglePin,
   isPinned = false,
   canExport = true,
+  onMoveToFolder,
+  folderOptions,
+  currentFolder,
+  className,
 }) => {
+  const moveItems: SelectOptionItem[] =
+    onMoveToFolder && folderOptions
+      ? folderOptions
+          .filter((f) => f.id !== currentFolder)
+          .map((f) => ({
+            id: `move:${f.id}`,
+            label: `移到${f.label}`,
+            icon: <Lucide.Folder size={13} style={{ marginRight: 6 }} />,
+            onClick: () => onMoveToFolder(f.id),
+          }))
+      : [];
+
   const options: SelectOptionItem[] = [
     ...(onTogglePin
       ? [
@@ -35,6 +60,7 @@ export const ChatHeaderMore: React.FC<Props> = ({
           },
         ]
       : []),
+    ...moveItems,
     ...(onExportMarkdown && canExport
       ? [
           {
@@ -61,14 +87,17 @@ export const ChatHeaderMore: React.FC<Props> = ({
   return (
     <Menu
       trigger={
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={styles.moreBtn}
-          aria-label="更多选项"
-          icon={<Lucide.MoreHorizontal size={15} />}
-        />
+        <Tooltip content="更多操作" side={UNIT_CHROME_TOOL_TIP_SIDE}>
+          <IconButton
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={`${styles.moreBtn}${className ? ` ${className}` : ''}`}
+            data-testid="chat-header-more"
+            aria-label="更多选项"
+            icon={<Lucide.MoreHorizontal size={16} />}
+          />
+        </Tooltip>
       }
       options={options}
       position={{ align: 'end', side: 'bottom', sideOffset: 6 }}

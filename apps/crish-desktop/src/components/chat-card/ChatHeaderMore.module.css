@@ -7,18 +7,18 @@
 .moreBtn {
   background: none;
   border: none;
-  color: var(--text-tertiary);
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  border-radius: var(--radius-sm, 6px);
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: var(--button-radius, 7px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color var(--transition-micro), color var(--transition-micro), opacity var(--transition-micro);
+  transition: background-color var(--transition-micro), color var(--transition-micro);
   padding: 0;
-  opacity: 0.72;
+  opacity: 1;
 }
 
 .moreBtn svg {
@@ -32,7 +32,6 @@
 .moreBtn:focus-visible,
 .moreWrap:hover .moreBtn,
 .moreWrap.isOpen .moreBtn {
-  opacity: 1;
   background-color: var(--bg-hover);
   color: var(--text-primary);
 }
@@ -103,4 +102,12 @@
 
 .moreItem:focus-visible {
   box-shadow: var(--focus-ring);
+}
+
+.danger {
+  color: var(--accent-red);
+}
+
+.danger svg {
+  color: var(--accent-red);
 }
