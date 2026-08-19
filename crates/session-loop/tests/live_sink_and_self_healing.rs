@@ -80,7 +80,7 @@ fn loop_with_tools(
 async fn test_ut_d01_01_live_sink_turn_and_agent_lifecycle() {
     let live_sink = Arc::new(RecordingLiveSink::default());
     let mut options = SessionLoopOptions::default();
-    options.live_sink = Some(live_sink.clone());
+    options.hooks.live_sink = Some(live_sink.clone());
 
     let provider = TestProvider::new(vec![
         ProviderStreamEvent::text("你好！"),
@@ -127,7 +127,7 @@ async fn test_ut_d01_01_live_sink_turn_and_agent_lifecycle() {
 async fn test_ut_d01_03_live_sink_tool_lifecycle() {
     let live_sink = Arc::new(RecordingLiveSink::default());
     let mut options = SessionLoopOptions::default();
-    options.live_sink = Some(live_sink.clone());
+    options.hooks.live_sink = Some(live_sink.clone());
 
     let echo_tool = Arc::new(TestTool::new(
         "echo_tool",
@@ -266,11 +266,7 @@ async fn test_ut_d01_06_tool_promise_self_healing_advances_turn() {
         ],
     ]);
 
-    let options = SessionLoopOptions {
-        tool_promise_recovery_enabled: true,
-        max_tool_promise_heals: 2,
-        ..SessionLoopOptions::default()
-    };
+    let options = { let mut o = SessionLoopOptions::default(); o.tool_exec.tool_promise_recovery_enabled = true; o.tool_exec.max_tool_promise_heals = 2; o };
 
     let mut loop_ = loop_with_tools(provider, vec![echo_tool], options);
     let outcome = loop_.run(user("帮我看看文件")).await;
@@ -307,11 +303,7 @@ async fn test_ut_d01_07_tool_promise_self_healing_caps_at_two_heals() {
         ],
     ]);
 
-    let options = SessionLoopOptions {
-        tool_promise_recovery_enabled: true,
-        max_tool_promise_heals: 2,
-        ..SessionLoopOptions::default()
-    };
+    let options = { let mut o = SessionLoopOptions::default(); o.tool_exec.tool_promise_recovery_enabled = true; o.tool_exec.max_tool_promise_heals = 2; o };
 
     let mut loop_ = loop_with_tools(provider, vec![], options);
     let outcome = loop_.run(user("持续测试")).await;
@@ -331,11 +323,7 @@ async fn test_ut_d01_08_tool_promise_disabled_when_flag_false() {
         ProviderStreamEvent::stop(StopReason::Stop),
     ]);
 
-    let options = SessionLoopOptions {
-        tool_promise_recovery_enabled: false,
-        max_tool_promise_heals: 2,
-        ..SessionLoopOptions::default()
-    };
+    let options = { let mut o = SessionLoopOptions::default(); o.tool_exec.tool_promise_recovery_enabled = false; o.tool_exec.max_tool_promise_heals = 2; o };
 
     let mut loop_ = loop_with_tools(provider, vec![], options);
     let outcome = loop_.run(user("开关关闭测试")).await;
@@ -366,3 +354,4 @@ fn test_ut_d01_09_toolexecctx_background_and_log_root_fields() {
     assert_eq!(ctx.log_root, Some(log_root));
     assert!(ctx.background.is_none());
 }
+

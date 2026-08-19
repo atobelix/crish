@@ -173,7 +173,7 @@ impl LoopState {
     /// 统一单点事件发射：同时推入持久化事件轨与实时通知轨（保证严格因果序）
     pub(crate) fn emit_event(&mut self, event: AgentEvent) {
         self.events.push(event.clone());
-        if let Some(sink) = &self.options.live_sink {
+        if let Some(sink) = &self.options.hooks.live_sink {
             sink.push_live(event);
         }
     }
@@ -240,7 +240,7 @@ pub(crate) fn record_message(state: &mut LoopState, message: AgentMessage) {
     // EV-12 删点：消息出队被消费成为 message-start → 删除待处理输入行
     //（fire-and-forget fail-open；未落库的内部消息 delete 无行可删，
     // 幂等无害——对应「每条用户消息 1 DELETE」）
-    if let Some(store) = &state.options.pending_input_store {
+    if let Some(store) = &state.options.assembly.pending_input_store {
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             let store = Arc::clone(store);
             let id = message.id.clone();
@@ -614,21 +614,15 @@ mod tests {
 
     /// 带预算/策略的最小配置（窗口 1 万、阈值 = window - reserve = 8000）
     fn budgeted_options() -> SessionLoopOptions {
-        SessionLoopOptions {
-            context_budget: Some(ContextBudget {
+        { let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(ContextBudget {
                 context_window: 10_000,
                 reserve_tokens: 2_000,
                 safety_tokens: 100,
-            }),
-            compaction_policy: Some(conex_compaction::CompactionPolicy {
+            }); o.compaction.compaction_policy = Some(conex_compaction::CompactionPolicy {
                 keep_recent_tokens: 2_000,
                 min_recent_turns: 1,
                 ..Default::default()
-            }),
-            max_auto_compactions_per_run: 1,
-            summarizer: Some(Arc::new(StubSummaryGuard)),
-            ..Default::default()
-        }
+            }); o.compaction.max_auto_compactions_per_run = 1; o.compaction.summarizer = Some(Arc::new(StubSummaryGuard)); o }
     }
 
     /// 超阈值对话：10 条消息 × 5000 字（CJK 逐字符 ≈ 5000 token）≈ 5 万 token
@@ -809,10 +803,7 @@ mod tests {
     /// 可配置上限：max_auto_compactions_per_run = 2 → 同 run 最多压缩 2 次
     #[tokio::test]
     async fn preflight_respects_configured_run_limit() {
-        let mut state = test_state(SessionLoopOptions {
-            max_auto_compactions_per_run: 2,
-            ..budgeted_options()
-        });
+        let mut state = test_state({ let mut o = budgeted_options(); o.compaction.max_auto_compactions_per_run = 2; o });
         state.conversation = big_conversation();
         assert!(maybe_compact_preflight(&mut state).await);
         state.conversation = big_conversation();
@@ -854,11 +845,7 @@ mod tests {
     /// 恒在发送序列尾部、绝不在 dropped_ids（07 方案 §2.4 断言 1/2）
     #[tokio::test]
     async fn user_boundary_compacts_when_over_threshold_and_holds_message() {
-        let mut state = test_state(SessionLoopOptions {
-            // E2 F1 L1：LLM 摘要强制——注入可用 Summarizer（合法 Schema V1）
-            summarizer: Some(Arc::new(StubSummaryGuard)),
-            ..budgeted_options()
-        });
+        let mut state = test_state({ let mut o: SessionLoopOptions = budgeted_options(); o.compaction.summarizer = Some(Arc::new(StubSummaryGuard)); o });
         state.conversation = big_conversation();
         // 模拟 hold 消息（prepare_turn 步骤 2：dequeue 后未 record_message
         // 即调用本函数——压缩对 hold 消息透明）
@@ -902,10 +889,7 @@ mod tests {
     /// / reason 字段），policy 归 proactive（07 方案 §2.4 断言 2）
     #[tokio::test]
     async fn user_boundary_events_carry_usermessage_trigger() {
-        let mut state = test_state(SessionLoopOptions {
-            summarizer: Some(Arc::new(StubSummaryGuard)),
-            ..budgeted_options()
-        });
+        let mut state = test_state({ let mut o = budgeted_options(); o.compaction.summarizer = Some(Arc::new(StubSummaryGuard)); o });
         state.conversation = big_conversation();
         assert!(maybe_compact_user_boundary(&mut state).await);
         // Start 事件：reason = "usermessage"
@@ -961,10 +945,7 @@ mod tests {
     /// runtime-intervention-required 事件（07 方案 §2.4 断言 2）
     #[tokio::test]
     async fn user_boundary_llm_unavailable_skips_but_sends_message() {
-        let mut state = test_state(SessionLoopOptions {
-            summarizer: None,
-            ..budgeted_options()
-        });
+        let mut state = test_state({ let mut o = budgeted_options(); o.compaction.summarizer = None; o });
         state.conversation = big_conversation();
         assert!(
             !maybe_compact_user_boundary(&mut state).await,
@@ -983,11 +964,7 @@ mod tests {
             "LLM 不可用必须发 runtime-intervention-required 事件"
         );
         // 豁免开启（compact_allow_stub_fallback=true）→ 降级 stub 压缩完成
-        let mut state = test_state(SessionLoopOptions {
-            summarizer: None,
-            compact_allow_stub_fallback: true,
-            ..budgeted_options()
-        });
+        let mut state = test_state({ let mut o = budgeted_options(); o.compaction.summarizer = None; o.compaction.compact_allow_stub_fallback = true; o });
         state.conversation = big_conversation();
         assert!(
             maybe_compact_user_boundary(&mut state).await,
@@ -1011,10 +988,7 @@ mod tests {
             "边界压缩后预检因计数封顶跳过"
         );
         // 反向：边界未压缩（LLM 不可用）不消耗计数 → 预检可再试
-        let mut state = test_state(SessionLoopOptions {
-            summarizer: None,
-            ..budgeted_options()
-        });
+        let mut state = test_state({ let mut o = budgeted_options(); o.compaction.summarizer = None; o });
         state.conversation = big_conversation();
         assert!(!maybe_compact_user_boundary(&mut state).await);
         assert_eq!(state.compaction.compactions_this_run, 0);
@@ -1046,20 +1020,19 @@ mod tests {
             }
         }
         let calls = Arc::new(std::sync::Mutex::new(0usize));
-        let state = test_state(SessionLoopOptions {
-            summarizer: Some(Arc::new(AlwaysFailSummarizer {
+        let state = test_state({
+            let mut o = budgeted_options();
+            o.compaction.summarizer = Some(Arc::new(AlwaysFailSummarizer {
                 calls: calls.clone(),
-            })),
-            // 豁免开启（E2 F1 L3）：同步摘要失败 → 降级 stub（awaiting 块），
-            // 供被动摘要重试点消费（F1 强制默认路径下失败不落 stub）
-            compact_allow_stub_fallback: true,
-            summary_dispatch: Some(crate::r#loop::summary_dispatch::SummaryDispatchConfig {
+            }));
+            o.compaction.compact_allow_stub_fallback = true;
+            o.summary.summary_dispatch = Some(crate::r#loop::summary_dispatch::SummaryDispatchConfig {
                 backoff_ms: vec![1, 1, 1],
                 jitter: 0.0,
                 max_wall_ms: 5_000,
                 max_attempts: 4,
-            }),
-            ..budgeted_options()
+            });
+            o
         });
         // 首轮边界压缩（超阈值）：同步摘要失败 → stub + 待重试快照 +
         // 后台任务登记
@@ -1201,14 +1174,11 @@ mod tests {
     #[tokio::test]
     async fn compaction_resets_cache_tracker_baseline_via_real_path() {
         use conex_telemetry::cache::{CacheAccountingKind, CacheUsageScalars};
-        let mut state = test_state(SessionLoopOptions {
-            cache_tracking: Some(crate::cache_tracker::CacheTrackingConfig {
+        let mut state = test_state({ let mut o = budgeted_options(); o.cache.cache_tracking = Some(crate::cache_tracker::CacheTrackingConfig {
                 provider: "deepseek".into(),
                 model: "deepseek-v4-flash".into(),
                 ttl_seconds: 60,
-            }),
-            ..budgeted_options()
-        });
+            }); o });
         let usage = |prompt: u64, read: u64, write: u64| CacheUsageScalars {
             prompt,
             read,
@@ -1365,10 +1335,7 @@ mod tests {
             calls: calls.clone(),
             fail: false,
         });
-        let mut state = test_state(SessionLoopOptions {
-            summarizer: Some(summarizer.clone()),
-            ..budgeted_options()
-        });
+        let mut state = test_state({ let mut o = budgeted_options(); o.compaction.summarizer = Some(summarizer.clone()); o });
         state.conversation = big_conversation();
         assert!(
             maybe_compact_preflight(&mut state).await,
@@ -1399,14 +1366,10 @@ mod tests {
 
         // 失败路径：Err → 降级中性 stub（R-C：永不改写；§3.4.4 不阻塞主对话）
         let fail_state = {
-            let mut state = test_state(SessionLoopOptions {
-                summarizer: Some(Arc::new(RecordingSummarizer {
+            let mut state = test_state({ let mut o = budgeted_options(); o.compaction.summarizer = Some(Arc::new(RecordingSummarizer {
                     calls: Arc::new(Mutex::new(Vec::new())),
                     fail: true,
-                })),
-                compact_allow_stub_fallback: true,
-                ..budgeted_options()
-            });
+                })); o.compaction.compact_allow_stub_fallback = true; o });
             state.conversation = big_conversation();
             assert!(
                 maybe_compact_preflight(&mut state).await,
@@ -1632,23 +1595,11 @@ mod tests {
         let summarizer = Arc::new(FailsThenSucceeds {
             calls: calls.clone(),
         });
-        let mut state = test_state(SessionLoopOptions {
-            summarizer: Some(summarizer.clone()),
-            // 快速退避注入（单飞任务 1ms 后即重试，测试等 300ms 收口）
-            summary_dispatch: Some(crate::r#loop::summary_dispatch::SummaryDispatchConfig {
-                backoff_ms: vec![1, 1, 1],
-                jitter: 0.0,
-                max_wall_ms: 5_000,
-                max_attempts: 4,
-            }),
-            cache_tracking: Some(crate::cache_tracker::CacheTrackingConfig {
+        let mut state = test_state({ let mut o = budgeted_options(); o.compaction.summarizer = Some(summarizer.clone()); o.cache.cache_tracking = Some(crate::cache_tracker::CacheTrackingConfig {
                 provider: "deepseek".into(),
                 model: "deepseek-v4-flash".into(),
                 ttl_seconds: 60,
-            }),
-            compact_allow_stub_fallback: true,
-            ..budgeted_options()
-        });
+            }); o.compaction.compact_allow_stub_fallback = true; o });
         state.conversation = big_conversation();
         assert!(
             maybe_compact_preflight(&mut state).await,
@@ -1712,3 +1663,5 @@ mod tests {
         assert_eq!(recorded[0].len(), 8, "丢弃 8 条消息全部进入重试任务");
     }
 }
+
+

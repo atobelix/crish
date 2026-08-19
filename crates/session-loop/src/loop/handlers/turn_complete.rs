@@ -82,8 +82,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     // 4. lifecycle turn.end 钩子的 stop 建议（01 §2.9 步骤 5 / 遗留问题 3：
     //    与 shouldStopAfterTurn 合并时以此为准）
     let stop_suggested = state
-        .options
-        .turn_end_hook
+        .options.hooks.turn_end_hook
         .as_ref()
         .map(|hook| {
             hook.on_turn_end(&TurnEndContext {
@@ -102,7 +101,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     //    优先级低于编排层 turn_end_hook、高于 maxTurns）。
     //    propagate 失败：记录日志后继续收场（钩子失败不中断收场流程，
     //    与 tool.pre 的 propagate 降级语义一致，见 hooks.rs 模块头注）。
-    if let Some(hooks) = &state.options.hooks {
+    if let Some(hooks) = &state.options.tool_exec.hooks {
         let event = crate::hooks::HookEvent::TurnEnd {
             session_id: ctx.session_id.clone(),
             turn_index: ctx.turn_index,
@@ -137,7 +136,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         });
         // I8-E1 第二批：error.occurred 钩子广播（runtime-error 事件同点位；
         // observe 默认，失败吞掉 + 计数，收场流程继续）
-        if let Some(hooks) = &state.options.hooks {
+        if let Some(hooks) = &state.options.tool_exec.hooks {
             let _ = hooks
                 .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
                     session_id: ctx.session_id.clone(),
@@ -164,8 +163,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
 
     // 6. shouldStopAfterTurn 兼容层（无 turn_end_hook 时生效；01 遗留问题 3）
     let should_stop = state
-        .options
-        .should_stop_after_turn
+        .options.hooks.should_stop_after_turn
         .as_ref()
         .map(|hook| {
             hook.on_turn_end(&TurnEndContext {
@@ -199,3 +197,4 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     dispatch(state, E::ShouldStop)?;
     Ok(HandlerOutcome::end(EndDecision::stop(state)))
 }
+

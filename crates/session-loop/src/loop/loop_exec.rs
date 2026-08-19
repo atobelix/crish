@@ -54,7 +54,7 @@ impl AgentSessionLoop {
                 error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
                 retryable: Some(true),
             });
-            if let Some(hooks) = &self.state.options.hooks {
+            if let Some(hooks) = &self.state.options.tool_exec.hooks {
                 let _ = hooks
                     .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
                         session_id: self.session_id.clone(),
@@ -100,7 +100,7 @@ impl AgentSessionLoop {
         // 层负责（T-40，经 CacheStatsTracker::baseline 移交）——本层只保证
         // 每 run 从干净状态开始（压缩代数归 0、签名基线作废、聚合清零）。
         self.state.compaction.cache_tracker =
-            build_tracker(self.state.options.cache_tracking.as_ref());
+            build_tracker(self.state.options.cache.cache_tracking.as_ref());
 
         // 用户消息入队（force 环）→ INITIALIZED → agent-start（01 §2.1）
         // EV-12 输入留痕写点：用户消息主路径入队即落库（save_pending_input，
@@ -122,7 +122,7 @@ impl AgentSessionLoop {
         // I8-E1 第一批：session.start 钩子广播（run 启动处；载荷最小子集
         // sessionId；observe 观察者失败不阻塞 run 启动——dispatch 内部
         // 已按 failStrategy 处置 + 错误事件化）
-        if let Some(hooks) = &self.state.options.hooks {
+        if let Some(hooks) = &self.state.options.tool_exec.hooks {
             let _ = hooks
                 .dispatch(&crate::hooks::HookEvent::SessionStart {
                     session_id: self.session_id.clone(),
@@ -201,7 +201,7 @@ impl AgentSessionLoop {
         if self.state.abort_signal.is_aborted() {
             return RecoveryDecision::Abort;
         }
-        if let Some(hook) = &self.state.options.recovery_hook {
+        if let Some(hook) = &self.state.options.hooks.recovery_hook {
             // F6：传结构化错误（码分类裁决）
             return hook.decide(err.crish(), self.state.machine.state());
         }
@@ -236,7 +236,7 @@ impl AgentSessionLoop {
         });
         // I8-E1 第二批：error.occurred 钩子广播（引擎错误分类处——runtime-error
         // 事件同点位；observe 默认，失败吞掉 + 计数，收场流程继续）
-        if let Some(hooks) = &self.state.options.hooks {
+        if let Some(hooks) = &self.state.options.tool_exec.hooks {
             let _ = hooks
                 .dispatch(&crate::hooks::HookEvent::ErrorOccurred {
                     session_id: self.session_id.clone(),
@@ -317,7 +317,7 @@ impl AgentSessionLoop {
         self.state.emit_event(end_event);
         // I8-E1 第一批：session.end 钩子广播（run 收场终态；observe 默认，
         // 失败吞掉 + 计数，收场流程继续——03 §2.4 表）
-        if let Some(hooks) = &self.state.options.hooks {
+        if let Some(hooks) = &self.state.options.tool_exec.hooks {
             let _ = hooks
                 .dispatch(&crate::hooks::HookEvent::SessionEnd {
                     session_id: self.session_id.clone(),
@@ -348,3 +348,4 @@ impl AgentSessionLoop {
         }
     }
 }
+

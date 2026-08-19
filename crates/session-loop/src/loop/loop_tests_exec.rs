@@ -49,14 +49,11 @@
             stop_with_usage(1_000, 50, 800, 100, None),
         ]);
         let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
-        loop_ = loop_.with_options(SessionLoopOptions {
-            cache_tracking: Some(CacheTrackingConfig {
+        loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.cache.cache_tracking = Some(CacheTrackingConfig {
                 provider: "deepseek".to_string(),
                 model: "deepseek-v4-flash".to_string(),
                 ttl_seconds: 60,
-            }),
-            ..Default::default()
-        });
+            }); o });
         let outcome = loop_.run(user_input("你好")).await;
         let stats = outcome.cache_stats.expect("配置后收口必须携带缓存统计");
         assert_eq!(stats.sample_count, 1);
@@ -195,26 +192,20 @@
         let quota_store = Arc::new(InMemoryExploreDocsQuotaStore::new());
         let mut loop_ =
             AgentSessionLoop::new("s1", "run-eg06", 16, Box::new(provider), Arc::new(reg));
-        loop_ = loop_.with_options(SessionLoopOptions {
-            cwd: Some(ws.path_str()),
-            // C1b（反向依赖移出）：写前备份中间件经 options 注入（默认链
-            // 已移出核心）——与壳层 run_launch.rs:605 同构造，验证
-            // options.tool_middleware → with_options → 工具执行器同步链路
-            tool_middleware: vec![Arc::new(
+        loop_ = loop_.with_options({
+            let mut o: SessionLoopOptions = SessionLoopOptions::default();
+            o.tool_exec.cwd = Some(ws.path_str());
+            o.tool_exec.tool_middleware = vec![Arc::new(
                 agent_tools::backup::BackupMiddleware::with_defaults(None),
-            )],
-            // 配额上下文（内存 store 后端）：主循环装配面透传 tool_ctx
-            explore_docs_quota: Some(ExploreDocsQuotaContext {
+            )];
+            o.assembly.explore_docs_quota = Some(ExploreDocsQuotaContext {
                 session_id: "s1".to_string(),
                 run_id: "run-eg06".to_string(),
                 granted: true,
                 quota: 1,
-                store: Some(
-                    Arc::clone(&quota_store)
-                        as Arc<dyn agent_tools::explore_quota::ExploreDocsQuotaStore>,
-                ),
-            }),
-            ..Default::default()
+                store: Some(Arc::clone(&quota_store) as Arc<dyn agent_tools::explore_quota::ExploreDocsQuotaStore>),
+            });
+            o
         });
 
         let outcome = loop_.run(user_input("装配冒烟")).await;
@@ -270,15 +261,11 @@
         let provider = TestProvider::new(vec![crate::stream::ProviderStreamEvent::text("x")])
             .with_error(err);
         let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
-        loop_ = loop_.with_options(SessionLoopOptions {
-            // 退避开启但 1ms 级（生产计算路径，预算 60s 充足）
-            retry_backoff: Some(RetryBackoffConfig {
+        loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.retry.retry_backoff = Some(RetryBackoffConfig {
                 base_ms: Some(1),
                 max_ms: Some(1),
                 total_budget_ms: None,
-            }),
-            ..Default::default()
-        });
+            }); o });
         let outcome = loop_.run(user_input("你好")).await;
         assert_eq!(outcome.reason, AgentEndReason::Error);
         let p = outcome.provider_error.expect("瞬态耗尽必须填充 provider_error");
@@ -335,3 +322,5 @@
             "正常 stop 收场不得携带 provider_error"
         );
     }
+
+

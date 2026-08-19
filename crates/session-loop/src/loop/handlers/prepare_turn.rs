@@ -80,7 +80,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     state.current_turn_index = Some(turn_index);
     // I8-E1 第一批：turn.start 钩子广播（turn 编排起点；observe 默认，
     // 失败吞掉 + 计数，编排继续——03 §2.4 表）
-    if let Some(hooks) = &state.options.hooks {
+    if let Some(hooks) = &state.options.tool_exec.hooks {
         let _ = hooks
             .dispatch(&crate::hooks::HookEvent::TurnStart {
                 session_id,
@@ -92,7 +92,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     // 4. steering 评估（D3 预注入短路：有可运行输入即跳过策略评估，
     //    避免对已注入 nudge 重复 steering；T06.2.1 Q03：steering_enabled
     //    =false 时跳过 AfterTools/BeforeTurn 评估）
-    if state.options.steering_enabled && !state.input_queue.has_runnable_pending() {
+    if state.options.hooks.steering_enabled && !state.input_queue.has_runnable_pending() {
         for phase in [SteeringPhase::AfterTools, SteeringPhase::BeforeTurn] {
             let actions = state.steering.evaluate(phase, &steering_context(state));
             if actions.is_empty() {
@@ -223,7 +223,7 @@ mod tests {
             min_recent_turns: 1,
             ..Default::default()
         });
-        state.options.max_auto_compactions_per_run = 1;
+        state.options.compaction.max_auto_compactions_per_run = 1;
         // E2 F1 L1：LLM 摘要强制——注入可用 Summarizer（合法 Schema V1 输出）
         struct StubSummary;
         impl conex_compaction::Summarizer for StubSummary {
@@ -329,3 +329,4 @@ mod tests {
         assert_eq!(tail.text(), "hello");
     }
 }
+

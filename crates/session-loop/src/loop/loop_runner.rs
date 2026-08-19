@@ -80,7 +80,7 @@ impl AgentSessionLoop {
             // （options 同源）
             tool_executor: {
                 let mut exec = ToolExecutor::new(tool_registry);
-                let _ = exec.with_middleware(options.tool_middleware.clone());
+                let _ = exec.with_middleware(options.tool_exec.tool_middleware.clone());
                 exec
             },
             tool_ctx: ToolExecCtx {
@@ -126,20 +126,19 @@ impl AgentSessionLoop {
     /// `with_tool_options` / `with_approval` 必须在 `run()` 之前调用。
     pub fn with_options(mut self, options: SessionLoopOptions) -> Self {
         // ── 引擎装配块（T-EG-06：互斥 / 配额 / 中间件链 / ESC 判定器）──
-        // 工作区根解析链：显式 workspace_root → options.cwd → 当前目录
+        // 工作区根解析链：显式 workspace_root → options.tool_exec.cwd → 当前目录
         // （与 ToolContext.workspace_root 既有回退语义一致，
         // tool_exec.rs:684-690；None 时写工具无互斥基准，回退当前目录）
         let root = self
             .tool_ctx
             .workspace_root
             .clone()
-            .or_else(|| options.cwd.clone().map(PathBuf::from))
+            .or_else(|| options.tool_exec.cwd.clone().map(PathBuf::from))
             .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
         // 写路径互斥注册表（I4-M3）：显式注入 → 复用 tool_ctx 既有 →
         // 按根新建（会话级，与工作区根同源——工具执行面与 ESC 判定器
         // 共享同一实例）
-        let registry = options
-            .write_claims
+        let registry = options.assembly.write_claims
             .clone()
             .or_else(|| self.tool_ctx.write_claims.clone())
             .unwrap_or_else(|| Arc::new(WritePathRegistry::new(&self.session_id, &root)));
@@ -147,11 +146,11 @@ impl AgentSessionLoop {
         self.tool_ctx.write_claims = Some(Arc::clone(&registry));
         // 探索类文档配额上下文（I6-M11 C5）：经 tool_ctx 透传工具执行面；
         // None = 主 agent 不受配额约束（04 C5「主 agent 自身不消耗」）
-        self.tool_ctx.explore_docs_quota = options.explore_docs_quota.clone();
+        self.tool_ctx.explore_docs_quota = options.assembly.explore_docs_quota.clone();
         // T-EG-08 REQ-G01：产出目录解析服务——显式注入 → 自动装配
         //（OutputWorkspace + InMemory store，工作区根同源；会话内幂等，
         // 目录名首次 resolve 冻结；生产持久化后端 F11 由壳层注入）
-        let output_dir = options.output_dir.clone().unwrap_or_else(|| {
+        let output_dir = options.assembly.output_dir.clone().unwrap_or_else(|| {
             Arc::new(agent_tools::tools::output_dir::OutputWorkspace::new(
                 self.tool_ctx.workspace_root.clone().unwrap_or_default(),
                 Arc::new(agent_tools::tools::output_dir::InMemoryOutputDirStore::new()),
@@ -160,14 +159,14 @@ impl AgentSessionLoop {
         self.tool_ctx.output_dir = Some(output_dir);
         // T-D-14 权限传递层：父 run 归属经 tool_ctx 透传执行器（审批请求
         // 来源判定与裁决者路由依据；None = 主 agent run）
-        self.tool_ctx.parent_run_id = options.parent_run_id.clone();
+        self.tool_ctx.parent_run_id = options.assembly.parent_run_id.clone();
         // Round6 / W4-E：笔记后端经 tool_ctx 透传工具执行面（None = unwired）
-        self.tool_ctx.note_backend = options.note_backend.clone();
+        self.tool_ctx.note_backend = options.assembly.note_backend.clone();
         // 后台任务管理器与日志落盘根透传工具执行面
-        self.tool_ctx.background = options.background.clone();
-        self.tool_ctx.log_root = options.log_root.clone();
+        self.tool_ctx.background = options.hooks.background.clone();
+        self.tool_ctx.log_root = options.hooks.log_root.clone();
         if self.delta_sink.is_none() {
-            if let Some(live_sink) = &options.live_sink {
+            if let Some(live_sink) = &options.hooks.live_sink {
                 self.delta_sink = Some(Arc::new(live_sink.clone()) as Arc<dyn DeltaSink>);
             }
         }
@@ -176,29 +175,29 @@ impl AgentSessionLoop {
         // 预算/压缩派生状态同步（P4 阶段 2-2/3-2）：LoopState 的
         // budget / compaction_policy / summarizer 与 options 同源，
         // 避免 handler 侧双读不一致（with_options 构造期定，run 内不可变）
-        self.state.budget_state.budget = options.context_budget;
-        self.state.compaction.compaction_policy = options.compaction_policy.clone();
-        self.state.compaction.summarizer = options.summarizer.clone();
+        self.state.budget_state.budget = options.assembly.context_budget;
+        self.state.compaction.compaction_policy = options.compaction.compaction_policy.clone();
+        self.state.compaction.summarizer = options.compaction.summarizer.clone();
         // 会话级摘要协调器派生状态同步（T-42）：与 options 同源（壳层
         // 装配；None = 回退 run 级 dispatch）
-        self.state.compaction.summary_coordinator = options.summary_coordinator.clone();
+        self.state.compaction.summary_coordinator = options.summary.summary_coordinator.clone();
         // E2 F2 层 1（低功耗模式）：低功耗护栏配置派生（两新键）——
         // 装配到 run 级调度器 [SummaryDispatch]（会话级 coordinator 侧
         // 的护栏接线由壳层批次在 SessionSummaryCoordinator 装配，07 §5.4
         // 文件域；本处为 session-loop 内核面的完整默认接线，含测试路径）
         self.state.compaction.summary_dispatch.set_retry_guard(
             crate::r#loop::summary_dispatch::SummaryRetryGuardConfig {
-                max_attempts: options.compact_summary_max_attempts,
-                retry_window_ms: options.compact_summary_retry_window_ms,
+                max_attempts: options.summary.compact_summary_max_attempts,
+                retry_window_ms: options.summary.compact_summary_retry_window_ms,
             },
         );
         // 缓存测量派生状态同步（P5 S2 / T-36）：cache_tracker 与 options
         // 同源（构造期定，run 起始再复位）
         self.state.compaction.cache_tracker =
-            build_tracker(self.state.options.cache_tracking.as_ref());
-        self.tool_ctx.cwd = self.state.options.cwd.clone();
+            build_tracker(self.state.options.cache.cache_tracking.as_ref());
+        self.tool_ctx.cwd = self.state.options.tool_exec.cwd.clone();
         // 幂等开关派生状态同步（T06.4.4）：true → 注入新守卫；false → 移除
-        let idempotency = if options.idempotency_enabled {
+        let idempotency = if options.tool_exec.idempotency_enabled {
             Some(Arc::new(ToolIdempotencyGuard::new()))
         } else {
             None
@@ -208,8 +207,8 @@ impl AgentSessionLoop {
         // tool_exec.rs 模块头注）
         let _ = self
             .tool_executor
-            .with_middleware(options.tool_middleware.clone());
-        let _ = self.tool_executor.with_hooks(options.hooks.clone());
+            .with_middleware(options.tool_exec.tool_middleware.clone());
+        let _ = self.tool_executor.with_hooks(options.tool_exec.hooks.clone());
         self
     }
 
@@ -250,7 +249,7 @@ impl AgentSessionLoop {
 
     /// 注入实时事件通知通道（Live Track 实时双轨事件发射，sequence=None）。
     pub fn with_live_sink(mut self, sink: Arc<dyn crate::provider::LiveEventSink>) -> Self {
-        self.state.options.live_sink = Some(Arc::clone(&sink));
+        self.state.options.hooks.live_sink = Some(Arc::clone(&sink));
         self.delta_sink = Some(Arc::new(sink) as Arc<dyn DeltaSink>);
         self
     }
@@ -345,7 +344,7 @@ impl AgentSessionLoop {
     /// 会话运行兜底，崩溃恢复语义允许丢失，不假装可回放）。无注入面
     /// 或无 runtime 上下文时零开销跳过（向后兼容）。
     pub(crate) fn spawn_pending_input_save(&self, message: &AgentMessage) {
-        let Some(store) = &self.state.options.pending_input_store else {
+        let Some(store) = &self.state.options.assembly.pending_input_store else {
             return;
         };
         let Ok(handle) = tokio::runtime::Handle::try_current() else {
@@ -391,7 +390,10 @@ impl AgentSessionLoop {
         mut self,
         store: Arc<dyn crate::input::PendingInputStore>,
     ) -> Self {
-        self.state.options.pending_input_store = Some(store);
+        self.state.options.assembly.pending_input_store = Some(store);
         self
     }
 }
+
+
+

@@ -209,10 +209,7 @@ async fn system_prompt_stable_across_runs_same_settings() {
         Box::new(provider),
         Arc::new(ToolRegistry::new()),
     )
-    .with_options(SessionLoopOptions {
-        system_prompt: Some(SYSTEM_PROMPT.to_string()),
-        ..Default::default()
-    });
+    .with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.system_prompt = Some(SYSTEM_PROMPT.to_string()); o });
 
     // 第一轮 run（请求 0：构建时对话仅含用户消息——助手回复在请求后 commit）
     let outcome1 = loop_.run(user("第一轮问题")).await;
@@ -335,3 +332,4 @@ async fn conversation_is_append_only_within_run() {
         ]
     );
 }
+

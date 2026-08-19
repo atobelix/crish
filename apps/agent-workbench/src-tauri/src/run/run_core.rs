@@ -692,7 +692,7 @@ impl CoreRunState {
     /// - `compact_summary_wall_ms`：单次调用墙钟（缺省 60000ms，P1-10）。
     /// - `compact_l1_placeholder`：L1 回退开关——**V1 启动级配置**：引擎
     ///   侧（轮次 1）已删 AgentMessage 面 L1 改 stub，运行时双态切换需
-    ///   引擎支持；V1 仅读取面（[session_loop::summary_l1_placeholder]）
+    ///   引擎支持；V1 已删除
     ///   文档化、不改变行为，预留给 V2。
     pub(crate) fn summary_dispatch_config(
         &self,
@@ -711,7 +711,7 @@ impl CoreRunState {
         }
         // L1 回退开关读取（V1 启动级：不改变行为，仅登记读取；引擎动态
         // 双态支持见 V2 挂账）
-        if session_loop::summary_l1_placeholder(|key| db.get_session_meta(key).ok().flatten()) {
+        if false {
             tracing::warn!(
                 target: "run",
                 session_id = session_id,

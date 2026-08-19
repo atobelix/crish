@@ -2,7 +2,7 @@
 //!
 //! 详案 `plans/详案-C1-核心循环瘦身.md` §5.3 的安全红线验收：
 //! 1. `.crish-trash` 写前备份真跑验证——经 AgentSessionLoop 全链路
-//!    （options.tool_middleware 壳层同构造注入 → with_options 同步 →
+//!    （options.tool_exec.tool_middleware 壳层同构造注入 → with_options 同步 →
 //!    工具执行器 → 真实内置 write_file 工具）断言写前快照落盘工作区
 //!    `.crish-trash`；
 //! 2. steering 真跑验证——真实空响应一次，壳层同构造
@@ -53,10 +53,7 @@ async fn write_file_through_loop_lands_crish_trash_snapshot() {
     //（run_launch.rs:605 同构造）+ cwd = 工作区根（中间件快照回退基准）
     let options = SessionLoopOptions::default()
         .with_tool_middleware(vec![Arc::new(BackupMiddleware::with_defaults(None))]);
-    let options = SessionLoopOptions {
-        cwd: Some(ws.path_str()),
-        ..options
-    };
+    let options = { let mut o = options; o.tool_exec.cwd = Some(ws.path_str()); o };
 
     let mut registry = ToolRegistry::new();
     register_builtin_tools(&mut registry).expect("内置工具注册失败");
@@ -147,3 +144,4 @@ async fn empty_response_still_steered_with_shell_injection() {
         "空响应必须触发 runtime-steering（壳层注入 steering 生效）"
     );
 }
+

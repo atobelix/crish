@@ -17,7 +17,7 @@
 //! 重试、绝不干预循环行为。
 //!
 //! 接线点（T-40 engine 接线时消费本模块 API）：
-//! - 经 `SessionLoopOptions.cache_tracking`（[CacheTrackingConfig]）注入
+//! - 经 `SessionLoopoptions.cache.cache_tracking`（[CacheTrackingConfig]）注入
 //!   LoopState（provider / model / TTL 由 engine 装配，TTL 走 P3
 //!   `cache_ttl_for_provider_model` 查询）；
 //! - `streaming::handle` 在 build_request 前捕获签名、turn 后消费 usage；
@@ -1302,3 +1302,4 @@ mod tests {
         assert_eq!(sig, full, "压缩后应全量重算（增量锚点已失效）");
     }
 }
+

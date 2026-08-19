@@ -60,7 +60,7 @@ pub(crate) async fn handle(
     // 取透传后非 None 值、messages 取对话投影；剔除 created_at / metadata——
     // 只读哈希，不改请求字节）
     let tools = tools_schema(state).to_vec();
-    let system = state.options.system_prompt.clone();
+    let system = state.options.assembly.system_prompt.clone();
     if let Some(tracker) = &mut state.compaction.cache_tracker {
         tracker.capture_signature(system.as_deref(), &tools, &state.conversation);
     }
@@ -163,7 +163,7 @@ async fn consume_stream(
                             {
                                 sink.push(delta);
                             }
-                        } else if let Some(sink) = &state.options.live_sink {
+                        } else if let Some(sink) = &state.options.hooks.live_sink {
                             if let Some(delta) =
                                 delta_to_message_event(&session_id, assistant_message_id, &event)
                             {
@@ -256,7 +256,7 @@ async fn consume_classify(
                 assistant_message_id,
                 text.clone(),
                 tool_calls.clone(),
-                state.options.assistant_client_message_id.as_deref(),
+                state.options.tool_exec.assistant_client_message_id.as_deref(),
             );
             // 收口轨（T09.1 双轨）：message-start → message-delta* →
             // message-end（01 §五.6 序列契约；实时轨已单独发射，此处保证
@@ -291,7 +291,7 @@ async fn consume_classify(
         ProviderOutput::Empty => {
             // T06.2.1（Q03）：steering 禁用时 empty-response 不可恢复——
             // 直接 stop + 诊断收场，不进 steering-evaluation（避免注入循环）
-            if !state.options.steering_enabled {
+            if !state.options.hooks.steering_enabled {
                 return Ok(HandlerOutcome::end(EndDecision::stop_with_diagnostic(
                     state,
                     "steering 已禁用，空响应无法恢复",
@@ -413,14 +413,14 @@ fn build_request(state: &LoopState) -> ProviderRequest<'_> {
     } else {
         // I1-β：非零思考预算用**用户档位**（SessionLoopOptions 装配面
         // 注入；None = 提供方默认，wire 与现状逐字节一致）
-        state.options.reasoning_effort
+        state.options.hooks.reasoning_effort
     };
 
     ProviderRequest {
         messages: &state.conversation,
         tools: tools_schema(state).to_vec(),
         max_tokens: Some(clamp_request_max_tokens(state)),
-        system_prompt: state.options.system_prompt.as_deref(),
+        system_prompt: state.options.assembly.system_prompt.as_deref(),
         session_id: Some(state.machine.context().session_id.clone()),
         reasoning_effort,
     }
@@ -711,3 +711,4 @@ fn emit_message_deltas(state: &mut LoopState, message: &AgentMessage) {
         }
     }
 }
+

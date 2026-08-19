@@ -66,7 +66,7 @@
     async fn overflow_stub_fallback_exemption_allows_stub() {
         let mut state = budgeted_state();
         state.compaction.summarizer = None;
-        state.options.compact_allow_stub_fallback = true;
+        state.options.compaction.compact_allow_stub_fallback = true;
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
@@ -89,7 +89,7 @@
     async fn overflow_require_llm_disabled_allows_stub() {
         let mut state = budgeted_state();
         state.compaction.summarizer = None;
-        state.options.compact_require_llm = false;
+        state.options.compaction.compact_require_llm = false;
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
@@ -145,7 +145,7 @@
     async fn overflow_retry_limit_configurable() {
         // 0 = 溢出不压缩直接 fatal
         let mut state = budgeted_state();
-        state.options.compact_overflow_retries = 0;
+        state.options.compaction.compact_overflow_retries = 0;
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
@@ -154,7 +154,7 @@
         assert_eq!(state.compaction.compactions_this_run, 0, "未压缩不得计数");
         // 1 = 只压缩一次，第二次仍超限直接 fatal（旧语义上限）
         let mut state = budgeted_state();
-        state.options.compact_overflow_retries = 1;
+        state.options.compaction.compact_overflow_retries = 1;
         let o1 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
             .await
             .unwrap();
@@ -198,25 +198,19 @@
             })
             .collect();
         let mut state = streaming_state();
-        let options = SessionLoopOptions {
-            context_budget: Some(ContextBudget {
+        let options = { let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(ContextBudget {
                 context_window: 100_000,
                 reserve_tokens: 1_000,
                 safety_tokens: 100,
-            }),
-            compaction_policy: Some(CompactionPolicy {
+            }); o.compaction.compaction_policy = Some(CompactionPolicy {
                 keep_recent_tokens: 20_000,
                 min_recent_turns: 1,
                 ..Default::default()
-            }),
-            max_auto_compactions_per_run: 1,
-            summarizer: Some(Arc::new(OkSummarizer)),
-            ..Default::default()
-        };
+            }); o.compaction.max_auto_compactions_per_run = 1; o.compaction.summarizer = Some(Arc::new(OkSummarizer)); o };
         state.options = options.clone();
-        state.budget_state.budget = options.context_budget;
-        state.compaction.compaction_policy = options.compaction_policy.clone();
-        state.compaction.summarizer = options.summarizer.clone();
+        state.budget_state.budget = options.assembly.context_budget;
+        state.compaction.compaction_policy = options.compaction.compaction_policy.clone();
+        state.compaction.summarizer = options.compaction.summarizer.clone();
         state.conversation = conversation;
         // 第一次压缩（keep=20000 → cut=8）
         let o1 = handle(&mut state, transient_error(ProviderErrorKind::PayloadTooLarge))
@@ -273,3 +267,5 @@
             "LLM 不可用必须经 runtime-error 事件呈现"
         );
     }
+
+

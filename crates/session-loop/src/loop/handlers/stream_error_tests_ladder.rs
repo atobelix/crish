@@ -5,7 +5,7 @@
     #[tokio::test]
     async fn circuit_breaker_below_threshold_still_retries() {
         let mut state = backoff_state();
-        state.options.provider_fail_streak = Some(5);
+        state.options.retry.provider_fail_streak = Some(5);
         let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
             .await
             .unwrap();
@@ -17,7 +17,7 @@
     #[tokio::test]
     async fn circuit_breaker_disabled_by_default_still_retries() {
         let mut state = backoff_state();
-        assert!(state.options.provider_fail_streak.is_none());
+        assert!(state.options.retry.provider_fail_streak.is_none());
         let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
             .await
             .unwrap();
@@ -30,7 +30,7 @@
     #[tokio::test]
     async fn abort_check_precedes_circuit_breaker_gate() {
         let mut state = streaming_state();
-        state.options.provider_fail_streak = Some(6);
+        state.options.retry.provider_fail_streak = Some(6);
         state.abort_signal.abort();
         let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
             .await
@@ -452,7 +452,7 @@
     #[tokio::test]
     async fn length_ladder_caps_upgrades_even_with_huge_limit() {
         let mut state = streaming_state();
-        state.options.length_upgrade_limit = 30;
+        state.options.retry.length_upgrade_limit = 30;
         // 第一次：升级（1/2）
         let o1 = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
             .await
@@ -492,7 +492,7 @@
     async fn max_tokens_doubling_saturates_never_overflow() {
         let mut state = streaming_state();
         state.max_tokens = u32::MAX - 1;
-        state.options.length_upgrade_limit = 1;
+        state.options.retry.length_upgrade_limit = 1;
         let outcome = handle(&mut state, transient_error(ProviderErrorKind::ContextLengthExceeded))
             .await
             .unwrap();
@@ -573,3 +573,4 @@
             "同步成功路径不得降级 stub：{summary}"
         );
     }
+

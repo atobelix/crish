@@ -23,70 +23,70 @@ use std::sync::Arc;
     #[test]
     fn default_options_match_documented_defaults() {
         let options = SessionLoopOptions::default();
-        assert_eq!(options.transient_retry_limit, 3);
-        assert_eq!(options.length_upgrade_limit, 2);
-        assert_eq!(options.continue_nudge_limit, 1);
-        assert!(options.steering_enabled, "steering 默认启用（行为不变）");
-        assert!(!options.idempotency_enabled, "幂等默认关闭（Q14 接线默认行为不变）");
-        assert!(options.turn_end_hook.is_none());
-        assert!(options.should_stop_after_turn.is_none());
-        assert!(options.recovery_hook.is_none());
-        assert!(options.cwd.is_none());
-        assert!(options.assistant_client_message_id.is_none());
+        assert_eq!(options.retry.transient_retry_limit, 3);
+        assert_eq!(options.retry.length_upgrade_limit, 2);
+        assert_eq!(options.retry.continue_nudge_limit, 1);
+        assert!(options.hooks.steering_enabled, "steering 默认启用（行为不变）");
+        assert!(!options.tool_exec.idempotency_enabled, "幂等默认关闭（Q14 接线默认行为不变）");
+        assert!(options.hooks.turn_end_hook.is_none());
+        assert!(options.hooks.should_stop_after_turn.is_none());
+        assert!(options.hooks.recovery_hook.is_none());
+        assert!(options.tool_exec.cwd.is_none());
+        assert!(options.tool_exec.assistant_client_message_id.is_none());
         assert!(
-            options.system_prompt.is_none(),
+            options.assembly.system_prompt.is_none(),
             "system_prompt 默认不发送（P1 阶段 2 透传字段）"
         );
         // P4 阶段 2-2/3-2：预算与压缩配置缺省全部关闭（未配置即现状）
         assert!(
-            options.context_budget.is_none(),
+            options.assembly.context_budget.is_none(),
             "context_budget 缺省 None = 不钳制不预检（向后兼容）"
         );
         assert!(
-            options.compaction_policy.is_none(),
+            options.compaction.compaction_policy.is_none(),
             "compaction_policy 缺省 None = 无自动压缩（向后兼容）"
         );
-        assert!(options.summarizer.is_none(), "summarizer 缺省 None = L1 静态占位符");
+        assert!(options.compaction.summarizer.is_none(), "summarizer 缺省 None = L1 静态占位符");
         assert_eq!(
-            options.max_auto_compactions_per_run, 1,
+            options.compaction.max_auto_compactions_per_run, 1,
             "单 run 自动压缩上限默认 1（P4 §3.4.6）"
         );
         assert!(
-            options.cache_tracking.is_none(),
+            options.cache.cache_tracking.is_none(),
             "cache_tracking 缺省 None = 不启用缓存测量（T-36 向后兼容）"
         );
         // C1b（反向依赖移出）：默认中间件链 = 空——核心不再内建
         // BackupMiddleware 具体实例（不变量 5；写前备份由壳层 run_launch.rs
         // 唯一注入，测试/编排经 with_tool_middleware 注入）
         assert!(
-            options.tool_middleware.is_empty(),
+            options.tool_exec.tool_middleware.is_empty(),
             "默认中间件链为空（C1b：核心不内建具体策略实例）"
         );
         // T-EG-06：注册表与配额缺省 None（装配发生在 with_options 装配块：
         // 注册表按工作区根新建并注入 ESC 判定器；配额 None = 主 agent
         // 不受约束）
         assert!(
-            options.write_claims.is_none(),
+            options.assembly.write_claims.is_none(),
             "write_claims 缺省 None = 由 with_options 按根新建"
         );
         assert!(
-            options.explore_docs_quota.is_none(),
+            options.assembly.explore_docs_quota.is_none(),
             "explore_docs_quota 缺省 None = 主 agent 不受配额约束"
         );
         // T-33：摘要后台调度缺省 None = 生产退避参数（1s/3s/9s）
         assert!(
-            options.summary_dispatch.is_none(),
+            options.summary.summary_dispatch.is_none(),
             "summary_dispatch 缺省 None = 生产缺省退避参数（T-33）"
         );
         // E2 F2 层 1（低功耗模式）：窗口内累计尝试护栏默认 8 / 观察窗口
         // 默认 30min（设计默认，E2 §3.1 层 1）
         assert_eq!(
-            options.compact_summary_max_attempts,
+            options.summary.compact_summary_max_attempts,
             summary_dispatch::DEFAULT_RETRY_GUARD_MAX_ATTEMPTS,
             "compact_summary_max_attempts 默认 8（累计成本护栏）"
         );
         assert_eq!(
-            options.compact_summary_retry_window_ms,
+            options.summary.compact_summary_retry_window_ms,
             summary_dispatch::DEFAULT_RETRY_GUARD_WINDOW_MS,
             "compact_summary_retry_window_ms 默认 30min（观察窗口）"
         );
@@ -107,8 +107,8 @@ use std::sync::Arc;
         let options = SessionLoopOptions::default().with_tool_middleware(vec![Arc::new(
             BackupMiddleware::with_defaults(None),
         )]);
-        assert_eq!(options.tool_middleware.len(), 1, "注入链恰 1 项");
-        assert_eq!(options.tool_middleware[0].name(), "backup");
+        assert_eq!(options.tool_exec.tool_middleware.len(), 1, "注入链恰 1 项");
+        assert_eq!(options.tool_exec.tool_middleware[0].name(), "backup");
 
         // with_steering：默认空策略协调器 → 注入 RecoverySteeringStrategy
         // 协调器（预算可观测：默认 3 → 注入预算 7 替换生效）
@@ -250,10 +250,7 @@ use std::sync::Arc;
     fn with_options_syncs_cwd_to_tool_ctx() {
         let provider = TestProvider::text_reply("hi");
         let loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
-        let loop_ = loop_.with_options(SessionLoopOptions {
-            cwd: Some("C:\\work".into()),
-            ..Default::default()
-        });
+        let loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.tool_exec.cwd = Some("C:\\work".into()); o });
         assert_eq!(loop_.tool_ctx.cwd.as_deref(), Some("C:\\work"));
     }
 
@@ -264,10 +261,7 @@ use std::sync::Arc;
         let provider = TestProvider::text_reply("hi");
         let loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
         // 开启：注入守卫
-        let loop_ = loop_.with_options(SessionLoopOptions {
-            idempotency_enabled: true,
-            ..Default::default()
-        });
+        let loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.tool_exec.idempotency_enabled = true; o });
         assert!(loop_.tool_executor.idempotency_enabled());
         // 关闭：守卫移除
         let loop_ = loop_.with_options(SessionLoopOptions::default());
@@ -304,10 +298,7 @@ use std::sync::Arc;
         let hook = CodeCapturingHook {
             received: Arc::clone(&received),
         };
-        loop_ = loop_.with_options(SessionLoopOptions {
-            recovery_hook: Some(Arc::new(hook)),
-            ..Default::default()
-        });
+        loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.hooks.recovery_hook = Some(Arc::new(hook)); o });
 
         // 显式码构造的 LoopError → decide 收到 &CrishError（码 + 可重试性）
         let err = LoopError::with_code(codes::TOOL_EXECUTION_FAILED, "工具执行失败");
@@ -393,10 +384,7 @@ use std::sync::Arc;
 
         let provider = TestProvider::text_reply("hi");
         let mut loop_ = AgentSessionLoop::new("s1", "r1", 16, Box::new(provider), registry());
-        loop_ = loop_.with_options(SessionLoopOptions {
-            recovery_hook: Some(Arc::new(SkipHook)),
-            ..Default::default()
-        });
+        loop_ = loop_.with_options({ let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.hooks.recovery_hook = Some(Arc::new(SkipHook)); o });
         // 推进到 Streaming 态（transition.rs 合法序列）
         loop_.state.machine = crate::state::AgentSessionMachine::new("s1", 16);
         loop_.state.machine.dispatch(E::Initialized).expect("合法转移：Initialized");
@@ -469,3 +457,5 @@ use std::sync::Arc;
             "max_turns=1 必须产生第 1 轮 turn-start 事件"
         );
     }
+
+

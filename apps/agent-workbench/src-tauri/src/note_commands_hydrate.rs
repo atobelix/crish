@@ -47,7 +47,7 @@ pub async fn note_query_blocks(params: NoteQueryBlocksParams) -> Result<JsonValu
     let joined =
         tokio::task::spawn_blocking(move || handle.block_on(backend.query_blocks(params))).await;
     let result = match joined {
-        Ok(r) => r,
+        Ok(r) => r.map_err(|e| NoteBackendError::ExecutionUnknown(e.to_string())),
         Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
             "spawn_blocking join 失败: {join_err}"
         ))),
@@ -137,7 +137,7 @@ pub async fn note_document_recent() -> Result<JsonValue, CoreError> {
     })
     .await;
     let result = match joined {
-        Ok(r) => r,
+        Ok(r) => r.map_err(|e| NoteBackendError::ExecutionUnknown(e.to_string())),
         Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
             "spawn_blocking join 失败: {join_err}"
         ))),
@@ -168,7 +168,7 @@ async fn hydrate_via_query_blocks(doc_id: &str, limit: u32) -> Result<JsonValue,
     let joined =
         tokio::task::spawn_blocking(move || handle.block_on(backend.query_blocks(params))).await;
     let result = match joined {
-        Ok(r) => r,
+        Ok(r) => r.map_err(|e| NoteBackendError::ExecutionUnknown(e.to_string())),
         Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
             "spawn_blocking join 失败: {join_err}"
         ))),

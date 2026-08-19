@@ -95,6 +95,8 @@ pub(crate) struct EngineHandle {
     /// 进程级惰性单例——BrowserManager + 会话槽 + estop 周期；装配失败
     /// 仅降级 not_ready，不阻断引擎构造，见 browser/mod.rs）
     browser_slot: Arc<crate::browser::BrowserSlot>,
+    /// 电脑操作槽（维度 1：computer_* 工具与面板命令共享的进程级单例）
+    computer_slot: Arc<crate::computer::ComputerSlot>,
     /// engineReady（配置齐备即 true）
     pub(crate) ready: AtomicBool,
     /// 未就绪原因（ready=false 时的诊断文案，PE-04 T04.5 联动）
@@ -374,6 +376,7 @@ impl EngineHandle {
                 "browser_* 工具注册失败（工具按 tool.not_found 兜底）"
             );
         }
+        let computer_slot = Arc::new(crate::computer::ComputerSlot::from_store(Arc::new(crate::computer::LocalDbComputerMetaStore::new(db.clone().expect("LocalDb for computer_slot")))));
         let tool_registry = Arc::new(registry);
         // E5：MCP 客户端桥初始化（stdio 服务器管理 + 工具适配；插件
         // mcpServers 经 register_plugin_mcp_server 注册为受管服务器）
@@ -406,6 +409,7 @@ impl EngineHandle {
             tool_registry,
             mcp_bridge,
             browser_slot,
+            computer_slot,
             ready: AtomicBool::new(ready),
             ready_reason: Mutex::new(ready_reason),
             provider_config: Mutex::new(provider_config),
@@ -547,6 +551,11 @@ impl EngineHandle {
     /// browser_commands（S6）与浏览器模块消费；进程级单例）
     pub(crate) fn browser_slot(&self) -> Arc<crate::browser::BrowserSlot> {
         Arc::clone(&self.browser_slot)
+    }
+
+    /// 电脑操作槽（维度 1：run 装配 abort 桥、面板命令；进程级单例）
+    pub(crate) fn computer_slot(&self) -> Arc<crate::computer::ComputerSlot> {
+        Arc::clone(&self.computer_slot)
     }
 
     /// 定时器注册表（T-CF-06 装配产物；TimerChannel 契约经
@@ -1492,7 +1501,7 @@ impl SessionLoopProducer {
         }
         // 装配 CacheTrackingConfig（T-36 消费：LoopState 构造 /
         // run 起始 build_tracker 重建 tracker——fresh run 语义）
-        self.options.cache_tracking = self.cache_tracking.clone();
+        self.options.cache.cache_tracking = self.cache_tracking.clone();
 
         // ── Round7：笔记真管线装配（原 R6 挂点 → 真注入）────────────────
         // `note_runtime::try_backend()` = 进程级
@@ -1502,9 +1511,9 @@ impl SessionLoopProducer {
         // 工具 query_blocks / document_outline / document_apply_md /
         // send_to_note 走 DocSession + store 投影（禁止 mirror 默认读）。
         // None = 打开失败 / 测试未 install → 工具 `note_backend_unwired`。
-        if self.options.note_backend.is_none() {
+        if self.options.assembly.note_backend.is_none() {
             if let Some(handle) = crate::note_runtime::try_backend() {
-                self.options.note_backend = Some(handle);
+                self.options.assembly.note_backend = Some(handle);
             }
         }
 
@@ -1514,7 +1523,7 @@ impl SessionLoopProducer {
         // 语义），注入段结构上不进压缩输入。无注入段（None / 空注入器）
         // 时 render 原样返回 → 与现状字节一致。
         if let Some(injector) = &self.context_injector {
-            self.options.system_prompt = injector.render(self.options.system_prompt.take());
+            self.options.assembly.system_prompt = injector.render(self.options.assembly.system_prompt.take());
         }
 
         let mut session_loop = AgentSessionLoop::new(
@@ -1628,3 +1637,4 @@ impl SessionLoopProducer {
         }
     }
 }
+

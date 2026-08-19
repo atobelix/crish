@@ -94,7 +94,7 @@ pub(crate) fn estimate_context(state: &LoopState) -> EstimateContext {
     engine.estimate_context_tokens(
         &state.conversation,
         tools_prefix_json(state).as_deref(),
-        state.options.system_prompt.as_deref(),
+        state.options.assembly.system_prompt.as_deref(),
         state.compaction.last_compaction_at,
     )
 }
@@ -169,7 +169,7 @@ pub(crate) async fn maybe_compact_preflight(state: &mut LoopState) -> bool {
     let Some(policy) = state.compaction.compaction_policy.clone() else {
         return false;
     };
-    if state.compaction.compactions_this_run >= state.options.max_auto_compactions_per_run {
+    if state.compaction.compactions_this_run >= state.options.compaction.max_auto_compactions_per_run {
         return false;
     }
     // 快照锁定（与 streaming 同一入口；预检发生在首次 build_request 之前，
@@ -231,7 +231,7 @@ pub(crate) async fn maybe_compact_user_boundary(state: &mut LoopState) -> bool {
         maybe_retry_pending_summary(state);
         return false;
     }
-    if state.compaction.compactions_this_run >= state.options.max_auto_compactions_per_run {
+    if state.compaction.compactions_this_run >= state.options.compaction.max_auto_compactions_per_run {
         // 计数封顶 → 不压缩（与预检共享单 run 计数，边界压缩后预检自然
         // 跳过）；被动补摘要**不受压缩计数约束**（不压缩对话、不消耗
         // 计数——仅补摘要的被动触发面）
@@ -270,7 +270,7 @@ pub(crate) async fn compact_with_llm_guard(
     info: &CompactionTriggerInfo,
 ) -> bool {
     let stub_policy =
-        if state.options.compact_allow_stub_fallback || !state.options.compact_require_llm {
+        if state.options.compaction.compact_allow_stub_fallback || !state.options.compaction.compact_require_llm {
             StubPolicy::StubAllowed
         } else {
             StubPolicy::LlmRequired
@@ -387,7 +387,7 @@ pub(crate) async fn apply_compaction(
     let session_id = state.machine.context().session_id.clone();
     // I8-E1：context.compact.start 钩子广播（压缩域处理起点；trigger ←
     // reason、tokens_before ← tokensBefore；observe 默认，失败吞掉 + 计数）
-    if let Some(hooks) = &state.options.hooks {
+    if let Some(hooks) = &state.options.tool_exec.hooks {
         let _ = hooks
             .dispatch(&crate::hooks::HookEvent::ContextCompactStart {
                 session_id: session_id.clone(),
@@ -629,7 +629,7 @@ pub(crate) async fn apply_compaction(
     });
     // I8-E1：context.compact.end 钩子广播（压缩域收场；诊断字段全保留——
     // aborted / keptMessageCount / compactionId；observe 默认，失败吞掉）
-    if let Some(hooks) = &state.options.hooks {
+    if let Some(hooks) = &state.options.tool_exec.hooks {
         let _ = hooks
             .dispatch(&crate::hooks::HookEvent::ContextCompactEnd {
                 session_id,
@@ -744,8 +744,8 @@ impl CompactionRuntime {
     /// options 时由 loop_runner 派生状态同步刷新，run 起始复位见 loop_exec.rs）
     pub(crate) fn from_options(options: &SessionLoopOptions) -> Self {
         Self {
-            compaction_policy: options.compaction_policy.clone(),
-            summarizer: options.summarizer.clone(),
+            compaction_policy: options.compaction.compaction_policy.clone(),
+            summarizer: options.compaction.summarizer.clone(),
             // 护栏初始态：时间戳护栏空（无压缩边界）、计数 0（fresh run）
             last_compaction_at: None,
             compactions_this_run: 0,
@@ -754,17 +754,17 @@ impl CompactionRuntime {
             overflow_llm_unavailable: false,
             // 缓存测量面（P5 S2 / T-36）：构造期从 options 派生一次
             // （with_options / run() 起始由 loop/mod.rs 同步刷新与复位）
-            cache_tracker: crate::cache_tracker::build_tracker(options.cache_tracking.as_ref()),
+            cache_tracker: crate::cache_tracker::build_tracker(options.cache.cache_tracking.as_ref()),
             // 摘要后台调度（T-33）：构造期从 options 派生（None = 生产缺省
             // 退避参数；测试注入快速序列）；run 起始不复位（单飞句柄跨 run
             // 保留——存活任务阻塞新 spawn，会话级单飞语义在 loop 实例内成立）
             summary_dispatch: Arc::new(SummaryDispatch::new(
-                options.summary_dispatch.clone().unwrap_or_default(),
+                options.summary.summary_dispatch.clone().unwrap_or_default(),
             )),
             // 会话级协调器（T-42）：构造期从 options 派生（壳层装配；None =
             // 回退 run 级 dispatch）——协调器由注册表持有，LoopState 只借用
             // Arc 引用，run 收口 drop 后任务仍由注册表支撑存活
-            summary_coordinator: options.summary_coordinator.clone(),
+            summary_coordinator: options.summary.summary_coordinator.clone(),
             // E2 F3：无待重试摘要（fresh state）
             pending_summary_retry: None,
         }
@@ -776,9 +776,10 @@ impl BudgetState {
     /// options 时由 loop_runner 派生状态同步刷新）
     pub(crate) fn from_options(options: &SessionLoopOptions) -> Self {
         Self {
-            budget: options.context_budget,
+            budget: options.assembly.context_budget,
             // EV-11（D-03）：usage 槽位初始空（provider 未报告前无数据）
             turn_usage: None,
         }
     }
 }
+

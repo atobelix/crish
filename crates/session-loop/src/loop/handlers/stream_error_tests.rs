@@ -53,28 +53,21 @@ use conex_types::events::AgentEvent;
     /// 构造无注入状态覆盖。
     fn budgeted_state() -> LoopState {
         let mut state = streaming_state();
-        let options = SessionLoopOptions {
-            context_budget: Some(ContextBudget {
+        let options = { let mut o: SessionLoopOptions = SessionLoopOptions::default(); o.assembly.context_budget = Some(ContextBudget {
                 context_window: 10_000,
                 reserve_tokens: 2_000,
                 safety_tokens: 100,
-            }),
-            compaction_policy: Some(CompactionPolicy {
+            }); o.compaction.compaction_policy = Some(CompactionPolicy {
                 keep_recent_tokens: 20_000,
                 min_recent_turns: 1,
                 ..Default::default()
-            }),
-            max_auto_compactions_per_run: 1,
-            // E2 F1：生产接线后的 Summarizer（成功返回合法 Schema V1 JSON）
-            summarizer: Some(Arc::new(OkSummarizer)),
-            ..Default::default()
-        };
+            }); o.compaction.max_auto_compactions_per_run = 1; o };
         // LoopState 构造期从 options 派生 budget/policy——测试内直接改
         // options 需同步派生字段（生产路径经 with_options 派生）
         state.options = options.clone();
-        state.budget_state.budget = options.context_budget;
-        state.compaction.compaction_policy = options.compaction_policy.clone();
-        state.compaction.summarizer = options.summarizer.clone();
+        state.budget_state.budget = options.assembly.context_budget;
+        state.compaction.compaction_policy = options.compaction.compaction_policy.clone();
+        state.compaction.summarizer = options.compaction.summarizer.clone();
         state.conversation = big_conversation();
         state
     }
@@ -149,7 +142,7 @@ use conex_types::events::AgentEvent;
     /// 单测驱动面；None = 现状立即重试由既有测试覆盖）
     fn backoff_state() -> LoopState {
         let mut state = streaming_state();
-        state.options.retry_backoff = Some(RetryBackoffConfig::default());
+        state.options.retry.retry_backoff = Some(RetryBackoffConfig::default());
         state
     }
 
@@ -529,7 +522,7 @@ use conex_types::events::AgentEvent;
     #[tokio::test]
     async fn circuit_breaker_trips_at_six_streak_fatals_without_retry() {
         let mut state = backoff_state();
-        state.options.provider_fail_streak = Some(6);
+        state.options.retry.provider_fail_streak = Some(6);
         let o = handle(&mut state, transient_error(ProviderErrorKind::ServerError))
             .await
             .unwrap();
@@ -555,3 +548,5 @@ use conex_types::events::AgentEvent;
         assert_eq!(p.kind, ProviderErrorKind::ServerError);
         assert_eq!(p.retries, 0);
     }
+
+

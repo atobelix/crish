@@ -27,7 +27,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     // 0. 防御性短路（T06.2.1 Q03）：steering_enabled=false 时 empty-response
     //    不可恢复——正常路径已在 streaming.rs 的 Empty 分支短路，此处防
     //    未来新路径直接进入本状态
-    if !state.options.steering_enabled {
+    if !state.options.hooks.steering_enabled {
         return Ok(HandlerOutcome::end(EndDecision::stop_with_diagnostic(
             state,
             "steering 已禁用，空响应无法恢复",
@@ -90,3 +90,4 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     dispatch(state, E::SteeringComplete)?;
     Ok(HandlerOutcome::continue_run())
 }
+

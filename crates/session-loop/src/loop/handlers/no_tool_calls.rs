@@ -38,8 +38,7 @@ pub(crate) async fn handle(
         // [super::stream_error::MAX_LENGTH_UPGRADES] 计——阶梯封顶 32768，
         // 配置放大不得触发翻倍溢出）
         let upgrade_limit = state
-            .options
-            .length_upgrade_limit
+            .options.retry.length_upgrade_limit
             .min(super::stream_error::MAX_LENGTH_UPGRADES);
         if state.length_upgrades < upgrade_limit {
             state.length_upgrades += 1;
@@ -65,7 +64,7 @@ pub(crate) async fn handle(
         }
         // 阶梯用尽：continue nudge 上限内再试一次（D8：不注入 nudge 文本，
         // 仅重试；上限 1）
-        if state.continue_nudges < state.options.continue_nudge_limit {
+        if state.continue_nudges < state.options.retry.continue_nudge_limit {
             state.continue_nudges += 1;
             dispatch(state, E::NoProgressContinue)?;
             return Ok(HandlerOutcome::continue_run());
@@ -77,11 +76,11 @@ pub(crate) async fn handle(
         state.continue_nudges = 0;
 
         // ── Tool-Promise 意图自愈状态机（RUL-02）──
-        if state.options.tool_promise_recovery_enabled {
+        if state.options.tool_exec.tool_promise_recovery_enabled {
             if let Some(assistant) = last_assistant_message(state) {
                 let text = assistant.text();
                 if let Some(snippet) = ToolPromiseDetector::detect_action_promise(&text) {
-                    if state.tool_promise_heals < state.options.max_tool_promise_heals {
+                    if state.tool_promise_heals < state.options.tool_exec.max_tool_promise_heals {
                         state.tool_promise_heals += 1;
                         tracing::warn!(
                             session_id = %state.machine.context().session_id,
@@ -184,7 +183,7 @@ mod tests {
     #[tokio::test]
     async fn length_stop_caps_upgrades_even_with_huge_limit() {
         let mut state = streaming_state();
-        state.options.length_upgrade_limit = 30;
+        state.options.retry.length_upgrade_limit = 30;
         // 第一次：升级（1/2）
         let o1 = handle(&mut state, Some(ConsumeStopReason::Length))
             .await
@@ -219,3 +218,4 @@ mod tests {
         );
     }
 }
+

@@ -695,70 +695,34 @@ pub(crate) async fn run_task_impl(
     let retry_backoff = state.retry_backoff_config(&session_id);
     let provider_fail_streak = state.provider_fail_streak_count(&session_id).await;
 
-    let options = SessionLoopOptions {
-        cwd: cwd.clone(),
-        assistant_client_message_id: assistant_client_message_id.clone(),
-        // P1 B1：systemPrompt 入站规范化一次 + E2 F5 阶段总结段注入
-        // （build_system_prompt 输出后拼接「阶段总结：N 条」段——零对话
-        // 污染、天然跨 run 携带，E2 §6.3 主选；无总结时行为与接线前一致）
-        system_prompt: assemble_system_prompt_with_stages(&state, &session_id, system_prompt),
-        context_budget,
-        // D1 §3.1.4（R6）：瞬态重试退避配置（session_meta 键注入；
-        // None = 现状立即重试向后兼容）
-        retry_backoff,
-        // D1 §3.2.3：会话级熔断计数当前值（transient_retry 入口闸 C1
-        // 输入；None = 不启用闸）
-        provider_fail_streak,
-        // T-EG-05（F7）/ C1b：写前自动备份中间件装配（S10b）——C1b 移出
-        // 核心默认后，本处为产品唯一 BackupMiddleware 注入点（写前备份
-        // 安全红线：漏注入 = 生产缺失写前自动备份，详案 C1b §5.3）。备份
-        // 根经 with_defaults(None) 执行期回退工作区 `.crish-trash`，与 UI
-        // 删除命令（trash_root_for 未注入时兜底，core_run_commands.rs:2356）
-        // 及工具侧 BuiltinToolConfig.trash_root（引擎装配处亦为 None）同源，
-        // 保证恢复面板与写前快照落入同一回收站根；中间件链经
-        // options.tool_middleware → AgentSessionLoop::with_options 同步到
-        // 工具执行器（消费侧循环装配由 F7 T-EG-06 负责，本处只做 options
-        // 侧构造）。
-        tool_middleware: vec![Arc::new(BackupMiddleware::with_defaults(None))],
-        // T-D-14 权限传递层：父 run 归属透传执行器（审批请求来源判定与
-        // 裁决者路由依据；None = 主 agent run，现状行为）
-        parent_run_id: parent_run_id.clone(),
-        // T-D-13：子代理 run 的写路径沙箱注册表（with_write_policy 装配；
-        // 子代理沙箱优先，策略注册逻辑不动）；普通 run 由 None 变
-        // Some(shared_registry)——30-P5：与逃逸判定器同一实例（双端注入
-        // 成对：工具声明写不误报未声明）
-        write_claims: subagent_write_registry
+    let options = {
+        let mut o = SessionLoopOptions::default();
+        o.tool_exec.cwd = cwd.clone();
+        o.tool_exec.assistant_client_message_id = assistant_client_message_id.clone();
+        o.assembly.system_prompt =
+            assemble_system_prompt_with_stages(&state, &session_id, system_prompt);
+        o.assembly.context_budget = context_budget;
+        o.retry.retry_backoff = retry_backoff;
+        o.retry.provider_fail_streak = provider_fail_streak;
+        o.tool_exec.tool_middleware =
+            vec![Arc::new(BackupMiddleware::with_defaults(None))];
+        o.assembly.parent_run_id = parent_run_id.clone();
+        o.assembly.write_claims = subagent_write_registry
             .clone()
-            .or_else(|| Some(Arc::clone(&shared_registry))),
-        // T-D-13：子代理 run 的配额上下文（design/review 凭证；None =
-        // 主 agent 不受配额约束，现状行为）
-        explore_docs_quota: subagent_quota.clone(),
-        // COMPACTION-01 P0-1（生产闭环）：压缩策略装配——默认 20000/2/1024
-        // （conex-compaction 常量）经 session_meta 键覆盖（compact_summary_
-        // max_tokens 等，读取键不实现 UI）；装配后预检压缩在生产可触发
-        // （此前走 ..Default::default() 回落到 None，预检/溢出恒不触发）
-        compaction_policy: state.compaction_policy_for(&session_id),
-        // T-42/T-43/T-44（记忆韧性轮次 6）：摘要后台面三线装配——
-        // - summarizer：会话级 Summarizer 工厂解析（生产工厂 = 真实 LLM
-        //   实现 ProviderSummarizer，COMPACTION-01 P0-3 闭环；无注入 →
-        //   None → 不 spawn，纯 stub awaiting 永驻，与接线前行为一致）；
-        // - summary_dispatch：session_meta 配置面（compact_summary_backoff_ms
-        //   / compact_summary_wall_ms；无键 = None = 生产缺省退避参数）；
-        // - summary_coordinator：会话级协调器（跨 run 单飞 + 全局并发
-        //   上限 ≤2 + 任务跨 run 存活；默认回调落 compression_blocks 表）
-        summarizer: state.summarizer_for(&session_id),
-        summary_dispatch: state.summary_dispatch_config(&session_id),
-        summary_coordinator: Some(state.summary_coordinator_for(&session_id)),
-        // Round7：笔记后端真注入（与 engine produce 双保险；同源
-        // note_runtime 进程句柄 / app_dir()/workspace.db）
-        note_backend: crate::note_runtime::try_backend(),
-        live_sink: Some(Arc::clone(&live_sink) as Arc<dyn session_loop::provider::LiveEventSink>),
-        background: Some(Arc::clone(&state.background) as Arc<dyn agent_tools::background::BackgroundTaskManager>),
-        log_root: Some(state.background.log_root()),
-        // I1-β：思考档位装配（run-task 入站 `reasoningEffort` → build_request
-        // 读档位下发；None = 引擎默认，wire 与现状一致）
-        reasoning_effort,
-        ..SessionLoopOptions::default()
+            .or_else(|| Some(Arc::clone(&shared_registry)));
+        o.assembly.explore_docs_quota = subagent_quota.clone();
+        o.compaction.compaction_policy = state.compaction_policy_for(&session_id);
+        o.compaction.summarizer = state.summarizer_for(&session_id);
+        o.summary.summary_dispatch = state.summary_dispatch_config(&session_id);
+        o.summary.summary_coordinator = Some(state.summary_coordinator_for(&session_id));
+        o.assembly.note_backend = crate::note_runtime::try_backend();
+        o.hooks.live_sink =
+            Some(Arc::clone(&live_sink) as Arc<dyn session_loop::provider::LiveEventSink>);
+        o.hooks.background = Some(Arc::clone(&state.background)
+            as Arc<dyn agent_tools::background::BackgroundTaskManager>);
+        o.hooks.log_root = Some(state.background.log_root());
+        o.hooks.reasoning_effort = reasoning_effort;
+        o
     };
     let tool_options = ToolBatchOptions {
         approval_enabled,

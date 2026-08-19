@@ -325,7 +325,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     request: conex_types::events::PermissionRequest {
                         id: format!("approval-{call_id}"),
                         session_id: session_id.clone(),
-                        cwd: state.options.cwd.clone().unwrap_or_default(),
+                        cwd: state.options.tool_exec.cwd.clone().unwrap_or_default(),
                         tool_call_id: call_id.clone(),
                         tool_name: tool_name.clone(),
                         parameters: args.clone(),
@@ -468,3 +468,4 @@ fn tool_output_from_parts(
 #[cfg(test)]
 #[path = "executing_tools_tests.rs"]
 mod tests;
+

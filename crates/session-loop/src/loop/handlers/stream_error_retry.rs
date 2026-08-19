@@ -95,19 +95,18 @@ pub(crate) async fn transient_retry(
     // （壳层读 session_meta 键 provider_fail_streak 注入；None = 未配置熔断
     // 不启用，向后兼容现状）
     if state
-        .options
-        .provider_fail_streak
+        .options.retry.provider_fail_streak
         .is_some_and(|s| s >= PROVIDER_FAIL_THRESHOLD)
     {
         tracing::warn!(
             session_id = %state.machine.context().session_id,
-            streak = ?state.options.provider_fail_streak,
+            streak = ?state.options.retry.provider_fail_streak,
             threshold = PROVIDER_FAIL_THRESHOLD,
             "熔断触发：跳过 run 内重试直接 fatal（观测面 runtime-error，熔断计数由壳层收口维护）"
         );
         return fatal_provider_error(state, classified);
     }
-    let limit = state.options.transient_retry_limit;
+    let limit = state.options.retry.transient_retry_limit;
     if state.transient_retries < limit {
         // 预算起点惰性初始化（规则 R1：首次瞬态错误时；fresh run 归零，
         // loop/mod.rs run 起始同批）
@@ -120,7 +119,7 @@ pub(crate) async fn transient_retry(
         // 现状立即重试（规则 R6，向后兼容）
         let delay = match &state.retry_delay {
             Some(f) => f(attempt, classified.retry_after_ms),
-            None => match state.options.retry_backoff {
+            None => match state.options.retry.retry_backoff {
                 Some(cfg) => match retry_delay_ms(
                     &cfg,
                     classified.kind,
@@ -238,3 +237,4 @@ pub(crate) fn emit_length_escalation_diagnostic(
         },
     });
 }
+
