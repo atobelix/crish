@@ -30,15 +30,10 @@ export function useAgentCardPanelNav(): AgentCardPanelNav {
     },
     [activeWorkspace]
   );
-  const onOpenPath = useCallback(
-    (filePath: string) => {
-      if (activeWorkspace) {
-        focusOrOpenPanel(activeWorkspace.id, 'files');
-      }
-      openFileInPanel(filePath);
-    },
-    [activeWorkspace]
-  );
+  const onOpenPath = useCallback((filePath: string) => {
+    // S6：只走叶打开器，不再叠开 files 坞（否则与 file-viewer 双开）
+    openFileInPanel(filePath);
+  }, []);
   const onOpenTerminal = useCallback(() => {
     if (activeWorkspace) {
       focusOrOpenPanel(activeWorkspace.id, 'terminal');

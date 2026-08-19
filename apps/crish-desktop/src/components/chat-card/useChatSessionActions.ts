@@ -60,13 +60,10 @@ export function useChatSessionActions({
     [handleGlobalTabClick]
   );
 
-  const openPathInFilesPanel = useCallback(
-    (filePath: string) => {
-      openSidePanel('files');
-      openFileInPanel(filePath);
-    },
-    [openSidePanel]
-  );
+  const openPathInFilesPanel = useCallback((filePath: string) => {
+    // S6：单一进叶。openFileInPanel 按类型分流 files / file-viewer，禁止再叠开 files。
+    openFileInPanel(filePath);
+  }, []);
 
   const {
     handleRegenerate,

@@ -325,4 +325,8 @@ export {
   registerFileViewerOpener,
   openFileInPanel,
   extractFilePathFromToolArgs,
+  resolveFilePreviewHost,
+  looksLikeOpenableFilePath,
+  pathFromFileOpenClickTarget,
+  type FilePreviewLeafHost,
 } from './filePanelOpener';

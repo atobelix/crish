@@ -12,6 +12,8 @@ import {
 import { FileEditor } from './FileEditor';
 import type { ViewMode } from './hooks/useFilePreview';
 
+/** files 叶内预览。禁止挂 document.body 或整屏覆盖层。 */
+
 /** 文件标识与能力域（当前选中文件 + 可编辑性 + markdown 标记）。 */
 interface FilePreviewFileProps {
   selected: string | null;

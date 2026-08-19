@@ -116,6 +116,7 @@ export const FileActions = React.memo(function FileActions({
                 className={styles.filesSeg}
                 role="group"
                 aria-label="Markdown 显示"
+                data-md-source-toggle="files-leaf-only"
               >
                 <Tooltip content="渲染预览">
                   <button

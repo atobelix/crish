@@ -209,7 +209,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     };
 
     return (
-      <div className={styles.card} aria-label="单文件代码查看">
+      <div
+        className={styles.card}
+        aria-label="单文件代码查看"
+        data-file-preview-host="file-viewer"
+      >
         <div className={styles.header}>
           <div className={styles.titleArea}>
             <Tooltip content={filePath}>

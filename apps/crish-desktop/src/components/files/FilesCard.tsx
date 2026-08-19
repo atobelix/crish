@@ -149,6 +149,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
       const onOpen = (ev: Event) => {
         const path = (ev as CustomEvent<{ path?: string }>).detail?.path;
         if (!path) return;
+        takePendingOpenPath();
         const resolved = resolveWorkspacePath(path);
         const parent = pathDirname(resolved);
         if (parent) {
@@ -190,7 +191,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         {/* 确认对话框渲染点：useFileNavigation（未保存切换）+ useFilePreview（外部修改覆盖） */}
         {nav.confirmGateView}
         {preview.confirmGateView}
-        <div className={styles.filesCard}>
+        <div className={styles.filesCard} data-file-preview-host="files">
           <div className={styles.filesBar} role="toolbar" aria-label="文件导航">
             <Tooltip content={PARENT_DIR_LABEL}>
               <Button

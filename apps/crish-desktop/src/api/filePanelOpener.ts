@@ -4,9 +4,17 @@
  * 从 workspaceFsApi 拆分而来；承载 registerFileViewerOpener / openFileInPanel
  * / takePendingOpenPath 模块内可变状态，以及 extractFilePathFromToolArgs 纯函数。
  * workspaceFsApi hub 经 re-export 保持对外契约不变。
+ *
+ * S6：点附件 / @ / 工具路径只进 files 或 file-viewer 叶。禁止 body 模态、
+ * fp-root、note/Notebook、当场 persist。
  */
 
-import { resolveWorkspacePath } from './workspaceFsApi';
+import {
+  detectFileKind,
+  isMarkdownFilename,
+  pathBasename,
+  resolveWorkspacePath,
+} from './workspaceFsApi';
 
 /** 面板尚未挂载时暂存待打开路径 */
 let pendingOpenPath: string | null = null;
@@ -17,26 +25,102 @@ export function takePendingOpenPath(): string | null {
   return p;
 }
 
-let fileViewerOpener: ((filePath: string, mode?: 'plain' | 'diff') => void) | null = null;
+let fileViewerOpener: ((filePath: string, mode?: 'plain' | 'diff') => void) | null =
+  null;
 
-export function registerFileViewerOpener(opener: typeof fileViewerOpener): void {
+export function registerFileViewerOpener(
+  opener: typeof fileViewerOpener
+): void {
   fileViewerOpener = opener;
 }
 
+/** 工作区文件预览宿主：只允许这两片叶 */
+export type FilePreviewLeafHost = 'files' | 'file-viewer';
+
 /**
- * 打开右侧文件面板并定位到路径。
- * 由对话工具行等入口调用；FilesCard 未挂载时先缓存路径。
- * 相对路径会接到当前工作区根下。
+ * 代码（非 md）走 file-viewer URI 叶；md / 图 / pdf / 表 / 二进制走 files 叶适配器。
+ * diff 强制 file-viewer。永不返回 note / preview（Web）/ Notebook。
  */
-export function openFileInPanel(filePath: string, mode?: 'plain' | 'diff'): void {
-  if (!filePath?.trim()) return;
-  const path = resolveWorkspacePath(filePath.trim());
-  if (fileViewerOpener) {
-    fileViewerOpener(path, mode);
-  } else {
-    pendingOpenPath = path;
-    window.dispatchEvent(new CustomEvent('crish-open-file', { detail: { path } }));
+export function resolveFilePreviewHost(
+  filePath: string,
+  mode?: 'plain' | 'diff'
+): FilePreviewLeafHost {
+  if (mode === 'diff') return 'file-viewer';
+  const name = pathBasename(filePath);
+  if (isMarkdownFilename(name)) return 'files';
+  return detectFileKind(name) === 'text' ? 'file-viewer' : 'files';
+}
+
+/** 附件名 / mention id 是否值得当成工作区路径打开（拒绝 note / 无扩展 id） */
+export function looksLikeOpenableFilePath(raw: string): boolean {
+  const s = (raw || '').trim();
+  if (!s || s.includes('\n') || s.length >= 512) return false;
+  if (/^(note|notebook)(:|$)/i.test(s)) return false;
+  if (/[\\/]/.test(s)) return true;
+  const name = pathBasename(s);
+  if (isMarkdownFilename(name)) return true;
+  if (detectFileKind(name) !== 'binary') return true;
+  return /\.[A-Za-z0-9]{1,12}$/.test(name);
+}
+
+/**
+ * 从点击目标抽出待打开路径。移除钮 / 非文件 mention 返回 null。
+ * 只认 data-file-open-path 或 kind=file 的 mention（id 优先，其次 label）。
+ */
+export function pathFromFileOpenClickTarget(
+  target: EventTarget | null
+): string | null {
+  const start =
+    target instanceof Element
+      ? target
+      : target instanceof Node
+        ? target.parentElement
+        : null;
+  if (!start) return null;
+  if (start.closest('.chat-attach-remove')) return null;
+  const el = start.closest(
+    '[data-file-open-path], span[data-type="mention"][data-kind="file"]'
+  );
+  if (!(el instanceof HTMLElement)) return null;
+  const explicit = (el.getAttribute('data-file-open-path') || '').trim();
+  if (looksLikeOpenableFilePath(explicit)) return explicit;
+  if (
+    el.getAttribute('data-type') === 'mention' &&
+    (el.getAttribute('data-kind') || 'file') === 'file'
+  ) {
+    const id = (el.getAttribute('data-id') || '').trim();
+    if (looksLikeOpenableFilePath(id)) return id;
+    const label = (el.getAttribute('data-label') || '').trim();
+    if (looksLikeOpenableFilePath(label)) return label;
   }
+  return null;
+}
+
+/**
+ * 在 files / file-viewer 叶打开工作区路径。
+ * 不挂 Notebook、不写 persist、不往 document.body 挂预览根。
+ */
+export function openFileInPanel(
+  filePath: string,
+  mode?: 'plain' | 'diff'
+): FilePreviewLeafHost | null {
+  if (!filePath?.trim()) return null;
+  const trimmed = filePath.trim();
+  if (/^(note|notebook)(:|$)/i.test(trimmed)) return null;
+  const path = resolveWorkspacePath(trimmed);
+  if (!path) return null;
+
+  const host = resolveFilePreviewHost(path, mode);
+  if (host === 'file-viewer' && fileViewerOpener) {
+    fileViewerOpener(path, mode);
+    return host;
+  }
+
+  pendingOpenPath = path;
+  window.dispatchEvent(
+    new CustomEvent('crish-open-file', { detail: { path } })
+  );
+  return 'files';
 }
 
 /** 从工具参数中尽量抽出文件路径（相对或绝对） */
@@ -62,7 +146,12 @@ export function extractFilePathFromToolArgs(args: string): string | null {
         'file',
       ]) {
         const v = inner[key];
-        if (typeof v === 'string' && v.trim() && !v.includes('\n') && v.length < 512) {
+        if (
+          typeof v === 'string' &&
+          v.trim() &&
+          !v.includes('\n') &&
+          v.length < 512
+        ) {
           return v.trim();
         }
       }
