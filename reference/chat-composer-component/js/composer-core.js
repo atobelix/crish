@@ -49,100 +49,111 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 1. Send Button State Update & Intelligent Single-Line ↔ Multi-Line Mode Detection
   window.updateSendButtonState = function updateSendButtonState() {
-    if (!composerEditable || !composerContainer) return;
+    document.querySelectorAll('.composer-container').forEach(container => {
+      const wrapper = container.closest('.composer-wrapper') || container;
+      const editable = container.querySelector('.composer-editable') || document.getElementById('composerEditable');
+      const filesEl = wrapper.querySelector('.file-zone') || document.getElementById('fileZone');
+      const sendBtnEl = wrapper.querySelector('.send-btn-circle') || document.getElementById('btnSend');
 
-    // Clean text: strip zero-width spaces, trailing <br>, whitespace
-    let text = composerEditable.innerText || composerEditable.textContent || '';
-    text = text.replace(/\u200B/g, '').replace(/\r?\n/g, '\n');
-    
-    // Sanitize trailing browser <br> artifacts when user deletes text
-    if (composerEditable.innerHTML === '<br>' || composerEditable.innerHTML === '<div><br></div>') {
-      composerEditable.innerHTML = '';
-      text = '';
-    }
+      if (!editable) return;
 
-    const cleanText = text.trim();
-    const hasFiles = fileZone && fileZone.children.length > 0;
-    const hasInlineTags = composerEditable.querySelectorAll('.rich-inline-tag, .chip-item').length > 0;
-    const hasContent = cleanText.length > 0 || hasFiles || hasInlineTags;
+      // Clean text: strip zero-width spaces, trailing <br>, whitespace
+      let text = editable.innerText || editable.textContent || '';
+      text = text.replace(/\u200B/g, '').replace(/\r?\n/g, '\n');
 
-    // 1. 发送按钮动画 show/hide
-    if (btnSend) {
-      if (hasContent) {
-        btnSend.classList.add('active');
-      } else {
-        btnSend.classList.remove('active');
+      // Sanitize trailing browser <br> artifacts when user deletes text
+      if (editable.innerHTML === '<br>' || editable.innerHTML === '<div><br></div>') {
+        editable.innerHTML = '';
+        text = '';
       }
-    }
 
-    // 2. 100% 对称即时切行引擎（无论单行/多行，容量计算 100% 恒等，删除第 1 个字符瞬间切回单行）
-    const layoutEl = document.querySelector('.input-main-layout');
-    const actionLeft = document.querySelector('.action-left');
-    const permBtn = document.getElementById('btnPermission');
-    const actionRight = document.querySelector('.action-right');
+      const cleanText = text.trim();
+      const hasFiles = filesEl && filesEl.children.length > 0;
+      const hasInlineTags = editable.querySelectorAll('.rich-inline-tag, .chip-item').length > 0;
+      const hasContent = cleanText.length > 0 || hasFiles || hasInlineTags;
 
-    const layoutW = layoutEl ? layoutEl.clientWidth : 800;
-    const leftW = actionLeft ? actionLeft.offsetWidth : 30;
-    const permW = permBtn ? permBtn.offsetWidth : 68;
-    const rightW = actionRight ? actionRight.offsetWidth : 174;
-
-    // 单行输入框在 Grid 布局中的物理精确可分配宽度（扣除左右两侧按钮与 Grid 间距 18px）
-    // 无论当前处于单行还是多行模式，该容量数值 100% 恒等完全一致！
-    const singleLineCapacity = Math.max(200, layoutW - (leftW + permW + rightW + 18));
-
-    const isCurrentlyMulti = composerContainer.classList.contains('is-multiline');
-    const hasExplicitNewline = cleanText.includes('\n');
-    const unclippedTextWidth = measureTextWidth(cleanText);
-
-    let isMultiLineNeeded = false;
-
-    if (hasFiles || hasExplicitNewline) {
-      isMultiLineNeeded = true;
-    } else {
-      // 100% 绝对对称即时判定：
-      // 多打 1 个字符超出单行容量上限 -> 瞬间展开多行；
-      // 按 Backspace 删除这第 1 个超出字符 -> 剩余文本瞬间满足单行容量，删除第 1 个字符即刻切回单行！零字符延迟！
-      isMultiLineNeeded = unclippedTextWidth >= singleLineCapacity;
-    }
-
-    if (isMultiLineNeeded) {
-      composerContainer.classList.add('is-multiline');
-    } else {
-      composerContainer.classList.remove('is-multiline');
-    }
-  };
-
-  if (composerEditable) {
-    ['input', 'keyup', 'keydown', 'cut', 'paste', 'blur', 'focus'].forEach(evt => {
-      composerEditable.addEventListener(evt, () => {
-        setTimeout(window.updateSendButtonState, 0);
-      });
-    });
-
-    // Initial state sync
-    window.updateSendButtonState();
-
-    // Clipboard Paste Handler (Supports Image & File Pasting)
-    composerEditable.addEventListener('paste', (e) => {
-      const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-      let filePasted = false;
-
-      for (let item of items) {
-        if (item.kind === 'file') {
-          e.preventDefault();
-          const file = item.getAsFile();
-          if (file) {
-            window.handleFiles([file]);
-            filePasted = true;
-          }
+      // 1. 发送按钮动画 show/hide
+      if (sendBtnEl) {
+        if (hasContent) {
+          sendBtnEl.classList.add('active');
+        } else {
+          sendBtnEl.classList.remove('active');
         }
       }
 
-      if (filePasted) {
-        window.updateSendButtonState();
+      // 2. 100% 对称即时切行引擎（无论单行/多行，容量计算 100% 恒等，删除第 1 个字符瞬间切回单行）
+      const layoutEl = container.querySelector('.input-main-layout');
+      const actionLeft = container.querySelector('.action-left');
+      const permBtnEl = container.querySelector('.pure-mode-text-btn, #btnPermission');
+      const actionRight = container.querySelector('.action-right');
+
+      const layoutW = layoutEl ? layoutEl.clientWidth : 800;
+      const leftW = actionLeft ? actionLeft.offsetWidth : 30;
+      const permW = permBtnEl ? permBtnEl.offsetWidth : 68;
+      const rightW = actionRight ? actionRight.offsetWidth : 174;
+
+      // 单行输入框在 Grid 布局中的物理精确可分配宽度（扣除左右两侧按钮与 Grid 间距 18px）
+      const singleLineCapacity = Math.max(200, layoutW - (leftW + permW + rightW + 18));
+      const hasExplicitNewline = cleanText.includes('\n');
+      const unclippedTextWidth = measureTextWidth(cleanText);
+
+      let isMultiLineNeeded = hasFiles || hasExplicitNewline || (unclippedTextWidth >= singleLineCapacity);
+
+      if (isMultiLineNeeded) {
+        container.classList.add('is-multiline');
+      } else {
+        container.classList.remove('is-multiline');
       }
     });
-  }
+  };
+
+  // Delegated event listeners across all panes
+  ['input', 'keyup', 'cut', 'blur', 'focus'].forEach(evt => {
+    document.addEventListener(evt, (e) => {
+      if (e.target.closest('.composer-editable')) {
+        setTimeout(window.updateSendButtonState, 0);
+      }
+    });
+  });
+
+  // Enter to send message
+  document.addEventListener('keydown', (e) => {
+    const editable = e.target.closest('.composer-editable');
+    if (editable && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      const wrapper = editable.closest('.composer-wrapper');
+      const sendBtn = wrapper ? wrapper.querySelector('.send-btn-circle') : document.getElementById('btnSend');
+      if (sendBtn) sendBtn.click();
+    }
+  });
+
+  // Clipboard Paste Handler (Supports Image & File Pasting)
+  document.addEventListener('paste', (e) => {
+    const editable = e.target.closest('.composer-editable');
+    if (!editable) return;
+
+    const items = (e.clipboardData || (window.event && window.event.clipboardData))?.items;
+    if (!items) return;
+
+    let filePasted = false;
+    for (let item of items) {
+      if (item.kind === 'file') {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          window.handleFiles([file]);
+          filePasted = true;
+        }
+      }
+    }
+
+    if (filePasted) {
+      setTimeout(window.updateSendButtonState, 0);
+    }
+  });
+
+  // Initial state sync
+  window.updateSendButtonState();
 
   // File Input Change Listener for Plus Menu
   if (hiddenFileInput) {

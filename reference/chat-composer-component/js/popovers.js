@@ -277,110 +277,159 @@ document.addEventListener('DOMContentLoaded', () => {
   const menuUseSkill = document.getElementById('menuUseSkill');
   const composerFileInput = document.getElementById('composerFileInput');
 
-  if (btnPlus) {
-    btnPlus.addEventListener('click', (e) => {
+  // ---- Universal Delegated Event Handlers for Composer Controls (Works for 100% of Single Pane & Cloned Split Panes!) ----
+  document.addEventListener('click', (e) => {
+    // 1. Plus Button
+    const plusBtn = e.target.closest('.icon-btn-plus, #btnPlus');
+    if (plusBtn) {
       e.preventDefault();
       e.stopPropagation();
-      window.togglePopover(btnPlus, 'plusPopover');
-    });
-  }
-
-  if (menuAddFile && composerFileInput) {
-    menuAddFile.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      window.closeAllPopovers();
-      composerFileInput.click();
-    });
-    composerFileInput.addEventListener('change', (e) => {
-      if (e.target.files && e.target.files.length > 0) {
-        if (window.handleFiles) window.handleFiles(e.target.files);
-        e.target.value = '';
-      }
-    });
-  }
-
-  function positionSkillSubmenu() {
-    if (!plusPopover || !skillSubmenu) return;
-    const rect = plusPopover.getBoundingClientRect();
-    let left = rect.right + 6;
-    let top = rect.top;
-    if (left + 180 > window.innerWidth - 16) {
-      left = rect.left - 186;
+      window.togglePopover(plusBtn, 'plusPopover');
+      return;
     }
-    skillSubmenu.style.left = `${Math.round(left)}px`;
-    skillSubmenu.style.top = `${Math.round(top)}px`;
-  }
 
-  if (menuUseSkill && skillSubmenu) {
-    menuUseSkill.addEventListener('mouseenter', () => {
-      positionSkillSubmenu();
-      skillSubmenu.classList.add('active');
-    });
-    menuUseSkill.addEventListener('click', (e) => {
+    // 2. Model Button
+    const modelBtn = e.target.closest('.fused-sub-trigger--model, #btnModel');
+    if (modelBtn) {
       e.preventDefault();
       e.stopPropagation();
-      positionSkillSubmenu();
-      skillSubmenu.classList.toggle('active');
-    });
-  }
+      const fused = modelBtn.closest('.fused-model-thinking-btn') || modelBtn;
+      window.togglePopover(fused, 'modelPopover');
+      return;
+    }
 
-  document.querySelectorAll('#skillListContainer .skill-item').forEach(item => {
-    item.addEventListener('click', (e) => {
+    // 3. Thinking Button
+    const thinkingBtn = e.target.closest('.fused-sub-trigger--thinking, #btnThinking');
+    if (thinkingBtn) {
       e.preventDefault();
       e.stopPropagation();
-      const skillName = item.getAttribute('data-name') || item.innerText.trim();
-      if (skillName && window.insertRichInlineTag) {
-        window.insertRichInlineTag(skillName, true);
-      }
-      window.closeAllPopovers();
-    });
-  });
+      const fused = thinkingBtn.closest('.fused-model-thinking-btn') || thinkingBtn;
+      window.togglePopover(fused, 'thinkingPopover');
+      return;
+    }
 
-  const skillSearchInput = document.getElementById('skillSearchInput');
-  if (skillSearchInput) {
-    skillSearchInput.addEventListener('input', () => {
-      const q = skillSearchInput.value.toLowerCase().trim();
-      document.querySelectorAll('#skillListContainer .skill-item').forEach(item => {
-        const name = (item.getAttribute('data-name') || item.innerText).toLowerCase();
-        item.style.display = q === '' || name.includes(q) ? 'flex' : 'none';
-      });
-    });
-  }
-
-  const btnSend = document.getElementById('btnSend');
-  if (btnSend) {
-    btnSend.addEventListener('click', (e) => {
+    // 4. Permission Button
+    const permBtn = e.target.closest('.pure-mode-text-btn, #btnPermission');
+    if (permBtn) {
       e.preventDefault();
       e.stopPropagation();
-      const text = composerEditable ? composerEditable.textContent.trim() : '';
+      window.togglePopover(permBtn, 'permissionPopover');
+      return;
+    }
+
+    // 5. Send Button
+    const sendBtn = e.target.closest('.send-btn-circle, #btnSend');
+    if (sendBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const wrapper = sendBtn.closest('.composer-wrapper');
+      const editable = wrapper ? wrapper.querySelector('.composer-editable') : document.getElementById('composerEditable');
+      const text = editable ? (editable.innerText || editable.textContent || '').trim() : '';
       if (text && window.sendMessage) {
         window.sendMessage(text);
+        if (editable) {
+          editable.innerHTML = '';
+          if (window.updateSendButtonState) window.updateSendButtonState();
+        }
       }
-    });
-  }
+      return;
+    }
 
-  const btnModelTrigger = document.getElementById('btnModel');
-  const btnThinkingTrigger = document.getElementById('btnThinking');
-  const fusedBtn = btnModelTrigger ? btnModelTrigger.closest('.fused-model-thinking-btn') : null;
-
-  // Click model text -> open model popover
-  if (btnModelTrigger) {
-    btnModelTrigger.addEventListener('click', (e) => {
+    // 6. Plan Mode Badge Click (Toggle steps drawer)
+    const planBadge = e.target.closest('.plan-mode-badge, #planModeBadge');
+    if (planBadge) {
       e.preventDefault();
       e.stopPropagation();
-      window.togglePopover(fusedBtn || btnModelTrigger, 'modelPopover');
-    });
-  }
+      const planBarEl = planBadge.closest('.plan-progress-bar') || document.getElementById('planProgressBar');
+      if (planBarEl) {
+        const wasOpen = planBarEl.classList.contains('expanded-steps');
+        planBarEl.classList.remove('expanded-goal');
+        planBarEl.classList.toggle('expanded-steps', !wasOpen);
+      }
+      return;
+    }
 
-  // Click thinking text -> open dedicated thinkingPopover
-  if (btnThinkingTrigger) {
-    btnThinkingTrigger.addEventListener('click', (e) => {
+    // 7. Plan Active Task Box Click (Toggle steps drawer)
+    const planActiveBox = e.target.closest('.plan-active-task-box, #planActiveTaskBox');
+    if (planActiveBox) {
       e.preventDefault();
       e.stopPropagation();
-      window.togglePopover(fusedBtn || btnThinkingTrigger, 'thinkingPopover');
-    });
-  }
+      const planBarEl = planActiveBox.closest('.plan-progress-bar') || document.getElementById('planProgressBar');
+      if (planBarEl) {
+        const wasOpen = planBarEl.classList.contains('expanded-steps');
+        planBarEl.classList.remove('expanded-goal');
+        planBarEl.classList.toggle('expanded-steps', !wasOpen);
+      }
+      return;
+    }
+
+    // 8. Plan Edit Quick Button (Toggle goal edit panel)
+    const planEditBtn = e.target.closest('#planEditQuickBtn, .plan-action-btn[title*="编辑"]');
+    if (planEditBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const planBarEl = planEditBtn.closest('.plan-progress-bar') || document.getElementById('planProgressBar');
+      if (planBarEl) {
+        const wasGoal = planBarEl.classList.contains('expanded-goal');
+        planBarEl.classList.remove('expanded-steps');
+        planBarEl.classList.toggle('expanded-goal', !wasGoal);
+      }
+      return;
+    }
+
+    // 9. Plan Pause Toggle Button
+    const planPauseBtn = e.target.closest('#planPauseToggleBtn, .plan-action-btn[title*="暂停"]');
+    if (planPauseBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const iconPause = planPauseBtn.querySelector('.icon-pause');
+      const iconPlay = planPauseBtn.querySelector('.icon-play');
+      if (iconPause && iconPlay) {
+        const isPaused = iconPlay.style.display !== 'none';
+        iconPlay.style.display = isPaused ? 'none' : 'block';
+        iconPause.style.display = isPaused ? 'block' : 'none';
+      }
+      return;
+    }
+
+    // 10. Plan Stop Button
+    const planStopBtn = e.target.closest('#planStopQuickBtn, .plan-action-btn[title*="终止"]');
+    if (planStopBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const planBarEl = planStopBtn.closest('.plan-progress-bar') || document.getElementById('planProgressBar');
+      if (planBarEl) {
+        planBarEl.classList.remove('expanded-steps', 'expanded-goal');
+      }
+      return;
+    }
+
+    // 11. File card remove button
+    const removeBtn = e.target.closest('.file-remove');
+    if (removeBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const card = removeBtn.closest('.file-card');
+      if (card) {
+        card.remove();
+        if (window.updateSendButtonState) window.updateSendButtonState();
+      }
+      return;
+    }
+
+    // 12. Inline tag remove button
+    const tagRemove = e.target.closest('.tag-remove-btn');
+    if (tagRemove) {
+      e.preventDefault();
+      e.stopPropagation();
+      const tag = tagRemove.closest('.rich-inline-tag');
+      if (tag) {
+        tag.remove();
+        if (window.updateSendButtonState) window.updateSendButtonState();
+      }
+      return;
+    }
+  });
 
   // Thinking Popover Selection Handler
   document.querySelectorAll('#thinkingPopover .thinking-option').forEach(item => {
@@ -392,15 +441,6 @@ document.addEventListener('DOMContentLoaded', () => {
       window.closeAllPopovers();
     });
   });
-
-  const btnPermission = document.getElementById('btnPermission');
-  if (btnPermission) {
-    btnPermission.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      window.togglePopover(btnPermission, 'permissionPopover');
-    });
-  }
 
   const modelSearchInput = document.getElementById('modelSearchInput');
 
@@ -458,14 +498,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeEffortLevel = '中';
 
   function updateModelButtonDisplay() {
-    const modelSpan = document.getElementById('btnModel');
-    const thinkingSpan = document.getElementById('btnThinking');
-    if (modelSpan) {
+    document.querySelectorAll('.fused-sub-trigger--model, #btnModel').forEach(modelSpan => {
       modelSpan.innerText = activeModelName;
-    }
-    if (thinkingSpan) {
+    });
+    document.querySelectorAll('.fused-sub-trigger--thinking, #btnThinking').forEach(thinkingSpan => {
       thinkingSpan.innerText = activeEffortLevel;
-    }
+    });
   }
 
   // 6-Level Discrete Thinking Effort System (Off, Low, Medium, High, X-High, Max)
@@ -545,15 +583,14 @@ document.addEventListener('DOMContentLoaded', () => {
       opt.classList.add('selected');
 
       const modeName = opt.getAttribute('data-mode') || opt.innerText.trim();
-      const btnPerm = document.getElementById('btnPermission');
-      if (btnPerm) {
+      document.querySelectorAll('.pure-mode-text-btn, #btnPermission').forEach(btnPerm => {
         const labelSpan = btnPerm.querySelector('span');
         if (labelSpan) labelSpan.innerText = modeName;
         // Sync button color class (pure-mode-text-btn variants)
         allPermClasses.forEach(cls => btnPerm.classList.remove(cls));
         const newCls = permColorMap[modeName];
         if (newCls) btnPerm.classList.add(newCls);
-      }
+      });
 
       if (modeName === '计划模式' || modeName === '目标模式') {
         window.setPlanActive(true);
@@ -1228,7 +1265,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (!this._indicator) this._indicator = this._createIndicator();
-        this._updateTarget(ev.clientX, ev.clientY, srcStrip);
+        this._updateTarget(ev.clientX, ev.clientY, srcStrip, dx);
       };
 
       const onUp = (ev) => {
@@ -1285,7 +1322,7 @@ document.addEventListener('DOMContentLoaded', () => {
       this._lastStateKey = null;
     }
 
-    _updateTarget(cx, cy, srcStrip) {
+    _updateTarget(cx, cy, srcStrip, dx) {
       const ind = this._indicator;
       if (!ind) return;
 
@@ -1298,17 +1335,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (strip && (strip.dataset.paneId || strip.closest('.app-top-bar'))) {
         const paneId = strip.dataset.paneId || 'pane-main';
-        this._handleStripDrop(cx, strip, paneId, ind);
+        this._handleStripDrop(cx, strip, paneId, ind, dx);
         return;
       }
 
       this._handlePaneDrop(cx, cy, ind);
     }
 
-    _handleStripDrop(cx, strip, paneId, ind) {
+    _handleStripDrop(cx, strip, paneId, ind, dx) {
       this._enterStrip(strip);
       const tabRects = this._cachedTabRects || [];
-      const insertIdx = this._computeInsertIndex(tabRects, cx);
+      const insertIdx = this._computeInsertIndex(tabRects, cx, dx);
       const shiftW = 150;
 
       const stateKey = `strip:${paneId}:${insertIdx}`;
@@ -1393,13 +1430,21 @@ document.addEventListener('DOMContentLoaded', () => {
       if (ind) ind.style.display = 'none';
     }
 
-    _computeInsertIndex(tabRects, cx) {
+    _computeInsertIndex(tabRects, cx, dx) {
       for (let i = 0; i < tabRects.length; i++) {
         const r = tabRects[i];
-        const leftThird = r.left + r.width / 3;
-        const rightThird = r.left + r.width * 2 / 3;
-        if (cx < leftThird) return i;
-        if (cx < rightThird) return cx < r.left + r.width / 2 ? i : i + 1;
+        if (cx < r.left) return i;
+        if (cx <= r.right) {
+          // Inside tab i: if moving right, trigger after 1/3; if moving left, trigger after right 1/3
+          if (dx !== undefined) {
+            if (dx >= 0) {
+              return cx >= r.left + r.width * (1 / 3) ? i + 1 : i;
+            } else {
+              return cx <= r.right - r.width * (1 / 3) ? i : i + 1;
+            }
+          }
+          return cx < r.left + r.width / 2 ? i : i + 1;
+        }
       }
       return tabRects.length;
     }
@@ -1531,7 +1576,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const sidePanel = document.createElement('div');
       sidePanel.className = 'chat-side-panel';
       sidePanel.innerHTML = `
-        <div class="side-panel-header">
+        <header class="side-panel-header">
           <div class="side-panel-nav-group">
             <button class="side-panel-btn active" title="工作区应用预览">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
@@ -1548,7 +1593,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <button class="side-panel-btn" title="在浏览器中打开"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></button>
             <button class="side-panel-btn" title="最大化面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg></button>
           </div>
-        </div>
+        </header>
         <div class="side-panel-body">
           <div class="side-panel-empty-state">
             <div class="side-empty-title">Create apps with Build Mode</div>
@@ -1727,8 +1772,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Sidebar Collapse / Expand Toggle
   const sidebar = document.getElementById('chatLeftSidebar');
   const sidebarToggleBtn = document.getElementById('sidebarToggleBtn');
-  const expandSidebarBtn = document.getElementById('expandSidebarBtn');
-  const collapsedToggleRail = document.getElementById('collapsedToggleRail');
 
   function toggleSidebar() {
     if (!sidebar) return;
@@ -1737,8 +1780,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (chatAppLayout) {
       chatAppLayout.classList.toggle('has-left-sidebar', !isCollapsed);
     }
-    if (collapsedToggleRail) {
-      collapsedToggleRail.style.display = isCollapsed ? 'flex' : 'none';
+    if (sidebarToggleBtn) {
+      sidebarToggleBtn.title = isCollapsed ? '展开左侧历史栏 (Cmd/Ctrl + B)' : '收起左侧历史栏 (Cmd/Ctrl + B)';
     }
     const leftmostHdr = document.querySelector('.tree-leaf-pane.top-row.left-edge > .tree-pane-header');
     if (leftmostHdr) {
@@ -1750,9 +1793,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   if (sidebarToggleBtn) sidebarToggleBtn.addEventListener('click', toggleSidebar);
-  if (expandSidebarBtn) expandSidebarBtn.addEventListener('click', toggleSidebar);
-  const topSidebarBtn = document.getElementById('topSidebarBtn');
-  if (topSidebarBtn) topSidebarBtn.addEventListener('click', toggleSidebar);
 
   // Window Controls Feedback
   const winMin = document.getElementById('winMinimizeBtn');

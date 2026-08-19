@@ -91,18 +91,18 @@ body {
   background: var(--bg-page, #ffffff);
 }
 
-/* Floating Overlay Top Bar (Window Controls & Collapse Toggle) */
+/* Floating Overlay Top Bar (Window Controls) */
 .workspace-top-bar {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 38px;
+  height: 36px;
   background: transparent;
   border-bottom: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding: 0;
   user-select: none;
   z-index: 200;
@@ -110,36 +110,22 @@ body {
   box-sizing: border-box;
 }
 
-.workspace-top-bar__rail {
-  height: 38px;
-  display: flex;
-  align-items: center;
-  padding-left: 10px;
-  padding-right: 4px;
-  flex-shrink: 0;
-  pointer-events: auto;
-  background: var(--bg-secondary, #f7f7f8);
-  border-radius: 0 0 6px 0;
-}
-
 .workspace-top-bar__trail {
   display: flex;
   align-items: center;
-  gap: 2px;
-  height: 38px;
+  gap: 0;
+  height: 36px;
   flex-shrink: 0;
-  padding-left: 16px;
-  padding-right: 4px;
+  padding-right: 0;
   pointer-events: auto;
-  background: var(--bg-secondary, #f7f7f8);
-  border-radius: 0 0 0 6px;
+  background: transparent;
   margin-left: auto;
 }
 
 .header-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  border-radius: 0;
   border: none;
   background: transparent;
   color: var(--text-secondary, #666666);
@@ -250,8 +236,9 @@ body {
 }
 
 .session-tab-item.is-dragging {
-  opacity: 0.35;
-  border: 1px dashed var(--brand-primary, #10b981) !important;
+  opacity: 0;
+  border: 1px solid transparent !important;
+  pointer-events: none;
 }
 
 .session-tab-item.drag-over-before {
@@ -1378,6 +1365,9 @@ textarea.composer-input {
 }
 
 .sidebar-toggle-btn {
+  position: fixed;
+  top: 4px;
+  left: 10px;
   width: 28px;
   height: 28px;
   border-radius: 6px;
@@ -1390,65 +1380,12 @@ textarea.composer-input {
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
+  z-index: 210;
   transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
 }
 
 .sidebar-toggle-btn:hover {
   background: rgba(0, 0, 0, 0.06);
-  color: var(--text-primary, #111111);
-}
-
-/* Single Permanent Invariant Left Sidebar Button */
-.top-fixed-sidebar-btn {
-  position: fixed;
-  top: 4px;
-  left: 10px;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-secondary, #666666);
-  z-index: 120;
-  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
-}
-
-.top-fixed-sidebar-btn:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--text-primary, #111111);
-}
-
-/* Single Permanent Invariant Panel Toggle Button (100% physically fixed on screen) */
-.top-fixed-panel-btn {
-  position: fixed;
-  top: 44px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-secondary, #666666);
-  z-index: 120;
-  padding: 0;
-  transition: background var(--dur-fast) var(--ease-default), color var(--dur-fast) var(--ease-default);
-}
-
-.top-fixed-panel-btn:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: var(--text-primary, #111111);
-}
-
-.top-fixed-panel-btn.active {
-  background: rgba(0, 0, 0, 0.08);
   color: var(--text-primary, #111111);
 }
 
@@ -1458,10 +1395,10 @@ textarea.composer-input {
   top: 0;
   left: 0;
   width: 100%;
-  height: 44px;
-  min-height: 44px;
-  margin-bottom: -44px;
-  z-index: 100;
+  height: 38px;
+  min-height: 38px;
+  margin-bottom: -38px;
+  z-index: 10;
   pointer-events: none;
   background: linear-gradient(
     to bottom,
@@ -1482,6 +1419,7 @@ textarea.composer-input {
 }
 
 .chat-top-left {
+  height: 28px;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -1496,6 +1434,7 @@ textarea.composer-input {
 
 /* Breadcrumbs (3 Levels) */
 .top-breadcrumbs {
+  height: 28px;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1547,17 +1486,19 @@ textarea.composer-input {
 .breadcrumb-agent-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 6px;
+  gap: 4px;
+  height: 24px;
+  padding: 0 6px;
   border-radius: 6px;
   background: transparent;
   border: none;
   color: var(--text-secondary, #666666);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 400;
   cursor: pointer;
   transition: all var(--dur-fast) var(--ease-default);
   outline: none;
+  box-sizing: border-box;
 }
 
 .breadcrumb-agent-btn:hover {
@@ -1583,6 +1524,7 @@ textarea.composer-input {
 }
 
 .chat-top-actions {
+  height: 28px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1646,7 +1588,7 @@ textarea.composer-input {
   bottom: 0;
   left: 2.5px;
   width: 1px;
-  background: var(--border-color, rgba(0, 0, 0, 0.08));
+  background: transparent;
 }
 
 .layout-resizer-sidebar:hover::after,
@@ -1677,7 +1619,7 @@ textarea.composer-input {
   bottom: 0;
   left: 2.5px;
   width: 1px;
-  background: var(--border-color, rgba(0, 0, 0, 0.12));
+  background: transparent;
 }
 
 .layout-resizer-panel:hover::after,
@@ -1874,7 +1816,7 @@ textarea.composer-input {
 
 .tree-leaf-pane > .top-side-panel-btn {
   position: absolute;
-  top: 42px;
+  top: 41px;
   right: 10px;
   width: 28px;
   height: 28px;
@@ -1904,7 +1846,7 @@ textarea.composer-input {
 .side-panel-header {
   height: 38px;
   min-height: 38px;
-  padding: 0 8px;
+  padding: 0 10px;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -1917,6 +1859,7 @@ textarea.composer-input {
 }
 
 .side-panel-nav-group {
+  height: 28px;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;
@@ -1925,6 +1868,7 @@ textarea.composer-input {
 }
 
 .side-panel-actions-group {
+  height: 28px;
   display: flex;
   flex-direction: row;
   flex-wrap: nowrap;

@@ -202,15 +202,8 @@
       <!-- 2. Right Workspace Container -->
       <div class="app-workspace-container" id="chatWorkspaceContainer">
 
-        <!-- Workspace Top Bar — Floating Overlay (Window Controls & Collapsed Sidebar Toggle) -->
+        <!-- Workspace Top Bar — Floating Overlay (Window Controls) -->
         <header class="workspace-top-bar" id="appTopBar" data-tauri-drag-region>
-          <!-- Collapsed Sidebar Expand Rail (Shown when sidebar collapsed) -->
-          <div class="workspace-top-bar__rail" id="collapsedToggleRail" style="display: none;">
-            <button class="header-btn" id="expandSidebarBtn" title="展开侧栏" style="width: 28px; height: 28px;">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line></svg>
-            </button>
-          </div>
-
           <!-- Fixed Right Window Action Buttons (3 Buttons: Min, Max, Close) -->
           <div class="workspace-top-bar__trail">
             <button class="header-btn" id="winMinimizeBtn" title="最小化"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
@@ -225,7 +218,7 @@
             <!-- Main Chat Column (Live DOM Node) -->
             <div class="chat-main-pane" id="chatMainPane">
               <!-- Row 2: Secondary Top Header (Breadcrumbs + Right Actions) -->
-              <div class="chat-top-header" id="chatTopHeader">
+              <header class="chat-top-header" id="chatTopHeader">
                 <!-- Left: 3-Level Breadcrumbs -->
                 <div class="chat-top-left">
                   <nav class="top-breadcrumbs" aria-label="Breadcrumb">
@@ -236,32 +229,32 @@
 
                     <span class="bc-sep">/</span>
 
-              <!-- Level 2: Session -->
-              <span class="breadcrumb-item breadcrumb-session" id="bcSession" title="当前会话">
-                <span class="bc-text">重构 IPC 缓冲通道</span>
-              </span>
+                    <!-- Level 2: Session -->
+                    <span class="breadcrumb-item breadcrumb-session" id="bcSession" title="当前会话">
+                      <span class="bc-text">重构 IPC 缓冲通道</span>
+                    </span>
 
-              <span class="bc-sep bc-agent-sep">/</span>
+                    <span class="bc-sep bc-agent-sep">/</span>
 
-              <!-- Level 3: Subagent Status Item (Restrained, subtle live dot & count) -->
-              <button class="breadcrumb-item breadcrumb-agent-btn" id="bcAgentCapsule" title="查看子 Agent 状态">
-                <span class="agent-live-dot"></span>
-                <span class="bc-agent-text">2 个运行中</span>
-                <svg class="bc-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
-              </button>
-            </nav>
-          </div>
+                    <!-- Level 3: Subagent Status Item (Restrained, subtle live dot & count) -->
+                    <button class="breadcrumb-item breadcrumb-agent-btn" id="bcAgentCapsule" title="查看子 Agent 状态">
+                      <span class="agent-live-dot"></span>
+                      <span class="bc-agent-text">2 个运行中</span>
+                      <svg class="bc-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                  </nav>
+                </div>
 
-          <!-- Right: Top Header Actions (More, Share) -->
-          <div class="chat-top-actions">
-            <button class="top-action-btn" id="topMoreBtn" title="更多操作">
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
-            </button>
-            <button class="top-action-btn" id="topShareBtn" title="分享链接">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-            </button>
-          </div>
-        </div>
+                <!-- Right: Top Header Actions (More, Share) -->
+                <div class="chat-top-actions">
+                  <button class="top-action-btn" id="topMoreBtn" title="更多操作">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle></svg>
+                  </button>
+                  <button class="top-action-btn" id="topShareBtn" title="分享链接">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                  </button>
+                </div>
+              </header>
 
       <!-- Minimalist Chat Stream Area (Scrollable) -->
       <div class="chat-stream-container" id="chatStreamContainer">
