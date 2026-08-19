@@ -20,10 +20,16 @@ const STRICT_CSS = ['TiptapEditorField.module.css', 'TiptapSlashMenu.module.css'
   css: readFileSync(join(here, f), 'utf8'),
 }));
 
-const HOST_CSS = {
-  name: 'ChatComposer.module.css',
-  css: readFileSync(join(here, 'ChatComposer.module.css'), 'utf8'),
-};
+const HOST_CSS_FILES = [
+  'ChatComposer.module.css',
+  'ComposerFusedTrigger.module.css',
+  'ComposerDirTree.module.css',
+].map((name) => ({
+  name,
+  css: readFileSync(join(here, name), 'utf8'),
+}));
+
+const HOST_CSS = HOST_CSS_FILES[0]!;
 
 describe('chat-composer 视觉红线（T10）', () => {
   for (const { name, css } of STRICT_CSS) {
@@ -58,7 +64,7 @@ describe('chat-composer 视觉红线（T10）', () => {
   });
 
   it('焦点混色 ≤10%（border-color mix ≥90%），跨域全检', () => {
-    for (const { name, css } of [...STRICT_CSS, HOST_CSS]) {
+    for (const { name, css } of [...STRICT_CSS, ...HOST_CSS_FILES]) {
       const mixes = css.match(/var\(--border-color\)\s+(\d+)%/g) ?? [];
       for (const mix of mixes) {
         const pct = Number(mix.match(/(\d+)%/)?.[1]);
@@ -81,7 +87,9 @@ describe('chat-composer 视觉红线（T10）', () => {
   });
 
   it('宿主域同样零硬编码色与 z-index 字面量（ChatComposer.module.css）', () => {
-    expect(HOST_CSS.css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(HOST_CSS.css).not.toMatch(/z-index:\s*\d/);
+    for (const { name, css } of HOST_CSS_FILES) {
+      expect(css, name).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+      expect(css, name).not.toMatch(/z-index:\s*\d/);
+    }
   });
 });

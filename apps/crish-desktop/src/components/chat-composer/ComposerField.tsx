@@ -307,6 +307,7 @@ export const ComposerField: React.FC<ComposerFieldProps> = React.memo(
                 type="button"
                 variant="primary"
                 size="sm"
+                className={styles.sendCircle}
                 aria-label={sendAria}
                 onClick={trySend}
                 disabled={sendDisabled}

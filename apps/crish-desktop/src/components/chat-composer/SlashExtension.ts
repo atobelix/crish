@@ -14,8 +14,9 @@
 import { Extension, Node, mergeAttributes } from '@tiptap/core';
 import Suggestion, { exitSuggestion } from '@tiptap/suggestion';
 import { PluginKey } from '@tiptap/pm/state';
-import { ReactRenderer } from '@tiptap/react';
+import { ReactRenderer, ReactNodeViewRenderer } from '@tiptap/react';
 import { TiptapSlashMenu } from './TiptapSlashMenu';
+import { ComposerInlineTag } from './ComposerInlineTag';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 import {
   calculateSafeCursorAnchor,
@@ -69,8 +70,10 @@ const getMentionItems = (
   return filtered.map<SlashCommandItem>((c) => ({
     id: `mention-${c.id}`,
     title: c.label,
-    description: c.kind === 'agent' ? '智能体' : '文件',
-    iconName: 'AtSign',
+    description:
+      c.kind === 'agent' ? '智能体' : c.kind === 'skill' ? '技能' : '文件',
+    iconName:
+      c.kind === 'agent' ? 'Bot' : c.kind === 'skill' ? 'Sparkles' : 'FileText',
     keywords: [c.id, c.label],
     command: ({ editor, range }: { editor: any; range?: any }) => {
       const chain = editor.chain().focus();
@@ -336,8 +339,22 @@ export const MentionSuggestionExtension =
           allowSpaces: true,
           allowedPrefixes: null,
           pluginKey: mentionSuggestionKey,
-          items: ({ query }: { query: string }) =>
-            getMentionItems(query, this.options.candidatesRef?.current ?? []),
+          allow: ({ state, range }: { state: any; range: { from: number; to: number } }) => {
+            try {
+              const text = state.doc.textBetween(range.from, range.to, '');
+              if (text.startsWith('@@')) return false;
+            } catch {
+              /* swallow-ok: 范围失效则仍允许 @ */
+            }
+            return true;
+          },
+          items: ({ query }: { query: string }) => {
+            if (query.startsWith('@')) return [];
+            return getMentionItems(
+              query,
+              this.options.candidatesRef?.current ?? []
+            );
+          },
           command: ({ editor, range, props }: any) => {
             props.command({ editor, range });
           },
@@ -411,6 +428,11 @@ export const MentionExtension = Node.create({
   }) {
     const label = node.attrs.label || node.attrs.id || 'mention';
     const kind = node.attrs.kind || 'file';
+    const filePath =
+      kind === 'file'
+        ? String(node.attrs.id || node.attrs.label || '').trim()
+        : '';
+    const text = kind === 'skill' ? String(label) : `@${label}`;
     return [
       'span',
       mergeAttributes(
@@ -419,11 +441,17 @@ export const MentionExtension = Node.create({
           'data-kind': kind,
           class: `mention-chip mention-chip-${kind}`,
           contenteditable: 'false',
+          ...(filePath ? { 'data-file-open-path': filePath } : {}),
         },
         HTMLAttributes
       ),
-      `@${label}`,
+      ['span', { class: 'mention-icon-box', 'aria-hidden': 'true' }],
+      text,
     ];
+  },
+
+  addNodeView() {
+    return ReactNodeViewRenderer(ComposerInlineTag);
   },
 
   renderText({ node }: { node: any }) {

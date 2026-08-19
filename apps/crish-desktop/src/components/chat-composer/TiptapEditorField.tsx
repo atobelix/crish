@@ -24,6 +24,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 
 import { exitSuggestion } from '@tiptap/suggestion';
 import { slashSuggestionKey, mentionSuggestionKey } from './SlashExtension';
+import { dirTreeSuggestionKey } from './DirTreeExtension';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 import { serializeToMarkdown } from './serialization/markdownSerializer';
 import { parseFromMarkdown } from './serialization/markdownDeserializer';
@@ -100,6 +101,7 @@ export const TiptapEditorField = React.forwardRef<
     const listboxBaseId = useId();
     const slashListboxId = `${listboxBaseId}-slash`;
     const mentionListboxId = `${listboxBaseId}-mention`;
+    const dirTreeListboxId = `${listboxBaseId}-dir-tree`;
 
     // ── 动态 prop 经 ref 桥接（编辑器装配一次性稳定，避免重建）─────────────────
     const placeholderRef = useRef<string>(placeholder ?? '');
@@ -179,6 +181,7 @@ export const TiptapEditorField = React.forwardRef<
       callbacksRef,
       slashListboxId,
       mentionListboxId,
+      dirTreeListboxId,
     };
 
     // 注意：装配一次性固定（useMemo 空依赖），bridge 内均为稳定 ref；
@@ -349,6 +352,9 @@ export const TiptapEditorField = React.forwardRef<
         }
         if (mentionSuggestionKey.getState(view.state)?.active) {
           exitSuggestion(view, mentionSuggestionKey);
+        }
+        if (dirTreeSuggestionKey.getState(view.state)?.active) {
+          exitSuggestion(view, dirTreeSuggestionKey);
         }
       };
       dom.addEventListener('keydown', onEscapeCapture, true);

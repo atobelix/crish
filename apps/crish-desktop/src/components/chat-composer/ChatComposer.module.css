@@ -141,44 +141,79 @@
 
 .attachStrip {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1_5);
-  padding: 0 4px 4px;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+  max-width: 100%;
 }
 
 .attachChip {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1_5);
-  max-width: 220px;
-  padding: 4px 6px 4px 8px;
-  border-radius: var(--radius-lg);
-  border: var(--hairline-width, 1px) solid
-    var(--hairline-strong, var(--border-color));
-  background: var(--bg-secondary);
-  font-size: var(--font-size-micro);
-  color: var(--text-secondary);
+  gap: 6px;
+  height: 28px;
+  max-width: 190px;
+  padding: 0 8px;
+  border-radius: var(--radius-md);
+  border: var(--hairline-width, 1px) solid var(--border-color);
+  background: transparent;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-primary);
   min-width: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  box-sizing: border-box;
+  box-shadow: none;
+}
+
+.attachChip:hover,
+.attachChip:focus-visible {
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+  outline: none;
 }
 
 .attachChipImage {
-  padding-left: var(--space-1);
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  border: none;
+  max-width: 27px;
 }
 
 .attachThumb {
-  width: 36px;
-  height: 36px;
+  width: 27px;
+  height: 27px;
   object-fit: cover;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   flex-shrink: 0;
   background: var(--bg-primary);
   border: var(--hairline-width, 1px) solid
     var(--hairline, var(--border-subtle, var(--border-color)));
 }
 
+.attachIconBox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
 .attachIcon {
   flex-shrink: 0;
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 .attachName {
@@ -189,19 +224,56 @@
 }
 
 .attachRemove {
-  width: 18px;
-  height: 18px;
-  margin-left: 0;
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 14px;
+  height: 14px;
+  margin: 0;
   padding: 0;
   flex-shrink: 0;
-  opacity: 0.7;
-  min-width: 18px;
-  min-height: 18px;
+  opacity: 0;
+  min-width: 14px;
+  min-height: 14px;
   box-sizing: border-box;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  color: var(--text-tertiary);
+  box-shadow: none;
 }
 
-.attachRemove:hover {
+.attachChip:hover .attachRemove,
+.attachChip:focus-within .attachRemove {
   opacity: 1;
+}
+
+.attachRemove:hover,
+.attachRemove:focus-visible {
+  opacity: 1;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.sendCircle:disabled {
+  width: 0;
+  min-width: 0;
+  height: var(--control-height);
+  padding: 0;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border: none;
+  box-shadow: none;
+}
+
+.sendCircle:not(:disabled) {
+  width: var(--control-height);
+  min-width: var(--control-height);
+  height: var(--control-height);
+  padding: 0;
+  border-radius: 50%;
+  box-shadow: none;
 }
 
 .sendBtn {
@@ -409,8 +481,26 @@
 }
 
 .composerWrapper {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0;
   width: 100%;
+}
+
+.dropMask {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--composer-bg) 92%, var(--text-primary) 4%);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 13px);
+  pointer-events: none;
+  box-shadow: none;
+  outline: 1px dashed var(--border-color);
+  outline-offset: -1px;
 }

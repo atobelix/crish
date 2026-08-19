@@ -17,6 +17,22 @@ vi.mock('./TiptapComposerField', () => ({
   },
 }));
 
+vi.mock('../../app/compositionRoot', () => ({
+  getCompositionRoot: () => ({
+    session: {
+      getActiveSessionId: () => null,
+      getState: () => ({
+        activeSessionId: null,
+        setComposerDraft: () => undefined,
+      }),
+    },
+  }),
+}));
+
+vi.mock('../../api/storeAccess', () => ({
+  openSettings: vi.fn(),
+}));
+
 import { ChatComposer } from './ChatComposer';
 
 function renderFallbackHarness() {

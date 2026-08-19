@@ -35,7 +35,8 @@ import { ComposerField } from './ComposerField';
 import type { ComposerFieldProps } from './composerTypes';
 import { ComposerAttachmentBar } from './ComposerAttachmentBar';
 import { ChatQueuePanel } from './ChatQueuePanel';
-import { getCompositionRoot } from '../../app/compositionRoot';
+import { ComposerDropHost } from './ComposerDropHost';
+import { ComposerFusedTrigger } from './ComposerFusedTrigger';
 
 export type { ComposerFieldProps } from './composerTypes';
 export { ComposerField, STOP_TOOLTIP } from './ComposerField';
@@ -102,6 +103,8 @@ export type ChatComposerProps = {
   setAttachments: React.Dispatch<React.SetStateAction<ChatAttachment[]>>;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFilesSelected: (files: File[]) => void | Promise<void>;
+  /** 点附件 / 文件 mention → files / file-viewer 叶；不传则不接线 */
+  onOpenPath?: (filePath: string) => void;
   showPlusMenu: boolean;
   setShowPlusMenu: (v: boolean) => void;
   permissionMode: PermissionMode;
@@ -137,6 +140,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   setAttachments,
   fileInputRef,
   onFilesSelected,
+  onOpenPath,
   showPlusMenu,
   setShowPlusMenu,
   permissionMode,
@@ -209,6 +213,29 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     [setAttachments]
   );
 
+  const handleFileOpenClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!onOpenPath) return;
+      const t =
+        e.target instanceof Element
+          ? e.target
+          : e.target instanceof Node
+            ? e.target.parentElement
+            : null;
+      if (!t) return;
+      if (t.closest('.chat-attach-remove')) return;
+      const el = t.closest('[data-file-open-path]');
+      if (!(el instanceof HTMLElement)) return;
+      const path = (el.getAttribute('data-file-open-path') || '').trim();
+      if (!path || /^(note|notebook)(:|$)/i.test(path)) return;
+      if (!/[\\/]/.test(path) && !/\.[A-Za-z0-9]{1,12}$/.test(path)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onOpenPath(path);
+    },
+    [onOpenPath]
+  );
+
   // 草稿原子保护：在前置校验失败或 IPC 发送未成功时，自动将已发送的内容原地回填至输入框
   const handleProtectedSend = useCallback(async () => {
     const rawInput = chatInput;
@@ -221,6 +248,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       if (rawInput) {
         setChatInput(rawInput);
         try {
+          const { getCompositionRoot } = await import(
+            '../../app/compositionRoot'
+          );
           const root = getCompositionRoot();
           const activeSessionId =
             root.session.getActiveSessionId?.() ??
@@ -295,6 +325,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             baseSlashCommands={filteredCommands}
             onSlashMenuPick={handleSlashMenuPick}
             emptyKind={emptyKind}
+            onFilesSelected={onFilesSelected}
           />
         </React.Suspense>
       </InputFieldErrorBoundary>
@@ -303,10 +334,14 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
   return (
     <AppErrorBoundary variant="compact" title="输入区出错">
-      <div
+      <ComposerDropHost
         ref={wrapperRef}
         className={`${styles.composerWrapper}${className ? ` ${className}` : ''}`}
         data-input-field={richTextFailed ? 'textarea' : 'rich-text'}
+        onClick={handleFileOpenClick}
+        onDropFiles={(files) => {
+          void onFilesSelected(files);
+        }}
       >
         <ChatQueuePanel
           queue={queuedMessages}
@@ -319,6 +354,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         <ComposerAttachmentBar
           attachments={attachments}
           onRemoveAttachment={handleRemoveAttachment}
+          {...(onOpenPath ? { onOpenPath } : {})}
         />
 
         <input
@@ -402,9 +438,11 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               </Tooltip>
             ) : null}
           </div>
-          <div className={styles.rightActions}>{rightActions}</div>
+          <div className={styles.rightActions}>
+            <ComposerFusedTrigger>{rightActions}</ComposerFusedTrigger>
+          </div>
         </div>
-      </div>
+      </ComposerDropHost>
     </AppErrorBoundary>
   );
 };

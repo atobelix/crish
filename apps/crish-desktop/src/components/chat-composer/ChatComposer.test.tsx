@@ -8,6 +8,23 @@
 import React, { useRef, useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+
+vi.mock('../../app/compositionRoot', () => ({
+  getCompositionRoot: () => ({
+    session: {
+      getActiveSessionId: () => null,
+      getState: () => ({
+        activeSessionId: null,
+        setComposerDraft: () => undefined,
+      }),
+    },
+  }),
+}));
+
+vi.mock('../../api/storeAccess', () => ({
+  openSettings: vi.fn(),
+}));
+
 import { ChatComposer, type ChatComposerProps } from './ChatComposer';
 
 function getEditorDom(): HTMLElement {

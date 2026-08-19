@@ -434,6 +434,7 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
               type="button"
               variant="primary"
               size="sm"
+              className={styles.sendCircle}
               aria-label={sendAria}
               onClick={trySend}
               disabled={sendDisabled}

@@ -100,6 +100,24 @@ describe('TiptapEditorField T3 补全', () => {
     expect(chip).toBeTruthy();
     expect(chip?.getAttribute('data-id')).toBe('agent-007');
     expect(chip?.getAttribute('data-kind')).toBe('agent');
+    expect(chip?.getAttribute('data-file-open-path')).toBeNull();
+  });
+
+  it('file mention 水合带 data-file-open-path', async () => {
+    render(
+      <TiptapEditorField
+        content={'请看 @[index.ts](src/index.ts:file)'}
+        onMarkdownChange={vi.fn()}
+      />
+    );
+    const dom = getEditorDom();
+    await waitFor(() => {
+      expect(dom.textContent).toContain('index.ts');
+    });
+    const chip = dom.querySelector('span[data-type="mention"]');
+    expect(chip?.getAttribute('data-kind')).toBe('file');
+    expect(chip?.getAttribute('data-id')).toBe('src/index.ts');
+    expect(chip?.getAttribute('data-file-open-path')).toBe('src/index.ts');
   });
 
   it('CodeBlock Enter 保护：代码块内 Enter 只换行，不触发发送', async () => {

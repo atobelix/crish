@@ -15,6 +15,8 @@ import {
   MentionExtension,
   MentionSuggestionExtension,
 } from './SlashExtension';
+import { DirTreeExtension } from './DirTreeExtension';
+import { openFileInPanel } from '../../api/filePanelOpener';
 import { serializeToMarkdown } from './serialization/markdownSerializer';
 import { isImeComposition, resolveTiptapKeydown } from './TiptapKeymap';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
@@ -55,6 +57,7 @@ export interface TiptapEditorBridge {
   callbacksRef: { current: TiptapEditorCallbacks };
   slashListboxId: string;
   mentionListboxId: string;
+  dirTreeListboxId?: string;
 }
 
 /**
@@ -120,6 +123,10 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
       listboxId: bridge.mentionListboxId,
       containerRef: bridge.containerRef,
     }),
+    DirTreeExtension.configure({
+      listboxId: bridge.dirTreeListboxId,
+      containerRef: bridge.containerRef,
+    }),
   ];
 
   return {
@@ -183,6 +190,22 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
 
         return false;
       },
+      handleClickOn: (
+        _view: any,
+        _pos: number,
+        node: { type?: { name?: string }; attrs?: Record<string, unknown> },
+        _nodePos: number,
+        event: MouseEvent,
+        direct: boolean
+      ) => {
+        if (!direct || node?.type?.name !== 'mention') return false;
+        const kind = String(node.attrs?.kind || 'file');
+        const id = String(node.attrs?.id || node.attrs?.label || '');
+        if (kind !== 'file' || !id) return false;
+        event.preventDefault();
+        openFileInPanel(id);
+        return true;
+      },
       handleDrop: (
         view: any,
         event: DragEvent | any,
@@ -195,6 +218,7 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
           event.dataTransfer.files.length > 0
         ) {
           event.preventDefault();
+          event.stopPropagation?.();
           bridge.callbacksRef.current.onDropFiles?.(
             Array.from(event.dataTransfer.files)
           );

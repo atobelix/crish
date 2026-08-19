@@ -1,0 +1,140 @@
+/**
+ * 融合触发胶囊：发丝分割，无品牌绿光晕，焦点混入 ≤6%。
+ */
+
+.capsule {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: var(--control-height);
+  padding: 0 2px;
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  box-shadow: none;
+  min-width: 0;
+}
+
+.left {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.divider {
+  width: 1px;
+  height: 10px;
+  margin: 0 2px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+.right {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.thinkBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: calc(var(--control-height) - 4px);
+  padding: 0 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  box-shadow: none;
+  white-space: nowrap;
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro),
+    border-color var(--transition-micro);
+}
+
+.thinkBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.thinkBtn.isOpen {
+  background: var(--tint-active);
+  color: var(--text-primary);
+}
+
+.thinkBtn:focus-visible {
+  outline: none;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+  box-shadow: none;
+}
+
+.chev {
+  opacity: 0.5;
+}
+
+.menu {
+  z-index: var(--z-dropdown);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: none;
+  padding: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: min(70vh, 360px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  text-align: left;
+  box-shadow: none;
+}
+
+.item:hover {
+  background: var(--tint-hover);
+}
+
+.item.isSelected {
+  background: var(--tint-active);
+}
+
+.item:focus-visible {
+  outline: none;
+  box-shadow: none;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+}
+
+.check {
+  opacity: 0.8;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}

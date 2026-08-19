@@ -1,0 +1,83 @@
+/**
+ * 叶内拖放包含块：遮罩只盖 composer，无彩 inset / 整页绿框。
+ * 与 Tiptap handleDrop 分工：编辑器内由 PM 拦截；页脚/附件条由本宿主收。
+ */
+import React, { useCallback, useRef, useState } from 'react';
+import styles from './ChatComposer.module.css';
+
+function hasFiles(dt: DataTransfer | null | undefined): boolean {
+  if (!dt) return false;
+  return Array.from(dt.types ?? []).includes('Files');
+}
+
+export type ComposerDropHostProps = {
+  onDropFiles: (files: File[]) => void;
+  className?: string;
+  children: React.ReactNode;
+} & Omit<React.HTMLAttributes<HTMLDivElement>, 'onDrop' | 'onDragOver'>;
+
+export const ComposerDropHost = React.forwardRef<
+  HTMLDivElement,
+  ComposerDropHostProps
+>(function ComposerDropHost(
+  { onDropFiles, className, children, onDragEnter, onDragLeave, ...rest },
+  ref
+) {
+  const [over, setOver] = useState(false);
+  const depthRef = useRef(0);
+
+  const reset = useCallback(() => {
+    depthRef.current = 0;
+    setOver(false);
+  }, []);
+
+  return (
+    <div
+      {...rest}
+      ref={ref}
+      className={className}
+      data-drop-over={over ? '1' : undefined}
+      onDragEnter={(e) => {
+        onDragEnter?.(e);
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        depthRef.current += 1;
+        setOver(true);
+      }}
+      onDragLeave={(e) => {
+        onDragLeave?.(e);
+        if (!hasFiles(e.dataTransfer)) return;
+        depthRef.current = Math.max(0, depthRef.current - 1);
+        if (depthRef.current === 0) setOver(false);
+      }}
+      onDragOver={(e) => {
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+      }}
+      onDrop={(e) => {
+        if (e.defaultPrevented) {
+          reset();
+          return;
+        }
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const files = Array.from(e.dataTransfer.files ?? []);
+        reset();
+        if (files.length) onDropFiles(files);
+      }}
+    >
+      {children}
+      {over ? (
+        <div
+          className={styles.dropMask}
+          data-testid="composer-drop-mask"
+          aria-hidden
+        >
+          放到这里添加附件
+        </div>
+      ) : null}
+    </div>
+  );
+});

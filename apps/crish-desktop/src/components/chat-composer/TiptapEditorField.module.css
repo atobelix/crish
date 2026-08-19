@@ -173,19 +173,46 @@
   pointer-events: none;
 }
 
-/* Mention chip MentionExtension         */
+/* Mention chip：文件图标盒 + Skill 变体（中性，无绿底墙） */
 :global(.mention-chip) {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 1px 6px;
+  gap: 4px;
+  padding: 1px 6px 1px 2px;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-  color: var(--accent-color);
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  background: var(--tint-hover);
+  color: var(--text-primary);
   font-size: 0.9em;
   font-weight: var(--font-weight-medium);
   user-select: none;
   cursor: default;
+  vertical-align: middle;
+}
+
+:global(.mention-chip-file) {
+  cursor: pointer;
+}
+
+:global(.mention-chip-skill) {
+  background: var(--tint-active);
+}
+
+:global(.mention-icon-box) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+:global(.mention-icon-box svg) {
+  width: 12px;
+  height: 12px;
 }
 
 /* dense      /                 */
