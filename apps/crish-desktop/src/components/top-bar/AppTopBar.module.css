@@ -1,5 +1,5 @@
 /**
- * AppTopBar styles   36px Seamless Single-layer Header
+ * AppTopBar — 36px 单层顶栏，背景跟画布，不做 secondary 二次底。
  */
 
 .topBar {
@@ -10,8 +10,9 @@
   width: 100vw;
   display: flex;
   align-items: center;
-  background: var(--bg-secondary);
-  border-bottom: 0.5px solid var(--border-color);
+  background: var(--bg-workspace, var(--bg-primary));
+  /* 极淡分割，不是另一块色板的 0.5px 实线底 */
+  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
   box-sizing: border-box;
   overflow: hidden;
   user-select: none;
@@ -74,31 +75,6 @@
   -webkit-app-region: drag;
 }
 
-.addBtn {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  min-height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm, 4px);
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 0;
-  transition: background-color var(--transition-fast, 150ms ease-out),
-              color var(--transition-fast, 150ms ease-out);
-  -webkit-app-region: no-drag;
-  pointer-events: auto;
-}
-
-.addBtn:hover {
-  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
-  color: var(--text-primary);
-}
-
 .trail {
   flex: 0 0 auto;
   height: 100%;
@@ -107,7 +83,7 @@
   gap: var(--space-1, 4px);
   padding-right: var(--space-1, 4px);
   padding-left: var(--space-1, 4px);
-  background: var(--bg-secondary);
+  background: transparent;
   -webkit-app-region: no-drag;
 }
 

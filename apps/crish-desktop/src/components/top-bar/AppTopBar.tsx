@@ -1,10 +1,10 @@
 /**
- * AppTopBar — 36px Seamless 一体化单层顶栏
+ * AppTopBar — 36px 单层顶栏（密度对齐参考 .workspace-top-bar / .tree-pane-header）
  *
  * 布局：
- *   [ Rail: 侧栏联动区 (-16px 负边距补偿) ] ── [ Main: 平嵌胶囊会话标签区 ] ── [ Spacer: 弹性拖拽区 + 加号 ] ── [ Trail: 帮助 + 自绘 Windows 窗控 ]
+ *   [ Rail: 侧栏开关 ] ── [ Main: 真名胶囊 Tab + 末枚旁加号 ] ── [ Spacer: 拖区 ] ── [ Trail: 帮助 + 真 WindowControls ]
  *
- * 严格锁定 36px 物理高度（--header-height: 36px;），释放 >= 20px 视口高度。
+ * 高度锁 36px。假窗控 / 演示 addTab / 叶内第三套 Tab 不进本层。
  */
 
 import React, { useMemo, useCallback, useEffect, useState } from 'react';
@@ -123,7 +123,7 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
               type="button"
               variant="ghost"
               size="sm"
-              className={`${styles.sidebarBtn} app-top-bar__sidebar-btn no-drag`}
+              className={`${styles.sidebarBtn} app-top-bar__sidebar-btn`}
               data-testid="sidebar-toggle"
               aria-label={sidebarCollapsed ? '展开侧栏' : '收起侧栏'}
               aria-expanded={!sidebarCollapsed}
@@ -145,13 +145,13 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
           />
         </div>
 
-        {/* 3. Spacer: 弹性拖拽区 */}
+        {/* 3. Spacer: 弹性窗拖区（加号在 Tab 条末枚旁，不进本区） */}
         <div
           className={`${styles.spacer} app-top-bar__spacer`}
           data-tauri-drag-region
         />
 
-        {/* 4. Trail: 帮助入口与自绘 Windows 窗控 */}
+        {/* 4. Trail: 帮助入口 + 真窗控（最小化/最大化/关闭） */}
         <div
           className={`${styles.trail} app-top-bar__trail app-top-bar__trail--fixed`}
           role="group"
@@ -163,7 +163,7 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
               type="button"
               variant="ghost"
               size="sm"
-              className={`${styles.helpBtn} header-btn no-drag`}
+              className={`${styles.helpBtn} app-top-bar__help-btn`}
               aria-label="快捷键与帮助"
               onClick={handleShowHelp}
               icon={

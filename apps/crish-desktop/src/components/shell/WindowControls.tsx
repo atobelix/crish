@@ -65,7 +65,7 @@ export const WindowControls: React.FC<WindowControlsProps> = React.memo(
 
     return (
       <div
-        className={`${styles.controlsGroup} no-drag`}
+        className={styles.controlsGroup}
         role="group"
         aria-label="窗口控制"
         data-tauri-drag-region="false"
@@ -75,7 +75,7 @@ export const WindowControls: React.FC<WindowControlsProps> = React.memo(
             type="button"
             variant="ghost"
             size="sm"
-            className={`${styles.winBtn} no-drag`}
+            className={styles.winBtn}
             aria-label="最小化窗口"
             data-tauri-drag-region="false"
             onClick={handleMinimize}
@@ -87,7 +87,7 @@ export const WindowControls: React.FC<WindowControlsProps> = React.memo(
             type="button"
             variant="ghost"
             size="sm"
-            className={`${styles.winBtn} no-drag`}
+            className={styles.winBtn}
             aria-label={isMaximized ? '向下还原窗口' : '最大化窗口'}
             data-tauri-drag-region="false"
             onClick={handleToggleMaximize}
@@ -105,7 +105,7 @@ export const WindowControls: React.FC<WindowControlsProps> = React.memo(
             type="button"
             variant="ghost"
             size="sm"
-            className={`${styles.winBtn} ${styles.closeBtn} no-drag`}
+            className={`${styles.winBtn} ${styles.closeBtn}`}
             data-testid={onClose ? 'settings-close-button' : undefined}
             aria-label={onClose ? '关闭设置' : '关闭应用'}
             data-tauri-drag-region="false"

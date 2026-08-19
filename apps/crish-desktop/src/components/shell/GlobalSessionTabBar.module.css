@@ -1,11 +1,6 @@
 /**
- * Global session tab bar   full width of workspaces main content.
- *
- * Spec: docs/red-team-plans/detailed-plans/03-             .md
- * - 26px capsule tab, 4px micro radius
- * - 48px gradient fadeout mask on hover/active
- * - 1px inner stroke / border on active tab
- * - Zero
+ * Global session tab bar — 26px 胶囊（flex: 0 0 150，min 120 / max 180）
+ * caption 嵌 AppTopBar：条跟画布，加号贴末枚 Tab。
  */
 
 .bar {
@@ -14,16 +9,16 @@
   --global-tab-radius: var(--radius-sm, 4px);
   --global-tab-gap: var(--space-0_5, 2px);
   --global-tab-pad-x: var(--space-1, 4px);
-  --global-strip-bg: var(--card-header-bg, transparent);
-  --global-tab-active-bg: var(--bg-card, var(--bg-primary));
+  --global-strip-bg: var(--bg-workspace, var(--bg-primary));
+  --global-tab-active-bg: var(--bg-workspace, var(--bg-primary));
   --global-strip-line: var(--border-color);
-  --global-tab-min-w: 32px;
+  --global-tab-min-w: 120px;
+  --global-tab-pref-w: 150px;
   --global-tab-max-w: 180px;
 
   display: flex;
   align-items: center;
   flex: 0 1 auto;
-  flex-shrink: 0;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -44,12 +39,18 @@
   pointer-events: auto;
 }
 
-/*    AppTopBar      caption           */
+/* 嵌 AppTopBar：shrink-wrap，加号与胶囊同一行，不被 trail 拉开 */
 .barCaption {
   --global-tab-strip-h: 100%;
   --global-tab-h: 26px;
-  --global-strip-bg: transparent;
-  --global-tab-active-bg: var(--bg-card, var(--bg-primary));
+  --global-tab-gap: var(--space-1, 4px);
+  --global-strip-bg: var(--bg-workspace, var(--bg-primary));
+  --global-tab-active-bg: var(--bg-workspace, var(--bg-primary));
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  flex-shrink: 1;
+  gap: var(--global-tab-gap);
   height: 100%;
   min-height: 0;
   max-height: none;
@@ -92,6 +93,15 @@
   --scrollbar-thumb-width: 0px;
 }
 
+/* caption：滚动区只包胶囊，加号在条外 shrink-0 */
+.barCaption .scroll {
+  flex: 0 1 auto;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  position: relative;
+}
+
 /* Edge fade */
 .bar[data-overflow-start='true']::before,
 .bar[data-overflow-end='true']::after {
@@ -114,7 +124,34 @@
   background: linear-gradient(to left, var(--global-strip-bg), transparent);
 }
 
-/* Uniform widths: equal flex share, clamped */
+/* caption 溢出渐隐打在滚动区，避免盖住末枚旁加号 */
+.barCaption[data-overflow-start='true']::before,
+.barCaption[data-overflow-end='true']::after {
+  content: none;
+}
+
+.barCaption[data-overflow-start='true'] .scroll::before,
+.barCaption[data-overflow-end='true'] .scroll::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.barCaption[data-overflow-start='true'] .scroll::before {
+  left: 0;
+  background: linear-gradient(to right, var(--global-strip-bg), transparent);
+}
+
+.barCaption[data-overflow-end='true'] .scroll::after {
+  right: 0;
+  background: linear-gradient(to left, var(--global-strip-bg), transparent);
+}
+
+/* 固定胶囊：flex 0 0 150，禁止均分挤成 32px 钉 */
 .tab {
   appearance: none;
   border: 1px solid transparent;
@@ -129,7 +166,8 @@
   height: var(--global-tab-h);
   min-height: var(--global-tab-h);
   max-height: var(--global-tab-h);
-  flex: 1 1 0;
+  flex: 0 0 150px;
+  width: var(--global-tab-pref-w);
   min-width: var(--global-tab-min-w);
   max-width: var(--global-tab-max-w);
   padding: 0 2px 0 8px;
@@ -162,8 +200,8 @@
 .tab.isActive {
   background: var(--global-tab-active-bg);
   color: var(--text-primary);
-  border-color: var(--border-color);
-  box-shadow: 0 0 0 1px var(--border-color); /* 1px       */
+  border-color: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--text-primary) 4%, transparent);
   font-weight: var(--font-weight-medium);
   z-index: 1;
 }
@@ -236,7 +274,7 @@
 
 .tabLabel {
   overflow: hidden;
-  text-overflow: clip;
+  text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
   flex: 1 1 auto;
@@ -294,7 +332,7 @@
 }
 
 .tab.isActive .tabClose {
-  background: linear-gradient(270deg, var(--bg-card, var(--bg-primary)) 60%, transparent 100%);
+  background: linear-gradient(270deg, var(--global-tab-active-bg, var(--bg-primary)) 60%, transparent 100%);
 }
 
 .tab:not(.isActive):hover .tabClose {
@@ -328,27 +366,33 @@
   position: relative;
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   flex-shrink: 0;
   height: 100%;
 }
 
 .tabAdd {
+  --btn-h: 26px;
+  --btn-px: 0;
+  --btn-icon-size: 13px;
   appearance: none;
-  border: 1px solid transparent;
+  border: none;
   background: transparent;
-  color: var(--text-tertiary);
-  width: var(--global-tab-h);
-  height: var(--global-tab-h);
-  min-width: var(--global-tab-h);
-  max-width: var(--global-tab-h);
+  color: var(--text-secondary);
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  min-height: 26px;
+  max-width: 26px;
+  max-height: 26px;
   padding: 0;
   margin: 0;
-  /* 与顶栏 sidebar/help 图标钮同一半径，不另飞一种 */
   border-radius: var(--radius-sm, 4px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  flex: 0 0 26px;
   flex-shrink: 0;
   align-self: center;
   line-height: 0;

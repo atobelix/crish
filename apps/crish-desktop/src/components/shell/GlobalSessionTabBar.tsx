@@ -64,8 +64,9 @@ export function openTabsStripRelevantEqual(
   return true;
 }
 
-const ICON_SIZE = 16;
-const TAB_ICON_STROKE = 1.75;
+/** 参考 .top-bar-new-tab-btn 内 13px 圆端十字 */
+const ADD_PLUS_SIZE = 13;
+const ADD_PLUS_STROKE = 2;
 
 export interface GlobalSessionTabBarProps {
   /**
@@ -332,7 +333,8 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
               </>
             );
           },
-          trailing: (
+          /* wrapTrailing：加号在滚动条外、永远贴末枚胶囊，不被 trail 挤掉 */
+          wrapTrailing: (
             <div className={styles.addWrap}>
               <Tooltip content="新建对话">
                 <Button
@@ -345,8 +347,8 @@ export const GlobalSessionTabBar: React.FC<GlobalSessionTabBarProps> =
                   onClick={onNewSession}
                   icon={
                     <Plus
-                      size={ICON_SIZE}
-                      strokeWidth={TAB_ICON_STROKE}
+                      size={ADD_PLUS_SIZE}
+                      strokeWidth={ADD_PLUS_STROKE}
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       aria-hidden

@@ -1,10 +1,13 @@
 // @vitest-environment jsdom
 /**
- * GlobalSessionTabBar smoke — workspace tabs, equal-width class, + → openNewDraftTab.
+ * GlobalSessionTabBar smoke — 150px 胶囊、+ → openNewDraftTab、真会话名。
  */
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, cleanup } from '@testing-library/react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   GlobalSessionTabBar,
   resolveTabTitle,
@@ -18,6 +21,11 @@ import { useSessionStore } from '../../store/sessionStore';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 import { EMPTY_SESSION_TITLE } from '../../api/sessionTitle';
 import type { SessionState } from '../../store/types';
+
+const DIR =
+  typeof import.meta.dirname === 'string'
+    ? import.meta.dirname
+    : dirname(fileURLToPath(import.meta.url));
 
 const dock = () => createDefaultDock();
 
@@ -124,14 +132,35 @@ describe('GlobalSessionTabBar', () => {
     const { getAllByTestId } = render(<GlobalSessionTabBar />);
     const tabs = getAllByTestId('global-session-tab');
     for (const tab of tabs) {
-      // CSS module hashes class names; assert the generated class string includes "tab"
-      // and that equal-share styles are applied via the module class on the node.
       expect(tab.className).toMatch(/tab/i);
-      // Active first tab
       if (tab.getAttribute('data-session-id') === 'sess-a') {
         expect(tab.className).toMatch(/isActive|active/i);
       }
     }
+  });
+
+  it('胶囊 CSS 为 flex: 0 0 150px，不再 flex:1 挤成 32px 钉', () => {
+    const css = readFileSync(join(DIR, 'GlobalSessionTabBar.module.css'), 'utf8');
+    const tabIdx = css.indexOf('\n.tab {');
+    expect(tabIdx).toBeGreaterThanOrEqual(0);
+    const tabBlock = css.slice(tabIdx, css.indexOf('\n}', tabIdx) + 2);
+    expect(tabBlock).toMatch(/flex:\s*0\s*0\s*150px/);
+    expect(tabBlock).not.toMatch(/flex:\s*1\s*1\s*0/);
+    expect(css).toMatch(/--global-tab-min-w:\s*120px/);
+    expect(css).toMatch(/--global-tab-pref-w:\s*150px/);
+    expect(css).toMatch(/--global-tab-max-w:\s*180px/);
+    expect(css).not.toMatch(/--global-tab-min-w:\s*32px/);
+  });
+
+  it('加号在 tablist 外、贴在条上（wrapTrailing），仍调用 openNewDraftTab', () => {
+    const { getByTestId } = render(<GlobalSessionTabBar />);
+    const bar = getByTestId('global-session-tab-bar');
+    const tablist = bar.querySelector('[role="tablist"]');
+    const add = getByTestId('global-strip-new-session');
+    expect(tablist).toBeTruthy();
+    expect(tablist!.contains(add)).toBe(false);
+    expect(bar.contains(add)).toBe(true);
+    expect(add.closest('[role="tablist"]')).toBeNull();
   });
 
   it('+ button calls shell.openNewDraftTab', () => {
@@ -153,6 +182,20 @@ describe('GlobalSessionTabBar', () => {
     expect(cls).not.toMatch(/message-square/);
     expect(svg!.getAttribute('stroke-linecap')).toBe('round');
     expect(svg!.getAttribute('stroke-linejoin')).toBe('round');
+    expect(svg!.getAttribute('width')).toBe('13');
+    expect(svg!.getAttribute('height')).toBe('13');
+  });
+
+  it('加号 CSS 为 26×26 透明无边', () => {
+    const css = readFileSync(join(DIR, 'GlobalSessionTabBar.module.css'), 'utf8');
+    const idx = css.indexOf('\n.tabAdd {');
+    expect(idx).toBeGreaterThanOrEqual(0);
+    const block = css.slice(idx, css.indexOf('\n}', idx) + 2);
+    expect(block).toMatch(/width:\s*26px/);
+    expect(block).toMatch(/height:\s*26px/);
+    expect(block).toMatch(/flex:\s*0\s*0\s*26px/);
+    expect(block).toMatch(/border:\s*none/);
+    expect(block).toMatch(/background:\s*transparent/);
   });
 
   it('clicking a tab activates it', () => {
