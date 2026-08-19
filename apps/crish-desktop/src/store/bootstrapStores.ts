@@ -10,6 +10,7 @@ import { initStoreAccess } from '../api/storeAccess';
 import { MessageSnapshots } from '../api/MessageSnapshots';
 import { bindMessageSnapshotsOps } from './messageSnapshotsBridge';
 import { logger, toErrMeta } from '../services/LoggerService';
+import { initTabModeProjection } from './tabModeApply';
 
 // ── Store update frequency logging ──
 const _counters = new Map<string, number>();
@@ -137,6 +138,8 @@ export function bootstrapStores(): () => void {
     useWorkspaceStore,
     useSettingsUiStore,
   );
+
+  unsubs.push(initTabModeProjection());
 
   // 快照桥接线（P0-1）：注入真实 MessageSnapshots 单例，恢复撤回/归档前的破坏性操作数据保护。
   // 注入点固定本处（模块图稳定后，AppBootstrap 调用），禁止在 store 定义期 import MessageSnapshots（init 环）。

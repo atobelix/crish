@@ -28,6 +28,7 @@ import {
   makePanelCard,
   makePanelGroup,
   collapseToolColumnToTabs,
+  splitToolColumnToStackedGroups,
   normalizeColumnWidths,
   pickActiveCardIndexAfterRemove,
   placePanelCard,
@@ -301,6 +302,18 @@ describe('placePanelCard / removePanelCard / ensureToolColumn', () => {
     expect(tool.groups).toHaveLength(1);
     expect(tool!.groups[0]!.cards.map((c) => c.id)).toEqual(['diff', 'files']);
     expect(collapseToolColumnToTabs(ws)).toBe(false);
+  });
+
+  it('splitToolColumnToStackedGroups splits merged tabs into stacked groups', () => {
+    const ws = wsWithToolTabs(['diff', 'files'], 'files');
+    const tool = ws.columns.find((c) => !isChatColumn(c))!;
+    expect(splitToolColumnToStackedGroups(ws)).toBe(true);
+    expect(tool.groups).toHaveLength(2);
+    expect(tool.groups.map((g) => g.cards.map((c) => c.id))).toEqual([
+      ['diff'],
+      ['files'],
+    ]);
+    expect(splitToolColumnToStackedGroups(ws)).toBe(false);
   });
 
   it('plan key places tasks card', () => {

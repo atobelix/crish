@@ -4,9 +4,11 @@
  */
 import type { DropPreviewState } from './types';
 import {
+  collapseToolColumnToTabs,
   ensureChatColumn,
   placePanelCard,
   removePanelCard,
+  splitToolColumnToStackedGroups,
 } from './layoutHelpers';
 import type {
   WorkspaceImmerSet,
@@ -21,6 +23,8 @@ export interface WorkspaceCleanupActionsSlice {
   togglePanel: (wsId: string, key: string, isVisible: boolean) => void;
   resizeColumns: (wsId: string, colIdx: number, dx: number, containerWidth: number) => void;
   resizeGroups: (wsId: string, colIdx: number, groupIdx: number, dy: number, containerHeight: number) => void;
+  /** layoutStore 写端投影：同步字段并合并/拆开工具列。勿当第二写端。 */
+  applyTabModeEnabled: (enabled: boolean) => void;
 }
 
 /**
@@ -91,6 +95,15 @@ export function createWorkspaceCleanupActions<T extends WorkspaceStoreSlice>(
       if (newTop > 0.1 && newBottom > 0.1) {
         groupTop.heightRatio = newTop;
         groupBottom.heightRatio = newBottom;
+      }
+    }),
+
+    applyTabModeEnabled: (enabled) => set((state) => {
+      const on = !!enabled;
+      state.tabModeEnabled = on;
+      for (const ws of state.workspaces) {
+        if (on) collapseToolColumnToTabs(ws);
+        else splitToolColumnToStackedGroups(ws);
       }
     }),
   };

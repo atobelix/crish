@@ -30,6 +30,7 @@ import {
   type LayoutBranch,
 } from '../layout-tree/types';
 import type { RightToolDockState } from './types';
+import { resolveToolSubtree } from './tabModeToolSubtree';
 
 // ── 计数 / 查询 ──────────────────────────────────────────────────────
 
@@ -250,7 +251,8 @@ export function expandSessionUnitDock(
   openPanelIds: string[],
   activePanelId: string,
   widthRatio: number,
-  activeLeafId: string | null = null
+  activeLeafId: string | null = null,
+  tabMode?: boolean
 ): LayoutTree {
   const sid = (sessionId || '').trim();
   if (!sid) return tree;
@@ -260,42 +262,51 @@ export function expandSessionUnitDock(
 
   const root = resolved.root;
   const chatLeaf = resolved.chatLeaf;
-  const toolLeaf = makeToolLeaf(openPanelIds, activePanelId, sid);
   const toolRatio = clampDockWidthRatio(widthRatio);
   const chatRatio = 1 - toolRatio;
 
+  const nextTool = (existing?: LayoutNode): LayoutNode => {
+    if (tabMode === true || tabMode === false) {
+      return resolveToolSubtree(
+        openPanelIds,
+        activePanelId,
+        sid,
+        existing,
+        tabMode
+      );
+    }
+    return existing
+      ? syncToolSubtree(existing, openPanelIds, activePanelId, sid)
+      : makeToolLeaf(openPanelIds, activePanelId, sid);
+  };
+
   const unitRootId = findUnitRootId(root, sid);
 
-  // 已是标准 H unit：同步 tool 侧与 splitRatio（tool 已 split 则保留 branch）
+  // 已是标准 H unit：同步 tool 侧与 splitRatio
   if (unitRootId && unitRootId !== chatLeaf.id) {
     const unitNode = findNodeById(root, unitRootId);
     if (unitNode && isBranch(unitNode) && unitNode.direction === 'horizontal') {
       const [first, second] = unitNode.children;
       let nextUnit: LayoutBranch;
       if (first.id === chatLeaf.id && isToolDomainSubtree(second)) {
-        // tool 侧可能是 leaf 或 branch(split)：sync 不拍扁
-        const synced = syncToolSubtree(
-          second,
-          openPanelIds,
-          activePanelId,
-          sid
-        );
         nextUnit = {
           ...unitNode,
-          children: [chatLeaf, synced],
+          children: [chatLeaf, nextTool(second)],
           splitRatio: chatRatio,
         };
       } else if (second.id === chatLeaf.id && isToolDomainSubtree(first)) {
-        // tool | chat → 归一为 chat | tool，仍保留 tool 侧 split
-        const synced = syncToolSubtree(first, openPanelIds, activePanelId, sid);
         nextUnit = {
           ...unitNode,
-          children: [chatLeaf, synced],
+          children: [chatLeaf, nextTool(first)],
           splitRatio: chatRatio,
         };
       } else {
-        // 非预期结构：退化为在 chat 位置包一层（新单 leaf）
-        nextUnit = createBranch('horizontal', chatLeaf, toolLeaf, chatRatio);
+        nextUnit = createBranch(
+          'horizontal',
+          chatLeaf,
+          nextTool(),
+          chatRatio
+        );
         const newRoot = replaceNode(root, chatLeaf.id, nextUnit);
         return { version: tree.version, root: newRoot };
       }
@@ -304,8 +315,7 @@ export function expandSessionUnitDock(
     }
   }
 
-  // chat-only unit：把 chat leaf 替换为 H(chat, tool)
-  const unit = createBranch('horizontal', chatLeaf, toolLeaf, chatRatio);
+  const unit = createBranch('horizontal', chatLeaf, nextTool(), chatRatio);
   const newRoot = replaceNode(root, chatLeaf.id, unit);
   return { version: tree.version, root: newRoot };
 }
@@ -318,7 +328,8 @@ export function projectDockOntoTree(
   tree: LayoutTree,
   dock: RightToolDockState,
   sessionId: string,
-  activeLeafId: string | null = null
+  activeLeafId: string | null = null,
+  tabMode?: boolean
 ): LayoutTree {
   const sid = (sessionId || '').trim();
   if (!sid) return tree;
@@ -336,7 +347,8 @@ export function projectDockOntoTree(
     panels,
     dock.activePanelId,
     dock.widthRatio,
-    activeLeafId
+    activeLeafId,
+    tabMode
   );
 }
 

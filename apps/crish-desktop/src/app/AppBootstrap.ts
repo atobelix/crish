@@ -188,6 +188,9 @@ export function useAppBootstrap({
     const unsubTheme = import('../store/themeProjection').then(
       ({ initThemeProjection }) => initThemeProjection()
     );
+    const unsubIndent = import('../store/codeIndentProjection').then(
+      ({ initCodeIndentProjection }) => initCodeIndentProjection()
+    );
     const initApp = async () => {
       try {
         const { clientApi } = await import('../api/clientApi');
@@ -219,6 +222,7 @@ export function useAppBootstrap({
     void initApp();
     return () => {
       void unsubTheme.then((unsub) => unsub());
+      void unsubIndent.then((unsub) => unsub());
     };
   }, [setAppSettings]);
 

@@ -22,7 +22,9 @@ import {
   findChatLeafBySessionId,
   listChatLeaves,
   listToolLeaves,
+  setPrimaryPanelChecker,
 } from '../layout-tree';
+import { viewRegistry } from '../../services/view-registry';
 
 vi.mock('../../api/projectStore', () => ({
   GENERAL_FOLDER: 'general',
@@ -111,6 +113,7 @@ function shellDock() {
 }
 
 beforeEach(() => {
+  setPrimaryPanelChecker((id: string) => viewRegistry.isPrimary(id));
   resetStores(chatOnlyTree());
   vi.clearAllMocks();
 });

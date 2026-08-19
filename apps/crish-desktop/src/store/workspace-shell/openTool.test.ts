@@ -9,7 +9,8 @@ import {
   type LayoutTree,
 } from '../layout-tree/types';
 import { collectLeaves } from '../layout-tree/operations';
-import { useLayoutTreeStore, listToolLeaves } from '../layout-tree';
+import { useLayoutTreeStore, listToolLeaves, setPrimaryPanelChecker } from '../layout-tree';
+import { viewRegistry } from '../../services/view-registry';
 
 vi.mock('../../api/projectStore', () => ({
   GENERAL_FOLDER: 'general',
@@ -93,6 +94,7 @@ function seedTwoSessionTabs(): {
 }
 
 beforeEach(() => {
+  setPrimaryPanelChecker((id: string) => viewRegistry.isPrimary(id));
   resetShell();
   resetLayout({
     version: 2,

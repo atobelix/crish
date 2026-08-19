@@ -31,6 +31,7 @@ import {
   listToolLeaves,
 } from '../layout-tree/conversationUnit';
 import { useLayoutTreeStore } from '../layout-tree/layoutTreeStore';
+import { setPrimaryPanelChecker } from '../layout-tree';
 import {
   normalizeToAdapterShape,
   countChatLeaves,
@@ -128,6 +129,10 @@ function resetStore(tree?: LayoutTree): void {
     activeDropZone: null,
   });
 }
+
+beforeEach(() => {
+  setPrimaryPanelChecker((id: string) => viewRegistry.isPrimary(id));
+});
 
 // ── normalize ────────────────────────────────────────────────────────
 
@@ -329,6 +334,65 @@ describe('expandSessionUnitDock', () => {
       expect((unitA.children[1] as LayoutLeaf).activeTab).toBe('terminal');
       expect((unitB.children[1] as LayoutLeaf).activeTab).toBe('files');
     }
+  });
+
+  it('tabMode true 把 tool branch 拍扁成单叶多 tab', () => {
+    const chatA = createLeaf('chat', ['chat'], 'chat', 'sess-a');
+    const termLeaf = createLeaf('terminal', ['terminal'], 'terminal', 'sess-a');
+    const filesLeaf = createLeaf('files', ['files'], 'files', 'sess-a');
+    const toolSplit = createBranch('vertical', termLeaf, filesLeaf, 0.5);
+    const unit = createBranch('horizontal', chatA, toolSplit, 0.62);
+    const tree: LayoutTree = { version: 2, root: unit };
+
+    const next = expandSessionUnitDock(
+      tree,
+      'sess-a',
+      ['terminal', 'files'],
+      'files',
+      0.4,
+      null,
+      true
+    );
+    const unitNode = findNodeById(next.root, findUnitRootId(next.root, 'sess-a')!);
+    expect(unitNode && isBranch(unitNode)).toBe(true);
+    if (unitNode && isBranch(unitNode)) {
+      const toolSide = unitNode.children[1];
+      expect(isLeaf(toolSide)).toBe(true);
+      if (isLeaf(toolSide)) {
+        expect(toolSide.tabs).toEqual(['terminal', 'files']);
+        expect(toolSide.activeTab).toBe('files');
+      }
+    }
+    expect(countToolLeaves(next.root)).toBe(1);
+  });
+
+  it('tabMode false 把多面板拆成垂直单 tab 叶', () => {
+    const { tree } = multiChatTree();
+    const next = expandSessionUnitDock(
+      tree,
+      'sess-a',
+      ['files', 'terminal'],
+      'terminal',
+      0.38,
+      null,
+      false
+    );
+    const unitNode = findNodeById(next.root, findUnitRootId(next.root, 'sess-a')!);
+    expect(unitNode && isBranch(unitNode)).toBe(true);
+    if (unitNode && isBranch(unitNode)) {
+      const toolSide = unitNode.children[1];
+      expect(isBranch(toolSide)).toBe(true);
+      if (isBranch(toolSide)) {
+        expect(toolSide.direction).toBe('vertical');
+        const tools = collectLeaves(toolSide);
+        expect(tools).toHaveLength(2);
+        expect(tools.every((t) => t.tabs.length === 1)).toBe(true);
+        expect(tools.map((t) => t.activeTab).sort()).toEqual(
+          ['files', 'terminal'].sort()
+        );
+      }
+    }
+    expect(countToolLeaves(next.root)).toBe(2);
   });
 
   it('tool 侧已是 branch(split) 时 expand 不拍扁为单 leaf', () => {

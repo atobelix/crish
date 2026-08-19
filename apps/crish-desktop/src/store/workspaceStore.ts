@@ -2,7 +2,7 @@
  * 工作区域 facade — 与 useLayoutStore **同一 zustand 实例**（非独立 create）。
  *
  * Owns (API surface): legacy workspaces / columns / groups / cards, DnD preview,
- * tabMode flags that still live on layoutStore.
+ * tabModeEnabled：layoutStore 为唯一写端；本字段是投影（不独立 persist）。
  *
  * ## Not the shell
  *
@@ -27,6 +27,7 @@ import {
   DEFAULT_WORKSPACE_ID,
   seedInitialWorkspaces,
   clampActiveWorkspaceIndex,
+  useLayoutStore,
 } from './layoutStore';
 import type {
   DropPreviewState,
@@ -51,7 +52,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       immer((set, get) => ({
         workspaces: _initialWorkspaces,
         activeWorkspaceIndex: clampActiveWorkspaceIndex(_initialWorkspaces, 0),
-        tabModeEnabled: false,
+        tabModeEnabled: useLayoutStore.getState().tabModeEnabled,
         draggedTab: null,
         dropPreview: null,
         ...createWorkspaceActions(set, get),
@@ -61,8 +62,12 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
         partialize: (s) => ({
           workspaces: s.workspaces,
           activeWorkspaceIndex: s.activeWorkspaceIndex,
-          tabModeEnabled: s.tabModeEnabled,
         }),
+        merge: (persisted, current) => {
+          const raw = (persisted ?? {}) as Record<string, unknown>;
+          const { tabModeEnabled: _ignored, ...rest } = raw;
+          return { ...current, ...rest, tabModeEnabled: current.tabModeEnabled };
+        },
       }
     ),
     'CrishWorkspaceStore'

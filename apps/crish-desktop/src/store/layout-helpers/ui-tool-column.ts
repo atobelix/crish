@@ -1,6 +1,11 @@
 import type { CardState, WorkspaceState } from '../types';
 import { makePanelCard, resolveWorkspacePanelKey } from './ui-panel';
-import { ensureChatColumn, isChatColumn, normalizeColumnWidths } from './ui-workspace';
+import {
+  ensureChatColumn,
+  isChatColumn,
+  normalizeColumnWidths,
+  rebalanceGroupHeights,
+} from './ui-workspace';
 
 const TOOL_COL_STATE_SS_PREFIX = 'crish_tool_col_state_v1:';
 const TOOL_COL_WIDTH_SS_PREFIX = 'crish_tool_col_w_v1:';
@@ -95,6 +100,37 @@ export function collapseToolColumnToTabs(ws: WorkspaceState): boolean {
     id: toolCol.groups[0]?.id || `group-tools-${ws.id}`,
     activeCardId: active, cards: mergedCards, heightRatio: 1,
   }];
+  ensureChatColumn(ws);
+  return true;
+}
+
+/** 合并标签关闭：每个工具卡独立成组（上下堆叠）。已是单卡组则 no-op。 */
+export function splitToolColumnToStackedGroups(ws: WorkspaceState): boolean {
+  ensureChatColumn(ws);
+  const toolCol = ws.columns.find((c) => !isChatColumn(c));
+  if (!toolCol) return false;
+  const seen = new Set<string>();
+  const cards: CardState[] = [];
+  for (const g of toolCol.groups) {
+    for (const c of g.cards) {
+      const id = resolveWorkspacePanelKey(c.id);
+      if (!id || id === 'chat' || seen.has(id)) continue;
+      seen.add(id);
+      cards.push(id === c.id ? c : makePanelCard(id));
+    }
+  }
+  if (cards.length === 0) return false;
+  const alreadyStacked =
+    toolCol.groups.length === cards.length &&
+    toolCol.groups.every((g) => g.cards.length === 1);
+  if (alreadyStacked) return false;
+  toolCol.groups = cards.map((card, i) => ({
+    id: `group-${card.id}-${ws.id}-${i}`,
+    activeCardId: card.id,
+    cards: [card],
+    heightRatio: 1 / cards.length,
+  }));
+  rebalanceGroupHeights(toolCol);
   ensureChatColumn(ws);
   return true;
 }

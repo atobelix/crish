@@ -35,13 +35,14 @@ import {
   countChatLeaves,
   countToolLeaves,
   clampDockWidthRatio,
-  makeToolLeaf,
   replaceNode,
   isToolDomainSubtree,
   projectDockOntoTree,
   stripToolLeavesPreserveChats,
   normalizeToAdapterShape,
 } from './adapterShapeTreeOps';
+import { findActiveToolLeaf, resolveToolSubtree } from './tabModeToolSubtree';
+import { readTabModeEnabled } from './tabModeReadBridge';
 
 // ── session 解析（store 路径） ───────────────────────────────────────
 
@@ -168,7 +169,8 @@ export function reprojectAllSessionDocks(): void {
           current,
           dock,
           sid,
-          treeStore.activeLeafId
+          treeStore.activeLeafId,
+          readTabModeEnabled()
         );
         if (next !== current) current = next;
       }
@@ -202,7 +204,13 @@ export function applyDockToSession(
     const store = useLayoutTreeStore.getState();
     const originalTree = store.tree;
     const base = stripLegacyGlobalToolColumn(originalTree);
-    const next = projectDockOntoTree(base, dock, sid, store.activeLeafId);
+    const next = projectDockOntoTree(
+      base,
+      dock,
+      sid,
+      store.activeLeafId,
+      readTabModeEnabled()
+    );
 
   // ── 统一计算所有状态变更（避免独立 setState 之间的中间态 re-render） ──
   const chatCount = countChatLeaves(next.root);
@@ -234,14 +242,9 @@ export function applyDockToSession(
           isLeaf(c) ? !viewRegistry.isPrimary(c.panelId) : isToolDomainSubtree(c)
         );
         if (toolSide) {
-          if (isLeaf(toolSide)) {
-            targetActiveLeafId = toolSide.id;
-          } else {
-            const firstTool = collectLeaves(toolSide).find(
-              (l) => !viewRegistry.isPrimary(l.panelId)
-            );
-            if (firstTool) targetActiveLeafId = firstTool.id;
-          }
+          const activeId = dock.activePanelId || '';
+          const hit = findActiveToolLeaf(toolSide, activeId);
+          if (hit) targetActiveLeafId = hit.id;
         }
       }
     }
@@ -392,15 +395,22 @@ export function ensureChatPlusSingleToolLeaf(
       undefined,
       prevChat?.sessionId
     );
-    const toolWithTabs = makeToolLeaf(panels, active);
+    const toolNode = resolveToolSubtree(
+      panels,
+      active,
+      prevChat?.sessionId,
+      undefined,
+      readTabModeEnabled()
+    );
     const ratio = clampDockWidthRatio(widthRatio);
     const tree: LayoutTree = {
       version: 2,
-      root: createBranch('horizontal', chatLeaf, toolWithTabs, 1 - ratio),
+      root: createBranch('horizontal', chatLeaf, toolNode, 1 - ratio),
     };
     store.setTree(tree);
     store.setToolColumnCollapsed(false);
-    store.setActiveLeaf(toolWithTabs.id);
+    const activeTool = findActiveToolLeaf(toolNode, active);
+    store.setActiveLeaf(activeTool?.id ?? (isLeaf(toolNode) ? toolNode.id : chatLeaf.id));
   });
 }
 

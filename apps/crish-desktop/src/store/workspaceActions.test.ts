@@ -129,6 +129,28 @@ describe('togglePanel — open / focus / close safely', () => {
     expect(tool!.groups[0]!.cards.map((c) => c.id)).toEqual(['diff', 'files']);
     expect(tool!.groups[0]!.activeCardId).toBe('files');
   });
+
+  it('applyTabModeEnabled 关则拆组、开则合并', () => {
+    const h = makeHarness(makeSlice(bareWs(), true));
+    const id = h.ws().id;
+    h.actions.togglePanel(id, 'diff', true);
+    h.actions.togglePanel(id, 'files', true);
+    expect(h.ws().columns.find((c) => !isChatColumn(c))!.groups).toHaveLength(1);
+
+    h.actions.applyTabModeEnabled(false);
+    expect(h.getState().tabModeEnabled).toBe(false);
+    const split = h.ws().columns.find((c) => !isChatColumn(c))!;
+    expect(split.groups).toHaveLength(2);
+    expect(split.groups.every((g) => g.cards.length === 1)).toBe(true);
+
+    h.actions.applyTabModeEnabled(true);
+    expect(h.getState().tabModeEnabled).toBe(true);
+    const merged = h.ws().columns.find((c) => !isChatColumn(c))!;
+    expect(merged.groups).toHaveLength(1);
+    expect(merged.groups[0]!.cards.map((c) => c.id)).toEqual(
+      expect.arrayContaining(['diff', 'files'])
+    );
+  });
 });
 
 describe('closeTabInGroup — no chat strip, prune empty', () => {

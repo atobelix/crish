@@ -15,11 +15,15 @@
 import React, { useCallback } from 'react';
 import { Plus, X } from 'lucide-react';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
-import { useLayoutTreeStore, type LayoutLeaf } from '../../store/storeAccess';
 import {
+  useLayoutTreeStore,
+  useLayoutStore,
+  selectTabModeEnabled,
+  useWorkspaceShellStore,
   collapseActiveTabRightDock,
   openToolInSession,
   openToolInActiveTab,
+  type LayoutLeaf,
 } from '../../store/storeAccess';
 import { IconButton, TabStrip, Tooltip, Menu } from '../ui';
 import { viewRegistry } from '../../services/view-registry';
@@ -33,6 +37,14 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
   ({ leaf }) => {
     const setActiveTab = useLayoutTreeStore((s) => s.setActiveTab);
     const removeTabFromLeaf = useLayoutTreeStore((s) => s.removeTabFromLeaf);
+    const tabModeEnabled = useLayoutStore(selectTabModeEnabled);
+    const dockOpenIds = useWorkspaceShellStore((s) => {
+      const sid = (leaf.sessionId || '').trim();
+      const tab = sid
+        ? s.openTabs.find((t) => t.sessionId === sid)
+        : s.openTabs.find((t) => t.tabId === s.activeTabId);
+      return tab?.rightDock.openPanelIds;
+    });
 
     const tabs = leaf.tabs;
     const activeTab = leaf.activeTab;
@@ -60,9 +72,12 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         } else {
           openToolInActiveTab(pid);
         }
-        setActiveTab(leaf.id, pid);
+        // 合并模式由 applyDock 写叶 tabs；分开模式新面板是另一叶，禁止钉回当前叶
+        if (tabModeEnabled) {
+          setActiveTab(leaf.id, pid);
+        }
       },
-      [leaf.id, leaf.sessionId, setActiveTab]
+      [leaf.id, leaf.sessionId, setActiveTab, tabModeEnabled]
     );
 
     const handleCollapseDock = useCallback(() => {
@@ -77,10 +92,11 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     // 单 tab 或无 tab 时不渲染标签栏（已调整为无 tabs 时才不渲染，以保证加号可用）
     if (tabs.length === 0) return null;
 
+    const occupied = new Set(dockOpenIds?.length ? dockOpenIds : tabs);
     const availablePanels = viewRegistry
       .getToolViews()
       .map((v) => v.id)
-      .filter((pid) => !tabs.includes(pid));
+      .filter((pid) => !occupied.has(pid));
 
     const labelOf = (tabId: string) => {
       return viewRegistry.getTitle(tabId);
@@ -100,6 +116,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
             'data-leaf-tool-tab-strip': 'true',
             'data-tab-strip-leaf-id': leaf.id,
             'data-tab-count': tabs.length,
+            'data-tab-mode': tabModeEnabled ? 'on' : 'off',
           },
         }}
         activeId={activeTab ?? null}
