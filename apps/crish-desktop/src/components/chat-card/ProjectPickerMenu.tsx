@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import menuStyles from '../ui/Menu/Menu.module.css';
 import styles from './ProjectPickerMenu.module.css';
 import {
   addProjectFromPath,
@@ -21,7 +22,7 @@ import {
   Search,
   Trash2,
 } from 'lucide-react';
-import { Button, ConfirmDialog, Menu, Tooltip } from '../ui';
+import { Button, ConfirmDialog, Input, Menu, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 
 /** 草稿态切项目：同步 draftFolder，不 mint 真会话 */
@@ -29,6 +30,14 @@ function syncDraftFolderOnProjectChange(folder: string): void {
   if (isPendingDraft(getSessionStoreState().activeSessionId)) {
     setDraftFolder(folder);
   }
+}
+
+function pickerItemClass(
+  ...extra: Array<string | false | null | undefined>
+): string {
+  return [menuStyles.menuItem, styles.item, ...extra]
+    .filter((c): c is string => typeof c === 'string' && c.length > 0)
+    .join(' ');
 }
 
 type Props = {
@@ -57,7 +66,6 @@ export const ProjectPickerMenu: React.FC<Props> = ({
   const [showAddCascade, setShowAddCascade] = useState(false);
   const [busy, setBusy] = useState(false);
   const activeId = getActiveProjectId();
-  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）
   const [confirmGate, renderConfirmGate] = useConfirmGate();
 
   const refresh = () => setProjects(listProjects());
@@ -69,7 +77,6 @@ export const ProjectPickerMenu: React.FC<Props> = ({
     setQ('');
   }, [open]);
 
-  // Filter projects by search query
   const filtered = projects.filter(
     (p) =>
       !q.trim() ||
@@ -85,7 +92,6 @@ export const ProjectPickerMenu: React.FC<Props> = ({
   const handlePickFolder = async () => {
     setBusy(true);
     try {
-      // 选择现有项目文件夹
       const path = await openDirectoryDialogSafe('选择现有项目文件夹');
       if (path) {
         addProjectFromPath(path);
@@ -102,7 +108,6 @@ export const ProjectPickerMenu: React.FC<Props> = ({
   const handleCreateEmptyProject = async () => {
     setBusy(true);
     try {
-      // 选择或创建空白文件夹作为新项目
       const path = await openDirectoryDialogSafe('选择或创建空白文件夹');
       if (path) {
         addProjectFromPath(path);
@@ -128,41 +133,47 @@ export const ProjectPickerMenu: React.FC<Props> = ({
     onChanged?.();
   };
 
+  const pickProject = (id: string) => {
+    openProject(id);
+    syncDraftFolderOnProjectChange(id);
+    onChanged?.();
+    handleOpenChange(false);
+  };
+
   return (
     <>
-      {/* 移除项目确认（Promise 桥渲染点） */}
       {renderConfirmGate(<ConfirmDialog />)}
       <Menu
         openState={{ open, onOpenChange: handleOpenChange }}
         trigger={children}
         position={{ side: 'bottom', align: 'center', sideOffset: 6 }}
         panel={{
-          contentClassName: 'sort-filter-menu open no-drag',
-          contentStyle: { width: '230px', overflow: 'visible' },
+          contentClassName: styles.pickerPanel,
+          contentStyle: { overflow: 'visible' },
         }}
       >
         <div
+          role="menu"
+          aria-label="选择项目"
           onMouseEnter={onContentMouseEnter}
           onMouseLeave={onContentMouseLeave}
         >
-          {/* Header Search Box */}
           <div
             className={styles.searchWrapper}
             onMouseEnter={() => setShowAddCascade(false)}
           >
-            <div className={styles.searchBox}>
-              <Search size={13} style={{ flexShrink: 0, opacity: 0.6 }} />
-              <input
-                className={styles.searchInput}
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="搜索项目"
-                autoFocus={open}
-              />
-            </div>
+            <Input
+              variant="search"
+              size="sm"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="搜索项目"
+              aria-label="搜索项目"
+              autoFocus={open}
+              prefixIcon={<Search size={13} />}
+            />
           </div>
 
-          {/* Projects List Scroll Area */}
           <div
             className={styles.scrollArea}
             onMouseEnter={() => setShowAddCascade(false)}
@@ -173,44 +184,21 @@ export const ProjectPickerMenu: React.FC<Props> = ({
                 <div key={p.id} className={styles.projectRow}>
                   <button
                     type="button"
-                    className={`sort-filter-option ${selected ? 'is-on' : ''}`}
-                    style={{ paddingRight: '28px' }}
-                    onClick={() => {
-                      openProject(p.id);
-                      syncDraftFolderOnProjectChange(p.id);
-                      onChanged?.();
-                      handleOpenChange(false);
-                    }}
+                    role="menuitem"
+                    aria-current={selected ? 'true' : undefined}
+                    className={pickerItemClass(styles.itemWithTrail)}
+                    onClick={() => pickProject(p.id)}
                   >
-                    <Folder
-                      size={14}
-                      style={{
-                        marginRight: '6px',
-                        flexShrink: 0,
-                        opacity: 0.7,
-                      }}
-                    />
                     <span
-                      style={{
-                        flex: 1,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
+                      className={`${menuStyles.menuItemIcon} ${styles.itemIcon}`}
+                      aria-hidden="true"
                     >
-                      {p.name}
+                      <Folder size={14} />
                     </span>
-                    {selected && (
-                      <Check
-                        size={13}
-                        className={styles.rowCheck}
-                        style={{
-                          position: 'absolute',
-                          right: '8px',
-                          color: 'var(--text-primary)',
-                        }}
-                      />
-                    )}
+                    <span className={menuStyles.menuItemLabel}>{p.name}</span>
+                    {selected ? (
+                      <Check size={13} className={styles.rowCheck} />
+                    ) : null}
                   </button>
                   {p.id !== GENERAL_FOLDER && (
                     <Tooltip content="从列表移除项目">
@@ -233,12 +221,13 @@ export const ProjectPickerMenu: React.FC<Props> = ({
             })}
           </div>
 
-          <div className={styles.divider} />
+          <div className={menuStyles.separator} />
 
-          {/* General Folder Option */}
           <button
             type="button"
-            className={`sort-filter-option ${!activeId ? 'is-on' : ''}`}
+            role="menuitem"
+            aria-current={!activeId ? 'true' : undefined}
+            className={pickerItemClass(!activeId && styles.itemWithTrail)}
             onMouseEnter={() => setShowAddCascade(false)}
             onClick={() => {
               setNoProject();
@@ -247,15 +236,16 @@ export const ProjectPickerMenu: React.FC<Props> = ({
               handleOpenChange(false);
             }}
           >
-            <Folder
-              size={14}
-              style={{ marginRight: '6px', flexShrink: 0, opacity: 0.7 }}
-            />
-            <span style={{ flex: 1 }}>通用项目</span>
-            {!activeId && <Check size={13} />}
+            <span
+              className={`${menuStyles.menuItemIcon} ${styles.itemIcon}`}
+              aria-hidden="true"
+            >
+              <Folder size={14} />
+            </span>
+            <span className={menuStyles.menuItemLabel}>通用项目</span>
+            {!activeId ? <Check size={13} className={styles.rowCheck} /> : null}
           </button>
 
-          {/* Add Project Cascade — 子菜单向右浮出，不扁平化进主列表 */}
           <div
             className={styles.addCascadeWrapper}
             onMouseEnter={() => setShowAddCascade(true)}
@@ -263,38 +253,51 @@ export const ProjectPickerMenu: React.FC<Props> = ({
           >
             <button
               type="button"
-              className={`sort-filter-option ${styles.addBtn}`}
+              role="menuitem"
+              className={pickerItemClass()}
               aria-haspopup="menu"
               aria-expanded={showAddCascade}
             >
-              <Plus size={14} style={{ marginRight: '6px', flexShrink: 0 }} />
-              <span style={{ flex: 1 }}>添加项目</span>
-              <ChevronRight size={13} style={{ opacity: 0.5 }} />
+              <span className={menuStyles.menuItemIcon} aria-hidden="true">
+                <Plus size={14} />
+              </span>
+              <span className={menuStyles.menuItemLabel}>添加项目</span>
+              <span className={menuStyles.menuItemHint} aria-hidden="true">
+                <ChevronRight size={13} />
+              </span>
             </button>
 
             {showAddCascade && (
               <div
-                className={styles.cascadeSubmenu}
+                className={`${menuStyles.menuContent} ${styles.cascadeSubmenu}`}
                 role="menu"
                 aria-label="添加项目"
               >
                 <button
                   type="button"
-                  className="sort-filter-option"
                   role="menuitem"
+                  className={pickerItemClass(
+                    busy ? menuStyles.menuItemDisabled : undefined
+                  )}
                   disabled={busy}
                   onClick={handlePickFolder}
                 >
-                  打开本地项目...
+                  <span className={menuStyles.menuItemLabel}>
+                    打开本地项目...
+                  </span>
                 </button>
                 <button
                   type="button"
-                  className="sort-filter-option"
                   role="menuitem"
+                  className={pickerItemClass(
+                    busy ? menuStyles.menuItemDisabled : undefined
+                  )}
                   disabled={busy}
                   onClick={handleCreateEmptyProject}
                 >
-                  新建空白项目...
+                  <span className={menuStyles.menuItemLabel}>
+                    新建空白项目...
+                  </span>
                 </button>
               </div>
             )}

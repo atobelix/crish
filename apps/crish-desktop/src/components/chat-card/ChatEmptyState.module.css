@@ -92,6 +92,8 @@
 }
 
 .chatEmptyProjectBtnInline {
+  appearance: none;
+  -webkit-appearance: none;
   font-size: calc(var(--font-size-2xl) + var(--space-1));
   font-weight: var(--font-weight-content);
   padding: var(--space-1) var(--space-3_5);
@@ -108,6 +110,11 @@
 
 .chatEmptyProjectBtnInline:hover {
   background: var(--control-soft-bg-hover);
+}
+
+.chatEmptyProjectBtnInline:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .chatEmptyProjectText {

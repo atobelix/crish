@@ -1,9 +1,25 @@
-/* ==========================================================================
-   ProjectPickerMenu Stylesheet
-   Designed to match the premium sorting & filtering menu layout exactly.
-   ========================================================================== */
+/* 空态项目选择：壳皮走 ui/Menu .menuContent；项走 .menuItem + 7px。 */
 
-/* Positioning row wrapper with no background or padding to prevent double-paddings */
+.pickerPanel {
+  width: 230px;
+  --item-radius: var(--button-radius, 7px);
+}
+
+.item {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  border-radius: var(--button-radius, 7px);
+}
+
+.itemWithTrail {
+  padding-right: 28px;
+}
+
+.itemIcon {
+  opacity: 0.7;
+}
+
 .projectRow {
   position: relative;
   width: 100%;
@@ -11,18 +27,16 @@
   align-items: center;
 }
 
-/* Custom checkmark positioning to match global standards (subtle grey) */
 .rowCheck {
   position: absolute;
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   pointer-events: none;
   flex-shrink: 0;
 }
 
-/* Subtle delete button, positioned exactly where the checkmark goes */
 .rowDeleteBtn {
   position: absolute;
   right: 8px;
@@ -32,14 +46,17 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: var(--radius-xs);
+  border-radius: var(--button-radius, 7px);
   width: 20px;
   height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
+  transition:
+    opacity var(--transition-micro),
+    color var(--transition-micro),
+    background-color var(--transition-micro);
   z-index: var(--z-card-footer);
 }
 
@@ -48,7 +65,6 @@
   background-color: color-mix(in srgb, var(--accent-red) 10%, transparent);
 }
 
-/* Hover States: Swap checkmark with delete button on hover to prevent overlapping */
 .projectRow:hover .rowDeleteBtn {
   opacity: 1;
 }
@@ -58,16 +74,6 @@
   display: none;
 }
 
-/* Disable active background color on project list items (keeps it flat as in the mockup) */
-.scrollArea :global(.sort-filter-option.is-on) {
-  background: transparent;
-}
-
-.scrollArea :global(.sort-filter-option.is-on):hover {
-  background: var(--bg-hover);
-}
-
-/* Scroll Area for Project List */
 .scrollArea {
   display: flex;
   flex-direction: column;
@@ -77,64 +83,21 @@
   padding: 2px 0;
 }
 
-/* Custom search container matching standard headers */
 .searchWrapper {
-  padding: 2px 2px 4px 2px;
+  padding: 2px 2px 4px;
+  width: 100%;
 }
 
-.searchBox {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  padding: 6px 10px;
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  color: var(--text-tertiary);
-}
-
-.searchInput {
-  border: none;
-  outline: none;
-  background: transparent;
-  flex: 1;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  font-family: inherit;
-}
-
-/* Divider between project list and footer actions */
-.divider {
-  height: 1px;
-  margin: 6px 4px;
-  background: var(--border-subtle, var(--border-color));
-  flex-shrink: 0;
-}
-
-/* Cascade: "    " row hosts a right-side floating submenu */
 .addCascadeWrapper {
   position: relative;
   width: 100%;
 }
 
-.addBtn {
-  width: 100%;
-}
-
-/* Floating submenu to the RIGHT of "    "   not flattened into main list */
+/* 级联壳皮复用 ui/Menu .menuContent；此处只负责相对主面板定位 */
 .cascadeSubmenu {
   position: absolute;
   left: 100%;
   top: 0;
   margin-left: 4px;
   min-width: 160px;
-  padding: var(--space-1_5, 6px);
-  background: var(--bg-elevated, var(--bg-primary));
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0_5);
-  z-index: var(--z-sticky-bar, 50);
-  box-sizing: border-box;
 }
