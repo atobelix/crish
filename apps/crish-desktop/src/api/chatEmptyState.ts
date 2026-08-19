@@ -9,8 +9,8 @@
  * FirstRun / needsKey soft-hint / 引擎条 与空态分工：
  * - soft-hint / FirstRun 独占「配密钥」；engine-down 独占引擎引导
  * - 空态只做对话面（选项目 / 清除过滤 / 新建会话），不重复密钥/引擎引导
- * - 水合 loading 中不闪欢迎空壳（避免幽灵「开始对话」）
- * - 空会话：清晰 CTA；不渲染远程幽灵壳（由 prune + loading 抑制配合）
+ * - 水合 loading 不灭 emptyKind：有会话零消息仍出欢迎面，由 UI 做轻量指示
+ * - 空会话：清晰 CTA；快捷 prompt 可在 loading 时收起，标题必须在
  */
 
 export type ChatEmptyKind = 'no-session' | 'filter-empty' | 'session-empty';
@@ -94,20 +94,20 @@ export type ChatEmptyResolveInput = {
   /** scheduled 主面不走对话空态 */
   mainSurface?: 'chat' | 'scheduled';
   /**
-   * 会话消息仍在从磁盘/引擎水合：有活动会话时抑制空壳，
-   * 避免远程会话短暂 messageCount=0 闪「开始对话」幽灵欢迎面。
+   * 会话消息仍在从磁盘/引擎水合。
+   * 不再灭 emptyKind（欢迎面必须可挂载）；组件可用轻量指示，快捷 prompt 可暂隐。
    */
   messagesLoading?: boolean;
 };
 
 /**
- * 解析主列空态 kind；null = 应渲染消息列表（非空）或暂不展示空态。
- * 优先级：scheduled 跳过 → loading 抑制 → 无会话 → 过滤无命中 → 有会话无消息。
+ * 解析主列空态 kind；null = 应渲染消息列表（非空）或 scheduled 主面。
+ * 优先级：scheduled 跳过 → 无会话 → 过滤无命中 → 有会话无消息。
  *
  * 不变量：
  * - messageCount === 0 时永不返回 filter-empty（欢迎面优先，避免「无匹配」误导）
  * - 无会话时优先 no-session，即使携带 filter / 历史计数
- * - messagesLoading + hasActiveSession → null（不闪空壳）
+ * - messagesLoading 不改变 kind（有会话零消息仍 session-empty）
  * - 无会话时 loading 不掩盖 no-session（仍需「新建对话」CTA）
  */
 export function resolveChatEmptyKind(
@@ -115,9 +115,6 @@ export function resolveChatEmptyKind(
 ): ChatEmptyKind | null {
   if (input.mainSurface === 'scheduled') return null;
   if (!input.hasActiveSession) return 'no-session';
-
-  // 有会话且消息仍在加载：不展示欢迎/过滤空态（防幽灵远程壳）
-  if (input.messagesLoading) return null;
 
   // 防御：负计数 / NaN 按 0 处理，避免异常输入落到「有消息列表」空壳
   const messageCount = normalizeCount(input.messageCount);

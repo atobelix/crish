@@ -143,7 +143,7 @@ describe('resolveChatEmptyKind', () => {
     ).toBeNull();
   });
 
-  it('messagesLoading with active session suppresses empty shell (no ghost welcome)', () => {
+  it('messagesLoading does not kill welcome / filter emptyKind', () => {
     expect(
       resolveChatEmptyKind({
         hasActiveSession: true,
@@ -151,8 +151,8 @@ describe('resolveChatEmptyKind', () => {
         displayCount: 0,
         messagesLoading: true,
       })
-    ).toBeNull();
-    // 水合中即使带着 filter 也不闪 filter-empty
+    ).toBe('session-empty');
+    // 已有消息 + 过滤无命中：loading 也不灭 filter-empty
     expect(
       resolveChatEmptyKind({
         hasActiveSession: true,
@@ -161,7 +161,7 @@ describe('resolveChatEmptyKind', () => {
         filterQuery: 'x',
         messagesLoading: true,
       })
-    ).toBeNull();
+    ).toBe('filter-empty');
   });
 
   it('messagesLoading does not hide no-session CTA when there is no active session', () => {
@@ -211,7 +211,7 @@ describe('shouldShowChatEmptyShell', () => {
         displayCount: 0,
         messagesLoading: true,
       })
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 
@@ -622,7 +622,7 @@ describe('shouldShowEmptyQuickPrompts', () => {
 });
 
 describe('three-state exclusive matrix', () => {
-  it('priority table: scheduled > loading > no-session > filter-empty > session-empty > null', () => {
+  it('priority table: scheduled > no-session > filter-empty > session-empty > null (loading 不灭 kind)', () => {
     const table: Array<{
       name: string;
       input: Parameters<typeof resolveChatEmptyKind>[0];
@@ -639,14 +639,14 @@ describe('three-state exclusive matrix', () => {
         want: null,
       },
       {
-        name: 'loading suppresses active empty shell',
+        name: 'loading keeps session-empty welcome',
         input: {
           hasActiveSession: true,
           messageCount: 0,
           displayCount: 0,
           messagesLoading: true,
         },
-        want: null,
+        want: 'session-empty',
       },
       {
         name: 'no-session beats filter signals',

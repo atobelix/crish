@@ -13,6 +13,10 @@ import {
 } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { Button, Tooltip } from '../ui';
+import {
+  resolveUnitChromeToolTip,
+  UNIT_CHROME_TOOL_TIP_SIDE,
+} from './unitChromeLabel';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import {
   openToolInSession,
@@ -163,7 +167,11 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             const isOpen = openPanelSet.has(id);
             const isActive = !rightDockCollapsed && activePanelId === id;
             return (
-              <Tooltip key={id} content={label}>
+              <Tooltip
+                key={id}
+                content={resolveUnitChromeToolTip(label)}
+                side={UNIT_CHROME_TOOL_TIP_SIDE}
+              >
                 <Button
                   type="button"
                   variant="ghost"
@@ -198,7 +206,10 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
           <>
             <span className={styles.toolbarDivider} aria-hidden="true" />
             <div className={styles.dockGroup}>
-              <Tooltip content="展开右侧工具栏">
+              <Tooltip
+                content={resolveUnitChromeToolTip('展开右侧工具栏')}
+                side={UNIT_CHROME_TOOL_TIP_SIDE}
+              >
                 <Button
                   type="button"
                   variant="ghost"

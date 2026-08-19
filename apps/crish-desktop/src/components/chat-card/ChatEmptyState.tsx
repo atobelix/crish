@@ -9,7 +9,7 @@
  *
  * 契约（与 api/chatEmptyState 纯函数对齐）：
  * - engineOk===false → 欢迎面草稿口径、隐藏快捷 prompt
- * - messagesLoading + 非 no-session → 不挂载（防幽灵「开始对话」）
+ * - messagesLoading 不卸载欢迎面（轻量指示；快捷 prompt 可暂隐）
  * - CTA 文案只走 resolveChatEmptyActionLabel 中文标签
  */
 import React, { useCallback, useEffect, useId, useRef } from 'react';
@@ -54,8 +54,7 @@ export type ChatEmptyStateProps = {
   engineOk?: boolean | null;
   /**
    * 会话消息仍在从磁盘/引擎水合。
-   * 有活动会话时组件内二次抑制空壳，避免父级短暂漏判闪幽灵欢迎面。
-   * no-session 仍展示「新建对话」CTA（与 resolveChatEmptyKind 一致）。
+   * 不卸载欢迎面；仅打 data-messages-loading + 轻量指示，快捷 prompt 可暂隐。
    */
   messagesLoading?: boolean;
   /** session-empty：项目选择器开关 */
@@ -175,11 +174,6 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
 
   // 运行时守卫：非法 kind 不挂载，避免 class/data 污染
   if (!isChatEmptyKind(kind)) return null;
-
-  // 防幽灵空壳：水合中不渲染欢迎/过滤空态（no-session 仍需「新建对话」）
-  if (messagesLoading && kind !== 'no-session') {
-    return null;
-  }
 
   const copy = resolveChatEmptyCopy({
     kind,
@@ -326,6 +320,15 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
             {copy.title}
           </h3>
         )}
+
+        {messagesLoading && kind !== 'no-session' ? (
+          <p
+            className={styles.chatEmptyLoading}
+            data-empty-region="loading"
+          >
+            正在加载消息
+          </p>
+        ) : null}
 
         {copy.sub ? (
           <p id={subId} className={styles.chatEmptySub}>

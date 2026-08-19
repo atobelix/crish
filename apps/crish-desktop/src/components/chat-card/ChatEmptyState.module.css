@@ -132,6 +132,15 @@
   display: none; /* Hide for cleaner look globally, user found it too noisy */
 }
 
+/* 水合中轻量指示：不占主角、不替代欢迎标题 */
+.chatEmptyLoading {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: var(--line-height-ui);
+}
+
 /* pill action   soft control, no elevation */
 .chatEmptyAction {
   display: inline-flex;

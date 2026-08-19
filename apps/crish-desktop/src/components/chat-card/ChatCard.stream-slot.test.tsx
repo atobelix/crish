@@ -175,6 +175,25 @@ describe('ChatCard workspace.chat.stream 槽', () => {
     expect(screen.queryByTestId('fallback-chat-message-list')).toBeNull();
   });
 
+  it('emptyKind + messagesLoading 仍挂欢迎面，不进零消息列表槽', () => {
+    stateHolder.current = makeState({
+      emptyKind: 'session-empty',
+      messagesLoading: true,
+      messages: [],
+      displayMessages: [],
+    });
+    const { container } = render(
+      <ChatCard handleGlobalTabClick={vi.fn()} sessionId="sess-1" />
+    );
+    expect(container.querySelector('[data-empty-kind="session-empty"]')).toBeTruthy();
+    expect(container.querySelector('[data-messages-loading="true"]')).toBeTruthy();
+    expect(
+      container.querySelector('[data-slot="workspace.chat.stream"]')
+    ).toBeNull();
+    expect(screen.getByTestId('mock-empty')).toBeTruthy();
+    expect(screen.queryByTestId('fallback-chat-message-list')).toBeNull();
+  });
+
   it('定时任务面不进入 workspace.chat.stream 槽', async () => {
     stateHolder.current = makeState({ mainSurface: 'scheduled' });
     const { container } = render(

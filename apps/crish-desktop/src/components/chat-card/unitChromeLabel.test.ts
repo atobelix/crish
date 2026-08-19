@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { GENERAL_FOLDER, type ProjectEntry } from '../../api/projectStore';
-import { resolveUnitChromeLabel } from './unitChromeLabel';
+import {
+  resolveUnitChromeLabel,
+  resolveUnitChromeToolTip,
+  UNIT_CHROME_TOOL_TIP_SIDE,
+} from './unitChromeLabel';
 
 const demoProject: ProjectEntry = {
   id: 'proj-demo1',
@@ -91,6 +95,25 @@ describe('resolveUnitChromeLabel', () => {
         [demoProject],
       ),
     ).toBe(GENERAL_FOLDER);
+  });
+});
+
+describe('unit chrome tool tip', () => {
+  it('side is left — not top (top 贴顶会钳到主画布)', () => {
+    expect(UNIT_CHROME_TOOL_TIP_SIDE).toBe('left');
+    expect(UNIT_CHROME_TOOL_TIP_SIDE).not.toBe('top');
+    expect(UNIT_CHROME_TOOL_TIP_SIDE).not.toBe('bottom');
+  });
+
+  it('打开… → 短词；不把完整「打开文件」当画布胶囊', () => {
+    expect(resolveUnitChromeToolTip('打开文件')).toBe('文件');
+    expect(resolveUnitChromeToolTip('打开总览')).toBe('总览');
+    expect(resolveUnitChromeToolTip('打开差异')).toBe('差异');
+    expect(resolveUnitChromeToolTip('打开终端')).toBe('终端');
+    expect(resolveUnitChromeToolTip('打开笔记')).toBe('笔记');
+    expect(resolveUnitChromeToolTip('展开右侧工具栏')).toBe('展开右坞');
+    expect(resolveUnitChromeToolTip('打开')).toBe('打开');
+    expect(resolveUnitChromeToolTip('  打开文件  ')).toBe('文件');
   });
 });
 

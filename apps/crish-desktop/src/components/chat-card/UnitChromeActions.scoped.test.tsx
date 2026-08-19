@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { act, render, waitFor } from '@testing-library/react';
 import { UnitChromeActions } from './UnitChromeActions';
+import { viewRegistry } from '../../services/view-registry';
+import { UNIT_CHROME_TOOL_TIP_SIDE } from './unitChromeLabel';
 import {
   useWorkspaceShellStore,
   createDefaultDock,
@@ -139,5 +144,44 @@ describe('UnitChromeActions 笔记闸（02 F6 / F7）', () => {
     });
     expect(spy).toHaveBeenCalledWith('unit-a', 'note');
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('UnitChromeActions icon-only + tip 不落画布', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function stubToolViews(): void {
+    vi.spyOn(viewRegistry, 'getView').mockReturnValue({
+      id: 'files',
+      title: '文件',
+      category: 'tool',
+      component: () => null,
+    } as never);
+  }
+
+  it('文件钮 icon-only：完整 aria-label，可见文本不含「打开文件」', () => {
+    stubToolViews();
+    const { getByTestId } = render(
+      <UnitChromeActions activeSessionId="unit-b" />
+    );
+    const filesBtn = getByTestId('chat-open-files');
+    expect(filesBtn.getAttribute('aria-label')).toBe('打开文件');
+    expect(filesBtn.textContent?.replace(/\s+/g, '')).toBe('');
+    expect(UNIT_CHROME_TOOL_TIP_SIDE).toBe('left');
+  });
+
+  it('源码：Tip 走横向短词，不把 label 画成实体按钮', () => {
+    const dir =
+      typeof import.meta.dirname === 'string'
+        ? import.meta.dirname
+        : dirname(fileURLToPath(import.meta.url));
+    const src = readFileSync(join(dir, 'UnitChromeActions.tsx'), 'utf8');
+    expect(src).toMatch(/side=\{UNIT_CHROME_TOOL_TIP_SIDE\}/);
+    expect(src).toMatch(/content=\{resolveUnitChromeToolTip\(label\)\}/);
+    expect(src).not.toMatch(/<Tooltip key=\{id\} content=\{label\}>/);
+    expect(src).toMatch(/icon=\{\s*<Icon /);
+    expect(src).not.toMatch(/icon=\{\s*<Icon[\s\S]*?\}\s*>\s*\{label\}/);
   });
 });

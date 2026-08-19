@@ -99,7 +99,7 @@ export function useChatEmptyKind({
         : mainSurface === 'chat'
           ? 'chat'
           : undefined,
-    messagesLoading,
+    // 不把 messagesLoading 传给 resolve：loading 不得灭 emptyKind
   });
   const onEmptySurface = emptyKind != null;
 

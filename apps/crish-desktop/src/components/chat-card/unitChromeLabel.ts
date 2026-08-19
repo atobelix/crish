@@ -53,3 +53,23 @@ export function resolveUnitChromeLabel(
   // 幽灵 proj-* / 未知 project-like key：仍非「对话」桶
   return f;
 }
+
+/**
+ * 叶工具条贴顶：Tip 走横向，避免默认 side=top 翻折/钳到主画布中央。
+ * 不改 Tooltip 全局基座。
+ */
+export const UNIT_CHROME_TOOL_TIP_SIDE = 'left' as const;
+
+/**
+ * 工具钮 Tip 短词：按钮仍 icon-only，aria-label 保留完整「打开…」。
+ * 「打开文件」→「文件」，避免贴顶大胶囊看起来像主区画钮。
+ */
+export function resolveUnitChromeToolTip(label: string): string {
+  const t = label.trim();
+  if (t.startsWith('打开')) {
+    const rest = t.slice(2).trim();
+    if (rest) return rest;
+  }
+  if (t === '展开右侧工具栏') return '展开右坞';
+  return t;
+}
