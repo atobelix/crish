@@ -16,7 +16,7 @@ export const NOTE_LEAF =
   '[data-leaf-id][data-panel-id="note"], [data-leaf-id][data-panel-id^="note:"]';
 export const PANEL = `${NOTE_LEAF} [data-testid="note-paper-strict-panel"]`;
 export const OPEN_NOTE =
-  '[data-testid="chat-open-note"], [data-unit-chrome-actions] [data-panel="note"]';
+  '[data-testid="chat-open-note"], [data-leaf-tool-tab-strip] [data-panel="note"], [data-unit-chrome-actions] [data-panel="note"]';
 export const SLASH_OVERLAY = '[data-testid="note-paper-strict-slash-overlay"]';
 export const SLASH_TRIGGER = '[data-testid="note-paper-strict-open-slash"]';
 export const SLASH_CLOSE = '[data-testid="note-paper-strict-close"]';

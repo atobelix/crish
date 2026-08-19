@@ -1,6 +1,6 @@
 /**
- * 07 · chat 叶 UnitChrome「打开笔记」源码钉。
- * 读 UnitChrome / TreeLeafPanel / 到达 helper 原文，不 import 叶壳编排。
+ * 07 · 坞头「打开笔记」源码钉。
+ * 读 unitChromeTools / LeafToolTabStrip / TreeLeafPanel / 到达 helper 原文。
  *
  * 测头自钉：源码钉 ≠ 真壳到达绿 ≠ 打开完成。
  */
@@ -15,9 +15,14 @@ const DIR =
     ? import.meta.dirname
     : dirname(fileURLToPath(import.meta.url));
 
+const TOOLS = join(DIR, '../../components/chat-card/unitChromeTools.ts');
 const CHROME = join(
   DIR,
   '../../components/chat-card/UnitChromeActions.tsx'
+);
+const STRIP = join(
+  DIR,
+  '../../components/binary-tree/LeafToolTabStrip.tsx'
 );
 const TREE_LEAF = join(
   DIR,
@@ -34,8 +39,10 @@ function readUtf8(path: string): string {
   return readFileSync(path, 'utf8');
 }
 
-describe('07 · UnitChrome chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打开完成）', () => {
+describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打开完成）', () => {
+  const toolsSrc = readUtf8(TOOLS);
   const chromeSrc = readUtf8(CHROME);
+  const stripSrc = readUtf8(STRIP);
   const treeSrc = readUtf8(TREE_LEAF);
   const openToolSrc = readUtf8(OPEN_TOOL);
   const arriveSrc = readUtf8(ARRIVE);
@@ -58,32 +65,31 @@ describe('07 · UnitChrome chat-open-note 源码钉（≠ 真壳到达绿 · ≠
     );
   });
 
-  it('清单与 DOM 契约仍是 chat-open-note / 打开笔记 / data-panel=note', () => {
-    expect(chromeSrc).toMatch(
+  it('清单在 unitChromeTools；DOM 契约在坞头 LeafToolTabStrip', () => {
+    expect(toolsSrc).toMatch(
       /id:\s*['"]note['"][\s\S]*?label:\s*['"]打开笔记['"][\s\S]*?testId:\s*['"]chat-open-note['"]/
     );
-    expect(chromeSrc).toMatch(/data-testid=\{testId\}/);
-    expect(chromeSrc).toMatch(/data-panel=\{id\}/);
-    expect(chromeSrc).toMatch(/data-unit-chrome-actions=["']true["']/);
-    expect(chromeSrc).toMatch(/aria-label=\{label\}/);
+    expect(stripSrc).toMatch(/UNIT_TOOL_PANELS/);
+    expect(stripSrc).toMatch(/data-testid=\{testId\}/);
+    expect(stripSrc).toMatch(/data-panel=\{id\}/);
+    expect(stripSrc).toMatch(/data-leaf-tool-tab-strip=["']true["']/);
+    expect(stripSrc).toMatch(/aria-label=\{label\}/);
+    expect(chromeSrc).not.toMatch(/chat-open-note/);
+    expect(chromeSrc).not.toMatch(/UNIT_TOOL_PANELS/);
     expect(arriveSrc).toMatch(
       /export const OPEN_NOTE\s*=\s*[\s\S]*?data-testid=["']chat-open-note["']/
-    );
-    expect(arriveSrc).toMatch(
-      /OPEN_NOTE\s*=\s*[\s\S]*?data-unit-chrome-actions[\s\S]*?data-panel=["']note["']/
     );
   });
 
   it('打开走 openToolInSession + note，不点 open-note-paper-strict', () => {
-    expect(chromeSrc).toMatch(
-      /openToolInSession\(\s*\(activeSessionId\s*\|\|\s*['"]{2}\)\.trim\(\)\s*,\s*panelId\s*\)/
-    );
-    expect(chromeSrc).toMatch(/onClick=\{\(\)\s*=>\s*handleOpenTool\(id\)\}/);
+    expect(stripSrc).toMatch(/openToolInSession\(leaf\.sessionId,\s*pid\)/);
+    expect(stripSrc).toMatch(/onClick=\{\(\)\s*=>\s*openPanel\(id\)\}/);
     expect(openToolSrc).toMatch(
       /export function openToolInSession\(\s*sessionId:\s*string,\s*panelId:\s*string/
     );
     expect(openToolSrc).not.toMatch(/note\s*:\s*['"]/);
     expect(chromeSrc).not.toMatch(/open-note-paper-strict/);
+    expect(stripSrc).not.toMatch(/open-note-paper-strict/);
     expect(treeSrc).not.toMatch(/open-note-paper-strict/);
     expect(openToolSrc).not.toMatch(/open-note-paper-strict/);
     expect(arriveSrc).not.toMatch(/open-note-paper-strict/);
@@ -92,7 +98,7 @@ describe('07 · UnitChrome chat-open-note 源码钉（≠ 真壳到达绿 · ≠
     );
   });
 
-  it('chat 叶仍挂 UnitChromeActions，不是死 CTA 入口', () => {
+  it('chat 叶仍挂 UnitChromeActions 覆盖层；工具钮在坞头', () => {
     expect(treeSrc).toMatch(/import\s+\{\s*UnitChromeActions\s*\}/);
     expect(treeSrc).toMatch(
       /isChat\s*\?\s*\([\s\S]*?<UnitChromeActions[\s\S]*?activeSessionId=\{sessionForPanel\}/
@@ -100,6 +106,6 @@ describe('07 · UnitChrome chat-open-note 源码钉（≠ 真壳到达绿 · ≠
     expect(treeSrc).toMatch(
       /openToolInSession\(\s*targetSessionId,\s*panelId\s*\)/
     );
-    expect(chromeSrc).toMatch(/viewRegistry\.getView\(id\)/);
+    expect(stripSrc).toMatch(/viewRegistry\.getView\(id\)/);
   });
 });

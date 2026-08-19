@@ -6,7 +6,7 @@
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
-import { UnitChromeActions } from '../../components/chat-card/UnitChromeActions';
+import { LeafToolTabStrip } from '../../components/binary-tree/LeafToolTabStrip';
 import { TreeLeafPanel } from '../../components/binary-tree/TreeLeafPanel';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 import { useLayoutStore } from '../../store/layoutStore';
@@ -78,10 +78,9 @@ describe('note-paper open integration（02 F8 / F9）', () => {
     });
   });
 
-  it('F8 点击打开笔记后 dock 含 note 且解折叠，树有非 primary note 叶', async () => {
-    const { getByTestId } = render(
-      <UnitChromeActions activeSessionId={SID} />
-    );
+  it('F8 点击坞头打开笔记后 dock 含 note 且解折叠，树有非 primary note 叶', async () => {
+    const filesLeaf = createLeaf('files', ['files'], 'files', SID);
+    const { getByTestId } = render(<LeafToolTabStrip leaf={filesLeaf} />);
     act(() => {
       getByTestId('chat-open-note').click();
     });
@@ -103,7 +102,8 @@ describe('note-paper open integration（02 F8 / F9）', () => {
   });
 
   it('F9 工具叶 DOM 出现 note-paper-strict-panel，祖先有 data-leaf-id，无死 CTA', async () => {
-    render(<UnitChromeActions activeSessionId={SID} />);
+    const filesLeaf = createLeaf('files', ['files'], 'files', SID);
+    render(<LeafToolTabStrip leaf={filesLeaf} />);
     act(() => {
       screen.getByTestId('chat-open-note').click();
     });
