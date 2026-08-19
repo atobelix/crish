@@ -36,7 +36,7 @@ export const ProfileHeader: React.FC<{
   refresh,
   notify: _notify,
   setProfiles,
-  setSelectedId,
+  setSelectedId: _setSelectedId,
 }) => {
   return (
     <div className="mrd-head">
@@ -181,7 +181,6 @@ export const ProfileHeader: React.FC<{
                   onClick={() => {
                     const next = removeProfile(selected.id);
                     setProfiles?.(next);
-                    setSelectedId?.(next[0]?.id || null);
                     setConfirmDeleteId(null);
                   }}
                 >

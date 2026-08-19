@@ -35,23 +35,22 @@ vi.mock('../../api/chat-bridge/editSessionConsumer', () => ({
   isEditSessionConsumerBound: vi.fn(() => false),
 }));
 
-vi.mock('../../api/providerProfiles', () => ({
-  addModelToProfile: vi.fn(),
-  createCustomProfile: vi.fn((opts) => ({ id: 'custom-123', ...opts })),
-  findProfileByDisplayName: vi.fn(
-    (list: ProviderProfile[], name: string) =>
-      list.find((p) => p.name === name)
-  ),
-  getActiveModelId: vi.fn(() => 'gpt-4o'),
-  getActiveProfileId: vi.fn(() => 'preset-openai'),
-  loadProfiles: mocks.loadProfiles,
-  mergeModelIds: vi.fn((a: string[], b: string[]) => [...a, ...b]),
-  normalizeModelIds: vi.fn((m: unknown) => m),
-  profileDisplayLabel: vi.fn((p: ProviderProfile) => p.name),
-  profileHasKey: vi.fn(() => true),
-  saveProfileKey: vi.fn(async () => ({ ok: true })),
-  upsertProfile: vi.fn(),
-}));
+vi.mock('../../api/providerProfiles', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api/providerProfiles')>();
+  return {
+    ...actual,
+    addModelToProfile: vi.fn(),
+    createCustomProfile: vi.fn((opts) => ({ id: 'custom-123', ...opts })),
+    getActiveModelId: vi.fn(() => 'gpt-4o'),
+    getActiveProfileId: vi.fn(() => 'preset-openai'),
+    loadProfiles: mocks.loadProfiles,
+    mergeModelIds: vi.fn((a: string[], b: string[]) => [...a, ...b]),
+    normalizeModelIds: vi.fn((m: unknown) => m),
+    profileHasKey: vi.fn(() => true),
+    saveProfileKey: vi.fn(async () => ({ ok: true })),
+    upsertProfile: vi.fn(),
+  };
+});
 
 vi.mock('../../api/modelCatalog', () => ({
   getModelMeta: mocks.getModelMeta,

@@ -27,7 +27,11 @@ import {
 } from './modelsPresets';
 import { onUiEvent } from '../../api/uiEvents';
 import { editSessionConsumer } from '../../api/chat-bridge/editSessionConsumer';
-import { settingsObjectId } from './modelProfilesHelpers';
+import {
+  foldSettingsProfiles,
+  pickSettingsSelectedId,
+  settingsObjectId,
+} from './modelProfilesHelpers';
 import { useModelConfigSession } from './useModelConfigSession';
 import { useModelProviderActions } from './useModelProviderActions';
 
@@ -44,19 +48,19 @@ export {
 export function useModelProfilesState(
   onShowToast?: (ok: boolean, msg: string) => void,
 ) {
-  const [profiles, setProfiles] = useState<ProviderProfile[]>(() =>
-    loadProfiles()
+  const [profiles, setProfilesState] = useState<ProviderProfile[]>(() =>
+    foldSettingsProfiles(loadProfiles())
   );
   const [selectedId, setSelectedIdState] = useState<string>(() => {
+    const raw = loadProfiles();
+    const folded = foldSettingsProfiles(raw);
+    let stored: string | null = null;
     try {
-      const s = sessionStorage.getItem('crish_models_selected_profile_v1');
-      if (s && loadProfiles().some((p) => p.id === s)) return s;
+      stored = sessionStorage.getItem('crish_models_selected_profile_v1');
     } catch {
       /* ignore */
     }
-    const act = getActiveProfileId();
-    if (act && loadProfiles().some((p) => p.id === act)) return act;
-    return loadProfiles()[0]?.id || '';
+    return pickSettingsSelectedId(folded, raw, stored, getActiveProfileId());
   });
 
   const setSelectedId = useCallback((id: string | null) => {
@@ -126,14 +130,17 @@ export function useModelProfilesState(
     [onShowToast],
   );
 
-  const refresh = useCallback(() => {
-    const list = loadProfiles();
-    setProfiles(list);
-    setSelectedIdState((cur) => {
-      if (cur && list.some((p) => p.id === cur)) return cur;
-      return list[0]?.id || '';
-    });
+  const setProfiles = useCallback((raw: ProviderProfile[]) => {
+    const folded = foldSettingsProfiles(raw);
+    setProfilesState(folded);
+    setSelectedIdState((cur) =>
+      pickSettingsSelectedId(folded, raw, cur, getActiveProfileId())
+    );
   }, []);
+
+  const refresh = useCallback(() => {
+    setProfiles(loadProfiles());
+  }, [setProfiles]);
 
   useEffect(() => {
     return onUiEvent('profiles-changed', () => {
@@ -268,9 +275,10 @@ export function useModelProfilesState(
 
   const addFromPreset = (preset: PresetProvider) => {
     void runAsLocalMutation(() => {
-      const existing = findProfileByDisplayName(loadProfiles(), preset.name);
+      const raw = loadProfiles();
+      const existing = findProfileByDisplayName(raw, preset.name);
       if (existing) {
-        refresh();
+        setProfiles(raw);
         setSelectedIdState(existing.id);
         setAddOpen(false);
         return;
@@ -280,7 +288,7 @@ export function useModelProfilesState(
         baseUrl: preset.baseUrl,
         models: [],
       });
-      refresh();
+      setProfiles(loadProfiles());
       setSelectedIdState(p.id);
       setAddOpen(false);
     });

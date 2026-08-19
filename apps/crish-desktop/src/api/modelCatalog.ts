@@ -62,6 +62,7 @@ export {
   fetchCatalogSnapshot,
   testProviderModel,
   listPickerProfiles,
+  listSettingsProfiles,
   listAvailablePickerModels,
   pickDefaultFromLocalCatalog,
 } from './modelCatalogIpc';

@@ -327,6 +327,14 @@ export function listPickerProfiles(): ProviderProfile[] {
 }
 
 /**
+ * 设置页服务商列表：含停用，同展示名只留一行。
+ * 折叠函数与 picker 相同（foldProfilesByDisplayName）；不过滤 enabled。
+ */
+export function listSettingsProfiles(): ProviderProfile[] {
+  return foldProfilesByDisplayName(loadProfiles());
+}
+
+/**
  * Picker 用：仅返回真实配置在 profile 中、且 meta 未禁用的模型。
  * 经 normalize → dedupe → usable 管道；不写死 vendor 演示表。
  * 空列表时返回 []（调用方不得回落 mimo 等硬编码默认）。
