@@ -131,16 +131,25 @@ export interface SubagentNode {
   children: FlowNode[];
 }
 
-/** 类型占位：本轮不从产品消息长出 */
+/**
+ * 前端派生：文档产物（引擎 `ToolOutput.artifacts` 弱时从工具输出长出）。
+ * 代码路径不得进入；缺 `docId` 不得创建 persist。
+ */
 export interface ArtifactNode {
   kind: 'artifact';
   id: string;
   title: string;
   mime: 'markdown' | 'text';
   content: string;
+  /** 前端派生：工作区路径；代码路径不填 */
+  path?: string;
+  /** 前端派生：已有笔记 id；缺省不得 apply+commit */
+  docId?: string;
+  /** 前端派生：引擎 artifacts 命中 vs 路径/输出启发式 */
+  derived: 'engine' | 'frontend';
 }
 
-/** 类型占位：仅 plan 模式后挂；本轮不从消息块发明 plan */
+/** 计划步骤：仅 plan 根可带；本切片不从消息发明 */
 export interface PlanStep {
   id: string;
   title: string;
@@ -148,7 +157,7 @@ export interface PlanStep {
   children: FlowNode[];
 }
 
-/** 类型占位：本轮不从产品消息长出 */
+/** 仅 plan 模式后挂；不从产品消息发明步骤，不吃演示剧本 */
 export interface PlanNode {
   kind: 'plan';
   id: string;
@@ -183,7 +192,7 @@ export interface ProjectMessageResult {
   pendingApprovals: PendingApproval[];
 }
 
-/** Phase A 默认 30s 合并窗 */
+/** Phase A 默认 30s 合并窗（仅双方都有时间戳时生效） */
 export const DEFAULT_PURPOSE_WINDOW_MS = 30_000;
 
 export interface HumanizeHooks {

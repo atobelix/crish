@@ -34,3 +34,12 @@ export { DEFAULT_PURPOSE_WINDOW_MS } from './types';
 export { projectMessage } from './projectMessage';
 export { projectPurposes, toActionNode } from './projectPurposes';
 export { extractPendingApprovals } from './extractPendingApprovals';
+export {
+  deriveArtifactFromTool,
+  deriveArtifacts,
+  isCodeArtifactPath,
+  isDocumentArtifactPath,
+  usableArtifactDocId,
+} from './deriveArtifacts';
+export { isPlanModeEnabled, projectPlanRoot } from './projectPlan';
+export type { ProjectPlanInput } from './projectPlan';

@@ -1,6 +1,7 @@
 /**
  * Phase A Purpose 投影：explanation 归一 + 30s 窗启发式合并。
  * 无 purpose_id；pending_approval 在此跳过。
+ * 无时间戳时 30s 窗失效，只按同一归一 explanation 合并（禁止整条合成）。
  */
 
 import {
@@ -26,11 +27,12 @@ import type {
 } from './types';
 import { DEFAULT_PURPOSE_WINDOW_MS } from './types';
 
-function toolTimeMs(tc: ProjectToolCallInput): number {
+/** 缺 startedAt / completedAt / finishedAt 时返回 null，不用 0 冒充时间戳。 */
+function toolTimeMs(tc: ProjectToolCallInput): number | null {
   if (typeof tc.startedAt === 'number') return tc.startedAt;
   if (typeof tc.completedAt === 'number') return tc.completedAt;
   if (typeof tc.finishedAt === 'number') return tc.finishedAt;
-  return 0;
+  return null;
 }
 
 /**
@@ -62,8 +64,17 @@ interface OpenPurpose {
   normalizedExplanation: string;
   actions: ActionNode[];
   verbFamily: string;
-  firstTime: number;
-  lastTime: number;
+  firstTime: number | null;
+  lastTime: number | null;
+}
+
+function sameNormalizedExplanation(
+  current: OpenPurpose,
+  tc: ProjectToolCallInput,
+): boolean {
+  const normA = normalizePurpose(tc.explanation);
+  const normB = current.normalizedExplanation;
+  return Boolean(normA && normB && normA === normB);
 }
 
 function shouldMergeIntoCurrent(
@@ -74,17 +85,19 @@ function shouldMergeIntoCurrent(
   hooks?: HumanizeHooks,
 ): boolean {
   const t = toolTimeMs(tc);
-  const lastT = current.lastTime || current.firstTime || 0;
-  if (t && lastT && Math.abs(t - lastT) > windowMs) return false;
+  const lastT = current.lastTime ?? current.firstTime;
+  // 双方都有时间戳才走 30s 窗。缺任一侧则窗失效，只按同一归一 explanation 合并。
+  if (t == null || lastT == null) {
+    return sameNormalizedExplanation(current, tc);
+  }
+  if (Math.abs(t - lastT) > windowMs) return false;
 
   if (current.purposeKey === purposeKey) return true;
 
   const fam = verbFamily(toolVerbBase(tc, hooks));
   if (fam !== current.verbFamily) return false;
 
-  const normA = normalizePurpose(tc.explanation);
-  const normB = current.normalizedExplanation;
-  return Boolean(normA && normB && normA === normB);
+  return sameNormalizedExplanation(current, tc);
 }
 
 function aggregatePurposeStatus(actions: ActionNode[]): PurposeStatus {
@@ -210,7 +223,7 @@ export function projectPurposes(
 
     open.actions.push(action);
     const t = toolTimeMs(tc);
-    if (t) open.lastTime = t;
+    if (t != null) open.lastTime = t;
   }
 
   if (current) emit(current);

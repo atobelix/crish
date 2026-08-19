@@ -182,6 +182,68 @@ describe('projectPurposes：30s 窗与 inspect 合并', () => {
   });
 });
 
+describe('projectPurposes：无时间戳不走 30s 窗', () => {
+  it('无时间戳 + 同一归一 explanation → 合成 1 个 Purpose', () => {
+    const purposes = projectPurposes([
+      tc({
+        id: 'r1',
+        name: 'read_file',
+        arguments: JSON.stringify({ path: 'src/a.ts' }),
+        explanation: '核对导出类型',
+      }),
+      tc({
+        id: 'r2',
+        name: 'run_terminal_cmd',
+        arguments: JSON.stringify({ command: 'tsc --noEmit' }),
+        explanation: '正在核对导出类型',
+      }),
+    ]);
+    expect(purposes).toHaveLength(1);
+    expect(purposes[0]?.primary).toBe('核对导出类型');
+    expect(purposes[0]?.actions.map((a) => a.id)).toEqual(['r1', 'r2']);
+  });
+
+  it('无时间戳 + 不同 explanation → 分 Purpose', () => {
+    const purposes = projectPurposes([
+      tc({
+        id: 'r1',
+        name: 'read_file',
+        arguments: JSON.stringify({ path: 'src/a.ts' }),
+        explanation: '核对导出类型',
+      }),
+      tc({
+        id: 'r2',
+        name: 'read_file',
+        arguments: JSON.stringify({ path: 'src/b.ts' }),
+        explanation: '阅读实现细节',
+      }),
+    ]);
+    expect(purposes).toHaveLength(2);
+    expect(purposes[0]?.actions.map((a) => a.id)).toEqual(['r1']);
+    expect(purposes[1]?.actions.map((a) => a.id)).toEqual(['r2']);
+    expect(purposes[0]?.primary).toBe('核对导出类型');
+    expect(purposes[1]?.primary).toBe('阅读实现细节');
+  });
+
+  it('无时间戳 + 无 explanation 同动词族不合并（禁止整条合成）', () => {
+    const purposes = projectPurposes([
+      tc({
+        id: 'i1',
+        name: 'read_file',
+        arguments: JSON.stringify({ path: 'a.ts' }),
+      }),
+      tc({
+        id: 'i2',
+        name: 'read_file',
+        arguments: JSON.stringify({ path: 'b.ts' }),
+      }),
+    ]);
+    expect(purposes).toHaveLength(2);
+    expect(purposes[0]?.actions.map((a) => a.id)).toEqual(['i1']);
+    expect(purposes[1]?.actions.map((a) => a.id)).toEqual(['i2']);
+  });
+});
+
 describe('pending_approval 不进 Purpose 树', () => {
   it('extractPendingApprovals 抽出；projectPurposes 跳过', () => {
     const tools: ProjectToolCallInput[] = [
