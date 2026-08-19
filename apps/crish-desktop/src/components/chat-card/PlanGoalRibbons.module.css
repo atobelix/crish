@@ -20,6 +20,16 @@
   border-radius: var(--radius-lg);
 }
 
+.planModeRibbon.docked {
+  width: calc(100% - 36px);
+  margin-left: 18px;
+  margin-right: auto;
+  margin-bottom: -10px;
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  z-index: var(--z-base);
+}
+
 .planModeRibbon.slim > svg {
   flex-shrink: 0;
   color: var(--text-tertiary);

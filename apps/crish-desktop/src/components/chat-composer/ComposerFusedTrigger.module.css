@@ -6,19 +6,32 @@
   display: inline-flex;
   align-items: center;
   max-width: 100%;
-  height: var(--control-height);
-  padding: 0 2px;
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-lg);
+  height: 28px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 14px;
   background: transparent;
   box-shadow: none;
   min-width: 0;
+}
+
+.capsule:hover {
+  background: var(--bg-hover);
 }
 
 .left {
   display: inline-flex;
   align-items: center;
   min-width: 0;
+}
+
+.left :global(button) {
+  height: 28px;
+  min-height: 28px;
+  min-width: 0;
+  max-width: 160px;
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .divider {
@@ -40,14 +53,15 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  height: calc(var(--control-height) - 4px);
-  padding: 0 8px;
+  height: 28px;
+  padding: 0 4px;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: 14px;
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
   font-size: var(--font-size-sm);
+  font-weight: 400;
   cursor: pointer;
   box-shadow: none;
   white-space: nowrap;
@@ -58,7 +72,7 @@
 }
 
 .thinkBtn:hover {
-  background: var(--tint-hover);
+  background: transparent;
   color: var(--text-primary);
 }
 

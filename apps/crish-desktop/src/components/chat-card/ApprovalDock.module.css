@@ -23,6 +23,14 @@
   min-height: 30px;
 }
 
+.approvalDock.docked {
+  width: calc(100% - 36px);
+  max-width: none;
+  margin-left: 18px;
+  margin-right: auto;
+  margin-bottom: 0;
+}
+
 .approvalDock:hover {
   background: color-mix(in srgb, var(--accent-orange) 9%, transparent);
 }

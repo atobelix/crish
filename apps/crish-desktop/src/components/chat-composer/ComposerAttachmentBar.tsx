@@ -79,6 +79,12 @@ export const ComposerAttachmentBar: React.FC<ComposerAttachmentBarProps> = ({
                 e.stopPropagation();
                 openPreview(a);
               }}
+              onAuxClick={(e) => {
+                if (e.button !== 1) return;
+                e.preventDefault();
+                e.stopPropagation();
+                onRemoveAttachment(a.name);
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();

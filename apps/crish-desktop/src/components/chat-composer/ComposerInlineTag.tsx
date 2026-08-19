@@ -14,7 +14,10 @@ function iconForKind(kind: string) {
   return Lucide.FileText;
 }
 
-export const ComposerInlineTag: React.FC<NodeViewProps> = ({ node }) => {
+export const ComposerInlineTag: React.FC<NodeViewProps> = ({
+  node,
+  deleteNode,
+}) => {
   const kind = String(node.attrs.kind || 'file');
   const label = String(node.attrs.label || node.attrs.id || '');
   const id = String(node.attrs.id || '');
@@ -41,6 +44,12 @@ export const ComposerInlineTag: React.FC<NodeViewProps> = ({ node }) => {
         e.preventDefault();
         e.stopPropagation();
         openFileInPanel(id);
+      }}
+      onAuxClick={(e: React.MouseEvent) => {
+        if (e.button !== 1) return;
+        e.preventDefault();
+        e.stopPropagation();
+        deleteNode?.();
       }}
       onKeyDown={(e: React.KeyboardEvent) => {
         if (!canOpen) return;

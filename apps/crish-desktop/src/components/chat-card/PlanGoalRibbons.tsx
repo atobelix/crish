@@ -37,11 +37,14 @@ export type GoalRibbonState = {
 export type PlanGoalRibbonsProps = {
   plan: PlanRibbonState;
   goal: GoalRibbonState;
+  /** 叠在输入卡上沿：缩进 + 负边距嵌入卡片 */
+  docked?: boolean;
 };
 
 export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
   plan,
   goal,
+  docked = false,
 }) => {
   const showPlanApprove = shouldShowPlanApproveAction(plan.planApproved);
   const goalProgressPct = goalRibbonProgressPercent(
@@ -53,7 +56,7 @@ export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
     <>
       {plan.inPlanMode ? (
         <div
-          className={`${styles.planModeRibbon} ${styles.slim}`}
+          className={`${styles.planModeRibbon} ${styles.slim}${docked ? ` ${styles.docked}` : ''}`}
           role="status"
           aria-live="polite"
           aria-label={resolvePlanModeAriaLabel(plan.planApproved)}
@@ -82,7 +85,7 @@ export const PlanGoalRibbons: React.FC<PlanGoalRibbonsProps> = ({
 
       {goal.goalModeActive ? (
         <div
-          className={`${styles.planModeRibbon} ${styles.goalModeRibbon} ${styles.slim}`}
+          className={`${styles.planModeRibbon} ${styles.goalModeRibbon} ${styles.slim}${docked ? ` ${styles.docked}` : ''}`}
           role="status"
           aria-live="polite"
           aria-label={resolveGoalRibbonAriaLabel({

@@ -25,6 +25,17 @@ vi.mock('./ChatStatusRibbons', () => ({
   ),
 }));
 
+vi.mock('./ApprovalDock', () => ({
+  ApprovalDock: (props: { show?: boolean; pendingCount?: number }) =>
+    props.show ? (
+      <div data-testid="approval-dock" data-pending={String(props.pendingCount)} />
+    ) : null,
+}));
+
+vi.mock('./PlanGoalRibbons', () => ({
+  PlanGoalRibbons: () => null,
+}));
+
 const ribbons = { streaming: {}, goal: {} } as RibbonsGroup;
 
 function renderWrap(
@@ -75,6 +86,8 @@ describe('ChatComposerWrapper workspace.chat.composerAbove', () => {
     expect(
       container.querySelector('[data-slot="workspace.chat.composerAbove"]')
     ).not.toBeNull();
+    expect(container.querySelector('[data-composer-float-zone]')).not.toBeNull();
+    expect(container.querySelector('[data-composer-wrapper]')).not.toBeNull();
     expect(container.querySelector('[data-permission-bar]')).toBeNull();
     expect(
       container.querySelector('[data-testid="ribbons"]')?.getAttribute(

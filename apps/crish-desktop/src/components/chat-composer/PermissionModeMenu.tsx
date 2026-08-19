@@ -14,6 +14,8 @@ import {
 type Props = {
   mode: PermissionMode;
   onChange: (m: PermissionMode) => void;
+  /** 主对话网格：盾形 icon-only；侧栏/测试默认文字药丸 */
+  iconOnly?: boolean;
 };
 
 /**
@@ -27,6 +29,7 @@ type Props = {
 export const PermissionModeMenu: React.FC<Props> = ({
   mode: modeRaw,
   onChange,
+  iconOnly = false,
 }) => {
   const mode = coercePermissionMode(modeRaw);
   const meta = permissionModeMeta(mode);
@@ -68,20 +71,30 @@ export const PermissionModeMenu: React.FC<Props> = ({
         <button
           ref={pillBtnRef}
           type="button"
-          className={[styles.permPill, open ? styles.isOpen : null]
+          className={[
+            styles.permPill,
+            open ? styles.isOpen : null,
+            iconOnly ? styles.iconOnly : null,
+          ]
             .filter(Boolean)
             .join(' ')}
+          data-perm-mode={mode}
           onClick={handleToggle}
           aria-expanded={open}
           aria-haspopup="menu"
           aria-label={`当前权限模式：${meta.label}`}
         >
+          {iconOnly ? (
+            <Lucide.Shield size={14} strokeWidth={2} aria-hidden="true" />
+          ) : null}
           <span>{meta.label}</span>
-          <Lucide.ChevronDown
-            size={11}
-            className={styles.permPillChev}
-            aria-hidden="true"
-          />
+          {iconOnly ? null : (
+            <Lucide.ChevronDown
+              size={11}
+              className={styles.permPillChev}
+              aria-hidden="true"
+            />
+          )}
         </button>
       </Tooltip>
 

@@ -33,11 +33,13 @@ import { shouldSuppressMenuReopen } from '../ui/Menu';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment, QueuedMessage } from '../../hooks/useChatStream';
 import { ComposerField } from './ComposerField';
-import type { ComposerFieldProps } from './composerTypes';
+import type { ComposerFieldProps, ComposerSendApi } from './composerTypes';
 import { ComposerAttachmentBar } from './ComposerAttachmentBar';
 import { ChatQueuePanel } from './ChatQueuePanel';
 import { ComposerDropHost } from './ComposerDropHost';
 import { ComposerFusedTrigger } from './ComposerFusedTrigger';
+import { ComposerSendControls } from './ComposerSendControls';
+import { useComposerMultiline } from './useComposerMultiline';
 
 export type { ComposerFieldProps } from './composerTypes';
 export { ComposerField, STOP_TOOLTIP } from './ComposerField';
@@ -149,6 +151,8 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const fieldContainerRef = useRef<HTMLDivElement>(null);
   const plusBtnRef = useRef<HTMLButtonElement>(null);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const sendApiRef = useRef<ComposerSendApi | null>(null);
 
   /** F1-γ：富文本装配失败（lazy 加载 / 渲染抛错）后永久回落 textarea 分支 */
   const [richTextFailed, setRichTextFailed] = useState(false);
@@ -281,6 +285,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       processingPlaceholder: '输入排队消息…（当前回复结束后发送，可粘贴截图）',
       ariaLabel: '主对话输入',
       containerRef: fieldContainerRef,
+      hideSendControls: true,
+      sendApiRef,
+      className: styles.fieldInGrid,
     }),
     [
       chatInput,
@@ -296,6 +303,12 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       onPasteImage,
     ]
   );
+
+  const isMultiline = useComposerMultiline({
+    text: chatInput,
+    hasAttachments: attachments.length > 0,
+    layoutRef,
+  });
 
   /**
    * 统一输入区装配：默认主路 = TiptapComposerField（React.lazy 软接 + Suspense，
@@ -338,82 +351,116 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           onEdit={onEditQueued ?? (() => {})}
           onDelete={onDeleteQueued ?? (() => {})}
         />
-        {renderInputField()}
 
-        <ComposerAttachmentBar
-          attachments={attachments}
-          onRemoveAttachment={handleRemoveAttachment}
-          {...(onOpenPath ? { onOpenPath } : {})}
-        />
+        <div
+          className={`${styles.composerCard}${isMultiline ? ` ${styles.isMultiline}` : ''}`}
+          data-composer-card=""
+          data-multiline={isMultiline ? '1' : '0'}
+          data-empty-kind={emptyKind}
+        >
+          <ComposerAttachmentBar
+            attachments={attachments}
+            onRemoveAttachment={handleRemoveAttachment}
+            {...(onOpenPath ? { onOpenPath } : {})}
+          />
 
-        <input
-          ref={fileInputRef as React.RefObject<HTMLInputElement>}
-          type="file"
-          multiple
-          aria-hidden
-          tabIndex={-1}
-          style={{ display: 'none' }}
-          onChange={async (e) => {
-            const files = Array.from(e.target.files || []);
-            e.target.value = '';
-            if (!files.length) return;
-            await onFilesSelected(files);
-            requestAnimationFrame(focusComposerTextarea);
-          }}
-        />
-
-        <div className={styles.footerActions} data-composer-footer="1">
-          <div className={styles.leftActions} style={{ position: 'relative' }}>
-            <Tooltip content="添加文件、技能、扩展…" disabled={showPlusMenu}>
-              <Button
-                ref={plusBtnRef}
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={`${styles.plusBtn} ${showPlusMenu ? styles.isOpen : ''}`}
-                aria-label="打开添加菜单"
-                aria-haspopup="menu"
-                aria-expanded={showPlusMenu}
-                aria-controls={showPlusMenu ? plusMenuId : undefined}
-                onClick={() => {
-                  if (shouldSuppressMenuReopen(plusBtnRef.current)) return;
-                  if (showPlusMenu) {
-                    setShowPlusMenu(false);
-                    requestAnimationFrame(() => plusBtnRef.current?.focus());
-                  } else {
-                    setShowPlusMenu(true);
-                    onCloseSiblingMenus?.();
+          <div
+            ref={layoutRef}
+            className={styles.inputMainLayout}
+            data-composer-layout=""
+            data-composer-footer="1"
+          >
+            <div className={styles.actionLeft} data-composer-grid="left">
+              <Tooltip content="添加文件、技能、扩展…" disabled={showPlusMenu}>
+                <Button
+                  ref={plusBtnRef}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={`${styles.plusBtn} ${showPlusMenu ? styles.isOpen : ''}`}
+                  aria-label="打开添加菜单"
+                  aria-haspopup="menu"
+                  aria-expanded={showPlusMenu}
+                  aria-controls={showPlusMenu ? plusMenuId : undefined}
+                  onClick={() => {
+                    if (shouldSuppressMenuReopen(plusBtnRef.current)) return;
+                    if (showPlusMenu) {
+                      setShowPlusMenu(false);
+                      requestAnimationFrame(() => plusBtnRef.current?.focus());
+                    } else {
+                      setShowPlusMenu(true);
+                      onCloseSiblingMenus?.();
+                    }
+                  }}
+                  icon={<Lucide.Plus size={16} aria-hidden />}
+                />
+              </Tooltip>
+              <ComposePlusMenu
+                id={plusMenuId}
+                open={showPlusMenu}
+                onClose={() => setShowPlusMenu(false)}
+                onAddFiles={() => fileInputRef.current?.click()}
+                onInsertSkillSlash={() => {
+                  if (!chatInput.startsWith('/')) {
+                    setChatInput(chatInput ? `/${chatInput}` : '/');
                   }
+                  void loadSkillSlash();
+                  requestAnimationFrame(focusComposerTextarea);
                 }}
-                icon={<Lucide.Plus size={16} aria-hidden />}
+                restoreFocusRef={plusBtnRef}
               />
-            </Tooltip>
-            <ComposePlusMenu
-              id={plusMenuId}
-              open={showPlusMenu}
-              onClose={() => setShowPlusMenu(false)}
-              onAddFiles={() => fileInputRef.current?.click()}
-              onInsertSkillSlash={() => {
-                if (!chatInput.startsWith('/')) {
-                  setChatInput(chatInput ? `/${chatInput}` : '/');
-                }
-                void loadSkillSlash();
-                requestAnimationFrame(focusComposerTextarea);
-              }}
-              restoreFocusRef={plusBtnRef}
-            />
-            <PermissionModeMenu
-              mode={permissionMode}
-              onChange={(m) => {
-                onPermissionChange(m);
-                setShowPlusMenu(false);
-                onCloseSiblingMenus?.();
-              }}
-            />
+            </div>
+
+            <div className={styles.fieldSlot} data-composer-grid="text">
+              {renderInputField()}
+            </div>
+
+            <div className={styles.permSlot} data-composer-grid="perm">
+              <PermissionModeMenu
+                iconOnly
+                mode={permissionMode}
+                onChange={(m) => {
+                  onPermissionChange(m);
+                  setShowPlusMenu(false);
+                  onCloseSiblingMenus?.();
+                }}
+              />
+            </div>
+
+            <div className={styles.actionRight} data-composer-grid="right">
+              <ComposerFusedTrigger>{rightActions}</ComposerFusedTrigger>
+              <ComposerSendControls
+                appearance="circle"
+                canSend={canSend}
+                isProcessing={isProcessing}
+                onSend={() => {
+                  if (sendApiRef.current) {
+                    sendApiRef.current.flushAndSend();
+                    return;
+                  }
+                  void handleProtectedSend();
+                }}
+                onStop={onStop}
+                onForceStop={onForceStop}
+              />
+            </div>
           </div>
-          <div className={styles.rightActions}>
-            <ComposerFusedTrigger>{rightActions}</ComposerFusedTrigger>
-          </div>
+
+          <input
+            ref={fileInputRef as React.RefObject<HTMLInputElement>}
+            type="file"
+            multiple
+            aria-hidden
+            tabIndex={-1}
+            style={{ display: 'none' }}
+            onChange={async (e) => {
+              const files = Array.from(e.target.files || []);
+              e.target.value = '';
+              if (!files.length) return;
+              await onFilesSelected(files);
+              requestAnimationFrame(focusComposerTextarea);
+            }}
+          />
         </div>
       </ComposerDropHost>
     </AppErrorBoundary>

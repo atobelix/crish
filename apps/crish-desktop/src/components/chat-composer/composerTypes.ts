@@ -82,6 +82,18 @@ export type ComposerFieldProps = {
   textAreaId?: string | undefined;
   /** 外壳 ref（便于父级 focus 回输入框） */
   containerRef?: React.Ref<HTMLDivElement> | undefined;
+  /**
+   * 主对话卡片网格自管发送/停止时隐藏盒内按钮；
+   * 侧栏 / 内联 ComposerField 默认仍自绘发送。
+   */
+  hideSendControls?: boolean | undefined;
+  /** 宿主发送钮调用：富文本先 flush markdown 再 onSend */
+  sendApiRef?: React.MutableRefObject<ComposerSendApi | null> | undefined;
+};
+
+/** 主对话网格发送钮调用字段内的 flushAndSend */
+export type ComposerSendApi = {
+  flushAndSend: () => void;
 };
 
 /** 提及候选人（@ 触发；宿主接入候选人源后注入，未接入时为空列表兜底不弹面板） */

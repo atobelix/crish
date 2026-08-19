@@ -12,6 +12,8 @@ import { SlotOutlet } from '../../services/view-registry';
 import { slotCore } from '../../services/view-registry/SlotCore';
 import type { ChatComposerAboveProps } from './chatComposerAboveProps';
 import './workspaceChatComposerAbove.slot';
+import { ApprovalDock } from './ApprovalDock';
+import { PlanGoalRibbons } from './PlanGoalRibbons';
 
 /**
  * R2-5 B3（P1-12 聚合）：ChatStatusRibbons 专属字段分组（ribbons 对象由调用方
@@ -97,6 +99,11 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
     ]
   );
 
+  const floatHasContent =
+    pendingApprovalCount > 0 ||
+    ribbons.goal.inPlanMode ||
+    ribbons.goal.goalModeActive;
+
   return (
     <div
       className={styles.chatFooter}
@@ -111,16 +118,52 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
           streaming={{ ...ribbons.streaming, runNotice, onDismissRunNotice }}
           goal={ribbons.goal}
           approval={approval}
+          omitPlanRibbons
+          omitApprovalDock
         />
 
-        <SlotOutlet
-          slotKey="workspace.chat.composerAbove"
-          context={composerAbove}
-          fallback={null}
-        />
+        <div className={styles.composerDock} data-composer-wrapper="">
+          <div
+            className={styles.floatZone}
+            data-composer-float-zone=""
+            hidden={!floatHasContent && !liftApproval}
+          >
+            <SlotOutlet
+              slotKey="workspace.chat.composerAbove"
+              context={composerAbove}
+              fallback={null}
+            />
+            {liftApproval ? null : (
+              <ApprovalDock
+                show={showApprovalDock}
+                pendingCount={pendingApprovalCount}
+                summary={pendingApprovalSummary}
+                toolId={pendingApprovalToolId}
+                msgId={pendingApprovalMsgId}
+                activeSessionId={activeSessionId}
+              />
+            )}
+            <PlanGoalRibbons
+              docked
+              plan={{
+                inPlanMode: ribbons.goal.inPlanMode,
+                planApproved: ribbons.goal.planApproved,
+                onApprovePlan: ribbons.goal.onApprovePlan,
+              }}
+              goal={{
+                goalModeActive: ribbons.goal.goalModeActive,
+                goalText: ribbons.goal.goalText,
+                goalIteration: ribbons.goal.goalIteration,
+                goalTasksDone: ribbons.goal.goalTasksDone ?? 0,
+                goalTasksTotal: ribbons.goal.goalTasksTotal ?? 0,
+                onStopGoal: ribbons.goal.onStopGoal,
+              }}
+            />
+          </div>
 
-        {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}
-        {composerElement}
+          {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}
+          {composerElement}
+        </div>
       </div>
     </div>
   );

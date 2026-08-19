@@ -17,10 +17,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
-import { Button, ConfirmDialog, Tooltip } from '../ui';
-import { useConfirmGate } from '../../hooks/useConfirmGate';
 import { TiptapEditorField } from './TiptapEditorField';
 import type {
   SlashCommandItem,
@@ -33,13 +30,8 @@ import {
   COMPOSER_LINE_HEIGHT,
   COMPOSER_MAX_LINES,
 } from '../../hooks/useAutoGrowTextarea';
-import {
-  FORCE_CANCEL_CONFIRM,
-  FORCE_STOP_LONG_PRESS_MS,
-  STOP_ARIA_LABEL,
-  STOP_TOOLTIP,
-} from './ComposerField';
 import type { ComposerFieldProps } from './composerTypes';
+import { ComposerSendControls } from './ComposerSendControls';
 import {
   readSendShortcut,
   SEND_SHORTCUT_CHANGED_EVENT,
@@ -131,6 +123,8 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   onFilesSelected,
   mentionCandidates,
   emptyKind,
+  hideSendControls = false,
+  sendApiRef,
 }) => {
   const lines =
     typeof maxLines === 'number' && Number.isFinite(maxLines)
@@ -213,6 +207,14 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
     onSendRef.current?.();
   }, [disabled, canSend, value, handleSendMarkdown]);
 
+  useEffect(() => {
+    if (!sendApiRef) return;
+    sendApiRef.current = { flushAndSend: trySend };
+    return () => {
+      sendApiRef.current = null;
+    };
+  }, [sendApiRef, trySend]);
+
   // ── 粘贴图片转发（宿主 handlePasteImage 读原事件 clipboardData）──────────────
   // 类型桥说明：宿主 onPaste 契约是 React.ClipboardEvent，编辑器侧为原生
   // ClipboardEvent；两者仅静态形状不同，运行期宿主只消费 clipboardData/preventDefault，
@@ -261,91 +263,8 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
     );
   }, [baseSlashCommands, skillSlashCommands]);
 
-  // ── Stop L2/L3 UX（与 ComposerField 同源：Shift+点击 / 长按 550ms + 二次确认）──
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressFiredRef = useRef(false);
-  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）
-  const [confirmGate, renderConfirmGate] = useConfirmGate();
-
-  const clearLongPress = useCallback(() => {
-    if (longPressTimerRef.current != null) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => () => clearLongPress(), [clearLongPress]);
-
-  /** @returns 是否已真正执行 force（用户确认后） */
-  const invokeForceStop = useCallback(async (): Promise<boolean> => {
-    const run = onForceStop ?? onStop;
-    if (!run) return false;
-    const ok = await confirmGate({
-      title: '强制取消',
-      description: FORCE_CANCEL_CONFIRM,
-      confirmLabel: '确认强制取消',
-      danger: true,
-    });
-    if (!ok) return false;
-    run();
-    return true;
-  }, [onForceStop, onStop, confirmGate]);
-
-  const handleStopClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (!onStop) return;
-      // 长按已触发 force 时忽略 mouseup 后的 click
-      if (longPressFiredRef.current) {
-        longPressFiredRef.current = false;
-        e.preventDefault();
-        return;
-      }
-      // Shift+点击 = L3 force_cancel（二次确认，异步弹窗）
-      if (e.shiftKey) {
-        e.preventDefault();
-        void invokeForceStop();
-        return;
-      }
-      // 默认单击 = L2 cooperative_stop
-      onStop();
-    },
-    [onStop, invokeForceStop]
-  );
-
-  const handleStopPointerDown = useCallback(() => {
-    if (!onStop) return;
-    longPressFiredRef.current = false;
-    clearLongPress();
-    longPressTimerRef.current = setTimeout(() => {
-      longPressTimerRef.current = null;
-      // 仅确认后吞掉后续 click；用户取消确认仍可单击 L2
-      void invokeForceStop().then((fired) => {
-        if (fired) longPressFiredRef.current = true;
-      });
-    }, FORCE_STOP_LONG_PRESS_MS);
-  }, [onStop, clearLongPress, invokeForceStop]);
-
-  // ── 渲染数据（与 ComposerField 同语义）─────────────────────────────────────
   const resolvedPlaceholder =
     isProcessing && processingPlaceholder ? processingPlaceholder : placeholder;
-
-  const sendDisabled = !canSend || Boolean(disabled);
-  const sendTitle = sendDisabled
-    ? isProcessing
-      ? '请输入要排队的消息'
-      : '请输入消息或添加附件'
-    : isProcessing
-      ? processingSendLabel === '排队'
-        ? '加入队列，当前回复结束后发送'
-        : '发送补充指示'
-      : '发送 (Enter)';
-  const sendAria = sendDisabled
-    ? isProcessing
-      ? '无法排队：请先输入内容'
-      : '无法发送：请输入消息或添加附件'
-    : isProcessing
-      ? processingSendLabel
-      : '发送';
 
   return (
     <div
@@ -365,8 +284,6 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
       }
     >
       {leading}
-      {/* 强制取消二次确认（Promise 桥渲染点：request 已带标题/文案，元素 props 兜底） */}
-      {renderConfirmGate(<ConfirmDialog />)}
       <TiptapEditorField
         ref={fieldRef}
         placeholder={resolvedPlaceholder}
@@ -389,58 +306,18 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
         mentionCandidates={mentionCandidates}
         containerRef={containerRef}
       />
-      <div className={styles.buttons}>
-        {isProcessing ? (
-          <>
-            <Tooltip content={sendTitle}>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                aria-label={sendAria}
-                onClick={trySend}
-                disabled={sendDisabled}
-              >
-                {processingSendLabel}
-              </Button>
-            </Tooltip>
-            {onStop ? (
-              <Tooltip content={STOP_TOOLTIP}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  data-testid="composer-stop"
-                  data-stop-level="l2"
-                  aria-label={STOP_ARIA_LABEL}
-                  onClick={handleStopClick}
-                  onPointerDown={handleStopPointerDown}
-                  onPointerUp={clearLongPress}
-                  onPointerLeave={clearLongPress}
-                  onPointerCancel={clearLongPress}
-                  icon={
-                    <Lucide.Square size={16} fill="currentColor" aria-hidden />
-                  }
-                />
-              </Tooltip>
-            ) : null}
-          </>
-        ) : (
-          <Tooltip content={sendTitle}>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              className={styles.sendCircle}
-              aria-label={sendAria}
-              onClick={trySend}
-              disabled={sendDisabled}
-              loading={Boolean(disabled)}
-              icon={<Lucide.CornerDownLeft size={16} />}
-            />
-          </Tooltip>
-        )}
-      </div>
+      {hideSendControls ? null : (
+        <ComposerSendControls
+          appearance="field"
+          canSend={canSend}
+          disabled={disabled}
+          isProcessing={isProcessing}
+          onSend={trySend}
+          onStop={onStop}
+          onForceStop={onForceStop}
+          processingSendLabel={processingSendLabel}
+        />
+      )}
     </div>
   );
 };

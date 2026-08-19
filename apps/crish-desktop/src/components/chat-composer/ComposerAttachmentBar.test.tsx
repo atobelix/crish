@@ -53,6 +53,24 @@ describe('ComposerAttachmentBar（S4 附件卡）', () => {
     expect(onOpenPath).toHaveBeenCalledTimes(1);
   });
 
+  it('中键点击附件卡移除，不打开', () => {
+    const onOpenPath = vi.fn();
+    const onRemove = vi.fn();
+    render(
+      <ComposerAttachmentBar
+        attachments={[{ name: 'src/mid.md', text: 'x' }]}
+        onRemoveAttachment={onRemove}
+        onOpenPath={onOpenPath}
+      />
+    );
+    fireEvent(
+      screen.getByTestId('composer-attach-card'),
+      new MouseEvent('auxclick', { button: 1, bubbles: true })
+    );
+    expect(onRemove).toHaveBeenCalledWith('src/mid.md');
+    expect(onOpenPath).not.toHaveBeenCalled();
+  });
+
   it('无 onOpenPath 时回落 openFileInPanel', () => {
     openFileInPanel.mockClear();
     render(

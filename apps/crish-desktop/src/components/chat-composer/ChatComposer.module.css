@@ -268,12 +268,22 @@
 }
 
 .sendCircle:not(:disabled) {
-  width: var(--control-height);
-  min-width: var(--control-height);
-  height: var(--control-height);
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   padding: 0;
   border-radius: 50%;
   box-shadow: none;
+  background: var(--accent-color, var(--brand, var(--text-primary)));
+  color: var(--bg-elevated);
+}
+
+.sendCircle:not(:disabled):hover {
+  background: color-mix(
+    in srgb,
+    var(--accent-color, var(--brand, var(--text-primary))) 88%,
+    var(--text-primary) 12%
+  );
 }
 
 .sendBtn {
@@ -416,21 +426,20 @@
 }
 
 .plusBtn {
-  background: transparent;
+  background: var(--bg-surface, var(--bg-elevated));
   border: none;
   cursor: pointer;
-  width: var(--control-height);
-  height: var(--control-height);
-  border-radius: var(--radius-lg);
-  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 50%;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   align-self: center;
-  transition:
-    background var(--transition-micro),
-    color var(--transition-micro);
+  transition: background var(--transition-micro);
 }
 
 .plusBtn:hover {
@@ -451,6 +460,7 @@
 
 .composerWrapper {
   position: relative;
+  z-index: var(--z-dock);
   display: flex;
   flex-direction: column;
   gap: 0;
@@ -464,16 +474,153 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 20px;
-  background: color-mix(
-    in srgb,
-    var(--composer-bg) 92%,
-    var(--text-primary) 4%
-  );
+  gap: 10px;
+  border-radius: 22px;
+  background: var(--bg-elevated, var(--composer-bg));
   color: var(--text-tertiary);
   font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium);
   pointer-events: none;
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--text-primary) 4%, transparent);
+  outline: none;
+}
+
+.dropMask svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.composerCard {
+  position: relative;
+  z-index: var(--z-dock);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 22px;
+  background: var(--composer-bg, var(--bg-composer, var(--bg-elevated)));
   box-shadow: none;
-  outline: 1px dashed var(--border-color);
-  outline-offset: -1px;
+  transition: border-color var(--transition-fast);
+}
+
+.composerCard.isMultiline:has(.attachStrip) {
+  gap: 6px;
+}
+
+.composerCard:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+  box-shadow: none;
+  outline: none;
+}
+
+.composerCard[data-empty-kind='session-empty']:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 95%,
+    var(--text-primary) 5%
+  );
+}
+
+.inputMainLayout {
+  display: grid;
+  width: 100%;
+  align-items: center;
+  gap: 4px;
+}
+
+.composerCard:not(.isMultiline) .inputMainLayout {
+  grid-template-areas: 'left-ctrl text perm actions';
+  grid-template-columns: auto 1fr auto auto;
+}
+
+.composerCard.isMultiline .inputMainLayout {
+  grid-template-areas:
+    'text text text text'
+    'left-ctrl perm . actions';
+  grid-template-columns: auto auto 1fr auto;
+  row-gap: 6px;
+}
+
+.actionLeft {
+  grid-area: left-ctrl;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.fieldSlot {
+  grid-area: text;
+  min-width: 0;
+}
+
+.permSlot {
+  grid-area: perm;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.actionRight {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  justify-self: end;
+  height: 32px;
+  gap: 4px;
+}
+
+.fieldInGrid {
+  --composer-min-lines: 1;
+  background: transparent;
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  min-height: 0;
+  border-radius: 0;
+  box-shadow: none;
+  gap: 0;
+}
+
+.fieldInGrid:focus-within {
+  background: transparent;
+  background-color: transparent;
+  border: none;
+  box-shadow: none;
+  outline: none;
+}
+
+.composerCard:not(.isMultiline) .fieldInGrid {
+  --composer-min-lines: 1;
+}
+
+.composerCard:not(.isMultiline) .fieldInGrid .textarea,
+.composerCard:not(.isMultiline) .fieldInGrid :global(.ProseMirror) {
+  min-height: 24px;
+  max-height: 24px;
+  height: 24px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.composerCard.isMultiline .fieldInGrid {
+  --composer-min-lines: 2;
+}
+
+.composerCard.isMultiline .fieldInGrid .textarea,
+.composerCard.isMultiline .fieldInGrid :global(.ProseMirror) {
+  white-space: pre-wrap;
+  overflow-y: auto;
+  min-height: 24px;
+  max-height: 220px;
 }

@@ -107,7 +107,6 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
             onClick={() => toggleExclusiveMenu(open, setOpen, btnRef.current)}
           >
             <span>{currentLabel}</span>
-            <Lucide.ChevronDown size={11} className={styles.chev} aria-hidden />
           </button>
         </Tooltip>
         {open ? (

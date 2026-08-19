@@ -127,6 +127,10 @@ export type ChatStatusRibbonsProps = {
    * 用于保持抽出前 DOM 顺序。
    */
   between?: React.ReactNode;
+  /** 计划/目标条改挂 composer 上沿时省略，避免双渲染 */
+  omitPlanRibbons?: boolean;
+  /** 审批 dock 改挂 composer 上沿时省略 */
+  omitApprovalDock?: boolean;
 };
 
 /** setup 动作派发：去模型设置 vs 去模型下拉（与抽出前一致）。 */
@@ -141,6 +145,8 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   goal: gp,
   approval: ap,
   between,
+  omitPlanRibbons = false,
+  omitApprovalDock = false,
 }) => {
   const {
     onOpenTerminal,
@@ -358,7 +364,9 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         </div>
       ) : null}
 
-      <PlanGoalRibbons plan={planState} goal={goalState} />
+      {omitPlanRibbons ? null : (
+        <PlanGoalRibbons plan={planState} goal={goalState} />
+      )}
 
       {/* 回到最新：浮在对话区右下角，仅图标 */}
       {showScrollToBottom ? (
@@ -398,14 +406,16 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
       <RunNoticeBar runNotice={runNotice} onDismiss={onDismissRunNotice} />
 
       {/* 审批 sticky：队列/子 agent 待确认时显示；单条主时间线靠 ApprovalAskCard */}
-      <ApprovalDock
-        show={showApprovalDock}
-        pendingCount={pendingApprovalCount}
-        summary={pendingApprovalSummary}
-        toolId={pendingApprovalToolId}
-        msgId={pendingApprovalMsgId}
-        activeSessionId={activeSessionId}
-      />
+      {omitApprovalDock ? null : (
+        <ApprovalDock
+          show={showApprovalDock}
+          pendingCount={pendingApprovalCount}
+          summary={pendingApprovalSummary}
+          toolId={pendingApprovalToolId}
+          msgId={pendingApprovalMsgId}
+          activeSessionId={activeSessionId}
+        />
+      )}
     </AppErrorBoundary>
   );
 };

@@ -66,6 +66,35 @@
   gap: var(--space-1_5);
 }
 
+.composerDock {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  position: relative;
+}
+
+.floatZone {
+  position: relative;
+  z-index: var(--z-base);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  row-gap: 6px;
+  margin: 0;
+}
+
+.floatZone[hidden] {
+  display: none;
+}
+
+.floatZone :global([data-permission-bar]) {
+  width: calc(100% - 36px);
+  margin-left: 18px;
+  margin-right: auto;
+  box-sizing: border-box;
+}
+
 .modelBadge {
   display: inline-flex;
   align-items: center;
