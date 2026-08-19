@@ -11,6 +11,20 @@
 //! # 诚实边界
 //! - Memory 测绿 **禁关**生产 A-AGT / EL-05
 //! - **≠** 宣称 Store 后端完成；**≠** 第二套写锥
+//!
+//! # B5 连锁事务 CAS 审查结论（维度 2 阶段 B 补充项）
+//! - agent-tools 域的**持久化**写路径（note 内容）经 `NoteBackend` trait 委托到
+//!   `conex-note-runtime::StoreNoteBackend`，最终走 `commit_ops` →
+//!   `DocSession::apply` → `emit_commit(expect_rev = Some(rev - 1))`，**已有 CT-01
+//!   CAS 乐观版本号保护**（见 `session_apply.rs:248`、`session.rs:380-413`）。
+//! - 本 `MemoryNoteBackend` 为进程内 dev/test 后端，**不落盘**，无持久化 CAS
+//!   适用面（内存数据结构非跨进程共享，`Mutex` 串行即足够）。
+//! - agent-tools 域其余持久化点（`RevertCounterGuard` / MCP server config /
+//!   output_dir session_meta）均为**单键 replace**（load → save 整值），非多步
+//!   连锁事务；`RevertCounterGuard.record_revert` 的 load→save 窗口最坏退化为
+//!   计数器时窗内 ±1 误差（安全侧），不涉及文档内容一致性。
+//! - 幂等守卫 `check_and_record` 的 CAS 归 C1（另一 Agent）。
+//! - **结论**：agent-tools 域无遗漏的连锁事务 CAS 缺口，无需本维度修复。
 
 #[path = "note_memory_apply.rs"]
 mod apply;
@@ -27,22 +41,13 @@ use crate::note_types::{
     NoteBlockBatchRequest, NoteBlockBatchResult, NoteOutline, NoteQueryBlocksParams,
     NoteQueryBlocksResult,
 };
+use crate::poison::POISON_RECOVERIES;
 use async_trait::async_trait;
 use serde_json::{Map, Value as JsonValue};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
-
-/// 毒丸恢复计数（B1-3 观测化：docs 锁中毒恢复次数；对齐 registry.rs
-/// 「tracing::error! 成对 + 计数」样板，零新依赖；本文件 3 处 docs 锁共用）
-static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
-
-/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
-#[cfg(test)]
-pub(crate) fn poison_recovery_count() -> u64 {
-    POISON_RECOVERIES.load(Ordering::Relaxed)
-}
 
 /// 进程内笔记后端（dev/test + 可注入 ToolContext）
 ///
@@ -318,11 +323,13 @@ pub(super) mod capture {
 mod tests {
     use super::capture::with_capture;
     use super::*;
+    use crate::poison::{poison_recovery_count, poison_test_guard};
 
     /// B1-3 毒化测：docs 锁中毒后 seed_doc 正常完成（不 panic）+ error
     /// 日志出现 + 毒丸恢复计数 +1（三要素）
     #[test]
     fn poisoned_docs_lock_seed_doc_recovers_with_log_and_count() {
+        let _serial = poison_test_guard();
         let backend = MemoryNoteBackend::new();
         let before = poison_recovery_count();
         crate::test_support::poison_std_lock(&backend.docs);

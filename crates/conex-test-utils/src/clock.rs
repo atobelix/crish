@@ -52,7 +52,7 @@ impl TestClock {
 
     /// 当前虚拟时间 ISO8601 字符串（毫秒精度，`1970-01-01T00:00:00.000Z` 起步）
     ///
-    /// 与 session-loop/orchestrator 的 `now_iso_utc` 同算法（Howard Hinnant
+    /// 与 `conex-shared::time` 同算法（Howard Hinnant
     /// civil-from-days 换算），无 chrono 依赖。
     pub fn now_iso_utc(&self) -> String {
         let millis = self.now_ms();
@@ -82,7 +82,7 @@ impl Default for TestClock {
     }
 }
 
-/// 从 Unix 天数换算公历年月日（Howard Hinnant 算法，与 session-loop 同源）
+/// 从 Unix 天数换算公历年月日（Howard Hinnant 算法，与 conex-shared::time 同算法）
 fn civil_from_days(z: i64) -> (i64, u32, u32) {
     let z = z + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;

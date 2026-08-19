@@ -84,9 +84,12 @@ fn store_error_code(kind: &str) -> Option<&'static str> {
             Some(codes::EVENT_STORE_APPEND_FAILED)
         }
         // 读路径 → event_store.read_failed
-        "query_events" | "query_events_by_run" | "query_runs" | "load_pending_inputs" => {
-            Some(codes::EVENT_STORE_READ_FAILED)
-        }
+        "query_events"
+        | "query_events_by_run"
+        | "query_events_by_type"
+        | "max_sequence"
+        | "query_runs"
+        | "load_pending_inputs" => Some(codes::EVENT_STORE_READ_FAILED),
         // 待处理输入写路径 → store.write_failed
         "save_pending_input" | "delete_pending_input" => Some(codes::STORE_WRITE_FAILED),
         _ => None,
@@ -193,6 +196,24 @@ pub trait Store: Send + Sync {
         &self,
         session_id: &str,
         run_id: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>>;
+
+    /// 会话内最大已落库 sequence（1C-1：恢复路径 SQL MAX 下推，替代
+    /// `query_events(.., None)` 全量加载后内存 `iter().max()`）。返回 0
+    /// 表示该会话无事件。调用方取 `max + 1` 即下一个可用序列号。
+    async fn max_sequence(&self, session_id: &str) -> StoreResult<u64>;
+
+    /// 按 run 归属 + event_type 过滤查询会话内事件（1C-2：SQL 下推
+    /// event_type，替代 `query_events_by_run(.., None)` 全量返回后内存
+    /// `find`）。`after_sequence` 开区间（> after）；`limit` 直下推；
+    /// run_id 为 NULL 的会话域事件恒不命中。
+    async fn query_events_by_type(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        event_type: &str,
         after_sequence: u64,
         limit: Option<u64>,
     ) -> StoreResult<Vec<PersistedEvent>>;
@@ -592,6 +613,50 @@ impl Store for InMemoryStore {
         Ok(events)
     }
 
+    async fn max_sequence(&self, session_id: &str) -> StoreResult<u64> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        Ok(guard
+            .events
+            .iter()
+            .filter(|e| e.session_id == session_id)
+            .map(|e| e.sequence)
+            .max()
+            .unwrap_or(0))
+    }
+
+    async fn query_events_by_type(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        event_type: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>> {
+        let guard = self
+            .inner
+            .lock()
+            .map_err(|e| StoreError::new("lock", e.to_string()))?;
+        let mut events: Vec<PersistedEvent> = guard
+            .events
+            .iter()
+            .filter(|e| {
+                e.session_id == session_id
+                    && e.run_id.as_deref() == Some(run_id)
+                    && e.sequence > after_sequence
+                    && e.event_type == event_type
+            })
+            .cloned()
+            .collect();
+        events.sort_by_key(|e| e.sequence);
+        if let Some(limit) = limit {
+            events.truncate(limit as usize);
+        }
+        Ok(events)
+    }
+
     async fn query_runs(&self) -> StoreResult<Vec<StoredRun>> {
         self.inner
             .lock()
@@ -824,6 +889,39 @@ impl Store for LocalDbStore {
             db.query_events_by_run(
                 &session_id,
                 &run_id,
+                after_sequence as i64,
+                limit.map(|limit| limit as i64),
+            )
+        })
+        .await?;
+        Ok(map_stored_events(rows))
+    }
+
+    async fn max_sequence(&self, session_id: &str) -> StoreResult<u64> {
+        let db = self.db.clone();
+        let session_id = session_id.to_string();
+        blocking_db_call("max_sequence", move || db.max_sequence(&session_id))
+            .await
+            .map(|seq| seq as u64)
+    }
+
+    async fn query_events_by_type(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        event_type: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> StoreResult<Vec<PersistedEvent>> {
+        let db = self.db.clone();
+        let session_id = session_id.to_string();
+        let run_id = run_id.to_string();
+        let event_type = event_type.to_string();
+        let rows = blocking_db_call("query_events_by_type", move || {
+            db.query_events_by_type(
+                &session_id,
+                &run_id,
+                &event_type,
                 after_sequence as i64,
                 limit.map(|limit| limit as i64),
             )
@@ -1362,6 +1460,8 @@ mod tests {
             // 读路径 → event_store.read_failed
             ("query_events", codes::EVENT_STORE_READ_FAILED),
             ("query_events_by_run", codes::EVENT_STORE_READ_FAILED),
+            ("query_events_by_type", codes::EVENT_STORE_READ_FAILED),
+            ("max_sequence", codes::EVENT_STORE_READ_FAILED),
             ("query_runs", codes::EVENT_STORE_READ_FAILED),
             ("load_pending_inputs", codes::EVENT_STORE_READ_FAILED),
             // 待处理输入写路径 → store.write_failed

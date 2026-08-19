@@ -13,6 +13,11 @@ use crate::recovery::RecoveryError;
 /// 重试策略（镜像 `agent-provider::retry::RetryPolicy` 的默认值；
 /// orchestrator 不依赖 agent-provider，退避公式与分类语义逐条镜像，
 /// 测试锁定与 retry.rs 同期望值防漂移）
+///
+/// 手动镜像标注：镜像源 = `agent-provider/src/retry.rs`。orchestrator 不依赖
+/// agent-provider（避免拉重依赖），变更 `retry.rs` 时须手动同步
+/// `recovery_policy.rs` 的默认值与分类语义。CI 对账：`crates/orchestrator/tests/recovery_policy_parity.rs`
+/// 锁定默认值与分类语义防漂移（与 retry.rs 同期望值）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RecoveryRetryPolicy {
     /// 最大重试次数（0 = 不重试，与 retry.rs 同语义：显式开启才重试）

@@ -32,11 +32,21 @@ pub struct TextHost {
     pub doc: Doc,
 }
 
-// Yrs 内部在无 sync feature 时未对 closure 标记 Send/Sync，但 TextHost 仅在单一线程或持锁时访问，可安全在线程间传递
+// SAFETY（B4 审查结论：仅 Send，已收窄去掉 Sync）：
+//
+// 为何必须 `unsafe impl Send`：yrs 无 `sync` feature 时 `Doc` / `UndoManager`
+// 不自动 `Send`（内部 `Rc`/`RefCell` 使 auto-trait 不成立）。二者是纯内存结构，
+// 不绑定 OS 线程、不持 thread-local。`TextHost` 同时拥有 `doc` 与 `undo_mgr`，
+// 跨线程移动时二者一起走，无悬挂别名。独占所有权下把值移到另一线程安全。
+//
+// 为何不实现 `Sync`：`Doc` 以 `&self` 暴露 `transact` / `get_or_insert_text`
+//（内部可变）。`Sync` 允许 `&TextHost` 跨线程共享，两线程同时 `transact` 即
+// 数据竞争。旧注释称「`Sync` 是为了让 `Mutex<DocSession>` 满足 Send」不成立：
+// `Mutex<T>: Send` 与 `Mutex<T>: Sync` 都只要求 `T: Send`，不要求 `T: Sync`。
+// 生产路径经 `Arc<Mutex<DocSession>>` 访问（`store_backend.rs` 分片锁），
+// 持锁后才碰 `TextHost`；去掉 `Sync` 后编译器会拒绝把 `&TextHost` 裸传跨线程。
 #[allow(unsafe_code)]
 unsafe impl Send for TextHost {}
-#[allow(unsafe_code)]
-unsafe impl Sync for TextHost {}
 
 impl TextHost {
     pub fn new() -> Self {
@@ -169,6 +179,8 @@ impl TextEngine {
     }
 
     /// 带冷藏二进制 update 登记（hydrate / 增量回放用）。
+    /// 增量 restore 走 `restore_block_data`，本入口留给冷藏二进制 hydrate。
+    #[allow(dead_code)]
     pub fn init_block_with_cold_update(
         &mut self,
         id: BlockId,
@@ -295,7 +307,10 @@ impl TextEngine {
         insert: &str,
     ) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
-        let host = self.hot.get_mut(&id).expect("ensure_hot 后必热");
+        let host = self
+            .hot
+            .get_mut(&id)
+            .ok_or_else(|| TextEngineError::NotRegistered(id.to_string()))?;
         let text = host.doc.get_or_insert_text(ROOT_TEXT);
         let current = {
             let txn = host.doc.transact();
@@ -330,7 +345,10 @@ impl TextEngine {
         bytes: &[u8],
     ) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
-        let host = self.hot.get_mut(&id).expect("ensure_hot 后必热");
+        let host = self
+            .hot
+            .get_mut(&id)
+            .ok_or_else(|| TextEngineError::NotRegistered(id.to_string()))?;
         {
             let remote_origin = YrsOrigin::from("remote");
             let mut txn = host.doc.transact_mut_with(remote_origin);
@@ -368,7 +386,10 @@ impl TextEngine {
     pub fn undo_text(&mut self, id: BlockId) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
         let (undone, current) = {
-            let host = self.hot.get_mut(&id).expect("ensure_hot 后必热");
+            let host = self
+                .hot
+                .get_mut(&id)
+                .ok_or_else(|| TextEngineError::NotRegistered(id.to_string()))?;
             let undone = host.undo_mgr.undo_blocking();
             let text = host.doc.get_or_insert_text(ROOT_TEXT);
             let txn = host.doc.transact();
@@ -387,7 +408,10 @@ impl TextEngine {
     pub fn redo_text(&mut self, id: BlockId) -> Result<String, TextEngineError> {
         self.ensure_hot(id)?;
         let (redone, current) = {
-            let host = self.hot.get_mut(&id).expect("ensure_hot 后必热");
+            let host = self
+                .hot
+                .get_mut(&id)
+                .ok_or_else(|| TextEngineError::NotRegistered(id.to_string()))?;
             let redone = host.undo_mgr.redo_blocking();
             let text = host.doc.get_or_insert_text(ROOT_TEXT);
             let txn = host.doc.transact();
@@ -475,61 +499,145 @@ impl TextEngine {
         self.touch_lru(id);
     }
 
-    // ─── P-H2 内存快照（方案 A：apply 前 Structure+Text 可恢复）──────────
+    // ─── P-H2 增量检查点（3-5：只快照涉及块，不 cold_updates.clone() 全表）──
 
-    /// 捕获当前文本引擎可恢复检查点（纯文本权威 + 冷藏二进制 + pin/热集合）。
-    pub(crate) fn checkpoint(&self) -> TextEngineCheckpoint {
-        let mut texts = HashMap::with_capacity(self.snapshots.len());
-        let mut cold_updates = self.cold_updates.clone();
-        for &id in self.snapshots.keys() {
-            texts.insert(id, self.read_text(id));
-            if let Some(host) = self.hot.get(&id) {
-                let txn = host.doc.transact();
-                let bytes = txn.encode_state_as_update_v1(&StateVector::default());
-                cold_updates.insert(id, bytes);
+    /// 当前已登记块 id（仅键；不含冷藏字节）。
+    pub(crate) fn registered_ids(&self) -> HashSet<BlockId> {
+        let mut ids = HashSet::with_capacity(self.snapshots.len() + self.cold_updates.len());
+        ids.extend(self.snapshots.keys().copied());
+        ids.extend(self.cold_updates.keys().copied());
+        ids
+    }
+
+    /// 只捕获 `involved` 中块的可恢复数据。
+    ///
+    /// 不 `cold_updates.clone()` 全表：未涉及块的 `Vec<u8>` 留在活表里（restore
+    /// 不替换）。不把活表改成 `Arc<HashMap>` 再给检查点握一份——apply 随后
+    /// `make_mut` 会因引用计数 >1 整表拷一次，等于把全表 clone 推迟到热路径。
+    pub(crate) fn checkpoint(&self, involved: &HashSet<BlockId>) -> TextEngineCheckpoint {
+        let mut blocks = HashMap::with_capacity(involved.len());
+        for &id in involved {
+            let existed = self.is_registered(id);
+            if !existed {
+                blocks.insert(
+                    id,
+                    BlockCheckpoint {
+                        text: Arc::from(""),
+                        update: None,
+                        existed: false,
+                    },
+                );
+                continue;
             }
+            let text: Arc<str> = if self.hot.contains_key(&id) {
+                Arc::from(self.read_text(id).as_str())
+            } else {
+                self.snapshots
+                    .get(&id)
+                    .cloned()
+                    .unwrap_or_else(|| Arc::from(""))
+            };
+            // 热块 encode 自身；冷块只 clone 这一条 entry
+            let update = self.encode_state_update(id);
+            blocks.insert(
+                id,
+                BlockCheckpoint {
+                    text,
+                    update,
+                    existed: true,
+                },
+            );
         }
         TextEngineCheckpoint {
             max_hot: self.max_hot,
-            texts,
-            cold_updates,
+            blocks,
+            registered: self.registered_ids(),
             pinned: self.pinned.clone(),
             was_hot: self.hot.keys().copied().collect(),
         }
     }
 
-    /// 从检查点整表替换引擎状态（P-H2 回滚）。
-    pub(crate) fn restore(&mut self, cp: TextEngineCheckpoint) {
-        *self = TextEngine::with_max_hot(cp.max_hot);
-        for (id, bytes) in cp.cold_updates {
-            let text = cp.texts.get(&id).cloned().unwrap_or_default();
-            self.init_block_with_cold_update(id, text, bytes);
-        }
-        for (id, text) in cp.texts {
-            if !self.is_registered(id) {
-                self.init_block_with_text(id, text);
+    fn restore_block_data(&mut self, id: BlockId, text: Arc<str>, update: Option<Vec<u8>>) {
+        self.snapshots.insert(id, text);
+        match update {
+            Some(bytes) => {
+                self.cold_updates.insert(id, bytes);
+            }
+            None => {
+                self.cold_updates.remove(&id);
             }
         }
-        for id in &cp.pinned {
-            self.pin(*id);
+        if self.hot.remove(&id).is_some() {
+            self.lru.retain(|x| *x != id);
+        }
+    }
+
+    /// 只恢复涉及块；未涉及块保持原状（COW）。P-H2：回滚后 ≡ checkpoint 时。
+    pub(crate) fn restore(&mut self, cp: TextEngineCheckpoint) {
+        let to_release: Vec<BlockId> = self
+            .registered_ids()
+            .into_iter()
+            .filter(|id| !cp.registered.contains(id))
+            .collect();
+        for id in to_release {
+            self.release_block(id);
+        }
+
+        for (id, blk) in cp.blocks {
+            if !blk.existed {
+                self.release_block(id);
+                continue;
+            }
+            self.restore_block_data(id, blk.text, blk.update);
+        }
+
+        self.pinned = cp.pinned;
+        let extra_hot: Vec<BlockId> = self
+            .hot
+            .keys()
+            .copied()
+            .filter(|id| !cp.was_hot.contains(id))
+            .collect();
+        for id in extra_hot {
+            self.evict_one(id);
         }
         for id in cp.was_hot {
-            // 热集重建失败不阻断回滚（登记与 plain text 已恢复）
             let _ = self.ensure_hot(id);
         }
+        self.max_hot = cp.max_hot.max(1);
     }
 }
 
-/// P-H2：文本引擎可恢复检查点（crate 内；不外泄 yrs 类型）。
+/// 单块增量快照（仅 involved）。
+#[derive(Debug, Clone)]
+struct BlockCheckpoint {
+    text: Arc<str>,
+    update: Option<Vec<u8>>,
+    existed: bool,
+}
+
+/// P-H2：文本引擎增量检查点（crate 内；不外泄 yrs 类型）。
+///
+/// 数据只含本次涉及块；`registered` / `was_hot` / `pinned` 是 id 集合（无字节）。
 #[derive(Debug, Clone)]
 pub(crate) struct TextEngineCheckpoint {
     max_hot: usize,
-    /// 全部已登记块的 plain text（冷热均可读权威）。
-    texts: HashMap<BlockId, String>,
-    cold_updates: HashMap<BlockId, Vec<u8>>,
+    blocks: HashMap<BlockId, BlockCheckpoint>,
+    /// 检查点时刻已登记的全部块 id（用于释放 apply 新建块，含 huge split）。
+    registered: HashSet<BlockId>,
     pinned: HashSet<BlockId>,
     /// 检查点时刻处于热态的块 id（恢复后 rehydrate）。
     was_hot: HashSet<BlockId>,
+}
+
+impl TextEngineCheckpoint {
+    pub(crate) fn involved_ids(&self) -> HashSet<BlockId> {
+        self.blocks.keys().copied().collect()
+    }
+
+    pub(crate) fn contains_registered(&self, id: BlockId) -> bool {
+        self.registered.contains(&id)
+    }
 }
 
 /// char 闭开区间 → UTF-8 字节起点与删除字节长度。
@@ -869,5 +977,80 @@ mod tests {
 
         let redone = eng.redo_text(id).unwrap();
         assert_eq!(redone, "你好🎉世界👨‍👩‍👧‍👦");
+    }
+
+    fn assert_send<T: Send>() {}
+
+    /// B4：TextHost / TextEngine 为 Send；Sync 已收窄（见 impl 旁 SAFETY）。
+    #[test]
+    fn text_host_and_engine_are_send() {
+        assert_send::<TextHost>();
+        assert_send::<TextEngine>();
+        assert_send::<TextEngineCheckpoint>();
+    }
+
+    /// 3-5：checkpoint 只收录 involved，不把未涉及块的冷藏字节拷进快照。
+    #[test]
+    fn checkpoint_incremental_only_clones_involved() {
+        let mut eng = TextEngine::with_max_hot(1);
+        let blocks = ids(8);
+        for &id in &blocks {
+            eng.init_block(id);
+            eng.apply_edit(id, 0, 0, "payload-xxxx").unwrap();
+        }
+        let target = blocks[0];
+        let involved = HashSet::from([target]);
+        let cp = eng.checkpoint(&involved);
+        assert_eq!(cp.blocks.len(), 1, "只快照涉及块");
+        assert!(cp.blocks.contains_key(&target));
+        assert!(!cp.blocks.contains_key(&blocks[1]));
+        assert_eq!(cp.registered.len(), 8, "registered 只记 id 键");
+        assert_eq!(cp.involved_ids().len(), 1);
+    }
+
+    /// 3-5 / P-H2：restore 只回滚涉及块；未涉及块原样；apply 新建块被释放。
+    #[test]
+    fn checkpoint_restore_incremental_p_h2() {
+        let mut eng = TextEngine::with_max_hot(8);
+        let a = BlockId::new();
+        let b = BlockId::new();
+        eng.init_block(a);
+        eng.init_block(b);
+        eng.apply_edit(a, 0, 0, "A0").unwrap();
+        eng.apply_edit(b, 0, 0, "B0").unwrap();
+        let b_hot_before = eng.is_hot(b);
+        let cp = eng.checkpoint(&HashSet::from([a]));
+
+        eng.apply_edit(a, 0, 2, "A1").unwrap();
+        let c = BlockId::new();
+        eng.init_block(c);
+        eng.apply_edit(c, 0, 0, "NEW").unwrap();
+        assert_eq!(eng.read_text(a), "A1");
+        assert!(eng.is_registered(c));
+
+        eng.restore(cp);
+        assert_eq!(eng.read_text(a), "A0", "涉及块回滚");
+        assert_eq!(eng.read_text(b), "B0", "未涉及块保持");
+        assert!(!eng.is_registered(c), "checkpoint 后新建块须释放");
+        assert_eq!(eng.is_hot(b), b_hot_before, "未涉及块热/冷拓扑恢复");
+    }
+
+    /// P-H2：涉及块被删后 restore 须按快照重建。
+    #[test]
+    fn checkpoint_restore_recreates_released_involved() {
+        let mut eng = TextEngine::with_max_hot(4);
+        let a = BlockId::new();
+        let b = BlockId::new();
+        eng.init_block(a);
+        eng.init_block(b);
+        eng.apply_edit(a, 0, 0, "keep").unwrap();
+        eng.apply_edit(b, 0, 0, "other").unwrap();
+        let cp = eng.checkpoint(&HashSet::from([a]));
+        eng.release_block(a);
+        assert!(!eng.is_registered(a));
+        eng.restore(cp);
+        assert!(eng.is_registered(a));
+        assert_eq!(eng.read_text(a), "keep");
+        assert_eq!(eng.read_text(b), "other");
     }
 }

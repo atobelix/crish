@@ -24,17 +24,14 @@ pub use action::{Action, ActionError, ClickCount, MouseButton, ScrollDirection};
 pub use activation::{ActivationError, ActivationGate, CleanupAction, SessionMode};
 pub use coord::{CoordError, Point, ScaleSpec};
 pub use screen::{CapturedFrame, DesktopLayout, MonitorInfo};
-pub use security::{
-    Approval, ApprovalGate, ApprovalRequest, EmergencyStop, EnableSource, EnablementError,
-    IdleTimeout, SessionEnablement, StopRecord, StopSource,
-};
+pub use security::{EnablementError, SessionEnablement};
 
 /// 会话级错误(动作校验 / 注入 / 截屏 / 初始化 / 目标门禁五类)。
 ///
 /// 错误码语义对齐 04 §2.1 与 §4.4:`Action` 细分 `tool.computer.invalid_params`
 /// 与 `tool.computer.coords_out_of_bounds`;设备面错误统一透传文本;
 /// `Gate` 承载动作前检查器(05 文档 §5.2 ActionTargetGate)拒绝载荷,工具层
-/// 映射 `tool.computer.elevated_window`(06 文档 §4.2 守卫⑥,白名单/提权统一)。
+/// 映射 `tool.computer.elevated_window`(06 文档 §4.2 WindowTargetGate 白名单/提权统一)。
 #[derive(Debug, thiserror::Error)]
 pub enum SessionError {
     /// 动作参数校验失败(参数非法 / 坐标越界,由 `ActionError` 细分)
@@ -50,7 +47,7 @@ pub enum SessionError {
     #[error("会话初始化失败: {0}")]
     Init(String),
     /// 动作前检查器拒绝(目标窗口白名单 / 提权探测;工具层映射
-    /// `tool.computer.elevated_window`,06 文档 §4.2 守卫⑥)
+    /// `tool.computer.elevated_window`,06 文档 §4.2 WindowTargetGate 白名单/提权统一)
     #[error("目标门禁拒绝: {0:?}")]
     Gate(conex_shared::gate::TargetDenial),
 }
@@ -75,7 +72,6 @@ pub struct ComputerSession {
     backend: action::inject::OsInputBackend,
     capture: screen::ScreenCapture,
     spec: ScaleSpec,
-    stop: Option<std::sync::Arc<security::EmergencyStop>>,
 }
 
 #[cfg(windows)]
@@ -94,55 +90,44 @@ impl ComputerSession {
             backend,
             capture,
             spec,
-            stop: None,
         })
     }
 
-    /// 注入急停标志
-    pub fn with_stop(mut self, stop: std::sync::Arc<security::EmergencyStop>) -> Self {
-        self.backend.set_stop(Some(stop.clone()));
-        self.stop = Some(stop);
-        self
-    }
-
-    /// 设置急停标志
-    pub fn set_stop(&mut self, stop: Option<std::sync::Arc<security::EmergencyStop>>) {
-        self.backend.set_stop(stop.clone());
-        self.stop = stop;
-    }
-
-    /// 当前布局表(显示器清单 / 虚拟桌面边界)
-    pub fn layout(&self) -> &DesktopLayout {
-        self.capture.layout()
-    }
-
-    /// 当前缩放规格(API 空间尺寸与换算因子;截屏后随布局刷新保持一致)
-    pub fn scale_spec(&self) -> &ScaleSpec {
-        &self.spec
-    }
-
-    /// 截屏感知:刷新布局(显示器热插拔自愈)→ 逐屏捕获 → 合成缩放 → PNG。
-    /// 返回帧尺寸为 API 空间(缩放后),并同步刷新本会话的缩放规格。
-    pub fn screenshot(&mut self) -> Result<CapturedFrame, SessionError> {
-        let frame = self.capture.capture().map_err(SessionError::Capture)?;
-        self.spec = self.capture.layout().to_scale_spec();
-        Ok(frame)
-    }
-
-    /// 动作派发:「参数校验 → 坐标换算 → 注入」(04 §2.1 流程第 1-2 步)。
+    /// 注入中止查询（收敛到单一路径：调用方在 dispatch 前构造闭包注入）
     ///
-    /// - 坐标类动作(移动/点击/拖拽/滚动带坐标)先经 API 空间边界校验,
-    ///   再换算为物理像素注入;
-    /// - 带修饰键的点击/滚动按「修饰键 down → 动作 → 修饰键 up」包裹;
-    /// - `CursorPosition` 返回物理光标经物理→API 换算的 API 空间值。
-    pub fn dispatch(&mut self, action: &Action) -> Result<ActionResult, SessionError> {
-        if let Some(ref s) = self.stop {
-            if s.stopped() {
-                return Err(SessionError::Inject(
-                    "急停已置位，拒绝派发注入动作".to_string(),
-                ));
-            }
-        }
+    /// 例如上层持有 `abort_token` 时：`session.set_abort_checker(Some(Arc::new(move || token.aborted())));`
+    /// 未注入时不轮询（返回 false），注入后 `OsInputBackend` 内所有 5ms 切片均委托该查询。
+    pub fn set_abort_checker(
+        &self,
+        checker: Option<std::sync::Arc<dyn Fn() -> bool + Send + Sync>>,
+    ) {
+        self.backend.set_abort_checker(checker);
+    }
+
+    /// 清除已注入的中止查询
+    pub fn clear_abort_checker(&self) {
+        self.backend.set_abort_checker(None);
+    }
+
+    /// 带中止查询的派发（注入点：dispatch 构造时将查询注入 OsInputBackend）
+    ///
+    /// 调用方构造闭包 `should_abort`（通常捕获 `abort_token`），本方法先注入再派发，
+    /// 保证 `run_steps_guarded` 的闭包来自注入查询，收敛到单一路径。
+    pub fn dispatch_with_abort<F>(
+        &mut self,
+        action: &Action,
+        should_abort: F,
+    ) -> Result<ActionResult, SessionError>
+    where
+        F: Fn() -> bool + Send + Sync + 'static,
+    {
+        self.backend
+            .set_abort_checker(Some(std::sync::Arc::new(should_abort)));
+        self.dispatch_inner(action)
+    }
+
+    /// 内部派发实现（参数校验 → 坐标换算 → 注入），供 `dispatch` 与 `dispatch_with_abort` 复用
+    fn dispatch_inner(&mut self, action: &Action) -> Result<ActionResult, SessionError> {
         action.validate(&self.spec)?;
         match action {
             Action::Key { keys } => {
@@ -230,6 +215,29 @@ impl ComputerSession {
             }
         }
         Ok(ActionResult::Done)
+    }
+
+    /// 兼容旧签名：无注入时直接派发（未注入查询时不轮询）
+    pub fn dispatch(&mut self, action: &Action) -> Result<ActionResult, SessionError> {
+        self.dispatch_inner(action)
+    }
+
+    /// 当前布局表(显示器清单 / 虚拟桌面边界)
+    pub fn layout(&self) -> &DesktopLayout {
+        self.capture.layout()
+    }
+
+    /// 当前缩放规格(API 空间尺寸与换算因子;截屏后随布局刷新保持一致)
+    pub fn scale_spec(&self) -> &ScaleSpec {
+        &self.spec
+    }
+
+    /// 截屏感知:刷新布局(显示器热插拔自愈)→ 逐屏捕获 → 合成缩放 → PNG。
+    /// 返回帧尺寸为 API 空间(缩放后),并同步刷新本会话的缩放规格。
+    pub fn screenshot(&mut self) -> Result<CapturedFrame, SessionError> {
+        let frame = self.capture.capture().map_err(SessionError::Capture)?;
+        self.spec = self.capture.layout().to_scale_spec();
+        Ok(frame)
     }
 
     /// API → 物理换算 + 物理空间回检钳制(04 §4.4 校验链第 2 层):

@@ -177,14 +177,6 @@ impl LoopState {
             sink.push_live(event);
         }
     }
-
-    /// 仅推入实时轨（用于 MessageDelta 等非持久化流式事件）
-    #[allow(dead_code)]
-    pub(crate) fn emit_live_only(&self, event: AgentEvent) {
-        if let Some(sink) = &self.options.live_sink {
-            sink.push_live(event);
-        }
-    }
 }
 
 // C1a（详案-C1-核心循环瘦身.md）：压缩编排面（预算钳制/估算/预检/边界/
@@ -486,7 +478,10 @@ pub(crate) fn emit_missing_turn_end(state: &mut LoopState) {
 pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>, LoopError> {
     // AbortSignal 等价 L3 强停，优先于总线内任何意图（01 §2.10）
     let (action, drained) = {
-        let mut bus = state.control_bus.lock().unwrap_or_else(|e| e.into_inner());
+        let mut bus = state.control_bus.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "control_bus 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
         let action = apply_safe_point_control(&mut bus, Some(&state.abort_signal));
         // EV-04（D-03）：本次安全点消费的意图轨迹（enqueued 态事件素材）——
         // abort 抢占路径（未 drain，意图原样保留）不取走，下次安全点

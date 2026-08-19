@@ -17,6 +17,8 @@ conex-fs = { path = "../conex-fs" }
 conex-sandbox = { path = "../conex-sandbox" }
 conex-search = { path = "../conex-search" }
 conex-types = { path = "../conex-types" }
+# now_iso_utc 真源（纯 std）
+conex-shared = { path = "../conex-shared" }
 # S1（TOOLS-01 §3.1）：流式工具输出协议——ToolStream 的 Stream trait 与
 # 构造助手（futures_util 为 workspace 既有依赖，复用不新增版本）
 futures-util = { workspace = true }

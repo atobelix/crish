@@ -84,6 +84,13 @@ fn join_split_chain(s: &DocSession, anchor: BlockId) -> String {
     parts.concat()
 }
 
+/// B4：DocSession 为 Send（经 Mutex 跨线程）；!Sync 由 TextHost 收窄保证。
+#[test]
+fn doc_session_is_send() {
+    fn assert_send<T: Send>() {}
+    assert_send::<DocSession>();
+}
+
 fn count_split_segments(s: &DocSession, anchor: BlockId) -> usize {
     let parent = s.tree.get(&anchor).and_then(|n| n.parent);
     let siblings: Vec<BlockId> = match parent {

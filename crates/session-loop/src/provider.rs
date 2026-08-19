@@ -223,7 +223,11 @@ mod tests {
             (ReasoningEffort::Max, "max"),
         ];
         for (variant, expected) in &literals {
-            assert_eq!(variant.as_str(), *expected, "wire 字面与 agent-provider 对齐");
+            assert_eq!(
+                variant.as_str(),
+                *expected,
+                "wire 字面与 agent-provider 对齐"
+            );
         }
     }
 }

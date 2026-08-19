@@ -286,6 +286,11 @@ impl CompactionEngine {
         summarizer: Option<&dyn Summarizer>,
         stub_policy: StubPolicy,
     ) -> CompactionPlan {
+        // 1C-9：入口单次遍历计算 tokens_before，同时按 cut 边界预累加
+        // dropped_tokens（被丢弃消息的 token 数），供后续 tokens_after 增量
+        // 推导，避免对 result 再做一次全量 count_agent_message_tokens 遍历。
+        // 此处 cut 尚未确定，先全量累加 tokens_before；dropped_tokens 在 cut
+        // 确定、dropped_arcs 构建后用同一遍历口径补算（见下方）。
         let tokens_before: u64 = messages
             .iter()
             .map(|m| count_agent_message_tokens(m) as u64)
@@ -318,6 +323,12 @@ impl CompactionEngine {
             // 可切但无可丢消息（如保留段前仅有 system/链）：无意义，放弃压缩
             return noop_plan(messages);
         }
+        // 1C-9：dropped_tokens 在构建 dropped_arcs 后单次遍历累加（与
+        // tokens_before 同一口径），供 tokens_after 增量推导复用。
+        let dropped_tokens: u64 = dropped_arcs
+            .iter()
+            .map(|m| count_agent_message_tokens(m) as u64)
+            .sum();
         let mut dropped_ids: Vec<String> = dropped_arcs.iter().map(|m| m.id.clone()).collect();
 
         // 迭代合并：T-07 取链尾最后一条非空摘要文本（stub 或 md 渲染
@@ -440,10 +451,14 @@ impl CompactionEngine {
         }));
         result.extend_from_slice(&messages[cut..]);
 
-        let mut tokens_after: u64 = result
-            .iter()
-            .map(|m| count_agent_message_tokens(m) as u64)
-            .sum();
+        // 1C-9：tokens_after 增量推导。
+        // result = (system + 链) + 新摘要 + messages[cut..]，其中 (system+链+messages[cut..])
+        // = messages - dropped_arcs → token = tokens_before - dropped_tokens。
+        // 加上新摘要单 Text 块的 token（count_tokens(&summary) 与该消息经
+        // count_agent_message_tokens 的结果一致——单 Text 块路径），避免对
+        // result 做第二次全量 count_agent_message_tokens 遍历。
+        let summary_tokens: u64 = count_tokens(&summary) as u64;
+        let mut tokens_after: u64 = tokens_before - dropped_tokens + summary_tokens;
 
         // 【核心加固 3：追加后紧急二次预检（Emergency Preflight / Fallback Compaction）】
         // 若追加新摘要或组装保留段后，总 Token 仍超过预算上限，强制执行兜底压缩，杜绝 400 错误

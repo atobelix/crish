@@ -27,9 +27,10 @@ use conex_types::response::ClassifiedStreamError;
 use conex_types::session::AgentEndReason;
 use conex_types::tool::ToolOutput;
 use session_loop::{
-    AgentSessionLoop, ControlKind, ControlLevel, ProviderCall, ProviderEventStream, ProviderRequest,
-    ProviderStreamEvent, ReasoningEffort, RecoverySteeringStrategy, SessionLoopOptions,
-    SteeringCoordinator, SteeringCoordinatorOptions, StopReason, TestProvider, TestTool,
+    AgentSessionLoop, ControlKind, ControlLevel, ProviderCall, ProviderEventStream,
+    ProviderRequest, ProviderStreamEvent, ReasoningEffort, RecoverySteeringStrategy,
+    SessionLoopOptions, SteeringCoordinator, SteeringCoordinatorOptions, StopReason, TestProvider,
+    TestTool,
 };
 
 /// C1b（反向依赖移出）：测试自建默认 steering 协调器——核心 new() 不再
@@ -293,11 +294,11 @@ async fn empty_response_injects_steering_then_recovers() {
                     .and_then(|meta| meta.get("kind"))
                     .and_then(|k| k.as_str())
                     == Some(
-                    session_loop::steering::metadata_kind_wire(
-                        conex_types::message::AgentMessageMetadataKind::Steering
+                        session_loop::steering::metadata_kind_wire(
+                            conex_types::message::AgentMessageMetadataKind::Steering,
+                        )
+                        .as_str(),
                     )
-                    .as_str()
-                )
         })
         .expect("应有 steering 注入消息");
     assert!(injected.text().contains("运行期纠偏"));
@@ -427,9 +428,9 @@ async fn steering_disabled_prepare_turn_skips_evaluation() {
                 .and_then(|k| k.as_str())
                 == Some(
                     session_loop::steering::metadata_kind_wire(
-                        conex_types::message::AgentMessageMetadataKind::Steering
+                        conex_types::message::AgentMessageMetadataKind::Steering,
                     )
-                    .as_str()
+                    .as_str(),
                 )
     }));
     // 无 steering / intervention 事件
@@ -1064,7 +1065,10 @@ async fn reasoning_effort_field_propagates_through_request() {
         session_id: None,
         reasoning_effort: None,
     };
-    let mut stream = provider_none.stream(&request_none).await.expect("脚本调用成功");
+    let mut stream = provider_none
+        .stream(&request_none)
+        .await
+        .expect("脚本调用成功");
     while let Some(item) = futures::StreamExt::next(&mut stream).await {
         item.expect("脚本替身不产出流中错误");
     }
@@ -1089,12 +1093,11 @@ async fn reasoning_effort_options_injects_through_product_path() {
         ProviderStreamEvent::text("思考档位链路"),
         ProviderStreamEvent::stop(StopReason::Stop),
     ]));
-    let mut loop_ = loop_with_arc(provider_handle.clone(), vec![]).with_options(
-        SessionLoopOptions {
+    let mut loop_ =
+        loop_with_arc(provider_handle.clone(), vec![]).with_options(SessionLoopOptions {
             reasoning_effort: Some(ReasoningEffort::High),
             ..Default::default()
-        },
-    );
+        });
     let outcome = loop_.run(user("请求")).await;
     assert_eq!(outcome.reason, AgentEndReason::Stop);
     assert!(outcome.error.is_none());
@@ -1390,11 +1393,11 @@ async fn abort_during_empty_response_skips_steering_injection() {
                     .and_then(|meta| meta.get("kind"))
                     .and_then(|k| k.as_str())
                     == Some(
-                    session_loop::steering::metadata_kind_wire(
-                        conex_types::message::AgentMessageMetadataKind::Steering
+                        session_loop::steering::metadata_kind_wire(
+                            conex_types::message::AgentMessageMetadataKind::Steering,
+                        )
+                        .as_str(),
                     )
-                    .as_str()
-                )
         }),
         "abort 后不得执行 steering 注入（F2-04：abort 后副作用）"
     );

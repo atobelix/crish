@@ -319,6 +319,7 @@ pub fn element_at_point(root: &PerceptionNode, x: i32, y: i32) -> Option<&Percep
 /// (HRESULT 0)——遍历循环把 `Err` 当「无元素」处理(见 [`UiaPerception::children_of`]),
 /// 否则首叶即中断。
 #[cfg(windows)]
+#[derive(Clone)]
 pub struct UiaPerception {
     automation: windows::Win32::UI::Accessibility::IUIAutomation,
     walker: windows::Win32::UI::Accessibility::IUIAutomationTreeWalker,
@@ -368,21 +369,31 @@ impl UiaPerception {
                 .automation
                 .ElementFromHandle(hwnd)
                 .map_err(|e| PerceptionError::Traverse(format!("ElementFromHandle: {e}")))?;
-            let raw = self.read_node(&root_el, 0);
+            // 设备面节点数预算（1C-6）：在 COM 调用产生前截断，与 build_snapshot
+            // 的纯函数层 NodeBudget 形成双重保险
+            let mut node_count = 0usize;
+            let raw = self.read_node(&root_el, 0, &mut node_count);
             Ok(build_snapshot(&raw))
         }
     }
 
     /// 元素 → 原始节点(属性读取失败宽容降级:名称/值/矩形取空,
-    /// 不因单元素属性异常中断整树)
+    /// 不因单元素属性异常中断整树)。
+    ///
+    /// `node_count` 累计已访问节点数；设备面在递归展开前检查
+    /// [`MAX_TREE_NODES`] 预算，避免复杂 UI（5000+ 节点）产生过量 COM 调用
+    /// （1C-6：设备面截断先于纯函数层 build_snapshot）。
     #[allow(unsafe_code)]
     fn read_node(
         &self,
         el: &windows::Win32::UI::Accessibility::IUIAutomationElement,
         depth: usize,
+        node_count: &mut usize,
     ) -> RawNode {
         use windows::Win32::UI::Accessibility::IUIAutomationValuePattern;
         use windows::Win32::UI::Accessibility::{UIA_ValuePatternId, UIA_CONTROLTYPE_ID};
+        // 计入当前节点（设备面已对其做了 COM 属性读取）
+        *node_count = node_count.saturating_add(1);
         unsafe {
             // 角色:ControlType → 归一化小写(未知 → "custom")
             let role = el
@@ -412,7 +423,7 @@ impl UiaPerception {
                 .unwrap_or(EMPTY_RECT);
             // 深度受限:仅在未触顶时展开子节点
             let children = if depth < MAX_TREE_DEPTH {
-                self.collect_children(el, depth)
+                self.collect_children(el, depth, node_count)
             } else {
                 Vec::new()
             };
@@ -430,19 +441,31 @@ impl UiaPerception {
     /// 子元素收集(37 报告陷阱):`GetFirstChildElement / GetNextSiblingElement`
     /// 的 `Err(empty)` 表示「无子/无兄弟」——一律按终止处理;
     /// 其他错误(元素销毁等)同样终止该方向,不中断整树。
+    ///
+    /// 1C-6：循环内每次 `read_node` 前检查节点数预算，超限即 break——
+    /// 设备面 COM 调用次数受 [`MAX_TREE_NODES`] 约束。
     #[allow(unsafe_code)]
     fn collect_children(
         &self,
         el: &windows::Win32::UI::Accessibility::IUIAutomationElement,
         depth: usize,
+        node_count: &mut usize,
     ) -> Vec<RawNode> {
         let mut out = Vec::new();
+        // 节点数预算耗尽 → 不再展开（设备面截断）
+        if *node_count >= MAX_TREE_NODES {
+            return out;
+        }
         let mut current = match self.first_child(el) {
             Some(c) => c,
             None => return out,
         };
         loop {
-            out.push(self.read_node(&current, depth + 1));
+            // 1C-6：预算检查先于递归，超限则停止设备面遍历
+            if *node_count >= MAX_TREE_NODES {
+                break;
+            }
+            out.push(self.read_node(&current, depth + 1, node_count));
             current = match self.next_sibling(&current) {
                 Some(s) => s,
                 None => break,
@@ -467,6 +490,25 @@ impl UiaPerception {
         el: &windows::Win32::UI::Accessibility::IUIAutomationElement,
     ) -> Option<windows::Win32::UI::Accessibility::IUIAutomationElement> {
         unsafe { self.walker.GetNextSiblingElement(el).ok() }
+    }
+
+    /// 焦点元素所属顶层窗口的名称（1C-7）。
+    ///
+    /// 轻量标题回退路径：`GetFocusedElement` → 父链上溯至顶层窗口 →
+    /// `CurrentName`。不做 TreeWalker 深遍历 / 不收集子树，单次 COM 属性
+    /// 读取替代完整 `snapshot()`（原路径 > 50ms，本方法 < 1ms）。
+    /// 失败（无焦点 / 元素销毁）返回 None——调用方按 None 不回填标题。
+    #[allow(unsafe_code)]
+    pub fn focused_element_name(&self) -> Option<String> {
+        use windows::Win32::UI::Accessibility::IUIAutomationElement;
+        unsafe {
+            let focused = self.automation.GetFocusedElement().ok()?;
+            let mut root_el: IUIAutomationElement = focused;
+            while let Some(parent) = self.parent_of(&root_el) {
+                root_el = parent;
+            }
+            root_el.CurrentName().ok().map(|b| b.to_string())
+        }
     }
 }
 
@@ -493,7 +535,9 @@ impl PerceptionSource for UiaPerception {
             while let Some(parent) = self.parent_of(&root_el) {
                 root_el = parent;
             }
-            let raw = self.read_node(&root_el, 0);
+            // 设备面节点数预算（1C-6）
+            let mut node_count = 0usize;
+            let raw = self.read_node(&root_el, 0, &mut node_count);
             Ok(build_snapshot(&raw))
         }
     }
@@ -510,7 +554,10 @@ impl PerceptionSource for UiaPerception {
                 .automation
                 .ElementFromPoint(POINT { x, y })
                 .map_err(|e| PerceptionError::Traverse(format!("ElementFromPoint: {e}")))?;
-            let raw = self.read_node(&el, 0);
+            // element_from_point 只需单元素属性，read_node 的子节点收集被结果层
+            // 丢弃（下方手动置 children = Vec::new()）；仍传入计数器以保持接口一致
+            let mut node_count = 0usize;
+            let raw = self.read_node(&el, 0, &mut node_count);
             let (name, value) = suppress(&raw);
             Ok(Some(PerceptionNode {
                 role: raw.role,

@@ -115,6 +115,11 @@ pub struct CacheStatsTracker {
     /// 模型切换待归因标记（`on_model_switch` 置位；下一次 `record_usage`
     /// 归因 ModelSwitch，之后随基线刷新清除——「签名基线作废」语义，P5 §3.4.5）
     model_switch_pending: bool,
+    /// 上次 `capture_signature` 的签名（增量计算锚点；system/tools 不变且
+    /// 消息仅追加时，下一轮只对新消息做哈希并 fold 到本签名的 `messages_hash`，
+    /// 避免每轮 O(N) 全量重算——1C-4 优化）。压缩（`on_compaction` /
+    /// `capture_post_compaction`）会替换对话 → 置 None 强制下一轮全量重算。
+    last_signature: Option<RequestSignature>,
     /// run 级输入 token 累计（wire promptTokens；CacheBreakdownMath 不含此标量）
     prompt_tokens: u64,
     /// run 级输出 token 累计（wire completionTokens）
@@ -143,6 +148,7 @@ impl CacheStatsTracker {
             pending_compaction: false,
             rebuild_signature: None,
             model_switch_pending: false,
+            last_signature: None,
             prompt_tokens: 0,
             completion_tokens: 0,
             total_tokens: 0,
@@ -162,18 +168,6 @@ impl CacheStatsTracker {
         self
     }
 
-    /// 覆盖缓存 TTL（秒；0 = 未知 / 无缓存）
-    ///
-    /// 演进用途登记（2026-08-09 遥测零消费清理，DEEPCHECK-05 #5）：运行期
-    /// 调整 TTL 的预留接口——当前生产路径统一走 [`Self::from_config`] 经
-    /// [CacheTrackingConfig] 构造注入（engine 层 P3 查询结果装配），本方法
-    /// 为未来"运行中刷新 TTL 路由表"接线点（如 P3 表热更新 / 用户手动改
-    /// TTL 后会话内生效）；尚无消费方，按项目惯例以 allow 登记挂起。
-    #[allow(dead_code)]
-    pub fn set_ttl(&mut self, ttl_seconds: u64) {
-        self.ttl_seconds = ttl_seconds;
-    }
-
     /// 请求发送前捕获签名（P5 §3.4.1「BEFORE sending」，对齐 jcode
     /// `record_request`）：从 build_request 的输入投影 system / tools /
     /// messages 哈希。投影剔除 created_at / metadata / client_message_id /
@@ -186,7 +180,14 @@ impl CacheStatsTracker {
         tools: &[ToolSchema],
         messages: &[Arc<AgentMessage>],
     ) {
-        self.pending_signature = Some(build_request_signature(system, tools, messages));
+        let sig = build_request_signature_incremental(
+            system,
+            tools,
+            messages,
+            self.last_signature.take(),
+        );
+        self.last_signature = Some(sig.clone());
+        self.pending_signature = Some(sig);
     }
 
     /// 压缩后重建签名（v1.1 §5.1 T-28 / 02 分析 §五 E1）：在 apply_compaction
@@ -205,6 +206,8 @@ impl CacheStatsTracker {
         tools: &[ToolSchema],
         messages: &[Arc<AgentMessage>],
     ) {
+        // 压缩后对话被替换——增量签名锚点失效，强制全量重算（1C-4）
+        self.last_signature = None;
         self.rebuild_signature = Some(build_request_signature(system, tools, messages));
     }
 
@@ -341,6 +344,8 @@ impl CacheStatsTracker {
         self.baseline = None;
         self.pending_compaction = true;
         self.rebuild_signature = None;
+        // 压缩会替换对话——增量签名锚点失效，强制下一轮全量重算（1C-4）
+        self.last_signature = None;
     }
 
     /// 外部代数注入（R-K 单源能力面，v1.1 §5.1 T-30 / 评审 02 P0-5）：
@@ -646,6 +651,60 @@ pub(crate) fn build_request_signature(
     let tools_hash = tools_hash(tools);
     let message_hashes: Vec<u64> = messages.iter().map(|m| message_hash(m)).collect();
     let messages_hash = message_hashes.iter().copied().fold(0, fnv1a_mix);
+    RequestSignature {
+        system_hash,
+        tools_hash,
+        messages_hash,
+        message_hashes,
+        message_count: messages.len(),
+        tool_count: tools.len(),
+    }
+}
+
+/// 构建请求签名（增量版，1C-4）。
+///
+/// 常见路径：system / tools 不变，对话仅追加新消息 → 复用上一签名的
+/// `message_hashes[..prev_count]` 与已折叠的 `messages_hash`，只对新增
+/// 消息 `messages[prev_count..]` 做哈希并 fold，签名计算从每轮 O(N) 降为
+/// O(新增消息数)。
+///
+/// 安全条件（任一不满足 → 回退全量重算，保证增量与全量结果恒等）：
+/// - 上一签名存在且 `prev_count <= messages.len()`；
+/// - `system_hash` / `tools_hash` 与上一签名一致（重新计算两个标量哈希
+///   成本 O(1) / O(T)，远低于全量消息哈希 O(N)）。
+///
+/// 前缀消息被改写（如压缩）的路径由调用方在压缩时清除 `last_signature`
+/// 强制全量重算覆盖（`on_compaction` / `capture_post_compaction`）。
+pub(crate) fn build_request_signature_incremental(
+    system: Option<&str>,
+    tools: &[ToolSchema],
+    messages: &[Arc<AgentMessage>],
+    prev: Option<RequestSignature>,
+) -> RequestSignature {
+    let system_hash = fnv1a(system.unwrap_or("").as_bytes());
+    let tools_hash = tools_hash(tools);
+    // 增量适用判定：上一签名存在、前缀覆盖、system/tools 未变
+    let incremental = prev
+        .as_ref()
+        .filter(|p| {
+            p.message_count <= messages.len()
+                && p.system_hash == system_hash
+                && p.tools_hash == tools_hash
+        })
+        .is_some();
+    if !incremental {
+        return build_request_signature(system, tools, messages);
+    }
+    let prev = prev.unwrap();
+    let prev_count = prev.message_count;
+    // 复用前缀哈希，只对新增消息计算
+    let mut message_hashes = prev.message_hashes;
+    let mut messages_hash = prev.messages_hash;
+    for m in &messages[prev_count..] {
+        let h = message_hash(m);
+        messages_hash = fnv1a_mix(messages_hash, h);
+        message_hashes.push(h);
+    }
     RequestSignature {
         system_hash,
         tools_hash,
@@ -1167,5 +1226,79 @@ mod tests {
         assert_eq!(t2.warm_until_ms(0), None);
         assert!(!t2.is_cold(u64::MAX));
         assert!(t2.cold_cache_check(u64::MAX).is_none());
+    }
+
+    // ── 1C-4 增量签名 ──
+
+    /// 增量签名与全量签名结果恒等：system/tools 不变、消息追加场景，
+    /// 第二轮 `capture_signature` 走增量路径，签名与全量重算一致。
+    #[test]
+    fn incremental_signature_matches_full_on_append() {
+        let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
+        let m2 = msg(
+            "m2",
+            AgentMessageRole::Assistant,
+            "回复",
+            "2026-01-01T00:00:00Z",
+        );
+        // 首轮（全量）
+        let mut t = tracker(0);
+        t.capture_signature(Some("sys"), &tools(), &[m1.clone()]);
+        let sig_after_first = t.pending_signature.clone().unwrap();
+        // 第二轮（追加 m2）走增量
+        t.capture_signature(Some("sys"), &tools(), &[m1.clone(), m2.clone()]);
+        let sig_incremental = t.pending_signature.clone().unwrap();
+        // 对照：全量重算
+        let sig_full = build_request_signature(Some("sys"), &tools(), &[m1, m2]);
+        assert_eq!(sig_incremental, sig_full, "增量签名必须与全量签名一致");
+        assert_eq!(sig_after_first.message_count, 1);
+        assert_eq!(sig_incremental.message_count, 2);
+    }
+
+    /// system 变化 → 增量不适用，回退全量重算（结果与全量一致）。
+    #[test]
+    fn incremental_signature_falls_back_when_system_changes() {
+        let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
+        let m2 = msg("m2", AgentMessageRole::User, "追加", "2026-01-01T00:00:00Z");
+        let mut t = tracker(0);
+        t.capture_signature(Some("sys"), &tools(), &[m1.clone()]);
+        t.capture_signature(Some("sys2"), &tools(), &[m1.clone(), m2.clone()]);
+        let sig = t.pending_signature.clone().unwrap();
+        let full = build_request_signature(Some("sys2"), &tools(), &[m1, m2]);
+        assert_eq!(sig, full, "system 变化后应回退全量重算");
+    }
+
+    /// 消息缩减（prev_count > messages.len()）→ 增量不适用，回退全量。
+    #[test]
+    fn incremental_signature_falls_back_when_messages_shrink() {
+        let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
+        let m2 = msg("m2", AgentMessageRole::User, "追加", "2026-01-01T00:00:00Z");
+        let mut t = tracker(0);
+        t.capture_signature(Some("sys"), &tools(), &[m1.clone(), m2.clone()]);
+        // 第二轮消息比首轮少 → prev_count(2) > len(1) → 回退全量
+        t.capture_signature(Some("sys"), &tools(), &[m1.clone()]);
+        let sig = t.pending_signature.clone().unwrap();
+        let full = build_request_signature(Some("sys"), &tools(), &[m1]);
+        assert_eq!(sig, full, "消息缩减应回退全量重算");
+    }
+
+    /// on_compaction 后增量锚点失效 → 下一轮 capture_signature 全量重算。
+    #[test]
+    fn on_compaction_invalidates_incremental_anchor() {
+        let m1 = msg("m1", AgentMessageRole::User, "你好", "2026-01-01T00:00:00Z");
+        let m2 = msg(
+            "m2",
+            AgentMessageRole::Assistant,
+            "摘要",
+            "2026-01-01T00:00:00Z",
+        );
+        let mut t = tracker(0);
+        t.capture_signature(Some("sys"), &tools(), &[m1.clone()]);
+        // 压缩后对话被替换
+        t.on_compaction();
+        t.capture_signature(Some("sys"), &tools(), &[m2.clone()]);
+        let sig = t.pending_signature.clone().unwrap();
+        let full = build_request_signature(Some("sys"), &tools(), &[m2]);
+        assert_eq!(sig, full, "压缩后应全量重算（增量锚点已失效）");
     }
 }

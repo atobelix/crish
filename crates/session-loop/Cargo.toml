@@ -21,6 +21,8 @@ conex-fs = { path = "../conex-fs" }
 # IPC 绕行）；conex-compaction 仅依赖 conex-types + serde_json，无环。
 conex-compaction = { path = "../conex-compaction" }
 conex-types = { path = "../conex-types" }
+# now_iso_utc / civil_from_days / unix_millis 真源（纯 std）
+conex-shared = { path = "../conex-shared" }
 # T-36（R5）：缓存测量跟踪器消费 conex-telemetry 的 cache 纯函数模块
 # （P5 §3.1.2 落点裁决：session-loop 引 conex-telemetry，其叶子约束不破——
 # 该 crate 仅依赖 conex-types；A3 §7.1 登记本依赖为计划内唯一新增授权）

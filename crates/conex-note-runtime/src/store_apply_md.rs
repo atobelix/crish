@@ -18,20 +18,11 @@ use agent_tools::note_backend::{
 use conex_doc_collab::{BlockId, Op};
 use conex_md_ast::{apply_md_fragment, LossyReport, MdError};
 use conex_workspace_store::commit_ops;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 
+use crate::poison::POISON_RECOVERIES;
 use crate::store_backend::{map_commit_err, origin_from_req, SlowPathProbe, StoreNoteBackend};
 use crate::store_plan_ops::parse_block_id;
-
-/// 毒丸恢复计数（B1-1 观测化：本文件 intents / per-doc 锁中毒恢复次数；
-/// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
-static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
-
-/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
-#[cfg(test)]
-pub(crate) fn poison_recovery_count() -> u64 {
-    POISON_RECOVERIES.load(Ordering::Relaxed)
-}
 
 impl StoreNoteBackend {
     /// 从 ops 收集新 Insert 的 block id（字符串）。
@@ -263,5 +254,8 @@ pub(crate) fn map_md_err(e: MdError) -> NoteBackendError {
             NoteBackendError::NotFound(format!("parent_id not found: {p}"))
         }
         MdError::Parse(m) | MdError::Lossy(m) => NoteBackendError::ApplyFailed(m),
+        MdError::DuplicateOpId(id) => {
+            NoteBackendError::ApplyFailed(format!("duplicate op id (defensive): {id}"))
+        }
     }
 }

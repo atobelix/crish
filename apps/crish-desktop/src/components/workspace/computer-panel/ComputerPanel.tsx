@@ -1,23 +1,21 @@
 /**
- * 电脑操作面板（二期 P2，S5 遗留⑩）：会话开关（显式开启/关闭）+
+ * 电脑操作面板：会话开关（显式开启/关闭）+
  * 三态会话指示（Idle/BrowserActive/DesktopActive 对应 ActivationGate）+
  * 感知预览占位。
  *
  * 安全门槛（04 §4）：
  * - 启用走风险确认对话框（§4.1 ①：说明可注入本机全部输入/截屏、停止方式），
  *   确认后才调用 enable；
- * - 三态指示呈现 ActivationGate 状态广播（§2 S3 项 4；引擎接线前由
- *   useComputerSession 本地化维护，未接线时展示「引擎未接线」降级徽标）。
+ * - 三态指示呈现 ActivationGate 状态广播（§2 S3 项 4；经 useComputerSession
+ *   订阅 computer://state-changed，正常由引擎状态广播驱动；missing 仅兜底）。
  *
- * 接线点登记（06 §8 遗留项 10）：
+ * 接线点（已登记，与 Rust 侧 `command_manifest.rs` / `main.rs` 三命令同步）：
  * - 命令桥：api/computerSessionApi.ts（computer_session_enable /
  *   computer_session_disable / computer_status + 事件
- *   computer://state-changed）；Rust 侧未注册 → missing 降级本地化；
+ *   computer://state-changed）；正常路径走引擎落盘与状态广播；
  * - 感知预览：UIA 快照（computer_snapshot）/ 截图回显（computer_screenshot，
- *   动作后回显）引擎接线后在此展示；当前为占位说明块；
- * - 装配点：引擎接线后经 PreviewCard（BrowserPanel 旁）或工作区入口
- *   `<ComputerPanel onShowToast={...} />` 一行装配（本任务纯新增，不动
- *   既有文件）。
+ *   动作后回显）由引擎提供；当前预览区为占位，后续接线扩展；
+ * - 装配点：经工作区入口 `<ComputerPanel />` 装配。
  */
 import React, { useState } from 'react';
 import { AlertTriangle, Power, ScanEye } from 'lucide-react';
@@ -157,14 +155,14 @@ export const ComputerPanel: React.FC<ComputerPanelProps> = () => {
         </div>
       </div>
 
-      {/* ── 感知预览（占位：UIA 快照 / 截图回显未接线） ── */}
+      {/* ── 感知预览（占位） ── */}
       <div className={styles.block}>
         <h4 className={styles.blockTitle}>
           <ScanEye size={13} strokeWidth={1.75} aria-hidden /> 感知预览
         </h4>
         <p className={styles.placeholderText}>
           UIA 快照（computer_snapshot）与动作回显截图（computer_screenshot）
-          引擎接线后在此展示；当前命令面未接线，预览暂不可用。
+          由引擎提供；当前预览区为占位，后续扩展在此展示。
         </p>
       </div>
 

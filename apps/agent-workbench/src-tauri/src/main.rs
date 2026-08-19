@@ -413,7 +413,7 @@ command_registry![
         "browser_list_history",
         browser_commands::browser_list_history
     ),
-    // ── 电脑操作会话命令（06 遗留⑨：会话开关 + 急停 + 状态；代理到
+    // ── 电脑操作会话命令（06 遗留⑨：会话开关 + 状态；代理到
     //    ComputerSlot，状态事件 computer://state-changed）──
     (
         "computer_session_enable",
@@ -423,7 +423,6 @@ command_registry![
         "computer_session_disable",
         computer_commands::computer_session_disable
     ),
-    ("computer_estop", computer_commands::computer_estop),
     ("computer_status", computer_commands::computer_status),
     // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
     (
@@ -879,18 +878,13 @@ fn main() {
 
             // ⑧e 06 遗留⑨：电脑操作会话槽装配——进程级单例托管
             // （ComputerSlot：session_meta `computer_use_enabled` 惰性恢复 +
-            // 互斥门/审批门/急停旗；命令面 computer_session_* 消费）。
+            // 互斥门；命令面 computer_session_* 消费）。
             // 事件发射器接线：`computer://state-changed` 状态迁移 → 前端面板
-            // （挂接幂等；启动前即挂订阅，enable/disable/estop 不丢事件）。
-            // 引擎侧工具注册装配（register_computer_tools 后置注册 + 守卫
-            // 注入）为接线点（engine.rs 并行在途，见 computer/mod.rs 模块头
-            // 接线点①②：engine 增 computer_slot 字段/装配/访问器后，本托管
-            // 改为 `core_state.engine().computer_slot()` 取用同一实例——
-            // 命令访问面（State<Arc<ComputerSlot>>）不变）
+            // （挂接幂等；启动前即挂订阅，enable/disable/on_run_stopped 不丢事件）。
+            // 引擎侧 computer_slot 字段已装配（维度 1 收敛接线点①②落地）；
+            // main.rs 取用同一实例托管给 Tauri State，命令访问面不变。
             {
-                let computer_slot = Arc::new(computer::ComputerSlot::new(Arc::new(
-                    computer::LocalDbComputerMetaStore::new(shared_db.local_db()),
-                )));
+                let computer_slot = core_state.engine().computer_slot();
                 app.manage(Arc::clone(&computer_slot));
                 computer_slot.attach_emitter(Arc::new(TauriEmitter::new(app_handle.clone())));
             }

@@ -333,7 +333,7 @@ async fn multi_replace_second_call_deduplicated() {
     let ws = TempWorkspace::new("e01_mr_idem");
     ws.write_file("src/component.ts", COMPONENT_TS_INITIAL);
     let guard = Arc::new(ToolIdempotencyGuard::new());
-    let exec = ToolExecutor::new(builtin_registry()).with_idempotency(guard);
+    let exec = ToolExecutor::new(builtin_registry()).with_idempotency_opt(Some(guard));
     let ctx = exec_ctx(&ws);
     let opts = exec_opts();
 

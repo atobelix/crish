@@ -9,7 +9,8 @@
 //! （depends_on 集合相同）的节点中，parallel=false 者须等待声明序在前、
 //! 同样 parallel=false 的同级节点全部进入终态后才就绪；parallel=true 者
 //! 不受约束（显式声明并发）。实现落点：is_ready + serial_predecessor_pending
-//! 判定，advance 无需结构性改动（就绪集合每轮重算 + 终态事件驱动重推进）。
+//! 判定；advance 以 dirty 增量就绪集做不动点（状态变化标后继脏，dirty
+//! 空则退出），终态事件驱动重推进。
 //!
 //! 三问：
 //! - 隔离边界：依赖图只推进不回溯（已 completed 不重复启动）；并发预算
@@ -791,6 +792,9 @@ pub struct FlowScheduler {
     wakeups: VecDeque<FlowWakeup>,
     /// 重启数据不一致上报（load 积压，首轮 advance 一次性带出）
     restart_reports: Vec<FlowReport>,
+    /// 增量就绪集：状态变化波及的节点。advance 每轮只对这些节点做
+    /// is_ready；入口可全量灌 Pending，循环内 dirty 空则退出。
+    dirty_set: HashSet<FlowNodeId>,
     /// 子代理事件发射器（M14 唯一发射方；None = 纯编排逻辑不发射。
     /// 事件只观测不阻塞编排：发射失败记录日志继续）
     subagent_events: Option<SubagentEventEmitter>,
@@ -829,6 +833,7 @@ impl FlowScheduler {
             meta,
             wakeups: VecDeque::new(),
             restart_reports: Vec::new(),
+            dirty_set: HashSet::new(),
             subagent_events: None,
         })
     }
@@ -934,6 +939,7 @@ impl FlowScheduler {
         self.states.clear();
         self.wakeups.clear();
         self.restart_reports.clear();
+        self.dirty_set.clear();
         for node in self.graph.as_ref().expect("声明已写入").nodes() {
             self.states.insert(node.id.clone(), FlowNodeState::Pending);
         }
@@ -957,30 +963,55 @@ impl FlowScheduler {
         // 重启数据不一致上报（load 积压，首轮推进一次性带出）
         out.reports.append(&mut self.restart_reports);
 
+        // 入口：若 dirty 为空则全量灌 Pending（首轮/恢复/预算重试兜底），否则保持增量集 O(dirty)
+        if self.dirty_set.is_empty() {
+            self.seed_dirty_pending();
+        }
+
         let mut mutated = false;
         let mut iteration = 0usize;
+        // 预计算声明序索引，保证就绪集按声明序确定（与原全量扫描语义一致，O(N)一次）
+        let order_index: HashMap<FlowNodeId, usize> = graph
+            .nodes()
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.id.clone(), i))
+            .collect();
         loop {
             iteration += 1;
             // 防御性上界：每轮至少一个节点发生状态迁移，节点数 + 1 轮内收敛
+            // +2 而非 +1：第一轮 Block 传播可能产生新阻塞节点，第二轮确认无新状态迁移后收敛；+2 为传播 + 确认两阶段余量。
             if iteration > graph.len() + 2 {
+                break;
+            }
+            if self.dirty_set.is_empty() {
                 break;
             }
             // 1. Block 传播（失败 + Block 策略 → 依赖节点阻塞，含传递）
             // T-D-01 确认：Block 按依赖边传播，与「父子链」无关；嵌套禁止
             // （maxDepth=1）后流程节点无后代，传播语义不受影响
             self.propagate_block(&graph, &mut out);
-            // 2. 就绪节点（声明序）：合成唤醒 → 预算 reserve → spawn
-            let ready_ids: Vec<FlowNodeId> = graph
-                .nodes()
+            if self.dirty_set.is_empty() {
+                break;
+            }
+            // 2. 仅遍历 dirty 集 O(dirty)（按声明序排序，与原全量扫描语义一致）
+            let mut ready_ids: Vec<FlowNodeId> = self
+                .dirty_set
                 .iter()
-                .filter(|node| self.is_ready(node))
-                .map(|node| node.id.clone())
+                .filter_map(|id| graph.node(id).map(|n| (n, id.clone())))
+                .filter(|(node, _)| self.is_ready(node))
+                .map(|(_, id)| id)
                 .collect();
+            ready_ids.sort_by_key(|id| order_index.get(id).copied().unwrap_or(usize::MAX));
+            // 本轮脏集已判定；后续仅由状态迁移 / Block 波及再入集
+            self.dirty_set.clear();
             if ready_ids.is_empty() {
                 break;
             }
             let mut spawned_any = false;
-            for node_id in ready_ids {
+            let mut budget_blocked: Vec<FlowNodeId> = Vec::new();
+            for (idx, node_id) in ready_ids.iter().enumerate() {
+                let node_id = node_id.clone();
                 let node = graph.node(&node_id).expect("就绪集合来自图节点");
                 // 合成唤醒：综合节点就绪即产事件（不轮询；同节点只唤醒一次）
                 if node.is_composite {
@@ -1025,7 +1056,8 @@ impl FlowScheduler {
                     active_concurrent: in_flight,
                 };
                 if let Err(_rejection) = check_recursion_guard(snapshot, self.guard) {
-                    // 预算满：节点保持就绪，等下一终态事件（事件驱动，不轮询）
+                    // 预算满：剩余就绪节点保留入 dirty，下次终态释放后重试（O(dirty)保留，不全量重扫）
+                    budget_blocked.extend(ready_ids[idx..].iter().cloned());
                     break;
                 }
                 self.budget.reserve();
@@ -1057,6 +1089,7 @@ impl FlowScheduler {
                 match self.spawner.spawn(&request).await {
                     Ok(result) => {
                         self.states.insert(node_id.clone(), FlowNodeState::Running);
+                        self.mark_successors_dirty(&node_id);
                         // 先写内存 runtime 映射（作用域内完成，随后立即持久化，
                         // 避免借用冲突：persist 需要 &self 的不可变借用）
                         {
@@ -1129,6 +1162,7 @@ impl FlowScheduler {
                         // Block 传播 / 上报中生效，下一轮不动点收敛）
                         self.budget.release();
                         self.states.insert(node_id.clone(), FlowNodeState::Failed);
+                        self.mark_successors_dirty(&node_id);
                         out.reports.push(FlowReport {
                             node_id: node_id.clone(),
                             run_id: None,
@@ -1140,6 +1174,9 @@ impl FlowScheduler {
                 }
                 spawned_any = true;
                 mutated = true;
+            }
+            if !budget_blocked.is_empty() {
+                self.dirty_set.extend(budget_blocked);
             }
             if !spawned_any {
                 break;
@@ -1193,6 +1230,8 @@ impl FlowScheduler {
         self.budget.release();
         let next = FlowNodeState::from_subagent(state);
         self.states.insert(node_id.clone(), next);
+        // 终态后后继入脏集；advance 入口仍会全量灌 Pending（含预算等待节点）
+        self.mark_successors_dirty(&node_id);
         // M14：收口发射 subagent-ended（唯一发射方；事件只观测不阻塞编排——
         // 失败记录日志继续；subagent_id 缺省回退 run id，保证信封完整性）
         if let Some(emitter) = &self.subagent_events {
@@ -1331,6 +1370,7 @@ impl FlowScheduler {
         runtime.subagent_run_id = Some(subagent_run_id.to_string());
         self.states
             .insert(node_id.to_string(), FlowNodeState::Running);
+        self.mark_successors_dirty(node_id);
         // 挂接的外部 run 同样计入流程内预算（终态时随 release 释放）
         self.budget.reserve();
         self.persist_runtime()?;
@@ -1482,6 +1522,7 @@ impl FlowScheduler {
             meta,
             wakeups: VecDeque::new(),
             restart_reports,
+            dirty_set: HashSet::new(),
             subagent_events: None,
         };
         scheduler.persist_budget()?;
@@ -1498,6 +1539,7 @@ impl FlowScheduler {
         self.states.clear();
         self.wakeups.clear();
         self.restart_reports.clear();
+        self.dirty_set.clear();
         self.budget = ConcurrencyBudget::new();
         self.meta.set_meta(FLOW_DECLARATION_KEY, "")?;
         self.meta.set_meta(FLOW_STATE_KEY, "[]")?;
@@ -1596,16 +1638,22 @@ impl FlowScheduler {
         }
     }
 
-    /// Block 传播：待启动节点任一前置为 Blocked，或前置 Failed 且其
-    /// 生效策略为 Block → 本节点置 Blocked（终态）并上报；迭代到不动点
-    /// （传递阻塞）。依赖环已在声明校验拒绝，无需防循环。
+    /// Block 传播：dirty 中的待启动节点任一前置为 Blocked，或前置 Failed 且其
+    /// 生效策略为 Block → 本节点置 Blocked（终态）并上报；后继入 dirty，
+    /// 迭代到不动点（传递阻塞）。依赖环已在声明校验拒绝，无需防循环。
     fn propagate_block(&mut self, graph: &FlowGraph, out: &mut FlowAdvance) {
         loop {
+            let candidates: Vec<FlowNodeId> = self
+                .dirty_set
+                .iter()
+                .filter(|id| self.states.get(*id).copied() == Some(FlowNodeState::Pending))
+                .cloned()
+                .collect();
             let mut changed = false;
-            for node in graph.nodes() {
-                if self.states.get(&node.id).copied() != Some(FlowNodeState::Pending) {
+            for node_id in candidates {
+                let Some(node) = graph.node(&node_id) else {
                     continue;
-                }
+                };
                 let blocker = node
                     .depends_on
                     .iter()
@@ -1615,20 +1663,22 @@ impl FlowScheduler {
                             self.effective_strategy(dep) == FailStrategy::Block
                         }
                         _ => false,
-                    });
+                    })
+                    .cloned();
                 if let Some(blocker) = blocker {
-                    self.states.insert(node.id.clone(), FlowNodeState::Blocked);
-                    out.blocked.push(node.id.clone());
+                    self.states.insert(node_id.clone(), FlowNodeState::Blocked);
+                    out.blocked.push(node_id.clone());
                     out.reports.push(FlowReport {
-                        node_id: node.id.clone(),
+                        node_id: node_id.clone(),
                         run_id: None,
                         strategy: Some(FailStrategy::Block),
                         kind: FlowReportKind::Blocked,
                         message: format!(
-                            "前置 {blocker} 失败（Block 策略），节点 {} 被阻塞",
-                            node.id
+                            "前置 {blocker} 失败（Block 策略），节点 {node_id} 被阻塞"
                         ),
                     });
+                    // 波及后继进 dirty，供本函数内下一轮传递阻塞
+                    self.mark_successors_dirty(&node_id);
                     changed = true;
                 }
             }
@@ -1636,6 +1686,52 @@ impl FlowScheduler {
                 break;
             }
         }
+    }
+
+    /// 把全部 Pending 灌入 dirty（advance 入口初始化；之后只扫脏集）
+    fn seed_dirty_pending(&mut self) {
+        let pending: Vec<FlowNodeId> = self
+            .graph
+            .as_ref()
+            .map(|g| {
+                g.nodes()
+                    .iter()
+                    .filter(|n| self.states.get(&n.id).copied() == Some(FlowNodeState::Pending))
+                    .map(|n| n.id.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
+        self.dirty_set.clear();
+        self.dirty_set.extend(pending);
+    }
+
+    /// 状态变化后把后继标脏：DAG 反向边（depends_on 后继）+ 同波次串行后继。
+    /// 同波次串行后继不在 depends_on 上，但 is_ready 受 serial_predecessor
+    /// 约束，必须一并标脏才能与全量重算语义一致。
+    fn mark_successors_dirty(&mut self, node_id: &str) {
+        let Some(graph) = self.graph.as_ref() else {
+            return;
+        };
+        let mut ids: Vec<FlowNodeId> = graph
+            .dependents(node_id)
+            .into_iter()
+            .map(|n| n.id.clone())
+            .collect();
+        if let Some(changed) = graph.node(node_id) {
+            if !changed.parallel {
+                let mut past = false;
+                for n in graph.nodes() {
+                    if n.id == node_id {
+                        past = true;
+                        continue;
+                    }
+                    if past && !n.parallel && n.depends_on == changed.depends_on {
+                        ids.push(n.id.clone());
+                    }
+                }
+            }
+        }
+        self.dirty_set.extend(ids);
     }
 
     /// 持久化编排声明（含 planner_run_id；入参图 = 待提交的候选图，
@@ -1673,7 +1769,13 @@ impl FlowScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_tools::tools::subagent::{SubagentSpawnError, SubagentSpawnResult};
+    use std::collections::HashSet;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    use agent_tools::tools::subagent::{
+        check_recursion_guard, RecursionGuardSnapshot, SubagentSpawnError, SubagentSpawnResult,
+    };
 
     fn node(id: &str, depends_on: &[&str]) -> FlowNode {
         FlowNode {
@@ -2059,5 +2161,254 @@ mod tests {
         assert!(!FlowNodeState::Running.is_terminal());
         // wire 名
         assert_eq!(FlowNodeState::Blocked.as_str(), "blocked");
+    }
+
+    // ── 增量就绪集 vs 全量 is_ready（详案 3-3）────────────────────
+
+    #[derive(Debug, Default)]
+    struct RecordingTestSpawner {
+        seq: AtomicUsize,
+        requests: Mutex<Vec<String>>,
+        fail_ids: Mutex<HashSet<String>>,
+    }
+
+    impl RecordingTestSpawner {
+        fn new() -> Arc<Self> {
+            Arc::new(Self::default())
+        }
+
+        fn fail_ids(ids: &[&str]) -> Arc<Self> {
+            Arc::new(Self {
+                fail_ids: Mutex::new(ids.iter().map(|s| (*s).to_string()).collect()),
+                ..Self::default()
+            })
+        }
+
+        fn started_nodes(&self) -> Vec<String> {
+            self.requests
+                .lock()
+                .expect("RecordingTestSpawner mutex")
+                .clone()
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl SubagentSpawner for RecordingTestSpawner {
+        async fn spawn(
+            &self,
+            req: &SubagentSpawnRequest,
+        ) -> Result<SubagentSpawnResult, SubagentSpawnError> {
+            let node_id = req.flow_node_id.clone().unwrap_or_default();
+            if self
+                .fail_ids
+                .lock()
+                .expect("RecordingTestSpawner mutex")
+                .contains(&node_id)
+            {
+                return Err(SubagentSpawnError::SpawnFailed(format!(
+                    "模拟 spawn 失败：{node_id}"
+                )));
+            }
+            self.requests
+                .lock()
+                .expect("RecordingTestSpawner mutex")
+                .push(node_id.clone());
+            let n = self.seq.fetch_add(1, Ordering::SeqCst);
+            Ok(SubagentSpawnResult {
+                subagent_id: format!("sub-{n}"),
+                subagent_run_id: format!("flow-run-{n}"),
+                session_id: format!("sess-{n}"),
+                status: SubagentState::Running,
+                summary: None,
+                flow_node_id: req.flow_node_id.clone(),
+                display_label: req.display_label.clone(),
+            })
+        }
+    }
+
+    fn sched_with_spawner(
+        tasks: Vec<FlowNode>,
+        spawner: Arc<dyn SubagentSpawner>,
+    ) -> FlowScheduler {
+        let meta = Arc::new(EmptyMeta);
+        let mut sched = FlowScheduler::new("sess-u", spawner, meta).expect("调度器创建失败");
+        let graph = FlowGraph::from_declaration(&declaration(tasks)).expect("声明应接受");
+        for node in graph.nodes() {
+            sched.states.insert(node.id.clone(), FlowNodeState::Pending);
+        }
+        sched.graph = Some(graph);
+        sched
+    }
+
+    /// 全量 is_ready（声明序），对照增量调度结果
+    fn full_ready_ids(sched: &FlowScheduler) -> Vec<FlowNodeId> {
+        sched
+            .graph
+            .as_ref()
+            .map(|g| {
+                g.nodes()
+                    .iter()
+                    .filter(|n| sched.is_ready(n))
+                    .map(|n| n.id.clone())
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// 增量 advance 结束后必须是全量 is_ready / 全量 Block 传播的不动点
+    fn assert_incremental_matches_full_scan(sched: &FlowScheduler) {
+        let Some(graph) = sched.graph.as_ref() else {
+            return;
+        };
+        for node in graph.nodes() {
+            if sched.states.get(&node.id).copied() != Some(FlowNodeState::Pending) {
+                continue;
+            }
+            let would_block = node
+                .depends_on
+                .iter()
+                .any(|dep| match sched.states.get(dep) {
+                    Some(FlowNodeState::Blocked) => true,
+                    Some(FlowNodeState::Failed) => {
+                        sched.effective_strategy(dep) == FailStrategy::Block
+                    }
+                    _ => false,
+                });
+            assert!(
+                !would_block,
+                "全量 propagate_block 仍会阻塞 {}，增量漏传播",
+                node.id
+            );
+        }
+        let full_ready = full_ready_ids(sched);
+        if full_ready.is_empty() {
+            return;
+        }
+        let in_flight = sched.budget.in_flight() as usize;
+        let snapshot = RecursionGuardSnapshot {
+            depth: 1,
+            active_siblings: in_flight,
+            active_concurrent: in_flight,
+        };
+        assert!(
+            check_recursion_guard(snapshot, sched.guard).is_err(),
+            "全量 is_ready 仍有 {full_ready:?} 且预算未满，增量漏调度"
+        );
+    }
+
+    #[tokio::test]
+    async fn advance_dirty_ready_set_matches_full_is_ready() {
+        // 同一图：DAG 后继 b←a、同波次串行 s1→s2、s2 后继 t
+        // 手工终态 a/s1 后，全量 is_ready = {b, s2}；增量 advance 必须正好启动这两个
+        let mut s1 = node("s1", &[]);
+        s1.parallel = false;
+        let mut s2 = node("s2", &[]);
+        s2.parallel = false;
+        let spawner = RecordingTestSpawner::new();
+        let mut sched = sched_with_spawner(
+            vec![
+                node("a", &[]),
+                node("b", &["a"]),
+                s1,
+                s2,
+                node("t", &["s2"]),
+            ],
+            spawner.clone(),
+        );
+        sched
+            .states
+            .insert("a".to_string(), FlowNodeState::Completed);
+        sched
+            .states
+            .insert("s1".to_string(), FlowNodeState::Completed);
+        let expected = full_ready_ids(&sched);
+        assert_eq!(expected, vec!["b".to_string(), "s2".to_string()]);
+
+        let adv = sched.advance().await.expect("增量推进");
+        let mut started: Vec<&str> = adv.started.iter().map(|s| s.node_id.as_str()).collect();
+        started.sort_unstable();
+        assert_eq!(started, vec!["b", "s2"], "增量启动集 == 全量 is_ready");
+        assert_eq!(sched.node_state("t"), Some(FlowNodeState::Pending));
+        assert!(sched.dirty_set.is_empty(), "推进结束后脏集应收空");
+        assert_incremental_matches_full_scan(&sched);
+
+        let run_s2 = adv
+            .started
+            .iter()
+            .find(|s| s.node_id == "s2")
+            .expect("s2 已启动")
+            .subagent_run_id
+            .clone();
+        let adv2 = sched
+            .on_subagent_terminal(&run_s2, SubagentState::Completed)
+            .await
+            .expect("s2 终态推进");
+        assert_eq!(
+            adv2.started
+                .iter()
+                .map(|s| s.node_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["t"],
+            "s2 完成后全量 is_ready={{t}}，增量同样只启动 t"
+        );
+        assert_incremental_matches_full_scan(&sched);
+        assert_eq!(spawner.started_nodes(), vec!["b", "s2", "t"]);
+    }
+
+    #[tokio::test]
+    async fn advance_dirty_spawn_fail_skip_matches_full_ready_same_call() {
+        // spawn 失败 + Skip：同一轮 advance 必须启动 DAG 后继与同波次串行后继
+        let mut a = node("a", &[]);
+        a.parallel = false;
+        a.on_failed = Some(FailStrategy::Skip);
+        let mut s = node("s", &[]);
+        s.parallel = false;
+        let spawner = RecordingTestSpawner::fail_ids(&["a"]);
+        let mut sched = sched_with_spawner(vec![a, s, node("b", &["a"])], spawner.clone());
+        // 推进前全量就绪只有 a（s 受串行约束）
+        assert_eq!(full_ready_ids(&sched), vec!["a".to_string()]);
+        let adv = sched.advance().await.expect("增量推进");
+        assert_eq!(sched.node_state("a"), Some(FlowNodeState::Failed));
+        let mut started: Vec<&str> = adv.started.iter().map(|s| s.node_id.as_str()).collect();
+        started.sort_unstable();
+        assert_eq!(
+            started,
+            vec!["b", "s"],
+            "Failed+Skip 后全量 is_ready={{b,s}}，须在同一轮增量启动"
+        );
+        assert!(sched.dirty_set.is_empty());
+        assert_incremental_matches_full_scan(&sched);
+    }
+
+    #[tokio::test]
+    async fn advance_dirty_block_propagation_matches_full_scan() {
+        // a spawn 失败 + 默认 Block：同一轮须传递阻塞 b→c，且不动点与全量一致
+        let spawner = RecordingTestSpawner::fail_ids(&["a"]);
+        let mut sched = sched_with_spawner(
+            vec![
+                node("a", &[]),
+                node("b", &["a"]),
+                node("c", &["b"]),
+                node("d", &[]),
+            ],
+            spawner.clone(),
+        );
+        let adv = sched.advance().await.expect("增量推进");
+        assert_eq!(sched.node_state("a"), Some(FlowNodeState::Failed));
+        assert_eq!(sched.node_state("b"), Some(FlowNodeState::Blocked));
+        assert_eq!(sched.node_state("c"), Some(FlowNodeState::Blocked));
+        assert_eq!(sched.node_state("d"), Some(FlowNodeState::Running));
+        assert_eq!(
+            adv.started
+                .iter()
+                .map(|s| s.node_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["d"]
+        );
+        assert!(adv.blocked.contains(&"b".to_string()));
+        assert!(adv.blocked.contains(&"c".to_string()), "Block 须传递到 c");
+        assert!(sched.dirty_set.is_empty());
+        assert_incremental_matches_full_scan(&sched);
+        assert_eq!(full_ready_ids(&sched).len(), 0, "阻塞后全量就绪集为空");
     }
 }

@@ -217,8 +217,15 @@ impl ToolIdempotencyGuard {
         if let Some(store) = &self.store {
             // 先落盘（append_key 幂等：重复写不报错）
             if let Err(cause) = store.append_key(&domain, &key).await {
-                // store 失败 → 不写内存键、直接返回错误：同进程重试
-                // check 不命中内存键，重新执行而非假去重
+                // store 失败 → 撤销内存预记录键（若由 check_and_record 预记录）后
+                // 返回错误：同进程重试 check 不命中内存键，重新执行而非假去重。
+                // 保持 11-T6「store 失败 → 内存不残留」契约（C1 check_and_record
+                // 预记录路径与分离式 check/record 路径行为一致）。
+                self.domains
+                    .lock()
+                    .unwrap_or_else(recover_lock)
+                    .get_mut(&domain)
+                    .map(|s| s.keys.remove(&key));
                 return Err(ToolError::new(
                     cause.code(),
                     format!(
@@ -227,7 +234,7 @@ impl ToolIdempotencyGuard {
                 ));
             }
         }
-        // store 成功（或无 store）后才写内存键
+        // store 成功（或无 store）后写内存键（幂等：check_and_record 可能已预记录）
         self.domains
             .lock()
             .unwrap_or_else(recover_lock)
@@ -236,6 +243,59 @@ impl ToolIdempotencyGuard {
             .keys
             .insert(key.clone());
         Ok(())
+    }
+
+    /// 原子 check + record（C1 TOCTOU 修复）。
+    ///
+    /// 在**同一内存锁区间**内完成 check + insert，消除 `check`→执行→`record`
+    /// 分离时并发首次执行绕过去重的窗口：两线程同时 `check_and_record` 同键，
+    /// 仅一个返回 [`IdempotencyDecision::Execute`]，另一个返回
+    /// [`IdempotencyDecision::Deduplicated`]。
+    ///
+    /// 语义：**预记录**——返回 `Execute` 时内存键已插入，调用方随后执行工具：
+    /// - 工具成功 → 调用 [`Self::record`] 落盘 store（内存 insert 幂等，重复无害）
+    /// - 工具失败 → 调用 [`Self::forget`] 撤销内存预记录，允许重试
+    ///
+    /// 与分离式 `check`/`record` 的区别：内存去重门在 check 阶段即关闭（而非
+    /// record 阶段），保证并发首次执行只有一个进入工具体。store 落盘仍在
+    /// `record`（工具成功后），保持「失败执行不落盘」契约。
+    ///
+    /// 保留 `check`/`record` 分离方法供流式恢复场景（重连后扫描已执行键、
+    /// 事后补录）使用。
+    pub async fn check_and_record(
+        &self,
+        ctx: &IdempotencyContext,
+        args: &Value,
+    ) -> Result<IdempotencyDecision, ToolError> {
+        let domain = ctx.domain();
+        self.ensure_loaded(&domain).await?;
+        let key = execution_key(ctx, args);
+        // 单次锁持：check + insert 原子化
+        let mut domains = self.domains.lock().unwrap_or_else(recover_lock);
+        let state = domains.entry(domain).or_default();
+        if state.keys.insert(key.clone()) {
+            // insert 返回 true = 新插入（此前不存在）→ 授权执行
+            Ok(IdempotencyDecision::Execute { key })
+        } else {
+            // 已存在 → 去重
+            Ok(IdempotencyDecision::Deduplicated { key })
+        }
+    }
+
+    /// 撤销 `check_and_record` 的预记录（C1 配套）。
+    ///
+    /// 工具执行失败时调用，从内存移除预记录键，使后续重试能重新进入执行路径。
+    /// 仅清理内存键：`check_and_record` 不落盘 store，故无需回退 store；若此前
+    /// 已调用 [`Self::record`] 落盘成功，则不应调用本方法（成功执行不撤销）。
+    ///
+    /// 不存在该键时为空操作（幂等）。
+    pub fn forget(&self, ctx: &IdempotencyContext, args: &Value) {
+        let domain = ctx.domain();
+        let key = execution_key(ctx, args);
+        let mut domains = self.domains.lock().unwrap_or_else(recover_lock);
+        if let Some(state) = domains.get_mut(&domain) {
+            state.keys.remove(&key);
+        }
     }
 
     /// 清除指定域的已执行记录（含默认域）
@@ -765,6 +825,100 @@ mod tests {
         assert!(matches!(
             guard.check(&c, &args).await.unwrap(),
             IdempotencyDecision::Deduplicated { .. }
+        ));
+    }
+
+    // ── C1 · 原子 check_and_record（TOCTOU 修复验证）────────────────────
+
+    /// C1：`check_and_record` 原子化 check + insert，两线程并发同键仅一个
+    /// 返回 `Execute`，另一个返回 `Deduplicated`。分离式 `check`/`record`
+    /// 在此场景下会两个都返回 `Execute`（TOCTOU 窗口）。
+    ///
+    /// 用 OS 线程 + 每线程 current-thread runtime（对齐 store_backend_tests /
+    /// explore_quota 双线程模式，agent-tools 未启用 rt-multi-thread）。
+    #[test]
+    fn check_and_record_concurrent_same_key_only_one_execute() {
+        use std::sync::{Arc, Barrier};
+        let guard = Arc::new(ToolIdempotencyGuard::new());
+        let args = Arc::new(json!({ "path": "a.txt" }));
+        let barrier = Arc::new(Barrier::new(3));
+        let mut handles = Vec::new();
+        for _ in 0..2 {
+            let guard = Arc::clone(&guard);
+            let barrier = Arc::clone(&barrier);
+            let args = Arc::clone(&args);
+            let c = ctx("run-1", "sess-1", "read_file");
+            handles.push(std::thread::spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("current-thread runtime");
+                barrier.wait();
+                rt.block_on(guard.check_and_record(&c, &args))
+            }));
+        }
+        barrier.wait();
+        let mut execute_count = 0;
+        let mut dedup_count = 0;
+        for h in handles {
+            let decision = h.join().expect("worker 不应 panic").expect("不应返回错误");
+            match decision {
+                IdempotencyDecision::Execute { .. } => execute_count += 1,
+                IdempotencyDecision::Deduplicated { .. } => dedup_count += 1,
+            }
+        }
+        assert_eq!(
+            execute_count, 1,
+            "并发同键仅一个返回 Execute（原子 check+insert），got execute={execute_count} dedup={dedup_count}"
+        );
+        assert_eq!(
+            dedup_count, 1,
+            "并发同键另一个返回 Deduplicated，got execute={execute_count} dedup={dedup_count}"
+        );
+    }
+
+    /// C1：`check_and_record` 返回 Execute 后工具失败 → `forget` 撤销预记录，
+    /// 同键重试应再次返回 Execute（保持「失败执行不记录」契约）。
+    #[tokio::test]
+    async fn check_and_record_forget_allows_retry_after_failure() {
+        let guard = ToolIdempotencyGuard::new();
+        let c = ctx("run-1", "sess-1", "write_file");
+        let args = json!({ "path": "a.txt", "content": "hi" });
+
+        // 首次预记录 → Execute
+        assert!(matches!(
+            guard.check_and_record(&c, &args).await.unwrap(),
+            IdempotencyDecision::Execute { .. }
+        ));
+        // 工具失败 → forget 撤销
+        guard.forget(&c, &args);
+        // 重试应再次 Execute（预记录已撤销）
+        assert!(matches!(
+            guard.check_and_record(&c, &args).await.unwrap(),
+            IdempotencyDecision::Execute { .. }
+        ));
+
+        // 成功后 record → 同键 check_and_record 应 Deduplicated
+        guard.record(&c, &args).await.unwrap();
+        assert!(matches!(
+            guard.check_and_record(&c, &args).await.unwrap(),
+            IdempotencyDecision::Deduplicated { .. }
+        ));
+    }
+
+    /// C1：`forget` 对不存在的键为空操作（幂等，不 panic）。
+    #[tokio::test]
+    async fn forget_nonexistent_key_is_noop() {
+        let guard = ToolIdempotencyGuard::new();
+        let c = ctx("run-1", "sess-1", "read_file");
+        let args = json!({ "path": "a.txt" });
+        // 对未记录的键 forget 不 panic
+        guard.forget(&c, &args);
+        guard.forget(&c, &args);
+        // 仍可正常 Execute
+        assert!(matches!(
+            guard.check_and_record(&c, &args).await.unwrap(),
+            IdempotencyDecision::Execute { .. }
         ));
     }
 }

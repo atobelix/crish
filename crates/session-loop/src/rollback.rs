@@ -186,7 +186,9 @@ impl<'a> RollbackExecutor<'a> {
                     for p in paths {
                         results.push(PathRollbackResult::Skipped {
                             path: p.clone(),
-                            reason: "git 类回滚须先过 RevertPolicy 门禁（C3/C4），撤回路径未自动执行".into(),
+                            reason:
+                                "git 类回滚须先过 RevertPolicy 门禁（C3/C4），撤回路径未自动执行"
+                                    .into(),
                         });
                     }
                 }
@@ -208,9 +210,18 @@ mod tests {
             reg.strategy_for(ToolCategory::Filesystem),
             RollbackStrategy::TrashRestore
         );
-        assert_eq!(reg.strategy_for(ToolCategory::Terminal), RollbackStrategy::None);
-        assert_eq!(reg.strategy_for(ToolCategory::Network), RollbackStrategy::None);
-        assert_eq!(reg.strategy_for(ToolCategory::Internal), RollbackStrategy::None);
+        assert_eq!(
+            reg.strategy_for(ToolCategory::Terminal),
+            RollbackStrategy::None
+        );
+        assert_eq!(
+            reg.strategy_for(ToolCategory::Network),
+            RollbackStrategy::None
+        );
+        assert_eq!(
+            reg.strategy_for(ToolCategory::Internal),
+            RollbackStrategy::None
+        );
         assert_eq!(reg.strategy_for(ToolCategory::Mcp), RollbackStrategy::None);
     }
 
@@ -232,10 +243,7 @@ mod tests {
         let exec = RollbackExecutor::new(&reg, None);
         let results = exec.rollback_before(
             42,
-            &[(
-                ToolCategory::Terminal,
-                vec!["/ws/out.log".to_string()],
-            )],
+            &[(ToolCategory::Terminal, vec!["/ws/out.log".to_string()])],
         );
         assert_eq!(results.len(), 1);
         assert!(matches!(
@@ -252,10 +260,7 @@ mod tests {
         let exec = RollbackExecutor::new(&reg, None);
         let results = exec.rollback_before(
             42,
-            &[(
-                ToolCategory::Filesystem,
-                vec!["/ws/a.txt".to_string()],
-            )],
+            &[(ToolCategory::Filesystem, vec!["/ws/a.txt".to_string()])],
         );
         assert!(matches!(
             &results[0],

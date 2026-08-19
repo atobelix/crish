@@ -31,11 +31,12 @@
 use crate::block_id::BlockId;
 use crate::events::BlockUpsert;
 use crate::ir::{BlockNode, BlockTree};
-use crate::op::Origin;
-use crate::persistence::{CommitBatch, EncodedUpdate, PersistencePlugin, UpdateKind};
+use crate::op::{Op, Origin};
+use crate::persistence::{CommitBatch, EncodedUpdate, PersistError, PersistencePlugin, UpdateKind};
 use crate::structure_codec::{encode_structure_payload, StructureCodecError};
 use crate::text_engine::{TextEngine, TextEngineCheckpoint, TextEngineError};
 use crate::tx::TxId;
+use std::collections::HashSet;
 use thiserror::Error;
 
 #[path = "session_apply.rs"]
@@ -154,6 +155,14 @@ pub enum ApplyError {
     NotFound(String),
     #[error("persist: {0}")]
     Persist(String),
+    /// CT-01 CAS 持久层版本冲突：`on_committed_expect` 期望版本不匹配，
+    /// 陈旧写被 [`crate::persistence::PersistError::Conflict`] 拦截。
+    ///
+    /// 类型化变体：错误透传链（session.rs 产生侧 → store_backend.rs 消费侧）
+    /// 不再依赖 `to_string().contains("conflict")` 字符串匹配；`expected`
+    /// = increment 前 rev（rev - 1）。
+    #[error("persist conflict: rev 已前进，期望 {expected} 不匹配")]
+    PersistConflict { expected: u64 },
     #[error("invariant: {0}")]
     Invariant(String),
     #[error("undo: {0}")]
@@ -224,7 +233,37 @@ pub struct DocSession {
     undo_stack: Vec<UndoEntry>,
 }
 
-// SAFETY: DocSession 内部通过受控访问或 Mutex 包装保护，可在线程间安全传递
+// SAFETY（B4 审查结论：仅 Send；`Sync` 既不成立也不需要）：
+//
+// 为何可跨线程移动（Send）：
+//   - `DocSession` 不含裸指针（*const/*mut）、线程局部存储（TLS）或
+//     `!Send` 的内部可变性（Cell/RefCell 等）；所有字段均为 owned 值，
+//     独占所有权移动不产生别名悬挂或资源泄漏。
+//   - `text_engine: TextEngine` 含 `TextHost`：`yrs::Doc` 自身已 `Send+Sync`
+//    （`doc.rs:59-60` 显式实现），`UndoManager<()>` 在无 `sync` feature 时
+//     不自动 `Send`（内部 `Observer<Box<dyn Fn + 'static>>` 未标 `Send`，
+//     见 `undo.rs:42-45`），但二者为纯堆内存结构（`DocStore(Arc<StoreInner>)` +
+//     `Arc<Inner<M>>`）、无 TLS，且 `TextHost` 同时拥有 `doc` 与 `undo_mgr`
+//     一起移动，堆上数据不依赖栈地址，无悬挂别名；`unsafe impl Send for TextHost`
+//     已在 `text_engine.rs:35-49` 论证（独占移动安全，仅 `Send`）。
+//   - 其余字段均已 `Send`：
+//     `persistence: Option<Box<dyn PersistencePlugin>>`（trait bound `Send + Sync`）；
+//     `doc_id: String`、`tree: BlockTree`（`HashMap<BlockId, BlockNode>` 等均由
+//     `Uuid/String` 等 `Send` 构成）、`rev: u64`、`huge_threshold: usize`；
+//     `last_tx_id: Option<TxId>`（`TxId(Uuid)`，`Send`）；
+//     `last_text_updates: Vec<TextUpdatePayload>`（`BlockId + Vec<u8>`，`Send`）；
+//     `undo_stack: Vec<UndoEntry>`（`UndoEntry = Origin + MemorySnapshot`，
+//     `MemorySnapshot` 含 `BlockTree + TextEngineCheckpoint + rev + last_*`，
+//     `TextEngineCheckpoint` 仅含 `HashMap<BlockId, BlockCheckpoint>`/`HashSet` 等
+//     owned 容器，`BlockCheckpoint { text: Arc<str>, update: Option<Vec<u8>> }` 均 `Send`）。
+//
+// 为何不实现 `Sync`：`TextHost` 已收窄为 `!Sync`（`Doc` 以 `&self` 暴露
+// `transact`/`get_or_insert_text` 等内部可变 API，`UndoManager` 含非 `Sync` 闭包，
+// `&TextHost` 并发即数据竞争），故 `TextEngine` 与 `DocSession` 自动 `!Sync`。
+// 跨线程共享唯一合法路径：`Arc<Mutex<DocSession>>`（`Mutex<T>: Send` 且
+// `Mutex<T>: Sync` 当且仅当 `T: Send`，不要求 `T: Sync`），持锁后以 `&mut`
+// 独占访问才碰 `TextHost`；`read_text` 等 `&self` 方法亦经 `&TextHost` 触发
+// yrs 事务，`&DocSession` 不得裸跨线程共享。
 #[allow(unsafe_code)]
 unsafe impl Send for DocSession {}
 
@@ -346,12 +385,55 @@ impl DocSession {
         self.text_engine.unpin(*id);
     }
 
-    /// P-H2：捕获 apply 前可恢复内存态（树 clone + 文本引擎检查点 + rev/观测）。
-    fn capture_memory_snapshot(&self) -> MemorySnapshot {
+    /// 本次写可能改动的文本引擎块：upserts / removes（含子树）/ text_touches 并集。
+    fn text_ids_for_ops(&self, ops: &[Op]) -> HashSet<BlockId> {
+        let mut ids = HashSet::new();
+        for op in ops {
+            match op {
+                Op::Insert { id, .. }
+                | Op::UpdateProps { id, .. }
+                | Op::TurnInto { id, .. }
+                | Op::Move { id, .. }
+                | Op::TextEdit { id, .. } => {
+                    ids.insert(*id);
+                }
+                Op::Delete { id } => {
+                    ids.extend(self.subtree_ids(*id));
+                }
+            }
+        }
+        ids
+    }
+
+    fn subtree_ids(&self, id: BlockId) -> Vec<BlockId> {
+        let mut stack = vec![id];
+        let mut out = Vec::new();
+        while let Some(cur) = stack.pop() {
+            if let Some(n) = self.tree.nodes.get(&cur) {
+                stack.extend(n.children.iter().copied());
+            }
+            out.push(cur);
+        }
+        out
+    }
+
+    /// undo 回滚涉及：原 apply 已快照块 ∪ 该步新建、即将被释放的块。
+    fn text_ids_for_undo_checkpoint(&self, pre: &TextEngineCheckpoint) -> HashSet<BlockId> {
+        let mut ids = pre.involved_ids();
+        for id in self.text_engine.registered_ids() {
+            if !pre.contains_registered(id) {
+                ids.insert(id);
+            }
+        }
+        ids
+    }
+
+    /// P-H2：捕获可恢复内存态（整树 clone + 文本引擎**增量**检查点 + rev/观测）。
+    fn capture_memory_snapshot(&self, text_ids: &HashSet<BlockId>) -> MemorySnapshot {
         MemorySnapshot {
             tree: self.tree.clone(),
             rev: self.rev,
-            text: self.text_engine.checkpoint(),
+            text: self.text_engine.checkpoint(text_ids),
             last_tx_id: self.last_tx_id,
             last_text_updates: self.last_text_updates.clone(),
         }
@@ -370,8 +452,8 @@ impl DocSession {
     ///
     /// 三个写路径（apply / undo / 远端文本合入）统一汇入本面；失败由调用方
     /// P-H2 快照回滚。**CT-01 CAS**：`expect_rev` = 本次写前会话 rev（increment 前），
-    /// 经存储层条件更新比对；陈旧写 → [`crate::persistence::PersistError::Conflict`] →
-    /// `ApplyError::Persist`（消息含稳定 `conflict` 标识，供上层错误码透传链消费）。
+    /// 经存储层条件更新比对；陈旧写 → [`crate::persistence::PersistError::Conflict`]
+    /// → [`ApplyError::PersistConflict`]（类型化变体，不再依赖 Display 文案匹配）。
     fn emit_commit(
         &self,
         origin: Origin,
@@ -400,7 +482,12 @@ impl DocSession {
             snapshot_tick: false,
         };
         p.on_committed_expect(&self.doc_id, &batch, expect_rev)
-            .map_err(|e| ApplyError::Persist(e.to_string()))?;
+            .map_err(|e| match e {
+                PersistError::Conflict { expect } => {
+                    ApplyError::PersistConflict { expected: expect }
+                }
+                other => ApplyError::Persist(other.to_string()),
+            })?;
         Ok(())
     }
 }

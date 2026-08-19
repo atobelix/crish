@@ -87,6 +87,16 @@ unsafe impl Send for PerceptionGuard {}
 #[allow(unsafe_code)]
 unsafe impl Sync for PerceptionGuard {}
 
+// Clone：UiaPerception 内部 COM 接口（IUIAutomation / IUIAutomationTreeWalker）
+// 经 windows crate 的 Clone（IUnknown::AddRef）实现引用计数共享——1C-7 需要
+// 在 spawn_blocking 闭包前克隆 perception 以在阻塞线程执行 gate_check。
+#[cfg(windows)]
+impl Clone for PerceptionGuard {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
 /// 真实电脑操作会话：`ComputerSession`（Windows 实装）+ `UiaPerception`
 /// （感知面）+ 动作前检查器 + 感知版本号（06 文档 遗留③）。
 ///
@@ -131,24 +141,27 @@ impl RealComputerSession {
         self.gate = gate;
         self
     }
+}
 
-    /// 动作前检查器（守卫⑥）：Win32 API 动态解析前台活动窗口 HWND/PID/真实 ExeName，
-    /// 废除 process: None 硬编码；遭遇 ACCESS_DENIED 等异常严格 Fail-Closed 判定提权阻止注入。
-    fn gate_check(&self) -> Result<(), SessionError> {
-        let mut target = conex_computer::window_gate::resolve_foreground_target();
-        if let ActionTarget::Window { ref mut title, .. } = target {
-            if *title == "未知窗口" || *title == "无标题窗口" || title.is_empty() {
-                if let Ok(snap) = self.perception.0.snapshot() {
-                    if !snap.root.name.is_empty() {
-                        *title = snap.root.name;
-                    }
+/// 动作前检查器纯逻辑（1C-7 提取）：接收 perception + gate，与 `self`
+/// 解耦，使 `spawn_blocking` 闭包可在克隆的 perception/gate 上执行而无需借用
+/// `&self`（async dispatch 不能把 `&self` 移入阻塞闭包）。
+#[cfg(windows)]
+fn gate_check_inner(
+    perception: &PerceptionGuard,
+    gate: &Arc<dyn ActionTargetGate>,
+) -> Result<(), SessionError> {
+    let mut target = conex_computer::window_gate::resolve_foreground_target();
+    if let ActionTarget::Window { ref mut title, .. } = target {
+        if *title == "未知窗口" || *title == "无标题窗口" || title.is_empty() {
+            if let Some(name) = perception.0.focused_element_name() {
+                if !name.is_empty() {
+                    *title = name;
                 }
             }
         }
-        self.gate
-            .check(&target)
-            .map_err(SessionError::Gate)
     }
+    gate.check(&target).map_err(SessionError::Gate)
 }
 
 #[cfg(windows)]
@@ -160,10 +173,16 @@ impl ComputerOps for RealComputerSession {
 
     async fn dispatch(&self, action: &Action) -> Result<ActionResult, SessionError> {
         // 动作前检查器（06 文档 §4.2 守卫⑥：白名单/提权 → elevated_window）
-        self.gate_check()?;
+        // 1C-7：gate_check 含 Win32 API（resolve_foreground_target）+ UIA
+        // COM 调用（focused_element_name），移入 spawn_blocking 避免阻塞
+        // tokio worker 线程。gate / perception 经 Arc clone 在闭包内执行。
         let inner = self.inner.clone();
         let action = action.clone();
+        let gate = self.gate.clone();
+        let perception = self.perception.clone();
         let result = tokio::task::spawn_blocking(move || {
+            // 1C-7：gate_check（Win32 API + UIA COM 调用）在阻塞线程执行
+            gate_check_inner(&perception, &gate)?;
             let mut session = inner.lock().expect("电脑会话锁损坏");
             session.dispatch(&action)
         })

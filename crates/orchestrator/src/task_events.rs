@@ -931,7 +931,10 @@ mod tests {
         let mut acc = TaskAuditAccumulator::new();
         let ai = TaskAuditOperator::AiTool { tool_call_id: None };
         acc.push(&started("t-1", "run-main"), ai.clone());
-        assert_eq!(acc.commands.get("t-1").map(String::as_str), Some("cargo build"));
+        assert_eq!(
+            acc.commands.get("t-1").map(String::as_str),
+            Some("cargo build")
+        );
 
         // completed 后 commands 映射即时释放
         acc.push(&completed("t-1", 0), ai.clone());

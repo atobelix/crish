@@ -561,7 +561,10 @@ impl HookRegistry {
         event: &HookEvent,
         result: &Result<HookDispatchOutcome, HookError>,
     ) {
-        let sink = self.outcome_sink.read().unwrap_or_else(|e| e.into_inner());
+        let sink = self.outcome_sink.read().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "hook outcome_sink 读锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
         let Some(sink) = sink.as_ref() else { return };
         let (outcome, hook_name, blocked_reason) = match result {
             Ok(o) if o.blocked.is_some() => {

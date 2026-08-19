@@ -71,7 +71,9 @@ pub use control::{
     level_for_kind, ControlBus, ControlDrainAction, ControlIntent, ControlIntentInput, ControlKind,
     ControlLevel,
 };
-pub use freeze::{is_retraction_evacuation_event, FreezeError, FrozenSession, SessionFreezeRegistry, WriteVerdict};
+pub use freeze::{
+    is_retraction_evacuation_event, FreezeError, FrozenSession, SessionFreezeRegistry, WriteVerdict,
+};
 pub use hooks::{
     HookAction, HookDispatchOutcome, HookError, HookEvent, HookEventKind, HookFailStrategy,
     HookHandler, HookMode, HookRegisterOptions, HookRegistry,
@@ -84,16 +86,15 @@ pub use provider::{
     DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ProviderStreamItem,
     ReasoningEffort, ToolSchema,
 };
-pub use retraction::{
-    RetractionBackend, RetractionError, RetractionOutcome, RetractionProtocol,
-    CONVERGE_TIMEOUT_MS,
-};
-pub use rollback::{
-    CategoryRollbackRegistry, PathRollbackResult, RollbackExecutor, RollbackStrategy,
-};
 pub use r#loop::{
     AgentSessionLoop, EndDecision, RecoveryDecision, RecoveryHook, RunOutcome, SessionLoopOptions,
     TurnEndContext, TurnEndHook,
+};
+pub use retraction::{
+    RetractionBackend, RetractionError, RetractionOutcome, RetractionProtocol, CONVERGE_TIMEOUT_MS,
+};
+pub use rollback::{
+    CategoryRollbackRegistry, PathRollbackResult, RollbackExecutor, RollbackStrategy,
 };
 // T-33/T-42：摘要后台调度类型面（run 级 dispatch + 会话级协调器/注册表 +
 // 配置面键）——壳层装配（T-43/T-44）与 orchestrator 回调落库消费
@@ -101,13 +102,12 @@ pub use r#loop::summary_coordinator::{
     SessionSummaryCoordinator, SessionSummaryCoordinatorRegistry, MAX_CONCURRENT_SUMMARY_TASKS,
 };
 pub use r#loop::summary_dispatch::{
-    summary_l1_placeholder, SummaryBackgroundSink, SummaryBackgroundSinkRef, SummaryDispatch,
-    SummaryDispatchConfig, SummaryDispatchOutcome, SummaryDispatchTask, SummaryOutcomeCallback,
-    SummaryRetryGate, SummaryRetryGuardConfig, DEFAULT_RETRY_GUARD_MAX_ATTEMPTS,
-    DEFAULT_RETRY_GUARD_WINDOW_MS, LOOP_SUMMARY_MAX_WALL_MS, MAX_SUMMARY_ATTEMPTS,
-    META_KEY_SUMMARY_BACKOFF_MS, META_KEY_SUMMARY_L1_PLACEHOLDER, META_KEY_SUMMARY_MAX_ATTEMPTS,
-    META_KEY_SUMMARY_RETRY_WINDOW_MS, META_KEY_SUMMARY_WALL_MS, SUMMARY_BACKOFF_MS,
-    SUMMARY_JITTER_RATIO,
+    SummaryBackgroundSink, SummaryBackgroundSinkRef, SummaryDispatch, SummaryDispatchConfig,
+    SummaryDispatchOutcome, SummaryDispatchTask, SummaryOutcomeCallback, SummaryRetryGate,
+    SummaryRetryGuardConfig, DEFAULT_RETRY_GUARD_MAX_ATTEMPTS, DEFAULT_RETRY_GUARD_WINDOW_MS,
+    LOOP_SUMMARY_MAX_WALL_MS, MAX_SUMMARY_ATTEMPTS, META_KEY_SUMMARY_BACKOFF_MS,
+    META_KEY_SUMMARY_MAX_ATTEMPTS, META_KEY_SUMMARY_RETRY_WINDOW_MS, META_KEY_SUMMARY_WALL_MS,
+    SUMMARY_BACKOFF_MS, SUMMARY_JITTER_RATIO,
 };
 pub use safe_point::{apply_safe_point_control, AbortSignal, ControlAction};
 pub use state::AgentSessionMachine;

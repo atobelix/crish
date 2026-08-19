@@ -9,18 +9,9 @@ use crate::note_plan_ops::MemBlock;
 use crate::note_types::{
     NoteApplyMdRequest, NoteApplyMdResult, NoteApplyMode, NoteBackendError, NoteLossyReport,
 };
+use crate::poison::POISON_RECOVERIES;
 use serde_json::Map;
-use std::sync::atomic::{AtomicU64, Ordering};
-
-/// 毒丸恢复计数（B1-3 观测化：intents/docs 锁中毒恢复次数；对齐 registry.rs
-/// 「tracing::error! 成对 + 计数」样板，零新依赖；本文件 4 处锁共用）
-static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
-
-/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
-#[cfg(test)]
-pub(crate) fn poison_recovery_count() -> u64 {
-    POISON_RECOVERIES.load(Ordering::Relaxed)
-}
+use std::sync::atomic::Ordering;
 
 impl MemoryNoteBackend {
     /// MD 片段写入（intent 幂等；append_to_block / 定位插入）
@@ -185,6 +176,7 @@ impl MemoryNoteBackend {
 mod tests {
     use super::super::capture::with_capture;
     use super::*;
+    use crate::poison::{poison_recovery_count, poison_test_guard};
 
     /// B1-3 毒化测：intents 锁中毒后 apply_md_fragment（带 intent_id）正常
     /// 返回 + error 日志出现 + 毒丸恢复计数 +2（三要素）。
@@ -193,6 +185,7 @@ mod tests {
     /// 幂等写入（:144）各自经恢复分支，每次 +1。
     #[test]
     fn poisoned_intents_lock_apply_md_recovers_with_log_and_count() {
+        let _serial = poison_test_guard();
         let backend = MemoryNoteBackend::new();
         let before = poison_recovery_count();
         crate::test_support::poison_std_lock(&backend.intents);

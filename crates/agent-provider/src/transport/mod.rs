@@ -18,6 +18,26 @@ use crate::sse::reader::{
 pub use crate::sse::reader::StreamFrameEvent;
 
 /// reqwest 响应体字节流适配器（bytes_stream → `Vec<u8>` 块）
+///
+/// # 1C-5 评估结论：维持现状（Bytes 替代不实施）
+///
+/// 评估了将 [`ChunkReader::next_chunk`] 返回类型从 `Vec<u8>` 改为
+/// `bytes::Bytes` 以消除下方 `bytes.to_vec()` 每块一次堆分配的方案：
+///
+/// - **理论收益**：reqwest `bytes_stream` 本身产出 `Bytes`（引用计数切片），
+///   直接返回可省去 `to_vec()` 的堆分配 + memcpy。大块（4MB）场景收益显著。
+/// - **实际收益不足**：
+///   1. 典型 SSE 块几 KB，一次几 KB 的 `Vec` 分配在现代分配器（jemalloc/
+///      mimalloc）下是几十 ns 级，远低于 SSE 解析 / 网络往返的 ms 级开销；
+///   2. [`SseParser::push`] 接收 `&[u8]` 后 `extend_from_slice` 到内部
+///      buffer——无论 `Bytes` 还是 `Vec<u8>`，解析层都必有一次拷贝，
+///      `Bytes` 仅省去传输边界的一次 `Vec` 分配，不能消除解析拷贝；
+///   3. trait 签名变更影响 [`ChunkReader`] 所有实现者（`ReqwestChunkReader`、
+///      测试用 `ChannelReader` / `ErrorReader`）+ `select_next_chunk` /
+///      `read_sse` / `read_sse_stream` 的 `bytes.len()` 与 `parser.push(&bytes)`
+///      适配点，重构成本与收益不成正比。
+/// - **决策**：按详案 1C-5「若收益不足以覆盖 trait 重构成本，标注评估后维持
+///   现状，不强行实施」。维持 `Vec<u8>` 返回类型，`bytes.to_vec()` 保留。
 struct ReqwestChunkReader {
     stream: Pin<Box<dyn Stream<Item = Result<Vec<u8>, reqwest::Error>> + Send>>,
 }

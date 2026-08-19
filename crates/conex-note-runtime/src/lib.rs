@@ -55,6 +55,7 @@
 #![allow(missing_docs)]
 
 mod hydrate_projection;
+mod poison;
 mod store_apply_md;
 mod store_backend;
 mod store_backend_apply;

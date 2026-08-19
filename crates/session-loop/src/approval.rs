@@ -78,7 +78,10 @@ impl ApprovalChannel {
     /// 取走本次执行记录的审批事件（并入批事件流，保持
     /// tool-start → approval-requested → tool-end 顺序契约）
     pub fn take_recorded(&self) -> Vec<ToolEvent> {
-        std::mem::take(&mut *self.recorded.lock().unwrap_or_else(|e| e.into_inner()))
+        std::mem::take(&mut *self.recorded.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "approval recorded 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        }))
     }
 
     /// 是否已中止（批级信号与会话级令牌任一触发）
@@ -113,7 +116,10 @@ impl AskChannel for ApprovalChannel {
         //    负责实时广播，本记录进入批事件流供持久化翻译）
         self.recorded
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "approval recorded 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .push(ToolEvent::ApprovalRequested {
                 call_id: self.call_id.clone(),
                 tool_name: tool_name.to_string(),
@@ -160,7 +166,10 @@ impl AskChannel for ApprovalChannel {
                         // 路径落事件，避免双发）
                         self.recorded
                             .lock()
-                            .unwrap_or_else(|e| e.into_inner())
+                            .unwrap_or_else(|e| {
+                                tracing::error!(target: "session_loop", "approval recorded 锁中毒，按恢复模式继续：{e}");
+                                e.into_inner()
+                            })
                             .push(ToolEvent::ApprovalResolved {
                                 call_id: self.call_id.clone(),
                                 decision: ApprovalDecision::Expired,

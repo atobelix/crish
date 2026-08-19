@@ -617,6 +617,10 @@ fn content_bytes(messages: &[SessionMessage]) -> u64 {
 /// [RunFailureContext.history] 字段属 D7 字段面（recovery.rs，与 D3 装配
 /// 表同批次对齐，禁止一侧先行）；字段落地后 [Self::prepare_resume] 以
 /// `Some(Self::subagent_history(row))` 一行接入。本函数独立暴露以便单测。
+///
+/// 接线状态：已确认接线计划——D7 字段占位已实现，待 recovery.rs RunFailureContext.history
+/// 字段落地后以 `ctx.history = Some(subagent_history(current))` 一行接入；当前占位保留，
+/// 跟随 D7 实现轮（追踪：backend-optimization Q10-D7）。
 pub fn subagent_history(row: &SessionAgent) -> Vec<HistoryMessage> {
     row.messages
         .iter()

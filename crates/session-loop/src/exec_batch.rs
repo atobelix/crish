@@ -28,35 +28,13 @@ impl ToolExecutor {
         }
     }
 
-    /// 启用幂等守卫
-    pub fn with_idempotency(mut self, guard: Arc<ToolIdempotencyGuard>) -> Self {
-        self.idempotency = Some(guard);
-        Self {
-            registry: self.registry,
-            idempotency: self.idempotency,
-            middleware: self.middleware,
-            middleware_timeouts: self.middleware_timeouts,
-            hooks: self.hooks,
-            revert_policy: self.revert_policy,
-            concurrency_obs: self.concurrency_obs,
-        }
-    }
-
     /// 重建执行器：Some=启用幂等守卫，None=移除守卫。
     ///
     /// AgentSessionLoop::with_options 派生状态同步用（T06.4.4：开关翻转时
     /// 不必重建执行器，直接替换守卫槽位）。
-    pub fn with_idempotency_opt(mut self, guard: Option<Arc<ToolIdempotencyGuard>>) -> Self {
+    pub fn with_idempotency_opt(&mut self, guard: Option<Arc<ToolIdempotencyGuard>>) -> Self {
         self.idempotency = guard;
-        Self {
-            registry: self.registry,
-            idempotency: self.idempotency,
-            middleware: self.middleware,
-            middleware_timeouts: self.middleware_timeouts,
-            hooks: self.hooks,
-            revert_policy: self.revert_policy,
-            concurrency_obs: self.concurrency_obs,
-        }
+        self.clone_executor()
     }
 
     /// 是否启用幂等守卫（测试 / 观测用）
@@ -68,65 +46,33 @@ impl ToolExecutor {
     ///
     /// 链在审批通过（或无需审批）后、工具执行前运行 before_execute，
     /// 执行后运行 on_result / on_error（优先级语义见模块头注）。
-    pub fn with_middleware(mut self, middleware: Vec<Arc<dyn ToolMiddleware>>) -> Self {
+    pub fn with_middleware(&mut self, middleware: Vec<Arc<dyn ToolMiddleware>>) -> Self {
         self.middleware = middleware;
-        Self {
-            registry: self.registry,
-            idempotency: self.idempotency,
-            middleware: self.middleware,
-            middleware_timeouts: self.middleware_timeouts,
-            hooks: self.hooks,
-            revert_policy: self.revert_policy,
-            concurrency_obs: self.concurrency_obs,
-        }
+        self.clone_executor()
     }
 
     /// 覆盖中间件钩子超时配置（E4：06 遗留 :148-152 收口；默认宽松放行
     /// 2000/2000/1000ms）。语义对齐 06「中间件自身错误语义」表：
     /// before_execute 超时 → Block；on_result 超时 → 降级透传原输出；
     /// on_error 超时 → 仅日志。
-    pub fn with_middleware_timeouts(mut self, timeouts: MiddlewareTimeoutConfig) -> Self {
+    pub fn with_middleware_timeouts(&mut self, timeouts: MiddlewareTimeoutConfig) -> Self {
         self.middleware_timeouts = timeouts;
-        Self {
-            registry: self.registry,
-            idempotency: self.idempotency,
-            middleware: self.middleware,
-            middleware_timeouts: self.middleware_timeouts,
-            hooks: self.hooks,
-            revert_policy: self.revert_policy,
-            concurrency_obs: self.concurrency_obs,
-        }
+        self.clone_executor()
     }
 
     /// 注入插件钩子注册表（Some = 启用 tool.pre/tool.post/tool.error 广播；
     /// None = 移除）。跨批共享同一注册表实例即可多批广播。
-    pub fn with_hooks(mut self, hooks: Option<Arc<HookRegistry>>) -> Self {
+    pub fn with_hooks(&mut self, hooks: Option<Arc<HookRegistry>>) -> Self {
         self.hooks = hooks;
-        Self {
-            registry: self.registry,
-            idempotency: self.idempotency,
-            middleware: self.middleware,
-            middleware_timeouts: self.middleware_timeouts,
-            hooks: self.hooks,
-            revert_policy: self.revert_policy,
-            concurrency_obs: self.concurrency_obs,
-        }
+        self.clone_executor()
     }
 
     /// 注入 C3 回退护栏策略（I3-S6）：替换阈值（session_meta 运行时覆盖，
     /// 04 Q1：同键覆盖默认值）/ 面积评估器（真实 git 接线 / 测试注入）。
     /// 默认策略始终生效（语义估算 + 默认阈值 10 文件 / 300 行 / 24 小时）。
-    pub fn with_revert_policy(mut self, policy: RevertPolicy) -> Self {
+    pub fn with_revert_policy(&mut self, policy: RevertPolicy) -> Self {
         self.revert_policy = policy;
-        Self {
-            registry: self.registry,
-            idempotency: self.idempotency,
-            middleware: self.middleware,
-            middleware_timeouts: self.middleware_timeouts,
-            hooks: self.hooks,
-            revert_policy: self.revert_policy,
-            concurrency_obs: self.concurrency_obs,
-        }
+        self.clone_executor()
     }
 }
 
@@ -167,11 +113,11 @@ impl ToolExecutor {
             options,
             abort,
         };
-        runner.run(sequence, &mut events, &mut results, &mut fatal).await;
+        runner
+            .run(sequence, &mut events, &mut results, &mut fatal)
+            .await;
 
-        events.push(ToolEvent::BatchEnd {
-            batch_id,
-        });
+        events.push(ToolEvent::BatchEnd { batch_id });
 
         // 防御性兜底：正常路径下（含取消路径）全部结果应有值；
         // debug 构建断言暴露遗漏路径，生产保持降级容错（不回退 panic）
@@ -330,7 +276,10 @@ impl BatchRunner<'_> {
         group: &[usize],
         approval_active: bool,
         events: &mut Vec<ToolEvent>,
-    ) -> (Vec<Option<ApprovalDecision>>, Vec<Option<ApprovalRequester>>) {
+    ) -> (
+        Vec<Option<ApprovalDecision>>,
+        Vec<Option<ApprovalRequester>>,
+    ) {
         let mut approvals: Vec<Option<ApprovalDecision>> = vec![None; group.len()];
         // T-D-14：并行组逐项请求方身份（拒绝文案按来源分支：
         // 子代理申请被拒 → 含「主 agent 拒绝 / 回报主 agent」指引）
@@ -340,7 +289,8 @@ impl BatchRunner<'_> {
                 let mut needs: Vec<usize> = Vec::new();
                 for (pos, &idx) in group.iter().enumerate() {
                     let call = &self.calls[idx];
-                    if self.executor.call_verdict(call, self.options) == PermissionVerdict::NeedsApproval
+                    if self.executor.call_verdict(call, self.options)
+                        == PermissionVerdict::NeedsApproval
                     {
                         needs.push(pos);
                         let requester = self.executor.approval_requester_for(self.ctx, &call.input);
@@ -456,15 +406,13 @@ impl BatchRunner<'_> {
                         )
                     }
                     _ => match decided {
-                        Some(ApprovalDecision::Denied { reason }) => {
-                            ClassifiedToolResult::error(
-                                &call.id,
-                                &call.tool_name,
-                                ToolErrorKind::UserDenied,
-                                denied_message(requesters[pos].is_some(), &reason),
-                                0,
-                            )
-                        }
+                        Some(ApprovalDecision::Denied { reason }) => ClassifiedToolResult::error(
+                            &call.id,
+                            &call.tool_name,
+                            ToolErrorKind::UserDenied,
+                            denied_message(requesters[pos].is_some(), &reason),
+                            0,
+                        ),
                         Some(ApprovalDecision::Expired) => {
                             // G-9：超时 → Expired 权威语义落库（并行组路径同
                             // 顺序路径；approval-resolved 位于本项
@@ -588,10 +536,20 @@ impl ToolExecutor {
         }
     }
 
-    /// 并行组并发观测句柄（B4）：活跃数 / 峰值计数点——测试断言与观测消费
+    /// 并行组并发观测句柄（B4）：活跃数 / 峰值计数点。
     ///
-    /// 当前消费者 = 本 crate 并行批测断言（并发峰值 ≤ 上限）；S3 埋点
-    /// 消费为后续切片，届时移除 allow
+    /// 当前消费方：`tool_exec_tests.rs` 并行批测
+    ///（`parallel_group_concurrency_peak_bounded_by_default` /
+    /// `parallel_group_max_parallel_one_serializes` /
+    /// `parallel_group_max_parallel_four_caps_peak`）断言峰值 ≤ 上限、
+    /// 批后 `active == 0`。生产路径只经字段 `concurrency_obs` 做
+    /// `enter`/`leave`，不读本访问器，故 `dead_code` 仅对非 test 编译成立。
+    ///
+    /// 接线计划：若批级观测要对齐 B5 计数原语打 tracing 字段（peak/active），
+    /// 经本访问器读取，接入点优先 `BatchRunner::collect_group_endings`
+    /// 或 `ToolBatchOutcome` 附加观测；禁止另开 Atomic 计数器。
+    /// 删除条件：上述三测不再读本句柄，且 `collect_group_endings` /
+    /// `ToolBatchOutcome` 仍无生产读取方时，下轮删除本方法与 `#[allow]`。
     #[allow(dead_code)]
     pub(crate) fn concurrency_obs(&self) -> &Arc<ParallelExecObs> {
         &self.concurrency_obs

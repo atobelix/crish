@@ -225,7 +225,10 @@ impl CdpClient {
                 };
                 if let Some(id) = parsed.id {
                     // 命令响应：pending 路由（未知 id 忽略，防负 id 调试代理流量）
-                    let mut pending = pending_clone.lock().unwrap_or_else(|p| p.into_inner());
+                    let mut pending = pending_clone.lock().unwrap_or_else(|p| {
+                        tracing::error!("CDP pending 锁中毒，按恢复模式继续：{p}");
+                        p.into_inner()
+                    });
                     if let Some(tx) = pending.remove(&id) {
                         let _ = tx.send(parsed);
                     }
@@ -243,7 +246,10 @@ impl CdpClient {
             // 不等 30s 超时），并通知 keepalive 停止
             pending_clone
                 .lock()
-                .unwrap_or_else(|p| p.into_inner())
+                .unwrap_or_else(|p| {
+                    tracing::error!("CDP pending 锁中毒，按恢复模式继续：{p}");
+                    p.into_inner()
+                })
                 .clear();
             let _ = cancel_tx.send(true);
             let _ = lost_tx_clone.send(true);
@@ -309,7 +315,10 @@ impl CdpClient {
 
         let (tx, rx) = oneshot::channel();
         {
-            let mut pending = self.pending.lock().unwrap_or_else(|p| p.into_inner());
+            let mut pending = self.pending.lock().unwrap_or_else(|p| {
+                tracing::error!("CDP pending 锁中毒，按恢复模式继续：{p}");
+                p.into_inner()
+            });
             pending.insert(id, tx);
         }
 

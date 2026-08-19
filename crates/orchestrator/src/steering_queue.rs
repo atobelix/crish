@@ -19,7 +19,9 @@
 
 use std::collections::VecDeque;
 
-use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole};
+use conex_types::message::{
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
+};
 use session_loop::input::{AgentInputQueue, InputEnqueueMode};
 
 /// 队列默认容量（任务书 B4.4 规定：默认 100）
@@ -685,7 +687,10 @@ mod tests {
             Some(metadata_kind_wire(AgentMessageMetadataKind::ContextState).as_str())
         );
         // steering 条目仍标 steering
-        let s = drained.iter().find(|e| e.is_steering).expect("steering 条目");
+        let s = drained
+            .iter()
+            .find(|e| e.is_steering)
+            .expect("steering 条目");
         assert_eq!(
             s.into_user_message()
                 .metadata

@@ -14,6 +14,7 @@
 //! `runId`/`permissionMode` 由 emit 层注入（任务卡约定）：runId 经信封
 //! 注入（03 §5.3-2），permissionMode 属会话级属性，工具侧恒为 None。
 
+use conex_shared::time::now_iso_utc;
 use conex_types::denied_stats::DeniedStats;
 use conex_types::events::{AgentEvent, SecurityAuditDecision, SecurityAuditOperation};
 use conex_types::impact::ImpactAssessment;
@@ -126,38 +127,10 @@ pub fn security_audit_event(
     }
 }
 
-/// 当前 UTC 时间 ISO8601 字符串（毫秒精度，`2026-07-31T08:00:00.000Z`）
-///
-/// 无 chrono 依赖，手工换算（Howard Hinnant civil-from-days 算法，
-/// 与 orchestrator / session-loop 同源）。
-fn now_iso_utc() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default();
-    let secs = now.as_secs();
-    let millis = now.subsec_millis();
-    let (hours, mins, sec) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-    let (year, month, day) = civil_from_days((secs / 86400) as i64);
-    format!("{year:04}-{month:02}-{day:02}T{hours:02}:{mins:02}:{sec:02}.{millis:03}Z")
-}
-
-/// 从 Unix 天数换算公历年月日（Howard Hinnant 算法）
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    (y + if m <= 2 { 1 } else { 0 }, m, d)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use conex_shared::time::civil_from_days;
 
     fn impact() -> ImpactAssessment {
         ImpactAssessment {

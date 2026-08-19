@@ -14,32 +14,24 @@
 
 use agent_tools::note_backend::NoteBackendError;
 use conex_doc_collab::{DocSession, PersistencePlugin};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use crate::hydrate_projection::{
     projection_from_session, DocSessionHydrateProjection, HYDRATE_PATH_DOC_SESSION,
 };
+use crate::poison::POISON_RECOVERIES;
 use crate::store_backend::{SlowPathProbe, StoreNoteBackend};
 
-/// 毒丸恢复计数（B1-1 观测化：本文件 sessions 索引锁 / per-doc 锁中毒恢复次数；
-/// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
-static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
-
-/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
-#[cfg(test)]
-pub(crate) fn poison_recovery_count() -> u64 {
-    POISON_RECOVERIES.load(Ordering::Relaxed)
-}
-
 impl StoreNoteBackend {
-    /// 取 doc 会话锁句柄（**B3 per-doc 分片锁**）。
+    /// 取 doc 会话锁句柄（**B3 per-doc 分片锁** + **C2 首开 TOCTOU 去重**）。
     ///
     /// - 快路径：map 锁内 `get`（短临界，不持 doc 锁）；命中直接返回
-    /// - 慢路径（仅首次打开）：`load_doc` → `DocSession::hydrate`
-    ///   （I/O 不在 map 锁内）→ map 锁内 insert-if-absent（查插原子性）；
-    ///   并发 ensure 同 doc 时复用先插者的会话，自己刚 hydrate 的未用会话
-    ///   直接丢弃——同 doc 单写者不变式由 per-doc 锁保证（G-HYD-2）
+    /// - 慢路径（仅首次打开）：取 per-doc **hydrate 许可锁**串行化同 doc 首开，
+    ///   仅持许可者做一次 `load_doc` → `DocSession::hydrate`（I/O 出 map 锁），
+    ///   然后锁内查插（复用先插者的 session）；并发等待许可者在许可释放后
+    ///   命中快路径或复用已插 session——**不重复 I/O**。不同 doc 的首次打开
+    ///   互不串行。同 doc 单写者不变式由 per-doc 锁保证（G-HYD-2）
     pub(crate) fn session_handle(
         &self,
         doc_id: &str,
@@ -50,6 +42,41 @@ impl StoreNoteBackend {
             .lock()
             .unwrap_or_else(|e| {
                 // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
+                tracing::error!(target: "conex_note_runtime", "sessions 索引锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
+            .get(doc_id)
+            .cloned()
+        {
+            return Ok(arc);
+        }
+        // C2：慢路径去重——取 per-doc hydrate 许可锁（不同 doc 互不串行）
+        let permit = {
+            let mut hydrating = self
+                .hydrating
+                .lock()
+                .unwrap_or_else(|e| {
+                    tracing::error!(target: "conex_note_runtime", "hydrating 索引锁中毒，按恢复模式继续：{e}");
+                    POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                    e.into_inner()
+                });
+            hydrating
+                .entry(doc_id.to_string())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        // 持许可锁：同 doc 并发首开在此串行，仅持许可者进入下方 hydrate
+        let _permit_guard = permit.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "conex_note_runtime", "hydrating 许可锁中毒，按恢复模式继续：{e}");
+            POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+            e.into_inner()
+        });
+        // double-checked：持许可后重新检查 sessions——另一线程可能已完成 hydrate
+        if let Some(arc) = self
+            .sessions
+            .lock()
+            .unwrap_or_else(|e| {
                 tracing::error!(target: "conex_note_runtime", "sessions 索引锁中毒，按恢复模式继续：{e}");
                 POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
                 e.into_inner()
@@ -98,6 +125,15 @@ impl StoreNoteBackend {
             .unwrap_or_else(|e| {
                 // PE-07 T07.6 A 模式：锁中毒恢复，不 panic 且可继续（B1-1 观测化）
                 tracing::error!(target: "conex_note_runtime", "sessions 索引锁中毒，按恢复模式继续：{e}");
+                POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
+                e.into_inner()
+            })
+            .remove(doc_id);
+        // C2：同步清理 per-doc hydrate 许可条目（冷开摘除后无并发首开在途）
+        self.hydrating
+            .lock()
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "conex_note_runtime", "hydrating 索引锁中毒，按恢复模式继续：{e}");
                 POISON_RECOVERIES.fetch_add(1, Ordering::Relaxed);
                 e.into_inner()
             })

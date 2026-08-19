@@ -10,7 +10,7 @@ use std::sync::Arc;
 use syntect::html::{ClassStyle, ClassedHTMLGenerator};
 use syntect::parsing::SyntaxSet;
 
-use crate::cache::{entry_within_budget, render_cache};
+use crate::cache::{entry_within_budget, highlight_cache, render_cache};
 
 /// 全局 SyntaxSet (内置语法,带 newline 模式)。
 /// 用 `load_defaults_newlines` 才能正确按行高亮含 `\n` 的代码。
@@ -86,7 +86,7 @@ pub fn highlight_code(code: &str, lang: Option<&str>) -> String {
         .unwrap_or_default();
 
     let cache_key = format!("{}:{}", lang_norm, raw);
-    if let Some(cached) = render_cache().get(&cache_key) {
+    if let Some(cached) = highlight_cache().get(&cache_key) {
         return (*cached).clone();
     }
 
@@ -99,9 +99,9 @@ pub fn highlight_code(code: &str, lang: Option<&str>) -> String {
         escape_html_plain(&raw)
     };
 
-    // 缓存 — 单条目字节预算超出时不入缓存
+    // 缓存 — 单条目字节预算超出时不入缓存（1C-8：用独立高亮缓存）
     if entry_within_budget(&cache_key, &html) {
-        render_cache().insert(cache_key, Arc::new(html.clone()));
+        highlight_cache().insert(cache_key, Arc::new(html.clone()));
     }
     html
 }
@@ -122,8 +122,11 @@ fn render_with_syntect(
     Ok(generator.finalize())
 }
 
-/// 清空高亮缓存。
+/// 清空缓存（1C-8：分离后高亮与渲染缓存独立，测试隔离需同时清两者；
+/// 高亮缓存是主要消费者，渲染缓存一并清空以保持原 clear_cache 的
+/// 「全量重置」语义，避免测试间残留命中）。
 pub fn clear_cache() {
+    highlight_cache().invalidate_all();
     render_cache().invalidate_all();
 }
 

@@ -92,13 +92,27 @@ async fn test_ut_d01_01_live_sink_turn_and_agent_lifecycle() {
     assert_eq!(outcome.reason, AgentEndReason::Stop);
 
     let live_events = live_sink.received_events();
-    let has_agent_start = live_events.iter().any(|e| matches!(e, AgentEvent::AgentStart { .. }));
-    let has_turn_start = live_events.iter().any(|e| matches!(e, AgentEvent::TurnStart { .. }));
-    let has_message_start = live_events.iter().any(|e| matches!(e, AgentEvent::MessageStart { .. }));
-    let has_message_delta = live_events.iter().any(|e| matches!(e, AgentEvent::MessageDelta { .. }));
-    let has_message_end = live_events.iter().any(|e| matches!(e, AgentEvent::MessageEnd { .. }));
-    let has_turn_end = live_events.iter().any(|e| matches!(e, AgentEvent::TurnEnd { .. }));
-    let has_agent_end = live_events.iter().any(|e| matches!(e, AgentEvent::AgentEnd { .. }));
+    let has_agent_start = live_events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::AgentStart { .. }));
+    let has_turn_start = live_events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::TurnStart { .. }));
+    let has_message_start = live_events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::MessageStart { .. }));
+    let has_message_delta = live_events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::MessageDelta { .. }));
+    let has_message_end = live_events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::MessageEnd { .. }));
+    let has_turn_end = live_events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::TurnEnd { .. }));
+    let has_agent_end = live_events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::AgentEnd { .. }));
 
     assert!(has_agent_start, "LiveSink 必须接收到 AgentStart 事件");
     assert!(has_turn_start, "LiveSink 必须接收到 TurnStart 事件");
@@ -115,13 +129,20 @@ async fn test_ut_d01_03_live_sink_tool_lifecycle() {
     let mut options = SessionLoopOptions::default();
     options.live_sink = Some(live_sink.clone());
 
-    let echo_tool = Arc::new(TestTool::new("echo_tool", serde_json::json!({"result": "done"})));
+    let echo_tool = Arc::new(TestTool::new(
+        "echo_tool",
+        serde_json::json!({"result": "done"}),
+    ));
 
     // Turn 1: tool call -> echo_tool
     // Turn 2: final answer
     let provider = TestProvider::with_scripts(vec![
         vec![
-            ProviderStreamEvent::tool_call(Some("c1".into()), "echo_tool", serde_json::json!({"msg": "hello"})),
+            ProviderStreamEvent::tool_call(
+                Some("c1".into()),
+                "echo_tool",
+                serde_json::json!({"msg": "hello"}),
+            ),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
         vec![
@@ -136,8 +157,12 @@ async fn test_ut_d01_03_live_sink_tool_lifecycle() {
 
     let live_events = live_sink.received_events();
 
-    let tool_start = live_events.iter().find(|e| matches!(e, AgentEvent::ToolStart { .. }));
-    let tool_end = live_events.iter().find(|e| matches!(e, AgentEvent::ToolEnd { .. }));
+    let tool_start = live_events
+        .iter()
+        .find(|e| matches!(e, AgentEvent::ToolStart { .. }));
+    let tool_end = live_events
+        .iter()
+        .find(|e| matches!(e, AgentEvent::ToolEnd { .. }));
 
     assert!(tool_start.is_some(), "LiveSink 必须实时收到 ToolStart");
     assert!(tool_end.is_some(), "LiveSink 必须实时收到 ToolEnd");
@@ -210,7 +235,10 @@ fn test_ut_d01_05_tool_promise_detector_three_tier_filter() {
 
 #[tokio::test]
 async fn test_ut_d01_06_tool_promise_self_healing_advances_turn() {
-    let echo_tool = Arc::new(TestTool::new("shell_command", serde_json::json!({"stdout": "file.txt"})));
+    let echo_tool = Arc::new(TestTool::new(
+        "shell_command",
+        serde_json::json!({"stdout": "file.txt"}),
+    ));
 
     // Turn 1: Assistant makes an action promise in text but does NOT make a tool call
     // Self-healing triggers -> enqueues steering nudge -> Turn 2
@@ -224,7 +252,11 @@ async fn test_ut_d01_06_tool_promise_self_healing_advances_turn() {
         ],
         // Turn 2: After nudge injection, assistant generates the real tool call
         vec![
-            ProviderStreamEvent::tool_call(Some("c1".into()), "shell_command", serde_json::json!({"command": "ls"})),
+            ProviderStreamEvent::tool_call(
+                Some("c1".into()),
+                "shell_command",
+                serde_json::json!({"command": "ls"}),
+            ),
             ProviderStreamEvent::stop(StopReason::Stop),
         ],
         // Turn 3: Final response
@@ -248,7 +280,8 @@ async fn test_ut_d01_06_tool_promise_self_healing_advances_turn() {
 
     // 验证 Nudge 消息是否注入到了对话中
     let has_nudge = outcome.messages.iter().any(|m| {
-        m.text().contains("【系统自动推进】") && m.text().contains("我将执行 shell_command 查看当前文件")
+        m.text().contains("【系统自动推进】")
+            && m.text().contains("我将执行 shell_command 查看当前文件")
     });
     assert!(has_nudge, "对话中必须包含针对性的系统自愈推进提示消息");
 }
@@ -284,7 +317,10 @@ async fn test_ut_d01_07_tool_promise_self_healing_caps_at_two_heals() {
     let outcome = loop_.run(user("持续测试")).await;
 
     assert_eq!(outcome.reason, AgentEndReason::Stop);
-    assert_eq!(outcome.turn_index, 3, "达到 2 次上限后执行第 3 轮必须安全收口，不得无限循环");
+    assert_eq!(
+        outcome.turn_index, 3,
+        "达到 2 次上限后执行第 3 轮必须安全收口，不得无限循环"
+    );
 }
 
 #[tokio::test]
@@ -305,7 +341,10 @@ async fn test_ut_d01_08_tool_promise_disabled_when_flag_false() {
     let outcome = loop_.run(user("开关关闭测试")).await;
 
     assert_eq!(outcome.reason, AgentEndReason::Stop);
-    assert_eq!(outcome.turn_index, 1, "开关关闭时不会自愈续轮，单轮正常收口");
+    assert_eq!(
+        outcome.turn_index, 1,
+        "开关关闭时不会自愈续轮，单轮正常收口"
+    );
 }
 
 // ============================================================================

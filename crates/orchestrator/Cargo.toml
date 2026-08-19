@@ -20,6 +20,8 @@ agent-tools = { path = "../agent-tools" }
 async-trait = { workspace = true }
 conex-db = { path = "../conex-db" }
 conex-types = { path = "../conex-types" }
+# now_iso_utc 真源（纯 std；旧路径 crate::now_iso_utc re-export）
+conex-shared = { path = "../conex-shared" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 session-loop = { path = "../session-loop" }

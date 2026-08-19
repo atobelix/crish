@@ -32,21 +32,12 @@ use conex_doc_collab::{DocSession, Origin};
 use conex_workspace_store::{SharedWorkspaceStore, StoreError};
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use crate::poison::POISON_RECOVERIES;
 pub use crate::store_backend_apply::ApplyCollabOpsOutcome;
-
-/// 毒丸恢复计数（B1-1 观测化：本文件 sessions 索引锁 / per-doc 锁中毒恢复次数；
-/// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
-static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
-
-/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
-#[cfg(test)]
-pub(crate) fn poison_recovery_count() -> u64 {
-    POISON_RECOVERIES.load(Ordering::Relaxed)
-}
 
 /// S3 长锁等待告警阈值（毫秒）：per-doc 锁等待常态为 µs 级；
 /// 超 10ms 视为争抢异常（B3 细锁后多 doc 互不串行，等待只来自同 doc 争抢）。
@@ -147,6 +138,11 @@ pub struct StoreNoteBackend {
     /// intent_id → 首次 apply 结果（send_to_note 幂等；**仅进程内**，不随 workspace.db 复活）
     pub(crate) intents: Mutex<HashMap<String, NoteApplyMdResult>>,
     pub(crate) batch_tokens: NoteBatchTokens,
+    /// **C2 TOCTOU 去重**：per-doc 「hydrate 许可」锁（首次打开 doc 的
+    /// `load_doc + hydrate` 串行化）。并发首次打开同 doc 时，仅持许可者做
+    /// 一次 I/O，其余等待后命中快路径或复用先插者的 session；不同 doc 的
+    /// 首次打开互不串行。许可条目随 sessions 一同在冷开摘除时清理。
+    pub(crate) hydrating: Mutex<HashMap<String, Arc<Mutex<()>>>>,
 }
 
 impl std::fmt::Debug for StoreNoteBackend {
@@ -174,6 +170,7 @@ impl StoreNoteBackend {
             sessions: Mutex::new(HashMap::new()),
             intents: Mutex::new(HashMap::new()),
             batch_tokens: NoteBatchTokens::new(),
+            hydrating: Mutex::new(HashMap::new()),
         }
     }
 
@@ -191,6 +188,13 @@ impl StoreNoteBackend {
     /// 底层 store 句柄。
     pub fn store(&self) -> &SharedWorkspaceStore {
         &self.store
+    }
+
+    /// 本库最近一篇已 persist 且投影非空的 `doc_id`（无则 `None`）。
+    pub fn recent_persisted_nonempty_doc_id(&self) -> Result<Option<String>, NoteBackendError> {
+        self.store
+            .recent_persisted_nonempty_doc_id()
+            .map_err(map_store_err)
     }
 
     /// 同步校验 batch token（apply_md / apply_block_ops 共用）。
@@ -214,18 +218,24 @@ pub(crate) fn map_store_err(e: StoreError) -> NoteBackendError {
 
 /// CommitPipelineError → NoteBackendError。
 pub(crate) fn map_commit_err(e: conex_workspace_store::CommitPipelineError) -> NoteBackendError {
+    use conex_doc_collab::ApplyError;
     use conex_workspace_store::CommitPipelineError;
     match e {
         CommitPipelineError::Apply(ae) => {
+            // B3：CAS 冲突类型化匹配——先按 ApplyError::PersistConflict 变体识别
+            // CT-01 CAS 陈旧写（on_committed_expect 期望版本不匹配），不再依赖
+            // Display 文案中的 "conflict" 字符串。类型匹配与 Display 文案解耦，
+            // PersistError::Conflict 的 Display 改文案后仍正确分类。
+            if let ApplyError::PersistConflict { expected } = &ae {
+                return NoteBackendError::Conflict(format!(
+                    "CAS persist conflict: 期望 rev {expected} 不匹配（陈旧写被拦截）"
+                ));
+            }
             let s = ae.to_string();
             if s.contains("not found") {
                 NoteBackendError::NotFound(s)
             } else if s.contains("id") && s.to_lowercase().contains("conflict") {
                 NoteBackendError::IdConflict(s)
-            } else if s.to_lowercase().contains("conflict") {
-                // CT-01：CAS 陈旧写（PersistError::Conflict Display 含稳定 "conflict"）
-                // → note.persist_conflict。置于 IdConflict 臂之后：先命中 id_conflict 的场景不变。
-                NoteBackendError::Conflict(s)
             } else {
                 NoteBackendError::ApplyFailed(s)
             }

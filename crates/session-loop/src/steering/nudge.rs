@@ -28,7 +28,9 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use conex_types::message::{AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole};
+use conex_types::message::{
+    AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
+};
 
 use crate::steering::{metadata_kind_wire, now_iso_utc, unix_millis, SteeringReason};
 

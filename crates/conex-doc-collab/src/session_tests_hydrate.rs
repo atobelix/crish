@@ -415,3 +415,260 @@ fn p_h2_persist_fail_rolls_back_tree_and_text() {
     // 半提交禁令：不得残留失败批写入的文本
     assert_ne!(s.read_text(&id), "should-not-stick");
 }
+
+/// 3-5 / P-H2：多块文档只改一块时增量回滚 ≡ apply 前；未涉及块与新建/删除均正确。
+#[test]
+fn p_h2_incremental_checkpoint_uninvolved_and_new_blocks() {
+    use crate::persistence::PersistError;
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+    struct FailAfterN {
+        n: usize,
+        calls: AtomicUsize,
+    }
+    impl PersistencePlugin for FailAfterN {
+        fn load_doc(&self, _: &str) -> Result<crate::persistence::HydrateBlob, PersistError> {
+            Ok(Default::default())
+        }
+        fn on_committed(&self, _: &str, _: &CommitBatch) -> Result<(), PersistError> {
+            let c = self.calls.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+            if c >= self.n {
+                Err(PersistError::Io("p_h2 incremental persist fail".into()))
+            } else {
+                Ok(())
+            }
+        }
+        fn flush_hint(&self, _: &str) -> Result<(), PersistError> {
+            Ok(())
+        }
+    }
+
+    let a = BlockId::new();
+    let b = BlockId::new();
+    let c = BlockId::new();
+
+    // n=2：建树成功，随后 TextEdit 失败
+    let mut s = DocSession::new("p-h2-inc").with_persistence(Box::new(FailAfterN {
+        n: 2,
+        calls: AtomicUsize::new(0),
+    }));
+    s.apply(
+        Origin::User,
+        &[
+            Op::Insert {
+                id: a,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            },
+            Op::Insert {
+                id: b,
+                parent: None,
+                order: "a1".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            },
+            Op::Insert {
+                id: c,
+                parent: None,
+                order: "a2".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            },
+            Op::TextEdit {
+                id: a,
+                start: 0,
+                end: 0,
+                insert: "alpha".into(),
+            },
+            Op::TextEdit {
+                id: b,
+                start: 0,
+                end: 0,
+                insert: "beta".into(),
+            },
+            Op::TextEdit {
+                id: c,
+                start: 0,
+                end: 0,
+                insert: "gamma".into(),
+            },
+        ],
+    )
+    .expect("seed apply");
+    let rev = s.rev();
+    let tree = s.tree().clone();
+
+    let err = s
+        .apply(
+            Origin::User,
+            &[Op::TextEdit {
+                id: a,
+                start: 0,
+                end: 5,
+                insert: "ALPHA".into(),
+            }],
+        )
+        .expect_err("edit A must fail persist");
+    assert!(matches!(err, ApplyError::Persist(_)));
+    assert_eq!(s.rev(), rev);
+    assert_eq!(s.read_text(&a), "alpha");
+    assert_eq!(s.read_text(&b), "beta", "未涉及块 B 不得被 restore 抹掉");
+    assert_eq!(s.read_text(&c), "gamma", "未涉及块 C 不得被 restore 抹掉");
+    assert_eq!(s.tree(), &tree);
+
+    // Insert D 失败 → D 不得残留，A/B/C 不变
+    let mut s = DocSession::new("p-h2-ins").with_persistence(Box::new(FailAfterN {
+        n: 2,
+        calls: AtomicUsize::new(0),
+    }));
+    s.apply(
+        Origin::User,
+        &[
+            Op::Insert {
+                id: a,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            },
+            Op::TextEdit {
+                id: a,
+                start: 0,
+                end: 0,
+                insert: "keep".into(),
+            },
+        ],
+    )
+    .unwrap();
+    let d = BlockId::new();
+    s.apply(
+        Origin::User,
+        &[Op::Insert {
+            id: d,
+            parent: None,
+            order: "a1".into(),
+            kind: BlockKind::Paragraph,
+            props: BlockProps::default(),
+        }],
+    )
+    .expect_err("insert D persist fail");
+    assert!(!s.tree().nodes.contains_key(&d));
+    assert!(!s.text_is_registered(&d));
+    assert_eq!(s.read_text(&a), "keep");
+
+    // Delete A 失败 → A 与文本须在
+    let mut s = DocSession::new("p-h2-del").with_persistence(Box::new(FailAfterN {
+        n: 2,
+        calls: AtomicUsize::new(0),
+    }));
+    s.apply(
+        Origin::User,
+        &[
+            Op::Insert {
+                id: a,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            },
+            Op::Insert {
+                id: b,
+                parent: None,
+                order: "a1".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            },
+            Op::TextEdit {
+                id: a,
+                start: 0,
+                end: 0,
+                insert: "alive".into(),
+            },
+            Op::TextEdit {
+                id: b,
+                start: 0,
+                end: 0,
+                insert: "sibling".into(),
+            },
+        ],
+    )
+    .unwrap();
+    s.apply(Origin::User, &[Op::Delete { id: a }])
+        .expect_err("delete A persist fail");
+    assert!(s.tree().nodes.contains_key(&a));
+    assert!(s.text_is_registered(&a));
+    assert_eq!(s.read_text(&a), "alive");
+    assert_eq!(s.read_text(&b), "sibling");
+}
+
+/// 3-5 / P-H2：huge split 新建段在 persist 失败后须被增量 restore 释放。
+#[test]
+fn p_h2_incremental_huge_split_releases_new_segments() {
+    use crate::persistence::PersistError;
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+    struct FailAfterN {
+        n: usize,
+        calls: AtomicUsize,
+    }
+    impl PersistencePlugin for FailAfterN {
+        fn load_doc(&self, _: &str) -> Result<crate::persistence::HydrateBlob, PersistError> {
+            Ok(Default::default())
+        }
+        fn on_committed(&self, _: &str, _: &CommitBatch) -> Result<(), PersistError> {
+            let c = self.calls.fetch_add(1, AtomicOrdering::SeqCst) + 1;
+            if c >= self.n {
+                Err(PersistError::Io("p_h2 huge persist fail".into()))
+            } else {
+                Ok(())
+            }
+        }
+        fn flush_hint(&self, _: &str) -> Result<(), PersistError> {
+            Ok(())
+        }
+    }
+
+    let id = BlockId::new();
+    let mut s = DocSession::new("p-h2-huge")
+        .with_huge_threshold(MIN_T_HUGE)
+        .with_persistence(Box::new(FailAfterN {
+            n: 2,
+            calls: AtomicUsize::new(0),
+        }));
+    s.apply(
+        Origin::User,
+        &[
+            Op::Insert {
+                id,
+                parent: None,
+                order: "a0".into(),
+                kind: BlockKind::Paragraph,
+                props: BlockProps::default(),
+            },
+            Op::TextEdit {
+                id,
+                start: 0,
+                end: 0,
+                insert: "seed".into(),
+            },
+        ],
+    )
+    .unwrap();
+    let nodes_before = s.tree().nodes.len();
+    let payload = "z".repeat(MIN_T_HUGE * 2 + MIN_T_HUGE / 2);
+    s.apply(
+        Origin::User,
+        &[Op::TextEdit {
+            id,
+            start: 0,
+            end: 4,
+            insert: payload,
+        }],
+    )
+    .expect_err("huge split persist fail");
+    assert_eq!(s.tree().nodes.len(), nodes_before, "新段不得残留");
+    assert_eq!(s.read_text(&id), "seed");
+    assert_eq!(super::count_split_segments(&s, id), 1);
+}

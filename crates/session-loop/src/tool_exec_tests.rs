@@ -946,13 +946,13 @@ async fn output_budget_bytes_truncates_large_output() {
 #[test]
 fn idempotency_opt_toggles_guard() {
     let reg = registry_with(vec![Arc::new(EchoTool)]);
-    let exec = ToolExecutor::new(reg);
+    let mut exec = ToolExecutor::new(reg);
     assert!(!exec.idempotency_enabled());
-    let exec = exec.with_idempotency_opt(Some(Arc::new(
+    exec = exec.with_idempotency_opt(Some(Arc::new(
         agent_tools::idempotency::ToolIdempotencyGuard::new(),
     )));
     assert!(exec.idempotency_enabled());
-    let exec = exec.with_idempotency_opt(None);
+    exec = exec.with_idempotency_opt(None);
     assert!(!exec.idempotency_enabled());
 }
 

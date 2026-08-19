@@ -60,18 +60,14 @@ async fn enqueue_writes_pending_input_with_run_id() {
     loop_inst.enqueue_input(user_msg("m-1", "你好"), InputEnqueueMode::Force);
 
     // 确定性状态轮询：等待 spawn 落库完成
-    let rows = wait_until(
-        Duration::from_secs(3),
-        Duration::from_millis(5),
-        || async {
-            let r = store.load_pending_inputs("s1").await.ok()?;
-            if !r.is_empty() {
-                Some(r)
-            } else {
-                None
-            }
-        },
-    )
+    let rows = wait_until(Duration::from_secs(3), Duration::from_millis(5), || async {
+        let r = store.load_pending_inputs("s1").await.ok()?;
+        if !r.is_empty() {
+            Some(r)
+        } else {
+            None
+        }
+    })
     .await
     .expect("enqueue 写点必须在超时前落库一条");
 
@@ -96,18 +92,14 @@ async fn consume_deletes_pending_input_row() {
     let (mut loop_inst, store) = loop_with_pending_store(Arc::new(InMemoryStore::new()));
     // enqueue 注入面写点（run 前）
     loop_inst.enqueue_input(user_msg("m-1", "第一问"), InputEnqueueMode::Force);
-    let rows_before = wait_until(
-        Duration::from_secs(3),
-        Duration::from_millis(5),
-        || async {
-            let r = store.load_pending_inputs("s1").await.ok()?;
-            if r.len() == 1 {
-                Some(r)
-            } else {
-                None
-            }
-        },
-    )
+    let rows_before = wait_until(Duration::from_secs(3), Duration::from_millis(5), || async {
+        let r = store.load_pending_inputs("s1").await.ok()?;
+        if r.len() == 1 {
+            Some(r)
+        } else {
+            None
+        }
+    })
     .await
     .expect("enqueue 写入必须在超时前就绪");
     assert_eq!(rows_before.len(), 1);
@@ -115,18 +107,14 @@ async fn consume_deletes_pending_input_row() {
     // run 起始写点（用户消息主路径）+ 消费删点（record_message）
     let _outcome = loop_inst.run(user_msg("m-2", "第二问")).await;
 
-    let rows = wait_until(
-        Duration::from_secs(3),
-        Duration::from_millis(5),
-        || async {
-            let r = store.load_pending_inputs("s1").await.ok()?;
-            if r.is_empty() {
-                Some(r)
-            } else {
-                None
-            }
-        },
-    )
+    let rows = wait_until(Duration::from_secs(3), Duration::from_millis(5), || async {
+        let r = store.load_pending_inputs("s1").await.ok()?;
+        if r.is_empty() {
+            Some(r)
+        } else {
+            None
+        }
+    })
     .await
     .expect("消费后 pending 行必须在超时前全部删除");
 
@@ -147,18 +135,14 @@ async fn restore_reads_written_pending_inputs_in_fifo_order() {
     loop_inst.enqueue_input(user_msg("p3", "三"), InputEnqueueMode::FollowUp);
 
     // 确定性状态轮询：等待 3 条记录全部写入
-    let rows = wait_until(
-        Duration::from_secs(3),
-        Duration::from_millis(5),
-        || async {
-            let r = store.load_pending_inputs("s1").await.ok()?;
-            if r.len() == 3 {
-                Some(r)
-            } else {
-                None
-            }
-        },
-    )
+    let rows = wait_until(Duration::from_secs(3), Duration::from_millis(5), || async {
+        let r = store.load_pending_inputs("s1").await.ok()?;
+        if r.len() == 3 {
+            Some(r)
+        } else {
+            None
+        }
+    })
     .await
     .expect("3 条记录必须在超时前全部写入");
 
@@ -173,34 +157,26 @@ async fn restore_reads_written_pending_inputs_in_fifo_order() {
 async fn repeated_enqueue_is_idempotent_by_id() {
     let (mut loop_inst, store) = loop_with_pending_store(Arc::new(InMemoryStore::new()));
     loop_inst.enqueue_input(user_msg("dup", "v1"), InputEnqueueMode::Force);
-    let _ = wait_until(
-        Duration::from_secs(3),
-        Duration::from_millis(5),
-        || async {
-            let r = store.load_pending_inputs("s1").await.ok()?;
-            if r.len() == 1 && r[0].payload.contains("v1") {
-                Some(r)
-            } else {
-                None
-            }
-        },
-    )
+    let _ = wait_until(Duration::from_secs(3), Duration::from_millis(5), || async {
+        let r = store.load_pending_inputs("s1").await.ok()?;
+        if r.len() == 1 && r[0].payload.contains("v1") {
+            Some(r)
+        } else {
+            None
+        }
+    })
     .await
     .expect("v1 应落库");
 
     loop_inst.enqueue_input(user_msg("dup", "v2"), InputEnqueueMode::Force);
-    let rows = wait_until(
-        Duration::from_secs(3),
-        Duration::from_millis(5),
-        || async {
-            let r = store.load_pending_inputs("s1").await.ok()?;
-            if r.len() == 1 && r[0].payload.contains("v2") {
-                Some(r)
-            } else {
-                None
-            }
-        },
-    )
+    let rows = wait_until(Duration::from_secs(3), Duration::from_millis(5), || async {
+        let r = store.load_pending_inputs("s1").await.ok()?;
+        if r.len() == 1 && r[0].payload.contains("v2") {
+            Some(r)
+        } else {
+            None
+        }
+    })
     .await
     .expect("v2 应覆盖落库");
 

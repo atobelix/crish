@@ -18,20 +18,11 @@ use agent_tools::note_backend::{
 };
 use conex_doc_collab::BlockId;
 use conex_workspace_store::commit_ops;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 
+use crate::poison::POISON_RECOVERIES;
 use crate::store_backend::{map_commit_err, origin_from_str, SlowPathProbe, StoreNoteBackend};
 use crate::store_plan_ops::plan_block_ops_to_collab;
-
-/// 毒丸恢复计数（B1-1 观测化：本文件 per-doc 锁中毒恢复次数；
-/// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
-static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
-
-/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
-#[cfg(test)]
-pub(crate) fn poison_recovery_count() -> u64 {
-    POISON_RECOVERIES.load(Ordering::Relaxed)
-}
 
 /// `apply_collab_ops_json` 成功结果（IPC / 测断言）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

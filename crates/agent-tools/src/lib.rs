@@ -46,6 +46,7 @@ mod note_md_parse;
 mod note_memory;
 mod note_plan_ops;
 mod note_types;
+mod poison;
 // W4-B/F：笔记工具审批名单（safe / write × plan|ask|full）
 pub mod note_permission;
 // W4-F：safeActions × Effects × Source **表驱动**矩阵起点（A-AGT-06）
@@ -53,13 +54,13 @@ pub mod note_permission;
 pub mod note_action_matrix;
 // W6-E-S Skeleton：千次批压测夹具 + 恶意扩展拒写/零持久化方向
 // ≠ EL-05；≠ A-AGT 满表；≠ W6-E Strict 闭环；Memory 禁关生产
-pub mod note_stress_guard;
 pub mod definition;
 pub mod executor;
 pub mod explore_quota;
 pub mod idempotency;
 pub mod mcp;
 pub mod middleware;
+pub mod note_stress_guard;
 pub mod output;
 pub mod permission;
 pub mod readonly;

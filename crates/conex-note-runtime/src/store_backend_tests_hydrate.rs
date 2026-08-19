@@ -143,3 +143,131 @@ async fn hydrate_document_empty_and_invalid() {
 
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// C2：并发首次打开**同一** doc → per-doc hydrate 许可串行化，
+/// sessions 索引恰 1 条目（无重复 session）、hydrating 许可恰 1 条目（有界）、
+/// 两线程投影一致（复用同一 session，无丢失/分叉）。
+#[test]
+fn concurrent_first_open_same_doc_dedups_to_single_hydrate() {
+    use std::sync::{Arc, Barrier};
+    let (dir, db) = temp_db();
+    let backend = Arc::new(StoreNoteBackend::open(&db).unwrap());
+    // 预写 seed（确保 load_doc 返回非空 blob，hydrate 出非空投影）
+    super::apply_md(&backend, "c2-same", "# C2 Same\n\nseed body");
+
+    let barrier = Arc::new(Barrier::new(3));
+    let mut handles = Vec::new();
+    for _ in 0..2 {
+        let backend = Arc::clone(&backend);
+        let barrier = Arc::clone(&barrier);
+        handles.push(std::thread::spawn(move || {
+            barrier.wait();
+            backend.hydrate_document_from_session("c2-same", 50)
+        }));
+    }
+    barrier.wait();
+    let mut projections = Vec::new();
+    for h in handles {
+        projections.push(h.join().expect("线程不应 panic").expect("并发首开投影成功"));
+    }
+    // sessions 索引恰 1 条目（两线程复用同一 session，无重复）
+    assert_eq!(
+        backend.sessions.lock().unwrap().len(),
+        1,
+        "并发同 doc 首开应只产生 1 个 session 条目"
+    );
+    // hydrating 许可恰 1 条目（per-doc 许可有界，不随并发数增长）
+    assert_eq!(
+        backend.hydrating.lock().unwrap().len(),
+        1,
+        "per-doc hydrate 许可可恰 1 条目（同 doc 单许可）"
+    );
+    // 两投影一致：blocks 数与首块文本一致（复用同一 session 树）
+    let (p0, p1) = (projections[0].clone(), projections[1].clone());
+    assert_eq!(p0.blocks.len(), p1.blocks.len(), "两线程投影块数一致");
+    assert_eq!(
+        p0.rev, p1.rev,
+        "两线程投影 rev 一致: {} vs {}",
+        p0.rev, p1.rev
+    );
+    assert!(
+        p0.blocks
+            .iter()
+            .any(|b| b.text.contains("C2 Same") || b.text.contains("seed body")),
+        "投影须含 seed 内容: {:?}",
+        p0.blocks
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// C2 负例：并发首开**不同** doc → 两 doc 各自许可、互不串行，
+/// 两 doc 均成功投影且 sessions 恰 2 条目、hydrating 恰 2 条目。
+#[test]
+fn concurrent_first_open_distinct_docs_dedups_independently() {
+    use std::sync::{Arc, Barrier};
+    let (dir, db) = temp_db();
+    let backend = Arc::new(StoreNoteBackend::open(&db).unwrap());
+    super::apply_md(&backend, "c2-dist-a", "# Dist A\n\na body");
+    super::apply_md(&backend, "c2-dist-b", "# Dist B\n\nb body");
+
+    let barrier = Arc::new(Barrier::new(3));
+    let docs = ["c2-dist-a", "c2-dist-b"];
+    let mut handles = Vec::new();
+    for doc in docs {
+        let backend = Arc::clone(&backend);
+        let barrier = Arc::clone(&barrier);
+        let doc = doc.to_string();
+        handles.push(std::thread::spawn(move || {
+            barrier.wait();
+            backend.hydrate_document_from_session(&doc, 50)
+        }));
+    }
+    barrier.wait();
+    for h in handles {
+        h.join()
+            .expect("线程不应 panic")
+            .expect("并发首开不同 doc 投影成功");
+    }
+    assert_eq!(
+        backend.sessions.lock().unwrap().len(),
+        2,
+        "两 doc 并发首开 → sessions 恰 2 条目"
+    );
+    assert_eq!(
+        backend.hydrating.lock().unwrap().len(),
+        2,
+        "两 doc 各自 per-doc 许可 → hydrating 恰 2 条目"
+    );
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// C2：冷开摘除后 hydrating 许可条目回落（无泄漏）。
+#[test]
+fn cold_open_cleans_up_hydrating_permit() {
+    let (dir, db) = temp_db();
+    let backend = StoreNoteBackend::open(&db).unwrap();
+    super::apply_md(&backend, "c2-cold", "# Cold Cleanup\n\nbody");
+    // 首开 → sessions + hydrating 各 1 条目
+    backend
+        .hydrate_document_from_session("c2-cold", 10)
+        .expect("首开投影");
+    assert_eq!(backend.sessions.lock().unwrap().len(), 1);
+    assert_eq!(backend.hydrating.lock().unwrap().len(), 1);
+    // 冷开 = 摘除 + 重开 → hydrating 许可被清理后重插，仍 1 条目
+    backend
+        .hydrate_document_cold("c2-cold", 10)
+        .expect("冷开重开投影");
+    assert_eq!(
+        backend.sessions.lock().unwrap().len(),
+        1,
+        "冷开重开后 sessions 仍 1 条目"
+    );
+    assert_eq!(
+        backend.hydrating.lock().unwrap().len(),
+        1,
+        "冷开清理后重插 hydrating 许可仍 1 条目（无泄漏）"
+    );
+    let _ = std::fs::remove_dir_all(dir);
+}

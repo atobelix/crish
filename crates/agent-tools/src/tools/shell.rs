@@ -254,7 +254,9 @@ impl ShellCommandTool {
             );
             return Prepared::Done(Err(ToolError::new(
                 TOOL_COMMAND_BLOCKED,
-                format!("PermissionDenied: Command blocked by safety red-line gatekeeper: {command}"),
+                format!(
+                    "PermissionDenied: Command blocked by safety red-line gatekeeper: {command}"
+                ),
             )));
         }
 
@@ -311,26 +313,24 @@ impl ShellCommandTool {
                     format!("PermissionDenied: Command denied by permission policy: {command}"),
                 )));
             }
-            PermissionVerdict::NeedsApproval => {
-                match &ctx.ask {
-                    Some(ask) => match ask.ask(&self.def.name, args).await {
-                        Ok(AskDecision::Allowed) => {}
-                        Ok(AskDecision::Denied { reason }) => {
-                            return Prepared::Done(Err(ToolError::new(
-                                TOOL_USER_DENIED,
-                                format!("user denied: {reason}"),
-                            )));
-                        }
-                        Err(err) => return Prepared::Done(Err(err)),
-                    },
-                    None => {
+            PermissionVerdict::NeedsApproval => match &ctx.ask {
+                Some(ask) => match ask.ask(&self.def.name, args).await {
+                    Ok(AskDecision::Allowed) => {}
+                    Ok(AskDecision::Denied { reason }) => {
                         return Prepared::Done(Err(ToolError::new(
-                            TOOL_REQUIRES_APPROVAL,
-                            format!("Command requires approval: {command}"),
+                            TOOL_USER_DENIED,
+                            format!("user denied: {reason}"),
                         )));
                     }
+                    Err(err) => return Prepared::Done(Err(err)),
+                },
+                None => {
+                    return Prepared::Done(Err(ToolError::new(
+                        TOOL_REQUIRES_APPROVAL,
+                        format!("Command requires approval: {command}"),
+                    )));
                 }
-            }
+            },
             PermissionVerdict::Allow => {}
         }
 

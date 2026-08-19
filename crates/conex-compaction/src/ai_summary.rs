@@ -2,10 +2,6 @@
 //!
 //! conex-compaction 保持纯算法、无运行时依赖（既有 crate 定位，P4 §3.4.4）：
 //!
-//! - **五字段模板**：固定压缩文档结构（任务目标/已完成/待办/关键决策/
-//!   文件清单），模板常量 + 生成函数 + 结构校验（04 C9 第 3 条，
-//!   字段不得省略）。**COMPACTION-01 P1-C 后为保留兼容面**：引擎契约
-//!   已单轨 Schema V1 JSON，本模板不再作为摘要输出格式要求（见下）；
 //! - **摘要提示词**：把被丢弃消息渲染为模型输入，提示输出 **Schema V1
 //!   JSON 文档**（12 required 字段，[crate::summary_document]）；
 //!   存在既有摘要时传入做迭代合并（P4 §3.4.3 / 02 Top 9
@@ -31,78 +27,6 @@ use conex_types::{AgentMessage, AgentMessageBlock};
 
 use crate::compaction::Summarizer;
 use crate::summary_document::validate_summary_document;
-
-// ── 五字段模板（04 C9 第 3 条：固定结构，不得省略字段）──
-
-/// 压缩文档标题（模板固定行）
-pub const SUMMARY_TEMPLATE_HEADER: &str = "## 压缩摘要";
-
-/// 五字段清单（固定顺序；校验与提示词均以此为准）
-pub const SUMMARY_TEMPLATE_FIELDS: [&str; 5] =
-    ["任务目标", "已完成", "待办", "关键决策", "文件清单"];
-
-/// 无内容字段的占位写法（模板语义：字段不得省略）
-pub const SUMMARY_EMPTY_FIELD_MARKER: &str = "(none)";
-
-/// 结构化摘要五字段内容（[format_structured_summary] 的输入）
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StructuredSummaryFields {
-    /// 任务目标（本轮/子任务目标一句话）
-    pub task_goal: String,
-    /// 已完成（要点列表，每条 ≤ 30 字）
-    pub completed: String,
-    /// 待办（要点列表）
-    pub pending: String,
-    /// 关键决策（决策点与理由，每条 ≤ 50 字）
-    pub key_decisions: String,
-    /// 文件清单（涉及文件路径列表）
-    pub file_list: String,
-}
-
-/// 按五字段模板格式化压缩文档（固定结构，字段不省略；空字段写
-/// [SUMMARY_EMPTY_FIELD_MARKER]）
-pub fn format_structured_summary(fields: &StructuredSummaryFields) -> String {
-    format!(
-        "{header}\n- 任务目标：{task_goal}\n- 已完成：{completed}\n- 待办：{pending}\n- 关键决策：{key_decisions}\n- 文件清单：{file_list}",
-        header = SUMMARY_TEMPLATE_HEADER,
-        task_goal = or_none(&fields.task_goal),
-        completed = or_none(&fields.completed),
-        pending = or_none(&fields.pending),
-        key_decisions = or_none(&fields.key_decisions),
-        file_list = or_none(&fields.file_list),
-    )
-}
-
-fn or_none(value: &str) -> &str {
-    if value.trim().is_empty() {
-        SUMMARY_EMPTY_FIELD_MARKER
-    } else {
-        value
-    }
-}
-
-/// 校验文本是否为合法五字段压缩文档（标题 + 五个字段前缀行全部在场；
-/// 字段顺序与格式不符视为非法，返回缺项说明）
-pub fn validate_structured_summary(text: &str) -> Result<(), String> {
-    if !text.contains(SUMMARY_TEMPLATE_HEADER) {
-        return Err(format!("缺少模板标题 {SUMMARY_TEMPLATE_HEADER}"));
-    }
-    let mut missing: Vec<&str> = Vec::new();
-    for field in SUMMARY_TEMPLATE_FIELDS {
-        let prefix = format!("- {field}：");
-        if !text
-            .lines()
-            .any(|line| line.trim_start().starts_with(&prefix))
-        {
-            missing.push(field);
-        }
-    }
-    if missing.is_empty() {
-        Ok(())
-    } else {
-        Err(format!("缺少字段：{}", missing.join(" / ")))
-    }
-}
 
 /// 渲染单条消息为摘要提示词片段（text/tool-call/tool-result 三通道，
 /// thought 不入提示——思考过程不诱导模型复述）
@@ -147,9 +71,8 @@ fn render_message_text(message: &AgentMessage) -> String {
 /// 构建摘要提示词（被丢弃消息 + 既有摘要迭代合并；输出要求为
 /// **Schema V1 JSON 文档**（[crate::summary_document::SUMMARY_REQUIRED_FIELDS]
 /// 12 字段），与引擎同步路径 / 后台调度的 JSON 契约单轨对齐
-/// （COMPACTION-01 P1-C：原五字段中文模板与 R-G 引擎校验互斥——忠实按
-/// 旧提示输出的 LLM 结果必被 validate_summary_document 拒绝而降级 stub；
-/// 对齐后实现方（ProviderSummarizer）可直接消费本函数）。
+/// （COMPACTION-01 P1-C：引擎契约单轨 Schema V1 JSON；忠实按本提示
+/// 输出的 LLM 结果经 validate_summary_document 校验后落库）。
 /// 调用方把结果经 [crate::summary_document::validate_summary_document]
 /// 校验后渲染落库。
 ///
@@ -211,16 +134,11 @@ pub fn is_degenerate_summary(text: &str, min_chars: usize) -> bool {
     text.trim().chars().count() < min_chars
 }
 
-/// 摘要可接受性判定：非退化（字符数达标）**或**符合五字段模板结构
-/// **或**为合法 Schema V1 JSON 文档（COMPACTION-01 P1-C：引擎契约单轨
-/// JSON 后，短而完整的 JSON 文档（如超短会话）不得被字符下限误杀）。
-///
-/// 五字段模板文档可合法地短于 500 字符（「任务目标一句话」设计），
-/// 结构完整即视为有效；字符下限针对非模板输出的空/垃圾文本
-/// （对齐 grok MIN_SUMMARY_SEED_CHARS 的退化检测意图）。
+/// 摘要可接受性判定：非退化（字符数达标）**或**为合法 Schema V1 JSON 文档
+/// （COMPACTION-01 P1-C：引擎契约单轨 JSON 后，短而完整的 JSON 文档
+/// （如超短会话）不得被字符下限误杀）。
 pub fn is_acceptable_summary(text: &str, min_chars: usize) -> bool {
     !is_degenerate_summary(text, min_chars)
-        || validate_structured_summary(text).is_ok()
         || validate_summary_document(text, usize::MAX).is_ok()
 }
 
@@ -485,10 +403,9 @@ mod tests {
 
     use super::{
         build_summarize_prompt, compaction_event_details, covers_up_to_turn_for_dropped,
-        format_structured_summary, is_acceptable_summary, is_degenerate_summary, retry_allowed,
-        summarize_with_guard, validate_structured_summary, RetryGuardSummarizer,
-        StructuredSummaryFields, SummaryOutcome, SummaryRetryPolicy, SUMMARY_EMPTY_FIELD_MARKER,
-        SUMMARY_TEMPLATE_FIELDS, SUMMARY_TEMPLATE_HEADER,
+        is_acceptable_summary, is_degenerate_summary, retry_allowed,
+        summarize_with_guard, RetryGuardSummarizer,
+        SummaryOutcome, SummaryRetryPolicy,
     };
     use crate::compaction::{CompactionEngine, CompactionPolicy, Summarizer};
 
@@ -515,14 +432,9 @@ mod tests {
         })
     }
 
-    fn five_field_summary() -> String {
-        format_structured_summary(&StructuredSummaryFields {
-            task_goal: "实现双阈值压缩".to_string(),
-            completed: "完成模板定义".to_string(),
-            pending: "补充测试".to_string(),
-            key_decisions: "常规线走 AI 摘要".to_string(),
-            file_list: "crates/conex-compaction/src/lib.rs".to_string(),
-        })
+    /// 足够长的摘要样本（≥ min_chars 阈值，用于通过退化检测的"成功"路径）
+    fn long_summary() -> String {
+        "这是一段足够长的压缩摘要样本，用于通过退化检测的字符下限阈值。".repeat(20)
     }
 
     /// 可编程摘要器（mock provider 通道：按脚本依次返回成功/退化/失败；
@@ -574,45 +486,6 @@ mod tests {
         messages.iter().map(|m| (**m).clone()).collect()
     }
 
-    // ── 五字段模板 ──
-
-    #[test]
-    fn template_format_contains_all_five_fields() {
-        let summary = five_field_summary();
-        assert!(summary.starts_with(SUMMARY_TEMPLATE_HEADER));
-        for field in SUMMARY_TEMPLATE_FIELDS {
-            assert!(
-                summary.contains(&format!("- {field}：")),
-                "模板须含字段 {field}"
-            );
-        }
-        // 空字段写 (none)，字段不省略
-        let empty = format_structured_summary(&StructuredSummaryFields {
-            task_goal: String::new(),
-            completed: String::new(),
-            pending: String::new(),
-            key_decisions: String::new(),
-            file_list: String::new(),
-        });
-        assert_eq!(empty.matches(SUMMARY_EMPTY_FIELD_MARKER).count(), 5);
-        assert!(validate_structured_summary(&empty).is_ok());
-    }
-
-    #[test]
-    fn template_validation_rejects_missing_fields() {
-        assert!(validate_structured_summary(&five_field_summary()).is_ok());
-        // 缺标题
-        let no_header = five_field_summary().replace(SUMMARY_TEMPLATE_HEADER, "## 摘要");
-        assert!(validate_structured_summary(&no_header).is_err());
-        // 缺一个字段
-        let no_file_list =
-            five_field_summary().replace("- 文件清单：crates/conex-compaction/src/lib.rs", "");
-        let err = validate_structured_summary(&no_file_list).unwrap_err();
-        assert!(err.contains("文件清单"), "缺项说明须点名缺失字段：{err}");
-        // 空字符串
-        assert!(validate_structured_summary("").is_err());
-    }
-
     // ── 摘要提示词 ──
 
     /// COMPACTION-01 P1-C：提示词已对齐 Schema V1 JSON 契约——12 个
@@ -646,13 +519,6 @@ mod tests {
         for field in crate::summary_document::SUMMARY_REQUIRED_FIELDS {
             assert!(prompt.contains(field), "提示词须点名 required 字段 {field}");
         }
-        // 五字段模板字段不再作为输出要求出现（孤儿面清除）
-        for field in SUMMARY_TEMPLATE_FIELDS {
-            assert!(
-                !prompt.contains(&format!("- {field}：")),
-                "提示词不应再要求五字段模板输出（{field}）"
-            );
-        }
         // 丢弃消息上下文 + 迭代合并
         assert!(prompt.contains("实现压缩模块"));
         assert!(prompt.contains("read_file"));
@@ -685,18 +551,11 @@ mod tests {
         assert!(!is_degenerate_summary("abc", 2));
     }
 
-    /// 可接受性：字符达标的任意文本可用；模板结构完整的短文档也可用
-    /// （五字段模板文档合法短于 500 字符）；合法 Schema V1 JSON 文档
+    /// 可接受性：字符达标的任意文本可用；合法 Schema V1 JSON 文档
     /// 同样可用（COMPACTION-01 P1-C：引擎契约单轨 JSON 后不得被字符
     /// 下限误杀）
     #[test]
     fn acceptable_summary_accepts_valid_template_and_schema_json() {
-        let summary = five_field_summary();
-        assert!(
-            is_degenerate_summary(&summary, 500),
-            "模板文档通常短于 500 字符"
-        );
-        assert!(is_acceptable_summary(&summary, 500), "结构完整即视为有效");
         // Schema V1 JSON：短而完整（12 required 字段）不得被字符下限拒绝
         let json = serde_json::json!({
             "schemaVersion": 1,
@@ -765,7 +624,7 @@ mod tests {
         let summarizer = ScriptedSummarizer::new(vec![
             Ok("过短".to_string()),
             Ok("仍过短".to_string()),
-            Ok(five_field_summary()),
+            Ok(long_summary()),
         ]);
         let waits = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let waits_arc = waits.clone();
@@ -782,7 +641,7 @@ mod tests {
         assert!(!outcome.degraded);
         assert_eq!(outcome.attempts, 3);
         assert_eq!(outcome.degenerate_attempts, 2);
-        assert!(outcome.summary.as_deref().unwrap().contains("任务目标"));
+        assert!(outcome.summary.as_deref().unwrap().contains("压缩摘要"));
         assert!(outcome.last_error.is_none());
         // 两次等待均为 3s 间隔
         assert_eq!(
@@ -839,7 +698,7 @@ mod tests {
     /// 首试成功不等待、不重试
     #[test]
     fn guard_first_attempt_success_no_retry() {
-        let summarizer = ScriptedSummarizer::new(vec![Ok(five_field_summary())]);
+        let summarizer = ScriptedSummarizer::new(vec![Ok(long_summary())]);
         let wait_count = std::sync::Arc::new(AtomicU32::new(0));
         let counter = wait_count.clone();
         let mut wait = move |_: std::time::Duration| {

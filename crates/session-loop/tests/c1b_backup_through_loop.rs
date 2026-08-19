@@ -51,9 +51,8 @@ async fn write_file_through_loop_lands_crish_trash_snapshot() {
     let ws = TempWorkspace::new("c1b_backup_loop");
     // 壳层等价 options：tool_middleware = [BackupMiddleware::with_defaults(None)]
     //（run_launch.rs:605 同构造）+ cwd = 工作区根（中间件快照回退基准）
-    let options = SessionLoopOptions::default().with_tool_middleware(vec![Arc::new(
-        BackupMiddleware::with_defaults(None),
-    )]);
+    let options = SessionLoopOptions::default()
+        .with_tool_middleware(vec![Arc::new(BackupMiddleware::with_defaults(None))]);
     let options = SessionLoopOptions {
         cwd: Some(ws.path_str()),
         ..options

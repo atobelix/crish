@@ -1,43 +1,29 @@
-//! 工具族实现：守卫链接线 + 13 个 computer_* 工具真实执行路径（06 文档 §4.2）。
+//! 工具族实现：守卫链接线 + 12 个 computer_* 工具真实执行路径（06 文档 §4.2，维度 1 收敛）。
 //!
-//! ## 执行守卫链（顺序即优先级；06 文档 §4.2）
+//! ## 执行守卫链（3 阶段，维度 1 收敛）
 //!
 //! ```text
 //! computer_* 工具 execute：
-//! ① 会话注入检查   session 未注入            → tool.computer.not_ready
+//! ① 会话注入 + 开启态合并检查  session 未注入或未开启 → tool.computer.not_ready/not_enabled
 //! ② 互斥守卫       activation.current() 非
-//!                   DesktopActive            → tool.session.exclusive   ← 硬约束，审批前
-//! ③ 开启态复查     check_action_allowed()
-//!                   未开启/已挂起/急停后      → tool.computer.not_enabled（零副作用）
-//! ④ 急停自查       stop.stopped()            → tool.computer.cancelled
-//! ⑤ 逐次审批       approval.require_approval(载荷) → Pending
-//!                   → 引擎经 ctx.ask 送用户   → settle 收口
-//!                   拒绝/急停中/并发请求      → Denied（零注入；approval.rejected）
-//! ⑥ 执行           参数校验(→invalid_params) → 坐标换算(→coords_out_of_bounds，
+//!                   DesktopActive            → tool.session.exclusive   ← 硬约束
+//! ③ 停止自查       abort_token.is_aborted()  → tool.computer.cancelled
+//! 执行             参数校验(→invalid_params) → 坐标换算(→coords_out_of_bounds，
 //!                   会话内 dispatch) → ActionTargetGate 门禁(提权→
 //!                   elevated_window，RealComputerSession 内) →
 //!                   ComputerOps.dispatch / screenshot / snapshot
-//!                   注入批次间自查 stop/abort_token → tool.computer.cancelled
+//!                   注入批次间自查 abort_token → tool.computer.cancelled
 //! ```
 //!
-//! - 守卫②在审批之前（04 §4.6 / 18 §6.3：互斥是硬约束，不占审批资源）；
-//! - 守卫③在审批之前（security.rs:216 `check_action_allowed` 注释登记；
-//!   挂载是注册时刻快照，运行期挂起/急停后回 Idle 由本守卫兜底拒绝）；
-//! - 审批载荷 = `ApprovalRequest`（动作名 + 参数摘要 + 目标窗口标题 + 物理
-//!   坐标）；`approval` 未注入（None）时按 Denied 收口（安全默认，不静默
-//!   放行——06 遗留⑤）；`ctx.ask` 未接线同样按 Denied 收口；
-//! - 审批等待期取消：等待期间 `stop.stopped()` / `ctx.abort_token.is_aborted()`
-//!   以 Denied（原因「急停/取消」）收口，拒绝时零注入；
-//! - `computer_estop` 自身不被急停打断（跳过守卫④）：触发
-//!   `EmergencyStop::global_stop()` + `ctx.abort_token.abort()`（同一吊销链，
-//!   来源 Global，04 §4.3 ①）+ 会话开启态关闭（恢复需用户重新显式开启）；
-//! - 动作前检查器（06 遗留⑥）挂在 [`crate::session::RealComputerSession`]
+//! - 守卫①合并了原会话注入检查与开启态复查（维度 1 收敛 6→3 阶段）；
+//! - 停止自查仅查 `abort_token`（EmergencyStop 删除后统一走 run 级 abort_signal）；
+//! - 动作前检查器挂在 [`crate::session::RealComputerSession`]
 //!   dispatch 内（05 文档 §5.2：白名单/提权 → elevated_window），工具层
 //!   经 [`crate::error::map_session_error`] 映射 `SessionError::Gate`。
 
 use crate::error;
 use crate::session::ComputerOps;
-use agent_tools::context::{AskDecision, ToolContext};
+use agent_tools::context::ToolContext;
 use agent_tools::definition::{Tool, ToolDefinition, ToolError};
 use agent_tools::registry::ToolRegistry;
 use async_trait::async_trait;
@@ -45,9 +31,7 @@ use base64::Engine;
 use conex_computer::action::{ClickCount, MouseButton, ScrollDirection};
 use conex_computer::coord::Point;
 use conex_computer::perception::{PerceptionNode, PerceptionSnapshot};
-use conex_computer::security::{
-    Approval, ApprovalGate, ApprovalRequest, EmergencyStop, SessionEnablement,
-};
+use conex_computer::security::SessionEnablement;
 use conex_computer::{Action, ActionResult};
 use conex_computer::activation::ActivationGate;
 use serde_json::{json, Value};
@@ -55,10 +39,10 @@ use std::io::Cursor;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-/// 工具类别（13 个，06 文档 §2 裁决：注入 8 / 感知 4 / 急停 1）。
+/// 工具类别（12 个，维度 1 收敛：注入 8 / 感知 4）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ToolKind {
-    // 注入 8（全 dangerous=true，Ask 审批）
+    // 注入 8（全 dangerous=true）
     Click,
     Type,
     Key,
@@ -67,27 +51,21 @@ pub(crate) enum ToolKind {
     Button,
     Drag,
     Scroll,
-    // 感知 4（全 dangerous=true，默认审批）
+    // 感知 4（全 dangerous=true）
     Wait,
     Screenshot,
     CursorPosition,
     Snapshot,
-    // 急停 1（自身不被急停打断）
-    Estop,
 }
 
 /// 守卫共享上下文（注册时从 [crate::ComputerToolsConfig] 装配注入各工具）。
 pub(crate) struct GuardCtx {
     /// 会话注入面（未注入 = 守卫① not_ready）
     pub session: Option<Arc<dyn ComputerOps>>,
-    /// 会话互斥守卫（S3；守卫②，审批前）
+    /// 会话互斥守卫（S3；守卫②）
     pub activation: Option<Arc<ActivationGate>>,
-    /// 会话级显式开启判据（守卫③，审批前）
+    /// 会话级显式开启判据（守卫①，与 session 注入合并检查）
     pub enablement: Option<Arc<SessionEnablement>>,
-    /// 全动作审批门（守卫⑤）
-    pub approval: Option<Arc<ApprovalGate>>,
-    /// 三级急停旗（守卫④ + 批次间自查）
-    pub stop: Option<Arc<EmergencyStop>>,
 }
 
 /// 电脑操作工具（定义 + 类别 + 守卫上下文；execute 走统一守卫链）。
@@ -119,9 +97,9 @@ impl ComputerTool {
         }
     }
 
-    /// 急停/中止令牌自查（守卫④ 与批次间自查共用判据）
+    /// 中止令牌自查（守卫③ 与批次间自查共用判据；维度 1 收敛：仅查 abort_token）
     fn stopped(&self, tctx: &ToolContext) -> bool {
-        self.ctx.stop.as_ref().is_some_and(|s| s.stopped()) || tctx.abort_token.is_aborted()
+        tctx.abort_token.is_aborted()
     }
 
     /// 注入批次间自查（守卫⑥ 末段：dispatch 返回后急停旗/中止令牌已置位
@@ -134,70 +112,7 @@ impl ComputerTool {
         }
     }
 
-    /// 守卫⑤ 逐次审批（Ask 逐次审批语义：一次一票；approval 未注入 /
-    /// ctx.ask 未接线均按 Denied 收口，不静默放行）。
-    async fn approve(&self, tctx: &ToolContext, args: &Value) -> Result<(), ToolError> {
-        let Some(gate) = &self.ctx.approval else {
-            return Err(error::approval_rejected(
-                "审批门未注入（安全默认：拒绝放行，06 遗留⑤）",
-            ));
-        };
-        let request = approval_request(&self.def.name, args);
-        // 载荷序列化提前（ApprovalRequest 非 Clone；Value 为 owned 拷贝）
-        let payload = approval_payload(&request);
-        match gate.require_approval(request) {
-            Approval::Granted => Ok(()),
-            Approval::Denied { reason } => Err(error::approval_rejected(reason)),
-            Approval::Pending { id } => {
-                // 审批传输面（agent-tools ctx.ask / AskChannel）：未接线 →
-                // 按 Denied 收口（settle 清在途，零注入）
-                let Some(ask) = &tctx.ask else {
-                    let _ = gate.settle(
-                        id,
-                        Approval::Denied {
-                            reason: "审批传输面未接线（ctx.ask），按拒绝收口".into(),
-                        },
-                    );
-                    return Err(error::approval_rejected(
-                        "审批传输面未接线（ctx.ask），按拒绝收口",
-                    ));
-                };
-                let decision = ask.ask(&self.def.name, &payload).await.map_err(|e| {
-                    let _ = gate.settle(
-                        id,
-                        Approval::Denied {
-                            reason: format!("审批传输失败：{e}"),
-                        },
-                    );
-                    error::approval_rejected(format!("审批传输失败：{e}"))
-                })?;
-                // 审批等待期取消：急停/中止令牌 → 以 Denied 收口（零注入，
-                // security.rs:305-314 注释登记；estop 自身不被急停打断，豁免）
-                if self.stopped(tctx) && !matches!(self.kind, ToolKind::Estop) {
-                    let _ = gate.settle(
-                        id,
-                        Approval::Denied {
-                            reason: "急停/取消（审批等待期）".into(),
-                        },
-                    );
-                    return Err(error::cancelled());
-                }
-                let verdict = match decision {
-                    AskDecision::Allowed => Approval::Granted,
-                    AskDecision::Denied { reason } => Approval::Denied { reason },
-                };
-                match gate.settle(id, verdict) {
-                    Ok(Approval::Granted) => Ok(()),
-                    Ok(Approval::Denied { reason }) => Err(error::approval_rejected(reason)),
-                    // 竞态（急停中 settle 放行被拒 / 已结算）→ 拒绝收口
-                    Ok(_) => Err(error::approval_rejected("审批收口异常，按拒绝处理")),
-                    Err(e) => Err(error::approval_rejected(format!("审批收口失败：{e}"))),
-                }
-            }
-        }
-    }
-
-    /// 守卫⑥ 执行（参数校验 → 会话派发 → 批次间自查；感知/急停分支）
+    /// 守卫⑥ 执行（参数校验 → 会话派发 → 批次间自查；感知分支）
     async fn execute_kind(
         &self,
         tctx: &ToolContext,
@@ -323,7 +238,14 @@ impl ComputerTool {
                 let duration = parse_wait_duration(args)?;
                 let with_screenshot = parse_wait_screenshot(args)?;
                 let started = Instant::now();
-                tokio::time::sleep(Duration::from_secs_f64(duration)).await;
+                let sleep = tokio::time::sleep(Duration::from_secs_f64(duration));
+                tokio::pin!(sleep);
+                tokio::select! {
+                    _ = &mut sleep => {}
+                    _ = tctx.abort_token.wait_aborted() => {
+                        return Err(error::cancelled());
+                    }
+                }
                 let elapsed_secs = started.elapsed().as_secs_f64();
                 let screenshot = if with_screenshot {
                     screenshot_payload(session, name, "png", 90, None).await?
@@ -368,22 +290,6 @@ impl ComputerTool {
                     "perceptionVersion": session.perception_version()
                 }))
             }
-            // ── 急停 1（触发全局急停链；自身不被急停打断，已完成即返回）──
-            ToolKind::Estop => {
-                let reason = parse_estop_reason(args)?
-                    .unwrap_or_else(|| "（未提供原因）".to_string());
-                // 04 §4.3 ①：AI 主动急停并入全局急停链（来源 Global，无新增 StopSource）
-                if let Some(stop) = &self.ctx.stop {
-                    stop.global_stop();
-                }
-                // 同一吊销链：引擎侧 abort_token 吊销（context.rs:44，幂等）
-                tctx.abort_token.abort();
-                // 恢复需用户重新显式开启（04 §4.4）：关闭会话开启态兜底
-                if let Some(enablement) = &self.ctx.enablement {
-                    enablement.disable(format!("AI 主动急停：{reason}"));
-                }
-                Ok(json!({ "ok": true, "stopped": true }))
-            }
         }
     }
 }
@@ -399,11 +305,16 @@ impl Tool for ComputerTool {
     }
 
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
-        // ① 会话注入检查（未注入 → tool.computer.not_ready，对齐 R-9 gating）
+        // ① 会话注入 + 开启态合并检查（未注入或未开启 → not_ready/not_enabled）
         let session = self.ctx.session.as_ref().ok_or_else(|| {
             error::not_ready("电脑操作会话未注入（ComputerToolsConfig.session）")
         })?;
-        // ② 互斥守卫（S3 ActivationGate；审批前，两向生效）
+        if let Some(enablement) = &self.ctx.enablement {
+            if !enablement.enabled() {
+                return Err(error::not_enabled("电脑操作未开启"));
+            }
+        }
+        // ② 互斥守卫（S3 ActivationGate；两向生效）
         if let Some(activation) = &self.ctx.activation {
             if !activation.current().is_desktop() {
                 return Err(error::exclusive(format!(
@@ -412,20 +323,11 @@ impl Tool for ComputerTool {
                 )));
             }
         }
-        // ③ 开启态复查（审批前；挂载是注册时刻快照，运行期挂起/急停后回
-        //    Idle 由本守卫兜底拒绝，零副作用）
-        if let Some(enablement) = &self.ctx.enablement {
-            if let Err(e) = enablement.check_action_allowed() {
-                return Err(error::not_enabled(e.to_string()));
-            }
-        }
-        // ④ 急停自查（estop 自身不被急停打断，跳过）
-        if !matches!(self.kind, ToolKind::Estop) && self.stopped(tctx) {
+        // ③ 停止自查（仅查 abort_token；维度 1 收敛：EmergencyStop 删除）
+        if self.stopped(tctx) {
             return Err(error::cancelled());
         }
-        // ⑤ 逐次审批
-        self.approve(tctx, &args).await?;
-        // ⑥ 执行
+        // 执行（参数校验 → 坐标换算 → 门禁 → 注入 → 批次间自查）
         self.execute_kind(tctx, session.as_ref(), &args).await
     }
 }
@@ -769,88 +671,7 @@ fn parse_snapshot_args(args: &Value) -> Result<(Option<u64>, Option<u64>), ToolE
     Ok((max_depth, max_elements))
 }
 
-fn parse_estop_reason(args: &Value) -> Result<Option<String>, ToolError> {
-    reject_unknown(args, &["reason"])?;
-    optional_string(args, "reason")
-}
-
-// ===== 审批载荷（守卫⑤） =====
-
-/// 审批载荷构造：动作名 + 参数摘要（06 §2.2：`type` 载明文，其余摘要化）。
-/// 窗口标题 / 物理坐标需会话面（UIA 感知 / 坐标换算），工具层不持有，
-/// 当前置 None（遗留登记：引擎 executor 层在守卫⑤前填充）。
-fn approval_request(tool_name: &str, args: &Value) -> ApprovalRequest {
-    ApprovalRequest::new(tool_name, params_summary(tool_name, args))
-}
-
-/// 参数摘要（逐工具字段面；type 明文展示——审计只落 sha256 由引擎侧负责）。
-fn params_summary(tool_name: &str, args: &Value) -> String {
-    match tool_name {
-        "computer_click" => {
-            summary_of(args, &["button", "count", "coordinate", "modifiers"])
-        }
-        "computer_type" => {
-            args.get("text")
-                .and_then(Value::as_str)
-                .map(|t| format!("text={t}"))
-                .unwrap_or_default()
-        }
-        "computer_key" => summary_of(args, &["keys"]),
-        "computer_hold_key" => summary_of(args, &["key", "duration"]),
-        "computer_move" => summary_of(args, &["coordinate"]),
-        "computer_button" => summary_of(args, &["button", "down"]),
-        "computer_drag" => summary_of(args, &["start_coordinate", "coordinate"]),
-        "computer_scroll" => {
-            summary_of(args, &["direction", "amount", "coordinate", "modifiers"])
-        }
-        "computer_wait" => summary_of(args, &["duration", "screenshot"]),
-        "computer_screenshot" => summary_of(args, &["format", "quality", "region"]),
-        "computer_cursor_position" => "cursor_position".to_string(),
-        "computer_snapshot" => summary_of(args, &["max_depth", "max_elements"]),
-        "computer_estop" => summary_of(args, &["reason"]),
-        other => format!("{other}: {args}"),
-    }
-}
-
-/// 指定字段 → 摘要串（`field=value` 空格拼接；数组展开为逗号串）。
-fn summary_of(args: &Value, fields: &[&str]) -> String {
-    fields
-        .iter()
-        .filter_map(|f| {
-            args.get(f)
-                .map(|v| format!("{f}={}", summarize_value(v)))
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn summarize_value(v: &Value) -> String {
-    match v {
-        Value::String(s) => s.clone(),
-        Value::Array(items) => {
-            let inner = items
-                .iter()
-                .map(summarize_value)
-                .collect::<Vec<_>>()
-                .join(",");
-            format!("[{inner}]")
-        }
-        other => other.to_string(),
-    }
-}
-
-/// 审批载荷序列化（ctx.ask / AskChannel 传输面；ApprovalRequest 展开为
-/// 工具名 + 参数 JSON——06 遗留⑤ 映射面）。
-fn approval_payload(request: &ApprovalRequest) -> Value {
-    json!({
-        "action": request.action,
-        "paramsSummary": request.params_summary,
-        "windowTitle": request.window_title,
-        "position": request.position.map(|p| json!({ "x": p.x, "y": p.y })),
-    })
-}
-
-// ===== 感知后处理（06 遗留⑧ zoom region 裁剪 + format 转换；纯函数可单测） =====
+// ===== 感知后处理（zoom region 裁剪 + format 转换；纯函数可单测） =====
 
 /// 截图后处理纯函数：
 /// 1. 解码 PNG 合成帧；
@@ -987,14 +808,14 @@ fn truncate_node(node: PerceptionNode, depth: usize, budget: &mut Budget) -> Per
 
 // ===== 注册 =====
 
-/// 13 个工具定义清单（注册序 = 注入 → 感知 → 急停；与
+/// 12 个工具定义清单（注册序 = 注入 → 感知；与
 /// [crate::ALL_TOOL_NAMES] 逐一对应，注册数断言测试守护）。
 pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
     vec![
         // ── 注入 8（全 dangerous=true）──
         ComputerTool::new(
             "computer_click",
-            "鼠标点击（危险操作，需审批）。button=left/right/middle，count=single/double/triple；带 coordinate 先移动再点击；带 modifiers 按住修饰键点击（如 ctrl+click）。",
+            "鼠标点击（危险操作）。button=left/right/middle，count=single/double/triple；带 coordinate 先移动再点击；带 modifiers 按住修饰键点击（如 ctrl+click）。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1011,7 +832,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_type",
-            "向当前焦点输入文本（危险操作，需审批）。50 字符/块 + 12ms 节流不丢字；中文/emoji 走 Unicode 直送；审批弹窗明文展示 text。",
+            "向当前焦点输入文本（危险操作）。50 字符/块 + 12ms 节流不丢字；中文/emoji 走 Unicode 直送。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1025,7 +846,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_key",
-            "发送组合键（危险操作，需审批）。keys 数组语义（如 [\"ctrl\",\"c\"]），至多一个非修饰键；不做字符串解析。",
+            "发送组合键（危险操作）。keys 数组语义（如 [\"ctrl\",\"c\"]），至多一个非修饰键；不做字符串解析。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1039,7 +860,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_hold_key",
-            "按住指定键 duration 秒后松开（危险操作，需审批）。duration 上限 100s。",
+            "按住指定键 duration 秒后松开（危险操作）。duration 上限 100s。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1054,7 +875,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_move",
-            "移动光标到指定坐标（危险操作，需审批）。coordinate 为 API 空间 [x,y]，经缩放校验后注入；等待完成再返回（_sync 语义）。",
+            "移动光标到指定坐标（危险操作）。coordinate 为 API 空间 [x,y]，经缩放校验后注入；等待完成再返回（_sync 语义）。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1068,7 +889,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_button",
-            "按下/抬起分离原语（危险操作，需审批）。作用于当前光标位置；down=true 按下 / false 抬起；供拖拽/选区/画板场景由模型编排。",
+            "按下/抬起分离原语（危险操作）。作用于当前光标位置；down=true 按下 / false 抬起；供拖拽/选区/画板场景由模型编排。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1083,7 +904,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_drag",
-            "拖拽（危险操作，需审批）。按下起点 → 分步移动终点 → 抬起；两端点均走缩放校验。",
+            "拖拽（危险操作）。按下起点 → 分步移动终点 → 抬起；两端点均走缩放校验。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1098,7 +919,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_scroll",
-            "滚动（危险操作，需审批；大 amount 默认拒绝型）。direction=up/down/left/right，amount 非负整数；可先移动再滚动、可带修饰键（如 shift+wheel 横向语义由 OS 决定）。",
+            "滚动（危险操作）。direction=up/down/left/right，amount 非负整数；可先移动再滚动、可带修饰键（如 shift+wheel 横向语义由 OS 决定）。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1113,7 +934,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
             ToolKind::Scroll,
             ctx.clone(),
         ),
-        // ── 感知 4（全 dangerous=true，默认审批）──
+        // ── 感知 4（全 dangerous=true）──
         ComputerTool::new(
             "computer_wait",
             "等待并返回（感知类，不注入任何输入）。duration 秒后完成；screenshot=true 时顺带返回截屏。",
@@ -1131,7 +952,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_screenshot",
-            "返回缩放后全桌面截屏（感知类，默认审批）。format=png/jpeg，quality 质量档；region 裁剪局部区域（zoom 语义，越界报错）。",
+            "返回缩放后全桌面截屏（感知类）。format=png/jpeg，quality 质量档；region 裁剪局部区域（zoom 语义，越界报错）。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1147,7 +968,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_cursor_position",
-            "返回当前光标位置（感知类，默认审批；API 空间坐标，经物理→API 换算）。",
+            "返回当前光标位置（感知类；API 空间坐标，经物理→API 换算）。",
             json!({
                 "type": "object",
                 "properties": {},
@@ -1158,7 +979,7 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
         ),
         ComputerTool::new(
             "computer_snapshot",
-            "返回 UIA 结构化快照（感知类，默认审批）。元素/角色/名称/边界矩形/索引紧凑序列化；密码框文本抑制（<password>）与键名脱敏已内置。",
+            "返回 UIA 结构化快照（感知类）。元素/角色/名称/边界矩形/索引紧凑序列化；密码框文本抑制（<password>）与键名脱敏已内置。",
             json!({
                 "type": "object",
                 "properties": {
@@ -1171,25 +992,10 @@ pub(crate) fn definitions(ctx: Arc<GuardCtx>) -> Vec<ComputerTool> {
             ToolKind::Snapshot,
             ctx.clone(),
         ),
-        // ── 急停 1（dangerous=true）──
-        ComputerTool::new(
-            "computer_estop",
-            "AI 主动急停（危险操作，需审批）。触发全局急停链：中止在途注入 → 感知源停止 → 会话回 Idle；恢复需用户重新显式开启。",
-            json!({
-                "type": "object",
-                "properties": {
-                    "reason": { "type": "string", "description": "可选，急停原因（审计记录）" }
-                },
-                "required": [],
-                "additionalProperties": false
-            }),
-            ToolKind::Estop,
-            ctx.clone(),
-        ),
     ]
 }
 
-/// 注册全部 13 个 computer_* 工具（幂等：同名已注册跳过，不报冲突；
+/// 注册全部 12 个 computer_* 工具（幂等：同名已注册跳过，不报冲突；
 /// 06 文档 §3.2 幂等语义对齐浏览器线 17 §1.4）。
 pub(crate) fn register_all(
     registry: &ToolRegistry,
@@ -1240,31 +1046,6 @@ mod tests {
         assert_eq!(err.code(), crate::codes::TOOL_COMPUTER_INVALID_PARAMS);
         let err = parse_hold_key_duration(&json!({ "duration": 200 })).expect_err("超长应拒绝");
         assert_eq!(err.code(), crate::codes::TOOL_COMPUTER_INVALID_PARAMS);
-    }
-
-    /// 审批摘要：type 明文展示（06 §2.2：审批弹窗明文展示 text）。
-    #[test]
-    fn params_summary_type_shows_plaintext() {
-        let summary = params_summary("computer_type", &json!({ "text": "hello 世界" }));
-        assert_eq!(summary, "text=hello 世界");
-        let summary = params_summary("computer_click", &json!({ "button": "left", "coordinate": [1, 2] }));
-        assert_eq!(summary, "button=left coordinate=[1,2]");
-        assert_eq!(
-            params_summary("computer_cursor_position", &json!({})),
-            "cursor_position"
-        );
-    }
-
-    /// 审批载荷序列化（ctx.ask 传输面形状：action/paramsSummary 必带，
-    /// windowTitle/position 可空）。
-    #[test]
-    fn approval_payload_shape() {
-        let request = ApprovalRequest::new("computer_type", "text=hello");
-        let payload = approval_payload(&request);
-        assert_eq!(payload["action"], "computer_type");
-        assert_eq!(payload["paramsSummary"], "text=hello");
-        assert!(payload["windowTitle"].is_null());
-        assert!(payload["position"].is_null());
     }
 
     /// 截图后处理：PNG 输入 → PNG 原样输出 + region 裁剪尺寸正确 + 越界拒绝。
@@ -1354,29 +1135,25 @@ mod tests {
         assert_eq!(out.root.children.len(), 2);
     }
 
-    /// 注册数断言（tools 层自检：13 定义 + 幂等跳过）。
+    /// 注册数断言（tools 层自检：12 定义 + 幂等跳过）。
     #[test]
-    fn register_all_mounts_13_tools_idempotently() {
+    fn register_all_mounts_12_tools_idempotently() {
         let ctx = Arc::new(GuardCtx {
             session: None,
             activation: None,
             enablement: None,
-            approval: None,
-            stop: None,
         });
         let registry = ToolRegistry::new();
         register_all(&registry, ctx).expect("注册成功");
-        assert_eq!(registry.len(), 13);
+        assert_eq!(registry.len(), 12);
         assert_eq!(registry.len(), crate::ALL_TOOL_NAMES.len());
         // 幂等：重复注册不冲突
         register_all(&registry, Arc::new(GuardCtx {
             session: None,
             activation: None,
             enablement: None,
-            approval: None,
-            stop: None,
         }))
         .expect("重复注册应幂等");
-        assert_eq!(registry.len(), 13);
+        assert_eq!(registry.len(), 12);
     }
 }

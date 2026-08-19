@@ -101,7 +101,7 @@ pub fn apply_md_fragment(
     }
 
     // 防御：Op 列表内 ID 不得重复（parse 已保证；再钉一次）
-    assert_ops_ids_unique(&ops);
+    assert_ops_ids_unique(&ops)?;
 
     let new_ids: Vec<BlockId> = ops
         .iter()
@@ -168,16 +168,16 @@ fn emit_subtree(
     Ok(())
 }
 
-fn assert_ops_ids_unique(ops: &[Op]) {
+fn assert_ops_ids_unique(ops: &[Op]) -> Result<(), MdError> {
     let mut seen = HashSet::new();
     for op in ops {
         if let Op::Insert { id, .. } = op {
-            assert!(
-                seen.insert(*id),
-                "apply_md_fragment 内部不变量：Insert ID 重复 {id}"
-            );
+            if !seen.insert(*id) {
+                return Err(MdError::DuplicateOpId(id.to_string()));
+            }
         }
     }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -24,9 +24,7 @@ use conex_types::events::{
 };
 use conex_types::session::AgentEndReason;
 use session_loop::RunOutcome;
-use session_loop::{
-    is_retraction_evacuation_event, SessionFreezeRegistry, WriteVerdict,
-};
+use session_loop::{is_retraction_evacuation_event, SessionFreezeRegistry};
 
 use crate::blocks::persist_compression_block;
 use crate::normalize::normalize_envelope;
@@ -117,8 +115,8 @@ impl std::error::Error for PersistError {}
 pub struct EventQueue {
     /// 会话级 sequence 分配器（T08.12：实际取号走 store 端原子计数器）
     sequencer: SessionSequencer,
-    /// 最近一次已分配序列的本地镜像（next_sequence 访问器与 store 损坏
-    /// 时的兜底取值）
+    /// 最近一次已成功分配序列的本地镜像（仅供 `next_sequence` 观测）。
+    /// 取号失败不推进——store 端 `reserve_sequence` 是唯一真源。
     last_reserved: u64,
     /// run 归属（构造期绑定，不可变；None = 会话域/空闲态事件，
     /// D-01 R-02：写面注入 = 构造期绑定，非 push 逐次传参）
@@ -212,20 +210,12 @@ impl EventQueue {
         (effective_run_id.map(str::to_string), envelope)
     }
 
-    /// 从会话级原子计数器取号（T08.12）；store 损坏时以本地镜像 +1 兜底，
-    /// 并返回错误（取号失败即持久化失败，事件不落库）
+    /// 从会话级原子计数器取号（T08.12）。store 是唯一真源：成功才回写
+    /// 本地镜像；失败不推进、不本地瞎加（取号失败即持久化失败）。
     async fn reserve(&mut self, session_id: &str) -> Result<u64, StoreError> {
-        match self.sequencer.reserve(session_id).await {
-            Ok(sequence) => {
-                self.last_reserved = sequence;
-                Ok(sequence)
-            }
-            Err(error) => {
-                // 兜底：本地镜像 +1（best-effort 路径仍可给出占位序列）
-                self.last_reserved += 1;
-                Err(error)
-            }
-        }
+        let sequence = self.sequencer.reserve(session_id).await?;
+        self.last_reserved = sequence;
+        Ok(sequence)
     }
 
     /// 入队并分配 sequence；持久化事件同步等待落库（delta 不阻塞）
@@ -256,10 +246,9 @@ impl EventQueue {
         let sequence = match self.reserve(session_id).await {
             Ok(sequence) => sequence,
             Err(error) => {
-                // 取号失败：本地镜像兜底值即为已分配的占位序列
-                let sequence = self.last_reserved;
+                // 取号失败：未消耗序列槽，错误携带上次成功号供观测
                 return Err(PersistError {
-                    sequence,
+                    sequence: self.last_reserved,
                     event_type: event_type_name(&event).to_string(),
                     error,
                 });
@@ -301,16 +290,30 @@ impl EventQueue {
         })
     }
 
-    /// 终态事件尽力落库（store 已坏时不假装可回放；失败仍返回事件）
+    /// 终态事件尽力落库（store 已坏时不假装可回放；失败仍返回事件）。
+    ///
+    /// 取号只走 store `reserve_sequence`：首次失败再重试一次。重试仍失败
+    /// 则不落库、不推进本地镜像（不是第二条序号生成器）。
     pub async fn push_terminal_best_effort(
         &mut self,
         session_id: &str,
         event: AgentEvent,
     ) -> SequencedEvent {
-        // 取号失败（store 已坏）时以本地镜像兜底，事件仍返回
         let sequence = match self.reserve(session_id).await {
             Ok(sequence) => sequence,
-            Err(_) => self.last_reserved,
+            Err(_) => match self.store().reserve_sequence(session_id).await {
+                Ok(sequence) => {
+                    self.last_reserved = sequence;
+                    sequence
+                }
+                Err(_) => {
+                    return SequencedEvent {
+                        sequence: self.last_reserved,
+                        event,
+                        persisted: false,
+                    };
+                }
+            },
         };
         let event_type = event_type_name(&event);
         let (run_id, envelope) = self.persist_envelope(session_id, sequence, &event);
@@ -497,14 +500,21 @@ pub async fn drive_outcome(
             "事件持久化失败（run 标记 failed(event-store-write-failed)）"
         );
         let message = format!("{}: {}", failure.event_type, failure.error.message);
-        // Q25（必做）：终态复用失败的 sequence（序列已从会话计数器取出，
-        // append 失败未落库），不留序列空洞；cursor 占位 = 该序列（T08.4）
+        // Q25（必做）：append 失败时序列已从会话计数器取出，终态复用该号
+        // 不留空洞。取号本身失败则槽位未消耗——改走 store 重试取号，
+        // 禁止用本地镜像当序号写库。
         run.cursor = failed_sequence;
         run.fail_event_store(queue.store(), &message).await?;
         let terminal = build_run_terminal(run, RunTerminalStatus::Failed, Some(message.clone()));
-        let sequenced = queue
-            .push_at_best_effort(&run.session_id, terminal, failed_sequence)
-            .await;
+        let sequenced = if failure.error.kind == "reserve_sequence" {
+            queue
+                .push_terminal_best_effort(&run.session_id, terminal)
+                .await
+        } else {
+            queue
+                .push_at_best_effort(&run.session_id, terminal, failed_sequence)
+                .await
+        };
         run.cursor = sequenced.sequence;
         pushed.push(sequenced);
         return Ok(DriveOutcome {
@@ -572,14 +582,20 @@ pub async fn drive_outcome(
                 "终态事件落库失败（run 翻转 failed）"
             );
             let message = format!("{}: {}", err.event_type, err.error.message);
-            // 终态序列已从会话计数器取出（append 失败未落库）：先占位再收口
+            // 终态序列：append 失败复用已取出的号；取号失败则 store 重试
             run.cursor = err.sequence;
             run.fail_event_store(queue.store(), &message).await?;
             let failed_terminal =
                 build_run_terminal(run, RunTerminalStatus::Failed, Some(message.clone()));
-            let sequenced = queue
-                .push_at_best_effort(&run.session_id, failed_terminal, err.sequence)
-                .await;
+            let sequenced = if err.error.kind == "reserve_sequence" {
+                queue
+                    .push_terminal_best_effort(&run.session_id, failed_terminal)
+                    .await
+            } else {
+                queue
+                    .push_at_best_effort(&run.session_id, failed_terminal, err.sequence)
+                    .await
+            };
             run.cursor = sequenced.sequence;
             pushed.push(sequenced);
             return Ok(DriveOutcome {
@@ -1303,6 +1319,285 @@ mod tests {
         assert_eq!(mem.runs()[0].cursor, 1, "失败路径 cursor 落库（T08.4）");
     }
 
+    // ── C3：取号失败不推进本地镜像，终态只信 store.reserve_sequence ──
+
+    /// 前 N 次 `reserve_sequence` 失败且不推进内层计数器；其余方法委托内存 store。
+    struct FailNReserves {
+        inner: Arc<InMemoryStore>,
+        remaining: std::sync::atomic::AtomicU32,
+    }
+
+    impl FailNReserves {
+        fn new(inner: Arc<InMemoryStore>, fails: u32) -> Self {
+            Self {
+                inner,
+                remaining: std::sync::atomic::AtomicU32::new(fails),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl Store for FailNReserves {
+        async fn insert_run(
+            &self,
+            run_id: &str,
+            session_id: &str,
+            status: conex_db::RunStatus,
+            end_reason: Option<&str>,
+            cursor: i64,
+        ) -> crate::persist::StoreResult<()> {
+            self.inner
+                .insert_run(run_id, session_id, status, end_reason, cursor)
+                .await
+        }
+
+        async fn update_run_status(
+            &self,
+            run_id: &str,
+            status: conex_db::RunStatus,
+            end_reason: Option<&str>,
+            cursor: Option<i64>,
+        ) -> crate::persist::StoreResult<()> {
+            self.inner
+                .update_run_status(run_id, status, end_reason, cursor)
+                .await
+        }
+
+        async fn reserve_sequence(&self, session_id: &str) -> crate::persist::StoreResult<u64> {
+            loop {
+                let left = self.remaining.load(std::sync::atomic::Ordering::SeqCst);
+                if left == 0 {
+                    return self.inner.reserve_sequence(session_id).await;
+                }
+                if self
+                    .remaining
+                    .compare_exchange(
+                        left,
+                        left - 1,
+                        std::sync::atomic::Ordering::SeqCst,
+                        std::sync::atomic::Ordering::SeqCst,
+                    )
+                    .is_ok()
+                {
+                    return Err(StoreError::new("reserve_sequence", "注入取号失败"));
+                }
+            }
+        }
+
+        async fn seed_sequence(
+            &self,
+            session_id: &str,
+            next_sequence: u64,
+        ) -> crate::persist::StoreResult<()> {
+            self.inner.seed_sequence(session_id, next_sequence).await
+        }
+
+        async fn append_event(
+            &self,
+            session_id: &str,
+            sequence: u64,
+            event_type: &str,
+            payload: &str,
+            run_id: Option<&str>,
+        ) -> crate::persist::StoreResult<()> {
+            self.inner
+                .append_event(session_id, sequence, event_type, payload, run_id)
+                .await
+        }
+
+        async fn query_events(
+            &self,
+            session_id: &str,
+            after_sequence: u64,
+            limit: Option<u64>,
+        ) -> crate::persist::StoreResult<Vec<crate::persist::PersistedEvent>> {
+            self.inner
+                .query_events(session_id, after_sequence, limit)
+                .await
+        }
+
+        async fn query_events_by_run(
+            &self,
+            session_id: &str,
+            run_id: &str,
+            after_sequence: u64,
+            limit: Option<u64>,
+        ) -> crate::persist::StoreResult<Vec<crate::persist::PersistedEvent>> {
+            self.inner
+                .query_events_by_run(session_id, run_id, after_sequence, limit)
+                .await
+        }
+
+        async fn max_sequence(&self, session_id: &str) -> crate::persist::StoreResult<u64> {
+            self.inner.max_sequence(session_id).await
+        }
+
+        async fn query_events_by_type(
+            &self,
+            session_id: &str,
+            run_id: &str,
+            event_type: &str,
+            after_sequence: u64,
+            limit: Option<u64>,
+        ) -> crate::persist::StoreResult<Vec<crate::persist::PersistedEvent>> {
+            self.inner
+                .query_events_by_type(session_id, run_id, event_type, after_sequence, limit)
+                .await
+        }
+
+        async fn query_runs(&self) -> crate::persist::StoreResult<Vec<conex_db::StoredRun>> {
+            self.inner.query_runs().await
+        }
+
+        async fn save_pending_input(
+            &self,
+            id: &str,
+            session_id: &str,
+            run_id: Option<&str>,
+            payload: &str,
+        ) -> crate::persist::StoreResult<()> {
+            self.inner
+                .save_pending_input(id, session_id, run_id, payload)
+                .await
+        }
+
+        async fn load_pending_inputs(
+            &self,
+            session_id: &str,
+        ) -> crate::persist::StoreResult<Vec<conex_db::PendingInput>> {
+            self.inner.load_pending_inputs(session_id).await
+        }
+
+        async fn delete_pending_input(&self, id: &str) -> crate::persist::StoreResult<bool> {
+            self.inner.delete_pending_input(id).await
+        }
+    }
+
+    /// C3：取号失败不推进本地镜像；终态经 store.reserve_sequence 重试取号，
+    /// 落库序号不与 store 计数器冲突。
+    #[tokio::test]
+    async fn reserve_failure_does_not_advance_mirror_or_collide_with_store() {
+        let mem = Arc::new(InMemoryStore::new());
+        let wrapped = Arc::new(FailNReserves::new(mem.clone(), 0));
+        let store: Arc<dyn Store> = wrapped.clone();
+        let mut queue = EventQueue::new(store.clone(), 1, None);
+
+        let first = queue.push("s1", agent_start()).await.unwrap();
+        assert_eq!(first.sequence, 1);
+        assert_eq!(queue.next_sequence(), 2);
+
+        wrapped
+            .remaining
+            .store(1, std::sync::atomic::Ordering::SeqCst);
+        let err = queue.push("s1", message_end()).await.unwrap_err();
+        assert_eq!(err.error.kind, "reserve_sequence");
+        assert_eq!(err.sequence, 1, "失败错误携带上次成功号，不是本地 +1");
+        assert_eq!(
+            queue.next_sequence(),
+            2,
+            "取号失败不得推进本地镜像"
+        );
+
+        // 终态：首次 reserve 再失败一次，重试走 store 取到 2
+        wrapped
+            .remaining
+            .store(1, std::sync::atomic::Ordering::SeqCst);
+        let terminal = AgentEvent::RunTerminal {
+            session_id: "s1".to_string(),
+            run_id: "r-c3".to_string(),
+            timestamp: ts(),
+            terminal: RunTerminalStatus::Failed,
+            error: Some("取号重试".to_string()),
+        };
+        let sequenced = queue.push_terminal_best_effort("s1", terminal).await;
+        assert_eq!(sequenced.sequence, 2, "终态号来自 store 重试取号");
+        assert!(sequenced.persisted, "重试取号成功后终态应落库");
+        assert_eq!(queue.next_sequence(), 3);
+
+        let stored = mem.events();
+        let mut seqs: Vec<u64> = stored.iter().map(|e| e.sequence).collect();
+        seqs.sort_unstable();
+        assert_eq!(seqs, vec![1, 2], "落库序列唯一，终态不与 store 冲突");
+        assert_eq!(
+            store.reserve_sequence("s1").await.unwrap(),
+            3,
+            "store 下一号接在终态之后——终态消耗的是 store 槽"
+        );
+    }
+
+    /// C3：重试仍失败则不落库、不消耗 store 槽；恢复后下一号仍是未分配值。
+    #[tokio::test]
+    async fn reserve_retry_exhausted_does_not_persist_unallocated_sequence() {
+        let mem = Arc::new(InMemoryStore::new());
+        let wrapped = Arc::new(FailNReserves::new(mem.clone(), 0));
+        let store: Arc<dyn Store> = wrapped.clone();
+        let mut queue = EventQueue::new(store.clone(), 1, None);
+
+        assert_eq!(queue.push("s1", agent_start()).await.unwrap().sequence, 1);
+
+        // push_terminal：reserve + 一次重试，共两次取号均失败
+        wrapped
+            .remaining
+            .store(2, std::sync::atomic::Ordering::SeqCst);
+        let terminal = AgentEvent::RunTerminal {
+            session_id: "s1".to_string(),
+            run_id: "r-c3-ex".to_string(),
+            timestamp: ts(),
+            terminal: RunTerminalStatus::Failed,
+            error: Some("store 仍坏".to_string()),
+        };
+        let sequenced = queue.push_terminal_best_effort("s1", terminal).await;
+        assert!(!sequenced.persisted);
+        assert_eq!(sequenced.sequence, 1, "未分配新号，返回上次成功号");
+        assert_eq!(queue.next_sequence(), 2, "镜像仍停在上次成功号");
+        assert_eq!(mem.events().len(), 1, "不得用未分配序号写库");
+        assert_eq!(
+            store.reserve_sequence("s1").await.unwrap(),
+            2,
+            "store 计数器未被本地瞎加抢号"
+        );
+    }
+
+    /// C3：drive 中途取号失败后终态走 store 重试，不复用未分配号写库。
+    #[tokio::test]
+    async fn drive_outcome_reserve_failure_terminal_retries_store() {
+        let mem = Arc::new(InMemoryStore::new());
+        let wrapped = Arc::new(FailNReserves::new(mem.clone(), 0));
+        let store: Arc<dyn Store> = wrapped.clone();
+        let manager = RunManager::new(store.clone());
+        let mut run = manager.start_run("s1", "r_c3_drive").await.unwrap();
+        let mut queue = EventQueue::new(store.clone(), run.cursor + 1, None);
+
+        wrapped
+            .remaining
+            .store(1, std::sync::atomic::Ordering::SeqCst);
+        let result = drive_outcome(
+            &mut run,
+            &mut queue,
+            outcome(
+                AgentEndReason::Stop,
+                vec![agent_start(), agent_end(AgentEndReason::Stop)],
+            ),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(result.terminal_status, RunTerminalStatus::Failed);
+        assert_eq!(result.end_reason, EVENT_STORE_WRITE_FAILED_REASON);
+        assert_eq!(result.events.len(), 1);
+        assert_eq!(result.events[0].sequence, 1, "终态号来自 store 重试");
+        assert!(result.events[0].persisted);
+        let stored = mem.events();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].event_type, "run-terminal");
+        assert_eq!(stored[0].sequence, 1);
+        assert_eq!(
+            store.reserve_sequence("s1").await.unwrap(),
+            2,
+            "终态占用 store 槽 1，下一号为 2，无冲突"
+        );
+    }
+
     // ── M14（I7 事件源补齐）：session.start/end 映射 + subagent-event 分流 ──
 
     /// session.start/end 事件源 = run 生命周期既有点位（映射而非重复发射）：
@@ -1746,10 +2041,7 @@ mod tests {
 
         // 非撤离写入（agent-start，sequence=2 > frozen_seq=1）→ 拒绝
         //（agent-end / run-terminal 为 run 收口终态撤离事件，放行面见下）
-        let err = queue
-            .push("s1", agent_start())
-            .await
-            .unwrap_err();
+        let err = queue.push("s1", agent_start()).await.unwrap_err();
         assert!(
             err.is_retraction_freeze(),
             "越界写入必须是可判定的 RetractionFreeze（kind={}）",
@@ -1772,7 +2064,10 @@ mod tests {
             timestamp: ts(),
         };
         let seq = queue.push("s1", truncate).await.unwrap();
-        assert_eq!(seq.sequence, 2, "TimelineTruncate.sequence == frozen_seq + 1");
+        assert_eq!(
+            seq.sequence, 2,
+            "TimelineTruncate.sequence == frozen_seq + 1"
+        );
         assert!(seq.persisted, "timeline-truncate Critical 必达落库");
         assert_eq!(mem.events().len(), 2);
 
@@ -1792,7 +2087,10 @@ mod tests {
 
         // 释放后写入恢复（新 run 从 boundary 后重新开始）
         registry.release("s1", "retraction:s1").unwrap();
-        let ok = queue.push("s1", agent_end(AgentEndReason::Stop)).await.unwrap();
+        let ok = queue
+            .push("s1", agent_end(AgentEndReason::Stop))
+            .await
+            .unwrap();
         assert_eq!(ok.sequence, 4, "释放后新写入放行（归新 run 语义）");
     }
 
@@ -1810,10 +2108,7 @@ mod tests {
 
         // 模拟 stop 收敛后的残余写入风暴：全部应被拒，边界不被抬高
         for _ in 0..5 {
-            let err = queue
-                .push("s1", agent_start())
-                .await
-                .unwrap_err();
+            let err = queue.push("s1", agent_start()).await.unwrap_err();
             assert!(err.is_retraction_freeze());
         }
         assert_eq!(

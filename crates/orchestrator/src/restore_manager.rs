@@ -12,7 +12,7 @@ use super::{
     INTERRUPTED_ERROR, INTERRUPTED_REASON, RUN_INTERRUPTED_EVENT,
 };
 use crate::now_ms;
-use crate::persist::{Store, StoreError};
+use crate::persist::{PersistedEvent, Store, StoreError};
 use crate::session::{SessionRecord, CONTEXT_COMPRESSION_END_EVENT, SESSION_LEAF_MOVED_EVENT};
 
 /// 重启恢复管理器（B4.3）
@@ -244,7 +244,27 @@ impl RestoreManager {
             } else {
                 0
             };
-            let events = store.query_events(&session.session_id, base, None).await?;
+            // 1C-3：分页加载快照锚点后事件，避免 `limit=None` 全量加载导致
+            // 恢复路径内存峰值随事件量线性增长。PAGE_SIZE=500：按 sequence
+            // 升序翻页直到无更多事件，结果集与全量加载一致（crash_consistency
+            // 测试覆盖）。
+            const RESTORE_PAGE_SIZE: u64 = 500;
+            let mut events: Vec<PersistedEvent> = Vec::new();
+            let mut page_after = base;
+            loop {
+                let page = store
+                    .query_events(&session.session_id, page_after, Some(RESTORE_PAGE_SIZE))
+                    .await?;
+                if page.is_empty() {
+                    break;
+                }
+                page_after = page.last().map(|e| e.sequence).unwrap_or(page_after);
+                let exhausted = page.len() < RESTORE_PAGE_SIZE as usize;
+                events.extend(page);
+                if exhausted {
+                    break;
+                }
+            }
             for event in &events {
                 last_sequence = last_sequence.max(event.sequence);
                 if event.event_type == SESSION_LEAF_MOVED_EVENT {
@@ -310,12 +330,12 @@ pub(crate) fn is_inflight(status: RunStatus) -> bool {
     }
 }
 
-/// 会话内下一个可用序列号（恢复审计事件续接用）
+/// 会话内下一个可用序列号（恢复审计事件续接用）。
+///
+/// 1C-1：改用 SQL `MAX(sequence)` 下推（`store.max_sequence`），避免
+/// `query_events(.., None)` 全量加载事件到内存再 `iter().max()`。
 async fn next_sequence(store: &dyn Store, session_id: &str) -> Result<u64, StoreError> {
-    // limit=None：全量读取取 max（DM-03 签名已加 limit 参数，无限制
-    // 等价旧语义）
-    let events = store.query_events(session_id, 0, None).await?;
-    Ok(events.iter().map(|event| event.sequence).max().unwrap_or(0) + 1)
+    Ok(store.max_sequence(session_id).await? + 1)
 }
 
 /// G-29 终态矛盾对账（DM-08）：只读校验 events 表 run-terminal 与 runs
@@ -333,23 +353,20 @@ async fn next_sequence(store: &dyn Store, session_id: &str) -> Result<u64, Store
 ///   定（cancel.rs 域），避免误报；
 /// - **不检查 Unknown 字面量**：诚实未知（裁决 D3），不臆断。
 ///
-/// 每个 run 一次 `query_events_by_run`（run 事件全量，limit=None——run 首
-/// 事件是 agent-start 而非 run-terminal，limit=1 会截断漏检；run 事件数
-/// 通常远小于会话全量，restore 为冷启动路径可接受），restore 整体
-/// O(runs × run 事件数) 只读查询。
+/// 1C-2：每 run 一次 `query_events_by_type(.., "run-terminal", 0, Some(1))`
+/// ——SQL 下推 event_type 过滤，只返回匹配的 1 条事件（替代原
+/// `query_events_by_run(.., None)` 全量加载后内存 `find`）。冷启动恢复
+/// 查询开销从 O(runs × run_events) 降为 O(runs)。
 async fn reconcile_terminal_conflicts(
     store: &dyn Store,
     runs: &[conex_db::StoredRun],
 ) -> Result<Vec<ReconcileConflict>, StoreError> {
     let mut conflicts = Vec::new();
     for run in runs {
-        let events = store
-            .query_events_by_run(&run.session_id, &run.run_id, 0, None)
+        let terminal_events = store
+            .query_events_by_type(&run.session_id, &run.run_id, "run-terminal", 0, Some(1))
             .await?;
-        let terminal = events
-            .iter()
-            .find(|e| e.event_type == "run-terminal")
-            .map(|e| e.payload.as_str());
+        let terminal = terminal_events.first().map(|e| e.payload.as_str());
         let has_terminal = terminal.is_some();
         // 事件流终态字面量：payload terminal 键优先，解析失败回退事件类型名
         let event_terminal = || {

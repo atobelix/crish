@@ -6,114 +6,18 @@
 //! （browser_list_tabs 输出，撤销 MVP 序号语义）；new_tab 受 MAX_TABS=8 上限
 //! 约束（可配 1-16，超限返回 `tool.browser.tab_limit_exceeded`，U-12 码）。
 
-use crate::error;
 use crate::exec;
 use crate::helpers;
-use crate::session::SessionOps;
-use crate::tools::{
-    Ctx, TargetInfoLite, CDP_PAGE_GO_BACK, CDP_PAGE_GO_FORWARD, CDP_PAGE_NAVIGATE, CDP_PAGE_RELOAD,
-    CDP_TARGET_ACTIVATE_TARGET, CDP_TARGET_CLOSE_TARGET, CDP_TARGET_CREATE_TARGET,
+use crate::tools::navigate_common::{
+    close_tab_by_id, history_back, history_forward, navigate_current_tab, open_new_tab,
+    parse_http_url, parse_tab_id, reject_bad_timeout_ms, reload_current_tab, switch_tab_by_id,
 };
+use crate::tools::{Ctx, TargetInfoLite};
 use agent_tools::context::ToolContext;
 use agent_tools::definition::{Tool, ToolDefinition, ToolError};
 use async_trait::async_trait;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use std::time::Duration;
-
-/// 导航后最终 URL 收敛轮询参数（H4：createTarget 返回时新页导航仍在途，
-/// 302 重定向未落地时 URL 与请求一致——短轮询至多等待收敛后复核）。
-const REDIRECT_POLLS: u32 = 5;
-const REDIRECT_POLL_INTERVAL: Duration = Duration::from_millis(100);
-
-/// 动作后复核的违例回退动作（navigate 回退历史；new_tab 关闭新标签）。
-enum AfterRollback<'a> {
-    /// 回退到上一页面（Page.goBack，会话面）
-    GoBack { session: &'a str },
-    /// 关闭新标签（Target.closeTarget，浏览器面；建页即违例无历史可回退）
-    CloseTab { target_id: &'a str },
-}
-
-/// 导航后动作复核（14 §7.1 ③）：URL 变化后重新过门禁，拒绝则回退并报 gate_blocked。
-async fn verify_after_navigation(
-    ctx: &Ctx,
-    ops: &dyn SessionOps,
-    tab: &conex_browser::SessionRef,
-    before: Option<&str>,
-    after: Option<&str>,
-) -> Result<(), ToolError> {
-    if let (Some(after_url), Some(before_url)) = (after, before) {
-        if after_url != before_url {
-            if let Err(denial) = ctx.gate.check(after_url) {
-                let _ = ops
-                    .send_page(&tab.session, CDP_PAGE_GO_BACK, json!({}))
-                    .await;
-                return Err(error::gate_blocked(
-                    after_url,
-                    &format!("{}（已回退到上一页面）", denial.reason),
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-/// H4 动作后门禁复核（browser_navigate / browser_new_tab 接入面）：
-/// 导航动作完成后重新读取目标最终 URL 并过门禁——302 重定向可把白名单内请求
-/// 带往内网/保留段，前置检查无法覆盖。
-///
-/// - `requested`：门禁已放行的请求 URL；最终 URL 与其不同时才触发复核
-///   （相同 = 已前置校验，无需重复判定）；
-/// - `poll`：new_tab 用（createTarget 返回时新页导航仍在途，URL 未变化时短轮询
-///   等待 302 收敛）；navigate 的导航提交语义已携带最终 URL，传 false；
-/// - 违例：执行 `rollback` 回退后返回 `tool.browser.gate_blocked`；
-/// - 返回最终 (title, url) 供调用方组织输出（含 302 后的真实落地 URL）。
-async fn verify_navigate_after(
-    ctx: &Ctx,
-    ops: &dyn SessionOps,
-    target_id: &str,
-    requested: &str,
-    poll: bool,
-    rollback: AfterRollback<'_>,
-) -> Result<(Option<String>, Option<String>), ToolError> {
-    let mut info = super::target_info(ops, target_id).await?;
-    if poll {
-        for _ in 0..REDIRECT_POLLS {
-            if info.1.as_deref() == Some(requested) {
-                tokio::time::sleep(REDIRECT_POLL_INTERVAL).await;
-                info = super::target_info(ops, target_id).await?;
-            } else {
-                break;
-            }
-        }
-    }
-    let Some(after_url) = info.1.as_deref() else {
-        return Ok(info);
-    };
-    if after_url != requested {
-        if let Err(denial) = ctx.gate.check(after_url) {
-            let rollback_note = match rollback {
-                AfterRollback::GoBack { session } => {
-                    let _ = ops
-                        .send_page(session, CDP_PAGE_GO_BACK, json!({}))
-                        .await;
-                    "已回退到上一页面"
-                }
-                AfterRollback::CloseTab { target_id } => {
-                    let _ = ops
-                        .send_browser(CDP_TARGET_CLOSE_TARGET, json!({ "targetId": target_id }))
-                        .await;
-                    "已关闭新标签页"
-                }
-            };
-            return Err(error::gate_blocked(
-                after_url,
-                &format!("{}（{rollback_note}）", denial.reason),
-            ));
-        }
-    }
-    Ok(info)
-}
 
 /// browser_navigate：导航当前标签页（导航检查点先行，17 §4.4）。
 pub(crate) struct NavigateTool {
@@ -157,50 +61,9 @@ impl Tool for NavigateTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_navigate", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["url", "timeout_ms"])?;
-        let url = helpers::validate_http_url(&helpers::require_string(&args, "url")?)?;
-        if let Some(t) = helpers::optional_u32(&args, "timeout_ms")? {
-            if t == 0 || t > 120_000 {
-                return Err(ToolError::invalid_input(
-                    "timeout_ms 超出范围（1..120000 毫秒）",
-                ));
-            }
-        }
-        // 导航检查点（17 §4.4）：Page.navigate 发送之前
-        exec::check_navigation_url(self.ctx.gate.as_ref(), url.as_str())?;
-        let tab = ops.current_tab()?;
-        let result = ops
-            .send_page(
-                &tab.session,
-                CDP_PAGE_NAVIGATE,
-                json!({ "url": url.as_str() }),
-            )
-            .await?;
-        if let Some(err_text) = result.get("errorText").and_then(Value::as_str) {
-            if !err_text.is_empty() {
-                return Err(ToolError::execution_failed(
-                    "browser_navigate",
-                    format!("导航失败：{err_text}"),
-                ));
-            }
-        }
-        // H4 动作后门禁复核：302 重定向可能把白名单内 URL 带往内网/保留段——
-        // 导航提交已携带最终 URL（服务端跳转在提交前完成），读取后复核，
-        // 违例回退上一页并返回 gate_blocked
-        let (title, actual) = verify_navigate_after(
-            &self.ctx,
-            ops,
-            &tab.target_id,
-            url.as_str(),
-            false,
-            AfterRollback::GoBack { session: &tab.session },
-        )
-        .await?;
-        Ok(json!({
-            "ok": true,
-            "url": actual.unwrap_or_else(|| url.to_string()),
-            "title": title.unwrap_or_default(),
-            "snapshotVersion": ops.snapshot_version(&tab.target_id),
-        }))
+        let url = parse_http_url(&args)?;
+        reject_bad_timeout_ms(&args)?;
+        navigate_current_tab(&self.ctx, ops, &url).await
     }
 }
 
@@ -242,21 +105,7 @@ impl Tool for BackTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_back", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &[])?;
-        let tab = ops.current_tab()?;
-        let (_, before) = super::target_info(ops, &tab.target_id).await?;
-        if let Some(u) = &before {
-            exec::check_navigation_url(self.ctx.gate.as_ref(), u)?;
-        }
-        ops.send_page(&tab.session, CDP_PAGE_GO_BACK, json!({}))
-            .await?;
-        let (title, after) = super::target_info(ops, &tab.target_id).await?;
-        verify_after_navigation(&self.ctx, ops, &tab, before.as_deref(), after.as_deref()).await?;
-        Ok(json!({
-            "ok": true,
-            "url": after.unwrap_or_default(),
-            "title": title.unwrap_or_default(),
-            "snapshotVersion": ops.snapshot_version(&tab.target_id),
-        }))
+        history_back(&self.ctx, ops).await
     }
 }
 
@@ -298,21 +147,7 @@ impl Tool for ForwardTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_forward", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &[])?;
-        let tab = ops.current_tab()?;
-        let (_, before) = super::target_info(ops, &tab.target_id).await?;
-        if let Some(u) = &before {
-            exec::check_navigation_url(self.ctx.gate.as_ref(), u)?;
-        }
-        ops.send_page(&tab.session, CDP_PAGE_GO_FORWARD, json!({}))
-            .await?;
-        let (title, after) = super::target_info(ops, &tab.target_id).await?;
-        verify_after_navigation(&self.ctx, ops, &tab, before.as_deref(), after.as_deref()).await?;
-        Ok(json!({
-            "ok": true,
-            "url": after.unwrap_or_default(),
-            "title": title.unwrap_or_default(),
-            "snapshotVersion": ops.snapshot_version(&tab.target_id),
-        }))
+        history_forward(&self.ctx, ops).await
     }
 }
 
@@ -358,24 +193,7 @@ impl Tool for ReloadTool {
         let ops = exec::run_browser_action(tctx, "browser_reload", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["ignore_cache"])?;
         let ignore_cache = helpers::optional_bool(&args, "ignore_cache")?.unwrap_or(false);
-        let tab = ops.current_tab()?;
-        let (_, before) = super::target_info(ops, &tab.target_id).await?;
-        if let Some(u) = &before {
-            exec::check_navigation_url(self.ctx.gate.as_ref(), u)?;
-        }
-        ops.send_page(
-            &tab.session,
-            CDP_PAGE_RELOAD,
-            json!({ "ignoreCache": ignore_cache }),
-        )
-        .await?;
-        let (title, after) = super::target_info(ops, &tab.target_id).await?;
-        verify_after_navigation(&self.ctx, ops, &tab, before.as_deref(), after.as_deref()).await?;
-        Ok(json!({
-            "ok": true,
-            "url": after.unwrap_or_default(),
-            "title": title.unwrap_or_default(),
-        }))
+        reload_current_tab(&self.ctx, ops, ignore_cache).await
     }
 }
 
@@ -479,72 +297,10 @@ impl Tool for NewTabTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_new_tab", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["url", "background"])?;
-        let url = helpers::validate_http_url(&helpers::require_string(&args, "url")?)?;
+        let url = parse_http_url(&args)?;
         // background 语义（Target.createTarget 无背景面）MVP 忽略，P1 接线
         let _background = helpers::optional_bool(&args, "background")?;
-        // MAX_TABS 上限（15 文档 §7.3 裁决 + U-12 码）：createTarget 之前计数
-        // 注入检查——超限返回 tab_limit_exceeded，不派发任何命令
-        let current = super::page_targets(ops).await?.len();
-        if current >= self.ctx.max_tabs {
-            return Err(error::tab_limit_exceeded(self.ctx.max_tabs));
-        }
-        // 导航检查点（17 §4.4）：Target.createTarget 发送之前
-        exec::check_navigation_url(self.ctx.gate.as_ref(), url.as_str())?;
-        let value = ops
-            .send_browser(CDP_TARGET_CREATE_TARGET, json!({ "url": url.as_str() }))
-            .await?;
-        let tab_id = value
-            .get("targetId")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                ToolError::execution_failed("browser_new_tab", "createTarget 未返回 targetId")
-            })?;
-        // P1 缺陷 F2（K6 实测，2026-08）：Chrome 151 的 createTarget **不触发
-        // attachedToTarget 事件** → 新标签无 CDP 会话 → per-tab 快照/动作
-        // node_gone。修复：createTarget 后显式 attach_tab（attachToTarget
-        // flatten:true + 域 enable，对齐恢复路径 enable_domains 顺序）——
-        // 会话经 BrowserSession 确定性登记（RealSession）或 attachedToTarget
-        // 事件落地（驱动侧默认实现），随后 H4 复核与用户操作即可路由。
-        // 活动标签语义：新标签**成为活动标签**（createTarget 默认聚焦新标签，
-        // background 参数 MVP 忽略；与 SessionAttached「最新附着者即活动」一致），
-        // 无需 switch 即可直接操作。attach 失败（目标已关闭等）→ 关闭已创建
-        // 标签回滚（不遗留无会话标签）并返回错误。
-        if let Err(e) = ops.attach_tab(tab_id).await {
-            let _ = ops
-                .send_browser(CDP_TARGET_CLOSE_TARGET, json!({ "targetId": tab_id }))
-                .await;
-            return Err(e);
-        }
-        // H4 动作后门禁复核：createTarget 返回时新页导航仍在途，302 重定向
-        // 可能把白名单内 URL 带往内网/保留段——轮询收敛最终 URL 后复核，
-        // 违例关闭新标签并返回 gate_blocked
-        let (_, actual) = verify_navigate_after(
-            &self.ctx,
-            ops,
-            tab_id,
-            url.as_str(),
-            true,
-            AfterRollback::CloseTab { target_id: tab_id },
-        )
-        .await?;
-        Ok(json!({
-            "ok": true,
-            "tabId": tab_id,
-            "url": url.to_string(),
-            "finalUrl": actual.unwrap_or_else(|| url.to_string()),
-        }))
-    }
-}
-
-/// 标签 targetId（targetId 字符串语义，P1）→ 目标信息。
-/// 未找到（标签已关闭/不存在）→ node_gone（目标过期，14 §5.1 同源）。
-async fn target_by_id(ops: &dyn SessionOps, tab_id: &str) -> Result<TargetInfoLite, ToolError> {
-    let targets = super::page_targets(ops).await?;
-    match targets.into_iter().find(|t| t.target_id == tab_id) {
-        Some(target) => Ok(target),
-        None => Err(error::node_gone(format!(
-            "标签 {tab_id} 不存在或已关闭（请先 browser_list_tabs 确认后重试）"
-        ))),
+        open_new_tab(&self.ctx, ops, &url).await
     }
 }
 
@@ -589,27 +345,8 @@ impl Tool for CloseTabTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_close_tab", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["tab_id"])?;
-        let tab_id = helpers::require_string(&args, "tab_id")?;
-        super::validate_tab_id(&tab_id, "tab_id")?;
-        let target = target_by_id(ops, &tab_id).await?;
-        let value = ops
-            .send_browser(
-                CDP_TARGET_CLOSE_TARGET,
-                json!({ "targetId": &target.target_id }),
-            )
-            .await?;
-        if value.get("success").and_then(Value::as_bool) == Some(false) {
-            return Err(ToolError::execution_failed(
-                "browser_close_tab",
-                "closeTarget 返回 success=false",
-            ));
-        }
-        let remaining = super::page_targets(ops).await?.len();
-        Ok(json!({
-            "ok": true,
-            "closedTabId": target.target_id,
-            "remainingTabs": remaining,
-        }))
+        let tab_id = parse_tab_id(&args)?;
+        close_tab_by_id(ops, &tab_id).await
     }
 }
 
@@ -654,279 +391,17 @@ impl Tool for SwitchTabTool {
     async fn execute(&self, tctx: &ToolContext, args: Value) -> Result<Value, ToolError> {
         let ops = exec::run_browser_action(tctx, "browser_switch_tab", &self.ctx.session).await?;
         helpers::reject_unknown(&args, &["tab_id"])?;
-        let tab_id = helpers::require_string(&args, "tab_id")?;
-        super::validate_tab_id(&tab_id, "tab_id")?;
-        let target = target_by_id(ops, &tab_id).await?;
-        ops.send_browser(
-            CDP_TARGET_ACTIVATE_TARGET,
-            json!({ "targetId": &target.target_id }),
-        )
-        .await?;
-        // P1：activateTarget 无 SessionAttached 事件——引擎活动槽显式切换；
-        // 失败（路由表无该标签）→ node_gone（目标过期）
-        ops.activate_tab(&tab_id)?;
-        // R-1：切换本身是 AI 动作——目标标签即时 +1（旧快照失效 → 强制重快照，
-        // 15 §7.2「AI 主动切换不吊销令牌，动作前按需重快照」）
-        ops.note_action_done(&tab_id);
-        let (title, url) = super::target_info(ops, &target.target_id).await?;
-        Ok(json!({
-            "ok": true,
-            "tabId": target.target_id,
-            "url": url.unwrap_or_default(),
-            "title": title.unwrap_or_default(),
-            "snapshotVersion": ops.snapshot_version(&target.target_id),
-        }))
+        let tab_id = parse_tab_id(&args)?;
+        switch_tab_by_id(ops, &tab_id).await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::{ConsoleEntry, NetworkEntry, SnapshotView};
+    use crate::session::SessionOps;
+    use crate::tools::navigate_common::{tool_ctx, tool_ctx_with_max, NavigateOps};
     use agent_tools::context::create_mock_tool_context;
-    use conex_browser::action::gate::{DomainGate, GateDenial};
-    use conex_browser::action::{
-        ActionError, ActionRequest, ActionSuccess, ElementMeta, WaitCondition, WaitOptions,
-    };
-    use conex_browser::snapshot::budget::BudgetConfig;
-    use conex_browser::SessionRef;
-    use std::sync::Mutex;
-
-    /// 确定性门禁替身：host 命中 denied_host 一律拒绝（零 DNS 依赖，CI 稳定）。
-    struct StubGate {
-        denied_host: &'static str,
-    }
-
-    impl DomainGate for StubGate {
-        fn check(&self, url: &str) -> Result<(), GateDenial> {
-            let host = url::Url::parse(url)
-                .expect("测试 URL 应合法")
-                .host_str()
-                .map(str::to_string);
-            if host.as_deref() == Some(self.denied_host) {
-                return Err(GateDenial {
-                    url: url.to_string(),
-                    reason: format!("测试拒绝：{url}"),
-                });
-            }
-            Ok(())
-        }
-    }
-
-    /// 记录型会话替身：记录全部命令 + 可配 Target.getTargetInfo 最终 URL
-    /// （模拟 302 重定向后的落地 URL）+ 可配 page 目标列表（MAX_TABS 计数面）。
-    /// F2 面：attachToTarget 应答会话并模拟事件驱动登记（created 活动标签
-    /// 语义——attach 后 current_tab/tab_session 命中新标签）。
-    struct NavigateOps {
-        log: Mutex<Vec<String>>,
-        info_url: String,
-        tab_ids: Mutex<Vec<String>>,
-        created: Mutex<Option<String>>,
-        /// F2 回滚面开关：attachToTarget 应答缺失 sessionId（模拟 attach 失败）
-        attach_broken: Mutex<bool>,
-    }
-
-    impl NavigateOps {
-        fn new(info_url: &str) -> Arc<Self> {
-            Arc::new(NavigateOps {
-                log: Mutex::new(Vec::new()),
-                info_url: info_url.to_string(),
-                tab_ids: Mutex::new(Vec::new()),
-                created: Mutex::new(None),
-                attach_broken: Mutex::new(false),
-            })
-        }
-        fn with_tabs(info_url: &str, tab_ids: &[&str]) -> Arc<Self> {
-            let ops = NavigateOps::new(info_url);
-            *ops.tab_ids.lock().unwrap_or_else(|p| p.into_inner()) =
-                tab_ids.iter().map(|t| t.to_string()).collect();
-            ops
-        }
-        fn calls(&self) -> Vec<String> {
-            self.log.lock().unwrap_or_else(|p| p.into_inner()).clone()
-        }
-        fn assert_called(&self, needle: &str) {
-            assert!(
-                self.calls().iter().any(|c| c.contains(needle)),
-                "应调用 {needle}：{:?}",
-                self.calls()
-            );
-        }
-        fn assert_not_called(&self, needle: &str) {
-            assert!(
-                !self.calls().iter().any(|c| c.contains(needle)),
-                "不应调用 {needle}：{:?}",
-                self.calls()
-            );
-        }
-    }
-
-    #[async_trait]
-    impl SessionOps for NavigateOps {
-        fn readiness(&self) -> Result<(), String> {
-            Ok(())
-        }
-        fn current_tab(&self) -> Result<SessionRef, ToolError> {
-            // F2：attach 后新标签成为活动标签（模拟事件驱动面 SessionAttached
-            // 登记——createTarget 聚焦新标签 + 「最新附着者即活动」语义）
-            if let Some(tid) = self.created.lock().unwrap_or_else(|p| p.into_inner()).clone() {
-                return Ok(SessionRef {
-                    target_id: tid.clone(),
-                    session: format!("S-{tid}"),
-                });
-            }
-            Ok(SessionRef {
-                target_id: "T1".to_string(),
-                session: "S1".to_string(),
-            })
-        }
-        fn tab_session(&self, tab_id: &str) -> Option<SessionRef> {
-            // F2：新标签经 attach 后可路由（模拟事件登记落表；其余标签无路由）
-            if self.created.lock().unwrap_or_else(|p| p.into_inner()).as_deref() == Some(tab_id) {
-                return Some(SessionRef {
-                    target_id: tab_id.to_string(),
-                    session: format!("S-{tab_id}"),
-                });
-            }
-            None
-        }
-        fn activate_tab(&self, tab_id: &str) -> Result<(), ToolError> {
-            self.log
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .push(format!("activate-tab:{tab_id}"));
-            Ok(())
-        }
-        fn note_action_done(&self, tab_id: &str) {
-            self.log
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .push(format!("bump:{tab_id}"));
-        }
-        async fn send_page(
-            &self,
-            session: &str,
-            method: &str,
-            params: Value,
-        ) -> Result<Value, ToolError> {
-            self.log
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .push(format!("page:{session}:{method} {params}"));
-            Ok(json!({ "frameId": "F1" }))
-        }
-        async fn send_browser(&self, method: &str, params: Value) -> Result<Value, ToolError> {
-            self.log
-                .lock()
-                .unwrap_or_else(|p| p.into_inner())
-                .push(format!("browser:{method} {params}"));
-            match method {
-                "Target.createTarget" => Ok(json!({ "targetId": "T9" })),
-                "Target.attachToTarget" => {
-                    // F2：应答会话 + 模拟 attachedToTarget 事件驱动的登记
-                    // （created 活动标签 + tab_session 路由命中）；
-                    // attach_broken 时应答缺失 sessionId（回滚面）
-                    let tid = params
-                        .get("targetId")
-                        .and_then(Value::as_str)
-                        .unwrap_or("T9")
-                        .to_string();
-                    if *self.attach_broken.lock().unwrap_or_else(|p| p.into_inner()) {
-                        return Ok(json!({}));
-                    }
-                    *self.created.lock().unwrap_or_else(|p| p.into_inner()) = Some(tid);
-                    Ok(json!({ "sessionId": "S-T9" }))
-                }
-                "Target.getTargets" => {
-                    let ids = self.tab_ids.lock().unwrap_or_else(|p| p.into_inner());
-                    Ok(json!({
-                        "targetInfos": ids.iter().map(|id| json!({
-                            "targetId": id,
-                            "type": "page",
-                            "title": "页",
-                            "url": "https://a.example/"
-                        })).collect::<Vec<_>>()
-                    }))
-                }
-                "Target.getTargetInfo" => Ok(json!({
-                    "targetInfo": {
-                        "targetId": "T1",
-                        "type": "page",
-                        "title": "标题",
-                        "url": self.info_url
-                    }
-                })),
-                _ => Ok(json!({})),
-            }
-        }
-        fn snapshot_version(&self, _tab_id: &str) -> u64 {
-            7
-        }
-        async fn capture_snapshot(
-            &self,
-            _tab_id: &str,
-            _session: &str,
-            _budgets: BudgetConfig,
-        ) -> Result<SnapshotView, ToolError> {
-            Ok(SnapshotView {
-                snapshot_version: 7,
-                tree: String::new(),
-                warnings: vec![],
-            })
-        }
-        fn element_meta(
-            &self,
-            _tab_id: &str,
-            _version: u64,
-            _index: u32,
-        ) -> Result<Option<ElementMeta>, ToolError> {
-            Ok(Some(ElementMeta {
-                backend_node_id: 1,
-                is_password: false,
-            }))
-        }
-        async fn execute_action(&self, _req: ActionRequest) -> Result<ActionSuccess, ActionError> {
-            Ok(ActionSuccess {
-                navigated: false,
-                url_after: None,
-                page_changed: false,
-                payload: None,
-            })
-        }
-        async fn wait_for(
-            &self,
-            _cond: WaitCondition,
-            _opts: WaitOptions,
-        ) -> Result<ActionSuccess, ActionError> {
-            Ok(ActionSuccess {
-                navigated: false,
-                url_after: None,
-                page_changed: false,
-                payload: None,
-            })
-        }
-        async fn console_entries(&self, _since_seq: u64) -> Vec<ConsoleEntry> {
-            vec![]
-        }
-        async fn network_entries(&self, _since_seq: u64) -> Vec<NetworkEntry> {
-            vec![]
-        }
-    }
-
-    /// 组装工具上下文（注入记录型会话 + 拒绝指定 host 的门禁替身）。
-    fn tool_ctx(ops: Arc<NavigateOps>, denied_host: &'static str) -> Arc<Ctx> {
-        tool_ctx_with_max(ops, denied_host, 8)
-    }
-
-    fn tool_ctx_with_max(ops: Arc<NavigateOps>, denied_host: &'static str, max_tabs: usize) -> Arc<Ctx> {
-        Arc::new(Ctx {
-            session: Some(ops),
-            gate: Arc::new(StubGate { denied_host }),
-            sensitive: crate::SensitiveCapabilities::default(),
-            budgets: BudgetConfig::active(),
-            max_tabs,
-        })
-    }
 
     /// H4 主回归：navigate 到白名单内 URL，服务端 302 重定向到被禁域
     /// （内网地址）→ 动作后复核拦截：gate_blocked + 回退上一页，不返回成功结果。
@@ -995,9 +470,10 @@ mod tests {
     /// （U-12 码），createTarget 零注入；关闭一个后可再开。
     #[tokio::test]
     async fn new_tab_rejects_when_at_max_tabs() {
-        let ops = NavigateOps::with_tabs("https://a.example/after", &[
-            "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8",
-        ]);
+        let ops = NavigateOps::with_tabs(
+            "https://a.example/after",
+            &["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8"],
+        );
         let ctx = tool_ctx(ops.clone(), "192.168.1.1");
         let tool = NewTabTool::new(ctx);
         let err = tool
@@ -1007,8 +483,15 @@ mod tests {
             )
             .await
             .expect_err("8 个标签已满应拒绝");
-        assert_eq!(err.code(), "tool.browser.tab_limit_exceeded", "错误码：{err}");
-        assert!(err.to_string().contains("MAX_TABS=8"), "应携带上限值：{err}");
+        assert_eq!(
+            err.code(),
+            "tool.browser.tab_limit_exceeded",
+            "错误码：{err}"
+        );
+        assert!(
+            err.to_string().contains("MAX_TABS=8"),
+            "应携带上限值：{err}"
+        );
         ops.assert_not_called("Target.createTarget");
     }
 
@@ -1094,7 +577,10 @@ mod tests {
         let routed = ops.tab_session("T9").expect("新标签应可路由");
         assert_eq!(routed.session, "S-T9");
         let current = ops.current_tab().expect("应有活动标签");
-        assert_eq!(current.target_id, "T9", "新标签应为活动标签（createTarget 聚焦语义）");
+        assert_eq!(
+            current.target_id, "T9",
+            "新标签应为活动标签（createTarget 聚焦语义）"
+        );
 
         // H4 复核面不受 attach 影响：最终 URL 收敛返回
         assert_eq!(out["finalUrl"], "https://a.example/after");
@@ -1106,10 +592,7 @@ mod tests {
     async fn new_tab_closes_tab_when_attach_fails() {
         // attachToTarget 应答缺失 sessionId：驱动侧默认实现判定失败
         let ops = NavigateOps::new("https://a.example/after");
-        *ops
-            .attach_broken
-            .lock()
-            .unwrap_or_else(|p| p.into_inner()) = true;
+        *ops.attach_broken.lock().unwrap_or_else(|p| p.into_inner()) = true;
         let ctx = tool_ctx(ops.clone(), "192.168.1.1");
         let err = NewTabTool::new(ctx)
             .execute(
@@ -1130,10 +613,7 @@ mod tests {
         let ops = NavigateOps::with_tabs("https://a.example/after", &["T1", "T2"]);
         let ctx = tool_ctx(ops.clone(), "192.168.1.1");
         let out = CloseTabTool::new(ctx.clone())
-            .execute(
-                &create_mock_tool_context(),
-                json!({ "tab_id": "T2" }),
-            )
+            .execute(&create_mock_tool_context(), json!({ "tab_id": "T2" }))
             .await
             .expect("按 targetId 关闭应成功");
         assert_eq!(out["closedTabId"], "T2");
@@ -1141,10 +621,7 @@ mod tests {
 
         // 已关闭/不存在的标签 → node_gone（不派发 closeTarget）
         let err = CloseTabTool::new(ctx)
-            .execute(
-                &create_mock_tool_context(),
-                json!({ "tab_id": "T9" }),
-            )
+            .execute(&create_mock_tool_context(), json!({ "tab_id": "T9" }))
             .await
             .expect_err("不存在的标签应 node_gone");
         assert_eq!(err.code(), "tool.browser.node_gone", "错误码：{err}");
@@ -1158,10 +635,7 @@ mod tests {
         let ops = NavigateOps::with_tabs("https://a.example/after", &["T1", "T2"]);
         let ctx = tool_ctx(ops.clone(), "192.168.1.1");
         let out = SwitchTabTool::new(ctx)
-            .execute(
-                &create_mock_tool_context(),
-                json!({ "tab_id": "T2" }),
-            )
+            .execute(&create_mock_tool_context(), json!({ "tab_id": "T2" }))
             .await
             .expect("按 targetId 切换应成功");
         assert_eq!(out["tabId"], "T2");
@@ -1171,10 +645,7 @@ mod tests {
 
         // 目标不存在 → node_gone，不派发 activateTarget
         let err = SwitchTabTool::new(tool_ctx(ops.clone(), "192.168.1.1"))
-            .execute(
-                &create_mock_tool_context(),
-                json!({ "tab_id": "T9" }),
-            )
+            .execute(&create_mock_tool_context(), json!({ "tab_id": "T9" }))
             .await
             .expect_err("不存在的标签应 node_gone");
         assert_eq!(err.code(), "tool.browser.node_gone", "错误码：{err}");

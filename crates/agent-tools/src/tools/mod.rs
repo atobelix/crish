@@ -404,7 +404,10 @@ pub(crate) fn has_escaping_symlink_below_root(path: &Path, root: &Path) -> bool 
                 if meta.file_type().is_symlink() {
                     match conex_fs::resolve_symlink_chain(&cur, 32) {
                         Ok(resolved_target) => {
-                            if !conex_fs::ConexPathNormalizer::is_subpath(&resolved_target, &norm_root) {
+                            if !conex_fs::ConexPathNormalizer::is_subpath(
+                                &resolved_target,
+                                &norm_root,
+                            ) {
                                 return true; // 终态物理路径逃逸，拦截
                             }
                         }

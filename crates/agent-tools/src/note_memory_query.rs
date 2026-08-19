@@ -9,17 +9,8 @@ use crate::note_types::{
     NoteBackendError, NoteOutline, NoteOutlineNode, NoteQueryBlockHit, NoteQueryBlocksParams,
     NoteQueryBlocksResult,
 };
-use std::sync::atomic::{AtomicU64, Ordering};
-
-/// 毒丸恢复计数（B1-3 观测化：docs 锁中毒恢复次数；对齐 registry.rs
-/// 「tracing::error! 成对 + 计数」样板，零新依赖；本文件 3 处 docs 锁共用）
-static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
-
-/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
-#[cfg(test)]
-pub(crate) fn poison_recovery_count() -> u64 {
-    POISON_RECOVERIES.load(Ordering::Relaxed)
-}
+use crate::poison::POISON_RECOVERIES;
+use std::sync::atomic::Ordering;
 
 impl MemoryNoteBackend {
     /// 组合查询块摘要（内存过滤）
@@ -237,11 +228,13 @@ fn insert_outline_node(roots: &mut Vec<NoteOutlineNode>, node: NoteOutlineNode) 
 mod tests {
     use super::super::capture::with_capture;
     use super::*;
+    use crate::poison::{poison_recovery_count, poison_test_guard};
 
     /// B1-3 毒化测：docs 锁中毒后 query_blocks 正常返回 + error 日志出现 +
     /// 毒丸恢复计数 +1（三要素）
     #[test]
     fn poisoned_docs_lock_query_recovers_with_log_and_count() {
+        let _serial = poison_test_guard();
         let backend = MemoryNoteBackend::new();
         let before = poison_recovery_count();
         crate::test_support::poison_std_lock(&backend.docs);

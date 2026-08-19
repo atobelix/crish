@@ -619,9 +619,12 @@ async fn stress_five_tier_lock_ordering_zero_deadlock() {
     l1_sorted.sort_unstable();
     l2_sorted.sort_unstable();
 
-    let p99_idx_0 = ((l0_sorted.len() as f64 * 0.99) as usize).min(l0_sorted.len().saturating_sub(1));
-    let p99_idx_1 = ((l1_sorted.len() as f64 * 0.99) as usize).min(l1_sorted.len().saturating_sub(1));
-    let p99_idx_2 = ((l2_sorted.len() as f64 * 0.99) as usize).min(l2_sorted.len().saturating_sub(1));
+    let p99_idx_0 =
+        ((l0_sorted.len() as f64 * 0.99) as usize).min(l0_sorted.len().saturating_sub(1));
+    let p99_idx_1 =
+        ((l1_sorted.len() as f64 * 0.99) as usize).min(l1_sorted.len().saturating_sub(1));
+    let p99_idx_2 =
+        ((l2_sorted.len() as f64 * 0.99) as usize).min(l2_sorted.len().saturating_sub(1));
     let p99_l0 = l0_sorted.get(p99_idx_0).cloned().unwrap_or_default();
     let p99_l1 = l1_sorted.get(p99_idx_1).cloned().unwrap_or_default();
     let p99_l2 = l2_sorted.get(p99_idx_2).cloned().unwrap_or_default();
@@ -910,5 +913,8 @@ async fn stress_kill_all_cascade_no_orphans() {
     })
     .await;
 
-    assert!(timeout_res.is_ok(), "全局一键终止级联压测在 10 秒内未完成：发生死锁或挂起！");
+    assert!(
+        timeout_res.is_ok(),
+        "全局一键终止级联压测在 10 秒内未完成：发生死锁或挂起！"
+    );
 }

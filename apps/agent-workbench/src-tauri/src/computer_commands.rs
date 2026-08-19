@@ -1,11 +1,9 @@
-//! 电脑操作会话命令面（06 遗留⑨：会话开关 + 急停 + 状态）。
+//! 电脑操作会话命令面（06 遗留⑨：会话开关 + 状态）。
 //!
 //! ## 接口契约（契约定死，前端消费面 computerSessionApi.ts）
 //! - `computer_session_enable` → `{ enabled: true }`（风险确认流在组件层
 //!   完成后调用；浏览器会话活跃 → `tool.session.exclusive:<...>`）；
 //! - `computer_session_disable` → `{ enabled: false }`（幂等）；
-//! - `computer_estop(reason?)` → `{ stopped: true }`（面板急停按钮 →
-//!   同一吊销链，04 §4.3 ③；reason 为审计原因）；
 //! - `computer_status` → `{ enabled, mode: "idle"|"browser"|"desktop",
 //!   reason? }`（触发惰性恢复：session_meta `computer_use_enabled`）。
 //!
@@ -17,13 +15,13 @@
 //! ## 事件面
 //! 状态迁移经 `computer://state-changed`（`{ enabled?, mode?, reason? }`）
 //! Tauri 事件发射——发射接线见 [crate::computer::ComputerSlot::attach_emitter]，
-//! 由槽内部在 enable/disable/estop/恢复 各转换点广播（命令面不重复发射）。
+//! 由槽内部在 enable/disable/on_run_stopped/恢复 各转换点广播（命令面不重复发射）。
 //!
 //! ## 登记面（已接线）
-//! 本文件命令已登记：`main.rs` command_registry!（:290-293）+ command_manifest.rs
-//! （registered=true，:213-216）。
+//! 本文件命令已登记：`main.rs` command_registry! + command_manifest.rs
+//! （registered=true）。
 
-use crate::computer::{ComputerSlot, EstopPayload, SessionPayload, StatusPayload};
+use crate::computer::{ComputerSlot, SessionPayload, StatusPayload};
 use std::sync::Arc;
 use tauri::State;
 
@@ -48,19 +46,6 @@ pub(crate) fn computer_session_disable(
 ) -> Result<SessionPayload, String> {
     slot.disable(None).map_err(|e| e.as_command_err())?;
     Ok(SessionPayload { enabled: false })
-}
-
-/// 全局急停（04 §4.3 ③ 面板急停按钮 → 同一吊销链：中止在途注入 → 感知源
-/// 停止 → 会话回 Idle；恢复需重新显式开启）。`reason` 为审计原因（可选）。
-///
-/// 契约：`{ stopped: true }`。
-#[tauri::command]
-pub(crate) fn computer_estop(
-    reason: Option<String>,
-    slot: State<'_, Arc<ComputerSlot>>,
-) -> Result<EstopPayload, String> {
-    slot.estop(reason).map_err(|e| e.as_command_err())?;
-    Ok(EstopPayload { stopped: true })
 }
 
 /// 查询电脑操作会话状态（触发惰性恢复；挂载/诊断用）。
@@ -127,30 +112,6 @@ mod tests {
         );
         let status = slot.status();
         assert!(!status.enabled);
-    }
-
-    /// estop 契约：载荷 `{ stopped: true }` + 急停旗置位 + reason 审计登记。
-    #[test]
-    fn estop_returns_contract_payload_with_reason() {
-        let slot = mock_slot();
-        slot.enable().expect("开启不应失败");
-        let app = mock_app(&slot);
-        let out = computer_estop(
-            Some("用户点击急停".to_string()),
-            app.state::<Arc<ComputerSlot>>(),
-        )
-        .expect("急停不应失败");
-        assert_eq!(
-            serde_json::to_value(&out).expect("序列化"),
-            json!({ "stopped": true })
-        );
-        assert!(slot.stop().stopped(), "急停旗必须置位");
-        let status = slot.status();
-        assert!(
-            !status.enabled,
-            "急停后开启态必须关闭（恢复需重新显式开启）"
-        );
-        assert_eq!(status.mode, "idle");
     }
 
     /// status 契约：`{ enabled, mode }` 形状（未开启 + Idle；reason 省略——

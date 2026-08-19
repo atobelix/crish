@@ -23,7 +23,7 @@
 //! - T6 screenshot（PNG 魔数 + 解码尺寸 == spec 目标档）；
 //! - T7 感知版本号单调推进（快照→光标→截屏）；
 //! - T8 白名单拒绝真实链 → `tool.computer.elevated_window`；
-//! - T9 estop 真实链（stopped + 开启态关闭 + 后续 not_enabled）。
+//! - T9 已收敛：原停止链改为会话级中止令牌（输入框停止按钮）验证，覆盖见守卫中止自查与 run 停止 watcher，不在本文件单独断言。
 //!
 //! ## 测试面豁免说明（clippy 禁令）
 //! 本文件为测试面拉起/终止记事本（`notepad.exe` / `taskkill /PID /T`）作为
@@ -35,61 +35,34 @@
 // 参数仅固定可执行名与临时文件路径，无用户自由参数）
 #![allow(clippy::disallowed_methods)]
 
-use agent_tools::context::{AskChannel, AskDecision, ToolContext};
+use agent_tools::context::ToolContext;
 use agent_tools::definition::ToolError;
 use agent_tools::registry::ToolRegistry;
 use base64::Engine;
 use conex_computer::activation::{ActivationGate, SessionMode};
 use conex_computer::coord::Point;
-use conex_computer::security::{
-    ApprovalGate, EmergencyStop, EnableSource, SessionEnablement,
-};
+use conex_computer::security::SessionEnablement;
 use conex_computer::window_gate::{WhitelistEntry, WindowTargetGate};
 use conex_computer::ComputerSession;
 use conex_computer_tools::codes;
 use conex_computer_tools::session::{ComputerOps, RealComputerSession};
 use conex_computer_tools::{register_computer_tools, ComputerToolsConfig};
 use serde_json::{json, Value};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-// ===== Mock 审批通道（自动放行 / 记录调用数） =====
-
-#[derive(Debug)]
-struct AutoAsk {
-    calls: AtomicUsize,
-}
-
-#[async_trait::async_trait]
-impl AskChannel for AutoAsk {
-    async fn ask(
-        &self,
-        _tool_name: &str,
-        _args: &Value,
-    ) -> Result<AskDecision, ToolError> {
-        self.calls.fetch_add(1, Ordering::SeqCst);
-        Ok(AskDecision::Allowed)
-    }
-}
-
-// ===== 装配（真实守卫组件 + 自动放行审批） =====
+// ===== 装配（真实守卫组件） =====
 
 struct Rig {
     registry: ToolRegistry,
     activation: Arc<ActivationGate>,
     enablement: Arc<SessionEnablement>,
-    stop: Arc<EmergencyStop>,
 }
 
 fn build_rig(session: Arc<dyn ComputerOps>) -> Rig {
     let activation = Arc::new(ActivationGate::new());
     let enablement = Arc::new(SessionEnablement::new());
-    enablement
-        .enable(EnableSource::User)
-        .expect("开启态可建立");
-    let stop = Arc::new(EmergencyStop::new());
-    let approval = Arc::new(ApprovalGate::with_stop(stop.clone()));
+    enablement.enable().expect("开启态可建立");
     let mut registry = ToolRegistry::new();
     register_computer_tools(
         &mut registry,
@@ -97,8 +70,6 @@ fn build_rig(session: Arc<dyn ComputerOps>) -> Rig {
             session: Some(session),
             enablement: Some(enablement.clone()),
             activation: Some(activation.clone()),
-            approval: Some(approval.clone()),
-            stop: Some(stop.clone()),
         },
     )
     .expect("注册应成功");
@@ -106,7 +77,6 @@ fn build_rig(session: Arc<dyn ComputerOps>) -> Rig {
         registry,
         activation,
         enablement,
-        stop,
     }
 }
 
@@ -115,10 +85,7 @@ async fn run_tool(rig: &Rig, name: &str, args: Value) -> Result<Value, ToolError
         .registry
         .get(name)
         .unwrap_or_else(|| panic!("工具 {name} 未注册"));
-    let mut ctx = ToolContext::new("sess-real-desktop", std::path::PathBuf::from("."));
-    ctx.ask = Some(Arc::new(AutoAsk {
-        calls: AtomicUsize::new(0),
-    }));
+    let ctx = ToolContext::new("sess-real-desktop", std::path::PathBuf::from("."));
     tool.execute(&ctx, args).await
 }
 
@@ -215,9 +182,9 @@ fn node_at_point(node: &Value, x: i32, y: i32) -> Option<&Value> {
     Some(node)
 }
 
-// ===== 真实桌面全链（T1-T9，单测试顺序执行避免并行注入干扰） =====
+// ===== 真实桌面全链（T1-T8，单测试顺序执行避免并行注入干扰） =====
 
-/// 真实桌面端到端全链（49 报告 §2 T1-T9 迁移；`#[ignore]` 手动运行）。
+/// 真实桌面端到端全链（49 报告 §2 T1-T8 迁移；原 T9 已收敛为会话级中止令牌，不单测）。
 ///
 /// 单测试串行执行：真实注入共享同一桌面（鼠标/键盘），并行测试会互相
 /// 干扰；每个阶段失败即 panic 并携带阶段上下文。
@@ -418,25 +385,6 @@ async fn full_chain() -> Result<(), String> {
             return Err(format!("T8 期望 elevated_window，实得 {e2}"));
         }
 
-        // ── T9 estop 真实链 ──
-        let r = run_tool(&rig, "computer_estop", json!({ "reason": "49 报告急停验证" }))
-            .await
-            .map_err(|e| format!("T9a estop 失败：{e}"))?;
-        if r["stopped"] != true {
-            return Err(format!("T9a estop 未返回 stopped：{r}"));
-        }
-        if !rig.stop.stopped() {
-            return Err("T9b 急停旗未置位".to_string());
-        }
-        if rig.enablement.enabled() {
-            return Err("T9c 会话开启态应关闭".to_string());
-        }
-        let e9 = run_tool(&rig, "computer_snapshot", json!({}))
-            .await
-            .expect_err("急停后动作应拒绝");
-        if e9.code() != codes::TOOL_COMPUTER_NOT_ENABLED {
-            return Err(format!("T9d 期望 not_enabled，实得 {e9}"));
-        }
         Ok(())
     }
     .await;

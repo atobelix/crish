@@ -80,12 +80,6 @@ pub const MAX_SUMMARY_ATTEMPTS: u32 = 4;
 /// [SUMMARY_BACKOFF_MS]——04 §5.2「compact_summary_backoff_ms JSON 数组，
 /// 默认 [1000,3000,9000]」）
 pub const META_KEY_SUMMARY_BACKOFF_MS: &str = "compact_summary_backoff_ms";
-/// session_meta 键：L1 占位符回退开关（true=旧 L1 占位符语义；false=新
-/// 中性 stub）。**V1 决策（启动级配置）**：引擎侧（轮次 1）已删 AgentMessage
-/// 面 L1 改 stub（R-E），运行时双态切换需引擎支持（conex-compaction 面）；
-/// V1 本键只读取+文档化、不改变行为——读取面由 [summary_l1_placeholder]
-/// 提供，引擎侧动态双态预留给 V2。
-pub const META_KEY_SUMMARY_L1_PLACEHOLDER: &str = "compact_l1_placeholder";
 /// session_meta 键：单次摘要调用墙钟上限（毫秒，缺省 [LOOP_SUMMARY_MAX_WALL_MS]；
 /// 评审 02 P1-10：单次调用墙钟 60s 预算）
 pub const META_KEY_SUMMARY_WALL_MS: &str = "compact_summary_wall_ms";
@@ -176,17 +170,6 @@ fn parse_backoff_ms(raw: &str) -> Option<Vec<u64>> {
     } else {
         None
     }
-}
-
-/// 读取 L1 占位符回退开关（T-44；true=旧 L1 语义 / false=新 stub）。
-/// **V1 决策**：启动级配置——壳层 run 装配时读一次决定路径；引擎侧
-/// （conex-compaction）已删 AgentMessage 面 L1（R-E），运行时双态切换
-/// 需引擎支持，V1 不接线（只文档化读取面），预留给 V2。
-pub fn summary_l1_placeholder(meta: impl Fn(&str) -> Option<String>) -> bool {
-    matches!(
-        meta(META_KEY_SUMMARY_L1_PLACEHOLDER).as_deref(),
-        Some("true" | "1")
-    )
 }
 
 /// 摘要任务完成结果（V1 经回调透传给壳层；轮次 6 落 compression_blocks 表）
@@ -486,14 +469,20 @@ impl SummaryDispatch {
         *self
             .background_sink
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) = sink;
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary background_sink 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            }) = sink;
     }
 
     /// 当前事件发射器快照（None = 未装配，不发射）
     fn background_sink(&self) -> Option<SummaryBackgroundSinkRef> {
         self.background_sink
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary background_sink 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .clone()
     }
 
@@ -502,7 +491,10 @@ impl SummaryDispatch {
     /// `compact_summary_retry_window_ms` 两新键注入）。F3 用户消息边界
     /// 被动触发点同样经本方法持有同一护栏实例（run 级面）。
     pub fn set_retry_guard(&self, config: SummaryRetryGuardConfig) {
-        *self.retry_gate.lock().unwrap_or_else(|e| e.into_inner()) = SummaryRetryGate::new(config);
+        *self.retry_gate.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "summary retry_gate 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        }) = SummaryRetryGate::new(config);
     }
 
     /// 单飞 spawn：存活任务存在 → 忽略新 spawn（返回 false）；否则启动
@@ -522,70 +514,107 @@ impl SummaryDispatch {
         task: SummaryDispatchTask,
         on_done: Option<SummaryOutcomeCallback>,
     ) -> bool {
-        let mut guard = self.task.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(handle) = guard.as_ref() {
-            if !handle.is_finished() {
-                tracing::debug!(
+        // 锁内只做单飞 / 护栏 / 组装；tokio::spawn 必须在 task 锁外，
+        // 再短锁回写 JoinHandle（避免持锁进入 runtime，也避免丢句柄）。
+        let prepared = {
+            let guard = self.task.lock().unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary task 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            });
+            if let Some(handle) = guard.as_ref() {
+                if !handle.is_finished() {
+                    tracing::debug!(
+                        session_id = %task.session_id,
+                        block_id = %task.block_id,
+                        "摘要后台任务已存活（单飞去重，忽略新 spawn）"
+                    );
+                    return false;
+                }
+            }
+            // E2 F2 层 1：窗口护栏——累计尝试达上限 → 拒绝（停止重试，等待
+            // 窗口过期重置；被动触发点不阻塞用户消息发送，仅本次补摘要跳过）
+            let now_ms = crate::steering::unix_millis() as u64;
+            let mut gate = self.retry_gate.lock().unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary retry_gate 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            });
+            if !gate.try_begin_episode(now_ms) {
+                let attempts_in_window = gate.attempts_in_window();
+                let guard_max = gate.config().max_attempts;
+                tracing::warn!(
                     session_id = %task.session_id,
                     block_id = %task.block_id,
-                    "摘要后台任务已存活（单飞去重，忽略新 spawn）"
+                    attempts_in_window = attempts_in_window,
+                    guard_max = guard_max,
+                    window_ms = gate.config().retry_window_ms,
+                    "低功耗护栏：窗口内累计尝试已达上限 → 忽略本次摘要触发（等待窗口重置或被动触发点）"
+                );
+                drop(gate);
+                // EV-06：护栏拒绝 = 明确放弃——用户可据此区分「正在补摘要」与
+                // 「已放弃」（01 无声清单 #1 黑洞闭合；attempt = 窗口内已累计
+                // 尝试数，reason = 护栏上限文案）
+                emit_summary_background(
+                    &self.background_sink(),
+                    &task.session_id,
+                    "give-up",
+                    attempts_in_window,
+                    Some(format!(
+                        "低功耗护栏：窗口内累计尝试 {attempts_in_window} 已达上限 {guard_max} → 忽略本次摘要触发"
+                    )),
+                    Some(task.block_id.clone()),
                 );
                 return false;
             }
-        }
-        // E2 F2 层 1：窗口护栏——累计尝试达上限 → 拒绝（停止重试，等待
-        // 窗口过期重置；被动触发点不阻塞用户消息发送，仅本次补摘要跳过）
-        let now_ms = crate::steering::unix_millis() as u64;
-        let mut gate = self.retry_gate.lock().unwrap_or_else(|e| e.into_inner());
-        if !gate.try_begin_episode(now_ms) {
-            let attempts_in_window = gate.attempts_in_window();
-            let guard_max = gate.config().max_attempts;
-            tracing::warn!(
-                session_id = %task.session_id,
-                block_id = %task.block_id,
-                attempts_in_window = attempts_in_window,
-                guard_max = guard_max,
-                window_ms = gate.config().retry_window_ms,
-                "低功耗护栏：窗口内累计尝试已达上限 → 忽略本次摘要触发（等待窗口重置或被动触发点）"
-            );
             drop(gate);
-            // EV-06：护栏拒绝 = 明确放弃——用户可据此区分「正在补摘要」与
-            // 「已放弃」（01 无声清单 #1 黑洞闭合；attempt = 窗口内已累计
-            // 尝试数，reason = 护栏上限文案）
-            emit_summary_background(
-                &self.background_sink(),
-                &task.session_id,
-                "give-up",
-                attempts_in_window,
-                Some(format!(
-                    "低功耗护栏：窗口内累计尝试 {attempts_in_window} 已达上限 {guard_max} → 忽略本次摘要触发"
-                )),
-                Some(task.block_id.clone()),
+            let config = self.config.clone();
+            // 收尾记账回调：任务完成（无论 committed / awaiting）先记录本次
+            // episode 尝试次数进窗口，再透传业务回调（None = 只记账）
+            let gate_for_cb = Arc::clone(&self.retry_gate);
+            let recorder: SummaryOutcomeCallback = Box::new(
+                move |outcome: SummaryDispatchOutcome| {
+                    let mut gate = gate_for_cb.lock().unwrap_or_else(|e| {
+                    tracing::error!(target: "session_loop", "summary retry_gate 锁中毒，按恢复模式继续：{e}");
+                    e.into_inner()
+                });
+                    gate.record_episode(outcome.attempts, crate::steering::unix_millis() as u64);
+                    drop(gate);
+                    if let Some(callback) = on_done {
+                        callback(outcome);
+                    }
+                },
             );
-            return false;
-        }
-        drop(gate);
-        let config = self.config.clone();
-        // 收尾记账回调：任务完成（无论 committed / awaiting）先记录本次
-        // episode 尝试次数进窗口，再透传业务回调（None = 只记账）
-        let gate_for_cb = Arc::clone(&self.retry_gate);
-        let recorder: SummaryOutcomeCallback = Box::new(move |outcome: SummaryDispatchOutcome| {
-            let mut gate = gate_for_cb.lock().unwrap_or_else(|e| e.into_inner());
-            gate.record_episode(outcome.attempts, crate::steering::unix_millis() as u64);
-            drop(gate);
-            if let Some(callback) = on_done {
-                callback(outcome);
-            }
-        });
-        // EV-06：spawn 前快照发射器 + 任务标识（task 将 move 进任务闭包）
-        let background = self.background_sink();
-        let spawned_session_id = task.session_id.clone();
-        let spawned_block_id = task.block_id.clone();
+            // EV-06：spawn 前快照发射器 + 任务标识（task 将 move 进任务闭包）
+            let background = self.background_sink();
+            let spawned_session_id = task.session_id.clone();
+            let spawned_block_id = task.block_id.clone();
+            (
+                task,
+                config,
+                recorder,
+                background,
+                spawned_session_id,
+                spawned_block_id,
+            )
+        };
+
+        let (task, config, recorder, background, spawned_session_id, spawned_block_id) = prepared;
         let handle = tokio::spawn(async move {
             run_summary_task(task, config, Some(recorder), background).await;
         });
-        *guard = Some(handle);
-        drop(guard);
+        {
+            let mut guard = self.task.lock().unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary task 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            });
+            if let Some(existing) = guard.as_ref() {
+                if !existing.is_finished() {
+                    // 并发已写入存活句柄：中止本次任务，避免覆盖丢 handle
+                    handle.abort();
+                    return false;
+                }
+            }
+            *guard = Some(handle);
+        }
         // EV-06：spawn 成功 → spawned（attempt=1 起算，含同步那次口径；
         // task 锁已释放——sink 回调不得持锁调用，防外部 sink 重入死锁）
         emit_summary_background(
@@ -1161,27 +1190,6 @@ mod tests {
         let meta = meta_map(&[(META_KEY_SUMMARY_BACKOFF_MS, "[]")]);
         let config = SummaryDispatchConfig::from_session_meta(meta, MAX_SUMMARY_ATTEMPTS);
         assert_eq!(config.backoff_ms, SUMMARY_BACKOFF_MS.to_vec());
-    }
-
-    /// L1 回退开关读取面（V1 启动级配置：只读取不接线，默认新 stub）
-    #[test]
-    fn l1_placeholder_switch_parses_meta() {
-        assert!(
-            !summary_l1_placeholder(meta_map(&[])),
-            "缺省 = 新 stub 语义"
-        );
-        assert!(!summary_l1_placeholder(meta_map(&[(
-            META_KEY_SUMMARY_L1_PLACEHOLDER,
-            "false"
-        )])));
-        assert!(summary_l1_placeholder(meta_map(&[(
-            META_KEY_SUMMARY_L1_PLACEHOLDER,
-            "true"
-        )])));
-        assert!(summary_l1_placeholder(meta_map(&[(
-            META_KEY_SUMMARY_L1_PLACEHOLDER,
-            "1"
-        )])));
     }
 
     // ── E2 F2 层 1 低功耗护栏（窗口累计 + 窗口过期重置）──────────────

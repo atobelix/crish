@@ -286,10 +286,7 @@ mod tests {
             self.calls.lock().unwrap().push("resolve".into());
             Ok(self.boundary)
         }
-        async fn session_max_sequence(
-            &self,
-            _session_id: &str,
-        ) -> Result<u64, RetractionError> {
+        async fn session_max_sequence(&self, _session_id: &str) -> Result<u64, RetractionError> {
             self.calls.lock().unwrap().push("max".into());
             Ok(self.max_seq)
         }
@@ -344,10 +341,7 @@ mod tests {
     async fn protocol_freezes_at_max_and_truncates_at_boundary_plus_one() {
         let backend = Arc::new(FakeBackend::new(Some(40), 99));
         let protocol = RetractionProtocol::new(Box::new(backend.clone()));
-        let outcome = protocol
-            .prepare_retraction("s1", "msg-1")
-            .await
-            .unwrap();
+        let outcome = protocol.prepare_retraction("s1", "msg-1").await.unwrap();
         assert_eq!(outcome.boundary_seq, 99, "冻结边界 = 稳定点 MAX(sequence)");
         assert_eq!(
             outcome.truncate_sequence, 100,
@@ -355,7 +349,13 @@ mod tests {
         );
         assert_eq!(
             backend.calls(),
-            vec!["resolve", "stop:40", "converge:run-1", "max", "truncate:99:Some(\"run-1\")"],
+            vec![
+                "resolve",
+                "stop:40",
+                "converge:run-1",
+                "max",
+                "truncate:99:Some(\"run-1\")"
+            ],
             "协议调用顺序 = 定位 → 停 run → 收敛 → 冻结读 → truncate"
         );
         // 冻结已释放（truncate 落库确认后）
@@ -367,9 +367,16 @@ mod tests {
     async fn protocol_fails_closed_when_target_not_found() {
         let backend = Arc::new(FakeBackend::new(None, 99));
         let protocol = RetractionProtocol::new(Box::new(backend.clone()));
-        let err = protocol.prepare_retraction("s1", "missing").await.unwrap_err();
+        let err = protocol
+            .prepare_retraction("s1", "missing")
+            .await
+            .unwrap_err();
         assert_eq!(err, RetractionError::NotFound);
-        assert_eq!(backend.calls(), vec!["resolve"], "定位失败后不再进入停 run/冻结");
+        assert_eq!(
+            backend.calls(),
+            vec!["resolve"],
+            "定位失败后不再进入停 run/冻结"
+        );
         assert!(!protocol.freeze_registry().is_frozen("s1"));
     }
 
@@ -399,7 +406,10 @@ mod tests {
         // 模拟第二个事务与第一个重叠：冻结激活期进入 → Busy
         let token = "retraction:s1";
         protocol.freeze_registry().freeze("s1", token, 99).unwrap();
-        let err = protocol.prepare_retraction("s1", "msg-2").await.unwrap_err();
+        let err = protocol
+            .prepare_retraction("s1", "msg-2")
+            .await
+            .unwrap_err();
         assert_eq!(err, RetractionError::Busy, "冻结期内并发撤回拒绝");
         protocol.freeze_registry().release("s1", token).unwrap();
         // 释放后新事务可进入（不残留互斥）

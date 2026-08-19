@@ -25,9 +25,7 @@ use conex_types::session::AgentSessionEvent as E;
 use futures::StreamExt;
 use std::sync::Arc;
 
-use crate::provider::{
-    DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ToolSchema,
-};
+use crate::provider::{DeltaSink, ProviderCall, ProviderEventStream, ProviderRequest, ToolSchema};
 use crate::steering::metadata_kind_wire;
 use crate::stream::{
     ConsumeBuilder, ConsumeResult, ConsumeStopReason, ProviderStreamEvent, StopReason,
@@ -130,6 +128,9 @@ async fn consume_stream(
     let mut aborted = false;
     match result {
         Ok(mut stream) => {
+            // 3-1：session_id 在流消费入口缓存一次；热路径按帧借用，构造
+            // MessageDelta 时再 to_string（事件字段契约要求 owned String）。
+            let session_id = state.machine.context().session_id.clone();
             // Q21（T09.9）：流式消费竞速——`stream.next()` 与 abort 监听
             // future 并置，abort 触发即停收并丢弃流（取消挂起的读取）：
             // 及时中断而非等流结束 / 传输层超时（AA-01 Q21 流式消费侧
@@ -158,13 +159,13 @@ async fn consume_stream(
                         // 丢帧不丢 message-end，03 §5.3-6）
                         if let Some(sink) = delta_sink {
                             if let Some(delta) =
-                                delta_to_message_event(state, assistant_message_id, &event)
+                                delta_to_message_event(&session_id, assistant_message_id, &event)
                             {
                                 sink.push(delta);
                             }
                         } else if let Some(sink) = &state.options.live_sink {
                             if let Some(delta) =
-                                delta_to_message_event(state, assistant_message_id, &event)
+                                delta_to_message_event(&session_id, assistant_message_id, &event)
                             {
                                 sink.push_live(delta);
                             }
@@ -332,7 +333,10 @@ pub(crate) fn streaming_aborted(state: &mut LoopState) -> Result<HandlerOutcome,
     // 幂等无操作；stream_error 阶梯复用本路径同样覆盖）
     emit_missing_turn_end(state);
     let action = {
-        let mut bus = state.control_bus.lock().unwrap_or_else(|e| e.into_inner());
+        let mut bus = state.control_bus.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "control_bus 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
         crate::safe_point::apply_safe_point_control(&mut bus, Some(&state.abort_signal))
     };
     match action {
@@ -669,7 +673,7 @@ fn commit_message_with_deltas(state: &mut LoopState, message: AgentMessage) {
 /// Stop）不进实时轨——仍走收口批量 emit（增量通道只承载 delta，PE-09 §0.3
 /// 契约点 2）
 fn delta_to_message_event(
-    state: &LoopState,
+    session_id: &str,
     message_id: &str,
     event: &ProviderStreamEvent,
 ) -> Option<AgentEvent> {
@@ -682,7 +686,7 @@ fn delta_to_message_event(
         _ => return None,
     };
     Some(AgentEvent::MessageDelta {
-        session_id: state.machine.context().session_id.clone(),
+        session_id: session_id.to_string(),
         timestamp: crate::steering::now_iso_utc(),
         message_id: message_id.to_string(),
         block,

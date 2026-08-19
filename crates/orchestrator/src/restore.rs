@@ -46,9 +46,7 @@ use crate::session::{SessionRecord, SessionTreeError};
 // - restore_manager.rs：重启恢复主流程 [RestoreManager] 与状态判定
 //   （restore_manager::*）
 // 公开面经 `pub use` 重导出，orchestrator::restore::* 路径不 break；
-// 测试旁挂 restore_tests.rs / restore_tests_snapshot.rs /
-// restore_tests_continuity.rs / restore_tests_anchors.rs /
-// restore_tests_agents.rs（include! 接线）。
+// 测试由 tests/ 集成测试目录承载（如 crash_consistency.rs），不在 src/ 内联。
 
 #[path = "restore_manager.rs"]
 mod restore_manager;
@@ -189,17 +187,4 @@ impl From<SessionTreeError> for RestoreError {
     fn from(err: SessionTreeError) -> Self {
         Self::new("session.invalid_state", err.to_string())
     }
-}
-
-#[cfg(test)]
-mod tests {
-    // SR-06d · 拆分 · ≠ EL：测试旁挂分五段（crate-size 门禁对 src 内每个
-    // 文件限 600 行，故用 include! 合成单一 tests 模块——测试路径
-    // restore::tests::* 不 break）。
-    #![allow(clippy::disallowed_methods)]
-    include!("restore_tests.rs");
-    include!("restore_tests_snapshot.rs");
-    include!("restore_tests_continuity.rs");
-    include!("restore_tests_anchors.rs");
-    include!("restore_tests_agents.rs");
 }

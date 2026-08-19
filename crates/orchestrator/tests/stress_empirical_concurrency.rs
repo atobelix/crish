@@ -122,14 +122,18 @@ async fn stress_real_localdb_and_kernel_state_machine_zero_deadlock() {
     let ready_counter = Arc::new(AtomicUsize::new(0));
     let completed_tasks = Arc::new(AtomicUsize::new(0));
 
-    let l0_latencies =
-        Arc::new(Mutex::new(Vec::with_capacity(write_workers * iterations_per_worker)));
-    let l1_latencies =
-        Arc::new(Mutex::new(Vec::with_capacity(write_workers * iterations_per_worker)));
-    let l2_latencies =
-        Arc::new(Mutex::new(Vec::with_capacity(write_workers * iterations_per_worker)));
-    let l3_latencies =
-        Arc::new(Mutex::new(Vec::with_capacity(write_workers * iterations_per_worker)));
+    let l0_latencies = Arc::new(Mutex::new(Vec::with_capacity(
+        write_workers * iterations_per_worker,
+    )));
+    let l1_latencies = Arc::new(Mutex::new(Vec::with_capacity(
+        write_workers * iterations_per_worker,
+    )));
+    let l2_latencies = Arc::new(Mutex::new(Vec::with_capacity(
+        write_workers * iterations_per_worker,
+    )));
+    let l3_latencies = Arc::new(Mutex::new(Vec::with_capacity(
+        write_workers * iterations_per_worker,
+    )));
 
     let mut join_set = tokio::task::JoinSet::new();
     let test_start = Instant::now();
@@ -386,7 +390,9 @@ async fn stress_multi_session_wal_16_writers_8_readers() {
 
     let mut join_set = tokio::task::JoinSet::new();
     let test_start = Instant::now();
-    let write_latencies = Arc::new(Mutex::new(Vec::with_capacity(num_sessions * writes_per_session)));
+    let write_latencies = Arc::new(Mutex::new(Vec::with_capacity(
+        num_sessions * writes_per_session,
+    )));
 
     // 启动 16 个写 Worker，分别通过 Group Commit 写入各自会话
     for session_idx in 0..num_sessions {
@@ -472,7 +478,10 @@ async fn stress_multi_session_wal_16_writers_8_readers() {
         elapsed, total_writes, tps, p50, p90, p99
     );
 
-    assert!(p99 < Duration::from_millis(50), "跨会话 P99 写入时延必须 < 50ms: {p99:?}");
+    assert!(
+        p99 < Duration::from_millis(50),
+        "跨会话 P99 写入时延必须 < 50ms: {p99:?}"
+    );
 
     // 验证每个会话的数据完整性与序列严格连续性
     for i in 0..num_sessions {
@@ -492,8 +501,7 @@ async fn stress_multi_session_wal_16_writers_8_readers() {
             })
             .expect("查询事件数失败");
         assert_eq!(
-            count as usize,
-            writes_per_session,
+            count as usize, writes_per_session,
             "会话 {sid} 的事件数必须等于写入次数"
         );
     }

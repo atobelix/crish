@@ -8,6 +8,13 @@
 
 use super::*;
 
+/// execute_one 事件相：start / 未执行 abort 收场 / 正常 tool-end。
+enum ToolEmit<'a> {
+    Start,
+    EndAborted,
+    End(&'a ClassifiedToolResult),
+}
+
 impl ToolExecutor {
     /// 执行单个工具（顺序路径：完整事件序列 + 审批）
     // G2 允许理由（clippy::too_many_arguments）：参数为工具执行上下文聚合
@@ -26,20 +33,53 @@ impl ToolExecutor {
         fatal: &mut Option<String>,
     ) -> ClassifiedToolResult {
         let call = &calls[idx];
-        events.push(ToolEvent::ToolStart {
-            call_id: call.id.clone(),
-            tool_name: call.tool_name.clone(),
-            input: call.input.clone(),
-            category: call.category,
-            concurrency: call.concurrency,
-            summary: call.summary.clone(),
-            // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp）
-            occurred_at_ms: Some(crate::steering::unix_millis() as u64),
-        });
+        Self::emit_tool_events(call, events, ToolEmit::Start);
 
         // abort 前置检查
         if let Some(sig) = abort {
             if sig.is_aborted() {
+                Self::emit_tool_events(call, events, ToolEmit::EndAborted);
+                return ClassifiedToolResult::error(
+                    &call.id,
+                    &call.tool_name,
+                    ToolErrorKind::Cancelled,
+                    "aborted",
+                    0,
+                );
+            }
+        }
+
+        let r = self
+            .handle_verdict_and_approval(call, ctx, approval, options, abort, events)
+            .await;
+        if self.result_is_fatal(call, &r) {
+            *fatal = Some(
+                r.error_message
+                    .clone()
+                    .unwrap_or_else(|| "tool failed".into()),
+            );
+        }
+        Self::emit_tool_events(call, events, ToolEmit::End(&r));
+        r
+    }
+
+    /// 顺序路径 tool-start / tool-end 发射（从 execute_one 抽出，只搬移）。
+    /// abort 未执行收场与正常收场载荷不同（原子要素留空 vs 透传），故分相。
+    fn emit_tool_events(call: &ToolBatchCall, events: &mut Vec<ToolEvent>, kind: ToolEmit<'_>) {
+        match kind {
+            ToolEmit::Start => {
+                events.push(ToolEvent::ToolStart {
+                    call_id: call.id.clone(),
+                    tool_name: call.tool_name.clone(),
+                    input: call.input.clone(),
+                    category: call.category,
+                    concurrency: call.concurrency,
+                    summary: call.summary.clone(),
+                    // EV-09（D-03）：工具开始时刻打点（翻译层回填 timestamp）
+                    occurred_at_ms: Some(crate::steering::unix_millis() as u64),
+                });
+            }
+            ToolEmit::EndAborted => {
                 events.push(ToolEvent::ToolEnd {
                     call_id: call.id.clone(),
                     tool_name: call.tool_name.clone(),
@@ -54,21 +94,41 @@ impl ToolExecutor {
                     executed_input: None,
                     occurred_at_ms: None,
                 });
-                return ClassifiedToolResult::error(
-                    &call.id,
-                    &call.tool_name,
-                    ToolErrorKind::Cancelled,
-                    "aborted",
-                    0,
-                );
+            }
+            ToolEmit::End(r) => {
+                events.push(ToolEvent::ToolEnd {
+                    call_id: call.id.clone(),
+                    tool_name: call.tool_name.clone(),
+                    is_error: r.error_kind.is_some(),
+                    duration_ms: r.duration_ms,
+                    output: r.output.clone(),
+                    error_code: r.error_kind.map(|k| k.error_code().to_string()),
+                    error_message: r.error_message.clone(),
+                    // EV-09（D-03）：原子要素透传（attempt/dedup/实际入参/打点）
+                    attempt: Some(r.attempt),
+                    deduplicated: Some(r.deduplicated),
+                    executed_input: r.executed_input.clone(),
+                    occurred_at_ms: r.occurred_at_ms,
+                });
             }
         }
+    }
 
+    /// 权限裁决 + 审批等待（从 execute_one 抽出，只搬移不改行为）。
+    async fn handle_verdict_and_approval(
+        &self,
+        call: &ToolBatchCall,
+        ctx: &ToolExecCtx,
+        approval: Option<Arc<dyn ApprovalGate>>,
+        options: &ToolBatchOptions,
+        abort: Option<&crate::safe_point::AbortSignal>,
+        events: &mut Vec<ToolEvent>,
+    ) -> ClassifiedToolResult {
         // R4 T10：权限判定 → 放行 / 拒绝 / 需审批。permission_mode 显式
         // 设置时 dangerous 标记进入判定（ask 问询 / plan 拒绝 / full-access
         // 放行）；未设置时沿用既有语义（approval 开启 → 全批审批）。
         let verdict = self.call_verdict(call, options);
-        let r = match (&approval, options.approval_enabled) {
+        match (&approval, options.approval_enabled) {
             (Some(gate), true) => match verdict {
                 PermissionVerdict::Allow => {
                     let (r, extra) = self
@@ -164,15 +224,13 @@ impl ToolExecutor {
             // 仅 Allow 进入执行面
             _ => match verdict {
                 PermissionVerdict::Deny => denied_result(call, options),
-                PermissionVerdict::NeedsApproval => {
-                    ClassifiedToolResult::error(
-                        &call.id,
-                        &call.tool_name,
-                        ToolErrorKind::ApprovalRequired,
-                        self.revert_refusal_message(call),
-                        0,
-                    )
-                }
+                PermissionVerdict::NeedsApproval => ClassifiedToolResult::error(
+                    &call.id,
+                    &call.tool_name,
+                    ToolErrorKind::ApprovalRequired,
+                    self.revert_refusal_message(call),
+                    0,
+                ),
                 PermissionVerdict::Allow => {
                     let (r, extra) = self
                         .execute_single_with_retry(call, ctx, options, abort, approval.clone())
@@ -181,29 +239,7 @@ impl ToolExecutor {
                     r
                 }
             },
-        };
-        if self.result_is_fatal(call, &r) {
-            *fatal = Some(
-                r.error_message
-                    .clone()
-                    .unwrap_or_else(|| "tool failed".into()),
-            );
         }
-        events.push(ToolEvent::ToolEnd {
-            call_id: call.id.clone(),
-            tool_name: call.tool_name.clone(),
-            is_error: r.error_kind.is_some(),
-            duration_ms: r.duration_ms,
-            output: r.output.clone(),
-            error_code: r.error_kind.map(|k| k.error_code().to_string()),
-            error_message: r.error_message.clone(),
-            // EV-09（D-03）：原子要素透传（attempt/dedup/实际入参/打点）
-            attempt: Some(r.attempt),
-            deduplicated: Some(r.deduplicated),
-            executed_input: r.executed_input.clone(),
-            occurred_at_ms: r.occurred_at_ms,
-        });
-        r
     }
 
     /// 单工具执行（不含事件产出；审批已通过或未启用）

@@ -201,12 +201,6 @@ pub struct SessionLoopOptions {
     /// （轮次 4 语义，向后兼容测试 / 纯 session-loop 用法）。
     pub summary_coordinator:
         Option<Arc<crate::r#loop::summary_coordinator::SessionSummaryCoordinator>>,
-    /// L1 占位符回退开关（T-44，session_meta 键 `compact_l1_placeholder`）：
-    /// true = 保留旧 L1 占位符语义；false / None = 新中性 stub（默认）。
-    /// **V1 决策（启动级配置）**：引擎侧（conex-compaction 轮次 1）已删除
-    /// AgentMessage 面 L1 改为 stub（R-E），运行时双态切换需引擎支持；
-    /// 本字段 V1 只透传文档化、不改变行为，预留给 V2（见 T-44 决策注释）。
-    pub compact_l1_placeholder: Option<bool>,
     /// 笔记后端（Round6 / W4-E）：经 `with_options` 注入 `tool_ctx.note_backend`，
     /// 再在 `tool_exec` 组装 `ToolContext` 时透传。None = 未接线（工具
     /// `note_backend_unwired`）；Some = `conex-note-runtime::NoteRuntime::open`
@@ -308,9 +302,6 @@ impl Default for SessionLoopOptions {
             // T-42：会话级协调器缺省 None = 回退 run 级 dispatch（轮次 4
             // 语义；壳层装配面经注册表注入）
             summary_coordinator: None,
-            // T-44：L1 回退开关缺省 None = 新中性 stub（默认；V1 启动级
-            // 配置，引擎不支持动态双态 → 仅文档化预留 V2）
-            compact_l1_placeholder: None,
             // Round6 / W4-E：笔记后端缺省 None = 未接线（工具 note_backend_unwired）；
             // 壳层 / engine 经 options 注入 StoreNoteBackend
             note_backend: None,
@@ -331,10 +322,7 @@ impl SessionLoopOptions {
     /// （[agent_tools::middleware::ToolMiddleware]；审批通过后、执行前生效）。
     /// 核心默认空链（不内建具体策略实例）；生产装配方 = 壳层 `run_launch.rs`
     /// （写前自动备份 BackupMiddleware），测试/编排经本方法注入。
-    pub fn with_tool_middleware(
-        mut self,
-        middleware: Vec<Arc<dyn ToolMiddleware>>,
-    ) -> Self {
+    pub fn with_tool_middleware(mut self, middleware: Vec<Arc<dyn ToolMiddleware>>) -> Self {
         self.tool_middleware = middleware;
         self
     }

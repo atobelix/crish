@@ -1,17 +1,15 @@
 /**
- * 电脑操作会话 hook：enabled 本地化状态机 + activation 三态 + invoke 封装 +
+ * 电脑操作会话 hook：enabled 状态机 + activation 三态 + invoke 封装 +
  * 事件订阅。对齐 useBrowserSession 风格：hook 收拢全部状态副作用，渲染层
  * 只消费返回值。
  *
- * 接线语义（命令面未接线，06 §8 遗留项 9/10）：
+ * 接线语义（已接线，三命令已登记于 Rust 侧，与 `command_manifest.rs` / `main.rs` 同步）：
  * - 挂载：先订阅事件、再查询初始状态（事件优先，对齐 F2 修复的挂载竞态
- *   范式）；查询返回 missing → wired=false（预期状态，不 toast——面板
- *   展示「引擎未接线」徽标降级提示）；
- * - 开关：enable/disable 走 invoke，missing 时本地化置位并 toast 提示
- *   「本地记录不落盘」；error 时 toast 错误；
+ *   范式）；查询正常返回引擎状态，missing 仅兜底（非 Tauri 环境）；
+ * - 开关：enable/disable 走 invoke，正常落盘引擎，missing 仅兜底本地化；
  * - busy 互斥 + 30s 超时释放（对齐 F4 评审修复）。
  *
- * 反馈约定：仅错误 / 降级提示 toast；成功路径静默（状态展示即反馈）。
+ * 反馈约定：仅错误 / 兜底提示 toast；成功路径静默（状态展示即反馈）。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { } from '../../../hooks/useToastQueue';
@@ -34,11 +32,11 @@ export interface UseComputerSessionOptions {
 }
 
 export interface UseComputerSessionResult {
-  /** 会话显式开启（命令面未接线时为本地记录，不落盘） */
+  /** 会话显式开启 */
   enabled: boolean;
-  /** ActivationGate 三态（idle/browser/desktop；未接线恒 idle） */
+  /** ActivationGate 三态（idle/browser/desktop） */
   activation: ComputerActivation;
-  /** 命令面是否接线（status 查询 missing → false，面板显示降级徽标） */
+  /** 命令面是否接线（正常 true；missing 时 false，面板降级提示） */
   wired: boolean;
   /** 是否有进行中的操作（开关互斥，防重复点击） */
   busy: boolean;
@@ -48,7 +46,7 @@ export interface UseComputerSessionResult {
   disable: () => void;
 }
 
-/** 三态失败 → 用户可读文案（missing = 引擎未接线）；action 为完整动作名 */
+/** 三态失败 → 用户可读文案（missing 为兜底，非 Tauri 环境）；action 为完整动作名 */
 function describeInvokeFailure(
   res: InvokeTypedResult<unknown>,
   action: string
@@ -62,7 +60,7 @@ function describeInvokeFailure(
   return `${action}失败：未知错误`;
 }
 
-/** missing（引擎未接线）时的本地化降级提示。 */
+/** missing 兜底时的本地化提示（非 Tauri 环境）。 */
 function describeUnwiredFallback(action: string): string {
   return `引擎未接线：${action}已本地记录（不落盘，重启后不保留）`;
 }
@@ -129,8 +127,7 @@ export function useComputerSession(
         if (res.status === 'ok') {
           applyPayload(res.data);
         } else if (res.status === 'missing') {
-          // 命令未接线是当前预期状态（S5 遗留接线项）：不 toast，
-          // 面板以「引擎未接线」徽标降级提示（wired=false）
+          // 兜底：非 Tauri 环境或旧版本 missing（正常已接线不应命中）
           setWired(false);
         } else {
           // 命令存在但查询报错：toast 明确诊断
@@ -154,7 +151,7 @@ export function useComputerSession(
           setEnabled(res.data.enabled);
         setWired(true);
       } else if (res.status === 'missing') {
-        // 命令面未接线：本地化置位 + 降级提示（不落盘）
+        // 兜底：非 Tauri 环境 missing 时本地化置位（正常已接线不应命中）
         setEnabled(true);
         setWired(false);
         toastRef.current(describeUnwiredFallback('启用电脑操作'));
@@ -172,6 +169,7 @@ export function useComputerSession(
           setEnabled(res.data.enabled);
         setWired(true);
       } else if (res.status === 'missing') {
+        // 兜底：非 Tauri 环境 missing 时本地化置位（正常已接线不应命中）
         setEnabled(false);
         setWired(false);
         toastRef.current(describeUnwiredFallback('停用电脑操作'));

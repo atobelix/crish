@@ -103,8 +103,8 @@ mod capture {
 
 use capture::with_capture;
 
-/// 毒化测串行锁：同一文件静态计数器的毒化测并行会相互污染 before/after
-/// 断言（共享 store_apply_md 计数器的两测尤其）；仅测试面串行，不影响生产路径。
+/// 毒化测串行锁：crate 级聚合计数器在并行测试下会污染 before/after
+/// 断言；仅测试面串行，不影响生产路径。
 static POISON_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// 取毒化测串行守卫（测试面自恢复：本锁若被毒化直接取回，不级联失败）。
@@ -167,7 +167,7 @@ fn poisoned_sessions_map_outline_recovers_with_log_and_count() {
     let (dir, db) = temp_db();
     let backend = StoreNoteBackend::open(&db).unwrap();
     apply_md(&backend, "poison-outline", "# Poison Outline\n\nbody");
-    let before = super::poison_recovery_count();
+    let before = crate::poison::poison_recovery_count();
     poison_std_lock(&backend.sessions);
     let (res, lines) =
         with_capture(|| block_on(backend.document_outline("poison-outline", Some(6))));
@@ -183,7 +183,7 @@ fn poisoned_sessions_map_outline_recovers_with_log_and_count() {
         lines.join("\n")
     );
     assert_eq!(
-        super::poison_recovery_count(),
+        crate::poison::poison_recovery_count(),
         before + 1,
         "sessions 索引锁恢复必须计数 +1"
     );
@@ -205,7 +205,7 @@ fn poisoned_per_doc_lock_apply_collab_recovers_with_log_and_count() {
         .get("poison-collab")
         .unwrap()
         .clone();
-    let before = crate::store_backend_apply::poison_recovery_count();
+    let before = crate::poison::poison_recovery_count();
     poison_std_lock(&arc);
     let ops_json = r#"[{"op":"insert","id":"22222222-2222-4222-a222-222222222222","parent":null,"order":"a0","kind":"paragraph","props":{"attrs":{}}}]"#;
     let (res, lines) =
@@ -218,7 +218,7 @@ fn poisoned_per_doc_lock_apply_collab_recovers_with_log_and_count() {
         lines.join("\n")
     );
     assert_eq!(
-        crate::store_backend_apply::poison_recovery_count(),
+        crate::poison::poison_recovery_count(),
         before + 1,
         "per-doc 锁恢复必须计数 +1"
     );
@@ -247,7 +247,7 @@ fn poisoned_doc_lock_document_to_md_recovers_with_log_and_count() {
         .get("poison-md")
         .unwrap()
         .clone();
-    let before = crate::store_backend_query::poison_recovery_count();
+    let before = crate::poison::poison_recovery_count();
     poison_std_lock(&arc);
     let (res, lines) = with_capture(|| backend.document_to_md("poison-md"));
     let md = res.expect("毒化后 document_to_md 仍正常返回");
@@ -258,7 +258,7 @@ fn poisoned_doc_lock_document_to_md_recovers_with_log_and_count() {
         lines.join("\n")
     );
     assert_eq!(
-        crate::store_backend_query::poison_recovery_count(),
+        crate::poison::poison_recovery_count(),
         before + 1,
         "per-doc 锁恢复必须计数 +1"
     );
@@ -273,7 +273,7 @@ fn poisoned_sessions_map_hydrate_recovers_with_log_and_count() {
     let (dir, db) = temp_db();
     let backend = StoreNoteBackend::open(&db).unwrap();
     apply_md(&backend, "poison-hyd", "# Poison Hydrate\n\nbody");
-    let before = crate::store_hydrate::poison_recovery_count();
+    let before = crate::poison::poison_recovery_count();
     poison_std_lock(&backend.sessions);
     let (res, lines) = with_capture(|| backend.hydrate_document_from_session("poison-hyd", 50));
     let proj = res.expect("毒化后 hydrate 投影仍正常返回");
@@ -284,7 +284,7 @@ fn poisoned_sessions_map_hydrate_recovers_with_log_and_count() {
         lines.join("\n")
     );
     assert_eq!(
-        crate::store_hydrate::poison_recovery_count(),
+        crate::poison::poison_recovery_count(),
         before + 1,
         "sessions 索引锁恢复必须计数 +1"
     );
@@ -306,7 +306,7 @@ fn poisoned_doc_lock_apply_md_recovers_with_log_and_count() {
         .get("poison-applymd")
         .unwrap()
         .clone();
-    let before = crate::store_apply_md::poison_recovery_count();
+    let before = crate::poison::poison_recovery_count();
     poison_std_lock(&arc);
     let (res, lines) = with_capture(|| {
         block_on(backend.apply_md_fragment(NoteApplyMdRequest {
@@ -329,7 +329,7 @@ fn poisoned_doc_lock_apply_md_recovers_with_log_and_count() {
         lines.join("\n")
     );
     assert_eq!(
-        crate::store_apply_md::poison_recovery_count(),
+        crate::poison::poison_recovery_count(),
         before + 1,
         "per-doc 锁恢复必须计数 +1"
     );
@@ -344,7 +344,7 @@ fn poisoned_intents_lock_apply_md_recovers_with_log_and_count() {
     let (dir, db) = temp_db();
     let backend = StoreNoteBackend::open(&db).unwrap();
     apply_md(&backend, "poison-intents", "seed body");
-    let before = crate::store_apply_md::poison_recovery_count();
+    let before = crate::poison::poison_recovery_count();
     poison_std_lock(&backend.intents);
     let (res, lines) = with_capture(|| {
         block_on(backend.apply_md_fragment(NoteApplyMdRequest {
@@ -371,7 +371,7 @@ fn poisoned_intents_lock_apply_md_recovers_with_log_and_count() {
         lines.join("\n")
     );
     assert_eq!(
-        crate::store_apply_md::poison_recovery_count(),
+        crate::poison::poison_recovery_count(),
         before + 2,
         "intents 幂等检查（:99）与结果回写（:232）两处锁各恢复一次"
     );
@@ -566,6 +566,65 @@ fn concurrent_first_open_distinct_docs_lands_two_sessions() {
         assert!(md.contains(doc), "{doc} 内容可读（双写无丢失）: {md:?}");
     }
     let _ = std::fs::remove_dir_all(dir);
+}
+
+// ── B3 · CAS 冲突类型化（消费侧：store_backend.rs map_commit_err）────────
+//
+// CT-01 CAS 陈旧写经 on_committed_expect → PersistError::Conflict
+// → ApplyError::PersistConflict → map_commit_err 类型匹配 →
+// NoteBackendError::Conflict（note.persist_conflict），不依赖 Display 文案。
+
+/// B3：`CommitPipelineError::Apply(ApplyError::PersistConflict)` 经
+/// [`map_commit_err`] 类型化分类为 [`NoteBackendError::Conflict`]，
+/// 不再依赖 `to_string().contains("conflict")` 字符串匹配。
+#[test]
+fn map_commit_err_types_persist_conflict_to_note_conflict() {
+    use agent_tools::note_backend::NoteBackendError;
+    use conex_doc_collab::ApplyError;
+    use conex_workspace_store::CommitPipelineError;
+
+    let expected_rev = 7u64;
+    let err = CommitPipelineError::Apply(ApplyError::PersistConflict {
+        expected: expected_rev,
+    });
+    let mapped = crate::store_backend::map_commit_err(err);
+    assert!(
+        matches!(mapped, NoteBackendError::Conflict(_)),
+        "PersistConflict 应类型化分类为 NoteBackendError::Conflict，得到 {mapped:?}"
+    );
+    // 稳定码：note.persist_conflict
+    assert_eq!(mapped.code(), "note.persist_conflict");
+    // 消息含期望 rev（类型化文案，不依赖原 PersistError Display）
+    assert!(
+        mapped.message().contains(&expected_rev.to_string()),
+        "消息应含期望 rev {expected_rev}，得到 {}",
+        mapped.message()
+    );
+}
+
+/// B3 负例：非 CAS 冲突的 ApplyError 变体（如 Persist/NotFound/Schema）
+/// 仍走既有字符串分类路径，不被误判为 Conflict。
+#[test]
+fn map_commit_err_keeps_non_conflict_apply_variants_unaffected() {
+    use agent_tools::note_backend::NoteBackendError;
+    use conex_doc_collab::ApplyError;
+    use conex_workspace_store::CommitPipelineError;
+
+    // NotFound 变体 → 仍走 contains("not found") 分类为 NotFound
+    let err = CommitPipelineError::Apply(ApplyError::NotFound("block x".into()));
+    let mapped = crate::store_backend::map_commit_err(err);
+    assert!(
+        matches!(mapped, NoteBackendError::NotFound(_)),
+        "ApplyError::NotFound 应分类为 NoteBackendError::NotFound，得到 {mapped:?}"
+    );
+
+    // 普通 Persist（非 CAS 冲突）→ ApplyFailed，不被误判为 Conflict
+    let err = CommitPipelineError::Apply(ApplyError::Persist("io: disk full".into()));
+    let mapped = crate::store_backend::map_commit_err(err);
+    assert!(
+        matches!(mapped, NoteBackendError::ApplyFailed(_)),
+        "ApplyError::Persist(非冲突) 应分类为 ApplyFailed，得到 {mapped:?}"
+    );
 }
 
 // ── S3 性能热点埋点观测测（LogCapture WARN 级，对齐 observability.rs）─

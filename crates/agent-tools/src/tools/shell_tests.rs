@@ -531,7 +531,11 @@ async fn delete_redirect_emits_security_audit_event() {
             assert_eq!(operation, &Op::Delete);
             assert_eq!(
                 targets,
-                &vec![conex_fs::ConexPathNormalizer::normalize(&ws.path().join("sub")).display().to_string()],
+                &vec![
+                    conex_fs::ConexPathNormalizer::normalize(&ws.path().join("sub"))
+                        .display()
+                        .to_string()
+                ],
                 "目标为解析后的绝对路径"
             );
             assert_eq!(impact.file_count, 2);
@@ -1593,4 +1597,3 @@ async fn shell_output_spills_to_log_root_when_truncated() {
     let log_path = std::path::PathBuf::from(log_path_str);
     assert!(log_path.exists(), "溢出日志文件应已落盘");
 }
-

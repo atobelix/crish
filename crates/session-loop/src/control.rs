@@ -18,10 +18,9 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use conex_shared::time::now_iso_utc;
 use conex_types::message::AgentMessage;
 use serde::{Deserialize, Serialize};
-
-use crate::steering::now_iso_utc;
 
 /// 控制意图种类（对齐 TS RunControlKind）
 ///

@@ -40,6 +40,28 @@ pub fn render_cache() -> &'static RenderCache {
     &RENDER_CACHE
 }
 
+/// 高亮缓存（1C-8：与渲染缓存分离）。
+///
+/// 原先 highlight.rs 与 renderer.rs 共用同一 `RENDER_CACHE`（2048 条目 / 32MB），
+/// key 格式不同（高亮 `lang:code` vs 渲染原文）——高亮大量命中会驱逐渲染
+/// 缓存条目，反之亦然。分离为独立 moka 实例后两者独立淘汰，互不干扰，命中率提升。
+pub type HighlightCache = Cache<String, Arc<String>>;
+
+static HIGHLIGHT_CACHE: once_cell::sync::Lazy<HighlightCache> =
+    once_cell::sync::Lazy::new(|| {
+        Cache::builder()
+            .max_capacity(CACHE_MAX_ENTRIES)
+            .weigher(|k: &String, v: &Arc<String>| -> u32 {
+                estimate_size(k, v.as_ref())
+            })
+            .build()
+    });
+
+/// 获取全局高亮缓存（1C-8）。
+pub fn highlight_cache() -> &'static HighlightCache {
+    &HIGHLIGHT_CACHE
+}
+
 /// 判断单条目是否在字节预算内 (用于预检查,避免插入巨物)。
 pub fn entry_within_budget(key: &str, value: &str) -> bool {
     let bytes = (key.len() + value.len()) * 2;

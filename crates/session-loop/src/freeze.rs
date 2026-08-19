@@ -94,7 +94,10 @@ impl SessionFreezeRegistry {
         token: &str,
         frozen_seq: u64,
     ) -> Result<(), FreezeError> {
-        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = self.inner.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "freeze 注册表锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
         if let Some(existing) = map.get(session_id) {
             return Err(FreezeError::AlreadyFrozen {
                 token: existing.token.clone(),
@@ -114,7 +117,10 @@ impl SessionFreezeRegistry {
     pub fn is_frozen(&self, session_id: &str) -> bool {
         self.inner
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "freeze 注册表锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .contains_key(session_id)
     }
 
@@ -122,7 +128,10 @@ impl SessionFreezeRegistry {
     pub fn frozen_seq(&self, session_id: &str) -> Option<u64> {
         self.inner
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "freeze 注册表锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .get(session_id)
             .map(|f| f.frozen_seq)
     }
@@ -139,7 +148,10 @@ impl SessionFreezeRegistry {
 
     /// 释放冻结（truncate 落库确认后；令牌校验防误释放）
     pub fn release(&self, session_id: &str, token: &str) -> Result<(), FreezeError> {
-        let mut map = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut map = self.inner.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "freeze 注册表锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
         match map.get(session_id) {
             None => Err(FreezeError::NotFrozen),
             Some(existing) if existing.token != token => Err(FreezeError::TokenMismatch),
@@ -229,14 +241,16 @@ mod tests {
     #[test]
     fn evacuation_event_classification() {
         use conex_types::events::{RunTerminalStatus, TimelineTruncateReason};
-        assert!(is_retraction_evacuation_event(&AgentEvent::TimelineTruncate {
-            session_id: "s1".into(),
-            run_id: "r1".into(),
-            boundary_seq: 42,
-            reason: TimelineTruncateReason::UserRequested,
-            target_message_id: "m1".into(),
-            timestamp: "2026-08-16T00:00:00Z".into(),
-        }));
+        assert!(is_retraction_evacuation_event(
+            &AgentEvent::TimelineTruncate {
+                session_id: "s1".into(),
+                run_id: "r1".into(),
+                boundary_seq: 42,
+                reason: TimelineTruncateReason::UserRequested,
+                target_message_id: "m1".into(),
+                timestamp: "2026-08-16T00:00:00Z".into(),
+            }
+        ));
         assert!(is_retraction_evacuation_event(&AgentEvent::RunTerminal {
             session_id: "s1".into(),
             run_id: "r1".into(),

@@ -43,6 +43,16 @@ pub const MAX_CONCURRENT_SUMMARY_TASKS: usize = 2;
 /// 防打爆 provider / 混用 RetryGuardSummarizer 内部互斥，00-plan 风险 9）
 static ACTIVE_SUMMARY_TASKS: AtomicUsize = AtomicUsize::new(0);
 
+/// 全局并发槽：任务结束、panic 或 abort（含未 poll 的 future 被 drop）时释放计数。
+/// 必须在 spawn 前创建并 move 进 future——abort 未起步的任务也能回滚。
+struct ActiveSummarySlot;
+
+impl Drop for ActiveSummarySlot {
+    fn drop(&mut self) {
+        ACTIVE_SUMMARY_TASKS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 /// 测试隔离：清空全局活跃任务计数。协调器测试共享同一进程级 static
 /// 计数（并行测试会互扰——任务完成前的 runtime shutdown 使 fetch_sub
 /// 不执行造成泄漏），测试以「全局串行锁 + 开头 reset」保证隔离。
@@ -97,7 +107,10 @@ impl SessionSummaryCoordinator {
         *self
             .background_sink
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) = sink;
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary background_sink 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            }) = sink;
     }
 
     /// 会话 id（会话元数据）
@@ -109,7 +122,10 @@ impl SessionSummaryCoordinator {
     pub fn last_outcome(&self) -> Option<SummaryDispatchOutcome> {
         self.last_outcome
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary last_outcome 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .clone()
     }
 
@@ -117,14 +133,20 @@ impl SessionSummaryCoordinator {
     pub fn config(&self) -> SummaryDispatchConfig {
         self.config
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary config 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .clone()
     }
 
     /// 更新触发配置（注册表 get_or_create 时调用；T-44 配置面）。
     /// 存活任务使用触发时的快照配置，不受更新影响。
     pub fn set_config(&self, config: SummaryDispatchConfig) {
-        *self.config.lock().unwrap_or_else(|e| e.into_inner()) = config;
+        *self.config.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "summary config 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        }) = config;
     }
 
     /// 会话级单飞触发：存活任务存在 → 忽略新触发（返回 false，跨 run
@@ -143,9 +165,13 @@ impl SessionSummaryCoordinator {
         // 事件在锁块外发射，块 id 需在锁块外声明——原声明在锁块内导致
         // spawn 成功路径编译错误（作用域越界）；仅上移声明，不碰逻辑。
         let spawned_block_id = task.block_id.clone();
-        // 会话单飞：存活任务存在 → 去重（幂等触发语义）
-        {
-            let mut guard = self.task.lock().unwrap_or_else(|e| e.into_inner());
+        // 锁内只做单飞 / 全局上限 / 组装；tokio::spawn 必须在 task 锁外，
+        // 再短锁回写 JoinHandle（避免持锁进入 runtime，也避免丢句柄）。
+        let prepared = {
+            let guard = self.task.lock().unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary task 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            });
             if let Some(handle) = guard.as_ref() {
                 if !handle.is_finished() {
                     tracing::debug!(
@@ -175,7 +201,10 @@ impl SessionSummaryCoordinator {
             let background = self
                 .background_sink
                 .lock()
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(|e| {
+                    tracing::error!(target: "session_loop", "summary background_sink 锁中毒，按恢复模式继续：{e}");
+                    e.into_inner()
+                })
                 .clone();
             // 完成回调解析：per-trigger 优先；否则会话级默认回调。统一包
             // 一层「会话元数据记录器」——outcome 在回调链内先写入
@@ -196,11 +225,28 @@ impl SessionSummaryCoordinator {
                     }) as SummaryOutcomeCallback)
                 }
             };
-            let handle = tokio::spawn(async move {
-                run_summary_task(task, config, callback, background).await;
-                // 任务终态（committed / retired 皆释放全局计数）
-                ACTIVE_SUMMARY_TASKS.fetch_sub(1, Ordering::AcqRel);
+            (task, config, callback, background)
+        };
+
+        let (task, config, callback, background) = prepared;
+        // 槽与 fetch_add 配对：正常结束 / abort 都走 Drop，避免双减或泄漏
+        let slot = ActiveSummarySlot;
+        let handle = tokio::spawn(async move {
+            let _slot = slot;
+            run_summary_task(task, config, callback, background).await;
+        });
+        {
+            let mut guard = self.task.lock().unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary task 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
             });
+            if let Some(existing) = guard.as_ref() {
+                if !existing.is_finished() {
+                    // 并发已写入存活句柄：中止本次任务，避免覆盖丢 handle
+                    handle.abort();
+                    return false;
+                }
+            }
             *guard = Some(handle);
         }
         // EV-06：spawn 成功 → spawned（attempt=1；任务关联块 id 经
@@ -210,7 +256,10 @@ impl SessionSummaryCoordinator {
         let background_snapshot = self
             .background_sink
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary background_sink 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .clone();
         emit_summary_background(
             &background_snapshot,
@@ -226,7 +275,10 @@ impl SessionSummaryCoordinator {
     /// 写入最近完成结果（任务收尾经默认回调 / per-trigger 回调落库后，
     /// 会话元数据快照保持最终态供查询——测试断言 / 审计 / 前端挂账）
     fn record_outcome(&self, outcome: SummaryDispatchOutcome) {
-        *self.last_outcome.lock().unwrap_or_else(|e| e.into_inner()) = Some(outcome);
+        *self.last_outcome.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "summary last_outcome 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        }) = Some(outcome);
     }
 }
 
@@ -259,7 +311,10 @@ impl SessionSummaryCoordinatorRegistry {
         *self
             .background_sink
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) = sink;
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary background_sink 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            }) = sink;
     }
 
     /// 取得（或新建）会话协调器——幂等：同会话返回同一 Arc，跨 run
@@ -269,12 +324,18 @@ impl SessionSummaryCoordinatorRegistry {
         session_id: &str,
         config: SummaryDispatchConfig,
     ) -> Arc<SessionSummaryCoordinator> {
-        let mut sessions = self.sessions.lock().unwrap_or_else(|e| e.into_inner());
+        let mut sessions = self.sessions.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "session_loop", "summary sessions 注册表锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        });
         // EV-06：发射器模板透传（None = 不发射；装配后刷新已存在协调器）
         let background = self
             .background_sink
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary background_sink 锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .clone();
         if let Some(coordinator) = sessions.get(session_id) {
             coordinator.set_config(config);
@@ -296,7 +357,10 @@ impl SessionSummaryCoordinatorRegistry {
     pub fn coordinator(&self, session_id: &str) -> Option<Arc<SessionSummaryCoordinator>> {
         self.sessions
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary sessions 注册表锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .get(session_id)
             .cloned()
     }
@@ -305,7 +369,10 @@ impl SessionSummaryCoordinatorRegistry {
     pub fn len(&self) -> usize {
         self.sessions
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary sessions 注册表锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .len()
     }
 
@@ -318,7 +385,10 @@ impl SessionSummaryCoordinatorRegistry {
     pub fn remove(&self, session_id: &str) -> Option<Arc<SessionSummaryCoordinator>> {
         self.sessions
             .lock()
-            .unwrap_or_else(|e| e.into_inner())
+            .unwrap_or_else(|e| {
+                tracing::error!(target: "session_loop", "summary sessions 注册表锁中毒，按恢复模式继续：{e}");
+                e.into_inner()
+            })
             .remove(session_id)
     }
 }

@@ -20,6 +20,10 @@
 
 #![allow(missing_docs)]
 
+/// **W6-A-S** Skeleton：A-BLK 抽样轨锚（包 ID / 诚实边界 / 场景表）。
+pub mod a_blk_skeleton;
+/// **W6-D-S** Skeleton：A-COL-01 子集轨锚（包 ID / 诚实边界 / 场景表）。
+pub mod a_col_skeleton;
 mod block_id;
 mod events;
 /// W1-F / A-COL-01：双 DocSession in-process 互推 harness（pub 可测试）。
@@ -33,11 +37,17 @@ pub mod structure_codec;
 /// 叶子文本引擎：yrs + 热集/冷藏（**非** `pub mod`，A-INV-05）。
 mod text_engine;
 mod tx;
-/// **W6-A-S** Skeleton：A-BLK 抽样轨锚（包 ID / 诚实边界 / 场景表）。
-pub mod a_blk_skeleton;
-/// **W6-D-S** Skeleton：A-COL-01 子集轨锚（包 ID / 诚实边界 / 场景表）。
-pub mod a_col_skeleton;
 
+/// W6-A-S 包锚 re-export（调度 / 集成测可 `use conex_doc_collab::W6_A_S_PACKAGE_ID`）。
+pub use a_blk_skeleton::{
+    W6_A_S_A_BLK_FAMILY, W6_A_S_A_BLK_SCENARIOS, W6_A_S_NOT_CLOSING, W6_A_S_PACKAGE_ID,
+    W6_A_S_TRACK,
+};
+/// W6-D-S 包锚 re-export（调度 / 集成测可 `use conex_doc_collab::W6_D_S_PACKAGE_ID`）。
+pub use a_col_skeleton::{
+    W6_D_S_A_COL_01_SCENARIOS, W6_D_S_A_COL_SUBSET, W6_D_S_NOT_CLOSING, W6_D_S_PACKAGE_ID,
+    W6_D_S_TRACK,
+};
 pub use block_id::{block_id_from_comment, block_id_to_comment, BlockId};
 pub use events::{BlockUpsert, DocEvent, ProjectionDiff};
 pub use harness::{DualSessionHarness, PeerSide, SimplifiedEncodedOps};
@@ -54,16 +64,6 @@ pub use session::{
 /// H1 / A-MEM-01：默认热集上界（活动 YText 实例数）；见 `plans/acceptance/perf-baseline.md`。
 pub use text_engine::DEFAULT_MAX_HOT;
 pub use tx::{TxGuard, TxId};
-/// W6-A-S 包锚 re-export（调度 / 集成测可 `use conex_doc_collab::W6_A_S_PACKAGE_ID`）。
-pub use a_blk_skeleton::{
-    W6_A_S_A_BLK_FAMILY, W6_A_S_A_BLK_SCENARIOS, W6_A_S_NOT_CLOSING, W6_A_S_PACKAGE_ID,
-    W6_A_S_TRACK,
-};
-/// W6-D-S 包锚 re-export（调度 / 集成测可 `use conex_doc_collab::W6_D_S_PACKAGE_ID`）。
-pub use a_col_skeleton::{
-    W6_D_S_A_COL_01_SCENARIOS, W6_D_S_A_COL_SUBSET, W6_D_S_NOT_CLOSING, W6_D_S_PACKAGE_ID,
-    W6_D_S_TRACK,
-};
 
 /// A-INV-09 文档锚点（测试与门禁引用此模块路径）。
 pub mod a_inv_09 {

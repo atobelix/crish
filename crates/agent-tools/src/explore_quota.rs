@@ -25,10 +25,11 @@
 
 use crate::context::{ExploreDocsQuotaContext, ToolContext};
 use crate::definition::ToolError;
+use crate::poison::POISON_RECOVERIES;
 use crate::tools::subagent::{SubagentCapabilityMode, SubagentRole};
 use conex_types::error::codes;
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 /// 配额键：可配上限（默认 [DEFAULT_EXPLORE_DOCS_QUOTA]）
@@ -127,18 +128,6 @@ pub trait ExploreDocsQuotaStore: Send + Sync + std::fmt::Debug {
     /// 释放一份配额（reserve 后写盘失败的补偿，防止配额泄漏）。
     /// best-effort：实现方可忽略；缺省为空实现。
     fn release(&self, _session_id: &str, _run_id: &str) {}
-}
-
-/// B5 毒丸恢复计数原语：`InMemoryExploreDocsQuotaStore.inner` 锁中毒恢复
-/// 累计次数（只在毒化分支 `fetch_add`，正常路径零开销；供本 crate 毒化测
-/// 断言 + S3 埋点消费）
-static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
-
-/// 锁中毒恢复累计计数（B5：毒丸恢复观测化；当前消费者 = 本 crate 毒化测，
-/// S3 埋点消费为后续切片，届时移除 allow）
-#[allow(dead_code)]
-pub(crate) fn poison_recovery_count() -> u64 {
-    POISON_RECOVERIES.load(Ordering::Relaxed)
 }
 
 /// 内存版存储（测试 / 未接线兜底：进程内计数，跨进程重启不恢复——
@@ -441,6 +430,7 @@ mod tests {
 
     use super::*;
     use crate::context::{create_mock_tool_context, ToolContext};
+    use crate::poison::{poison_recovery_count, poison_test_guard};
     use crate::tools::subagent::SubagentState;
     use conex_test_utils::TempWorkspace;
 
@@ -927,6 +917,7 @@ mod tests {
     /// tracing::error 日志、毒化恢复计数 +1
     #[test]
     fn poisoned_inner_lock_recovers_with_log_and_count() {
+        let _serial = poison_test_guard();
         let store = InMemoryExploreDocsQuotaStore::new();
         crate::test_support::poison_std_lock(&store.inner);
         let before = poison_recovery_count();

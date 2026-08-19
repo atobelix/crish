@@ -557,7 +557,8 @@ impl RecoveryCoordinator {
             created_at_ms: now_ms() as u64,
         };
         let payload = fork_node_payload(&record, &ctx.task);
-        {
+        // fork 与读路径同一次持锁：消除 fork 后、读路径前的 TOCTOU
+        let path_json = {
             let mut tree = self.tree.lock().map_err(|e| RecoveryError::InvalidState {
                 message: format!("会话树锁中毒：{e}"),
             })?;
@@ -565,12 +566,7 @@ impl RecoveryCoordinator {
                 .map_err(|e| RecoveryError::InvalidState {
                     message: format!("会话树 fork 失败：{e}"),
                 })?;
-        }
-        // 工作流路径（根 → 新叶子）落 subagent_path_json
-        let path_json = {
-            let tree = self.tree.lock().map_err(|e| RecoveryError::InvalidState {
-                message: format!("会话树锁中毒：{e}"),
-            })?;
+            // 工作流路径（根 → 新叶子）落 subagent_path_json
             let path = tree.read_branch_path(Some(&new_leaf_id)).map_err(|e| {
                 RecoveryError::InvalidState {
                     message: format!("工作流路径读取失败：{e}"),

@@ -20,19 +20,10 @@ use conex_workspace_store::{
     ImportMirrorOpts, ImportMirrorResult, MirrorDriftReport, QueryBlocksParams, ThreeWayStrategy,
 };
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::Ordering;
 
+use crate::poison::POISON_RECOVERIES;
 use crate::store_backend::{map_store_err, SlowPathProbe, StoreNoteBackend};
-
-/// 毒丸恢复计数（B1-1 观测化：本文件 sessions 索引锁 / per-doc 锁中毒恢复次数；
-/// 对齐 registry.rs「tracing::error! 成对 + 计数」样板，零新依赖）
-static POISON_RECOVERIES: AtomicU64 = AtomicU64::new(0);
-
-/// 毒丸恢复计数读取（毒化测断言用；S3 埋点消费面就绪后解除 cfg(test)）
-#[cfg(test)]
-pub(crate) fn poison_recovery_count() -> u64 {
-    POISON_RECOVERIES.load(Ordering::Relaxed)
-}
 
 impl StoreNoteBackend {
     /// 同步版即时 S（测试 / 进程内）；语义同 [`agent_tools::note_backend::NoteBackend::get_md`]。

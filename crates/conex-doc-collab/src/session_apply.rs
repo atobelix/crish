@@ -90,8 +90,9 @@ impl DocSession {
         // 预校验（结构 + 文本偏移模拟）：失败则整批不改树/不改文本（A-INV-09a）
         self.validate_batch(ops)?;
 
-        // P-H2：apply 前可恢复快照（默认主路径；与两阶段 prepare 等价「失败见旧态」）
-        let pre = self.capture_memory_snapshot();
+        // P-H2：只快照本次 apply 涉及块（3-5 增量；未涉及块 COW 保持）
+        let involved = self.text_ids_for_ops(ops);
+        let pre = self.capture_memory_snapshot(&involved);
         match self.apply_after_validate(origin, ops, tx_id) {
             Ok(event) => {
                 // W1-U：仅本地 User/Agent 入栈；失败路径不入栈

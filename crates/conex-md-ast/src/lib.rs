@@ -14,7 +14,6 @@
 //! - [`apply_md_fragment`] → [`ApplyReport`]（ops + lossy + new_ids；W2-B：lossy 可观测；失败零半树）
 //! - [`strip_conex_id_comments`]（pure-gfm 辅助；mode 面优先用 [`serialize_md`]）
 //! - [`encode_block_id_line`] / [`decode_block_id_line`]
-//! - 退役：[`parse_document_handwritten`]（非默认）
 //!
 //! # 诚实边界（W2-A / W2-B / W2-A 扩表 / gfm-core 加深 / W2-A 续加深 / A-MD 诚实加深）
 //! - **已接线** markdown-rs 为 GFM P 主路径（W2-A）
@@ -68,6 +67,9 @@ pub enum MdError {
     /// `parent` 不在目标树中。
     #[error("unknown parent: {0}")]
     UnknownParent(String),
+    /// 防御性不变量：Op 列表内 Insert ID 重复（parse 已保证唯一；此处兜底）。
+    #[error("duplicate op id: {0}")]
+    DuplicateOpId(String),
 }
 
 /// 单条有损/诊断项（pure-gfm 剥离、缺 ID、未知结构等）。

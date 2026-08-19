@@ -17,6 +17,7 @@ pub(crate) mod debug;
 pub(crate) mod eval;
 pub(crate) mod interact;
 pub(crate) mod navigate;
+pub(crate) mod navigate_common;
 pub(crate) mod sense;
 
 use crate::error;

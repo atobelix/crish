@@ -1,16 +1,16 @@
 /**
- * 电脑操作（Computer Use）会话 invoke 桥（二期 P2，S5 遗留⑩）。
+ * 电脑操作（Computer Use）会话 invoke 桥。
  *
- * 契约（与引擎接线约定，定死；接线前 Rust 侧未注册 → invokeTyped 返回
- * missing，上层降级为「未接线」提示 + 开关状态本地化）：
+ * 契约（与引擎已接线，三命令已登记于 Rust 侧，与 `commandManifest.ts` / `main.rs` 一致）：
  *   invoke('computer_session_enable')  -> { enabled: true }
  *   invoke('computer_session_disable') -> { enabled: false }
  *   invoke('computer_status')          -> { enabled: boolean, mode: 'idle'|'browser'|'desktop', reason?: string }
  *   事件 'computer://state-changed' payload { enabled?, mode?, reason? }
  *
- * 接线点登记（06 文档 §8 遗留项 9/10 + 04 §3 前端接线面）：
- * - Rust 侧 Tauri 命令未注册（agent-workbench 无 computer_* 命令）——
- *   invokeTyped 的 missing 语义即「引擎未接线」，上层本地化降级；
+ * 接线点（已登记，三命令与 Rust 侧 `command_manifest.rs` / `main.rs` 同步）：
+ * - Rust 侧 Tauri 命令已登记（agent-workbench 已注册 computer_session_enable /
+ *   computer_session_disable / computer_status 三命令），正常路径走引擎落盘与查询；
+ *   missing 仅作兜底（非 Tauri 环境 / 旧版本兼容）；
  * - computer_session_enable/disable：落盘 session_meta
  *   computer_use_enabled（04 §4.1，持久化范式对齐 conex-types timer.rs:43
  *   session_meta 键约定；开关范式对齐 BrowserToolsConfig.mcp_attach_allowed）；
@@ -20,10 +20,8 @@
  * - 事件 'computer://state-changed'：由 ActivationGate 状态广播接线
  *   （04 §2 S3 项 4：变更 → 事件总线 → 面板指示条）。
  *
- * 错误处理对齐 tauriInvoke 三态：missing = 引擎未接线（非 Tauri / 命令
- * 未注册），error = 命令报错（携带 kind/message）。命令面未接线期间不
- * 重复经 transport 清单校验，直接走 tauriInvoke（对齐 browserSessionApi
- * 既有策略）。
+ * 错误处理对齐 tauriInvoke 三态：error = 命令报错（携带 kind/message）；
+ * missing 为兜底（正常已接线不应命中，非 Tauri 环境才降级）。
  */
 
 import { invokeTyped } from './tauriInvoke';
@@ -66,7 +64,7 @@ export function disableComputerSession(): Promise<
   return invokeTyped<ComputerSessionResult>(COMPUTER_SESSION_DISABLE_CMD);
 }
 
-/** 查询电脑操作会话状态（挂载恢复/诊断用；未接线 → missing）。 */
+/** 查询电脑操作会话状态（挂载恢复/诊断用；兜底 missing 仅非 Tauri 环境）。 */
 export function fetchComputerStatus(): Promise<
   InvokeTypedResult<ComputerStatusResult>
 > {

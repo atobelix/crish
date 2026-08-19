@@ -34,7 +34,7 @@
 //! - 冲突规避：两族工具共享同一实例/同一 DOM，但快照索引不互通（MCP 用自家
 //!   uid、自研用 snapshotVersion 绑定索引），模型侧由命名空间区分。
 //!
-//! ## 工具清单（MVP 子集 23 个，R-13 §8.2 第 7 项）
+//! ## 工具清单（MVP 子集 24 个，R-13 §8.2 第 7 项）
 //! - 导航 8（dangerous=false）：navigate/back/forward/reload/list_tabs/new_tab/
 //!   close_tab/switch_tab；
 //! - 感知 5（dangerous=false）：snapshot/screenshot/wait_for/get_url/get_title；
@@ -133,7 +133,7 @@ pub struct BrowserToolsConfig {
     pub mcp_attach_allowed: bool,
 }
 
-/// 注册全部 23 个 browser_* 工具（后置注册函数，**不进入** agent-tools 的
+/// 注册全部 24 个 browser_* 工具（后置注册函数，**不进入** agent-tools 的
 /// `register_builtin_tools`）。
 ///
 /// 幂等语义（17 §1.4）：同名工具已注册（MCP/引擎预注册）时跳过，不报冲突；

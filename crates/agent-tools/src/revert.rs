@@ -210,6 +210,12 @@ impl RevertAssessor for SemanticRevertAssessor {
                 ref_age_seconds: None,
             },
             _ => RevertArea {
+                // 面积未知：reset --hard / checkout 旧 ref / revert 回退等形态无法从
+                // 命令文本推断文件数与行数，按静态正则兜底返回全 None。
+                // C3 门禁当前不作为唯一防线（unknown_area_triggers 默认 false = 零打扰）；
+                // 真实面积需 `git diff --stat <ref>` 解析文件数/行数 +
+                // `git log -1 --format=%ct <ref>` 查询 ref 年代，后续轮接线实现。
+                // TODO(后续轮): RevertAssessor 真实 git 命令接线，补齐此处面积。
                 file_count: None,
                 line_count: None,
                 cross_directory: false,

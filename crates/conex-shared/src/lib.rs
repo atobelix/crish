@@ -2,7 +2,7 @@
 //!
 //! 本 crate 为叶子纯抽象面：帧源（[`frame::FrameSource`]/[`frame::FrameStream`]）、
 //! 输入后端（[`input::InputBackend`]）、动作目标门禁（[`gate::ActionTargetGate`]）
-//! 三组 trait 与共享类型。
+//! 三组 trait 与共享类型；另含 [`time`]（UTC ISO8601 / civil-from-days，纯 std）。
 //!
 //! 约束（05 文档 §3/§7）：不携带 tokio 运行时、不携带设备代码；
 //! 运行时与设备实现由消费侧（conex-browser / conex-computer）各自提供，
@@ -20,6 +20,7 @@
 pub mod frame;
 pub mod gate;
 pub mod input;
+pub mod time;
 
 pub use frame::{
     Frame, FrameFormat, FramePolicy, FrameRate, FrameSource, FrameSourceError, FrameSourceStatus,
@@ -30,6 +31,7 @@ pub use input::{
     ClickCount, InputBackend, InputBackendError, KeyName, MouseButton, PhysicalPoint,
     ScrollDirection,
 };
+pub use time::{civil_from_days, now_iso_utc, unix_millis};
 
 #[cfg(test)]
 pub(crate) mod test_support;

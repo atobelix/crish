@@ -126,6 +126,76 @@ impl LocalDb {
         Ok(events)
     }
 
+    /// 会话内最大已落库 sequence（1C-1：恢复路径 SQL MAX 下推，避免全量
+    /// 加载事件再内存 `iter().max()`）。返回 0 表示该会话无事件。
+    ///
+    /// SQL 为 `SELECT COALESCE(MAX(sequence), 0) FROM events WHERE
+    /// session_id = ?1`——与 [Self::reserve_sequence] 的隐式预热口径一致
+    ///（取号路径的 `COALESCE(MAX(sequence),0)+1` 同源）。
+    pub fn max_sequence(&self, session_id: &str) -> Result<i64, DbFailure> {
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+        conn.query_row(
+            "SELECT COALESCE(MAX(sequence), 0) FROM events WHERE session_id = ?1",
+            rusqlite::params![session_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|e| self.latch_error("max_sequence", e))
+    }
+
+    /// 按 run 归属 + event_type 过滤查询会话内事件（1C-2：SQL 下推
+    /// event_type 过滤，替代 `query_events_by_run` 全量返回后内存
+    /// `find`）。SQL 为 `WHERE session_id = ?1 AND run_id = ?2 AND
+    /// sequence > ?3 AND event_type = ?4 ORDER BY sequence ASC LIMIT ?5`。
+    ///
+    /// `after_sequence` 开区间（> after）；`limit` 直下推；run_id 为 NULL
+    /// 的会话域事件恒不命中（SQL NULL 比较语义）。
+    pub fn query_events_by_type(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        event_type: &str,
+        after_sequence: i64,
+        limit: Option<i64>,
+    ) -> Result<Vec<StoredEvent>, DbFailure> {
+        let conn = self.conn.lock().map_err(|e| DbFailure {
+            message: format!("lock poisoned: {e}"),
+            kind: DbFailureKind::Lock,
+        })?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT session_id, sequence, event_type, payload, run_id, created_at
+                 FROM events WHERE session_id = ?1 AND run_id = ?2 AND sequence > ?3
+                 AND event_type = ?4
+                 ORDER BY sequence ASC LIMIT ?5",
+            )
+            .map_err(|e| self.latch_error("query_events_by_type_prepare", e))?;
+
+        let limit_value = limit.unwrap_or(i64::MAX);
+        let events = stmt
+            .query_map(
+                rusqlite::params![session_id, run_id, after_sequence, event_type, limit_value],
+                |row| {
+                    Ok(StoredEvent {
+                        session_id: row.get(0)?,
+                        sequence: row.get(1)?,
+                        event_type: row.get(2)?,
+                        payload: row.get(3)?,
+                        run_id: row.get(4)?,
+                        created_at: row.get(5)?,
+                    })
+                },
+            )
+            .map_err(|e| self.latch_error("query_events_by_type_map", e))?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| self.latch_error("query_events_by_type_collect", e))?;
+
+        Ok(events)
+    }
+
     /// 会话级序列号原子取号（T08.12 Q23：store 端自增；首次取号按库内
     /// max(sequence)+1 对齐——首个待发号即 max+1，取号后计数器 +1）。
     pub fn reserve_sequence(&self, session_id: &str) -> Result<i64, DbFailure> {

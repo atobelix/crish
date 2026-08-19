@@ -156,16 +156,30 @@ impl ParallelExecObs {
         self.active.fetch_sub(1, Ordering::SeqCst);
     }
 
-    /// 当前活跃并行数
+    /// 当前活跃并行数。
+    ///
+    /// 当前消费方：`tool_exec_tests.rs` 三测断言批后 `active == 0`
+    ///（证明 permit/计数无泄漏）。生产路径只 `enter`/`leave`，不读本方法。
+    ///
+    /// 接线计划：生产埋点若要暴露瞬时并行度，经本方法读值写入 tracing
+    /// 字段（与 `peak` 同源，禁止另开计数器）；接入点同
+    /// `ToolExecutor::concurrency_obs`。
+    /// 删除条件：测试不再断言 `active` 且生产无读取方时，下轮删本方法
+    /// 与 `#[allow]`。
     #[allow(dead_code)]
     pub(crate) fn active(&self) -> usize {
         self.active.load(Ordering::SeqCst)
     }
 
-    /// 并发峰值（自创建以来观测到的最大活跃数）
+    /// 并发峰值（自创建以来观测到的最大活跃数）。
     ///
-    /// 当前消费者 = 本 crate 并行批测断言（并发峰值 ≤ 上限）；S3 埋点
-    /// 消费为后续切片，届时移除 allow
+    /// 当前消费方：`tool_exec_tests.rs` 三测断言峰值 ∈ [2, 上限] 或恰为 1
+    ///（`max_parallel=1` 串行化）。生产路径只 `enter` 内 `fetch_max`，不读本方法。
+    ///
+    /// 接线计划：生产埋点若要对齐 B5 做批级峰值观测，经本方法读值；
+    /// 接入点优先 `BatchRunner::collect_group_endings` 收口，禁止另开 Atomic。
+    /// 删除条件：测试不再断言 `peak` 且生产无读取方时，下轮删本方法
+    /// 与 `#[allow]`。
     #[allow(dead_code)]
     pub(crate) fn peak(&self) -> usize {
         self.peak.load(Ordering::SeqCst)

@@ -32,11 +32,11 @@ pub fn exclusive(reason: impl Into<String>) -> ToolError {
     ToolError::new(codes::TOOL_SESSION_EXCLUSIVE, reason)
 }
 
-/// 急停 / 取消（06 §5 `tool.computer.cancelled`；不计重试额度）。
+/// 中止 / 取消（06 §5 `tool.computer.cancelled`；会话级中止令牌触发，不计重试额度）。
 pub fn cancelled() -> ToolError {
     ToolError::new(
         codes::TOOL_COMPUTER_CANCELLED,
-        "已急停（AI 操作中止）",
+        "已停止（AI 操作中止）",
     )
 }
 
@@ -56,8 +56,10 @@ pub fn elevated_window(message: impl Into<String>) -> ToolError {
     ToolError::new(codes::TOOL_COMPUTER_ELEVATED_WINDOW, message)
 }
 
-/// 审批拒绝（守卫⑤ 收口；`approval.rejected` 为 conex-types 既有码，
-/// 浏览器线 ApprovalDenied 同源，零注入语义）。
+/// 审批拒绝（`approval.rejected` 为 conex-types 既有码，
+/// 浏览器线 ApprovalDenied 同源，零注入语义；维度 1 收敛后电脑操作审批门
+/// 已删除，本函数保留供其他消费方复用）。
+#[allow(dead_code)]
 pub fn approval_rejected(reason: impl Into<String>) -> ToolError {
     ToolError::new(shared_codes::APPROVAL_REJECTED, reason)
 }

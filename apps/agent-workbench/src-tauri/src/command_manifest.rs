@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（125 条 = 全部 registered=true 实装命令；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（124 条 = 全部 registered=true 实装命令；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：workbench_open_workspace /
@@ -68,7 +68,7 @@ const fn entry(
 /// F-03（DM-07）：core_read_run_events 恢复激活；R1 撤回 core_session_retract 登记
 ///（统一输入流收敛战役）后总数 125（注册面 120 → 121）；R7 收口 GUI fs 删除命令
 /// 幽灵退役（R6-D5 后零消费）后总数 124（注册面 121 → 120）；
-/// note_document_recent 追加后 124 → 125（computer_estop 仍在 rust 面；前端已退役 estop）。
+/// computer_estop 退役后 123；`note_document_recent` 追加后 124。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -89,7 +89,12 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_list_file_openers", "workbench", "gui", true),
         // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（B01/B02 查询面）
         entry("workbench_list_background_tasks", "workbench", "gui", true),
-        entry("workbench_get_background_task_output", "workbench", "gui", true),
+        entry(
+            "workbench_get_background_task_output",
+            "workbench",
+            "gui",
+            true,
+        ),
         entry("workbench_cancel_background_task", "workbench", "gui", true),
         // F3（T-AB-19 顺手接线）：send_input 命令面补齐（前端
         // sendBackgroundTaskInput 已接线等待，T-AB-20 操作面）
@@ -215,11 +220,10 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("browser_list_bookmarks", "browser", "engine", true),
         entry("browser_list_history", "browser", "engine", true),
         // ── 电脑操作会话命令（06 遗留⑨：computer_session_enable/disable、
-        //    computer_estop、computer_status；代理到 ComputerSlot，
+        //    computer_status；代理到 ComputerSlot，
         //    状态事件 computer://state-changed）──
         entry("computer_session_enable", "computer", "engine", true),
         entry("computer_session_disable", "computer", "engine", true),
-        entry("computer_estop", "computer", "engine", true),
         entry("computer_status", "computer", "engine", true),
         // ── Round7+：笔记双引擎 IPC（noteApi / noteHydrateIpc / noteMirrorIpc）──
         entry("note_document_apply_md", "note", "engine", true),
@@ -280,7 +284,7 @@ mod tests {
     /// F-03（DM-07）core_read_run_events 恢复激活（注册面 119 → 120）；R1 撤回
     /// core_session_retract 登记（统一输入流收敛战役）后总数 124 → 125（注册面 120 → 121）；
     /// R7 收口 GUI fs 删除命令幽灵退役（R6-D5 后零消费）后总数 125 → 124（注册面 121 → 120）；
-    /// note_document_recent 追加后 124 → 125（computer_estop 仍在 rust 面）。
+    /// computer_estop 退役后 123；note_document_recent 追加后 124。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -291,12 +295,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 125,
-            "总数 125（124 + note_document_recent；estop 仍在 rust）"
+            total, 124,
+            "总数 124（123 + note_document_recent；与前端同步）"
         );
         assert_eq!(
-            registered, 125,
-            "注册面 125（全部为 registered=true 实装命令）"
+            registered, 124,
+            "注册面 124（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -418,11 +422,11 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 125);
+        assert_eq!(manifest.commands.len(), 124);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 
-    /// Round7+：笔记 IPC 十命令登记且 registered=true（含 hydrate / mirror / apply_ops / undo_text / redo_text）。
+    /// Round7+：笔记 IPC 十命令登记且 registered=true（含 hydrate / recent / mirror / apply_ops / undo_text / redo_text）。
     #[test]
     fn manifest_registers_note_commands() {
         let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
@@ -498,4 +502,3 @@ mod tests {
         );
     }
 }
-

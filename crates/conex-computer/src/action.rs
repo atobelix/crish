@@ -477,10 +477,9 @@ pub mod inject {
         steps
     }
 
-    use crate::security::EmergencyStop;
     use std::sync::Arc;
 
-    /// 安全释放所有按键与鼠标按键（急停中断时清理残留按下状态）
+    /// 安全释放所有按键与鼠标按键（停止中断时清理残留按下状态）
     pub fn release_all_keys_and_buttons(enigo: &mut Enigo) {
         let keys = [
             enigo::Key::Control,
@@ -501,22 +500,20 @@ pub mod inject {
         }
     }
 
-    /// 执行步骤序列（持锁逐条注入；每一步及 5ms 切片休眠原子轮询 EmergencyStop，<=5ms 响应急停）
+    /// 执行步骤序列（持锁逐条注入；每一步及 5ms 切片休眠原子轮询停止查询，<=5ms 响应停止）
     #[allow(unsafe_code)]
     pub fn run_steps_guarded(
         enigo: &mut Enigo,
         steps: &[InjectStep],
-        stop: Option<&Arc<EmergencyStop>>,
+        should_abort: impl Fn() -> bool,
     ) -> Result<(), InjectError> {
         for (idx, step) in steps.iter().enumerate() {
-            if let Some(s) = stop {
-                if s.stopped() {
-                    release_all_keys_and_buttons(enigo);
-                    return Err(format!(
-                        "急停触发，注入已中止（已完成 {idx}/{} 步）",
-                        steps.len()
-                    ));
-                }
+            if should_abort() {
+                release_all_keys_and_buttons(enigo);
+                return Err(format!(
+                    "停止触发，注入已中止（已完成 {idx}/{} 步）",
+                    steps.len()
+                ));
             }
             match step {
                 InjectStep::MoveTo { x, y } => {
@@ -557,14 +554,12 @@ pub mod inject {
                 InjectStep::DelayMs { ms } => {
                     let mut remaining = *ms;
                     while remaining > 0 {
-                        if let Some(s) = stop {
-                            if s.stopped() {
-                                release_all_keys_and_buttons(enigo);
-                                return Err(format!(
-                                    "急停触发，注入已中止（已完成 {idx}/{} 步）",
-                                    steps.len()
-                                ));
-                            }
+                        if should_abort() {
+                            release_all_keys_and_buttons(enigo);
+                            return Err(format!(
+                                "停止触发，注入已中止（已完成 {idx}/{} 步）",
+                                steps.len()
+                            ));
                         }
                         let slice = remaining.min(5);
                         thread::sleep(Duration::from_millis(slice));
@@ -576,18 +571,16 @@ pub mod inject {
         Ok(())
     }
 
-    /// 向后兼容执行器包装
-    pub fn run_steps(enigo: &mut Enigo, steps: &[InjectStep]) -> Result<(), InjectError> {
-        run_steps_guarded(enigo, steps, None)
-    }
-
-    /// 注入后端:enigo 句柄(`Mutex` 内可变,05 §4.4)+ 键名注册表解析 + 5ms 急停原子轮询。
+    /// 注入后端:enigo 句柄(`Mutex` 内可变,05 §4.4)+ 键名注册表解析。
     ///
     /// 内可变改造后全部方法 `&self`,可经 `Arc<dyn InputBackend>` 共享调用;
     /// 注入为同步原语,std 互斥即可(05 §4.4)。序列级原子性由会话层单消费者保证。
+    /// 中止查询经 `ComputerSession::dispatch` 注入（`Option<Arc<dyn Fn()->bool+Send+Sync>>`），
+    /// 注入循环内 5ms 切片轮询，收敛到单一中止路径。
     pub struct OsInputBackend {
         enigo: Mutex<Enigo>,
-        stop: Mutex<Option<Arc<EmergencyStop>>>,
+        /// 注入式中止查询（None = 未注入，不中止；Some = 外部闭包，通常指向 run 级中止信号）
+        abort_check: Mutex<Option<Arc<dyn Fn() -> bool + Send + Sync>>>,
     }
 
     /// 功能键编号 → enigo 键码(F1-F24,enigo 为独立变体)
@@ -652,24 +645,22 @@ pub mod inject {
             let enigo = Enigo::new(&settings).map_err(|e| format!("enigo 初始化失败: {e:?}"))?;
             Ok(Self {
                 enigo: Mutex::new(enigo),
-                stop: Mutex::new(None),
+                abort_check: Mutex::new(None),
             })
         }
 
-        /// 绑定急停标志
-        pub fn with_stop(self, stop: Arc<EmergencyStop>) -> Self {
-            *self.stop.lock().unwrap_or_else(|e| e.into_inner()) = Some(stop);
-            self
+        /// 注入中止查询（由 ComputerSession::dispatch 构造时传入，通常为 `|| abort_token.abort()` 的闭包）
+        pub fn set_abort_checker(&self, checker: Option<Arc<dyn Fn() -> bool + Send + Sync>>) {
+            *self.abort_check.lock().unwrap_or_else(|e| e.into_inner()) = checker;
         }
 
-        /// 动态设置/更新急停标志
-        pub fn set_stop(&self, stop: Option<Arc<EmergencyStop>>) {
-            *self.stop.lock().unwrap_or_else(|e| e.into_inner()) = stop;
-        }
-
-        /// 获取当前急停标志引用克隆
-        fn stop_ref(&self) -> Option<Arc<EmergencyStop>> {
-            self.stop.lock().unwrap_or_else(|e| e.into_inner()).clone()
+        /// 当前是否已请求中止（委托给注入的查询；未注入则为 false，单一路径）
+        fn aborted(&self) -> bool {
+            self.abort_check
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_ref()
+                .is_some_and(|f| f())
         }
 
         /// 键名 → enigo 键码
@@ -770,8 +761,8 @@ pub mod inject {
         fn key_hold_inner(&self, keys: &[String], hold_ms: Option<u32>) -> Result<(), InjectError> {
             let steps = build_key_steps(keys, hold_ms);
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-            let stop = self.stop_ref();
-            run_steps_guarded(&mut enigo, &steps, stop.as_ref())
+            let should_abort = || self.aborted();
+            run_steps_guarded(&mut enigo, &steps, should_abort)
         }
 
         /// 组合键注入(dispatch 路径;hold_ms = None)
@@ -779,16 +770,13 @@ pub mod inject {
             self.key_hold_inner(keys, None)
         }
 
-        /// 按住指定键 duration 秒后松开(上限 100s 已在校验层约束，5ms 切片原子急停轮询)
+        /// 按住指定键 duration 秒后松开(上限 100s 已在校验层约束，5ms 切片原子停止轮询)
         pub fn hold_key(&self, name: &str, duration_secs: f32) -> Result<(), InjectError> {
             let key = Self::resolve(name).ok_or_else(|| format!("键名无法解析: {name}"))?;
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-            let stop = self.stop_ref();
-            if let Some(ref s) = stop {
-                if s.stopped() {
-                    release_all_keys_and_buttons(&mut enigo);
-                    return Err("急停触发，按键保持中止".to_string());
-                }
+            if self.aborted() {
+                release_all_keys_and_buttons(&mut enigo);
+                return Err("停止触发，按键保持中止".to_string());
             }
             enigo
                 .key(key, Direction::Press)
@@ -796,11 +784,9 @@ pub mod inject {
 
             let mut remaining_ms = (duration_secs * 1000.0) as u64;
             while remaining_ms > 0 {
-                if let Some(ref s) = stop {
-                    if s.stopped() {
-                        release_all_keys_and_buttons(&mut enigo);
-                        return Err("急停触发，按键保持中止".to_string());
-                    }
+                if self.aborted() {
+                    release_all_keys_and_buttons(&mut enigo);
+                    return Err("停止触发，按键保持中止".to_string());
                 }
                 let slice = remaining_ms.min(5);
                 thread::sleep(Duration::from_millis(slice));
@@ -814,27 +800,22 @@ pub mod inject {
         }
 
         /// 文本输入核心:按 50 字符分块,块间 12ms 节流(04 §2.3;Unicode 直送,
-        /// 不依赖 IME,37 报告 Gate-B 三应用 0 丢字实证；5ms 切片原子急停轮询)
+        /// 不依赖 IME,37 报告 Gate-B 三应用 0 丢字实证；5ms 切片原子停止轮询)
         fn type_text_inner(&self, text: &str) -> Result<(), InjectError> {
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-            let stop = self.stop_ref();
             for chunk in chunk_text(text, TYPING_GROUP_SIZE) {
-                if let Some(ref s) = stop {
-                    if s.stopped() {
-                        release_all_keys_and_buttons(&mut enigo);
-                        return Err("急停触发，文本输入中止".to_string());
-                    }
+                if self.aborted() {
+                    release_all_keys_and_buttons(&mut enigo);
+                    return Err("停止触发，文本输入中止".to_string());
                 }
                 enigo
                     .text(&chunk)
                     .map_err(|e| format!("文本注入失败: {e:?}"))?;
                 let mut remaining_ms = TYPING_DELAY_MS;
                 while remaining_ms > 0 {
-                    if let Some(ref s) = stop {
-                        if s.stopped() {
-                            release_all_keys_and_buttons(&mut enigo);
-                            return Err("急停触发，文本输入中止".to_string());
-                        }
+                    if self.aborted() {
+                        release_all_keys_and_buttons(&mut enigo);
+                        return Err("停止触发，文本输入中止".to_string());
                     }
                     let slice = remaining_ms.min(5);
                     thread::sleep(Duration::from_millis(slice));
@@ -870,8 +851,8 @@ pub mod inject {
             };
             let steps = build_click_steps(to_enigo_button(button), times, None, &[]);
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-            let stop = self.stop_ref();
-            run_steps_guarded(&mut enigo, &steps, stop.as_ref())
+            let should_abort = || self.aborted();
+            run_steps_guarded(&mut enigo, &steps, should_abort)
         }
 
         /// 按下/抬起分离原语
@@ -887,15 +868,12 @@ pub mod inject {
                 .map_err(|e| format!("鼠标按键失败: {e:?}"))
         }
 
-        /// 拖拽:起点按下 → 分步线性插值移动 → 终点抬起(04 §2.2 语义；5ms 切片原子急停轮询)
+        /// 拖拽:起点按下 → 分步线性插值移动 → 终点抬起(04 §2.2 语义；5ms 切片原子停止轮询)
         pub fn drag(&self, from: Point, to: Point) -> Result<(), InjectError> {
-            let stop = self.stop_ref();
-            if let Some(ref s) = stop {
-                if s.stopped() {
-                    let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-                    release_all_keys_and_buttons(&mut enigo);
-                    return Err("急停触发，拖拽中止".to_string());
-                }
+            if self.aborted() {
+                let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+                release_all_keys_and_buttons(&mut enigo);
+                return Err("停止触发，拖拽中止".to_string());
             }
             self.mouse_move(from)?;
             self.mouse_button(MouseButton::Left, true)?;
@@ -905,12 +883,10 @@ pub mod inject {
             let steps = (distance + DRAG_STEP_PX as i64 - 1) / DRAG_STEP_PX as i64;
             let steps = steps.max(1);
             for step in 1..=steps {
-                if let Some(ref s) = stop {
-                    if s.stopped() {
-                        let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-                        release_all_keys_and_buttons(&mut enigo);
-                        return Err("急停触发，拖拽中止".to_string());
-                    }
+                if self.aborted() {
+                    let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+                    release_all_keys_and_buttons(&mut enigo);
+                    return Err("停止触发，拖拽中止".to_string());
                 }
                 let t = step as f64 / steps as f64;
                 let x = from.x + (dx as f64 * t).round() as i32;
@@ -918,12 +894,10 @@ pub mod inject {
                 self.mouse_move(Point::new(x, y))?;
                 let mut remaining_ms = DRAG_STEP_DELAY_MS;
                 while remaining_ms > 0 {
-                    if let Some(ref s) = stop {
-                        if s.stopped() {
-                            let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-                            release_all_keys_and_buttons(&mut enigo);
-                            return Err("急停触发，拖拽中止".to_string());
-                        }
+                    if self.aborted() {
+                        let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
+                        release_all_keys_and_buttons(&mut enigo);
+                        return Err("停止触发，拖拽中止".to_string());
                     }
                     let slice = remaining_ms.min(5);
                     thread::sleep(Duration::from_millis(slice));
@@ -944,8 +918,8 @@ pub mod inject {
             };
             let steps = build_scroll_steps(dir, amount, None, &[]);
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-            let stop = self.stop_ref();
-            run_steps_guarded(&mut enigo, &steps, stop.as_ref())
+            let should_abort = || self.aborted();
+            run_steps_guarded(&mut enigo, &steps, should_abort)
         }
 
         /// 按住一组修饰键(click/scroll 带 modifiers 语义,dispatch 前置包裹面)
@@ -955,8 +929,8 @@ pub mod inject {
                 .map(|m| InjectStep::KeyDown { name: m.clone() })
                 .collect();
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-            let stop = self.stop_ref();
-            run_steps_guarded(&mut enigo, &steps, stop.as_ref())
+            let should_abort = || self.aborted();
+            run_steps_guarded(&mut enigo, &steps, should_abort)
         }
 
         /// 抬起一组修饰键(逆序)
@@ -967,8 +941,8 @@ pub mod inject {
                 .map(|m| InjectStep::KeyUp { name: m.clone() })
                 .collect();
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-            let stop = self.stop_ref();
-            run_steps_guarded(&mut enigo, &steps, stop.as_ref())
+            let should_abort = || self.aborted();
+            run_steps_guarded(&mut enigo, &steps, should_abort)
         }
 
         /// 当前光标物理坐标(GetCursorPos 直连,多显示器负坐标正确)
@@ -1001,7 +975,8 @@ pub mod inject {
     ///
     /// 与既有 `ComputerSession::dispatch` 派发路径并存:dispatch 走本地方法
     /// (坐标/修饰键由 dispatch 前置包裹,lib.rs),共享 trait 方法为 S6 新契约;
-    /// 两者共享 `build_*` 序列构建与 `run_steps` 执行器,注入语义一致。
+    /// 两者共享 `build_*` 序列构建与 `run_steps_guarded` 执行器(必须传入
+    /// abort 查询,无「不看停止」入口),注入语义一致。
     #[async_trait]
     impl InputBackend for OsInputBackend {
         async fn mouse_move(&self, p: SharedPoint) -> Result<(), InputBackendError> {
@@ -1023,7 +998,8 @@ pub mod inject {
             };
             let steps = build_click_steps(to_enigo_button_shared(btn), times, p, mods);
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-            run_steps(&mut enigo, &steps).map_err(InputBackendError::Failed)
+            let should_abort = || self.aborted();
+            run_steps_guarded(&mut enigo, &steps, should_abort).map_err(InputBackendError::Failed)
         }
 
         async fn button(
@@ -1056,7 +1032,8 @@ pub mod inject {
         ) -> Result<(), InputBackendError> {
             let steps = build_scroll_steps(dir, amount, p, mods);
             let mut enigo = self.enigo.lock().expect("注入后端锁损坏");
-            run_steps(&mut enigo, &steps).map_err(InputBackendError::Failed)
+            let should_abort = || self.aborted();
+            run_steps_guarded(&mut enigo, &steps, should_abort).map_err(InputBackendError::Failed)
         }
 
         async fn type_text(&self, text: &str) -> Result<(), InputBackendError> {
@@ -1348,6 +1325,59 @@ pub mod inject {
             assert_send_sync::<OsInputBackend>();
             fn assert_backend<T: InputBackend>() {}
             assert_backend::<OsInputBackend>();
+        }
+
+        /// 阻塞执行器:current-thread 运行时驱动 InputBackend 异步方法(测试专用)
+        fn block_on<F: std::future::Future>(fut: F) -> F::Output {
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("测试运行时构建失败")
+                .block_on(fut)
+        }
+
+        fn backend_with_abort_set() -> OsInputBackend {
+            let backend = OsInputBackend::new().expect("注入后端初始化失败");
+            backend.set_abort_checker(Some(Arc::new(|| true)));
+            backend
+        }
+
+        fn assert_aborted(err: InputBackendError) {
+            match err {
+                InputBackendError::Failed(msg) => {
+                    assert!(msg.contains("停止"), "中止错误应含停止语义，实得: {msg}");
+                }
+                other => panic!("预期 Failed(停止)，实得 {other:?}"),
+            }
+        }
+
+        #[test]
+        fn input_backend_click_aborts_when_flag_set() {
+            // abort 先置位:首步自查即中止,不执行 ButtonClick(无真实点击副作用)
+            let backend = backend_with_abort_set();
+            let err = block_on(InputBackend::click(
+                &backend,
+                SharedMouseButton::Left,
+                SharedClickCount::Single,
+                None,
+                &[],
+            ))
+            .expect_err("abort 置位时 InputBackend::click 必须中止");
+            assert_aborted(err);
+        }
+
+        #[test]
+        fn input_backend_scroll_aborts_when_flag_set() {
+            let backend = backend_with_abort_set();
+            let err = block_on(InputBackend::scroll(
+                &backend,
+                SharedScrollDirection::Down,
+                3,
+                None,
+                &[],
+            ))
+            .expect_err("abort 置位时 InputBackend::scroll 必须中止");
+            assert_aborted(err);
         }
     }
 }
@@ -1704,32 +1734,33 @@ mod tests {
 
     #[test]
     #[cfg(windows)]
-    fn adversarial_computer_estop_5ms_response() {
+    fn adversarial_computer_stop_5ms_response() {
         use crate::action::inject::{run_steps_guarded, InjectStep};
-        use crate::security::EmergencyStop;
+        use std::sync::atomic::{AtomicBool, Ordering};
         use std::sync::Arc;
 
-        let stop = Arc::new(EmergencyStop::new());
+        let aborted = Arc::new(AtomicBool::new(false));
         let mut enigo = enigo::Enigo::new(&enigo::Settings::default()).unwrap();
         let steps = vec![
             InjectStep::DelayMs { ms: 200 },
             InjectStep::DelayMs { ms: 200 },
         ];
 
-        let stop_clone = stop.clone();
+        let aborted_clone = aborted.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(15));
-            stop_clone.panel_stop();
+            aborted_clone.store(true, Ordering::SeqCst);
         });
 
         let start = std::time::Instant::now();
-        let res = run_steps_guarded(&mut enigo, &steps, Some(&stop));
+        let flag = aborted.clone();
+        let res = run_steps_guarded(&mut enigo, &steps, move || flag.load(Ordering::SeqCst));
         let elapsed = start.elapsed();
 
-        assert!(res.is_err(), "注入必须被急停中断");
+        assert!(res.is_err(), "注入必须被停止中断");
         assert!(
             elapsed.as_millis() < 80,
-            "急停响应延迟必须 <= 5ms（实际总耗时 {}ms）",
+            "停止响应延迟必须 <= 5ms（实际总耗时 {}ms）",
             elapsed.as_millis()
         );
     }

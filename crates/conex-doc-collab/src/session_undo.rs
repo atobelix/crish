@@ -10,6 +10,7 @@ use super::*;
 use crate::events::{BlockUpsert, DocEvent, ProjectionDiff};
 use crate::op::Origin;
 use crate::tx::{TxGuard, TxId};
+use std::collections::HashSet;
 
 impl DocSession {
     /// 远端文本 update 合入指定块（冷块先 rehydrate，A-MEM-03）。
@@ -26,8 +27,9 @@ impl DocSession {
         if !self.tree.nodes.contains_key(&id) {
             return Err(ApplyError::NotFound(id.to_string()));
         }
-        // P-H2：突变前快照
-        let pre = self.capture_memory_snapshot();
+        // P-H2：只快照本块（远端合入单 id）
+        let involved = HashSet::from([id]);
+        let pre = self.capture_memory_snapshot(&involved);
         match self.apply_remote_text_update_inner(id, bytes) {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -97,7 +99,8 @@ impl DocSession {
             .expect("undo_stack 非空（已 last 检查）");
 
         // persist 失败时回滚到 undo 前内存态，并把 entry 压回栈
-        let pre_undo = self.capture_memory_snapshot();
+        let undo_ids = self.text_ids_for_undo_checkpoint(&entry.pre.text);
+        let pre_undo = self.capture_memory_snapshot(&undo_ids);
         let rev_before = self.rev;
 
         // 恢复树与文本 plain；不回退 rev 历史值（协同单调）
@@ -145,7 +148,8 @@ impl DocSession {
         if !self.tree.nodes.contains_key(&id) {
             return Err(ApplyError::NotFound(id.to_string()));
         }
-        let pre = self.capture_memory_snapshot();
+        let involved = HashSet::from([id]);
+        let pre = self.capture_memory_snapshot(&involved);
         let rev_before = self.rev;
 
         let new_text = self.text_engine.undo_text(id)?;
@@ -182,7 +186,8 @@ impl DocSession {
         if !self.tree.nodes.contains_key(&id) {
             return Err(ApplyError::NotFound(id.to_string()));
         }
-        let pre = self.capture_memory_snapshot();
+        let involved = HashSet::from([id]);
+        let pre = self.capture_memory_snapshot(&involved);
         let rev_before = self.rev;
 
         let new_text = self.text_engine.redo_text(id)?;

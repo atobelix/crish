@@ -403,7 +403,9 @@ impl ToolPromiseDetector {
                     .last()
                     .unwrap_or(pos);
                 let snippet = &tail[char_boundary_pos..];
-                let end_pos = snippet.find(['。', '！', '\n', '.', '!']).unwrap_or(snippet.len());
+                let end_pos = snippet
+                    .find(['。', '！', '\n', '.', '!'])
+                    .unwrap_or(snippet.len());
                 let result = snippet[..end_pos].trim();
                 if !result.is_empty() {
                     return Some(result.to_string());
@@ -418,11 +420,11 @@ impl ToolPromiseDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use conex_types::message::AgentMessageMetadataKind;
     use crate::steering::metadata_kind_wire;
     use crate::steering::testutil::{
         assistant_with_tool_calls, tool_result, tool_result_json, user,
     };
+    use conex_types::message::AgentMessageMetadataKind;
     use serde_json::json;
 
     fn context<'a>(
@@ -855,7 +857,10 @@ mod tests {
 
         let text_with_promise = format!("{long_chinese}接下来使用 shell_command 运行测试。");
         let detected = ToolPromiseDetector::detect_action_promise(&text_with_promise);
-        assert_eq!(detected, Some("接下来使用 shell_command 运行测试".to_string()));
+        assert_eq!(
+            detected,
+            Some("接下来使用 shell_command 运行测试".to_string())
+        );
     }
 
     #[test]

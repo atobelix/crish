@@ -558,6 +558,14 @@ pub(crate) async fn run_task_impl(
         crate::browser::spawn_browser_estop_watcher(browser_slot, abort_signal.clone());
     }
 
+    // 维度 1 收敛：电脑操作停止 watcher（对齐 browser 线先例）——
+    // run 级 abort_signal 触发 → ComputerSlot::on_run_stopped 释放互斥门 +
+    // 关闭开启态 + 落盘（普通停止语义，不置急停旗）。
+    {
+        let computer_slot = state.engine.computer_slot();
+        crate::computer::spawn_computer_stop_watcher(computer_slot, abort_signal.clone());
+    }
+
     // ── 15-T-6（裁决 D9）：工具级审计路由注册（run 级桥）──────────
     // 工具级 security-audit（shell/delete 经 BuiltinToolConfig.audit_sink
     // 发射，接线前 NoopAuditSink 静默丢弃）经路由 sink 送达本 run 缓冲
