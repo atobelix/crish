@@ -32,6 +32,7 @@ export interface MessageActionsActions {
   onDismissFollowUp?: ((msgId: string) => void) | undefined;
   onOpenDiff: (diff: FileDiff) => void;
   onOpenDiffPanel?: (() => void) | undefined;
+  onRetract?: (() => void) | undefined;
 }
 
 export interface MessageActionsProps {
@@ -44,12 +45,7 @@ export interface MessageActionsProps {
 }
 
 export const MessageActions: React.FC<MessageActionsProps> = React.memo(
-  ({
-    msg,
-    state,
-    actions,
-    cacheMetricsNode,
-  }) => {
+  ({ msg, state, actions, cacheMetricsNode }) => {
     const {
       copied = false,
       isLastAssistant = false,
@@ -70,6 +66,7 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
       onDismissFollowUp,
       onOpenDiff: _onOpenDiff,
       onOpenDiffPanel: _onOpenDiffPanel,
+      onRetract,
     } = actions ?? {};
     const { showToast } = useToast();
     // B-05：完成态气泡挂「发送到笔记」（agent-card / 主 chat 共用 MessageActions）
@@ -105,6 +102,7 @@ export const MessageActions: React.FC<MessageActionsProps> = React.memo(
           onCopy={onCopy}
           onRegenerate={() => onRegenerate(msg.id)}
           onTogglePin={() => onTogglePin(msg.id)}
+          {...(onRetract !== undefined && { onRetract })}
           sendToNoteNode={
             <ChatSendToNoteEntry
               messageId={msg.id}

@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import styles from './ChatCard.module.css';
-import type { } from '../../hooks/useToastQueue';
+import type {} from '../../hooks/useToastQueue';
 import { ChatMessageList } from '../chat-message-list/ChatMessageList';
 import type { ChatMessageListProps } from '../chat-message-list/chatMessageListProps';
 import '../chat-message-list/workspaceChatStream.slot';
@@ -58,10 +58,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onOpenSchedule={() => {
           state.setMainSurface('scheduled');
         }}
-        // R1 撤回（统一输入流收敛战役）：composer 撤回按钮 → 引擎
-        // session_retract（停 run → 冻结 → timeline-truncate → 投影重放）
-        onRetract={state.handleRetract}
-        canRetract={state.messages?.some((m) => m.sender === 'user')}
         rightActions={
           state.showModelPicker ? (
             <ModelBadgePicker
@@ -141,6 +137,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
       generation: {
         onRegenerate: state.handleRegenerate,
         onBranch: state.handleBranch,
+        onRetract: state.handleRetract,
       },
       approval: {
         approvalBusy: state.approvalState.approvalBusy,

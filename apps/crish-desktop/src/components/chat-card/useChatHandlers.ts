@@ -90,11 +90,9 @@ export function useChatHandlers({
     });
   }, [activeSessionId]);
 
-  // ── R1 撤回（统一输入流收敛战役）：引擎撤回入口 + 回填消费 ──
-  // 注：D5（R6 收口）已废弃消息级撤回 UI 链——用户发起的「撤回已发消息」
-  // 唯一路径 = ChatComposer 撤回按钮 → core_session_retract → 引擎
-  // timeline-truncate；withdrawMessage action 本体保留（send-failure
-  // 乐观回滚 / regenerate 消费）。
+  // ── R1 撤回：引擎入口 + 回填消费 ──
+  // 用户锁：入口在消息流（最后一条 user / 正在生成的助手行），不在 composer 页脚。
+  // 流式中同样可撤。withdrawMessage action 本体保留（send-failure 乐观回滚 / regenerate）。
 
   // timeline-truncate 消费端派发的回填事件 → setChatInput + setComposerDraft
   //（数据源 = boundary user 节点 text，不依赖 draft 快照）
@@ -105,10 +103,8 @@ export function useChatHandlers({
     });
   }, [setChatInput]);
 
-  // 撤回上一条 user 消息（composer 撤回按钮）：定位活跃会话最后一条
-  // user 消息 → 引擎 core_session_retract（复用 core_run_control L3 通道 +
-  // 独立 retract 语义 wire；引擎侧停 run → 冻结 → timeline-truncate →
-  // 前端经事件流投影重放 + 文本回填）
+  // 撤回上一条 user 消息（消息行动作栏）：定位活跃会话最后一条
+  // user 消息 → 引擎 core_session_retract（流式中不停用）
   const handleRetract = useCallback(async () => {
     const sid = activeSessionId;
     if (!sid || sid.startsWith('__pending')) {
