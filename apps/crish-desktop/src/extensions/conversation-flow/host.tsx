@@ -1,5 +1,5 @@
 /**
- * 叙事流 stream 宿主：喂 projectMessage，S3 前仍画线性 ChatMessageList。
+ * 叙事流 stream 宿主：喂 projectMessage，经可选 renderTools / renderThought 注入块。
  * 崩溃不在此吞掉，交给 SlotOutlet abdicate → ChatCard fallback。
  */
 import {
@@ -12,6 +12,7 @@ import {
 import { projectMessage } from '@crish/conversation-flow';
 import type { ChatMessageListProps } from '../../components/chat-message-list/chatMessageListProps';
 import type { SessionMessage } from '../../store/types';
+import { createNarrativeRenderers } from './narrativeRenderers';
 
 const ChatMessageList = lazy(async () => {
   const m = await import('../../components/chat-message-list/ChatMessageList');
@@ -34,9 +35,11 @@ function countAssistantFlowNodes(messages: SessionMessage[]): number {
 export function ConversationFlowHost(
   props: ChatMessageListProps
 ): ReactElement {
-  const nodeCount = useMemo(
-    () => countAssistantFlowNodes(props.messages.messages),
-    [props.messages.messages]
+  const list = props.messages.messages;
+  const nodeCount = useMemo(() => countAssistantFlowNodes(list), [list]);
+  const { renderTools, renderThought } = useMemo(
+    () => createNarrativeRenderers(list),
+    [list]
   );
 
   return (
@@ -46,7 +49,11 @@ export function ConversationFlowHost(
       style={HOST_STYLE}
     >
       <Suspense fallback={null}>
-        <ChatMessageList {...props} />
+        <ChatMessageList
+          {...props}
+          renderTools={renderTools}
+          renderThought={renderThought}
+        />
       </Suspense>
     </div>
   );

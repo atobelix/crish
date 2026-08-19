@@ -1,4 +1,5 @@
 import React, { useMemo, useRef } from 'react';
+import { useNarrativeRenderSlots } from './narrativeRenderSlots';
 import { AlertCircle } from 'lucide-react';
 import styles from '../chat-message-row/ChatMessageRow.module.css';
 import type { SessionMessage } from '../../store/types';
@@ -62,10 +63,24 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
     status,
     isThinkingMsg = false,
   }) {
+    const { renderTools, renderThought } = useNarrativeRenderSlots();
     return (
       <>
         {items.map((item) => {
           if (item.kind === 'thought') {
+            if (renderThought) {
+              return (
+                <React.Fragment key={item.key}>
+                  {renderThought({
+                    content: item.content,
+                    isLive: item.isLive ?? isThinkingMsg,
+                    durationMs: item.durationMs,
+                    turnIndex: item.turnIndex,
+                    messageId: msgId,
+                  })}
+                </React.Fragment>
+              );
+            }
             return (
               <TimelineThoughtSection
                 key={item.key}
@@ -104,6 +119,17 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
                   </div>
                 )}
               </div>
+            );
+          }
+          if (item.kind === 'tools' && renderTools && toolStackProps) {
+            return (
+              <React.Fragment key={item.key}>
+                {renderTools({
+                  items: item.items,
+                  msgId,
+                  toolStackProps,
+                })}
+              </React.Fragment>
             );
           }
           return toolStackProps ? (

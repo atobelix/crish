@@ -1,0 +1,237 @@
+/* 叙事块：只用产品 token。禁 --brand / rail / --accent-blue。无竖轨、无绿勾墙。 */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0;
+}
+
+.purpose,
+.action,
+.thinking,
+.subagent {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-xl);
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.head:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+.head:focus-visible {
+  outline: none;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+}
+
+.headStatic {
+  cursor: default;
+}
+
+.headStatic:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.primary {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.pulse {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-circle);
+  background: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pulse {
+    animation: flowPulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes flowPulse {
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.kindPrefix {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+}
+
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 0 0 2px 12px;
+}
+
+.actionHeadRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.actionHeadRow .head {
+  flex: 1 1 auto;
+}
+
+.pathBtn,
+.chip {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
+  box-shadow: none;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--font-size-xs, var(--font-size-sm));
+  cursor: pointer;
+}
+
+.pathBtn:hover,
+.chip:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+.pathBtn:focus-visible,
+.chip:focus-visible {
+  outline: none;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+}
+
+.detail,
+.thinkingFull,
+.subagentBody {
+  max-height: var(--flow-output-max, 600px);
+  overflow: auto;
+  margin: 0 8px 4px 20px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.pre {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  color: var(--text-secondary);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.previewWrap {
+  position: relative;
+  overflow: hidden;
+  margin: 0 8px 2px 20px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.previewText {
+  display: block;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.previewFade {
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 56px;
+  background: linear-gradient(
+    to right,
+    hsl(0 0% 100% / 0),
+    var(--bg-primary)
+  );
+  pointer-events: none;
+}
+
+.thinkingFull {
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.inspectorBtn {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+}
+
+.inspectorBtn:hover {
+  color: var(--text-secondary);
+}
+
+.inspectorBtn:focus-visible {
+  outline: none;
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+}
+
+.subagent {
+  max-height: var(--flow-output-max, 600px);
+  overflow: auto;
+}
+
+.subagentShell {
+  min-width: 0;
+}

@@ -21,6 +21,10 @@ import { MessageVirtualizer } from './MessageVirtualizer';
 import { scrollToMessage, useScrollAnchor } from './useScrollAnchor';
 import { useChatMessageState } from './useChatMessageState';
 import type { ChatMessageListProps } from './chatMessageListProps';
+import {
+  EMPTY_NARRATIVE_SLOTS,
+  NarrativeRenderSlotsContext,
+} from '../chat-message/narrativeRenderSlots';
 
 export type {
   ChatMessageListApprovalProps,
@@ -39,6 +43,8 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   generation,
   approval,
   navigation,
+  renderTools,
+  renderThought,
 }) => {
   const {
     messages,
@@ -165,44 +171,50 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     setDismissedFollowUps({});
   }, [activeSessionId, setDismissedFollowUps]);
 
+  const narrativeSlots = useMemo(() => {
+    if (!renderTools && !renderThought) return EMPTY_NARRATIVE_SLOTS;
+    return { renderTools, renderThought };
+  }, [renderTools, renderThought]);
+
   if (messages.length === 0) {
     return null;
   }
 
   return (
     <AppErrorBoundary variant="compact" title="消息列表出错">
-      <MessageVirtualizer
-        messages={messages}
-        pinnedItems={pinnedItems}
-        pinsOpen={pinsOpen}
-        setPinsOpen={setPinsOpen}
-        jumpToPinned={jumpToPinned}
-        togglePin={togglePin}
-        searchHighlightQuery={searchHighlightQuery}
-        expandedUserMsgs={expandedUserMsgs}
-        onToggleExpandUser={onToggleExpandUser}
-        
-        hideThinkingBlock={hideThinkingBlock}
-        inPlanMode={inPlanMode}
-        planApproved={planApproved}
-        lastAssistantId={lastAssistantId}
-        thinkingMsgId={thinkingMsgId}
-        toolStackProps={toolStackProps}
-        handleRegenerateRow={handleRegenerateRow}
-        onBranch={onBranch}
-        onOpenDiff={onOpenDiff}
-        onOpenDiffPanel={onOpenDiffPanel}
-        setPermissionMode={setPermissionMode}
-        setPlanApproved={setPlanApproved}
-        handleFillFollowUp={handleFillFollowUp}
-        onSendFollowUp={onSendFollowUp}
-        handleSendFollowUp={handleSendFollowUp}
-        dismissedFollowUps={dismissedFollowUps}
-        handleDismissFollowUp={handleDismissFollowUp}
-        showAllMessages={showAllMessages}
-        activeSessionId={activeSessionId}
-        handleMarkdownClick={handleMarkdownClick}
-      />
+      <NarrativeRenderSlotsContext.Provider value={narrativeSlots}>
+        <MessageVirtualizer
+          messages={messages}
+          pinnedItems={pinnedItems}
+          pinsOpen={pinsOpen}
+          setPinsOpen={setPinsOpen}
+          jumpToPinned={jumpToPinned}
+          togglePin={togglePin}
+          searchHighlightQuery={searchHighlightQuery}
+          expandedUserMsgs={expandedUserMsgs}
+          onToggleExpandUser={onToggleExpandUser}
+          hideThinkingBlock={hideThinkingBlock}
+          inPlanMode={inPlanMode}
+          planApproved={planApproved}
+          lastAssistantId={lastAssistantId}
+          thinkingMsgId={thinkingMsgId}
+          toolStackProps={toolStackProps}
+          handleRegenerateRow={handleRegenerateRow}
+          onBranch={onBranch}
+          onOpenDiff={onOpenDiff}
+          onOpenDiffPanel={onOpenDiffPanel}
+          setPermissionMode={setPermissionMode}
+          setPlanApproved={setPlanApproved}
+          handleFillFollowUp={handleFillFollowUp}
+          onSendFollowUp={onSendFollowUp}
+          handleSendFollowUp={handleSendFollowUp}
+          dismissedFollowUps={dismissedFollowUps}
+          handleDismissFollowUp={handleDismissFollowUp}
+          showAllMessages={showAllMessages}
+          activeSessionId={activeSessionId}
+          handleMarkdownClick={handleMarkdownClick}
+        />
+      </NarrativeRenderSlotsContext.Provider>
     </AppErrorBoundary>
   );
 };

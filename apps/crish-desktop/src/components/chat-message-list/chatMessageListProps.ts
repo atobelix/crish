@@ -1,4 +1,15 @@
 import type { FileDiff, SessionAgent, SessionMessage } from '../../store/types';
+import type {
+  ChatNarrativeRenderThought,
+  ChatNarrativeRenderTools,
+} from '../chat-message/narrativeRenderSlots';
+
+export type {
+  ChatNarrativeRenderThought,
+  ChatNarrativeRenderThoughtArgs,
+  ChatNarrativeRenderTools,
+  ChatNarrativeRenderToolsArgs,
+} from '../chat-message/narrativeRenderSlots';
 
 /** 消息列表数据域（展示消息/全量消息/agents/会话ID/过滤开关收敛为单一子对象） */
 export interface ChatMessageListMessagesProps {
@@ -67,4 +78,13 @@ export interface ChatMessageListProps {
   approval: ChatMessageListApprovalProps;
   /** 导航操作域 */
   navigation: ChatMessageListNavigationProps;
+  /**
+   * 可选：替换工具扁平行。缺省 undefined = ChatToolCallBlock。
+   * 叙事插件注入 Purpose 树；内核默认行为不变。
+   */
+  renderTools?: ChatNarrativeRenderTools;
+  /**
+   * 可选：替换思考段。缺省 undefined = TimelineThoughtSection。
+   */
+  renderThought?: ChatNarrativeRenderThought;
 }
