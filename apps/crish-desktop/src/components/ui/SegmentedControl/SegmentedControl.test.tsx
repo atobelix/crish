@@ -1,13 +1,20 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 /**
- * ui/SegmentedControl 基础测试：同心几何、受控/非受控双模、键盘漫游与无障碍
+ * ui/SegmentedControl 基础测试：7px 圆角锁、受控/非受控双模、键盘漫游与无障碍
  */
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import {} from 'react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SegmentedControl } from './SegmentedControl';
 import styles from './SegmentedControl.module.css';
+
+const CSS_SRC = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), 'SegmentedControl.module.css'),
+  'utf8'
+);
 
 describe('ui/SegmentedControl', () => {
   const sampleOptions = [
@@ -161,5 +168,22 @@ describe('ui/SegmentedControl', () => {
     rerender(<SegmentedControl options={sampleOptions} size="md" />);
     expect(group).toHaveClass(styles.containerMd);
     expect(group).toHaveAttribute('data-size', 'md');
+  });
+
+  it('圆角锁：外框与分段按钮走 --button-radius 7px，禁 8px 硬编码与胶囊', () => {
+    expect(CSS_SRC).toContain('--seg-outer-radius: var(--button-radius, 7px)');
+    expect(CSS_SRC).toContain('--seg-inner-radius: var(--button-radius, 7px)');
+    expect(CSS_SRC).toContain('border-radius: var(--seg-outer-radius)');
+    expect(CSS_SRC).toContain('border-radius: var(--seg-inner-radius)');
+    const radiusLines = CSS_SRC.split(/\r?\n/).filter((line) =>
+      /radius/i.test(line)
+    );
+    const radiusBlob = radiusLines.join('\n');
+    expect(radiusBlob).not.toMatch(/8px/);
+    expect(radiusBlob).not.toMatch(/--radius-lg/);
+    expect(radiusBlob).not.toMatch(/--radius-md/);
+    expect(radiusBlob).not.toMatch(/999/);
+    expect(CSS_SRC).not.toMatch(/border-radius:\s*8px/);
+    expect(CSS_SRC).not.toMatch(/border-radius:\s*999/);
   });
 });

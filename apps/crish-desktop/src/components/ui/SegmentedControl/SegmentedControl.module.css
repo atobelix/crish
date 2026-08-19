@@ -1,15 +1,13 @@
-/* ui/SegmentedControl        RED-DETAILED-02 / T-ATOM-06 
- *          Ro = Ri + P
- *      (sm/md): Ro = 8px (--radius-lg), P = 2px => Ri = 6px (--radius-md)
- *      (xs): Ro = 6px (--radius-md), P = 2px => Ri = 4px (--radius-sm)
- * 100%    tokens.css       hex/rgba    9999px      
+/* ui/SegmentedControl · RED-DETAILED-02 / T-ATOM-06
+ * 圆角锁：外框与分段按钮均走 --button-radius（7px）。
+ * 禁止 8px 硬编码、禁止 999/9999 胶囊盖过设置按钮契约。
  */
 
 .container {
   --seg-h: 28px;
   --seg-pad: 2px;
-  --seg-outer-radius: var(--radius-lg, 8px);
-  --seg-inner-radius: var(--radius-md, 6px);
+  --seg-outer-radius: var(--button-radius, 7px);
+  --seg-inner-radius: var(--button-radius, 7px);
   --seg-fs: var(--font-size-sm, 13px);
   --seg-item-px: var(--space-2_5, 10px);
 
@@ -44,8 +42,6 @@
 .container[data-size='xs'] {
   --seg-h: 24px;
   --seg-pad: 2px;
-  --seg-outer-radius: var(--radius-md, 6px);
-  --seg-inner-radius: var(--radius-sm, 4px);
   --seg-fs: var(--font-size-xs, 12px);
   --seg-item-px: var(--space-2, 8px);
 }
@@ -54,8 +50,6 @@
 .container[data-size='sm'] {
   --seg-h: 28px;
   --seg-pad: 2px;
-  --seg-outer-radius: var(--radius-lg, 8px);
-  --seg-inner-radius: var(--radius-md, 6px);
   --seg-fs: var(--font-size-sm, 13px);
   --seg-item-px: var(--space-2_5, 10px);
 }
@@ -64,8 +58,6 @@
 .container[data-size='md'] {
   --seg-h: 32px;
   --seg-pad: 2px;
-  --seg-outer-radius: var(--radius-lg, 8px);
-  --seg-inner-radius: var(--radius-md, 6px);
   --seg-fs: var(--font-size-base, 14px);
   --seg-item-px: var(--space-3, 12px);
 }
@@ -125,7 +117,8 @@
 /*    Focus Ring AGENTS.md   13    */
 .item:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
 .itemDisabled {

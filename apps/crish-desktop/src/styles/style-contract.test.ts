@@ -239,19 +239,24 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
     expect(hits, `禁名复活：${hits.join(', ')}`).toEqual([]);
   });
 
-  it(`新出口 ${SCROLLBAR_EXPORT} 存在且含 thin + webkit + thumb token + 指定容器`, () => {
+  it(`新出口 ${SCROLLBAR_EXPORT} 存在且含 webkit 细条 + 无三角 + thumb token + 指定容器`, () => {
     const css = readFile(`src/styles/${SCROLLBAR_EXPORT}`);
-    expect(css).toContain('scrollbar-width: thin');
     expect(css).toContain('--tint-scrollbar-thumb');
     expect(css).toContain('sidebarScroll');
     expect(css).toContain('menuContent');
     expect(css).toContain('coverContent');
     expect(css).toContain('navScroll');
+    expect(css).toContain('dialogBody');
+    expect(css).toContain('::-webkit-scrollbar-button');
+    expect(css).toMatch(/display:\s*none/);
     const webkit = css.match(/::-webkit-scrollbar/g) ?? [];
     expect(
       webkit.length,
       `${SCROLLBAR_EXPORT} webkit 块 ${webkit.length} < ${SCROLLBAR_EXPORT_MIN}`
     ).toBeGreaterThanOrEqual(SCROLLBAR_EXPORT_MIN);
+    // 全局 * 不得设 scrollbar-width，否则 WebView2 忽略 webkit、露出系统三角
+    const starBlock = css.match(/(?:^|\n)\*\s*\{[^}]*\}/)?.[0] ?? '';
+    expect(starBlock).not.toContain('scrollbar-width');
   });
 
   it(`index.css 引入 ${SCROLLBAR_EXPORT} 且不引禁名`, () => {
@@ -260,17 +265,22 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
     expect(indexCss).not.toContain(SCROLLBAR_BANNED);
   });
 
-  it('侧栏 / Menu / 设置 cover 消费 thin + thumb token', () => {
-    const hosts = [
+  it('侧栏 / Menu 消费 thin + thumb token；设置 cover/nav 不得写 scrollbar-width', () => {
+    const sidebarMenu = [
       'src/components/sidebar/Sidebar.module.css',
       'src/components/ui/Menu/Menu.module.css',
-      'src/components/settings/SettingsPanel.module.css',
     ] as const;
-    for (const rel of hosts) {
+    for (const rel of sidebarMenu) {
       const css = readFile(rel);
       expect(css, rel).toContain('scrollbar-width: thin');
       expect(css, rel).toContain('--tint-scrollbar-thumb');
     }
+    // WebView2：容器上的 scrollbar-width 会关掉 ::-webkit-scrollbar，露出系统三角
+    const panel = readFile('src/components/settings/SettingsPanel.module.css');
+    expect(panel).not.toMatch(/scrollbar-width\s*:/);
+    expect(panel).toContain('overflow-y: auto');
+    expect(panel).toContain('.coverContent');
+    expect(panel).toContain('.navScroll');
   });
 
   it(`其它生产 css 不得新增私有 ::-webkit-scrollbar（出口 ${SCROLLBAR_EXPORT} 除外）`, () => {
@@ -433,6 +443,42 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
     const css = readFile('src/styles/tokens.css');
     expect(css).not.toContain('15.5%');
     expect(css).not.toContain('12.5%');
+  });
+});
+
+describe('设置按钮圆角 7px 契约', () => {
+  it('tokens.css 默认档 --button-radius 锁 7px，密度档不得改写', () => {
+    const css = readFile('src/styles/tokens.css');
+    const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
+    expect(lightBlock).toMatch(/--button-radius:\s*7px/);
+    expect(lightBlock).not.toMatch(/--button-radius:\s*var\(--radius-/);
+    const sizeBlockRe = (size: string): RegExp =>
+      new RegExp(`\\[data-ui-size=['"]${size}['"]\\]\\s*\\{[\\s\\S]*?\\n\\}`);
+    const smallBlock = css.match(sizeBlockRe('small'))?.[0] ?? '';
+    const largeBlock = css.match(sizeBlockRe('large'))?.[0] ?? '';
+    expect(smallBlock.length).toBeGreaterThan(20);
+    expect(largeBlock.length).toBeGreaterThan(20);
+    expect(smallBlock).not.toMatch(/--button-radius\s*:/);
+    expect(largeBlock).not.toMatch(/--button-radius\s*:/);
+  });
+
+  it('ui/Button 与 ui/SegmentedControl 消费 --button-radius，禁 8px/胶囊硬编码半径', () => {
+    const button = readFile('src/components/ui/Button/Button.module.css');
+    const seg = readFile(
+      'src/components/ui/SegmentedControl/SegmentedControl.module.css'
+    );
+    expect(button).toContain('--btn-radius: var(--button-radius, 7px)');
+    expect(seg).toContain('--seg-outer-radius: var(--button-radius, 7px)');
+    expect(seg).toContain('--seg-inner-radius: var(--button-radius, 7px)');
+    const radiusLines = seg
+      .split(/\r?\n/)
+      .filter((line) => /radius/i.test(line))
+      .join('\n');
+    expect(radiusLines).not.toMatch(/8px/);
+    expect(radiusLines).not.toMatch(/--radius-lg/);
+    expect(radiusLines).not.toMatch(/999/);
+    expect(seg).not.toMatch(/border-radius:\s*8px/);
+    expect(seg).not.toMatch(/border-radius:\s*999/);
   });
 });
 

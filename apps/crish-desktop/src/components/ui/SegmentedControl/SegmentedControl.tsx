@@ -1,9 +1,9 @@
-﻿/**
+/**
  * ui/SegmentedControl 原子分段选择器（RED-DETAILED-02 / T-ATOM-06）
  *
- * 遵循同心几何三大公理（Ro = 8px, P = 2px => Ri = 6px），
+ * 圆角锁：外框与分段按钮走 --button-radius（7px）；严禁 8px 硬编码与 9999px 药丸。
  * 落实 FLIP 动态平滑滑块与无障碍键盘漫游（ArrowLeft / ArrowRight）。
- * 支持受控/非受控双模，严禁使用 9999px 药丸圆角。
+ * 支持受控/非受控双模。
  *
  * 分层契约：本组件只依赖 react 与 tokens CSS 变量，不依赖任何业务模块。
  */
