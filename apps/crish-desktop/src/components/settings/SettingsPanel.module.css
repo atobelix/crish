@@ -256,9 +256,15 @@
   color: var(--text-primary);
 }
 
-/* 全屏壳层叠只挂 overlay；内部 Menu portal 进此节点，局部 --z-dropdown 即可压过面板 */
+/* 全屏壳层叠只挂 overlay；内部 Menu portal 进此节点。
+ * wrapper 必须吃到抬高后的 --z-dropdown，否则 isolation:isolate 的面板会盖住下拉。 */
 .settingsCoverOverlay {
   --dialog-z: var(--z-modal, 1000);
+  --z-dropdown: 20;
+}
+
+.settingsCoverOverlay :global([data-radix-popper-content-wrapper]) {
+  z-index: var(--z-dropdown);
 }
 
 /*           */

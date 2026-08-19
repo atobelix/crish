@@ -1,4 +1,3 @@
-import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 外观：主题、密度、字体与阅读相关选项；改完即生效，仅失败提示。
  * 状态与副作用逻辑已提取到 useAppearanceSettings；本组件仅负责渲染。
@@ -20,7 +19,7 @@ type Props = {
 };
 
 export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
-  const { showToast } = useToast();
+  void _onBlockingOverlayChange;
   const {
     visibilityRef,
     settings,
@@ -31,8 +30,8 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
     allValues,
     appearanceSchema,
     save,
-    applyDensity,
     handleSave,
+    resetAppearance,
   } = useAppearanceSettings();
 
   if (loadError && !settings) {
@@ -42,7 +41,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
           <SettingsCard>
             <SettingsRow
               title={
-                <span className="settings-list-empty" role="alert">
+                <span role="alert">
                   {loadError}
                 </span>
               }
@@ -72,7 +71,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
         <SettingsSection>
           <SettingsCard>
             <SettingsRow
-              title={<span className="settings-list-empty">加载中…</span>}
+              title={<span>加载中…</span>}
             />
           </SettingsCard>
         </SettingsSection>
@@ -87,7 +86,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
           schema={appearanceSchema}
           values={allValues}
           onSave={handleSave}
-          ready={!saving}
+          ready
         />
 
         {/*
@@ -98,7 +97,6 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
         <SettingsSection title="字体">
           <SettingsCard>
             <FontSettingsSection
-              
               onPersistSettings={async (fonts) => {
                 const ok = await save({ fonts });
                 if (!ok) {
@@ -126,28 +124,7 @@ export const SettingsAppearanceTab: React.FC<Props> = ({ _onBlockingOverlayChang
                   size="sm"
                   disabled={saving}
                   onClick={() => {
-                    void (async () => {
-                      try {
-                        const { DEFAULT_FONT_PREFS, setFontPreferences } =
-                          await import('../../api/fontStore');
-                        const ok = await save({
-                          theme: 'default',
-                          hideThinkingBlock: false,
-                          markdown: {
-                            ...(settings.markdown || {}),
-                            codeBlockIndent: '  ',
-                          },
-                          fonts: { ...DEFAULT_FONT_PREFS },
-                        });
-                        if (!ok) return;
-                        // D3：主题走 save 路径（settingsStore → themeProjection 投影），
-                        // 不再直调 setTheme（crish_theme 单一写端 = themeProjection）
-                        await setFontPreferences({ ...DEFAULT_FONT_PREFS });
-                        applyDensity('medium');
-                      } catch (err) {
-                        showToast('重置失败：' + String(err));
-                      }
-                    })();
+                    void resetAppearance();
                   }}
                 >
                   重置

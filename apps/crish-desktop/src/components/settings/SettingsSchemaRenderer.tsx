@@ -1,5 +1,5 @@
 import React from 'react';
-import { Input, SegmentedControl, Select, Switch } from '../ui';
+import { Button, Input, SegmentedControl, Select, Slider, Switch } from '../ui';
 import {
   SettingsSection,
   SettingsCard,
@@ -56,7 +56,7 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
     return (
       <SettingsSection>
         <SettingsCard>
-          <SettingsRow title={<span className="settings-list-empty">加载中…</span>} />
+          <SettingsRow title={<span className={uiStyles.listEmpty}>加载中…</span>} />
         </SettingsCard>
       </SettingsSection>
     );
@@ -88,8 +88,9 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
               } else if (prop.type === 'select') {
                 control = (
                   <Select
-                    className="settings-personalize-select"
-                    value={String(val || '')}
+                    className={uiStyles.controlSelect}
+                    size="sm"
+                    value={String(val ?? '')}
                     options={(prop.options || []).map((o) => ({
                       id: o.value,
                       label: o.label,
@@ -120,21 +121,23 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
               } else if (prop.type === 'range') {
                 const numVal = Number(val ?? prop.min ?? 0);
                 control = (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <input
-                      id={domId}
-                      type="range"
+                  <div className={uiStyles.controlRange}>
+                    <Slider
+                      aria-label={prop.title}
                       min={prop.min ?? 0}
                       max={prop.max ?? 100}
                       step={prop.step ?? 1}
                       value={numVal}
                       disabled={!ready}
-                      onChange={(e) => void onSave({ [prop.key]: Number(e.target.value) })}
-                      style={{ cursor: 'pointer', accentColor: 'var(--text-primary)', height: 4, width: 100 }}
+                      onChange={(next) => {
+                        void onSave({ [prop.key]: next });
+                      }}
+                      className={uiStyles.controlRangeSlider}
                     />
                     {prop.showValue && (
-                      <span style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', minWidth: 40, textAlign: 'right', fontWeight: 600 }}>
-                        {numVal}{prop.unit ?? ''}
+                      <span className={uiStyles.controlRangeValue}>
+                        {numVal}
+                        {prop.unit ?? ''}
                       </span>
                     )}
                   </div>
@@ -144,40 +147,36 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                   <input
                     id={domId}
                     type="color"
-                    // 待确认：颜色选择器默认值（纯黑）是功能数据而非样式 token，暂不迁移
+                    className={uiStyles.controlColor}
                     value={String(val || '#000000')}
                     disabled={!ready}
                     onChange={(e) => void onSave({ [prop.key]: e.target.value })}
-                    style={{ cursor: 'pointer', border: '1px solid var(--border-color)', borderRadius: 6, width: 40, height: 24, padding: 0, background: 'transparent' }}
                   />
                 );
               } else if (prop.type === 'preset-grid') {
                 control = (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 8 }}>
+                  <div className={uiStyles.presetGrid}>
                     {(prop.presets || []).map((preset) => {
                       const isSelected = val === preset.id;
                       return (
-                        <button
+                        <Button
                           key={preset.id}
                           type="button"
+                          variant={isSelected ? 'secondary' : 'ghost'}
+                          size="sm"
                           disabled={!ready}
+                          aria-pressed={isSelected}
+                          className={uiStyles.presetItem}
                           onClick={() => void onSave({ [prop.key]: preset.id })}
-                          style={{
-                            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
-                            padding: 8, borderRadius: 8, cursor: 'pointer',
-                            border: isSelected ? '2px solid var(--accent-color)' : '1px solid var(--border-color)',
-                            background: 'var(--bg-card)', color: 'var(--text-primary)',
-                            position: 'relative', transition: 'border-color 0.15s',
-                          }}
                         >
-                          {preset.preview && (
-                            <div style={{ width: 32, height: 32, borderRadius: 6, background: preset.preview }} />
-                          )}
-                          <span style={{ fontSize: 'var(--font-size-xs)', textAlign: 'center', lineHeight: 1.3 }}>{preset.name}</span>
-                          {isSelected && (
-                            <span style={{ position: 'absolute', top: 2, right: 2, fontSize: 12, color: 'var(--accent-color)' }}>✓</span>
-                          )}
-                        </button>
+                          {preset.preview ? (
+                            <span
+                              className={uiStyles.presetSwatch}
+                              style={{ background: preset.preview }}
+                            />
+                          ) : null}
+                          <span className={uiStyles.presetName}>{preset.name}</span>
+                        </Button>
                       );
                     })}
                   </div>
@@ -185,8 +184,9 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
               } else if (prop.type === 'font-selector') {
                 control = (
                   <Select
-                    className="settings-personalize-select"
-                    value={String(val || '')}
+                    className={uiStyles.controlSelect}
+                    size="sm"
+                    value={String(val ?? '')}
                     options={(prop.options || []).map((o) => ({
                       id: o.value,
                       label: o.label,
@@ -202,6 +202,7 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                   <SegmentedControl
                     aria-label={prop.title}
                     size="sm"
+                    className={uiStyles.controlSegment}
                     value={String(val ?? '')}
                     disabled={!ready}
                     options={(prop.toggleOptions || []).map((opt) => ({
@@ -215,12 +216,12 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                 );
               }
 
-               return (
+              return (
                 <SettingsRow
                   key={prop.key}
                   title={
                     prop.type === 'boolean' || prop.type === 'string' || prop.type === 'range' || prop.type === 'color' ? (
-                      <label htmlFor={domId} className="settings-ui-row-label">
+                      <label htmlFor={domId} className={uiStyles.settingsUiRowLabel}>
                         {prop.title}
                       </label>
                     ) : (

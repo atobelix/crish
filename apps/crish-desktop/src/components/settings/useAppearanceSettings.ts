@@ -10,6 +10,7 @@ import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
 import { useSettingsField, useLayoutStore } from '../../store/storeAccess';
 import {
+  DEFAULT_SHELL_CHROME,
   parseShellChromeMode,
   type ShellChromeMode,
 } from '../../api/shellChrome';
@@ -32,6 +33,39 @@ import { useAppearanceSchema } from './useAppearanceSchema';
 
 export type UiSize = 'small' | 'medium' | 'large';
 export type ThemeId = 'default' | 'dark';
+
+const DEFAULT_PERSONALIZATION: PersonalizationSettings = {
+  skin: 'warm-gray',
+  customBg: '#f4f3f0',
+  customFg: '#111111',
+  fontSizeAdjust: 0,
+  themeBrightnessAdjust: 0,
+  themeBrightnessVibrant: false,
+  themeAutoTimeTransition: false,
+};
+
+function mergeSettings(
+  current: Settings,
+  updates: Partial<Settings>
+): Settings {
+  return {
+    ...current,
+    ...updates,
+    markdown: updates.markdown
+      ? { ...(current.markdown || {}), ...updates.markdown }
+      : current.markdown,
+    fonts: updates.fonts
+      ? { ...(current.fonts || {}), ...updates.fonts }
+      : current.fonts,
+  };
+}
+
+function readDomTheme(): ThemeId | null {
+  if (typeof document === 'undefined') return null;
+  const raw = document.documentElement.getAttribute('data-theme');
+  if (raw === 'dark' || raw === 'default') return raw;
+  return null;
+}
 
 /** 非法值回落标准 */
 export function normalizeUiSize(raw: unknown): UiSize {
@@ -71,6 +105,7 @@ export interface AppearanceSettingsResult {
     updates: Partial<PersonalizationSettings>
   ) => void;
   handleSave: (updates: Record<string, unknown>) => void;
+  resetAppearance: () => Promise<void>;
 }
 
 export function useAppearanceSettings(): AppearanceSettingsResult {
@@ -103,6 +138,8 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       setPersonalization(next);
       writeStoredPersonalization(next);
       applyPersonalization(next, activeTheme);
+      const domTheme = readDomTheme();
+      if (domTheme) setActiveTheme(domTheme);
     },
     [personalization, activeTheme]
   );
@@ -133,6 +170,7 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
         if (cancelled || !sets) return;
         setSettings(sets);
         setLoadError(null);
+        setAppSettings(sets);
         // 读盘后立即同步 DOM（主题 / 字体），与 local 独立 key 对齐
         try {
           if (sets.theme) {
@@ -140,6 +178,8 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
               await import('../../api/themeStore');
             applyTheme(normTheme(sets.theme));
           }
+          const domTheme = readDomTheme();
+          if (domTheme && !cancelled) setActiveTheme(domTheme);
           if (sets.fonts) {
             const { applyFontStacks, ensureFontsLoaded, normalizeFontPrefs } =
               await import('../../api/fontStore');
@@ -163,32 +203,33 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
     return () => {
       cancelled = true;
     };
-  }, [cwd, loadTick]);
+  }, [cwd, loadTick, setAppSettings]);
 
   /** @returns 是否写入成功；失败已 toast，不抛给点击处理器 */
   const save = useCallback(
     async (updates: Partial<Settings>): Promise<boolean> => {
       if (!settings) return false;
-      setSaving(true);
+      const previous = settings;
+      const optimistic = mergeSettings(settings, updates);
+      setSettings(optimistic);
+      setAppSettings(optimistic);
       try {
         const merged = await clientApi.saveSettingsEx(cwd, 'global', updates);
         setSettings(merged);
         setAppSettings(merged);
-        // D3：主题不再直调 setTheme——setAppSettings(merged) 写入 settingsStore 后，
+        // D3：主题不再直调 setTheme——setAppSettings 写入 settingsStore 后，
         // themeProjection 订阅投影自动完成 DOM + crish_theme 缓存同步（单一写端）。
-        // fonts：FontSettingsSection 已 setFontPreferences；此处仅当其它入口写入 fonts 时补 apply
         if (updates.fonts) {
           const { setFontPreferences, normalizeFontPrefs } =
             await import('../../api/fontStore');
           await setFontPreferences(normalizeFontPrefs(updates.fonts));
         }
-        // 成功静默：不 toast「已保存」
         return true;
       } catch (err) {
+        setSettings(previous);
+        setAppSettings(previous);
         toast.show('保存失败：' + String(err));
         return false;
-      } finally {
-        setSaving(false);
       }
     },
     [cwd, setAppSettings, settings]
@@ -236,7 +277,7 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
   const allValues = useMemo<Record<string, unknown>>(() => {
     if (!settings) return {};
     return {
-      theme: normalizeTheme(settings.theme),
+      theme: activeTheme,
       uiSize: normalizeUiSize(uiSize),
       shellChrome: parseShellChromeMode(shellChromeMode),
       codeIndent: normalizeCodeIndent(settings.markdown?.codeBlockIndent),
@@ -249,7 +290,7 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
       vibrantMode: personalization.themeBrightnessVibrant ?? false,
       restoreLastWorkspace,
     };
-  }, [settings, uiSize, shellChromeMode, personalization, restoreLastWorkspace]);
+  }, [settings, uiSize, shellChromeMode, personalization, restoreLastWorkspace, activeTheme]);
 
   const appearanceSchema = useAppearanceSchema({
     activeTheme,
@@ -259,7 +300,12 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
 
   const handleSave = useCallback(
     (updates: Record<string, unknown>) => {
-      if ('theme' in updates) void save({ theme: String(updates.theme) });
+      if ('theme' in updates) {
+        if (personalization.themeAutoTimeTransition) {
+          updatePersonalization({ themeAutoTimeTransition: false });
+        }
+        void save({ theme: String(updates.theme) });
+      }
       if ('uiSize' in updates) applyDensity(updates.uiSize as UiSize);
       if ('shellChrome' in updates)
         applyChrome(updates.shellChrome as ShellChromeMode);
@@ -297,15 +343,43 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
         const next = Boolean(updates.restoreLastWorkspace);
         setRestoreLastWorkspaceState(next);
         setRestoreLastWorkspace(next);
-        toast.show(
-          next
-            ? '已开启：下次启动将尝试恢复工作台布局'
-            : '已关闭：下次启动为干净新对话'
-        );
       }
     },
-    [save, applyDensity, applyChrome, settings, updatePersonalization]
+    [
+      save,
+      applyDensity,
+      applyChrome,
+      settings,
+      updatePersonalization,
+      personalization.themeAutoTimeTransition,
+    ]
   );
+
+  const resetAppearance = useCallback(async () => {
+    if (!settings) return;
+    setSaving(true);
+    try {
+      const { DEFAULT_FONT_PREFS, setFontPreferences } =
+        await import('../../api/fontStore');
+      updatePersonalization({ ...DEFAULT_PERSONALIZATION });
+      applyDensity('medium');
+      applyChrome(DEFAULT_SHELL_CHROME);
+      const ok = await save({
+        theme: 'default',
+        markdown: {
+          ...(settings.markdown || {}),
+          codeBlockIndent: '  ',
+        },
+        fonts: { ...DEFAULT_FONT_PREFS },
+      });
+      if (!ok) return;
+      await setFontPreferences({ ...DEFAULT_FONT_PREFS });
+    } catch (err) {
+      toast.show('重置失败：' + String(err));
+    } finally {
+      setSaving(false);
+    }
+  }, [settings, save, updatePersonalization, applyDensity, applyChrome]);
 
   return {
     visibilityRef,
@@ -327,5 +401,6 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
     applyChrome,
     updatePersonalization,
     handleSave,
+    resetAppearance,
   };
 }

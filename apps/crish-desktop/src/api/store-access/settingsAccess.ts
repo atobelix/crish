@@ -80,3 +80,25 @@ export function notifySendShortcutChanged(): void {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new Event(SEND_SHORTCUT_CHANGED_EVENT));
 }
+
+/** 立刻写入 crish_settings.sendShortcut 并通知 composer（不等 saveSettingsEx 排队） */
+export function persistSendShortcut(value: unknown): SendShortcut {
+  const next = normalizeSendShortcut(value);
+  try {
+    const raw = localStorage.getItem(SETTINGS_LS_KEY);
+    if (!raw) {
+      localStorage.setItem(SETTINGS_LS_KEY, JSON.stringify({ sendShortcut: next }));
+    } else {
+      const obj = JSON.parse(raw) as unknown;
+      if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
+        const parsed = obj as Record<string, unknown>;
+        parsed.sendShortcut = next;
+        localStorage.setItem(SETTINGS_LS_KEY, JSON.stringify(parsed));
+      }
+    }
+  } catch {
+    /* quota / 隐私模式：仍发事件，读面回落默认 */
+  }
+  notifySendShortcutChanged();
+  return next;
+}

@@ -6,22 +6,28 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { Settings } from '../../api/clientApi';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
-import { useLayoutStore } from '../../store/storeAccess';
-import { useSettingsField } from '../../store/storeAccess';
-import { SettingsPage } from './SettingsUI';
+import { useLayoutStore, useSettingsField } from '../../store/storeAccess';
+import {
+  SettingsPage,
+  SettingsCard,
+  SettingsRow,
+  SettingsSection,
+} from './SettingsUI';
 import { Button } from '../ui';
 import { SettingsSchemaRenderer } from './SettingsSchemaRenderer';
 import type { SchemaSection } from './SettingsSchemaRenderer';
 import {
   normalizeSendShortcut,
-  notifySendShortcutChanged,
+  persistSendShortcut,
 } from '../../api/store-access/settingsAccess';
+import { telemetry } from '../../services/TelemetryService';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
 };
 
 export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
+  void _onBlockingOverlayChange;
   const { showToast } = useToast();
   const cwd = getWorkspacePath() || '__global__';
   const setTabModeEnabled = useLayoutStore((s) => s.setTabModeEnabled);
@@ -29,7 +35,6 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [loadTick, setLoadTick] = useState(0);
 
   useEffect(() => {
@@ -55,28 +60,31 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
     return () => {
       cancelled = true;
     };
-  }, [cwd, setAppSettings, setTabModeEnabled, loadTick]);
+  }, [cwd, setAppSettings, setTabModeEnabled, loadTick, showToast]);
 
   const save = useCallback(
     async (updates: Partial<Settings>): Promise<boolean> => {
       if (!settings) return false;
-      setSaving(true);
+      const previous = settings;
+      const optimistic = { ...settings, ...updates };
+      setSettings(optimistic);
+      setAppSettings(optimistic);
       try {
         const merged = await clientApi.saveSettingsEx(cwd, 'global', updates);
         setSettings(merged);
         setAppSettings(merged);
         return true;
       } catch (err) {
+        setSettings(previous);
+        setAppSettings(previous);
         showToast('保存失败：' + String(err));
         return false;
-      } finally {
-        setSaving(false);
       }
     },
-    [cwd, setAppSettings, settings]
+    [cwd, setAppSettings, settings, showToast]
   );
 
-  const ready = Boolean(settings) && !saving;
+  const ready = Boolean(settings);
 
   // JSON-Schema defining general settings dynamically
   const personalizeSchema: SchemaSection[] = useMemo(
@@ -182,9 +190,10 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
   const handleSave = useCallback(
     async (updates: Record<string, unknown>) => {
       if ('sendShortcut' in updates) {
-        const next = normalizeSendShortcut(updates.sendShortcut);
+        const prev = normalizeSendShortcut(settings?.sendShortcut);
+        const next = persistSendShortcut(updates.sendShortcut);
         const ok = await save({ sendShortcut: next });
-        if (ok) notifySendShortcutChanged();
+        if (!ok) persistSendShortcut(prev);
         return;
       }
       if ('tabModeEnabled' in updates) {
@@ -194,35 +203,43 @@ export const SettingsPersonalizeTab: React.FC<Props> = ({ _onBlockingOverlayChan
         if (!ok) {
           setTabModeEnabled(!on);
         }
-      } else {
-        await save(updates);
+        return;
+      }
+      const ok = await save(updates);
+      if (!ok) return;
+      if ('enableSkillCommands' in updates) {
+        window.dispatchEvent(new CustomEvent('crish-skills-changed'));
+      }
+      if ('enableCrashTelemetry' in updates) {
+        telemetry.setEnabled(Boolean(updates.enableCrashTelemetry));
       }
     },
-    [save, setTabModeEnabled]
+    [save, setTabModeEnabled, settings?.sendShortcut]
   );
 
   if (loadError && !settings) {
     return (
       <SettingsPage title="通用设置">
-        <div
-          style={{
-            padding: '20px',
-            color: 'var(--accent-red)',
-            textAlign: 'center',
-          }}
-        >
-          <p>{loadError}</p>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              setLoadError(null);
-              setLoadTick((n) => n + 1);
-            }}
-          >
-            重试
-          </Button>
-        </div>
+        <SettingsSection title="错误">
+          <SettingsCard>
+            <SettingsRow
+              title={<span role="alert">{loadError}</span>}
+              control={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    setLoadError(null);
+                    setLoadTick((n) => n + 1);
+                  }}
+                >
+                  重试
+                </Button>
+              }
+            />
+          </SettingsCard>
+        </SettingsSection>
       </SettingsPage>
     );
   }
