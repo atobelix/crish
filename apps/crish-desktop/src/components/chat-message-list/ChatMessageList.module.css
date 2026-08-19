@@ -1,3 +1,15 @@
+/* 叶 scroller + 滚动条左侧 scrubber 的定位包含块（跟叶走，不钉视口） */
+.streamHost {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 /*              chat            */
 .list {
   width: 100%;

@@ -1,0 +1,125 @@
+// @vitest-environment jsdom
+import { describe, expect, it, vi } from 'vitest';
+import { VirtualScrollManager } from '../../api/VirtualScrollManager';
+import {
+  buildScrubberSegments,
+  countScrubberTicks,
+  formatTickTooltip,
+  isConversationFlowOn,
+  readPurposeLabel,
+  scrollToScrubberTarget,
+  snippetFromUserText,
+  wheelDeltaY,
+} from './flowScrubberModel';
+
+function msg(
+  id: string,
+  sender: 'user' | 'assistant',
+  text = id,
+  timestamp = 1
+) {
+  return { id, sender, text, timestamp };
+}
+
+describe('flowScrubberModel', () => {
+  it('无消息 / 无用户气泡返回空（不画空柱）', () => {
+    expect(buildScrubberSegments([], () => 100)).toEqual([]);
+    expect(
+      buildScrubberSegments([msg('a1', 'assistant')], () => 100)
+    ).toEqual([]);
+  });
+
+  it('tick 数 = 用户气泡数，高度比按 VSM 像素而不是等高校', () => {
+    const heights: Record<string, number> = {
+      u1: 100,
+      a1: 300,
+      u2: 200,
+    };
+    const segs = buildScrubberSegments(
+      [msg('u1', 'user', '问一'), msg('a1', 'assistant'), msg('u2', 'user', '问二')],
+      (id) => heights[id] ?? 0
+    );
+    expect(countScrubberTicks(segs)).toBe(2);
+    const ticks = segs.filter((s) => s.type === 'tick');
+    expect(ticks[0]?.type === 'tick' && ticks[0].tick.heightPercent).toBeCloseTo(
+      100 / 600
+    );
+    expect(ticks[1]?.type === 'tick' && ticks[1].tick.heightPercent).toBeCloseTo(
+      200 / 600
+    );
+    expect(ticks[0]?.type === 'tick' && ticks[0].tick.flex).toBe(100);
+    expect(ticks[1]?.type === 'tick' && ticks[1].tick.flex).toBe(200);
+    const gaps = segs.filter((s) => s.type === 'gap');
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]?.type === 'gap' && gaps[0].flex).toBe(300);
+  });
+
+  it('关插件 tooltip 只用 snippet；开插件拼 purpose/时间', () => {
+    expect(
+      formatTickTooltip({ snippet: '你好世界', flowOn: false, timeLabel: '14:00' })
+    ).toBe('你好世界');
+    expect(
+      formatTickTooltip({
+        snippet: '你好世界',
+        flowOn: true,
+        timeLabel: '14:00',
+        purpose: '梳理 IPC',
+      })
+    ).toBe('梳理 IPC · 你好世界');
+    expect(
+      formatTickTooltip({ snippet: '你好世界', flowOn: true, timeLabel: '14:00' })
+    ).toBe('14:00 · 你好世界');
+  });
+
+  it('snippet 折叠空白且截断', () => {
+    expect(snippetFromUserText('  a   b  ')).toBe('a b');
+    expect(snippetFromUserText('x'.repeat(120)).endsWith('…')).toBe(true);
+  });
+
+  it('wheel 行模式换算 36px', () => {
+    expect(wheelDeltaY({ deltaY: 40, deltaMode: 0 })).toBe(40);
+    expect(wheelDeltaY({ deltaY: 2, deltaMode: 1 })).toBe(72);
+  });
+
+  it('点 tick：DOM 在则 scrollIntoView，否则 VSM scrollTo', () => {
+    const intoView = vi.fn();
+    const row = document.createElement('article');
+    row.setAttribute('data-msg-id', 'u1');
+    row.scrollIntoView = intoView;
+    const scroller = document.createElement('div');
+    scroller.appendChild(row);
+    const manager = new VirtualScrollManager(100);
+    manager.syncOrder(['u1', 'u2']);
+    scrollToScrubberTarget(scroller, 'u1', manager);
+    expect(intoView).toHaveBeenCalledWith({
+      behavior: 'smooth',
+      block: 'center',
+    });
+
+    const scrollTo = vi.fn();
+    const empty = {
+      querySelector: () => null,
+      clientHeight: 400,
+      scrollTo,
+    } as unknown as HTMLElement;
+    manager.setActual('u1', 200);
+    manager.setActual('u2', 200);
+    scrollToScrubberTarget(empty, 'u2', manager);
+    expect(scrollTo).toHaveBeenCalledWith({
+      top: 100,
+      behavior: 'smooth',
+    });
+  });
+
+  it('conversation-flow 祖先与 purpose 节点读取', () => {
+    const host = document.createElement('div');
+    host.setAttribute('data-conversation-flow', 'on');
+    const scroller = document.createElement('div');
+    scroller.innerHTML =
+      '<article data-msg-id="a1"><div data-flow-purpose aria-label="梳理 IPC">x</div></article>';
+    host.appendChild(scroller);
+    expect(isConversationFlowOn(scroller)).toBe(true);
+    expect(readPurposeLabel(scroller, 'a1')).toBe('梳理 IPC');
+    expect(readPurposeLabel(scroller, 'missing')).toBeUndefined();
+  });
+});

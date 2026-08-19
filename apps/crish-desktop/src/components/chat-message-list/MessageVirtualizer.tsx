@@ -13,6 +13,7 @@ import {
   unregisterActiveVsm,
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
+import { FlowScrubber } from './FlowScrubber';
 
 import {
   messageVirtualizerPropsEqual,
@@ -127,9 +128,17 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
     };
   }, []);
 
+  // 首帧就把 id 序写入 VSM，避免只靠 layout effect 时测试/首屏 visibleRange 为空
+  vs.manager.syncOrder(msgIds);
   const { startIndex, endIndex, startOffset, estimatedTotalHeight } =
-    vs.visibleRange;
+    vs.manager.computeVisibleRange(
+      vs.scrollTop,
+      vs.viewportHeight,
+      messages.length,
+      6
+    );
   const endOffset = vs.manager.getOffset(endIndex);
+  const totalHeight = vs.manager.getTotalHeight(messages.length);
 
   const pinnedIdSet = useMemo(
     () => new Set(pinnedItems.map((p) => p.id)),
@@ -137,18 +146,19 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
   );
 
   return (
-    <div
-      ref={vs.containerRef}
-      className={styles.list}
-      role="region"
-      aria-label="会话消息"
-      data-total-count={messages.length}
-      data-show-all={showAllMessages ? 'true' : 'false'}
-      data-virtual-scroll="true"
-      onClick={handleMarkdownClick}
-      onScroll={vs.onScroll}
-    >
-      <div className={styles.listInner}>
+    <div className={styles.streamHost} data-chat-stream-host="">
+      <div
+        ref={vs.containerRef}
+        className={styles.list}
+        role="region"
+        aria-label="会话消息"
+        data-total-count={messages.length}
+        data-show-all={showAllMessages ? 'true' : 'false'}
+        data-virtual-scroll="true"
+        onClick={handleMarkdownClick}
+        onScroll={vs.onScroll}
+      >
+        <div className={styles.listInner}>
         {pinnedItems.length > 0 ? (
           <div
             className={styles.pinnedBar}
@@ -290,7 +300,14 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
           }}
           aria-hidden
         />
+        </div>
       </div>
+      <FlowScrubber
+        messages={messages}
+        manager={manager}
+        totalHeight={totalHeight}
+        scrollerRef={vs.containerRef}
+      />
     </div>
   );
 };

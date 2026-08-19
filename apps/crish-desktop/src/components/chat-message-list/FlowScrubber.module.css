@@ -1,0 +1,96 @@
+/* 对话叶滚动条左侧无轨刻度。相对叶 scroller 绝对定位，禁止钉在视口上。 */
+
+.wrapper {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* 滚动条宽 + 2px 缝，零重叠；right:0 的 hitbox 不得侵入滚动条 */
+  right: calc(var(--scrollbar-thumb-width, 7px) + 2px);
+  width: 20px;
+  z-index: var(--z-dock, 10);
+  pointer-events: none;
+  overflow: visible;
+}
+
+.root {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 100%;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: flex-end;
+  gap: 8px;
+  overflow: visible;
+  transition: gap var(--transition-fast);
+}
+
+.root:hover {
+  gap: 12px;
+}
+
+.gap {
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-height: 0;
+  width: 0;
+  pointer-events: none;
+}
+
+.tick {
+  position: relative;
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-height: 2px;
+  width: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 1px;
+  background-color: var(--text-tertiary);
+  transform-origin: right center;
+  cursor: pointer;
+  pointer-events: auto;
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
+  box-sizing: border-box;
+  transition:
+    width var(--transition-smooth),
+    background-color var(--transition-smooth);
+}
+
+.tick::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  bottom: -8px;
+  left: -20px;
+  right: 0;
+  z-index: 1;
+}
+
+.tick.isActive {
+  background-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
+  width: 16px;
+}
+
+.root:hover .tick {
+  width: 16px;
+  background-color: color-mix(in srgb, var(--text-primary) 25%, transparent);
+}
+
+.root:hover .tick.isActive {
+  width: 24px;
+  background-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
+}
+
+.tick:hover,
+.root:hover .tick:hover {
+  background-color: var(--text-primary);
+  width: 32px;
+  z-index: 10;
+}
