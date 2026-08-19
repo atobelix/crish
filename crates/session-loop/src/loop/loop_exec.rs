@@ -50,7 +50,7 @@ impl AgentSessionLoop {
         if self.max_turns == 0 {
             self.state.emit_event(AgentEvent::RuntimeError {
                 session_id: self.session_id.clone(),
-                timestamp: crate::steering::now_iso_utc(),
+                timestamp: conex_shared::time::now_iso_utc(),
                 error: "maxTurns 预算用尽（turnIndex=0，maxTurns=0）".to_string(),
                 retryable: Some(true),
             });
@@ -116,7 +116,7 @@ impl AgentSessionLoop {
         }
         let start_event = AgentEvent::AgentStart {
             session_id: self.session_id.clone(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
         };
         self.state.emit_event(start_event);
         // I8-E1 第一批：session.start 钩子广播（run 启动处；载荷最小子集
@@ -230,7 +230,7 @@ impl AgentSessionLoop {
         // 观测事件（runtime-error：retryable 只表「可重试」，与收场正交）
         self.state.emit_event(AgentEvent::RuntimeError {
             session_id: self.session_id.clone(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             error: err.message().to_string(),
             retryable: Some(decision == RecoveryDecision::Retry),
         });
@@ -310,7 +310,7 @@ impl AgentSessionLoop {
         let diagnostic = decision.diagnostic.clone();
         let end_event = AgentEvent::AgentEnd {
             session_id: self.session_id.clone(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             reason,
             error: error.clone(),
         };

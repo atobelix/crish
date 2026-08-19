@@ -49,7 +49,7 @@ pub(crate) fn fatal_provider_error(
     let compression_note = compression_fatal_note(state, classified.kind);
     state.emit_event(AgentEvent::RuntimeError {
         session_id: state.machine.context().session_id.clone(),
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         error: format!(
             "{:?}: {}{}",
             classified.kind, classified.message, compression_note

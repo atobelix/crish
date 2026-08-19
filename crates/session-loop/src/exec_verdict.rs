@@ -252,7 +252,7 @@ pub(crate) fn mark_rest_cancelled(
             concurrency: call.concurrency,
             summary: call.summary.clone(),
             // EV-09（D-03）：兄弟失败取消——标记时刻打点（未执行，duration=0）
-            occurred_at_ms: Some(crate::steering::unix_millis() as u64),
+            occurred_at_ms: Some(conex_shared::time::unix_millis() as u64),
         });
         events.push(ToolEvent::ToolEnd {
             call_id: call.id.clone(),

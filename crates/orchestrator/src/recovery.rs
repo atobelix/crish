@@ -726,7 +726,7 @@ impl RecoveryCoordinator {
                 RECOVER_ACKNOWLEDGED_EVENT,
                 &serialize_recovery_typed(&AgentEvent::RecoveryAcknowledged {
                     session_id: self.session_id.clone(),
-                    timestamp: crate::now_iso_utc(),
+                    timestamp: conex_shared::time::now_iso_utc(),
                     notification_id: None,
                     subagent_run_id: subagent_run_id.to_string(),
                 })?,

@@ -418,13 +418,13 @@ impl DocSession {
     }
 
     /// undo 回滚涉及：原 apply 已快照块 ∪ 该步新建、即将被释放的块。
+    ///
+    /// I3 精修：由 `registered_ids()` 全量扫描 + `contains_registered` 超集
+    /// 改为 `involved_ids` + `ids_created_since(version)` 增量精确
+    ///（O(involved+新增)，复用 version_index 有序区间），消除全量遍历与超集多余快照。
     fn text_ids_for_undo_checkpoint(&self, pre: &TextEngineCheckpoint) -> HashSet<BlockId> {
         let mut ids = pre.involved_ids();
-        for id in self.text_engine.registered_ids() {
-            if !pre.contains_registered(id) {
-                ids.insert(id);
-            }
-        }
+        ids.extend(self.text_engine.ids_created_since(pre.version()));
         ids
     }
 

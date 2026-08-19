@@ -295,7 +295,7 @@ pub(crate) async fn compact_with_llm_guard(
         );
         state.events.push(AgentEvent::RuntimeInterventionRequired {
             session_id: state.machine.context().session_id.clone(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             reason: "LLM 摘要不可用，压缩等待 LLM 可用".to_string(),
             choices: vec!["等待 LLM 摘要可用后自动压缩".to_string()],
             message:
@@ -397,7 +397,7 @@ pub(crate) async fn apply_compaction(
             .await;
     }
     // 时间戳护栏边界（epoch ms；与 usage 源消息时间戳同精度）
-    let boundary_ms = crate::steering::unix_millis() as i64;
+    let boundary_ms = conex_shared::time::unix_millis() as i64;
     // 摘要后台重试的丢弃消息（**对话替换前**捕获——plan 只携带 dropped
     // id，消息正文须取自压缩前对话，与同步尝试同源；T-32 任务入参）
     let dropped_for_retry: Vec<conex_types::message::AgentMessage> = plan
@@ -421,7 +421,7 @@ pub(crate) async fn apply_compaction(
     // Start 事件（压缩开始：触发原因 + 压缩前 token）
     state.emit_event(AgentEvent::ContextCompressionStart {
         session_id: session_id.clone(),
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         reason: compression_reason_str(info.reason).to_string(),
         tokens_before: plan.tokens_before,
     });
@@ -593,7 +593,7 @@ pub(crate) async fn apply_compaction(
         tokens_before: plan.tokens_before,
         tokens_after: plan.tokens_after,
         threshold_tokens,
-        created_at: crate::steering::now_iso_utc(),
+        created_at: conex_shared::time::now_iso_utc(),
         handoff: None,
         // 缓存边界（对齐 ContextCompressionCacheBoundaryMetadata；
         // structured_summary_* 为 V2 结构化摘要缓存域预留）
@@ -622,7 +622,7 @@ pub(crate) async fn apply_compaction(
     let compaction_id = record.id.clone();
     state.emit_event(AgentEvent::ContextCompressionEnd {
         session_id: session_id.clone(),
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         result: Some(record),
         aborted: false,
         error: None,

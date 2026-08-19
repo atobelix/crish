@@ -39,7 +39,7 @@ use conex_types::events::{AgentEvent, SecurityAuditDecision, SecurityAuditOperat
 use conex_types::impact::ImpactAssessment;
 
 use crate::events::{EventQueue, PersistError};
-use crate::now_iso_utc;
+use conex_shared::time::now_iso_utc;
 use crate::persist::Store;
 use crate::steering_queue::{PendingMessageQueue, SteeringInputEntry};
 

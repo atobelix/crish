@@ -267,7 +267,7 @@ pub fn collect_checkpoint_from_messages(
         }
         if let Some(mut checkpoint) = parse_checkpoint_marker(&text)? {
             if checkpoint.timestamp.is_none() {
-                checkpoint.timestamp = Some(crate::steering::now_iso_utc());
+                checkpoint.timestamp = Some(conex_shared::time::now_iso_utc());
             }
             return Ok(Some(checkpoint));
         }

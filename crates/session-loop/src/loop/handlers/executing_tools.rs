@@ -126,7 +126,7 @@ pub(crate) async fn handle(
         );
         state.emit_event(AgentEvent::RuntimeError {
             session_id: state.machine.context().session_id.clone(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             error: format!("工具致命错误：{fatal}"),
             retryable: None,
         });
@@ -154,7 +154,7 @@ fn tool_result_message(result: &ClassifiedToolResult) -> AgentMessage {
     AgentMessage {
         id: format!("tool-result-{}", result.id),
         role: AgentMessageRole::Tool,
-        created_at: crate::steering::now_iso_utc(),
+        created_at: conex_shared::time::now_iso_utc(),
         blocks: vec![AgentMessageBlock::ToolResult {
             tool_call_id: result.id.clone(),
             tool_name: result.tool_name.clone(),
@@ -278,7 +278,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                 AgentEvent::ToolBatchStart {
                     session_id: session_id.clone(),
                     batch_id: id.clone(),
-                    timestamp: crate::steering::now_iso_utc(),
+                    timestamp: conex_shared::time::now_iso_utc(),
                     summary: format!("{count} 个工具调用"),
                     calls: calls_summary.clone(),
                 }
@@ -306,7 +306,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     // EV-09（D-03）：timestamp 优先执行器打点时刻
                     timestamp: occurred_at_ms
                         .map(|ms| crate::steering::iso_from_epoch_ms(ms))
-                        .unwrap_or_else(crate::steering::now_iso_utc),
+                        .unwrap_or_else(conex_shared::time::now_iso_utc),
                     // EV-09（D-03）：轮次关联键真值（与 turn-start /
                     // message-end.turnIndex 同值口径）
                     turn_index,
@@ -337,7 +337,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         requester_run_id: requester.as_ref().map(|r| r.run_id.clone()),
                         reason: requester.as_ref().and_then(|r| r.reason.clone()),
                     },
-                    timestamp: crate::steering::now_iso_utc(),
+                    timestamp: conex_shared::time::now_iso_utc(),
                 }
             }
             ToolEvent::ApprovalResolved { call_id, decision } => {
@@ -361,7 +361,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                         }
                         ApprovalDecision::Expired => conex_types::events::ApprovalDecision::Expired,
                     },
-                    timestamp: crate::steering::now_iso_utc(),
+                    timestamp: conex_shared::time::now_iso_utc(),
                 }
             }
             ToolEvent::ToolEnd {
@@ -398,7 +398,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                     // EV-09（D-03）：timestamp 优先执行器打点时刻
                     timestamp: occurred_at_ms
                         .map(|ms| crate::steering::iso_from_epoch_ms(ms))
-                        .unwrap_or_else(crate::steering::now_iso_utc),
+                        .unwrap_or_else(conex_shared::time::now_iso_utc),
                     // EV-09（D-03）：工具原子要素真值（审批重试 attempt 链 /
                     // 幂等去重 / 中间件改写后实际入参）
                     attempt: *attempt,
@@ -410,7 +410,7 @@ fn emit_tool_events(state: &mut LoopState, events: &[ToolEvent]) {
                 AgentEvent::ToolBatchEnd {
                     session_id: session_id.clone(),
                     batch_id: id.clone(),
-                    timestamp: crate::steering::now_iso_utc(),
+                    timestamp: conex_shared::time::now_iso_utc(),
                     // EV-09（D-03）：摘要级结果清单（id + toolName + status
                     // + duration；全量输出由 tool-end 承载）
                     calls: results_summary.clone(),

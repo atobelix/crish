@@ -32,7 +32,8 @@ use conex_types::message::{
     AgentMessage, AgentMessageBlock, AgentMessageMetadataKind, AgentMessageRole,
 };
 
-use crate::steering::{metadata_kind_wire, now_iso_utc, unix_millis, SteeringReason};
+use crate::steering::{metadata_kind_wire, SteeringReason};
+use conex_shared::time::{now_iso_utc, unix_millis};
 
 /// 消息 id 计数器（保证同毫秒内多次注入 id 唯一）
 static MESSAGE_ID_COUNTER: AtomicU64 = AtomicU64::new(0);

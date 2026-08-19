@@ -48,7 +48,7 @@ static MESSAGE_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 /// 生成唯一消息 id（前缀 + 毫秒时间戳 + 序号）
 pub(crate) fn new_message_id(prefix: &str) -> String {
     let n = MESSAGE_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("{prefix}-{}-{n}", crate::steering::unix_millis())
+    format!("{prefix}-{}-{n}", conex_shared::time::unix_millis())
 }
 
 /// 重试等待延迟注入函数（D1 §3.1.2 注入面签名：本次尝试序号、Retry-After
@@ -460,7 +460,7 @@ pub(crate) fn emit_missing_turn_end(state: &mut LoopState) {
     let end_event = AgentEvent::TurnEnd {
         session_id: state.machine.context().session_id.clone(),
         turn_index,
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         tool_call_count: state.machine.context().tool_call_count,
         usage: None,
     };
@@ -504,7 +504,7 @@ pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>
     for intent in &drained {
         state.events.push(AgentEvent::ControlIntent {
             session_id: session_id.clone(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             kind: intent.kind.as_event_kind().to_string(),
             intent_id: intent.id.clone(),
             source: intent.source.clone(),
@@ -515,7 +515,7 @@ pub(crate) fn check_control(state: &mut LoopState) -> Result<Option<EndDecision>
     for intent in &drained {
         state.events.push(AgentEvent::ControlIntent {
             session_id: session_id.clone(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             kind: intent.kind.as_event_kind().to_string(),
             intent_id: intent.id.clone(),
             source: intent.source.clone(),

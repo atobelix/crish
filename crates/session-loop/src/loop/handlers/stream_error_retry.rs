@@ -191,7 +191,7 @@ pub(crate) fn emit_retry_diagnostic(
     let session_id = state.machine.context().session_id.clone();
     state.emit_event(AgentEvent::ProviderDiagnostic {
         session_id,
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         diagnostic: ProviderDiagnostic {
             phase: ProviderDiagnosticPhase::Retry,
             attempt: Some(attempt),
@@ -225,7 +225,7 @@ pub(crate) fn emit_length_escalation_diagnostic(
     let session_id = state.machine.context().session_id.clone();
     state.emit_event(AgentEvent::ProviderDiagnostic {
         session_id,
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         diagnostic: ProviderDiagnostic {
             phase: ProviderDiagnosticPhase::Retry,
             attempt: Some(attempt),

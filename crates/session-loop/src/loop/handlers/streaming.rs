@@ -73,7 +73,7 @@ pub(crate) async fn handle(
     // （request 最后使用点 = stream 调用，NLL 允许此后 &mut state；
     // 消费循环尚未开始，锚点必然先于任何 message-delta）。
     let request = build_request(state);
-    let request_started_at_ms = crate::steering::unix_millis() as u64;
+    let request_started_at_ms = conex_shared::time::unix_millis() as u64;
     let result = provider.stream(&request).await;
     emit_provider_request_anchored(state, request_started_at_ms);
     // T09.1 双轨：预生成 assistant 消息 id——实时 delta 与最终收口消息共用
@@ -486,7 +486,7 @@ fn emit_provider_request_anchored(state: &mut LoopState, request_started_at_ms: 
         .map(|t| t.model().to_string());
     state.emit_event(AgentEvent::ProviderRequestAnchored {
         session_id,
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         turn_index,
         model,
         request_started_at_ms,
@@ -499,7 +499,7 @@ fn emit_diagnostics(state: &mut LoopState, consumed: &ConsumeResult) {
     for diagnostic in &consumed.diagnostics {
         state.emit_event(AgentEvent::ProviderDiagnostic {
             session_id: session_id.clone(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             diagnostic: diagnostic.clone(),
         });
     }
@@ -544,7 +544,7 @@ fn consume_cache_usage(state: &mut LoopState, consumed: &ConsumeResult) {
     };
     let completion = get("completionTokens").unwrap_or(0);
     let total = get("totalTokens").unwrap_or(0);
-    let completed_at_ms = crate::steering::unix_millis() as u64;
+    let completed_at_ms = conex_shared::time::unix_millis() as u64;
     if let Some(miss) = tracker.record_usage(scalars, completion, total, completed_at_ms) {
         tracing::debug!(
             missed_tokens = miss.missed_tokens,
@@ -622,7 +622,7 @@ fn build_assistant_message(
     AgentMessage {
         id: message_id.to_string(),
         role: AgentMessageRole::Assistant,
-        created_at: crate::steering::now_iso_utc(),
+        created_at: conex_shared::time::now_iso_utc(),
         blocks,
         metadata: if consumed.metadata.is_null() {
             None
@@ -687,7 +687,7 @@ fn delta_to_message_event(
     };
     Some(AgentEvent::MessageDelta {
         session_id: session_id.to_string(),
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         message_id: message_id.to_string(),
         block,
     })
@@ -704,7 +704,7 @@ fn emit_message_deltas(state: &mut LoopState, message: &AgentMessage) {
         ) {
             state.events.push(AgentEvent::MessageDelta {
                 session_id: session_id.clone(),
-                timestamp: crate::steering::now_iso_utc(),
+                timestamp: conex_shared::time::now_iso_utc(),
                 message_id: message.id.clone(),
                 block: block.clone(),
             });

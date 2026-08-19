@@ -41,7 +41,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     let turn_end_event = AgentEvent::TurnEnd {
         session_id: ctx.session_id.clone(),
         turn_index: ctx.turn_index,
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
         tool_call_count: ctx.tool_call_count,
         // D-03 契约窗口（EV-11/EV-13）：turn 级 usage 真值——streaming
         // consume 后写入槽位（六字段：prompt/completion/total/cache_read/
@@ -127,7 +127,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
         // 01 §1.5 / 05 §2.8 对齐 core:index.ts:593-608）
         state.emit_event(AgentEvent::RuntimeError {
             session_id: ctx.session_id.clone(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             error: format!(
                 "maxTurns 预算用尽（turnIndex={}，maxTurns={}）",
                 ctx.turn_index, ctx.max_turns

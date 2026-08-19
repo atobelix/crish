@@ -98,7 +98,7 @@ pub(crate) async fn handle(
                         let nudge_msg = AgentMessage {
                             id: new_message_id("nudge-promise"),
                             role: AgentMessageRole::User,
-                            created_at: crate::steering::now_iso_utc(),
+                            created_at: conex_shared::time::now_iso_utc(),
                             blocks: vec![AgentMessageBlock::Text { text: nudge_prompt }],
                             metadata: Some(serde_json::json!({
                                 "kind": AgentMessageMetadataKind::ToolPromiseRecovery,

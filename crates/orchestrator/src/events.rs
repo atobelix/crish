@@ -28,7 +28,7 @@ use session_loop::{is_retraction_evacuation_event, SessionFreezeRegistry};
 
 use crate::blocks::persist_compression_block;
 use crate::normalize::normalize_envelope;
-use crate::now_iso_utc;
+use conex_shared::time::now_iso_utc;
 use crate::persist::{SessionSequencer, Store, StoreError};
 use crate::run::{map_outcome_to_terminal, RunError, RunHandle, EVENT_STORE_WRITE_FAILED_REASON};
 
@@ -686,7 +686,7 @@ mod tests {
     }
 
     fn ts() -> String {
-        crate::now_iso_utc()
+        conex_shared::time::now_iso_utc()
     }
 
     fn agent_start() -> AgentEvent {

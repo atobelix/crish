@@ -320,7 +320,7 @@ impl SummaryRetryGuardConfig {
 ///   防「压缩→仍超→再压缩」死循环——本护栏防「摘要失败→无限被动触发」
 ///   循环，两者互不消耗对方计数。
 ///
-/// 时间注入面：`now_ms` 由调用方提供（生产 [crate::steering::unix_millis]），
+/// 时间注入面：`now_ms` 由调用方提供（生产 [conex_shared::time::unix_millis]），
 /// 测试注入假时钟驱动窗口过期断言，零真实等待。
 pub struct SummaryRetryGate {
     config: SummaryRetryGuardConfig,
@@ -424,7 +424,7 @@ pub(crate) fn emit_summary_background(
     if let Some(sink) = sink {
         sink.emit(&AgentEvent::SummaryBackground {
             session_id: session_id.to_string(),
-            timestamp: crate::steering::now_iso_utc(),
+            timestamp: conex_shared::time::now_iso_utc(),
             phase: phase.to_string(),
             attempt,
             reason,
@@ -533,7 +533,7 @@ impl SummaryDispatch {
             }
             // E2 F2 层 1：窗口护栏——累计尝试达上限 → 拒绝（停止重试，等待
             // 窗口过期重置；被动触发点不阻塞用户消息发送，仅本次补摘要跳过）
-            let now_ms = crate::steering::unix_millis() as u64;
+            let now_ms = conex_shared::time::unix_millis() as u64;
             let mut gate = self.retry_gate.lock().unwrap_or_else(|e| {
                 tracing::error!(target: "session_loop", "summary retry_gate 锁中毒，按恢复模式继续：{e}");
                 e.into_inner()
@@ -576,7 +576,7 @@ impl SummaryDispatch {
                     tracing::error!(target: "session_loop", "summary retry_gate 锁中毒，按恢复模式继续：{e}");
                     e.into_inner()
                 });
-                    gate.record_episode(outcome.attempts, crate::steering::unix_millis() as u64);
+                    gate.record_episode(outcome.attempts, conex_shared::time::unix_millis() as u64);
                     drop(gate);
                     if let Some(callback) = on_done {
                         callback(outcome);
@@ -800,7 +800,7 @@ fn jittered_ms(base: u64, jitter: f64) -> u64 {
         return base;
     }
     let jitter = jitter.min(0.2);
-    let seed = crate::steering::unix_millis();
+    let seed = conex_shared::time::unix_millis();
     // [-1, 1) 伪随机（时间种子低位）
     let spread = ((seed % 2001) as f64 / 2000.0) * 2.0 - 1.0;
     let scaled = base as f64 * (1.0 + spread * jitter);

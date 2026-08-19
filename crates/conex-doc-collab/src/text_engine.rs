@@ -535,11 +535,23 @@ impl TextEngine {
     // ─── P-H2 增量检查点（3-5：只快照涉及块，不 cold_updates.clone() 全表）──
 
     /// 当前已登记块 id（仅键；不含冷藏字节）。
+    ///
+    /// I3 精修：由全表 `snapshots`/`cold_updates` 双表扫描改为复用 `version_index`
+    /// 有序索引，避免双表哈希合并；仍 O(N) 但与增量路径同源。增量 undo 已改走
+    /// `ids_created_since` + `registered_involved`，不再依赖此全量方法。
+    /// 保留此方法供外部兼容与测试，非增量热路径。
+    #[allow(dead_code)]
     pub(crate) fn registered_ids(&self) -> HashSet<BlockId> {
-        let mut ids = HashSet::with_capacity(self.snapshots.len() + self.cold_updates.len());
-        ids.extend(self.snapshots.keys().copied());
-        ids.extend(self.cold_updates.keys().copied());
-        ids
+        // 复用 version_index（BTree 有序，O(N) 收集），与 checkpoint/restore 版本语义同源
+        self.version_index.values().copied().collect()
+    }
+
+    /// 增量：自 `since_version` 以来新建的块 id（O(新增)，复用 version_index 有序区间）。
+    pub(crate) fn ids_created_since(&self, since_version: u64) -> Vec<BlockId> {
+        self.version_index
+            .range(since_version..)
+            .map(|(_, id)| *id)
+            .collect()
     }
 
     /// 只捕获 `involved` 中块的可恢复数据。
@@ -710,6 +722,8 @@ pub(crate) struct TextEngineCheckpoint {
     /// I3：checkpoint 时的 next_version，用于增量释放新增块。
     version: u64,
     /// I3：仅涉及块中在旧表中已存在的 id（O(involved)），替代全量 HashSet。
+    /// 增量 undo 已改走 version 索引，非热路径保留此集供 `contains_registered` 精确判断涉及块。
+    #[allow(dead_code)]
     registered_involved: HashSet<BlockId>,
     pinned: HashSet<BlockId>,
     /// 检查点时刻处于热态的块 id（恢复后 rehydrate）。
@@ -721,37 +735,21 @@ impl TextEngineCheckpoint {
         self.blocks.keys().copied().collect()
     }
 
-    pub(crate) fn contains_registered(&self, id: BlockId) -> bool {
-        // 涉及块：以快照中的 existed 为准（registered_involved 仅含 existed==true 的 id）
-        if self.blocks.contains_key(&id) {
-            return self.registered_involved.contains(&id);
-        }
-        // 未涉及块：已收敛为增量，无法精确回答旧表成员。
-        // 为保持 `text_ids_for_undo_checkpoint` 的正确性（需识别新增块），
-        // 对未涉及块统一返回 false，使 `!contains_registered(new_outside)` 为 true，
-        // 从而将所有未涉及的当前块视为新增并纳入 undo 快照（超集，正确但非最优）。
-        // 真正的新增块释放由 `restore` 的 version_index 精确处理。
-        self.registered_involved.contains(&id)
+    /// 检查点版本（next_version 快照），用于增量判断新增块边界。
+    pub(crate) fn version(&self) -> u64 {
+        self.version
     }
 
-    /// I3：精确判断旧表成员（仅当 TextEngine 可提供版本时使用）。
-    /// 未涉及块的精确判断需结合 `block_versions`，但 `TextEngineCheckpoint` 独立于引擎时
-    /// 无法访问；`restore` 已通过 version_index 精确处理，`contains_registered` 仅用于
-    /// `DocSession::text_ids_for_undo_checkpoint` 的超集快照，已足够正确。
+    /// 判断 `id` 在检查点时刻是否已登记（精确，O(1)）。
+    ///
+    /// I3 精修：移除对未涉及块的超集分支（原对未涉及统一返回 false 导致全量超集）。
+    /// 本方法仅对涉及块精确（`registered_involved` 含 `involved ∩ old`）；未涉及块
+    /// 是否为旧块应由 `TextEngine::ids_created_since(version)` 的 version 索引精确判定，
+    /// 调用方（`text_ids_for_undo_checkpoint`）已改为该增量路径，不再对未涉及块调用此方法。
+    /// 保留此方法供涉及块精确判断，非热路径。
     #[allow(dead_code)]
-    pub(crate) fn contains_registered_exact(
-        &self,
-        id: BlockId,
-        block_versions: &HashMap<BlockId, u64>,
-    ) -> bool {
-        if let Some(blk) = self.blocks.get(&id) {
-            return blk.existed;
-        }
-        if let Some(v) = block_versions.get(&id) {
-            return *v < self.version;
-        }
-        // 从未登记的块不在旧表中
-        false
+    pub(crate) fn contains_registered(&self, id: BlockId) -> bool {
+        self.registered_involved.contains(&id)
     }
 }
 

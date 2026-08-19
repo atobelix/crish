@@ -80,7 +80,4 @@ pub(crate) fn now_ms() -> i64 {
         .unwrap_or_default()
 }
 
-/// 兼容层，将移除 — 旧路径 re-export（`crate::now_iso_utc`），请直接使用 [`conex_shared::time::now_iso_utc`]。
-/// 实现真源：[`conex_shared::time`]，本 re-export 仅为兼容保留。
-#[deprecated(note = "Use `conex_shared::time::now_iso_utc` instead. Compatibility layer, will be removed.")]
-pub(crate) use conex_shared::time::now_iso_utc;
+

@@ -41,7 +41,7 @@ use conex_types::events::{
 };
 
 use crate::events::{EventQueue, PersistError, SequencedEvent};
-use crate::now_iso_utc;
+use conex_shared::time::now_iso_utc;
 use crate::persist::Store;
 
 /// 发射上下文（父 run 归属：信封 runId = parent_run_id，03 §5.3-2）

@@ -71,7 +71,7 @@ pub(crate) async fn handle(state: &mut LoopState) -> Result<HandlerOutcome, Loop
     let start_event = AgentEvent::TurnStart {
         session_id: session_id.clone(),
         turn_index,
-        timestamp: crate::steering::now_iso_utc(),
+        timestamp: conex_shared::time::now_iso_utc(),
     };
     state.emit_event(start_event);
     // EV-08：孤儿 turn-start 修复——记录已发射 turn-start 的轮次（收敛
