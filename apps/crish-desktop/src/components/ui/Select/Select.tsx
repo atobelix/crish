@@ -12,7 +12,6 @@
  */
 import React, { useEffect, useId, useState } from 'react';
 import { Menu } from '../Menu/Menu';
-import { Tooltip } from '../Tooltip/Tooltip';
 import type { SelectOptionItem } from '../Menu/types';
 import styles from './Select.module.css';
 
@@ -21,7 +20,7 @@ export interface SelectOption {
   label: string;
   icon?: React.ReactNode;
   disabled?: boolean;
-  /** 选项辅助说明（渲染为悬停 Tooltip，对齐 SettingsSelect 的 hint 语义） */
+  /** 选项辅助说明（行内次级文案；菜单开时 Tooltip 会被静音，故不用 Tooltip） */
   hint?: string;
 }
 
@@ -58,13 +57,13 @@ function toMenuItem(option: SelectOption): SelectOptionItem {
   };
 }
 
-/** 选项节点：hint 存在时以 Tooltip 包裹（对齐 SettingsSelect 的 hint 呈现） */
+/** 选项节点：hint 作为行内次级文案（菜单开着时 isTooltipSilenced 会灭 Tooltip） */
 function renderOption(
   option: SelectOption,
   selected: boolean,
   onSelect: (id: string) => void
 ) {
-  const button = (
+  return (
     <button
       key={option.id}
       type="button"
@@ -88,16 +87,14 @@ function renderOption(
           {option.icon}
         </span>
       ) : null}
-      <span className={styles.optionLabel}>{option.label}</span>
+      <span className={styles.optionText}>
+        <span className={styles.optionLabel}>{option.label}</span>
+        {option.hint ? (
+          <span className={styles.optionHint}>{option.hint}</span>
+        ) : null}
+      </span>
       {selected ? <CheckIcon /> : null}
     </button>
-  );
-  return option.hint ? (
-    <Tooltip key={option.id} content={option.hint}>
-      {button}
-    </Tooltip>
-  ) : (
-    button
   );
 }
 

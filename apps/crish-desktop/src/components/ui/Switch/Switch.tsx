@@ -4,7 +4,7 @@
  * 收敛 settings 域手写开关（settings-switch 全局类 checkbox 与 aria-pressed
  * 切换按钮）的统一落点：role="switch" + aria-checked + 键盘 Space/Enter 切换。
  *
- * 分层契约：只依赖 react 与 tokens CSS 变量；thumb 平移走 --transition-fast，
+ * 分层契约：只依赖 react 与 tokens CSS 变量；thumb 平移走 --easing-enter（无过冲），
  * 圆角走 --radius-full，不写死数值（对齐 ui/ 原子层样式规范）。
  *
  * 受控/非受控双模（对齐 ui/Menu、ui/Select 惯例）：

@@ -142,7 +142,7 @@ describe('ui/Select', () => {
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
   });
 
-  it('hint 选项：悬停展示辅助说明（Tooltip），选择不受影响', async () => {
+  it('hint 选项：行内展示辅助说明，选择不受影响', async () => {
     const onChange = vi.fn();
     render(
       <Select
@@ -151,11 +151,9 @@ describe('ui/Select', () => {
       />
     );
     fireEvent.click(screen.getByRole('combobox'));
-    const option = await screen.findByRole('option', { name: '选项甲' });
-    fireEvent.mouseEnter(option);
-    await waitFor(() =>
-      expect(screen.getByText('仅作说明')).toBeInTheDocument()
-    );
+    const option = await screen.findByRole('option', { name: /选项甲/ });
+    expect(screen.getByText('仅作说明')).toBeInTheDocument();
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     fireEvent.click(option);
     expect(onChange).toHaveBeenCalledWith('a');
   });

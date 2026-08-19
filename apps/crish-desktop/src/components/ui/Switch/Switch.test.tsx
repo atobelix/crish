@@ -2,11 +2,16 @@
 /**
  * ui/Switch 基础测试：受控/非受控双模、键盘交互、aria 断言、label 关联
  */
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { Switch } from './Switch';
 import styles from './Switch.module.css';
+
+const DIR = dirname(fileURLToPath(import.meta.url));
 
 afterEach(() => {
   cleanup();
@@ -78,6 +83,13 @@ describe('ui/Switch', () => {
     expect(sw.className).toContain('layout-extra');
     rerender(<Switch />);
     expect(screen.getByRole('switch').className).not.toContain(styles.trackSm);
+  });
+
+  it('拇指过渡无 y>1 过冲贝塞尔', () => {
+    const css = readFileSync(join(DIR, 'Switch.module.css'), 'utf8');
+    expect(css).not.toMatch(/1\.51/);
+    expect(css).not.toMatch(/cubic-bezier\([^)]*[1-9]\.\d{2,}/);
+    expect(css).toMatch(/--easing-enter/);
   });
 
   it('外部 label htmlFor 可关联开关（设置行标题场景）', () => {
