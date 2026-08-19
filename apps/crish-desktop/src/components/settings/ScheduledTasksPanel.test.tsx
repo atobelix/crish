@@ -44,10 +44,9 @@ vi.mock('../../api/openAgentPanel', () => ({
 }));
 
 import { ScheduledTasksPanel } from './ScheduledTasksPanel';
-import { triggerWorkflow, deleteWorkflow } from '../../api/workflowApi';
+import { triggerWorkflow, deleteWorkflow, listWorkflows } from '../../api/workflowApi';
 
 describe('ScheduledTasksPanel', () => {
-  const onShowToast = vi.fn();
   const onBackToChat = vi.fn();
 
   beforeEach(() => {
@@ -56,7 +55,7 @@ describe('ScheduledTasksPanel', () => {
   });
 
   it('renders workflow list and handles manual trigger', async () => {
-    render(<ScheduledTasksPanel onShowToast={onShowToast} onBackToChat={onBackToChat} />);
+    render(<ScheduledTasksPanel onBackToChat={onBackToChat} />);
 
     await act(async () => {
       await Promise.resolve();
@@ -73,7 +72,7 @@ describe('ScheduledTasksPanel', () => {
   });
 
   it('handles task deletion successfully', async () => {
-    render(<ScheduledTasksPanel onShowToast={onShowToast} onBackToChat={onBackToChat} />);
+    render(<ScheduledTasksPanel onBackToChat={onBackToChat} />);
 
     await act(async () => {
       await Promise.resolve();
@@ -90,7 +89,7 @@ describe('ScheduledTasksPanel', () => {
   });
 
   it('opens create workflow modal form', async () => {
-    render(<ScheduledTasksPanel onShowToast={onShowToast} onBackToChat={onBackToChat} />);
+    render(<ScheduledTasksPanel onBackToChat={onBackToChat} />);
 
     await act(async () => {
       await Promise.resolve();
@@ -100,5 +99,22 @@ describe('ScheduledTasksPanel', () => {
     fireEvent.click(addBtn);
 
     expect(screen.getByPlaceholderText('例如：每日代码体检')).toBeTruthy();
+  });
+
+  it('新建/收起走 ui/Button，列表空态不是 fieldset', async () => {
+    vi.mocked(listWorkflows).mockResolvedValueOnce([]);
+    render(<ScheduledTasksPanel onBackToChat={onBackToChat} />);
+
+    const toggle = await screen.findByRole('button', { name: '新建' });
+    expect(toggle).toHaveAttribute('data-variant', 'secondary');
+    expect(toggle).toHaveAttribute('data-size', 'sm');
+    expect(document.querySelector('fieldset')).toBeNull();
+
+    fireEvent.click(toggle);
+    expect(screen.getByRole('button', { name: '收起' })).toHaveAttribute(
+      'data-variant',
+      'secondary'
+    );
+    expect(screen.getByRole('form', { name: '新建计划' })).toBeTruthy();
   });
 });

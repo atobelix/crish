@@ -99,6 +99,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
           type="button"
           variant="ghost"
           size="sm"
+          className={styles.actionBtn}
           onClick={onBackToChat}
           aria-label="返回对话"
           icon={<Lucide.ArrowLeft size={16} aria-hidden />}
@@ -115,6 +116,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
           type="button"
           variant="secondary"
           size="sm"
+          className={styles.actionBtn}
           aria-expanded={showForm}
           aria-controls="sched-in-chat-form"
           onClick={() => {

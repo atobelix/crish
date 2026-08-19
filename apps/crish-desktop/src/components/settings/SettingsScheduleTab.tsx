@@ -1,7 +1,7 @@
-﻿import { useToast } from '../../services/toast/ToastContext';
+import { useToast } from '../../services/toast/ToastContext';
 /**
  * 设置 · 定时任务：筛选、新建、编辑、启停与立即执行；成功静默，仅错误提示。
- * 壳组件：只保留 tab 外壳（筛选栏 + 双入口 + 表单/列表装配）；
+ * 壳组件：筛选与创建方式走 SegmentedControl（7px），动作走 ui/Button；
  * 状态/动作见 useWorkflowsState，表单/列表见 WorkflowForm / WorkflowList。
  */
 import React, { useState } from 'react';
@@ -31,6 +31,11 @@ import { WorkflowList } from './WorkflowList';
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
 };
+
+const CREATE_PATH_OPTIONS = [
+  { value: 'ai', label: '用对话创建（推荐）' },
+  { value: 'manual', label: '手动创建' },
+];
 
 export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange }) => {
   const { showToast: _showToast } = useToast();
@@ -135,6 +140,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
           <SegmentedControl
             aria-label="任务筛选"
             size="sm"
+            className={styles.segment}
             value={filter}
             options={FILTER_OPTIONS.map((opt) => ({
               value: opt.id,
@@ -146,6 +152,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
             type="button"
             variant="secondary"
             size="sm"
+            className={styles.actionBtn}
             aria-expanded={createMode !== 'none'}
             aria-controls="sched-settings-form"
             disabled={busy}
@@ -189,32 +196,29 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
           </div>
         )}
 
-        {createMode === 'paths' ? (
-          <div className={styles.createPaths} id="sched-settings-form">
-            <button
-              type="button"
-              className={styles.createPath}
-              onClick={handleAiCreateSchedule}
-            >
-              <span className={styles.createPathTitle}>用对话创建</span>
-              <span className={styles.createPathDesc}>
-                描述目标和频率，让 AI 帮你写好（推荐）
-              </span>
-            </button>
-            <button
-              type="button"
-              className={styles.createPath}
-              onClick={() => {
+        {createMode !== 'none' && !isEditing ? (
+          <div
+            className={styles.createSeg}
+            id={createMode === 'paths' ? 'sched-settings-form' : undefined}
+          >
+            <SegmentedControl
+              aria-label="创建方式"
+              size="sm"
+              block
+              className={styles.segment}
+              disabled={busy}
+              value={createMode === 'form' ? 'manual' : ''}
+              options={CREATE_PATH_OPTIONS}
+              onChange={(v) => {
+                if (v === 'ai') {
+                  handleAiCreateSchedule();
+                  return;
+                }
                 setCreateMode('form');
                 setError('');
                 setOk('');
               }}
-            >
-              <span className={styles.createPathTitle}>手动创建</span>
-              <span className={styles.createPathDesc}>
-                自己填名称、内容和触发方式
-              </span>
-            </button>
+            />
           </div>
         ) : null}
 

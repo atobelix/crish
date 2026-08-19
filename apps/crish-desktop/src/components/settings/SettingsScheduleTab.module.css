@@ -24,6 +24,12 @@
   gap: var(--space-1_5, 6px);
 }
 
+.presetChips :global(button) {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--button-radius, 7px);
+}
+
 .formRow {
   display: flex;
   flex-wrap: wrap;
@@ -36,41 +42,26 @@
   min-width: 0;
 }
 
-.createPaths {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2, 8px);
-  margin: 8px 0 16px;
+/* 覆盖 SegmentedControl 外圈 8px / 内滑块 6px，锁设置按钮 7px */
+.toolbar .segment,
+.createSeg .segment {
+  --seg-outer-radius: var(--button-radius, 7px);
+  --seg-inner-radius: 5px;
+  border-radius: var(--button-radius, 7px);
 }
 
-.createPath {
+.toolbar .segment :global(button),
+.createSeg .segment :global(button) {
   appearance: none;
   -webkit-appearance: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  width: 100%;
-  padding: 12px 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl, 12px);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
 }
 
-.createPath:hover {
-  background: var(--bg-hover);
+.createSeg {
+  margin: 0 0 var(--space-4, 16px);
 }
 
-.createPathTitle {
-  font-size: var(--font-size-base);
-  color: var(--text-primary);
-}
-
-.createPathDesc {
-  font-size: var(--font-size-sm);
-  color: var(--text-secondary);
+.actionBtn {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--button-radius, 7px);
 }
