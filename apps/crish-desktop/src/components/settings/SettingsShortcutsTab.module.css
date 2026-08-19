@@ -4,9 +4,26 @@
   gap: var(--space-2);
 }
 
+.controlGroup :global(button) {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--button-radius, 7px);
+}
+
+.shortcutSearch {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--button-radius, 7px);
+  box-shadow: none;
+}
+
 .shortcutKeyBtn {
+  appearance: none;
+  -webkit-appearance: none;
   min-width: 88px;
   font-variant-numeric: tabular-nums;
+  border-radius: var(--button-radius, 7px);
+  box-shadow: none;
 }
 
 .recording {

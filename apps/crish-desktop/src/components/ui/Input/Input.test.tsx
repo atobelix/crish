@@ -6,6 +6,9 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { useState } from 'react';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Input } from './Input';
 import { Textarea } from './Textarea';
 
@@ -58,11 +61,33 @@ describe('ui/Input', () => {
     expect(document.getElementById(hintId!)).toHaveTextContent('仅本机保存');
   });
 
-  it('search 型：放大镜前缀对屏幕阅读器隐藏', () => {
+  it('search 型：role=searchbox，不走原生 type=search 皮', () => {
     render(<Input variant="search" aria-label="搜索" />);
     const input = screen.getByRole('searchbox');
     expect(input).toBeInTheDocument();
-    expect(input).toHaveAttribute('type', 'search');
+    expect(input).toHaveAttribute('type', 'text');
+    expect(input).not.toHaveAttribute('type', 'search');
+  });
+
+  it('search 型：传入 type=search 仍被压成 text（防 WebView2 原生白框）', () => {
+    render(
+      <Input variant="search" type="search" aria-label="防原生搜索" />
+    );
+    const input = screen.getByRole('searchbox', { name: '防原生搜索' });
+    expect(input).toHaveAttribute('type', 'text');
+  });
+
+  it('search 皮：appearance 抹平 + 7px + 无原生 search 装饰 + 无厚阴影', () => {
+    // 不用 new URL('./*.module.css')：vitest 会把 CSS module 改写成非 file URL
+    const cssDir = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(cssDir, 'Input.module.css'), 'utf8');
+    expect(css).toContain('appearance: none');
+    expect(css).toContain('-webkit-appearance: none');
+    expect(css).toContain('var(--button-radius, 7px)');
+    expect(css).toContain('::-webkit-search-decoration');
+    expect(css).toContain('::-webkit-search-cancel-button');
+    expect(css).toContain('box-shadow: none');
+    expect(css).not.toMatch(/box-shadow:\s*0\s+[2-9]px/);
   });
 
   it('password 型：默认密文，点击切换明文并还原', () => {

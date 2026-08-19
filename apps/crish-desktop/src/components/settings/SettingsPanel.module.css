@@ -135,8 +135,6 @@
   flex-direction: column;
   gap: var(--space-0_5, 2px);
   padding: 8px 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
 }
 
 .navEmpty {
@@ -201,8 +199,6 @@
   overflow-y: auto; /*                (X = W) */
   overflow-x: hidden;
   overscroll-behavior: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
   contain: strict; /*      */
   align-items: stretch;
 }

@@ -68,3 +68,62 @@ describe('快捷键设置页单源契约（T2-5）', () => {
     expect(serviceSrc).toContain("'shortcuts.overrides'");
   });
 });
+
+describe('快捷键页控件皮契约（搜索 / 改键钮 / overlay 细条）', () => {
+  it('搜索走 ui/Input variant=search，不再挂裸 type=search / settings-field-input', () => {
+    const src = readSrc('components/settings/SettingsShortcutsTab.tsx');
+    expect(src).toContain('variant="search"');
+    expect(src).toContain('from \'../ui\'');
+    expect(src).toMatch(/<\s*Input[\s\S]*variant="search"/);
+    expect(src).not.toMatch(/<input[^>]*type=["']search["']/);
+    expect(src).not.toContain('settings-field-input');
+    expect(src).not.toContain('settings-shortcuts-filter');
+  });
+
+  it('改键钮走 ui/Button，并挂 7px / appearance 去 UA 皮', () => {
+    const src = readSrc('components/settings/SettingsShortcutsTab.tsx');
+    const css = readSrc('components/settings/SettingsShortcutsTab.module.css');
+    expect(src).toContain('variant="secondary"');
+    expect(src).toContain('size="sm"');
+    expect(src).toContain('styles.shortcutKeyBtn');
+    expect(src).not.toMatch(/<button\s+className=\{`shortcut-key-btn/);
+    expect(css).toContain('appearance: none');
+    expect(css).toContain('-webkit-appearance: none');
+    expect(css).toContain('var(--button-radius, 7px)');
+    expect(css).toContain('.shortcutSearch');
+    expect(css).toContain('.shortcutKeyBtn');
+  });
+
+  it('ui/Input search 变体去掉原生皮：appearance + 7px + 不渲染 type=search', () => {
+    const inputTsx = readSrc('components/ui/Input/Input.tsx');
+    const inputCss = readSrc('components/ui/Input/Input.module.css');
+    expect(inputTsx).toContain("variant === 'search' ? 'searchbox'");
+    expect(inputTsx).not.toMatch(/variant === 'search'\s*\n\s*\? 'search'/);
+    expect(inputCss).toContain('appearance: none');
+    expect(inputCss).toContain('-webkit-appearance: none');
+    expect(inputCss).toContain('var(--button-radius, 7px)');
+    expect(inputCss).toContain('::-webkit-search-decoration');
+    expect(inputCss).toContain('::-webkit-search-cancel-button');
+    expect(inputCss).not.toMatch(/box-shadow:\s*0\s+4px/);
+  });
+
+  it('设置 cover/nav/Dialog 吃 overlay 细条：入口引入 + 无三角 + cover 不写 scrollbar-width', () => {
+    const overlay = readSrc('styles/overlay-scrollbar.css');
+    const indexCss = readSrc('index.css');
+    const panel = readSrc('components/settings/SettingsPanel.module.css');
+    const uiCss = readSrc('components/settings/SettingsUI.module.css');
+    expect(indexCss).toContain("@import './styles/overlay-scrollbar.css'");
+    expect(indexCss).not.toContain('shell-scrollbar.css');
+    expect(overlay).toContain('::-webkit-scrollbar');
+    expect(overlay).toContain('::-webkit-scrollbar-button');
+    expect(overlay).toContain('coverContent');
+    expect(overlay).toContain('navScroll');
+    expect(overlay).toContain('dialogBody');
+    expect(overlay).toContain('--tint-scrollbar-thumb');
+    expect(overlay).not.toMatch(/(?:^|\n)\*\s*\{[^}]*scrollbar-width/);
+    expect(panel).not.toMatch(/scrollbar-width\s*:/);
+    expect(panel).toContain('.coverContent');
+    expect(uiCss).toContain('var(--button-radius, 7px)');
+    expect(uiCss).toContain('appearance: none');
+  });
+});

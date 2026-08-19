@@ -63,6 +63,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
       onCompositionEnd,
       onEnter,
       'aria-describedby': ariaDescribedBy,
+      role,
       ...restProps
     },
     ref
@@ -162,14 +163,15 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
 
     // password 型别的明文切换状态
     const [showPassword, setShowPassword] = useState(false);
+    // search 不用 type=search：WebView2 会画 Windows 原生白框/清除钮。
+    // 语义改走 role=searchbox；外观由 Input.module.css appearance:none 接管。
     const inputType =
       variant === 'password'
         ? showPassword
           ? 'text'
           : 'password'
-        : variant === 'search'
-          ? 'search'
-          : 'text';
+        : 'text';
+    const inputRole = variant === 'search' ? 'searchbox' : role;
 
     const describedBy =
       [error ? errorId : null, hint ? hintId : null, ariaDescribedBy ?? null]
@@ -226,7 +228,6 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={setCombinedRef}
             id={inputId}
             className={`${inputClasses}${className ? ` ${className}` : ''}`}
-            type={inputType}
             value={value}
             defaultValue={defaultValue}
             disabled={disabled}
@@ -238,6 +239,8 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             aria-invalid={error ? true : undefined}
             aria-describedby={describedBy}
             {...restProps}
+            type={inputType}
+            role={inputRole}
           />
 
           {suffix != null ? (

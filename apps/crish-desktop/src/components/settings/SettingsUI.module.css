@@ -125,10 +125,23 @@
   max-width: 240px;
 }
 
-.filterInput :global(input[type='search']::-webkit-search-cancel-button),
-.filterInput :global(input[type='search']::-webkit-search-decoration),
-.filterInputGrow :global(input[type='search']::-webkit-search-cancel-button),
-.filterInputGrow :global(input[type='search']::-webkit-search-decoration) {
+.filterInput :global(input),
+.filterInputGrow :global(input) {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: var(--button-radius, 7px);
+  box-shadow: none;
+}
+
+.filterInput :global(input::-webkit-search-cancel-button),
+.filterInput :global(input::-webkit-search-decoration),
+.filterInput :global(input::-webkit-search-results-button),
+.filterInput :global(input::-webkit-search-results-decoration),
+.filterInputGrow :global(input::-webkit-search-cancel-button),
+.filterInputGrow :global(input::-webkit-search-decoration),
+.filterInputGrow :global(input::-webkit-search-results-button),
+.filterInputGrow :global(input::-webkit-search-results-decoration) {
+  display: none;
   -webkit-appearance: none;
   appearance: none;
 }

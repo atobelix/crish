@@ -231,6 +231,7 @@ export const SettingsShortcutsTab: React.FC = () => {
           id={filterId}
           variant="search"
           size="sm"
+          className={styles.shortcutSearch}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜索…"
