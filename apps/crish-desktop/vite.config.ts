@@ -303,9 +303,19 @@ export default defineConfig({
     chunkSizeGatePlugin(),
   ],
   resolve: {
-    alias: {
-      '@': resolve(__dirname, 'src'),
-    },
+    alias: [
+      { find: '@', replacement: resolve(__dirname, 'src') },
+      { find: '@crish/block-paper/chrome.css', replacement: resolve(__dirname, '../../packages/block-paper/src/chrome/blockChrome.css') },
+      { find: '@crish/block-paper/paper-list.css', replacement: resolve(__dirname, '../../packages/block-paper/src/list/paperList.css') },
+      { find: /^@crish\/block-paper$/, replacement: resolve(__dirname, '../../packages/block-paper/src/index.ts') },
+      { find: /^@crish\/block-paper-contract$/, replacement: resolve(__dirname, '../../packages/block-paper-contract/src/index.ts') },
+      { find: '@crish/shared-utils/browser', replacement: resolve(__dirname, '../../packages/shared-utils/src/browser-index.ts') },
+      { find: '@crish/shared-utils/node', replacement: resolve(__dirname, '../../packages/shared-utils/src/node-index.ts') },
+      { find: /^@crish\/shared-utils$/, replacement: resolve(__dirname, '../../packages/shared-utils/src/index.ts') },
+      { find: /^@crish\/shared-types$/, replacement: resolve(__dirname, '../../packages/shared-types/src/index.ts') },
+      { find: /^@crish\/conversation-flow$/, replacement: resolve(__dirname, '../../packages/conversation-flow/src/index.ts') },
+      { find: /^@crish\/editor-kit$/, replacement: resolve(__dirname, '../../packages/editor-kit/src/index.ts') },
+    ],
   },
   optimizeDeps: {
     // 避免 dev prebundle 把 Node-only stdio transport 打进浏览器 deps
