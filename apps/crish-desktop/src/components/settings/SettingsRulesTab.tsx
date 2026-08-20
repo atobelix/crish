@@ -8,7 +8,7 @@ import { useToast } from '../../services/toast/ToastContext';
 import React, { useId, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './SettingsRulesTab.module.css';
-import { Button, Select, Tooltip } from '../ui';
+import { Button, Input, Select, Tooltip } from '../ui';
 import {
   SettingsPage,
   SettingsSection,
@@ -135,36 +135,35 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
   }
 
   const headerMeta = (
-    <div className="settings-head-tools settings-head-tools--rules">
-      <div className="settings-head-tools-row">
-        <label htmlFor={scopeSelectId} className="sr-only">
-          规则作用域
-        </label>
-        <Select
-          value={scopeKey}
-          options={scopeOptions.map((o) => ({
-            id: o.value,
-            label: o.label,
-            ...(o.hint !== undefined ? { hint: o.hint } : {}),
-          }))}
-          onChange={setScopeKey}
+    <div className={styles.headerMetaRow}>
+      <label htmlFor={scopeSelectId} className="sr-only">
+        规则作用域
+      </label>
+      <Select
+        id={scopeSelectId}
+        value={scopeKey}
+        options={scopeOptions.map((o) => ({
+          id: o.value,
+          label: o.label,
+          ...(o.hint !== undefined ? { hint: o.hint } : {}),
+        }))}
+        onChange={setScopeKey}
+        disabled={busy}
+        size="sm"
+      />
+      <Tooltip content={`编辑${scopeLabel}全文`}>
+        <Button
+          ref={fullEditorBtnRef}
+          type="button"
+          variant="secondary"
+          size="sm"
+          onClick={openFullEditor}
+          aria-label={`编辑${scopeLabel}全文`}
           disabled={busy}
-          className="settings-rules-scope-select"
-        />
-        <Tooltip content={`编辑${scopeLabel}全文`}>
-          <Button
-            ref={fullEditorBtnRef}
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={openFullEditor}
-            aria-label={`编辑${scopeLabel}全文`}
-            disabled={busy}
-          >
-            编辑全文
-          </Button>
-        </Tooltip>
-      </div>
+        >
+          编辑全文
+        </Button>
+      </Tooltip>
     </div>
   );
 
@@ -221,7 +220,7 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
                   <Tooltip key={preset} content={exists ? '已添加' : `添加：${preset}`}>
                     <button
                       type="button"
-                      className={`settings-rule-preset${exists ? ' is-disabled' : ''}`}
+                      className={styles.presetChip}
                       onClick={() => handleAddPreset(preset)}
                       disabled={exists || busy}
                       aria-label={
@@ -242,14 +241,14 @@ export const SettingsRulesTab: React.FC<Props> = ({ onBlockingOverlayChange }) =
               <span className={styles.labelDesc}>输入后添加</span>
             </div>
             <div className={styles.inputGroup}>
-              <input
+              <Input
                 ref={addInputRef}
                 id={addInputId}
-                type="text"
+                size="sm"
                 placeholder="写一条规则…"
                 value={newRuleText}
                 onChange={(e) => setNewRuleText(e.target.value)}
-                className={`settings-field-input settings-field-input--sm settings-field-input--grow ${styles.inputGrow}`}
+                className={styles.inputGrow}
                 disabled={busy}
                 aria-label="自定义规则"
                 autoComplete="off"

@@ -16,7 +16,7 @@ import {
   SettingsCard,
   SettingsRow,
 } from './SettingsUI';
-import { Button, Select, Tooltip } from '../ui';
+import { Button, Input, Select, Tooltip } from '../ui';
 import {
   usePermissionField,
   selectPermissionMode,
@@ -180,6 +180,8 @@ export const SettingsSecurityTab: React.FC = () => {
             desc="工具执行前要不要先确认"
             control={
               <Select
+                id={permLabelId}
+                size="sm"
                 className="settings-security-select"
                 value={permissionMode}
                 options={PERMISSION_MODES.map((m) => ({
@@ -258,9 +260,9 @@ export const SettingsSecurityTab: React.FC = () => {
               </span>
             </div>
             <div className={styles.inputGroup}>
-              <input
+              <Input
                 id={wlInputId}
-                type="text"
+                size="sm"
                 placeholder="如 git status"
                 value={newWhitelistCmd}
                 onChange={(e) => setNewWhitelistCmd(e.target.value)}
@@ -269,7 +271,7 @@ export const SettingsSecurityTab: React.FC = () => {
                 autoCorrect="off"
                 autoCapitalize="off"
                 aria-label="要信任的命令"
-                className={`settings-field-input settings-field-input--sm settings-field-input--grow ${styles.inputGrow}`}
+                className={styles.inputGrow}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -369,7 +371,7 @@ export const SettingsSecurityTab: React.FC = () => {
                   >
                     <button
                       type="button"
-                      className={`settings-chip-btn ${styles.presetChip}`}
+                      className={styles.presetChip}
                       disabled={already}
                       aria-pressed={already}
                       aria-label={already ? `${cmd} 已添加` : `添加 ${cmd}`}

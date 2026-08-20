@@ -147,17 +147,19 @@
 }
 
 .controlInput {
-  width: 180px;
-  min-width: 0;
+  min-width: 160px;
+  max-width: 280px;
 }
 
 .controlSelect {
-  border-radius: var(--button-radius, 7px);
+  min-width: 160px;
+  max-width: 280px;
+  width: auto;
 }
 
 .controlSegment.controlSegment {
-  --seg-outer-radius: var(--button-radius, 7px);
-  --seg-inner-radius: 5px;
+  --seg-outer-radius: var(--radius-md, 6px);
+  --seg-inner-radius: 4px;
 }
 
 .controlRange {
@@ -263,6 +265,7 @@
   align-items: center;
   gap: var(--space-3);
 }
+
 
 /* Modern select tooltip */
 .modernSelectTooltip {

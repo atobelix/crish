@@ -56,12 +56,12 @@
   font-weight: 600;
 }
 
-/*      OK /    /    */
+/*      OK / 异常 / 4px 状态 Badge    */
 .badgeOk {
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-success);
@@ -72,7 +72,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-danger);
@@ -80,11 +80,27 @@
 }
 
 .monoBadge {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--font-mono);
   font-size: 12px;
   padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--tint-strong);
+  border-radius: 4px;
+  background: rgba(29, 28, 26, 0.055);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color, #e2dfd9);
+}
+
+:global(html[data-theme='dark']) .monoBadge {
+  background: rgba(245, 244, 240, 0.08);
+  border-color: var(--border-color, #2b2926);
+}
+
+.logDirControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
 }
 
 .monoEllipsis {
@@ -121,7 +137,7 @@
   font-size: 12px;
   font-weight: 700;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--text-danger);
   background: var(--color-error-bg);
 }
@@ -152,7 +168,7 @@
   color: var(--text-tertiary);
 }
 
-/*        */
+/*  最近诊断：CSS Grid 72px 150px 1fr 刚性栅格隔离，消灭重叠碰撞   */
 .diagList {
   list-style: none;
   margin: 0;
@@ -162,12 +178,14 @@
 }
 
 .diagItem {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 7px 4px;
+  display: grid;
+  grid-template-columns: 72px 150px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--border-subtle);
   font-size: 13px;
+  box-sizing: border-box;
 }
 
 .diagItem:last-child {
@@ -175,19 +193,26 @@
 }
 
 .diagLevel {
-  flex-shrink: 0;
-  width: 52px;
+  width: 72px;
+  box-sizing: border-box;
   text-align: center;
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
-  padding: 1px 0;
+  padding: 2px 4px;
   border-radius: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .diagLevel_debug {
   color: var(--text-tertiary);
-  background: var(--tint-strong);
+  background: rgba(29, 28, 26, 0.08);
+}
+
+:global(html[data-theme='dark']) .diagLevel_debug {
+  background: rgba(245, 244, 240, 0.1);
 }
 
 .diagLevel_info {
@@ -207,14 +232,17 @@
 }
 
 .diagTs {
-  flex-shrink: 0;
+  width: 150px;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-tertiary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .diagMsg {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

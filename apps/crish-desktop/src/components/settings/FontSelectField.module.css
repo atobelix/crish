@@ -1,6 +1,6 @@
 .settingsSelect {
   position: relative;
-  min-width: 120px;
+  min-width: 140px;
   max-width: 280px;
 }
 
@@ -14,35 +14,30 @@
 .settingsSelectTrigger {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1_5);
+  justify-content: space-between;
+  gap: 8px;
   flex: 1;
   min-width: 0;
-  min-height: var(--control-height-sm);
-  height: var(--control-height-sm);
-  padding: 0 8px 0 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xl);
-  background: var(--tint-hover);
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-color, #e2dfd9);
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-card, #ffffff);
   color: var(--text-primary);
   font-family: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-normal);
   cursor: pointer;
-  text-align: left;
-  box-shadow: none;
   outline: none;
-  transition:
-    background var(--transition-micro),
-    border-color var(--transition-micro);
+  box-shadow: none;
+  box-sizing: border-box;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
 }
 
 .settingsSelectTrigger:hover:not(:disabled) {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 96%,
-    var(--text-primary) 4%
-  );
-  background: var(--tint-hover);
+  background: rgba(29, 28, 26, 0.045);
+  border-color: var(--border-color, #e2dfd9);
 }
 
 .settingsSelectTrigger:active:not(:disabled),
@@ -50,13 +45,23 @@
 .settingsSelectTrigger:focus-visible,
 .settingsSelectTrigger[aria-expanded='true'],
 .settingsSelect.isOpen .settingsSelectTrigger {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
-  background: var(--tint-hover);
-  box-shadow: var(--focus-ring);
+  background: rgba(29, 28, 26, 0.045);
+  border-color: var(--border-color, #e2dfd9);
+  box-shadow: none;
+}
+
+:global(html[data-theme='dark']) .settingsSelectTrigger {
+  border-color: var(--border-color, #2b2926);
+  background: var(--bg-card, #181715);
+}
+
+:global(html[data-theme='dark']) .settingsSelectTrigger:hover:not(:disabled),
+:global(html[data-theme='dark']) .settingsSelectTrigger:active:not(:disabled),
+:global(html[data-theme='dark']) .settingsSelectTrigger:focus,
+:global(html[data-theme='dark']) .settingsSelectTrigger:focus-visible,
+:global(html[data-theme='dark']) .settingsSelectTrigger[aria-expanded='true'] {
+  background: rgba(245, 244, 240, 0.06);
+  border-color: var(--border-color, #2b2926);
 }
 
 .settingsSelectTrigger:disabled {
@@ -87,20 +92,25 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-md, 6px);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   flex-shrink: 0;
   padding: 0;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .settingsSelectIconBtn:hover:not(:disabled) {
-  background: var(--bg-active);
+  background: rgba(29, 28, 26, 0.045);
   color: var(--text-primary);
+}
+
+:global(html[data-theme='dark']) .settingsSelectIconBtn:hover:not(:disabled) {
+  background: rgba(245, 244, 240, 0.06);
 }
 
 .settingsSelectIconBtn:disabled {
@@ -110,64 +120,108 @@
 
 .settingsSelectMenu,
 .settingsSelectMenuPortal {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-2xl);
-  box-shadow: var(--shadow-lg);
-  padding: 4px 1px 4px 4px;
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--border-color, #e2dfd9);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px -10px rgba(29, 28, 26, 0.09),
+              0 6px 20px -3px rgba(29, 28, 26, 0.03);
+  padding: 6px;
   display: flex;
   flex-direction: column;
+  gap: 2px;
   overflow: hidden;
   box-sizing: border-box;
-  z-index: var(--z-tooltip);
+  z-index: var(--z-dropdown-menu, 2000);
+}
+
+:global(html[data-theme='dark']) .settingsSelectMenu,
+:global(html[data-theme='dark']) .settingsSelectMenuPortal {
+  background: var(--sep-bg-panel, rgba(24, 23, 21, 0.96));
+  border-color: var(--border-color, #2b2926);
+  box-shadow: 0 24px 54px -10px rgba(0, 0, 0, 0.70);
+}
+
+.settingsSelectHeader {
+  margin-bottom: 2px;
 }
 
 .settingsSelectScroll {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-height: 0;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color, #e2dfd9) transparent;
+}
+
+.settingsSelectScroll::-webkit-scrollbar {
+  width: 3px;
+}
+.settingsSelectScroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.settingsSelectScroll::-webkit-scrollbar-thumb {
+  background: var(--border-color, #e2dfd9);
+  border-radius: 3px;
 }
 
 .settingsSelectGroup {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xxs, 11px);
   color: var(--text-tertiary);
-  padding: 8px 10px 4px;
+  padding: 6px 10px 2px;
   user-select: none;
 }
 
 .settingsSelectItem {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
+  height: 28px;
+  min-height: 28px;
   border: none;
   background: transparent;
   text-align: left;
-  padding: 8px 10px;
-  border-radius: var(--radius-lg);
+  padding: 0 10px;
+  border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
   color: var(--text-primary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-normal);
-  transition: background var(--transition-micro);
+  transition: background-color 0.12s ease;
+  box-sizing: border-box;
 }
 
 .settingsSelectItem:hover {
-  background: var(--bg-hover);
+  background: rgba(29, 28, 26, 0.045);
+}
+
+:global(html[data-theme='dark']) .settingsSelectItem:hover {
+  background: rgba(245, 244, 240, 0.06);
 }
 
 .settingsSelectItem.isActive {
-  background: var(--bg-active);
+  background: rgba(29, 28, 26, 0.065);
   color: var(--text-primary);
-  font-weight: var(--font-weight-medium);
+  font-weight: 500;
+}
+
+:global(html[data-theme='dark']) .settingsSelectItem.isActive {
+  background: rgba(245, 244, 240, 0.09);
 }
 
 .settingsSelectItem.isActive:hover {
-  background: var(--bg-active);
+  background: rgba(29, 28, 26, 0.065);
+}
+
+:global(html[data-theme='dark']) .settingsSelectItem.isActive:hover {
+  background: rgba(245, 244, 240, 0.09);
 }
 
 .settingsSelectItemLabel {
@@ -179,61 +233,33 @@
 }
 
 .settingsSelectItemHint {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xxs, 11px);
   color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
-.settingsSelectCheck {
+.settingsSelectCheckIcon {
   flex-shrink: 0;
-  color: var(--accent-green);
+  color: #059669;
+}
+
+:global(html[data-theme='dark']) .settingsSelectCheckIcon {
+  color: #10b981;
 }
 
 .settingsSelectEmpty {
   padding: 12px 10px;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   color: var(--text-tertiary);
   text-align: center;
 }
 
 .settingsSelectFooter {
-  border-top: 1px solid var(--border-subtle);
-  margin-top: var(--space-1);
-  padding-top: var(--space-1_5);
+  border-top: 1px solid rgba(29, 28, 26, 0.06);
+  margin-top: 2px;
+  padding-top: 2px;
 }
 
-.settingsSelectCustom {
-  display: flex;
-  gap: var(--space-1_5);
-  padding: 0 2px;
-}
-
-.settingsSelectCustomInput {
-  flex: 1;
-  min-width: 0;
-  height: 28px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: 0 8px;
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  outline: none;
-  box-shadow: none;
-  transition: border-color var(--transition-micro);
-}
-
-.settingsSelectCustomInput:focus {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
-  outline: none;
-  box-shadow: none;
-}
-.settingsSelectCheckIcon {
-  flex-shrink: 0;
-  color: var(--accent-green);
+:global(html[data-theme='dark']) .settingsSelectFooter {
+  border-top-color: rgba(255, 255, 255, 0.07);
 }

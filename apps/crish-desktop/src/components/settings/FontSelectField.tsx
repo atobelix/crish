@@ -31,6 +31,7 @@ interface Props {
   placeholder?: string;
   maxHeight?: number;
   className?: string;
+  header?: React.ReactNode;
   footer?: React.ReactNode;
   valuePreviewFamily?: string;
 }
@@ -43,6 +44,7 @@ export const FontSelectField: React.FC<Props> = ({
   placeholder = '选择…',
   maxHeight = 280,
   className,
+  header,
   footer,
   valuePreviewFamily,
 }) => {
@@ -53,11 +55,11 @@ export const FontSelectField: React.FC<Props> = ({
   const selected = options.find((o) => o.value === value);
   const label = selected?.label || placeholder;
 
-  // 面板宽度贴合触发器宽度（[140,220] 钳制；位置由基座负责）
+  // 面板宽度贴合触发器宽度（[140,280] 钳制；位置由基座负责）
   const measureWidth = useCallback(() => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      setMenuWidth(Math.min(Math.max(rect.width, 140), 220));
+      setMenuWidth(Math.min(Math.max(rect.width, 160), 280));
     }
   }, []);
 
@@ -134,6 +136,7 @@ export const FontSelectField: React.FC<Props> = ({
             </button>
           }
         >
+          {header ? <div className={styles.settingsSelectHeader}>{header}</div> : null}
           <div role="listbox" className={styles.settingsSelectScroll}>
             {options.map((opt) => {
               const isSelected = opt.value === value;

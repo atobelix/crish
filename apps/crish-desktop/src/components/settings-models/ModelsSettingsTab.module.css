@@ -78,8 +78,8 @@
   border: 1px solid transparent;
   background: transparent;
   text-align: left;
-  padding: 8px 10px;
-  border-radius: var(--radius-xl);
+  padding: 6px 10px;
+  border-radius: 8px;
   cursor: pointer;
   font-family: inherit;
   transition:
@@ -89,16 +89,29 @@
 }
 
 .mrlItem:hover {
-  background: var(--tint-hover);
+  background: rgba(29, 28, 26, 0.045);
+}
+
+:global(html[data-theme='dark']) .mrlItem:hover {
+  background: rgba(245, 244, 240, 0.06);
 }
 
 .mrlItem.isActive {
-  background: var(--tint-hover);
-  border-color: var(--tint-strong);
+  background: rgba(29, 28, 26, 0.065);
+  border-color: var(--border-color, #e2dfd9);
+}
+
+:global(html[data-theme='dark']) .mrlItem.isActive {
+  background: rgba(245, 244, 240, 0.09);
+  border-color: var(--border-color, #2b2926);
 }
 
 .mrlItem.isActive:hover {
-  background: var(--tint-hover);
+  background: rgba(29, 28, 26, 0.065);
+}
+
+:global(html[data-theme='dark']) .mrlItem.isActive:hover {
+  background: rgba(245, 244, 240, 0.09);
 }
 
 .mrlItemRowTop {
@@ -931,36 +944,77 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--border-subtle);
-  background: var(--control-soft-bg, var(--bg-secondary));
-  border-radius: var(--radius-xl);
-  padding: 0 12px;
-  min-height: var(--control-height-sm, 28px);
+  border: 1px solid var(--border-color, #e2dfd9);
+  background: var(--bg-card, #ffffff);
+  border-radius: var(--radius-md, 6px);
+  padding: 0 10px;
+  min-height: 28px;
+  height: 28px;
   color: var(--text-primary);
   font-family: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
+
 .addServiceBtn:hover {
-  background: var(--tint-hover);
+  background: rgba(29, 28, 26, 0.045);
+  border-color: var(--border-color, #e2dfd9);
 }
+
+:global(html[data-theme='dark']) .addServiceBtn {
+  border-color: var(--border-color, #2b2926);
+  background: var(--bg-card, #181715);
+}
+
+:global(html[data-theme='dark']) .addServiceBtn:hover {
+  background: rgba(245, 244, 240, 0.06);
+}
+
 .addServiceBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: 0 0 0 2px var(--tint-focus-ring, rgba(0, 0, 0, 0.08));
 }
+
 .addProviderMenu {
-  min-width: 200px;
+  min-width: 220px;
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--border-color, #e2dfd9);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px -10px rgba(29, 28, 26, 0.09);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
 }
+
+:global(html[data-theme='dark']) .addProviderMenu {
+  background: var(--sep-bg-panel, rgba(24, 23, 21, 0.96));
+  border-color: var(--border-color, #2b2926);
+  box-shadow: 0 24px 54px -10px rgba(0, 0, 0, 0.70);
+}
+
 .addMenuTitle {
-  padding: 6px 10px 8px;
-  font-size: var(--font-size-xxs);
+  padding: 4px 10px;
+  font-size: var(--font-size-xs, 11px);
   font-weight: var(--font-weight-medium);
   color: var(--text-tertiary);
-  letter-spacing: var(--letter-spacing-wide);
+  border-bottom: 1px solid rgba(29, 28, 26, 0.06);
+  margin-bottom: 2px;
 }
+
+:global(html[data-theme='dark']) .addMenuTitle {
+  border-bottom-color: rgba(255, 255, 255, 0.07);
+}
+
 .addMenuTitleGap {
-  margin-top: var(--space-1);
+  margin-top: 4px;
 }
+
 .addMenuOption {
   display: flex;
   align-items: center;
@@ -968,51 +1022,74 @@
   gap: var(--space-3);
   width: 100%;
   min-height: 28px;
-  padding: 4px 10px;
+  height: 28px;
+  padding: 0 10px;
   border: none;
-  border-radius: var(--radius-lg);
+  border-radius: 8px;
   background: transparent;
   color: var(--text-primary);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
+  box-sizing: border-box;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
+
 .addMenuOption:hover {
-  background: var(--tint-active);
+  background: rgba(29, 28, 26, 0.045);
+  color: var(--text-primary);
+}
+
+:global(html[data-theme='dark']) .addMenuOption:hover {
+  background: rgba(245, 244, 240, 0.06);
 }
 
 /* ModelsCascadeSelect (ModelProfileList) */
 .cascadeSelectTrigger {
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  border: 1px solid var(--border-subtle);
-  background: var(--control-soft-bg, var(--bg-secondary));
-  border-radius: var(--radius-full);
-  padding: 0 12px;
-  min-height: var(--control-height-sm, 28px);
+  border: 1px solid var(--border-color, #e2dfd9);
+  background: var(--bg-card, #ffffff);
+  border-radius: var(--radius-md, 6px);
+  padding: 0 10px;
+  height: 28px;
+  min-height: 28px;
+  min-width: 220px;
   color: var(--text-primary);
   font-family: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   cursor: pointer;
   box-sizing: border-box;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
 .cascadeSelectTrigger:hover {
-  background: var(--tint-hover);
+  background: rgba(29, 28, 26, 0.045);
+  border-color: var(--border-color, #e2dfd9);
+}
+
+:global(html[data-theme='dark']) .cascadeSelectTrigger {
+  border-color: var(--border-color, #2b2926);
+  background: var(--bg-card, #181715);
+}
+
+:global(html[data-theme='dark']) .cascadeSelectTrigger:hover {
+  background: rgba(245, 244, 240, 0.06);
 }
 
 .cascadeSelectTrigger:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: 0 0 0 2px var(--tint-focus-ring, rgba(0, 0, 0, 0.08));
 }
 
 .cascadeSelectValue {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
-  font-weight: var(--font-weight-medium);
+  font-weight: 500;
 }
 
 .cascadeList {
@@ -1020,11 +1097,25 @@
   flex-direction: column;
   gap: 2px;
   min-width: 220px;
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--border-color, #e2dfd9);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px -10px rgba(29, 28, 26, 0.09);
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+:global(html[data-theme='dark']) .cascadeList {
+  background: var(--sep-bg-panel, rgba(24, 23, 21, 0.96));
+  border-color: var(--border-color, #2b2926);
+  box-shadow: 0 24px 54px -10px rgba(0, 0, 0, 0.70);
 }
 
 .cascadeEmpty {
-  padding: 8px 12px;
-  font-size: var(--font-size-xs);
+  padding: 8px 10px;
+  font-size: var(--font-size-xs, 11px);
   color: var(--text-tertiary);
   cursor: default;
 }
@@ -1034,18 +1125,27 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: 6px 10px;
-  border-radius: var(--radius-lg);
-  font-size: var(--font-size-sm);
+  padding: 0 10px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 8px;
+  font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
   cursor: pointer;
   position: relative;
-  transition: background var(--transition-fast);
+  box-sizing: border-box;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .cascadeRow:hover,
 .cascadeRow.isOpen {
-  background: var(--tint-active);
+  background: rgba(29, 28, 26, 0.045);
+  color: var(--text-primary);
+}
+
+:global(html[data-theme='dark']) .cascadeRow:hover,
+:global(html[data-theme='dark']) .cascadeRow.isOpen {
+  background: rgba(245, 244, 240, 0.06);
 }
 
 .cascadeChev {
@@ -1055,24 +1155,44 @@
 
 .cascadeFlyout {
   position: absolute;
-  right: calc(100% + 6px);
+  right: calc(100% + 4px);
   top: 0;
   min-width: 180px;
   max-height: 280px;
+  height: auto;
   overflow-y: auto;
-  overscroll-behavior: auto;
-  z-index: var(--z-dropdown-menu);
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  box-shadow: var(
-    --shadow-floating,
-    0 4px 16px color-mix(in srgb, var(--shadow-color) 8%, transparent)
-  );
-  padding: 4px;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color, #e2dfd9) transparent;
+  z-index: var(--z-dropdown-menu, 2000);
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--border-color, #e2dfd9);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px -10px rgba(29, 28, 26, 0.09);
+  padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  box-sizing: border-box;
+}
+
+.cascadeFlyout::-webkit-scrollbar {
+  width: 3px;
+}
+.cascadeFlyout::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cascadeFlyout::-webkit-scrollbar-thumb {
+  background: var(--border-color, #e2dfd9);
+  border-radius: 3px;
+}
+
+:global(html[data-theme='dark']) .cascadeFlyout {
+  background: var(--sep-bg-panel, rgba(24, 23, 21, 0.96));
+  border-color: var(--border-color, #2b2926);
+  box-shadow: 0 24px 54px -10px rgba(0, 0, 0, 0.70);
 }
 
 .cascadeOption {
@@ -1080,25 +1200,38 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  width: 100%;
-  padding: 5px 8px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
+  padding: 0 10px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 8px;
+  font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  text-align: left;
   cursor: pointer;
+  border: none;
+  background: transparent;
+  box-sizing: border-box;
+  transition: background-color 0.12s ease, color 0.12s ease;
 }
 
 .cascadeOption:hover {
-  background: var(--tint-active);
+  background: rgba(29, 28, 26, 0.045);
+  color: var(--text-primary);
 }
 
+:global(html[data-theme='dark']) .cascadeOption:hover {
+  background: rgba(245, 244, 240, 0.06);
+}
+
+.cascadeOption.isSelected,
 .cascadeOption.isOn {
-  background: var(--tint-active);
-  font-weight: var(--font-weight-medium);
+  background: rgba(29, 28, 26, 0.065);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+:global(html[data-theme='dark']) .cascadeOption.isSelected,
+:global(html[data-theme='dark']) .cascadeOption.isOn {
+  background: rgba(245, 244, 240, 0.09);
 }
 
 .cascadeOptionText {
@@ -1109,6 +1242,10 @@
 }
 
 .cascadeCheck {
-  color: var(--accent-primary, var(--text-primary));
+  color: #059669;
   flex-shrink: 0;
+}
+
+:global(html[data-theme='dark']) .cascadeCheck {
+  color: #10b981;
 }

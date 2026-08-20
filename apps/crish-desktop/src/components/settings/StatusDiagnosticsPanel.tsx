@@ -157,6 +157,15 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
     [showToast],
   );
 
+  const handleCopyPath = useCallback(
+    async (pathStr: string) => {
+      const ok = await copyTextBestEffort(pathStr);
+      if (ok) showToast('已复制路径');
+      else showToast('复制失败');
+    },
+    [showToast],
+  );
+
   /**
    * 重建搜索索引（T-F 06 T2.5 / M7 入口）：调 rustCore.rebuildSearchIndex
    * （core_rebuild_search_index），成功后刷新状态（诚实等待 searchIndexReady
@@ -294,11 +303,25 @@ export const StatusDiagnosticsPanel: React.FC<Props> = ({
             title="日志目录"
             desc="日志文件落盘位置（可在文件管理器中查看）"
             control={
-              <Tooltip content={status?.logDir ?? '未知'}>
-                <span className={styles.monoEllipsis} data-testid="diag-log-dir">
-                  {status?.logDir ?? '—'}
-                </span>
-              </Tooltip>
+              <div className={styles.logDirControl}>
+                <Tooltip content={status?.logDir ?? '未知'}>
+                  <span className={styles.monoEllipsis} data-testid="diag-log-dir">
+                    {status?.logDir ?? '—'}
+                  </span>
+                </Tooltip>
+                {status?.logDir ? (
+                  <Tooltip content="复制日志目录路径">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label="复制日志目录路径"
+                      onClick={() => void handleCopyPath(status.logDir!)}
+                      icon={<ClipboardCopy size={13} strokeWidth={1.75} />}
+                    />
+                  </Tooltip>
+                ) : null}
+              </div>
             }
           />
         </SettingsCard>

@@ -326,7 +326,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
               void apply({ uiFont: v as UiFontChoice });
             }}
             {...(uiPreviewFamily !== undefined && { valuePreviewFamily: uiPreviewFamily })}
-            footer={customHeader('ui')}
+            header={customHeader('ui')}
             maxHeight={320}
           />
         }
@@ -362,7 +362,7 @@ export const FontSettingsSection: React.FC<Props> = ({ onPersistSettings }) => {
                 void apply({ monoFont: v as MonoFontChoice });
               }}
               {...(monoPreviewFamily !== undefined && { valuePreviewFamily: monoPreviewFamily })}
-              footer={customHeader('mono')}
+              header={customHeader('mono')}
               maxHeight={320}
             />
           </div>

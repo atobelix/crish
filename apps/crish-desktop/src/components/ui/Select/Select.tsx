@@ -234,6 +234,7 @@ function CheckIcon() {
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
+      className={styles.checkIcon}
     >
       <path d="M20 6 9 17l-5-5" />
     </svg>

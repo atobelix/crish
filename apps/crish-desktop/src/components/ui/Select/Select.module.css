@@ -1,6 +1,6 @@
-/* ui/Select        PE-05 T05.1.6 
- *       .settings-select-trigger / .settings-field-input    
- *      tokens.css       hex/rgba */
+/* ui/Select — SmartExpandablePanel Design System Specification
+ * Single hairline border (#e2dfd9 / #2b2926), Zero-Blue palette, concentric radii (14px/8px)
+ */
 
 .selectWrap {
   display: flex;
@@ -18,42 +18,58 @@
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
   width: 100%;
-  height: var(--control-height);
-  min-height: var(--control-height);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
+  height: var(--control-height, 32px);
+  min-height: var(--control-height, 32px);
+  padding: 0 10px;
+  border: 1px solid var(--border-color, #e2dfd9);
+  border-radius: var(--radius-md, 6px);
+  font-size: var(--font-size-sm, 13px);
   font-family: var(--font-sans);
-  background: var(--bg-primary);
+  background: var(--bg-card, #ffffff);
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
   cursor: pointer;
   transition:
-    border-color var(--transition-micro),
-    background var(--transition-micro),
-    box-shadow var(--transition-micro);
+    border-color var(--transition-micro, 120ms) ease,
+    background-color var(--transition-micro, 120ms) ease,
+    box-shadow var(--transition-micro, 120ms) ease;
 }
 
 .trigger:hover {
-  border-color: var(--border-color);
+  background: rgba(29, 28, 26, 0.045);
+  border-color: var(--border-color, #e2dfd9);
 }
 
 .trigger:focus-visible {
-  border-color: var(--border-color);
-  background: var(--bg-card);
-  box-shadow: var(--focus-ring);
+  border-color: var(--border-color, #e2dfd9);
+  background: var(--bg-card, #ffffff);
+  box-shadow: 0 0 0 2px var(--tint-focus-ring, rgba(0, 0, 0, 0.08));
+}
+
+:global(html[data-theme='dark']) .trigger {
+  border-color: var(--border-color, #2b2926);
+  background: var(--bg-card, #181715);
+}
+
+:global(html[data-theme='dark']) .trigger:hover {
+  background: rgba(245, 244, 240, 0.06);
+  border-color: var(--border-color, #2b2926);
+}
+
+:global(html[data-theme='dark']) .trigger:focus-visible {
+  border-color: var(--border-color, #2b2926);
+  background: var(--bg-card, #181715);
 }
 
 .triggerSm {
-  height: var(--control-height-sm);
-  min-height: var(--control-height-sm);
-  padding: 0 var(--control-pad-x);
-  font-size: var(--font-size-xs);
-  border-radius: var(--radius-sm);
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  border-radius: var(--radius-md, 6px);
 }
 
 .triggerError {
@@ -84,43 +100,77 @@
 
 .menu {
   min-width: 180px;
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--border-color, #e2dfd9);
+  border-radius: 14px;
+  box-shadow: 0 20px 48px -10px rgba(29, 28, 26, 0.09);
+  padding: 6px;
+  box-sizing: border-box;
+}
+
+:global(html[data-theme='dark']) .menu {
+  background: var(--sep-bg-panel, rgba(24, 23, 21, 0.96));
+  border-color: var(--border-color, #2b2926);
+  box-shadow: 0 24px 54px -10px rgba(0, 0, 0, 0.70);
 }
 
 .listbox {
   display: flex;
   flex-direction: column;
-  gap: var(--dropdown-gap);
+  gap: 2px;
 }
 
 .option {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
   border: none;
   background: transparent;
   text-align: left;
-  padding: var(--item-padding);
-  border-radius: var(--item-radius);
+  padding: 0 10px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 8px;
   font-family: inherit;
-  font-size: var(--item-font-size);
+  font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
   cursor: pointer;
-  transition: background var(--transition-micro);
+  box-sizing: border-box;
+  transition:
+    background-color var(--transition-micro, 120ms) ease,
+    color var(--transition-micro, 120ms) ease;
   width: 100%;
 }
 
 .option:hover {
-  background: var(--bg-hover);
+  background: rgba(29, 28, 26, 0.045);
+  color: var(--text-primary);
+}
+
+:global(html[data-theme='dark']) .option:hover {
+  background: rgba(245, 244, 240, 0.06);
 }
 
 .option:focus-visible {
   outline: none;
-  background: var(--bg-active);
+  background: rgba(29, 28, 26, 0.065);
+}
+
+:global(html[data-theme='dark']) .option:focus-visible {
+  background: rgba(245, 244, 240, 0.09);
 }
 
 .optionSelected {
-  background: var(--bg-active);
+  background: rgba(29, 28, 26, 0.065);
   color: var(--text-primary);
+  font-weight: 500;
+}
+
+:global(html[data-theme='dark']) .optionSelected {
+  background: rgba(245, 244, 240, 0.09);
 }
 
 .optionDisabled {
@@ -139,20 +189,33 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .optionLabel {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
 }
 
 .optionHint {
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
+  font-size: 11px;
+  color: var(--text-secondary);
   line-height: 1.35;
-  font-weight: var(--font-weight-normal);
+  font-weight: 400;
+}
+
+.checkIcon {
+  flex-shrink: 0;
+  color: #059669;
+}
+
+:global(html[data-theme='dark']) .checkIcon {
+  color: #10b981;
 }
 
 .selectError {
