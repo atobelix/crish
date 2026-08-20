@@ -168,4 +168,3 @@ describe('LeafToolTabStrip 纯标签化与防溢出吸附验证', () => {
     expect(pinnedBtn).toBeTruthy();
   });
 });
-

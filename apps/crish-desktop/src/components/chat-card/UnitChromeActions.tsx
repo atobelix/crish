@@ -4,8 +4,8 @@ import React, {
   useMemo,
   useRef,
   useState,
-  useSyncExternalStore,
 } from 'react';
+import { Globe, FileCode } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { SessionInlineRename } from './SessionInlineRename';
 import { SubagentHeaderPanel } from './SubagentHeaderPanel';
@@ -15,20 +15,13 @@ import {
   resolveUnitChromeToolTip,
   UNIT_CHROME_TOOL_TIP_SIDE,
 } from './unitChromeLabel';
-import {
-  IconSidebarLeft,
-  IconSidebarRight,
-} from '../sidebar/SidebarToggleIcons';
-import { UNIT_TOOL_PANELS } from './unitChromeTools';
-import { viewRegistry } from '../../services/view-registry';
+import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import {
   applyDockToTree,
-  collapseActiveTabRightDock,
   listProjects,
   openToolInSession,
   pinSession,
   projectFolderLabel,
-  selectActiveSessionId,
   unpinSession,
   useLayoutTreeStore,
   useSessionField,
@@ -118,18 +111,13 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
     const rightDockCollapsed = dockSnapshot
       ? dockSnapshot.collapsed
       : globalTreeCollapsed;
-    const openPanelIds = dockSnapshot?.openPanelIds;
     const activePanelId = dockSnapshot?.activePanelId;
-    const openPanelSet = useMemo(
-      () => new Set(openPanelIds ?? []),
-      [openPanelIds]
-    );
 
-    const registryVersion = useSyncExternalStore(
-      (cb) => viewRegistry.subscribe(cb),
-      () => viewRegistry.getVersion()
-    );
-    void registryVersion;
+    const isPreviewActive =
+      !rightDockCollapsed &&
+      (activePanelId === 'preview' || activePanelId === 'overview');
+    const isArtifactsActive =
+      !rightDockCollapsed && activePanelId === 'files';
 
     const [shareFlash, setShareFlash] = useState(false);
     const flashTimerRef = useRef<number | null>(null);
@@ -230,12 +218,13 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       })();
     }, [sid]);
 
-    const handleOpenTool = useCallback(
-      (panelId: string) => {
-        openToolInSession((activeSessionId || '').trim(), panelId);
-      },
-      [activeSessionId]
-    );
+    const handleOpenPreview = useCallback(() => {
+      openToolInSession((activeSessionId || '').trim(), 'preview');
+    }, [activeSessionId]);
+
+    const handleOpenArtifacts = useCallback(() => {
+      openToolInSession((activeSessionId || '').trim(), 'files');
+    }, [activeSessionId]);
 
     const handleToggleRightDock = useCallback(() => {
       const shell = getCompositionRoot().shell.getState();
@@ -263,10 +252,6 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       applyDockToTree(dock, tab.sessionId);
     }, [activeSessionId]);
 
-    const handleToggleLeftSidebar = useCallback(() => {
-      getCompositionRoot().shell.toggleSidebar?.();
-    }, []);
-
     const handleJumpToNewDraft = useCallback(() => {
       enterDraftMode(folder);
     }, [folder]);
@@ -290,40 +275,101 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
         data-chat-top-header="true"
         aria-label="对话快捷操作"
       >
-        {/* ── 左侧：项目 / 标题 / 子代理 / 更多操作 ── */}
-        <div className={styles.topLeft}>
+        {/* ── 左侧：三级面包屑导航 (3-Level Breadcrumbs) ── */}
+        <div className={`${styles.topLeft} chat-top-left`}>
           {leading}
-          <nav className={styles.breadcrumbs} aria-label="Breadcrumb">
-            <Tooltip content="点击新建此项目对话" side={UNIT_CHROME_TOOL_TIP_SIDE}>
-              <button
-                type="button"
-                className={`${styles.bcItem} ${styles.bcProjectBtn}`}
-                onClick={handleJumpToNewDraft}
-              >
-                {projectLabel}
-              </button>
-            </Tooltip>
-            <span className={styles.bcSep} aria-hidden="true">
+          <nav className={`${styles.breadcrumbs} top-breadcrumbs`} aria-label="Breadcrumb">
+            {/* Level 1: Project */}
+            <div className={`${styles.breadcrumbItem} breadcrumb-item`}>
+              <Tooltip content="点击新建此项目对话" side={UNIT_CHROME_TOOL_TIP_SIDE}>
+                <button
+                  type="button"
+                  id="bcProject"
+                  className={`${styles.bcProjectBtn} breadcrumb-project`}
+                  onClick={handleJumpToNewDraft}
+                  title="点击新建此项目对话"
+                >
+                  <span className={`${styles.bcText} bc-text`}>{projectLabel}</span>
+                </button>
+              </Tooltip>
+            </div>
+
+            {/* 分割符 1 */}
+            <span className={`${styles.bcSep} bc-sep`} aria-hidden="true">
               /
             </span>
-            <SessionInlineRename
-              title={displayTitle}
-              onRename={handleRename}
-              disabled={!realSession}
-            />
+
+            {/* Level 2: Session */}
+            <div
+              className={`${styles.breadcrumbItem} ${styles.breadcrumbSession} breadcrumb-item breadcrumb-session`}
+              id="bcSession"
+              title="当前会话"
+            >
+              <SessionInlineRename
+                title={displayTitle}
+                onRename={handleRename}
+                disabled={!realSession}
+              />
+            </div>
+
+            {/* Level 3: Subagent Status Item */}
             {sessionAgents && sessionAgents.length > 0 ? (
               <>
-                <span className={styles.bcSep} aria-hidden="true">
+                <span
+                  className={`${styles.bcSep} ${styles.bcAgentSep} bc-sep bc-agent-sep`}
+                  aria-hidden="true"
+                >
                   /
                 </span>
-                <SubagentHeaderPanel
-                  agents={sessionAgents}
-                  parentSessionId={sid}
-                />
+                <div className={`${styles.breadcrumbItem} breadcrumb-item`}>
+                  <SubagentHeaderPanel
+                    agents={sessionAgents}
+                    parentSessionId={sid}
+                  />
+                </div>
               </>
             ) : null}
+          </nav>
+        </div>
+
+        {/* ── 右侧：极简动作组 (Exactly 3 核心操作 + 边缘右坞开关) ── */}
+        <div className={`${styles.topActions} chat-top-actions`}>
+          {/* 按钮 1: 应用预览 (🌐 Globe) */}
+          <Tooltip content="打开应用预览" side={UNIT_CHROME_TOOL_TIP_SIDE}>
+            <button
+              type="button"
+              id="topQuickPreviewBtn"
+              className={`${styles.topActionBtn} top-action-btn ${isPreviewActive ? styles.isActive : ''}`}
+              data-testid="top-quick-preview-btn"
+              data-active={isPreviewActive ? 'true' : 'false'}
+              aria-label="打开应用预览"
+              title="打开应用预览"
+              onClick={handleOpenPreview}
+            >
+              <Globe size={14} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          </Tooltip>
+
+          {/* 按钮 2: 代码产物与文件 (📄 FileCode) */}
+          <Tooltip content="打开代码产物与文件" side={UNIT_CHROME_TOOL_TIP_SIDE}>
+            <button
+              type="button"
+              id="topQuickArtifactsBtn"
+              className={`${styles.topActionBtn} top-action-btn ${isArtifactsActive ? styles.isActive : ''}`}
+              data-testid="top-quick-artifacts-btn"
+              data-active={isArtifactsActive ? 'true' : 'false'}
+              aria-label="打开代码产物与文件"
+              title="打开代码产物与文件"
+              onClick={handleOpenArtifacts}
+            >
+              <FileCode size={14} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+          </Tooltip>
+
+          {/* 按钮 3: 更多操作 (⋯ More) */}
+          <div className={`${styles.chatHeaderMoreTrigger} chat-header-more-trigger`}>
             <ChatHeaderMore
-              className={styles.actionBtn}
+              className={`${styles.topActionBtn} top-action-btn`}
               onTogglePin={realSession ? handleTogglePin : undefined}
               isPinned={isPinned}
               onExportMarkdown={handleExport}
@@ -337,51 +383,9 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               folderOptions={folderOptions}
               currentFolder={folder || GENERAL_FOLDER}
             />
-          </nav>
-        </div>
+          </div>
 
-        {/* ── 右侧：左侧边栏开关 + 5大核心产品工具 + 右坞收起 ── */}
-        <div className={styles.topActions}>
-          <Tooltip content="切换左侧边栏" side={UNIT_CHROME_TOOL_TIP_SIDE}>
-            <IconButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={styles.actionBtn}
-              data-testid="sidebar-toggle-btn"
-              aria-label="切换左侧边栏"
-              onClick={handleToggleLeftSidebar}
-              icon={<IconSidebarLeft size={15} aria-hidden />}
-            />
-          </Tooltip>
-          <span className={styles.toolbarDivider} aria-hidden="true" />
-          {UNIT_TOOL_PANELS.map(({ id, label, testId, Icon }) => {
-            if (!viewRegistry.getView(id)) return null;
-            const isOpen = openPanelSet.has(id);
-            const isActive = !rightDockCollapsed && activePanelId === id;
-            return (
-              <Tooltip
-                key={id}
-                content={resolveUnitChromeToolTip(label)}
-                side={UNIT_CHROME_TOOL_TIP_SIDE}
-              >
-                <IconButton
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.actionBtn}
-                  data-testid={testId}
-                  data-panel={id}
-                  data-active={isActive ? 'true' : 'false'}
-                  data-open={isOpen && !rightDockCollapsed ? 'true' : 'false'}
-                  aria-label={label}
-                  aria-pressed={isActive}
-                  onClick={() => handleOpenTool(id)}
-                  icon={<Icon size={15} strokeWidth={1.75} aria-hidden />}
-                />
-              </Tooltip>
-            );
-          })}
+          {/* 边缘右坞开关 */}
           <Tooltip
             content={resolveUnitChromeToolTip(dockLabel)}
             side={UNIT_CHROME_TOOL_TIP_SIDE}
@@ -390,7 +394,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               type="button"
               variant="ghost"
               size="sm"
-              className={styles.actionBtn}
+              className={`${styles.topActionBtn} ${styles.rightDockToggle} top-action-btn right-dock-toggle`}
               data-testid="right-dock-toggle"
               data-active={rightDockCollapsed ? 'false' : 'true'}
               aria-label={dockLabel}

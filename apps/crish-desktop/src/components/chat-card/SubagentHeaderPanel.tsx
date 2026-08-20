@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Bot, XOctagon } from 'lucide-react';
+import { Bot, ChevronDown, XOctagon } from 'lucide-react';
 import type { SessionAgent } from '../../store/types';
 import { countRunningSubagents } from './unitChromeLabel';
 import { Menu, IconButton, Tooltip } from '../ui';
@@ -21,20 +21,23 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
   const trigger = (
     <button
       type="button"
-      className={`${styles.agentTrigger} ${runningCount > 0 ? styles.isRunning : ''}`}
+      id="bcAgentCapsule"
+      className={`${styles.agentTrigger} ${styles.breadcrumbAgentBtn} breadcrumb-agent-btn ${runningCount > 0 ? styles.isRunning : ''}`}
       aria-label="展开子代理状态面板"
+      title="查看子 Agent 状态"
     >
       {runningCount > 0 ? (
         <>
-          <span className={styles.liveDot} aria-hidden="true" />
-          <span className={styles.triggerText}>{runningCount} 个运行中</span>
+          <span className={`${styles.liveDot} ${styles.agentLiveDot} agent-live-dot`} aria-hidden="true" />
+          <span className={`${styles.triggerText} ${styles.bcAgentText} bc-agent-text`}>{runningCount} 个运行中</span>
         </>
       ) : (
         <>
           <Bot size={13} className={styles.botIcon} aria-hidden="true" />
-          <span className={styles.triggerText}>{agents.length} 个子代理</span>
+          <span className={`${styles.triggerText} ${styles.bcAgentText} bc-agent-text`}>{agents.length} 个子代理</span>
         </>
       )}
+      <ChevronDown size={11} className={`${styles.bcChevron} bc-chevron`} aria-hidden="true" />
     </button>
   );
 

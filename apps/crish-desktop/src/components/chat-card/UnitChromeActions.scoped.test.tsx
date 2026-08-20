@@ -180,11 +180,8 @@ describe('UnitChromeActions 分屏折叠作用域单源化 (Task 2)', () => {
   });
 });
 
-describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', () => {
+describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作组）', () => {
   afterEach(() => {
-    act(() => {
-      deactivateNotePaper();
-    });
     vi.restoreAllMocks();
     useSessionStore.setState({
       sessions: [],
@@ -193,7 +190,7 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
     });
   });
 
-  it('空会话：无 quiet；打开文件等工具在对话顶；更多 / 侧栏 / 坞开关固定在', () => {
+  it('空会话：无 quiet；极简 4 元动作组固定在顶栏；彻底移除 5 个粗糙产品工具', () => {
     stubCoreTools();
     seedSession('unit-empty', { messageCount: 0, title: EMPTY_SESSION_TITLE });
     const { getByTestId, queryByTestId, container } =
@@ -201,44 +198,53 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
     const root = container.querySelector('[data-unit-chrome-actions="true"]');
     expect(root?.getAttribute('data-chat-top-header')).toBe('true');
     expect(root?.hasAttribute('data-canvas-quiet')).toBe(false);
-    expect(getByTestId('chat-open-files')).toBeTruthy();
-    expect(getByTestId('chat-open-overview')).toBeTruthy();
-    expect(getByTestId('chat-open-diff')).toBeTruthy();
-    expect(getByTestId('chat-open-terminal')).toBeTruthy();
-    expect(queryByTestId('chat-open-note')).toBeNull();
-    expect(getByTestId('chat-open-files').getAttribute('aria-label')).toBe(
-      '打开文件'
-    );
+
+    // 4 大标准动作组在顶栏
+    expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
+    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
-    expect(getByTestId('sidebar-toggle-btn')).toBeTruthy();
     expect(getByTestId('right-dock-toggle')).toBeTruthy();
+
+    // 5 个粗糙产品工具及左侧栏开关已彻底从顶栏退役
+    expect(queryByTestId('chat-open-overview')).toBeNull();
+    expect(queryByTestId('chat-open-files')).toBeNull();
+    expect(queryByTestId('chat-open-diff')).toBeNull();
+    expect(queryByTestId('chat-open-terminal')).toBeNull();
+    expect(queryByTestId('chat-open-note')).toBeNull();
+    expect(queryByTestId('sidebar-toggle-btn')).toBeNull();
+
+    expect(getByTestId('top-quick-preview-btn').getAttribute('aria-label')).toBe(
+      '打开应用预览'
+    );
+    expect(getByTestId('top-quick-artifacts-btn').getAttribute('aria-label')).toBe(
+      '打开代码产物与文件'
+    );
+
     expect(container.textContent).toContain(EMPTY_SESSION_TITLE);
     expect(container.textContent).not.toContain('未命名会话');
-    expect(
-      getByTestId('chat-open-files').textContent?.replace(/\s+/g, '')
-    ).toBe('');
   });
 
-  it('no-session / 草稿：工具入口仍在，标题是新会话', () => {
+  it('no-session / 草稿：极简动作组入口仍在，标题是新会话', () => {
     stubCoreTools();
     const none = renderChrome(null);
     const noneRoot = none.container.querySelector(
       '[data-unit-chrome-actions="true"]'
     );
     expect(noneRoot?.hasAttribute('data-canvas-quiet')).toBe(false);
-    expect(none.getByTestId('chat-open-files')).toBeTruthy();
+    expect(none.getByTestId('top-quick-preview-btn')).toBeTruthy();
+    expect(none.getByTestId('top-quick-artifacts-btn')).toBeTruthy();
     expect(none.getByTestId('right-dock-toggle')).toBeTruthy();
-    expect(none.getByTestId('sidebar-toggle-btn')).toBeTruthy();
     expect(none.container.textContent).toContain(EMPTY_SESSION_TITLE);
     none.unmount();
 
     const draft = renderChrome(PENDING_DRAFT_SESSION_ID);
-    expect(draft.getByTestId('chat-open-files')).toBeTruthy();
+    expect(draft.getByTestId('top-quick-preview-btn')).toBeTruthy();
+    expect(draft.getByTestId('top-quick-artifacts-btn')).toBeTruthy();
     expect(draft.getByTestId('right-dock-toggle')).toBeTruthy();
     expect(draft.container.textContent).toContain(EMPTY_SESSION_TITLE);
   });
 
-  it('有消息后仍是覆盖层，工具钮仍在对话顶', () => {
+  it('有消息后仍是覆盖层，极简动作组仍在对话顶', () => {
     stubCoreTools();
     seedSession('unit-live', { messageCount: 2, title: '重构 IPC' });
     const { getByTestId, container } = renderChrome('unit-live');
@@ -247,7 +253,8 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
         .querySelector('[data-unit-chrome-actions="true"]')
         ?.hasAttribute('data-canvas-quiet')
     ).toBe(false);
-    expect(getByTestId('chat-open-files')).toBeTruthy();
+    expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
+    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
     expect(getByTestId('right-dock-toggle')).toBeTruthy();
     expect(container.textContent).toContain('重构 IPC');
   });
@@ -259,10 +266,10 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
       leading: <span data-testid="chrome-leading">搜</span>,
     });
     expect(getByTestId('chrome-leading')).toBeTruthy();
-    expect(getByTestId('chat-open-files')).toBeTruthy();
+    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
   });
 
-  it('点击打开文件走 openToolInSession(sid, files)', () => {
+  it('点击应用预览按钮走 openToolInSession(sid, preview)', () => {
     stubCoreTools();
     const spy = vi
       .spyOn(storeAccess, 'openToolInSession')
@@ -270,7 +277,20 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
     seedSession('unit-open', { messageCount: 1 });
     const { getByTestId } = renderChrome('unit-open');
     act(() => {
-      getByTestId('chat-open-files').click();
+      getByTestId('top-quick-preview-btn').click();
+    });
+    expect(spy).toHaveBeenCalledWith('unit-open', 'preview');
+  });
+
+  it('点击代码产物与文件走 openToolInSession(sid, files)', () => {
+    stubCoreTools();
+    const spy = vi
+      .spyOn(storeAccess, 'openToolInSession')
+      .mockImplementation(() => {});
+    seedSession('unit-open', { messageCount: 1 });
+    const { getByTestId } = renderChrome('unit-open');
+    act(() => {
+      getByTestId('top-quick-artifacts-btn').click();
     });
     expect(spy).toHaveBeenCalledWith('unit-open', 'files');
   });
@@ -290,22 +310,23 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
     expect(container.textContent).toContain('2 个运行中');
   });
 
-  it('Tip 走 bottom；覆盖层无 quiet / 无果冻；工具清单在对话顶', () => {
+  it('Tip 走 bottom；覆盖层无 quiet / 无果冻；样式符合 38px 与 6px 圆角规范', () => {
     expect(UNIT_CHROME_TOOL_TIP_SIDE).toBe('bottom');
     const src = readFileSync(join(DIR, 'UnitChromeActions.tsx'), 'utf8');
     const css = readFileSync(join(DIR, 'UnitChromeActions.module.css'), 'utf8');
     expect(src).not.toMatch(/data-canvas-quiet/);
     expect(src).not.toMatch(/isUnitChromeCanvasQuiet/);
-    expect(src).toMatch(/UNIT_TOOL_PANELS/);
+    expect(src).not.toMatch(/UNIT_TOOL_PANELS/);
     expect(src).toMatch(/openToolInSession/);
-    expect(src).toMatch(/chat-open-files|data-testid=\{testId\}/);
+    expect(src).toMatch(/top-quick-preview-btn/);
+    expect(src).toMatch(/top-quick-artifacts-btn/);
     expect(src).toMatch(/onMoveToFolder/);
     expect(src).toMatch(/onTogglePin/);
     expect(src).toMatch(/onExportMarkdown/);
     expect(src).toMatch(/onClearHistory/);
     expect(src).not.toMatch(/if\s*\(\s*rightDockCollapsed\s*&&/);
     expect(src).not.toMatch(/from\s+['"]\.\/ChatHeader['"]/);
-    expect(src).toMatch(/data-testid="sidebar-toggle-btn"/);
+    expect(src).not.toMatch(/sidebar-toggle-btn/);
     expect(src).toMatch(/data-testid="right-dock-toggle"/);
     expect(src).toMatch(/data-chat-top-header/);
     expect(src).toMatch(/\{leading\}/);
@@ -313,13 +334,14 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
     expect(css).not.toMatch(/opacity:\s*0\.28/);
     expect(css).not.toMatch(/transform:\s*scale/);
     expect(css).toMatch(/height:\s*38px/);
+    expect(css).toMatch(/margin-bottom:\s*-38px/);
     expect(css).toMatch(/pointer-events:\s*none/);
-    expect(css).toMatch(/--button-radius,\s*7px/);
+    expect(css).toMatch(/border-radius:\s*6px/);
     expect(css).not.toMatch(/\.chatTopHeader\s*\{[^}]*display:\s*none/);
   });
 });
 
-describe('UnitChromeActions 重构与交互验证 (00-总方案 §4.1)', () => {
+describe('UnitChromeActions 重构与交互验证 (00-总方案 §4.1 & 02-pixel-perfect §2)', () => {
   beforeEach(() => {
     stubCoreTools();
   });
@@ -365,66 +387,15 @@ describe('UnitChromeActions 重构与交互验证 (00-总方案 §4.1)', () => {
     expect(getByText('1 个运行中')).toBeTruthy();
   });
 
-  it('左侧包含 ChatHeaderMore，右侧包含统一侧栏按钮与 5 项产品工具', () => {
+  it('左侧包含三级面包屑，右侧包含四元极简动作组（preview, artifacts, more, rightDockToggle）', () => {
     seedSession('sess-tools');
-    const { getByTestId } = renderChrome('sess-tools');
+    const { getByTestId, queryByTestId } = renderChrome('sess-tools');
+    expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
+    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
-    expect(getByTestId('sidebar-toggle-btn')).toBeTruthy();
-    expect(getByTestId('chat-open-overview')).toBeTruthy();
-    expect(getByTestId('chat-open-files')).toBeTruthy();
-    expect(getByTestId('chat-open-diff')).toBeTruthy();
-    expect(getByTestId('chat-open-terminal')).toBeTruthy();
     expect(getByTestId('right-dock-toggle')).toBeTruthy();
-  });
-});
-
-describe('UnitChromeActions 笔记闸（02 F6 / F7）', () => {
-  afterEach(() => {
-    act(() => {
-      deactivateNotePaper();
-    });
-    vi.restoreAllMocks();
-  });
-
-  it('未 activate 不渲染 chat-open-note；activate 后出现，deactivate 后消失', async () => {
-    deactivateNotePaper();
-    const { queryByTestId, getByTestId } = render(
-      <UnitChromeActions activeSessionId="unit-a" />
-    );
-    expect(queryByTestId('chat-open-note')).toBeNull();
-
-    act(() => {
-      activateNotePaper();
-    });
-    await waitFor(() => {
-      expect(getByTestId('chat-open-note')).toBeTruthy();
-    });
-
-    act(() => {
-      deactivateNotePaper();
-    });
-    await waitFor(() => {
-      expect(queryByTestId('chat-open-note')).toBeNull();
-    });
-  });
-
-  it('F7 点击 chat-open-note 只走 openToolInSession(sid, note)', async () => {
-    act(() => {
-      activateNotePaper();
-    });
-    const spy = vi
-      .spyOn(storeAccess, 'openToolInSession')
-      .mockImplementation(() => {});
-    const { getByTestId } = render(
-      <UnitChromeActions activeSessionId="unit-a" />
-    );
-    await waitFor(() => {
-      expect(getByTestId('chat-open-note')).toBeTruthy();
-    });
-    act(() => {
-      getByTestId('chat-open-note').click();
-    });
-    expect(spy).toHaveBeenCalledWith('unit-a', 'note');
-    expect(spy).toHaveBeenCalledTimes(1);
+    expect(queryByTestId('sidebar-toggle-btn')).toBeNull();
+    expect(queryByTestId('chat-open-overview')).toBeNull();
+    expect(queryByTestId('chat-open-files')).toBeNull();
   });
 });

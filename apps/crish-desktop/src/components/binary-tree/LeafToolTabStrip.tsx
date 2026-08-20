@@ -580,4 +580,3 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
 );
 
 LeafToolTabStrip.displayName = 'LeafToolTabStrip';
-
