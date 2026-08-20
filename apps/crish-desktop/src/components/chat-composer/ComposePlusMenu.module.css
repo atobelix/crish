@@ -1,10 +1,24 @@
 /**
  * ComposePlusMenu — SmartExpandablePanel Design System Specification
- * min-width: 188px, 14px outer / 8px inner item radius, 24x24 icon box with 6px radius
+ * min-width: 188px, 14px outer / 8px inner item radius, 24x24 icon box with 4px radius
  */
 
 .plusMenu {
   min-width: 188px;
+  z-index: var(--z-dropdown-menu, var(--z-dropdown));
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  border: 1px solid var(--sep-border-color, var(--border-color));
+  border-radius: var(--sep-radius-outer, 14px);
+  box-shadow: var(--sep-shadow);
+  padding: var(--sep-padding, 6px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sep-item-gap, 2px);
+  box-sizing: border-box;
+  color: var(--sep-text-primary, var(--text-primary));
+  font-family: var(--sep-font-sans, var(--font-sans));
 }
 
 .item {
@@ -15,13 +29,15 @@
   border: none;
   background: transparent;
   text-align: left;
-  padding: 5px var(--sep-item-padding-h, 10px);
+  padding: 6px 8px;
   border-radius: var(--sep-item-radius, 8px);
-  min-height: 34px;
+  min-height: 32px;
   cursor: pointer;
   font-family: inherit;
-  color: var(--sep-text-primary, #1d1c1a);
-  transition: background var(--transition-micro, 100ms ease-out);
+  color: var(--text-primary);
+  transition:
+    background-color var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
   box-sizing: border-box;
 }
 
@@ -29,10 +45,7 @@
 .item:focus-visible {
   outline: none;
   background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
-}
-
-.item:focus-visible {
-  box-shadow: 0 0 0 2px var(--sep-border-focus, #b2ada2);
+  color: var(--text-primary);
 }
 
 .item:active {
@@ -42,14 +55,14 @@
 .icon {
   width: 24px;
   height: 24px;
-  border-radius: var(--sep-btn-radius, 6px);
-  background: var(--sep-bg-input, rgba(29, 28, 26, 0.03));
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--sep-text-secondary, #5c5954);
+  color: var(--text-secondary);
   flex-shrink: 0;
-  transition: background var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
+  transition: color var(--transition-micro, 100ms ease);
 }
 
 .icon svg {
@@ -59,11 +72,11 @@
 
 .item:hover .icon,
 .item:focus-visible .icon {
-  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
-  color: var(--sep-text-primary, #1d1c1a);
+  color: var(--text-primary);
 }
 
-.text {
+.text,
+.textCol {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -72,17 +85,16 @@
 }
 
 .title {
-  font-size: var(--sep-font-size-base, 13px);
-  font-weight: var(--font-weight-medium, 500);
-  line-height: var(--line-height-dense, 1.2);
-  color: var(--sep-text-primary, #1d1c1a);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text-primary);
 }
 
 .desc {
-  font-size: var(--sep-font-size-header, 10.5px);
-  line-height: var(--line-height-tight, 1.25);
-  opacity: 0.9;
-  color: var(--sep-text-muted, #8b8780);
+  font-size: var(--font-size-xs, 11px);
+  line-height: 1.25;
+  color: var(--sep-text-muted, var(--text-tertiary));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

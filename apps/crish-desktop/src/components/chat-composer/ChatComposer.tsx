@@ -439,7 +439,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                       onCloseSiblingMenus?.();
                     }
                   }}
-                  icon={<Lucide.Plus size={16} aria-hidden />}
+                  icon={<Lucide.Plus size={14} aria-hidden />}
                 />
               </Tooltip>
               <ComposePlusMenu

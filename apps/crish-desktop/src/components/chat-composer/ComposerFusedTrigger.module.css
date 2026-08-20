@@ -1,5 +1,6 @@
 /**
- * 融合触发胶囊：发丝分割，无品牌绿光晕，焦点混入 ≤6%。
+ * 融合触发胶囊：单层透明底 + 1px 中性发丝边框，发丝物理隔离，左右两槽独立微圆角悬停。
+ * 彻底消除直角硬切与青底叠色。
  */
 
 .capsule {
@@ -7,38 +8,78 @@
   align-items: center;
   max-width: 100%;
   height: 28px;
-  padding: 0 8px;
-  border: none;
-  border-radius: 14px;
+  padding: 0 2px;
+  border: 1px solid var(--sep-border-color, var(--border-color));
+  border-radius: var(--sep-pill-radius, 9999px);
   background: transparent;
   box-shadow: none;
   min-width: 0;
+  box-sizing: border-box;
+  user-select: none;
+  transition: border-color var(--transition-fast, 120ms ease);
 }
 
 .capsule:hover {
-  background: var(--bg-hover);
+  border-color: var(--sep-border-hover, var(--border-hover, var(--border-color)));
+  background: transparent;
+}
+
+.capsule:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--sep-border-color, var(--border-color)) 94%,
+    var(--text-primary) 6%
+  );
 }
 
 .left {
   display: inline-flex;
   align-items: center;
   min-width: 0;
+  padding: 0 1px;
 }
 
+/* 穿透控制内嵌 ModelBadgePicker 按钮 */
+.left :global(button.model-badge-btn),
+.left :global(button[data-testid='model-selector-button']),
 .left :global(button) {
-  height: 28px;
-  min-height: 28px;
+  height: 24px;
+  min-height: 24px;
   min-width: 0;
   max-width: 160px;
-  padding-left: 4px;
-  padding-right: 4px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--sep-btn-radius, 6px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  cursor: pointer;
+  box-sizing: border-box;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
+}
+
+.left :global(button.model-badge-btn:hover),
+.left :global(button[data-testid='model-selector-button']:hover),
+.left :global(button:hover) {
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  color: var(--text-primary);
+}
+
+.left :global(button.model-badge-btn.active),
+.left :global(button[data-testid='model-selector-button'][aria-expanded='true']),
+.left :global(button.active) {
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  color: var(--text-primary);
 }
 
 .divider {
   width: 1px;
-  height: 10px;
+  height: 12px;
   margin: 0 2px;
-  background: var(--border-color);
+  background: var(--sep-divider-color, rgba(29, 28, 26, 0.08));
   flex-shrink: 0;
 }
 
@@ -47,48 +88,45 @@
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+  padding: 0 1px;
 }
 
 .thinkBtn {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  height: 28px;
-  padding: 0 4px;
+  gap: 3px;
+  height: 24px;
+  padding: 0 6px;
   border: none;
-  border-radius: 14px;
+  border-radius: var(--sep-btn-radius, 6px);
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs, 12px);
   font-weight: 400;
   cursor: pointer;
   box-shadow: none;
   white-space: nowrap;
+  box-sizing: border-box;
   transition:
-    background var(--transition-micro),
-    color var(--transition-micro),
-    border-color var(--transition-micro);
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
 }
 
 .thinkBtn:hover {
-  background: transparent;
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
   color: var(--text-primary);
 }
 
 .thinkBtn.isOpen {
-  background: var(--tint-active);
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
   color: var(--text-primary);
+  font-weight: 500;
 }
 
 .thinkBtn:focus-visible {
   outline: none;
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
-  box-shadow: none;
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
 }
 
 .chev {
@@ -96,59 +134,66 @@
 }
 
 .menu {
-  z-index: var(--z-dropdown);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: none;
-  padding: var(--space-1);
+  z-index: var(--z-dropdown-menu, var(--z-dropdown));
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  border: 1px solid var(--sep-border-color, var(--border-color));
+  border-radius: var(--sep-radius-outer, 14px);
+  box-shadow: var(--sep-shadow);
+  padding: var(--sep-padding, 6px);
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--sep-item-gap, 2px);
+  min-width: 140px;
   max-height: min(70vh, 360px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  box-sizing: border-box;
+  color: var(--sep-text-primary, var(--text-primary));
+  font-family: var(--sep-font-sans, var(--font-sans));
 }
 
 .item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
   width: 100%;
   min-height: 28px;
   padding: 5px 8px;
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md, 6px);
   background: transparent;
   color: var(--text-primary);
   font-family: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   cursor: pointer;
   text-align: left;
   box-shadow: none;
+  box-sizing: border-box;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
 }
 
 .item:hover {
-  background: var(--tint-hover);
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  color: var(--text-primary);
 }
 
 .item.isSelected {
-  background: var(--tint-active);
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .item:focus-visible {
   outline: none;
-  box-shadow: none;
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
 }
 
 .check {
-  opacity: 0.8;
-  color: var(--text-secondary);
+  color: var(--brand-deep);
   flex-shrink: 0;
 }

@@ -137,9 +137,9 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
                   <span>{opt.label}</span>
                   {selected ? (
                     <Lucide.Check
-                      size={12}
+                      size={13}
                       className={styles.check}
-                      aria-hidden
+                      aria-hidden="true"
                     />
                   ) : null}
                 </button>

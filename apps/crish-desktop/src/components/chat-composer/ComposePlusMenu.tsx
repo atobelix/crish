@@ -1,8 +1,3 @@
-/**
- * 输入区「+」菜单：附件 / 技能 / 插件 / MCP / 扩展中心
- * 基于 ui/Menu 统一面板管理（T05.3.2 由 common/UnifiedSelectPopover 改 import），
- * 继承自动碰撞避让与标准键盘导航。
- */
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ComposePlusMenu.module.css';
@@ -11,7 +6,7 @@ import { emitUiEvent } from '../../api/uiEvents';
 import { Menu, Tooltip } from '../ui';
 import type { SelectOptionItem } from '../ui';
 
-type Props = {
+export interface ComposePlusMenuProps {
   open: boolean;
   onClose: () => void;
   onAddFiles: () => void;
@@ -19,9 +14,9 @@ type Props = {
   onInsertSkillSlash?: () => void;
   id?: string;
   restoreFocusRef?: React.RefObject<HTMLElement | null>;
-};
+}
 
-export const ComposePlusMenu: React.FC<Props> = ({
+export const ComposePlusMenu: React.FC<ComposePlusMenuProps> = ({
   open,
   onClose,
   onAddFiles,
@@ -32,8 +27,8 @@ export const ComposePlusMenu: React.FC<Props> = ({
     {
       id: 'file',
       label: '添加文件',
-      hint: '图片或文档',
-      icon: <Lucide.Paperclip size={13} strokeWidth={1.75} />,
+      hint: '图片、代码或文档',
+      icon: <Lucide.Paperclip size={14} strokeWidth={1.8} />,
       onClick: () => {
         onAddFiles();
         onClose();
@@ -42,8 +37,8 @@ export const ComposePlusMenu: React.FC<Props> = ({
     {
       id: 'skill',
       label: '使用技能',
-      hint: '输入 / 选择技能',
-      icon: <Lucide.Sparkles size={13} strokeWidth={1.75} />,
+      hint: '键入 / 快速唤起技能',
+      icon: <Lucide.Sparkles size={14} strokeWidth={1.8} />,
       onClick: () => {
         onInsertSkillSlash?.();
         onClose();
@@ -53,8 +48,8 @@ export const ComposePlusMenu: React.FC<Props> = ({
     {
       id: 'plugin',
       label: '插件',
-      hint: '扩展包',
-      icon: <Lucide.Puzzle size={13} strokeWidth={1.75} />,
+      hint: '管理已安装插件',
+      icon: <Lucide.Puzzle size={14} strokeWidth={1.8} />,
       onClick: () => {
         onClose();
         openSettings('plugins');
@@ -63,8 +58,8 @@ export const ComposePlusMenu: React.FC<Props> = ({
     {
       id: 'mcp',
       label: 'MCP 工具',
-      hint: '服务与工具开关',
-      icon: <Lucide.Cable size={13} strokeWidth={1.75} />,
+      hint: '服务与协议连接',
+      icon: <Lucide.Cable size={14} strokeWidth={1.8} />,
       onClick: () => {
         onClose();
         openSettings('plugins');
@@ -73,8 +68,8 @@ export const ComposePlusMenu: React.FC<Props> = ({
     {
       id: 'extensions',
       label: '扩展中心',
-      hint: '发现 / 安装',
-      icon: <Lucide.Blocks size={13} strokeWidth={1.75} />,
+      hint: '发现与安装新工具',
+      icon: <Lucide.Blocks size={14} strokeWidth={1.8} />,
       onClick: () => {
         onClose();
         openSettings('plugins');
@@ -83,7 +78,8 @@ export const ComposePlusMenu: React.FC<Props> = ({
     {
       id: 'schedule',
       label: '定时任务',
-      icon: <Lucide.Clock size={13} strokeWidth={1.75} />,
+      hint: '计划执行与循环任务',
+      icon: <Lucide.Clock size={14} strokeWidth={1.8} />,
       onClick: () => {
         onClose();
         emitUiEvent('open-scheduled');
@@ -123,15 +119,15 @@ export const ComposePlusMenu: React.FC<Props> = ({
             onMouseDown={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
           >
-            <span className={styles.icon} aria-hidden>
+            <span className={styles.icon} aria-hidden="true">
               {item.icon}
             </span>
-            <span className={styles.text}>
+            <div className={styles.text}>
               <span className={styles.title}>{item.label}</span>
               {item.hint ? (
                 <span className={styles.desc}>{item.hint}</span>
               ) : null}
-            </span>
+            </div>
           </button>
         </Tooltip>
       )}

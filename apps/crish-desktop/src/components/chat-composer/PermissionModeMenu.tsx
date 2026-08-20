@@ -11,6 +11,20 @@ import {
   type PermissionMode,
 } from '../../api/permissionModes';
 
+const MODE_ICON_MAP: Record<PermissionMode, React.ReactNode> = {
+  ask: <Lucide.ShieldCheck size={14} strokeWidth={1.8} />,
+  deep: <Lucide.Search size={14} strokeWidth={1.8} />,
+  plan: <Lucide.Target size={14} strokeWidth={1.8} />,
+  full: <Lucide.Zap size={14} strokeWidth={1.8} />,
+};
+
+const MODE_SUBLABEL_MAP: Record<PermissionMode, string> = {
+  ask: '改文件、执行前需手动批准',
+  deep: '只读分析与代码深入检索',
+  plan: '生成执行方案，不修改项目',
+  full: '读写自动执行，极危操作确认',
+};
+
 type Props = {
   mode: PermissionMode;
   onChange: (m: PermissionMode) => void;
@@ -24,7 +38,7 @@ type Props = {
  * - 外点已关后同一 pointer 落到药丸不得再打开；
  * - 坐标/Esc/外点关闭由基座接管；side="top"；
  * - 键盘漫游由基座 options 模式提供；
- * - 每项 Tooltip 展示矩阵提示，选中态打勾。
+ * - 每项 Tooltip 展示矩阵提示，专属语义图标 + 11px 次级描述，选中态翡翠绿打勾。
  */
 export const PermissionModeMenu: React.FC<Props> = ({
   mode: modeRaw,
@@ -85,7 +99,7 @@ export const PermissionModeMenu: React.FC<Props> = ({
           aria-label={`当前权限模式：${meta.label}`}
         >
           {iconOnly ? (
-            <Lucide.Shield size={14} strokeWidth={2} aria-hidden="true" />
+            <Lucide.Shield size={14} strokeWidth={1.8} aria-hidden="true" />
           ) : null}
           <span>{meta.label}</span>
           {iconOnly ? null : (
@@ -113,6 +127,13 @@ export const PermissionModeMenu: React.FC<Props> = ({
           renderItem={(opt) => {
             const itemMeta = permissionModeMeta(opt.id);
             const isSelected = opt.id === mode;
+            const icon =
+              MODE_ICON_MAP[opt.id as PermissionMode] ?? (
+                <Lucide.Shield size={14} strokeWidth={1.8} />
+              );
+            const sublabel =
+              MODE_SUBLABEL_MAP[opt.id as PermissionMode] ??
+              itemMeta.description;
             return (
               <Tooltip key={opt.id} content={itemMeta.matrixHint}>
                 <button
@@ -124,11 +145,17 @@ export const PermissionModeMenu: React.FC<Props> = ({
                     opt.onClick?.();
                   }}
                 >
-                  <span>{itemMeta.label}</span>
+                  <span className={styles.iconWrapper} aria-hidden="true">
+                    {icon}
+                  </span>
+                  <div className={styles.textCol}>
+                    <span className={styles.title}>{itemMeta.label}</span>
+                    <span className={styles.desc}>{sublabel}</span>
+                  </div>
                   {isSelected ? (
                     <Lucide.Check
-                      size={12}
-                      style={{ marginLeft: 'auto', opacity: 0.8 }}
+                      size={13}
+                      className={styles.checkIcon}
                       aria-hidden="true"
                     />
                   ) : null}
