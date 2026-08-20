@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import menuStyles from '../ui/Menu/Menu.module.css';
 import styles from './ProjectPickerMenu.module.css';
 import {
@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { Button, ConfirmDialog, Input, Menu, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
+import { SafeTriangleTracker } from '../ui/internal/SafeTriangle';
 
 /** 草稿态切项目：同步 draftFolder，不 mint 真会话 */
 function syncDraftFolderOnProjectChange(folder: string): void {
@@ -68,10 +69,18 @@ export const ProjectPickerMenu: React.FC<Props> = ({
   const activeId = getActiveProjectId();
   const [confirmGate, renderConfirmGate] = useConfirmGate();
 
+  const safeTrackerRef = useRef(new SafeTriangleTracker(300));
+  const addBtnRef = useRef<HTMLButtonElement | null>(null);
+  const cascadeRef = useRef<HTMLDivElement | null>(null);
+
   const refresh = () => setProjects(listProjects());
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setShowAddCascade(false);
+      safeTrackerRef.current.reset();
+      return;
+    }
     refresh();
     setShowAddCascade(false);
     setQ('');
@@ -86,7 +95,11 @@ export const ProjectPickerMenu: React.FC<Props> = ({
 
   const handleOpenChange = (nextOpen: boolean) => {
     onOpenChange(nextOpen);
-    if (!nextOpen) onClose?.();
+    if (!nextOpen) {
+      setShowAddCascade(false);
+      safeTrackerRef.current.reset();
+      onClose?.();
+    }
   };
 
   const handlePickFolder = async () => {
@@ -140,6 +153,32 @@ export const ProjectPickerMenu: React.FC<Props> = ({
     handleOpenChange(false);
   };
 
+  const handleAddCascadeLeave = useCallback((e: React.MouseEvent) => {
+    if (showAddCascade && cascadeRef.current) {
+      const subRect = cascadeRef.current.getBoundingClientRect();
+      safeTrackerRef.current.enter(
+        { x: e.clientX, y: e.clientY },
+        {
+          left: subRect.left,
+          top: subRect.top,
+          right: subRect.right,
+          bottom: subRect.bottom,
+        },
+        'right'
+      );
+    }
+  }, [showAddCascade]);
+
+  const handleOtherRowEnter = useCallback((e?: React.MouseEvent) => {
+    if (showAddCascade && safeTrackerRef.current.isGraceActive() && e) {
+      if (safeTrackerRef.current.check({ x: e.clientX, y: e.clientY })) {
+        return;
+      }
+    }
+    setShowAddCascade(false);
+    safeTrackerRef.current.reset();
+  }, [showAddCascade]);
+
   return (
     <>
       {renderConfirmGate(<ConfirmDialog />)}
@@ -160,7 +199,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({
         >
           <div
             className={styles.searchWrapper}
-            onMouseEnter={() => setShowAddCascade(false)}
+            onMouseEnter={handleOtherRowEnter}
           >
             <Input
               variant="search"
@@ -176,7 +215,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({
 
           <div
             className={styles.scrollArea}
-            onMouseEnter={() => setShowAddCascade(false)}
+            onMouseEnter={handleOtherRowEnter}
           >
             {filtered.map((p) => {
               const selected = p.id === activeId;
@@ -228,7 +267,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({
             role="menuitem"
             aria-current={!activeId ? 'true' : undefined}
             className={pickerItemClass(!activeId && styles.itemWithTrail)}
-            onMouseEnter={() => setShowAddCascade(false)}
+            onMouseEnter={handleOtherRowEnter}
             onClick={() => {
               setNoProject();
               syncDraftFolderOnProjectChange(GENERAL_FOLDER);
@@ -248,15 +287,29 @@ export const ProjectPickerMenu: React.FC<Props> = ({
 
           <div
             className={styles.addCascadeWrapper}
-            onMouseEnter={() => setShowAddCascade(true)}
-            onMouseLeave={() => setShowAddCascade(false)}
+            onMouseEnter={() => {
+              setShowAddCascade(true);
+              safeTrackerRef.current.reach();
+            }}
+            onMouseLeave={handleAddCascadeLeave}
           >
             <button
+              ref={addBtnRef}
               type="button"
               role="menuitem"
               className={pickerItemClass()}
               aria-haspopup="menu"
               aria-expanded={showAddCascade}
+              onClick={() => setShowAddCascade((prev) => !prev)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setShowAddCascade(true);
+                  requestAnimationFrame(() => {
+                    cascadeRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+                  });
+                }
+              }}
             >
               <span className={menuStyles.menuItemIcon} aria-hidden="true">
                 <Plus size={14} />
@@ -269,9 +322,19 @@ export const ProjectPickerMenu: React.FC<Props> = ({
 
             {showAddCascade && (
               <div
+                ref={cascadeRef}
                 className={`${menuStyles.menuContent} ${styles.cascadeSubmenu}`}
                 role="menu"
                 aria-label="添加项目"
+                onMouseEnter={() => safeTrackerRef.current.reach()}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowLeft' || e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowAddCascade(false);
+                    addBtnRef.current?.focus();
+                  }
+                }}
               >
                 <button
                   type="button"

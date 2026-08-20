@@ -121,6 +121,10 @@ export function getSubmenuSafeTriangle(
   ];
 }
 
+import { SafeAimEngine } from './SafeAimEngine';
+
+export { SafeAimEngine } from './SafeAimEngine';
+
 /**
  * SafeTriangle 状态机控制器，管理 300ms Grace Timer 与相邻项 hover 锁
  */
@@ -144,6 +148,18 @@ export class SafeTriangleTracker {
   ): void {
     this.triangle = getSubmenuSafeTriangle(cursor, submenuBounds, placement);
     this.isSuspended = true;
+
+    // 同步 SVG 虚拟多边形 (Zero-Canvas Safe-Aim Overlay)
+    try {
+      const svg = document.getElementById('sepSafeAimOverlay');
+      const poly = svg?.querySelector('polygon');
+      if (poly && this.triangle) {
+        const [p1, p2, p3] = this.triangle;
+        poly.setAttribute('points', `${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`);
+      }
+    } catch {
+      // quiet fail if not in DOM environment
+    }
 
     this.clearTimer();
     this.graceTimer = setTimeout(() => {
@@ -176,6 +192,7 @@ export class SafeTriangleTracker {
     this.clearTimer();
     this.isSuspended = false;
     this.triangle = null;
+    this.clearSvgPolygon();
   }
 
   /**
@@ -185,6 +202,16 @@ export class SafeTriangleTracker {
     this.clearTimer();
     this.isSuspended = false;
     this.triangle = null;
+    this.clearSvgPolygon();
+  }
+
+  private clearSvgPolygon(): void {
+    try {
+      const poly = document.getElementById('sepSafeAimOverlay')?.querySelector('polygon');
+      if (poly) poly.removeAttribute('points');
+    } catch {
+      // quiet fail
+    }
   }
 
   /**

@@ -1,6 +1,6 @@
-/* ui/Menu        PE-05 T05.1.4 
- *       .tabs-add-menu/.tabs-add-item shell-polish.css  
- *      tokens.css / z-index.css       hex/rgba */
+/* ui/Menu — SmartExpandablePanel Design System Specification
+ * Single hairline border (#e2dfd9 / #2b2926), Zero-Blue palette, concentric radii (14px/8px)
+ */
 
 /* wrapper 才和全屏 Dialog 面板同级；只给 .menuContent 设 z 压不住 isolation:isolate 的壳 */
 :global([data-radix-popper-content-wrapper]):has(.menuContent) {
@@ -23,61 +23,68 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
-  padding: var(--dropdown-padding, var(--space-1, 4px));
-  border-radius: var(--dropdown-radius, var(--radius-lg, 8px));
-  border: 1px solid var(--hairline-strong);
-  background: var(--bg-elevated);
-  box-shadow: var(--shadow-lg);
+  scrollbar-color: var(--sep-border-color, #e2dfd9) transparent;
+  padding: var(--sep-padding, 6px);
+  border-radius: var(--sep-radius-outer, 14px);
+  border: 1px solid var(--sep-border-color, #e2dfd9);
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  box-shadow: var(--sep-shadow);
   display: flex;
   flex-direction: column;
-  gap: var(--dropdown-gap, 2px);
+  gap: var(--sep-item-gap, 2px);
+  font-family: var(--sep-font-sans, var(--font-sans));
+  color: var(--sep-text-primary, #1d1c1a);
 }
 
 .menuTitle {
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  border-bottom: 1px solid var(--hairline);
-  margin-bottom: var(--space-1);
+  padding: 4px var(--sep-padding, 6px);
+  font-size: var(--sep-font-size-sm, 11px);
+  color: var(--sep-text-muted, #8b8780);
+  font-weight: 500;
+  border-bottom: 1px solid var(--sep-divider-color, rgba(29, 28, 26, 0.06));
+  margin-bottom: 3px;
 }
 
 .menuList {
   display: flex;
   flex-direction: column;
-  gap: var(--dropdown-gap, 2px);
+  gap: var(--sep-item-gap, 2px);
 }
 
 .menuItem {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
   border: none;
   background: transparent;
   text-align: left;
-  padding: var(--item-padding, 6px 8px);
-  border-radius: var(--item-radius, var(--radius-md, 6px));
+  padding: 5px var(--sep-item-padding-h, 10px);
+  border-radius: var(--sep-item-radius, 8px);
+  min-height: var(--sep-item-height, 28px);
   font-family: inherit;
-  font-size: var(--item-font-size, var(--font-size-sm, 13px));
-  color: var(--text-primary);
+  font-size: var(--sep-font-size-base, 13px);
+  color: var(--sep-text-primary, #1d1c1a);
   cursor: pointer;
-  transition: background var(--transition-micro);
+  transition: background var(--transition-micro, 100ms ease-out);
   width: 100%;
+  box-sizing: border-box;
 }
 
 .menuItem:hover {
-  background: var(--bg-hover);
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
 }
 
 .menuItem:focus-visible {
   outline: none;
-  background: var(--bg-active);
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
 }
 
 .menuItemDisabled {
-  color: var(--text-tertiary);
+  color: var(--sep-text-muted, #8b8780);
   cursor: not-allowed;
-  opacity: var(--opacity-disabled);
+  opacity: var(--opacity-disabled, 0.5);
 }
 
 .menuItemDisabled:hover {
@@ -85,12 +92,13 @@
 }
 
 .menuItemDanger {
-  color: var(--color-error);
+  color: var(--sep-danger-color, hsl(0 84% 60%));
 }
 
 .menuItemIcon {
   display: inline-flex;
   flex-shrink: 0;
+  color: inherit;
 }
 
 .menuItemLabel {
@@ -101,18 +109,43 @@
 }
 
 .menuItemHint {
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
+  font-size: var(--sep-font-size-sm, 11px);
+  color: var(--sep-text-muted, #8b8780);
   flex-shrink: 0;
 }
 
-/* 0.5px          */
+/* 1px Hardware-Aligned Divider */
 .separator {
-  height: 1px;
-  background-color: var(--border-subtle);
-  transform: scaleY(0.5);
-  margin: var(--space-1, 4px) 0;
+  height: 0;
+  min-height: 0;
   border: none;
+  border-top: 1px solid var(--sep-divider-color, rgba(29, 28, 26, 0.06));
+  margin: 3px var(--sep-padding, 6px);
+  flex-shrink: 0;
   padding: 0;
+}
+
+/* Safe-Aim Virtual Triangle/Polygon Hit-test Overlay (Zero Canvas Overhead) */
+:global(.sep-safe-aim-overlay) {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none !important;
+  z-index: 2005;
+  fill: transparent;
+  stroke: none;
+}
+
+:global(.sep-safe-aim-overlay.sep-debug-visible) {
+  fill: rgba(16, 185, 129, 0.12);
+  stroke: rgba(16, 185, 129, 0.4);
+  stroke-dasharray: 4 2;
+  stroke-width: 1px;
+}
+
+:global(.sep-safe-aim-overlay polygon) {
+  pointer-events: none !important;
 }
 

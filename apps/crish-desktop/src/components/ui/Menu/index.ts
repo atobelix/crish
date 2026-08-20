@@ -11,4 +11,6 @@ export type { SelectOptionItem } from './types';
 export { shouldSuppressMenuReopen, toggleExclusiveMenu } from './menuOpenGuard';
 export { calculateSubmenuPosition } from './position';
 export type { SubmenuPlacementResult } from './position';
+export { SafeAimEngine } from '../internal/SafeAimEngine';
+export type { SafeAimOptions } from '../internal/SafeAimEngine';
 

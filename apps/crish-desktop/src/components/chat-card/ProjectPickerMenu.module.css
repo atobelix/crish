@@ -1,15 +1,16 @@
-/* 空态项目选择：壳皮走 ui/Menu .menuContent；项走 .menuItem + 7px。 */
+/* 空态项目选择：壳皮走 ui/Menu .menuContent；项走 .menuItem + 8px 同心圆角。 */
 
 .pickerPanel {
   width: 230px;
-  --item-radius: var(--button-radius, 7px);
+  --item-radius: var(--sep-item-radius, var(--button-radius, 8px));
 }
 
 .item {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--sep-item-radius, var(--button-radius, 8px));
+  min-height: var(--sep-item-height, 28px);
 }
 
 .itemWithTrail {
@@ -17,7 +18,7 @@
 }
 
 .itemIcon {
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 .projectRow {
@@ -32,7 +33,7 @@
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--text-primary);
+  color: var(--sep-accent-color, #10b981);
   pointer-events: none;
   flex-shrink: 0;
 }
@@ -44,9 +45,9 @@
   transform: translateY(-50%);
   border: none;
   background: transparent;
-  color: var(--text-tertiary);
+  color: var(--sep-text-muted, #8b8780);
   cursor: pointer;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--sep-btn-radius, var(--button-radius, 6px));
   width: 20px;
   height: 20px;
   display: flex;
@@ -54,15 +55,15 @@
   justify-content: center;
   opacity: 0;
   transition:
-    opacity var(--transition-micro),
-    color var(--transition-micro),
-    background-color var(--transition-micro);
-  z-index: var(--z-card-footer);
+    opacity var(--transition-micro, 100ms ease-out),
+    color var(--transition-micro, 100ms ease-out),
+    background-color var(--transition-micro, 100ms ease-out);
+  z-index: var(--z-card-footer, 10);
 }
 
 .rowDeleteBtn:hover {
-  color: var(--accent-red);
-  background-color: color-mix(in srgb, var(--accent-red) 10%, transparent);
+  color: var(--sep-danger-color, hsl(0 84% 60%));
+  background-color: var(--sep-danger-light, hsl(0 84% 60% / 0.08));
 }
 
 .projectRow:hover .rowDeleteBtn {
@@ -77,7 +78,7 @@
 .scrollArea {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0_5);
+  gap: var(--sep-item-gap, 2px);
   max-height: 180px;
   overflow-y: auto;
   padding: 2px 0;
@@ -93,11 +94,18 @@
   width: 100%;
 }
 
-/* 级联壳皮复用 ui/Menu .menuContent；此处只负责相对主面板定位 */
+/* 级联壳皮复用 ui/Menu .menuContent；此处负责相对主面板定位与同心圆角 */
 .cascadeSubmenu {
   position: absolute;
   left: 100%;
   top: 0;
   margin-left: 4px;
   min-width: 160px;
+  border-radius: var(--sep-radius-outer, 14px);
+  border: 1px solid var(--sep-border-color, #e2dfd9);
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  box-shadow: var(--sep-shadow);
+  padding: var(--sep-padding, 6px);
 }

@@ -7,23 +7,23 @@
 .moreBtn {
   background: none;
   border: none;
-  color: var(--text-secondary);
+  color: var(--sep-text-secondary, #5c5954);
   width: 28px;
   height: 28px;
   min-width: 28px;
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--sep-btn-radius, 6px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color var(--transition-micro), color var(--transition-micro);
+  transition: background-color var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
   padding: 0;
   opacity: 1;
 }
 
 .moreBtn svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 
 /* hover / open states */
@@ -32,13 +32,13 @@
 .moreBtn:focus-visible,
 .moreWrap:hover .moreBtn,
 .moreWrap.isOpen .moreBtn {
-  background-color: var(--bg-hover);
-  color: var(--text-primary);
+  background-color: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  color: var(--sep-text-primary, #1d1c1a);
 }
 
 .moreBtn:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring);
+  box-shadow: 0 0 0 2px var(--sep-border-focus, #b2ada2);
 }
 
 /* Menu popup */
@@ -48,16 +48,21 @@
   bottom: auto;
   left: 0;
   right: auto;
-  z-index: var(--z-dropdown-menu);
+  z-index: var(--z-dropdown-menu, 300);
   min-width: 148px;
-  padding: 3px;
-  border-radius: var(--radius-lg);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-md);
+  padding: var(--sep-padding, 6px);
+  border-radius: var(--sep-radius-outer, 14px);
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  border: 1px solid var(--sep-border-color, #e2dfd9);
+  box-shadow: var(--sep-shadow);
   display: flex;
   flex-direction: column;
-  gap: var(--space-0_5);
+  gap: var(--sep-item-gap, 2px);
+  color: var(--sep-text-primary, #1d1c1a);
+  font-family: var(--sep-font-sans, var(--font-sans));
+  box-sizing: border-box;
 }
 
 .moreItem {
@@ -69,45 +74,44 @@
   width: 100%;
   font-family: inherit;
   cursor: pointer;
-  color: var(--text-secondary);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  color: var(--sep-text-primary, #1d1c1a);
+  transition: background var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
   box-sizing: border-box;
-
-  gap: var(--space-1_5);
-  padding: 5px 8px;
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-xs, 12px);
-  min-height: 28px;
+  gap: var(--space-2, 8px);
+  padding: 5px var(--sep-item-padding-h, 10px);
+  border-radius: var(--sep-item-radius, 8px);
+  font-size: var(--sep-font-size-base, 13px);
+  min-height: var(--sep-item-height, 28px);
 }
 
 .moreItem svg {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
-  color: var(--text-tertiary);
-  transition: color var(--transition-fast);
+  color: var(--sep-text-secondary, #5c5954);
+  transition: color var(--transition-micro, 100ms ease-out);
 }
 
 .moreItem:hover,
 .moreItem:focus-visible {
   outline: none;
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  color: var(--sep-text-primary, #1d1c1a);
 }
 
 .moreItem:hover svg,
 .moreItem:focus-visible svg {
-  color: var(--text-secondary);
+  color: var(--sep-text-primary, #1d1c1a);
 }
 
 .moreItem:focus-visible {
-  box-shadow: var(--focus-ring);
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
 }
 
 .danger {
-  color: var(--accent-red);
+  color: var(--sep-danger-color, hsl(0 84% 60%));
 }
 
 .danger svg {
-  color: var(--accent-red);
+  color: var(--sep-danger-color, hsl(0 84% 60%));
 }

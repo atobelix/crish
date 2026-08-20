@@ -1,23 +1,41 @@
 import type React from 'react';
 
 /**
- * Menu 键盘漫游逻辑（↑↓ Home End Enter Esc），从 Menu.tsx 提取以降低行数。
- * 依赖注入而非闭包捕获，纯函数风格。
+ * Menu 键盘漫游与 WAI-ARIA 级联导航逻辑（↑↓ Home End Enter Esc → ←）。
+ * 纯函数风格。
  */
 export function handleMenuKeyDown(
   e: React.KeyboardEvent<HTMLDivElement>,
   opts: {
     isOpen: boolean;
-    options: ReadonlyArray<{ id: string; disabled?: boolean; onClick?: () => void }>;
+    options: ReadonlyArray<{
+      id: string;
+      disabled?: boolean;
+      onClick?: () => void;
+      hasSubmenu?: boolean;
+      onExpandSubmenu?: () => void;
+    }>;
     focusedIndex: number;
     contentRef: React.RefObject<HTMLDivElement | null>;
     setFocusedIndex: React.Dispatch<React.SetStateAction<number>>;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onSelect?: (id: string, opt: any) => void;
     handleOpenChange: (open: boolean) => void;
+    onSubmenuExpand?: (index: number, opt: unknown) => void;
+    onSubmenuCollapse?: () => void;
   }
 ): void {
-  const { isOpen, options, focusedIndex, contentRef, setFocusedIndex, onSelect, handleOpenChange } = opts;
+  const {
+    isOpen,
+    options,
+    focusedIndex,
+    contentRef,
+    setFocusedIndex,
+    onSelect,
+    handleOpenChange,
+    onSubmenuExpand,
+    onSubmenuCollapse,
+  } = opts;
   if (!isOpen) return;
 
   // CJK IME 组合态与 Windows 229 合成事件绝对放行
@@ -34,7 +52,11 @@ export function handleMenuKeyDown(
   if (e.key === 'Escape') {
     if (e.defaultPrevented) return;
     e.preventDefault();
-    handleOpenChange(false);
+    if (onSubmenuCollapse) {
+      onSubmenuCollapse();
+    } else {
+      handleOpenChange(false);
+    }
     return;
   }
 
@@ -63,14 +85,33 @@ export function handleMenuKeyDown(
     } else if (e.key === 'End') {
       e.preventDefault();
       setFocusedIndex(options.length - 1);
+    } else if (e.key === 'ArrowRight') {
+      if (focusedIndex >= 0 && focusedIndex < options.length) {
+        const opt = options[focusedIndex];
+        if (opt && !opt.disabled && (opt.hasSubmenu || opt.onExpandSubmenu)) {
+          e.preventDefault();
+          opt.onExpandSubmenu?.();
+          onSubmenuExpand?.(focusedIndex, opt);
+        }
+      }
+    } else if (e.key === 'ArrowLeft') {
+      if (onSubmenuCollapse) {
+        e.preventDefault();
+        onSubmenuCollapse();
+      }
     } else if (e.key === 'Enter' || e.key === ' ') {
       if (focusedIndex >= 0 && focusedIndex < options.length) {
         const opt = options[focusedIndex];
         if (opt && !opt.disabled) {
           e.preventDefault();
-          opt.onClick?.();
-          onSelect?.(opt.id, opt);
-          handleOpenChange(false);
+          if (opt.hasSubmenu || opt.onExpandSubmenu) {
+            opt.onExpandSubmenu?.();
+            onSubmenuExpand?.(focusedIndex, opt);
+          } else {
+            opt.onClick?.();
+            onSelect?.(opt.id, opt);
+            handleOpenChange(false);
+          }
         }
       }
     }
@@ -114,5 +155,15 @@ export function handleMenuKeyDown(
   } else if (e.key === 'End') {
     e.preventDefault();
     setFocusedIndex(items.length - 1);
+  } else if (e.key === 'ArrowRight') {
+    if (active.getAttribute('aria-haspopup') === 'menu' || active.hasAttribute('data-has-submenu')) {
+      e.preventDefault();
+      active.click();
+    }
+  } else if (e.key === 'ArrowLeft') {
+    if (onSubmenuCollapse) {
+      e.preventDefault();
+      onSubmenuCollapse();
+    }
   }
 }

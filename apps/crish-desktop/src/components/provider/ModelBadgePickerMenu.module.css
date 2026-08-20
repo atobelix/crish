@@ -1,10 +1,12 @@
 .mbMenu {
   width: 170px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-1);
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  border: 1px solid var(--sep-border-color, #e2dfd9);
+  border-radius: var(--sep-radius-outer, 14px);
+  box-shadow: var(--sep-shadow);
+  padding: var(--sep-padding, 6px);
   display: flex;
   flex-direction: column;
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
@@ -16,6 +18,8 @@
   );
   overflow-y: auto;
   -webkit-app-region: no-drag;
+  color: var(--sep-text-primary, #1d1c1a);
+  font-family: var(--sep-font-sans, var(--font-sans));
 }
 
 .mbMenuExit {
@@ -25,8 +29,8 @@
 .mbEmpty {
   padding: 12px 10px;
   text-align: center;
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
+  font-size: var(--sep-font-size-sm, 11px);
+  color: var(--sep-text-muted, #8b8780);
 }
 
 .mbRowContainer {
@@ -36,47 +40,56 @@
 .mbRow {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
   width: 100%;
   border: none;
   background: transparent;
-  padding: 7px 8px;
-  border-radius: var(--radius-lg);
+  padding: 5px var(--sep-item-padding-h, 10px);
+  border-radius: var(--sep-item-radius, 8px);
+  min-height: var(--sep-item-height, 28px);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background var(--transition-micro);
-  color: var(--text-primary);
+  transition: background var(--transition-micro, 100ms ease-out);
+  color: var(--sep-text-primary, #1d1c1a);
+  box-sizing: border-box;
 }
 
 .mbRow:hover,
 .mbRow.isExpanded {
-  background: var(--bg-hover);
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+}
+
+.mbRow:focus-visible {
+  outline: none;
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
 }
 
 .mbRowText {
   flex: 1;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-primary);
+  font-size: var(--sep-font-size-base, 13px);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--sep-text-primary, #1d1c1a);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .mbChevron {
-  color: var(--text-tertiary);
+  color: var(--sep-text-muted, #8b8780);
   flex-shrink: 0;
 }
 
 .mbSubMenuFloating {
   position: fixed;
   width: 190px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-1);
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  border: 1px solid var(--sep-border-color, #e2dfd9);
+  border-radius: var(--sep-radius-outer, 14px);
+  box-shadow: var(--sep-shadow);
+  padding: var(--sep-padding, 6px);
   z-index: var(--z-dropdown-menu, 400);
   display: flex;
   flex-direction: column;
@@ -88,6 +101,9 @@
   overflow-y: auto;
   -webkit-app-region: no-drag;
   animation: crish-popover-enter var(--transition-popover-enter) forwards;
+  color: var(--sep-text-primary, #1d1c1a);
+  font-family: var(--sep-font-sans, var(--font-sans));
+  box-sizing: border-box;
 }
 
 .mbSubMenu {
@@ -95,12 +111,14 @@
   top: -4px;
   right: calc(100% + 4px);
   width: 190px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-1);
-  z-index: var(--z-sidebar-menu);
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  border: 1px solid var(--sep-border-color, #e2dfd9);
+  border-radius: var(--sep-radius-outer, 14px);
+  box-shadow: var(--sep-shadow);
+  padding: var(--sep-padding, 6px);
+  z-index: var(--z-sidebar-menu, 300);
   display: flex;
   flex-direction: column;
   max-height: min(
@@ -115,72 +133,90 @@
 .mbSubRow {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
   width: 100%;
   border: none;
   background: transparent;
-  padding: 7px 8px;
-  border-radius: var(--radius-lg);
+  padding: 5px var(--sep-item-padding-h, 10px);
+  border-radius: var(--sep-item-radius, 8px);
+  min-height: var(--sep-item-height, 28px);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background var(--transition-micro);
-  color: var(--text-secondary);
+  transition: background var(--transition-micro, 100ms ease-out);
+  color: var(--sep-text-secondary, #5c5954);
+  box-sizing: border-box;
 }
 
 .mbSubRow:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  color: var(--sep-text-primary, #1d1c1a);
+}
+
+.mbSubRow:focus-visible {
+  outline: none;
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
 }
 
 .mbSubRow.isSelected {
-  background: var(--bg-active);
-  color: var(--text-primary);
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  color: var(--sep-text-primary, #1d1c1a);
+  font-weight: 500;
 }
 
 .mbSubRowText {
   flex: 1;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
+  font-size: var(--sep-font-size-base, 13px);
+  font-weight: var(--font-weight-normal, 400);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .mbCheck {
-  color: var(--text-secondary);
+  color: var(--sep-accent-color, #10b981);
   flex-shrink: 0;
 }
 
 .mbDivider {
-  height: 1px;
-  background: var(--border-subtle);
-  margin: 4px 4px;
+  height: 0;
+  min-height: 0;
+  border: none;
+  border-top: 1px solid var(--sep-divider-color, rgba(29, 28, 26, 0.06));
+  margin: 3px var(--sep-padding, 6px);
+  flex-shrink: 0;
 }
 
 .mbManageBtn {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
   width: 100%;
   border: none;
   background: transparent;
-  padding: 7px 8px;
-  border-radius: var(--radius-lg);
+  padding: 5px var(--sep-item-padding-h, 10px);
+  border-radius: var(--sep-item-radius, 8px);
+  min-height: var(--sep-item-height, 28px);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
-  transition: background var(--transition-micro);
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
+  transition: background var(--transition-micro, 100ms ease-out);
+  color: var(--sep-text-secondary, #5c5954);
+  font-size: var(--sep-font-size-base, 13px);
+  box-sizing: border-box;
 }
 
 .mbManageBtn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  color: var(--sep-text-primary, #1d1c1a);
+}
+
+.mbManageBtn:focus-visible {
+  outline: none;
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
 }
 
 .mbManageIcon {
-  color: var(--text-tertiary);
+  color: var(--sep-text-muted, #8b8780);
   flex-shrink: 0;
 }

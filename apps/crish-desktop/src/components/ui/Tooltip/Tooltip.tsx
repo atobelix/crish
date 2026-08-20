@@ -353,6 +353,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     }
 
     const effectiveSide = clampedPos?.effectiveSide ?? side;
+    const isPositionReady = clampedPos !== null;
 
     const clonedChild = React.cloneElement(child, {
       ref: mergedRef,
@@ -369,6 +370,12 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       onClick: handleClick,
     });
 
+    const tooltipStateClass = !isPositionReady
+      ? styles.tooltipMeasuring
+      : state === 'exiting'
+        ? styles.tooltipExit
+        : styles.tooltipEnter;
+
     return (
       <>
         {clonedChild}
@@ -383,16 +390,17 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
               id={tipId}
               role="tooltip"
               data-tooltip-portal="true"
-              className={`${styles.tooltip} ${styles[effectiveSide]} ${state === 'exiting' ? styles.tooltipExit : styles.tooltipEnter}`}
+              className={`${styles.tooltip} ${styles[effectiveSide]} ${tooltipStateClass}`}
               style={
                 {
                   top: `${clampedPos?.top ?? rect.top}px`,
                   left: `${clampedPos?.left ?? rect.left}px`,
+                  visibility: isPositionReady ? 'visible' : 'hidden',
                   opacity:
-                    clampedPos !== null && isValidDOMRect(rect) ? undefined : 0,
+                    isPositionReady && isValidDOMRect(rect) ? undefined : 0,
                   pointerEvents:
                     state === 'exiting' ||
-                    clampedPos === null ||
+                    !isPositionReady ||
                     !isValidDOMRect(rect)
                       ? 'none'
                       : undefined,
