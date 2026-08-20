@@ -56,3 +56,28 @@ export type {
   TabStripItem,
   TabStripRenderCtx,
 } from './TabStrip/TabStrip';
+
+export {
+  SmartExpandablePanel,
+  useSmartPanel,
+  MenuAdapter,
+  SelectAdapter,
+  convertMenuOptionToSmartItem,
+  convertMenuOptionsToSmartItems,
+  convertSmartItemToMenuOption,
+  convertSmartItemsToMenuOptions,
+  convertSelectOptionToSmartItem,
+  convertSelectOptionsToSmartItems,
+  convertSmartItemToSelectOption,
+  convertSmartItemsToSelectOptions,
+} from './SmartExpandablePanel';
+export type {
+  MenuItem,
+  MenuGroup,
+  MenuItemType,
+  SmartPanelProps,
+  UseSmartPanelReturn,
+  PositionResult,
+  SubmenuPositionResult,
+  BoundingBox,
+} from './SmartExpandablePanel';
