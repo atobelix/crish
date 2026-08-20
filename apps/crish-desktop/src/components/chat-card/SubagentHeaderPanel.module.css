@@ -30,7 +30,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--brand-primary, var(--accent-green, #10b981));
+  background: var(--brand, var(--brand-primary, #10b981));
   flex-shrink: 0;
   animation: agentDotPulse 1.4s ease-in-out infinite;
 }

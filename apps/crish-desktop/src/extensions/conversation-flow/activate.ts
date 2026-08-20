@@ -15,10 +15,7 @@ const ConversationFlowHost = lazy(async () => {
   return { default: m.ConversationFlowHost };
 });
 
-const ConversationFlowPermissionBar = lazy(async () => {
-  const m = await import('./PermissionBar');
-  return { default: m.PermissionBar };
-});
+import { PermissionBar } from './PermissionBar';
 
 function StreamSlotHost(props: ChatMessageListProps): ReactElement {
   return createElement(
@@ -29,11 +26,7 @@ function StreamSlotHost(props: ChatMessageListProps): ReactElement {
 }
 
 function ComposerAboveSlotHost(props: ChatComposerAboveProps): ReactElement {
-  return createElement(
-    Suspense,
-    { fallback: null },
-    createElement(ConversationFlowPermissionBar, props)
-  );
+  return createElement(PermissionBar, props);
 }
 
 let currentDeactivate: (() => void) | null = null;

@@ -527,7 +527,7 @@
   border-radius: 50%;
   background: var(--brand, #10b981);
   box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
-  animation: thought-dot-pulse 1.5s ease-in-out infinite;
+  animation: thought-dot-pulse 1.4s ease-in-out infinite;
   display: inline-block;
   flex-shrink: 0;
   margin-right: 2px;
@@ -752,7 +752,7 @@
 
 .thinkingSummaryText {
   font-size: var(--font-size-xxs, 11px);
-  color: var(--text-tertiary, #94a3b8);
+  color: var(--text-tertiary, #8c877d);
   font-variant-numeric: tabular-nums;
 }
 
@@ -833,7 +833,7 @@
   font-weight: 600;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
-  background: #ffffff;
+  background: var(--bg-page, #ffffff);
   color: var(--text-secondary, #5c5850);
   border: 1px solid var(--border-color, rgba(0, 0, 0, 0.15));
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
@@ -841,25 +841,25 @@
 }
 
 .flowPlanStep.isDone .flowPlanStepNum {
-  background: #ffffff;
+  background: var(--bg-page, #ffffff);
   color: var(--text-primary, #1c1b18);
-  border-color: rgba(0, 0, 0, 0.25);
+  border-color: color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.25)) 80%, var(--text-primary));
 }
 
 .flowPlanStep.isRunning .flowPlanStepNum {
-  background: rgba(16, 185, 129, 0.1);
-  color: #10b981;
-  border-color: rgba(16, 185, 129, 0.4);
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
-  animation: plan-num-pulse 2s ease-in-out infinite;
+  background: color-mix(in srgb, var(--brand, #10b981) 12%, var(--bg-page, #ffffff));
+  color: var(--brand, #10b981);
+  border-color: color-mix(in srgb, var(--brand, #10b981) 40%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 15%, transparent);
+  animation: plan-num-pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes plan-num-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.15);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 15%, transparent);
   }
   50% {
-    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand, #10b981) 30%, transparent);
   }
 }
 

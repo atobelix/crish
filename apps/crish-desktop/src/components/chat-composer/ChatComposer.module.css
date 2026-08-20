@@ -940,7 +940,7 @@
   border: none;
   cursor: pointer;
   background: var(--brand);
-  color: var(--bg-elevated);
+  color: var(--text-on-brand, white);
   flex-shrink: 0;
   font-size: 0;
   line-height: 1;
@@ -984,6 +984,8 @@
   width: 16px;
   height: 16px;
   stroke-width: 2.5;
+  color: var(--text-on-brand, white);
+  stroke: currentColor;
   flex-shrink: 0;
   margin: auto;
 }
