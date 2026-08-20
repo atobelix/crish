@@ -94,3 +94,121 @@ html[data-theme="dark"] .elevation-4 {
   from { opacity: 1; transform: scale(1) translateY(0); }
   to   { opacity: 0; transform: scale(0.96) translateY(8px); }
 }
+
+/* Markdown 代码块与复制按钮视效规范 */
+.md-code-block {
+  position: relative;
+  margin: var(--space-2) 0;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: var(--md-code-bg, var(--bg-secondary));
+  overflow: hidden;
+}
+
+.md-code-pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.55;
+  tab-size: var(--md-code-tab-size, 2);
+}
+
+.md-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-family: var(--font-sans, inherit);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--transition-fast, 150ms ease),
+    background-color var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease);
+}
+
+.md-code-block:hover .md-code-copy,
+.md-code-copy:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.md-code-copy:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+.md-code-copy.is-copied {
+  color: var(--status-success, #10b981);
+}
+
+/* ==========================================================================
+   4. SmartExpandablePanel & Concentric Curvature Architecture
+   ========================================================================== */
+
+/* Outer Shell (L1: R_outer = 14px, Padding = 6px) */
+.sep-panel-root,
+[data-sep-panel="true"] {
+  border-radius: var(--sep-radius-outer, 14px);
+  padding: var(--sep-padding, 6px);
+  border: 1px solid var(--sep-border-color, #e2dfd9);
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  box-shadow: var(--sep-shadow);
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px));
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px));
+}
+
+/* Inner Container (L2: R_inner = 8px) */
+.sep-inner-container,
+[data-sep-inner="true"] {
+  border-radius: var(--sep-radius-inner, 8px);
+}
+
+/* Item Row (L3: R_item = 8px, H = 28px) */
+.sep-item-row,
+[data-sep-item="true"] {
+  border-radius: var(--sep-item-radius, 8px);
+  height: var(--sep-item-height, 28px);
+  padding: 0 var(--sep-item-padding-h, 10px);
+}
+
+/* Action Button (L4: R_btn = 6px) */
+.sep-btn,
+[data-sep-btn="true"] {
+  border-radius: var(--sep-btn-radius, 6px);
+}
+
+/* Badge (L5: R_badge = 4px) */
+.sep-badge,
+[data-sep-badge="true"] {
+  border-radius: var(--sep-badge-radius, 4px);
+}
+
+/* Status Pill (L6: R_pill = 9999px) */
+.sep-pill,
+[data-sep-pill="true"] {
+  border-radius: var(--sep-pill-radius, 9999px);
+}
+
+/* Circular Button (L7: 50%) */
+.sep-circle-btn,
+[data-sep-circle="true"] {
+  border-radius: 50%;
+}

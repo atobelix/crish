@@ -100,19 +100,32 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         ? activeSessionId
         : leaf.sessionId || activeSessionId;
 
-    const handleActivate = useCallback(() => {
-      if (!isActive) setActiveLeaf(leaf.id);
-      // 多 chat：点击 pane 时把 shell active 切到该 leaf 绑定的 session
-      if (leaf.sessionId) {
-        const shell = useWorkspaceShellStore.getState();
-        const tab = shell.openTabs.find((t) => t.sessionId === leaf.sessionId);
-        if (tab) {
-          if (shell.activeTabId !== tab.tabId) shell.activateTab(tab.tabId);
-        } else {
-          shell.openOrFocusSession(leaf.sessionId);
+    const handleActivate = useCallback(
+      (e?: React.PointerEvent) => {
+        if (e && e.target && 'closest' in (e.target as HTMLElement)) {
+          const target = e.target as HTMLElement;
+          if (
+            target.closest(
+              'button, input, textarea, select, [role="menuitem"], [role="menu"], [data-interactive], [data-radix-popper-content-wrapper], [data-interactive="true"]'
+            )
+          ) {
+            return;
+          }
         }
-      }
-    }, [isActive, leaf.id, leaf.sessionId, setActiveLeaf]);
+        if (!isActive) setActiveLeaf(leaf.id);
+        // 多 chat：点击 pane 时把 shell active 切到该 leaf 绑定的 session
+        if (leaf.sessionId) {
+          const shell = useWorkspaceShellStore.getState();
+          const tab = shell.openTabs.find((t) => t.sessionId === leaf.sessionId);
+          if (tab) {
+            if (shell.activeTabId !== tab.tabId) shell.activateTab(tab.tabId);
+          } else {
+            shell.openOrFocusSession(leaf.sessionId);
+          }
+        }
+      },
+      [isActive, leaf.id, leaf.sessionId, setActiveLeaf]
+    );
 
     /**
      * 几何由 layoutEffect 写 DOM，不用 React style prop。
@@ -186,7 +199,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         data-active={isActive ? 'true' : 'false'}
         data-dragging-source={isDragSource ? 'true' : 'false'}
         data-unit-tab-strip={isChat && isMultiChat ? 'true' : 'false'}
-        onPointerDownCapture={handleActivate}
+        onPointerDown={handleActivate}
         role="region"
         aria-label={`${viewRegistry.getTitle(leaf.activeTab, renderCtx)} 面板`}
       >

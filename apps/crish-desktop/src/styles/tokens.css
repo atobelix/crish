@@ -125,6 +125,56 @@ html[data-theme='light'] {
     var(--text-primary) 10%
   );
 
+  --bg-page: #ffffff;
+  --bg-canvas: #f6f5f3;
+  --bg-panel: rgba(255, 254, 252, 0.96);
+  --bg-item-hover: rgba(0, 0, 0, 0.04);
+  --bg-item-active: rgba(0, 0, 0, 0.08);
+
+  --brand-primary: #10b981;
+  --brand: #10b981;
+  --brand-deep: #059669;
+
+  /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Light) --- */
+  --sep-radius-outer: 14px;
+  --sep-padding: 6px;
+  --sep-radius-inner: calc(var(--sep-radius-outer) - var(--sep-padding));
+  --sep-item-radius: calc(var(--sep-radius-outer) - var(--sep-padding));
+  --sep-btn-radius: 6px;
+  --sep-badge-radius: 4px;
+  --sep-pill-radius: 9999px;
+
+  --sep-item-height: 28px;
+  --sep-item-padding-h: 10px;
+  --sep-item-gap: 2px;
+
+  --sep-bg-canvas: #f6f5f3;
+  --sep-bg-panel: rgba(255, 254, 252, 0.96);
+  --sep-bg-panel-solid: #ffffff;
+  --sep-bg-item-hover: rgba(29, 28, 26, 0.045);
+  --sep-bg-item-selected: rgba(29, 28, 26, 0.065);
+  --sep-bg-input: rgba(29, 28, 26, 0.03);
+
+  --sep-border-color: #e2dfd9;
+  --sep-border-hover: #c9c5bc;
+  --sep-border-focus: #b2ada2;
+  --sep-divider-color: rgba(29, 28, 26, 0.06);
+
+  --sep-text-primary: #1d1c1a;
+  --sep-text-secondary: #5c5954;
+  --sep-text-muted: #8b8780;
+
+  --sep-accent-color: #10b981;
+  --sep-accent-light: hsl(160 84% 39% / 0.12);
+  --sep-danger-color: hsl(0 84% 60%);
+  --sep-danger-light: hsl(0 84% 60% / 0.08);
+
+  --sep-shadow: 0 20px 48px -10px rgba(29, 28, 26, 0.09),
+                0 6px 20px -3px rgba(29, 28, 26, 0.03),
+                0 2px 6px 0 rgba(29, 28, 26, 0.015),
+                inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --sep-backdrop-blur: 28px;
+
   --accent-color: hsl(35, 16%, 15%); /*        */
   --accent-light: hsl(35, 20%, 98.5%); /*      */
   --accent-hover: hsl(35, 16%, 22%); /*      */
@@ -139,15 +189,13 @@ html[data-theme='light'] {
   --accent-green-muted: hsl(142, 30%, 82.5%);
   --accent-red: hsl(0, 55%, 55%); /*     /   */
   --accent-red-light: hsl(0, 55%, 97.5%); /*        */
-  /*    6.1       08     4  accent-blue    /      
-   * #2f81f7    3.23:1   #1d4ed8   5.89:1 WCAG AA     4.5:1  
-   *   /      --color-info dark          5.35:1      */
-  --accent-blue: #1d4ed8;
-  --accent-blue-light: hsl(217, 70%, 96%);
+  /* Zero-Blue 铁律：--accent-blue / --accent-primary 收敛为高对比中性墨阶与翡翠绿 */
+  --accent-blue: #065f46;
+  --accent-blue-light: hsl(160 84% 39% / 0.12);
   --accent-violet: hsl(258, 90%, 66%);
   --accent-violet-light: hsl(258, 40%, 97%);
-  --accent-primary: var(--accent-blue);
-  --accent-secondary: var(--accent-blue-light);
+  --accent-primary: #10b981;
+  --accent-secondary: hsl(160 84% 39% / 0.12);
   /* primary     FirstRunWizard        light = text-primary   dark = text-secondary    */
   --accent-inverted: var(--text-primary);
   --accent-chart-in: hsl(35, 10%, 82%);
@@ -624,6 +672,56 @@ html[data-theme='dark'] {
   --focus-ring-strong: 0 0 0 3px
     color-mix(in srgb, var(--text-primary) 22%, transparent);
 
+  --bg-page: #0c0c0b;
+  --bg-canvas: #141412;
+  --bg-panel: rgba(24, 23, 21, 0.96);
+  --bg-item-hover: rgba(245, 244, 240, 0.06);
+  --bg-item-active: rgba(245, 244, 240, 0.10);
+
+  --brand-primary: #10b981;
+  --brand: #10b981;
+  --brand-deep: #059669;
+
+  /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Dark) --- */
+  --sep-radius-outer: 14px;
+  --sep-padding: 6px;
+  --sep-radius-inner: calc(var(--sep-radius-outer) - var(--sep-padding));
+  --sep-item-radius: calc(var(--sep-radius-outer) - var(--sep-padding));
+  --sep-btn-radius: 6px;
+  --sep-badge-radius: 4px;
+  --sep-pill-radius: 9999px;
+
+  --sep-item-height: 28px;
+  --sep-item-padding-h: 10px;
+  --sep-item-gap: 2px;
+
+  --sep-bg-canvas: #0c0c0b;
+  --sep-bg-panel: rgba(24, 23, 21, 0.96);
+  --sep-bg-panel-solid: #181715;
+  --sep-bg-item-hover: rgba(245, 244, 240, 0.06);
+  --sep-bg-item-selected: rgba(245, 244, 240, 0.09);
+  --sep-bg-input: rgba(245, 244, 240, 0.04);
+
+  --sep-border-color: #2b2926;
+  --sep-border-hover: #3d3a35;
+  --sep-border-focus: #524e47;
+  --sep-divider-color: rgba(255, 255, 255, 0.07);
+
+  --sep-text-primary: #f5f4f0;
+  --sep-text-secondary: #b5b2aa;
+  --sep-text-muted: #78756d;
+
+  --sep-accent-color: #10b981;
+  --sep-accent-light: hsl(160 84% 45% / 0.16);
+  --sep-danger-color: hsl(0 84% 60%);
+  --sep-danger-light: hsl(0 84% 60% / 0.08);
+
+  --sep-shadow: 0 24px 54px -10px rgba(0, 0, 0, 0.70),
+                0 8px 24px -4px rgba(0, 0, 0, 0.45),
+                0 2px 8px 0 rgba(0, 0, 0, 0.30),
+                inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --sep-backdrop-blur: 28px;
+
   --accent-color: #f8fafc;
   --accent-light: #1e293b;
   --accent-hover: #ffffff;
@@ -649,16 +747,17 @@ html[data-theme='dark'] {
     var(--accent-red, #ef4444) 8%,
     var(--bg-primary)
   );
-  --accent-blue: hsl(217, 91%, 60%);
-  --accent-blue-light: hsl(224, 64%, 33%);
+  /* Zero-Blue 铁律：--accent-blue / --accent-primary 收敛为高对比中性墨阶与翡翠绿 */
+  --accent-blue: #34d399;
+  --accent-blue-light: hsl(160 84% 45% / 0.16);
   --accent-violet: hsl(258, 90%, 66%);
   --accent-violet-light: hsl(261, 73%, 23%);
-  --accent-primary: var(--accent-blue);
-  --accent-secondary: var(--accent-blue-light);
+  --accent-primary: #10b981;
+  --accent-secondary: hsl(160 84% 45% / 0.16);
   /* primary     dark    text-secondary    */
   --accent-inverted: var(--text-secondary);
-  --accent-chart-in: var(--accent-blue-light);
-  --accent-chart-out: var(--accent-blue);
+  --accent-chart-in: hsl(160 84% 45% / 0.25);
+  --accent-chart-out: #10b981;
   --text-on-accent: var(--bg-primary, #0a0a0a);
   /* legacy/semantic aliases dark        light             dark      */
   --accent-danger: var(--color-error);

@@ -205,20 +205,10 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(chrome?.getAttribute('data-chat-top-header')).toBe('true');
     expect(chrome?.hasAttribute('data-canvas-quiet')).toBe(false);
     expect(container.querySelector('[data-leaf-tool-tab-strip]')).toBeNull();
-    expect(queryByTestId('chat-open-note')).toBeNull();
-    expect(getByTestId('chat-open-files')).toBeTruthy();
-    expect(getByTestId('chat-open-overview')).toBeTruthy();
+    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
+    expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
     expect(getByTestId('right-dock-toggle')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
-
-    act(() => {
-      activateNotePaper();
-    });
-    expect(getByTestId('chat-open-note')).toBeTruthy();
-    expect(container.querySelector('[data-leaf-tool-tab-strip]')).toBeNull();
-    act(() => {
-      deactivateNotePaper();
-    });
   });
 
   it('F11 note 未注册时本地 fallback，不是纯空白', () => {
