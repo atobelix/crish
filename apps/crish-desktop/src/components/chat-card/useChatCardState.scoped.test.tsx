@@ -7,12 +7,12 @@
  */
 import { renderHook, act } from '@testing-library/react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { useLayoutStore } from '../../store/layoutStore';
+import { useSessionStore } from '../../store/sessionStore';
 import { useScopedSessionField } from './useScopedSessionField';
 import type { SessionState } from '../store/types';
 
 function seedStore(): void {
-  useLayoutStore.setState((st) => {
+  useSessionStore.setState((st) => {
     st.sessionsById = {
       'sess-a': {
         id: 'sess-a',
@@ -63,7 +63,7 @@ describe('useScopedSessionField 会话级订阅短路（T4.2）', () => {
 
     // 非活跃会话 B 的消息变更（immer patch）→ 短路：selector 零调用、零渲染
     act(() => {
-      useLayoutStore.setState((st) => {
+      useSessionStore.setState((st) => {
         st.sessionsById['sess-b']!.messages!.push({
           id: 'b2',
           sender: 'assistant',
@@ -93,7 +93,7 @@ describe('useScopedSessionField 会话级订阅短路（T4.2）', () => {
     selectorSpy.mockClear();
 
     act(() => {
-      useLayoutStore.setState((st) => {
+      useSessionStore.setState((st) => {
         st.sessionsById['sess-a']!.messages!.push({
           id: 'a2',
           sender: 'assistant',
@@ -121,7 +121,7 @@ describe('useScopedSessionField 会话级订阅短路（T4.2）', () => {
     selectorSpy.mockClear();
 
     act(() => {
-      useLayoutStore.setState((st) => {
+      useSessionStore.setState((st) => {
         st.activeSessionId = 'sess-b';
       });
     });
@@ -144,7 +144,7 @@ describe('useScopedSessionField 会话级订阅短路（T4.2）', () => {
     selectorSpy.mockClear();
     // 无关字段（folderOrder）变更 → 短路
     act(() => {
-      useLayoutStore.setState((st) => {
+      useSessionStore.setState((st) => {
         st.folderOrder = ['对话'];
       });
     });
