@@ -1,0 +1,136 @@
+.agentTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 6px;
+  border: none;
+  border-radius: var(--button-radius, 7px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: background-color var(--transition-micro, 120ms) ease,
+              color var(--transition-micro, 120ms) ease;
+}
+
+.agentTrigger:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.liveDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-green, #10b981);
+  box-shadow: 0 0 6px var(--accent-green, #10b981);
+  animation: pulse-dot 1.4s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.botIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.triggerText {
+  white-space: nowrap;
+}
+
+.subagentMenuPanel {
+  min-width: 240px;
+  max-width: 320px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.agentItemRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm, 4px);
+  gap: 8px;
+  transition: background-color var(--transition-micro, 120ms) ease;
+}
+
+.agentItemRow:hover {
+  background: var(--bg-hover);
+}
+
+.agentInfo {
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.agentHeaderLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.agentName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusBadge {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
+.statusBadge.running {
+  background: color-mix(in srgb, var(--accent-green, #10b981) 15%, transparent);
+  color: var(--accent-green, #10b981);
+}
+
+.statusBadge.completed {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.statusBadge.failed {
+  background: color-mix(in srgb, var(--status-error, #ef4444) 15%, transparent);
+  color: var(--status-error, #ef4444);
+}
+
+.statusBadge.stopped {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
+.agentTask {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.killBtn {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.killBtn:hover {
+  color: var(--status-error, #ef4444);
+}

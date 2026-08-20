@@ -1,0 +1,74 @@
+.renameContainer {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 220px;
+  height: 24px;
+}
+
+.renameInput {
+  height: 24px;
+  padding: 0 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  outline: none;
+  box-shadow: none;
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--transition-micro, 120ms) ease;
+}
+
+.renameInput:focus {
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+}
+
+.titleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 4px;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 200px;
+  min-width: 0;
+  outline: none;
+  transition: background-color var(--transition-micro, 120ms) ease;
+}
+
+.titleBtn:hover:not(.disabled) {
+  background: var(--bg-hover);
+}
+
+.titleBtn.disabled {
+  cursor: default;
+}
+
+.titleText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.editIcon {
+  color: var(--text-tertiary);
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity var(--transition-micro, 120ms) ease;
+}
+
+.titleBtn:hover:not(.disabled) .editIcon {
+  opacity: 0.7;
+}
