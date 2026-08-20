@@ -1,24 +1,38 @@
-/* LeafToolTabStrip：纯标签化顶栏，30px 实体分界行。加号防溢出吸附架构。 */
+/* LeafToolTabStrip：双层顶栏架构与加号防溢出吸附设计 */
 
+.container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+  background: var(--card-header-bg, var(--bg-secondary));
+  position: relative;
+  z-index: var(--z-sticky, 2);
+  user-select: none;
+}
+
+/* Row 1: Tab Strip (30px Height) */
 .header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   height: 30px;
   min-height: 30px;
   max-height: 30px;
   padding: 0 4px 0 6px;
   box-sizing: border-box;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
   background: var(--card-header-bg, var(--bg-secondary));
   flex-shrink: 0;
   width: 100%;
   min-width: 0;
   overflow: hidden;
   position: relative;
-  z-index: var(--z-sticky, 2);
 }
 
-.tabsScrollArea {
+/* Tabs Track: contains Tab list and In-flow Add button */
+.tabsTrack {
   display: flex;
   align-items: center;
   gap: 3px;
@@ -32,15 +46,27 @@
   scrollbar-width: none;
 }
 
+.tabsList {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 100%;
+  flex-shrink: 0;
+}
+
+/* Tab Item */
 .tab {
   display: inline-flex;
   align-items: center;
+  justify-content: space-between;
   gap: 5px;
   height: 24px;
-  max-width: 130px;
-  padding: 0 6px 0 8px;
+  max-width: 140px;
+  min-width: 0;
+  flex: 0 0 auto;
+  padding: 0 4px 0 7px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm, 5px);
+  border-radius: var(--radius-sm, 4px);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
@@ -48,13 +74,18 @@
   font-weight: 400;
   cursor: pointer;
   white-space: nowrap;
-  flex-shrink: 0;
   box-sizing: border-box;
   user-select: none;
+  overflow: hidden;
   transition:
     background-color var(--transition-micro, 120ms) ease,
     color var(--transition-micro, 120ms) ease,
-    border-color var(--transition-micro, 120ms) ease;
+    border-color var(--transition-micro, 120ms) ease,
+    max-width 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    padding 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    margin 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .tab:hover {
@@ -67,18 +98,33 @@
   color: var(--text-primary);
   font-weight: 500;
   border-color: var(--border-subtle);
+  box-shadow: 0 1px 2px var(--tint-subtle, hsl(0 0% 0% / 0.04));
 }
 
 .tabIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  opacity: 0.75;
+  opacity: 0.85;
+}
+
+.tabIcon svg {
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  display: block;
 }
 
 .tabLabel {
+  flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
   min-width: 0;
   pointer-events: none;
+  font-size: 12px;
 }
 
 .tabCloseBtn {
@@ -87,6 +133,7 @@
   justify-content: center;
   width: 16px;
   height: 16px;
+  min-width: 16px;
   border: none;
   border-radius: 3px;
   background: transparent;
@@ -95,24 +142,130 @@
   margin-left: 2px;
   cursor: pointer;
   flex-shrink: 0;
-  opacity: 0.4;
+  opacity: 0.65;
   transition:
     opacity var(--transition-micro, 120ms) ease,
     background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease;
+    color var(--transition-micro, 120ms) ease,
+    transform var(--transition-micro, 120ms) ease;
 }
 
 .tab:hover .tabCloseBtn {
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
 .tabCloseBtn:hover {
   opacity: 1;
   background: var(--tint-strong, hsl(0 0% 0% / 0.08));
   color: var(--text-primary);
+  transform: scale(1.08);
 }
 
-.stickyTrailingGroup {
+.tabCloseBtn:active {
+  transform: scale(0.92);
+}
+
+/* Animations */
+.isEntering {
+  animation: sideTabSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.isLeaving {
+  max-width: 0;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  margin-left: 0;
+  margin-right: -4px;
+  opacity: 0;
+  transform: scale(0.88) translateX(-4px);
+  pointer-events: none;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+@keyframes sideTabSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateX(-6px);
+    max-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+    margin-right: -4px;
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    max-width: 140px;
+    padding-left: 7px;
+    padding-right: 4px;
+    margin-right: 0;
+  }
+}
+
+/* Add Buttons: in-flow and pinned */
+.addBtn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  flex: 0 0 24px;
+  padding: 0;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid transparent;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-micro, 120ms) ease,
+    color var(--transition-micro, 120ms) ease,
+    opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    width 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    min-width 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    margin 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.addBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.addBtn.pinned {
+  opacity: 0;
+  width: 0;
+  min-width: 0;
+  flex: 0 0 0px;
+  transform: scale(0.85);
+  pointer-events: none;
+  overflow: hidden;
+  margin: 0;
+}
+
+.hasOverflow .addBtn.pinned {
+  opacity: 1;
+  width: 24px;
+  min-width: 24px;
+  flex: 0 0 24px;
+  transform: scale(1);
+  pointer-events: auto;
+  margin-right: 2px;
+}
+
+.hasOverflow .addBtn.inFlow {
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  min-width: 0;
+  flex: 0 0 0px;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* Right Fixed Cluster */
+.fixedCluster {
   flex: 0 0 auto;
   flex-shrink: 0;
   display: flex;
@@ -120,24 +273,227 @@
   gap: 2px;
   padding-left: 4px;
   height: 100%;
+  position: relative;
+  z-index: var(--z-sticky, 2);
 }
 
-.addTabBtn,
-.collapseBtn {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+.sideBtn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
   padding: 0;
   border-radius: var(--radius-sm, 4px);
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   color: var(--text-tertiary);
+  cursor: pointer;
   flex-shrink: 0;
   transition:
     background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease;
+    color var(--transition-micro, 120ms) ease,
+    transform var(--transition-micro, 120ms) ease;
 }
 
-.addTabBtn:hover,
-.collapseBtn:hover {
+.sideBtn:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
+}
+
+.sideBtn:active {
+  transform: scale(0.94);
+}
+
+.btnMaximize,
+.btnCollapse {
+  width: 24px;
+  height: 24px;
+}
+
+/* Row 2: Action / Navigation Toolbar (32px Height) */
+.toolbar {
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  padding: 0 8px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+  flex-shrink: 0;
+  box-sizing: border-box;
+  background: var(--bg-primary);
+}
+
+.toolbarNav {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbarActions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbarBtn {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0;
+  transition:
+    background-color var(--transition-micro, 120ms) ease,
+    color var(--transition-micro, 120ms) ease,
+    transform var(--transition-micro, 120ms) ease;
+}
+
+.toolbarBtn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.toolbarBtn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.toolbarBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Centered Launcher Hub Component (Empty State: 0 Tabs) */
+.launcherHubWrapper {
+  position: absolute;
+  top: 30px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--z-sticky, 2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: var(--bg-primary);
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.launcherHub {
+  width: 100%;
+  max-width: 320px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  animation: launcherHubFadeIn 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes launcherHubFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.launcherCardsGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.launcherCard {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle, var(--border-color));
+  background: var(--bg-primary);
+  cursor: pointer;
+  text-align: left;
+  user-select: none;
+  box-sizing: border-box;
+  width: 100%;
+  transition:
+    background-color var(--transition-micro, 120ms) ease,
+    border-color var(--transition-micro, 120ms) ease,
+    transform var(--transition-micro, 120ms) ease,
+    box-shadow var(--transition-micro, 120ms) ease;
+}
+
+.launcherCard:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px var(--tint-subtle, hsl(0 0% 0% / 0.04));
+}
+
+.launcherCard:active {
+  transform: translateY(0);
+  background: var(--bg-active);
+}
+
+.launcherCardIconBox {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--bg-hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition:
+    color var(--transition-micro, 120ms) ease,
+    background-color var(--transition-micro, 120ms) ease;
+}
+
+.launcherCard:hover .launcherCardIconBox {
+  color: var(--text-primary);
+  background: var(--bg-active);
+}
+
+.launcherCardText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.launcherCardTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.launcherCardDesc {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
