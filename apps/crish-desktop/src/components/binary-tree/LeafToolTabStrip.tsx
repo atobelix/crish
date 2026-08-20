@@ -385,6 +385,9 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                     onMouseDown={(e) => {
                       if (e.button === 1) e.preventDefault();
                     }}
+                    onPointerDown={(e) =>
+                      startToolDrag(leafId, tabId, tabId, label, e)
+                    }
                     data-tool-tab-id={tabId}
                     data-tab-id={tabId}
                   >
@@ -435,16 +438,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 ) : (
                   <Maximize2 size={14} strokeWidth={2} />
                 )}
-              </button>
-            </Tooltip>
-            <Tooltip content="收起右侧面板" side="bottom">
-              <button
-                type="button"
-                className={`${styles.sideBtn} ${styles.btnCollapse} side-panel-btn side-panel-btn-collapse active`}
-                onClick={handleCollapse}
-                aria-label="收起右侧面板"
-              >
-                <IconSidebarRight size={14} />
               </button>
             </Tooltip>
           </div>

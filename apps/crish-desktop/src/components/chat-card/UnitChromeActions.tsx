@@ -330,7 +330,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
           </nav>
         </div>
 
-        {/* ── 右侧：极简动作组 (预览 / 产物 / 更多 / 右坞固定切换) ── */}
+        {/* ── 右侧：极简动作组 (Exactly 3 核心操作: 预览 / 产物 / 更多，带 36px margin-right) ── */}
         <div className={`${styles.topActions} chat-top-actions`}>
           {/* 按钮 1: 应用预览 (🌐 Globe) */}
           <Tooltip content="打开应用预览" side={UNIT_CHROME_TOOL_TIP_SIDE}>
@@ -380,24 +380,22 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               currentFolder={folder || GENERAL_FOLDER}
             />
           </div>
-
-          {/* 按钮 4: 仅当右侧工作区收起时，在对话顶栏展示展开按钮 (◫ PanelRight) */}
-          {rightDockCollapsed && (
-            <Tooltip content={dockLabel} side={UNIT_CHROME_TOOL_TIP_SIDE}>
-              <button
-                type="button"
-                id="topQuickDockBtn"
-                className={`${styles.topActionBtn} top-action-btn top-side-panel-btn`}
-                data-testid="top-quick-dock-btn"
-                data-active="false"
-                aria-label={dockLabel}
-                onClick={handleToggleRightDock}
-              >
-                <PanelRight size={14} strokeWidth={1.8} aria-hidden="true" />
-              </button>
-            </Tooltip>
-          )}
         </div>
+
+        {/* ── 右侧 margin-right 区域绝对定位固定按钮 (永久常驻，开合都不卸载) ── */}
+        <Tooltip content={dockLabel} side={UNIT_CHROME_TOOL_TIP_SIDE}>
+          <button
+            type="button"
+            id="topQuickDockBtn"
+            className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn ${!rightDockCollapsed ? styles.isActive : ''}`}
+            data-testid="top-quick-dock-btn"
+            data-active={!rightDockCollapsed ? 'true' : 'false'}
+            aria-label={dockLabel}
+            onClick={handleToggleRightDock}
+          >
+            <PanelRight size={14} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        </Tooltip>
       </header>
     );
   }
