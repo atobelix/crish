@@ -17,7 +17,7 @@
 
 .tooltipMeasuring {
   visibility: hidden;
-  animation: none !important;
+  animation: none;
 }
 
 @keyframes tooltip-enter {

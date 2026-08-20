@@ -1,4 +1,4 @@
-﻿/**
+/**
  * ui/Slider 原子滑动条组件（RED-DETAILED-02 / T-ATOM-07）
  *
  * 遵循 2px 发丝轨道与 44px 隐式命中区（Fitts's Law），

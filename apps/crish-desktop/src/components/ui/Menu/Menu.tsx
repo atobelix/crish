@@ -331,7 +331,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
             onClick: (e: React.MouseEvent) => {
               if (shouldSuppressMenuReopen(triggerRef.current)) {
                 e.preventDefault();
-                e.stopPropagation();
                 return;
               }
               (
