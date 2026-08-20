@@ -1,9 +1,6 @@
 /**
- *     +       
- *    Menu         contentClassName         
- * -           min-width: 188px 
- * -       /  /    
- * -       width: 100%        
+ * ComposePlusMenu — SmartExpandablePanel Design System Specification
+ * min-width: 188px, 14px outer / 8px inner item radius, 24x24 icon box with 6px radius
  */
 
 .plusMenu {
@@ -13,57 +10,57 @@
 .item {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
   width: 100%;
   border: none;
   background: transparent;
   text-align: left;
-  padding: 6px 8px;
-  border-radius: var(--radius-md, 7px);
+  padding: 5px var(--sep-item-padding-h, 10px);
+  border-radius: var(--sep-item-radius, 8px);
   min-height: 34px;
   cursor: pointer;
   font-family: inherit;
-  color: var(--text-primary);
-  transition: background var(--transition-micro);
+  color: var(--sep-text-primary, #1d1c1a);
+  transition: background var(--transition-micro, 100ms ease-out);
   box-sizing: border-box;
 }
 
 .item:hover,
 .item:focus-visible {
   outline: none;
-  background: var(--bg-hover);
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
 }
 
 .item:focus-visible {
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: 0 0 0 2px var(--sep-border-focus, #b2ada2);
 }
 
-/* 按下色变，无缩放 */
 .item:active {
-  background: var(--bg-active);
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
 }
 
 .icon {
   width: 24px;
   height: 24px;
-  border-radius: var(--radius-md);
-  background: var(--tint-hover);
+  border-radius: var(--sep-btn-radius, 6px);
+  background: var(--sep-bg-input, rgba(29, 28, 26, 0.03));
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  color: var(--sep-text-secondary, #5c5954);
   flex-shrink: 0;
+  transition: background var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
 }
 
 .icon svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 
 .item:hover .icon,
 .item:focus-visible .icon {
-  background: var(--bg-active);
-  color: var(--text-primary);
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  color: var(--sep-text-primary, #1d1c1a);
 }
 
 .text {
@@ -75,17 +72,17 @@
 }
 
 .title {
-  font-size: var(--font-size-xs-plus, 12px);
+  font-size: var(--sep-font-size-base, 13px);
   font-weight: var(--font-weight-medium, 500);
-  line-height: var(--line-height-dense);
-  color: var(--text-primary);
+  line-height: var(--line-height-dense, 1.2);
+  color: var(--sep-text-primary, #1d1c1a);
 }
 
 .desc {
-  font-size: 10.5px;
-  line-height: var(--line-height-tight);
+  font-size: var(--sep-font-size-header, 10.5px);
+  line-height: var(--line-height-tight, 1.25);
   opacity: 0.9;
-  color: var(--text-tertiary);
+  color: var(--sep-text-muted, #8b8780);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

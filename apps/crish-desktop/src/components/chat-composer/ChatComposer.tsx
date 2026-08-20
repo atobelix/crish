@@ -1,19 +1,12 @@
 /**
- * 主对话输入区：slash 菜单（tiptap 接管）、富文本输入、发送/停止、附件条、+ 菜单 / 权限。
- * 会话次要动作（搜索/导出）在 card-header ChatHeaderMore。
- * 子 agent 通过 ComposerField 复用同一视觉与增高逻辑（侧栏 AgentCard / 内联 InlineAgentPanel）。
+ * 主对话输入区：四层空间垂直堆叠架构（Four-Layer Vertical Spatial Stacking Architecture）
+ * 严格对齐 docs/ui-reference-alignment-audit/02-pixel-perfect-implementation-plan.md §4 与 reference/chat-composer-component/index.html (L269-420) / css/composer.css
  *
- * 40 方案 T6 接线：编辑器由 TiptapComposerField 接管；
- * - 宿主 ComposerSlashMenu 文本注入路径退役（tiptap 菜单已接管键盘与点选）；
- * - 命令源 filteredCommands 以 baseSlashCommands 桥入编辑器菜单（宿主过滤 + 编辑器 query 精滤）；
- * - open-schedule 动作经 onSlashMenuPick 回宿主开面板；
- * - 落地面态（RL-01 5% 焦点混色特例）从祖先 DOM data-empty-kind 感知。
- *
- * F1-γ 输入契约化：主输入不再硬绑富文本——
- * - 核心输入契约（ComposerFieldProps，composerTypes.ts canonical）统一装配 fieldContract；
- * - 默认主路 = TiptapComposerField（React.lazy 软接 + Suspense）；
- * - 富文本装配失败（模块加载 / 渲染抛错，InputFieldErrorBoundary 捕获）→
- *   回落 ComposerField（textarea）兜底，纯文本可发送；附件/权限/队列保持壳层职责。
+ * 【四层垂直空间层级】：
+ * - Layer 1: 浮动权限审批条（ComposerPermissionBar）
+ * - Layer 2: 目标/计划模式进度条（ComposerPlanProgressBar）
+ * - Layer 3: 上下文与文件引用卡片区（ComposerAttachmentBar，24px 高度圆角芯片卡片）
+ * - Layer 4: 主输入区（Composer Card：加号/权限盾牌 + 富文本/兜底输入 + 融合模型胶囊 + 统计/语音 + 墨绿实体正圆发送按钮）
  */
 import React, {
   useCallback,
@@ -33,8 +26,15 @@ import { shouldSuppressMenuReopen } from '../ui/Menu';
 import type { PermissionMode } from '../../api/permissionModes';
 import type { ChatAttachment, QueuedMessage } from '../../hooks/useChatStream';
 import { ComposerField } from './ComposerField';
-import type { ComposerFieldProps, ComposerSendApi } from './composerTypes';
+import type {
+  ComposerFieldProps,
+  ComposerSendApi,
+  ComposerPermissionBarProps,
+  ComposerPlanProgressBarProps,
+} from './composerTypes';
 import { ComposerAttachmentBar } from './ComposerAttachmentBar';
+import { ComposerPermissionBar } from './ComposerPermissionBar';
+import { ComposerPlanProgressBar } from './ComposerPlanProgressBar';
 import { ChatQueuePanel } from './ChatQueuePanel';
 import { ComposerDropHost } from './ComposerDropHost';
 import { ComposerFusedTrigger } from './ComposerFusedTrigger';
@@ -43,6 +43,16 @@ import { useComposerMultiline } from './useComposerMultiline';
 
 export type { ComposerFieldProps } from './composerTypes';
 export { ComposerField, STOP_TOOLTIP } from './ComposerField';
+export { ComposerPermissionBar } from './ComposerPermissionBar';
+export type { ComposerPermissionBarProps } from './ComposerPermissionBar';
+export { ComposerPlanProgressBar } from './ComposerPlanProgressBar';
+export type { ComposerPlanProgressBarProps } from './ComposerPlanProgressBar';
+export { ComposerAttachmentBar } from './ComposerAttachmentBar';
+export type { ComposerAttachmentBarProps } from './ComposerAttachmentBar';
+export { ComposerSendControls } from './ComposerSendControls';
+export type { ComposerSendControlsProps } from './ComposerSendControls';
+export { ComposerFusedTrigger } from './ComposerFusedTrigger';
+export type { ComposerFusedTriggerProps } from './ComposerFusedTrigger';
 
 /** 富文本输入（默认主路）：React.lazy 软接，装配失败回落 textarea（F1-γ） */
 const TiptapComposerFieldLazy = React.lazy(() =>
@@ -113,6 +123,15 @@ export type ChatComposerProps = {
   onDeleteQueued?: (id: string) => void;
   /** 落地面态（session-empty）；未传时从 DOM 祖先 data-empty-kind 感知 */
   emptyKind?: string | null;
+  /** Layer 1: 权限审批条节点或属性 */
+  permissionBarNode?: React.ReactNode;
+  permissionBarProps?: ComposerPermissionBarProps;
+  /** Layer 2: 目标/计划进度条节点或属性 */
+  planProgressNode?: React.ReactNode;
+  planProgressProps?: ComposerPlanProgressBarProps;
+  /** 右侧统计/语音按键自定义或显示开关 */
+  voiceStatsButton?: React.ReactNode;
+  showVoiceStatsButton?: boolean;
 };
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -146,6 +165,12 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onEditQueued,
   onDeleteQueued,
   emptyKind: emptyKindProp,
+  permissionBarNode,
+  permissionBarProps,
+  planProgressNode,
+  planProgressProps,
+  voiceStatsButton,
+  showVoiceStatsButton = false,
 }) => {
   const plusMenuId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -259,14 +284,11 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   }, [attachments.length, chatInput, onSend, setChatInput]);
 
   // ── F1-γ 核心输入契约（canonical）：富文本 / textarea 共用同一契约对象 ───────
-  // 附件（ComposerAttachmentBar + 隐藏 file input）/ 权限 / 队列为壳层职责，不塞入契约；
-  // 发送底层只吃纯文本（useSlashSend chatInput.trim()），提取层归各变体。
   const fieldContract = useMemo<ComposerFieldProps>(
     () => ({
       value: chatInput,
       onChange: (val) => {
         setChatInput(val);
-        // 输入前缀斜杠时预载 skill 命令（tiptap 菜单经引用桥接即时并入）
         if (val.startsWith('/') && !val.includes(' ')) {
           void loadSkillSlash();
         }
@@ -334,6 +356,13 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     );
   };
 
+  const hasFloatLayer = Boolean(
+    permissionBarNode ||
+      permissionBarProps ||
+      planProgressNode ||
+      planProgressProps
+  );
+
   return (
     <AppErrorBoundary variant="compact" title="输入区出错">
       <ComposerDropHost
@@ -352,24 +381,42 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           onDelete={onDeleteQueued ?? (() => {})}
         />
 
+        {/* 浮动层区域（Layer 1: 权限审批条 + Layer 2: 目标/计划进度条） */}
+        {hasFloatLayer ? (
+          <div className={styles.composerFloatZone} data-composer-float-zone="">
+            {permissionBarNode ||
+              (permissionBarProps ? (
+                <ComposerPermissionBar {...permissionBarProps} />
+              ) : null)}
+            {planProgressNode ||
+              (planProgressProps ? (
+                <ComposerPlanProgressBar {...planProgressProps} />
+              ) : null)}
+          </div>
+        ) : null}
+
+        {/* 主输入卡片（Layer 3: 附件卡片 + Layer 4: 输入网格） */}
         <div
           className={`${styles.composerCard}${isMultiline ? ` ${styles.isMultiline}` : ''}`}
           data-composer-card=""
           data-multiline={isMultiline ? '1' : '0'}
           data-empty-kind={emptyKind}
         >
+          {/* Layer 3: 上下文与文件引用卡片区 */}
           <ComposerAttachmentBar
             attachments={attachments}
             onRemoveAttachment={handleRemoveAttachment}
             {...(onOpenPath ? { onOpenPath } : {})}
           />
 
+          {/* Layer 4: 主输入区网格布局 */}
           <div
             ref={layoutRef}
             className={styles.inputMainLayout}
             data-composer-layout=""
             data-composer-footer="1"
           >
+            {/* 左侧控制区：[ ＋ 加号按钮 ] + [ 🛡️ 权限盾牌按钮 ]（icon-only 模式） */}
             <div className={styles.actionLeft} data-composer-grid="left">
               <Tooltip content="添加文件、技能、扩展…" disabled={showPlusMenu}>
                 <Button
@@ -411,10 +458,12 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               />
             </div>
 
+            {/* 中间输入区：富文本/单多行自适应输入框 */}
             <div className={styles.fieldSlot} data-composer-grid="text">
               {renderInputField()}
             </div>
 
+            {/* 权限模式切换按钮（icon-only 模式） */}
             <div className={styles.permSlot} data-composer-grid="perm">
               <PermissionModeMenu
                 iconOnly
@@ -427,8 +476,21 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
               />
             </div>
 
+            {/* 右侧动作区：[ 3.7 Sonnet ⏐ High ] 融合模型胶囊 + 语音/统计 + 墨绿正圆发送按钮 */}
             <div className={styles.actionRight} data-composer-grid="right">
               <ComposerFusedTrigger>{rightActions}</ComposerFusedTrigger>
+              {voiceStatsButton ||
+                (showVoiceStatsButton ? (
+                  <Tooltip content="语音输入 / 上下文统计">
+                    <button
+                      type="button"
+                      className={styles.actionCircleBtn}
+                      aria-label="语音输入或上下文统计"
+                    >
+                      <Lucide.BarChart2 size={16} aria-hidden />
+                    </button>
+                  </Tooltip>
+                ) : null)}
               <ComposerSendControls
                 appearance="circle"
                 canSend={canSend}

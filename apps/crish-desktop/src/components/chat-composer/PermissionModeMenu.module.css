@@ -91,15 +91,17 @@
 }
 
 .permMenu {
-  z-index: var(--z-dropdown-menu);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
-  padding: var(--space-1);
+  z-index: var(--z-dropdown-menu, 300);
+  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  border: 1px solid var(--sep-border-color, #e2dfd9);
+  border-radius: var(--sep-radius-outer, 14px);
+  box-shadow: var(--sep-shadow);
+  padding: var(--sep-padding, 6px);
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--sep-item-gap, 2px);
   animation: cds-popover-enter var(--transition-popover-enter) forwards;
   transform-origin: var(--radix-popover-content-transform-origin, top left);
   max-height: min(
@@ -112,7 +114,10 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   box-sizing: border-box;
+  color: var(--sep-text-primary, #1d1c1a);
+  font-family: var(--sep-font-sans, var(--font-sans));
 }
+
 .permMenuExit {
   animation: cds-popover-exit var(--transition-popover-exit) forwards;
 }
@@ -121,51 +126,52 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
   width: 100%;
-  min-height: 28px;
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
+  min-height: var(--sep-item-height, 28px);
+  padding: 5px var(--sep-item-padding-h, 10px);
+  border-radius: var(--sep-item-radius, 8px);
+  font-size: var(--sep-font-size-base, 13px);
+  color: var(--sep-text-primary, #1d1c1a);
   border: none;
   background: transparent;
   cursor: pointer;
   box-sizing: border-box;
   transition:
-    background var(--transition-micro),
-    color var(--transition-micro);
+    background var(--transition-micro, 100ms ease-out),
+    color var(--transition-micro, 100ms ease-out);
   text-align: left;
   white-space: nowrap;
   font-family: inherit;
-  font-weight: var(--font-weight-normal);
+  font-weight: var(--font-weight-normal, 400);
   position: relative;
 }
 
 .permMenuItem:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  color: var(--sep-text-primary, #1d1c1a);
 }
 
 .permMenuItem.isSelected {
-  background: var(--bg-active);
-  color: var(--text-primary);
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  color: var(--sep-text-primary, #1d1c1a);
+  font-weight: 500;
 }
 
 .permMenuItem:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
 }
 
 .permMenuTitle {
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
+  font-size: var(--sep-font-size-base, 13px);
+  color: var(--sep-text-primary, #1d1c1a);
 }
 
 .permMenuCheck {
   position: absolute;
-  right: 8px;
+  right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--accent-green);
+  color: var(--sep-accent-color, #10b981);
 }

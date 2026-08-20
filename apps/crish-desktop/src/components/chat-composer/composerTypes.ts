@@ -178,3 +178,12 @@ export interface TiptapEditorFieldHandle {
   /** 同步获取当前编辑器 markdown（绕过 150ms 防抖） */
   getMarkdown: () => string;
 }
+
+export type {
+  ComposerPermissionBarProps,
+  PermissionRiskLevel,
+} from './ComposerPermissionBar';
+export type {
+  ComposerPlanProgressBarProps,
+  PlanStepItem,
+} from './ComposerPlanProgressBar';

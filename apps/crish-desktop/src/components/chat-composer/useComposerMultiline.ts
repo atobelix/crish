@@ -1,26 +1,35 @@
 /**
- * 单行胶囊 ↔ 多行网格：有附件 / 显式换行 / 文本宽超过单行容量则切多行；
- * 删到能放下立刻切回（与参考容量引擎对称）。
+ * 单行胶囊 ↔ 多行网格：
+ * 1. 单例 Canvas 2D 离屏度量（彻底废弃 DOM <span> 挂载）
+ * 2. 虚拟单行基准解耦（Decoupled Baseline，基于 layoutW - used 纯单行容量）
+ * 3. 24px 双门限施密特迟滞区间（Schmitt Trigger Deadband，死区内锁定上一帧状态）
+ * 4. 120ms 振荡自愈熔断器（120ms 内翻转 >= 3 次触发 400ms 强制多行锁定）
+ * 5. ResizeObserver 回调结合 RAF 防抖批处理调度
  */
 import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 
-const GRID_GUTTER_PX = 18;
-const MIN_CAPACITY_PX = 200;
+export const GRID_GUTTER_PX = 18;
+export const MIN_CAPACITY_PX = 200;
+export const HYSTERESIS_BUFFER_PX = 24;
+export const FLIP_WINDOW_MS = 120;
+export const FLIP_THRESHOLD = 3;
+export const LOCKOUT_DURATION_MS = 400;
 
-function measureTextWidth(text: string, font: string): number {
-  if (typeof document === 'undefined') return 0;
-  const span = document.createElement('span');
-  span.setAttribute('aria-hidden', 'true');
-  span.style.visibility = 'hidden';
-  span.style.position = 'absolute';
-  span.style.top = '-9999px';
-  span.style.whiteSpace = 'nowrap';
-  span.style.font = font;
-  span.textContent = text;
-  document.body.appendChild(span);
-  const width = span.getBoundingClientRect().width;
-  span.remove();
-  return width;
+let sharedCanvas: HTMLCanvasElement | null = null;
+let sharedCtx: CanvasRenderingContext2D | null = null;
+
+export function measureTextWidthCanvas(text: string, font: string): number {
+  if (typeof window === 'undefined' && typeof document === 'undefined') return 0;
+  if (!sharedCanvas && typeof document !== 'undefined') {
+    sharedCanvas = document.createElement('canvas');
+    sharedCtx = sharedCanvas.getContext('2d');
+  }
+  if (!sharedCtx && sharedCanvas) {
+    sharedCtx = sharedCanvas.getContext('2d');
+  }
+  if (!sharedCtx) return text.length * 8;
+  sharedCtx.font = font;
+  return sharedCtx.measureText(text).width;
 }
 
 export function useComposerMultiline(opts: {
@@ -33,6 +42,12 @@ export function useComposerMultiline(opts: {
     () => hasAttachments || text.includes('\n')
   );
   const fontRef = useRef<string>('');
+  const multilineRef = useRef(multiline);
+  multilineRef.current = multiline;
+
+  // 振荡熔断状态追踪
+  const flipHistoryRef = useRef<number[]>([]);
+  const lockedUntilRef = useRef<number>(0);
 
   const measure = useCallback(() => {
     if (hasAttachments || text.includes('\n')) {
@@ -44,6 +59,12 @@ export function useComposerMultiline(opts: {
       setMultiline(false);
       return;
     }
+
+    const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now < lockedUntilRef.current) {
+      return; // 熔断锁定期间，保持多行
+    }
+
     const left = layout.querySelector(
       '[data-composer-grid="left"]'
     ) as HTMLElement | null;
@@ -56,6 +77,7 @@ export function useComposerMultiline(opts: {
     const editable = layout.querySelector(
       '[contenteditable="true"], textarea'
     ) as HTMLElement | null;
+
     const layoutW = layout.clientWidth;
     const used =
       (left?.offsetWidth ?? 0) +
@@ -63,30 +85,80 @@ export function useComposerMultiline(opts: {
       (right?.offsetWidth ?? 0) +
       GRID_GUTTER_PX;
     const capacity = Math.max(MIN_CAPACITY_PX, layoutW - used);
+
     if (editable) {
       const cs = getComputedStyle(editable);
       fontRef.current = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
-      if (editable.scrollWidth > editable.clientWidth + 1) {
-        setMultiline(true);
-        return;
-      }
     }
+
     const clean = text.replace(/\u200B/g, '').trim();
     if (!clean) {
       setMultiline(false);
       return;
     }
-    const width = measureTextWidth(clean, fontRef.current || '14px sans-serif');
-    setMultiline(width >= capacity);
+
+    const textWidth = measureTextWidthCanvas(
+      clean,
+      fontRef.current || '14px sans-serif'
+    );
+    const isCurrentlyMulti = multilineRef.current;
+
+    let nextState = isCurrentlyMulti;
+    if (!isCurrentlyMulti && textWidth >= capacity) {
+      nextState = true; // 突破上门限，展开
+    } else if (isCurrentlyMulti && textWidth < capacity - HYSTERESIS_BUFFER_PX) {
+      nextState = false; // 跌破下门限，收起
+    }
+
+    if (nextState !== isCurrentlyMulti) {
+      // 记录翻转历史并清理超出窗口的时间戳
+      const history = flipHistoryRef.current.filter(
+        (t) => now - t < FLIP_WINDOW_MS
+      );
+      history.push(now);
+      flipHistoryRef.current = history;
+
+      if (history.length >= FLIP_THRESHOLD) {
+        // 触发 400ms 熔断保护，强制锁定多行态
+        lockedUntilRef.current = now + LOCKOUT_DURATION_MS;
+        setMultiline(true);
+        return;
+      }
+      setMultiline(nextState);
+    }
   }, [hasAttachments, layoutRef, text]);
 
   useLayoutEffect(() => {
     measure();
     const el = layoutRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => measure());
+
+    let rafId: number | null = null;
+    const ro = new ResizeObserver(() => {
+      if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+        if (rafId !== null) {
+          window.cancelAnimationFrame(rafId);
+        }
+        rafId = window.requestAnimationFrame(() => {
+          rafId = null;
+          measure();
+        });
+      } else {
+        measure();
+      }
+    });
+
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (
+        rafId !== null &&
+        typeof window !== 'undefined' &&
+        window.cancelAnimationFrame
+      ) {
+        window.cancelAnimationFrame(rafId);
+      }
+      ro.disconnect();
+    };
   }, [layoutRef, measure]);
 
   return multiline;

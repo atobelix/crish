@@ -1,3 +1,1018 @@
+/**
+ * ChatComposer.module.css
+ * 四层空间垂直堆叠架构（Four-Layer Vertical Spatial Stacking Architecture）
+ * - Layer 1: 浮动权限审批条（.flowPermissionBar / .flow-permission-bar）
+ * - Layer 2: 目标/计划模式进度条（.planProgressBar / .plan-progress-bar）
+ * - Layer 3: 上下文与文件引用卡片区（.fileZone / .fileCard / .attachChip）
+ * - Layer 4: 主输入区（.composerCard / .inputMainLayout / .sendBtnCircle / .actionCircleBtn）
+ *
+ * 遵循设计规范与反过度设计铁律：
+ * - 纯 Token 驱动：零硬编码色（无 hex）、z-index 纯 token 化；
+ * - 聚焦边框混入克制：session-empty 5%，普通 6%（color-mix ≥90%）；
+ * - 墨绿色正圆发送按钮：32x32px 正圆，var(--brand)，Hover var(--brand-deep)，200ms spring 弹性展开/收缩。
+ */
+
+/* ==========================================================================
+   Composer Root Wrapper & Float Zone (Layer 1 + Layer 2 Host)
+   ========================================================================== */
+
+.composerWrapper {
+  position: relative;
+  z-index: var(--z-dock);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+}
+
+.composerFloatZone {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  position: relative;
+  z-index: var(--z-base);
+}
+
+.composerFloatZone:empty {
+  display: none;
+}
+
+/* ==========================================================================
+   Layer 1: 浮动权限审批条（Floating Permission Approval Bar）
+   ========================================================================== */
+
+.flowPermissionHost {
+  display: flex;
+  flex-direction: column;
+  row-gap: 6px;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+}
+
+.flowPermissionBar {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px;
+  margin: 0;
+  border-radius: 12px;
+  background: var(
+    --sem-warn-soft,
+    color-mix(in srgb, hsl(38, 90%, 50%) 4.5%, var(--bg-elevated))
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      hsl(38, 90%, 50%) 16%,
+      var(--border-color)
+    );
+  box-shadow: 0 1px 3px var(--shadow-color, rgba(0, 0, 0, 0.02));
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--text-primary);
+  transition:
+    border-color var(--transition-fast, 120ms ease),
+    background var(--transition-fast, 120ms ease),
+    opacity 300ms ease,
+    transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.flowPermissionBar:hover {
+  border-color: color-mix(
+    in srgb,
+    hsl(38, 90%, 50%) 22%,
+    var(--border-color)
+  );
+}
+
+.flowPermissionBarLine1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 20px;
+  line-height: 20px;
+  flex-shrink: 0;
+}
+
+.flowPermissionBarTitleGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  height: 20px;
+  line-height: 20px;
+}
+
+.shieldIcon {
+  color: var(--brand-deep);
+  flex-shrink: 0;
+}
+
+.flowPermissionBarBadge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+}
+
+.flowPermissionBarBadge[data-risk='low'] {
+  color: var(--brand-deep);
+  font-weight: 600;
+}
+
+.flowPermissionBarBadge[data-risk='high'] {
+  color: var(--sem-error);
+  font-weight: 600;
+}
+
+.flowPermissionBarSummary {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.flowPermissionBarMetaRight {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+  padding-right: 2px;
+}
+
+.flowPermissionBarTimer {
+  font-family: var(--font-mono, monospace);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.flowPermissionBarTimer.isOrange {
+  color: var(--sem-warn);
+}
+
+.flowPermissionBarTimer.isWarningFlash {
+  color: var(--sem-warn);
+  animation: permWarnPulse 2s ease-in-out infinite;
+}
+
+.flowPermissionBarTimer.isExpired {
+  color: var(--sem-error);
+  animation: permExpirePulse 1.4s ease-in-out infinite alternate;
+}
+
+@keyframes permWarnPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+@keyframes permExpirePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.flowPermissionBarMore {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--tint-hover);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.flowPermissionBarLine2 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  height: 22px;
+  line-height: 22px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.flowPermissionCmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  height: 22px;
+  line-height: 22px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.flowPermissionBarActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  line-height: 22px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.flowPermissionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 22px;
+  min-height: 22px;
+  max-height: 22px;
+  line-height: 22px;
+  padding: 0 8px;
+  border-radius: 5px;
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  transition: background 120ms ease;
+  box-shadow: none;
+}
+
+.flowPermissionBtnDeny {
+  background: transparent;
+  color: var(--sem-error);
+}
+
+.flowPermissionBtnDeny:hover {
+  background: color-mix(in srgb, var(--sem-error) 8%, transparent);
+}
+
+.flowPermissionBtnAllow {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  font-weight: 500;
+}
+
+.flowPermissionBtnAllow:hover {
+  background: var(--bg-elevated);
+}
+
+.flowPermissionBtnAlways {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.flowPermissionBtnAlways:hover {
+  background: var(--tint-hover);
+}
+
+.flowPermissionBarResolved {
+  opacity: 0.55;
+  transform: scale(0.96);
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   Layer 2: 目标/计划模式进度条（Plan Progress Bar & Scrubber）
+   ========================================================================== */
+
+.planProgressBar {
+  display: flex;
+  position: relative;
+  flex-direction: column;
+  width: 100%;
+  margin-bottom: -10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -2px 10px var(--shadow-color, rgba(0, 0, 0, 0.02));
+  box-sizing: border-box;
+  transition:
+    border-color var(--transition-fast, 120ms ease),
+    box-shadow var(--transition-fast, 120ms ease);
+  outline: none;
+  z-index: var(--z-base);
+}
+
+.planStepList {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  background: var(--bg-elevated);
+  border-bottom: 0px solid var(--border-subtle);
+  border-radius: 16px 16px 0 0;
+  overflow: hidden;
+}
+
+.planProgressBar.isExpanded .planStepList {
+  grid-template-rows: 1fr;
+  border-bottom-width: 1px;
+}
+
+.planStepListInner {
+  overflow: hidden;
+  padding: 0 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: padding 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.planProgressBar.isExpanded .planStepListInner {
+  padding: 10px 14px 4px 14px;
+}
+
+.planExpandedStep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  outline: none;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease);
+}
+
+.planExpandedStep:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.planExpandedStep.completed {
+  color: var(--text-primary);
+}
+
+.planExpandedStep.active {
+  color: var(--text-primary);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+}
+
+.planStepDot {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  flex-shrink: 0;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    box-shadow var(--transition-fast, 120ms ease);
+}
+
+.planExpandedStep.completed .planStepDot {
+  background: var(--text-primary);
+}
+
+.planExpandedStep.active .planStepDot {
+  background: var(--brand);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand) 25%, transparent);
+  animation: planDotPulse 1.4s ease-in-out infinite;
+}
+
+@keyframes planDotPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand) 25%, transparent);
+  }
+  50% {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 40%, transparent);
+  }
+}
+
+.stepText {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.planStepApproveBtn {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, transparent);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
+  color: var(--brand-deep);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.planStepApproveBtn:hover {
+  background: color-mix(in srgb, var(--brand) 20%, transparent);
+}
+
+.planCollapsed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 14px 12px;
+  height: 44px;
+  box-sizing: border-box;
+}
+
+.planModeBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 9999px;
+  border: 1px solid color-mix(in srgb, var(--brand) 25%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, transparent);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  height: 24px;
+  box-sizing: border-box;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.planModeBadge .modeIcon {
+  width: 13px;
+  height: 13px;
+}
+
+.planDividerV {
+  width: 1px;
+  height: 16px;
+  background: var(--border-color);
+  flex-shrink: 0;
+}
+
+.planStepCounter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--tint-hover);
+  padding: 0 6px;
+  border-radius: 4px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  height: 20px;
+}
+
+.planActiveTaskBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  height: 24px;
+  line-height: 24px;
+  box-sizing: border-box;
+}
+
+.planRoller {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  height: 24px;
+}
+
+.planRollerTrack {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.planStep {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+  height: 24px;
+  line-height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.planSpacer {
+  flex: 0 0 4px;
+}
+
+.planRightControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.planDuration {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.planQuickActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.planActionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background var(--transition-micro, 80ms ease),
+    color var(--transition-micro, 80ms ease);
+}
+
+.planActionBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.planActionBtn.stop:hover {
+  background: color-mix(in srgb, var(--sem-error) 10%, transparent);
+  color: var(--sem-error);
+}
+
+/* ==========================================================================
+   Layer 3: 上下文与文件引用卡片区（Attachment Bar）
+   ========================================================================== */
+
+.fileZone,
+.attachStrip {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px 4px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  max-width: 100%;
+}
+
+.fileZone::-webkit-scrollbar,
+.attachStrip::-webkit-scrollbar {
+  display: none;
+}
+
+.fileZone:empty,
+.attachStrip:empty {
+  display: none;
+}
+
+.fileCard,
+.attachChip {
+  position: relative;
+  z-index: var(--z-base);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-card, 6px);
+
+  cursor: pointer;
+  user-select: none;
+  transition: border-color var(--transition-fast, 120ms ease);
+  height: 24px;
+  box-sizing: border-box;
+  max-width: 190px;
+  flex-shrink: 0;
+  overflow: visible;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.fileCard:hover,
+.attachChip:hover,
+.attachChip:focus-visible {
+  background: transparent;
+  border-color: var(--border-color);
+  outline: none;
+  z-index: var(--z-popover);
+}
+
+.attachChipImage {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  max-width: 24px;
+  border-radius: 4px;
+}
+
+.fileThumbnail,
+.attachThumb {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 4px;
+  display: block;
+  flex-shrink: 0;
+  background: var(--bg-primary);
+}
+
+.fileIcon,
+.attachIconBox {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.attachIcon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.fileName,
+.attachName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.fileRemove,
+.attachRemove {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 14px;
+  height: 14px;
+  background: color-mix(
+    in srgb,
+    var(--text-primary) 13%,
+    var(--bg-elevated) 87%
+  );
+  color: var(--text-tertiary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.7);
+  pointer-events: none;
+  transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: var(--z-popover);
+  border: none;
+  padding: 0;
+  box-shadow: 0 1px 2px var(--shadow-color, rgba(0, 0, 0, 0.08));
+}
+
+.fileRemove svg,
+.attachRemove svg {
+  width: 8px;
+  height: 8px;
+  stroke-width: 2.5;
+}
+
+.fileCard:hover .fileRemove,
+.fileCard:hover .attachRemove,
+.attachChip:hover .fileRemove,
+.attachChip:hover .attachRemove,
+.attachChip:focus-within .fileRemove,
+.attachChip:focus-within .attachRemove {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.fileRemove:hover,
+.attachRemove:hover {
+  background: var(--sem-error);
+  color: var(--bg-elevated);
+}
+
+/* ==========================================================================
+   Layer 4: 主输入区（Composer Card & Grid Layout）
+   ========================================================================== */
+
+.composerCard {
+  position: relative;
+  z-index: var(--z-dock);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 22px;
+  background: var(--composer-bg, var(--bg-composer, var(--bg-elevated)));
+  box-shadow: none;
+  transition: border-color var(--transition-fast, 120ms ease);
+}
+
+.composerCard.isMultiline:has(.attachStrip),
+.composerCard.isMultiline:has(.fileZone) {
+  gap: 6px;
+}
+
+.composerCard:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+  box-shadow: none;
+  outline: none;
+}
+
+/* RL-01 特例：全页空态落地输入焦点边框仅混入 5% */
+.composerCard[data-empty-kind='session-empty']:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 95%,
+    var(--text-primary) 5%
+  );
+}
+
+.inputMainLayout {
+  display: grid;
+  width: 100%;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 单行模式（默认）：所有控件位于同一行 */
+.composerCard:not(.isMultiline) .inputMainLayout {
+  grid-template-areas: 'left-ctrl text perm actions';
+  grid-template-columns: auto 1fr auto auto;
+}
+
+/* 多行模式：输入框占满顶部，控制按钮移至底部 */
+.composerCard.isMultiline .inputMainLayout {
+  grid-template-areas:
+    'text text text text'
+    'left-ctrl perm . actions';
+  grid-template-columns: auto auto 1fr auto;
+  row-gap: 6px;
+}
+
+.actionLeft {
+  grid-area: left-ctrl;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.fieldSlot {
+  grid-area: text;
+  min-width: 0;
+}
+
+.permSlot {
+  grid-area: perm;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.actionRight {
+  grid-area: actions;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  justify-self: end;
+  height: 32px;
+  gap: 4px;
+}
+
+/* ---- Plus Button ---- */
+.plusBtn {
+  background: var(--bg-surface, var(--bg-elevated));
+  border: none;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 50%;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: center;
+  transition: background var(--transition-micro, 80ms ease);
+}
+
+.plusBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.plusBtn.isOpen,
+.plusBtn.isOn {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.plusBtn svg {
+  width: var(--icon-size, 16px);
+  height: var(--icon-size, 16px);
+}
+
+/* ---- Action Circle Button (Voice / Stats) ---- */
+.actionCircleBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-surface, var(--bg-elevated));
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 0;
+  line-height: 1;
+  box-sizing: border-box;
+  padding: 0;
+  transition:
+    color var(--transition-fast, 120ms ease),
+    background var(--transition-fast, 120ms ease);
+}
+
+.actionCircleBtn:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.actionCircleBtn svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Emerald Green Solid Circle Send Button (.sendBtnCircle / send-btn-circle)
+   ========================================================================== */
+
+.sendBtnCircle,
+.sendCircle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  margin-left: 0;
+  opacity: 0;
+  transform: scale(0.7);
+  pointer-events: none;
+  overflow: hidden;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: var(--brand);
+  color: var(--bg-elevated);
+  flex-shrink: 0;
+  font-size: 0;
+  line-height: 1;
+  box-sizing: border-box;
+  transition:
+    width 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    margin-left 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    background var(--transition-fast, 120ms ease),
+    box-shadow var(--transition-fast, 120ms ease);
+}
+
+.sendBtnCircle.active,
+.sendCircle[data-send-active='1'],
+.sendCircle:not(:disabled) {
+  width: 32px;
+  min-width: 32px;
+  margin-left: 6px;
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--brand) 25%, transparent);
+}
+
+.sendBtnCircle.active:hover,
+.sendCircle[data-send-active='1']:hover,
+.sendCircle:not(:disabled):hover {
+  background: var(--brand-deep);
+}
+
+.sendBtnCircle.active:active,
+.sendCircle[data-send-active='1']:active,
+.sendCircle:not(:disabled):active {
+  background: var(--brand-deep);
+}
+
+.sendBtnCircle svg,
+.sendCircle svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.5;
+  flex-shrink: 0;
+  margin: auto;
+}
+
+.stopCircleBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  transition:
+    color var(--transition-fast, 120ms ease),
+    background var(--transition-fast, 120ms ease);
+}
+
+.stopCircleBtn:hover {
+  background: color-mix(in srgb, var(--sem-error) 10%, transparent);
+  color: var(--sem-error);
+}
+
+/* ==========================================================================
+   Composer Field in Grid & Fallback Textarea styles
+   ========================================================================== */
+
 .container {
   --composer-line-height: 1.45;
   --composer-min-lines: 2;
@@ -10,16 +1025,14 @@
   align-items: center;
   background: var(--composer-shell-bg);
   background-color: var(--composer-shell-bg);
-  border: 1px solid var(--border-color); /* Explicit premium border */
-  border-radius: 20px; /* Fully rounded top rectangle */
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
   padding: 10px 14px;
   gap: var(--space-2);
   min-height: calc(
     1em * var(--composer-line-height) * var(--composer-min-lines) + 16px
   );
   transition: border-color var(--transition-fast);
-  backdrop-filter: none;
-  box-shadow: none;
   color: var(--text-primary);
   box-sizing: border-box;
 }
@@ -36,15 +1049,12 @@
   outline: none;
 }
 
-/* RL-01       data-empty-kind="session-empty"        5% */
 .container[data-empty-kind='session-empty']:focus-within {
   border-color: color-mix(
     in srgb,
     var(--border-color) 95%,
     var(--text-primary) 5%
   );
-  box-shadow: none;
-  outline: none;
 }
 
 .containerDense {
@@ -54,7 +1064,7 @@
   border-radius: var(--radius-md);
   background: var(--composer-shell-bg);
   background-color: var(--composer-shell-bg);
-  border: 1px solid var(--border-color); /* Premium outline for dense sub-agent fields */
+  border: 1px solid var(--border-color);
 }
 
 .containerDense:focus-within {
@@ -113,18 +1123,6 @@
   color: var(--text-secondary);
 }
 
-.textarea:-webkit-autofill,
-.textarea:-webkit-autofill:hover,
-.textarea:-webkit-autofill:focus {
-  -webkit-text-fill-color: var(--text-primary);
-  caret-color: var(--text-primary);
-  /* autofill hack 99999s                              */
-  transition: background-color 99999s ease-out 0s;
-  box-shadow: 0 0 0 1000px transparent inset;
-  background: transparent;
-  background-color: transparent;
-}
-
 .containerDense .textarea {
   font-size: var(--font-size-sm, 13px);
   line-height: var(--composer-line-height);
@@ -139,167 +1137,20 @@
   align-self: center;
 }
 
-.attachStrip {
-  display: flex;
-  flex-wrap: nowrap;
-  align-items: center;
-  gap: 6px;
-  padding: 0 4px 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
-  max-width: 100%;
-}
-
-.attachChip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  max-width: 190px;
-  padding: 0 8px;
-  border-radius: var(--radius-md);
-  border: var(--hairline-width, 1px) solid var(--border-color);
-  background: transparent;
-  font-size: var(--font-size-sm, 13px);
-  color: var(--text-primary);
-  min-width: 0;
-  flex-shrink: 0;
-  cursor: pointer;
-  box-sizing: border-box;
-  box-shadow: none;
-}
-
-.attachChip:hover,
-.attachChip:focus-visible {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
-  outline: none;
-}
-
-.attachChipImage {
-  width: 27px;
-  height: 27px;
-  padding: 0;
-  border: none;
-  max-width: 27px;
-}
-
-.attachThumb {
-  width: 27px;
-  height: 27px;
-  object-fit: cover;
-  border-radius: var(--radius-sm);
-  flex-shrink: 0;
-  background: var(--bg-primary);
-  border: var(--hairline-width, 1px) solid
-    var(--hairline, var(--border-subtle, var(--border-color)));
-}
-
-.attachIconBox {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-
-.attachIcon {
-  flex-shrink: 0;
-  opacity: 0.8;
-}
-
-.attachName {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  min-width: 0;
-}
-
-.attachRemove {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 14px;
-  height: 14px;
-  margin: 0;
-  padding: 0;
-  flex-shrink: 0;
-  opacity: 0;
-  min-width: 14px;
-  min-height: 14px;
-  box-sizing: border-box;
-  border-radius: 50%;
-  background: var(--bg-elevated);
-  color: var(--text-tertiary);
-  box-shadow: none;
-}
-
-.attachChip:hover .attachRemove,
-.attachChip:focus-within .attachRemove {
-  opacity: 1;
-}
-
-.attachRemove:hover,
-.attachRemove:focus-visible {
-  opacity: 1;
-  color: var(--text-primary);
-  outline: none;
-}
-
-.sendCircle:disabled {
-  width: 0;
-  min-width: 0;
-  height: var(--control-height);
-  padding: 0;
-  margin: 0;
-  opacity: 0;
-  overflow: hidden;
-  pointer-events: none;
-  border: none;
-  box-shadow: none;
-}
-
-.sendCircle:not(:disabled) {
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 50%;
-  box-shadow: none;
-  background: var(--accent-color, var(--brand, var(--text-primary)));
-  color: var(--bg-elevated);
-}
-
-.sendCircle:not(:disabled):hover {
-  background: color-mix(
-    in srgb,
-    var(--accent-color, var(--brand, var(--text-primary))) 88%,
-    var(--text-primary) 12%
-  );
-}
-
 .sendBtn {
   background: transparent;
   border: none;
   cursor: pointer;
   color: var(--text-tertiary);
-  width: var(--control-height);
-  height: var(--control-height);
-  border-radius: var(--radius-lg);
+  width: var(--control-height, 32px);
+  height: var(--control-height, 32px);
+  border-radius: var(--radius-lg, 8px);
   display: flex;
   align-items: center;
   justify-content: center;
   transition:
-    color var(--transition-micro),
-    background var(--transition-micro);
+    color var(--transition-micro, 80ms ease),
+    background var(--transition-micro, 80ms ease);
   flex-shrink: 0;
   padding: 0;
 }
@@ -329,255 +1180,22 @@
   color: var(--text-primary);
 }
 
-.containerDense .sendBtn {
-  width: calc(var(--control-height) - 4px);
-  height: calc(var(--control-height) - 4px);
-  border-radius: var(--radius-md);
-}
-
-.containerDense .sendBtn svg {
-  width: calc(var(--icon-size, 16px) - 1px);
-  height: calc(var(--icon-size, 16px) - 1px);
-}
-
-.containerDense .sendBtn.queue {
-  height: calc(var(--control-height-sm, 28px) - 2px);
-  padding: 0 6px;
-  font-size: var(--font-size-xs, 12px);
-  border-radius: var(--radius-sm);
-}
-
-.containerDense .buttons {
-  gap: var(--space-0_5);
-  padding-bottom: 0;
-}
-
 .queue {
   width: auto;
-  height: var(--control-height-sm);
+  height: var(--control-height-sm, 28px);
   padding: 0 8px;
   gap: var(--space-1);
   background: transparent;
   color: var(--text-tertiary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  border-radius: var(--radius-md, 6px);
   font-family: var(--font-sans);
 }
 
 .queue:hover:not(:disabled) {
   background: var(--bg-hover);
   color: var(--text-secondary);
-}
-
-.queue svg {
-  width: 11px;
-  height: 11px;
-}
-
-.insert,
-.sendLabel {
-  width: auto;
-  height: var(--control-height-sm);
-  padding: 0 10px;
-  gap: var(--space-1);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  border-radius: var(--radius-md);
-  font-family: var(--font-sans);
-}
-
-.insert:hover,
-.sendLabel:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.insert svg,
-.sendLabel svg {
-  width: 11px;
-  height: 11px;
-}
-
-.footerActions {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border: 1px solid var(--border-color);
-  border-top: none; /* Open top to merge seamlessly with the bottom border of the white box */
-  border-radius: 0 0 12px 12px; /* Rounded corners only at the bottom */
-  background: var(
-    --composer-footer-bg
-  ); /* Adaptable, premium background token */
-  width: calc(100% - 32px); /* Narrower width, forming the smaller rectangle */
-  margin: -1px auto 0 auto; /* Overlap by -1px to physically connect with absolutely no gap */
-  padding: 4px 14px; /* Sleeker, tighter vertical padding */
-  box-sizing: border-box;
-  min-height: 28px;
-}
-
-.leftActions,
-.rightActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.plusBtn {
-  background: var(--bg-surface, var(--bg-elevated));
-  border: none;
-  cursor: pointer;
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  border-radius: 50%;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  align-self: center;
-  transition: background var(--transition-micro);
-}
-
-.plusBtn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.plusBtn.isOpen,
-.plusBtn.isOn {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.plusBtn svg {
-  width: var(--icon-size);
-  height: var(--icon-size);
-}
-
-.composerWrapper {
-  position: relative;
-  z-index: var(--z-dock);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  width: 100%;
-}
-
-.dropMask {
-  position: absolute;
-  inset: 0;
-  z-index: var(--z-popover);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border-radius: 22px;
-  background: var(--bg-elevated, var(--composer-bg));
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm, 13px);
-  font-weight: var(--font-weight-medium);
-  pointer-events: none;
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--text-primary) 4%, transparent);
-  outline: none;
-}
-
-.dropMask svg {
-  flex-shrink: 0;
-  color: var(--text-secondary);
-}
-
-.composerCard {
-  position: relative;
-  z-index: var(--z-dock);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 6px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: 22px;
-  background: var(--composer-bg, var(--bg-composer, var(--bg-elevated)));
-  box-shadow: none;
-  transition: border-color var(--transition-fast);
-}
-
-.composerCard.isMultiline:has(.attachStrip) {
-  gap: 6px;
-}
-
-.composerCard:focus-within {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 94%,
-    var(--text-primary) 6%
-  );
-  box-shadow: none;
-  outline: none;
-}
-
-.composerCard[data-empty-kind='session-empty']:focus-within {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 95%,
-    var(--text-primary) 5%
-  );
-}
-
-.inputMainLayout {
-  display: grid;
-  width: 100%;
-  align-items: center;
-  gap: 4px;
-}
-
-.composerCard:not(.isMultiline) .inputMainLayout {
-  grid-template-areas: 'left-ctrl text perm actions';
-  grid-template-columns: auto 1fr auto auto;
-}
-
-.composerCard.isMultiline .inputMainLayout {
-  grid-template-areas:
-    'text text text text'
-    'left-ctrl perm . actions';
-  grid-template-columns: auto auto 1fr auto;
-  row-gap: 6px;
-}
-
-.actionLeft {
-  grid-area: left-ctrl;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-  position: relative;
-}
-
-.fieldSlot {
-  grid-area: text;
-  min-width: 0;
-}
-
-.permSlot {
-  grid-area: perm;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.actionRight {
-  grid-area: actions;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  justify-self: end;
-  height: 32px;
-  gap: 4px;
 }
 
 .fieldInGrid {
@@ -623,4 +1241,28 @@
   overflow-y: auto;
   min-height: 24px;
   max-height: 220px;
+}
+
+.dropMask {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 22px;
+  background: var(--bg-elevated, var(--composer-bg));
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--text-primary) 4%, transparent);
+  outline: none;
+}
+
+.dropMask svg {
+  flex-shrink: 0;
+  color: var(--text-secondary);
 }

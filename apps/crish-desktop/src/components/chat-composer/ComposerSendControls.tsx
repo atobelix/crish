@@ -1,6 +1,7 @@
 /**
  * 发送 / 排队 / 停止（L2 协作 · L3 强制取消）。
- * 主对话卡片用圆钮上箭头；侧栏 ComposerField 仍用盒内回车折角。
+ * 主对话卡片使用墨绿色实体圆形发送按钮（32x32px 正圆，#10b981，Hover #059669，白色上箭头，200ms Spring 展开/收缩）；
+ * 侧栏 ComposerField / 兜底模式回落至盒内回车折角按钮。
  */
 import React, { useCallback, useEffect, useRef } from 'react';
 import * as Lucide from 'lucide-react';
@@ -124,6 +125,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
         type="button"
         variant="ghost"
         size="sm"
+        className={`${styles.stop} ${appearance === 'circle' ? styles.stopCircleBtn : ''}`}
         data-testid="composer-stop"
         data-stop-level="l2"
         aria-label={STOP_ARIA_LABEL}
@@ -132,7 +134,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
         onPointerUp={clearLongPress}
         onPointerLeave={clearLongPress}
         onPointerCancel={clearLongPress}
-        icon={<Lucide.Square size={16} fill="currentColor" aria-hidden />}
+        icon={<Lucide.Square size={14} fill="currentColor" aria-hidden />}
       />
     </Tooltip>
   ) : null;
@@ -148,6 +150,7 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
                 type="button"
                 variant="secondary"
                 size="sm"
+                className={styles.queue}
                 aria-label={sendAria}
                 onClick={trySend}
                 disabled={sendDisabled}
@@ -157,25 +160,34 @@ export const ComposerSendControls: React.FC<ComposerSendControlsProps> = ({
             </Tooltip>
             {stopBtn}
           </>
-        ) : (
+        ) : appearance === 'circle' ? (
           <Tooltip content={sendTitle}>
             <Button
               type="button"
               variant="primary"
-              size={appearance === 'circle' ? 'md' : 'sm'}
-              className={styles.sendCircle}
+              size="md"
+              className={`${styles.sendBtnCircle} ${styles.sendCircle} send-btn-circle ${sendDisabled ? '' : `${styles.active} active`}`}
               data-send-active={sendDisabled ? '0' : '1'}
               aria-label={sendAria}
               onClick={trySend}
               disabled={sendDisabled}
               loading={Boolean(disabled)}
-              icon={
-                appearance === 'circle' ? (
-                  <Lucide.ArrowUp size={16} aria-hidden />
-                ) : (
-                  <Lucide.CornerDownLeft size={16} />
-                )
-              }
+              icon={<Lucide.ArrowUp size={16} strokeWidth={2.5} aria-hidden />}
+            />
+          </Tooltip>
+        ) : (
+          <Tooltip content={sendTitle}>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              className={styles.sendBtn}
+              data-send-active={sendDisabled ? '0' : '1'}
+              aria-label={sendAria}
+              onClick={trySend}
+              disabled={sendDisabled}
+              loading={Boolean(disabled)}
+              icon={<Lucide.CornerDownLeft size={16} aria-hidden />}
             />
           </Tooltip>
         )}
