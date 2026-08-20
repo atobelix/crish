@@ -1,3 +1,13 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
 :root {
   --loader-bg: #0b0b0e;
   --loader-card-bg: linear-gradient(180deg, #131316 0%, #08080a 100%);
@@ -33,14 +43,20 @@ html.theme-dark {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
   width: 100vw;
+  height: 100vh;
   background-color: var(--loader-bg);
   transition: background-color 0.3s ease;
   user-select: none;
   overflow: hidden;
   margin: 0;
   padding: 0;
+  z-index: 99999;
 }
 
 .app-loader-icon-card {
