@@ -12,14 +12,10 @@ import {
   X,
   Maximize2,
   Minimize2,
-  ChevronLeft,
-  ChevronRight,
-  RotateCw,
-  ExternalLink,
-  Globe,
-  FileCode,
 } from 'lucide-react';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
+import { SidePanelLauncherHub } from './SidePanelLauncherHub';
+import { SidePanelNavToolbar } from './SidePanelNavToolbar';
 import {
   useLayoutTreeStore,
   useLayoutStore,
@@ -449,131 +445,10 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         </header>
 
         {/* Row 2: 导航工具条 (32px 高度，特定视图展示，空态隐藏) */}
-        {shouldShowNavToolbar && (
-          <div
-            className={`${styles.toolbar} side-panel-toolbar`}
-            role="toolbar"
-            aria-label="视图导航"
-            data-testid="side-panel-toolbar"
-          >
-            <div className={`${styles.toolbarNav} side-panel-toolbar-nav`}>
-              <Tooltip content="后退" side="bottom">
-                <button
-                  type="button"
-                  className={`${styles.toolbarBtn} side-panel-btn`}
-                  aria-label="后退"
-                  title="后退"
-                  disabled
-                >
-                  <ChevronLeft size={14} strokeWidth={2} />
-                </button>
-              </Tooltip>
-              <Tooltip content="前进" side="bottom">
-                <button
-                  type="button"
-                  className={`${styles.toolbarBtn} side-panel-btn`}
-                  aria-label="前进"
-                  title="前进"
-                  disabled
-                >
-                  <ChevronRight size={14} strokeWidth={2} />
-                </button>
-              </Tooltip>
-              <Tooltip content="刷新" side="bottom">
-                <button
-                  type="button"
-                  className={`${styles.toolbarBtn} side-panel-btn`}
-                  aria-label="刷新"
-                  title="刷新"
-                  onClick={() => {
-                    // 可根据具体活跃视图触发刷新
-                  }}
-                >
-                  <RotateCw size={14} strokeWidth={2} />
-                </button>
-              </Tooltip>
-            </div>
-            <div
-              className={`${styles.toolbarActions} side-panel-toolbar-actions`}
-            >
-              <Tooltip content="在浏览器中打开" side="bottom">
-                <button
-                  type="button"
-                  className={`${styles.toolbarBtn} side-panel-btn`}
-                  aria-label="在浏览器中打开"
-                  title="在浏览器中打开"
-                  onClick={() => {
-                    // 在默认浏览器中打开
-                  }}
-                >
-                  <ExternalLink size={14} strokeWidth={2} />
-                </button>
-              </Tooltip>
-            </div>
-          </div>
-        )}
+        {shouldShowNavToolbar && <SidePanelNavToolbar />}
 
         {/* 空态 Launcher Hub 居中卡片 (0 个 Tab 时展示) */}
-        {isEmpty && (
-          <div
-            className={`${styles.launcherHubWrapper} side-panel-launcher-hub-wrapper`}
-            data-testid="side-panel-launcher-hub-wrapper"
-          >
-            <div
-              className={`${styles.launcherHub} side-panel-launcher-hub`}
-              data-testid="side-panel-launcher-hub"
-            >
-              <div
-                className={`${styles.launcherCardsGroup} launcher-cards-group`}
-              >
-                <button
-                  type="button"
-                  className={`${styles.launcherCard} side-panel-launcher-card`}
-                  onClick={() => openPanel('preview')}
-                  data-testid="launcher-card-preview"
-                >
-                  <div
-                    className={`${styles.launcherCardIconBox} launcher-card-icon-box`}
-                  >
-                    <Globe size={16} strokeWidth={1.8} />
-                  </div>
-                  <div className={styles.launcherCardText}>
-                    <span
-                      className={`${styles.launcherCardTitle} launcher-card-title`}
-                    >
-                      应用预览
-                    </span>
-                    <span className={styles.launcherCardDesc}>
-                      在右侧实时预览当前 Web / 桌面应用
-                    </span>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.launcherCard} side-panel-launcher-card`}
-                  onClick={() => openPanel('files')}
-                  data-testid="launcher-card-files"
-                >
-                  <div
-                    className={`${styles.launcherCardIconBox} launcher-card-icon-box`}
-                  >
-                    <FileCode size={16} strokeWidth={1.8} />
-                  </div>
-                  <div className={styles.launcherCardText}>
-                    <span
-                      className={`${styles.launcherCardTitle} launcher-card-title`}
-                    >
-                      代码产物与文件
-                    </span>
-                    <span className={styles.launcherCardDesc}>
-                      浏览会话生成的文件、差异与产物
-                    </span>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {isEmpty && <SidePanelLauncherHub onOpenPanel={openPanel} />}
       </div>
     );
   }
