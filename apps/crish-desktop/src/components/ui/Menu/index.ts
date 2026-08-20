@@ -5,7 +5,10 @@
  * 统一从这里导出 Menu 组件、公共类型与坐标纯函数；
  * 全量 barrel 在 `ui/index.ts`。
  */
-export { Menu } from './Menu';
+export { Menu, MenuContext } from './Menu';
 export type { MenuProps } from './Menu';
 export type { SelectOptionItem } from './types';
 export { shouldSuppressMenuReopen, toggleExclusiveMenu } from './menuOpenGuard';
+export { calculateSubmenuPosition } from './position';
+export type { SubmenuPlacementResult } from './position';
+

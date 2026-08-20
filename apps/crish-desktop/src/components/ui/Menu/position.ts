@@ -74,6 +74,14 @@ export interface ClampedPosition {
   transformOrigin: string;
 }
 
+/** 二级级联子菜单几何放置计算结果 */
+export interface SubmenuPlacementResult {
+  x: number;
+  y: number;
+  side: 'left' | 'right';
+  transformOrigin: string;
+}
+
 /**
  * 获取当前宿主环境真实有效的视口几何矩形
  * 支持感知 Windows 最大化 data-window-maximized 状态
@@ -352,3 +360,65 @@ export function measureMenu(
     transformOrigin: res.transformOrigin,
   };
 }
+
+/**
+ * 二级级联子菜单纯函数几何定位算法（PE-05 / 级联浮层重构）
+ *
+ * 核心特性：
+ * 1. 默认优先向左侧展开，当左侧空间不足且右侧空间更大时自动翻转至右侧展开；
+ * 2. 内置刚性双向数学钳位（Two-Way Clamping Invariant），绝对杜绝负坐标 (x >= minX) 与右侧越界 (x + w <= maxX)；
+ * 3. 垂直方向默认顶部对齐 (targetY = rowRect.top - 4)，并在底部贴边向上钳位。
+ *
+ * @param rowRect 触发该子菜单的服务商行 DOMRect
+ * @param submenuWidth 子菜单宽度（默认 190px）
+ * @param submenuHeight 子菜单最大高度（默认 280px）
+ * @param sideOffset 水平间隙偏移（默认 4px）
+ * @param edgePadding 视口边缘安全留白（默认 8px）
+ * @returns 确定的坐标、展开方向与动画 origin
+ */
+export function calculateSubmenuPosition(
+  rowRect: DOMRect,
+  submenuWidth = 190,
+  submenuHeight = 280,
+  sideOffset = 4,
+  edgePadding = 8
+): SubmenuPlacementResult {
+  const vp = getEffectiveViewport();
+  const minX = (vp.offsetLeft ?? 0) + edgePadding;
+  const maxX = (vp.offsetLeft ?? 0) + vp.width - edgePadding;
+  const minY = (vp.offsetTop ?? 0) + edgePadding;
+  const maxY = (vp.offsetTop ?? 0) + vp.height - edgePadding;
+
+  const spaceLeft = rowRect.left - minX - sideOffset;
+  const spaceRight = maxX - rowRect.right - sideOffset;
+
+  let side: 'left' | 'right' = 'left';
+  let targetX = rowRect.left - submenuWidth - sideOffset;
+
+  // 当左侧放不下且右侧空间更大时，翻转至右侧展开
+  if (submenuWidth > spaceLeft && spaceRight >= spaceLeft) {
+    side = 'right';
+    targetX = rowRect.right + sideOffset;
+  }
+
+  // 双向刚性数学钳位，绝对杜绝任何负坐标 (X >= minX) 与右侧越界 (X + W <= maxX)
+  const clampedX = Math.min(
+    Math.max(minX, targetX),
+    Math.max(minX, maxX - submenuWidth)
+  );
+
+  // 垂直方向：默认顶部对齐 (top: rowRect.top - 4)，底部贴边向上钳位
+  const targetY = rowRect.top - 4;
+  const clampedY = Math.min(
+    Math.max(minY, targetY),
+    Math.max(minY, maxY - submenuHeight)
+  );
+
+  return {
+    x: clampedX,
+    y: clampedY,
+    side,
+    transformOrigin: side === 'left' ? 'top right' : 'top left',
+  };
+}
+

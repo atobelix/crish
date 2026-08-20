@@ -30,7 +30,6 @@
 }
 
 .mbRowContainer {
-  position: relative;
   width: 100%;
 }
 
@@ -68,6 +67,27 @@
 .mbChevron {
   color: var(--text-tertiary);
   flex-shrink: 0;
+}
+
+.mbSubMenuFloating {
+  position: fixed;
+  width: 190px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: var(--space-1);
+  z-index: var(--z-dropdown-menu, 400);
+  display: flex;
+  flex-direction: column;
+  max-height: min(
+    var(--radix-popover-content-available-height, 280px),
+    70vh,
+    280px
+  );
+  overflow-y: auto;
+  -webkit-app-region: no-drag;
+  animation: crish-popover-enter var(--transition-popover-enter) forwards;
 }
 
 .mbSubMenu {

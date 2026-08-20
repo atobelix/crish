@@ -17,9 +17,15 @@ import { shouldSuppressMenuReopen } from './menuOpenGuard';
 import { Tooltip } from '../Tooltip/Tooltip';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 import { layerStackService } from '../internal/layer-stack/LayerStackManager';
+import { resolveElement } from '../internal/layer-stack/layerStackTypes';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
 import styles from './Menu.module.css';
 import type { SelectOptionItem } from './types';
+
+/** 菜单上下文，供子菜单/级联浮层建立 LayerStack 父子拓扑关系 */
+export const MenuContext = React.createContext<{ menuId: string | null }>({
+  menuId: null,
+});
 
 /** 菜单定位配置（对齐/方向/偏移/最大高度收敛为单一子对象） */
 export interface MenuPositionConfig {
@@ -355,123 +361,147 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   }
 
   return (
-    <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
-      {renderedTrigger}
+    <MenuContext.Provider value={{ menuId }}>
+      <Popover.Root open={isOpen} onOpenChange={handleOpenChange}>
+        {renderedTrigger}
 
-      <Popover.Portal container={dialogOverlay ?? undefined}>
-        <Popover.Content
-          ref={contentRef}
-          // F7 F2：非模态菜单不得声明 aria-modal——aria-modal=true 会
-          // 让屏幕阅读器切断后台内容（菜单语义是轻量浮层，非模态框）
-          align={align}
-          side={side}
-          sideOffset={sideOffset}
-          avoidCollisions={true}
-          collisionPadding={12}
-          className={contentClasses}
-          style={{ maxHeight: resolvedMaxHeight, ...contentStyle }}
-          onKeyDown={handleKeyDown}
-          onCloseAutoFocus={onCloseAutoFocus}
-          onPointerDownOutside={(e) => {
-            if (onPointerDownOutside) {
-              onPointerDownOutside(e);
-              return;
-            }
-            const target = e.detail.originalEvent.target as Node | null;
-            const triggerEl = anchor?.current ?? triggerRef.current;
-            if (triggerEl && target && triggerEl.contains(target)) {
-              e.preventDefault();
-            }
-          }}
-          onInteractOutside={(e) => {
-            if (onInteractOutside) {
-              onInteractOutside(e);
-              return;
-            }
-            const customEvent = e as CustomEvent<{ originalEvent?: Event }>;
-            const target = (customEvent.detail?.originalEvent?.target ||
-              e.target) as Node | null;
-            const triggerEl = anchor?.current ?? triggerRef.current;
-            if (triggerEl && target && triggerEl.contains(target)) {
-              e.preventDefault();
-            }
-          }}
-          onEscapeKeyDown={(e) => {
-            const rawEvent = e as unknown as {
-              isComposing?: boolean;
-              keyCode?: number;
-              key?: string;
-              nativeEvent?: { isComposing?: boolean };
-            };
-            if (
-              rawEvent.isComposing ||
-              rawEvent.nativeEvent?.isComposing ||
-              rawEvent.keyCode === 229 ||
-              rawEvent.key === 'Process'
-            ) {
-              e.preventDefault();
-              return;
-            }
-            onEscapeKeyDown?.(e);
-          }}
-        >
-          {title != null ? (
-            <div className={styles.menuTitle}>{title}</div>
-          ) : null}
+        <Popover.Portal container={dialogOverlay ?? undefined}>
+          <Popover.Content
+            ref={contentRef}
+            // F7 F2：非模态菜单不得声明 aria-modal——aria-modal=true 会
+            // 让屏幕阅读器切断后台内容（菜单语义是轻量浮层，非模态框）
+            align={align}
+            side={side}
+            sideOffset={sideOffset}
+            avoidCollisions={true}
+            collisionPadding={12}
+            className={contentClasses}
+            style={{ maxHeight: resolvedMaxHeight, ...contentStyle }}
+            onKeyDown={handleKeyDown}
+            onCloseAutoFocus={onCloseAutoFocus}
+            onPointerDownOutside={(e) => {
+              if (onPointerDownOutside) {
+                onPointerDownOutside(e);
+                return;
+              }
+              const target = e.detail.originalEvent.target as Node | null;
+              const triggerEl = anchor?.current ?? triggerRef.current;
+              if (triggerEl && target && triggerEl.contains(target)) {
+                e.preventDefault();
+                return;
+              }
+              // 放行属于该菜单子孙的 Portal 浮层点击，防止误杀父菜单
+              const isDescendant = layerStackService
+                .getDescendants(menuId)
+                .some((child) => {
+                  const el = resolveElement(child.elementRef);
+                  return el && target && el.contains(target);
+                });
+              if (isDescendant) {
+                e.preventDefault();
+              }
+            }}
+            onInteractOutside={(e) => {
+              if (onInteractOutside) {
+                onInteractOutside(e);
+                return;
+              }
+              const customEvent = e as CustomEvent<{ originalEvent?: Event }>;
+              const target = (customEvent.detail?.originalEvent?.target ||
+                e.target) as Node | null;
+              const triggerEl = anchor?.current ?? triggerRef.current;
+              if (triggerEl && target && triggerEl.contains(target)) {
+                e.preventDefault();
+                return;
+              }
+              // 放行属于该菜单子孙的 Portal 浮层交互，防止误杀父菜单
+              const isDescendant = layerStackService
+                .getDescendants(menuId)
+                .some((child) => {
+                  const el = resolveElement(child.elementRef);
+                  return el && target && el.contains(target);
+                });
+              if (isDescendant) {
+                e.preventDefault();
+              }
+            }}
+            onEscapeKeyDown={(e) => {
+              const rawEvent = e as unknown as {
+                isComposing?: boolean;
+                keyCode?: number;
+                key?: string;
+                nativeEvent?: { isComposing?: boolean };
+              };
+              if (
+                rawEvent.isComposing ||
+                rawEvent.nativeEvent?.isComposing ||
+                rawEvent.keyCode === 229 ||
+                rawEvent.key === 'Process'
+              ) {
+                e.preventDefault();
+                return;
+              }
+              onEscapeKeyDown?.(e);
+            }}
+          >
+            {title != null ? (
+              <div className={styles.menuTitle}>{title}</div>
+            ) : null}
 
-          {children != null ? (
-            children
-          ) : (
-            <div role="menu" className={styles.menuList}>
-              {options.map((opt, index) => {
-                const isFocused = index === focusedIndex;
+            {children != null ? (
+              children
+            ) : (
+              <div role="menu" className={styles.menuList}>
+                {options.map((opt, index) => {
+                  const isFocused = index === focusedIndex;
 
-                if (renderItem) {
+                  if (renderItem) {
+                    return (
+                      <React.Fragment key={opt.id}>
+                        {renderItem(opt, index, isFocused)}
+                      </React.Fragment>
+                    );
+                  }
+
                   return (
-                    <React.Fragment key={opt.id}>
-                      {renderItem(opt, index, isFocused)}
-                    </React.Fragment>
+                    <button
+                      key={opt.id}
+                      type="button"
+                      role="menuitem"
+                      disabled={opt.disabled}
+                      className={[
+                        styles.menuItem,
+                        opt.disabled ? styles.menuItemDisabled : null,
+                        opt.danger ? styles.menuItemDanger : null,
+                      ]
+                        .filter(Boolean)
+                        .join(' ')}
+                      onMouseEnter={() => setFocusedIndex(index)}
+                      onClick={() => {
+                        if (opt.disabled) return;
+                        opt.onClick?.();
+                        onSelect?.(opt.id, opt);
+                        handleOpenChange(false);
+                      }}
+                    >
+                      {opt.icon != null ? (
+                        <span className={styles.menuItemIcon} aria-hidden="true">
+                          {opt.icon}
+                        </span>
+                      ) : null}
+                      <span className={styles.menuItemLabel}>{opt.label}</span>
+                      {opt.hint != null ? (
+                        <span className={styles.menuItemHint}>{opt.hint}</span>
+                      ) : null}
+                    </button>
                   );
-                }
-
-                return (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    role="menuitem"
-                    disabled={opt.disabled}
-                    className={[
-                      styles.menuItem,
-                      opt.disabled ? styles.menuItemDisabled : null,
-                      opt.danger ? styles.menuItemDanger : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    onMouseEnter={() => setFocusedIndex(index)}
-                    onClick={() => {
-                      if (opt.disabled) return;
-                      opt.onClick?.();
-                      onSelect?.(opt.id, opt);
-                      handleOpenChange(false);
-                    }}
-                  >
-                    {opt.icon != null ? (
-                      <span className={styles.menuItemIcon} aria-hidden="true">
-                        {opt.icon}
-                      </span>
-                    ) : null}
-                    <span className={styles.menuItemLabel}>{opt.label}</span>
-                    {opt.hint != null ? (
-                      <span className={styles.menuItemHint}>{opt.hint}</span>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+                })}
+              </div>
+            )}
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+    </MenuContext.Provider>
   );
 });
 Menu.displayName = 'Menu';
