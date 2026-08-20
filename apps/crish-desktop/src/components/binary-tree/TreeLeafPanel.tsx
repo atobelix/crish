@@ -205,10 +205,12 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
       >
         <div className={styles.leafBody}>
           {isChat ? (
-            <UnitChromeActions
-              activeSessionId={sessionForPanel}
-              className={styles.leafToolHeader}
-            />
+            /*
+             * 不再叠 leafToolHeader 的绝对定位。
+             * 参考里 .chat-top-header 是流内 sticky + margin-bottom:-38px：
+             * 既不占高度，又能跟着叶子的内边距走。再套一层 absolute 只会两套定位打架。
+             */
+            <UnitChromeActions activeSessionId={sessionForPanel} />
           ) : (
             <LeafToolTabStrip leaf={leaf} />
           )}

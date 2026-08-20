@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 受管浏览器会话 hook：状态机 + invoke 封装 + 事件订阅。
  * 对齐 usePreviewNavigation 风格：hook 收拢全部状态副作用，渲染层只消费返回值。
  *

@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import { SidePanelLauncherHub } from './SidePanelLauncherHub';
-import { SidePanelNavToolbar } from './SidePanelNavToolbar';
 import {
   useLayoutTreeStore,
   useLayoutStore,
@@ -457,9 +456,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
             </Tooltip>
           </div>
         </div>
-
-        {/* Row 2: 导航工具条 (32px 高度，特定视图展示，空态隐藏) */}
-        {shouldShowNavToolbar && <SidePanelNavToolbar />}
 
         {/* 空态 Launcher Hub 居中卡片 (0 个 Tab 时展示) */}
         {isEmpty && <SidePanelLauncherHub onOpenPanel={openPanel} />}

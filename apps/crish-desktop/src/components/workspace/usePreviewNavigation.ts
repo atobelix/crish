@@ -1,4 +1,4 @@
-﻿import { toast } from '../../services/toast/ToastContext';
+import { toast } from '../../services/toast/ToastContext';
 /**
  * 内置预览浏览器导航 hook：导航栈 + 历史/书签状态 + 加载超时 + 外部事件。
  * 收拢 PreviewCard 的全部状态副作用；渲染层（工具栏 / 历史面板 / 内容区）
