@@ -54,5 +54,5 @@
 :global([data-global-session-tab-bar] [role='tab'].is-dragging) {
   opacity: 0;
   pointer-events: none;
-  border-color: transparent !important;
+  border-color: transparent;
 }

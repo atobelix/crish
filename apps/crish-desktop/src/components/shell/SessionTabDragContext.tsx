@@ -13,13 +13,13 @@ import {
 } from './sessionTabDropCommit';
 import {
   collectStripTabs,
-  createGhostPill,
   createIndicator,
   indicatorClasses,
   leaveStrip,
   posIndicator,
   shiftStripTabs,
 } from './sessionTabDragDom';
+import { runToolTabDrag } from './toolTabDragRuntime';
 import {
   SESSION_TAB_INDICATOR_GEOM_MS,
   computeSessionTabInsertIndex,
@@ -158,8 +158,8 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
 
           const entering = currentMode !== 'strip';
           currentMode = 'strip';
-          indicator.classList.add(indicatorClasses.strip);
-          indicator.classList.remove(indicatorClasses.pane);
+          if (indicatorClasses.strip) indicator.classList.add(indicatorClasses.strip);
+          if (indicatorClasses.pane) indicator.classList.remove(indicatorClasses.pane);
           indicator.style.display = 'flex';
           indicator.style.transition = entering
             ? INDICATOR_GEOM_TRANSITION
@@ -177,7 +177,7 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
           target = {
             kind: 'strip',
             insertIdx,
-            remainingIds: cachedTabs.map((t) => t.sessionId),
+            remainingIds: cachedTabs.map((t) => t.id),
           };
           return;
         }
@@ -209,8 +209,8 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
           lastStateKey = stateKey;
           currentMode = 'pane';
           target = { kind: 'pane', leafId, region };
-          indicator.classList.add(indicatorClasses.pane);
-          indicator.classList.remove(indicatorClasses.strip);
+          if (indicatorClasses.pane) indicator.classList.add(indicatorClasses.pane);
+          if (indicatorClasses.strip) indicator.classList.remove(indicatorClasses.strip);
           indicator.style.display = 'flex';
           indicator.style.transition = entering
             ? INDICATOR_GEOM_TRANSITION
@@ -284,73 +284,28 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  /**
+   * 工具叶标签拖拽：条内重排、跨叶搬运、拖到叶面边缘分屏。
+   * 指针细节在 toolTabDragRuntime，落点提交统一走 layoutTreeStore.applyDrop。
+   */
   const startToolDrag = useCallback(
     (
-      _leafId: string,
-      _tabId: string,
-      _panelId: string,
+      leafId: string,
+      tabId: string,
+      panelId: string,
       title: string,
       e: React.PointerEvent
     ) => {
-      if (e.button !== 0) return;
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const pointerId = e.pointerId;
-
-      let dragging = false;
-      let ghostEl: HTMLDivElement | null = null;
-
-      const onPointerMove = (me: PointerEvent) => {
-        if (me.pointerId !== pointerId) return;
-        const dx = me.clientX - startX;
-        const dy = me.clientY - startY;
-
-        if (!dragging && !exceedsSessionTabDragThresholdL1(dx, dy)) return;
-
-        if (!dragging) {
-          dragging = true;
+      runToolTabDrag({ leafId, tabId, panelId }, title, e, {
+        onDragStart: (label) => {
           setIsDragging(true);
-          setGhostLabel(title);
-          document.body.classList.add('tab-dragging');
-          if (!customGhostRef.current) {
-            ghostEl = createGhostPill(title);
-          }
-        }
-
-        if (dragging) {
-          const targetGhost = customGhostRef.current || ghostEl;
-          if (targetGhost) {
-            targetGhost.style.transform = `translate3d(${me.clientX + 14}px, ${me.clientY + 14}px, 0)`;
-          }
-        }
-      };
-
-      const cleanup = () => {
-        window.removeEventListener('pointermove', onPointerMove);
-        window.removeEventListener('pointerup', onPointerUp);
-        window.removeEventListener('pointercancel', onPointerCancel);
-        if (ghostEl) {
-          ghostEl.remove();
-          ghostEl = null;
-        }
-        document.body.classList.remove('tab-dragging');
-        setIsDragging(false);
-        setGhostLabel(null);
-      };
-
-      const onPointerUp = (me: PointerEvent) => {
-        if (me.pointerId !== pointerId) return;
-        cleanup();
-      };
-
-      const onPointerCancel = (me: PointerEvent) => {
-        if (me.pointerId !== pointerId) return;
-        cleanup();
-      };
-
-      window.addEventListener('pointermove', onPointerMove);
-      window.addEventListener('pointerup', onPointerUp);
-      window.addEventListener('pointercancel', onPointerCancel);
+          setGhostLabel(label);
+        },
+        onDragEnd: () => {
+          setIsDragging(false);
+          setGhostLabel(null);
+        },
+      });
     },
     []
   );

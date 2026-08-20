@@ -16,15 +16,15 @@
   user-select: none;
 }
 
-/* Row 1: Tab Strip (30px Height) */
+/* Row 1: Tab Strip (38px Height, matching chatTopHeader) */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 30px;
-  min-height: 30px;
-  max-height: 30px;
-  padding: 0 4px 0 6px;
+  height: 38px;
+  min-height: 38px;
+  max-height: 38px;
+  padding: 0 8px 0 10px;
   box-sizing: border-box;
   border-bottom: none;
   background: transparent;
@@ -282,9 +282,9 @@
 }
 
 .sideBtn {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
   padding: 0;
   border-radius: var(--radius-md, 6px);
   border: none;
@@ -312,8 +312,13 @@
 
 .btnMaximize,
 .btnCollapse {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
+}
+
+.btnCollapse:global(.active) {
+  background: var(--bg-active, rgba(0, 0, 0, 0.08));
+  color: var(--text-primary);
 }
 
 /* Row 2: Action / Navigation Toolbar (32px Height) */

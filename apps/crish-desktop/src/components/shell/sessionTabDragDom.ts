@@ -18,20 +18,31 @@ export function readTranslateX(el: HTMLElement): number {
   }
 }
 
-export function collectStripTabs(strip: HTMLElement, sourceSessionId: string) {
+/**
+ * 采集条内除源标签外的其余标签几何。
+ *
+ * idAttr 决定用哪个属性认标签：会话条用 data-session-id，
+ * 工具叶标签条用 data-tool-tab-id。两条链路共用同一套位移动画，
+ * 只在认标识这一步分叉。
+ */
+export function collectStripTabs(
+  strip: HTMLElement,
+  sourceId: string,
+  idAttr: string = 'data-session-id'
+) {
   const tabs = Array.from(
-    strip.querySelectorAll<HTMLElement>('[role="tab"][data-session-id]')
+    strip.querySelectorAll<HTMLElement>(`[role="tab"][${idAttr}]`)
   );
   const remaining: Array<{
     left: number;
     right: number;
     width: number;
     el: HTMLElement;
-    sessionId: string;
+    id: string;
   }> = [];
   for (const t of tabs) {
-    const sid = t.getAttribute('data-session-id') || '';
-    if (!sid || sid === sourceSessionId) continue;
+    const sid = t.getAttribute(idAttr) || '';
+    if (!sid || sid === sourceId) continue;
     const r = t.getBoundingClientRect();
     const tx = readTranslateX(t);
     remaining.push({
@@ -39,7 +50,7 @@ export function collectStripTabs(strip: HTMLElement, sourceSessionId: string) {
       right: r.right - tx,
       width: r.width,
       el: t,
-      sessionId: sid,
+      id: sid,
     });
   }
   return remaining;
@@ -76,10 +87,10 @@ export function posIndicator(
 
 export function createIndicator(title: string): HTMLDivElement {
   const d = document.createElement('div');
-  d.className = styles.indicator;
+  d.className = styles.indicator || '';
   d.setAttribute('aria-hidden', 'true');
   const span = document.createElement('span');
-  span.className = styles.title;
+  span.className = styles.title || '';
   span.textContent = title || '放置标签';
   d.appendChild(span);
   document.body.appendChild(d);
@@ -87,8 +98,8 @@ export function createIndicator(title: string): HTMLDivElement {
 }
 
 export const indicatorClasses = {
-  strip: styles.strip,
-  pane: styles.pane,
+  strip: styles.strip || '',
+  pane: styles.pane || '',
 };
 
 export function createGhostPill(title: string): HTMLDivElement {
