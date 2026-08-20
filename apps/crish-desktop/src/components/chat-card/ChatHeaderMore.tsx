@@ -20,6 +20,8 @@ interface Props {
   folderOptions?: FolderOption[];
   currentFolder?: string;
   className?: string;
+  onShare?: () => void;
+  shareFlash?: boolean;
 }
 
 /**
@@ -36,6 +38,8 @@ export const ChatHeaderMore: React.FC<Props> = ({
   folderOptions,
   currentFolder,
   className,
+  onShare,
+  shareFlash = false,
 }) => {
   const moveItems: SelectOptionItem[] =
     onMoveToFolder && folderOptions
@@ -68,6 +72,16 @@ export const ChatHeaderMore: React.FC<Props> = ({
             label: '导出 Markdown',
             icon: <Lucide.Download size={13} style={{ marginRight: 6 }} />,
             onClick: onExportMarkdown,
+          },
+        ]
+      : []),
+    ...(onShare
+      ? [
+          {
+            id: 'share',
+            label: shareFlash ? '已复制 Markdown' : '分享会话',
+            icon: <Lucide.Link size={13} style={{ marginRight: 6 }} />,
+            onClick: onShare,
           },
         ]
       : []),
@@ -120,3 +134,4 @@ export const ChatHeaderMore: React.FC<Props> = ({
     />
   );
 };
+

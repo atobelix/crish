@@ -1,9 +1,3 @@
-/**
- * 对话叶顶快捷行（气质参考 chat-top-header，能力不跟示例网页砍）。
- * 覆盖在对话流上：leading + 面包屑；右侧固定 28px 钮。
- * 产品工具（总览/文件/差异/终端/笔记）必须在本行；坞头可共存，不能只留坞头。
- * 坞开合都不卸载右钮。无 quiet 半隐、无果冻。
- */
 import React, {
   useCallback,
   useEffect,
@@ -12,89 +6,99 @@ import React, {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { Link } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
+import { SessionInlineRename } from './SessionInlineRename';
+import { SubagentHeaderPanel } from './SubagentHeaderPanel';
 import { IconButton, Tooltip } from '../ui';
 import {
-  countRunningSubagents,
   resolveUnitChromeLabel,
   resolveUnitChromeToolTip,
   UNIT_CHROME_TOOL_TIP_SIDE,
 } from './unitChromeLabel';
+import {
+  IconSidebarLeft,
+  IconSidebarRight,
+} from '../sidebar/SidebarToggleIcons';
 import { UNIT_TOOL_PANELS } from './unitChromeTools';
-import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import { viewRegistry } from '../../services/view-registry';
 import {
   applyDockToTree,
-  openToolInSession,
-  useWorkspaceShellStore,
-  useSessionField,
-  useLayoutTreeStore,
-} from '../../store/storeAccess';
-import {
-  pinSession,
-  unpinSession,
-  clearSessionMessages,
-} from '../../api/storeAccess';
-import {
-  EMPTY_SESSION_TITLE,
-  sessionListDisplayTitle,
-} from '../../api/sessionTitle';
-import {
-  GENERAL_FOLDER,
+  collapseActiveTabRightDock,
   listProjects,
+  openToolInSession,
+  pinSession,
   projectFolderLabel,
-} from '../../api/projectStore';
-import {
+  selectActiveSessionId,
+  unpinSession,
+  useLayoutTreeStore,
+  useSessionField,
+  useWorkspaceShellStore,
+  GENERAL_FOLDER,
+  clearSessionMessages,
   exportSessionToMarkdown,
+  getCompositionRoot,
   tryDownloadSessionMarkdown,
-} from '../../api/sessionExport';
-import { toast } from '../../services/toast/ToastContext';
-import { getCompositionRoot } from '../../app/compositionRoot';
-import { isPendingDraft } from '../../store/draftSession';
+  renameSession,
+  enterDraftMode,
+} from '../../store/storeAccess';
+import { toast } from '../../services/toast';
+import { sessionListDisplayTitle } from '../../api/sessionTitle';
 import styles from './UnitChromeActions.module.css';
 
-const SHARE_FLASH_MS = 1200;
+const SHARE_FLASH_MS = 2000;
+const EMPTY_SESSION_TITLE = '新会话';
+
+function isPendingDraft(id: string | null | undefined): boolean {
+  return typeof id === 'string' && id.startsWith('__pending_draft__');
+}
 
 export interface UnitChromeActionsProps {
-  /** 本 unit 会话 id（多 pane 时必须是 leaf.sessionId） */
   activeSessionId?: string | null;
-  onExportMarkdown?: () => void;
-  onClearHistory?: () => void;
-  /** 额外前置控件（如消息搜索按钮） */
-  leading?: React.ReactNode;
   className?: string;
+  leading?: React.ReactNode;
+  onClearHistory?: () => void;
+  onExportMarkdown?: () => void;
 }
 
 export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
   ({
     activeSessionId,
-    onExportMarkdown,
-    onClearHistory,
-    leading,
     className,
+    leading,
+    onClearHistory,
+    onExportMarkdown,
   }) => {
     const sid = (activeSessionId || '').trim();
-    const realSession = Boolean(sid) && !isPendingDraft(sid);
-    const messageCount = useSessionField((s) =>
-      sid ? (s.sessionsById[sid]?.messages?.length ?? 0) : 0
-    );
-    const isPinned = useSessionField((s) =>
-      Boolean(sid && s.sessionsById[sid]?.isPinned)
-    );
-    const folder = useSessionField((s) =>
-      sid ? s.sessionsById[sid]?.folder : undefined
-    );
+    const isDraft = !sid || isPendingDraft(sid);
+    const realSession = !isDraft;
+
+    const folder = useSessionField((s) => {
+      if (!sid) return undefined;
+      return s.sessionsById[sid]?.folder;
+    });
+
+    const isPinned = useSessionField((s) => {
+      if (!sid) return false;
+      return Boolean(s.sessionsById[sid]?.isPinned);
+    });
+
+    const messageCount = useSessionField((s) => {
+      if (!sid) return 0;
+      return s.sessionsById[sid]?.messages?.length ?? 0;
+    });
+
     const displayTitle = useSessionField((s) => {
       if (!sid || isPendingDraft(sid)) return EMPTY_SESSION_TITLE;
       const sess = s.sessionsById[sid];
       if (!sess) return EMPTY_SESSION_TITLE;
       return sessionListDisplayTitle(sess);
     });
-    const runningAgents = useSessionField((s) => {
-      if (!sid) return 0;
-      return countRunningSubagents(s.sessionsById[sid]?.agents);
+
+    const sessionAgents = useSessionField((s) => {
+      if (!sid) return undefined;
+      return s.sessionsById[sid]?.agents;
     });
+
     const canExport = messageCount > 0;
     const projectLabel = resolveUnitChromeLabel(
       sid ? { folder } : null,
@@ -145,7 +149,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
         opts.push({ id: p.id, label: label || p.id });
       }
       return opts;
-    }, [folder]);
+    }, []);
 
     const handleTogglePin = useCallback(() => {
       const id = (activeSessionId || '').trim();
@@ -259,6 +263,22 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       applyDockToTree(dock, tab.sessionId);
     }, [activeSessionId]);
 
+    const handleToggleLeftSidebar = useCallback(() => {
+      getCompositionRoot().shell.toggleSidebar?.();
+    }, []);
+
+    const handleJumpToNewDraft = useCallback(() => {
+      enterDraftMode(folder);
+    }, [folder]);
+
+    const handleRename = useCallback(
+      (newTitle: string) => {
+        if (!realSession) return;
+        renameSession(sid, newTitle);
+      },
+      [realSession, sid]
+    );
+
     const dockLabel = rightDockCollapsed
       ? '展开右侧工具栏'
       : '收起右侧工具栏';
@@ -270,33 +290,71 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
         data-chat-top-header="true"
         aria-label="对话快捷操作"
       >
+        {/* ── 左侧：项目 / 标题 / 子代理 / 更多操作 ── */}
         <div className={styles.topLeft}>
           {leading}
           <nav className={styles.breadcrumbs} aria-label="Breadcrumb">
-            <span className={`${styles.bcItem} ${styles.bcProject}`}>
-              {projectLabel}
-            </span>
+            <Tooltip content="点击新建此项目对话" side={UNIT_CHROME_TOOL_TIP_SIDE}>
+              <button
+                type="button"
+                className={`${styles.bcItem} ${styles.bcProjectBtn}`}
+                onClick={handleJumpToNewDraft}
+              >
+                {projectLabel}
+              </button>
+            </Tooltip>
             <span className={styles.bcSep} aria-hidden="true">
               /
             </span>
-            <span className={`${styles.bcItem} ${styles.bcSession}`}>
-              {displayTitle}
-            </span>
-            {runningAgents > 0 ? (
+            <SessionInlineRename
+              title={displayTitle}
+              onRename={handleRename}
+              disabled={!realSession}
+            />
+            {sessionAgents && sessionAgents.length > 0 ? (
               <>
                 <span className={styles.bcSep} aria-hidden="true">
                   /
                 </span>
-                <span className={`${styles.bcItem} ${styles.bcAgent}`}>
-                  <span className={styles.liveDot} aria-hidden="true" />
-                  {runningAgents} 个运行中
-                </span>
+                <SubagentHeaderPanel
+                  agents={sessionAgents}
+                  parentSessionId={sid}
+                />
               </>
             ) : null}
+            <ChatHeaderMore
+              className={styles.actionBtn}
+              onTogglePin={realSession ? handleTogglePin : undefined}
+              isPinned={isPinned}
+              onExportMarkdown={handleExport}
+              canExport={canExport}
+              onClearHistory={
+                realSession && messageCount > 0 ? handleClear : undefined
+              }
+              onMoveToFolder={realSession ? handleMoveToFolder : undefined}
+              onShare={realSession ? handleShare : undefined}
+              shareFlash={shareFlash}
+              folderOptions={folderOptions}
+              currentFolder={folder || GENERAL_FOLDER}
+            />
           </nav>
         </div>
 
+        {/* ── 右侧：左侧边栏开关 + 5大核心产品工具 + 右坞收起 ── */}
         <div className={styles.topActions}>
+          <Tooltip content="切换左侧边栏" side={UNIT_CHROME_TOOL_TIP_SIDE}>
+            <IconButton
+              type="button"
+              variant="ghost"
+              size="sm"
+              className={styles.actionBtn}
+              data-testid="sidebar-toggle-btn"
+              aria-label="切换左侧边栏"
+              onClick={handleToggleLeftSidebar}
+              icon={<IconSidebarLeft size={15} aria-hidden />}
+            />
+          </Tooltip>
+          <span className={styles.toolbarDivider} aria-hidden="true" />
           {UNIT_TOOL_PANELS.map(({ id, label, testId, Icon }) => {
             if (!viewRegistry.getView(id)) return null;
             const isOpen = openPanelSet.has(id);
@@ -324,35 +382,6 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               </Tooltip>
             );
           })}
-          {UNIT_TOOL_PANELS.some(({ id }) => viewRegistry.getView(id)) ? (
-            <span className={styles.toolbarDivider} aria-hidden="true" />
-          ) : null}
-          <ChatHeaderMore
-            className={styles.actionBtn}
-            onTogglePin={realSession ? handleTogglePin : undefined}
-            isPinned={isPinned}
-            onExportMarkdown={handleExport}
-            canExport={canExport}
-            onClearHistory={
-              realSession && messageCount > 0 ? handleClear : undefined
-            }
-            onMoveToFolder={realSession ? handleMoveToFolder : undefined}
-            folderOptions={folderOptions}
-            currentFolder={folder || GENERAL_FOLDER}
-          />
-          <Tooltip content="分享" side={UNIT_CHROME_TOOL_TIP_SIDE}>
-            <IconButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={styles.actionBtn}
-              data-testid="chat-share"
-              data-share-flash={shareFlash ? 'true' : 'false'}
-              aria-label="分享"
-              onClick={handleShare}
-              icon={<Link size={16} strokeWidth={2} aria-hidden />}
-            />
-          </Tooltip>
           <Tooltip
             content={resolveUnitChromeToolTip(dockLabel)}
             side={UNIT_CHROME_TOOL_TIP_SIDE}

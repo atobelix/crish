@@ -4,7 +4,7 @@ import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, render, fireEvent, waitFor } from '@testing-library/react';
 import { UnitChromeActions } from './UnitChromeActions';
 import { viewRegistry } from '../../services/view-registry';
 import { UNIT_CHROME_TOOL_TIP_SIDE } from './unitChromeLabel';
@@ -193,7 +193,7 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
     });
   });
 
-  it('空会话：无 quiet；打开文件等工具在对话顶；更多 / 分享 / 坞开关固定在', () => {
+  it('空会话：无 quiet；打开文件等工具在对话顶；更多 / 侧栏 / 坞开关固定在', () => {
     stubCoreTools();
     seedSession('unit-empty', { messageCount: 0, title: EMPTY_SESSION_TITLE });
     const { getByTestId, queryByTestId, container } =
@@ -210,7 +210,7 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
       '打开文件'
     );
     expect(getByTestId('chat-header-more')).toBeTruthy();
-    expect(getByTestId('chat-share')).toBeTruthy();
+    expect(getByTestId('sidebar-toggle-btn')).toBeTruthy();
     expect(getByTestId('right-dock-toggle')).toBeTruthy();
     expect(container.textContent).toContain(EMPTY_SESSION_TITLE);
     expect(container.textContent).not.toContain('未命名会话');
@@ -228,7 +228,7 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
     expect(noneRoot?.hasAttribute('data-canvas-quiet')).toBe(false);
     expect(none.getByTestId('chat-open-files')).toBeTruthy();
     expect(none.getByTestId('right-dock-toggle')).toBeTruthy();
-    expect(none.getByTestId('chat-share')).toBeTruthy();
+    expect(none.getByTestId('sidebar-toggle-btn')).toBeTruthy();
     expect(none.container.textContent).toContain(EMPTY_SESSION_TITLE);
     none.unmount();
 
@@ -305,8 +305,8 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
     expect(src).toMatch(/onClearHistory/);
     expect(src).not.toMatch(/if\s*\(\s*rightDockCollapsed\s*&&/);
     expect(src).not.toMatch(/from\s+['"]\.\/ChatHeader['"]/);
+    expect(src).toMatch(/data-testid="sidebar-toggle-btn"/);
     expect(src).toMatch(/data-testid="right-dock-toggle"/);
-    expect(src).toMatch(/data-testid="chat-share"/);
     expect(src).toMatch(/data-chat-top-header/);
     expect(src).toMatch(/\{leading\}/);
     expect(css).not.toMatch(/data-canvas-quiet/);
@@ -316,6 +316,65 @@ describe('UnitChromeActions 对话顶快捷行（覆盖层 + 产品工具）', (
     expect(css).toMatch(/pointer-events:\s*none/);
     expect(css).toMatch(/--button-radius,\s*7px/);
     expect(css).not.toMatch(/\.chatTopHeader\s*\{[^}]*display:\s*none/);
+  });
+});
+
+describe('UnitChromeActions 重构与交互验证 (00-总方案 §4.1)', () => {
+  beforeEach(() => {
+    stubCoreTools();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('点击项目名称应调用 enterDraftMode 进入新建草稿态', () => {
+    const draftSpy = vi.spyOn(storeAccess, 'enterDraftMode').mockImplementation(() => {});
+    seedSession('sess-proj', { folder: 'my-proj' });
+    const { getByText } = renderChrome('sess-proj');
+    act(() => {
+      fireEvent.click(getByText(/my-proj|默认/));
+    });
+    expect(draftSpy).toHaveBeenCalledWith('my-proj');
+  });
+
+  it('点击标题进入编辑态，按 Enter 成功触发 renameSession', () => {
+    const renameSpy = vi.spyOn(storeAccess, 'renameSession').mockImplementation(() => {});
+    seedSession('sess-rename', { title: '旧标题' });
+    const { getByText, container } = renderChrome('sess-rename');
+    act(() => {
+      fireEvent.click(getByText('旧标题'));
+    });
+    const input = container.querySelector('input');
+    expect(input).toBeTruthy();
+    act(() => {
+      fireEvent.change(input!, { target: { value: '新标题' } });
+      fireEvent.keyDown(input!, { key: 'Enter' });
+    });
+    expect(renameSpy).toHaveBeenCalledWith('sess-rename', '新标题');
+  });
+
+  it('子代理存在时展示状态胶囊，包含数量与状态徽章', () => {
+    seedSession('sess-agent', {
+      agents: [
+        { id: 'ag-1', name: '调研专家', status: 'running' },
+        { id: 'ag-2', name: '测试专家', status: 'completed' },
+      ] as never,
+    });
+    const { getByText } = renderChrome('sess-agent');
+    expect(getByText('1 个运行中')).toBeTruthy();
+  });
+
+  it('左侧包含 ChatHeaderMore，右侧包含统一侧栏按钮与 5 项产品工具', () => {
+    seedSession('sess-tools');
+    const { getByTestId } = renderChrome('sess-tools');
+    expect(getByTestId('chat-header-more')).toBeTruthy();
+    expect(getByTestId('sidebar-toggle-btn')).toBeTruthy();
+    expect(getByTestId('chat-open-overview')).toBeTruthy();
+    expect(getByTestId('chat-open-files')).toBeTruthy();
+    expect(getByTestId('chat-open-diff')).toBeTruthy();
+    expect(getByTestId('chat-open-terminal')).toBeTruthy();
+    expect(getByTestId('right-dock-toggle')).toBeTruthy();
   });
 });
 

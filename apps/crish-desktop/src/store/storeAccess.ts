@@ -322,3 +322,27 @@ export type {
   UiSize,
   ShellChromeMode,
 };
+
+// ── 会话与项目快捷操作门面再导出（供 Header / Toolbar 快捷调度）───────────────
+
+export {
+  GENERAL_FOLDER,
+  listProjects,
+  projectFolderLabel,
+} from '../api/projectStore';
+
+export {
+  pinSession,
+  unpinSession,
+  clearSessionMessages,
+  renameSession,
+  enterDraftMode,
+} from '../api/storeAccess';
+
+export { getCompositionRoot } from '../app/compositionRoot';
+
+export {
+  exportSessionToMarkdown,
+  tryDownloadSessionMarkdown,
+} from '../api/sessionExport';
+
