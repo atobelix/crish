@@ -203,17 +203,15 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         role="region"
         aria-label={`${viewRegistry.getTitle(leaf.activeTab, renderCtx)} 面板`}
       >
-        {/* chat：顶快捷覆盖层。工具叶：LeafToolTabStrip。不复活 ChatHeader。 */}
-        {isChat ? (
-          <UnitChromeActions
-            activeSessionId={sessionForPanel}
-            className={styles.leafToolHeader}
-          />
-        ) : (
-          <LeafToolTabStrip leaf={leaf} />
-        )}
-
         <div className={styles.leafBody}>
+          {isChat ? (
+            <UnitChromeActions
+              activeSessionId={sessionForPanel}
+              className={styles.leafToolHeader}
+            />
+          ) : (
+            <LeafToolTabStrip leaf={leaf} />
+          )}
           <AppErrorBoundary
             compact
             title={`面板 [${leaf.activeTab}] 渲染异常`}

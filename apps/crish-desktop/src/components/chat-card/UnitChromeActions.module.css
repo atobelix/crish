@@ -121,41 +121,7 @@
   gap: 4px;
   pointer-events: auto;
   flex-shrink: 0;
-  margin-right: 36px;
-}
-
-.topSidePanelBtn {
-  position: absolute;
-  top: 5px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  border-radius: var(--radius-md, 6px);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-secondary);
-  padding: 0;
-  outline: none;
-  z-index: 110;
-  pointer-events: auto;
-  transition:
-    background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease;
-}
-
-.topSidePanelBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
-  color: var(--text-primary);
-}
-
-.topSidePanelBtn[data-active='true'] {
-  background: var(--bg-active, rgba(0, 0, 0, 0.08));
-  color: var(--text-primary);
+  margin-left: auto;
 }
 
 .topActionBtn {

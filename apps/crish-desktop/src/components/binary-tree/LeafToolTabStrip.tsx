@@ -32,6 +32,7 @@ import {
   type MenuItem,
 } from '../ui/SmartExpandablePanel';
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
+import { useSessionTabDrag } from '../shell/SessionTabDragContext';
 import { viewRegistry } from '../../services/view-registry';
 import styles from './LeafToolTabStrip.module.css';
 
@@ -74,6 +75,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     const setActiveTab = useLayoutTreeStore((s) => s.setActiveTab);
     const removeTabFromLeaf = useLayoutTreeStore((s) => s.removeTabFromLeaf);
     const tabModeEnabled = useLayoutStore(selectTabModeEnabled);
+    const { startToolDrag } = useSessionTabDrag();
 
     const dockOpenIds = useWorkspaceShellStore((s) => {
       const sid = (sessionId || '').trim();
@@ -438,6 +440,16 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 ) : (
                   <Maximize2 size={14} strokeWidth={2} />
                 )}
+              </button>
+            </Tooltip>
+            <Tooltip content="收起右侧面板" side="bottom">
+              <button
+                type="button"
+                className={`${styles.sideBtn} ${styles.btnCollapse} side-panel-btn side-panel-btn-collapse active`}
+                onClick={handleCollapse}
+                aria-label="收起右侧面板"
+              >
+                <IconSidebarRight size={14} />
               </button>
             </Tooltip>
           </div>

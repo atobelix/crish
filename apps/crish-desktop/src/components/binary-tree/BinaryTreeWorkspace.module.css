@@ -47,8 +47,12 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  /* 画布本身不再铺色，透出 .section 的灰底，卡片才有「浮起来」的层次 */
-  background: transparent;
+  /* 整个工作区统一为单个大卡片 */
+  background: var(--bg-elevated, var(--bg-card));
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 12px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.02);
+  box-sizing: border-box;
   /* container query       leaf       */
   container-type: size;
   container-name: tree-canvas;
@@ -316,16 +320,11 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  /* strip   leaf    body      padding     strip hairline      */
   padding-top: 0;
   margin-top: 0;
-  /*
-   * 视觉上的「小矩形」：纸白底 + 单层发丝边框 + 同心圆角。
-   * 不加投影——叶子是 overflow:hidden，投影会被裁掉；本仓的层次靠底色差与发丝线表达。
-   */
-  background: var(--bg-elevated, var(--bg-card));
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl, 12px);
+  background: transparent;
+  border: none;
+  border-radius: 0;
   transition: border-color var(--transition-fast, 150ms ease-out);
 }
 
