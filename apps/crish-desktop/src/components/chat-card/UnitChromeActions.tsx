@@ -330,8 +330,12 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
           </nav>
         </div>
 
-        {/* ── 右侧：极简动作组 (Exactly 3 核心操作: 预览 / 产物 / 更多，带 36px margin-right) ── */}
-        <div className={`${styles.topActions} chat-top-actions`}>
+        {/* ── 右侧：极简动作组 (Exactly 3 核心操作: 预览 / 产物 / 更多，右坞收起时留 36px margin 供绝对定位按钮锚定) ── */}
+        <div
+          className={`${styles.topActions} ${
+            rightDockCollapsed ? styles.withDockMargin : ''
+          } chat-top-actions`}
+        >
           {/* 按钮 1: 应用预览 (🌐 Globe) */}
           <Tooltip content="打开应用预览" side={UNIT_CHROME_TOOL_TIP_SIDE}>
             <button
@@ -381,13 +385,13 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             />
           </div>
 
-          {/* 按钮 4: 仅当右侧工作区收起时，在对话顶栏展示展开按钮 (◫ IconSidebarRight) */}
+          {/* 按钮 4: 仅当右侧工作区收起时，在对话顶栏展示绝对定位展开按钮 (◫ IconSidebarRight) */}
           {rightDockCollapsed && (
             <Tooltip content={dockLabel} side={UNIT_CHROME_TOOL_TIP_SIDE}>
               <button
                 type="button"
                 id="topQuickDockBtn"
-                className={`${styles.topActionBtn} top-action-btn top-side-panel-btn`}
+                className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}
                 data-testid="top-quick-dock-btn"
                 data-active="false"
                 aria-label={dockLabel}

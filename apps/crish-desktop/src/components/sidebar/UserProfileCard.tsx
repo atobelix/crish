@@ -1,4 +1,4 @@
-﻿import React, { useRef } from 'react';
+import React, { useRef } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './Sidebar.module.css';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';

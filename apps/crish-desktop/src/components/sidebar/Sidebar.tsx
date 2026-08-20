@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import styles from './Sidebar.module.css';
 import { useLayoutStore, useSessionStore } from '../../store/storeAccess';
 import { useSidebarSessions } from '../../store/storeAccess';

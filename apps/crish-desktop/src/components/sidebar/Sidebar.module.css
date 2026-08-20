@@ -1,6 +1,6 @@
 .sidebar {
   width: var(--sidebar-width);
-  background-color: var(--bg-secondary);
+  background: transparent;
   border-right: none; /* Removed vertical border line */
   display: flex;
   flex-direction: column;

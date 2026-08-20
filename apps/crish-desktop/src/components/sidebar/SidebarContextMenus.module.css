@@ -43,7 +43,7 @@
 
 .contextMenuItem:hover,
 .contextMenuItem:focus-visible {
-  background-color: var(--bg-hover);
+  background-color: var(--sidebar-hover);
   color: var(--text-primary);
   outline: none;
 }

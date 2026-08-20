@@ -447,7 +447,8 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
             <Tooltip content="收起右侧面板" side="bottom">
               <button
                 type="button"
-                className={`${styles.sideBtn} ${styles.btnCollapse} side-panel-btn side-panel-btn-collapse active`}
+                id="topQuickDockBtn"
+                className={`${styles.sideBtn} ${styles.btnCollapse} top-action-btn top-side-panel-btn active side-panel-btn side-panel-btn-collapse`}
                 onClick={handleCollapse}
                 aria-label="收起右侧面板"
               >
