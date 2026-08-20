@@ -79,7 +79,7 @@
 
 .folderRow:hover,
 .fileRow:hover {
-  background: var(--tree-hover-bg, hsl(35 12% 90% / 0.65));
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
 }
 
 .fileRow.isOpening {
@@ -121,7 +121,7 @@
 .folderBadge {
   font-size: 10px;
   color: var(--text-tertiary);
-  background: var(--bg-tertiary, hsl(210 12% 92%));
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
   padding: 1px 5px;
   border-radius: var(--radius-xs, 2px);
   margin-left: 6px;

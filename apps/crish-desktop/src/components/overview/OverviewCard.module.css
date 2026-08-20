@@ -11,7 +11,7 @@
   gap: var(--space-2_5);
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
-  background: var(--bg-primary);
+  background: var(--bg-card, #ffffff);
 }
 
 .lean {

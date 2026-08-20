@@ -7,7 +7,7 @@
   min-width: 0;
   width: 100%;
   overflow: hidden;
-  background: var(--bg-primary);
+  background: var(--bg-card, #ffffff);
   container-type: inline-size;
   container-name: diff-panel;
   box-sizing: border-box;

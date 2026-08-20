@@ -3,7 +3,7 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: var(--bg-primary);
+  background: var(--bg-card, #ffffff);
   overflow: hidden;
   box-sizing: border-box;
   -webkit-app-region: no-drag;
