@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import * as Lucide from 'lucide-react';
+import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import styles from './InlineAgentPanel.module.css';
 import { Button, Tooltip } from '../ui';
 import type { SessionAgent } from '../../store/types';
@@ -164,7 +165,7 @@ export const InlineAgentPanelHeader: React.FC<InlineAgentPanelHeaderProps> = ({
             aria-pressed={sideFocused}
             disabled={sideDisabled}
             onClick={onOpenSide}
-            icon={<Lucide.PanelRight size={13} aria-hidden />}
+            icon={<IconSidebarRight size={13} aria-hidden />}
           />
         </Tooltip>
       </div>

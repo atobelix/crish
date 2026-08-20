@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Globe, FileCode, PanelRight } from 'lucide-react';
+import { Globe, FileCode } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { SessionInlineRename } from './SessionInlineRename';
 import { SubagentHeaderPanel } from './SubagentHeaderPanel';
@@ -381,7 +381,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             />
           </div>
 
-          {/* 按钮 4: 仅当右侧工作区收起时，在对话顶栏展示展开按钮 (◫ PanelRight) */}
+          {/* 按钮 4: 仅当右侧工作区收起时，在对话顶栏展示展开按钮 (◫ IconSidebarRight) */}
           {rightDockCollapsed && (
             <Tooltip content={dockLabel} side={UNIT_CHROME_TOOL_TIP_SIDE}>
               <button
@@ -393,7 +393,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
                 aria-label={dockLabel}
                 onClick={handleToggleRightDock}
               >
-                <PanelRight size={14} strokeWidth={1.8} aria-hidden="true" />
+                <IconSidebarRight size={15} />
               </button>
             </Tooltip>
           )}
