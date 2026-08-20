@@ -106,7 +106,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           const target = e.target as HTMLElement;
           if (
             target.closest(
-              'button, input, textarea, select, [role="menuitem"], [role="menu"], [data-interactive], [data-radix-popper-content-wrapper], [data-interactive="true"]'
+              'button, input, textarea, select, a, summary, [role="button"], [role="menuitem"], [role="menu"], [role="combobox"], [role="listbox"], [role="option"], [role="tab"], [role="switch"], [role="dialog"], [role="toolbar"], [contenteditable="true"], [data-interactive], [data-radix-popper-content-wrapper], [data-interactive="true"]'
             )
           ) {
             return;
