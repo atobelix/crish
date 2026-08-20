@@ -1,103 +1,66 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, fireEvent, waitFor } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
 import { LeafToolTabStrip } from './LeafToolTabStrip';
-import * as workspaceShellModule from '../../store/workspace-shell';
 import { createLeaf } from '../../store/layout-tree/types';
 import { useLayoutStore } from '../../store/layoutStore';
 import { viewRegistry } from '../../services/view-registry';
-import {
-  activateNotePaper,
-  deactivateNotePaper,
-} from '../../extensions/note-paper';
+import * as storeAccess from '../../store/storeAccess';
 
-describe('LeafToolTabStrip 会话作用域绑定 (Task 4)', () => {
+describe('LeafToolTabStrip 纯标签化与防溢出吸附验证', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     useLayoutStore.getState().setTabModeEnabled(true);
+    vi.spyOn(viewRegistry, 'getTitle').mockImplementation((id: string) => id);
+    vi.spyOn(viewRegistry, 'getIcon').mockImplementation(
+      () => () => <span data-testid="tool-icon" />
+    );
   });
 
-  it('点击工具叶子收起按钮时，必须显式调用 openToolInSession 绑定当前 leaf.sessionId', () => {
-    const openToolSpy = vi
-      .spyOn(workspaceShellModule, 'openToolInSession')
-      .mockImplementation(() => {});
-
-    const leaf = createLeaf(
-      'tool-leaf-1',
-      ['overview', 'files'],
-      'overview',
-      'sess-b'
-    );
-
-    const { getByLabelText, container } = render(
-      <LeafToolTabStrip leaf={leaf} />
-    );
-
-    const collapseBtn = getByLabelText('收起右侧面板');
-    expect(collapseBtn).toBeDefined();
-    const strip = container.querySelector('[data-leaf-tool-tab-strip="true"]');
-    expect(strip?.getAttribute('data-tab-mode')).toBe('on');
-
-    fireEvent.click(collapseBtn);
-
-    expect(openToolSpy).toHaveBeenCalledWith('sess-b', 'chat');
-  });
-});
-
-describe('LeafToolTabStrip 坞头工具导航', () => {
   afterEach(() => {
-    act(() => {
-      deactivateNotePaper();
-    });
     vi.restoreAllMocks();
   });
 
-  function stubCoreTools(): void {
-    vi.spyOn(viewRegistry, 'getView').mockImplementation((id: string) => {
-      if (id === 'note') return undefined as never;
-      return {
-        id,
-        title: id,
-        category: 'tool',
-        component: () => null,
-      } as never;
-    });
-  }
-
-  it('坞头有打开文件等图标钮，点击走 openToolInSession', () => {
-    stubCoreTools();
-    const openToolSpy = vi
-      .spyOn(workspaceShellModule, 'openToolInSession')
-      .mockImplementation(() => {});
-    const leaf = createLeaf('tool-leaf-1', ['overview'], 'overview', 'sess-b');
-    const { getByTestId, queryByTestId } = render(
-      <LeafToolTabStrip leaf={leaf} />
+  it('不再渲染 dockToolNav 固定工具条', () => {
+    const leaf = createLeaf(
+      'tool-leaf-1',
+      ['files', 'diff'],
+      'files',
+      'sess-b'
     );
-    expect(getByTestId('chat-open-files').getAttribute('aria-label')).toBe(
-      '打开文件'
-    );
-    expect(getByTestId('chat-open-files').textContent?.replace(/\s+/g, '')).toBe(
-      ''
-    );
-    expect(queryByTestId('chat-open-note')).toBeNull();
-    fireEvent.click(getByTestId('chat-open-files'));
-    expect(openToolSpy).toHaveBeenCalledWith('sess-b', 'files');
+    const { queryByRole } = render(<LeafToolTabStrip leaf={leaf} />);
+    expect(queryByRole('toolbar', { name: '会话工具' })).toBeNull();
   });
 
-  it('activate 笔记后坞头出现 chat-open-note', async () => {
+  it('每个 Tab 渲染对应的工具 Icon 与微型关闭按钮（多 Tab 时）', () => {
+    const leaf = createLeaf(
+      'tool-leaf-1',
+      ['files', 'diff'],
+      'files',
+      'sess-b'
+    );
+    const { getByText, getAllByTestId, getAllByLabelText } = render(
+      <LeafToolTabStrip leaf={leaf} />
+    );
+    expect(getByText('files')).toBeTruthy();
+    expect(getAllByTestId('tool-icon')).toHaveLength(2);
+    expect(getAllByLabelText(/关闭/)).toHaveLength(2);
+  });
+
+  it('单 Tab 时不显示关闭叉号', () => {
     const leaf = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
-    activateNotePaper();
-    const { getByTestId } = render(<LeafToolTabStrip leaf={leaf} />);
-    await waitFor(() => {
-      expect(getByTestId('chat-open-note')).toBeTruthy();
-    });
-    const spy = vi
-      .spyOn(workspaceShellModule, 'openToolInSession')
+    const { queryByLabelText } = render(<LeafToolTabStrip leaf={leaf} />);
+    expect(queryByLabelText(/关闭/)).toBeNull();
+  });
+
+  it('点击收起按钮显式触发 openToolInSession(sessionId, "chat")', () => {
+    const openToolSpy = vi
+      .spyOn(storeAccess, 'openToolInSession')
       .mockImplementation(() => {});
-    act(() => {
-      getByTestId('chat-open-note').click();
-    });
-    expect(spy).toHaveBeenCalledWith('sess-b', 'note');
+    const leaf = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
+    const { getByLabelText } = render(<LeafToolTabStrip leaf={leaf} />);
+    fireEvent.click(getByLabelText('收起右侧面板'));
+    expect(openToolSpy).toHaveBeenCalledWith('sess-b', 'chat');
   });
 });

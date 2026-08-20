@@ -210,7 +210,6 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(getByTestId('chat-open-overview')).toBeTruthy();
     expect(getByTestId('right-dock-toggle')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
-    expect(getByTestId('chat-share')).toBeTruthy();
 
     act(() => {
       activateNotePaper();
