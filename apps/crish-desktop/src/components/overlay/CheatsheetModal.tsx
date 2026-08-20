@@ -54,11 +54,7 @@ export function CheatsheetModal({ onClose, isOpen = true }: CheatsheetModalProps
       onClose={onClose}
       title={
         <span className={styles.cheatsheetTitleWrap}>
-          <Lucide.Keyboard
-            size={16}
-            style={{ color: 'var(--accent-color)' }}
-            aria-hidden="true"
-          />
+          <Lucide.Keyboard size={16} aria-hidden="true" />
           <span className={styles.cheatsheetTitle}>快捷键</span>
         </span>
       }

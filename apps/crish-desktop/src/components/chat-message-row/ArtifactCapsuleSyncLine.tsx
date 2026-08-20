@@ -11,6 +11,7 @@
  *   - 已完成态：`✓ 已落盘 (1.2KB)`。
  */
 import React from 'react';
+import { Tooltip } from '../ui';
 import styles from './ChatMessageRow.module.css';
 
 export interface ArtifactCapsuleProps {
@@ -40,17 +41,19 @@ export const ArtifactCapsule: React.FC<ArtifactCapsuleProps> = ({
         📄
       </span>
       <span className="flow-artifact__prefix">{prefix}</span>
-      <button
-        type="button"
-        className={`${styles.flowArtifactChip} flow-artifact__chip`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onClick?.(target);
-        }}
-        title={`打开产物 ${name}`}
-      >
-        {name}
-      </button>
+      <Tooltip content={`打开产物 ${name}`}>
+        <button
+          type="button"
+          className={`${styles.flowArtifactChip} flow-artifact__chip`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick?.(target);
+          }}
+          aria-label={`打开产物 ${name}`}
+        >
+          {name}
+        </button>
+      </Tooltip>
     </div>
   );
 };

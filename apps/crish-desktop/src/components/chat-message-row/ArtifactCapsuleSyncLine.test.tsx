@@ -17,7 +17,9 @@ describe('ArtifactCapsule & SyncLine (§5.4)', () => {
 
     expect(screen.getByText('📄')).toBeDefined();
     expect(screen.getByText('已生成')).toBeDefined();
-    const btn = screen.getByRole('button', { name: 'PE-08-session-loop-ipc-batcher' });
+    const btn = screen.getByRole('button', {
+      name: '打开产物 PE-08-session-loop-ipc-batcher',
+    });
     expect(btn).toBeDefined();
 
     fireEvent.click(btn);

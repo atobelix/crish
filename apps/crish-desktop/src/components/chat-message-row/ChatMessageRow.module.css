@@ -55,27 +55,26 @@
   flex-direction: column;
   align-items: flex-end;
   max-width: min(78%, 560px);
+  min-width: min-content;
   gap: var(--space-1_5);
 }
 
 .userBubble {
-  background: color-mix(
-    in srgb,
-    var(--bg-secondary) 88%,
-    var(--bg-elevated) 12%
-  );
+  background: var(--bg-card, hsl(35, 10%, 98%));
   color: var(--text-primary);
-  border-radius: 20px 20px var(--radius-xs) 20px;
-  padding: 12px 16px;
-  font-size: var(--font-size-base);
+  border-radius: 14px 14px 4px 14px;
+  padding: 10px 14px;
+  font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-normal);
-  line-height: var(--line-height-body);
-  word-break: normal;
+  line-height: 1.5;
+  word-break: break-word;
   overflow-wrap: break-word;
   white-space: pre-wrap;
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px var(--tint-subtle, hsl(0 0% 0% / 0.02));
   width: fit-content;
   max-width: 100%;
+  min-width: min-content;
   -webkit-user-select: text;
   user-select: text;
 }

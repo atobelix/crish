@@ -178,10 +178,6 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
                 (needsModelSetup ? '填写模型' : '无可用模型')
             )}
           </span>
-          <ChevronDown
-            size={14}
-            style={{ opacity: 0.6, marginLeft: 6, flexShrink: 0 }}
-          />
         </button>
       </Tooltip>
       {showModelDropdown ? (

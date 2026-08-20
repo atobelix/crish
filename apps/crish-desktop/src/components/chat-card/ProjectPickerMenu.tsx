@@ -154,35 +154,34 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
     });
 
     const isGeneralSelected = !activeId || activeId === GENERAL_FOLDER;
+    const generalItem: MenuItem = {
+      id: 'proj:general',
+      type: 'selectable',
+      label: '通用项目',
+      icon: <Folder size={14} />,
+      selected: isGeneralSelected,
+      onSelect: () => {
+        setNoProject();
+        syncDraftFolderOnProjectChange(GENERAL_FOLDER);
+        onChanged?.();
+        onOpenChange(false);
+      },
+    };
 
     return [
-      // 1. 项目列表组
+      // 1. 项目列表组（包含具体项目与通用项目）
       {
         id: 'project-list-group',
         type: 'group',
         isSelectableList: true,
-        items: projectItems,
+        items: [...projectItems, generalItem],
       },
-      // 2. 分割线
+      // 2. 唯一样式分割线
       {
-        id: 'sep-1',
+        id: 'sep-actions',
         type: 'divider',
       },
-      // 3. 通用项目固定选项
-      {
-        id: 'proj:general',
-        type: 'selectable',
-        label: '通用项目',
-        icon: <Folder size={14} />,
-        selected: isGeneralSelected,
-        onSelect: () => {
-          setNoProject();
-          syncDraftFolderOnProjectChange(GENERAL_FOLDER);
-          onChanged?.();
-          onOpenChange(false);
-        },
-      },
-      // 4. 添加项目级联子菜单（带有 Safe-Aim 轨迹保护）
+      // 3. 添加项目级联子菜单（带有 Safe-Aim 轨迹保护）
       {
         id: 'action:add-project',
         type: 'submenu',

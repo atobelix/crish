@@ -381,7 +381,8 @@ export function calculateSubmenuPosition(
   submenuWidth = 190,
   submenuHeight = 280,
   sideOffset = 4,
-  edgePadding = 8
+  edgePadding = 8,
+  preferredSide: 'left' | 'right' = 'left'
 ): SubmenuPlacementResult {
   const vp = getEffectiveViewport();
   const minX = (vp.offsetLeft ?? 0) + edgePadding;
@@ -392,13 +393,24 @@ export function calculateSubmenuPosition(
   const spaceLeft = rowRect.left - minX - sideOffset;
   const spaceRight = maxX - rowRect.right - sideOffset;
 
-  let side: 'left' | 'right' = 'left';
-  let targetX = rowRect.left - submenuWidth - sideOffset;
+  let side: 'left' | 'right' = preferredSide;
+  let targetX =
+    preferredSide === 'left'
+      ? rowRect.left - submenuWidth - sideOffset
+      : rowRect.right + sideOffset;
 
-  // 当左侧放不下且右侧空间更大时，翻转至右侧展开
-  if (submenuWidth > spaceLeft && spaceRight >= spaceLeft) {
-    side = 'right';
-    targetX = rowRect.right + sideOffset;
+  if (preferredSide === 'left') {
+    // 当左侧放不下且右侧空间更大时，翻转至右侧展开
+    if (submenuWidth > spaceLeft && spaceRight >= spaceLeft) {
+      side = 'right';
+      targetX = rowRect.right + sideOffset;
+    }
+  } else {
+    // 当右侧放不下且左侧空间更大时，翻转至左侧展开
+    if (submenuWidth > spaceRight && spaceLeft >= spaceRight) {
+      side = 'left';
+      targetX = rowRect.left - submenuWidth - sideOffset;
+    }
   }
 
   // 双向刚性数学钳位，绝对杜绝任何负坐标 (X >= minX) 与右侧越界 (X + W <= maxX)

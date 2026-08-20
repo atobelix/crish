@@ -95,7 +95,7 @@ function seedSession(
   });
 }
 
-describe('UnitChromeActions 分屏折叠作用域单源化 (Task 2)', () => {
+describe('UnitChromeActions 分屏作用域单源化', () => {
   beforeEach(() => {
     useLayoutStore.setState((st) => {
       st.sessionsById = {
@@ -158,25 +158,20 @@ describe('UnitChromeActions 分屏折叠作用域单源化 (Task 2)', () => {
     });
   });
 
-  it('当多 Unit 分屏时，Unit B 折叠右坞后其展开按钮必须可见（不受 Unit A 展开导致的全局 false 影响）', () => {
-    const { getByTestId } = render(
-      <UnitChromeActions activeSessionId="unit-b" />
-    );
-
-    const expandBtn = getByTestId('right-dock-toggle');
-    expect(expandBtn).toBeDefined();
-    expect(expandBtn.getAttribute('aria-expanded')).toBe('false');
-  });
-
-  it('坞展开时右钮仍在 DOM，不卸载开关', () => {
-    const { getByTestId } = render(
+  it('当多 Unit 分屏时，Unit A 展开 files 时代码产物按钮高亮，Unit B 处于折叠状态不高亮', () => {
+    const unitA = render(
       <UnitChromeActions activeSessionId="unit-a" />
     );
-    const toggle = getByTestId('right-dock-toggle');
-    expect(toggle).toBeDefined();
-    expect(toggle.getAttribute('aria-expanded')).toBe('true');
-    expect(toggle.getAttribute('data-active')).toBe('true');
-    expect(toggle.getAttribute('aria-label')).toBe('收起右侧工具栏');
+    const artifactsBtnA = unitA.getByTestId('top-quick-artifacts-btn');
+    expect(artifactsBtnA.getAttribute('data-active')).toBe('true');
+    unitA.unmount();
+
+    const unitB = render(
+      <UnitChromeActions activeSessionId="unit-b" />
+    );
+    const artifactsBtnB = unitB.getByTestId('top-quick-artifacts-btn');
+    expect(artifactsBtnB.getAttribute('data-active')).toBe('false');
+    unitB.unmount();
   });
 });
 
@@ -190,7 +185,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     });
   });
 
-  it('空会话：无 quiet；极简 4 元动作组固定在顶栏；彻底移除 5 个粗糙产品工具', () => {
+  it('空会话：无 quiet；极简 3 元动作组固定在顶栏；彻底移除 5 个粗糙产品工具与重复坞开关', () => {
     stubCoreTools();
     seedSession('unit-empty', { messageCount: 0, title: EMPTY_SESSION_TITLE });
     const { getByTestId, queryByTestId, container } =
@@ -199,11 +194,11 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(root?.getAttribute('data-chat-top-header')).toBe('true');
     expect(root?.hasAttribute('data-canvas-quiet')).toBe(false);
 
-    // 4 大标准动作组在顶栏
+    // 3 大标准动作组在顶栏（极简 3 元动作组）
     expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
     expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
-    expect(getByTestId('right-dock-toggle')).toBeTruthy();
+    expect(queryByTestId('right-dock-toggle')).toBeNull();
 
     // 5 个粗糙产品工具及左侧栏开关已彻底从顶栏退役
     expect(queryByTestId('chat-open-overview')).toBeNull();
@@ -233,14 +228,12 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(noneRoot?.hasAttribute('data-canvas-quiet')).toBe(false);
     expect(none.getByTestId('top-quick-preview-btn')).toBeTruthy();
     expect(none.getByTestId('top-quick-artifacts-btn')).toBeTruthy();
-    expect(none.getByTestId('right-dock-toggle')).toBeTruthy();
     expect(none.container.textContent).toContain(EMPTY_SESSION_TITLE);
     none.unmount();
 
     const draft = renderChrome(PENDING_DRAFT_SESSION_ID);
     expect(draft.getByTestId('top-quick-preview-btn')).toBeTruthy();
     expect(draft.getByTestId('top-quick-artifacts-btn')).toBeTruthy();
-    expect(draft.getByTestId('right-dock-toggle')).toBeTruthy();
     expect(draft.container.textContent).toContain(EMPTY_SESSION_TITLE);
   });
 
@@ -255,7 +248,6 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     ).toBe(false);
     expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
     expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
-    expect(getByTestId('right-dock-toggle')).toBeTruthy();
     expect(container.textContent).toContain('重构 IPC');
   });
 
@@ -327,7 +319,6 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(src).not.toMatch(/if\s*\(\s*rightDockCollapsed\s*&&/);
     expect(src).not.toMatch(/from\s+['"]\.\/ChatHeader['"]/);
     expect(src).not.toMatch(/sidebar-toggle-btn/);
-    expect(src).toMatch(/data-testid="right-dock-toggle"/);
     expect(src).toMatch(/data-chat-top-header/);
     expect(src).toMatch(/\{leading\}/);
     expect(css).not.toMatch(/data-canvas-quiet/);
@@ -336,7 +327,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(css).toMatch(/height:\s*38px/);
     expect(css).toMatch(/margin-bottom:\s*-38px/);
     expect(css).toMatch(/pointer-events:\s*none/);
-    expect(css).toMatch(/border-radius:\s*6px/);
+    expect(css).toMatch(/border-radius:\s*(?:var\(--radius-md,\s*6px\)|6px)/);
     expect(css).not.toMatch(/\.chatTopHeader\s*\{[^}]*display:\s*none/);
   });
 });
@@ -387,13 +378,13 @@ describe('UnitChromeActions 重构与交互验证 (00-总方案 §4.1 & 02-pixel
     expect(getByText('1 个运行中')).toBeTruthy();
   });
 
-  it('左侧包含三级面包屑，右侧包含四元极简动作组（preview, artifacts, more, rightDockToggle）', () => {
+  it('左侧包含三级面包屑，右侧包含极简 3 元动作组（preview, artifacts, more）', () => {
     seedSession('sess-tools');
     const { getByTestId, queryByTestId } = renderChrome('sess-tools');
     expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
     expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
-    expect(getByTestId('right-dock-toggle')).toBeTruthy();
+    expect(queryByTestId('right-dock-toggle')).toBeNull();
     expect(queryByTestId('sidebar-toggle-btn')).toBeNull();
     expect(queryByTestId('chat-open-overview')).toBeNull();
     expect(queryByTestId('chat-open-files')).toBeNull();

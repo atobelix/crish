@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getSessionById } from '../../store/storeAccess';
 import {
   addCommandPermission,

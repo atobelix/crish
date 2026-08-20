@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import ReactDOM from 'react-dom';
 import * as Popover from '@radix-ui/react-popover';
 import type { MenuItem, MenuGroup, SmartPanelProps } from './types';
 import { SmartPanelHeader } from './SmartPanelHeader';
@@ -14,6 +15,7 @@ import { SafeAimEngine } from '../internal/SafeAimEngine';
 import { useLayerRegistration } from '../internal/layer-registration/useLayerRegistration';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
 import { Tooltip } from '../Tooltip/Tooltip';
+import { calculateSubmenuPosition } from '../Menu/position';
 import menuStyles from '../Menu/Menu.module.css';
 import styles from './SmartExpandablePanel.module.css';
 
@@ -45,6 +47,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
 
   const [query, setQuery] = useState('');
   const [activeSubmenu, setActiveSubmenu] = useState<MenuItem | null>(null);
+  const [submenuStyle, setSubmenuStyle] = useState<React.CSSProperties | null>(null);
 
   const panelId = useId();
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -68,10 +71,12 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
       if (nextOpen) {
         setQuery('');
         setActiveSubmenu(null);
+        setSubmenuStyle(null);
         safeAim.clearSubmenu();
         onOpen?.();
       } else {
         setActiveSubmenu(null);
+        setSubmenuStyle(null);
         safeAim.clearSubmenu();
         onClose?.();
       }
@@ -121,10 +126,41 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
         clearTimeout(safeAimTimeoutRef.current);
         safeAimTimeoutRef.current = null;
       }
+      const itemRect = el.getBoundingClientRect();
+      const panelRect =
+        contentRef.current?.getBoundingClientRect() ?? itemRect;
+      const vpWidth =
+        typeof window !== 'undefined' ? window.innerWidth : 1280;
+      const vpHeight =
+        typeof window !== 'undefined' ? window.innerHeight : 800;
+
+      // 判断右侧空间是否足够 (至少 160px)
+      const spaceRight = vpWidth - panelRect.right - 12;
+      const fitsRight = spaceRight >= 160;
+
+      const stylePos: React.CSSProperties = {
+        position: 'fixed',
+        top: `${Math.max(12, Math.min(itemRect.top - 4, vpHeight - 200))}px`,
+        zIndex: 9999,
+      };
+
+      if (fitsRight) {
+        stylePos.left = `${panelRect.right + 4}px`;
+        stylePos.transformOrigin = 'top left';
+      } else {
+        stylePos.right = `${vpWidth - panelRect.left + 4}px`;
+        stylePos.transformOrigin = 'top right';
+      }
+
+      setSubmenuStyle(stylePos);
       setActiveSubmenu(item);
       requestAnimationFrame(() => {
         if (cascadeSubmenuRef.current) {
-          safeAim.setSubmenu(el, cascadeSubmenuRef.current, 'right');
+          safeAim.setSubmenu(
+            el,
+            cascadeSubmenuRef.current,
+            fitsRight ? 'right' : 'left'
+          );
         }
       });
     },
@@ -278,32 +314,36 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
             )}
 
             {/* 二级级联子菜单 (8px 同心圆角 / 4px 内衬 / 4px-6px 条目) */}
-            {activeSubmenu && activeSubmenu.children && (
-              <div
-                ref={cascadeSubmenuRef}
-                className={`${menuStyles.menuContent} ${styles.cascadeSubmenu}`}
-                role="menu"
-                aria-label={activeSubmenu.label || '添加项目'}
-                onMouseEnter={() => {
-                  if (safeAimTimeoutRef.current) {
-                    clearTimeout(safeAimTimeoutRef.current);
-                    safeAimTimeoutRef.current = null;
-                  }
-                }}
-              >
-                {activeSubmenu.children.map((subItem) => (
-                  <SmartPanelItem
-                    key={subItem.id}
-                    item={subItem}
-                    onSelect={(item, ev) => {
-                      subItem.onSelect?.(item, ev);
-                      subItem.onClick?.();
-                      onSelect?.(item);
-                      handleOpenChange(false);
-                    }}
-                  />
-                ))}
-              </div>
+            {activeSubmenu && activeSubmenu.children && submenuStyle && (
+              ReactDOM.createPortal(
+                <div
+                  ref={cascadeSubmenuRef}
+                  className={`${menuStyles.menuContent} ${styles.cascadeSubmenu}`}
+                  role="menu"
+                  aria-label={activeSubmenu.label || '子菜单'}
+                  style={submenuStyle}
+                  onMouseEnter={() => {
+                    if (safeAimTimeoutRef.current) {
+                      clearTimeout(safeAimTimeoutRef.current);
+                      safeAimTimeoutRef.current = null;
+                    }
+                  }}
+                >
+                  {activeSubmenu.children.map((subItem) => (
+                    <SmartPanelItem
+                      key={subItem.id}
+                      item={subItem}
+                      onSelect={(item, ev) => {
+                        subItem.onSelect?.(item, ev);
+                        subItem.onClick?.();
+                        onSelect?.(item);
+                        handleOpenChange(false);
+                      }}
+                    />
+                  ))}
+                </div>,
+                dialogOverlay ?? (typeof document !== 'undefined' ? document.body : null)!
+              )
             )}
           </div>
         </Popover.Content>

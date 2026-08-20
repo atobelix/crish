@@ -1,85 +1,45 @@
-/*         PE-05 T05.2 #2 
- *      ui/Dialog      /  /  /        
- *                  /     /  /  /     --dialog-z    */
-
-/*     --dialog-z     --z-cheatsheet    */
 .cheatsheetOverlay {
   --dialog-z: var(--z-modal);
 }
 
-/*          420px   */
 .cheatsheetModal {
-  --dialog-width: 420px;
+  --dialog-width: 480px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 14px);
+  box-shadow: var(--shadow-2xl);
 }
 
-/*               h2    */
 .cheatsheetTitleWrap {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
 }
 
 .cheatsheetTitle {
   margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-normal);
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-primary);
-}
-
-/*        dialogBody         8/12px     */
-.cheatsheetBody {
-  margin: calc(var(--space-1) * -1) calc(var(--space-4) * -1) 0;
-  padding: 8px 12px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0_5);
-}
-
-.cheatsheetRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 10px 8px;
-  border-radius: var(--radius-md);
-  transition: background-color var(--transition-micro);
-}
-
-.cheatsheetRow:hover {
-  background: var(--tint-hover);
-}
-
-.cheatsheetLabel {
-  font-size: var(--font-size-base);
-  color: var(--text-secondary);
-}
-
-.cheatsheetKey {
-  font-family: var(--font-sans);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-primary);
-  background: var(--md-code-bg);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 4px 8px;
-  box-shadow: none;
 }
 
 .cheatsheetSearch {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin: 4px 4px 0;
-  padding: 8px 12px;
-  border-radius: var(--radius-md);
-  background: var(--tint-hover);
+  gap: 8px;
+  margin: 0 0 12px 0;
+  padding: 6px 10px;
+  background: var(--bg-hover);
   border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 6px);
   color: var(--text-tertiary);
+  transition:
+    border-color var(--transition-micro, 120ms) ease,
+    background-color var(--transition-micro, 120ms) ease;
 }
 
 .cheatsheetSearch:focus-within {
-  border-color: var(--accent-color);
+  border-color: color-mix(in srgb, var(--border-color) 80%, var(--text-primary) 20%);
 }
 
 .cheatsheetSearchInput {
@@ -87,7 +47,7 @@
   border: none;
   background: transparent;
   outline: none;
-  font-size: var(--font-size-sm);
+  font-size: 13px;
   color: var(--text-primary);
   font-family: inherit;
 }
@@ -96,38 +56,82 @@
   color: var(--text-tertiary);
 }
 
+.cheatsheetBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .cheatsheetCategory {
-  margin-bottom: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  border: none;
+  padding: 0;
 }
 
 .cheatsheetCategoryTitle {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold, 600);
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-tertiary);
-  padding: 10px 8px 4px;
+  padding: 4px 6px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.cheatsheetRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm, 4px);
+  transition: background-color var(--transition-micro, 100ms) ease;
+}
+
+.cheatsheetRow:hover {
+  background: var(--bg-hover);
+}
+
+.cheatsheetLabel {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.cheatsheetKey {
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px 6px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 .cheatsheetEmpty {
   text-align: center;
   padding: 32px 16px;
   color: var(--text-tertiary);
-  font-size: var(--font-size-sm);
+  font-size: 13px;
 }
 
 .cheatsheetFooterTip {
-  margin: 4px 0 12px;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  background: var(--md-code-bg);
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-hover);
   border: 1px solid var(--border-color);
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-body, 1.55);
+  font-size: 11.5px;
+  line-height: 1.5;
   color: var(--text-secondary);
 }
 
 .cheatsheetFooterTip strong {
   color: var(--text-primary);
-  font-weight: var(--font-weight-normal);
+  font-weight: 600;
 }

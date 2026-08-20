@@ -142,15 +142,14 @@ export const ChatHeaderMore: React.FC<ChatHeaderMoreProps> = ({
 
   const trigger = (
     <Tooltip content="更多操作" side={UNIT_CHROME_TOOL_TIP_SIDE}>
-      <IconButton
+      <button
         type="button"
-        variant="ghost"
-        size="sm"
-        className={className}
+        className={`${className || ''} top-action-btn`}
         data-testid="chat-header-more"
         aria-label="更多选项"
-        icon={<MoreHorizontal size={16} />}
-      />
+      >
+        <MoreHorizontal size={14} strokeWidth={1.8} aria-hidden="true" />
+      </button>
     </Tooltip>
   );
 

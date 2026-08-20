@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SessionMessage } from '../../store/types';
 
 export interface UseChatScrollAnchorOptions {

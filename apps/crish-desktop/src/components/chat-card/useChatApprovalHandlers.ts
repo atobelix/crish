@@ -1,4 +1,4 @@
-﻿import type { SessionMessage, SessionAgent } from '../../store/types';
+import type { SessionMessage, SessionAgent } from '../../store/types';
 import type { } from '../../hooks/useToastQueue';
 import { useChatApprovalState } from './useChatApprovalState';
 import { useChatApprovalExecutor } from './useChatApprovalExecutor';

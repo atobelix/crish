@@ -77,7 +77,6 @@ export const SessionInlineRename: React.FC<SessionInlineRenameProps> = ({
         aria-label={`会话名称：${title}`}
       >
         <span className={styles.titleText}>{title}</span>
-        {!disabled && <Pencil size={11} className={styles.editIcon} aria-hidden />}
       </button>
     </Tooltip>
   );

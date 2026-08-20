@@ -23,7 +23,7 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  padding: 0 10px;
+  padding: 0 12px;
   box-sizing: border-box;
   flex-shrink: 0;
   user-select: none;
@@ -65,6 +65,8 @@
 }
 
 .bcProjectBtn {
+  display: inline-flex;
+  align-items: center;
   border: none;
   background: transparent;
   color: var(--text-secondary, #777777);
@@ -72,21 +74,19 @@
   font-size: 13px;
   font-family: inherit;
   max-width: 110px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  flex-shrink: 1;
-  padding: 2px 4px;
+  height: 24px;
+  padding: 0 4px;
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   outline: none;
+  box-sizing: border-box;
   transition: background-color var(--transition-micro, 120ms) ease,
               color var(--transition-micro, 120ms) ease;
 }
 
 .bcProjectBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #111111);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  color: var(--text-primary);
 }
 
 .bcText {
@@ -96,7 +96,7 @@
 }
 
 .bcSep {
-  color: var(--text-tertiary, #cccccc);
+  color: var(--text-tertiary);
   font-size: 12px;
   margin: 0 1px;
   flex-shrink: 0;
@@ -127,14 +127,14 @@
   width: 28px;
   height: 28px;
   min-width: 28px;
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
   cursor: pointer;
-  color: var(--text-secondary, #666666);
+  color: var(--text-secondary);
   padding: 0;
   outline: none;
   box-sizing: border-box;
@@ -144,22 +144,18 @@
 }
 
 .topActionBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #111111);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  color: var(--text-primary);
 }
 
 .topActionBtn.isActive,
 .topActionBtn[data-active='true'] {
-  background: var(--bg-active, rgba(0, 0, 0, 0.08));
-  color: var(--text-primary, #111111);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.065));
+  color: var(--text-primary);
 }
 
 .chatHeaderMoreTrigger {
   display: inline-flex;
   align-items: center;
-  flex-shrink: 0;
-}
-
-.rightDockToggle {
   flex-shrink: 0;
 }

@@ -1,4 +1,8 @@
-/* LeafToolTabStrip：双层顶栏架构与加号防溢出吸附设计 */
+/*
+ * LeafToolTabStrip：标签行长在外壳灰底上，不跟着卡片走。
+ * 对齐参考里的 .tree-pane-header —— 透明底、无下边框，
+ * 视觉分界完全交给下方 .leafBody 卡片的发丝边框。
+ */
 
 .container {
   display: flex;
@@ -6,7 +10,7 @@
   width: 100%;
   min-width: 0;
   flex-shrink: 0;
-  background: var(--card-header-bg, var(--bg-secondary));
+  background: transparent;
   position: relative;
   z-index: var(--z-sticky, 2);
   user-select: none;
@@ -22,8 +26,8 @@
   max-height: 30px;
   padding: 0 4px 0 6px;
   box-sizing: border-box;
-  border-bottom: 1px solid var(--border-subtle, var(--border-color));
-  background: var(--card-header-bg, var(--bg-secondary));
+  border-bottom: none;
+  background: transparent;
   flex-shrink: 0;
   width: 100%;
   min-width: 0;
@@ -66,7 +70,7 @@
   flex: 0 0 auto;
   padding: 0 4px 0 7px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-md, 6px);
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
@@ -89,16 +93,16 @@
 }
 
 .tab:hover {
-  background: var(--sidebar-hover);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
   color: var(--text-primary);
 }
 
 .tabActive {
-  background: var(--bg-primary);
+  background: var(--bg-card, #ffffff);
   color: var(--text-primary);
   font-weight: 500;
-  border-color: var(--border-subtle);
-  box-shadow: 0 1px 2px var(--tint-subtle, hsl(0 0% 0% / 0.04));
+  border-color: var(--border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .tabIcon {
@@ -282,13 +286,13 @@
   height: 24px;
   min-width: 24px;
   padding: 0;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-md, 6px);
   border: none;
   background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   cursor: pointer;
   flex-shrink: 0;
   transition:
@@ -298,7 +302,7 @@
 }
 
 .sideBtn:hover {
-  background: var(--sidebar-hover);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
   color: var(--text-primary);
 }
 

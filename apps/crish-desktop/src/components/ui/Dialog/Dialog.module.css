@@ -14,7 +14,9 @@
 .backdrop {
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--bg-overlay) 45%, transparent);
+  background: rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(1.5px);
+  -webkit-backdrop-filter: blur(1.5px);
 }
 
 .dialog {
@@ -26,10 +28,10 @@
   flex-direction: column;
   max-width: calc(100vw - var(--space-8));
   max-height: calc(100vh - var(--space-8));
-  background: var(--bg-elevated);
-  border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-xl, 12px);
-  box-shadow: var(--shadow-2xl);
+  background: #ffffff;
+  border: 1px solid var(--border-color, #e5e5e5);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.12), 0 8px 16px -4px rgba(0, 0, 0, 0.04);
   outline: none;
 }
 

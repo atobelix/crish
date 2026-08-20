@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Globe, FileCode } from 'lucide-react';
+import { Globe, FileCode, PanelRight } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { SessionInlineRename } from './SessionInlineRename';
 import { SubagentHeaderPanel } from './SubagentHeaderPanel';
@@ -287,7 +287,6 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
                   id="bcProject"
                   className={`${styles.bcProjectBtn} breadcrumb-project`}
                   onClick={handleJumpToNewDraft}
-                  title="点击新建此项目对话"
                 >
                   <span className={`${styles.bcText} bc-text`}>{projectLabel}</span>
                 </button>
@@ -303,7 +302,6 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             <div
               className={`${styles.breadcrumbItem} ${styles.breadcrumbSession} breadcrumb-item breadcrumb-session`}
               id="bcSession"
-              title="当前会话"
             >
               <SessionInlineRename
                 title={displayTitle}
@@ -339,11 +337,10 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             <button
               type="button"
               id="topQuickPreviewBtn"
-              className={`${styles.topActionBtn} top-action-btn ${isPreviewActive ? styles.isActive : ''}`}
+              className={`${styles.topActionBtn} top-action-btn`}
               data-testid="top-quick-preview-btn"
               data-active={isPreviewActive ? 'true' : 'false'}
               aria-label="打开应用预览"
-              title="打开应用预览"
               onClick={handleOpenPreview}
             >
               <Globe size={14} strokeWidth={1.8} aria-hidden="true" />
@@ -355,11 +352,10 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             <button
               type="button"
               id="topQuickArtifactsBtn"
-              className={`${styles.topActionBtn} top-action-btn ${isArtifactsActive ? styles.isActive : ''}`}
+              className={`${styles.topActionBtn} top-action-btn`}
               data-testid="top-quick-artifacts-btn"
               data-active={isArtifactsActive ? 'true' : 'false'}
               aria-label="打开代码产物与文件"
-              title="打开代码产物与文件"
               onClick={handleOpenArtifacts}
             >
               <FileCode size={14} strokeWidth={1.8} aria-hidden="true" />
@@ -385,25 +381,21 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             />
           </div>
 
-          {/* 边缘右坞开关 */}
-          <Tooltip
-            content={resolveUnitChromeToolTip(dockLabel)}
-            side={UNIT_CHROME_TOOL_TIP_SIDE}
-          >
-            <IconButton
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={`${styles.topActionBtn} ${styles.rightDockToggle} top-action-btn right-dock-toggle`}
-              data-testid="right-dock-toggle"
-              data-active={rightDockCollapsed ? 'false' : 'true'}
-              aria-label={dockLabel}
-              aria-expanded={!rightDockCollapsed}
-              aria-pressed={!rightDockCollapsed}
-              onClick={handleToggleRightDock}
-              icon={<IconSidebarRight size={15} aria-hidden />}
-            />
-          </Tooltip>
+          {/* 按钮 4: 仅当右侧工作区收起时，在对话顶栏展示展开按钮 (◫ PanelRight) */}
+          {rightDockCollapsed && (
+            <Tooltip content={dockLabel} side={UNIT_CHROME_TOOL_TIP_SIDE}>
+              <button
+                type="button"
+                id="topQuickDockBtn"
+                className={`${styles.topActionBtn} top-action-btn top-side-panel-btn`}
+                data-testid="top-quick-dock-btn"
+                aria-label={dockLabel}
+                onClick={handleToggleRightDock}
+              >
+                <PanelRight size={14} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+            </Tooltip>
+          )}
         </div>
       </header>
     );
