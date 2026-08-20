@@ -26,7 +26,12 @@ import {
   openToolInActiveTab,
   type LayoutLeaf,
 } from '../../store/storeAccess';
-import { Tooltip, Menu } from '../ui';
+import { Tooltip } from '../ui';
+import {
+  SmartExpandablePanel,
+  type MenuItem,
+} from '../ui/SmartExpandablePanel';
+import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import { viewRegistry } from '../../services/view-registry';
 import styles from './LeafToolTabStrip.module.css';
 
@@ -121,10 +126,12 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     useLayoutEffect(() => {
       checkOverflow();
       const el = tabsTrackRef.current;
-      if (!el || typeof ResizeObserver === 'undefined') return;
-      const ro = new ResizeObserver(() => checkOverflow());
-      ro.observe(el);
-      return () => ro.disconnect();
+      if (!el) return;
+      const ro = ResizeObserverManager.getInstance();
+      ro.observe(el, checkOverflow);
+      return () => {
+        ro.unobserve(el, checkOverflow);
+      };
     }, [checkOverflow, tabs.length]);
 
     // 滚轮横向滑动
@@ -280,7 +287,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
           type="button"
           className={btnClass}
           aria-label="添加功能面板"
-          title="添加工具标签"
         >
           <Plus size={13} strokeWidth={2} />
         </button>
@@ -294,23 +300,26 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         );
       }
 
+      const addMenuItems: MenuItem[] = availablePanels.map((pid) => {
+        const Icon = viewRegistry.getIcon(pid);
+        return {
+          id: pid,
+          label: viewRegistry.getTitle(pid),
+          icon: Icon ? <Icon size={13} /> : undefined,
+          onSelect: () => openPanel(pid),
+        };
+      });
+
       return (
-        <Menu
+        <SmartExpandablePanel
           position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
           trigger={
             <Tooltip content="添加工具标签" side="bottom">
               {btnElement}
             </Tooltip>
           }
-          options={availablePanels.map((pid) => {
-            const Icon = viewRegistry.getIcon(pid);
-            return {
-              id: pid,
-              label: viewRegistry.getTitle(pid),
-              icon: Icon ? <Icon size={13} /> : undefined,
-              onClick: () => openPanel(pid),
-            };
-          })}
+          items={addMenuItems}
+          className={styles.leafToolAddPanel}
         />
       );
     };
@@ -378,7 +387,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                     }}
                     data-tool-tab-id={tabId}
                     data-tab-id={tabId}
-                    title={label}
                   >
                     {Icon && (
                       <span className={`${styles.tabIcon} side-panel-tab-icon`}>
@@ -421,7 +429,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 className={`${styles.sideBtn} ${styles.btnMaximize} side-panel-btn side-panel-btn-maximize`}
                 onClick={handleToggleMaximize}
                 aria-label={isMaximized ? '恢复面板' : '最大化面板'}
-                title={isMaximized ? '恢复面板' : '最大化面板'}
               >
                 {isMaximized ? (
                   <Minimize2 size={14} strokeWidth={2} />
@@ -436,7 +443,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 className={`${styles.sideBtn} ${styles.btnCollapse} side-panel-btn side-panel-btn-collapse`}
                 onClick={handleCollapse}
                 aria-label="收起右侧面板"
-                title="收起右侧面板"
               >
                 <IconSidebarRight size={14} />
               </button>

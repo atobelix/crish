@@ -1,6 +1,11 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import menuStyles from '../ui/Menu/Menu.module.css';
-import styles from './ProjectPickerMenu.module.css';
+import React, { useMemo, useState, useCallback } from 'react';
+import {
+  Folder,
+  FolderOpen,
+  FolderPlus,
+  Plus,
+  Trash2,
+} from 'lucide-react';
 import {
   addProjectFromPath,
   GENERAL_FOLDER,
@@ -14,17 +19,13 @@ import {
 import { openDirectoryDialogSafe } from '../../api/openDirectoryDialog';
 import { getSessionStoreState, setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../store/storeAccess';
-import {
-  Check,
-  ChevronRight,
-  Folder,
-  Plus,
-  Search,
-  Trash2,
-} from 'lucide-react';
-import { Button, ConfirmDialog, Input, Menu, Tooltip } from '../ui';
+import { ConfirmDialog, Tooltip } from '../ui';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
-import { SafeTriangleTracker } from '../ui/internal/SafeTriangle';
+import {
+  SmartExpandablePanel,
+  type MenuItem,
+} from '../ui/SmartExpandablePanel';
+import styles from './ProjectPickerMenu.module.css';
 
 /** 草稿态切项目：同步 draftFolder，不 mint 真会话 */
 function syncDraftFolderOnProjectChange(folder: string): void {
@@ -33,15 +34,7 @@ function syncDraftFolderOnProjectChange(folder: string): void {
   }
 }
 
-function pickerItemClass(
-  ...extra: Array<string | false | null | undefined>
-): string {
-  return [menuStyles.menuItem, styles.item, ...extra]
-    .filter((c): c is string => typeof c === 'string' && c.length > 0)
-    .join(' ');
-}
-
-type Props = {
+export interface ProjectPickerMenuProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** @deprecated 优先使用 onOpenChange(false)。@see onOpenChange */
@@ -51,9 +44,9 @@ type Props = {
   children: React.ReactNode;
   onContentMouseEnter?: () => void;
   onContentMouseLeave?: () => void;
-};
+}
 
-export const ProjectPickerMenu: React.FC<Props> = ({
+export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
   open,
   onOpenChange,
   onClose,
@@ -62,46 +55,19 @@ export const ProjectPickerMenu: React.FC<Props> = ({
   onContentMouseEnter,
   onContentMouseLeave,
 }) => {
-  const [q, setQ] = useState('');
-  const [projects, setProjects] = useState<ProjectEntry[]>([]);
-  const [showAddCascade, setShowAddCascade] = useState(false);
+  const [projectListVersion, setProjectListVersion] = useState(0);
   const [busy, setBusy] = useState(false);
   const activeId = getActiveProjectId();
   const [confirmGate, renderConfirmGate] = useConfirmGate();
 
-  const safeTrackerRef = useRef(new SafeTriangleTracker(300));
-  const addBtnRef = useRef<HTMLButtonElement | null>(null);
-  const cascadeRef = useRef<HTMLDivElement | null>(null);
-  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const refresh = useCallback(() => {
+    setProjectListVersion((v) => v + 1);
+  }, []);
 
-  const refresh = () => setProjects(listProjects());
-
-  useEffect(() => {
-    if (!open) {
-      setShowAddCascade(false);
-      safeTrackerRef.current.reset();
-      return;
-    }
-    refresh();
-    setShowAddCascade(false);
-    setQ('');
-  }, [open]);
-
-  const filtered = projects.filter(
-    (p) =>
-      !q.trim() ||
-      p.name.toLowerCase().includes(q.toLowerCase()) ||
-      p.path.toLowerCase().includes(q.toLowerCase())
-  );
-
-  const handleOpenChange = (nextOpen: boolean) => {
-    onOpenChange(nextOpen);
-    if (!nextOpen) {
-      setShowAddCascade(false);
-      safeTrackerRef.current.reset();
-      onClose?.();
-    }
-  };
+  const projects = useMemo(() => {
+    void projectListVersion;
+    return listProjects();
+  }, [projectListVersion, open]);
 
   const handlePickFolder = async () => {
     setBusy(true);
@@ -110,10 +76,9 @@ export const ProjectPickerMenu: React.FC<Props> = ({
       if (path) {
         addProjectFromPath(path);
         onChanged?.();
-        handleOpenChange(false);
+        refresh();
+        onOpenChange(false);
       }
-    } catch {
-      // quiet fail
     } finally {
       setBusy(false);
     }
@@ -126,10 +91,9 @@ export const ProjectPickerMenu: React.FC<Props> = ({
       if (path) {
         addProjectFromPath(path);
         onChanged?.();
-        handleOpenChange(false);
+        refresh();
+        onOpenChange(false);
       }
-    } catch {
-      // quiet fail
     } finally {
       setBusy(false);
     }
@@ -147,270 +111,119 @@ export const ProjectPickerMenu: React.FC<Props> = ({
     onChanged?.();
   };
 
-  const pickProject = (id: string) => {
-    openProject(id);
-    syncDraftFolderOnProjectChange(id);
-    onChanged?.();
-    handleOpenChange(false);
-  };
+  const pickProject = useCallback(
+    (id: string) => {
+      openProject(id);
+      syncDraftFolderOnProjectChange(id);
+      onChanged?.();
+      onOpenChange(false);
+    },
+    [onChanged, onOpenChange]
+  );
 
-  const handleAddCascadeLeave = useCallback((e: React.MouseEvent) => {
-    if (showAddCascade && cascadeRef.current) {
-      const subRect = cascadeRef.current.getBoundingClientRect();
-      safeTrackerRef.current.enter(
-        { x: e.clientX, y: e.clientY },
-        {
-          left: subRect.left,
-          top: subRect.top,
-          right: subRect.right,
-          bottom: subRect.bottom,
+  // 纯数据驱动 Schema 构造
+  const menuItems = useMemo<MenuItem[]>(() => {
+    const projectItems: MenuItem[] = projects.map((p) => {
+      const isSelected = p.id === activeId;
+      return {
+        id: `proj:${p.id}`,
+        type: 'selectable',
+        label: p.name,
+        sublabel: p.path,
+        icon: <Folder size={14} />,
+        selected: isSelected,
+        searchKeywords: `${p.name} ${p.path}`,
+        onSelect: () => pickProject(p.id),
+        trailingAction:
+          p.id !== GENERAL_FOLDER ? (
+            <Tooltip content="从列表移除项目">
+              <button
+                type="button"
+                className={styles.rowDeleteBtn}
+                aria-label={`从列表移除项目 ${p.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void handleRemoveProject(p);
+                }}
+              >
+                <Trash2 size={12} />
+              </button>
+            </Tooltip>
+          ) : undefined,
+      };
+    });
+
+    const isGeneralSelected = !activeId || activeId === GENERAL_FOLDER;
+
+    return [
+      // 1. 项目列表组
+      {
+        id: 'project-list-group',
+        type: 'group',
+        isSelectableList: true,
+        items: projectItems,
+      },
+      // 2. 分割线
+      {
+        id: 'sep-1',
+        type: 'divider',
+      },
+      // 3. 通用项目固定选项
+      {
+        id: 'proj:general',
+        type: 'selectable',
+        label: '通用项目',
+        icon: <Folder size={14} />,
+        selected: isGeneralSelected,
+        onSelect: () => {
+          setNoProject();
+          syncDraftFolderOnProjectChange(GENERAL_FOLDER);
+          onChanged?.();
+          onOpenChange(false);
         },
-        'right'
-      );
-    }
-  }, [showAddCascade]);
-
-  const handleOtherRowEnter = useCallback((e?: React.MouseEvent) => {
-    if (showAddCascade && safeTrackerRef.current.isGraceActive() && e) {
-      if (safeTrackerRef.current.check({ x: e.clientX, y: e.clientY })) {
-        return;
-      }
-    }
-    setShowAddCascade(false);
-    safeTrackerRef.current.reset();
-  }, [showAddCascade]);
+      },
+      // 4. 添加项目级联子菜单（带有 Safe-Aim 轨迹保护）
+      {
+        id: 'action:add-project',
+        type: 'submenu',
+        label: '添加项目',
+        icon: <Plus size={14} />,
+        children: [
+          {
+            id: 'action:open-local',
+            label: '打开本地项目...',
+            icon: <FolderOpen size={14} />,
+            disabled: busy,
+            onSelect: handlePickFolder,
+          },
+          {
+            id: 'action:create-empty',
+            label: '新建空白项目...',
+            icon: <FolderPlus size={14} />,
+            disabled: busy,
+            onSelect: handleCreateEmptyProject,
+          },
+        ],
+      },
+    ];
+  }, [projects, activeId, busy, pickProject, onChanged, onOpenChange]);
 
   return (
     <>
       {renderConfirmGate(<ConfirmDialog />)}
-      <Menu
-        openState={{ open, onOpenChange: handleOpenChange }}
+      <SmartExpandablePanel
+        open={open}
+        onOpenChange={onOpenChange}
+        onClose={onClose}
         trigger={children}
+        items={menuItems}
+        enableSearch={true}
+        searchPlaceholder="搜索项目"
         position={{ side: 'bottom', align: 'center', sideOffset: 6 }}
-        panel={{
-          contentClassName: styles.pickerPanel,
-          contentStyle: { overflow: 'visible' },
-        }}
-      >
-        <div
-          role="menu"
-          aria-label="选择项目"
-          onMouseEnter={onContentMouseEnter}
-          onMouseLeave={onContentMouseLeave}
-        >
-          <div
-            className={styles.searchWrapper}
-            onMouseEnter={handleOtherRowEnter}
-          >
-            <Input
-              variant="search"
-              size="sm"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowDown') {
-                  e.preventDefault();
-                  const firstItem =
-                    scrollAreaRef.current?.querySelector<HTMLButtonElement>(
-                      '[role="menuitem"]'
-                    ) || addBtnRef.current;
-                  firstItem?.focus();
-                } else if (e.key === 'Enter') {
-                  if (filtered.length > 0 && filtered[0]) {
-                    e.preventDefault();
-                    pickProject(filtered[0].id);
-                  }
-                }
-              }}
-              placeholder="搜索项目"
-              aria-label="搜索项目"
-              autoFocus={open}
-              prefixIcon={<Search size={13} />}
-            />
-          </div>
-
-          <div
-            ref={scrollAreaRef}
-            className={styles.scrollArea}
-            onMouseEnter={handleOtherRowEnter}
-          >
-            {filtered.map((p) => {
-              const selected = p.id === activeId;
-              return (
-                <div key={p.id} className={styles.projectRow}>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    aria-current={selected ? 'true' : undefined}
-                    className={pickerItemClass(styles.itemWithTrail)}
-                    onClick={() => pickProject(p.id)}
-                  >
-                    <span
-                      className={`${menuStyles.menuItemIcon} ${styles.itemIcon}`}
-                      aria-hidden="true"
-                    >
-                      <Folder size={14} />
-                    </span>
-                    <span className={menuStyles.menuItemLabel}>{p.name}</span>
-                    {selected ? (
-                      <Check size={13} className={styles.rowCheck} />
-                    ) : null}
-                  </button>
-                  {p.id !== GENERAL_FOLDER && (
-                    <Tooltip content="从列表移除项目">
-                      <Button
-                        type="button"
-                        variant="danger"
-                        size="sm"
-                        className={styles.rowDeleteBtn}
-                        aria-label={`从列表移除项目 ${p.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          void handleRemoveProject(p);
-                        }}
-                        icon={<Trash2 size={12} />}
-                      />
-                    </Tooltip>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className={menuStyles.separator} />
-
-          <button
-            type="button"
-            role="menuitem"
-            aria-current={!activeId ? 'true' : undefined}
-            className={pickerItemClass(!activeId && styles.itemWithTrail)}
-            onMouseEnter={handleOtherRowEnter}
-            onClick={() => {
-              setNoProject();
-              syncDraftFolderOnProjectChange(GENERAL_FOLDER);
-              onChanged?.();
-              handleOpenChange(false);
-            }}
-          >
-            <span
-              className={`${menuStyles.menuItemIcon} ${styles.itemIcon}`}
-              aria-hidden="true"
-            >
-              <Folder size={14} />
-            </span>
-            <span className={menuStyles.menuItemLabel}>通用项目</span>
-            {!activeId ? <Check size={13} className={styles.rowCheck} /> : null}
-          </button>
-
-          <div
-            className={styles.addCascadeWrapper}
-            onMouseEnter={() => {
-              setShowAddCascade(true);
-              safeTrackerRef.current.reach();
-            }}
-            onMouseLeave={handleAddCascadeLeave}
-          >
-            <button
-              ref={addBtnRef}
-              type="button"
-              role="menuitem"
-              className={pickerItemClass()}
-              aria-haspopup="menu"
-              aria-expanded={showAddCascade}
-              onClick={() => setShowAddCascade((prev) => !prev)}
-              onKeyDown={(e) => {
-                if (e.key === 'ArrowRight' || e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setShowAddCascade(true);
-                  requestAnimationFrame(() => {
-                    cascadeRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
-                  });
-                }
-              }}
-            >
-              <span className={menuStyles.menuItemIcon} aria-hidden="true">
-                <Plus size={14} />
-              </span>
-              <span className={menuStyles.menuItemLabel}>添加项目</span>
-              <span className={menuStyles.menuItemHint} aria-hidden="true">
-                <ChevronRight size={13} />
-              </span>
-            </button>
-
-            {showAddCascade && (
-              <div
-                ref={cascadeRef}
-                className={`${menuStyles.menuContent} ${styles.cascadeSubmenu}`}
-                role="menu"
-                aria-label="添加项目"
-                onMouseEnter={() => safeTrackerRef.current.reach()}
-                onKeyDown={(e) => {
-                  if (e.key === 'ArrowLeft' || e.key === 'Escape') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setShowAddCascade(false);
-                    addBtnRef.current?.focus();
-                    return;
-                  }
-                  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const cascadeItems = Array.from(
-                      cascadeRef.current?.querySelectorAll<HTMLButtonElement>(
-                        '[role="menuitem"]:not([disabled])'
-                      ) ?? []
-                    );
-                    if (cascadeItems.length === 0) return;
-                    const cur =
-                      document.activeElement instanceof HTMLButtonElement
-                        ? cascadeItems.indexOf(document.activeElement)
-                        : -1;
-                    let next = 0;
-                    if (e.key === 'ArrowDown')
-                      next = cur < 0 ? 0 : (cur + 1) % cascadeItems.length;
-                    else if (e.key === 'ArrowUp')
-                      next =
-                        cur < 0
-                          ? cascadeItems.length - 1
-                          : (cur - 1 + cascadeItems.length) %
-                            cascadeItems.length;
-                    else if (e.key === 'Home') next = 0;
-                    else if (e.key === 'End') next = cascadeItems.length - 1;
-                    cascadeItems[next]?.focus();
-                  }
-                }}
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={pickerItemClass(
-                    busy ? menuStyles.menuItemDisabled : undefined
-                  )}
-                  disabled={busy}
-                  onClick={handlePickFolder}
-                >
-                  <span className={menuStyles.menuItemLabel}>
-                    打开本地项目...
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={pickerItemClass(
-                    busy ? menuStyles.menuItemDisabled : undefined
-                  )}
-                  disabled={busy}
-                  onClick={handleCreateEmptyProject}
-                >
-                  <span className={menuStyles.menuItemLabel}>
-                    新建空白项目...
-                  </span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </Menu>
+        className={styles.pickerPanel}
+        onMouseEnter={onContentMouseEnter}
+        onMouseLeave={onContentMouseLeave}
+      />
     </>
   );
 };

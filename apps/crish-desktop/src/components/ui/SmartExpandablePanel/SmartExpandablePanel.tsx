@@ -157,42 +157,44 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   if (anchor) {
     renderedTrigger = <Popover.Anchor virtualRef={anchor} />;
   } else if (trigger) {
-    let actualTrigger = trigger;
+    let actualTrigger: React.ReactNode = trigger;
     let tipContent: React.ReactNode = null;
     let tipSide: 'top' | 'bottom' | 'left' | 'right' = 'bottom';
 
     if (
       React.isValidElement(trigger) &&
       typeof trigger.type !== 'string' &&
-      (trigger.props as { content?: React.ReactNode; children?: React.ReactNode }).content !==
-        undefined &&
-      (trigger.props as { content?: React.ReactNode; children?: React.ReactNode }).children !==
-        undefined
+      'content' in (trigger.props as Record<string, unknown>) &&
+      'children' in (trigger.props as Record<string, unknown>)
     ) {
-      tipContent = (trigger.props as { content?: React.ReactNode }).content;
-      tipSide =
-        (trigger.props as { side?: 'top' | 'bottom' | 'left' | 'right' }).side || 'bottom';
-      actualTrigger =
-        ((trigger as React.ReactElement).props as { children?: React.ReactNode }).children ?? trigger;
+      const p = trigger.props as {
+        content?: React.ReactNode;
+        side?: 'top' | 'bottom' | 'left' | 'right';
+        children?: React.ReactNode;
+      };
+      tipContent = p.content ?? null;
+      tipSide = p.side || 'bottom';
+      actualTrigger = p.children ?? trigger;
     }
 
-    const clonedTrigger = React.isValidElement(actualTrigger)
-      ? React.cloneElement(actualTrigger as React.ReactElement<Record<string, unknown>>, {
+    if (React.isValidElement(actualTrigger)) {
+      const clonedElement = React.cloneElement(
+        actualTrigger as React.ReactElement<{ ref?: unknown }>,
+        {
           ref: (node: HTMLElement | null) => {
             triggerRef.current = node;
           },
-        })
-      : actualTrigger;
+        }
+      );
 
-    if (React.isValidElement(clonedTrigger)) {
       renderedTrigger = (
         <Popover.Trigger asChild>
-          {tipContent != null && tipContent !== false && React.isValidElement(clonedTrigger) ? (
+          {tipContent != null ? (
             <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
-              {clonedTrigger}
+              {clonedElement}
             </Tooltip>
           ) : (
-            (clonedTrigger as React.ReactElement)
+            clonedElement
           )}
         </Popover.Trigger>
       );

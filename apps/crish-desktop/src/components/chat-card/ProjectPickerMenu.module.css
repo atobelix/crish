@@ -1,16 +1,16 @@
-/* 空态项目选择：壳皮走 ui/Menu .menuContent；项走 .menuItem + 8px 同心圆角。 */
+/* ProjectPickerMenu：基于 SmartExpandablePanel 契约与 Design Tokens */
 
 .pickerPanel {
   width: 230px;
-  --item-radius: var(--sep-item-radius, var(--button-radius, 8px));
+  --item-radius: var(--radius-md, 6px);
 }
 
 .item {
   appearance: none;
   -webkit-appearance: none;
   position: relative;
-  border-radius: var(--sep-item-radius, var(--button-radius, 8px));
-  min-height: var(--sep-item-height, 28px);
+  border-radius: var(--radius-md, 6px);
+  min-height: 28px;
 }
 
 .itemWithTrail {
@@ -33,16 +33,12 @@
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--sep-accent-color, #10b981);
+  color: var(--sep-accent-check, #059669);
   pointer-events: none;
   flex-shrink: 0;
 }
 
 .rowDeleteBtn {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
   border: none;
   background: transparent;
   color: var(--sep-text-muted, #8b8780);
@@ -66,13 +62,11 @@
   background-color: var(--sep-danger-light, hsl(0 84% 60% / 0.08));
 }
 
-.projectRow:hover .rowDeleteBtn {
+div:hover > button > div > .rowDeleteBtn,
+div:hover > .rowDeleteBtn,
+:global(.sep-item-wrapper):hover .rowDeleteBtn,
+[class*="itemWrapper"]:hover .rowDeleteBtn {
   opacity: 1;
-}
-
-.projectRow:hover .rowCheck {
-  opacity: 0;
-  display: none;
 }
 
 .scrollArea {
@@ -85,7 +79,7 @@
 }
 
 .searchWrapper {
-  padding: 2px 2px 4px;
+  padding: 0;
   width: 100%;
 }
 
@@ -94,18 +88,18 @@
   width: 100%;
 }
 
-/* 级联壳皮复用 ui/Menu .menuContent；此处负责相对主面板定位与同心圆角 */
+/* 级联子卡片：8px 外圆角 / 4px 内衬 / 4px 条目 */
 .cascadeSubmenu {
   position: absolute;
   left: 100%;
   top: 0;
   margin-left: 4px;
   min-width: 160px;
-  border-radius: var(--sep-radius-outer, 14px);
+  border-radius: var(--sep-submenu-radius, 8px);
   border: 1px solid var(--sep-border-color, #e2dfd9);
   background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
   backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
   -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
   box-shadow: var(--sep-shadow);
-  padding: var(--sep-padding, 6px);
+  padding: 4px;
 }

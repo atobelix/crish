@@ -89,7 +89,7 @@
 }
 
 .tab:hover {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
   color: var(--text-primary);
 }
 
@@ -156,7 +156,7 @@
 
 .tabCloseBtn:hover {
   opacity: 1;
-  background: var(--tint-strong, hsl(0 0% 0% / 0.08));
+  background: var(--sidebar-active);
   color: var(--text-primary);
   transform: scale(1.08);
 }
@@ -229,7 +229,7 @@
 }
 
 .addBtn:hover {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
   color: var(--text-primary);
 }
 
@@ -298,7 +298,7 @@
 }
 
 .sideBtn:hover {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
   color: var(--text-primary);
 }
 
@@ -363,7 +363,7 @@
 }
 
 .toolbarBtn:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
   color: var(--text-primary);
 }
 
@@ -442,7 +442,7 @@
 }
 
 .launcherCard:hover {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
   border-color: var(--border-color);
   transform: translateY(-1px);
   box-shadow: 0 2px 8px var(--tint-subtle, hsl(0 0% 0% / 0.04));
@@ -496,4 +496,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.leafToolAddPanel {
+  min-width: 140px;
 }
