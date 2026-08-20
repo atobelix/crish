@@ -49,6 +49,7 @@ export interface LeafToolTabStripProps {
   onCollapse?: () => void;
   isMaximized?: boolean;
   showNavToolbar?: boolean;
+  className?: string;
 }
 
 export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
@@ -65,6 +66,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     onCollapse,
     isMaximized: propIsMaximized,
     showNavToolbar,
+    className,
   }) => {
     const leafId = propLeafId ?? leaf?.id ?? '';
     const sessionId = propSessionId ?? leaf?.sessionId ?? null;
@@ -327,12 +329,12 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     };
 
     return (
-      <div
+      <header
         className={`${styles.container} ${
-          hasOverflow ? styles.hasOverflow : ''
-        } ${isEmpty ? styles.isEmpty : ''} ${
-          isMaximized ? styles.isMaximized : ''
-        } chat-side-panel`}
+          className || ''
+        } ${hasOverflow ? styles.hasOverflow : ''} ${
+          isEmpty ? styles.isEmpty : ''
+        } ${isMaximized ? styles.isMaximized : ''} chat-side-panel`}
         data-leaf-tool-tab-strip="true"
         data-tab-strip-leaf-id={leafId}
         data-tab-count={tabs.length}
@@ -341,8 +343,8 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         data-is-maximized={isMaximized ? 'true' : 'false'}
         data-is-empty={isEmpty ? 'true' : 'false'}
       >
-        {/* Row 1: Tab Strip (30px 高度) */}
-        <header
+        {/* Row 1: Tab Strip (38px 高度) */}
+        <div
           className={`${styles.header} ${
             hasOverflow ? styles.hasOverflow : ''
           } side-panel-tab-header`}
@@ -453,14 +455,14 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
               </button>
             </Tooltip>
           </div>
-        </header>
+        </div>
 
         {/* Row 2: 导航工具条 (32px 高度，特定视图展示，空态隐藏) */}
         {shouldShowNavToolbar && <SidePanelNavToolbar />}
 
         {/* 空态 Launcher Hub 居中卡片 (0 个 Tab 时展示) */}
         {isEmpty && <SidePanelLauncherHub onOpenPanel={openPanel} />}
-      </div>
+      </header>
     );
   }
 );

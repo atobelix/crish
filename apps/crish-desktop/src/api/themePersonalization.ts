@@ -304,12 +304,9 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
       }
     }
 
-    if (!isDarkPreset && p.skin !== 'cream') {
-      // 🌟 浅色模式表面层级重塑：
-      // 1. 卡片背景（bgCard）混入 10.0% 的温润色彩结晶，呈现极为素雅高级的轻暖白。
-      // 2. 下拉/级联选择面板（bgElevated）混入 16.0% 的温润色彩结晶到 bgCard 基础中！
-      bgCard = `color-mix(in srgb, ${vibrantTint} 10.0%, ${bgCard})`;
-      bgElevated = `color-mix(in srgb, ${vibrantTint} 16.0%, ${bgCard})`;
+    if (!isDarkPreset && p.skin === 'cream') {
+      bgCard = `color-mix(in srgb, ${vibrantTint} 6.0%, ${bgCard})`;
+      bgElevated = `color-mix(in srgb, ${vibrantTint} 10.0%, ${bgCard})`;
     }
 
     // --- 🚨 动态注入 Diff/状态高亮色对比度补偿变量 🚨 ---

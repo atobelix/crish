@@ -7,24 +7,18 @@ html[data-theme='light'] {
    * Premium Light Theme
    * Pure neutral/monochrome greys
    */
-  --bg-primary: hsl(35, 12%, 94%); /*             */
-  --bg-secondary: hsl(35, 12%, 91.5%); /*     /  /           */
-  --bg-tertiary: hsl(35, 12%, 88.5%); /*                */
+  --bg-primary: #f4f5f7; /* 外层底板大矩形背景 (Shell) */
+  --bg-secondary: #eaecee; /* 侧边栏/辅助层背景 */
+  --bg-tertiary: #e2e5e8; /* 悬浮/深一层背景 */
   --bg-hover: var(--tint-hover); /*    tint         */
   --bg-active: var(--tint-active); /*    tint         */
-  --bg-card: hsl(
-    35,
-    10%,
-    98%
-  ); /*                        */
-  --bg-elevated: hsl(
-    35,
-    8%,
-    100%
-  ); /*                          */
+  --bg-card: #ffffff; /* 小矩形/卡片纯白底色 (Paper) */
+  --bg-elevated: #ffffff; /* 浮起卡片纯白底色 */
   --bg-workspace: var(--bg-primary);
   --shell-chrome-bg: var(--bg-secondary);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
+  /* 外壳留白：叶子卡片与窗口边缘之间的落差，密度档位可覆写 */
+  --shell-gutter: var(--space-2, 8px);
   --card-header-bg: var(--bg-secondary);
   --bg-subtle: var(--bg-secondary);
   --text-primary: #111111;
@@ -612,6 +606,8 @@ html[data-theme='dark'] {
   --bg-workspace: var(--bg-primary);
   --shell-chrome-bg: var(--bg-secondary);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
+  /* 外壳留白：叶子卡片与窗口边缘之间的落差，密度档位可覆写 */
+  --shell-gutter: var(--space-2, 8px);
   --text-primary: #f0f0f0;
   --text-secondary: #a3a3a3;
   /*    6.1       08     7  dark text-tertiary 62%     3.59:1
