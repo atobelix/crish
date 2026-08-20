@@ -72,6 +72,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({
   const safeTrackerRef = useRef(new SafeTriangleTracker(300));
   const addBtnRef = useRef<HTMLButtonElement | null>(null);
   const cascadeRef = useRef<HTMLDivElement | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   const refresh = () => setProjects(listProjects());
 
@@ -206,6 +207,21 @@ export const ProjectPickerMenu: React.FC<Props> = ({
               size="sm"
               value={q}
               onChange={(e) => setQ(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  const firstItem =
+                    scrollAreaRef.current?.querySelector<HTMLButtonElement>(
+                      '[role="menuitem"]'
+                    ) || addBtnRef.current;
+                  firstItem?.focus();
+                } else if (e.key === 'Enter') {
+                  if (filtered.length > 0 && filtered[0]) {
+                    e.preventDefault();
+                    pickProject(filtered[0].id);
+                  }
+                }
+              }}
               placeholder="搜索项目"
               aria-label="搜索项目"
               autoFocus={open}
@@ -214,6 +230,7 @@ export const ProjectPickerMenu: React.FC<Props> = ({
           </div>
 
           <div
+            ref={scrollAreaRef}
             className={styles.scrollArea}
             onMouseEnter={handleOtherRowEnter}
           >
@@ -333,6 +350,33 @@ export const ProjectPickerMenu: React.FC<Props> = ({
                     e.stopPropagation();
                     setShowAddCascade(false);
                     addBtnRef.current?.focus();
+                    return;
+                  }
+                  if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const cascadeItems = Array.from(
+                      cascadeRef.current?.querySelectorAll<HTMLButtonElement>(
+                        '[role="menuitem"]:not([disabled])'
+                      ) ?? []
+                    );
+                    if (cascadeItems.length === 0) return;
+                    const cur =
+                      document.activeElement instanceof HTMLButtonElement
+                        ? cascadeItems.indexOf(document.activeElement)
+                        : -1;
+                    let next = 0;
+                    if (e.key === 'ArrowDown')
+                      next = cur < 0 ? 0 : (cur + 1) % cascadeItems.length;
+                    else if (e.key === 'ArrowUp')
+                      next =
+                        cur < 0
+                          ? cascadeItems.length - 1
+                          : (cur - 1 + cascadeItems.length) %
+                            cascadeItems.length;
+                    else if (e.key === 'Home') next = 0;
+                    else if (e.key === 'End') next = cascadeItems.length - 1;
+                    cascadeItems[next]?.focus();
                   }
                 }}
               >

@@ -2,11 +2,12 @@
  * apps/crish-desktop/src/components/ui/internal/SafeAimEngine.ts
  *
  * SafeAimEngine - Zero-Canvas SVG Polygon Safe-Triangle Hover Protection Engine
- * 严格对齐 reference/smart-expandable-panel/js/safe-aim.js 规范：
+ * 严格对齐 reference/smart-expandable-panel/js/safe-aim.js 与 02-pixel-perfect-implementation-plan.md §7.2 规范：
  * 1. 维护单例 SVG 虚拟多边形碰撞检测层（#sepSafeAimOverlay），零 Canvas 额外渲染开销；
  * 2. 追踪鼠标轨迹历史（4 帧队列），计算光标运动趋势向量；
  * 3. 采用重心坐标（Barycentric Coordinates）与 2D 叉积算法 O(1) 判定光标是否在 Safe Triangle 保护区；
- * 4. 彻底消除鼠标斜向划入二级级联子菜单时的闪烁与误关闭。
+ * 4. 支持四向方位 (left / right / top / bottom) 级联展开与动态多边形渲染；
+ * 5. 彻底消除鼠标斜向划入二级级联子菜单时的闪烁与误关闭。
  */
 
 export interface Point2D {
@@ -19,6 +20,8 @@ export interface SafeAimOptions {
   debug?: boolean;
 }
 
+export type SubmenuPlacement = 'left' | 'right' | 'top' | 'bottom';
+
 export class SafeAimEngine {
   private static instance: SafeAimEngine | null = null;
 
@@ -26,6 +29,7 @@ export class SafeAimEngine {
   public debug: boolean;
   public activeSubmenu: HTMLElement | null = null;
   public activeTriggerItem: HTMLElement | null = null;
+  public activePlacement: SubmenuPlacement | null = null;
   private mouseHistory: Point2D[] = [];
   private readonly MAX_MOUSE_HISTORY = 4;
 
@@ -53,7 +57,7 @@ export class SafeAimEngine {
     return SafeAimEngine.instance;
   }
 
-  private initSvgOverlay(): void {
+  public initSvgOverlay(): void {
     if (typeof document === 'undefined') return;
     let svg = document.getElementById('sepSafeAimOverlay') as unknown as SVGSVGElement | null;
     if (!svg) {
@@ -92,7 +96,7 @@ export class SafeAimEngine {
     }
   }
 
-  private onMouseMove(e: MouseEvent): void {
+  public onMouseMove(e: { clientX: number; clientY: number }): void {
     this.mouseHistory.push({ x: e.clientX, y: e.clientY });
     if (this.mouseHistory.length > this.MAX_MOUSE_HISTORY) {
       this.mouseHistory.shift();
@@ -112,26 +116,49 @@ export class SafeAimEngine {
       : this.getRecentMousePos();
   }
 
-  public setSubmenu(triggerItemEl: HTMLElement | null, submenuEl: HTMLElement | null): void {
+  public setSubmenu(
+    triggerItemEl: HTMLElement | null,
+    submenuEl: HTMLElement | null,
+    placement?: SubmenuPlacement
+  ): void {
     this.activeTriggerItem = triggerItemEl;
     this.activeSubmenu = submenuEl;
+    this.activePlacement = placement ?? null;
     this.updatePolygon();
   }
 
   public clearSubmenu(): void {
     this.activeTriggerItem = null;
     this.activeSubmenu = null;
+    this.activePlacement = null;
+    this.mouseHistory = [];
     this.clearPolygon();
   }
 
-  private clearPolygon(): void {
+  public reset(): void {
+    this.clearSubmenu();
+  }
+
+  public setPolygonPoints(p1: Point2D, p2: Point2D, p3: Point2D): void {
+    if (!this.polygonEl) {
+      this.initSvgOverlay();
+    }
+    if (this.polygonEl) {
+      this.polygonEl.setAttribute(
+        'points',
+        `${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`
+      );
+    }
+  }
+
+  public clearPolygon(): void {
     if (this.polygonEl) {
       this.polygonEl.removeAttribute('points');
     }
   }
 
   public updatePolygon(): void {
-    if (!this.enabled || !this.activeSubmenu || !this.polygonEl) {
+    if (!this.enabled || !this.activeSubmenu) {
       this.clearPolygon();
       return;
     }
@@ -143,37 +170,72 @@ export class SafeAimEngine {
     }
 
     const mouse = this.getRecentMousePos();
-    const isSubmenuOnRight = subRect.left >= mouse.x;
+    const placement = this.activePlacement;
 
     let pTop: Point2D;
     let pBottom: Point2D;
-    if (isSubmenuOnRight) {
+
+    if (placement === 'bottom') {
+      pTop = { x: subRect.left, y: subRect.top };
+      pBottom = { x: subRect.right, y: subRect.top };
+    } else if (placement === 'top') {
+      pTop = { x: subRect.left, y: subRect.bottom };
+      pBottom = { x: subRect.right, y: subRect.bottom };
+    } else if (placement === 'left') {
+      pTop = { x: subRect.right, y: subRect.top };
+      pBottom = { x: subRect.right, y: subRect.bottom };
+    } else if (placement === 'right') {
       pTop = { x: subRect.left, y: subRect.top };
       pBottom = { x: subRect.left, y: subRect.bottom };
     } else {
-      pTop = { x: subRect.right, y: subRect.top };
-      pBottom = { x: subRect.right, y: subRect.bottom };
+      // 缺省自适应判定
+      const isSubmenuOnRight = subRect.left >= mouse.x;
+      if (isSubmenuOnRight) {
+        pTop = { x: subRect.left, y: subRect.top };
+        pBottom = { x: subRect.left, y: subRect.bottom };
+      } else {
+        pTop = { x: subRect.right, y: subRect.top };
+        pBottom = { x: subRect.right, y: subRect.bottom };
+      }
     }
 
-    const points = `${mouse.x},${mouse.y} ${pTop.x},${pTop.y} ${pBottom.x},${pBottom.y}`;
-    this.polygonEl.setAttribute('points', points);
+    this.setPolygonPoints(mouse, pTop, pBottom);
   }
 
-  public isPointerInSafeZone(point: Point2D): boolean {
+  public isPointerInSafeZone(
+    point: Point2D,
+    placement?: SubmenuPlacement
+  ): boolean {
     if (!this.enabled || !this.activeSubmenu) return false;
 
     const subRect = this.activeSubmenu.getBoundingClientRect();
     const mouse = this.getPreviousMousePos();
-    const isSubmenuOnRight = subRect.left >= mouse.x;
+    const resolvedPlacement = placement ?? this.activePlacement;
 
     let pTop: Point2D;
     let pBottom: Point2D;
-    if (isSubmenuOnRight) {
+
+    if (resolvedPlacement === 'bottom') {
+      pTop = { x: subRect.left, y: subRect.top };
+      pBottom = { x: subRect.right, y: subRect.top };
+    } else if (resolvedPlacement === 'top') {
+      pTop = { x: subRect.left, y: subRect.bottom };
+      pBottom = { x: subRect.right, y: subRect.bottom };
+    } else if (resolvedPlacement === 'left') {
+      pTop = { x: subRect.right, y: subRect.top };
+      pBottom = { x: subRect.right, y: subRect.bottom };
+    } else if (resolvedPlacement === 'right') {
       pTop = { x: subRect.left, y: subRect.top };
       pBottom = { x: subRect.left, y: subRect.bottom };
     } else {
-      pTop = { x: subRect.right, y: subRect.top };
-      pBottom = { x: subRect.right, y: subRect.bottom };
+      const isSubmenuOnRight = subRect.left >= mouse.x;
+      if (isSubmenuOnRight) {
+        pTop = { x: subRect.left, y: subRect.top };
+        pBottom = { x: subRect.left, y: subRect.bottom };
+      } else {
+        pTop = { x: subRect.right, y: subRect.top };
+        pBottom = { x: subRect.right, y: subRect.bottom };
+      }
     }
 
     return this.pointInTriangle(point, mouse, pTop, pBottom);
@@ -181,6 +243,7 @@ export class SafeAimEngine {
 
   /**
    * 重心坐标系 (Barycentric Coordinates) 三角形内点判定
+   * 采用 float epsilon 容差（1e-6），确保边界点与顶点判定稳定
    */
   public pointInTriangle(p: Point2D, a: Point2D, b: Point2D, c: Point2D): boolean {
     const v0x = c.x - a.x;
@@ -197,17 +260,19 @@ export class SafeAimEngine {
     const dot12 = v1x * v2x + v1y * v2y;
 
     const denom = dot00 * dot11 - dot01 * dot01;
-    if (denom === 0) return false;
+    if (Math.abs(denom) < 1e-9) return false;
 
     const invDenom = 1 / denom;
     const u = (dot11 * dot02 - dot01 * dot12) * invDenom;
     const v = (dot00 * dot12 - dot01 * dot02) * invDenom;
 
-    return u >= 0 && v >= 0 && u + v <= 1;
+    const eps = 1e-6;
+    return u >= -eps && v >= -eps && u + v <= 1 + eps;
   }
 
   public destroy(): void {
     this.detach();
+    this.mouseHistory = [];
     if (this.svgOverlay && this.svgOverlay.parentNode) {
       this.svgOverlay.parentNode.removeChild(this.svgOverlay);
       this.svgOverlay = null;

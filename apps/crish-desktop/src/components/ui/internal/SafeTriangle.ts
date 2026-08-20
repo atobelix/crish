@@ -151,11 +151,12 @@ export class SafeTriangleTracker {
 
     // 同步 SVG 虚拟多边形 (Zero-Canvas Safe-Aim Overlay)
     try {
-      const svg = document.getElementById('sepSafeAimOverlay');
-      const poly = svg?.querySelector('polygon');
-      if (poly && this.triangle) {
-        const [p1, p2, p3] = this.triangle;
-        poly.setAttribute('points', `${p1.x},${p1.y} ${p2.x},${p2.y} ${p3.x},${p3.y}`);
+      if (this.triangle) {
+        SafeAimEngine.getInstance().setPolygonPoints(
+          this.triangle[0],
+          this.triangle[1],
+          this.triangle[2]
+        );
       }
     } catch {
       // quiet fail if not in DOM environment
@@ -207,8 +208,7 @@ export class SafeTriangleTracker {
 
   private clearSvgPolygon(): void {
     try {
-      const poly = document.getElementById('sepSafeAimOverlay')?.querySelector('polygon');
-      if (poly) poly.removeAttribute('points');
+      SafeAimEngine.getInstance().clearPolygon();
     } catch {
       // quiet fail
     }

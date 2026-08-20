@@ -124,8 +124,10 @@ const ModelBadgeSubmenuPortal: React.FC<SubmenuProps> = ({
           cur < 0
             ? items.length - 1
             : (cur - 1 + items.length) % items.length;
+      else if (e.key === 'Home') next = 0;
       else if (e.key === 'End') next = items.length - 1;
       items[next]?.focus({ preventScroll: true });
+      items[next]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   };
 
@@ -430,6 +432,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                     if (
                       (currentSide === 'left' && e.key === 'ArrowLeft') ||
                       (currentSide === 'right' && e.key === 'ArrowRight') ||
+                      e.key === 'ArrowRight' ||
                       e.key === 'Enter' ||
                       e.key === ' '
                     ) {

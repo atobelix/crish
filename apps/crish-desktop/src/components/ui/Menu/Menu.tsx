@@ -115,6 +115,13 @@ export interface MenuProps {
   panel?: MenuPanelConfig;
   /** 面板外侧/键盘交互回调 */
   outsideHandlers?: MenuOutsideHandlers;
+  /** 自定义键盘事件拦截器（优先触发） */
+  onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
+  /** 级联子菜单展开/收起控制钩子（WAI-ARIA 级联漫游协议） */
+  cascade?: {
+    onSubmenuExpand?: (index: number, optionOrElement: unknown) => void;
+    onSubmenuCollapse?: () => void;
+  };
 }
 
 /**
@@ -133,6 +140,8 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   openState,
   panel,
   outsideHandlers,
+  onKeyDown,
+  cascade,
 }: MenuProps) {
   // 定位配置（缺省值与原扁平 props 保持一致）
   const align = position?.align ?? 'end';
@@ -226,6 +235,8 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   // 键盘 ↑ ↓ 漫游与 Enter / Esc 支持（08-步5 T4-4：children 模式双通道漫游）
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
+      onKeyDown?.(e);
+      if (e.defaultPrevented) return;
       handleMenuKeyDown(e, {
         isOpen,
         options,
@@ -234,9 +245,11 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         setFocusedIndex,
         onSelect,
         handleOpenChange,
+        onSubmenuExpand: cascade?.onSubmenuExpand,
+        onSubmenuCollapse: cascade?.onSubmenuCollapse,
       });
     },
-    [isOpen, options, focusedIndex, onSelect, handleOpenChange]
+    [isOpen, options, focusedIndex, onSelect, handleOpenChange, onKeyDown, cascade]
   );
 
   // 漫游索引变化时把焦点移动到对应项并滚动跟随（F7 F4：
