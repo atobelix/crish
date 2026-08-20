@@ -40,17 +40,27 @@
   pointer-events: none;
 }
 
+.tickSlot {
+  width: 100%;
+  min-height: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  pointer-events: none;
+  background: transparent;
+}
+
 .tick {
   position: relative;
-  flex-shrink: 1;
-  flex-basis: 0;
-  min-height: 2px;
+  flex: 0 0 2px;
+  height: 2px;
   width: 8px;
   margin: 0;
   padding: 0;
   border: none;
   border-radius: 1px;
   background-color: var(--text-tertiary);
+  opacity: 0.35;
   transform-origin: right center;
   cursor: pointer;
   pointer-events: auto;
@@ -59,8 +69,9 @@
   display: block;
   box-sizing: border-box;
   transition:
-    width var(--transition-smooth),
-    background-color var(--transition-smooth);
+    width var(--transition-smooth, 200ms cubic-bezier(0.16, 1, 0.3, 1)),
+    opacity var(--transition-smooth, 200ms ease),
+    background-color var(--transition-smooth, 200ms ease);
 }
 
 .tick::before {
@@ -74,23 +85,25 @@
 }
 
 .tick.isActive {
-  background-color: color-mix(in srgb, var(--text-primary) 40%, transparent);
+  background-color: var(--text-primary);
+  opacity: 0.6;
   width: 16px;
 }
 
 .root:hover .tick {
   width: 16px;
-  background-color: color-mix(in srgb, var(--text-primary) 25%, transparent);
+  opacity: 0.5;
 }
 
 .root:hover .tick.isActive {
   width: 24px;
-  background-color: color-mix(in srgb, var(--text-primary) 50%, transparent);
+  opacity: 0.8;
 }
 
 .tick:hover,
 .root:hover .tick:hover {
-  background-color: var(--text-primary);
-  width: 32px;
+  background-color: var(--text-primary) !important;
+  opacity: 1 !important;
+  width: 32px !important;
   z-index: 10;
 }

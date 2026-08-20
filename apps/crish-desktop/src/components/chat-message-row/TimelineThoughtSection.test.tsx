@@ -25,12 +25,13 @@ describe('TimelineThoughtSection', () => {
     expect(screen.getByText(/共 9 字/)).toBeDefined();
   });
 
-  it('实时思考中展示 Spinner 与流式文案', () => {
-    render(
+  it('实时思考中展示呼吸绿点与流式文案', () => {
+    const { container } = render(
       <TimelineThoughtSection content="正在思考下一步工具调用" isLive={true} />
     );
 
-    expect(screen.getByText('正在深入思考…')).toBeDefined();
+    expect(screen.getByText('思考中')).toBeDefined();
+    expect(container.querySelector('[class*="thoughtLiveDot"]')).not.toBeNull();
   });
 
   it('defaultExpanded 控制新渲染块的初始开合', () => {

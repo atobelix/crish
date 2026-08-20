@@ -49,18 +49,19 @@ const FlowScrubberTick: React.FC<{
   onJump: (id: string) => void;
 }> = React.memo(function FlowScrubberTick({ tick, tooltip, onJump }) {
   return (
-    <Tooltip content={tooltip} side="left">
-      <button
-        type="button"
-        className={styles.tick}
-        style={{ flexGrow: tick.flex }}
-        data-flow-scrubber-tick=""
-        data-msg-id={tick.id}
-        data-height-percent={String(tick.heightPercent)}
-        aria-label={tooltip}
-        onClick={() => onJump(tick.id)}
-      />
-    </Tooltip>
+    <div className={styles.tickSlot} style={{ flexGrow: tick.flex }}>
+      <Tooltip content={tooltip} side="left">
+        <button
+          type="button"
+          className={styles.tick}
+          data-flow-scrubber-tick=""
+          data-msg-id={tick.id}
+          data-height-percent={String(tick.heightPercent)}
+          aria-label={tooltip}
+          onClick={() => onJump(tick.id)}
+        />
+      </Tooltip>
+    </div>
   );
 });
 
@@ -120,7 +121,7 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
           const tick = wrap.querySelector(
             `[data-flow-scrubber-tick][data-msg-id="${CSS.escape(id)}"]`
           );
-          if (tick instanceof HTMLElement) {
+          if (tick instanceof HTMLElement && activeClass) {
             tick.classList.toggle(activeClass, entry.isIntersecting);
           }
         }

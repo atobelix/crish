@@ -1,16 +1,16 @@
 /**
  * TimelineThoughtSection.tsx
- * 交错多步骤时间线中的行内思维链组件（FIN-02 / FIN-03 / RUL-05 落地）。
+ * 交错多步骤时间线中的行内思维链组件（极简行内流规范 §5.1 / reference thinking.css）。
  *
  * 特性：
- * - 废除 4000 字符硬截断，行内自适应 8k~12k 字符视口（budgetThinkingText）；
- * - 超过预算时渲染优雅的「查看完整思考链（共 X 字）」操作条与渐变遮罩；
- * - 点击操作条或悬浮胶囊触发 openThoughtInspector 打开万字沉浸式查阅器；
- * - 实时流阶段随 Token 输出自适应平滑吸底追尾滚动（用户手动向上翻动时暂停）；
- * - 毫秒级耗时、字数统计与阶段标题呈现。
+ * - 彻底废除厚重带外框的灰色大卡片，采用极简行内流排布；
+ * - 已完成态：`思考了 3.4秒 >`（或 `第 1 阶段思考 · 2.4s · 共 X 字 >`，font-variant-numeric: tabular-nums）；
+ * - 实时运行态（Live）：`🟢 思考中 · 1.8秒`（5px 翡翠绿脉冲高亮）；
+ * - 展开内容区带上下 20px 平滑渐变遮罩（linear-gradient），自然融入时间线；
+ * - 超过预算时渲染优雅的「查看完整思考链」操作条，支持 openThoughtInspector 万字沉浸式查阅。
  */
 import React, { useLayoutEffect, useRef, useState, useMemo } from 'react';
-import { ChevronRight, BrainCircuit, Sparkles, Maximize2 } from 'lucide-react';
+import { Maximize2 } from 'lucide-react';
 import styles from './ChatMessageRow.module.css';
 import { AsyncMarkdownBlock } from './AsyncMarkdownBlock';
 import {
@@ -44,7 +44,7 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
   const userScrolledUpRef = useRef(false);
   const prevIsLiveRef = useRef(isLive);
 
-  // 8k~12k 自适应 DOM 预算计算（流式阶段启用 Safe Markdown Tail Slicer 尾窗滑动，DEC-06 / DIM-06）
+  // 8k~12k 自适应 DOM 预算计算（流式阶段启用 Safe Markdown Tail Slicer 尾窗滑动）
   const budget = useMemo(() => {
     return budgetThinkingText(content, {
       cap: THINKING_INLINE_CHAR_CAP,
@@ -77,10 +77,11 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
 
   const durationLabel = useMemo(() => {
     if (durationMs != null && durationMs > 0) {
-      return `${(durationMs / 1000).toFixed(1)}s`;
+      const sec = (durationMs / 1000).toFixed(1);
+      return turnIndex != null ? `${sec}s` : `${sec}秒`;
     }
     return null;
-  }, [durationMs]);
+  }, [durationMs, turnIndex]);
 
   const totalChars = budget.totalChars;
 
@@ -94,11 +95,13 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
     });
   };
 
-  const sectionTitle = isLive
-    ? '正在深入思考…'
+  const titleText = isLive
+    ? '思考中'
     : turnIndex != null
       ? `第 ${turnIndex + 1} 阶段思考`
-      : '思考过程';
+      : durationLabel
+        ? `思考了 ${durationLabel}`
+        : '思考过程';
 
   return (
     <div
@@ -113,36 +116,30 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
         tabIndex={0}
         aria-expanded={isOpen}
       >
-        <span className={styles.thoughtIconSlot} aria-hidden>
-          {isLive ? (
-            <Sparkles size={13} className={styles.sparkleLiveIcon} />
-          ) : (
-            <BrainCircuit size={13} className={styles.brainIcon} />
-          )}
-        </span>
+        {isLive ? (
+          <span className={styles.thoughtLiveDot} aria-hidden />
+        ) : null}
 
         <span className={styles.thoughtTitle}>
-          {sectionTitle}
-          {isLive ? (
-            <ThinkingTimer isLive />
-          ) : (
-            <span className={styles.thoughtMeta}>
-              {durationLabel && (
-                <span className={styles.thoughtDuration}>
-                  {' '}
-                  · {durationLabel}
-                </span>
-              )}
-              {totalChars > 0 && (
-                <span className={styles.thoughtWords}>
-                  {' '}
-                  · 共 {totalChars.toLocaleString()} 字
-                </span>
-              )}
-              {budget.isTruncated ? ' (行内已截断)' : ''}
-            </span>
-          )}
+          {titleText}
         </span>
+
+        {isLive ? (
+          <ThinkingTimer isLive />
+        ) : (
+          <span className={styles.thoughtMeta}>
+            {turnIndex != null && durationLabel ? (
+              <span className={styles.thoughtDuration}> · {durationLabel}</span>
+            ) : null}
+            {totalChars > 0 ? (
+              <span className={styles.thoughtWords}>
+                {' '}
+                · 共 {totalChars.toLocaleString()} 字
+              </span>
+            ) : null}
+            {budget.isTruncated ? ' (行内已截断)' : ''}
+          </span>
+        )}
 
         {/* 沉浸式查阅器悬浮入口 */}
         <Tooltip content="在沉浸式查阅器中查看完整思维链">
@@ -156,11 +153,12 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
           </button>
         </Tooltip>
 
-        <ChevronRight
-          size={13}
+        <span
           className={`${styles.thoughtChevron} ${isOpen ? styles.isOpen : ''}`}
           aria-hidden
-        />
+        >
+          ›
+        </span>
       </div>
 
       <div

@@ -1,3 +1,159 @@
+/* ───── Subagent Time-Line Inline Badge (§5.3 / reference subagent.css) ───── */
+.flowSubagent {
+  margin: 2px 0;
+  min-width: 0;
+  padding-left: var(--flow-summary-indent, 0.35em);
+  box-sizing: border-box;
+}
+
+.flowSubagentLine1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--flow-font-meta, 13px);
+  line-height: 1.5;
+  color: var(--flow-meta, var(--text-secondary, #4a4a4a));
+  text-align: left;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.flowSubagentLine1:hover {
+  color: var(--flow-meta-hover, var(--text-primary, #2a2a2a));
+}
+
+.flowSubagentIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  font-size: 13px;
+}
+
+.flowSubagentTitle {
+  color: inherit;
+  font-weight: 500;
+  font-family: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+
+.flowSubagentStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  color: var(--flow-meta-soft, var(--text-tertiary, #5c5c5c));
+  font-size: var(--flow-font-meta, 13px);
+  font-variant-numeric: tabular-nums;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.flowSubagentDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand, #10b981);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
+  animation: subagent-dot-pulse 1.4s ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes subagent-dot-pulse {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+    box-shadow: 0 0 0 4.5px color-mix(in srgb, var(--brand, #10b981) 32%, transparent);
+  }
+}
+
+/* Line 2: progress traces indented under title (padding-left: 22px) */
+.flowSubagentLine2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 0 1px 22px;
+  font-size: var(--flow-font-meta, 13px);
+  color: var(--flow-meta-soft, var(--text-secondary, #4a4a4a));
+  min-height: 22px;
+}
+
+.flowSubagentTraces {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.flowSubagentCol {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.flowSubagentTraceLead {
+  color: var(--flow-meta-soft, #8c877d);
+  flex-shrink: 0;
+}
+
+.flowSubagentTrace {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 32em;
+  color: var(--flow-meta, var(--text-secondary, #4a4a4a));
+}
+
+/* Expand panel: LEFT vertical rail distinguishes subagent stream from main stream */
+.flowSubagentPanel {
+  margin: 4px 0 6px 4px;
+  padding: 3px 0 3px 12px;
+  box-sizing: border-box;
+  max-height: 280px;
+  overflow: hidden;
+  position: relative;
+  border: none;
+  border-left: 1px solid rgba(0, 0, 0, 0.10);
+  background: transparent;
+  box-shadow: none;
+}
+
+.flowSubagentPanelInner {
+  max-height: 274px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 4px 8px 4px;
+  overscroll-behavior-y: auto;
+}
+
 .inlineAgent {
   border: none;
   border-radius: 0;

@@ -980,3 +980,26 @@
   display: inline-block;
   flex-shrink: 0;
 }
+
+.toolLivePulseDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand, #10b981);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
+  animation: pulse-live-tool 1.4s ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes pulse-live-tool {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+    box-shadow: 0 0 0 4.5px color-mix(in srgb, var(--brand, #10b981) 32%, transparent);
+  }
+}

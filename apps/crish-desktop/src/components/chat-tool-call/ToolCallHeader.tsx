@@ -146,25 +146,26 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
     if (running) {
       inner = (
         <span className={styles.toolRowLive} aria-hidden>
-          <span
-            className="loading-spinner"
-            style={{ width: 10, height: 10, borderWidth: 1.5 }}
-          />
+          <span className={styles.toolLivePulseDot} />
         </span>
       );
-    } else if (tc.status === 'success') {
-      inner = (
-        <CheckCircle2 size={sz} strokeWidth={sw} color="var(--accent-green)" />
-      );
     } else if (tc.status === 'error') {
-      inner = <XCircle size={sz} strokeWidth={sw} color="var(--accent-red)" />;
+      inner = (
+        <XCircle
+          size={sz}
+          strokeWidth={sw}
+          color="var(--accent-red, #c45c5c)"
+        />
+      );
     } else {
-      // V1-γ（决策 12 最小图标映射）：非运行/终态图标 = 命令类型轴图标
-      // （toolCommandType + toolCommandIcon），替换固定 CircleDot 兜底；
-      // 状态轴（running→spinner / success→CheckCircle2 / error→XCircle）保留。
+      // 严禁绿勾墙：非 error 均采用精细的中性/命令语义图标（完成态无彩），杜绝大面积刺眼绿勾
       const KindIcon = toolCommandIcon(toolCommandType(tc));
       inner = (
-        <KindIcon size={sz} strokeWidth={sw} color="var(--text-tertiary)" />
+        <KindIcon
+          size={sz}
+          strokeWidth={sw}
+          color="var(--text-tertiary, #8c877d)"
+        />
       );
     }
     return (

@@ -21,6 +21,7 @@ import {
   DEFAULT_CHAT_NOTE_DOC_ID,
   shouldShowSendToNoteEntry,
 } from './sendToNoteMount';
+import styles from '../chat-message-row/ChatMessageRow.module.css';
 
 export type ChatSendToNoteEntryProps = {
   messageId: string;
@@ -94,6 +95,7 @@ export const ChatSendToNoteEntry: React.FC<ChatSendToNoteEntryProps> = ({
         intentId={intentId}
         origin={origin}
         iconOnly={iconOnly}
+        className={styles.iconBtn}
         {...(sink !== undefined ? { sink } : {})}
         {...(transport !== undefined ? { transport } : {})}
         onSuccess={handleSuccess}

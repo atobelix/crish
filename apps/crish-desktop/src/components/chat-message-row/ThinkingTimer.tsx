@@ -29,7 +29,12 @@ export const ThinkingTimer: React.FC<ThinkingTimerProps> = React.memo(
 
     if (!isLive) return null;
 
-    return <span className={styles.thinkingSec}> · {seconds}s</span>;
+    return (
+      <span className={styles.thinkingSec}>
+        <span className={styles.thinkingSep}> · </span>
+        <span className={styles.thinkingTick}>{seconds}秒</span>
+      </span>
+    );
   }
 );
 
