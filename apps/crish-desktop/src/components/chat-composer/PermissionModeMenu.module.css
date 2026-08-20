@@ -47,12 +47,12 @@
   flex-shrink: 0;
 }
 
-/* 统一 24x24 极简微圆角盾牌按钮 */
+/* 28x28 极简微圆角盾牌按钮 */
 .permPill.iconOnly {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  max-width: 24px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  max-width: 28px;
   padding: 0;
   border-radius: var(--radius-md, 6px);
   border: none;
