@@ -26,7 +26,7 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--bg-workspace, var(--bg-primary));
-  padding: 0 var(--shell-gutter, 8px) var(--shell-gutter, 8px);
+  padding: 0 var(--shell-gutter, 8px) var(--shell-gutter, 8px) 0;
   box-sizing: border-box;
 }
 
