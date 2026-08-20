@@ -420,6 +420,23 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
             className={`${styles.fixedCluster} side-panel-tab-fixed-cluster`}
           >
             {renderAddButton(false)}
+            <Tooltip
+              content={isMaximized ? '恢复面板' : '最大化面板'}
+              side="bottom"
+            >
+              <button
+                type="button"
+                className={`${styles.sideBtn} ${styles.btnMaximize} side-panel-btn side-panel-btn-maximize`}
+                onClick={handleToggleMaximize}
+                aria-label={isMaximized ? '恢复面板' : '最大化面板'}
+              >
+                {isMaximized ? (
+                  <Minimize2 size={14} strokeWidth={2} />
+                ) : (
+                  <Maximize2 size={14} strokeWidth={2} />
+                )}
+              </button>
+            </Tooltip>
             <Tooltip content="收起右侧面板" side="bottom">
               <button
                 type="button"
