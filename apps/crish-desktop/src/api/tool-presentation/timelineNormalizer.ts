@@ -99,6 +99,37 @@ export function normalizeAssistantTimeline(
   };
 }
 
+function parseInlineThoughtAndText(
+  raw: string,
+  turnIndex?: number
+): Array<{ kind: 'thought' | 'text'; content: string; turnIndex?: number }> {
+  if (!raw || !raw.trim()) return [];
+  const tagRegex = /<(?:think|thought)>([\s\S]*?)<\/(?:think|thought)>/gi;
+  if (!tagRegex.test(raw)) {
+    return [{ kind: 'text', content: raw, turnIndex }];
+  }
+  tagRegex.lastIndex = 0;
+  const out: Array<{ kind: 'thought' | 'text'; content: string; turnIndex?: number }> = [];
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tagRegex.exec(raw)) !== null) {
+    const textBefore = raw.slice(lastIdx, match.index);
+    if (textBefore.trim()) {
+      out.push({ kind: 'text', content: textBefore, turnIndex });
+    }
+    const thoughtContent = match[1]?.trim();
+    if (thoughtContent) {
+      out.push({ kind: 'thought', content: thoughtContent, turnIndex });
+    }
+    lastIdx = match.index + match[0].length;
+  }
+  const textAfter = raw.slice(lastIdx);
+  if (textAfter.trim()) {
+    out.push({ kind: 'text', content: textAfter, turnIndex });
+  }
+  return out;
+}
+
 /**
  * 构建交错式多步骤时间线（thought / tool_call / text 自然交错）。
  * blocks 可用时严格按 blocks 顺序；否则平滑降级。
@@ -147,12 +178,24 @@ export function buildAssistantTimeline(
           flushTools();
           const c = b.content || '';
           if (c.trim()) {
-            items.push({
-              kind: 'text',
-              content: c,
-              turnIndex: b.turnIndex,
-              key: `text-${xi++}`,
-            });
+            const parsed = parseInlineThoughtAndText(c, b.turnIndex);
+            for (const p of parsed) {
+              if (p.kind === 'thought') {
+                items.push({
+                  kind: 'thought',
+                  content: p.content,
+                  turnIndex: p.turnIndex,
+                  key: `thought-${thi++}`,
+                });
+              } else {
+                items.push({
+                  kind: 'text',
+                  content: p.content,
+                  turnIndex: p.turnIndex,
+                  key: `text-${xi++}`,
+                });
+              }
+            }
           }
         } else if (b.type === 'tool_call' && b.id) {
           const tc = toolsById.get(b.id);
@@ -171,7 +214,22 @@ export function buildAssistantTimeline(
         }
       }
       if (!items.some((i) => i.kind === 'text') && (msg.text || '').trim()) {
-        items.push({ kind: 'text', content: msg.text || '', key: 'text-full' });
+        const parsed = parseInlineThoughtAndText(msg.text || '');
+        for (const p of parsed) {
+          if (p.kind === 'thought') {
+            items.push({
+              kind: 'thought',
+              content: p.content,
+              key: `thought-${thi++}`,
+            });
+          } else {
+            items.push({
+              kind: 'text',
+              content: p.content,
+              key: `text-${xi++}`,
+            });
+          }
+        }
       }
       return items;
     }
@@ -204,7 +262,22 @@ export function buildAssistantTimeline(
       }
     }
     if ((msg.text || '').trim()) {
-      items.push({ kind: 'text', content: msg.text || '', key: 'text-0' });
+      const parsed = parseInlineThoughtAndText(msg.text || '');
+      for (const p of parsed) {
+        if (p.kind === 'thought') {
+          items.push({
+            kind: 'thought',
+            content: p.content,
+            key: `thought-${thi++}`,
+          });
+        } else {
+          items.push({
+            kind: 'text',
+            content: p.content,
+            key: `text-${xi++}`,
+          });
+        }
+      }
     }
     return items;
   } catch {

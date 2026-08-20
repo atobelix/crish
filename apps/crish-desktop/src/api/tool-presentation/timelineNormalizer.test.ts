@@ -460,5 +460,23 @@ describe('timelineNormalizer', () => {
         timelineSignature(otherTurn)
       );
     });
+
+    it('extracts inline <think> and <thought> tags into structured thought timeline items', () => {
+      const msg = makeMessage({
+        id: 'msg-think',
+        sender: 'assistant',
+        text: '<think>我先了解一下当前工作区的情况，再开始创建项目。</think>已为你创建项目。',
+      });
+      const timeline = buildAssistantTimeline(msg);
+      expect(timeline.length).toBe(2);
+      expect(timeline[0]?.kind).toBe('thought');
+      expect((timeline[0] as { content?: string })?.content).toBe(
+        '我先了解一下当前工作区的情况，再开始创建项目。'
+      );
+      expect(timeline[1]?.kind).toBe('text');
+      expect((timeline[1] as { content?: string })?.content).toBe(
+        '已为你创建项目。'
+      );
+    });
   });
 });
