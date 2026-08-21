@@ -5,7 +5,7 @@
 //! `mark_successors_dirty`。保留 Q3 dirty 集逻辑（O(dirty) 按声明序推进），
 //! 预算判定与 spawn 在本模块内完成。
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use agent_tools::tools::subagent::{
@@ -17,8 +17,7 @@ use crate::subagent_events::{started_info_from_spawn, SubagentEmitContext, Subag
 
 use super::model::{FailStrategy, FlowGraph, FlowNode, FlowNodeId, FlowNodeRuntime, FlowNodeState};
 use super::scheduler::{
-    BudgetExceededKind, ConcurrencyBudget, FlowAdvance, FlowError, FlowMetaStore, FlowReport,
-    FlowReportKind, FlowScheduler, FlowStarted, FlowWakeup, FLOW_STATE_KEY,
+    FlowAdvance, FlowError, FlowReport, FlowReportKind, FlowScheduler, FlowStarted, FlowWakeup,
 };
 
 // ── 声明序索引缓存（预计算一次，复用）─────────────────────────────

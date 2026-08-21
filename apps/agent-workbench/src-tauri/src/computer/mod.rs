@@ -163,6 +163,35 @@ impl ComputerMetaStore for LocalDbComputerMetaStore {
     }
 }
 
+/// 无库降级存储适配（进程内内存镜像；engine_build 装配 `db: None` 时启用）。
+///
+/// 语义对齐全应用「缺库不阻断装配」哲学（timer/wait store 的 Option 模式）：
+/// 开关状态保存在进程内存中，功能完整可用、进程退出即失（无持久化镜像）。
+/// 与 [SessionEnablement]（会话级内存状态机）分层：本类型是 meta 键的
+/// 内存替身，不是状态机本身。
+pub(crate) struct MemoryComputerMetaStore {
+    enabled: AtomicBool,
+}
+
+impl Default for MemoryComputerMetaStore {
+    fn default() -> Self {
+        Self {
+            enabled: AtomicBool::new(false),
+        }
+    }
+}
+
+impl ComputerMetaStore for MemoryComputerMetaStore {
+    fn load_enabled(&self) -> Result<bool, String> {
+        Ok(self.enabled.load(Ordering::Relaxed))
+    }
+
+    fn persist_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.enabled.store(enabled, Ordering::Relaxed);
+        Ok(())
+    }
+}
+
 /// 电脑操作会话槽（进程级单例；命令面 + 工具装配接线面）。
 ///
 /// 并发纪律：全部守卫为原子/锁内同步操作（无跨 await 持锁面），

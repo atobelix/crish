@@ -10380,6 +10380,25 @@ impl Store for RecordingStore {
             .await
     }
 
+    // 1C-1 下推面（Store trait 新增方法）：本桩仅关注 query_events /
+    // query_events_by_run 的 limit 记录，其余一律原样委托内层。
+    async fn max_sequence(&self, session_id: &str) -> orchestrator::persist::StoreResult<u64> {
+        self.inner.max_sequence(session_id).await
+    }
+
+    async fn query_events_by_type(
+        &self,
+        session_id: &str,
+        run_id: &str,
+        event_type: &str,
+        after_sequence: u64,
+        limit: Option<u64>,
+    ) -> orchestrator::persist::StoreResult<Vec<orchestrator::persist::PersistedEvent>> {
+        self.inner
+            .query_events_by_type(session_id, run_id, event_type, after_sequence, limit)
+            .await
+    }
+
     async fn query_runs(&self) -> orchestrator::persist::StoreResult<Vec<conex_db::StoredRun>> {
         self.inner.query_runs().await
     }

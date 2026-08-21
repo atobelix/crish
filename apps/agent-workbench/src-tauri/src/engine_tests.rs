@@ -1057,13 +1057,13 @@ async fn produce_without_initial_conversation_stays_single_message() {
 /// （clamp = min(requested, window - estimate - safety)，估算 > 0）
 #[tokio::test]
 async fn produce_applies_context_budget_clamp() {
-    let options = SessionLoopOptions {
-        context_budget: Some(ContextBudget {
-            context_window: 12_288,
-            ..ContextBudget::default()
-        }),
-        ..SessionLoopOptions::default()
-    };
+    // SessionLoopOptions 重构后 context_budget 归入 assembly 子结构
+    // （对齐 run_launch.rs 装配惯例：default() + 逐字段赋值）
+    let mut options = SessionLoopOptions::default();
+    options.assembly.context_budget = Some(ContextBudget {
+        context_window: 12_288,
+        ..ContextBudget::default()
+    });
     let (mut producer, provider) = test_producer(None, options);
     producer.produce().await;
     let max_tokens = provider
@@ -1974,10 +1974,9 @@ async fn produce_without_injector_keeps_default_system_prompt_behavior() {
     );
 
     // 无注入但 options 已带基础段：原样透传（不被注入通道改写）
-    let options = SessionLoopOptions {
-        system_prompt: Some("基础系统提示".to_string()),
-        ..SessionLoopOptions::default()
-    };
+    // （system_prompt 归入 assembly 子结构，对齐 run_launch.rs 装配惯例）
+    let mut options = SessionLoopOptions::default();
+    options.assembly.system_prompt = Some("基础系统提示".to_string());
     let (mut producer_base, provider_base) = test_producer(None, options);
     producer_base.produce().await;
     assert_eq!(

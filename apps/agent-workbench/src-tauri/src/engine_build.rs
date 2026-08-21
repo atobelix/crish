@@ -376,7 +376,14 @@ impl EngineHandle {
                 "browser_* 工具注册失败（工具按 tool.not_found 兜底）"
             );
         }
-        let computer_slot = Arc::new(crate::computer::ComputerSlot::from_store(Arc::new(crate::computer::LocalDbComputerMetaStore::new(db.clone().expect("LocalDb for computer_slot")))));
+        // computer_slot 装配（与 timer/wait store 同一 db 可选语义）：
+        // 有库 → session_meta 持久化镜像；无库 → 进程内内存镜像（缺库
+        // 不阻断装配；对齐全应用降级哲学，禁止 expect 强拆 Option）。
+        let computer_meta: Arc<dyn crate::computer::ComputerMetaStore> = match db.clone() {
+            Some(db) => Arc::new(crate::computer::LocalDbComputerMetaStore::new(db)),
+            None => Arc::new(crate::computer::MemoryComputerMetaStore::default()),
+        };
+        let computer_slot = Arc::new(crate::computer::ComputerSlot::from_store(computer_meta));
         let tool_registry = Arc::new(registry);
         // E5：MCP 客户端桥初始化（stdio 服务器管理 + 工具适配；插件
         // mcpServers 经 register_plugin_mcp_server 注册为受管服务器）
