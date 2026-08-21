@@ -20,8 +20,8 @@
 //!   ⑧ [CoreRunState] manage + [EventBridge] manage + [SharedDb] manage；
 //!   ⑨ 模型目录 manage（`Arc<RwLock<ModelCatalog>>`，内置表；P3 步骤 5，
 //!   catalog_get / catalog_refresh 消费）；
-//!   ⑩ MCP 插件：debug 下 `dev_mcp::register_if_enabled(builder)`（默认关闭，
-//!   `CRISH_MCP_SOCKET=1` 开启）；
+//!   ⑩ MCP 插件：debug 下 `dev_mcp::register_if_enabled(builder)`（默认开启，
+//!   `CRISH_MCP_SOCKET=0` 显式关闭；2026-08-21 用户裁决）；
 //!   ⑪ 多端本地服务生产装配（R1-11 G-1）：CoreStateBackend（真实
 //!   `*_impl` 直调面）+ FanOutEmitter（挂 EventBridge 汇聚点，注入
 //!   ServerState.event_stream）+ PairingCoordinator（set_port / rebind
@@ -673,8 +673,8 @@ fn main() {
         .plugin(single_instance::register())
         .plugin(tauri_plugin_dialog::init());
 
-    // setup 序列 ⑩：MCP 调试插件（默认关闭，CRISH_MCP_SOCKET=1 开启；
-    // release 由插件自身拒绝兜底，注册点本身亦被 cfg 隔离）。
+    // setup 序列 ⑩：MCP 调试插件（debug 默认开启，CRISH_MCP_SOCKET=0 显式关闭；
+    // release 由插件自身拒绝兜底，注册点本身亦被 cfg 隔离。2026-08-21 用户裁决）。
     #[cfg(debug_assertions)]
     let builder = dev_mcp::register_if_enabled(builder);
 
