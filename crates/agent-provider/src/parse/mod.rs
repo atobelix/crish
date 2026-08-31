@@ -24,6 +24,7 @@ pub mod azure_responses;
 pub mod chat;
 pub mod gemini;
 pub mod responses;
+pub mod think_tags;
 pub mod tool_call;
 
 pub use anthropic::{
@@ -37,6 +38,10 @@ pub use gemini::{
     GeminiParser,
 };
 pub use responses::{response_status_to_stop, ResponsesParser};
+pub use think_tags::{
+    ExtractedPiece, ExtractorState, StreamingTagExtractor, TagPair, TagState, ThinkTagState,
+    ThinkTagStateMachine, DEFAULT_TAGS, SUPPORTED_TAGS,
+};
 pub use tool_call::{
     parse_arguments, parse_full_tool_call, ToolCall, ToolCallCollector, ToolCallFlush,
 };

@@ -506,7 +506,6 @@ pub async fn core_jsonl_to_messages(text: String) -> Result<Vec<serde_json::Valu
     result
 }
 
-
 /// JSONL 追加（自 perf 迁移；fsync 语义保留，走 spawn_blocking + WorkspaceFsGuard 守卫）。
 ///
 /// - `path`：目标 JSONL 文件（相对路径相对 workspace_root 解析）；

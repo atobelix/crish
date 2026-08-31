@@ -12,8 +12,8 @@ use std::collections::VecDeque;
 use std::pin::Pin;
 use std::sync::{OnceLock, RwLock};
 
-use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::error::{classify_provider_error, source_from_sse_read_error};
+use agent_provider::events::{ProviderStreamEvent as WireEvent, StreamParseError};
 use agent_provider::transport::StreamFrameEvent;
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ClassifiedStreamError;

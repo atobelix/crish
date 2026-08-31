@@ -681,10 +681,15 @@ impl SubagentSpawnerImpl {
                                     if e.event_type != "subagent-ended" {
                                         return false;
                                     }
-                                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&e.payload) {
+                                    if let Ok(val) =
+                                        serde_json::from_str::<serde_json::Value>(&e.payload)
+                                    {
                                         let sub_id = val.get("subagentId").and_then(|v| v.as_str());
-                                        let sub_run_id = val.get("subagentRunId").and_then(|v| v.as_str());
-                                        if sub_id == Some(&cfg.subagent_id) || sub_run_id == Some(&run_id) {
+                                        let sub_run_id =
+                                            val.get("subagentRunId").and_then(|v| v.as_str());
+                                        if sub_id == Some(&cfg.subagent_id)
+                                            || sub_run_id == Some(&run_id)
+                                        {
                                             return true;
                                         }
                                     }

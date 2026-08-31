@@ -14,6 +14,7 @@ use crate::events::{
 };
 use crate::sse::frame::SseFrame;
 
+use super::super::think_tags::StreamingTagExtractor;
 use super::super::tool_call::{parse_full_tool_call, ToolCallCollector};
 use super::chat_mapping::{
     finish_reason_to_stop, non_empty_string, parse_usage, provider_body_error,
@@ -32,6 +33,8 @@ pub struct ChatCompletionsParser {
     usage: Option<ProviderUsage>,
     /// 已终结（错误帧或 finish 后；此后 push_frame/finish 均空产出）
     terminated: bool,
+    /// 内嵌思考标签实时提取器（B2.5 / Markdown Stream Refactor）
+    tag_extractor: StreamingTagExtractor,
 }
 
 impl ChatCompletionsParser {
@@ -103,11 +106,6 @@ impl ChatCompletionsParser {
         // 4. delta 内容（02 §2.2 步骤 4）
         let delta = choice.get("delta").and_then(Value::as_object);
         if let Some(delta) = delta {
-            if let Some(text) = non_empty_string(delta.get("content")) {
-                events.push(ProviderStreamEvent::TextDelta {
-                    text: text.to_owned(),
-                });
-            }
             // thought 优先级：reasoning_content → reasoning → thinking → thinking_delta → thought（02 §1.4）
             if let Some(thought) = non_empty_string(delta.get("reasoning_content"))
                 .or_else(|| non_empty_string(delta.get("reasoning")))
@@ -119,6 +117,10 @@ impl ChatCompletionsParser {
                     text: thought.to_owned(),
                     redacted: None,
                 });
+            }
+            if let Some(text) = non_empty_string(delta.get("content")) {
+                let extracted = self.tag_extractor.push_text(text);
+                events.extend(extracted);
             }
             // 标准位置：delta.tool_calls[]（增量合并进 pending）
             if let Some(tool_calls) = delta.get("tool_calls").and_then(Value::as_array) {
@@ -151,9 +153,8 @@ impl ChatCompletionsParser {
             // 无 delta 时 message.content 兜底正文（对齐 runtime:provider-openai-chat.ts:128-130）
             if delta.is_none() {
                 if let Some(text) = non_empty_string(message.get("content")) {
-                    events.push(ProviderStreamEvent::TextDelta {
-                        text: text.to_owned(),
-                    });
+                    let extracted = self.tag_extractor.push_text(text);
+                    events.extend(extracted);
                 }
             }
         }
@@ -184,6 +185,10 @@ impl ChatCompletionsParser {
         let mut events = Vec::new();
         let has_tool_calls = self.collector.has_named_calls();
         let flush = self.collector.finish();
+
+        // 冲刷标签状态机未决的缓冲区
+        let remaining_tag_events = self.tag_extractor.finish();
+        events.extend(remaining_tag_events);
 
         // flush pending：名完整 → 完整 tool-call；缺 name → RU-06 诊断（不静默丢）
         for call in flush.calls {

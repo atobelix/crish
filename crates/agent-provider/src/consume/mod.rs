@@ -270,7 +270,10 @@ fn finish(aggregate: Aggregate, aborted: bool) -> ConsumeResult {
     if aborted {
         return finish_after_abort(aggregate);
     }
-    let has_content = !aggregate.text.is_empty() || !aggregate.tool_calls.is_empty();
+    let has_content = !aggregate.text.is_empty()
+        || !aggregate.tool_calls.is_empty()
+        || !aggregate.thought.is_empty()
+        || !aggregate.thought_blocks.is_empty();
     // 空响应：无 block 且无 error → Empty（02 §一.3：131-132；01 §五.3）
     if !has_content && aggregate.error.is_none() {
         return ConsumeResult {
@@ -279,7 +282,7 @@ fn finish(aggregate: Aggregate, aborted: bool) -> ConsumeResult {
             metadata: Value::Null,
         };
     }
-    // 无内容且 error → StreamError：仅「无文字且无 tool-call 且 stopReason=error」
+    // 无内容且 error → StreamError：仅「无文字且无 tool-call 且无思考且 stopReason=error」
     // 归入错误路径（01 §五.3 / 01 D6），进入上层分类重试阶梯
     if !has_content {
         // G1-c：沿用 Stop 构造点携带的 error_kind，兜底由错误文案重分类
@@ -290,7 +293,7 @@ fn finish(aggregate: Aggregate, aborted: bool) -> ConsumeResult {
             metadata: Value::Null,
         };
     }
-    // 有文字或 tool-call → Message（正常产出，纯文字永不失败）：error 不作为
+    // 有文字或 tool-call 或思考 → Message（正常产出，纯文字永不失败）：error 不作为
     // stopReason 一票否决，降级为 metadata.providerError 标注（02 §五.12 / 01 D6）
     let stop_reason = if !aggregate.tool_calls.is_empty() {
         ConsumeStopReason::ToolCall
@@ -318,7 +321,10 @@ fn finish(aggregate: Aggregate, aborted: bool) -> ConsumeResult {
 /// 有内容 → 保留部分内容，stopReason=aborted、aborted=true 标注；无内容 → StreamError
 /// （Aborted 类，不可重试；对齐 02 §4.2 第 1 行 abort 直接传播语义）。
 fn finish_after_abort(aggregate: Aggregate) -> ConsumeResult {
-    let has_content = !aggregate.text.is_empty() || !aggregate.tool_calls.is_empty();
+    let has_content = !aggregate.text.is_empty()
+        || !aggregate.tool_calls.is_empty()
+        || !aggregate.thought.is_empty()
+        || !aggregate.thought_blocks.is_empty();
     if !has_content {
         let message = aggregate.error.unwrap_or_else(|| "aborted".to_string());
         return ConsumeResult {
@@ -947,5 +953,59 @@ mod tests {
         // error 不再作为 Message 的 stopReason（01 D6），故不参与取值域
         assert!("error".parse::<ConsumeStopReason>().is_err());
         assert!("nope".parse::<ConsumeStopReason>().is_err());
+    }
+
+    /// 纯思考流（无正文）→ Message（不判定为 Empty），metadata 完整保留 thought 与 thoughtBlocks
+    #[test]
+    fn pure_thought_stream_yields_message() {
+        let result = consume(
+            vec![
+                thought_delta("深度思考内容片段1", None),
+                thought_delta("深度思考内容片段2", Some(true)),
+                stop(StopReason::Stop),
+            ],
+            false,
+        );
+        assert!(result.response.is_message(), "纯思考流必须产出 Message，不得被判定为 Empty");
+        assert_eq!(result.response.text(), "");
+        assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Stop));
+        assert_eq!(result.metadata["thought"], "深度思考内容片段1深度思考内容片段2");
+        let blocks = result.metadata["thoughtBlocks"].as_array().unwrap();
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0]["text"], "深度思考内容片段1");
+        assert!(blocks[0].get("redacted").is_none());
+        assert_eq!(blocks[1]["text"], "深度思考内容片段2");
+        assert_eq!(blocks[1]["redacted"], true);
+    }
+
+    /// abort 发生在纯思考流中 → 保留思考内容，stopReason=aborted（partial salvage）
+    #[test]
+    fn abort_with_only_thought_keeps_partial_message() {
+        let result = consume(
+            vec![
+                thought_delta("流中被 abort 的思考片段", None),
+            ],
+            true,
+        );
+        assert!(result.response.is_message(), "仅有思考内容时 abort 必须保留为 Message");
+        assert_eq!(result.response.text(), "");
+        assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Aborted));
+        assert_eq!(result.metadata["aborted"], true);
+        assert_eq!(result.metadata["thought"], "流中被 abort 的思考片段");
+    }
+
+    /// 纯思考流 + error stop → Message，错误降级为 metadata 标注，思考内容不丢
+    #[test]
+    fn thought_with_error_stop_yields_message() {
+        let result = consume(
+            vec![
+                thought_delta("思考到一半发生错误", None),
+                stop_with(StopReason::Error, Some("网络异常中断"), None),
+            ],
+            false,
+        );
+        assert!(result.response.is_message(), "有思考内容且发生 error stop 时必须产出 Message");
+        assert_eq!(result.metadata["thought"], "思考到一半发生错误");
+        assert_eq!(result.metadata["providerError"], "网络异常中断");
     }
 }

@@ -48,9 +48,7 @@ impl ClientConnectionConfig {
         match options {
             None => defaults,
             Some(overrides) => ClientConnectionConfig {
-                connect_timeout: overrides
-                    .connect_timeout
-                    .or(defaults.connect_timeout),
+                connect_timeout: overrides.connect_timeout.or(defaults.connect_timeout),
                 tcp_keepalive: overrides.tcp_keepalive.or(defaults.tcp_keepalive),
                 http2_keep_alive_interval: overrides
                     .http2_keep_alive_interval

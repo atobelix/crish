@@ -10,7 +10,10 @@
 //! OpenAI 系亲和头族（各自差异化头独立）。
 
 use agent_provider::request::cache::CachePolicy;
-use agent_provider::request::{anthropic_request_headers, gemini_request_headers, reasoning_effort_headers, ReasoningEffort, ReasoningVendor, WireProtocol};
+use agent_provider::request::{
+    anthropic_request_headers, gemini_request_headers, reasoning_effort_headers, ReasoningEffort,
+    ReasoningVendor, WireProtocol,
+};
 
 use super::EngineProviderConfig;
 
@@ -63,9 +66,7 @@ pub(crate) fn request_headers_for(
 /// 会话头 `x-deepseek-harness-session-id`（对齐 DSH 会话亲和 + 遥测头族）；
 /// 未来提供方会话亲和 K=V 族经本函数决议替换/扩族（对齐 04:189 的
 /// 「不同提供方需要不同会话亲和表达」）。K=V 集由提供方决议，非硬编码单头。
-pub(crate) fn session_affinity_headers(
-    session_id: Option<&str>,
-) -> Vec<(&'static str, String)> {
+pub(crate) fn session_affinity_headers(session_id: Option<&str>) -> Vec<(&'static str, String)> {
     match session_id.map(str::trim).filter(|s| !s.is_empty()) {
         Some(sid) => vec![("x-deepseek-harness-session-id", sid.to_string())],
         None => Vec::new(),

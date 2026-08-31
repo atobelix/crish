@@ -593,9 +593,7 @@ pub(crate) mod idle_resume {
                 id: entry.id,
                 role: AgentMessageRole::User,
                 created_at: crate::engine::now_iso_utc(),
-                blocks: vec![AgentMessageBlock::Text {
-                    text: entry.text,
-                }],
+                blocks: vec![AgentMessageBlock::Text { text: entry.text }],
                 metadata: Some(serde_json::json!({
                     "kind": AgentMessageMetadataKind::ContextState
                 })),

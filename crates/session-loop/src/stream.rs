@@ -258,6 +258,7 @@ impl ConsumeResult {
 
 /// 思考块（metadata.thoughtBlocks 元素，redacted 透传）
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 struct ThoughtBlock {
     text: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -395,7 +396,10 @@ fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> C
     if aborted {
         return finish_after_abort(aggregate, accounting);
     }
-    let has_content = !aggregate.text.is_empty() || !aggregate.tool_calls.is_empty();
+    let has_content = !aggregate.text.is_empty()
+        || !aggregate.tool_calls.is_empty()
+        || !aggregate.thought.is_empty()
+        || !aggregate.thought_blocks.is_empty();
     // 空响应：无 block 且无 error → Empty（02 §一.3；01 §五.3）
     if !has_content && aggregate.error.is_none() {
         return ConsumeResult {
@@ -404,7 +408,7 @@ fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> C
             metadata: Value::Null,
         };
     }
-    // 无内容且 error → StreamError：仅「无文字且无 tool-call 且 stopReason=error」
+    // 无内容且 error → StreamError：仅「无文字且无 tool-call 且无思考且 stopReason=error」
     // 归入错误路径（01 D6），进入分类重试阶梯
     if !has_content {
         let message = aggregate.error.unwrap_or_default();
@@ -414,7 +418,7 @@ fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> C
             metadata: Value::Null,
         };
     }
-    // 有文字或 tool-call → Message：error 不作为 stopReason 一票否决，
+    // 有文字或 tool-call 或思考 → Message：error 不作为 stopReason 一票否决，
     // 降级为 metadata.providerError 标注（01 D6 裁决）
     let stop_reason = if !aggregate.tool_calls.is_empty() {
         ConsumeStopReason::ToolCall
@@ -435,7 +439,10 @@ fn finish(aggregate: Aggregate, aborted: bool, accounting: CacheAccounting) -> C
 
 /// abort 时完成聚合（partial salvage，02 §一.3：144-174）
 fn finish_after_abort(aggregate: Aggregate, accounting: CacheAccounting) -> ConsumeResult {
-    let has_content = !aggregate.text.is_empty() || !aggregate.tool_calls.is_empty();
+    let has_content = !aggregate.text.is_empty()
+        || !aggregate.tool_calls.is_empty()
+        || !aggregate.thought.is_empty()
+        || !aggregate.thought_blocks.is_empty();
     if !has_content {
         let message = aggregate.error.unwrap_or_else(|| "aborted".to_string());
         return ConsumeResult {
@@ -924,5 +931,65 @@ mod tests {
             serde_json::json!({ "read": 1, "write": 2, "miss": 3, "inputTotal": 6 })
         );
         assert!(value.get("input_total").is_none(), "禁止 snake_case 键");
+    }
+
+    /// 纯思考流（无正文）→ Message（不判定为 Empty），metadata 完整保留 thought 与 thoughtBlocks
+    #[test]
+    fn pure_thought_stream_yields_message() {
+        let result = consume(
+            vec![
+                ProviderStreamEvent::thought("纯思考深度分析1", None),
+                ProviderStreamEvent::thought("纯思考深度分析2", Some(true)),
+                ProviderStreamEvent::stop(StopReason::Stop),
+            ],
+            false,
+        );
+        assert!(result.response.is_message(), "纯思考流必须产出 Message，不得被判定为 Empty");
+        assert_eq!(result.response.text(), "");
+        assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Stop));
+        assert_eq!(result.metadata["thought"], "纯思考深度分析1纯思考深度分析2");
+        let blocks = result.metadata["thoughtBlocks"].as_array().unwrap();
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(blocks[0]["text"], "纯思考深度分析1");
+        assert!(blocks[0].get("redacted").is_none());
+        assert_eq!(blocks[1]["text"], "纯思考深度分析2");
+        assert_eq!(blocks[1]["redacted"], true);
+    }
+
+    /// abort 发生在纯思考流中 → 保留思考内容，stopReason=aborted（partial salvage）
+    #[test]
+    fn abort_with_only_thought_keeps_partial_message() {
+        let result = consume(
+            vec![
+                ProviderStreamEvent::thought("流中被 abort 的思考片段", None),
+            ],
+            true,
+        );
+        assert!(result.response.is_message(), "仅有思考内容时 abort 必须保留为 Message");
+        assert_eq!(result.response.text(), "");
+        assert_eq!(result.stop_reason(), Some(ConsumeStopReason::Aborted));
+        assert_eq!(result.metadata["aborted"], true);
+        assert_eq!(result.metadata["thought"], "流中被 abort 的思考片段");
+    }
+
+    /// 纯思考流 + error stop → Message，错误降级为 metadata 标注，思考内容不丢
+    #[test]
+    fn thought_with_error_stop_yields_message() {
+        let result = consume(
+            vec![
+                ProviderStreamEvent::thought("思考到一半发生错误", None),
+                ProviderStreamEvent::Stop {
+                    reason: StopReason::Error,
+                    error: Some("网络连接重置".to_string()),
+                    error_kind: Some(ProviderErrorKind::Timeout),
+                    usage: None,
+                },
+            ],
+            false,
+        );
+        assert!(result.response.is_message(), "有思考内容且发生 error stop 时必须产出 Message");
+        assert_eq!(result.metadata["thought"], "思考到一半发生错误");
+        assert_eq!(result.metadata["providerError"], "网络连接重置");
+        assert_eq!(result.metadata["providerErrorKind"], "timeout");
     }
 }

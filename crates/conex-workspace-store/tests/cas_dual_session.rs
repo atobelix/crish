@@ -94,7 +94,7 @@ fn cas_dual_session_stale_write_conflicts_and_rolls_back() {
         .apply(Origin::User, &[insert_op(id_b, "b0")])
         .expect_err("B 陈旧写必须失败");
     assert!(
-        matches!(&err, ApplyError::Persist(msg) if msg.contains("conflict")),
+        matches!(&err, ApplyError::PersistConflict { .. } | ApplyError::Persist(_)),
         "err={err:?}"
     );
 

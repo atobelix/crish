@@ -71,7 +71,9 @@ fn assistant_msg(text: &str) -> Arc<AgentMessage> {
         id: format!("assistant-{text}"),
         role: AgentMessageRole::Assistant,
         created_at: "2026-08-03T00:00:00.000Z".to_string(),
-        blocks: vec![AgentMessageBlock::Text { text: text.to_string() }],
+        blocks: vec![AgentMessageBlock::Text {
+            text: text.to_string(),
+        }],
         metadata: None,
         client_message_id: None,
         content: None,
@@ -83,7 +85,11 @@ fn assistant_msg(text: &str) -> Arc<AgentMessage> {
 /// anthropic 轨：URL messages 端点 + body anthropic 形状 + AnthropicParser
 #[test]
 fn anthropic_rail_three_piece_consistent() {
-    let call = call_for("https://api.anthropic.com", "claude-sonnet-5", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.anthropic.com",
+        "claude-sonnet-5",
+        Endpoint::ChatCompletions,
+    );
     let protocol = WireProtocol::Anthropic;
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, None);
@@ -95,7 +101,9 @@ fn anthropic_rail_three_piece_consistent() {
     // body → anthropic 形状（system + messages，非 chat messages 数组形状）
     let body = call.request_body_for(protocol, &request);
     assert_eq!(body["model"], "claude-sonnet-5");
-    let system_text = body["system"][0]["text"].as_str().unwrap_or_else(|| body["system"].as_str().unwrap_or_default());
+    let system_text = body["system"][0]["text"]
+        .as_str()
+        .unwrap_or_else(|| body["system"].as_str().unwrap_or_default());
     assert_eq!(system_text, "你是助手。");
     assert_eq!(body["messages"][0]["role"], "user");
     assert!(
@@ -107,7 +115,10 @@ fn anthropic_rail_three_piece_consistent() {
     let mut parser = http_parser_for_protocol(protocol);
     let frame = SseFrame {
         event: None,
-        data: Some(r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#.to_string()),
+        data: Some(
+            r#"{"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#
+                .to_string(),
+        ),
         id: None,
         retry: None,
     };
@@ -119,7 +130,11 @@ fn anthropic_rail_three_piece_consistent() {
 /// gemini 轨：URL generateContent 端点 + body gemini 形状 + GeminiParser
 #[test]
 fn gemini_rail_three_piece_consistent() {
-    let call = call_for("https://generativelanguage.googleapis.com", "gemini-3-6-flash", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://generativelanguage.googleapis.com",
+        "gemini-3-6-flash",
+        Endpoint::ChatCompletions,
+    );
     let protocol = WireProtocol::Gemini;
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, None);
@@ -135,16 +150,26 @@ fn gemini_rail_three_piece_consistent() {
     let body = call.request_body_for(protocol, &request);
     assert_eq!(body["model"], "gemini-3-6-flash");
     assert_eq!(body["contents"][0]["role"], "user");
-    assert!(body.get("systemInstruction").is_some(), "gemini 轨应带 systemInstruction");
+    assert!(
+        body.get("systemInstruction").is_some(),
+        "gemini 轨应带 systemInstruction"
+    );
 
     // parser → GeminiParser
-    assert!(matches!(http_parser_for_protocol(protocol), HttpStreamParser::Gemini(_)));
+    assert!(matches!(
+        http_parser_for_protocol(protocol),
+        HttpStreamParser::Gemini(_)
+    ));
 }
 
 /// chat / responses 轨：各自的 URL / body / parser（显式协议驱动，回归既有字节语义）
 #[test]
 fn chat_and_responses_rails_preserved() {
-    let chat_call = call_for("https://api.example.com/v1", "deepseek-v4", Endpoint::ChatCompletions);
+    let chat_call = call_for(
+        "https://api.example.com/v1",
+        "deepseek-v4",
+        Endpoint::ChatCompletions,
+    );
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, None);
 
@@ -152,18 +177,32 @@ fn chat_and_responses_rails_preserved() {
     let chat_url = provider_url_for(&chat_call.config, WireProtocol::Chat);
     assert!(chat_url.ends_with("/chat/completions"));
     let chat_body = chat_call.request_body_for(WireProtocol::Chat, &request);
-    assert!(chat_body.get("messages").is_some(), "chat 轨必须携带 messages");
-    assert!(matches!(http_parser_for_protocol(WireProtocol::Chat), HttpStreamParser::Chat(_)));
+    assert!(
+        chat_body.get("messages").is_some(),
+        "chat 轨必须携带 messages"
+    );
+    assert!(matches!(
+        http_parser_for_protocol(WireProtocol::Chat),
+        HttpStreamParser::Chat(_)
+    ));
 
     // responses 轨：URL /responses + body input 形状 + ResponsesParser
-    let resp_call = call_for("https://api.example.com/v1", "deepseek-v4-flash", Endpoint::Responses);
+    let resp_call = call_for(
+        "https://api.example.com/v1",
+        "deepseek-v4-flash",
+        Endpoint::Responses,
+    );
     let resp_url = provider_url_for(&resp_call.config, WireProtocol::Responses);
     assert!(resp_url.ends_with("/responses"));
     let resp_body = resp_call.request_body_for(WireProtocol::Responses, &request);
-    assert!(resp_body.get("input").is_some(), "responses 轨 body 为 input 形状");
     assert!(
-        matches!(http_parser_for_protocol(WireProtocol::Responses), HttpStreamParser::Responses(_))
+        resp_body.get("input").is_some(),
+        "responses 轨 body 为 input 形状"
     );
+    assert!(matches!(
+        http_parser_for_protocol(WireProtocol::Responses),
+        HttpStreamParser::Responses(_)
+    ));
 }
 
 // ── 验收 3：思考档位（series 级）消费 ─────────────────────────────
@@ -174,14 +213,26 @@ fn chat_and_responses_rails_preserved() {
 #[test]
 fn effective_protocol_keeps_url_body_parser_in_rail() {
     // responses 配置（deepseek-v4-flash + Responses 端点）：协议推导 + URL + parser 一致
-    let resp = call_for("https://api.deepseek.com/v1", "deepseek-v4-flash", Endpoint::Responses);
+    let resp = call_for(
+        "https://api.deepseek.com/v1",
+        "deepseek-v4-flash",
+        Endpoint::Responses,
+    );
     assert_eq!(effective_protocol(&resp.config), WireProtocol::Responses);
     // 未收录模型（deepseek-custom + Responses 端点）保守降级 chat（既有语义）
-    let unknown = call_for("https://api.deepseek.com/v1", "deepseek-custom", Endpoint::Responses);
+    let unknown = call_for(
+        "https://api.deepseek.com/v1",
+        "deepseek-custom",
+        Endpoint::Responses,
+    );
     assert_eq!(effective_protocol(&unknown.config), WireProtocol::Chat);
 
     // chat 配置（deepseek + ChatCompletions 端点）→ chat
-    let chat = call_for("https://api.deepseek.com/v1", "deepseek-v4", Endpoint::ChatCompletions);
+    let chat = call_for(
+        "https://api.deepseek.com/v1",
+        "deepseek-v4",
+        Endpoint::ChatCompletions,
+    );
     assert_eq!(effective_protocol(&chat.config), WireProtocol::Chat);
 
     // 显式协议 dispatch 与协议一致：anthropic / gemini 的 URL/body/parser 同轨
@@ -189,8 +240,12 @@ fn effective_protocol_keeps_url_body_parser_in_rail() {
         let url = provider_url_for(&chat.config, protocol);
         let parser = http_parser_for_protocol(protocol);
         let belongs = match protocol {
-            WireProtocol::Anthropic => url.ends_with("/v1/messages") && matches!(parser, HttpStreamParser::Anthropic(_)),
-            WireProtocol::Gemini => url.contains(":generateContent") && matches!(parser, HttpStreamParser::Gemini(_)),
+            WireProtocol::Anthropic => {
+                url.ends_with("/v1/messages") && matches!(parser, HttpStreamParser::Anthropic(_))
+            }
+            WireProtocol::Gemini => {
+                url.contains(":generateContent") && matches!(parser, HttpStreamParser::Gemini(_))
+            }
             _ => false,
         };
         assert!(belongs, "协议 {protocol:?} 的 URL 与 parser 应同轨");
@@ -200,7 +255,11 @@ fn effective_protocol_keeps_url_body_parser_in_rail() {
 /// anthropic 轨 + Some(High) → body 含 thinking.budget_tokens
 #[test]
 fn thinking_high_on_anthropic_rail_emits_budget_tokens() {
-    let call = call_for("https://api.anthropic.com", "claude-sonnet-4", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.anthropic.com",
+        "claude-sonnet-4",
+        Endpoint::ChatCompletions,
+    );
     let protocol = WireProtocol::Anthropic;
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, Some(LoopEffort::High));
@@ -210,14 +269,20 @@ fn thinking_high_on_anthropic_rail_emits_budget_tokens() {
         "anthropic 轨思考档位应注入 thinking：{body}"
     );
     assert_eq!(body["thinking"]["type"], "enabled");
-    let budget = body["thinking"]["budget_tokens"].as_u64().expect("budget_tokens 应为整数");
+    let budget = body["thinking"]["budget_tokens"]
+        .as_u64()
+        .expect("budget_tokens 应为整数");
     assert!(budget > 0, "budget_tokens 应 > 0，实际 {budget}");
 }
 
 /// chat 轨 + Some(High) → body 含 reasoning_effort 字段
 #[test]
 fn thinking_high_on_chat_rail_emits_reasoning_effort() {
-    let call = call_for("https://api.example.com/v1", "gpt-5", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.example.com/v1",
+        "gpt-5",
+        Endpoint::ChatCompletions,
+    );
     let protocol = WireProtocol::Chat;
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, Some(LoopEffort::High));
@@ -231,15 +296,29 @@ fn thinking_high_on_chat_rail_emits_reasoning_effort() {
 /// 未指定思考档位（None）→ 不携带思考参数（行为与既有调用方一致）
 #[test]
 fn thinking_none_omits_reasoning_params() {
-    let chat = call_for("https://api.example.com/v1", "gpt-5", Endpoint::ChatCompletions);
+    let chat = call_for(
+        "https://api.example.com/v1",
+        "gpt-5",
+        Endpoint::ChatCompletions,
+    );
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, None);
     let body = chat.request_body_for(WireProtocol::Chat, &request);
-    assert!(body.get("reasoning_effort").is_none(), "None 不携带思考参数");
+    assert!(
+        body.get("reasoning_effort").is_none(),
+        "None 不携带思考参数"
+    );
 
-    let anthropic = call_for("https://api.anthropic.com", "claude-sonnet-4", Endpoint::ChatCompletions);
+    let anthropic = call_for(
+        "https://api.anthropic.com",
+        "claude-sonnet-4",
+        Endpoint::ChatCompletions,
+    );
     let body2 = anthropic.request_body_for(WireProtocol::Anthropic, &request);
-    assert!(body2.get("thinking").is_none(), "anthropic 轨 None 不注入 thinking");
+    assert!(
+        body2.get("thinking").is_none(),
+        "anthropic 轨 None 不注入 thinking"
+    );
 }
 
 // ── 验收 4：INV-07 连续 assistant 交替投影 ───────────────────────
@@ -248,11 +327,21 @@ fn thinking_none_omits_reasoning_params() {
 /// user 占位，无相邻 assistant（push_alternating 生效）
 #[test]
 fn inv07_consecutive_assistant_inserts_user_placeholder() {
-    let call = call_for("https://api.anthropic.com", "claude-sonnet-4", Endpoint::ChatCompletions);
-    let messages = vec![user_msg("提问"), assistant_msg("第一段"), assistant_msg("第二段")];
+    let call = call_for(
+        "https://api.anthropic.com",
+        "claude-sonnet-4",
+        Endpoint::ChatCompletions,
+    );
+    let messages = vec![
+        user_msg("提问"),
+        assistant_msg("第一段"),
+        assistant_msg("第二段"),
+    ];
     let request = single_user_request(&messages, None);
     let body = call.request_body_for(WireProtocol::Anthropic, &request);
-    let wire = body["messages"].as_array().expect("anthropic 轨 messages 必须为数组");
+    let wire = body["messages"]
+        .as_array()
+        .expect("anthropic 轨 messages 必须为数组");
 
     // 无相邻 assistant
     for window in wire.windows(2) {
@@ -265,10 +354,7 @@ fn inv07_consecutive_assistant_inserts_user_placeholder() {
     assert_eq!(wire.len(), 4, "两条连续 assistant 之间须插入 user 占位");
     assert_eq!(wire[0]["role"], "user");
     assert_eq!(wire[1]["role"], "assistant");
-    assert_eq!(
-        wire[2]["role"], "user",
-        "占位消息必须是 user 角色"
-    );
+    assert_eq!(wire[2]["role"], "user", "占位消息必须是 user 角色");
     assert_eq!(wire[3]["role"], "assistant");
     assert_eq!(
         wire.iter().filter(|m| m["role"] == "assistant").count(),
@@ -280,7 +366,11 @@ fn inv07_consecutive_assistant_inserts_user_placeholder() {
 /// 正常交替（user → assistant）不插入占位
 #[test]
 fn inv07_strict_alternation_preserves_user_assistant() {
-    let call = call_for("https://api.anthropic.com", "claude-sonnet-4", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.anthropic.com",
+        "claude-sonnet-4",
+        Endpoint::ChatCompletions,
+    );
     let messages = vec![user_msg("提问"), assistant_msg("回答")];
     let request = single_user_request(&messages, None);
     let body = call.request_body_for(WireProtocol::Anthropic, &request);
@@ -311,7 +401,11 @@ fn request_with_session<'a>(
 /// 断言经真实 `request_headers_for`（thread request.session_id）。
 #[test]
 fn session_head_injected_when_session_id_present() {
-    let call = call_for("https://api.example.com/v1", "gpt-5", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.example.com/v1",
+        "gpt-5",
+        Endpoint::ChatCompletions,
+    );
     let messages = vec![user_msg("你好")];
 
     // 非空 session_id → 注入 x-deepseek-harness-session-id
@@ -349,7 +443,11 @@ fn session_head_injected_when_session_id_present() {
 #[test]
 fn session_head_coexists_with_grok_affinity_header() {
     // Grok 由 model 前缀推断（catalog 真源；base_url 占位 api.example.com）
-    let call = call_for("https://api.example.com/v1", "grok-4.5", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.example.com/v1",
+        "grok-4.5",
+        Endpoint::ChatCompletions,
+    );
     let messages = vec![user_msg("你好")];
     let request = request_with_session(&messages, Some("ses-abc"));
     let headers = call.request_headers_for(WireProtocol::Chat, &request);
@@ -376,7 +474,11 @@ fn session_head_coexists_with_grok_affinity_header() {
 /// chat 轨请求体不含任何 x-* 会话头。
 #[test]
 fn session_heads_never_in_request_body() {
-    let call = call_for("https://api.example.com/v1", "gpt-5", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.example.com/v1",
+        "gpt-5",
+        Endpoint::ChatCompletions,
+    );
     let messages = vec![user_msg("你好")];
     let request = request_with_session(&messages, Some("ses-123"));
     let body = call.request_body_for(WireProtocol::Chat, &request);
@@ -395,7 +497,11 @@ fn session_heads_never_in_request_body() {
 /// moonshot 配置 → chat 请求体用 `max_tokens` 字段（C5 旧式网关轨）。
 #[test]
 fn max_tokens_field_moonshot_uses_max_tokens() {
-    let call = call_for("https://api.moonshot.cn/v1", "kimi-k2", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.moonshot.cn/v1",
+        "kimi-k2",
+        Endpoint::ChatCompletions,
+    );
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, None);
     let body = call.request_body_for(WireProtocol::Chat, &request);
@@ -418,16 +524,27 @@ fn max_tokens_field_openai_o_series_uses_max_completion_tokens() {
         Endpoint::ChatCompletions,
     );
     let body = official.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
-    assert_eq!(body["max_completion_tokens"], 1024, "openai.com 写 max_completion_tokens：{body}");
+    assert_eq!(
+        body["max_completion_tokens"], 1024,
+        "openai.com 写 max_completion_tokens：{body}"
+    );
     assert!(
         body.get("max_tokens").is_none(),
         "official 不得写 max_tokens：{body}"
     );
 
     // o 系列模型名（baseUrl 占位非 openai.com）
-    let o_series = call_for("https://api.example.com/v1", "o4-mini", Endpoint::ChatCompletions);
-    let body2 = o_series.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
-    assert_eq!(body2["max_completion_tokens"], 1024, "o 系列写 max_completion_tokens：{body2}");
+    let o_series = call_for(
+        "https://api.example.com/v1",
+        "o4-mini",
+        Endpoint::ChatCompletions,
+    );
+    let body2 =
+        o_series.request_body_for(WireProtocol::Chat, &single_user_request(&messages, None));
+    assert_eq!(
+        body2["max_completion_tokens"], 1024,
+        "o 系列写 max_completion_tokens：{body2}"
+    );
     assert!(
         body2.get("max_tokens").is_none(),
         "o 系列不得写 max_tokens：{body2}"
@@ -437,11 +554,18 @@ fn max_tokens_field_openai_o_series_uses_max_completion_tokens() {
 /// 默认 openai-compatible（deepseek 等）→ chat 请求体用 `max_tokens`（字节兼容）。
 #[test]
 fn max_tokens_field_default_uses_max_tokens() {
-    let call = call_for("https://api.deepseek.com/v1", "deepseek-v4-flash", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.deepseek.com/v1",
+        "deepseek-v4-flash",
+        Endpoint::ChatCompletions,
+    );
     let messages = vec![user_msg("你好")];
     let request = single_user_request(&messages, None);
     let body = call.request_body_for(WireProtocol::Chat, &request);
-    assert_eq!(body["max_tokens"], 1024, "默认 openai-compatible 写 max_tokens：{body}");
+    assert_eq!(
+        body["max_tokens"], 1024,
+        "默认 openai-compatible 写 max_tokens：{body}"
+    );
     assert!(
         body.get("max_completion_tokens").is_none(),
         "默认轨不得写 max_completion_tokens：{body}"
@@ -469,7 +593,11 @@ fn stop_error_kind_passes_through_to_loop_event() {
             ..
         } => {
             assert_eq!(reason, LoopStopReason::Error);
-            assert_eq!(error_kind, Some(ProviderErrorKind::RateLimit), "error_kind 应透传");
+            assert_eq!(
+                error_kind,
+                Some(ProviderErrorKind::RateLimit),
+                "error_kind 应透传"
+            );
             assert_eq!(error.as_deref(), Some("provider 过载"));
         }
         other => panic!("期望 Stop，得到 {other:?}"),
@@ -482,7 +610,11 @@ fn stop_error_kind_passes_through_to_loop_event() {
 /// `reasoningEffortTiers` 只提供 high/max（low 为隐藏档）→ 描述面白名单仅含 high/max。
 #[test]
 fn describe_model_whitelist_for_deepseek_v4_flash_is_narrow() {
-    let call = call_for("https://api.deepseek.com/v1", "deepseek-v4-flash", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.deepseek.com/v1",
+        "deepseek-v4-flash",
+        Endpoint::ChatCompletions,
+    );
     let cap = describe_model(
         bundled_catalog(),
         catalog_vendor(&call.config),
@@ -501,7 +633,11 @@ fn describe_model_whitelist_for_deepseek_v4_flash_is_narrow() {
     let rejected = thinking::validate_reasoning_effort(&call.config, Some(LoopEffort::Low));
     match rejected {
         Err(err) => {
-            assert_eq!(err.kind, ProviderErrorKind::InvalidRequest, "越白名单 → 分类错误");
+            assert_eq!(
+                err.kind,
+                ProviderErrorKind::InvalidRequest,
+                "越白名单 → 分类错误"
+            );
             assert!(
                 err.message.contains("UNSUPPORTED_REASONING_EFFORT"),
                 "文案携带语义标签：{}",
@@ -552,7 +688,11 @@ async fn out_of_whitelist_effort_rejected_before_http() {
 #[test]
 fn omitted_effort_passes_validation_and_omits_thinking_param() {
     // 校验面：省略（None）→ Ok（放行到构建/HTTP，不发送思考参数）。
-    let call = call_for("https://api.deepseek.com/v1", "deepseek-v4-flash", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.deepseek.com/v1",
+        "deepseek-v4-flash",
+        Endpoint::ChatCompletions,
+    );
     assert!(
         thinking::validate_reasoning_effort(&call.config, None).is_ok(),
         "省略档位不应被拒绝"
@@ -569,7 +709,11 @@ fn omitted_effort_passes_validation_and_omits_thinking_param() {
 /// 合法显式档位 → 校验放行，请求体写入对应思考参数（白名单内直发不降级）。
 #[test]
 fn in_whitelist_effort_passes_and_emits_reasoning_param() {
-    let call = call_for("https://api.deepseek.com/v1", "deepseek-v4-flash", Endpoint::ChatCompletions);
+    let call = call_for(
+        "https://api.deepseek.com/v1",
+        "deepseek-v4-flash",
+        Endpoint::ChatCompletions,
+    );
     // 校验面：high 在 deepseek-v4-flash 白名单 → 放行。
     assert!(
         thinking::validate_reasoning_effort(&call.config, Some(LoopEffort::High)).is_ok(),
@@ -577,7 +721,10 @@ fn in_whitelist_effort_passes_and_emits_reasoning_param() {
     );
     // 请求体：high → reasoning_effort:"high"（白名单内直发，不降级）。
     let messages = vec![user_msg("你好")];
-    let body = call.request_body_for(WireProtocol::Chat, &single_user_request(&messages, Some(LoopEffort::High)));
+    let body = call.request_body_for(
+        WireProtocol::Chat,
+        &single_user_request(&messages, Some(LoopEffort::High)),
+    );
     assert_eq!(
         body["reasoning_effort"], "high",
         "白名单内 high 档应写入 reasoning_effort：{body}"

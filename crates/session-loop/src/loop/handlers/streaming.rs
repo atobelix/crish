@@ -595,6 +595,7 @@ fn build_assistant_message(
     client_message_id: Option<&str>,
 ) -> AgentMessage {
     let mut blocks: Vec<AgentMessageBlock> = Vec::new();
+    let mut has_thought_block = false;
     // thought 块（metadata.thoughtBlocks，redacted 透传，02 §一.4）
     if let Some(blocks_value) = consumed
         .metadata
@@ -602,13 +603,26 @@ fn build_assistant_message(
         .and_then(|v| v.as_array())
     {
         for block in blocks_value {
-            if let (Some(text), Some(redacted)) = (
-                block.get("text").and_then(|v| v.as_str()),
-                block.get("redacted").and_then(|v| v.as_bool()),
-            ) {
+            if let Some(text) = block.get("text").and_then(|v| v.as_str()) {
                 blocks.push(AgentMessageBlock::Thought {
                     text: text.to_string(),
-                    redacted: Some(redacted),
+                    redacted: block.get("redacted").and_then(|v| v.as_bool()),
+                });
+                has_thought_block = true;
+            }
+        }
+    }
+    // 兜底：若 thoughtBlocks 为空或未产出 thought 块，但 metadata.thought 存在非空文本
+    if !has_thought_block {
+        if let Some(thought_text) = consumed
+            .metadata
+            .get("thought")
+            .and_then(|v| v.as_str())
+        {
+            if !thought_text.is_empty() {
+                blocks.push(AgentMessageBlock::Thought {
+                    text: thought_text.to_string(),
+                    redacted: None,
                 });
             }
         }
@@ -711,4 +725,3 @@ fn emit_message_deltas(state: &mut LoopState, message: &AgentMessage) {
         }
     }
 }
-

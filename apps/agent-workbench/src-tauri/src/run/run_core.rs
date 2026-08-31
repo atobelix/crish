@@ -337,7 +337,8 @@ pub struct CoreRunState {
     /// D3 §3.1：每会话恢复协调器（C7 权威实例；五件套装配，惰性构造——
     /// 外层 Mutex<HashMap> 为 L0 内存守卫，持锁 < 100ns；
     /// 内层统一为 Arc<tokio::sync::Mutex<RecoveryCoordinator>> 异步业务锁，支持 await）
-    pub(crate) recovery_coordinators: Mutex<HashMap<String, Arc<tokio::sync::Mutex<RecoveryCoordinator>>>>,
+    pub(crate) recovery_coordinators:
+        Mutex<HashMap<String, Arc<tokio::sync::Mutex<RecoveryCoordinator>>>>,
     /// D3 §3.1/§3.3：每会话会话树（restore 后 from_session_record 重建；
     /// 阶梯 3 fork 的源叶子载体；coordinator 惰性构造时缺省空树）
     pub(crate) session_trees: Mutex<HashMap<String, Arc<Mutex<SessionTree>>>>,
@@ -1421,8 +1422,6 @@ pub(crate) async fn write_back_cache_stats(
         }
     }
 }
-
-
 
 /// D5 §3.9 / D1 §3.2.2：壳层事件发射统一入口（入队持久化 + 信封 emit；
 /// sequence 由 EventQueue 会话级原子分配）。goal-* 与熔断观测事件

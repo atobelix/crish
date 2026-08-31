@@ -25,8 +25,8 @@
 //! 创建命令（含进程拉起 / Job 分配）走 `spawn_blocking` 避免阻塞命令线程；
 //! 写入 / 调整 / 终止为轻量注册表操作，保持同步。
 
-pub(crate) mod utf8_buffer;
 mod session;
+pub(crate) mod utf8_buffer;
 
 use conex_types::CoreError;
 use serde::Serialize;
@@ -73,10 +73,7 @@ pub(crate) async fn workbench_pty_create(
 /// Cap: 64 KiB per call.
 /// 异步命令：将 I/O 卸载至 tokio 阻塞线程池，解除全局锁阻塞，杜绝阻塞 Tauri 命令主线程。
 #[tauri::command]
-pub(crate) async fn workbench_pty_write(
-    pty_id: String,
-    data: String,
-) -> Result<(), CoreError> {
+pub(crate) async fn workbench_pty_write(pty_id: String, data: String) -> Result<(), CoreError> {
     if data.len() > MAX_WRITE_BYTES {
         return Err(CoreError::InvalidInput(format!(
             "write too large: {} bytes (max {MAX_WRITE_BYTES})",
@@ -85,11 +82,9 @@ pub(crate) async fn workbench_pty_write(
     }
     let pty_id_cloned = pty_id.clone();
     let bytes = data.into_bytes();
-    tokio::task::spawn_blocking(move || {
-        session::write_session(&pty_id_cloned, &bytes)
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("workbench_pty_write join: {e}")))??;
+    tokio::task::spawn_blocking(move || session::write_session(&pty_id_cloned, &bytes))
+        .await
+        .map_err(|e| CoreError::Internal(format!("workbench_pty_write join: {e}")))??;
 
     Ok(())
 }

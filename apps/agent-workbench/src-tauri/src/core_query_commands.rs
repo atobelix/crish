@@ -967,7 +967,10 @@ mod tests {
             "npm test 需要执行权限"
         );
         // T5-1b 增量（崩溃台账）
-        assert_eq!(json["lastCrash"]["fileName"], "crash-20260816-120000-main.log");
+        assert_eq!(
+            json["lastCrash"]["fileName"],
+            "crash-20260816-120000-main.log"
+        );
         assert_eq!(json["lastCrash"]["timestampMs"], 1_700_000_000_005_i64);
         // 不得出现 snake_case 键
         for key in [

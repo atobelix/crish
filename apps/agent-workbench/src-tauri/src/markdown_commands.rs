@@ -60,7 +60,6 @@ pub async fn md_render_stream(text: String, stream_mode: bool) -> Result<String,
         .map_err(|e| CoreError::Internal(format!("md_render_stream join: {e}")))
 }
 
-
 /// 清空 markdown 渲染缓存与代码高亮缓存。
 ///
 /// 用于内存压力场景或测试隔离。正常运行时无需调用（moka 自动 LRU 淘汰）。

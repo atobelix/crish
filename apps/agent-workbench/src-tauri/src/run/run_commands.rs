@@ -1055,16 +1055,15 @@ mod tests {
     /// 测试用 CoreRunState（InMemoryStore + 独立快照文件 + 记录桥）
     fn test_state() -> Arc<CoreRunState> {
         let (bridge, _emitter) = recording_bridge();
-        let snapshots: Arc<dyn SnapshotStore> = Arc::new(SnapshotFileStore::new(
-            std::env::temp_dir().join(format!(
+        let snapshots: Arc<dyn SnapshotStore> =
+            Arc::new(SnapshotFileStore::new(std::env::temp_dir().join(format!(
                 "conex_reaper_{}_{}_snapshot.json",
                 std::process::id(),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap_or_default()
                     .as_nanos()
-            )),
-        ));
+            ))));
         Arc::new(CoreRunState::new(
             Arc::new(InMemoryStore::new()),
             snapshots,
@@ -1194,8 +1193,15 @@ mod tests {
 
         // 终态补写断言：run 标记 failed + lastError 写入收割文案
         let status = active.handle.lock().await.status.clone();
-        assert_eq!(status, conex_db::RunStatus::Failed, "孤儿 run 终态 = failed");
-        let last_error = state.diagnostics.last_error().expect("收割必须写 lastError");
+        assert_eq!(
+            status,
+            conex_db::RunStatus::Failed,
+            "孤儿 run 终态 = failed"
+        );
+        let last_error = state
+            .diagnostics
+            .last_error()
+            .expect("收割必须写 lastError");
         assert!(
             last_error.message.contains(ORPHAN_REAP_MESSAGE),
             "lastError 必须含收割文案：{}",
@@ -1215,25 +1221,25 @@ mod tests {
         let running_handle = tauri::async_runtime::spawn(async {
             tokio::time::sleep(Duration::from_secs(60)).await;
         });
-        let running = build_active_run(
-            &state,
-            "sess-running",
-            "run-running",
-            Some(running_handle),
-        )
-        .await;
+        let running =
+            build_active_run(&state, "sess-running", "run-running", Some(running_handle)).await;
 
         // 未登记驱动句柄（构造在前、spawn 在后的中间态 / 测试驱动路径）
-        let unregistered =
-            build_active_run(&state, "sess-none", "run-none", None).await;
+        let unregistered = build_active_run(&state, "sess-none", "run-none", None).await;
 
         // 连续多轮：两条 run 都必须存活
         for _ in 0..(ORPHAN_REAP_DEBOUNCE_ROUNDS + 2) {
             reap_orphan_runs_round(&state).await;
         }
         let registry = state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
-        assert!(registry.contains_key("run-running"), "运行中 run 不得被收割");
-        assert!(registry.contains_key("run-none"), "未登记驱动 run 不得被收割");
+        assert!(
+            registry.contains_key("run-running"),
+            "运行中 run 不得被收割"
+        );
+        assert!(
+            registry.contains_key("run-none"),
+            "未登记驱动 run 不得被收割"
+        );
         drop(registry);
         assert!(
             state

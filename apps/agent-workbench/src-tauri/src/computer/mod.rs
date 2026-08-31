@@ -46,7 +46,6 @@
 //! 普通停止语义，不置急停旗，不叫急停。
 
 use crate::core_event_bridge::Emitter;
-use session_loop::AbortSignal;
 #[cfg(test)]
 use agent_tools::definition::ToolError;
 #[cfg(test)]
@@ -59,6 +58,7 @@ use conex_computer_tools::session::ComputerOps;
 use conex_computer_tools::{register_computer_tools, ComputerToolsConfig};
 use conex_db::LocalDb;
 use serde::Serialize;
+use session_loop::AbortSignal;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -233,13 +233,10 @@ impl ComputerSlot {
     /// 挂接状态事件发射器（幂等：重复挂接覆盖旧值；main.rs ⑧e 与命令面
     /// 启动前即挂订阅，enable/disable 不丢事件）。
     pub(crate) fn attach_emitter(&self, emitter: Arc<dyn Emitter>) {
-        *self
-            .emitter
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!(target: "computer", "emitter 锁中毒，按恢复模式继续：{e}");
-                e.into_inner()
-            }) = Some(emitter);
+        *self.emitter.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "computer", "emitter 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        }) = Some(emitter);
     }
 
     /// 会话互斥门共享实例（接线点③：浏览器线经同一门做互斥守卫）。
@@ -258,13 +255,10 @@ impl ComputerSlot {
     /// 未注入时工具面 `tool.computer.not_ready`——守卫①）。
     #[cfg(test)]
     pub(crate) fn set_session(&self, session: Arc<dyn ComputerOps>) {
-        *self
-            ._session
-            .lock()
-            .unwrap_or_else(|e| {
-                tracing::error!(target: "computer", "computer session 锁中毒，按恢复模式继续：{e}");
-                e.into_inner()
-            }) = Some(session);
+        *self._session.lock().unwrap_or_else(|e| {
+            tracing::error!(target: "computer", "computer session 锁中毒，按恢复模式继续：{e}");
+            e.into_inner()
+        }) = Some(session);
     }
 
     /// 惰性恢复：首次访问从 session_meta 恢复开启态（幂等一次性；构造不读库）。

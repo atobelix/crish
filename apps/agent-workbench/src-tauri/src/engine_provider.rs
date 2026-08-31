@@ -37,8 +37,8 @@ use agent_provider::request::{
     build_anthropic_request_body, build_cache_policy, build_chat_completions_request_body,
     build_gemini_request_body, build_responses_request_body, infer_reasoning_vendor,
     AnthropicRequestOptions, ChatCompletionsRequestOptions, GeminiRequestOptions,
-    ReasoningContentMode, ReasoningVendor, RequestBuildContext, ToolDefinition as WireToolDefinition,
-    WireProtocol,
+    ReasoningContentMode, ReasoningVendor, RequestBuildContext,
+    ToolDefinition as WireToolDefinition, WireProtocol,
 };
 use agent_provider::sse::{AbortFlag, StreamDiagnosticContext, StreamReadOptions};
 use agent_provider::transport::stream_frames;
@@ -203,9 +203,7 @@ impl HttpProviderCall {
                 let options = GeminiRequestOptions {
                     model: Some(self.config.model.clone()),
                     max_output_tokens: request.max_tokens.map(u64::from),
-                    thinking_intensity: request
-                        .reasoning_effort
-                        .map(thinking::effort_to_intensity),
+                    thinking_intensity: request.reasoning_effort.map(thinking::effort_to_intensity),
                     ..Default::default()
                 };
                 build_gemini_request_body(&options, &context)
@@ -266,9 +264,7 @@ impl HttpProviderCall {
         request: &ProviderRequest<'_>,
     ) -> Vec<(&'static str, String)> {
         let policy = match protocol {
-            WireProtocol::Chat | WireProtocol::Responses => {
-                self.request_options(request).cache
-            }
+            WireProtocol::Chat | WireProtocol::Responses => self.request_options(request).cache,
             WireProtocol::Anthropic | WireProtocol::Gemini => None,
         };
         headers::request_headers_for(
@@ -337,7 +333,12 @@ impl ProviderCall for HttpProviderCall {
                 Ok(response) => response,
                 Err(error) => {
                     let source = source_from_reqwest_error(&error);
-                    return Err(to_classified(classify_provider_error(None, None, Some(source), None)));
+                    return Err(to_classified(classify_provider_error(
+                        None,
+                        None,
+                        Some(source),
+                        None,
+                    )));
                 }
             },
         };

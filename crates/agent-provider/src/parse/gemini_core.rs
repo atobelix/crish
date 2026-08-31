@@ -16,6 +16,7 @@ use crate::events::{
 };
 use crate::sse::frame::SseFrame;
 
+use super::super::think_tags::StreamingTagExtractor;
 use super::gemini_map::{
     gemini_finish_reason_to_stop, gemini_payload_error, has_candidates, merge_gemini_usage,
     non_empty_string, normalize_function_args, parse_gemini_usage, prompt_block_reason,
@@ -41,6 +42,8 @@ pub struct GeminiParser {
     stream_error: Option<String>,
     /// 已终结（错误帧或 finish 后）
     terminated: bool,
+    /// 内嵌思考标签实时提取器（B2.5 / Markdown Stream Refactor）
+    tag_extractor: StreamingTagExtractor,
 }
 
 impl Default for GeminiParser {
@@ -54,6 +57,7 @@ impl Default for GeminiParser {
             tool_call_count: 0,
             stream_error: None,
             terminated: false,
+            tag_extractor: StreamingTagExtractor::default(),
         }
     }
 }
@@ -163,9 +167,8 @@ impl GeminiParser {
                         // 正文部分（106-110）
                         if let Some(text) = non_empty_string(part.get("text")) {
                             self.emitted_content = true;
-                            events.push(ProviderStreamEvent::TextDelta {
-                                text: text.to_owned(),
-                            });
+                            let extracted = self.tag_extractor.push_text(text);
+                            events.extend(extracted);
                             continue;
                         }
                         // functionCall / function_call 完整调用一次性产出（112-138）
@@ -186,8 +189,8 @@ impl GeminiParser {
                                     .filter(|value| !value.is_null())
                                     .or_else(|| {
                                         function_call
-                                            .get("arguments")
-                                            .filter(|value| !value.is_null())
+                                             .get("arguments")
+                                             .filter(|value| !value.is_null())
                                     }),
                             );
                             let id = string_field(function_call.get("id"))
@@ -231,6 +234,12 @@ impl GeminiParser {
             return Ok(Vec::new());
         }
         let mut events = Vec::new();
+        // 冲刷标签状态机未决的缓冲区
+        let remaining_tag_events = self.tag_extractor.finish();
+        if !remaining_tag_events.is_empty() {
+            self.emitted_content = true;
+            events.extend(remaining_tag_events);
+        }
         // 有工具调用且 reason 为 stop → 强制 tool-call（158-160）
         if self.tool_call_count > 0 && self.stop_reason == StopReason::Stop {
             self.stop_reason = StopReason::ToolCall;

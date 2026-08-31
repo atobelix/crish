@@ -19,10 +19,7 @@ use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::config::{
-    persistence::load_profiles_config,
-    profile::read_profile_key,
-};
+use crate::config::{persistence::load_profiles_config, profile::read_profile_key};
 
 /// 探活请求参数（serde camelCase）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -68,7 +65,10 @@ pub fn parse_scanned_models(body: &serde_json::Value, profile_id: &str) -> Vec<S
     let mut add_item = |id_raw: &str, context_window: Option<u64>| {
         let trimmed = id_raw.trim();
         // 兼容 Gemini 前缀 "models/gemini-1.5-pro"
-        let model_id = trimmed.strip_prefix("models/").unwrap_or(trimmed).to_string();
+        let model_id = trimmed
+            .strip_prefix("models/")
+            .unwrap_or(trimmed)
+            .to_string();
         if !model_id.is_empty() && seen_ids.insert(model_id.clone()) {
             scanned.push(ScannedModel {
                 model: model_id,
@@ -155,7 +155,12 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
         }
     };
 
-    let base_url = match profile.base_url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let base_url = match profile
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(url) => url.trim_end_matches('/'),
         None => {
             return ProbePingResult {
@@ -225,12 +230,16 @@ pub async fn probe_ping_core(req: ProbePingRequest) -> ProbePingResult {
             client.post(url).headers(headers).json(&body)
         }
         "gemini" => {
-            let url = format!("{base_url}/v1beta/models/{model_to_test}:generateContent?key={api_key}");
+            let url =
+                format!("{base_url}/v1beta/models/{model_to_test}:generateContent?key={api_key}");
             let body = serde_json::json!({
                 "contents": [{"parts": [{"text": "hi"}]}],
                 "generationConfig": {"maxOutputTokens": 1}
             });
-            client.post(url).header(CONTENT_TYPE, "application/json").json(&body)
+            client
+                .post(url)
+                .header(CONTENT_TYPE, "application/json")
+                .json(&body)
         }
         _ => {
             // 默认 OpenAI / DeepSeek / ChatCompletions
@@ -326,7 +335,12 @@ pub async fn probe_scan_models_core(
         }
     };
 
-    let base_url = match profile.base_url.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    let base_url = match profile
+        .base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
         Some(url) => url.trim_end_matches('/'),
         None => {
             return ProbeScanResult {
@@ -593,7 +607,8 @@ mod tests {
 
     #[test]
     fn parse_scanned_models_array_format() {
-        let json_strings = serde_json::json!(["claude-3-5-sonnet", "claude-3-opus", "claude-3-5-sonnet"]);
+        let json_strings =
+            serde_json::json!(["claude-3-5-sonnet", "claude-3-opus", "claude-3-5-sonnet"]);
         let models = parse_scanned_models(&json_strings, "anthropic-direct");
         assert_eq!(models.len(), 2);
         assert_eq!(models[0].model, "claude-3-5-sonnet");
@@ -656,7 +671,10 @@ mod tests {
 
     #[tokio::test]
     async fn probe_ping_and_scan_with_local_mock_server() {
-        use axum::{routing::{get, post}, Json, Router};
+        use axum::{
+            routing::{get, post},
+            Json, Router,
+        };
         use std::net::SocketAddr;
         use tokio::net::TcpListener;
 
@@ -689,7 +707,8 @@ mod tests {
         });
 
         // 构造临时测试目录与隔离 Profile
-        let test_dir = std::env::temp_dir().join(format!("crish-probe-test-{}", std::process::id()));
+        let test_dir =
+            std::env::temp_dir().join(format!("crish-probe-test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&test_dir);
         let prev_config_dir = std::env::var("CRISH_WORKBENCH_CONFIG_DIR").ok();
         std::env::set_var("CRISH_WORKBENCH_CONFIG_DIR", &test_dir);
@@ -707,7 +726,8 @@ mod tests {
         );
 
         // 写入 profile secret key
-        let _ = crate::config::config_secret_set(profile_id.to_string(), "mock-api-key".to_string());
+        let _ =
+            crate::config::config_secret_set(profile_id.to_string(), "mock-api-key".to_string());
 
         // 1. 测试 probe_ping_core
         let ping_res = probe_ping_core(ProbePingRequest {

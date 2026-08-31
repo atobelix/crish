@@ -95,13 +95,13 @@ pub(crate) use orchestrator::restore::{
 };
 pub(crate) use orchestrator::run::{CancelMode, RunEngine, RunHandle, RunManager};
 pub(crate) use orchestrator::session::{SessionRecord, SessionTree};
+pub(crate) use orchestrator::steering_queue::CONTEXT_STATE_GROUP;
 pub(crate) use orchestrator::subagent_events::{
     SubagentEmitContext, SubagentEventEmitter, SubagentEventInfo,
 };
 pub(crate) use orchestrator::{
     assess_round, GoalDecision, GoalState, PendingMessageQueue, RoundInput, ToolCallStamp,
 };
-pub(crate) use orchestrator::steering_queue::CONTEXT_STATE_GROUP;
 pub(crate) use session_loop::approval_router::{
     arbiter_metadata, classify_source, route_approval, route_approval_guarded,
 };

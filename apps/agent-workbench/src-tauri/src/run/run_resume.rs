@@ -92,7 +92,7 @@ pub(crate) fn main_task_text(messages: &[Arc<AgentMessage>]) -> String {
 }
 
 /// steering 注入判定（消息 metadata.kind == AgentMessageMetadataKind::Steering
-    /// canonical wire——I1-α④ 枚举化）
+/// canonical wire——I1-α④ 枚举化）
 pub(crate) fn is_steering_message(message: &AgentMessage) -> bool {
     message
         .metadata
@@ -100,10 +100,7 @@ pub(crate) fn is_steering_message(message: &AgentMessage) -> bool {
         .and_then(|meta| meta.get("kind"))
         .and_then(|kind| kind.as_str())
         == Some(
-            session_loop::steering::metadata_kind_wire(
-                AgentMessageMetadataKind::Steering,
-            )
-            .as_str(),
+            session_loop::steering::metadata_kind_wire(AgentMessageMetadataKind::Steering).as_str(),
         )
 }
 

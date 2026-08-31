@@ -9,7 +9,9 @@
 //! 提供逐变体映射；gemini 轨 builder 用 `thinking_intensity`（[ThinkingIntensity]），
 //! 由 [effort_to_intensity] 换算。
 
-use agent_provider::request::{describe_model, ReasoningEffort, ReasoningReject, ThinkingIntensity};
+use agent_provider::request::{
+    describe_model, ReasoningEffort, ReasoningReject, ThinkingIntensity,
+};
 use conex_types::error::ProviderErrorKind;
 use conex_types::response::ClassifiedStreamError;
 
@@ -35,7 +37,9 @@ pub(crate) fn to_provider_effort(
 
 /// session-loop 思考档位 → gemini thinking intensity（gemini 轨 builder 消费
 /// [ThinkingIntensity]；逐变体映射，变体集一致）。
-pub(crate) fn effort_to_intensity(effort: session_loop::provider::ReasoningEffort) -> ThinkingIntensity {
+pub(crate) fn effort_to_intensity(
+    effort: session_loop::provider::ReasoningEffort,
+) -> ThinkingIntensity {
     match effort {
         session_loop::provider::ReasoningEffort::Off => ThinkingIntensity::Off,
         session_loop::provider::ReasoningEffort::Auto => ThinkingIntensity::Medium,
@@ -73,7 +77,10 @@ pub(crate) fn validate_reasoning_effort(
     };
     let provider_effort = to_provider_effort(sl_effort);
     // off/auto → 关闭/默认思考，不发送、不校验。
-    if matches!(provider_effort, ReasoningEffort::Off | ReasoningEffort::Auto) {
+    if matches!(
+        provider_effort,
+        ReasoningEffort::Off | ReasoningEffort::Auto
+    ) {
         return Ok(());
     }
     let capability = describe_model(
@@ -83,7 +90,10 @@ pub(crate) fn validate_reasoning_effort(
         Some(config.endpoint),
     );
     let in_whitelist = capability.supports_reasoning
-        && capability.efforts.iter().any(|e| e == provider_effort.as_str());
+        && capability
+            .efforts
+            .iter()
+            .any(|e| e == provider_effort.as_str());
     if in_whitelist {
         Ok(())
     } else {

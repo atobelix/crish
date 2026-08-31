@@ -90,6 +90,8 @@ pub const SEARCH_INDEX_PATH: &str = "/v1/search/index";
 /// 移动端配对入口（POST /v1/pair；R1-11 G-2：body {code, label?} →
 /// {token, label?}，令牌仅此一次明文返回；免鉴权——配对端点无令牌可入）
 pub const PAIR_PATH: &str = "/v1/pair";
+/// 应用预览透明代理入口（GET /v1/preview/proxy；免鉴权公共路由）
+pub const PREVIEW_PROXY_PATH: &str = "/v1/preview/proxy";
 
 /// 密钥/高危险命令面（R1-10 T-07 / D5 §4.5：显式不进远程白名单——矩阵外
 /// 命令）。REST 路由表即远程白名单：本清单条目一律不注册路由，触达时经
@@ -203,6 +205,11 @@ pub fn build_router(state: ServerState) -> Router {
         .route(
             PAIR_PATH,
             post(crate::server::pair_endpoint::handle_rest_pair),
+        )
+        .route(
+            PREVIEW_PROXY_PATH,
+            get(crate::server::preview_proxy::handle_preview_proxy)
+                .options(crate::server::preview_proxy::handle_preview_proxy_options),
         );
     // WS 事件端点（R1-05）：handler 内自鉴权（Bearer 头或 ?token= 双通道，
     // D2 §10.1）——不进 require_bearer_token 中间件组（浏览器 WS 无法携带
@@ -3877,5 +3884,89 @@ mod tests {
             1,
             "成功请求必须计入窗口（成功与失败统一计）"
         );
+    }
+
+    // ── Preview Proxy 免鉴权端点测试 ──
+
+    /// 预览代理缺少 url 参数或参数非法时返回 400 cmd.invalid
+    #[tokio::test]
+    async fn preview_proxy_without_url_param_returns_400_cmd_invalid() {
+        let app = build_router(test_state());
+
+        // 无查询参数
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri(PREVIEW_PROXY_PATH)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.invalid");
+
+        // url 参数为空
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri(format!("{PREVIEW_PROXY_PATH}?url="))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.invalid");
+
+        // url 协议不支持（如 ftp）
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri(format!("{PREVIEW_PROXY_PATH}?url=ftp://example.com/test"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = json_body(response).await;
+        assert_eq!(body["code"], "cmd.invalid");
+    }
+
+    /// 预览代理 OPTIONS 预检请求返回 204 及 CORS 头部
+    #[tokio::test]
+    async fn preview_proxy_options_returns_204_with_cors_headers() {
+        let app = build_router(test_state());
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .method("OPTIONS")
+                    .uri(PREVIEW_PROXY_PATH)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(
+            response
+                .headers()
+                .get("access-control-allow-origin")
+                .unwrap(),
+            "*"
+        );
+        assert!(response
+            .headers()
+            .get("access-control-allow-methods")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("GET"));
     }
 }

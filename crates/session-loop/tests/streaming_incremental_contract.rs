@@ -571,3 +571,165 @@ async fn collected_sequence_intact_without_sink() {
         other => panic!("期望 message-end，实际 {other:?}"),
     }
 }
+
+/// 验证 redacted 为 None 时思考块在 assistant 消息中依然完整保留（P0 缺陷修复验证）
+#[tokio::test]
+async fn thought_blocks_retained_when_redacted_is_none() {
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::thought("模型原始深度思考内容", None),
+        ProviderStreamEvent::text("最终回答文本"),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]);
+    let outcome = loop_with(Box::new(provider))
+        .run(user("测试无 redacted 思考块"))
+        .await;
+
+    let assistant_msg = outcome
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::Assistant)
+        .expect("应产出 assistant 消息");
+
+    // blocks 应包含 Thought 块与 Text 块
+    assert_eq!(assistant_msg.blocks.len(), 2);
+    assert_eq!(
+        assistant_msg.blocks[0],
+        AgentMessageBlock::Thought {
+            text: "模型原始深度思考内容".to_string(),
+            redacted: None,
+        }
+    );
+    assert_eq!(
+        assistant_msg.blocks[1],
+        AgentMessageBlock::Text {
+            text: "最终回答文本".to_string(),
+        }
+    );
+}
+
+/// 验证纯思考流（无正文）在会话循环中正常落盘为 Assistant 消息，不被判定为 Empty
+#[tokio::test]
+async fn pure_thought_stream_commits_assistant_message() {
+    let provider = TestProvider::new(vec![
+        ProviderStreamEvent::thought("纯思考链内容分析", None),
+        ProviderStreamEvent::stop(StopReason::Stop),
+    ]);
+    let outcome = loop_with(Box::new(provider))
+        .run(user("纯思考测试"))
+        .await;
+
+    assert_eq!(outcome.reason, AgentEndReason::Stop);
+    let assistant_msg = outcome
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::Assistant)
+        .expect("纯思考流必须 commit assistant 消息");
+
+    assert_eq!(assistant_msg.blocks.len(), 1);
+    assert_eq!(
+        assistant_msg.blocks[0],
+        AgentMessageBlock::Thought {
+            text: "纯思考链内容分析".to_string(),
+            redacted: None,
+        }
+    );
+    assert_eq!(assistant_msg.thought(), "纯思考链内容分析");
+}
+
+/// 验证在纯思考流中途 Abort 时，已累积的思考链被完整抢救（Partial Salvage）落盘
+#[tokio::test]
+async fn abort_during_thought_salvages_partial_thought() {
+    let signal_slot: SignalSlot = Arc::new(Mutex::new(None));
+    let polled_after_abort = Arc::new(AtomicBool::new(false));
+    let provider = AbortMidStreamProvider {
+        script: vec![
+            ProviderStreamEvent::thought("第一阶段思考...", None),
+            ProviderStreamEvent::thought("第二阶段思考...", None),
+            ProviderStreamEvent::thought("第三阶段思考（不应到达）", None),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+        abort_after: 2,
+        signal_slot: signal_slot.clone(),
+        polled_after_abort: polled_after_abort.clone(),
+    };
+    let mut loop_ = loop_with(Box::new(provider));
+    *signal_slot.lock().unwrap() = Some(loop_.abort_signal());
+    let outcome = loop_.run(user("测试思考流 abort 抢救")).await;
+
+    assert_eq!(outcome.reason, AgentEndReason::Aborted);
+    let assistant_msg = outcome
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::Assistant)
+        .expect("abort 抢救必须保留 assistant 消息");
+
+    assert_eq!(
+        assistant_msg
+            .metadata
+            .as_ref()
+            .and_then(|m| m.get("stopReason"))
+            .and_then(|s| s.as_str()),
+        Some("aborted")
+    );
+    assert_eq!(assistant_msg.blocks.len(), 2);
+    assert_eq!(
+        assistant_msg.blocks[0],
+        AgentMessageBlock::Thought {
+            text: "第一阶段思考...".to_string(),
+            redacted: None,
+        }
+    );
+    assert_eq!(
+        assistant_msg.blocks[1],
+        AgentMessageBlock::Thought {
+            text: "第二阶段思考...".to_string(),
+            redacted: None,
+        }
+    );
+    assert_eq!(assistant_msg.thought(), "第一阶段思考...第二阶段思考...");
+}
+
+/// 验证混合思考与正文流中途 Abort 时，思考块与正文块均被完整抢救
+#[tokio::test]
+async fn mixed_thought_and_text_abort_salvages_both() {
+    let signal_slot: SignalSlot = Arc::new(Mutex::new(None));
+    let polled_after_abort = Arc::new(AtomicBool::new(false));
+    let provider = AbortMidStreamProvider {
+        script: vec![
+            ProviderStreamEvent::thought("前置思考完成", None),
+            ProviderStreamEvent::text("正文回答的第一句。"),
+            ProviderStreamEvent::text("正文回答的第二句（不应到达）。"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ],
+        abort_after: 2,
+        signal_slot: signal_slot.clone(),
+        polled_after_abort: polled_after_abort.clone(),
+    };
+    let mut loop_ = loop_with(Box::new(provider));
+    *signal_slot.lock().unwrap() = Some(loop_.abort_signal());
+    let outcome = loop_.run(user("测试混合流 abort 抢救")).await;
+
+    assert_eq!(outcome.reason, AgentEndReason::Aborted);
+    let assistant_msg = outcome
+        .messages
+        .iter()
+        .find(|m| m.role == AgentMessageRole::Assistant)
+        .expect("混合流 abort 抢救必须保留 assistant 消息");
+
+    assert_eq!(assistant_msg.blocks.len(), 2);
+    assert_eq!(
+        assistant_msg.blocks[0],
+        AgentMessageBlock::Thought {
+            text: "前置思考完成".to_string(),
+            redacted: None,
+        }
+    );
+    assert_eq!(
+        assistant_msg.blocks[1],
+        AgentMessageBlock::Text {
+            text: "正文回答的第一句。".to_string(),
+        }
+    );
+    assert_eq!(assistant_msg.text(), "正文回答的第一句。");
+    assert_eq!(assistant_msg.thought(), "前置思考完成");
+}

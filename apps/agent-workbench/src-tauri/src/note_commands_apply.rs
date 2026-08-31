@@ -258,10 +258,9 @@ pub async fn note_undo_text(req: NoteUndoTextArgs) -> Result<JsonValue, CoreErro
         return Ok(unwired_failure());
     };
     let handle = tokio::runtime::Handle::current();
-    let joined = tokio::task::spawn_blocking(move || {
-        handle.block_on(backend.undo_text(&doc_id, &block_id))
-    })
-    .await;
+    let joined =
+        tokio::task::spawn_blocking(move || handle.block_on(backend.undo_text(&doc_id, &block_id)))
+            .await;
     let result = match joined {
         Ok(r) => r,
         Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(
@@ -307,10 +306,9 @@ pub async fn note_redo_text(req: NoteRedoTextArgs) -> Result<JsonValue, CoreErro
         return Ok(unwired_failure());
     };
     let handle = tokio::runtime::Handle::current();
-    let joined = tokio::task::spawn_blocking(move || {
-        handle.block_on(backend.redo_text(&doc_id, &block_id))
-    })
-    .await;
+    let joined =
+        tokio::task::spawn_blocking(move || handle.block_on(backend.redo_text(&doc_id, &block_id)))
+            .await;
     let result = match joined {
         Ok(r) => r,
         Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(

@@ -88,7 +88,6 @@ pub(crate) fn register_if_enabled(
 /// MCP 状态查询结果（camelCase 序列化，对齐 commandManifest 契约
 /// `{ enabled, execEnabled }`）。
 #[allow(dead_code)]
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,4 +142,3 @@ mod tests {
         clear_env();
     }
 }
-

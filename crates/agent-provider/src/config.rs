@@ -864,25 +864,27 @@ mod tests {
 
     #[test]
     fn legacy_single_object_wraps_as_default_provider() {
-        let dir = temp_dir("legacy-single");
-        fs::write(
-            dir.join(DEFAULT_CONFIG_FILE_NAME),
-            r#"{ "providerId": "openai-compatible", "baseUrl": "https://legacy.example/v1", "model": "legacy-model" }"#,
-        )
-        .expect("写入配置");
-        let store = ProviderConfigStore::load(&dir).expect("加载");
-        // 旧单对象应以默认键入映射。
-        assert_eq!(
-            store.config(DEFAULT_PROVIDER_ID).model.as_deref(),
-            Some("legacy-model")
-        );
-        let resolved = store.resolve_default().expect("解析");
-        assert_eq!(resolved.provider_id, "openai-compatible");
-        assert_eq!(
-            resolved.base_url.as_deref(),
-            Some("https://legacy.example/v1")
-        );
-        assert_eq!(resolved.model.as_deref(), Some("legacy-model"));
+        with_env(&[], || {
+            let dir = temp_dir("legacy-single");
+            fs::write(
+                dir.join(DEFAULT_CONFIG_FILE_NAME),
+                r#"{ "providerId": "openai-compatible", "baseUrl": "https://legacy.example/v1", "model": "legacy-model" }"#,
+            )
+            .expect("写入配置");
+            let store = ProviderConfigStore::load(&dir).expect("加载");
+            // 旧单对象应以默认键入映射。
+            assert_eq!(
+                store.config(DEFAULT_PROVIDER_ID).model.as_deref(),
+                Some("legacy-model")
+            );
+            let resolved = store.resolve_default().expect("解析");
+            assert_eq!(resolved.provider_id, "openai-compatible");
+            assert_eq!(
+                resolved.base_url.as_deref(),
+                Some("https://legacy.example/v1")
+            );
+            assert_eq!(resolved.model.as_deref(), Some("legacy-model"));
+        });
     }
 
     // ── T1.3 凭据 per-provider ──

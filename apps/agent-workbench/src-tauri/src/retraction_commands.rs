@@ -112,17 +112,17 @@ pub(crate) async fn retract_impl(
     } else {
         None
     };
-    let paths = collect_post_boundary_write_paths(
-        state.store.as_ref(),
-        session_id,
-        outcome.boundary_seq,
-    )
-    .await
-    .unwrap_or_default();
+    let paths =
+        collect_post_boundary_write_paths(state.store.as_ref(), session_id, outcome.boundary_seq)
+            .await
+            .unwrap_or_default();
     let executor = RollbackExecutor::new(&registry, trash.as_ref());
     let results = executor.rollback_before(
         outcome.boundary_seq,
-        &paths.iter().map(|p| (ToolCategory::Filesystem, vec![p.clone()])).collect::<Vec<_>>(),
+        &paths
+            .iter()
+            .map(|p| (ToolCategory::Filesystem, vec![p.clone()]))
+            .collect::<Vec<_>>(),
     );
     let mut summary = RollbackSummary {
         restored: 0,
@@ -205,7 +205,8 @@ impl RetractionBackend for ShellRetractionBackend {
         session_id: &str,
         target_message_id: &str,
     ) -> Result<Option<u64>, RetractionError> {
-        self.query_message_start_seq(session_id, target_message_id).await
+        self.query_message_start_seq(session_id, target_message_id)
+            .await
     }
 
     async fn session_max_sequence(&self, session_id: &str) -> Result<u64, RetractionError> {
@@ -227,7 +228,11 @@ impl RetractionBackend for ShellRetractionBackend {
         // 会话内运行中 run 逐一投 L3 force_cancel（复用既有控制总线；
         // 子代理 run 的 L3 由 kill_all 兜底投递）
         let targets: Vec<(String, Arc<crate::core_run_commands::ActiveRun>)> = {
-            let active = self.state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+            let active = self
+                .state
+                .active_runs
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             active
                 .values()
                 .filter(|a| a.session_id == session_id)
@@ -266,7 +271,11 @@ impl RetractionBackend for ShellRetractionBackend {
         loop {
             // 锁纪律：std MutexGuard 不跨 await 持有（先取句柄再释放锁）
             let handle = {
-                let active = self.state.active_runs.lock().unwrap_or_else(|e| e.into_inner());
+                let active = self
+                    .state
+                    .active_runs
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
                 active.get(run_id).map(|a| Arc::clone(&a.handle))
             };
             let terminal = match handle {
@@ -371,4 +380,3 @@ async fn collect_post_boundary_write_paths(
 #[cfg(test)]
 #[path = "retraction_commands_tests.rs"]
 mod tests;
-

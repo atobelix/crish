@@ -18,11 +18,7 @@
 //! 入为准，env 面由 `ProviderConfigStore`（crates）承载）。本模块只做壳侧投影，
 //! 不改 `crates/`（主控纪律）。
 
-use std::{
-    collections::BTreeMap,
-    fs,
-    path::PathBuf,
-};
+use std::{collections::BTreeMap, fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -128,10 +124,16 @@ pub(crate) fn apply_profile_config(
     let entry = state.profiles.entry(id).or_default();
     // 只覆盖传入字段（merge，不 clobber 未传字段——saveProfileBaseUrl 只传
     // baseUrl、activateProfileModel 传 baseUrl+model、saveProfileKey 传 key）。
-    if let Some(url) = base_url.map(|value| value.trim().to_string()).filter(|v| !v.is_empty()) {
+    if let Some(url) = base_url
+        .map(|value| value.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
         entry.base_url = Some(url);
     }
-    if let Some(model) = model.map(|value| value.trim().to_string()).filter(|v| !v.is_empty()) {
+    if let Some(model) = model
+        .map(|value| value.trim().to_string())
+        .filter(|v| !v.is_empty())
+    {
         entry.model = Some(model);
     }
     state.save()
@@ -353,15 +355,15 @@ mod tests {
 
         // 从磁盘重载（同一隔离目录）：映射与活跃 id 持久化。
         let reloaded = reload_state();
-        assert_eq!(
-            reloaded.active_profile_id.as_deref(),
-            Some("opencode-go")
-        );
+        assert_eq!(reloaded.active_profile_id.as_deref(), Some("opencode-go"));
         let entry = reloaded
             .profiles
             .get("opencode-go")
             .expect("opencode-go 条目");
-        assert_eq!(entry.base_url.as_deref(), Some("https://opencode.ai/zen/go/v1"));
+        assert_eq!(
+            entry.base_url.as_deref(),
+            Some("https://opencode.ai/zen/go/v1")
+        );
         assert_eq!(entry.model.as_deref(), Some("deepseek-v4-flash"));
     }
 
@@ -395,4 +397,3 @@ mod tests {
         assert_eq!(active_ids, vec!["deepseek"], "最近应用者为活跃");
     }
 }
-

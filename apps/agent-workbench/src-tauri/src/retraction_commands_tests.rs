@@ -72,17 +72,13 @@ fn test_state() -> (Arc<CoreRunState>, LocalDb) {
     db.upsert_session_entry(&session_entry("s1"))
         .expect("会话条目");
     let emitter = Arc::new(RecordingEmitter(Mutex::new(Vec::new())));
-    let bridge = EventBridge::new(
-        "workbench-run-event",
-        emitter as Arc<dyn Emitter>,
-    );
+    let bridge = EventBridge::new("workbench-run-event", emitter as Arc<dyn Emitter>);
     let seq = TMP_SEQ.fetch_add(1, Ordering::Relaxed);
-    let snapshots: Arc<dyn SnapshotStore> = Arc::new(
-        SnapshotFileStore::new(std::env::temp_dir().join(format!(
+    let snapshots: Arc<dyn SnapshotStore> =
+        Arc::new(SnapshotFileStore::new(std::env::temp_dir().join(format!(
             "conex_retract_{}_{seq}_snapshot.json",
             std::process::id()
-        ))),
-    );
+        ))));
     let state = Arc::new(CoreRunState::new(
         Arc::new(LocalDbStore::new(db.clone())),
         snapshots,
@@ -229,8 +225,7 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
     // kill_all 直发 subagent-ended(2) 均计入——撤离/收场事件在冻结读点前
     // 落库，边界含收场事件；前端投影按 targetMessageId 截断不受影响。
     assert_eq!(
-        resp.boundary_seq,
-        2,
+        resp.boundary_seq, 2,
         "冻结边界 = 收敛点 MAX（message-start 1 + kill_all 直发 subagent-ended 2）"
     );
     assert_eq!(
@@ -293,7 +288,10 @@ async fn retract_impl_stop_run_cascades_kill_all_cancelled_event_layer_rows_norm
         .iter()
         .find(|r| r.subagent_run_id == sub_run_id)
         .expect("子代理行在案");
-    assert_eq!(row.status, "failed", "kill_all 行归一 failed（已知双写约定）");
+    assert_eq!(
+        row.status, "failed",
+        "kill_all 行归一 failed（已知双写约定）"
+    );
     assert!(row.ended_at.is_some(), "ended_at 补齐");
 
     // ⑦ timeline-truncate 落库（sequence == boundary+1；只追加不变量）

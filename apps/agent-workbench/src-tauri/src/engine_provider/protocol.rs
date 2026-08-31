@@ -17,12 +17,12 @@
 use std::sync::OnceLock;
 
 use agent_provider::config::Endpoint;
+use agent_provider::events::StreamParseError;
 use agent_provider::models::{infer_vendor, ModelCatalog};
 use agent_provider::parse::anthropic::AnthropicParser;
 use agent_provider::parse::chat::ChatCompletionsParser;
 use agent_provider::parse::gemini::GeminiParser;
 use agent_provider::parse::responses::ResponsesParser;
-use agent_provider::events::StreamParseError;
 use agent_provider::request::{
     infer_reasoning_vendor, resolve_max_tokens_field, resolve_wire_protocol, MaxTokensField,
     ReasoningVendor, WireProtocol,
@@ -121,10 +121,7 @@ pub(crate) fn provider_url(config: &EngineProviderConfig) -> String {
 }
 
 /// 按显式协议生成 URL（测试/解析器三件套一致性的纯决策入口）。
-pub(crate) fn provider_url_for(
-    config: &EngineProviderConfig,
-    protocol: WireProtocol,
-) -> String {
+pub(crate) fn provider_url_for(config: &EngineProviderConfig, protocol: WireProtocol) -> String {
     let base = config.base_url.trim_end_matches('/');
     match protocol {
         WireProtocol::Anthropic => format!("{base}/v1/messages"),

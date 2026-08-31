@@ -342,8 +342,13 @@ async fn p1_approval_race_auto_approve_before_engine_registers_not_found() {
     let (state, _registry) = state_with_background();
     // 短超时门（800ms）：验证「已过期」权威收场（生产 120s 兜底语义不变；
     // 场景 3 的裁决远快于超时，无竞态 flaky）
-    let (active, emitter) =
-        t10_active_run(&state, "sess-p1race", "run-p1race", Duration::from_millis(800)).await;
+    let (active, emitter) = t10_active_run(
+        &state,
+        "sess-p1race",
+        "run-p1race",
+        Duration::from_millis(800),
+    )
+    .await;
     let gate = Arc::clone(&active.approval);
 
     // 场景 1 非待审批（超车）：approve 在引擎 request_approval 注册前落地
@@ -1988,10 +1993,14 @@ async fn config_profile_apply_opencode_go_serves_preset_profile() {
     // 引擎生效配置 = opencode-go 端点/模型/凭据（profile 投影优先）。
     let config = state.engine.provider_config().expect("opencode-go 就绪");
     assert_eq!(
-        config.base_url, server.base_url("/zen/go/v1"),
+        config.base_url,
+        server.base_url("/zen/go/v1"),
         "生效 baseUrl 必须为 opencode-go 端点"
     );
-    assert_eq!(config.model, "deepseek-v4-flash", "生效 model 必须为 opencode-go");
+    assert_eq!(
+        config.model, "deepseek-v4-flash",
+        "生效 model 必须为 opencode-go"
+    );
     assert_eq!(config.api_key, "sk-opencode-go", "生效 key 来自 DPAPI 槽");
     assert!(state.engine.ready(), "opencode-go 三件套齐备引擎就绪");
 
@@ -2127,7 +2136,10 @@ async fn config_get_snapshot_exposes_multiple_providers() {
 
     let snapshot = crate::config::config_get().expect("config_get");
     let providers = snapshot["providers"].as_array().expect("providers 数组");
-    assert!(providers.len() >= 2, "config 快照应含 ≥2 提供方：{providers:?}");
+    assert!(
+        providers.len() >= 2,
+        "config 快照应含 ≥2 提供方：{providers:?}"
+    );
     assert_eq!(
         snapshot["activeProfileId"].as_str(),
         Some("profile-b"),
@@ -4242,10 +4254,9 @@ fn drain_merge_caps_at_16() {
         metadata
             .get("kind")
             .and_then(|k: &serde_json::Value| k.as_str()),
-        Some(session_loop::steering::metadata_kind_wire(
-            AgentMessageMetadataKind::Steering
+        Some(
+            session_loop::steering::metadata_kind_wire(AgentMessageMetadataKind::Steering).as_str()
         )
-        .as_str())
     );
 }
 
@@ -5065,9 +5076,7 @@ async fn goal_continue_inject_text_contains_goal_prefix_and_round() {
         .expect("goal 续轮消息带 metadata");
     assert_eq!(
         metadata["kind"],
-        session_loop::steering::metadata_kind_wire(
-            AgentMessageMetadataKind::GoalContinue
-        ),
+        session_loop::steering::metadata_kind_wire(AgentMessageMetadataKind::GoalContinue),
         "注入消息 metadata.kind=goal-continue（引擎自主续轮标识）"
     );
 }
@@ -5927,7 +5936,9 @@ async fn fail_streak_cross_threshold_emits_circuit_trip() {
             .iter()
             .filter_map(|p| serde_json::from_str::<serde_json::Value>(p).ok())
             .collect();
-        if values.iter().any(|v| v["type"] == "runtime-intervention-required")
+        if values
+            .iter()
+            .any(|v| v["type"] == "runtime-intervention-required")
             && values
                 .iter()
                 .any(|v| v["type"] == "recovery-escalated" && v["detail"] == "circuit-trip")
@@ -8108,12 +8119,10 @@ async fn active_run_driver_joinhandle_saved() {
 async fn zero_passive_injection_during_run_e2e() {
     let ws = TestWorkspace::new("zero_inj_e2e");
     let provider = Arc::new(
-        TestProvider::with_scripts(vec![
-            vec![
-                ProviderStreamEvent::text("第一轮回复完毕"),
-                ProviderStreamEvent::stop(StopReason::Stop),
-            ],
-        ])
+        TestProvider::with_scripts(vec![vec![
+            ProviderStreamEvent::text("第一轮回复完毕"),
+            ProviderStreamEvent::stop(StopReason::Stop),
+        ]])
         .with_pause(0, 2_000),
     );
     let (state, _db, emitter) = run_control_test_state(Arc::clone(&provider));
@@ -9674,8 +9683,6 @@ async fn continuity_kill_channel_lifecycle_paths() {
 }
 
 // ── E2 F4（07 §3 卡 C）：core_compact_now 手动压缩命令 ──────────────
-
-
 
 /// F4/F5 测试辅助：构造超预算对话（N 条大消息；ASCII 约 4 字符/token，
 /// 8000 字符 ≈ 2000 token/条；15 条 ≈ 30k token ≈ 窗口 64000 的 47%）

@@ -1530,7 +1530,8 @@ impl SessionLoopProducer {
         // 语义），注入段结构上不进压缩输入。无注入段（None / 空注入器）
         // 时 render 原样返回 → 与现状字节一致。
         if let Some(injector) = &self.context_injector {
-            self.options.assembly.system_prompt = injector.render(self.options.assembly.system_prompt.take());
+            self.options.assembly.system_prompt =
+                injector.render(self.options.assembly.system_prompt.take());
         }
 
         let mut session_loop = AgentSessionLoop::new(
@@ -1644,4 +1645,3 @@ impl SessionLoopProducer {
         }
     }
 }
-

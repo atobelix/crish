@@ -448,12 +448,8 @@ pub(crate) async fn run_task_impl(
     // 冻结激活期写侧拒绝 `> frozen_seq` 非撤离写入
     let base = state.base_sequence_for(&session_id).await;
     let queue = Arc::new(tokio::sync::Mutex::new(
-        EventQueue::new(
-            state.store.clone(),
-            base,
-            Some(run_id.clone()),
-        )
-        .with_freeze_registry(Arc::clone(&state.retraction_freeze)),
+        EventQueue::new(state.store.clone(), base, Some(run_id.clone()))
+            .with_freeze_registry(Arc::clone(&state.retraction_freeze)),
     ));
 
     // 本 run 的缓冲事件桥（gate 广播 / delta sink / 收口 emit 共用）
@@ -704,8 +700,7 @@ pub(crate) async fn run_task_impl(
         o.assembly.context_budget = context_budget;
         o.retry.retry_backoff = retry_backoff;
         o.retry.provider_fail_streak = provider_fail_streak;
-        o.tool_exec.tool_middleware =
-            vec![Arc::new(BackupMiddleware::with_defaults(None))];
+        o.tool_exec.tool_middleware = vec![Arc::new(BackupMiddleware::with_defaults(None))];
         o.assembly.parent_run_id = parent_run_id.clone();
         o.assembly.write_claims = subagent_write_registry
             .clone()

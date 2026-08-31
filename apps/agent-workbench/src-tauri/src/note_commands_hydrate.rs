@@ -132,10 +132,8 @@ pub async fn note_document_recent() -> Result<JsonValue, CoreError> {
     let Some(store) = note_runtime::try_store_backend() else {
         return Ok(unwired_failure());
     };
-    let joined = tokio::task::spawn_blocking(move || {
-        store.store().recent_persisted_nonempty_doc_id()
-    })
-    .await;
+    let joined =
+        tokio::task::spawn_blocking(move || store.store().recent_persisted_nonempty_doc_id()).await;
     let result = match joined {
         Ok(r) => r.map_err(|e| NoteBackendError::ExecutionUnknown(e.to_string())),
         Err(join_err) => Err(NoteBackendError::ExecutionUnknown(format!(

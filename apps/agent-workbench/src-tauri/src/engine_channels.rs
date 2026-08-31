@@ -27,7 +27,9 @@ use session_loop::provider::{DeltaSink, LiveEventSink};
 use session_loop::ControlBus;
 
 use super::engine_build::EngineHandle;
-use super::engine_provider::{chat_provider_url, max_tokens_field, user_message, EngineProviderConfig};
+use super::engine_provider::{
+    chat_provider_url, max_tokens_field, user_message, EngineProviderConfig,
+};
 use crate::buffer::{drop_class_of, EventBuffer};
 use crate::core_event_bridge::{EmitReport, EventBridge};
 use crate::timers::AgentEventSink;
