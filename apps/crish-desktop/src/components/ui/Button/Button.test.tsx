@@ -10,16 +10,16 @@ import { IconButton } from './IconButton';
 import styles from './Button.module.css';
 
 describe('ui/Button', () => {
-  it('渲染默认 primary/md 形态并透传属性', () => {
+  it('渲染默认 secondary/md 形态并透传属性', () => {
     render(<Button data-testid="btn">确定</Button>);
     const btn = screen.getByTestId('btn');
     expect(btn.tagName).toBe('BUTTON');
     expect(btn).toHaveAttribute('type', 'button');
     expect(btn.className).toContain(styles.button);
-    expect(btn.className).toContain(styles.buttonPrimary);
+    expect(btn.className).toContain(styles.buttonSecondary);
     expect(btn.className).toContain(styles.buttonMd);
     expect(btn).toHaveAttribute('data-size', 'md');
-    expect(btn).toHaveAttribute('data-variant', 'primary');
+    expect(btn).toHaveAttribute('data-variant', 'secondary');
     expect(screen.getByText('确定')).toBeInTheDocument();
   });
 

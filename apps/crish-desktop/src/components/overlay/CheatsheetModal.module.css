@@ -39,7 +39,7 @@
 }
 
 .cheatsheetSearch:focus-within {
-  border-color: color-mix(in srgb, var(--border-color) 80%, var(--text-primary) 20%);
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
 }
 
 .cheatsheetSearchInput {

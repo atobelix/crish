@@ -130,6 +130,85 @@ describe('T-E 新 action：setEngineLastRunId / updateMessageTimeline / applyToo
     ).not.toThrow();
   });
 
+  it('updateMessageTimeline 多轮交互中绝不丢弃历史 thought 块与 tool_call 块', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          makeSession({
+            id: 's1',
+            messages: [
+              makeMessage({
+                id: 'm1',
+                sender: 'assistant',
+                text: '阶段结论',
+                status: 'processing',
+                blocks: [
+                  { type: 'thought', content: 'Turn 0 思维链', turnIndex: 0 },
+                  { type: 'tool_call', id: 't1' },
+                ],
+                toolCalls: [
+                  makeTool({ id: 't1', status: 'success', turnId: 'turn-0' }),
+                  makeTool({ id: 't2', status: 'running', turnId: 'turn-1' }),
+                ],
+                thinkingTurns: [
+                  { turnIndex: 0, content: 'Turn 0 思维链' },
+                  { turnIndex: 1, content: 'Turn 1 新思维链' },
+                ],
+              }),
+            ],
+          }),
+        ],
+        's1',
+      ),
+    );
+    h.actions.updateMessageTimeline('s1', 'm1');
+    const msg = h.getState().sessionsById['s1']!.messages[0]!;
+    expect(msg.blocks?.filter((b) => b.type === 'thought')).toHaveLength(2);
+    expect(msg.blocks?.filter((b) => b.type === 'tool_call')).toHaveLength(2);
+    expect(msg.blocks?.filter((b) => b.type === 'text')).toHaveLength(1);
+    expect(msg.blocks?.[0]).toMatchObject({
+      type: 'thought',
+      content: 'Turn 0 思维链',
+      turnIndex: 0,
+    });
+  });
+
+  it('T-04: updateMessageText 发生截断重置时只重置 text 块，严格保留全部 thought 与 tool_call 块', () => {
+    const h = makeHarnessFromState(
+      makeStateFromSessions(
+        [
+          makeSession({
+            id: 's1',
+            messages: [
+              makeMessage({
+                id: 'm1',
+                sender: 'assistant',
+                text: '很长的旧文本已经输出到了第一千个字符',
+                streamTextOffset: 20,
+                blocks: [
+                  { type: 'thought', content: '关键思考链', turnIndex: 0 },
+                  { type: 'tool_call', id: 't1' },
+                  { type: 'text', content: '旧文本' },
+                ],
+                toolCalls: [makeTool({ id: 't1', status: 'success' })],
+              }),
+            ],
+          }),
+        ],
+        's1',
+      ),
+    );
+
+    // 传入变短且不匹配前缀的新文本触发 offset 重置分支
+    h.actions.updateMessageText('s1', 'm1', '新重置文本');
+    const msg = h.getState().sessionsById['s1']!.messages[0]!;
+    expect(msg.blocks?.find((b) => b.type === 'thought')).toBeDefined();
+    expect(msg.blocks?.find((b) => b.type === 'thought')?.content).toBe('关键思考链');
+    expect(msg.blocks?.find((b) => b.type === 'tool_call')).toBeDefined();
+    expect(msg.blocks?.find((b) => b.type === 'tool_call')?.id).toBe('t1');
+    expect(msg.blocks?.find((b) => b.type === 'text')?.content).toBe('新重置文本');
+  });
+
   it('applyToolCallPatches 批量终态（批内单次 immer）', () => {
     const h = makeHarnessFromState(
       makeStateFromSessions(

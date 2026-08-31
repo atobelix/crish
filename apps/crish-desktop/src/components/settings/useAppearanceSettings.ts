@@ -171,15 +171,18 @@ export function useAppearanceSettings(): AppearanceSettingsResult {
         setSettings(sets);
         setLoadError(null);
         setAppSettings(sets);
-        // 读盘后立即同步 DOM（主题 / 字体），与 local 独立 key 对齐
+        // 读盘后尊重当前已生效的真实主题（若磁盘配置陈旧，则自动以当前主题反向修复磁盘）
         try {
-          if (sets.theme) {
-            const { applyTheme, normalizeTheme: normTheme } =
-              await import('../../api/themeStore');
-            applyTheme(normTheme(sets.theme));
+          const currentActiveTheme = readDomTheme() || readStoredTheme();
+          if (sets.theme && sets.theme !== currentActiveTheme) {
+            sets.theme = currentActiveTheme;
+            void clientApi.saveSettingsEx(cwd, 'global', {
+              theme: currentActiveTheme,
+            });
           }
-          const domTheme = readDomTheme();
-          if (domTheme && !cancelled) setActiveTheme(domTheme);
+          if (currentActiveTheme && !cancelled) {
+            setActiveTheme(currentActiveTheme);
+          }
           if (sets.fonts) {
             const { applyFontStacks, ensureFontsLoaded, normalizeFontPrefs } =
               await import('../../api/fontStore');

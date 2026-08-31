@@ -27,6 +27,7 @@ vi.mock('./tauriInvoke', () => ({
   invokeTyped: vi.fn(async () => ({ status: 'missing' as const })),
 }));
 
+import { logger } from '../services/LoggerService';
 import {
   buildCatalogEntriesFromProfiles,
   buildScannedModelWire,
@@ -45,6 +46,7 @@ import {
   isUsableCatalogEntry,
   listAvailablePickerModels,
   listPickerProfiles,
+  listSettingsProfiles,
   normalizeCatalogEntries,
   normalizeCatalogEntry,
   normalizeModelIdText,
@@ -193,6 +195,41 @@ describe('modelCatalog', () => {
       list.filter((p) => p.name === 'OpenCode Go 订阅').map((p) => p.id)
     ).toEqual(['opencode-go']);
     expect(list.map((p) => p.id)).toEqual(['opencode-go', 'deepseek']);
+  });
+
+  it('listSettingsProfiles folds same display name and keeps disabled', () => {
+    saveProfiles([
+      {
+        id: 'opencode-go',
+        name: 'OpenCode Go 订阅',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        models: ['deepseek-v4-flash'],
+        hasKey: false,
+        enabled: true,
+      },
+      {
+        id: 'preset-opencode-go',
+        name: 'OpenCode Go 订阅',
+        baseUrl: 'https://opencode.ai/zen/go/v1',
+        models: [],
+        hasKey: false,
+        enabled: true,
+      },
+      {
+        id: 'off',
+        name: 'Off',
+        baseUrl: 'https://off.example',
+        models: ['x'],
+        hasKey: true,
+        enabled: false,
+      },
+    ]);
+    const settings = listSettingsProfiles();
+    expect(
+      settings.filter((p) => p.name === 'OpenCode Go 订阅').map((p) => p.id)
+    ).toEqual(['opencode-go']);
+    expect(settings.map((p) => p.id)).toContain('off');
+    expect(listPickerProfiles().map((p) => p.id)).not.toContain('off');
   });
 
   it('getModelMeta defaults enabled true with optional context', () => {
@@ -484,8 +521,8 @@ describe('modelCatalog', () => {
       expect(wire).not.toHaveProperty('vendor');
     });
 
-    it('uploadScannedModels：命令缺失 / invoke 失败仅 console.warn，不抛', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    it('uploadScannedModels：命令缺失 / invoke 失败仅 warn，不抛', async () => {
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
       try {
         // missing：命令未注册 / 非 Tauri 环境
         await expect(
@@ -688,7 +725,7 @@ describe('modelCatalog', () => {
     });
 
     it('fetchCatalogSnapshot 失败降级：missing / error / 非法载荷 → false，静态表兜底不崩', async () => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
       try {
         // missing（非 Tauri 环境 / 命令未注册）
         expect(await fetchCatalogSnapshot()).toBe(false);

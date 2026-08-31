@@ -20,6 +20,7 @@ import { parseBridgeEvent } from './eventParser';
 import { dispatchEvent } from './dispatch';
 import type { HandlerEnv } from './handlerEnv';
 import type { StreamState } from './streamState';
+import { logger } from '../../../services/LoggerService';
 
 function makeEnv() {
   const state: StreamState = {
@@ -250,8 +251,8 @@ describe('显式空实现 handler 无副作用锁定（审计行为级补位）'
 });
 
 describe('provider-diagnostic 行为：记可观测日志，不触碰状态与回调', () => {
-  it('宽容形态 diagnostic 载荷经分派只触发 console.warn（scope=provider-diagnostic）', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('宽容形态 diagnostic 载荷经分派只触发 logger.warn（scope=provider-diagnostic）', () => {
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     try {
       const { env } = makeEnv();
       const parsed = parseBridgeEvent({
@@ -268,7 +269,7 @@ describe('provider-diagnostic 行为：记可观测日志，不触碰状态与�
       dispatchEvent(env, parsed.data);
       expect(warn).toHaveBeenCalledTimes(1);
       expect(String(warn.mock.calls[0][0])).toContain('provider-diagnostic');
-      const detail = String(warn.mock.calls[0][1] ?? '');
+      const detail = JSON.stringify(warn.mock.calls[0][1] ?? {});
       expect(detail).toContain('openai');
       expect(detail).toContain('429');
       expectNoSideEffects(env);
@@ -278,7 +279,7 @@ describe('provider-diagnostic 行为：记可观测日志，不触碰状态与�
   });
 
   it('缺 diagnostic 时回退顶层 data 字段记录', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     try {
       const { env } = makeEnv();
       const parsed = parseBridgeEvent({
@@ -289,7 +290,7 @@ describe('provider-diagnostic 行为：记可观测日志，不触碰状态与�
       if (parsed.ok !== true) throw new Error(parsed.error);
       dispatchEvent(env, parsed.data);
       expect(warn).toHaveBeenCalledTimes(1);
-      const detail = String(warn.mock.calls[0][1] ?? '');
+      const detail = JSON.stringify(warn.mock.calls[0][1] ?? {});
       expect(detail).toContain('https://x');
       expectNoSideEffects(env);
     } finally {
@@ -313,7 +314,7 @@ describe('onMessageEnd 终态权威 + turnIndex 分段（G3/G4 / 04 §5.1-2、§
     return { role: 'assistant', content };
   }
 
-  it('丢中段/修订：终稿全文权威覆盖增量累积（不做 \\n\\n 追加，消灭两段共存）', () => {
+  it('丢中段/修订：终稿全文权威覆盖增量累积（单增量生产者模型下 0 伪增量）', () => {
     const { env, state, callbacks } = makeEnv();
     // 模拟增量丢帧后的累积文本（缺中段）
     state.assistantText = 'Helloworld';
@@ -321,8 +322,8 @@ describe('onMessageEnd 终态权威 + turnIndex 分段（G3/G4 / 04 §5.1-2、§
       message: assistantMessage('Hello brave new world'),
     });
     expect(state.assistantText).toBe('Hello brave new world');
-    // onChunk 只补差额（slice(prevLen)）：'Helloworld' 长 10，终稿 21 → 差 11 字符
-    expect(callbacks.onChunk).toHaveBeenCalledWith('e new world');
+    // 单增量生产者铁律：onMessageEnd 严禁向 onChunk 派发伪增量
+    expect(callbacks.onChunk).not.toHaveBeenCalled();
   });
 
   it('多轮 run：同 clientMessageId 按 turnIndex 分段追加（live 单气泡全文）', () => {
@@ -337,9 +338,8 @@ describe('onMessageEnd 终态权威 + turnIndex 分段（G3/G4 / 04 §5.1-2、§
       message: assistantMessage('第二轮'),
     });
     expect(state.assistantText).toBe('第一轮\n\n第二轮');
-    expect(callbacks.onChunk).toHaveBeenNthCalledWith(1, '第一轮');
-    // 第二段差额含段间分隔符（\n\n 前缀，由 join 产出）
-    expect(callbacks.onChunk).toHaveBeenNthCalledWith(2, '\n\n第二轮');
+    // 单增量生产者铁律：onMessageEnd 严禁向 onChunk 派发伪增量
+    expect(callbacks.onChunk).not.toHaveBeenCalled();
   });
 
   it('同 turn 重复 message-end（重发）：幂等覆盖，不重复追加', () => {
@@ -353,7 +353,7 @@ describe('onMessageEnd 终态权威 + turnIndex 分段（G3/G4 / 04 §5.1-2、§
       message: assistantMessage('第一轮'),
     });
     expect(state.assistantText).toBe('第一轮');
-    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
+    expect(callbacks.onChunk).not.toHaveBeenCalled();
   });
 
   it('同 turn 修订 message-end：终态权威覆盖该段，不追加', () => {
@@ -367,9 +367,7 @@ describe('onMessageEnd 终态权威 + turnIndex 分段（G3/G4 / 04 §5.1-2、§
       message: assistantMessage('第一轮（修订）'),
     });
     expect(state.assistantText).toBe('第一轮（修订）');
-    // 修订段更长 → 补差额；同 turn 不产生第二段
-    expect(callbacks.onChunk).toHaveBeenCalledTimes(2);
-    expect(callbacks.onChunk).toHaveBeenNthCalledWith(2, '（修订）');
+    expect(callbacks.onChunk).not.toHaveBeenCalled();
   });
 
   it('旧载荷（无 turnIndex）：按 0 处理，重复 message-end 幂等（向前兼容）', () => {
@@ -377,7 +375,7 @@ describe('onMessageEnd 终态权威 + turnIndex 分段（G3/G4 / 04 §5.1-2、§
     dispatchMessageEnd(env, { message: assistantMessage('正文') });
     dispatchMessageEnd(env, { message: assistantMessage('正文') });
     expect(state.assistantText).toBe('正文');
-    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
+    expect(callbacks.onChunk).not.toHaveBeenCalled();
   });
 
   it('message-end 缺正文（content/blocks 全空）：不产生 onChunk，状态不变', () => {

@@ -62,10 +62,10 @@
 }
 
 .dynamicChip.dynamicChipActive {
-  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  background: color-mix(in srgb, var(--brand) 10%, transparent);
   border-color: color-mix(
     in srgb,
-    var(--accent-color) 30%,
+    var(--brand) 22%,
     var(--border-subtle)
   );
   color: var(--text-primary);
@@ -189,7 +189,7 @@
   box-sizing: border-box;
 }
 
-/* Engine Crash Ribbon (T5-1)            +        
+/* Engine Crash Ribbon (T5-1)            +
                 /     hairline     */
 .crashRibbon {
   display: flex;

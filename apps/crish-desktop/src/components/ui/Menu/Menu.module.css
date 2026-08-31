@@ -23,15 +23,14 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: var(--border-color, #e2dfd9) transparent;
+  scrollbar-color: var(--tint-scrollbar-thumb, var(--border-color)) transparent;
   padding: 6px;
   border-radius: 14px;
-  border: 1px solid var(--border-color, #e2dfd9);
-  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  border: 1px solid var(--border-subtle);
+  background: var(--sep-bg-panel, var(--bg-elevated));
   backdrop-filter: blur(28px) saturate(160%);
   -webkit-backdrop-filter: blur(28px) saturate(160%);
-  box-shadow: 0 20px 48px -10px rgba(29, 28, 26, 0.09),
-              0 6px 20px -3px rgba(29, 28, 26, 0.03);
+  box-shadow: var(--shadow-dropdown);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -39,23 +38,13 @@
   color: var(--text-primary);
 }
 
-:global(html[data-theme='dark']) .menuContent {
-  background: var(--sep-bg-panel, rgba(24, 23, 21, 0.96));
-  border-color: var(--border-color, #2b2926);
-  box-shadow: 0 24px 54px -10px rgba(0, 0, 0, 0.70);
-}
-
 .menuTitle {
   padding: 4px 10px;
   font-size: var(--font-size-xs, 11px);
   color: var(--text-tertiary);
   font-weight: 500;
-  border-bottom: 1px solid rgba(29, 28, 26, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 2px;
-}
-
-:global(html[data-theme='dark']) .menuTitle {
-  border-bottom-color: rgba(255, 255, 255, 0.07);
 }
 
 .menuList {
@@ -86,21 +75,14 @@
 }
 
 .menuItem:hover {
-  background: rgba(29, 28, 26, 0.045);
+  background: var(--bg-hover);
   color: var(--text-primary);
-}
-
-:global(html[data-theme='dark']) .menuItem:hover {
-  background: rgba(245, 244, 240, 0.06);
 }
 
 .menuItem:focus-visible {
   outline: none;
-  background: rgba(29, 28, 26, 0.065);
-}
-
-:global(html[data-theme='dark']) .menuItem:focus-visible {
-  background: rgba(245, 244, 240, 0.09);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .menuItemDisabled {
@@ -141,33 +123,8 @@
   height: 0;
   min-height: 0;
   border: none;
-  border-top: 1px solid var(--sep-divider-color, rgba(29, 28, 26, 0.06));
+  border-top: 1px solid var(--sep-divider-color, var(--border-subtle));
   margin: 3px var(--sep-padding, 6px);
   flex-shrink: 0;
   padding: 0;
 }
-
-/* Safe-Aim Virtual Triangle/Polygon Hit-test Overlay (Zero Canvas Overhead) */
-:global(.sep-safe-aim-overlay) {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  pointer-events: none;
-  z-index: var(--z-popover);
-  fill: transparent;
-  stroke: none;
-}
-
-:global(.sep-safe-aim-overlay.sep-debug-visible) {
-  fill: rgba(16, 185, 129, 0.12);
-  stroke: rgba(16, 185, 129, 0.4);
-  stroke-dasharray: 4 2;
-  stroke-width: 1px;
-}
-
-:global(.sep-safe-aim-overlay polygon) {
-  pointer-events: none;
-}
-

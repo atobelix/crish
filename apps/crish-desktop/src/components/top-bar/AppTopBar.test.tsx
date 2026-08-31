@@ -130,7 +130,7 @@ describe('AppTopBar', () => {
     expect(onToggleSidebar).toHaveBeenCalledTimes(1);
   });
 
-  it('rail reflects sidebarCollapsed state and -16px margin compensation', () => {
+  it('rail 是固定槽位：侧栏开合不改变侧栏开关按钮的位置', () => {
     const { container, rerender } = render(
       <AppTopBar
         sidebarCollapsed={false}
@@ -142,8 +142,10 @@ describe('AppTopBar', () => {
 
     const rail = container.querySelector('.app-top-bar__rail') as HTMLElement;
     expect(rail).toBeTruthy();
-    expect(rail.style.width).toBe('280px');
-    expect(rail.style.marginRight).toBe('-16px');
+    // 非 mac 环境固定 48px；不再跟随 sidebarWidth
+    expect(rail.style.width).toBe('48px');
+    // 负边距补偿已随固定槽位一并退役
+    expect(rail.style.marginRight).toBe('');
 
     rerender(
       <AppTopBar
@@ -154,8 +156,9 @@ describe('AppTopBar', () => {
       />
     );
 
-    expect(rail.style.width).toBe('36px');
-    expect(rail.style.marginRight).toBe('0px');
+    // 收起侧栏后宽度不变——按钮钉在原地，鼠标不用追
+    expect(rail.style.width).toBe('48px');
+    expect(rail.style.marginRight).toBe('');
   });
 
   it('help button triggers onShowCheatsheet and dispatches open-cheatsheet event', () => {

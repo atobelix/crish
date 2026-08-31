@@ -41,6 +41,11 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, [open, onToggle]);
 
+  const canCommit =
+    !commitLoading &&
+    !pushLoading &&
+    (commitMsg.trim().length > 0 || stagedCount > 0);
+
   if (!open) {
     return (
       <div
@@ -92,18 +97,20 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
         onChange={(e) => onCommitMsgChange(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            onCommit();
+            if (canCommit) {
+              e.preventDefault();
+              onCommit();
+            }
           }
         }}
       />
       <div className={styles.commitActions}>
         <Button
           type="button"
-          variant="ghost"
+          variant="primary"
           size="sm"
           style={{ height: 28 }}
-          disabled={commitLoading || pushLoading}
+          disabled={!canCommit}
           onClick={onCommit}
           icon={<Lucide.GitCommit size={14} style={{ marginRight: 4 }} />}
         >

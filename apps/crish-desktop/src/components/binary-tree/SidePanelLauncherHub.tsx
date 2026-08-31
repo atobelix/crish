@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, FileCode } from 'lucide-react';
+import { Globe, FolderTree } from 'lucide-react';
 import styles from './LeafToolTabStrip.module.css';
 
 export interface SidePanelLauncherHubProps {
@@ -42,14 +42,14 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({ onOp
             data-testid="launcher-card-files"
           >
             <div className={`${styles.launcherCardIconBox} launcher-card-icon-box`}>
-              <FileCode size={16} strokeWidth={1.8} />
+              <FolderTree size={16} strokeWidth={1.8} />
             </div>
             <div className={styles.launcherCardText}>
               <span className={`${styles.launcherCardTitle} launcher-card-title`}>
-                代码产物与文件
+                文件
               </span>
               <span className={styles.launcherCardDesc}>
-                浏览会话生成的文件、差异与产物
+                浏览项目工作区目录树、编辑与代码预览
               </span>
             </div>
           </button>

@@ -62,10 +62,8 @@
   background-color: var(--sep-danger-light, hsl(0 84% 60% / 0.08));
 }
 
-div:hover > button > div > .rowDeleteBtn,
-div:hover > .rowDeleteBtn,
 :global(.sep-item-wrapper):hover .rowDeleteBtn,
-[class*="itemWrapper"]:hover .rowDeleteBtn {
+.itemWrapper:hover .rowDeleteBtn {
   opacity: 1;
 }
 

@@ -1,9 +1,9 @@
 .listScroll {
-  /*                     .sidebarScroll overflow-y: auto  
+  /*                     .sidebarScroll overflow-y: auto
    *
-   *     flex: 1        .sidebarScroll             
-   *    .sidebarScroll   overflow-y: auto         
-   *    flex: none   flex: 0 0 auto             
+   *     flex: 1        .sidebarScroll
+   *    .sidebarScroll   overflow-y: auto
+   *    flex: none   flex: 0 0 auto
    *       .sidebarScroll             */
   display: flex;
   flex-direction: column;
@@ -312,8 +312,24 @@
   position: relative;
 }
 
-.sessionItem.branchSession::before {
-  display: none;
+.branchBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: var(--space-1);
+  color: var(--text-tertiary);
+}
+
+.branchIcon {
+  color: var(--accent-primary, #6366f1);
+  opacity: 0.85;
+  transition: color var(--transition-micro), opacity var(--transition-micro);
+}
+
+.sessionItem:hover .branchIcon,
+.sessionItem.active .branchIcon {
+  opacity: 1;
 }
 
 .sessionRenameInput {
@@ -568,4 +584,56 @@
 
 .sidebarDragging .sessionItem {
   cursor: grabbing;
+}
+
+/* 自治响应侧栏折叠状态 */
+:global([data-sidebar-collapsed='1']) .sectionLabel > :not(svg),
+:global([data-sidebar-collapsed='1']) .folderHeader > :not(svg),
+:global([data-sidebar-collapsed='1']) .folderName,
+:global([data-sidebar-collapsed='1']) .folderCount,
+:global([data-sidebar-collapsed='1']) .sessionText,
+:global([data-sidebar-collapsed='1']) .sessionSearchSnippet,
+:global([data-sidebar-collapsed='1']) .sessionTime,
+:global([data-sidebar-collapsed='1']) .sessionActionsBtn,
+:global([data-sidebar-collapsed='1']) .branchBadge,
+:global([data-sidebar-collapsed='1']) .emptyHint,
+:global([data-sidebar-collapsed='1']) .sessionItemFoldBtn,
+:global([data-sidebar-collapsed='true']) .sectionLabel > :not(svg),
+:global([data-sidebar-collapsed='true']) .folderHeader > :not(svg),
+:global([data-sidebar-collapsed='true']) .folderName,
+:global([data-sidebar-collapsed='true']) .folderCount,
+:global([data-sidebar-collapsed='true']) .sessionText,
+:global([data-sidebar-collapsed='true']) .sessionSearchSnippet,
+:global([data-sidebar-collapsed='true']) .sessionTime,
+:global([data-sidebar-collapsed='true']) .sessionActionsBtn,
+:global([data-sidebar-collapsed='true']) .branchBadge,
+:global([data-sidebar-collapsed='true']) .emptyHint,
+:global([data-sidebar-collapsed='true']) .sessionItemFoldBtn {
+  display: none;
+}
+
+:global([data-sidebar-collapsed='1']) .sessionItem,
+:global([data-sidebar-collapsed='true']) .sessionItem {
+  justify-content: center;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md, 8px);
+  margin: 0 auto;
+}
+
+:global([data-sidebar-collapsed='1']) .sessionItem::before,
+:global([data-sidebar-collapsed='true']) .sessionItem::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.5;
+}
+
+:global([data-sidebar-collapsed='1']) .sessionItem.active::before,
+:global([data-sidebar-collapsed='true']) .sessionItem.active::before {
+  opacity: 1;
+  background: var(--accent-color, var(--accent-primary));
 }

@@ -256,7 +256,7 @@ export const FileActions = React.memo(function FileActions({
                 size="sm"
                 className={styles.filesNavBtn}
                 aria-label={MORE_ACTIONS_LABEL}
-                icon={<MoreHorizontal size={15} />}
+                icon={<MoreHorizontal size={14} />}
               />
             </Tooltip>
           }

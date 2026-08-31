@@ -51,7 +51,7 @@
 }
 
 /* 源 Tab 隐身；条内让位 transform 由 JS 写 inline */
-:global([data-global-session-tab-bar] [role='tab'].is-dragging) {
+:global([data-global-session-tab-bar]) :global([role='tab'].is-dragging) {
   opacity: 0;
   pointer-events: none;
   border-color: transparent;

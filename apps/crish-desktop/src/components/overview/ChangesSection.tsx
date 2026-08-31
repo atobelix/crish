@@ -6,7 +6,7 @@ import { openGitDownloadPage } from '../../api/gitApi';
 import type { GitStatusResult } from '../../api/gitApi';
 import type { GitStatusFile, GitStatusCode } from '../../api/gitTreeHelpers';
 import type { DiffFileInfo } from '../../api/storeAccess';
-import { OverviewGitTree } from './OverviewGitTree';
+import { OverviewChangesList } from './OverviewChangesList';
 
 interface ChangesSectionProps {
   open: boolean;
@@ -207,7 +207,7 @@ export const ChangesSection = React.memo(function ChangesSection({
           ) : null}
 
           {hasFileList ? (
-            <OverviewGitTree
+            <OverviewChangesList
               files={activeFiles}
               openingPath={openingPath}
               onOpenFile={handleOpenFile}

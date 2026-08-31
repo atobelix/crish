@@ -85,7 +85,6 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
           className={`${styles.skillsEmptyInline} skills-empty-inline ${styles.skillsEmptyInlineCta} skills-empty-inline--cta`}
           role="status"
           aria-live="polite"
-          title={EMPTY_INSTALL_HINT}
         >
           <div>暂无技能</div>
           <Tooltip content="导入本机技能或用 AI 创建">
@@ -109,7 +108,6 @@ export const SkillCardList: React.FC<SkillCardListProps> = ({
         className={`${styles.skillsEmptyInline} skills-empty-inline`}
         role="status"
         aria-live="polite"
-        title={EMPTY_FILTER_HINT}
       >
         <div>无匹配 · 共 {skills.length} 个技能</div>
         <div className={`${styles.skillsDiscoverActions} skills-discover-actions`} style={{ justifyContent: 'flex-start' }}>

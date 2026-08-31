@@ -37,7 +37,7 @@ const DEFAULT_RIGHT_DOCK: RightToolDockState = {
   collapsed: true,
   openPanelIds: [],
   activePanelId: null,
-  widthRatio: 0.38,
+  widthRatio: 0.50,
 };
 
 export function createDefaultDock(

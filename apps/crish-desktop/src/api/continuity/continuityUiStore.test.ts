@@ -1,11 +1,9 @@
 /**
- * D8 §3.7.4/§3.7.5 continuityUiStore：临时通知（老虎机滚动状态）+
- * 熔断横幅（触发/关闭）。事件 → store 单一数据源。
+ * D8 §3.7.4 continuityUiStore：临时通知（老虎机滚动状态）。
+ * 事件 → store 单一数据源。
  */
 import { describe, expect, it, beforeEach } from 'vitest';
 import {
-  CIRCUIT_BANNER_DEFAULT_MESSAGE,
-  isCircuitTripDetail,
   resetContinuityUiStoreForTests,
   useContinuityUiStore,
 } from './continuityUiStore';
@@ -74,63 +72,5 @@ describe('clearRetryNotice（重连完成/失败清除）', () => {
     expect(
       Object.keys(useContinuityUiStore.getState().retryNotices)
     ).toHaveLength(0);
-  });
-});
-
-describe('raiseCircuitBanner / dismissCircuitBanner（熔断横幅）', () => {
-  beforeEach(() => {
-    resetContinuityUiStoreForTests();
-  });
-
-  it('熔断触发 → 横幅展示（默认文案 + reason）', () => {
-    useContinuityUiStore
-      .getState()
-      .raiseCircuitBanner('s1', CIRCUIT_BANNER_DEFAULT_MESSAGE, 'circuit-trip');
-    const banner = useContinuityUiStore.getState().circuitBanners['s1'];
-    expect(banner).toBeDefined();
-    expect(banner!.message).toBe(CIRCUIT_BANNER_DEFAULT_MESSAGE);
-    expect(banner!.reason).toBe('circuit-trip');
-    expect(banner!.dismissed).toBe(false);
-  });
-
-  it('手动关闭 → dismissed=true（同 session 不重弹）', () => {
-    useContinuityUiStore
-      .getState()
-      .raiseCircuitBanner('s1', CIRCUIT_BANNER_DEFAULT_MESSAGE);
-    useContinuityUiStore.getState().dismissCircuitBanner('s1');
-    expect(
-      useContinuityUiStore.getState().circuitBanners['s1']!.dismissed
-    ).toBe(true);
-  });
-
-  it('新触发覆盖已关闭态（dismissed 复位）', () => {
-    useContinuityUiStore.getState().raiseCircuitBanner('s1', 'a');
-    useContinuityUiStore.getState().dismissCircuitBanner('s1');
-    useContinuityUiStore
-      .getState()
-      .raiseCircuitBanner('s1', 'b', 'circuit-trip');
-    const banner = useContinuityUiStore.getState().circuitBanners['s1'];
-    expect(banner!.dismissed).toBe(false);
-    expect(banner!.message).toBe('b');
-  });
-
-  it('会话隔离 + 空 sessionId 拒绝', () => {
-    useContinuityUiStore.getState().raiseCircuitBanner('s1', 'a');
-    useContinuityUiStore.getState().raiseCircuitBanner('', 'x');
-    expect(
-      useContinuityUiStore.getState().circuitBanners['s2']
-    ).toBeUndefined();
-    expect(
-      Object.keys(useContinuityUiStore.getState().circuitBanners)
-    ).toHaveLength(1);
-  });
-});
-
-describe('isCircuitTripDetail', () => {
-  it('detail=circuit-trip 判定', () => {
-    expect(isCircuitTripDetail('circuit-trip')).toBe(true);
-    expect(isCircuitTripDetail('')).toBe(false);
-    expect(isCircuitTripDetail(null)).toBe(false);
-    expect(isCircuitTripDetail('other')).toBe(false);
   });
 });

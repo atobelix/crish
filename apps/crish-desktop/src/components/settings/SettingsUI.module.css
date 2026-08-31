@@ -157,11 +157,6 @@
   width: auto;
 }
 
-.controlSegment.controlSegment {
-  --seg-outer-radius: var(--radius-md, 6px);
-  --seg-inner-radius: 4px;
-}
-
 .controlRange {
   display: flex;
   align-items: center;
@@ -285,7 +280,7 @@
 }
 
 .modernSelectTooltipInner {
-  background: var(--bg-primary);
+  background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
   color: var(--text-primary);
   padding: 6px 12px;
@@ -293,9 +288,7 @@
   font-size: var(--font-size-xs);
   line-height: var(--line-height-base);
   white-space: nowrap;
-  box-shadow:
-    0 4px 12px color-mix(in srgb, var(--shadow-color) 8%, transparent),
-    0 2px 4px color-mix(in srgb, var(--shadow-color) 4%, transparent);
+  box-shadow: var(--shadow-dropdown);
 }
 
 .modernSelectTooltipArrow {
@@ -305,24 +298,9 @@
   transform: translateX(-50%) rotate(45deg);
   width: 8px;
   height: 8px;
-  background: var(--bg-primary);
+  background: var(--bg-elevated);
   border-right: 1px solid var(--border-subtle);
   border-bottom: 1px solid var(--border-subtle);
-}
-
-/* Dark mode theme support */
-:global(html[data-theme='dark']) .modernSelectTooltipInner {
-  background: var(--bg-elevated);
-  border-color: var(--border-subtle);
-  color: var(--text-primary);
-  box-shadow:
-    0 4px 16px color-mix(in srgb, var(--shadow-color) 30%, transparent),
-    0 2px 8px color-mix(in srgb, var(--shadow-color) 20%, transparent);
-}
-
-:global(html[data-theme='dark']) .modernSelectTooltipArrow {
-  background: var(--bg-elevated);
-  border-color: var(--border-subtle);
 }
 
 .settingsUiRowLabel {

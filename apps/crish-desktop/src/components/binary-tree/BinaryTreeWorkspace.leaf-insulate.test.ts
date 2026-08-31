@@ -107,16 +107,27 @@ describe('叶 chrome IA 与真树对齐', () => {
     expect(leaf).not.toMatch(/from ['"]\.\/UnitSessionTabStrip['"]/);
   });
 
-  it('chat 叶顶行是覆盖层，不占 flex 通栏、不 quiet', () => {
+  it('chat 叶顶行由 UnitChromeActions 自己 sticky 定位，本表不得再叠绝对定位', () => {
     const css = readBeside('./BinaryTreeWorkspace.module.css');
     expect(css).not.toMatch(/data-canvas-quiet/);
-    expect(css).toMatch(/\.leafToolHeader\s*\{[^}]*position:\s*absolute/);
-    expect(css).toMatch(/\.leafToolHeader\s*\{[^}]*height:\s*38px/);
-    expect(css).toMatch(/\.leafToolHeader\s*\{[^}]*pointer-events:\s*none/);
-    expect(css).not.toMatch(
-      /\.leafToolHeader\s*\{[^}]*justify-content:\s*flex-end/
-    );
+    /*
+     * 参考 .chat-top-header 是流内 sticky + margin-bottom:-38px。
+     * 本表曾另有一份 .leafToolHeader 绝对定位覆盖层，两套定位互相覆盖，
+     * 表现为渐隐层与右上角坞开关错位。这里钉死：布局表不再碰叶顶行定位。
+     */
+    expect(css).not.toMatch(/\.leafToolHeader/);
     expect(css).not.toMatch(/--card-header-bg/);
+
+    const chromeCss = readFileSync(
+      join(DIR, '../chat-card/UnitChromeActions.module.css'),
+      'utf8'
+    );
+    const header = ruleBlock(chromeCss, '.chatTopHeader');
+    expect(header).toMatch(/position:\s*sticky/);
+    expect(header).toMatch(/height:\s*38px/);
+    expect(header).toMatch(/margin-bottom:\s*-38px/);
+    expect(header).toMatch(/pointer-events:\s*none/);
+    expect(header).not.toMatch(/justify-content:\s*flex-end/);
   });
 });
 

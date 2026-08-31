@@ -158,18 +158,18 @@ describe('UnitChromeActions 分屏作用域单源化', () => {
     });
   });
 
-  it('当多 Unit 分屏时，Unit A 展开 files 时代码产物按钮高亮，Unit B 处于折叠状态不高亮', () => {
+  it('当多 Unit 分屏时，Unit A 展开 files 时文件按钮高亮，Unit B 处于折叠状态不高亮', () => {
     const unitA = render(
       <UnitChromeActions activeSessionId="unit-a" />
     );
-    const artifactsBtnA = unitA.getByTestId('top-quick-artifacts-btn');
+    const artifactsBtnA = unitA.getByTestId('top-quick-files-btn');
     expect(artifactsBtnA.getAttribute('data-active')).toBe('true');
     unitA.unmount();
 
     const unitB = render(
       <UnitChromeActions activeSessionId="unit-b" />
     );
-    const artifactsBtnB = unitB.getByTestId('top-quick-artifacts-btn');
+    const artifactsBtnB = unitB.getByTestId('top-quick-files-btn');
     expect(artifactsBtnB.getAttribute('data-active')).toBe('false');
     unitB.unmount();
   });
@@ -196,7 +196,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
 
     // 3 大标准动作组在顶栏（极简 3 元动作组）
     expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
-    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
+    expect(getByTestId('top-quick-files-btn')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
     expect(queryByTestId('right-dock-toggle')).toBeNull();
 
@@ -211,8 +211,8 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(getByTestId('top-quick-preview-btn').getAttribute('aria-label')).toBe(
       '打开应用预览'
     );
-    expect(getByTestId('top-quick-artifacts-btn').getAttribute('aria-label')).toBe(
-      '打开代码产物与文件'
+    expect(getByTestId('top-quick-files-btn').getAttribute('aria-label')).toBe(
+      '打开文件'
     );
 
     expect(container.textContent).toContain(EMPTY_SESSION_TITLE);
@@ -227,13 +227,13 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     );
     expect(noneRoot?.hasAttribute('data-canvas-quiet')).toBe(false);
     expect(none.getByTestId('top-quick-preview-btn')).toBeTruthy();
-    expect(none.getByTestId('top-quick-artifacts-btn')).toBeTruthy();
+    expect(none.getByTestId('top-quick-files-btn')).toBeTruthy();
     expect(none.container.textContent).toContain(EMPTY_SESSION_TITLE);
     none.unmount();
 
     const draft = renderChrome(PENDING_DRAFT_SESSION_ID);
     expect(draft.getByTestId('top-quick-preview-btn')).toBeTruthy();
-    expect(draft.getByTestId('top-quick-artifacts-btn')).toBeTruthy();
+    expect(draft.getByTestId('top-quick-files-btn')).toBeTruthy();
     expect(draft.container.textContent).toContain(EMPTY_SESSION_TITLE);
   });
 
@@ -247,7 +247,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
         ?.hasAttribute('data-canvas-quiet')
     ).toBe(false);
     expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
-    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
+    expect(getByTestId('top-quick-files-btn')).toBeTruthy();
     expect(container.textContent).toContain('重构 IPC');
   });
 
@@ -258,7 +258,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
       leading: <span data-testid="chrome-leading">搜</span>,
     });
     expect(getByTestId('chrome-leading')).toBeTruthy();
-    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
+    expect(getByTestId('top-quick-files-btn')).toBeTruthy();
   });
 
   it('点击应用预览按钮走 openToolInSession(sid, preview)', () => {
@@ -274,7 +274,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(spy).toHaveBeenCalledWith('unit-open', 'preview');
   });
 
-  it('点击代码产物与文件走 openToolInSession(sid, files)', () => {
+  it('点击文件走 openToolInSession(sid, files)', () => {
     stubCoreTools();
     const spy = vi
       .spyOn(storeAccess, 'openToolInSession')
@@ -282,7 +282,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     seedSession('unit-open', { messageCount: 1 });
     const { getByTestId } = renderChrome('unit-open');
     act(() => {
-      getByTestId('top-quick-artifacts-btn').click();
+      getByTestId('top-quick-files-btn').click();
     });
     expect(spy).toHaveBeenCalledWith('unit-open', 'files');
   });
@@ -311,7 +311,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(src).not.toMatch(/UNIT_TOOL_PANELS/);
     expect(src).toMatch(/openToolInSession/);
     expect(src).toMatch(/top-quick-preview-btn/);
-    expect(src).toMatch(/top-quick-artifacts-btn/);
+    expect(src).toMatch(/top-quick-files-btn/);
     expect(src).toMatch(/onMoveToFolder/);
     expect(src).toMatch(/onTogglePin/);
     expect(src).toMatch(/onExportMarkdown/);
@@ -382,7 +382,7 @@ describe('UnitChromeActions 重构与交互验证 (00-总方案 §4.1 & 02-pixel
     seedSession('sess-tools');
     const { getByTestId, queryByTestId } = renderChrome('sess-tools');
     expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
-    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
+    expect(getByTestId('top-quick-files-btn')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
     expect(queryByTestId('right-dock-toggle')).toBeNull();
     expect(queryByTestId('sidebar-toggle-btn')).toBeNull();

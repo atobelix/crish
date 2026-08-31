@@ -12,7 +12,7 @@ import { buildAssistantTimeline } from '../../api/toolPresentation';
 import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { Priority } from '../../workers';
 import { ChatToolStack } from '../chat-tool-call/ChatToolCallBlock';
-import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
+import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
 import { InlineAgentThinkingFold } from './InlineAgentThinkingFold';
 import {
   InlineAgentApprovalHint,
@@ -229,7 +229,7 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
                       if (!fallback.trim()) return null;
                       return (
                         <div className="msg-assistant-text">
-                          <AsyncMarkdownBlock
+                          <StreamingMarkdownView
                             text={fallback}
                             isStreaming={isStreamingMsg}
                             priority={mdPriority}
@@ -245,7 +245,7 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
                       if (item.kind === 'thought') {
                         return (
                           <div key={item.key} className="msg-timeline-thought">
-                            <AsyncMarkdownBlock
+                            <StreamingMarkdownView
                               text={item.content}
                               isStreaming={false}
                               priority={mdPriority}
@@ -262,7 +262,7 @@ export const InlineAgentTimeline: React.FC<InlineAgentTimelineProps> = ({
                           isStreamingMsg && item.key === lastTextKey;
                         return (
                           <div key={item.key} className="msg-timeline-text">
-                            <AsyncMarkdownBlock
+                            <StreamingMarkdownView
                               text={body}
                               isStreaming={streaming}
                               priority={mdPriority}

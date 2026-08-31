@@ -1,4 +1,4 @@
-/*      PE-05 T05.2 #6      ui/Dialog        /  /    
+/*      PE-05 T05.2 #6      ui/Dialog        /  /
  *               --dialog-z    */
 
 /*     --dialog-z        */
@@ -33,8 +33,8 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-2xl);
-  background: var(--text-primary);
-  color: var(--text-on-accent);
+  background: var(--brand-deep, #047857);
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -48,7 +48,7 @@
   color: var(--text-primary);
 }
 
-/*     activeMeta.desc      description    dialogDescription  
+/*     activeMeta.desc      description    dialogDescription
  * firstRunSub         */
 .firstRunSteps {
   display: flex;
@@ -90,8 +90,8 @@
 }
 
 .firstRunStep.isActive .firstRunStepNum {
-  background: var(--text-primary);
-  color: var(--text-on-accent);
+  background: var(--brand-deep, #047857);
+  color: #ffffff;
 }
 
 .firstRunBody {
@@ -216,8 +216,9 @@
 }
 
 .firstRunBtn.primary {
-  background: var(--text-primary);
-  color: var(--text-on-accent);
+  background: var(--brand-deep, #047857);
+  border-color: var(--brand-primary, #10b981);
+  color: #ffffff;
 }
 
 .firstRunBtn.primary:disabled {

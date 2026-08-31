@@ -68,9 +68,6 @@
 }
 
 .mcpToolbar .segment {
-  --seg-outer-radius: var(--button-radius, 7px);
-  --seg-inner-radius: 5px;
-  border-radius: var(--button-radius, 7px);
   flex-shrink: 0;
 }
 

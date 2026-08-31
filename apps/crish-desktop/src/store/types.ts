@@ -44,6 +44,7 @@ export type SettingsTabType =
   | 'skills'
   | 'mcp'
   | 'plugins'
+  | 'browser'
   | 'security'
   | 'diagnostics';
 
@@ -415,6 +416,8 @@ export interface SessionMessage extends Pick<
     turnIndex: number;
     content: string;
     durationMs?: number;
+    id?: string;
+    isStreaming?: boolean;
   }>;
   /** epoch ms */
   timestamp: number;

@@ -33,6 +33,7 @@ import {
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import { useSessionTabDrag } from '../shell/SessionTabDragContext';
 import { viewRegistry } from '../../services/view-registry';
+import { SidePanelNavToolbar } from './SidePanelNavToolbar';
 import styles from './LeafToolTabStrip.module.css';
 
 export interface LeafToolTabStripProps {
@@ -48,6 +49,7 @@ export interface LeafToolTabStripProps {
   onCollapse?: () => void;
   isMaximized?: boolean;
   showNavToolbar?: boolean;
+  showCollapseBtn?: boolean;
   className?: string;
 }
 
@@ -65,6 +67,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     onCollapse,
     isMaximized: propIsMaximized,
     showNavToolbar,
+    showCollapseBtn = true,
     className,
   }) => {
     const leafId = propLeafId ?? leaf?.id ?? '';
@@ -274,11 +277,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
       );
     };
 
-    const shouldShowNavToolbar =
-      !isEmpty &&
-      (showNavToolbar !== undefined
-        ? showNavToolbar
-        : isNavigableView(activeTab));
+    const shouldShowNavToolbar = !isEmpty && Boolean(showNavToolbar);
 
     const renderAddButton = (isInFlow: boolean) => {
       const btnClass = `${styles.addBtn} ${
@@ -423,7 +422,9 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
 
           {/* 右侧固定操作区 */}
           <div
-            className={`${styles.fixedCluster} side-panel-tab-fixed-cluster`}
+            className={`${styles.fixedCluster} ${
+              !showCollapseBtn ? styles.dockSlotReserved : ''
+            } side-panel-tab-fixed-cluster`}
           >
             {renderAddButton(false)}
             <Tooltip
@@ -443,19 +444,24 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 )}
               </button>
             </Tooltip>
-            <Tooltip content="收起右侧面板" side="bottom">
-              <button
-                type="button"
-                id="topQuickDockBtn"
-                className={`${styles.sideBtn} ${styles.btnCollapse} top-action-btn top-side-panel-btn active side-panel-btn side-panel-btn-collapse`}
-                onClick={handleCollapse}
-                aria-label="收起右侧面板"
-              >
-                <IconSidebarRight size={14} />
-              </button>
-            </Tooltip>
+            {showCollapseBtn ? (
+              <Tooltip content="收起右侧面板" side="bottom">
+                <button
+                  type="button"
+                  id="topQuickDockBtn"
+                  className={`${styles.sideBtn} ${styles.btnCollapse} top-action-btn top-side-panel-btn active side-panel-btn side-panel-btn-collapse`}
+                  onClick={handleCollapse}
+                  aria-label="收起右侧面板"
+                >
+                  <IconSidebarRight size={14} />
+                </button>
+              </Tooltip>
+            ) : null}
           </div>
         </div>
+
+        {/* Row 2: 导航工具条 (仅在显式开启时展示) */}
+        {shouldShowNavToolbar && <SidePanelNavToolbar />}
 
         {/* 空态 Launcher Hub 居中卡片 (0 个 Tab 时展示) */}
         {isEmpty && <SidePanelLauncherHub onOpenPanel={openPanel} />}

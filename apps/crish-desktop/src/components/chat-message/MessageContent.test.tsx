@@ -192,4 +192,71 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
     );
     expect(container.textContent).not.toBe('准备读取文件...读取结果：');
   });
+
+  it('当 msg.status === "error" 且 timeline 为空时渲染错误提示卡片', () => {
+    const errorMsg: SessionMessage = {
+      id: 'err-msg-1',
+      sender: 'assistant',
+      status: 'error',
+      text: '',
+      errorDetail: { message: '后端请求超时，请重试' },
+    };
+
+    const { container } = render(
+      <MessageContent msg={errorMsg} />
+    );
+
+    expect(container.textContent).toContain('后端请求超时，请重试');
+  });
+
+  it('当 msg.status === "error" 且 timeline.length > 0（包含思考链）时，依然渲染错误卡片，严禁吞噬错误', () => {
+    const errorWithThoughtMsg: SessionMessage = {
+      id: 'err-msg-thought-1',
+      sender: 'assistant',
+      status: 'error',
+      text: '',
+      thinking: '正在深入思考方案...',
+      errorDetail: { message: '模型生成阶段发生异常' },
+    };
+
+    const { container } = render(
+      <MessageContent msg={errorWithThoughtMsg} />
+    );
+
+    // 思考链与错误信息必须同时呈现，错误卡片绝对不被吞噬
+    expect(container.textContent).toContain('思考');
+    expect(container.textContent).toContain('模型生成阶段发生异常');
+  });
+
+  it('当 msg.status === "error" 且 timeline 为空但存在前置 partial 正文时，同时展示正文与错误卡片', () => {
+    const errorWithPartialTextMsg: SessionMessage = {
+      id: 'err-msg-partial-1',
+      sender: 'assistant',
+      status: 'error',
+      text: '已完成前半部分数据收集。',
+      errorDetail: { message: '下游服务连接中断' },
+    };
+
+    const { container } = render(
+      <MessageContent msg={errorWithPartialTextMsg} />
+    );
+
+    expect(container.textContent).toContain('已完成前半部分数据收集。');
+    expect(container.textContent).toContain('下游服务连接中断');
+  });
+
+  it('当 msg.status === "error" 且 errorDetail 缺省时，展示默认兜底文案，绝不白屏吞噬', () => {
+    const errorDefaultMsg: SessionMessage = {
+      id: 'err-msg-default-1',
+      sender: 'assistant',
+      status: 'error',
+      text: '',
+    };
+
+    const { container } = render(
+      <MessageContent msg={errorDefaultMsg} />
+    );
+
+    expect(container.textContent).toContain('服务暂时不可用，请检查网络或后端配置');
+  });
 });

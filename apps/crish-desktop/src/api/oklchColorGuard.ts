@@ -10,7 +10,7 @@ interface OKLCH {
  */
 export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
   const str = colorStr.trim().toLowerCase();
-  
+
   // Handlers for common raw formats in Conex (hex, HSL, color-mix)
   let r = 0.9, g = 0.9, b = 0.9; // Default to light grey fallback
 
@@ -36,7 +36,7 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
       const h = parseInt(match[1]!) / 360;
       const s = parseInt(match[2]!) / 100;
       const l = parseInt(match[3]!) / 100;
-      
+
       // HSL to RGB conversion
       const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
       const p = 2 * l - q;
@@ -98,15 +98,28 @@ export function getContrastGuardedText(bgPrimaryColor: string, isDark?: boolean)
 /**
  * Updates CSS Custom Properties for text dynamically based on the current skin's background
  */
-export function applyTextContrastGuard(bgPrimaryColor: string, isDark: boolean) {
+export function applyTextContrastGuard(
+  bgPrimaryColor: string,
+  isDark: boolean,
+  options?: { isCustomSkin?: boolean; explicitTextPrimary?: string }
+): void {
   if (typeof window === 'undefined') return;
+
+  const isCustom = options?.isCustomSkin ?? false;
+  const explicitFg = options?.explicitTextPrimary;
+
+  // 官方预设且已显式提供字色时，官方预设已满足 WCAG 规范，保持原汁原味，不作侵入式覆盖
+  if (!isCustom && explicitFg) {
+    return;
+  }
+
   const root = document.documentElement;
   const textPrimary = getContrastGuardedText(bgPrimaryColor, isDark);
-  
+
   root.style.setProperty('--text-primary', textPrimary);
-  
+
   const isComputedDark = textPrimary === 'hsl(0, 0%, 94%)';
-  
+
   if (isComputedDark) {
     root.style.setProperty('--text-secondary', 'hsl(0, 0%, 72%)');
     root.style.setProperty('--text-tertiary', 'hsl(0, 0%, 50%)');
@@ -115,4 +128,3 @@ export function applyTextContrastGuard(bgPrimaryColor: string, isDark: boolean) 
     root.style.setProperty('--text-tertiary', 'hsl(35, 6%, 52%)');
   }
 }
-

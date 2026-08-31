@@ -184,4 +184,10 @@ describe('ui/Select', () => {
     expect(onOuterClick).toHaveBeenCalledTimes(1);
     await screen.findByRole('listbox');
   });
+
+  it('size="sm" 下发 triggerSm 类名', () => {
+    render(<Select size="sm" options={OPTIONS} />);
+    const trigger = screen.getByRole('combobox');
+    expect(trigger.className).toContain('triggerSm');
+  });
 });

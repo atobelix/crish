@@ -70,7 +70,7 @@ export function replaceNode(
 
 /** tool 列宽 → branch.splitRatio（first child 占比）；钳制与 Phase 1 一致 */
 export function clampDockWidthRatio(widthRatio: number): number {
-  return Math.min(0.55, Math.max(0.15, widthRatio));
+  return Math.min(0.75, Math.max(0.20, widthRatio));
 }
 
 export function makeToolLeaf(
@@ -173,17 +173,33 @@ export function resolveChatLeafForSession(
 
   const chats = listChatLeaves(root);
 
-  // 优先：活动 leaf 且为未绑定 chat
+  // 优先：活动 leaf 且为未绑定 / 草稿 chat
   let candidate: LayoutLeaf | null = null;
   if (activeLeafId) {
     const active = chats.find((c) => c.id === activeLeafId);
-    if (active && !active.sessionId) candidate = active;
+    if (
+      active &&
+      (!active.sessionId ||
+        active.sessionId.startsWith('__pending') ||
+        active.sessionId === sid)
+    ) {
+      candidate = active;
+    }
   }
-  // 其次：任意未绑定 chat
+  // 其次：任意未绑定或草稿 chat
   if (!candidate) {
-    candidate = chats.find((c) => !c.sessionId) ?? null;
+    candidate =
+      chats.find(
+        (c) =>
+          !c.sessionId ||
+          c.sessionId.startsWith('__pending') ||
+          c.sessionId === sid
+      ) ?? null;
   }
-  // 再次：唯一 chat 且无 sessionId（上面已覆盖）；不抢占其它 session 的 leaf
+  // 再次：单 chat 布局中唯一直属 chat（不抢占 multi-chat 中明确归属他人的 leaf）
+  if (!candidate && chats.length === 1) {
+    candidate = chats[0]!;
+  }
   if (!candidate) {
     if (chats.length === 0) {
       const newChat = createLeaf('chat', undefined, undefined, sid);

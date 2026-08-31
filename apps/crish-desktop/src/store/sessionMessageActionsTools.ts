@@ -22,8 +22,12 @@ import {
   sanitizeToolCallUpdates,
   toolCallPatchHasChanges,
 } from './sessionSharedHelpers';
-import { normalizeAssistantTimeline } from '../api/toolPresentation';
+import {
+  normalizeAssistantTimeline,
+} from '../api/toolPresentation';
 import type { MessageCacheState } from '@crish/shared-types';
+
+export { reconcileAssistantMessageBlocks } from '../api/toolPresentation';
 
 /** 工具/状态/pinned/缓存类 actions 子集 */
 export function createSessionMessageActionsTools<T extends SessionStoreSlice>(

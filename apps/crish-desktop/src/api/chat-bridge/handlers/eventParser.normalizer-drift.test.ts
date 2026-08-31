@@ -31,6 +31,7 @@ import {
   vi,
 } from 'vitest';
 import { ENGINE_NORMALIZERS, parseBridgeEvent } from './eventParser';
+import { logger } from '../../../services/LoggerService';
 import {
   ENGINE_EVENT_TYPES,
   parseEngineEvent,
@@ -517,9 +518,9 @@ describe('T-F 06 T4.1：归一器键集与生成事件类型双向锁定', () =>
 
 describe('T-F 06 T4.2：静默默认值可观测（非安全向显式登记）', () => {
   // logInternalError 实现 = console.warn（userFacingErrors.ts:244-249），
-  // 以 console.warn spy 观测「进兜底时有日志」。
+  // 以 logger.warn spy 观测「进兜底时有日志」。
   beforeEach(() => {
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(logger, 'warn').mockImplementation(() => {});
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -530,7 +531,7 @@ describe('T-F 06 T4.2：静默默认值可观测（非安全向显式登记）',
       type: 'run-terminal',
       terminal: 'mystery-status',
     });
-    expect(console.warn).toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalled();
     expect(r.ok).toBe(true);
     if (r.ok && r.data.kind === 'engine') {
       expect(r.data.event.type).toBe('run-terminal');
@@ -546,7 +547,7 @@ describe('T-F 06 T4.2：静默默认值可观测（非安全向显式登记）',
       type: 'tool-batch-start',
       calls: [{ id: 'tc1', toolName: 'read', category: 'mystery-cat' }],
     });
-    expect(console.warn).toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalled();
     expect(r.ok).toBe(true);
   });
 

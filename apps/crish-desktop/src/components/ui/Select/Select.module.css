@@ -21,13 +21,13 @@
   gap: var(--space-2, 8px);
   width: 100%;
   height: var(--control-height, 32px);
-  min-height: var(--control-height, 32px);
+  min-height: 0;
   padding: 0 10px;
-  border: 1px solid var(--border-color, #e2dfd9);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md, 6px);
   font-size: var(--font-size-sm, 13px);
   font-family: var(--font-sans);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
@@ -39,34 +39,20 @@
 }
 
 .trigger:hover {
-  background: rgba(29, 28, 26, 0.045);
-  border-color: var(--border-color, #e2dfd9);
+  background: var(--bg-hover);
+  border-color: var(--border-color);
 }
 
 .trigger:focus-visible {
-  border-color: var(--border-color, #e2dfd9);
-  background: var(--bg-card, #ffffff);
-  box-shadow: 0 0 0 2px var(--tint-focus-ring, rgba(0, 0, 0, 0.08));
-}
-
-:global(html[data-theme='dark']) .trigger {
-  border-color: var(--border-color, #2b2926);
-  background: var(--bg-card, #181715);
-}
-
-:global(html[data-theme='dark']) .trigger:hover {
-  background: rgba(245, 244, 240, 0.06);
-  border-color: var(--border-color, #2b2926);
-}
-
-:global(html[data-theme='dark']) .trigger:focus-visible {
-  border-color: var(--border-color, #2b2926);
-  background: var(--bg-card, #181715);
+  border-color: var(--border-color);
+  background: var(--bg-card);
+  outline: none;
+  box-shadow: var(--focus-ring);
 }
 
 .triggerSm {
   height: 28px;
-  min-height: 28px;
+  min-height: 0;
   padding: 0 8px;
   font-size: 12px;
   border-radius: var(--radius-md, 6px);
@@ -100,20 +86,14 @@
 
 .menu {
   min-width: 180px;
-  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  background: var(--bg-elevated);
   backdrop-filter: blur(28px) saturate(160%);
   -webkit-backdrop-filter: blur(28px) saturate(160%);
-  border: 1px solid var(--border-color, #e2dfd9);
+  border: 1px solid var(--border-subtle);
   border-radius: 14px;
-  box-shadow: 0 20px 48px -10px rgba(29, 28, 26, 0.09);
+  box-shadow: var(--shadow-dropdown);
   padding: 6px;
   box-sizing: border-box;
-}
-
-:global(html[data-theme='dark']) .menu {
-  background: var(--sep-bg-panel, rgba(24, 23, 21, 0.96));
-  border-color: var(--border-color, #2b2926);
-  box-shadow: 0 24px 54px -10px rgba(0, 0, 0, 0.70);
 }
 
 .listbox {
@@ -146,31 +126,20 @@
 }
 
 .option:hover {
-  background: rgba(29, 28, 26, 0.045);
+  background: var(--bg-hover);
   color: var(--text-primary);
-}
-
-:global(html[data-theme='dark']) .option:hover {
-  background: rgba(245, 244, 240, 0.06);
 }
 
 .option:focus-visible {
   outline: none;
-  background: rgba(29, 28, 26, 0.065);
-}
-
-:global(html[data-theme='dark']) .option:focus-visible {
-  background: rgba(245, 244, 240, 0.09);
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 .optionSelected {
-  background: rgba(29, 28, 26, 0.065);
+  background: var(--bg-active, var(--tint-active));
   color: var(--text-primary);
   font-weight: 500;
-}
-
-:global(html[data-theme='dark']) .optionSelected {
-  background: rgba(245, 244, 240, 0.09);
 }
 
 .optionDisabled {
@@ -211,11 +180,7 @@
 
 .checkIcon {
   flex-shrink: 0;
-  color: #059669;
-}
-
-:global(html[data-theme='dark']) .checkIcon {
-  color: #10b981;
+  color: var(--accent-color, var(--brand-deep));
 }
 
 .selectError {

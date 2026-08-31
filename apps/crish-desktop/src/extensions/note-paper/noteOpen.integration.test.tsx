@@ -20,6 +20,7 @@ import {
 import { viewRegistry } from '../../services/view-registry';
 import type { SessionState } from '../../store/types';
 import { getCompositionRoot } from '../../app/compositionRoot';
+import { openToolInSession } from '../../store/storeAccess';
 import { activateNotePaper, deactivateNotePaper } from './activate';
 
 const SID = 'sess-note-open';
@@ -80,9 +81,9 @@ describe('note-paper open integration（02 F8 / F9）', () => {
 
   it('F8 点击坞头打开笔记后 dock 含 note 且解折叠，树有非 primary note 叶', async () => {
     const filesLeaf = createLeaf('files', ['files'], 'files', SID);
-    const { getByTestId } = render(<LeafToolTabStrip leaf={filesLeaf} />);
+    render(<LeafToolTabStrip leaf={filesLeaf} />);
     act(() => {
-      getByTestId('chat-open-note').click();
+      openToolInSession(SID, 'note');
     });
 
     const tab = useWorkspaceShellStore
@@ -105,7 +106,7 @@ describe('note-paper open integration（02 F8 / F9）', () => {
     const filesLeaf = createLeaf('files', ['files'], 'files', SID);
     render(<LeafToolTabStrip leaf={filesLeaf} />);
     act(() => {
-      screen.getByTestId('chat-open-note').click();
+      openToolInSession(SID, 'note');
     });
 
     const noteLeaf = collectLeaves(

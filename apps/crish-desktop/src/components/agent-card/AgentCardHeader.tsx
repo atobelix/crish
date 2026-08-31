@@ -40,7 +40,7 @@ export const AgentCardHeader: React.FC<AgentCardHeaderProps> = ({
 
   return (
     <header
-      className={`${styles.agentCardHeader} ${styles.agentCardHeaderSlim}`}
+      className={`${styles.agentCardHeader} ${styles.agentCardHeaderSlim} side-panel-toolbar`}
     >
       <div className={styles.agentCardTitleRow}>
         {/* 返回浏览列表：不关 tab、不碰主列；browse 会触发 id 清空 → 清草稿 */}

@@ -18,7 +18,10 @@ import {
   parseErr,
   type ParseResult,
 } from '../../../../../../packages/shared-types/src/generated/engine';
-import type { EngineEventType } from '../../../../../../packages/shared-types/src/generated/engine';
+import type {
+  EngineEventType,
+  EngineEvent,
+} from '../../../../../../packages/shared-types/src/generated/engine';
 import type { Normalizer } from './eventParserShared';
 import { CORE_NORMALIZERS } from './eventParserCore';
 import { DIAGNOSTIC_NORMALIZERS } from './eventParserDiagnostics';

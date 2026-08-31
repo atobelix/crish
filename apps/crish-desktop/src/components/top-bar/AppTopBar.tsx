@@ -18,6 +18,7 @@ import styles from './AppTopBar.module.css';
 
 export interface AppTopBarProps {
   sidebarCollapsed: boolean;
+  /** 保留给调用方的既有契约；rail 已改为固定槽位，不再消费这两项 */
   sidebarWidth?: number | string;
   isResizing?: boolean;
   onToggleSidebar: () => void;
@@ -25,13 +26,7 @@ export interface AppTopBarProps {
 }
 
 export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
-  ({
-    sidebarCollapsed,
-    sidebarWidth = 260,
-    isResizing = false,
-    onToggleSidebar,
-    onShowCheatsheet,
-  }) => {
+  ({ sidebarCollapsed, onToggleSidebar, onShowCheatsheet }) => {
     const isMacDesktop = useMemo(() => {
       return (
         typeof navigator !== 'undefined' &&
@@ -86,15 +81,12 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
       window.dispatchEvent(new CustomEvent('open-cheatsheet'));
     }, [onShowCheatsheet]);
 
-    const resolvedSidebarWidth =
-      typeof sidebarWidth === 'number' ? `${sidebarWidth}px` : sidebarWidth;
-
     const hasMacTrafficLights = isMacDesktop && !isFullscreen;
-    const railWidth = sidebarCollapsed
-      ? hasMacTrafficLights
-        ? '106px'
-        : '36px'
-      : resolvedSidebarWidth;
+    /*
+     * 侧栏开关是固定槽位：宽度只为 macOS 交通灯让位，不再跟随侧栏展开宽度伸缩。
+     * 之前 rail 宽度绑 sidebarWidth，开合侧栏时按钮会横向滑动，手要追着点。
+     */
+    const railWidth = hasMacTrafficLights ? '106px' : '48px';
     const railPaddingLeft = hasMacTrafficLights ? 70 : 12;
 
     return (
@@ -111,10 +103,6 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
             width: railWidth,
             minWidth: railWidth,
             paddingLeft: railPaddingLeft,
-            marginRight: sidebarCollapsed ? 0 : -16, // -16px 负边距消除 16px 视错觉断层
-            transition: isResizing
-              ? 'none'
-              : 'width 200ms cubic-bezier(0.16, 1, 0.3, 1), min-width 200ms cubic-bezier(0.16, 1, 0.3, 1)',
           }}
           data-tauri-drag-region
         >

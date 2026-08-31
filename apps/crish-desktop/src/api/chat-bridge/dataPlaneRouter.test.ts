@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 全局数据面路由测试（14-T7，注入式验收，不依赖 Rust D1）。
  *
  * 覆盖：
@@ -294,7 +294,7 @@ describe('子代理面全局路由（父 run 收口后兜底，T-6 / 04 M1）', 
   }
 
   function agentsOf(sid: string) {
-    return useLayoutStore.getState().sessionsById[sid]?.agents;
+    return useSessionStore.getState().sessionsById[sid]?.agents;
   }
 
   beforeEach(() => {
@@ -514,5 +514,3 @@ describe('子代理面全局路由（父 run 收口后兜底，T-6 / 04 M1）', 
     expect(isSubagentPlaneEventType('error')).toBe(false);
   });
 });
-
-import { useSessionStore } from '@/store/sessionStore';

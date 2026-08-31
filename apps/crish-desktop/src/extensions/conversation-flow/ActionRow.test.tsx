@@ -6,8 +6,8 @@ import { projectPurposes } from '@crish/conversation-flow';
 import type { MessageToolCall } from '../../store/types';
 import { ActionRow } from './ActionRow';
 
-vi.mock('../../components/chat-message-row/AsyncMarkdownBlock', () => ({
-  AsyncMarkdownBlock: ({ text }: { text: string }) =>
+vi.mock('../../components/chat-message-row/StreamingMarkdownView', () => ({
+  StreamingMarkdownView: ({ text }: { text: string }) =>
     React.createElement('div', { 'data-testid': 'async-markdown-block' }, text),
 }));
 

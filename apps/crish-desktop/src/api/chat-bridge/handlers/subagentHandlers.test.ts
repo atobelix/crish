@@ -1,4 +1,4 @@
-﻿/**
+/**
  * subagent 域三 handler 行为测试（I5-M7：C8 事件契约信封对齐）。
  *
  * Rust 契约（crates/conex-types/src/events.rs + contracts/engine-events.json）：
@@ -358,13 +358,13 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   function agentById(id: string): SessionAgent | undefined {
-    return useLayoutStore
+    return useSessionStore
       .getState()
       .sessionsById[sid]?.agents?.find((a) => a.id === id);
   }
 
   function toolCall(messageId: string, toolId: string) {
-    return useLayoutStore
+    return useSessionStore
       .getState()
       .sessionsById[sid]?.messages?.find((m) => m.id === messageId)
       ?.toolCalls?.find((t) => t.id === toolId);
@@ -392,7 +392,7 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('started 全局消费防双写：同 id agent 已存在（per-run 已建）→ 跳过不覆盖', () => {
-    useLayoutStore.getState().upsertSessionAgent(sid, {
+    useSessionStore.getState().upsertSessionAgent(sid, {
       id: 'sa-1',
       subagentRunId: 'sr-1',
       parentSessionId: sid,
@@ -416,22 +416,20 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('started 全局消费：父工具卡置 running（running 态才更新）', () => {
-    useLayoutStore
-      .getState()
-      .addMessage(useLayoutStore.getState().workspaces[0].id, sid, {
-        id: 'm1',
-        sender: 'assistant',
-        text: '',
-        timestamp: Date.now(),
-        toolCalls: [
-          {
-            id: 'tc-running',
-            name: 'run_subagent',
-            arguments: '',
-            status: 'running',
-          },
-        ],
-      });
+    useSessionStore.getState().addMessage('ws-1', sid, {
+      id: 'm1',
+      sender: 'assistant',
+      text: '',
+      timestamp: Date.now(),
+      toolCalls: [
+        {
+          id: 'tc-running',
+          name: 'run_subagent',
+          arguments: '',
+          status: 'running',
+        },
+      ],
+    });
     onSubagentStartedGlobal({
       type: 'subagent-started',
       runId: 'run-parent',
@@ -446,23 +444,21 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('started 全局消费：终态父工具卡不回退为 running', () => {
-    useLayoutStore
-      .getState()
-      .addMessage(useLayoutStore.getState().workspaces[0].id, sid, {
-        id: 'm1',
-        sender: 'assistant',
-        text: '',
-        timestamp: Date.now(),
-        toolCalls: [
-          {
-            id: 'tc-done',
-            name: 'run_subagent',
-            arguments: '',
-            status: 'success',
-            output: '旧输出',
-          },
-        ],
-      });
+    useSessionStore.getState().addMessage('ws-1', sid, {
+      id: 'm1',
+      sender: 'assistant',
+      text: '',
+      timestamp: Date.now(),
+      toolCalls: [
+        {
+          id: 'tc-done',
+          name: 'run_subagent',
+          arguments: '',
+          status: 'success',
+          output: '旧输出',
+        },
+      ],
+    });
     onSubagentStartedGlobal({
       type: 'subagent-started',
       runId: 'run-parent',
@@ -477,7 +473,7 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('event 全局消费：message-delta 投影到 agent 时间线（applySubagentEventToMessages 同源）', () => {
-    useLayoutStore.getState().upsertSessionAgent(sid, {
+    useSessionStore.getState().upsertSessionAgent(sid, {
       id: 'sa-1',
       subagentRunId: 'sr-1',
       parentSessionId: sid,
@@ -525,23 +521,21 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('ended 全局消费：status/summary/endedAt + 时间线消息收口 + 父工具卡终态', () => {
-    useLayoutStore
-      .getState()
-      .addMessage(useLayoutStore.getState().workspaces[0].id, sid, {
-        id: 'm1',
-        sender: 'assistant',
-        text: '',
-        timestamp: Date.now(),
-        toolCalls: [
-          {
-            id: 'tc-spawn',
-            name: 'run_subagent',
-            arguments: '',
-            status: 'running',
-          },
-        ],
-      });
-    useLayoutStore.getState().upsertSessionAgent(sid, {
+    useSessionStore.getState().addMessage('ws-1', sid, {
+      id: 'm1',
+      sender: 'assistant',
+      text: '',
+      timestamp: Date.now(),
+      toolCalls: [
+        {
+          id: 'tc-spawn',
+          name: 'run_subagent',
+          arguments: '',
+          status: 'running',
+        },
+      ],
+    });
+    useSessionStore.getState().upsertSessionAgent(sid, {
       id: 'sa-1',
       subagentRunId: 'sr-1',
       parentSessionId: sid,
@@ -583,23 +577,21 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
   });
 
   it('ended 全局消费：failed → 父工具卡 error + 兜底文案', () => {
-    useLayoutStore
-      .getState()
-      .addMessage(useLayoutStore.getState().workspaces[0].id, sid, {
-        id: 'm1',
-        sender: 'assistant',
-        text: '',
-        timestamp: Date.now(),
-        toolCalls: [
-          {
-            id: 'tc-spawn',
-            name: 'run_subagent',
-            arguments: '',
-            status: 'running',
-          },
-        ],
-      });
-    useLayoutStore.getState().upsertSessionAgent(sid, {
+    useSessionStore.getState().addMessage('ws-1', sid, {
+      id: 'm1',
+      sender: 'assistant',
+      text: '',
+      timestamp: Date.now(),
+      toolCalls: [
+        {
+          id: 'tc-spawn',
+          name: 'run_subagent',
+          arguments: '',
+          status: 'running',
+        },
+      ],
+    });
+    useSessionStore.getState().upsertSessionAgent(sid, {
       id: 'sa-1',
       subagentRunId: 'sr-1',
       parentSessionId: sid,
@@ -625,5 +617,3 @@ describe('子代理面全局消费者（父 run 收口后兜底 → agents store
     expect(tc!.output).toBe('协作未完成');
   });
 });
-
-import { useSessionStore } from '@/store/sessionStore';

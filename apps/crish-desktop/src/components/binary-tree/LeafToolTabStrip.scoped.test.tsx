@@ -93,7 +93,7 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       expect(onToggleMaximize).toHaveBeenCalledTimes(1);
     });
 
-    it('Row 2 导航工具条在预览视图展示，在普通视图或空态不展示', () => {
+    it('Row 2 导航工具条在显式开启时展示，在未显式开启或普通视图不展示', () => {
       const previewLeaf = createLeaf(
         'tool-leaf-1',
         ['preview'],
@@ -101,7 +101,7 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
         'sess-b'
       );
       const { getByTestId, queryByTestId, rerender } = render(
-        <LeafToolTabStrip leaf={previewLeaf} />
+        <LeafToolTabStrip leaf={previewLeaf} showNavToolbar={true} />
       );
       expect(getByTestId('side-panel-toolbar')).toBeTruthy();
 
@@ -558,4 +558,3 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     });
   });
 });
-

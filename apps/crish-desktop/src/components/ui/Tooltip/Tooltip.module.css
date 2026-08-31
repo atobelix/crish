@@ -1,5 +1,5 @@
-/* ui/Tooltip        PE-05 T05.1.5 
- *   components/Tooltip/Tooltip.module.css      
+/* ui/Tooltip        PE-05 T05.1.5
+ *   components/Tooltip/Tooltip.module.css
  *      tokens.css       hex/rgba */
 .tooltip {
   position: fixed;
@@ -45,9 +45,9 @@
 .tooltipContent {
   background: var(--bg-elevated);
   border: 1px solid var(--hairline-strong);
-  border-radius: var(--radius-tooltip, var(--radius-sm, 4px));
-  box-shadow: var(--shadow-lg);
-  padding: 6px 12px;
+  border-radius: var(--radius-full, 9999px);
+  box-shadow: var(--shadow-sm);
+  padding: 4px 10px;
   font-size: var(--font-size-xs);
   line-height: var(--line-height-base);
   color: var(--text-primary);
@@ -71,18 +71,10 @@
   border-radius: var(--radius-xs, 2px);
 }
 
-html[data-theme="dark"] .tooltipContent {
-  background: var(--bg-elevated);
-}
-
 .arrow {
   position: absolute;
   width: 8px;
   height: 8px;
-  background: var(--bg-elevated);
-}
-
-html[data-theme="dark"] .arrow {
   background: var(--bg-elevated);
 }
 

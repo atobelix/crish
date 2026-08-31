@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
@@ -8,7 +8,7 @@ import type {
   SplitChangeRenderItem,
   PlaceholderRenderItem,
 } from './diffCardTypes';
-import { highlightCode } from '../../api/codeHighlight';
+import { highlightCode, langFromFilename } from '../../api/codeHighlight';
 import {
   computeIntralinePair,
   type DiffWordToken,
@@ -23,35 +23,58 @@ function basename(p: string): string {
 function renderTokens(
   tokens: DiffWordToken[],
   targetType: 'added' | 'removed',
-  fallbackText: string
+  fallbackText: string,
+  lang: string
 ) {
   if (!tokens || tokens.length === 0) {
     return (
       <span
         dangerouslySetInnerHTML={{
-          __html: highlightCode(fallbackText, 'diff'),
+          __html: highlightCode(fallbackText, lang),
         }}
       />
     );
   }
   return (
-    <>
-      {tokens.map((tok, i) => {
-        if (tok.type === targetType) {
-          return (
-            <span
-              key={i}
-              className={
-                targetType === 'added' ? styles.diffWordAdd : styles.diffWordDel
-              }
-            >
-              {tok.text}
-            </span>
-          );
-        }
-        return <span key={i}>{tok.text}</span>;
-      })}
-    </>
+    <span style={{ position: 'relative', display: 'inline-block' }}>
+      <span
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          pointerEvents: 'none',
+          whiteSpace: 'pre',
+          color: 'transparent',
+          userSelect: 'none',
+        }}
+        aria-hidden="true"
+      >
+        {tokens.map((tok, i) => {
+          const isTarget = tok.type === targetType;
+          if (isTarget) {
+            return (
+              <span
+                key={i}
+                className={
+                  targetType === 'added' ? styles.diffWordAdd : styles.diffWordDel
+                }
+              >
+                {tok.text}
+              </span>
+            );
+          }
+          return <span key={i}>{tok.text}</span>;
+        })}
+      </span>
+      <span
+        style={{ position: 'relative', background: 'transparent' }}
+        dangerouslySetInnerHTML={{
+          __html: highlightCode(fallbackText, lang),
+        }}
+      />
+    </span>
   );
 }
 
@@ -82,6 +105,8 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
 
   const visibleItems = renderItems.slice(startIndex, endIndex);
   const offsetTop = startIndex * rowHeight;
+
+  const codeLang = useMemo(() => langFromFilename(f.filePath), [f.filePath]);
 
   return (
     <AppErrorBoundary variant="compact" title="变更对比出错">
@@ -119,13 +144,6 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                     key={`${f.filePath}-collapse-${item.startIndex}`}
                     className={styles.collapseBar}
                     onClick={() => onExpandBlock(f.filePath, item.startIndex)}
-                    style={{
-                      height: `${rowHeight}px`,
-                      minHeight: `${rowHeight}px`,
-                      maxHeight: `${rowHeight}px`,
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
                   >
                     <Lucide.Maximize2
                       size={12}
@@ -168,7 +186,6 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                 rightNum = String(right.newLine ?? '');
               }
 
-              // 当同时存在左侧删除与右侧新增时，执行词法级 Intraline Diff
               let leftTokens: DiffWordToken[] | null = null;
               let rightTokens: DiffWordToken[] | null = null;
               if (isLeftDel && isRightAdd) {
@@ -177,7 +194,6 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                 rightTokens = pairResult.newTokens;
               }
 
-              // 构造具备绝对业务唯一性的稳定 Key：文件名 + 旧路径 + 旧行号 + 新行号 + 全局行索引
               const oldLine =
                 left?.oldLine !== undefined ? String(left.oldLine) : '';
               const newLine =
@@ -190,8 +206,9 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                   className={styles.splitLine}
                   style={{ minHeight: `${rowHeight}px` }}
                 >
+                  {/* 左栏 */}
                   <div
-                    className={`${styles.splitColumn} ${leftClass}`}
+                    className={`${styles.splitColumn} ${leftClass} ${!left ? styles.diffLineEmpty : ''}`}
                     style={{ padding: 0 }}
                   >
                     <div className={styles.gutterNum} data-num={leftNum}>
@@ -199,19 +216,23 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                     </div>
                     <div className={styles.gutterMarker}>{leftMarker}</div>
                     <div className={styles.lineText}>
-                      {leftTokens ? (
-                        renderTokens(leftTokens, 'removed', leftText)
-                      ) : (
-                        <span
-                          dangerouslySetInnerHTML={{
-                            __html: highlightCode(leftText, 'diff'),
-                          }}
-                        />
-                      )}
+                      {left ? (
+                        leftTokens ? (
+                          renderTokens(leftTokens, 'removed', leftText, codeLang)
+                        ) : (
+                          <span
+                            dangerouslySetInnerHTML={{
+                              __html: highlightCode(leftText, codeLang),
+                            }}
+                          />
+                        )
+                      ) : null}
                     </div>
                   </div>
+
+                  {/* 右栏 */}
                   <div
-                    className={`${styles.splitColumn} ${rightClass}`}
+                    className={`${styles.splitColumn} ${rightClass} ${!right ? styles.diffLineEmpty : ''}`}
                     style={{ padding: 0 }}
                   >
                     <div className={styles.gutterNum} data-num={rightNum}>
@@ -219,15 +240,17 @@ export const DiffCardSplitView: React.FC<DiffCardSplitViewProps> = ({
                     </div>
                     <div className={styles.gutterMarker}>{rightMarker}</div>
                     <div className={styles.lineText}>
-                      {rightTokens ? (
-                        renderTokens(rightTokens, 'added', rightText)
-                      ) : (
-                        <span
-                          dangerouslySetInnerHTML={{
-                            __html: highlightCode(rightText, 'diff'),
-                          }}
-                        />
-                      )}
+                      {right ? (
+                        rightTokens ? (
+                          renderTokens(rightTokens, 'added', rightText, codeLang)
+                        ) : (
+                          <span
+                            dangerouslySetInnerHTML={{
+                              __html: highlightCode(rightText, codeLang),
+                            }}
+                          />
+                        )
+                      ) : null}
                     </div>
                   </div>
                 </div>

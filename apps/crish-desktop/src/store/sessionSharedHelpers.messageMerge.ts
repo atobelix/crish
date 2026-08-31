@@ -167,6 +167,9 @@ export function applySessionAgentPatch(
     target.subagentPath = patch.subagentPath;
   if (patch.subagentRunId !== undefined)
     target.subagentRunId = patch.subagentRunId;
+  if (patch.errorKind !== undefined) target.errorKind = patch.errorKind;
+  if (patch.retries !== undefined) target.retries = patch.retries;
+  if (patch.needsUser !== undefined) target.needsUser = patch.needsUser;
 }
 
 export function cloneMessages(messages: SessionMessage[]): SessionMessage[] {

@@ -210,8 +210,8 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     // 浅色特有：极富人文温润质感的黄金海岸/暖铜纸温混色终点（30% 饱和度、45% 亮度，彻底消灭阴暗灰色，让调暗充满温馨阳光感，在哪一级都不脏不沉闷！）
     const twilightTarget = `color-mix(in srgb, ${mixColor} 15%, hsl(34, 30%, 45%))`;
 
-    // 💡 自动温感色温融入 (仅浅色模式下生效)
-    if (solarWarmthMix > 0 && !isDarkPreset) {
+    // 💡 自动温感色温融入 (仅在显式开启且非中性预设下生效)
+    if (solarWarmthMix > 0 && !isDarkPreset && p.skin !== 'warm-gray' && p.skin !== 'paper' && p.skin !== 'classic-gray') {
       const sunsetTone = 'hsl(30, 40%, 90%)';
       bgPrimary = `color-mix(in srgb, ${sunsetTone} ${solarWarmthMix * 100}%, ${bgPrimary})`;
       bgSecondary = `color-mix(in srgb, ${sunsetTone} ${solarWarmthMix * 100}%, ${bgSecondary})`;
@@ -391,7 +391,10 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     root.style.setProperty('--composer-bg', composerBg);
 
     // Dynamic OKLCH contrast guard to automatically enforce WCAG AA contrast ratios
-    applyTextContrastGuard(bgPrimary, isDarkPreset);
+    applyTextContrastGuard(bgPrimary, isDarkPreset, {
+      isCustomSkin: p.skin === 'custom',
+      explicitTextPrimary: textPrimary,
+    });
   } else {
     // 移除属性，使用 tokens.css 默认值
     root.style.removeProperty('--bg-primary');

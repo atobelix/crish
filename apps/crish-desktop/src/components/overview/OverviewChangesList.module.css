@@ -1,0 +1,128 @@
+.changesContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  gap: var(--space-1, 4px);
+}
+
+/* 改动文件无序列表容器 */
+.changesList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  box-sizing: border-box;
+  max-height: 320px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.changesItem {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  list-style: none;
+}
+
+/* 单行文件按钮：严格锁定 28px 高度，对齐 --control-height-sm 与基线 */
+.changesItemBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  min-height: var(--control-height-sm, 28px);
+  max-height: var(--control-height-sm, 28px);
+  height: var(--control-height-sm, 28px);
+  padding: 0 var(--space-1_5, 6px);
+  margin: 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: var(--font-size-xs, 12px);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+  user-select: none;
+  transition: background-color var(--transition-fast, 120ms ease);
+}
+
+.changesItemBtn:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+}
+
+.changesItemBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.changesItemBtn.isOpening {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.fileTypeIcon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 文件名称：等宽字体，加粗主显，优先保留空间 */
+.fileName {
+  flex-shrink: 0;
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono, monospace);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+/* 目录弱化注记：靠右填充剩余空间，末尾优先截断 */
+.dirBreadcrumb {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary);
+  direction: rtl;
+  text-align: left;
+}
+
+/* 增删度量区域：右侧紧凑对齐 */
+.fileMetrics {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.moreActionRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 2px 0 0 2px;
+}
+
+.moreBtn {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary);
+  padding: 2px 6px;
+  height: 22px;
+}
+
+.moreBtn:hover {
+  color: var(--text-primary);
+}

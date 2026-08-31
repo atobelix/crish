@@ -2,7 +2,7 @@
 .flowSubagent {
   margin: 2px 0;
   min-width: 0;
-  padding-left: var(--flow-summary-indent, 0.35em);
+  padding-left: var(--space-0_5, 2px);
   box-sizing: border-box;
 }
 
@@ -19,9 +19,9 @@
   background: none;
   cursor: pointer;
   font-family: inherit;
-  font-size: var(--flow-font-meta, 13px);
+  font-size: var(--font-size-sm, 13px);
   line-height: 1.5;
-  color: var(--flow-meta, var(--text-secondary, #4a4a4a));
+  color: var(--text-secondary);
   text-align: left;
   box-sizing: border-box;
   -webkit-font-smoothing: antialiased;
@@ -30,7 +30,7 @@
 }
 
 .flowSubagentLine1:hover {
-  color: var(--flow-meta-hover, var(--text-primary, #2a2a2a));
+  color: var(--text-primary);
 }
 
 .flowSubagentIcon {
@@ -59,8 +59,8 @@
   align-items: center;
   gap: 4px;
   margin-left: 6px;
-  color: var(--flow-meta-soft, var(--text-tertiary, #5c5c5c));
-  font-size: var(--flow-font-meta, 13px);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 13px);
   font-variant-numeric: tabular-nums;
   font-family: inherit;
   white-space: nowrap;
@@ -95,8 +95,8 @@
   align-items: center;
   gap: 8px;
   padding: 1px 0 1px 22px;
-  font-size: var(--flow-font-meta, 13px);
-  color: var(--flow-meta-soft, var(--text-secondary, #4a4a4a));
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary);
   min-height: 22px;
 }
 
@@ -117,7 +117,7 @@
 }
 
 .flowSubagentTraceLead {
-  color: var(--flow-meta-soft, #8c877d);
+  color: var(--text-tertiary);
   flex-shrink: 0;
 }
 
@@ -126,7 +126,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 32em;
-  color: var(--flow-meta, var(--text-secondary, #4a4a4a));
+  color: var(--text-secondary);
 }
 
 /* Expand panel: LEFT vertical rail distinguishes subagent stream from main stream */

@@ -19,7 +19,7 @@ import {
 } from '../../../api/sessionSearch';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
-import { MoreHorizontal } from 'lucide-react';
+import { GitBranch, MoreHorizontal } from 'lucide-react';
 
 /** 更多钮边长；必须小于行高，避免撑满整行吞掉标题点击 */
 export const SESSION_ACTIONS_BTN_PX = 18;
@@ -205,9 +205,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
 
   const isBranched = !!s.branchParentId;
   const baseTitle = sessionListDisplayTitle(s);
-  const displayText = isBranched
-    ? `分支: ${baseTitle.replace(/ - 分支$/, '')}`
-    : baseTitle;
+  const displayText = baseTitle.replace(/ - 分支$/, '');
   const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
   const sessionActive = s.id === activeSessionId;
   void searchHit; // 保留 prop 以兼容搜索 API，UI 强制单行不渲染 snippet
@@ -235,8 +233,13 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
   );
 
   // 产品约束：每条对话固定单行，禁止 multiLine / 项目副行 / 搜索副行撑高
-  const ariaLabel = isRunning ? `${displayText}，处理中` : displayText;
-  const tipContent = displayText;
+  const sessionTitleWithBranch = isBranched
+    ? `分支会话：${displayText}`
+    : displayText;
+  const ariaLabel = isRunning
+    ? `${sessionTitleWithBranch}，处理中`
+    : sessionTitleWithBranch;
+  const tipContent = sessionTitleWithBranch;
 
   const dropClass =
     dropPlace === 'before'
@@ -350,6 +353,16 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
           <>
             <Tooltip content={tipContent}>
               <span className={styles.sessionTextCol}>
+                {isBranched && (
+                  <span className={styles.branchBadge} aria-label="分支会话">
+                    <GitBranch
+                      size={11}
+                      strokeWidth={2}
+                      className={styles.branchIcon}
+                      aria-hidden
+                    />
+                  </span>
+                )}
                 <span className={styles.sessionText}>{displayText}</span>
               </span>
             </Tooltip>

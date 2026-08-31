@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { useSettingsUiStore } from './settingsUiStore';
 import { useLayoutStore } from './layoutStore';
 import type { } from './types';

@@ -11,22 +11,7 @@ export async function bootstrapFull(): Promise<void> {
       });
     })(),
 
-    // 2. 同步引擎配置
-    (async () => {
-      const { clientApi } = await import('./api/clientApi');
-      try {
-        const settings = await clientApi.getSettings();
-        if (settings?.theme) {
-          const { applyTheme, normalizeTheme } =
-            await import('./api/themeStore');
-          applyTheme(normalizeTheme(settings.theme));
-        }
-      } catch {
-        /* 主题读取失败时保持默认主题 */
-      }
-    })(),
-
-    // 3. 运行时模型目录快照（DEEPCHECK-02 P0：catalog_get 接线；Rust 目录真源
+    // 2. 运行时模型目录快照（DEEPCHECK-02 P0：catalog_get 接线；Rust 目录真源
     //    → 前端四指标定价 + 思考档位单源（T5.2b 描述接口 offered）；invoke 失败
     //    内部降级静态表 / 提供方默认，恒不抛）
     (async () => {

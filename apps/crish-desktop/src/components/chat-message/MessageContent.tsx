@@ -9,14 +9,10 @@ import {
   extractImageRefs,
   type AssistantTimelineItem,
 } from '../../api/toolPresentation';
-import {
-  IncrementalThoughtStripper,
-  stripThoughtPlaceholders,
-} from '../../api/markdownRenderLite';
+import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { Priority } from '../../workers';
-import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
 import { MessageToolCallsSection } from '../chat-message-row/MessageToolCallsSection';
-import { StreamingTextBlock } from '../chat-message-row/StreamingTextBlock';
+import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
 import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
 
 export interface MessageContentProps {
@@ -44,10 +40,26 @@ const _IMAGE_TAIL_WINDOW = 256;
 /** 流式区图片上限（与 extractImageRefs 的 8 张上限对齐） */
 const STREAM_IMAGE_MAX = 8;
 
+const ErrorMessageBanner: React.FC<{
+  errorDetail?: SessionMessage['errorDetail'];
+  className?: string;
+}> = ({ errorDetail, className }) => (
+  <div
+    className={`${styles.timelineText} ${styles.errorBannerWrapper} ${className || ''}`.trim()}
+  >
+    <div className={styles.errorBanner}>
+      <AlertCircle size={13} className={styles.errorBannerIcon} />
+      <span className={styles.errorBannerText}>
+        {errorDetail?.message || '服务暂时不可用，请检查网络或后端配置'}
+      </span>
+    </div>
+  </div>
+);
+
 /**
  * Timeline 主体（08-detail D6/T1.5）：思考链 + 工具卡 + 稳定文本块。
  * memo 化 + 流式期间签名缓存命中（timeline 引用稳定）→ 纯文本帧零重渲染；
- * 流式增长的最后 text 项由调用方剔除，走独立 StreamingTextBlock 增量区。
+ * 流式增长的最后 text 项由调用方剔除，走 StreamingMarkdownView 渐进分块渲染。
  */
 interface TimelineBodyProps {
   items: AssistantTimelineItem[];
@@ -105,12 +117,13 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
             const imgs = extractImageRefs(bodyText);
             return (
               <div key={item.key} className={styles.timelineText}>
-                <AsyncMarkdownBlock
+                <StreamingMarkdownView
                   text={bodyText}
                   isStreaming={false}
                   priority={
                     status === 'processing' ? Priority.Normal : Priority.High
                   }
+                  messageId={msgId}
                 />
                 {imgs.length > 0 && (
                   <div className={styles.inlineImages}>
@@ -195,16 +208,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       timelineCacheRef.current.timeline = null;
     }
 
-    // T1.1 增量 stripper：ref 持有完成行窗口状态，按 (sessionId, msgId) 复位；
-    // 文本收缩/流重启 → resynced，调用方重挂载 StreamingTextBlock。
-    const stripperRef = useRef<IncrementalThoughtStripper | null>(null);
-    if (!stripperRef.current) {
-      stripperRef.current = new IncrementalThoughtStripper();
-    }
-    /** 流式帧单调序号（R2-4 N1 修复）：同值新帧（delta 相同）也能被 StreamingTextBlock
-     * 区分（seq+1）照常 append；StrictMode 双执行（同 seq）仍被拦截 */
-    const streamSeqRef = useRef(0);
-
     /** 主体拆分缓存：timeline 引用稳定 → 拆分数组引用稳定（TimelineBody memo 依赖） */
     const splitRef = useRef<{
       timeline: AssistantTimelineItem[];
@@ -273,39 +276,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       return found;
     }, [streaming, streamText]);
 
-    // 增量文本计算与单调序号生成（纯计算隔离，0 render setState）
-    const { streamDelta, streamSeq, isResynced } = useMemo(() => {
-      const stripper = stripperRef.current;
-      if (!streaming || !streamText) {
-        if (stripper && stripper.getRawLen() > 0) {
-          stripper.reset();
-        }
-        return { streamDelta: '', streamSeq: 0, isResynced: false };
-      }
-      if (!stripper) {
-        return { streamDelta: '', streamSeq: 0, isResynced: false };
-      }
-      const frame = stripper.next(streamText);
-      if (frame.resynced) {
-        streamSeqRef.current += 1;
-        return {
-          streamDelta: frame.appended,
-          streamSeq: streamSeqRef.current,
-          isResynced: true,
-        };
-      }
-      if (frame.appended) {
-        streamSeqRef.current += 1;
-      }
-      return {
-        streamDelta: frame.appended,
-        streamSeq: streamSeqRef.current,
-        isResynced: false,
-      };
-    }, [streaming, streamText]);
-
-    const activeStreamKey = `${msg.id}-${isResynced ? streamSeq : 0}`;
-
     const streamIdx = streaming
       ? timeline.findIndex((i) => i.key === lastTextKey)
       : -1;
@@ -326,47 +296,41 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     prevStatusRef.current = msg.status;
 
     if (!timeline.length) {
-      const fallback = stripThoughtPlaceholders(displayMsg.text || '');
       if (msg.status === 'error') {
-        const errorDetail = msg.errorDetail;
+        const fallback = stripThoughtPlaceholders(displayMsg.text || '');
         return (
-          <div
-            className={`${styles.timelineText} ${className || ''}`}
-            style={{ width: '100%' }}
-          >
-            <div
-              style={{
-                padding: '10px 14px',
-                background: 'var(--bg-error-subtle, rgba(239, 68, 68, 0.04))',
-                border: '1px solid var(--border-color)',
-                borderRadius: 6,
-                fontSize: 13,
-                color: 'var(--text-secondary)',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 8,
-              }}
-            >
-              <AlertCircle size={13} style={{ color: 'var(--color-error)' }} />
-              <span>
-                {errorDetail?.message || '服务暂时不可用，请检查网络或后端配置'}
-              </span>
-            </div>
+          <div className={className}>
+            {fallback.trim() && (
+              <div className={styles.timelineText}>
+                <StreamingMarkdownView
+                  text={fallback}
+                  isStreaming={false}
+                  priority={Priority.High}
+                  messageId={msg.id}
+                />
+              </div>
+            )}
+            <ErrorMessageBanner
+              errorDetail={msg.errorDetail}
+              className={className}
+            />
           </div>
         );
       }
+      const fallback = stripThoughtPlaceholders(displayMsg.text || '');
       if (!fallback.trim()) {
         return null;
       }
-      // T1.5-⑤：fallback/error/empty 路径不复用流式节点（走 AsyncMarkdownBlock 全量）
+      // 降级路径：当 timeline.length === 0 时，通过 StreamingMarkdownView 进行渐进真流式分块渲染
       return (
         <div className={`${styles.timelineText} ${className || ''}`}>
-          <AsyncMarkdownBlock
+          <StreamingMarkdownView
             text={fallback}
             isStreaming={isThinkingMsg}
             priority={
               msg.status === 'processing' ? Priority.Normal : Priority.High
             }
+            messageId={msg.id}
           />
         </div>
       );
@@ -384,10 +348,11 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
         />
         {streaming && (
           <div className={styles.timelineText}>
-            <StreamingTextBlock
-              key={activeStreamKey}
-              delta={streamDelta}
-              seq={streamSeq}
+            <StreamingMarkdownView
+              text={stripThoughtPlaceholders(streamText || '')}
+              isStreaming={true}
+              priority={Priority.Normal}
+              messageId={msg.id}
             />
             {currentStreamImages.length > 0 && (
               <div className={styles.inlineImages}>
@@ -412,6 +377,9 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           isThinkingMsg={isThinkingMsg}
           hideThinkingBlock={hideThinkingBlock}
         />
+        {msg.status === 'error' && (
+          <ErrorMessageBanner errorDetail={msg.errorDetail} />
+        )}
       </div>
     );
   }

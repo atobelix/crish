@@ -89,7 +89,7 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
   renderTrigger,
 }) => {
   const [open, setOpen] = useState(false);
-  const [theme, setThemeLocal] = useState<UiTheme>(() => readStoredTheme());
+  const [theme, setThemeState] = useState<UiTheme>(() => readStoredTheme());
   const rootRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -97,6 +97,29 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
   const restoreOnCloseRef = useRef(false);
   /** 侧栏尺寸变化时重挂基座锚点（Radix 自动重新定位） */
   const [anchorTick, setAnchorTick] = useState(0);
+
+  // 监听全局主题变更事件，确保分段器高亮与真实生效主题 100% 保持一致
+  useEffect(() => {
+    const handleThemeChange = (e: Event) => {
+      const customEvt = e as CustomEvent<{ theme?: UiTheme }>;
+      if (customEvt?.detail?.theme) {
+        setThemeState(customEvt.detail.theme);
+      } else {
+        setThemeState(readStoredTheme());
+      }
+    };
+    window.addEventListener('crish-theme-changed', handleThemeChange);
+    return () => {
+      window.removeEventListener('crish-theme-changed', handleThemeChange);
+    };
+  }, []);
+
+  // 当菜单展开时，立即对齐一次当前 DOM 与 Storage 的真实主题
+  useEffect(() => {
+    if (open) {
+      setThemeState(readStoredTheme());
+    }
+  }, [open]);
   const menuId = useId();
   const themeGroupId = useId();
 
@@ -190,7 +213,7 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
 
   const applyTheme = (t: UiTheme) => {
     setTheme(t);
-    setThemeLocal(t);
+    setThemeState(t);
   };
 
   const go = (tab?: SettingsTabType) => {

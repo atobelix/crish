@@ -146,12 +146,11 @@ export const TrashSection: React.FC<TrashSectionProps> = () => {
                     aria-hidden
                   />
                   <div className={styles.rowText}>
-                    <span
-                      className={styles.rowTitle}
-                      title={entry.originalPath}
-                    >
-                      {entry.originalPath}
-                    </span>
+                    <Tooltip content={entry.originalPath}>
+                      <span className={styles.rowTitle}>
+                        {entry.originalPath}
+                      </span>
+                    </Tooltip>
                     <span className={styles.rowMeta}>
                       {metaBits.join(' · ')}
                     </span>

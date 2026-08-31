@@ -31,7 +31,7 @@
   max-width: min(var(--chat-col-max, 760px), 100%);
   margin-left: auto;
   margin-right: auto;
-  padding: 20px 20px 16px;
+  padding: 48px 20px 16px;
   box-sizing: border-box;
   min-width: 0;
 }

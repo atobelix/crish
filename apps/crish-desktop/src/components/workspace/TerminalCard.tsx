@@ -67,7 +67,7 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
 
   return (
     <div
-      className={`${styles.panel} term-card`}
+      className={`${styles.panel} chat-side-panel side-panel-body term-card`}
       role="region"
       aria-labelledby={titleId}
       aria-label="终端"

@@ -148,5 +148,29 @@ export const FlowDagView: React.FC = () => {
     };
   }, []);
 
-  return <FlowDagGraph nodes={nodes} />;
+  if (dagEmpty(nodes)) {
+    return (
+      <div
+        className={`${styles.emptyContainer} chat-side-panel side-panel-body`}
+        role="region"
+        aria-label="编排图"
+      >
+        <div className={styles.emptyContent}>
+          <div className={styles.emptyTitle}>暂无编排图数据</div>
+          <div className={styles.emptyDesc}>当前会话尚未生成子任务依赖拓扑。</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="chat-side-panel side-panel-body"
+      role="region"
+      aria-label="编排图"
+      style={{ overflow: 'auto', padding: '12px' }}
+    >
+      <FlowDagGraph nodes={nodes} />
+    </div>
+  );
 };

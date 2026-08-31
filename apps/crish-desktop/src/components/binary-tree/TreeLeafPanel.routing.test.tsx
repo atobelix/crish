@@ -204,7 +204,7 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(chrome).toBeTruthy();
     expect(chrome?.getAttribute('data-chat-top-header')).toBe('true');
     expect(chrome?.hasAttribute('data-canvas-quiet')).toBe(false);
-    expect(getByTestId('top-quick-artifacts-btn')).toBeTruthy();
+    expect(getByTestId('top-quick-files-btn')).toBeTruthy();
     expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
     expect(queryByTestId('right-dock-toggle')).toBeNull();

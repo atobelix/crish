@@ -400,7 +400,7 @@
 }
 
 .planExpandedStep.completed .planStepDot {
-  background: var(--text-primary);
+  background: var(--brand, #10b981);
 }
 
 .planExpandedStep.active .planStepDot {
@@ -852,9 +852,9 @@
   gap: 4px;
 }
 
-/* ---- Plus Button ---- */
+/* ---- Plus Button (32x32 正圆按钮，无边框，浅灰底) ---- */
 .plusBtn {
-  background: var(--bg-surface, var(--bg-elevated));
+  background: var(--bg-surface, color-mix(in srgb, var(--bg-secondary) 50%, var(--bg-elevated)));
   border: none;
   cursor: pointer;
   width: 32px;
@@ -881,24 +881,24 @@
 
 .plusBtn.isOpen,
 .plusBtn.isOn {
-  background: var(--bg-hover);
+  background: var(--tint-active, rgba(0, 0, 0, 0.08));
   color: var(--text-primary);
 }
 
 .plusBtn svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.75;
 }
 
-/* ---- Action Circle Button (Voice / Stats) ---- */
+/* ---- Action Circle Button (Voice / Stats) (32x32 正圆按钮) ---- */
 .actionCircleBtn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
   border: none;
-  background: transparent;
-  color: var(--text-secondary);
+  background: var(--bg-surface, color-mix(in srgb, var(--bg-secondary) 50%, var(--bg-elevated)));
+  color: var(--text-primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -915,13 +915,13 @@
 
 .actionCircleBtn:hover {
   color: var(--text-primary);
-  background: var(--sidebar-hover);
+  background: var(--bg-hover);
 }
 
 .actionCircleBtn svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 1.8;
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.75;
   flex-shrink: 0;
 }
 
@@ -1266,8 +1266,7 @@
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
   pointer-events: none;
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--text-primary) 4%, transparent);
+  box-shadow: inset 0 0 0 1px var(--tint-hover);
   outline: none;
 }
 

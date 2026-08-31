@@ -24,7 +24,7 @@ export interface IconButtonProps extends Omit<
 
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
   function IconButton(
-    { icon, tooltip, className, 'aria-label': ariaLabel, ...props },
+    { icon, tooltip, className, variant = 'ghost', 'aria-label': ariaLabel, ...props },
     ref
   ) {
     const classNames = [styles.iconButton, className].filter(Boolean).join(' ');
@@ -33,6 +33,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
       <Button
         ref={ref}
         icon={icon}
+        variant={variant}
         aria-label={ariaLabel}
         className={classNames}
         {...props}

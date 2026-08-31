@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import * as Lucide from 'lucide-react';
+import { Tooltip } from '../ui';
 import styles from './RuntimePanel.module.css';
 import type { LiveTask } from './useRuntimePanelData';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
@@ -51,13 +52,12 @@ export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
           {liveTasks.map((wk) => {
             const elapsedText = formatElapsed(wk.elapsedSeconds);
             const clickable = Boolean(wk.sessionId);
-            return (
+            const rowNode = (
               <div
                 key={wk.id}
                 className={`${styles.row} ${styles.isLive}${clickable ? ` ${styles.isClickable}` : ''}`}
                 role={clickable ? 'button' : 'listitem'}
                 tabIndex={clickable ? 0 : undefined}
-                title={clickable ? '打开对应会话' : undefined}
                 aria-label={liveTaskAriaLabel({
                   taskName: wk.taskName,
                   elapsedSeconds: wk.elapsedSeconds,
@@ -85,6 +85,13 @@ export const LiveTasksSection: React.FC<LiveTasksSectionProps> = ({
                   <Lucide.ChevronRight size={16} className={styles.rowChevron} aria-hidden />
                 ) : null}
               </div>
+            );
+            return clickable ? (
+              <Tooltip key={wk.id} content="打开对应会话">
+                {rowNode}
+              </Tooltip>
+            ) : (
+              rowNode
             );
           })}
         </div>

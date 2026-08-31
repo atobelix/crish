@@ -47,16 +47,16 @@
   flex-shrink: 0;
 }
 
-/* 28x28 极简微圆角盾牌按钮 */
+/* 极简无边框盾牌图标（精确对齐截图：无背景无描边，语义色） */
 .permPill.iconOnly {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  max-width: 28px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  max-width: 24px;
   padding: 0;
-  border-radius: var(--radius-md, 6px);
+  border-radius: 50%;
   border: none;
-  background: transparent; /* CRITICAL: 彻底消灭实心深色底 */
+  background: transparent;
   color: var(--text-secondary);
   display: inline-flex;
   align-items: center;
@@ -74,30 +74,31 @@
 }
 
 .permPill.iconOnly:hover {
-  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
-  color: var(--text-primary);
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
 }
 
 .permPill.iconOnly.isOpen,
 .permPill.iconOnly:active {
-  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
-  color: var(--text-primary);
+  background: var(--tint-active, rgba(0, 0, 0, 0.08));
 }
 
 .permPill.iconOnly svg {
   width: 14px;
   height: 14px;
-  stroke-width: 1.8;
+  stroke-width: 1.75;
 }
 
-.permPill.iconOnly[data-perm-mode='ask'],
-.permPill.iconOnly[data-perm-mode='plan'],
-.permPill.iconOnly[data-perm-mode='deep'] {
-  color: var(--text-secondary);
+.permPill.iconOnly[data-perm-mode='ask'] {
+  color: var(--sem-warn, #d97706);
 }
 
 .permPill.iconOnly[data-perm-mode='full'] {
-  color: var(--text-primary);
+  color: #c25e2e; /* 经典赤褐色/珊瑚橙，精确匹配截图 */
+}
+
+.permPill.iconOnly[data-perm-mode='plan'],
+.permPill.iconOnly[data-perm-mode='deep'] {
+  color: var(--text-secondary, #5c5954);
 }
 
 .permPillChev {
@@ -111,16 +112,16 @@
 
 .permMenu {
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
-  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
-  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
-  border: 1px solid var(--sep-border-color, var(--border-color));
+  background: var(--bg-card, hsl(35, 10%, 98%));
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--border-color);
   border-radius: var(--sep-radius-outer, 14px);
-  box-shadow: var(--sep-shadow);
-  padding: var(--sep-padding, 6px);
+  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.12), 0 4px 16px -2px rgba(0, 0, 0, 0.05);
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: var(--sep-item-gap, 2px);
+  gap: 2px;
   min-width: 230px;
   max-width: 280px;
   animation: cds-popover-enter var(--transition-popover-enter) forwards;
@@ -135,8 +136,8 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   box-sizing: border-box;
-  color: var(--sep-text-primary, var(--text-primary));
-  font-family: var(--sep-font-sans, var(--font-sans));
+  color: var(--text-primary);
+  font-family: var(--font-sans, var(--sep-font-sans));
 }
 
 .permMenuExit {
@@ -163,19 +164,19 @@
 }
 
 .permMenuItem:hover {
-  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
-  color: var(--sep-text-primary, var(--text-primary));
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  color: var(--text-primary);
 }
 
 .permMenuItem.isSelected {
-  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
-  color: var(--sep-text-primary, var(--text-primary));
+  background: var(--tint-active, rgba(16, 185, 129, 0.08));
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .permMenuItem:focus-visible {
   outline: none;
-  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  background: var(--tint-active, rgba(16, 185, 129, 0.08));
 }
 
 .iconWrapper {

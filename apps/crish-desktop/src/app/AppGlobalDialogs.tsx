@@ -1,7 +1,6 @@
 import { lazy, Suspense } from 'react';
 import { AppErrorBoundary } from '../components/AppErrorBoundary';
 import { TelemetryDialog } from '../components/overlay/TelemetryDialog';
-import { FullThoughtModal } from '../components/chat-message-row/FullThoughtModal';
 import { openSettings } from '../api/storeAccess';
 import { emitUiEvent } from '../api/uiEvents';
 import { getActiveModelId, getActiveProfileId } from '../api/providerProfiles';
@@ -148,8 +147,6 @@ export function AppGlobalDialogs({
           </Suspense>
         </AppErrorBoundary>
       )}
-
-      <FullThoughtModal />
     </>
   );
 }

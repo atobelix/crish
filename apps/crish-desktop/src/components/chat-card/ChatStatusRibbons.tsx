@@ -34,7 +34,6 @@ import {
   type PlanRibbonState,
 } from './PlanGoalRibbons';
 import { RunNoticeBar } from './RunNoticeBar';
-import { CircuitBreakerBanner } from './CircuitBreakerBanner';
 import { RetrySlotNotice } from './RetrySlotNotice';
 import { ApprovalDock } from './ApprovalDock';
 import { useContinuityUiStore } from '../../api/continuity/continuityUiStore';
@@ -203,17 +202,11 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   const engineCrashed = connectionStatus === 'engine_crashed';
   const engineCrashedText = resolveEngineCrashedText({ onEmptySurface });
 
-  // D8 §3.7.4/§3.7.5：临时通知（老虎机滚动重连）+ 熔断横幅（会话级订阅；
+  // D8 §3.7.4：临时通知（老虎机滚动重连；会话级订阅；
   // 不进对话历史，仅 UI 层——事件 handler 写入 continuityUiStore）
   const activeSession = activeSessionId ?? null;
   const retryNotice = useContinuityUiStore((s) =>
     activeSession ? s.retryNotices[activeSession] : null
-  );
-  const circuitBanner = useContinuityUiStore((s) =>
-    activeSession ? s.circuitBanners[activeSession] : null
-  );
-  const dismissCircuitBanner = useContinuityUiStore(
-    (s) => s.dismissCircuitBanner
   );
 
   const currentSession = activeSessionId
@@ -394,13 +387,6 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         />
       ) : null}
 
-      {/* 熔断横幅（D8 §3.7.1）：Provider 连续失败自动恢复已暂停；可手动关闭 */}
-      {activeSession && circuitBanner ? (
-        <CircuitBreakerBanner
-          banner={circuitBanner}
-          onDismiss={() => dismissCircuitBanner(activeSession)}
-        />
-      ) : null}
 
       {/* 系统提示：错误/空回复 — 明确非 AI 输出；空文案不挂载（防幽灵条） */}
       <RunNoticeBar runNotice={runNotice} onDismiss={onDismissRunNotice} />

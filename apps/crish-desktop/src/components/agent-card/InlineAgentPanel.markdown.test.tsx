@@ -10,8 +10,8 @@ import type { SessionAgent } from '../../store/types';
 
 const asyncMdCalls: Array<{ text: string; isStreaming?: boolean }> = [];
 
-vi.mock('../chat-message-row/AsyncMarkdownBlock', () => ({
-  AsyncMarkdownBlock: (props: { text: string; isStreaming?: boolean }) => {
+vi.mock('../chat-message-row/StreamingMarkdownView', () => ({
+  StreamingMarkdownView: (props: { text: string; isStreaming?: boolean }) => {
     asyncMdCalls.push({ text: props.text, isStreaming: props.isStreaming });
     return (
       <div

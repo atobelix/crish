@@ -504,7 +504,7 @@ describe('EventRouter 消费侧 per-run 幂等去重（04 §5.1-1 / G1/G2）', (
 
   it('重复 message-end（同 sequence）只消费一次', () => {
     const finish = vi.fn();
-    const { router, callbacks } = makeRouter(finish);
+    const { router, callbacks, state } = makeRouter(finish);
     const msg = {
       type: 'message-end',
       runId: 'run-test',
@@ -517,8 +517,9 @@ describe('EventRouter 消费侧 per-run 幂等去重（04 §5.1-1 / G1/G2）', (
     };
     router.onMsg(msg);
     router.onMsg(msg);
-    expect(callbacks.onChunk).toHaveBeenCalledTimes(1);
-    expect(callbacks.onChunk).toHaveBeenCalledWith('hi');
+    // 单增量生产者铁律：onMessageEnd 严禁向 onChunk 注入伪增量
+    expect(callbacks.onChunk).not.toHaveBeenCalled();
+    expect(state.assistantText).toBe('hi');
   });
 
   it('重复 message-delta（同 messageId 同 sequence）只消费一次', () => {

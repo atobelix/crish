@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import type { FileDiff } from '../../store/types';
 import type { ChangeRenderItem, PlaceholderRenderItem } from './diffCardTypes';
-import { highlightCode } from '../../api/codeHighlight';
+import { highlightCode, langFromFilename } from '../../api/codeHighlight';
 import {
   computeIntralinePair,
   type DiffWordToken,
@@ -20,35 +20,58 @@ function basename(p: string): string {
 function renderTokens(
   tokens: DiffWordToken[],
   targetType: 'added' | 'removed',
-  fallbackText: string
+  fallbackText: string,
+  lang: string
 ) {
   if (!tokens || tokens.length === 0) {
     return (
       <span
         dangerouslySetInnerHTML={{
-          __html: highlightCode(fallbackText, 'diff'),
+          __html: highlightCode(fallbackText, lang),
         }}
       />
     );
   }
   return (
-    <>
-      {tokens.map((tok, i) => {
-        if (tok.type === targetType) {
-          return (
-            <span
-              key={i}
-              className={
-                targetType === 'added' ? styles.diffWordAdd : styles.diffWordDel
-              }
-            >
-              {tok.text}
-            </span>
-          );
-        }
-        return <span key={i}>{tok.text}</span>;
-      })}
-    </>
+    <span style={{ position: 'relative', display: 'inline-block' }}>
+      <span
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          pointerEvents: 'none',
+          whiteSpace: 'pre',
+          color: 'transparent',
+          userSelect: 'none',
+        }}
+        aria-hidden="true"
+      >
+        {tokens.map((tok, i) => {
+          const isTarget = tok.type === targetType;
+          if (isTarget) {
+            return (
+              <span
+                key={i}
+                className={
+                  targetType === 'added' ? styles.diffWordAdd : styles.diffWordDel
+                }
+              >
+                {tok.text}
+              </span>
+            );
+          }
+          return <span key={i}>{tok.text}</span>;
+        })}
+      </span>
+      <span
+        style={{ position: 'relative', background: 'transparent' }}
+        dangerouslySetInnerHTML={{
+          __html: highlightCode(fallbackText, lang),
+        }}
+      />
+    </span>
   );
 }
 
@@ -80,6 +103,9 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
 
   const visibleItems = renderItems.slice(startIndex, endIndex);
   const offsetTop = startIndex * rowHeight;
+
+  // 真实语言推导
+  const codeLang = useMemo(() => langFromFilename(f.filePath), [f.filePath]);
 
   return (
     <AppErrorBoundary variant="compact" title="变更对比出错">
@@ -117,13 +143,6 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                     key={`${f.filePath}-collapse-${item.startIndex}`}
                     className={styles.collapseBar}
                     onClick={() => onExpandBlock(f.filePath, item.startIndex)}
-                    style={{
-                      height: `${rowHeight}px`,
-                      minHeight: `${rowHeight}px`,
-                      maxHeight: `${rowHeight}px`,
-                      display: 'flex',
-                      alignItems: 'center',
-                    }}
                   >
                     <Lucide.Maximize2
                       size={12}
@@ -146,7 +165,6 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                 marker = '+';
                 targetType = 'added';
 
-                // 检查前一项是否是 deletion
                 const prevItem =
                   globalIdx > 0 ? renderItems[globalIdx - 1] : null;
                 if (
@@ -165,7 +183,6 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                 marker = '−';
                 targetType = 'removed';
 
-                // 检查后一项是否是 addition
                 const nextItem =
                   globalIdx + 1 < renderItems.length
                     ? renderItems[globalIdx + 1]
@@ -202,11 +219,11 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                   <div className={styles.gutterMarker}>{marker}</div>
                   <div className={styles.lineText}>
                     {tokens ? (
-                      renderTokens(tokens, targetType, change.content)
+                      renderTokens(tokens, targetType, change.content, codeLang)
                     ) : (
                       <span
                         dangerouslySetInnerHTML={{
-                          __html: highlightCode(change.content, 'diff'),
+                          __html: highlightCode(change.content, codeLang),
                         }}
                       />
                     )}

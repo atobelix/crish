@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Globe, FileCode } from 'lucide-react';
+import { Globe, FolderTree } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { SessionInlineRename } from './SessionInlineRename';
 import { SubagentHeaderPanel } from './SubagentHeaderPanel';
@@ -98,6 +98,9 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       listProjects()
     );
 
+    const isToolColumnOpen = useLayoutTreeStore(
+      (s) => !s.toolColumnCollapsed
+    );
     const dockSnapshot = useWorkspaceShellStore((s) => {
       const id = (activeSessionId || '').trim();
       const tab = id
@@ -105,12 +108,16 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
         : s.openTabs.find((t) => t.tabId === s.activeTabId);
       return tab?.rightDock ?? null;
     });
-    const globalTreeCollapsed = useLayoutTreeStore(
-      (s) => s.toolColumnCollapsed
-    );
-    const rightDockCollapsed = dockSnapshot
-      ? dockSnapshot.collapsed
-      : globalTreeCollapsed;
+    // 只有在右侧真正有工具分栏展开时，才视为右坞已打开（Chat 顶栏右边距归 0）；
+    // 只要右侧无工具分栏渲染，一律留 36px 边距给绝对定位的固定坞按钮，绝不重叠。
+    const isDockActivelyRendered =
+      isToolColumnOpen &&
+      Boolean(
+        dockSnapshot &&
+          !dockSnapshot.collapsed &&
+          dockSnapshot.openPanelIds?.length
+      );
+    const rightDockCollapsed = !isDockActivelyRendered;
     const activePanelId = dockSnapshot?.activePanelId;
 
     const isPreviewActive =
@@ -222,7 +229,7 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       openToolInSession((activeSessionId || '').trim(), 'preview');
     }, [activeSessionId]);
 
-    const handleOpenArtifacts = useCallback(() => {
+    const handleOpenFiles = useCallback(() => {
       openToolInSession((activeSessionId || '').trim(), 'files');
     }, [activeSessionId]);
 
@@ -351,18 +358,18 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             </button>
           </Tooltip>
 
-          {/* 按钮 2: 代码产物与文件 (📄 FileCode) */}
-          <Tooltip content="打开代码产物与文件" side={UNIT_CHROME_TOOL_TIP_SIDE}>
+          {/* 按钮 2: 文件管理器 (📁 FolderTree) */}
+          <Tooltip content="打开文件" side={UNIT_CHROME_TOOL_TIP_SIDE}>
             <button
               type="button"
-              id="topQuickArtifactsBtn"
+              id="topQuickFilesBtn"
               className={`${styles.topActionBtn} top-action-btn`}
-              data-testid="top-quick-artifacts-btn"
+              data-testid="top-quick-files-btn"
               data-active={isArtifactsActive ? 'true' : 'false'}
-              aria-label="打开代码产物与文件"
-              onClick={handleOpenArtifacts}
+              aria-label="打开文件"
+              onClick={handleOpenFiles}
             >
-              <FileCode size={14} strokeWidth={1.8} aria-hidden="true" />
+              <FolderTree size={14} strokeWidth={1.8} aria-hidden="true" />
             </button>
           </Tooltip>
 
@@ -384,23 +391,6 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
               currentFolder={folder || GENERAL_FOLDER}
             />
           </div>
-
-          {/* 按钮 4: 仅当右侧工作区收起时，在对话顶栏展示绝对定位展开按钮 (◫ IconSidebarRight) */}
-          {rightDockCollapsed && (
-            <Tooltip content={dockLabel} side={UNIT_CHROME_TOOL_TIP_SIDE}>
-              <button
-                type="button"
-                id="topQuickDockBtn"
-                className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}
-                data-testid="top-quick-dock-btn"
-                data-active="false"
-                aria-label={dockLabel}
-                onClick={handleToggleRightDock}
-              >
-                <IconSidebarRight size={15} />
-              </button>
-            </Tooltip>
-          )}
         </div>
       </header>
     );

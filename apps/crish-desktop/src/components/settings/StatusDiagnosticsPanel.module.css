@@ -1,4 +1,4 @@
-/*           PE-04 T04.5-2      SettingsUI          
+/*           PE-04 T04.5-2      SettingsUI
  * S6 P1-8 --ui-*       rgba       --color-*     tokens.css     */
 
 .pageMeta {
@@ -86,14 +86,9 @@
   font-size: 12px;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(29, 28, 26, 0.055);
+  background: var(--control-soft-bg, var(--tint-hover));
   color: var(--text-primary);
-  border: 1px solid var(--border-color, #e2dfd9);
-}
-
-:global(html[data-theme='dark']) .monoBadge {
-  background: rgba(245, 244, 240, 0.08);
-  border-color: var(--border-color, #2b2926);
+  border: 1px solid var(--border-color);
 }
 
 .logDirControl {
@@ -208,11 +203,7 @@
 
 .diagLevel_debug {
   color: var(--text-tertiary);
-  background: rgba(29, 28, 26, 0.08);
-}
-
-:global(html[data-theme='dark']) .diagLevel_debug {
-  background: rgba(245, 244, 240, 0.1);
+  background: var(--tint-active);
 }
 
 .diagLevel_info {

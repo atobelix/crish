@@ -53,7 +53,7 @@ const SIZE_CLASS: Record<ButtonSize, string | undefined> = {
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   function Button(
     {
-      variant = 'primary',
+      variant = 'secondary',
       size = 'md',
       icon,
       iconPosition = 'left',

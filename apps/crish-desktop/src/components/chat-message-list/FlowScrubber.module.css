@@ -85,7 +85,7 @@
 }
 
 .tick.isActive {
-  background-color: var(--text-primary);
+  background-color: var(--brand-primary, #10b981);
   opacity: 0.6;
   width: 16px;
 }
@@ -102,8 +102,8 @@
 
 .tick:hover,
 .root:hover .tick:hover {
-  background-color: var(--text-primary) !important;
-  opacity: 1 !important;
-  width: 32px !important;
+  background-color: var(--brand-primary, #10b981);
+  opacity: 1;
+  width: 32px;
   z-index: 10;
 }

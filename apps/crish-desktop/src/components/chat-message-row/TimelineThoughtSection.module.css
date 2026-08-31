@@ -1,0 +1,213 @@
+/* ───── Timeline Interleaved Thought Section (Clean Inline Flow) ───── */
+.thoughtTimelineSection {
+  margin: 0;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding-left: var(--space-0_5, 2px);
+  box-sizing: border-box;
+  max-width: 100%;
+}
+
+.thoughtHeaderBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  max-width: 100%;
+  min-height: 22px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: left;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  transition: color var(--transition-fast, 150ms ease);
+}
+
+.thoughtHeaderBtn:hover {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+.thoughtHeaderBtn:focus-visible {
+  outline: none;
+  color: var(--text-primary);
+}
+
+.thoughtLiveDot {
+  width: 5px;
+  height: 5px;
+  min-width: 5px;
+  min-height: 5px;
+  border-radius: 50%;
+  background: var(--brand, #10b981);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
+  animation: thought-dot-pulse 1.4s ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+@keyframes thought-dot-pulse {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.7;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 18%, transparent);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand, #10b981) 32%, transparent);
+  }
+}
+
+.thoughtTimelineSection.isLive .thoughtTitle {
+  color: var(--brand-deep, #059669);
+  font-weight: 500;
+}
+
+.thoughtTitle {
+  font-weight: 400;
+  color: inherit;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.thoughtMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: inherit;
+  font-size: var(--font-size-sm, 13px);
+  font-variant-numeric: tabular-nums;
+  flex: 0 1 auto;
+}
+
+.thoughtDuration {
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.thinkingSec {
+  display: inline-flex;
+  align-items: baseline;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.thinkingSep {
+  margin: 0 2px;
+  color: inherit;
+  opacity: 0.6;
+}
+
+.thinkingTick {
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+}
+
+.thoughtChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-left: 2px;
+  color: var(--text-tertiary);
+  transition:
+    transform var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
+  flex-shrink: 0;
+}
+
+.thoughtHeaderBtn:hover .thoughtChevron {
+  color: var(--text-secondary);
+}
+
+.thoughtChevron.isOpen {
+  transform: rotate(90deg);
+}
+
+.thoughtAccordion {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.thoughtAccordion[data-expanded='true'] {
+  grid-template-rows: 1fr;
+}
+
+.thoughtAccordionInner {
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.thoughtAccordion[data-expanded='true'] .thoughtAccordionInner {
+  opacity: 1;
+}
+
+.thinkingBodyContainer {
+  position: relative;
+  max-height: 168px;
+  overflow: hidden;
+}
+
+.thinkingBodyContainer::before,
+.thinkingBodyContainer::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 20px;
+  pointer-events: none;
+  z-index: 2;
+  transition: opacity var(--transition-fast, 150ms ease);
+}
+
+.thinkingBodyContainer::before {
+  top: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--bg-page, #ffffff) 0%,
+    color-mix(in srgb, var(--bg-page, #ffffff) 88%, transparent) 40%,
+    transparent 100%
+  );
+}
+
+.thinkingBodyContainer::after {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    var(--bg-page, #ffffff) 0%,
+    color-mix(in srgb, var(--bg-page, #ffffff) 88%, transparent) 40%,
+    transparent 100%
+  );
+}
+
+.thoughtScrollBody {
+  max-height: 168px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 6px 0 10px;
+  margin: 0;
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.65;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  overscroll-behavior-y: auto;
+  border: none;
+  background: transparent;
+}

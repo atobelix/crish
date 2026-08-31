@@ -82,6 +82,22 @@ describe('Chat list React key audit (static source)', () => {
     expect(content).toMatch(/streamText/);
   });
 
+  it('hideThinkingBlock 沿助手行透传到 MessageContent，不再 void', () => {
+    const row = stripComments(
+      readSrc('../components/chat-message-row/ChatAssistantMessageRow.tsx')
+    );
+    const content = stripComments(
+      readSrc('../components/chat-message/MessageContent.tsx')
+    );
+    expect(row).toMatch(/hideThinkingBlock=\{hideThinkingBlock\}/);
+    expect(row).not.toMatch(/void _hideThinkingBlock/);
+    expect(row).not.toMatch(/_hideThinkingBlock/);
+    expect(content).toMatch(/hideThinkingBlock/);
+    expect(content).toMatch(/thoughtDefaultOpen/);
+    expect(content).toMatch(/defaultOpen:\s*thoughtDefaultOpen/);
+    expect(content).toMatch(/defaultExpanded=\{thoughtDefaultOpen\}/);
+  });
+
   it('ChatToolCallBlock tool rows key by tool id', () => {
     const src = readSrc('../components/chat-tool-call/ChatToolCallBlock.tsx');
     // 工具行 / 批处理均以 id 为键（禁止 index）
@@ -114,8 +130,8 @@ describe('stream / final single-row identity (static + pure)', () => {
   it('useRunStreamingAssistant creates one assistant id and reuses it through complete', () => {
     const src = readSrc('../hooks/chat-stream/useRunStreamingAssistant.ts');
     const helperSrc = readSrc('../hooks/chat-stream/streamExecutionHelper.ts');
-    const internalsSrc = readSrc(
-      '../hooks/chat-stream/streamCallbacksInternals.ts'
+    const completionSrc = readSrc(
+      '../hooks/chat-stream/streamRunCompletion.ts'
     );
     // 单次 mint
     expect(src).toMatch(
@@ -124,7 +140,7 @@ describe('stream / final single-row identity (static + pure)', () => {
     // 热路径写 streamingStore，按同一 id
     expect(src).toMatch(/setStreamText\(sid,\s*assistantMsgId/);
     // 终态 commit 同一 id
-    expect(internalsSrc).toMatch(
+    expect(completionSrc).toMatch(
       /commitStreamToSession\(sid,\s*assistantMsgId/
     );
     // finish / helper 不得再次 addMessage 助手

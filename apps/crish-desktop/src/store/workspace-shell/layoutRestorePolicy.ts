@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Shell-side helpers for multi-unit layout restore.
  * Pure tree → dock inference; validation re-exported from layout-tree.
  *

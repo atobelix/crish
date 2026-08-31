@@ -8,7 +8,7 @@ import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
 import { Button, Tooltip } from '../ui';
 
-/** 预览状态（可回退/前进/空白/src/加载/地址/书签/历史/外部/AI 模式等收敛为单一子对象） */
+/** 预览状态（可回退/前进/空白/src/加载/地址/书签/历史/外部打开等收敛为单一子对象） */
 export interface PreviewToolbarPreviewProps {
   canBack: boolean;
   canForward: boolean;
@@ -21,8 +21,8 @@ export interface PreviewToolbarPreviewProps {
   bookmarked: boolean;
   showHist: boolean;
   canExternal: boolean;
-  /** AI 受管浏览器模式（BrowserPanel）；true 时工具栏地址栏等仍可见但内容区切换 */
-  aiBrowser: boolean;
+  /** DOM 检查器是否处于激活状态 */
+  isInspectorActive?: boolean;
 }
 
 /** 导航操作域（后退/前进/主页/刷新/地址提交与变更/清空收敛为单一子对象） */
@@ -36,12 +36,12 @@ export interface PreviewToolbarNavigationProps {
   onClearUrl: () => void;
 }
 
-/** 工具栏动作域（书签/历史切换/外部打开/AI 浏览器切换收敛为单一子对象） */
+/** 工具栏动作域（书签/历史切换/外部打开/DOM 检查器收敛为单一子对象） */
 export interface PreviewToolbarActionsProps {
   onBookmark: () => void;
   onToggleHist: () => void;
   onOpenExternal: () => void;
-  onToggleAiBrowser: () => void;
+  onToggleInspector?: () => void;
 }
 
 export type PreviewToolbarProps = {
@@ -69,7 +69,7 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
     bookmarked,
     showHist,
     canExternal,
-    aiBrowser,
+    isInspectorActive,
   } = preview;
   const {
     onBack,
@@ -80,11 +80,14 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
     onUrlChange,
     onClearUrl,
   } = navigation;
-  const { onBookmark, onToggleHist, onOpenExternal, onToggleAiBrowser } =
-    actions;
+  const { onBookmark, onToggleHist, onOpenExternal, onToggleInspector } = actions;
   const iconSz = 14;
   return (
-    <div className={styles.bar} role="toolbar" aria-label="预览浏览器工具栏">
+    <div
+      className={`${styles.bar} side-panel-toolbar`}
+      role="toolbar"
+      aria-label="预览浏览器工具栏"
+    >
       <Tooltip content="后退">
         <Button
           type="button"
@@ -184,6 +187,30 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
       </form>
       <Tooltip
         content={
+          isInspectorActive
+            ? '退出元素拾取 (Esc)'
+            : '拾取页面元素 (Inspect)'
+        }
+      >
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={`${styles.navBtn} ${isInspectorActive ? styles.inspectorActive : ''}`}
+          onClick={onToggleInspector}
+          disabled={blank || !frameSrc}
+          aria-label="拾取页面元素"
+          aria-pressed={isInspectorActive}
+          icon={
+            <Lucide.MousePointerClick
+              size={iconSz}
+              strokeWidth={1.75}
+            />
+          }
+        />
+      </Tooltip>
+      <Tooltip
+        content={
           !canBookmark
             ? '空白页无法加入书签'
             : bookmarked
@@ -222,19 +249,6 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
           aria-controls="preview-hist-panel"
           aria-haspopup="dialog"
           icon={<Lucide.History size={iconSz} strokeWidth={1.75} />}
-        />
-      </Tooltip>
-      <Tooltip content={aiBrowser ? '返回内嵌预览' : 'AI 浏览器（受管窗口）'}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={`${styles.navBtn} ${aiBrowser ? styles.isOn : ''}`}
-          data-ai-browser-toggle=""
-          onClick={onToggleAiBrowser}
-          aria-label={aiBrowser ? '返回内嵌预览' : 'AI 浏览器（受管窗口）'}
-          aria-pressed={aiBrowser}
-          icon={<Lucide.Monitor size={iconSz} strokeWidth={1.75} />}
         />
       </Tooltip>
       <Tooltip

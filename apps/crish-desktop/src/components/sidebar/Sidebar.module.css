@@ -269,7 +269,7 @@
   width: 6px;
   height: 100%;
   cursor: col-resize;
-  z-index: var(--z-sidebar-resizer);
+  z-index: var(--z-resizer, var(--z-chrome, 100));
   background: transparent;
   touch-action: none;
 }
@@ -346,69 +346,14 @@
   width: var(--sidebar-width);
 }
 
-/*                                   */
 .iconCollapse .sidebarTop {
   padding-left: 8px;
   padding-right: 8px;
 }
 
-.iconCollapse .sidebarTop :global([class*='topActions']) {
-  gap: var(--space-2, 6px);
-}
-
-.iconCollapse .sidebarTop :global([class*='navItem']) {
-  justify-content: center;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-lg);
-}
-
-.iconCollapse .sidebarTop :global([class*='navItem']) > span,
-.iconCollapse .sidebarTop :global([class*='navItem']) > input,
-.iconCollapse .sidebarTop :global([class*='navItem']) > [role='search'] {
-  display: none;
-}
-
 .iconCollapse .sidebarScroll {
   padding-left: 8px;
   padding-right: 8px;
-}
-
-.iconCollapse .sidebarScroll :global([class*='sectionLabel']) > :not(svg),
-.iconCollapse .sidebarScroll :global([class*='folderHeader']) > :not(svg),
-.iconCollapse .sidebarScroll :global([class*='folderName']),
-.iconCollapse .sidebarScroll :global([class*='folderCount']),
-.iconCollapse .sidebarScroll :global([class*='sessionText']),
-.iconCollapse .sidebarScroll :global([class*='sessionSearchSnippet']),
-.iconCollapse .sidebarScroll :global([class*='sessionTime']),
-.iconCollapse .sidebarScroll :global([class*='sessionActionsBtn']),
-.iconCollapse .sidebarScroll :global([class*='emptyHint']),
-.iconCollapse .sidebarScroll :global([class*='sessionItemFoldBtn']) {
-  display: none;
-}
-
-.iconCollapse .sidebarScroll :global([class*='sessionItem']) {
-  justify-content: center;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-md, 8px);
-  margin: 0 auto;
-}
-
-.iconCollapse .sidebarScroll :global([class*='sessionItem'])::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.5;
-}
-
-.iconCollapse .sidebarScroll :global([class*='sessionItem'].active)::before {
-  opacity: 1;
-  background: var(--accent-primary);
 }
 
 .iconCollapse .sidebarFooter {
@@ -442,11 +387,7 @@
   display: none;
 }
 
-.iconCollapse .sidebarFooter > :global(*) {
-  justify-content: center;
-}
-
-.iconCollapse .sidebarFooter :global([class*='modeChip']) > span,
-.iconCollapse .sidebarFooter :global([class*='footerActions']) > span {
+.iconCollapse .modeChip > span,
+.iconCollapse .footerActions > span {
   display: none;
 }

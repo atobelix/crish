@@ -14,9 +14,21 @@ export interface StreamState {
    */
   lastMessageCacheMetrics?: MessageCacheMetrics | null;
   /**
-   * 每轮 message-end 的终态文本段（按 turnIndex 顺序，G4 / 04 §5.2-5）。
-   * 惰性初始化（onMessageEnd 首轮创建）；同 turn 幂等覆盖、跨 turn 追加，
-   * 消灭多轮 run live 侧「同 clientMessageId 单气泡只剩末轮」。
+   * 当前活跃轮次索引（单调安全步进）。
+   */
+  activeTurnIndex?: number;
+  /**
+   * 每轮流式增量文本账本（按 turnIndex 索引）。
+   */
+  turnStreamedTexts?: Map<number, string>;
+  /**
+   * 每轮 message-end 权威终态文本快照账本（按 turnIndex 索引）。
+   */
+  turnAuthoritativeTexts?: Map<number, string>;
+  /**
+   * 每轮 message-end 的权威终态文本快照（按 turnIndex 索引）。
+   * 惰性初始化（onMessageEnd 首轮创建）；同 turn 幂等覆盖、跨 turn 追加。
+   * 单增量生产者模型下的权威账本，严禁向实时增量队列二次注入。
    */
   messageEndTurnSegments?: string[];
 }
@@ -28,4 +40,10 @@ export function cleanupStreamState(state: StreamState): void {
     clearTimeout(state.endTimer);
     state.endTimer = null;
   }
+  state.messageEndTurnSegments = undefined;
+  state.turnStreamedTexts?.clear();
+  state.turnAuthoritativeTexts?.clear();
+  state.turnStreamedTexts = undefined;
+  state.turnAuthoritativeTexts = undefined;
+  state.activeTurnIndex = undefined;
 }

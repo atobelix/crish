@@ -1,7 +1,7 @@
-/* ui/Button        PE-05 / RED-DETAILED-02 
- * 100%    Design Tokens 0     
- *                   ::before 0-          Focus Ring 
- *      0-             --radius-sm(4px)/--radius-md(6px)/--radius-lg(8px) 
+/* ui/Button        PE-05 / RED-DETAILED-02
+ * 100%    Design Tokens 0
+ *                   ::before 0-          Focus Ring
+ *      0-             --radius-sm(4px)/--radius-md(6px)/--radius-lg(8px)
  */
 
 /* 1.            */
@@ -19,8 +19,8 @@
   --btn-fg: var(--text-primary);
   --btn-border: transparent;
   --btn-shadow: none;
-  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  --btn-active-overlay: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --btn-hover-overlay: var(--tint-hover);
+  --btn-active-overlay: var(--tint-active);
 
   position: relative;
   display: inline-flex;
@@ -124,9 +124,9 @@
 /* 3.                       */
 .buttonPrimary,
 .button[data-variant='primary'] {
-  --btn-bg: var(--accent-color);
-  --btn-fg: var(--text-on-accent);
-  --btn-border: color-mix(in srgb, var(--accent-color) 80%, black 20%);
+  --btn-bg: var(--brand, hsl(160 84% 39%));
+  --btn-fg: #ffffff;
+  --btn-border: var(--brand-deep, hsl(160 84% 31%));
   --btn-hover-overlay: color-mix(in srgb, white 15%, transparent);
   --btn-active-overlay: color-mix(in srgb, black 15%, transparent);
 }
@@ -136,8 +136,8 @@
   --btn-bg: var(--control-soft-bg);
   --btn-fg: var(--text-primary);
   --btn-border: var(--border-subtle);
-  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  --btn-active-overlay: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --btn-hover-overlay: var(--tint-hover);
+  --btn-active-overlay: var(--tint-active);
 }
 
 .buttonGhost,
@@ -145,8 +145,8 @@
   --btn-bg: transparent;
   --btn-fg: var(--text-secondary);
   --btn-border: transparent;
-  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 6%, transparent);
-  --btn-active-overlay: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --btn-hover-overlay: var(--tint-hover);
+  --btn-active-overlay: var(--tint-active);
 }
 
 .buttonPlain,
@@ -154,8 +154,8 @@
   --btn-bg: transparent;
   --btn-fg: var(--text-tertiary);
   --btn-border: transparent;
-  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  --btn-active-overlay: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --btn-hover-overlay: var(--tint-hover);
+  --btn-active-overlay: var(--tint-active);
 }
 
 .buttonDanger,

@@ -59,8 +59,8 @@
 .chatSoftHint[data-setup-hint='needs-key'] {
   border-color: color-mix(
     in srgb,
-    var(--accent-color) 22%,
-    var(--hairline, var(--border-subtle))
+    var(--brand) 18%,
+    var(--border-subtle)
   );
 }
 
@@ -83,8 +83,8 @@
 .chatSoftHint[data-setup-hint='sync-engine'] {
   border-color: color-mix(
     in srgb,
-    var(--accent-color) 12%,
-    var(--hairline, var(--border-subtle))
+    var(--brand) 12%,
+    var(--border-subtle)
   );
 }
 

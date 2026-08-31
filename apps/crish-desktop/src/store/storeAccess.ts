@@ -292,17 +292,13 @@ export {
 
 export type { StreamToolLive } from './streamingStore';
 
-// ── 消息快照桥 / 思维检视器（组件读面入口；T4 A4 统一读面收编）───────────────
+// ── 消息快照桥（组件读面入口；T4 A4 统一读面收编）──────────────────────────────
 
 export {
   registerActiveVsm,
   unregisterActiveVsm,
 } from './messageSnapshotsBridge';
 
-export {
-  useThoughtInspectorStore,
-  openThoughtInspector,
-} from './thoughtInspectorStore';
 
 // ── 类型再导出（读面消费方经本模块取类型，避免直连 store 模块）─────────────────
 
@@ -345,4 +341,3 @@ export {
   exportSessionToMarkdown,
   tryDownloadSessionMarkdown,
 } from '../api/sessionExport';
-

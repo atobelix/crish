@@ -1,9 +1,9 @@
 /**
  * apps/crish-desktop/src/components/chat-composer/TiptapEditorField.module.css
- *       token        ChatComposer.module.css textarea     
- * -              --composer-bg     /           
- * -      --composer-max-lines   --composer-line-height         textarea      
- * -            text-tertiary    code   8% mix   hover     
+ *       token        ChatComposer.module.css textarea
+ * -              --composer-bg     /
+ * -      --composer-max-lines   --composer-line-height         textarea
+ * -            text-tertiary    code   8% mix   hover
  */
 
 .fieldWrapper {
@@ -176,7 +176,7 @@
 }
 
 /* Mention chip：文件图标盒 + Skill 变体（中性，无绿底墙） */
-:global(.mention-chip) {
+.proseMirrorField :global(.mention-chip) {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -192,15 +192,15 @@
   vertical-align: middle;
 }
 
-:global(.mention-chip-file) {
+.proseMirrorField :global(.mention-chip-file) {
   cursor: pointer;
 }
 
-:global(.mention-chip-skill) {
+.proseMirrorField :global(.mention-chip-skill) {
   background: var(--tint-active);
 }
 
-:global(.mention-icon-box) {
+.proseMirrorField :global(.mention-icon-box) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -212,7 +212,7 @@
   flex-shrink: 0;
 }
 
-:global(.mention-icon-box svg) {
+.proseMirrorField :global(.mention-icon-box svg) {
   width: 12px;
   height: 12px;
 }

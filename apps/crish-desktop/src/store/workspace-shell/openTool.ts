@@ -18,6 +18,7 @@ import { registerFileViewerOpener } from '../../api/workspaceFsApi';
 const TOOL_ALIASES: Record<string, string> = {
   tasks: 'overview',
   plan: 'overview',
+  browser: 'preview',
 };
 
 /** 在指定 session 的 RightToolDock 中打开工具（多 unit 时不抢其它会话） */
@@ -30,12 +31,29 @@ export function openToolInSession(sessionId: string, panelId: string): void {
     : store.getActiveTab();
 
   if (mapped === 'chat') {
+    /*
+     * 收起右坞：树回到 chat-only 的同时，必须把 collapsed 回写 shell store。
+     * 少了这一步，两个 store 会各说各话——树上面板已经关了，shell 仍认为坞是开的。
+     * 顶栏 UnitChromeActions 正是据此判断的，于是坞开关按钮与 .withDockMargin
+     * 的 36px 让位边距会一起消失。
+     */
+    if (tab && !tab.rightDock.collapsed) {
+      store.updateRightDock(tab.tabId, { ...tab.rightDock, collapsed: true });
+    }
     ensureChatOnlyTree(tab?.sessionId || sid || undefined);
     return;
   }
 
   if (!tab) {
-    ensureChatOnlyTree();
+    applyDockToTree(
+      {
+        collapsed: false,
+        openPanelIds: [mapped],
+        activePanelId: mapped,
+        widthRatio: 0.38,
+      },
+      sid || undefined
+    );
     return;
   }
 

@@ -218,12 +218,22 @@ export function commitStreamToSession(
   // Prefer non-empty override; empty string falls through to streaming store.
   const text = options?.text || fromStore || '';
   if (text) {
-    updateMessageText(sessionId, messageId, text);
+    const msg = getSessionById(sessionId)?.messages?.find(
+      (m: SessionMessage) => m.id === messageId
+    );
+    if (msg?.text !== text) {
+      updateMessageText(sessionId, messageId, text);
+    }
   }
   if (options?.commitThinking !== false) {
     const thinking = getStreamThinking(sessionId, messageId);
     if (thinking != null && thinking !== '') {
-      updateMessageThinking(sessionId, messageId, thinking);
+      const msg = getSessionById(sessionId)?.messages?.find(
+        (m: SessionMessage) => m.id === messageId
+      );
+      if (msg?.thinking !== thinking) {
+        updateMessageThinking(sessionId, messageId, thinking);
+      }
     }
   }
   // 2. 关键时序闭环：严禁同步 clearStream()！

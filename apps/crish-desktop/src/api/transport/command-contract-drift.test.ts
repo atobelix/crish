@@ -214,6 +214,15 @@ const GHOST_EXEMPTIONS: ReadonlySet<string> = new Set([
   'workbench_select_folder',
   // workbench_http_request：原生通用出站代理通道，保留供扩展与备用网络探测
   'workbench_http_request',
+  // ── 退役面（computer-panel 旧投屏残留已物理删除，Rust 侧命令面仍登记）──
+  // computer_session_enable / computer_session_disable / computer_status：
+  // 原生浏览器与面板标准化战役（决策 1 同类退役）——computer-panel 前端壳
+  // （ComputerPanel / useComputerSession / computerPanelLib / computerSessionApi）
+  // 已删净，前端无静态字面量消费；Rust 侧 computer_commands.rs 命令面仍登记，
+  // 由并行域退役后从豁免集移除（对齐 computer_estop 退役先例）
+  'computer_session_enable',
+  'computer_session_disable',
+  'computer_status',
 ]);
 
 describe('T-F 06 T5.1 命令契约漂移总门禁', () => {

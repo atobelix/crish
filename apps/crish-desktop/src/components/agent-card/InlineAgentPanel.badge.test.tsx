@@ -5,8 +5,8 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import type { SessionAgent } from '../../store/types';
 import * as openAgentPanelModule from '../../api/openAgentPanel';
 
-vi.mock('../chat-message-row/AsyncMarkdownBlock', () => ({
-  AsyncMarkdownBlock: (props: { text: string }) => <div>{props.text}</div>,
+vi.mock('../chat-message-row/StreamingMarkdownView', () => ({
+  StreamingMarkdownView: (props: { text: string }) => <div>{props.text}</div>,
 }));
 
 vi.mock('../../store/sessionStore', () => ({

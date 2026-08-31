@@ -6,7 +6,7 @@
  * timelineNormalizer hub 与 buildAssistantTimeline 经 re-export 共用本模块。
  */
 
-import type { MessageToolCall } from '../../../store/layoutStore';
+import type { MessageToolCall } from '../../store/types';
 import {
   isInspectTool,
   isInterruptedTool,

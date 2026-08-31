@@ -124,4 +124,34 @@ describe('SessionRow 点击 / 更多钮', () => {
     expect(onContextMenuSession).toHaveBeenCalled();
     expect(onSelectSession).not.toHaveBeenCalled();
   });
+
+  it('普通会话直接渲染纯净标题，不渲染分支徽标', () => {
+    renderRow();
+    const row = screen.getByTestId('sidebar-session-item');
+    expect(row.textContent).toContain('测试会话');
+    expect(row.querySelector('svg.lucide-git-branch')).toBeNull();
+  });
+
+  it('分支会话渲染 GitBranch 微图标，且标题不带 "分支: " 纯文本前缀', () => {
+    const branchSession = makeSession({
+      id: 'sess-branch',
+      title: '分析代码架构 - 分支',
+      branchParentId: 'sess-parent',
+    });
+    renderRow({
+      session: {
+        s: branchSession,
+        activeSessionId: 'other',
+        searchQuery: '',
+        isDraggingThis: false,
+        isRenaming: false,
+        isDraggable: true,
+      },
+    });
+    const row = screen.getByTestId('sidebar-session-item');
+    expect(row.textContent).toContain('分析代码架构');
+    expect(row.textContent).not.toContain('分支:');
+    expect(row.getAttribute('aria-label')).toContain('分支会话：分析代码架构');
+    expect(row.querySelector('svg.lucide-git-branch')).not.toBeNull();
+  });
 });

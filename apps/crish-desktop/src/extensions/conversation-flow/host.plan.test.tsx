@@ -20,8 +20,8 @@ vi.mock('../../components/chat-message-list/ChatMessageList', () => ({
   ChatMessageList: () => <div data-testid="linear-chat-message-list" />,
 }));
 
-vi.mock('../../components/chat-message-row/AsyncMarkdownBlock', () => ({
-  AsyncMarkdownBlock: () => null,
+vi.mock('../../components/chat-message-row/StreamingMarkdownView', () => ({
+  StreamingMarkdownView: () => null,
 }));
 
 const DEMO_SNIPS = [

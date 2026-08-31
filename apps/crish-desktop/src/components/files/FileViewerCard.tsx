@@ -210,11 +210,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 
     return (
       <div
-        className={styles.card}
+        className={`${styles.card} chat-side-panel`}
         aria-label="单文件代码查看"
         data-file-preview-host="file-viewer"
       >
-        <div className={styles.header}>
+        <div className={`${styles.header} side-panel-toolbar`} role="toolbar" aria-label="单文件查看工具栏">
           <div className={styles.titleArea}>
             <Tooltip content={filePath}>
               <span className={styles.fileName}>{baseName}</span>

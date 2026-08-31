@@ -152,7 +152,7 @@ export const ComposerPlanProgressBar: React.FC<ComposerPlanProgressBarProps> = (
         <div className={`${styles.planDividerV} plan-divider-v`} aria-hidden />
 
         <Tooltip content={`当前进度：第 ${currentStep} 步 / 共 ${totalSteps} 步`}>
-          <span className={`${styles.planStepCounter} plan-step-counter`} title="当前进度">
+          <span className={`${styles.planStepCounter} plan-step-counter`}>
             {currentStep}/{totalSteps}
           </span>
         </Tooltip>

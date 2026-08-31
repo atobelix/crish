@@ -154,32 +154,28 @@ export const SendToNoteButton: React.FC<SendToNoteButtonProps> = ({
   if (iconOnly) {
     return (
       <div
-        className={className}
         data-testid="send-to-note-root"
         data-status={String(status ?? '')}
         data-can-send={canSend ? 'true' : 'false'}
+        style={{ display: 'inline-flex', alignItems: 'center' }}
       >
         <Tooltip content={lastOk ? '已发送到笔记' : errorText || label}>
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
             disabled={!canSend || busy}
-            loading={busy}
             onClick={() => {
               void handleClick();
             }}
             aria-label={label}
             data-testid="send-to-note-button"
             className={className}
-            icon={
-              lastOk ? (
-                <Check size={14} aria-hidden />
-              ) : (
-                <SquarePen size={14} aria-hidden />
-              )
-            }
-          />
+          >
+            {lastOk ? (
+              <Check size={13} aria-hidden />
+            ) : (
+              <SquarePen size={13} aria-hidden />
+            )}
+          </button>
         </Tooltip>
       </div>
     );

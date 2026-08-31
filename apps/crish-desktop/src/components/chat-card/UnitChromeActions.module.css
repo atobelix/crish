@@ -23,12 +23,17 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
+  padding: 0 10px;
   box-sizing: border-box;
   flex-shrink: 0;
   user-select: none;
 }
 
+/*
+ * 左侧面包屑容器：吃满左侧剩余空间。
+ * 声明 flex: 1 1 auto 与 width: auto，
+ * 绝缘外层 .leafBody > * > * 的 flex: 1 1 0% 侵入，避免在部分分屏下被意外挤压。
+ */
 .topLeft {
   height: 28px;
   display: flex;
@@ -39,6 +44,7 @@
   pointer-events: auto;
   min-width: 0;
   flex: 1 1 auto;
+  width: auto;
   overflow: hidden;
 }
 
@@ -107,23 +113,42 @@
 }
 
 .breadcrumbSession {
-  max-width: 140px;
+  min-width: 0;
+  max-width: clamp(140px, 28vw, 360px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex-shrink: 1;
 }
 
+/*
+ * 右侧快捷动作组（预览 / 产物 / 更多）：
+ * 1. 声明 flex: 0 0 auto 与 width: auto 形成强样式绝缘，
+ *    彻底防止被外层 .leafBody 深度 flex 规则拉伸成 50% 宽导致按钮悬在半空；
+ * 2. margin-left: auto 保证紧贴 Chat 叶右边缘；
+ * 3. 配合 withDockMargin 在右坞折叠时为顶层画布常驻的固定坞开关留出 36px 槽位。
+ */
 .topActions {
   height: 28px;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
   pointer-events: auto;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  width: auto;
   margin-left: auto;
+  /*
+   * 参考 .chat-top-actions 带 margin-right 过渡。
+   * 坞开合时右边距平滑过渡，消除 36px 硬跳。
+   */
+  transition: margin-right var(--transition-fast, 150ms ease-out);
 }
 
+/*
+ * 坞收起时右侧空出 36px，给绝对定位的坞开关让位；
+ * 坞展开后开关移交给右侧面板自己的标签行，这里回收边距。
+ */
 .topActions.withDockMargin {
   margin-right: 36px;
 }
@@ -149,12 +174,23 @@
   pointer-events: auto;
   transition:
     background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease;
+    color var(--transition-micro, 120ms) ease,
+    opacity var(--transition-fast, 150ms ease-out);
 }
 
 .topSidePanelBtn:hover {
   background: var(--bg-hover, rgba(0, 0, 0, 0.045));
   color: var(--text-primary);
+}
+
+/*
+ * 坞展开后开关退场：只动透明度与命中，绝不动定位。
+ * 之前是条件卸载，按钮位置会随 DOM 增删漂一下；改成常驻固定槽位后
+ * 无论开合，按钮的 top/right 恒定，鼠标不用重新找。
+ */
+.topSidePanelBtn[data-dock-open='true'] {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .topSidePanelBtn:global(.active),
@@ -188,9 +224,10 @@
   color: var(--text-primary);
 }
 
+/* 参考 .top-action-btn.active 是 8% 压深，不是 hover 的 4%——两态必须能分辨 */
 .topActionBtn.isActive,
 .topActionBtn[data-active='true'] {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.065));
+  background: var(--bg-active, rgba(0, 0, 0, 0.08));
   color: var(--text-primary);
 }
 

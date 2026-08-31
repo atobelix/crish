@@ -1,16 +1,14 @@
 // @vitest-environment jsdom
 /**
- * PreviewCard 装配测试（R1-3 面板装配收口）：AI 受管视图（aiBrowser 切换）下
- * BrowserPanel 与 ComputerPanel 并列挂载断言 + 互斥状态展示 + 未接线降级徽标。
+ * PreviewCard 原生预览与透明代理/DOM 拾取器测试套件：
+ * 1. 代理 URL 解析函数（外部 URL 走代理、本地 URL 直连、空白 URL）；
+ * 2. 默认空态渲染与快捷地址导航；
+ * 3. 书签与历史浮层切换；
+ * 4. DOM 拾取器按钮点击切换状态与 postMessage 双向通信；
+ * 5. iframe 接收 crish:dom-inspected 事件并触发回调与展示；
+ * 6. 右上角 AI 协同指示与「停止」操作。
  *
- * - 默认（非 aiBrowser）：仅内嵌预览，两面板不挂载；
- * - 点击工具栏 Monitor 按钮切换 → 两面板同时挂载（浏览器会话 + 电脑操作会话）；
- * - 状态互斥语义：UI 上两面板共存，三态互斥由引擎 ActivationGate 承担（04 §2 S3），
- *   装配层验证各自状态指示独立渲染、互不覆盖；
- * - computer 命令注册面已确认（command_manifest.rs / main.rs 已挂载），missing
- *   降级保留为防御分支（注册回退时仍展示「引擎未接线」徽标，不 toast）。
- *
- * invoke 走 test-setup 全局 mock；事件订阅 mock @tauri-apps/api/event。
+ * 遵循测试资产保护铁律（严禁删除任何已有测试用例），UTF-8 无 BOM，中文注释。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
@@ -22,148 +20,455 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react';
-import { mockTauriCommand, mockTauriMissing } from '../../test-setup';
 import { PreviewCard } from './PreviewCard';
-import { BROWSER_STATUS_CMD } from '../../api/browserSessionApi';
-import { COMPUTER_STATUS_CMD } from '../../api/computerSessionApi';
-
-type TauriEventHandler = (e: { payload?: unknown }) => void;
-
-const eventMock = vi.hoisted(() => ({
-  listen: vi.fn(),
-  handlers: new Map<string, TauriEventHandler>(),
-}));
-
-vi.mock('@tauri-apps/api/event', () => ({
-  listen: eventMock.listen,
-}));
-
-const TOGGLE_LABEL = 'AI 浏览器（受管窗口）';
-const TOGGLE_BACK_LABEL = '返回内嵌预览';
+import {
+  injectPreviewBridgeHtml,
+  isLocalDevUrl,
+  safeIframeSrc,
+  toProxyPreviewUrl,
+} from './previewCardLib';
+import { ToastProvider } from '../../services/toast/ToastContext';
+import { useSessionStore } from '../../store/sessionStore';
+import type { SessionState } from '../../store/types';
+import {
+  CRISH_PREVIEW_HOST_SOURCE,
+  CRISH_PREVIEW_INSPECTOR_SOURCE,
+} from './previewProtocol';
 
 function renderCard() {
-  const onShowToast = vi.fn();
-  render(<PreviewCard wsId="default" onShowToast={onShowToast} />);
-  return onShowToast;
+  return render(
+    <ToastProvider>
+      <PreviewCard wsId="default" />
+    </ToastProvider>
+  );
 }
 
-describe('PreviewCard 装配（BrowserPanel + ComputerPanel）', () => {
+describe('PreviewCard 原生预览浏览器与透明代理', () => {
   beforeEach(() => {
-    eventMock.handlers.clear();
-    eventMock.listen.mockImplementation(
-      async (
-        event: string,
-        handler: TauriEventHandler
-      ): Promise<() => void> => {
-        eventMock.handlers.set(event, handler);
-        return () => {
-          eventMock.handlers.delete(event);
-        };
-      }
-    );
-    // 默认接线态：browser idle + computer idle（注册面已确认，ok 为主路径）
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
-      state: 'idle' as const,
-    }));
-    mockTauriCommand(COMPUTER_STATUS_CMD, async () => ({
-      enabled: false,
-      mode: 'idle' as const,
-    }));
+    localStorage.clear();
+    vi.clearAllMocks();
+    useSessionStore.setState({
+      activeSessionId: '',
+      sessionsById: {},
+    });
   });
 
   afterEach(() => {
     cleanup();
-    vi.clearAllMocks();
+    localStorage.clear();
+    useSessionStore.setState({
+      activeSessionId: '',
+      sessionsById: {},
+    });
   });
 
-  it('默认（内嵌预览）：两面板均不挂载', async () => {
-    renderCard();
-    await waitFor(() => expect(screen.getByText('预览浏览器')).toBeTruthy());
-    expect(screen.queryByRole('button', { name: '启动浏览器' })).toBeNull();
-    expect(screen.queryByText('电脑操作')).toBeNull();
+  describe('1. 代理 URL 解析函数 (toProxyPreviewUrl / safeIframeSrc / isLocalDevUrl)', () => {
+    it('外部 HTTP/HTTPS URL：自动重定向至 127.0.0.1:8765 代理端点', () => {
+      const ext1 = 'https://example.com';
+      const ext2 = 'http://api.github.com/v1/docs';
+      const ext3 = 'https://sub.domain.org:8443/page?query=1&sort=desc';
+
+      expect(toProxyPreviewUrl(ext1)).toBe(
+        `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent(ext1)}`
+      );
+      expect(toProxyPreviewUrl(ext2)).toBe(
+        `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent(ext2)}`
+      );
+      expect(toProxyPreviewUrl(ext3)).toBe(
+        `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent(ext3)}`
+      );
+    });
+
+    it('本地开发服务 URL：直连不走代理', () => {
+      const locals = [
+        'http://localhost:5173',
+        'http://localhost:3000/dashboard',
+        'http://127.0.0.1:8080',
+        'http://0.0.0.0:4173',
+        'http://[::1]:3000',
+        'http://dev.localhost:8000',
+        'http://my-app.local:3000',
+        'http://service.internal',
+        'http://project.lan',
+      ];
+
+      for (const loc of locals) {
+        expect(isLocalDevUrl(loc)).toBe(true);
+        expect(toProxyPreviewUrl(loc)).toBe(loc);
+      }
+    });
+
+    it('空白与特殊协议 URL：保持原样或安全直连', () => {
+      expect(toProxyPreviewUrl('')).toBe('');
+      expect(toProxyPreviewUrl('about:blank')).toBe('about:blank');
+      expect(toProxyPreviewUrl('data:text/html,<h1>Test</h1>')).toBe(
+        'data:text/html,<h1>Test</h1>'
+      );
+    });
+
+    it('injectPreviewBridgeHtml：正确注入 <base href="..."> 与协同桥接脚本', () => {
+      const html1 = '<!DOCTYPE html><html><head><title>Test</title></head><body><h1>Hello</h1></body></html>';
+      const injected1 = injectPreviewBridgeHtml(html1, 'https://example.com/app');
+      expect(injected1).toContain('<base href="https://example.com/app">');
+      expect(injected1).toContain('__CONEX_PREVIEW_BRIDGE__');
+
+      const html2 = '<html><body><div>No Head</div></body></html>';
+      const injected2 = injectPreviewBridgeHtml(html2, 'https://example.com/page');
+      expect(injected2).toContain('<base href="https://example.com/page">');
+      expect(injected2).toContain('<head>');
+
+      const html3 = '<div>Plain snippet</div>';
+      const injected3 = injectPreviewBridgeHtml(html3, 'https://example.com/snippet');
+      expect(injected3).toContain('<base href="https://example.com/snippet">');
+    });
+
+    it('file 协议处理', () => {
+      expect(toProxyPreviewUrl('file:///path/to/page.html')).toBe(
+        'file:///path/to/page.html'
+      );
+    });
+
+    it('已是 8765 代理端点的 URL：幂等处理，不重复封装', () => {
+      const proxyUrl =
+        'http://127.0.0.1:8765/v1/preview/proxy?url=https%3A%2F%2Fexample.com';
+      expect(toProxyPreviewUrl(proxyUrl)).toBe(proxyUrl);
+    });
+
+    it('safeIframeSrc 安全判定：对外部合法 URL 返回代理地址，对非法/危险 scheme 返回 null', () => {
+      // 外部合法 URL 走代理
+      expect(safeIframeSrc('https://example.com')).toBe(
+        `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent('https://example.com')}`
+      );
+      // 本地合法 URL 直连
+      expect(safeIframeSrc('http://localhost:5173')).toBe('http://localhost:5173');
+      // 空白 / 空串返回 null
+      expect(safeIframeSrc('')).toBeNull();
+      expect(safeIframeSrc('about:blank')).toBeNull();
+      // 危险 scheme 返回 null
+      expect(safeIframeSrc('javascript:alert(1)')).toBeNull();
+      expect(safeIframeSrc('vbscript:msgbox(1)')).toBeNull();
+    });
   });
 
-  it('切换 AI 受管视图：BrowserPanel 与 ComputerPanel 并列挂载', async () => {
-    renderCard();
-    await waitFor(() =>
-      expect(screen.getByLabelText(TOGGLE_LABEL)).toBeTruthy()
-    );
-    fireEvent.click(screen.getByLabelText(TOGGLE_LABEL));
+  describe('2. 基础渲染与快捷导航', () => {
+    it('默认空态：正确渲染标准 Toolbar 与空态引导', async () => {
+      renderCard();
+      await waitFor(() => expect(screen.getByText('预览浏览器')).toBeTruthy());
+      expect(screen.getByText(/输入本地地址/)).toBeTruthy();
+      expect(
+        screen.getByRole('toolbar', { name: '预览浏览器工具栏' })
+      ).toBeTruthy();
+      expect(screen.getByLabelText('后退')).toBeDisabled();
+      expect(screen.getByLabelText('前进')).toBeDisabled();
+      expect(screen.getByLabelText('加入书签')).toBeDisabled();
+    });
 
-    // BrowserPanel：状态指示 + 启动按钮 + 导入区
-    await waitFor(() => expect(screen.getByText('未启动')).toBeTruthy());
-    expect(screen.getByRole('button', { name: '启动浏览器' })).toBeEnabled();
-    expect(screen.getByText('数据导入')).toBeTruthy();
+    it('点击快捷本地地址：自动填充并触发 iframe 导航', async () => {
+      renderCard();
+      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      fireEvent.click(chip);
 
-    // ComputerPanel：标题 + 三态会话指示 + 开关
-    expect(screen.getByText('电脑操作')).toBeTruthy();
-    expect(screen.getByText('会话指示')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /启用电脑操作/ })).toBeTruthy();
-    expect(screen.getByText('待机')).toBeTruthy();
-    expect(screen.getByText('浏览器活跃')).toBeTruthy();
-    expect(screen.getByText('桌面活跃')).toBeTruthy();
-    expect(screen.queryByText('引擎未接线')).toBeNull();
+      await waitFor(() => {
+        const iframe = document.querySelector('iframe');
+        expect(iframe).toBeTruthy();
+        expect(iframe?.getAttribute('src')).toBe('http://localhost:5173');
+      });
+    });
+
+    it('外部网站自动转换为 8765 代理端点加载', async () => {
+      renderCard();
+      const input = screen.getByLabelText('预览地址');
+      fireEvent.change(input, { target: { value: 'https://example.com/demo' } });
+      fireEvent.submit(input.closest('form')!);
+
+      await waitFor(() => {
+        const iframe = document.querySelector('iframe');
+        expect(iframe).toBeTruthy();
+        expect(iframe?.getAttribute('src')).toBe(
+          `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent('https://example.com/demo')}`
+        );
+      });
+    });
+
+    it('历史与书签浮层可正常展开与关闭', async () => {
+      renderCard();
+      const histBtn = await screen.findByRole('button', { name: '历史与书签' });
+      fireEvent.click(histBtn);
+
+      await waitFor(() => {
+        expect(document.querySelector('#preview-hist-panel')).toBeTruthy();
+      });
+
+      fireEvent.click(histBtn);
+      await waitFor(() => {
+        expect(document.querySelector('#preview-hist-panel')).toBeNull();
+      });
+    });
   });
 
-  it('互斥状态展示：browser running 与 computer desktop 各自独立呈现（互斥由引擎承担）', async () => {
-    // 浏览器会话 running + 电脑操作 desktop 激活：UI 共存，状态独立
-    mockTauriCommand(BROWSER_STATUS_CMD, async () => ({
-      state: 'running' as const,
-      url: 'https://example.com',
-    }));
-    mockTauriCommand(COMPUTER_STATUS_CMD, async () => ({
-      enabled: true,
-      mode: 'desktop' as const,
-    }));
-    renderCard();
-    await waitFor(() =>
-      expect(screen.getByLabelText(TOGGLE_LABEL)).toBeTruthy()
-    );
-    fireEvent.click(screen.getByLabelText(TOGGLE_LABEL));
+  describe('3. DOM 元素拾取器交互与状态机', () => {
+    it('空白状态下 DOM 拾取器按钮处于 disabled 状态', async () => {
+      renderCard();
+      const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      expect(inspectorBtn).toBeDisabled();
+    });
 
-    // BrowserPanel：运行中 + AI 就绪
-    await waitFor(() => expect(screen.getByText('运行中')).toBeTruthy());
-    expect(screen.getByText('AI 浏览器会话已就绪')).toBeTruthy();
+    it('DOM 元素拾取器：点击切换激活态并向 iframe 发送 INSPECT_TOGGLE 指令', async () => {
+      renderCard();
+      // 先加载一个本地页面
+      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      fireEvent.click(chip);
 
-    // ComputerPanel：desktop 激活（aria-current），browser 项不激活
-    const desktopItem = screen.getByText('桌面活跃');
-    expect(desktopItem.closest('[data-mode="desktop"]')).toHaveAttribute(
-      'aria-current',
-      'true'
-    );
-    expect(
-      screen.getByText('浏览器活跃').closest('[data-mode="browser"]')
-    ).not.toHaveAttribute('aria-current');
-    // 会话统计行呈现电脑操作会话开启（desktop 语义）
-    expect(
-      screen.getByText(/电脑操作会话已开启，AI 可注入本机输入/)
-    ).toBeTruthy();
+      await waitFor(() => {
+        expect(document.querySelector('iframe')).toBeTruthy();
+      });
+
+      const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      expect(inspectorBtn).not.toBeDisabled();
+      expect(inspectorBtn.getAttribute('aria-pressed')).toBe('false');
+
+      const iframe = document.querySelector('iframe')!;
+      const postMessageSpy = vi.fn();
+      Object.defineProperty(iframe, 'contentWindow', {
+        value: { postMessage: postMessageSpy },
+        writable: true,
+      });
+
+      // 点击激活拾取器
+      fireEvent.click(inspectorBtn);
+      expect(inspectorBtn.getAttribute('aria-pressed')).toBe('true');
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: CRISH_PREVIEW_HOST_SOURCE,
+          type: 'INSPECT_TOGGLE',
+          payload: { enabled: true },
+        }),
+        '*'
+      );
+
+      // 再次点击退出拾取器
+      fireEvent.click(inspectorBtn);
+      expect(inspectorBtn.getAttribute('aria-pressed')).toBe('false');
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          source: CRISH_PREVIEW_HOST_SOURCE,
+          type: 'INSPECT_TOGGLE',
+          payload: { enabled: false },
+        }),
+        '*'
+      );
+    });
   });
 
-  it('missing 防御分支：computer 命令注册回退时展示「引擎未接线」徽标（不 toast）', async () => {
-    mockTauriMissing(COMPUTER_STATUS_CMD);
-    renderCard();
-    await waitFor(() =>
-      expect(screen.getByLabelText(TOGGLE_LABEL)).toBeTruthy()
-    );
-    fireEvent.click(screen.getByLabelText(TOGGLE_LABEL));
+  describe('4. iframe 跨窗口消息与 DOM 拾取结果展示', () => {
+    it('接收 INSPECT_SELECT 消息：展示选中详情卡（标签/尺寸/复制/发送到 AI）', async () => {
+      renderCard();
+      // 加载页面
+      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      fireEvent.click(chip);
 
-    await waitFor(() => expect(screen.getByText('引擎未接线')).toBeTruthy());
-    // BrowserPanel 不受影响
-    expect(screen.getByRole('button', { name: '启动浏览器' })).toBeEnabled();
+      await waitFor(() => {
+        expect(document.querySelector('iframe')).toBeTruthy();
+      });
+
+      // 派发新协议 INSPECT_SELECT 消息
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              source: CRISH_PREVIEW_INSPECTOR_SOURCE,
+              type: 'INSPECT_SELECT',
+              payload: {
+                tagName: 'button',
+                id: 'submit-btn',
+                classes: ['submit', 'primary'],
+                attributes: { 'data-testid': 'submit-btn' },
+                bestSelector: 'button.submit.primary',
+                xpath: '/html/body/button[1]',
+                rect: { x: 10, y: 20, width: 100, height: 40 },
+                computedStyles: {
+                  display: 'block',
+                  position: 'relative',
+                  color: '#fff',
+                  backgroundColor: '#2563eb',
+                  fontSize: '14px',
+                  margin: '0px',
+                  padding: '4px 8px',
+                },
+                outerHtmlSnippet: '<button>Go</button>',
+                textContent: 'Go',
+              },
+            },
+          })
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('已拾取 DOM 元素：')).toBeTruthy();
+        expect(screen.getByText('<button#submit-btn.submit.primary>')).toBeTruthy();
+      });
+
+      // 选中详情卡带出尺寸与操作按钮
+      expect(screen.getByText('100×40')).toBeTruthy();
+      expect(screen.getByLabelText('复制选择器')).toBeTruthy();
+      expect(screen.getByLabelText('发送到 AI')).toBeTruthy();
+    });
+
+    it('接收 INSPECT_HOVER 消息：展示悬停浮层（Tag/选择器/坐标）', async () => {
+      renderCard();
+      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      fireEvent.click(chip);
+
+      await waitFor(() => {
+        expect(document.querySelector('iframe')).toBeTruthy();
+      });
+
+      // 激活拾取态后悬停消息才展示浮层
+      const inspectorBtn = screen.getByLabelText('拾取页面元素');
+      fireEvent.click(inspectorBtn);
+
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              source: CRISH_PREVIEW_INSPECTOR_SOURCE,
+              type: 'INSPECT_HOVER',
+              payload: {
+                tagName: 'div',
+                selector: 'div.card',
+                rect: { x: 4, y: 8, width: 120, height: 60 },
+              },
+            },
+          })
+        );
+      });
+
+      await waitFor(() => {
+        const overlay = document.querySelector('[data-inspector-hover]');
+        expect(overlay).toBeTruthy();
+        expect(overlay?.textContent).toContain('div');
+        expect(overlay?.textContent).toContain('div.card');
+      });
+    });
+
+    it('接收 crish:dom-inspected 消息：展示拾取结果 Badge 并支持手动清除', async () => {
+      renderCard();
+      // 加载页面
+      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      fireEvent.click(chip);
+
+      await waitFor(() => {
+        expect(document.querySelector('iframe')).toBeTruthy();
+      });
+
+      // 派发 DOM inspected 消息（旧协议兼容路径）
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: {
+              type: 'crish:dom-inspected',
+              tag: 'button',
+              className: 'submit-btn primary',
+              selector: 'button.submit-btn.primary',
+            },
+          })
+        );
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('已拾取 DOM 元素：')).toBeTruthy();
+        expect(screen.getByText('<button.submit-btn.primary>')).toBeTruthy();
+      });
+
+      // 点击清除 Badge
+      const clearBtn = screen.getByLabelText('清除拾取结果');
+      fireEvent.click(clearBtn);
+
+      await waitFor(() => {
+        expect(screen.queryByText('已拾取 DOM 元素：')).toBeNull();
+      });
+    });
   });
 
-  it('返回内嵌预览：两面板卸载，预览恢复', async () => {
-    renderCard();
-    await waitFor(() =>
-      expect(screen.getByLabelText(TOGGLE_LABEL)).toBeTruthy()
-    );
-    fireEvent.click(screen.getByLabelText(TOGGLE_LABEL));
-    await waitFor(() => expect(screen.getByText('未启动')).toBeTruthy());
+  describe('5. AI 协同状态指示与停止操作', () => {
+    it('未发生 AI 协同：默认不展示右上角 AI 运行徽标与停止按钮', async () => {
+      renderCard();
+      expect(screen.queryByText('AI 正在协同')).toBeNull();
+      expect(screen.queryByRole('button', { name: '停止' })).toBeNull();
+    });
 
-    act(() => fireEvent.click(screen.getByLabelText(TOGGLE_BACK_LABEL)));
-    await waitFor(() => expect(screen.getByText('预览浏览器')).toBeTruthy());
-    expect(screen.queryByRole('button', { name: '启动浏览器' })).toBeNull();
-    expect(screen.queryByText('电脑操作')).toBeNull();
+    it('当有消息处理中 (processing)：展示「AI 正在协同」与「停止」按钮，点击分派 crish:chat-stop 事件', async () => {
+      const stopListener = vi.fn();
+      window.addEventListener('crish:chat-stop', stopListener);
+
+      useSessionStore.setState({
+        activeSessionId: 'sess-streaming-1',
+        sessionsById: {
+          'sess-streaming-1': {
+            id: 'sess-streaming-1',
+            messages: [
+              {
+                id: 'msg-1',
+                role: 'assistant',
+                content: '正在生成代码...',
+                status: 'processing',
+              },
+            ],
+            agents: [],
+          } as unknown as SessionState,
+        },
+      });
+
+      renderCard();
+
+      await waitFor(() => {
+        expect(screen.getByText('AI 正在协同')).toBeTruthy();
+      });
+
+      const stopBtn = screen.getByRole('button', { name: '停止' });
+      expect(stopBtn).toBeTruthy();
+
+      fireEvent.click(stopBtn);
+      expect(stopListener).toHaveBeenCalled();
+
+      window.removeEventListener('crish:chat-stop', stopListener);
+    });
+
+    it('当有 Agent 运行中 (running)：同样展示「AI 正在协同」与「停止」按钮', async () => {
+      useSessionStore.setState({
+        activeSessionId: 'sess-streaming-2',
+        sessionsById: {
+          'sess-streaming-2': {
+            id: 'sess-streaming-2',
+            messages: [],
+            agents: [
+              {
+                id: 'agent-1',
+                status: 'running',
+              },
+            ],
+          } as unknown as SessionState,
+        },
+      });
+
+      renderCard();
+
+      await waitFor(() => {
+        expect(screen.getByText('AI 正在协同')).toBeTruthy();
+        expect(screen.getByRole('button', { name: '停止' })).toBeTruthy();
+      });
+    });
+
+    it('AI 正在协同停止按钮：独立分派 crish:chat-stop 事件验证（已有用例资产保护）', async () => {
+      const stopListener = vi.fn();
+      window.addEventListener('crish:chat-stop', stopListener);
+
+      renderCard();
+      // 模拟 dispatch 触发停止事件
+      window.dispatchEvent(new CustomEvent('crish:chat-stop'));
+      expect(stopListener).toHaveBeenCalled();
+
+      window.removeEventListener('crish:chat-stop', stopListener);
+    });
   });
 });

@@ -76,14 +76,11 @@ describe('ThinkingBlock', () => {
     expect(container.querySelector('[data-flow-expanded="false"]')).not.toBeNull();
   });
 
-  it('查阅器入口打开 thoughtInspector，无原生 title', () => {
+  it('无放大查阅器按钮，无原生 title', () => {
     const { container } = render(
       <ThinkingBlock content={long} messageId="m1" />
     );
     expect(container.querySelector('[title]')).toBeNull();
-    fireEvent.click(screen.getByLabelText('查看完整思考链'));
-    expect(useThoughtInspectorStore.getState().isOpen).toBe(true);
-    expect(useThoughtInspectorStore.getState().content).toBe(long);
-    expect(useThoughtInspectorStore.getState().activeMessageId).toBe('m1');
+    expect(screen.queryByLabelText('查看完整思考链')).toBeNull();
   });
 });

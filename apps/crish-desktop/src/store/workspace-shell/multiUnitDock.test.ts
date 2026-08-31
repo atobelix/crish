@@ -28,6 +28,7 @@ import {
   listChatLeaves,
   listToolLeaves,
   removeUnitBySessionId,
+  setPrimaryPanelChecker,
 } from '../layout-tree';
 import {
   projectDockOntoTree,
@@ -186,6 +187,7 @@ function toolPanelOfUnit(root: LayoutTree['root'], sessionId: string): LayoutLea
 }
 
 beforeEach(() => {
+  setPrimaryPanelChecker((id) => id === 'chat');
   resetShell();
   resetLayout({
     version: 2,

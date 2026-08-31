@@ -1,6 +1,6 @@
-/* ui/Badge        RED-DETAILED-02 / T-ATOM-07 
- *      0-        4px       (--radius-sm) 
- * 100%    Design Tokens    5         tone 
+/* ui/Badge        RED-DETAILED-02 / T-ATOM-07
+ *      0-        4px       (--radius-sm)
+ * 100%    Design Tokens    5         tone
  */
 
 .badge {
@@ -64,16 +64,16 @@
 
 .toneBrand,
 .badge[data-tone='brand'] {
-  --badge-bg: color-mix(in srgb, var(--accent-color) 12%, transparent);
-  --badge-fg: var(--accent-color);
-  --badge-border: color-mix(in srgb, var(--accent-color) 25%, transparent);
+  --badge-bg: color-mix(in srgb, var(--brand, #10b981) 10%, transparent);
+  --badge-fg: var(--brand-deep, #059669);
+  --badge-border: color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
 }
 
 .toneInfo,
 .badge[data-tone='info'] {
-  --badge-bg: color-mix(in srgb, var(--color-info, var(--accent-color)) 12%, transparent);
-  --badge-fg: var(--color-info, var(--accent-color));
-  --badge-border: color-mix(in srgb, var(--color-info, var(--accent-color)) 25%, transparent);
+  --badge-bg: color-mix(in srgb, var(--color-info) 10%, transparent);
+  --badge-fg: var(--color-info);
+  --badge-border: color-mix(in srgb, var(--color-info) 22%, transparent);
 }
 
 .toneSuccess,

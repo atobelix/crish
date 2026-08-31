@@ -199,6 +199,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         data-active={isActive ? 'true' : 'false'}
         data-dragging-source={isDragSource ? 'true' : 'false'}
         data-unit-tab-strip={isChat && isMultiChat ? 'true' : 'false'}
+        data-has-strip={!isChat ? 'true' : 'false'}
         onPointerDown={handleActivate}
         role="region"
         aria-label={`${viewRegistry.getTitle(leaf.activeTab, renderCtx)} 面板`}
@@ -212,7 +213,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
              */
             <UnitChromeActions activeSessionId={sessionForPanel} />
           ) : (
-            <LeafToolTabStrip leaf={leaf} />
+            <LeafToolTabStrip leaf={leaf} showCollapseBtn={false} />
           )}
           <AppErrorBoundary
             compact

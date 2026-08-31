@@ -1,0 +1,132 @@
+/**
+ * Conex 统一流式动画 GPU 硬件加速样式表
+ *
+ * 核心契约：
+ * 1. 满足 Zero-CLS 与 Chromium Compositor 独立硬件加速（will-change: opacity, transform）；
+ * 2. 单源打字机光标 .conex-streaming-caret 全局唯一真相源，消费 --stream-caret-*；
+ * 3. 彻底接入 tokens.css 中的 --stream-* 命名空间与 data-perf-tier 性能分档；
+ * 4. 彻底消除历史蓝灰裸色与 ChatMessageRow.module.css 双轨冲突；
+ * 5. 绑定 Eco 0ms 纯折叠与表格生成上下文智能光标抑制。
+ */
+
+/* ==========================================================================
+   1. 单词级 GPU 淡入动画 (Compositor-Only)
+   ========================================================================== */
+
+@keyframes conex-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--stream-anim-word-offset-y, 2px));
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 单词级动画 Span 规范 (GPU 合成，不占用主线程 JS) */
+[data-conex-animate="true"],
+[data-sd-animate="true"] {
+  display: inline;
+  will-change: opacity, transform;
+  animation-name: conex-fade-in;
+  animation-duration: var(--sd-duration, var(--conex-duration, var(--stream-anim-word-fade, 100ms)));
+  animation-timing-function: var(--stream-anim-easing, cubic-bezier(0.16, 1, 0.3, 1));
+  animation-delay: var(--sd-delay, var(--conex-delay, 0ms));
+  animation-fill-mode: both;
+}
+
+/* ==========================================================================
+   2. 列表项 Marker 专用颜色淡入
+   ========================================================================== */
+
+@keyframes conex-marker-fade {
+  from {
+    color: transparent;
+  }
+  to {
+    color: inherit;
+  }
+}
+
+[data-conex-animate-marker]::marker,
+[data-sd-animate-marker]::marker {
+  animation: conex-marker-fade var(--sd-marker-duration, var(--conex-marker-duration, var(--stream-anim-marker-fade, 120ms))) ease var(--sd-marker-delay, var(--conex-marker-delay, 0ms)) both;
+}
+
+/* ==========================================================================
+   3. TURBO 模式与容器级 GPU 隔离
+   ========================================================================== */
+
+.conex-streaming-root[data-tier="TURBO"],
+[data-tier="TURBO"],
+.md-block-active[data-turbo="true"] {
+  contain: layout style paint;
+  will-change: transform;
+}
+
+/* ==========================================================================
+   4. 单源打字机光标 (Single-Source Caret SSOT)
+   ========================================================================== */
+
+.conex-streaming-caret {
+  display: inline-block;
+  width: var(--stream-caret-width, 2px);
+  height: var(--stream-caret-height, 0.95em);
+  margin-left: var(--stream-caret-margin-left, var(--space-0_5, 2px));
+  vertical-align: text-bottom;
+  background: var(--stream-caret-color, var(--brand, hsl(160 84% 39%)));
+  border-radius: var(--stream-caret-radius, 1px);
+  animation: conex-caret-blink var(--stream-caret-blink-dur, 800ms) cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes conex-caret-blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 上下文抑制光标修饰符（如表格生成期，防止破坏 table 盒模型） */
+.suppressCaret .conex-streaming-caret,
+[data-contains-table="true"] .conex-streaming-caret {
+  display: none;
+  content: '';
+  visibility: hidden;
+}
+
+/* 性能分档深度绑定：Eco 档位与 Reduced Motion 下彻底静止常亮 */
+html[data-perf-tier='eco'] .conex-streaming-caret {
+  animation: none;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conex-streaming-caret {
+    animation: none;
+    opacity: 1;
+  }
+  [data-conex-animate="true"],
+  [data-sd-animate="true"] {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  [data-conex-animate-marker]::marker,
+  [data-sd-animate-marker]::marker {
+    animation: none;
+    color: inherit;
+  }
+}
+
+/* ==========================================================================
+   5. 封口块视口裁剪与自适应围限 (Zero-CLS)
+   ========================================================================== */
+
+.md-block-sealed {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--stream-table-intrinsic-h, 320px);
+  contain: layout style paint;
+}

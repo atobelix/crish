@@ -1,14 +1,13 @@
 import {
   MessageSquare,
   Terminal,
-  Eye,
   LayoutDashboard,
-  FolderTree,
   GitBranch,
   PlayCircle,
   Bot,
   Globe,
   Workflow,
+  FolderTree,
   FileCode,
 } from 'lucide-react';
 import type React from 'react';
@@ -52,8 +51,9 @@ export function resetBuiltInViewsRegistrationFlagForTesting(): void {
  *
  * @param factories 由调用方注入的 lazy factory map（main.tsx startup）。
  *   key 为视图 id（chat/terminal/preview/overview/files/diff/runtime/agent/
- *   browser/flow-dag/file-viewer）；value 为返回 `React.ComponentType<ViewRenderContext>`
- *   的 factory。缺失的 id 跳过注册（防御；调用方应提供全部 11 个）。
+ *   flow-dag/file-viewer）；value 为返回 `React.ComponentType<ViewRenderContext>`
+ *   的 factory。缺失的 id 跳过注册（防御；调用方应提供全部 10 个）。
+ *   browser 已并入 preview（决策 1 视图路由收敛），不再注册独立 browser 视图。
  */
 export function registerBuiltInViews(factories: ViewFactoryMap): void {
   if (isBuiltInRegistered && viewRegistry.getView('chat')) return;
@@ -81,8 +81,8 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
   // 3. Web 预览卡片 (Tool)
   viewRegistry.registerView({
     id: 'preview',
-    title: '预览',
-    icon: Eye,
+    title: '应用预览',
+    icon: Globe,
     category: 'tool',
     component: factories['preview']?.() ?? fallbackComponent,
   });
@@ -132,16 +132,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
     component: factories['agent']?.() ?? fallbackComponent,
   });
 
-  // 9. 一等公民释放：AI 受管浏览器 (Tool)
-  viewRegistry.registerView({
-    id: 'browser',
-    title: 'AI 浏览器',
-    icon: Globe,
-    category: 'tool',
-    component: factories['browser']?.() ?? fallbackComponent,
-  });
-
-  // 10. 一等公民释放：拓扑编排图 (Tool)
+  // 9. 一等公民释放：拓扑编排图 (Tool)
   viewRegistry.registerView({
     id: 'flow-dag',
     title: '编排图',
@@ -150,7 +141,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
     component: factories['flow-dag']?.() ?? fallbackComponent,
   });
 
-  // 11. 文件查看器 (Auxiliary - 结构化 viewParams: { filePath, initialMode })
+  // 10. 文件查看器 (Auxiliary - 结构化 viewParams: { filePath, initialMode })
   viewRegistry.registerView({
     id: 'file-viewer',
     title: (ctx: ViewRenderContext) => {
@@ -165,7 +156,7 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
 
 /**
  * factory 缺失时的兜底组件（防御）。
- * 正常路径由 main.tsx 提供全部 11 个 factory；此兜底仅用于异常/测试场景，
+ * 正常路径由 main.tsx 提供全部 10 个 factory；此兜底仅用于异常/测试场景，
  * 避免单个 factory 缺失导致整批注册崩溃。
  */
 const fallbackComponent: React.FC<ViewRenderContext> = () => null;

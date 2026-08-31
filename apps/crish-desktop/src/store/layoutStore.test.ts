@@ -1,4 +1,4 @@
-﻿/**
+/**
  * layoutStore 单测：安全默认、空工作区种子、无 ghost 面板、类型保真 helpers。
  * 操作全局 singleton 后尽量复位，避免污染其他门面测试。
  */

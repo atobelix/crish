@@ -91,7 +91,7 @@ export class VirtualScrollManager {
    * - 高度数据跨调用保留（已知 ID 的 estimated/actual 不丢失）
    * - 完全相同的顺序跳过（防止不必要的重建）
    */
-  syncOrder(ids: string[]): void {
+  syncOrder(ids: string[]): boolean {
     if (!ids || !Array.isArray(ids)) {
       ids = [];
     }
@@ -99,7 +99,7 @@ export class VirtualScrollManager {
       ids.length === this.order.length &&
       ids.every((id, i) => id === this.order[i])
     ) {
-      return;
+      return false;
     }
     this.order = ids.slice();
     const n = this.order.length;
@@ -114,6 +114,7 @@ export class VirtualScrollManager {
       this.currentHeights[i] = h;
       this.bitAdd(i + 1, h);
     }
+    return true;
   }
 
   /** 按 messageId 获取高度（actual > estimated > fallback） */

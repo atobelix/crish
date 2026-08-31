@@ -283,7 +283,7 @@ export function ensureChatOnlyTree(sessionId?: string): void {
         collapsed: true,
         openPanelIds: [],
         activePanelId: null,
-        widthRatio: 0.38,
+        widthRatio: 0.50,
       });
       return;
     }

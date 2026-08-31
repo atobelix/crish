@@ -1,15 +1,11 @@
 /**
- * continuityHandlers 集成面：recovery-escalated（熔断侧/子代理侧）handler
- * 消费 → continuityUiStore 横幅。goal-* handler 的投影纯函数已由
- * continuityHandlers.test.ts 覆盖（纯函数层），本文件覆盖 handler 层接线。
+ * continuityHandlers 集成面：recovery-escalated 子代理侧 handler 消费 → session store。
+ * goal-* handler 的投影纯函数已由 continuityHandlers.test.ts 覆盖（纯函数层），
+ * 本文件覆盖 handler 层接线。
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { onRecoveryEscalated } from './continuityHandlers';
-import {
-  resetContinuityUiStoreForTests,
-  useContinuityUiStore,
-  CIRCUIT_BANNER_DEFAULT_MESSAGE,
-} from '../../continuity/continuityUiStore';
+import { useSessionStore } from '../../../store/sessionStore';
 
 type EscalatedPayload = {
   sessionId: string;
@@ -40,34 +36,30 @@ function escalatedEnvelope(payload: EscalatedPayload) {
   };
 }
 
-describe('onRecoveryEscalated（熔断侧，detail=circuit-trip）', () => {
-  beforeEach(() => {
-    resetContinuityUiStoreForTests();
-  });
+describe('onRecoveryEscalated（子代理侧投影）', () => {
+  it('子代理侧（subagentRunId=Some）→ 投影 errorKind/retries 到 agent', () => {
+    const testSession = {
+      id: 's1',
+      title: 'Test Session',
+      messages: [],
+      agents: [
+        {
+          id: 'a1',
+          name: 'subagent-1',
+          role: 'assistant' as const,
+          subagentRunId: 'r1',
+        },
+      ],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
 
-  it('detail=circuit-trip 且无 subagentRunId → 熔断横幅', () => {
-    onRecoveryEscalated(
-      {} as never,
-      escalatedEnvelope({ sessionId: 's1', detail: 'circuit-trip' }) as never
-    );
-    const banner = useContinuityUiStore.getState().circuitBanners['s1'];
-    expect(banner).toBeDefined();
-    expect(banner!.message).toBe(CIRCUIT_BANNER_DEFAULT_MESSAGE);
-    expect(banner!.reason).toBe('circuit-trip');
-    expect(banner!.dismissed).toBe(false);
-  });
+    useSessionStore.setState((s) => ({
+      ...s,
+      sessions: [testSession as never],
+      sessionsById: { s1: testSession as never },
+    }));
 
-  it('detail 非 circuit-trip → 不弹横幅', () => {
-    onRecoveryEscalated(
-      {} as never,
-      escalatedEnvelope({ sessionId: 's1', detail: 'other' }) as never
-    );
-    expect(
-      useContinuityUiStore.getState().circuitBanners['s1']
-    ).toBeUndefined();
-  });
-
-  it('子代理侧（subagentRunId=Some、detail=None）→ 不弹横幅（留给失败卡片）', () => {
     onRecoveryEscalated(
       {} as never,
       escalatedEnvelope({
@@ -77,18 +69,28 @@ describe('onRecoveryEscalated（熔断侧，detail=circuit-trip）', () => {
         retries: 2,
       }) as never
     );
-    expect(
-      useContinuityUiStore.getState().circuitBanners['s1']
-    ).toBeUndefined();
+
+    const store = useSessionStore.getState();
+    const agent = store.sessionsById['s1']?.agents?.find((a) => a.id === 'a1');
+    expect(agent?.errorKind).toBe('timeout');
+    expect(agent?.retries).toBe(2);
   });
 
-  it('空 sessionId → 不弹横幅（无归属不投影）', () => {
-    onRecoveryEscalated(
-      {} as never,
-      escalatedEnvelope({ sessionId: '', detail: 'circuit-trip' }) as never
-    );
-    expect(
-      useContinuityUiStore.getState().circuitBanners['s1']
-    ).toBeUndefined();
+  it('无 subagentRunId 熔断侧事件 → 安全忽略不崩溃', () => {
+    expect(() => {
+      onRecoveryEscalated(
+        {} as never,
+        escalatedEnvelope({ sessionId: 's1', detail: 'circuit-trip' }) as never
+      );
+    }).not.toThrow();
+  });
+
+  it('空 sessionId → 安全忽略', () => {
+    expect(() => {
+      onRecoveryEscalated(
+        {} as never,
+        escalatedEnvelope({ sessionId: '', detail: 'circuit-trip' }) as never
+      );
+    }).not.toThrow();
   });
 });

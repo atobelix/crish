@@ -1,11 +1,11 @@
-/* note-paper       W5-B-S Skeleton   W5-B Strict    
+/* note-paper       W5-B-S Skeleton   W5-B Strict
  *
- *      tokens.css      radius/space/font/line-height    chrome 
- *    AFFiNE/AppFlowy                    hover   hover   chrome  
- *      13    --border-color 94% + --text-primary 6%       --focus-ring 30% 
- * ** **   EL ** **      ** **         
+ *      tokens.css      radius/space/font/line-height    chrome
+ *    AFFiNE/AppFlowy                    hover   hover   chrome
+ *      13    --border-color 94% + --text-primary 6%       --focus-ring 30%
+ * ** **   EL ** **      ** **
  *
- * fallback   light        tokens             :root / data-theme      
+ * fallback   light        tokens             :root / data-theme
  */
 
 /* 05-B 顶栏绝缘：文末 .panel > .header/.footer（0,2,0）；不改 6% / heading */
@@ -214,10 +214,10 @@ button.badge:focus-visible {
 }
 
 /*
- * React slash      SlashMenuOverlay className 
- *   chrome.css .bp-slash-host elevated + shadow-lg + z-popover + 280   
- *                   /   z /      chat   
- * Strict / Skeleton    open      EL-01 
+ * React slash      SlashMenuOverlay className
+ *   chrome.css .bp-slash-host elevated + shadow-lg + z-popover + 280
+ *                   /   z /      chat
+ * Strict / Skeleton    open      EL-01
  */
 .slashOverlay {
   top: var(--space-2, 8px);
@@ -247,12 +247,12 @@ button.badge:focus-visible {
 /* slash                   /    chip +    banner */
 
 /*
- * W3-G PaperList         PaperListDomMount   class np-paper-list-mount 
- *  / gap / spacer /     **  **   `@crish/block-paper/paper-list.css`   visual-align 11  
- *            list     gap    spacer host         
- *   EL-01          
+ * W3-G PaperList         PaperListDomMount   class np-paper-list-mount
+ *  / gap / spacer /     **  **   `@crish/block-paper/paper-list.css`   visual-align 11
+ *            list     gap    spacer host
+ *   EL-01
  */
-:global(.np-paper-list-mount) {
+.paperListHost :global(.np-paper-list-mount) {
   position: relative;
   display: flex;
   flex-direction: column;
@@ -263,7 +263,7 @@ button.badge:focus-visible {
 }
 
 /*        scrollport    .bp-paper-list[data-scroll-host] */
-:global(.np-paper-list-mount[data-scroll-host='1']) {
+.paperListHost :global(.np-paper-list-mount[data-scroll-host='1']) {
   overflow: hidden;
 }
 
@@ -336,8 +336,8 @@ button.badge:focus-visible {
 }
 
 /*
- *     React     P6     data-drop-side=before|after    2px     
- *   DnD            token             
+ *     React     P6     data-drop-side=before|after    2px
+ *   DnD            token
  */
 .blockRow[data-drop-side='before']::before,
 .blockRow[data-drop-side='after']::after {
@@ -363,7 +363,7 @@ button.badge:focus-visible {
   transform: translateY(50%);
 }
 
-/*         invisible hover/focus/multi    L0    
+/*         invisible hover/focus/multi    L0
  *          min   = control-height-xs     hover   chrome
  *       L0    opacity 0      0.3     */
 .handle {

@@ -191,8 +191,8 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         {/* 确认对话框渲染点：useFileNavigation（未保存切换）+ useFilePreview（外部修改覆盖） */}
         {nav.confirmGateView}
         {preview.confirmGateView}
-        <div className={styles.filesCard} data-file-preview-host="files">
-          <div className={styles.filesBar} role="toolbar" aria-label="文件导航">
+        <div className={`${styles.filesCard} chat-side-panel`} data-file-preview-host="files">
+          <div className={`${styles.filesBar} side-panel-toolbar`} role="toolbar" aria-label="文件导航">
             <Tooltip content={PARENT_DIR_LABEL}>
               <Button
                 type="button"
@@ -202,7 +202,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 aria-label={PARENT_DIR_LABEL}
                 disabled={!nav.cwd || nav.cwd === nav.root}
                 onClick={handleGoUp}
-                icon={<CornerLeftUp size={15} />}
+                icon={<CornerLeftUp size={14} />}
               />
             </Tooltip>
             <Tooltip content={REFRESH_LABEL}>
@@ -213,7 +213,7 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 className={styles.filesNavBtn}
                 aria-label={REFRESH_LABEL}
                 onClick={handleRefreshBtn}
-                icon={<RotateCw size={15} />}
+                icon={<RotateCw size={14} />}
               />
             </Tooltip>
 
@@ -256,7 +256,8 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className={`${styles.filesNavBtn} ${nav.filterMode || nav.filter ? styles.isOn : ''}`}
+                  className={styles.filesNavBtn}
+                  active={Boolean(nav.filterMode || nav.filter)}
                   aria-label={
                     nav.filterMode || nav.filter ? '关闭筛选' : '筛选当前目录'
                   }
@@ -357,6 +358,8 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
               data-mode={preview.view}
             >
               <FileTreeView
+                root={nav.root}
+                cwd={nav.cwd}
                 flatTree={nav.flatTree}
                 selected={preview.selected}
                 expanded={nav.expanded}

@@ -17,11 +17,6 @@ import {
   getSessionById,
   getSessionStoreState,
 } from '../../../store/storeAccess';
-import {
-  CIRCUIT_BANNER_DEFAULT_MESSAGE,
-  isCircuitTripDetail,
-  useContinuityUiStore,
-} from '../../continuity/continuityUiStore';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 
@@ -113,16 +108,7 @@ export function onRecoveryEscalated(
   if (!sid) return;
   const { detail, subagentRunId } = envelope.event;
   if (subagentRunId === undefined || subagentRunId === null || !subagentRunId) {
-    // 熔断侧：无子代理归属 → 熔断横幅（可手动关闭；已关闭时新触发覆盖）
-    if (isCircuitTripDetail(detail)) {
-      useContinuityUiStore
-        .getState()
-        .raiseCircuitBanner(
-          sid,
-          CIRCUIT_BANNER_DEFAULT_MESSAGE,
-          'circuit-trip'
-        );
-    }
+    // 熔断侧：无子代理归属，已废弃全局断路器状态
     return;
   }
   // 子代理侧：失败卡片 kind/retries 投影（errorKind/retries 字段进 agent 行，

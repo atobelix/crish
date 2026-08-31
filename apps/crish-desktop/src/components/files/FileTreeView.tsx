@@ -8,6 +8,7 @@ import {
   FileCode2,
   FileText,
   Folder,
+  FolderTree,
   Image,
   Table,
   X,
@@ -79,6 +80,8 @@ function formatSize(n: number): string {
 }
 
 export interface FileTreeViewProps {
+  root?: string;
+  cwd?: string;
   flatTree: TreeNode[];
   selected: string | null;
   expanded: Record<string, unknown>;
@@ -99,6 +102,8 @@ const ITEM_HEIGHT = 28;
 
 export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
   function FileTreeView({
+    root,
+    cwd: _cwd,
     flatTree,
     selected,
     expanded,
@@ -111,8 +116,10 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
     onDoubleClick,
     onErrorDismiss,
   }) {
+    const ids = useMemo(() => flatTree.map((e) => e.path), [flatTree]);
     const { visibleRange, containerRef, onScroll, totalHeight } =
       useVirtualScroll({
+        ids,
         itemCount: flatTree.length,
         fallbackHeight: ITEM_HEIGHT,
       });
@@ -122,6 +129,11 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
     const visibleItems = useMemo(() => {
       return flatTree.slice(startIndex, endIndex + 1);
     }, [flatTree, startIndex, endIndex]);
+
+    const rootName = useMemo(() => {
+      if (!root) return '工作区';
+      return root.split(/[\\/]/).filter(Boolean).pop() || '工作区';
+    }, [root]);
 
     // F7-F35：ARIA tree pattern 键盘漫游——焦点在可见行间移动；
     // 目标行未渲染（虚拟窗口外）时 no-op（与 Tab 行为一致，等待滚动后可达）
@@ -185,6 +197,32 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         aria-label="文件树"
         style={{ overflowY: 'auto', position: 'relative' }}
       >
+        {root ? (
+          <Tooltip content={`项目根目录: ${root}`}>
+            <div
+              className={styles.filesTreeRootHeader}
+              data-testid="files-tree-root-header"
+              role="button"
+              tabIndex={0}
+              onClick={() => onSelect(root, true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  onSelect(root, true);
+                }
+              }}
+            >
+              <FolderTree
+                size={14}
+                className={styles.filesTreeRootHeaderIcon}
+                aria-hidden
+              />
+              <span className={styles.filesTreeRootHeaderName}>{rootName}</span>
+              <span className={styles.filesTreeRootHeaderPath}>({root})</span>
+            </div>
+          </Tooltip>
+        ) : null}
+
         {loading ? (
           <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
             加载中…
@@ -210,7 +248,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                 aria-live="polite"
                 style={{
                   position: 'sticky',
-                  top: 0,
+                  top: root ? 28 : 0,
                   zIndex: 'var(--z-pinned-bar)',
                 }}
               >

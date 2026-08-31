@@ -23,6 +23,7 @@ import {
   findChatLeafBySessionId,
   findUnitRootId,
   listToolLeaves,
+  setPrimaryPanelChecker,
 } from '../layout-tree';
 import {
   applyDockToSession,
@@ -34,6 +35,7 @@ import {
   type RightToolDockState,
   type TabSurface,
 } from './types';
+import { useSessionStore } from '../sessionStore';
 
 vi.mock('../../api/projectStore', () => ({
   GENERAL_FOLDER: 'general',
@@ -170,6 +172,14 @@ function toolSnapshot(root: LayoutTree['root']): Array<{
 }
 
 beforeEach(() => {
+  setPrimaryPanelChecker((id) => id === 'chat');
+  useSessionStore.setState({
+    activeSessionId: SESSION_A,
+    sessionsById: {
+      [SESSION_A]: { id: SESSION_A, title: 'A', messages: [], agents: [] } as any,
+      [SESSION_B]: { id: SESSION_B, title: 'B', messages: [], agents: [] } as any,
+    },
+  });
   resetShell();
   resetLayout({
     version: 2,
@@ -241,7 +251,7 @@ describe('activateTab focus dock isolation (R4 U10)', () => {
       shell.openTabs.find((t) => t.tabId === 'tab-b')!.rightDock
     ).toEqual(dockBBefore);
 
-    expect(setActiveSessionId).toHaveBeenCalledWith(SESSION_A);
+    expect(useSessionStore.getState().activeSessionId).toBe(SESSION_A);
   });
 
   it('tab.rightDock 为 collapsed 时 activate 仍不剥已打开的邻居 tool leaf', () => {

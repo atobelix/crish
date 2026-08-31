@@ -19,10 +19,11 @@ import type {
   UnifiedRenderItem,
   SplitRenderItem,
 } from './diffCardTypes';
+import { buildSplitPairsFromGeneric, type DiffChangeType } from '../../api/diffPairMatcher';
 
 type SourceMode = DiffSourceMode;
 
-function getComputedChanges(f: FileDiff): ComputedChange[] {
+export function getComputedChanges(f: FileDiff): ComputedChange[] {
   let o = 0,
     n = 0;
   return f.changes.map((c, i) => {
@@ -52,40 +53,28 @@ function getComputedChanges(f: FileDiff): ComputedChange[] {
   });
 }
 
-function getSplitPairs(
+/**
+ * 重构后的 getSplitPairs：全面接入 diffPairMatcher 对偶配对引擎
+ */
+export function getSplitPairs(
   f: FileDiff,
   inputLines?: ComputedChange[]
 ): SplitPair[] {
   const lines = inputLines ?? getComputedChanges(f);
-  const pairs: SplitPair[] = [];
-  for (let i = 0; i < lines.length;) {
-    const item = lines[i];
-    if (!item) {
-      i++;
-      continue;
-    }
-    if (item.isHeader) {
-      i++;
-      continue;
-    }
-    if (item.change.type === 'deletion') {
-      const nx = lines[i + 1];
-      if (nx?.change.type === 'addition') {
-        pairs.push({ left: item, right: nx });
-        i += 2;
-      } else {
-        pairs.push({ left: item, right: undefined });
-        i++;
-      }
-    } else if (item.change.type === 'addition') {
-      pairs.push({ left: undefined, right: item });
-      i++;
-    } else {
-      pairs.push({ left: item, right: item });
-      i++;
-    }
-  }
-  return pairs;
+
+  const getChangeType = (item: ComputedChange): DiffChangeType => {
+    if (item.isHeader) return 'header';
+    if (item.change.type === 'deletion') return 'delete';
+    if (item.change.type === 'addition') return 'add';
+    return 'context';
+  };
+
+  const genericPairs = buildSplitPairsFromGeneric(lines, getChangeType);
+
+  return genericPairs.map((p) => ({
+    left: p.left ?? undefined,
+    right: p.right ?? undefined,
+  }));
 }
 
 function getUnifiedItems(

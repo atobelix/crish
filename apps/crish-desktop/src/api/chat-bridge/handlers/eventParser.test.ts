@@ -7,6 +7,7 @@
  */
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { parseBridgeEvent } from './eventParser';
+import { logger } from '../../../services/LoggerService';
 import type {
   AgentEvent,
   CacheDomainEvent,
@@ -284,7 +285,7 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
   });
 
   it('宽容路径 tool-batch-start/end 缺 calls 时回退空数组并记录可观测日志', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(logger, 'warn').mockImplementation(() => {});
     try {
       const start = parseBridgeEvent({
         type: 'tool-batch-start',
@@ -300,7 +301,7 @@ describe('parseBridgeEvent（T7 单一解析入口）', () => {
         expect(end.data.event.calls).toEqual([]);
       }
       expect(warn).toHaveBeenCalledTimes(2);
-      const messages = warn.mock.calls.map((c) => String(c[1] ?? ''));
+      const messages = warn.mock.calls.map((c) => JSON.stringify(c[1] ?? {}));
       expect(
         messages.some(
           (m) => m.includes('tool-batch-start') && m.includes('calls')

@@ -1,5 +1,6 @@
 import { initSsrGlobals } from './createSsrGlobals';
 import { initVisualPresentationController } from './services/visualThemeController';
+import { bootstrapTheme } from './api/themeStore';
 import { memoryManager } from '@crish/shared-utils/browser';
 import { logger } from './services/LoggerService';
 import './index.css';
@@ -82,12 +83,6 @@ const builtinViewFactories: ViewFactoryMap = {
         default: () => <m.AgentCard />,
       }))
     ),
-  browser: () =>
-    lazy(() =>
-      import('./components/workspace/BrowserPanel').then((m) => ({
-        default: () => <m.BrowserPanel />,
-      }))
-    ),
   'flow-dag': () =>
     lazy(() =>
       import('./components/workspace/FlowDagView').then((m) => ({
@@ -116,6 +111,9 @@ const builtinViewFactories: ViewFactoryMap = {
 // 必须在任何模块前执行 — 替换 appMode / productMode 的同步 localStorage 读
 initSsrGlobals();
 initVisualPresentationController();
+
+// 🌟 主题与个性化皮肤同步水合（彻底斩断 useEffect 延迟与二次跳变）
+bootstrapTheme();
 
 // CSS token runtime injection — keeps JS source of truth in sync with CSS
 document.documentElement.style.setProperty(
@@ -218,6 +216,8 @@ async function startup() {
         ? { message: e.message, stack: e.stack, name: e.name }
         : { message: String(e) },
     });
+    // 异常安全复位：解除门闩避免内联错误页冻结
+    document.documentElement.classList.remove('preload');
     const el = document.getElementById('root');
     if (el) {
       el.innerHTML =
@@ -258,6 +258,8 @@ async function startup() {
     logger.error('[crish] fatal: failed to load AppErrorBoundary chunk', {
       module: 'main',
     });
+    // 异常安全复位：解除门闩避免内联错误页冻结
+    document.documentElement.classList.remove('preload');
     const el = document.getElementById('root');
     if (el) {
       el.innerHTML =
@@ -269,16 +271,27 @@ async function startup() {
 
   // R-09（T5.3）：React 首帧渲染完成标记——root.render 后首个 rAF 打点，
   // 回答「App 何时可交互」（07 审计 R-09 / 4.3）
+  // 🌟 解除冷启动 .preload 全局动画门闩，恢复所有交互态过渡
   requestAnimationFrame(() => {
+    document.documentElement.classList.remove('preload');
     window.__crish_perf = {
       ...window.__crish_perf,
       reactInteractiveReady: performance.now(),
     };
   });
 
-  // Phase 2: idle 时加载完整 UI（后台连接、设置同步、会话元数据）
+  // Phase 2: idle 时加载完整 UI（后台连接、设置同步、会话元数据）及预热视图 Chunk
   // 失败不应阻塞已有 UI，只记日志
   const idleTask = () => {
+    // 🌟 预热常用右侧工具视图 Chunk，彻底消除用户首次点击时的 Suspense 停顿
+    Promise.allSettled([
+      import('./components/diff/DiffCard'),
+      import('./components/files/FilesCard'),
+      import('./components/overview/OverviewCard'),
+      import('./components/workspace/PreviewCard'),
+      import('./components/workspace/RuntimePanel'),
+    ]).catch(() => {});
+
     import('./bootstrap-full')
       .then((m) => m.bootstrapFull())
       .catch((e) => {

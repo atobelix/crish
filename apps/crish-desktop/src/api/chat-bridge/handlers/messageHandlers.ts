@@ -6,7 +6,7 @@
  * message-end 终态整段合并（mergeAssistantTextPiece，终态权威语义 G3）；
  * 多轮 run 按 turnIndex 分段（G4 / 04 §5.2-5：同 turn 幂等覆盖、跨 turn 追加）。
  */
-import { blockText, mergeAssistantTextPiece } from './eventUtils';
+import { blockText } from './eventUtils';
 import type { EngineEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 import { useSessionStore } from '../../../store/sessionStore';
@@ -47,6 +47,28 @@ import {
 export { computeCacheMetricsFromUsage };
 export type { MessageCacheMetrics };
 
+/**
+ * 防御清洗 turnIndex：
+ * - 负数、NaN、Infinity、-Infinity 均清洗为 0；
+ * - 浮点数向下取整为整数；
+ * - 字符串数字解析并清洗；
+ * - 其余非数值类型归零兜底。
+ */
+export function sanitizeTurnIndex(raw: unknown): number {
+  if (typeof raw === 'number') {
+    if (!Number.isFinite(raw) || Number.isNaN(raw)) return 0;
+    return Math.max(0, Math.floor(raw));
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) return 0;
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || Number.isNaN(parsed)) return 0;
+    return Math.max(0, Math.floor(parsed));
+  }
+  return 0;
+}
+
 export function onMessageStart(
   _env: HandlerEnv,
   _envelope: EngineEnvelope<'message-start'>
@@ -63,11 +85,29 @@ export function onMessageDelta(
   const block = event.block;
   const t = blockText(block);
   if (!t) return;
+
+  // 提取与安全步进轮次
+  const rawTurn =
+    ('turnIndex' in event
+      ? (event as { turnIndex?: unknown }).turnIndex
+      : undefined) ?? raw.turnIndex;
+  if (rawTurn !== undefined && rawTurn !== null) {
+    const cleanTurn = sanitizeTurnIndex(rawTurn);
+    state.activeTurnIndex = Math.max(state.activeTurnIndex ?? 0, cleanTurn);
+  }
+  const currentTurn = state.activeTurnIndex ?? 0;
+
   if (block.type === 'thought') {
     state.assistantThought += t;
     callbacks.onThought(state.assistantThought);
     return;
   }
+
+  // 初始化流式增量双账本（按轮次记录）
+  if (!state.turnStreamedTexts) {
+    state.turnStreamedTexts = new Map<number, string>();
+  }
+
   let deltaToSend = t;
   if (raw.message && typeof raw.message === 'object') {
     const msg = raw.message as Record<string, unknown>;
@@ -83,6 +123,10 @@ export function onMessageDelta(
   } else {
     state.assistantText += t;
   }
+
+  const prevStreamed = state.turnStreamedTexts.get(currentTurn) || '';
+  state.turnStreamedTexts.set(currentTurn, prevStreamed + deltaToSend);
+
   if (deltaToSend) {
     callbacks.onChunk(deltaToSend);
   }
@@ -95,44 +139,71 @@ export function onMessageEnd(
   const { state, callbacks } = env;
   const msg = envelope.event.message;
   if (msg.role !== 'assistant') return;
-  // 与 replay 投影共用同一 text/thought 投影原语（T3 单源化，杜绝各写一套）
+
   const { text, thought } = projectAgentMessageContent(msg);
+
+  // 1. 思考链收口：权威覆盖，不追加
   if (thought.trim()) {
-    if (
-      state.assistantThought &&
-      !state.assistantThought.includes(thought.trim())
-    ) {
-      state.assistantThought = `${state.assistantThought}\n${thought.trim()}`;
-    } else {
-      state.assistantThought = thought.trim();
-    }
+    state.assistantThought = thought.trim();
     callbacks.onThought(state.assistantThought);
   }
+
+  // 2. 正文收口：Map 双账本模型与多轮分段权威覆盖，单生产者铁律（绝对不调 onChunk 追加！）
   if (text.trim()) {
     const piece = text.trim();
-    // G4 / 04 §5.2-5：按 turnIndex 分段合并——同 turn 的 message-end 为
-    // 终态权威（mergeAssistantTextPiece 幂等/修订合并），跨 turn 追加新段。
-    // 旧载荷（无 turnIndex）按 0 处理，保持单段路径向后兼容。
-    const turnIndex =
-      typeof envelope.event.turnIndex === 'number'
-        ? envelope.event.turnIndex
-        : 0;
+    const rawTurn =
+      ('turnIndex' in envelope.event
+        ? (envelope.event as { turnIndex?: unknown }).turnIndex
+        : undefined) ?? envelope.raw.turnIndex;
+    const turnIndex = sanitizeTurnIndex(rawTurn);
+
+    // 步进活跃轮次
+    state.activeTurnIndex = Math.max(state.activeTurnIndex ?? 0, turnIndex);
+
+    // 初始化 Map 双账本
+    if (!state.turnAuthoritativeTexts) {
+      state.turnAuthoritativeTexts = new Map<number, string>();
+    }
+    if (!state.turnStreamedTexts) {
+      state.turnStreamedTexts = new Map<number, string>();
+    }
+
+    // 记录本轮权威快照
+    state.turnAuthoritativeTexts.set(turnIndex, piece);
+
+    // 兼容维护 messageEndTurnSegments 数组
     if (!state.messageEndTurnSegments) state.messageEndTurnSegments = [];
     const segs = state.messageEndTurnSegments;
     while (segs.length <= turnIndex) segs.push('');
-    segs[turnIndex] = mergeAssistantTextPiece(segs[turnIndex] ?? '', piece);
-    // 过滤空占位段（turnIndex 1-based，索引 0 及无正文轮次不产生分隔符）
-    const joined = segs.filter(Boolean).join('\n\n');
-    const prevLen = state.assistantText.length;
-    state.assistantText = joined;
-    if (state.assistantText.length > prevLen) {
-      const addedDelta = state.assistantText.slice(prevLen);
-      callbacks.onChunk(addedDelta);
+    segs[turnIndex] = piece;
+
+    // 按轮次升序聚合多轮权威快照（Map 双账本）
+    const allTurns = new Set<number>([
+      ...Array.from(state.turnAuthoritativeTexts.keys()),
+      ...Array.from(state.turnStreamedTexts.keys()),
+      ...segs.map((_, i) => i),
+    ]);
+    const sortedTurns = Array.from(allTurns).sort((a, b) => a - b);
+    const combinedPieces: string[] = [];
+
+    for (const tIndex of sortedTurns) {
+      const auth = state.turnAuthoritativeTexts.get(tIndex);
+      if (auth && auth.trim()) {
+        combinedPieces.push(auth.trim());
+      } else if (segs[tIndex]?.trim()) {
+        combinedPieces.push(segs[tIndex].trim());
+      } else {
+        const streamed = state.turnStreamedTexts.get(tIndex);
+        if (streamed && streamed.trim()) {
+          combinedPieces.push(streamed.trim());
+        }
+      }
     }
+
+    state.assistantText = combinedPieces.filter(Boolean).join('\n\n');
   }
-  // T-47：metadata.usage / cacheBreakdown 不再丢弃——派生消息级缓存指标
-  // 存入流状态（null = 未上报隐藏；store 层 SessionMessage.cacheMetrics
-  // 接线由 T-48 消费）。仅非 null 写入，无数据时不覆盖上一拍。
+
+  // 3. 消息级缓存指标收集（T-47 / T-48）
   const metrics = computeCacheMetricsFromUsage(msg.metadata);
   if (metrics) {
     state.lastMessageCacheMetrics = metrics;

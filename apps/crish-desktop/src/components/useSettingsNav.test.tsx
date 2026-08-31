@@ -120,6 +120,7 @@ describe('useSettingsNav Esc / LayerStack', () => {
     const cover = css.match(/\.settingsCover\s*\{[\s\S]*?\n\}/)?.[0] ?? '';
     expect(cover).not.toMatch(/z-index\s*:/);
     expect(css).toMatch(/\.settingsCoverOverlay[\s\S]*--dialog-z:\s*var\(--z-modal/);
+    expect(css).toMatch(/\.settingsCoverOverlay[\s\S]*--z-dropdown:/);
   });
 
   it('useSettingsNav 不再 window 捕获阶段直接关设置', () => {

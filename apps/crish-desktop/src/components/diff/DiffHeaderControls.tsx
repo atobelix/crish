@@ -66,7 +66,7 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
   }) {
     return (
       <div
-        className={styles.compactHeader}
+        className={`${styles.compactHeader} side-panel-toolbar`}
         role="toolbar"
         aria-label="紧凑变更工具栏"
       >
@@ -109,6 +109,7 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
           <div className={styles.contextSelector}>
             {sourceMode === 'session' ? (
               <Select
+                size="sm"
                 className={styles.inlineSelect}
                 disabled={busy}
                 value={turnKey}
@@ -122,6 +123,7 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
             ) : sourceMode === 'git' ? (
               <div className={styles.branchWrap}>
                 <Select
+                  size="sm"
                   className={styles.inlineSelect}
                   disabled={busy}
                   value={currentBranch}
@@ -147,7 +149,7 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
             <Button
               type="button"
               variant="ghost"
-              size="xs"
+              size="sm"
               className={styles.actionBtn}
               aria-label={
                 diffViewMode === 'unified' ? '切换至分栏视图' : '切换至合并视图'
@@ -155,9 +157,9 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
               onClick={onViewModeChange}
               icon={
                 diffViewMode === 'unified' ? (
-                  <Columns2 size={13} aria-hidden />
+                  <Columns2 size={14} aria-hidden />
                 ) : (
-                  <List size={13} aria-hidden />
+                  <List size={14} aria-hidden />
                 )
               }
             />
@@ -168,11 +170,11 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
               <Button
                 type="button"
                 variant="ghost"
-                size="xs"
+                size="sm"
                 className={styles.actionBtn}
                 aria-label="复制 Patch"
                 onClick={onCopyPatch}
-                icon={<Copy size={13} aria-hidden />}
+                icon={<Copy size={14} aria-hidden />}
               />
             </Tooltip>
           )}
@@ -184,11 +186,12 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
               <Button
                 type="button"
                 variant="ghost"
-                size="xs"
-                className={`${styles.actionBtn} ${commitPanelOpen ? styles.isActive : ''}`}
+                size="sm"
+                className={styles.actionBtn}
+                active={commitPanelOpen}
                 aria-label="切换提交面板"
                 onClick={onCommitPanelToggle}
-                icon={<GitCommit size={13} aria-hidden />}
+                icon={<GitCommit size={14} aria-hidden />}
               />
             </Tooltip>
           )}
@@ -197,12 +200,13 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
             <Button
               type="button"
               variant="ghost"
-              size="xs"
-              className={`${styles.actionBtn} ${searchOpen || searchActive ? styles.isActive : ''}`}
+              size="sm"
+              className={styles.actionBtn}
+              active={searchOpen || searchActive}
               aria-label="搜索差异行"
               aria-pressed={searchOpen || searchActive}
               onClick={() => onSearchOpenChange(!searchOpen)}
-              icon={<Search size={13} aria-hidden />}
+              icon={<Search size={14} aria-hidden />}
             />
           </Tooltip>
 
@@ -211,12 +215,12 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
               <Button
                 type="button"
                 variant="danger"
-                size="xs"
+                size="sm"
                 className={styles.actionBtn}
                 aria-label="清空变更列表"
                 disabled={applyBusy}
                 onClick={onClear}
-                icon={<Trash2 size={13} aria-hidden />}
+                icon={<Trash2 size={14} aria-hidden />}
               />
             </Tooltip>
           )}

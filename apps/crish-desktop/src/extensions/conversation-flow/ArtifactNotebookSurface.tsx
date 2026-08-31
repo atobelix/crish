@@ -3,7 +3,7 @@
  * 浮层只挂本组件树（对话叶内），不挂 document.body。
  */
 import type { ReactElement } from 'react';
-import { AsyncMarkdownBlock } from '../../components/chat-message-row/AsyncMarkdownBlock';
+import { StreamingMarkdownView } from '../../components/chat-message-row/StreamingMarkdownView';
 import styles from './narrative.module.css';
 
 export interface ArtifactNotebookSurfaceProps {
@@ -81,7 +81,7 @@ export function ArtifactNotebookSurface({
         data-artifact-md="async-markdown-block"
       >
         {content.trim() ? (
-          <AsyncMarkdownBlock text={content} isStreaming={false} />
+          <StreamingMarkdownView text={content} isStreaming={false} />
         ) : (
           <p className={styles.notebookEmpty}>暂无正文</p>
         )}

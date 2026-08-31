@@ -1,6 +1,7 @@
 import React from 'react';
 import type { RefObject } from 'react';
 import { Search, X } from 'lucide-react';
+import { Tooltip } from '../Tooltip/Tooltip';
 import styles from './SmartExpandablePanel.module.css';
 
 export interface SmartPanelHeaderProps {
@@ -38,18 +39,19 @@ export const SmartPanelHeader: React.FC<SmartPanelHeaderProps> = ({
           spellCheck={false}
         />
         {query ? (
-          <button
-            type="button"
-            className={styles.searchClearBtn}
-            title="清空搜索"
-            aria-label="清空搜索"
-            onClick={() => {
-              onQueryChange('');
-              inputRef?.current?.focus();
-            }}
-          >
-            <X size={13} aria-hidden="true" />
-          </button>
+          <Tooltip content="清空搜索">
+            <button
+              type="button"
+              className={styles.searchClearBtn}
+              aria-label="清空搜索"
+              onClick={() => {
+                onQueryChange('');
+                inputRef?.current?.focus();
+              }}
+            >
+              <X size={13} aria-hidden="true" />
+            </button>
+          </Tooltip>
         ) : null}
       </div>
       <div className={styles.sepSearchDivider} />

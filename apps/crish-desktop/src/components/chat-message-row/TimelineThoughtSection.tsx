@@ -4,23 +4,15 @@
  *
  * 特性：
  * - 彻底废除厚重带外框的灰色大卡片，采用极简行内流排布；
- * - 已完成态：`思考了 3.4秒 >`（或 `第 1 阶段思考 · 2.4s · 共 X 字 >`，font-variant-numeric: tabular-nums）；
+ * - 已完成态：`思考了 3.4秒 >`（或 `第 1 阶段思考 · 2.4s >`，font-variant-numeric: tabular-nums）；
  * - 实时运行态（Live）：`🟢 思考中 · 1.8秒`（5px 翡翠绿脉冲高亮）；
- * - 展开内容区带上下 20px 平滑渐变遮罩（linear-gradient），自然融入时间线；
- * - 超过预算时渲染优雅的「查看完整思考链」操作条，支持 openThoughtInspector 万字沉浸式查阅。
+ * - 思考内容直接在折叠面板内通过 `thoughtScrollBody` 完整滚动渲染。
  */
 import React, { useLayoutEffect, useRef, useState, useMemo } from 'react';
-import { Maximize2 } from 'lucide-react';
-import styles from './ChatMessageRow.module.css';
-import { AsyncMarkdownBlock } from './AsyncMarkdownBlock';
-import {
-  Priority,
-  budgetThinkingText,
-  THINKING_INLINE_CHAR_CAP,
-} from '../../workers';
-import { openThoughtInspector } from '../../store/storeAccess';
+import styles from './TimelineThoughtSection.module.css';
+import { StreamingMarkdownView } from './StreamingMarkdownView';
+import { Priority } from '../../workers';
 import { ThinkingTimer } from './ThinkingTimer';
-import { Tooltip, Button } from '../ui';
 
 export interface TimelineThoughtSectionProps {
   content: string;
@@ -36,21 +28,12 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
   isLive = false,
   durationMs,
   turnIndex,
-  messageId,
   defaultExpanded,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultExpanded ?? isLive);
   const bodyRef = useRef<HTMLDivElement>(null);
   const userScrolledUpRef = useRef(false);
   const prevIsLiveRef = useRef(isLive);
-
-  // 8k~12k 自适应 DOM 预算计算（流式阶段启用 Safe Markdown Tail Slicer 尾窗滑动）
-  const budget = useMemo(() => {
-    return budgetThinkingText(content, {
-      cap: THINKING_INLINE_CHAR_CAP,
-      mode: isLive ? 'tail' : 'head',
-    });
-  }, [content, isLive]);
 
   // 当 isLive 重新开启时，复位用户手动滚动标志，确保自动追尾吸底
   useLayoutEffect(() => {
@@ -67,7 +50,7 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
     if (!userScrolledUpRef.current) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [budget.displayText, isLive, isOpen]);
+  }, [content, isLive, isOpen]);
 
   const handleScroll = () => {
     if (!bodyRef.current || !isLive) return;
@@ -82,18 +65,6 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
     }
     return null;
   }, [durationMs, turnIndex]);
-
-  const totalChars = budget.totalChars;
-
-  const handleOpenInspector = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    openThoughtInspector({
-      messageId: messageId || '',
-      content,
-      turnIndex,
-      durationSec: durationMs ? durationMs / 1000 : undefined,
-    });
-  };
 
   const titleText = isLive
     ? '思考中'
@@ -131,27 +102,8 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
             {turnIndex != null && durationLabel ? (
               <span className={styles.thoughtDuration}> · {durationLabel}</span>
             ) : null}
-            {totalChars > 0 ? (
-              <span className={styles.thoughtWords}>
-                {' '}
-                · 共 {totalChars.toLocaleString()} 字
-              </span>
-            ) : null}
-            {budget.isTruncated ? ' (行内已截断)' : ''}
           </span>
         )}
-
-        {/* 沉浸式查阅器悬浮入口 */}
-        <Tooltip content="在沉浸式查阅器中查看完整思维链">
-          <button
-            type="button"
-            className={styles.thoughtExpandModalBtn}
-            onClick={handleOpenInspector}
-            aria-label="查看完整思考链"
-          >
-            <Maximize2 size={12} />
-          </button>
-        </Tooltip>
 
         <span
           className={`${styles.thoughtChevron} ${isOpen ? styles.isOpen : ''}`}
@@ -176,38 +128,16 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
                 <div
                   style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
                 >
-                  {budget.displayText}
+                  {content}
                 </div>
               ) : (
-                <AsyncMarkdownBlock
-                  text={budget.displayText}
+                <StreamingMarkdownView
+                  text={content}
                   isStreaming={false}
                   priority={Priority.Low}
                 />
               )}
             </div>
-
-            {/* 超出预算时渲染优雅的沉浸查阅引导条 */}
-            {budget.isTruncated && !isLive && (
-              <div className={styles.thinkingFadeOverlay}>
-                <div className={styles.thinkingActionStrip}>
-                  <span className={styles.thinkingSummaryText}>
-                    已显示前 {budget.displayText.length.toLocaleString()} 字 /
-                    共 {totalChars.toLocaleString()} 字
-                  </span>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className={styles.fullThoughtBtn}
-                    onClick={handleOpenInspector}
-                    icon={<Maximize2 size={12} />}
-                  >
-                    查看完整思考链 (共 {totalChars.toLocaleString()} 字)
-                  </Button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </div>

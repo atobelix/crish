@@ -6,37 +6,28 @@
 .capsule {
   display: inline-flex;
   align-items: center;
-  max-width: 100%;
   height: 28px;
-  padding: 0 2px;
-  border: 1px solid var(--sep-border-color, var(--border-color));
-  border-radius: var(--sep-pill-radius, 9999px);
+  padding: 0 6px;
+  border: none;
+  border-radius: 14px;
   background: transparent;
   box-shadow: none;
   min-width: 0;
   box-sizing: border-box;
   user-select: none;
-  transition: border-color var(--transition-fast, 120ms ease);
+  transition:
+    background var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease);
 }
 
 .capsule:hover {
-  border-color: var(--sep-border-hover, var(--border-hover, var(--border-color)));
-  background: transparent;
-}
-
-.capsule:focus-within {
-  border-color: color-mix(
-    in srgb,
-    var(--sep-border-color, var(--border-color)) 94%,
-    var(--text-primary) 6%
-  );
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
 }
 
 .left {
   display: inline-flex;
   align-items: center;
   min-width: 0;
-  padding: 0 1px;
 }
 
 /* 穿透控制内嵌 ModelBadgePicker 按钮 */
@@ -46,40 +37,29 @@
   height: 24px;
   min-height: 24px;
   min-width: 0;
-  max-width: 160px;
-  padding: 0 6px;
+  padding: 0 2px;
   border: none;
-  border-radius: var(--sep-btn-radius, 6px);
   background: transparent;
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  font-size: var(--font-sub, 13px);
   font-weight: 500;
   cursor: pointer;
   box-sizing: border-box;
-  transition:
-    background var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
+  display: inline-flex;
+  align-items: center;
 }
 
 .left :global(button.model-badge-btn:hover),
 .left :global(button[data-testid='model-selector-button']:hover),
 .left :global(button:hover) {
-  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
-  color: var(--text-primary);
-}
-
-.left :global(button.model-badge-btn.active),
-.left :global(button[data-testid='model-selector-button'][aria-expanded='true']),
-.left :global(button.active) {
-  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
   color: var(--text-primary);
 }
 
 .divider {
   width: 1px;
-  height: 12px;
-  margin: 0 2px;
-  background: var(--sep-divider-color, rgba(29, 28, 26, 0.08));
+  height: 10px;
+  margin: 0 4px;
+  background: var(--border-color, rgba(0, 0, 0, 0.12));
   flex-shrink: 0;
 }
 
@@ -88,38 +68,31 @@
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  padding: 0 1px;
 }
 
 .thinkBtn {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   height: 24px;
-  padding: 0 6px;
+  padding: 0 2px;
   border: none;
-  border-radius: var(--sep-btn-radius, 6px);
   background: transparent;
   color: var(--text-secondary);
   font-family: inherit;
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-sub, 13px);
   font-weight: 400;
   cursor: pointer;
   box-shadow: none;
   white-space: nowrap;
   box-sizing: border-box;
-  transition:
-    background var(--transition-micro, 100ms ease),
-    color var(--transition-micro, 100ms ease);
 }
 
 .thinkBtn:hover {
-  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
   color: var(--text-primary);
 }
 
 .thinkBtn.isOpen {
-  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
   color: var(--text-primary);
   font-weight: 500;
 }

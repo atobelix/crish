@@ -132,7 +132,7 @@
   margin: 0;
   padding: 4px 8px;
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-full);
+  border-radius: var(--radius-sm, 6px);
   background: color-mix(in srgb, var(--bg-secondary) 80%, transparent);
   box-shadow: none;
   color: var(--text-secondary);

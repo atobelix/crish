@@ -140,4 +140,22 @@ describe('files/FileTreeView 树形语义（F7-F35）', () => {
     fireEvent.keyDown(rows[1], { key: 'Enter' });
     expect(onSelect).toHaveBeenCalledWith('src/main.ts', false);
   });
+
+  it('当传入 root 时，树顶部固化渲染 Project Root Header 容器 (📁 conex)', () => {
+    const onSelect = vi.fn();
+    const { getByTestId } = render(
+      <FileTreeView
+        {...defaultProps(TREE)}
+        root="c:/Software/conex"
+        onSelect={onSelect}
+      />
+    );
+    const header = getByTestId('files-tree-root-header');
+    expect(header).toBeTruthy();
+    expect(header.textContent).toContain('conex');
+    expect(header.textContent).toContain('c:/Software/conex');
+
+    fireEvent.click(header);
+    expect(onSelect).toHaveBeenCalledWith('c:/Software/conex', true);
+  });
 });

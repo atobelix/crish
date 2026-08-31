@@ -150,17 +150,35 @@ export function bootstrapTheme(): UiTheme {
   return t;
 }
 
-/** 切换并持久化 */
+/** 切换并持久化（单真源写端入口） */
 export function setTheme(theme: UiTheme | string): UiTheme {
   const t = applyTheme(theme);
   persistTheme(t);
   const p = readStoredPersonalization();
   applyPersonalization(p, t);
   try {
-    window.dispatchEvent(new CustomEvent('crish-theme-changed', { detail: { theme: t } }));
+    window.dispatchEvent(
+      new CustomEvent('crish-theme-changed', { detail: { theme: t } })
+    );
   } catch {
     /* swallow-ok: 主题变更事件分发失败不影响已应用样式 */
   }
+
+  // 异步同步至 settingsStore 与磁盘持久化，保证全局单真源一致，消除旧值覆盖
+  try {
+    void import('../store/settingsStore').then(({ useSettingsStore }) => {
+      const current = useSettingsStore.getState().appSettings;
+      if (current && current.theme !== t) {
+        useSettingsStore.getState().setAppSettings({ ...current, theme: t });
+      }
+    });
+    void import('./clientApi').then(({ clientApi }) => {
+      void clientApi.saveSettingsEx('__global__', 'global', { theme: t });
+    });
+  } catch {
+    /* swallow-ok: 异步持久化尽力而为 */
+  }
+
   return t;
 }
 

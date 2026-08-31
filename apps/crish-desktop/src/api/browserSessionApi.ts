@@ -30,7 +30,6 @@
 import { invokeTyped } from './tauriInvoke';
 import type { InvokeTypedResult } from './tauriInvoke';
 import type { BrowserSessionState } from '../components/workspace/browserSessionLib';
-import type { BrowserInputEventPayload } from '../components/workspace/browser-panel/browserPanelTypes';
 
 export const BROWSER_START_CMD = 'browser_start';
 export const BROWSER_STOP_CMD = 'browser_stop';
@@ -75,6 +74,41 @@ export type BrowserStateEventPayload = {
   url?: string;
   reason?: string;
 };
+
+/**
+ * 输入事件上行载荷（browser_input 契约；字段对齐 Rust BrowserInputEvent
+ * camelCase）。按 kind 取用子集：
+ * - mouse：action/x/y/button/buttons/clickCount/modifiers
+ * - wheel：x/y/deltaX/deltaY/buttons/modifiers（delta 为像素，已按 §3.4 归一化）
+ * - key：action/down|up、key/code/text/windowsVirtualKeyCode/
+ *   nativeVirtualKeyCode/autoRepeat/modifiers/location
+ * - text：text（IME 合成文本）
+ */
+export interface BrowserInputEventPayload {
+  kind: 'mouse' | 'wheel' | 'key' | 'text';
+  /** mouse：down/up/move（缺省视为 move）；key：down/up（缺省 down） */
+  action?: 'down' | 'up' | 'move';
+  x?: number;
+  y?: number;
+  /** mouse：none/left/right/middle/back/forward */
+  button?: 'none' | 'left' | 'right' | 'middle' | 'back' | 'forward';
+  /** 位掩码（1=左 2=右 4=中 8=back 16=forward，12 文档 §3.2） */
+  buttons?: number;
+  clickCount?: number;
+  deltaX?: number;
+  deltaY?: number;
+  /** CDP modifiers（1=Alt 2=Ctrl 4=Meta 8=Shift，12 文档 §3.1） */
+  modifiers?: number;
+  key?: string;
+  code?: string;
+  /** keydown 可打印字符 / text 种类合成文本 */
+  text?: string;
+  windowsVirtualKeyCode?: number;
+  nativeVirtualKeyCode?: number;
+  autoRepeat?: boolean;
+  /** 数字小键盘置 3（12 文档 §3.3） */
+  location?: number;
+}
 
 export function startBrowserSession(): Promise<InvokeTypedResult<BrowserStartResult>> {
   return invokeTyped<BrowserStartResult>(BROWSER_START_CMD);
@@ -124,7 +158,7 @@ export function fetchBrowserFrameStatus(): Promise<
 /**
  * 输入上行（no-wait）：仅入队即返回，引擎侧路由/合并后由注入管线后台派发。
  * 高频事件（mousemove/wheel）引擎侧按帧间隔合并——前端无需精细节流，
- * rAF 合并仅为 IPC 预过滤（见 usePanelInput 注释）。
+ * rAF 合并仅为 IPC 预过滤。
  */
 export function sendBrowserInput(
   event: BrowserInputEventPayload,

@@ -46,8 +46,8 @@
 }
 
 .track[aria-checked='true'] {
-  background: var(--accent-color);
-  border-color: var(--accent-color);
+  background: var(--brand, #10b981);
+  border-color: var(--brand-deep, #059669);
 }
 
 /*    Focus Ring AGENTS.md   13            3%~10%  */

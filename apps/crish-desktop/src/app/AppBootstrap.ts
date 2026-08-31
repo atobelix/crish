@@ -177,9 +177,6 @@ export function useAppBootstrap({
 
   // 6. Theme, Font, and Settings bootstrap
   useEffect(() => {
-    void import('../api/themeStore').then(({ bootstrapTheme }) =>
-      bootstrapTheme()
-    );
     void import('../api/fontStore').then(({ bootstrapFonts }) =>
       bootstrapFonts()
     );
@@ -194,8 +191,17 @@ export function useAppBootstrap({
     const initApp = async () => {
       try {
         const { clientApi } = await import('../api/clientApi');
+        const { readStoredTheme } = await import('../api/themeStore');
         const settings = await clientApi.getSettings();
         if (settings) {
+          // 启动自愈：若本地已存明确主题偏好且与磁盘不一致，以本地最新操作为准并自愈磁盘
+          const localTheme = readStoredTheme();
+          if (localTheme && settings.theme !== localTheme) {
+            settings.theme = localTheme;
+            void clientApi.saveSettingsEx('__global__', 'global', {
+              theme: localTheme,
+            });
+          }
           // Bootstrap command: prefer prop when App wires React setter; else layout facade
           if (setAppSettings) {
             setAppSettings(settings);

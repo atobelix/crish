@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { FileCode } from 'lucide-react';
 import type { FileDiff } from '../../store/types';
 import styles from './ChatToolCallBlock.module.css';
+import { highlightCode, langFromFilename } from '../../api/codeHighlight';
 
 export interface ToolCallDiffPreviewProps {
   diff: FileDiff;
@@ -12,6 +13,8 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
   diff,
   onOpenDiff,
 }) => {
+  const codeLang = useMemo(() => langFromFilename(diff.filePath), [diff.filePath]);
+
   return (
     <div className={styles.gitDiffCard} key={diff.filePath}>
       <div
@@ -41,7 +44,12 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                   ? '-'
                   : ' '}
             </div>
-            <pre className={styles.lineContent}>{change.content}</pre>
+            <pre
+              className={styles.lineContent}
+              dangerouslySetInnerHTML={{
+                __html: highlightCode(change.content, codeLang),
+              }}
+            />
           </div>
         ))}
         {diff.changes.length > 8 && (

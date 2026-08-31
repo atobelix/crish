@@ -29,7 +29,7 @@ import {
   shouldReuseAgentPanelFocus,
 } from '../../api/openAgentPanel';
 import { Priority } from '../../workers';
-import { AsyncMarkdownBlock } from '../chat-message-row/AsyncMarkdownBlock';
+import { MarkdownBlockItem } from '../chat-message-row/MarkdownBlockItem';
 import {
   isAnyRecoveryCommandReady,
   isRecoveryCommandReady,
@@ -224,8 +224,10 @@ export const InlineAgentPanel: React.FC<InlineAgentPanelProps> = ({
           >
             {messages.map((m) => (
               <div key={m.id} className={styles.inlineAgentMsg}>
-                <AsyncMarkdownBlock
+                <MarkdownBlockItem
                   text={m.text || ''}
+                  isSealed={m.status !== 'processing'}
+                  isLast={false}
                   isStreaming={m.status === 'processing'}
                   priority={Priority.Low}
                 />

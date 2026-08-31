@@ -57,14 +57,16 @@ describe('SidebarNav 顶钮', () => {
     expect(css).toMatch(/justify-content:\s*flex-start/);
   });
 
-  it('sidebarTop 自身无 :hover；折叠态顶钮圆角与展开同 --radius-lg', () => {
-    const css = readFileSync(
+  it('sidebarTop 自身无 :hover；顶钮圆角锁定 --radius-lg', () => {
+    const sidebarCss = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), 'Sidebar.module.css'),
       'utf8'
     );
-    expect(css).not.toMatch(/\.sidebarTop:hover/);
-    expect(css).toMatch(
-      /\.iconCollapse \.sidebarTop[\s\S]*border-radius:\s*var\(--radius-lg\)/
+    const navCss = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), 'SidebarNav.module.css'),
+      'utf8'
     );
+    expect(sidebarCss).not.toMatch(/\.sidebarTop:hover/);
+    expect(navCss).toMatch(/border-radius:\s*var\(--radius-lg\)/);
   });
 });

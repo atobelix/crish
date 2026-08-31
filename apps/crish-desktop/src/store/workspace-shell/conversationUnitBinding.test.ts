@@ -11,13 +11,14 @@
  * @see store/layout-tree/conversationUnit.ts
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   createLeaf,
   createBranch,
   type LayoutNode,
   type LayoutTree,
 } from '../layout-tree/types';
+import { setPrimaryPanelChecker } from '../layout-tree';
 import { viewRegistry } from '../../services/view-registry';
 import { collectLeaves, findNodeById } from '../layout-tree/operations';
 import {
@@ -28,6 +29,10 @@ import {
   listChatLeaves,
   listToolLeaves,
 } from '../layout-tree/conversationUnit';
+
+beforeEach(() => {
+  setPrimaryPanelChecker((id) => id === 'chat');
+});
 import {
   normalizeToAdapterShape,
   countChatLeaves,

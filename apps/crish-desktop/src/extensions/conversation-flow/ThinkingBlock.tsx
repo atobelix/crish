@@ -3,9 +3,6 @@
  * live 计时 ≤ 1Hz；查阅器仍走 thoughtInspector。
  */
 import { useEffect, useState, type ReactElement } from 'react';
-import { Maximize2 } from 'lucide-react';
-import { Tooltip } from '../../components/ui/Tooltip/Tooltip';
-import { openThoughtInspector } from '../../store/thoughtInspectorStore';
 import { TOOL_OUTPUT_PIXEL_CAP } from '../../workers';
 import { clipThinkingPreview } from './narrativeModel';
 import styles from './narrative.module.css';
@@ -25,8 +22,6 @@ export function ThinkingBlock({
   preview,
   isLive = false,
   durationMs,
-  messageId,
-  turnIndex,
   defaultOpen = false,
 }: ThinkingBlockProps): ReactElement {
   const [open, setOpen] = useState(defaultOpen);
@@ -79,24 +74,6 @@ export function ThinkingBlock({
             <span className={styles.meta}>{durationLabel}</span>
           ) : null}
         </button>
-        <Tooltip content="在查阅器中查看完整思维链">
-          <button
-            type="button"
-            className={styles.inspectorBtn}
-            aria-label="查看完整思考链"
-            onClick={(e) => {
-              e.stopPropagation();
-              openThoughtInspector({
-                messageId: messageId || '',
-                content,
-                turnIndex,
-                durationSec: durationMs ? durationMs / 1000 : undefined,
-              });
-            }}
-          >
-            <Maximize2 size={12} />
-          </button>
-        </Tooltip>
       </div>
       {open ? (
         <div

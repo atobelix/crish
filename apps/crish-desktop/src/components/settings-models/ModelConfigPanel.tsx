@@ -90,32 +90,35 @@ export const ModelConfigPanel: React.FC<{
           className={`${styles.mrdCfgActions} mrd-cfg-actions`}
         >
           {meta.lastTest && (
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 500,
-                marginRight: '6px',
-                userSelect: 'none',
-                color: !meta.lastTest.ok
-                  ? 'var(--accent-red)'
-                  : (meta.lastTest.latencyMs || 0) < 400
-                    ? 'var(--accent-green)'
-                    : (meta.lastTest.latencyMs || 0) < 1200
-                      ? 'var(--accent-orange)'
-                      : 'var(--accent-red)',
-              }}
-              title={
+            <Tooltip
+              content={
                 meta.lastTest.error ||
                 (meta.lastTest.ok ? '测试成功' : '测试失败')
               }
             >
-              {meta.lastTest.ok
-                ? `${meta.lastTest.latencyMs}ms`
-                : meta.lastTest.error?.includes('超时') ||
-                    meta.lastTest.error?.includes('timeout')
-                  ? '超时'
-                  : '失败'}
-            </span>
+              <span
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  marginRight: '6px',
+                  userSelect: 'none',
+                  color: !meta.lastTest.ok
+                    ? 'var(--accent-red)'
+                    : (meta.lastTest.latencyMs || 0) < 400
+                      ? 'var(--accent-green)'
+                      : (meta.lastTest.latencyMs || 0) < 1200
+                        ? 'var(--accent-orange)'
+                        : 'var(--accent-red)',
+                }}
+              >
+                {meta.lastTest.ok
+                  ? `${meta.lastTest.latencyMs}ms`
+                  : meta.lastTest.error?.includes('超时') ||
+                      meta.lastTest.error?.includes('timeout')
+                    ? '超时'
+                    : '失败'}
+              </span>
+            </Tooltip>
           )}
           <Tooltip content="测试连通性">
             <Button

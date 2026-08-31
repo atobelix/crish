@@ -1,5 +1,5 @@
 /**
- * Git 变动文件树状折叠与紧凑单子链纯函数算法
+ * Git 变动文件状态数据契约与增删微条纯函数算法
  * 文件路径：apps/crish-desktop/src/api/gitTreeHelpers.ts
  */
 
@@ -21,47 +21,6 @@ export interface GitStatusFile {
 }
 
 /**
- * 树节点基础共有契约
- */
-export interface GitTreeBaseNode {
-  id: string; // 规范化相对路径，作为 React Key / 唯一标识
-  name: string; // 呈现名称 (单级目录名，或紧凑折叠的路径链如 'apps/crish-desktop/src')
-  fullPath: string; // 完整相对路径
-  depth: number; // 视觉缩进深度 (0-indexed)
-}
-
-/**
- * 目录节点契约
- */
-export interface GitTreeFolderNode extends GitTreeBaseNode {
-  isFolder: true;
-  children: GitTreeNode[];
-  totalFiles: number;
-  totalAdditions: number;
-  totalDeletions: number;
-}
-
-/**
- * 文件叶子节点契约
- */
-export interface GitTreeFileNode extends GitTreeBaseNode {
-  isFolder: false;
-  file: GitStatusFile;
-}
-
-/**
- * 树节点联合类型
- */
-export type GitTreeNode = GitTreeFolderNode | GitTreeFileNode;
-
-/**
- * 树构建选项
- */
-export interface GitTreeBuildOptions {
-  compactSingleChild?: boolean; // 是否启用单子目录紧凑折叠，默认为 true
-}
-
-/**
  * 增删统计微条度量契约
  */
 export interface DiffStatMetric {
@@ -77,16 +36,66 @@ export interface DiffStatBarsResult {
 }
 
 /**
- * 纯函数：将扁平 Git 文件列表转换为带紧凑折叠的多叉树结构
- *
- * @param files 扁平 Git 文件状态数组
- * @param options 树构建参数
- * @returns 构造完成的多叉树顶级节点数组
- *
- * 性能复杂度：
- * - 时间复杂度: O(N * D + N log N)，其中 N 为文件总数，D 为平均目录深度 (D <= 10)
- * - 空间复杂度: O(N)，纯函数不可变输出，零副作用
+ * 计算增删比例微条格数
  */
+export function calculateDiffStatBars(
+  additions: number,
+  deletions: number,
+  maxBars: number = 5
+): DiffStatBarsResult {
+  const safeAdd = Math.max(0, additions || 0);
+  const safeDel = Math.max(0, deletions || 0);
+  const total = safeAdd + safeDel;
+  if (total === 0 || maxBars <= 0) {
+    return { addBars: 0, delBars: 0, emptyBars: maxBars > 0 ? maxBars : 0 };
+  }
+
+  const addBars = Math.min(maxBars, Math.round((safeAdd / total) * maxBars));
+  const delBars = Math.min(
+    maxBars - addBars,
+    Math.round((safeDel / total) * maxBars)
+  );
+  const emptyBars = Math.max(0, maxBars - addBars - delBars);
+
+  return { addBars, delBars, emptyBars };
+}
+
+// ============================================================================
+// 以下为已废弃的多叉树算法类型与函数，仅为向前兼容保留，新代码严禁调用
+// ============================================================================
+
+/** @deprecated 概览面板已重构为扁平列表 OverviewChangesList，多叉树结构已废弃 */
+export interface GitTreeBaseNode {
+  id: string;
+  name: string;
+  fullPath: string;
+  depth: number;
+}
+
+/** @deprecated */
+export interface GitTreeFolderNode extends GitTreeBaseNode {
+  isFolder: true;
+  children: GitTreeNode[];
+  totalFiles: number;
+  totalAdditions: number;
+  totalDeletions: number;
+}
+
+/** @deprecated */
+export interface GitTreeFileNode extends GitTreeBaseNode {
+  isFolder: false;
+  file: GitStatusFile;
+}
+
+/** @deprecated */
+export type GitTreeNode = GitTreeFolderNode | GitTreeFileNode;
+
+/** @deprecated */
+export interface GitTreeBuildOptions {
+  compactSingleChild?: boolean;
+}
+
+/** @deprecated 概览面板改动呈现已改为线性列表，严禁在新组件中构建多叉树 */
 export function buildGitTree(
   files: GitStatusFile[],
   options: GitTreeBuildOptions = { compactSingleChild: true }
@@ -95,7 +104,6 @@ export function buildGitTree(
     return [];
   }
 
-  // 1. 初始化虚拟根容器
   const root: GitTreeFolderNode = {
     id: '__root__',
     name: '',
@@ -108,7 +116,6 @@ export function buildGitTree(
     totalDeletions: 0,
   };
 
-  // 2. 将扁平路径按 / 分解并逐级挂载至多叉树
   for (const file of files) {
     if (!file || typeof file.path !== 'string') continue;
     const normalizedPath = file.path.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
@@ -164,7 +171,6 @@ export function buildGitTree(
     }
   }
 
-  // 3. 递归排序：文件夹优先于文件，同类按字母序升序
   const sortNodesRecursively = (nodes: GitTreeNode[]) => {
     nodes.sort((a, b) => {
       if (a.isFolder && !b.isFolder) return -1;
@@ -179,7 +185,6 @@ export function buildGitTree(
   };
   sortNodesRecursively(root.children);
 
-  // 4. 执行单子目录紧凑折叠 (Compact Single-Child Folders)
   if (options.compactSingleChild !== false) {
     return compactTreeFolders(root.children, 0);
   }
@@ -187,11 +192,7 @@ export function buildGitTree(
   return normalizeDepth(root.children, 0);
 }
 
-/**
- * 递归单子目录紧凑折叠算法
- * 对标 AppFlowy Compact Single-Child Folders：
- * 当目录 A 仅包含唯一子节点 B 且 B 也是目录时，坍缩为 'A/B'
- */
+/** @deprecated */
 export function compactTreeFolders(
   nodes: GitTreeNode[],
   targetDepth: number = 0
@@ -205,7 +206,6 @@ export function compactTreeFolders(
     let combinedName = current.name;
     let combinedPath = current.fullPath;
 
-    // 只要只有一个子节点且该子节点是文件夹，就执行链式合并坍缩
     while (current.children.length === 1 && current.children[0]!.isFolder) {
       const singleChild = current.children[0] as GitTreeFolderNode;
       combinedName = `${combinedName}/${singleChild.name}`;
@@ -227,9 +227,7 @@ export function compactTreeFolders(
   });
 }
 
-/**
- * 规范化树节点深度标尺
- */
+/** @deprecated */
 export function normalizeDepth(
   nodes: GitTreeNode[],
   targetDepth: number = 0
@@ -244,29 +242,4 @@ export function normalizeDepth(
       children: normalizeDepth(node.children, targetDepth + 1),
     };
   });
-}
-
-/**
- * 计算增删比例微条格数
- */
-export function calculateDiffStatBars(
-  additions: number,
-  deletions: number,
-  maxBars: number = 5
-): DiffStatBarsResult {
-  const safeAdd = Math.max(0, additions || 0);
-  const safeDel = Math.max(0, deletions || 0);
-  const total = safeAdd + safeDel;
-  if (total === 0 || maxBars <= 0) {
-    return { addBars: 0, delBars: 0, emptyBars: maxBars > 0 ? maxBars : 0 };
-  }
-
-  const addBars = Math.min(maxBars, Math.round((safeAdd / total) * maxBars));
-  const delBars = Math.min(
-    maxBars - addBars,
-    Math.round((safeDel / total) * maxBars)
-  );
-  const emptyBars = Math.max(0, maxBars - addBars - delBars);
-
-  return { addBars, delBars, emptyBars };
 }

@@ -67,8 +67,8 @@
   min-height: 28px;
   padding: 0 10px;
   border-radius: var(--radius-md, 6px);
-  border: 1px solid var(--border-color, #e2dfd9);
-  background: rgba(29, 28, 26, 0.03);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
   color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
   font-family: inherit;
@@ -78,20 +78,9 @@
 }
 
 .presetChip:hover:not(:disabled) {
-  background: rgba(29, 28, 26, 0.055);
+  background: var(--bg-hover);
   color: var(--text-primary);
-  border-color: var(--border-color, #e2dfd9);
-}
-
-:global(html[data-theme='dark']) .presetChip {
-  background: rgba(245, 244, 240, 0.04);
-  border-color: var(--border-color, #2b2926);
-}
-
-:global(html[data-theme='dark']) .presetChip:hover:not(:disabled) {
-  background: rgba(245, 244, 240, 0.08);
-  border-color: var(--border-color, #2b2926);
-  color: var(--text-primary);
+  border-color: var(--border-color);
 }
 
 .presetChip:disabled {
@@ -99,8 +88,8 @@
   cursor: default;
 }
 
-/*        PE-05 T05.2 #7 
- *     settings-dialog        ui/Dialog    
+/*        PE-05 T05.2 #7
+ *     settings-dialog        ui/Dialog
  *        /  /           tokens */
 
 .rulesEditorOverlay {

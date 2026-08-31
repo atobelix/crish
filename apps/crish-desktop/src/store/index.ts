@@ -8,7 +8,7 @@
  * - `useSettingsUiStore` — 设置浮层 UI 域（独立实例）
  * - `useSettingsStore` — 应用设置域（独立实例）
  * - `usePermissionStore` — 权限/plan 域（独立实例）
- * - `useTerminalStore` / `useWorkerStore` / `useThoughtInspectorStore` — 独立域
+ * - `useTerminalStore` / `useWorkerStore` — 独立域
  *
  * Sibling stores (separate create):
  * - `workspace-shell` — TabSurface / dock write owner
@@ -162,7 +162,7 @@ export { usePermissionStore } from './permissionStore';
 export type { PermissionStore } from './permissionStore';
 export { useSettingsStore } from './settingsStore';
 export type { SettingsStore } from './settingsStore';
-export * from './thoughtInspectorStore';
+
 
 // store 侧公共读面（T11 新域读入口）
 export * from './storeAccess';

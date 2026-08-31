@@ -1,6 +1,6 @@
-/* ui/Slider        RED-DETAILED-02 / T-ATOM-07 
- *    2px       44px       Fitts's Law  
- * 12px      50%      
+/* ui/Slider        RED-DETAILED-02 / T-ATOM-07
+ *    2px       44px       Fitts's Law
+ * 12px      50%
  */
 
 .slider {
@@ -45,7 +45,7 @@
 /*        */
 .filledTrack {
   height: 100%;
-  background-color: var(--accent-color);
+  background-color: var(--brand, #10b981);
   border-radius: inherit;
   transition: width var(--transition-micro, 80ms) ease-out;
 }
@@ -61,7 +61,7 @@
   margin-left: -6px;
   border-radius: 50%;
   background-color: var(--bg-elevated);
-  border: 1.5px solid var(--accent-color);
+  border: 1.5px solid var(--brand, #10b981);
   box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
   box-sizing: border-box;
   pointer-events: none;

@@ -6,19 +6,19 @@
 .plusMenu {
   min-width: 188px;
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
-  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
-  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
-  border: 1px solid var(--sep-border-color, var(--border-color));
+  background: var(--bg-card, hsl(35, 10%, 98%));
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  border: 1px solid var(--border-color);
   border-radius: var(--sep-radius-outer, 14px);
-  box-shadow: var(--sep-shadow);
-  padding: var(--sep-padding, 6px);
+  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.12), 0 4px 16px -2px rgba(0, 0, 0, 0.05);
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: var(--sep-item-gap, 2px);
+  gap: 2px;
   box-sizing: border-box;
-  color: var(--sep-text-primary, var(--text-primary));
-  font-family: var(--sep-font-sans, var(--font-sans));
+  color: var(--text-primary);
+  font-family: var(--font-sans, var(--sep-font-sans));
 }
 
 .item {
@@ -44,12 +44,12 @@
 .item:hover,
 .item:focus-visible {
   outline: none;
-  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
   color: var(--text-primary);
 }
 
 .item:active {
-  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  background: var(--tint-active, rgba(16, 185, 129, 0.08));
 }
 
 .icon {

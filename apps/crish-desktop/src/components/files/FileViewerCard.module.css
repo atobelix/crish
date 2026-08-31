@@ -13,12 +13,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  height: 34px;
-  min-height: 34px;
-  padding: 0 10px;
+  gap: 4px;
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  padding: 0 8px;
+  border-top: none;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
-  background: var(--card-header-bg, var(--bg-secondary));
+  background: var(--bg-card, #ffffff);
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -44,8 +46,10 @@
   align-items: center;
   background: color-mix(in srgb, var(--border-subtle) 35%, transparent);
   padding: 2px;
-  border-radius: 8px;
-  margin: 0 8px;
+  border-radius: 4px;
+  margin: 0;
+  height: 24px;
+  box-sizing: border-box;
 }
 
 .toggleTab {
@@ -257,7 +261,7 @@
   word-break: break-all;
 }
 
-/* S6 P1-4 diff       --accent-*-light-adaptive   DiffCard   token   
+/* S6 P1-4 diff       --accent-*-light-adaptive   DiffCard   token
  *   dark           GitHub rgba       */
 .diffAddition {
   background: var(--accent-green-light-adaptive);

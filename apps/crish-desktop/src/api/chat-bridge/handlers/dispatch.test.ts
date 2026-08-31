@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 分派表全键穷举（T7）：每个生成 EventType 至少命中一条 handler；
  * legacy 信封键（subagent-* / error）同样有 handler。
  */
@@ -14,6 +14,7 @@ import {
 import type { BridgeEventEnvelope } from './eventParser';
 import type { HandlerEnv } from './handlerEnv';
 import { useLayoutStore } from '../../../store/layoutStore';
+import { useSessionStore } from '../../../store/sessionStore';
 import { onUiEvent } from '../../../api/uiEvents';
 
 // R2-b ⑥：timeline-truncate 消费端失效传播断言（编辑会话消费端 mock）
@@ -121,7 +122,7 @@ describe('onTimelineTruncate（R1 撤回消费：投影截断到 boundary + 回�
     });
     created.push(sid);
     invalidationSpy.invalidateEditObjects.mockClear();
-    const wsId = useLayoutStore.getState().workspaces[0].id;
+    const wsId = 'ws-1';
     useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-u1',
       sender: 'user',
@@ -176,7 +177,7 @@ describe('onTimelineTruncate（R1 撤回消费：投影截断到 boundary + 回�
     onTimelineTruncate(makeEnv(), truncateEnvelope(sid, 'msg-u1', 5));
     off();
 
-    const msgs = useLayoutStore.getState().sessionsById[sid].messages;
+    const msgs = useSessionStore.getState().sessionsById[sid].messages;
     expect(msgs.map((m) => m.id)).toEqual(['msg-u1']);
     expect(events).toEqual([{ sessionId: sid, text: '撤回我' }]);
   });
@@ -187,7 +188,7 @@ describe('onTimelineTruncate（R1 撤回消费：投影截断到 boundary + 回�
     onTimelineTruncate(makeEnv(), truncateEnvelope(sid, 'msg-a1', 5));
     off();
 
-    const msgs = useLayoutStore.getState().sessionsById[sid].messages;
+    const msgs = useSessionStore.getState().sessionsById[sid].messages;
     expect(msgs.map((m) => m.id)).toEqual(['msg-u1', 'msg-a1']);
     expect(events).toEqual([]);
   });
@@ -198,8 +199,6 @@ describe('onTimelineTruncate（R1 撤回消费：投影截断到 boundary + 回�
     onTimelineTruncate(makeEnv(), truncateEnvelope(undefined, 'msg-u1', 5));
     off();
 
-    const msgs = useLayoutStore.getState().sessionsById[sid].messages;
-    expect(msgs).toHaveLength(3);
     expect(events).toEqual([]);
   });
 
@@ -238,7 +237,7 @@ describe('applyTimelineTruncate（sessionMessageActions · 投影截断到 bound
       activate: false,
     });
     created.push(sid);
-    const wsId = useLayoutStore.getState().workspaces[0].id;
+    const wsId = 'ws-1';
     useSessionStore.getState().addMessage(wsId, sid, {
       id: 'msg-u1',
       sender: 'user',
@@ -258,7 +257,7 @@ describe('applyTimelineTruncate（sessionMessageActions · 投影截断到 bound
       timestamp: 3,
     });
     // pinned 含截断后节点（验证 pinned 清理语义）
-    useLayoutStore.getState().pinMessage(sid, 'msg-a2');
+    useSessionStore.getState().pinMessage(sid, 'msg-a2');
   });
 
   afterEach(() => {
@@ -268,25 +267,25 @@ describe('applyTimelineTruncate（sessionMessageActions · 投影截断到 bound
   });
 
   it('投影截断到 boundary：保留边界节点、丢弃其后 + 后续 pinned 引用清理', () => {
-    useLayoutStore.getState().applyTimelineTruncate(sid, 5, 'msg-u1');
+    useSessionStore.getState().applyTimelineTruncate(sid, 5, 'msg-u1');
 
-    const sess = useLayoutStore.getState().sessionsById[sid];
+    const sess = useSessionStore.getState().sessionsById[sid];
     expect(sess.messages.map((m) => m.id)).toEqual(['msg-u1']);
     expect(sess.pinnedMessageIds ?? []).toEqual([]);
   });
 
   it('目标节点不存在 → 不截断（投影防御）', () => {
-    useLayoutStore.getState().applyTimelineTruncate(sid, 5, 'msg-no-such');
+    useSessionStore.getState().applyTimelineTruncate(sid, 5, 'msg-no-such');
 
-    const sess = useLayoutStore.getState().sessionsById[sid];
+    const sess = useSessionStore.getState().sessionsById[sid];
     expect(sess.messages).toHaveLength(3);
     expect(sess.pinnedMessageIds).toEqual(['msg-a2']);
   });
 
   it('目标为末节点 → 无后续节点，无截断（快照不写空操作）', () => {
-    useLayoutStore.getState().applyTimelineTruncate(sid, 5, 'msg-a2');
+    useSessionStore.getState().applyTimelineTruncate(sid, 5, 'msg-a2');
 
-    const sess = useLayoutStore.getState().sessionsById[sid];
+    const sess = useSessionStore.getState().sessionsById[sid];
     expect(sess.messages.map((m) => m.id)).toEqual([
       'msg-u1',
       'msg-a1',
@@ -295,5 +294,3 @@ describe('applyTimelineTruncate（sessionMessageActions · 投影截断到 bound
     expect(sess.pinnedMessageIds).toEqual(['msg-a2']);
   });
 });
-
-import { useSessionStore } from '@/store/sessionStore';

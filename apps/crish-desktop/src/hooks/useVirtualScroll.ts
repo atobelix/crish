@@ -82,6 +82,10 @@ export function useVirtualScroll(
   }, []);
 
   const ids = options.ids;
+  if (ids) {
+    manager.syncOrder(ids);
+  }
+
   useLayoutEffect(() => {
     if (ids) {
       manager.syncOrder(ids);
@@ -106,7 +110,7 @@ export function useVirtualScroll(
     () => manager.computeVisibleRange(scrollTop, viewportHeight, itemCount, overscanSafe),
     // actualTick 变化时重算，使 setActual 回写即时生效
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [manager, scrollTop, viewportHeight, itemCount, overscanSafe, actualTick],
+    [manager, scrollTop, viewportHeight, itemCount, overscanSafe, actualTick, ids],
   );
 
   const totalHeight = useMemo(

@@ -153,7 +153,7 @@ export function finalizeAssistantMessageText(opts: {
     const latest = buildMessageIndex(getSessionById(sid)).get(assistantMsgId);
     const raw = latest?.text || committedText || streamedFullText || '';
     const cleaned = stripThoughtPlaceholders(raw);
-    if (cleaned !== raw) {
+    if (cleaned !== raw && latest?.text !== cleaned) {
       st.updateMessageText(sid, assistantMsgId, cleaned);
     }
     finalTextForHtml = cleaned || raw;

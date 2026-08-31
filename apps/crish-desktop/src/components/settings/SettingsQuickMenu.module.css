@@ -23,12 +23,12 @@
 }
 
 .sidebarFooterSettings:hover {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
   color: var(--text-primary);
 }
 
 .sidebarFooterSettings.isOpen {
-  background: var(--bg-active);
+  background: var(--sidebar-active);
   color: var(--text-primary);
 }
 
@@ -122,7 +122,7 @@
 }
 
 .sbQuickItem:hover {
-  background: var(--bg-hover);
+  background: var(--sidebar-hover);
   color: var(--text-primary);
 }
 

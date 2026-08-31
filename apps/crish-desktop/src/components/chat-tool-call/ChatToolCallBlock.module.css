@@ -260,7 +260,7 @@
 
 /*        V1-          inspect /        group  */
 .toolGroup {
-  border-left: 2px solid var(--accent-color);
+  border-left: 2px solid color-mix(in srgb, var(--brand) 40%, var(--border-color));
   margin: 4px 0;
   padding-left: 8px;
 }
@@ -268,7 +268,7 @@
 .toolGroupHeader {
   font-size: var(--font-size-xxs);
   font-weight: var(--font-weight-medium, 500);
-  color: var(--accent-color);
+  color: var(--text-secondary);
   padding: 2px 0 4px;
   letter-spacing: 0.03em;
 }
@@ -281,8 +281,8 @@
   padding: 6px 8px;
   margin: 2px 0;
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, var(--accent-color) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent-color) 20%, transparent);
+  background: color-mix(in srgb, var(--brand) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 18%, transparent);
 }
 
 .batchBarLabel {
@@ -915,7 +915,7 @@
 }
 
 .gitDiffLineRow.deletion .lineNumCol {
-  color: var(--accent-red);
+  color: var(--diff-del-fg, var(--accent-red));
   background-color: transparent;
 }
 
@@ -925,16 +925,16 @@
   white-space: pre;
   overflow-x: visible;
   flex: 1;
-  color: var(--text-primary);
+  color: var(--diff-text-normal, var(--text-primary));
   font-weight: var(--font-weight-code, 400);
 }
 
 .gitDiffLineRow.addition .lineContent {
-  color: var(--accent-green);
+  color: var(--diff-add-fg);
 }
 
 .gitDiffLineRow.deletion .lineContent {
-  color: var(--accent-red);
+  color: var(--diff-del-fg);
 }
 
 .gitDiffMoreIndicator {
@@ -971,11 +971,13 @@
     transform: scale(0.85);
   }
 }
+
 .liveIndicator {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent-color);
+  background: var(--brand, #10b981);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 25%, transparent);
   animation: pulse-dot var(--transition-pulse) infinite;
   display: inline-block;
   flex-shrink: 0;

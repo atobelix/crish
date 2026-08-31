@@ -14,7 +14,6 @@ import {
   selectScheduledTasks,
   selectTokenUsage,
 } from '../../store/storeAccess';
-import { getWorkspacePath } from '../../api/projectStore';
 import { setActiveDiffSource } from '../../api/storeAccess';
 import { estimateCostUsd } from '../../api/pricingStore';
 import {
@@ -104,17 +103,15 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
     [diffFiles, activeDiffSource]
   );
 
-  const wsPath = getWorkspacePath();
   const branch = git?.found && git.branch ? git.branch : '';
 
   return (
     <div
-      className={`${styles.card} ${styles.lean}`}
+      className={`${styles.card} ${styles.lean} chat-side-panel side-panel-body`}
       role="region"
       aria-label="总览"
     >
       <OverviewHeader
-        wsPath={wsPath}
         session={session}
         onGoalClick={() => setOpenSec((p) => ({ ...p, activeTasks: true }))}
       />

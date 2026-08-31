@@ -42,14 +42,6 @@
   min-width: 0;
 }
 
-/* 覆盖 SegmentedControl 外圈 8px / 内滑块 6px，锁设置按钮 7px */
-.toolbar .segment,
-.createSeg .segment {
-  --seg-outer-radius: var(--button-radius, 7px);
-  --seg-inner-radius: 5px;
-  border-radius: var(--button-radius, 7px);
-}
-
 .toolbar .segment :global(button),
 .createSeg .segment :global(button) {
   appearance: none;

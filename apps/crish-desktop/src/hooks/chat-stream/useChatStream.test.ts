@@ -46,13 +46,31 @@ vi.mock('../../api/chatApi', () => ({
 }));
 vi.mock('../../app/compositionRoot', () => ({
   getCompositionRoot: () => ({
-    session: { getActiveSessionId: () => 'sess-1' },
+    session: {
+      getActiveSessionId: () => 'sess-1',
+      getState: () => ({
+        getSessionById: h.getSessionById,
+        ...h.layoutState,
+      }),
+    },
     layout: { getState: () => h.layoutState },
     runControl: { dispatch: vi.fn() },
   }),
 }));
 vi.mock('../../store/sessionStore', () => ({
   getSessionById: h.getSessionById,
+  useSessionStore: vi.fn((selector) =>
+    typeof selector === 'function'
+      ? selector({ upsertSessionAgent: vi.fn() })
+      : {}
+  ),
+}));
+
+vi.mock('../../services/toast/ToastContext', () => ({
+  toast: {
+    show: (msg: string) => showToastMock(msg),
+    error: (msg: string) => showToastMock(msg),
+  },
 }));
 
 const showToastMock = vi.fn();

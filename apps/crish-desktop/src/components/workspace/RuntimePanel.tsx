@@ -23,7 +23,7 @@ import { TrashSection } from './TrashSection';
 import { FlowDagView } from './FlowDagView';
 import { useFlowDagVisible } from '../../hooks/useFlowDagVisible';
 import { connectionManager } from '../../services/ConnectionManager';
-import { Button } from '../ui';
+import { Button, Tooltip } from '../ui';
 import {
   formatEngineStatusFull,
   formatEngineStatusShort,
@@ -90,31 +90,32 @@ export const RuntimePanel: React.FC<RuntimePanelProps> = () => {
         title="引擎"
         modifier="sectionEngine"
         actions={
-          <div
-            className={styles.engineStatus}
-            role="status"
-            aria-live="polite"
-            aria-label={formatEngineStatusFull(connectionStatus)}
-            title={formatEngineStatusTitle(connectionStatus)}
-          >
-            <span
-              className={`${styles.dot} ${isReadyStatus(connectionStatus) ? styles.on : styles.off}`}
-              aria-hidden
-            />
-            <span className={`${styles.rowMeta} ${styles.engineMeta}`}>
-              {formatEngineStatusShort(connectionStatus)}
-            </span>
-            {connectionStatus === 'engine_crashed' ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => void connectionManager.reconnect()}
-              >
-                自动重连
-              </Button>
-            ) : null}
-          </div>
+          <Tooltip content={formatEngineStatusTitle(connectionStatus)}>
+            <div
+              className={styles.engineStatus}
+              role="status"
+              aria-live="polite"
+              aria-label={formatEngineStatusFull(connectionStatus)}
+            >
+              <span
+                className={`${styles.dot} ${isReadyStatus(connectionStatus) ? styles.on : styles.off}`}
+                aria-hidden
+              />
+              <span className={`${styles.rowMeta} ${styles.engineMeta}`}>
+                {formatEngineStatusShort(connectionStatus)}
+              </span>
+              {connectionStatus === 'engine_crashed' ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void connectionManager.reconnect()}
+                >
+                  自动重连
+                </Button>
+              ) : null}
+            </div>
+          </Tooltip>
         }
       />
 

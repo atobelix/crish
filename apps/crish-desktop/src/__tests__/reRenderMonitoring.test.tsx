@@ -62,13 +62,15 @@ const { mockAmdRenders, mockToolSectionRenders } = vi.hoisted(() => ({
   mockToolSectionRenders: [] as number[],
 }));
 
-vi.mock('../components/chat-message-row/AsyncMarkdownBlock', async () => {
+vi.mock('../components/chat-message-row/MarkdownBlockItem', async () => {
   const ReactMod = await import('react');
   return {
-    AsyncMarkdownBlock: ReactMod.memo(
+    MarkdownBlockItem: ReactMod.memo(
       (props: { text?: string; isStreaming?: boolean }) => {
         if (!props.text) return null; // 与真实组件语义一致：空文本不渲染
-        mockAmdRenders.push(props.text ?? '');
+        if (!props.isStreaming) {
+          mockAmdRenders.push(props.text ?? '');
+        }
         return ReactMod.createElement(
           'div',
           {

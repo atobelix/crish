@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import styles from './ChatMessageRow.module.css';
+import styles from './TimelineThoughtSection.module.css';
 
 export type ThinkingTimerProps = {
   /** When true, counts elapsed seconds from this live thinking start. */

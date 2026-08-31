@@ -179,9 +179,9 @@ describe('normalizeToAdapterShape', () => {
 // ── pure clamp / resolve ─────────────────────────────────────────────
 
 describe('clampDockWidthRatio', () => {
-  it('clamps to [0.15, 0.55]', () => {
-    expect(clampDockWidthRatio(0)).toBe(0.15);
-    expect(clampDockWidthRatio(1)).toBe(0.55);
+  it('clamps to [0.20, 0.75]', () => {
+    expect(clampDockWidthRatio(0)).toBe(0.20);
+    expect(clampDockWidthRatio(1)).toBe(0.75);
     expect(clampDockWidthRatio(0.38)).toBe(0.38);
   });
 });

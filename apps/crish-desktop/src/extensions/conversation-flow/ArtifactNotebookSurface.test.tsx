@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { ArtifactNotebookSurface } from './ArtifactNotebookSurface';
 
-vi.mock('../../components/chat-message-row/AsyncMarkdownBlock', () => ({
-  AsyncMarkdownBlock: ({ text }: { text: string }) =>
+vi.mock('../../components/chat-message-row/StreamingMarkdownView', () => ({
+  StreamingMarkdownView: ({ text }: { text: string }) =>
     React.createElement('div', { 'data-testid': 'async-markdown-block' }, text),
 }));
 

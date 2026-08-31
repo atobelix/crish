@@ -21,7 +21,7 @@ import {
 } from './messageHandlers';
 import type { HandlerEnv } from './handlerEnv';
 import type { StreamState } from './streamState';
-import { useLayoutStore } from '../../../store/layoutStore';
+import { useSessionStore } from '../../../store/sessionStore';
 import type { SessionMessage, SessionState } from '../../../store/types';
 
 function makeEnv() {
@@ -261,7 +261,7 @@ describe('onMessageEnd 消息级展示链路（T-48：事件 → SessionMessage.
     } as unknown as SessionState;
     // sessions[] 为 autoIndex 的 canonical 数组（handler 经其写入）；
     // sessionsById 由中间件重建，测试里同时种子两者避免索引漂移
-    useLayoutStore.setState((state) => ({
+    useSessionStore.setState((state) => ({
       sessions: [...state.sessions.filter((s) => s.id !== SESS), session],
       sessionsById: { ...state.sessionsById, [SESS]: session },
     }));
@@ -281,7 +281,7 @@ describe('onMessageEnd 消息级展示链路（T-48：事件 → SessionMessage.
   });
 
   afterEach(() => {
-    useLayoutStore.setState((state) => {
+    useSessionStore.setState((state) => {
       const next = { ...state.sessionsById };
       delete next[SESS];
       return {
@@ -317,7 +317,7 @@ describe('onMessageEnd 消息级展示链路（T-48：事件 → SessionMessage.
         cacheMissTokens: 2500,
       },
     });
-    const msg = useLayoutStore
+    const msg = useSessionStore
       .getState()
       .sessionsById[SESS]?.messages.find((m) => m.id === MSG);
     expect(msg?.cacheMetrics?.source).toBe('engine-message-end');
@@ -332,7 +332,7 @@ describe('onMessageEnd 消息级展示链路（T-48：事件 → SessionMessage.
     dispatchMessageEndWithUsage(env2, {
       cacheBreakdown: { read: 70, write: 10, miss: 20, inputTotal: 180 },
     });
-    const msg = useLayoutStore
+    const msg = useSessionStore
       .getState()
       .sessionsById[SESS]?.messages.find((m) => m.id === MSG);
     expect(msg?.cacheMetrics?.metrics?.cacheReadTokens).toBe(70);
@@ -343,7 +343,7 @@ describe('onMessageEnd 消息级展示链路（T-48：事件 → SessionMessage.
     const { env } = makeEnv();
     const env2 = { ...env, sessionId: SESS };
     dispatchMessageEndWithUsage(env2, { usage: { promptTokens: 100 } });
-    const msg = useLayoutStore
+    const msg = useSessionStore
       .getState()
       .sessionsById[SESS]?.messages.find((m) => m.id === MSG);
     expect(msg?.cacheMetrics).toBeUndefined();
@@ -356,7 +356,7 @@ describe('onMessageEnd 消息级展示链路（T-48：事件 → SessionMessage.
       usage: { cacheReadTokens: 10 },
     });
     expect(
-      useLayoutStore.getState().sessionsById['sess-missing']
+      useSessionStore.getState().sessionsById['sess-missing']
     ).toBeUndefined();
   });
 });

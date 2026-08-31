@@ -18,7 +18,6 @@ const testFactories: ViewFactoryMap = {
   diff: stubFactory,
   runtime: stubFactory,
   agent: stubFactory,
-  browser: stubFactory,
   'flow-dag': stubFactory,
   'file-viewer': stubFactory,
 };
@@ -40,7 +39,6 @@ describe('ViewRegistry 视图注册中心与路由解析', () => {
     expect(ids).toContain('diff');
     expect(ids).toContain('runtime');
     expect(ids).toContain('agent');
-    expect(ids).toContain('browser');
     expect(ids).toContain('flow-dag');
     expect(ids).toContain('file-viewer');
   });
@@ -48,12 +46,12 @@ describe('ViewRegistry 视图注册中心与路由解析', () => {
   it('category 分类正确划分', () => {
     expect(viewRegistry.isPrimary('chat')).toBe(true);
     expect(viewRegistry.isPrimary('terminal')).toBe(false);
-    expect(viewRegistry.isPrimary('browser')).toBe(false);
+    expect(viewRegistry.isPrimary('preview')).toBe(false);
 
     const toolViews = viewRegistry.getToolViews();
     const toolIds = toolViews.map((v) => v.id);
     expect(toolIds).toContain('terminal');
-    expect(toolIds).toContain('browser');
+    expect(toolIds).toContain('preview');
     expect(toolIds).toContain('flow-dag');
     expect(toolIds).not.toContain('chat');
     expect(toolIds).not.toContain('file-viewer');
@@ -104,8 +102,9 @@ describe('ViewRegistry 视图注册中心与路由解析', () => {
 
   it('getTitle 正确返回静态或动态计算标题及 Fallback', () => {
     expect(viewRegistry.getTitle('chat')).toBe('对话');
+    expect(viewRegistry.getTitle('files')).toBe('文件');
     expect(viewRegistry.getTitle('terminal')).toBe('终端');
-    expect(viewRegistry.getTitle('browser')).toBe('AI 浏览器');
+    expect(viewRegistry.getTitle('preview')).toBe('应用预览');
     expect(viewRegistry.getTitle('flow-dag')).toBe('编排图');
 
     // file-viewer 动态标题提取文件名 (包含 Windows 反斜杠)

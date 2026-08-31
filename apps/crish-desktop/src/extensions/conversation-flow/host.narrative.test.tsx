@@ -15,8 +15,8 @@ import {
   setOfficialConversationFlowActivateForTesting,
 } from './activate';
 
-vi.mock('../../components/chat-message-row/AsyncMarkdownBlock', () => ({
-  AsyncMarkdownBlock: () => null,
+vi.mock('../../components/chat-message-row/StreamingMarkdownView', () => ({
+  StreamingMarkdownView: () => null,
 }));
 
 vi.mock('../../components/chat-message-list/ChatMessageList', () => ({

@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useLayoutStore } from '../store/layoutStore';
+import { useWorkspaceStore } from '../store/workspaceStore';
 import {
   beginLayoutInteraction,
   endLayoutInteraction,
@@ -62,8 +62,8 @@ export function nudgeGroupByKey(
 }
 
 export function useColumnResize(wsId: string) {
-  const resizeColumns = useLayoutStore((s) => s.resizeColumns);
-  const resizeGroups = useLayoutStore((s) => s.resizeGroups);
+  const resizeColumns = useWorkspaceStore((s) => s.resizeColumns);
+  const resizeGroups = useWorkspaceStore((s) => s.resizeGroups);
 
   const handleColResizerPointerDown = useCallback((
     e: React.PointerEvent,

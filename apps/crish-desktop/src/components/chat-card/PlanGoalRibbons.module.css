@@ -98,7 +98,7 @@
 
 /* goal mode ribbon */
 .goalModeRibbon {
-  border-color: color-mix(in srgb, var(--accent-color) 35%, var(--hairline, var(--border-subtle)));
+  border-color: color-mix(in srgb, var(--brand) 18%, var(--border-subtle));
 }
 
 .goalModeRibbonMeter {
@@ -115,7 +115,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: color-mix(in srgb, var(--accent-color) 75%, var(--text-primary));
+  background: var(--brand, #10b981);
   min-width: 0;
   transition: width var(--transition-fast);
 }

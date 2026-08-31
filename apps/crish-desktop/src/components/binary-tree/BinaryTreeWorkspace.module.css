@@ -1,13 +1,13 @@
 /**
- *          
  *
- *      
- * - canvas   position: relative    leaf          rect 
- * - sash       branch   splitRatio   
+ *
+ *
+ * - canvas   position: relative    leaf          rect
+ * - sash       branch   splitRatio
  * - drop overlay      pointer-events: none
  *
- *          Workspace.module.css      hairline sash accent drop    
- * multi-unit leaf   radius overflow clip sash         chat/tool      
+ *          Workspace.module.css      hairline sash accent drop
+ * multi-unit leaf   radius overflow clip sash         chat/tool
  */
 
 /*
@@ -66,7 +66,7 @@
 .leaf {
   position: absolute;
   /* rect   useTreeResize.paintFlatLayout / TreeLeafPanel layoutEffect   inline
-   *     React style prop    live resize re-render          
+   *     React style prop    live resize re-render
    *    px min-width      % rect   min-size   useTreeResize
    *      clamp MIN_CHILD_PX          min-width:0   flex
    *       overflow:hidden        sibling     */
@@ -96,15 +96,44 @@
 }
 
 /*
- * chat 叶顶快捷行：覆盖在 leafBody 上的 38px 渐隐层，不占弹性行。
- * 工具叶 LeafToolTabStrip 自带条高。不要复活 ChatHeader / UnitSessionTabStrip。
+ * 永久驻留的单一固定物理 DOM 按钮样式（对照 reference/chat-composer-component .tree-leaf-pane > .top-side-panel-btn）
+ * 永远固定在 canvas 顶部右上角 10px / 5px 处，z-index 高于所有面板与分隔条。
  */
-/*
- * chat 叶顶快捷行不再由本表定位：
- * UnitChromeActions 自带 .chatTopHeader（sticky + margin-bottom:-38px），
- * 与参考 .chat-top-header 同构。这里曾有一份 .leafToolHeader 绝对定位覆盖层，
- * 两套定位互相覆盖导致渐隐层与右上角坞开关错位，已删除。
- */
+.topSidePanelBtn {
+  position: absolute;
+  top: 5px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: var(--radius-md, 6px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 0;
+  outline: none;
+  z-index: 120;
+  pointer-events: auto;
+  transition:
+    background-color var(--transition-micro, 120ms) ease,
+    color var(--transition-micro, 120ms) ease;
+}
+
+.topSidePanelBtn:hover {
+  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  color: var(--text-primary);
+}
+
+.topSidePanelBtn:global(.active),
+.topSidePanelBtn[data-active='true'] {
+  background: var(--bg-active, rgba(0, 0, 0, 0.08));
+  color: var(--text-primary);
+}
+
 
 /* live resize     +          leaf      */
 :global(.tree-resizing) .leaf,
@@ -127,8 +156,8 @@
 }
 
 /*
- * multi-unit canvas    2 leaf     inset hairline    
- *    outline/             chrome      
+ * multi-unit canvas    2 leaf     inset hairline
+ *    outline/             chrome
  */
 .canvas:has(.leaf ~ .leaf) .leaf {
   opacity: 1;
@@ -260,9 +289,9 @@
 
 /*    Ghost                                                    */
 /*
- * transform             useTreeDrag    ref     
- * el.style.transform = `translate(x,y) rotate(1.5deg)`    React  
- * CSS     transform    inline style             
+ * transform             useTreeDrag    ref
+ * el.style.transform = `translate(x,y) rotate(1.5deg)`    React
+ * CSS     transform    inline style
  */
 
 .ghost {
@@ -378,11 +407,24 @@
   min-height: 0;
   color: var(--text-tertiary);
   font-size: var(--font-size-sm);
-  background: var(--bg-secondary);
+  background: var(--bg-card, #ffffff);
   box-sizing: border-box;
   padding: var(--space-4);
   text-align: center;
   user-select: none;
   overflow: hidden;
   -webkit-app-region: no-drag;
+}
+
+/* 当 Leaf 存在顶部 TabStrip 时，移除卡片本体的上边框，零 !important 提权 */
+.leaf[data-has-strip='true'] > .leafBody > * > .leafCard,
+.leaf[data-has-strip='true'] > .leafBody > * > * > .leafCard,
+.leaf[data-has-strip='true'] :global([class*='cardContainer']),
+.leaf[data-has-strip='true'] :global([class*='cardWrapper']) {
+  border-top: none;
+}
+
+/* 相邻兄弟协调 */
+.leafBody > :global([class*='toolTabStrip']) + * {
+  border-top: 1px solid var(--border-subtle);
 }

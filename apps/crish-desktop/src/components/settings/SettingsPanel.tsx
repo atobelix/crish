@@ -83,6 +83,11 @@ const StatusDiagnosticsPanel = lazy(() =>
     default: m.StatusDiagnosticsPanel,
   }))
 );
+const SettingsBrowserTab = lazy(() =>
+  import('./SettingsBrowserTab').then((m) => ({
+    default: m.SettingsBrowserTab,
+  }))
+);
 
 type TabComponentProps = {
   onBlockingOverlayChange?: (open: boolean) => void;
@@ -105,6 +110,7 @@ const TAB_COMPONENTS: Record<
   schedule: { label: '定时任务', Component: SettingsScheduleTab },
   rules: { label: '规则', Component: SettingsRulesTab },
   shortcuts: { label: '快捷键', Component: SettingsShortcutsTab },
+  browser: { label: '受管浏览器', Component: SettingsBrowserTab },
   security: { label: '安全', Component: SettingsSecurityTab },
   diagnostics: { label: '状态诊断', Component: StatusDiagnosticsPanel },
 };

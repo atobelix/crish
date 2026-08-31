@@ -131,6 +131,8 @@ export function ProjectsSection({
                     className={styles.folderHeader}
                     aria-expanded={open}
                     onClick={() => {
+                      openProject(p.id);
+                      onOpenProject(p.id);
                       onToggleProjectCollapsed(p.id);
                     }}
                   >

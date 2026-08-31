@@ -214,7 +214,7 @@ export function createSessionMessageActionsCore<T extends SessionStoreSlice>(
         ) {
           offset = 0;
           msg.streamTextOffset = 0;
-          msg.blocks = msg.blocks.filter((b) => b.type === 'tool_call');
+          msg.blocks = msg.blocks.filter((b) => b.type !== 'text');
         }
         const segment = text.length >= offset ? text.slice(offset) : text;
         const lastBlock = msg.blocks[msg.blocks.length - 1];

@@ -2,12 +2,13 @@
  * unitTabPlacement — pure placement helpers (R4 / D2).
  */
 
-import { describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect } from 'vitest';
 import {
   createLeaf,
   createBranch,
   type LayoutNode,
 } from '../layout-tree/types';
+import { setPrimaryPanelChecker } from '../layout-tree';
 import { createDefaultDock, type TabSurface } from './types';
 import {
   listChatUnits,
@@ -15,6 +16,10 @@ import {
   tabsForUnit,
   type ChatUnitRef,
 } from './unitTabPlacement';
+
+beforeEach(() => {
+  setPrimaryPanelChecker((id) => id === 'chat');
+});
 
 // ── fixtures ──────────────────────────────────────────────────────────
 

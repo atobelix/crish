@@ -90,7 +90,18 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
     const q = filter.trim().toLowerCase();
     const out: TreeNode[] = [];
     const walk = (list: FsDirEntry[], depth: number) => {
-      for (const e of list) {
+      // 智能自然排序：1. 文件夹优先；2. 业务目录优先于 . 或 -- 前缀的内部噪音目录；3. 拼写自然排序
+      const sorted = [...list].sort((a, b) => {
+        if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+        const aNoise = a.name.startsWith('.') || a.name.startsWith('--');
+        const bNoise = b.name.startsWith('.') || b.name.startsWith('--');
+        if (aNoise !== bNoise) return aNoise ? 1 : -1;
+        return a.name.localeCompare(b.name, undefined, {
+          numeric: true,
+          sensitivity: 'base',
+        });
+      });
+      for (const e of sorted) {
         out.push({ ...e, depth });
         if (e.isDir && expanded[e.path]) walk(expanded[e.path] ?? [], depth + 1);
       }

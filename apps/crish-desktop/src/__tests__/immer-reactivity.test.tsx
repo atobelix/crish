@@ -1,4 +1,4 @@
-﻿// @vitest-environment jsdom
+// @vitest-environment jsdom
 import { render, screen, waitFor } from '@testing-library/react';
 import { useRef, type ReactNode } from 'react';
 import React from 'react';

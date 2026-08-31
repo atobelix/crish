@@ -6,11 +6,7 @@
   margin-bottom: var(--space-3, 12px);
 }
 
-/* 覆盖 SegmentedControl 外圈 8px / 内滑块 6px，锁设置按钮 7px */
 .toolbar .segment {
-  --seg-outer-radius: var(--button-radius, 7px);
-  --seg-inner-radius: 5px;
-  border-radius: var(--button-radius, 7px);
   flex-shrink: 0;
 }
 

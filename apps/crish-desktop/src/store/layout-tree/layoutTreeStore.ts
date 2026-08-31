@@ -55,7 +55,10 @@ export type {
   LayoutTreeStoreActions,
   LayoutTreeStore,
 } from './layoutTreeStoreTypes';
-import type { LayoutTreeStore } from './layoutTreeStoreTypes';
+import type {
+  LayoutTreeStore,
+  LayoutTreeStoreState,
+} from './layoutTreeStoreTypes';
 import {
   validateRestorableLayoutTree,
   RESTORE_LAST_WORKSPACE_LS_KEY,

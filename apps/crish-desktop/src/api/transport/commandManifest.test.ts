@@ -59,6 +59,9 @@ describe('commandManifest', () => {
       // note_apply_ops：CONN-B3 collab wire apply（119 → 120；113 → 114）
       // 电脑操作三命令（computer_session_* / computer_status）已接线
       //   （123；117）
+      // 原生浏览器与面板标准化战役：computer-panel 旧投屏残留退役（前端
+      //   computerSessionApi 已删；Rust 侧命令面仍登记，见
+      //   command-contract-drift.test.ts GHOST_EXEMPTIONS 退役面豁免）
       // E2 F4：core_compact_now 已接线（registered=false → true；118 → 119,
       //   登记先行 6 → 5）
       // F-03（DM-07）：core_read_run_events 恢复激活（T-F 06 退役撤销；

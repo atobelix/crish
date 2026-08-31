@@ -179,12 +179,22 @@ function paintFlatLayout(
   }
 }
 
+function getActiveCollapsedDomain(): 'tool' | undefined {
+  const root = getCompositionRoot();
+  const shell = root.shell.getState();
+  const tab = shell.getActiveTab();
+  const collapsed = tab?.rightDock
+    ? tab.rightDock.collapsed
+    : root.tree.getState().toolColumnCollapsed;
+  return collapsed ? 'tool' : undefined;
+}
+
 /** 按给定 ratio 本地重算 flatten 结果，写入 leaf / sash 的 inline style */
 function applyLiveLayout(branchId: string, ratio: number): void {
   const state = getCompositionRoot().tree.getState();
   const liveTree = resizeBranchTree(state.tree, branchId, ratio);
   const flat = flattenTree(liveTree.root, {
-    collapsedDomain: state.toolColumnCollapsed ? 'tool' : undefined,
+    collapsedDomain: getActiveCollapsedDomain(),
   });
   paintFlatLayout(flat.leaves, flat.branches);
 }
@@ -193,7 +203,7 @@ function applyLiveLayout(branchId: string, ratio: number): void {
 function restoreLayoutFromStore(): void {
   const state = getCompositionRoot().tree.getState();
   const flat = flattenTree(state.tree.root, {
-    collapsedDomain: state.toolColumnCollapsed ? 'tool' : undefined,
+    collapsedDomain: getActiveCollapsedDomain(),
   });
   paintFlatLayout(flat.leaves, flat.branches);
 }

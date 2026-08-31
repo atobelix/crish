@@ -1,5 +1,7 @@
 /**
- * AppTopBar — 36px 单层顶栏，背景跟画布，不做 secondary 二次底。
+ * AppTopBar — 36px 单层顶栏，与工作区外壳共用同一块灰底。
+ * 视觉规格对齐参考里的 .tree-pane-header：透明分界、无下边框，
+ * 顶栏与下方画布是一整片连续的「大矩形」，卡片浮在其上。
  */
 
 .topBar {
@@ -11,8 +13,8 @@
   display: flex;
   align-items: center;
   background: var(--bg-workspace, var(--bg-primary));
-  /* 极淡分割，不是另一块色板的 0.5px 实线底 */
-  border-bottom: 1px solid color-mix(in srgb, var(--text-primary) 8%, transparent);
+  /* 不画下边框：与画布同底，靠卡片自身的发丝边框建立层次 */
+  border-bottom: none;
   box-sizing: border-box;
   overflow: hidden;
   user-select: none;
@@ -20,6 +22,11 @@
   z-index: var(--z-sidebar, 100);
 }
 
+/*
+ * Rail：侧栏开关的固定槽位。
+ * 宽度只跟随交通灯让位，不跟随侧栏展开宽度——按钮位置必须是钉死的，
+ * 否则每次开合侧栏，用户刚要点的按钮就滑走了。
+ */
 .rail {
   height: 100%;
   display: flex;

@@ -35,10 +35,10 @@ function read(rel: string): string {
 }
 
 describe('S7 · Artifact Notebook 源码钉', () => {
-  it('阅读面用 AsyncMarkdownBlock，不引入 markdown-editor / conex-mdx view', () => {
+  it('阅读面用 StreamingMarkdownView，不引入 markdown-editor / conex-mdx view', () => {
     const surface = read('ArtifactNotebookSurface.tsx');
     const chip = read('ArtifactChip.tsx');
-    expect(surface).toMatch(/from\s+['"][^'"]*AsyncMarkdownBlock['"]/);
+    expect(surface).toMatch(/from\s+['"][^'"]*StreamingMarkdownView['"]/);
     expect(surface).toMatch(/data-artifact-md=["']async-markdown-block["']/);
     expect(surface).toMatch(/data-notebook-host=["']leaf-body["']/);
     expect(chip).not.toMatch(/onOpenPath\s*[=:(]/);

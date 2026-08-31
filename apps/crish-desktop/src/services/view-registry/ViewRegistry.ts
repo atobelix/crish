@@ -24,9 +24,12 @@ class ViewRegistryImpl {
         prefix: 'file-viewer:',
         resolve: (uri) => {
           const raw = uri.substring('file-viewer:'.length);
-          const qIdx = raw.indexOf('?');
-          const rawPath = qIdx >= 0 ? raw.substring(0, qIdx) : raw;
-          const queryStr = qIdx >= 0 ? raw.substring(qIdx + 1) : '';
+          const hashIdx = raw.indexOf('#');
+          const noHash = hashIdx >= 0 ? raw.substring(0, hashIdx) : raw;
+          const hashStr = hashIdx >= 0 ? raw.substring(hashIdx + 1) : '';
+          const qIdx = noHash.indexOf('?');
+          const rawPath = qIdx >= 0 ? noHash.substring(0, qIdx) : noHash;
+          const queryStr = qIdx >= 0 ? noHash.substring(qIdx + 1) : '';
           let filePath = rawPath;
           try {
             filePath = decodeURIComponent(rawPath);
@@ -36,8 +39,16 @@ class ViewRegistryImpl {
           const searchParams = new URLSearchParams(queryStr);
           const modeParam = searchParams.get('mode') || searchParams.get('initialMode');
           const initialMode = modeParam === 'diff' ? 'diff' : 'plain';
+          let line: number | undefined;
           const lineStr = searchParams.get('line');
-          const line = lineStr ? parseInt(lineStr, 10) : undefined;
+          if (lineStr) {
+            line = parseInt(lineStr, 10);
+          } else if (hashStr) {
+            const m = hashStr.match(/^L?(\d+)/i);
+            if (m && m[1]) {
+              line = parseInt(m[1], 10);
+            }
+          }
           return {
             viewId: 'file-viewer',
             params: {
@@ -183,7 +194,13 @@ class ViewRegistryImpl {
   /** 判定指定视图是否属于主对话域 */
   public isPrimary(id: string): boolean {
     if (!id) return false;
-    if (id === 'chat' || id.startsWith('chat?') || id.startsWith('chat:')) {
+    if (
+      id === 'chat' ||
+      id.startsWith('chat?') ||
+      id.startsWith('chat:') ||
+      id === '__pending_draft__' ||
+      id.startsWith('pending:')
+    ) {
       return true;
     }
     const def = this.resolveView(id).definition;

@@ -10,16 +10,21 @@
  * 3. sash / DropZoneOverlay / 面板 ghost
  */
 
-import React, { useRef } from 'react';
+import React, { useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
   useLayoutTreeStore,
+  useWorkspaceShellStore,
+  getCompositionRoot,
+  applyDockToTree,
   flattenTree,
   listChatLeaves,
   type LayoutLeaf,
   type FlatBranch,
 } from '../../store/storeAccess';
 import { getPanelTitle } from '../../store/storeAccess';
+import { Tooltip } from '../ui';
+import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import { useTreeDrag } from '../../hooks/useTreeDrag';
 import { useTreeResize } from '../../hooks/useTreeResize';
 import { useTreePanelEvents } from '../../hooks/useTreePanelEvents';
@@ -140,6 +145,15 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
     useTreePanelEvents();
     useChatPanelSync();
 
+    // 订阅当前活跃标签页的右侧工作区开合状态（单源驱动）
+    const dockSnapshot = useWorkspaceShellStore((s) => {
+      const tab = s.openTabs.find((t) => t.tabId === s.activeTabId);
+      return tab?.rightDock ?? null;
+    });
+    const isRightDockCollapsed = dockSnapshot
+      ? dockSnapshot.collapsed || !dockSnapshot.openPanelIds?.length
+      : toolColumnCollapsed;
+
     const {
       leaves: panels,
       branches,
@@ -148,10 +162,10 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
       // multi-chat：禁止全局 toolColumnCollapsed 压掉所有 unit 右坞
       const multi = listChatLeaves(tree.root).length > 1;
       const result = flattenTree(tree.root, {
-        collapsedDomain: !multi && toolColumnCollapsed ? 'tool' : undefined,
+        collapsedDomain: !multi && isRightDockCollapsed ? 'tool' : undefined,
       });
       return { ...result, isMultiChat: multi };
-    }, [tree.root, toolColumnCollapsed]);
+    }, [tree.root, isRightDockCollapsed]);
 
     // 跨 render 复用 leaf / rect 引用，供 TreeLeafPanel React.memo 跳过
     const leafEntryCacheRef = useRef<Map<string, StableLeafEntry>>(new Map());
@@ -181,6 +195,32 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
       }
       return getPanelTitle(draggedSource.tabId);
     }, [draggedSource]);
+
+    const handleToggleRightDock = useCallback((e: React.MouseEvent) => {
+      e.stopPropagation();
+      const shell = getCompositionRoot().shell.getState();
+      const tab = shell.getActiveTab();
+      if (!tab) {
+        const cur = useLayoutTreeStore.getState().toolColumnCollapsed;
+        useLayoutTreeStore.getState().setToolColumnCollapsed(!cur);
+        return;
+      }
+      const nextCollapsed = !tab.rightDock.collapsed;
+      const dock = {
+        ...tab.rightDock,
+        collapsed: nextCollapsed,
+        activePanelId:
+          !nextCollapsed && !tab.rightDock.activePanelId
+            ? 'overview'
+            : tab.rightDock.activePanelId,
+        openPanelIds:
+          !nextCollapsed && !tab.rightDock.openPanelIds.length
+            ? ['overview']
+            : tab.rightDock.openPanelIds,
+      };
+      shell.updateRightDock(tab.tabId, dock);
+      applyDockToTree(dock, tab.sessionId);
+    }, []);
 
     // 解构稳定字段，避免把整包 controller 对象传给 sash（破 memo）
     const { startResize, resizingBranchId } = resizeController;
@@ -224,6 +264,33 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
                 />
               );
             })}
+
+            {/* ★ 永久驻留的单一固定物理 DOM 切换按钮（对照 reference/chat-composer-component） */}
+            <Tooltip
+              content={
+                isRightDockCollapsed
+                  ? '展开右侧工具栏 (Cmd/Ctrl + J)'
+                  : '收起右侧面板 (Cmd/Ctrl + J)'
+              }
+              side="bottom"
+            >
+              <button
+                type="button"
+                id="topQuickDockBtn"
+                className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn ${
+                  !isRightDockCollapsed ? 'active' : ''
+                }`}
+                data-testid="top-quick-dock-btn"
+                data-active={!isRightDockCollapsed ? 'true' : 'false'}
+                data-dock-open={!isRightDockCollapsed ? 'true' : 'false'}
+                aria-label={
+                  isRightDockCollapsed ? '展开右侧工具栏' : '收起右侧面板'
+                }
+                onClick={handleToggleRightDock}
+              >
+                <IconSidebarRight size={14} />
+              </button>
+            </Tooltip>
 
             {/* Drop zone 覆盖层 */}
             <DropZoneOverlay />
