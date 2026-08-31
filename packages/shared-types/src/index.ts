@@ -352,11 +352,15 @@ export {
 // 消除 apps/crish-mobile 对 `packages/shared-types/src/generated/device`
 // 深路径的直引，统一经本公共面。
 //
-// 命名冲突处理：generated/device 的 `RunControlLevel` 与上方 `./run-control`
-// 的同名导出冲突（两者字段相同但来源不同）。ESM 规则：显式命名导出优先于
-// `export *` 通配，故 `RunControlLevel` 绑定到 `./run-control` 版；
-// generated 版需经显式 alias `DeviceRunControlLevel` 才可达。
 export * from './generated/device/types';
+export {
+  APPROVAL_DECISION_VALUES,
+  type ApprovalDecision,
+} from './generated/engine/types';
+export {
+  APPROVAL_DECISION_VALUES as DEVICE_APPROVAL_DECISION_VALUES,
+  type ApprovalDecision as DeviceApprovalDecision,
+} from './generated/device/types';
 export type {
   RunControlLevel as DeviceRunControlLevel,
 } from './generated/device/types';

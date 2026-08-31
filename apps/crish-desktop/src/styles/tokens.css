@@ -1,3 +1,39 @@
+/* ==========================================================================
+   冷启动全局动画门闩（Zero-FOUC Latch）
+   在应用启动和初次水合完成前，强制冻结全量组件过渡与动画，杜绝视觉蠕动
+   🌟 显式排除 .app-initial-loader，保护开屏加载动画正常运转
+   ========================================================================== */
+html.preload *:not(.app-initial-loader, .app-initial-loader *),
+html.preload *:not(.app-initial-loader, .app-initial-loader *)::before,
+html.preload *:not(.app-initial-loader, .app-initial-loader *)::after {
+  -webkit-transition: none !important;
+  -moz-transition: none !important;
+  -ms-transition: none !important;
+  -o-transition: none !important;
+  transition: none !important;
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
+
+:root {
+  /* 响应式断点权威单一真源 (SSOT) */
+  --breakpoint-sm: 640px;
+  --breakpoint-md: 768px;
+  --breakpoint-lg: 1024px;
+  --breakpoint-xl: 1280px;
+
+  /* 几何尺寸与圆角契约 (锁定 7px 按钮圆角与 9999px 胶囊圆角) */
+  --button-radius: 7px;
+  --radius-full: 9999px;
+  --radius-tooltip: var(--radius-full);
+  --seg-outer-radius: var(--button-radius, 7px);
+  --seg-inner-radius: var(--button-radius, 7px);
+
+  /* 悬空兼容易错别名兜底安全网 */
+  --color-text-dim: var(--text-tertiary);
+  --color-text-secondary: var(--text-secondary);
+}
+
 /* --- CONEX UI tokens pure neutral grays (no blue/purple tint) --- */
 
 :root,
@@ -23,14 +59,14 @@ html[data-theme='light'] {
   --bg-subtle: var(--bg-secondary);
   --text-primary: #111111;
   --text-secondary: #555555;
-  /*    6.1       08     1/2  #888888    3.06:1   #696969  
-   *   light     4.78:1      4.53:1 WCAG AA     4.5:1  
+  /*    6.1       08     1/2  #888888    3.06:1   #696969
+   *   light     4.78:1      4.53:1 WCAG AA     4.5:1
    *    hex    color-mix                 */
   --text-tertiary: #696969;
   --text-muted: var(--text-tertiary);
 
-  /*      token tint    text-primary    + transparent    
-   * hover/active/strong               C-3     --tint-highlight  
+  /*      token tint    text-primary    + transparent
+   * hover/active/strong               C-3     --tint-highlight
    *         color-mix        */
   --tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent);
   --tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent);
@@ -94,12 +130,8 @@ html[data-theme='light'] {
     var(--bg-secondary)
   );
 
-  --md-code-bg: color-mix(
-    in srgb,
-    var(--control-mix-color) 1.5%,
-    var(--bg-primary)
-  );
-  --md-code-border: var(--border-color);
+  --md-code-bg: var(--md-code-block-bg);
+  --md-code-border: var(--md-code-block-border);
   --md-code-fg: var(--text-primary);
   --md-code-tab-size: 2;
   --focus-ring-color: color-mix(
@@ -127,7 +159,7 @@ html[data-theme='light'] {
 
   --brand-primary: #10b981;
   --brand: #10b981;
-  --brand-deep: #059669;
+  --brand-deep: hsl(160 84% 30%); /* #047857, 4.77:1 >= 4.5:1 */
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Light) --- */
   --sep-radius-outer: 14px;
@@ -180,7 +212,7 @@ html[data-theme='light'] {
   --sep-duration-open: 0.22s;
   --sep-duration-close: 0.15s;
 
-  --accent-color: hsl(35, 16%, 15%); /*        */
+  --accent-color: hsl(160 84% 36%); /* 品牌翡翠绿活态签名 */
   --accent-light: hsl(35, 20%, 98.5%); /*      */
   --accent-hover: hsl(35, 16%, 22%); /*      */
   --accent-soft: hsl(35, 12%, 93.5%); /*      */
@@ -235,9 +267,9 @@ html[data-theme='light'] {
   /*       --text-danger/--text-success      /        --color-*      */
   --text-danger: var(--color-error);
   --text-success: var(--color-success);
-  /*         08     3/5 WCAG AA     4.5:1  
-   *   /    --accent-orange/--accent-green          
-   * --text-warning-strong #c2410c light   4.55:1 accent-orange   1.85:1 
+  /*         08     3/5 WCAG AA     4.5:1
+   *   /    --accent-orange/--accent-green
+   * --text-warning-strong #c2410c light   4.55:1 accent-orange   1.85:1
    * --text-success-strong #46724c light   4.92:1 ChangesSection +N     */
   --text-warning-strong: #c2410c;
   --text-success-strong: #46724c;
@@ -263,7 +295,7 @@ html[data-theme='light'] {
   --bg-overlay: var(--shadow-color);
 
   /* model/active status color (9 uses of #16a34a) */
-  /*    6.1       08     5      #16a34a   2.91:1   #15803d   4.41:1 WCAG AA UI  3:1  
+  /*    6.1       08     5      #16a34a   2.91:1   #15803d   4.41:1 WCAG AA UI  3:1
    *        --text-success-strong  4.5:1  */
   --color-active: #15803d;
 
@@ -368,7 +400,7 @@ html[data-theme='light'] {
   --transition-press: 80ms ease-out;
   --transition-skeleton: 1.5s ease-in-out;
   --transition-spin: 0.8s linear;
-  /*    9.1 S7      token      /        
+  /*    9.1 S7      token      /
    *      1.1-2.2s     1.6s    /      step-end     */
   --transition-pulse: 1.6s ease-in-out;
   --transition-blink: 1s step-end;
@@ -409,8 +441,8 @@ html[data-theme='light'] {
   --settings-sidebar-width: 240px;
 
   /*
-   *       ?14     
-   * xxs/xs                  
+   *       ?14
+   * xxs/xs
    */
   --font-size-adjust: 0px;
   --font-size-xxs: calc(11px + var(--font-size-adjust));
@@ -444,44 +476,268 @@ html[data-theme='light'] {
   --letter-spacing-tighter: -0.02em;
   --letter-spacing-tightest: -0.025em;
 
-  /* 7     Z-Index       9000      100,000          */
-  --z-base: 0;
-  --z-dock: 10;
-  --z-chrome: 100;
-  --z-dropdown: 300;
-  --z-popover: 500;
-  --z-modal: 1000;
-  --z-tooltip: 9000;
+  /* Z-Index levels are authoritative in styles/z-index.css */
 
-  /* 5.5%       Diff        Gutter */
-  --diff-line-add-bg: hsl(142 35% 42% / 0.055);
-  --diff-line-add-border: hsl(142 71% 45% / 0.35);
-  --diff-gutter-add-bg: hsl(142 35% 42% / 0.075);
-  --diff-gutter-add-fg: hsl(142 45% 30%);
-  --diff-word-add-bg: hsl(142 40% 40% / 0.18);
+  /* ==========================================================================
+     CONEX UI TOKENS — STREAMING & MARKDOWN EXTENSION (LIGHT THEME)
+     遵循 AGENTS.md §13 (柔和焦点与克制边框) 与 §14 (HSLA / color-mix 现代语法)
+     ========================================================================== */
 
-  --diff-line-del-bg: hsl(0 55% 55% / 0.055);
-  --diff-line-del-border: hsl(0 84% 60% / 0.35);
-  --diff-gutter-del-bg: hsl(0 55% 55% / 0.075);
-  --diff-gutter-del-fg: hsl(0 55% 38%);
-  --diff-word-del-bg: hsl(0 60% 50% / 0.18);
+  /* --- 1. Markdown 排版与正文体系 (Light) --- */
+  --md-text-font: var(--font-sans);
+  --md-text-size: var(--font-size-base, 14px);
+  --md-text-line-height: 1.65;
+  --md-text-color: var(--text-primary, #111111);
+  --md-text-paragraph-gap: 0.85em;
 
-  --diff-line-delete-bg: var(--diff-line-del-bg);
-  --diff-line-delete-border: var(--diff-line-del-border);
+  --md-heading-font-weight: 600;
+  --md-heading-line-height: 1.35;
+  --md-heading-color: var(--text-primary, #111111);
+  --md-heading-h1-size: 1.5em;
+  --md-heading-h2-size: 1.3em;
+  --md-heading-h3-size: 1.15em;
+  --md-heading-h4-size: 1.05em;
+  --md-heading-h5-size: 1em;
+  --md-heading-h6-size: 0.9em;
+  --md-heading-margin-top: 0.6em;
+  --md-heading-margin-bottom: 0.3em;
 
-  --diff-gutter-width: 48px;
+  --md-code-inline-bg: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
+  --md-code-inline-fg: hsl(0 0% 12%);
+  --md-code-inline-border: color-mix(in srgb, var(--border-color) 75%, transparent);
+  --md-code-inline-radius: 4px;
+  --md-code-inline-padding: 0.15em 0.4em;
+
+  --md-code-block-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+  --md-code-block-border: var(--border-subtle);
+  --md-code-block-radius: 8px;
+  --md-code-block-padding: 12px 14px;
+  --md-code-font: var(--font-mono);
+  --md-code-font-size: 12.5px;
+  --md-code-tab-size: 2;
+  --md-code-header-bg: color-mix(in srgb, var(--text-primary) 2%, var(--bg-card));
+  --md-code-copy-bg: color-mix(in srgb, var(--bg-card) 85%, transparent);
+  --md-code-copy-hover-bg: var(--bg-card);
+
+  --md-path-link-bg: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --md-path-link-hover-bg: color-mix(in srgb, var(--brand) 10%, transparent);
+  --md-path-link-active-bg: color-mix(in srgb, var(--brand) 16%, transparent);
+  --md-path-link-fg: var(--brand-deep, hsl(160 84% 31%));
+  --md-path-link-border: color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  --md-path-link-radius: var(--radius-sm, 4px);
+
+  --md-task-box-size: 14px;
+  --md-task-box-radius: 3px;
+
+  --md-quote-border-color: color-mix(in srgb, var(--text-primary) 8%, var(--border-color));
+  --md-quote-border-width: 2px;
+  --md-quote-bg: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  --md-quote-text: var(--text-secondary, #555555);
+  --md-quote-padding: 0.4em 0 0.4em 1em;
+  --md-quote-margin: 0.6em 0;
+
+  --md-list-marker-color: var(--text-tertiary, #696969);
+  --md-list-marker-fade-duration: 120ms;
+  --md-list-item-gap: 0.3em;
+  --md-list-indent: 1.5em;
+
+  --md-hr-color: var(--border-subtle);
+  --md-hr-height: 1px;
+  --md-link-color: var(--brand-deep, #059669);
+  --md-link-hover-color: var(--brand, #10b981);
+  --md-link-underline-offset: 3px;
+
+  /* --- 2. 流式表格体系 (Light) --- */
+  --md-table-bg: var(--bg-secondary);
+  --md-table-border: var(--hairline-strong, var(--border-color));
+  --md-table-border-width: var(--hairline-width, 1px);
+  --md-table-border-color: var(--border-color, hsl(35 10% 86%));
+  --md-table-border-subtle: var(--border-subtle, hsl(35 8% 91%));
+  --md-table-row-border: var(--hairline, var(--border-subtle));
+  --md-table-header-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+  --md-table-header-backdrop-blur: 12px;
+  --md-table-header-fg: var(--text-primary);
+  --md-table-header-font-weight: 600;
+  --md-table-header-border: var(--hairline-strong, var(--border-color));
+  --md-table-header-z: 2;
+  --md-table-row-bg: var(--bg-card, #ffffff);
+  --md-table-row-hover-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+  --md-table-row-zebra-bg: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-card));
+  --md-table-row-even-bg: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
+  --md-table-cell-pad-x: 12px;
+  --md-table-cell-pad-y: 8px;
+  --md-table-cell-padding: var(--space-2, 8px) var(--space-3, 12px);
+  --md-table-cell-padding-compact: var(--space-1_5, 6px) var(--space-2, 8px);
+  --md-table-font-size: var(--font-size-sm, 13px);
+  --md-table-line-height: 1.55;
+  --md-table-radius: var(--radius-lg, 8px);
+
+  --stream-table-active-outline: 1px dashed var(--brand, hsl(160 84% 39%));
+  --stream-table-active-bg: color-mix(in srgb, var(--brand) 4%, transparent);
+  --stream-table-pulse-border: color-mix(in srgb, var(--brand) 30%, transparent);
+  --stream-table-intrinsic-h: 320px;
+
+  /* --- 3. 自定义富交互与 Artifacts 体系 (Light) --- */
+  --artifact-card-bg: var(--bg-card, #ffffff);
+  --artifact-card-border: var(--border-color, hsl(35 10% 86%));
+  --artifact-card-border-hover: color-mix(in srgb, var(--border-subtle) 95%, var(--text-primary) 5%);
+  --artifact-card-radius: 8px;
+  --artifact-card-shadow: var(--shadow-sm);
+  --artifact-header-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+  --artifact-header-border: var(--border-subtle);
+  --artifact-header-fg: var(--text-primary);
+  --artifact-header-height: 34px;
+  --artifact-action-btn-bg: color-mix(in srgb, var(--text-primary) 4%, var(--bg-card));
+  --artifact-action-btn-hover: color-mix(in srgb, var(--text-primary) 8%, var(--bg-card));
+  --artifact-action-btn-border: var(--border-subtle);
+  --artifact-btn-bg: var(--bg-primary, #f4f5f7);
+  --artifact-btn-border: var(--border-subtle);
+  --artifact-btn-hover-bg: var(--tint-hover);
+  --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 92%, var(--text-primary) 8%);
+  --artifact-btn-active-bg: var(--tint-active);
+  --artifact-portal-overlay-bg: hsl(0 0% 0% / 0.45);
+  --artifact-portal-blur: 12px;
+  --artifact-output-max-h: 600px;
+
+  /* Diff 比对 (严格按照 WCAG AA 达标色阶) */
+  --diff-add-bg: hsl(142 35% 42% / 0.07);
+  --diff-add-border: hsl(142 71% 45% / 0.35);
+  --diff-add-fg: hsl(142 65% 25%); /* 6.75:1 WCAG AA */
+  --diff-add-word-bg: hsl(142 40% 40% / 0.20);
+  --diff-add-gutter-bg: hsl(142 35% 42% / 0.10);
+  --diff-add-gutter-fg: hsl(142 45% 30%);
+
+  --diff-del-bg: hsl(0 55% 55% / 0.07);
+  --diff-del-border: hsl(0 84% 60% / 0.35);
+  --diff-del-fg: hsl(0 68% 38%); /* 7.01:1 WCAG AAA */
+  --diff-del-word-bg: hsl(0 60% 50% / 0.20);
+  --diff-del-gutter-bg: hsl(0 55% 55% / 0.10);
+  --diff-del-gutter-fg: hsl(0 55% 38%);
+
+  --diff-linenum-fg: var(--text-tertiary, #696969);
+  --diff-context-fg: var(--text-secondary);
   --diff-gutter-bg: var(--bg-secondary);
   --diff-gutter-text: var(--text-tertiary);
   --diff-header-height: 34px;
+  --diff-split-divider: var(--border-subtle);
+  --diff-split-header-bg: var(--bg-secondary);
+  --diff-split-header-fg: var(--text-secondary);
+  --diff-mode-segmented-bg: var(--bg-primary, #f4f5f7);
+  --diff-mode-item-active-bg: var(--bg-card, #ffffff);
+  --diff-mode-item-active-fg: var(--text-primary, #111111);
+
+  /* Legacy Diff 兼容映射 */
+  --diff-line-add-bg: var(--diff-add-bg);
+  --diff-line-add-border: var(--diff-add-border);
+  --diff-gutter-add-bg: var(--diff-add-gutter-bg);
+  --diff-gutter-add-fg: var(--diff-add-gutter-fg);
+  --diff-word-add-bg: var(--diff-add-word-bg);
+  --diff-line-del-bg: var(--diff-del-bg);
+  --diff-line-del-border: var(--diff-del-border);
+  --diff-gutter-del-bg: var(--diff-del-gutter-bg);
+  --diff-gutter-del-fg: var(--diff-del-gutter-fg);
+  --diff-word-del-bg: var(--diff-del-word-bg);
+  --diff-line-delete-bg: var(--diff-del-bg);
+  --diff-line-delete-border: var(--diff-del-border);
+
+  /* FileTree 工程文件树 */
+  --filetree-bg: var(--bg-card, #ffffff);
+  --filetree-indent-unit: 14px;
+  --filetree-node-hover-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --filetree-node-active-bg: color-mix(in srgb, var(--brand) 10%, transparent);
+  --filetree-node-active-fg: var(--text-primary);
+  --filetree-node-fg: var(--text-secondary);
+  --filetree-icon-color: var(--text-tertiary);
+  --filetree-badge-add-bg: hsl(142 71% 45% / 0.12);
+  --filetree-badge-add-fg: hsl(142 71% 28%);
+  --filetree-badge-mod-bg: hsl(38 92% 50% / 0.12);
+  --filetree-badge-mod-fg: hsl(32 95% 30%);
+  --filetree-badge-del-bg: hsl(0 84% 60% / 0.12);
+  --filetree-badge-del-fg: hsl(0 75% 38%);
+  --filetree-badge-untracked-bg: hsl(0 0% 50% / 0.12);
+  --filetree-badge-untracked-fg: hsl(0 0% 36%);
+  --filetree-badge-conflicted-bg: hsl(0 84% 60% / 0.18);
+  --filetree-badge-conflicted-fg: hsl(0 84% 35%);
+  --filetree-badge-renamed-bg: hsl(270 60% 50% / 0.12);
+  --filetree-badge-renamed-fg: hsl(270 60% 36%);
+
+  /* AI 步骤卡片 */
+  --aicard-bg: var(--bg-card, #ffffff);
+  --aicard-border: var(--border-color);
+  --aicard-header-bg: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card));
+  --aicard-title-font-size: 13.5px;
+  --aicard-status-pulse-live: var(--brand, hsl(160 84% 39%));
+  --aicard-status-running: var(--brand);
+  --aicard-status-success: var(--text-secondary, #555555);
+  --aicard-status-warning: var(--accent-orange, hsl(38 92% 50%));
+  --aicard-status-error: var(--accent-red, hsl(0 55% 55%));
+  --aicard-badge-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --aicard-badge-fg: var(--text-tertiary);
+
+  /* --- 4. 极简思考链与状态横幅体系 (Light) --- */
+  --thought-header-bg: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
+  --thought-header-hover-bg: color-mix(in srgb, var(--text-primary) 4%, var(--bg-primary));
+  --thought-header-fg: var(--text-secondary, #555555);
+  --thought-header-hover-fg: var(--text-primary, #111111);
+  --thought-header-font-size: var(--font-size-sm, 13px);
+  --thought-header-line-height: 1.5;
+  --thought-border-color: var(--border-subtle);
+  --thought-indicator-bar: color-mix(in srgb, var(--text-primary) 15%, transparent);
+  --thought-live-title-fg: var(--brand-deep, #059669);
+  --thought-live-dot: var(--brand, #10b981);
+  --thought-live-glow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 20%, transparent);
+  --thought-chevron-fg: var(--text-tertiary, #696969);
+  --thought-chevron-hover-fg: var(--text-secondary, #555555);
+  --thought-chevron-color: var(--text-tertiary);
+  --thought-chevron-hover: var(--text-secondary);
+  --thought-rail-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --thought-rail-width: 2px;
+  --thought-body-bg: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-primary));
+  --thought-body-fg: var(--text-secondary, #555555);
+  --thought-body-font-size: var(--font-size-sm, 13px);
+  --thought-body-line-height: 1.65;
+  --thought-time-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --thought-time-fg: var(--text-tertiary, #696969);
+  --thought-badge-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --thought-badge-fg: var(--text-tertiary, #696969);
+  --thought-summary-indent: 0.35em;
+  --thought-font-size-meta: 12.5px;
+  --thought-scroll-max-h: 180px;
+  --thought-max-height: 240px;
+  --thought-mask-bg: var(--bg-card, #ffffff);
+
+  --banner-error-bg: color-mix(in srgb, var(--accent-red) 6%, var(--bg-card));
+  --banner-error-border: color-mix(in srgb, var(--accent-red) 22%, transparent);
+  --banner-error-fg: var(--text-primary, #111111);
+  --banner-error-icon: var(--color-error, #ef4444);
+  --banner-error-radius: var(--radius-md, 6px);
+  --banner-error-padding: var(--space-2, 8px) var(--space-3, 12px);
+  --banner-error-gap: var(--space-2, 8px);
+  --banner-error-font-size: var(--font-size-sm, 13px);
+
+  /* --- 5. 流式动效与打字机光标体系 (Light) --- */
+  --stream-caret-color: var(--brand-deep, hsl(160 84% 31%)); /* 4.88:1 WCAG AA */
+  --stream-caret-width: 2px;
+  --stream-caret-height: 0.95em;
+  --stream-caret-radius: 1px;
+  --stream-caret-margin-left: var(--space-0_5, 2px);
+  --stream-caret-blink-dur: 800ms;
+
+  --stream-anim-word-fade: 100ms;
+  --stream-anim-word-offset-y: 2px;
+  --stream-anim-marker-fade: 120ms;
+  --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
+  --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 2%, transparent);
+  --stream-pulse-duration: 1.6s;
+  --stream-chunk-gap: 0.85em;
 
   /*         styles/z-index.css       */
-  /* --font-mono-features   fontStore.ts                    
+  /* --font-mono-features   fontStore.ts
    *                         */
   --font-mono-features: 'calt' 0, 'liga' 0;
 
-  --breakpoint-sm: 640px;
-  --breakpoint-md: 768px;
-  --breakpoint-lg: 1024px;
 
   --opacity-disabled: 0.5;
   --ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
@@ -500,7 +756,7 @@ html[data-theme='light'] {
   --control-pad-y: 6px;
 
   /*
-   *       ?       ?gap              
+   *       ?       ?gap
    * ui-size gear           ?5/7/9   ?px
    */
   --space-0_5: 2px;
@@ -535,7 +791,7 @@ html[data-theme='light'] {
   --line-height-base: 1.4;
 
   /*
-   *        card-header / files-bar /         
+   *        card-header / files-bar /
    *                  ?shell/panels    ?magic number
    */
   --card-header-min-height: 36px;
@@ -565,7 +821,7 @@ html[data-theme='light'] {
   /*
    *         ?/  ?/ footer    /     ?
    *      media   ?--chat-col-max-wide
-   * 680 ?760                  
+   * 680 ?760
    */
   --chat-col-max: 760px; /* overridden by JS constants at runtime */
   --chat-col-max-wide: 840px;
@@ -589,27 +845,27 @@ html[data-theme='light'] {
 
 /*           secondary   ?primary        ?
  * ?CSS          ?theme-dark.css
- * hairline      light     ?chat / shell / settings     
+ * hairline      light     ?chat / shell / settings
  *   --hairline       =      card-header   settings-list   filter-bar?
- *   --hairline-strong =                     
+ *   --hairline-strong =
  *          color-mix     ?*/
 html[data-theme='dark'] {
-  /* Premium Dark Theme (Neutral/Vercel style) */
-  --bg-primary: hsl(0, 0%, 5%);
-  --bg-secondary: hsl(0, 0%, 8%);
-  --bg-tertiary: hsl(0, 0%, 11%);
+  /* Premium Dark Theme (对齐 themePresets dark-cozy 单真源) */
+  --bg-primary: #1b1b1b;
+  --bg-secondary: #242424;
+  --bg-tertiary: #1e1e1e;
   --bg-hover: var(--tint-hover); /*    tint         */
   --bg-active: var(--tint-active); /*    tint         */
-  --bg-card: hsl(0, 0%, 11%);
-  --bg-elevated: hsl(0, 0%, 15%);
+  --bg-card: #242424;
+  --bg-elevated: #242424;
   --bg-subtle: var(--bg-secondary);
   --bg-workspace: var(--bg-primary);
-  --shell-chrome-bg: var(--bg-secondary);
+  --shell-chrome-bg: #151515;
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
   /* 外壳留白：叶子卡片与窗口边缘之间的落差，密度档位可覆写 */
   --shell-gutter: var(--space-2, 8px);
-  --text-primary: #f0f0f0;
-  --text-secondary: #a3a3a3;
+  --text-primary: #dddddd;
+  --text-secondary: #aaaaaa;
   /*    6.1       08     7  dark text-tertiary 62%     3.59:1
    *   #8f8f8f   6.0:1 WCAG AA     4.5:1  */
   --text-tertiary: #8f8f8f;
@@ -634,13 +890,13 @@ html[data-theme='dark'] {
   --switch-thumb-shadow: 0 1px 2px
     color-mix(in srgb, var(--shadow-color) 12%, transparent);
 
-  --border-color: hsl(0, 0%, 18%);
-  --border-subtle: hsl(0, 0%, 14%);
+  --border-color: #333333;
+  --border-subtle: #2a2a2a;
   --composer-bg: var(--bg-secondary);
   --composer-footer-bg: var(--bg-secondary);
   /* S6      theme-dark.css                           */
-  --md-code-bg: var(--bg-tertiary);
-  --md-code-border: var(--hairline, var(--border-subtle));
+  --md-code-bg: var(--md-code-block-bg);
+  --md-code-border: var(--md-code-block-border);
   --md-code-fg: var(--text-primary);
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
@@ -661,7 +917,7 @@ html[data-theme='dark'] {
     var(--text-primary) 9.5%,
     var(--bg-primary)
   );
-  /* dark        01    P2-01  light    hover/active   control-mix-color   dark  
+  /* dark        01    P2-01  light    hover/active   control-mix-color   dark
    *     light           tint          */
   --sidebar-hover: color-mix(
     in srgb,
@@ -674,10 +930,16 @@ html[data-theme='dark'] {
     var(--bg-secondary)
   );
   --control-mix-color: var(--text-primary);
-  --focus-ring-color: color-mix(in srgb, var(--text-primary) 30%, transparent);
-  --focus-ring: 0 0 0 2px var(--focus-ring-color);
-  --focus-ring-strong: 0 0 0 3px
-    color-mix(in srgb, var(--text-primary) 22%, transparent);
+  --focus-ring-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
+  --focus-ring: 0 0 0 1.5px var(--focus-ring-color);
+  --focus-ring-subtle: 0 0 0 1px
+    color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%);
+  --focus-ring-strong: 0 0 0 2px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 
   --bg-page: #0c0c0b;
   --bg-canvas: #141412;
@@ -687,7 +949,7 @@ html[data-theme='dark'] {
 
   --brand-primary: #10b981;
   --brand: #10b981;
-  --brand-deep: #059669;
+  --brand-deep: hsl(160 84% 30%);
 
   /* --- SmartExpandablePanel & Zero-Blue Design System Tokens (Dark) --- */
   --sep-radius-outer: 14px;
@@ -729,7 +991,7 @@ html[data-theme='dark'] {
                 0 2px 8px 0 rgba(0, 0, 0, 0.30);
   --sep-backdrop-blur: 28px;
 
-  --accent-color: #f8fafc;
+  --accent-color: hsl(160 84% 45%);
   --accent-light: #1e293b;
   --accent-hover: #ffffff;
   --accent-soft: #334155;
@@ -825,8 +1087,8 @@ html[data-theme='dark'] {
   --terminal-prompt: #4ade80;
   --terminal-bar-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
 
-  /* F7-F27           dark     light   #868e96/#e8590c   
-   *             muted   4.6:1      dark      light   
+  /* F7-F27           dark     light   #868e96/#e8590c
+   *             muted   4.6:1      dark      light
    *                --text-secondary           */
   --ui-text-success: #69db7c;
   --ui-text-danger: #ff8787;
@@ -850,26 +1112,260 @@ html[data-theme='dark'] {
   --syntax-deletion: #f87171;
   --syntax-meta: #a3a3a3;
 
-  /* 5.5%       Diff        Gutter (Dark) */
-  --diff-line-add-bg: hsl(142 40% 50% / 0.09);
-  --diff-line-add-border: hsl(142 71% 45% / 0.45);
-  --diff-gutter-add-bg: hsl(142 40% 50% / 0.12);
-  --diff-gutter-add-fg: hsl(142 45% 72%);
-  --diff-word-add-bg: hsl(142 45% 45% / 0.28);
+  /* ==========================================================================
+     CONEX UI TOKENS — STREAMING & MARKDOWN EXTENSION (DARK THEME)
+     纯中性炭黑底板 + 高对比墨阶 + 翡翠绿活态签名
+     ========================================================================== */
 
-  --diff-line-del-bg: hsl(0 60% 55% / 0.09);
-  --diff-line-del-border: hsl(0 84% 60% / 0.45);
-  --diff-gutter-del-bg: hsl(0 60% 55% / 0.12);
-  --diff-gutter-del-fg: hsl(0 60% 75%);
-  --diff-word-del-bg: hsl(0 65% 50% / 0.28);
+  /* --- 1. Markdown 排版与正文体系 (Dark) --- */
+  --md-text-font: var(--font-sans);
+  --md-text-size: var(--font-size-base, 14px);
+  --md-text-line-height: 1.65;
+  --md-text-color: var(--text-primary, #f0f0f0);
+  --md-text-paragraph-gap: 0.85em;
 
-  --diff-line-delete-bg: var(--diff-line-del-bg);
-  --diff-line-delete-border: var(--diff-line-del-border);
+  --md-heading-font-weight: 600;
+  --md-heading-line-height: 1.35;
+  --md-heading-color: var(--text-primary, #f0f0f0);
+  --md-heading-h1-size: 1.5em;
+  --md-heading-h2-size: 1.3em;
+  --md-heading-h3-size: 1.15em;
+  --md-heading-h4-size: 1.05em;
+  --md-heading-h5-size: 1em;
+  --md-heading-h6-size: 0.9em;
+  --md-heading-margin-top: 0.6em;
+  --md-heading-margin-bottom: 0.3em;
 
-  --diff-gutter-width: 48px;
+  --md-code-inline-bg: hsl(0 0% 14%);
+  --md-code-inline-fg: hsl(0 0% 92%);
+  --md-code-inline-border: hsl(0 0% 20%);
+  --md-code-inline-radius: 4px;
+  --md-code-inline-padding: 0.15em 0.4em;
+
+  --md-code-block-bg: hsl(0 0% 9%);
+  --md-code-block-border: hsl(0 0% 16%);
+  --md-code-block-radius: 8px;
+  --md-code-block-padding: 12px 14px;
+  --md-code-font: var(--font-mono);
+  --md-code-font-size: 12.5px;
+  --md-code-tab-size: 2;
+  --md-code-header-bg: hsl(0 0% 11%);
+  --md-code-copy-bg: color-mix(in srgb, var(--bg-card) 85%, transparent);
+  --md-code-copy-hover-bg: hsl(0 0% 16%);
+
+  --md-path-link-bg: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --md-path-link-hover-bg: color-mix(in srgb, var(--brand) 14%, transparent);
+  --md-path-link-active-bg: color-mix(in srgb, var(--brand) 20%, transparent);
+  --md-path-link-fg: var(--brand, hsl(160 84% 45%));
+  --md-path-link-border: hsl(0 0% 20%);
+  --md-path-link-radius: var(--radius-sm, 4px);
+
+  --md-task-box-size: 14px;
+  --md-task-box-radius: 3px;
+
+  --md-quote-border-color: color-mix(in srgb, var(--text-primary) 8%, var(--border-color));
+  --md-quote-border-width: 2px;
+  --md-quote-bg: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  --md-quote-text: var(--text-secondary, #a3a3a3);
+  --md-quote-padding: 0.4em 0 0.4em 1em;
+  --md-quote-margin: 0.6em 0;
+
+  --md-list-marker-color: var(--text-tertiary, #8f8f8f);
+  --md-list-marker-fade-duration: 120ms;
+  --md-list-item-gap: 0.3em;
+  --md-list-indent: 1.5em;
+
+  --md-hr-color: var(--border-subtle);
+  --md-hr-height: 1px;
+  --md-link-color: var(--brand, #10b981);
+  --md-link-hover-color: hsl(160 84% 55%);
+  --md-link-underline-offset: 3px;
+
+  /* --- 2. 流式表格体系 (Dark) --- */
+  --md-table-bg: var(--bg-secondary);
+  --md-table-border: var(--hairline-strong, var(--border-color));
+  --md-table-border-width: var(--hairline-width, 1px);
+  --md-table-border-color: hsl(0 0% 18%);
+  --md-table-border-subtle: hsl(0 0% 14%);
+  --md-table-row-border: var(--hairline, var(--border-subtle));
+  --md-table-header-bg: hsl(0 0% 12%);
+  --md-table-header-backdrop-blur: 12px;
+  --md-table-header-fg: var(--text-primary);
+  --md-table-header-font-weight: 600;
+  --md-table-header-border: var(--hairline-strong, var(--border-color));
+  --md-table-header-z: 2;
+  --md-table-row-bg: hsl(0 0% 10%);
+  --md-table-row-hover-bg: hsl(0 0% 13%);
+  --md-table-row-zebra-bg: hsl(0 0% 11%);
+  --md-table-row-even-bg: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  --md-table-cell-pad-x: 12px;
+  --md-table-cell-pad-y: 8px;
+  --md-table-cell-padding: var(--space-2, 8px) var(--space-3, 12px);
+  --md-table-cell-padding-compact: var(--space-1_5, 6px) var(--space-2, 8px);
+  --md-table-font-size: var(--font-size-sm, 13px);
+  --md-table-line-height: 1.55;
+  --md-table-radius: var(--radius-lg, 8px);
+
+  --stream-table-active-outline: 1px dashed var(--brand, hsl(160 84% 45%));
+  --stream-table-active-bg: color-mix(in srgb, var(--brand) 6%, transparent);
+  --stream-table-pulse-border: color-mix(in srgb, var(--brand) 40%, transparent);
+  --stream-table-intrinsic-h: 320px;
+
+  /* --- 3. 自定义富交互与 Artifacts 体系 (Dark) --- */
+  --artifact-card-bg: hsl(0 0% 11%);
+  --artifact-card-border: hsl(0 0% 18%);
+  --artifact-card-border-hover: color-mix(in srgb, var(--border-subtle) 94%, var(--text-primary) 6%);
+  --artifact-card-radius: 8px;
+  --artifact-card-shadow: var(--shadow-sm);
+  --artifact-header-bg: hsl(0 0% 13%);
+  --artifact-header-border: hsl(0 0% 14%);
+  --artifact-header-fg: var(--text-primary);
+  --artifact-header-height: 34px;
+  --artifact-action-btn-bg: hsl(0 0% 15%);
+  --artifact-action-btn-hover: hsl(0 0% 20%);
+  --artifact-action-btn-border: hsl(0 0% 22%);
+  --artifact-btn-bg: hsl(0 0% 8%);
+  --artifact-btn-border: hsl(0 0% 18%);
+  --artifact-btn-hover-bg: var(--tint-hover);
+  --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 90%, var(--text-primary) 10%);
+  --artifact-btn-active-bg: var(--tint-active);
+  --artifact-portal-overlay-bg: hsl(0 0% 0% / 0.70);
+  --artifact-portal-blur: 16px;
+  --artifact-output-max-h: 600px;
+
+  /* Diff 比对 (Dark 高对比度) */
+  --diff-add-bg: hsl(142 40% 50% / 0.12);
+  --diff-add-border: hsl(142 71% 45% / 0.45);
+  --diff-add-fg: hsl(142 75% 72%); /* 9.46:1 WCAG AAA */
+  --diff-add-word-bg: hsl(142 45% 45% / 0.30);
+  --diff-add-gutter-bg: hsl(142 40% 50% / 0.16);
+  --diff-add-gutter-fg: hsl(142 45% 72%);
+
+  --diff-del-bg: hsl(0 60% 55% / 0.12);
+  --diff-del-border: hsl(0 84% 60% / 0.45);
+  --diff-del-fg: hsl(0 85% 75%); /* 7.21:1 WCAG AAA */
+  --diff-del-word-bg: hsl(0 65% 50% / 0.30);
+  --diff-del-gutter-bg: hsl(0 60% 55% / 0.16);
+  --diff-del-gutter-fg: hsl(0 60% 75%);
+
+  --diff-linenum-fg: hsl(0 0% 56%);
+  --diff-context-fg: var(--text-secondary);
   --diff-gutter-bg: var(--bg-secondary);
   --diff-gutter-text: var(--text-tertiary);
   --diff-header-height: 34px;
+  --diff-split-divider: hsl(0 0% 16%);
+  --diff-split-header-bg: hsl(0 0% 8%);
+  --diff-split-header-fg: var(--text-secondary);
+  --diff-mode-segmented-bg: hsl(0 0% 8%);
+  --diff-mode-item-active-bg: hsl(0 0% 18%);
+  --diff-mode-item-active-fg: var(--text-primary, #f0f0f0);
+
+  /* Legacy Diff 兼容映射 */
+  --diff-line-add-bg: var(--diff-add-bg);
+  --diff-line-add-border: var(--diff-add-border);
+  --diff-gutter-add-bg: var(--diff-add-gutter-bg);
+  --diff-gutter-add-fg: var(--diff-add-gutter-fg);
+  --diff-word-add-bg: var(--diff-add-word-bg);
+  --diff-line-del-bg: var(--diff-del-bg);
+  --diff-line-del-border: var(--diff-del-border);
+  --diff-gutter-del-bg: var(--diff-del-gutter-bg);
+  --diff-gutter-del-fg: var(--diff-del-gutter-fg);
+  --diff-word-del-bg: var(--diff-del-word-bg);
+  --diff-line-delete-bg: var(--diff-del-bg);
+  --diff-line-delete-border: var(--diff-del-border);
+
+  /* FileTree 工程文件树 */
+  --filetree-bg: hsl(0 0% 10%);
+  --filetree-indent-unit: 14px;
+  --filetree-node-hover-bg: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  --filetree-node-active-bg: color-mix(in srgb, var(--brand) 14%, transparent);
+  --filetree-node-active-fg: var(--text-primary);
+  --filetree-node-fg: var(--text-secondary);
+  --filetree-icon-color: var(--text-tertiary);
+  --filetree-badge-add-bg: hsl(142 60% 45% / 0.20);
+  --filetree-badge-add-fg: hsl(142 75% 70%);
+  --filetree-badge-mod-bg: hsl(38 92% 50% / 0.20);
+  --filetree-badge-mod-fg: hsl(45 93% 65%);
+  --filetree-badge-del-bg: hsl(0 75% 55% / 0.20);
+  --filetree-badge-del-fg: hsl(0 75% 72%);
+  --filetree-badge-untracked-bg: hsl(0 0% 70% / 0.18);
+  --filetree-badge-untracked-fg: hsl(0 0% 78%);
+  --filetree-badge-conflicted-bg: hsl(0 75% 55% / 0.25);
+  --filetree-badge-conflicted-fg: hsl(0 85% 75%);
+  --filetree-badge-renamed-bg: hsl(270 60% 50% / 0.20);
+  --filetree-badge-renamed-fg: hsl(270 70% 75%);
+
+  /* AI 步骤卡片 */
+  --aicard-bg: hsl(0 0% 11%);
+  --aicard-border: hsl(0 0% 18%);
+  --aicard-header-bg: hsl(0 0% 13%);
+  --aicard-title-font-size: 13.5px;
+  --aicard-status-pulse-live: var(--brand, hsl(160 84% 45%));
+  --aicard-status-running: var(--brand);
+  --aicard-status-success: var(--text-secondary, #a3a3a3);
+  --aicard-status-warning: var(--accent-orange, hsl(38 92% 50%));
+  --aicard-status-error: var(--accent-red, hsl(0 55% 55%));
+  --aicard-badge-bg: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --aicard-badge-fg: var(--text-tertiary);
+
+  /* --- 4. 极简思考链与状态横幅体系 (Dark) --- */
+  --thought-header-bg: hsl(0 0% 10%);
+  --thought-header-hover-bg: hsl(0 0% 13%);
+  --thought-header-fg: var(--text-secondary, #a3a3a3);
+  --thought-header-hover-fg: var(--text-primary, #f0f0f0);
+  --thought-header-font-size: var(--font-size-sm, 13px);
+  --thought-header-line-height: 1.5;
+  --thought-border-color: hsl(0 0% 15%);
+  --thought-indicator-bar: hsl(0 0% 25%);
+  --thought-live-title-fg: var(--brand, #10b981);
+  --thought-live-dot: var(--brand, #10b981);
+  --thought-live-glow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 25%, transparent);
+  --thought-chevron-fg: var(--text-tertiary, #8f8f8f);
+  --thought-chevron-hover-fg: var(--text-secondary, #a3a3a3);
+  --thought-chevron-color: var(--text-tertiary);
+  --thought-chevron-hover: var(--text-secondary);
+  --thought-rail-color: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  --thought-rail-width: 2px;
+  --thought-body-bg: hsl(0 0% 8%);
+  --thought-body-fg: var(--text-secondary, #a3a3a3);
+  --thought-body-font-size: var(--font-size-sm, 13px);
+  --thought-body-line-height: 1.65;
+  --thought-time-bg: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --thought-time-fg: var(--text-tertiary, #8f8f8f);
+  --thought-badge-bg: color-mix(in srgb, var(--text-primary) 7%, transparent);
+  --thought-badge-fg: var(--text-tertiary);
+  --thought-summary-indent: 0.35em;
+  --thought-font-size-meta: 12.5px;
+  --thought-scroll-max-h: 180px;
+  --thought-max-height: 240px;
+  --thought-mask-bg: var(--bg-card, hsl(0 0% 11%));
+
+  --banner-error-bg: color-mix(in srgb, var(--accent-red) 12%, var(--bg-card));
+  --banner-error-border: color-mix(in srgb, var(--accent-red) 32%, transparent);
+  --banner-error-fg: var(--text-primary, #f0f0f0);
+  --banner-error-icon: hsl(0 60% 65%);
+  --banner-error-radius: var(--radius-md, 6px);
+  --banner-error-padding: var(--space-2, 8px) var(--space-3, 12px);
+  --banner-error-gap: var(--space-2, 8px);
+  --banner-error-font-size: var(--font-size-sm, 13px);
+
+  /* --- 5. 流式动效与打字机光标体系 (Dark) --- */
+  --stream-caret-color: var(--brand, hsl(160 84% 45%)); /* 8.92:1 WCAG AAA */
+  --stream-caret-width: 2px;
+  --stream-caret-height: 0.95em;
+  --stream-caret-radius: 1px;
+  --stream-caret-margin-left: var(--space-0_5, 2px);
+  --stream-caret-blink-dur: 800ms;
+
+  --stream-anim-word-fade: 100ms;
+  --stream-anim-word-offset-y: 2px;
+  --stream-anim-marker-fade: 120ms;
+  --stream-anim-easing: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 22%, transparent);
+  --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 3%, transparent);
+  --stream-pulse-duration: 1.6s;
+  --stream-chunk-gap: 0.85em;
 
   color-scheme: dark;
 }
@@ -950,6 +1446,12 @@ html[data-theme='dark'] {
   --diff-sidebar-width-md: 108px;
   --diff-file-chip-min: 88px;
   --diff-file-chip-min-xs: 72px;
+
+  --md-text-size: 13px;
+  --md-code-font-size: 11.5px;
+  --md-table-font-size: 12px;
+  --md-table-cell-pad-x: 10px;
+  --md-table-cell-pad-y: 6px;
 }
 
 [data-ui-size='large'] {
@@ -1026,9 +1528,15 @@ html[data-theme='dark'] {
   --diff-sidebar-width-md: 128px;
   --diff-file-chip-min: 104px;
   --diff-file-chip-min-xs: 88px;
+
+  --md-text-size: 16px;
+  --md-code-font-size: 14px;
+  --md-table-font-size: 14.5px;
+  --md-table-cell-pad-x: 14px;
+  --md-table-cell-pad-y: 10px;
 }
 
-/*    html[data-perf-tier=...]        token       
+/*    html[data-perf-tier=...]        token
  * html[data-theme]         token    ::selection / keyframes /
  * .ui-popover-animate / [data-panel]           design-system.css
  *  S7-3   token    tokens.css     token     */
@@ -1040,9 +1548,12 @@ html[data-perf-tier='high'] {
   --backdrop-blur: blur(16px);
   --bg-glass: rgba(255, 255, 255, 0.75);
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+  --artifact-portal-blur: 16px;
+  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
 }
 html[data-perf-tier='high'][data-theme='dark'] {
   --bg-glass: rgba(10, 10, 10, 0.75);
+  --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 22%, transparent);
 }
 
 /* BALANCED SPEC TIER: Snappy layout transitions */
@@ -1050,6 +1561,11 @@ html[data-perf-tier='balanced'] {
   --backdrop-blur: blur(0px); /* Disable expensive GPU filters */
   --bg-glass: var(--bg-elevated); /* solid background fallback */
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
+  --artifact-portal-blur: 0px;
+  --stream-anim-word-fade: 80ms;
+  --stream-anim-word-offset-y: 1px;
+  --stream-anim-marker-fade: 100ms;
+  --stream-pulse-glow: none;
 }
 
 /* ECO PERFORMANCE TIER: Strictly flat layout, zero transitions */
@@ -1067,5 +1583,28 @@ html[data-perf-tier='eco'] {
   --transition-popover-exit: 0ms;
   --transition-modal-enter: 0ms;
   --transition-accordion: 0ms;
+  --artifact-portal-blur: 0px;
+  --stream-anim-word-fade: 0ms;
+  --stream-anim-marker-fade: 0ms;
+  --stream-anim-word-offset-y: 0px;
+  --stream-caret-blink-dur: 0ms;
+  --stream-pulse-duration: 0ms;
+  --stream-pulse-glow: none;
+  --stream-pulse-bg: transparent;
 }
 
+/* Reduced Motion Preference: System-level quiet response */
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  html[data-theme='default'],
+  html[data-theme='light'],
+  html[data-theme='dark'] {
+    --stream-anim-word-fade: 0ms;
+    --stream-anim-marker-fade: 0ms;
+    --stream-anim-word-offset-y: 0px;
+    --stream-caret-blink-dur: 0ms;
+    --stream-pulse-duration: 0ms;
+    --stream-pulse-glow: none;
+    --stream-pulse-bg: transparent;
+  }
+}

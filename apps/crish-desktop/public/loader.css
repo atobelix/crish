@@ -9,19 +9,19 @@ body {
 }
 
 :root {
-  --loader-bg: #0b0b0e;
-  --loader-card-bg: linear-gradient(180deg, #131316 0%, #08080a 100%);
-  --loader-border: rgba(255, 255, 255, 0.08);
-  --loader-line-stroke: #f4f4f5;
-  --loader-text: #a1a1aa;
-  --loader-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.85);
+  --loader-bg: #f4f5f7;
+  --loader-card-bg: linear-gradient(180deg, #ffffff 0%, #f4f5f7 100%);
+  --loader-border: rgba(0, 0, 0, 0.08);
+  --loader-line-stroke: #18181b;
+  --loader-text: #71717a;
+  --loader-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.08);
 }
 
 html[data-theme='light'],
 html[data-theme='default'],
 html.theme-light {
-  --loader-bg: #f4f4f5;
-  --loader-card-bg: linear-gradient(180deg, #ffffff 0%, #f4f4f5 100%);
+  --loader-bg: #f4f5f7;
+  --loader-card-bg: linear-gradient(180deg, #ffffff 0%, #f4f5f7 100%);
   --loader-border: rgba(0, 0, 0, 0.08);
   --loader-line-stroke: #18181b;
   --loader-text: #71717a;
@@ -30,8 +30,8 @@ html.theme-light {
 
 html[data-theme='dark'],
 html.theme-dark {
-  --loader-bg: #0b0b0e;
-  --loader-card-bg: linear-gradient(180deg, #131316 0%, #08080a 100%);
+  --loader-bg: #1b1b1b;
+  --loader-card-bg: linear-gradient(180deg, #242424 0%, #1b1b1b 100%);
   --loader-border: rgba(255, 255, 255, 0.08);
   --loader-line-stroke: #f4f4f5;
   --loader-text: #a1a1aa;
@@ -51,7 +51,6 @@ html.theme-dark {
   width: 100vw;
   height: 100vh;
   background-color: var(--loader-bg);
-  transition: background-color 0.3s ease;
   user-select: none;
   overflow: hidden;
   margin: 0;

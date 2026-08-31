@@ -25,12 +25,17 @@
 
   /* ---------- 面 ---------- */
   /* 页面是「纸」（带 2% 正黄），浮起的 composer/弹层更白——形成受光关系 */
+  --bg-shell: var(--shell, #f4f5f7);
   --bg-page: var(--paper);
   --bg-composer: var(--paper-raised);
   --bg-popover: var(--paper-raised);
   --bg-surface: var(--paper-sunken);
   --bg-hover: var(--wash-hover);
   --bg-active: var(--wash-active);
+
+  /* ---------- 卡片岛屿 (Card Island Architecture) ---------- */
+  --card-radius: 10px;
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.02);
 
   /* ---------- 线 ---------- */
   --border-color: var(--line);

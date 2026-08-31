@@ -156,7 +156,7 @@ html[data-theme="dark"] .elevation-4 {
 }
 
 .md-code-copy.is-copied {
-  color: var(--status-success, #10b981);
+  color: var(--brand, hsl(160 84% 39%));
 }
 
 /* ==========================================================================
@@ -211,4 +211,126 @@ html[data-theme="dark"] .elevation-4 {
 .sep-circle-btn,
 [data-sep-circle="true"] {
   border-radius: 50%;
+}
+
+/* ==========================================================================
+   5. 20 组 --syntax-* 双引擎语法高亮全局基座 (Syntect + Highlight.js)
+   ========================================================================== */
+
+/* 1. Keyword 关键字与类型声明 */
+.hljs-keyword,
+.hljs-type,
+.hljs-operator,
+.hljs-selector-tag,
+.source .keyword,
+.source .storage {
+  color: var(--syntax-keyword);
+}
+
+/* 2. String 字符串与正则 */
+.hljs-string,
+.hljs-regexp,
+.hljs-subst,
+.hljs-symbol,
+.source .string,
+.source .string.quoted,
+.source .string.template {
+  color: var(--syntax-string);
+}
+
+/* 3. Number 数值与常量 */
+.hljs-number,
+.hljs-literal,
+.hljs-link,
+.source .constant.numeric,
+.source .constant.language {
+  color: var(--syntax-number);
+}
+
+/* 4. Title / Function / Class 标题与函数名 */
+.hljs-title,
+.hljs-title.function_,
+.hljs-title.class_,
+.hljs-section,
+.source .entity.name.function,
+.source .entity.name.type,
+.source .entity.name.class,
+.source .entity.name.struct {
+  color: var(--syntax-title);
+}
+
+/* 5. Builtin 内置对象与系统包 */
+.hljs-built_in,
+.hljs-selector-id,
+.hljs-selector-class,
+.source .support.type,
+.source .support.class,
+.source .support.function,
+.source .support.constant {
+  color: var(--syntax-builtin);
+}
+
+/* 6. Attr / Property 属性与标签 */
+.hljs-attr,
+.hljs-attribute,
+.hljs-tag,
+.hljs-name,
+.source .entity.other.attribute-name,
+.source .entity.name.tag,
+.source .variable.other.property {
+  color: var(--syntax-attr);
+}
+
+/* 7. Comment 代码注释 */
+.hljs-comment,
+.hljs-doctag,
+.source .comment {
+  color: var(--syntax-comment);
+  font-style: italic;
+}
+
+/* 8. Addition Diff 增量代码 */
+.hljs-addition,
+.source .markup.inserted,
+.source .addition {
+  color: var(--syntax-addition);
+}
+
+/* 9. Deletion Diff 删除代码 */
+.hljs-deletion,
+.source .markup.deleted,
+.source .deletion {
+  color: var(--syntax-deletion);
+}
+
+/* 10. Meta / Params 元信息与参数 */
+.hljs-meta,
+.hljs-params,
+.source .meta,
+.source .punctuation.separator {
+  color: var(--syntax-meta);
+}
+
+/* Safe-Aim Virtual Triangle/Polygon Hit-test Overlay (全局浮动菜单防抖遮罩) */
+.sep-safe-aim-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: var(--z-popover, 500);
+  fill: transparent;
+  stroke: none;
+}
+
+.sep-safe-aim-overlay.sep-debug-visible {
+  fill: color-mix(in srgb, var(--accent-green, #10b981) 12%, transparent);
+  stroke: color-mix(in srgb, var(--accent-green, #10b981) 40%, transparent);
+  stroke-dasharray: 4 2;
+  stroke-width: 1px;
+}
+
+.sep-safe-aim-overlay polygon {
+  pointer-events: none;
 }

@@ -5,6 +5,7 @@
   /* Level 1: 粘性与外壳停靠层 */
   --z-dock: 10;
   --z-sticky: var(--z-dock);
+  --z-card-footer: var(--z-dock);
 
   /* Level 2: 视口外壳与分栏手柄 */
   --z-chrome: 100;
@@ -13,6 +14,7 @@
 
   /* Level 3: 下拉菜单与级联选择 */
   --z-dropdown: 300;
+  --z-breadcrumb: 400;
 
   /* Level 4: 浮层、卡片气泡与上下文菜单 */
   --z-popover: 500;

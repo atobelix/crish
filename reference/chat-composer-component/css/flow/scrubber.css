@@ -3,26 +3,15 @@
    Provides a quick jump track next to the native scrollbar.
    ========================================================================== */
 
-/* Wrapper fixed to the right of the chat scrollbar, vertically centered, completely immune to scroll */
+/* Wrapper anchored to the right of the chat-main-pane scrollbar, vertically centered */
 .flow-scrubber-wrapper {
-  position: fixed;
+  position: absolute;
   top: 0;
   bottom: 0;
   right: 14px; /* 12px native scrollbar width + 2px clean gap = zero overlap */
   width: 20px;
   z-index: 50;
   pointer-events: none; /* Wrapper itself shouldn't block */
-  transition: right var(--dur-base) var(--ease-spring);
-}
-
-/* When right workspace side panel is open, anchor to center divider scrollbar */
-.chat-app-layout.has-side-panel .flow-scrubber-wrapper {
-  right: calc(50% + 14px);
-}
-
-/* When both left sidebar and right side panel are open, anchor to middle pane's right edge */
-.chat-app-layout.has-left-sidebar.has-side-panel .flow-scrubber-wrapper {
-  right: calc((100vw - 240px) / 2 + 14px);
 }
 
 .flow-scrubber {

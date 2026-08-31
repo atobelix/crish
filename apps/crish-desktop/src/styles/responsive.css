@@ -1,9 +1,4 @@
 :root {
-  --breakpoint-sm: 480px;
-  --breakpoint-md: 768px;
-  --breakpoint-lg: 1024px;
-  --breakpoint-xl: 1280px;
-
   --sidebar-width: 260px;
   --sidebar-width-collapsed: 48px;
 }

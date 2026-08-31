@@ -633,7 +633,7 @@ document.addEventListener('DOMContentLoaded', () => {
       e.stopPropagation();
       dragCounter = 0;
       dragDropOverlay.style.display = 'none';
-      
+
       const files = e.dataTransfer.files;
       if (files && files.length > 0) {
         if (window.handleFiles) window.handleFiles(files);
@@ -916,11 +916,11 @@ document.addEventListener('DOMContentLoaded', () => {
         e.stopPropagation();
         const idx = parseInt(item.getAttribute('data-idx'));
         const val = item.getAttribute('data-val');
-        
+
         // Update Thumb Position & Track Level
         thumb.style.transform = `translateX(${idx * 100}%)`;
         track.setAttribute('data-level', idx);
-        
+
         // Update Active Class
         items.forEach(i => i.classList.remove('is-active'));
         item.classList.add('is-active');
@@ -960,13 +960,13 @@ document.addEventListener('DOMContentLoaded', () => {
     item.addEventListener('click', (e) => {
       // Don't close if clicking advanced toggle
       if (e.target.closest('.model-advanced-toggle') || e.target.closest('.model-advanced-content')) return;
-      
+
       e.stopPropagation();
       const modelName = item.getAttribute('data-model');
-      
+
       document.querySelectorAll('.model-item').forEach(i => i.classList.remove('is-selected'));
       item.classList.add('is-selected');
-      
+
       const btnModel = document.getElementById('btnModel');
       if (btnModel) {
         let alias = modelName;
@@ -976,7 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (alias.includes('4o Mini')) alias = '4o Mini';
         btnModel.textContent = alias;
       }
-      
+
       window.closeAllPopovers();
     });
   });
@@ -999,7 +999,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const topMoreMenu = document.getElementById('topMoreMenu');
   const topMoveOption = document.getElementById('topMoveOption');
   const topProjectSubmenu = document.getElementById('topProjectSubmenu');
-  const topShareBtn = document.getElementById('topShareBtn');
+  const topQuickPreviewBtn = document.getElementById('topQuickPreviewBtn');
+  const topQuickArtifactsBtn = document.getElementById('topQuickArtifactsBtn');
   const topPanelBtn = document.getElementById('topPanelBtn');
   const chatAppLayout = document.getElementById('chatAppLayout');
 
@@ -1030,13 +1031,45 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (topShareBtn) {
-    topShareBtn.addEventListener('click', (e) => {
+  function openSidePanelCapability(type, btnEl) {
+    const leafEl = btnEl?.closest('.tree-leaf-pane')
+                || document.querySelector('.tree-leaf-pane.active')
+                || document.querySelector('.tree-leaf-pane');
+
+    if (leafEl) {
+      if (!leafEl.classList.contains('has-side-panel')) {
+        leafEl.classList.add('has-side-panel');
+        const sidePanelBtn = leafEl.querySelector('.top-side-panel-btn');
+        if (sidePanelBtn) sidePanelBtn.classList.add('active');
+        if (window.syncComposerHorizontalAlignment) {
+          setTimeout(window.syncComposerHorizontalAlignment, 50);
+        }
+      }
+      if (leafEl._sidePanelTabManager) {
+        leafEl._sidePanelTabManager.openCapability(type);
+      }
+    } else if (chatAppLayout) {
+      if (!chatAppLayout.classList.contains('has-side-panel')) {
+        chatAppLayout.classList.add('has-side-panel');
+        if (topPanelBtn) topPanelBtn.classList.add('active');
+        if (window.syncComposerHorizontalAlignment) {
+          setTimeout(window.syncComposerHorizontalAlignment, 50);
+        }
+      }
+    }
+  }
+
+  if (topQuickPreviewBtn) {
+    topQuickPreviewBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      topShareBtn.style.color = 'var(--brand, #10b981)';
-      setTimeout(() => {
-        topShareBtn.style.color = '';
-      }, 1200);
+      openSidePanelCapability('preview', topQuickPreviewBtn);
+    });
+  }
+
+  if (topQuickArtifactsBtn) {
+    topQuickArtifactsBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openSidePanelCapability('artifacts', topQuickArtifactsBtn);
     });
   }
 
@@ -1046,7 +1079,7 @@ document.addEventListener('DOMContentLoaded', () => {
     chatAppLayout.classList.toggle('has-side-panel');
     const isOpen = chatAppLayout.classList.contains('has-side-panel');
     if (topPanelBtn) topPanelBtn.classList.toggle('active', isOpen);
-    
+
     // Sync composer horizontal alignment and timeline rails
     if (window.syncComposerHorizontalAlignment) {
       setTimeout(window.syncComposerHorizontalAlignment, 50);
@@ -1112,9 +1145,11 @@ document.addEventListener('DOMContentLoaded', () => {
     addTab(pid) {
       const leaf = this.findLeaf(this.tree, pid);
       if (!leaf) return;
-      const tab = { id: 'tab-' + Date.now(), title: '新会话 ' + (leaf.tabs.length + 1) };
+      this._tabUid = (this._tabUid || leaf.tabs.length) + 1;
+      const tab = { id: 'tab-' + Date.now(), title: '新会话 ' + this._tabUid };
       leaf.tabs.push(tab);
       leaf.activeTabId = tab.id;
+      this._enteringTabId = tab.id;
       this._emit('rebuild');
     }
 
@@ -1133,26 +1168,52 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     executeSplit(srcId, tab, dstId, region, insertIdx = -1) {
-      this._rmTab(this.tree, srcId, tab.id);
-      this._prune(this.tree);
+      const srcLeaf = this.findLeaf(this.tree, srcId);
+      const dstLeaf = this.findLeaf(this.tree, dstId);
 
-      if (region === 'center' || region === 'strip') {
-        const target = this.findLeaf(this.tree, dstId) || this.firstLeaf();
-        if (target) {
-          const idx = (insertIdx >= 0 && insertIdx <= target.tabs.length) ? insertIdx : target.tabs.length;
-          target.tabs.splice(idx, 0, tab);
-          target.activeTabId = tab.id;
-        }
-      } else {
-        const target = this.findLeaf(this.tree, dstId);
-        if (target) {
-          this._split(this.tree, dstId, tab, region);
-        } else {
-          const fallback = this.firstLeaf();
-          if (fallback) { fallback.tabs.push(tab); fallback.activeTabId = tab.id; }
+      // 1. In-place reorder in the SAME pane (NO tree pruning!)
+      if (srcId === dstId && (region === 'center' || region === 'strip') && srcLeaf) {
+        const fromIdx = srcLeaf.tabs.findIndex(t => t.id === tab.id);
+        if (fromIdx !== -1) {
+          srcLeaf.tabs.splice(fromIdx, 1);
+          let toIdx = insertIdx;
+          if (toIdx < 0 || toIdx > srcLeaf.tabs.length) {
+            toIdx = srcLeaf.tabs.length;
+          }
+          srcLeaf.tabs.splice(toIdx, 0, tab);
+          srcLeaf.activeTabId = tab.id;
+          this._emit('rebuild');
+          return;
         }
       }
 
+      // 2. Cross-pane move into existing pane tabs
+      if ((region === 'center' || region === 'strip') && dstLeaf) {
+        this._rmTab(this.tree, srcId, tab.id);
+        const idx = (insertIdx >= 0 && insertIdx <= dstLeaf.tabs.length) ? insertIdx : dstLeaf.tabs.length;
+        dstLeaf.tabs.splice(idx, 0, tab);
+        dstLeaf.activeTabId = tab.id;
+        this._prune(this.tree);
+        this._emit('rebuild');
+        return;
+      }
+
+      // 3. Binary Split (left / right / top / bottom)
+      if (dstLeaf && (region === 'left' || region === 'right' || region === 'top' || region === 'bottom')) {
+        this._rmTab(this.tree, srcId, tab.id);
+        this._split(this.tree, dstId, tab, region);
+        this._prune(this.tree);
+        this._emit('rebuild');
+        return;
+      }
+
+      // Fallback
+      this._rmTab(this.tree, srcId, tab.id);
+      const fallback = this.firstLeaf();
+      if (fallback) {
+        fallback.tabs.push(tab);
+        fallback.activeTabId = tab.id;
+      }
       this._prune(this.tree);
       this._emit('rebuild');
     }
@@ -1218,27 +1279,45 @@ document.addEventListener('DOMContentLoaded', () => {
       this._target = null;
       this._draggedTab = null;
       this._indicator = null;
-      this._foreignStrip = null;
-      this._cachedTabRects = null;
+      this._card = null;
+      this._activeStrip = null;
+      this._tabElements = [];
+      this._tabOriginalRects = [];
+      this._srcIdx = -1;
+      this._srcPaneId = null;
+      this._draggedEl = null;
+      this._lastTargetIdx = -1;
       this._lastStateKey = null;
-      this._currentMode = null;
     }
 
     start(e, srcPaneId, tab, idx, srcStrip) {
       if (e.button !== 0 || e.target.closest('.tab-item-close-btn')) return;
 
       this._draggedTab = tab;
+      this._srcPaneId = srcPaneId;
+      this._srcIdx = idx;
       const sx = e.clientX, sy = e.clientY;
-      const allTabs = Array.from(srcStrip.querySelectorAll('.session-tab-item'));
+
+      const tabsList = srcStrip.querySelector('.top-bar-tabs-list') || srcStrip;
+      const allTabs = Array.from(tabsList.querySelectorAll('.session-tab-item:not(.is-leaving)'));
       const dragged = allTabs[idx] || e.currentTarget;
       if (!dragged) return;
+      this._draggedEl = dragged;
 
       const leaf = this.store.findLeaf(this.store.tree, srcPaneId);
       if (!leaf) return;
 
+      const rect = dragged.getBoundingClientRect();
+      const grabOffsetX = Math.max(10, Math.min(e.clientX - rect.left, rect.width - 10));
+      const grabOffsetY = Math.max(5, Math.min(e.clientY - rect.top, rect.height - 5));
+
       let mode = 'idle';
       let cleaned = false;
       document.body.style.userSelect = 'none';
+      document.body.classList.add('is-tab-dragging');
+
+      // Measure source strip layout
+      this._initSrcStrip(srcStrip);
 
       const cleanup = () => {
         if (cleaned) return;
@@ -1246,26 +1325,42 @@ document.addEventListener('DOMContentLoaded', () => {
         window.removeEventListener('mousemove', onMove);
         window.removeEventListener('mouseup', onUp);
         document.body.style.userSelect = '';
-        dragged.classList.remove('is-dragging');
-        if (this._indicator) { this._indicator.remove(); this._indicator = null; }
+        document.body.classList.remove('is-tab-dragging');
+
+        if (dragged) {
+          dragged.classList.remove('is-dragging');
+        }
+        if (this._card) {
+          this._card.remove();
+          this._card = null;
+        }
+        if (this._indicator) {
+          this._indicator.remove();
+          this._indicator = null;
+        }
         this._leaveStrip();
         this._target = null;
         this._lastStateKey = null;
-        this._currentMode = null;
         this._draggedTab = null;
+        this._draggedEl = null;
       };
 
       const onMove = (ev) => {
         const dx = ev.clientX - sx, dy = ev.clientY - sy;
-        if (mode === 'idle' && (Math.abs(dx) + Math.abs(dy)) < 4) return;
+        if (mode === 'idle' && (Math.abs(dx) + Math.abs(dy)) < 3) return;
 
         if (mode === 'idle') {
           mode = 'drag';
           dragged.classList.add('is-dragging');
+          this._createCard(tab.title, rect.width);
         }
 
-        if (!this._indicator) this._indicator = this._createIndicator();
-        this._updateTarget(ev.clientX, ev.clientY, srcStrip, dx);
+        // Real-time 0ms direct hardware cursor tracking in global viewport space
+        if (this._card) {
+          this._card.style.transform = `translate3d(${ev.clientX - grabOffsetX}px, ${ev.clientY - grabOffsetY}px, 0)`;
+        }
+
+        this._onDragMove(ev.clientX, ev.clientY);
       };
 
       const onUp = (ev) => {
@@ -1280,7 +1375,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const { paneId, region, insertIdx } = target;
-        if (paneId === srcPaneId && leaf.tabs.length <= 1 && region === 'center') {
+        if (paneId === srcPaneId && leaf.tabs.length <= 1 && (region === 'center' || region === 'strip')) {
           this.store.activateTab(srcPaneId, tab.id);
           return;
         }
@@ -1292,161 +1387,229 @@ document.addEventListener('DOMContentLoaded', () => {
       window.addEventListener('mouseup', onUp);
     }
 
-    _createIndicator() {
-      const d = document.createElement('div');
-      d.className = 'tree-drop-indicator';
-      document.body.appendChild(d);
-      return d;
+    _createCard(title, width) {
+      if (this._card) this._card.remove();
+      const c = document.createElement('div');
+      c.className = 'tree-drag-card';
+      c.style.width = width ? width + 'px' : '150px';
+      c.innerHTML = `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;">${title}</span>`;
+      document.body.appendChild(c);
+      this._card = c;
     }
 
-    _enterStrip(strip) {
-      if (this._foreignStrip === strip && this._cachedTabRects) return;
-      this._leaveStrip();
-      this._foreignStrip = strip;
-      this._cachedTabRects = Array.from(strip.querySelectorAll('.session-tab-item:not(.is-dragging):not(.is-leaving)')).map(t => {
-        const r = t.getBoundingClientRect();
-        const tx = new WebKitCSSMatrix(getComputedStyle(t).transform).m41 || 0;
-        return { left: r.left - tx, right: r.right - tx, width: r.width, el: t };
+    _initSrcStrip(strip) {
+      this._activeStrip = strip;
+      const tabsList = strip.querySelector('.top-bar-tabs-list') || strip;
+      this._tabElements = Array.from(tabsList.querySelectorAll('.session-tab-item:not(.is-leaving)'));
+      this._tabOriginalRects = this._tabElements.map(el => {
+        const r = el.getBoundingClientRect();
+        const tx = new WebKitCSSMatrix(getComputedStyle(el).transform).m41 || 0;
+        const baseLeft = r.left - tx;
+        return {
+          left: baseLeft,
+          right: baseLeft + r.width,
+          width: r.width,
+          midX: baseLeft + r.width / 2,
+          el: el
+        };
       });
+      this._lastTargetIdx = this._srcIdx;
     }
 
     _leaveStrip() {
-      if (this._foreignStrip) {
-        this._foreignStrip.querySelectorAll('.session-tab-item').forEach(t => {
-          t.style.transform = '';
-          t.style.transition = '';
+      if (this._tabElements) {
+        this._tabElements.forEach(el => {
+          el.style.transform = '';
+          el.style.transition = 'transform 160ms cubic-bezier(0.2, 0, 0, 1)';
         });
       }
-      this._foreignStrip = null;
-      this._cachedTabRects = null;
+      if (this._activeStrip) {
+        const inFlowAdd = this._activeStrip.querySelector('.top-bar-new-tab-btn.in-flow');
+        if (inFlowAdd) {
+          inFlowAdd.style.transform = '';
+          inFlowAdd.style.transition = 'transform 160ms cubic-bezier(0.2, 0, 0, 1)';
+        }
+      }
+      this._activeStrip = null;
+      this._tabElements = [];
+      this._tabOriginalRects = [];
+      this._lastTargetIdx = -1;
       this._lastStateKey = null;
     }
 
-    _updateTarget(cx, cy, srcStrip, dx) {
-      const ind = this._indicator;
-      if (!ind) return;
+    _createIndicator() {
+      if (this._indicator) return this._indicator;
+      const d = document.createElement('div');
+      d.className = 'tree-drop-indicator';
+      document.body.appendChild(d);
+      this._indicator = d;
+      return d;
+    }
 
+    _onDragMove(cx, cy) {
       const hit = document.elementFromPoint(cx, cy);
-      const strip = hit ? hit.closest('.top-bar-tabs-container') : null;
 
-      if (this._foreignStrip && this._foreignStrip !== strip) {
+      // Robust header / tab strip detection (handles header padding, tab items, tabsList, etc.)
+      const header = hit ? hit.closest('.tree-pane-header') : null;
+      const strip = header ? (header.querySelector('.top-bar-tabs-container') || header) : (hit ? hit.closest('.top-bar-tabs-container') : null);
+
+      if (strip) {
+        // Mode 1: Inside Tab Strip (Chrome-grade Physical Card Reordering)
+        this._handleStripMove(cx, strip);
+      } else {
+        // Mode 2: Detached into Workspace Panes (Green Drop Zone Preview)
+        this._handleWorkspaceMove(cx, cy, hit);
+      }
+    }
+
+    _handleStripMove(cx, strip) {
+      if (this._card) {
+        this._card.classList.remove('is-detached');
+      }
+
+      // Hide workspace drop indicator when inside tab strip
+      if (this._indicator) {
+        this._indicator.style.display = 'none';
+      }
+
+      const paneId = strip.dataset.paneId || strip.closest('.tree-leaf-pane')?.dataset?.paneId || this._srcPaneId || 'pane-main';
+      const isSameStrip = (paneId === this._srcPaneId);
+
+      if (isSameStrip) {
+        if (this._activeStrip !== strip || !this._tabOriginalRects || this._tabOriginalRects.length === 0) {
+          this._initSrcStrip(strip);
+        }
+        const rects = this._tabOriginalRects;
+        const srcIdx = this._srcIdx;
+        const shiftW = (rects[srcIdx]?.width || 150) + 4;
+
+        // Determine target slot by comparing cursor position against neighbor midpoints
+        let targetIdx = srcIdx;
+        for (let i = 0; i < rects.length; i++) {
+          if (i === srcIdx) continue;
+          const r = rects[i];
+          if (i < srcIdx) {
+            if (cx < r.midX) {
+              targetIdx = Math.min(targetIdx, i);
+            }
+          } else {
+            if (cx > r.midX) {
+              targetIdx = Math.max(targetIdx, i);
+            }
+          }
+        }
+
+        if (targetIdx !== this._lastTargetIdx) {
+          this._lastTargetIdx = targetIdx;
+          rects.forEach((r, i) => {
+            if (i === srcIdx) return;
+            r.el.style.transition = 'transform 160ms cubic-bezier(0.2, 0, 0, 1)';
+            if (srcIdx < targetIdx && i > srcIdx && i <= targetIdx) {
+              r.el.style.transform = `translateX(-${shiftW}px)`;
+            } else if (srcIdx > targetIdx && i >= targetIdx && i < srcIdx) {
+              r.el.style.transform = `translateX(${shiftW}px)`;
+            } else {
+              r.el.style.transform = '';
+            }
+          });
+        }
+
+        this._target = { paneId, region: 'strip', insertIdx: targetIdx };
+      } else {
+        // Cross-window drag to another strip!
+        if (this._activeStrip !== strip) {
+          this._leaveStrip();
+          this._activeStrip = strip;
+          const tabsList = strip.querySelector('.top-bar-tabs-list') || strip;
+          this._tabElements = Array.from(tabsList.querySelectorAll('.session-tab-item:not(.is-leaving)'));
+          this._tabOriginalRects = this._tabElements.map(el => {
+            const r = el.getBoundingClientRect();
+            const tx = new WebKitCSSMatrix(getComputedStyle(el).transform).m41 || 0;
+            const baseLeft = r.left - tx;
+            return { left: baseLeft, right: baseLeft + r.width, width: r.width, midX: baseLeft + r.width / 2, el: el };
+          });
+        }
+
+        const rects = this._tabOriginalRects;
+        const shiftW = 154;
+        let targetIdx = rects.length;
+        for (let i = 0; i < rects.length; i++) {
+          if (cx < rects[i].midX) {
+            targetIdx = i;
+            break;
+          }
+        }
+
+        const stateKey = `cross:${paneId}:${targetIdx}`;
+        if (this._lastStateKey !== stateKey) {
+          this._lastStateKey = stateKey;
+          rects.forEach((r, i) => {
+            r.el.style.transition = 'transform 160ms cubic-bezier(0.2, 0, 0, 1)';
+            r.el.style.transform = i >= targetIdx ? `translateX(${shiftW}px)` : '';
+          });
+          const inFlowAdd = strip.querySelector('.top-bar-new-tab-btn.in-flow');
+          if (inFlowAdd) {
+            inFlowAdd.style.transition = 'transform 160ms cubic-bezier(0.2, 0, 0, 1)';
+            inFlowAdd.style.transform = `translateX(${shiftW}px)`;
+          }
+        }
+
+        this._target = { paneId, region: 'strip', insertIdx: targetIdx };
+      }
+    }
+
+    _handleWorkspaceMove(cx, cy, hit) {
+      if (this._card) {
+        this._card.classList.add('is-detached');
+      }
+
+      // Reset tab strip displacements when dragging out into the workspace
+      if (this._activeStrip) {
         this._leaveStrip();
       }
 
-      if (strip && (strip.dataset.paneId || strip.closest('.app-top-bar'))) {
-        const paneId = strip.dataset.paneId || 'pane-main';
-        this._handleStripDrop(cx, strip, paneId, ind, dx);
+      const ind = this._createIndicator();
+      const pane = hit ? hit.closest('.tree-leaf-pane') : null;
+
+      if (!pane) {
+        ind.style.display = 'none';
+        this._target = null;
+        this._lastStateKey = null;
         return;
       }
 
-      this._handlePaneDrop(cx, cy, ind);
-    }
+      const r = pane.getBoundingClientRect();
+      const rx = (cx - r.left) / r.width;
+      const ry = (cy - r.top) / r.height;
+      let region = 'center';
+      if (rx < 0.22) region = 'left';
+      else if (rx > 0.78) region = 'right';
+      else if (ry < 0.22) region = 'top';
+      else if (ry > 0.78) region = 'bottom';
 
-    _handleStripDrop(cx, strip, paneId, ind, dx) {
-      this._enterStrip(strip);
-      const tabRects = this._cachedTabRects || [];
-      const insertIdx = this._computeInsertIndex(tabRects, cx, dx);
-      const shiftW = 150;
+      const paneId = pane.dataset.paneId || 'pane-main';
+      const stateKey = `pane:${paneId}:${region}`;
+      if (this._lastStateKey === stateKey) return;
+      this._lastStateKey = stateKey;
 
-      const stateKey = `strip:${paneId}:${insertIdx}`;
-      if (this._lastStateKey !== stateKey) {
-        this._lastStateKey = stateKey;
-        tabRects.forEach((r, i) => {
-          r.el.style.transition = 'transform 180ms cubic-bezier(.2,0,0,1)';
-          r.el.style.transform = i >= insertIdx ? `translateX(${shiftW + 4}px)` : '';
-        });
-      }
+      this._target = { paneId, region, insertIdx: -1 };
 
-      const scrollRect = strip.getBoundingClientRect();
-      const indicatorW = 150;
-      const minX = scrollRect.left + 2;
-      const maxX = scrollRect.right - indicatorW - 2;
-      const lineX = Math.max(minX, Math.min(cx - indicatorW / 2, maxX));
-
-      const title = this._draggedTab ? this._draggedTab.title : '放置标签';
-      ind.innerHTML = `<span style="font-size:12px;font-weight:500;color:var(--brand-primary,#10b981);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:0 8px;max-width:100%;pointer-events:none;">${title}</span>`;
       ind.style.display = 'flex';
       ind.style.alignItems = 'center';
-      ind.style.justifyContent = 'flex-start';
-      ind.style.borderRadius = '4px';
+      ind.style.justifyContent = 'center';
+      ind.style.borderRadius = '6px';
+      ind.style.transition = 'left 120ms cubic-bezier(.2,0,0,1), top 120ms cubic-bezier(.2,0,0,1), width 120ms cubic-bezier(.2,0,0,1), height 120ms cubic-bezier(.2,0,0,1), border-radius 100ms ease, opacity 80ms ease';
 
-      const enteringStrip = this._currentMode !== 'strip';
-      this._currentMode = 'strip';
-      if (enteringStrip) {
-        ind.style.transition = 'left 120ms cubic-bezier(.2,0,0,1), top 120ms cubic-bezier(.2,0,0,1), width 120ms cubic-bezier(.2,0,0,1), height 120ms cubic-bezier(.2,0,0,1), border-radius 100ms ease, opacity 80ms ease';
-      } else {
-        ind.style.transition = 'border-radius 100ms ease, opacity 80ms ease';
+      const title = this._draggedTab ? this._draggedTab.title : '';
+      ind.innerHTML = title ? `<span style="font-size:13px;font-weight:500;color:var(--brand-primary,#10b981);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80%;pointer-events:none;">${title}</span>` : '';
+
+      switch (region) {
+        case 'left':   this._posInd(ind, r.left + 2, r.top + 2, r.width * .5 - 4, r.height - 4); break;
+        case 'right':  this._posInd(ind, r.left + r.width * .5 + 2, r.top + 2, r.width * .5 - 4, r.height - 4); break;
+        case 'top':    this._posInd(ind, r.left + 2, r.top + 2, r.width - 4, r.height * .5 - 4); break;
+        case 'bottom': this._posInd(ind, r.left + 2, r.top + r.height * .5 + 2, r.width - 4, r.height * .5 - 4); break;
+        default:       this._posInd(ind, r.left + 2, r.top + 2, r.width - 4, r.height - 4); break;
       }
-
-      this._posInd(ind, lineX, scrollRect.top + (scrollRect.height - 26) / 2, indicatorW, 26);
-      this._target = { paneId, region: 'center', insertIdx };
-    }
-
-    _handlePaneDrop(cx, cy, ind) {
-      this._leaveStrip();
-      const panes = Array.from(document.querySelectorAll('.tree-leaf-pane, #chatMainPane'));
-
-      for (const pane of panes) {
-        const r = pane.getBoundingClientRect();
-        if (cx < r.left || cx > r.right || cy < r.top || cy > r.bottom) continue;
-
-        const rx = (cx - r.left) / r.width;
-        const ry = (cy - r.top) / r.height;
-        let region = 'center';
-        if (rx < 0.25) region = 'left';
-        else if (rx > 0.75) region = 'right';
-        else if (ry < 0.25) region = 'top';
-        else if (ry > 0.75) region = 'bottom';
-
-        const paneId = pane.dataset.paneId || 'pane-main';
-        const stateKey = `pane:${paneId}:${region}`;
-        if (this._lastStateKey === stateKey) return;
-        this._lastStateKey = stateKey;
-
-        this._target = { paneId, region, insertIdx: -1 };
-
-        ind.style.display = 'flex';
-        ind.style.alignItems = 'center';
-        ind.style.justifyContent = 'center';
-        ind.style.borderRadius = '6px';
-        this._currentMode = 'pane';
-        ind.style.transition = 'left 120ms cubic-bezier(.2,0,0,1), top 120ms cubic-bezier(.2,0,0,1), width 120ms cubic-bezier(.2,0,0,1), height 120ms cubic-bezier(.2,0,0,1), border-radius 100ms ease, opacity 80ms ease';
-
-        const title = this._draggedTab ? this._draggedTab.title : '';
-        ind.innerHTML = title ? `<span style="font-size:13px;font-weight:500;color:var(--brand-primary,#10b981);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:80%;pointer-events:none;">${title}</span>` : '';
-
-        switch (region) {
-          case 'left':   this._posInd(ind, r.left + 2, r.top + 2, r.width * .5 - 4, r.height - 4); break;
-          case 'right':  this._posInd(ind, r.left + r.width * .5 + 2, r.top + 2, r.width * .5 - 4, r.height - 4); break;
-          case 'top':    this._posInd(ind, r.left + 2, r.top + 2, r.width - 4, r.height * .5 - 4); break;
-          case 'bottom': this._posInd(ind, r.left + 2, r.top + r.height * .5 + 2, r.width - 4, r.height * .5 - 4); break;
-          default:       this._posInd(ind, r.left + 2, r.top + 2, r.width - 4, r.height - 4); break;
-        }
-        return;
-      }
-
-      this._target = null;
-      this._lastStateKey = null;
-      if (ind) ind.style.display = 'none';
-    }
-
-    _computeInsertIndex(tabRects, cx, dx) {
-      for (let i = 0; i < tabRects.length; i++) {
-        const r = tabRects[i];
-        if (cx < r.left) return i;
-        if (cx <= r.right) {
-          // Inside tab i: if moving right, trigger after 1/3; if moving left, trigger after right 1/3
-          if (dx !== undefined) {
-            if (dx >= 0) {
-              return cx >= r.left + r.width * (1 / 3) ? i + 1 : i;
-            } else {
-              return cx <= r.right - r.width * (1 / 3) ? i : i + 1;
-            }
-          }
-          return cx < r.left + r.width / 2 ? i : i + 1;
-        }
-      }
-      return tabRects.length;
     }
 
     _posInd(el, l, t, w, h) {
@@ -1454,6 +1617,338 @@ document.addEventListener('DOMContentLoaded', () => {
       el.style.top = t + 'px';
       el.style.width = w + 'px';
       el.style.height = h + 'px';
+    }
+  }
+
+  // ---- Side Panel Tab & View Controller (Row 1: Tabs + Row 2: Toolbar + Launcher Hub) ----
+  class SidePanelTabManager {
+    constructor(sidePanelEl, leafEl = null) {
+      this.sidePanelEl = sidePanelEl;
+      this.leafEl = leafEl;
+      this.tabs = [
+        { id: 'tab-preview', type: 'preview', title: '应用预览', icon: 'preview', closable: true },
+        { id: 'tab-artifacts', type: 'artifacts', title: '代码产物', icon: 'artifacts', closable: true }
+      ];
+      this.activeTabId = 'tab-preview';
+      this.isMaximized = false;
+      this._tabCounter = this.tabs.length;
+
+      this._initDOM();
+      this.render();
+    }
+
+    _initDOM() {
+      this.sidePanelEl.innerHTML = `
+        <header class="side-panel-tab-header">
+          <div class="side-panel-tabs-track">
+            <div class="side-panel-tabs-list"></div>
+            <button class="side-panel-add-btn in-flow" title="新建标签页">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+          </div>
+          <div class="side-panel-tab-fixed-cluster">
+            <button class="side-panel-add-btn pinned" title="新建标签页">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+            </button>
+            <button class="side-panel-btn side-panel-btn-maximize" title="最大化面板">
+              <svg class="icon-maximize" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+              <svg class="icon-restore" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none;"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="side-panel-toolbar">
+          <div class="side-panel-toolbar-nav">
+            <button class="side-panel-btn" title="后退"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button>
+            <button class="side-panel-btn" title="前进"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
+            <button class="side-panel-btn" title="刷新"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg></button>
+          </div>
+          <div class="side-panel-toolbar-actions">
+            <button class="side-panel-btn" title="在浏览器中打开"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></button>
+          </div>
+        </div>
+
+        <div class="side-panel-body"></div>
+      `;
+
+      this.tabHeader = this.sidePanelEl.querySelector('.side-panel-tab-header');
+      this.tabsTrack = this.sidePanelEl.querySelector('.side-panel-tabs-track');
+      this.tabsList = this.sidePanelEl.querySelector('.side-panel-tabs-list');
+      this.inFlowAddBtn = this.sidePanelEl.querySelector('.side-panel-add-btn.in-flow');
+      this.pinnedAddBtn = this.sidePanelEl.querySelector('.side-panel-add-btn.pinned');
+      this.maxBtn = this.sidePanelEl.querySelector('.side-panel-btn-maximize');
+      this.bodyEl = this.sidePanelEl.querySelector('.side-panel-body');
+
+      this.inFlowAddBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.addTab();
+      });
+      this.pinnedAddBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.addTab();
+      });
+
+      this.maxBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.toggleMaximize();
+      });
+
+      this.tabsTrack.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          this.tabsTrack.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      if (window.ResizeObserver) {
+        this._resizeObserver = new ResizeObserver(() => this.checkOverflow());
+        this._resizeObserver.observe(this.tabsTrack);
+      }
+    }
+
+    _getIconSvg(iconType) {
+      if (iconType === 'artifacts') {
+        return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><polyline points="10 13 8 15 10 17"></polyline><polyline points="14 13 16 15 14 17"></polyline></svg>`;
+      }
+      return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10z"></path></svg>`;
+    }
+
+    render(enteringTabId = null) {
+      this.tabsList.innerHTML = '';
+      const isEmpty = this.tabs.length === 0;
+      this.sidePanelEl.classList.toggle('is-empty', isEmpty);
+
+      if (isEmpty) {
+        this.renderLauncherHub();
+        this.checkOverflow();
+        return;
+      }
+
+      this.tabs.forEach((tab) => {
+        const tabEl = document.createElement('div');
+        tabEl.className = 'side-panel-tab-item' + (tab.id === this.activeTabId ? ' active' : '');
+        if (tab.id === enteringTabId) {
+          tabEl.classList.add('is-entering');
+        }
+        tabEl.dataset.id = tab.id;
+        tabEl.title = tab.title;
+        tabEl.innerHTML = `
+          <span class="side-panel-tab-icon">${this._getIconSvg(tab.icon)}</span>
+          <span class="tab-item-title">${tab.title}</span>
+          ${tab.closable ? `
+          <button class="tab-item-close-btn" title="关闭标签页">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>` : ''}
+        `;
+
+        tabEl.addEventListener('click', (e) => {
+          if (e.target.closest('.tab-item-close-btn')) {
+            e.stopPropagation();
+            this.closeTab(tab.id, tabEl);
+          } else {
+            this.activateTab(tab.id);
+          }
+        });
+
+        // Middle click to close tab
+        tabEl.addEventListener('auxclick', (e) => {
+          if (e.button === 1) { // Middle mouse button
+            e.preventDefault();
+            e.stopPropagation();
+            if (tab.closable) {
+              this.closeTab(tab.id, tabEl);
+            }
+          }
+        });
+
+        tabEl.addEventListener('mousedown', (e) => {
+          if (e.button === 1) {
+            e.preventDefault(); // Prevent default auto-scroll icon on middle click
+          }
+        });
+
+        this.tabsList.appendChild(tabEl);
+      });
+
+      this.updateBodyView();
+      this.checkOverflow();
+    }
+
+    renderLauncherHub() {
+      if (!this.bodyEl) return;
+      this.bodyEl.innerHTML = `
+        <div class="side-panel-launcher-hub">
+          <div class="launcher-cards-group">
+            <button class="side-panel-launcher-card" data-capability="preview">
+              <div class="launcher-card-icon-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10z"></path>
+                </svg>
+              </div>
+              <span class="launcher-card-title">应用预览</span>
+            </button>
+
+            <button class="side-panel-launcher-card" data-capability="artifacts">
+              <div class="launcher-card-icon-box">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                  <polyline points="10 13 8 15 10 17"></polyline><polyline points="14 13 16 15 14 17"></polyline>
+                </svg>
+              </div>
+              <span class="launcher-card-title">代码产物与文件</span>
+            </button>
+          </div>
+        </div>
+      `;
+
+      this.bodyEl.querySelectorAll('.side-panel-launcher-card').forEach(card => {
+        card.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const cap = card.dataset.capability;
+          this.openCapability(cap);
+        });
+      });
+    }
+
+    openCapability(type, customTitle = null) {
+      const existingTab = this.tabs.find(t => t.type === type);
+      if (existingTab) {
+        this.activateTab(existingTab.id);
+        return existingTab.id;
+      }
+
+      this._tabCounter++;
+      const newId = 'tab-' + type + '-' + Date.now();
+      const defaultTitle = type === 'artifacts' ? '代码产物' : '应用预览';
+      const newTab = {
+        id: newId,
+        type: type,
+        title: customTitle || defaultTitle,
+        icon: type,
+        closable: true
+      };
+      this.tabs.push(newTab);
+      this.activeTabId = newId;
+      this.render(newId);
+
+      setTimeout(() => {
+        if (this.tabsTrack) {
+          this.tabsTrack.scrollTo({ left: this.tabsTrack.scrollWidth, behavior: 'smooth' });
+          this.checkOverflow();
+        }
+      }, 50);
+      return newId;
+    }
+
+    activateTab(tabId) {
+      if (this.activeTabId === tabId) return;
+      this.activeTabId = tabId;
+      this.tabsList.querySelectorAll('.side-panel-tab-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.id === tabId);
+      });
+      const activeEl = this.tabsList.querySelector(`.side-panel-tab-item[data-id="${tabId}"]`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
+      this.updateBodyView();
+    }
+
+    updateBodyView() {
+      if (!this.bodyEl || this.tabs.length === 0) return;
+      const activeTab = this.tabs.find(t => t.id === this.activeTabId);
+      if (!activeTab) return;
+      if (activeTab.icon === 'artifacts') {
+        this.bodyEl.innerHTML = `
+          <div class="side-panel-empty-state">
+            <div class="side-empty-title">代码产物与文件</div>
+            <div class="side-empty-desc" style="color: var(--text-secondary); font-size: 13px; line-height: 1.6;">在此查看与管理当前会话生成的代码产物、文档及导出文件。</div>
+          </div>
+        `;
+      } else {
+        this.bodyEl.innerHTML = `
+          <div class="side-panel-empty-state">
+            <div class="side-empty-title">Create apps with Build Mode</div>
+            <div class="side-empty-desc" style="color: var(--text-secondary); font-size: 13px; line-height: 1.6;">In Build Mode, create websites, games, apps, and interactive dashboards, and preview them right here.</div>
+          </div>
+        `;
+      }
+    }
+
+    addTab() {
+      this._tabCounter++;
+      const newId = 'tab-custom-' + Date.now() + '-' + this._tabCounter;
+      const isArtifact = this._tabCounter % 2 === 0;
+      const newTab = {
+        id: newId,
+        type: isArtifact ? 'artifacts' : 'preview',
+        title: isArtifact ? `代码产物 ${this._tabCounter}` : `应用预览 ${this._tabCounter}`,
+        icon: isArtifact ? 'artifacts' : 'preview',
+        closable: true
+      };
+      this.tabs.push(newTab);
+      this.activeTabId = newId;
+      this.render(newId);
+
+      setTimeout(() => {
+        if (this.tabsTrack) {
+          this.tabsTrack.scrollTo({ left: this.tabsTrack.scrollWidth, behavior: 'smooth' });
+          this.checkOverflow();
+        }
+      }, 50);
+    }
+
+    closeTab(tabId, tabEl) {
+      const tabIdx = this.tabs.findIndex(t => t.id === tabId);
+      if (tabIdx === -1) return;
+
+      // Immediately activate neighbor so there is zero visual lag
+      if (this.activeTabId === tabId && this.tabs.length > 1) {
+        const nextActive = this.tabs[tabIdx === 0 ? 1 : tabIdx - 1];
+        if (nextActive) {
+          this.activeTabId = nextActive.id;
+          const nextEl = this.tabsList.querySelector(`.side-panel-tab-item[data-id="${nextActive.id}"]`);
+          if (nextEl) nextEl.classList.add('active');
+          this.updateBodyView();
+        }
+      }
+
+      tabEl.classList.remove('active');
+      tabEl.classList.add('is-leaving');
+      tabEl.style.pointerEvents = 'none';
+
+      setTimeout(() => {
+        const idx = this.tabs.findIndex(t => t.id === tabId);
+        if (idx !== -1) {
+          this.tabs.splice(idx, 1);
+        }
+        if (this.tabs.length === 0) {
+          this.activeTabId = null;
+        }
+        this.render();
+      }, 220);
+    }
+
+    toggleMaximize() {
+      this.isMaximized = !this.isMaximized;
+      this.sidePanelEl.classList.toggle('is-maximized', this.isMaximized);
+      const iconMax = this.maxBtn.querySelector('.icon-maximize');
+      const iconRestore = this.maxBtn.querySelector('.icon-restore');
+      if (iconMax && iconRestore) {
+        iconMax.style.display = this.isMaximized ? 'none' : '';
+        iconRestore.style.display = this.isMaximized ? '' : 'none';
+      }
+      this.maxBtn.title = this.isMaximized ? '恢复面板' : '最大化面板';
+      if (window.syncComposerHorizontalAlignment) {
+        setTimeout(window.syncComposerHorizontalAlignment, 50);
+      }
+    }
+
+    checkOverflow() {
+      if (!this.tabsTrack || !this.tabHeader) return;
+      const isOverflowing = this.tabsTrack.scrollWidth > this.tabsTrack.clientWidth + 2;
+      this.tabHeader.classList.toggle('has-overflow', isOverflowing);
     }
   }
 
@@ -1483,9 +1978,31 @@ document.addEventListener('DOMContentLoaded', () => {
       root.appendChild(this._buildNode(this.store.tree, mainPane, { topRow: true, leftEdge: true, rightEdge: true }));
       container.appendChild(root);
 
+      this.store._enteringTabId = null;
+
       if (window.syncComposerHorizontalAlignment) {
         setTimeout(window.syncComposerHorizontalAlignment, 50);
       }
+    }
+
+    _handleCloseTab(node, tab, tabEl) {
+      if (node.activeTabId === tab.id && node.tabs.length > 1) {
+        const curIdx = node.tabs.findIndex(t => t.id === tab.id);
+        const nextTab = node.tabs[curIdx === 0 ? 1 : curIdx - 1];
+        if (nextTab) {
+          node.activeTabId = nextTab.id;
+          const nextEl = tabEl.parentElement?.querySelector(`.session-tab-item[data-id="${nextTab.id}"]`);
+          if (nextEl) nextEl.classList.add('active');
+        }
+      }
+
+      tabEl.classList.remove('active');
+      tabEl.classList.add('is-leaving');
+      tabEl.style.pointerEvents = 'none';
+
+      setTimeout(() => {
+        this.store.removeTab(node.id, tab.id);
+      }, 220);
     }
 
     _buildLeaf(node, mainPane, flags) {
@@ -1499,26 +2016,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (flags.rightEdge) leafEl.classList.add('right-edge');
       }
 
-      // 1. Header with Dynamic Tab Strip
+      // 1. Header with Dynamic Tab Strip (Contained inside card island)
       const hdr = document.createElement('div');
       hdr.className = 'tree-pane-header';
-
-      // Reserve space for floating overlay controls on top row
-      if (flags.topRow && flags.leftEdge) {
-        const isCollapsed = document.getElementById('chatLeftSidebar')?.classList.contains('collapsed');
-        hdr.style.paddingLeft = isCollapsed ? '38px' : '0px';
-      }
-      if (flags.topRow && flags.rightEdge) {
-        hdr.style.paddingRight = '120px';
-      }
 
       const strip = document.createElement('div');
       strip.className = 'top-bar-tabs-container';
       strip.dataset.paneId = node.id;
 
+      const tabsList = document.createElement('div');
+      tabsList.className = 'top-bar-tabs-list';
+
       node.tabs.forEach((tab, i) => {
         const tabEl = document.createElement('div');
         tabEl.className = 'session-tab-item' + (tab.id === node.activeTabId ? ' active' : '');
+        if (tab.id === this.store._enteringTabId) {
+          tabEl.classList.add('is-entering');
+        }
         tabEl.dataset.id = tab.id;
         tabEl.title = tab.title;
         tabEl.innerHTML = `
@@ -1531,27 +2045,71 @@ document.addEventListener('DOMContentLoaded', () => {
         tabEl.addEventListener('click', (e) => {
           if (e.target.closest('.tab-item-close-btn')) {
             e.stopPropagation();
-            this.store.removeTab(node.id, tab.id);
+            this._handleCloseTab(node, tab, tabEl);
           } else {
             this.store.activateTab(node.id, tab.id);
           }
         });
 
-        tabEl.addEventListener('mousedown', (e) => {
-          this.drag.start(e, node.id, tab, i, strip);
+        // Middle click to close tab
+        tabEl.addEventListener('auxclick', (e) => {
+          if (e.button === 1) {
+            e.preventDefault();
+            e.stopPropagation();
+            this._handleCloseTab(node, tab, tabEl);
+          }
         });
 
-        strip.appendChild(tabEl);
+        tabEl.addEventListener('mousedown', (e) => {
+          if (e.button === 1) {
+            e.preventDefault(); // prevent scroll cursor on middle click
+          } else {
+            this.drag.start(e, node.id, tab, i, strip);
+          }
+        });
+
+        tabsList.appendChild(tabEl);
       });
 
-      const addBtn = document.createElement('button');
-      addBtn.className = 'top-bar-new-tab-btn';
-      addBtn.title = '新建标签页';
-      addBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
-      addBtn.addEventListener('click', () => this.store.addTab(node.id));
-      strip.appendChild(addBtn);
+      strip.appendChild(tabsList);
+
+      const addBtnInFlow = document.createElement('button');
+      addBtnInFlow.className = 'top-bar-new-tab-btn in-flow';
+      addBtnInFlow.title = '新建标签页';
+      addBtnInFlow.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+      addBtnInFlow.addEventListener('click', () => this.store.addTab(node.id));
+      strip.appendChild(addBtnInFlow);
+
+      // Pinned cluster before win-controls / right boundary
+      const fixedCluster = document.createElement('div');
+      fixedCluster.className = 'top-bar-fixed-cluster';
+      const addBtnPinned = document.createElement('button');
+      addBtnPinned.className = 'top-bar-new-tab-btn pinned';
+      addBtnPinned.title = '新建标签页';
+      addBtnPinned.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>';
+      addBtnPinned.addEventListener('click', () => this.store.addTab(node.id));
+      fixedCluster.appendChild(addBtnPinned);
+
+      // Horizontal wheel scrolling support on strip
+      strip.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          strip.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      // Overflow observer to toggle smart pinning
+      const checkHdrOverflow = () => {
+        const isOverflow = strip.scrollWidth > strip.clientWidth + 2;
+        hdr.classList.toggle('has-overflow', isOverflow);
+      };
+      if (window.ResizeObserver) {
+        new ResizeObserver(checkHdrOverflow).observe(strip);
+      }
+      setTimeout(checkHdrOverflow, 30);
 
       hdr.appendChild(strip);
+      hdr.appendChild(fixedCluster);
       leafEl.appendChild(hdr);
 
       // 2. Content with Conversation View and Per-Pane Right Side Panel
@@ -1572,35 +2130,11 @@ document.addEventListener('DOMContentLoaded', () => {
       panelResizer.className = 'layout-resizer layout-resizer-panel';
       panelResizer.title = '拖拽调整右侧面板宽度';
 
-      // Side Panel DOM matching prototype
+      // Side Panel DOM matching prototype (Tab Strip + Functional Toolbar)
       const sidePanel = document.createElement('div');
       sidePanel.className = 'chat-side-panel';
-      sidePanel.innerHTML = `
-        <header class="side-panel-header">
-          <div class="side-panel-nav-group">
-            <button class="side-panel-btn active" title="工作区应用预览">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-            </button>
-            <button class="side-panel-btn" title="代码产物与文件">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-            </button>
-            <div class="side-panel-divider-v"></div>
-            <button class="side-panel-btn" title="后退"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></button>
-            <button class="side-panel-btn" title="前进"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg></button>
-            <button class="side-panel-btn" title="刷新"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg></button>
-          </div>
-          <div class="side-panel-actions-group">
-            <button class="side-panel-btn" title="在浏览器中打开"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg></button>
-            <button class="side-panel-btn" title="最大化面板"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg></button>
-          </div>
-        </header>
-        <div class="side-panel-body">
-          <div class="side-panel-empty-state">
-            <div class="side-empty-title">Create apps with Build Mode</div>
-            <div class="side-empty-desc" style="color: var(--text-secondary); font-size: 13px; line-height: 1.6;">In Build Mode, create websites, games, apps, and interactive dashboards, and preview them right here.</div>
-          </div>
-        </div>
-      `;
+      const sidePanelTabManager = new SidePanelTabManager(sidePanel, leafEl);
+      leafEl._sidePanelTabManager = sidePanelTabManager;
 
       content.appendChild(chatPane);
       content.appendChild(panelResizer);
@@ -1612,10 +2146,7 @@ document.addEventListener('DOMContentLoaded', () => {
       sidePanelBtn.className = 'top-action-btn top-side-panel-btn';
       sidePanelBtn.title = '切换右侧工作区 (Cmd/Ctrl + J)';
       sidePanelBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-          <line x1="15" y1="3" x2="15" y2="21"></line>
-        </svg>
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="1.75" y="2.25" width="12.5" height="11.5" rx="3.25" stroke="currentColor" stroke-width="1.4"></rect><path d="M9.75 2.5v11" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg>
       `;
 
       sidePanelBtn.addEventListener('click', (e) => {
@@ -1627,6 +2158,36 @@ document.addEventListener('DOMContentLoaded', () => {
           setTimeout(window.syncComposerHorizontalAlignment, 50);
         }
       });
+
+      // Bind Per-Leaf Chat Pane Quick Launchers
+      const qPreview = chatPane.querySelector('#topQuickPreviewBtn') || chatPane.querySelector('[title="打开应用预览"]');
+      const qArtifacts = chatPane.querySelector('#topQuickArtifactsBtn') || chatPane.querySelector('[title="打开代码产物与文件"]');
+      if (qPreview) {
+        qPreview.onclick = (e) => {
+          e.stopPropagation();
+          if (!leafEl.classList.contains('has-side-panel')) {
+            leafEl.classList.add('has-side-panel');
+            sidePanelBtn.classList.add('active');
+            if (window.syncComposerHorizontalAlignment) {
+              setTimeout(window.syncComposerHorizontalAlignment, 50);
+            }
+          }
+          sidePanelTabManager.openCapability('preview');
+        };
+      }
+      if (qArtifacts) {
+        qArtifacts.onclick = (e) => {
+          e.stopPropagation();
+          if (!leafEl.classList.contains('has-side-panel')) {
+            leafEl.classList.add('has-side-panel');
+            sidePanelBtn.classList.add('active');
+            if (window.syncComposerHorizontalAlignment) {
+              setTimeout(window.syncComposerHorizontalAlignment, 50);
+            }
+          }
+          sidePanelTabManager.openCapability('artifacts');
+        };
+      }
 
       leafEl.appendChild(sidePanelBtn);
 
@@ -1717,11 +2278,15 @@ document.addEventListener('DOMContentLoaded', () => {
         e.stopPropagation();
         handle.setPointerCapture(e.pointerId);
         handle.classList.add('active');
+        document.body.classList.add('is-resizing-split');
         document.body.style.userSelect = 'none';
 
         const isH = node.direction === 'horizontal';
         document.body.style.cursor = isH ? 'col-resize' : 'row-resize';
         const rect = branchEl.getBoundingClientRect();
+
+        let rafId = null;
+        let pendingRaw = null;
 
         const onMove = (ev) => {
           let raw = isH
@@ -1729,22 +2294,35 @@ document.addEventListener('DOMContentLoaded', () => {
             : (ev.clientY - rect.top) / rect.height;
 
           raw = Math.max(0.12, Math.min(0.88, raw));
-          leftEl.style.flex = String(raw);
-          rightEl.style.flex = String(1 - raw);
-          node.ratio = raw;
+          pendingRaw = raw;
 
-          if (window.syncComposerHorizontalAlignment) {
-            window.syncComposerHorizontalAlignment();
+          if (!rafId) {
+            rafId = requestAnimationFrame(() => {
+              rafId = null;
+              if (pendingRaw === null) return;
+              leftEl.style.flex = String(pendingRaw);
+              rightEl.style.flex = String(1 - pendingRaw);
+              node.ratio = pendingRaw;
+            });
           }
         };
 
         const onUp = (ev) => {
+          if (rafId) {
+            cancelAnimationFrame(rafId);
+            rafId = null;
+          }
           handle.releasePointerCapture(ev.pointerId);
           handle.classList.remove('active');
+          document.body.classList.remove('is-resizing-split');
           document.body.style.userSelect = '';
           document.body.style.cursor = '';
           window.removeEventListener('pointermove', onMove);
           window.removeEventListener('pointerup', onUp);
+
+          if (window.syncComposerHorizontalAlignment) {
+            window.syncComposerHorizontalAlignment();
+          }
         };
 
         window.addEventListener('pointermove', onMove);
@@ -1782,10 +2360,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (sidebarToggleBtn) {
       sidebarToggleBtn.title = isCollapsed ? '展开左侧历史栏 (Cmd/Ctrl + B)' : '收起左侧历史栏 (Cmd/Ctrl + B)';
-    }
-    const leftmostHdr = document.querySelector('.tree-leaf-pane.top-row.left-edge > .tree-pane-header');
-    if (leftmostHdr) {
-      leftmostHdr.style.paddingLeft = isCollapsed ? '44px' : '0px';
     }
     if (window.syncComposerHorizontalAlignment) {
       setTimeout(window.syncComposerHorizontalAlignment, 50);
@@ -1865,4 +2439,3 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
-
