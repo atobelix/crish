@@ -110,6 +110,12 @@ export interface LayoutTreeStoreActions {
     dstLeafId: string,
     region: SplitRegion
   ) => void;
+  /** 从侧栏拖拽会话直接在目标旁 split 出新叶。推历史。 */
+  splitSessionFromSidebar: (
+    sessionId: string,
+    dstLeafId: string,
+    region: SplitRegion
+  ) => void;
 
   // ── 焦点操作（不推历史） ────────────────────────────────────
   /** 设置激活 leaf */

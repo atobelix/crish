@@ -31,6 +31,7 @@ import {
   removeTab,
   moveTab,
   splitTab,
+  splitSessionFromSidebar,
   activateTabInTree,
   applyDrop,
   flattenTree,
@@ -269,6 +270,27 @@ describe('会话 tab 命令矩阵', () => {
       leafOf('B', [tab('s1', 't2')])
     );
     expect(splitTab(broken, 'A', 't1', 'B', 'right')).toBe(broken);
+  });
+
+  it('splitSessionFromSidebar: 从侧栏拖拽全新会话 → 成功分屏创建新叶', () => {
+    const leaf = leafOf('L1', [tab('s1', 't1')]);
+    const tree: LayoutTree = { version: LAYOUT_TREE_VERSION, root: leaf };
+    const result = splitSessionFromSidebar(tree, 's-brand-new', 'L1', 'right');
+    expect(result).not.toBe(tree);
+    const leaves = collectLeaves(result.root);
+    expect(leaves).toHaveLength(2);
+    expect(leaves.some((l) => l.tabs.some((t) => t.sessionId === 's-brand-new'))).toBe(true);
+  });
+
+  it('splitSessionFromSidebar: 从侧栏拖拽已有 Tab 的会话 → 迁移并分屏（保证会话唯一性）', () => {
+    const A = leafOf('A', [tab('s1', 't1'), tab('s2', 't2')]);
+    const B = leafOf('B', [tab('s3', 't3')]);
+    const tree = twoLeafTree(A, B);
+    const result = splitSessionFromSidebar(tree, 's2', 'B', 'bottom');
+    expect(result).not.toBe(tree);
+    const leaves = collectLeaves(result.root);
+    expect(leaves.find((l) => l.id === 'A')!.tabs).toHaveLength(1);
+    expect(leaves.some((l) => l.id !== 'A' && l.id !== 'B' && l.tabs.some((t) => t.sessionId === 's2'))).toBe(true);
   });
 
   it('单叶一 tab 关掉 → 同叶留下新对话界面', () => {

@@ -24,7 +24,7 @@ import {
   isRealSessionId,
   sessionIdTaken,
 } from './sessionTabModel';
-import { findNodeById } from './layoutTreeQuery';
+import { findNodeById, collectLeaves } from './layoutTreeQuery';
 import { pruneEmptyLeaves, moveTab } from './layoutTreeMoveRemove';
 
 // ── 不可变替换（核心辅助） ──────────────────────────────────────────────
@@ -279,3 +279,58 @@ export function splitTab(
   const nextTree: LayoutTree = { ...tree, root: nextRoot };
   return pruneEmptyLeaves(nextTree);
 }
+
+/**
+ * 从侧栏拖拽会话直接在目标叶旁 split 出新叶并打开该会话。
+ * 若全树已存在该会话的 Tab，则走严格唯一性迁移（splitTab）；若全树未打开，则新建 Tab 实体并 split。
+ */
+export function splitSessionFromSidebar(
+  tree: LayoutTree,
+  sessionId: string,
+  dstLeafId: string,
+  region: SplitRegion,
+  splitRatio?: number
+): LayoutTree {
+  if (!sessionId || !dstLeafId || !tree?.root) return tree;
+
+  // 1. 检查全树是否已经有该会话的 Tab
+  const allLeaves = collectLeaves(tree.root);
+  for (const leaf of allLeaves) {
+    const existingTab = leaf.tabs.find((t) => t.sessionId === sessionId);
+    if (existingTab) {
+      return splitTab(tree, leaf.id, existingTab.tabId, dstLeafId, region, splitRatio);
+    }
+  }
+
+  // 2. 全树未打开：创建全新 Tab 与 Leaf
+  const dst = requireChatLeaf(tree.root, dstLeafId);
+  if (!dst) return tree;
+
+  const newTab = createSessionTab({
+    tabId: generateNodeId('tab'),
+    sessionId,
+  });
+
+  const freshLeaf: LayoutLeaf = {
+    type: 'leaf',
+    id: generateNodeId('leaf'),
+    panelId: 'chat',
+    tabs: [newTab],
+    activeTabId: newTab.tabId,
+    dock: createDefaultDock(),
+  };
+
+  const dir: SplitDirection =
+    region === 'left' || region === 'right' ? 'horizontal' : 'vertical';
+  const ratio = clampSplitRatio(splitRatio ?? 0.5);
+
+  const [first, second] =
+    region === 'right' || region === 'bottom'
+      ? [dst, freshLeaf]
+      : [freshLeaf, dst];
+
+  const branch = createBranch(dir, first, second, ratio);
+  const nextRoot = replaceNode(tree.root, dstLeafId, branch);
+  return { ...tree, root: nextRoot };
+}
+

@@ -1,8 +1,32 @@
+/**
+ * useSessionListDrag.ts — 侧栏会话列表拖拽动力学与跨域分屏引擎
+ * 
+ * 核心特性：
+ * 1. 1D 轴向同构纯数学让位（X/Y 轴同构，垂直 translateY 顺滑过渡）；
+ * 2. 彻底脱壳 GhostPill，消除原项重叠；
+ * 3. 拖拽全程零 Store 污染，松手单次原子提交；
+ * 4. 跨域工作区探测，支持直接向右侧二叉树工作区分屏（22% 边缘切分）与顶栏插入；
+ * 5. 严格单窗口同会话互斥守门（无意义自自分裂拦截）。
+ */
+
 import React, { useCallback, useRef, useState } from 'react';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
 import type { SessionState } from '../../../store/types';
+import { useLayoutTreeStore } from '../../../store/layout-tree';
 import styles from '../SidebarSessionList.module.css';
 import type { SidebarDragItem } from './sessionListTypes';
+import {
+  compute1DInsertIndex,
+  compute1DShiftOffsets,
+  type Axis1DItemSpan,
+} from '../../shell/drag-engine/sessionDrag1DGeometry';
+import {
+  resolveCrossDomainTarget,
+  type CrossDomainTarget,
+} from '../../shell/drag-engine/crossDomainDropRouter';
+import { commitSidebarSessionDrop } from '../../shell/sessionTabDropCommit';
+import { paneDropIndicatorRect } from '../../shell/sessionTabDragFeel';
+import { createIndicator } from '../../shell/sessionTabDragDom';
 
 export type DropPlace = 'before' | 'after';
 
@@ -11,7 +35,6 @@ export type DropIndicator = {
   place: DropPlace;
 };
 
-/** Live visual preview while dragging (does not require store order to match activity sort). */
 export type SessionDragPreview = {
   sessionId: string;
   overSessionId: string | null;
@@ -44,20 +67,9 @@ export type UseSessionListDragResult = {
   ) => void;
 };
 
-const DRAG_THRESHOLD_PX = 6;
+const DRAG_THRESHOLD_PX = 5;
+const ROW_STEP_PX = 36; // 行高 + 间隙标准步长
 
-type LastCommit = {
-  targetSessionId: string | null;
-  folder: string;
-  isPinned: boolean;
-};
-
-/**
- * Reorder a section list for live drag preview.
- * - Removes the dragged row from `list`
- * - If this list is the drop target section, re-inserts at overId/place
- * - `dragSession` supplies the row payload when the item originates outside this list
- */
 export function applyDragPreview(
   list: SessionState[],
   preview: SessionDragPreview,
@@ -92,7 +104,6 @@ export function applyDragPreview(
   return next;
 }
 
-/** Whether a section (pinned / general / project folder) is the preview drop target. */
 export function isPreviewTargetSection(
   preview: SessionDragPreview,
   kind: 'pinned' | 'general' | 'project',
@@ -112,20 +123,6 @@ export function isPreviewTargetSection(
   return Boolean(projectId && preview.folder === projectId);
 }
 
-/** Convert preview place into moveSessionRealtime insert-before target. */
-function previewToInsertBeforeId(
-  sectionIds: string[],
-  overSessionId: string | null,
-  place: DropPlace
-): string | null {
-  if (!overSessionId) return null;
-  const idx = sectionIds.indexOf(overSessionId);
-  if (idx === -1) return overSessionId;
-  if (place === 'before') return overSessionId;
-  const next = sectionIds[idx + 1];
-  return next ?? null;
-}
-
 function isGeneralFolderName(folder: string | null | undefined): boolean {
   const f = (folder || '').trim();
   return (
@@ -137,128 +134,46 @@ function isGeneralFolderName(folder: string | null | undefined): boolean {
   );
 }
 
-function resolveDropTarget(
-  clientX: number,
-  clientY: number,
-  pinnedZone: HTMLElement | null,
-  fallbackFolder: string
-): {
-  overPinned: boolean;
-  targetSessionId: string | null;
-  place: DropPlace;
-  folder: string;
-} {
-  // Ghost has pointer-events:none so elementsFromPoint skips it; no display toggle.
-  const stack =
-    typeof document.elementsFromPoint === 'function'
-      ? (document.elementsFromPoint(clientX, clientY) as Element[])
-      : ([document.elementFromPoint(clientX, clientY)].filter(Boolean) as Element[]);
-
-  let hovered: Element | null = null;
-  const ghostClass = styles.sidebarDragGhost || 'sidebar-drag-ghost';
-  for (const node of stack) {
-    if (!(node instanceof HTMLElement)) continue;
-    // Defense in depth if pointer-events is overridden on a clone subtree
-    if (
-      node.classList.contains(ghostClass) ||
-      node.classList.contains('sidebar-drag-ghost') ||
-      node.closest(`.${ghostClass}`) ||
-      node.closest('.sidebar-drag-ghost')
-    ) {
-      continue;
-    }
-    hovered = node;
-    break;
-  }
-
-  if (!hovered) {
-    return {
-      overPinned: false,
-      targetSessionId: null,
-      place: 'before',
-      folder: fallbackFolder,
-    };
-  }
-
-  const overPinned = Boolean(
-    hovered.closest('[data-drop-zone="pinned"]') ||
-      (styles.pinnedDropZone && hovered.closest(`.${styles.pinnedDropZone}`)) ||
-      (styles.pinnedList && hovered.closest(`.${styles.pinnedList}`) && pinnedZone?.contains(hovered)) ||
-      (pinnedZone && (hovered === pinnedZone || pinnedZone.contains(hovered as Node)))
-  );
-
-  const sessionWrap = hovered.closest('[data-session-id]') as HTMLElement | null;
-  const targetSessionId: string | null =
-    sessionWrap?.getAttribute('data-session-id') || null;
-  let place: DropPlace = 'before';
-
-  if (sessionWrap && targetSessionId) {
-    const rect = sessionWrap.getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    place = clientY < mid ? 'before' : 'after';
-  }
-
-  const folderEl = hovered.closest('[data-folder-name]') as HTMLElement | null;
-  const generalZone = hovered.closest('[data-drop-zone="general"]');
-  let folder = fallbackFolder;
-
-  if (overPinned) {
-    // Keep original folder identity when pinning; pin is orthogonal to folder.
-    folder = fallbackFolder || GENERAL_FOLDER;
-  } else if (folderEl) {
-    folder = folderEl.getAttribute('data-folder-name') || fallbackFolder || GENERAL_FOLDER;
-  } else if (generalZone) {
-    folder = GENERAL_FOLDER;
-  } else if (isGeneralFolderName(fallbackFolder)) {
-    folder = GENERAL_FOLDER;
-  }
-
-  // Don't treat the dragged row itself as insert target (caller filters).
-  return { overPinned, targetSessionId, place, folder };
-}
-
-function buildGhostFromRow(
-  el: HTMLElement | null,
-  elRect: DOMRect | undefined
-): HTMLDivElement | null {
-  if (!el) return null;
-  const ghost = el.cloneNode(true) as HTMLDivElement;
-  ghost.className = `${styles.sidebarDragGhost || ''} sidebar-drag-ghost`.trim();
+/** 统一创建精致脱壳 GhostPill（截断标题、微阴影、挂载 body） */
+function createSidebarGhostPill(titleText: string): HTMLDivElement {
+  const ghost = document.createElement('div');
+  ghost.className = 'sidebar-drag-ghost';
   ghost.setAttribute('aria-hidden', 'true');
   ghost.style.cssText = [
     'position:fixed',
-    `width:${elRect?.width ?? 180}px`,
-    `height:${elRect?.height ?? 40}px`,
     'left:0',
     'top:0',
+    'height:26px',
+    'max-width:180px',
+    'min-width:60px',
+    'padding:0 10px',
+    'background:var(--bg-card, #ffffff)',
+    'color:var(--text-primary, #1a1a1a)',
+    'border:1px solid var(--border-color, rgba(0,0,0,0.12))',
+    'border-radius:6px',
+    'box-shadow:0 8px 24px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.06)',
+    'display:flex',
+    'align-items:center',
+    'font-size:12px',
+    'font-weight:500',
+    'white-space:nowrap',
+    'overflow:hidden',
+    'text-overflow:ellipsis',
     'pointer-events:none',
-    // F7-F14：z-index 走 token 档位（值等价 --z-tooltip），禁裸数字
     'z-index:var(--z-tooltip)',
-    'opacity:0.92',
-    'margin:0',
-    'list-style:none',
-    'box-sizing:border-box',
+    'opacity:0.95',
+    'will-change:transform',
+    'transition:opacity 120ms ease',
   ].join(';');
-  // Flatten nested interactive bits
-  ghost.querySelectorAll('button, input, a').forEach((n) => {
-    (n as HTMLElement).tabIndex = -1;
-  });
+  ghost.textContent = titleText || '会话';
   document.body.appendChild(ghost);
   return ghost;
 }
 
-/**
- * Pointer-based session list drag: live row reorder preview, pin zone, drop indicators.
- * Store commit is throttled to distinct (target, folder, isPinned) tuples; pointerup cleans up.
- */
 export function useSessionListDrag(
   opts: UseSessionListDragOpts
 ): UseSessionListDragResult {
-  const {
-    pinnedZoneRef,
-    renamingSessionId,
-    onMoveSessionRealtime,
-  } = opts;
+  const { renamingSessionId, onMoveSessionRealtime } = opts;
 
   const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(null);
   const [dragOverPinned, setDragOverPinned] = useState(false);
@@ -267,8 +182,6 @@ export function useSessionListDrag(
 
   const onMoveRef = useRef(onMoveSessionRealtime);
   onMoveRef.current = onMoveSessionRealtime;
-  const pinnedZoneRefStable = useRef(pinnedZoneRef);
-  pinnedZoneRefStable.current = pinnedZoneRef;
 
   const startSessionDrag = useCallback(
     (e: React.PointerEvent, sessionId: string, folderName?: string) => {
@@ -276,125 +189,170 @@ export function useSessionListDrag(
 
       const startX = e.clientX;
       const startY = e.clientY;
-      const originFolder =
-        (folderName && folderName.trim()) || GENERAL_FOLDER;
+      const originFolder = (folderName && folderName.trim()) || GENERAL_FOLDER;
 
       let dragging = false;
-      let dragOverlay: HTMLDivElement | null = null;
+      let ghostEl: HTMLDivElement | null = null;
+      let indicatorEl: HTMLDivElement | null = null;
       let raf = 0;
-      let pendingPointer: { x: number; y: number } | null = null;
-      let lastCommit: LastCommit | null = null;
-      let lastPreviewKey = '';
+      let pendingPointer: { x: number; y: number; dx: number; dy: number } | null = null;
 
-      const el = (e.currentTarget as HTMLElement).closest('li') as HTMLElement | null;
-      const elRect = el?.getBoundingClientRect();
-      const offsetX = startX - (elRect?.left ?? startX);
-      const offsetY = startY - (elRect?.top ?? startY);
+      const rowLi = (e.currentTarget as HTMLElement).closest('li') as HTMLElement | null;
+      const titleSpan = rowLi?.querySelector('[class*="sessionTextCol"], [class*="sessionText"]') as HTMLElement | null;
+      const sessionTitle = titleSpan?.textContent?.trim() || '会话';
 
-      const applyPointer = (clientX: number, clientY: number) => {
-        if (!dragging) return;
+      // 记录抓取偏移量
+      const rowRect = rowLi?.getBoundingClientRect();
+      const grabOffsetX = startX - (rowRect?.left ?? startX);
+      const grabOffsetY = startY - (rowRect?.top ?? startY);
 
-        if (dragOverlay) {
-          dragOverlay.style.transform = `translate(${clientX - offsetX}px, ${clientY - offsetY}px)`;
+      let lastAppliedTarget: CrossDomainTarget | null = null;
+      let shiftedElements: HTMLElement[] = [];
+
+      const clearAllShifts = () => {
+        for (const el of shiftedElements) {
+          el.style.transform = '';
+          el.style.transition = '';
         }
+        shiftedElements = [];
+      };
 
-        const hit = resolveDropTarget(
-          clientX,
-          clientY,
-          pinnedZoneRefStable.current.current,
-          originFolder
-        );
-
-        // Ignore self as drop target for indicator / insert-before
-        let overId = hit.targetSessionId;
-        if (overId === sessionId) {
-          overId = null;
-        }
-
-        const isPinned = hit.overPinned;
-        const folder = isPinned
-          ? originFolder
-          : isGeneralFolderName(hit.folder)
-            ? GENERAL_FOLDER
-            : hit.folder;
-
-        setDragOverPinned(isPinned);
-
-        const preview: SessionDragPreview = {
-          sessionId,
-          overSessionId: overId,
-          place: hit.place,
-          isPinned,
-          folder,
-        };
-
-        const previewKey = `${preview.overSessionId ?? ''}|${preview.place}|${preview.isPinned}|${preview.folder}`;
-        if (previewKey !== lastPreviewKey) {
-          lastPreviewKey = previewKey;
-          setDragPreview(preview);
-          setDropIndicator(
-            overId ? { sessionId: overId, place: hit.place } : null
-          );
-        }
-
-        // Insert-before for store: when place=after, next sibling or null (end).
-        // Section sibling resolution is approximate here (DOM order among [data-session-id]).
-        let insertBeforeId: string | null = overId;
-        if (overId && hit.place === 'after') {
-          const listRoot =
-            (document.querySelector(
-              isPinned
-                ? '[data-drop-zone="pinned"]'
-                : isGeneralFolderName(folder)
-                  ? '[data-drop-zone="general"]'
-                  : `[data-folder-name="${CSS.escape ? CSS.escape(folder) : folder.replace(/"/g, '\\"')}"]`
-            ) as HTMLElement | null) || null;
-          const ids = listRoot
-            ? Array.from(
-                listRoot.querySelectorAll<HTMLElement>('[data-session-id]')
-              )
-                .map((n) => n.getAttribute('data-session-id') || '')
-                .filter((id) => id && id !== sessionId)
-            : [];
-          insertBeforeId = previewToInsertBeforeId(ids, overId, 'after');
-        }
-
-        const commit: LastCommit = {
-          targetSessionId: insertBeforeId,
-          folder,
-          isPinned,
-        };
-
-        if (
-          !lastCommit ||
-          lastCommit.targetSessionId !== commit.targetSessionId ||
-          lastCommit.folder !== commit.folder ||
-          lastCommit.isPinned !== commit.isPinned
-        ) {
-          lastCommit = commit;
-          onMoveRef.current(
-            sessionId,
-            commit.targetSessionId,
-            commit.folder,
-            commit.isPinned
-          );
+      const hideIndicator = () => {
+        if (indicatorEl) {
+          indicatorEl.style.display = 'none';
         }
       };
 
-      const scheduleApply = (clientX: number, clientY: number) => {
-        pendingPointer = { x: clientX, y: clientY };
+      const showPaneIndicator = (rect: { left: number; top: number; width: number; height: number }, region: any) => {
+        if (!indicatorEl) {
+          indicatorEl = createIndicator('分屏');
+        }
+        const indRect = paneDropIndicatorRect(region, rect);
+        indicatorEl.style.display = 'block';
+        indicatorEl.style.left = `${indRect.left}px`;
+        indicatorEl.style.top = `${indRect.top}px`;
+        indicatorEl.style.width = `${indRect.width}px`;
+        indicatorEl.style.height = `${indRect.height}px`;
+      };
+
+      const apply1DShiftToSidebarSection = (
+        container: HTMLElement,
+        insertIndex: number,
+        sourceIndex: number | null
+      ) => {
+        clearAllShifts();
+        const rows = Array.from(
+          container.querySelectorAll<HTMLElement>('li[data-session-id]')
+        ).filter((el) => el.getAttribute('data-session-id') !== sessionId);
+
+        const offsets = compute1DShiftOffsets({
+          itemCount: rows.length,
+          sourceIndex,
+          insertIndex,
+          shiftStep: ROW_STEP_PX,
+        });
+
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i]!;
+          const offset = offsets[i] ?? 0;
+          row.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
+          row.style.transform = offset !== 0 ? `translateY(${offset}px)` : '';
+          shiftedElements.push(row);
+        }
+      };
+
+      const applyPointer = (clientX: number, clientY: number, dx: number, dy: number) => {
+        if (!dragging) return;
+
+        // 1. 同步 Ghost 位置（GPU translate3d）
+        if (ghostEl) {
+          ghostEl.style.transform = `translate3d(${clientX - grabOffsetX}px, ${clientY - grabOffsetY}px, 0)`;
+        }
+
+        // 2. 空间索引跨域落点探测
+        const tree = useLayoutTreeStore.getState().tree;
+        const target = resolveCrossDomainTarget(clientX, clientY, dx, dy, sessionId, tree);
+        lastAppliedTarget = target;
+
+        // 3. 分域响应动力学
+        if (target.domain === 'pane-split') {
+          clearAllShifts();
+          showPaneIndicator(target.paneRect, target.region);
+          if (ghostEl) ghostEl.style.opacity = '0.95';
+        } else if (target.domain === 'tab-strip') {
+          clearAllShifts();
+          hideIndicator();
+          if (ghostEl) ghostEl.style.opacity = '0.95';
+        } else if (target.domain === 'sidebar') {
+          hideIndicator();
+          if (ghostEl) ghostEl.style.opacity = '0.95';
+
+          // 探测具体所属侧栏分区（Pinned / Project / General）
+          const hit = document.elementFromPoint(clientX, clientY);
+          const pinnedZone = hit?.closest('[data-drop-zone="pinned"]') as HTMLElement | null;
+          const folderEl = hit?.closest('[data-folder-name]') as HTMLElement | null;
+          const generalZone = (hit?.closest('[data-drop-zone="general"]') || document.querySelector('[data-drop-zone="general"]')) as HTMLElement | null;
+
+          const isPinned = Boolean(pinnedZone);
+          const activeContainer = pinnedZone || folderEl || generalZone;
+
+          if (activeContainer) {
+            const rows = Array.from(
+              activeContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
+            );
+            const sourceIndex = rows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
+            const otherRows = rows.filter((r) => r.getAttribute('data-session-id') !== sessionId);
+
+            const spans: Axis1DItemSpan[] = otherRows.map((r) => {
+              const rect = r.getBoundingClientRect();
+              return {
+                id: r.getAttribute('data-session-id') || '',
+                start: rect.top,
+                end: rect.bottom,
+                size: rect.height,
+              };
+            });
+
+            const insertIdx = compute1DInsertIndex(spans, clientY, dy);
+            apply1DShiftToSidebarSection(activeContainer, insertIdx, sourceIndex >= 0 ? sourceIndex : null);
+
+            const overId = spans[insertIdx]?.id || null;
+            const folder = isPinned
+              ? originFolder
+              : folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
+
+            setDragOverPinned(isPinned);
+            setDragPreview({
+              sessionId,
+              overSessionId: overId,
+              place: 'before',
+              isPinned,
+              folder,
+            });
+          }
+        } else {
+          // 游离或被拦截
+          clearAllShifts();
+          hideIndicator();
+          if (ghostEl) ghostEl.style.opacity = '0.35'; // 游离半透明
+        }
+      };
+
+      const scheduleApply = (clientX: number, clientY: number, dx: number, dy: number) => {
+        pendingPointer = { x: clientX, y: clientY, dx, dy };
         if (raf) return;
         raf = requestAnimationFrame(() => {
           raf = 0;
           const p = pendingPointer;
           pendingPointer = null;
-          if (p) applyPointer(p.x, p.y);
+          if (p) applyPointer(p.x, p.y, p.dx, p.dy);
         });
       };
 
       const move = (me: PointerEvent) => {
         const dx = me.clientX - startX;
         const dy = me.clientY - startY;
+
         if (!dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
           dragging = true;
           try {
@@ -403,34 +361,44 @@ export function useSessionListDrag(
             /* ignore */
           }
           document.body.classList.add('sidebar-dragging');
+          if (rowLi) {
+            rowLi.classList.add(styles.isDraggingSource || 'isDraggingSource');
+          }
           setActiveDragItem({
             type: 'session',
             sessionId,
             ...(folderName !== undefined ? { folderName } : {}),
           });
-          dragOverlay = buildGhostFromRow(el, elRect);
-          if (dragOverlay) {
-            dragOverlay.style.transform = `translate(${me.clientX - offsetX}px, ${me.clientY - offsetY}px)`;
-          }
-          // First frame hit-test immediately (correct pin/folder; no false unpin flash)
-          applyPointer(me.clientX, me.clientY);
+          ghostEl = createSidebarGhostPill(sessionTitle);
+          applyPointer(me.clientX, me.clientY, dx, dy);
         }
+
         if (!dragging) return;
-        scheduleApply(me.clientX, me.clientY);
+        scheduleApply(me.clientX, me.clientY, dx, dy);
       };
 
       const cleanup = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
-        window.removeEventListener('pointercancel', up);
+        window.removeEventListener('pointercancel', cancel);
+        window.removeEventListener('keydown', handleKeyDown);
+
         if (raf) {
           cancelAnimationFrame(raf);
           raf = 0;
         }
-        if (dragOverlay) {
-          dragOverlay.remove();
-          dragOverlay = null;
+        if (ghostEl) {
+          ghostEl.remove();
+          ghostEl = null;
         }
+        if (indicatorEl) {
+          indicatorEl.remove();
+          indicatorEl = null;
+        }
+        if (rowLi) {
+          rowLi.classList.remove(styles.isDraggingSource || 'isDraggingSource');
+        }
+        clearAllShifts();
         document.body.classList.remove('sidebar-dragging');
         setActiveDragItem(null);
         setDragOverPinned(false);
@@ -438,30 +406,82 @@ export function useSessionListDrag(
         setDragPreview(null);
       };
 
+      const cancel = () => {
+        cleanup();
+      };
+
+      const handleKeyDown = (ke: KeyboardEvent) => {
+        if (ke.key === 'Escape') {
+          cancel();
+        }
+      };
+
       const up = () => {
-        // Final rAF flush so last position commits before cleanup
         if (raf) {
           cancelAnimationFrame(raf);
           raf = 0;
         }
-        if (dragging && pendingPointer) {
-          applyPointer(pendingPointer.x, pendingPointer.y);
-          pendingPointer = null;
-        } else if (dragging && lastCommit) {
-          // Ensure last commit is durable (no-op if store already matches)
-          onMoveRef.current(
-            sessionId,
-            lastCommit.targetSessionId,
-            lastCommit.folder,
-            lastCommit.isPinned
-          );
+
+        if (dragging && lastAppliedTarget) {
+          if (lastAppliedTarget.domain === 'pane-split') {
+            commitSidebarSessionDrop({
+              sessionId,
+              target: {
+                kind: 'pane',
+                targetLeafId: lastAppliedTarget.targetLeafId,
+                region: lastAppliedTarget.region,
+              },
+            });
+          } else if (lastAppliedTarget.domain === 'tab-strip') {
+            commitSidebarSessionDrop({
+              sessionId,
+              target: {
+                kind: 'strip',
+                targetLeafId: lastAppliedTarget.targetLeafId,
+                insertIdx: lastAppliedTarget.insertIndex,
+              },
+            });
+          } else if (lastAppliedTarget.domain === 'sidebar') {
+            // 单次原子提交侧栏重排序
+            const hit = document.elementFromPoint(startX + (pendingPointer?.dx ?? 0), startY + (pendingPointer?.dy ?? 0));
+            const pinnedZone = hit?.closest('[data-drop-zone="pinned"]');
+            const folderEl = hit?.closest('[data-folder-name]') as HTMLElement | null;
+            const isPinned = Boolean(pinnedZone);
+            const folder = isPinned
+              ? originFolder
+              : folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
+
+            const activeContainer = pinnedZone || folderEl || document.querySelector('[data-drop-zone="general"]');
+            const rows = activeContainer
+              ? Array.from(activeContainer.querySelectorAll<HTMLElement>('li[data-session-id]')).filter(
+                  (r) => r.getAttribute('data-session-id') !== sessionId
+                )
+              : [];
+
+            const spans: Axis1DItemSpan[] = rows.map((r) => {
+              const rect = r.getBoundingClientRect();
+              return {
+                id: r.getAttribute('data-session-id') || '',
+                start: rect.top,
+                end: rect.bottom,
+                size: rect.height,
+              };
+            });
+
+            const insertIdx = compute1DInsertIndex(spans, startY + (pendingPointer?.dy ?? 0), pendingPointer?.dy ?? 0);
+            const targetSessionId = spans[insertIdx]?.id || null;
+
+            onMoveRef.current(sessionId, targetSessionId, folder, isPinned);
+          }
         }
+
         cleanup();
       };
 
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
-      window.addEventListener('pointercancel', up);
+      window.addEventListener('pointercancel', cancel);
+      window.addEventListener('keydown', handleKeyDown);
     },
     [renamingSessionId]
   );

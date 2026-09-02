@@ -49,3 +49,34 @@ export function commitSessionTabDrop(input: {
   }
   tree.splitTab(sourceLeafId, tabId, target.targetLeafId, target.region);
 }
+
+/**
+ * 侧栏会话拖入右侧工作区落点提交器（支持直接分屏或加入顶栏）
+ */
+export function commitSidebarSessionDrop(input: {
+  sessionId: string;
+  target: SessionTabDropTarget;
+}): void {
+  const { sessionId, target } = input;
+  if (!sessionId) return;
+
+  const tree = useLayoutTreeStore.getState();
+
+  if (target.kind === 'strip') {
+    tree.openSession(sessionId, {
+      activeLeafId: target.targetLeafId,
+    });
+    return;
+  }
+
+  if (target.region === 'center') {
+    tree.openSession(sessionId, {
+      activeLeafId: target.targetLeafId,
+    });
+    return;
+  }
+
+  // 边缘分屏
+  tree.splitSessionFromSidebar(sessionId, target.targetLeafId, target.region);
+}
+

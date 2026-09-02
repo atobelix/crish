@@ -24,6 +24,7 @@ import {
   removeTab as removeTabOp,
   moveTab as moveTabOp,
   splitTab as splitTabOp,
+  splitSessionFromSidebar as splitSessionFromSidebarOp,
   activateTabInTree,
   updateTabDock as updateTabDockOp,
   updateLeafDock as updateLeafDockOp,
@@ -291,6 +292,29 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
             );
             if (fresh) activeLeafId = fresh.id;
           }
+          return {
+            past: [...state.past, state.tree].slice(-MAX_HISTORY),
+            future: [],
+            tree: result,
+            activeLeafId: resolveActiveLeaf(result, activeLeafId),
+          };
+        }),
+
+      splitSessionFromSidebar: (sessionId, dstLeafId, region) =>
+        set((state) => {
+          const result = splitSessionFromSidebarOp(
+            state.tree,
+            sessionId,
+            dstLeafId,
+            region
+          );
+          if (result === state.tree) return {};
+          let activeLeafId = dstLeafId;
+          const leaves = collectLeaves(result.root);
+          const fresh = leaves.find((l) =>
+            l.tabs.some((t) => t.sessionId === sessionId)
+          );
+          if (fresh) activeLeafId = fresh.id;
           return {
             past: [...state.past, state.tree].slice(-MAX_HISTORY),
             future: [],

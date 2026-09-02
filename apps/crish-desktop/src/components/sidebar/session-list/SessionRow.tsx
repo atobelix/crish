@@ -249,20 +249,13 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     : sessionTitleWithBranch;
   const tipContent = sessionTitleWithBranch;
 
-  const dropClass =
-    dropPlace === 'before'
-      ? styles.dropBefore
-      : dropPlace === 'after'
-        ? styles.dropAfter
-        : '';
-
   const fixedH = SIDEBAR_SESSION_ROW_HEIGHT;
 
   return (
     <li
       data-session-id={s.id}
       data-drop-place={dropPlace || undefined}
-      className={`${styles.sessionItemWrap} ${isDraggingThis ? 'drag-ghost-hidden' : ''} ${isRunning ? styles.isRunning : ''} ${dropClass || ''}`.trim()}
+      className={`${styles.sessionItemWrap} ${isDraggingThis ? styles.isDraggingSource : ''} ${isRunning ? styles.isRunning : ''}`.trim()}
       style={{ height: fixedH, minHeight: fixedH, maxHeight: fixedH }}
       role="presentation"
     >
