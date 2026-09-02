@@ -92,7 +92,7 @@ describe('z-index token 契约（F7-F14）', () => {
 
   it('useSessionListDrag 拖拽幽灵走 --z-tooltip 档位（值等价 token 化）', () => {
     const src = readFile(
-      'src/components/sidebar/session-list/useSessionListDrag.ts'
+      'src/components/sidebar/session-list/useSessionListDragHelpers.ts'
     );
     expect(src).toContain('z-index:var(--z-tooltip)');
   });
