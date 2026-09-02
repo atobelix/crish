@@ -16,18 +16,53 @@
 
 ::-webkit-scrollbar-thumb {
   background: var(--tint-scrollbar-thumb);
+  background-clip: padding-box;
+  border-right: 2px solid transparent; /* 右侧留出 2px 物理安全空隙，杜绝紧贴边缘与误触 */
+  border-left: 1px solid transparent;
   border-radius: var(--radius-full);
 }
 
 ::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:active {
   background: var(--scrollbar-thumb-active);
+  background-clip: padding-box;
+  border-right: 2px solid transparent;
+  border-left: 1px solid transparent;
 }
 
-::-webkit-scrollbar-button,
-::-webkit-scrollbar-button:single-button,
-::-webkit-scrollbar-button:start:decrement,
-::-webkit-scrollbar-button:end:increment {
+/* 上下微型圆角三角端点按钮：形成物理安全护栏，杜绝滑块顶破圆角容器两端 */
+::-webkit-scrollbar-button:vertical:start:decrement {
+  display: block;
+  height: 8px;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center 2px;
+  background-size: 5px 4px;
+  background-clip: padding-box;
+  border-right: 2px solid transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 5'%3E%3Cpath d='M1.2 4 L3 1.5 L4.8 4 Z' fill='%23CCCBCA' stroke='%23CCCBCA' stroke-width='0.6' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:vertical:end:increment {
+  display: block;
+  height: 8px;
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center 2px;
+  background-size: 5px 4px;
+  background-clip: padding-box;
+  border-right: 2px solid transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 5'%3E%3Cpath d='M1.2 1 L3 3.5 L4.8 1 Z' fill='%23CCCBCA' stroke='%23CCCBCA' stroke-width='0.6' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:vertical:start:decrement:hover,
+::-webkit-scrollbar-button:vertical:start:decrement:active,
+::-webkit-scrollbar-button:vertical:end:increment:hover,
+::-webkit-scrollbar-button:vertical:end:increment:active {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 5'%3E%3Cpath d='M1.2 4 L3 1.5 L4.8 4 Z' fill='%239e9d9c' stroke='%239e9d9c' stroke-width='0.6' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar-button:horizontal {
   display: none;
   width: 0;
   height: 0;
