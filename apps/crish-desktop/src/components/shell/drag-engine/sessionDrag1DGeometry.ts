@@ -10,6 +10,35 @@ export interface Axis1DItemSpan {
   start: number; // left (X) or top (Y)
   end: number;   // right (X) or bottom (Y)
   size: number;  // width (X) or height (Y)
+  el?: HTMLElement;
+}
+
+/** 读取元素当前的 translateY 像素值 */
+export function readTranslateY(el: HTMLElement): number {
+  const tr = getComputedStyle(el).transform;
+  if (!tr || tr === 'none') return 0;
+  try {
+    return new DOMMatrix(tr).m42 || 0;
+  } catch {
+    const m = /matrix\(([^)]+)\)/.exec(tr);
+    if (!m?.[1]) return 0;
+    const parts = m[1].split(',').map((s) => parseFloat(s.trim()));
+    return Number.isFinite(parts[5]) ? parts[5]! : 0;
+  }
+}
+
+/** 读取元素当前的 translateX 像素值 */
+export function readTranslateX(el: HTMLElement): number {
+  const tr = getComputedStyle(el).transform;
+  if (!tr || tr === 'none') return 0;
+  try {
+    return new DOMMatrix(tr).m41 || 0;
+  } catch {
+    const m = /matrix\(([^)]+)\)/.exec(tr);
+    if (!m?.[1]) return 0;
+    const parts = m[1].split(',').map((s) => parseFloat(s.trim()));
+    return Number.isFinite(parts[4]) ? parts[4]! : 0;
+  }
 }
 
 export interface Compute1DOffsetsInput {
