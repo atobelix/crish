@@ -13,7 +13,10 @@
 //!   CacheMechanism/CacheCapability，P2 §3.1；断点分配与 wire 注入 T-13b）
 //! - [compat]：G5 compat 纯函数面（resolve_max_tokens_field / resolve_developer_role /
 //!   empty_content_wire_value，R1 T1.7；消费接线归 R3 T3.6 / R2 T2.2-T2.3）
+//! - [attachment_wire]：XML CDATA 防逃逸沙箱与 ANSI 清洗（详案 04 §2.4；
+//!   wire 组装归后续轮次接线，00-总方案 §三 #5 wire 权威在 Rust）
 
+pub mod attachment_wire;
 pub mod build;
 pub mod build_anthropic;
 pub mod build_gemini;
@@ -56,6 +59,7 @@ pub use messages::{
     stringify_tool_output, system_prompt_as_user_prefix, to_chat_messages,
     to_responses_input_items, ChatContent, ChatContentPart, ChatMessage, ReasoningContentMode,
 };
+pub use attachment_wire::{strip_ansi_codes, wrap_safe_cdata};
 pub use schema::{canonical_json_string, canonicalize_schema};
 pub use tools::{
     default_input_schema, to_chat_tool_choice, to_openai_tool, to_responses_tool,

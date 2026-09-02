@@ -36,6 +36,11 @@
 
 pub mod approval;
 pub mod approval_router;
+// 附件注入防爆护栏（战役 prompt-injection-pipeline 维度四 · 详案 04
+// §2.2/§2.5；wire 权威在 Rust，00-总方案 §三 #5）——Head-Tail 首尾截断
+// 纯函数 + Token 预算钳制；消费接线（prepare_turn L3 预检）后续轮次落地
+pub mod attachment_budget;
+pub mod attachment_truncation;
 pub mod cache_tracker;
 pub mod checkpoint;
 pub mod control;
