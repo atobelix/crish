@@ -38,7 +38,7 @@
   height: 100%;
   -webkit-app-region: drag;
   app-region: drag;
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .trail {

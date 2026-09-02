@@ -34,7 +34,7 @@
   position: absolute;
   top: 0;
   left: 0;
-  width: 48px;
+  width: 52px;
   height: var(--header-height, 36px);
   min-height: var(--header-height, 36px);
   display: flex;
@@ -52,14 +52,14 @@
 }
 
 .sidebarToggleBtn {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-lg, 8px);
   border: none;
   background: transparent;
   color: var(--text-secondary);

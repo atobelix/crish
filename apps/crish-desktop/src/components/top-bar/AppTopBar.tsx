@@ -39,8 +39,8 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
         <div
           className={styles.headerClearance}
           style={{
-            width: isMacDesktop ? 106 : 48,
-            minWidth: isMacDesktop ? 106 : 48,
+            width: isMacDesktop ? 106 : 52,
+            minWidth: isMacDesktop ? 106 : 52,
           }}
           aria-hidden="true"
         />
