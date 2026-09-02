@@ -1,26 +1,27 @@
 /**
- * useSessionListDrag.ts — 侧栏会话与项目文件夹拖拽动力学与跨域分屏统一引擎 (Master Ultimate Edition)
+ * useSessionListDrag.ts — 侧栏会话与项目文件夹拖拽动力学与跨域分屏统一引擎 (Master Magnum Opus Edition)
  * 
  * 核心特性：
- * 1. 业务约束守门：项目内部的会话只能在当前项目内重排序或拖入置顶区，严禁流出到未绑定项目的常规区；
- * 2. 跨分组空洞自闭合：会话拖入其他合法分组（如置顶）时，原分组下方的列表项自动向上平移 (-28px) 补齐空洞，目标分组向下平移 (+28px) 腾出槽位；
- * 3. 彻底清退 React Re-render：拖拽全过程零 setState、零 React 重绘，纯 GPU transform 驱动，彻底消除抽搐与闪烁；
- * 4. 零绿框纯净视觉：彻底移除置顶区绿框，纯靠 translateY 顺滑让位；全局静音 Tooltip 气泡；
- * 5. 跨域工作区二叉树分屏与单窗口互斥保护；
- * 6. 支持项目文件夹在项目区域内部的拖拽重排序。
+ * 1. 真实网格步长自适应解算 (31px = 28px + gap 3px)，消除尺寸阶跃与卡顿；
+ * 2. 实数域全连续中值分割方程，消灭 1.5px 缝隙死区，彻底根治整体微抖动；
+ * 3. 跨域顶栏 TabStrip 1D 水平平滑让位动力学 (translateX 154px) 与指定下标精准插排；
+ * 4. 三 Store 原子同步协议：分屏与插入后 Zero-Click 自动激活新叶节点与会话；
+ * 5. 跨分组空洞自闭合：拖入其他分区时，原分组下方项目自动向上平移 (-31px) 补齐空洞；
+ * 6. 业务约束守门：项目内部会话仅限当前项目内排序或置顶，严禁流出到未绑定项目的常规区；
+ * 7. 纯 Ref 驱动与 GPU 合成层：拖拽全过程零 setState、零 React 重绘，全局静音 Tooltip。
  */
 
 import React, { useCallback, useRef, useState } from 'react';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
 import type { SessionState } from '../../../store/types';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
-import { useSessionStore } from '../../../store/storeAccess';
 import styles from '../SidebarSessionList.module.css';
 import type { SidebarDragItem } from './sessionListTypes';
 import {
   compute1DInsertIndex,
   compute1DShiftOffsets,
   readTranslateY,
+  readTranslateX,
   type Axis1DItemSpan,
 } from '../../shell/drag-engine/sessionDrag1DGeometry';
 import {
@@ -71,7 +72,8 @@ export type UseSessionListDragResult = {
 };
 
 const DRAG_THRESHOLD_PX = 4;
-const DEFAULT_ROW_STEP_PX = 28; // 标准单行高度
+const DEFAULT_ROW_STEP_PX = 31; // 28px height + 3px gap
+const DEFAULT_TAB_STEP_PX = 154; // 150px tab max-width + 4px gap
 
 export function applyDragPreview(
   list: SessionState[],
@@ -214,12 +216,10 @@ export function useSessionListDrag(
         left: startX,
         top: startY,
         width: 240,
-        height: DEFAULT_ROW_STEP_PX,
+        height: 28,
       } as DOMRect);
 
-      const rowStepPx = rowRect.height > 0 ? rowRect.height : DEFAULT_ROW_STEP_PX;
-
-      // 记录抓取偏移量
+      // 抓取偏移量
       const grabOffsetX = startX - rowRect.left;
       const grabOffsetY = startY - rowRect.top;
 
@@ -228,6 +228,7 @@ export function useSessionListDrag(
       let currentInsertSessionId: string | null = null;
       let currentTargetFolder = originFolder;
       let currentIsPinned = false;
+      let currentStripInsertIdx = 0;
 
       // 找到源项所在的原生分组容器
       const sourceContainer =
@@ -281,9 +282,73 @@ export function useSessionListDrag(
           showPaneIndicator(target.paneRect, target.region);
           if (ghostEl) ghostEl.style.opacity = '0.95';
         } else if (target.domain === 'tab-strip') {
-          clearAllShifts();
+          // 跨域进入顶栏 TabStrip：执行 1D 水平让位动力学
           hideIndicator();
           if (ghostEl) ghostEl.style.opacity = '0.95';
+
+          const strip = target.stripEl;
+          const allTabs = Array.from(
+            strip.querySelectorAll<HTMLElement>('[role="tab"], .tabItem, [data-tab-id]')
+          ).filter((t) => t.offsetParent !== null);
+
+          const tabSpans: Axis1DItemSpan[] = allTabs.map((t) => {
+            const rect = t.getBoundingClientRect();
+            const tx = readTranslateX(t);
+            return {
+              id: t.getAttribute('data-tab-id') || t.getAttribute('data-session-id') || '',
+              start: rect.left - tx,
+              end: rect.right - tx,
+              size: rect.width,
+              el: t,
+            };
+          });
+
+          const insertIdx = compute1DInsertIndex(tabSpans, clientX, dx);
+          currentStripInsertIdx = insertIdx;
+
+          const offsets = compute1DShiftOffsets({
+            itemCount: allTabs.length,
+            sourceIndex: null, // 跨域拖入，目标条中无源项占位
+            insertIndex: insertIdx,
+            shiftStep: DEFAULT_TAB_STEP_PX,
+          });
+
+          const nextShifted: HTMLElement[] = [];
+          for (let i = 0; i < allTabs.length; i++) {
+            const tabEl = allTabs[i]!;
+            const offset = offsets[i] ?? 0;
+            tabEl.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
+            tabEl.style.transform = offset !== 0 ? `translateX(${offset}px)` : '';
+            nextShifted.push(tabEl);
+          }
+
+          // 跨分组时原侧栏分组空洞也向上收缩补齐
+          if (sourceContainer) {
+            const allSourceRows = Array.from(
+              sourceContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
+            ).filter((r) => r.offsetParent !== null);
+
+            const origIdx = allSourceRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
+            if (origIdx >= 0) {
+              for (let i = 0; i < allSourceRows.length; i++) {
+                const sRow = allSourceRows[i]!;
+                if (sRow.getAttribute('data-session-id') === sessionId) continue;
+                if (i > origIdx) {
+                  sRow.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
+                  sRow.style.transform = `translateY(-${DEFAULT_ROW_STEP_PX}px)`;
+                  nextShifted.push(sRow);
+                }
+              }
+            }
+          }
+
+          for (const el of shiftedElements) {
+            if (!nextShifted.includes(el)) {
+              el.style.transform = '';
+              el.style.transition = '';
+            }
+          }
+          shiftedElements = nextShifted;
         } else if (target.domain === 'sidebar') {
           hideIndicator();
 
@@ -300,7 +365,6 @@ export function useSessionListDrag(
 
           // 业务硬约束守门：项目内的会话只能在项目内排序或放在置顶区域，禁止放在常规未绑定项目的对话列表中
           if (isProjectSession && !isPinnedTarget && targetFolderName !== originFolder) {
-            // 目标非法：拦截，不产生腾位
             clearAllShifts();
             if (ghostEl) ghostEl.style.opacity = '0.35';
             currentInsertSessionId = null;
@@ -342,12 +406,22 @@ export function useSessionListDrag(
               };
             });
 
+            // 测量真实物理步长 (自适应采样或 31px)
+            let effectiveStepPx = DEFAULT_ROW_STEP_PX;
+            if (targetSpans.length >= 2) {
+              const s0 = targetSpans[0];
+              const s1 = targetSpans[1];
+              if (s0 && s1) {
+                effectiveStepPx = Math.abs(s1.start - s0.start) || effectiveStepPx;
+              }
+            }
+
             const insertIdx = compute1DInsertIndex(targetSpans, clientY, dy);
             const targetOffsets = compute1DShiftOffsets({
               itemCount: otherTargetRows.length,
               sourceIndex: sourceIndex >= 0 ? sourceIndex : null,
               insertIndex: insertIdx,
-              shiftStep: rowStepPx,
+              shiftStep: effectiveStepPx,
             });
 
             for (let i = 0; i < otherTargetRows.length; i++) {
@@ -370,13 +444,12 @@ export function useSessionListDrag(
 
               const origIdx = allSourceRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
               if (origIdx >= 0) {
-                // 原项之后的所有项向上平移 -28px 闭合空洞
                 for (let i = 0; i < allSourceRows.length; i++) {
                   const sRow = allSourceRows[i]!;
                   if (sRow.getAttribute('data-session-id') === sessionId) continue;
                   if (i > origIdx) {
                     sRow.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
-                    sRow.style.transform = `translateY(-${rowStepPx}px)`;
+                    sRow.style.transform = `translateY(-${effectiveStepPx}px)`;
                     nextShifted.push(sRow);
                   }
                 }
@@ -512,7 +585,7 @@ export function useSessionListDrag(
                 target: {
                   kind: 'strip',
                   targetLeafId: lastAppliedTarget.targetLeafId,
-                  insertIdx: lastAppliedTarget.insertIndex,
+                  insertIdx: currentStripInsertIdx,
                 },
               });
             } else if (lastAppliedTarget.domain === 'sidebar') {

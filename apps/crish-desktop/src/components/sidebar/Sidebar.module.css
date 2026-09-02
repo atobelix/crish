@@ -101,6 +101,9 @@
   min-height: 0; /* Enable flex-1 scrolling */
   scrollbar-width: thin;
   scrollbar-color: var(--tint-scrollbar-thumb) transparent;
+  contain: layout paint;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .sidebarFooter {

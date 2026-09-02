@@ -94,6 +94,7 @@ export function useChatCardState({
   return {
     activeSessionId: sessionMeta.activeSessionId,
     activeSessionTitle: sessionMeta.activeSessionTitle,
+    workspaceKey: sessionMeta.workspaceKey,
     messages: chatMessages.messages,
     agents: chatMessages.agents,
     goalMode: sessionMeta.goalMode,

@@ -50,8 +50,10 @@ export function commitSessionTabDrop(input: {
   tree.splitTab(sourceLeafId, tabId, target.targetLeafId, target.region);
 }
 
+import { useWorkspaceShellStore } from '../../store/workspace-shell/workspaceShellStore';
+
 /**
- * 侧栏会话拖入右侧工作区落点提交器（支持直接分屏或加入顶栏）
+ * 侧栏会话拖入右侧工作区落点提交器（支持直接分屏或在顶栏任意位置自由插入）
  */
 export function commitSidebarSessionDrop(input: {
   sessionId: string;
@@ -60,23 +62,24 @@ export function commitSidebarSessionDrop(input: {
   const { sessionId, target } = input;
   if (!sessionId) return;
 
-  const tree = useLayoutTreeStore.getState();
+  const shell = useWorkspaceShellStore.getState();
 
   if (target.kind === 'strip') {
-    tree.openSession(sessionId, {
+    shell.openOrFocusSession(sessionId, {
       activeLeafId: target.targetLeafId,
+      insertIdx: target.insertIdx,
     });
     return;
   }
 
   if (target.region === 'center') {
-    tree.openSession(sessionId, {
+    shell.openOrFocusSession(sessionId, {
       activeLeafId: target.targetLeafId,
     });
     return;
   }
 
-  // 边缘分屏
-  tree.splitSessionFromSidebar(sessionId, target.targetLeafId, target.region);
+  // 边缘分屏：统一走 workspaceShell 门面，保证 lastChatLeafId + activeSessionId + DOM 焦点原子同步
+  shell.splitSessionFromSidebar(sessionId, target.targetLeafId, target.region);
 }
 

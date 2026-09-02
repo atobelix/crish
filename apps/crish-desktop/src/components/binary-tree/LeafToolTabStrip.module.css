@@ -72,22 +72,24 @@
   flex-shrink: 0;
 }
 
-/* Tab Item：高度 26px 与 4px 圆角（严格对齐 reference .side-panel-tab-item） */
+/* Tab Item：高度 28px 与 8px 圆角（全域视觉同构） */
 .tab {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  gap: 5px;
-  height: 26px;
+  gap: 6px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
   max-width: 140px;
   min-width: 0;
   flex: 0 0 auto;
-  padding: 0 4px 0 7px;
+  padding: 0 6px 0 8px;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-lg, 8px);
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-xs-plus, 12px);
   font-family: inherit;
   font-weight: 400;
   cursor: pointer;
@@ -103,7 +105,7 @@
     padding 220ms cubic-bezier(0.16, 1, 0.3, 1),
     margin 220ms cubic-bezier(0.16, 1, 0.3, 1),
     opacity 180ms ease,
-    transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+    transform 140ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .tab:hover {
@@ -221,14 +223,14 @@
   }
 }
 
-/* Add Buttons: in-flow and pinned (26px height, 4px radius) */
+/* Add Buttons: in-flow and pinned (28px height, 8px radius) */
 .addBtn {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  flex: 0 0 26px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  flex: 0 0 28px;
   padding: 0;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-lg, 8px);
   border: 1px solid transparent;
   background: transparent;
   display: inline-flex;
@@ -264,9 +266,9 @@
 
 .hasOverflow .addBtn.pinned {
   opacity: 1;
-  width: 26px;
-  min-width: 26px;
-  flex: 0 0 26px;
+  width: 28px;
+  min-width: 28px;
+  flex: 0 0 28px;
   transform: scale(1);
   pointer-events: auto;
   margin-right: 2px;
@@ -298,11 +300,11 @@
 }
 
 .sideBtn {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
   padding: 0;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-lg, 8px);
   border: none;
   background: transparent;
   display: inline-flex;

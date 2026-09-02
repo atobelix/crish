@@ -44,7 +44,14 @@ export interface WorkspaceShellActions {
       title?: string;
       workspaceKey?: string;
       split?: 'right' | 'left' | 'top' | 'bottom';
+      activeLeafId?: string;
+      insertIdx?: number;
     }
+  ) => void;
+  splitSessionFromSidebar: (
+    sessionId: string,
+    dstLeafId: string,
+    region: 'left' | 'right' | 'top' | 'bottom'
   ) => void;
   activateTab: (leafId: string, tabId: string) => void;
   /** 内部 / 尚未改的调用：按 tabId 反查叶 */

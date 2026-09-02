@@ -92,7 +92,7 @@ export function compute1DShiftOffsets(input: Compute1DOffsetsInput): number[] {
   return offsets;
 }
 
-/** 方向感知型无缝隙 1D 插入点解算（基于项中心点与 1/3 滞后） */
+/** 方向感知型全连续实数域 1D 插入点解算（严格覆盖实数轴，彻底消灭 gap 缝隙死区） */
 export function compute1DInsertIndex(
   items: readonly Axis1DItemSpan[],
   pointerPos: number,
@@ -101,19 +101,22 @@ export function compute1DInsertIndex(
   const count = items.length;
   if (count === 0) return 0;
 
-  const first = items[0]!;
-  if (pointerPos <= first.start) return 0;
+  // 1. 构建全连续实数域分割中点序列 B = [b_0, b_1, ..., b_N]
+  // b_0 = -Infinity, b_k = (end[k-1] + start[k]) / 2, b_N = +Infinity
+  const boundaries: number[] = new Array(count + 1);
+  boundaries[0] = -Infinity;
+  for (let k = 1; k < count; k++) {
+    boundaries[k] = (items[k - 1]!.end + items[k]!.start) / 2;
+  }
+  boundaries[count] = Infinity;
 
-  const last = items[count - 1]!;
-  if (pointerPos >= last.end) return count;
-
+  // 2. 判定 pointerPos 落在哪个连续区间 [boundaries[k], boundaries[k+1])
   for (let i = 0; i < count; i++) {
-    const item = items[i]!;
-    const nextItem = items[i + 1];
-    const itemStart = item.start;
-    const itemEnd = nextItem ? (item.end + nextItem.start) / 2 : item.end;
+    const bStart = boundaries[i]!;
+    const bEnd = boundaries[i + 1]!;
 
-    if (pointerPos >= itemStart && pointerPos <= itemEnd) {
+    if (pointerPos >= bStart && pointerPos < bEnd) {
+      const item = items[i]!;
       const size = Math.max(1, item.size);
       const thresholdRatio = 1 / 3;
 

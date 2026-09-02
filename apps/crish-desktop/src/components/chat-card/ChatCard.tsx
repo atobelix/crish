@@ -192,6 +192,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
               <div className={styles.chatCol} data-empty-col="true">
                 <ChatEmptyState
                   kind={state.emptyKind}
+                  workspaceKey={state.workspaceKey}
                   filterQuery={state.localMsgFilter}
                   needsKeySetup={state.needsKeySetup}
                   needsModelSetup={state.needsModelSetup}

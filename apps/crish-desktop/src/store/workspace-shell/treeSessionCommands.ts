@@ -15,6 +15,7 @@ export interface OpenSessionOpts {
   title: string;
   workspaceKey: string;
   activeLeafId: string;
+  insertIdx?: number;
 }
 
 export interface OpenSessionResult {

@@ -146,17 +146,39 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
       workspaceKeyNow() ||
       GENERAL_FOLDER;
 
-    const targetLeaf = resolveActiveChatLeaf(get().lastChatLeafId);
+    const targetLeaf = opts?.activeLeafId
+      ? { id: opts.activeLeafId }
+      : resolveActiveChatLeaf(get().lastChatLeafId);
+
     const result = treeOpenSession(sid, {
       title,
       workspaceKey,
       activeLeafId: targetLeaf.id,
+      insertIdx: opts?.insertIdx,
     });
     if (opts?.split && result.created) {
       treeSplitTab(result.leafId, result.tabId, result.leafId, opts.split);
     }
     rememberChatLeaf(set, result.leafId);
     useSessionStore.getState().setActiveSessionId(sid);
+    syncSessionFromActiveLeaf(result.leafId);
+  },
+
+  splitSessionFromSidebar: (sessionId, dstLeafId, region) => {
+    const sid = (sessionId || '').trim();
+    if (!sid || isPendingDraft(sid) || !dstLeafId) return;
+
+    const treeStore = useLayoutTreeStore.getState();
+    treeStore.splitSessionFromSidebar(sid, dstLeafId, region);
+
+    const updatedTree = useLayoutTreeStore.getState().tree;
+    const leaves = listChatLeaves(updatedTree.root);
+    const fresh = leaves.find((l) => l.tabs.some((t) => t.sessionId === sid));
+    const finalLeafId = fresh ? fresh.id : dstLeafId;
+
+    rememberChatLeaf(set, finalLeafId);
+    useSessionStore.getState().setActiveSessionId(sid);
+    syncSessionFromActiveLeaf(finalLeafId);
   },
 
   activateTab: (leafId, tabId) => {

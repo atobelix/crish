@@ -1,16 +1,11 @@
 .listScroll {
-  /*                     .sidebarScroll overflow-y: auto
-   *
-   *     flex: 1        .sidebarScroll
-   *    .sidebarScroll   overflow-y: auto
-   *    flex: none   flex: 0 0 auto
-   *       .sidebarScroll             */
   display: flex;
   flex-direction: column;
   gap: 0;
   flex: none;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 60px;
+  contain: layout paint;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .emptyHint {
@@ -25,7 +20,6 @@
   opacity: 0.85;
 }
 
-/*        display        0fr               */
 .accordionWrapper {
   display: block;
 }
@@ -37,6 +31,9 @@
 .accordionInner {
   overflow: hidden;
   min-height: 0;
+  contain: layout paint;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .accordionWrapper[data-expanded='true'] .accordionInner {
@@ -140,6 +137,9 @@
   border: 1px dashed transparent;
   border-radius: var(--radius-lg);
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
+  contain: layout paint;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 /* 做减法：彻底移除置顶区域的生硬绿框与绿色背景，统一由 translateY 平滑让位 */
@@ -153,6 +153,9 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  contain: layout paint;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .folderGroup {
@@ -246,6 +249,9 @@
   gap: 3px; /* Standard 3px vertical gap between individual conversation capsule items */
   padding-left: var(--space-2_5);
   padding-right: var(--space-2);
+  contain: layout paint;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .sessionItemWrap {
@@ -255,6 +261,8 @@
   max-height: 28px;
   box-sizing: border-box;
   overflow: hidden;
+  contain: strict;
+  will-change: transform;
 }
 
 .sessionItem {

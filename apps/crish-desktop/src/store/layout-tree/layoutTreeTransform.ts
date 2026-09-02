@@ -191,14 +191,39 @@ export function resetToSingleDraftLeaf(
   };
 }
 
-/** 打开或聚焦会话（纯函数）。如果已存在则激活，否则插入新 tab 并激活。 */
+/** 打开或聚焦会话（纯函数）。如果已存在则移动/激活，否则在指定下标插入新 tab 并激活。 */
 export function openSession(
   tree: LayoutTree,
   sessionId: string,
-  opts: { title?: string; workspaceKey?: string; activeLeafId: string }
+  opts: {
+    title?: string;
+    workspaceKey?: string;
+    activeLeafId: string;
+    insertIdx?: number;
+  }
 ): { tree: LayoutTree; leafId: string; tabId: string; created: boolean } {
   const existing = findTabBySessionId(tree.root, sessionId);
   if (existing) {
+    if (
+      opts.insertIdx !== undefined &&
+      (existing.leaf.id !== opts.activeLeafId ||
+        existing.leaf.tabs.findIndex((t) => t.tabId === existing.tab.tabId) !==
+          opts.insertIdx)
+    ) {
+      const movedTree = moveTab(
+        tree,
+        existing.leaf.id,
+        existing.tab.tabId,
+        opts.activeLeafId,
+        opts.insertIdx
+      );
+      return {
+        tree: movedTree,
+        leafId: opts.activeLeafId,
+        tabId: existing.tab.tabId,
+        created: false,
+      };
+    }
     const nextTree = activateTabInTree(tree, existing.leaf.id, existing.tab.tabId);
     return {
       tree: nextTree,
@@ -218,7 +243,7 @@ export function openSession(
     title: opts.title,
     workspaceKey: opts.workspaceKey,
   });
-  const nextTree = insertTab(tree, targetLeaf.id, newTab);
+  const nextTree = insertTab(tree, targetLeaf.id, newTab, opts.insertIdx);
   return {
     tree: nextTree,
     leafId: targetLeaf.id,

@@ -27,7 +27,15 @@ import {
   type ChatEmptyKind,
   type ChatEmptyPrimaryAction,
 } from '../../api/chatEmptyState';
-import { getActiveProject, getWorkspacePath } from '../../api/projectStore';
+import {
+  getActiveProject,
+  getWorkspacePath,
+  listProjects,
+  resolveFolderToProjectId,
+  projectFolderLabel,
+  GENERAL_FOLDER,
+  type ProjectEntry,
+} from '../../api/projectStore';
 import { ProjectPickerMenu } from './ProjectPickerMenu';
 import {
   ChevronRight,
@@ -43,6 +51,8 @@ const PROJECT_PICKER_CLOSE_DELAY_MS = 400;
 
 export type ChatEmptyStateProps = {
   kind: ChatEmptyKind;
+  /** 窗格绑定的项目作用域 Key（支持 project.id / folder / GENERAL_FOLDER），隔离多分屏跨窗口文字乱跳 */
+  workspaceKey?: string | null;
   filterQuery?: string;
   needsKeySetup?: boolean;
   needsModelSetup?: boolean;
@@ -67,6 +77,52 @@ export type ChatEmptyStateProps = {
   /** filter-empty */
   onClearFilter?: () => void;
 };
+
+export interface ScopedProjectInfo {
+  project: ProjectEntry | null;
+  displayName: string;
+  isGeneral: boolean;
+}
+
+/** 窗格作用域优先的项目解析器（纯函数、零全局副作用） */
+export function resolveProjectForScope(
+  workspaceKey?: string | null
+): ScopedProjectInfo {
+  if (workspaceKey !== undefined && workspaceKey !== null) {
+    const k = workspaceKey.trim();
+    if (
+      !k ||
+      k === GENERAL_FOLDER ||
+      k === '对话' ||
+      k === '会话' ||
+      k === '常规会话' ||
+      k === 'general'
+    ) {
+      return { project: null, displayName: '选择项目', isGeneral: true };
+    }
+
+    const projectId = resolveFolderToProjectId(k);
+    if (projectId) {
+      const p = listProjects().find((proj) => proj.id === projectId);
+      if (p) {
+        return { project: p, displayName: p.name, isGeneral: false };
+      }
+    }
+
+    const label = projectFolderLabel(k);
+    return { project: null, displayName: label, isGeneral: false };
+  }
+
+  const active = getActiveProject();
+  if (active) {
+    return { project: active, displayName: active.name, isGeneral: false };
+  }
+  return {
+    project: null,
+    displayName: getWorkspacePath() ? '当前目录' : '选择项目',
+    isGeneral: true,
+  };
+}
 
 function EmptyIcon({ kind }: { kind: ChatEmptyKind }) {
   const common = {
@@ -93,15 +149,6 @@ function primaryActionHandler(
   return undefined;
 }
 
-/** 项目条按钮展示名（中文，与欢迎面口径一致） */
-function projectDisplayName(
-  active: ReturnType<typeof getActiveProject>
-): string {
-  if (active?.name) return active.name;
-  if (getWorkspacePath()) return '当前目录';
-  return '选择项目';
-}
-
 /** 将快捷 prompt 填入后聚焦主列输入框（避免全局 query 误伤其它 textarea） */
 function focusChatComposer(): void {
   const scope =
@@ -120,6 +167,7 @@ function focusChatComposer(): void {
 
 export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   kind,
+  workspaceKey,
   filterQuery = '',
   needsKeySetup = false,
   needsModelSetup = false,
@@ -139,17 +187,16 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   > | null>(null);
 
   const cancelProjectPickerClose = useCallback(() => {
-    if (projectPickerCloseTimerRef.current != null) {
+    if (projectPickerCloseTimerRef.current) {
       clearTimeout(projectPickerCloseTimerRef.current);
       projectPickerCloseTimerRef.current = null;
     }
   }, []);
 
   const scheduleProjectPickerClose = useCallback(() => {
-    if (!onShowProjectPicker) return;
     cancelProjectPickerClose();
     projectPickerCloseTimerRef.current = setTimeout(() => {
-      onShowProjectPicker(false);
+      onShowProjectPicker?.(false);
       projectPickerCloseTimerRef.current = null;
     }, PROJECT_PICKER_CLOSE_DELAY_MS);
   }, [onShowProjectPicker, cancelProjectPickerClose]);
@@ -189,8 +236,9 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
   const actionLabel =
     resolveChatEmptyActionLabel(primaryAction) ?? copy.actionLabel;
 
-  const activeProject = getActiveProject();
-  const projectName = projectDisplayName(activeProject);
+  const projectInfo = resolveProjectForScope(workspaceKey);
+  const projectName = projectInfo.displayName;
+  const activeProject = projectInfo.project;
 
   const ariaLabel = chatEmptyKindAriaLabel(kind);
   const titleId = `chat-empty-title-${kind}-${reactId}`;

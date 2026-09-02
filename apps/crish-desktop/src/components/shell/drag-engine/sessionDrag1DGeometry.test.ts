@@ -107,6 +107,13 @@ describe('sessionDrag1DGeometry — 1D 轴向动力学与纯数学位移引擎�
       expect(compute1DInsertIndex(items, 20, -5)).toBe(0);
     });
 
+    it('指针落在两项之间的 gap (37px) 处：不产生跳变，单调连续命中', () => {
+      // items: [0, 36], [38, 74]. gap 为 (36, 38). 中点为 37px.
+      expect(compute1DInsertIndex(items, 36.5, 1)).toBe(1);
+      expect(compute1DInsertIndex(items, 37.0, 1)).toBe(1);
+      expect(compute1DInsertIndex(items, 37.5, 1)).toBe(1);
+    });
+
     it('指针越过最后一项 → 返回 items.length', () => {
       expect(compute1DInsertIndex(items, 200, 1)).toBe(3);
     });

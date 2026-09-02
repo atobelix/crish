@@ -69,9 +69,11 @@
   app-region: no-drag;
 }
 
-/* 单个会话/工具标签项 */
+/* 单个会话/工具标签项 (28px 严格对标侧栏胶囊卡片，8px 圆角) */
 .tabItem {
-  height: 26px;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
   max-width: 180px;
   min-width: 0;
   flex: 0 1 150px;
@@ -79,11 +81,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 0 4px 0 8px;
+  padding: 0 6px 0 10px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: var(--radius-lg, 8px);
+  font-size: var(--font-size-xs-plus, 12.5px);
   font-weight: 400;
   color: var(--text-secondary, #666666);
   cursor: pointer;
@@ -102,7 +104,7 @@
               padding 220ms cubic-bezier(0.16, 1, 0.3, 1),
               margin 220ms cubic-bezier(0.16, 1, 0.3, 1),
               opacity 180ms ease,
-              transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+              transform 140ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .tabItem:active {
@@ -214,14 +216,14 @@
   transform: scale(0.9);
 }
 
-/* 新建标签按钮（加号） */
+/* 新建标签按钮（加号）- 28px × 28px / 8px 圆角 */
 .newTabBtn {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  flex: 0 0 26px;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  flex: 0 0 28px;
   padding: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-lg, 8px);
   border: 1px solid transparent;
   background: transparent;
   display: inline-flex;

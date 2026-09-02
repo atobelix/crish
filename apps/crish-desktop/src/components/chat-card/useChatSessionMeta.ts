@@ -5,6 +5,9 @@ import { isFirstRunOverlayOpen } from '../firstRunOverlayFlag';
 import { useScopedSessionField, type SessionStoreStateShape } from './useScopedSessionField';
 import type { SessionState } from '../../store/types';
 
+import { useLayoutTreeStore, collectLeaves } from '../../store/layout-tree';
+import { GENERAL_FOLDER } from '../../api/projectStore';
+
 export interface UseChatSessionMetaOptions {
   sessionIdProp?: string | null;
 }
@@ -13,6 +16,7 @@ export interface UseChatSessionMetaResult {
   activeSessionId: string | null;
   resolveSessionId: (s: SessionStoreStateShape) => string;
   activeSessionTitle: string | undefined;
+  workspaceKey: string;
   goalMode: SessionState['goalMode'];
   goalModeActive: boolean;
   firstRunOpen: boolean;
@@ -38,6 +42,25 @@ export function useChatSessionMeta({
     useCallback((session) => session?.title, [])
   );
 
+  const sessionFolder = useScopedSessionField(
+    resolveSessionId,
+    useCallback((session) => session?.folder, [])
+  );
+
+  const tabWorkspaceKey = useLayoutTreeStore(
+    useCallback((s) => {
+      if (!sessionIdProp) return null;
+      const leaves = collectLeaves(s.tree.root);
+      for (const leaf of leaves) {
+        const tab = leaf.tabs.find((t) => t.sessionId === sessionIdProp || t.tabId === sessionIdProp);
+        if (tab) return tab.workspaceKey;
+      }
+      return null;
+    }, [sessionIdProp])
+  );
+
+  const workspaceKey = sessionFolder || tabWorkspaceKey || (sessionIdProp ? GENERAL_FOLDER : '');
+
   const goalMode = useScopedSessionField(
     resolveSessionId,
     useCallback((session) => session?.goalMode, [])
@@ -60,6 +83,7 @@ export function useChatSessionMeta({
     activeSessionId,
     resolveSessionId,
     activeSessionTitle,
+    workspaceKey,
     goalMode,
     goalModeActive,
     firstRunOpen,
