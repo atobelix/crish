@@ -67,8 +67,23 @@ describe('SidebarHeader', () => {
     vi.clearAllMocks();
   });
 
-  it('侧栏头不再内嵌开关', () => {
-    const { queryByTestId } = render(<SidebarHeader {...headerProps} />);
-    expect(queryByTestId('sidebar-toggle')).toBeNull();
+  it('侧栏头渲染语义化 header，包含折叠按钮与预留扩展区域', () => {
+    const onToggle = vi.fn();
+    const { getByTestId, container } = render(
+      <SidebarHeader {...headerProps} collapsed={false} onToggle={onToggle} />
+    );
+
+    const header = container.querySelector('header');
+    expect(header).toBeTruthy();
+    expect(header?.getAttribute('role')).toBe('banner');
+
+    const toggleBtn = getByTestId('sidebar-header-toggle');
+    expect(toggleBtn).toBeTruthy();
+    expect(toggleBtn.getAttribute('aria-label')).toBe('收起侧栏');
+    fireEvent.click(toggleBtn);
+    expect(onToggle).toHaveBeenCalledTimes(1);
+
+    const extra = getByTestId('sidebar-header-extra');
+    expect(extra).toBeTruthy();
   });
 });

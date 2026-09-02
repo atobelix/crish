@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import React from 'react';
-import { render } from '@testing-library/react';
+import { render, fireEvent } from '@testing-library/react';
+import styles from '../../SidebarSessionList.module.css';
 import { GeneralSection } from '../GeneralSection';
 import { ProjectsSection } from '../ProjectsSection';
 import type { SessionState } from '../../../../store/types';
@@ -37,13 +38,13 @@ describe('侧栏所见即所得自然流式布局结构不变量 (WYSIWYG Flow I
     </li>
   );
 
-  it('GeneralSection 所见即所得：24 条会话全量渲染，零截断、零“查看全部”按钮', () => {
+  it('GeneralSection 默认截断为 10 条，展示“查看全部 (24)”，点击后展开全部 24 条', () => {
     // 模拟现场截图中的 24 条常规会话
     const sessions = Array.from({ length: 24 }, (_, i) =>
       createMockSession(`sess_${i}`, `会话项 ${i + 1}`)
     );
 
-    const { container, queryByText } = render(
+    const { container, getByText, queryByText } = render(
       <GeneralSection
         generalSessions={sessions}
         generalCollapsed={false}
@@ -57,22 +58,28 @@ describe('侧栏所见即所得自然流式布局结构不变量 (WYSIWYG Flow I
       />
     );
 
-    // 1. 24 项全部挂载到 DOM，所见即所得
-    const listItems = container.querySelectorAll('li[data-session-id]');
+    // 1. 默认只展示前 10 项，避免侧栏无限拉长
+    let listItems = container.querySelectorAll('li[data-session-id]');
+    expect(listItems.length).toBe(10);
+
+    // 2. 存在“查看全部 (24)”按钮
+    const toggleBtn = getByText('查看全部 (24)');
+    expect(toggleBtn).not.toBeNull();
+
+    // 3. 点击展开
+    fireEvent.click(toggleBtn);
+    listItems = container.querySelectorAll('li[data-session-id]');
     expect(listItems.length).toBe(24);
+    expect(getByText('收起')).not.toBeNull();
 
-    // 2. 彻底不存在“查看全部 (24)”或“收起”按钮
-    expect(queryByText(/查看全部/)).toBeNull();
-    expect(queryByText(/收起/)).toBeNull();
-
-    // 3. ul 内部不存在非法的内嵌手风琴 div
-    const ul = container.querySelector('ul[data-drop-zone="general"]');
-    expect(ul).not.toBeNull();
-    const innerDivs = ul?.querySelectorAll('div');
-    expect(innerDivs?.length ?? 0).toBe(0);
+    // 4. 点击收起
+    fireEvent.click(getByText('收起'));
+    listItems = container.querySelectorAll('li[data-session-id]');
+    expect(listItems.length).toBe(10);
+    expect(queryByText('查看全部 (24)')).not.toBeNull();
   });
 
-  it('ProjectsSection 所见即所得：文件夹内 12 条会话全量流式展开，零截断', () => {
+  it('ProjectsSection：项目标题展示数量角标，项目内默认截断为 6 条，可展开收起', () => {
     const project: ProjectEntry = {
       id: 'proj_1',
       name: '核心项目',
@@ -85,7 +92,7 @@ describe('侧栏所见即所得自然流式布局结构不变量 (WYSIWYG Flow I
       createMockSession(`proj_sess_${i}`, `项目会话 ${i + 1}`)
     );
 
-    const { container, queryByText } = render(
+    const { container, getByText, queryByText } = render(
       <ProjectsSection
         data={{
           projects: [project],
@@ -103,11 +110,28 @@ describe('侧栏所见即所得自然流式布局结构不变量 (WYSIWYG Flow I
       />
     );
 
-    // 1. 12 项全部流式挂载
-    const listItems = container.querySelectorAll('li[data-session-id]');
-    expect(listItems.length).toBe(12);
+    // 1. 项目标题后零数字噪音（杜绝视觉噪音）
+    const badge = container.querySelector(`.${styles.folderCount}`);
+    expect(badge).toBeNull();
 
-    // 2. 彻底不存在“查看全部”按钮
-    expect(queryByText(/查看全部/)).toBeNull();
+    // 2. 文件夹内默认截断为 6 项
+    let listItems = container.querySelectorAll('li[data-session-id]');
+    expect(listItems.length).toBe(6);
+
+    // 3. 展示“查看全部 (12)”
+    const toggleBtn = getByText('查看全部 (12)');
+    expect(toggleBtn).not.toBeNull();
+
+    // 4. 点击展开全部 12 项
+    fireEvent.click(toggleBtn);
+    listItems = container.querySelectorAll('li[data-session-id]');
+    expect(listItems.length).toBe(12);
+    expect(getByText('收起')).not.toBeNull();
+
+    // 5. 点击收起恢复 6 项
+    fireEvent.click(getByText('收起'));
+    listItems = container.querySelectorAll('li[data-session-id]');
+    expect(listItems.length).toBe(6);
+    expect(queryByText('查看全部 (12)')).not.toBeNull();
   });
 });

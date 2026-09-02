@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { SessionState } from '../../../store/types';
 import type { ProjectEntry } from '../../../api/projectStore';
 import { emitUiEvent } from '../../../api/uiEvents';
@@ -12,6 +12,8 @@ import {
   FolderOpen,
   FolderPlus,
 } from 'lucide-react';
+
+const PROJECT_FOLD_LIMIT = 6;
 
 export interface ProjectsSectionData {
   projects: ProjectEntry[];
@@ -48,6 +50,11 @@ export function ProjectsSection({
   data,
   actions,
 }: ProjectsSectionProps) {
+  const [expandedProjectFolders, setExpandedProjectFolders] = useState<
+    Record<string, boolean>
+  >({});
+  void setExpandedProjectFolders;
+
   const {
     projects,
     collapsedProjects,
@@ -81,7 +88,7 @@ export function ProjectsSection({
         >
           <span>项目</span>
           <ChevronDown
-            size={14}
+            size={13}
             className={projectsSectionCollapsed ? styles.chevCollapsed : ''}
             aria-hidden
           />
@@ -117,42 +124,41 @@ export function ProjectsSection({
                 className={styles.folderGroup}
                 data-folder-name={p.id}
               >
-                <div
-                  className={styles.folderHeader}
-                  onClick={() => onToggleProjectCollapsed(p.id)}
-                  aria-expanded={open}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onToggleProjectCollapsed(p.id);
-                    }
-                  }}
-                >
-                  <span className={styles.folderChevron}>
-                    <ChevronDown
-                      size={14}
-                      className={open ? '' : styles.chevCollapsed}
-                      aria-hidden
-                    />
-                  </span>
-                  <span className={styles.folderIcon} aria-hidden>
-                    {open ? (
-                      <FolderOpen size={14} strokeWidth={1.75} />
-                    ) : (
-                      <Folder size={14} strokeWidth={1.75} />
-                    )}
-                  </span>
-                  <Tooltip content={p.path}>
-                    <span className={styles.folderName}>
-                      {p.name}
+                <div className={styles.folderHeaderRow}>
+                  <div
+                    className={styles.folderHeader}
+                    onClick={() => onToggleProjectCollapsed(p.id)}
+                    aria-expanded={open}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onToggleProjectCollapsed(p.id);
+                      }
+                    }}
+                  >
+                    <span className={styles.folderChevron}>
+                      <ChevronDown
+                        size={13}
+                        className={open ? '' : styles.chevCollapsed}
+                        aria-hidden
+                      />
                     </span>
-                  </Tooltip>
-                  <div className={styles.folderBadgeAndActions}>
-                    <span className={styles.folderCount}>
-                      {sess.length > 0 ? sess.length : ''}
+                    <span className={styles.folderIcon} aria-hidden>
+                      {open ? (
+                        <FolderOpen size={14} strokeWidth={1.75} />
+                      ) : (
+                        <Folder size={14} strokeWidth={1.75} />
+                      )}
                     </span>
+                    <Tooltip content={p.path}>
+                      <span className={styles.folderName}>
+                        {p.name}
+                      </span>
+                    </Tooltip>
+                  </div>
+                  <div className={styles.folderActions}>
                     <Tooltip content="在本项目新建对话">
                       <Button
                         type="button"
@@ -180,15 +186,40 @@ export function ProjectsSection({
                 >
                   <div className={styles.accordionInner}>
                     {sess.length > 0 ? (
-                      <ul
-                        className={`${styles.pinnedList} ${styles.folderSessions}`}
-                        role="tree"
-                        aria-label={`${p.name} 会话`}
-                        data-drop-zone="project"
-                        data-folder-name={p.id}
-                      >
-                        {sess.map((s) => renderSessionItem(s, true))}
-                      </ul>
+                      <>
+                        <ul
+                          className={`${styles.pinnedList} ${styles.folderSessions}`}
+                          role="tree"
+                          aria-label={`${p.name} 会话`}
+                          data-drop-zone="project"
+                          data-folder-name={p.id}
+                        >
+                          {(expandedProjectFolders[p.id]
+                            ? sess
+                            : sess.slice(0, PROJECT_FOLD_LIMIT)
+                          ).map((s) => renderSessionItem(s, true))}
+                        </ul>
+                        {sess.length > PROJECT_FOLD_LIMIT && (
+                          <div className={styles.foldToggleRow}>
+                            <button
+                              type="button"
+                              className={styles.foldToggleBtn}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedProjectFolders((prev) => ({
+                                  ...prev,
+                                  [p.id]: !prev[p.id],
+                                }));
+                              }}
+                              aria-expanded={Boolean(expandedProjectFolders[p.id])}
+                            >
+                              {expandedProjectFolders[p.id]
+                                ? '收起'
+                                : `查看全部 (${sess.length})`}
+                            </button>
+                          </div>
+                        )}
+                      </>
                     ) : null}
                   </div>
                 </div>

@@ -51,7 +51,7 @@ export function PinnedSection({
           >
             <span>置顶</span>
             <ChevronDown
-              size={14}
+              size={13}
               className={pinnedCollapsed ? styles.chevCollapsed : ''}
               aria-hidden
             />

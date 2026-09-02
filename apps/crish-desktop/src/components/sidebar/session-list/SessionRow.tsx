@@ -349,21 +349,19 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
           />
         ) : (
           <>
-            <Tooltip content={tipContent}>
-              <span className={styles.sessionTextCol}>
-                {isBranched && (
-                  <span className={styles.branchBadge} aria-label="分支会话">
-                    <GitBranch
-                      size={11}
-                      strokeWidth={2}
-                      className={styles.branchIcon}
-                      aria-hidden
-                    />
-                  </span>
-                )}
-                <span className={styles.sessionText}>{displayText}</span>
-              </span>
-            </Tooltip>
+            <span className={styles.sessionTextCol}>
+              {isBranched && (
+                <span className={styles.branchBadge} aria-label="分支会话">
+                  <GitBranch
+                    size={12}
+                    strokeWidth={2}
+                    className={styles.branchIcon}
+                    aria-hidden
+                  />
+                </span>
+              )}
+              <span className={styles.sessionText}>{displayText}</span>
+            </span>
             <span className={styles.sessionTrailing}>
               {isRunning ? (
                 <Tooltip content="处理中">

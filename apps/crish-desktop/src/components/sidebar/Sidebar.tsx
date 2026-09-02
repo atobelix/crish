@@ -293,6 +293,8 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
           filterLabel={filterLabel}
           activeNav={activeNav}
           searchInput={searchInput}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
           onHamburgerClick={handleHamburgerClick}
           onOverlayClose={handleOverlayClose}
           onNewSession={handleNewSession}

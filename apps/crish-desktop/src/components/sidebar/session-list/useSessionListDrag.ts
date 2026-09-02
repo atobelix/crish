@@ -1,29 +1,20 @@
 /**
- * useSessionListDrag.ts — 侧栏会话与项目文件夹拖拽动力学与跨域分屏统一引擎 (Master Magnum Opus Edition)
+ * useSessionListDrag.ts — 侧栏会话拖拽重排序与跨域分屏引擎
  * 
- * 核心特性：
- * 1. 真实网格步长自适应解算 (31px = 28px + gap 3px)，消除尺寸阶跃与卡顿；
- * 2. 实数域全连续中值分割方程，消灭 1.5px 缝隙死区，彻底根治整体微抖动；
- * 3. 跨域顶栏 TabStrip 1D 水平平滑让位动力学 (translateX 154px) 与指定下标精准插排；
- * 4. 三 Store 原子同步协议：分屏与插入后 Zero-Click 自动激活新叶节点与会话；
- * 5. 跨分组空洞自闭合：拖入其他分区时，原分组下方项目自动向上平移 (-31px) 补齐空洞；
- * 6. 业务约束守门：项目内部会话仅限当前项目内排序或置顶，严禁流出到未绑定项目的常规区；
- * 7. 纯 Ref 驱动与 GPU 合成层：拖拽全过程零 setState、零 React 重绘，全局静音 Tooltip。
+ * 架构规范（对齐 02a3e75d 纯 React 状态驱动模型 + 跨域分屏）：
+ * 1. 彻底清退 DOM 级 style.transform 强行突变，所有会话行保持自然文档流；
+ * 2. 拖拽过程中仅通过 dragPreview 触发 React 乐观重排，零物理震荡、零多区域抽搐；
+ * 3. 仅当 previewKey 实质变更时才更新状态，避免无谓重渲染；
+ * 4. 完美融合右侧跨域分屏探测（resolveCrossDomainTarget 与 commitSidebarSessionDrop）；
+ * 5. 松手时原子提交 Store 持久化，平滑无缝衔接。
  */
 
 import React, { useCallback, useRef, useState } from 'react';
-import { GENERAL_FOLDER, canonicalSessionFolder } from '../../../api/projectStore';
+import { GENERAL_FOLDER } from '../../../api/projectStore';
 import type { SessionState } from '../../../store/types';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
 import styles from '../SidebarSessionList.module.css';
 import type { SidebarDragItem } from './sessionListTypes';
-import {
-  compute1DInsertIndex,
-  compute1DShiftOffsets,
-  readTranslateY,
-  readTranslateX,
-  type Axis1DItemSpan,
-} from '../../shell/drag-engine/sessionDrag1DGeometry';
 import {
   resolveCrossDomainTarget,
   type CrossDomainTarget,
@@ -31,6 +22,18 @@ import {
 import { commitSidebarSessionDrop } from '../../shell/sidebarSessionDropCommit';
 import { paneDropIndicatorRect } from '../../shell/sessionTabDragFeel';
 import { createIndicator } from '../../shell/sessionTabDragDom';
+import {
+  type DropPlace,
+  type DropIndicator,
+  type SessionDragPreview,
+  DRAG_THRESHOLD_PX,
+  DEFAULT_ROW_STEP_PX,
+  DEFAULT_TAB_STEP_PX,
+  applyDragPreview,
+  isPreviewTargetSection,
+  createSidebarSessionGhost,
+  swallowNextClick,
+} from './useSessionListDragHelpers';
 
 export {
   type DropPlace,
@@ -41,55 +44,10 @@ export {
   DEFAULT_TAB_STEP_PX,
   applyDragPreview,
   isPreviewTargetSection,
+  createSidebarSessionGhost,
   swallowNextClick,
-} from './useSessionListDragHelpers';
-import {
-  type DropIndicator,
-  type SessionDragPreview,
-  DRAG_THRESHOLD_PX,
-  DEFAULT_ROW_STEP_PX,
-  DEFAULT_TAB_STEP_PX,
-  swallowNextClick,
-} from './useSessionListDragHelpers';
+};
 
-/**
- * 原汁原味克隆当前会话行的真实 DOM 外观，并进行深层事件脱敏（杜绝 pointer-events 遮挡穿透）
- */
-export function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDivElement {
-  const ghost = rowLi.cloneNode(true) as HTMLDivElement;
-  ghost.className = 'sidebar-drag-ghost';
-  ghost.setAttribute('aria-hidden', 'true');
-  ghost.style.cssText = [
-    'position: fixed',
-    'left: 0',
-    'top: 0',
-    `width: ${Math.round(rowRect.width)}px`,
-    `height: ${Math.round(rowRect.height)}px`,
-    'box-sizing: border-box',
-    'pointer-events: none !important',
-    'z-index:var(--z-tooltip)',
-    'opacity: 0.94',
-    'border-radius: 8px',
-    'background: var(--bg-card, #ffffff)',
-    'box-shadow: 0 10px 28px rgba(0, 0, 0, 0.15), 0 3px 8px rgba(0, 0, 0, 0.08)',
-    'border: 1px solid var(--border-color, rgba(0, 0, 0, 0.12))',
-    'will-change: transform',
-    'transform: translate3d(-9999px, -9999px, 0)',
-    'margin: 0',
-    'list-style: none',
-  ].join(';');
-
-  // 深度禁用内部所有子元素的指针响应与焦点
-  ghost.querySelectorAll('*').forEach((n) => {
-    if (n instanceof HTMLElement) {
-      n.style.pointerEvents = 'none';
-      n.tabIndex = -1;
-    }
-  });
-
-  document.body.appendChild(ghost);
-  return ghost;
-}
 export type UseSessionListDragOpts = {
   pinnedZoneRef: React.RefObject<HTMLElement | null>;
   sessionListRef: React.RefObject<HTMLElement | null>;
@@ -114,55 +72,234 @@ export type UseSessionListDragResult = {
   ) => void;
 };
 
+type LastCommit = {
+  targetSessionId: string | null;
+  folder: string;
+  isPinned: boolean;
+};
+
+function previewToInsertBeforeId(
+  sectionIds: string[],
+  overSessionId: string | null,
+  place: DropPlace
+): string | null {
+  if (!overSessionId) return null;
+  const idx = sectionIds.indexOf(overSessionId);
+  if (idx === -1) return overSessionId;
+  if (place === 'before') return overSessionId;
+  const next = sectionIds[idx + 1];
+  return next ?? null;
+}
+
+function isGeneralFolderName(folder: string | null | undefined): boolean {
+  const f = (folder || '').trim();
+  return (
+    !f ||
+    f === GENERAL_FOLDER ||
+    f === '会话' ||
+    f === '常规会话' ||
+    f === 'general'
+  );
+}
+
+function resolveDropTarget(
+  clientX: number,
+  clientY: number,
+  selfSessionId: string,
+  pinnedZone: HTMLElement | null,
+  fallbackFolder: string,
+  lastPlace: DropPlace,
+  instantDy: number
+): {
+  overPinned: boolean;
+  targetSessionId: string | null;
+  place: DropPlace;
+  folder: string;
+} {
+  const stack =
+    typeof document.elementsFromPoint === 'function'
+      ? (document.elementsFromPoint(clientX, clientY) as Element[])
+      : ([document.elementFromPoint(clientX, clientY)].filter(Boolean) as Element[]);
+
+  let hovered: Element | null = null;
+  const ghostClass = styles.sidebarDragGhost || 'sidebar-drag-ghost';
+  for (const node of stack) {
+    if (!(node instanceof HTMLElement)) continue;
+    if (
+      node.classList.contains(ghostClass) ||
+      node.classList.contains('sidebar-drag-ghost') ||
+      node.closest(`.${ghostClass}`) ||
+      node.closest('.sidebar-drag-ghost')
+    ) {
+      continue;
+    }
+    // 关键防抖：穿透正在被拖拽的源项自身（杜绝将自身识别为落点而引发跳跃到末尾）
+    const row = node.closest('[data-session-id]') as HTMLElement | null;
+    if (row?.getAttribute('data-session-id') === selfSessionId) {
+      continue;
+    }
+    hovered = node;
+    break;
+  }
+
+  if (!hovered) {
+    return {
+      overPinned: false,
+      targetSessionId: null,
+      place: lastPlace,
+      folder: fallbackFolder,
+    };
+  }
+
+  const overPinned = Boolean(
+    hovered.closest('[data-drop-zone="pinned"]') ||
+      (styles.pinnedDropZone && hovered.closest(`.${styles.pinnedDropZone}`)) ||
+      (styles.pinnedList && hovered.closest(`.${styles.pinnedList}`) && pinnedZone?.contains(hovered)) ||
+      (pinnedZone && (hovered === pinnedZone || pinnedZone.contains(hovered as Node)))
+  );
+
+  const sessionWrap = hovered.closest('[data-session-id]') as HTMLElement | null;
+  let targetSessionId: string | null =
+    sessionWrap?.getAttribute('data-session-id') || null;
+  if (targetSessionId === selfSessionId) {
+    targetSessionId = null;
+  }
+
+  let place: DropPlace = lastPlace;
+
+  // 1. 命中具体会话行时的滞后死区防抖（Hysteresis Deadband 35% ~ 65%）
+  if (sessionWrap && targetSessionId) {
+    const rect = sessionWrap.getBoundingClientRect();
+    if (rect.height > 0) {
+      const relY = clientY - rect.top;
+      const ratio = relY / rect.height;
+
+      if (ratio < 0.35) {
+        place = 'before';
+      } else if (ratio > 0.65) {
+        place = 'after';
+      } else {
+        // 处于 35% ~ 65% 的黄金死区：根据明确运动趋势切换；微动或静止时绝对保持上一帧状态，消除震荡
+        if (instantDy > 1.5) {
+          place = 'after';
+        } else if (instantDy < -1.5) {
+          place = 'before';
+        } else {
+          place = lastPlace;
+        }
+      }
+    }
+  }
+
+  const folderEl = hovered.closest('[data-folder-name]') as HTMLElement | null;
+  const generalZone = hovered.closest('[data-drop-zone="general"]') as HTMLElement | null;
+  let folder = fallbackFolder;
+
+  if (overPinned) {
+    folder = fallbackFolder || GENERAL_FOLDER;
+  } else if (folderEl) {
+    folder = folderEl.getAttribute('data-folder-name') || fallbackFolder || GENERAL_FOLDER;
+  } else if (generalZone) {
+    folder = GENERAL_FOLDER;
+  } else if (isGeneralFolderName(fallbackFolder)) {
+    folder = GENERAL_FOLDER;
+  }
+
+  // 2. 容器边缘与间隙投影兜底：当未精准命中具体 li 时，吸附到该容器的最近项或首尾
+  if (!targetSessionId) {
+    const activeZone = overPinned
+      ? pinnedZone
+      : (folderEl?.querySelector('ul') || generalZone?.querySelector('ul') || folderEl || generalZone);
+
+    if (activeZone) {
+      const candidateRows = Array.from(
+        activeZone.querySelectorAll<HTMLElement>('li[data-session-id]')
+      ).filter(
+        (r) =>
+          r.getAttribute('data-session-id') !== selfSessionId &&
+          r.offsetParent !== null &&
+          r.getBoundingClientRect().height > 0
+      );
+
+      if (candidateRows.length > 0) {
+        const first = candidateRows[0]!;
+        const last = candidateRows[candidateRows.length - 1]!;
+        const firstRect = first.getBoundingClientRect();
+        const lastRect = last.getBoundingClientRect();
+
+        if (clientY < firstRect.top + firstRect.height * 0.5) {
+          targetSessionId = first.getAttribute('data-session-id');
+          place = 'before';
+        } else if (clientY > lastRect.bottom - lastRect.height * 0.5) {
+          targetSessionId = last.getAttribute('data-session-id');
+          place = 'after';
+        } else {
+          let closest = candidateRows[0]!;
+          let minDist = Infinity;
+          for (const r of candidateRows) {
+            const b = r.getBoundingClientRect();
+            const dist = Math.abs(clientY - (b.top + b.height / 2));
+            if (dist < minDist) {
+              minDist = dist;
+              closest = r;
+            }
+          }
+          targetSessionId = closest.getAttribute('data-session-id');
+          const cRect = closest.getBoundingClientRect();
+          place = clientY < cRect.top + cRect.height / 2 ? 'before' : 'after';
+        }
+      }
+    }
+  }
+
+  return { overPinned, targetSessionId, place, folder };
+}
+
 export function useSessionListDrag(
   opts: UseSessionListDragOpts
 ): UseSessionListDragResult {
-  const { sessionListRef, renamingSessionId, onMoveSessionRealtime } = opts;
+  const { pinnedZoneRef, renamingSessionId, onMoveSessionRealtime } = opts;
 
   const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(null);
   const [dragOverPinned, setDragOverPinned] = useState(false);
+  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
+  const [dragPreview, setDragPreview] = useState<SessionDragPreview | null>(null);
 
   const onMoveRef = useRef(onMoveSessionRealtime);
   onMoveRef.current = onMoveSessionRealtime;
-
-  const sessionListRefStable = useRef(sessionListRef);
-  sessionListRefStable.current = sessionListRef;
+  const pinnedZoneRefStable = useRef(pinnedZoneRef);
+  pinnedZoneRefStable.current = pinnedZoneRef;
 
   const startSessionDrag = useCallback(
     (e: React.PointerEvent, sessionId: string, folderName?: string) => {
       if (e.button !== 0 || renamingSessionId === sessionId) return;
 
+      const targetEl = e.currentTarget as HTMLElement;
+      const pointerId = e.pointerId;
+      try {
+        targetEl.setPointerCapture?.(pointerId);
+      } catch {
+        /* ignore */
+      }
+
       const startX = e.clientX;
       const startY = e.clientY;
-      const originFolder = canonicalSessionFolder(folderName);
-      const isProjectSession = originFolder !== GENERAL_FOLDER;
+      const originFolder = (folderName && folderName.trim()) || GENERAL_FOLDER;
 
       let dragging = false;
       let ghostEl: HTMLDivElement | null = null;
       let indicatorEl: HTMLDivElement | null = null;
       let raf = 0;
       let pendingPointer: { x: number; y: number; dx: number; dy: number } | null = null;
+      let lastCommit: LastCommit | null = null;
+      let lastPreviewKey = '';
+      let lastAppliedTarget: CrossDomainTarget | null = null;
+      let currentStripInsertIdx = 0;
+      let lastPlace: DropPlace = 'before';
+      let lastClientY = startY;
+      let shiftedElements: HTMLElement[] = [];
 
       const rowLi = (e.currentTarget as HTMLElement).closest('li') as HTMLElement | null;
-      const rowRect = rowLi?.getBoundingClientRect() ?? ({
-        left: startX,
-        top: startY,
-        width: 240,
-        height: 28,
-      } as DOMRect);
-
-      // 抓取偏移量
-      const grabOffsetX = startX - rowRect.left;
-      const grabOffsetY = startY - rowRect.top;
-
-      let lastAppliedTarget: CrossDomainTarget | null = null;
-      let shiftedElements: HTMLElement[] = [];
-      let currentInsertSessionId: string | null = null;
-      let currentTargetFolder = originFolder;
-      let currentIsPinned = false;
-      let currentStripInsertIdx = 0;
-
-      // 找到源项所在的原生分组容器
       const sourceContainer =
         rowLi?.closest('[data-drop-zone="pinned"]') ||
         rowLi?.closest('[data-folder-name]') ||
@@ -176,6 +313,15 @@ export function useSessionListDrag(
         }
         shiftedElements = [];
       };
+      const rowRect = rowLi?.getBoundingClientRect() ?? ({
+        left: startX,
+        top: startY,
+        width: 240,
+        height: 28,
+      } as DOMRect);
+
+      const grabOffsetX = startX - rowRect.left;
+      const grabOffsetY = startY - rowRect.top;
 
       const hideIndicator = () => {
         if (indicatorEl) {
@@ -206,77 +352,164 @@ export function useSessionListDrag(
           ghostEl.style.transform = `translate3d(${clientX - grabOffsetX}px, ${clientY - grabOffsetY}px, 0)`;
         }
 
-        // 2. 空间索引跨域落点探测（几何优先 + 多重兜底）
+        // 2. 空间跨域落点探测（分屏优先）
         const tree = useLayoutTreeStore.getState().tree;
         const target = resolveCrossDomainTarget(clientX, clientY, dx, dy, sessionId, tree);
         lastAppliedTarget = target;
 
-        // 3. 分域响应动力学
         if (target.domain === 'pane-split') {
-          setDragOverPinned(false);
           clearAllShifts();
+          setDragOverPinned(false);
+          setDragPreview(null);
+          setDropIndicator(null);
+          lastPreviewKey = '';
           showPaneIndicator(target.paneRect, target.region);
           if (ghostEl) ghostEl.style.opacity = '0.95';
-        } else if (target.domain === 'tab-strip') {
+          return;
+        }
+
+        if (target.domain === 'tab-strip') {
+          clearAllShifts();
           setDragOverPinned(false);
-          // 跨域进入顶栏 TabStrip：执行 1D 水平让位动力学
+          setDragPreview(null);
+          setDropIndicator(null);
+          lastPreviewKey = '';
           hideIndicator();
           if (ghostEl) ghostEl.style.opacity = '0.95';
+          currentStripInsertIdx = target.insertIndex;
+          return;
+        }
 
-          const strip = target.stripEl;
-          const allTabs = Array.from(
-            strip.querySelectorAll<HTMLElement>('[role="tab"], .tabItem, [data-tab-id]')
-          ).filter((t) => t.offsetParent !== null);
+        // 3. 侧栏内部基于 dragPreview 的纯净 React 乐观重排
+        hideIndicator();
+        if (ghostEl) ghostEl.style.opacity = '0.95';
 
-          const tabSpans: Axis1DItemSpan[] = allTabs.map((t) => {
-            const rect = t.getBoundingClientRect();
-            const tx = readTranslateX(t);
-            return {
-              id: t.getAttribute('data-tab-id') || t.getAttribute('data-session-id') || '',
-              start: rect.left - tx,
-              end: rect.right - tx,
-              size: rect.width,
-              el: t,
-            };
-          });
+        const instantDy = clientY - lastClientY;
+        lastClientY = clientY;
 
-          const insertIdx = compute1DInsertIndex(tabSpans, clientX, dx);
-          currentStripInsertIdx = insertIdx;
+        const hit = resolveDropTarget(
+          clientX,
+          clientY,
+          sessionId,
+          pinnedZoneRefStable.current.current,
+          originFolder,
+          lastPlace,
+          instantDy
+        );
+        lastPlace = hit.place;
 
-          const offsets = compute1DShiftOffsets({
-            itemCount: allTabs.length,
-            sourceIndex: null, // 跨域拖入，目标条中无源项占位
-            insertIndex: insertIdx,
-            shiftStep: DEFAULT_TAB_STEP_PX,
-          });
+        const overId = hit.targetSessionId;
 
-          const nextShifted: HTMLElement[] = [];
-          for (let i = 0; i < allTabs.length; i++) {
-            const tabEl = allTabs[i]!;
-            const offset = offsets[i] ?? 0;
-            tabEl.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
-            tabEl.style.transform = offset !== 0 ? `translateX(${offset}px)` : '';
-            nextShifted.push(tabEl);
+        const isPinned = hit.overPinned;
+        const folder = isPinned
+          ? originFolder
+          : isGeneralFolderName(hit.folder)
+            ? GENERAL_FOLDER
+            : hit.folder;
+
+        setDragOverPinned(isPinned);
+
+        const preview: SessionDragPreview = {
+          sessionId,
+          overSessionId: overId,
+          place: hit.place,
+          isPinned,
+          folder,
+        };
+
+        const previewKey = `${preview.overSessionId ?? ''}|${preview.place}|${preview.isPinned}|${preview.folder}`;
+        if (previewKey !== lastPreviewKey) {
+          lastPreviewKey = previewKey;
+          setDropIndicator(
+            overId ? { sessionId: overId, place: hit.place } : null
+          );
+        }
+
+        let insertBeforeId: string | null = overId;
+        if (overId && hit.place === 'after') {
+          const listRoot =
+            (document.querySelector(
+              isPinned
+                ? '[data-drop-zone="pinned"]'
+                : isGeneralFolderName(folder)
+                  ? '[data-drop-zone="general"]'
+                  : `[data-folder-name="${CSS.escape ? CSS.escape(folder) : folder.replace(/"/g, '\\"')}"]`
+            ) as HTMLElement | null) || null;
+          const ids = listRoot
+            ? Array.from(
+                listRoot.querySelectorAll<HTMLElement>('[data-session-id]')
+              )
+                .map((n) => n.getAttribute('data-session-id') || '')
+                .filter((id) => id && id !== sessionId)
+            : [];
+          insertBeforeId = previewToInsertBeforeId(ids, overId, 'after');
+        }
+
+        lastCommit = {
+          targetSessionId: insertBeforeId,
+          folder,
+          isPinned,
+        };
+
+        // 4. 在当前活动容器内驱动平滑 1D 滑动让位动效 (140ms cubic-bezier)
+        const activeContainer = (
+          isPinned
+            ? pinnedZoneRefStable.current.current
+            : (document.querySelector(
+                isGeneralFolderName(folder)
+                  ? '[data-drop-zone="general"]'
+                  : `[data-folder-name="${CSS.escape ? CSS.escape(folder) : folder.replace(/"/g, '\\"')}"]`
+              ) as HTMLElement | null)
+        );
+
+        if (activeContainer) {
+          const allTargetRows = Array.from(
+            activeContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
+          ).filter((r) => r.offsetParent !== null && r.getBoundingClientRect().height > 0);
+
+          const isSameContainer = Boolean(
+            sourceContainer && activeContainer.contains(sourceContainer)
+          );
+
+          const otherRows = allTargetRows.filter(
+            (r) => r.getAttribute('data-session-id') !== sessionId
+          );
+          const srcIdx = isSameContainer
+            ? allTargetRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId)
+            : -1;
+
+          let targetIdx = otherRows.length;
+          if (overId) {
+            const matchIdx = otherRows.findIndex(
+              (r) => r.getAttribute('data-session-id') === overId
+            );
+            if (matchIdx >= 0) {
+              targetIdx = hit.place === 'before' ? matchIdx : matchIdx + 1;
+            }
           }
 
-          // 跨分组时原侧栏分组空洞也向上收缩补齐
-          if (sourceContainer) {
-            const allSourceRows = Array.from(
-              sourceContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
-            ).filter((r) => r.offsetParent !== null);
+          const stepPx = DEFAULT_ROW_STEP_PX;
+          const nextShifted: HTMLElement[] = [];
 
-            const origIdx = allSourceRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
-            if (origIdx >= 0) {
-              for (let i = 0; i < allSourceRows.length; i++) {
-                const sRow = allSourceRows[i]!;
-                if (sRow.getAttribute('data-session-id') === sessionId) continue;
-                if (i > origIdx) {
-                  sRow.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
-                  sRow.style.transform = `translateY(-${DEFAULT_ROW_STEP_PX}px)`;
-                  nextShifted.push(sRow);
-                }
+          for (let i = 0; i < otherRows.length; i++) {
+            const row = otherRows[i]!;
+            let offset = 0;
+
+            if (isSameContainer && srcIdx >= 0) {
+              if (targetIdx > srcIdx) {
+                if (i >= srcIdx && i < targetIdx) offset = -stepPx;
+              } else if (targetIdx < srcIdx) {
+                if (i >= targetIdx && i < srcIdx) offset = stepPx;
+              }
+            } else {
+              if (i >= targetIdx) {
+                offset = stepPx;
               }
             }
+
+            row.style.transition = 'transform 120ms cubic-bezier(0.2, 0, 0, 1)';
+            row.style.transform = offset !== 0 ? `translateY(${offset}px)` : '';
+            nextShifted.push(row);
           }
 
           for (const el of shiftedElements) {
@@ -286,142 +519,6 @@ export function useSessionListDrag(
             }
           }
           shiftedElements = nextShifted;
-        } else if (target.domain === 'sidebar') {
-          hideIndicator();
-
-          // 移回侧栏时无条件清除可能残留在 TabStrip DOM 上的水平位移
-          for (const el of shiftedElements) {
-            el.style.transform = '';
-            el.style.transition = '';
-          }
-          shiftedElements = [];
-
-          // 探测光标命中的具体侧栏分区（置顶 / 项目文件夹 / 常规区）
-          const hit = document.elementFromPoint(clientX, clientY);
-          const pinnedZone = hit?.closest('[data-drop-zone="pinned"]') as HTMLElement | null;
-          const folderEl = hit?.closest('[data-folder-name]') as HTMLElement | null;
-          const generalZone = hit?.closest('[data-drop-zone="general"]') as HTMLElement | null;
-
-          const isPinnedTarget = Boolean(pinnedZone);
-          setDragOverPinned(isPinnedTarget);
-          const rawTargetFolder = folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
-          const targetFolderName = isPinnedTarget
-            ? originFolder
-            : canonicalSessionFolder(rawTargetFolder);
-
-          // 业务硬约束守门：项目内的会话只能在项目内排序或放在置顶区域，禁止放在常规未绑定项目的对话列表中
-          if (isProjectSession && !isPinnedTarget && targetFolderName !== originFolder) {
-            clearAllShifts();
-            if (ghostEl) ghostEl.style.opacity = '0.35';
-            currentInsertSessionId = null;
-            return;
-          }
-
-          if (ghostEl) ghostEl.style.opacity = '0.95';
-
-          const activeContainer = pinnedZone || folderEl || generalZone;
-
-          if (activeContainer) {
-            const nextShifted: HTMLElement[] = [];
-
-            // A. 处理当前目标容器中的项（腾位或同列表位移）
-            const allTargetRows = Array.from(
-              activeContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
-            ).filter((r) => {
-              if (r.offsetParent === null) return false;
-              const b = r.getBoundingClientRect();
-              return b.height > 0;
-            });
-
-            const isSameContainer = activeContainer === sourceContainer;
-            const sourceIndex = isSameContainer
-              ? allTargetRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId)
-              : -1;
-            const otherTargetRows = allTargetRows.filter((r) => r.getAttribute('data-session-id') !== sessionId);
-
-            // 采集未位移时的静态物理几何坐标
-            const targetSpans: Axis1DItemSpan[] = otherTargetRows.map((r) => {
-              const rect = r.getBoundingClientRect();
-              const ty = readTranslateY(r);
-              return {
-                id: r.getAttribute('data-session-id') || '',
-                start: rect.top - ty,
-                end: rect.bottom - ty,
-                size: rect.height,
-                el: r,
-              };
-            });
-
-            // 测量真实物理步长 (自适应采样或 31px)
-            let effectiveStepPx = DEFAULT_ROW_STEP_PX;
-            if (targetSpans.length >= 2) {
-              const s0 = targetSpans[0];
-              const s1 = targetSpans[1];
-              if (s0 && s1) {
-                effectiveStepPx = Math.abs(s1.start - s0.start) || effectiveStepPx;
-              }
-            }
-
-            const insertIdx = compute1DInsertIndex(targetSpans, clientY, dy);
-            const targetOffsets = compute1DShiftOffsets({
-              itemCount: otherTargetRows.length,
-              sourceIndex: sourceIndex >= 0 ? sourceIndex : null,
-              insertIndex: insertIdx,
-              shiftStep: effectiveStepPx,
-            });
-
-            for (let i = 0; i < otherTargetRows.length; i++) {
-              const row = otherTargetRows[i]!;
-              const offset = targetOffsets[i] ?? 0;
-              row.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
-              row.style.transform = offset !== 0 ? `translateY(${offset}px)` : '';
-              nextShifted.push(row);
-            }
-
-            // B. 跨分组拖拽时：原分组容器下的列表项向上补位收缩空洞！
-            if (!isSameContainer && sourceContainer) {
-              const allSourceRows = Array.from(
-                sourceContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
-              ).filter((r) => {
-                if (r.offsetParent === null) return false;
-                const b = r.getBoundingClientRect();
-                return b.height > 0;
-              });
-
-              const origIdx = allSourceRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
-              if (origIdx >= 0) {
-                for (let i = 0; i < allSourceRows.length; i++) {
-                  const sRow = allSourceRows[i]!;
-                  if (sRow.getAttribute('data-session-id') === sessionId) continue;
-                  if (i > origIdx) {
-                    sRow.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
-                    sRow.style.transform = `translateY(-${effectiveStepPx}px)`;
-                    nextShifted.push(sRow);
-                  }
-                }
-              }
-            }
-
-            // C. 清除不再处于位移状态的其余 DOM 元素
-            for (const el of shiftedElements) {
-              if (!nextShifted.includes(el)) {
-                el.style.transform = '';
-                el.style.transition = '';
-              }
-            }
-            shiftedElements = nextShifted;
-
-            const overId = targetSpans[insertIdx]?.id || null;
-            currentInsertSessionId = overId;
-            currentTargetFolder = targetFolderName;
-            currentIsPinned = isPinnedTarget;
-          }
-        } else {
-          // 游离态
-          setDragOverPinned(false);
-          clearAllShifts();
-          hideIndicator();
-          if (ghostEl) ghostEl.style.opacity = '0.35';
         }
       };
 
@@ -443,13 +540,12 @@ export function useSessionListDrag(
         if (!dragging && Math.hypot(dx, dy) > DRAG_THRESHOLD_PX) {
           dragging = true;
           try {
-            (e as unknown as PointerEvent).preventDefault?.();
+            me.preventDefault?.();
           } catch {
             /* ignore */
           }
           document.body.classList.add('sidebar-dragging');
 
-          // 先克隆原汁原味的 Ghost，再标记原行占位态
           if (rowLi) {
             ghostEl = createSidebarSessionGhost(rowLi, rowRect);
             rowLi.classList.add(styles.isDraggingSource || 'isDraggingSource');
@@ -469,6 +565,11 @@ export function useSessionListDrag(
       };
 
       const cleanup = () => {
+        try {
+          targetEl.releasePointerCapture?.(pointerId);
+        } catch {
+          /* ignore */
+        }
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup', up);
         window.removeEventListener('pointercancel', cancel);
@@ -489,10 +590,12 @@ export function useSessionListDrag(
         if (rowLi) {
           rowLi.classList.remove(styles.isDraggingSource || 'isDraggingSource');
         }
-        clearAllShifts();
         document.body.classList.remove('sidebar-dragging');
+        clearAllShifts();
         setActiveDragItem(null);
         setDragOverPinned(false);
+        setDropIndicator(null);
+        setDragPreview(null);
       };
 
       const cancel = () => {
@@ -513,8 +616,6 @@ export function useSessionListDrag(
 
         if (dragging) {
           swallowNextClick();
-
-          // 同步执行最后一帧确定终态
           applyPointer(ue.clientX, ue.clientY, ue.clientX - startX, ue.clientY - startY);
 
           if (lastAppliedTarget) {
@@ -537,17 +638,24 @@ export function useSessionListDrag(
                 },
               });
             } else if (lastAppliedTarget.domain === 'sidebar') {
-              // 约束守门：若项目会话被拖入非法区域则不提交
-              if (isProjectSession && !currentIsPinned && currentTargetFolder !== originFolder) {
-                // 非法落点：NO-OP
-              } else {
+              if (lastCommit) {
                 onMoveRef.current(
                   sessionId,
-                  currentInsertSessionId,
-                  currentTargetFolder,
-                  currentIsPinned
+                  lastCommit.targetSessionId,
+                  lastCommit.folder,
+                  lastCommit.isPinned
                 );
               }
+
+              if (ghostEl) {
+                ghostEl.style.transition = 'opacity 80ms ease-out';
+                ghostEl.style.opacity = '0';
+              }
+
+              requestAnimationFrame(() => {
+                cleanup();
+              });
+              return;
             }
           }
         }
@@ -566,8 +674,8 @@ export function useSessionListDrag(
   return {
     activeDragItem,
     dragOverPinned,
-    dropIndicator: null,
-    dragPreview: null,
+    dropIndicator,
+    dragPreview,
     startSessionDrag,
   };
 }

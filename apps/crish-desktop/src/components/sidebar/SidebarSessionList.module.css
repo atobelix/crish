@@ -49,8 +49,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 24px;
-  padding-right: var(--space-1);
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0 4px 0 10px;
+  box-sizing: border-box;
 }
 
 .sectionLabelLeft {
@@ -72,8 +75,9 @@
   user-select: none;
   background: none;
   border: none;
-  padding: 0 8px; /* Internal padding set to 8px so text starts at exactly 10px + 8px = 18px from left */
+  padding: 0;
   text-align: left;
+  line-height: 28px;
 }
 
 .sectionLabel:hover {
@@ -101,32 +105,39 @@
 }
 
 .sectionNew,
+.sectionSortBtn,
 .sectionSort {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
   border: none;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-md, 6px);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   opacity: 0;
+  padding: 0;
   transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
 }
 
 .sectionLabelRow:hover .sectionNew,
 .sectionLabelRow:focus-within .sectionNew,
+.sectionLabelRow:hover .sectionSortBtn,
+.sectionLabelRow:focus-within .sectionSortBtn,
 .sectionLabelRow:hover .sectionSort,
 .sectionLabelRow:focus-within .sectionSort {
   opacity: 1;
 }
 
 .sectionNew:hover,
+.sectionSortBtn:hover,
 .sectionSort:hover {
   color: var(--text-primary);
-  background-color: var(--bg-hover);
+  background-color: var(--tint-hover);
 }
 
 .pinnedDropZone {
@@ -165,8 +176,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 24px;
-  padding-right: var(--space-1);
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0 4px 0 10px;
+  box-sizing: border-box;
 }
 
 .folderHeader {
@@ -175,13 +189,14 @@
   gap: var(--space-1_5);
   flex: 1;
   min-width: 0;
+  height: 28px;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-secondary);
   cursor: pointer;
   background: none;
   border: none;
-  padding: 0 8px; /* Internal padding set to 8px so folder icons start exactly at 10px + 8px = 18px from left */
+  padding: 0;
   text-align: left;
 }
 
@@ -205,38 +220,44 @@
   min-width: 0;
 }
 
-.folderCount {
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
-  background-color: var(--tint-hover);
-  padding: 1px 4px;
-  border-radius: var(--radius-xs);
-  margin-left: var(--space-0_5);
+.folderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
+.folderNewBtn,
 .folderNewSession {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
   border: none;
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-md, 6px);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   opacity: 0;
+  padding: 0;
   transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
 }
 
+.folderHeaderRow:hover .folderNewBtn,
+.folderHeaderRow:focus-within .folderNewBtn,
 .folderHeaderRow:hover .folderNewSession,
 .folderHeaderRow:focus-within .folderNewSession {
   opacity: 1;
 }
 
+.folderNewBtn:hover,
 .folderNewSession:hover {
   color: var(--text-primary);
-  background-color: var(--bg-hover);
+  background-color: var(--tint-hover);
 }
 
 .folderSessions {
@@ -259,6 +280,8 @@
   overflow: hidden;
   contain: strict;
   will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .sessionItem {
@@ -282,6 +305,8 @@
   cursor: pointer;
   overflow: hidden;
   pointer-events: auto;
+  user-select: none;
+  -webkit-user-select: none;
   -webkit-app-region: no-drag;
 }
 
@@ -421,19 +446,19 @@
 
 .sessionItem .sessionActionsBtn {
   position: absolute;
-  right: 0;
+  right: 4px;
   top: 50%;
   transform: translateY(-50%);
   opacity: 0;
   pointer-events: none;
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
-  min-height: 22px;
-  max-width: 22px;
-  max-height: 22px;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  max-width: 24px;
+  max-height: 24px;
   padding: 0;
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius-md, 6px);
   color: var(--text-tertiary);
   background: transparent;
   border: none;
@@ -570,16 +595,14 @@
   will-change: transform;
 }
 
-/* 拖拽源占位态：柔和虚化并隐藏内部文字，消除文字重叠与重影 */
+/* 拖拽源占位态：完全透明占位，消除灰色色块残留与重影 */
 .isDraggingSource {
-  opacity: 0.25;
-  pointer-events: none;
-  background: var(--tint-hover, hsl(0 0% 0% / 0.04));
-  border-radius: var(--radius-md, 8px);
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 .isDraggingSource > * {
-  visibility: hidden;
+  visibility: hidden !important;
 }
 
 .sidebarDragging {
@@ -641,4 +664,38 @@
 :global([data-sidebar-collapsed='true']) .sessionItem.active::before {
   opacity: 1;
   background: var(--accent-color, var(--accent-primary));
+}
+
+/* 分区超出折叠切换行与按钮：优雅微交互，自然流式扩展 */
+.foldToggleRow {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  min-height: 28px;
+  max-height: 28px;
+  padding: 0 4px 0 10px;
+  box-sizing: border-box;
+}
+
+.foldToggleBtn {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: var(--radius-md, 6px);
+  line-height: 1.5;
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.foldToggleBtn:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+.foldToggleBtn:active {
+  background: var(--tint-active);
 }

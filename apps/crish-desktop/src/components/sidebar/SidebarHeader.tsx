@@ -15,6 +15,8 @@ export interface SidebarHeaderProps {
   filterLabel: string;
   activeNav: string;
   searchInput?: string | undefined;
+  collapsed?: boolean;
+  onToggle?: () => void;
   onHamburgerClick: () => void;
   onOverlayClose: () => void;
   onNewSession: () => void;
@@ -60,7 +62,7 @@ export const SidebarToggle: React.FC<{
 SidebarToggle.displayName = 'SidebarToggle';
 
 /**
- * 侧栏头：新建/定时/搜索。开关不在这里，避免被侧栏收起裁掉。
+ * 侧栏头：整行 Header 语义化容器，左侧折叠开关，右侧预留扩展区域，紧随其后为快捷操作与搜索。
  */
 export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
   ({
@@ -73,14 +75,41 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
     filterLabel,
     activeNav,
     searchInput,
+    collapsed,
+    onToggle,
     onHamburgerClick,
     onOverlayClose,
     onNewSession,
     onOpenScheduled,
     onSearchChange,
   }) => {
+    const toggleLabel = collapsed ? '展开侧栏' : '收起侧栏';
+
     return (
       <>
+        <header className={styles.sidebarHeaderBar} role="banner">
+          <div className={styles.sidebarHeaderLeft}>
+            {onToggle && (
+              <Tooltip content={toggleLabel}>
+                <button
+                  type="button"
+                  className={`${styles.sidebarToggleBtn} sidebar-toggle-btn`}
+                  data-testid="sidebar-header-toggle"
+                  aria-label={toggleLabel}
+                  aria-expanded={!collapsed}
+                  aria-controls="crish-sidebar"
+                  onClick={onToggle}
+                >
+                  <IconSidebarLeft size={14} aria-hidden="true" />
+                </button>
+              </Tooltip>
+            )}
+          </div>
+          <div className={styles.sidebarHeaderRight} data-testid="sidebar-header-extra">
+            {/* 用户预留扩展区：可在右侧添加其他按钮与信息 */}
+          </div>
+        </header>
+
         {sidebarBehavior === 'overlay' && (
           <Button
             type="button"

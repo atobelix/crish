@@ -46,6 +46,33 @@
   pointer-events: auto;
 }
 
+/* 整行语义化侧栏头部容器：占满宽度 100%，左侧折叠按钮，右侧预留扩展区域 */
+.sidebarHeaderBar {
+  width: 100%;
+  height: var(--header-height, 36px);
+  min-height: var(--header-height, 36px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.sidebarHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebarHeaderRight {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 1;
+}
+
 .sidebarHeader[data-mac='true'] {
   width: 106px;
   padding-left: 70px;
@@ -59,20 +86,20 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-lg, 8px);
-  border: none;
   background: transparent;
-  color: var(--text-secondary);
+  border: none;
+  border-radius: var(--radius-md);
+  color: var(--text-tertiary);
   cursor: pointer;
   padding: 0;
-  outline: none;
-  flex-shrink: 0;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  pointer-events: auto;
+  margin: 0;
+  box-shadow: none;
   transition:
     background-color var(--transition-fast, 150ms ease-out),
     color var(--transition-fast, 150ms ease-out);
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  pointer-events: auto;
 }
 
 .sidebarToggleBtn:hover {
@@ -85,7 +112,7 @@
 }
 
 .sidebarTop {
-  padding: 36px 10px 0 10px;
+  padding: 4px 10px 0 10px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
