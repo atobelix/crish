@@ -18,7 +18,8 @@
   - [2.1 Ref 劫持致 `scrollTop=0` 长白屏机理解剖](#21-ref-劫持致-scrolltop0-长白屏机理解剖)
   - [2.2 `useUndoWithScrollAnchor` 同步微任务锚定失效风险](#22-useundowithscrollanchor-同步微任务锚定失效风险)
   - [2.3 `ResizeObserver` 循环震荡与渲染雪崩](#23-resizeobserver-循环震荡与渲染雪崩)
-  - [2.4 零 DOM 增量与 Mode 2 类名绝对隔离准则](#24-零-dom-增量与-mode-2-类名绝对隔离准则)
+  - [2.4 侧栏嵌套视口与双滚动条脱节死锁机理解剖（M05 纠偏：`WindowedSessionUl` vs `Sidebar`）](#24-侧栏嵌套视口与双滚动条脱节死锁机理解剖m05-纠偏windowedsessionul-vs-sidebar)
+  - [2.5 零 DOM 增量与单一真理视口隔离准则](#25-零-dom-增量与单一真理视口隔离准则)
 - [三、第一梯队（Tier A：弹出层与独立面板全面迁移至 `<ScrollArea>`）改造详案](#三第一梯队tier-a弹出层与独立面板全面迁移至-scrollarea-改造详案)
   - [3.1 `ModelBadgePickerMenu`（模型选择菜单：100% 还原真机截图与上下圆角三角）](#31-modelbadgepickermenu模型选择菜单100-还原真机截图与上下圆角三角)
   - [3.2 `PermissionModeMenu`（权限模式菜单：`size="xs" showButtons={true}`）](#32-permissionmodemenu权限模式菜单sizexs-showbuttonstrue)
@@ -29,7 +30,7 @@
   - [3.7 `SettingsPanel` 及各 Tab 视口（设置面板：`size="md"`，清除级联私有条）](#37-settingspanel-及各-tab-视口设置面板sizemd清除级联私有条)
 - [四、第二梯队（Tier B：虚拟化长列表与重型视口接入 Mode 2 纯类名）改造详案](#四第二梯队tier-b虚拟化长列表与重型视口接入-mode-2-纯类名改造详案)
   - [4.1 `MessageVirtualizer`（主会话消息流：零 DOM 包装 + `.scrollArea .scrollAreaMd`）](#41-messagevirtualizer主会话消息流零-dom-包装--scrollarea-scrollareamd)
-  - [4.2 `WindowedSessionUl` 与 `Sidebar`（侧栏虚拟会话树与主轨：`.scrollArea .scrollAreaSm`）](#42-windowedsessionul-与-sidebar侧栏虚拟会话树与主轨scrollarea-scrollareasm)
+  - [4.2 `Sidebar` 与 `WindowedSessionUl`（侧栏单一视口收敛与虚拟列表双重滚动根除：`.sidebarScroll` 单一承载）](#42-sidebar-与-windowedsessionul侧栏单一视口收敛与虚拟列表双重滚动根除sidebarscroll-单一承载)
   - [4.3 `TerminalCard`（终端与运行日志卡片：`.scrollArea .scrollAreaMd`）](#43-terminalcard终端与运行日志卡片scrollarea-scrollareamd)
   - [4.4 `DiffCard` 视口体系（代码对比视口：`.scrollArea .scrollAreaMd`）](#44-diffcard-视口体系代码对比视口scrollarea-scrollareamd)
 - [五、第三梯队（Tier C：纯净无痕通道与千层饼消除、TSX 内联样式深度清洗）](#五第三梯队tier-c纯净无痕通道与千层饼消除tsx-内联样式深度清洗)
@@ -79,11 +80,14 @@
 │    - 激活态 (Active)：光标悬停 Hover 与拖拽 Active 统统同色，实测灰度严格死锁 20.2% ± 0.3%；  │
 │    - 差值绝对锁定：激活态与未激活态增量绝对锁定在 12.0% ± 0.5%，全仓严禁定义第三态！        │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ 2. 虚拟滚动禁区红线（0 DOM 增量与 Ref 零劫持）                                          │
+│ 2. 虚拟滚动禁区红线（0 DOM 增量、Ref 零劫持与单一视口防嵌套【M05 纠偏】）               │
 │    - MessageVirtualizer、WindowedSessionUl 等虚拟列表绝对禁止外层套用 React DOM        │
-│      <ScrollArea> 包装！                                                               │
-│    - DOM 深度增量严格为 0，防止 Ref 绑定劫持致使 scrollTop 恒为 0（长白屏）及             │
-│      ResizeObserver 循环震荡；虚拟列表一律纯消费 Mode 2 零 DOM 工具类名！               │
+│      <ScrollArea> 包装！DOM 深度增量严格为 0；                                          │
+│    - 单一视口承载铁律（M05 纠偏）：侧栏滚动条必须且只能挂载于外层宿主 Sidebar.tsx       │
+│      （.sidebarScroll 接入 .scrollArea .scrollAreaSm）；撤销内层 WindowedSessionUl.tsx  │
+│      的 .scrollArea 挂载，防止 overflow-y 嵌套引发双滚动条与虚拟列表脱节卡死！          │
+│    - MessageVirtualizer 保持 Ref 直通直取，防止 Ref 绑定劫持致使 scrollTop 恒为 0     │
+│      （长白屏）及 ResizeObserver 循环震荡；纯消费 Mode 2 零 DOM 工具类名！               │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
 │ 3. 模型选择菜单 100% 还原用户真机截图体验                                              │
 │    - ModelBadgePickerMenu 必须精准还原截图（media_1788348026546.png）视觉效果：         │
@@ -117,10 +121,14 @@
 │         │                      │ • SettingsPanel 各 Tab  │ • 删除 scrollbar-width: thin│
 ├─────────┼──────────────────────┼─────────────────────────┼─────────────────────────────┤
 │ Tier B  │ 虚拟滚动长列表、流式 │ • MessageVirtualizer    │ • 保持原生 DOM 结构完全不变 │
-│【虚拟列 │ 消息瀑布、双栏对比、 │ • WindowedSessionUl     │ • DOM 增量严格为 0          │
-│ 表/重型 │ 庞大终端输出         │ • Sidebar (主侧栏导航)  │ • 挂载 Mode 2 纯类名：      │
-│ 容器】  │                      │ • TerminalCard          │   .scrollArea .scrollAreaMd │
-│         │                      │ • DiffCard 比对主视口   │   .scrollArea .scrollAreaSm │
+│【虚拟列 │ 消息瀑布、双栏对比、 │ • Sidebar (单一主视口)  │ • DOM 增量严格为 0          │
+│ 表/重型 │ 庞大终端输出         │ • WindowedSessionUl     │ • Mode 2 纯类名挂载：       │
+│ 容器】  │                      │   (内层纯列表，零注入)   │   - MessageVirtualizer: md  │
+│         │                      │ • TerminalCard          │   - Sidebar 主视口: sm      │
+│         │                      │ • DiffCard 比对主视口   │   - Terminal/DiffCard: md   │
+│         │                      │                         │ • M05 纠偏：WindowedSessionUl│
+│         │                      │                         │   撤销 .scrollArea，由外层  │
+│         │                      │                         │   Sidebar 单一承载滚动      │
 ├─────────┼──────────────────────┼─────────────────────────┼─────────────────────────────┤
 │ Tier C  │ 标签导航栏、水平操作 │ • LeafToolTabStrip      │ • 挂载统一工具类            │
 │【无痕通 │ 条、TSX 内联样式容器 │ • PaneHeader            │   .hideScrollbar            │
@@ -205,12 +213,56 @@ useUndoWithScrollAnchor(containerRef, manager);
 
 ---
 
-### 2.4 零 DOM 增量与 Mode 2 类名绝对隔离准则
+### 2.4 侧栏嵌套视口与双滚动条脱节死锁机理解剖（M05 纠偏：`WindowedSessionUl` vs `Sidebar`）
 
-基于上述三大物理事实，本方案制定**虚拟滚动绝对红线**：
+在审查最初方案时，Reviewer C 抓出了全仓最隐蔽也是破坏力极强的一处设计缺陷——**虚拟列表内层注入 `overflow` 导致嵌套视口脱节死锁（Reviewer C M05）**：
+
+#### 1. 宿主与内层列表的真实代码拓扑：
+- 查看 `apps/crish-desktop/src/components/sidebar/Sidebar.tsx:305-310`：
+  ```tsx
+  <div
+    className={styles.sidebarScroll}
+    data-sidebar-chrome="scroll"
+    aria-hidden={chromeHidden || undefined}
+    inert={chromeHidden ? true : undefined}
+  >
+    <SidebarSessionList ... />
+  </div>
+  ```
+  侧边栏真正的物理滚动宿主是 `div.sidebarScroll`，其在 `Sidebar.module.css:121-134` 中定义了 `flex: 1; overflow-y: auto;`。
+- 查看 `apps/crish-desktop/src/components/sidebar/session-list/WindowedSessionUl.tsx:45-56`：
+  `WindowedSessionUl` 仅仅是 `SidebarSessionList` 内渲染的一个虚拟化 `<ul>` 结构标签。其纵向高度由 `safe.topPad`（顶部占位垫片）和可视窗口切片项目自然撑开。**其自身根本没有声明任何 `overflow-y`！**
+
+#### 2. 错误挂载 `.scrollArea` 的灾难性连锁反应：
+查阅 Mode 2 工具类定义（`overlay-scrollbar.css`）：
+```css
+.scrollArea {
+  overflow-y: auto;   /* ❌ 赋予独立滚动能力 */
+  overflow-x: hidden;
+  ...
+}
+```
+如果盲目在 `WindowedSessionUl.tsx` 的 `<ul>` 容器上注入 `scrollArea scrollAreaSm`：
+1. **产生嵌套双滚动条（Double Scrollbars）**：外层 `div.sidebarScroll` 和内层 `ul.sessionListWindowed` 同时具备 `overflow-y: auto`。在屏幕侧栏上，两层滑块同时争抢显示；
+2. **滚轮事件拦截与视口脱节**：用户将鼠标置于会话列表上滚动滚轮时，Chromium 事件分发机制优先将 `wheel` 事件路由给内层 `ul`。内层 `ul` 消耗滚动偏移，但外层 `div.sidebarScroll` 的 `scrollTop` 纹丝不动；
+3. **虚拟窗口切片计算瘫痪**：`SidebarSessionList` 的切片计算依赖于外部视口的滚动位置与可见高度。内层截流导致外部计算失效，会话列表无法按需装载新行，用户向下滚动时瞬间出现白屏或列表剧烈抖动抽搐，形成严重的交互死锁！
+
+#### 3. M05 刚性整改规范（单一真理视口 SSOT）：
+- **绝对撤销** `WindowedSessionUl.tsx` 上的 `.scrollArea` / `.scrollAreaSm` 类名挂载；`WindowedSessionUl` 保持纯粹结构列表，绝对禁止注入任何 `overflow-y: auto`；
+- 侧边栏的滚动条必须且只能挂载于**外层单一主宿主 `Sidebar.tsx`**（`styles.sidebarScroll` 接入 `scrollArea scrollAreaSm`）；
+- 滚动由单一视口承载，内层虚拟列表自然随外层滚动，彻底根除双滚动条与事件脱节。
+
+---
+
+### 2.5 零 DOM 增量与单一真理视口隔离准则
+
+基于上述四大物理事实，本方案制定**虚拟滚动绝对红线**：
 1. **DOM 结构增量必须严格为 0**：`MessageVirtualizer` 与 `WindowedSessionUl` 的 JSX 树中，严禁增加任何额外的 `div` 包装容器；
-2. **纯粹消费 Mode 2 工具类**：直接在原生发生滚动的 DOM 元素上挂载 `.scrollArea .scrollAreaMd`（或 `scrollAreaSm`）；
-3. **渲染卸载至 Compositor**：全部由 Blink 原生 C++ 排版引擎在非主线程直接完成滚动与二元灰度滑块绘制，零 JS 事件监听，零 React 状态开销！
+2. **Ref 零劫持与原生直通**：`MessageVirtualizer` 的 `vs.containerRef` 直接直通绑定至真实发生滚动的宿主 DOM；`useUndoWithScrollAnchor` 原生微任务读写 `containerRef.current.scrollTop` 路径为 100% 直通；
+3. **单一真理视口承载（SSOT）**：
+   - 消息流视口：滚动发生于 `div.list`，直接消费 `.scrollArea .scrollAreaMd`；
+   - 侧栏视口：滚动发生于外层 `div.sidebarScroll`，消费 `.scrollArea .scrollAreaSm`；内层 `WindowedSessionUl` 绝不声明局部 `overflow`；
+4. **渲染卸载至 Compositor**：全部由 Blink 原生 C++ 排版引擎在非主线程直接完成滚动与二元灰度滑块绘制，零 JS 事件监听，零 React 状态开销！
 
 ---
 
