@@ -109,6 +109,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     disabledRef.current = disabled;
     const contentRef = useRef(content);
     contentRef.current = content;
+    const triggerModeRef = useRef<'hover' | 'focus' | null>(null);
     const tipId = useId();
 
     const { state, isMounted } = useAnimatedPresence({
@@ -141,8 +142,12 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     hideImmediateRef.current = hideImmediate;
 
     useEffect(() => {
-      return registerTooltipInstance(tipId, () => hideImmediateRef.current());
-    }, [tipId]);
+      return registerTooltipInstance(
+        tipId,
+        () => hideImmediateRef.current(),
+        () => clearShowTimer()
+      );
+    }, [tipId, clearShowTimer]);
 
     useEffect(() => () => hideImmediateRef.current(), []);
 
@@ -151,6 +156,55 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
         setClampedPos(null);
       }
     }, [isMounted]);
+
+    // 活跃显示期间的光标逃逸与离开主动巡检（杜绝常驻狗皮膏药）
+    useEffect(() => {
+      if (!visible) return;
+      const target = childElRef.current;
+      if (!target) return;
+
+      const onGlobalPointerMove = (e: PointerEvent) => {
+        const tRect = target.getBoundingClientRect();
+        const tipEl = tipRef.current;
+        const tipRect = tipEl?.getBoundingClientRect();
+
+        const inTarget =
+          e.clientX >= tRect.left - 4 &&
+          e.clientX <= tRect.right + 4 &&
+          e.clientY >= tRect.top - 4 &&
+          e.clientY <= tRect.bottom + 4;
+
+        const inTip =
+          tipRect &&
+          e.clientX >= tipRect.left - 2 &&
+          e.clientX <= tipRect.right + 2 &&
+          e.clientY >= tipRect.top - 2 &&
+          e.clientY <= tipRect.bottom + 2;
+
+        if (!inTarget && !inTip) {
+          hideImmediate();
+        }
+      };
+
+      const onDocMouseLeave = (e: MouseEvent) => {
+        if (!e.relatedTarget) {
+          hideImmediate();
+        }
+      };
+
+      window.addEventListener('pointermove', onGlobalPointerMove, {
+        passive: true,
+      });
+      document.documentElement.addEventListener('mouseleave', onDocMouseLeave);
+
+      return () => {
+        window.removeEventListener('pointermove', onGlobalPointerMove);
+        document.documentElement.removeEventListener(
+          'mouseleave',
+          onDocMouseLeave
+        );
+      };
+    }, [visible, hideImmediate]);
 
     const isValid = React.isValidElement(children);
     const child = (isValid ? children : null) as React.ReactElement<
@@ -202,6 +256,16 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     const commitShow = (el: HTMLElement) => {
       if (disabledRef.current || !contentRef.current) return;
       if (isTooltipMuted()) return;
+
+      // 物理真实性守卫：如果是 hover 触发，光标必须依然真正停留在 :hover 态；杜绝异步延迟后鼠标已走却常驻
+      if (triggerModeRef.current === 'hover') {
+        const isHovered =
+          typeof el.matches === 'function' ? el.matches(':hover') : true;
+        if (!isHovered) {
+          return;
+        }
+      }
+
       const currentRect = el.getBoundingClientRect();
       if (!isValidDOMRect(currentRect) || isTriggerOffscreen(currentRect)) {
         return;
@@ -234,6 +298,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     };
 
     const handleHide = () => {
+      triggerModeRef.current = null;
       // 未满 delayShow 离开：清定时器，从未显示
       clearShowTimer();
       if (delayHide > 0 && visibleRef.current) {
@@ -246,6 +311,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     };
 
     const handleMouseEnter = (e: React.MouseEvent<HTMLElement>) => {
+      triggerModeRef.current = 'hover';
       scheduleShow(e.currentTarget);
       childHandlers.onMouseEnter?.(e);
       restHandlers.onMouseEnter?.(e);
@@ -259,19 +325,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
 
     const handleFocus = (e: React.FocusEvent<HTMLElement>) => {
       const target = e.currentTarget;
-      try {
-        if (
-          typeof target.matches === 'function' &&
-          target.ownerDocument.activeElement === target &&
-          !target.matches(':focus-visible')
-        ) {
-          childHandlers.onFocus?.(e);
-          restHandlers.onFocus?.(e);
-          return;
-        }
-      } catch {
-        // 兼容不支持 matches 或 :focus-visible 的特殊环境
-      }
+      triggerModeRef.current = 'focus';
 
       const currentRect = target.getBoundingClientRect();
       if (!isValidDOMRect(currentRect)) {
@@ -286,18 +340,21 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     };
 
     const handleBlur = (e: React.FocusEvent<HTMLElement>) => {
+      triggerModeRef.current = null;
       hideImmediate();
       childHandlers.onBlur?.(e);
       restHandlers.onBlur?.(e);
     };
 
     const handlePointerDown = (e: React.PointerEvent<HTMLElement>) => {
+      triggerModeRef.current = null;
       hideImmediate();
       childHandlers.onPointerDown?.(e);
       restHandlers.onPointerDown?.(e);
     };
 
     const handleClick = (e: React.MouseEvent<HTMLElement>) => {
+      triggerModeRef.current = null;
       hideImmediate();
       childHandlers.onClick?.(e);
       restHandlers.onClick?.(e);

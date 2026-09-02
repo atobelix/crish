@@ -9,7 +9,12 @@ export const DEFAULT_DELAY_SHOW_MS = 350;
 
 type HideFn = () => void;
 
-const hiders = new Map<string, HideFn>();
+interface TooltipEntry {
+  hide: HideFn;
+  cancelPending: () => void;
+}
+
+const registry = new Map<string, TooltipEntry>();
 let activeId: string | null = null;
 let listenersAttached = false;
 let floatingObserver: MutationObserver | null = null;
@@ -28,20 +33,34 @@ export function isTooltipMuted(): boolean {
   return layerStackManager.isTooltipSilenced() || isFloatingActiveAttr();
 }
 
-export function registerTooltipInstance(id: string, hide: HideFn): () => void {
-  hiders.set(id, hide);
+export function registerTooltipInstance(
+  id: string,
+  hide: HideFn,
+  cancelPending: () => void = () => {}
+): () => void {
+  registry.set(id, { hide, cancelPending });
   ensureDismissListeners();
   return () => {
-    hiders.delete(id);
+    registry.delete(id);
     if (activeId === id) activeId = null;
   };
 }
 
-/** 后来者占槽。菜单静音中拒绝占槽。 */
+/** 取消所有正在等待显示（排队未弹出）的 Tooltip 定时器 */
+export function cancelAllPendingTooltips(exceptId?: string): void {
+  for (const [id, entry] of registry.entries()) {
+    if (id !== exceptId) {
+      entry.cancelPending();
+    }
+  }
+}
+
+/** 后来者占槽。菜单静音中拒绝占槽；一旦占槽，物理灭掉所有其他提示，确保全局 ≤ 1 */
 export function claimTooltipSlot(id: string): boolean {
   if (isTooltipMuted()) return false;
+  cancelAllPendingTooltips(id);
   if (activeId && activeId !== id) {
-    hiders.get(activeId)?.();
+    registry.get(activeId)?.hide();
   }
   activeId = id;
   return true;
@@ -52,9 +71,12 @@ export function releaseTooltipSlot(id: string): void {
 }
 
 export function hideAllTooltips(): void {
-  const snapshot = [...hiders.values()];
   activeId = null;
-  for (const hide of snapshot) hide();
+  const snapshot = [...registry.values()];
+  for (const entry of snapshot) {
+    entry.cancelPending();
+    entry.hide();
+  }
 }
 
 function ensureDismissListeners(): void {
@@ -62,11 +84,22 @@ function ensureDismissListeners(): void {
   listenersAttached = true;
 
   const dismiss = () => hideAllTooltips();
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') dismiss();
+  };
+  const onDocMouseLeave = (e: MouseEvent) => {
+    if (!e.relatedTarget) dismiss();
+  };
 
   window.addEventListener('scroll', dismiss, true);
   window.addEventListener('resize', dismiss);
   window.addEventListener('blur', dismiss);
+  window.addEventListener('keydown', onKeyDown, true);
   document.addEventListener('pointerdown', dismiss, true);
+  document.addEventListener('click', dismiss, true);
+  document.addEventListener('contextmenu', dismiss, true);
+  document.documentElement.addEventListener('mouseleave', onDocMouseLeave);
+
   const onVisibility = () => {
     if (document.visibilityState !== 'visible') dismiss();
   };
@@ -76,7 +109,11 @@ function ensureDismissListeners(): void {
     window.removeEventListener('scroll', dismiss, true);
     window.removeEventListener('resize', dismiss);
     window.removeEventListener('blur', dismiss);
+    window.removeEventListener('keydown', onKeyDown, true);
     document.removeEventListener('pointerdown', dismiss, true);
+    document.removeEventListener('click', dismiss, true);
+    document.removeEventListener('contextmenu', dismiss, true);
+    document.documentElement.removeEventListener('mouseleave', onDocMouseLeave);
     document.removeEventListener('visibilitychange', onVisibility);
   });
 
@@ -96,7 +133,7 @@ function ensureDismissListeners(): void {
 /** 测试收尾：清槽并卸全局监听，避免用例互串 */
 export function resetTooltipControllerForTests(): void {
   hideAllTooltips();
-  hiders.clear();
+  registry.clear();
   activeId = null;
   for (const off of listenerCleanups) off();
   listenerCleanups.length = 0;

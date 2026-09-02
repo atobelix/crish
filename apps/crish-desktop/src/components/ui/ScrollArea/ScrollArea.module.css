@@ -1,0 +1,150 @@
+/* ==========================================================================
+   ScrollArea Atomic Component CSS Module
+   严格遵循 tokens.css 契约，严禁全仓裸写硬编码像素！
+   二元灰度绝对死锁：未激活 8.2% vs 激活 20.0%，差值严格 12%，Hover、Active 与 Dragging 统统同色！
+   按钮背景完全透明，严禁方块底色；轨道与滑块右侧保持 2px 物理透明防误触空隙。
+   ========================================================================== */
+
+.root {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+/* 四级尺寸 Token 映射 */
+.xs {
+  --scrollbar-width: var(--scrollbar-width-xs, 6px);
+  --scrollbar-button-height: 8px;
+}
+
+.sm {
+  --scrollbar-width: var(--scrollbar-width-sm, 7px);
+  --scrollbar-button-height: 8px;
+}
+
+.md {
+  --scrollbar-width: var(--scrollbar-width-md, 9px);
+  --scrollbar-button-height: 8px;
+}
+
+.lg {
+  --scrollbar-width: var(--scrollbar-width-lg, 11px);
+  --scrollbar-button-height: 10px;
+}
+
+/* 视口主容器：原生滚动支撑，隐藏系统滚动条避免双条重叠 */
+.viewport {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  outline: none;
+  scrollbar-width: none;
+}
+
+.content {
+  min-width: 100%;
+  box-sizing: border-box;
+}
+
+/* 三段式垂直侧柱：绝对定位悬浮于容器内侧右端，严格保留 2px 物理透明隔离间隙 */
+.stepperTrackColumn {
+  position: absolute;
+  right: 2px;
+  width: var(--scrollbar-width);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+  opacity: 0;
+  transition: opacity 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 2;
+  user-select: none;
+}
+
+.stepperTrackColumn.visible {
+  opacity: 1;
+}
+
+/* 端点安全护栏步进按钮：透明无底框，饱满 8px 包围盒 */
+.stepperButton {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-button-height, 8px);
+  min-height: 8px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent; /* 绝无方块底色！ */
+  color: var(--scrollbar-thumb-bg); /* 静止态继承未激活滑块色 #eae8e6 (或 tokens 变量) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  outline: none;
+  border-radius: var(--radius-xs, 2px);
+  transition: color 120ms ease, opacity 120ms ease;
+  user-select: none;
+  touch-action: none;
+}
+
+/* 交互态（Hover、Active 统统同色）：仅调灰度至 --scrollbar-thumb-active，底色绝对不变，绝无深色方块！ */
+.stepperButton:hover:not(.disabled),
+.stepperButton:active:not(.disabled) {
+  color: var(--scrollbar-thumb-active);
+  background: transparent; /* 绝不产生方框背景污染！ */
+}
+
+/* 极限禁用态：到达端点时淡出 */
+.stepperButton.disabled {
+  opacity: 0.18;
+  cursor: default;
+  pointer-events: none;
+}
+
+.arrowIcon {
+  display: block;
+  flex-shrink: 0;
+}
+
+/* 物理真空隔离带：固定 2px 净空缓冲 */
+.safeGap {
+  width: 100%;
+  height: var(--scrollbar-track-safe-gap, 2px);
+  flex-shrink: 0;
+}
+
+/* 独立滑行游弋轨道 */
+.isolatedTrack {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  background: var(--scrollbar-track-bg, transparent);
+  overflow: hidden;
+}
+
+/* 轨道内滑块：二元灰度绝对死锁 (未激活 vs 激活)，基于轨道绝对定位与拖拽手柄 */
+.thumbIndicator {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  border-radius: var(--scrollbar-thumb-radius, var(--radius-full, 9999px));
+  background: var(--scrollbar-thumb-bg);
+  transition: background 120ms ease;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+/* 铁律：滑块 Hover、Active 与 Dragging 拖拽统统同色（--scrollbar-thumb-active），严禁第三态！ */
+.thumbIndicator:hover,
+.thumbIndicator:active,
+.thumbIndicator.dragging {
+  background: var(--scrollbar-thumb-active);
+}
+
+.thumbIndicator.dragging {
+  cursor: grabbing;
+}

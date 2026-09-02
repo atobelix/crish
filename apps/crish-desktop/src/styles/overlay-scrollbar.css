@@ -73,13 +73,20 @@
   background: transparent;
 }
 
+/* ScrollArea 视口原生滚动支撑（隐藏系统滚动条避免双条重叠） */
+[class*='viewport']::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 /* 侧栏 / Menu / 设置 cover+nav / Dialog 内容（CSS Modules 哈希后仍命中 local 名）。
  * 此处禁止写 scrollbar-width / scrollbar-color：会关掉上面的 webkit 细条。 */
 [class*='sidebarScroll'],
+.sidebar,
 [class*='menuContent'],
-[class*='coverContent'],
 [class*='navScroll'],
+[class*='coverContent'],
 [class*='dialogBody'] {
-  /* 占位选择器：契约测试与消费方清单同源；绘制走上方全局 webkit。 */
   scrollbar-gutter: auto;
 }
