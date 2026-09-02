@@ -25,6 +25,7 @@ import { useEngineBootstrap } from './app/useEngineBootstrap';
 import { useAppShortcuts } from './app/AppShortcuts';
 import { AppGlobalDialogs, SkeletonFallback } from './app/AppGlobalDialogs';
 import { useWorkspaceShellStore } from './store/workspace-shell';
+import { navigateToSurface } from './store/surfaceRouter';
 
 // ── 关键路径组件：同步导入，与 App 同 chunk ──
 import { Sidebar } from './components/sidebar/Sidebar';
@@ -137,14 +138,14 @@ function App() {
     };
   }, []);
 
-  // 全局常驻主工作区路由守卫（杜绝因子组件卸载导致 open-chat/open-scheduled 事件丢失）
+  // 全局常驻主工作区路由守卫（统一接入 surfaceRouter）
   useEffect(() => {
     const offs = [
       onUiEvent('open-chat', () => {
-        useLayoutStore.getState().setChatMainSurface('chat');
+        navigateToSurface('chat');
       }),
       onUiEvent('open-scheduled', () => {
-        useLayoutStore.getState().setChatMainSurface('scheduled');
+        navigateToSurface('scheduled');
       }),
     ];
     return () => offs.forEach((off) => off());

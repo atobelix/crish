@@ -1,15 +1,15 @@
 :global(.chat-doc-flow):has(.schedInChat),
 :global([data-testid='chat-doc-flow']):has(.schedInChat) {
-  padding-top: var(--space-3);
+  padding-top: 0;
   max-width: none;
   align-items: stretch;
   justify-content: flex-start;
 }
 
 .schedInChat {
-  max-width: none;
+  max-width: 980px;
   margin: 0;
-  padding: 8px 8px 28px;
+  padding: 24px 32px 48px;
   width: 100%;
   box-sizing: border-box;
 }

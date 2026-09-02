@@ -1,5 +1,5 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { useSessionStore } from '../../store/storeAccess';
+import { useSessionStore, useMainSurface } from '../../store/storeAccess';
 import { useLayoutStore } from '../../store/layoutStore';
 import { getActiveProjectId } from '../../api/projectStore';
 import { setDraftFolder } from '../../api/storeAccess';
@@ -48,8 +48,9 @@ export function useSidebarHandlers({
   setSidebarCollapsed,
 }: UseSidebarHandlersOptions) {
   const renameSession = useSessionStore((s) => s.renameSession);
-
-  const [activeNav, setActiveNav] = useState('chat');
+  const { meta: surfaceMeta, toggleSurface, navigateToChatSession, navigateToNewDraft } =
+    useMainSurface();
+  const activeNav = surfaceMeta.sidebarNavKey;
   const newSessionLockRef = useRef(false);
 
   const handleNewSession = useCallback(() => {
@@ -58,19 +59,14 @@ export function useSidebarHandlers({
     try {
       if (filterType === 'pinned') setFilterType('all');
       setGeneralCollapsed(false);
-      getCompositionRoot().shell.openNewDraftTab(
-        getActiveProjectId() || undefined
-      );
-      useLayoutStore.getState().setChatMainSurface('chat');
-      setActiveNav('chat');
       setRenamingSessionId(null);
-      emitUiEvent('open-chat');
+      navigateToNewDraft(getActiveProjectId() || undefined);
     } finally {
       queueMicrotask(() => {
         newSessionLockRef.current = false;
       });
     }
-  }, [filterType, setFilterType, setGeneralCollapsed, setRenamingSessionId]);
+  }, [filterType, setFilterType, setGeneralCollapsed, setRenamingSessionId, navigateToNewDraft]);
 
   const handleCommitRename = useCallback(
     (sessionId: string, title: string) => {
@@ -82,29 +78,18 @@ export function useSidebarHandlers({
   );
 
   const handleOpenScheduled = useCallback(() => {
-    setActiveNav((prev) => {
-      if (prev === 'scheduled') {
-        useLayoutStore.getState().setChatMainSurface('chat');
-        return 'chat';
-      }
-      useLayoutStore.getState().setChatMainSurface('scheduled');
-      return 'scheduled';
-    });
-    emitUiEvent('open-scheduled');
-  }, []);
+    toggleSurface('scheduled');
+  }, [toggleSurface]);
 
   const handleSelectSession = useCallback(
     (id: string) => {
       const root = getCompositionRoot();
       const target = root.session.getState().sessionsById[id];
-      root.session.openOrFocusSession(id, {
+      navigateToChatSession(id, {
         title: target?.title,
         workspaceKey:
           target?.folder || currentWorkspaceFolderKey(getActiveProjectId()),
       });
-      useLayoutStore.getState().setChatMainSurface('chat');
-      clearAgentPanelFocus();
-      setActiveNav('chat');
       setRenamingSessionId(null);
       if (target && !target.isPinned) {
         setGeneralCollapsed(false);
@@ -114,9 +99,8 @@ export function useSidebarHandlers({
           );
         }
       }
-      emitUiEvent('open-chat');
     },
-    [setRenamingSessionId, setGeneralCollapsed, setCollapsedProjects]
+    [setRenamingSessionId, setGeneralCollapsed, setCollapsedProjects, navigateToChatSession]
   );
 
   const handleOpenProject = useCallback(

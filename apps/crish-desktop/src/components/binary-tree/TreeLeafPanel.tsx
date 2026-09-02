@@ -462,16 +462,18 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             </>
           ) : null}
         </div>
-        <button
-          type="button"
-          className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}
-          data-testid="top-quick-dock-btn"
-          data-active={dockOpen ? 'true' : 'false'}
-          aria-label={dockOpen ? '收起右侧工具栏' : '展开右侧工具栏'}
-          onClick={handleToggleDock}
-        >
-          <IconSidebarRight size={14} />
-        </button>
+        {chatMainSurface !== 'scheduled' && (
+          <button
+            type="button"
+            className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}
+            data-testid="top-quick-dock-btn"
+            data-active={dockOpen ? 'true' : 'false'}
+            aria-label={dockOpen ? '收起右侧工具栏' : '展开右侧工具栏'}
+            onClick={handleToggleDock}
+          >
+            <IconSidebarRight size={14} />
+          </button>
+        )}
       </div>
     );
   },

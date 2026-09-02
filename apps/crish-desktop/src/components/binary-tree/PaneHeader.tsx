@@ -118,10 +118,6 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     const effectiveActiveTabId = activeTabId || visibleTabs[0]?.tabId || '';
     void isActive;
 
-    if (chatMainSurface === 'scheduled') {
-      return null;
-    }
-
     useEffect(
       () => () => {
         if (leaveTimerRef.current != null) {
@@ -234,6 +230,17 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
 
     if (!isChat) {
       return null;
+    }
+
+    if (chatMainSurface === 'scheduled') {
+      return (
+        <div
+          className={styles.paneHeader}
+          data-pane-header="true"
+          data-tauri-drag-region
+          onPointerDown={handleHeaderPointerDown}
+        />
+      );
     }
 
     return (

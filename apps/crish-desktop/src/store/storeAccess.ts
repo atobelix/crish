@@ -336,3 +336,14 @@ export {
   exportSessionToMarkdown,
   tryDownloadSessionMarkdown,
 } from '../api/sessionExport';
+
+export {
+  type MainSurfaceId,
+  type MainSurfaceMeta,
+  MAIN_SURFACES,
+  navigateToSurface,
+  toggleSurface,
+  navigateToChatSession,
+  navigateToNewDraft,
+  useMainSurface,
+} from './surfaceRouter';
