@@ -179,7 +179,7 @@
   height: 28px;
   min-height: 28px;
   max-height: 28px;
-  padding: 0 4px 0 2px;
+  padding: 0 4px 0 10px;
   box-sizing: border-box;
 }
 
@@ -245,7 +245,8 @@
 }
 
 .folderNewBtn,
-.folderNewSession {
+.folderNewSession,
+:global(.button).folderNewBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -258,7 +259,8 @@
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  opacity: 0;
+  opacity: 0 !important;
+  pointer-events: none;
   padding: 0 !important;
   margin: 0 !important;
   line-height: 1;
@@ -268,8 +270,11 @@
 .folderHeaderRow:hover .folderNewBtn,
 .folderHeaderRow:focus-within .folderNewBtn,
 .folderHeaderRow:hover .folderNewSession,
-.folderHeaderRow:focus-within .folderNewSession {
-  opacity: 1;
+.folderHeaderRow:focus-within .folderNewSession,
+.folderHeaderRow:hover :global(.button).folderNewBtn,
+.folderHeaderRow:focus-within :global(.button).folderNewBtn {
+  opacity: 1 !important;
+  pointer-events: auto;
 }
 
 .folderNewBtn:hover,
