@@ -77,8 +77,8 @@ html[data-theme='light'] {
   /* 未激活态滑块：精准对应物理像素 #EAE8E6，实测灰度 8.24%，微暖纸温极低饱和度，绝不发黄 (SSOT) */
   --scrollbar-thumb-bg: hsl(30 8.7% 91%);
 
-  /* 激活态滑块：精准对应物理像素 #CDCAC7，实测灰度 19.6%~20.0%，Hover 与 Active 严格同色，差值死锁约 11.8%~12% */
-  --scrollbar-thumb-active: hsl(30 6.5% 79.2%);
+  /* 激活态滑块：黄色/色相饱和度构成完全不变 (H=30 S=8.7%)，仅下调灰度至 19.6%~20.0% (L=78.5%)，差值死锁约 12%，杜绝 23.5% 纯灰 */
+  --scrollbar-thumb-active: hsl(30 8.7% 78.5%);
 
   /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
   --scrollbar-track-bg: transparent;
