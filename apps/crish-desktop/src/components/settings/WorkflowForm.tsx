@@ -11,6 +11,7 @@ import {
   WORKFLOW_SCHEDULE_TYPES,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
+import { listProjects } from '../../api/projectStore';
 import { Button, Input, Select, Tooltip } from '../ui';
 import styles from './ScheduledTasksPanel.module.css';
 import scheduleStyles from './SettingsScheduleTab.module.css';
@@ -248,6 +249,31 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     );
   }
 
+  const projects = listProjects();
+  const projectOptions = [
+    { id: '', label: '默认工作区（全局）' },
+    ...projects.map((p) => ({
+      id: p.path,
+      label: p.name,
+      hint: p.path,
+    })),
+  ];
+
+  const projectSelect = (
+    <Select
+      {...(settingsVariant
+        ? { className: 'sched-settings-select' }
+        : styles.schedSelect !== undefined
+          ? { className: styles.schedSelect }
+          : {})}
+      value={draft.cwd || ''}
+      disabled={busy}
+      options={projectOptions}
+      onChange={(v) => onDraftChange({ ...draft, cwd: v })}
+      aria-label="所属项目"
+    />
+  );
+
   return (
     <div
       id={formId}
@@ -257,6 +283,12 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     >
       {nameInput}
       {promptInput}
+      <div className={styles.schedFieldRow}>
+        <label className={`${styles.schedField} ${styles.schedFieldGrow}`}>
+          <span className={styles.schedFieldLabel}>所属项目</span>
+          {projectSelect}
+        </label>
+      </div>
       <div className={styles.schedFieldRow}>
         <label className={`${styles.schedField} ${styles.schedFieldGrow}`}>
           <span className={styles.schedFieldLabel}>频率</span>

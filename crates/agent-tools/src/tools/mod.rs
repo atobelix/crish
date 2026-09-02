@@ -20,6 +20,10 @@
 //! - `set_timer`：set_timer / cancel_timer（T-CF-05）——一次性后台定时器
 //!   注册与取消 + TimerChannel 契约（后台静默运行不阻塞、早退条件
 //!   never/any/task-id、同 sender 单活跃定时器约束；注册面 14→16）
+//! - `create_workflow`：create_workflow（维度五 / 05 详案 §2.4 路径 A）——
+//!   定时任务注册 + WorkflowCreationChannel 契约（引擎侧复用既有
+//!   create-workflow IPC 校验/注册逻辑适配；通道经 BuiltinToolConfig 注入，
+//!   None = common.unsupported；注册面 33→34）
 //! - `output_dir`：resolve_output_dir（T-EG-08 / REQ-G01）——会话文档产出
 //!   目录解析（显式 folder 优先 / 默认 .agent-outputs/<YYYY-MM-DD>-<会话标识>/
 //!   惰性与幂等 / 只读子代理不自选；注册面 16→17）
@@ -38,6 +42,10 @@
 //! （R3 T9：BuiltinToolConfig 仅承载构造期默认配置，不再注入 workspace_root）。
 
 pub mod background_task;
+// 维度五（05 详案 §2.4 路径 A）：create_workflow 工具模块声明（引擎侧经
+// BuiltinToolConfig.workflow_creation_channel 注入 WorkflowCreationChannel
+// 契约，None = common.unsupported；注册面 33→34）
+pub mod create_workflow;
 // T-41：decompress_context 工具模块声明（注册面 18→20 由本文件下方
 // register_builtin_tools_with_config 负责；压缩块原文服务经
 // ctx.compression_store 注入，None = common.unsupported）
@@ -136,6 +144,10 @@ pub struct BuiltinToolConfig {
     /// target=self 返回结构化不可用错误；引擎侧实现会话留档 + followUp 环
     /// 入队后注入——agent-tools 只定义契约）
     pub main_agent_message_channel: Option<Arc<dyn send_message::MainAgentMessageChannel>>,
+    /// 工作流创建通道（维度五 / 05 详案 §2.4：None = 未接线，create_workflow
+    /// 返回结构化不可用错误；引擎侧复用既有 create-workflow IPC 校验/注册
+    /// 逻辑适配后注入——agent-tools 只定义契约，禁止平行第二套注册链路）
+    pub workflow_creation_channel: Option<Arc<dyn create_workflow::WorkflowCreationChannel>>,
 }
 
 impl Default for BuiltinToolConfig {
@@ -152,6 +164,7 @@ impl Default for BuiltinToolConfig {
             subagent_kill_channel: None,
             subagent_inject_channel: None,
             main_agent_message_channel: None,
+            workflow_creation_channel: None,
         }
     }
 }
@@ -222,6 +235,12 @@ pub fn register_builtin_tools_with_config(
     )))?;
     registry.register(Arc::new(set_timer::CancelTimerTool::with_channel(
         config.timer_channel.clone(),
+    )))?;
+    // create_workflow（维度五 / 05 详案 §2.4 路径 A）：定时任务注册，
+    // workflow_creation_channel 字段透传（None = 未接线，工具返回
+    // common.unsupported；引擎侧复用 create-workflow IPC 校验/注册逻辑适配）
+    registry.register(Arc::new(create_workflow::CreateWorkflowTool::with_channel(
+        config.workflow_creation_channel.clone(),
     )))?;
     // resolve_output_dir（T-EG-08 / REQ-G01）：查询类工具——解析会话文档
     // 产出目录（显式 folder 优先 / 默认日期目录 / 惰性幂等）；服务经
@@ -791,7 +810,8 @@ mod tests {
         // →31（D4：kill_subagent / send_message 两工具并入）
         // →32（W4-F 余量 block_move）
         // →33（W4-R block_set_attr）
-        assert_eq!(registry.len(), 33);
+        // →34（维度五：create_workflow 并入）
+        assert_eq!(registry.len(), 34);
         let names: Vec<String> = registry
             .list_definitions()
             .iter()
@@ -808,6 +828,7 @@ mod tests {
                 "block_set_attr",
                 "block_update",
                 "cancel_timer",
+                "create_workflow",
                 "decompress_context",
                 "delete_dir",
                 "delete_file",
@@ -987,6 +1008,14 @@ mod tests {
         // 未接线环境工具返回 common.unsupported，不 panic
         let config = BuiltinToolConfig::default();
         assert!(config.timer_channel.is_none());
+    }
+
+    #[test]
+    fn builtin_config_has_workflow_creation_channel() {
+        // 回归基线（维度五）：workflow_creation_channel 缺省 None——
+        // 未接线环境 create_workflow 返回 common.unsupported，不 panic
+        let config = BuiltinToolConfig::default();
+        assert!(config.workflow_creation_channel.is_none());
     }
 
     #[tokio::test]

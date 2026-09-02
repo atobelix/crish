@@ -15,6 +15,7 @@ import {
   getSessionById,
   renameSession,
 } from '../../api/storeAccess';
+import { useSessionStore } from '../../store/sessionStore';
 
 /** 面板读取计划超时（settings 双计时共用） */
 export const WORKFLOWS_LOAD_TIMEOUT_MS = 12_000;
@@ -93,6 +94,7 @@ export function draftFromWorkflow(w: WorkflowDefinition): WorkflowScheduleDraft 
   const d = emptyWorkflowDraft();
   d.name = w.name;
   d.prompt = w.prompt || '';
+  d.cwd = w.cwd || '';
   const s = w.schedule;
   if (s && typeof s === 'object') {
     const sch = s as { type?: string; time?: string; minutes?: number };
@@ -118,7 +120,12 @@ export function draftFromWorkflow(w: WorkflowDefinition): WorkflowScheduleDraft 
 export function ensureScheduledSession(
   sessionId: string | undefined,
   workflowName: string,
-  opts?: { activate?: boolean },
+  opts?: {
+    activate?: boolean;
+    prompt?: string;
+    status?: string;
+    startedAt?: number;
+  },
 ) {
   if (!sessionId) return;
   const title = scheduledSessionTitle(workflowName);
@@ -135,5 +142,29 @@ export function ensureScheduledSession(
     sess.title !== title
   ) {
     renameSession(sessionId, title);
+  }
+
+  // 保证会话中包含初始运行记录与提示词消息，避免用户点进会话呈现空白
+  const currentSess = getSessionById(sessionId);
+  if (currentSess && (!currentSess.messages || currentSess.messages.length === 0)) {
+    const promptText = (opts?.prompt || '').trim() || '定时任务触发执行';
+    const timestamp = opts?.startedAt || Date.now();
+    const wsId = 'default';
+    const userMsgId = `sched-user-${sessionId}`;
+    const assistantMsgId = `sched-ast-${sessionId}`;
+
+    useSessionStore.getState().addMessage(wsId, sessionId, {
+      id: userMsgId,
+      sender: 'user',
+      text: `[定时任务执行] ${workflowName}\n\n${promptText}`,
+      timestamp,
+    });
+
+    useSessionStore.getState().addMessage(wsId, sessionId, {
+      id: assistantMsgId,
+      sender: 'assistant',
+      text: `定时任务「${workflowName}」已触发运行。\n- 状态：${opts?.status === 'failed' ? '执行失败' : '已完成'}\n- 触发时间：${new Date(timestamp).toLocaleString()}\n- 提示词指令：\n> ${promptText.split('\n').join('\n> ')}`,
+      timestamp: timestamp + 50,
+    });
   }
 }

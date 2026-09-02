@@ -35,6 +35,7 @@ export type WorkflowScheduleDraft = {
   scheduleType: WorkflowScheduleType;
   dailyTime: string;
   intervalMinutes: string;
+  cwd?: string;
 };
 
 export type WorkflowSchedulePreset = {
@@ -204,6 +205,7 @@ export function emptyWorkflowDraft(): WorkflowScheduleDraft {
     scheduleType: 'manual',
     dailyTime: DEFAULT_DAILY_TIME,
     intervalMinutes: String(DEFAULT_INTERVAL_MINUTES),
+    cwd: '',
   };
 }
 

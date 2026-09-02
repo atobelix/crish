@@ -914,6 +914,14 @@ fn main() {
                     "SchedulerRegistry 装配降级（workflow 走命令层独立退化路径，Cron 不参与续 run 判定）"
                 );
             }
+            // 维度五（05 详案 §2.4 路径 A）：create_workflow 工具通道生产
+            // 转正——backend + AppHandle 注入引擎侧延迟绑定面（绑定前工具
+            // 返回 common.unsupported；注册链路复用 create-workflow 同一
+            // 校验/注册后端，无第二套实现）
+            core_state
+                .engine()
+                .workflow_creation_channel()
+                .bind(workflow_state.backend_handle(), app_handle.clone());
             app.manage(workflow_state);
 
             // ⑨ 模型目录（P3 步骤 5）：内置表挂 Tauri state（catalog_get /

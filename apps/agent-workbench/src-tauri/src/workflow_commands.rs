@@ -599,12 +599,166 @@ impl WorkflowCommandState {
         self.backend.set_registry(registry);
     }
 
-    /// 后端句柄（测试访问：装配轮集成断言「注入队列 = 命令层落点」——
-    /// 生产命令经同模块 `state.inner().backend` 直取，本访问器仅测试面
-    /// 使用，cfg(test) 门控零非测试构建 dead_code）
-    #[cfg(test)]
-    pub(crate) fn backend(&self) -> Arc<WorkflowBackend> {
+    /// 后端句柄（生产面：create_workflow 工具通道延迟绑定（main.rs 装配轮
+    /// 取走注入引擎侧 [WorkflowCreationChannelBinding]，绑定前工具返回
+    /// common.unsupported）；测试访问：装配轮集成断言）
+    pub(crate) fn backend_handle(&self) -> Arc<WorkflowBackend> {
         Arc::clone(&self.backend)
+    }
+}
+
+// ── create_workflow 工具通道（维度五 / 05 详案 §2.4 路径 A 生产接线）────
+
+/// 工具通道绑定载荷：backend（唯一注册链路真源）+ AppHandle（成功落盘后
+/// 广播 `workflow:created` 全域事件——与 IPC 命令路径共用同一发射 helper）
+struct BoundWorkflowBackend {
+    backend: Arc<WorkflowBackend>,
+    app: tauri::AppHandle,
+}
+
+/// create_workflow 工具通道延迟绑定适配器（对齐 ContinuityChannelBoard
+/// 延迟绑定范式：引擎装配（engine_build）早于 workflow 后端创建（main.rs
+/// setup ⑧c），装配期注入空绑定占位——工具返回 common.unsupported；
+/// main.rs 在 `WorkflowCommandState::new` 之后调用 [Self::bind] 完成生产转正）
+///
+/// 注册链路 SSOT：`create` 复用既有 `create-workflow` IPC 的同一校验链
+/// （[WorkflowScheduleWire::parse] → [WorkflowBackend::create]），**禁止**
+/// 平行实现第二套校验 / 注册逻辑（05 详案 §2.4 接线注记）。
+pub(crate) struct WorkflowCreationChannelBinding {
+    inner: std::sync::Mutex<Option<BoundWorkflowBackend>>,
+}
+
+impl std::fmt::Debug for WorkflowCreationChannelBinding {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // 绑定内含 AppHandle / WorkflowBackend，均非稳定调试面——只披露绑定状态
+        let bound = self
+            .inner
+            .lock()
+            .map(|g| g.is_some())
+            .unwrap_or(false);
+        f.debug_struct("WorkflowCreationChannelBinding")
+            .field("bound", &bound)
+            .finish()
+    }
+}
+
+impl WorkflowCreationChannelBinding {
+    /// 装配期构造（未绑定；engine_build.rs 经 BuiltinToolConfig 注入）
+    pub(crate) fn new() -> Self {
+        Self {
+            inner: std::sync::Mutex::new(None),
+        }
+    }
+
+    /// 生产绑定（main.rs setup：workflow_state 创建后取 backend + AppHandle）
+    pub(crate) fn bind(&self, backend: Arc<WorkflowBackend>, app: tauri::AppHandle) {
+        let mut guard = self
+            .inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *guard = Some(BoundWorkflowBackend { backend, app });
+    }
+}
+
+impl Default for WorkflowCreationChannelBinding {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// 工具入参 → `create-workflow` 同源 wire 调度 JSON（经
+/// [WorkflowScheduleWire::parse] 复用既有校验链；timezone 仅展示语义——
+/// 工具未提供时落 "local" 占位，前端列表按 IANA 校验失败回退本机时区展示，
+/// 调度真源始终按本机时区计算）
+fn workflow_schedule_wire_json(
+    input: &agent_tools::WorkflowCreateInput,
+) -> serde_json::Value {
+    match input.schedule_type.as_str() {
+        SCHEDULE_TYPE_DAILY => serde_json::json!({
+            "type": "daily",
+            "time": input.daily_time.clone().unwrap_or_default(),
+            "timezone": "local",
+        }),
+        SCHEDULE_TYPE_INTERVAL_MINUTES => serde_json::json!({
+            "type": "intervalMinutes",
+            "intervalMinutes": input.interval_minutes.unwrap_or_default(),
+        }),
+        SCHEDULE_TYPE_CRON => serde_json::json!({
+            "type": "cron",
+            "expression": input.cron_expression.clone().unwrap_or_default(),
+        }),
+        // manual 为缺省调度类型（与工具 schema 缺省一致）
+        _ => serde_json::json!({ "type": "manual" }),
+    }
+}
+
+#[async_trait::async_trait]
+impl agent_tools::WorkflowCreationChannel for WorkflowCreationChannelBinding {
+    async fn create(
+        &self,
+        input: agent_tools::WorkflowCreateInput,
+    ) -> Result<agent_tools::WorkflowCreateOutput, agent_tools::WorkflowCreateError> {
+        let bound = {
+            let guard = self
+                .inner
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            match guard.as_ref() {
+                Some(b) => BoundWorkflowBackend {
+                    backend: Arc::clone(&b.backend),
+                    app: b.app.clone(),
+                },
+                None => return Err(agent_tools::WorkflowCreateError::Unsupported),
+            }
+        };
+
+        let schedule_value = workflow_schedule_wire_json(&input);
+        let schedule = WorkflowScheduleWire::parse(&schedule_value)
+            .map_err(agent_tools::WorkflowCreateError::InvalidInput)?;
+
+        let view = bound
+            .backend
+            .create(
+                input.name,
+                input.prompt,
+                schedule,
+                input.cwd,
+                None,
+                input.enabled.unwrap_or(true),
+            )
+            .await
+            .map_err(|e: CoreError| agent_tools::WorkflowCreateError::InvalidInput(e.to_string()))?;
+
+        // 全域状态广播（05 详案 §2.5）：工具路径与 IPC 命令路径共用同一
+        // 发射 helper，前端 useWorkflowsState 监听后刷新列表
+        emit_workflow_event(
+            &bound.app,
+            "workflow:created",
+            serde_json::json!({
+                "workflowId": view.id,
+                "name": view.name,
+                "nextRunAt": view.next_run_at,
+            }),
+        );
+
+        Ok(agent_tools::WorkflowCreateOutput {
+            workflow_id: view.id,
+            name: view.name,
+            next_run_at: view.next_run_at,
+        })
+    }
+}
+
+/// workflow 全域事件发射 helper（唯一发射面：IPC 命令路径与工具通道路径
+/// 共用；发射失败仅留痕不阻断注册主流程——事件是通知面，不是落盘面）
+pub(crate) fn emit_workflow_event(
+    app: &tauri::AppHandle,
+    event: &str,
+    payload: serde_json::Value,
+) {
+    use tauri::Emitter;
+    if let Err(e) = app.emit(event, payload) {
+        tracing::warn!(target: "workflow", "workflow 事件发射失败（{event}）：{e}");
     }
 }
 
@@ -1006,6 +1160,7 @@ pub(crate) async fn create_workflow(
     cwd: Option<String>,
     mode: Option<String>,
     enabled: Option<bool>,
+    app: tauri::AppHandle,
     state: tauri::State<'_, WorkflowCommandState>,
 ) -> Result<WorkflowCreateResponse, CoreError> {
     let schedule = parse_schedule_input(schedule.as_ref())?;
@@ -1013,6 +1168,16 @@ pub(crate) async fn create_workflow(
     let workflow = backend
         .create(name, prompt, schedule, cwd, mode, enabled.unwrap_or(true))
         .await?;
+    // 全域状态广播（05 详案 §2.5）：前端 useWorkflowsState 监听后即时刷新
+    emit_workflow_event(
+        &app,
+        "workflow:created",
+        serde_json::json!({
+            "workflowId": workflow.id,
+            "name": workflow.name,
+            "nextRunAt": workflow.next_run_at,
+        }),
+    );
     Ok(WorkflowCreateResponse { workflow })
 }
 
@@ -1037,6 +1202,7 @@ pub(crate) async fn update_workflow(
     cwd: Option<String>,
     mode: Option<String>,
     enabled: Option<bool>,
+    app: tauri::AppHandle,
     state: tauri::State<'_, WorkflowCommandState>,
 ) -> Result<WorkflowCreateResponse, CoreError> {
     if workflow_id.trim().is_empty() {
@@ -1056,6 +1222,15 @@ pub(crate) async fn update_workflow(
     };
     let backend = Arc::clone(&state.inner().backend);
     let workflow = backend.update(&workflow_id, patch).await?;
+    emit_workflow_event(
+        &app,
+        "workflow:updated",
+        serde_json::json!({
+            "workflowId": workflow.id,
+            "name": workflow.name,
+            "nextRunAt": workflow.next_run_at,
+        }),
+    );
     Ok(WorkflowCreateResponse { workflow })
 }
 
@@ -1063,13 +1238,20 @@ pub(crate) async fn update_workflow(
 #[tauri::command(rename = "delete-workflow")]
 pub(crate) async fn delete_workflow(
     workflow_id: String,
+    app: tauri::AppHandle,
     state: tauri::State<'_, WorkflowCommandState>,
 ) -> Result<(), CoreError> {
     if workflow_id.trim().is_empty() {
         return Err(CoreError::InvalidInput("workflowId 不能为空".to_string()));
     }
     let backend = Arc::clone(&state.inner().backend);
-    backend.delete(&workflow_id).await
+    backend.delete(&workflow_id).await?;
+    emit_workflow_event(
+        &app,
+        "workflow:deleted",
+        serde_json::json!({ "workflowId": workflow_id }),
+    );
+    Ok(())
 }
 
 /// `trigger-workflow`：手动立即触发一次（fired_count 计入 + steering 注入）

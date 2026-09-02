@@ -178,6 +178,12 @@ pub use tools::{register_builtin_tools, register_builtin_tools_with_config, Buil
 // [TimerHandle] 属 conex-types timer 模块（§4.1 冻结承载），引擎侧直接走
 // conex_types::timer 导入，不在本 crate 重复 re-export
 pub use tools::set_timer::{TimerChannel, TimerError, MAX_TIMER_DURATION_SECONDS};
+// 维度五（05 详案 §2.4 路径 A）：工作流创建契约导出——引擎侧（workflow
+// 后端适配 + 通道板卡）与注册面按冻结形状消费；create_workflow 工具类本身
+// 为 crate 内注册面专用（对齐 set_timer 先例，不导出）
+pub use tools::create_workflow::{
+    WorkflowCreateError, WorkflowCreateInput, WorkflowCreateOutput, WorkflowCreationChannel,
+};
 // I4-M3（写路径互斥与只读裁剪）：write_paths 引擎级互斥 + readonly 只读
 // 子代理工具集裁剪；claim_write_guard 为 crate 内部工具接线助手，不导出
 pub use readonly::{filter_readonly_registry, READONLY_TOOL_NAMES, WRITE_TOOL_NAMES};

@@ -5,7 +5,8 @@ import { toast } from '../../services/toast/ToastContext';
  * 创建/编辑/删除、会话占位副作用与行内状态（成功静默，仅错误 toast）。
  * 差异由 surface 参数分流，两壳层行为保持一致。
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { listenWorkflowEvents } from '../../api/workflow-api/workflowEvents';
 import { networkUserMessage } from '../../api/userFacingErrors';
 import {
   createWorkflow,
@@ -182,6 +183,26 @@ export function useWorkflowsState(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 全域状态实时同步（05 详案 §2.5）：Rust 在 create/update/delete 成功
+  // 落盘后广播 workflow:created/updated/deleted——对话框内 Agent 工具注册、
+  // 设置页/主面板任一入口的改动即时反映到本面（refresh 恒以重读为准）。
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void listenWorkflowEvents(() => {
+      if (!disposed) void refreshRef.current();
+    }).then((fn) => {
+      if (disposed) fn();
+      else unlisten = fn;
+    });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   /** 监听类关键词提示：行内即可，禁止教育性 toast（策略：仅错误+可撤销） */
   const maybeWatchHint = (text: string) => {
     const hint = watchTriggerHint(text);
@@ -227,6 +248,7 @@ export function useWorkflowsState(
           name: draft.name.trim(),
           prompt: draft.prompt.trim(),
           schedule: schedGuard.schedule,
+          cwd: draft.cwd !== undefined ? draft.cwd : (opts.workspacePath || undefined),
         });
         if (!res.ok) {
           fail(
@@ -238,11 +260,12 @@ export function useWorkflowsState(
         }
         setOk('已保存');
       } else {
+        const targetCwd = (draft.cwd || '').trim() || opts.workspacePath || undefined;
         const res = await createWorkflow({
           name: draft.name.trim(),
           prompt: draft.prompt.trim(),
           schedule: schedGuard.schedule,
-          ...(opts.workspacePath ? { cwd: opts.workspacePath } : {}),
+          ...(targetCwd ? { cwd: targetCwd } : {}),
           enabled: true,
         });
         if (!res.ok) {

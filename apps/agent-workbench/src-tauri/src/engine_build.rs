@@ -25,6 +25,7 @@ use agent_tools::tools::kill_subagent::SubagentKillChannel;
 use agent_tools::tools::send_message::{MainAgentMessageChannel, SubagentInjectChannel};
 use agent_tools::tools::set_timer::TimerChannel;
 use agent_tools::tools::wait_subagents::SubagentWaitChannel;
+use agent_tools::WorkflowCreationChannel;
 use async_trait::async_trait;
 use conex_db::LocalDb;
 use conex_telemetry::cache::{
@@ -153,6 +154,12 @@ pub(crate) struct EngineHandle {
     /// CoreRunState::finalize_continuity_channels（main.rs 装配面），
     /// 已接线）
     continuity: Arc<ContinuityChannelBoard>,
+    /// create_workflow 工具通道（维度五 / 05 详案 §2.4 路径 A：延迟绑定
+    /// 面同 ContinuityChannelBoard 范式——装配期注入空绑定占位（工具返回
+    /// common.unsupported），main.rs setup ⑧c WorkflowCommandState 创建后
+    /// 经 [Self::workflow_creation_channel] 取走并 bind 生产转正）
+    workflow_creation_channel:
+        Arc<crate::workflow_commands::WorkflowCreationChannelBinding>,
     // T-D-13 精简：spawner 字段冗余（全仓无读取方，A8 D3）——实际
     // spawner 由 CoreRunState::finalize_subagent_spawner 自管，构造参数
     // 保留经 BuiltinToolConfig.subagent_spawner 注入 run_subagent 工具
@@ -261,6 +268,11 @@ impl EngineHandle {
         // 未绑定窗口内 resolver 恒 None（inject 返回结构化 InjectFailed）、
         // 通道返回未绑定错误，行为与装配前一致（生产装配毫秒级完成）
         let continuity = Arc::new(ContinuityChannelBoard::new());
+        // 维度五（05 详案 §2.4 路径 A）：create_workflow 工具通道延迟绑定
+        // 占位——main.rs setup ⑧c 注入 WorkflowBackend 后生产转正
+        let workflow_creation_channel = Arc::new(
+            crate::workflow_commands::WorkflowCreationChannelBinding::new(),
+        );
         let terminal_stream = Arc::new(EventStreamBroadcast::new());
         let wait_channel = Arc::new(WaitChannel::new(
             Arc::clone(&dispatch_store) as Arc<dyn WaitStore>,
@@ -321,6 +333,11 @@ impl EngineHandle {
             // 绑定；未绑定 = 通道返回结构化未绑定错误，行为与装配前一致）
             subagent_kill_channel: Some(Arc::clone(&continuity) as Arc<dyn SubagentKillChannel>),
             subagent_inject_channel: Some(Arc::clone(&continuity) as Arc<dyn SubagentInjectChannel>),
+            // 维度五（05 详案 §2.4 路径 A）：create_workflow 工具通道注入
+            // （延迟绑定，未绑定 = common.unsupported 降级）
+            workflow_creation_channel: Some(
+                Arc::clone(&workflow_creation_channel) as Arc<dyn WorkflowCreationChannel>
+            ),
             main_agent_message_channel: Some(
                 Arc::clone(&continuity) as Arc<dyn MainAgentMessageChannel>
             ),
@@ -432,6 +449,7 @@ impl EngineHandle {
             scheduler_event_sink,
             audit_sink,
             continuity,
+            workflow_creation_channel,
         }
     }
 
@@ -642,6 +660,14 @@ impl EngineHandle {
     /// main.rs 装配轮（P6 WorkflowBackend::set_registry），已接线）
     pub(crate) fn scheduler_registry(&self) -> Option<Arc<crate::sched::SchedulerRegistry>> {
         self.scheduler_registry.clone()
+    }
+
+    /// create_workflow 工具通道（维度五 / 05 详案 §2.4 路径 A；延迟绑定
+    /// 面——main.rs setup ⑧c WorkflowCommandState 创建后 bind 生产转正）
+    pub(crate) fn workflow_creation_channel(
+        &self,
+    ) -> Arc<crate::workflow_commands::WorkflowCreationChannelBinding> {
+        Arc::clone(&self.workflow_creation_channel)
     }
 
     /// 定时器事件缓冲（T-CF-06 装配产物；P4 drain 转发路径的入口——

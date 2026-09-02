@@ -278,8 +278,8 @@ mod tests {
         }
         assert!(!out.has("run_subagent"), "名单外的 run_subagent 必须剔除");
         // 原注册表不受影响（非破坏性裁剪）
-        // 注册面 →33（W4-R block_set_attr）
-        assert_eq!(reg.len(), 33);
+        // 注册面 →34（W4-R block_set_attr + 维度五 create_workflow）
+        assert_eq!(reg.len(), 34);
         assert!(reg.has("run_subagent"));
     }
 
@@ -301,7 +301,7 @@ mod tests {
         assert!(empty.is_empty());
         // 原注册表不受影响（注册面 33 = W4-F + W4-R block_set_attr + D4
         // kill_subagent/send_message 后）
-        assert_eq!(reg.len(), 33);
+        assert_eq!(reg.len(), 34);
     }
 
     /// 六类型各自工具面：analysis/organization 只读、design/review 只读 +
@@ -359,8 +359,8 @@ mod tests {
             );
             assert!(!out.has("write_file"));
         }
-        // 原注册表不受影响（非破坏性裁剪；注册面 33 = W4-R block_set_attr 后）
-        assert_eq!(reg.len(), 33);
+        // 原注册表不受影响（非破坏性裁剪；注册面 34 = W4-R block_set_attr + 维度五 create_workflow 后）
+        assert_eq!(reg.len(), 34);
         assert!(reg.has("write_file"));
         // W4-B/F/R 写工具不得进只读 / design 面（design 仅 + diff_file）
         for tt in ["analysis", "design"] {
@@ -441,9 +441,9 @@ mod tests {
         assert!(impl_reg.has("shell_command"));
         assert!(impl_reg.has("run_subagent"));
         // 原注册表不受影响（非破坏性裁剪）
-        // 33 内置（含 W4-R block_set_attr + D4 kill_subagent/
-        // send_message）+ 4 browser_* 假工具
-        assert_eq!(reg.len(), 37);
+        // 34 内置（含 W4-R block_set_attr + D4 kill_subagent/
+        // send_message + 维度五 create_workflow）+ 4 browser_* 假工具
+        assert_eq!(reg.len(), 38);
         assert!(reg.has("browser_navigate"));
     }
 

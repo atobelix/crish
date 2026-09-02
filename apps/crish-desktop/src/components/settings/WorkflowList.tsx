@@ -162,6 +162,7 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                   <div className={styles.schedItemMeta}>
                     {scheduleLabel(w.schedule)}
                     {paused ? ` · ${workflowEnabledLabel(false)}` : ''}
+                    {w.cwd ? ` · 项目: ${w.cwd.split(/[\\/]/).filter(Boolean).pop() || w.cwd}` : ''}
                   </div>
                 </div>
                 <div className={styles.schedItemActions} role="group" aria-label={`${w.name} 操作`}>
