@@ -275,7 +275,7 @@ export {
   collapseActiveTabRightDock,
 } from './workspace-shell';
 
-export type { TabSurface } from './workspace-shell';
+export type { SessionTab } from './workspace-shell';
 
 // ── streaming 热缓冲读面（view model 装配只经本读面；写仍走 streamingStore actions）─
 

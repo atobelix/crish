@@ -10,7 +10,7 @@ import {
   buildInspectorAiSnippet,
   buildInspectorElementLabel,
   hasInspectorComputedStyles,
-  legacyToSelectPayload,
+  convertInspectedElementPayload,
 } from './previewCardLib';
 import { enableInspector, subscribeToInspector } from './previewHostBridge';
 import {
@@ -162,7 +162,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
         navigate(event.data.href);
         return;
       }
-      const payload = legacyToSelectPayload(
+      const payload = convertInspectedElementPayload(
         parseInspectedElementPayload(event.data)
       );
       if (!payload) return;

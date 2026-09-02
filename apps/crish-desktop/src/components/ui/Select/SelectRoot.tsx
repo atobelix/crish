@@ -18,7 +18,6 @@ import type {
   RegisteredItemData,
 } from './types';
 import { extractItemsFromChildren } from './internal/extractChildrenItems';
-import styles from './SelectContent.module.css';
 
 export const SelectContext = createContext<SelectContextValue | null>(null);
 
@@ -44,7 +43,6 @@ export function SelectRoot({
   clearable = false,
   disabled = false,
   error,
-  label,
   id,
   className,
   align = 'start',
@@ -264,9 +262,11 @@ export function SelectRoot({
       <SelectTrigger className={className}>
         <SelectValue placeholder={placeholder}>
           {currentSelectedOption ? (
-            <span className={styles.selectedValue}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
               {currentSelectedOption.icon && (
-                <span className={styles.itemIcon}>{currentSelectedOption.icon}</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                  {currentSelectedOption.icon}
+                </span>
               )}
               <span>{currentSelectedOption.label}</span>
             </span>
@@ -289,23 +289,9 @@ export function SelectRoot({
     </>
   );
 
-  const wrapped = (
+  return (
     <SelectContext.Provider value={contextValue}>
-      {label || error ? (
-        <div className={styles.wrapper}>
-          {label && (
-            <label className={styles.label} htmlFor={triggerId}>
-              {label}
-            </label>
-          )}
-          {content}
-          {error && <p className={styles.errorText}>{error}</p>}
-        </div>
-      ) : (
-        content
-      )}
+      {content}
     </SelectContext.Provider>
   );
-
-  return wrapped;
 }

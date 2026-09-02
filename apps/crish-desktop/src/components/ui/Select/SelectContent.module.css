@@ -267,45 +267,9 @@
 /* 分割线 */
 .separator {
   height: 0;
-  min-height: 0;
-  border: none;
-  border-top: 1px solid var(--border-subtle);
   margin: 3px 6px;
   flex-shrink: 0;
   padding: 0;
-}
-
-/* 表单域包装 */
-.wrapper,
-.legacyWrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-}
-
-.label,
-.legacyLabel {
-  font-size: var(--font-size-xs, 12px);
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.errorText,
-.legacyErrorText {
-  font-size: var(--font-size-xs, 11px);
-  color: var(--color-error, hsl(0 84% 60%));
-  margin: 2px 0 0 0;
-}
-
-.selectedValue,
-.legacySelectedValue {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* 节能与减弱动画 */

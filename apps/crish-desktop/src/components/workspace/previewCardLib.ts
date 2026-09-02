@@ -183,10 +183,10 @@ export function hasInspectorComputedStyles(
 }
 
 /**
- * 将旧协议 InspectedElementPayload 收敛为新契约 INSPECT_SELECT 载荷
- * （兼容 previewDomInspector 运行时 crish:dom-inspected 上报）。
+ * 将 InspectedElementPayload 收敛为 INSPECT_SELECT 载荷
+ * （承接 previewDomInspector 运行时 crish:dom-inspected 上报）。
  */
-export function legacyToSelectPayload(
+export function convertInspectedElementPayload(
   p: ReturnType<typeof parseInspectedElementPayload>
 ): InspectSelectPayload | null {
   if (!p) return null;

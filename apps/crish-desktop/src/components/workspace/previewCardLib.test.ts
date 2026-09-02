@@ -12,7 +12,7 @@ import {
   buildInspectorAiSnippet,
   buildInspectorElementLabel,
   hasInspectorComputedStyles,
-  legacyToSelectPayload,
+  convertInspectedElementPayload,
 } from './previewCardLib';
 
 describe('previewCardLib 拾取辅助工具', () => {
@@ -81,9 +81,9 @@ describe('previewCardLib 拾取辅助工具', () => {
     });
   });
 
-  describe('legacyToSelectPayload', () => {
-    it('将旧协议 payload 收敛为新契约字段', () => {
-      const legacy = {
+  describe('convertInspectedElementPayload', () => {
+    it('将 InspectedElementPayload 收敛为规范载荷字段', () => {
+      const input = {
         tagName: 'button',
         id: 'btn-1',
         className: 'btn primary',
@@ -94,7 +94,7 @@ describe('previewCardLib 拾取辅助工具', () => {
         rect: { x: 1, y: 2, width: 80, height: 30, top: 2, left: 1 },
         attributes: { id: 'btn-1' },
       };
-      const out = legacyToSelectPayload(legacy as never);
+      const out = convertInspectedElementPayload(input as never);
       expect(out).not.toBeNull();
       expect(out?.tagName).toBe('button');
       expect(out?.classes).toEqual(['btn', 'primary']);
@@ -111,7 +111,7 @@ describe('previewCardLib 拾取辅助工具', () => {
     });
 
     it('null 输入返回 null', () => {
-      expect(legacyToSelectPayload(null)).toBeNull();
+      expect(convertInspectedElementPayload(null)).toBeNull();
     });
   });
 });

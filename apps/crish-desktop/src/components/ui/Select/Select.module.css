@@ -372,35 +372,6 @@
   padding: 0;
 }
 
-/* Legacy 兼容包装 */
-.legacyWrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-}
-
-.legacyLabel {
-  font-size: var(--font-size-xs, 12px);
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.legacyErrorText {
-  font-size: var(--font-size-xs, 11px);
-  color: var(--color-error, hsl(0 84% 60%));
-  margin: 2px 0 0 0;
-}
-
-.legacySelectedValue {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* 节能与减弱动画 */
 @media (prefers-reduced-motion: reduce) {
   .content {

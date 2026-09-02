@@ -33,16 +33,12 @@ export interface SelectRootProps {
   clearable?: boolean;
   /** 是否禁用 */
   disabled?: boolean;
-  /** 复合子节点，或传 options 开启适配器模式 */
+  /** 复合子节点，或传 options 开启快捷单组件声明 */
   children?: React.ReactNode;
   /** 快捷 options 模式（可选） */
   options?: SelectOption[];
   /** 快捷 placeholder 模式（可选） */
   placeholder?: string;
-  /** 快捷 label 模式（可选） */
-  label?: React.ReactNode;
-  /** 快捷 error 模式（可选） */
-  error?: string;
   /** 快捷 id（可选） */
   id?: string;
   /** 快捷 className（可选） */

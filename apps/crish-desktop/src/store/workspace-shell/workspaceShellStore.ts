@@ -66,7 +66,7 @@ function sessionFromStore(sessionId: string) {
   );
 }
 
-function resolveTabSurfaceTitle(sessionId: string, title?: string): string {
+function resolveSessionTabTitle(sessionId: string, title?: string): string {
   return resolveChromeSessionTitle(sessionFromStore(sessionId), title);
 }
 
@@ -119,7 +119,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     const root = useLayoutTreeStore.getState().tree.root;
     for (const tab of scanRealSessionTabs(root)) {
       if (overrides && overrides[tab.sessionId] === undefined) continue;
-      const resolved = resolveTabSurfaceTitle(
+      const resolved = resolveSessionTabTitle(
         tab.sessionId,
         overrides?.[tab.sessionId]
       );
@@ -139,7 +139,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     const sid = (sessionId || '').trim();
     if (!sid || isPendingDraft(sid)) return;
 
-    const title = resolveTabSurfaceTitle(sid, opts?.title);
+    const title = resolveSessionTabTitle(sid, opts?.title);
     const workspaceKey =
       canonicalSessionFolder(opts?.workspaceKey) ||
       sessionFromStore(sid)?.folder ||

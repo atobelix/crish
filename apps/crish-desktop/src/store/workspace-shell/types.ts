@@ -27,9 +27,6 @@ export interface SessionTab {
   dock: RightToolDockState;
 }
 
-/** @deprecated 使用 SessionTab；维 07 删除别名 */
-export type TabSurface = SessionTab;
-
 export interface WorkspaceShellState {
   /** 冷启动门闩：hydrate / migrate 完成前 UI 不画多叶 */
   shellReady: boolean;
