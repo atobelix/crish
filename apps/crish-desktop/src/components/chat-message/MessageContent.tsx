@@ -40,22 +40,6 @@ const _IMAGE_TAIL_WINDOW = 256;
 /** 流式区图片上限（与 extractImageRefs 的 8 张上限对齐） */
 const STREAM_IMAGE_MAX = 8;
 
-const ErrorMessageBanner: React.FC<{
-  errorDetail?: SessionMessage['errorDetail'];
-  className?: string;
-}> = ({ errorDetail, className }) => (
-  <div
-    className={`${styles.timelineText} ${styles.errorBannerWrapper} ${className || ''}`.trim()}
-  >
-    <div className={styles.errorBanner}>
-      <AlertCircle size={13} className={styles.errorBannerIcon} />
-      <span className={styles.errorBannerText}>
-        {errorDetail?.message || '服务暂时不可用，请检查网络或后端配置'}
-      </span>
-    </div>
-  </div>
-);
-
 /**
  * Timeline 主体（08-detail D6/T1.5）：思考链 + 工具卡 + 稳定文本块。
  * memo 化 + 流式期间签名缓存命中（timeline 引用稳定）→ 纯文本帧零重渲染；
@@ -298,22 +282,17 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     if (!timeline.length) {
       if (msg.status === 'error') {
         const fallback = stripThoughtPlaceholders(displayMsg.text || '');
+        if (!fallback.trim()) return null;
         return (
           <div className={className}>
-            {fallback.trim() && (
-              <div className={styles.timelineText}>
-                <StreamingMarkdownView
-                  text={fallback}
-                  isStreaming={false}
-                  priority={Priority.High}
-                  messageId={msg.id}
-                />
-              </div>
-            )}
-            <ErrorMessageBanner
-              errorDetail={msg.errorDetail}
-              className={className}
-            />
+            <div className={styles.timelineText}>
+              <StreamingMarkdownView
+                text={fallback}
+                isStreaming={false}
+                priority={Priority.High}
+                messageId={msg.id}
+              />
+            </div>
           </div>
         );
       }
@@ -377,9 +356,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           isThinkingMsg={isThinkingMsg}
           hideThinkingBlock={hideThinkingBlock}
         />
-        {msg.status === 'error' && (
-          <ErrorMessageBanner errorDetail={msg.errorDetail} />
-        )}
       </div>
     );
   }

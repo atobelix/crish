@@ -15,11 +15,9 @@ export interface GeneralSectionProps {
   generalWindowEnabled: boolean;
   generalRenderRange: SessionListWindowRange;
   generalListRef: React.RefObject<HTMLUListElement | null>;
-  showAllGeneralSessions: boolean;
   onToggleGeneral: () => void;
   onSortBtnClick: (e: React.MouseEvent) => void;
   sortTriggerRef?: React.RefObject<HTMLButtonElement | null>;
-  onToggleShowAllGeneralSessions: () => void;
   /** Kept for SidebarSessionList API; reorder is pointer drop-only via SessionRow. */
   onMoveSessionRealtime: (
     sessionId: string,
@@ -36,19 +34,13 @@ export function GeneralSection({
   generalWindowEnabled,
   generalRenderRange,
   generalListRef,
-  showAllGeneralSessions,
   onToggleGeneral,
   onSortBtnClick,
   sortTriggerRef,
-  onToggleShowAllGeneralSessions,
   onMoveSessionRealtime: _onMoveSessionRealtime,
   renderSessionItem,
 }: GeneralSectionProps) {
   void _onMoveSessionRealtime;
-  const visibleSessions =
-    showAllGeneralSessions || generalSessions.length <= 10
-      ? generalSessions
-      : generalSessions.slice(0, 10);
 
   return (
     <section className={styles.section} aria-label="对话">
@@ -122,69 +114,29 @@ export function GeneralSection({
           data-folder-name={GENERAL_FOLDER}
         >
           {generalSessions.length > 0 ? (
-            <>
-              {generalWindowEnabled ? (
-                <WindowedSessionUl
-                  sessions={visibleSessions}
-                  range={generalRenderRange}
-                  listRef={generalListRef}
-                  className={`${styles.pinnedList} ${styles.folderSessions}`}
-                  renderRow={renderSessionItem}
-                  ariaLabel="对话列表"
-                />
-              ) : (
-                <ul
-                  className={`${styles.pinnedList} ${styles.folderSessions}`}
-                  role="tree"
-                  aria-label="对话列表"
-                  data-windowed="0"
-                  data-window-count={generalSessions.length}
-                  data-drop-zone="general"
-                  data-folder-name={GENERAL_FOLDER}
-                >
-                  {visibleSessions.map((s) => renderSessionItem(s))}
-                </ul>
-              )}
-              {generalSessions.length > 10 && !showAllGeneralSessions && (
-                <div
-                  className={styles.accordionWrapper}
-                  data-expanded={showAllGeneralSessions ? 'true' : 'false'}
-                >
-                  <div className={styles.accordionInner}>
-                    <ul
-                      className={`${styles.pinnedList} ${styles.folderSessions}`}
-                      style={{ paddingTop: 3 }}
-                    >
-                      {generalSessions
-                        .slice(10)
-                        .map((s) => renderSessionItem(s))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-              {generalSessions.length > 10 && (
-                <div
-                  style={{
-                    paddingLeft: 10,
-                    paddingRight: 8,
-                    marginTop: 4,
-                  }}
-                >
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={`${styles.sessionItem} ${styles.sessionItemFoldBtn}`}
-                    style={{ color: 'var(--text-tertiary)' }}
-                    onClick={onToggleShowAllGeneralSessions}
-                  >
-                    {showAllGeneralSessions
-                      ? '收起'
-                      : `查看全部 (${generalSessions.length})`}
-                  </Button>
-                </div>
-              )}
-            </>
+            generalWindowEnabled ? (
+              <WindowedSessionUl
+                sessions={generalSessions}
+                range={generalRenderRange}
+                listRef={generalListRef}
+                className={`${styles.pinnedList} ${styles.folderSessions}`}
+                renderRow={renderSessionItem}
+                ariaLabel="对话列表"
+              />
+            ) : (
+              <ul
+                ref={generalListRef}
+                className={`${styles.pinnedList} ${styles.folderSessions}`}
+                role="tree"
+                aria-label="对话列表"
+                data-windowed="0"
+                data-window-count={generalSessions.length}
+                data-drop-zone="general"
+                data-folder-name={GENERAL_FOLDER}
+              >
+                {generalSessions.map((s) => renderSessionItem(s))}
+              </ul>
+            )
           ) : (
             <div
               className={`${styles.emptyHint} ${styles.subtle}`}

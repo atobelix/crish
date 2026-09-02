@@ -48,15 +48,11 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
     sessionListRef,
     generalListRef,
     dragOverPinned,
-    expandedProjectFolders,
-    showAllGeneralSessions,
     isSearchEmpty,
     isAllEmpty,
     showProjectsAndGeneral,
     nowTick,
     renderSessionItem,
-    toggleExpandedProjectFolder,
-    toggleShowAllGeneralSessions,
     listClassName,
   } = useSidebarSessionList(props);
 
@@ -125,14 +121,12 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
               collapsedProjects,
               projectsSectionCollapsed,
               byProjectId,
-              expandedProjectFolders,
             }}
             actions={{
               onToggleProjectsSection,
               onToggleProjectCollapsed,
               onOpenProject,
               onMoveSessionRealtime,
-              onToggleExpandedProjectFolder: toggleExpandedProjectFolder,
               renderSessionItem,
             }}
           />
@@ -145,11 +139,9 @@ const SidebarSessionListInner: React.FC<SidebarSessionListProps> = (props) => {
             generalWindowEnabled={generalWindowEnabled}
             generalRenderRange={generalRenderRange}
             generalListRef={generalListRef}
-            showAllGeneralSessions={showAllGeneralSessions}
             onToggleGeneral={onToggleGeneral}
             onSortBtnClick={onSortBtnClick}
             sortTriggerRef={sortTriggerRef}
-            onToggleShowAllGeneralSessions={toggleShowAllGeneralSessions}
             onMoveSessionRealtime={onMoveSessionRealtime}
             renderSessionItem={renderSessionItem}
           />

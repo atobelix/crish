@@ -34,10 +34,6 @@ export function useSessionGrouping({
   pinnedCollapsed: boolean;
   onTogglePinned: () => void;
 }) {
-  const [expandedProjectFolders, setExpandedProjectFolders] = useState<
-    Record<string, boolean>
-  >({});
-
   /** sessions[] index — pin stack free-reorder is stored here via moveSessionRealtime. */
   const sessionOrderIndex = useMemo(() => {
     const m = new Map<string, number>();
@@ -141,15 +137,9 @@ export function useSessionGrouping({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 原始依赖面保留
   }, [isDragging]);
 
-  const toggleExpandedProjectFolder = useCallback((id: string) => {
-    setExpandedProjectFolders((prev) => ({ ...prev, [id]: !prev[id] }));
-  }, []);
-
   return {
     pinnedSessions,
     byProjectId,
     generalSessions,
-    expandedProjectFolders,
-    toggleExpandedProjectFolder,
   };
 }

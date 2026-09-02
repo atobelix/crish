@@ -6,6 +6,7 @@ import { onUiEvent } from '../../api/uiEvents';
 import { generateMessageId } from '../../utils/generateMessageId';
 import { getTransport } from '../../api/transport';
 import { backfillFromBoundaryText } from '../../hooks/chat-stream/slashSendDraftManager';
+import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
 
 export interface UseChatHandlersOptions {
   wsId: string;
@@ -149,6 +150,10 @@ export function useChatHandlers({
       handleStopGeneration();
       const session = getCompositionRoot().session.getState();
       session.withdrawMessage(wsId, activeSessionId, assistantMsgId);
+
+      // 重试时原子清空瞬态错误提示
+      useEphemeralChatStore.getState().clearEphemeralStatus(activeSessionId);
+
       const msgs = session.sessionsById[activeSessionId]?.messages || [];
       let userMsgId = msgs.findLast((m) => m.sender === 'user')?.id;
       if (!userMsgId) {

@@ -299,10 +299,6 @@
   /* ... */
 }
 
-.sessionItemFoldBtn {
-  font-size: var(--font-size-sm);
-}
-
 .sessionItem:hover {
   background: var(--sidebar-hover);
   color: var(--text-primary);
@@ -621,18 +617,7 @@
 :global([data-sidebar-collapsed='1']) .sessionActionsBtn,
 :global([data-sidebar-collapsed='1']) .branchBadge,
 :global([data-sidebar-collapsed='1']) .emptyHint,
-:global([data-sidebar-collapsed='1']) .sessionItemFoldBtn,
-:global([data-sidebar-collapsed='true']) .sectionLabel > :not(svg),
-:global([data-sidebar-collapsed='true']) .folderHeader > :not(svg),
-:global([data-sidebar-collapsed='true']) .folderName,
-:global([data-sidebar-collapsed='true']) .folderCount,
-:global([data-sidebar-collapsed='true']) .sessionText,
-:global([data-sidebar-collapsed='true']) .sessionSearchSnippet,
-:global([data-sidebar-collapsed='true']) .sessionTime,
-:global([data-sidebar-collapsed='true']) .sessionActionsBtn,
-:global([data-sidebar-collapsed='true']) .branchBadge,
-:global([data-sidebar-collapsed='true']) .emptyHint,
-:global([data-sidebar-collapsed='true']) .sessionItemFoldBtn {
+:global([data-sidebar-collapsed='true']) .emptyHint {
   display: none;
 }
 

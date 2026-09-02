@@ -1,0 +1,113 @@
+/* EphemeralStatusSlot.module.css — 灰色进行时错误态插槽样式 (遵循 AGENTS.md §13 & §14) */
+
+.ephemeralSlot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  max-width: min(var(--chat-col-max, 760px), 100%);
+  margin: var(--space-2, 8px) auto var(--space-4, 16px);
+  padding: 6px 12px;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  border-radius: var(--radius-md, 8px);
+  border: var(--hairline-width, 1px) solid var(--border-subtle, var(--border-color));
+  box-shadow: none;
+  font-family: inherit;
+  animation: ephemeral-slot-fadein 180ms ease-out forwards;
+}
+
+@keyframes ephemeral-slot-fadein {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.statusContent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.liveDot {
+  width: 5px;
+  height: 5px;
+  min-width: 5px;
+  min-height: 5px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-tertiary) 20%, transparent);
+  animation: ephemeral-dot-pulse 1.6s ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes ephemeral-dot-pulse {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-tertiary) 30%, transparent);
+  }
+}
+
+.statusText {
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  word-break: break-word;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.retryButton {
+  height: 22px;
+  padding: 0 8px;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  border: none;
+  transition: all var(--transition-fast, 120ms ease);
+}
+
+.retryButton:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+.dismissButton {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.dismissButton:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}

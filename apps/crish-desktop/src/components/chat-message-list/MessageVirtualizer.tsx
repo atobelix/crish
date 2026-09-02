@@ -14,6 +14,7 @@ import {
 } from '../../store/storeAccess';
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
+import { EphemeralStatusSlot } from './EphemeralStatusSlot';
 
 import {
   messageVirtualizerPropsEqual,
@@ -300,6 +301,19 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
           }}
           aria-hidden
         />
+
+        {activeSessionId && (
+          <EphemeralStatusSlot
+            sessionId={activeSessionId}
+            onRetry={
+              lastAssistantId
+                ? () => {
+                    handleRegenerateRow(lastAssistantId);
+                  }
+                : undefined
+            }
+          />
+        )}
         </div>
       </div>
       <FlowScrubber

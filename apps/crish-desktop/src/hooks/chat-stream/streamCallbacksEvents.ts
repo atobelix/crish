@@ -23,6 +23,7 @@ import {
   sanitizeToolDisplayOutput,
 } from '../../api/toolFeedback';
 import { publishToolDiffsLazy } from './helpers';
+import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
 import {
   buildMessageIndex,
   resolveToolIdentity,
@@ -280,45 +281,37 @@ export function handleRunError(opts: {
     kind: kind || 'error',
     detail: detail || undefined,
   };
-  let hadNetworkError = false;
-  if (surface === 'persistent') {
-    // network/恢复类：仅输入框上方持久条；不进 toast、不写气泡
-    hadNetworkError = true;
-    pushRunNotice({ ...notice, persistent: true });
-  } else if (surface === 'banner-toast') {
-    // 可行动错误（blocked/auth/no_key/no_project）：横幅 + 一次性 toast
-    pushRunNotice(notice, 14000);
-    toast.show(message);
-  } else if (surface === 'banner') {
-    // 无正文的失败：仅横幅（14s TTL），无 toast
-    pushRunNotice(notice, 14000);
-  }
+  let hadNetworkError = kind === 'network';
+  const st = getCompositionRoot().session.getState();
+
   if (asstErr) {
-    const st = getCompositionRoot().session.getState();
-    if (surface === 'persistent') {
-      // network 类不写气泡错误卡；无正文时 withdraw 占位（保持现状）
-      if (!hadText) {
-        st.withdrawMessage(wsId, sid, assistantMsgId);
-        clearStream(sid, assistantMsgId);
-      }
-    } else if (!hadText) {
+    if (!hadText) {
+      // 零 Token 失败：彻底撤回预置的空白 assistant 消息，不留幽灵占位
       st.withdrawMessage(wsId, sid, assistantMsgId);
       clearStream(sid, assistantMsgId);
     } else {
-      st.setSessionMessageStatus(sid, assistantMsgId, 'error', undefined, {
-        errorDetail: {
-          message: message || '服务暂时不可用，请检查网络或后端配置',
-          kind: kind || 'stream-error',
-          technical:
-            typeof detail === 'string'
-              ? detail
-              : detail
-                ? JSON.stringify(detail)
-                : undefined,
-        },
-      });
+      // 部分 Token 中断：保留真实生成的片段，标记完成，绝不附加 errorDetail 污染气泡
+      st.setSessionMessageStatus(sid, assistantMsgId, 'completed');
     }
   }
+
+  // 错误统一收敛为消息流底部的瞬态进行时状态（灰色字体、可重试、内存独占）
+  useEphemeralChatStore.getState().setEphemeralStatus(sid, {
+    id: `${kind || 'error'}:${message}`,
+    kind: (kind as any) || 'generic',
+    message: message || '服务暂时不可用，请检查网络或后端配置',
+    technicalDetail:
+      typeof detail === 'string'
+        ? detail
+        : detail
+          ? JSON.stringify(detail)
+          : undefined,
+    retryable: true,
+    timestamp: Date.now(),
+    retryContext: {
+      userMsgId: refs.streamManager?.get(sid)?.userMsgId,
+    },
+  });
   flushStreamBatchers();
   // R-11（08-detail T5.4）：error 收口补清理——先预算刷残余帧
   //（避免残余文本被 gen 守卫丢弃），再按 complete 同语义删 gen

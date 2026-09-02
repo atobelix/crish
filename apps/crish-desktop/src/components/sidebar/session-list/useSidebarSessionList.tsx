@@ -52,7 +52,6 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
 
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [renameDraft, setRenameDraft] = useState('');
-  const [showAllGeneralSessions, setShowAllGeneralSessions] = useState(false);
 
   const pinnedZoneRef = useRef<HTMLDivElement>(null);
   const sessionListRef = useRef<HTMLDivElement>(null);
@@ -166,8 +165,6 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     pinnedSessions,
     byProjectId,
     generalSessions,
-    expandedProjectFolders,
-    toggleExpandedProjectFolder,
   } = useSessionGrouping({
     sessions,
     sortedSessions,
@@ -347,10 +344,6 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     ]
   );
 
-  const toggleShowAllGeneralSessions = useCallback(() => {
-    setShowAllGeneralSessions((v) => !v);
-  }, []);
-
   const isAllEmpty = !isSearching && visibleSessions.length === 0;
   const showProjectsAndGeneral = filterType !== 'pinned';
 
@@ -369,15 +362,11 @@ export function useSidebarSessionList(props: SidebarSessionListProps) {
     generalListRef,
     dragOverPinned,
     dropIndicator,
-    expandedProjectFolders,
-    showAllGeneralSessions,
     isSearchEmpty,
     isAllEmpty,
     showProjectsAndGeneral,
     nowTick,
     renderSessionItem,
-    toggleExpandedProjectFolder,
-    toggleShowAllGeneralSessions,
     listClassName: isDragging ? styles.sidebarDragging : undefined,
   };
 }

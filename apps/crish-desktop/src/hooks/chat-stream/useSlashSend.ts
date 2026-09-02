@@ -105,6 +105,10 @@ export function useSlashSend(
       return;
     }
 
+    // 原子清空该会话的瞬态错误进行时提示（发送新对话自动自愈）
+    const { useEphemeralChatStore } = await import('../../store/ephemeralChatStore');
+    useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
+
     // 3. 多模态 Payload 与提示词组装
     const { input, displayText, finalStreamOptions } = assembleChatPayload({
       sessionId,

@@ -200,28 +200,7 @@ export async function runPreflightChecks(
         globalText: rulesLinesToText(next, '# 全局规则'),
       });
 
-      const learnSid = resolveTargetSessionId(activeSessionId, rawInput);
-      if (
-        !learnSid ||
-        !canStreamLocalSession(learnSid, !!getSessionById(learnSid))
-      ) {
-        showToast('会话不可用，规则已保存但未写入时间线');
-        return { status: 'handled' };
-      }
-      addMessage(wsId, learnSid, {
-        id: generateMessageId('user'),
-        sender: 'user',
-        text: `/learn ${ruleText}`,
-        timestamp: Date.now(),
-        status: 'completed',
-      });
-      addMessage(wsId, learnSid, {
-        id: generateMessageId('assistant'),
-        sender: 'assistant',
-        text: `已记录用户偏好：${ruleText}`,
-        timestamp: Date.now() + 1,
-        status: 'completed',
-      });
+      showToast(`已成功记住规则：${ruleText}`);
     } catch (e) {
       showToast(
         `记住规则失败：${e instanceof Error ? e.message : String(e)}`
