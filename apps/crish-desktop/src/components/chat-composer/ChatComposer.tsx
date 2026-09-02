@@ -132,6 +132,12 @@ export type ChatComposerProps = {
   /** 右侧统计/语音按键自定义或显示开关 */
   voiceStatsButton?: React.ReactNode;
   showVoiceStatsButton?: boolean;
+  /** 草稿撤销：当前会话是否存在可撤销的外部模板覆盖（sessionDraftManager） */
+  hasUndo?: boolean;
+  /** 草稿撤销动作（原位无损恢复） */
+  handleUndoDraft?: () => void;
+  /** 定向注入信号 tick，驱动编辑器占位符聚焦 */
+  draftInjectionTick?: number;
 };
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -171,6 +177,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   planProgressProps,
   voiceStatsButton,
   showVoiceStatsButton = false,
+  hasUndo,
+  handleUndoDraft,
+  draftInjectionTick,
 }) => {
   const plusMenuId = useId();
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -310,6 +319,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       hideSendControls: true,
       sendApiRef,
       className: styles.fieldInGrid,
+      hasUndo,
+      handleUndoDraft,
+      draftInjectionTick,
     }),
     [
       chatInput,
@@ -323,6 +335,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       onStop,
       onForceStop,
       onPasteImage,
+      hasUndo,
+      handleUndoDraft,
+      draftInjectionTick,
     ]
   );
 

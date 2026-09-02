@@ -14,7 +14,8 @@ import {
   type WorkflowDefinition,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
-import { setComposerSeed } from '../../api/composerSeed';
+import { useSessionStore } from '../../store/sessionStore';
+import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { closeSettings } from '../../store/storeAccess';
 import styles from './SettingsScheduleTab.module.css';
 import { Button, SegmentedControl } from '../ui';
@@ -101,15 +102,24 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
     setWfDraft(draftFromWorkflow(w));
   };
 
-  /** 关闭设置，在对话里用 AI 写定时任务名称与提示词 */
+  /** 关闭设置，在对话里用 AI 写定时任务名称与提示词（定向注入当前会话草稿） */
   const handleAiCreateSchedule = () => {
-    setComposerSeed(
-      [
-        '请帮我设计一个 Crish 定时任务。',
-        '输出：任务名称、触发方式（手动 / 每日时刻 / 间隔分钟）、完整提示词（可直接粘贴使用）。',
-        '我想用它来：',
-      ].join('\n')
-    );
+    // 以 store 当前活跃会话定向（返回对话时即该会话）；无活跃会话则中止注入
+    const targetSid = useSessionStore.getState().activeSessionId;
+    if (targetSid) {
+      sessionDraftManager.injectSeed({
+        targetSessionId: targetSid,
+        content: [
+          '请帮我设计一个 Crish 定时任务。',
+          '输出：任务名称、触发方式（手动 / 每日时刻 / 间隔分钟）、完整提示词（可直接粘贴使用）。',
+          '我想用它来：',
+        ].join('\n'),
+        mode: 'safe_seed',
+        metadata: { source: 'settings_tab', title: '定时任务对话创建' },
+      });
+    } else {
+      console.warn('[SettingsScheduleTab] 无活跃会话，跳过草稿注入');
+    }
     setCreateMode('none');
     closeSettings();
     setTimeout(() => emitUiEvent('open-chat'), 100);

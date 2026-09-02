@@ -1,0 +1,99 @@
+/**
+ * apps/crish-desktop/src/components/chat-composer/DraftUndoToast.module.css
+ * 模板注入撤销悬浮条视觉：
+ * - 半透浮层卡片，柔和阴影（无重阴影，Shadow ≤ 12%/5% 与 PermissionModeMenu 同源）；
+ * - 边框 / 焦点态遵循铁律 §13：相对基线的灰色加深混入 ≤ 10%（常规 6%）；
+ * - 颜色一律 HSL/HSLA 或 color-mix 派生，不散落 rgba。
+ */
+
+.undoToast {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(460px, calc(100vw - 24px));
+  padding: 6px 8px 6px 12px;
+  border: var(--hairline-width, 1px) solid
+    color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 94%, var(--text-primary) 6%);
+  border-radius: 10px;
+  background: hsl(0 0% 100% / 0.96);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.4;
+  box-shadow:
+    0 16px 40px -8px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 12%, transparent),
+    0 4px 16px -2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 5%, transparent);
+  backdrop-filter: blur(6px);
+  animation: undoToastIn 160ms ease-out;
+}
+
+@keyframes undoToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toastText {
+  color: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.undoBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: none;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent-color, hsl(160 60% 40%)) 10%, transparent);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.undoBtn:hover {
+  background: color-mix(in srgb, var(--accent-color, hsl(160 60% 40%)) 16%, transparent);
+}
+
+.undoBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-primary) 62%, transparent);
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.closeBtn:hover {
+  background: color-mix(in srgb, var(--border-color) 60%, transparent);
+  color: var(--text-primary);
+}
+
+.closeBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}

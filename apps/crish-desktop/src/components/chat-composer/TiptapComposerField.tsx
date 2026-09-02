@@ -25,6 +25,7 @@ import type {
   MentionCandidate,
 } from './composerTypes';
 import { slashMenuPick } from '../../api/resolveSlashCommand';
+import { DraftUndoToast } from './DraftUndoToast';
 import {
   COMPOSER_DENSE_LINE_HEIGHT,
   COMPOSER_LINE_HEIGHT,
@@ -125,6 +126,9 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   emptyKind,
   hideSendControls = false,
   sendApiRef,
+  hasUndo,
+  handleUndoDraft,
+  draftInjectionTick,
 }) => {
   const lines =
     typeof maxLines === 'number' && Number.isFinite(maxLines)
@@ -239,6 +243,12 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
     slashPickRef.current = onSlashMenuPick;
   }, [onSlashMenuPick]);
 
+  // ── 定向注入响应：草稿模板命中活跃会话后聚焦并全选首个占位符 ───────────────
+  useEffect(() => {
+    if (!draftInjectionTick) return;
+    fieldRef.current?.focusPlaceholder();
+  }, [draftInjectionTick]);
+
   const slashExtraItems = useMemo(() => {
     const base = baseSlashCommands ?? HOST_SYSTEM_SLASH;
     return [...base, ...(skillSlashCommands ?? [])].map<SlashCommandItem>(
@@ -283,6 +293,11 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
         } as React.CSSProperties
       }
     >
+      {/* 草稿撤销浮条：外部模板覆盖后提示原位恢复（详案 03 §2.3） */}
+      <DraftUndoToast
+        show={Boolean(hasUndo)}
+        onUndo={() => handleUndoDraft?.()}
+      />
       {leading}
       <TiptapEditorField
         ref={fieldRef}

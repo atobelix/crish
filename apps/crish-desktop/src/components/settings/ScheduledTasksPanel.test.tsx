@@ -101,7 +101,7 @@ describe('ScheduledTasksPanel', () => {
     const addBtn = screen.getAllByText('新建')[0];
     fireEvent.click(addBtn);
 
-    const manualOption = await screen.findByText('手动填写表单');
+    const manualOption = await screen.findByText('手动创建');
     fireEvent.click(manualOption);
 
     expect(screen.getByPlaceholderText('例如：每日代码体检')).toBeTruthy();
@@ -117,7 +117,7 @@ describe('ScheduledTasksPanel', () => {
     expect(document.querySelector('fieldset')).toBeNull();
 
     fireEvent.click(toggle);
-    const manualOption = await screen.findByText('手动填写表单');
+    const manualOption = await screen.findByText('手动创建');
     fireEvent.click(manualOption);
 
     expect(screen.getByRole('button', { name: '收起' })).toHaveAttribute(

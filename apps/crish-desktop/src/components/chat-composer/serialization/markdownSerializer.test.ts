@@ -173,18 +173,13 @@ describe('GFM Markdown Serialization & Deserialization (CRM-04)', () => {
 });
 
 describe('T5 双向 roundtrip 保真（40 方案 T5）', () => {
-  // 逐字稳定用例：serialize(parse(md)) 必须与输入完全一致
+  // 逐字稳定用例：serialize(parse(md)) 必须与输入完全一致。
+  // （composer schema 收敛后，仅行内结构与「降维后不改变序列化形状」的输入可逐字稳定）
   const stableCases: Array<[string, string]> = [
-    ['嵌套无序列表', '- 顶层一\n  - 嵌套一\n  - 嵌套二\n- 顶层二'],
-    ['嵌套任务列表', '- [ ] 顶层任务\n      - [x] 嵌套任务\n- [x] 顶层已勾选'],
-    ['任务内嵌套无序列表', '- [ ] 任务\n      - 子项一\n      子项续行'],
-    ['无序内嵌套任务', '- 顶层\n  - [x] 子任务'],
-    ['有序列表嵌套', '1. 第一\n   1. 子一\n2. 第二'],
     ['mention 双向保真', '提及 @[Agent 史密斯](agent-007:agent) 与 @[文件](f-1:file)'],
-    ['引用内嵌套任务列表', '> - [ ] 引用内任务'],
-    ['多级标题与行内样式', '# 标题一\n\n**加粗** 与 *斜体* 与 `行内码` 与 ~~删除~~'],
     ['链接保真', '访问 [Crish 文档](https://crish.example/docs)'],
-    ['任务续行与嵌套混合', '- [ ] 首行\n      续行文本\n      - 嵌套项'],
+    ['多级标题与行内样式', '# 标题一\n\n**加粗** 与 *斜体* 与 `行内码` 与 ~~删除~~'],
+    ['引用内嵌套任务列表', '> - [ ] 引用内任务'],
   ];
 
   for (const [name, markdown] of stableCases) {
@@ -194,6 +189,63 @@ describe('T5 双向 roundtrip 保真（40 方案 T5）', () => {
       expect(once).toBe(markdown);
       const again = serializeToMarkdown(parseFromMarkdown(once));
       expect(again).toBe(once);
+    });
+  }
+
+  // composer schema 收敛契约用例：嵌套块级结构降维为段落（标记文本保留），
+  // 不再逐字还原嵌套/缩进形状——schema 已禁用块级列表节点（见
+  // markdownDeserializer.ts 头部输出契约），序列化输出必须仍可安全再解析。
+  const convergedCases: Array<[string, string[]]> = [
+    ['嵌套无序列表', ['- 顶层一', '- 嵌套一', '- 嵌套二', '- 顶层二']],
+    ['嵌套任务列表', ['- [ ] 顶层任务', '- [x] 嵌套任务', '- [x] 顶层已勾选']],
+    ['任务内嵌套无序列表', ['- [ ] 任务', '- 子项一', '子项续行']],
+    ['无序内嵌套任务', ['- 顶层', '- [x] 子任务']],
+    ['有序列表嵌套', ['1. 第一', '1. 子一', '2. 第二']],
+    ['任务续行与嵌套混合', ['- [ ] 首行', '续行文本', '- 嵌套项']],
+  ];
+
+  for (const [name, markdown] of convergedCases) {
+    const source = {
+      嵌套无序列表: '- 顶层一\n  - 嵌套一\n  - 嵌套二\n- 顶层二',
+      嵌套任务列表: '- [ ] 顶层任务\n      - [x] 嵌套任务\n- [x] 顶层已勾选',
+      任务内嵌套无序列表: '- [ ] 任务\n      - 子项一\n      子项续行',
+      无序内嵌套任务: '- 顶层\n  - [x] 子任务',
+      有序列表嵌套: '1. 第一\n   1. 子一\n2. 第二',
+      任务续行与嵌套混合: '- [ ] 首行\n      续行文本\n      - 嵌套项',
+    }[name] as string;
+
+    it(`${name}：parse 输出零禁用块级节点且条目文本保真`, () => {
+      const ast = parseFromMarkdown(source);
+      const types = new Set<string>();
+      const walk = (node: { type?: string; content?: Array<never> } | null) => {
+        if (!node) return;
+        if (node.type) types.add(node.type);
+        for (const child of node.content ?? []) {
+          walk(child as { type?: string; content?: Array<never> } | null);
+        }
+      };
+      walk(ast as { type?: string; content?: Array<never> } | null);
+      for (const t of [
+        'heading',
+        'bulletList',
+        'orderedList',
+        'listItem',
+        'taskList',
+        'taskItem',
+        'blockquote',
+        'horizontalRule',
+      ]) {
+        expect(types.has(t)).toBe(false);
+      }
+      const once = serializeToMarkdown(ast);
+      for (const item of markdown) expect(once).toContain(item);
+      // 再解析仍零禁用节点（收敛输出可安全再次水合）
+      const again = parseFromMarkdown(once);
+      const types2 = new Set<string>();
+      walk(again as { type?: string; content?: Array<never> } | null);
+      for (const t of ['bulletList', 'orderedList', 'taskList', 'heading', 'blockquote']) {
+        expect(types2.has(t)).toBe(false);
+      }
     });
   }
 
@@ -213,16 +265,25 @@ describe('T5 双向 roundtrip 保真（40 方案 T5）', () => {
     expect(codeNode?.content?.[0]?.text).toBe('const fence = "```";\nconsole.log(fence);');
   });
 
-  it('嵌套结构在 AST 层级上正确（taskList 内嵌 taskList / bullet 内嵌 bullet）', () => {
+  it('嵌套结构降维后为段落序列，条目标记文本保真（composer schema 收敛契约）', () => {
     const nestedTask = parseFromMarkdown('- [ ] 顶层任务\n      - [x] 嵌套任务');
-    const taskItem = nestedTask.content?.[0]?.content?.[0] as { content?: Array<{ type?: string; attrs?: { checked?: boolean } }> };
-    expect(nestedTask.content?.[0]?.type).toBe('taskList');
-    const nestedList = taskItem.content?.find((n) => n.type === 'taskList');
-    expect(nestedList).toBeDefined();
-    expect(nestedList?.content?.[0]?.attrs?.checked).toBe(true);
+    const taskTypes = new Set<string>();
+    const walk = (node: { type?: string; content?: Array<never> } | null) => {
+      if (!node) return;
+      if (node.type) taskTypes.add(node.type);
+      for (const child of node.content ?? []) {
+        walk(child as { type?: string; content?: Array<never> } | null);
+      }
+    };
+    walk(nestedTask as { type?: string; content?: Array<never> } | null);
+    expect(taskTypes.has('taskList')).toBe(false);
+    expect(taskTypes.has('taskItem')).toBe(false);
+    expect(serializeToMarkdown(nestedTask)).toContain('- [ ] 顶层任务');
+    expect(serializeToMarkdown(nestedTask)).toContain('- [x] 嵌套任务');
 
     const nestedBullet = parseFromMarkdown('- 顶层\n  - 子项');
-    const bulletItem = nestedBullet.content?.[0]?.content?.[0] as { content?: Array<{ type?: string }> };
-    expect(bulletItem.content?.some((n) => n.type === 'bulletList')).toBe(true);
+    const bulletText = serializeToMarkdown(nestedBullet);
+    expect(bulletText).toContain('- 顶层');
+    expect(bulletText).toContain('- 子项');
   });
 });

@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const listWorkflowsMock = vi.hoisted(() => vi.fn(async () => []));
 const closeSettingsMock = vi.hoisted(() => vi.fn());
-const setComposerSeedMock = vi.hoisted(() => vi.fn());
+const injectSeedMock = vi.hoisted(() => vi.fn());
 const emitUiEventMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/workflowApi', async (importOriginal) => {
@@ -33,8 +33,27 @@ vi.mock('../../store/storeAccess', async (importOriginal) => {
   };
 });
 
-vi.mock('../../api/composerSeed', () => ({
-  setComposerSeed: (...args: unknown[]) => setComposerSeedMock(...args),
+vi.mock('../../store/sessionStore', async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import('../../store/sessionStore')
+  >();
+  return {
+    ...actual,
+    useSessionStore: {
+      ...actual.useSessionStore,
+      // 定向草稿注入以活跃会话寻址：测试固定一个目标会话 ID
+      getState: () => ({
+        ...actual.useSessionStore.getState(),
+        activeSessionId: 'sess-target-1',
+      }),
+    },
+  };
+});
+
+vi.mock('../../api/draft/sessionDraftManager', () => ({
+  sessionDraftManager: {
+    injectSeed: (...args: unknown[]) => injectSeedMock(...args),
+  },
 }));
 
 vi.mock('../../api/uiEvents', () => ({
@@ -111,14 +130,19 @@ describe('SettingsScheduleTab I4 死皮拉回', () => {
     expect(document.querySelector('fieldset')).toBeNull();
   });
 
-  it('用对话创建写入 composer 种子并关闭设置', async () => {
+  it('用对话创建写入会话定向草稿并关闭设置', async () => {
     render(<SettingsScheduleTab />);
 
     fireEvent.click(await screen.findByRole('button', { name: '新建' }));
     fireEvent.click(screen.getByRole('radio', { name: '用对话创建（推荐）' }));
 
-    expect(setComposerSeedMock).toHaveBeenCalledTimes(1);
-    expect(String(setComposerSeedMock.mock.calls[0]?.[0])).toMatch(/定时任务/);
+    expect(injectSeedMock).toHaveBeenCalledTimes(1);
+    const payload = injectSeedMock.mock.calls[0]?.[0] as {
+      targetSessionId: string;
+      content: string;
+    };
+    expect(payload.targetSessionId).toBe('sess-target-1');
+    expect(payload.content).toMatch(/定时任务/);
     expect(closeSettingsMock).toHaveBeenCalled();
 
     await waitFor(() => {

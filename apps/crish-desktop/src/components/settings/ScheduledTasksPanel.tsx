@@ -21,7 +21,8 @@ import {
   navigateToNewDraft,
 } from '../../store/storeAccess';
 import { useLayoutStore } from '../../store/layoutStore';
-import { setComposerSeed } from '../../api/composerSeed';
+import { useSessionStore } from '../../store/sessionStore';
+import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import styles from './ScheduledTasksPanel.module.css';
 import { Button, Tooltip, Menu } from '../ui';
 import type { SelectOptionItem } from '../ui';
@@ -89,10 +90,16 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
   };
 
   const openRunSession = (run: WorkflowRunEntry) => {
-    const wfName = workflows.find((w) => w.id === run.workflowId)?.name || '任务';
+    const matchedWf = workflows.find((w) => w.id === run.workflowId);
+    const wfName = matchedWf?.name || '定时任务';
     const targetSessionId =
       run.sessionId || `sched-${run.workflowId}-${run.runId || Date.now()}`;
-    ensureScheduledSession(targetSessionId, wfName, { activate: true });
+    ensureScheduledSession(targetSessionId, wfName, {
+      activate: true,
+      prompt: matchedWf?.prompt || '按计划执行定时任务',
+      status: run.status,
+      startedAt: run.startedAt ? new Date(run.startedAt).getTime() : Date.now(),
+    });
     navigateToChatSession(targetSessionId, { title: `[定时] ${wfName}` });
     onBackToChat?.();
   };
@@ -106,13 +113,48 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
   };
 
   const handleCreateInChat = () => {
-    const promptTemplate =
-      '请帮我创建一个定时任务：\n- 任务名称：\n- 执行周期：（例如 每天 09:00 / 每 30 分钟 / 0 9 * * *）\n- 任务指令：（描述希望 Agent 定时执行的任务）';
-    setComposerSeed(promptTemplate);
+    const promptTemplate = [
+      '/schedule 请帮我创建一个定时任务：',
+      '- 任务目标：[描述希望定时执行的任务，例如：每日代码体检 / PR 总结]',
+      '- 执行周期：[例如：每天 09:00 / 每 30 分钟 / 0 9 * * *]',
+      '- 所属项目：[例如：当前项目 / 全局]',
+      '- 具体指令：[每次触发时希望 Agent 执行的具体操作]',
+    ].join('\n');
+
     navigateToNewDraft();
-    setTimeout(() => {
-      setComposerSeed(promptTemplate);
-    }, 100);
+    // 以 store 实际返回的会话 ID 定向注入（禁止 'draft' 字面量兜底）
+    const activeSid = useSessionStore.getState().activeSessionId;
+    if (!activeSid) {
+      console.warn('[ScheduledTasksPanel] 未取到目标会话 ID，跳过草稿注入');
+      onBackToChat?.();
+      return;
+    }
+    sessionDraftManager.injectSeed({
+      targetSessionId: activeSid,
+      content: promptTemplate,
+      mode: 'safe_seed',
+      metadata: { source: 'schedule_panel', title: '定时任务编排模版' },
+    });
+
+    // 注入专属的定时任务助手引导 Prompt
+    const assistantGuideText = [
+      '**定时任务创建助手**',
+      '',
+      '工作指南：',
+      '1. 理解用户的定时任务目标、触发频率（例如：每天特定时间 HH:mm、间隔分钟数、或标准 5 段 cron 表达式）和工作目录（所属项目）；',
+      '2. 如果用户提供的信息不完整或模糊（例如未指定执行时间、未明确具体任务指令、或未确定工作目录），请主动以结构化形式向用户提问以补齐必要参数；',
+      '3. 确认所有参数完整后，为用户总结任务定义并指导完成注册。',
+      '',
+      '已为您准备好定时任务创建模版，您可以直接在下方输入框中补充具体需求并发送。如有任何疑问，随时向我提问。',
+    ].join('\n');
+
+    useSessionStore.getState().addMessage('default', activeSid, {
+      id: `system-prompt-${Date.now()}`,
+      sender: 'assistant',
+      text: assistantGuideText,
+      timestamp: Date.now(),
+    });
+
     onBackToChat?.();
   };
 
@@ -133,15 +175,11 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     {
       id: 'chat',
       label: '在对话中创建',
-      hint: '由 Agent 根据自然语言说明自动创建',
-      icon: <Lucide.Sparkles size={14} strokeWidth={1.75} />,
       onClick: () => handleSelectCreateMenu('chat'),
     },
     {
       id: 'manual',
-      label: '手动填写表单',
-      hint: '自定义配置任务名称、提示词与调度周期',
-      icon: <Lucide.SlidersHorizontal size={14} strokeWidth={1.75} />,
+      label: '手动创建',
       onClick: () => handleSelectCreateMenu('manual'),
     },
   ];

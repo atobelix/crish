@@ -20,7 +20,8 @@ export function useChatComposerProps(options: UseChatComposerPropsOptions) {
   const { activeSessionId, wsId, needsKeySetup, needsModelSetup, isProcessing,
     handleGlobalTabClick, setShowModelDropdown, setPickerInlineError } = options;
 
-  const { chatInput, setChatInput, isComposing, setIsComposing } =
+  const { chatInput, setChatInput, isComposing, setIsComposing,
+    hasUndo, handleUndoDraft, draftInjectionTick } =
     useChatInput({ activeSessionId });
 
   const { slashMenuOpen, setSlashMenuOpen, slashSelectedIndex,
@@ -65,6 +66,7 @@ export function useChatComposerProps(options: UseChatComposerPropsOptions) {
 
   return {
     chatInput, setChatInput, isComposing, setIsComposing,
+    hasUndo, handleUndoDraft, draftInjectionTick,
     slashMenuOpen, setSlashMenuOpen, slashSelectedIndex,
     setSlashSelectedIndex, filteredCommands, loadSkillSlash,
     attachments, setAttachments, fileInputRef, handleFilesSelected,

@@ -28,6 +28,7 @@ import { dirTreeSuggestionKey } from './DirTreeExtension';
 import type { SlashCommandItem, MentionCandidate } from './composerTypes';
 import { serializeToMarkdown } from './serialization/markdownSerializer';
 import { parseFromMarkdown } from './serialization/markdownDeserializer';
+import { focusAndSelectFirstPlaceholder } from './tiptapInjectionUtils';
 import type {
   TiptapEditorFieldProps,
   TiptapEditorFieldHandle,
@@ -387,6 +388,11 @@ export const TiptapEditorField = React.forwardRef<
             serializeToMarkdown(editor.getJSON()).trim() ||
             editor.getText().trim()
           );
+        },
+        focusPlaceholder: () => {
+          const editor = editorRef.current;
+          if (!editor) return false;
+          return focusAndSelectFirstPlaceholder(editor);
         },
       }),
       []

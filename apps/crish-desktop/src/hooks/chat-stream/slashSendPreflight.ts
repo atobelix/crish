@@ -109,27 +109,36 @@ export async function runPreflightChecks(
   const slash = resolveSlashCommand(rawInput);
 
   if (isNavigationSlash(slash.kind)) {
-    setChatInput('');
-    setSlashMenuOpen(false);
     if (slash.kind === 'schedule') {
-      emitUiEvent('open-scheduled');
-    } else if (slash.kind === 'teamwork-preview') {
-      void import('../../api/openAgentPanel').then(
-        ({ openAgentPanelBrowse }) => {
-          openAgentPanelBrowse({ sessionId: activeSessionId || undefined });
-        }
-      );
+      const restText = rawInput.replace(/^\/(schedule|定时任务|定时)\s*/i, '').trim();
+      if (!restText) {
+        setChatInput('');
+        setSlashMenuOpen(false);
+        emitUiEvent('open-scheduled');
+        return { status: 'handled' };
+      }
+      // 携带任务参数时放行给 Agent 会话处理
     } else {
-      handleGlobalTabClick('preview');
-      if (slash.kind === 'browser' && slash.url) {
-        void import('../../api/previewBrowserStore').then(
-          ({ normalizeBrowseUrl, setPreviewUrl }) => {
-            setPreviewUrl(normalizeBrowseUrl(slash.url));
+      setChatInput('');
+      setSlashMenuOpen(false);
+      if (slash.kind === 'teamwork-preview') {
+        void import('../../api/openAgentPanel').then(
+          ({ openAgentPanelBrowse }) => {
+            openAgentPanelBrowse({ sessionId: activeSessionId || undefined });
           }
         );
+      } else {
+        handleGlobalTabClick('preview');
+        if (slash.kind === 'browser' && slash.url) {
+          void import('../../api/previewBrowserStore').then(
+            ({ normalizeBrowseUrl, setPreviewUrl }) => {
+              setPreviewUrl(normalizeBrowseUrl(slash.url));
+            }
+          );
+        }
       }
+      return { status: 'handled' };
     }
-    return { status: 'handled' };
   }
 
   if (slashMissingArg(slash)) {

@@ -1,6 +1,14 @@
 /**
  * apps/crish-desktop/src/components/chat-composer/serialization/markdownDeserializer.ts
- * Parse GFM Markdown string back into ProseMirror AST JSON document tree (CRM-04).
+ * Parse GFM Markdown string back into a ProseMirror JSON document tree (CRM-04).
+ *
+ * 输出契约（composer schema 收敛，SSOT）：本文件唯一消费方是 TiptapEditorField
+ * 的草稿水合，composer 编辑器 schema 刻意禁用块级排版节点（heading / bulletList /
+ * orderedList / listItem / taskList / taskItem / blockquote / horizontalRule，
+ * 见 TiptapEditorExtensions 的 StarterKit 配置——对话输入框保持纯净行内修饰流）。
+ * 因此 parseFromMarkdown 输出恒为行内 schema 形状：块级结构降维为段落并原样
+ * 保留标记文本（# / - / - [ ] / 1. / > / ---），codeBlock 与行内 mark 全保真。
+ * 否则 setContent 会因未知节点抛错并触发水合静默丢失（历史事故：列表模板水合为空）。
  */
 
 import type { JSONContent } from './markdownSerializer';
@@ -134,8 +142,10 @@ export function parseInline(text: string): JSONContent[] {
       continue;
     }
 
-    // 5. Italic: *text* (must not start with **)
-    const italicMatch = remaining.match(/^\*([^*][\s\S]*?)\*/);
+    // 5. Italic: *text*（须遵守 CommonMark 左侧翼规则：开标记 '*' 后不得紧跟
+    //    空白，否则视为字面星号——否则 cron 表达式「0 9 * * *」等裸星号序列
+    //    会被误判为斜体并丢失星号文本；闭标记侧同理要求内文以非空白收尾）
+    const italicMatch = remaining.match(/^\*(?=\S)(\S(?:[\s\S]*?\S)?)\*/);
     if (italicMatch) {
       const inner = italicMatch[1] ?? '';
       const children = parseInline(inner);
@@ -264,30 +274,35 @@ export function parseFromMarkdown(markdown: string): JSONContent {
       continue;
     }
 
-    // 2. Heading: # Heading
+    // 2. Heading → composer schema 无 heading 节点，降维为段落并保留 # 标记文本
     const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
     if (headingMatch && headingMatch[1] && headingMatch[2] !== undefined) {
       const level = headingMatch[1].length;
       content.push({
-        type: 'heading',
-        attrs: { level },
-        content: parseInline(headingMatch[2]),
+        type: 'paragraph',
+        content: [
+          { type: 'text', text: `${'#'.repeat(level)} ` },
+          ...parseInline(headingMatch[2]),
+        ],
       });
       i++;
       continue;
     }
 
-    // 3. Horizontal rule: ---
+    // 3. Horizontal rule → composer schema 无 horizontalRule，降维为原样文本段落
     if (/^(---|[*]{3}|_{3})\s*$/.test(trimmedLine)) {
-      content.push({ type: 'horizontalRule' });
+      content.push({
+        type: 'paragraph',
+        content: [{ type: 'text', text: trimmedLine }],
+      });
       i++;
       continue;
     }
 
-    // 4. Task list: - [ ] Task or - [x] Task（支持嵌套列表与缩进续行）
+    // 4. Task list → composer schema 无 taskList/taskItem，降维为段落，
+    //    复选框以原样标记文本保留（- [ ] / - [x]），嵌套子块递归降维
     const taskMatch = line.match(TASK_ITEM_RE);
     if (taskMatch) {
-      const taskItems: JSONContent[] = [];
       while (i < lines.length) {
         const curLine = lines[i];
         if (!curLine) break;
@@ -299,27 +314,26 @@ export function parseFromMarkdown(markdown: string): JSONContent {
         const tail = collectListItemTail(lines, i);
         itemLines.push(...tail.textLines);
         i = tail.next;
-        const itemContent: JSONContent[] = [
-          { type: 'paragraph', content: parseInline(itemLines.join('\n')) },
-        ];
-        itemContent.push(...parseSubBlocks(tail.subBlocks));
-        taskItems.push({
-          type: 'taskItem',
-          attrs: { checked },
-          content: itemContent,
+        content.push({
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: `- [${checked ? 'x' : ' '}] ` },
+            ...parseInline(itemLines.join('\n')),
+          ],
         });
+        content.push(...parseSubBlocks(tail.subBlocks));
       }
-      content.push({
-        type: 'taskList',
-        content: taskItems,
-      });
       continue;
     }
 
-    // 5. Bullet list: - Item or * Item（支持嵌套列表与缩进续行）
+    // 5. Bullet list → composer schema 无 bulletList/listItem，降维为段落，
+    //    项目符号以原样标记文本保留（- / * / +）
     const bulletMatch = line.match(BULLET_ITEM_RE);
     if (bulletMatch) {
-      const listItems: JSONContent[] = [];
+      const bulletMark = bulletMatch[0].slice(
+        0,
+        bulletMatch[0].length - (bulletMatch[1]?.length ?? 0)
+      );
       while (i < lines.length) {
         const curLine = lines[i];
         if (!curLine) break;
@@ -330,27 +344,24 @@ export function parseFromMarkdown(markdown: string): JSONContent {
         const tail = collectListItemTail(lines, i);
         itemLines.push(...tail.textLines);
         i = tail.next;
-        const itemContent: JSONContent[] = [
-          { type: 'paragraph', content: parseInline(itemLines.join('\n')) },
-        ];
-        itemContent.push(...parseSubBlocks(tail.subBlocks));
-        listItems.push({
-          type: 'listItem',
-          content: itemContent,
+        content.push({
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: bulletMark },
+            ...parseInline(itemLines.join('\n')),
+          ],
         });
+        content.push(...parseSubBlocks(tail.subBlocks));
       }
-      content.push({
-        type: 'bulletList',
-        content: listItems,
-      });
       continue;
     }
 
-    // 6. Ordered list: 1. Item（支持嵌套列表与缩进续行）
+    // 6. Ordered list → composer schema 无 orderedList，降维为段落，
+    //    序号以原样标记文本保留（起始序号延续）
     const orderedMatch = line.match(ORDERED_ITEM_RE);
     if (orderedMatch && orderedMatch[1]) {
-      const listItems: JSONContent[] = [];
       const startNum = parseInt(orderedMatch[1], 10);
+      let itemIndex = 0;
       while (i < lines.length) {
         const curLine = lines[i];
         if (!curLine) break;
@@ -361,24 +372,20 @@ export function parseFromMarkdown(markdown: string): JSONContent {
         const tail = collectListItemTail(lines, i);
         itemLines.push(...tail.textLines);
         i = tail.next;
-        const itemContent: JSONContent[] = [
-          { type: 'paragraph', content: parseInline(itemLines.join('\n')) },
-        ];
-        itemContent.push(...parseSubBlocks(tail.subBlocks));
-        listItems.push({
-          type: 'listItem',
-          content: itemContent,
+        content.push({
+          type: 'paragraph',
+          content: [
+            { type: 'text', text: `${startNum + itemIndex}. ` },
+            ...parseInline(itemLines.join('\n')),
+          ],
         });
+        content.push(...parseSubBlocks(tail.subBlocks));
+        itemIndex++;
       }
-      content.push({
-        type: 'orderedList',
-        attrs: { start: startNum },
-        content: listItems,
-      });
       continue;
     }
 
-    // 7. Blockquote: > Text
+    // 7. Blockquote → composer schema 无 blockquote，内层块递归降维后逐段加 '> ' 前缀
     if (trimmedLine.startsWith('>')) {
       const quoteLines: string[] = [];
       while (i < lines.length) {
@@ -388,10 +395,16 @@ export function parseFromMarkdown(markdown: string): JSONContent {
         i++;
       }
       const innerDoc = parseFromMarkdown(quoteLines.join('\n'));
-      content.push({
-        type: 'blockquote',
-        content: innerDoc.content,
-      });
+      for (const node of innerDoc.content ?? []) {
+        if (node.type === 'paragraph') {
+          content.push({
+            type: 'paragraph',
+            content: [{ type: 'text', text: '> ' }, ...(node.content ?? [])],
+          });
+        } else {
+          content.push(node);
+        }
+      }
       continue;
     }
 

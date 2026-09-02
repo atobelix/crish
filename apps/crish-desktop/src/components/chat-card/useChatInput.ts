@@ -1,6 +1,20 @@
+/**
+ * apps/crish-desktop/src/components/chat-card/useChatInput.ts
+ * 基于 sessionDraftManager 的会话隔离输入协调器（详案 03 §2.2）。
+ * - 会话切换微任务原子 Barrier：Flush 旧会话 → Reset DOM → Hydrate 新会话；
+ * - 移除 350ms 本地防抖与 composerSeed sessionStorage 通道，持久化由
+ *   sessionDraftManager（300ms 防抖 + flushSession/flushAll 原子强刷）统一承接；
+ * - beforeunload / visibilitychange 守卫：离开前强刷当前会话草稿；
+ * - 订阅 sessionDraftManager：后台会话定向注入零视口干扰，命中活跃会话则水合。
+ *
+ * 接口兼容：chatInput / setChatInput / isComposing / setIsComposing 照旧；
+ * 新增 hasUndo / handleUndoDraft / draftInjectionTick（供撤销浮条与占位符聚焦）。
+ *
+ * CI Guardrail: Max 400 lines of effective code, UTF-8 无 BOM.
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSessionStore } from '../../store/sessionStore';
-import { COMPOSER_SEED_EVENT, takeComposerSeed } from '../../api/composerSeed';
+import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 
 export interface UseChatInputOptions {
   activeSessionId: string | null;
@@ -11,106 +25,110 @@ export interface UseChatInputResult {
   setChatInput: (textOrFn: React.SetStateAction<string>) => void;
   isComposing: boolean;
   setIsComposing: React.Dispatch<React.SetStateAction<boolean>>;
+  /** 当前会话是否存在可撤销的外部模板覆盖历史 */
+  hasUndo: boolean;
+  /** 撤销最近一次外部模板覆盖（100% 原位恢复） */
+  handleUndoDraft: () => void;
+  /** 注入信号自增（命中活跃会话的 injectSeed/undoDraft 事件），驱动占位符聚焦 */
+  draftInjectionTick: number;
 }
 
 export function useChatInput({
   activeSessionId,
 }: UseChatInputOptions): UseChatInputResult {
-  const setComposerDraft = useSessionStore((s) => s.setComposerDraft);
-
   const [chatInput, setChatInputState] = useState('');
   const [isComposing, setIsComposing] = useState(false);
+  const [hasUndo, setHasUndo] = useState(false);
+  const [draftInjectionTick, setDraftInjectionTick] = useState(0);
 
   const activeSessionIdRef = useRef(activeSessionId);
-  const draftPersistTimerRef = useRef<number | null>(null);
-  const pendingDraftRef = useRef<{ sid: string; text: string } | null>(null);
+  const latestTextRef = useRef('');
 
-  const flushComposerDraft = useCallback(() => {
-    if (draftPersistTimerRef.current != null) {
-      window.clearTimeout(draftPersistTimerRef.current);
-      draftPersistTimerRef.current = null;
-    }
-    const pending = pendingDraftRef.current;
-    pendingDraftRef.current = null;
-    if (pending) {
-      setComposerDraft(pending.sid, pending.text);
-    }
-  }, [setComposerDraft]);
-
-  const scheduleComposerDraft = useCallback(
-    (sid: string, text: string) => {
-      pendingDraftRef.current = { sid, text };
-      if (draftPersistTimerRef.current != null) {
-        window.clearTimeout(draftPersistTimerRef.current);
-      }
-      draftPersistTimerRef.current = window.setTimeout(() => {
-        draftPersistTimerRef.current = null;
-        const pending = pendingDraftRef.current;
-        pendingDraftRef.current = null;
-        if (pending) setComposerDraft(pending.sid, pending.text);
-      }, 350);
-    },
-    [setComposerDraft]
-  );
-
+  // 1. 会话切换原子 Barrier（Flush 旧会话草稿 → 复位 DOM → Hydrate 新会话）
   useEffect(() => {
-    flushComposerDraft();
+    const prevSid = activeSessionIdRef.current;
+    if (prevSid && prevSid !== activeSessionId) {
+      // Barrier 阶段 1：强刷旧会话草稿至 Level 2/3（同步，作废其挂起防抖）
+      sessionDraftManager.setDraft(prevSid, latestTextRef.current, true);
+    }
     activeSessionIdRef.current = activeSessionId;
-    const seed = takeComposerSeed();
-    const restored = seed || (activeSessionId
-      ? useSessionStore.getState().composerDrafts[activeSessionId] || ''
-      : '');
+
+    if (!activeSessionId) {
+      setChatInputState('');
+      latestTextRef.current = '';
+      setHasUndo(false);
+      return;
+    }
+
+    // Barrier 阶段 2：从 SessionDraftManager 精确恢复新会话草稿
+    const restored = sessionDraftManager.getDraft(activeSessionId);
     setChatInputState(restored);
-  }, [activeSessionId, flushComposerDraft]);
+    latestTextRef.current = restored;
+    setHasUndo(sessionDraftManager.hasUndo(activeSessionId));
+  }, [activeSessionId]);
 
+  // 2. 页面卸载 / 隐藏守卫（Unload / Hidden Barrier，尽力而为的即时持久化）
   useEffect(() => {
-    const onLeave = () => flushComposerDraft();
-    window.addEventListener('beforeunload', onLeave);
-    const onVis = () => {
-      if (document.visibilityState === 'hidden') onLeave();
-    };
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      window.removeEventListener('beforeunload', onLeave);
-      document.removeEventListener('visibilitychange', onVis);
-      flushComposerDraft();
-    };
-  }, [flushComposerDraft]);
-
-  const setChatInput = useCallback(
-    (textOrFn: React.SetStateAction<string>) => {
+    const onFlush = () => {
       const sid = activeSessionIdRef.current;
-      setChatInputState((prev) => {
-        const next = typeof textOrFn === 'function' ? textOrFn(prev) : textOrFn;
-        if (sid) {
-          queueMicrotask(() => scheduleComposerDraft(sid, next));
-        }
-        return next;
-      });
-    },
-    [scheduleComposerDraft]
-  );
+      if (sid) {
+        sessionDraftManager.setDraft(sid, latestTextRef.current, true);
+      }
+    };
+    window.addEventListener('beforeunload', onFlush);
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') onFlush();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
+    return () => {
+      window.removeEventListener('beforeunload', onFlush);
+      document.removeEventListener('visibilitychange', onVisibility);
+      onFlush();
+    };
+  }, []);
+
+  // 3. 用户输入调度：本地状态 + sessionDraftManager（300ms 防抖落 Store）
+  const setChatInput = useCallback((textOrFn: React.SetStateAction<string>) => {
+    const sid = activeSessionIdRef.current;
+    setChatInputState((prev) => {
+      const next =
+        typeof textOrFn === 'function' ? textOrFn(prev) : textOrFn;
+      latestTextRef.current = next;
+      if (sid) {
+        sessionDraftManager.setDraft(sid, next, false);
+      }
+      return next;
+    });
+  }, []);
+
+  // 4. 订阅定向注入 / 撤销事件（后台会话注入零视口干扰）
   useEffect(() => {
-    const apply = (text: string) => {
-      const t = text.trim();
-      if (!t) return;
-      setChatInput(t);
-    };
-    const seed = takeComposerSeed();
-    if (seed) apply(seed);
-    const onSeed = (e: Event) => {
-      const detail = (e as CustomEvent<{ text?: string }>).detail;
-      if (detail?.text) apply(detail.text);
-    };
-    window.addEventListener(COMPOSER_SEED_EVENT, onSeed);
-    return () => window.removeEventListener(COMPOSER_SEED_EVENT, onSeed);
-  }, [setChatInput]);
+    return sessionDraftManager.subscribe(({ sessionId, content, hasUndo: undoAvail }) => {
+      if (sessionId === activeSessionIdRef.current) {
+        setChatInputState(content);
+        latestTextRef.current = content;
+        setHasUndo(undoAvail);
+        setDraftInjectionTick((t) => t + 1);
+      }
+    });
+  }, []);
+
+  // 5. 撤销操作（外部模板覆盖原位无损恢复）
+  const handleUndoDraft = useCallback(() => {
+    const sid = activeSessionIdRef.current;
+    if (sid) {
+      sessionDraftManager.undoDraft(sid);
+    }
+  }, []);
 
   return {
     chatInput,
     setChatInput,
     isComposing,
     setIsComposing,
+    hasUndo,
+    handleUndoDraft,
+    draftInjectionTick,
   };
 }

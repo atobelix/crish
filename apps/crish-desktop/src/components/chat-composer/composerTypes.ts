@@ -89,6 +89,12 @@ export type ComposerFieldProps = {
   hideSendControls?: boolean | undefined;
   /** 宿主发送钮调用：富文本先 flush markdown 再 onSend */
   sendApiRef?: React.MutableRefObject<ComposerSendApi | null> | undefined;
+  /** 草稿撤销：当前会话是否存在可撤销的外部模板覆盖（sessionDraftManager 订阅） */
+  hasUndo?: boolean | undefined;
+  /** 草稿撤销动作（外部模板覆盖原位无损恢复） */
+  handleUndoDraft?: (() => void) | undefined;
+  /** 定向注入信号 tick（命中活跃会话的 injectSeed/undoDraft 事件自增），驱动占位符聚焦 */
+  draftInjectionTick?: number | undefined;
 };
 
 /** 主对话网格发送钮调用字段内的 flushAndSend */
@@ -177,6 +183,8 @@ export interface TiptapEditorFieldProps {
 export interface TiptapEditorFieldHandle {
   /** 同步获取当前编辑器 markdown（绕过 150ms 防抖） */
   getMarkdown: () => string;
+  /** 聚焦并全选首个占位符（外部模板注入后调用）；无占位符时定位文末，返回是否命中占位符 */
+  focusPlaceholder: () => boolean;
 }
 
 export type {

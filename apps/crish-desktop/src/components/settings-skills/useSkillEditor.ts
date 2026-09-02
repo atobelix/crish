@@ -4,7 +4,8 @@ import { createProjectSkill, type DesktopSkill } from '../../api/skillsApi';
 import { skillStableId } from '../../api/skillId';
 import { getWorkspacePath } from '../../api/projectStore';
 import { parseMarkdownToHtml } from '../../api/markdownRender';
-import { setComposerSeed } from '../../api/composerSeed';
+import { useSessionStore } from '../../store/sessionStore';
+import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
 import { emitUiEvent } from '../../api/uiEvents';
 import { closeSettings } from '../../store/storeAccess';
 import {
@@ -64,13 +65,22 @@ export function useSkillEditor(deps: UseSkillEditorDeps, api: SharedSkillApi) {
   };
 
   const handleAiCreateSkill = () => {
-    setComposerSeed(
-      [
-        '请帮我创建一个 Crish 技能（正式 SKILL.md）。',
-        '需要：用途说明、适用场景、主要步骤，以及可直接保存的完整 SKILL.md 内容（含 frontmatter）。',
-        '我打算用它来：',
-      ].join('\n')
-    );
+    // 以 store 当前活跃会话定向注入（返回对话时即该会话）；无活跃会话则中止
+    const targetSid = useSessionStore.getState().activeSessionId;
+    if (targetSid) {
+      sessionDraftManager.injectSeed({
+        targetSessionId: targetSid,
+        content: [
+          '请帮我创建一个 Crish 技能（正式 SKILL.md）。',
+          '需要：用途说明、适用场景、主要步骤，以及可直接保存的完整 SKILL.md 内容（含 frontmatter）。',
+          '我打算用它来：',
+        ].join('\n'),
+        mode: 'safe_seed',
+        metadata: { source: 'skill_editor', title: '技能对话创建' },
+      });
+    } else {
+      console.warn('[useSkillEditor] 无活跃会话，跳过草稿注入');
+    }
     setCreateMode('none');
     closeSettings();
     emitUiEvent('open-chat');
