@@ -53,7 +53,7 @@ export const SidebarToggle: React.FC<{
           aria-controls="crish-sidebar"
           onClick={onToggle}
         >
-          <IconSidebarLeft size={14} aria-hidden="true" />
+          <IconSidebarLeft size={16} aria-hidden="true" />
         </button>
       </Tooltip>
     </div>
@@ -100,7 +100,7 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
                   aria-controls="crish-sidebar"
                   onClick={onToggle}
                 >
-                  <IconSidebarLeft size={14} aria-hidden="true" />
+                  <IconSidebarLeft size={16} aria-hidden="true" />
                 </button>
               </Tooltip>
             )}

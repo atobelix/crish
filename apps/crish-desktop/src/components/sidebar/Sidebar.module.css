@@ -121,7 +121,7 @@
 .sidebarScroll {
   flex: 1;
   overflow-y: auto;
-  padding: 14px 10px 14px 10px; /* Standardized scroll boundary padding to 10px, top 14px */
+  padding: 10px 2px 14px 8px; /* 收紧右侧留白至 2px，左侧与顶栏中轴对齐 */
   display: flex;
   flex-direction: column;
   gap: 14px;
