@@ -115,6 +115,10 @@ export function createGhostPill(
   const moduleClass = styles.card || '';
   ghost.className = [moduleClass, 'tree-drag-card'].filter(Boolean).join(' ');
   ghost.setAttribute('aria-hidden', 'true');
+  const computedWidth =
+    sourceWidth && sourceWidth > 0
+      ? Math.min(Math.max(sourceWidth, 60), 180)
+      : 150;
   ghost.style.cssText = [
     'position: fixed',
     'left: 0',
@@ -123,7 +127,10 @@ export function createGhostPill(
     'z-index: 100000',
     'box-sizing: border-box',
     'height: 26px',
-    'padding: 0 10px',
+    `width: ${Math.round(computedWidth)}px`,
+    'max-width: 180px',
+    'min-width: 60px',
+    'padding: 0 8px',
     'display: flex',
     'align-items: center',
     'background: var(--bg-card, #ffffff)',
@@ -134,14 +141,22 @@ export function createGhostPill(
     'font-size: 12px',
     'font-weight: 500',
     'font-family: inherit',
-    'white-space: nowrap',
+    'overflow: hidden',
     'will-change: transform, opacity',
     'transform: translate3d(-9999px, -9999px, 0)',
   ].join(';');
-  if (sourceWidth && sourceWidth > 0) {
-    ghost.style.width = `${Math.round(sourceWidth)}px`;
-  }
-  ghost.textContent = title || '会话';
+
+  const titleSpan = document.createElement('span');
+  titleSpan.style.cssText = [
+    'flex: 1 1 auto',
+    'min-width: 0',
+    'overflow: hidden',
+    'text-overflow: ellipsis',
+    'white-space: nowrap',
+  ].join(';');
+  titleSpan.textContent = title || '会话';
+  ghost.appendChild(titleSpan);
+
   document.body.appendChild(ghost);
   return ghost;
 }
