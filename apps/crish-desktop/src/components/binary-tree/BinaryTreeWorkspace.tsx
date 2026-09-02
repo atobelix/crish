@@ -2,51 +2,36 @@
  * 二叉树工作区 — 拖拽式布局工作区主入口。
  *
  * 渲染流程：
- * 1. layoutTreeStore → flattenTree
- * 2. leaf chrome（真树；不要复活 ChatHeader / UnitSessionTabStrip）：
- *    - chat 叶：UnitChromeActions（leafBody 上覆盖层；工具钮 + 右侧固定钮，坞开不卸）
- *    - 工具叶：LeafToolTabStrip（基于 leaf.tabs）
- *    - 会话身份在窗口顶栏 GlobalSessionTabBar + 侧栏列表，叶内不再做第三套标题行
- * 3. sash / DropZoneOverlay / 面板 ghost
+ * 1. layoutTreeStore → flattenTree（树上只有 chat 叶，不传 collapsedDomain）
+ * 2. leaf chrome：
+ *    - 会话身份在本叶 PaneHeader ← leaf.tabs / activeTabId
+ *    - 工具条是叶内抽屉头 LeafToolTabStrip，树上无 tool 叶
+ *    - 侧栏只列会话，不拥有打开集
+ *    - UnitChromeActions 仍是对话列覆盖层
+ * 3. sash / sessionTabIndicator / 面板 resize
  */
 
-import React, { useCallback, useRef } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useRef } from 'react';
 import {
   useLayoutTreeStore,
-  useWorkspaceShellStore,
-  getCompositionRoot,
-  applyDockToTree,
   flattenTree,
   listChatLeaves,
   type LayoutLeaf,
   type FlatBranch,
 } from '../../store/storeAccess';
-import { getPanelTitle } from '../../store/storeAccess';
-import { Tooltip } from '../ui';
-import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
-import { useTreeDrag } from '../../hooks/useTreeDrag';
 import { useTreeResize } from '../../hooks/useTreeResize';
 import { useTreePanelEvents } from '../../hooks/useTreePanelEvents';
 import { useChatPanelSync } from '../../hooks/useChatPanelSync';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { TreeLeafPanel } from './TreeLeafPanel';
 import { TreeResizeSash, flatBranchEqual } from './TreeResizeSash';
-import { DropZoneOverlay } from './DropZoneOverlay';
 import styles from './BinaryTreeWorkspace.module.css';
-
-// ── Props ───────────────────────────────────────────────────────────
 
 export interface BinaryTreeWorkspaceProps {
   className?: string;
 }
 
-// ── 稳定 leaf / branch 身份 ─────────────────────────────────────────
-//
-// flattenTree 每次产出新 FlatPanel / FlatBranch / rect 字面量；map 内再
-// new LayoutLeaf 会使 TreeLeafPanel / TreeResizeSash 的 React.memo 浅比较
-// 永远失败（sibling resize commit、activeLeaf 切换等父级 re-render 都会
-// 重绘所有 leaf/sash）。按 id 复用引用：内容未变则保持同一对象。
+// flattenTree 每次产出新 FlatPanel / FlatBranch / rect 字面量；按 id 复用引用。
 
 type FlatPanelItem = ReturnType<typeof flattenTree>['leaves'][number];
 type LeafRect = FlatPanelItem['rect'];
@@ -56,11 +41,48 @@ interface StableLeafEntry {
   rect: LeafRect;
 }
 
-function tabsEqual(a: readonly string[], b: readonly string[]): boolean {
+function dockIdentityEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (a.length !== b.length) return false;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  const da = a as {
+    collapsed?: boolean;
+    activePanelId?: string | null;
+    openPanelIds?: string[];
+    widthRatio?: number;
+  };
+  const db = b as typeof da;
+  if (da.collapsed !== db.collapsed) return false;
+  if (da.activePanelId !== db.activePanelId) return false;
+  if (da.widthRatio !== db.widthRatio) return false;
+  const pa = da.openPanelIds ?? [];
+  const pb = db.openPanelIds ?? [];
+  if (pa.length !== pb.length) return false;
+  for (let i = 0; i < pa.length; i++) {
+    if (pa[i] !== pb[i]) return false;
+  }
+  return true;
+}
+
+function tabsIdentityEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) {
+    return false;
+  }
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
+    const x = a[i] as { tabId?: string; dock?: unknown } | string;
+    const y = b[i] as { tabId?: string; dock?: unknown } | string;
+    if (x === y) continue;
+    if (
+      typeof x === 'object' &&
+      typeof y === 'object' &&
+      x &&
+      y &&
+      x.tabId === y.tabId &&
+      dockIdentityEqual(x.dock, y.dock)
+    ) {
+      continue;
+    }
+    return false;
   }
   return true;
 }
@@ -71,14 +93,19 @@ function rectEqual(a: LeafRect, b: LeafRect): boolean {
   );
 }
 
+function readPanelActiveTabId(panel: FlatPanelItem): string {
+  return panel.activeTabId ?? '';
+}
+
 function toLayoutLeaf(panel: FlatPanelItem): LayoutLeaf {
+  const activeTabId = readPanelActiveTabId(panel);
   return {
     type: 'leaf',
     id: panel.leafId,
-    panelId: panel.panelId,
+    panelId: 'chat',
     tabs: panel.tabs,
-    activeTab: panel.activeTab,
-    ...(panel.sessionId ? { sessionId: panel.sessionId } : {}),
+    activeTabId,
+    dock: panel.dock,
   };
 }
 
@@ -89,13 +116,16 @@ function stabilizeLeafEntries(
   const next = new Map<string, StableLeafEntry>();
   for (const panel of panels) {
     const cached = prev.get(panel.leafId);
+    const activeTabId = readPanelActiveTabId(panel);
+    const cachedActive = cached
+      ? (cached.leaf as LayoutLeaf & { activeTabId?: string }).activeTabId
+      : undefined;
     let leaf: LayoutLeaf;
     if (
       cached &&
-      cached.leaf.panelId === panel.panelId &&
-      cached.leaf.activeTab === panel.activeTab &&
-      cached.leaf.sessionId === panel.sessionId &&
-      tabsEqual(cached.leaf.tabs, panel.tabs)
+      cachedActive === activeTabId &&
+      tabsIdentityEqual(cached.leaf.tabs, panel.tabs) &&
+      dockIdentityEqual(cached.leaf.dock, panel.dock)
     ) {
       leaf = cached.leaf;
     } else {
@@ -110,7 +140,6 @@ function stabilizeLeafEntries(
   return next;
 }
 
-/** 按 branchId 复用 FlatBranch 引用（几何未变则同一对象） */
 function stabilizeBranches(
   branches: FlatBranch[],
   prev: Map<string, FlatBranch>
@@ -126,48 +155,26 @@ function stabilizeBranches(
   return next;
 }
 
-// ── 主组件 ───────────────────────────────────────────────────────────
-
 export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
   React.memo(() => {
     const tree = useLayoutTreeStore((s) => s.tree);
     const activeLeafId = useLayoutTreeStore((s) => s.activeLeafId);
-    const toolColumnCollapsed = useLayoutTreeStore(
-      (s) => s.toolColumnCollapsed
-    );
-    const draggedSource = useLayoutTreeStore((s) => s.draggedSource);
-    // 注意：勿订 past/future 长度 — 历史栈变化与 canvas 渲染无关，
-    // 曾导致每次 resize commit / 其它写历史动作全树 leaf+sash re-render。
 
     const canvasRef = useRef<HTMLDivElement>(null);
-    const dragController = useTreeDrag();
     const resizeController = useTreeResize();
     useTreePanelEvents();
     useChatPanelSync();
-
-    // 订阅当前活跃标签页的右侧工作区开合状态（单源驱动）
-    const dockSnapshot = useWorkspaceShellStore((s) => {
-      const tab = s.openTabs.find((t) => t.tabId === s.activeTabId);
-      return tab?.rightDock ?? null;
-    });
-    const isRightDockCollapsed = dockSnapshot
-      ? dockSnapshot.collapsed || !dockSnapshot.openPanelIds?.length
-      : toolColumnCollapsed;
 
     const {
       leaves: panels,
       branches,
       isMultiChat,
     } = React.useMemo(() => {
-      // multi-chat：禁止全局 toolColumnCollapsed 压掉所有 unit 右坞
       const multi = listChatLeaves(tree.root).length > 1;
-      const result = flattenTree(tree.root, {
-        collapsedDomain: !multi && isRightDockCollapsed ? 'tool' : undefined,
-      });
+      const result = flattenTree(tree.root);
       return { ...result, isMultiChat: multi };
-    }, [tree.root, isRightDockCollapsed]);
+    }, [tree.root]);
 
-    // 跨 render 复用 leaf / rect 引用，供 TreeLeafPanel React.memo 跳过
     const leafEntryCacheRef = useRef<Map<string, StableLeafEntry>>(new Map());
     const stableLeafEntries = React.useMemo(() => {
       const next = stabilizeLeafEntries(panels, leafEntryCacheRef.current);
@@ -175,7 +182,6 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
       return next;
     }, [panels]);
 
-    // 跨 render 复用 branch 引用，供 TreeResizeSash React.memo 跳过
     const branchCacheRef = useRef<Map<string, FlatBranch>>(new Map());
     const stableBranches = React.useMemo(() => {
       const next = stabilizeBranches(branches, branchCacheRef.current);
@@ -183,53 +189,10 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
       return next;
     }, [branches]);
 
-    const draggedLeafId =
-      draggedSource && draggedSource.type === 'leaf'
-        ? draggedSource.leafId
-        : null;
-
-    const ghostLabel = React.useMemo(() => {
-      if (!draggedSource) return null;
-      if (draggedSource.type === 'leaf') {
-        return getPanelTitle(draggedSource.panelId);
-      }
-      return getPanelTitle(draggedSource.tabId);
-    }, [draggedSource]);
-
-    const handleToggleRightDock = useCallback((e: React.MouseEvent) => {
-      e.stopPropagation();
-      const shell = getCompositionRoot().shell.getState();
-      const tab = shell.getActiveTab();
-      if (!tab) {
-        const cur = useLayoutTreeStore.getState().toolColumnCollapsed;
-        useLayoutTreeStore.getState().setToolColumnCollapsed(!cur);
-        return;
-      }
-      const nextCollapsed = !tab.rightDock.collapsed;
-      const dock = {
-        ...tab.rightDock,
-        collapsed: nextCollapsed,
-        activePanelId:
-          !nextCollapsed && !tab.rightDock.activePanelId
-            ? 'overview'
-            : tab.rightDock.activePanelId,
-        openPanelIds:
-          !nextCollapsed && !tab.rightDock.openPanelIds.length
-            ? ['overview']
-            : tab.rightDock.openPanelIds,
-      };
-      shell.updateRightDock(tab.tabId, dock);
-      applyDockToTree(dock, tab.sessionId);
-    }, []);
-
-    // 解构稳定字段，避免把整包 controller 对象传给 sash（破 memo）
     const { startResize, resizingBranchId } = resizeController;
 
     return (
-      <div
-        className={styles.section}
-        data-tree-workspace="true"
-      >
+      <div className={styles.section} data-tree-workspace="true">
         <AppErrorBoundary compact>
           <div
             ref={canvasRef}
@@ -246,13 +209,11 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
                   leaf={entry.leaf}
                   rect={entry.rect}
                   isActive={panel.leafId === activeLeafId}
-                  isDragSource={panel.leafId === draggedLeafId}
                   isMultiChat={isMultiChat}
                 />
               );
             })}
 
-            {/* 渲染所有 sash（branch 经 branchId 缓存稳定；startResize 稳定 + isResizing 布尔） */}
             {branches.map((branch) => {
               const stable = stableBranches.get(branch.branchId) ?? branch;
               return (
@@ -264,58 +225,8 @@ export const BinaryTreeWorkspace: React.FC<BinaryTreeWorkspaceProps> =
                 />
               );
             })}
-
-            {/* ★ 永久驻留的单一固定物理 DOM 切换按钮（对照 reference/chat-composer-component） */}
-            <Tooltip
-              content={
-                isRightDockCollapsed
-                  ? '展开右侧工具栏 (Cmd/Ctrl + J)'
-                  : '收起右侧面板 (Cmd/Ctrl + J)'
-              }
-              side="bottom"
-            >
-              <button
-                type="button"
-                id="topQuickDockBtn"
-                className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn ${
-                  !isRightDockCollapsed ? 'active' : ''
-                }`}
-                data-testid="top-quick-dock-btn"
-                data-active={!isRightDockCollapsed ? 'true' : 'false'}
-                data-dock-open={!isRightDockCollapsed ? 'true' : 'false'}
-                aria-label={
-                  isRightDockCollapsed ? '展开右侧工具栏' : '收起右侧面板'
-                }
-                onClick={handleToggleRightDock}
-              >
-                <IconSidebarRight size={14} />
-              </button>
-            </Tooltip>
-
-            {/* Drop zone 覆盖层 */}
-            <DropZoneOverlay />
           </div>
         </AppErrorBoundary>
-
-        {/* 面板拖拽 ghost（useTreeDrag）：ref + 直接 DOM transform，跳过 React re-render */}
-        {ghostLabel !== null &&
-          dragController.isDragging &&
-          createPortal(
-            <div
-              ref={dragController.setGhostRef}
-              className={styles.ghost}
-              style={{
-                position: 'fixed',
-                left: 0,
-                top: 0,
-                transform: 'translate(-9999px, -9999px)',
-              }}
-              aria-hidden="true"
-            >
-              <span className={styles.ghostLabel}>{ghostLabel}</span>
-            </div>,
-            document.body
-          )}
       </div>
     );
   });

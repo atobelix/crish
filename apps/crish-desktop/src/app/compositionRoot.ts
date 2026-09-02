@@ -6,12 +6,12 @@
  *
  * 门面范围：
  * - pty：PTY registry handlers / killAll
- * - session：session facade getState + enterDraft / openOrFocusSession / getActiveSessionId
+ * - session：getState + enterDraft / openOrFocusSession / deleteSession / getActiveSessionId
  *   + pin/unpin/archive/unarchive/branch（侧栏菜单等命令式写）
- * - shell：workspace-shell getState + openNewDraftTab / setShellReady
+ * - shell：会话手势门面 + shellReady（activateTab / closeTab / focusLeaf / promoteDraftTab）
  * - layout：layoutStore 命令式读/写（sessions / tabMode / sidebar / planMode / appSettings）
  * - workspace：workspace facade getState（legacy columns — alias of layoutStore）
- * - tree：layout-tree 薄门面（getState + setLeafSessionId；hydrate/bootstrap 用）
+ * - tree：layout-tree 薄门面（仅 getState；hydrate/bootstrap 用）
  * - runControl：L1/L2/L3 dispatch（wrap runControlClient）
  * - metrics：controlMetrics getSnapshot / record
  *
@@ -19,17 +19,15 @@
  *
  * | Facade | Backing store | Not this facade |
  * |--------|---------------|-----------------|
- * | `shell` | workspaceShellStore (TabSurface / dock) | layout-tree geometry |
+ * | `shell` | workspaceShellStore（手势门面 + shellReady） | 标签数组（在 chat 叶 tabs） |
  * | `layout` | layoutStore god-object (sessions + chrome + settings) | **not** layoutTreeStore |
- * | `session` | layoutStore session slice + shell openOrFocus | tree leaf focus alone |
+ * | `session` | sessionStore + shell openOrFocus / deleteSession | tree leaf 1:1 绑定 |
  * | `workspace` | layoutStore workspace slice (legacy cards) | workspace-shell |
- * | `tree` | layoutTreeStore (geometry + leaf↔session bind) | **not** layoutStore chrome |
+ * | `tree` | layoutTreeStore（几何；无 setLeafSessionId） | **not** layoutStore chrome |
  *
- * Tree facade is **thin** — hydrate/bootstrap getState only; do **not** force drag/UI
- * through DI (hooks still use `useLayoutTreeStore` selectors). No splitLeaf on root
- * until a command path needs it.
- * Open/focus/new-draft: **shell** (or session.openOrFocusSession → shell). Do not pair
- * with raw layout.setSessions / setActiveSessionId from UI for the same gesture.
+ * Tree facade is **thin** — hydrate/bootstrap getState only.
+ * 会话手势只走 shell / session 门面一次；shell 内部会 sync setActiveSessionId。
+ * UI 再叠 setActiveSessionId / setLeafSessionId / bindActiveChatLeafSession 即违规。
  *
  * @see docs/plans/2026-07-system-architecture-control-master-plan.md Round B3
  * @see docs/architecture/desktop-composition-and-stores.md
@@ -84,11 +82,13 @@ export type SessionFacade = {
   getActiveSessionId: typeof getActiveSessionId;
   /** 用户「新对话」草稿（不 mint 空壳） */
   enterDraft: (folder?: string) => void;
-  /** 打开或聚焦会话 tab（经 workspace-shell） */
+  /** 打开或聚焦会话 tab（经 workspace-shell：找叶 + 维 02 openSession） */
   openOrFocusSession: (
     sessionId: string,
     opts?: { title?: string; workspaceKey?: string }
   ) => void;
+  /** 删除会话并摘对应 tab */
+  deleteSession: (sessionId: string) => boolean;
   /** 置顶（不 open/focus） */
   pinSession: (sessionId: string) => void;
   /** 取消置顶 */
@@ -104,8 +104,40 @@ export type SessionFacade = {
 export type ShellFacade = {
   /** workspace-shell zustand getState */
   getState: () => ReturnType<typeof useWorkspaceShellStore.getState>;
-  openNewDraftTab: (workspaceKey?: string) => void;
   setShellReady: (ready: boolean) => void;
+  openNewDraftTab: (
+    opts?: { leafId?: string; workspaceKey?: string } | string
+  ) => void;
+  addTab: (leafId: string) => void;
+  activateTab: (leafId: string, tabId: string) => void;
+  closeTab: (leafId: string, tabId: string) => void;
+  removeTab: (leafId: string, tabId: string) => void;
+  focusLeaf: (leafId: string) => void;
+  promoteDraftTab: (
+    draftSessionId: string,
+    realSessionId: string,
+    title?: string
+  ) => void;
+  openOrFocusSession: (
+    sessionId: string,
+    opts?: {
+      title?: string;
+      workspaceKey?: string;
+      split?: 'right' | 'left' | 'top' | 'bottom';
+    }
+  ) => void;
+  openSession: (
+    sessionId: string,
+    opts?: {
+      title?: string;
+      workspaceKey?: string;
+      split?: 'right' | 'left' | 'top' | 'bottom';
+    }
+  ) => void;
+  updateTabDock: (
+    tabId: string,
+    patch: import('../store/workspace-shell/types').RightToolDockState | Partial<import('../store/workspace-shell/types').RightToolDockState>
+  ) => void;
 };
 
 /**
@@ -142,17 +174,13 @@ export type WorkspaceFacade = {
 };
 
 /**
- * layout-tree 薄命令门面 —— hydrate/bootstrap 读树 + leaf↔session 绑定。
+ * layout-tree 薄命令门面 —— hydrate/bootstrap 读树。
  *
- * **Not layoutStore.** Geometry UI (drag/split render) stays on
- * `useLayoutTreeStore` selectors — do not inject this into every panel.
- * `splitLeaf` omitted until a bootstrap/command path needs it (UI keeps hooks).
+ * **Not layoutStore.** 无 setLeafSessionId：会话身份只在 leaf.tabs。
  */
 export type TreeFacade = {
   /** layoutTreeStore.getState（hydrate 读 tree / toolColumnCollapsed） */
   getState: () => ReturnType<typeof useLayoutTreeStore.getState>;
-  /** 绑定 chat leaf → sessionId（多 chat 分屏；不推历史） */
-  setLeafSessionId: (leafId: string, sessionId: string | undefined) => void;
 };
 
 export type RunControlFacade = {
@@ -214,8 +242,6 @@ function buildDefaultLayoutFacade(): LayoutFacade {
 function buildDefaultTreeFacade(): TreeFacade {
   return {
     getState: () => useLayoutTreeStore.getState(),
-    setLeafSessionId: (leafId, sessionId) =>
-      useLayoutTreeStore.getState().setLeafSessionId(leafId, sessionId),
   };
 }
 
@@ -240,6 +266,8 @@ function buildDefaultRoot(): CompositionRoot {
       enterDraft: (folder?: string) => enterDraftMode(folder),
       openOrFocusSession: (sessionId, opts) =>
         useWorkspaceShellStore.getState().openOrFocusSession(sessionId, opts),
+      deleteSession: (sessionId) =>
+        useWorkspaceShellStore.getState().deleteSessionAndCloseTab(sessionId),
       pinSession: (sessionId) => getSessionStoreState().pinSession(sessionId),
       unpinSession: (sessionId) =>
         getSessionStoreState().unpinSession(sessionId),
@@ -252,10 +280,30 @@ function buildDefaultRoot(): CompositionRoot {
     },
     shell: {
       getState: () => useWorkspaceShellStore.getState(),
-      openNewDraftTab: (workspaceKey?: string) =>
-        useWorkspaceShellStore.getState().openNewDraftTab(workspaceKey),
       setShellReady: (ready: boolean) =>
         useWorkspaceShellStore.getState().setShellReady(ready),
+      openNewDraftTab: (opts) =>
+        useWorkspaceShellStore.getState().openNewDraftTab(opts),
+      addTab: (leafId) =>
+        useWorkspaceShellStore.getState().openNewDraftTab({ leafId }),
+      activateTab: (leafId, tabId) =>
+        useWorkspaceShellStore.getState().activateTab(leafId, tabId),
+      closeTab: (leafId, tabId) =>
+        useWorkspaceShellStore.getState().closeTab(leafId, tabId),
+      removeTab: (leafId, tabId) =>
+        useWorkspaceShellStore.getState().closeTab(leafId, tabId),
+      focusLeaf: (leafId) =>
+        useWorkspaceShellStore.getState().focusLeaf(leafId),
+      promoteDraftTab: (draftSessionId, realSessionId, title) =>
+        useWorkspaceShellStore
+          .getState()
+          .promoteDraftTab(draftSessionId, realSessionId, title),
+      openOrFocusSession: (sessionId, opts) =>
+        useWorkspaceShellStore.getState().openOrFocusSession(sessionId, opts),
+      openSession: (sessionId, opts) =>
+        useWorkspaceShellStore.getState().openOrFocusSession(sessionId, opts),
+      updateTabDock: (tabId, patch) =>
+        useWorkspaceShellStore.getState().updateRightDock(tabId, patch),
     },
     layout: buildDefaultLayoutFacade(),
     workspace: {

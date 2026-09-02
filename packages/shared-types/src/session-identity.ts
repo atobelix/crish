@@ -19,22 +19,32 @@ export const SESSION_IDENTITY_KINDS = ['draft', 'local', 'engine'] as const;
 
 /**
  * Pending Draft 哨兵 sessionId。
- * 与 desktop `PENDING_DRAFT_SESSION_ID = '__pending_draft__'` 字面量一致。
+ * 光杆单例仅作脏数据 / 测试 / clearDraft 无叶时回退；
+ * 生产路径 mint 的草稿 tab 必须用 `mintDraftSessionId(tabId)`。
  */
 export const PENDING_DRAFT_SESSION_ID = '__pending_draft__' as const;
+
+/** 叶内 draft tab 的 sessionId 前缀。完整值 = 前缀 + tabId */
+export const PENDING_DRAFT_PREFIX = '__pending_draft__:' as const;
+
+/** 由 tabId mint 每 tab 唯一的草稿哨兵（同叶多次 + 互不碰撞） */
+export function mintDraftSessionId(tabId: string): string {
+  return `${PENDING_DRAFT_PREFIX}${tabId}`;
+}
 
 /** 带阶段的会话身份引用（契约层最小结构） */
 export interface SessionIdentityRef {
   kind: SessionIdentityKind;
-  /** draft 时固定为 PENDING_DRAFT_SESSION_ID；local/engine 为真实 id */
+  /** draft 时为光杆哨兵或 `__pending_draft__:${tabId}`；local/engine 为真实 id */
   sessionId: string;
 }
 
-/** 是否为 Pending Draft 哨兵 id（null/undefined → false） */
+/** 是否为 Pending Draft 哨兵 id（光杆或 per-tab 前缀；null/undefined → false） */
 export function isPendingDraftSessionId(
   id: string | null | undefined
 ): boolean {
-  return id === PENDING_DRAFT_SESSION_ID;
+  if (!id) return false;
+  return id === PENDING_DRAFT_SESSION_ID || id.startsWith(PENDING_DRAFT_PREFIX);
 }
 
 export function isSessionIdentityKind(

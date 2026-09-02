@@ -1,8 +1,7 @@
-import React, { useRef } from 'react';
+import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './Sidebar.module.css';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
-import type {} from '../../hooks/useToastQueue';
 
 export interface UserProfileCardProps {
   username?: string;
@@ -11,13 +10,10 @@ export interface UserProfileCardProps {
 
 export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
   ({ username = 'orange', workspaceName = 'Conex Workspace' }) => {
-    const triggerRef = useRef<HTMLButtonElement>(null);
-
     return (
       <SettingsQuickMenu
         renderTrigger={({ open, triggerProps }) => (
           <button
-            ref={triggerRef}
             type="button"
             className={`${styles.userProfileCard}${open ? ` ${styles.isOpen}` : ''}`}
             data-testid="user-profile-card"

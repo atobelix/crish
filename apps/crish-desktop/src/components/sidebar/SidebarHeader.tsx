@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import styles from './Sidebar.module.css';
 import { Menu } from 'lucide-react';
-import { Button } from '../ui';
+import { Button, Tooltip } from '../ui';
+import { IconSidebarLeft } from './SidebarToggleIcons';
 import { SidebarNav } from './SidebarNav';
 
 export interface SidebarHeaderProps {
@@ -22,8 +23,44 @@ export interface SidebarHeaderProps {
 }
 
 /**
- * 左栏工具区（LeftToolRegion）：新建/定时/搜索。
- * 折叠入口仅在 AbsoluteTopBar（PR-1 / K3），此处不再放第二颗折叠钮。
+ * 侧栏开关：挂在主布局上，不进宽度为 0 的侧栏盒，因此收起时也不被裁掉。
+ */
+export const SidebarToggle: React.FC<{
+  collapsed: boolean;
+  onToggle: () => void;
+}> = React.memo(({ collapsed, onToggle }) => {
+  const isMacDesktop = useMemo(() => {
+    return (
+      typeof navigator !== 'undefined' &&
+      /Macintosh|Mac OS X/i.test(navigator.userAgent)
+    );
+  }, []);
+  const toggleLabel = collapsed ? '展开侧栏' : '收起侧栏';
+  return (
+    <div
+      className={`${styles.sidebarHeader} sidebar-header`}
+      data-mac={isMacDesktop ? 'true' : 'false'}
+    >
+      <Tooltip content={toggleLabel}>
+        <button
+          type="button"
+          className={`${styles.sidebarToggleBtn} sidebar-toggle-btn`}
+          data-testid="sidebar-toggle"
+          aria-label={toggleLabel}
+          aria-expanded={!collapsed}
+          aria-controls="crish-sidebar"
+          onClick={onToggle}
+        >
+          <IconSidebarLeft size={14} aria-hidden="true" />
+        </button>
+      </Tooltip>
+    </div>
+  );
+});
+SidebarToggle.displayName = 'SidebarToggle';
+
+/**
+ * 侧栏头：新建/定时/搜索。开关不在这里，避免被侧栏收起裁掉。
  */
 export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
   ({

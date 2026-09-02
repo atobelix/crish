@@ -1,26 +1,32 @@
-/* ui/SegmentedControl · RED-DETAILED-02 / T-ATOM-06
- * 圆角锁：外框与分段按钮均走 --button-radius（7px）。
- * 禁止 8px 硬编码、禁止 999/9999 胶囊盖过设置按钮契约。
+/* apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.module.css
+ *
+ * Conex UI · SegmentedControl 现代化样式系统 (v2.0)
+ * 1. 彻底根治 Double Alpha Stacking 激活项 Hover 灰度加深 Bug；
+ * 2. 14px 外壳 + 11px 滑块 SmartPanel 同心大圆角几何体系；
+ * 3. 柔和物理贝塞尔 cubic-bezier(0.2, 0, 0, 1) 动效（防破框）；
+ * 4. 严格遵循 AGENTS.md §13 焦点环规范与 §14 Zero-Blue 现代色彩空间。
  */
 
 .container {
-  --seg-h: 28px;
-  --seg-pad: 2px;
-  --seg-outer-radius: var(--button-radius, 7px);
-  --seg-inner-radius: var(--button-radius, 7px);
-  --seg-fs: var(--font-size-sm, 13px);
-  --seg-item-px: var(--space-2_5, 10px);
+  --tab-spring-bezier: cubic-bezier(0.2, 0, 0, 1);
+  --tab-duration: 200ms;
+  --tab-press-duration: 100ms;
 
   position: relative;
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+
+  /* 核心防穿透：建立局部独立层叠上下文，杜绝外部父容器滤镜与灰度渗透 */
+  isolation: isolate;
+
   height: var(--seg-h);
   padding: var(--seg-pad);
   border-radius: var(--seg-outer-radius);
-  background-color: var(--bg-secondary);
+  background-color: var(--seg-track-bg, color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card, hsl(0 0% 100%))));
   border: 1px solid var(--border-subtle);
-  user-select: none;
 }
 
 .containerBlock {
@@ -37,56 +43,108 @@
   cursor: not-allowed;
 }
 
-/*       */
+/* ── 尺寸档位与同心圆角几何矩阵 ── */
+
+/* xs: 24px 高度, 6px 外壳, 4px 滑块 */
 .containerXs,
 .container[data-size='xs'] {
   --seg-h: 24px;
   --seg-pad: 2px;
+  --seg-outer-radius: var(--radius-md, 6px);
+  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad)); /* 4px */
   --seg-fs: var(--font-size-xs, 12px);
   --seg-item-px: var(--space-2, 8px);
+  --seg-icon-size: 13px;
 }
 
+/* sm: 28px 高度, 7px 外壳, 5px 滑块 (默认档) */
 .containerSm,
 .container[data-size='sm'] {
   --seg-h: 28px;
   --seg-pad: 2px;
+  --seg-outer-radius: var(--button-radius, 7px);
+  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad)); /* 5px */
   --seg-fs: var(--font-size-sm, 13px);
   --seg-item-px: var(--space-2_5, 10px);
+  --seg-icon-size: 14px;
 }
 
+/* md: 32px 高度, 8px 外壳, 5px 滑块 */
 .containerMd,
 .container[data-size='md'] {
   --seg-h: 32px;
-  --seg-pad: 2px;
+  --seg-pad: 3px;
+  --seg-outer-radius: var(--radius-lg, 8px);
+  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad)); /* 5px */
   --seg-fs: var(--font-size-base, 14px);
   --seg-item-px: var(--space-3, 12px);
+  --seg-icon-size: 16px;
 }
 
-/*         (FLIP   ) */
+/* lg: 38px 高度, 10px 外壳, 7px 滑块 (规整为整数 3px pad，消除亚像素偏心) */
+.containerLg,
+.container[data-size='lg'] {
+  --seg-h: 38px;
+  --seg-pad: 3px;
+  --seg-outer-radius: var(--radius-xl, 10px);
+  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad)); /* 7px */
+  --seg-fs: var(--font-size-md, 15px);
+  --seg-item-px: var(--space-4, 16px);
+  --seg-icon-size: 18px;
+}
+
+/* panel: 36px 高度, 14px 外壳, 11px 滑块 (设置面板专属 SmartPanel 同心大圆角) */
+.containerPanel,
+.container[data-size='panel'] {
+  --seg-h: 36px;
+  --seg-pad: 3px;
+  --seg-outer-radius: var(--sep-radius-outer, 14px);
+  --seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad)); /* 11px 完美同心 */
+  --seg-fs: 13.5px;
+  --seg-item-px: 14px;
+  --seg-icon-size: 15px;
+}
+
+/* ── 固体纯白滑块 (Solid Pure-White Card Base Latch) ── */
 .activeSlider {
   position: absolute;
   top: var(--seg-pad);
   bottom: var(--seg-pad);
   left: 0;
   border-radius: var(--seg-inner-radius);
-  background-color: var(--bg-elevated);
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color) 10%, transparent);
+
+  /* 浅色纯白 / 深色提亮实体卡底 (Elevated Card Base) */
+  background-color: var(--seg-slider-bg, var(--bg-card, hsl(0 0% 100%)));
+
+  /* 彻底消除双重描边：滑块不加边框，仅保留纯净立体微投影 */
+  border: none;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 6%, transparent),
+    0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 3%, transparent);
+
   pointer-events: none;
   z-index: 1;
+  will-change: transform, width, opacity;
+  transform-origin: center center;
+
   transition:
-    transform var(--transition-fast, 180ms) cubic-bezier(0.2, 0, 0, 1),
-    width var(--transition-fast, 180ms) cubic-bezier(0.2, 0, 0, 1),
-    opacity var(--transition-micro, 120ms) ease;
+    transform var(--tab-duration) var(--tab-spring-bezier),
+    width var(--tab-duration) var(--tab-spring-bezier),
+    opacity 120ms ease;
 }
 
-/*       */
+/* 首屏未就绪时禁用过渡，防止 (0,0) 弹跳飞跃 */
+.container[data-ready='false'] .activeSlider {
+  transition: none;
+}
+
+/* ── 分段项交互按钮 ── */
 .item {
   position: relative;
   z-index: 2;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1_5, 6px);
   height: 100%;
   padding: 0 var(--seg-item-px);
   font-family: var(--font-sans, inherit);
@@ -100,30 +158,79 @@
   cursor: pointer;
   white-space: nowrap;
   outline: none;
-  transition:
-    color var(--transition-micro, 120ms) ease,
-    background var(--transition-micro, 120ms) ease;
+  box-sizing: border-box;
+  transition: color 120ms ease;
 }
 
 .item:hover:not(:disabled) {
   color: var(--text-primary);
 }
 
-.itemActive {
+/* 悬停背板微光 (仅未激活项在 Hover 时激活动画遮罩，与激活滑块 1:1 几何尺寸完全一致) */
+.item::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--seg-inner-radius);
+  background-color: var(--tint-hover);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  z-index: -1;
+}
+
+/* 严格互斥选择器：仅未激活项在 Hover 时激活动画遮罩 */
+.item:hover:not(:disabled):not([data-active='true']):not([aria-checked='true']):not(.itemActive)::before {
+  opacity: 1;
+}
+
+/* 已激活项：关闭伪元素，杜绝 Double Alpha Stacking */
+.item[data-active='true']::before,
+.item[aria-checked='true']::before,
+.item.itemActive::before {
+  opacity: 0;
+  display: none;
+}
+
+.itemActive,
+.item[data-active='true'],
+.item[aria-checked='true'] {
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
 }
 
-/*    Focus Ring AGENTS.md   13    */
+/* AGENTS.md §13 严格柔和焦点环规范 (3%~10% 克制灰) */
 .item:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px
-    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  box-shadow:
+    0 0 0 1px var(--bg-card),
+    0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .itemDisabled {
   cursor: not-allowed;
   opacity: var(--opacity-disabled, 0.45);
+  pointer-events: none;
+}
+
+/* ── itemInner 微观物理按压交互 ── */
+.itemInner {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1_5, 6px);
+  width: 100%;
+  height: 100%;
+  transform: scale(1) translateY(0);
+  transform-origin: center center;
+  transition: transform var(--tab-duration) var(--tab-spring-bezier);
+}
+
+/* 按压弹性微压缩 (Scale 0.97 + 下沉 1px) */
+.item:active:not(:disabled) .itemInner {
+  transform: scale(0.97) translateY(1px);
+  transition: transform var(--tab-press-duration) ease-in-out;
 }
 
 .itemIcon {
@@ -131,10 +238,43 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 1em;
+  font-size: var(--seg-icon-size);
+  color: inherit;
 }
 
 .itemLabel {
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  padding: 1px 5px;
+  border-radius: var(--radius-full, 9999px);
+  background-color: var(--tint-strong);
+  color: var(--text-secondary);
+  font-family: var(--font-mono, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 减弱动画兜底与 Eco Tier 降级 ── */
+@media (prefers-reduced-motion: reduce) {
+  .activeSlider,
+  .itemInner {
+    transition-duration: 0ms;
+    animation-duration: 0ms;
+    transform: none;
+  }
+}
+
+html[data-perf-tier='eco'] .activeSlider,
+html[data-perf-tier='eco'] .itemInner {
+  transition-duration: 0ms;
+  animation-duration: 0ms;
+  transform: none;
 }

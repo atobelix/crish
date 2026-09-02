@@ -163,23 +163,12 @@ export function isFontInstalled(family: string): boolean {
 }
 
 /**
- * 扫描本机字体（产品友好）：
- * - 不用 Local Font Access API（会弹出 localhost 权限框，正式版不可接受）
- * - 用 canvas 探测各平台精选字体 + 用户手动输入
+ * 扫描本机字体（双引擎 + 缓存）：
  */
 export async function listLocalFonts(): Promise<LocalFontEntry[]> {
-  const map = new Map<string, LocalFontEntry>();
-  const curated = curatedLocalFonts();
-  const all = [...new Set([...curated.ui, ...curated.mono])];
-  for (const fam of all) {
-    if (!fam || fam.startsWith('-')) continue;
-    if (isFontInstalled(fam)) map.set(fam, { family: fam });
-  }
-  // 微任务让 UI 可先响应用户点击（避免扫描卡顿）
-  await Promise.resolve();
-  return Array.from(map.values()).sort((a, b) =>
-    a.family.localeCompare(b.family, 'zh-CN', { sensitivity: 'base' }),
-  );
+  const { scanSystemFonts } = await import('./fontStoreScan');
+  const res = await scanSystemFonts(false);
+  return res.fonts;
 }
 
 /* ---------- load embedded ---------- */

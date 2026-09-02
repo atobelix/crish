@@ -1,0 +1,144 @@
+/* ui/Select/SelectTrigger.module.css — 闭合态触发器大圆角与双向箭头样式 */
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card, hsl(0 0% 100%));
+  color: var(--text-primary);
+  font-family: inherit;
+  cursor: pointer;
+  box-sizing: border-box;
+  text-align: left;
+  user-select: none;
+  position: relative;
+  transition:
+    background-color var(--transition-micro, 100ms ease),
+    border-color var(--transition-micro, 100ms ease);
+}
+
+.trigger:hover:not(:disabled) {
+  background: var(--tint-hover);
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+}
+
+.trigger:focus-visible {
+  outline: none;
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.trigger.open {
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.trigger:disabled {
+  opacity: var(--opacity-disabled, 0.45);
+  cursor: not-allowed;
+  background: var(--bg-secondary);
+}
+
+/* 尺寸矩阵 */
+.triggerSm,
+.size-sm {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: var(--font-size-xs, 12px);
+  border-radius: 8px;
+}
+
+.triggerMd,
+.size-md {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: var(--font-size-sm, 13px);
+  border-radius: 9px;
+}
+
+.triggerLg,
+.size-lg {
+  height: 38px;
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: var(--font-size-md, 14px);
+  border-radius: 10px;
+}
+
+/* 变体 */
+.triggerSoft,
+.variant-soft {
+  background: var(--bg-secondary);
+  border-color: transparent;
+}
+
+.triggerSoft:hover:not(:disabled),
+.variant-soft:hover:not(:disabled) {
+  background: var(--tint-hover);
+  border-color: transparent;
+}
+
+.triggerOutline,
+.variant-outline {
+  background: var(--bg-card, hsl(0 0% 100%));
+  border-color: var(--border-color, hsl(35 10% 86%));
+}
+
+/* 错误态 */
+.triggerError {
+  border-color: var(--color-error, hsl(0 84% 60%));
+}
+
+.startSlot,
+.endSlot {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  margin-left: auto;
+  transition: transform var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
+}
+
+.trigger:hover:not(:disabled) .chevron {
+  color: var(--text-secondary);
+}
+
+.clearBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background-color var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
+}
+
+.clearBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.placeholder {
+  color: var(--text-tertiary);
+}

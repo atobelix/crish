@@ -10,10 +10,17 @@
 
 import {
   PENDING_DRAFT_SESSION_ID,
+  PENDING_DRAFT_PREFIX,
+  mintDraftSessionId,
   isPendingDraftSessionId,
 } from '@crish/shared-types';
 
-export { PENDING_DRAFT_SESSION_ID, isPendingDraftSessionId };
+export {
+  PENDING_DRAFT_SESSION_ID,
+  PENDING_DRAFT_PREFIX,
+  mintDraftSessionId,
+  isPendingDraftSessionId,
+};
 
 /**
  * 历史 API 名：等价 PENDING_DRAFT_SESSION_ID。

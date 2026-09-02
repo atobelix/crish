@@ -1,28 +1,8 @@
 /**
- * 浏览器数据导入区（G-4 收尾 U6：书签/历史/登录态导入 UI，03-方案 §4.2 U6）。
- *
- * 布局（BrowserPanel 内「数据导入」区）：
- * - 书签：文件选择（Chrome Bookmarks JSON——文件按钮 / 拖入 / 路径输入三通道）→
- *   导入按钮 → 统计展示（inserted/skippedDupes + 解析侧报告透传）；
- * - 历史：路径输入（History 库路径）→ 导入 → 统计展示（readTotal/inserted/skippedDupes）；
- * - 登录态：导出（两段确认：① 授权读取对话框——确认后才 authorized=true 实读（§5.2
- *   零副作用）；② 域名清单预览对话框——确认后才「另存为」写盘（§5.4 写盘仅走前端
- *   显式另存为路径））；导入（JSON 粘贴或文件）→ 脱敏统计展示（不含 cookie value）；
- * - 列表：list_bookmarks / list_history 可折叠展示（历史带 limit 控制）。
- *
- * 反馈约定：成功统计行内展示（role="status"，成功文案不打扰 toast——产品禁令）；
- * 仅错误走 toast（onShowToast）。
- *
- * 错误面：invokeTyped 三态——missing（引擎未接线）/ error（结构化 kind/message，
- * tool.browser.not_ready / tool.invalid_input 前缀由 message 透传展示）。
- *
- * 结构（D-01 G-03b 拆分 + T4-11 R6）：业务状态与行为已迁至 `import-hooks/` 四个 hook
- * （useBookmarksImport / useHistoryImport（含列表）/ useStorageImport /
- * useExportAuth），导出两段确认对话框抽为 ExportAuthDialogs 纯展示壳；
- * 「已导入数据」列表区抽为 ImportedListBlock 纯展示壳（T4-11 R6）；
- * 本文件仅保留：props + useId + busy 编排 + 派生 + JSX 渲染（UI ≤500 行门禁）。
+ * 浏览器数据导入区（现代化重构产物）
+ * 彻底清退刺眼高饱和绿块，统一收敛至标准 Button / Input / Token 规范
  */
-import React, { useId, useState } from 'react';
+import React, { useId, useRef, useState } from 'react';
 import {
   Bookmark,
   Download,
@@ -34,10 +14,7 @@ import {
 } from 'lucide-react';
 import styles from './BrowserImportSection.module.css';
 import { Button, Input, Tooltip } from '../../ui';
-import {
-  isUsableJsonText,
-} from '../../../api/browserImportLib';
-import type { } from '../../../hooks/useToastQueue';
+import { isUsableJsonText } from '../../../api/browserImportLib';
 import { useBookmarksImport } from './import-hooks/useBookmarksImport';
 import { useHistoryImport } from './import-hooks/useHistoryImport';
 import { useStorageImport } from './import-hooks/useStorageImport';
@@ -51,22 +28,28 @@ export interface BrowserImportSectionProps {
   browserRunning?: boolean;
   /** 测试注入：登录态「另存为」写盘（缺省 downloadTextFile）。 */
   saveExport?: (filename: string, content: string) => void;
+  /** 外部传入错误 toast 回调。 */
+  onShowToast?: (message: string) => void;
 }
 
 export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
   browserRunning = false,
   saveExport,
+  onShowToast,
 }) => {
   const baseId = useId();
   const [busy, setBusy] = useState<BusyKind>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragDepthRef = useRef(0);
 
-  const bookmarks = useBookmarksImport({ busy, setBusy });
-  const history = useHistoryImport({ busy, setBusy });
-  const storage = useStorageImport({ busy, setBusy });
+  const bookmarks = useBookmarksImport({ busy, setBusy, onShowToast });
+  const history = useHistoryImport({ busy, setBusy, onShowToast });
+  const storage = useStorageImport({ busy, setBusy, onShowToast });
   const exportAuth = useExportAuth({
     setBusy,
     setStorageError: storage.setStorageError,
     saveExport,
+    onShowToast,
   });
 
   const exportReady = browserRunning && busy !== 'storageExport';
@@ -74,6 +57,37 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
     browserRunning &&
     isUsableJsonText(storage.storageJson) &&
     busy !== 'storageImport';
+
+  const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    if (dragDepthRef.current === 1) {
+      setIsDragging(true);
+    }
+  };
+
+  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepthRef.current -= 1;
+    if (dragDepthRef.current <= 0) {
+      dragDepthRef.current = 0;
+      setIsDragging(false);
+    }
+  };
+
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy';
+    }
+  };
+
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragging(false);
+    bookmarks.onBookmarksDrop(e);
+  };
 
   return (
     <section className={styles.section} aria-label="数据导入">
@@ -133,10 +147,17 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
         <div
           className={styles.dropZone}
           role="button"
-          aria-label="拖入 Chrome Bookmarks JSON"
+          aria-label={
+            bookmarks.bookmarksFileName
+              ? `已装载：${bookmarks.bookmarksFileName}`
+              : '拖入 Chrome Bookmarks JSON'
+          }
+          data-dragging={isDragging ? 'true' : undefined}
           tabIndex={0}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={bookmarks.onBookmarksDrop}
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault();
@@ -331,6 +352,7 @@ export const BrowserImportSection: React.FC<BrowserImportSectionProps> = ({
         <textarea
           id={`${baseId}-storage-json`}
           className={styles.textarea}
+          aria-label="粘贴标准 storage_state JSON（Playwright 兼容 { cookies, origins }）"
           placeholder="粘贴标准 storage_state JSON（Playwright 兼容 { cookies, origins }）"
           value={storage.storageJson}
           onChange={(e) => {

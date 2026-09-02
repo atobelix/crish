@@ -9,9 +9,14 @@ import { useBrowserSession } from '../workspace/useBrowserSession';
 
 type Props = {
   _onBlockingOverlayChange?: (open: boolean) => void;
+  saveExport?: (filename: string, content: string) => void;
+  onShowToast?: (message: string) => void;
 };
 
-export const SettingsBrowserTab: React.FC<Props> = () => {
+export const SettingsBrowserTab: React.FC<Props> = ({
+  saveExport,
+  onShowToast,
+}) => {
   const { state } = useBrowserSession();
   const browserRunning = state === 'running';
 
@@ -19,7 +24,11 @@ export const SettingsBrowserTab: React.FC<Props> = () => {
     <SettingsPage title="受管浏览器">
       <SettingsSection title="数据管理与导入">
         <SettingsCard>
-          <BrowserImportSection browserRunning={browserRunning} />
+          <BrowserImportSection
+            browserRunning={browserRunning}
+            saveExport={saveExport}
+            onShowToast={onShowToast}
+          />
         </SettingsCard>
       </SettingsSection>
     </SettingsPage>

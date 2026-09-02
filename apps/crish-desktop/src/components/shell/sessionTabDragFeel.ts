@@ -1,7 +1,7 @@
 /**
  * 会话 Tab 拖手感纯函数（参考 DragController 常量）。
  *
- * 布局引擎仍走产品 shell / BinaryTree；这里只钉阈值、插入滞后、叶面 25% 分区。
+ * 布局引擎仍走产品 shell / BinaryTree；这里只钉阈值、插入滞后、叶面 22% 分区。
  */
 
 export const SESSION_TAB_DRAG_THRESHOLD_L1 = 4;
@@ -9,7 +9,8 @@ export const SESSION_TAB_INDICATOR_W = 150;
 export const SESSION_TAB_INDICATOR_H = 26;
 export const SESSION_TAB_SHIFT_GAP = 4;
 export const SESSION_TAB_INSERT_HYSTERESIS = 1 / 3;
-export const SESSION_PANE_EDGE = 0.25;
+/** 叶面边缘占比。与 Demo DragController `_handleWorkspaceMove`（rx<0.22 / >0.78）同一数值。 */
+export const SESSION_PANE_EDGE = 0.22;
 export const SESSION_TAB_STRIP_SHIFT_MS = 180;
 export const SESSION_TAB_STRIP_SHIFT_EASE = 'cubic-bezier(.2,0,0,1)';
 export const SESSION_TAB_INDICATOR_GEOM_MS = 120;
@@ -73,7 +74,7 @@ export function computeSessionTabInsertIndex(
   return tabRects.length;
 }
 
-/** 叶面：左右上下 25% 边缘分 region，中间 center 合并 */
+/** 叶面：左右上下 22% 边缘分 region，中间 center 合并 */
 export function detectPaneDropRegion(
   cx: number,
   cy: number,

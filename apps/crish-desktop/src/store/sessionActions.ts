@@ -68,8 +68,11 @@ export interface SessionActions {
   setActiveSessionId: (id: string) => void;
   setActiveAgentId: (id: string | null) => void;
   setPanelAgentId: (id: string | null) => void;
-  /** 进入草稿态：active = 哨兵，sessions 不增条目 */
-  enterDraftMode: (folder?: string) => void;
+  /** 进入草稿态：active = 哨兵（可 per-tab），sessions 不增条目 */
+  enterDraftMode: (
+    folder?: string,
+    opts?: { draftSessionId?: string }
+  ) => void;
   /** 更新草稿绑定 folder（项目切换时） */
   setDraftFolder: (folder: string) => void;
   /** 退出草稿：清空 draftFolder；若 active 为草稿则清空 active */

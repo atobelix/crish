@@ -12,6 +12,7 @@ import { useSessionStore } from './sessionStore';
 import { useStreamingStore } from './streamingStore';
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
 import { useTerminalStore } from './terminalStore';
+import { getShellReadApi } from './workspace-shell/shellReadBridge';
 
 export const SessionCoordinator = {
   /**
@@ -23,6 +24,9 @@ export const SessionCoordinator = {
   deleteSessionCascade(sessionId: string): boolean {
     const id = String(sessionId || '').trim();
     if (!id) return false;
+
+    // 0. 树上有该 session 的 tab 则摘掉（经 shell 桥，避免 Coordinator ↔ store 环）
+    getShellReadApi()?.closeTabBySessionId?.(id);
 
     // 1. 清理 sessionStore 中的持久数据（返回是否真实命中并删除）
     const removed = useSessionStore.getState().deleteSession(id);

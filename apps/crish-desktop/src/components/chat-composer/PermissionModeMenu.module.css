@@ -24,19 +24,20 @@
 }
 
 .permPill:hover {
-  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
 .permPill:active,
 .permPill.isOpen {
-  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 
 .permPill:focus-visible {
   outline: none;
-  background: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  background: var(--tint-active);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
 .permPillDot {
@@ -74,12 +75,12 @@
 }
 
 .permPill.iconOnly:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--tint-hover);
 }
 
 .permPill.iconOnly.isOpen,
 .permPill.iconOnly:active {
-  background: var(--tint-active, rgba(0, 0, 0, 0.08));
+  background: var(--tint-active);
 }
 
 .permPill.iconOnly svg {
@@ -89,16 +90,16 @@
 }
 
 .permPill.iconOnly[data-perm-mode='ask'] {
-  color: var(--sem-warn, #d97706);
+  color: var(--sem-warn, hsl(37 91% 44%));
 }
 
 .permPill.iconOnly[data-perm-mode='full'] {
-  color: #c25e2e; /* 经典赤褐色/珊瑚橙，精确匹配截图 */
+  color: var(--accent-orange-strong, color-mix(in srgb, var(--accent-orange, hsl(28 80% 52%)) 85%, var(--text-primary)));
 }
 
 .permPill.iconOnly[data-perm-mode='plan'],
 .permPill.iconOnly[data-perm-mode='deep'] {
-  color: var(--text-secondary, #5c5954);
+  color: var(--text-secondary);
 }
 
 .permPillChev {
@@ -112,19 +113,21 @@
 
 .permMenu {
   z-index: var(--z-dropdown-menu, var(--z-dropdown));
-  background: var(--bg-card, hsl(35, 10%, 98%));
+  background: var(--bg-card, hsl(0 0% 100%));
   backdrop-filter: blur(28px) saturate(160%);
   -webkit-backdrop-filter: blur(28px) saturate(160%);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
   border-radius: var(--sep-radius-outer, 14px);
-  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.12), 0 4px 16px -2px rgba(0, 0, 0, 0.05);
+  box-shadow:
+    0 16px 40px -8px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 12%, transparent),
+    0 4px 16px -2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 5%, transparent);
   padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 230px;
-  max-width: 280px;
-  animation: cds-popover-enter var(--transition-popover-enter) forwards;
+  min-width: min(260px, calc(100vw - 16px));
+  max-width: min(340px, calc(100vw - 16px));
+  animation: cds-popover-enter var(--transition-popover-enter, 180ms cubic-bezier(0.16, 1, 0.3, 1)) forwards;
   transform-origin: var(--radix-popover-content-transform-origin, top left);
   max-height: min(
     var(--radix-popover-content-available-height, 360px),
@@ -135,9 +138,29 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent)) transparent;
   box-sizing: border-box;
   color: var(--text-primary);
   font-family: var(--font-sans, var(--sep-font-sans));
+}
+
+.permMenu::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.permMenu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.permMenu::-webkit-scrollbar-thumb {
+  background: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent));
+  border-radius: 9999px;
+}
+
+.permMenu::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
 }
 
 .permMenuExit {
@@ -149,7 +172,9 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 10px;
+  min-height: 32px;
+  height: auto;
   border-radius: var(--sep-item-radius, 8px);
   border: none;
   background: transparent;
@@ -164,19 +189,20 @@
 }
 
 .permMenuItem:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
 .permMenuItem.isSelected {
-  background: var(--tint-active, rgba(16, 185, 129, 0.08));
+  background: var(--tint-active);
   color: var(--text-primary);
   font-weight: 500;
 }
 
 .permMenuItem:focus-visible {
   outline: none;
-  background: var(--tint-active, rgba(16, 185, 129, 0.08));
+  background: var(--tint-hover);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
 .iconWrapper {
@@ -198,31 +224,35 @@
 .textCol {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   flex: 1;
   min-width: 0;
+  text-align: left;
 }
 
 .title,
 .permMenuTitle {
   font-size: var(--font-size-sm, 13px);
   font-weight: 500;
-  line-height: 1.25;
+  line-height: var(--line-height-ui, 1.35);
   color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .desc {
   font-size: var(--font-size-xs, 11px);
-  color: var(--sep-text-muted, var(--text-tertiary));
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-weight: 400;
+  color: var(--text-secondary);
+  line-height: var(--line-height-ui, 1.35);
+  word-break: break-word;
+  white-space: normal;
 }
 
 .checkIcon,
 .permMenuCheck {
-  color: var(--brand-deep);
+  color: var(--brand-deep, hsl(160 84% 30%));
   flex-shrink: 0;
   margin-left: auto;
 }

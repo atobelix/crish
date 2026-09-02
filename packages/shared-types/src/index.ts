@@ -245,6 +245,8 @@ export type {
 export {
   SESSION_IDENTITY_KINDS,
   PENDING_DRAFT_SESSION_ID,
+  PENDING_DRAFT_PREFIX,
+  mintDraftSessionId,
   isPendingDraftSessionId,
   isSessionIdentityKind,
   resolveSessionIdentityKind,

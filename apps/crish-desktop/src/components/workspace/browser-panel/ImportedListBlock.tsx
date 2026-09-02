@@ -1,8 +1,7 @@
 /**
- * 已导入数据列表区（T4-11 R6 拆分产物 · 自 BrowserImportSection 迁出）。
+ * 已导入数据列表区（现代化重构产物 · 自 BrowserImportSection 迁出）。
  * 纯展示壳：列表展开/收起按钮、limit 控制、刷新、书签/历史行渲染。
- * 状态与行为由 useHistoryImport hook 经主体接线传入，DOM 结构与文案零改动
- * （测试 BrowserImportSection.test.tsx「列表展示」断言不依赖本文件内部）。
+ * 状态与行为由 useHistoryImport hook 经主体接线传入，DOM 结构与无障碍完善。
  */
 import React from 'react';
 import { RefreshCw } from 'lucide-react';
@@ -36,15 +35,19 @@ export const ImportedListBlock: React.FC<ImportedListBlockProps> = ({
   baseId,
   list,
 }) => {
+  const panelId = `${baseId}-list-panel`;
+
   return (
     <div className={styles.block}>
-      <h4 className={styles.blockTitle}>已导入数据</h4>
+      <h4 className={styles.blockTitle}>已导入数据查看</h4>
       <div className={styles.row}>
         <Button
           type="button"
           variant={list.listTab === 'bookmarks' ? 'primary' : 'secondary'}
           size="sm"
           disabled={busy === 'list'}
+          aria-expanded={list.listTab === 'bookmarks'}
+          aria-controls={panelId}
           onClick={() => {
             void list.toggleList('bookmarks');
           }}
@@ -56,6 +59,8 @@ export const ImportedListBlock: React.FC<ImportedListBlockProps> = ({
           variant={list.listTab === 'history' ? 'primary' : 'secondary'}
           size="sm"
           disabled={busy === 'list'}
+          aria-expanded={list.listTab === 'history'}
+          aria-controls={panelId}
           onClick={() => {
             void list.toggleList('history');
           }}
@@ -90,13 +95,15 @@ export const ImportedListBlock: React.FC<ImportedListBlockProps> = ({
           </>
         ) : null}
       </div>
+
       {list.listError ? (
         <p className={styles.error} role="alert">
           {list.listError}
         </p>
       ) : null}
+
       {list.listTab === 'bookmarks' && list.bookmarkRows !== null ? (
-        <div className={styles.listWrap}>
+        <div className={styles.listWrap} id={panelId} role="region" aria-label="已导入书签列表">
           <p className={styles.listCaption} role="status">
             共 {list.bookmarkRows.length} 条（导入时间倒序）
           </p>
@@ -124,8 +131,9 @@ export const ImportedListBlock: React.FC<ImportedListBlockProps> = ({
           )}
         </div>
       ) : null}
+
       {list.listTab === 'history' && list.historyRows !== null ? (
-        <div className={styles.listWrap}>
+        <div className={styles.listWrap} id={panelId} role="region" aria-label="已导入历史列表">
           <p className={styles.listCaption} role="status">
             共 {list.historyRows.length} 条（visited_at 倒序，limit 截断）
           </p>

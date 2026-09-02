@@ -1,20 +1,26 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import * as Lucide from 'lucide-react';
+/**
+ * 现代字体选择器：内嵌搜索过滤框 + 极简操作栏 + WAI-ARIA 1.2 + IME 组合锁
+ */
+
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import styles from './FontSelectField.module.css';
 import { Menu, Tooltip } from '../ui';
 import type { SelectOptionItem } from '../ui';
+import {
+  filterAndSortIndexedOptions,
+  indexFontOptions,
+  type IndexedFontOption,
+} from './internal/fontPinyinMatcher';
+import {
+  SearchIcon,
+  HardDriveIcon,
+  RotateCcwIcon,
+  CheckIcon,
+  Loader2Icon,
+  ChevronDownIcon,
+} from './internal/fontIcons';
+import { useFontKeyboardNav } from './internal/useFontKeyboardNav';
 
-/**
- * FontSelectField — 字体选择字段（T-C 批次 5.2 · T13 业务封装）
- *
- * SettingsSelect 退役后，FontSettingsSection 的专属能力（字体预览 previewFamily、
- * 自定义 footer 头部、valuePreviewFamily、分组 group 字段）不升格 ui/Select
- * （单消费点专属形态，遵循「2 个消费点才升格」原则），以本业务封装层组合实现：
- * 基座仍是 ui/Menu（listbox 语义 + 键盘漫游 + Esc/外点关闭），仅保留
- * 「面板宽度贴合触发器」测量与字体渲染定制。
- *
- * 消费点：仅 FontSettingsSection（ui 字体 / 代码字体两处）。
- */
 export type FontSelectOption = {
   value: string;
   label: string;
@@ -31,9 +37,14 @@ interface Props {
   placeholder?: string;
   maxHeight?: number;
   className?: string;
+  valuePreviewFamily?: string;
+  onScanLocal?: () => Promise<void> | void;
+  isScanning?: boolean;
+  onResetDefault?: () => void;
+  isDefault?: boolean;
+  onApplyCustom?: (customName: string) => void;
   header?: React.ReactNode;
   footer?: React.ReactNode;
-  valuePreviewFamily?: string;
 }
 
 export const FontSelectField: React.FC<Props> = ({
@@ -41,36 +52,107 @@ export const FontSelectField: React.FC<Props> = ({
   options,
   onChange,
   disabled,
-  placeholder = '选择…',
-  maxHeight = 280,
+  placeholder = '选择字体…',
+  maxHeight = 320,
   className,
+  valuePreviewFamily,
+  onScanLocal,
+  isScanning = false,
+  onResetDefault,
+  isDefault = false,
+  onApplyCustom,
   header,
   footer,
-  valuePreviewFamily,
 }) => {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [menuWidth, setMenuWidth] = useState<number | undefined>(undefined);
+
+  const listboxId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selected = options.find((o) => o.value === value);
   const label = selected?.label || placeholder;
 
-  // 面板宽度贴合触发器宽度（[140,280] 钳制；位置由基座负责）
+  // 1. 预构建索引（带 Memoize）
+  const indexedOptions = useMemo(() => indexFontOptions(options), [options]);
+
+  // 2. 多维即时模糊过滤
+  const filteredOptions = useMemo(() => {
+    return filterAndSortIndexedOptions(indexedOptions, searchQuery);
+  }, [indexedOptions, searchQuery]);
+
+  // 3. 分组划分（预设与本机）
+  const groupedList = useMemo(() => {
+    const presets: IndexedFontOption[] = [];
+    const locals: IndexedFontOption[] = [];
+
+    for (const opt of filteredOptions) {
+      if (opt.group === '本机' || opt.value.startsWith('local:')) {
+        locals.push(opt);
+      } else {
+        presets.push(opt);
+      }
+    }
+    return { presets, locals };
+  }, [filteredOptions]);
+
+  // 4. 测量触发器宽度
   const measureWidth = useCallback(() => {
     if (triggerRef.current) {
       const rect = triggerRef.current.getBoundingClientRect();
-      setMenuWidth(Math.min(Math.max(rect.width, 160), 280));
+      setMenuWidth(Math.min(Math.max(rect.width, 180), 320));
     }
   }, []);
+
+  const handleSelect = useCallback(
+    (val: string) => {
+      onChange(val);
+      setOpen(false);
+    },
+    [onChange]
+  );
+
+  const handleApplyCustomQuery = useCallback(() => {
+    const q = searchQuery.trim();
+    if (!q) return;
+    if (onApplyCustom) {
+      onApplyCustom(q);
+      setOpen(false);
+    }
+  }, [searchQuery, onApplyCustom]);
+
+  const {
+    focusedIndex,
+    setFocusedIndex,
+    scrollContainerRef,
+    handleCompositionStart,
+    handleCompositionEnd,
+    handleKeyDown,
+  } = useFontKeyboardNav({
+    filteredCount: filteredOptions.length,
+    onSelectCurrent: (idx) => {
+      const opt = filteredOptions[idx];
+      if (opt) handleSelect(opt.value);
+    },
+    onApplyCustom: handleApplyCustomQuery,
+    onClose: () => {
+      setOpen(false);
+      triggerRef.current?.focus();
+    },
+  });
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
       if (nextOpen) {
         measureWidth();
+        setSearchQuery('');
+        setTimeout(() => searchInputRef.current?.focus(), 30);
       }
       setOpen(nextOpen);
     },
-    [measureWidth],
+    [measureWidth]
   );
 
   useEffect(() => {
@@ -79,19 +161,22 @@ export const FontSelectField: React.FC<Props> = ({
     return () => window.removeEventListener('resize', measureWidth);
   }, [open, measureWidth]);
 
-  const handleSelect = useCallback(
-    (idValue: string) => {
-      onChange(idValue);
-      setOpen(false);
-    },
-    [onChange],
+  const menuOptions: SelectOptionItem[] = useMemo(
+    () => filteredOptions.map((opt) => ({ id: opt.value, label: opt.label })),
+    [filteredOptions]
   );
 
-  // 键盘漫游用：选项数组与 children 渲染顺序保持一致
-  const menuOptions: SelectOptionItem[] = options.map((opt) => ({
-    id: opt.value,
-    label: opt.label,
-  }));
+  const hasDraftToApply =
+    Boolean(onApplyCustom) &&
+    searchQuery.trim().length > 0 &&
+    searchQuery.trim() !== selected?.label;
+
+  const activeDescendantId =
+    focusedIndex >= 0 && focusedIndex < filteredOptions.length
+      ? `${listboxId}-opt-${focusedIndex}`
+      : undefined;
+
+  let flatOptionCursor = 0;
 
   return (
     <div
@@ -115,6 +200,8 @@ export const FontSelectField: React.FC<Props> = ({
               className={styles.settingsSelectTrigger}
               disabled={disabled}
               aria-label={label}
+              aria-haspopup="listbox"
+              aria-expanded={open}
             >
               <span
                 className={styles.settingsSelectValue}
@@ -122,64 +209,184 @@ export const FontSelectField: React.FC<Props> = ({
                   valuePreviewFamily
                     ? { fontFamily: valuePreviewFamily }
                     : selected?.previewFamily
-                      ? { fontFamily: selected.previewFamily }
-                      : undefined
+                    ? { fontFamily: selected.previewFamily }
+                    : undefined
                 }
               >
                 {label}
               </span>
-              <Lucide.ChevronDown
-                size={14}
-                className={styles.settingsSelectChev}
-                aria-hidden
-              />
+              <ChevronDownIcon size={14} className={styles.settingsSelectChev} />
             </button>
           }
         >
-          {header ? <div className={styles.settingsSelectHeader}>{header}</div> : null}
-          <div role="listbox" className={styles.settingsSelectScroll}>
-            {options.map((opt) => {
-              const isSelected = opt.value === value;
-              const font = opt.previewFamily;
-              const node = (
-                <button
-                  key={opt.value}
-                  type="button"
-                  className={`${styles.settingsSelectItem} ${isSelected ? styles.isActive : ''}`}
-                  role="option"
-                  aria-selected={isSelected}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSelect(opt.value);
-                  }}
-                >
-                  <span
-                    className={styles.settingsSelectItemLabel}
-                    style={font ? { fontFamily: font } : undefined}
+          {/* 内嵌搜索头部 + 极简操作栏 */}
+          <div
+            className={styles.searchHeader}
+            role="search"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className={styles.searchInputWrapper}>
+              <SearchIcon size={13} className={styles.searchIcon} />
+              <input
+                ref={searchInputRef}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={open}
+                aria-controls={listboxId}
+                aria-activedescendant={activeDescendantId}
+                aria-label="搜索或输入自定义字体名称"
+                className={styles.searchInput}
+                placeholder="搜索或输入字体..."
+                value={searchQuery}
+                disabled={disabled}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
+                onKeyDown={handleKeyDown}
+              />
+              {hasDraftToApply && (
+                <Tooltip content="应用当前自定义字体 (Enter)">
+                  <button
+                    type="button"
+                    className={styles.customApplyBtn}
+                    onClick={handleApplyCustomQuery}
+                    aria-label="应用当前自定义字体"
                   >
-                    {opt.label}
-                  </span>
-                  {isSelected ? (
-                    <Lucide.Check
-                      size={13}
-                      className={styles.settingsSelectCheckIcon}
-                      aria-hidden
-                    />
-                  ) : null}
-                </button>
-              );
+                    <CheckIcon size={12} />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
 
-              if (opt.hint) {
-                return (
-                  <Tooltip key={opt.value} content={opt.hint}>
-                    {node}
-                  </Tooltip>
-                );
-              }
-              return node;
-            })}
+            {onScanLocal && (
+              <Tooltip content="全量扫描本机系统字体">
+                <button
+                  type="button"
+                  className={styles.actionBtn}
+                  disabled={disabled || isScanning}
+                  onClick={() => void onScanLocal()}
+                  aria-label="全量扫描本机系统字体"
+                >
+                  {isScanning ? (
+                    <Loader2Icon size={13} className={styles.spinIcon} />
+                  ) : (
+                    <HardDriveIcon size={13} />
+                  )}
+                </button>
+              </Tooltip>
+            )}
+
+            {onResetDefault && (
+              <Tooltip content="恢复系统优化默认字体">
+                <button
+                  type="button"
+                  className={styles.actionBtn}
+                  disabled={disabled || isDefault}
+                  onClick={onResetDefault}
+                  aria-label="恢复系统优化默认字体"
+                >
+                  <RotateCcwIcon size={13} />
+                </button>
+              </Tooltip>
+            )}
           </div>
-          {footer ? <div className={styles.settingsSelectFooter}>{footer}</div> : null}
+
+          {header ? <div className={styles.headerArea}>{header}</div> : null}
+
+          {/* 选项滚动列表 */}
+          <div
+            id={listboxId}
+            ref={scrollContainerRef}
+            role="listbox"
+            aria-label="字体选项列表"
+            className={styles.settingsSelectScroll}
+          >
+            {groupedList.presets.length > 0 && (
+              <>
+                <div role="presentation" className={styles.groupHeader}>
+                  预设与内嵌
+                </div>
+                {groupedList.presets.map((opt) => {
+                  const flatIdx = flatOptionCursor++;
+                  const isSelected = opt.value === value;
+                  const isFocused = flatIdx === focusedIndex;
+                  return (
+                    <button
+                      key={opt.value}
+                      id={`${listboxId}-opt-${flatIdx}`}
+                      data-opt-index={flatIdx}
+                      type="button"
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={isSelected}
+                      className={`${styles.settingsSelectItem} ${
+                        isSelected ? styles.isActive : ''
+                      } ${isFocused ? styles.isFocused : ''}`}
+                      onMouseEnter={() => setFocusedIndex(flatIdx)}
+                      onClick={() => handleSelect(opt.value)}
+                    >
+                      <span
+                        className={styles.settingsSelectItemLabel}
+                        style={opt.previewFamily ? { fontFamily: opt.previewFamily } : undefined}
+                      >
+                        {opt.label}
+                      </span>
+                      {isSelected && <CheckIcon size={13} className={styles.checkIcon} />}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {groupedList.locals.length > 0 && (
+              <>
+                <div role="presentation" className={styles.groupHeader}>
+                  本机系统字体 ({groupedList.locals.length})
+                </div>
+                {groupedList.locals.map((opt) => {
+                  const flatIdx = flatOptionCursor++;
+                  const isSelected = opt.value === value;
+                  const isFocused = flatIdx === focusedIndex;
+                  return (
+                    <button
+                      key={opt.value}
+                      id={`${listboxId}-opt-${flatIdx}`}
+                      data-opt-index={flatIdx}
+                      type="button"
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={isSelected}
+                      className={`${styles.settingsSelectItem} ${
+                        isSelected ? styles.isActive : ''
+                      } ${isFocused ? styles.isFocused : ''}`}
+                      onMouseEnter={() => setFocusedIndex(flatIdx)}
+                      onClick={() => handleSelect(opt.value)}
+                    >
+                      <span
+                        className={styles.settingsSelectItemLabel}
+                        style={opt.previewFamily ? { fontFamily: opt.previewFamily } : undefined}
+                      >
+                        {opt.label}
+                      </span>
+                      {isSelected && <CheckIcon size={13} className={styles.checkIcon} />}
+                    </button>
+                  );
+                })}
+              </>
+            )}
+
+            {filteredOptions.length === 0 && (
+              <div className={styles.emptyState}>
+                <span>未找到匹配字体</span>
+                <span className={styles.emptySub}>按 Enter 或点击对勾直接应用为自定义字体</span>
+              </div>
+            )}
+          </div>
+
+          {footer ? <div className={styles.footerArea}>{footer}</div> : null}
         </Menu>
       </div>
     </div>

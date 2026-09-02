@@ -1,0 +1,195 @@
+/* ui/Select/Combobox.module.css — 搜索输入框、Chips 胶囊与高亮文本样式 */
+
+.comboboxInputWrapper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card, hsl(0 0% 100%));
+  color: var(--text-primary);
+  border-radius: var(--radius-lg, 8px);
+  box-sizing: border-box;
+  padding: 0 10px;
+  position: relative;
+  transition:
+    border-color var(--transition-micro, 100ms ease);
+}
+
+.comboboxInputWrapper:focus-within {
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.comboboxInputWrapper.size-sm {
+  height: 28px;
+  min-height: 28px;
+  border-radius: var(--radius-md, 6px);
+  padding: 0 8px;
+}
+
+.comboboxInputWrapper.size-md {
+  height: 32px;
+  min-height: 32px;
+  border-radius: var(--radius-lg, 8px);
+  padding: 0 10px;
+}
+
+.comboboxInputWrapper.size-lg {
+  height: 40px;
+  min-height: 40px;
+  border-radius: var(--radius-xl, 10px);
+  padding: 0 14px;
+}
+
+.comboboxInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-primary);
+  padding: 0;
+}
+
+.comboboxInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.startSlot,
+.endSlot {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.clearBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background-color var(--transition-micro, 100ms ease), color var(--transition-micro, 100ms ease);
+}
+
+.clearBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+}
+
+/* 多选 Chips 容器 */
+.chipsWrapper {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 32px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card, hsl(0 0% 100%));
+  border-radius: var(--radius-lg, 8px);
+  box-sizing: border-box;
+  cursor: text;
+  transition:
+    border-color var(--transition-micro, 100ms ease);
+}
+
+.chipsWrapper:focus-within {
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.chipsInput {
+  flex: 1;
+  min-width: 60px;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-primary);
+  padding: 2px 0;
+}
+
+.chipsInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* 胶囊 Chip */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  user-select: none;
+  box-sizing: border-box;
+  transition:
+    background-color var(--transition-micro, 100ms ease),
+    border-color var(--transition-micro, 100ms ease);
+}
+
+.chip.chipActive {
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.chipLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chipRemove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.chipRemove:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+/* 关键词高亮 */
+.highlightText {
+  color: var(--brand-deep, hsl(160 84% 30%));
+  font-weight: 600;
+}
+
+/* 浮层网格 */
+.gridList {
+  display: grid;
+  gap: 2px;
+}
+
+/* 空状态 */
+.empty {
+  padding: 12px 10px;
+  text-align: center;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+}

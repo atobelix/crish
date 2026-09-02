@@ -1,0 +1,322 @@
+/* ui/Select/SelectContent.module.css — 展开态大圆角浮层与同心曲率样式 */
+
+.content {
+  position: fixed;
+  z-index: var(--z-dropdown, 300);
+  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  box-shadow:
+    0 10px 28px -4px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 10%, transparent),
+    0 3px 10px -2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+  box-sizing: border-box;
+  outline: none;
+  font-family: inherit;
+  color: var(--text-primary);
+  max-height: min(360px, 70vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent)) transparent;
+  min-width: max(var(--anchor-width, 160px), 220px);
+  max-width: min(440px, calc(100vw - 16px));
+  width: max(calc(var(--anchor-width, 160px) + 20px), 220px);
+  animation: selectPopEnter 140ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes selectPopEnter {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.content::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.content::-webkit-scrollbar-thumb {
+  background: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent));
+  border-radius: 9999px;
+}
+
+.content::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
+}
+
+/* 尺寸档位（同心曲率：外圆角 = 内圆角 + 内边距） */
+.contentSm,
+.size-sm {
+  border-radius: 12px;
+  padding: 4px;
+}
+
+.contentMd,
+.size-md {
+  border-radius: 13px;
+  padding: 5px;
+}
+
+.contentLg,
+.size-lg {
+  border-radius: 14px;
+  padding: 6px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 选项行（8~9px 同心圆角） */
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 0 10px;
+  border-radius: 8px;
+  min-height: 32px;
+  height: 32px;
+  font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-primary);
+  cursor: pointer;
+  box-sizing: border-box;
+  position: relative;
+  user-select: none;
+  outline: none;
+  transition:
+    background-color var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease),
+    transform 60ms ease-out;
+}
+
+.item:active:not(.itemDisabled) {
+  transform: scale(0.985);
+}
+
+.itemSm {
+  padding: 0 8px;
+  font-size: var(--font-size-xs, 12px);
+  min-height: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
+.itemMd {
+  padding: 0 10px;
+  font-size: var(--font-size-sm, 13px);
+  min-height: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.itemLg {
+  padding: 0 12px;
+  font-size: var(--font-size-md, 14px);
+  min-height: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+/* 多行说明选项 */
+.itemWithHint {
+  min-height: 46px;
+  height: auto;
+  padding: 6px 10px;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.itemWithHint .itemIcon {
+  margin-top: 2px;
+}
+
+.itemWithHint .itemCheck {
+  margin-top: 3px;
+}
+
+.item:hover:not(.itemDisabled),
+.itemHighlighted:not(.itemDisabled) {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.itemSelected,
+.item[aria-selected='true'] {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.itemDisabled,
+.item[aria-disabled='true'] {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled, 0.45);
+}
+
+.itemDisabled:hover {
+  background: transparent;
+}
+
+.itemIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+.itemSelected .itemIcon {
+  color: var(--text-primary);
+}
+
+.itemLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: var(--line-height-ui, 1.35);
+}
+
+.textCol {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.title {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desc {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--text-tertiary);
+  word-break: break-word;
+  white-space: normal;
+}
+
+.itemHint {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.itemShortcut {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-tertiary);
+  font-family: var(--font-mono, monospace);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.itemCheck {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--brand, hsl(160 84% 39%));
+  margin-left: auto;
+}
+
+/* 分组与标签 */
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.groupLabel {
+  padding: 4px 10px;
+  font-size: var(--font-size-xs, 11px);
+  font-weight: 500;
+  color: var(--text-tertiary);
+  user-select: none;
+}
+
+/* 分割线 */
+.separator {
+  height: 0;
+  min-height: 0;
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 3px 6px;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+/* 表单域包装 */
+.wrapper,
+.legacyWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.label,
+.legacyLabel {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.errorText,
+.legacyErrorText {
+  font-size: var(--font-size-xs, 11px);
+  color: var(--color-error, hsl(0 84% 60%));
+  margin: 2px 0 0 0;
+}
+
+.selectedValue,
+.legacySelectedValue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 节能与减弱动画 */
+@media (prefers-reduced-motion: reduce) {
+  .content {
+    animation: none;
+    transition: opacity 100ms ease;
+  }
+}
+
+html[data-perf-tier='eco'] .content {
+  animation: none;
+  transition: none;
+}

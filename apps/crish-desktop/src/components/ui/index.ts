@@ -22,8 +22,50 @@ export { Menu } from './Menu/Menu';
 export type { MenuProps } from './Menu/Menu';
 export type { SelectOptionItem } from './Menu/types';
 
-export { Select } from './Select/Select';
-export type { SelectProps, SelectOption } from './Select/Select';
+export {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+  SelectGroup,
+  SelectGroupLabel,
+  SelectLabel,
+  SelectSeparator,
+  SelectClearButton,
+  SelectIcon,
+  Combobox,
+  ComboboxInput,
+  ComboboxChips,
+  ComboboxChip,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+  ComboboxGroup,
+  ComboboxLabel,
+  ComboboxSeparator,
+  highlightMatches,
+} from './Select';
+export type {
+  SelectProps,
+  SelectOption,
+  SelectSize,
+  SelectVariant,
+  SelectRootProps,
+  SelectTriggerProps,
+  SelectValueProps,
+  SelectContentProps,
+  SelectItemProps,
+  ComboboxRootProps,
+  ComboboxInputProps,
+  ComboboxChipsProps,
+  ComboboxChipProps,
+  ComboboxContentProps,
+  ComboboxListProps,
+  ComboboxItemProps,
+  ComboboxEmptyProps,
+} from './Select';
 
 export { Dialog } from './Dialog/Dialog';
 export type { DialogProps, DialogSize, DialogRole } from './Dialog/Dialog';
@@ -57,8 +99,45 @@ export type {
   TabStripRenderCtx,
 } from './TabStrip/TabStrip';
 
+export { Tabs, TabsList, TabsTrigger, TabsContent, useTabsContext } from './Tabs';
+export type {
+  TabsProps,
+  TabsListProps,
+  TabsTriggerProps,
+  TabsContentProps,
+  TabsVariant,
+  TabsSize,
+  TabsOrientation,
+  TabsContextValue,
+} from './Tabs';
+
+export {
+  PreviewCard,
+  PreviewCardTrigger,
+  PreviewCardContent,
+  PreviewCardTitle,
+  PreviewCardDescription,
+  PreviewCardArrow,
+  usePreviewCardContext,
+  computePreviewCardPosition,
+  PREVIEW_CARD_EDGE_PAD,
+} from './PreviewCard';
+export type {
+  PreviewCardProps,
+  PreviewCardTriggerProps,
+  PreviewCardContentProps,
+  PreviewCardTitleProps,
+  PreviewCardDescriptionProps,
+  PreviewCardArrowProps,
+  PreviewCardSide,
+  PreviewCardAlign,
+  PreviewCardContextValue,
+  PreviewCardPositionResult,
+} from './PreviewCard';
+
 export {
   SmartExpandablePanel,
+  SmartPanel,
   useSmartPanel,
   MenuAdapter,
   SelectAdapter,

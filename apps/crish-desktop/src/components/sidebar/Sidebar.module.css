@@ -30,8 +30,62 @@
   box-shadow: var(--shadow-lg);
 }
 
+.sidebarHeader {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 48px;
+  height: var(--header-height, 36px);
+  min-height: var(--header-height, 36px);
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  z-index: calc(var(--z-sidebar, 100) + 1);
+  pointer-events: auto;
+}
+
+.sidebarHeader[data-mac='true'] {
+  width: 106px;
+  padding-left: 70px;
+}
+
+.sidebarToggleBtn {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md, 6px);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  pointer-events: auto;
+  transition:
+    background-color var(--transition-fast, 150ms ease-out),
+    color var(--transition-fast, 150ms ease-out);
+}
+
+.sidebarToggleBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.sidebarToggleBtn:active {
+  background: var(--tint-active);
+}
+
 .sidebarTop {
-  padding: 12px 10px 0 10px; /* Static padding for top actions */
+  padding: 36px 10px 0 10px;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
@@ -88,17 +142,21 @@
   color: var(--text-primary);
   transition:
     background var(--transition-micro),
-    border-color var(--transition-micro);
+    border-color var(--transition-micro),
+    color var(--transition-micro);
   box-sizing: border-box;
   text-align: left;
 }
 
 .userProfileCard:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
+  color: var(--text-primary);
 }
 
+.userProfileCard:active,
 .userProfileCard.isOpen {
-  background: var(--bg-active);
+  background: var(--tint-active);
+  color: var(--text-primary);
 }
 
 .userAvatarContainer {
@@ -127,8 +185,8 @@
   width: 7px;
   height: 7px;
   border-radius: var(--radius-full);
-  background: var(--accent-green, #10b981);
-  box-shadow: 0 0 0 1.5px var(--bg-secondary);
+  background: var(--status-online, hsl(142 76% 46%));
+  box-shadow: 0 0 0 1.5px var(--bg-workspace, var(--bg-primary));
 }
 
 .userTextStack {
@@ -182,12 +240,13 @@
 }
 
 .settingsGearBtn:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
+.settingsGearBtn:active,
 .settingsGearBtn.isOpen {
-  background: var(--bg-active);
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 
@@ -215,10 +274,19 @@
   min-height: 26px;
   height: 26px;
   box-sizing: border-box;
+  transition:
+    background var(--transition-micro),
+    color var(--transition-micro),
+    border-color var(--transition-micro);
 }
 
 .modeChip:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.modeChip:active {
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 
@@ -330,11 +398,11 @@
 }
 
 .hamburger:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
 }
 
 .hamburgerActive {
-  background: var(--bg-hover);
+  background: var(--tint-active);
 }
 
 /* Icon-collapse mode */

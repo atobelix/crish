@@ -28,11 +28,13 @@ import {
 export interface UseStorageImportOptions {
   busy: BusyKind;
   setBusy: Dispatch<SetStateAction<BusyKind>>;
+  onShowToast?: (message: string) => void;
 }
 
 export function useStorageImport({
   busy,
   setBusy,
+  onShowToast,
 }: UseStorageImportOptions) {
   const [storageError, setStorageError] = useState('');
   const [storageJson, setStorageJson] = useState('');
@@ -46,9 +48,10 @@ export function useStorageImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setStorageError(full);
+      onShowToast?.(full);
       toast.show(full);
     },
-    []
+    [onShowToast]
   );
 
   const applyStorageFile = useCallback(

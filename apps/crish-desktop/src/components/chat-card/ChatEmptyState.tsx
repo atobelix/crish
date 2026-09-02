@@ -382,7 +382,7 @@ export const ChatEmptyState: React.FC<ChatEmptyStateProps> = ({
                   <ChevronRight
                     size={14}
                     className={styles.promptArrow}
-                    style={{ opacity: 0.4, flexShrink: 0, marginLeft: 'auto' }}
+                    aria-hidden="true"
                   />
                 </button>
               </Tooltip>

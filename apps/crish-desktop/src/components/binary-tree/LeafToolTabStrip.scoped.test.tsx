@@ -3,9 +3,7 @@ import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, act, screen, waitFor } from '@testing-library/react';
 import { LeafToolTabStrip } from './LeafToolTabStrip';
-import { createLeaf } from '../../store/layout-tree/types';
 import { useLayoutStore } from '../../store/layoutStore';
-import { useLayoutTreeStore } from '../../store/layout-tree';
 import { viewRegistry } from '../../services/view-registry';
 import * as storeAccess from '../../store/storeAccess';
 
@@ -31,25 +29,15 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
 
   describe('1. 标签栏基础结构与状态渲染 (DOM & Layout Contract)', () => {
     it('不再渲染 dockToolNav 固定工具条', () => {
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff'],
-        'files',
-        'sess-b'
-      );
-      const { queryByRole } = render(<LeafToolTabStrip leaf={leaf} />);
+      const leaf = { tabs: ['files', 'diff'], activeTab: 'files' };
+      const { queryByRole } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />);
       expect(queryByRole('toolbar', { name: '会话工具' })).toBeNull();
     });
 
     it('每个 Tab 渲染对应的工具 Icon 与微型关闭按钮（多 Tab 时）', () => {
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff'],
-        'files',
-        'sess-b'
-      );
+      const leaf = { tabs: ['files', 'diff'], activeTab: 'files' };
       const { getByText, getAllByTestId, getAllByLabelText } = render(
-        <LeafToolTabStrip leaf={leaf} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />
       );
       expect(getByText('files')).toBeTruthy();
       expect(getAllByTestId('tool-icon')).toHaveLength(2);
@@ -57,35 +45,38 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     });
 
     it('单 Tab 时不显示关闭叉号（防止误删破损）', () => {
-      const leaf = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
-      const { queryByLabelText } = render(<LeafToolTabStrip leaf={leaf} />);
+      const leaf = { tabs: ['files'], activeTab: 'files' };
+      const { queryByLabelText } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />);
       expect(queryByLabelText(/关闭/)).toBeNull();
     });
 
     it('包含随流加号与固定区加号（双态加号结构）', () => {
-      const leaf = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
-      const { container } = render(<LeafToolTabStrip leaf={leaf} />);
+      const leaf = { tabs: ['files'], activeTab: 'files' };
+      const { container } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />);
       const inFlowBtn = container.querySelector('.side-panel-add-btn.in-flow');
       const pinnedBtn = container.querySelector('.side-panel-add-btn.pinned');
       expect(inFlowBtn).toBeTruthy();
       expect(pinnedBtn).toBeTruthy();
     });
 
-    it('点击收起按钮显式触发 openToolInSession(sessionId, "chat")', () => {
-      const openToolSpy = vi
-        .spyOn(storeAccess, 'openToolInSession')
-        .mockImplementation(() => {});
-      const leaf = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
-      const { getByLabelText } = render(<LeafToolTabStrip leaf={leaf} />);
-      fireEvent.click(getByLabelText('收起右侧面板'));
-      expect(openToolSpy).toHaveBeenCalledWith('sess-b', 'chat');
+    it('抽屉头不再放收起钮，收起由叶上唯一坞开关负责', () => {
+      const leaf = { tabs: ['files'], activeTab: 'files' };
+      const { queryByLabelText } = render(
+        <LeafToolTabStrip
+          leafId="tool-leaf-1"
+          sessionId="sess-b"
+          tabs={leaf.tabs}
+          activeTab={leaf.activeTab}
+        />
+      );
+      expect(queryByLabelText('收起右侧面板')).toBeNull();
     });
 
     it('支持最大化/恢复面板按钮切换与回调', () => {
       const onToggleMaximize = vi.fn();
-      const leaf = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
+      const leaf = { tabs: ['files'], activeTab: 'files' };
       const { getByLabelText } = render(
-        <LeafToolTabStrip leaf={leaf} onToggleMaximize={onToggleMaximize} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onToggleMaximize={onToggleMaximize} />
       );
       const maxBtn = getByLabelText('最大化面板');
       expect(maxBtn).toBeTruthy();
@@ -94,32 +85,22 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     });
 
     it('Row 2 导航工具条在显式开启时展示，在未显式开启或普通视图不展示', () => {
-      const previewLeaf = createLeaf(
-        'tool-leaf-1',
-        ['preview'],
-        'preview',
-        'sess-b'
-      );
+      const previewLeaf = { tabs: ['preview'], activeTab: 'preview' };
       const { getByTestId, queryByTestId, rerender } = render(
-        <LeafToolTabStrip leaf={previewLeaf} showNavToolbar={true} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={previewLeaf.tabs} activeTab={previewLeaf.activeTab} showNavToolbar={true} />
       );
       expect(getByTestId('side-panel-toolbar')).toBeTruthy();
 
-      const filesLeaf = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
-      rerender(<LeafToolTabStrip leaf={filesLeaf} />);
+      const filesLeaf = { tabs: ['files'], activeTab: 'files' };
+      rerender(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={filesLeaf.tabs} activeTab={filesLeaf.activeTab} />);
       expect(queryByTestId('side-panel-toolbar')).toBeNull();
     });
   });
 
   describe('2. 加号展开与工具选择状态机 (Plus Expand & Menu State Machine)', () => {
     it('断言 2.1：点击加号按钮展开可选工具菜单，过滤掉已打开的 Tab', async () => {
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff'],
-        'files',
-        'sess-b'
-      );
-      const { container } = render(<LeafToolTabStrip leaf={leaf} />);
+      const leaf = { tabs: ['files', 'diff'], activeTab: 'files' };
+      const { container } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />);
 
       const addBtn = container.querySelector(
         '.side-panel-add-btn.in-flow'
@@ -143,9 +124,9 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
 
     it('断言 2.2：点击菜单项触发 openPanel 并选中新工具', async () => {
       const onAddTab = vi.fn();
-      const leaf = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
+      const leaf = { tabs: ['files'], activeTab: 'files' };
       const { container } = render(
-        <LeafToolTabStrip leaf={leaf} onAddTab={onAddTab} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onAddTab={onAddTab} />
       );
 
       const addBtn = container.querySelector(
@@ -167,13 +148,8 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     });
 
     it('断言 2.3：所有工具全部占用时，加号按钮渲染为 Tooltip 模式，不弹出空菜单', () => {
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff', 'terminal', 'preview'],
-        'files',
-        'sess-b'
-      );
-      const { container } = render(<LeafToolTabStrip leaf={leaf} />);
+      const leaf = { tabs: ['files', 'diff', 'terminal', 'preview'], activeTab: 'files' };
+      const { container } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />);
 
       const addBtn = container.querySelector(
         '.side-panel-add-btn.in-flow'
@@ -187,14 +163,9 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
   describe('3. Tab 切换、手势滚轮与中键关闭 (Tab Gestures & Wheel)', () => {
     it('断言 3.1：点击未激活 Tab 切换活动标签', () => {
       const onSelectTab = vi.fn();
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff'],
-        'files',
-        'sess-b'
-      );
+      const leaf = { tabs: ['files', 'diff'], activeTab: 'files' };
       const { getByText } = render(
-        <LeafToolTabStrip leaf={leaf} onSelectTab={onSelectTab} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onSelectTab={onSelectTab} />
       );
 
       const diffTab = getByText('diff');
@@ -205,14 +176,9 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     it('断言 3.2：鼠标中键 (auxClick button=1) 点击多 Tab 时触发关闭', () => {
       vi.useFakeTimers();
       const onCloseTab = vi.fn();
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff'],
-        'files',
-        'sess-b'
-      );
+      const leaf = { tabs: ['files', 'diff'], activeTab: 'files' };
       const { container } = render(
-        <LeafToolTabStrip leaf={leaf} onCloseTab={onCloseTab} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onCloseTab={onCloseTab} />
       );
 
       const diffTab = container.querySelector('[data-tab-id="diff"]')!;
@@ -236,9 +202,9 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     it('断言 3.3：单 Tab 时鼠标中键点击不触发关闭（安全保护）', () => {
       vi.useFakeTimers();
       const onCloseTab = vi.fn();
-      const leaf = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
+      const leaf = { tabs: ['files'], activeTab: 'files' };
       const { container } = render(
-        <LeafToolTabStrip leaf={leaf} onCloseTab={onCloseTab} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onCloseTab={onCloseTab} />
       );
 
       const filesTab = container.querySelector('[data-tab-id="files"]')!;
@@ -256,13 +222,8 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     });
 
     it('断言 3.4：横向滚轮滑动 (handleTrackWheel) 将 deltaY 转换为 scrollLeft 并 preventDefault', () => {
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff', 'terminal'],
-        'files',
-        'sess-b'
-      );
-      const { container } = render(<LeafToolTabStrip leaf={leaf} />);
+      const leaf = { tabs: ['files', 'diff', 'terminal'], activeTab: 'files' };
+      const { container } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />);
 
       const track = container.querySelector('.side-panel-tabs-track') as HTMLDivElement;
       expect(track).toBeTruthy();
@@ -281,16 +242,11 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
 
     it('断言 3.5：新增 Tab 触发 isEntering 动画类并在 220ms 后自动清除', () => {
       vi.useFakeTimers();
-      const leaf1 = createLeaf('tool-leaf-1', ['files'], 'files', 'sess-b');
-      const { container, rerender } = render(<LeafToolTabStrip leaf={leaf1} />);
+      const leaf1 = { tabs: ['files'], activeTab: 'files' };
+      const { container, rerender } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf1.tabs} activeTab={leaf1.activeTab} />);
 
-      const leaf2 = createLeaf(
-        'tool-leaf-1',
-        ['files', 'terminal'],
-        'terminal',
-        'sess-b'
-      );
-      rerender(<LeafToolTabStrip leaf={leaf2} />);
+      const leaf2 = { tabs: ['files', 'terminal'], activeTab: 'terminal' };
+      rerender(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf2.tabs} activeTab={leaf2.activeTab} />);
 
       const terminalTab = container.querySelector('[data-tab-id="terminal"]');
       expect(terminalTab?.className).toContain('isEntering');
@@ -309,15 +265,14 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       vi.useFakeTimers();
       const onSelectTab = vi.fn();
       const onCloseTab = vi.fn();
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff', 'terminal'],
-        'files',
-        'sess-b'
-      );
+      const leaf = { tabs: ['files', 'diff', 'terminal'], activeTab: 'files' };
       const { getByLabelText } = render(
         <LeafToolTabStrip
-          leaf={leaf}
+          leafId="tool-leaf-1"
+          sessionId="sess-b"
+          sessionTabId="tab-sess"
+          tabs={leaf.tabs}
+          activeTab={leaf.activeTab}
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
         />
@@ -341,15 +296,14 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       vi.useFakeTimers();
       const onSelectTab = vi.fn();
       const onCloseTab = vi.fn();
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff'],
-        'diff',
-        'sess-b'
-      );
+      const leaf = { tabs: ['files', 'diff'], activeTab: 'diff' };
       const { getByLabelText } = render(
         <LeafToolTabStrip
-          leaf={leaf}
+          leafId="tool-leaf-1"
+          sessionId="sess-b"
+          sessionTabId="tab-sess"
+          tabs={leaf.tabs}
+          activeTab={leaf.activeTab}
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
         />
@@ -373,15 +327,14 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       vi.useFakeTimers();
       const onSelectTab = vi.fn();
       const onCloseTab = vi.fn();
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff', 'terminal'],
-        'files',
-        'sess-b'
-      );
+      const leaf = { tabs: ['files', 'diff', 'terminal'], activeTab: 'files' };
       const { getByLabelText } = render(
         <LeafToolTabStrip
-          leaf={leaf}
+          leafId="tool-leaf-1"
+          sessionId="sess-b"
+          sessionTabId="tab-sess"
+          tabs={leaf.tabs}
+          activeTab={leaf.activeTab}
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
         />
@@ -404,14 +357,9 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     it('断言 4.4：重复连续快速点击同一 Tab 的关闭按钮，被 closingTabIds 防重拦截', () => {
       vi.useFakeTimers();
       const onCloseTab = vi.fn();
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff'],
-        'files',
-        'sess-b'
-      );
+      const leaf = { tabs: ['files', 'diff'], activeTab: 'files' };
       const { getByLabelText } = render(
-        <LeafToolTabStrip leaf={leaf} onCloseTab={onCloseTab} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onCloseTab={onCloseTab} />
       );
 
       const closeFilesBtn = getByLabelText('关闭 files');
@@ -432,14 +380,9 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     it('断言 4.5：并发关闭多个 Tab，各自计时器独立触发且无竞态冲突', () => {
       vi.useFakeTimers();
       const onCloseTab = vi.fn();
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff', 'terminal'],
-        'files',
-        'sess-b'
-      );
+      const leaf = { tabs: ['files', 'diff', 'terminal'], activeTab: 'files' };
       const { getByLabelText } = render(
-        <LeafToolTabStrip leaf={leaf} onCloseTab={onCloseTab} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onCloseTab={onCloseTab} />
       );
 
       fireEvent.click(getByLabelText('关闭 diff'));
@@ -469,7 +412,7 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
         sessionId: 'sess-b',
       };
       const { getByTestId, queryByTestId } = render(
-        <LeafToolTabStrip leaf={emptyLeaf} />
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={emptyLeaf.tabs} activeTab={emptyLeaf.activeTab} />
       );
 
       // 空态下 Row 2 隐藏
@@ -494,13 +437,8 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
 
   describe('5. ESC 键退栈与高频极限压测 (ESC Dismissal & Stress Matrix)', () => {
     it('断言 5.1：加号菜单展开后按下 ESC 键，菜单安全关闭且 Tab 栏 DOM 无损', async () => {
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff'],
-        'files',
-        'sess-b'
-      );
-      const { container } = render(<LeafToolTabStrip leaf={leaf} />);
+      const leaf = { tabs: ['files', 'diff'], activeTab: 'files' };
+      const { container } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />);
 
       const addBtn = container.querySelector(
         '.side-panel-add-btn.in-flow'
@@ -526,15 +464,14 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       vi.useFakeTimers();
       const onSelectTab = vi.fn();
       const onCloseTab = vi.fn();
-      const leaf = createLeaf(
-        'tool-leaf-1',
-        ['files', 'diff', 'terminal', 'preview'],
-        'files',
-        'sess-b'
-      );
+      const leaf = { tabs: ['files', 'diff', 'terminal', 'preview'], activeTab: 'files' };
       const { container, getByText, getByLabelText } = render(
         <LeafToolTabStrip
-          leaf={leaf}
+          leafId="tool-leaf-1"
+          sessionId="sess-b"
+          sessionTabId="tab-sess"
+          tabs={leaf.tabs}
+          activeTab={leaf.activeTab}
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
         />

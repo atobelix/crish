@@ -35,16 +35,17 @@ describe('menuOpenGuard', () => {
   it('外点关后同一 trigger 抑制重开', () => {
     const btn = document.createElement('button');
     const content = document.createElement('div');
-    document.body.append(content, btn);
+    const outside = document.createElement('div');
+    document.body.append(content, btn, outside);
     layerStackService.register({
       id: 'm1',
       type: 'dropdown-menu',
       dismissible: true,
       onDismiss: () => undefined,
       elementRef: { current: content },
-      anchorRef: { current: null },
+      anchorRef: { current: btn },
     });
-    btn.dispatchEvent(
+    outside.dispatchEvent(
       new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
     );
     expect(shouldSuppressMenuReopen(btn)).toBe(true);
@@ -59,6 +60,7 @@ describe('menuOpenGuard', () => {
     expect(open).toBe(false);
     content.remove();
     btn.remove();
+    outside.remove();
   });
 
   it('关 A 的外点落在 B 的 trigger 上时，不抑制 B 打开', () => {

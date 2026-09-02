@@ -26,7 +26,7 @@ export interface SettingsQuickMenuProps {
       'aria-haspopup': 'menu';
       'aria-expanded': boolean;
       'aria-controls'?: string;
-      onClick: () => void;
+      onClick?: () => void;
     };
   }) => React.ReactNode;
 }
@@ -229,7 +229,6 @@ export const SettingsQuickMenu: React.FC<SettingsQuickMenuProps> = ({
     'aria-haspopup': 'menu' as const,
     'aria-expanded': open,
     'aria-controls': open ? menuId : undefined,
-    onClick: () => handleOpenChange(!open),
   };
 
   const defaultTrigger = (

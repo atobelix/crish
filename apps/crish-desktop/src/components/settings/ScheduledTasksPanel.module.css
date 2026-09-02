@@ -197,17 +197,6 @@
   padding: 0 10px 0 12px;
 }
 
-.schedSelect :global(.settings-select-trigger:hover:not(:disabled)),
-.schedField :global(.settings-select-trigger:hover:not(:disabled)) {
-  background: var(--bg-primary);
-  box-shadow: 0 0 0 1px var(--tint-divider);
-}
-
-.schedSelect :global(.is-open .settings-select-trigger),
-.schedField :global(.settings-select.is-open .settings-select-trigger) {
-  box-shadow: 0 0 0 1px var(--tint-scrollbar-thumb);
-  background: var(--bg-primary);
-}
 
 .schedFormActions {
   display: flex;

@@ -200,7 +200,6 @@ describe('专项 1：400px~1200px 极限视口与碰撞翻折守卫矩阵 (GEO-V
         selected={null}
         view="tree"
         onNavigate={vi.fn()}
-        onRefresh={vi.fn()}
         onOpenFile={vi.fn()}
       />
     );
@@ -418,7 +417,6 @@ describe('专项 2：多分屏容器隔离裁剪守卫矩阵 (GEO-SPLIT-01 ~ GEO
           selected={null}
           view="tree"
           onNavigate={vi.fn()}
-          onRefresh={vi.fn()}
           onOpenFile={vi.fn()}
         />
       </div>
@@ -801,7 +799,6 @@ describe('专项 4：IME 输入法合成态与光标几何同步守卫矩阵 (GE
         selected={null}
         view="tree"
         onNavigate={vi.fn()}
-        onRefresh={vi.fn()}
         onOpenFile={vi.fn()}
       />
     );

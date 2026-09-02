@@ -34,6 +34,7 @@ export type {
 export class LayerStackManager {
   private static instance: LayerStackManager | null = null;
   private static readonly MAX_TRACE_HISTORY = 100;
+  private static readonly COOLDOWN_WINDOW_MS = 100;
 
   private layers: LayerRegistration[] = [];
   private traceHistory: LayerTraceRecord[] = [];
@@ -43,12 +44,13 @@ export class LayerStackManager {
   private lastEscapeDismissTime = 0;
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
   private anchorPointerDownTarget: Node | null = null;
-  /** 本次 pointerdown 外点关掉的层；同一击落到其 trigger 不得再打开 */
+  /** 本次 pointerdown 外点关掉的层与触发手势快照；附带时间戳确保 100ms 时效性 */
   private dismissedByPointer: {
     pointerId: number;
     layerId: string;
     anchor: HTMLElement | null;
     target: EventTarget | null;
+    timestamp: number;
   } | null = null;
 
   private constructor() {
@@ -137,51 +139,59 @@ export class LayerStackManager {
   }
 
   /**
-   * 本层刚被同一 pointer 外点关掉：后续 onOpenChange(true) 必须吞掉。
+   * 本层刚被同一 pointer 外点关掉：后续 onOpenChange(true) 必须吞掉
    */
   public wasLayerDismissedThisGesture(layerId: string): boolean {
-    return this.dismissedByPointer?.layerId === layerId;
+    if (!this.dismissedByPointer) return false;
+    const now =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (
+      now - this.dismissedByPointer.timestamp >
+      LayerStackManager.COOLDOWN_WINDOW_MS
+    ) {
+      this.dismissedByPointer = null;
+      return false;
+    }
+    return this.dismissedByPointer.layerId === layerId;
   }
 
   /**
    * 外点已关后同一 pointer 落到该 trigger：不得再 toggle 开。
+   * 严格模式：仅当被关层具有真实 anchor 且匹配 triggerEl 时才拦截；彻底放行其它按钮！
    */
   public wasTriggerClickAfterDismiss(triggerEl: HTMLElement | null): boolean {
     const rec = this.dismissedByPointer;
     if (!rec || !triggerEl) return false;
-    if (
-      rec.anchor &&
-      (rec.anchor === triggerEl ||
-        rec.anchor.contains(triggerEl) ||
-        triggerEl.contains(rec.anchor))
-    ) {
-      return true;
+
+    const now =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
+    if (now - rec.timestamp > LayerStackManager.COOLDOWN_WINDOW_MS) {
+      this.dismissedByPointer = null;
+      return false;
     }
-    // 被关层的锚是另一个仍在树上的 trigger：互斥切换，不抑制新菜单打开
+
+    // 只有明确匹配被关层的 anchor 时，才确认为同一 Trigger 反弹误触
     if (
       rec.anchor &&
       rec.anchor.isConnected &&
-      rec.anchor !== triggerEl &&
-      !rec.anchor.contains(triggerEl) &&
-      !triggerEl.contains(rec.anchor)
-    ) {
-      return false;
-    }
-    if (
-      !rec.anchor &&
-      rec.target instanceof Node &&
-      triggerEl.contains(rec.target)
+      (rec.anchor === triggerEl ||
+        rec.anchor.contains(triggerEl) ||
+        triggerEl.contains(rec.anchor) ||
+        (rec.target instanceof Node && rec.anchor.contains(rec.target)))
     ) {
       return true;
     }
+
     return false;
   }
 
   /**
-   * 50ms 冷却防重入检测
-   * 当触发器在 50ms 内接收到连续点击时，判定为重入竞态并静默丢弃
+   * 100ms 黄金防重入冷却检测
+   * 当触发器在 100ms 内接收到连续点击时，判定为重入竞态并静默丢弃
    */
-  public isWithinCooldown(cooldownMs = 50): boolean {
+  public isWithinCooldown(
+    cooldownMs = LayerStackManager.COOLDOWN_WINDOW_MS
+  ): boolean {
     const now =
       typeof performance !== 'undefined' ? performance.now() : Date.now();
     return now - this.lastCloseTimestamp < cooldownMs;
@@ -514,7 +524,7 @@ export class LayerStackManager {
   };
 
   /**
-   * 全局单一 PointerDown 调度处理器（Branch-Aware 外点判定）
+   * 全局单一 PointerDown 调度处理器（级联清退所有外部可退栈浮层）
    */
   private handleGlobalPointerDown = (event: PointerEvent): void => {
     if (PROCESSED_EVENTS.has(event)) return;
@@ -525,49 +535,68 @@ export class LayerStackManager {
     const target = event.target as Node | null;
     if (!target) return;
 
-    // 倒序遍历栈，找到第一个声明了 dismissible: true 的顶层浮层（根除 Toast 拦截死锁）
-    let targetLayer: LayerRegistration | null = null;
+    const now =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
+
+    const layersToDismiss: LayerRegistration[] = [];
+    let hitAnchor: HTMLElement | null = null;
+    let hitAnchorLayerId: string | null = null;
+
+    let hitAnchorTarget: Node | null = null;
+
+    // 倒序扫描所有已注册浮层
     for (let i = this.layers.length - 1; i >= 0; i--) {
-      const l = this.layers[i];
-      if (l && l.dismissible) {
-        targetLayer = l;
-        break;
+      const layer = this.layers[i];
+      if (!layer || !layer.dismissible) continue;
+
+      // 1. 检查点击是否位于容器内部
+      const topEl = resolveElement(layer.elementRef);
+      if (topEl && topEl.contains(target)) {
+        continue; // 内部点击，保留
+      }
+
+      // 2. 检查点击是否位于关联的 Anchor / Trigger 触发源内部
+      const anchorEl = resolveElement(layer.anchorRef);
+      if (anchorEl && anchorEl.contains(target)) {
+        hitAnchorTarget = target;
+        hitAnchor = anchorEl;
+        hitAnchorLayerId = layer.id;
+        continue; // 命中自身 Trigger，交给 Trigger 的 toggle 逻辑
+      }
+
+      // 3. 检查点击是否位于任何子孙 Branch 浮层内部
+      const descendants = this.getDescendants(layer.id);
+      const isInsideDescendants = descendants.some((child) => {
+        const childEl = resolveElement(child.elementRef);
+        return childEl && childEl.contains(target);
+      });
+      if (isInsideDescendants) {
+        continue;
+      }
+
+      // 4. 确认属于外部点击，加入退栈队列
+      layersToDismiss.push(layer);
+    }
+
+    this.anchorPointerDownTarget = hitAnchorTarget;
+
+    if (layersToDismiss.length > 0 && layersToDismiss[0]) {
+      const topLayer = layersToDismiss[0];
+      this.dismissedByPointer = {
+        pointerId: event.pointerId,
+        layerId: topLayer.id,
+        anchor: resolveElement(topLayer.anchorRef),
+        target,
+        timestamp: now,
+      };
+
+      // 依次级联退栈关闭所有外部浮层
+      for (const l of layersToDismiss) {
+        if (l) {
+          this.dismissLayer(l.id, 'outside-pointer');
+        }
       }
     }
-    if (!targetLayer) return;
-
-    // 1. 检查点击是否位于容器内部
-    const topEl = resolveElement(targetLayer.elementRef);
-    if (topEl && topEl.contains(target)) {
-      return; // 内部点击，不触发外点关闭
-    }
-
-    // 2. 检查点击是否位于关联的 Anchor / Trigger 触发源内部
-    const anchorEl = resolveElement(targetLayer.anchorRef);
-    if (anchorEl && anchorEl.contains(target)) {
-      this.anchorPointerDownTarget = target;
-      return; // 触发源自身事件管理开关，避免 Double Toggle 震荡
-    }
-    this.anchorPointerDownTarget = null;
-
-    // 3. 检查点击是否位于任何子孙 Branch 浮层内部（如 Tooltip / 二级 Submenu）
-    const descendants = this.getDescendants(targetLayer.id);
-    for (const child of descendants) {
-      if (!child) continue;
-      const childEl = resolveElement(child.elementRef);
-      if (childEl && childEl.contains(target)) {
-        return; // 点击在子分支内，视为内部交互，严禁误关父层
-      }
-    }
-
-    // 4. 确认属于外部点击，仅关闭当前目标可关闭浮层
-    this.dismissedByPointer = {
-      pointerId: event.pointerId,
-      layerId: targetLayer.id,
-      anchor: resolveElement(targetLayer.anchorRef),
-      target,
-    };
-    this.dismissLayer(targetLayer.id, 'outside-pointer');
   };
 
   /**
@@ -577,6 +606,9 @@ export class LayerStackManager {
     if (!this.anchorPointerDownTarget) return;
     const target = event.target as Node | null;
     if (!target) return;
+
+    const now =
+      typeof performance !== 'undefined' ? performance.now() : Date.now();
 
     for (let i = this.layers.length - 1; i >= 0; i--) {
       const l = this.layers[i];
@@ -593,6 +625,7 @@ export class LayerStackManager {
             layerId: l.id,
             anchor: anchorEl,
             target,
+            timestamp: now,
           };
           this.dismissLayer(l.id, 'outside-pointer');
           this.anchorPointerDownTarget = null;

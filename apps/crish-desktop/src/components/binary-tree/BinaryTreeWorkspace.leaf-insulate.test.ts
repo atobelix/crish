@@ -49,10 +49,10 @@ describe('05 leafBody 绝缘 · 选择器文本', () => {
 
   it('二级 fill 用 :not(header/footer)，打不中纸面 chrome', () => {
     expect(moduleCss).toMatch(
-      /\.leafBody\s*>\s*\*:not\(:global\(header\)\):not\(:global\(footer\)\)/
+      /\.leafChatColumn\s*>\s*\*:not\(:global\(header\)\):not\(:global\(footer\)\)/
     );
     expect(moduleCss).toMatch(
-      /\.leafBody\s*>\s*\*\s*>\s*\*:not\(:global\(header\)\):not\(:global\(footer\)\)/
+      /\.leafChatColumn\s*>\s*\*\s*>\s*\*:not\(:global\(header\)\):not\(:global\(footer\)\)/
     );
     expect(moduleCss).not.toMatch(/\.leafBody\s+\*\s*[,{]/);
   });
@@ -101,8 +101,10 @@ describe('叶 chrome IA 与真树对齐', () => {
     expect(ws).toMatch(/LeafToolTabStrip/);
     expect(ws).not.toMatch(/单 unit chat：ChatHeader/);
     expect(ws).not.toMatch(/UnitSessionTabStrip（per-unit/);
+    expect(ws).not.toMatch(/GlobalSessionTabBar 是会话身份源/);
     expect(leaf).toMatch(/UnitChromeActions/);
     expect(leaf).toMatch(/LeafToolTabStrip/);
+    expect(leaf).toMatch(/leafDockDrawer/);
     expect(leaf).not.toMatch(/from ['"]\.\/ChatHeader['"]/);
     expect(leaf).not.toMatch(/from ['"]\.\/UnitSessionTabStrip['"]/);
   });

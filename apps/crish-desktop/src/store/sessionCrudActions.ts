@@ -11,7 +11,6 @@ import {
   deleteSessionFromIndexed,
   getSessionById,
   getSessionForWrite,
-  getSessionIndex,
   reindexSessionsById,
 } from './sessionIndex';
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
@@ -30,7 +29,6 @@ import {
   maybeAutoTitleSession,
   needsEngineMessageHydrate,
   normalizeWritableSessionTitle,
-  pickFallbackActiveSessionId,
   pruneEmptyShellsInPlace,
   syncActiveTerminalSession,
 } from './sessionSharedHelpers';
@@ -343,31 +341,12 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       if (!id) return false;
       let removed = false;
       set((state) => {
-        const idx = getSessionIndex(state, id);
-        const wasActive = state.activeSessionId === id;
-        const fallback = wasActive
-          ? pickFallbackActiveSessionId(state, id, idx >= 0 ? idx : 0)
-          : '';
         removed = deleteSessionFromIndexed(state, id);
         if (!removed) return;
         dropTerminalForSession(state, id);
-        if (wasActive) {
-          if (isPendingDraft(fallback)) {
-            // 草稿态后备：复用 applyDraftModeToState 补齐 draftFolder / agent / terminal
-            applyDraftModeToState(state);
-          } else {
-            state.activeSessionId = fallback;
-            state.activeAgentId = null;
-            state.panelAgentId = null;
-            syncActiveTerminalSession(fallback);
-          }
-        }
-        pruneEmptyShellsInPlace(
-          state,
-          shellPruneKeepIds(state.activeSessionId || null, null, {
-            activating: true,
-          })
-        );
+        // 纯数据面：只删目标。不拿 sessions[] 邻居覆盖画面，也不在删除路径
+        // prune 邻居空壳（那会把未打开的历史会话一并 GC）。画面由
+        // shell.deleteSessionAndCloseTab → syncSessionFromActiveLeaf 校正。
       });
       if (removed) {
         sessionRuntimeRegistry.remove(id);

@@ -33,8 +33,8 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-2xl);
-  background: var(--brand-deep, #047857);
-  color: #ffffff;
+  background: var(--brand-deep, hsl(160 84% 30%));
+  color: var(--text-on-accent, hsl(0 0% 100%));
   display: flex;
   align-items: center;
   justify-content: center;
@@ -90,8 +90,8 @@
 }
 
 .firstRunStep.isActive .firstRunStepNum {
-  background: var(--brand-deep, #047857);
-  color: #ffffff;
+  background: var(--brand-deep, hsl(160 84% 30%));
+  color: var(--text-on-accent, hsl(0 0% 100%));
 }
 
 .firstRunBody {
@@ -216,9 +216,9 @@
 }
 
 .firstRunBtn.primary {
-  background: var(--brand-deep, #047857);
-  border-color: var(--brand-primary, #10b981);
-  color: #ffffff;
+  background: var(--brand-deep, hsl(160 84% 30%));
+  border-color: var(--brand-primary, hsl(160 84% 39%));
+  color: var(--text-on-accent, hsl(0 0% 100%));
 }
 
 .firstRunBtn.primary:disabled {

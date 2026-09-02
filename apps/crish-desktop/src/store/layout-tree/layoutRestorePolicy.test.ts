@@ -1,5 +1,5 @@
 /**
- * Cold-start multi-unit restore validation (pure).
+ * Cold-start v3 restore validation (pure).
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -11,22 +11,32 @@ import {
   createLeaf,
   createBranch,
   type LayoutTree,
+  type LayoutLeaf,
 } from './types';
+import {
+  createSessionTab,
+  PENDING_DRAFT_SESSION_ID,
+} from './sessionTabModel';
 
 function multiUnitTree(): LayoutTree {
-  const chatA = createLeaf('chat', ['chat'], 'chat', 'sess-a');
-  const toolA = createLeaf('terminal', ['terminal'], 'terminal', 'sess-a');
-  const unitA = createBranch('horizontal', chatA, toolA, 0.62);
-  const chatB = createLeaf('chat', ['chat'], 'chat', 'sess-b');
   return {
-    version: 2,
-    root: createBranch('horizontal', unitA, chatB, 0.5),
+    version: 3,
+    root: createBranch(
+      'horizontal',
+      createLeaf({
+        tabs: [createSessionTab({ sessionId: 'sess-a', tabId: 'ta' })],
+      }),
+      createLeaf({
+        tabs: [createSessionTab({ sessionId: 'sess-b', tabId: 'tb' })],
+      }),
+      0.5
+    ),
   };
 }
 
 describe('validateRestorableLayoutTree', () => {
   it('accepts default single chat', () => {
-    const v = validateRestorableLayoutTree(createDefaultTree('chat'));
+    const v = validateRestorableLayoutTree(createDefaultTree());
     expect(v.ok).toBe(true);
     if (v.ok) {
       expect(v.chatCount).toBe(1);
@@ -34,7 +44,7 @@ describe('validateRestorableLayoutTree', () => {
     }
   });
 
-  it('accepts valid multi-unit with session bindings', () => {
+  it('accepts valid multi-unit with distinct sessions', () => {
     const v = validateRestorableLayoutTree(multiUnitTree());
     expect(v.ok).toBe(true);
     if (v.ok) {
@@ -48,28 +58,31 @@ describe('validateRestorableLayoutTree', () => {
     expect(validateRestorableLayoutTree(undefined).ok).toBe(false);
   });
 
-  it('rejects multi-unit with unbound chat leaf', () => {
+  it('accepts multi-unit with empty composing leaves (no unbound-chat reason)', () => {
     const tree: LayoutTree = {
-      version: 2,
+      version: 3,
       root: createBranch(
         'horizontal',
-        createLeaf('chat', ['chat'], 'chat', 'sess-a'),
-        createLeaf('chat', ['chat'], 'chat'), // unbound
+        createLeaf(),
+        createLeaf(),
         0.5
       ),
     };
     const v = validateRestorableLayoutTree(tree);
-    expect(v.ok).toBe(false);
-    if (!v.ok) expect(v.reason).toBe('multi-unit-unbound-chat');
+    expect(v.ok).toBe(true);
   });
 
   it('rejects duplicate session chat bindings', () => {
     const tree: LayoutTree = {
-      version: 2,
+      version: 3,
       root: createBranch(
         'horizontal',
-        createLeaf('chat', ['chat'], 'chat', 'sess-a'),
-        createLeaf('chat', ['chat'], 'chat', 'sess-a'),
+        createLeaf({
+          tabs: [createSessionTab({ sessionId: 'sess-a', tabId: 'a' })],
+        }),
+        createLeaf({
+          tabs: [createSessionTab({ sessionId: 'sess-a', tabId: 'b' })],
+        }),
         0.5
       ),
     };
@@ -78,45 +91,68 @@ describe('validateRestorableLayoutTree', () => {
     if (!v.ok) expect(v.reason).toBe('duplicate-session-binding');
   });
 
-  it('rejects orphan tool session without chat parent', () => {
-    const tree: LayoutTree = {
-      version: 2,
-      root: createBranch(
-        'horizontal',
-        createLeaf('chat', ['chat'], 'chat', 'sess-a'),
-        createLeaf('terminal', ['terminal'], 'terminal', 'sess-orphan'),
-        0.5
-      ),
-    };
+  it('rejects tool leaf', () => {
+    const tree = {
+      version: 3,
+      root: {
+        type: 'leaf',
+        id: 't',
+        panelId: 'terminal',
+        tabs: [
+          createSessionTab({ sessionId: 's1', tabId: 't1' }),
+        ],
+        activeTabId: 't1',
+      },
+    } as unknown as LayoutTree;
     const v = validateRestorableLayoutTree(tree);
     expect(v.ok).toBe(false);
-    if (!v.ok) expect(v.reason).toBe('orphan-tool-session');
-  });
-
-  it('rejects tool-only tree (no chat)', () => {
-    const tree: LayoutTree = {
-      version: 2,
-      root: createLeaf('terminal', ['terminal'], 'terminal'),
-    };
-    const v = validateRestorableLayoutTree(tree);
-    expect(v.ok).toBe(false);
-    if (!v.ok) expect(v.reason).toBe('no-chat-leaf');
+    if (!v.ok) {
+      expect(['tool-leaf-present', 'malformed-structure', 'no-chat-leaf']).toContain(
+        v.reason
+      );
+    }
   });
 
   it('rejects malformed structure', () => {
     const bad = {
-      version: 2,
+      version: 3,
       root: {
         type: 'branch',
         id: 'b1',
         direction: 'horizontal',
         splitRatio: 0.5,
-        children: [{ type: 'leaf', id: 'only-one' }], // not 2 children
+        children: [{ type: 'leaf', id: 'only-one' }],
       },
     } as unknown as LayoutTree;
     expect(isLayoutNodeStructurallyValid(bad.root)).toBe(false);
     const v = validateRestorableLayoutTree(bad);
     expect(v.ok).toBe(false);
     if (!v.ok) expect(v.reason).toBe('malformed-structure');
+  });
+
+  it('rejects illegal global draft', () => {
+    const dirty: LayoutLeaf = {
+      type: 'leaf',
+      id: 'L',
+      panelId: 'chat',
+      tabs: [
+        {
+          tabId: 't',
+          sessionId: PENDING_DRAFT_SESSION_ID,
+          title: '新对话',
+          workspaceKey: '对话',
+          dock: {
+            collapsed: true,
+            openPanelIds: [],
+            activePanelId: null,
+            widthRatio: 0.5,
+          },
+        },
+      ],
+      activeTabId: 't',
+    };
+    const v = validateRestorableLayoutTree({ version: 3, root: dirty });
+    expect(v.ok).toBe(false);
+    if (!v.ok) expect(v.reason).toBe('illegal-global-draft');
   });
 });

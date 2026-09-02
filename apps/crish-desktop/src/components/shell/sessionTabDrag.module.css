@@ -1,16 +1,12 @@
 /**
- * 会话 Tab 拖指示皮（参考 .tree-drop-indicator）。
- * 不改 GlobalSessionTabBar 密度；源 Tab 隐身用 :global(.is-dragging)。
+ * 会话 Tab 拖指示皮（参考 .tree-drop-indicator / .tree-drag-card）。
+ * 不改 PaneHeader 胶囊密度；源 Tab 隐身用 :global(.is-dragging)。
  */
 
 .indicator {
   position: fixed;
-  background: color-mix(
-    in srgb,
-    var(--accent-green, #10b981) 18%,
-    transparent
-  );
-  border: none;
+  background: var(--tint-hover, hsl(0 0% 0% / 0.05));
+  border: 1px dashed var(--border-subtle, hsl(0 0% 0% / 0.15));
   border-radius: 6px;
   box-sizing: border-box;
   z-index: var(--z-tooltip, 9000);
@@ -20,22 +16,32 @@
   justify-content: center;
   overflow: hidden;
   font-family: inherit;
+  backdrop-filter: blur(2px);
 }
 
 .strip {
   justify-content: flex-start;
-  border-radius: 4px;
+  border-radius: 6px;
+  background: var(--tint-hover, hsl(0 0% 0% / 0.06));
+  border: 1px dashed var(--border-subtle, hsl(0 0% 0% / 0.18));
 }
 
 .pane {
   justify-content: center;
-  border-radius: 6px;
+  border-radius: 8px;
+  background: color-mix(
+    in srgb,
+    var(--tint-hover, hsl(0 0% 0% / 0.05)) 80%,
+    transparent
+  );
+  border: 1.5px dashed var(--border-subtle, hsl(0 0% 0% / 0.18));
+  backdrop-filter: blur(4px);
 }
 
 .title {
   font-size: 12px;
   font-weight: 500;
-  color: var(--accent-green, #10b981);
+  color: var(--text-secondary, #666666);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -46,13 +52,64 @@
 
 .pane .title {
   font-size: 13px;
-  padding: 0;
+  font-weight: 600;
+  color: var(--text-primary, #111111);
+  padding: 4px 12px;
+  border-radius: 6px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-subtle, hsl(0 0% 0% / 0.12));
+  box-shadow: 0 2px 8px hsl(0 0% 0% / 0.08);
   max-width: 80%;
 }
 
+.card {
+  position: fixed;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 100000;
+  box-sizing: border-box;
+  height: 26px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #111111);
+  border: 1px solid var(--border-subtle, hsl(0 0% 0% / 0.15));
+  border-radius: 6px;
+  box-shadow: 0 8px 24px hsl(0 0% 0% / 0.14), 0 2px 6px hsl(0 0% 0% / 0.08);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  white-space: nowrap;
+  will-change: transform, opacity;
+  transform: translate3d(-9999px, -9999px, 0);
+  transition: opacity 120ms ease;
+}
+
+.card.detached,
+:global(.tree-drag-card.is-detached) {
+  opacity: 0.35;
+  box-shadow: none;
+  border-color: transparent;
+}
+
 /* 源 Tab 隐身；条内让位 transform 由 JS 写 inline */
-:global([data-global-session-tab-bar]) :global([role='tab'].is-dragging) {
+:global([data-pane-header='true']) :global([role='tab'].is-dragging) {
   opacity: 0;
   pointer-events: none;
   border-color: transparent;
+}
+
+/* 拖拽期隔离：不要给 * 设 pointer-events:none，条带与叶框仍需命中 */
+:global(body.is-tab-dragging) * {
+  user-select: none !important;
+}
+
+:global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-body],
+:global(body.is-tab-dragging) [data-tree-canvas] [data-leaf-id] > :not([data-pane-header]),
+:global(body.is-tab-dragging) iframe,
+:global(body.is-tab-dragging) .xterm,
+:global(body.is-tab-dragging) [data-markdown-editor] {
+  pointer-events: none !important;
 }

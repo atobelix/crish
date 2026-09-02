@@ -123,6 +123,7 @@ export const SettingsShortcutsTab: React.FC = () => {
     if (!recordingShortcutId) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Tab') return;
+      if (e.key === 'Process' || e.isComposing) return;
       e.preventDefault();
       e.stopPropagation();
 
@@ -136,7 +137,7 @@ export const SettingsShortcutsTab: React.FC = () => {
       if (e.shiftKey) keys.push('Shift');
       if (e.altKey) keys.push('Alt');
       if (e.metaKey) keys.push('Meta');
-      if (!['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
+      if (!['Control', 'Shift', 'Alt', 'Meta', 'Process', 'Unidentified'].includes(e.key)) {
         let keyName = e.key;
         if (keyName === ' ') keyName = 'Space';
         keys.push(keyName.length === 1 ? keyName.toUpperCase() : keyName);

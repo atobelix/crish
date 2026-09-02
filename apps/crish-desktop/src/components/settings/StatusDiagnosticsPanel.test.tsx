@@ -9,6 +9,7 @@ import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StatusDiagnosticsPanel } from './StatusDiagnosticsPanel';
+import styles from './StatusDiagnosticsPanel.module.css';
 
 const fetchEngineStatus = vi.fn();
 const rebuildSearchIndex = vi.fn();
@@ -54,7 +55,9 @@ describe('StatusDiagnosticsPanel', () => {
     expect(screen.getByTestId('diag-searchIndexReady')).toHaveTextContent('OK');
 
     // 日志配置
-    expect(screen.getByTestId('diag-log-level')).toHaveTextContent('info');
+    const logLevel = screen.getByTestId('diag-log-level');
+    expect(logLevel).toHaveTextContent('info');
+    expect(logLevel).toHaveClass(styles.monoBadge);
     expect(screen.getByTestId('diag-log-dir')).toHaveTextContent('C:\\logs\\crish');
 
     // 最近错误（醒目错误块：kind + detail）
@@ -136,6 +139,7 @@ describe('StatusDiagnosticsPanel', () => {
     const rebuildBtn = screen.getByTestId('diag-rebuild-search-index');
     expect(rebuildBtn).toBeTruthy();
     expect(rebuildBtn).toHaveTextContent('重建索引');
+    expect(rebuildBtn).toHaveAttribute('data-variant', 'secondary');
 
     fireEvent.click(rebuildBtn);
     await waitFor(() => {

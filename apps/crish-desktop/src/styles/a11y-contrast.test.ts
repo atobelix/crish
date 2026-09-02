@@ -55,7 +55,7 @@ function hexToRgb(value: string): Rgb | null {
 
 function hslToRgb(value: string): Rgb | null {
   const m = value.match(
-    /hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/i
+    /hsla?\(\s*([\d.]+)(?:deg)?(?:\s*,\s*|\s+)([\d.]+)%(?:\s*,\s*|\s+)([\d.]+)%(?:\s*(?:,|\/)\s*[\d.]+%?)?\s*\)/i
   );
   if (!m) return null;
   const h = ((parseFloat(m[1]) % 360) + 360) % 360;

@@ -1,0 +1,429 @@
+/* ==========================================================================
+   Toast Viewport & 3D Stacking Notification Center
+   Appica-Inspired Zero-Dependency Native Physics & Fan-Out Architecture
+   ========================================================================== */
+
+.viewport {
+  position: fixed;
+  z-index: var(--z-toast, 1000);
+  width: 380px;
+  max-width: calc(100vw - 32px);
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+/* 锚定位置类 */
+.viewportBottomRight {
+  bottom: 16px;
+  right: 16px;
+}
+
+.viewportBottomCenter {
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.viewportBottomLeft {
+  bottom: 16px;
+  left: 16px;
+}
+
+.viewportTopRight {
+  top: 16px;
+  right: 16px;
+}
+
+.viewportTopCenter {
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.viewportTopLeft {
+  top: 16px;
+  left: 16px;
+}
+
+/* ==========================================================================
+   Toast Card Base & Physics Variables
+   ========================================================================== */
+
+.toastCard {
+  --gap: 12px;
+  --peek: 12px;
+  --scale: calc(max(0, 1 - (var(--toast-index, 0) * 0.1)));
+  --shrink: calc(1 - var(--scale));
+  --height: var(--toast-frontmost-height, var(--toast-height, 56px));
+  --swipe-x: var(--toast-swipe-movement-x, 0px);
+  --swipe-y: var(--toast-swipe-movement-y, 0px);
+
+  position: absolute;
+  z-index: calc(1000 - var(--toast-index, 0));
+  width: 100%;
+  pointer-events: auto;
+  box-sizing: border-box;
+
+  /* 堆叠态高度锁定为首张高度，展开态释放为自适应高度 */
+  height: var(--height);
+  overflow: hidden;
+
+  /* 背景与发丝边框适配 */
+  background-color: var(--bg-elevated, hsl(0 0% 100%));
+  color: var(--text-primary, #111111);
+  border: 1px solid var(--hairline, var(--border-subtle, hsl(35 8% 91%)));
+  border-radius: var(--radius-lg, 8px);
+  padding: 10px 14px;
+  font-size: var(--font-size-sm, 13px);
+  line-height: var(--line-height-base, 1.4);
+  font-family: var(--font-sans);
+
+  /* 物理阴影：底部锚定向上发散，顶部锚定向下发散 */
+  box-shadow: 0 -4px 16px -2px color-mix(in srgb, var(--shadow-color, #000) 6%, transparent),
+              0 2px 6px -1px color-mix(in srgb, var(--shadow-color, #000) 4%, transparent);
+
+  /* 核心物理曲线：展开/折叠 0.5s，高度自适应 0.18s */
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+              opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+              height 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.3s ease,
+              border-color 0.2s ease;
+  will-change: transform, opacity, height;
+  touch-action: none;
+}
+
+/* ==========================================================================
+   底部锚定 3D 堆叠与扇形展开 Transform 计算
+   ========================================================================== */
+
+.viewport[data-position^='bottom'] .toastCard,
+.viewport:not([data-position^='top']) .toastCard {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transform-origin: bottom center;
+
+  /* 堆叠态 Transform */
+  transform: translateX(var(--swipe-x))
+             translateY(calc(var(--swipe-y) - (var(--toast-index, 0) * var(--peek)) - (var(--shrink) * var(--height))))
+             scale(var(--scale));
+}
+
+/* 悬停扇形展开态 (Hover Expanded - Bottom) */
+.viewport[data-position^='bottom'][data-expanded='true'] .toastCard,
+.viewport:not([data-position^='top'])[data-expanded='true'] .toastCard {
+  height: var(--toast-height, auto);
+  transform: translateX(var(--swipe-x))
+             translateY(calc(-1 * var(--toast-offset-y, 0px) + var(--swipe-y)))
+             scale(1);
+  box-shadow: var(--shadow-lg, 0 10px 25px -5px color-mix(in srgb, var(--shadow-color, #000) 10%, transparent));
+}
+
+/* ==========================================================================
+   顶部锚定 3D 堆叠与展开 Transform 计算
+   ========================================================================== */
+
+.viewport[data-position^='top'] .toastCard {
+  top: 0;
+  left: 0;
+  right: 0;
+  transform-origin: top center;
+
+  /* 堆叠态 Transform */
+  transform: translateX(var(--swipe-x))
+             translateY(calc(var(--swipe-y) + (var(--toast-index, 0) * var(--peek)) + (var(--shrink) * var(--height))))
+             scale(var(--scale));
+  box-shadow: 0 4px 16px -2px color-mix(in srgb, var(--shadow-color, #000) 6%, transparent),
+              0 2px 6px -1px color-mix(in srgb, var(--shadow-color, #000) 4%, transparent);
+}
+
+/* 悬停扇形展开态 (Hover Expanded - Top) */
+.viewport[data-position^='top'][data-expanded='true'] .toastCard {
+  height: var(--toast-height, auto);
+  transform: translateX(var(--swipe-x))
+             translateY(calc(var(--toast-offset-y, 0px) + var(--swipe-y)))
+             scale(1);
+  box-shadow: var(--shadow-lg, 0 10px 25px -5px color-mix(in srgb, var(--shadow-color, #000) 10%, transparent));
+}
+
+/* ==========================================================================
+   防闪烁 Hover 桥接伪元素 (Hover Bridge)
+   ========================================================================== */
+
+.toastCard::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: calc(var(--gap, 12px) + 2px);
+  pointer-events: auto;
+}
+
+.viewport[data-position^='top'] .toastCard::after {
+  top: auto;
+  bottom: 100%;
+}
+
+/* ==========================================================================
+   入场、退场与手势滑离动画
+   ========================================================================== */
+
+@keyframes toastEnterBottom {
+  from {
+    opacity: 0;
+    transform: translateY(120%) scale(0.92);
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.toastCard[data-state='entering'] {
+  animation: toastEnterBottom 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.toastCard[data-state='exiting'] {
+  opacity: 0 !important;
+  transform: translateY(100%) scale(0.92) !important;
+  pointer-events: none;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
+}
+
+.toastCard[data-state='swiping'] {
+  transition: none !important;
+}
+
+.toastCard[data-state='swiping-dismiss'] {
+  opacity: 0 !important;
+  transform: translateX(calc(var(--swipe-x) * 1.8 + 120px)) translateY(var(--swipe-y)) !important;
+  pointer-events: none;
+  transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
+}
+
+/* ==========================================================================
+   倒计时进度指示器 (Progress Indicator)
+   ========================================================================== */
+
+.progressTrack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: transparent;
+  overflow: hidden;
+  border-bottom-left-radius: inherit;
+  border-bottom-right-radius: inherit;
+  pointer-events: none;
+}
+
+.progressBar {
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  background: var(--brand-deep, hsl(160 84% 31%));
+  animation: toastProgress linear forwards;
+}
+
+/* 展开悬停时冻结进度条 */
+.viewport[data-expanded='true'] .progressBar {
+  animation-play-state: paused !important;
+}
+
+@keyframes toastProgress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
+/* ==========================================================================
+   类型主题色彩 (Type Variants)
+   ========================================================================== */
+
+.toastCard[data-type='error'],
+.toastCard[data-toast-type='error'] {
+  border-color: var(--color-error-border, color-mix(in srgb, var(--accent-red, #dc2626) 25%, transparent));
+}
+.toastCard[data-type='error'] .progressBar,
+.toastCard[data-toast-type='error'] .progressBar {
+  background: var(--text-danger, var(--accent-red, #dc2626));
+}
+
+.toastCard[data-type='success'],
+.toastCard[data-toast-type='success'] {
+  border-color: var(--color-success-border, var(--accent-green-muted, #86efac));
+}
+.toastCard[data-type='success'] .progressBar,
+.toastCard[data-toast-type='success'] .progressBar {
+  background: var(--text-success-strong, var(--brand-deep, #059669));
+}
+
+.toastCard[data-type='warning'],
+.toastCard[data-toast-type='warning'] {
+  border-color: var(--color-warning-border, color-mix(in srgb, var(--accent-orange, #c2410c) 25%, transparent));
+}
+.toastCard[data-type='warning'] .progressBar,
+.toastCard[data-toast-type='warning'] .progressBar {
+  background: var(--text-warning-strong, #c2410c);
+}
+
+.toastCard[data-type='loading'] .progressBar,
+.toastCard[data-toast-type='loading'] .progressBar {
+  background: var(--brand, #10b981);
+}
+
+/* ==========================================================================
+   卡片内部布局与组件元素
+   ========================================================================== */
+
+.cardBody {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+}
+
+.iconWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.contentWrapper {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.35;
+  margin-bottom: 2px;
+  color: var(--text-primary, #111111);
+}
+
+.message {
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.4;
+  color: var(--text-primary, #111111);
+  word-break: break-word;
+}
+
+.description {
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.4;
+  color: var(--text-secondary, #555555);
+  margin-top: 4px;
+  word-break: break-word;
+}
+
+.actionsRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.undoButton {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  color: var(--brand-deep, #059669);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  border-radius: var(--radius-sm, 4px);
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.undoButton:hover {
+  opacity: 0.85;
+  background-color: var(--tint-hover);
+}
+
+.actionButton {
+  border: none;
+  padding: 3px 8px;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  background-color: var(--text-primary, #111111);
+  color: var(--bg-card, #ffffff);
+  transition: opacity 0.15s ease;
+}
+
+.actionButton:hover {
+  opacity: 0.88;
+}
+
+.actionButton[data-variant='secondary'] {
+  background-color: var(--tint-hover);
+  color: var(--text-primary, #111111);
+  border: 1px solid var(--border-subtle);
+}
+
+.actionButton[data-variant='danger'] {
+  background-color: var(--text-danger, #dc2626);
+  color: #ffffff;
+}
+
+.actionButton[data-variant='ghost'] {
+  background-color: transparent;
+  color: var(--text-primary, #111111);
+}
+
+.closeButton {
+  background: transparent;
+  border: none;
+  padding: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-tertiary, #696969);
+  cursor: pointer;
+  margin-top: -2px;
+  margin-right: -4px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.closeButton:hover {
+  color: var(--text-primary, #111111);
+  background-color: var(--tint-hover);
+}
+
+.closeButton:focus-visible,
+.actionButton:focus-visible,
+.undoButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* ==========================================================================
+   减弱动态偏好 (prefers-reduced-motion)
+   ========================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  .toastCard {
+    transition: none !important;
+    animation: none !important;
+  }
+  .progressBar {
+    animation: none !important;
+    display: none !important;
+  }
+}

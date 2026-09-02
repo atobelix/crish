@@ -322,7 +322,7 @@
 }
 
 .branchIcon {
-  color: var(--accent-primary, #6366f1);
+  color: var(--accent-primary, hsl(239 84% 67%));
   opacity: 0.85;
   transition: color var(--transition-micro), opacity var(--transition-micro);
 }
@@ -394,7 +394,7 @@
   position: relative;
   flex-shrink: 0;
   width: 44px;
-  height: 18px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -416,6 +416,7 @@
   text-overflow: ellipsis;
   text-align: right;
   transition: opacity var(--transition-micro);
+  pointer-events: none;
 }
 
 .sessionItem .sessionActionsBtn {
@@ -425,23 +426,24 @@
   transform: translateY(-50%);
   opacity: 0;
   pointer-events: none;
-  width: 18px;
-  height: 18px;
-  min-width: 18px;
-  min-height: 18px;
-  max-width: 18px;
-  max-height: 18px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  max-width: 22px;
+  max-height: 22px;
   padding: 0;
   border-radius: var(--radius-sm, 4px);
   color: var(--text-tertiary);
-  background: none;
+  background: transparent;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   -webkit-app-region: no-drag;
-  transition: opacity var(--transition-micro), color var(--transition-micro);
+  transition: opacity var(--transition-micro), color var(--transition-micro), background var(--transition-micro);
+  z-index: 5;
 }
 
 .sessionItem .sessionActionsBtn::before {
@@ -463,7 +465,7 @@
 
 .sessionActionsBtn:hover {
   color: var(--text-primary);
-  background: transparent;
+  background: var(--tint-hover);
 }
 
 .sessionListWindowed {

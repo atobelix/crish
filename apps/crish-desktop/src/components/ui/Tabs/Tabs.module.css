@@ -1,0 +1,296 @@
+/* ==========================================================================
+   Conex UI - Tabs 3.5% 灰底纯白卡片动效体系
+   ========================================================================== */
+
+/* ── 1. 基础变量与尺寸几何映射 ── */
+.root {
+  --tab-spring-bezier: cubic-bezier(0.175, 0.885, 0.32, 1.5);
+  --tab-duration: 250ms;
+  --tab-press-duration: 100ms;
+
+  display: flex;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.root[data-orientation='horizontal'] {
+  flex-direction: column;
+}
+
+.root[data-orientation='vertical'] {
+  flex-direction: row;
+}
+
+/* ── 2. TabsList 轨道底板 ── */
+.list {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.list[data-block='true'] {
+  display: flex;
+  width: 100%;
+}
+
+.list[data-orientation='vertical'] {
+  flex-direction: column;
+  align-items: stretch;
+  width: fit-content;
+}
+
+/* 变体：pill 胶囊卡片模式 */
+.listPill {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--tab-outer-radius);
+  padding: var(--tab-pad);
+  gap: var(--tab-gap);
+}
+
+/* 变体：line 下划线模式 */
+.listLine {
+  background-color: transparent;
+  gap: var(--tab-gap);
+}
+
+.listLine[data-orientation='horizontal'] {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.listLine[data-orientation='vertical'] {
+  border-right: 1px solid var(--border-subtle);
+}
+
+/* ── 3. 尺寸档位几何契约 (同心圆角锁定) ── */
+.sizeXs {
+  --tab-height: 24px;
+  --tab-pad: 2px;
+  --tab-gap: 2px;
+  --tab-outer-radius: var(--radius-md, 6px);
+  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 4px */
+  --tab-font-size: var(--font-size-xs, 12px);
+  --tab-item-px: var(--space-2, 8px);
+  --tab-icon-size: 13px;
+}
+
+.sizeSm {
+  --tab-height: 28px;
+  --tab-pad: 2px;
+  --tab-gap: 2px;
+  --tab-outer-radius: var(--button-radius, 7px);
+  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 5px */
+  --tab-font-size: var(--font-size-sm, 13px);
+  --tab-item-px: var(--space-2_5, 10px);
+  --tab-icon-size: 14px;
+}
+
+.sizeMd {
+  --tab-height: 32px;
+  --tab-pad: 3px;
+  --tab-gap: 3px;
+  --tab-outer-radius: var(--radius-lg, 8px);
+  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 5px */
+  --tab-font-size: var(--font-size-base, 14px);
+  --tab-item-px: var(--space-3, 12px);
+  --tab-icon-size: 16px;
+}
+
+.sizeLg {
+  --tab-height: 38px;
+  --tab-pad: 3.5px;
+  --tab-gap: 4px;
+  --tab-outer-radius: var(--radius-xl, 10px);
+  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6.5px */
+  --tab-font-size: var(--font-size-md, 15px);
+  --tab-item-px: var(--space-4, 16px);
+  --tab-icon-size: 18px;
+}
+
+/* ── 4. 激活滑块指示器 (Active Slider / Indicator) ── */
+.indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 1;
+  will-change: transform, width, height, opacity;
+  transform-origin: center center;
+  transition:
+    transform var(--tab-duration) var(--tab-spring-bezier),
+    width var(--tab-duration) var(--tab-spring-bezier),
+    height var(--tab-duration) var(--tab-spring-bezier),
+    opacity 120ms ease;
+}
+
+/* pill 滑块：纯白卡片 + 发丝边框 + 柔和低空微阴影 */
+.indicatorPill {
+  border-radius: var(--tab-inner-radius);
+  background-color: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-subtle);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.05),
+    0 1px 1px rgba(0, 0, 0, 0.02);
+}
+
+/* line 滑块：圆角高光线条 */
+.indicatorLine {
+  background-color: var(--text-primary);
+  border-radius: var(--radius-full, 9999px);
+}
+
+.indicatorLine[data-orientation='horizontal'] {
+  bottom: 0;
+  height: 2px;
+}
+
+.indicatorLine[data-orientation='vertical'] {
+  left: 0;
+  width: 2px;
+}
+
+/* ── 5. Trigger 交互项 ── */
+.trigger {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--tab-height);
+  padding: 0 var(--tab-item-px);
+  font-family: var(--font-sans, inherit);
+  font-size: var(--tab-font-size);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 1;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--tab-inner-radius);
+  cursor: pointer;
+  white-space: nowrap;
+  outline: none;
+  box-sizing: border-box;
+  transition: color 120ms ease;
+}
+
+.list[data-block='true'] .trigger {
+  flex: 1;
+}
+
+/* 悬停微底色 */
+.trigger:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.trigger:hover:not(:disabled):not([data-active='true']):not([aria-selected='true']):not([aria-checked='true']) .triggerInner::before {
+  opacity: 1;
+}
+
+.trigger[data-active='true'],
+.trigger[aria-selected='true'],
+.trigger[aria-checked='true'] {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* AGENTS.md §13 严格柔和焦点环 */
+.trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+}
+
+.trigger:disabled {
+  cursor: not-allowed;
+  opacity: var(--opacity-disabled, 0.45);
+}
+
+/* ── 6. TriggerInner 微观物理按压交互 ── */
+.triggerInner {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1_5, 6px);
+  width: 100%;
+  height: 100%;
+  transform: scale(1) translateY(0);
+  transform-origin: center center;
+  transition: transform var(--tab-duration) var(--tab-spring-bezier);
+}
+
+/* 悬停背板微光 */
+.triggerInner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--tab-inner-radius);
+  background-color: var(--tint-hover);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+/* 按压弹性微压缩 (Scale 0.97 + 下沉 1px) */
+.trigger:active:not(:disabled) .triggerInner {
+  transform: scale(0.97) translateY(1px);
+  transition: transform var(--tab-press-duration) ease-in-out;
+}
+
+.triggerIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: var(--tab-icon-size);
+}
+
+.triggerLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.triggerBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  padding: 1px 4px;
+  border-radius: var(--radius-full, 9999px);
+  background-color: var(--tint-strong);
+  color: var(--text-tertiary);
+}
+
+/* ── 7. TabsContent 面板过渡 ── */
+.content {
+  outline: none;
+  transition:
+    opacity 200ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.content[hidden] {
+  display: none;
+}
+
+/* ── 8. 减弱动画兜底 (Reduced Motion & Eco Tier) ── */
+@media (prefers-reduced-motion: reduce) {
+  .indicator,
+  .triggerInner,
+  .content {
+    transition-duration: 0ms;
+    animation-duration: 0ms;
+  }
+}
+
+html[data-perf-tier='eco'] .indicator,
+html[data-perf-tier='eco'] .triggerInner,
+html[data-perf-tier='eco'] .content {
+  transition-duration: 0ms;
+  animation-duration: 0ms;
+}

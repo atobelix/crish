@@ -1,34 +1,29 @@
 /**
- * Multi-unit layout cold-start restore policy (pure).
+ * 冷启动 restore 校验（纯函数）。只认 v3 叶拥有 SessionTab[] 的形状。
  *
- * Default product policy (D-D / S3):
- * - Cold start: safe single-chat clean (do not force-restore multi-unit trees)
- * - Full multi-unit restore: opt-in via ui.restoreLastWorkspace
- * - Even with opt-in: invalid / corrupt trees fall back to clean single unit
- *
- * @see docs/architecture/multi-unit-layout-restore-adr.md
- * @see docs/plans/2026-07-shell-residual-optimization.md D-D
+ * v2 persist 必须先 migrateToLeafOwnedTabs。旧规则
+ * multi-unit-unbound-chat / orphan-tool-session 已删除。
  */
-
 import type { LayoutNode, LayoutTree } from './types';
 import {
-  findDuplicateSessionChatLeaves,
+  PENDING_DRAFT_SESSION_ID,
+  isRealSessionId,
   listChatLeaves,
-  listToolLeaves,
-} from './conversationUnit';
+} from './sessionTabModel';
 
-/** appSettings / settings UI key (flat + nested ui.*) */
 export const RESTORE_LAST_WORKSPACE_SETTING_KEY = 'ui.restoreLastWorkspace';
-/** localStorage mirror used by layoutTreeStore rehydrate (avoids appSettings race) */
 export const RESTORE_LAST_WORKSPACE_LS_KEY = 'crish_restore_last_workspace';
 
 export type LayoutRestoreFailReason =
   | 'missing-tree'
   | 'malformed-structure'
   | 'no-chat-leaf'
+  | 'tool-leaf-present'
+  | 'empty-tabs'
+  | 'active-tab-missing'
+  | 'illegal-global-draft'
   | 'duplicate-session-binding'
-  | 'multi-unit-unbound-chat'
-  | 'orphan-tool-session';
+  | 'duplicate-tab-id';
 
 export type LayoutRestoreVerdict =
   | { ok: true; chatCount: number; multiUnit: boolean }
@@ -38,17 +33,37 @@ export type LayoutRestoreVerdict =
       chatCount: number;
     };
 
+function isSessionTabStructurallyValid(t: unknown): boolean {
+  if (!t || typeof t !== 'object') return false;
+  const o = t as Record<string, unknown>;
+  if (typeof o.tabId !== 'string' || !o.tabId) return false;
+  if (typeof o.sessionId !== 'string' || !o.sessionId) return false;
+  if (typeof o.title !== 'string' || !o.title) return false;
+  if (typeof o.workspaceKey !== 'string' || !o.workspaceKey) return false;
+  if (!o.dock || typeof o.dock !== 'object') return false;
+  const d = o.dock as Record<string, unknown>;
+  if (typeof d.collapsed !== 'boolean') return false;
+  if (!Array.isArray(d.openPanelIds)) return false;
+  if (typeof d.widthRatio !== 'number' || !Number.isFinite(d.widthRatio)) {
+    return false;
+  }
+  if (d.activePanelId !== null && typeof d.activePanelId !== 'string') {
+    return false;
+  }
+  return true;
+}
+
 /** Basic structural sanity for rehydrated JSON. */
 export function isLayoutNodeStructurallyValid(node: unknown): node is LayoutNode {
   if (!node || typeof node !== 'object') return false;
   const n = node as Record<string, unknown>;
   if (typeof n.id !== 'string' || !n.id) return false;
   if (n.type === 'leaf') {
-    return (
-      typeof n.panelId === 'string' &&
-      Array.isArray(n.tabs) &&
-      typeof n.activeTab === 'string'
-    );
+    if (typeof n.panelId !== 'string' || !n.panelId) return false;
+    if (!Array.isArray(n.tabs)) return false;
+    if (typeof n.activeTabId !== 'string') return false;
+    if (n.tabs.length > 0 && typeof n.tabs[0] === 'string') return false;
+    return n.tabs.every((t) => isSessionTabStructurallyValid(t));
   }
   if (n.type === 'branch') {
     if (n.direction !== 'horizontal' && n.direction !== 'vertical') return false;
@@ -65,14 +80,7 @@ export function isLayoutNodeStructurallyValid(node: unknown): node is LayoutNode
 }
 
 /**
- * Whether a persisted layout tree is safe to restore as multi-unit (or single unit).
- *
- * Invariants:
- * - root present + structurally valid
- * - ≥1 chat leaf
- * - no duplicate sessionId on chat leaves (1 session ≤ 1 chat)
- * - multi-unit (chatCount > 1): every chat leaf has a non-empty sessionId
- * - tool leaf with sessionId must map to an existing chat session (no orphan tools)
+ * 是否可 restore 为 v3 叶拥有标签树。
  */
 export function validateRestorableLayoutTree(
   tree: LayoutTree | null | undefined
@@ -84,33 +92,63 @@ export function validateRestorableLayoutTree(
     return { ok: false, reason: 'malformed-structure', chatCount: 0 };
   }
 
+  const allLeaves = collectAllLeaves(tree.root);
+  if (allLeaves.some((l) => l.panelId !== 'chat')) {
+    const chatCount = allLeaves.filter((l) => l.panelId === 'chat').length;
+    return { ok: false, reason: 'tool-leaf-present', chatCount };
+  }
+
   const chats = listChatLeaves(tree.root);
   const chatCount = chats.length;
   if (chatCount < 1) {
     return { ok: false, reason: 'no-chat-leaf', chatCount: 0 };
   }
 
-  const dups = findDuplicateSessionChatLeaves(tree.root);
-  if (dups.size > 0) {
-    return { ok: false, reason: 'duplicate-session-binding', chatCount };
-  }
-
-  if (chatCount > 1) {
-    const unbound = chats.some((c) => !(c.sessionId || '').trim());
-    if (unbound) {
-      return { ok: false, reason: 'multi-unit-unbound-chat', chatCount };
+  for (const leaf of chats) {
+    if (leaf.tabs.length === 0) {
+      if (leaf.activeTabId) {
+        return { ok: false, reason: 'active-tab-missing', chatCount };
+      }
+      continue;
+    }
+    if (
+      leaf.activeTabId &&
+      !leaf.tabs.some((t) => t.tabId === leaf.activeTabId)
+    ) {
+      return { ok: false, reason: 'active-tab-missing', chatCount };
+    }
+    for (const tab of leaf.tabs) {
+      if (tab.sessionId === PENDING_DRAFT_SESSION_ID) {
+        return { ok: false, reason: 'illegal-global-draft', chatCount };
+      }
     }
   }
 
-  const chatSessions = new Set(
-    chats.map((c) => (c.sessionId || '').trim()).filter(Boolean)
-  );
-  for (const tool of listToolLeaves(tree.root)) {
-    const owner = (tool.sessionId || '').trim();
-    if (owner && !chatSessions.has(owner)) {
-      return { ok: false, reason: 'orphan-tool-session', chatCount };
+  const realSeen = new Map<string, number>();
+  const tabIds = new Set<string>();
+  for (const leaf of chats) {
+    for (const tab of leaf.tabs) {
+      if (tabIds.has(tab.tabId)) {
+        return { ok: false, reason: 'duplicate-tab-id', chatCount };
+      }
+      tabIds.add(tab.tabId);
+      if (isRealSessionId(tab.sessionId)) {
+        realSeen.set(tab.sessionId, (realSeen.get(tab.sessionId) ?? 0) + 1);
+      }
+    }
+  }
+  for (const count of realSeen.values()) {
+    if (count >= 2) {
+      return { ok: false, reason: 'duplicate-session-binding', chatCount };
     }
   }
 
   return { ok: true, chatCount, multiUnit: chatCount > 1 };
+}
+
+function collectAllLeaves(
+  node: LayoutNode
+): Array<{ panelId: string; tabs: unknown[]; activeTabId?: string }> {
+  if (node.type === 'leaf') return [node];
+  return [...collectAllLeaves(node.children[0]), ...collectAllLeaves(node.children[1])];
 }

@@ -170,7 +170,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         ? showPassword
           ? 'text'
           : 'password'
-        : 'text';
+        : variant === 'search'
+          ? 'text'
+          : (restProps.type ?? 'text');
     const inputRole = variant === 'search' ? 'searchbox' : role;
 
     const describedBy =

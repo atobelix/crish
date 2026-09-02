@@ -5,81 +5,40 @@
  */
 
 .topBar {
-  position: relative;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   height: var(--header-height, 36px);
   min-height: var(--header-height, 36px);
   max-height: var(--header-height, 36px);
   width: 100vw;
   display: flex;
   align-items: center;
-  background: var(--bg-workspace, var(--bg-primary));
-  /* 不画下边框：与画布同底，靠卡片自身的发丝边框建立层次 */
+  background: transparent;
   border-bottom: none;
   box-sizing: border-box;
   overflow: hidden;
   user-select: none;
-  -webkit-app-region: drag;
-  z-index: var(--z-sidebar, 100);
-}
-
-/*
- * Rail：侧栏开关的固定槽位。
- * 宽度只跟随交通灯让位，不跟随侧栏展开宽度——按钮位置必须是钉死的，
- * 否则每次开合侧栏，用户刚要点的按钮就滑走了。
- */
-.rail {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-  box-sizing: border-box;
-  -webkit-app-region: drag;
-}
-
-.sidebarBtn {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  min-height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-sm, 4px);
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0;
-  transition: background-color var(--transition-fast, 150ms ease-out),
-              color var(--transition-fast, 150ms ease-out);
   -webkit-app-region: no-drag;
-  pointer-events: auto;
+  app-region: no-drag;
+  z-index: var(--z-sidebar, 100);
+  pointer-events: none;
 }
 
-.sidebarBtn:hover {
-  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
-  color: var(--text-primary);
-}
-
-.main {
-  flex: 0 1 auto;
-  min-width: 0;
+.headerClearance {
   height: 100%;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  -webkit-app-region: drag;
+  flex-shrink: 0;
+  pointer-events: none;
 }
 
 .spacer {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-width: 32px;
   height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding-left: var(--space-1, 4px);
   -webkit-app-region: drag;
+  app-region: drag;
+  pointer-events: auto;
 }
 
 .trail {
@@ -92,6 +51,7 @@
   padding-left: var(--space-1, 4px);
   background: transparent;
   -webkit-app-region: no-drag;
+  pointer-events: auto;
 }
 
 .helpBtn {
@@ -115,6 +75,10 @@
 }
 
 .helpBtn:hover {
-  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
+  background: var(--tint-hover);
   color: var(--text-primary);
+}
+
+.helpBtn:active {
+  background: var(--tint-active);
 }

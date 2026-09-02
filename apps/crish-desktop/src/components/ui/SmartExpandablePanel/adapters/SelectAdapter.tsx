@@ -1,9 +1,24 @@
 import React, { useEffect, useId, useState, useMemo } from 'react';
 import { MenuAdapter } from './MenuAdapter';
-import type { SelectOption, SelectProps } from '../../Select/Select';
+import type { SelectOption, SelectSize } from '../../Select/Select';
 import type { SelectOptionItem } from '../../Menu/types';
 import { convertSelectOptionsToSmartItems } from './schemaBridge';
 import styles from '../../Select/Select.module.css';
+
+export interface SelectAdapterProps {
+  value?: string | null;
+  onChange?: (value: string) => void;
+  options?: SelectOption[];
+  placeholder?: string;
+  disabled?: boolean;
+  error?: string;
+  label?: React.ReactNode;
+  size?: SelectSize;
+  id?: string;
+  className?: string;
+  align?: 'start' | 'center' | 'end';
+  side?: 'top' | 'bottom';
+}
 
 function toMenuItem(option: SelectOption): SelectOptionItem {
   return {
@@ -60,7 +75,7 @@ function renderOption(
 export function SelectAdapter({
   value: externalValue,
   onChange,
-  options,
+  options = [],
   placeholder = '请选择',
   disabled = false,
   error,
@@ -70,7 +85,7 @@ export function SelectAdapter({
   className,
   align,
   side,
-}: SelectProps) {
+}: SelectAdapterProps) {
   const autoId = useId();
   const selectId = id ?? `ui-select-${autoId}`;
   const listboxId = `ui-select-listbox-${autoId}`;

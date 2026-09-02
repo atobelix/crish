@@ -98,9 +98,8 @@ describe('Markdown Typography & Syntax Highlighting Tokens (Plan 06)', () => {
   describe('2. 行内代码与交互胶囊微排版规范断言', () => {
     it('.md-inline-code 必须具备微内衬、圆角与换行克隆规则', () => {
       expect(chatMessageRowCss).toContain('.assistantText :global(.md-inline-code)');
-      expect(chatMessageRowCss).toContain('--md-code-inline-bg');
+      expect(chatMessageRowCss).toContain('3.5%');
       expect(chatMessageRowCss).toContain('--md-code-inline-fg');
-      expect(chatMessageRowCss).toContain('--md-code-inline-border');
       expect(chatMessageRowCss).toContain('box-decoration-break: clone');
       expect(chatMessageRowCss).toContain('-webkit-box-decoration-break: clone');
     });

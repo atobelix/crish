@@ -1,20 +1,31 @@
 /**
- * 二叉树布局操作 — 插入/拆分/合并操作子模块。
+ * 二叉树布局操作 — 插入 / 拆分 / 合并。
  *
- * 包含不可变替换核心辅助（replaceNode / removeBranch），
- * 供本模块及其它子模块复用。
+ * 会话切分只走 splitTab；splitLeaf 仅作几何原语（新叶是空的新对话界面）。
  */
 import type {
-  LayoutBranch,
   LayoutLeaf,
   LayoutNode,
   LayoutTree,
   SplitDirection,
-  DropDirection,
 } from './types';
-import { createBranch, createLeaf, isBranch, isLeaf } from './types';
-import { isPrimaryPanel } from './index';
+import {
+  createBranch,
+  createLeaf,
+  generateNodeId,
+  isBranch,
+  isLeaf,
+  clampSplitRatio,
+} from './types';
+import type { SessionTab } from './sessionTabModel';
+import {
+  createSessionTab,
+  createDefaultDock,
+  isRealSessionId,
+  sessionIdTaken,
+} from './sessionTabModel';
 import { findNodeById } from './layoutTreeQuery';
+import { pruneEmptyLeaves, moveTab } from './layoutTreeMoveRemove';
 
 // ── 不可变替换（核心辅助） ──────────────────────────────────────────────
 
@@ -50,34 +61,29 @@ export function removeBranch(
   return { ...root, children: [newFirst, newSecond] };
 }
 
+function requireChatLeaf(root: LayoutNode, leafId: string): LayoutLeaf | null {
+  const n = findNodeById(root, leafId);
+  if (!n || n.type !== 'leaf') return null;
+  return n;
+}
+
 // ── 结构操作 ──────────────────────────────────────────────────────────
 
 /**
- * 分割叶子：将目标 leaf 替换为一个 branch，
- * 原 leaf 和新 leaf 作为 branch 的两个 child。
- *
- * @param direction 'horizontal' → 新 leaf 在右/下；'vertical' → 新 leaf 在下
- * @param position 'before' | 'after' — 新 leaf 放在原 leaf 的前面还是后面
+ * 分割叶子：将目标 leaf 替换为一个 branch，原 leaf 和新 chat 叶作为 child。
+ * 新叶是空的新对话界面。会话切分请走 splitTab。
  */
 export function splitLeaf(
   tree: LayoutTree,
   leafId: string,
   direction: SplitDirection,
-  newPanelId: string,
   position: 'before' | 'after' = 'after',
-  splitRatio = 0.5,
-  /** 新 leaf 绑定的 sessionId（tool 叶 = ownerSessionId；tab→split 时透传源 unit） */
-  newLeafSessionId?: string
+  splitRatio = 0.5
 ): LayoutTree {
   const target = findNodeById(tree.root, leafId);
   if (!target || !isLeaf(target)) return tree;
 
-  const newLeaf = createLeaf(
-    newPanelId,
-    undefined,
-    undefined,
-    newLeafSessionId
-  );
+  const newLeaf = createLeaf();
   const [first, second] =
     position === 'after' ? [target, newLeaf] : [newLeaf, target];
 
@@ -87,7 +93,6 @@ export function splitLeaf(
 
 /**
  * 合并分支：删除目标 branch，保留指定 child。
- * 如果合并后父 branch 只剩一个 child，自动提升（flatten）。
  */
 export function mergeBranch(
   tree: LayoutTree,
@@ -101,66 +106,176 @@ export function mergeBranch(
   return { ...tree, root: newRoot };
 }
 
+// ── 会话 tab 命令 ────────────────────────────────────────────────────
+
 /**
- * 在 anchor 节点旁插入新 leaf（或已有节点旁挂新 leaf），用于「首次放入会话」分屏。
- * anchor 应为 Conversation Unit root（chat-only 或 H(chat|tools)），
- * 禁止直接 split  unit 内的 chat leaf（会把 tools 变成全局右栏）。
+ * 把已有 SessionTab 推进目标叶（openSession 用）。I1：重复真实 sessionId 入口拒绝。
  */
-export function insertLeafBesideNode(
-  tree: LayoutTree,
-  anchorNodeId: string,
-  direction: DropDirection,
-  newPanelId: string,
-  newLeafSessionId?: string,
-  splitRatio = 0.5
-): LayoutTree {
-  const anchor = findNodeById(tree.root, anchorNodeId);
-  if (!anchor) return tree;
-
-  const splitDir: SplitDirection =
-    direction === 'left' || direction === 'right' ? 'horizontal' : 'vertical';
-  const position: 'before' | 'after' =
-    direction === 'left' || direction === 'top' ? 'before' : 'after';
-
-  const newLeaf = createLeaf(
-    newPanelId,
-    undefined,
-    undefined,
-    newLeafSessionId
-  );
-  const [first, second] =
-    position === 'after' ? [anchor, newLeaf] : [newLeaf, anchor];
-  const branch = createBranch(splitDir, first, second, splitRatio);
-  return {
-    ...tree,
-    root: replaceNode(tree.root, anchorNodeId, branch),
-  };
-}
-
-// ── Tab 操作 ──────────────────────────────────────────────────────────
-
-/** 向叶子添加 tab */
-export function addTabToLeaf(
+export function insertTab(
   tree: LayoutTree,
   leafId: string,
-  tabId: string
+  tab: SessionTab,
+  insertIdx?: number
 ): LayoutTree {
-  const target = findNodeById(tree.root, leafId);
-  if (!target || !isLeaf(target)) return tree;
-  if (target.tabs.includes(tabId)) return tree;
+  const leaf = requireChatLeaf(tree.root, leafId);
+  if (!leaf) return tree;
+  if (!tab || !tab.tabId) return tree;
+  if (!isRealSessionId(tab.sessionId)) return tree;
+  if (leaf.tabs.some((t) => t.tabId === tab.tabId)) return tree;
+  if (sessionIdTaken(tree.root, tab.sessionId)) return tree;
 
-  // 域隔离：对话域（chat）与功能区不能混在同一个 leaf 里。
-  // 这样能保证「对话只能在对话区域内相互排版，功能区在功能区域内排版」。
-  if (
-    isPrimaryPanel(tabId) !== isPrimaryPanel(target.panelId)
-  ) {
-    return tree;
+  const tabs = [...leaf.tabs];
+  const idx = insertIdx;
+  if (idx === undefined || !Number.isFinite(idx) || idx < 0 || idx > tabs.length) {
+    tabs.push(tab);
+  } else {
+    tabs.splice(idx, 0, tab);
   }
-
   const updated: LayoutLeaf = {
-    ...target,
-    tabs: [...target.tabs, tabId],
-    activeTab: tabId,
+    ...leaf,
+    tabs,
+    activeTabId: tab.tabId,
   };
   return { ...tree, root: replaceNode(tree.root, leafId, updated) };
+}
+
+/**
+ * 进入本叶未提交的新对话界面：不创建标签，条带已有真会话保留且无选中。
+ * 传入真 sessionId 时才插入标签（openSession / 发送成功物化）。
+ */
+export function enterComposer(tree: LayoutTree, leafId: string): LayoutTree {
+  const leaf = requireChatLeaf(tree.root, leafId);
+  if (!leaf) return tree;
+  const tabs = leaf.tabs.filter((t) => isRealSessionId(t.sessionId));
+  if (leaf.activeTabId === '' && tabs.length === leaf.tabs.length) {
+    return tree;
+  }
+  const updated: LayoutLeaf = { ...leaf, tabs, activeTabId: '' };
+  return { ...tree, root: replaceNode(tree.root, leafId, updated) };
+}
+
+/** 加号 / 新对话：进入新对话界面。带真 sessionId 的对象则插入标签。 */
+export function addTab(
+  tree: LayoutTree,
+  leafId: string,
+  tabOrWorkspaceKey?:
+    | string
+    | {
+        tabId?: string;
+        sessionId?: string;
+        title?: string;
+        workspaceKey?: string;
+        dock?: Partial<import('./sessionTabModel').RightToolDockState>;
+      }
+): LayoutTree {
+  if (tabOrWorkspaceKey && typeof tabOrWorkspaceKey === 'object') {
+    const sid =
+      typeof tabOrWorkspaceKey.sessionId === 'string'
+        ? tabOrWorkspaceKey.sessionId.trim()
+        : '';
+    if (isRealSessionId(sid)) {
+      return insertTab(
+        tree,
+        leafId,
+        createSessionTab({
+          sessionId: sid,
+          tabId: tabOrWorkspaceKey.tabId,
+          title: tabOrWorkspaceKey.title,
+          workspaceKey: tabOrWorkspaceKey.workspaceKey,
+          dock: tabOrWorkspaceKey.dock,
+        })
+      );
+    }
+  }
+  return enterComposer(tree, leafId);
+}
+
+export type SplitRegion = 'left' | 'right' | 'top' | 'bottom' | 'center';
+
+/**
+ * 从源叶拿走该 SessionTab，在目标旁 split 出新叶 tabs=[该 tab]。
+ * region=center 走 moveTab（末尾）。同叶且唯一 tab → no-op 保 leaf id。
+ */
+export function splitTab(
+  tree: LayoutTree,
+  srcLeafId: string,
+  tabId: string,
+  dstLeafId: string,
+  region: SplitRegion,
+  splitRatio?: number
+): LayoutTree {
+  if (!srcLeafId || !tabId || !dstLeafId) return tree;
+
+  if (region === 'center') {
+    const dst = requireChatLeaf(tree.root, dstLeafId);
+    if (!dst) return tree;
+    return moveTab(tree, srcLeafId, tabId, dstLeafId, dst.tabs.length);
+  }
+
+  const src = requireChatLeaf(tree.root, srcLeafId);
+  const dst = requireChatLeaf(tree.root, dstLeafId);
+  if (!src || !dst) return tree;
+  const tabIdx = src.tabs.findIndex((t) => t.tabId === tabId);
+  if (tabIdx < 0) return tree;
+
+  if (srcLeafId === dstLeafId && src.tabs.length <= 1) return tree;
+
+  const tab = src.tabs[tabIdx]!;
+  if (sessionIdTaken(tree.root, tab.sessionId, tabId)) return tree;
+
+  const newTabs = src.tabs.filter((t) => t.tabId !== tabId);
+  const newActiveId =
+    src.activeTabId !== tabId
+      ? src.activeTabId
+      : newTabs.length > 0
+        ? newTabs[Math.max(0, tabIdx - 1)]!.tabId
+        : '';
+
+  const srcRemaining: LayoutLeaf | null =
+    newTabs.length === 0
+      ? null
+      : { ...src, tabs: newTabs, activeTabId: newActiveId };
+
+  const fresh: LayoutLeaf = {
+    type: 'leaf',
+    id: generateNodeId('leaf'),
+    panelId: 'chat',
+    tabs: [tab],
+    activeTabId: tab.tabId,
+    dock: createDefaultDock(),
+  };
+
+  const dir: SplitDirection =
+    region === 'left' || region === 'right' ? 'horizontal' : 'vertical';
+  const ratio = clampSplitRatio(splitRatio ?? 0.5);
+
+  if (srcLeafId === dstLeafId) {
+    if (!srcRemaining) return tree;
+    const [first, second] =
+      region === 'right' || region === 'bottom'
+        ? [srcRemaining, fresh]
+        : [fresh, srcRemaining];
+    const branch = createBranch(dir, first, second, ratio);
+    return { ...tree, root: replaceNode(tree.root, srcLeafId, branch) };
+  }
+
+  let nextRoot = tree.root;
+  if (srcRemaining) {
+    nextRoot = replaceNode(nextRoot, srcLeafId, srcRemaining);
+  } else {
+    const empty: LayoutLeaf = { ...src, tabs: [], activeTabId: '' };
+    nextRoot = replaceNode(nextRoot, srcLeafId, empty);
+  }
+
+  const dstNow = findNodeById(nextRoot, dstLeafId);
+  if (!dstNow || !isLeaf(dstNow)) return tree;
+  const [first, second] =
+    region === 'right' || region === 'bottom'
+      ? [dstNow, fresh]
+      : [fresh, dstNow];
+  const branch = createBranch(dir, first, second, ratio);
+  nextRoot = replaceNode(nextRoot, dstLeafId, branch);
+
+  const nextTree: LayoutTree = { ...tree, root: nextRoot };
+  return pruneEmptyLeaves(nextTree);
 }

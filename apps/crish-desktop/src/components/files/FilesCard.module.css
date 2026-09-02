@@ -75,20 +75,21 @@
   cursor: default;
 }
 
-.filesNavBtnSm {
-  width: var(--control-height-sm);
-  height: var(--control-height-sm);
+.filesNavBtn.isOn {
+  background: var(--tint-active);
+  color: var(--text-primary);
 }
 
-/*                                                                                                                 ?*/
+/* 面包屑导航容器 */
 .filesCrumbs {
   flex: 1;
   min-width: 0;
+  flex-shrink: 1;
   display: flex;
   align-items: center;
   gap: 0;
   overflow: visible;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-medium);
   color: var(--text-secondary);
   white-space: nowrap;
@@ -101,27 +102,8 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  max-width: 140px;
-}
-
-.filesPathForm {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  height: var(--control-height-sm, 28px);
-  padding: 0 8px;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-sizing: border-box;
-}
-
-.filesPathForm:focus-within {
-  border: none;
-  box-shadow: none;
-  background: transparent;
+  overflow: visible;
+  flex-shrink: 0;
 }
 
 .filesPathFilter {
@@ -220,81 +202,13 @@
   flex: 1;
 }
 
-.filesPreviewMedia {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-3);
-  min-height: 0;
-  flex: 1;
-  overflow: auto;
-}
-
-.filesPreviewMedia img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: var(--radius-xs);
-}
-
-.filesPreviewPdf {
-  width: 100%;
-  height: 100%;
-  min-height: 280px;
-  border: none;
-  background: var(--bg-card, #ffffff);
-}
-
-.filesNavBtn.isOn {
-  background: var(--tint-active);
-  color: var(--text-primary);
-}
-
-.filesPathIco {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-  width: var(--icon-size);
-  height: var(--icon-size);
-}
-
-.filesPathInput {
-  flex: 1;
-  min-width: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-normal);
-  font-family: inherit;
-  color: var(--text-primary);
-}
-
-.filesPathCrumbs {
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.filesPathCrumbsGrow {
-  flex: 1;
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-  text-overflow: ellipsis;
-  overflow: hidden;
-}
-
 .filesBcChip {
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xs, 12px);
   font-family: inherit;
+  font-weight: var(--font-weight-medium, 500);
   padding: 2px 4px;
   cursor: pointer;
   max-width: 120px;
@@ -312,8 +226,10 @@
 
 .filesBcChipFile {
   color: var(--text-primary);
-  font-weight: var(--font-weight-content);
-  max-width: 160px;
+  font-size: var(--font-size-xs, 12px);
+  font-family: inherit;
+  font-weight: var(--font-weight-medium, 500);
+  max-width: 180px;
   cursor: default;
 }
 
@@ -321,13 +237,22 @@
   background: transparent;
 }
 
+.filesBcChipMuted {
+  opacity: 0.6;
+  color: var(--text-tertiary);
+}
+
 .filesBcSep {
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1;
   color: var(--text-tertiary);
   opacity: 0.55;
   margin: 0 1px;
 }
 
-/*                                             ?+         ?                 ?*/
+/* ─────────────────────────────────────────────────────────────────────────
+   面包屑下拉树状展开浮层 (Flyout Tree View)
+   ───────────────────────────────────────────────────────────────────────── */
 .filesBcFlyout {
   position: absolute;
   top: calc(100% + 6px);
@@ -337,66 +262,23 @@
   max-height: min(52vh, 400px);
   display: flex;
   flex-direction: column;
-  padding: var(--space-2);
-  border-radius: var(--radius-2xl);
+  padding: var(--space-2, 8px);
+  border-radius: var(--radius-xl, 12px);
   border: 1px solid var(--border-subtle);
   background: var(--bg-elevated, #ffffff);
-  box-shadow: var(--shadow-lg, 0 12px 28px rgba(0, 0, 0, 0.12));
+  box-shadow: var(--shadow-lg);
+  overscroll-behavior: contain;
   white-space: normal;
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   面包屑多级下钻浮层头部 (Flyout Drill-Down Nav Header)
-   ───────────────────────────────────────────────────────────────────────── */
-.filesBcNavHeader {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5, 6px);
-  padding: 4px 6px;
-  margin-bottom: var(--space-1);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary, #f4f5f7);
-  font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.filesBcNavBackBtn {
-  appearance: none;
-  border: none;
-  background: transparent;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  font-size: 11px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 2px 4px;
-  border-radius: var(--radius-sm);
-}
-
-.filesBcNavBackBtn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.filesBcNavCurrentPath {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-family-mono, monospace);
-  font-size: 11px;
+  box-sizing: border-box;
 }
 
 .filesBcFlyoutSearch {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 6px 10px;
-  margin-bottom: var(--space-1_5);
-  border-radius: var(--radius-lg);
+  gap: var(--space-1_5, 6px);
+  padding: 4px 6px 4px 8px;
+  margin-bottom: var(--space-1_5, 6px);
+  border-radius: var(--radius-lg, 8px);
   border: 1px solid var(--border-subtle);
   background: var(--bg-card, #ffffff);
   color: var(--text-tertiary);
@@ -410,7 +292,31 @@
   outline: none;
   background: transparent;
   font: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-primary);
+  padding: 2px 0;
+}
+
+.filesBcDirectOpenBtn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: background var(--transition-micro, 120ms) ease, color var(--transition-micro, 120ms) ease;
+}
+
+.filesBcDirectOpenBtn:hover {
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -418,6 +324,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -429,15 +336,17 @@
   background: transparent;
   display: flex;
   align-items: center;
-  gap: var(--space-1_5);
+  gap: var(--space-1_5, 6px);
   width: 100%;
   text-align: left;
-  padding: 6px 8px;
-  border-radius: var(--radius-lg);
+  padding: 5px 8px;
+  border-radius: var(--radius-md, 6px);
   font: inherit;
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
   cursor: pointer;
+  transition: background 0.12s ease;
+  user-select: none;
 }
 
 .filesBcFlyoutItem:hover,
@@ -447,8 +356,17 @@
 
 .filesBcFlyoutChev {
   width: 14px;
+  height: 14px;
   flex-shrink: 0;
   color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.filesBcFlyoutChev.isExpanded {
+  transform: rotate(90deg);
 }
 
 .filesBcFlyoutChev.isLeaf {
@@ -466,35 +384,15 @@
 .filesBcFlyoutEmpty {
   padding: 16px 8px;
   text-align: center;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
-}
-
-.filesBcFlyoutGoto {
-  appearance: none;
-  border: none;
-  border-top: 1px solid var(--hairline, var(--border-subtle));
-  background: transparent;
-  margin-top: var(--space-1);
-  padding: var(--space-2);
-  font: inherit;
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: 0 0 8px 8px;
-  text-align: center;
-}
-
-.filesBcFlyoutGoto:hover {
-  color: var(--text-primary);
-  background: var(--bg-hover);
 }
 
 .filesPendingBadge {
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  border-radius: 999px;
+  border-radius: var(--radius-md, 6px);
   background: var(--bg-active);
   color: var(--text-secondary);
   font-size: var(--font-size-xxs);
@@ -512,37 +410,6 @@
   height: 26px;
 }
 
-.filesMoreMenu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  min-width: 160px;
-  padding: var(--space-1);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
-  z-index: var(--z-popover);
-}
-
-.filesMoreItem {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: none;
-  background: transparent;
-  padding: 7px 10px;
-  border-radius: 7px;
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  color: var(--text-primary);
-  cursor: pointer;
-}
-
-.filesMoreItem:hover {
-  background: var(--bg-hover);
-}
-
 /* ?3                                               ?*/
 .filesContextBar {
   display: flex;
@@ -556,23 +423,13 @@
   box-sizing: border-box;
 }
 
-.filesContextName {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-}
-
 .filesDirtyDot {
   display: inline-block;
-  margin-right: var(--space-0_5);
-  color: var(--text-tertiary);
-  font-weight: var(--font-weight-heavy);
+  vertical-align: 1px;
+  font-size: 8px;
+  margin-right: 4px;
+  color: var(--accent-color);
+  font-weight: normal;
   line-height: var(--line-height-none);
 }
 
@@ -681,12 +538,12 @@
   }
 }
 
-/*                                                    ?+                                 ?*/
+/* 打开方式胶囊 */
 .filesOpenCapsule {
   position: relative;
   display: inline-flex;
   align-items: stretch;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-md, 6px);
   border: 1px solid var(--border-color);
   background: transparent;
   overflow: visible;
@@ -696,114 +553,53 @@
   margin: 0;
 }
 
-.filesOpenMain {
+.filesOpenCapsule .filesOpenMain {
   appearance: none;
   border: none;
   background: transparent;
   color: var(--text-secondary);
   font: inherit;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 0 8px;
   cursor: pointer;
-  border-radius: var(--radius-sm) 0 0 5px;
-  height: 26px;
+  border-radius: var(--radius-sm, 4px) 0 0 var(--radius-sm, 4px);
+  height: 24px;
+  min-height: 24px;
   box-sizing: border-box;
 }
 
-.filesOpenMain:hover {
+.filesOpenCapsule .filesOpenMain:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
 }
 
-.filesOpenChev {
+.filesOpenCapsule .filesOpenChev {
   appearance: none;
   border: none;
   border-left: 1px solid var(--border-color);
   background: transparent;
   color: var(--text-secondary);
   width: 22px;
+  min-width: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  border-radius: 0 5px 5px 0;
+  border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
   padding: 0;
-  height: 26px;
+  height: 24px;
+  min-height: 24px;
   box-sizing: border-box;
 }
 
-.filesOpenChev:hover {
+.filesOpenCapsule .filesOpenChev:hover {
   background: var(--bg-hover);
   color: var(--text-primary);
-}
-
-.filesOpenMenu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: var(--z-dropdown-menu);
-  min-width: 220px;
-  max-height: min(60vh, 360px);
-  overflow-y: auto;
-  padding: var(--space-1_5);
-  border-radius: var(--radius-2xl);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
-  box-shadow:
-    0 4px 16px color-mix(in srgb, var(--shadow-color) 8%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--shadow-color) 2%, transparent);
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.filesOpenItem {
-  appearance: none;
-  border: none;
-  background: transparent;
-  text-align: left;
-  font: inherit;
-  font-size: var(--font-size-sm);
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 8px 10px;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: background var(--transition-micro);
-}
-
-.filesOpenItem:hover {
-  background: var(--bg-hover);
-}
-
-.filesOpenItemMore {
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-}
-
-.filesOpenSep {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--hairline, var(--border-subtle));
-}
-
-.filesOpenAppIco {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--radius-xs);
-  background: var(--tint-active);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-content);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -831,7 +627,7 @@
 }
 
 .filesTreeRootHeader:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
 }
 
 .filesTreeRootHeaderIcon {
@@ -1071,239 +867,3 @@
   color: var(--text-primary);
 }
 
-.filesDetail {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-}
-
-.filesDetailBody {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  background: var(--bg-primary);
-  position: relative;
-}
-
-.filesTextPre {
-  margin: 0;
-  padding: 8px 10px 48px;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-  color: var(--text-primary);
-  white-space: pre-wrap;
-  word-break: break-word;
-  cursor: text;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.filesEditor {
-  width: 100%;
-  height: 100%;
-  min-height: 160px;
-  border: none;
-  outline: none;
-  resize: none;
-  padding: 8px 10px;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
-  color: var(--text-primary);
-  background: var(--bg-primary);
-  box-sizing: border-box;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.filesPreviewMedia {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-2_5);
-  min-height: 100px;
-  background: var(--bg-secondary);
-}
-
-.filesPreviewMedia img {
-  max-width: 100%;
-  max-height: min(70vh, 520px);
-  object-fit: contain;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-}
-
-.filesPreviewPdf {
-  width: 100%;
-  height: 100%;
-  min-height: 280px;
-  border: none;
-  background: var(--bg-secondary);
-}
-
-.filesTableWrap {
-  overflow: auto;
-  padding: var(--space-2_5);
-}
-
-.filesTable {
-  border-collapse: collapse;
-  font-size: var(--font-size-xs);
-  width: max-content;
-  min-width: 100%;
-}
-
-.filesTable th,
-.filesTable td {
-  border: 1px solid var(--border-color);
-  padding: 5px 8px;
-  text-align: left;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-primary);
-}
-
-.filesTable th {
-  background: var(--bg-tertiary);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-secondary);
-}
-
-.filesTrunc {
-  margin-top: var(--space-2);
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  text-align: center;
-}
-
-.filesDetail {
-  position: relative;
-}
-
-.filesDetailBody {
-  position: relative;
-}
-
-.filesSelBar {
-  position: absolute;
-  left: 8px;
-  right: 8px;
-  bottom: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  padding: 8px 10px;
-  background: var(--bg-elevated, var(--bg-primary));
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
-  z-index: var(--z-card-footer);
-  width: min(320px, calc(100% - 16px));
-  max-width: 320px;
-  transition:
-    top var(--transition-micro),
-    left var(--transition-micro);
-  box-sizing: border-box;
-}
-
-/*                                                                     ht/bottom          ?*/
-.filesSelBar.isAnchored {
-  right: auto;
-  bottom: auto;
-}
-
-.filesSelPreview {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  max-height: 36px;
-  overflow: hidden;
-  font-family: var(--font-mono);
-  line-height: 1.35;
-  white-space: pre-wrap;
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.filesSelForm {
-  display: flex;
-  gap: var(--space-1_5);
-  align-items: center;
-}
-
-.filesSelForm input {
-  flex: 1;
-  min-width: 0;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: 6px 10px;
-  font-size: var(--font-size-sm);
-  font-family: inherit;
-  outline: none;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  -webkit-user-select: text;
-  user-select: text;
-}
-
-.filesSelForm input:focus {
-  border-color: var(--text-tertiary);
-  box-shadow: none;
-}
-
-.filesSelHint {
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
-}
-
-/*                                                                                                                             ?*/
-@container filesCard (max-width: 380px) {
-  .filesBar {
-    gap: 1px;
-    padding: 3px 4px;
-    min-height: var(--control-height-sm, 28px);
-  }
-  .filesCrumbs {
-    padding: 0 2px;
-  }
-  .filesPathForm {
-    padding: 0 4px;
-  }
-  .filesPathIco {
-    display: none;
-  }
-  .filesRowMeta {
-    display: none;
-  }
-  .filesGitStatus {
-    display: none;
-  }
-  .filesBcChip {
-    max-width: 72px;
-  }
-  .filesContextName {
-    max-width: 42%;
-  }
-  .filesActionHint {
-    padding: 1px 4px 1px 6px;
-  }
-  .filesSoftBtn {
-    padding: 0 6px;
-  }
-}
-
-@container filesCard (max-width: 280px) {
-  .filesPendingBadge {
-    display: none;
-  }
-  .filesBcChip {
-    max-width: 48px;
-  }
-  .filesPathFilter {
-    width: 56px;
-  }
-}

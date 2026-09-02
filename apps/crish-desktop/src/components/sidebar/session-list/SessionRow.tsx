@@ -5,6 +5,10 @@ import React, {
   useContext,
   useRef,
 } from 'react';
+import {
+  GitBranch,
+  MoreHorizontal,
+} from 'lucide-react';
 import type { SessionState } from '../../../store/types';
 import {
   formatSessionListAbsoluteTime,
@@ -19,10 +23,9 @@ import {
 } from '../../../api/sessionSearch';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
-import { GitBranch, MoreHorizontal } from 'lucide-react';
 
-/** 更多钮边长；必须小于行高，避免撑满整行吞掉标题点击 */
-export const SESSION_ACTIONS_BTN_PX = 18;
+/** 更多钮边长；保持充足的命中区域 */
+export const SESSION_ACTIONS_BTN_PX = 20;
 
 /** Drop indicator place; local type avoids circular runtime import with useSessionListDrag */
 export type SessionRowDropPlace = 'before' | 'after';
@@ -30,7 +33,10 @@ export type SessionRowDropPlace = 'before' | 'after';
 function isSessionMoreTarget(el: EventTarget | null): boolean {
   return (
     el instanceof Element &&
-    Boolean(el.closest('[data-testid="session-more-button"]'))
+    Boolean(
+      el.closest('[data-testid="session-more-button"]') ||
+        el.closest(`.${styles.sessionActionsBtn}`)
+    )
   );
 }
 
@@ -71,7 +77,7 @@ const SessionRowTime = memo(function SessionRowTime({
   );
 });
 
-/** 从行元素合成右键坐标（键盘菜单 / 更多按钮） */
+/** 从行元素合成右键/更多菜单坐标（键盘菜单 / 更多按钮） */
 function syntheticContextMenuEvent(
   el: HTMLElement | null,
   base?: React.MouseEvent | React.KeyboardEvent,
@@ -84,29 +90,35 @@ function syntheticContextMenuEvent(
   const rect = targetEl?.getBoundingClientRect();
   const isTargetButton = Boolean(targetEl && targetEl !== el);
   const anchor = opts?.anchor;
+  const isMoreButton = anchor === 'right-center';
+
+  // 更多操作按钮或显式锚点模式：严格根据按钮几何边缘锚定（右侧 + 6px），不跟随鼠标指针位置，彻底防止误触
   const clientX =
-    rect != null
-      ? anchor === 'right-center'
-        ? rect.right + 4
-        : isTargetButton
-          ? rect.left
-          : rect.left + Math.min(rect.width * 0.7, rect.width - 8)
-      : 0;
+    isMoreButton && rect != null
+      ? rect.right + 6
+      : !anchor && base && 'clientX' in base && typeof (base as React.MouseEvent).clientX === 'number' && (base as React.MouseEvent).clientX > 0
+        ? (base as React.MouseEvent).clientX
+        : rect != null
+          ? isTargetButton
+            ? rect.left
+            : rect.left + Math.min(rect.width * 0.7, rect.width - 8)
+          : 0;
   const clientY =
-    rect != null
-      ? anchor === 'right-center'
-        ? rect.top + rect.height / 2
-        : isTargetButton
-          ? rect.bottom + 4
-          : rect.top + rect.height / 2
-      : 0;
+    isMoreButton && rect != null
+      ? rect.top
+      : !anchor && base && 'clientY' in base && typeof (base as React.MouseEvent).clientY === 'number' && (base as React.MouseEvent).clientY > 0
+        ? (base as React.MouseEvent).clientY
+        : rect != null
+          ? isTargetButton
+            ? rect.bottom + 4
+            : rect.top + rect.height / 2
+          : 0;
   const preventDefault = () => {
     if (base && 'preventDefault' in base) base.preventDefault();
   };
   const stopPropagation = () => {
     if (base && 'stopPropagation' in base) base.stopPropagation();
   };
-  const isMoreButton = anchor === 'right-center';
   return {
     clientX,
     clientY,
@@ -145,7 +157,7 @@ export interface SessionRowRenameProps {
 /** 行操作域（选择/右键/拖拽起手/导航/键盘重排收敛为单一子对象） */
 export interface SessionRowActionsProps {
   onSelectSession: (id: string) => void;
-  onContextMenuSession: (e: React.MouseEvent, sessionId: string) => void;
+  onContextMenuSession?: (e: React.MouseEvent, sessionId: string) => void;
   onStartSessionDrag: (
     e: React.PointerEvent,
     sessionId: string,
@@ -197,10 +209,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
     onReorderKeyboard,
   } = props.actions;
   const _rowHeight = props.rowHeight;
-  // rowHeight 由列表布局传入但本组件实际使用常量 SIDEBAR_SESSION_ROW_HEIGHT
-  // （行高固定，由 api/sessionListWindow 统一管理）；保留 prop 以兼容调用方契约
   void _rowHeight;
-  // 显式从 props 读取，避免解构默认值/HMR 边界导致 ReferenceError
   const dropPlace: SessionRowDropPlace | null = dropPlaceProp ?? null;
 
   const isBranched = !!s.branchParentId;
@@ -208,7 +217,7 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
   const displayText = baseTitle.replace(/ - 分支$/, '');
   const isRunning = s.messages?.some((m) => m.status === 'processing') ?? false;
   const sessionActive = s.id === activeSessionId;
-  void searchHit; // 保留 prop 以兼容搜索 API，UI 强制单行不渲染 snippet
+  void searchHit;
   const q = searchQuery.trim();
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -227,12 +236,11 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
       const ev = syntheticContextMenuEvent(rowRef.current, base, {
         anchor: isMoreButton ? 'right-center' : 'bottom-left',
       });
-      onContextMenuSession(ev, s.id);
+      onContextMenuSession?.(ev, s.id);
     },
     [onContextMenuSession, s.id]
   );
 
-  // 产品约束：每条对话固定单行，禁止 multiLine / 项目副行 / 搜索副行撑高
   const sessionTitleWithBranch = isBranched
     ? `分支会话：${displayText}`
     : displayText;
@@ -269,21 +277,18 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
         className={`${styles.sessionItem} ${sessionActive ? styles.active : ''} ${isBranched ? styles.branchSession : ''} ${isRunning ? styles.isRunning : ''} ${isRenaming ? styles.isRenaming : ''}`}
         onClick={(e) => {
           if (isRenaming) return;
-          // 更多钮自己开菜单；不要让 exclusive / stop 漏网后把行选择吞掉
           if (isSessionMoreTarget(e.target)) return;
-          // 仅拒绝明确的中/右键；合成 click（MCP/自动化）常不带 button 或为 0。
-          // 旧逻辑 `button !== 0` 会把 button===undefined 也挡掉 → 界面“点了没反应”。
           if (typeof e.button === 'number' && e.button !== 0) return;
           selectThis();
         }}
         onContextMenu={(e) => {
           if (isRenaming) return;
-          onContextMenuSession(e, s.id);
+          e.preventDefault();
+          onContextMenuSession?.(e, s.id);
         }}
         onPointerDown={
           isDraggable && !isRenaming
             ? (e) => {
-                // 仅左键启动拖拽；不 preventDefault，保证 click 仍可触发
                 if (typeof e.button === 'number' && e.button !== 0) return;
                 if (isSessionMoreTarget(e.target)) return;
                 onStartSessionDrag(e, s.id, s.folder);
@@ -397,7 +402,9 @@ export const SessionRow = memo(function SessionRow(props: SessionRowProps) {
                         maxHeight: SESSION_ACTIONS_BTN_PX,
                       }}
                       onPointerDown={(e) => {
-                        // 不要让行拖拽 / pointer capture 把后续 click 吃掉
+                        e.stopPropagation();
+                      }}
+                      onMouseDown={(e) => {
                         e.stopPropagation();
                       }}
                       onClick={(e) => {

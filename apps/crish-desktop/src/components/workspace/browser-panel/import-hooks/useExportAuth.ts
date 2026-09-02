@@ -26,12 +26,14 @@ export interface UseExportAuthOptions {
   setStorageError: Dispatch<SetStateAction<string>>;
   /** 测试注入：登录态「另存为」写盘（缺省 downloadTextFile）。 */
   saveExport?: (filename: string, content: string) => void;
+  onShowToast?: (message: string) => void;
 }
 
 export function useExportAuth({
   setBusy,
   setStorageError,
   saveExport,
+  onShowToast,
 }: UseExportAuthOptions) {
   const [exportAuthOpen, setExportAuthOpen] = useState(false);
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
@@ -44,9 +46,10 @@ export function useExportAuth({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setStorageError(full);
+      onShowToast?.(full);
       toast.show(full);
     },
-    [setStorageError]
+    [setStorageError, onShowToast]
   );
 
   // 登录态导出：两段确认（① 授权读取 → ② 预览域名清单后确认写盘）

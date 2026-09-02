@@ -1,57 +1,58 @@
-/*          G-4    U6     BrowserPanel.module.css   token    */
+/* apps/crish-desktop/src/components/workspace/browser-panel/BrowserImportSection.module.css
+ * 受管浏览器现代化改造样式表
+ */
 
 .section {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1_5);
-  margin-top: var(--space-1);
-  padding-top: var(--space-1_5);
-  border-top: var(--hairline-width, 1px) solid var(--border-subtle);
-  font-size: var(--font-size-xs);
+  gap: var(--space-4, 16px);
+  width: 100%;
 }
 
 .header {
   display: flex;
   align-items: baseline;
-  gap: var(--space-1);
+  gap: var(--space-1_5, 6px);
   flex-wrap: wrap;
 }
 
 .title {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
 }
 
 .hint {
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
 }
 
 .block {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-1_5);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-md, 8px);
-  background: var(--bg-secondary);
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-3_5, 14px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.block:last-child {
+  border-bottom: none;
 }
 
 .blockTitle {
   display: flex;
   align-items: center;
-  gap: var(--space-0_5);
+  gap: var(--space-1_5, 6px);
   margin: 0;
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 .row {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--space-2, 8px);
   flex-wrap: wrap;
 }
 
@@ -64,29 +65,44 @@
   pointer-events: none;
 }
 
+/* 现代化发丝虚线拖拽区域 */
 .dropZone {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 44px;
-  padding: var(--space-1) var(--space-1_5);
-  border: var(--hairline-width, 1px) dashed var(--border-color);
-  border-radius: var(--radius-md, 8px);
+  min-height: 48px;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border: 1px dashed var(--border-color, hsl(35 10% 86%));
+  border-radius: var(--button-radius, 7px);
+  background-color: var(--bg-secondary, hsl(35 8% 92.1%));
   color: var(--text-tertiary);
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs, 12px);
   text-align: center;
   cursor: pointer;
+  box-sizing: border-box;
+  transition:
+    border-color var(--transition-fast, 150ms) ease,
+    background-color var(--transition-fast, 150ms) ease,
+    color var(--transition-fast, 150ms) ease;
 }
 
 .dropZone:hover,
 .dropZone:focus-visible {
   outline: none;
-  border-color: var(--accent-color);
-  color: var(--text-secondary);
+  border-color: var(--brand, hsl(160 84% 39%));
+  background-color: color-mix(in srgb, var(--brand) 4%, var(--bg-secondary));
+  color: var(--text-primary);
+}
+
+.dropZone[data-dragging='true'] {
+  border-color: var(--brand, hsl(160 84% 39%));
+  background-color: color-mix(in srgb, var(--brand) 8%, var(--bg-secondary));
+  color: var(--brand-deep, hsl(160 84% 30%));
 }
 
 .fileLoaded {
-  font-size: var(--font-size-xxs);
+  margin: 0;
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-secondary);
   overflow-wrap: anywhere;
 }
@@ -94,20 +110,24 @@
 .fileLoaded code {
   font-family: var(--font-mono, ui-monospace, monospace);
   color: var(--text-primary);
+  background: var(--tint-hover);
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 
 .error {
   margin: 0;
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs, 12px);
   color: var(--color-error);
   overflow-wrap: anywhere;
 }
 
 .stats {
   margin: 0;
-  font-size: var(--font-size-xxs);
-  color: var(--text-success);
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-success-strong, hsl(132 23% 36%));
   overflow-wrap: anywhere;
+  font-weight: 500;
 }
 
 .textarea {
@@ -115,37 +135,45 @@
   box-sizing: border-box;
   resize: vertical;
   font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.5;
   color: var(--text-primary);
-  background: var(--bg-primary);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-md, 8px);
-  padding: var(--space-1) var(--space-1_5);
+  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color);
+  border-radius: var(--button-radius, 7px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  outline: none;
+  transition:
+    border-color var(--transition-fast, 150ms) ease,
+    box-shadow var(--transition-fast, 150ms) ease;
 }
 
 .textarea:focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
-  border-color: var(--border-color);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
 }
 
 .listWrap {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0_5);
+  gap: var(--space-2, 8px);
   min-width: 0;
+  margin-top: var(--space-2, 8px);
 }
 
 .listCaption {
   margin: 0;
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
 }
 
 .listEmpty {
   margin: 0;
-  font-size: var(--font-size-xxs);
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
+  padding: var(--space-3, 12px) 0;
+  text-align: center;
 }
 
 .list {
@@ -154,22 +182,24 @@
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: var(--space-0_5);
-  max-height: 180px;
+  gap: 1px;
+  max-height: 220px;
   overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--button-radius, 7px);
+  background: var(--border-subtle);
 }
 
 .listItem {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    'name name'
+    'name time'
     'path url';
-  gap: 1px var(--space-1);
-  padding: var(--space-0_5) var(--space-1);
-  border-radius: var(--radius-sm);
-  background: var(--bg-primary);
-  font-size: var(--font-size-xxs);
+  gap: 2px var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: var(--bg-card, hsl(0 0% 100%));
+  font-size: var(--font-size-xs, 12px);
   min-width: 0;
 }
 
@@ -183,7 +213,7 @@
 }
 
 .itemTime {
-  grid-area: name;
+  grid-area: time;
   color: var(--text-tertiary);
   font-family: var(--font-mono, ui-monospace, monospace);
   white-space: nowrap;
@@ -209,23 +239,16 @@
   font-family: var(--font-mono, ui-monospace, monospace);
 }
 
-.domainList {
-  display: block;
-  margin-top: var(--space-0_5);
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: var(--font-size-xxs);
-  color: var(--text-primary);
-  word-break: break-all;
+.spin {
+  animation: importSpinKeyframe var(--transition-spin, 800ms) infinite linear;
 }
 
-.spin {
-  animation: importSpinKeyframe var(--transition-spin) infinite;
-}
 @keyframes importSpinKeyframe {
   to {
     transform: rotate(360deg);
   }
 }
+
 @media (prefers-reduced-motion: reduce) {
   .spin {
     animation: none;

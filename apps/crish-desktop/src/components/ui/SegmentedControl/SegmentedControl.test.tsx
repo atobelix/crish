@@ -1,189 +1,323 @@
 // @vitest-environment jsdom
 /**
- * ui/SegmentedControl 基础测试：7px 圆角锁、受控/非受控双模、键盘漫游与无障碍
+ * apps/crish-desktop/src/components/ui/SegmentedControl/SegmentedControl.test.tsx
+ *
+ * SegmentedControl 自动化单元测试套件 (v2.0 灰度防穿透与 14px SmartPanel 同心大圆角专项验证)
  */
-import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import React from 'react';
+import { describe, expect, it, vi } from 'vitest';
 import { SegmentedControl } from './SegmentedControl';
 import styles from './SegmentedControl.module.css';
 
-const CSS_SRC = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), 'SegmentedControl.module.css'),
-  'utf8'
-);
+const DIR = dirname(fileURLToPath(import.meta.url));
+const CSS_SRC = readFileSync(join(DIR, 'SegmentedControl.module.css'), 'utf8');
+const TSX_SRC = readFileSync(join(DIR, 'SegmentedControl.tsx'), 'utf8');
 
-describe('ui/SegmentedControl', () => {
-  const sampleOptions = [
-    { value: 'all', label: '全部' },
-    { value: 'active', label: '进行中' },
-    { value: 'completed', label: '已完成' },
+describe('ui/SegmentedControl 现代化测试套件', () => {
+  const defaultOptions = [
+    { value: 'default', label: '浅色' },
+    { value: 'dark', label: '深色' },
   ];
 
-  it('渲染基本选项且首项默认为非受控选中项', () => {
-    render(<SegmentedControl options={sampleOptions} aria-label="状态筛选" />);
-    const group = screen.getByRole('radiogroup', { name: '状态筛选' });
-    expect(group).toBeInTheDocument();
-
-    const radios = screen.getAllByRole('radio');
-    expect(radios).toHaveLength(3);
-    expect(radios[0]).toHaveAttribute('aria-checked', 'true');
-    expect(radios[1]).toHaveAttribute('aria-checked', 'false');
-    expect(radios[2]).toHaveAttribute('aria-checked', 'false');
-  });
-
-  it('受控模式：正确反映受控 value 并调用 onChange', () => {
-    const onChange = vi.fn();
-    const { rerender } = render(
-      <SegmentedControl
-        options={sampleOptions}
-        value="active"
-        onChange={onChange}
-      />
-    );
-    expect(screen.getByRole('radio', { name: '进行中' })).toHaveAttribute(
-      'aria-checked',
-      'true'
-    );
-
-    fireEvent.click(screen.getByRole('radio', { name: '已完成' }));
-    expect(onChange).toHaveBeenCalledWith('completed');
-
-    rerender(
-      <SegmentedControl
-        options={sampleOptions}
-        value="completed"
-        onChange={onChange}
-      />
-    );
-    expect(screen.getByRole('radio', { name: '已完成' })).toHaveAttribute(
-      'aria-checked',
-      'true'
-    );
-  });
-
-  it('非受控模式：点击切换内部状态并调用 onChange', () => {
-    const onChange = vi.fn();
+  it('[SC-01] 正确渲染 RadioGroup 语义与默认激活状态', () => {
     render(
       <SegmentedControl
-        options={sampleOptions}
-        defaultValue="all"
-        onChange={onChange}
+        aria-label="主题切换"
+        options={defaultOptions}
+        defaultValue="default"
       />
     );
 
-    fireEvent.click(screen.getByRole('radio', { name: '已完成' }));
-    expect(onChange).toHaveBeenCalledWith('completed');
-    expect(screen.getByRole('radio', { name: '已完成' })).toHaveAttribute(
-      'aria-checked',
-      'true'
-    );
-    expect(screen.getByRole('radio', { name: '全部' })).toHaveAttribute(
-      'aria-checked',
-      'false'
-    );
+    const group = screen.getByRole('radiogroup', { name: '主题切换' });
+    expect(group).toBeInTheDocument();
+
+    const lightRadio = screen.getByRole('radio', { name: '浅色' });
+    const darkRadio = screen.getByRole('radio', { name: '深色' });
+
+    expect(lightRadio).toHaveAttribute('aria-checked', 'true');
+    expect(lightRadio).toHaveAttribute('tabIndex', '0');
+    expect(lightRadio).toHaveAttribute('data-active', 'true');
+
+    expect(darkRadio).toHaveAttribute('aria-checked', 'false');
+    expect(darkRadio).toHaveAttribute('tabIndex', '-1');
+    expect(darkRadio).toHaveAttribute('data-active', 'false');
   });
 
-  it('支持纯字符串数组 options', () => {
-    const strOptions = ['Day', 'Week', 'Month'];
-    render(<SegmentedControl options={strOptions} defaultValue="Week" />);
+  it('[SC-02] 激活项严格隔离：data-active="true" 且滑块处于渲染树中', () => {
+    const { container } = render(
+      <SegmentedControl options={defaultOptions} value="default" />
+    );
+
+    const activeItem = container.querySelector('[data-active="true"]');
+    expect(activeItem).toBeInTheDocument();
+    expect(activeItem).toHaveTextContent('浅色');
+
+    const slider = container.querySelector(`.${styles.activeSlider}`);
+    expect(slider).toBeInTheDocument();
+    expect(slider).toHaveAttribute('aria-hidden', 'true');
+  });
+
+  it('[SC-03] 灰度防穿透：CSS 具有严格互斥选择器与 !important 门锁', () => {
+    // 1. 验证仅未激活项在 Hover 时激活动画遮罩
+    expect(CSS_SRC).toContain(
+      ":hover:not(:disabled):not([data-active='true']):not([aria-checked='true']):not(.itemActive)::before"
+    );
+
+    // 2. 验证已激活项绝对强制关闭伪元素遮罩，杜绝 Double Alpha Stacking
+    expect(CSS_SRC).toContain(
+      ".item[data-active='true']::before"
+    );
+    expect(CSS_SRC).toContain('opacity: 0;');
+    expect(CSS_SRC).toContain('display: none;');
+
+    // 3. 验证容器声明 isolation: isolate 建立局部独立层叠上下文
+    expect(CSS_SRC).toContain('isolation: isolate;');
+
+    // 4. 验证滑块锁定实体纯色卡底 var(--seg-slider-bg)
+    expect(CSS_SRC).toContain('background-color: var(--seg-slider-bg');
+  });
+
+  it('[SC-04] 同心大圆角体系：size="panel" 正确应用 containerPanel 类名与几何属性', () => {
+    const { container, rerender } = render(
+      <SegmentedControl
+        size="panel"
+        options={defaultOptions}
+        defaultValue="default"
+      />
+    );
+
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).toContain(styles.containerPanel);
+    expect(root).toHaveAttribute('data-size', 'panel');
+
+    // 验证各尺寸档位类名与属性
+    rerender(<SegmentedControl size="xs" options={defaultOptions} />);
+    expect(root.className).toContain(styles.containerXs);
+    expect(root).toHaveAttribute('data-size', 'xs');
+
+    rerender(<SegmentedControl size="sm" options={defaultOptions} />);
+    expect(root.className).toContain(styles.containerSm);
+    expect(root).toHaveAttribute('data-size', 'sm');
+
+    rerender(<SegmentedControl size="md" options={defaultOptions} />);
+    expect(root.className).toContain(styles.containerMd);
+    expect(root).toHaveAttribute('data-size', 'md');
+
+    rerender(<SegmentedControl size="lg" options={defaultOptions} />);
+    expect(root.className).toContain(styles.containerLg);
+    expect(root).toHaveAttribute('data-size', 'lg');
+  });
+
+  it('[SC-05] 图标与徽标：正确渲染自定义前置图标与尾部徽标', () => {
+    const optionsWithExtra = [
+      {
+        value: 'enter',
+        label: 'Enter 发送',
+        icon: <span data-testid="enter-icon">⏎</span>,
+        badge: 'Kbd',
+      },
+      {
+        value: 'ctrlEnter',
+        label: 'Ctrl+Enter 发送',
+        icon: <span data-testid="ctrl-icon">⌃⏎</span>,
+      },
+    ];
+
+    render(
+      <SegmentedControl
+        options={optionsWithExtra}
+        defaultValue="enter"
+      />
+    );
+
+    expect(screen.getByTestId('enter-icon')).toBeInTheDocument();
+    expect(screen.getByText('Kbd')).toBeInTheDocument();
+    expect(screen.getByTestId('ctrl-icon')).toBeInTheDocument();
+  });
+
+  it('[SC-06] 受控模式：外部 value 变更驱动选中态更新并触发 onChange', () => {
+    const handleChange = vi.fn();
+    const { rerender } = render(
+      <SegmentedControl
+        options={defaultOptions}
+        value="default"
+        onChange={handleChange}
+      />
+    );
+
+    const lightRadio = screen.getByRole('radio', { name: '浅色' });
+    const darkRadio = screen.getByRole('radio', { name: '深色' });
+
+    expect(lightRadio).toHaveAttribute('aria-checked', 'true');
+    expect(darkRadio).toHaveAttribute('aria-checked', 'false');
+
+    fireEvent.click(darkRadio);
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(handleChange).toHaveBeenCalledWith('dark');
+
+    // 外部受控重新渲染
+    rerender(
+      <SegmentedControl
+        options={defaultOptions}
+        value="dark"
+        onChange={handleChange}
+      />
+    );
+    expect(lightRadio).toHaveAttribute('aria-checked', 'false');
+    expect(darkRadio).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('[SC-07] 非受控模式：用户点击正确更新内部选中态并触发 onChange 回调', () => {
+    const handleChange = vi.fn();
+    render(
+      <SegmentedControl
+        options={defaultOptions}
+        defaultValue="default"
+        onChange={handleChange}
+      />
+    );
+
+    const darkRadio = screen.getByRole('radio', { name: '深色' });
+    fireEvent.click(darkRadio);
+
+    expect(handleChange).toHaveBeenCalledTimes(1);
+    expect(handleChange).toHaveBeenCalledWith('dark');
+    expect(darkRadio).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('[SC-08] 键盘导航：Arrow/Home/End 正确实现焦点循环漫游与跳转', () => {
+    const handleChange = vi.fn();
+    render(
+      <SegmentedControl
+        options={[
+          { value: 'small', label: '紧凑' },
+          { value: 'medium', label: '默认' },
+          { value: 'large', label: '宽松' },
+        ]}
+        defaultValue="small"
+        onChange={handleChange}
+      />
+    );
+
+    const group = screen.getByRole('radiogroup');
+    const smallBtn = screen.getByRole('radio', { name: '紧凑' });
+    smallBtn.focus();
+
+    // 1. 按右方向键切换到「默认」
+    fireEvent.keyDown(group, { key: 'ArrowRight' });
+    expect(handleChange).toHaveBeenCalledWith('medium');
+
+    // 2. 再次按右方向键切换到「宽松」
+    fireEvent.keyDown(group, { key: 'ArrowRight' });
+    expect(handleChange).toHaveBeenCalledWith('large');
+
+    // 3. 再次按右方向键循环回到「紧凑」
+    fireEvent.keyDown(group, { key: 'ArrowRight' });
+    expect(handleChange).toHaveBeenCalledWith('small');
+
+    // 4. 按左方向键向前循环到「宽松」
+    fireEvent.keyDown(group, { key: 'ArrowLeft' });
+    expect(handleChange).toHaveBeenCalledWith('large');
+
+    // 5. 按 Home 键跳到第一项「紧凑」
+    fireEvent.keyDown(group, { key: 'Home' });
+    expect(handleChange).toHaveBeenCalledWith('small');
+
+    // 6. 按 End 键跳到最后一项「宽松」
+    fireEvent.keyDown(group, { key: 'End' });
+    expect(handleChange).toHaveBeenCalledWith('large');
+  });
+
+  it('[SC-09] 禁用保护：禁用单项与整组禁用拦截所有点击与键盘事件', () => {
+    const handleChange = vi.fn();
+    const { rerender } = render(
+      <SegmentedControl
+        options={[
+          { value: 'opt1', label: '选项一' },
+          { value: 'opt2', label: '选项二', disabled: true },
+          { value: 'opt3', label: '选项三' },
+        ]}
+        defaultValue="opt1"
+        onChange={handleChange}
+      />
+    );
+
+    const disabledBtn = screen.getByRole('radio', { name: '选项二' });
+    expect(disabledBtn).toBeDisabled();
+
+    fireEvent.click(disabledBtn);
+    expect(handleChange).not.toHaveBeenCalled();
+
+    // 键盘导航跳过禁用项
+    const group = screen.getByRole('radiogroup');
+    fireEvent.keyDown(group, { key: 'ArrowRight' });
+    expect(handleChange).toHaveBeenCalledWith('opt3');
+
+    // 整组禁用
+    rerender(
+      <SegmentedControl
+        options={[
+          { value: 'opt1', label: '选项一' },
+          { value: 'opt2', label: '选项二' },
+        ]}
+        disabled
+        onChange={handleChange}
+      />
+    );
+    fireEvent.click(screen.getByRole('radio', { name: '选项一' }));
+    expect(handleChange).toHaveBeenCalledTimes(1); // 未增加调用
+  });
+
+  it('[SC-10] 通栏布局与纯字符串 options 支持', () => {
+    const { container } = render(
+      <SegmentedControl
+        block
+        options={['Day', 'Week', 'Month']}
+        defaultValue="Week"
+      />
+    );
+
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).toContain(styles.containerBlock);
     expect(screen.getByRole('radio', { name: 'Week' })).toHaveAttribute(
       'aria-checked',
       'true'
     );
   });
 
-  it('禁用态：整组禁用或单个选项禁用阻止交互', () => {
-    const onChange = vi.fn();
-    const optionsWithDisabled = [
-      { value: 'a', label: '选项A' },
-      { value: 'b', label: '选项B', disabled: true },
-    ];
-    const { rerender } = render(
-      <SegmentedControl options={optionsWithDisabled} onChange={onChange} />
-    );
+  describe('CI 门禁与反过度设计静态守卫断言', () => {
+    it('[SC-11] CSS 文件不得包含裸写硬编码 HEX 颜色或 rgba', () => {
+      // 允许 var() 内的 HSL fallback，严禁裸写 HEX
+      const rawHexMatches = CSS_SRC.match(/(?<!var\([^)]*)#[0-9a-fA-F]{3,8}\b/g);
+      expect(rawHexMatches).toBeNull();
 
-    fireEvent.click(screen.getByRole('radio', { name: '选项B' }));
-    expect(onChange).not.toHaveBeenCalled();
+      // 严禁旧式 rgba()
+      expect(CSS_SRC).not.toMatch(/rgba\(/);
+    });
 
-    rerender(
-      <SegmentedControl
-        options={optionsWithDisabled}
-        disabled
-        onChange={onChange}
-      />
-    );
-    fireEvent.click(screen.getByRole('radio', { name: '选项A' }));
-    expect(onChange).not.toHaveBeenCalled();
-  });
+    it('[SC-12] 单文件行数严格满足 RL-03 门禁 (物理行 <= 300 行)', () => {
+      const tsxLines = TSX_SRC.split(/\r?\n/).length;
+      const cssLines = CSS_SRC.split(/\r?\n/).length;
 
-  it('断言 6 (SegmentedControl 键盘漫游)：ArrowRight / ArrowLeft 切换选中项并触发 onChange', () => {
-    const onChange = vi.fn();
-    render(
-      <SegmentedControl
-        options={sampleOptions}
-        defaultValue="all"
-        onChange={onChange}
-      />
-    );
-    const group = screen.getByRole('radiogroup');
+      expect(tsxLines).toBeLessThanOrEqual(300);
+      expect(cssLines).toBeLessThanOrEqual(300);
+    });
 
-    // 在容器上按下 ArrowRight -> 切换到 index 1 ('active')
-    fireEvent.keyDown(group, { key: 'ArrowRight', code: 'ArrowRight' });
-    expect(onChange).toHaveBeenCalledWith('active');
-    expect(screen.getByRole('radio', { name: '进行中' })).toHaveAttribute(
-      'aria-checked',
-      'true'
-    );
+    it('[SC-13] 零外部 npm 组件库依赖断言', () => {
+      expect(TSX_SRC).not.toMatch(/from\s+['"]@radix-ui/);
+      expect(TSX_SRC).not.toMatch(/from\s+['"]@base-ui/);
+      expect(TSX_SRC).not.toMatch(/from\s+['"]framer-motion/);
+      expect(TSX_SRC).not.toMatch(/from\s+['"]lucide-react/);
+    });
 
-    // 再次按下 ArrowRight -> 切换到 index 2 ('completed')
-    fireEvent.keyDown(group, { key: 'ArrowRight', code: 'ArrowRight' });
-    expect(onChange).toHaveBeenCalledWith('completed');
-    expect(screen.getByRole('radio', { name: '已完成' })).toHaveAttribute(
-      'aria-checked',
-      'true'
-    );
-
-    // 按下 ArrowLeft -> 回退到 index 1 ('active')
-    fireEvent.keyDown(group, { key: 'ArrowLeft', code: 'ArrowLeft' });
-    expect(onChange).toHaveBeenCalledWith('active');
-    expect(screen.getByRole('radio', { name: '进行中' })).toHaveAttribute(
-      'aria-checked',
-      'true'
-    );
-  });
-
-  it('支持尺寸修饰器与 block 属性', () => {
-    const { rerender } = render(
-      <SegmentedControl options={sampleOptions} size="xs" block />
-    );
-    const group = screen.getByRole('radiogroup');
-    expect(group).toHaveClass(styles.containerXs);
-    expect(group).toHaveClass(styles.containerBlock);
-    expect(group).toHaveAttribute('data-size', 'xs');
-
-    rerender(<SegmentedControl options={sampleOptions} size="md" />);
-    expect(group).toHaveClass(styles.containerMd);
-    expect(group).toHaveAttribute('data-size', 'md');
-  });
-
-  it('圆角锁：外框与分段按钮走 --button-radius 7px，禁 8px 硬编码与胶囊', () => {
-    expect(CSS_SRC).toContain('--seg-outer-radius: var(--button-radius, 7px)');
-    expect(CSS_SRC).toContain('--seg-inner-radius: var(--button-radius, 7px)');
-    expect(CSS_SRC).toContain('border-radius: var(--seg-outer-radius)');
-    expect(CSS_SRC).toContain('border-radius: var(--seg-inner-radius)');
-    const radiusLines = CSS_SRC.split(/\r?\n/).filter((line) =>
-      /radius/i.test(line)
-    );
-    const radiusBlob = radiusLines.join('\n');
-    expect(radiusBlob).not.toMatch(/8px/);
-    expect(radiusBlob).not.toMatch(/--radius-lg/);
-    expect(radiusBlob).not.toMatch(/--radius-md/);
-    expect(radiusBlob).not.toMatch(/999/);
-    expect(CSS_SRC).not.toMatch(/border-radius:\s*8px/);
-    expect(CSS_SRC).not.toMatch(/border-radius:\s*999/);
+    it('[SC-14] 动画曲线无过冲安全合规 (避免 y > 1.0 破出外框)', () => {
+      // 严禁 1.5 等过冲贝塞尔
+      expect(CSS_SRC).not.toMatch(/1\.5\)/);
+      expect(CSS_SRC).toContain('cubic-bezier(0.2, 0, 0, 1)');
+    });
   });
 });

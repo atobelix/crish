@@ -68,16 +68,16 @@ describe('Zero-FOUC & Startup Theme SSOT Test Suite', () => {
 
     const warmGray = SKIN_PRESETS['warm-gray'];
     expect(warmGray).toBeDefined();
-    expect(warmGray.bgPrimary).toBe('#f4f5f7');
-    expect(warmGray.bgSecondary).toBe('#eaecee');
-    expect(warmGray.bgTertiary).toBe('#e2e5e8');
+    expect(warmGray.bgPrimary).toBe('hsl(35 8% 94.5%)');
+    expect(warmGray.bgSecondary).toBe('hsl(35 8% 92.1%)');
+    expect(warmGray.bgTertiary).toBe('hsl(35 8% 89.7%)');
     expect(warmGray.textPrimary).toBe('#111111');
   });
 
   it('SSOT-05: getContrastGuardedText 算法在浅色与深色背景下的对比度判定', () => {
     // 浅色背景 -> 深色字
     expect(getContrastGuardedText('#ffffff', false)).toBe('hsl(35, 12%, 11%)');
-    expect(getContrastGuardedText('#f4f5f7', false)).toBe('hsl(35, 12%, 11%)');
+    expect(getContrastGuardedText('hsl(35 8% 94.5%)', false)).toBe('hsl(35, 12%, 11%)');
 
     // 深色背景 -> 亮白字
     expect(getContrastGuardedText('#1b1b1b', true)).toBe('hsl(0, 0%, 94%)');

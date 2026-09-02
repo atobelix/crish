@@ -1,4 +1,9 @@
-import React from 'react';
+/**
+ * apps/crish-desktop/src/components/diff/DiffHeaderControls.tsx
+ * 
+ * 差异面板紧凑工具栏 (v2.0 现代化 SegmentedControl 与 28px 几何对齐版)
+ */
+import React, { useMemo } from 'react';
 import {
   Columns2,
   GitBranch,
@@ -9,7 +14,13 @@ import {
   Trash2,
   Sparkles,
 } from 'lucide-react';
-import { Button, Select, Tooltip } from '../ui';
+import {
+  Button,
+  Select,
+  SegmentedControl,
+  type SegmentedControlOption,
+  Tooltip,
+} from '../ui';
 import styles from './DiffCard.module.css';
 import type { FileDiff } from '../../store/types';
 
@@ -64,44 +75,47 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
     onCopyPatch,
     onClear,
   }) {
+    const sourceOptions = useMemo<
+      SegmentedControlOption<'session' | 'git'>[]
+    >(
+      () => [
+        {
+          value: 'session',
+          label: 'AI',
+          icon: <Sparkles size={12} className={styles.tabIcon} aria-hidden />,
+          'aria-label': '当前对话中 AI 产生的改动',
+          disabled: applyBusy,
+        },
+        {
+          value: 'git',
+          label: gitLoading ? 'Git…' : 'Git',
+          icon: <GitBranch size={12} className={styles.tabIcon} aria-hidden />,
+          'aria-label': '工作区 Git 未提交变更',
+          disabled: gitLoading || applyBusy,
+        },
+      ],
+      [applyBusy, gitLoading]
+    );
+
+    const activeSegmentValue =
+      sourceMode === 'git' ? 'git' : 'session';
+
     return (
       <div
         className={`${styles.compactHeader} side-panel-toolbar`}
         role="toolbar"
         aria-label="紧凑变更工具栏"
       >
-        {/* 左侧：来源切换胶囊 (AI 改动 / Git) */}
+        {/* 左侧：标准原子 SegmentedControl (AI 改动 / Git) */}
         <div className={styles.leftGroup}>
-          <div
-            className={styles.sourceSegment}
-            role="group"
+          <SegmentedControl
+            size="sm"
+            value={activeSegmentValue}
+            options={sourceOptions}
+            onChange={(val) => onSourceModeChange(val as 'session' | 'git')}
             aria-label="变更来源"
-          >
-            <Tooltip content="当前对话中 AI 产生的改动">
-              <button
-                type="button"
-                className={`${styles.sourceTab} ${sourceMode === 'session' ? styles.activeTab : ''}`}
-                aria-pressed={sourceMode === 'session'}
-                disabled={applyBusy}
-                onClick={() => onSourceModeChange('session')}
-              >
-                <Sparkles size={12} className={styles.tabIcon} aria-hidden />
-                <span>AI</span>
-              </button>
-            </Tooltip>
-            <Tooltip content="工作区 Git 未提交变更">
-              <button
-                type="button"
-                className={`${styles.sourceTab} ${sourceMode === 'git' ? styles.activeTab : ''}`}
-                aria-pressed={sourceMode === 'git'}
-                disabled={gitLoading || applyBusy}
-                onClick={() => onSourceModeChange('git')}
-              >
-                <GitBranch size={12} className={styles.tabIcon} aria-hidden />
-                <span>{gitLoading ? 'Git…' : 'Git'}</span>
-              </button>
-            </Tooltip>
-          </div>
+            className={styles.sourceSegmentControl}
+          />
 
           <div className={styles.headerDivider} aria-hidden />
 
@@ -119,18 +133,18 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
                   ...(o.hint !== undefined ? { hint: o.hint } : {}),
                 }))}
                 onChange={onTurnSelect}
+                aria-label="选择对话回合"
               />
             ) : sourceMode === 'git' ? (
-              <div className={styles.branchWrap}>
-                <Select
-                  size="sm"
-                  className={styles.inlineSelect}
-                  disabled={busy}
-                  value={currentBranch}
-                  options={branches.map((b) => ({ id: b, label: b }))}
-                  onChange={(val) => onBranchChange(val)}
-                />
-              </div>
+              <Select
+                size="sm"
+                className={styles.inlineSelect}
+                disabled={busy}
+                value={currentBranch}
+                options={branches.map((b) => ({ id: b, label: b }))}
+                onChange={(val) => onBranchChange(val)}
+                aria-label="选择 Git 分支"
+              />
             ) : (
               <span className={styles.idleHint}>载入变更源开始对比</span>
             )}
@@ -229,3 +243,5 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
     );
   }
 );
+
+DiffHeaderControls.displayName = 'DiffHeaderControls';

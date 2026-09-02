@@ -28,8 +28,8 @@ describe('clampSplitRatio 参考手感 [0.12, 0.88]', () => {
   });
 
   it('createBranch 经 clampSplitRatio 钳制', () => {
-    const a = createLeaf('a');
-    const b = createLeaf('b');
+    const a = createLeaf();
+    const b = createLeaf();
     expect(createBranch('horizontal', a, b, 0.01).splitRatio).toBe(0.12);
     expect(createBranch('horizontal', a, b, 0.99).splitRatio).toBe(0.88);
     expect(createBranch('horizontal', a, b, 0.5).splitRatio).toBe(0.5);

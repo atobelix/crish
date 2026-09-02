@@ -90,7 +90,7 @@
 }
 
 .settingsBtn:hover {
-  background: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.05));
+  background: var(--sep-bg-item-hover, hsl(35 20% 92% / 0.6));
   color: var(--sep-text-primary, var(--text-primary));
 }
 
@@ -160,19 +160,19 @@
 }
 
 .modelItem:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
 .modelItem.isSelected {
-  background: var(--tint-active, rgba(16, 185, 129, 0.08));
+  background: var(--tint-hover);
   color: var(--text-primary);
   font-weight: 500;
 }
 
 .modelItem:focus-visible {
   outline: none;
-  background: var(--tint-active, rgba(16, 185, 129, 0.08));
+  background: var(--tint-hover);
 }
 
 .modelName {
@@ -293,7 +293,7 @@
 }
 
 .advancedTrigger:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--bg-hover, hsl(35 20% 92% / 0.6));
   color: var(--text-primary);
 }
 
@@ -331,7 +331,7 @@
 }
 
 .advancedItem:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--bg-hover, hsl(35 20% 92% / 0.6));
   color: var(--text-primary);
 }
 

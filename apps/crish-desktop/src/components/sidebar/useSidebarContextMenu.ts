@@ -4,12 +4,6 @@ import { sessionListDisplayTitle } from '../../api/sessionTitle';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { toast } from '../../services/toast/ToastContext';
 import {
-  findChatLeafBySessionId,
-  listChatLeaves,
-  collectLeaves,
-} from '../../store/storeAccess';
-import { viewRegistry } from '../../services/view-registry';
-import {
   archiveUndoToastMessage,
   branchUndoToastMessage,
   BRANCH_TITLE_SUFFIX,
@@ -19,10 +13,21 @@ import {
 import { toggleExclusiveMenu } from '../ui/Menu';
 import { openSessionInNewWindow } from './sidebarHelpers';
 
+type OpenSessionOpts = {
+  title?: string;
+  workspaceKey?: string;
+  split?: 'right' | 'left' | 'top' | 'bottom';
+};
+
+function shellOpenSession(
+  sessionId: string,
+  opts?: OpenSessionOpts
+): void {
+  getCompositionRoot().shell.openSession(sessionId, opts);
+}
+
 /**
- * 侧栏「拆分视图」：在 layout-tree 上 split 出第二个 chat leaf 并绑定 session。
- * 已有该 session 的 chat leaf 时仅 focus（1 session ↔ 0..1 leaf）。
- * 不再走 legacy splitScreenWorkspace（只增 workspaces[]，不会产生 multi-unit）。
+ * 侧栏「拆分视图」：已打开 → openSession 聚焦；未打开且 split → 新叶只含该 session。
  */
 function openSessionInChatSplit(
   sessionId: string,
@@ -30,49 +35,9 @@ function openSessionInChatSplit(
 ): void {
   const sid = (sessionId || '').trim();
   if (!sid) return;
-
-  const root = getCompositionRoot();
-  const tree = root.tree.getState();
-  const existing = findChatLeafBySessionId(tree.tree.root, sid);
-  if (existing) {
-    root.session.openOrFocusSession(sid, opts);
-    return;
-  }
-
-  const chats = listChatLeaves(tree.tree.root);
-  if (chats.length === 0) {
-    root.session.openOrFocusSession(sid, opts);
-    return;
-  }
-
-  const target = chats.find((c) => c.id === tree.activeLeafId) ?? chats[0]!;
-
-  // 目标 leaf 未绑定时，先绑 shell active，避免两 pane 都跟 shell 漂
-  const shell = root.shell.getState();
-  const shellSid =
-    shell.openTabs.find((t) => t.tabId === shell.activeTabId)?.sessionId ??
-    null;
-  if (!target.sessionId && shellSid && shellSid !== sid) {
-    root.tree.setLeafSessionId(target.id, shellSid);
-  }
-
-  const beforeIds = new Set(
-    collectLeaves(root.tree.getState().tree.root).map((l) => l.id)
-  );
-  // splitLeaf 未上 tree 门面（E5）；经 tree.getState 单一命令入口
-  root.tree.getState().splitLeaf(target.id, 'horizontal', 'chat', 'after', 0.5);
-
-  const after = root.tree.getState();
-  const newLeaf = collectLeaves(after.tree.root).find(
-    (l) => viewRegistry.isPrimary(l.panelId) && !beforeIds.has(l.id)
-  );
-  if (newLeaf) {
-    root.tree.setLeafSessionId(newLeaf.id, sid);
-    after.setActiveLeaf(newLeaf.id);
-  }
-
-  // 开/聚焦 shell tab；多 chat 时 bind 会 focus 已绑定 leaf，不会 rebind 邻居
-  root.session.openOrFocusSession(sid, opts);
+  // 已在某叶 tabs → 门面内部 activateTab（I1，不 mint 第二份）
+  // 未打开 → openSession(..., { split: 'right' }) 出新叶
+  shellOpenSession(sid, { ...opts, split: 'right' });
 }
 
 export interface UseSidebarContextMenuOptions {
@@ -99,37 +64,7 @@ export function useSidebarContextMenu({
   const sortMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuTriggerRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (menuRef.current && !menuRef.current.contains(target)) {
-        const trigger = contextMenuTriggerRef.current;
-        // 点在 trigger 上交给 toggleExclusiveMenu，避免外点关 + 再开对打
-        if (!trigger || !trigger.contains(target)) {
-          setContextMenu(null);
-        }
-      }
-      if (
-        sortMenuRef.current &&
-        !sortMenuRef.current.contains(e.target as Node)
-      ) {
-        const sortBtn = (e.target as HTMLElement).closest('.sort-btn');
-        if (!sortBtn) setSortDropdownOpen(false);
-      }
-    };
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setContextMenu(null);
-        setSortDropdownOpen(false);
-      }
-    };
-    document.addEventListener('click', handleOutsideClick);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('click', handleOutsideClick);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [setSortDropdownOpen]);
+
 
   const handleContextMenu = (e: React.MouseEvent, sessionId: string) => {
     const triggerEl =
@@ -172,13 +107,16 @@ export function useSidebarContextMenu({
     if (!contextMenu) return;
     const { sessionId } = contextMenu;
     const root = getCompositionRoot();
-    const targetSession = root.session.getState().sessionsById[sessionId];
+    const store = root.session.getState();
+    const targetSession =
+      store.sessionsById[sessionId] ??
+      store.sessions.find((s) => s.id === sessionId);
     setContextMenu(null);
     if (!targetSession) return;
 
     switch (action) {
       case 'open-current':
-        root.session.openOrFocusSession(sessionId, {
+        shellOpenSession(sessionId, {
           title: targetSession.title,
           workspaceKey: targetSession.folder,
         });

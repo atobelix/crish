@@ -1,7 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff } from '../../store/types';
-import { useLayoutTreeStore } from '../../store/storeAccess';
+import { openToolInSession } from '../../store/storeAccess';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import { useTerminalField, selectDiffFiles } from '../../store/storeAccess';
 import {
   openPathDefault,
@@ -11,9 +12,9 @@ import {
 } from '../../api/hostOpenersApi';
 import { logInternalError } from '../../api/userFacingErrors';
 import {
-  pathDirname,
   readTextFile,
   getWorkspacePath,
+  revealInOs,
 } from '../../api/workspaceFsApi';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { useToast } from '../../services/toast/ToastContext';
@@ -81,7 +82,6 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     const [openDefaultLabel, setOpenDefaultLabel] =
       useState('在系统默认应用打开');
     const [fileOpeners, setFileOpeners] = useState<HostOpener[]>([]);
-    const [openMenuMore, setOpenMenuMore] = useState(false);
 
     useEffect(() => {
       let active = true;
@@ -132,45 +132,15 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       window.dispatchEvent(
         new CustomEvent('crish-open-file', { detail: { path: absolutePath } })
       );
-      const treeStore = useLayoutTreeStore.getState();
-      const root = treeStore.tree.root;
-
-      type TreeLike = {
-        type?: string;
-        tabs?: string[];
-        id?: string;
-        children?: TreeLike[];
-      };
-      function findAndActivateFiles(node: TreeLike): boolean {
-        if (node.type === 'leaf') {
-          if (node.tabs && node.tabs.includes('files')) {
-            treeStore.setActiveTab(node.id ?? '', 'files');
-            return true;
-          }
-          return false;
-        }
-        const [first, second] = node.children ?? [];
-        return (
-          (first ? findAndActivateFiles(first) : false) ||
-          (second ? findAndActivateFiles(second) : false)
-        );
-      }
-
-      const success = findAndActivateFiles(root);
-      if (!success) {
-        const activeLeafId = treeStore.activeLeafId;
-        if (activeLeafId) {
-          treeStore.addTabToLeaf(activeLeafId, 'files');
-          treeStore.setActiveTab(activeLeafId, 'files');
-        }
-      }
+      const sid = getCompositionRoot().session.getActiveSessionId();
+      if (sid) openToolInSession(sid, 'files');
       showToast('已在本地文件树中定位该文件');
     };
 
     const handleOpenSystemExplorer = () => {
-      const parentDir = pathDirname(absolutePath);
-      void openPathDefault(parentDir).catch(() => {
-        showToast('打开系统管理器目录失败');
+      void revealInOs(absolutePath).catch((e) => {
+        logInternalError('components/files/FileViewerCard/revealInOs', e);
+        showToast('在资源管理器中定位失败');
       });
     };
 
@@ -248,13 +218,13 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
               <Tooltip content={`${openDefaultLabel}（系统默认）`}>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="ghost"
                   size="sm"
                   className={styles.filesOpenMain}
                   onClick={handleOpenDefault}
-                  icon={<Lucide.AppWindow size={13} aria-hidden />}
+                  icon={<Lucide.AppWindow size={14} aria-hidden />}
                 >
-                  <span>{openDefaultLabel}</span>
+                  {openDefaultLabel}
                 </Button>
               </Tooltip>
 
@@ -273,50 +243,36 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                   </Tooltip>
                 }
                 options={[
-                  ...fileOpeners
-                    .slice(0, openMenuMore ? fileOpeners.length : 6)
-                    .map((op) => ({
-                      id: op.id,
-                      label: op.displayName,
-                      icon: op.iconDataUrl ? (
-                        <img
-                          src={op.iconDataUrl}
-                          width={14}
-                          height={14}
-                          alt=""
-                          style={{ flexShrink: 0, objectFit: 'contain' }}
-                        />
-                      ) : (
-                        <Lucide.AppWindow
-                          size={14}
-                          style={{
-                            flexShrink: 0,
-                            color: 'var(--text-secondary)',
-                          }}
-                        />
-                      ),
-                      onClick: () => {
-                        void openWithHostOpener(op.id, absolutePath).catch(
-                          (e) =>
-                            logInternalError(
-                              'components/files/FileViewerCard/openWith',
-                              e
-                            )
-                        );
-                      },
-                    })),
-                  ...(fileOpeners.length > 6
-                    ? [
-                        {
-                          id: '__toggle_more__',
-                          label: openMenuMore
-                            ? '收起'
-                            : `更多应用（${fileOpeners.length - 6}）`,
-                          icon: <Lucide.ChevronsUpDown size={14} aria-hidden />,
-                          onClick: () => setOpenMenuMore((v) => !v),
-                        },
-                      ]
-                    : []),
+                  ...fileOpeners.map((op) => ({
+                    id: op.id,
+                    label: op.displayName,
+                    icon: op.iconDataUrl ? (
+                      <img
+                        src={op.iconDataUrl}
+                        width={14}
+                        height={14}
+                        alt=""
+                        style={{ flexShrink: 0, objectFit: 'contain' }}
+                      />
+                    ) : (
+                      <Lucide.AppWindow
+                        size={14}
+                        style={{
+                          flexShrink: 0,
+                          color: 'var(--text-secondary)',
+                        }}
+                      />
+                    ),
+                    onClick: () => {
+                      void openWithHostOpener(op.id, absolutePath).catch(
+                        (e) =>
+                          logInternalError(
+                            'components/files/FileViewerCard/openWith',
+                            e
+                          )
+                      );
+                    },
+                  })),
                 ]}
               />
             </div>

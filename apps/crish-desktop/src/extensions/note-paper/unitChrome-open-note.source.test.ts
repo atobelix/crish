@@ -99,8 +99,9 @@ describe('07 · 坞头 chat-open-note 源码钉（≠ 真壳到达绿 · ≠ 打
   it('chat 叶仍挂 UnitChromeActions 覆盖层；工具钮在对话顶（坞头可共存）', () => {
     expect(treeSrc).toMatch(/import\s+\{\s*UnitChromeActions\s*\}/);
     expect(treeSrc).toMatch(
-      /isChat\s*\?\s*\([\s\S]*?<UnitChromeActions[\s\S]*?activeSessionId=\{sessionForPanel\}/
+      /<UnitChromeActions[\s\S]*?activeSessionId=\{sessionForPanel\}/
     );
+    expect(treeSrc).not.toMatch(/leaf\.sessionId\s*\|\|\s*activeSessionId/);
     expect(stripSrc).toMatch(/viewRegistry\.(getView|getTitle|getToolViews)\(/);
     expect(chromeSrc).toMatch(/openToolInSession/);
   });

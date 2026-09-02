@@ -44,9 +44,14 @@ describe('compositionRoot (B3)', () => {
     expect(typeof root.session.archiveSession).toBe('function');
     expect(typeof root.session.unarchiveSession).toBe('function');
     expect(typeof root.session.branchSession).toBe('function');
+    expect(typeof root.session.deleteSession).toBe('function');
     expect(typeof root.shell.getState).toBe('function');
     expect(typeof root.shell.openNewDraftTab).toBe('function');
     expect(typeof root.shell.setShellReady).toBe('function');
+    expect(typeof root.shell.activateTab).toBe('function');
+    expect(typeof root.shell.closeTab).toBe('function');
+    expect(typeof root.shell.focusLeaf).toBe('function');
+    expect(typeof root.shell.promoteDraftTab).toBe('function');
     expect(typeof root.layout.getState).toBe('function');
     expect(typeof root.layout.getSessions).toBe('function');
     expect(typeof root.layout.setSessions).toBe('function');
@@ -60,9 +65,9 @@ describe('compositionRoot (B3)', () => {
     expect(typeof root.layout.getAppSettings).toBe('function');
     expect(typeof root.layout.setAppSettings).toBe('function');
     expect(typeof root.workspace.getState).toBe('function');
-    // tree ≠ layout：geometry / leaf↔session，非 chrome·sessions god-object
+    // tree ≠ layout：geometry，无 setLeafSessionId
     expect(typeof root.tree.getState).toBe('function');
-    expect(typeof root.tree.setLeafSessionId).toBe('function');
+    expect(root.tree).not.toHaveProperty('setLeafSessionId');
     expect(typeof root.runControl.dispatch).toBe('function');
     expect(typeof root.runControl.cooperativeStop).toBe('function');
     expect(typeof root.runControl.forceCancel).toBe('function');
@@ -85,6 +90,7 @@ describe('compositionRoot (B3)', () => {
       getActiveSessionId: () => 'sess-override',
       enterDraft: vi.fn(),
       openOrFocusSession: vi.fn(),
+      deleteSession: vi.fn(),
       pinSession: vi.fn(),
       unpinSession: vi.fn(),
       archiveSession: vi.fn(),
@@ -117,6 +123,7 @@ describe('compositionRoot (B3)', () => {
         getActiveSessionId: () => null as never,
         enterDraft,
         openOrFocusSession,
+        deleteSession: vi.fn(),
         pinSession: vi.fn(),
         unpinSession: vi.fn(),
         archiveSession: vi.fn(),
@@ -142,6 +149,7 @@ describe('compositionRoot (B3)', () => {
         getActiveSessionId: () => null as never,
         enterDraft: vi.fn(),
         openOrFocusSession: vi.fn(),
+        deleteSession: vi.fn(),
         pinSession,
         unpinSession,
         archiveSession,
@@ -161,20 +169,30 @@ describe('compositionRoot (B3)', () => {
     expect(branchSession).toHaveBeenCalledWith('s-src', '分叉标题');
   });
 
-  it('shell 门面：openNewDraftTab / setShellReady 可被 override 调用', () => {
+  it('shell 门面：openNewDraftTab / setShellReady / activateTab 可被 override 调用', () => {
     const openNewDraftTab = vi.fn();
     const setShellReady = vi.fn();
+    const activateTab = vi.fn();
+    const closeTab = vi.fn();
+    const focusLeaf = vi.fn();
+    const promoteDraftTab = vi.fn();
     const root = registerCompositionRoot({
       shell: {
         getState: () => ({}) as never,
         openNewDraftTab,
         setShellReady,
+        activateTab,
+        closeTab,
+        focusLeaf,
+        promoteDraftTab,
       },
     });
     root.shell.openNewDraftTab('folder-x');
     root.shell.setShellReady(true);
+    root.shell.activateTab('leaf-1', 'tab-1');
     expect(openNewDraftTab).toHaveBeenCalledWith('folder-x');
     expect(setShellReady).toHaveBeenCalledWith(true);
+    expect(activateTab).toHaveBeenCalledWith('leaf-1', 'tab-1');
   });
 
   it('layout 门面：sessions / tabMode / sidebar / planMode / appSettings 可被 override 调用', () => {
@@ -231,8 +249,7 @@ describe('compositionRoot (B3)', () => {
     expect(root.layout.getAppSettings()).toEqual({ theme: 'light' });
   });
 
-  it('tree 门面：getState / setLeafSessionId 可被 override 调用', () => {
-    const setLeafSessionId = vi.fn();
+  it('tree 门面：仅 getState，无 setLeafSessionId', () => {
     const fakeTreeState = {
       tree: { root: { id: 'leaf-1' } },
       setToolColumnCollapsed: vi.fn(),
@@ -240,12 +257,10 @@ describe('compositionRoot (B3)', () => {
     const root = registerCompositionRoot({
       tree: {
         getState: () => fakeTreeState as never,
-        setLeafSessionId,
       },
     });
     expect(root.tree.getState().tree.root.id).toBe('leaf-1');
-    root.tree.setLeafSessionId('leaf-1', 'sess-a');
-    expect(setLeafSessionId).toHaveBeenCalledWith('leaf-1', 'sess-a');
+    expect(root.tree).not.toHaveProperty('setLeafSessionId');
   });
 
   it('B3 hydrate 路径：tree.getState 同形读 tree / setToolColumnCollapsed', () => {
@@ -257,7 +272,6 @@ describe('compositionRoot (B3)', () => {
     registerCompositionRoot({
       tree: {
         getState: getState as never,
-        setLeafSessionId: vi.fn(),
       },
     });
     // 与 hydrateWorkspaceShell 同形
@@ -311,12 +325,17 @@ describe('compositionRoot (B3)', () => {
         getState: () => ({}) as never,
         openNewDraftTab,
         setShellReady: vi.fn(),
+        activateTab: vi.fn(),
+        closeTab: vi.fn(),
+        focusLeaf: vi.fn(),
+        promoteDraftTab: vi.fn(),
       },
       session: {
         getState: () => ({}) as never,
         getActiveSessionId: () => null as never,
         enterDraft,
         openOrFocusSession,
+        deleteSession: vi.fn(),
         pinSession: vi.fn(),
         unpinSession: vi.fn(),
         archiveSession: vi.fn(),

@@ -43,13 +43,13 @@ html[data-theme='light'] {
    * Premium Light Theme
    * Pure neutral/monochrome greys
    */
-  --bg-primary: #f4f5f7; /* 外层底板大矩形背景 (Shell) */
-  --bg-secondary: #eaecee; /* 侧边栏/辅助层背景 */
-  --bg-tertiary: #e2e5e8; /* 悬浮/深一层背景 */
+  --bg-primary: hsl(35 8% 94.5%); /* 外层底板大矩形背景 (Shell, 5.5% 灰度) */
+  --bg-secondary: hsl(35 8% 92.1%); /* 侧边栏/辅助层背景 (7.9% 灰度) */
+  --bg-tertiary: hsl(35 8% 89.7%); /* 悬浮/深一层背景 (10.3% 灰度) */
   --bg-hover: var(--tint-hover); /*    tint         */
   --bg-active: var(--tint-active); /*    tint         */
-  --bg-card: #ffffff; /* 小矩形/卡片纯白底色 (Paper) */
-  --bg-elevated: #ffffff; /* 浮起卡片纯白底色 */
+  --bg-card: hsl(0 0% 100%); /* 小矩形/卡片纯白底色 (Paper) */
+  --bg-elevated: hsl(0 0% 100%); /* 浮起卡片纯白底色 */
   --bg-workspace: var(--bg-primary);
   --shell-chrome-bg: var(--bg-secondary);
   --shell-inset-bg: var(--bg-workspace, var(--bg-primary));
@@ -59,18 +59,13 @@ html[data-theme='light'] {
   --bg-subtle: var(--bg-secondary);
   --text-primary: #111111;
   --text-secondary: #555555;
-  /*    6.1       08     1/2  #888888    3.06:1   #696969
-   *   light     4.78:1      4.53:1 WCAG AA     4.5:1
-   *    hex    color-mix                 */
+  /* 文本三级色：WCAG AA 达标 */
   --text-tertiary: #696969;
   --text-muted: var(--text-tertiary);
 
-  /*      token tint    text-primary    + transparent
-   * hover/active/strong               C-3     --tint-highlight
-   *         color-mix        */
-  --tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  --tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  --tint-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --tint-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  --tint-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
+  --tint-strong: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
   --tint-scrollbar-thumb: color-mix(
@@ -84,62 +79,48 @@ html[data-theme='light'] {
   /* T-C    5.2   T11 ui/Switch             settings-switch     */
   --switch-track-bg: color-mix(
     in srgb,
-    var(--text-primary) 5%,
-    var(--bg-tertiary)
+    var(--text-primary) 3.5%,
+    var(--bg-card, hsl(0 0% 100%))
   );
+  --switch-thumb-bg: hsl(0 0% 100%);
   --switch-thumb-shadow: 0 1px 2px
-    color-mix(in srgb, var(--shadow-color) 12%, transparent);
+    color-mix(in srgb, var(--shadow-color) 8%, transparent);
+  --seg-track-bg: color-mix(
+    in srgb,
+    var(--text-primary) 3.5%,
+    var(--bg-card, hsl(0 0% 100%))
+  );
+  --seg-slider-bg: var(--bg-card, hsl(0 0% 100%));
 
   --border-color: hsl(35, 10%, 86%);
   --border-subtle: hsl(35, 8%, 91%);
-  --composer-bg: color-mix(
-    in srgb,
-    var(--control-mix-color) 15%,
-    var(--bg-primary)
-  );
+  --composer-bg: var(--bg-card, hsl(0 0% 100%));
   --composer-footer-bg: transparent;
   --hairline-width: 1px;
   --hairline: var(--border-subtle);
   --hairline-strong: var(--border-color);
 
-  --control-mix-color: hsl(35, 40%, 30%);
-
-  --control-soft-bg: color-mix(
-    in srgb,
-    var(--control-mix-color) 4%,
-    var(--bg-primary)
-  );
-  --control-soft-bg-hover: color-mix(
-    in srgb,
-    var(--control-mix-color) 4%,
-    var(--bg-primary)
-  );
+  --control-soft-bg: var(--tint-hover);
+  --control-soft-bg-hover: var(--tint-active);
   --control-soft-bg-active: color-mix(
     in srgb,
-    var(--control-mix-color) 8%,
-    var(--bg-primary)
+    var(--text-primary) 10%,
+    transparent
   );
-  --sidebar-hover: color-mix(
-    in srgb,
-    var(--control-mix-color) 4%,
-    var(--bg-secondary)
-  );
-  --sidebar-active: color-mix(
-    in srgb,
-    var(--control-mix-color) 8%,
-    var(--bg-secondary)
-  );
+  --sidebar-hover: var(--tint-hover);
+  --sidebar-active: var(--tint-active);
 
   --md-code-bg: var(--md-code-block-bg);
   --md-code-border: var(--md-code-block-border);
   --md-code-fg: var(--text-primary);
   --md-code-tab-size: 2;
+  --control-mix-color: var(--text-primary);
   --focus-ring-color: color-mix(
     in srgb,
-    var(--control-mix-color) 8%,
+    var(--control-mix-color) 6%,
     transparent
   );
-  --focus-ring: 0 0 0 2px var(--focus-ring-color);
+  --focus-ring: 0 0 0 1.5px var(--focus-ring-color);
   --focus-ring-subtle: color-mix(
     in srgb,
     var(--border-color) 94%,
@@ -153,9 +134,8 @@ html[data-theme='light'] {
 
   --bg-page: #ffffff;
   --bg-canvas: #f6f5f3;
-  --bg-panel: rgba(255, 254, 252, 0.96);
-  --bg-item-hover: rgba(0, 0, 0, 0.04);
-  --bg-item-active: rgba(0, 0, 0, 0.08);
+  --bg-item-hover: var(--tint-hover);
+  --bg-item-active: var(--tint-active);
 
   --brand-primary: #10b981;
   --brand: #10b981;
@@ -181,10 +161,10 @@ html[data-theme='light'] {
   --sep-font-size-header: 10.5px;
 
   --sep-bg-canvas: #f6f5f3;
-  --sep-bg-panel: rgba(255, 254, 252, 0.96);
+  --sep-bg-panel: var(--bg-card, hsl(0 0% 100%));
   --sep-bg-panel-solid: #ffffff;
-  --sep-bg-item-hover: rgba(29, 28, 26, 0.045);
-  --sep-bg-item-selected: rgba(29, 28, 26, 0.065);
+  --sep-bg-item-hover: var(--tint-hover);
+  --sep-bg-item-selected: var(--tint-hover);
   --sep-bg-input: rgba(29, 28, 26, 0.03);
 
   --sep-border-color: #e2dfd9;
@@ -202,9 +182,9 @@ html[data-theme='light'] {
   --sep-danger-color: hsl(0 84% 60%);
   --sep-danger-light: hsl(0 84% 60% / 0.08);
 
-  --sep-shadow: 0 20px 48px -10px rgba(29, 28, 26, 0.09),
-                0 6px 20px -3px rgba(29, 28, 26, 0.03),
-                0 2px 6px 0 rgba(29, 28, 26, 0.015);
+  --sep-shadow:
+    0 4px 16px -2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 4%, transparent),
+    0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 2%, transparent);
   --sep-backdrop-blur: 28px;
 
   --sep-ease-spring: cubic-bezier(0.22, 1.25, 0.36, 1);
@@ -218,12 +198,12 @@ html[data-theme='light'] {
   --accent-soft: hsl(35, 12%, 93.5%); /*      */
 
   --accent-orange: hsl(38, 92%, 50%);
-  --accent-orange-light: hsl(38, 100%, 96%);
-  --accent-green: hsl(142, 35%, 42%); /*        */
-  --accent-green-hover: hsl(142, 35%, 35%);
-  --accent-green-light: hsl(142, 35%, 96.5%); /*          */
-  --accent-green-soft: hsl(142, 30%, 92.5%);
-  --accent-green-muted: hsl(142, 30%, 82.5%);
+  --accent-green: hsl(142 72% 46%); /* 活泼高 RGB 翠绿 (RGB: 33, 201, 98) */
+  --accent-green-hover: hsl(142 72% 38%);
+  --accent-green-light: hsl(142 72% 96.5%);
+  --accent-green-soft: hsl(142 60% 92.5%);
+  --accent-green-muted: hsl(142 50% 82.5%);
+  --status-online: hsl(142 76% 46%);
   --accent-red: hsl(0, 55%, 55%); /*     /   */
   --accent-red-light: hsl(0, 55%, 97.5%); /*        */
   /* Zero-Blue 铁律：--accent-blue / --accent-primary 收敛为高对比中性墨阶与翡翠绿 */
@@ -279,7 +259,7 @@ html[data-theme='light'] {
   --ui-text-success: #2f9e44;
   --ui-text-danger: #e03131;
   /*    6.1       ui-text-muted         #868e96    2.94:1   #757d85   3.69:1 */
-  --ui-text-muted: #757d85;
+  --ui-text-muted: var(--text-tertiary);
   --ui-text-info: #1971c2;
   /*    6.1       08     6  WARN    #e8590c    3.09:1       --text-warning-strong 4.55:1  */
   --ui-text-warning: var(--text-warning-strong);
@@ -369,10 +349,8 @@ html[data-theme='light'] {
     0 4px 12px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
     0 1px 1px color-mix(in srgb, var(--shadow-color) 0.5%, transparent);
   --shadow-lg:
-    0 4px 8px color-mix(in srgb, var(--shadow-color) 1%, transparent),
-    0 12px 24px color-mix(in srgb, var(--shadow-color) 1.5%, transparent),
-    0 24px 48px color-mix(in srgb, var(--shadow-color) 1%, transparent),
-    0 1px 2px color-mix(in srgb, var(--shadow-color) 0.5%, transparent);
+    0 4px 16px -2px color-mix(in srgb, var(--shadow-color) 4%, transparent),
+    0 1px 3px color-mix(in srgb, var(--shadow-color) 2%, transparent);
   --shadow-drag:
     0 8px 16px color-mix(in srgb, var(--shadow-color) 2%, transparent),
     0 20px 40px color-mix(in srgb, var(--shadow-color) 2.5%, transparent),
@@ -590,7 +568,7 @@ html[data-theme='light'] {
   --artifact-action-btn-bg: color-mix(in srgb, var(--text-primary) 4%, var(--bg-card));
   --artifact-action-btn-hover: color-mix(in srgb, var(--text-primary) 8%, var(--bg-card));
   --artifact-action-btn-border: var(--border-subtle);
-  --artifact-btn-bg: var(--bg-primary, #f4f5f7);
+  --artifact-btn-bg: var(--bg-primary, hsl(35 8% 95.2%));
   --artifact-btn-border: var(--border-subtle);
   --artifact-btn-hover-bg: var(--tint-hover);
   --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 92%, var(--text-primary) 8%);
@@ -622,7 +600,7 @@ html[data-theme='light'] {
   --diff-split-divider: var(--border-subtle);
   --diff-split-header-bg: var(--bg-secondary);
   --diff-split-header-fg: var(--text-secondary);
-  --diff-mode-segmented-bg: var(--bg-primary, #f4f5f7);
+  --diff-mode-segmented-bg: var(--bg-secondary, hsl(35 8% 92.1%));
   --diff-mode-item-active-bg: var(--bg-card, #ffffff);
   --diff-mode-item-active-fg: var(--text-primary, #111111);
 
@@ -835,9 +813,9 @@ html[data-theme='light'] {
   --chat-footer-fade: linear-gradient(
     to bottom,
     transparent 0%,
-    color-mix(in srgb, var(--bg-primary) 55%, transparent) 42%,
-    color-mix(in srgb, var(--bg-primary) 92%, transparent) 78%,
-    var(--bg-primary) 100%
+    color-mix(in srgb, var(--bg-card, #ffffff) 55%, transparent) 42%,
+    color-mix(in srgb, var(--bg-card, #ffffff) 92%, transparent) 78%,
+    var(--bg-card, #ffffff) 100%
   );
 
   color-scheme: light;
@@ -854,8 +832,8 @@ html[data-theme='dark'] {
   --bg-primary: #1b1b1b;
   --bg-secondary: #242424;
   --bg-tertiary: #1e1e1e;
-  --bg-hover: var(--tint-hover); /*    tint         */
-  --bg-active: var(--tint-active); /*    tint         */
+  --bg-hover: var(--tint-hover);
+  --bg-active: var(--tint-active);
   --bg-card: #242424;
   --bg-elevated: #242424;
   --bg-subtle: var(--bg-secondary);
@@ -866,15 +844,13 @@ html[data-theme='dark'] {
   --shell-gutter: var(--space-2, 8px);
   --text-primary: #dddddd;
   --text-secondary: #aaaaaa;
-  /*    6.1       08     7  dark text-tertiary 62%     3.59:1
-   *   #8f8f8f   6.0:1 WCAG AA     4.5:1  */
+  /* 文本三级色：WCAG AA 达标 */
   --text-tertiary: #8f8f8f;
   --text-muted: var(--text-tertiary);
 
-  /*      token tint    dark      text-primary                */
-  --tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent);
-  --tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  --tint-strong: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --tint-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
+  --tint-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
+  --tint-strong: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
   --tint-scrollbar-thumb: color-mix(
@@ -886,9 +862,19 @@ html[data-theme='dark'] {
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
   /* T-C    5.2   T11 ui/Switch         dark       theme-dark.css     */
-  --switch-track-bg: var(--tint-active);
-  --switch-thumb-shadow: 0 1px 2px
-    color-mix(in srgb, var(--shadow-color) 12%, transparent);
+  --switch-track-bg: color-mix(
+    in srgb,
+    var(--text-primary) 14%,
+    var(--bg-card, #242424)
+  );
+  --switch-thumb-bg: #ffffff;
+  --switch-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --seg-track-bg: #181818;
+  --seg-slider-bg: color-mix(
+    in srgb,
+    var(--text-primary) 16%,
+    var(--bg-card, #242424)
+  );
 
   --border-color: #333333;
   --border-subtle: #2a2a2a;
@@ -919,16 +905,8 @@ html[data-theme='dark'] {
   );
   /* dark        01    P2-01  light    hover/active   control-mix-color   dark
    *     light           tint          */
-  --sidebar-hover: color-mix(
-    in srgb,
-    var(--text-primary) 5%,
-    var(--bg-secondary)
-  );
-  --sidebar-active: color-mix(
-    in srgb,
-    var(--text-primary) 8%,
-    var(--bg-secondary)
-  );
+  --sidebar-hover: var(--tint-hover);
+  --sidebar-active: var(--tint-active);
   --control-mix-color: var(--text-primary);
   --focus-ring-color: color-mix(
     in srgb,
@@ -944,8 +922,8 @@ html[data-theme='dark'] {
   --bg-page: #0c0c0b;
   --bg-canvas: #141412;
   --bg-panel: rgba(24, 23, 21, 0.96);
-  --bg-item-hover: rgba(245, 244, 240, 0.06);
-  --bg-item-active: rgba(245, 244, 240, 0.10);
+  --bg-item-hover: var(--tint-hover);
+  --bg-item-active: var(--tint-active);
 
   --brand-primary: #10b981;
   --brand: #10b981;
@@ -967,8 +945,8 @@ html[data-theme='dark'] {
   --sep-bg-canvas: #0c0c0b;
   --sep-bg-panel: rgba(24, 23, 21, 0.96);
   --sep-bg-panel-solid: #181715;
-  --sep-bg-item-hover: rgba(245, 244, 240, 0.06);
-  --sep-bg-item-selected: rgba(245, 244, 240, 0.09);
+  --sep-bg-item-hover: var(--tint-hover);
+  --sep-bg-item-selected: var(--tint-active);
   --sep-bg-input: rgba(245, 244, 240, 0.04);
 
   --sep-border-color: #2b2926;
@@ -986,23 +964,24 @@ html[data-theme='dark'] {
   --sep-danger-color: hsl(0 84% 60%);
   --sep-danger-light: hsl(0 84% 60% / 0.08);
 
-  --sep-shadow: 0 24px 54px -10px rgba(0, 0, 0, 0.70),
-                0 8px 24px -4px rgba(0, 0, 0, 0.45),
-                0 2px 8px 0 rgba(0, 0, 0, 0.30);
+  --sep-shadow:
+    0 4px 18px rgba(0, 0, 0, 0.28),
+    0 1px 3px rgba(0, 0, 0, 0.18);
   --sep-backdrop-blur: 28px;
 
   --accent-color: hsl(160 84% 45%);
-  --accent-light: #1e293b;
+  --accent-light: hsl(0 0% 16%);
   --accent-hover: #ffffff;
-  --accent-soft: #334155;
+  --accent-soft: hsl(0 0% 26%);
 
   --accent-orange: hsl(38, 92%, 50%);
   --accent-orange-light: hsl(21, 92%, 14%);
-  --accent-green: hsl(142, 35%, 42%);
-  --accent-green-hover: hsl(142, 35%, 35%);
-  --accent-green-light: hsl(142, 35%, 16%);
-  --accent-green-soft: hsl(142, 30%, 20%);
-  --accent-green-muted: hsl(142, 30%, 24%);
+  --accent-green: hsl(142 72% 46%);
+  --accent-green-hover: hsl(142 72% 38%);
+  --accent-green-light: hsl(142 60% 16%);
+  --accent-green-soft: hsl(142 50% 20%);
+  --accent-green-muted: hsl(142 45% 24%);
+  --status-online: hsl(142 76% 48%);
   --accent-red: hsl(0, 55%, 55%);
   --accent-red-light: hsl(0, 55%, 16%);
   /*       themeStore applyTheme              dark    */
@@ -1058,17 +1037,14 @@ html[data-theme='dark'] {
 
   /* Premium Soft Dark Shadows */
   --shadow-sm:
-    0 1px 2px color-mix(in srgb, var(--shadow-color) 15%, transparent),
-    0 1px 1px color-mix(in srgb, var(--shadow-color) 10%, transparent);
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    0 1px 1px rgba(0, 0, 0, 0.10);
   --shadow-md:
-    0 2px 4px color-mix(in srgb, var(--shadow-color) 15%, transparent),
-    0 6px 16px color-mix(in srgb, var(--shadow-color) 20%, transparent),
-    0 1px 1px color-mix(in srgb, var(--shadow-color) 10%, transparent);
+    0 2px 8px rgba(0, 0, 0, 0.20),
+    0 1px 2px rgba(0, 0, 0, 0.12);
   --shadow-lg:
-    0 4px 8px color-mix(in srgb, var(--shadow-color) 20%, transparent),
-    0 16px 32px color-mix(in srgb, var(--shadow-color) 25%, transparent),
-    0 32px 64px color-mix(in srgb, var(--shadow-color) 15%, transparent),
-    0 1px 2px color-mix(in srgb, var(--shadow-color) 10%, transparent);
+    0 4px 18px rgba(0, 0, 0, 0.28),
+    0 1px 3px rgba(0, 0, 0, 0.18);
   --shadow-drag:
     0 8px 16px color-mix(in srgb, var(--shadow-color) 25%, transparent),
     0 24px 48px color-mix(in srgb, var(--shadow-color) 35%, transparent),

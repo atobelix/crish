@@ -57,8 +57,8 @@
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
   border-radius: var(--radius-2xl);
   padding: var(--space-5);
   box-shadow: var(--shadow-lg);

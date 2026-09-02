@@ -9,8 +9,8 @@ body {
 }
 
 :root {
-  --loader-bg: #f4f5f7;
-  --loader-card-bg: linear-gradient(180deg, #ffffff 0%, #f4f5f7 100%);
+  --loader-bg: hsl(35 8% 95.2%);
+  --loader-card-bg: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(35 8% 95.2%) 100%);
   --loader-border: rgba(0, 0, 0, 0.08);
   --loader-line-stroke: #18181b;
   --loader-text: #71717a;
@@ -20,8 +20,8 @@ body {
 html[data-theme='light'],
 html[data-theme='default'],
 html.theme-light {
-  --loader-bg: #f4f5f7;
-  --loader-card-bg: linear-gradient(180deg, #ffffff 0%, #f4f5f7 100%);
+  --loader-bg: hsl(35 8% 95.2%);
+  --loader-card-bg: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(35 8% 95.2%) 100%);
   --loader-border: rgba(0, 0, 0, 0.08);
   --loader-line-stroke: #18181b;
   --loader-text: #71717a;

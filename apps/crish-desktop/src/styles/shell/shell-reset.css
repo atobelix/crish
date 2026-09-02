@@ -28,7 +28,7 @@ body {
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-normal);
   line-height: 1.5;
-  background-color: var(--bg-workspace, var(--bg-primary, #f4f5f7));
+  background-color: var(--bg-workspace, var(--bg-primary, hsl(35 8% 95.2%)));
   color: var(--text-primary);
   overflow: hidden;
   height: 100vh;

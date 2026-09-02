@@ -1,4 +1,4 @@
-export { SmartExpandablePanel } from './SmartExpandablePanel';
+export { SmartExpandablePanel, SmartExpandablePanel as SmartPanel } from './SmartExpandablePanel';
 export { SmartPanelHeader } from './SmartPanelHeader';
 export { SmartPanelItem } from './SmartPanelItem';
 export { SmartPanelList } from './SmartPanelList';

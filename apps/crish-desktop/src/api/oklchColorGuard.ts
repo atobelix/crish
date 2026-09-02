@@ -29,13 +29,11 @@ export function parseColorToOklch(colorStr: string, isDark?: boolean): OKLCH {
     g = parseInt(parsedHex.slice(2, 4), 16) / 255;
     b = parseInt(parsedHex.slice(4, 6), 16) / 255;
   } else if (str.startsWith('hsl')) {
-    // 锚定右括号：仅匹配完整函数调用。小数 / deg / 空格分隔 / 现代 slash alpha
-    // （hsl(35, 10%, 50% / 50%)）等未覆盖格式按文档契约回退默认灰。
-    const match = str.match(/hsla?\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+    const match = str.match(/hsla?\(\s*([\d.]+)(?:deg)?(?:\s*,\s*|\s+)([\d.]+)%(?:\s*,\s*|\s+)([\d.]+)%/);
     if (match) {
-      const h = parseInt(match[1]!) / 360;
-      const s = parseInt(match[2]!) / 100;
-      const l = parseInt(match[3]!) / 100;
+      const h = parseFloat(match[1]!) / 360;
+      const s = parseFloat(match[2]!) / 100;
+      const l = parseFloat(match[3]!) / 100;
 
       // HSL to RGB conversion
       const q = l < 0.5 ? l * (1 + s) : l + s - l * s;

@@ -38,6 +38,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   onClose,
   onMouseEnter,
   onMouseLeave,
+  triggerMode = 'both',
   renderItem,
   children,
 }) => {
@@ -55,6 +56,19 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const cascadeSubmenuRef = useRef<HTMLDivElement | null>(null);
   const safeAimTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearHoverTimers = useCallback(() => {
+    if (hoverOpenTimerRef.current) {
+      clearTimeout(hoverOpenTimerRef.current);
+      hoverOpenTimerRef.current = null;
+    }
+    if (hoverCloseTimerRef.current) {
+      clearTimeout(hoverCloseTimerRef.current);
+      hoverCloseTimerRef.current = null;
+    }
+  }, []);
 
   const safeAim = useMemo(
     () => SafeAimEngine.getInstance({ enabled: enableTriangleAim }),
@@ -64,6 +78,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
+      clearHoverTimers();
       if (!isControlled) {
         setInternalOpen(nextOpen);
       }
@@ -81,8 +96,49 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
         onClose?.();
       }
     },
-    [isControlled, externalOnOpenChange, onOpen, onClose, safeAim]
+    [clearHoverTimers, isControlled, externalOnOpenChange, onOpen, onClose, safeAim]
   );
+
+  const handleTriggerMouseEnter = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      clearHoverTimers();
+      onMouseEnter?.();
+      if (triggerMode === 'hover' || triggerMode === 'both') {
+        hoverOpenTimerRef.current = setTimeout(() => {
+          handleOpenChange(true);
+        }, 150);
+      }
+    },
+    [clearHoverTimers, onMouseEnter, triggerMode, handleOpenChange]
+  );
+
+  const handleTriggerMouseLeave = useCallback(
+    (e: React.MouseEvent<HTMLElement>) => {
+      if (hoverOpenTimerRef.current) {
+        clearTimeout(hoverOpenTimerRef.current);
+        hoverOpenTimerRef.current = null;
+      }
+      onMouseLeave?.();
+      if (triggerMode === 'hover' || triggerMode === 'both') {
+        hoverCloseTimerRef.current = setTimeout(() => {
+          handleOpenChange(false);
+        }, 250);
+      }
+    },
+    [onMouseLeave, triggerMode, handleOpenChange]
+  );
+
+  const handleContentMouseEnter = useCallback(() => {
+    clearHoverTimers();
+  }, [clearHoverTimers]);
+
+  const handleContentMouseLeave = useCallback(() => {
+    if (triggerMode === 'hover' || triggerMode === 'both') {
+      hoverCloseTimerRef.current = setTimeout(() => {
+        handleOpenChange(false);
+      }, 250);
+    }
+  }, [triggerMode, handleOpenChange]);
 
   useLayerRegistration(
     {
@@ -152,8 +208,10 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
         stylePos.transformOrigin = 'top right';
       }
 
-      setSubmenuStyle(stylePos);
       setActiveSubmenu(item);
+      setSubmenuStyle(stylePos);
+
+      // 注册安全三角保护区
       requestAnimationFrame(() => {
         if (cascadeSubmenuRef.current) {
           safeAim.setSubmenu(
@@ -177,6 +235,7 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
           safeAimTimeoutRef.current = setTimeout(() => {
             setActiveSubmenu(null);
             safeAim.clearSubmenu();
+            safeAimTimeoutRef.current = null;
           }, 300);
         }
         return;
@@ -214,26 +273,60 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
     }
 
     if (React.isValidElement(actualTrigger)) {
+      const actualTriggerElement = actualTrigger as React.ReactElement<{
+        ref?: unknown;
+        onMouseEnter?: (e: React.MouseEvent<HTMLElement>) => void;
+        onMouseLeave?: (e: React.MouseEvent<HTMLElement>) => void;
+        onClick?: (e: React.MouseEvent<HTMLElement>) => void;
+      }>;
+      const originalProps = actualTriggerElement.props;
+
       const clonedElement = React.cloneElement(
-        actualTrigger as React.ReactElement<{ ref?: unknown }>,
+        actualTriggerElement,
         {
           ref: (node: HTMLElement | null) => {
             triggerRef.current = node;
+            const origRef = (actualTriggerElement as unknown as { ref?: React.Ref<HTMLElement> }).ref;
+            if (typeof origRef === 'function') {
+              origRef(node);
+            } else if (origRef && typeof origRef === 'object' && 'current' in origRef) {
+              (origRef as React.MutableRefObject<HTMLElement | null>).current = node;
+            }
           },
+          onMouseEnter: (e: React.MouseEvent<HTMLElement>) => {
+            originalProps?.onMouseEnter?.(e);
+            handleTriggerMouseEnter(e);
+          },
+          onMouseLeave: (e: React.MouseEvent<HTMLElement>) => {
+            originalProps?.onMouseLeave?.(e);
+            handleTriggerMouseLeave(e);
+          },
+          onClick: (e: React.MouseEvent<HTMLElement>) => {
+            clearHoverTimers();
+            originalProps?.onClick?.(e);
+          },
+        } as React.Attributes & {
+          ref: (node: HTMLElement | null) => void;
+          onMouseEnter: (e: React.MouseEvent<HTMLElement>) => void;
+          onMouseLeave: (e: React.MouseEvent<HTMLElement>) => void;
+          onClick: (e: React.MouseEvent<HTMLElement>) => void;
         }
       );
 
-      renderedTrigger = (
+      const triggerElem = (
         <Popover.Trigger asChild>
-          {tipContent != null ? (
-            <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
-              {clonedElement}
-            </Tooltip>
-          ) : (
-            clonedElement
-          )}
+          {clonedElement}
         </Popover.Trigger>
       );
+
+      renderedTrigger =
+        tipContent != null ? (
+          <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
+            {triggerElem}
+          </Tooltip>
+        ) : (
+          triggerElem
+        );
     }
   }
 
@@ -262,6 +355,17 @@ export const SmartExpandablePanel: React.FC<SmartPanelProps> = ({
           collisionPadding={12}
           className={panelClasses}
           style={style}
+          onMouseEnter={handleContentMouseEnter}
+          onMouseLeave={handleContentMouseLeave}
+          onWheel={(e) => e.stopPropagation()}
+          onPointerDownOutside={(e) => {
+            const target = e.detail.originalEvent.target as Node | null;
+            const triggerEl = anchor?.current ?? triggerRef.current;
+            if (triggerEl && target && triggerEl.contains(target)) {
+              e.preventDefault();
+              return;
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
               if (activeSubmenu) {

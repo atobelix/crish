@@ -2,7 +2,7 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { LayerStackManager, layerStackManager } from './LayerStackManager';
 
-describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () => {
+describe('LayerStackManager 单核调度中枢与 100ms 冷却防重入锁', () => {
   beforeEach(() => {
     layerStackManager.dispose();
   });
@@ -18,11 +18,11 @@ describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () =
     expect(instance1).toBe(layerStackManager);
   });
 
-  it('50ms 冷却防重入锁状态机判定', () => {
+  it('100ms 冷却防重入锁状态机判定', () => {
     expect(layerStackManager.isWithinCooldown()).toBe(false);
 
     layerStackManager.markCloseTimestamp();
-    expect(layerStackManager.isWithinCooldown(50)).toBe(true);
+    expect(layerStackManager.isWithinCooldown(100)).toBe(true);
   });
 
   it('Tooltip 全局静默互斥协议 (data-floating-active)', () => {
@@ -166,7 +166,7 @@ describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () =
     parentEl.remove();
   });
 
-  it('外点关掉无锚层后，同一 pointer 落到原 target 不得再开', () => {
+  it('外点关掉无锚层后，同一 pointer 点击其它按钮绝不误杀（放行）', () => {
     const btn = document.createElement('button');
     document.body.appendChild(btn);
     const content = document.createElement('div');
@@ -187,7 +187,8 @@ describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () =
     expect(layerStackManager.wasLayerDismissedThisGesture('orphan-menu')).toBe(
       true
     );
-    expect(layerStackManager.wasTriggerClickAfterDismiss(btn)).toBe(true);
+    // 当 rec.anchor 为 null 时，100% 绝对放行，绝不误杀其它按钮
+    expect(layerStackManager.wasTriggerClickAfterDismiss(btn)).toBe(false);
     btn.remove();
     content.remove();
   });
@@ -215,6 +216,45 @@ describe('LayerStackManager 单核调度中枢与 50ms 冷却防重入锁', () =
     contentA.remove();
     btnA.remove();
     btnB.remove();
+  });
+
+  it('单次外部点击级联退栈清退所有并存非模态浮层', () => {
+    const onDismissA = vi.fn();
+    const onDismissB = vi.fn();
+
+    const elA = document.createElement('div');
+    const elB = document.createElement('div');
+    const outsideEl = document.createElement('div');
+    document.body.append(elA, elB, outsideEl);
+
+    layerStackManager.register({
+      id: 'layer-a',
+      type: 'drawer',
+      dismissible: true,
+      onDismiss: onDismissA,
+      elementRef: elA,
+    });
+    layerStackManager.register({
+      id: 'layer-b',
+      type: 'popover',
+      dismissible: true,
+      onDismiss: onDismissB,
+      elementRef: elB,
+    });
+
+    expect(layerStackManager.getLayers().length).toBe(2);
+
+    outsideEl.dispatchEvent(
+      new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
+    );
+
+    expect(onDismissA).toHaveBeenCalledWith('outside-pointer');
+    expect(onDismissB).toHaveBeenCalledWith('outside-pointer');
+    expect(layerStackManager.getLayers().length).toBe(0);
+
+    elA.remove();
+    elB.remove();
+    outsideEl.remove();
   });
 
   it('Trace 审计历史记录正常工作', () => {

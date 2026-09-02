@@ -223,8 +223,8 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 cwd={nav.cwd}
                 selected={preview.selected}
                 view={preview.view}
+                dirty={preview.dirty}
                 onNavigate={handleNavigate}
-                onRefresh={handleRefreshDir}
                 onOpenFile={handleOpenFile}
               />
             ) : null}
@@ -295,6 +295,8 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
             {!noRoot ? (
               <FileActions
                 selected={preview.selected}
+                cwd={nav.cwd}
+                root={nav.root}
                 view={preview.view}
                 canEdit={preview.canEdit}
                 isMd={preview.isMd}

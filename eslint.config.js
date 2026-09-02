@@ -411,7 +411,6 @@ export default tseslint.config(
       'apps/crish-desktop/src/components/chat-composer/ComposerSlashMenu.tsx',
       'apps/crish-desktop/src/components/chat-message-row/ChatMessageRow.tsx',
       'apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx',
-      'apps/crish-desktop/src/components/shell/GlobalSessionTabBar.tsx',
       'apps/crish-desktop/src/components/shell/SessionTabDragContext.tsx',
       'apps/crish-desktop/src/components/shell/VirtualList.tsx',
       'apps/crish-desktop/src/components/sidebar/SidebarContextMenus.tsx',

@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip, Menu } from '../ui';
 import {
   AppWindow,
   ChevronDown,
-  ChevronsUpDown,
   Copy,
   FolderOpen,
   MoreHorizontal,
@@ -46,6 +45,8 @@ const MORE_ACTIONS_LABEL = '更多操作';
 
 interface FileActionsProps {
   selected: string | null;
+  cwd?: string;
+  root?: string;
   view: ViewMode;
   canEdit: boolean;
   isMd: boolean;
@@ -63,6 +64,8 @@ interface FileActionsProps {
 
 export const FileActions = React.memo(function FileActions({
   selected,
+  cwd,
+  root,
   view,
   canEdit,
   isMd,
@@ -77,7 +80,7 @@ export const FileActions = React.memo(function FileActions({
   onMdModeChange,
   onCopyPath,
 }: FileActionsProps) {
-  const [openMenuMore, setOpenMenuMore] = useState(false);
+  const targetPath = selected || cwd || root || null;
 
   const handleOpenDefault = () => {
     if (selected)
@@ -86,8 +89,8 @@ export const FileActions = React.memo(function FileActions({
       );
   };
   const handleReveal = () => {
-    if (selected)
-      void revealInOs(selected).catch((e) =>
+    if (targetPath)
+      void revealInOs(targetPath).catch((e) =>
         logInternalError('components/files/FileActions/revealInOs', e)
       );
   };
@@ -101,147 +104,123 @@ export const FileActions = React.memo(function FileActions({
   return (
     <>
       {view !== 'browse' ? (
-        <div className={styles.filesContextBar}>
-          <span className={styles.filesContextName}>
-            {dirty ? (
-              <span className={styles.filesDirtyDot} aria-label="未保存">
-                ·
-              </span>
-            ) : null}
-            {selected?.split(/[\\/]/).pop() || ''}
-          </span>
-          <div className={styles.filesContextActions}>
-            {isMd ? (
-              <div
-                className={styles.filesSeg}
-                role="group"
-                aria-label="Markdown 显示"
-                data-md-source-toggle="files-leaf-only"
+        <div className={styles.filesContextActions}>
+          {isMd ? (
+            <div
+              className={styles.filesSeg}
+              role="group"
+              aria-label="Markdown 显示"
+              data-md-source-toggle="files-leaf-only"
+            >
+              <Tooltip content="渲染预览">
+                <button
+                  type="button"
+                  className={`${styles.filesSegBtn} ${mdMode === 'render' ? styles.isOn : ''}`}
+                  aria-pressed={mdMode === 'render'}
+                  onClick={() => onMdModeChange('render')}
+                >
+                  渲染
+                </button>
+              </Tooltip>
+              <Tooltip content="源码">
+                <button
+                  type="button"
+                  className={`${styles.filesSegBtn} ${mdMode === 'source' ? styles.isOn : ''}`}
+                  aria-pressed={mdMode === 'source'}
+                  onClick={() => onMdModeChange('source')}
+                >
+                  源码
+                </button>
+              </Tooltip>
+            </div>
+          ) : null}
+          {canEdit && !editing ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className={styles.filesSoftBtn}
+              onClick={onEdit}
+              icon={<Pencil size={14} />}
+            >
+              编辑
+            </Button>
+          ) : null}
+          {editing ? (
+            <>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                className={`${styles.filesSoftBtn} ${styles.filesSoftBtnEmphasis}`}
+                disabled={!dirty}
+                onClick={onSave}
+                icon={<Save size={14} />}
               >
-                <Tooltip content="渲染预览">
-                  <button
-                    type="button"
-                    className={`${styles.filesSegBtn} ${mdMode === 'render' ? styles.isOn : ''}`}
-                    aria-pressed={mdMode === 'render'}
-                    onClick={() => onMdModeChange('render')}
-                  >
-                    渲染
-                  </button>
-                </Tooltip>
-                <Tooltip content="源码">
-                  <button
-                    type="button"
-                    className={`${styles.filesSegBtn} ${mdMode === 'source' ? styles.isOn : ''}`}
-                    aria-pressed={mdMode === 'source'}
-                    onClick={() => onMdModeChange('source')}
-                  >
-                    源码
-                  </button>
-                </Tooltip>
-              </div>
-            ) : null}
-            {canEdit && !editing ? (
+                保存
+              </Button>
               <Button
                 type="button"
                 variant="secondary"
                 size="sm"
                 className={styles.filesSoftBtn}
-                onClick={onEdit}
-                icon={<Pencil size={13} />}
+                onClick={onCancel}
               >
-                编辑
+                取消
               </Button>
-            ) : null}
-            {editing ? (
-              <>
+            </>
+          ) : null}
+          {selected ? (
+            <div className={styles.filesOpenCapsule}>
+              <Tooltip content={`${openDefaultLabel}（系统默认）`}>
                 <Button
                   type="button"
-                  variant="primary"
+                  variant="ghost"
                   size="sm"
-                  className={`${styles.filesSoftBtn} ${styles.filesSoftBtnEmphasis}`}
-                  disabled={!dirty}
-                  onClick={onSave}
-                  icon={<Save size={13} />}
+                  className={styles.filesOpenMain}
+                  onClick={handleOpenDefault}
+                  icon={<AppWindow size={14} aria-hidden />}
                 >
-                  保存
+                  {openDefaultLabel}
                 </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className={styles.filesSoftBtn}
-                  onClick={onCancel}
-                >
-                  取消
-                </Button>
-              </>
-            ) : null}
-            {selected ? (
-              <div className={styles.filesOpenCapsule}>
-                <Tooltip content={`${openDefaultLabel}（系统默认）`}>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className={styles.filesOpenMain}
-                    onClick={handleOpenDefault}
-                    icon={<AppWindow size={13} aria-hidden />}
-                  >
-                    {openDefaultLabel}
-                  </Button>
-                </Tooltip>
-                <Menu
-                  position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
-                  trigger={
-                    <Tooltip content={OPEN_WITH_LABEL}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={styles.filesOpenChev}
-                        aria-label={OPEN_WITH_LABEL}
-                        icon={<ChevronDown size={14} aria-hidden />}
-                      />
-                    </Tooltip>
-                  }
-                  options={[
-                    {
-                      id: 'copy-path',
-                      label: '复制路径',
-                      icon: <Copy size={14} aria-hidden />,
-                      onClick: () => onCopyPath('abs'),
-                    },
-                    {
-                      id: 'reveal-file',
-                      label: '在文件管理器中显示',
-                      icon: <FolderOpen size={14} aria-hidden />,
-                      onClick: handleReveal,
-                    },
-                    ...fileOpeners
-                      .slice(0, openMenuMore ? fileOpeners.length : 6)
-                      .map((op) => ({
-                        id: op.id,
-                        label: op.displayName,
-                        icon: getOpenerIcon(op, 14),
-                        onClick: () => handleOpenWith(op),
-                      })),
-                    ...(fileOpeners.length > 6
-                      ? [
-                          {
-                            id: '__toggle_more_openers__',
-                            label: openMenuMore
-                              ? '收起'
-                              : `更多应用（${fileOpeners.length - 6}）`,
-                            icon: <ChevronsUpDown size={14} aria-hidden />,
-                            onClick: () => setOpenMenuMore((v) => !v),
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
-              </div>
-            ) : null}
-          </div>
+              </Tooltip>
+              <Menu
+                position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
+                trigger={
+                  <Tooltip content={OPEN_WITH_LABEL}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={styles.filesOpenChev}
+                      aria-label={OPEN_WITH_LABEL}
+                      icon={<ChevronDown size={14} aria-hidden />}
+                    />
+                  </Tooltip>
+                }
+                options={[
+                  {
+                    id: 'copy-path',
+                    label: '复制绝对路径',
+                    icon: <Copy size={14} aria-hidden />,
+                    onClick: () => onCopyPath('abs'),
+                  },
+                  {
+                    id: 'reveal-file',
+                    label: '在资源管理器中显示',
+                    icon: <FolderOpen size={14} aria-hidden />,
+                    onClick: handleReveal,
+                  },
+                  ...fileOpeners.map((op) => ({
+                    id: op.id,
+                    label: op.displayName,
+                    icon: getOpenerIcon(op, 14),
+                    onClick: () => handleOpenWith(op),
+                  })),
+                ]}
+              />
+            </div>
+          ) : null}
         </div>
       ) : null}
 
@@ -264,27 +243,21 @@ export const FileActions = React.memo(function FileActions({
             {
               id: 'copy-rel',
               label: '复制相对路径',
+              icon: <Copy size={14} aria-hidden />,
               onClick: () => onCopyPath('rel'),
             },
             {
               id: 'copy-abs',
               label: '复制绝对路径',
+              icon: <Copy size={14} aria-hidden />,
               onClick: () => onCopyPath('abs'),
             },
             {
               id: 'reveal-sys',
               label: '在资源管理器中显示',
+              icon: <FolderOpen size={14} aria-hidden />,
               onClick: handleReveal,
             },
-            ...(view === 'detail' && canEdit && !editing
-              ? [
-                  {
-                    id: 'edit-file',
-                    label: '编辑文件',
-                    onClick: onEdit,
-                  },
-                ]
-              : []),
           ]}
         />
       </div>

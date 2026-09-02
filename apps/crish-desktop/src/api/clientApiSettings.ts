@@ -40,8 +40,13 @@ function lsGet(key: string, legacy?: string): string | null {
 }
 
 const initSettingsDb = () => {
+  if (typeof localStorage === 'undefined') return;
   if (!lsGet(SETTINGS_KEY, SETTINGS_KEY_LEGACY)) {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
+    try {
+      localStorage.setItem(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
+    } catch {
+      /* ignore */
+    }
   }
 };
 

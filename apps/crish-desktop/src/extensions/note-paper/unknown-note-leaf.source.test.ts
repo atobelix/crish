@@ -42,21 +42,18 @@ describe('07 · 未知 note 叶文案源码钉（≠ 真壳到达 · ≠ 打开�
 
   it('未知 / 未注册 view 分支存在（未知面板类型）', () => {
     expect(treeSrc).toMatch(/未知面板类型/);
-    expect(treeSrc).toMatch(/\bhasDefinition\b/);
     expect(treeSrc).toMatch(/viewRegistry\.resolveView/);
     expect(treeSrc).toMatch(/<SlotOutlet[\s\S]*?fallback=\{/);
-    expect(treeSrc).toMatch(
-      /未知面板类型：\{leaf\.activeTab\}/
-    );
+    expect(treeSrc).toMatch(/未知面板类型：\{panelId\}/);
   });
 
   it('文案钉扩展未激活 / 未知，而非 note 内置名单兜底', () => {
     expect(treeSrc).toMatch(/笔记扩展未激活|扩展未激活/);
     expect(treeSrc).toMatch(
-      /isNoteTab\s*\?\s*['"]（笔记扩展未激活）['"]/
+      /note\s*\?\s*['"]（笔记扩展未激活）['"]/
     );
     expect(treeSrc).toMatch(
-      /leaf\.activeTab\s*===\s*['"]note['"]\s*\|\|\s*leaf\.activeTab\.startsWith\(\s*['"]note:['"]\s*\)/
+      /panelId\s*===\s*['"]note['"]\s*\|\|\s*panelId\.startsWith\(\s*['"]note:['"]\s*\)/
     );
     expect(treeSrc).not.toMatch(/registerBuiltInViews/);
     expect(treeSrc).not.toMatch(/NotePaperStrictPanel|NoteLeafHost/);

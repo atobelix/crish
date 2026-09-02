@@ -29,11 +29,13 @@ import { toast } from '../../../../services/toast/ToastContext';
 export interface UseBookmarksImportOptions {
   busy: BusyKind;
   setBusy: Dispatch<SetStateAction<BusyKind>>;
+  onShowToast?: (message: string) => void;
 }
 
 export function useBookmarksImport({
   busy,
   setBusy,
+  onShowToast,
 }: UseBookmarksImportOptions) {
   const [bookmarksJson, setBookmarksJson] = useState('');
   const [bookmarksFileName, setBookmarksFileName] = useState('');
@@ -48,9 +50,10 @@ export function useBookmarksImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setBookmarksError(full);
+      onShowToast?.(full);
       toast.show(full);
     },
-    []
+    [onShowToast]
   );
 
   // 书签：文件三通道（选择 / 拖入 / 路径读取）共用装载

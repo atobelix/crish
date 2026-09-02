@@ -183,8 +183,8 @@ function getActiveCollapsedDomain(): 'tool' | undefined {
   const root = getCompositionRoot();
   const shell = root.shell.getState();
   const tab = shell.getActiveTab();
-  const collapsed = tab?.rightDock
-    ? tab.rightDock.collapsed
+  const collapsed = tab?.dock
+    ? tab.dock.collapsed
     : root.tree.getState().toolColumnCollapsed;
   return collapsed ? 'tool' : undefined;
 }

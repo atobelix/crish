@@ -1,0 +1,302 @@
+/**
+ * PaneHeader.module.css — 独立窗格标签栏高精 CSS 模块
+ * 规范完全对标 reference/chat-composer-component/css/composer.css
+ */
+
+.paneHeader {
+  height: 36px;
+  min-height: 36px;
+  max-height: 36px;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 4px;
+  border-bottom: none;
+  user-select: none;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  position: relative;
+  z-index: 5;
+  overflow: hidden;
+  -webkit-app-region: drag;
+  app-region: drag;
+  pointer-events: auto;
+  transition: padding-left var(--dur-base, 200ms) cubic-bezier(0.16, 1, 0.3, 1),
+              padding-right var(--dur-base, 200ms) cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* 声明式避让规则 */
+/* 顶行最左叶子：在侧栏收起时让出 44px 悬浮按钮空间（macOS 下 106px） */
+:global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
+  padding-left: 0px;
+}
+:global([data-sidebar-collapsed="true"]) :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
+  padding-left: 44px;
+}
+:global([data-platform="macos"]:not([data-fullscreen="true"])) :global([data-sidebar-collapsed="true"]) :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
+  padding-left: 106px;
+}
+
+/* 顶行最右叶子：在 Windows 下让出 112px 窗口控制三键空间 */
+:global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
+  padding-right: 112px;
+}
+:global([data-platform="macos"]) :global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
+  padding-right: 38px;
+}
+
+/* 拖拽调整大小期间关闭缓动过渡 */
+:global(body.tree-resizing) .paneHeader,
+:global(body.is-tab-dragging) .paneHeader {
+  transition: none !important;
+}
+
+.tabsContainer {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  gap: 4px;
+  padding-left: 2px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+
+.tabsContainer::-webkit-scrollbar {
+  display: none;
+}
+
+.tabsList {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 100%;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+/* 单个会话/工具标签项 */
+.tabItem {
+  height: 26px;
+  max-width: 180px;
+  min-width: 0;
+  flex: 0 1 150px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 4px 0 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary, #666666);
+  cursor: pointer;
+  white-space: nowrap;
+  box-sizing: border-box;
+  user-select: none;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  transition: background var(--dur-fast, 120ms) var(--ease-default, ease-out),
+              color var(--dur-fast, 120ms) var(--ease-default, ease-out),
+              border-color var(--dur-fast, 120ms) var(--ease-default, ease-out),
+              box-shadow var(--dur-fast, 120ms) var(--ease-default, ease-out),
+              max-width 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              flex-basis 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              padding 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              margin 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 180ms ease,
+              transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.tabItem:active {
+  transform: scale(0.985);
+}
+
+.tabItem:hover {
+  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-primary, #111111);
+}
+
+.tabItemActive {
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #111111);
+  font-weight: 500;
+  border-color: var(--border-subtle, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+/* 入场与离场动画 */
+@keyframes tabSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateX(-6px);
+    max-width: 0;
+    flex-basis: 0px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-right: -4px;
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+    max-width: 180px;
+    flex-basis: 150px;
+    padding-left: 8px;
+    padding-right: 4px;
+    margin-right: 0;
+  }
+}
+
+.tabItemEntering {
+  animation: tabSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.tabItemLeaving {
+  max-width: 0 !important;
+  min-width: 0 !important;
+  flex-basis: 0px !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  margin-left: 0 !important;
+  margin-right: -4px !important;
+  opacity: 0 !important;
+  transform: scale(0.88) translateX(-4px) !important;
+  pointer-events: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.tabTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tabCloseBtn {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary, #999999);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.4;
+  transition: background var(--dur-fast, 120ms), opacity var(--dur-fast, 120ms), color var(--dur-fast, 120ms), transform var(--dur-fast, 120ms);
+}
+
+.tabItem:hover .tabCloseBtn {
+  opacity: 0.75;
+}
+
+.tabItemActive .tabCloseBtn {
+  opacity: 0.75;
+}
+
+.tabCloseBtn:hover {
+  background: var(--tint-hover, rgba(0, 0, 0, 0.08));
+  color: var(--text-primary, #111111);
+  opacity: 1 !important;
+}
+
+.tabCloseBtn:active {
+  transform: scale(0.9);
+}
+
+/* 新建标签按钮（加号） */
+.newTabBtn {
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  flex: 0 0 26px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #666666);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  transition: background var(--dur-fast, 120ms) var(--ease-default, ease-out),
+              color var(--dur-fast, 120ms) var(--ease-default, ease-out),
+              opacity 160ms var(--ease-default, ease-out),
+              transform 120ms var(--ease-default, ease-out),
+              width 160ms var(--ease-default, ease-out),
+              min-width 160ms var(--ease-default, ease-out),
+              margin 160ms var(--ease-default, ease-out);
+}
+
+.newTabBtn:hover {
+  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-primary, #111111);
+}
+
+.newTabBtn:active {
+  transform: scale(0.92);
+  background: rgba(0, 0, 0, 0.09);
+}
+
+.inFlow {
+  margin-left: 2px;
+}
+
+.pinned {
+  opacity: 0;
+  width: 0;
+  min-width: 0;
+  flex: 0 0 0px;
+  transform: scale(0.85);
+  pointer-events: none;
+  overflow: hidden;
+  margin: 0;
+}
+
+.hasOverflow .pinned {
+  opacity: 1;
+  width: 26px;
+  min-width: 26px;
+  flex: 0 0 26px;
+  transform: scale(1);
+  pointer-events: auto;
+  margin-right: 4px;
+}
+
+.hasOverflow .inFlow {
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  min-width: 0;
+  flex: 0 0 0px;
+  margin: 0;
+  overflow: hidden;
+}
+
+.fixedCluster {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 2px;
+  position: relative;
+  z-index: 6;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}

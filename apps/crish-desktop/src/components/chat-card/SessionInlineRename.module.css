@@ -48,7 +48,7 @@
 }
 
 .titleBtn:hover:not(.disabled) {
-  background: var(--bg-hover);
+  background: var(--bg-hover, hsl(35 20% 92% / 0.6));
 }
 
 .titleBtn.disabled {

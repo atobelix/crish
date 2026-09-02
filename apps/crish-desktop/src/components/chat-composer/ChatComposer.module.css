@@ -400,7 +400,7 @@
 }
 
 .planExpandedStep.completed .planStepDot {
-  background: var(--brand, #10b981);
+  background: var(--brand);
 }
 
 .planExpandedStep.active .planStepDot {
@@ -852,9 +852,9 @@
   gap: 4px;
 }
 
-/* ---- Plus Button (32x32 正圆按钮，无边框，浅灰底) ---- */
+/* ---- Plus Button (32x32 正圆按钮，无边框，轻柔微光) ---- */
 .plusBtn {
-  background: var(--bg-surface, color-mix(in srgb, var(--bg-secondary) 50%, var(--bg-elevated)));
+  background: var(--tint-hover, color-mix(in srgb, var(--text-primary) 3.5%, transparent));
   border: none;
   cursor: pointer;
   width: 32px;
@@ -874,14 +874,11 @@
     color var(--transition-micro, 100ms ease);
 }
 
-.plusBtn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
+.plusBtn:hover,
+.plusBtn:active,
 .plusBtn.isOpen,
 .plusBtn.isOn {
-  background: var(--tint-active, rgba(0, 0, 0, 0.08));
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 

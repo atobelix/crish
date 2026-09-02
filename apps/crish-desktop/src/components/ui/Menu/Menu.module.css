@@ -1,6 +1,4 @@
-/* ui/Menu — SmartExpandablePanel Design System Specification
- * Single hairline border (#e2dfd9 / #2b2926), Zero-Blue palette, concentric radii (14px/8px)
- */
+/* ui/Menu/Menu.module.css — 现代化弹性自适应菜单基座样式规范 */
 
 /* wrapper 才和全屏 Dialog 面板同级；只给 .menuContent 设 z 压不住 isolation:isolate 的壳 */
 :global([data-radix-popper-content-wrapper]):has(.menuContent) {
@@ -12,30 +10,63 @@
   outline: none;
   pointer-events: auto;
   min-width: 180px;
+  max-width: min(340px, calc(100vw - 16px));
   box-sizing: border-box;
   max-height: min(
-    var(--radix-popover-content-available-height, 360px),
-    70vh,
-    360px
+    var(--radix-popover-content-available-height, calc(100vh - 32px)),
+    calc(100vh - 32px),
+    640px
   );
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb, var(--border-color)) transparent;
+
   padding: 6px;
-  border-radius: 14px;
-  border: 1px solid var(--border-subtle);
-  background: var(--sep-bg-panel, var(--bg-elevated));
+  border-radius: var(--sep-radius-outer, 14px);
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card, hsl(0 0% 100%));
   backdrop-filter: blur(28px) saturate(160%);
   -webkit-backdrop-filter: blur(28px) saturate(160%);
-  box-shadow: var(--shadow-dropdown);
+  box-shadow: var(--sep-shadow);
   display: flex;
   flex-direction: column;
   gap: 2px;
   font-family: var(--font-sans);
-  color: var(--text-primary);
+}
+
+.menuContent[data-state='open'] {
+  animation: cds-popover-enter var(--transition-popover-enter, 180ms cubic-bezier(0.16, 1, 0.3, 1)) forwards;
+}
+
+.menuContent[data-state='closed'] {
+  animation: none;
+  display: none;
+}
+
+/* WebKit / Blink 细滚动条 */
+.menuContent::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.menuContent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.menuContent::-webkit-scrollbar-thumb {
+  background: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent));
+  border-radius: 9999px;
+}
+
+.menuContent::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
+}
+
+.menuContent::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .menuTitle {
@@ -45,6 +76,7 @@
   font-weight: 500;
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 2px;
+  user-select: none;
 }
 
 .menuList {
@@ -53,6 +85,7 @@
   gap: 2px;
 }
 
+/* ── 核心改造：解锁高度死锁，支持弹性自适应与多行排版 ── */
 .menuItem {
   display: flex;
   align-items: center;
@@ -60,35 +93,51 @@
   border: none;
   background: transparent;
   text-align: left;
-  padding: 0 10px;
-  border-radius: 8px;
-  height: 28px;
-  min-height: 28px;
+  padding: 8px 10px;
+  border-radius: var(--sep-item-radius, 8px);
+  min-height: 32px;
+  height: auto;
   font-family: inherit;
   font-size: var(--font-size-sm, 13px);
   color: var(--text-primary);
   cursor: pointer;
-  transition: background-color var(--transition-micro, 120ms) ease,
-              color var(--transition-micro, 120ms) ease;
-  width: 100%;
   box-sizing: border-box;
-}
-
-.menuItem:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.menuItem:focus-visible {
+  width: 100%;
+  position: relative;
+  user-select: none;
   outline: none;
-  background: var(--bg-hover);
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease),
+    box-shadow var(--transition-micro, 100ms ease);
+}
+
+/* Hover 状态：采用微背景 tint-hover，边框绝不加深变黑 */
+.menuItem:hover:not(.menuItemDisabled) {
+  background: var(--tint-hover);
   color: var(--text-primary);
+}
+
+/* 键盘焦点高亮 (WAI-ARIA Focus Visible) */
+.menuItem:focus-visible,
+.menuItem.isFocused {
+  outline: none;
+  background: var(--tint-hover);
+  color: var(--text-primary);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+}
+
+.menuItem.isSelected,
+.menuItem[data-selected='true'] {
+  background: var(--tint-active);
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 .menuItemDisabled {
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--text-tertiary);
   cursor: not-allowed;
-  opacity: var(--opacity-disabled, 0.5);
+  opacity: var(--opacity-disabled, 0.45);
 }
 
 .menuItemDisabled:hover {
@@ -96,26 +145,80 @@
 }
 
 .menuItemDanger {
-  color: var(--sep-danger-color, hsl(0 84% 60%));
+  color: var(--color-error, hsl(0 84% 60%));
+}
+
+.menuItemDanger:hover {
+  background: var(--color-error-bg, hsl(0 84% 60% / 0.08));
+  color: var(--color-error, hsl(0 84% 60%));
 }
 
 .menuItemIcon {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+.menuItemDanger .menuItemIcon {
   color: inherit;
 }
 
-.menuItemLabel {
+.menuItemContent {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.menuItemLabel {
+  display: block;
+  font-size: var(--font-size-sm, 13px);
+  line-height: var(--line-height-ui, 1.35);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.menuItemHint {
-  font-size: var(--sep-font-size-sm, 11px);
-  color: var(--sep-text-muted, #8b8780);
+.menuItemDescription {
+  display: block;
+  font-size: var(--font-size-xs, 11px);
+  color: var(--text-tertiary);
+  line-height: var(--line-height-ui, 1.35);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+}
+
+.menuItemShortcut {
+  font-size: var(--font-size-xs, 11px);
+  font-family: var(--font-mono, monospace);
+  color: var(--text-tertiary);
+  padding: 1px 4px;
+  background: var(--tint-subtle);
+  border-radius: var(--radius-sm, 4px);
+  letter-spacing: 0.5px;
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+.menuItemChevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  margin-left: auto;
+  opacity: 0.7;
+}
+
+.menuItemCheck {
+  flex-shrink: 0;
+  color: var(--brand-deep, hsl(160 84% 30%));
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
 }
 
 /* 1px Hardware-Aligned Divider */
@@ -123,8 +226,21 @@
   height: 0;
   min-height: 0;
   border: none;
-  border-top: 1px solid var(--sep-divider-color, var(--border-subtle));
-  margin: 3px var(--sep-padding, 6px);
+  border-top: 1px solid var(--border-subtle);
+  margin: 3px 6px;
   flex-shrink: 0;
   padding: 0;
+}
+
+/* 节能与减弱动态偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .menuContent {
+    animation: none;
+    transition: opacity 100ms ease;
+  }
+}
+
+html[data-perf-tier='eco'] .menuContent {
+  animation: none;
+  transition: none;
 }

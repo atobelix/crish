@@ -1,40 +1,46 @@
 /**
- * 冷启动门闩：默认 clean 单 chat；设置可 restore 上次 workspace（含 multi-unit）。
+ * 冷启动门闩：默认 clean 单 chat；设置可 restore 上次 workspace。
  *
- * Policy (D-D / S3):
- * - Default OFF → safe single-chat clean (never force multi-unit restore)
- * - Opt-in `ui.restoreLastWorkspace` → restore tree + tabs when tree validates
- * - Opt-in + invalid/corrupt multi-unit tree → same clean fallback
- *
- * @see analysis/shell_workspace_redesign.md §4.6.1
- * @see docs/architecture/multi-unit-layout-restore-adr.md
+ * restore 路径只调维 01 `migrateToLeafOwnedTabs` 一次，之后 shell 只 setShellReady。
+ * 运行期不写 openTabs / legacy map。
  */
 
+import { loadLegacyOpenTabsMap } from '../store/workspace-shell';
 import {
-  loadLegacyOpenTabsMap,
-  ensureAdapterShape,
-  ensureChatOnlyTree,
-} from '../store/workspace-shell';
-import {
-  validateRestorableLayoutTree,
-  syncShellDocksFromTree,
-  listBoundSessionIdsFromTree,
   applySafeCleanColdStart,
   RESTORE_LAST_WORKSPACE_LS_KEY,
   RESTORE_LAST_WORKSPACE_SETTING_KEY,
 } from '../store/workspace-shell/layoutRestorePolicy';
 import { getSessionById } from '../store/sessionStore';
-import { listChatLeaves } from '../store/layout-tree';
+import * as layoutTreePkg from '../store/layout-tree';
 import { getCompositionRoot } from './compositionRoot';
 import { getSettingsState } from '../store/storeAccess';
 import type { Settings } from '../api/clientApi';
+import { clearLegacyOpenTabsMap } from '../api/workspaceChromeTabs';
+import type { LayoutTree } from '../store/layout-tree/types';
 
-/** @deprecated use RESTORE_LAST_WORKSPACE_SETTING_KEY — kept for call-site clarity. @see RESTORE_LAST_WORKSPACE_SETTING_KEY */
+/** @deprecated use RESTORE_LAST_WORKSPACE_SETTING_KEY */
 const RESTORE_KEY = RESTORE_LAST_WORKSPACE_SETTING_KEY;
+
+type MigrateFn = (input: {
+  tree: unknown;
+  openTabsMap?: Readonly<Record<string, string[]>>;
+  activeLeafId?: string | null;
+  resolveMeta?: (
+    sessionId: string
+  ) => { title?: string; workspaceKey?: string } | undefined;
+}) =>
+  | { ok: true; tree: LayoutTree; didMigrate: boolean }
+  | { ok: false; tree: LayoutTree; reason: string };
+
+function resolveMigrateFn(): MigrateFn | null {
+  const fn = (layoutTreePkg as { migrateToLeafOwnedTabs?: MigrateFn })
+    .migrateToLeafOwnedTabs;
+  return typeof fn === 'function' ? fn : null;
+}
 
 export function readRestoreLastWorkspace(): boolean {
   try {
-    // 优先 appSettings（经 compositionRoot.layout）
     const settings = getCompositionRoot().layout.getAppSettings() as
       | Record<string, unknown>
       | undefined;
@@ -54,20 +60,19 @@ export function readRestoreLastWorkspace(): boolean {
     if (raw === '1' || raw === 'true') return true;
     if (raw === '0' || raw === 'false') return false;
   } catch {
-    /* swallow-ok: 恢复开关读取失败时回退默认 clean 启动 */
+    /* swallow-ok */
   }
-  return false; // 默认 clean
+  return false;
 }
 
 /**
  * 在首帧工作区绘制前调用（bootstrap 链）。
- * 保证 clean 模式不会闪现多 leaf 脏布局；restore 仅在树校验通过时保留 multi-unit。
+ * clean：单 draft 叶，不读 map。
+ * restore：维 01 迁移一次，shell 只 setShellReady。
  */
 export function hydrateWorkspaceShell(): void {
   const root = getCompositionRoot();
   const restore = readRestoreLastWorkspace();
-  const shell = root.shell.getState();
-  // layout-tree via compositionRoot.tree（≠ root.layout / layoutStore）
   const treeStore = root.tree.getState();
 
   if (!restore) {
@@ -76,84 +81,43 @@ export function hydrateWorkspaceShell(): void {
     return;
   }
 
-  // restore opt-in：校验持久化树；失败则安全单 chat
-  const verdict = validateRestorableLayoutTree(treeStore.tree);
-  if (!verdict.ok) {
-    if (import.meta.env?.DEV) {
-      console.warn(
-        '[hydrateWorkspaceShell] restore rejected:',
-        verdict.reason,
-        '→ clean single chat'
-      );
-    }
-    applySafeCleanColdStart();
-    root.shell.setShellReady(true);
-    return;
-  }
-
-  // 有效树：归一 adapter（不折叠 multi），再恢复 tabs
-  ensureAdapterShape();
+  const migrate = resolveMigrateFn();
   const map = loadLegacyOpenTabsMap();
-  const known = new Map<string, { title?: string; folder?: string }>();
   const sessions = root.layout.getSessions() || [];
-  for (const s of sessions) {
-    known.set(s.id, { title: s.title, folder: s.folder });
-  }
-  for (const id of Object.keys(map).flatMap((k) => map[k] || [])) {
-    if (!known.has(id)) {
-      const s = getSessionById(id);
-      if (s) known.set(s.id, { title: s.title, folder: s.folder });
-    }
-  }
-  // 树内已绑定 session 也记入 known（map 不全时仍能建 tab）
-  for (const sid of listBoundSessionIdsFromTree(treeStore.tree)) {
-    if (!known.has(sid)) {
-      const s = getSessionById(sid);
-      if (s) known.set(sid, { title: s.title, folder: s.folder });
-      else known.set(sid, {});
-    }
-  }
+  const resolveMeta = (id: string) => {
+    const s =
+      sessions.find((x) => x.id === id) ?? getSessionById(id) ?? undefined;
+    if (!s) return undefined;
+    return { title: s.title, workspaceKey: s.folder };
+  };
 
-  if (Object.keys(map).length) {
-    // 勿用默认 collapsed dock 投影到已恢复的 multi-unit 树
-    shell.migrateFromOpenTabsMap(map, known, { projectActiveDock: false });
-  } else {
-    // 无 open-tabs map：按树内绑定 session 建 tabs，或 clean draft
-    const bound = listBoundSessionIdsFromTree(root.tree.getState().tree);
-    if (bound.length === 0) {
-      shell.resetToCleanDraft();
-      // reset 会 ensureChatOnlyTree：单 chat 无 session 时保留单 leaf
-      ensureChatOnlyTree();
-    } else {
-      // workspaceKey：优先 known.folder，否则 general
-      const byFolder: Record<string, string[]> = {};
-      for (const sid of bound) {
-        const meta = known.get(sid);
-        const fk = (meta?.folder || '').trim() || '__general__';
-        if (!byFolder[fk]) byFolder[fk] = [];
-        byFolder[fk]!.push(sid);
+  if (migrate) {
+    const result = migrate({
+      tree: treeStore.tree,
+      openTabsMap: map,
+      activeLeafId: treeStore.activeLeafId,
+      resolveMeta,
+    });
+    if (!result.ok) {
+      if (import.meta.env?.DEV) {
+        console.warn(
+          '[hydrateWorkspaceShell] migrate failed:',
+          result.reason,
+          '→ clean single chat'
+        );
       }
-      shell.migrateFromOpenTabsMap(byFolder, known, {
-        projectActiveDock: false,
-      });
+      applySafeCleanColdStart();
+      root.shell.setShellReady(true);
+      clearLegacyOpenTabsMap();
+      return;
     }
+    treeStore.setTree(result.tree);
   }
 
-  // 从树反推每个 tab 的 rightDock（保留 multi-unit 坞状态元数据）
-  const restoredTree = root.tree.getState().tree;
-  syncShellDocksFromTree(restoredTree);
-  ensureAdapterShape();
-
-  // 多 unit 时全局 toolColumnCollapsed 不应藏邻居 tool
-  const chats = listChatLeaves(restoredTree.root);
-  if (chats.length > 1) {
-    root.tree.getState().setToolColumnCollapsed(false);
-  }
-
+  clearLegacyOpenTabsMap();
   root.shell.setShellReady(true);
 }
 
-/** 供设置页写入 */
 export function setRestoreLastWorkspace(value: boolean): void {
   try {
     localStorage.setItem(
@@ -161,7 +125,7 @@ export function setRestoreLastWorkspace(value: boolean): void {
       value ? 'true' : 'false'
     );
   } catch {
-    /* swallow-ok: 恢复开关写失败仅影响下次启动还原 */
+    /* swallow-ok */
   }
   const prev = (getSettingsState().appSettings || {}) as Record<string, unknown>;
   const ui = {

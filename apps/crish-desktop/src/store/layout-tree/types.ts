@@ -1,25 +1,41 @@
 /**
  * 二叉树布局模型 — 类型定义。
  *
- * 参考 VS Code SerializableGrid：每个节点要么是 leaf（面板），
- * 要么是 branch（严格二叉分割）。支持任意深度的水平/垂直嵌套。
+ * 树上只有 chat 叶；会话身份在 SessionTab.sessionId，不在叶字段。
+ * 参考 VS Code SerializableGrid：每个节点要么是 leaf，要么是严格二叉 branch。
  */
 
-/** 叶子节点：一个面板（可含多个 tab） */
+import {
+  normalizeSessionTab,
+  isRealSessionId,
+  activeSessionIdOf,
+  createDefaultDock,
+  type SessionTab,
+  type RightToolDockState,
+} from './sessionTabModel';
+
+export type { SessionTab, RightToolDockState } from './sessionTabModel';
+
+/** 本战役起 LayoutTree.version。v2 = 旧 leaf.sessionId + tabs: string[] + 可含 tool 叶 */
+export const LAYOUT_TREE_VERSION = 3 as const;
+
+/** 叶子节点：一片 chat 窗格，自己拥有会话标签 */
 export interface LayoutLeaf {
   type: 'leaf';
   id: string;
-  /** 面板类型标识：'chat' | 'diff' | 'terminal' | 'files' | 'agent' | ... */
-  panelId: string;
-  /** 该面板内的 tab id 列表 */
-  tabs: string[];
-  /** 当前激活的 tab id */
-  activeTab: string;
+  /** 树上只有 chat 叶（I5） */
+  panelId: 'chat';
+  /** 权威。只放已发送成功的真会话；草稿不进此数组 */
+  tabs: SessionTab[];
   /**
-   * 多 chat 分屏：leaf 绑定的会话 id。
-   * 有值时 ChatCard 优先用此 session，而非 shell 全局 active。
+   * 当前选中的真会话 tab。空字符串 = 本叶处于未提交的新对话界面
+   * （条带无选中、不创建标签）。非空时必须属于 tabs[].tabId。
    */
-  sessionId?: string;
+  activeTabId: string;
+  /**
+   * 未提交新对话时本叶的坞。有活动 tab 时以 tab.dock 为准。
+   */
+  dock?: RightToolDockState;
 }
 
 /** 分支节点：严格二叉分割 */
@@ -40,17 +56,18 @@ export type LayoutNode = LayoutLeaf | LayoutBranch;
 /** 完整布局树 */
 export interface LayoutTree {
   root: LayoutNode;
-  version: number;
+  version: typeof LAYOUT_TREE_VERSION | number;
 }
 
 /** 渲染用平坦面板描述（flattenToRenderList 输出） */
 export interface FlatPanel {
   leafId: string;
-  panelId: string;
-  tabs: string[];
-  activeTab: string;
-  /** 多 chat 分屏绑定的会话 id（透传自 LayoutLeaf.sessionId） */
-  sessionId?: string;
+  panelId: 'chat';
+  tabs: SessionTab[];
+  activeTabId: string;
+  dock: RightToolDockState;
+  /** 派生自活动 tab，禁止当写源 */
+  sessionId: string;
   /** 相对于整个工作区的 rect（0-1 百分比） */
   rect: { x: number; y: number; width: number; height: number };
 }
@@ -86,10 +103,9 @@ export interface TreeDragSource {
   type: 'leaf' | 'tab';
   /** 源 leaf id */
   leafId: string;
-  /** 源 tab id（leaf 拖拽时等于 leafId，tab 拖拽时为具体 tab） */
+  /** SessionTab.tabId（不再是 panelId 字符串） */
   tabId: string;
-  /** 源面板类型（用于 ghost 标题、applyDrop 决策） */
-  panelId: string;
+  panelId: 'chat';
 }
 
 // ── 业务常量（单一来源，禁止在其它文件硬编码） ──────────────────────
@@ -108,42 +124,45 @@ export function clampSplitRatio(ratio: number): number {
 
 let idCounter = 0;
 
-/** 生成唯一节点 id */
-function generateNodeId(prefix = 'node'): string {
+/** 生成唯一节点 id（splitTab 新叶与 createLeaf 同一生成器） */
+export function generateNodeId(prefix = 'node'): string {
   return `${prefix}-${Date.now().toString(36)}-${(idCounter++).toString(36)}`;
 }
 
+export interface CreateLeafInput {
+  tabs?: SessionTab[];
+  activeTabId?: string;
+  dock?: Partial<RightToolDockState>;
+  /** 仅测试夹具；生产走 generateNodeId */
+  id?: string;
+}
+
 /**
- * 创建叶子节点。
+ * 创建 chat 叶子：缺省为空的新对话界面（tabs 空、无选中标签）。
  *
- * 不变量归一化（系统性防御 H4）：
- * 1. tabs 永远非空 — undefined 或 [] 都回退到 [panelId]。
- *    旧实现 `tabs ?? [panelId]` 仅处理 undefined，对 `tabs=[]` 放行，
- *    导致 migrateFromColumns 处理空 cards 旧 group 时产生 `tabs=[]` leaf。
- * 2. activeTab 必在 tabs 中 — 否则回退到 tabList[0]。
- *    防止 activeTab 指向已被移除的 tab（如旧数据残留）。
- *
- * 在工厂函数层归一化是单一可信源：所有调用方（migrateFromColumns、
- * splitLeaf、mergeLeafInto 等）自动受益，无需在各调用点重复防御。
+ * 归一化：
+ * 1. 草稿 tab 丢弃，只保留真会话
+ * 2. 无真会话 → activeTabId 空（新对话界面）
+ * 3. 有真会话且 active 命中 → 用它；否则回退 tabs[0]
+ * 4. 不再接受 panelId / 叶级 sessionId
  */
-export function createLeaf(
-  panelId: string,
-  tabs?: string[],
-  activeTab?: string,
-  sessionId?: string
-): LayoutLeaf {
-  const tabList = tabs && tabs.length > 0 ? tabs : [panelId];
-  const activeTabResolved =
-    activeTab && tabList.includes(activeTab) ? activeTab : tabList[0]!;
-  const leaf: LayoutLeaf = {
+export function createLeaf(input?: CreateLeafInput): LayoutLeaf {
+  const id = input?.id ?? generateNodeId('leaf');
+  const tabs = (input?.tabs ?? [])
+    .map((t) => normalizeSessionTab(t))
+    .filter((t) => isRealSessionId(t.sessionId));
+  const activeTabId =
+    input?.activeTabId && tabs.some((t) => t.tabId === input.activeTabId)
+      ? input.activeTabId
+      : tabs[0]?.tabId ?? '';
+  return {
     type: 'leaf',
-    id: generateNodeId('leaf'),
-    panelId,
-    tabs: tabList,
-    activeTab: activeTabResolved,
+    id,
+    panelId: 'chat',
+    tabs,
+    activeTabId,
+    dock: createDefaultDock(input?.dock),
   };
-  if (sessionId) leaf.sessionId = sessionId;
-  return leaf;
 }
 
 /** 创建分支节点 */
@@ -162,12 +181,25 @@ export function createBranch(
   };
 }
 
-/** 创建单面板默认布局 */
-export function createDefaultTree(panelId = 'chat'): LayoutTree {
+/** 创建单 chat 叶、未提交新对话界面的默认布局 */
+export function createDefaultTree(): LayoutTree {
   return {
-    root: createLeaf(panelId),
-    version: 2,
+    root: createLeaf(),
+    version: LAYOUT_TREE_VERSION,
   };
+}
+
+/** 根删光兜底：单叶新对话界面（不保留已删根 id，不创建标签） */
+export function createFallbackDraftTree(version: number = LAYOUT_TREE_VERSION): LayoutTree {
+  return {
+    version,
+    root: createLeaf(),
+  };
+}
+
+/** flatten 用：活动 tab 的 sessionId（派生，禁止当写源） */
+export function leafActiveSessionId(leaf: LayoutLeaf): string {
+  return activeSessionIdOf(leaf);
 }
 
 // ── 类型守卫 ──────────────────────────────────────────────────────────

@@ -30,13 +30,13 @@
       'classic-gray': '#f1f3f5',
       'cream': '#fcf8f2',
       'sand': '#f9f6f0',
-      'warm-gray': '#f4f5f7'
+      'warm-gray': 'hsl(35 8% 95.2%)'
     };
 
     if (t === 'dark') {
       root.style.setProperty('--loader-bg', '#1b1b1b');
     } else {
-      root.style.setProperty('--loader-bg', (skin && skinMap[skin]) || '#f4f5f7');
+      root.style.setProperty('--loader-bg', (skin && skinMap[skin]) || 'hsl(35 8% 95.2%)');
     }
 
     // 5. 读取并注入字体配置

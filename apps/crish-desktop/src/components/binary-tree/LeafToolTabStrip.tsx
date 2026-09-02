@@ -13,16 +13,13 @@ import {
   Maximize2,
   Minimize2,
 } from 'lucide-react';
-import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import { SidePanelLauncherHub } from './SidePanelLauncherHub';
 import {
-  useLayoutTreeStore,
   useLayoutStore,
   selectTabModeEnabled,
-  useWorkspaceShellStore,
-  collapseActiveTabRightDock,
   openToolInSession,
   openToolInActiveTab,
+  getCompositionRoot,
   type LayoutLeaf,
 } from '../../store/storeAccess';
 import { Tooltip } from '../ui';
@@ -31,7 +28,6 @@ import {
   type MenuItem,
 } from '../ui/SmartExpandablePanel';
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
-import { useSessionTabDrag } from '../shell/SessionTabDragContext';
 import { viewRegistry } from '../../services/view-registry';
 import { SidePanelNavToolbar } from './SidePanelNavToolbar';
 import styles from './LeafToolTabStrip.module.css';
@@ -40,17 +36,58 @@ export interface LeafToolTabStripProps {
   leaf?: LayoutLeaf;
   leafId?: string;
   sessionId?: string | null;
+  /** 本叶 active SessionTab.tabId，写坞用 */
+  sessionTabId?: string;
   tabs?: string[];
   activeTab?: string;
   onSelectTab?: (tabId: string) => void;
   onCloseTab?: (tabId: string) => void;
   onAddTab?: (panelId: string) => void;
   onToggleMaximize?: () => void;
-  onCollapse?: () => void;
   isMaximized?: boolean;
   showNavToolbar?: boolean;
-  showCollapseBtn?: boolean;
   className?: string;
+}
+
+type DockPatch = {
+  collapsed?: boolean;
+  openPanelIds?: string[];
+  activePanelId?: string | null;
+};
+
+function updateTabDock(tabId: string, patch: DockPatch): void {
+  const fn = (
+    getCompositionRoot().shell as unknown as {
+      updateTabDock?: (id: string, p: DockPatch) => void;
+    }
+  ).updateTabDock;
+  fn?.(tabId, patch);
+}
+
+function readDockFromLeaf(leaf: LayoutLeaf | undefined): {
+  openPanelIds: string[];
+  activePanelId: string;
+  sessionId: string | null;
+  sessionTabId: string;
+} | null {
+  if (!leaf) return null;
+  const raw = leaf.tabs as unknown;
+  if (!Array.isArray(raw)) return null;
+  const sessionTabs = raw.filter(
+    (t): t is { tabId: string; sessionId: string; dock?: { openPanelIds?: string[]; activePanelId?: string | null } } =>
+      typeof t === 'object' && t !== null && typeof (t as { tabId?: string }).tabId === 'string'
+  );
+  if (sessionTabs.length === 0) return null;
+  const activeTabId = (leaf as LayoutLeaf & { activeTabId?: string }).activeTabId;
+  const tab =
+    sessionTabs.find((t) => t.tabId === activeTabId) ?? sessionTabs[0];
+  if (!tab) return null;
+  return {
+    openPanelIds: tab.dock?.openPanelIds ?? [],
+    activePanelId: tab.dock?.activePanelId ?? '',
+    sessionId: tab.sessionId ?? null,
+    sessionTabId: tab.tabId,
+  };
 }
 
 export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
@@ -58,36 +95,27 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
     leaf,
     leafId: propLeafId,
     sessionId: propSessionId,
+    sessionTabId: propSessionTabId,
     tabs: propTabs,
     activeTab: propActiveTab,
     onSelectTab,
     onCloseTab,
     onAddTab,
     onToggleMaximize,
-    onCollapse,
     isMaximized: propIsMaximized,
     showNavToolbar,
-    showCollapseBtn = true,
     className,
   }) => {
+    const dockFromLeaf = readDockFromLeaf(leaf);
     const leafId = propLeafId ?? leaf?.id ?? '';
-    const sessionId = propSessionId ?? leaf?.sessionId ?? null;
-    const rawTabs = propTabs ?? leaf?.tabs ?? [];
+    const sessionId = propSessionId ?? dockFromLeaf?.sessionId ?? null;
+    const sessionTabId = propSessionTabId ?? dockFromLeaf?.sessionTabId ?? '';
+    const rawTabs = propTabs ?? dockFromLeaf?.openPanelIds ?? [];
     const tabs = useMemo(() => rawTabs, [rawTabs]);
-    const activeTab = propActiveTab ?? leaf?.activeTab ?? (tabs[0] || '');
+    const activeTab =
+      propActiveTab ?? dockFromLeaf?.activePanelId ?? (tabs[0] || '');
 
-    const setActiveTab = useLayoutTreeStore((s) => s.setActiveTab);
-    const removeTabFromLeaf = useLayoutTreeStore((s) => s.removeTabFromLeaf);
     const tabModeEnabled = useLayoutStore(selectTabModeEnabled);
-    const { startToolDrag } = useSessionTabDrag();
-
-    const dockOpenIds = useWorkspaceShellStore((s) => {
-      const sid = (sessionId || '').trim();
-      const tab = sid
-        ? s.openTabs.find((t) => t.sessionId === sid)
-        : s.openTabs.find((t) => t.tabId === s.activeTabId);
-      return tab?.rightDock?.openPanelIds;
-    });
 
     const registryVersion = useSyncExternalStore(
       (cb) => viewRegistry.subscribe(cb),
@@ -158,12 +186,12 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         if (tabId !== activeTab) {
           if (onSelectTab) {
             onSelectTab(tabId);
-          } else if (leafId) {
-            setActiveTab(leafId, tabId);
+          } else if (sessionTabId) {
+            updateTabDock(sessionTabId, { activePanelId: tabId });
           }
         }
       },
-      [activeTab, leafId, onSelectTab, setActiveTab]
+      [activeTab, onSelectTab, sessionTabId]
     );
 
     const triggerCloseTab = useCallback(
@@ -173,15 +201,15 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         }
         if (closingTabIds.has(tabId)) return;
 
-        // 如果关闭的是激活 Tab，零视觉延迟切换到相邻 Tab
+        // 关闭的是激活工具 tab：先切 dock.activePanelId，不是 leaf.activeTabId
         if (tabId === activeTab && tabs.length > 1) {
           const idx = tabs.indexOf(tabId);
           const nextActive = tabs[idx === 0 ? 1 : idx - 1];
           if (nextActive) {
             if (onSelectTab) {
               onSelectTab(nextActive);
-            } else if (leafId) {
-              setActiveTab(leafId, nextActive);
+            } else if (sessionTabId) {
+              updateTabDock(sessionTabId, { activePanelId: nextActive });
             }
           }
         }
@@ -196,19 +224,28 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
           });
           if (onCloseTab) {
             onCloseTab(tabId);
-          } else if (leafId) {
-            removeTabFromLeaf(leafId, tabId);
+          } else if (sessionTabId) {
+            const nextIds = tabs.filter((id) => id !== tabId);
+            if (nextIds.length === 0) {
+              updateTabDock(sessionTabId, {
+                collapsed: true,
+                openPanelIds: [],
+                activePanelId: null,
+              });
+            } else {
+              updateTabDock(sessionTabId, {
+                openPanelIds: nextIds,
+              });
+            }
           }
         }, 220);
       },
       [
         activeTab,
         closingTabIds,
-        leafId,
         onCloseTab,
         onSelectTab,
-        removeTabFromLeaf,
-        setActiveTab,
+        sessionTabId,
         tabs,
       ]
     );
@@ -217,18 +254,13 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
       (pid: string) => {
         if (onAddTab) {
           onAddTab(pid);
+        } else if (sessionId) {
+          openToolInSession(sessionId, pid);
         } else {
-          if (sessionId) {
-            openToolInSession(sessionId, pid);
-          } else {
-            openToolInActiveTab(pid);
-          }
-          if (tabModeEnabled && leafId) {
-            setActiveTab(leafId, pid);
-          }
+          openToolInActiveTab(pid);
         }
       },
-      [leafId, sessionId, setActiveTab, tabModeEnabled, onAddTab]
+      [sessionId, onAddTab]
     );
 
     const handleToggleMaximize = useCallback(() => {
@@ -239,20 +271,7 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
       }
     }, [onToggleMaximize]);
 
-    const handleCollapse = useCallback(() => {
-      if (onCollapse) {
-        onCollapse();
-      } else if (sessionId) {
-        openToolInSession(sessionId, 'chat');
-      } else {
-        collapseActiveTabRightDock(true);
-      }
-    }, [onCollapse, sessionId]);
-
-    const occupied = useMemo(
-      () => new Set(dockOpenIds?.length ? dockOpenIds : tabs),
-      [dockOpenIds, tabs]
-    );
+    const occupied = useMemo(() => new Set(tabs), [tabs]);
     const availablePanels = useMemo(
       () =>
         viewRegistry
@@ -387,9 +406,10 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                     onMouseDown={(e) => {
                       if (e.button === 1) e.preventDefault();
                     }}
-                    onPointerDown={(e) =>
-                      startToolDrag(leafId, tabId, tabId, label, e)
-                    }
+                    onPointerDown={(e) => {
+                      // 工具 tab 不再切会话树；顺序走 updateTabDock
+                      e.stopPropagation();
+                    }}
                     data-tool-tab-id={tabId}
                     data-tab-id={tabId}
                   >
@@ -416,15 +436,13 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                   </div>
                 );
               })}
-              {renderAddButton(true)}
+              {!hasOverflow && renderAddButton(true)}
             </div>
           </div>
 
           {/* 右侧固定操作区 */}
           <div
-            className={`${styles.fixedCluster} ${
-              !showCollapseBtn ? styles.dockSlotReserved : ''
-            } side-panel-tab-fixed-cluster`}
+            className={`${styles.fixedCluster} side-panel-tab-fixed-cluster`}
           >
             {renderAddButton(false)}
             <Tooltip
@@ -444,19 +462,6 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                 )}
               </button>
             </Tooltip>
-            {showCollapseBtn ? (
-              <Tooltip content="收起右侧面板" side="bottom">
-                <button
-                  type="button"
-                  id="topQuickDockBtn"
-                  className={`${styles.sideBtn} ${styles.btnCollapse} top-action-btn top-side-panel-btn active side-panel-btn side-panel-btn-collapse`}
-                  onClick={handleCollapse}
-                  aria-label="收起右侧面板"
-                >
-                  <IconSidebarRight size={14} />
-                </button>
-              </Tooltip>
-            ) : null}
           </div>
         </div>
 

@@ -21,14 +21,12 @@ export function readTranslateX(el: HTMLElement): number {
 /**
  * 采集条内除源标签外的其余标签几何。
  *
- * idAttr 决定用哪个属性认标签：会话条用 data-session-id，
- * 工具叶标签条用 data-tool-tab-id。两条链路共用同一套位移动画，
- * 只在认标识这一步分叉。
+ * 会话条主键是 data-tab-id（维 06）；idAttr 仍可覆盖，供抽屉内排序复用位移。
  */
 export function collectStripTabs(
   strip: HTMLElement,
   sourceId: string,
-  idAttr: string = 'data-session-id'
+  idAttr: string = 'data-tab-id'
 ) {
   const tabs = Array.from(
     strip.querySelectorAll<HTMLElement>(`[role="tab"][${idAttr}]`)
@@ -66,12 +64,13 @@ export function leaveStrip(strip: HTMLElement | null) {
 
 export function shiftStripTabs(
   tabs: ReturnType<typeof collectStripTabs>,
-  insertIdx: number
+  insertIdx: number,
+  shiftPx: number = SESSION_TAB_STRIP_SHIFT_PX
 ) {
+  const px = Number.isFinite(shiftPx) ? shiftPx : SESSION_TAB_STRIP_SHIFT_PX;
   tabs.forEach((r, i) => {
     r.el.style.transition = `transform ${SESSION_TAB_STRIP_SHIFT_MS}ms ${SESSION_TAB_STRIP_SHIFT_EASE}`;
-    r.el.style.transform =
-      i >= insertIdx ? `translateX(${SESSION_TAB_STRIP_SHIFT_PX}px)` : '';
+    r.el.style.transform = i >= insertIdx ? `translateX(${px}px)` : '';
   });
 }
 
@@ -102,29 +101,55 @@ export const indicatorClasses = {
   pane: styles.pane || '',
 };
 
-export function createGhostPill(title: string): HTMLDivElement {
+export const ghostClasses = {
+  card: styles.card || '',
+  detached: styles.detached || '',
+};
+
+/** ghost 宽度跟源 tab；class 用 tree-drag-card，配合 is-detached。 */
+export function createGhostPill(
+  title: string,
+  sourceWidth?: number
+): HTMLDivElement {
   const ghost = document.createElement('div');
-  ghost.className = 'topbar-tab-drag-ghost';
+  const moduleClass = styles.card || '';
+  ghost.className = [moduleClass, 'tree-drag-card'].filter(Boolean).join(' ');
   ghost.setAttribute('aria-hidden', 'true');
   ghost.style.cssText = [
     'position: fixed',
     'left: 0',
     'top: 0',
     'pointer-events: none',
-    'z-index: var(--z-tooltip, 9000)',
-    'padding: 4px 12px',
-    'background: var(--bg-primary)',
-    'color: var(--text-primary)',
-    'border: 1px solid var(--border-color)',
+    'z-index: 100000',
+    'box-sizing: border-box',
+    'height: 26px',
+    'padding: 0 10px',
+    'display: flex',
+    'align-items: center',
+    'background: var(--bg-card, #ffffff)',
+    'color: var(--text-primary, #111111)',
+    'border: 1px solid var(--border-subtle, hsl(0 0% 0% / 0.15))',
     'border-radius: 6px',
-    'box-shadow: 0 4px 12px color-mix(in srgb, var(--shadow-color, #000) 18%, transparent)',
+    'box-shadow: 0 8px 24px hsl(0 0% 0% / 0.14), 0 2px 6px hsl(0 0% 0% / 0.08)',
     'font-size: 12px',
+    'font-weight: 500',
     'font-family: inherit',
     'white-space: nowrap',
-    'opacity: 0.92',
-    'will-change: transform',
+    'will-change: transform, opacity',
+    'transform: translate3d(-9999px, -9999px, 0)',
   ].join(';');
+  if (sourceWidth && sourceWidth > 0) {
+    ghost.style.width = `${Math.round(sourceWidth)}px`;
+  }
   ghost.textContent = title || '会话';
   document.body.appendChild(ghost);
   return ghost;
+}
+
+export function setGhostDetached(card: HTMLElement | null, detached: boolean) {
+  if (!card) return;
+  card.classList.toggle('is-detached', detached);
+  if (ghostClasses.detached) {
+    card.classList.toggle(ghostClasses.detached, detached);
+  }
 }

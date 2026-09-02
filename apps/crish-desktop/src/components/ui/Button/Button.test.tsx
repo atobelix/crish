@@ -146,6 +146,31 @@ describe('ui/Button', () => {
     fireEvent.click(screen.getByText('禁用'));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
+
+  it('Secondary 变体应渲染实体白卡属性并支持点击和禁用态', () => {
+    const handleClick = vi.fn();
+    const { rerender } = render(
+      <Button variant="secondary" onClick={handleClick}>
+        重建索引
+      </Button>
+    );
+    const btn = screen.getByRole('button', { name: '重建索引' });
+    expect(btn).toBeInTheDocument();
+    expect(btn).toHaveAttribute('data-variant', 'secondary');
+    expect(btn).toHaveClass(styles.buttonSecondary);
+
+    fireEvent.click(btn);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <Button variant="secondary" disabled onClick={handleClick}>
+        重建索引
+      </Button>
+    );
+    expect(btn).toBeDisabled();
+    fireEvent.click(btn);
+    expect(handleClick).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ui/IconButton', () => {

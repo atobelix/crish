@@ -203,16 +203,17 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
     const btn = document.createElement('button');
     btn.dataset.testid = 'session-more-button';
     const content = document.createElement('div');
-    document.body.append(content, btn);
+    const outside = document.createElement('div');
+    document.body.append(content, btn, outside);
     layerStackService.register({
       id: SESSION_CONTEXT_MENU_LAYER_ID,
       type: 'context-menu',
       dismissible: true,
       onDismiss: () => undefined,
       elementRef: { current: content },
-      anchorRef: { current: null },
+      anchorRef: { current: btn },
     });
-    btn.dispatchEvent(
+    outside.dispatchEvent(
       new PointerEvent('pointerdown', { bubbles: true, cancelable: true })
     );
     expect(shouldSuppressMenuReopen(btn)).toBe(true);
@@ -226,6 +227,7 @@ describe('useSidebarContextMenu 外点关 vs trigger 对打', () => {
     expect(result.current.contextMenu).toBeNull();
     content.remove();
     btn.remove();
+    outside.remove();
   });
 
   it('右键不受 suppress：关权限丸后仍能打开会话菜单', () => {

@@ -22,7 +22,12 @@ export interface SchemaProperty {
   presets?: { id: string; name: string; preview: string }[];
   category?: 'sans' | 'mono';
   previewText?: string;
-  toggleOptions?: { value: string; label: string; icon?: string }[];
+  toggleOptions?: {
+    value: string;
+    label: React.ReactNode;
+    icon?: React.ReactNode;
+    badge?: React.ReactNode;
+  }[];
 }
 
 export interface SchemaSection {
@@ -201,13 +206,15 @@ export const SettingsSchemaRenderer: React.FC<SettingsSchemaRendererProps> = Rea
                 control = (
                   <SegmentedControl
                     aria-label={prop.title}
-                    size="sm"
+                    size="panel"
                     className={uiStyles.controlSegment}
                     value={String(val ?? '')}
                     disabled={!ready}
                     options={(prop.toggleOptions || []).map((opt) => ({
                       value: opt.value,
                       label: opt.label,
+                      icon: opt.icon,
+                      badge: opt.badge,
                     }))}
                     onChange={(v) => {
                       void onSave({ [prop.key]: v });

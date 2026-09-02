@@ -94,18 +94,18 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
       name: '自定义颜色',
       bgPrimary: bg,
       bgSecondary: isDark
-        ? `color-mix(in srgb, ${bg} 85%, #000 15%)`
-        : `color-mix(in srgb, ${bg} 95%, #fff 5%)`,
+        ? `color-mix(in srgb, ${bg} 85%, hsl(0 0% 0%) 15%)`
+        : `color-mix(in srgb, ${bg} 95%, hsl(0 0% 100%) 5%)`,
       bgTertiary: `color-mix(in srgb, ${bg} 90%, ${fg} 10%)`,
       bgCard: isDark
-        ? `color-mix(in srgb, ${bg} 90%, #fff 10%)`
-        : `color-mix(in srgb, ${bg} 96%, #fff 4%)`,
+        ? `color-mix(in srgb, ${bg} 90%, hsl(0 0% 100%) 10%)`
+        : `color-mix(in srgb, ${bg} 96%, hsl(0 0% 100%) 4%)`,
       bgElevated: isDark
-        ? `color-mix(in srgb, ${bg} 88%, #fff 12%)`
-        : `color-mix(in srgb, ${bg} 96%, #fff 4%)`,
+        ? `color-mix(in srgb, ${bg} 88%, hsl(0 0% 100%) 12%)`
+        : `color-mix(in srgb, ${bg} 96%, hsl(0 0% 100%) 4%)`,
       shellChromeBg: isDark
-        ? `color-mix(in srgb, ${bg} 85%, #000 15%)`
-        : `color-mix(in srgb, ${bg} 78%, #b8b4ac 22%)`,
+        ? `color-mix(in srgb, ${bg} 85%, hsl(0 0% 0%) 15%)`
+        : `color-mix(in srgb, ${bg} 78%, hsl(38 8% 70%) 22%)`,
       textPrimary: fg,
       textSecondary: `color-mix(in srgb, ${bg} 35%, ${fg} 65%)`,
       borderColor: `color-mix(in srgb, ${bg} 82%, ${fg} 18%)`,
@@ -200,10 +200,10 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     }
 
     // 🌟 依据白天与黑夜自适应的调节终点，彻底破除死黑 🌟
-    let mixTarget = adjust > 0 ? '#ffffff' : '#000000';
+    let mixTarget = adjust > 0 ? 'hsl(0 0% 100%)' : 'hsl(0 0% 0%)';
     if (p.themeBrightnessVibrant) {
-      const tintTarget = `color-mix(in srgb, ${mixColor} 8%, #ffffff)`;
-      const shadeTarget = `color-mix(in srgb, ${mixColor} 14%, #000000)`;
+      const tintTarget = `color-mix(in srgb, ${mixColor} 8%, hsl(0 0% 100%))`;
+      const shadeTarget = `color-mix(in srgb, ${mixColor} 14%, hsl(0 0% 0%))`;
       mixTarget = adjust > 0 ? tintTarget : shadeTarget;
     }
 
@@ -221,9 +221,21 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
       vibrantTint = `color-mix(in srgb, hsl(30, 50%, 65%) ${solarWarmthMix * 100}%, ${vibrantTint})`;
     }
 
-    // 💡 默认 0 档“完全保真”显示原有预设样式，展现最净朗的原汁原味色调（不叠加任何灰色或变暗叠加）
+    // 💡 护眼暖灰：100% 纯 HSL 数学公式驱动调色板与 2.4% ~ 8% 亮度微调阶梯
+    if (!isDarkPreset && p.skin === 'warm-gray') {
+      const lPrimary = Number((95.2 + adjust * 0.6).toFixed(2));
+      const lSecondary = Number((lPrimary - 2.4).toFixed(2));
+      const lTertiary = Number((lPrimary - 4.8).toFixed(2));
 
-    if (adjust !== 0) {
+      bgPrimary = `hsl(35 8% ${lPrimary}%)`;
+      bgSecondary = `hsl(35 8% ${lSecondary}%)`;
+      bgTertiary = `hsl(35 8% ${lTertiary}%)`;
+      bgCard = 'hsl(0 0% 100%)';
+      bgElevated = 'hsl(0 0% 100%)';
+      shellChromeBg = `hsl(35 8% ${lSecondary}%)`;
+      borderColor = 'hsl(35 10% 86%)';
+      borderSubtle = 'hsl(35 8% 91%)';
+    } else if (adjust !== 0) {
       if (isDarkPreset) {
         if (adjust > 0) {
           // 深色主题调亮
@@ -243,7 +255,7 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
           borderSubtle = `color-mix(in srgb, ${borderSubtle} ${100 - pSec}%, ${mixTarget})`;
 
           // 对比度补偿：主文本稍许变白，增强辨识度
-          textPrimary = `color-mix(in srgb, ${textPrimary} ${100 - adjust * 1.5}%, #ffffff)`;
+          textPrimary = `color-mix(in srgb, ${textPrimary} ${100 - adjust * 1.5}%, hsl(0 0% 100%))`;
         } else {
           // 深色主题调暗
           const pBase = Math.abs(adjust) * 3.5; // 基础背景走向极致深邃
@@ -272,15 +284,15 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
           const pElev = adjust * 4.5;
           const pChrome = adjust * 3.5;
 
-          bgPrimary = `color-mix(in srgb, ${bgPrimary} ${100 - pBase}%, #ffffff)`;
-          bgSecondary = `color-mix(in srgb, ${bgSecondary} ${100 - pSec}%, #ffffff)`;
-          bgTertiary = `color-mix(in srgb, ${bgTertiary} ${100 - pSec}%, #ffffff)`;
-          bgCard = `color-mix(in srgb, ${bgCard} ${100 - pElev}%, #ffffff)`;
-          bgElevated = `color-mix(in srgb, ${bgElevated} ${100 - pElev}%, #ffffff)`;
-          shellChromeBg = `color-mix(in srgb, ${shellChromeBg} ${100 - pChrome}%, #ffffff)`;
+          bgPrimary = `color-mix(in srgb, ${bgPrimary} ${100 - pBase}%, hsl(0 0% 100%))`;
+          bgSecondary = `color-mix(in srgb, ${bgSecondary} ${100 - pSec}%, hsl(0 0% 100%))`;
+          bgTertiary = `color-mix(in srgb, ${bgTertiary} ${100 - pSec}%, hsl(0 0% 100%))`;
+          bgCard = `color-mix(in srgb, ${bgCard} ${100 - pElev}%, hsl(0 0% 100%))`;
+          bgElevated = `color-mix(in srgb, ${bgElevated} ${100 - pElev}%, hsl(0 0% 100%))`;
+          shellChromeBg = `color-mix(in srgb, ${shellChromeBg} ${100 - pChrome}%, hsl(0 0% 100%))`;
 
-          borderColor = `color-mix(in srgb, ${borderColor} ${100 - pSec}%, #ffffff)`;
-          borderSubtle = `color-mix(in srgb, ${borderSubtle} ${100 - pSec}%, #ffffff)`;
+          borderColor = `color-mix(in srgb, ${borderColor} ${100 - pSec}%, hsl(0 0% 100%))`;
+          borderSubtle = `color-mix(in srgb, ${borderSubtle} ${100 - pSec}%, hsl(0 0% 100%))`;
         } else {
           // 浅色主题调暗：🌟 应用非线性对比拉伸算法，消解发闷 🌟
           const pBase = Math.abs(adjust) * 3.0; // 主背景变暗极温和 (由 3.2 调至 3.0)
@@ -299,7 +311,7 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
           borderSubtle = `color-mix(in srgb, ${borderSubtle} ${100 - pSec}%, ${twilightTarget})`;
 
           // 对比度补偿：字色向深色靠拢，增强黑暗下的对比
-          textPrimary = `color-mix(in srgb, ${textPrimary} ${100 - Math.abs(adjust) * 1.8}%, #111111)`;
+          textPrimary = `color-mix(in srgb, ${textPrimary} ${100 - Math.abs(adjust) * 1.8}%, hsl(0 0% 7%))`;
         }
       }
     }
@@ -313,19 +325,19 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     let greenLight = 'var(--accent-green-light)';
     let redLight = 'var(--accent-red-light)';
     if (!isDarkPreset) {
-      // 🌟 浅色模式下采用极净的高饱和高对比混色：直接混入 `#ffffff` 纯白，拒绝混合变暗的泥脏底色！ 🌟
+      // 🌟 浅色模式下采用极净的高饱和高对比混色：直接混入 `hsl(0 0% 100%)` 纯白，拒绝混合变暗的泥脏底色！ 🌟
       // 增加饱和度比例（绿 15.5%，红 12.5%），确保底色极其清新透亮，在黄色/Cream主题或最暗微调都绝对鲜亮夺目！
-      greenLight = `color-mix(in srgb, var(--accent-green, #16a34a) 15.5%, #ffffff)`;
-      redLight = `color-mix(in srgb, var(--accent-red, #dc2626) 12.5%, #ffffff)`;
+      greenLight = `color-mix(in srgb, var(--accent-green, hsl(142 35% 42%)) 15.5%, hsl(0 0% 100%))`;
+      redLight = `color-mix(in srgb, var(--accent-red, hsl(0 55% 55%)) 12.5%, hsl(0 0% 100%))`;
     } else {
       // 深色模式默认基于 bgSecondary
       if (adjust < 0) {
         const pct = Math.abs(adjust) * 1.2;
-        greenLight = `color-mix(in srgb, var(--accent-green, #22c55e) ${8 + pct}%, ${bgSecondary})`;
-        redLight = `color-mix(in srgb, var(--accent-red, #ef4444) ${8 + pct}%, ${bgSecondary})`;
+        greenLight = `color-mix(in srgb, var(--accent-green, hsl(142 71% 45%)) ${8 + pct}%, ${bgSecondary})`;
+        redLight = `color-mix(in srgb, var(--accent-red, hsl(0 84% 60%)) ${8 + pct}%, ${bgSecondary})`;
       } else {
-        greenLight = `color-mix(in srgb, var(--accent-green, #22c55e) 8%, ${bgPrimary})`;
-        redLight = `color-mix(in srgb, var(--accent-red, #ef4444) 8%, ${bgPrimary})`;
+        greenLight = `color-mix(in srgb, var(--accent-green, hsl(142 71% 45%)) 8%, ${bgPrimary})`;
+        redLight = `color-mix(in srgb, var(--accent-red, hsl(0 84% 60%)) 8%, ${bgPrimary})`;
       }
     }
     root.style.setProperty('--accent-green-light-adaptive', greenLight);
@@ -363,28 +375,14 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     root.style.setProperty('--control-soft-bg-hover', `color-mix(in srgb, ${controlSoftBase} ${softHoverPct}, ${bgSecondary})`);
     root.style.setProperty('--control-soft-bg-active', `color-mix(in srgb, ${controlSoftBase} ${softActivePct}, ${bgSecondary})`);
 
-    // --- 🌟 完美的对话输入框背景跟随：浅色模式下让背景基准点使用已经过亮度微调的 bgPrimary，从而令输入框完美随滑动条改变亮度 🌟 ---
+    // --- 🌟 对话输入框背景：浅色模式下始终保持纯净纸面白底 bgCard (hsl(0 0% 100%)) 🌟 ---
     let composerBg = skinConfig.composerBg;
     if (!isDarkPreset) {
       if (!composerBg) {
-        composerBg = `color-mix(in srgb, ${vibrantTint} 15.0%, ${bgPrimary})`;
-      } else {
-        if (adjust !== 0) {
-          const pSec = adjust > 0 ? adjust * 3.5 : Math.abs(adjust) * 4.0;
-          const target = adjust > 0 ? '#ffffff' : twilightTarget;
-          composerBg = `color-mix(in srgb, ${composerBg} ${100 - pSec}%, ${target})`;
-        }
+        composerBg = bgCard || 'hsl(0 0% 100%)';
       }
     } else {
-      if (composerBg) {
-        if (adjust !== 0) {
-          const pSec = adjust > 0 ? adjust * 2.8 : Math.abs(adjust) * 2.3;
-          const mixTarget = adjust > 0
-            ? (p.themeBrightnessVibrant ? `color-mix(in srgb, ${mixColor} 8%, #ffffff)` : '#ffffff')
-            : (p.themeBrightnessVibrant ? `color-mix(in srgb, ${mixColor} 14%, #000000)` : '#000000');
-          composerBg = `color-mix(in srgb, ${composerBg} ${100 - pSec}%, ${mixTarget})`;
-        }
-      } else {
+      if (!composerBg) {
         composerBg = bgSecondary;
       }
     }

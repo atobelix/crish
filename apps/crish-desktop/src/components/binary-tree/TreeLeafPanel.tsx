@@ -3,10 +3,9 @@
  *
  * 架构契约：
  * - 纯几何叶子空间容器，100% 剥离 switch(panelId) 静态硬编码；
- * - 面板内容全量改由 SlotOutlet('workspace.leaf.panel') + ViewRegistry 动态渲染；
- * - 标题统一由 ViewRegistry 派生。
- * - chat 叶 chrome：UnitChromeActions（leafBody 上覆盖层；工具钮 + 更多/分享/坞开关，坞开不卸）。
- * - 工具叶 chrome：LeafToolTabStrip。不要复活 ChatHeader / UnitSessionTabStrip。
+ * - chat 叶：PaneHeader + 叶内抽屉头 LeafToolTabStrip；
+ * - 仍禁止复活 ChatHeader / UnitSessionTabStrip / GlobalSessionTabBar。
+ * 未提交的新对话不占标签；画面会话 = 本叶选中 tab，否则为本叶草稿哨兵。
  */
 
 import React, {
@@ -17,27 +16,28 @@ import React, {
   useRef,
   useSyncExternalStore,
 } from 'react';
-import { useLayoutTreeStore } from '../../store/storeAccess';
 import type { LayoutLeaf } from '../../store/types';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { UnitChromeActions } from '../chat-card/UnitChromeActions';
+import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import { LeafToolTabStrip } from './LeafToolTabStrip';
+import { LeafDockResizer } from './LeafDockResizer';
+import { PaneHeader } from './PaneHeader';
+import { computePaneEdges } from './paneEdgeGeometry';
 import styles from './BinaryTreeWorkspace.module.css';
 import {
-  useWorkspaceShellStore,
-  openToolInSession,
-  openToolInActiveTab,
-  selectActiveSessionId,
-  useSessionField,
-  isPendingDraft,
+  openToolInLeaf,
+  updateLeafDock,
+  selectTabModeEnabled,
+  useLayoutStore,
+  getCompositionRoot,
 } from '../../store/storeAccess';
+import { mintDraftSessionId } from '../../store/draftSession';
 import {
   viewRegistry,
   SlotOutlet,
   type ViewRenderContext,
 } from '../../services/view-registry';
-
-// ── Props ───────────────────────────────────────────────────────────
 
 interface TreeLeafPanelProps {
   leaf: LayoutLeaf;
@@ -45,10 +45,60 @@ interface TreeLeafPanelProps {
   rect: { x: number; y: number; width: number; height: number };
   /** 是否为激活 leaf */
   isActive: boolean;
-  /** 是否为拖拽源 */
-  isDragSource: boolean;
-  /** 当前是否多 chat 分屏（>1 chat leaf） */
+  /** 是否为拖拽源（旧拖拽兼容，缺省 false） */
+  isDragSource?: boolean;
+  /** 当前是否多 chat 分屏（>1 chat leaf）；条带不再依赖此旗标 */
   isMultiChat?: boolean;
+}
+
+interface LeafSessionTab {
+  tabId: string;
+  sessionId: string;
+  title?: string;
+  dock?: {
+    collapsed: boolean;
+    openPanelIds: string[];
+    activePanelId: string | null;
+    widthRatio: number;
+  };
+}
+
+type SessionShellCommands = {
+  activateTab: (leafId: string, tabId: string) => void;
+};
+
+function sessionShell(): SessionShellCommands {
+  return getCompositionRoot().shell as unknown as SessionShellCommands;
+}
+
+function readLeafTabs(leaf: LayoutLeaf): LeafSessionTab[] {
+  const raw = leaf.tabs as unknown;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (t): t is LeafSessionTab =>
+      typeof t === 'object' &&
+      t !== null &&
+      typeof (t as LeafSessionTab).tabId === 'string'
+  );
+}
+
+function readActiveTabId(leaf: LayoutLeaf): string {
+  const id = (leaf as LayoutLeaf & { activeTabId?: string }).activeTabId;
+  return typeof id === 'string' ? id : '';
+}
+
+const COLLAPSED_DOCK = {
+  collapsed: true,
+  openPanelIds: [] as string[],
+  activePanelId: null as string | null,
+  widthRatio: 0.5,
+};
+
+function readActiveTab(leaf: LayoutLeaf): LeafSessionTab | undefined {
+  const tabs = readLeafTabs(leaf);
+  const activeTabId = readActiveTabId(leaf);
+  if (!activeTabId) return undefined;
+  return tabs.find((t) => t.tabId === activeTabId);
 }
 
 function rectPropsEqual(
@@ -60,45 +110,53 @@ function rectPropsEqual(
   );
 }
 
-function leafPropsEqual(a: LayoutLeaf, b: LayoutLeaf): boolean {
+function dockPropsEqual(
+  a: LeafSessionTab['dock'] | undefined,
+  b: LeafSessionTab['dock'] | undefined
+): boolean {
   if (a === b) return true;
-  if (
-    a.id !== b.id ||
-    a.panelId !== b.panelId ||
-    a.activeTab !== b.activeTab ||
-    a.sessionId !== b.sessionId
-  ) {
-    return false;
-  }
-  if (a.tabs === b.tabs) return true;
-  if (a.tabs.length !== b.tabs.length) return false;
-  for (let i = 0; i < a.tabs.length; i++) {
-    if (a.tabs[i] !== b.tabs[i]) return false;
+  if (!a || !b) return false;
+  if (a.collapsed !== b.collapsed) return false;
+  if (a.activePanelId !== b.activePanelId) return false;
+  if (a.widthRatio !== b.widthRatio) return false;
+  if (a.openPanelIds.length !== b.openPanelIds.length) return false;
+  for (let i = 0; i < a.openPanelIds.length; i++) {
+    if (a.openPanelIds[i] !== b.openPanelIds[i]) return false;
   }
   return true;
 }
 
-// ── 组件实现 ─────────────────────────────────────────────────────────
+function leafPropsEqual(a: LayoutLeaf, b: LayoutLeaf): boolean {
+  if (a === b) return true;
+  if (a.id !== b.id) return false;
+  if (readActiveTabId(a) !== readActiveTabId(b)) return false;
+  if (!dockPropsEqual(a.dock, b.dock)) return false;
+  const at = readLeafTabs(a);
+  const bt = readLeafTabs(b);
+  if (at.length !== bt.length) return false;
+  for (let i = 0; i < at.length; i++) {
+    const x = at[i]!;
+    const y = bt[i]!;
+    if (x.tabId !== y.tabId) return false;
+    if (x.sessionId !== y.sessionId) return false;
+    if (!dockPropsEqual(x.dock, y.dock)) return false;
+  }
+  return true;
+}
 
 export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
-  ({
-    leaf,
-    rect,
-    isActive,
-    isDragSource,
-    isMultiChat = false,
-  }) => {
-    const setActiveLeaf = useLayoutTreeStore((s) => s.setActiveLeaf);
+  ({ leaf, rect, isActive, isDragSource }) => {
     const leafElRef = useRef<HTMLDivElement>(null);
+    const leafBodyRef = useRef<HTMLDivElement>(null);
+    const tabModeEnabled = useLayoutStore(selectTabModeEnabled);
 
-    const activeSessionId = useSessionField(selectActiveSessionId);
-    // 新对话草稿态：活动 pane 必须跟 PENDING_DRAFT（空白欢迎面），不能被 leaf.sessionId 钉死
-    // 非活动分屏 pane 仍显示自己的 leaf 会话
-    const inDraft = isPendingDraft(activeSessionId || '');
+    const activeTab = readActiveTab(leaf);
     const sessionForPanel =
-      inDraft && isActive
-        ? activeSessionId
-        : leaf.sessionId || activeSessionId;
+      activeTab?.sessionId || mintDraftSessionId(leaf.id);
+    const dock = activeTab?.dock ?? leaf.dock ?? COLLAPSED_DOCK;
+    const dockOpen =
+      dock.collapsed !== true && Boolean(dock.activePanelId);
+    const sessionTabId = activeTab?.tabId;
 
     const handleActivate = useCallback(
       (e?: React.PointerEvent) => {
@@ -112,19 +170,14 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             return;
           }
         }
-        if (!isActive) setActiveLeaf(leaf.id);
-        // 多 chat：点击 pane 时把 shell active 切到该 leaf 绑定的 session
-        if (leaf.sessionId) {
-          const shell = useWorkspaceShellStore.getState();
-          const tab = shell.openTabs.find((t) => t.sessionId === leaf.sessionId);
-          if (tab) {
-            if (shell.activeTabId !== tab.tabId) shell.activateTab(tab.tabId);
-          } else {
-            shell.openOrFocusSession(leaf.sessionId);
-          }
+        const tabId = readActiveTabId(leaf);
+        if (tabId) {
+          sessionShell().activateTab(leaf.id, tabId);
+        } else {
+          getCompositionRoot().shell.focusLeaf(leaf.id);
         }
       },
-      [isActive, leaf.id, leaf.sessionId, setActiveLeaf]
+      [leaf]
     );
 
     /**
@@ -143,18 +196,74 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
       el.style.height = `${rect.height * 100}%`;
     }, [rect.x, rect.y, rect.width, rect.height]);
 
-    // 统一会话感知工具分发器（裁决 ARB-06：采用自由函数分发）
+    useLayoutEffect(() => {
+      const el = leafBodyRef.current;
+      if (!el || !dockOpen) return;
+      const w = el.clientWidth;
+      if (w <= 0) return;
+      const px = Math.max(
+        200,
+        Math.min(w * 0.7, (dock.widthRatio || 0.5) * w)
+      );
+      el.style.setProperty('--leaf-dock-width', `${px}px`);
+    }, [dockOpen, dock.widthRatio]);
+
     const handleOpenTool = useCallback(
       (panelId: string) => {
-        const targetSessionId = sessionForPanel;
-        if (targetSessionId && !targetSessionId.startsWith('__pending')) {
-          openToolInSession(targetSessionId, panelId);
-        } else {
-          openToolInActiveTab(panelId);
-        }
+        openToolInLeaf(leaf.id, panelId);
       },
-      [sessionForPanel]
+      [leaf.id]
     );
+
+    const handleCommitDockRatio = useCallback(
+      (ratio: number) => {
+        updateLeafDock(leaf.id, { widthRatio: ratio });
+      },
+      [leaf.id]
+    );
+
+    const handleSelectToolTab = useCallback(
+      (panelId: string) => {
+        updateLeafDock(leaf.id, { activePanelId: panelId });
+      },
+      [leaf.id]
+    );
+
+    const handleCloseToolTab = useCallback(
+      (panelId: string) => {
+        const nextIds = dock.openPanelIds.filter((id) => id !== panelId);
+        if (nextIds.length === 0) {
+          updateLeafDock(leaf.id, {
+            collapsed: true,
+            openPanelIds: [],
+            activePanelId: null,
+          });
+          return;
+        }
+        const nextActive =
+          dock.activePanelId === panelId
+            ? nextIds[nextIds.length - 1] ?? null
+            : dock.activePanelId;
+        updateLeafDock(leaf.id, {
+          openPanelIds: nextIds,
+          activePanelId: nextActive,
+        });
+      },
+      [dock.activePanelId, dock.openPanelIds, leaf.id]
+    );
+
+    const handleToggleDock = useCallback(() => {
+      if (dockOpen) {
+        updateLeafDock(leaf.id, { collapsed: true });
+        return;
+      }
+      updateLeafDock(leaf.id, {
+        collapsed: false,
+        activePanelId: dock.activePanelId || 'overview',
+        openPanelIds:
+          dock.openPanelIds.length > 0 ? dock.openPanelIds : ['overview'],
+      });
+    }, [dock.activePanelId, dock.openPanelIds, dockOpen, leaf.id]);
 
     const registryVersion = useSyncExternalStore(
       (cb) => viewRegistry.subscribe(cb),
@@ -162,86 +271,196 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     );
     void registryVersion;
 
-    const resolved = viewRegistry.resolveView(leaf.activeTab);
-    const isChat = viewRegistry.isPrimary(leaf.panelId);
-    const hasDefinition = Boolean(resolved.definition);
-    const isNoteTab =
-      leaf.activeTab === 'note' || leaf.activeTab.startsWith('note:');
+    const chatResolved = viewRegistry.resolveView('chat');
+    const toolPanelId = dock.activePanelId || 'overview';
+    const toolResolved = viewRegistry.resolveView(toolPanelId);
 
-    // 纯函数视图渲染上下文
-    const renderCtx: ViewRenderContext = useMemo(
+    const chatCtx: ViewRenderContext = useMemo(
       () => ({
-        panelId: leaf.activeTab,
+        panelId: 'chat',
         leafId: leaf.id,
         sessionId: sessionForPanel ?? undefined,
         isActive,
         openView: handleOpenTool,
-        params: resolved.params,
+        params: chatResolved.params,
       }),
       [
-        leaf.activeTab,
         leaf.id,
         sessionForPanel,
         isActive,
         handleOpenTool,
-        resolved.params,
+        chatResolved.params,
       ]
     );
+
+    const toolCtx: ViewRenderContext = useMemo(
+      () => ({
+        panelId: toolPanelId,
+        leafId: leaf.id,
+        sessionId: sessionForPanel ?? undefined,
+        isActive,
+        openView: handleOpenTool,
+        params: toolResolved.params,
+      }),
+      [
+        toolPanelId,
+        leaf.id,
+        sessionForPanel,
+        isActive,
+        handleOpenTool,
+        toolResolved.params,
+      ]
+    );
+
+    const stackedPanelIds = tabModeEnabled
+      ? [toolPanelId]
+      : dock.openPanelIds.length > 0
+        ? dock.openPanelIds
+        : [toolPanelId];
+
+    const edges = useMemo(() => computePaneEdges(rect), [rect]);
+    const tabCount = readLeafTabs(leaf).length;
+
+    const renderToolOutlet = (panelId: string) => {
+      const resolved = viewRegistry.resolveView(panelId);
+      const ctx: ViewRenderContext = {
+        ...toolCtx,
+        panelId,
+        params: resolved.params,
+      };
+      const note =
+        panelId === 'note' || panelId.startsWith('note:');
+      if (!resolved.definition) {
+        return (
+          <div className={styles.emptyState}>
+            未知面板类型：{panelId}
+            {note ? '（笔记扩展未激活）' : null}
+          </div>
+        );
+      }
+      return (
+        <SlotOutlet
+          slotKey="workspace.leaf.panel"
+          context={ctx}
+          entryKey={resolved.definition.id}
+          fallback={
+            <div className={styles.emptyState}>
+              未知面板类型：{panelId}
+            </div>
+          }
+        />
+      );
+    };
 
     return (
       <div
         ref={leafElRef}
         className={styles.leaf}
         data-leaf-id={leaf.id}
-        data-panel-id={leaf.panelId}
-        data-tab-count={leaf.tabs.length}
-        data-session-id={leaf.sessionId || undefined}
+        data-panel-id="chat"
+        data-tab-count={tabCount}
+        data-session-id={sessionForPanel || undefined}
         data-active={isActive ? 'true' : 'false'}
         data-dragging-source={isDragSource ? 'true' : 'false'}
-        data-unit-tab-strip={isChat && isMultiChat ? 'true' : 'false'}
-        data-has-strip={!isChat ? 'true' : 'false'}
+        data-has-strip="true"
+        data-dock-open={dockOpen ? 'true' : 'false'}
+        data-top-row={edges.isTopRow ? 'true' : undefined}
+        data-left-edge={edges.isLeftEdge ? 'true' : undefined}
+        data-right-edge={edges.isRightEdge ? 'true' : undefined}
+        data-bottom-row={edges.isBottomRow ? 'true' : undefined}
         onPointerDown={handleActivate}
         role="region"
-        aria-label={`${viewRegistry.getTitle(leaf.activeTab, renderCtx)} 面板`}
+        aria-label={`${viewRegistry.getTitle('chat', chatCtx)} 面板`}
       >
-        <div className={styles.leafBody}>
-          {isChat ? (
-            /*
-             * 不再叠 leafToolHeader 的绝对定位。
-             * 参考里 .chat-top-header 是流内 sticky + margin-bottom:-38px：
-             * 既不占高度，又能跟着叶子的内边距走。再套一层 absolute 只会两套定位打架。
-             */
-            <UnitChromeActions activeSessionId={sessionForPanel} />
-          ) : (
-            <LeafToolTabStrip leaf={leaf} showCollapseBtn={false} />
-          )}
-          <AppErrorBoundary
-            compact
-            title={`面板 [${leaf.activeTab}] 渲染异常`}
-          >
-            <Suspense
-              fallback={<div className={styles.emptyState}>加载中…</div>}
-            >
-              {hasDefinition ? (
-                <SlotOutlet
-                  slotKey="workspace.leaf.panel"
-                  context={renderCtx}
-                  entryKey={resolved.definition?.id ?? leaf.activeTab}
-                  fallback={
-                    <div className={styles.emptyState}>
-                      未知面板类型：{leaf.activeTab}
-                    </div>
-                  }
+        <PaneHeader leaf={leaf} isActive={isActive} isChat />
+        <div
+          ref={leafBodyRef}
+          className={styles.leafBody}
+          data-dock-open={dockOpen ? 'true' : 'false'}
+        >
+          <div className={styles.leafChatColumn}>
+            <UnitChromeActions
+              activeSessionId={sessionForPanel}
+              dockOpen={dockOpen}
+              dockPanelId={dock.activePanelId}
+              onOpenPreview={() => handleOpenTool('preview')}
+              onOpenFiles={() => handleOpenTool('files')}
+            />
+            <AppErrorBoundary compact title="面板 [chat] 渲染异常">
+              <Suspense
+                fallback={<div className={styles.emptyState}>加载中…</div>}
+              >
+                {chatResolved.definition ? (
+                  <SlotOutlet
+                    slotKey="workspace.leaf.panel"
+                    context={chatCtx}
+                    entryKey={chatResolved.definition.id}
+                    fallback={
+                      <div className={styles.emptyState}>
+                        未知面板类型：chat
+                      </div>
+                    }
+                  />
+                ) : (
+                  <div className={styles.emptyState}>未知面板类型：chat</div>
+                )}
+              </Suspense>
+            </AppErrorBoundary>
+          </div>
+          {dockOpen ? (
+            <>
+              <LeafDockResizer
+                leafBodyRef={leafBodyRef}
+                widthRatio={dock.widthRatio || 0.5}
+                onCommitRatio={handleCommitDockRatio}
+              />
+              <div
+                className={`${styles.leafDockDrawer} chat-side-panel`}
+                data-drawer-strip="true"
+                data-leaf-dock-drawer="true"
+              >
+                <LeafToolTabStrip
+                  leafId={leaf.id}
+                  sessionId={sessionForPanel}
+                  sessionTabId={sessionTabId}
+                  tabs={dock.openPanelIds}
+                  activeTab={dock.activePanelId ?? ''}
+                  onSelectTab={handleSelectToolTab}
+                  onCloseTab={handleCloseToolTab}
+                  onAddTab={handleOpenTool}
                 />
-              ) : (
-                <div className={styles.emptyState}>
-                  未知面板类型：{leaf.activeTab}
-                  {isNoteTab ? '（笔记扩展未激活）' : null}
-                </div>
-              )}
-            </Suspense>
-          </AppErrorBoundary>
+                <AppErrorBoundary
+                  compact
+                  title={`面板 [${toolPanelId}] 渲染异常`}
+                >
+                  <Suspense
+                    fallback={
+                      <div className={styles.emptyState}>加载中…</div>
+                    }
+                  >
+                    {tabModeEnabled
+                      ? renderToolOutlet(toolPanelId)
+                      : stackedPanelIds.map((pid) => (
+                          <React.Fragment key={pid}>
+                            {renderToolOutlet(pid)}
+                          </React.Fragment>
+                        ))}
+                  </Suspense>
+                </AppErrorBoundary>
+              </div>
+            </>
+          ) : null}
         </div>
+        <button
+          type="button"
+          className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}
+          data-testid="top-quick-dock-btn"
+          data-active={dockOpen ? 'true' : 'false'}
+          aria-label={dockOpen ? '收起右侧工具栏' : '展开右侧工具栏'}
+          onClick={handleToggleDock}
+        >
+          <IconSidebarRight size={14} />
+        </button>
       </div>
     );
   },
@@ -249,7 +468,6 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     leafPropsEqual(prev.leaf, next.leaf) &&
     rectPropsEqual(prev.rect, next.rect) &&
     prev.isActive === next.isActive &&
-    prev.isDragSource === next.isDragSource &&
-    prev.isMultiChat === next.isMultiChat
+    prev.isDragSource === next.isDragSource
 );
 TreeLeafPanel.displayName = 'TreeLeafPanel';

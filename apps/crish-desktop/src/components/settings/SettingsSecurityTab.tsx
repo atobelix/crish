@@ -57,6 +57,13 @@ function pathLeaf(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
+const PERM_ICON_MAP: Record<string, React.ReactNode> = {
+  ask: <Lucide.ShieldCheck size={14} strokeWidth={1.8} />,
+  deep: <Lucide.Search size={14} strokeWidth={1.8} />,
+  plan: <Lucide.Target size={14} strokeWidth={1.8} />,
+  full: <Lucide.Zap size={14} strokeWidth={1.8} />,
+};
+
 export const SettingsSecurityTab: React.FC = () => {
   const { showToast } = useToast();
   const permissionModeRaw = usePermissionField(selectPermissionMode);
@@ -188,6 +195,7 @@ export const SettingsSecurityTab: React.FC = () => {
                   id: m.id,
                   label: m.label,
                   hint: m.description,
+                  icon: PERM_ICON_MAP[m.id],
                 }))}
                 onChange={onPermissionChange}
               />

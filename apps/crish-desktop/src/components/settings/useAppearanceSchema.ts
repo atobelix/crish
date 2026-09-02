@@ -2,9 +2,52 @@
  * 设置 · 外观 · Schema 定义 hook（从 useAppearanceSettings 提取）。
  * 封装外观设置面板的 SchemaSection 结构（主题/密度/窗口/缩进、颜色与皮肤、高级）。
  */
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 import type { SchemaSection } from './SettingsSchemaRenderer';
 import type { ThemeId } from './useAppearanceSettings';
+
+// 自研原生 Sun / Moon 微图标 (14x14)，零外部 npm 依赖
+const SunIcon: React.FC = () =>
+  React.createElement(
+    'svg',
+    {
+      width: '14',
+      height: '14',
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: '2',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      'aria-hidden': 'true',
+    },
+    React.createElement('circle', { cx: '12', cy: '12', r: '5' }),
+    React.createElement('line', { x1: '12', y1: '1', x2: '12', y2: '3' }),
+    React.createElement('line', { x1: '12', y1: '21', x2: '12', y2: '23' }),
+    React.createElement('line', { x1: '4.22', y1: '4.22', x2: '5.64', y2: '5.64' }),
+    React.createElement('line', { x1: '18.36', y1: '18.36', x2: '19.78', y2: '19.78' }),
+    React.createElement('line', { x1: '1', y1: '12', x2: '3', y2: '12' }),
+    React.createElement('line', { x1: '21', y1: '12', x2: '23', y2: '12' }),
+    React.createElement('line', { x1: '4.22', y1: '19.78', x2: '5.64', y2: '18.36' }),
+    React.createElement('line', { x1: '18.36', y1: '5.64', x2: '19.78', y2: '4.22' })
+  );
+
+const MoonIcon: React.FC = () =>
+  React.createElement(
+    'svg',
+    {
+      width: '14',
+      height: '14',
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: '2',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+      'aria-hidden': 'true',
+    },
+    React.createElement('path', { d: 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z' })
+  );
 
 export interface UseAppearanceSchemaArgs {
   activeTheme: ThemeId;
@@ -28,8 +71,8 @@ export function useAppearanceSchema({
             title: '主题模式',
             desc: '切换浅色/深色主题',
             toggleOptions: [
-              { value: 'default', label: '浅色' },
-              { value: 'dark', label: '深色' },
+              { value: 'default', label: '浅色', icon: React.createElement(SunIcon) },
+              { value: 'dark', label: '深色', icon: React.createElement(MoonIcon) },
             ],
           },
           {
@@ -100,7 +143,7 @@ export function useAppearanceSchema({
             type: 'range' as const,
             title: '亮度微调',
             desc: '调整界面整体亮度',
-            min: -5,
+            min: -4,
             max: 4,
             step: 1,
             showValue: true,

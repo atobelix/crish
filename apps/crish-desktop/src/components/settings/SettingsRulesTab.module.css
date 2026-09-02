@@ -66,26 +66,31 @@
   height: 28px;
   min-height: 28px;
   padding: 0 10px;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--button-radius, 7px);
   border: 1px solid var(--border-color);
-  background: var(--bg-card);
-  color: var(--text-secondary);
+  background: var(--bg-card, hsl(0 0% 100%));
+  color: var(--text-primary);
   font-size: var(--font-size-xs, 12px);
   font-family: inherit;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 3%, transparent);
+  transition:
+    background-color var(--transition-micro, 100ms) ease,
+    border-color var(--transition-micro, 100ms) ease,
+    box-shadow var(--transition-micro, 100ms) ease;
 }
 
 .presetChip:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+  background: var(--bg-card);
   border-color: var(--border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .presetChip:disabled {
-  opacity: 0.45;
-  cursor: default;
+  opacity: var(--opacity-disabled, 0.45);
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 /*        PE-05 T05.2 #7

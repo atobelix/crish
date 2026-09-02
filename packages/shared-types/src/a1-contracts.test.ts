@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   PENDING_DRAFT_SESSION_ID,
+  PENDING_DRAFT_PREFIX,
+  mintDraftSessionId,
   SESSION_IDENTITY_KINDS,
   isPendingDraftSessionId,
   isSessionIdentityKind,
@@ -25,9 +27,11 @@ describe('session-identity (A1)', () => {
     expect(PENDING_DRAFT_SESSION_ID).toBe('__pending_draft__');
   });
 
-  it('isPendingDraftSessionId 仅识别哨兵', () => {
+  it('isPendingDraftSessionId 识别光杆哨兵与 per-tab 前缀', () => {
     expect(isPendingDraftSessionId(PENDING_DRAFT_SESSION_ID)).toBe(true);
     expect(isPendingDraftSessionId('__pending_draft__')).toBe(true);
+    expect(isPendingDraftSessionId(`${PENDING_DRAFT_PREFIX}tab_1`)).toBe(true);
+    expect(isPendingDraftSessionId(mintDraftSessionId('tab_x'))).toBe(true);
     expect(isPendingDraftSessionId(null)).toBe(false);
     expect(isPendingDraftSessionId(undefined)).toBe(false);
     expect(isPendingDraftSessionId('')).toBe(false);

@@ -96,20 +96,21 @@
   -webkit-appearance: none;
   font-size: calc(var(--font-size-2xl) + var(--space-1));
   font-weight: var(--font-weight-content);
-  padding: var(--space-1) var(--space-3_5);
-  border-radius: var(--radius-md);
+  padding: 2px 8px;
+  border-radius: var(--radius-lg, 8px);
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   color: var(--text-primary);
   display: inline-flex;
   align-items: center;
   gap: var(--space-1_5);
-  transition: background-color var(--transition-fast);
+  transition: background-color var(--transition-fast), border-color var(--transition-fast);
   cursor: pointer;
 }
 
 .chatEmptyProjectBtnInline:hover {
-  background: var(--control-soft-bg-hover);
+  background: var(--tint-hover);
+  border-color: var(--border-subtle);
 }
 
 .chatEmptyProjectBtnInline:focus-visible {
@@ -119,9 +120,9 @@
 
 .chatEmptyProjectText {
   color: var(--text-primary);
-  background: var(--control-soft-bg);
-  padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-2xl);
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
   font-size: calc(var(--font-size-2xl) + var(--space-0_5));
   font-weight: var(--font-weight-content);
   font-family: inherit;
@@ -184,9 +185,9 @@
 .chatEmptyPrompts {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-2_5, 10px);
   width: 100%;
-  max-width: var(--chat-col-max);
+  max-width: min(var(--chat-col-max), 640px);
   margin: var(--space-5) auto 0 auto;
   box-sizing: border-box;
 }
@@ -194,85 +195,102 @@
 .sessionEmpty .chatEmptyPrompts {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-2_5, 10px);
   width: 100%;
-  max-width: var(--chat-col-max);
+  max-width: min(var(--chat-col-max), 640px);
   margin-top: var(--space-5);
   box-sizing: border-box;
 }
 
-.quickPromptCard {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  text-align: left;
-  padding: var(--space-3) calc(var(--space-4) + var(--space-0_5));
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-2xl);
-  cursor: pointer;
-  color: var(--text-primary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-normal);
-  font-family: var(--font-sans);
-  width: 100%;
-  min-width: unset;
-  box-shadow: none;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-  min-height: var(--control-height-sm);
-  line-height: var(--line-height-ui);
-  box-sizing: border-box;
-}
-
+.quickPromptCard,
 .sessionEmpty .quickPromptCard {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   text-align: left;
-  padding: var(--space-3) calc(var(--space-4) + var(--space-0_5));
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-2xl);
-  font-size: var(--font-size-sm);
+  padding: 12px 16px;
+  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl, 12px);
+  cursor: pointer;
   color: var(--text-primary);
-  box-shadow: none;
   width: 100%;
+  box-shadow:
+    0 1px 3px color-mix(in srgb, var(--shadow-color, black) 4%, transparent),
+    0 1px 2px color-mix(in srgb, var(--shadow-color, black) 2%, transparent);
+  transition:
+    background var(--transition-micro, 100ms ease),
+    border-color var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
   box-sizing: border-box;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  outline: none;
 }
 
 .quickPromptLabel {
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  margin-right: var(--space-3);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: var(--space-3, 12px);
   flex-shrink: 0;
+  letter-spacing: -0.01em;
 }
 
 .quickPromptDesc {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs);
+  font-size: 12px;
+  color: var(--text-secondary);
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
   flex: 1;
+  line-height: 1.4;
 }
 
+.promptArrow {
+  color: var(--text-tertiary);
+  opacity: 0.7;
+  flex-shrink: 0;
+  margin-left: auto;
+  transition:
+    opacity var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease);
+}
+
+/* Hover 状态：不位移跳动、不染主题色，仅微背景响应与纯净发丝边框 */
 .quickPromptCard:hover,
 .sessionEmpty .quickPromptCard:hover {
-  background: var(--control-soft-bg-hover);
-  border-color: var(--border-color);
-  color: var(--text-primary);
-  /*       ?translateY              */
+  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card, hsl(0 0% 100%)));
+  border-color: var(--border-subtle);
+}
+
+.quickPromptCard:hover .promptArrow {
+  color: var(--text-secondary);
+  opacity: 1;
+}
+
+.quickPromptCard:active,
+.sessionEmpty .quickPromptCard:active {
+  background: color-mix(in srgb, var(--text-primary) 6.5%, var(--bg-card, hsl(0 0% 100%)));
 }
 
 .quickPromptCard:focus-visible {
   outline: none;
-  border-color: var(--border-color);
-  box-shadow: var(--focus-ring);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .quickPromptCard svg {
   display: block;
+}
+
+@media (max-width: 600px) {
+  .quickPromptCard,
+  .sessionEmpty .quickPromptCard {
+    padding: 10px 12px;
+  }
+  .quickPromptLabel {
+    font-size: 13px;
+    margin-right: 8px;
+  }
 }
 
 @media (max-width: 720px) {

@@ -67,8 +67,8 @@ describe('ui/Menu 低视口（600px 高）定位回归', () => {
   it('基座 CSS 契约：menuContent 含低视口 max-height 钳制 + overflow-y 滚动', () => {
     const css = readCssText('Menu.module.css');
     expect(css).toContain('--radix-popover-content-available-height');
-    expect(css).toContain('70vh');
-    expect(css).toContain('360px');
+    expect(css).toContain('calc(100vh - 32px)');
+    expect(css).toContain('640px');
     expect(css).toContain('overflow-y: auto');
   });
 

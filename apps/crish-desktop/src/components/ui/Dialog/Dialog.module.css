@@ -14,7 +14,7 @@
 .backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.04);
+  background: color-mix(in srgb, var(--shadow-color) 4%, transparent);
   backdrop-filter: blur(1.5px);
   -webkit-backdrop-filter: blur(1.5px);
 }
@@ -28,10 +28,10 @@
   flex-direction: column;
   max-width: calc(100vw - var(--space-8));
   max-height: calc(100vh - var(--space-8));
-  background: #ffffff;
-  border: 1px solid var(--border-color, #e5e5e5);
+  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
   border-radius: 16px;
-  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.12), 0 8px 16px -4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 20px 40px -8px color-mix(in srgb, var(--shadow-color) 12%, transparent), 0 8px 16px -4px color-mix(in srgb, var(--shadow-color) 4%, transparent);
   outline: none;
 }
 
@@ -164,7 +164,7 @@
 }
 
 .dialogClose:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 

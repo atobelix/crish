@@ -1,107 +1,51 @@
 /**
- * 会话 Tab 落到叶面：保留产品 openOrFocusSession / 1 session ≤ 1 chat leaf。
- * 边缘 region 才 split/move；center 只聚焦。已有 leaf 不 clone。
+ * 会话 Tab 落点提交：一次 mouseup 只调一个树命令。
+ *
+ * 条内 / 叶面中心 → moveTab；叶面边缘 → splitTab。
+ * 空源 prune 由维 02 命令负责；本模块不补锚、不改树。
  */
 
-import { useWorkspaceShellStore } from '../../store/workspace-shell';
-import {
-  useLayoutTreeStore,
-  findChatLeafBySessionId,
-  findNodeById,
-  findUnitRootId,
-  insertLeafBesideNode,
-  moveNode,
-} from '../../store/storeAccess';
+import { findNodeById, useLayoutTreeStore } from '../../store/layout-tree';
 import type { PaneDropRegion } from './sessionTabDragFeel';
 
-function regionToDirection(
-  region: PaneDropRegion
-): 'left' | 'right' | 'top' | 'bottom' | null {
-  if (region === 'center') return null;
-  return region;
+export type SessionTabDropTarget =
+  | { kind: 'strip'; targetLeafId: string; insertIdx: number }
+  | { kind: 'pane'; targetLeafId: string; region: PaneDropRegion };
+
+/** 只读目标叶 tabs.length，用于中心落点的追加下标。 */
+export function readChatLeafTabCount(leafId: string): number {
+  const root = useLayoutTreeStore.getState().tree.root;
+  const node = findNodeById(root, leafId);
+  if (!node || node.type !== 'leaf' || !Array.isArray(node.tabs)) return 0;
+  return node.tabs.length;
 }
 
-/**
- * 条内重排：insertIdx 相对「不含源 Tab」的剩余列表。
- * beforeId = remaining[insertIdx]；越界则 append。
- */
-export function commitSessionTabStripReorder(
-  sessionId: string,
-  insertIdx: number,
-  remainingSessionIds: readonly string[]
-): void {
-  const sid = (sessionId || '').trim();
-  if (!sid) return;
-  const beforeId =
-    insertIdx >= 0 && insertIdx < remainingSessionIds.length
-      ? remainingSessionIds[insertIdx] ?? null
-      : null;
-  if (beforeId === sid) return;
-  useWorkspaceShellStore.getState().reorderSessionTab(sid, beforeId);
-}
+export function commitSessionTabDrop(input: {
+  sourceLeafId: string;
+  tabId: string;
+  target: SessionTabDropTarget;
+}): void {
+  const { sourceLeafId, tabId, target } = input;
+  if (!sourceLeafId || !tabId) return;
 
-/** 叶面落点：center → openOrFocusSession；边缘 → 旁插/搬 unit，再 openOrFocus。 */
-export function commitSessionPaneDrop(
-  sessionId: string,
-  targetLeafId: string,
-  region: PaneDropRegion,
-  title?: string
-): void {
-  const sid = (sessionId || '').trim();
-  if (!sid) return;
+  const tree = useLayoutTreeStore.getState();
 
-  const opts = title ? { title } : undefined;
-  const shell = useWorkspaceShellStore.getState();
-  const treeStore = useLayoutTreeStore.getState();
-  const direction = regionToDirection(region);
-
-  if (!direction) {
-    shell.openOrFocusSession(sid, opts);
+  if (target.kind === 'strip') {
+    tree.moveTab(sourceLeafId, tabId, target.targetLeafId, target.insertIdx);
     return;
   }
 
-  const root = treeStore.tree.root;
-  const target = findNodeById(root, targetLeafId);
-  if (!target) {
-    shell.openOrFocusSession(sid, opts);
+  if (target.region === 'center') {
+    if (sourceLeafId === target.targetLeafId) return;
+    const dstLen = readChatLeafTabCount(target.targetLeafId);
+    tree.moveTab(sourceLeafId, tabId, target.targetLeafId, dstLen);
     return;
   }
 
-  const targetSid = target.type === 'leaf' ? target.sessionId : undefined;
-  const targetAnchor = targetSid
-    ? (findUnitRootId(root, targetSid) ?? target.id)
-    : target.id;
-
-  const existing = findChatLeafBySessionId(root, sid);
-  if (existing) {
-    const sourceAnchor = findUnitRootId(root, sid) ?? existing.id;
-    if (sourceAnchor === targetAnchor) {
-      shell.openOrFocusSession(sid, opts);
-      return;
-    }
-    const next = moveNode(
-      treeStore.tree,
-      sourceAnchor,
-      targetAnchor,
-      direction
-    );
-    if (next !== treeStore.tree) {
-      treeStore.setTree(next);
-    }
-    shell.openOrFocusSession(sid, opts);
-    return;
+  // 边缘：自己叶且唯一 tab → no-op（不能拆成空源再 prune 成同一张叶）
+  if (sourceLeafId === target.targetLeafId) {
+    const n = readChatLeafTabCount(sourceLeafId);
+    if (n <= 1) return;
   }
-
-  const next = insertLeafBesideNode(
-    treeStore.tree,
-    targetAnchor,
-    direction,
-    'chat',
-    sid,
-    0.5
-  );
-  if (next !== treeStore.tree) {
-    treeStore.setTree(next);
-  }
-  shell.openOrFocusSession(sid, opts);
+  tree.splitTab(sourceLeafId, tabId, target.targetLeafId, target.region);
 }

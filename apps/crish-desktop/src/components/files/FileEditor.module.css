@@ -1,0 +1,19 @@
+/* apps/crish-desktop/src/components/files/FileEditor.module.css */
+.editor {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 8px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.editor:focus-visible {
+  outline: none;
+}

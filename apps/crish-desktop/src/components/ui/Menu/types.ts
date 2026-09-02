@@ -14,6 +14,8 @@ export interface SelectOptionItem {
   icon?: React.ReactNode;
   /** 右侧次要信息 */
   hint?: string;
+  /** 描述信息（支持富文本多行排版） */
+  description?: React.ReactNode;
   disabled?: boolean;
   /** 危险操作项（错误红语义） */
   danger?: boolean;

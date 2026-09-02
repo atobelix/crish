@@ -6,14 +6,14 @@ import React, {
   useState,
 } from 'react';
 import styles from './FilesCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Tooltip } from '../ui';
 import {
   ChevronRight,
-  CornerLeftUp,
   File,
   FileCode2,
   FileText,
   Folder,
+  FolderOpen,
   Image,
   Search,
   Table,
@@ -34,6 +34,16 @@ function joinLocal(base: string, name: string): string {
   return `${base.replace(/[\\/]+$/, '')}${sep}${name}`;
 }
 
+function sortEntries(entries: FsDirEntry[]): FsDirEntry[] {
+  return [...entries].sort((a, b) => {
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    const aNoise = a.name.startsWith('.') || a.name.startsWith('--');
+    const bNoise = b.name.startsWith('.') || b.name.startsWith('--');
+    if (aNoise !== bNoise) return aNoise ? 1 : -1;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+  });
+}
+
 function BcFileIcon({ name }: { name: string }) {
   const k = detectFileKind(name);
   const color = fileExtColor(name);
@@ -41,12 +51,9 @@ function BcFileIcon({ name }: { name: string }) {
   if (k === 'image') return <Image size={sz} style={{ color }} aria-hidden />;
   if (k === 'pdf') return <FileText size={sz} style={{ color }} aria-hidden />;
   if (k === 'table') return <Table size={sz} style={{ color }} aria-hidden />;
-  if (
-    /\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(
-      name
-    )
-  )
+  if (/\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(name)) {
     return <FileCode2 size={sz} style={{ color }} aria-hidden />;
+  }
   return <File size={sz} style={{ color }} aria-hidden />;
 }
 
@@ -57,19 +64,12 @@ interface BreadcrumbItem {
 }
 
 interface FlyoutState {
-  /** 触发弹层的面包屑节点路径（锚点，决定挂载在哪个 segment 上） */
   anchorPath: string;
-  /** 当前浮层正在浏览的物理目录路径（支持下钻和回退） */
-  currentPath: string;
-  /** 当前正在浏览的目录显示名称 */
-  currentLabel: string;
-  /** 下钻历史路径栈（用于返回上一级） */
-  navHistory: string[];
-  /** 当前目录下的文件/文件夹列表 */
-  entries: FsDirEntry[];
-  /** 加载中状态 */
+  anchorLabel: string;
+  dirCache: Record<string, FsDirEntry[]>;
+  expandedPaths: Set<string>;
+  loadingPaths: Set<string>;
   loading: boolean;
-  /** 过滤关键词 */
   filter: string;
 }
 
@@ -78,8 +78,8 @@ interface FileBreadcrumbProps {
   cwd: string;
   selected: string | null;
   view: ViewMode;
+  dirty?: boolean;
   onNavigate: (path: string) => void;
-  onRefresh: (path: string) => void;
   onOpenFile: (path: string) => void;
 }
 
@@ -88,8 +88,8 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
   cwd,
   selected,
   view,
+  dirty,
   onNavigate,
-  onRefresh: _onRefresh,
   onOpenFile,
 }: FileBreadcrumbProps) {
   const [bcFlyout, setBcFlyout] = useState<FlyoutState | null>(null);
@@ -104,10 +104,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
 
   const breadcrumbs: BreadcrumbItem[] = useMemo(() => {
     if (!root) return [];
-    const dir =
-      view === 'detail' && selected
-        ? pathDirname(selected) || root
-        : cwd || root;
+    const dir = view === 'detail' && selected ? pathDirname(selected) || root : cwd || root;
     const rel = pathRelativeToRoot(dir, root);
     const items: BreadcrumbItem[] = [{ label: rootLabel, path: root }];
     if (rel && rel !== '.') {
@@ -141,18 +138,18 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
       }
       setBcFlyout({
         anchorPath: dirPath,
-        currentPath: dirPath,
-        currentLabel: label,
-        navHistory: [],
-        entries: [],
+        anchorLabel: label,
+        dirCache: {},
+        expandedPaths: new Set<string>(),
+        loadingPaths: new Set<string>(),
         loading: true,
         filter: '',
       });
       try {
         const list = await loadDir(dirPath);
         setBcFlyout((prev) =>
-          prev && prev.anchorPath === dirPath && prev.currentPath === dirPath
-            ? { ...prev, entries: list, loading: false }
+          prev && prev.anchorPath === dirPath
+            ? { ...prev, dirCache: { [dirPath]: list }, loading: false }
             : prev
         );
         requestAnimationFrame(() => bcFilterRef.current?.focus());
@@ -164,75 +161,90 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
     [bcFlyout?.anchorPath, loadDir]
   );
 
-  const handleDrillDown = useCallback(
-    async (dirPath: string, dirName: string) => {
+  const toggleExpand = useCallback(
+    async (dirPath: string) => {
       if (!bcFlyout) return;
-      const nextHistory = [...bcFlyout.navHistory, bcFlyout.currentPath];
-      setBcFlyout((prev) =>
-        prev
-          ? {
-              ...prev,
-              currentPath: dirPath,
-              currentLabel: dirName,
-              navHistory: nextHistory,
-              entries: [],
-              loading: true,
-              filter: '',
-            }
-          : null
-      );
+
+      if (bcFlyout.expandedPaths.has(dirPath)) {
+        setBcFlyout((prev) => {
+          if (!prev) return null;
+          const nextExpanded = new Set(prev.expandedPaths);
+          nextExpanded.delete(dirPath);
+          return { ...prev, expandedPaths: nextExpanded };
+        });
+        return;
+      }
+
+      if (bcFlyout.dirCache[dirPath]) {
+        setBcFlyout((prev) => {
+          if (!prev) return null;
+          const nextExpanded = new Set(prev.expandedPaths);
+          nextExpanded.add(dirPath);
+          return { ...prev, expandedPaths: nextExpanded };
+        });
+        return;
+      }
+
+      setBcFlyout((prev) => {
+        if (!prev) return null;
+        const nextLoading = new Set(prev.loadingPaths);
+        nextLoading.add(dirPath);
+        const nextExpanded = new Set(prev.expandedPaths);
+        nextExpanded.add(dirPath);
+        return { ...prev, loadingPaths: nextLoading, expandedPaths: nextExpanded };
+      });
+
       try {
         const list = await loadDir(dirPath);
-        setBcFlyout((prev) =>
-          prev && prev.currentPath === dirPath
-            ? { ...prev, entries: list, loading: false }
-            : prev
-        );
-        requestAnimationFrame(() => bcFilterRef.current?.focus());
+        setBcFlyout((prev) => {
+          if (!prev) return null;
+          const nextLoading = new Set(prev.loadingPaths);
+          nextLoading.delete(dirPath);
+          return {
+            ...prev,
+            loadingPaths: nextLoading,
+            dirCache: { ...prev.dirCache, [dirPath]: list },
+          };
+        });
       } catch {
-        setBcFlyout((prev) =>
-          prev ? { ...prev, entries: [], loading: false } : null
-        );
+        setBcFlyout((prev) => {
+          if (!prev) return null;
+          const nextLoading = new Set(prev.loadingPaths);
+          nextLoading.delete(dirPath);
+          const nextExpanded = new Set(prev.expandedPaths);
+          nextExpanded.delete(dirPath);
+          return { ...prev, loadingPaths: nextLoading, expandedPaths: nextExpanded };
+        });
       }
     },
     [bcFlyout, loadDir]
   );
 
-  const handleNavBack = useCallback(async () => {
-    if (!bcFlyout || bcFlyout.navHistory.length === 0) return;
-    const prevPath = bcFlyout.navHistory[bcFlyout.navHistory.length - 1];
-    if (!prevPath) return;
-    const targetPath = prevPath;
-    const nextHistory = bcFlyout.navHistory.slice(0, -1);
-    const prevLabel =
-      targetPath.split(/[\\/]/).filter(Boolean).pop() || rootLabel;
-    setBcFlyout((prev) =>
-      prev
-        ? {
-            ...prev,
-            currentPath: targetPath,
-            currentLabel: prevLabel,
-            navHistory: nextHistory,
-            entries: [],
-            loading: true,
-            filter: '',
-          }
-        : null
-    );
-    try {
-      const list = await loadDir(targetPath);
-      setBcFlyout((prev) =>
-        prev && prev.currentPath === targetPath
-          ? { ...prev, entries: list, loading: false }
-          : prev
-      );
-      requestAnimationFrame(() => bcFilterRef.current?.focus());
-    } catch {
-      setBcFlyout((prev) =>
-        prev ? { ...prev, entries: [], loading: false } : null
-      );
-    }
-  }, [bcFlyout, loadDir, rootLabel]);
+  const handleDirectOpenCurrentDir = useCallback(() => {
+    if (!bcFlyout) return;
+    const target = bcFlyout.anchorPath;
+    setBcFlyout(null);
+    requestAnimationFrame(() => bcTriggerRef.current?.focus());
+    onNavigate(target);
+  }, [bcFlyout, onNavigate]);
+
+  const handleDoubleClickFolder = useCallback(
+    (folderPath: string) => {
+      setBcFlyout(null);
+      requestAnimationFrame(() => bcTriggerRef.current?.focus());
+      onNavigate(folderPath);
+    },
+    [onNavigate]
+  );
+
+  const handleOpenFile = useCallback(
+    (filePath: string) => {
+      setBcFlyout(null);
+      requestAnimationFrame(() => bcTriggerRef.current?.focus());
+      onOpenFile(filePath);
+    },
+    [onOpenFile]
+  );
 
   useEffect(() => {
     if (!bcFlyout) return;
@@ -240,7 +252,6 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
       const t = e.target as Node;
       if (crumbsRef.current?.contains(t)) return;
       setBcFlyout(null);
-      requestAnimationFrame(() => bcTriggerRef.current?.focus());
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -256,42 +267,98 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
     };
   }, [bcFlyout]);
 
-  const bcFlyoutFiltered = useMemo(() => {
+  const filteredEntries = useMemo(() => {
     if (!bcFlyout) return [];
     const q = bcFlyout.filter.trim().toLowerCase();
-    let list = bcFlyout.entries;
-    if (q) list = list.filter((e) => e.name.toLowerCase().includes(q));
-    return [...list].sort((a, b) => {
-      if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
-      const aNoise = a.name.startsWith('.') || a.name.startsWith('--');
-      const bNoise = b.name.startsWith('.') || b.name.startsWith('--');
-      if (aNoise !== bNoise) return aNoise ? 1 : -1;
-      return a.name.localeCompare(b.name, undefined, {
-        numeric: true,
-        sensitivity: 'base',
-      });
-    });
+    if (!q) return [];
+    const results: FsDirEntry[] = [];
+    const visited = new Set<string>();
+
+    const traverse = (dirPath: string) => {
+      if (visited.has(dirPath)) return;
+      visited.add(dirPath);
+      const entries = bcFlyout.dirCache[dirPath] || [];
+      for (const ent of entries) {
+        if (ent.name.toLowerCase().includes(q)) results.push(ent);
+        if (ent.isDir && bcFlyout.dirCache[ent.path]) traverse(ent.path);
+      }
+    };
+
+    traverse(bcFlyout.anchorPath);
+    return sortEntries(results);
   }, [bcFlyout]);
+
+  const renderTreeNodes = (dirPath: string, depth: number) => {
+    if (!bcFlyout) return null;
+    const entries = bcFlyout.dirCache[dirPath];
+    if (!entries) return null;
+
+    return sortEntries(entries).map((ent) => {
+      const isExpanded = bcFlyout.expandedPaths.has(ent.path);
+      const isLoading = bcFlyout.loadingPaths.has(ent.path);
+      const children = bcFlyout.dirCache[ent.path];
+
+      return (
+        <React.Fragment key={ent.path}>
+          <button
+            type="button"
+            role="option"
+            className={`${styles.filesBcFlyoutItem} ${selected === ent.path ? styles.isActive : ''}`}
+            style={{ paddingLeft: `${8 + depth * 14}px` }}
+            onClick={() => (ent.isDir ? void toggleExpand(ent.path) : handleOpenFile(ent.path))}
+            onDoubleClick={() => ent.isDir && handleDoubleClickFolder(ent.path)}
+          >
+            {ent.isDir ? (
+              <>
+                <ChevronRight
+                  size={13}
+                  className={`${styles.filesBcFlyoutChev} ${isExpanded ? styles.isExpanded : ''}`}
+                  aria-hidden
+                />
+                <Folder size={14} aria-hidden />
+              </>
+            ) : (
+              <>
+                <span className={`${styles.filesBcFlyoutChev} ${styles.isLeaf}`} />
+                <BcFileIcon name={ent.name} />
+              </>
+            )}
+            <span className={styles.filesBcFlyoutName}>{ent.name}</span>
+          </button>
+          {ent.isDir && isExpanded ? (
+            isLoading ? (
+              <div
+                className={styles.filesBcFlyoutEmpty}
+                style={{ paddingLeft: `${8 + (depth + 1) * 14}px`, textAlign: 'left', paddingBlock: '4px' }}
+              >
+                加载中…
+              </div>
+            ) : children && children.length === 0 ? (
+              <div
+                className={styles.filesBcFlyoutEmpty}
+                style={{ paddingLeft: `${8 + (depth + 1) * 14}px`, textAlign: 'left', paddingBlock: '4px' }}
+              >
+                空目录
+              </div>
+            ) : children ? (
+              renderTreeNodes(ent.path, depth + 1)
+            ) : null
+          ) : null}
+        </React.Fragment>
+      );
+    });
+  };
 
   if (!root) return null;
 
   return (
-    <div
-      className={styles.filesCrumbs}
-      ref={crumbsRef}
-      aria-label="工作区相对路径"
-    >
+    <div className={styles.filesCrumbs} ref={crumbsRef} aria-label="工作区相对路径">
       {breadcrumbs.length === 0 ? (
-        <span
-          className={`${styles.filesBcChip} ${styles.filesBcChipMuted || 'files-bc-chip--muted'}`}
-        >
-          {rootLabel}
-        </span>
+        <span className={`${styles.filesBcChip} ${styles.filesBcChipMuted}`}>{rootLabel}</span>
       ) : (
         breadcrumbs.map((b, i) => {
           const isLast = i === breadcrumbs.length - 1;
           const canNav = !b.isFile;
-          // 关键修复：依靠稳定的 anchorPath 匹配，下钻时弹层绝不意外卸载瞬灭
           const flyOpen = bcFlyout?.anchorPath === b.path;
           return (
             <React.Fragment key={`${b.path}-${i}`}>
@@ -316,9 +383,7 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                       }}
                       onDoubleClick={() => {
                         setBcFlyout(null);
-                        requestAnimationFrame(() =>
-                          bcTriggerRef.current?.focus()
-                        );
+                        requestAnimationFrame(() => bcTriggerRef.current?.focus());
                         onNavigate(b.path);
                       }}
                     >
@@ -329,29 +394,10 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                     <div
                       className={styles.filesBcFlyout}
                       role="listbox"
-                      aria-label={`${bcFlyout.currentLabel} 目录`}
+                      aria-label={`${bcFlyout.anchorLabel} 目录`}
                     >
-                      {bcFlyout.navHistory.length > 0 ? (
-                        <div className={styles.filesBcNavHeader}>
-                          <button
-                            type="button"
-                            className={styles.filesBcNavBackBtn}
-                            onClick={() => void handleNavBack()}
-                            aria-label="返回上一级"
-                          >
-                            <CornerLeftUp size={12} aria-hidden />
-                            <span>返回</span>
-                          </button>
-                          <Tooltip content={bcFlyout.currentPath}>
-                            <span className={styles.filesBcNavCurrentPath}>
-                              {pathRelativeToRoot(bcFlyout.currentPath, root) ||
-                                rootLabel}
-                            </span>
-                          </Tooltip>
-                        </div>
-                      ) : null}
                       <div className={styles.filesBcFlyoutSearch}>
-                        <Search size={14} aria-hidden />
+                        <Search size={13} aria-hidden />
                         <input
                           ref={bcFilterRef}
                           type="search"
@@ -365,83 +411,60 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                           onKeyDown={(e) => {
                             if (e.key === 'Escape') {
                               setBcFlyout(null);
-                              requestAnimationFrame(() =>
-                                bcTriggerRef.current?.focus()
-                              );
+                              requestAnimationFrame(() => bcTriggerRef.current?.focus());
+                            } else if (e.key === 'Enter') {
+                              e.preventDefault();
+                              handleDirectOpenCurrentDir();
                             }
                           }}
                         />
+                        <Tooltip
+                          content={`在文件树中打开此目录 (${bcFlyout.anchorLabel}) (Enter)`}
+                        >
+                          <button
+                            type="button"
+                            className={styles.filesBcDirectOpenBtn}
+                            aria-label="在文件树中打开此目录"
+                            onClick={handleDirectOpenCurrentDir}
+                          >
+                            <FolderOpen size={14} aria-hidden />
+                          </button>
+                        </Tooltip>
                       </div>
                       <div className={styles.filesBcFlyoutList}>
                         {bcFlyout.loading ? (
-                          <div className={styles.filesBcFlyoutEmpty}>
-                            加载中…
-                          </div>
-                        ) : bcFlyoutFiltered.length === 0 ? (
-                          <div className={styles.filesBcFlyoutEmpty}>
-                            {bcFlyout.filter.trim() ? '无匹配' : '空目录'}
-                          </div>
-                        ) : (
-                          bcFlyoutFiltered.map((ent) => (
-                            <button
-                              key={ent.path}
-                              type="button"
-                              role="option"
-                              className={`${styles.filesBcFlyoutItem} ${selected === ent.path ? styles.isActive : ''}`}
-                              onClick={() => {
-                                if (ent.isDir) {
-                                  // 下钻导航：进入子目录，保持浮层展开
-                                  void handleDrillDown(ent.path, ent.name);
-                                } else {
-                                  // 打开文件：关闭浮层
-                                  setBcFlyout(null);
-                                  requestAnimationFrame(() =>
-                                    bcTriggerRef.current?.focus()
-                                  );
-                                  void onOpenFile(ent.path);
+                          <div className={styles.filesBcFlyoutEmpty}>加载中…</div>
+                        ) : bcFlyout.filter.trim() ? (
+                          filteredEntries.length === 0 ? (
+                            <div className={styles.filesBcFlyoutEmpty}>无匹配</div>
+                          ) : (
+                            filteredEntries.map((ent) => (
+                              <button
+                                key={ent.path}
+                                type="button"
+                                role="option"
+                                className={`${styles.filesBcFlyoutItem} ${selected === ent.path ? styles.isActive : ''}`}
+                                onClick={() =>
+                                  ent.isDir ? void toggleExpand(ent.path) : handleOpenFile(ent.path)
                                 }
-                              }}
-                            >
-                              {ent.isDir ? (
-                                <>
-                                  <ChevronRight
-                                    size={13}
-                                    className={styles.filesBcFlyoutChev}
-                                    aria-hidden
-                                  />
+                                onDoubleClick={() => ent.isDir && handleDoubleClickFolder(ent.path)}
+                              >
+                                {ent.isDir ? (
                                   <Folder size={14} aria-hidden />
-                                </>
-                              ) : (
-                                <>
-                                  <span
-                                    className={`${styles.filesBcFlyoutChev} ${styles.isLeaf}`}
-                                  />
+                                ) : (
                                   <BcFileIcon name={ent.name} />
-                                </>
-                              )}
-                              <span className={styles.filesBcFlyoutName}>
-                                {ent.name}
-                              </span>
-                            </button>
-                          ))
+                                )}
+                                <span className={styles.filesBcFlyoutName}>{ent.name}</span>
+                              </button>
+                            ))
+                          )
+                        ) : !bcFlyout.dirCache[bcFlyout.anchorPath] ||
+                          bcFlyout.dirCache[bcFlyout.anchorPath]?.length === 0 ? (
+                          <div className={styles.filesBcFlyoutEmpty}>空目录</div>
+                        ) : (
+                          renderTreeNodes(bcFlyout.anchorPath, 0)
                         )}
                       </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        className={styles.filesBcFlyoutGoto}
-                        onClick={() => {
-                          const target = bcFlyout.currentPath;
-                          setBcFlyout(null);
-                          requestAnimationFrame(() =>
-                            bcTriggerRef.current?.focus()
-                          );
-                          onNavigate(target);
-                        }}
-                      >
-                        打开此目录
-                      </Button>
                     </div>
                   ) : null}
                 </span>
@@ -449,6 +472,11 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
                 <span
                   className={`${styles.filesBcChip} ${isLast ? styles.filesBcChipFile : ''}`}
                 >
+                  {dirty && b.isFile ? (
+                    <span className={styles.filesDirtyDot} aria-label="未保存">
+                      ●
+                    </span>
+                  ) : null}
                   {b.label}
                 </span>
               )}
@@ -459,3 +487,6 @@ export const FileBreadcrumb = React.memo(function FileBreadcrumb({
     </div>
   );
 });
+
+
+

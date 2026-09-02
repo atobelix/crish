@@ -44,12 +44,12 @@
 .item:hover,
 .item:focus-visible {
   outline: none;
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
 .item:active {
-  background: var(--tint-active, rgba(16, 185, 129, 0.08));
+  background: var(--tint-active);
 }
 
 .icon {

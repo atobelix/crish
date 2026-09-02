@@ -18,6 +18,7 @@ describe('draftSession / shared-types 对齐', () => {
   it('isPendingDraft 与 isPendingDraftSessionId 一致', () => {
     expect(isPendingDraft(PENDING_DRAFT_SESSION_ID)).toBe(true);
     expect(isPendingDraftSessionId(PENDING_DRAFT_SESSION_ID)).toBe(true);
+    expect(isPendingDraft('__pending_draft__:tab_1')).toBe(true);
     expect(isPendingDraft(null)).toBe(false);
     expect(isPendingDraft('real-sess')).toBe(false);
   });

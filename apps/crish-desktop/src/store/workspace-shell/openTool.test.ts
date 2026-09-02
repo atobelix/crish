@@ -1,5 +1,5 @@
 /**
- * openTool session isolation — multi-unit 时工具打开不得串坞。
+ * openTool：只 updateTabDock。多叶隔离；禁止 splitLeaf / tool 叶。
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,9 +7,15 @@ import {
   createLeaf,
   createBranch,
   type LayoutTree,
+  type LayoutLeaf,
 } from '../layout-tree/types';
-import { collectLeaves } from '../layout-tree/operations';
-import { useLayoutTreeStore, listToolLeaves, setPrimaryPanelChecker } from '../layout-tree';
+import { collectLeaves, flattenTree } from '../layout-tree/operations';
+import {
+  useLayoutTreeStore,
+  listToolLeaves,
+  listChatLeaves,
+  setPrimaryPanelChecker,
+} from '../layout-tree';
 import { viewRegistry } from '../../services/view-registry';
 
 vi.mock('../../api/projectStore', () => ({
@@ -21,7 +27,6 @@ vi.mock('../../api/projectStore', () => ({
 vi.mock('../../api/storeAccess', () => ({
   enterDraftMode: vi.fn(),
   setActiveSessionId: vi.fn(),
-  // compositionRoot 门面依赖（T06.9.1：workspaceShellStore 经 compositionRoot.tree）
   getSessionStoreState: vi.fn(() => ({})),
   getActiveSessionId: vi.fn(() => null),
   getWorkspaceStoreState: vi.fn(() => ({})),
@@ -37,13 +42,40 @@ vi.mock('../../api/workspaceChromeTabs', () => ({
   MAX_OPEN_SESSION_TABS: 20,
 }));
 
-import { useWorkspaceShellStore } from './workspaceShellStore';
+import { createDefaultDock } from './types';
 import {
   openToolInSession,
   openToolInActiveTab,
+  openFileViewerInSession,
+  findTabBySessionId,
+  readLeafDock,
+  type LeafSessionTab,
 } from './openTool';
-import { createDefaultDock } from './types';
 import { focusOrOpenTreePanel } from '../layout-tree/treePanelAccess';
+import { countToolLeaves } from './adapterShapeTreeOps';
+
+function makeTab(
+  sessionId: string,
+  tabId: string,
+  dock = createDefaultDock()
+): LeafSessionTab {
+  return {
+    tabId,
+    sessionId,
+    title: sessionId,
+    workspaceKey: 'general',
+    dock,
+  };
+}
+
+function makeChatLeaf(
+  sessionId: string,
+  tabId: string,
+  dock = createDefaultDock()
+): LayoutLeaf {
+  const tab = makeTab(sessionId, tabId, dock);
+  return createLeaf({ tabs: [tab], activeTabId: tabId });
+}
 
 function resetLayout(tree: LayoutTree): void {
   useLayoutTreeStore.setState({
@@ -57,176 +89,180 @@ function resetLayout(tree: LayoutTree): void {
   });
 }
 
-function resetShell(): void {
-  useWorkspaceShellStore.setState({
-    openTabs: [],
-    activeTabId: null,
-    shellReady: true,
-  });
-}
-
-function seedTwoSessionTabs(): {
-  tabAId: string;
-  tabBId: string;
-} {
-  const tabA = {
-    tabId: 'tab-a',
-    kind: 'conversation' as const,
-    sessionId: 'sess-a',
-    workspaceKey: 'general',
-    title: 'A',
-    rightDock: createDefaultDock(),
-  };
-  const tabB = {
-    tabId: 'tab-b',
-    kind: 'conversation' as const,
-    sessionId: 'sess-b',
-    workspaceKey: 'general',
-    title: 'B',
-    rightDock: createDefaultDock(),
-  };
-  useWorkspaceShellStore.setState({
-    openTabs: [tabA, tabB],
-    activeTabId: 'tab-a',
-    shellReady: true,
-  });
-  return { tabAId: tabA.tabId, tabBId: tabB.tabId };
-}
-
 beforeEach(() => {
   setPrimaryPanelChecker((id: string) => viewRegistry.isPrimary(id));
-  resetShell();
   resetLayout({
     version: 2,
     root: createBranch(
       'horizontal',
-      createLeaf('chat', ['chat'], 'chat', 'sess-a'),
-      createLeaf('chat', ['chat'], 'chat', 'sess-b'),
+      makeChatLeaf('sess-a', 'tab-a'),
+      makeChatLeaf('sess-b', 'tab-b'),
       0.5
     ),
   });
   vi.clearAllMocks();
 });
 
-describe('openToolInSession — multi-unit isolation', () => {
-  it('opens tool only on the target session dock, not the active tab', () => {
-    seedTwoSessionTabs();
+function dockOf(sessionId: string) {
+  return findTabBySessionId(
+    useLayoutTreeStore.getState().tree.root,
+    sessionId
+  )?.tab.dock;
+}
 
+describe('openToolInSession — 只改目标 tab.dock', () => {
+  it('opens tool only on the target session dock, not the neighbor', () => {
     openToolInSession('sess-b', 'files');
 
-    const tabs = useWorkspaceShellStore.getState().openTabs;
-    const a = tabs.find((t) => t.sessionId === 'sess-a')!;
-    const b = tabs.find((t) => t.sessionId === 'sess-b')!;
-
-    expect(a.rightDock.openPanelIds).toEqual([]);
-    expect(a.rightDock.collapsed).toBe(true);
-
-    expect(b.rightDock.openPanelIds).toContain('files');
-    expect(b.rightDock.activePanelId).toBe('files');
-    expect(b.rightDock.collapsed).toBe(false);
+    const a = dockOf('sess-a')!;
+    const b = dockOf('sess-b')!;
+    expect(a.openPanelIds).toEqual([]);
+    expect(a.collapsed).toBe(true);
+    expect(b.openPanelIds).toContain('files');
+    expect(b.activePanelId).toBe('files');
+    expect(b.collapsed).toBe(false);
+    expect(listChatLeaves(useLayoutTreeStore.getState().tree.root)).toHaveLength(
+      2
+    );
+    expect(listToolLeaves(useLayoutTreeStore.getState().tree.root)).toHaveLength(
+      0
+    );
   });
 
   it('does not mutate neighbor when opening on active session', () => {
-    seedTwoSessionTabs();
-    // pre-open files on B
-    useWorkspaceShellStore.setState((s) => ({
-      openTabs: s.openTabs.map((t) =>
-        t.sessionId === 'sess-b'
-          ? {
-              ...t,
-              rightDock: {
-                ...t.rightDock,
-                collapsed: false,
-                openPanelIds: ['files'],
-                activePanelId: 'files',
-              },
-            }
-          : t
-      ),
-    }));
-
+    openToolInSession('sess-b', 'files');
     openToolInSession('sess-a', 'terminal');
 
-    const tabs = useWorkspaceShellStore.getState().openTabs;
-    const a = tabs.find((t) => t.sessionId === 'sess-a')!;
-    const b = tabs.find((t) => t.sessionId === 'sess-b')!;
-
-    expect(a.rightDock.openPanelIds).toContain('terminal');
-    expect(a.rightDock.activePanelId).toBe('terminal');
-    expect(b.rightDock.openPanelIds).toEqual(['files']);
-    expect(b.rightDock.activePanelId).toBe('files');
+    const a = dockOf('sess-a')!;
+    const b = dockOf('sess-b')!;
+    expect(a.openPanelIds).toContain('terminal');
+    expect(a.activePanelId).toBe('terminal');
+    expect(b.openPanelIds).toEqual(['files']);
+    expect(b.activePanelId).toBe('files');
   });
 
   it('aliases tasks/plan → overview', () => {
-    seedTwoSessionTabs();
     openToolInSession('sess-a', 'tasks');
-    const a = useWorkspaceShellStore
-      .getState()
-      .openTabs.find((t) => t.sessionId === 'sess-a')!;
-    expect(a.rightDock.openPanelIds).toContain('overview');
-    expect(a.rightDock.activePanelId).toBe('overview');
+    expect(dockOf('sess-a')!.openPanelIds).toContain('overview');
+    expect(dockOf('sess-a')!.activePanelId).toBe('overview');
   });
 
-  it('openToolInActiveTab targets active tab only', () => {
-    seedTwoSessionTabs();
+  it('openToolInActiveTab targets active leaf tab only', () => {
     openToolInActiveTab('diff');
-
-    const tabs = useWorkspaceShellStore.getState().openTabs;
-    const a = tabs.find((t) => t.sessionId === 'sess-a')!;
-    const b = tabs.find((t) => t.sessionId === 'sess-b')!;
-
-    expect(a.rightDock.openPanelIds).toContain('diff');
-    expect(b.rightDock.openPanelIds).toEqual([]);
+    expect(dockOf('sess-a')!.openPanelIds).toContain('diff');
+    expect(dockOf('sess-b')!.openPanelIds).toEqual([]);
   });
 
   it('focusOrOpenTreePanel(sessionId) scopes non-chat tools', () => {
-    seedTwoSessionTabs();
     focusOrOpenTreePanel('agent', 'sess-b');
-
-    const tabs = useWorkspaceShellStore.getState().openTabs;
-    const a = tabs.find((t) => t.sessionId === 'sess-a')!;
-    const b = tabs.find((t) => t.sessionId === 'sess-b')!;
-
-    expect(a.rightDock.openPanelIds).toEqual([]);
-    expect(b.rightDock.openPanelIds).toContain('agent');
-    expect(b.rightDock.activePanelId).toBe('agent');
+    expect(dockOf('sess-a')!.openPanelIds).toEqual([]);
+    expect(dockOf('sess-b')!.openPanelIds).toContain('agent');
+    expect(dockOf('sess-b')!.activePanelId).toBe('agent');
   });
 
   it('focusOrOpenTreePanel without sessionId uses active tab', () => {
-    seedTwoSessionTabs();
     focusOrOpenTreePanel('preview');
-
-    const a = useWorkspaceShellStore
-      .getState()
-      .openTabs.find((t) => t.sessionId === 'sess-a')!;
-    expect(a.rightDock.openPanelIds).toContain('preview');
+    expect(dockOf('sess-a')!.openPanelIds).toContain('preview');
   });
 
   it('append does not duplicate already-open panel id', () => {
-    seedTwoSessionTabs();
     openToolInSession('sess-a', 'files');
     openToolInSession('sess-a', 'files');
-    const a = useWorkspaceShellStore
-      .getState()
-      .openTabs.find((t) => t.sessionId === 'sess-a')!;
-    expect(a.rightDock.openPanelIds.filter((p) => p === 'files')).toHaveLength(
-      1
+    expect(
+      dockOf('sess-a')!.openPanelIds.filter((p) => p === 'files')
+    ).toHaveLength(1);
+  });
+
+  it('开 terminal 不造 tool 叶、不增加 sash、不拨 activeLeafId', () => {
+    const chat = makeChatLeaf('sess-a', 'tab-a');
+    resetLayout({ version: 2, root: chat });
+    const branchesBefore = flattenTree(chat).branches.length;
+    const activeBefore = useLayoutTreeStore.getState().activeLeafId;
+
+    openToolInSession('sess-a', 'terminal');
+
+    const state = useLayoutTreeStore.getState();
+    expect(listChatLeaves(state.tree.root)).toHaveLength(1);
+    expect(countToolLeaves(state.tree.root)).toBe(0);
+    expect(state.tree.root.id).toBe(chat.id);
+    expect(state.activeLeafId).toBe(activeBefore);
+    expect(flattenTree(state.tree.root).branches.length).toBe(branchesBefore);
+    expect(readLeafDock(state.tree.root as LayoutLeaf).activePanelId).toBe(
+      'terminal'
     );
   });
 
-  it('projects tool leaf onto the target session unit only', () => {
-    seedTwoSessionTabs();
-    openToolInSession('sess-b', 'terminal');
-
-    const tools = listToolLeaves(useLayoutTreeStore.getState().tree.root);
-    // at least one tool leaf exists for expanded dock
-    expect(tools.length).toBeGreaterThanOrEqual(1);
-    // chat leaves for both sessions remain
-    const chats = collectLeaves(useLayoutTreeStore.getState().tree.root).filter(
-      (l) => l.panelId === 'chat'
+  it('mapped===chat 只 collapsed，拓扑字节级不变', () => {
+    openToolInSession('sess-a', 'terminal');
+    const before = useLayoutTreeStore.getState().tree;
+    const beforeJson = JSON.stringify({
+      id: before.root.id,
+      type: before.root.type,
+    });
+    openToolInSession('sess-a', 'chat');
+    const after = useLayoutTreeStore.getState().tree;
+    expect(after.root.id).toBe(before.root.id);
+    expect(JSON.stringify({ id: after.root.id, type: after.root.type })).toBe(
+      beforeJson
     );
-    const sessionIds = new Set(chats.map((c) => c.sessionId).filter(Boolean));
-    expect(sessionIds.has('sess-a')).toBe(true);
-    expect(sessionIds.has('sess-b')).toBe(true);
+    expect(listChatLeaves(after.root)).toHaveLength(2);
+    expect(listToolLeaves(after.root)).toHaveLength(0);
+    expect(dockOf('sess-a')!.collapsed).toBe(true);
+    expect(dockOf('sess-b')!.collapsed).toBe(true);
+  });
+
+  it('新对话叶开 files 只写本叶 dock，不抢邻叶', () => {
+    const left = createLeaf({ id: 'leaf-compose' });
+    const right = makeChatLeaf('sess-b', 'tab-b');
+    resetLayout({
+      version: 3,
+      root: createBranch('horizontal', left, right, 0.5),
+    });
+    useLayoutTreeStore.setState({ activeLeafId: right.id });
+
+    openToolInSession('__pending_draft__:leaf-compose', 'files');
+
+    const compose = collectLeaves(
+      useLayoutTreeStore.getState().tree.root
+    ).find((l) => l.id === 'leaf-compose');
+    expect(compose?.dock?.collapsed).toBe(false);
+    expect(compose?.dock?.activePanelId).toBe('files');
+    expect(compose?.dock?.openPanelIds).toContain('files');
+    expect(dockOf('sess-b')!.collapsed).toBe(true);
+    expect(dockOf('sess-b')!.openPanelIds).toEqual([]);
+  });
+});
+
+describe('openFileViewerInSession', () => {
+  it('不增加叶数、不造 tool 叶，panelId 进 dock', () => {
+    const store = useLayoutTreeStore.getState();
+    const leavesBefore = collectLeaves(store.tree.root).length;
+    const rootIdBefore = store.tree.root.id;
+    const splitFn = (
+      store as { splitLeaf?: (...args: unknown[]) => void }
+    ).splitLeaf;
+    const addFn = (
+      store as { addTabToLeaf?: (...args: unknown[]) => void }
+    ).addTabToLeaf;
+    const splitSpy =
+      typeof splitFn === 'function' ? vi.spyOn(store, 'splitLeaf') : null;
+    const addSpy =
+      typeof addFn === 'function' ? vi.spyOn(store, 'addTabToLeaf') : null;
+
+    openFileViewerInSession('C:/tmp/a.ts');
+
+    expect(splitSpy?.mock.calls ?? []).toHaveLength(0);
+    expect(addSpy?.mock.calls ?? []).toHaveLength(0);
+    expect(collectLeaves(useLayoutTreeStore.getState().tree.root)).toHaveLength(
+      leavesBefore
+    );
+    expect(useLayoutTreeStore.getState().tree.root.id).toBe(rootIdBefore);
+    expect(listToolLeaves(useLayoutTreeStore.getState().tree.root)).toHaveLength(
+      0
+    );
+    expect(dockOf('sess-a')!.activePanelId).toBe('file-viewer:C:/tmp/a.ts');
+    expect(dockOf('sess-a')!.openPanelIds).toContain('file-viewer:C:/tmp/a.ts');
+    splitSpy?.mockRestore();
+    addSpy?.mockRestore();
   });
 });

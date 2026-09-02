@@ -1,16 +1,15 @@
 /**
  * layoutTreeStore 类型契约（Store State / Actions / 联合类型）。
  *
- * 从 layoutTreeStore.ts 拆出（T4-11 基线清零）：hub 保留 re-export，
- * 消费方 import 路径不变。
+ * 会话身份写端没有 setLeafSessionId；身份只在 leaf.tabs[].sessionId。
  */
 
 import type {
   LayoutTree,
-  SplitDirection,
   DropDirection,
   TreeDragSource,
 } from './types';
+import type { SplitRegion } from './layoutTreeInsert';
 import type { DropZone } from './dropDetection';
 
 export interface LayoutTreeStoreState {
@@ -34,19 +33,11 @@ export interface LayoutTreeStoreActions {
   // ── 结构操作（推历史） ──────────────────────────────────────
   /** 替换整棵树（反序列化/迁移） */
   setTree: (tree: LayoutTree) => void;
-  /** 重置为单面板 */
-  resetTree: (panelId?: string) => void;
-  /** 分割叶子 */
-  splitLeaf: (
-    leafId: string,
-    direction: SplitDirection,
-    newPanelId: string,
-    position?: 'before' | 'after',
-    splitRatio?: number
-  ) => void;
+  /** 重置为单 chat 叶的未提交新对话界面 */
+  resetTree: () => void;
   /** 合并分支 */
   mergeBranch: (branchId: string, keepIndex?: 0 | 1) => void;
-  /** 移动叶子 */
+  /** 移动叶子（几何，不改 tabs 内容） */
   moveLeaf: (
     sourceId: string,
     targetId: string,
@@ -54,18 +45,8 @@ export interface LayoutTreeStoreActions {
   ) => void;
   /** 调整分割比例（commit=true 推历史，false 不推用于拖拽手势） */
   resizeBranch: (branchId: string, ratio: number, commit?: boolean) => void;
-  /** 向叶子添加 tab */
-  addTabToLeaf: (leafId: string, tabId: string) => void;
-  /** 从叶子移除 tab */
-  removeTabFromLeaf: (leafId: string, tabId: string) => void;
-  /** 绑定 chat leaf → sessionId（多 chat 分屏；不推历史） */
-  setLeafSessionId: (
-    leafId: string,
-    sessionId: string | undefined
-  ) => void;
   /**
    * 同时更新 tree + toolColumnCollapsed + activeLeafId（推历史）。
-   * 用于 dock 展开/折叠等需要原子性更新多个字段的场景。
    */
   setTreeWithDock: (
     tree: LayoutTree,
@@ -73,36 +54,82 @@ export interface LayoutTreeStoreActions {
     activeLeafId?: string | null
   ) => void;
 
+  // ── 会话 tab 命令 ──────────────────────────────────────────
+  /** 激活该叶 tab；即使树不变也聚焦该叶。不推历史。 */
+  activateTab: (leafId: string, tabId: string) => void;
+  /** 只改该 tab 的 dock，不改拓扑、不推历史 */
+  updateTabDock: (
+    tabId: string,
+    patch: import('./sessionTabModel').RightToolDockState | Partial<import('./sessionTabModel').RightToolDockState>
+  ) => void;
+  /** 写本叶坞：有活动 tab 写 tab.dock，否则写叶上新对话坞 */
+  updateLeafDock: (
+    leafId: string,
+    patch: import('./sessionTabModel').RightToolDockState | Partial<import('./sessionTabModel').RightToolDockState>
+  ) => void;
+  /** 进入本叶新对话界面（不建标签）；带真 sessionId 则插入标签。推历史。 */
+  addTab: (
+    leafId: string,
+    tabOrWorkspaceKey?:
+      | string
+      | {
+          tabId?: string;
+          title?: string;
+          workspaceKey?: string;
+          dock?: Partial<import('./sessionTabModel').RightToolDockState>;
+        }
+  ) => void;
+  /** 打开或聚焦会话（已存在则激活，否则插入新 tab 并激活）。推历史（新建时）。 */
+  openSession: (
+    sessionId: string,
+    opts: { title?: string; workspaceKey?: string; activeLeafId: string }
+  ) => { leafId: string; tabId: string; created: boolean };
+  /** 发送成功：把未提交新对话物化成真会话标签。推历史。 */
+  promoteDraftTab: (
+    draftSessionId: string,
+    realSessionId: string,
+    patch?: { title?: string }
+  ) => void;
+  /** 修改指定 sessionId 的 tab 标题。不推历史。 */
+  updateTabTitle: (sessionId: string, title: string) => void;
+  /** 重置为单 chat 叶的未提交新对话界面。推历史。 */
+  resetToSingleDraftLeaf: (workspaceKey?: string) => void;
+  /** 从该叶删 tab；空则 prune（唯一叶留下新对话界面）。推历史。 */
+  removeTab: (leafId: string, tabId: string) => void;
+  /** 同一对象搬到目标叶。推历史。 */
+  moveTab: (
+    srcLeafId: string,
+    tabId: string,
+    dstLeafId: string,
+    insertIdx: number
+  ) => void;
+  /** 从源拿走，在目标旁 split 出新叶。推历史。 */
+  splitTab: (
+    srcLeafId: string,
+    tabId: string,
+    dstLeafId: string,
+    region: SplitRegion
+  ) => void;
+
   // ── 焦点操作（不推历史） ────────────────────────────────────
   /** 设置激活 leaf */
   setActiveLeaf: (leafId: string | null) => void;
-  /** 设置激活 tab */
-  setActiveTab: (leafId: string, tabId: string) => void;
   /** 折叠/展开右侧面板（功能区） */
   toggleToolColumnCollapsed: () => void;
   /** 显式设置功能区折叠（Adapter / RightToolDock 用） */
   setToolColumnCollapsed: (collapsed: boolean) => void;
 
   // ── 拖拽状态（不推历史） ────────────────────────────────────
-  /** 设置拖拽源（拖拽开始时调用） */
   setDraggedSource: (source: TreeDragSource | null) => void;
-  /** 设置当前 drop zone（拖拽移动时调用） */
   setActiveDropZone: (zone: DropZone | null) => void;
-  /** 提交拖拽：调用 applyDrop 计算变更，推历史，清理拖拽状态 */
   commitDrop: () => void;
-  /** 取消拖拽：清空拖拽状态，不变更结构 */
   cancelDrag: () => void;
 
   // ── 历史操作 ──────────────────────────────────────────────
-  /** 手势前置快照:在连续操作（如 resize 拖拽）开始前调用一次 */
   pushHistory: () => void;
-  /** 撤销 */
   undo: () => void;
-  /** 重做 */
   redo: () => void;
-  /** 是否可撤销 */
   canUndo: () => boolean;
-  /** 是否可重做 */
   canRedo: () => boolean;
 }
 

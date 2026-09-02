@@ -58,6 +58,7 @@ function stubSession(partial: Partial<SessionFacade> = {}): SessionFacade {
     getActiveSessionId: () => null as never,
     enterDraft: vi.fn(),
     openOrFocusSession: vi.fn(),
+    deleteSession: vi.fn(),
     pinSession: vi.fn(),
     unpinSession: vi.fn(),
     archiveSession: vi.fn(),
@@ -72,6 +73,10 @@ function stubShell(partial: Partial<ShellFacade> = {}): ShellFacade {
     getState: () => ({}) as never,
     openNewDraftTab: vi.fn(),
     setShellReady: vi.fn(),
+    activateTab: vi.fn(),
+    closeTab: vi.fn(),
+    focusLeaf: vi.fn(),
+    promoteDraftTab: vi.fn(),
     ...partial,
   };
 }
@@ -97,6 +102,8 @@ describe('ownership enforce (OPT-E9)', () => {
       expect(typeof root.session.archiveSession).toBe('function');
       expect(typeof root.session.unarchiveSession).toBe('function');
       expect(typeof root.session.branchSession).toBe('function');
+      expect(typeof root.session.deleteSession).toBe('function');
+      expect(typeof root.shell.activateTab).toBe('function');
       expect(root.layout).not.toHaveProperty('pinSession');
       expect(root.layout).not.toHaveProperty('archiveSession');
       expect(root.layout).not.toHaveProperty('branchSession');
@@ -193,12 +200,12 @@ describe('ownership enforce (OPT-E9)', () => {
   // ── 3. Naming guard: .layout ≠ layout-tree; .tree is geometry ──
 
   describe('naming guard: layout chrome vs tree geometry', () => {
-    it('root.tree has setLeafSessionId / getState; root.layout has getAppSettings', () => {
+    it('root.tree has getState only; root.layout has getAppSettings', () => {
       const root = registerCompositionRoot();
 
-      // tree = layout-tree geometry
+      // tree = layout-tree geometry；无 leaf↔session 1:1 绑定 API
       expect(typeof root.tree.getState).toBe('function');
-      expect(typeof root.tree.setLeafSessionId).toBe('function');
+      expect(root.tree).not.toHaveProperty('setLeafSessionId');
       expect(root.tree).not.toHaveProperty('getAppSettings');
       expect(root.tree).not.toHaveProperty('setSessions');
       expect(root.tree).not.toHaveProperty('setTabModeEnabled');

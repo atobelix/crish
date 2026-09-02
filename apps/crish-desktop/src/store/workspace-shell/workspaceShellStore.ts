@@ -1,43 +1,17 @@
 /**
- * Workspace Shell Store — TabSurface / dock **write owner**.
+ * Workspace Shell Store — 会话手势门面 + shellReady。
  *
- * ## Ownership (write authority)
+ * 标签权威在 chat 叶 `tabs` + `activeTabId`。本 store 不持有 openTabs，
+ * 不写 leaf.sessionId，不偷绑，不投影坞到树几何。
  *
- * Owns:
- * - openTabs (TabSurface[]), activeTabId, shellReady
- * - per-tab rightDock (collapsed / panels / widthRatio)
- * - User gestures: openOrFocusSession, activateTab, closeTab, openNewDraftTab,
- *   reorderSessionTab, updateRightDock, migrateFromOpenTabsMap, resetToCleanDraft
+ * | Facade | 职责 |
+ * |--------|------|
+ * | shell  | 找叶 + 调维 02 树命令 + sync 画面会话 |
+ * | session.openOrFocusSession | 委托本 store |
+ * | tree | 只 getState；无 setLeafSessionId |
  *
- * Orchestrates (allowed side-effects, not dual sources of truth):
- * - Calls session activate (`setActiveSessionId` / `enterDraftMode`) when focusing a tab
- * - Projects dock / unit bind onto `layoutTreeStore` via adapterShape / conversationUnit helpers
- *
- * ## Does NOT own
- *
- * | Concern | Owner |
- * |---------|--------|
- * | Session list, messages, agents body | layoutStore / session facade |
- * | Tree split/merge/drop geometry | layoutTreeStore (shell only bind/project) |
- * | Legacy columns/groups | workspaceStore (= layoutStore) |
- *
- * ## Forbidden writes
- *
- * - Components: **do not** call `setActiveSessionId` *and* shell activate for the same open;
- *   one owner — **shell** for tab open/focus/new-draft (`compositionRoot.shell` / `.session.openOrFocusSession`).
- * - **Do not** write openTabs from layoutStore or layout-tree.
- * - **Do not** raw `setTree` for tab open; use bind/project helpers after shell state change.
- * - Session **identity for open tabs** lives on TabSurface.sessionId here — not LayoutLeaf.tabs.
- *
- * ## compositionRoot
- *
- * - `compositionRoot.shell` → this store (openNewDraftTab, setShellReady, getState)
- * - `compositionRoot.session.openOrFocusSession` → delegates here
- * - `compositionRoot.layout` is **layoutStore**, not this module
- * - T06.9.1：跨 store 读树一律经 `compositionRoot.tree`（不再直取 useLayoutTreeStore）
- *
- * @see store/storeOwnership.ts (`SHELL_TAB_OWNERSHIP`)
- * @see docs/architecture/desktop-composition-and-stores.md
+ * UI 只调本门面一次。禁止再叠 setActiveSessionId / setLeafSessionId /
+ * bindActiveChatLeafSession。
  */
 
 import { create } from 'zustand';
@@ -46,96 +20,39 @@ import {
   canonicalSessionFolder,
   getActiveProjectId,
 } from '../../api/projectStore';
-import { isPendingDraft } from '../draftSession';
-// 维度 3 步骤 1（3-C）：斩断 store → api/storeAccess 反向边。
-// 原先直引 `enterDraftMode, setActiveSessionId from '../../api/storeAccess'`，
-// 形成跨层反向边（store 域 → api 编排层）。现改用同层 store 原生 action
-// （useSessionStore.getState()），防御已在 sessionCrudActions 的 setActiveSessionId
-// 内补齐（trim + 空值；与 api/store-access/sessionAccess.normalizeSessionId 对齐）。
+import { isPendingDraft, mintDraftSessionId } from '../draftSession';
 import { useSessionStore } from '../sessionStore';
-import {
-  closeSessionTab,
-  syncOpenTabsToLegacy,
-  moveSessionTab,
-  currentWorkspaceFolderKey,
-  type OpenSessionTabsMap,
-  MAX_OPEN_SESSION_TABS,
-} from '../../api/workspaceChromeTabs';
+import { currentWorkspaceFolderKey } from '../../api/workspaceChromeTabs';
 import {
   isDefaultSessionTitle,
   resolveChromeSessionTitle,
 } from '../../api/sessionTitle';
-import {
-  type RightToolDockState,
-  type TabSurface,
-  type WorkspaceShellState,
-  createDefaultDock,
-  mintTabId,
-} from './types';
-import { applyDockToTree, ensureAdapterShape, ensureChatOnlyTree } from './adapterShape';
-import {
-  dedupeSessionLeavesInStore,
-  removeSessionUnitFromTree,
-  neighborDockNeedsProject,
-  bindActiveChatLeafSession,
-} from './leafBindingHelpers';
-import { useLayoutTreeStore, listChatLeaves } from '../layout-tree';
+import { listChatLeaves, useLayoutTreeStore } from '../layout-tree';
+import type { RightToolDockState, WorkspaceShellStore } from './types';
 import { registerShellStoreReadApi } from './shellRegistry';
+import {
+  ownedChatLeaves,
+  pictureFromActiveLeaf,
+  resolveActiveChatLeaf,
+  scanRealSessionTabs,
+} from './treeSessionQuery';
+import {
+  treeActivateTab,
+  treeAddTab,
+  treeFindTabBySessionId,
+  treeFindTabByTabId,
+  treeMoveTab,
+  treeOpenSession,
+  treeSplitTab,
+  treePromoteDraftTab,
+  treeRemoveTab,
+  treeResetToSingleDraftLeaf,
+  treeUpdateTabDock,
+  treeUpdateTabTitle,
+} from './treeSessionCommands';
 
-// 拆分自本文件的子模块 re-export，保证消费方 import 路径不变
 export { loadLegacyOpenTabsMap, selectActiveTabSessionId } from './shellSelectors';
 export { registerTreeDockSync } from './treeDockSync';
-
-export interface WorkspaceShellStore
-  extends WorkspaceShellState {
-  openOrFocusSession: (
-    sessionId: string,
-    opts?: { title?: string; workspaceKey?: string }
-  ) => void;
-  activateTab: (tabId: string) => void;
-  closeTab: (tabId: string) => void;
-  closeTabBySessionId: (sessionId: string, workspaceKey?: string) => void;
-  /**
-   * 顶栏会话标签重排：把 sessionId 移到 beforeSessionId 之前。
-   * beforeSessionId 为 null 时移到同 workspaceKey 组末尾。
-   * 仅调整同 workspaceKey 内顺序，并同步 legacy open-tabs map。
-   */
-  reorderSessionTab: (
-    sessionId: string,
-    beforeSessionId: string | null
-  ) => void;
-  updateRightDock: (
-    tabId: string,
-    patch: Partial<RightToolDockState> | RightToolDockState
-  ) => void;
-  /**
-   * 用户侧「新对话」/顶栏「+」：追加或聚焦草稿 tab，不清空其它顶栏 tab，
-   * 也不重置 layout-tree（保留 multi-chat 分屏）。
-   * 冷启动/无标签恢复仍用 resetToCleanDraft。
-   */
-  openNewDraftTab: (workspaceKey?: string) => void;
-  /** 仅冷启动 / migrate 空表 / 关光后兜底：整表替换为单一草稿 */
-  resetToCleanDraft: (workspaceKey?: string) => void;
-  setShellReady: (ready: boolean) => void;
-  getActiveTab: () => TabSurface | null;
-  /**
-   * Restore open tabs from legacy folder→sessionId map.
-   * @param opts.projectActiveDock default true — set false when layout tree
-   *   already holds multi-unit docks (avoid stamping default collapsed dock).
-   */
-  migrateFromOpenTabsMap: (
-    map: OpenSessionTabsMap,
-    known: Map<string, { title?: string; folder?: string }>,
-    opts?: { projectActiveDock?: boolean }
-  ) => void;
-  /**
-   * 将已打开 tab 的 title 与会话投影对齐（打开已有 tab / 改名 / 首条消息）。
-   * 传入 overrides 时只回写命中的 sessionId；缺省则全部从 session store 取。
-   */
-  syncOpenTabTitles: (
-    overrides?: Readonly<Record<string, string>>
-  ) => void;
-}
 
 function workspaceKeyNow(): string {
   return currentWorkspaceFolderKey(getActiveProjectId());
@@ -153,312 +70,175 @@ function resolveTabSurfaceTitle(sessionId: string, title?: string): string {
   return resolveChromeSessionTitle(sessionFromStore(sessionId), title);
 }
 
-function makeSessionTab(
-  sessionId: string,
-  workspaceKey: string,
-  title?: string
-): TabSurface {
-  return {
-    tabId: mintTabId(),
-    kind: 'conversation',
-    sessionId,
-    workspaceKey: canonicalSessionFolder(workspaceKey) || GENERAL_FOLDER,
-    title: resolveTabSurfaceTitle(sessionId, title),
-    rightDock: createDefaultDock(),
-  };
+function rememberChatLeaf(
+  set: (partial: { lastChatLeafId: string | null }) => void,
+  leafId: string
+): void {
+  set({ lastChatLeafId: leafId });
+}
+
+function syncSessionFromActiveLeaf(lastChatLeafId: string | null): void {
+  const tab = pictureFromActiveLeaf(lastChatLeafId);
+  const session = useSessionStore.getState();
+  if (!tab) {
+    const leaf = resolveActiveChatLeaf(lastChatLeafId);
+    session.enterDraftMode(workspaceKeyNow() || GENERAL_FOLDER, {
+      draftSessionId: mintDraftSessionId(leaf.id),
+    });
+    return;
+  }
+  if (isPendingDraft(tab.sessionId)) {
+    session.enterDraftMode(tab.workspaceKey, {
+      draftSessionId: tab.sessionId,
+    });
+    return;
+  }
+  if (session.activeSessionId !== tab.sessionId) {
+    session.setActiveSessionId(tab.sessionId);
+  }
+}
+
+function killPty(sessionId: string): void {
+  if (!sessionId || isPendingDraft(sessionId)) return;
+  void import('../../api/ptyRegistry')
+    .then((m) => m.killPtyForSessionBackground(sessionId))
+    .catch(() => {
+      /* ignore */
+    });
 }
 
 export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => ({
-  openTabs: [],
-  activeTabId: null,
   shellReady: false,
+  lastChatLeafId: null,
 
-  getActiveTab: () => {
-    const { openTabs, activeTabId } = get();
-    if (!activeTabId) return null;
-    return openTabs.find((t) => t.tabId === activeTabId) ?? null;
-  },
+  getActiveTab: () => pictureFromActiveLeaf(get().lastChatLeafId),
 
   setShellReady: (ready) => set({ shellReady: ready }),
 
   syncOpenTabTitles: (overrides) => {
-    const { openTabs } = get();
-    if (!openTabs.length) return;
-    let dirty = false;
-    const next = openTabs.map((t) => {
-      if (isPendingDraft(t.sessionId)) return t;
-      const override = overrides?.[t.sessionId];
-      if (overrides && override === undefined) return t;
-      const resolved = resolveTabSurfaceTitle(t.sessionId, override);
-      if (resolved === t.title) return t;
-      // 无会话投影时的 EMPTY 回落不得盖掉已有真实标题
+    const root = useLayoutTreeStore.getState().tree.root;
+    for (const tab of scanRealSessionTabs(root)) {
+      if (overrides && overrides[tab.sessionId] === undefined) continue;
+      const resolved = resolveTabSurfaceTitle(
+        tab.sessionId,
+        overrides?.[tab.sessionId]
+      );
+      if (resolved === tab.title) continue;
       if (
         isDefaultSessionTitle(resolved) &&
-        t.title.trim() &&
-        !isDefaultSessionTitle(t.title)
+        tab.title.trim() &&
+        !isDefaultSessionTitle(tab.title)
       ) {
-        return t;
+        continue;
       }
-      dirty = true;
-      return { ...t, title: resolved };
-    });
-    if (dirty) set({ openTabs: next });
+      treeUpdateTabTitle(tab.sessionId, resolved);
+    }
   },
 
   openOrFocusSession: (sessionId, opts) => {
     const sid = (sessionId || '').trim();
-    if (!sid) return;
-    const key =
+    if (!sid || isPendingDraft(sid)) return;
+
+    const title = resolveTabSurfaceTitle(sid, opts?.title);
+    const workspaceKey =
       canonicalSessionFolder(opts?.workspaceKey) ||
+      sessionFromStore(sid)?.folder ||
       workspaceKeyNow() ||
       GENERAL_FOLDER;
 
-    const state = get();
-    const existing = state.openTabs.find((t) => t.sessionId === sid);
-    if (existing) {
-      get().syncOpenTabTitles({
-        [sid]: resolveTabSurfaceTitle(sid, opts?.title),
-      });
-      // 已打开：聚焦 tab，并始终对齐 activeSessionId（禁止因 tab 已 active 而跳过）
-      if (get().activeTabId === existing.tabId) {
-        useSessionStore.getState().setActiveSessionId(sid);
-        bindActiveChatLeafSession(sid);
-        return;
-      }
-      get().activateTab(existing.tabId);
-      return;
-    }
-
-    const tab = makeSessionTab(sid, key, opts?.title);
-    // D10：legacy map 同步统一入口（双写路径保留，登记待清理）
-    syncOpenTabsToLegacy(key, sid);
-    set({
-      openTabs: [...state.openTabs, tab].slice(-MAX_OPEN_SESSION_TABS),
-      activeTabId: tab.tabId,
+    const targetLeaf = resolveActiveChatLeaf(get().lastChatLeafId);
+    const result = treeOpenSession(sid, {
+      title,
+      workspaceKey,
+      activeLeafId: targetLeaf.id,
     });
+    if (opts?.split && result.created) {
+      treeSplitTab(result.leafId, result.tabId, result.leafId, opts.split);
+    }
+    rememberChatLeaf(set, result.leafId);
     useSessionStore.getState().setActiveSessionId(sid);
-    // 侧栏打开：绑 session 到已有/unbound leaf；不 wipe 其它 unit 的 multi 布局
-    bindActiveChatLeafSession(sid);
-    // 仅保证至少 1 个 chat leaf 存在（normalize 不折叠 multi）
-    ensureAdapterShape();
-    dedupeSessionLeavesInStore();
   },
 
-  activateTab: (tabId) => {
-    const state = get();
-    const tab = state.openTabs.find((t) => t.tabId === tabId);
-    if (!tab) return;
-    // 同 tab 再点：仍同步 session id，避免 shell / session store 漂移
-    if (state.activeTabId === tabId) {
-      useSessionStore.getState().setActiveSessionId(tab.sessionId);
-      bindActiveChatLeafSession(tab.sessionId);
-      return;
-    }
-    set({ activeTabId: tabId });
-    useSessionStore.getState().setActiveSessionId(tab.sessionId);
-    // 聚焦该 session 的 chat leaf / unit（1:1）；不 auto-split、不 reproject dock（U10 / D1）
-    bindActiveChatLeafSession(tab.sessionId);
-    dedupeSessionLeavesInStore();
+  activateTab: (leafId, tabId) => {
+    const loc = treeFindTabByTabId(tabId);
+    if (!loc || loc.leafId !== leafId) return;
+    treeActivateTab(leafId, tabId);
+    rememberChatLeaf(set, leafId);
+    syncSessionFromActiveLeaf(leafId);
+  },
+
+  activateTabByTabId: (tabId) => {
+    const loc = treeFindTabByTabId(tabId);
+    if (loc) get().activateTab(loc.leafId, loc.tab.tabId);
   },
 
   reorderSessionTab: (sessionId, beforeSessionId) => {
+    const src = treeFindTabBySessionId(sessionId);
+    if (!src) return;
+    const leaf = ownedChatLeaves(
+      useLayoutTreeStore.getState().tree.root
+    ).find((l) => l.id === src.leafId);
+    if (!leaf) return;
+    let insertIdx = leaf.tabs.length;
+    if (beforeSessionId) {
+      const i = leaf.tabs.findIndex((t) => t.sessionId === beforeSessionId);
+      if (i >= 0) insertIdx = i;
+    }
+    treeMoveTab(src.leafId, src.tab.tabId, src.leafId, insertIdx);
+  },
+
+  closeTab: (leafId, tabId) => {
+    const loc = treeFindTabByTabId(tabId);
+    if (!loc || loc.leafId !== leafId) return;
+    const closing = loc.tab;
+    if (!isPendingDraft(closing.sessionId)) {
+      killPty(closing.sessionId);
+    }
+    treeRemoveTab(leafId, tabId);
+
+    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+    const still = chats.find((l) => l.id === get().lastChatLeafId);
+    if (!still) {
+      const tree = useLayoutTreeStore.getState();
+      const next =
+        chats.find((l) => l.id === tree.activeLeafId) ?? chats[0] ?? null;
+      set({ lastChatLeafId: next?.id ?? null });
+    }
+    syncSessionFromActiveLeaf(get().lastChatLeafId);
+  },
+
+  closeTabBySessionId: (sessionId, _workspaceKey) => {
     const sid = (sessionId || '').trim();
-    if (!sid) return;
-    const state = get();
-    const source = state.openTabs.find((t) => t.sessionId === sid);
-    if (!source) return;
-
-    const wsKey = canonicalSessionFolder(source.workspaceKey) || GENERAL_FOLDER;
-    const beforeId = (beforeSessionId || '').trim() || null;
-    if (beforeId === sid) return;
-
-    const sameWs = state.openTabs.filter(
-      (t) =>
-        (canonicalSessionFolder(t.workspaceKey) || GENERAL_FOLDER) === wsKey
-    );
-    const fromIdx = sameWs.findIndex((t) => t.sessionId === sid);
-    if (fromIdx < 0) return;
-
-    const reordered = [...sameWs];
-    const [moved] = reordered.splice(fromIdx, 1);
-    if (!moved) return;
-
-    if (beforeId) {
-      const toIdx = reordered.findIndex((t) => t.sessionId === beforeId);
-      if (toIdx >= 0) {
-        reordered.splice(toIdx, 0, moved);
-      } else {
-        reordered.push(moved);
-      }
-    } else {
-      reordered.push(moved);
-    }
-
-    // 顺序是否实质变化
-    const unchanged =
-      reordered.length === sameWs.length &&
-      reordered.every((t, i) => t.tabId === sameWs[i]!.tabId);
-    if (unchanged) return;
-
-    // 按 openTabs 原位置槽位写回同 workspace 的新顺序
-    let i = 0;
-    const nextTabs = state.openTabs.map((t) => {
-      if (
-        (canonicalSessionFolder(t.workspaceKey) || GENERAL_FOLDER) === wsKey
-      ) {
-        return reordered[i++]!;
-      }
-      return t;
-    });
-
-    set({ openTabs: nextTabs });
-    // 同步 legacy open-tabs map
-    moveSessionTab(wsKey, sid, beforeId || undefined);
+    if (!sid || isPendingDraft(sid)) return;
+    const loc = treeFindTabBySessionId(sid);
+    if (loc) get().closeTab(loc.leafId, loc.tab.tabId);
+    else killPty(sid);
   },
 
-  closeTab: (tabId) => {
-    const state = get();
-    const idx = state.openTabs.findIndex((t) => t.tabId === tabId);
-    if (idx < 0) return;
-    const closing = state.openTabs[idx]!;
-    const nextTabs = state.openTabs.filter((t) => t.tabId !== tabId);
-
-    // 同步 legacy open-tabs map
-    closeSessionTab(
-      closing.workspaceKey,
-      closing.sessionId,
-      state.activeTabId === tabId ? closing.sessionId : null
-    );
-
-    // 关闭 tab / 摘 unit → kill 该 session 的 PTY（折叠坞不杀；动态 import 防环）
-    void import('../../api/ptyRegistry')
-      .then((m) => m.killPtyForSessionBackground(closing.sessionId))
-      .catch(() => {
-        /* ignore */
-      });
-
-    // 无论是否 active：摘掉该 session 的 unit（chat + tool），reflow 邻居
-    removeSessionUnitFromTree(closing.sessionId);
-
-    const wasActive = state.activeTabId === tabId;
-    if (!wasActive) {
-      set({ openTabs: nextTabs });
-      ensureAdapterShape();
-      dedupeSessionLeavesInStore();
-      return;
-    }
-
-    const sameWs = nextTabs.filter(
-      (t) => t.workspaceKey === closing.workspaceKey
-    );
-    const neighbor =
-      sameWs[Math.min(idx, sameWs.length - 1)] ??
-      sameWs[sameWs.length - 1] ??
-      nextTabs[Math.min(idx, nextTabs.length - 1)] ??
-      nextTabs[nextTabs.length - 1] ??
-      null;
-
-    if (neighbor) {
-      set({ openTabs: nextTabs, activeTabId: neighbor.tabId });
-      useSessionStore.getState().setActiveSessionId(neighbor.sessionId);
-      bindActiveChatLeafSession(neighbor.sessionId);
-      // 仅当邻居 dock 应展开但树上缺 tool 时补投影；多 unit 已就位则跳过
-      if (neighborDockNeedsProject(neighbor.sessionId, neighbor.rightDock)) {
-        applyDockToTree(neighbor.rightDock, neighbor.sessionId);
-      }
-      ensureAdapterShape();
-      dedupeSessionLeavesInStore();
-      return;
-    }
-
-    // 无邻居：进入空白新对话界面（draft 不进 openTabs，不减标签以外的「假新对话 tab」）
-    const realOnly = nextTabs.filter((t) => !isPendingDraft(t.sessionId));
-    set({ openTabs: realOnly, activeTabId: null });
-    useSessionStore.getState().enterDraftMode(closing.workspaceKey);
-    ensureChatOnlyTree();
+  updateRightDock: (tabId, patch: Partial<RightToolDockState> | RightToolDockState) => {
+    treeUpdateTabDock(tabId, patch);
   },
 
-  closeTabBySessionId: (sessionId, workspaceKey) => {
-    const key = workspaceKey
-      ? canonicalSessionFolder(workspaceKey)
-      : undefined;
-    const tab = get().openTabs.find(
-      (t) =>
-        t.sessionId === sessionId &&
-        (key ? t.workspaceKey === key : true)
-    );
-    if (tab) get().closeTab(tab.tabId);
-    else {
-      // 仅 legacy map：无 TabSurface 仍须释放 PTY
-      const fk = key || workspaceKeyNow();
-      closeSessionTab(fk, sessionId, sessionId);
-      void import('../../api/ptyRegistry')
-        .then((m) => m.killPtyForSessionBackground(sessionId))
-        .catch(() => {
-          /* ignore */
-        });
-    }
-  },
+  openNewDraftTab: (opts) => {
+    const args = typeof opts === 'string' ? { workspaceKey: opts } : (opts ?? {});
+    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+    const listed = listChatLeaves(useLayoutTreeStore.getState().tree.root);
+    const leaf =
+      (args.leafId &&
+        (chats.find((l) => l.id === args.leafId) ||
+          listed.find((l) => l.id === args.leafId))) ||
+      resolveActiveChatLeaf(get().lastChatLeafId);
 
-  updateRightDock: (tabId, patch) => {
-    const state = get();
-    const openTabs = state.openTabs.map((t) => {
-      if (t.tabId !== tabId) return t;
-      const rightDock =
-        'collapsed' in patch &&
-        'openPanelIds' in patch &&
-        'activePanelId' in patch &&
-        'widthRatio' in patch
-          ? (patch as RightToolDockState)
-          : { ...t.rightDock, ...patch };
-      return { ...t, rightDock };
-    });
-    set({ openTabs });
-    // 始终按该 tab 的 session 投影（含非 active unit 关最后工具 tab → 折叠该 unit）
-    const tab = openTabs.find((t) => t.tabId === tabId);
-    if (tab) applyDockToTree(tab.rightDock, tab.sessionId);
-  },
-
-  /**
-   * 用户「新对话」：进入空白界面（PENDING_DRAFT），**不**往 openTabs 塞「新对话」标签，
-   * **不**清空已有真实会话标签。标签行只反映真实 session；draft 无文字标签。
-   * @see docs/architecture/session-pending-draft-adr.md
-   */
-  openNewDraftTab: (workspaceKey) => {
-    const key =
-      canonicalSessionFolder(workspaceKey) ||
+    const workspaceKey =
+      canonicalSessionFolder(args.workspaceKey) ||
       workspaceKeyNow() ||
       GENERAL_FOLDER;
-    const state = get();
-    // 清掉历史误写入的 draft tab（若有），保留全部真实会话 tab
-    const realTabs = state.openTabs.filter((t) => !isPendingDraft(t.sessionId));
-    set({
-      openTabs: realTabs,
-      // 无选中 tab → 条带无高亮；界面由 activeSessionId=PENDING_DRAFT 驱动 empty UI
-      activeTabId: null,
+
+    treeAddTab(leaf.id, { workspaceKey });
+    rememberChatLeaf(set, leaf.id);
+    useSessionStore.getState().enterDraftMode(workspaceKey, {
+      draftSessionId: mintDraftSessionId(leaf.id),
     });
-    useSessionStore.getState().enterDraftMode(key);
-
-    // 关键：ChatCard 若钉死 leaf.sessionId，会忽略 PENDING_DRAFT → 看起来「点了没反应」
-    // 解绑当前活动 chat leaf，让面板跟全局 draft 空态
-    try {
-      const treeStore = useLayoutTreeStore.getState();
-      const chats = listChatLeaves(treeStore.tree.root);
-      const target =
-        chats.find((c) => c.id === treeStore.activeLeafId) ??
-        (chats.length === 1 ? chats[0]! : undefined);
-      if (target?.sessionId) {
-        treeStore.setLeafSessionId(target.id, undefined);
-      }
-      if (target && treeStore.activeLeafId !== target.id) {
-        treeStore.setActiveLeaf(target.id);
-      }
-    } catch {
-      /* ignore */
-    }
-
-    // 不 wipe multi-chat 树；仅保证至少有 chat leaf
-    ensureAdapterShape();
   },
 
   resetToCleanDraft: (workspaceKey) => {
@@ -466,60 +246,57 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
       canonicalSessionFolder(workspaceKey) ||
       workspaceKeyNow() ||
       GENERAL_FOLDER;
-    // 冷启动 / 显式「关光全部」：清空 tab，进入空白新对话（draft 不进 openTabs）
     void import('../../api/ptyRegistry')
       .then((m) => m.killAllPtys())
       .catch(() => {
         /* ignore */
       });
-    set({
-      openTabs: [],
-      activeTabId: null,
+    treeResetToSingleDraftLeaf(key);
+    const leaf = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0];
+    set({ lastChatLeafId: leaf?.id ?? null });
+    useSessionStore.getState().enterDraftMode(key, {
+      draftSessionId: leaf ? mintDraftSessionId(leaf.id) : undefined,
     });
-    useSessionStore.getState().enterDraftMode(key);
-    ensureChatOnlyTree();
   },
 
-  migrateFromOpenTabsMap: (map, known, opts) => {
-    const projectActiveDock = opts?.projectActiveDock !== false;
-    const tabs: TabSurface[] = [];
-    for (const [wsKey, ids] of Object.entries(map)) {
-      for (const sid of ids || []) {
-        if (tabs.some((t) => t.sessionId === sid)) continue;
-        const meta = known.get(sid);
-        tabs.push(
-          makeSessionTab(
-            sid,
-            wsKey,
-            meta?.title
-          )
-        );
-      }
+  focusLeaf: (leafId) => {
+    const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
+    const leaf = chats.find((l) => l.id === leafId);
+    if (!leaf) return;
+    if (leaf.activeTabId) {
+      treeActivateTab(leafId, leaf.activeTabId);
+    } else {
+      useLayoutTreeStore.getState().setActiveLeaf(leafId);
     }
-    if (!tabs.length) {
-      get().resetToCleanDraft();
+    rememberChatLeaf(set, leafId);
+    syncSessionFromActiveLeaf(leafId);
+  },
+
+  promoteDraftTab: (draftSessionId, realSessionId, title) => {
+    if (
+      !isPendingDraft(draftSessionId) ||
+      !realSessionId ||
+      isPendingDraft(realSessionId)
+    ) {
       return;
     }
-    set({
-      openTabs: tabs.slice(-MAX_OPEN_SESSION_TABS),
-      activeTabId: tabs[tabs.length - 1]!.tabId,
-    });
-    const active = tabs[tabs.length - 1]!;
-    if (!isPendingDraft(active.sessionId)) {
-      useSessionStore.getState().setActiveSessionId(active.sessionId);
+    const existing = treeFindTabBySessionId(realSessionId);
+    if (existing) {
+      get().activateTab(existing.leafId, existing.tab.tabId);
+      return;
     }
-    // Multi-unit tree restore: keep tree docks; only project when requested
-    // (default collapsed shell dock would collapse restored units).
-    if (projectActiveDock) {
-      applyDockToTree(active.rightDock, active.sessionId);
-    }
-    ensureAdapterShape();
+    treePromoteDraftTab(draftSessionId, realSessionId, { title });
+    syncSessionFromActiveLeaf(get().lastChatLeafId);
+  },
+
+  deleteSessionAndCloseTab: (sessionId) => {
+    const sid = (sessionId || '').trim();
+    if (!sid || isPendingDraft(sid)) return false;
+    get().closeTabBySessionId(sid);
+    const removed = useSessionStore.getState().deleteSession(sid);
+    syncSessionFromActiveLeaf(get().lastChatLeafId);
+    return removed;
   },
 }));
 
-// G13 断环：向 shellReadBridge 注册本 store 的读取/写入闭包，
-// adapterShape / layoutRestorePolicy 经桥访问 shell，不再 import 本文件。
-// 必须在 useWorkspaceShellStore 定义之后执行（依赖其 getState/setState）。
 registerShellStoreReadApi(useWorkspaceShellStore);
-
-

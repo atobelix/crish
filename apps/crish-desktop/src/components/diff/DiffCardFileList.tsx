@@ -214,6 +214,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
               <div className={styles.compareSelectorWrap}>
                 <span className={styles.selectLabel}>对比维度:</span>
                 <Select
+                  size="sm"
                   value={getFileCompareMode(f.filePath)}
                   options={compareOptions.map((o) => ({
                     id: o.value,
@@ -226,6 +227,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                     }
                   }}
                   className={styles.inlineCompareSelect ?? ''}
+                  aria-label="对比维度选择"
                 />
               </div>
 

@@ -1,5 +1,4 @@
-/*           PE-04 T04.5-2      SettingsUI
- * S6 P1-8 --ui-*       rgba       --color-*     tokens.css     */
+/* apps/crish-desktop/src/components/settings/StatusDiagnosticsPanel.module.css */
 
 .pageMeta {
   display: inline-flex;
@@ -17,7 +16,7 @@
 }
 
 .spin {
-  animation: diag-spin var(--transition-spin) infinite;
+  animation: diag-spin var(--transition-spin, 800ms) infinite linear;
 }
 
 @keyframes diag-spin {
@@ -26,7 +25,6 @@
   }
 }
 
-/*             /       */
 .errorBanner {
   display: flex;
   align-items: flex-start;
@@ -34,7 +32,7 @@
   padding: 12px 14px;
   margin-bottom: 16px;
   border: 1px solid var(--color-error-border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 8px);
   background: var(--color-error-bg);
   color: var(--text-danger);
 }
@@ -56,12 +54,12 @@
   font-weight: 600;
 }
 
-/*      OK / 异常 / 4px 状态 Badge    */
+/* 状态 Badge */
 .badgeOk {
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   font-size: 12px;
   font-weight: 600;
   color: var(--text-success);
@@ -72,23 +70,26 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   font-size: 12px;
   font-weight: 600;
   color: var(--text-danger);
   background: var(--color-error-bg);
 }
 
+/* 纯净 Badge 规范 */
 .monoBadge {
   display: inline-flex;
   align-items: center;
   font-family: var(--font-mono);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--control-soft-bg, var(--tint-hover));
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-card, hsl(0 0% 100%));
   color: var(--text-primary);
   border: 1px solid var(--border-color);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 3%, transparent);
 }
 
 .logDirControl {
@@ -110,14 +111,13 @@
   vertical-align: middle;
 }
 
-/*            */
 .lastError {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px 14px;
   border: 1px solid var(--color-error-border);
-  border-radius: 8px;
+  border-radius: var(--radius-lg, 8px);
   background: var(--color-error-bg);
 }
 
@@ -132,7 +132,7 @@
   font-size: 12px;
   font-weight: 700;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   color: var(--text-danger);
   background: var(--color-error-bg);
 }
@@ -153,7 +153,6 @@
   color: var(--text-danger);
 }
 
-/*     /       */
 .noError {
   display: flex;
   align-items: center;
@@ -163,7 +162,7 @@
   color: var(--text-tertiary);
 }
 
-/*  最近诊断：CSS Grid 72px 150px 1fr 刚性栅格隔离，消灭重叠碰撞   */
+/* 最近诊断刚性栅格隔离 */
 .diagList {
   list-style: none;
   margin: 0;
@@ -195,7 +194,7 @@
   font-size: 11px;
   font-weight: 700;
   padding: 2px 4px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

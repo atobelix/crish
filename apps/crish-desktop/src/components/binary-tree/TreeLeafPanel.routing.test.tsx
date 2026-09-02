@@ -1,13 +1,12 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { TreeLeafPanel } from './TreeLeafPanel';
 import * as workspaceShellModule from '../../store/workspace-shell';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useLayoutTreeStore } from '../../store/layout-tree';
-import { createLeaf } from '../../store/layout-tree/types';
-import type { SessionState } from '../../store/types';
+import type { LayoutLeaf, SessionState } from '../../store/types';
 import { registerBuiltInViews, type ViewFactoryMap } from '../../services/view-registry';
 import type { ViewRenderContext } from '../../services/view-registry';
 import { lazy } from 'react';
@@ -99,6 +98,42 @@ const routingTestFactories: ViewFactoryMap = {
   'flow-dag': stubFactory,
 };
 
+function makeChatLeaf(opts: {
+  id?: string;
+  sessionId: string;
+  tabId?: string;
+  dock?: {
+    collapsed: boolean;
+    openPanelIds: string[];
+    activePanelId: string | null;
+    widthRatio?: number;
+  };
+}): LayoutLeaf {
+  const tabId = opts.tabId ?? 'tab-1';
+  return {
+    type: 'leaf',
+    id: opts.id ?? 'chat-leaf-1',
+    panelId: 'chat',
+    tabs: [
+      {
+        tabId,
+        sessionId: opts.sessionId,
+        title: opts.sessionId,
+        workspaceKey: '对话',
+        dock: {
+          collapsed: true,
+          openPanelIds: [],
+          activePanelId: null,
+          widthRatio: 0.5,
+          ...opts.dock,
+        },
+      },
+    ],
+    activeTab: 'chat',
+    activeTabId: tabId,
+  } as unknown as LayoutLeaf;
+}
+
 describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
   afterEach(() => {
     act(() => {
@@ -127,12 +162,15 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     });
   });
 
-  it('TreeLeafPanel 渲染 ChatCard 时注入真实 handleOpenTool，点击工具入口触发 openToolInSession', async () => {
+  it('TreeLeafPanel 渲染 ChatCard 时注入真实 handleOpenTool，点击工具入口触发 openToolInLeaf', async () => {
     const openToolSpy = vi
-      .spyOn(workspaceShellModule, 'openToolInSession')
+      .spyOn(workspaceShellModule, 'openToolInLeaf')
       .mockImplementation(() => {});
 
-    const leaf = createLeaf('chat-leaf-1', ['chat'], 'chat', 'session-123');
+    const leaf = makeChatLeaf({
+      id: 'chat-leaf-1',
+      sessionId: 'session-123',
+    });
     useLayoutTreeStore.setState({
       activeLeafId: leaf.id,
       tree: { root: leaf, version: 1 },
@@ -152,23 +190,27 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     );
     filesBtn.click();
 
-    expect(openToolSpy).toHaveBeenCalledWith('session-123', 'files');
+    expect(openToolSpy).toHaveBeenCalledWith('chat-leaf-1', 'files');
 
     const diffBtn = screen.getByTestId('trigger-diff-tool');
     diffBtn.click();
 
-    expect(openToolSpy).toHaveBeenCalledWith('session-123', 'diff');
+    expect(openToolSpy).toHaveBeenCalledWith('chat-leaf-1', 'diff');
   });
 
-  it('TreeLeafPanel 渲染 FilesCard', async () => {
-    const leaf = createLeaf(
-      'tool-leaf-files',
-      ['files'],
-      'files',
-      'session-123'
-    );
+  it('chat 叶 dock 开 files 时抽屉内渲染 FilesCard，叶根仍 data-panel-id=chat', async () => {
+    const leaf = makeChatLeaf({
+      id: 'chat-leaf-files',
+      sessionId: 'session-123',
+      dock: {
+        collapsed: false,
+        openPanelIds: ['files'],
+        activePanelId: 'files',
+        widthRatio: 0.4,
+      },
+    });
 
-    render(
+    const { container } = render(
       <TreeLeafPanel
         leaf={leaf}
         rect={{ x: 0.5, y: 0, width: 0.5, height: 1 }}
@@ -181,11 +223,17 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
       screen.getByTestId('mock-files-card')
     );
     expect(filesCard).toBeDefined();
+    const root = container.querySelector('[data-leaf-id]') as HTMLElement;
+    expect(root.getAttribute('data-panel-id')).toBe('chat');
+    expect(root.getAttribute('data-dock-open')).toBe('true');
+    expect(
+      container.querySelector('[data-leaf-tool-tab-strip="true"]')
+    ).toBeTruthy();
   });
 
   it('F6 默认 chat 叶出现顶快捷行；打开文件在对话顶；不挂 LeafToolTabStrip', async () => {
     deactivateNotePaper();
-    const leaf = createLeaf('chat', ['chat'], 'chat', 'session-123');
+    const leaf = makeChatLeaf({ id: 'chat', sessionId: 'session-123' });
     useLayoutTreeStore.setState({
       activeLeafId: leaf.id,
       tree: { root: leaf, version: 1 },
@@ -208,12 +256,27 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(getByTestId('top-quick-preview-btn')).toBeTruthy();
     expect(getByTestId('chat-header-more')).toBeTruthy();
     expect(queryByTestId('right-dock-toggle')).toBeNull();
+    const dockBtn = getByTestId('top-quick-dock-btn');
+    expect(dockBtn).toBeTruthy();
+    expect(chrome?.contains(dockBtn)).toBe(false);
+    expect(
+      container.querySelector('[data-leaf-id]')?.contains(dockBtn)
+    ).toBe(true);
   });
 
-  it('F11 note 未注册时本地 fallback，不是纯空白', () => {
+  it('F11 note 未注册时抽屉空态 fallback，叶根仍 chat', () => {
     deactivateNotePaper();
-    const leaf = createLeaf('note', ['note'], 'note', 'session-123');
-    render(
+    const leaf = makeChatLeaf({
+      id: 'chat-note',
+      sessionId: 'session-123',
+      dock: {
+        collapsed: false,
+        openPanelIds: ['note'],
+        activePanelId: 'note',
+        widthRatio: 0.4,
+      },
+    });
+    const { container } = render(
       <TreeLeafPanel
         leaf={leaf}
         rect={{ x: 0.5, y: 0, width: 0.5, height: 1 }}
@@ -224,5 +287,8 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(screen.getByText(/未知面板类型：note/)).toBeTruthy();
     expect(screen.getByText(/笔记扩展未激活/)).toBeTruthy();
     expect(screen.queryByTestId('note-paper-strict-panel')).toBeNull();
+    expect(
+      container.querySelector('[data-leaf-id]')?.getAttribute('data-panel-id')
+    ).toBe('chat');
   });
 });

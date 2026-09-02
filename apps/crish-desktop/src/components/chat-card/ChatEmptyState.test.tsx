@@ -95,4 +95,40 @@ describe('ChatEmptyState', () => {
     ).toBeTruthy();
     expect(container.querySelector('[data-empty-region="loading"]')).toBeNull();
   });
+
+  it('renders 3 quick prompt cards with listitem role and accessible labels', () => {
+    stubProject('conex');
+    const onSetChatInput = vi.fn();
+    render(
+      <ChatEmptyState
+        kind="session-empty"
+        onSetChatInput={onSetChatInput}
+      />
+    );
+
+    const cards = screen.getAllByRole('listitem');
+    expect(cards).toHaveLength(3);
+
+    expect(screen.getByText('分析项目结构')).toBeDefined();
+    expect(screen.getByText('查看代码改动')).toBeDefined();
+    expect(screen.getByText('检查开发服务')).toBeDefined();
+  });
+
+  it('triggers prompt insertion and focus when card is clicked', () => {
+    stubProject('conex');
+    const onSetChatInput = vi.fn();
+    render(
+      <ChatEmptyState
+        kind="session-empty"
+        onSetChatInput={onSetChatInput}
+      />
+    );
+
+    const firstCard = screen.getByRole('listitem', { name: /分析项目结构/i });
+    firstCard.click();
+
+    expect(onSetChatInput).toHaveBeenCalledWith(
+      expect.stringContaining('分析当前工作区项目结构')
+    );
+  });
 });

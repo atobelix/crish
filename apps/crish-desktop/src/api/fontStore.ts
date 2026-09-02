@@ -31,6 +31,7 @@ export {
   listLocalFonts,
   ensureFontsLoaded,
 } from './fontStoreCatalog';
+export { scanSystemFonts } from './fontStoreScan';
 import { ensureFontsLoaded, uiFontOptions, monoFontOptions } from './fontStoreCatalog';
 
 export type PlatformId =

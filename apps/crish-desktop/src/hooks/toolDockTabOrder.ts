@@ -5,13 +5,6 @@
  */
 
 import type { LayoutNode } from '../store/layout-tree/types';
-import { isLeaf } from '../store/layout-tree/types';
-import { viewRegistry } from '../services/view-registry';
-import { findNodeById } from '../store/layout-tree/operations';
-import {
-  findUnitRootId,
-  listToolLeaves,
-} from '../store/layout-tree/conversationUnit';
 
 /**
  * 将 `fromId` 移到 `beforeId` 之前；`beforeId` 为 null / 不存在时移到末尾。
@@ -52,23 +45,13 @@ export function reorderOpenPanelIds(
  * 用于拖拽落点域限制：工具 tab 只能落在本 unit 的 tool 域。
  */
 export function listToolLeafIdsInUnit(
-  root: LayoutNode,
-  sessionId: string
+  _root: LayoutNode,
+  _sessionId: string
 ): Set<string> {
-  const sid = (sessionId || '').trim();
-  if (!sid) return new Set();
-
-  const unitRootId = findUnitRootId(root, sid);
-  if (!unitRootId) return new Set();
-
-  const unitNode = findNodeById(root, unitRootId);
-  if (!unitNode) return new Set();
-
-  if (isLeaf(unitNode)) {
-    return !viewRegistry.isPrimary(unitNode.panelId) ? new Set([unitNode.id]) : new Set();
-  }
-
-  return new Set(listToolLeaves(unitNode).map((l) => l.id));
+  void _root;
+  void _sessionId;
+  // 坞已下树，会话树上没有 tool 叶。
+  return new Set();
 }
 
 /**
@@ -76,24 +59,12 @@ export function listToolLeafIdsInUnit(
  * 拖拽源 leaf 优先用此结果，避免 header 所在 leaf 与 tab 实际所在 leaf 不一致。
  */
 export function findToolLeafIdForPanel(
-  root: LayoutNode,
-  sessionId: string,
-  panelId: string
+  _root: LayoutNode,
+  _sessionId: string,
+  _panelId: string
 ): string | null {
-  const sid = (sessionId || '').trim();
-  if (!sid || !panelId) return null;
-
-  const unitRootId = findUnitRootId(root, sid);
-  if (!unitRootId) return null;
-  const unitNode = findNodeById(root, unitRootId);
-  if (!unitNode) return null;
-
-  const tools = isLeaf(unitNode)
-    ? !viewRegistry.isPrimary(unitNode.panelId)
-      ? [unitNode]
-      : []
-    : listToolLeaves(unitNode);
-
-  const hit = tools.find((l) => l.tabs.includes(panelId));
-  return hit?.id ?? null;
+  void _root;
+  void _sessionId;
+  void _panelId;
+  return null;
 }

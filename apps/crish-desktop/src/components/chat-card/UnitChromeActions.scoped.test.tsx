@@ -153,21 +153,82 @@ describe('UnitChromeActions 分屏作用域单源化', () => {
       activeTabId: 'tab-b',
     });
 
+    const dockA = createDefaultDock({
+      collapsed: false,
+      openPanelIds: ['files'],
+      activePanelId: 'files',
+    });
+    const dockB = createDefaultDock({
+      collapsed: true,
+      openPanelIds: ['overview'],
+      activePanelId: null,
+    });
     useLayoutTreeStore.setState({
       toolColumnCollapsed: false,
-    });
+      tree: {
+        version: 3,
+        root: {
+          type: 'branch',
+          id: 'split-root',
+          direction: 'horizontal',
+          splitRatio: 0.5,
+          children: [
+            {
+              type: 'leaf',
+              id: 'leaf-a',
+              panelId: 'chat',
+              tabs: [
+                {
+                  tabId: 'tab-a',
+                  sessionId: 'unit-a',
+                  title: '会话 A',
+                  workspaceKey: GENERAL_FOLDER,
+                  dock: dockA,
+                },
+              ],
+              activeTab: 'chat',
+              activeTabId: 'tab-a',
+            },
+            {
+              type: 'leaf',
+              id: 'leaf-b',
+              panelId: 'chat',
+              tabs: [
+                {
+                  tabId: 'tab-b',
+                  sessionId: 'unit-b',
+                  title: '会话 B',
+                  workspaceKey: GENERAL_FOLDER,
+                  dock: dockB,
+                },
+              ],
+              activeTab: 'chat',
+              activeTabId: 'tab-b',
+            },
+          ],
+        },
+      },
+    } as never);
   });
 
   it('当多 Unit 分屏时，Unit A 展开 files 时文件按钮高亮，Unit B 处于折叠状态不高亮', () => {
     const unitA = render(
-      <UnitChromeActions activeSessionId="unit-a" />
+      <UnitChromeActions
+        activeSessionId="unit-a"
+        dockOpen
+        dockPanelId="files"
+      />
     );
     const artifactsBtnA = unitA.getByTestId('top-quick-files-btn');
     expect(artifactsBtnA.getAttribute('data-active')).toBe('true');
     unitA.unmount();
 
     const unitB = render(
-      <UnitChromeActions activeSessionId="unit-b" />
+      <UnitChromeActions
+        activeSessionId="unit-b"
+        dockOpen={false}
+        dockPanelId={null}
+      />
     );
     const artifactsBtnB = unitB.getByTestId('top-quick-files-btn');
     expect(artifactsBtnB.getAttribute('data-active')).toBe('false');
@@ -207,6 +268,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(queryByTestId('chat-open-terminal')).toBeNull();
     expect(queryByTestId('chat-open-note')).toBeNull();
     expect(queryByTestId('sidebar-toggle-btn')).toBeNull();
+    expect(queryByTestId('top-quick-dock-btn')).toBeNull();
 
     expect(getByTestId('top-quick-preview-btn').getAttribute('aria-label')).toBe(
       '打开应用预览'
@@ -319,6 +381,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(src).not.toMatch(/if\s*\(\s*rightDockCollapsed\s*&&/);
     expect(src).not.toMatch(/from\s+['"]\.\/ChatHeader['"]/);
     expect(src).not.toMatch(/sidebar-toggle-btn/);
+    expect(src).not.toMatch(/top-quick-dock-btn/);
     expect(src).toMatch(/data-chat-top-header/);
     expect(src).toMatch(/\{leading\}/);
     expect(css).not.toMatch(/data-canvas-quiet/);
@@ -386,6 +449,7 @@ describe('UnitChromeActions 重构与交互验证 (00-总方案 §4.1 & 02-pixel
     expect(getByTestId('chat-header-more')).toBeTruthy();
     expect(queryByTestId('right-dock-toggle')).toBeNull();
     expect(queryByTestId('sidebar-toggle-btn')).toBeNull();
+    expect(queryByTestId('top-quick-dock-btn')).toBeNull();
     expect(queryByTestId('chat-open-overview')).toBeNull();
     expect(queryByTestId('chat-open-files')).toBeNull();
   });

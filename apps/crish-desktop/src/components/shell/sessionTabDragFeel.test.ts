@@ -54,14 +54,24 @@ describe('条内插入指数 1/3 滞后', () => {
   });
 });
 
-describe('叶面 25% 边缘分区', () => {
+describe('叶面 22% 边缘分区', () => {
   const pane = { left: 0, top: 0, width: 400, height: 200 };
 
-  it('钉死 25% 边缘常量', () => {
-    expect(SESSION_PANE_EDGE).toBe(0.25);
+  it('钉死 22% 边缘常量', () => {
+    expect(SESSION_PANE_EDGE).toBe(0.22);
   });
 
-  it('左右上下 25% 为 split；中间 center', () => {
+  it('400×200 叶：x=0–87 left，x=88 起不算 left；中间 center；x=313–400 right', () => {
+    expect(detectPaneDropRegion(0, 100, pane)).toBe('left');
+    expect(detectPaneDropRegion(87, 100, pane)).toBe('left');
+    expect(detectPaneDropRegion(88, 100, pane)).toBe('center');
+    expect(detectPaneDropRegion(200, 100, pane)).toBe('center');
+    expect(detectPaneDropRegion(312, 100, pane)).toBe('center');
+    expect(detectPaneDropRegion(313, 100, pane)).toBe('right');
+    expect(detectPaneDropRegion(400, 100, pane)).toBe('right');
+  });
+
+  it('左右上下 22% 为 split；中间 center', () => {
     expect(detectPaneDropRegion(20, 100, pane)).toBe('left');
     expect(detectPaneDropRegion(390, 100, pane)).toBe('right');
     expect(detectPaneDropRegion(200, 10, pane)).toBe('top');

@@ -1,11 +1,11 @@
 /**
  * ui/Dialog 目录内私有焦点圈定基元（PE-05 T05.1.3, WO-21）
  *
- * 引用计数沙盒与白名单隔离（WO-21 / SPEC-03）：
+ * 引用计数沙盒与白名单隔离（WO-21 / SPEC-03 / Plan-09）：
  * 1. 建立 FocusTrapIsolationManager 原生 Map<Element, number> inert 引用计数状态机；
  * 2. 精确隔离当前 activeTrapElement 自身，多层嵌套时父级 Dialog 被正确 inert 冻结；
- * 3. 白名单旁路：Radix Popper、Tooltip、Toast 兄弟容器不打上 aria-hidden="true" / inert=true；
- * 4. Tab / Shift+Tab 循环锁定与边界 wrap-around 冒泡阻断。
+ * 3. 白名单旁路：Radix Popper、Tooltip、Toast 以及自研 Select/Combobox 浮层不打上 aria-hidden / inert；
+ * 4. Tab / Shift+Tab 循环锁定与边界 wrap-around 冒泡阻断，支持自研浮层内部焦点豁免。
  */
 import React, {
   useEffect,
@@ -68,7 +68,15 @@ class FocusTrapIsolationManager {
       node.classList.contains('radix-popper-content-wrapper') ||
       node.classList.contains('toaster') ||
       node.id === 'toast-portal' ||
-      node.id === 'tooltip-portal'
+      node.id === 'tooltip-portal' ||
+      // 🌟 Plan-09 自研 Select / Combobox 原子浮层白名单放行
+      node.getAttribute('data-slot') === 'select-content' ||
+      node.getAttribute('data-slot') === 'combobox-content' ||
+      node.getAttribute('role') === 'listbox' ||
+      node.hasAttribute('data-floating-layer') ||
+      node.querySelector?.(
+        '[data-slot="select-content"], [data-slot="combobox-content"], [role="listbox"], [data-floating-layer]'
+      ) != null
     ) {
       return true;
     }
@@ -214,6 +222,16 @@ export function FocusTrap({
       const last = focusable[focusable.length - 1];
       if (!first || !last) return;
       const activeEl = document.activeElement;
+
+      // 如果当前焦点位于自研或白名单浮层内部，交由浮层自身键盘状态机处理
+      if (
+        activeEl &&
+        activeEl.closest?.(
+          '[data-slot="select-content"], [data-slot="combobox-content"], [role="listbox"], [data-radix-popper-content-wrapper], [data-floating-layer]'
+        )
+      ) {
+        return;
+      }
 
       if (e.shiftKey) {
         if (activeEl === first || !containerRef.current.contains(activeEl)) {

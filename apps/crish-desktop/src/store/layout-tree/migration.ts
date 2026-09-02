@@ -21,6 +21,7 @@ import { useLayoutTreeStore } from './layoutTreeStore';
 import { migrateFromColumns, collectLeaves } from './operations';
 import { createDefaultTree } from './types';
 import type { LayoutTree } from './types';
+import { isDraftSessionId } from './sessionTabModel';
 
 /** 旧 store 的 localStorage key（与 layoutStore.ts withPersist 一致） */
 const LEGACY_STORAGE_KEY = 'crish-layout-v1';
@@ -38,9 +39,11 @@ function isTreeInDefaultState(tree: LayoutTree): boolean {
   const leaves = collectLeaves(tree.root);
   if (leaves.length !== 1) return false;
   const leaf = leaves[0]!;
-  // 默认树：单 chat leaf，tabs 仅 ['chat']
+  // 默认树：单 chat 叶，无真会话（空新对话界面，或遗留单张草稿 tab）
+  if (leaf.panelId !== 'chat') return false;
+  if (leaf.tabs.length === 0) return true;
   return (
-    leaf.panelId === 'chat' && leaf.tabs.length === 1 && leaf.tabs[0] === 'chat'
+    leaf.tabs.length === 1 && isDraftSessionId(leaf.tabs[0]!.sessionId)
   );
 }
 

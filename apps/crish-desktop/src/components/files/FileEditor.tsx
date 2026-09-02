@@ -1,4 +1,8 @@
+/**
+ * apps/crish-desktop/src/components/files/FileEditor.tsx
+ */
 import React from 'react';
+import styles from './FileEditor.module.css';
 
 interface FileEditorProps {
   editBuf: string;
@@ -8,20 +12,19 @@ interface FileEditorProps {
 }
 
 export const FileEditor = React.memo(function FileEditor({
-  editBuf, content, onChange,
+  editBuf,
+  content,
+  onChange,
 }: FileEditorProps) {
   return (
     <textarea
-      className="files-editor"
+      className={styles.editor}
       value={editBuf}
       onChange={(e) => onChange(e.target.value, e.target.value !== content)}
       spellCheck={false}
-      style={{
-        width: '100%', height: '100%', resize: 'none', border: 'none',
-        outline: 'none', padding: '8px', fontFamily: 'var(--font-mono)',
-        fontSize: 'var(--font-size-sm)', lineHeight: '1.5',
-        background: 'var(--bg-primary)', color: 'var(--text-primary)',
-      }}
+      aria-label="源码编辑区域"
     />
   );
 });
+
+FileEditor.displayName = 'FileEditor';

@@ -61,8 +61,8 @@
 }
 
 .settingsUiCard {
-  background: transparent;
-  border: 1px solid var(--border-subtle);
+  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
   border-radius: var(--radius-xl, 12px);
   overflow: hidden;
   display: flex;
@@ -222,7 +222,7 @@
 }
 
 .settingsUiRowClickable:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
 }
 
 .settingsUiRowIcon {

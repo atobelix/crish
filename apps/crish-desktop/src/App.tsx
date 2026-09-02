@@ -28,6 +28,7 @@ import { useWorkspaceShellStore } from './store/workspace-shell';
 
 // ── 关键路径组件：同步导入，与 App 同 chunk ──
 import { Sidebar } from './components/sidebar/Sidebar';
+import { SidebarToggle } from './components/sidebar/SidebarHeader';
 import { AppTopBar } from './components/AppTopBar';
 import { SessionTabDragProvider } from './components/shell/SessionTabDragContext';
 
@@ -107,9 +108,6 @@ function App() {
   // 引擎就绪门闩（T06.8 归一：useEngineBootstrap 取代 useAppBootstrap setEngineReady）
   const engineReady = useEngineBootstrap();
 
-  const [isHoveredExpanded, setIsHoveredExpanded] = useState(false);
-  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
   // App startup & service hydration
   useAppBootstrap({
     setAppSettings,
@@ -138,31 +136,6 @@ function App() {
     };
   }, []);
 
-  const handleSidebarHoverEnter = () => {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    setIsHoveredExpanded(true);
-  };
-
-  const handleSidebarHoverLeave = () => {
-    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    hoverTimeoutRef.current = setTimeout(() => {
-      setIsHoveredExpanded(false);
-    }, 200);
-  };
-
-  const handleHoverTriggerEnter = () => {
-    if (sidebarCollapsed) {
-      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-      setIsHoveredExpanded(true);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
-    };
-  }, []);
-
   const appModeClass = isDemoModeFast() ? 'app-mode-demo' : 'app-mode-normal';
 
   return (
@@ -172,6 +145,7 @@ function App() {
         className={`app-container ${appModeClass}`}
         data-engine-ready={engineReady ? 'true' : 'false'}
         data-first-run={showFirstRun ? 'true' : 'false'}
+        data-sidebar-collapsed={sidebarCollapsed ? 'true' : 'false'}
         data-perf-level={
           platformAdaptation.hardwareReady
             ? String(platformAdaptation.level)
@@ -182,61 +156,35 @@ function App() {
           跳转到主要内容
         </a>
 
-        <AppTopBar
-          sidebarCollapsed={sidebarCollapsed}
-          onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-          onShowCheatsheet={() => setShowCheatsheet(true)}
-        />
+        <AppTopBar onShowCheatsheet={() => setShowCheatsheet(true)} />
 
         <main
           id="crish-main"
           className="main-layout"
           aria-label="主工作区"
         >
-          {sidebarCollapsed && (
-            <div
-              className="sidebar-hover-trigger"
-              onMouseEnter={handleHoverTriggerEnter}
-              aria-hidden="true"
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: 0,
-                bottom: 0,
-                width: '8px',
-                zIndex: 'var(--z-sidebar)',
-                cursor: 'w-resize',
-              }}
-            />
-          )}
+          <SidebarToggle
+            collapsed={sidebarCollapsed}
+            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+          />
 
           <div
             id="crish-sidebar"
-            className={`sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''} ${sidebarCollapsed && isHoveredExpanded ? 'hoverExpanded' : ''}`}
+            className={`sidebar-wrapper ${sidebarCollapsed ? 'collapsed' : ''}`}
             role="navigation"
             aria-label="会话侧栏"
-            aria-hidden={
-              sidebarCollapsed && !isHoveredExpanded ? true : undefined
-            }
             style={{
-              width:
-                sidebarCollapsed && !isHoveredExpanded
-                  ? 0
-                  : 'var(--sidebar-width)',
+              width: sidebarCollapsed ? 0 : 'var(--sidebar-width)',
               height: '100%',
               flexShrink: 0,
               transition: 'width 0.25s cubic-bezier(0.2, 0.8, 0.2, 1)',
-              overflow: 'visible',
+              overflow: 'hidden',
               position: 'relative',
-              zIndex: sidebarCollapsed && isHoveredExpanded ? 'var(--z-sidebar)' : undefined,
             }}
           >
             <AppErrorBoundary compact title="侧栏出错">
               <Suspense fallback={<SkeletonFallback height="100%" />}>
                 <Sidebar
-                  hoverExpanded={sidebarCollapsed && isHoveredExpanded}
-                  onHoverLeave={handleSidebarHoverLeave}
-                  onHoverEnter={handleSidebarHoverEnter}
                   searchQuery={sessionSearch}
                   searchInput={sessionSearchInput}
                   onSearchChange={setSessionSearchInput}

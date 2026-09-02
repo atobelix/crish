@@ -83,7 +83,7 @@ describe('permPill × modelBadge 互斥 / 四击', () => {
     pointerClick(badge);
     expect(await screen.findByText('测试服务商')).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+      expect(screen.queryByText('当前会话操作需手动授权')).not.toBeInTheDocument()
     );
     expect(screen.getByText('模型管理...')).toBeInTheDocument();
   });

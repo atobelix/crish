@@ -107,7 +107,7 @@
 }
 
 .tab:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -116,7 +116,7 @@
   color: var(--text-primary);
   font-weight: 500;
   border-color: var(--border-color);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
 }
 
 .tabIcon {
@@ -174,7 +174,7 @@
 
 .tabCloseBtn:hover {
   opacity: 1;
-  background: var(--sidebar-active);
+  background: var(--tint-hover);
   color: var(--text-primary);
   transform: scale(1.08);
 }
@@ -247,7 +247,7 @@
 }
 
 .addBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -290,21 +290,19 @@
   align-items: center;
   gap: 2px;
   padding-left: 4px;
+  /* 叶上坞开关钉在抽屉右上 28×28 + right 10px，本簇把加号/最大化让到它左边 */
+  padding-right: 38px;
   height: 100%;
   position: relative;
   z-index: var(--z-sticky, 2);
 }
 
-.fixedCluster.dockSlotReserved {
-  padding-right: 36px;
-}
-
 .sideBtn {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
   padding: 0;
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--radius-sm, 4px);
   border: none;
   background: transparent;
   display: inline-flex;
@@ -320,7 +318,7 @@
 }
 
 .sideBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -328,15 +326,9 @@
   transform: scale(0.94);
 }
 
-.btnMaximize,
-.btnCollapse {
-  width: 28px;
-  height: 28px;
-}
-
-.btnCollapse:global(.active) {
-  background: var(--bg-active, rgba(0, 0, 0, 0.08));
-  color: var(--text-primary);
+.btnMaximize {
+  width: 26px;
+  height: 26px;
 }
 
 /* Row 2: Action / Navigation Toolbar (32px Height) */
@@ -350,7 +342,7 @@
   flex-wrap: nowrap;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   box-sizing: border-box;
   background: var(--bg-card, #ffffff);
@@ -371,10 +363,10 @@
 }
 
 .toolbarBtn {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  border-radius: 4px;
+  width: 26px;
+  height: 26px;
+  min-width: 26px;
+  border-radius: var(--radius-sm, 4px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -390,7 +382,7 @@
 }
 
 .toolbarBtn:hover:not(:disabled) {
-  background: var(--sidebar-hover);
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -454,7 +446,7 @@
   gap: 12px;
   padding: 10px 14px;
   border-radius: var(--radius-md, 8px);
-  border: 1px solid var(--border-subtle, var(--border-color));
+  border: 1px solid var(--border-subtle);
   background: var(--bg-card, #ffffff);
   cursor: pointer;
   text-align: left;
@@ -469,10 +461,10 @@
 }
 
 .launcherCard:hover {
-  background: var(--sidebar-hover);
+  background: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
   border-color: var(--border-color);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px var(--tint-subtle, hsl(0 0% 0% / 0.04));
+  box-shadow: var(--shadow-sm);
 }
 
 .launcherCard:active {

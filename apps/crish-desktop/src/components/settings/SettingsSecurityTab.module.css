@@ -72,7 +72,7 @@
 }
 
 .presetChip:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
   color: var(--text-primary);
   border-color: var(--border-color);
 }

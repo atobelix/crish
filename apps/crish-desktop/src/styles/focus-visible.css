@@ -7,13 +7,13 @@
 }
 
 :focus-visible {
-  outline: 2px solid var(--focus-ring-color);
+  outline: 1.5px solid var(--focus-ring-color, color-mix(in srgb, var(--text-primary) 6%, transparent));
   outline-offset: 1px;
 }
 
 input:focus-visible,
 textarea:focus-visible {
-  outline-offset: -2px;
+  outline-offset: -1px;
 }
 
 button:focus-visible,
@@ -21,5 +21,5 @@ a:focus-visible,
 [role='button']:focus-visible,
 [tabindex]:not([tabindex='-1']):focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  box-shadow: var(--focus-ring, 0 0 0 1.5px color-mix(in srgb, var(--text-primary) 6%, transparent));
 }

@@ -6,7 +6,7 @@
  * （D-01 §4.2 分配：列表管理归入本 hook）。busy/setBusy 由主体传入
  * （同一 BusyKind 编排）；错误统一走本 hook 错误出口（行内 role=alert + toast）。
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import {
   importHistory,
@@ -22,11 +22,13 @@ import { resultMessage, type BusyKind } from './browserImportShared';
 export interface UseHistoryImportOptions {
   busy: BusyKind;
   setBusy: Dispatch<SetStateAction<BusyKind>>;
+  onShowToast?: (message: string) => void;
 }
 
 export function useHistoryImport({
   busy,
   setBusy,
+  onShowToast,
 }: UseHistoryImportOptions) {
   // ── 历史导入 ──
   const [historyPath, setHistoryPath] = useState('');
@@ -39,9 +41,10 @@ export function useHistoryImport({
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setHistoryError(full);
+      onShowToast?.(full);
       toast.show(full);
     },
-    []
+    [onShowToast]
   );
 
   const runHistoryImport = async () => {
@@ -57,7 +60,7 @@ export function useHistoryImport({
     setBusy(null);
   };
 
-  // ── 列表（可折叠 + 历史 limit 控制） ──
+  // ── 列表（可折叠 + 历史 limit 控制 + 时序保护） ──
   const [listTab, setListTab] = useState<'bookmarks' | 'history' | null>(null);
   const [historyLimit, setHistoryLimit] = useState('50');
   const [bookmarkRows, setBookmarkRows] = useState<
@@ -67,30 +70,40 @@ export function useHistoryImport({
     null
   );
   const [listError, setListError] = useState('');
+  const reqSeqRef = useRef(0);
 
   /** 列表域错误出口：行内 role=alert + toast。 */
   const reportListError = useCallback(
     (prefix: string, msg: string) => {
       const full = `${prefix}${msg}`;
       setListError(full);
+      onShowToast?.(full);
       toast.show(full);
     },
-    []
+    [onShowToast]
   );
 
   const loadList = async (tab: 'bookmarks' | 'history') => {
+    const currentSeq = ++reqSeqRef.current;
     setBusy('list');
-    if (tab === 'bookmarks') {
-      const res = await listBookmarks();
-      if (res.status === 'ok') setBookmarkRows(res.data);
-      else reportListError('书签列表加载失败：', resultMessage(res, ''));
-    } else {
-      const limit = Math.max(1, Math.floor(Number(historyLimit)) || 50);
-      const res = await listHistory(undefined, limit);
-      if (res.status === 'ok') setHistoryRows(res.data);
-      else reportListError('历史列表加载失败：', resultMessage(res, ''));
+    try {
+      if (tab === 'bookmarks') {
+        const res = await listBookmarks();
+        if (currentSeq !== reqSeqRef.current) return;
+        if (res.status === 'ok') setBookmarkRows(res.data);
+        else reportListError('书签列表加载失败：', resultMessage(res, ''));
+      } else {
+        const limit = Math.max(1, Math.floor(Number(historyLimit)) || 50);
+        const res = await listHistory(undefined, limit);
+        if (currentSeq !== reqSeqRef.current) return;
+        if (res.status === 'ok') setHistoryRows(res.data);
+        else reportListError('历史列表加载失败：', resultMessage(res, ''));
+      }
+    } finally {
+      if (currentSeq === reqSeqRef.current) {
+        setBusy(null);
+      }
     }
-    setBusy(null);
   };
 
   const toggleList = async (tab: 'bookmarks' | 'history') => {

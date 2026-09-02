@@ -3,59 +3,56 @@ import React, {
   useCallback,
   useContext,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import {
-  commitSessionPaneDrop,
-  commitSessionTabStripReorder,
+  commitSessionTabDrop,
+  type SessionTabDropTarget,
 } from './sessionTabDropCommit';
 import {
   collectStripTabs,
+  createGhostPill,
   createIndicator,
   indicatorClasses,
   leaveStrip,
   posIndicator,
+  setGhostDetached,
   shiftStripTabs,
 } from './sessionTabDragDom';
-import { runToolTabDrag } from './toolTabDragRuntime';
 import {
   SESSION_TAB_INDICATOR_GEOM_MS,
+  SESSION_TAB_SHIFT_GAP,
   computeSessionTabInsertIndex,
   detectPaneDropRegion,
   exceedsSessionTabDragThresholdL1,
   paneDropIndicatorRect,
-  stripDropIndicatorRect,
-  type PaneDropRegion,
 } from './sessionTabDragFeel';
 
-export interface UseTopBarDragResult {
-  isDragging: boolean;
-  startSessionDrag: (
-    sessionId: string,
-    title: string,
-    e: React.PointerEvent
-  ) => void;
-  startToolDrag: (
-    leafId: string,
-    tabId: string,
-    panelId: string,
-    title: string,
-    e: React.PointerEvent
-  ) => void;
-  setGhostRef: (el: HTMLDivElement | null) => void;
-  ghostLabel: string | null;
+export interface StartSessionDragArgs {
+  leafId: string;
+  tabId: string;
+  title: string;
+  e: React.PointerEvent;
 }
 
-const SessionTabDragContext = createContext<UseTopBarDragResult | null>(null);
+export interface UseSessionTabDragResult {
+  isDragging: boolean;
+  startSessionDrag: (
+    leafId: string,
+    tabId: string,
+    title: string,
+    e: React.PointerEvent
+  ) => void;
+}
 
-const NOOP_DRAG: UseTopBarDragResult = {
+const SessionTabDragContext = createContext<UseSessionTabDragResult | null>(
+  null
+);
+
+const NOOP_DRAG: UseSessionTabDragResult = {
   isDragging: false,
   startSessionDrag: () => {},
-  startToolDrag: () => {},
-  setGhostRef: () => {},
-  ghostLabel: null,
 };
 
 const INDICATOR_GEOM_TRANSITION = [
@@ -70,255 +67,301 @@ const INDICATOR_GEOM_TRANSITION = [
 const INDICATOR_SOFT_TRANSITION =
   'border-radius 100ms ease, opacity 80ms ease';
 
-type DragTarget =
-  | { kind: 'strip'; insertIdx: number; remainingIds: string[] }
-  | { kind: 'pane'; leafId: string; region: PaneDropRegion };
+const EDGE_SCROLL_ZONE_PX = 36;
+const EDGE_SCROLL_STEP_PX = 12;
+
+function autoScrollStrip(track: HTMLElement | null, clientX: number): boolean {
+  if (!track || track.scrollWidth <= track.clientWidth) return false;
+  const r = track.getBoundingClientRect();
+  const before = track.scrollLeft;
+  if (clientX < r.left + EDGE_SCROLL_ZONE_PX) {
+    track.scrollLeft -= EDGE_SCROLL_STEP_PX;
+  } else if (clientX > r.right - EDGE_SCROLL_ZONE_PX) {
+    track.scrollLeft += EDGE_SCROLL_STEP_PX;
+  }
+  return track.scrollLeft !== before;
+}
+
+/** 真正拖过之后吞掉随后 click，避免源 tab 卸载前被再激活。 */
+function swallowNextClick(): void {
+  const eat = (ev: MouseEvent) => {
+    ev.stopPropagation();
+    ev.preventDefault();
+  };
+  window.addEventListener('click', eat, { capture: true, once: true });
+  window.setTimeout(() => {
+    window.removeEventListener('click', eat, { capture: true });
+  }, 0);
+}
 
 export function SessionTabDragProvider({ children }: { children: ReactNode }) {
   const [isDragging, setIsDragging] = useState(false);
-  const [ghostLabel, setGhostLabel] = useState<string | null>(null);
-  const customGhostRef = useRef<HTMLDivElement | null>(null);
 
-  const setGhostRef = useCallback((el: HTMLDivElement | null) => {
-    customGhostRef.current = el;
-  }, []);
+  const startSessionDrag = useCallback((
+    sourceLeafId: string,
+    tabId: string,
+    title: string,
+    e: React.PointerEvent
+  ) => {
+    if (e.button !== 0) return;
+    if (!sourceLeafId || !tabId) return;
+    const closeBtn = (e.target as HTMLElement | null)?.closest?.(
+      '[data-tab-close], button'
+    );
+    if (closeBtn) return;
 
-  const startSessionDrag = useCallback(
-    (sessionId: string, title: string, e: React.PointerEvent) => {
-      if (e.button !== 0) return;
-      const closeBtn = (e.target as HTMLElement | null)?.closest?.(
-        '[data-tab-close]'
-      );
-      if (closeBtn) return;
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const pointerId = e.pointerId;
+    const sourceTab = (e.currentTarget as HTMLElement | null) ?? null;
+    const sourceRect = sourceTab?.getBoundingClientRect();
+    const sourceWidth = sourceRect?.width ?? 0;
+    const grabOffsetX = sourceRect
+      ? Math.max(10, Math.min(e.clientX - sourceRect.left, sourceRect.width - 10))
+      : 10;
+    const grabOffsetY = sourceRect
+      ? Math.max(5, Math.min(e.clientY - sourceRect.top, sourceRect.height - 5))
+      : 5;
+    const shiftPx = (sourceWidth > 0 ? sourceWidth : 150) + SESSION_TAB_SHIFT_GAP;
 
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const pointerId = e.pointerId;
-      const sourceTab = (e.currentTarget as HTMLElement | null) ?? null;
+    try {
+      e.currentTarget?.setPointerCapture?.(pointerId);
+    } catch {
+      /* 捕获失败不致命：window 级监听仍能跟到指针 */
+    }
 
-      try {
-        e.currentTarget?.setPointerCapture?.(pointerId);
-      } catch {
-        /* ignore */
+    let dragging = false;
+    let card: HTMLDivElement | null = null;
+    let indicator: HTMLDivElement | null = null;
+    let foreignStrip: HTMLElement | null = null;
+    let cachedTabs: ReturnType<typeof collectStripTabs> | null = null;
+    let lastStateKey: string | null = null;
+    let currentMode: 'strip' | 'pane' | null = null;
+    let target: SessionTabDropTarget | null = null;
+    let rafId = 0;
+    let pending: { x: number; y: number; dx: number } | null = null;
+
+    const hideIndicator = () => {
+      if (!indicator) return;
+      indicator.style.display = 'none';
+    };
+
+    const applyStrip = (x: number, dx: number, strip: HTMLElement): boolean => {
+      const wrap = strip.closest(
+        '[data-pane-header="true"]'
+      ) as HTMLElement | null;
+      const targetLeafId =
+        wrap?.closest('[data-leaf-id]')?.getAttribute('data-leaf-id') || '';
+      if (!targetLeafId || !indicator) return false;
+
+      if (foreignStrip !== strip) {
+        leaveStrip(foreignStrip);
+        foreignStrip = strip;
+        cachedTabs = null;
+        lastStateKey = null;
+      }
+      if (!cachedTabs) {
+        cachedTabs = collectStripTabs(strip, tabId, 'data-tab-id');
       }
 
-      let dragging = false;
-      let indicator: HTMLDivElement | null = null;
-      let foreignStrip: HTMLElement | null = null;
-      let cachedTabs: ReturnType<typeof collectStripTabs> | null = null;
-      let lastStateKey: string | null = null;
-      let currentMode: 'strip' | 'pane' | null = null;
-      let target: DragTarget | null = null;
+      const insertIdx = computeSessionTabInsertIndex(cachedTabs, x, dx);
+      const stateKey = `strip:${targetLeafId}:${insertIdx}`;
+      if (lastStateKey !== stateKey) {
+        lastStateKey = stateKey;
+        shiftStripTabs(cachedTabs, insertIdx, shiftPx);
+      }
 
-      const onPointerMove = (me: PointerEvent) => {
-        if (me.pointerId !== pointerId) return;
-        const dx = me.clientX - startX;
-        const dy = me.clientY - startY;
+      currentMode = 'strip';
+      setGhostDetached(card, false);
+      hideIndicator();
+      if (indicatorClasses.strip) {
+        indicator.classList.add(indicatorClasses.strip);
+      }
+      if (indicatorClasses.pane) {
+        indicator.classList.remove(indicatorClasses.pane);
+      }
 
-        if (!dragging && !exceedsSessionTabDragThresholdL1(dx, dy)) return;
+      target = { kind: 'strip', targetLeafId, insertIdx };
+      return true;
+    };
 
-        if (!dragging) {
-          dragging = true;
-          setIsDragging(true);
-          setGhostLabel(title);
-          document.body.classList.add('tab-dragging');
-          document.body.style.userSelect = 'none';
-          sourceTab?.classList.add('is-dragging');
-          indicator = createIndicator(title);
+    const applyPane = (x: number, y: number): boolean => {
+      if (!indicator) return false;
+      const leaves = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '[data-tree-canvas="true"] [data-leaf-id]'
+        )
+      );
+      for (const pane of leaves) {
+        const r = pane.getBoundingClientRect();
+        const region = detectPaneDropRegion(x, y, {
+          left: r.left,
+          top: r.top,
+          width: r.width,
+          height: r.height,
+        });
+        if (!region) continue;
+        const leafId = pane.getAttribute('data-leaf-id') || '';
+        if (!leafId) continue;
+
+        const stateKey = `pane:${leafId}:${region}`;
+        const entering = currentMode !== 'pane' || lastStateKey !== stateKey;
+        lastStateKey = stateKey;
+        currentMode = 'pane';
+        target = { kind: 'pane', targetLeafId: leafId, region };
+        setGhostDetached(card, true);
+        if (indicatorClasses.pane) {
+          indicator.classList.add(indicatorClasses.pane);
         }
-
-        if (!indicator) return;
-
-        const hit = document.elementFromPoint(me.clientX, me.clientY);
-        const stripWrap = hit
-          ? (hit.closest('[data-global-session-tab-bar]') as HTMLElement | null)
-          : null;
-        const strip = stripWrap
-          ? (stripWrap.querySelector('[role="tablist"]') as HTMLElement | null)
-          : null;
-
-        if (strip) {
-          if (foreignStrip !== strip) {
-            leaveStrip(foreignStrip);
-            foreignStrip = strip;
-            cachedTabs = collectStripTabs(strip, sessionId);
-            lastStateKey = null;
-          }
-          if (!cachedTabs) cachedTabs = collectStripTabs(strip, sessionId);
-          const insertIdx = computeSessionTabInsertIndex(
-            cachedTabs,
-            me.clientX,
-            dx
-          );
-          const stateKey = `strip:${insertIdx}`;
-          if (lastStateKey !== stateKey) {
-            lastStateKey = stateKey;
-            shiftStripTabs(cachedTabs, insertIdx);
-          }
-
-          const entering = currentMode !== 'strip';
-          currentMode = 'strip';
-          if (indicatorClasses.strip) indicator.classList.add(indicatorClasses.strip);
-          if (indicatorClasses.pane) indicator.classList.remove(indicatorClasses.pane);
-          indicator.style.display = 'flex';
-          indicator.style.transition = entering
-            ? INDICATOR_GEOM_TRANSITION
-            : INDICATOR_SOFT_TRANSITION;
-          const scrollRect = strip.getBoundingClientRect();
-          posIndicator(
-            indicator,
-            stripDropIndicatorRect(me.clientX, {
-              left: scrollRect.left,
-              top: scrollRect.top,
-              width: scrollRect.width,
-              height: scrollRect.height,
-            })
-          );
-          target = {
-            kind: 'strip',
-            insertIdx,
-            remainingIds: cachedTabs.map((t) => t.id),
-          };
-          return;
+        if (indicatorClasses.strip) {
+          indicator.classList.remove(indicatorClasses.strip);
         }
-
-        if (foreignStrip) {
-          leaveStrip(foreignStrip);
-          foreignStrip = null;
-          cachedTabs = null;
-        }
-
-        const leaves = Array.from(
-          document.querySelectorAll<HTMLElement>(
-            '[data-tree-canvas="true"] [data-leaf-id]'
-          )
-        );
-        for (const pane of leaves) {
-          const r = pane.getBoundingClientRect();
-          const region = detectPaneDropRegion(me.clientX, me.clientY, {
+        indicator.style.display = 'flex';
+        indicator.style.transition = entering
+          ? INDICATOR_GEOM_TRANSITION
+          : INDICATOR_SOFT_TRANSITION;
+        posIndicator(
+          indicator,
+          paneDropIndicatorRect(region, {
             left: r.left,
             top: r.top,
             width: r.width,
             height: r.height,
-          });
-          if (!region) continue;
-          const leafId = pane.getAttribute('data-leaf-id') || '';
-          if (!leafId) continue;
-          const stateKey = `pane:${leafId}:${region}`;
-          const entering = currentMode !== 'pane' || lastStateKey !== stateKey;
-          lastStateKey = stateKey;
-          currentMode = 'pane';
-          target = { kind: 'pane', leafId, region };
-          if (indicatorClasses.pane) indicator.classList.add(indicatorClasses.pane);
-          if (indicatorClasses.strip) indicator.classList.remove(indicatorClasses.strip);
-          indicator.style.display = 'flex';
-          indicator.style.transition = entering
-            ? INDICATOR_GEOM_TRANSITION
-            : INDICATOR_SOFT_TRANSITION;
-          posIndicator(
-            indicator,
-            paneDropIndicatorRect(region, {
-              left: r.left,
-              top: r.top,
-              width: r.width,
-              height: r.height,
-            })
-          );
-          return;
+          })
+        );
+        return true;
+      }
+      return false;
+    };
+
+    const flush = () => {
+      rafId = 0;
+      const p = pending;
+      pending = null;
+      if (!p || !indicator) return;
+
+      if (card) {
+        card.style.transform = `translate3d(${p.x - grabOffsetX}px, ${p.y - grabOffsetY}px, 0)`;
+      }
+
+      const hit = document.elementFromPoint(p.x, p.y);
+      const toolStrip = hit
+        ? (hit.closest('[data-leaf-tool-tab-strip]') as HTMLElement | null)
+        : null;
+      const stripWrap =
+        !toolStrip && hit
+          ? (hit.closest('[data-pane-header="true"]') as HTMLElement | null)
+          : null;
+      const strip = stripWrap
+        ? (stripWrap.querySelector('[role="tablist"]') as HTMLElement | null)
+        : null;
+
+      if (strip) {
+        if (autoScrollStrip(strip, p.x)) {
+          cachedTabs = collectStripTabs(strip, tabId, 'data-tab-id');
+          lastStateKey = null;
         }
+        if (applyStrip(p.x, p.dx, strip)) return;
+      }
 
-        target = null;
-        lastStateKey = null;
-        currentMode = null;
-        indicator.style.display = 'none';
-      };
-
-      const cleanup = () => {
-        window.removeEventListener('pointermove', onPointerMove);
-        window.removeEventListener('pointerup', onPointerUp);
-        window.removeEventListener('pointercancel', onPointerCancel);
-        window.removeEventListener('keydown', onKeyDown);
-        sourceTab?.classList.remove('is-dragging');
+      if (foreignStrip) {
         leaveStrip(foreignStrip);
-        if (indicator) {
-          indicator.remove();
-          indicator = null;
-        }
-        document.body.classList.remove('tab-dragging');
-        document.body.style.userSelect = '';
-        setIsDragging(false);
-        setGhostLabel(null);
-      };
+        foreignStrip = null;
+        cachedTabs = null;
+      }
 
-      const onPointerUp = (me: PointerEvent) => {
-        if (me.pointerId !== pointerId) return;
-        const drop = target;
-        const wasDrag = dragging;
-        cleanup();
-        if (!wasDrag || !drop) return;
-        if (drop.kind === 'strip') {
-          commitSessionTabStripReorder(
-            sessionId,
-            drop.insertIdx,
-            drop.remainingIds
-          );
-          return;
-        }
-        commitSessionPaneDrop(sessionId, drop.leafId, drop.region, title);
-      };
+      if (applyPane(p.x, p.y)) return;
 
-      const onPointerCancel = (me: PointerEvent) => {
-        if (me.pointerId !== pointerId) return;
-        cleanup();
-      };
+      target = null;
+      lastStateKey = null;
+      currentMode = null;
+      setGhostDetached(card, true);
+      hideIndicator();
+    };
 
-      const onKeyDown = (ke: KeyboardEvent) => {
-        if (ke.key === 'Escape') cleanup();
-      };
+    const onPointerMove = (me: PointerEvent) => {
+      if (me.pointerId !== pointerId) return;
+      const dx = me.clientX - startX;
+      const dy = me.clientY - startY;
+      if (!dragging && !exceedsSessionTabDragThresholdL1(dx, dy)) return;
 
-      window.addEventListener('pointermove', onPointerMove);
-      window.addEventListener('pointerup', onPointerUp);
-      window.addEventListener('pointercancel', onPointerCancel);
-      window.addEventListener('keydown', onKeyDown);
-    },
-    []
-  );
+      if (!dragging) {
+        dragging = true;
+        setIsDragging(true);
+        document.body.classList.add('is-tab-dragging');
+        sourceTab?.classList.add('is-dragging');
+        card = createGhostPill(title, sourceWidth);
+        indicator = createIndicator(title);
+      }
 
-  /**
-   * 工具叶标签拖拽：条内重排、跨叶搬运、拖到叶面边缘分屏。
-   * 指针细节在 toolTabDragRuntime，落点提交统一走 layoutTreeStore.applyDrop。
-   */
-  const startToolDrag = useCallback(
-    (
-      leafId: string,
-      tabId: string,
-      panelId: string,
-      title: string,
-      e: React.PointerEvent
-    ) => {
-      runToolTabDrag({ leafId, tabId, panelId }, title, e, {
-        onDragStart: (label) => {
-          setIsDragging(true);
-          setGhostLabel(label);
-        },
-        onDragEnd: () => {
-          setIsDragging(false);
-          setGhostLabel(null);
-        },
+      pending = { x: me.clientX, y: me.clientY, dx };
+      if (card) {
+        card.style.transform = `translate3d(${me.clientX - grabOffsetX}px, ${me.clientY - grabOffsetY}px, 0)`;
+      }
+      if (!rafId) rafId = requestAnimationFrame(flush);
+    };
+
+    const cleanup = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+      pending = null;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerCancel);
+      window.removeEventListener('keydown', onKeyDown);
+      sourceTab?.classList.remove('is-dragging');
+      leaveStrip(foreignStrip);
+      foreignStrip = null;
+      if (card) {
+        card.remove();
+        card = null;
+      }
+      if (indicator) {
+        indicator.remove();
+        indicator = null;
+      }
+      document.body.classList.remove('is-tab-dragging');
+      setIsDragging(false);
+    };
+
+    const onPointerUp = (me: PointerEvent) => {
+      if (me.pointerId !== pointerId) return;
+      const drop = target;
+      const wasDrag = dragging;
+      cleanup();
+      if (wasDrag) swallowNextClick();
+      if (!wasDrag || !drop) return;
+      commitSessionTabDrop({
+        sourceLeafId,
+        tabId,
+        target: drop,
       });
-    },
-    []
-  );
+    };
 
-  const value = useMemo<UseTopBarDragResult>(
+    const onPointerCancel = (me: PointerEvent) => {
+      if (me.pointerId !== pointerId) return;
+      cleanup();
+    };
+
+    const onKeyDown = (ke: KeyboardEvent) => {
+      if (ke.key !== 'Escape') return;
+      cleanup();
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+    window.addEventListener('keydown', onKeyDown);
+  }, []);
+
+  const value = useMemo<UseSessionTabDragResult>(
     () => ({
       isDragging,
       startSessionDrag,
-      startToolDrag,
-      setGhostRef,
-      ghostLabel,
     }),
-    [isDragging, startSessionDrag, startToolDrag, setGhostRef, ghostLabel]
+    [isDragging, startSessionDrag]
   );
 
   return (
@@ -328,7 +371,7 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useSessionTabDrag(): UseTopBarDragResult {
+export function useSessionTabDrag(): UseSessionTabDragResult {
   return useContext(SessionTabDragContext) ?? NOOP_DRAG;
 }
 

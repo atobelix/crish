@@ -14,6 +14,7 @@ import type {
   FlatBranch,
 } from './types';
 import { isLeaf } from './types';
+import { createDefaultDock } from './sessionTabModel';
 import { isPrimaryPanel } from './index';
 
 type Rect = { x: number; y: number; width: number; height: number };
@@ -88,10 +89,12 @@ function flattenRecursive(
   if (isLeaf(node)) {
     leavesOut.push({
       leafId: node.id,
-      panelId: node.panelId,
+      panelId: 'chat',
       tabs: node.tabs,
-      activeTab: node.activeTab,
-      ...(node.sessionId ? { sessionId: node.sessionId } : {}),
+      activeTabId: node.activeTabId,
+      dock: createDefaultDock(node.dock),
+      sessionId:
+        node.tabs.find((t) => t.tabId === node.activeTabId)?.sessionId ?? '',
       rect: leafMatchesCollapsedDomain(node, collapsedDomain)
         ? { x: rect.x, y: rect.y, width: 0, height: 0 }
         : rect,

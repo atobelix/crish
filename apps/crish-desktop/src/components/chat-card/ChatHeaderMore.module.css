@@ -32,11 +32,16 @@
 
 .moreBtn:hover,
 .moreBtn.isOpen,
+.moreBtn:hover,
 .moreBtn:focus-visible,
 .moreWrap:hover .moreBtn,
 .moreWrap.isOpen .moreBtn {
-  background-color: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
-  color: var(--sep-text-primary, #1d1c1a);
+  background-color: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.moreBtn:active {
+  background-color: var(--tint-active);
 }
 
 .moreBtn:focus-visible {

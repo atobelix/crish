@@ -1,19 +1,16 @@
 /**
- * tabMode 单一写端投影：layoutStore.tabModeEnabled →
- * workspaceStore 字段 + 遗留 columns 合并/拆分 + 右坞树重投影。
- * 不持有第三份状态。
+ * tabMode 单一写端：layoutStore.tabModeEnabled → workspaceStore 字段。
+ * 禁止对树投影。抽屉内单条 vs 垂直堆叠由维 05 读此 flag。
  */
 import { useLayoutStore } from './layoutStore';
 import { useWorkspaceStore } from './workspaceStore';
-import { reprojectAllSessionDocks } from './workspace-shell/adapterShape';
 import { registerTabModeReader } from './workspace-shell/tabModeReadBridge';
 
 function applyTabMode(on: boolean): void {
   useWorkspaceStore.getState().applyTabModeEnabled(on);
-  reprojectAllSessionDocks();
 }
 
-/** 装配投影；返回退订。bootstrapStores 调一次。 */
+/** 装配 flag 同步；返回退订。bootstrapStores 调一次。 */
 export function initTabModeProjection(): () => void {
   registerTabModeReader(() => useLayoutStore.getState().tabModeEnabled);
   applyTabMode(useLayoutStore.getState().tabModeEnabled);

@@ -14,7 +14,7 @@
   backdrop-filter: blur(28px) saturate(160%);
   -webkit-backdrop-filter: blur(28px) saturate(160%);
   border: 1px solid var(--border-color, #e2dfd9);
-  box-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.12), 0 4px 12px -2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--sep-shadow);
   color: var(--text-primary, #1d1c1a);
   font-family: var(--font-sans, sans-serif);
   box-sizing: border-box;
@@ -68,7 +68,7 @@
   width: 15px;
   height: 15px;
   flex-shrink: 0;
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--text-tertiary);
   pointer-events: none;
 }
 
@@ -81,13 +81,13 @@
   padding: 0;
   font-family: inherit;
   font-size: 12.5px;
-  color: var(--sep-text-primary, #1d1c1a);
+  color: var(--text-primary);
   outline: none;
   box-shadow: none;
 }
 
 .searchInput::placeholder {
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--text-tertiary);
 }
 
 .searchClearBtn {
@@ -98,21 +98,21 @@
   height: 18px;
   border: none;
   background: transparent;
-  color: var(--sep-text-muted, #8b8780);
-  border-radius: var(--sep-badge-radius, 4px);
+  color: var(--text-tertiary);
+  border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   padding: 0;
   transition: color var(--transition-micro, 100ms) ease;
 }
 
 .searchClearBtn:hover {
-  color: var(--sep-text-primary, #1d1c1a);
+  color: var(--text-primary);
 }
 
 .sepSearchDivider {
   height: 1px;
-  background: var(--sep-divider-color, rgba(29, 28, 26, 0.06));
-  margin: 4px 0 2px 0;
+  background: var(--border-subtle);
+  margin: 4px 0 4px 0;
   flex-shrink: 0;
 }
 
@@ -120,77 +120,82 @@
 .listContainer {
   display: flex;
   flex-direction: column;
-  gap: var(--sep-item-gap, 2px);
-  max-height: 280px;
+  gap: var(--sep-item-gap, 4px);
+  max-height: min(calc(100vh - 48px), 600px);
   overflow-y: auto;
   overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--sep-border-hover, #c9c5bc) transparent;
-  padding: 1px 0;
+  padding: 2px 0;
 }
 
 .listContainer::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 .listContainer::-webkit-scrollbar-thumb {
-  background: var(--sep-border-hover, #c9c5bc);
-  border-radius: 3px;
+  background: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent));
+  border-radius: 9999px;
+}
+
+.listContainer::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
 }
 
 .listContainer::-webkit-scrollbar-track {
   background: transparent;
 }
 
+.listContainer::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .emptyState {
   padding: 12px 8px;
   text-align: center;
   font-size: 12px;
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--text-tertiary);
 }
 
 /* 分组与分割线 */
 .groupSection {
   display: flex;
   flex-direction: column;
-  gap: var(--sep-item-gap, 2px);
+  gap: var(--sep-item-gap, 4px);
 }
 
-.groupTitle {
-  font-size: 10.5px;
+.groupHeader {
+  font-size: 11px;
   font-weight: 500;
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--text-tertiary);
   padding: 4px 6px 2px;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  text-transform: none;
+  letter-spacing: 0.02em;
 }
 
 .selectableListGroup {
   display: flex;
   flex-direction: column;
-  gap: var(--sep-item-gap, 2px);
-  max-height: 180px;
+  gap: var(--sep-item-gap, 4px);
+  max-height: 220px;
   overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 .groupItems {
   display: flex;
   flex-direction: column;
-  gap: var(--sep-item-gap, 2px);
+  gap: var(--sep-item-gap, 4px);
 }
 
 .groupDivider {
-  height: 1px;
-  background: var(--sep-divider-color, rgba(29, 28, 26, 0.06));
-  margin: 3px 0;
-  flex-shrink: 0;
+  display: none;
 }
 
 .divider {
   height: 1px;
-  background: var(--sep-divider-color, rgba(29, 28, 26, 0.06));
-  margin: 3px 0;
+  background: var(--border-subtle);
+  margin: 4px 0;
   flex-shrink: 0;
 }
 
@@ -208,14 +213,14 @@
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  min-height: var(--sep-item-height, 28px);
-  padding: 4px 8px;
+  min-height: var(--sep-item-height, 32px);
+  padding: 5px 10px;
   border: none;
   border-radius: var(--sep-item-radius, 8px);
   background: transparent;
-  color: var(--sep-text-primary, #1d1c1a);
+  color: var(--text-primary);
   font-family: inherit;
-  font-size: var(--sep-font-size-base, 13px);
+  font-size: 13px;
   line-height: 1.35;
   text-align: left;
   cursor: pointer;
@@ -232,11 +237,12 @@
 
 .item:hover,
 .item.focused {
-  background-color: var(--sep-bg-item-hover, rgba(29, 28, 26, 0.045));
+  background-color: var(--tint-hover);
+  color: var(--text-primary);
 }
 
 .item.selected {
-  background-color: var(--sep-bg-item-selected, rgba(29, 28, 26, 0.065));
+  background-color: var(--tint-hover);
 }
 
 .item.disabled {
@@ -245,12 +251,12 @@
 }
 
 .item.danger {
-  color: var(--sep-danger-color, hsl(0 84% 60%));
+  color: var(--sem-error, #ef4444);
 }
 
 .item.danger:hover,
 .item.danger.focused {
-  background-color: var(--sep-danger-light, hsl(0 84% 60% / 0.08));
+  background-color: color-mix(in srgb, var(--sem-error, #ef4444) 10%, transparent);
 }
 
 .itemLeft {
@@ -266,7 +272,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  opacity: 0.75;
+  color: var(--text-secondary);
 }
 
 .itemTextContainer {
@@ -282,11 +288,12 @@
   white-space: nowrap;
   font-size: 13px;
   font-weight: 400;
+  color: var(--text-primary);
 }
 
 .itemSublabel {
   font-size: 11px;
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -298,7 +305,7 @@
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  margin-left: 6px;
+  margin-left: 8px;
 }
 
 .badge {
@@ -335,28 +342,26 @@
   z-index: 2;
 }
 
-/* 二级子菜单卡片（8px 同心圆角 / 4px 内衬 / 4px-6px 条目） */
+/* 二级子菜单卡片（14px 外圆角 / 6px 内衬 / 8px 条目，与一级面板 100% 几何对齐） */
 .cascadeSubmenu {
   position: absolute;
   left: calc(100% + 4px);
   top: 0;
   min-width: 160px;
-  border-radius: var(--sep-submenu-radius, 8px);
-  border: 1px solid var(--sep-border-color, #e2dfd9);
-  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
-  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  border-radius: var(--sep-radius-outer, 14px);
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card, hsl(0 0% 100%));
   box-shadow: var(--sep-shadow);
-  padding: 4px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--sep-item-gap, 4px);
   z-index: var(--z-dropdown-menu, 310);
   outline: none;
 }
 
 .cascadeSubmenu .item {
-  border-radius: var(--sep-subitem-radius, 4px);
-  min-height: 26px;
-  padding: 3px 6px;
+  border-radius: var(--sep-item-radius, 8px);
+  min-height: var(--sep-item-height, 32px);
+  padding: 5px 10px;
 }

@@ -1,14 +1,11 @@
 /**
- * ui/Menu 菜单基座（PE-05 T05.1.4）
+ * ui/Menu 菜单基座（PE-05 T05.1.4 / 现代化弹性自适应升级版）
  *
  * 从 `components/common/UnifiedSelectPopover.tsx` 整体提炼上移：
- * - Radix Popover + 自动防碰撞 + 双模 open（外部受控 or 内部自管）
  * - 键盘漫游：↑↓ 跳过 disabled、Enter/Space 选中、Esc 关闭
  * - cloneElement 注入 trigger 事件（保留 stopPropagation 防拖拽抢夺）
  * - 样式从全局类/内联 style 收敛为 CSS Modules（tokens 变量）
- *
- * 后续 12 套菜单收敛（T05.3）统一基于本基座；坐标计算单源
- * 见同目录 position.ts。
+ * - 支持 description 多行自适应与 checkmark 呈现
  */
 import React, { useCallback, useEffect, useRef, useState, useId } from 'react';
 import * as Popover from '@radix-ui/react-popover';
@@ -19,6 +16,7 @@ import { useLayerRegistration } from '../internal/layer-registration/useLayerReg
 import { layerStackService } from '../internal/layer-stack/LayerStackManager';
 import { resolveElement } from '../internal/layer-stack/layerStackTypes';
 import { DialogOverlayContext } from '../Dialog/dialogOverlayContext';
+import { CheckIcon } from '../Select/internal/SelectIcons';
 import styles from './Menu.module.css';
 import type { SelectOptionItem } from './types';
 
@@ -29,105 +27,59 @@ export const MenuContext = React.createContext<{ menuId: string | null }>({
 
 /** 菜单定位配置（对齐/方向/偏移/最大高度收敛为单一子对象） */
 export interface MenuPositionConfig {
-  /** 水平对齐: start | center | end */
   align?: 'start' | 'center' | 'end';
-  /** 弹出方向: top | bottom | left | right */
   side?: 'top' | 'bottom' | 'left' | 'right';
-  /** 与触发器的偏移距离 */
   sideOffset?: number;
-  /** 面板最大高度（超出滚动）；默认 min(70vh, 360px) */
   maxHeight?: number | string;
 }
 
 /** 菜单开关状态（受控/非受控双模收敛为单一子对象） */
 export interface MenuOpenState {
-  /** 初始是否打开（非受控模式） */
   defaultOpen?: boolean;
-  /** 外部受控 open */
   open?: boolean;
-  /** 外部受控 onOpenChange */
   onOpenChange?: (open: boolean) => void;
 }
 
 /** 面板外观配置（标题/类名/样式收敛为单一子对象） */
 export interface MenuPanelConfig {
-  /** 面板标题（可选） */
   title?: string;
-  /** 追加到面板的类名 */
   contentClassName?: string;
-  /** 追加到面板的样式 */
   contentStyle?: React.CSSProperties;
 }
 
 /** 面板外侧/键盘交互回调收敛为单一子对象 */
 export interface MenuOutsideHandlers {
-  /**
-   * 面板外侧交互回调（T05.3.2 SettingsQuickMenu 焦点还原语义需要）。
-   * 透传给 Radix Popover.Content；先于 onOpenChange(false) 触发，
-   * 消费方据此区分「外点关闭」与「Esc/键盘关闭」。
-   */
   onInteractOutside?: (event: Event) => void;
-  /** 点击外部指针按下回调（用于阻止默认关闭行为，解决 Anchor 模式 Double Toggle 竞态） */
   onPointerDownOutside?: (
     event: CustomEvent<{ originalEvent: PointerEvent }>
   ) => void;
-  /**
-   * Esc 键拦截回调（08-步5 T4-3 嵌套子菜单逐级关闭需要）：
-   * 透传给 Radix Popover.Content 的 onEscapeKeyDown——Radix 在 document
-   * 捕获阶段处理 Escape，preventDefault() 可阻止整层关闭；
-   * 基座自身的 Esc 分支尊重 defaultPrevented（消费方已处理则不重复关闭）。
-   */
   onEscapeKeyDown?: (event: KeyboardEvent) => void;
-  /** 关闭后焦点还原控制回调 */
   onCloseAutoFocus?: (event: Event) => void;
 }
 
 export interface MenuProps {
-  /** 触发节点（cloneElement 注入打开/防冒泡事件，保留原行为）；anchor 模式可不传 */
   trigger?: React.ReactNode;
-  /**
-   * 外部浮动锚点（P1-F4 根因修复）：提供真实可见元素（如「+」按钮）的 ref 时，
-   * 以该元素作 Radix Popover 浮动锚点（PopperAnchor virtualRef）——floating-ui
-   * 基于可见元素计算菜单位置，不再依赖 trigger 克隆/不可见元素（display:none
-   * 元素 getBoundingClientRect 全 0 → 菜单钉在视口 (0,0)，F7 F1）。
-   * 缺省时保持既有 trigger 克隆锚定行为（兼容其余菜单消费方）。
-   */
   anchor?: React.RefObject<HTMLElement | null>;
-  /** 标准选项数组（可选；传入 children 时用于键盘漫游/Enter 选中） */
   options?: SelectOptionItem[];
-  /** 自定义项渲染（options 模式的可控渲染钩子） */
   renderItem?: (
     option: SelectOptionItem,
     index: number,
     isFocused: boolean
   ) => React.ReactNode;
-  /** 自定义面板内容（可选；与 options 模式二选一） */
   children?: React.ReactNode;
-  /** 选中项回调 */
   onSelect?: (id: string, option: SelectOptionItem) => void;
-  /** 预留：可搜索（SettingsSelect/ModelPicker 迁移时实现） */
   searchable?: boolean;
-  /** 定位配置（对齐/方向/偏移/最大高度） */
   position?: MenuPositionConfig;
-  /** 开关状态（受控/非受控双模） */
   openState?: MenuOpenState;
-  /** 面板外观配置（标题/类名/样式） */
   panel?: MenuPanelConfig;
-  /** 面板外侧/键盘交互回调 */
   outsideHandlers?: MenuOutsideHandlers;
-  /** 自定义键盘事件拦截器（优先触发） */
   onKeyDown?: (e: React.KeyboardEvent<HTMLDivElement>) => void;
-  /** 级联子菜单展开/收起控制钩子（WAI-ARIA 级联漫游协议） */
   cascade?: {
     onSubmenuExpand?: (index: number, optionOrElement: unknown) => void;
     onSubmenuCollapse?: () => void;
   };
 }
 
-/**
- * 菜单基座：双模 open（外部为 true 或内部为 true 均展示），
- * 关闭时重置漫游索引。行为与 UnifiedSelectPopover 完全对齐。
- */
 export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   trigger,
   anchor,
@@ -143,36 +95,27 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
   onKeyDown,
   cascade,
 }: MenuProps) {
-  // 定位配置（缺省值与原扁平 props 保持一致）
   const align = position?.align ?? 'end';
   const side = position?.side ?? 'bottom';
   const sideOffset = position?.sideOffset ?? 6;
   const maxHeight = position?.maxHeight;
 
-  // 开关状态（受控/非受控双模）
   const defaultOpen = openState?.defaultOpen ?? false;
   const externalOpen = openState?.open;
   const externalOnOpenChange = openState?.onOpenChange;
 
-  // 面板外观
   const title = panel?.title;
   const contentClassName = panel?.contentClassName;
   const contentStyle = panel?.contentStyle;
 
-  // 外侧/键盘交互回调
   const onInteractOutside = outsideHandlers?.onInteractOutside;
   const onPointerDownOutside = outsideHandlers?.onPointerDownOutside;
   const onEscapeKeyDown = outsideHandlers?.onEscapeKeyDown;
   const onCloseAutoFocus = outsideHandlers?.onCloseAutoFocus;
 
-  // searchable 预留位（当前未消费，保留以兼容消费方透传）
   void searchable;
 
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
-
-  // F7 F3：受控/非受控双模互斥——外部受控时内部状态完全旁路（不写回、
-  // 不参与 OR），消除「onOpenChange(false) 后父级仍传 true → 菜单立即重开」
-  // 的同步链竞态与每次打开多一次渲染的写回开销。
   const isControlled = externalOpen !== undefined;
   const isOpen = isControlled ? externalOpen : internalOpen;
 
@@ -219,9 +162,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     isOpen
   );
 
-  // F7 F2：ARIA menu 模式——打开时初始焦点落首个未禁用项。
-  // 用 ref 缓存首项索引，effect 只在 open 转变时触发（避免父级重渲染
-  // 传入新 options 引用时劫持用户漫游位置）
   const firstEnabledIndexRef = useRef(-1);
   firstEnabledIndexRef.current = options.findIndex((o) => !o.disabled);
 
@@ -232,7 +172,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     }
   }, [isOpen]);
 
-  // 键盘 ↑ ↓ 漫游与 Enter / Esc 支持（08-步5 T4-4：children 模式双通道漫游）
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       onKeyDown?.(e);
@@ -252,8 +191,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     [isOpen, options, focusedIndex, onSelect, handleOpenChange, onKeyDown, cascade]
   );
 
-  // 漫游索引变化时把焦点移动到对应项并滚动跟随（F7 F4：
-  // max-height 滚动容器内漫游到视口外项时焦点不可见 → 键盘盲走）
   useEffect(() => {
     if (focusedIndex >= 0 && contentRef.current) {
       const items = contentRef.current.querySelectorAll<HTMLButtonElement>(
@@ -265,18 +202,13 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
     }
   }, [focusedIndex]);
 
-  // ══════════════════════════════════════════════════════════════════════════════
-  // Trigger 渲染与 React 19 安全克隆分支
-  // ══════════════════════════════════════════════════════════════════════════════
   let renderedTrigger: React.ReactNode = null;
 
   if (anchor) {
-    // 【推荐模式】显式 Anchor：Radix Popover 仅挂载 Anchor 虚拟参考点，外部按钮拥有绝对所有权
     renderedTrigger = (
       <Popover.Anchor virtualRef={anchor} data-menu-anchor="true" />
     );
   } else if (trigger) {
-    // 【向后兼容模式】对 trigger 进行 React 19 安全解析
     let actualTrigger: React.ReactNode = trigger;
     let tipContent: React.ReactNode = null;
     let tipSide: 'top' | 'bottom' | 'left' | 'right' = 'top';
@@ -329,7 +261,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
               }
             },
             onClick: (e: React.MouseEvent) => {
-              if (shouldSuppressMenuReopen(triggerRef.current)) {
+              if (!isOpen && shouldSuppressMenuReopen(triggerRef.current)) {
                 e.preventDefault();
                 return;
               }
@@ -343,19 +275,18 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         )
       : actualTrigger;
 
-    // 窗拖排除只留给真正处在 drag region 的控件自己写
-    // -webkit-app-region: no-drag。基座 Trigger 不再无条件拼 no-drag。
-    renderedTrigger = (
-      <Popover.Trigger asChild>
-        {tipContent && React.isValidElement(clonedTrigger) ? (
-          <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
-            {clonedTrigger}
-          </Tooltip>
-        ) : (
-          (clonedTrigger as React.ReactElement)
-        )}
-      </Popover.Trigger>
-    );
+    renderedTrigger =
+      tipContent && React.isValidElement(clonedTrigger) ? (
+        <Tooltip content={tipContent} side={tipSide} disabled={isOpen}>
+          <Popover.Trigger asChild>
+            {clonedTrigger as React.ReactElement}
+          </Popover.Trigger>
+        </Tooltip>
+      ) : (
+        <Popover.Trigger asChild>
+          {clonedTrigger as React.ReactElement}
+        </Popover.Trigger>
+      );
   }
 
   const contentClasses = [styles.menuContent, contentClassName]
@@ -364,10 +295,9 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
 
   const resolvedMaxHeight =
     maxHeight != null
-      ? `min(${typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight}, var(--radix-popover-content-available-height, 360px), 70vh, 360px)`
-      : 'min(var(--radix-popover-content-available-height, 360px), 70vh, 360px)';
+      ? `min(${typeof maxHeight === 'number' ? `${maxHeight}px` : maxHeight}, var(--radix-popover-content-available-height, calc(100vh - 32px)), calc(100vh - 32px))`
+      : 'min(var(--radix-popover-content-available-height, calc(100vh - 32px)), calc(100vh - 32px), 640px)';
 
-  // 与加号同构：Anchor 模式关则整棵 Popover 卸掉，避免关着的 Root 还在听外点/toggle。
   if (anchor && !isOpen) {
     return null;
   }
@@ -380,8 +310,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
         <Popover.Portal container={dialogOverlay ?? undefined}>
           <Popover.Content
             ref={contentRef}
-            // F7 F2：非模态菜单不得声明 aria-modal——aria-modal=true 会
-            // 让屏幕阅读器切断后台内容（菜单语义是轻量浮层，非模态框）
             align={align}
             side={side}
             sideOffset={sideOffset}
@@ -392,17 +320,14 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
             onKeyDown={handleKeyDown}
             onCloseAutoFocus={onCloseAutoFocus}
             onPointerDownOutside={(e) => {
-              if (onPointerDownOutside) {
-                onPointerDownOutside(e);
-                return;
-              }
+              onPointerDownOutside?.(e);
+              if (e.defaultPrevented) return;
               const target = e.detail.originalEvent.target as Node | null;
               const triggerEl = anchor?.current ?? triggerRef.current;
               if (triggerEl && target && triggerEl.contains(target)) {
                 e.preventDefault();
                 return;
               }
-              // 放行属于该菜单子孙的 Portal 浮层点击，防止误杀父菜单
               const isDescendant = layerStackService
                 .getDescendants(menuId)
                 .some((child) => {
@@ -414,10 +339,8 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
               }
             }}
             onInteractOutside={(e) => {
-              if (onInteractOutside) {
-                onInteractOutside(e);
-                return;
-              }
+              onInteractOutside?.(e);
+              if (e.defaultPrevented) return;
               const customEvent = e as CustomEvent<{ originalEvent?: Event }>;
               const target = (customEvent.detail?.originalEvent?.target ||
                 e.target) as Node | null;
@@ -426,7 +349,6 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
                 e.preventDefault();
                 return;
               }
-              // 放行属于该菜单子孙的 Portal 浮层交互，防止误杀父菜单
               const isDescendant = layerStackService
                 .getDescendants(menuId)
                 .some((child) => {
@@ -466,6 +388,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
               <div role="menu" className={styles.menuList}>
                 {options.map((opt, index) => {
                   const isFocused = index === focusedIndex;
+                  const isSelected = Boolean(opt.selected);
 
                   if (renderItem) {
                     return (
@@ -485,6 +408,7 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
                         styles.menuItem,
                         opt.disabled ? styles.menuItemDisabled : null,
                         opt.danger ? styles.menuItemDanger : null,
+                        isSelected ? styles.isSelected : null,
                       ]
                         .filter(Boolean)
                         .join(' ')}
@@ -501,9 +425,21 @@ export const Menu: React.FC<MenuProps> = React.memo(function Menu({
                           {opt.icon}
                         </span>
                       ) : null}
-                      <span className={styles.menuItemLabel}>{opt.label}</span>
-                      {opt.hint != null ? (
+                      {opt.description ? (
+                        <div className={styles.textCol}>
+                          <span className={styles.title}>{opt.label}</span>
+                          <span className={styles.desc}>{opt.description}</span>
+                        </div>
+                      ) : (
+                        <span className={styles.menuItemLabel}>{opt.label}</span>
+                      )}
+                      {opt.hint != null && !opt.description ? (
                         <span className={styles.menuItemHint}>{opt.hint}</span>
+                      ) : null}
+                      {isSelected ? (
+                        <span className={styles.menuItemCheck}>
+                          <CheckIcon size={14} />
+                        </span>
                       ) : null}
                     </button>
                   );

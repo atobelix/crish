@@ -1,18 +1,19 @@
 // @vitest-environment jsdom
 /**
- * activate + chrome 点击 → dock / 树 / 叶内 Strict。
- * jsdom 绿 ≠ 打开完成 ≠ 关 EL。
+ * 开笔记走 tab.dock 抽屉，不再把 note 投影成树叶。
+ * jsdom 绿 ≠ 打开完成 ≠ 关 EL。抽屉 DOM 归维 05。
  */
-import React from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
-import { LeafToolTabStrip } from '../../components/binary-tree/LeafToolTabStrip';
-import { TreeLeafPanel } from '../../components/binary-tree/TreeLeafPanel';
+import { act } from '@testing-library/react';
 import { GENERAL_FOLDER } from '../../api/projectStore';
 import { useLayoutStore } from '../../store/layoutStore';
-import { useLayoutTreeStore } from '../../store/layout-tree';
-import { collectLeaves } from '../../store/layout-tree';
-import { createLeaf } from '../../store/layout-tree/types';
+import {
+  useLayoutTreeStore,
+  listChatLeaves,
+  listToolLeaves,
+  setPrimaryPanelChecker,
+} from '../../store/layout-tree';
+import { createLeaf, type LayoutLeaf } from '../../store/layout-tree/types';
 import {
   createDefaultDock,
   useWorkspaceShellStore,
@@ -21,11 +22,18 @@ import { viewRegistry } from '../../services/view-registry';
 import type { SessionState } from '../../store/types';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { openToolInSession } from '../../store/storeAccess';
+import {
+  findTabBySessionId,
+  readLeafDock,
+  type LeafSessionTab,
+} from '../../store/workspace-shell/openTool';
 import { activateNotePaper, deactivateNotePaper } from './activate';
 
 const SID = 'sess-note-open';
+const TAB_ID = 'tab-note-open';
 
 function seedStores(): void {
+  setPrimaryPanelChecker((id: string) => viewRegistry.isPrimary(id));
   useLayoutStore.setState((st) => {
     st.sessionsById = {
       [SID]: {
@@ -41,10 +49,22 @@ function seedStores(): void {
     };
     st.activeSessionId = SID;
   });
+  const tab: LeafSessionTab = {
+    tabId: TAB_ID,
+    sessionId: SID,
+    title: '会话',
+    workspaceKey: GENERAL_FOLDER,
+    dock: createDefaultDock({ collapsed: true }),
+  };
+  const chatLeaf: LayoutLeaf = createLeaf({
+    tabs: [tab],
+    activeTabId: TAB_ID,
+  });
+  // 维 05 未切 UI 前 TreeLeafPanel 仍读 shell openTabs
   useWorkspaceShellStore.setState({
     openTabs: [
       {
-        tabId: 'tab-note-open',
+        tabId: TAB_ID,
         kind: 'conversation',
         sessionId: SID,
         workspaceKey: GENERAL_FOLDER,
@@ -52,12 +72,11 @@ function seedStores(): void {
         rightDock: createDefaultDock({ collapsed: true }),
       },
     ],
-    activeTabId: 'tab-note-open',
+    activeTabId: TAB_ID,
     shellReady: true,
   });
-  const chatLeaf = createLeaf('chat', ['chat'], 'chat', SID);
   useLayoutTreeStore.setState({
-    tree: { root: chatLeaf, version: 1 },
+    tree: { root: chatLeaf, version: 2 },
     activeLeafId: chatLeaf.id,
     toolColumnCollapsed: true,
     past: [],
@@ -79,54 +98,31 @@ describe('note-paper open integration（02 F8 / F9）', () => {
     });
   });
 
-  it('F8 点击坞头打开笔记后 dock 含 note 且解折叠，树有非 primary note 叶', async () => {
-    const filesLeaf = createLeaf('files', ['files'], 'files', SID);
-    render(<LeafToolTabStrip leaf={filesLeaf} />);
+  it('F8 打开笔记后 tab.dock 含 note 且解折叠，仍单 chat 叶、无 tool 叶', () => {
     act(() => {
       openToolInSession(SID, 'note');
     });
 
-    const tab = useWorkspaceShellStore
-      .getState()
-      .openTabs.find((t) => t.sessionId === SID);
-    expect(tab?.rightDock.openPanelIds).toContain('note');
-    expect(tab?.rightDock.activePanelId).toBe('note');
-    expect(tab?.rightDock.collapsed).toBe(false);
-    expect(useLayoutTreeStore.getState().toolColumnCollapsed).toBe(false);
-
-    const noteLeaf = collectLeaves(
-      useLayoutTreeStore.getState().tree.root
-    ).find(
-      (l) => l.activeTab === 'note' && !viewRegistry.isPrimary(l.panelId)
-    );
-    expect(noteLeaf).toBeTruthy();
+    const root = useLayoutTreeStore.getState().tree.root;
+    const hit = findTabBySessionId(root, SID);
+    expect(hit?.tab.dock.openPanelIds).toContain('note');
+    expect(hit?.tab.dock.activePanelId).toBe('note');
+    expect(hit?.tab.dock.collapsed).toBe(false);
+    expect(listChatLeaves(root)).toHaveLength(1);
+    expect(listToolLeaves(root)).toHaveLength(0);
   });
 
-  it('F9 工具叶 DOM 出现 note-paper-strict-panel，祖先有 data-leaf-id，无死 CTA', async () => {
-    const filesLeaf = createLeaf('files', ['files'], 'files', SID);
-    render(<LeafToolTabStrip leaf={filesLeaf} />);
+  it('F9 开笔记不造 note 树叶；坞在活动 tab.dock（抽屉 DOM 归维 05）', () => {
     act(() => {
       openToolInSession(SID, 'note');
     });
 
-    const noteLeaf = collectLeaves(
-      useLayoutTreeStore.getState().tree.root
-    ).find((l) => l.activeTab === 'note');
-    expect(noteLeaf).toBeTruthy();
-
-    render(
-      <TreeLeafPanel
-        leaf={noteLeaf!}
-        rect={{ x: 0.5, y: 0, width: 0.5, height: 1 }}
-        isActive={true}
-        isDragSource={false}
-      />
-    );
-
-    const panel = await waitFor(() =>
-      screen.getByTestId('note-paper-strict-panel')
-    );
-    expect(panel.closest('[data-leaf-id]')).toBeTruthy();
-    expect(screen.queryByTestId('open-note-paper-strict')).toBeNull();
+    const state = useLayoutTreeStore.getState();
+    const chatLeaf = listChatLeaves(state.tree.root)[0];
+    expect(chatLeaf).toBeTruthy();
+    expect(listToolLeaves(state.tree.root)).toHaveLength(0);
+    expect(readLeafDock(chatLeaf!).activePanelId).toBe('note');
+    expect(readLeafDock(chatLeaf!).collapsed).toBe(false);
+    expect(chatLeaf!.id).toBe(state.activeLeafId);
   });
 });

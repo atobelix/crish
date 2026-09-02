@@ -42,19 +42,19 @@ export type SessionTab = {
 export type OpenSessionTabsMap = Record<string, string[]>;
 
 /**
- * legacy open-tabs map 同步统一入口（D10 收敛，T-E 批次 5）。
- *
- * 运行期双写路径（shell store ↔ legacy map）**保留**——跨窗口/重启标签恢复
- * 依赖 legacy map 存活；本 helper 把「打开/聚焦会话 → 同步 legacy map」的散点
- * 调用（shell store / 已删旧列 chrome hooks 曾各自直调 openSessionTab）收为一处，
- * 供后续「删除双写」分支（hydrate 覆盖后无消费方时）单一 grep 定位。
- * 登记待清理：store/README.md D10 条目 + storeOwnership 注释。
+ * legacy open-tabs map 同步。运行期 **停写**；仅冷启动迁移仍可读。
+ * 生产路径不得再调用 openSessionTab / closeSessionTab / moveSessionTab。
  */
 export function syncOpenTabsToLegacy(
   workspaceKey: string,
   sessionId: string,
 ): string[] {
   return openSessionTab(workspaceKey, sessionId);
+}
+
+/** 冷启动迁移完成后清空，避免下次再当输入。 */
+export function clearLegacyOpenTabsMap(): void {
+  saveOpenTabsMap({});
 }
 
 /**

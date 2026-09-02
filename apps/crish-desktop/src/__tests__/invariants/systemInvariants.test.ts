@@ -22,8 +22,10 @@ import { findEmptyShellViolations } from '../../dev/emptyShellAssert';
 import {
   createLeaf,
   createBranch,
+  LAYOUT_TREE_VERSION,
   type LayoutTree,
 } from '../../store/layout-tree/types';
+import { createSessionTab } from '../../store/layout-tree/sessionTabModel';
 import {
   dedupeDuplicateSessionChatLeaves,
   findChatLeafBySessionId,
@@ -172,13 +174,20 @@ describe('I-DRAFT — draft not in sessions[]', () => {
 
 // ── I-SHELL: 1 session ≤ 1 chat leaf ─────────────────────────────────
 
-describe('I-SHELL — 1 session ≤ 1 chat leaf', () => {
+function chatLeaf(sessionId: string, id?: string) {
+  return createLeaf({
+    id,
+    tabs: [createSessionTab({ sessionId, tabId: `tab-${sessionId}-${id ?? sessionId}` })],
+  });
+}
+
+describe('I-SHELL — 1 session ≤ 1 chat leaf（扫 leaf.tabs[].sessionId）', () => {
   it('findDuplicateSessionChatLeaves detects multi-leaf same session', () => {
-    const a1 = createLeaf('chat', ['chat'], 'chat', 'sess-dup');
-    const a2 = createLeaf('chat', ['chat'], 'chat', 'sess-dup');
-    const ok = createLeaf('chat', ['chat'], 'chat', 'sess-ok');
+    const a1 = chatLeaf('sess-dup', 'a1');
+    const a2 = chatLeaf('sess-dup', 'a2');
+    const ok = chatLeaf('sess-ok', 'ok');
     const tree: LayoutTree = {
-      version: 2,
+      version: LAYOUT_TREE_VERSION,
       root: createBranch(
         'horizontal',
         createBranch('horizontal', a1, a2, 0.5),
@@ -198,11 +207,11 @@ describe('I-SHELL — 1 session ≤ 1 chat leaf', () => {
   });
 
   it('dedupeDuplicateSessionChatLeaves restores ≤1 chat leaf per session', () => {
-    const a1 = createLeaf('chat', ['chat'], 'chat', 'dup');
-    const a2 = createLeaf('chat', ['chat'], 'chat', 'dup');
-    const other = createLeaf('chat', ['chat'], 'chat', 'ok');
+    const a1 = chatLeaf('dup', 'a1');
+    const a2 = chatLeaf('dup', 'a2');
+    const other = chatLeaf('ok', 'ok');
     const tree: LayoutTree = {
-      version: 2,
+      version: LAYOUT_TREE_VERSION,
       root: createBranch(
         'horizontal',
         createBranch('horizontal', a1, a2, 0.5),
@@ -218,11 +227,14 @@ describe('I-SHELL — 1 session ≤ 1 chat leaf', () => {
   });
 
   it('validateRestorableLayoutTree rejects duplicate-session binding', () => {
-    const a = createLeaf('chat', ['chat'], 'chat', 's1');
-    const b = createLeaf('chat', ['chat'], 'chat', 's1');
     const tree: LayoutTree = {
-      version: 2,
-      root: createBranch('horizontal', a, b, 0.5),
+      version: LAYOUT_TREE_VERSION,
+      root: createBranch(
+        'horizontal',
+        chatLeaf('s1', 'a'),
+        chatLeaf('s1', 'b'),
+        0.5
+      ),
     };
     const verdict = validateRestorableLayoutTree(tree);
     expect(verdict.ok).toBe(false);
@@ -232,11 +244,14 @@ describe('I-SHELL — 1 session ≤ 1 chat leaf', () => {
   });
 
   it('valid multi-unit (distinct sessions) satisfies I-SHELL', () => {
-    const a = createLeaf('chat', ['chat'], 'chat', 's-a');
-    const b = createLeaf('chat', ['chat'], 'chat', 's-b');
     const tree: LayoutTree = {
-      version: 2,
-      root: createBranch('horizontal', a, b, 0.5),
+      version: LAYOUT_TREE_VERSION,
+      root: createBranch(
+        'horizontal',
+        chatLeaf('s-a', 'a'),
+        chatLeaf('s-b', 'b'),
+        0.5
+      ),
     };
     expect(findDuplicateSessionChatLeaves(tree.root).size).toBe(0);
     const verdict = validateRestorableLayoutTree(tree);

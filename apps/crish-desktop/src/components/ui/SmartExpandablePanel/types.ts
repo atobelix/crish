@@ -140,6 +140,8 @@ export interface SmartPanelProps {
   items?: Array<MenuItem | MenuGroup>;
   /** 触发节点（cloneElement 注入打开/防冒泡事件） */
   trigger?: ReactNode;
+  /** 触发模式：'click' | 'hover' | 'both'（默认 'both'） */
+  triggerMode?: 'click' | 'hover' | 'both';
   /** 锚定触发器元素 Ref */
   triggerRef?: RefObject<HTMLElement | null>;
   /** 外部浮动锚点（虚拟锚点） */

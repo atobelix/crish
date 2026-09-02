@@ -64,9 +64,9 @@
 
 .toneBrand,
 .badge[data-tone='brand'] {
-  --badge-bg: color-mix(in srgb, var(--brand, #10b981) 10%, transparent);
-  --badge-fg: var(--brand-deep, #059669);
-  --badge-border: color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
+  --badge-bg: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 10%, transparent);
+  --badge-fg: var(--brand-deep, hsl(160 84% 30%));
+  --badge-border: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 22%, transparent);
 }
 
 .toneInfo,

@@ -30,30 +30,18 @@
   box-sizing: border-box;
 }
 
-/* Global session tab bar row   shrink-0 above tree body */
-.section > [data-global-session-tab-bar] {
-  flex: 0 0 auto;
-  flex-shrink: 0;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-}
-
 .canvas {
   position: relative;
   width: 100%;
-  /* 祖先确定高 + flex 剩余；子级全 abs，不能靠自动高或流内子项撑高 */
   flex: 1 1 0%;
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  /* 整个工作区统一为单个大卡片 */
-  background: var(--bg-elevated, var(--bg-card));
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl, 12px);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.02);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   box-sizing: border-box;
-  /* container query       leaf       */
   container-type: size;
   container-name: tree-canvas;
 }
@@ -96,12 +84,12 @@
 }
 
 /*
- * 永久驻留的单一固定物理 DOM 按钮样式（对照 reference/chat-composer-component .tree-leaf-pane > .top-side-panel-btn）
- * 永远固定在 canvas 顶部右上角 10px / 5px 处，z-index 高于所有面板与分隔条。
+ * 叶的直接子节点：绝对钉在叶右上。
+ * 开合都不卸载、不改透明度。
  */
 .topSidePanelBtn {
   position: absolute;
-  top: 5px;
+  top: 41px;
   right: 10px;
   width: 28px;
   height: 28px;
@@ -116,7 +104,7 @@
   color: var(--text-secondary);
   padding: 0;
   outline: none;
-  z-index: 120;
+  z-index: var(--z-chrome);
   pointer-events: auto;
   transition:
     background-color var(--transition-micro, 120ms) ease,
@@ -124,13 +112,13 @@
 }
 
 .topSidePanelBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
 .topSidePanelBtn:global(.active),
 .topSidePanelBtn[data-active='true'] {
-  background: var(--bg-active, rgba(0, 0, 0, 0.08));
+  background: var(--bg-active);
   color: var(--text-primary);
 }
 
@@ -152,7 +140,7 @@
  * 卡片已经跟灰底分离，再叠一层描边或压暗只会显脏。
  */
 .leaf[data-active='true'] .leafBody {
-  border-color: var(--tint-strong);
+  border-color: var(--border-color, hsl(35 10% 86%));
 }
 
 /*
@@ -321,10 +309,9 @@
   font-weight: var(--font-weight-medium);
 }
 
-/* Leaf body：chat / 工具内容。chat chrome 覆盖在 body 上，不占行。 */
+/* Leaf body：对话列 +（坞未折叠时）内部 resizer + 抽屉。卡片皮肤 token 不动。 */
 
 .leafBody {
-  /* chrome 在 leafBody 外；body 吃剩余高，勿写成 height:100% 把兄弟裁掉 */
   flex: 1 1 0%;
   min-width: 0;
   min-height: 0;
@@ -336,19 +323,79 @@
   align-items: stretch;
   padding-top: 0;
   margin-top: 0;
-  background: transparent;
-  border: none;
-  border-radius: 0;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-subtle, hsl(0 0% 0% / 0.08));
+  border-radius: var(--radius-lg, 10px);
+  box-shadow:
+    0 1px 3px hsl(0 0% 0% / 0.03),
+    0 4px 12px hsl(0 0% 0% / 0.02);
   transition: border-color var(--transition-fast, 150ms ease-out);
+}
+
+.leafBody[data-dock-open='true'] {
+  flex-direction: row;
+}
+
+.leafChatColumn {
+  flex: 1 1 0%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow: hidden;
+  position: relative;
+}
+
+.leafDockResizer {
+  flex: 0 0 6px;
+  width: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  position: relative;
+  z-index: 2;
+  background: transparent;
+  align-self: stretch;
+}
+
+.leafDockResizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 2.5px;
+  width: 1px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.leafDockResizer:hover::after,
+.leafDockResizer[data-dragging='true']::after {
+  background: var(--accent-green, #10b981);
+  width: 2px;
+  left: 2px;
+}
+
+.leafDockDrawer {
+  flex: 0 0 var(--leaf-dock-width, 50%);
+  width: var(--leaf-dock-width, 50%);
+  min-width: 200px;
+  max-width: 70%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 }
 
 /*
  * ErrorBoundary / SlotOutlet 现为 display:contents：> / > * > * 打在包装上，
  * 不改盒树。纸面根若再 contents，header/footer 会升成叶子弹性子项。
  * :not 让二级 fill 打不中 chrome；不要改成 .leafBody *。
+ * 坞展开后行布局：fill 只打在对话列内部，不打在 resizer / 抽屉上。
  */
-.leafBody > *:not(:global(header)):not(:global(footer)),
-.leafBody > * > *:not(:global(header)):not(:global(footer)) {
+.leafChatColumn > *:not(:global(header)):not(:global(footer)),
+.leafChatColumn > * > *:not(:global(header)):not(:global(footer)) {
   flex: 1 1 0%;
   min-width: 0;
   min-height: 0;
@@ -416,15 +463,12 @@
   -webkit-app-region: no-drag;
 }
 
-/* 当 Leaf 存在顶部 TabStrip 时，移除卡片本体的上边框，零 !important 提权 */
-.leaf[data-has-strip='true'] > .leafBody > * > .leafCard,
-.leaf[data-has-strip='true'] > .leafBody > * > * > .leafCard,
-.leaf[data-has-strip='true'] :global([class*='cardContainer']),
-.leaf[data-has-strip='true'] :global([class*='cardWrapper']) {
+/*
+ * data-has-strip=true 表示叶顶有 PaneHeader（在 leafBody 外）。
+ * 卡片顶边由岛屿几何处理，不要把「strip 在 leafBody 内」的旧选择器套到 chat 卡片上。
+ * 抽屉头摘掉其下工具卡片顶边。
+ */
+[data-leaf-tool-tab-strip='true'] + * .leafCard,
+.leafDockDrawer [data-leaf-tool-tab-strip='true'] ~ * {
   border-top: none;
-}
-
-/* 相邻兄弟协调 */
-.leafBody > :global([class*='toolTabStrip']) + * {
-  border-top: 1px solid var(--border-subtle);
 }

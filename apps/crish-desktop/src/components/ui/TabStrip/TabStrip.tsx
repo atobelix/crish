@@ -18,7 +18,7 @@
  * - 垂直 tab/侧边导航：另行组件（本基座 aria-orientation 恒为 horizontal）；
  * - tab 内嵌复杂工具栏：组合而非扩 prop；
  * - 拖拽领域算法：域内 hook（useTopBarDrag 等），基座只提供 onTabPointerDown 插槽；
- * - 上下文菜单：业务封装层组合（如 GlobalSessionTabBar 的全局菜单）。
+ * - 上下文菜单：业务封装层组合（如 PaneHeader 的会话菜单）。
  */
 import React, {
   useCallback,
@@ -62,7 +62,7 @@ export interface TabStripAppearance {
   tabActiveClassName?: string;
   /** wrap 层自定义数据属性 */
   data?: Record<string, string | boolean | number | undefined>;
-  /** wrap 层语义角色（如 navigation 包裹场景，GlobalSessionTabBar） */
+  /** wrap 层语义角色（如 navigation 包裹场景，PaneHeader） */
   wrapRole?: string;
   /** wrap 层无障碍名（与 wrapRole 搭配） */
   wrapAriaLabel?: string;

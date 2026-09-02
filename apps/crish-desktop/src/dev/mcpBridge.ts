@@ -9,6 +9,7 @@ import { getCompositionRoot } from '../app/compositionRoot';
 import { currentWorkspaceFolderKey } from '../api/workspaceChromeTabs';
 import { getActiveProjectId } from '../api/projectStore';
 import { selectActiveTabSessionId } from '../store/workspace-shell';
+import { scanRealSessionTabs } from '../store/workspace-shell/treeSessionQuery';
 import { logger } from '../services/LoggerService';
 
 type McpBridge = {
@@ -76,11 +77,13 @@ export function registerCrishMcpBridge(): void {
         const root = getCompositionRoot();
         const shell = root.shell.getState();
         const sessions = root.session.getState();
+        const treeRoot = root.tree.getState().tree.root;
+        const active = shell.getActiveTab();
         return {
           shellReady: shell.shellReady,
-          activeTabId: shell.activeTabId,
+          activeTabId: active?.tabId ?? null,
           activeTabSessionId: selectActiveTabSessionId(shell),
-          openTabs: shell.openTabs.map((t) => ({
+          openTabs: scanRealSessionTabs(treeRoot).map((t) => ({
             tabId: t.tabId,
             sessionId: t.sessionId,
             title: t.title,

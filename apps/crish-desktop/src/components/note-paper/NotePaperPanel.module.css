@@ -18,22 +18,18 @@
   flex: 1;
   min-height: 200px;
   min-width: 0;
-  /*     card       workspace     */
-  background: var(--bg-card, hsl(35, 10%, 98%));
+  background: var(--bg-card, #ffffff);
   color: var(--text-primary, #111111);
-  border: var(--hairline-width, 1px) solid
-    var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
+  border: var(--hairline-width, 1px) solid var(--border-subtle);
   border-radius: var(--radius-lg, 8px);
   overflow: hidden;
   font-family: var(--font-sans, system-ui, sans-serif);
   box-shadow: var(--shadow-sm);
-  /*    6%  13 3 6    10     token    30% / strong 12 22% */
   --np-focus-edge: color-mix(
     in srgb,
     var(--border-color) 94%,
     var(--text-primary) 6%
   );
-  /*       edge   6%      inset        */
   --np-focus-row: color-mix(
     in srgb,
     var(--border-color) 94%,
@@ -56,9 +52,8 @@
   gap: var(--card-header-gap, var(--space-1_5, 6px));
   min-height: var(--card-header-min-height, 36px);
   padding: var(--card-header-pad-y, 0px) var(--panel-pad-x, 12px);
-  border-bottom: var(--hairline-width, 1px) solid
-    var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
-  background: var(--bg-secondary, hsl(35, 12%, 91.5%));
+  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
+  background: var(--bg-secondary);
   flex-shrink: 0;
 }
 
@@ -95,14 +90,7 @@
   padding: var(--space-0_5, 2px) var(--space-2, 8px);
   border: none;
   border-radius: var(--radius-full, 9999px);
-  background: var(
-    --control-soft-bg,
-    color-mix(
-      in srgb,
-      var(--control-mix-color, #4a4035) 4%,
-      var(--bg-primary, #f0ebe6)
-    )
-  );
+  background: var(--control-soft-bg);
   color: var(--text-secondary, #555555);
   font-size: var(--font-size-xs, 12px);
   font-family: inherit;
@@ -120,24 +108,12 @@ button.badge {
 }
 
 button.badge:hover:not(:disabled) {
-  background: var(
-    --control-soft-bg-hover,
-    var(
-      --tint-hover,
-      color-mix(in srgb, var(--text-primary, #111) 4%, transparent)
-    )
-  );
+  background: var(--control-soft-bg-hover, var(--tint-hover));
   color: var(--text-primary, #111111);
 }
 
 button.badge:active:not(:disabled) {
-  background: var(
-    --control-soft-bg-active,
-    var(
-      --tint-active,
-      color-mix(in srgb, var(--text-primary, #111) 8%, transparent)
-    )
-  );
+  background: var(--control-soft-bg-active, var(--tint-active));
 }
 
 button.badge:focus-visible {
@@ -190,7 +166,7 @@ button.badge:focus-visible {
   align-items: stretch;
   /*                  padding      */
   gap: var(--space-0_5, 2px);
-  background: var(--bg-card, hsl(35, 10%, 98%));
+  background: var(--bg-card, #ffffff);
   /*   shell-scrollbar / PaperList    thin + stable     webkit   */
   scrollbar-gutter: stable;
   scrollbar-width: thin;
@@ -233,14 +209,7 @@ button.badge:focus-visible {
 }
 
 .badge[data-slash-write-mode='writable'] {
-  background: var(
-    --control-soft-bg,
-    color-mix(
-      in srgb,
-      var(--control-mix-color, #4a4035) 4%,
-      var(--bg-primary, #f0ebe6)
-    )
-  );
+  background: var(--control-soft-bg);
   color: var(--text-secondary, #555555);
 }
 
@@ -308,13 +277,7 @@ button.badge:focus-visible {
 
 .blockRow:hover,
 .blockRow[data-handle='hover'] {
-  background: var(
-    --bg-hover,
-    var(
-      --tint-hover,
-      color-mix(in srgb, var(--text-primary, #111) 4%, transparent)
-    )
-  );
+  background: var(--bg-hover);
 }
 
 /*    1px inset 6%       [tabindex]:not        (0,3,0) */
@@ -327,12 +290,8 @@ button.badge:focus-visible {
 }
 
 .blockRow[data-handle='multi'] {
-  background: var(
-    --tint-strong,
-    color-mix(in srgb, var(--text-primary, #111) 12%, transparent)
-  );
-  box-shadow: inset 0 0 0 1px
-    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+  background: var(--tint-strong);
+  box-shadow: inset 0 0 0 1px var(--border-color);
 }
 
 /*
@@ -418,10 +377,7 @@ button.badge:focus-visible {
 }
 
 .blockRow:hover .handle {
-  background-color: var(
-    --tint-hover,
-    color-mix(in srgb, var(--text-primary, #111) 4%, transparent)
-  );
+  background-color: var(--tint-hover);
 }
 
 .blockContent {
@@ -544,14 +500,7 @@ button.badge:focus-visible {
   font-weight: var(--font-weight-normal, 400);
   line-height: var(--line-height-body, 1.55);
   color: var(--md-code-fg, var(--text-primary, #111111));
-  background: var(
-    --md-code-bg,
-    color-mix(
-      in srgb,
-      var(--control-mix-color, #4a4035) 1.5%,
-      var(--bg-primary, #f0ebe6)
-    )
-  );
+  background: var(--md-code-bg, var(--bg-secondary));
   border: var(--hairline-width, 1px) solid
     var(--md-code-border, var(--border-color, hsl(35, 10%, 86%)));
   border-radius: var(--radius-sm, 5px);
@@ -585,12 +534,11 @@ button.badge:focus-visible {
 
 .footer {
   padding: var(--space-1_5, 6px) var(--panel-pad-x, 12px);
-  border-top: var(--hairline-width, 1px) solid
-    var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
+  border-top: var(--hairline-width, 1px) solid var(--border-subtle);
   font-size: var(--font-size-xxs, 11px);
   color: var(--text-tertiary, #696969);
   line-height: var(--line-height-ui, 1.35);
-  background: var(--bg-secondary, hsl(35, 12%, 91.5%));
+  background: var(--bg-secondary);
   flex-shrink: 0;
 }
 
@@ -601,9 +549,8 @@ button.badge:focus-visible {
   flex-direction: column;
   gap: var(--space-1, 4px);
   padding: var(--space-1_5, 6px) var(--panel-pad-x, 12px);
-  border-top: var(--hairline-width, 1px) solid
-    var(--hairline, var(--border-subtle, hsl(35, 8%, 91%)));
-  background: var(--bg-secondary, hsl(35, 12%, 91.5%));
+  border-top: var(--hairline-width, 1px) solid var(--border-subtle);
+  background: var(--bg-secondary);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-secondary, #555555);
   line-height: var(--line-height-ui, 1.35);
@@ -627,14 +574,7 @@ button.badge:focus-visible {
   min-height: var(--control-height-xs, 24px);
   padding: var(--space-0_5, 2px) var(--space-2, 8px);
   border-radius: var(--radius-full, 9999px);
-  background: var(
-    --control-soft-bg,
-    color-mix(
-      in srgb,
-      var(--control-mix-color, #4a4035) 4%,
-      var(--bg-primary, #f0ebe6)
-    )
-  );
+  background: var(--control-soft-bg);
   color: var(--text-primary, #111111);
   font-variant-numeric: tabular-nums;
 }

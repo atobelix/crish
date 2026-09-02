@@ -91,8 +91,12 @@
 }
 
 .bcProjectBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--tint-hover);
   color: var(--text-primary);
+}
+
+.bcProjectBtn:active {
+  background: var(--tint-active);
 }
 
 .bcText {
@@ -153,52 +157,6 @@
   margin-right: 36px;
 }
 
-.topSidePanelBtn {
-  position: absolute;
-  top: 5px;
-  right: 10px;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  border-radius: var(--radius-md, 6px);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: var(--text-secondary);
-  padding: 0;
-  outline: none;
-  z-index: 110;
-  pointer-events: auto;
-  transition:
-    background-color var(--transition-micro, 120ms) ease,
-    color var(--transition-micro, 120ms) ease,
-    opacity var(--transition-fast, 150ms ease-out);
-}
-
-.topSidePanelBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
-  color: var(--text-primary);
-}
-
-/*
- * 坞展开后开关退场：只动透明度与命中，绝不动定位。
- * 之前是条件卸载，按钮位置会随 DOM 增删漂一下；改成常驻固定槽位后
- * 无论开合，按钮的 top/right 恒定，鼠标不用重新找。
- */
-.topSidePanelBtn[data-dock-open='true'] {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.topSidePanelBtn:global(.active),
-.topSidePanelBtn[data-active='true'] {
-  background: var(--bg-active, rgba(0, 0, 0, 0.08));
-  color: var(--text-primary);
-}
-
 .topActionBtn {
   width: 28px;
   height: 28px;
@@ -220,14 +178,13 @@
 }
 
 .topActionBtn:hover {
-  background: var(--bg-hover, rgba(0, 0, 0, 0.045));
+  background: var(--tint-hover);
   color: var(--text-primary);
 }
 
-/* 参考 .top-action-btn.active 是 8% 压深，不是 hover 的 4%——两态必须能分辨 */
 .topActionBtn.isActive,
 .topActionBtn[data-active='true'] {
-  background: var(--bg-active, rgba(0, 0, 0, 0.08));
+  background: var(--tint-active);
   color: var(--text-primary);
 }
 

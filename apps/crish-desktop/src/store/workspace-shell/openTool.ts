@@ -1,19 +1,27 @@
 /**
- * 在活动 Tab 的 RightToolDock 中打开工具面板。
- * 替换 focusOrOpenTreePanel 对 tool 的主路径。
+ * 开工具：只改目标 SessionTab.dock（维 02 updateTabDock），不改树拓扑。
  *
- * ## compositionRoot (OPT-G4)
- * Imperative getState here is **same-store only** (`useWorkspaceShellStore`).
- * Keep direct store access — no cross-store tree/session getState in this module.
- * Tree projection stays via `adapterShape` (internal; not rewritten).
- * Migrating shell → `getCompositionRoot().shell` would add store→root coupling
- * with no cross-store benefit.
+ * I3 只改该 tab；I5 不造 tool 叶；I6 不写 setLeafSessionId。
+ * 失败原样返回。
  */
 
-import { useWorkspaceShellStore } from './workspaceShellStore';
-import { ensureChatOnlyTree, applyDockToTree } from './adapterShape';
-import { useLayoutTreeStore, collectLeaves } from '../layout-tree';
+import {
+  useLayoutTreeStore,
+  findNodeById,
+  findTabBySessionId as findTabLocationBySessionId,
+  updateTabDock as updateTabDockInTree,
+  updateLeafDock as updateLeafDockInTree,
+} from '../layout-tree';
+import { isLeaf, type LayoutLeaf, type LayoutNode } from '../layout-tree/types';
+import type { SessionTab } from '../layout-tree/sessionTabModel';
+import {
+  createDefaultDock,
+  DRAFT_SESSION_ID_PREFIX,
+  isDraftSessionId,
+} from '../layout-tree/sessionTabModel';
 import { registerFileViewerOpener } from '../../api/workspaceFsApi';
+import type { RightToolDockState } from './types';
+import { clampDockWidthRatio } from './adapterShapeTreeOps';
 
 const TOOL_ALIASES: Record<string, string> = {
   tasks: 'overview',
@@ -21,146 +29,178 @@ const TOOL_ALIASES: Record<string, string> = {
   browser: 'preview',
 };
 
-/** 在指定 session 的 RightToolDock 中打开工具（多 unit 时不抢其它会话） */
-export function openToolInSession(sessionId: string, panelId: string): void {
-  const mapped = TOOL_ALIASES[panelId] || panelId;
+/** 与维 01 SessionTab 同形；供本维测试与维 05 读坞 */
+export type LeafSessionTab = SessionTab;
+
+export type LeafDockView = {
+  collapsed: boolean;
+  openPanelIds: string[];
+  activePanelId: string | null;
+  widthRatio: number;
+};
+
+/** I1：非 draft sessionId 全树至多一个命中；先序第一个 */
+export function findTabBySessionId(
+  root: LayoutNode,
+  sessionId: string
+): { leafId: string; tab: LeafSessionTab } | null {
+  const hit = findTabLocationBySessionId(root, (sessionId || '').trim());
+  if (!hit) return null;
+  return { leafId: hit.leaf.id, tab: hit.tab };
+}
+
+export function findActiveLeafActiveTab(): {
+  leafId: string;
+  tab: LeafSessionTab;
+} | null {
+  const store = useLayoutTreeStore.getState();
+  const activeId = store.activeLeafId;
+  if (!activeId) return null;
+  const node = findNodeById(store.tree.root, activeId);
+  if (!node || !isLeaf(node)) return null;
+  const tab = node.tabs.find((t) => t.tabId === node.activeTabId);
+  if (!tab) return null;
+  return { leafId: node.id, tab };
+}
+
+/**
+ * Store 包装：调维 02 纯函数，写回 tree。
+ * 不走 setTree，避免推历史 / resolveActiveLeaf 拨焦点（I3 / 命令表）。
+ */
+export function updateTabDock(
+  tabId: string,
+  patch: Partial<RightToolDockState>
+): void {
+  const id = (tabId || '').trim();
+  if (!id) return;
+  const nextPatch: Partial<RightToolDockState> = { ...patch };
+  if (typeof patch.widthRatio === 'number') {
+    nextPatch.widthRatio = clampDockWidthRatio(patch.widthRatio);
+  }
+  const store = useLayoutTreeStore.getState();
+  const next = updateTabDockInTree(store.tree, id, nextPatch);
+  if (next === store.tree) return;
+  useLayoutTreeStore.setState({ tree: next });
+}
+
+export function updateLeafDock(
+  leafId: string,
+  patch: Partial<RightToolDockState>
+): void {
+  const id = (leafId || '').trim();
+  if (!id) return;
+  const nextPatch: Partial<RightToolDockState> = { ...patch };
+  if (typeof patch.widthRatio === 'number') {
+    nextPatch.widthRatio = clampDockWidthRatio(patch.widthRatio);
+  }
+  const store = useLayoutTreeStore.getState();
+  const next = updateLeafDockInTree(store.tree, id, nextPatch);
+  if (next === store.tree) return;
+  useLayoutTreeStore.setState({ tree: next });
+}
+
+/** 本叶正在画的坞：活动 tab 优先，否则新对话坞 */
+export function readLeafDock(leaf: LayoutLeaf): LeafDockView {
+  const tab = leaf.activeTabId
+    ? leaf.tabs.find((t) => t.tabId === leaf.activeTabId)
+    : undefined;
+  return createDefaultDock(tab?.dock ?? leaf.dock);
+}
+
+/** 按 session 找到所属叶。草稿哨兵只认本叶，绝不回落到邻叶。 */
+export function resolveLeafIdForSession(sessionId: string): string | null {
+  const root = useLayoutTreeStore.getState().tree.root;
   const sid = (sessionId || '').trim();
-  const store = useWorkspaceShellStore.getState();
-  const tab = sid
-    ? store.openTabs.find((t) => t.sessionId === sid) ?? store.getActiveTab()
-    : store.getActiveTab();
+  if (!sid) return null;
+  const hit = findTabBySessionId(root, sid);
+  if (hit) return hit.leafId;
+  if (isDraftSessionId(sid) && sid.startsWith(DRAFT_SESSION_ID_PREFIX)) {
+    const leafId = sid.slice(DRAFT_SESSION_ID_PREFIX.length);
+    const node = findNodeById(root, leafId);
+    if (node && isLeaf(node)) return node.id;
+  }
+  return null;
+}
+
+export function openToolInLeaf(leafId: string, panelId: string): void {
+  const id = (leafId || '').trim();
+  if (!id) return;
+  const mapped = TOOL_ALIASES[panelId] || panelId;
+  const store = useLayoutTreeStore.getState();
+  const node = findNodeById(store.tree.root, id);
+  if (!node || !isLeaf(node)) return;
+  const dock = readLeafDock(node);
 
   if (mapped === 'chat') {
-    /*
-     * 收起右坞：树回到 chat-only 的同时，必须把 collapsed 回写 shell store。
-     * 少了这一步，两个 store 会各说各话——树上面板已经关了，shell 仍认为坞是开的。
-     * 顶栏 UnitChromeActions 正是据此判断的，于是坞开关按钮与 .withDockMargin
-     * 的 36px 让位边距会一起消失。
-     */
-    if (tab && !tab.rightDock.collapsed) {
-      store.updateRightDock(tab.tabId, { ...tab.rightDock, collapsed: true });
-    }
-    ensureChatOnlyTree(tab?.sessionId || sid || undefined);
+    updateLeafDock(id, { collapsed: true });
     return;
   }
 
-  if (!tab) {
-    applyDockToTree(
-      {
-        collapsed: false,
-        openPanelIds: [mapped],
-        activePanelId: mapped,
-        widthRatio: 0.38,
-      },
-      sid || undefined
-    );
-    return;
-  }
+  const openPanelIds = dock.openPanelIds.includes(mapped)
+    ? dock.openPanelIds
+    : [...dock.openPanelIds, mapped];
 
-  const openPanelIds = tab.rightDock.openPanelIds.includes(mapped)
-    ? tab.rightDock.openPanelIds
-    : [...tab.rightDock.openPanelIds, mapped];
-
-  const dock = {
-    ...tab.rightDock,
+  updateLeafDock(id, {
+    collapsed: false,
     openPanelIds,
     activePanelId: mapped,
-    collapsed: false,
-  };
-  store.updateRightDock(tab.tabId, dock);
-  applyDockToTree(dock, tab.sessionId);
+  });
 
-  // 打开终端面板：ensure 该 session 的 PTY（折叠坞不 kill；C2 未就绪时 no-op）
   if (mapped === 'terminal') {
-    const ensureSid = tab.sessionId || sid;
-    void import('../../api/ptyRegistry')
-      .then((m) => m.ensurePtyForSession(ensureSid))
-      .catch(() => {
-        /* ignore */
-      });
+    const sid =
+      node.tabs.find((t) => t.tabId === node.activeTabId)?.sessionId ?? '';
+    if (sid) {
+      void import('../../api/ptyRegistry')
+        .then((m) => m.ensurePtyForSession(sid))
+        .catch(() => {
+          /* PTY 与树无关；C2 未就绪时 no-op */
+        });
+    }
   }
+}
 
-  // 确保全局侧栏没有被折叠，如果折叠了就将其展开
-  if (useLayoutTreeStore.getState().toolColumnCollapsed) {
-    useLayoutTreeStore.getState().setToolColumnCollapsed(false);
-  }
+/** 在指定 session 所属叶的坞中打开工具。找不到该叶则不动。 */
+export function openToolInSession(sessionId: string, panelId: string): void {
+  const leafId = resolveLeafIdForSession(sessionId);
+  if (!leafId) return;
+  openToolInLeaf(leafId, panelId);
 }
 
 export function openToolInActiveTab(panelId: string): void {
-  const tab = useWorkspaceShellStore.getState().getActiveTab();
-  openToolInSession(tab?.sessionId ?? '', panelId);
+  const activeId = useLayoutTreeStore.getState().activeLeafId;
+  if (!activeId) return;
+  openToolInLeaf(activeId, panelId);
 }
 
-function openFileViewerInSession(filePath: string, _initialMode: 'plain' | 'diff' = 'plain'): void {
-  const store = useWorkspaceShellStore.getState();
-  const tab = store.getActiveTab();
-  if (!tab) return;
-
-  const tabId = `file-viewer:${filePath}`;
-
-  const treeStore = useLayoutTreeStore.getState();
-  if (treeStore.toolColumnCollapsed) {
-    treeStore.setToolColumnCollapsed(false);
-  }
-
-  const root = treeStore.tree.root;
-  // 类型化收集（AA-03 Q18 消除 node: any）：复用 layout-tree 唯一 collectLeaves
-  const toolLeaves = collectLeaves(root).filter((l) => l.panelId !== 'chat');
-  const chatLeaves = collectLeaves(root).filter((l) => l.panelId === 'chat');
-  let targetLeafId = treeStore.activeLeafId;
-
-  if (chatLeaves.some(c => c.id === targetLeafId)) {
-    targetLeafId = toolLeaves[0]?.id || null;
-  }
-
-  if (!targetLeafId && toolLeaves[0]) {
-    targetLeafId = toolLeaves[0].id;
-  }
-
-  if (targetLeafId) {
-    treeStore.addTabToLeaf(targetLeafId, tabId);
-    treeStore.setActiveTab(targetLeafId, tabId);
-  } else {
-    const activeChat = chatLeaves[0];
-    if (activeChat) {
-      treeStore.splitLeaf(activeChat.id, 'horizontal', tabId, 'after', 0.5);
-    }
-  }
-
-  const openPanelIds = tab.rightDock.openPanelIds.includes(tabId)
-    ? tab.rightDock.openPanelIds
-    : [...tab.rightDock.openPanelIds, tabId];
-  const dock = {
-    ...tab.rightDock,
-    openPanelIds,
-    activePanelId: tabId,
-    collapsed: false,
-  };
-  store.updateRightDock(tab.tabId, dock);
-  applyDockToTree(dock, tab.sessionId);
+/** 文件查看器：panelId 进 dock.openPanelIds。禁止 splitLeaf */
+export function openFileViewerInSession(
+  filePath: string,
+  _initialMode: 'plain' | 'diff' = 'plain'
+): void {
+  const activeId = useLayoutTreeStore.getState().activeLeafId;
+  if (!activeId) return;
+  openToolInLeaf(activeId, `file-viewer:${filePath}`);
 }
 
 export function collapseActiveTabRightDock(collapsed: boolean): void {
-  const store = useWorkspaceShellStore.getState();
-  const tab = store.getActiveTab();
-  if (!tab) return;
-  const dock = {
-    ...tab.rightDock,
-    collapsed,
-    activePanelId:
-      !collapsed && !tab.rightDock.activePanelId
-        ? 'overview'
-        : tab.rightDock.activePanelId,
-    openPanelIds:
-      !collapsed && !tab.rightDock.openPanelIds.length
-        ? ['overview']
-        : tab.rightDock.openPanelIds,
-  };
-  store.updateRightDock(tab.tabId, dock);
-  applyDockToTree(dock, tab.sessionId);
+  const activeId = useLayoutTreeStore.getState().activeLeafId;
+  if (!activeId) return;
+  const node = findNodeById(
+    useLayoutTreeStore.getState().tree.root,
+    activeId
+  );
+  if (!node || !isLeaf(node)) return;
+  const dock = readLeafDock(node);
+  const patch: Partial<RightToolDockState> = { collapsed };
+  if (!collapsed && !dock.activePanelId) {
+    patch.activePanelId = 'overview';
+    patch.openPanelIds = dock.openPanelIds.length
+      ? dock.openPanelIds
+      : ['overview'];
+  }
+  updateLeafDock(activeId, patch);
 }
 
-// 注册回调解耦循环依赖
 registerFileViewerOpener((path, mode) => {
   openFileViewerInSession(path, mode || 'plain');
 });

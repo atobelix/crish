@@ -9,23 +9,18 @@ import { Globe, FolderTree } from 'lucide-react';
 import { ChatHeaderMore } from './ChatHeaderMore';
 import { SessionInlineRename } from './SessionInlineRename';
 import { SubagentHeaderPanel } from './SubagentHeaderPanel';
-import { IconButton, Tooltip } from '../ui';
+import { Tooltip } from '../ui';
 import {
   resolveUnitChromeLabel,
-  resolveUnitChromeToolTip,
   UNIT_CHROME_TOOL_TIP_SIDE,
 } from './unitChromeLabel';
-import { IconSidebarRight } from '../sidebar/SidebarToggleIcons';
 import {
-  applyDockToTree,
   listProjects,
   openToolInSession,
   pinSession,
   projectFolderLabel,
   unpinSession,
-  useLayoutTreeStore,
   useSessionField,
-  useWorkspaceShellStore,
   GENERAL_FOLDER,
   clearSessionMessages,
   exportSessionToMarkdown,
@@ -51,6 +46,10 @@ export interface UnitChromeActionsProps {
   leading?: React.ReactNode;
   onClearHistory?: () => void;
   onExportMarkdown?: () => void;
+  dockOpen?: boolean;
+  dockPanelId?: string | null;
+  onOpenPreview?: () => void;
+  onOpenFiles?: () => void;
 }
 
 export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
@@ -60,6 +59,10 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
     leading,
     onClearHistory,
     onExportMarkdown,
+    dockOpen = false,
+    dockPanelId = null,
+    onOpenPreview,
+    onOpenFiles,
   }) => {
     const sid = (activeSessionId || '').trim();
     const isDraft = !sid || isPendingDraft(sid);
@@ -98,33 +101,10 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       listProjects()
     );
 
-    const isToolColumnOpen = useLayoutTreeStore(
-      (s) => !s.toolColumnCollapsed
-    );
-    const dockSnapshot = useWorkspaceShellStore((s) => {
-      const id = (activeSessionId || '').trim();
-      const tab = id
-        ? s.openTabs.find((t) => t.sessionId === id)
-        : s.openTabs.find((t) => t.tabId === s.activeTabId);
-      return tab?.rightDock ?? null;
-    });
-    // 只有在右侧真正有工具分栏展开时，才视为右坞已打开（Chat 顶栏右边距归 0）；
-    // 只要右侧无工具分栏渲染，一律留 36px 边距给绝对定位的固定坞按钮，绝不重叠。
-    const isDockActivelyRendered =
-      isToolColumnOpen &&
-      Boolean(
-        dockSnapshot &&
-          !dockSnapshot.collapsed &&
-          dockSnapshot.openPanelIds?.length
-      );
-    const rightDockCollapsed = !isDockActivelyRendered;
-    const activePanelId = dockSnapshot?.activePanelId;
-
+    const rightDockCollapsed = !dockOpen;
     const isPreviewActive =
-      !rightDockCollapsed &&
-      (activePanelId === 'preview' || activePanelId === 'overview');
-    const isArtifactsActive =
-      !rightDockCollapsed && activePanelId === 'files';
+      dockOpen && (dockPanelId === 'preview' || dockPanelId === 'overview');
+    const isArtifactsActive = dockOpen && dockPanelId === 'files';
 
     const [shareFlash, setShareFlash] = useState(false);
     const flashTimerRef = useRef<number | null>(null);
@@ -226,38 +206,20 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
     }, [sid]);
 
     const handleOpenPreview = useCallback(() => {
+      if (onOpenPreview) {
+        onOpenPreview();
+        return;
+      }
       openToolInSession((activeSessionId || '').trim(), 'preview');
-    }, [activeSessionId]);
+    }, [activeSessionId, onOpenPreview]);
 
     const handleOpenFiles = useCallback(() => {
+      if (onOpenFiles) {
+        onOpenFiles();
+        return;
+      }
       openToolInSession((activeSessionId || '').trim(), 'files');
-    }, [activeSessionId]);
-
-    const handleToggleRightDock = useCallback(() => {
-      const shell = getCompositionRoot().shell.getState();
-      const id = (activeSessionId || '').trim();
-      const tab = id
-        ? (shell.openTabs.find((t) => t.sessionId === id) ??
-          shell.getActiveTab())
-        : shell.getActiveTab();
-      if (!tab) return;
-
-      const collapsed = !tab.rightDock.collapsed;
-      const dock = {
-        ...tab.rightDock,
-        collapsed,
-        activePanelId:
-          !collapsed && !tab.rightDock.activePanelId
-            ? 'overview'
-            : tab.rightDock.activePanelId,
-        openPanelIds:
-          !collapsed && !tab.rightDock.openPanelIds.length
-            ? ['overview']
-            : tab.rightDock.openPanelIds,
-      };
-      shell.updateRightDock(tab.tabId, dock);
-      applyDockToTree(dock, tab.sessionId);
-    }, [activeSessionId]);
+    }, [activeSessionId, onOpenFiles]);
 
     const handleJumpToNewDraft = useCallback(() => {
       enterDraftMode(folder);
@@ -270,10 +232,6 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       },
       [realSession, sid]
     );
-
-    const dockLabel = rightDockCollapsed
-      ? '展开右侧工具栏'
-      : '收起右侧工具栏';
 
     return (
       <header

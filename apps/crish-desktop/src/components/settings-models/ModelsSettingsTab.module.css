@@ -42,7 +42,7 @@
   width: 24px;
   height: 24px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--tint-active);
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -53,9 +53,9 @@
 }
 
 .mrlAddBtn:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
   color: var(--text-primary);
-  border-color: var(--tint-strong);
+  border-color: var(--border-color, hsl(35 10% 86%));
 }
 
 .mrlList {
@@ -350,7 +350,7 @@
   height: 28px;
   padding: 0 8px 0 26px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--tint-active);
+  border: 1px solid var(--border-color);
   background: var(--bg-primary);
   font-size: var(--font-size-xs);
   color: var(--text-primary);
@@ -381,7 +381,7 @@
   gap: var(--space-3);
   padding: 8px 12px;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--tint-hover);
+  border: 1px solid var(--border-subtle);
   background: var(--bg-primary);
   transition:
     background-color var(--transition-fast),
@@ -390,11 +390,12 @@
 }
 
 .mrdModelRow:not(:global(.is-expanded)):hover {
-  border-color: var(--tint-strong);
+  background: var(--bg-hover);
+  border-color: var(--border-subtle);
 }
 
 .mrdModelRow.isLive {
-  border-color: var(--tint-active);
+  border-color: var(--border-color);
 }
 
 .mrdModelRow.isOff {
@@ -542,12 +543,12 @@
 .modelsCtxInput {
   width: 72px;
   height: 28px;
-  border: 1px solid var(--tint-strong);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 0 6px;
   font-size: var(--font-size-xs);
   font-family: var(--font-mono);
-  background: var(--tint-hover);
+  background: var(--bg-card);
   color: var(--text-primary);
   outline: none;
   box-shadow: none;
@@ -647,9 +648,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  border: 1px solid var(--tint-active);
+  border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  background: var(--tint-hover);
+  background: var(--bg-card);
   padding: 10px 12px;
   cursor: pointer;
   font: inherit;
@@ -703,7 +704,7 @@
   margin-top: var(--space-2);
   padding: var(--space-3);
   border-radius: var(--radius-xl);
-  border: 1px solid var(--tint-active);
+  border: 1px solid var(--border-subtle);
   background: var(--md-code-bg);
   min-width: 0;
 }
@@ -751,7 +752,7 @@
   flex-direction: column;
   gap: 0;
   border-radius: var(--radius-lg);
-  border: 1px solid var(--tint-active);
+  border: 1px solid var(--border-subtle);
   overflow: hidden;
 }
 
@@ -901,7 +902,7 @@
 }
 .mrdAddModelBtn:hover {
   background: var(--tint-hover);
-  border-color: var(--text-tertiary);
+  border-color: var(--border-color);
   color: var(--text-primary);
 }
 
@@ -931,8 +932,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--border-color, #e2dfd9);
-  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--bg-card, hsl(0 0% 100%));
   border-radius: var(--radius-md, 6px);
   padding: 0 10px;
   min-height: 28px;
@@ -945,20 +946,14 @@
   transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
-.addServiceBtn {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-}
-
 .addServiceBtn:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
   border-color: var(--border-color);
 }
 
 .addServiceBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--tint-focus-ring, rgba(0, 0, 0, 0.08));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
 .addProviderMenu {
@@ -1037,13 +1032,13 @@
 }
 
 .cascadeSelectTrigger:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
   border-color: var(--border-color);
 }
 
 .cascadeSelectTrigger:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--tint-focus-ring, rgba(0, 0, 0, 0.08));
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
 .cascadeSelectValue {

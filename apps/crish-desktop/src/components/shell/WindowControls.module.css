@@ -25,8 +25,12 @@
 }
 
 .winBtn:hover {
-  background: var(--tint-hover, rgba(128, 128, 128, 0.12));
+  background: var(--tint-hover);
   color: var(--text-primary);
+}
+
+.winBtn:active {
+  background: var(--tint-active);
 }
 
 .closeBtn:hover {

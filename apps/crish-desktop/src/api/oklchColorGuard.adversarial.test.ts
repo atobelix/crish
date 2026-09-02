@@ -94,30 +94,28 @@ describe('parseColorToOklch — HSL 解析', () => {
     expect(r.l).toBeGreaterThan(0.2);
   });
 
-  it('暴露 bug: HSL 含小数值不匹配，回退到默认灰色', () => {
+  it('HSL 含小数值正确解析', () => {
     const r = parseColorToOklch('hsl(35.5, 10%, 50%)');
-    // 正则 /hsla?\((\d+),\s*(\d+)%,\s*(\d+)%/ 不匹配 35.5
-    // 回退到默认 r=0.9, g=0.9, b=0.9
-    const defaultR = parseColorToOklch('nonexistent');
-    expect(r).toEqual(defaultR);
+    expect(r.l).toBeGreaterThan(0.2);
+    expect(r.l).toBeLessThan(0.3);
   });
 
-  it('暴露 bug: HSL 含 deg 单位不匹配', () => {
+  it('HSL 含 deg 单位正确解析', () => {
     const r = parseColorToOklch('hsl(35deg, 10%, 50%)');
-    const defaultR = parseColorToOklch('nonexistent');
-    expect(r).toEqual(defaultR);
+    expect(r.l).toBeGreaterThan(0.2);
+    expect(r.l).toBeLessThan(0.3);
   });
 
-  it('暴露 bug: HSL 现代 slash alpha 语法不匹配', () => {
+  it('HSL 现代 slash alpha 语法正确解析', () => {
     const r = parseColorToOklch('hsl(35, 10%, 50% / 50%)');
-    const defaultR = parseColorToOklch('nonexistent');
-    expect(r).toEqual(defaultR);
+    expect(r.l).toBeGreaterThan(0.2);
+    expect(r.l).toBeLessThan(0.3);
   });
 
-  it('暴露 bug: HSL 空格分隔语法不匹配', () => {
+  it('HSL 空格分隔语法正确解析', () => {
     const r = parseColorToOklch('hsl(35 10% 50%)');
-    const defaultR = parseColorToOklch('nonexistent');
-    expect(r).toEqual(defaultR);
+    expect(r.l).toBeGreaterThan(0.2);
+    expect(r.l).toBeLessThan(0.3);
   });
 
   it('暴露 bug: HSL 百分号缺失不匹配', () => {

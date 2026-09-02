@@ -154,4 +154,28 @@ describe('SessionRow 点击 / 更多钮', () => {
     expect(row.getAttribute('aria-label')).toContain('分支会话：分析代码架构');
     expect(row.querySelector('svg.lucide-git-branch')).not.toBeNull();
   });
+
+  describe('SessionRow 单一菜单出口契约测试（消灭双重幽灵菜单）', () => {
+    it('点击更多按钮派发单一 onContextMenuSession 事件，且绝不挂载本地 session-row-panel', () => {
+      const { onContextMenuSession } = renderRow();
+      const moreBtn = screen.getByTestId('session-more-button');
+      fireEvent.click(moreBtn);
+
+      // 核心断言 1：仅触发单一全局 onContextMenuSession
+      expect(onContextMenuSession).toHaveBeenCalledTimes(1);
+      expect(onContextMenuSession.mock.calls[0]![1]).toBe('sess-1');
+
+      // 核心断言 2：DOM 中绝对不存在本地冗余的 session-row-panel
+      expect(screen.queryByTestId('session-row-panel')).toBeNull();
+    });
+
+    it('右键行派发单一 onContextMenuSession 事件，且绝不挂载本地 session-row-panel', () => {
+      const { onContextMenuSession } = renderRow();
+      const row = screen.getByTestId('sidebar-session-item');
+      fireEvent.contextMenu(row, { clientX: 150, clientY: 300 });
+
+      expect(onContextMenuSession).toHaveBeenCalledTimes(1);
+      expect(screen.queryByTestId('session-row-panel')).toBeNull();
+    });
+  });
 });

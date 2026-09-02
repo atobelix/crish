@@ -82,10 +82,11 @@ export const SidebarContextMenus: React.FC<SidebarContextMenusProps> = ({
 }) => {
   const target = contextMenu
     ? (() => {
+        const root = getCompositionRoot();
+        const store = root.session.getState();
         const s =
-          getCompositionRoot().session.getState().sessionsById[
-            contextMenu.sessionId
-          ];
+          store.sessionsById[contextMenu.sessionId] ??
+          store.sessions.find((sess) => sess.id === contextMenu.sessionId);
         return s && !s.isArchived ? s : undefined;
       })()
     : undefined;

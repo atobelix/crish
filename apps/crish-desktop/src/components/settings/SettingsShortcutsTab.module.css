@@ -1,7 +1,9 @@
+/* apps/crish-desktop/src/components/settings/SettingsShortcutsTab.module.css */
+
 .controlGroup {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
 }
 
 .controlGroup :global(button) {
@@ -17,16 +19,59 @@
   box-shadow: none;
 }
 
+/* 纯白实体卡片键帽 */
 .shortcutKeyBtn {
   appearance: none;
   -webkit-appearance: none;
-  min-width: 88px;
+  outline: none;
+  min-width: 92px;
+  height: 28px;
+  padding: 0 10px;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--font-size-xs, 12px);
   font-variant-numeric: tabular-nums;
+  font-weight: var(--font-weight-medium, 500);
+  letter-spacing: 0.02em;
   border-radius: var(--button-radius, 7px);
-  box-shadow: none;
+  background-color: var(--bg-card, hsl(0 0% 100%));
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 4%, transparent),
+    0 1px 1px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 2%, transparent);
+  cursor: pointer;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    background-color var(--transition-micro, 100ms) ease-out,
+    border-color var(--transition-micro, 100ms) ease-out,
+    box-shadow var(--transition-micro, 100ms) ease-out;
 }
 
-.recording {
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+.shortcutKeyBtn:hover:not(:disabled) {
+  background-color: var(--bg-card);
+  border-color: var(--border-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.shortcutKeyBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+/* 录制态：Emerald 活态焦点环与无障碍对比度 */
+.shortcutKeyBtn.recording {
+  outline: none;
+  border-color: var(--brand, hsl(160 84% 39%));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 20%, transparent);
+  background-color: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 4%, var(--bg-card));
+  color: var(--brand-deep, hsl(160 84% 30%));
+}
+
+:global(html[data-theme='dark']) .shortcutKeyBtn.recording {
+  background-color: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 12%, var(--bg-card));
+  color: var(--brand, hsl(160 84% 45%));
 }

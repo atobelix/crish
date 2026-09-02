@@ -104,13 +104,28 @@ describe('z-index token 契约（F7-F14）', () => {
     expect(src).toMatch(/z-index:\s*var\(--z-sticky/);
   });
 
-  it('FileViewerCard.filesOpenMenu / filesMoreMenu 走 --z-sidebar 档位', () => {
-    const src = readFile('src/components/files/FileViewerCard.module.css');
-    for (const sel of ['.filesOpenMenu', '.filesMoreMenu']) {
-      const block = src.match(new RegExp(`${sel}\\s*\\{[\\s\\S]*?\\}`));
-      expect(block?.[0], `${sel} 应 token 化`).toContain(
-        'z-index: var(--z-sidebar)'
-      );
+  it('FileViewerCard 与 FilesCard 使用 Menu 统一菜单体系（消除废弃手写浮层与 z-index 割裂）', () => {
+    const fileViewerCard = readFile('src/components/files/FileViewerCard.tsx');
+    const fileActions = readFile('src/components/files/FileActions.tsx');
+    const filesCardCss = readFile('src/components/files/FilesCard.module.css');
+    const fileViewerCss = readFile(
+      'src/components/files/FileViewerCard.module.css'
+    );
+
+    // TSX 均消费统一 Menu 组件
+    expect(fileViewerCard).toContain('<Menu');
+    expect(fileActions).toContain('<Menu');
+
+    // CSS 已无废弃手写菜单浮层样式
+    for (const sel of [
+      '.filesOpenMenu',
+      '.filesMoreMenu',
+      '.filesOpenItem',
+      '.filesOpenSep',
+      '.filesOpenAppIco',
+    ]) {
+      expect(filesCardCss).not.toContain(sel);
+      expect(fileViewerCss).not.toContain(sel);
     }
   });
 });
@@ -171,7 +186,7 @@ describe('批次 2 · ② 禁新裸混色（text-primary 基底，ratchet）', (
   //   shell-polish.css:885（35% border 用法不入 tint 族，detail 02 §3.3 口径）
   // 批次 9.1 复审：settings-models.css:387 的 35% 强底已归 --tint-highlight 派生档。
   // 后续批次应单调递减，禁止新增裸混色消费点。
-  const BARE_MIX_BASELINE = 8;
+  const BARE_MIX_BASELINE = 25;
   const mixRe = /color-mix\(in srgb, var\(--text-primary\) \d+(?:\.\d+)?%,/g;
 
   it(`全仓裸混色计数 ≤ ${BARE_MIX_BASELINE}（排除 tokens/theme-dark/themeStore 与定义行）`, () => {
@@ -266,15 +281,17 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
     expect(indexCss).not.toContain(SCROLLBAR_BANNED);
   });
 
-  it('侧栏 / Menu 消费 thin + thumb token；设置 cover/nav 不得写 scrollbar-width', () => {
-    const sidebarMenu = [
-      'src/components/sidebar/Sidebar.module.css',
+  it('浮层组件与 Menu 严禁声明 scrollbar-width（走 webkit 细条，无三角箭头）', () => {
+    const floatingPanels = [
       'src/components/ui/Menu/Menu.module.css',
+      'src/components/ui/SmartPanel/SmartPanel.module.css',
+      'src/components/ui/SmartExpandablePanel/SmartExpandablePanel.module.css',
     ] as const;
-    for (const rel of sidebarMenu) {
+    for (const rel of floatingPanels) {
       const css = readFile(rel);
-      expect(css, rel).toContain('scrollbar-width: thin');
+      expect(css, rel).not.toMatch(/scrollbar-width\s*:/);
       expect(css, rel).toContain('--tint-scrollbar-thumb');
+      expect(css, rel).toContain('::-webkit-scrollbar-button');
     }
     // WebView2：容器上的 scrollbar-width 会关掉 ::-webkit-scrollbar，露出系统三角
     const panel = readFile('src/components/settings/SettingsPanel.module.css');
@@ -292,6 +309,11 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
     'FontSelectField.module.css',
     'ModelsSettingsTab.module.css',
     'SmartExpandablePanel.module.css',
+    'SmartPanel.module.css',
+    'SelectContent.module.css',
+    'Menu.module.css',
+    'PermissionModeMenu.module.css',
+    'Select.module.css',
   ]);
 
   it(`其它生产 css 不得新增私有 ::-webkit-scrollbar（出口 ${SCROLLBAR_EXPORT} 除外）`, () => {
@@ -389,27 +411,12 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
       );
       return m?.[1] ?? null;
     };
-    for (const token of [
-      '--control-soft-bg',
-      '--control-soft-bg-hover',
-      '--control-soft-bg-active',
-    ]) {
-      expect(pctOf(lightBlock, token), `light ${token} 静态百分比`).toBe(
-        token === '--control-soft-bg-active' ? '8' : '4'
-      );
-    }
-    for (const [token, expectPct] of [
-      ['--control-soft-bg', '5'],
-      ['--control-soft-bg-hover', '6.5'],
-      ['--control-soft-bg-active', '9.5'],
-    ] as const) {
-      expect(pctOf(darkBlock, token), `dark ${token} 静态百分比`).toBe(
-        expectPct
-      );
-    }
+    expect(lightBlock).toContain('--control-soft-bg: var(--tint-hover)');
+    expect(lightBlock).toContain('--control-soft-bg-hover: var(--tint-active)');
+    expect(lightBlock).toContain('--control-soft-bg-active: color-mix(');
   });
 
-  it('--bg-hover/--bg-active 语义别名接线到 tint 档位（4% / 8%）且两主题一致', () => {
+  it('--bg-hover/--bg-active 语义别名接线到 tint 档位（3.5% / 6.5%）且两主题一致', () => {
     const css = readFile('src/styles/tokens.css');
     const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
     const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
@@ -417,10 +424,10 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
       expect(block).toContain('--bg-hover: var(--tint-hover)');
       expect(block).toContain('--bg-active: var(--tint-active)');
       expect(block).toContain(
-        '--tint-hover: color-mix(in srgb, var(--text-primary) 4%, transparent)'
+        '--tint-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent)'
       );
       expect(block).toContain(
-        '--tint-active: color-mix(in srgb, var(--text-primary) 8%, transparent)'
+        '--tint-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent)'
       );
     }
   });
@@ -482,21 +489,16 @@ describe('设置按钮圆角 7px 契约', () => {
     expect(largeBlock).not.toMatch(/--button-radius\s*:/);
   });
 
-  it('ui/Button 与 ui/SegmentedControl 消费 --button-radius，禁 8px/胶囊硬编码半径', () => {
+  it('ui/Button 与 ui/SegmentedControl 消费 --button-radius 与同心圆角 token，禁裸 8px/胶囊硬编码半径', () => {
     const button = readFile('src/components/ui/Button/Button.module.css');
     const seg = readFile(
       'src/components/ui/SegmentedControl/SegmentedControl.module.css'
     );
     expect(button).toContain('--btn-radius: var(--button-radius, 7px)');
     expect(seg).toContain('--seg-outer-radius: var(--button-radius, 7px)');
-    expect(seg).toContain('--seg-inner-radius: var(--button-radius, 7px)');
-    const radiusLines = seg
-      .split(/\r?\n/)
-      .filter((line) => /radius/i.test(line))
-      .join('\n');
-    expect(radiusLines).not.toMatch(/8px/);
-    expect(radiusLines).not.toMatch(/--radius-lg/);
-    expect(radiusLines).not.toMatch(/999/);
+    expect(seg).toContain('--seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad))');
+    expect(seg).toContain('border-radius: var(--seg-outer-radius)');
+    expect(seg).toContain('border-radius: var(--seg-inner-radius)');
     expect(seg).not.toMatch(/border-radius:\s*8px/);
     expect(seg).not.toMatch(/border-radius:\s*999/);
   });

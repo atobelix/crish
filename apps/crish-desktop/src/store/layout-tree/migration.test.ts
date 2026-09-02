@@ -25,6 +25,7 @@ import {
   type LayoutTree,
 } from './types';
 import { findNodeById, collectLeaves } from './operations';
+import { createSessionTab } from './sessionTabModel';
 
 // ── 测试夹具 ────────────────────────────────────────────────────────
 
@@ -212,7 +213,7 @@ function legacyMixedEmptyAndNormalGroups() {
  * 同时修正 activeLeafId 保持 store 一致性。
  */
 function resetStoreFully(): void {
-  const defaultTree = createDefaultTree('chat');
+  const defaultTree = createDefaultTree();
   useLayoutTreeStore.setState({
     tree: defaultTree,
     activeLeafId: defaultTree.root.id,
@@ -257,8 +258,8 @@ describe('migrateLayoutIfNeeded — 跳过条件', () => {
     const customTree: LayoutTree = {
       root: createBranch(
         'horizontal',
-        createLeaf('chat'),
-        createLeaf('diff'),
+        createLeaf(),
+        createLeaf(),
         0.5
       ),
       version: 2,
@@ -314,7 +315,7 @@ describe('migrateLayoutIfNeeded — 迁移执行', () => {
     expect(isBranch(tree.root)).toBe(true);
     const leaves = collectLeaves(tree.root);
     expect(leaves).toHaveLength(2);
-    expect(leaves.map((l) => l.panelId).sort()).toEqual(['chat', 'diff']);
+    expect(leaves.every((l) => l.panelId === 'chat')).toBe(true);
 
     // 历史：原默认树推入 past（可 undo）
     expect(past.length).toBe(1);
@@ -333,7 +334,7 @@ describe('migrateLayoutIfNeeded — 迁移执行', () => {
 
     const leaves = collectLeaves(tree.root);
     expect(leaves).toHaveLength(2);
-    expect(leaves.map((l) => l.panelId).sort()).toEqual(['chat', 'terminal']);
+    expect(leaves.every((l) => l.panelId === 'chat')).toBe(true);
   });
 
   it('迁移后 activeLeafId 仍指向有效 leaf', () => {
@@ -393,13 +394,8 @@ describe('migrateLayoutIfNeeded — 迁移执行', () => {
     expect(leaves).toHaveLength(1);
 
     const leaf = leaves[0]!;
-    // 不变量：tabs 永远非空（默认树由 createDefaultTree 创建，自动满足）
-    expect(leaf.tabs.length).toBeGreaterThanOrEqual(1);
-    // 不变量：activeTab 必在 tabs 中
-    expect(leaf.tabs).toContain(leaf.activeTab);
-    // 默认树：tabs=['chat'], activeTab='chat', panelId='chat'
-    expect(leaf.tabs).toEqual(['chat']);
-    expect(leaf.activeTab).toBe('chat');
+    expect(leaf.tabs).toHaveLength(0);
+    expect(leaf.activeTabId).toBe('');
     expect(leaf.panelId).toBe('chat');
   });
 
@@ -413,25 +409,17 @@ describe('migrateLayoutIfNeeded — 迁移执行', () => {
     const leaves = collectLeaves(tree.root);
     expect(leaves).toHaveLength(2);
 
-    // 每个 leaf 都必须满足不变量：tabs 非空 + activeTab in tabs
+    // 每个 leaf 都必须是 chat 叶；允许空的新对话界面
     for (const leaf of leaves) {
+      expect(leaf.panelId).toBe('chat');
+      if (leaf.tabs.length === 0) {
+        expect(leaf.activeTabId).toBe('');
+        continue;
+      }
       expect(leaf.tabs.length).toBeGreaterThanOrEqual(1);
-      expect(leaf.tabs).toContain(leaf.activeTab);
+      expect(leaf.tabs.some((t) => t.tabId === leaf.activeTabId)).toBe(true);
+      expect(leaf.panelId).toBe('chat');
     }
-
-    // 正常 group 保持原值
-    const normalLeaf = leaves.find((l) => l.panelId === 'chat');
-    expect(normalLeaf).toBeDefined();
-    expect(normalLeaf!.tabs).toEqual(['chat']);
-    expect(normalLeaf!.activeTab).toBe('chat');
-
-    // 注意：空 cards group 归一化后 panelId 也变为 'chat'，
-    // 故可能存在两个 panelId='chat' 的 leaf（这是合理的，因为旧数据已损坏）。
-    // 这里用 allLeavesValid 验证"所有 leaf（含归一化后的空 cards leaf）满足不变量"。
-    const allLeavesValid = leaves.every(
-      (l) => l.tabs.length > 0 && l.tabs.includes(l.activeTab)
-    );
-    expect(allLeavesValid).toBe(true);
   });
 });
 
@@ -514,7 +502,7 @@ describe('migrateLayoutIfNeeded — 幂等性', () => {
 });
 
 describe('migrateLayoutIfNeeded — 默认状态检测', () => {
-  it('单 chat leaf + tabs=["chat"] 视为默认状态', () => {
+  it('单 chat leaf + 一个 tab 视为默认状态', () => {
     // 这是迁移的初始条件；不直接调用 isTreeInDefaultState（私有），
     // 而是通过行为验证：默认状态 + 旧数据 → 触发迁移
     setLegacyLayout(legacyTwoColumns() as never);
@@ -522,10 +510,12 @@ describe('migrateLayoutIfNeeded — 默认状态检测', () => {
     expect(result).toBe(true);
   });
 
-  it('单 leaf 但 panelId !== "chat" 视为非默认（用户自定义）', () => {
-    // 用户已将默认 chat leaf 改为 diff
+  it('两叶树视为非默认（用户自定义）', () => {
     useLayoutTreeStore.setState({
-      tree: { root: createLeaf('diff'), version: 2 },
+      tree: {
+        root: createBranch('horizontal', createLeaf(), createLeaf(), 0.5),
+        version: 3,
+      },
     });
     setLegacyLayout(legacyTwoColumns() as never);
 
@@ -536,7 +526,15 @@ describe('migrateLayoutIfNeeded — 默认状态检测', () => {
 
   it('单 chat leaf 但 tabs 含多个元素视为非默认', () => {
     useLayoutTreeStore.setState({
-      tree: { root: createLeaf('chat', ['chat', 'agent'], 'chat'), version: 2 },
+      tree: {
+        root: createLeaf({
+          tabs: [
+            createSessionTab({ sessionId: 's1', tabId: 'a' }),
+            createSessionTab({ sessionId: 's2', tabId: 'b' }),
+          ],
+        }),
+        version: 3,
+      },
     });
     setLegacyLayout(legacyTwoColumns() as never);
 

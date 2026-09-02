@@ -1,24 +1,25 @@
 /**
- * workspace-shell package — **TabSurface / dock write owner**.
+ * workspace-shell package — 会话手势门面 + shellReady。
  *
  * | Own | Do not own |
  * |-----|------------|
- * | openTabs, activeTabId, rightDock, shellReady | session messages (layoutStore) |
- * | open/focus/close/new-draft tab lifecycle | binary tree geometry (layout-tree) |
+ * | shellReady、lastChatLeafId、会话手势转发 | 标签数组（在 chat 叶 tabs） |
+ * | open/focus/close/new-draft/promote | 二叉树几何（layout-tree 命令） |
  *
- * Forbidden: dual-write open path via raw `setActiveSessionId` without shell;
- * tree mutations except through layout-tree ops / shell project helpers.
+ * 禁止 bindActiveChatLeafSession / 写 openTabs / setLeafSessionId。
  *
  * compositionRoot: `.shell` → here; `.layout` → layoutStore (not tree).
- *
- * @see ./workspaceShellStore.ts header
- * @see ../storeOwnership.ts
  */
 
 export * from './types';
 export * from './adapterShape';
 export * from './workspaceShellStore';
 export * from './openTool';
-export * from './unitTabPlacement';
 export * from './layoutRestorePolicy';
-// openToolInSession 经 openTool 再导出
+export {
+  pictureFromActiveLeaf,
+  resolveActiveChatLeaf,
+  findTabBySessionId,
+  findTabByTabId,
+  listAllSessionTabs,
+} from './treeSessionQuery';

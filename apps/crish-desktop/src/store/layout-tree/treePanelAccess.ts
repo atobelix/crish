@@ -23,10 +23,7 @@ import {
   openToolInActiveTab,
   openToolInSession,
 } from '../workspace-shell/openTool';
-import {
-  ensureAdapterShape,
-  ensureChatOnlyTree,
-} from '../workspace-shell/adapterShape';
+import { ensureAdapterShape } from '../workspace-shell/adapterShape';
 
 
 /**
@@ -43,8 +40,6 @@ export function focusOrOpenTreePanel(
   sessionId?: string | null
 ): void {
   if (panelId === 'chat' || isPrimaryPanel(panelId)) {
-    const sid = (sessionId || '').trim();
-    ensureChatOnlyTree(sid || undefined);
     ensureAdapterShape();
     return;
   }

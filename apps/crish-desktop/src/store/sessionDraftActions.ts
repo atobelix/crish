@@ -33,9 +33,14 @@ import type {
  */
 export function applyDraftModeToState(
   state: SessionStoreSlice,
-  folder?: string
+  folder?: string,
+  opts?: { draftSessionId?: string }
 ): void {
-  state.activeSessionId = PENDING_DRAFT_SESSION_ID;
+  const id =
+    opts?.draftSessionId && isPendingDraft(opts.draftSessionId)
+      ? opts.draftSessionId
+      : PENDING_DRAFT_SESSION_ID;
+  state.activeSessionId = id;
   state.draftFolder =
     (typeof folder === 'string' && folder.trim()) ||
     getActiveProjectId() ||
@@ -43,7 +48,7 @@ export function applyDraftModeToState(
     '';
   state.activeAgentId = null;
   state.panelAgentId = null;
-  syncActiveTerminalSession(PENDING_DRAFT_SESSION_ID);
+  syncActiveTerminalSession(id);
 }
 
 /**
@@ -66,8 +71,8 @@ export function createSessionDraftActions<T extends SessionStoreSlice>(
   'enterDraftMode' | 'setDraftFolder' | 'clearDraft' | 'commitDraftIfNeeded'
 > {
   const actions = {
-    enterDraftMode: (folder?: string) => {
-      set((state) => applyDraftModeToState(state, folder));
+    enterDraftMode: (folder?: string, opts?: { draftSessionId?: string }) => {
+      set((state) => applyDraftModeToState(state, folder, opts));
       // D2：draft_enter 计数（内存）
       recordDraftEnter();
     },

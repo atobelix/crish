@@ -60,7 +60,8 @@
 }
 
 .userBubble {
-  background: var(--bg-card, hsl(35, 10%, 98%));
+  /* 5.5% 灰度底，无描边 */
+  background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-card));
   color: var(--text-primary);
   border-radius: 14px 14px 4px 14px;
   padding: 10px 14px;
@@ -70,8 +71,8 @@
   word-break: break-word;
   overflow-wrap: break-word;
   white-space: pre-wrap;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 1px 3px var(--tint-subtle, hsl(0 0% 0% / 0.02));
+  border: none;
+  box-shadow: none;
   width: fit-content;
   max-width: 100%;
   min-width: min-content;
@@ -344,7 +345,7 @@
   margin: var(--md-heading-margin-top, 0.30em) 0 var(--md-heading-margin-bottom, 0.15em);
 }
 
-/* 行内代码微胶囊 */
+/* 行内代码：3.5% 灰度底，无描边 */
 .assistantText :global(.md-inline-code) {
   font-family: var(--md-code-font, var(--font-mono));
   font-size: var(--md-code-inline-size, 0.9em);
@@ -352,9 +353,9 @@
   padding: var(--md-code-inline-padding, 0.15em 0.4em);
   margin: 0 0.2em;
   border-radius: var(--md-code-inline-radius, 4px);
-  background: var(--md-code-inline-bg);
+  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
   color: var(--md-code-inline-fg);
-  border: 1px solid var(--md-code-inline-border);
+  border: none;
   word-break: break-word;
   white-space: pre-wrap;
   box-decoration-break: clone;

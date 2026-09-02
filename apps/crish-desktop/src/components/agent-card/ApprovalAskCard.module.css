@@ -228,8 +228,9 @@
 }
 
 .approvalCardBtn.deny:hover:not(:disabled) {
+  background: var(--tint-hover);
+  border-color: var(--border-color);
   color: var(--text-primary);
-  border-color: var(--text-tertiary);
 }
 
 .approvalCardBtn.allow {

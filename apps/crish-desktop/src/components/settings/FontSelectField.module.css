@@ -4,6 +4,11 @@
   max-width: 280px;
 }
 
+.settingsSelect.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .settingsSelectTriggerRow {
   display: flex;
   align-items: center;
@@ -23,7 +28,7 @@
   padding: 0 10px;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md, 6px);
-  background: var(--bg-card);
+  background: var(--bg-card, hsl(0 0% 100%));
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm, 13px);
@@ -36,18 +41,16 @@
 }
 
 .settingsSelectTrigger:hover:not(:disabled) {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
   border-color: var(--border-color);
 }
 
 .settingsSelectTrigger:active:not(:disabled),
-.settingsSelectTrigger:focus,
 .settingsSelectTrigger:focus-visible,
-.settingsSelectTrigger[aria-expanded='true'],
-.settingsSelect.isOpen .settingsSelectTrigger {
-  background: var(--bg-hover);
-  border-color: var(--border-color);
-  box-shadow: none;
+.settingsSelectTrigger[aria-expanded='true'] {
+  background: var(--tint-hover);
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  outline: none;
 }
 
 .settingsSelectTrigger:disabled {
@@ -61,54 +64,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: left;
 }
 
 .settingsSelectChev {
   flex-shrink: 0;
   color: var(--text-tertiary);
-  transition: transform var(--transition-micro);
+  transition: transform var(--transition-micro, 0.15s ease);
   opacity: 0.7;
 }
 
-.settingsSelect.isOpen .settingsSelectChev {
-  transform: rotate(180deg);
-}
-
-.settingsSelectIconBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: var(--radius-md, 6px);
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  flex-shrink: 0;
-  padding: 0;
-  transition: background-color 0.12s ease, color 0.12s ease;
-}
-
-.settingsSelectIconBtn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.settingsSelectIconBtn:disabled {
-  opacity: 0.45;
-  cursor: default;
-}
-
-.settingsSelectMenu,
-.settingsSelectMenuPortal {
-  background: var(--sep-bg-panel, var(--bg-elevated));
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
+.settingsSelectMenu {
+  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
   box-shadow: var(--shadow-dropdown);
-  padding: 6px;
+  padding: 4px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -117,16 +88,124 @@
   z-index: var(--z-dropdown-menu, 2000);
 }
 
-.settingsSelectHeader {
-  margin-bottom: 2px;
+/* 顶部搜索条与操作栏 */
+.searchHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--bg-primary, var(--bg-workspace));
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
+.searchInputWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 6px;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  width: 100%;
+  height: 22px;
+  border: none;
+  background: transparent;
+  padding: 0 24px 0 24px;
+  font-family: inherit;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  outline: none;
+  box-sizing: border-box;
+}
+
+.searchInput::placeholder {
+  color: var(--text-tertiary);
+}
+
+.customApplyBtn {
+  position: absolute;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--accent-color, var(--brand-deep));
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.customApplyBtn:hover {
+  background: var(--tint-hover);
+}
+
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.actionBtn:hover:not(:disabled) {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.actionBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.spinIcon {
+  transform-origin: center center;
+  animation: font-spin 0.8s linear infinite;
+  color: var(--accent-color, var(--brand-deep));
+}
+
+@keyframes font-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 下拉滚动列表 */
 .settingsSelectScroll {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-height: 0;
+  padding: 2px 0;
   overscroll-behavior: contain;
   scrollbar-width: thin;
   scrollbar-color: var(--border-subtle) transparent;
@@ -143,10 +222,10 @@
   border-radius: 3px;
 }
 
-.settingsSelectGroup {
+.groupHeader {
   font-size: var(--font-size-xxs, 11px);
   color: var(--text-tertiary);
-  padding: 6px 10px 2px;
+  padding: 6px 8px 2px;
   user-select: none;
 }
 
@@ -156,13 +235,13 @@
   justify-content: space-between;
   gap: 8px;
   width: 100%;
-  height: 28px;
-  min-height: 28px;
+  height: 30px;
+  min-height: 30px;
   border: none;
   background: transparent;
   text-align: left;
-  padding: 0 10px;
-  border-radius: 8px;
+  padding: 0 8px;
+  border-radius: 6px;
   cursor: pointer;
   font-family: inherit;
   color: var(--text-primary);
@@ -172,18 +251,15 @@
   box-sizing: border-box;
 }
 
-.settingsSelectItem:hover {
-  background: var(--bg-hover);
+.settingsSelectItem:hover,
+.settingsSelectItem.isFocused {
+  background: var(--tint-hover);
 }
 
 .settingsSelectItem.isActive {
-  background: var(--bg-active, var(--tint-active));
+  background: var(--tint-hover);
   color: var(--text-primary);
   font-weight: 500;
-}
-
-.settingsSelectItem.isActive:hover {
-  background: var(--bg-active, var(--tint-active));
 }
 
 .settingsSelectItemLabel {
@@ -194,27 +270,32 @@
   white-space: nowrap;
 }
 
-.settingsSelectItemHint {
-  font-size: var(--font-size-xxs, 11px);
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.settingsSelectCheckIcon {
+.checkIcon {
   flex-shrink: 0;
   color: var(--accent-color, var(--brand-deep));
 }
 
-.settingsSelectEmpty {
-  padding: 12px 10px;
-  font-size: var(--font-size-sm, 13px);
-  color: var(--text-tertiary);
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 8px;
   text-align: center;
+  gap: 4px;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
 }
 
-.settingsSelectFooter {
-  border-top: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
-  margin-top: 2px;
-  padding-top: 2px;
+.emptySub {
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary);
+  opacity: 0.8;
+}
+
+.highlightMark {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--text-primary);
+  border-radius: 2px;
+  padding: 0 1px;
 }

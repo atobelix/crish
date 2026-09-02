@@ -169,19 +169,12 @@ export const ProjectPickerMenu: React.FC<ProjectPickerMenuProps> = ({
     };
 
     return [
-      // 1. 项目列表组（包含具体项目与通用项目）
-      {
-        id: 'project-list-group',
-        type: 'group',
-        isSelectableList: true,
-        items: [...projectItems, generalItem],
-      },
-      // 2. 唯一样式分割线
+      ...projectItems,
+      generalItem,
       {
         id: 'sep-actions',
         type: 'divider',
       },
-      // 3. 添加项目级联子菜单（带有 Safe-Aim 轨迹保护）
       {
         id: 'action:add-project',
         type: 'submenu',

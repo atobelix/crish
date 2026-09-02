@@ -37,55 +37,13 @@
 .leftGroup {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   min-width: 0;
   flex: 1 1 auto;
 }
 
-.sourceSegment {
-  display: inline-flex;
-  align-items: center;
-  background: var(--control-soft-bg);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm, 4px);
-  padding: 1px;
-  gap: 1px;
+.sourceSegmentControl {
   flex-shrink: 0;
-  height: 26px;
-  box-sizing: border-box;
-}
-
-.sourceTab {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 6px;
-  border-radius: var(--radius-xs, 2px);
-  font-size: var(--font-size-xs, 12px);
-  font-weight: 500;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all 120ms ease;
-}
-
-.sourceTab:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--tint-hover);
-}
-
-.sourceTab.activeTab {
-  color: var(--text-primary);
-  background: var(--bg-card);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  font-weight: 600;
-}
-
-.sourceTab:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .tabIcon {
@@ -112,14 +70,7 @@
 }
 
 .inlineSelect {
-  height: 26px;
-  min-height: 26px;
-  font-size: var(--font-size-xs, 12px);
-}
-
-.branchWrap {
-  display: flex;
-  align-items: center;
+  /* 允许 SelectTrigger 原生 size="sm" (28px) 完全生效，不再强制 26px 覆写 */
   width: 100%;
 }
 
@@ -137,10 +88,10 @@
 }
 
 .actionBtn {
-  width: 26px;
-  height: 26px;
-  min-width: 26px;
-  border-radius: var(--radius-sm, 4px);
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: var(--radius-md, 6px);
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -215,7 +166,7 @@
   min-width: 0;
   overflow: hidden;
   max-width: 100%;
-  background: var(--bg-card);
+  background: var(--bg-card, #ffffff);
 }
 
 /* 手风琴文件列表 (DEL-17: 移除 overscroll-behavior: contain) */
@@ -392,21 +343,15 @@
   cursor: pointer;
   transition:
     border-color var(--transition-micro),
-    background-color var(--transition-micro),
     color var(--transition-micro);
 }
 
 .hoverActBtn:hover {
-  background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-subtle);
 }
 
 .hoverActBtn.danger:hover {
-  background: var(
-    --accent-red-light-adaptive,
-    color-mix(in srgb, var(--accent-red) 10%, var(--bg-primary))
-  );
   color: var(--accent-red);
   border-color: var(--accent-red);
 }
@@ -448,19 +393,6 @@
   min-width: 120px;
 }
 
-.inlineCompareSelect :global(.settings-select-trigger) {
-  height: 24px;
-  min-height: 24px;
-  padding: 0 8px;
-  border-radius: var(--radius-xs);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-card);
-  font-size: var(--font-size-xxs);
-  gap: var(--space-1);
-  width: 100%;
-  color: var(--text-primary);
-}
-
 .inlineActions {
   display: flex;
   align-items: center;
@@ -471,21 +403,20 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-xs);
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   transition:
     border-color var(--transition-micro),
-    background-color var(--transition-micro),
     color var(--transition-micro);
 }
 
 .inlineIconBtn:hover {
-  background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-subtle);
 }
@@ -501,9 +432,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-xs);
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: var(--radius-sm, 4px);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
@@ -511,7 +443,6 @@
 }
 
 .inlineActionBtn:hover {
-  background: var(--bg-hover);
   color: var(--text-primary);
   border-color: var(--border-subtle);
 }
@@ -519,7 +450,7 @@
 .inlineActionAccept:hover:not(:disabled) {
   background: var(
     --accent-green-light-adaptive,
-    color-mix(in srgb, var(--accent-green) 10%, var(--bg-primary))
+    color-mix(in srgb, var(--accent-green) 10%, var(--bg-card))
   );
   color: var(--accent-green);
   border-color: var(--accent-green);
@@ -750,7 +681,7 @@
 }
 
 .commitTriggerBar:hover {
-  background: var(--bg-hover);
+  background: color-mix(in srgb, var(--text-primary) 4%, var(--bg-secondary));
   border-color: var(--border-color);
 }
 
@@ -814,7 +745,6 @@
 }
 
 .commitCloseBtn:hover {
-  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -831,9 +761,11 @@
   box-sizing: border-box;
 }
 
+.commitInput:focus-visible,
 .commitInput:focus {
   outline: none;
-  border-color: var(--brand-deep, #047857);
+  border-color: var(--brand, hsl(160 84% 39%));
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 25%, transparent);
 }
 
 .commitActions {
@@ -890,7 +822,6 @@
 }
 
 .groupActionBtn:hover {
-  background: var(--bg-hover);
   color: var(--text-primary);
 }
 
@@ -925,6 +856,7 @@
   text-align: center;
   box-sizing: border-box;
   overflow: hidden;
+  background: var(--bg-card, #ffffff);
   -webkit-app-region: no-drag;
 }
 

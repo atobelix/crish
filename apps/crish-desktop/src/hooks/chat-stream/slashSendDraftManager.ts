@@ -124,20 +124,19 @@ export function backfillFromBoundaryText(
 }
 
 /**
- * 草稿 → 真会话：commit 后补建 shell tab + 绑 chat leaf
+ * 草稿 → 真会话：就地 promote 当前草稿 tab，禁止再 openOrFocusSession 多开一张。
  */
 export function commitDraftAndOpenShell(opts?: {
   title?: string;
   folder?: string;
 }): string {
+  const st = getCompositionRoot().session.getState();
+  const draftId = st.activeSessionId;
   const newId = commitDraftIfNeeded(opts);
   if (!newId || isPendingDraft(newId)) return newId;
-  const shell = getCompositionRoot().shell.getState();
-  if (!shell.openTabs.some((t) => t.sessionId === newId)) {
-    const sess = getSessionById(newId);
-    getCompositionRoot().session.openOrFocusSession(newId, {
-      title: sess?.title,
-    });
+  if (isPendingDraft(draftId)) {
+    const title = getSessionById(newId)?.title;
+    getCompositionRoot().shell.promoteDraftTab(draftId, newId, title);
   }
   return newId;
 }

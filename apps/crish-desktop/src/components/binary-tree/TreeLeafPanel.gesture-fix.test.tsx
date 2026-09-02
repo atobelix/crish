@@ -5,6 +5,7 @@ import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
 import { TreeLeafPanel } from './TreeLeafPanel';
 import { useWorkspaceShellStore } from '../../store/storeAccess';
 import { useLayoutTreeStore } from '../../store/layout-tree';
+import { getCompositionRoot } from '../../app/compositionRoot';
 import { createLeaf } from '../../store/layout-tree/types';
 import {
   registerBuiltInViews,
@@ -258,6 +259,19 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
     vi.clearAllMocks();
     setPrimaryPanelChecker((pid) => pid === 'chat');
     registerBuiltInViews(gestureTestFactories);
+    const root = getCompositionRoot();
+    (
+      root.shell as unknown as {
+        activateTab: (leafId: string) => void;
+        updateTabDock: () => void;
+      }
+    ).activateTab = (leafId: string) => {
+      const st = useLayoutTreeStore.getState();
+      if (st.activeLeafId !== leafId) st.setActiveLeaf(leafId);
+    };
+    (
+      root.shell as unknown as { updateTabDock: () => void }
+    ).updateTabDock = () => {};
     useWorkspaceShellStore.setState({
       activeTabId: 'tab-1',
       openTabs: [
@@ -559,11 +573,11 @@ describe('TreeLeafPanel 交互状态机与多窗口手势压测 (Gesture & Stres
       fireEvent.pointerDown(emptySpace);
 
       expect(useLayoutTreeStore.getState().activeLeafId).toBe(leaf2.id);
-      expect(useWorkspaceShellStore.getState().activeTabId).toBe('tab-2');
     });
 
     it('断言 4.2：若已处于激活态，再次点击空白区域不重复触发无效激活', async () => {
       const leaf1 = createLeaf('chat', ['chat'], 'chat', 'session-1');
+      useLayoutTreeStore.setState({ activeLeafId: leaf1.id });
       const setActiveLeafSpy = vi.spyOn(useLayoutTreeStore.getState(), 'setActiveLeaf');
 
       render(

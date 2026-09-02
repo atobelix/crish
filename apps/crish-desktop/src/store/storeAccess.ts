@@ -240,7 +240,6 @@ export {
   findChatLeafBySessionId,
   findLeafAtPointer,
   findNodeById,
-  findUnitRootId,
   flattenTree,
   detectDropZone,
   isZoneSame,
@@ -258,7 +257,6 @@ export type {
 
 export {
   findParent,
-  insertLeafBesideNode,
   moveNode,
 } from './layout-tree/operations';
 
@@ -269,18 +267,15 @@ export { focusOrOpenTreePanel } from './layout-tree/treePanelAccess';
 export {
   useWorkspaceShellStore,
   selectActiveTabSessionId,
-  resolveStripWorkspaceKey,
   createDefaultDock,
   openToolInSession,
+  openToolInLeaf,
   openToolInActiveTab,
+  updateLeafDock,
   collapseActiveTabRightDock,
-  applyDockToTree,
-  listChatUnits,
-  tabsForUnit,
-  reprojectAllSessionDocks,
 } from './workspace-shell';
 
-export type { TabSurface, ChatUnitRef } from './workspace-shell';
+export type { TabSurface } from './workspace-shell';
 
 // ── streaming 热缓冲读面（view model 装配只经本读面；写仍走 streamingStore actions）─
 
