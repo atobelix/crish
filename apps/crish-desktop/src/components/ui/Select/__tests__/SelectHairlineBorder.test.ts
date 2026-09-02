@@ -1,10 +1,15 @@
-// @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+const DIR =
+  typeof import.meta.dirname === 'string'
+    ? import.meta.dirname
+    : dirname(fileURLToPath(import.meta.url));
 
 function getFileContent(filename: string): string {
-  const absPath = resolve(process.cwd(), 'src/components/ui/Select', filename);
+  const absPath = resolve(DIR, '..', filename);
   return readFileSync(absPath, 'utf8');
 }
 

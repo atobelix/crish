@@ -6,6 +6,7 @@ import {
   SESSION_TAB_INDICATOR_W,
   SESSION_TAB_STRIP_SHIFT_PX,
   computeSessionTabInsertIndex,
+  computeStripTabOffsets,
   detectPaneDropRegion,
   exceedsSessionTabDragThresholdL1,
   paneDropIndicatorRect,
@@ -109,3 +110,70 @@ describe('指示条几何', () => {
     expect(left.height).toBe(196);
   });
 });
+
+describe('computeStripTabOffsets 让位位移数学模型', () => {
+  it('同条向右拖：区间内标签向左补位，绝不向右多推', () => {
+    // 3 个标签 [0, 1, 2]，拖动 index 0 往右插入到 index 2 的位置
+    const offsets = computeStripTabOffsets({
+      tabCount: 2, // 排除 sourceTab 后的剩余标签数
+      sourceIndex: 0,
+      insertIndex: 2,
+      shiftPx: 154,
+    });
+    // index 0 和 1 的标签（即原 index 1 和 2）向左移动 154px 补位
+    expect(offsets).toEqual([-154, -154]);
+  });
+
+  it('同条向左拖：区间内标签向右腾位', () => {
+    // 原 index 2 往左插入到 index 0 的位置
+    const offsets = computeStripTabOffsets({
+      tabCount: 2,
+      sourceIndex: 2,
+      insertIndex: 0,
+      shiftPx: 154,
+    });
+    // 0 和 1 号标签向右移动 154px 腾位
+    expect(offsets).toEqual([154, 154]);
+  });
+
+  it('同条原地不动：偏移量全为 0', () => {
+    const offsets = computeStripTabOffsets({
+      tabCount: 2,
+      sourceIndex: 1,
+      insertIndex: 1,
+      shiftPx: 154,
+    });
+    expect(offsets).toEqual([0, 0]);
+  });
+
+  it('跨条拖入开头：所有现有标签向右腾位 1 个槽位', () => {
+    const offsets = computeStripTabOffsets({
+      tabCount: 2,
+      sourceIndex: null,
+      insertIndex: 0,
+      shiftPx: 154,
+    });
+    expect(offsets).toEqual([154, 154]);
+  });
+
+  it('跨条拖入中间：仅 insertIndex 之后的标签向右腾位', () => {
+    const offsets = computeStripTabOffsets({
+      tabCount: 3,
+      sourceIndex: null,
+      insertIndex: 1,
+      shiftPx: 154,
+    });
+    expect(offsets).toEqual([0, 154, 154]);
+  });
+
+  it('跨条拖入末尾追加：全部标签偏移为 0', () => {
+    const offsets = computeStripTabOffsets({
+      tabCount: 2,
+      sourceIndex: null,
+      insertIndex: 2,
+      shiftPx: 154,
+    });
+    expect(offsets).toEqual([0, 0]);
+  });
+});
+

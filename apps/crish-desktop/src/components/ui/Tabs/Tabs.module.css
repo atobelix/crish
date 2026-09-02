@@ -138,7 +138,7 @@
 
 /* line 滑块：圆角高光线条 */
 .indicatorLine {
-  background-color: var(--text-primary);
+  background-color: var(--accent-color, var(--brand-primary, hsl(160 84% 39%)));
   border-radius: var(--radius-full, 9999px);
 }
 

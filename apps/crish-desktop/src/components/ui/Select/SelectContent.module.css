@@ -18,7 +18,7 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent)) transparent;
+  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
   min-width: max(var(--anchor-width, 160px), 220px);
   max-width: min(440px, calc(100vw - 16px));
   width: max(calc(var(--anchor-width, 160px) + 20px), 220px);
@@ -46,12 +46,12 @@
 }
 
 .content::-webkit-scrollbar-thumb {
-  background: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent));
+  background: var(--tint-scrollbar-thumb);
   border-radius: 9999px;
 }
 
 .content::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
+  background: var(--tint-highlight);
 }
 
 /* 尺寸档位（同心曲率：外圆角 = 内圆角 + 内边距） */

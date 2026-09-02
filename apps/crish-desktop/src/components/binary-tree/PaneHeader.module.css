@@ -22,17 +22,15 @@
   -webkit-app-region: drag;
   app-region: drag;
   pointer-events: auto;
-  transition: padding-left var(--dur-base, 200ms) cubic-bezier(0.16, 1, 0.3, 1),
-              padding-right var(--dur-base, 200ms) cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* 声明式避让规则 */
-/* 顶行最左叶子：在侧栏收起时让出 44px 悬浮按钮空间（macOS 下 106px） */
+/* 顶行最左叶子：在侧栏收起时让出 52px 悬浮按钮空间（macOS 下 106px） */
 :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
   padding-left: 0px;
 }
 :global([data-sidebar-collapsed="true"]) :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
-  padding-left: 44px;
+  padding-left: 52px;
 }
 :global([data-platform="macos"]:not([data-fullscreen="true"])) :global([data-sidebar-collapsed="true"]) :global([data-top-row="true"][data-left-edge="true"]) .paneHeader {
   padding-left: 106px;
@@ -44,12 +42,6 @@
 }
 :global([data-platform="macos"]) :global([data-top-row="true"][data-right-edge="true"]) .paneHeader {
   padding-right: 38px;
-}
-
-/* 拖拽调整大小期间关闭缓动过渡 */
-:global(body.tree-resizing) .paneHeader,
-:global(body.is-tab-dragging) .paneHeader {
-  transition: none !important;
 }
 
 .tabsContainer {
@@ -65,10 +57,6 @@
   padding-left: 2px;
   -webkit-app-region: drag;
   app-region: drag;
-}
-
-.tabsContainer::-webkit-scrollbar {
-  display: none;
 }
 
 .tabsList {
@@ -201,7 +189,7 @@
   justify-content: center;
   border: none;
   background: transparent;
-  color: var(--text-tertiary, #999999);
+  color: var(--text-tertiary);
   cursor: pointer;
   padding: 0;
   opacity: 0.4;
@@ -217,7 +205,7 @@
 }
 
 .tabCloseBtn:hover {
-  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  background: var(--tint-hover);
   color: var(--text-primary);
   opacity: 1 !important;
 }

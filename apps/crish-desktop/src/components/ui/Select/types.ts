@@ -47,6 +47,8 @@ export interface SelectRootProps {
   align?: 'start' | 'center' | 'end';
   /** 快捷 side（可选） */
   side?: 'top' | 'bottom';
+  /** 浮层传送门容器（可选） */
+  portalContainer?: HTMLElement | null;
   /** 快捷 onChange 别名 */
   onChange?: (value: string) => void;
 }

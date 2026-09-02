@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 /**
  * ui/Select/Combobox 测试套件：
  * 1. 原生过滤与关键词高亮匹配（highlightMatches）

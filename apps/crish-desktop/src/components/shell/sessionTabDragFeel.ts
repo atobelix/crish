@@ -165,3 +165,50 @@ export function stripDropIndicatorRect(
 
 export const SESSION_TAB_STRIP_SHIFT_PX =
   SESSION_TAB_INDICATOR_W + SESSION_TAB_SHIFT_GAP;
+
+export interface StripTabOffsetInput {
+  /** 目标条中现有标签数量（排除被拖拽的源标签） */
+  tabCount: number;
+  /** 同条拖拽时源标签在原列表中的 index；跨条拖拽时为 null */
+  sourceIndex: number | null;
+  /** 当前指针计算出的目标插入位置 (0 <= insertIndex <= tabCount) */
+  insertIndex: number;
+  /** 单个槽位移动步长 = tabWidth + gap */
+  shiftPx: number;
+}
+
+/**
+ * 计算条内每个标签的平移偏移量（纯数学闭环）：
+ * - 同条内拖拽：双向对称补位（向右拖时区间向左补位，向左拖时区间向右腾位）；
+ * - 跨条拖拽：仅 insertIndex 之后的标签向右平移 1 个槽位，末尾追加时全部为 0。
+ */
+export function computeStripTabOffsets(input: StripTabOffsetInput): number[] {
+  const { tabCount, sourceIndex, insertIndex, shiftPx } = input;
+  const offsets = new Array<number>(tabCount).fill(0);
+  if (tabCount <= 0) return offsets;
+
+  const validShift = Number.isFinite(shiftPx) && shiftPx > 0 ? shiftPx : SESSION_TAB_STRIP_SHIFT_PX;
+
+  if (sourceIndex !== null) {
+    // ── 情况 A：同条内拖拽（源标签在 DOM 中占位）──
+    if (insertIndex > sourceIndex) {
+      // 向右拖：sourceIndex 到 insertIndex 之间的标签向左补位
+      for (let i = sourceIndex; i < insertIndex && i < tabCount; i++) {
+        offsets[i] = -validShift;
+      }
+    } else if (insertIndex < sourceIndex) {
+      // 向左拖：insertIndex 到 sourceIndex 之间的标签向右腾位
+      for (let i = insertIndex; i < sourceIndex && i < tabCount; i++) {
+        offsets[i] = validShift;
+      }
+    }
+  } else {
+    // ── 情况 B：跨条拖拽（目标条中无源标签占位）──
+    // insertIndex 及其后面的所有标签向右腾出 1 个槽位
+    for (let i = insertIndex; i < tabCount; i++) {
+      offsets[i] = validShift;
+    }
+  }
+
+  return offsets;
+}

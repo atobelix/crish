@@ -24,10 +24,12 @@ import {
   SESSION_TAB_INDICATOR_GEOM_MS,
   SESSION_TAB_SHIFT_GAP,
   computeSessionTabInsertIndex,
+  computeStripTabOffsets,
   detectPaneDropRegion,
   exceedsSessionTabDragThresholdL1,
   paneDropIndicatorRect,
 } from './sessionTabDragFeel';
+import type { CollectedStripData } from './sessionTabDragDom';
 
 export interface StartSessionDragArgs {
   leafId: string;
@@ -134,7 +136,7 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
     let card: HTMLDivElement | null = null;
     let indicator: HTMLDivElement | null = null;
     let foreignStrip: HTMLElement | null = null;
-    let cachedTabs: ReturnType<typeof collectStripTabs> | null = null;
+    let cachedTabs: CollectedStripData | null = null;
     let lastStateKey: string | null = null;
     let currentMode: 'strip' | 'pane' | null = null;
     let target: SessionTabDropTarget | null = null;
@@ -164,11 +166,17 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
         cachedTabs = collectStripTabs(strip, tabId, 'data-tab-id');
       }
 
-      const insertIdx = computeSessionTabInsertIndex(cachedTabs, x, dx);
+      const insertIdx = computeSessionTabInsertIndex(cachedTabs.tabs, x, dx);
       const stateKey = `strip:${targetLeafId}:${insertIdx}`;
       if (lastStateKey !== stateKey) {
         lastStateKey = stateKey;
-        shiftStripTabs(cachedTabs, insertIdx, shiftPx);
+        const offsets = computeStripTabOffsets({
+          tabCount: cachedTabs.tabs.length,
+          sourceIndex: cachedTabs.sourceIndex,
+          insertIndex: insertIdx,
+          shiftPx,
+        });
+        shiftStripTabs(cachedTabs.tabs, offsets);
       }
 
       currentMode = 'strip';
@@ -256,7 +264,11 @@ export function SessionTabDragProvider({ children }: { children: ReactNode }) {
         ? (stripWrap.querySelector('[role="tablist"]') as HTMLElement | null)
         : null;
 
-      if (strip) {
+      // 垂直防抖滞后区间：若当前已在 strip 模式，y 只要未深入内容区（>48px）优先维持 strip
+      const stripBottom = stripWrap ? stripWrap.getBoundingClientRect().bottom : 36;
+      const preferStrip = currentMode === 'strip' ? p.y <= stripBottom + 12 : p.y <= stripBottom + 2;
+
+      if (strip && preferStrip) {
         if (autoScrollStrip(strip, p.x)) {
           cachedTabs = collectStripTabs(strip, tabId, 'data-tab-id');
           lastStateKey = null;

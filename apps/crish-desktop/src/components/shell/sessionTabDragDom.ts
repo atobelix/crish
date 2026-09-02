@@ -18,8 +18,20 @@ export function readTranslateX(el: HTMLElement): number {
   }
 }
 
+export interface CollectedStripData {
+  tabs: Array<{
+    left: number;
+    right: number;
+    width: number;
+    el: HTMLElement;
+    id: string;
+  }>;
+  /** 源标签在当前条带的原始 index；若不在本条带中则为 null */
+  sourceIndex: number | null;
+}
+
 /**
- * 采集条内除源标签外的其余标签几何。
+ * 采集条内除源标签外的其余标签几何，并识别源标签原始 index。
  *
  * 会话条主键是 data-tab-id（维 06）；idAttr 仍可覆盖，供抽屉内排序复用位移。
  */
@@ -27,20 +39,20 @@ export function collectStripTabs(
   strip: HTMLElement,
   sourceId: string,
   idAttr: string = 'data-tab-id'
-) {
-  const tabs = Array.from(
+): CollectedStripData {
+  const allTabs = Array.from(
     strip.querySelectorAll<HTMLElement>(`[role="tab"][${idAttr}]`)
   );
-  const remaining: Array<{
-    left: number;
-    right: number;
-    width: number;
-    el: HTMLElement;
-    id: string;
-  }> = [];
-  for (const t of tabs) {
+  let sourceIndex: number | null = null;
+  const remaining: CollectedStripData['tabs'] = [];
+
+  for (let idx = 0; idx < allTabs.length; idx++) {
+    const t = allTabs[idx]!;
     const sid = t.getAttribute(idAttr) || '';
-    if (!sid || sid === sourceId) continue;
+    if (sid === sourceId) {
+      sourceIndex = idx;
+      continue;
+    }
     const r = t.getBoundingClientRect();
     const tx = readTranslateX(t);
     remaining.push({
@@ -51,7 +63,7 @@ export function collectStripTabs(
       id: sid,
     });
   }
-  return remaining;
+  return { tabs: remaining, sourceIndex };
 }
 
 export function leaveStrip(strip: HTMLElement | null) {
@@ -63,14 +75,13 @@ export function leaveStrip(strip: HTMLElement | null) {
 }
 
 export function shiftStripTabs(
-  tabs: ReturnType<typeof collectStripTabs>,
-  insertIdx: number,
-  shiftPx: number = SESSION_TAB_STRIP_SHIFT_PX
+  tabs: CollectedStripData['tabs'],
+  offsets: readonly number[]
 ) {
-  const px = Number.isFinite(shiftPx) ? shiftPx : SESSION_TAB_STRIP_SHIFT_PX;
   tabs.forEach((r, i) => {
+    const offset = offsets[i] ?? 0;
     r.el.style.transition = `transform ${SESSION_TAB_STRIP_SHIFT_MS}ms ${SESSION_TAB_STRIP_SHIFT_EASE}`;
-    r.el.style.transform = i >= insertIdx ? `translateX(${px}px)` : '';
+    r.el.style.transform = offset !== 0 ? `translateX(${offset}px)` : '';
   });
 }
 

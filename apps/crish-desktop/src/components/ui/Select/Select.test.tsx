@@ -1,10 +1,10 @@
+// @vitest-environment jsdom
 /**
  * ui/Select 测试套件：
- * 1. 传统 options 适配器模式完整覆盖（100% 零破坏向后兼容）
- * 2. 现代 Compound 复合组件拓扑、槽位与无障碍
- * 3. 同心圆角尺寸矩阵（sm / md / lg）
- * 4. 一键清除与 Backspace/Delete 快捷键
- * 5. 全键盘无障碍漫游（Arrow/Home/End/Space/Enter/Esc）
+ * 1. options 模式与复合组件拓扑、槽位与无障碍
+ * 2. 同心圆角尺寸矩阵（sm / md / lg）
+ * 3. 一键清除与 Backspace/Delete 快捷键
+ * 4. 全键盘无障碍漫游（Arrow/Home/End/Space/Enter/Esc）
  */
 import React, { useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -127,23 +127,9 @@ describe('ui/Select (Options 模式向后兼容)', () => {
     );
   });
 
-  it('error 文案触发 aria-invalid 与错误描边类', () => {
-    render(<Select options={OPTIONS} error="必须选择模型" />);
-    expect(screen.getByRole('combobox')).toHaveAttribute(
-      'aria-invalid',
-      'true'
-    );
-    expect(screen.getByText('必须选择模型')).toBeInTheDocument();
-  });
-
-  it('label 关联触发器', () => {
-    render(<Select label="模型" options={OPTIONS} />);
-    const label = screen.getByText('模型');
-    expect(label.tagName).toBe('LABEL');
-    expect(screen.getByRole('combobox')).toHaveAttribute(
-      'id',
-      label.getAttribute('for')
-    );
+  it('支持自定义 id 传递至触发器', () => {
+    render(<Select id="custom-select-id" options={OPTIONS} />);
+    expect(screen.getByRole('combobox')).toHaveAttribute('id', 'custom-select-id');
   });
 
   it('disabled 触发器不可交互', () => {

@@ -153,9 +153,9 @@
 :global(html[data-theme='dark']) .button[data-variant='secondary'],
 :global(.theme-dark) .buttonSecondary,
 :global(.theme-dark) .button[data-variant='secondary'] {
-  --btn-bg: color-mix(in srgb, var(--text-primary) 12%, var(--bg-card, #242424));
+  --btn-bg: color-mix(in srgb, var(--text-primary) 10%, var(--bg-card, #242424));
   --btn-fg: var(--text-primary, #dddddd);
-  --btn-border: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --btn-border: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --btn-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   --btn-hover-overlay: var(--tint-hover);
   --btn-active-overlay: var(--tint-active);

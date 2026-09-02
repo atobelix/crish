@@ -6,6 +6,7 @@
   justify-content: space-between;
   gap: var(--space-2, 8px);
   width: 100%;
+  min-height: 0;
   border: 1px solid var(--border-color, hsl(35 10% 86%));
   background: var(--bg-card, hsl(0 0% 100%));
   color: var(--text-primary);
@@ -162,7 +163,7 @@
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent)) transparent;
+  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
   min-width: min(160px, calc(100vw - 16px));
   max-width: min(420px, calc(100vw - 16px));
   width: var(--anchor-width, auto);
@@ -179,12 +180,12 @@
 }
 
 .content::-webkit-scrollbar-thumb {
-  background: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent));
+  background: var(--tint-scrollbar-thumb);
   border-radius: 9999px;
 }
 
 .content::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
+  background: var(--tint-highlight);
 }
 
 .contentSm {

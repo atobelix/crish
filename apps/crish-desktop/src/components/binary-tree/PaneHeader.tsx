@@ -252,7 +252,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
                   }}
                   role="tab"
                   aria-selected={tab.tabId === activeTabId}
-                  title={title}
+                  aria-label={title}
                   data-tab-id={tab.tabId}
                   data-session-id={tab.sessionId || undefined}
                 >
@@ -261,7 +261,6 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
                     type="button"
                     className={styles.tabCloseBtn}
                     onClick={(e) => handleTabClose(e, tab)}
-                    title="关闭标签页"
                     aria-label={`关闭 ${title}`}
                   >
                     <X size={10} strokeWidth={2.2} />
@@ -276,7 +275,6 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
             className={`${styles.newTabBtn} ${styles.inFlow}`}
             data-tauri-drag-region="false"
             onClick={handleNewTab}
-            title="新对话"
             aria-label="新对话"
           >
             <Plus size={13} strokeWidth={2} />
@@ -289,7 +287,6 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
             className={`${styles.newTabBtn} ${styles.pinned}`}
             data-tauri-drag-region="false"
             onClick={handleNewTab}
-            title="新对话"
             aria-label="新对话"
           >
             <Plus size={13} strokeWidth={2} />
