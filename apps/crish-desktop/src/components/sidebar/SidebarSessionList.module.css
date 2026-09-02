@@ -596,10 +596,10 @@
 :global(body.sidebar-dragging) [data-tooltip-portal],
 :global(body.sidebar-dragging) [data-floating-ui-portal],
 :global(body.sidebar-dragging) .tooltip {
-  display: none !important;
-  visibility: hidden !important;
-  opacity: 0 !important;
-  pointer-events: none !important;
+  display: none;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* 自治响应侧栏折叠状态 */

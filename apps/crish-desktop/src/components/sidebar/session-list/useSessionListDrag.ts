@@ -28,110 +28,34 @@ import {
   resolveCrossDomainTarget,
   type CrossDomainTarget,
 } from '../../shell/drag-engine/crossDomainDropRouter';
-import { commitSidebarSessionDrop } from '../../shell/sessionTabDropCommit';
+import { commitSidebarSessionDrop } from '../../shell/sidebarSessionDropCommit';
 import { paneDropIndicatorRect } from '../../shell/sessionTabDragFeel';
 import { createIndicator } from '../../shell/sessionTabDragDom';
 
-export type DropPlace = 'before' | 'after';
-
-export type DropIndicator = {
-  sessionId: string;
-  place: DropPlace;
-};
-
-export type SessionDragPreview = {
-  sessionId: string;
-  overSessionId: string | null;
-  place: DropPlace;
-  isPinned: boolean;
-  folder: string;
-};
-
-export type UseSessionListDragOpts = {
-  pinnedZoneRef: React.RefObject<HTMLElement | null>;
-  sessionListRef: React.RefObject<HTMLElement | null>;
-  renamingSessionId: string | null;
-  onMoveSessionRealtime: (
-    sessionId: string,
-    targetSessionId: string | null,
-    targetFolder: string,
-    isPinned: boolean
-  ) => void;
-};
-
-export type UseSessionListDragResult = {
-  activeDragItem: SidebarDragItem | null;
-  dragOverPinned: boolean;
-  dropIndicator: DropIndicator | null;
-  dragPreview: SessionDragPreview | null;
-  startSessionDrag: (
-    e: React.PointerEvent,
-    sessionId: string,
-    folderName?: string
-  ) => void;
-};
-
-const DRAG_THRESHOLD_PX = 4;
-const DEFAULT_ROW_STEP_PX = 31; // 28px height + 3px gap
-const DEFAULT_TAB_STEP_PX = 154; // 150px tab max-width + 4px gap
-
-export function applyDragPreview(
-  list: SessionState[],
-  preview: SessionDragPreview,
-  dragSession: SessionState | null,
-  listIsTarget: boolean
-): SessionState[] {
-  const without = list.filter((s) => s.id !== preview.sessionId);
-  if (!listIsTarget) return without;
-
-  const source =
-    dragSession && dragSession.id === preview.sessionId
-      ? dragSession
-      : list.find((s) => s.id === preview.sessionId) || null;
-  if (!source) return without;
-
-  const virtual: SessionState = {
-    ...source,
-    isPinned: preview.isPinned,
-    folder: preview.folder,
-  };
-
-  if (!preview.overSessionId) {
-    return [...without, virtual];
-  }
-
-  const idx = without.findIndex((s) => s.id === preview.overSessionId);
-  if (idx === -1) return [...without, virtual];
-
-  const insertAt = preview.place === 'before' ? idx : idx + 1;
-  const next = without.slice();
-  next.splice(insertAt, 0, virtual);
-  return next;
-}
-
-export function isPreviewTargetSection(
-  preview: SessionDragPreview,
-  kind: 'pinned' | 'general' | 'project',
-  projectId?: string
-): boolean {
-  if (kind === 'pinned') return preview.isPinned;
-  if (preview.isPinned) return false;
-  if (kind === 'general') {
-    return (
-      preview.folder === GENERAL_FOLDER ||
-      preview.folder === '会话' ||
-      preview.folder === '常规会话' ||
-      preview.folder === 'general' ||
-      !preview.folder
-    );
-  }
-  return Boolean(projectId && preview.folder === projectId);
-}
+export {
+  type DropPlace,
+  type DropIndicator,
+  type SessionDragPreview,
+  DRAG_THRESHOLD_PX,
+  DEFAULT_ROW_STEP_PX,
+  DEFAULT_TAB_STEP_PX,
+  applyDragPreview,
+  isPreviewTargetSection,
+  swallowNextClick,
+} from './useSessionListDragHelpers';
+import {
+  type DropIndicator,
+  type SessionDragPreview,
+  DRAG_THRESHOLD_PX,
+  DEFAULT_ROW_STEP_PX,
+  DEFAULT_TAB_STEP_PX,
+  swallowNextClick,
+} from './useSessionListDragHelpers';
 
 /**
  * 原汁原味克隆当前会话行的真实 DOM 外观，并进行深层事件脱敏（杜绝 pointer-events 遮挡穿透）
  */
-function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDivElement {
+export function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDivElement {
   const ghost = rowLi.cloneNode(true) as HTMLDivElement;
   ghost.className = 'sidebar-drag-ghost';
   ghost.setAttribute('aria-hidden', 'true');
@@ -166,19 +90,29 @@ function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDi
   document.body.appendChild(ghost);
   return ghost;
 }
+export type UseSessionListDragOpts = {
+  pinnedZoneRef: React.RefObject<HTMLElement | null>;
+  sessionListRef: React.RefObject<HTMLElement | null>;
+  renamingSessionId: string | null;
+  onMoveSessionRealtime: (
+    sessionId: string,
+    targetSessionId: string | null,
+    targetFolder: string,
+    isPinned: boolean
+  ) => void;
+};
 
-/** 吞噬拖拽松手后的紧跟 click 事件，防止误触发列表项选中 */
-function swallowNextClick(): void {
-  const handler = (e: MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    window.removeEventListener('click', handler, true);
-  };
-  window.addEventListener('click', handler, true);
-  setTimeout(() => {
-    window.removeEventListener('click', handler, true);
-  }, 300);
-}
+export type UseSessionListDragResult = {
+  activeDragItem: SidebarDragItem | null;
+  dragOverPinned: boolean;
+  dropIndicator: DropIndicator | null;
+  dragPreview: SessionDragPreview | null;
+  startSessionDrag: (
+    e: React.PointerEvent,
+    sessionId: string,
+    folderName?: string
+  ) => void;
+};
 
 export function useSessionListDrag(
   opts: UseSessionListDragOpts
@@ -187,8 +121,6 @@ export function useSessionListDrag(
 
   const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(null);
   const [dragOverPinned, setDragOverPinned] = useState(false);
-  const [dropIndicator] = useState<DropIndicator | null>(null);
-  const [dragPreview] = useState<SessionDragPreview | null>(null);
 
   const onMoveRef = useRef(onMoveSessionRealtime);
   onMoveRef.current = onMoveSessionRealtime;
@@ -634,8 +566,8 @@ export function useSessionListDrag(
   return {
     activeDragItem,
     dragOverPinned,
-    dropIndicator,
-    dragPreview,
+    dropIndicator: null,
+    dragPreview: null,
     startSessionDrag,
   };
 }

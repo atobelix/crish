@@ -293,7 +293,7 @@ describe('sanitizeMessagesForHydrate', () => {
       }),
     ]);
     expect(out![0]!.status).toBe('completed');
-    expect(out![0]!.text).toBe('（上次回复未完成）');
+    expect(out![0]!.text).toBe('');
     expect(out![0]!.toolCalls?.[0]!.status).toBe('error');
     expect(out![0]!.toolCalls?.[0]!.output).toContain('中断');
     expect(out![0]!.toolCalls?.[1]!.output).toBe('partial');
