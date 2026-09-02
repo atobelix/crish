@@ -157,6 +157,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     const leafElRef = useRef<HTMLDivElement>(null);
     const leafBodyRef = useRef<HTMLDivElement>(null);
     const tabModeEnabled = useLayoutStore(selectTabModeEnabled);
+    const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
 
     const activeTab = readActiveTab(leaf);
     const sessionForPanel =
@@ -178,6 +179,9 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             return;
           }
         }
+        if (chatMainSurface !== 'chat') {
+          return;
+        }
         const tabId = readActiveTabId(leaf);
         if (tabId) {
           sessionShell().activateTab(leaf.id, tabId);
@@ -185,7 +189,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           getCompositionRoot().shell.focusLeaf(leaf.id);
         }
       },
-      [leaf]
+      [leaf, chatMainSurface]
     );
 
     /**
@@ -328,7 +332,6 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
     const edges = useMemo(() => computePaneEdges(rect), [rect]);
     const tabCount = readLeafTabs(leaf).length;
-    const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
 
     const renderToolOutlet = (panelId: string) => {
       const resolved = viewRegistry.resolveView(panelId);

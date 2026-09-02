@@ -4,35 +4,40 @@
   max-width: none;
   align-items: stretch;
   justify-content: flex-start;
+  overflow-y: auto;
 }
 
 .schedInChat {
-  max-width: 980px;
-  margin: 0;
-  padding: 24px 32px 48px;
   width: 100%;
+  max-width: min(var(--chat-col-max, 840px), 100%);
+  margin-left: auto;
+  margin-right: auto;
+  padding: 32px 24px 64px;
   box-sizing: border-box;
 }
 
 .schedInChat.schedInChatDense {
-  gap: var(--space-2_5);
+  gap: var(--space-3);
 }
 
 .schedInChatHead {
   display: flex;
   align-items: center;
-  gap: var(--space-2_5);
-  margin-bottom: var(--space-2_5);
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-1);
 }
 
 .schedInChatTitles {
-  flex: 1;
-  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
 }
 
 .schedInChatTitles h3 {
   margin: 0;
-  font-size: var(--font-size-base);
+  font-size: var(--font-size-lg, 16px);
   font-weight: var(--font-weight-medium);
   color: var(--text-primary);
   line-height: var(--line-height-tight);
@@ -43,8 +48,8 @@
 }
 
 .schedInChatCount {
-  display: block;
-  margin-top: var(--space-0_5);
+  display: inline-block;
+  margin-top: 0;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
   white-space: nowrap;
