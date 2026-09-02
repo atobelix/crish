@@ -121,17 +121,25 @@
   transform: scale(0.985);
 }
 
-.tabItem:hover {
-  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #111111);
+.tabItem:hover:not(.tabItemActive) {
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 65%, transparent);
+  border-color: color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 60%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+  color: var(--text-primary);
 }
 
 .tabItemActive {
   background: var(--bg-card, #ffffff);
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   font-weight: 500;
-  border-color: var(--border-subtle, rgba(0, 0, 0, 0.08));
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
+  border-color: var(--border-subtle, color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 80%, transparent));
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 6%, transparent), 0 1px 1px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+}
+
+.tabItemActive:hover {
+  background: var(--bg-card, #ffffff);
+  border-color: var(--border-color, hsl(35 10% 86%));
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 8%, transparent), 0 1px 1.5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
 }
 
 /* 入场与离场动画 */
@@ -209,8 +217,8 @@
 }
 
 .tabCloseBtn:hover {
-  background: var(--tint-hover, rgba(0, 0, 0, 0.08));
-  color: var(--text-primary, #111111);
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  color: var(--text-primary);
   opacity: 1 !important;
 }
 
@@ -231,7 +239,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary, #666666);
+  color: var(--text-secondary);
   cursor: pointer;
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -245,8 +253,10 @@
 }
 
 .newTabBtn:hover {
-  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #111111);
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 65%, transparent);
+  border-color: color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 60%, transparent);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+  color: var(--text-primary);
 }
 
 .newTabBtn:active {
