@@ -74,19 +74,11 @@ html[data-theme='light'] {
      ========================================================================== */
 
   /* --- 1. 二元色彩与灰度系统 (Binary Optical Color System) --- */
-  /* 未激活态滑块：实测灰度 8.2%，融入底板道林纸温与 8% 品牌暖橙底韵 (SSOT) */
-  --scrollbar-thumb-bg: color-mix(
-    in srgb,
-    var(--accent-orange, hsl(38 92% 50%)) 8%,
-    hsl(35 8% 91.8%)
-  );
+  /* 未激活态滑块：精准对应物理像素 #EAE8E6，实测灰度 8.24%，微暖纸温极低饱和度，绝不发黄 (SSOT) */
+  --scrollbar-thumb-bg: hsl(30 8.7% 91%);
 
-  /* 激活态滑块：实测灰度 20.2%，Hover 与 Active 严格二元同色，融入 16% 暖橙，差值死锁 12.0% */
-  --scrollbar-thumb-active: color-mix(
-    in srgb,
-    var(--accent-orange, hsl(38 92% 50%)) 16%,
-    hsl(35 12% 79.5%)
-  );
+  /* 激活态滑块：精准对应物理像素 #CDCAC7，实测灰度 19.6%~20.0%，Hover 与 Active 严格同色，差值死锁约 11.8%~12% */
+  --scrollbar-thumb-active: hsl(30 6.5% 79.2%);
 
   /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
   --scrollbar-track-bg: transparent;
