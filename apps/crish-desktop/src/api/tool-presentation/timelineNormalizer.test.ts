@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { MessageToolCall, SessionMessage } from '../../store/layoutStore';
+import type {
+  MessageContextInjection,
+  MessageToolCall,
+  SessionMessage,
+} from '../../store/layoutStore';
 import {
   alignToolCallBlocks,
   buildAssistantTimeline,
@@ -25,6 +29,23 @@ function makeMessage(
   partial: Partial<SessionMessage> & Pick<SessionMessage, 'id' | 'sender'>
 ): SessionMessage {
   return {
+    timestamp: Date.now(),
+    ...partial,
+  };
+}
+
+function makeInjection(
+  partial: Partial<MessageContextInjection>
+): MessageContextInjection {
+  return {
+    id: 'inj-1',
+    kind: 'rule',
+    title: '项目规则: AGENTS.md',
+    summary: '2 条规则',
+    status: 'injected',
+    source: 'rule_loader',
+    content: '1. 必须使用 UTF-8 无 BOM\n2. 严禁 --no-verify',
+    tokenEstimate: 120,
     timestamp: Date.now(),
     ...partial,
   };
@@ -688,6 +709,169 @@ describe('timelineNormalizer', () => {
       });
       expect(items[2]).toMatchObject({ kind: 'thought', content: '真实思考2' });
       expect(items[3]).toMatchObject({ kind: 'text', content: '最终正文。' });
+    });
+  });
+
+  describe('buildAssistantTimeline 注入卡片分支（context_injection）', () => {
+    const inj = makeInjection({ id: 'inj-rule-1' });
+
+    it('按 blocks 声明的 context_injection 块排布注入项（flushTools 语义保持）', () => {
+      const msg = makeMessage({
+        id: 'msg-inj-order',
+        sender: 'assistant',
+        toolCalls: [
+          makeToolCall({
+            id: 't1',
+            name: 'grep_search',
+            status: 'success',
+            output: 'match',
+          }),
+        ],
+        injections: [inj],
+        blocks: [
+          { type: 'context_injection', id: 'inj-rule-1' },
+          { type: 'tool_call', id: 't1' },
+          { type: 'text', content: '基于上述规则完成检索' },
+        ],
+      });
+
+      const timeline = buildAssistantTimeline(msg);
+      expect(timeline[0]).toMatchObject({
+        kind: 'injection',
+        key: 'injection-inj-rule-1',
+      });
+      expect(timeline[1]?.kind).toBe('tools');
+      expect(timeline[2]?.kind).toBe('text');
+    });
+
+    it('blocks 缺 injections 时回退 b.injection 内联载荷', () => {
+      const inlineInj = makeInjection({ id: 'inj-inline-1' });
+      const msg = makeMessage({
+        id: 'msg-inj-inline',
+        sender: 'assistant',
+        text: '规则已就位',
+        blocks: [
+          {
+            type: 'context_injection',
+            id: 'inj-inline-1',
+            injection: inlineInj,
+          },
+          { type: 'text', content: '规则已就位' },
+        ],
+      });
+
+      const timeline = buildAssistantTimeline(msg);
+      expect(timeline[0]?.kind).toBe('injection');
+      if (timeline[0]?.kind === 'injection') {
+        expect(timeline[0].injection).toEqual(inlineInj);
+      }
+    });
+
+    it('孤儿注入兜底：injections 存在但 blocks 未声明时置顶挂载', () => {
+      const orphan = makeInjection({ id: 'inj-orphan-1' });
+      const msg = makeMessage({
+        id: 'msg-inj-orphan',
+        sender: 'assistant',
+        text: '正文开始',
+        injections: [orphan],
+        blocks: [{ type: 'text', content: '正文开始' }],
+      });
+
+      const timeline = buildAssistantTimeline(msg);
+      expect(timeline[0]?.kind).toBe('injection');
+      if (timeline[0]?.kind === 'injection') {
+        expect(timeline[0].key).toBe('injection-orphan-inj-orphan-1');
+        expect(timeline[0].injection.id).toBe('inj-orphan-1');
+      }
+      expect(timeline[1]?.kind).toBe('text');
+    });
+
+    it('历史无 blocks 消息降级：injections 置顶列出后接 text', () => {
+      const legacy = makeInjection({ id: 'inj-legacy-1' });
+      const msg = makeMessage({
+        id: 'msg-inj-legacy',
+        sender: 'assistant',
+        text: '历史正文',
+        injections: [legacy],
+      });
+
+      const timeline = buildAssistantTimeline(msg);
+      expect(timeline[0]?.kind).toBe('injection');
+      if (timeline[0]?.kind === 'injection') {
+        expect(timeline[0].injection.id).toBe('inj-legacy-1');
+      }
+      expect(timeline[1]?.kind).toBe('text');
+    });
+
+    it('孤儿工具兜底在注入置顶后仍正常追加（不互斥）', () => {
+      const orphan = makeInjection({ id: 'inj-orphan-2' });
+      const msg = makeMessage({
+        id: 'msg-inj-orphan-tool',
+        sender: 'assistant',
+        text: '收尾',
+        toolCalls: [
+          makeToolCall({
+            id: 't-orphan',
+            name: 'read_file',
+            status: 'success',
+            output: 'data',
+          }),
+        ],
+        injections: [orphan],
+        blocks: [{ type: 'text', content: '收尾' }],
+      });
+
+      const timeline = buildAssistantTimeline(msg);
+      expect(timeline[0]?.kind).toBe('injection');
+      expect(timeline[1]?.kind).toBe('text');
+      expect(timeline[2]?.kind).toBe('tools');
+    });
+  });
+
+  describe('timelineSignature 注入投影（id:status:tokenEstimate）', () => {
+    const baseInj = makeInjection({ id: 'inj-sig-1' });
+
+    it('注入 status 跃迁（pending → injected）必须击穿签名', () => {
+      const msgA: SessionMessage = {
+        id: 'msg-inj-sig',
+        sender: 'assistant',
+        text: '正文',
+        injections: [{ ...baseInj, status: 'pending' }],
+        blocks: [
+          { type: 'context_injection', id: 'inj-sig-1' },
+          { type: 'text', content: '正文' },
+        ],
+      };
+      const sigPending = timelineSignature(msgA);
+      const sigInjected = timelineSignature({
+        ...msgA,
+        injections: [{ ...baseInj, status: 'injected' }],
+      });
+      expect(sigPending).not.toBe(sigInjected);
+    });
+
+    it('注入 tokenEstimate 变化必须击穿签名；纯文本流式帧不改变注入签名', () => {
+      const msgA: SessionMessage = {
+        id: 'msg-inj-sig-te',
+        sender: 'assistant',
+        status: 'completed',
+        text: '正文',
+        injections: [{ ...baseInj, tokenEstimate: 100 }],
+        blocks: [{ type: 'text', content: '正文' }],
+      };
+      const sigA = timelineSignature(msgA);
+      const sigB = timelineSignature({
+        ...msgA,
+        injections: [{ ...baseInj, tokenEstimate: 500 }],
+      });
+      expect(sigA).not.toBe(sigB);
+      // 纯正文变化（非流式 completed）→ 注入签名不参与文本键 → 签名整体仍变化
+      const sigTextChanged = timelineSignature({
+        ...msgA,
+        text: '正文已更新',
+        blocks: [{ type: 'text', content: '正文已更新' }],
+      });
+      expect(sigA).not.toBe(sigTextChanged);
     });
   });
 });

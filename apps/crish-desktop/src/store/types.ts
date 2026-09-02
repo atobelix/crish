@@ -356,20 +356,101 @@ export interface SessionMessageToolCallResult {
   isError?: boolean;
 }
 
-/** 时间线块类型：思维链段 / 正文段 / 工具调用锚点 / 图片块 / 步骤标记 */
-export type MessageTimelineBlockType =
-  'thought' | 'text' | 'tool_call' | 'image' | 'step_start' | 'step_end';
+// ── 可见上下文注入卡片契约（Prompt 注入管线 · 全战役唯一卡片契约）────────────
+
+/** 上下文注入来源分类（9 类，snake_case；SSOT：docs/prompt-injection-pipeline 00 总方案 §三） */
+export type ContextInjectionKind =
+  /** 项目/全局规则注入（AGENTS.md、安全基线） */
+  | 'rule'
+  /** 专家技能/提示词模板注入（antigravity-guide 等） */
+  | 'skill'
+  /** 文件引用与代码快照（@file、代码选区） */
+  | 'file_context'
+  /** Git 工作区状态与改动快照（Diff、分支状态） */
+  | 'git_status'
+  /** 终端历史上下文与命令回执（错误日志、测试失败输出） */
+  | 'terminal_output'
+  /** 运行时纠偏与目标模式指令（/goal 状态、steering） */
+  | 'runtime_steering'
+  /** 定时任务/助手模式唤醒元数据（/schedule、Workflow Grill-Me） */
+  | 'schedule_trigger'
+  /** 会话记忆与阶段性总结 */
+  | 'memory'
+  /** 工作区目录拓扑与运行环境契约 */
+  | 'workspace_env';
+
+/** 注入项生命周期状态（5 态） */
+export type ContextInjectionStatus =
+  /** 准备注入（待下发/校验中） */
+  | 'pending'
+  /** 已成功注入当前 Turn 上下文（活跃生效） */
+  | 'injected'
+  /** 持续跨轮次生效中（Persistent，如持久规则） */
+  | 'active'
+  /** 已过期/单次有效已消费（随时间线推进沉淀为历史） */
+  | 'expired'
+  /** 注入失败（如 Token 超限熔断 / 文件读取错误；卡片标红 + 重试） */
+  | 'failed';
 
 /**
- * 消息时间线块（按发生顺序交错 thought / text / tool_call / image）。
+ * 统一可见上下文注入卡片实体（对话流一等公民，同构于 ToolCard）。
+ * 对应对话流中独立呈现的可见注入卡片，无需 AI 主动调用，由系统直接注入。
+ * 字段名契约：`summary`（非 description）、`tokenEstimate`（非 estimatedTokens）。
+ */
+export interface MessageContextInjection {
+  /** 唯一标识符（UUID 或基于内容哈希） */
+  id: string;
+  /** 注入分类 */
+  kind: ContextInjectionKind;
+  /** 卡片展示标题（如 "规则注入: AGENTS.md"） */
+  title: string;
+  /** 简明副标题/摘要（展示于卡片 Header 右侧） */
+  summary?: string;
+  /** 当前生命周期状态 */
+  status: ContextInjectionStatus;
+  /** 注入源标识（如 "rule_loader" / "slash_command" / "schedule_panel"） */
+  source: string;
+  /** 核心正文内容（Markdown / 代码 / 结构化文本） */
+  content: string;
+  /** 估算的 Token 消耗量（用于 Token 胶囊展示；可能缺省） */
+  tokenEstimate?: number;
+  /** 关联的文件 Diff 快照列表（可选） */
+  diffs?: FileDiff[];
+  /** 关联的目标文件路径列表（可选） */
+  targetPaths?: string[];
+  /** 注入发生时间戳（epoch ms） */
+  timestamp: number;
+  /** 是否支持展开查看详情（默认 true） */
+  isFoldable?: boolean;
+  /** 初始是否默认折叠（内容 > 160 字符默认 true） */
+  defaultFolded?: boolean;
+  /** 失败时的错误诊断信息（status='failed' 时展示） */
+  errorMessage?: string;
+  /** 结构化扩展元数据（附件截断信息 / 行号锚点 / 退出码等挂载于此） */
+  metadata?: Record<string, unknown>;
+}
+
+/** 时间线块类型：思维链段 / 正文段 / 工具调用锚点 / 系统注入卡片 / 图片块 / 步骤标记 */
+export type MessageTimelineBlockType =
+  | 'thought'
+  | 'text'
+  | 'tool_call'
+  | 'context_injection' // 新增：系统上下文注入卡片一等公民
+  | 'image'
+  | 'step_start'
+  | 'step_end';
+
+/**
+ * 消息时间线块（按发生顺序交错 thought / text / tool_call / image / context_injection）。
  * - thought：单步思考块（一等公民），content 承载思考文本，turnIndex 标记轮次
  * - text：content 为该段正文；流式时由 streamTextOffset 切分
  * - tool_call：id 对齐 MessageToolCall.id；content 可选摘要
+ * - context_injection：id 对齐 MessageContextInjection.id；也可直接挂 injection 全量载荷
  * - image：images 承载结构化图片引用
  */
 export interface MessageTimelineBlock {
   type: MessageTimelineBlockType;
-  /** tool_call 时对应 toolCall.id；thought 时对应 stepId/thoughtId */
+  /** tool_call 时对应 toolCall.id；context_injection 时对应 injection.id；thought 时对应 stepId/thoughtId */
   id?: string;
   /** 文本或思考内容 */
   content?: string;
@@ -385,6 +466,8 @@ export interface MessageTimelineBlock {
   redacted?: boolean;
   /** type === 'image' 时承载结构化图片引用 */
   images?: MessageImageRef[];
+  /** type === 'context_injection' 时挂载的结构化数据（或经 id 从 injections 查表） */
+  injection?: MessageContextInjection;
 }
 
 export interface TimelineThoughtBlock extends MessageTimelineBlock {
@@ -430,6 +513,8 @@ export interface SessionMessage extends Pick<
    * 列出对应 toolCall.id。用于消息淘汰时识别「调用 + 结果」配对一并清理。
    */
   toolCallResults?: SessionMessageToolCallResult[] | undefined;
+  /** 本条消息包含的系统上下文注入项集合（与 blocks 中 context_injection 块按 id 对应） */
+  injections?: MessageContextInjection[] | undefined;
   /**
    * 时间线：按发生顺序交错 thought / text / tool_call。
    * 流式累计正文用 streamTextOffset 切分到当前 text 段。

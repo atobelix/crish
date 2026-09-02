@@ -54,6 +54,14 @@ export function timelineSignature(msg: SessionMessage): string {
     st: tc.startedAt,
   }));
 
+  // 注入项投影：id:status:tokenEstimate 编入签名——注入状态跃迁（pending→injected）
+  // 或 token 估算变化精确失效局部缓存；纯文本流式帧不含本字段，保持 memo 稳定命中。
+  const injProj = (msg.injections || []).map((inj) => ({
+    id: inj.id,
+    s: inj.status,
+    te: inj.tokenEstimate ?? 0,
+  }));
+
   const hasExplicitText = blocks.some(
     (b) => b.type === 'text' && (b.content || '').trim().length > 0
   );
@@ -62,6 +70,7 @@ export function timelineSignature(msg: SessionMessage): string {
     return JSON.stringify({
       b: blocksProj,
       t: toolsProj,
+      i: injProj,
       st: msg.status || 'unknown',
       hasText: Boolean((msg.text || '').trim()),
       txt: isLiveProcessing ? undefined : msg.text || '',
@@ -71,6 +80,7 @@ export function timelineSignature(msg: SessionMessage): string {
   return JSON.stringify({
     b: blocksProj,
     t: toolsProj,
+    i: injProj,
     st: msg.status || 'unknown',
   });
 }

@@ -36,6 +36,9 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
       } else if (b.type === 'tool_call') {
         // 工具卡片紧凑行约 52px
         h += 52;
+      } else if (b.type === 'context_injection') {
+        // 上下文注入卡片紧凑单行约 40px
+        h += 40;
       } else if (b.type === 'text') {
         const len = b.content?.length || 0;
         h += Math.max(32, Math.ceil(len / 40) * 20);
@@ -45,6 +48,7 @@ export function estimateTimelineMessageHeight(msg: SessionMessage): number {
     // 降级文本估算
     if ((msg.thinking || '').trim()) h += 36;
     if (msg.toolCalls?.length) h += msg.toolCalls.length * 52;
+    if (msg.injections?.length) h += msg.injections.length * 40;
     const len = msg.text?.length || 0;
     h += Math.max(48, Math.ceil(len / 40) * 20);
   }

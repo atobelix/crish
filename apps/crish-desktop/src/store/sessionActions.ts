@@ -15,6 +15,7 @@
 import type { SessionsIndexed } from './sessionIndex';
 import type { ProjectEntry } from '../api/projectStore';
 import type {
+  MessageContextInjection,
   MessageToolCall,
   MessageToolCallApprovalDecision,
   MessageToolCallStatus,
@@ -131,6 +132,16 @@ export interface SessionActions {
     message: SessionMessage
   ) => void;
   withdrawMessage: (wsId: string, sessionId: string, messageId: string) => void;
+  /**
+   * 向目标会话写入一条可见上下文注入卡片（Prompt 注入管线）。
+   * 挂载策略：写入目标会话最新可挂载（settled assistant）消息的 injections 与
+   * context_injection 块；无活跃可挂载消息时创建 sender='assistant' 载体消息。
+   * 空 targetSessionId 拒绝（console.warn）。
+   */
+  addContextInjection: (
+    targetSessionId: string,
+    injection: MessageContextInjection
+  ) => void;
   /**
    * R1 撤回消费（统一输入流收敛战役）：timeline-truncate 投影重放——
    * 保留边界 user 节点，丢弃其后的投影节点（`> boundarySeq` 部分）。

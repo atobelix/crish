@@ -7,10 +7,12 @@ import {
 } from '../api/sessionTitle';
 import { nowIsoTimestamp } from '../api/sessionTime';
 import type { SessionImportMeta, SessionState } from './types';
+import type { MessageContextInjection } from './types';
 import {
   deleteSessionFromIndexed,
   getSessionById,
   getSessionForWrite,
+  rebindSessionById,
   reindexSessionsById,
 } from './sessionIndex';
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
@@ -41,6 +43,12 @@ import {
 } from './sessionDraftActions';
 // 批量状态 actions（setSessions / patchSession / clearSessionMessages）从子模块导入
 import { createSessionStateActions } from './sessionStateActions';
+// 可见注入卡片挂载辅助纯函数（addContextInjection 复用，见 sessionInjectionMount.ts）
+import {
+  appendInjectionToMessage,
+  findInjectionMountTarget,
+  makeInjectionCarrierMessage,
+} from './sessionInjectionMount';
 
 export function createSessionCrudActions<T extends SessionStoreSlice>(
   set: SessionImmerSet<T>,
@@ -58,6 +66,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
   | 'renameSession'
   | 'createSession'
   | 'deleteSession'
+  | 'addContextInjection'
   | 'setSessions'
   | 'patchSession'
   | 'clearSessionMessages'
@@ -309,6 +318,61 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         useStreamingStore.getState().clearSession(id);
       }
       return removed;
+    },
+
+    /**
+     * 向目标会话时间线写入一条可见上下文注入卡片。
+     *
+     * 挂载策略（findInjectionMountTarget）：优先写入「最新可挂载消息」——
+     * 进行中的助手消息或空正文注入载体消息；无任何可挂载消息时创建
+     * sender='assistant' 的载体消息（makeInjectionCarrierMessage）。
+     *
+     * 防御：空 targetSessionId 拒绝并 console.warn；injection 缺 id 拒绝；
+     * 目标会话不存在时静默 no-op（与 addMessage 对缺失会话的语义一致）。
+     * 写卡动作单一路径：外部一律经 contextInjectionDispatcher 调用本 action。
+     */
+    addContextInjection: (
+      targetSessionId: string,
+      injection: MessageContextInjection
+    ) => {
+      const sessionId =
+        typeof targetSessionId === 'string' ? targetSessionId.trim() : '';
+      if (!sessionId) {
+        console.warn(
+          '[addContextInjection] 拒绝写入：targetSessionId 为空'
+        );
+        return;
+      }
+      if (!injection || !injection.id) {
+        console.warn(
+          '[addContextInjection] 拒绝写入：injection 缺少 id'
+        );
+        return;
+      }
+      set((state) => {
+        const sess = getSessionForWrite(state, sessionId);
+        if (!sess) return;
+        if (!sess.messages) sess.messages = [];
+
+        const target = findInjectionMountTarget(sess.messages);
+        if (target) {
+          appendInjectionToMessage(target, injection);
+        } else {
+          sess.messages.push(makeInjectionCarrierMessage(injection));
+        }
+        if (
+          typeof injection.timestamp === 'number' &&
+          Number.isFinite(injection.timestamp)
+        ) {
+          sess.timestamp = new Date(injection.timestamp).toISOString();
+        } else {
+          sess.timestamp = nowIsoTimestamp();
+        }
+        if (sess.timestampSource !== 'local') {
+          sess.timestampSource = 'local';
+        }
+        rebindSessionById(state, sessionId, sess);
+      });
     },
 
     // setSessions / patchSession / clearSessionMessages 由 createSessionStateActions 提供（见 return 处合并）。

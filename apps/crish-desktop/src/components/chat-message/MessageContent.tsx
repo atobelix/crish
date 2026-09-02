@@ -14,6 +14,7 @@ import { Priority } from '../../workers';
 import { MessageToolCallsSection } from '../chat-message-row/MessageToolCallsSection';
 import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
 import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
+import { CompactInjectionRow } from '../chat-injection/CompactInjectionRow';
 
 export interface MessageContentProps {
   /**
@@ -134,6 +135,24 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
                   toolStackProps,
                 })}
               </React.Fragment>
+            );
+          }
+          if (item.kind === 'injection') {
+            // 可见注入卡片（Prompt 注入管线 · 维度二）：同构 CompactToolRow
+            return (
+              <CompactInjectionRow
+                key={item.key}
+                rowKey={item.key}
+                injection={item.injection}
+                activeSessionId={toolStackProps?.activeSessionId ?? ''}
+                msgId={msgId}
+                {...(toolStackProps?.actions?.onOpenDiff
+                  ? { onOpenDiff: toolStackProps.actions.onOpenDiff }
+                  : {})}
+                {...(toolStackProps?.actions?.onOpenPath
+                  ? { onOpenPath: toolStackProps.actions.onOpenPath }
+                  : {})}
+              />
             );
           }
           return toolStackProps ? (

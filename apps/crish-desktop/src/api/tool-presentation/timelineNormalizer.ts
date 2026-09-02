@@ -83,7 +83,7 @@ function pushParsedText(
 }
 
 /**
- * 构建交错式多步骤时间线（thought / tool_call / text 自然交错）。
+ * 构建交错式多步骤时间线（thought / tool_call / context_injection / text 自然交错）。
  */
 export function buildAssistantTimeline(
   msg: SessionMessage
@@ -91,6 +91,8 @@ export function buildAssistantTimeline(
   try {
     const tools = msg.toolCalls || [];
     const toolsById = new Map(tools.map((t) => [t.id, t]));
+    const injections = msg.injections || [];
+    const injectionsById = new Map(injections.map((inj) => [inj.id, inj]));
     const blocks = msg.blocks || [];
     const items: AssistantTimelineItem[] = [];
     let toolBuf: MessageToolCall[] = [];
@@ -108,13 +110,26 @@ export function buildAssistantTimeline(
     };
 
     if (blocks.length > 0) {
-      const used = new Set<string>();
+      const usedTools = new Set<string>();
+      const usedInjections = new Set<string>();
       if (!blocks.some((b) => b.type === 'thought')) {
         pushFallbackTurns(msg, items);
       }
 
       for (const b of blocks) {
-        if (b.type === 'thought') {
+        if (b.type === 'context_injection') {
+          flushTools();
+          const inj = (b.id ? injectionsById.get(b.id) : undefined) || b.injection;
+          if (inj) {
+            items.push({
+              kind: 'injection',
+              key: `injection-${inj.id}`,
+              injection: inj,
+              turnIndex: b.turnIndex,
+            });
+            usedInjections.add(inj.id);
+          }
+        } else if (b.type === 'thought') {
           flushTools();
           const thoughtContent = (b.content || '').trim();
           if (thoughtContent || b.isStreaming) {
@@ -139,12 +154,25 @@ export function buildAssistantTimeline(
           const tc = toolsById.get(b.id);
           if (tc) {
             toolBuf.push(tc);
-            used.add(b.id);
+            usedTools.add(b.id);
           }
         }
       }
       flushTools();
-      const orphan = tools.filter((t) => !used.has(t.id));
+
+      // 孤儿注入兜底：injections 存在但 blocks 未声明的项，置顶挂载
+      const orphanInjections = injections.filter(
+        (inj) => !usedInjections.has(inj.id)
+      );
+      for (const inj of orphanInjections) {
+        items.unshift({
+          kind: 'injection',
+          key: `injection-orphan-${inj.id}`,
+          injection: inj,
+        });
+      }
+
+      const orphan = tools.filter((t) => !usedTools.has(t.id));
       if (orphan.length) {
         const rendered = buildToolRenderItems(orphan);
         if (rendered.length) {
@@ -157,6 +185,10 @@ export function buildAssistantTimeline(
       return items;
     }
 
+    // 历史无 blocks 消息兼容降级：按 injections -> thoughts -> tools -> text 顺序列出
+    for (const inj of injections) {
+      items.push({ kind: 'injection', key: `injection-${inj.id}`, injection: inj });
+    }
     pushFallbackTurns(msg, items);
     if (tools.length) {
       const rendered = buildToolRenderItems(tools);

@@ -79,6 +79,7 @@ export type {
   ColumnState,
   DiffChange,
   FileDiff,
+  MessageContextInjection,
   MessageToolCall,
   SessionMessage,
   SessionAgent,
