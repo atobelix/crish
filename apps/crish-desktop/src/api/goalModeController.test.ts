@@ -364,12 +364,20 @@ describe('goalModeController', () => {
     expect(done.tasks?.every((t) => t.done)).toBe(true);
   });
 
-  it('buildGoalModePrefix includes open tasks', () => {
+  it('buildGoalModePrefix renders canonical GOAL_MODE_PROMPT (SSOT)', () => {
     const p = buildGoalModePrefix('g', 1, 5, [
       { id: '1', text: 'open', done: false },
       { id: '2', text: 'done', done: true },
     ]);
-    expect(p).toContain('open');
+    // 高保真：核心目标 / 当前轮次（1 起第 N 轮）/ 续写上限 / 未完成任务清单
+    expect(p).toContain('核心目标');
+    expect(p).toContain('g');
+    expect(p).toContain('第 2 轮');
+    expect(p).toContain('自动续写上限 5 轮');
+    expect(p).toContain('- [ ] open');
+    expect(p).toContain('DONE');
+    // 既有消费路径尾部换行契约保留（`${prefix}${text}` 需 `---\n` 分隔）
+    expect(p.endsWith('---\n')).toBe(true);
     expect(
       formatOpenGoalTasksForPrompt([
         { id: '1', text: 'open', done: false },

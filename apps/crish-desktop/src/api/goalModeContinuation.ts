@@ -11,6 +11,7 @@ import type {
   SessionGoalTask,
   SessionState,
 } from '../store/types';
+import { GOAL_MODE_PROMPT } from '../prompts';
 
 /**
  * 桌面 goalMode 默认上限；与引擎 `DEFAULT_GOAL_MAX_ROUNDS`（12）对齐。
@@ -81,20 +82,17 @@ export function buildGoalModePrefix(
   tasks?: SessionGoalTask[]
 ): string {
   const openBlock = formatOpenGoalTasksForPrompt(tasks);
-  return [
-    '[目标模式 · 系统指令]',
-    `你正在执行长期目标，请持续推进直至完成，并在每轮结束前自检进度。`,
-    `目标：${goal}`,
-    `当前第 ${iteration + 1} 轮（自动续写上限 ${maxIterations} 轮；请尽量在上限内完成）。`,
-    '请工作直至目标实质完成；不要半途停下或只列计划而不执行。',
-    '请在回复中维护 markdown 任务清单（`- [ ]` / `- [x]`），便于进度同步。',
-    '若目标已完成，请在回复末尾明确写出 DONE 或「目标已完成」。',
-    openBlock ? openBlock.trimEnd() : '',
-    '---',
-    '',
-  ]
-    .filter((line, i, arr) => line !== '' || (i > 0 && arr[i - 1] !== ''))
-    .join('\n');
+  // 主控复核裁决：GOAL_MODE_PROMPT.render() 产物严禁回拼进 System Prompt。
+  // 维度一阶段仅替换文本来源、维持既有消费路径——渲染产物仍是「前缀文本」
+  // （消费方 slashSendPreflight / useGoalMode 原样拼接，见详案 01 裁决注记）。
+  // 保留尾部换行：既有消费方 `${prefix}${text}` 依赖 `---\n` 分隔语义。
+  const rendered = GOAL_MODE_PROMPT.render({
+    goal,
+    currentRound: iteration + 1,
+    maxRounds: maxIterations,
+    openTasksBlock: openBlock || '',
+  });
+  return `${rendered}\n`;
 }
 
 /**
@@ -167,11 +165,7 @@ export function deactivateGoalMode(gm: SessionGoalMode): SessionGoalMode {
 }
 
 export type GoalStopReason =
-  | 'cancelled'
-  | 'inactive'
-  | 'queued'
-  | 'done'
-  | 'max_iter';
+  'cancelled' | 'inactive' | 'queued' | 'done' | 'max_iter';
 
 export type GoalContinueDecision =
   | {

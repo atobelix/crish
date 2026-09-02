@@ -23,20 +23,15 @@ import {
   normalizeSlashName,
   saveActivationMap,
 } from './skillsApiHelpers';
-import {
-  mkdirAny,
-  readTextAny,
-  writeTextAny,
-} from './skillsApiFs';
-import {
-  discoverSkills,
-  type DiscoverSkillsResult,
-} from './skillsApiDiscovery';
+import { mkdirAny, readTextAny, writeTextAny } from './skillsApiFs';
+import { discoverSkills } from './skillsApiDiscovery';
 import type {
   DesktopSkill,
   SkillActivation,
   SkillSlashCommand,
 } from './skillsApi.types';
+import { createPromptTemplate } from '../prompts';
+import type { PromptTemplate } from '../prompts';
 
 // ── 类型再导出（消费方 import 路径不变） ──────────────────────────────
 export type {
@@ -240,20 +235,47 @@ export function formatSkillInjection(
   skill: DesktopSkill,
   userRest: string
 ): string {
-  const header = [
-    `【技能：${skill.name}】`,
-    skill.description ? `说明：${skill.description}` : '',
-    '',
-    skill.content || '（技能正文为空）',
-    '',
-    '---',
-    '',
-    userRest || '请按上述技能执行。',
-  ]
-    .filter((line) => line !== undefined)
-    .join('\n');
-  return header;
+  // 语义等价旧裸拼接：描述为空时整行省略；正文/兜底文案/userRest 原样透出
+  const descriptionLine = skill.description ? `说明：${skill.description}` : '';
+  return SKILL_INJECTION_TEMPLATE.render({
+    skillName: skill.name,
+    descriptionLine,
+    skillBody: skill.content || '（技能正文为空）',
+    userPrompt: userRest || '请按上述技能执行。',
+  });
 }
+
+/**
+ * /skill:name 指令的技能说明注入模板（modelText 载荷，消费方 slashSendPreflight）。
+ * 经统一插值引擎渲染（SSOT）；维度一阶段就地定义于 skillsApi 消费侧，
+ * skills（L4）层集中资产待技能注入后续收口轮迁入 src/prompts/skills/skillFormatter.ts。
+ */
+interface SkillInjectionParams {
+  skillName: string;
+  /** 已含「说明：」前缀的描述行；描述为空时为空串（整行省略，等价旧裸拼接） */
+  descriptionLine: string;
+  skillBody: string;
+  userPrompt: string;
+}
+
+const SKILL_INJECTION_TEMPLATE: PromptTemplate<SkillInjectionParams> =
+  createPromptTemplate(
+    {
+      id: 'skills-active-injection',
+      name: '技能斜杠注入模板',
+      description: '/skill:name 指令的技能说明注入（发送前置 modelText 载荷）',
+      layer: 'skills',
+      version: '1.0.0',
+      defaultLocale: 'zh-CN',
+      tags: ['skill', 'injection'],
+    },
+    {
+      'zh-CN':
+        '【技能：{{skillName}}】\n{{descriptionLine}}\n\n{{skillBody}}\n\n---\n\n{{userPrompt}}',
+      'en-US':
+        '【技能：{{skillName}}】\n{{descriptionLine}}\n\n{{skillBody}}\n\n---\n\n{{userPrompt}}',
+    }
+  );
 
 // ── 斜杠命令缓存（菜单用） ---------- */
 

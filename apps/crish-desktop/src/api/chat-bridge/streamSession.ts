@@ -26,25 +26,14 @@ import {
 } from './streamFinishControl';
 import { resolveContextWindow } from './readiness';
 import { type HistoryMessage, buildHistoryMessages } from './historyMessages';
+import {
+  getResponseStyleDescription,
+  resolveResponseStyle,
+} from '../../prompts';
 
 function isRunDead(state: StreamState): boolean {
   return state.finished || state.cancelled;
 }
-
-const STYLE_DESCS: Record<string, string> = {
-  minimal:
-    'Response style: minimal. Prefer the shortest correct answer. Avoid preambles, lists, and restating the question.',
-  low: 'Response style: concise. Keep answers short; use bullets only when they improve clarity. Skip lengthy explanations unless asked.',
-  medium:
-    'Response style: balanced. Be clear and complete without padding. Explain non-obvious steps briefly.',
-  high: 'Response style: thorough. Provide structured reasoning, edge cases, and verification steps when useful. Still stay on-topic.',
-};
-const STYLE_ZH_MAP: Record<string, string> = {
-  极简: 'minimal',
-  简洁: 'low',
-  适中: 'medium',
-  深入: 'high',
-};
 
 export async function createStreamSession(
   prompt: string,
@@ -115,9 +104,10 @@ export async function createStreamSession(
         reasoningEffort = tl;
       }
 
-      const rawStyle = String(sets?.responseStyle ?? 'medium');
-      const resolvedKey = STYLE_ZH_MAP[rawStyle] || rawStyle.toLowerCase();
-      responseStyleGuidance = STYLE_DESCS[resolvedKey] ?? STYLE_DESCS.medium;
+      // 响应风格：设置值经 resolveResponseStyle 归一为 wire 档位后，
+      // 取英文单行描述（行为等价原 STYLE_ZH_MAP/STYLE_DESCS 硬编码字典，文本源迁至 prompts SSOT）
+      const styleLevel = resolveResponseStyle(sets?.responseStyle);
+      responseStyleGuidance = getResponseStyleDescription(styleLevel, 'en-US');
       contextWindow = resolveContextWindow(sets);
     } catch {
       /* swallow-ok: 设置解析失败按默认执行 */
