@@ -95,17 +95,6 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
       aria-label="定时任务"
     >
       <div className={styles.schedInChatHead}>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={styles.actionBtn}
-          onClick={onBackToChat}
-          aria-label="返回对话"
-          icon={<Lucide.ArrowLeft size={16} aria-hidden />}
-        >
-          返回
-        </Button>
         <div className={styles.schedInChatTitles}>
           <h3 id="sched-in-chat-title">定时任务</h3>
           <span className={styles.schedInChatCount} aria-live="polite">

@@ -157,17 +157,52 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       }
     }, [isMounted]);
 
-    // 活跃显示期间的光标逃逸主动巡检（原生 DOM contains 拓扑检测，零坐标魔术数字）
+    // 活跃显示期间的物理真实性刚性守卫（零常驻、零脱离元素漂移）
     useEffect(() => {
       if (!visible) return;
       const target = childElRef.current;
       if (!target) return;
 
+      let rafId: number;
+      const checkLiveness = () => {
+        // 1. 宿主节点脱离 DOM 树，立刻自毁
+        if (!target.isConnected) {
+          hideImmediate();
+          return;
+        }
+
+        // 2. hover 模式下光标脱离判定（支持原生 :hover 状态检测）
+        if (triggerModeRef.current === 'hover') {
+          const isTargetHovered =
+            typeof target.matches === 'function' ? target.matches(':hover') : true;
+          const tipEl = tipRef.current;
+          const isTipHovered =
+            tipEl && typeof tipEl.matches === 'function'
+              ? tipEl.matches(':hover')
+              : false;
+
+          if (!isTargetHovered && !isTipHovered) {
+            hideImmediate();
+            return;
+          }
+        }
+
+        // 3. 几何位移巡检：若目标元素发生位移（如分屏、过渡动画、布局重排），动态重测并对齐或熄灭
+        const newRect = target.getBoundingClientRect();
+        if (!isValidDOMRect(newRect) || isTriggerOffscreen(newRect)) {
+          hideImmediate();
+          return;
+        }
+
+        rafId = requestAnimationFrame(checkLiveness);
+      };
+
+      rafId = requestAnimationFrame(checkLiveness);
+
       const onGlobalPointerMove = (e: PointerEvent) => {
         const targetNode = e.target as Node | null;
         if (!targetNode) return;
 
-        // 原生拓扑判断：光标目标既不在触发元素内，也不在提示气泡内，即确认离开
         const inTarget = target.contains(targetNode);
         const inTip = tipRef.current ? tipRef.current.contains(targetNode) : false;
 
@@ -188,6 +223,7 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       document.documentElement.addEventListener('mouseleave', onDocMouseLeave);
 
       return () => {
+        cancelAnimationFrame(rafId);
         window.removeEventListener('pointermove', onGlobalPointerMove);
         document.documentElement.removeEventListener(
           'mouseleave',

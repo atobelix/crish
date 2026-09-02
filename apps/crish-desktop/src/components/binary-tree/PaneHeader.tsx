@@ -13,7 +13,8 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { Plus, X } from 'lucide-react';
 import type { LayoutLeaf } from '../../store/types';
-import { useSessionStore } from '../../store/storeAccess';
+import { useSessionStore, useLayoutStore } from '../../store/storeAccess';
+import { useLayoutTreeStore, collectLeaves } from '../../store/layout-tree';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { isPendingDraft } from '../../store/draftSession';
 import { useSessionTabDrag } from '../shell/SessionTabDragContext';
@@ -84,8 +85,44 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     const { startSessionDrag } = useSessionTabDrag();
     const sessionsById = useSessionStore((s) => s.sessionsById);
 
-    // 条带成员 = 本叶已提交的真会话 tabs，禁止投影 openTabs
-    const visibleTabs = useMemo(() => readLeafTabs(leaf), [leaf.tabs]);
+    const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
+    const setChatMainSurface = useLayoutStore((s) => s.setChatMainSurface);
+    const leavesCount = useLayoutTreeStore(
+      (s) => collectLeaves(s.tree.root).length
+    );
+    const isMultiPane = leavesCount > 1;
+
+    // 条带成员计算：若处于定时任务展示，展示「定时任务」Tab；若无已提交会话但在分屏下或有草稿，展示「新对话」Tab 确保始终可关分屏
+    const visibleTabs = useMemo(() => {
+      if (chatMainSurface === 'scheduled') {
+        return [
+          {
+            tabId: `scheduled-${leaf.id}`,
+            sessionId: '',
+            title: '定时任务',
+          },
+        ];
+      }
+      const committedTabs = readLeafTabs(leaf);
+      if (committedTabs.length > 0) {
+        return committedTabs;
+      }
+      const raw = leaf.tabs as unknown;
+      if (Array.isArray(raw) && raw.length > 0) {
+        const first = raw[0] as LeafSessionTab;
+        return [
+          {
+            tabId: first.tabId || `draft-${leaf.id}`,
+            sessionId: first.sessionId || '',
+            title: '新对话',
+          },
+        ];
+      }
+      return isMultiPane
+        ? [{ tabId: `pane-${leaf.id}`, sessionId: '', title: '新对话' }]
+        : [];
+    }, [chatMainSurface, leaf.id, leaf.tabs, isMultiPane]);
+
     const activeTabId = readActiveTabId(leaf);
     const effectiveActiveTabId = activeTabId || visibleTabs[0]?.tabId || '';
     void isActive;
@@ -133,15 +170,34 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
 
     const handleTabClick = useCallback(
       (tab: LeafSessionTab) => {
+        if (tab.tabId.startsWith('scheduled-')) {
+          setChatMainSurface('scheduled');
+          return;
+        }
+        if (chatMainSurface === 'scheduled') {
+          setChatMainSurface('chat');
+        }
         sessionShell().activateTab(leaf.id, tab.tabId);
       },
-      [leaf.id]
+      [chatMainSurface, leaf.id, setChatMainSurface]
     );
 
     const handleTabClose = useCallback(
       (e: React.MouseEvent, tab: LeafSessionTab) => {
         e.stopPropagation();
-        const tabs = readLeafTabs(leaf);
+        if (tab.tabId.startsWith('scheduled-')) {
+          if (isMultiPane) {
+            const raw = leaf.tabs as unknown;
+            const tid =
+              Array.isArray(raw) && raw[0]?.tabId ? raw[0].tabId : tab.tabId;
+            sessionShell().removeTab(leaf.id, tid);
+          } else {
+            setChatMainSurface('chat');
+          }
+          return;
+        }
+
+        const tabs = visibleTabs;
         const currentActive = readActiveTabId(leaf);
         // 关的是本叶 active 且还有邻居：立刻切邻居，避免 220ms 离场闪白
         if (tab.tabId === currentActive && tabs.length > 1) {
@@ -160,7 +216,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           leaveTimerRef.current = null;
         }, TAB_LEAVE_MS);
       },
-      [leaf]
+      [leaf, isMultiPane, setChatMainSurface, visibleTabs]
     );
 
     const handleMouseDown = useCallback(
