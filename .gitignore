@@ -26,6 +26,7 @@ npm-debug.log*
 # IDE
 .vscode/
 .idea/
+.freebuff/
 *.swp
 *.swo
 *~
