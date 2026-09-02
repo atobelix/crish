@@ -190,6 +190,7 @@
   flex: 1;
   min-width: 0;
   height: 28px;
+  line-height: 28px;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-medium, 500);
   color: var(--text-secondary);
@@ -204,6 +205,16 @@
   color: var(--text-primary);
 }
 
+.folderIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 .folderHeader svg {
   color: var(--text-tertiary);
   transition: transform var(--transition-fast);
@@ -214,6 +225,10 @@
 }
 
 .folderName {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  line-height: 28px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -224,6 +239,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  height: 28px;
   margin-left: auto;
   flex-shrink: 0;
 }
@@ -237,13 +253,15 @@
   height: 24px;
   min-width: 24px;
   min-height: 24px;
-  border: none;
+  border: none !important;
   border-radius: var(--radius-md, 6px);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   opacity: 0;
-  padding: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1;
   transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
 }
 

@@ -138,13 +138,6 @@ export function ProjectsSection({
                       }
                     }}
                   >
-                    <span className={styles.folderChevron}>
-                      <ChevronDown
-                        size={13}
-                        className={open ? '' : styles.chevCollapsed}
-                        aria-hidden
-                      />
-                    </span>
                     <span className={styles.folderIcon} aria-hidden>
                       {open ? (
                         <FolderOpen size={14} strokeWidth={1.75} />
@@ -158,26 +151,28 @@ export function ProjectsSection({
                       </span>
                     </Tooltip>
                   </div>
-                  <div className={styles.folderActions}>
-                    <Tooltip content="在本项目新建对话">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={styles.folderNewBtn}
-                        aria-label={`在 ${p.name} 新建对话`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenProject(p.id);
-                          getCompositionRoot().shell.openNewDraftTab(p.id);
-                          emitUiEvent('open-chat');
-                        }}
-                        icon={
-                          <FilePlus2 size={14} strokeWidth={1.75} aria-hidden />
-                        }
-                      />
-                    </Tooltip>
-                  </div>
+                  {open ? (
+                    <div className={styles.folderActions}>
+                      <Tooltip content="在本项目新建对话">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className={styles.folderNewBtn}
+                          aria-label={`在 ${p.name} 新建对话`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenProject(p.id);
+                            getCompositionRoot().shell.openNewDraftTab(p.id);
+                            emitUiEvent('open-chat');
+                          }}
+                          icon={
+                            <FilePlus2 size={14} strokeWidth={1.75} aria-hidden />
+                          }
+                        />
+                      </Tooltip>
+                    </div>
+                  ) : null}
                 </div>
                 <div
                   className={styles.accordionWrapper}
