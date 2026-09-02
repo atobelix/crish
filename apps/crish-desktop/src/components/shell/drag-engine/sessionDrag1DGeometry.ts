@@ -92,7 +92,7 @@ export function compute1DShiftOffsets(input: Compute1DOffsetsInput): number[] {
   return offsets;
 }
 
-/** 方向感知型 1/3 滞后容差插入点解算 */
+/** 方向感知型无缝隙 1D 插入点解算（基于项中心点与 1/3 滞后） */
 export function compute1DInsertIndex(
   items: readonly Axis1DItemSpan[],
   pointerPos: number,
@@ -102,22 +102,26 @@ export function compute1DInsertIndex(
   if (count === 0) return 0;
 
   const first = items[0]!;
-  if (pointerPos < first.start) return 0;
+  if (pointerPos <= first.start) return 0;
 
   const last = items[count - 1]!;
-  if (pointerPos > last.end) return count;
+  if (pointerPos >= last.end) return count;
 
   for (let i = 0; i < count; i++) {
     const item = items[i]!;
-    if (pointerPos >= item.start && pointerPos <= item.end) {
+    const nextItem = items[i + 1];
+    const itemStart = item.start;
+    const itemEnd = nextItem ? (item.end + nextItem.start) / 2 : item.end;
+
+    if (pointerPos >= itemStart && pointerPos <= itemEnd) {
       const size = Math.max(1, item.size);
       const thresholdRatio = 1 / 3;
 
       if (pointerDelta >= 0) {
-        // 正向移动（向右/向下）：深入超过 1/3 则后插
+        // 向下/向右：深入超过 1/3 后插
         return pointerPos >= item.start + size * thresholdRatio ? i + 1 : i;
       } else {
-        // 反向移动（向左/向上）：回退超过 1/3 则前插
+        // 向上/向左：回退超过 1/3 前插
         return pointerPos <= item.end - size * thresholdRatio ? i : i + 1;
       }
     }

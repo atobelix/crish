@@ -69,7 +69,6 @@ export type UseSessionListDragResult = {
 };
 
 const DRAG_THRESHOLD_PX = 4;
-const ROW_STEP_PX = 36; // 行高 + 间距
 
 export function applyDragPreview(
   list: SessionState[],
@@ -164,7 +163,7 @@ function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDi
 export function useSessionListDrag(
   opts: UseSessionListDragOpts
 ): UseSessionListDragResult {
-  const { sessionListRef, renamingSessionId, onMoveSessionRealtime } = opts;
+  const { renamingSessionId, onMoveSessionRealtime } = opts;
 
   const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(null);
   const [dragOverPinned, setDragOverPinned] = useState(false);
@@ -173,9 +172,6 @@ export function useSessionListDrag(
 
   const onMoveRef = useRef(onMoveSessionRealtime);
   onMoveRef.current = onMoveSessionRealtime;
-
-  const sessionListRefStable = useRef(sessionListRef);
-  sessionListRefStable.current = sessionListRef;
 
   const startSessionDrag = useCallback(
     (e: React.PointerEvent, sessionId: string, folderName?: string) => {
@@ -196,8 +192,10 @@ export function useSessionListDrag(
         left: startX,
         top: startY,
         width: 240,
-        height: 36,
+        height: 28,
       } as DOMRect);
+
+      const rowStepPx = rowRect.height > 0 ? rowRect.height : 28;
 
       // 记录抓取偏移量
       const grabOffsetX = startX - rowRect.left;
@@ -238,7 +236,7 @@ export function useSessionListDrag(
       const applyPointer = (clientX: number, clientY: number, dx: number, dy: number) => {
         if (!dragging) return;
 
-        // 1. 同步 Ghost 位置（GPU translate3d）
+        // 1. 同步 Ghost 物理位置（GPU translate3d）
         if (ghostEl) {
           ghostEl.style.transform = `translate3d(${clientX - grabOffsetX}px, ${clientY - grabOffsetY}px, 0)`;
         }
@@ -261,69 +259,81 @@ export function useSessionListDrag(
           hideIndicator();
           if (ghostEl) ghostEl.style.opacity = '0.95';
 
-          // 获取侧栏容器中的所有可见会话行
-          const listScroll = sessionListRefStable.current?.current || document.querySelector('[class*="listScroll"]');
-          if (!listScroll) return;
-
-          const allRows = Array.from(
-            listScroll.querySelectorAll<HTMLElement>('li[data-session-id]')
-          );
-
-          // 区分源项与目标项
-          const sourceIndex = allRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
-          const otherRows = allRows.filter((r) => r.getAttribute('data-session-id') !== sessionId);
-
-          // 采集静态物理几何（减去当前存在的 translateY）
-          const spans: Axis1DItemSpan[] = otherRows.map((r) => {
-            const rect = r.getBoundingClientRect();
-            const ty = readTranslateY(r);
-            return {
-              id: r.getAttribute('data-session-id') || '',
-              start: rect.top - ty,
-              end: rect.bottom - ty,
-              size: rect.height,
-              el: r,
-            };
-          });
-
-          // 计算插入位置
-          const insertIdx = compute1DInsertIndex(spans, clientY, dy);
-
-          // 计算位移向量并应用 translateY
-          const offsets = compute1DShiftOffsets({
-            itemCount: otherRows.length,
-            sourceIndex: sourceIndex >= 0 ? sourceIndex : null,
-            insertIndex: insertIdx,
-            shiftStep: ROW_STEP_PX,
-          });
-
-          for (let i = 0; i < otherRows.length; i++) {
-            const row = otherRows[i]!;
-            const offset = offsets[i] ?? 0;
-            row.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
-            row.style.transform = offset !== 0 ? `translateY(${offset}px)` : '';
-            if (!shiftedElements.includes(row)) {
-              shiftedElements.push(row);
-            }
-          }
-
-          // 解析目标所属分组（置顶 / 项目文件夹 / 常规）
+          // 探测命中所属分区（置顶 / 项目文件夹 / 常规区）
           const hit = document.elementFromPoint(clientX, clientY);
-          const pinnedZone = hit?.closest('[data-drop-zone="pinned"]');
+          const pinnedZone = hit?.closest('[data-drop-zone="pinned"]') as HTMLElement | null;
           const folderEl = hit?.closest('[data-folder-name]') as HTMLElement | null;
+          const generalZone = (hit?.closest('[data-drop-zone="general"]') || document.querySelector('[data-drop-zone="general"]')) as HTMLElement | null;
 
           const isPinned = Boolean(pinnedZone);
-          const folder = isPinned
-            ? originFolder
-            : folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
+          const activeContainer = pinnedZone || folderEl || generalZone;
 
-          const overId = spans[insertIdx]?.id || null;
+          if (activeContainer) {
+            // 严格过滤不可见/折叠手风琴中的项
+            const allRows = Array.from(
+              activeContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
+            ).filter((r) => {
+              if (r.offsetParent === null) return false;
+              const b = r.getBoundingClientRect();
+              return b.height > 0;
+            });
 
-          currentInsertSessionId = overId;
-          currentTargetFolder = folder;
-          currentIsPinned = isPinned;
+            // 区分源项与目标项
+            const sourceIndex = allRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
+            const otherRows = allRows.filter((r) => r.getAttribute('data-session-id') !== sessionId);
 
-          setDragOverPinned(isPinned);
+            // 采集未位移时的静态物理几何坐标（减去当前 translateY）
+            const spans: Axis1DItemSpan[] = otherRows.map((r) => {
+              const rect = r.getBoundingClientRect();
+              const ty = readTranslateY(r);
+              return {
+                id: r.getAttribute('data-session-id') || '',
+                start: rect.top - ty,
+                end: rect.bottom - ty,
+                size: rect.height,
+                el: r,
+              };
+            });
+
+            // 计算无缝插入点
+            const insertIdx = compute1DInsertIndex(spans, clientY, dy);
+
+            // 计算位移向量并应用 translateY 让位
+            const offsets = compute1DShiftOffsets({
+              itemCount: otherRows.length,
+              sourceIndex: sourceIndex >= 0 ? sourceIndex : null,
+              insertIndex: insertIdx,
+              shiftStep: rowStepPx,
+            });
+
+            // 清理不在当前容器中的其它行位移
+            for (const el of shiftedElements) {
+              if (!otherRows.includes(el)) {
+                el.style.transform = '';
+                el.style.transition = '';
+              }
+            }
+            shiftedElements = otherRows;
+
+            for (let i = 0; i < otherRows.length; i++) {
+              const row = otherRows[i]!;
+              const offset = offsets[i] ?? 0;
+              row.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
+              row.style.transform = offset !== 0 ? `translateY(${offset}px)` : '';
+            }
+
+            const folder = isPinned
+              ? originFolder
+              : folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
+
+            const overId = spans[insertIdx]?.id || null;
+
+            currentInsertSessionId = overId;
+            currentTargetFolder = folder;
+            currentIsPinned = isPinned;
+
+            setDragOverPinned(isPinned);
+          }
         } else {
           // 游离态
           clearAllShifts();
@@ -415,39 +425,44 @@ export function useSessionListDrag(
         }
       };
 
-      const up = () => {
+      const up = (ue: PointerEvent) => {
         if (raf) {
           cancelAnimationFrame(raf);
           raf = 0;
         }
 
-        if (dragging && lastAppliedTarget) {
-          if (lastAppliedTarget.domain === 'pane-split') {
-            commitSidebarSessionDrop({
-              sessionId,
-              target: {
-                kind: 'pane',
-                targetLeafId: lastAppliedTarget.targetLeafId,
-                region: lastAppliedTarget.region,
-              },
-            });
-          } else if (lastAppliedTarget.domain === 'tab-strip') {
-            commitSidebarSessionDrop({
-              sessionId,
-              target: {
-                kind: 'strip',
-                targetLeafId: lastAppliedTarget.targetLeafId,
-                insertIdx: lastAppliedTarget.insertIndex,
-              },
-            });
-          } else if (lastAppliedTarget.domain === 'sidebar') {
-            // 单次原子提交侧栏重排序
-            onMoveRef.current(
-              sessionId,
-              currentInsertSessionId,
-              currentTargetFolder,
-              currentIsPinned
-            );
+        if (dragging) {
+          // 同步执行最后一帧确定终态
+          applyPointer(ue.clientX, ue.clientY, ue.clientX - startX, ue.clientY - startY);
+
+          if (lastAppliedTarget) {
+            if (lastAppliedTarget.domain === 'pane-split') {
+              commitSidebarSessionDrop({
+                sessionId,
+                target: {
+                  kind: 'pane',
+                  targetLeafId: lastAppliedTarget.targetLeafId,
+                  region: lastAppliedTarget.region,
+                },
+              });
+            } else if (lastAppliedTarget.domain === 'tab-strip') {
+              commitSidebarSessionDrop({
+                sessionId,
+                target: {
+                  kind: 'strip',
+                  targetLeafId: lastAppliedTarget.targetLeafId,
+                  insertIdx: lastAppliedTarget.insertIndex,
+                },
+              });
+            } else if (lastAppliedTarget.domain === 'sidebar') {
+              // 单次原子提交侧栏重排序
+              onMoveRef.current(
+                sessionId,
+                currentInsertSessionId,
+                currentTargetFolder,
+                currentIsPinned
+              );
+            }
           }
         }
 
