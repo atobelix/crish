@@ -337,9 +337,10 @@ export function handleRunError(opts: {
     'server_error',
     'stream_abort',
   ] as const;
-  const resolvedKind = validKinds.includes(kind as any)
-    ? (kind as (typeof validKinds)[number])
-    : 'generic';
+  const resolvedKind =
+    kind && (validKinds as readonly string[]).includes(kind)
+      ? (kind as (typeof validKinds)[number])
+      : 'generic';
 
   // 错误统一收敛为消息流底部的瞬态进行时状态（灰色字体、可重试、内存独占）
   useEphemeralChatStore.getState().setEphemeralStatus(sid, {

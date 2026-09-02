@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import type { SessionState } from '../../../store/types';
 import { groupUnpinnedByProject } from '../../../store/storeAccess';
 import type { ProjectEntry } from '../../../api/projectStore';

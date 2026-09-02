@@ -29,11 +29,7 @@
 }
 
 .accordionInner {
-  overflow: hidden;
   min-height: 0;
-  contain: layout paint;
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
 }
 
 .accordionWrapper[data-expanded='true'] .accordionInner {

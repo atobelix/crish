@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { sessionListDisplayTitle } from '../../api/sessionTitle';
 import { getCompositionRoot } from '../../app/compositionRoot';

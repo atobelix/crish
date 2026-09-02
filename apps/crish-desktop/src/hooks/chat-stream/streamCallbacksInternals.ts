@@ -14,7 +14,6 @@ import type {
   MessageToolCall,
 } from '../../store/types';
 import { getStreamTool } from '../../store/streamingStore';
-import { getCompositionRoot } from '../../app/compositionRoot';
 import { buildGoalRunTaskFields } from '../../api/goalModeController';
 import {
   streamToolBatchKey,

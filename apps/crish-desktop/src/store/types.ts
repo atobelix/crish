@@ -441,7 +441,11 @@ export interface SessionMessage extends Pick<
   thinkingTime?: number | undefined;
   /** 本条消息中所有图片的结构化索引（跨 text block + tool call 汇总） */
   images?: MessageImageRef[] | undefined;
-  /** 运行错误诊断详情 */
+  /**
+   * 运行错误诊断详情。
+   * @deprecated 历史持久化/向后兼容字段；新流式会话错误已收敛至 ephemeralChatStore 瞬态进行时状态。
+   * @see useEphemeralChatStore
+   */
   errorDetail?:
     | {
         message: string;

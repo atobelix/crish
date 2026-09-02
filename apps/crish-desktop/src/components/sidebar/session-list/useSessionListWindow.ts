@@ -80,11 +80,32 @@ export function useSessionListWindow(
       typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
     ro?.observe(scrollEl);
     const listEl = listRef.current;
-    if (listEl) ro?.observe(listEl);
+    if (listEl) {
+      ro?.observe(listEl);
+      if (listEl.parentElement) {
+        ro?.observe(listEl.parentElement);
+      }
+    }
+
+    // 监听侧栏内部（如 ProjectsSection 折叠/展开、PinnedSection 变化）导致的几何重排
+    const mo =
+      typeof MutationObserver !== 'undefined'
+        ? new MutationObserver(() => {
+            update();
+          })
+        : null;
+    mo?.observe(scrollEl, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style', 'aria-expanded', 'data-expanded', 'hidden'],
+    });
+
     return () => {
       cancelAnimationFrame(raf);
       scrollEl.removeEventListener('scroll', update);
       ro?.disconnect();
+      mo?.disconnect();
     };
   }, [count, enabled, ensureIndex, scrollParentRef, listRef, getHeight]);
 

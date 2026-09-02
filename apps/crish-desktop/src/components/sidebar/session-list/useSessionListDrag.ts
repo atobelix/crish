@@ -186,7 +186,7 @@ export function useSessionListDrag(
   const { sessionListRef, renamingSessionId, onMoveSessionRealtime } = opts;
 
   const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(null);
-  const [dragOverPinned] = useState(false);
+  const [dragOverPinned, setDragOverPinned] = useState(false);
   const [dropIndicator] = useState<DropIndicator | null>(null);
   const [dragPreview] = useState<SessionDragPreview | null>(null);
 
@@ -281,10 +281,12 @@ export function useSessionListDrag(
 
         // 3. 分域响应动力学
         if (target.domain === 'pane-split') {
+          setDragOverPinned(false);
           clearAllShifts();
           showPaneIndicator(target.paneRect, target.region);
           if (ghostEl) ghostEl.style.opacity = '0.95';
         } else if (target.domain === 'tab-strip') {
+          setDragOverPinned(false);
           // 跨域进入顶栏 TabStrip：执行 1D 水平让位动力学
           hideIndicator();
           if (ghostEl) ghostEl.style.opacity = '0.95';
@@ -369,6 +371,7 @@ export function useSessionListDrag(
           const generalZone = hit?.closest('[data-drop-zone="general"]') as HTMLElement | null;
 
           const isPinnedTarget = Boolean(pinnedZone);
+          setDragOverPinned(isPinnedTarget);
           const rawTargetFolder = folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
           const targetFolderName = isPinnedTarget
             ? originFolder
@@ -483,6 +486,7 @@ export function useSessionListDrag(
           }
         } else {
           // 游离态
+          setDragOverPinned(false);
           clearAllShifts();
           hideIndicator();
           if (ghostEl) ghostEl.style.opacity = '0.35';
@@ -556,6 +560,7 @@ export function useSessionListDrag(
         clearAllShifts();
         document.body.classList.remove('sidebar-dragging');
         setActiveDragItem(null);
+        setDragOverPinned(false);
       };
 
       const cancel = () => {

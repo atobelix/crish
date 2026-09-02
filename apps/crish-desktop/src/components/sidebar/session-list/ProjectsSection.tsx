@@ -1,7 +1,6 @@
 import React from 'react';
 import type { SessionState } from '../../../store/types';
 import type { ProjectEntry } from '../../../api/projectStore';
-import { openProject } from '../../../api/projectStore';
 import { emitUiEvent } from '../../../api/uiEvents';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import { Button, Tooltip } from '../../ui';
