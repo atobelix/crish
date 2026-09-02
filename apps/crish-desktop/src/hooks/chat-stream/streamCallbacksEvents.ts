@@ -281,24 +281,70 @@ export function handleRunError(opts: {
     kind: kind || 'error',
     detail: detail || undefined,
   };
-  let hadNetworkError = kind === 'network';
+  let hadNetworkError = false;
   const st = getCompositionRoot().session.getState();
+  if (surface === 'persistent') {
+    // network/恢复类：仅输入框上方持久条；不进 toast、不写气泡
+    hadNetworkError = true;
+    pushRunNotice({ ...notice, persistent: true });
+  } else if (surface === 'banner-toast') {
+    // 可行动错误（blocked/auth/no_key/no_project）：横幅 + 一次性 toast
+    pushRunNotice(notice, 14000);
+    toast.show(message);
+  } else if (surface === 'banner') {
+    // 无正文的失败：仅横幅（14s TTL），无 toast
+    pushRunNotice(notice, 14000);
+  }
 
   if (asstErr) {
-    if (!hadText) {
+    if (surface === 'persistent') {
+      // network/恢复类：不写气泡错误卡；无正文时 withdraw 占位（保持现状）
+      if (!hadText) {
+        st.withdrawMessage(wsId, sid, assistantMsgId);
+        clearStream(sid, assistantMsgId);
+      }
+    } else if (!hadText) {
       // 零 Token 失败：彻底撤回预置的空白 assistant 消息，不留幽灵占位
       st.withdrawMessage(wsId, sid, assistantMsgId);
       clearStream(sid, assistantMsgId);
     } else {
-      // 部分 Token 中断：保留真实生成的片段，标记完成，绝不附加 errorDetail 污染气泡
-      st.setSessionMessageStatus(sid, assistantMsgId, 'completed');
+      st.setSessionMessageStatus(sid, assistantMsgId, 'error', undefined, {
+        errorDetail: {
+          message: message || '服务暂时不可用，请检查网络或后端配置',
+          kind: kind || 'stream-error',
+          technical:
+            typeof detail === 'string'
+              ? detail
+              : detail
+                ? JSON.stringify(detail)
+                : undefined,
+        },
+      });
     }
   }
+
+  // 提取当轮真实提问文本与用户消息 ID，保障 0-token 失败重试闭环
+  const lastUserMsg = st?.sessionsById?.[sid]?.messages?.findLast(
+    (m) => m.sender === 'user'
+  );
+
+  const validKinds = [
+    'network',
+    'rate_limit',
+    'auth',
+    'quota',
+    'context_length',
+    'server_error',
+    'stream_abort',
+  ] as const;
+  const resolvedKind = validKinds.includes(kind as any)
+    ? (kind as (typeof validKinds)[number])
+    : 'generic';
 
   // 错误统一收敛为消息流底部的瞬态进行时状态（灰色字体、可重试、内存独占）
   useEphemeralChatStore.getState().setEphemeralStatus(sid, {
     id: `${kind || 'error'}:${message}`,
-    kind: (kind as any) || 'generic',
+    kind: resolvedKind,
     message: message || '服务暂时不可用，请检查网络或后端配置',
     technicalDetail:
       typeof detail === 'string'
@@ -309,7 +355,8 @@ export function handleRunError(opts: {
     retryable: true,
     timestamp: Date.now(),
     retryContext: {
-      userMsgId: refs.streamManager?.get(sid)?.userMsgId,
+      userMsgId: refs.streamManager?.get(sid)?.userMsgId || lastUserMsg?.id,
+      promptText: lastUserMsg?.text,
     },
   });
   flushStreamBatchers();

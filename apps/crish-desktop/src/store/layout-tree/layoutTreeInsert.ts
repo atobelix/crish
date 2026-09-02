@@ -289,7 +289,8 @@ export function splitSessionFromSidebar(
   sessionId: string,
   dstLeafId: string,
   region: SplitRegion,
-  splitRatio?: number
+  splitRatio?: number,
+  opts?: { title?: string; workspaceKey?: string }
 ): LayoutTree {
   if (!sessionId || !dstLeafId || !tree?.root) return tree;
 
@@ -309,6 +310,8 @@ export function splitSessionFromSidebar(
   const newTab = createSessionTab({
     tabId: generateNodeId('tab'),
     sessionId,
+    title: opts?.title,
+    workspaceKey: opts?.workspaceKey,
   });
 
   const freshLeaf: LayoutLeaf = {

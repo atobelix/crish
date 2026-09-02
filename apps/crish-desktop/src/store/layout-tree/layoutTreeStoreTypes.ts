@@ -114,7 +114,9 @@ export interface LayoutTreeStoreActions {
   splitSessionFromSidebar: (
     sessionId: string,
     dstLeafId: string,
-    region: SplitRegion
+    region: SplitRegion,
+    splitRatio?: number,
+    opts?: { title?: string; workspaceKey?: string }
   ) => void;
 
   // ── 焦点操作（不推历史） ────────────────────────────────────

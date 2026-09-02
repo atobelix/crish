@@ -204,22 +204,27 @@ export function openSession(
 ): { tree: LayoutTree; leafId: string; tabId: string; created: boolean } {
   const existing = findTabBySessionId(tree.root, sessionId);
   if (existing) {
-    if (
+    const isDifferentLeaf = opts.activeLeafId && existing.leaf.id !== opts.activeLeafId;
+    const isDifferentIndex =
       opts.insertIdx !== undefined &&
-      (existing.leaf.id !== opts.activeLeafId ||
-        existing.leaf.tabs.findIndex((t) => t.tabId === existing.tab.tabId) !==
-          opts.insertIdx)
-    ) {
+      existing.leaf.tabs.findIndex((t) => t.tabId === existing.tab.tabId) !== opts.insertIdx;
+
+    if (isDifferentLeaf || isDifferentIndex) {
+      const targetLeafId = opts.activeLeafId || existing.leaf.id;
+      const targetTabs =
+        collectLeaves(tree.root).find((l) => l.id === targetLeafId)?.tabs.length ?? 0;
+      const finalInsertIdx = opts.insertIdx !== undefined ? opts.insertIdx : targetTabs;
+
       const movedTree = moveTab(
         tree,
         existing.leaf.id,
         existing.tab.tabId,
-        opts.activeLeafId,
-        opts.insertIdx
+        targetLeafId,
+        finalInsertIdx
       );
       return {
         tree: movedTree,
-        leafId: opts.activeLeafId,
+        leafId: targetLeafId,
         tabId: existing.tab.tabId,
         created: false,
       };

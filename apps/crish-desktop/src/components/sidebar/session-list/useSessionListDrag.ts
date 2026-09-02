@@ -12,7 +12,7 @@
  */
 
 import React, { useCallback, useRef, useState } from 'react';
-import { GENERAL_FOLDER } from '../../../api/projectStore';
+import { GENERAL_FOLDER, canonicalSessionFolder } from '../../../api/projectStore';
 import type { SessionState } from '../../../store/types';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
 import styles from '../SidebarSessionList.module.css';
@@ -202,8 +202,8 @@ export function useSessionListDrag(
 
       const startX = e.clientX;
       const startY = e.clientY;
-      const originFolder = (folderName && folderName.trim()) || GENERAL_FOLDER;
-      const isProjectSession = originFolder !== GENERAL_FOLDER && originFolder !== '';
+      const originFolder = canonicalSessionFolder(folderName);
+      const isProjectSession = originFolder !== GENERAL_FOLDER;
 
       let dragging = false;
       let ghostEl: HTMLDivElement | null = null;
@@ -251,7 +251,10 @@ export function useSessionListDrag(
         }
       };
 
-      const showPaneIndicator = (rect: { left: number; top: number; width: number; height: number }, region: any) => {
+      const showPaneIndicator = (
+        rect: { left: number; top: number; width: number; height: number },
+        region: 'left' | 'right' | 'top' | 'bottom' | 'center'
+      ) => {
         if (!indicatorEl) {
           indicatorEl = createIndicator('分屏');
         }
@@ -352,6 +355,13 @@ export function useSessionListDrag(
         } else if (target.domain === 'sidebar') {
           hideIndicator();
 
+          // 移回侧栏时无条件清除可能残留在 TabStrip DOM 上的水平位移
+          for (const el of shiftedElements) {
+            el.style.transform = '';
+            el.style.transition = '';
+          }
+          shiftedElements = [];
+
           // 探测光标命中的具体侧栏分区（置顶 / 项目文件夹 / 常规区）
           const hit = document.elementFromPoint(clientX, clientY);
           const pinnedZone = hit?.closest('[data-drop-zone="pinned"]') as HTMLElement | null;
@@ -359,9 +369,10 @@ export function useSessionListDrag(
           const generalZone = hit?.closest('[data-drop-zone="general"]') as HTMLElement | null;
 
           const isPinnedTarget = Boolean(pinnedZone);
+          const rawTargetFolder = folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
           const targetFolderName = isPinnedTarget
             ? originFolder
-            : folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
+            : canonicalSessionFolder(rawTargetFolder);
 
           // 业务硬约束守门：项目内的会话只能在项目内排序或放在置顶区域，禁止放在常规未绑定项目的对话列表中
           if (isProjectSession && !isPinnedTarget && targetFolderName !== originFolder) {

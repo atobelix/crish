@@ -28,6 +28,7 @@ import {
   enqueueFollowUpMessage,
 } from './slashSendQueueHelper';
 import { runPreflightChecks, assembleChatPayload } from './slashSendPreflight';
+import { useEphemeralChatStore } from '../../store/ephemeralChatStore';
 
 export function useSlashSend(
   options: UseChatStreamOptions,
@@ -106,7 +107,6 @@ export function useSlashSend(
     }
 
     // 原子清空该会话的瞬态错误进行时提示（发送新对话自动自愈）
-    const { useEphemeralChatStore } = await import('../../store/ephemeralChatStore');
     useEphemeralChatStore.getState().clearEphemeralStatus(sessionId);
 
     // 3. 多模态 Payload 与提示词组装

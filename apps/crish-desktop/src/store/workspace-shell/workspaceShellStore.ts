@@ -169,7 +169,11 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     if (!sid || isPendingDraft(sid) || !dstLeafId) return;
 
     const treeStore = useLayoutTreeStore.getState();
-    treeStore.splitSessionFromSidebar(sid, dstLeafId, region);
+    const session = useSessionStore.getState().sessionsById[sid];
+    treeStore.splitSessionFromSidebar(sid, dstLeafId, region, undefined, {
+      title: session?.title,
+      workspaceKey: session?.folder,
+    });
 
     const updatedTree = useLayoutTreeStore.getState().tree;
     const leaves = listChatLeaves(updatedTree.root);

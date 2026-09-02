@@ -300,13 +300,15 @@ export const useLayoutTreeStore = create<LayoutTreeStore>()(
           };
         }),
 
-      splitSessionFromSidebar: (sessionId, dstLeafId, region) =>
+      splitSessionFromSidebar: (sessionId, dstLeafId, region, splitRatio, opts) =>
         set((state) => {
           const result = splitSessionFromSidebarOp(
             state.tree,
             sessionId,
             dstLeafId,
-            region
+            region,
+            splitRatio,
+            opts
           );
           if (result === state.tree) return {};
           let activeLeafId = dstLeafId;

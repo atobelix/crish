@@ -25,6 +25,7 @@ import {
   EMPTY_NARRATIVE_SLOTS,
   NarrativeRenderSlotsContext,
 } from '../chat-message/narrativeRenderSlots';
+import { EphemeralStatusSlot } from './EphemeralStatusSlot';
 
 export type {
   ChatMessageListApprovalProps,
@@ -186,7 +187,21 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   }, [renderTools, renderThought]);
 
   if (messages.length === 0) {
-    return null;
+    if (!activeSessionId) return null;
+    return (
+      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <EphemeralStatusSlot
+          sessionId={activeSessionId}
+          onRetry={
+            onSendFollowUp
+              ? (prompt) => {
+                  if (prompt) onSendFollowUp(prompt);
+                }
+              : undefined
+          }
+        />
+      </div>
+    );
   }
 
   return (

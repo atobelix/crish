@@ -13,6 +13,7 @@ import { useStreamingStore } from './streamingStore';
 import { clearMessageSnapshots } from './messageSnapshotsBridge';
 import { useTerminalStore } from './terminalStore';
 import { getShellReadApi } from './workspace-shell/shellReadBridge';
+import { useEphemeralChatStore } from './ephemeralChatStore';
 
 export const SessionCoordinator = {
   /**
@@ -39,6 +40,9 @@ export const SessionCoordinator = {
 
     // 4. 清理 terminalStore 中的终端绑定与会话关联
     useTerminalStore.getState().removePtySession(id);
+
+    // 5. 清理 ephemeralChatStore 中的内存瞬态状态，杜绝内存泄漏
+    useEphemeralChatStore.getState().clearEphemeralStatus(id);
 
     return removed;
   },

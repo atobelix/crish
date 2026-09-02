@@ -146,6 +146,25 @@ export function treeOpenSession(
   }
   const existing = treeFindTabBySessionId(sessionId);
   if (existing) {
+    // 跨 Leaf 拖入或显式指定插入位置时，真实搬移 Tab 到目标 Leaf 与指定下标
+    if (
+      opts.activeLeafId &&
+      (opts.activeLeafId !== existing.leafId || opts.insertIdx !== undefined)
+    ) {
+      const targetIdx = opts.insertIdx ?? 9999;
+      treeMoveTab(
+        existing.leafId,
+        existing.tab.tabId,
+        opts.activeLeafId,
+        targetIdx
+      );
+      treeActivateTab(opts.activeLeafId, existing.tab.tabId);
+      return {
+        leafId: opts.activeLeafId,
+        tabId: existing.tab.tabId,
+        created: false,
+      };
+    }
     treeActivateTab(existing.leafId, existing.tab.tabId);
     return {
       leafId: existing.leafId,

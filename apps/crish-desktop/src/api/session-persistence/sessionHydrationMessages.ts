@@ -166,15 +166,11 @@ export function sanitizeMessagesForHydrate(
   return messages.map((m) => {
     let next = m;
     if (m.status === 'processing') {
-      const sanitizedText = m.text && m.text.trim()
-        ? m.text
-        : m.sender === 'assistant'
-          ? '（上次回复未完成）'
-          : undefined;
+      const sanitizedText = m.text && m.text.trim() ? m.text : '';
       next = {
         ...next,
         status: 'completed',
-        ...(sanitizedText !== undefined ? { text: sanitizedText } : {}),
+        text: sanitizedText,
       };
     }
     if (next.toolCalls?.length) {
