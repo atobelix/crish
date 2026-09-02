@@ -103,27 +103,27 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
             {workflows.length > 0 ? `${workflows.length} 条` : ' '}
           </span>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          className={styles.actionBtn}
-          aria-expanded={showForm}
-          aria-controls="sched-in-chat-form"
-          onClick={() => {
-            if (showForm) {
-              closeForm();
-            } else {
-              setShowForm(true);
-              setError('');
-              setOk('');
-            }
-          }}
-          icon={<Lucide.Plus size={16} aria-hidden />}
-        >
-          {showForm ? '收起' : '新建'}
-        </Button>
-      </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className={styles.actionBtn}
+              aria-expanded={showForm}
+              aria-controls="sched-in-chat-form"
+              onClick={() => {
+                if (showForm) {
+                  closeForm();
+                } else {
+                  setShowForm(true);
+                  setError('');
+                  setOk('');
+                }
+              }}
+              icon={<Lucide.Plus size={16} aria-hidden />}
+            >
+              {showForm ? '收起' : '新建'}
+            </Button>
+          </div>
 
       <div className={styles.schedPresetRow}>
         <div className={styles.schedPresetChips} role="group" aria-label="计划模板">

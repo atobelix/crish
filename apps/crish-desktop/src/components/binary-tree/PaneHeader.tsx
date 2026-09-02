@@ -118,6 +118,10 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     const effectiveActiveTabId = activeTabId || visibleTabs[0]?.tabId || '';
     void isActive;
 
+    if (chatMainSurface === 'scheduled') {
+      return null;
+    }
+
     useEffect(
       () => () => {
         if (leaveTimerRef.current != null) {

@@ -328,6 +328,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
     const edges = useMemo(() => computePaneEdges(rect), [rect]);
     const tabCount = readLeafTabs(leaf).length;
+    const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
 
     const renderToolOutlet = (panelId: string) => {
       const resolved = viewRegistry.resolveView(panelId);
@@ -387,13 +388,15 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           data-dock-open={dockOpen ? 'true' : 'false'}
         >
           <div className={styles.leafChatColumn}>
-            <UnitChromeActions
-              activeSessionId={sessionForPanel}
-              dockOpen={dockOpen}
-              dockPanelId={dock.activePanelId}
-              onOpenPreview={() => handleOpenTool('preview')}
-              onOpenFiles={() => handleOpenTool('files')}
-            />
+            {chatMainSurface !== 'scheduled' && (
+              <UnitChromeActions
+                activeSessionId={sessionForPanel}
+                dockOpen={dockOpen}
+                dockPanelId={dock.activePanelId}
+                onOpenPreview={() => handleOpenTool('preview')}
+                onOpenFiles={() => handleOpenTool('files')}
+              />
+            )}
             <AppErrorBoundary compact title="面板 [chat] 渲染异常">
               <Suspense
                 fallback={<div className={styles.emptyState}>加载中…</div>}

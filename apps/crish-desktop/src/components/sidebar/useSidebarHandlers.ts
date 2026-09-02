@@ -1,5 +1,6 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { useSessionStore } from '../../store/storeAccess';
+import { useLayoutStore } from '../../store/layoutStore';
 import { getActiveProjectId } from '../../api/projectStore';
 import { setDraftFolder } from '../../api/storeAccess';
 import { isPendingDraft } from '../../store/storeAccess';
@@ -60,6 +61,7 @@ export function useSidebarHandlers({
       getCompositionRoot().shell.openNewDraftTab(
         getActiveProjectId() || undefined
       );
+      useLayoutStore.getState().setChatMainSurface('chat');
       setActiveNav('chat');
       setRenamingSessionId(null);
       emitUiEvent('open-chat');
@@ -80,7 +82,14 @@ export function useSidebarHandlers({
   );
 
   const handleOpenScheduled = useCallback(() => {
-    setActiveNav('scheduled');
+    setActiveNav((prev) => {
+      if (prev === 'scheduled') {
+        useLayoutStore.getState().setChatMainSurface('chat');
+        return 'chat';
+      }
+      useLayoutStore.getState().setChatMainSurface('scheduled');
+      return 'scheduled';
+    });
     emitUiEvent('open-scheduled');
   }, []);
 
@@ -93,6 +102,7 @@ export function useSidebarHandlers({
         workspaceKey:
           target?.folder || currentWorkspaceFolderKey(getActiveProjectId()),
       });
+      useLayoutStore.getState().setChatMainSurface('chat');
       clearAgentPanelFocus();
       setActiveNav('chat');
       setRenamingSessionId(null);

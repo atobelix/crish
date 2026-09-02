@@ -15,7 +15,7 @@ import {
   usePlatformAdaptation,
 } from '@crish/shared-utils/browser';
 import { createDebounced } from './api/debouncedValue';
-import { } from './api/uiEvents';
+import { onUiEvent } from './api/uiEvents';
 import { AppErrorBoundary } from './components/AppErrorBoundary';
 import { shouldShowFirstRunWizard } from './components/firstRunWizardLib';
 import styles from './App.module.css';
@@ -65,13 +65,6 @@ function DevHealthOverlayMount() {
 const BinaryTreeWorkspace = lazy(() =>
   import('./components/binary-tree/BinaryTreeWorkspace').then((m) => ({
     default: m.BinaryTreeWorkspace,
-  }))
-);
-
-// 定时任务全局独立面板（选到定时任务无法分屏，单屏全尺寸呈现）
-const ScheduledTasksPanel = lazy(() =>
-  import('./components/settings/ScheduledTasksPanel').then((m) => ({
-    default: m.ScheduledTasksPanel,
   }))
 );
 
@@ -142,6 +135,19 @@ function App() {
     return () => {
       window.removeEventListener('crish-open-first-run', handler);
     };
+  }, []);
+
+  // 全局常驻主工作区路由守卫（杜绝因子组件卸载导致 open-chat/open-scheduled 事件丢失）
+  useEffect(() => {
+    const offs = [
+      onUiEvent('open-chat', () => {
+        useLayoutStore.getState().setChatMainSurface('chat');
+      }),
+      onUiEvent('open-scheduled', () => {
+        useLayoutStore.getState().setChatMainSurface('scheduled');
+      }),
+    ];
+    return () => offs.forEach((off) => off());
   }, []);
 
   const appModeClass = isDemoModeFast() ? 'app-mode-demo' : 'app-mode-normal';
@@ -221,10 +227,6 @@ function App() {
                 <AppErrorBoundary compact title="工作区出错">
                   {!shellReady ? (
                     <SkeletonFallback height={400} />
-                  ) : chatMainSurface === 'scheduled' ? (
-                    <Suspense fallback={<SkeletonFallback height={400} />}>
-                      <ScheduledTasksPanel />
-                    </Suspense>
                   ) : (
                     <Suspense fallback={<SkeletonFallback height={400} />}>
                       <BinaryTreeWorkspace />

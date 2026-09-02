@@ -22,6 +22,7 @@ import {
 } from '../../api/projectStore';
 import { isPendingDraft, mintDraftSessionId } from '../draftSession';
 import { useSessionStore } from '../sessionStore';
+import { useLayoutStore } from '../layoutStore';
 import { currentWorkspaceFolderKey } from '../../api/workspaceChromeTabs';
 import {
   isDefaultSessionTitle,
@@ -161,6 +162,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     }
     rememberChatLeaf(set, result.leafId);
     useSessionStore.getState().setActiveSessionId(sid);
+    useLayoutStore.getState().setChatMainSurface('chat');
     syncSessionFromActiveLeaf(result.leafId);
   },
 
@@ -182,6 +184,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
 
     rememberChatLeaf(set, finalLeafId);
     useSessionStore.getState().setActiveSessionId(sid);
+    useLayoutStore.getState().setChatMainSurface('chat');
     syncSessionFromActiveLeaf(finalLeafId);
   },
 
@@ -190,6 +193,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     if (!loc || loc.leafId !== leafId) return;
     treeActivateTab(leafId, tabId);
     rememberChatLeaf(set, leafId);
+    useLayoutStore.getState().setChatMainSurface('chat');
     syncSessionFromActiveLeaf(leafId);
   },
 
@@ -262,6 +266,7 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
 
     treeAddTab(leaf.id, { workspaceKey });
     rememberChatLeaf(set, leaf.id);
+    useLayoutStore.getState().setChatMainSurface('chat');
     useSessionStore.getState().enterDraftMode(workspaceKey, {
       draftSessionId: mintDraftSessionId(leaf.id),
     });
