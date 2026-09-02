@@ -609,11 +609,6 @@
   max-width: 100%;
 }
 
-.fileZone::-webkit-scrollbar,
-.attachStrip::-webkit-scrollbar {
-  display: none;
-}
-
 .fileZone:empty,
 .attachStrip:empty {
   display: none;
@@ -1112,7 +1107,6 @@
   margin: 0;
   overflow-y: hidden;
   box-sizing: content-box;
-  scrollbar-width: thin;
   field-sizing: content;
   vertical-align: middle;
 }

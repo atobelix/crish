@@ -877,7 +877,6 @@
   max-width: 100%;
   min-width: 0;
   overscroll-behavior-x: contain;
-  scrollbar-width: thin;
 }
 
 .gitDiffLineRow {

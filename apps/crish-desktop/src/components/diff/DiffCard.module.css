@@ -182,7 +182,6 @@
   overflow-y: auto;
   overscroll-behavior: auto;
   flex: 1 1 auto;
-  scrollbar-width: thin;
 }
 
 .fileList.isFullWidth {

@@ -27,7 +27,6 @@
   min-height: 56px;
   max-height: 240px;
   overflow-y: auto;
-  scrollbar-width: thin;
   resize: none;
   box-sizing: border-box;
   width: 100%;

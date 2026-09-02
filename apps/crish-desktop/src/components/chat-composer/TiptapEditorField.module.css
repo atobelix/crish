@@ -39,7 +39,6 @@
   color: var(--text-primary);
   padding: 0;
   margin: 0;
-  scrollbar-width: thin;
   word-break: break-word;
   box-sizing: border-box;
 }

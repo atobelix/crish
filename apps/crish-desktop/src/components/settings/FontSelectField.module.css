@@ -207,19 +207,6 @@
   min-height: 0;
   padding: 2px 0;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-subtle) transparent;
-}
-
-.settingsSelectScroll::-webkit-scrollbar {
-  width: 3px;
-}
-.settingsSelectScroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.settingsSelectScroll::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 3px;
 }
 
 .groupHeader {

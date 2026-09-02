@@ -60,10 +60,6 @@
   scrollbar-width: none;
 }
 
-.tabsTrack::-webkit-scrollbar {
-  display: none;
-}
-
 .tabsList {
   display: flex;
   align-items: center;

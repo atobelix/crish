@@ -1107,8 +1107,6 @@
   height: auto;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-subtle) transparent;
   z-index: var(--z-dropdown-menu, 2000);
   background: var(--sep-bg-panel, var(--bg-elevated));
   backdrop-filter: blur(28px) saturate(160%);
@@ -1121,17 +1119,6 @@
   flex-direction: column;
   gap: 2px;
   box-sizing: border-box;
-}
-
-.cascadeFlyout::-webkit-scrollbar {
-  width: 3px;
-}
-.cascadeFlyout::-webkit-scrollbar-track {
-  background: transparent;
-}
-.cascadeFlyout::-webkit-scrollbar-thumb {
-  background: var(--border-subtle);
-  border-radius: 3px;
 }
 
 .cascadeOption {

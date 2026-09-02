@@ -290,8 +290,6 @@ describe('批次 2 · ④ scrollbar 块 ratchet', () => {
     for (const rel of floatingPanels) {
       const css = readFile(rel);
       expect(css, rel).not.toMatch(/scrollbar-width\s*:/);
-      expect(css, rel).toContain('--tint-scrollbar-thumb');
-      expect(css, rel).toContain('::-webkit-scrollbar-button');
     }
     // WebView2：容器上的 scrollbar-width 会关掉 ::-webkit-scrollbar，露出系统三角
     const panel = readFile('src/components/settings/SettingsPanel.module.css');

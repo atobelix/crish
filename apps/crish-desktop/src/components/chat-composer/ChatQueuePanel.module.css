@@ -9,7 +9,6 @@
   border-radius: var(--radius-md);
   max-height: 140px;
   overflow-y: auto;
-  scrollbar-width: thin;
 }
 
 .item {

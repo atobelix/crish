@@ -162,30 +162,10 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
   min-width: min(160px, calc(100vw - 16px));
   max-width: min(420px, calc(100vw - 16px));
   width: var(--anchor-width, auto);
   animation: cds-popover-enter var(--transition-popover-enter, 150ms cubic-bezier(0.16, 1, 0.3, 1)) forwards;
-}
-
-.content::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-
-.content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.content::-webkit-scrollbar-thumb {
-  background: var(--tint-scrollbar-thumb);
-  border-radius: 9999px;
-}
-
-.content::-webkit-scrollbar-thumb:hover {
-  background: var(--tint-highlight);
 }
 
 .contentSm {

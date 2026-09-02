@@ -274,11 +274,6 @@
   font-family: var(--font-sans, system-ui, sans-serif);
   font-size: var(--font-size-base, 14px);
   line-height: var(--line-height-ui, 1.35);
-  /* 浮层滚动条：与 shell / .body 同温 thin + tint thumb */
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tint-strong, var(--tint-scrollbar-thumb, transparent))
-    transparent;
   /* 入场微透明；eco 下取消（见文末；含 React 裸 .bp-slash-host） */
   transition: opacity var(--transition-micro, 100ms ease-out);
 }

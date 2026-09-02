@@ -167,11 +167,6 @@ button.badge:focus-visible {
   /*                  padding      */
   gap: var(--space-0_5, 2px);
   background: var(--bg-card, #ffffff);
-  /*   shell-scrollbar / PaperList    thin + stable     webkit   */
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tint-strong, var(--tint-scrollbar-thumb, transparent))
-    transparent;
 }
 
 /*        chat      +   gutter     visual-align  02  */

@@ -31,7 +31,6 @@
   outline: none;
   box-shadow: none;
   animation: popoverFadeIn var(--transition-fast);
-  scrollbar-width: thin;
   -webkit-app-region: no-drag;
 }
 

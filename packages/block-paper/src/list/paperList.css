@@ -6,8 +6,6 @@
  *
  * 纪律：
  * - 色/间距/字阶 **仅** token（禁第三套魔法色、禁裸 z-index:9999）
- * - 滚动条：scrollbar-width:thin + gutter stable；**禁** ::-webkit-scrollbar 私有块
- *   （主壳唯一出口 `shell-scrollbar.css`；本文件只消费 thin / --tint-strong）
  * - **≠ EL-01**；**≠** A-PERF 数值门；**≠** 虚拟化完成宣称
  * - 消费：`import '@crish/block-paper/paper-list.css'`
  */
@@ -46,18 +44,10 @@
   overflow: visible;
 }
 
-/*
- * 列表自身作为滚动宿主（产品挂载写 data-scroll-host="1"）。
- * 细滚动条 + stable gutter，与 .body / slash 同温；禁 webkit 伪元素块。
- */
 .bp-paper-list[data-scroll-host='1'] {
   flex: 1 1 auto;
   overflow: auto;
   overscroll-behavior: contain;
-  scrollbar-gutter: stable;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tint-strong, var(--tint-scrollbar-thumb, transparent))
-    transparent;
 }
 
 /*

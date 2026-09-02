@@ -29,10 +29,6 @@
   border-radius: calc(var(--md-table-radius, var(--radius-lg, 8px)) - 2px);
   background: var(--md-table-bg, var(--bg-secondary));
   box-sizing: border-box;
-
-  /* 极简细滚动条规范 */
-  scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb) transparent;
 }
 
 /* 强制 fixed 布局，消除列宽左右抽搐 */

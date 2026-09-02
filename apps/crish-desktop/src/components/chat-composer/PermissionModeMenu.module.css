@@ -138,29 +138,9 @@
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent)) transparent;
   box-sizing: border-box;
   color: var(--text-primary);
   font-family: var(--font-sans, var(--sep-font-sans));
-}
-
-.permMenu::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
-}
-
-.permMenu::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.permMenu::-webkit-scrollbar-thumb {
-  background: var(--tint-scrollbar-thumb, color-mix(in srgb, var(--text-primary) 18%, transparent));
-  border-radius: 9999px;
-}
-
-.permMenu::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text-primary) 30%, transparent);
 }
 
 .permMenuExit {
