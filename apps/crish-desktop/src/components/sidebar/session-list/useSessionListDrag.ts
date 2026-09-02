@@ -1,12 +1,14 @@
 /**
- * useSessionListDrag.ts — 侧栏会话列表拖拽动力学与跨域分屏引擎
+ * useSessionListDrag.ts — 侧栏会话列表拖拽动力学与跨域分屏引擎 (Master Edition)
  * 
  * 核心特性：
- * 1. 原汁原味 Ghost：完美保持会话列表行的原始 DOM 结构、图标、文字与精致卡片样式；
- * 2. 纯物理 1D 让位：基于静态几何解算消除振荡，平滑 translateY 避让腾位，绝无生硬绿线与绿框；
- * 3. 拖拽全程零 Store 污染，松手单次原子提交；
- * 4. 跨域工作区探测，支持直接向右侧二叉树工作区分屏（22% 边缘切分）与顶栏插入；
- * 5. 严格单窗口同会话互斥守门（无意义自自分裂拦截）。
+ * 1. 原汁原味 Ghost：完美保持会话列表行的原始 DOM 结构、图标、文字与精致卡片样式，深度事件脱敏（pointer-events: none）；
+ * 2. 几何优先空间索引：结合视口包围盒与多重 DOM 选择器，彻底消灭 outside 假阳性误判；
+ * 3. 纯物理 1D 让位：基于静态未位移几何解算消除振荡，平滑 translateY 避让腾位，绝无生硬绿线与绿框；
+ * 4. 严格肉眼可见过滤：自动剔除折叠手风琴中的 0 尺寸隐藏项，保障几何解算连续无缝；
+ * 5. 拖拽全程零 Store 污染，松手单次原子提交；
+ * 6. 跨域工作区探测，支持直接向右侧二叉树工作区分屏（22% 边缘切分）与顶栏插入；
+ * 7. 严格单窗口同会话互斥守门（无意义自自分裂拦截）。
  */
 
 import React, { useCallback, useRef, useState } from 'react';
@@ -69,6 +71,7 @@ export type UseSessionListDragResult = {
 };
 
 const DRAG_THRESHOLD_PX = 4;
+const DEFAULT_ROW_STEP_PX = 28; // 标准行高
 
 export function applyDragPreview(
   list: SessionState[],
@@ -124,7 +127,7 @@ export function isPreviewTargetSection(
 }
 
 /**
- * 原汁原味克隆当前会话行的真实 DOM 外观（包含图标、标题、排版、卡片阴影）
+ * 原汁原味克隆当前会话行的真实 DOM 外观，并进行深层事件脱敏（杜绝 pointer-events 遮挡穿透）
  */
 function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDivElement {
   const ghost = rowLi.cloneNode(true) as HTMLDivElement;
@@ -137,7 +140,7 @@ function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDi
     `width: ${Math.round(rowRect.width)}px`,
     `height: ${Math.round(rowRect.height)}px`,
     'box-sizing: border-box',
-    'pointer-events: none',
+    'pointer-events: none !important',
     'z-index:var(--z-tooltip)',
     'opacity: 0.94',
     'border-radius: 8px',
@@ -150,20 +153,35 @@ function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDi
     'list-style: none',
   ].join(';');
 
-  // 禁用内部按钮与链接的焦点与指针
-  ghost.querySelectorAll('button, input, a').forEach((n) => {
-    (n as HTMLElement).tabIndex = -1;
-    (n as HTMLElement).style.pointerEvents = 'none';
+  // 深度禁用内部所有子元素的指针响应与焦点，确保底层 elementFromPoint 100% 穿透
+  ghost.querySelectorAll('*').forEach((n) => {
+    if (n instanceof HTMLElement) {
+      n.style.pointerEvents = 'none';
+      n.tabIndex = -1;
+    }
   });
 
   document.body.appendChild(ghost);
   return ghost;
 }
 
+/** 吞噬拖拽松手后的紧跟 click 事件，防止误触发列表项选中 */
+function swallowNextClick(): void {
+  const handler = (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.removeEventListener('click', handler, true);
+  };
+  window.addEventListener('click', handler, true);
+  setTimeout(() => {
+    window.removeEventListener('click', handler, true);
+  }, 300);
+}
+
 export function useSessionListDrag(
   opts: UseSessionListDragOpts
 ): UseSessionListDragResult {
-  const { renamingSessionId, onMoveSessionRealtime } = opts;
+  const { sessionListRef, renamingSessionId, onMoveSessionRealtime } = opts;
 
   const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(null);
   const [dragOverPinned, setDragOverPinned] = useState(false);
@@ -172,6 +190,9 @@ export function useSessionListDrag(
 
   const onMoveRef = useRef(onMoveSessionRealtime);
   onMoveRef.current = onMoveSessionRealtime;
+
+  const sessionListRefStable = useRef(sessionListRef);
+  sessionListRefStable.current = sessionListRef;
 
   const startSessionDrag = useCallback(
     (e: React.PointerEvent, sessionId: string, folderName?: string) => {
@@ -192,10 +213,10 @@ export function useSessionListDrag(
         left: startX,
         top: startY,
         width: 240,
-        height: 28,
+        height: DEFAULT_ROW_STEP_PX,
       } as DOMRect);
 
-      const rowStepPx = rowRect.height > 0 ? rowRect.height : 28;
+      const rowStepPx = rowRect.height > 0 ? rowRect.height : DEFAULT_ROW_STEP_PX;
 
       // 记录抓取偏移量
       const grabOffsetX = startX - rowRect.left;
@@ -241,7 +262,7 @@ export function useSessionListDrag(
           ghostEl.style.transform = `translate3d(${clientX - grabOffsetX}px, ${clientY - grabOffsetY}px, 0)`;
         }
 
-        // 2. 空间索引跨域落点探测
+        // 2. 空间索引跨域落点探测（几何优先 + 多重兜底）
         const tree = useLayoutTreeStore.getState().tree;
         const target = resolveCrossDomainTarget(clientX, clientY, dx, dy, sessionId, tree);
         lastAppliedTarget = target;
@@ -259,17 +280,23 @@ export function useSessionListDrag(
           hideIndicator();
           if (ghostEl) ghostEl.style.opacity = '0.95';
 
-          // 探测命中所属分区（置顶 / 项目文件夹 / 常规区）
+          // 探测光标命中的具体侧栏分区（置顶 / 项目文件夹 / 常规区）
           const hit = document.elementFromPoint(clientX, clientY);
           const pinnedZone = hit?.closest('[data-drop-zone="pinned"]') as HTMLElement | null;
           const folderEl = hit?.closest('[data-folder-name]') as HTMLElement | null;
-          const generalZone = (hit?.closest('[data-drop-zone="general"]') || document.querySelector('[data-drop-zone="general"]')) as HTMLElement | null;
+          const generalZone =
+            (hit?.closest('[data-drop-zone="general"]') as HTMLElement | null) ||
+            (document.querySelector('[data-drop-zone="general"]') as HTMLElement | null);
+
+          const listScroll =
+            sessionListRefStable.current?.current ||
+            (document.querySelector('[data-session-list="true"], [class*="listScroll"]') as HTMLElement | null);
 
           const isPinned = Boolean(pinnedZone);
-          const activeContainer = pinnedZone || folderEl || generalZone;
+          const activeContainer = pinnedZone || folderEl || generalZone || listScroll;
 
           if (activeContainer) {
-            // 严格过滤不可见/折叠手风琴中的项
+            // 严格过滤不可见/折叠手风琴中的 0 尺寸隐藏项
             const allRows = Array.from(
               activeContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
             ).filter((r) => {
@@ -306,7 +333,7 @@ export function useSessionListDrag(
               shiftStep: rowStepPx,
             });
 
-            // 清理不在当前容器中的其它行位移
+            // 清理不在当前活动容器中的其它行位移
             for (const el of shiftedElements) {
               if (!otherRows.includes(el)) {
                 el.style.transform = '';
@@ -365,19 +392,18 @@ export function useSessionListDrag(
             /* ignore */
           }
           document.body.classList.add('sidebar-dragging');
+
+          // 先生成原汁原味的 Ghost，再标记原行占位态（防止克隆出隐藏内容）
           if (rowLi) {
+            ghostEl = createSidebarSessionGhost(rowLi, rowRect);
             rowLi.classList.add(styles.isDraggingSource || 'isDraggingSource');
           }
+
           setActiveDragItem({
             type: 'session',
             sessionId,
             ...(folderName !== undefined ? { folderName } : {}),
           });
-
-          // 从原列表行生成原汁原味的 Ghost
-          if (rowLi) {
-            ghostEl = createSidebarSessionGhost(rowLi, rowRect);
-          }
 
           applyPointer(me.clientX, me.clientY, dx, dy);
         }
@@ -432,6 +458,8 @@ export function useSessionListDrag(
         }
 
         if (dragging) {
+          swallowNextClick();
+
           // 同步执行最后一帧确定终态
           applyPointer(ue.clientX, ue.clientY, ue.clientX - startX, ue.clientY - startY);
 

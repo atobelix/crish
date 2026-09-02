@@ -92,12 +92,37 @@ export function resolveCrossDomainTarget(
     }
   }
 
-  // 3. 探测是否位于侧栏区域
-  const sidebarRoot = hit.closest('[data-sidebar-root="true"]') as HTMLElement | null;
-  if (sidebarRoot) {
+  // 3. 探测是否位于侧栏区域（视口包围盒优先 + 多重选择器兜底）
+  const sidebarEl =
+    (hit.closest('[data-sidebar-root="true"], aside.crish-sidebar, aside[data-testid="sidebar"]') as HTMLElement | null) ||
+    document.querySelector<HTMLElement>('[data-sidebar-root="true"], aside.crish-sidebar, aside[data-testid="sidebar"]');
+
+  if (sidebarEl) {
+    const sbRect = sidebarEl.getBoundingClientRect();
+    if (
+      clientX >= sbRect.left &&
+      clientX <= sbRect.right &&
+      clientY >= sbRect.top &&
+      clientY <= sbRect.bottom
+    ) {
+      return {
+        domain: 'sidebar',
+        sectionEl: sidebarEl,
+        sectionKind: 'general',
+        folder: '',
+        insertIndex: 0,
+        targetSessionId: null,
+        isPinned: false,
+      };
+    }
+  }
+
+  // 兜底：若 hit 命中了侧栏内部任意滚动或列表结构
+  const internalHit = hit.closest('[data-sidebar-chrome], [class*="sidebarScroll"], [class*="listScroll"], [data-session-list="true"]');
+  if (internalHit) {
     return {
       domain: 'sidebar',
-      sectionEl: sidebarRoot,
+      sectionEl: (internalHit.closest('aside') || internalHit) as HTMLElement,
       sectionKind: 'general',
       folder: '',
       insertIndex: 0,

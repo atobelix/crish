@@ -273,6 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(
         className={`${styles.sidebar} crish-sidebar ${sidebarCollapsed ? styles.collapsed : ''} ${hoverExpanded ? styles.tempExpanded : ''} ${isOverlayActive ? styles.overlay : ''} ${sidebarBehavior === 'icon-collapse' && !isOverlayActive ? styles.iconCollapse : ''}`}
         role="navigation"
         aria-label="侧栏导航"
+        data-sidebar-root="true"
         data-testid="sidebar"
         data-sidebar-filter={filterType}
         data-sidebar-density={densityHint}
