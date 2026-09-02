@@ -142,11 +142,11 @@
   transition: border-color var(--transition-fast), background-color var(--transition-fast);
 }
 
+/* 做减法：彻底移除置顶区域的生硬绿框与绿色背景，统一由 translateY 平滑让位 */
 .pinnedDropZone.dragOver {
-  border-color: var(--accent-primary);
-  background-color: color-mix(in srgb, var(--accent-primary) 8%, transparent);
-  outline: 1px dashed color-mix(in srgb, var(--accent-primary) 55%, transparent);
-  outline-offset: 1px;
+  border-color: transparent;
+  background-color: transparent;
+  outline: none;
 }
 
 .pinnedList {
@@ -589,6 +589,17 @@
 
 .sidebarDragging .sessionItem {
   cursor: grabbing;
+}
+
+/* 拖拽期间全局静音/隐藏任何浮层气泡 Tooltip */
+:global(body.sidebar-dragging) [role="tooltip"],
+:global(body.sidebar-dragging) [data-tooltip-portal],
+:global(body.sidebar-dragging) [data-floating-ui-portal],
+:global(body.sidebar-dragging) .tooltip {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* 自治响应侧栏折叠状态 */

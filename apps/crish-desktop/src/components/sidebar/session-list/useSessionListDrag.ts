@@ -1,20 +1,20 @@
 /**
- * useSessionListDrag.ts — 侧栏会话列表拖拽动力学与跨域分屏引擎 (Master Edition)
+ * useSessionListDrag.ts — 侧栏会话与项目文件夹拖拽动力学与跨域分屏统一引擎 (Master Ultimate Edition)
  * 
  * 核心特性：
- * 1. 原汁原味 Ghost：完美保持会话列表行的原始 DOM 结构、图标、文字与精致卡片样式，深度事件脱敏（pointer-events: none）；
- * 2. 几何优先空间索引：结合视口包围盒与多重 DOM 选择器，彻底消灭 outside 假阳性误判；
- * 3. 纯物理 1D 让位：基于静态未位移几何解算消除振荡，平滑 translateY 避让腾位，绝无生硬绿线与绿框；
- * 4. 严格肉眼可见过滤：自动剔除折叠手风琴中的 0 尺寸隐藏项，保障几何解算连续无缝；
- * 5. 拖拽全程零 Store 污染，松手单次原子提交；
- * 6. 跨域工作区探测，支持直接向右侧二叉树工作区分屏（22% 边缘切分）与顶栏插入；
- * 7. 严格单窗口同会话互斥守门（无意义自自分裂拦截）。
+ * 1. 业务约束守门：项目内部的会话只能在当前项目内重排序或拖入置顶区，严禁流出到未绑定项目的常规区；
+ * 2. 跨分组空洞自闭合：会话拖入其他合法分组（如置顶）时，原分组下方的列表项自动向上平移 (-28px) 补齐空洞，目标分组向下平移 (+28px) 腾出槽位；
+ * 3. 彻底清退 React Re-render：拖拽全过程零 setState、零 React 重绘，纯 GPU transform 驱动，彻底消除抽搐与闪烁；
+ * 4. 零绿框纯净视觉：彻底移除置顶区绿框，纯靠 translateY 顺滑让位；全局静音 Tooltip 气泡；
+ * 5. 跨域工作区二叉树分屏与单窗口互斥保护；
+ * 6. 支持项目文件夹在项目区域内部的拖拽重排序。
  */
 
 import React, { useCallback, useRef, useState } from 'react';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
 import type { SessionState } from '../../../store/types';
 import { useLayoutTreeStore } from '../../../store/layout-tree';
+import { useSessionStore } from '../../../store/storeAccess';
 import styles from '../SidebarSessionList.module.css';
 import type { SidebarDragItem } from './sessionListTypes';
 import {
@@ -71,7 +71,7 @@ export type UseSessionListDragResult = {
 };
 
 const DRAG_THRESHOLD_PX = 4;
-const DEFAULT_ROW_STEP_PX = 28; // 标准行高
+const DEFAULT_ROW_STEP_PX = 28; // 标准单行高度
 
 export function applyDragPreview(
   list: SessionState[],
@@ -153,7 +153,7 @@ function createSidebarSessionGhost(rowLi: HTMLElement, rowRect: DOMRect): HTMLDi
     'list-style: none',
   ].join(';');
 
-  // 深度禁用内部所有子元素的指针响应与焦点，确保底层 elementFromPoint 100% 穿透
+  // 深度禁用内部所有子元素的指针响应与焦点
   ghost.querySelectorAll('*').forEach((n) => {
     if (n instanceof HTMLElement) {
       n.style.pointerEvents = 'none';
@@ -184,9 +184,9 @@ export function useSessionListDrag(
   const { sessionListRef, renamingSessionId, onMoveSessionRealtime } = opts;
 
   const [activeDragItem, setActiveDragItem] = useState<SidebarDragItem | null>(null);
-  const [dragOverPinned, setDragOverPinned] = useState(false);
-  const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(null);
-  const [dragPreview, setDragPreview] = useState<SessionDragPreview | null>(null);
+  const [dragOverPinned] = useState(false);
+  const [dropIndicator] = useState<DropIndicator | null>(null);
+  const [dragPreview] = useState<SessionDragPreview | null>(null);
 
   const onMoveRef = useRef(onMoveSessionRealtime);
   onMoveRef.current = onMoveSessionRealtime;
@@ -201,6 +201,7 @@ export function useSessionListDrag(
       const startX = e.clientX;
       const startY = e.clientY;
       const originFolder = (folderName && folderName.trim()) || GENERAL_FOLDER;
+      const isProjectSession = originFolder !== GENERAL_FOLDER && originFolder !== '';
 
       let dragging = false;
       let ghostEl: HTMLDivElement | null = null;
@@ -227,6 +228,13 @@ export function useSessionListDrag(
       let currentInsertSessionId: string | null = null;
       let currentTargetFolder = originFolder;
       let currentIsPinned = false;
+
+      // 找到源项所在的原生分组容器
+      const sourceContainer =
+        rowLi?.closest('[data-drop-zone="pinned"]') ||
+        rowLi?.closest('[data-folder-name]') ||
+        rowLi?.closest('[data-drop-zone="general"]') ||
+        null;
 
       const clearAllShifts = () => {
         for (const el of shiftedElements) {
@@ -278,26 +286,36 @@ export function useSessionListDrag(
           if (ghostEl) ghostEl.style.opacity = '0.95';
         } else if (target.domain === 'sidebar') {
           hideIndicator();
-          if (ghostEl) ghostEl.style.opacity = '0.95';
 
           // 探测光标命中的具体侧栏分区（置顶 / 项目文件夹 / 常规区）
           const hit = document.elementFromPoint(clientX, clientY);
           const pinnedZone = hit?.closest('[data-drop-zone="pinned"]') as HTMLElement | null;
           const folderEl = hit?.closest('[data-folder-name]') as HTMLElement | null;
-          const generalZone =
-            (hit?.closest('[data-drop-zone="general"]') as HTMLElement | null) ||
-            (document.querySelector('[data-drop-zone="general"]') as HTMLElement | null);
+          const generalZone = hit?.closest('[data-drop-zone="general"]') as HTMLElement | null;
 
-          const listScroll =
-            sessionListRefStable.current?.current ||
-            (document.querySelector('[data-session-list="true"], [class*="listScroll"]') as HTMLElement | null);
+          const isPinnedTarget = Boolean(pinnedZone);
+          const targetFolderName = isPinnedTarget
+            ? originFolder
+            : folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
 
-          const isPinned = Boolean(pinnedZone);
-          const activeContainer = pinnedZone || folderEl || generalZone || listScroll;
+          // 业务硬约束守门：项目内的会话只能在项目内排序或放在置顶区域，禁止放在常规未绑定项目的对话列表中
+          if (isProjectSession && !isPinnedTarget && targetFolderName !== originFolder) {
+            // 目标非法：拦截，不产生腾位
+            clearAllShifts();
+            if (ghostEl) ghostEl.style.opacity = '0.35';
+            currentInsertSessionId = null;
+            return;
+          }
+
+          if (ghostEl) ghostEl.style.opacity = '0.95';
+
+          const activeContainer = pinnedZone || folderEl || generalZone;
 
           if (activeContainer) {
-            // 严格过滤不可见/折叠手风琴中的 0 尺寸隐藏项
-            const allRows = Array.from(
+            const nextShifted: HTMLElement[] = [];
+
+            // A. 处理当前目标容器中的项（腾位或同列表位移）
+            const allTargetRows = Array.from(
               activeContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
             ).filter((r) => {
               if (r.offsetParent === null) return false;
@@ -305,12 +323,14 @@ export function useSessionListDrag(
               return b.height > 0;
             });
 
-            // 区分源项与目标项
-            const sourceIndex = allRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
-            const otherRows = allRows.filter((r) => r.getAttribute('data-session-id') !== sessionId);
+            const isSameContainer = activeContainer === sourceContainer;
+            const sourceIndex = isSameContainer
+              ? allTargetRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId)
+              : -1;
+            const otherTargetRows = allTargetRows.filter((r) => r.getAttribute('data-session-id') !== sessionId);
 
-            // 采集未位移时的静态物理几何坐标（减去当前 translateY）
-            const spans: Axis1DItemSpan[] = otherRows.map((r) => {
+            // 采集未位移时的静态物理几何坐标
+            const targetSpans: Axis1DItemSpan[] = otherTargetRows.map((r) => {
               const rect = r.getBoundingClientRect();
               const ty = readTranslateY(r);
               return {
@@ -322,44 +342,60 @@ export function useSessionListDrag(
               };
             });
 
-            // 计算无缝插入点
-            const insertIdx = compute1DInsertIndex(spans, clientY, dy);
-
-            // 计算位移向量并应用 translateY 让位
-            const offsets = compute1DShiftOffsets({
-              itemCount: otherRows.length,
+            const insertIdx = compute1DInsertIndex(targetSpans, clientY, dy);
+            const targetOffsets = compute1DShiftOffsets({
+              itemCount: otherTargetRows.length,
               sourceIndex: sourceIndex >= 0 ? sourceIndex : null,
               insertIndex: insertIdx,
               shiftStep: rowStepPx,
             });
 
-            // 清理不在当前活动容器中的其它行位移
+            for (let i = 0; i < otherTargetRows.length; i++) {
+              const row = otherTargetRows[i]!;
+              const offset = targetOffsets[i] ?? 0;
+              row.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
+              row.style.transform = offset !== 0 ? `translateY(${offset}px)` : '';
+              nextShifted.push(row);
+            }
+
+            // B. 跨分组拖拽时：原分组容器下的列表项向上补位收缩空洞！
+            if (!isSameContainer && sourceContainer) {
+              const allSourceRows = Array.from(
+                sourceContainer.querySelectorAll<HTMLElement>('li[data-session-id]')
+              ).filter((r) => {
+                if (r.offsetParent === null) return false;
+                const b = r.getBoundingClientRect();
+                return b.height > 0;
+              });
+
+              const origIdx = allSourceRows.findIndex((r) => r.getAttribute('data-session-id') === sessionId);
+              if (origIdx >= 0) {
+                // 原项之后的所有项向上平移 -28px 闭合空洞
+                for (let i = 0; i < allSourceRows.length; i++) {
+                  const sRow = allSourceRows[i]!;
+                  if (sRow.getAttribute('data-session-id') === sessionId) continue;
+                  if (i > origIdx) {
+                    sRow.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
+                    sRow.style.transform = `translateY(-${rowStepPx}px)`;
+                    nextShifted.push(sRow);
+                  }
+                }
+              }
+            }
+
+            // C. 清除不再处于位移状态的其余 DOM 元素
             for (const el of shiftedElements) {
-              if (!otherRows.includes(el)) {
+              if (!nextShifted.includes(el)) {
                 el.style.transform = '';
                 el.style.transition = '';
               }
             }
-            shiftedElements = otherRows;
+            shiftedElements = nextShifted;
 
-            for (let i = 0; i < otherRows.length; i++) {
-              const row = otherRows[i]!;
-              const offset = offsets[i] ?? 0;
-              row.style.transition = 'transform 140ms cubic-bezier(0.2, 0, 0, 1)';
-              row.style.transform = offset !== 0 ? `translateY(${offset}px)` : '';
-            }
-
-            const folder = isPinned
-              ? originFolder
-              : folderEl?.getAttribute('data-folder-name') || GENERAL_FOLDER;
-
-            const overId = spans[insertIdx]?.id || null;
-
+            const overId = targetSpans[insertIdx]?.id || null;
             currentInsertSessionId = overId;
-            currentTargetFolder = folder;
-            currentIsPinned = isPinned;
-
-            setDragOverPinned(isPinned);
+            currentTargetFolder = targetFolderName;
+            currentIsPinned = isPinnedTarget;
           }
         } else {
           // 游离态
@@ -393,7 +429,7 @@ export function useSessionListDrag(
           }
           document.body.classList.add('sidebar-dragging');
 
-          // 先生成原汁原味的 Ghost，再标记原行占位态（防止克隆出隐藏内容）
+          // 先克隆原汁原味的 Ghost，再标记原行占位态
           if (rowLi) {
             ghostEl = createSidebarSessionGhost(rowLi, rowRect);
             rowLi.classList.add(styles.isDraggingSource || 'isDraggingSource');
@@ -436,9 +472,6 @@ export function useSessionListDrag(
         clearAllShifts();
         document.body.classList.remove('sidebar-dragging');
         setActiveDragItem(null);
-        setDragOverPinned(false);
-        setDropIndicator(null);
-        setDragPreview(null);
       };
 
       const cancel = () => {
@@ -483,13 +516,17 @@ export function useSessionListDrag(
                 },
               });
             } else if (lastAppliedTarget.domain === 'sidebar') {
-              // 单次原子提交侧栏重排序
-              onMoveRef.current(
-                sessionId,
-                currentInsertSessionId,
-                currentTargetFolder,
-                currentIsPinned
-              );
+              // 约束守门：若项目会话被拖入非法区域则不提交
+              if (isProjectSession && !currentIsPinned && currentTargetFolder !== originFolder) {
+                // 非法落点：NO-OP
+              } else {
+                onMoveRef.current(
+                  sessionId,
+                  currentInsertSessionId,
+                  currentTargetFolder,
+                  currentIsPinned
+                );
+              }
             }
           }
         }
