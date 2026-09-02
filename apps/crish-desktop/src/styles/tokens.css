@@ -68,11 +68,63 @@ html[data-theme='light'] {
   --tint-strong: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
-  --tint-scrollbar-thumb: color-mix(
+  /* ==========================================================================
+     统一滚动条二元色彩与几何尺寸 Token 体系（Unified Scrollbar Design Tokens）
+     遵循用户最高定案铁律：二元灰度 (8.2% vs 20.2%，差值死锁 12.0%)，四级宽度零裸写
+     ========================================================================== */
+
+  /* --- 1. 二元色彩与灰度系统 (Binary Optical Color System) --- */
+  /* 未激活态滑块：实测灰度 8.2%，融入底板道林纸温与 8% 品牌暖橙底韵 (SSOT) */
+  --scrollbar-thumb-bg: color-mix(
     in srgb,
-    var(--text-primary) 18%,
+    var(--accent-orange, hsl(38 92% 50%)) 8%,
+    hsl(35 8% 91.8%)
+  );
+
+  /* 激活态滑块：实测灰度 20.2%，Hover 与 Active 严格二元同色，融入 16% 暖橙，差值死锁 12.0% */
+  --scrollbar-thumb-active: color-mix(
+    in srgb,
+    var(--accent-orange, hsl(38 92% 50%)) 16%,
+    hsl(35 12% 79.5%)
+  );
+
+  /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
+  --scrollbar-track-bg: transparent;
+
+  /* 端点微型矢量三角按钮前景色：继承未激活滑块色，悬停/激活随滑块同步沉稳加深 */
+  --scrollbar-button-color: var(--scrollbar-thumb-bg);
+  --scrollbar-button-hover-color: var(--scrollbar-thumb-active);
+  --scrollbar-button-hover-bg: color-mix(
+    in srgb,
+    var(--text-primary) 5%,
     transparent
   );
+  --scrollbar-button-active-bg: color-mix(
+    in srgb,
+    var(--text-primary) 10%,
+    transparent
+  );
+
+  /* --- 2. 四级宽度 Token 体系 (Four-Tier Width System，严禁裸写 px) --- */
+  --scrollbar-width-xs: 4px; /* 超细纤薄型：模型选择浮层、代码自动补全 Popover */
+  --scrollbar-width-sm: 5px; /* 紧凑型：侧边栏列表、抽屉面板、二级下拉菜单 */
+  --scrollbar-width-md: 7px; /* 标准默认型 (SSOT)：主会话瀑布流、正文编辑器、设置面板 */
+  --scrollbar-width-lg: 9px; /* 宽屏大视口型：双栏对比视口、超长 DiffCard、海量日志 */
+
+  /* 全局默认滑块宽度映射：未指定时默认走标准 md (7px) */
+  --scrollbar-width: var(--scrollbar-width-md);
+  --scrollbar-thumb-width: var(--scrollbar-width);
+
+  /* --- 3. 几何与端点护栏尺寸 Token (Geometry & Endcap Guardrails) --- */
+  --scrollbar-thumb-radius: var(--radius-full, 9999px); /* 胶囊圆角，保证两端半圆完全对称 */
+  --scrollbar-thumb-min-size: 18px; /* 最小滑块尺寸，防止极短滑块抓取失灵 */
+  --scrollbar-button-size: var(--scrollbar-width); /* 端点安全按钮尺寸 (长边)，激活 Blink TrackRect 端点护栏 */
+  --scrollbar-button-arrow-size: 4px; /* 内部等腰圆角微型三角矢量长边 */
+  --scrollbar-track-safe-gap: 2px; /* 滑块行程与端点按钮之间的代数隔离裕量 */
+
+  /* --- 向后兼容别名安全网 (Deprecated Aliases Bridge) ---
+     警告：以下别名仅供存量代码渐进过渡，全新业务严禁直接引用，将在维度 6 门禁收口后全面废弃 */
+  --tint-scrollbar-thumb: var(--scrollbar-thumb-bg);
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 
@@ -793,8 +845,6 @@ html[data-theme='light'] {
   --diff-sidebar-width-md: 120px;
   --diff-file-chip-min: 96px;
   --diff-file-chip-min-xs: 80px;
-  /*    tabs /    chips      */
-  --panel-h-scrollbar-size: 3px;
 
   /*
    *         ?/  ?/ footer    /     ?
@@ -853,11 +903,43 @@ html[data-theme='dark'] {
   --tint-strong: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
   --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
-  --tint-scrollbar-thumb: color-mix(
+  /* ==========================================================================
+     暗色环境二元滚动条色彩适配 (Dark Theme Binary Scrollbar Tokens)
+     遵循用户最高定案铁律：二元灰度，暗色防刺眼低眩光，四级宽度与几何继承全局
+     ========================================================================== */
+  /* 暗色未激活态：微弱透光冷灰，融入暗色底板 (--bg-primary: #1b1b1b) */
+  --scrollbar-thumb-bg: color-mix(
     in srgb,
-    var(--text-primary) 18%,
+    var(--text-primary, #dddddd) 20%,
     transparent
   );
+
+  /* 暗色激活态：Hover 与 Active 严格同色，坚挺沉着，透光率提升至 36%，杜绝高对比刺眼 */
+  --scrollbar-thumb-active: color-mix(
+    in srgb,
+    var(--text-primary, #dddddd) 36%,
+    transparent
+  );
+
+  /* 暗色轨道背景：保持完全透明 */
+  --scrollbar-track-bg: transparent;
+
+  /* 暗色端点按钮前景色与微交互底色 */
+  --scrollbar-button-color: var(--scrollbar-thumb-bg);
+  --scrollbar-button-hover-color: var(--scrollbar-thumb-active);
+  --scrollbar-button-hover-bg: color-mix(
+    in srgb,
+    var(--text-primary) 8%,
+    transparent
+  );
+  --scrollbar-button-active-bg: color-mix(
+    in srgb,
+    var(--text-primary) 15%,
+    transparent
+  );
+
+  /* 向后兼容别名安全网 */
+  --tint-scrollbar-thumb: var(--scrollbar-thumb-bg);
   --tint-overlay: color-mix(in srgb, var(--text-primary) 25%, transparent);
   --tint-highlight: color-mix(in srgb, var(--text-primary) 28%, transparent);
 

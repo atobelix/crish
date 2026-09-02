@@ -160,7 +160,7 @@
 }
 
 .schedFieldInput:focus {
-  box-shadow: 0 0 0 1px var(--tint-scrollbar-thumb);
+  box-shadow: 0 0 0 1px var(--border-subtle);
 }
 
 .schedFieldTextarea {
