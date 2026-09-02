@@ -157,29 +157,19 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       }
     }, [isMounted]);
 
-    // 活跃显示期间的光标逃逸与离开主动巡检（杜绝常驻狗皮膏药）
+    // 活跃显示期间的光标逃逸主动巡检（原生 DOM contains 拓扑检测，零坐标魔术数字）
     useEffect(() => {
       if (!visible) return;
       const target = childElRef.current;
       if (!target) return;
 
       const onGlobalPointerMove = (e: PointerEvent) => {
-        const tRect = target.getBoundingClientRect();
-        const tipEl = tipRef.current;
-        const tipRect = tipEl?.getBoundingClientRect();
+        const targetNode = e.target as Node | null;
+        if (!targetNode) return;
 
-        const inTarget =
-          e.clientX >= tRect.left - 4 &&
-          e.clientX <= tRect.right + 4 &&
-          e.clientY >= tRect.top - 4 &&
-          e.clientY <= tRect.bottom + 4;
-
-        const inTip =
-          tipRect &&
-          e.clientX >= tipRect.left - 2 &&
-          e.clientX <= tipRect.right + 2 &&
-          e.clientY >= tipRect.top - 2 &&
-          e.clientY <= tipRect.bottom + 2;
+        // 原生拓扑判断：光标目标既不在触发元素内，也不在提示气泡内，即确认离开
+        const inTarget = target.contains(targetNode);
+        const inTip = tipRef.current ? tipRef.current.contains(targetNode) : false;
 
         if (!inTarget && !inTip) {
           hideImmediate();
