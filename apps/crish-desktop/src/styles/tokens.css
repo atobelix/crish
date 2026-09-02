@@ -74,11 +74,11 @@ html[data-theme='light'] {
      ========================================================================== */
 
   /* --- 1. 二元色彩与灰度系统 (Binary Optical Color System) --- */
-  /* 未激活态滑块：若有若无微暖纸温 (H=30 S=3% L=91.4%)，物理像素 #EAE9E8，实测灰度 8.24%，绝无可见黄色 (SSOT) */
-  --scrollbar-thumb-bg: hsl(30 3% 91.4%);
+  /* 未激活态滑块：微调至 10.0% 灰度 (H=30 S=2% L=90%)，物理像素 #e6e6e5，确保浅色底板清晰可见 (SSOT) */
+  --scrollbar-thumb-bg: #e6e6e5;
 
-  /* 激活态滑块：同色系同构成若有若无纸温 (H=30 S=2% L=79.6%)，物理像素 #CCCBCA，实测灰度 20.00%，差值死锁 11.8%，绝无可见黄色 */
-  --scrollbar-thumb-active: hsl(30 2% 79.6%);
+  /* 激活态滑块：黄色/色相饱和度绝对不动 (H=30 S=2%)，灰度下调至 21.8% (L=78%)，物理像素 #c8c7c6，差值严格死锁约 12% */
+  --scrollbar-thumb-active: #c8c7c6;
 
   /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
   --scrollbar-track-bg: transparent;
@@ -97,13 +97,13 @@ html[data-theme='light'] {
     transparent
   );
 
-  /* --- 2. 四级宽度 Token 体系 (Four-Tier Width System，严禁裸写 px) --- */
-  --scrollbar-width-xs: 4px; /* 超细纤薄型：模型选择浮层、代码自动补全 Popover */
-  --scrollbar-width-sm: 5px; /* 紧凑型：侧边栏列表、抽屉面板、二级下拉菜单 */
-  --scrollbar-width-md: 7px; /* 标准默认型 (SSOT)：主会话瀑布流、正文编辑器、设置面板 */
-  --scrollbar-width-lg: 9px; /* 宽屏大视口型：双栏对比视口、超长 DiffCard、海量日志 */
+  /* --- 2. 四级宽度 Token 体系 (Four-Tier Width System，包含 2px 右侧防误触间距) --- */
+  --scrollbar-width-xs: 6px; /* 超细纤薄型：滑块净宽 4px + 2px 边距 */
+  --scrollbar-width-sm: 7px; /* 紧凑型：滑块净宽 5px + 2px 边距 */
+  --scrollbar-width-md: 9px; /* 标准默认型 (SSOT)：滑块净宽 7px + 2px 边距，告别 4px 过细 */
+  --scrollbar-width-lg: 11px; /* 宽屏大视口型：滑块净宽 9px + 2px 边距 */
 
-  /* 全局默认滑块宽度映射：未指定时默认走标准 md (7px) */
+  /* 全局默认滑块宽度映射：未指定时默认走标准 md (9px 总宽，7px 净宽) */
   --scrollbar-width: var(--scrollbar-width-md);
   --scrollbar-thumb-width: var(--scrollbar-width);
 
