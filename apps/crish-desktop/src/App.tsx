@@ -163,10 +163,12 @@ function App() {
           className="main-layout"
           aria-label="主工作区"
         >
-          <SidebarToggle
-            collapsed={sidebarCollapsed}
-            onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
-          />
+          {sidebarCollapsed && (
+            <SidebarToggle
+              collapsed={sidebarCollapsed}
+              onToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+            />
+          )}
 
           <div
             id="crish-sidebar"

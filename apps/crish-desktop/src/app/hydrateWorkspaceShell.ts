@@ -114,6 +114,35 @@ export function hydrateWorkspaceShell(): void {
     treeStore.setTree(result.tree);
   }
 
+  // 🌟 冷启动自愈扫描：确保全树所有拥有 Tab 的 ChatLeaf 均具备有效 activeTabId
+  const currentTree = treeStore.tree;
+  let hasRepaired = false;
+  const listChat = (layoutTreePkg as { listChatLeaves?: (root: unknown) => Array<{ id: string; tabs: Array<{ tabId: string }>; activeTabId?: string }> })
+    .listChatLeaves;
+  const chatLeaves = typeof listChat === 'function' ? listChat(currentTree.root) : [];
+  for (const leaf of chatLeaves) {
+    if (leaf.tabs && leaf.tabs.length > 0 && !leaf.activeTabId) {
+      const firstId = leaf.tabs[0]?.tabId;
+      if (firstId) {
+        leaf.activeTabId = firstId;
+        hasRepaired = true;
+      }
+    }
+  }
+  if (hasRepaired) {
+    treeStore.setTree({ ...currentTree });
+  }
+
+  // 首屏对齐全局会话与活动叶
+  const activeLeafId = treeStore.activeLeafId || chatLeaves[0]?.id;
+  if (activeLeafId) {
+    const activeLeaf = chatLeaves.find((l) => l.id === activeLeafId);
+    const activeTabId = activeLeaf?.activeTabId || activeLeaf?.tabs?.[0]?.tabId;
+    if (activeLeaf && activeTabId) {
+      root.shell.activateTab(activeLeaf.id, activeTabId);
+    }
+  }
+
   clearLegacyOpenTabsMap();
   root.shell.setShellReady(true);
 }

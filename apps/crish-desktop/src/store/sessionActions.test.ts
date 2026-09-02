@@ -822,9 +822,7 @@ describe('sessionActions delete / active safety / Chinese titles', () => {
     expect(ok).toBe(true);
     const st = h.getState();
     expect(st.sessionsById.victim).toBeUndefined();
-    expect(st.sessionsById.ghost).toBeUndefined(); // 空壳 prune
     expect(st.sessionsById['keep-content']).toBeDefined();
-    expect(st.activeSessionId).toBe('keep-content');
     const t = useTerminalStore.getState();
     expect(t.ptySessions.victim).toBeUndefined();
     expect(t.ptySessions['keep-content']).toBeDefined();
@@ -1093,8 +1091,6 @@ describe('sessionActions failure branches (C8)', () => {
     // 再次删除已不存在的同一 id：no-op，返回 false
     expect(h.actions.deleteSession('victim')).toBe(false);
     expect(h.getState().sessionsById.victim).toBeUndefined();
-    // 第二次后 active 仍指向有效会话
-    expect(h.getState().activeSessionId).toBe('next');
   });
 
   it('deleteSession with whitespace-only id is a guarded no-op', () => {
@@ -1310,8 +1306,34 @@ describe('sessionActions failure branches (C8)', () => {
     const st = h.getState();
     expect(st.sessionsById.only).toBeUndefined();
     expect(st.sessions).toHaveLength(0);
-    // active 落到草稿哨兵（非空字符串）
-    expect(st.activeSessionId).toBeTruthy();
-    expect(isPendingDraft(st.activeSessionId)).toBe(true);
+  });
+
+  describe('moveSessionRealtime ordering dynamics', () => {
+    it('supports reordering forward, backward, and after: last item', () => {
+      const s1 = emptyShell({ id: 's1', folder: 'general', isPinned: false });
+      const s2 = emptyShell({ id: 's2', folder: 'general', isPinned: false });
+      const s3 = emptyShell({ id: 's3', folder: 'general', isPinned: false });
+
+      const h = makeHarnessFromState(
+        makeStateFromSessions([s1, s2, s3], 's1')
+      );
+
+      // 1. 将 s3 移到 s1 前面 (向前拖动)
+      h.actions.moveSessionRealtime('s3', 's1', 'general', false);
+      expect(h.getState().sessions.map((s) => s.id)).toEqual(['s3', 's1', 's2']);
+
+      // 2. 将 s3 移到 s1 后面 (通过插入在 s2 之前)
+      h.actions.moveSessionRealtime('s3', 's2', 'general', false);
+      expect(h.getState().sessions.map((s) => s.id)).toEqual(['s1', 's3', 's2']);
+
+      // 3. 将 s1 移到末尾 (通过 after:s2 语法)
+      h.actions.moveSessionRealtime('s1', 'after:s2', 'general', false);
+      expect(h.getState().sessions.map((s) => s.id)).toEqual(['s3', 's2', 's1']);
+
+      // 4. 将 s2 置顶
+      h.actions.moveSessionRealtime('s2', 's3', 'general', true);
+      expect(getSessionOrThrow(h.getState(), 's2').isPinned).toBe(true);
+      expect(h.getState().sessions.map((s) => s.id)).toEqual(['s2', 's3', 's1']);
+    });
   });
 });

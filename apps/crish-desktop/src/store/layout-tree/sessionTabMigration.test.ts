@@ -444,4 +444,26 @@ describe('validateRestorableLayoutTree v3', () => {
     );
     expect(listRealSessionIds(root)).toEqual(['s1']);
   });
+
+  it('拥有 Tabs 但 activeTabId 为空的破坏态，迁移后必定自愈激活首个 Tab', () => {
+    const brokenTree = {
+      version: LAYOUT_TREE_VERSION,
+      root: {
+        type: 'leaf',
+        id: 'L1',
+        panelId: 'chat',
+        tabs: [
+          { tabId: 'tab-auto-1', sessionId: 'sess-auto-1', title: '会话1', workspaceKey: 'conex' },
+          { tabId: 'tab-auto-2', sessionId: 'sess-auto-2', title: '会话2', workspaceKey: 'conex' },
+        ],
+        activeTabId: '', // 破坏态：有 Tab 但无激活
+      },
+    };
+    const res = migrateToLeafOwnedTabs({ tree: brokenTree });
+    expect(res.ok).toBe(true);
+    if (res.ok) {
+      const leaves = collectLeaves(res.tree.root);
+      expect(leaves[0]!.activeTabId).toBe('tab-auto-1');
+    }
+  });
 });

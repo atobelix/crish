@@ -87,6 +87,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     // 条带成员 = 本叶已提交的真会话 tabs，禁止投影 openTabs
     const visibleTabs = useMemo(() => readLeafTabs(leaf), [leaf.tabs]);
     const activeTabId = readActiveTabId(leaf);
+    const effectiveActiveTabId = activeTabId || visibleTabs[0]?.tabId || '';
     void isActive;
 
     useEffect(
@@ -229,7 +230,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
         >
           <div className={styles.tabsList}>
             {visibleTabs.map((tab) => {
-              const isSelected = tab.tabId === activeTabId;
+              const isSelected = tab.tabId === effectiveActiveTabId;
               const session = tab.sessionId
                 ? sessionsById[tab.sessionId]
                 : undefined;
@@ -251,7 +252,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
                     }
                   }}
                   role="tab"
-                  aria-selected={tab.tabId === activeTabId}
+                  aria-selected={isSelected}
                   aria-label={title}
                   data-tab-id={tab.tabId}
                   data-session-id={tab.sessionId || undefined}

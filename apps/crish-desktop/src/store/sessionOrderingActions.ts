@@ -155,12 +155,18 @@ export function createSessionOrderingActions<T extends SessionStoreSlice>(
         sess.isPinned = isPinned;
         sess.folder = folder;
 
-        // Insert before targetSessionId; null / missing / self → append.
-        // Callers throttle on (target, folder, isPinned) to limit mid-drag churn.
+        // Insert before targetSessionId or after targetSessionId if prefixed with after:
+        // null / missing / self → append.
         if (targetSessionId && targetSessionId !== sessionId) {
-          const tIdx = getSessionIndex(state, targetSessionId);
+          const isAfter = targetSessionId.startsWith('after:');
+          const cleanTargetId = isAfter
+            ? targetSessionId.slice(6)
+            : targetSessionId;
+
+          const tIdx = getSessionIndex(state, cleanTargetId);
           if (tIdx !== -1) {
-            state.sessions.splice(tIdx, 0, sess);
+            const insertIdx = isAfter ? tIdx + 1 : tIdx;
+            state.sessions.splice(insertIdx, 0, sess);
           } else {
             state.sessions.push(sess);
           }

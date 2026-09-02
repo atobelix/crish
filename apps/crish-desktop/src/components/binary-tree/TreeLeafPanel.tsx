@@ -96,9 +96,17 @@ const COLLAPSED_DOCK = {
 
 function readActiveTab(leaf: LayoutLeaf): LeafSessionTab | undefined {
   const tabs = readLeafTabs(leaf);
+  if (tabs.length === 0) return undefined;
+
   const activeTabId = readActiveTabId(leaf);
-  if (!activeTabId) return undefined;
-  return tabs.find((t) => t.tabId === activeTabId);
+  if (activeTabId) {
+    const match = tabs.find((t) => t.tabId === activeTabId);
+    if (match) return match;
+  }
+
+  // 核心自愈防线：若拥有会话 Tab 但 activeTabId 为空或失效，
+  // 绝不能返回 undefined 沦落为草稿空屏！纯函数级默认收敛至首个真实 Tab！
+  return tabs[0];
 }
 
 function rectPropsEqual(

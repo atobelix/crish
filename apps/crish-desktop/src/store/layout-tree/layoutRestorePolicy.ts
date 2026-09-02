@@ -112,7 +112,7 @@ export function validateRestorableLayoutTree(
       continue;
     }
     if (
-      leaf.activeTabId &&
+      !leaf.activeTabId ||
       !leaf.tabs.some((t) => t.tabId === leaf.activeTabId)
     ) {
       return { ok: false, reason: 'active-tab-missing', chatCount };

@@ -289,8 +289,9 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
     const leaf = chats.find((l) => l.id === leafId);
     if (!leaf) return;
-    if (leaf.activeTabId) {
-      treeActivateTab(leafId, leaf.activeTabId);
+    const targetTabId = leaf.activeTabId || leaf.tabs[0]?.tabId;
+    if (targetTabId) {
+      treeActivateTab(leafId, targetTabId);
     } else {
       useLayoutTreeStore.getState().setActiveLeaf(leafId);
     }

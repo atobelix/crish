@@ -255,7 +255,7 @@ function finalizeLeaf(leaf: WorkLeaf): LayoutLeaf {
   const tabs = leaf.tabs.filter((t) => isRealSessionId(t.sessionId));
   const activeTabId = tabs.some((t) => t.tabId === leaf.activeTabId)
     ? leaf.activeTabId
-    : '';
+    : (tabs[0]?.tabId ?? '');
   return {
     type: 'leaf',
     id: leaf.id,
@@ -525,14 +525,10 @@ export function migrateToLeafOwnedTabs(
       const prefer = leaf.legacySid
         ? leaf.tabs.find((t) => t.sessionId === leaf.legacySid)
         : undefined;
-      if (prefer) leaf.activeTabId = prefer.tabId;
-      else if (
-        leaf.activeTabId &&
-        !leaf.tabs.some((t) => t.tabId === leaf.activeTabId)
-      ) {
+      if (prefer) {
+        leaf.activeTabId = prefer.tabId;
+      } else if (!leaf.tabs.some((t) => t.tabId === leaf.activeTabId)) {
         leaf.activeTabId = leaf.tabs[0]?.tabId ?? '';
-      } else if (!leaf.activeTabId && leaf.tabs.length > 0) {
-        /* 已是新对话界面，保留无选中 */
       }
       leaf.panelId = 'chat';
     }
