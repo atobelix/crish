@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useChatEmptyKind } from './useChatEmptyKind';
 import {
   useScopedSessionField,
@@ -6,6 +6,7 @@ import {
   type SessionStoreStateShape,
 } from './useScopedSessionField';
 import type { SessionMessage, SessionAgent } from '../../store/types';
+import { triggerSessionMessageHydrateIfNeeded } from '../../store/sessionCrudActions';
 
 export interface UseChatMessagesOptions {
   resolveSessionId: (s: SessionStoreStateShape) => string;
@@ -51,6 +52,11 @@ export function useChatMessages({
     resolveSessionId,
     useCallback((session) => session?.engineLastRunId, [])
   );
+
+  useEffect(() => {
+    if (!activeSessionId) return;
+    triggerSessionMessageHydrateIfNeeded(activeSessionId);
+  }, [activeSessionId]);
 
   const {
     displayMessages,

@@ -59,10 +59,14 @@ export function cancelAllPendingTooltips(exceptId?: string): void {
 export function claimTooltipSlot(id: string): boolean {
   if (isTooltipMuted()) return false;
   cancelAllPendingTooltips(id);
-  if (activeId && activeId !== id) {
-    registry.get(activeId)?.hide();
+  // 1. 状态机互斥：遍历所有 registered entry，灭掉除 id 以外的一切实例
+  for (const [otherId, entry] of registry.entries()) {
+    if (otherId !== id) {
+      entry.hide();
+    }
   }
   activeId = id;
+
   return true;
 }
 

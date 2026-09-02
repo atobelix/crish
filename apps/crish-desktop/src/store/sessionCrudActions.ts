@@ -166,52 +166,7 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
           );
           // Lazy message hydrate：list/sync 可只带 title；正文在 activate 时从引擎补。
           // 非丢消息 — 见 needsEngineMessageHydrate / store README「会话消息水合」。
-          if (needsEngineMessageHydrate(sess)) {
-            void import('../api/sessionEventHydrate').then(
-              ({ hydrateSessionMessagesFromEngine, mergeMessagesById }) => {
-                void hydrateSessionMessagesFromEngine(nextId).then((res) => {
-                  if (!res.ok) return;
-                  set((state) => {
-                    // getSessionForWrite：经 sessions[] 写，避免 immer 只 fork sessionsById
-                    // 导致 MCP/侧栏读 sessions[].messages 仍为 [] 的假「丢消息」
-                    const s = getSessionForWrite(state, nextId);
-                    if (!s) return;
-                    // 按 id 合并：本地乐观消息 + 引擎回放不双 append；重放 length 不增
-                    if (res.messages.length > 0) {
-                      s.messages = mergeMessagesById(
-                        s.messages || [],
-                        res.messages
-                      );
-                      s.timestamp = nowIsoTimestamp();
-                      s.timestampSource = 'remote';
-                      maybeAutoTitleSession(state, s);
-                    } else if (s.messages && s.messages.length > 0) {
-                      maybeAutoTitleSession(state, s);
-                    }
-                    // P1-D2：游标取 max 保护——分页拉全后 nextAfterSequence 必然
-                    // 前进；任何异常路径（如截断态）也不允许回拨既有游标
-                    // （对齐 R2 §6 修复建议 1）
-                    s.engineCursor = Math.max(
-                      s.engineCursor ?? 0,
-                      res.nextAfterSequence
-                    );
-                    if (res.lastRunId) s.engineLastRunId = res.lastRunId;
-                    s.hydratedFromEngine = true;
-                    // P1-D2：截断态标记。分页拉全成功（无 truncated）时清除——
-                    // 拉全后标记自然清除，persist 熔断随之解除（见
-                    // sessionRustDb.isHydrateTruncated）
-                    if (res.truncated === true) {
-                      s.hydrateTruncated = true;
-                    } else {
-                      delete s.hydrateTruncated;
-                    }
-                    // 再绑一次：保证 finalize 后 map 与数组同引用
-                    state.sessionsById[nextId] = s;
-                  });
-                });
-              }
-            );
-          }
+          triggerSessionMessageHydrateIfNeeded(nextId, get, set);
         }
       }
     },
@@ -365,3 +320,70 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
   const stateActions = createSessionStateActions(set);
   return { ...actions, ...draftActions, ...stateActions };
 }
+
+/**
+ * 跨模块可复用的会话正文懒水合触发器。
+ * 只要会话处于 needsEngineMessageHydrate（正文为空且未完成引擎水合），
+ * 即刻自发拉取，避免画面沦为空白草稿。
+ */
+export function triggerSessionMessageHydrateIfNeeded(
+  sessionId: string,
+  get?: SessionStoreGet,
+  set?: SessionImmerSet
+): void {
+  if (!sessionId || isPendingDraft(sessionId)) return;
+
+  const resolveGet = async () => {
+    if (get) return get();
+    const { useSessionStore } = await import('./sessionStore');
+    return useSessionStore.getState();
+  };
+
+  const resolveSet = async () => {
+    if (set) return set;
+    const { useSessionStore } = await import('./sessionStore');
+    return useSessionStore.setState;
+  };
+
+  void resolveGet().then((state) => {
+    const sess = getSessionById(state, sessionId);
+    if (!sess || !needsEngineMessageHydrate(sess)) return;
+
+    void Promise.all([
+      import('../api/sessionEventHydrate'),
+      resolveSet(),
+    ]).then(([{ hydrateSessionMessagesFromEngine, mergeMessagesById }, setter]) => {
+      void hydrateSessionMessagesFromEngine(sessionId).then((res) => {
+        if (!res.ok) return;
+        setter((draft) => {
+          const s = getSessionForWrite(draft, sessionId);
+          if (!s) return;
+          if (res.messages.length > 0) {
+            s.messages = mergeMessagesById(
+              s.messages || [],
+              res.messages
+            );
+            s.timestamp = nowIsoTimestamp();
+            s.timestampSource = 'remote';
+            maybeAutoTitleSession(draft, s);
+          } else if (s.messages && s.messages.length > 0) {
+            maybeAutoTitleSession(draft, s);
+          }
+          s.engineCursor = Math.max(
+            s.engineCursor ?? 0,
+            res.nextAfterSequence
+          );
+          if (res.lastRunId) s.engineLastRunId = res.lastRunId;
+          s.hydratedFromEngine = true;
+          if (res.truncated === true) {
+            s.hydrateTruncated = true;
+          } else {
+            delete s.hydrateTruncated;
+          }
+          draft.sessionsById[sessionId] = s;
+        });
+      });
+    });
+  });
+}
+

@@ -92,17 +92,8 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     );
     const isMultiPane = leavesCount > 1;
 
-    // 条带成员计算：若处于定时任务展示，展示「定时任务」Tab；若无已提交会话但在分屏下或有草稿，展示「新对话」Tab 确保始终可关分屏
+    // 条带成员计算：已提交会话 tabs，分屏下若无真会话但有草稿保留草稿以支持关闭
     const visibleTabs = useMemo(() => {
-      if (chatMainSurface === 'scheduled') {
-        return [
-          {
-            tabId: `scheduled-${leaf.id}`,
-            sessionId: '',
-            title: '定时任务',
-          },
-        ];
-      }
       const committedTabs = readLeafTabs(leaf);
       if (committedTabs.length > 0) {
         return committedTabs;
@@ -121,7 +112,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       return isMultiPane
         ? [{ tabId: `pane-${leaf.id}`, sessionId: '', title: '新对话' }]
         : [];
-    }, [chatMainSurface, leaf.id, leaf.tabs, isMultiPane]);
+    }, [leaf.id, leaf.tabs, isMultiPane]);
 
     const activeTabId = readActiveTabId(leaf);
     const effectiveActiveTabId = activeTabId || visibleTabs[0]?.tabId || '';
@@ -170,33 +161,14 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
 
     const handleTabClick = useCallback(
       (tab: LeafSessionTab) => {
-        if (tab.tabId.startsWith('scheduled-')) {
-          setChatMainSurface('scheduled');
-          return;
-        }
-        if (chatMainSurface === 'scheduled') {
-          setChatMainSurface('chat');
-        }
         sessionShell().activateTab(leaf.id, tab.tabId);
       },
-      [chatMainSurface, leaf.id, setChatMainSurface]
+      [leaf.id]
     );
 
     const handleTabClose = useCallback(
       (e: React.MouseEvent, tab: LeafSessionTab) => {
         e.stopPropagation();
-        if (tab.tabId.startsWith('scheduled-')) {
-          if (isMultiPane) {
-            const raw = leaf.tabs as unknown;
-            const tid =
-              Array.isArray(raw) && raw[0]?.tabId ? raw[0].tabId : tab.tabId;
-            sessionShell().removeTab(leaf.id, tid);
-          } else {
-            setChatMainSurface('chat');
-          }
-          return;
-        }
-
         const tabs = visibleTabs;
         const currentActive = readActiveTabId(leaf);
         // 关的是本叶 active 且还有邻居：立刻切邻居，避免 220ms 离场闪白
@@ -216,7 +188,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           leaveTimerRef.current = null;
         }, TAB_LEAVE_MS);
       },
-      [leaf, isMultiPane, setChatMainSurface, visibleTabs]
+      [leaf, visibleTabs]
     );
 
     const handleMouseDown = useCallback(

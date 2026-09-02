@@ -16,6 +16,7 @@ import {
 } from '../../api/workflowApi';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
 import { setActiveSessionId } from '../../api/storeAccess';
+import { useLayoutStore } from '../../store/layoutStore';
 import styles from './ScheduledTasksPanel.module.css';
 import { Button, Tooltip } from '../ui';
 import { ensureScheduledSession } from './workflowsSharedLib';
@@ -25,7 +26,7 @@ import { WorkflowList } from './WorkflowList';
 import { RunHistoryList } from './RunHistoryList';
 
 type Props = {
-  onBackToChat: () => void;
+  onBackToChat?: () => void;
 };
 
 export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
@@ -77,7 +78,8 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     ensureScheduledSession(run.sessionId, wfName, { activate: true });
     setActiveSessionId(run.sessionId);
     clearAgentPanelFocus();
-    onBackToChat();
+    useLayoutStore.getState().setChatMainSurface('chat');
+    onBackToChat?.();
     // 切会话即反馈，不 toast
   };
 

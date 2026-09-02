@@ -68,6 +68,13 @@ const BinaryTreeWorkspace = lazy(() =>
   }))
 );
 
+// 定时任务全局独立面板（选到定时任务无法分屏，单屏全尺寸呈现）
+const ScheduledTasksPanel = lazy(() =>
+  import('./components/settings/ScheduledTasksPanel').then((m) => ({
+    default: m.ScheduledTasksPanel,
+  }))
+);
+
 // ── 非关键路径组件：代码分割，按需加载 ──
 
 function App() {
@@ -80,6 +87,7 @@ function App() {
   );
   const sidebarCollapsed = useLayoutStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useLayoutStore((s) => s.setSidebarCollapsed);
+  const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
   const showSettingsOverlay = useSettingsUiStore((s) => s.showSettingsOverlay);
   const setShowSettingsOverlay = useSettingsUiStore(
     (s) => s.setShowSettingsOverlay
@@ -213,6 +221,10 @@ function App() {
                 <AppErrorBoundary compact title="工作区出错">
                   {!shellReady ? (
                     <SkeletonFallback height={400} />
+                  ) : chatMainSurface === 'scheduled' ? (
+                    <Suspense fallback={<SkeletonFallback height={400} />}>
+                      <ScheduledTasksPanel />
+                    </Suspense>
                   ) : (
                     <Suspense fallback={<SkeletonFallback height={400} />}>
                       <BinaryTreeWorkspace />

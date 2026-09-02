@@ -66,7 +66,7 @@ export function readOwnedLeaf(leaf: {
     typeof leaf.activeTabId === 'string' &&
     tabs.some((t) => t.tabId === leaf.activeTabId)
       ? leaf.activeTabId
-      : '';
+      : (tabs[0]?.tabId || '');
   return {
     type: 'leaf',
     id: leaf.id,
@@ -163,5 +163,5 @@ export function pictureFromActiveLeaf(
   lastChatLeafId: string | null
 ): SessionTab | null {
   const leaf = resolveActiveChatLeaf(lastChatLeafId);
-  return leaf.tabs.find((t) => t.tabId === leaf.activeTabId) ?? null;
+  return leaf.tabs.find((t) => t.tabId === leaf.activeTabId) ?? leaf.tabs[0] ?? null;
 }

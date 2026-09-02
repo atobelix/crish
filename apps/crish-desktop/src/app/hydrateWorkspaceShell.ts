@@ -18,6 +18,8 @@ import { getSettingsState } from '../store/storeAccess';
 import type { Settings } from '../api/clientApi';
 import { clearLegacyOpenTabsMap } from '../api/workspaceChromeTabs';
 import type { LayoutTree } from '../store/layout-tree/types';
+import { triggerSessionMessageHydrateIfNeeded } from '../store/sessionCrudActions';
+import { isPendingDraft } from '../store/draftSession';
 
 /** @deprecated use RESTORE_LAST_WORKSPACE_SETTING_KEY */
 const RESTORE_KEY = RESTORE_LAST_WORKSPACE_SETTING_KEY;
@@ -140,6 +142,14 @@ export function hydrateWorkspaceShell(): void {
     const activeTabId = activeLeaf?.activeTabId || activeLeaf?.tabs?.[0]?.tabId;
     if (activeLeaf && activeTabId) {
       root.shell.activateTab(activeLeaf.id, activeTabId);
+    }
+  }
+
+  // 遍历所有 ChatLeaf 的首选活动 Tab，自动预流水合，消除刷新后显示空屏需手动点击的缺陷
+  for (const leaf of chatLeaves as Array<{ id: string; tabs?: Array<{ tabId: string; sessionId?: string }>; activeTabId?: string }>) {
+    const activeTab = leaf.tabs?.find((t) => t.tabId === leaf.activeTabId) || leaf.tabs?.[0];
+    if (activeTab?.sessionId && !isPendingDraft(activeTab.sessionId)) {
+      triggerSessionMessageHydrateIfNeeded(activeTab.sessionId);
     }
   }
 
