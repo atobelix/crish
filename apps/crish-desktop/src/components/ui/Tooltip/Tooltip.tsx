@@ -452,6 +452,10 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
                       ? 'none'
                       : undefined,
                   '--tooltip-translate': translateFor(effectiveSide),
+                  '--tooltip-arrow-offset':
+                    clampedPos?.arrowOffset !== undefined
+                      ? `${clampedPos.arrowOffset}px`
+                      : undefined,
                 } as React.CSSProperties & Record<string, unknown>
               }
             >

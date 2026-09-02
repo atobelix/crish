@@ -80,7 +80,7 @@
 
 .top .arrow {
   bottom: -4px;
-  left: 50%;
+  left: var(--tooltip-arrow-offset, 50%);
   transform: translateX(-50%) rotate(45deg);
   border-right: 1px solid var(--hairline-strong);
   border-bottom: 1px solid var(--hairline-strong);
@@ -88,7 +88,7 @@
 
 .bottom .arrow {
   top: -4px;
-  left: 50%;
+  left: var(--tooltip-arrow-offset, 50%);
   transform: translateX(-50%) rotate(45deg);
   border-left: 1px solid var(--hairline-strong);
   border-top: 1px solid var(--hairline-strong);
@@ -96,7 +96,7 @@
 
 .left .arrow {
   right: -4px;
-  top: 50%;
+  top: var(--tooltip-arrow-offset, 50%);
   transform: translateY(-50%) rotate(45deg);
   border-right: 1px solid var(--hairline-strong);
   border-top: 1px solid var(--hairline-strong);
@@ -104,7 +104,7 @@
 
 .right .arrow {
   left: -4px;
-  top: 50%;
+  top: var(--tooltip-arrow-offset, 50%);
   transform: translateY(-50%) rotate(45deg);
   border-left: 1px solid var(--hairline-strong);
   border-bottom: 1px solid var(--hairline-strong);

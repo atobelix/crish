@@ -98,6 +98,7 @@ export interface ClampedTooltipResult {
   top: number;
   left: number;
   effectiveSide: TooltipSide;
+  arrowOffset: number;
 }
 
 /**
@@ -196,7 +197,25 @@ export function computeClampedPosition(
   const cLeft = Math.min(Math.max(TOOLTIP_EDGE_PAD, boxLeft), clampW);
   const cTop = Math.min(Math.max(TOOLTIP_EDGE_PAD, boxTop), clampH);
 
-  // 5. 反算 base 坐标（translate 由 CSS 变量施加）
+  // 5. 计算小尖角 (Arrow) 动态指向触发器几何中轴的相对位移
+  let arrowOffset: number;
+  if (effectiveSide === 'top' || effectiveSide === 'bottom') {
+    const targetCenterX = rect.left + rect.width / 2;
+    const rawArrow = targetCenterX - cLeft;
+    arrowOffset =
+      tipWidth > 24
+        ? Math.max(12, Math.min(tipWidth - 12, rawArrow))
+        : tipWidth / 2;
+  } else {
+    const targetCenterY = rect.top + rect.height / 2;
+    const rawArrow = targetCenterY - cTop;
+    arrowOffset =
+      tipHeight > 24
+        ? Math.max(12, Math.min(tipHeight - 12, rawArrow))
+        : tipHeight / 2;
+  }
+
+  // 6. 反算 base 坐标（translate 由 CSS 变量施加）
   let resLeft: number;
   let resTop: number;
   switch (effectiveSide) {
@@ -218,5 +237,5 @@ export function computeClampedPosition(
       break;
   }
 
-  return { left: resLeft, top: resTop, effectiveSide };
+  return { left: resLeft, top: resTop, effectiveSide, arrowOffset };
 }
