@@ -56,9 +56,10 @@ export function useChatInput({
   useEffect(() => {
     flushComposerDraft();
     activeSessionIdRef.current = activeSessionId;
-    const restored = activeSessionId
+    const seed = takeComposerSeed();
+    const restored = seed || (activeSessionId
       ? useSessionStore.getState().composerDrafts[activeSessionId] || ''
-      : '';
+      : '');
     setChatInputState(restored);
   }, [activeSessionId, flushComposerDraft]);
 

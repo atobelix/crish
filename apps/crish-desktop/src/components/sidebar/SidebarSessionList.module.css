@@ -268,11 +268,10 @@
 }
 
 .folderHeaderRow:hover .folderNewBtn,
-.folderHeaderRow:focus-within .folderNewBtn,
 .folderHeaderRow:hover .folderNewSession,
-.folderHeaderRow:focus-within .folderNewSession,
 .folderHeaderRow:hover :global(.button).folderNewBtn,
-.folderHeaderRow:focus-within :global(.button).folderNewBtn {
+.folderHeaderRow .folderNewBtn:focus-visible,
+.folderHeaderRow :global(.button).folderNewBtn:focus-visible {
   opacity: 1 !important;
   pointer-events: auto;
 }

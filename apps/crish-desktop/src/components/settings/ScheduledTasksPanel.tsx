@@ -11,15 +11,21 @@ import * as Lucide from 'lucide-react';
 import {
   WORKFLOW_SCHEDULE_PRESETS,
   emptyWorkflowDraft,
+  type WorkflowDefinition,
   type WorkflowRunEntry,
   type WorkflowScheduleDraft,
 } from '../../api/workflowApi';
 import { clearAgentPanelFocus } from '../../api/openAgentPanel';
-import { setActiveSessionId } from '../../api/storeAccess';
+import {
+  navigateToChatSession,
+  navigateToNewDraft,
+} from '../../store/storeAccess';
 import { useLayoutStore } from '../../store/layoutStore';
+import { setComposerSeed } from '../../api/composerSeed';
 import styles from './ScheduledTasksPanel.module.css';
-import { Button, Tooltip } from '../ui';
-import { ensureScheduledSession } from './workflowsSharedLib';
+import { Button, Tooltip, Menu } from '../ui';
+import type { SelectOptionItem } from '../ui';
+import { ensureScheduledSession, draftFromWorkflow } from './workflowsSharedLib';
 import { useWorkflowsState } from './useWorkflowsState';
 import { WorkflowForm } from './WorkflowForm';
 import { WorkflowList } from './WorkflowList';
@@ -43,6 +49,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     setOk,
     emptyCopy,
     handleCreate,
+    handleSave,
     handleToggle,
     handleTrigger,
     handleDelete,
@@ -50,12 +57,16 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
   } = state;
 
   const [showForm, setShowForm] = useState(false);
+  const [editingWorkflow, setEditingWorkflow] = useState<WorkflowDefinition | null>(null);
   const [draft, setDraft] = useState<WorkflowScheduleDraft>(emptyWorkflowDraft);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const createBtnRef = React.useRef<HTMLButtonElement>(null);
 
   const applyPreset = (presetId: string) => {
     const preset = WORKFLOW_SCHEDULE_PRESETS.find((p) => p.id === presetId);
     if (!preset) return;
     setShowForm(true);
+    setEditingWorkflow(null);
     setError('');
     setOk('');
     setDraft({ ...preset.draft });
@@ -63,32 +74,77 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
 
   const closeForm = () => {
     setShowForm(false);
+    setEditingWorkflow(null);
     setError('');
     setOk('');
     setDraft(emptyWorkflowDraft());
   };
 
-  const openRunSession = (run: WorkflowRunEntry) => {
-    if (!run.sessionId) {
-      // 无会话：错误路径，可 toast
-      showToast('该次运行暂无关联会话');
-      return;
-    }
-    const wfName = workflows.find((w) => w.id === run.workflowId)?.name || '任务';
-    ensureScheduledSession(run.sessionId, wfName, { activate: true });
-    setActiveSessionId(run.sessionId);
-    clearAgentPanelFocus();
-    useLayoutStore.getState().setChatMainSurface('chat');
-    onBackToChat?.();
-    // 切会话即反馈，不 toast
+  const handleEdit = (w: WorkflowDefinition) => {
+    setShowForm(true);
+    setEditingWorkflow(w);
+    setError('');
+    setOk('');
+    setDraft(draftFromWorkflow(w));
   };
 
-  const handleFormCreate = async () => {
-    const created = await handleCreate(draft);
-    if (!created) return;
+  const openRunSession = (run: WorkflowRunEntry) => {
+    const wfName = workflows.find((w) => w.id === run.workflowId)?.name || '任务';
+    const targetSessionId =
+      run.sessionId || `sched-${run.workflowId}-${run.runId || Date.now()}`;
+    ensureScheduledSession(targetSessionId, wfName, { activate: true });
+    navigateToChatSession(targetSessionId, { title: `[定时] ${wfName}` });
+    onBackToChat?.();
+  };
+
+  const handleFormSave = async () => {
+    const saved = await handleSave(draft, editingWorkflow);
+    if (!saved) return;
     setShowForm(false);
+    setEditingWorkflow(null);
     setDraft(emptyWorkflowDraft());
   };
+
+  const handleCreateInChat = () => {
+    const promptTemplate =
+      '请帮我创建一个定时任务：\n- 任务名称：\n- 执行周期：（例如 每天 09:00 / 每 30 分钟 / 0 9 * * *）\n- 任务指令：（描述希望 Agent 定时执行的任务）';
+    setComposerSeed(promptTemplate);
+    navigateToNewDraft();
+    setTimeout(() => {
+      setComposerSeed(promptTemplate);
+    }, 100);
+    onBackToChat?.();
+  };
+
+  const handleSelectCreateMenu = (id: string) => {
+    setCreateMenuOpen(false);
+    if (id === 'chat') {
+      handleCreateInChat();
+    } else if (id === 'manual') {
+      setEditingWorkflow(null);
+      setDraft(emptyWorkflowDraft());
+      setError('');
+      setOk('');
+      setShowForm(true);
+    }
+  };
+
+  const createMenuItems: SelectOptionItem[] = [
+    {
+      id: 'chat',
+      label: '在对话中创建',
+      hint: '由 Agent 根据自然语言说明自动创建',
+      icon: <Lucide.Sparkles size={14} strokeWidth={1.75} />,
+      onClick: () => handleSelectCreateMenu('chat'),
+    },
+    {
+      id: 'manual',
+      label: '手动填写表单',
+      hint: '自定义配置任务名称、提示词与调度周期',
+      icon: <Lucide.SlidersHorizontal size={14} strokeWidth={1.75} />,
+      onClick: () => handleSelectCreateMenu('manual'),
+    },
+  ];
 
   return (
     <div
@@ -103,27 +159,47 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
             {workflows.length > 0 ? `${workflows.length} 条` : ' '}
           </span>
         </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className={styles.actionBtn}
-              aria-expanded={showForm}
-              aria-controls="sched-in-chat-form"
-              onClick={() => {
-                if (showForm) {
-                  closeForm();
-                } else {
-                  setShowForm(true);
-                  setError('');
-                  setOk('');
-                }
-              }}
-              icon={<Lucide.Plus size={16} aria-hidden />}
-            >
-              {showForm ? '收起' : '新建'}
-            </Button>
-          </div>
+        <div style={{ position: 'relative' }}>
+          <Button
+            ref={createBtnRef}
+            type="button"
+            variant="secondary"
+            size="sm"
+            className={styles.actionBtn}
+            aria-expanded={showForm || createMenuOpen}
+            aria-controls={showForm ? 'sched-in-chat-form' : undefined}
+            onClick={() => {
+              if (showForm) {
+                closeForm();
+              } else {
+                setCreateMenuOpen((prev) => !prev);
+              }
+            }}
+            icon={
+              showForm ? (
+                <Lucide.ChevronUp size={16} aria-hidden />
+              ) : (
+                <Lucide.Plus size={16} aria-hidden />
+              )
+            }
+          >
+            {showForm ? '收起' : '新建'}
+          </Button>
+          <Menu
+            openState={{
+              open: createMenuOpen,
+              onOpenChange: setCreateMenuOpen,
+            }}
+            options={createMenuItems}
+            anchor={createBtnRef}
+            position={{ side: 'bottom', align: 'end' }}
+            onSelect={(id) => handleSelectCreateMenu(id)}
+            outsideHandlers={{
+              onInteractOutside: () => setCreateMenuOpen(false),
+            }}
+          />
+        </div>
+      </div>
 
       <div className={styles.schedPresetRow}>
         <div className={styles.schedPresetChips} role="group" aria-label="计划模板">
@@ -165,12 +241,12 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
           formId="sched-in-chat-form"
           draft={draft}
           busy={busy}
-          isEditing={false}
+          isEditing={Boolean(editingWorkflow)}
           onDraftChange={setDraft}
           onApplyPreset={applyPreset}
           onNameBlur={() => maybeWatchHint(draft.name)}
           onSave={() => {
-            void handleFormCreate();
+            void handleFormSave();
           }}
           onClose={closeForm}
         />
@@ -188,6 +264,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
         onTrigger={(w) => {
           void handleTrigger(w);
         }}
+        onEdit={handleEdit}
         onDelete={(w) => {
           void handleDelete(w);
         }}

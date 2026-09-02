@@ -194,6 +194,17 @@ export const WorkflowList: React.FC<WorkflowListProps> = ({
                       }
                     />
                   </Tooltip>
+                  <Tooltip content="编辑">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      aria-label={`编辑 ${w.name}`}
+                      disabled={busy}
+                      onClick={() => onEdit?.(w)}
+                      icon={<Lucide.Pencil size={16} aria-hidden />}
+                    />
+                  </Tooltip>
                   <Tooltip content="删除">
                     <Button
                       type="button"

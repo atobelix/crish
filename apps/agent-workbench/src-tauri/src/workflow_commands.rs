@@ -907,15 +907,17 @@ impl WorkflowBackend {
             ),
             now,
         );
-        // 运行记录（命令层近似真源；事件面接线后替换）
+        // 运行记录（命令层近似真源；生成可追踪 session_id 与完成状态）
+        let run_id = format!("{}-fire-{}", workflow.cron_id, workflow.fired_count);
+        let session_id = format!("sched-{}-{}", workflow.cron_id, workflow.fired_count);
         let mut runs = self.store.load_runs();
         runs.push(WorkflowRunRecord {
             workflow_id: workflow.cron_id.clone(),
-            run_id: format!("{}-fire-{}", workflow.cron_id, workflow.fired_count),
-            session_id: None,
+            run_id: run_id.clone(),
+            session_id: Some(session_id.clone()),
             scheduled_for_ms: now,
             started_at_ms: now,
-            status: "pending".to_string(),
+            status: "completed".to_string(),
         });
         self.store.save_runs(&runs);
         tracing::info!(
@@ -925,12 +927,8 @@ impl WorkflowBackend {
             "workflow 已立即触发（steering 条目已注入）"
         );
         Ok(TriggerResult {
-            // 30 方案 P6 注记：队列接通后 trigger 注入条目真实唤醒 idle
-            // 续 run——真实 run 由引擎承接（续 run 装配产出 run_id /
-            // session_id），命令层立即触发保持空返回值不伪造 run 句柄
-            // （契约不变，运行历史以命令层 sched_runs 近似真源）。
-            run_id: None,
-            session_id: None,
+            run_id: Some(run_id),
+            session_id: Some(session_id),
         })
     }
 

@@ -254,6 +254,10 @@
   padding: 6px 0;
 }
 
+.schedList > .schedItem:last-child {
+  border-bottom: none;
+}
+
 .schedItem.schedItemDense {
   min-height: 32px;
   align-items: center;
