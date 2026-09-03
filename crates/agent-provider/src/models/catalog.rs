@@ -44,7 +44,8 @@ pub use catalog_price::{PeakPricingSchedule, PriceDerivation, TieredPriceTier};
 /// [ModelCatalogEntry::offered_levels] 消费（R4 T4.2 模型级改名消费入口）。
 pub type TierEffortMap = BTreeMap<String, Option<String>>;
 
-/// `reasoning_effort_tiers` / `thinking_level_map` 的 serde 反序列化：
+/// `thinking_tiers`（v2 单一载体，取代旧 `reasoning_effort_tiers` / `thinking_level_map`
+/// 双字段）的 serde 反序列化：
 /// 兼容三形（向后兼容优先，缺省 None 经 `#[serde(default)]` 兜底不触发本函数）：
 /// - `null` → None；
 /// - 旧 `["low","medium"]` 数组 → 各档位 wire 拼写同键（旧版 `Vec<String>` 行为逐字段不变）；
@@ -105,8 +106,8 @@ where
 /// 已从结构移除（03 §7.1 迁移表 #17/#18：长上下文档迁入 `tieredPricing`）；
 /// v1 旧 JSON 中的这些键由 serde 忽略，仍可正常解析（兼容不炸）。
 /// 全部字段提供 Default（`#[serde(default)]`），缺字段条目可解析（A3 P2-10 由测试钉死）。
-/// G2 扩展：`reasoning_effort_tiers` 升级为 [TierEffortMap]（档位→wire 映射载体），
-/// 新增并列字段 `thinking_level_map`（pi-ai 语义，与前者同构）。
+/// G2 扩展：档位载体统一为单一 [TierEffortMap]（`thinking_tiers`，v2 单源裁决——
+/// 不允许向后兼容多轨，旧双字段废止）。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ModelCatalogEntry {
@@ -199,35 +200,45 @@ pub struct ModelCatalogEntry {
     // ── 能力位（F 组，缺省 false = 保守关闭）──
     /// Responses API 支持（DeepSeek 仅 v4-flash；engine.rs provider_url 判定用）
     pub supports_responses: bool,
+    /// 是否支持 reasoning（粗粒度门；= thinking_tiers 非空，v2 单源派生）
     pub supports_reasoning: bool,
     /// 是否接受 reasoning_effort 参数（OpenAI/DeepSeek/Qwen/GLM/Kimi 原生格式）
     pub supports_reasoning_effort: bool,
-    /// 模型级档位白名单 + wire 拼写映射（键=规范档位；值=Some(wire 拼写) 提供该档 /
-    /// None=隐藏不支持档）。G2 模型级档位载体：从旧 `Vec<String>` 白名单扩展为
-    /// 「档位 → Option<wire 拼写>」映射，同时承载白名单与 G6 wire 改名。
-    ///
-    /// serde 兼容三形：`null`/缺省 → None；旧 `["low","medium","xhigh"]` 数组 →
-    /// 各档位 wire 拼写同规范名（向后兼容）；`{"low":null,"medium":"high"}` 对象 →
-    /// 直译（Some=wire 拼写改名 / None=隐藏）。消费侧经 [ModelCatalogEntry::wire_effort_for]
-    /// / [ModelCatalogEntry::offered_levels] 查询（R4 T4.2 模型级改名消费入口）。
+    /// 模型级思考档位白名单 + wire 拼写映射（**v2 单一载体**，取代旧
+    /// `reasoning_effort_tiers` 与 `thinking_level_map` 双字段——单源裁决，
+    /// 不允许向后兼容多轨）。键=规范档位；值=Some(wire 拼写) 提供该档 /
+    /// None=隐藏不支持档。消费侧经 [ModelCatalogEntry::wire_effort_for] /
+    /// [ModelCatalogEntry::offered_levels] 查询（R4 T4.2 模型级改名消费入口）。
     #[serde(default, deserialize_with = "deserialize_tier_map")]
-    pub reasoning_effort_tiers: Option<TierEffortMap>,
-    /// pi-ai thinkingLevelMap 语义载体（键=规范档位；值=Some(wire 拼写)/None=隐藏不支持档），
-    /// 与 [Self::reasoning_effort_tiers] 同构（数据源 pi-ai 每模型 `thinkingLevelMap`，
-    /// 如 deepseek-v4-flash `{"minimal":null,...,"high":"high","max":"max"}`）。
-    /// 消费查询与 reasoning_effort_tiers 合一：[ModelCatalogEntry::wire_effort_for]
-    /// 优先查本字段，未命中回落 reasoning_effort_tiers；向后兼容优先（新增字段，缺省 None）。
-    #[serde(default, deserialize_with = "deserialize_tier_map")]
-    pub thinking_level_map: Option<TierEffortMap>,
+    pub thinking_tiers: Option<TierEffortMap>,
+    /// 思考参数形态（v2 单源；枚举串见 [crate::request::vendor::ReasoningFormat]：
+    /// "reasoning_effort" / "thinking_budget" / "thinking_adaptive" / "thinking_level" /
+    /// "qwen_enable_thinking" / "zai_thinking" / "openrouter_reasoning" / "none"）。
+    /// 各协议 builder 按此字段映射思考 wire（不再按模型名前缀硬编码猜测）。
+    pub thinking_format: Option<String>,
+    /// 思考预算默认值（token；anthropic/gemini 系档位映射用）
+    pub thinking_budget_default: Option<u32>,
+    /// 思考预算上界（可选）
+    pub thinking_budget_max: Option<u32>,
+    /// 输入模态（text / image / video / audio / pdf；v2 单源）
+    pub input_modalities: Option<Vec<String>>,
+    /// 输出模态（text / image / video / audio；v2 单源）
+    pub output_modalities: Option<Vec<String>>,
+    /// 便捷位：是否支持图像输入（= input_modalities 含 image）
     pub supports_vision: bool,
+    /// 便捷位：是否支持视频输入（= input_modalities 含 video；v2 新增）
+    pub supports_video_input: bool,
     pub supports_function_calling: bool,
     pub supports_parallel_function_calling: bool,
     pub supports_system_messages: bool,
     pub supports_response_schema: bool,
     pub supports_tool_choice: bool,
     pub supports_web_search: bool,
+    /// 便捷位：是否支持音频输入（= input_modalities 含 audio）
     pub supports_audio_input: bool,
+    /// 便捷位：是否支持音频输出（= output_modalities 含 audio）
     pub supports_audio_output: bool,
+    /// 便捷位：是否支持 PDF 输入（= input_modalities 含 pdf）
     pub supports_pdf_input: bool,
     pub supports_assistant_prefill: bool,
     pub supports_computer_use: bool,
@@ -257,38 +268,24 @@ impl ModelCatalogEntry {
         format!("{vendor}::{model}")
     }
 
-    /// 模型级档位 → wire 拼写查询（G2 载体消费；供 R4 T4.2 模型级 wire 改名消费）。
+    /// 模型级档位 → wire 拼写查询（v2 单一载体 [Self::thinking_tiers]；R4 T4.2 模型级改名消费）。
     ///
-    /// 合并语义（向后兼容优先、pi-ai 更细者优先）：
-    /// `thinking_level_map` 优先命中 → 回车；未命中回落 `reasoning_effort_tiers`；
-    /// 两字段均未收录该档 → None。仅返回**提供（Some）**档位的 wire 拼写；
-    /// 隐藏档（None 值）与未收录档一律返回 None（参与「不支持」归一化/拒绝）。
-    ///
-    /// 返回的 wire 拼写可与键同名（常规）或改名（G6，如 `{"medium":"high"}` → "high"）。
+    /// 合并语义（v2 单源，废止旧双字段回落）：`thinking_tiers` 收录该档 → 返回其 wire
+    /// 拼写（可为改名，如 `{"medium":"high"}` → "high"）；未收录 / 隐藏档（None 值）→ None。
+    /// 仅返回**提供（Some）**档位的 wire 拼写；隐藏档与未收录档一律返回 None。
     pub fn wire_effort_for(&self, level: &str) -> Option<&str> {
-        if let Some(map) = &self.thinking_level_map {
-            if let Some(wire) = map.get(level) {
-                return wire.as_deref();
-            }
-        }
-        self.reasoning_effort_tiers
+        self.thinking_tiers
             .as_ref()
             .and_then(|map| map.get(level))
             .and_then(|wire| wire.as_deref())
     }
 
-    /// 提供档位集合（wire 拼写为 Some=提供的档位）：跨 `thinking_level_map` 与
-    /// `reasoning_effort_tiers` 并集，字典序返回。隐藏档（None 值）不入集。
+    /// 提供档位集合（wire 拼写为 Some=提供的档位）：`thinking_tiers` 中提供档位的并集，
+    /// 字典序返回。隐藏档（None 值）不入集。
     /// 供「模型能力描述」只读接口（R2 T2.4）暴露稳定档位集（前端档位面板唯一数据源）。
     pub fn offered_levels(&self) -> Vec<String> {
         let mut levels = BTreeSet::new();
-        for map in [
-            self.thinking_level_map.as_ref(),
-            self.reasoning_effort_tiers.as_ref(),
-        ]
-        .into_iter()
-        .flatten()
-        {
+        if let Some(map) = &self.thinking_tiers {
             for (level, wire) in map {
                 if wire.is_some() {
                     levels.insert(level.clone());

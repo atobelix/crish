@@ -20,6 +20,11 @@ import {
   setAppSettings,
 } from '../../api/store-access/settingsAccess';
 import { clientApi } from '../../api/clientApi';
+import {
+  THINKING_LEVEL_LABELS,
+  thinkingLevelOptionsFor,
+  resolveCatalogEfforts,
+} from '../../api/thinkingGear';
 
 export type Props = {
   activeModel?: string | null;
@@ -30,15 +35,6 @@ export type Props = {
   /** 真实可见徽标，作 Radix Anchor；禁止再走 Popover.Trigger */
   anchor: React.RefObject<HTMLElement | null>;
 };
-
-const THINKING_PILLS = [
-  { value: 'off', label: 'Off' },
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'xhigh', label: 'X-High' },
-  { value: 'max', label: 'Max' },
-];
 
 export const ModelBadgePickerMenu: React.FC<Props> = ({
   activeModel,
@@ -135,9 +131,8 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   }, [onOpenChange, onClose]);
 
   const currentThinkingDisplay = useMemo(() => {
-    if (!storedThinking || storedThinking === 'default') return 'High';
-    const match = THINKING_PILLS.find((p) => p.value === storedThinking);
-    return match ? match.label : storedThinking;
+    if (!storedThinking || storedThinking === 'default') return '提供方默认';
+    return THINKING_LEVEL_LABELS[storedThinking] ?? storedThinking;
   }, [storedThinking]);
 
   if (!open) return null;
@@ -244,22 +239,26 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                   <span className={styles.thinkingTitle}>思考强度</span>
                   <span className={styles.thinkingValue}>{currentThinkingDisplay}</span>
                 </div>
+                {/* 档位单源 = thinkingGear（catalog 描述接口白名单 + 提供方默认）；
+                    删除了 THINKING_PILLS 硬编码数组与 'High' 谎报（模型能力战役 v2） */}
                 <div className={styles.thinkingTrack}>
-                  {THINKING_PILLS.map((p) => {
-                    const isActive =
-                      storedThinking === p.value ||
-                      (!storedThinking && p.value === 'high');
-                    return (
-                      <button
-                        key={p.value}
-                        type="button"
-                        className={`${styles.thinkingPill} ${isActive ? styles.activePill : ''}`}
-                        onClick={() => handleSelectThinking(p.value)}
-                      >
-                        {p.label}
-                      </button>
-                    );
-                  })}
+                  {thinkingLevelOptionsFor(resolveCatalogEfforts(activeModel ?? '')).map(
+                    (o) => {
+                      const isActive =
+                        storedThinking === o.value ||
+                        (!storedThinking && o.isProviderDefault);
+                      return (
+                        <button
+                          key={o.value}
+                          type="button"
+                          className={`${styles.thinkingPill} ${isActive ? styles.activePill : ''}`}
+                          onClick={() => handleSelectThinking(o.value)}
+                        >
+                          {o.label}
+                        </button>
+                      );
+                    }
+                  )}
                 </div>
               </div>
             </div>

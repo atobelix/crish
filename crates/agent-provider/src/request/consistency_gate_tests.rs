@@ -62,7 +62,7 @@ fn entry_with_tiers(
         "provider": vendor,
         "vendor": vendor,
         "supportsReasoning": supports_reasoning,
-        "reasoningEffortTiers": tiers,
+        "thinkingTiers": tiers,
     });
     serde_json::from_value(value).expect("条目解析")
 }

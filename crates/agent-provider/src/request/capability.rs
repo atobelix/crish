@@ -38,36 +38,41 @@
 
 use crate::config::Endpoint;
 use crate::models::{ModelCatalog, ModelCatalogEntry};
-use crate::request::{infer_thinking_capability, resolve_wire_protocol, WireProtocol};
+use crate::request::{resolve_wire_protocol, WireProtocol};
 
 /// 模型能力描述（描述面只读数据；G8-a 契约登记）。
 ///
 /// 均为纯派生字段，消费方只读；不承载请求构建逻辑（请求侧走 R4 校验面）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelCapability {
-    /// 是否支持 reasoning。粗粒度门：模型级档位白名单非空 / catalog `supports_reasoning`
-    /// 能力位 / 系列级能力表三源合并（见 [describe_model]）。
+    /// 是否支持 reasoning（v2 单源：= thinking_tiers 非空，见 [describe_model]）。
     pub supports_reasoning: bool,
     /// 档位白名单（规范档位字符串，只含支持的档位，隐藏档不出现）。
-    /// 模型级存在时 = [ModelCatalogEntry::offered_levels]（字典序并集）；
-    /// 系列级兜底时 = 系列能力表 levels 的规范名（不含 Off）。
+    /// 单源 = [ModelCatalogEntry::offered_levels]（`thinking_tiers` 提供档，字典序并集）。
     pub efforts: Vec<String>,
     /// 派生默认档位（efforts 首个；efforts 为空 → None）。非显式配置。
     pub default_effort: Option<String>,
     /// 模型级 wire 协议（复用 C4 [WireProtocol] 单一真源 [resolve_wire_protocol]）。
     pub wire_protocol: WireProtocol,
+    /// 思考参数形态（条目 `thinking_format` 单源；None = 未声明，协议 builder 按缺省映射）。
+    pub thinking_format: Option<String>,
+    /// 思考预算默认值（token；条目 `thinking_budget_default` 单源）。
+    pub thinking_budget_default: Option<u32>,
+    /// 思考预算上界（条目 `thinking_budget_max` 单源）。
+    pub thinking_budget_max: Option<u32>,
 }
 
-/// 描述一个模型的能力（G8-a 只读描述接口，合并 `infer_thinking_capability` + catalog 能力位）。
+/// 描述一个模型的能力（G8-a 只读描述接口；v2 单源裁决——只读 catalog 条目字段，
+/// 不推断、不系列兜底、不硬编码猜测）。
 ///
-/// ## 合并语义
-/// 1. **档位白名单**：模型级 [ModelCatalogEntry::offered_levels] 非空 → 以模型级为准；
-///    未声明 / 非法(空) → 系列级 [infer_thinking_capability] levels 兜底（规范名）。
-/// 2. **supports_reasoning**：模型级白名单非空 → true；否则 = series.supported
-///    ∧ catalog 粗粒度门控（entry 不存在或 entry.supports_reasoning 非 false）。
-///    即 catalog 显式 `supports_reasoning=false` 时保守为 false（不隐藏，仅该模型）。
-/// 3. **default_effort**：efforts 首个（派生默认）。
-/// 4. **wire_protocol**：[resolve_wire_protocol] 单一真源（C4；mode → supports_responses →
+/// ## 单源语义（v2，取代旧「目录档位 ∪ 系列猜测表」双源）
+/// 1. **档位白名单**：条目 [ModelCatalogEntry::offered_levels]（`thinking_tiers` 提供档，
+///    隐藏档不入集）。条目未声明 → 空白名单（不猜测）。
+/// 2. **supports_reasoning**：= thinking_tiers 非空（提供档存在）。条目未声明 → false。
+/// 3. **default_effort**：efforts 首个（派生默认；空 → None）。
+/// 4. **thinking_format / budget**：条目 `thinking_format` / `thinking_budget_default` /
+///    `thinking_budget_max`（None = 未声明）。
+/// 5. **wire_protocol**：[resolve_wire_protocol] 单一真源（C4；mode → supports_responses →
 ///    endpoint → chat 兜底）。
 ///
 /// 纯函数：无 IO、无状态、只读 [ModelCatalog]；任何 bad config 不 panic（不隐藏提供方）。
@@ -78,32 +83,24 @@ pub fn describe_model(
     endpoint: Option<Endpoint>,
 ) -> ModelCapability {
     let entry = catalog.lookup(vendor, model);
-    let series = infer_thinking_capability(model);
 
-    // 1. 模型级档位白名单优先：offered_levels 提供档并集（隐藏档不入集、规范档位）。
-    let model_levels = entry
+    // 1. 档位白名单 = thinking_tiers 提供档（隐藏档不入集；条目未声明 → 空）。
+    let efforts = entry
         .map(ModelCatalogEntry::offered_levels)
         .unwrap_or_default();
 
-    // 2. 档位白名单 + supports_reasoning 合并（模型级非空 → 模型级为准）。
-    let (efforts, supports_reasoning) = if !model_levels.is_empty() {
-        (model_levels, true)
-    } else {
-        // 模型级未声明/非法 → 系列级兜底，叠加 catalog 能力位粗粒度保守门控。
-        let series_levels: Vec<String> = series
-            .levels
-            .iter()
-            .map(|level| level.as_str().to_owned())
-            .collect();
-        // entry 不存在（未知模型）→ 无门控（true）；存在且显式 supports_reasoning=false → 保守 false。
-        let coarse_gate = entry.is_none_or(|entry| entry.supports_reasoning);
-        (series_levels, series.supported && coarse_gate)
-    };
+    // 2. supports_reasoning = 白名单非空（单源，不做系列兜底猜测）。
+    let supports_reasoning = !efforts.is_empty();
 
     // 3. 派生默认档位（efforts 首个；空 → None）。
     let default_effort = (!efforts.is_empty()).then(|| efforts[0].clone());
 
-    // 4. wire 协议单一真源（C4）。
+    // 4. 思考参数形态与预算（条目单源；None = 未声明）。
+    let thinking_format = entry.and_then(|e| e.thinking_format.clone());
+    let thinking_budget_default = entry.and_then(|e| e.thinking_budget_default);
+    let thinking_budget_max = entry.and_then(|e| e.thinking_budget_max);
+
+    // 5. wire 协议单一真源（C4）。
     let wire_protocol = resolve_wire_protocol(catalog, vendor, model, endpoint);
 
     ModelCapability {
@@ -111,6 +108,9 @@ pub fn describe_model(
         efforts,
         default_effort,
         wire_protocol,
+        thinking_format,
+        thinking_budget_default,
+        thinking_budget_max,
     }
 }
 

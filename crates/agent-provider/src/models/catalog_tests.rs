@@ -852,7 +852,7 @@ fn v2_entry_serde_roundtrip_full_fields() {
         "supportsResponses": true,
         "supportsReasoning": true,
         "supportsReasoningEffort": true,
-        "reasoningEffortTiers": ["low", "medium", "xhigh"],
+        "thinkingTiers": ["low", "medium", "xhigh"],
         "supportsVision": true,
         "supportsToolChoice": true,
         "supportsWebSearch": false,
@@ -917,7 +917,7 @@ fn v2_entry_serde_roundtrip_full_fields() {
         Some(&["5m".to_string(), "1h".to_string()][..])
     );
     assert_eq!(
-        entry.reasoning_effort_tiers,
+        entry.thinking_tiers,
         Some(BTreeMap::from([
             ("low".to_string(), Some("low".to_string())),
             ("medium".to_string(), Some("medium".to_string())),
@@ -1339,11 +1339,11 @@ fn t11_legacy_vec_tiers_parse_to_identity_map() {
         "provider": "dashscope",
         "vendor": "qwen",
         "supportsReasoningEffort": true,
-        "reasoningEffortTiers": ["low", "medium", "xhigh"],
+        "thinkingTiers": ["low", "medium", "xhigh"],
     }))
     .expect("旧 Vec 数组形式必须可解析");
     assert_eq!(
-        entry.reasoning_effort_tiers,
+        entry.thinking_tiers,
         Some(BTreeMap::from([
             ("low".to_string(), Some("low".to_string())),
             ("medium".to_string(), Some("medium".to_string())),
@@ -1361,14 +1361,14 @@ fn t11_legacy_vec_tiers_parse_to_identity_map() {
 
     // null 与缺省 → None
     let null_entry: ModelCatalogEntry =
-        serde_json::from_value(serde_json::json!({ "reasoningEffortTiers": null }))
+        serde_json::from_value(serde_json::json!({ "thinkingTiers": null }))
             .expect("null 必须解析为 None");
-    assert_eq!(null_entry.reasoning_effort_tiers, None);
+    assert_eq!(null_entry.thinking_tiers, None);
 
     // 缺省（default 兜底）→ None
     let default_entry: ModelCatalogEntry =
         serde_json::from_value(serde_json::json!({ "model": "x" })).expect("缺省必须可解析");
-    assert_eq!(default_entry.reasoning_effort_tiers, None);
+    assert_eq!(default_entry.thinking_tiers, None);
 }
 
 /// 新映射形式（`{"low":null,"medium":"high"}`）serde roundtrip，含 None 隐藏项
@@ -1378,28 +1378,18 @@ fn t11_map_tiers_roundtrip_with_hidden_items() {
         "model": "glm-5.2",
         "provider": "zai",
         "vendor": "glm",
-        "reasoningEffortTiers": {"low": null, "medium": "high", "high": "high", "max": "max"},
-        "thinkingLevelMap": {"minimal": null, "low": null, "medium": "high", "max": null}
+        "thinkingTiers": {"low": null, "medium": "high", "high": "high", "max": "max", "minimal": null}
     }"#;
     let entry: ModelCatalogEntry = serde_json::from_str(raw).expect("新映射形式必须可解析");
-    // reasoning_effort_tiers：Some=wire 提供 / None=隐藏
+    // v2 单载体：thinking_tiers 为唯一档位源，Some=wire 提供 / None=隐藏
     assert_eq!(
-        entry.reasoning_effort_tiers,
+        entry.thinking_tiers,
         Some(BTreeMap::from([
             ("low".to_string(), None),
             ("medium".to_string(), Some("high".to_string())),
             ("high".to_string(), Some("high".to_string())),
             ("max".to_string(), Some("max".to_string())),
-        ]))
-    );
-    // thinking_level_map：独立字段，语义同构
-    assert_eq!(
-        entry.thinking_level_map,
-        Some(BTreeMap::from([
             ("minimal".to_string(), None),
-            ("low".to_string(), None),
-            ("medium".to_string(), Some("high".to_string())),
-            ("max".to_string(), None),
         ]))
     );
     // roundtrip：序列化后重新解析必须逐位一致（含 None 隐藏项）
@@ -1409,9 +1399,7 @@ fn t11_map_tiers_roundtrip_with_hidden_items() {
     assert_eq!(reparsed, entry);
 
     // 隐藏档（None）不进入提供档集；提供的档并集字典序。
-    // thinking_level_map 提供 medium（max/low/minimal 均隐藏）；
-    // reasoning_effort_tiers 提供 medium/high/max（low 隐藏）
-    // → 并集 {medium, high, max} 字典序；两字段均隐藏/无的档不入集。
+    // 提供档 = {medium(改名 high), high, max}；隐藏档 minimal/low 不入集。
     assert_eq!(
         entry.offered_levels(),
         vec!["high".to_string(), "max".to_string(), "medium".to_string()]
@@ -1425,7 +1413,7 @@ fn t11_map_tiers_roundtrip_with_hidden_items() {
 fn t11_wire_effort_for_rename_and_hidden() {
     // 改名映射（独立 reasoning_effort_tiers 改名场景）
     let renamed: ModelCatalogEntry = serde_json::from_value(serde_json::json!({
-        "reasoningEffortTiers": {"medium": "high", "low": "low"},
+        "thinkingTiers": {"medium": "high", "low": "low"},
     }))
     .expect("改名映射必须可解析");
     assert_eq!(
@@ -1442,7 +1430,7 @@ fn t11_wire_effort_for_rename_and_hidden() {
 
     // 隐藏档（None 值）：wire_effort_for 返回 None，offered_levels 不含该档
     let hidden: ModelCatalogEntry = serde_json::from_value(serde_json::json!({
-        "thinkingLevelMap": {"minimal": null, "low": null, "high": "high", "max": "max"},
+        "thinkingTiers": {"minimal": null, "low": null, "high": "high", "max": "max"},
     }))
     .expect("含隐藏档映射必须可解析");
     assert_eq!(
@@ -1466,37 +1454,36 @@ fn t11_wire_effort_for_rename_and_hidden() {
     );
 }
 
-/// 查询辅助融合 two 字段：thinking_level_map 优先，reasoning_effort_tiers 回落
+/// 查询辅助单载体：thinking_tiers 为唯一档位源（v2 单源裁决，无跨字段回落）
 #[test]
-fn t11_wire_effort_for_falls_back_across_fields() {
+fn t11_wire_effort_for_single_source() {
     let entry: ModelCatalogEntry = serde_json::from_value(serde_json::json!({
-        // thinkingLevelMap 只提供 high/max 且 maximal 改名；tiers 提供 low/medium
-        "reasoningEffortTiers": {"low": "low", "medium": "medium", "high": "high"},
-        "thinkingLevelMap": {"minimal": null, "medium": "high", "high": "high", "max": "max"},
+        // 单一载体（v2 单源）：medium 改名 high、low 同名、minimal 隐藏
+        "thinkingTiers": {
+            "minimal": null,
+            "low": "low",
+            "medium": "high",
+            "high": "high",
+            "max": "max",
+        },
     }))
     .expect("必须可解析");
-    // thinking_level_map 命中优先
+    // 改名命中
     assert_eq!(
         entry.wire_effort_for("medium"),
         Some("high"),
-        "thinkingLevelMap 改名优先"
+        "改名映射返回 wire 拼写"
     );
-    // 未命中 thinking_level_map → 回落 reasoning_effort_tiers
-    assert_eq!(
-        entry.wire_effort_for("low"),
-        Some("low"),
-        "回落 reasoning_effort_tiers"
-    );
-    // reasoning_effort_tiers 未收录的 max，thinking_level_map 提供
+    assert_eq!(entry.wire_effort_for("low"), Some("low"));
     assert_eq!(entry.wire_effort_for("max"), Some("max"));
-    // thinking_level_map 里 minimal 隐藏，且两字段均无 → None
+    // 隐藏档与未收录档 → None
     assert_eq!(entry.wire_effort_for("minimal"), None);
     assert_eq!(
         entry.wire_effort_for("bogus"),
         None,
-        "两字段均未收录 → None"
+        "未收录档 → None"
     );
-    // offered_levels 并集：low / medium / high / max（隐藏档 minimal 不入集）
+    // offered_levels 提供档集：low / medium / high / max（隐藏档 minimal 不入集）
     assert_eq!(
         entry.offered_levels(),
         vec![
@@ -1512,12 +1499,12 @@ fn t11_wire_effort_for_falls_back_across_fields() {
 #[test]
 fn t11_empty_tier_map_is_none() {
     let empty_arr: ModelCatalogEntry =
-        serde_json::from_value(serde_json::json!({ "reasoningEffortTiers": [] }))
+        serde_json::from_value(serde_json::json!({ "thinkingTiers": [] }))
             .expect("空数组必须可解析");
-    assert_eq!(empty_arr.reasoning_effort_tiers, None, "空数组 → None");
+    assert_eq!(empty_arr.thinking_tiers, None, "空数组 → None");
     let empty_obj: ModelCatalogEntry =
-        serde_json::from_value(serde_json::json!({ "thinkingLevelMap": {} }))
+        serde_json::from_value(serde_json::json!({ "thinkingTiers": {} }))
             .expect("空对象必须可解析");
-    assert_eq!(empty_obj.thinking_level_map, None, "空对象 → None");
+    assert_eq!(empty_obj.thinking_tiers, None, "空对象 → None");
     assert!(empty_obj.offered_levels().is_empty());
 }
