@@ -19,6 +19,7 @@ import {
 import { fetchEngineStatus, type EngineStatus } from '../../api/engineConfig';
 import { onUiEvent } from '../../api/uiEvents';
 import type { AppSettings } from '../../store/types';
+import { abbreviateModel } from '../../api/modelAbbreviation';
 
 import { ModelBadgePickerMenu } from '../provider/ModelBadgePickerMenu';
 
@@ -132,13 +133,18 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
     );
   }, [showModelDropdown, setShowModelDropdown]);
 
-  const getModelDisplayName = (modelId: string) => {
+  const renderModelName = (modelId: string) => {
     if (!modelId) return '选择模型';
-    const profile = getActiveProfile();
-    if (profile && activeProfileId === profile.id) {
-      return modelId;
-    }
-    return modelId;
+    if (modelId === '填写模型' || modelId === '无可用模型') return modelId;
+    const clean = resolveDisplayModelId(modelId) || modelId;
+    const abbr = abbreviateModel(clean);
+    return (
+      <span className={styles.modelAdaptiveWrapper}>
+        <span className={styles.modelStandard}>{abbr.standard}</span>
+        <span className={styles.modelCompact}>{abbr.compact}</span>
+        <span className={styles.modelMicro}>{abbr.micro}</span>
+      </span>
+    );
   };
 
   return (
@@ -172,7 +178,7 @@ export const ModelBadgePicker: React.FC<ModelBadgePickerProps> = ({
               textAlign: 'left',
             }}
           >
-            {getModelDisplayName(
+            {renderModelName(
               resolveDisplayModelId(engineModel) ||
                 engineModel ||
                 (needsModelSetup ? '填写模型' : '无可用模型')

@@ -4,6 +4,7 @@ import {
   setModelCapability,
   setModelContextLength,
   setModelDisplayName,
+  setModelThinkingLevel,
 } from '../../api/modelCatalog';
 
 export interface AddModelDraft {
@@ -30,6 +31,7 @@ export interface ConfigDraft {
   displayName: string;
   contextLength: string;
   caps: Record<ModelCapabilityKey, boolean>;
+  thinkingLevel?: string;
 }
 
 export function applyMetaForModel(
@@ -39,6 +41,7 @@ export function applyMetaForModel(
     displayName: string;
     contextLength: string;
     caps: Record<ModelCapabilityKey, boolean>;
+    thinkingLevel?: string;
   }
 ): void {
   if (draft.displayName.trim()) {
@@ -55,5 +58,8 @@ export function applyMetaForModel(
       opt.key,
       Boolean(draft.caps[opt.key])
     );
+  }
+  if (draft.thinkingLevel !== undefined) {
+    setModelThinkingLevel(profileId, modelId, draft.thinkingLevel);
   }
 }

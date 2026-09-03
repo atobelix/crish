@@ -1,6 +1,10 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import type { ModelMeta } from '../../api/modelCatalog';
+import {
+  thinkingLevelOptionsFor,
+  resolveCatalogEfforts,
+} from '../../api/thinkingGear';
 import { Button, Tooltip } from '../ui';
 import { CapEditor } from './CapEditor';
 import type { CfgDraft } from './useModelProfilesState';
@@ -28,6 +32,10 @@ export const ModelConfigPanel: React.FC<{
   closeConfig,
   saveConfig,
 }) => {
+  const thinkingOptions = React.useMemo(() => {
+    return thinkingLevelOptionsFor(resolveCatalogEfforts(m));
+  }, [m]);
+
   return (
     <div
       className={`${styles.modelConfigPanel} mrd-model-cfg`}
@@ -65,6 +73,26 @@ export const ModelConfigPanel: React.FC<{
               )
             }
           />
+        </label>
+        <label
+          className={`${styles.mrdCfgLabel} mrd-cfg-label`}
+        >
+          <span>思考强度</span>
+          <select
+            className={`${styles.mrdFieldInput} mrd-field-input`}
+            value={cfgDraft.thinkingLevel || 'default'}
+            onChange={(e) =>
+              setCfgDraft((d) =>
+                d ? { ...d, thinkingLevel: e.target.value } : null
+              )
+            }
+          >
+            {thinkingOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
       <div className={`${styles.mrdCfgFooter} mrd-cfg-footer`}>

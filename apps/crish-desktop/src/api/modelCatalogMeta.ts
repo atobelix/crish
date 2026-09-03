@@ -61,7 +61,7 @@ function upsertModelMeta(
   patch: Partial<
     Pick<
       ModelMeta,
-      'enabled' | 'contextLength' | 'lastTest' | 'displayName' | 'capabilities'
+      'enabled' | 'contextLength' | 'lastTest' | 'displayName' | 'capabilities' | 'defaultThinkingLevel'
     >
   >
 ): ModelMeta {
@@ -124,6 +124,14 @@ export function setModelCapability(
   return upsertModelMeta(profileId, model, {
     capabilities: { ...(prev.capabilities || {}), [key]: on },
   });
+}
+
+export function setModelThinkingLevel(
+  profileId: string,
+  model: string,
+  defaultThinkingLevel: string | undefined
+): ModelMeta {
+  return upsertModelMeta(profileId, model, { defaultThinkingLevel });
 }
 
 /** 展示名：优先 displayName，否则 model id */

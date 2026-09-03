@@ -1,0 +1,88 @@
+/**
+ * SmartModelBadge 现代 CSS 容器查询样式
+ * 遵循 AGENTS.md §13 (克制焦点与激活边框) 与 §14 (HSLA 色彩空间)
+ */
+
+.badgeContainer {
+  display: inline-flex;
+  align-items: center;
+  container-type: inline-size;
+  container-name: modelBadge;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: hsl(220 18% 14% / 0.85);
+  border: 1px solid hsl(220 16% 24% / 0.9);
+  color: var(--text-primary, hsl(215 20% 95%));
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: text;
+  cursor: default;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.capsule:hover {
+  border-color: color-mix(in srgb, var(--border-color, hsl(220 16% 24%)) 90%, var(--text-primary, #fff) 10%);
+  background: hsl(220 18% 18% / 0.95);
+}
+
+/* 状态小圆点 */
+.statusDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: hsl(155 75% 50% / 0.9);
+  flex-shrink: 0;
+}
+
+/* 阶梯文本切换：默认显示 micro */
+.standardSpan {
+  display: none;
+}
+.compactSpan {
+  display: none;
+}
+.microSpan {
+  display: inline;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+/* 容器查询断点 1：宽度 >= 130px 切换为 Compact 紧凑态 */
+@container modelBadge (min-width: 130px) {
+  .standardSpan {
+    display: none;
+  }
+  .compactSpan {
+    display: inline;
+    font-weight: 500;
+  }
+  .microSpan {
+    display: none;
+  }
+}
+
+/* 容器查询断点 2：宽度 >= 220px 切换为 Standard 规范态 */
+@container modelBadge (min-width: 220px) {
+  .standardSpan {
+    display: inline;
+    font-weight: 500;
+  }
+  .compactSpan {
+    display: none;
+  }
+  .microSpan {
+    display: none;
+  }
+}

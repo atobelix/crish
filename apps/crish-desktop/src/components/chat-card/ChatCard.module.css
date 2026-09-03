@@ -9,6 +9,8 @@
   overflow: hidden;
   flex: 1 1 0%;
   position: relative;
+  container-type: inline-size;
+  container-name: chatContainer;
 }
 
 /*      flex   overflow hidden       .list              */
@@ -101,7 +103,7 @@
   justify-content: space-between;
   gap: var(--space-2);
   height: var(--control-height);
-  min-width: 165px;
+  min-width: 0;
   max-width: 260px;
   padding: 0 12px;
   border-radius: var(--radius-sm);
@@ -123,15 +125,57 @@
   color: var(--text-primary);
 }
 
-.modelBadge.active {
-  background: var(--bg-hover);
+.modelText {
+  font-size: var(--font-sub, 13px);
+  font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
 }
 
-.modelText {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
+.modelAdaptiveWrapper {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* 默认微型态（极窄双栏分屏视口 < 420px）：显示 micro，绝不撑爆底栏 */
+.modelAdaptiveWrapper .modelStandard {
+  display: none;
+}
+.modelAdaptiveWrapper .modelCompact {
+  display: none;
+}
+.modelAdaptiveWrapper .modelMicro {
+  display: inline;
+}
+
+/* 中等视口 (420px ~ 580px)：平滑展开为 compact 特征名 */
+@container chatContainer (min-width: 420px) {
+  .modelAdaptiveWrapper .modelStandard {
+    display: none;
+  }
+  .modelAdaptiveWrapper .modelCompact {
+    display: inline;
+  }
+  .modelAdaptiveWrapper .modelMicro {
+    display: none;
+  }
+}
+
+/* 空间宽裕视口 (>= 580px，全屏单栏)：完整展示 standard 规范名，拒绝过度缩写 */
+@container chatContainer (min-width: 580px) {
+  .modelAdaptiveWrapper .modelStandard {
+    display: inline;
+  }
+  .modelAdaptiveWrapper .modelCompact {
+    display: none;
+  }
+  .modelAdaptiveWrapper .modelMicro {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {

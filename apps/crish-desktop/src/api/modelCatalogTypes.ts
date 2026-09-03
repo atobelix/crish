@@ -28,6 +28,8 @@ export type ModelMeta = {
   contextLength?: number | undefined;
   /** 支持的能力 */
   capabilities?: ModelCapabilities | undefined;
+  /** 思考强度偏好（模型独立配置，缺省跟随全局或提供方） */
+  defaultThinkingLevel?: string | undefined;
   lastTest?:
     | {
         ok: boolean;

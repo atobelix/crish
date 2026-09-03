@@ -51,6 +51,7 @@ export {
   setModelContextLength,
   setModelDisplayName,
   setModelCapability,
+  setModelThinkingLevel,
   formatModelDisplayName,
 } from './modelCatalogMeta';
 

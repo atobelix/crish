@@ -63,6 +63,7 @@ export function useModelConfigSession(args: ModelConfigSessionArgs) {
           vision: Boolean(meta.capabilities?.vision),
           reasoning: Boolean(meta.capabilities?.reasoning),
         },
+        thinkingLevel: meta.defaultThinkingLevel || 'default',
       });
     },
     [selected, setManualOpen, setConfigOpenId, setCfgDraft],

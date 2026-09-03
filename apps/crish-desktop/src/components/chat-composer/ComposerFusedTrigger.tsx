@@ -22,6 +22,8 @@ import {
 import { clientApi } from '../../api/clientApi';
 import { onUiEvent } from '../../api/uiEvents';
 import { useSettingsStore } from '../../store/settingsStore';
+import { getActiveProfile } from '../../api/provider-profiles/profileStorePersistence';
+import { getModelMeta, setModelThinkingLevel } from '../../api/modelCatalog';
 
 export type ComposerFusedTriggerProps = {
   children?: React.ReactNode;
@@ -56,9 +58,11 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
     return off;
   }, []);
 
-  const options = thinkingLevelOptionsFor(resolveCatalogEfforts(modelId));
-  const current = stored || 'default';
+  const activeProfile = getActiveProfile();
+  const modelMeta = activeProfile ? getModelMeta(activeProfile.id, modelId) : null;
+  const current = modelMeta?.defaultThinkingLevel || stored || 'default';
   const currentLabel = levelLabel(current);
+  const options = thinkingLevelOptionsFor(resolveCatalogEfforts(modelId));
 
   const selectLevel = useCallback(async (value: string) => {
     const prev = getAppSettings();
@@ -66,13 +70,16 @@ export const ComposerFusedTrigger: React.FC<ComposerFusedTriggerProps> = ({
       ...(prev ?? {}),
       defaultThinkingLevel: value,
     });
+    if (activeProfile && modelId) {
+      setModelThinkingLevel(activeProfile.id, modelId, value);
+    }
     try {
       await clientApi.updateSettings({ defaultThinkingLevel: value });
     } catch {
       /* swallow-ok: 本机设置写失败不阻断 UI */
     }
     setOpen(false);
-  }, []);
+  }, [activeProfile, modelId]);
 
   const menuOptions = options.map((o) => ({
     id: o.value,

@@ -176,3 +176,6 @@ export type {
   ScrollAreaType,
   ScrollMetrics,
 } from './ScrollArea';
+
+export { SmartModelBadge } from './SmartModelBadge';
+export type { SmartModelBadgeProps } from './SmartModelBadge';
