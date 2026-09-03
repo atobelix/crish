@@ -143,19 +143,15 @@ describe('files/FileTreeView 树形语义（F7-F35）', () => {
 
   it('当传入 root 时，树顶部固化渲染 Project Root Header 容器 (📁 conex)', () => {
     const onSelect = vi.fn();
-    const { getByTestId } = render(
+    const { queryByTestId, getByText } = render(
       <FileTreeView
         {...defaultProps(TREE)}
         root="c:/Software/conex"
         onSelect={onSelect}
       />
     );
-    const header = getByTestId('files-tree-root-header');
-    expect(header).toBeTruthy();
-    expect(header.textContent).toContain('conex');
-    expect(header.textContent).toContain('c:/Software/conex');
-
-    fireEvent.click(header);
-    expect(onSelect).toHaveBeenCalledWith('c:/Software/conex', true);
+    // 根目录 header 已按设计要求移除，保持界面轻简
+    expect(queryByTestId('files-tree-root-header')).toBeNull();
+    expect(getByText('README.md')).toBeTruthy();
   });
 });

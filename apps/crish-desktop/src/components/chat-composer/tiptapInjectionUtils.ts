@@ -40,7 +40,8 @@ export function locateFirstPlaceholder(
   let result: PlaceholderRange | null = null;
 
   doc.descendants((node, pos) => {
-    if (result || !node.isText || !node.text) return false;
+    if (result) return false;
+    if (!node.isText || !node.text) return true;
     const match = PLACEHOLDER_REGEX.exec(node.text);
     if (match) {
       result = {
@@ -48,7 +49,7 @@ export function locateFirstPlaceholder(
         to: pos + match.index + match[0].length,
         text: match[0],
       };
-      return false; // 命中即终止扫描
+      return false;
     }
     return true;
   });

@@ -30,9 +30,10 @@ import {
   updateLeafDock,
   selectTabModeEnabled,
   useLayoutStore,
+  useSessionStore,
   getCompositionRoot,
 } from '../../store/storeAccess';
-import { mintDraftSessionId } from '../../store/draftSession';
+import { mintDraftSessionId, isPendingDraft } from '../../store/draftSession';
 import {
   viewRegistry,
   SlotOutlet,
@@ -94,18 +95,24 @@ const COLLAPSED_DOCK = {
   widthRatio: 0.5,
 };
 
-function readActiveTab(leaf: LayoutLeaf): LeafSessionTab | undefined {
+function readActiveTab(
+  leaf: LayoutLeaf,
+  isComposingDraft?: boolean
+): LeafSessionTab | undefined {
   const tabs = readLeafTabs(leaf);
   if (tabs.length === 0) return undefined;
 
   const activeTabId = readActiveTabId(leaf);
+  // 当本叶处于确定性新对话草稿态时，返回 undefined 进入草稿面板
+  if (activeTabId === '' && isComposingDraft) {
+    return undefined;
+  }
   if (activeTabId) {
     const match = tabs.find((t) => t.tabId === activeTabId);
     if (match) return match;
   }
 
-  // 核心自愈防线：若拥有会话 Tab 但 activeTabId 为空或失效，
-  // 绝不能返回 undefined 沦落为草稿空屏！纯函数级默认收敛至首个真实 Tab！
+  // 自愈防线：若非明确草稿态但 activeTabId 为空或失效，默认收敛至首个真实 Tab
   return tabs[0];
 }
 
@@ -159,12 +166,16 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     const tabModeEnabled = useLayoutStore(selectTabModeEnabled);
     const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
 
-    const activeTab = readActiveTab(leaf);
+    const activeSessionId = useSessionStore((s) => s.activeSessionId);
+    const isLeafDraft =
+      activeSessionId === mintDraftSessionId(leaf.id) ||
+      (isPendingDraft(activeSessionId) && leaf.activeTabId === '');
+    const activeTab = readActiveTab(leaf, isLeafDraft);
     const sessionForPanel =
       activeTab?.sessionId || mintDraftSessionId(leaf.id);
     const dock = activeTab?.dock ?? leaf.dock ?? COLLAPSED_DOCK;
     const dockOpen =
-      dock.collapsed !== true && Boolean(dock.activePanelId);
+      !isLeafDraft && dock.collapsed !== true && Boolean(dock.activePanelId);
     const sessionTabId = activeTab?.tabId;
 
     const handleActivate = useCallback(
@@ -391,7 +402,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           data-dock-open={dockOpen ? 'true' : 'false'}
         >
           <div className={styles.leafChatColumn}>
-            {chatMainSurface !== 'scheduled' && (
+            {chatMainSurface !== 'scheduled' && !isLeafDraft && (
               <UnitChromeActions
                 activeSessionId={sessionForPanel}
                 dockOpen={dockOpen}
@@ -465,7 +476,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             </>
           ) : null}
         </div>
-        {chatMainSurface !== 'scheduled' && (
+        {chatMainSurface !== 'scheduled' && !isLeafDraft && (
           <button
             type="button"
             className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}

@@ -344,11 +344,13 @@ function normalizeId(id: string | undefined | null): string {
  * 先清主列再写侧栏，并再断言主列 null（防脏状态残留）。
  */
 function applySidePanelFocus(panelAgentId: string | null): void {
-  const st = getCompositionRoot().session.getState();
+  const root = getCompositionRoot();
+  const st = root?.session?.getState?.();
+  if (!st) return;
   st.setActiveAgentId(null);
   st.setPanelAgentId(panelAgentId);
   // 防御：任何遗留路径若把 active 写脏，强制再清
-  if (getCompositionRoot().session.getState().activeAgentId !== null) {
+  if (root?.session?.getState?.()?.activeAgentId !== null) {
     st.setActiveAgentId(null);
   }
 }

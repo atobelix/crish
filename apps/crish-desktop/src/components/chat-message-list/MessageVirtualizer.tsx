@@ -305,10 +305,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
         {activeSessionId && (
           <EphemeralStatusSlot
             sessionId={activeSessionId}
-            onRetry={(promptText) => {
-              if (promptText && onSendFollowUp) {
-                onSendFollowUp(promptText);
-              } else if (lastAssistantId) {
+            onRetry={(_promptText) => {
+              if (lastAssistantId) {
                 handleRegenerateRow(lastAssistantId);
               }
             }}

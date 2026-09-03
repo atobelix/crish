@@ -8,7 +8,7 @@
  * 视觉对齐 chat-injection 卡片族（圆角 + 语义微光 + 无重阴影），
  * 成功/失败状态以 toast + 卡片内状态徽标双通道呈现。
  */
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { CheckCircle2, AlertCircle, Loader2, Clock } from 'lucide-react';
 import styles from './ContextInjectionBlock.module.css';
 import { Button, Tooltip } from '../ui';
@@ -38,21 +38,34 @@ function scheduleSummary(payload: WorkflowConfirmPayload): string {
   }
 }
 
+// 跨组件挂载持久化已确认载荷集合，防虚拟列表卸载后重复创建
+const confirmedPayloadSignatures = new Set<string>();
+
+function getPayloadSignature(payload: WorkflowConfirmPayload): string {
+  return `${payload.name}::${payload.prompt}::${payload.scheduleType}::${payload.cronExpression || payload.dailyTime || payload.intervalMinutes || ''}`;
+}
+
 export const WorkflowConfirmCard: React.FC<WorkflowConfirmCardProps> =
   React.memo(function WorkflowConfirmCard({ payload }) {
     const toast = useToast();
+    const sig = useMemo(() => getPayloadSignature(payload), [payload]);
+    const isAlreadyConfirmed = confirmedPayloadSignatures.has(sig);
+
     const [busy, setBusy] = useState(false);
-    const [result, setResult] = useState<'idle' | 'ok' | 'error'>('idle');
+    const [result, setResult] = useState<'idle' | 'ok' | 'error'>(
+      isAlreadyConfirmed ? 'ok' : 'idle'
+    );
     const [errorMsg, setErrorMsg] = useState('');
 
     const handleConfirm = useCallback(async () => {
-      if (busy) return;
+      if (busy || result === 'ok') return;
       setBusy(true);
       setResult('idle');
       setErrorMsg('');
       try {
         const res = await registerWorkflowFromGrillMe(payload);
         if (res.ok) {
+          confirmedPayloadSignatures.add(sig);
           setResult('ok');
           toast.success('定时任务已创建并激活');
         } else {
@@ -99,7 +112,7 @@ export const WorkflowConfirmCard: React.FC<WorkflowConfirmCardProps> =
               <Clock size={14} />
             </span>
             <span className={styles.kindBadge}>任务确认</span>
-            <span className={styles.titleText}>📋 定时任务配置确认</span>
+            <span className={styles.titleText}>定时任务配置确认</span>
             {result === 'ok' ? (
               <Tooltip content="已成功创建">
                 <CheckCircle2

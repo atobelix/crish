@@ -300,10 +300,10 @@
 }
 
 .toneFile {
-  border-left-color: var(--accent-blue, #065f46);
+  border-left-color: var(--accent-blue, hsl(217 91% 60%));
 }
 .toneFile .iconSlot {
-  color: var(--accent-blue, #065f46);
+  color: var(--accent-blue, hsl(217 91% 60%));
 }
 
 .toneGit {
@@ -344,8 +344,8 @@
 
 /* ── 状态强化（失败标红 + 待注入脉冲边框）────────────────────────────── */
 
-.isFailed {
-  border-left-color: var(--text-danger, hsl(0 68% 55%)) !important;
+.injectionBlock.isFailed {
+  border-left-color: var(--text-danger, hsl(0 68% 55%));
   border-color: color-mix(in srgb, var(--accent-red) 30%, var(--border-color));
   background: color-mix(in srgb, var(--accent-red) 3%, var(--bg-card));
 }

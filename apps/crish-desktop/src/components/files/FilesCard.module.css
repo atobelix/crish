@@ -704,6 +704,15 @@
   width: var(--icon-size);
   height: var(--icon-size);
   color: var(--text-tertiary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filesRowIco svg {
+  width: 14px;
+  height: 14px;
+  display: block;
 }
 
 .filesRowIco.dir {

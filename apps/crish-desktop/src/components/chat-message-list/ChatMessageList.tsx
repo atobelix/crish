@@ -189,16 +189,9 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   if (messages.length === 0) {
     if (!activeSessionId) return null;
     return (
-      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
         <EphemeralStatusSlot
           sessionId={activeSessionId}
-          onRetry={
-            onSendFollowUp
-              ? (prompt) => {
-                  if (prompt) onSendFollowUp(prompt);
-                }
-              : undefined
-          }
         />
       </div>
     );

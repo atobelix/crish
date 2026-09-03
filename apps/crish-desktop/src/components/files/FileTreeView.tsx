@@ -1,76 +1,13 @@
 import React, { useMemo } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
-import {
-  ChevronDown,
-  ChevronRight,
-  File,
-  FileCode2,
-  FileText,
-  Folder,
-  FolderTree,
-  Image,
-  Table,
-  X,
-} from 'lucide-react';
-import { detectFileKind } from '../../api/workspaceFsApi';
-import { fileExtColor } from '../../api/codeHighlight';
+import { Folder, X } from 'lucide-react';
+import { ChevronDownIcon, ChevronRightIcon, FileFormatIcon } from '../../assets/icons';
 import { useVirtualScroll } from '../../hooks/useVirtualScroll';
 import type { TreeNode } from './FileSearchFilter';
 
 function TreeFileIcon({ name }: { name: string }) {
-  const k = detectFileKind(name);
-  const color = fileExtColor(name);
-  const sz = 14;
-  if (k === 'image')
-    return (
-      <Image
-        size={sz}
-        className={styles.filesRowIco}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  if (k === 'pdf')
-    return (
-      <FileText
-        size={sz}
-        className={styles.filesRowIco}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  if (k === 'table')
-    return (
-      <Table
-        size={sz}
-        className={styles.filesRowIco}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  if (
-    /\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(
-      name
-    )
-  ) {
-    return (
-      <FileCode2
-        size={sz}
-        className={styles.filesRowIco}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  }
-  return (
-    <File
-      size={sz}
-      className={styles.filesRowIco}
-      style={{ color }}
-      aria-hidden
-    />
-  );
+  return <FileFormatIcon fileName={name} size={14} className={styles.filesRowIco} />;
 }
 
 function formatSize(n: number): string {
@@ -197,31 +134,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
         aria-label="文件树"
         style={{ overflowY: 'auto', position: 'relative' }}
       >
-        {root ? (
-          <Tooltip content={`项目根目录: ${root}`}>
-            <div
-              className={styles.filesTreeRootHeader}
-              data-testid="files-tree-root-header"
-              role="button"
-              tabIndex={0}
-              onClick={() => onSelect(root, true)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  onSelect(root, true);
-                }
-              }}
-            >
-              <FolderTree
-                size={14}
-                className={styles.filesTreeRootHeaderIcon}
-                aria-hidden
-              />
-              <span className={styles.filesTreeRootHeaderName}>{rootName}</span>
-              <span className={styles.filesTreeRootHeaderPath}>({root})</span>
-            </div>
-          </Tooltip>
-        ) : null}
+
 
         {loading ? (
           <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>
@@ -248,7 +161,7 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                 aria-live="polite"
                 style={{
                   position: 'sticky',
-                  top: root ? 28 : 0,
+                  top: 0,
                   zIndex: 'var(--z-pinned-bar)',
                 }}
               >
@@ -327,9 +240,9 @@ export const FileTreeView: React.FC<FileTreeViewProps> = React.memo(
                       icon={
                         e.isDir ? (
                           expanded[e.path] ? (
-                            <ChevronDown size={13} />
+                            <ChevronDownIcon size={12} />
                           ) : (
-                            <ChevronRight size={13} />
+                            <ChevronRightIcon size={12} />
                           )
                         ) : undefined
                       }

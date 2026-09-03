@@ -271,7 +271,7 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(queryByTestId('top-quick-dock-btn')).toBeNull();
 
     expect(getByTestId('top-quick-preview-btn').getAttribute('aria-label')).toBe(
-      '打开应用预览'
+      '浏览器'
     );
     expect(getByTestId('top-quick-files-btn').getAttribute('aria-label')).toBe(
       '打开文件'
@@ -281,22 +281,14 @@ describe('UnitChromeActions 对话顶快捷行（三级面包屑 + 极简动作�
     expect(container.textContent).not.toContain('未命名会话');
   });
 
-  it('no-session / 草稿：极简动作组入口仍在，标题是新会话', () => {
+  it('新建草稿态下不渲染顶部操作栏', () => {
     stubCoreTools();
     const none = renderChrome(null);
-    const noneRoot = none.container.querySelector(
-      '[data-unit-chrome-actions="true"]'
-    );
-    expect(noneRoot?.hasAttribute('data-canvas-quiet')).toBe(false);
-    expect(none.getByTestId('top-quick-preview-btn')).toBeTruthy();
-    expect(none.getByTestId('top-quick-files-btn')).toBeTruthy();
-    expect(none.container.textContent).toContain(EMPTY_SESSION_TITLE);
+    expect(none.container.firstChild).toBeNull();
     none.unmount();
 
     const draft = renderChrome(PENDING_DRAFT_SESSION_ID);
-    expect(draft.getByTestId('top-quick-preview-btn')).toBeTruthy();
-    expect(draft.getByTestId('top-quick-files-btn')).toBeTruthy();
-    expect(draft.container.textContent).toContain(EMPTY_SESSION_TITLE);
+    expect(draft.container.firstChild).toBeNull();
   });
 
   it('有消息后仍是覆盖层，极简动作组仍在对话顶', () => {

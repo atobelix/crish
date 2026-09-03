@@ -14,6 +14,7 @@ import { formatBranchUndoToast } from '../hooks/useToastQueue';
 import { toast } from '../services/toast/ToastContext';
 import type { SettingsTabType } from '../store/types';
 import { getCompositionRoot } from './compositionRoot';
+import { navigateToNewDraft } from '../store/surfaceRouter';
 
 export interface UseAppShortcutsOptions {
   showCheatsheet: boolean;
@@ -87,9 +88,7 @@ export function useAppShortcuts({
           return;
         case 'new_session':
           e.preventDefault();
-          getCompositionRoot().shell.openNewDraftTab(
-            getActiveProjectId() || undefined
-          );
+          navigateToNewDraft();
           return;
         case 'focus_composer':
           e.preventDefault();

@@ -21,8 +21,6 @@
 
 import { getPermissionMode, getAppSettings } from '../storeAccess';
 import { useSessionStore } from '../../store/sessionStore';
-import { contextInjectionDispatcher } from '../contextInjectionDispatcher';
-import { estimateTextTokens } from '../../utils/tokenEstimator';
 
 /** 暂存键（取走即清空；载荷为 { sessionId, text } 会话寻址 JSON） */
 export const PENDING_CONTEXT_STATE_KEY = 'crish_pending_context_state_v1';
@@ -137,21 +135,7 @@ export function recordPendingContextState(): void {
     lastRecordedSignature = text;
 
     const sid = useSessionStore.getState().activeSessionId || '';
-    // 可见卡片：状态切换在对话流中直接呈现（所见即所知；无活跃会话
-    // 时仅暂存 wire，卡片随下次进入对话的会话派发）
-    if (sid) {
-      const content = `[系统上下文注入 · 状态切换]\n\n${text}`;
-      contextInjectionDispatcher.inject(sid, {
-        kind: 'workspace_env',
-        title: '🔄 上下文状态切换',
-        summary: text.length > 80 ? `${text.slice(0, 80)}…` : text,
-        status: 'injected',
-        source: 'system_event',
-        content,
-        tokenEstimate: estimateTextTokens(content),
-        metadata: { mode: 'context-state' },
-      });
-    }
+    // 模型切换仅作为后台状态暂存，随下次请求带给引擎，绝不向主对话流注入任何卡片
     writeStash({ sessionId: sid, text });
   } catch {
     /* swallow-ok: 记录失败不影响状态切换本身 */
@@ -166,11 +150,12 @@ export function recordPendingContextState(): void {
 export function takePendingContextState(currentSessionId?: string | null): string | undefined {
   const stash = readStash();
   if (!stash) return undefined;
-  clearStash();
   if (stash.sessionId && stash.sessionId !== (currentSessionId || '')) {
-    // 绑定他会话：本次不消费（该会话的 run 会取走）
+    // 绑定他会话：本次不消费，保留快照供目标会话消费
     return undefined;
   }
+  // 匹配成功才消费并清除暂存
+  clearStash();
   return stash.text;
 }
 

@@ -54,7 +54,7 @@ export const CompactInjectionRow: React.FC<RowProps> = React.memo(
     const canToggle = injection.isFoldable !== false && (hasContent || hasDiffs || hasPaths);
 
     const defaultOpen =
-      !(injection.defaultFolded ?? injection.content.length > INJECTION_COLLAPSE_CHAR_THRESHOLD);
+      !(injection.defaultFolded ?? ((injection.content || '').length > INJECTION_COLLAPSE_CHAR_THRESHOLD));
     const [localOpen, setLocalOpen] = useState(defaultOpen);
     // 受控优先：容器传入 expandedInjections 时以其为准；否则本地 state
     const controlled = expandedInjections?.[injection.id];

@@ -16,7 +16,7 @@ import type { LayoutLeaf } from '../../store/types';
 import { useSessionStore, useLayoutStore } from '../../store/storeAccess';
 import { useLayoutTreeStore, collectLeaves } from '../../store/layout-tree';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { isPendingDraft } from '../../store/draftSession';
+import { isPendingDraft, mintDraftSessionId } from '../../store/draftSession';
 import { useSessionTabDrag } from '../shell/SessionTabDragContext';
 import styles from './PaneHeader.module.css';
 
@@ -115,7 +115,13 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     }, [leaf.id, leaf.tabs, isMultiPane]);
 
     const activeTabId = readActiveTabId(leaf);
-    const effectiveActiveTabId = activeTabId || visibleTabs[0]?.tabId || '';
+    const activeSessionId = useSessionStore((s) => s.activeSessionId);
+    const isLeafDraft =
+      activeSessionId === mintDraftSessionId(leaf.id) ||
+      (isPendingDraft(activeSessionId) && leaf.activeTabId === '');
+    // 未提交新对话草稿态下 activeTabId 为空不高亮；非草稿的破坏态自愈回退到首个 Tab
+    const effectiveActiveTabId =
+      activeTabId || (isLeafDraft ? '' : visibleTabs[0]?.tabId || '');
     void isActive;
 
     useEffect(

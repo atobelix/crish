@@ -31,6 +31,7 @@ import {
 } from '../../store/storeAccess';
 import { toast } from '../../services/toast';
 import { sessionListDisplayTitle } from '../../api/sessionTitle';
+import { useDraftFolder } from '../../store/draft-routing';
 import styles from './UnitChromeActions.module.css';
 
 const SHARE_FLASH_MS = 2000;
@@ -68,10 +69,16 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
     const isDraft = !sid || isPendingDraft(sid);
     const realSession = !isDraft;
 
-    const folder = useSessionField((s) => {
+    const registeredDraftFolder = useDraftFolder(sid);
+    const storeDraftFolder = useSessionField((s) => s.draftFolder);
+    const sessionFolder = useSessionField((s) => {
       if (!sid) return undefined;
       return s.sessionsById[sid]?.folder;
     });
+
+    const folder = isDraft
+      ? (registeredDraftFolder || storeDraftFolder)
+      : (sessionFolder ?? registeredDraftFolder ?? storeDraftFolder);
 
     const isPinned = useSessionField((s) => {
       if (!sid) return false;
@@ -97,13 +104,12 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
 
     const canExport = messageCount > 0;
     const projectLabel = resolveUnitChromeLabel(
-      sid ? { folder } : null,
+      { folder },
       listProjects()
     );
 
     const rightDockCollapsed = !dockOpen;
-    const isPreviewActive =
-      dockOpen && (dockPanelId === 'preview' || dockPanelId === 'overview');
+    const isPreviewActive = dockOpen && dockPanelId === 'preview';
     const isArtifactsActive = dockOpen && dockPanelId === 'files';
 
     const [shareFlash, setShareFlash] = useState(false);
@@ -233,6 +239,11 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
       [realSession, sid]
     );
 
+    // 新建草稿或未发送消息的空状态下无需展示顶部操作栏，保持界面干净
+    if (isDraft) {
+      return null;
+    }
+
     return (
       <header
         className={`${styles.chatTopHeader}${className ? ` ${className}` : ''}`}
@@ -301,15 +312,15 @@ export const UnitChromeActions: React.FC<UnitChromeActionsProps> = React.memo(
             rightDockCollapsed ? styles.withDockMargin : ''
           } chat-top-actions`}
         >
-          {/* 按钮 1: 应用预览 (🌐 Globe) */}
-          <Tooltip content="打开应用预览" side={UNIT_CHROME_TOOL_TIP_SIDE}>
+          {/* 按钮 1: 浏览器 (🌐 Globe) */}
+          <Tooltip content="浏览器" side={UNIT_CHROME_TOOL_TIP_SIDE}>
             <button
               type="button"
               id="topQuickPreviewBtn"
               className={`${styles.topActionBtn} top-action-btn`}
               data-testid="top-quick-preview-btn"
               data-active={isPreviewActive ? 'true' : 'false'}
-              aria-label="打开应用预览"
+              aria-label="浏览器"
               onClick={handleOpenPreview}
             >
               <Globe size={14} strokeWidth={1.8} aria-hidden="true" />

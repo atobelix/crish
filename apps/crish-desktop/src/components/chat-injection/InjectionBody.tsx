@@ -26,7 +26,7 @@ export const InjectionBody: React.FC<InjectionBodyProps> = React.memo(
       >
         <div className={styles.bodyInner}>
           <StreamingMarkdownView
-            text={injection.content}
+            text={injection.content || ''}
             isStreaming={false}
             priority={Priority.Normal}
             messageId={`inj-${injection.id}`}

@@ -39,6 +39,7 @@ type State = {
   error: Error | null;
   retryCount: number;
   circuitOpen: boolean;
+  copied?: boolean;
 };
 
 const CIRCUIT_KEY = 'crish_error_boundary_circuit';
@@ -200,6 +201,18 @@ export class AppErrorBoundary extends React.Component<Props, State> {
     } catch { /* ignore */ }
   };
 
+  private copyError = () => {
+    const error = this.state.error;
+    if (!error) return;
+    const msg = formatErrorMessage(error);
+    const stack = error.stack || '';
+    const fullText = stack ? `${msg}\n\n${stack}` : msg;
+    void navigator.clipboard?.writeText(fullText).then(() => {
+      this.setState({ copied: true });
+      setTimeout(() => this.setState({ copied: false }), 2000);
+    });
+  };
+
   private handleClose = () => {
     this.dismiss();
     this.props.onClose?.();
@@ -248,6 +261,14 @@ export class AppErrorBoundary extends React.Component<Props, State> {
               >
                 重新加载
               </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={this.copyError}
+              >
+                {this.state.copied ? '已复制' : '复制错误'}
+              </Button>
             </div>
             {stack && (
               <details className={styles.appErrorDetails}>
@@ -285,7 +306,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
               </div>
             </Tooltip>
             <div className={styles.appErrorActions}>
-              {/* Fix #19: 按钮顺序 [重试] [其他操作] */}
+              {/* 统一规范：[重试] [复制错误] [其他操作] [重新加载] */}
               <Button
                 type="button"
                 variant="primary"
@@ -293,6 +314,14 @@ export class AppErrorBoundary extends React.Component<Props, State> {
                 onClick={this.dismiss}
               >
                 重试
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={this.copyError}
+              >
+                {this.state.copied ? '已复制' : '复制错误'}
               </Button>
               {this.props.onClose && (
                 <Button
@@ -328,7 +357,7 @@ export class AppErrorBoundary extends React.Component<Props, State> {
               {msg}
             </div>
           </Tooltip>
-          {/* Fix #19: 按钮顺序 [重试] [其他操作] */}
+          {/* 统一规范：[重试/恢复] [复制错误] [重新加载] */}
           <div className={styles.appErrorActions}>
             <Button
               type="button"
@@ -337,6 +366,14 @@ export class AppErrorBoundary extends React.Component<Props, State> {
               onClick={this.dismiss}
             >
               {this.props.onReset ? '重试' : '尝试恢复'}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={this.copyError}
+            >
+              {this.state.copied ? '已复制' : '复制错误'}
             </Button>
             <Button
               type="button"

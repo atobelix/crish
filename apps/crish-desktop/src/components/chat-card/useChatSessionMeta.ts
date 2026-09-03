@@ -7,6 +7,8 @@ import type { SessionState } from '../../store/types';
 
 import { useLayoutTreeStore, collectLeaves } from '../../store/layout-tree';
 import { GENERAL_FOLDER } from '../../api/projectStore';
+import { useDraftFolder } from '../../store/draft-routing';
+import { useSessionStore } from '../../store/sessionStore';
 
 export interface UseChatSessionMetaOptions {
   sessionIdProp?: string | null;
@@ -59,7 +61,16 @@ export function useChatSessionMeta({
     }, [sessionIdProp])
   );
 
-  const workspaceKey = sessionFolder || tabWorkspaceKey || (sessionIdProp ? GENERAL_FOLDER : '');
+  const targetSid = sessionIdProp ?? activeSessionId;
+  const draftFolder = useDraftFolder(targetSid);
+  const storeDraftFolder = useSessionStore((s) => s.draftFolder);
+
+  const workspaceKey =
+    sessionFolder ||
+    tabWorkspaceKey ||
+    draftFolder ||
+    storeDraftFolder ||
+    (sessionIdProp ? GENERAL_FOLDER : '');
 
   const goalMode = useScopedSessionField(
     resolveSessionId,

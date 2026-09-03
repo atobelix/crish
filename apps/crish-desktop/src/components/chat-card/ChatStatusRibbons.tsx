@@ -5,7 +5,7 @@
  *
  * 壳组件：保留动态快捷 chip 区（DynamicChipBar）、计划抽屉（PlanDrawer）、
  * 回到底部 FAB 与编排；文案纯函数见 chatStatusRibbonsLib，
- * 各功能条见 SetupHintBanner / PlanGoalRibbons / RunNoticeBar / ApprovalDock。
+ * 各功能条见 SetupHintBanner / PlanGoalRibbons / ApprovalDock。
  *
  * 引导态（密钥 / 手填模型）只用页内 soft-hint，禁止 toast 刷屏。
  * FirstRun 盖层打开时让位给向导（见 isFirstRunOverlayOpen）。
@@ -33,8 +33,6 @@ import {
   type GoalRibbonState,
   type PlanRibbonState,
 } from './PlanGoalRibbons';
-import { RunNoticeBar } from './RunNoticeBar';
-import { RetrySlotNotice } from './RetrySlotNotice';
 import { ApprovalDock } from './ApprovalDock';
 import { useContinuityUiStore } from '../../api/continuity/continuityUiStore';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
@@ -378,18 +376,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
 
       {between}
 
-      {/* 临时通知老虎机滚动（D8 §3.7.4）：重连进度单起一行，不进对话历史；
-          空态不挂载（retryNotice null）防幽灵条 */}
-      {retryNotice ? (
-        <RetrySlotNotice
-          attempt={retryNotice.attempt}
-          maxAttempts={retryNotice.maxAttempts}
-        />
-      ) : null}
 
-
-      {/* 系统提示：错误/空回复 — 明确非 AI 输出；空文案不挂载（防幽灵条） */}
-      <RunNoticeBar runNotice={runNotice} onDismiss={onDismissRunNotice} />
 
       {/* 审批 sticky：队列/子 agent 待确认时显示；单条主时间线靠 ApprovalAskCard */}
       {omitApprovalDock ? null : (

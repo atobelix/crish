@@ -1,18 +1,18 @@
-/* EphemeralStatusSlot.module.css — 灰色进行时错误态插槽样式 (遵循 AGENTS.md §13 & §14) */
+/* EphemeralStatusSlot.module.css — 纯文本无背景无描边提示行 (遵循极简左对齐铁律) */
 
 .ephemeralSlot {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--space-2, 8px);
   width: 100%;
   max-width: min(var(--chat-col-max, 760px), 100%);
-  margin: var(--space-2, 8px) auto var(--space-4, 16px);
-  padding: 6px 12px;
+  margin: var(--space-2, 8px) 0;
+  padding: 4px 0;
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
-  border-radius: var(--radius-md, 8px);
-  border: var(--hairline-width, 1px) solid var(--border-subtle, var(--border-color));
+  background: transparent;
+  border: none;
+  border-radius: 0;
   box-shadow: none;
   font-family: inherit;
   animation: ephemeral-slot-fadein 180ms ease-out forwards;
@@ -21,7 +21,7 @@
 @keyframes ephemeral-slot-fadein {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(2px);
   }
   to {
     opacity: 1;
@@ -32,43 +32,30 @@
 .statusContent {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
 }
 
 .liveDot {
-  width: 5px;
-  height: 5px;
-  min-width: 5px;
-  min-height: 5px;
+  width: 4px;
+  height: 4px;
+  min-width: 4px;
+  min-height: 4px;
   border-radius: 50%;
   background: var(--text-tertiary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-tertiary) 20%, transparent);
-  animation: ephemeral-dot-pulse 1.6s ease-in-out infinite;
   display: inline-block;
   flex-shrink: 0;
 }
 
-@keyframes ephemeral-dot-pulse {
-  0%, 100% {
-    transform: scale(0.9);
-    opacity: 0.6;
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 1;
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--text-tertiary) 30%, transparent);
-  }
-}
-
 .statusText {
-  font-size: var(--font-size-sm, 13px);
+  font-size: var(--font-size-xs, 12px);
   line-height: 1.4;
   color: var(--text-tertiary);
   word-break: break-word;
   white-space: pre-wrap;
   user-select: text;
+  text-align: left;
 }
 
 .actions {
@@ -76,38 +63,42 @@
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
+  margin-left: 4px;
 }
 
 .retryButton {
-  height: 22px;
-  padding: 0 8px;
+  height: 20px;
+  padding: 0 4px;
   font-size: var(--font-size-xs, 12px);
   color: var(--text-secondary);
-  border-radius: var(--radius-sm, 4px);
   background: transparent;
   border: none;
-  transition: all var(--transition-fast, 120ms ease);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color var(--transition-micro, 100ms ease);
 }
 
 .retryButton:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: transparent;
 }
 
 .dismissButton {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   color: var(--text-tertiary);
-  border-radius: var(--radius-sm, 4px);
   background: transparent;
   border: none;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: color var(--transition-micro, 100ms ease);
 }
 
 .dismissButton:hover {
   color: var(--text-primary);
-  background: var(--tint-hover);
+  background: transparent;
 }
