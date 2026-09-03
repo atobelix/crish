@@ -1,0 +1,224 @@
+/* ==========================================================================
+   ComponentGallery.module.css
+   纯正 React 组件化画廊（1:1 对齐用户参考设计）
+   ========================================================================== */
+
+.galleryRoot {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  background-color: #09090b;
+  color: #ffffff;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   左侧分类侧边栏 (文字 100% 允许选中复制)
+   -------------------------------------------------------------------------- */
+.sidebar {
+  width: 240px;
+  min-width: 240px;
+  height: 100%;
+  border-right: 1px solid #1c1c1f;
+  padding: 32px 16px;
+  overflow-y: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  box-sizing: border-box;
+}
+
+.groupBlock {
+  margin-bottom: 24px;
+  user-select: text;
+}
+
+.groupHeading {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #52525b;
+  padding: 0 10px 8px;
+  user-select: text;
+}
+
+.navList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  user-select: text;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #a1a1aa;
+  cursor: pointer;
+  margin-bottom: 1px;
+  transition: background 120ms ease, color 120ms ease;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.navItem * {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.navItem:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #ffffff;
+}
+
+.navItem.active {
+  background: #27272a;
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.navBadge {
+  font-size: 10.5px;
+  color: #71717a;
+  font-family: var(--font-mono, monospace);
+}
+
+/* --------------------------------------------------------------------------
+   右侧主区域
+   -------------------------------------------------------------------------- */
+.mainContent {
+  flex: 1;
+  height: 100%;
+  overflow-y: auto;
+  padding: 40px 60px 80px;
+  max-width: 980px;
+  box-sizing: border-box;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: #52525b;
+  margin-bottom: 10px;
+}
+
+.crumbActive {
+  color: #a1a1aa;
+}
+
+.title {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin: 0 0 6px 0;
+  color: #ffffff;
+}
+
+.desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: #a1a1aa;
+  margin: 0 0 28px 0;
+}
+
+/* 预览条与主题切换 */
+.previewBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.previewLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.themeSegmented {
+  display: flex;
+  background: #141417;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.themeTab {
+  padding: 3px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: #71717a;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  transition: all 100ms ease;
+}
+
+.themeTab.tabActive {
+  background: #27272a;
+  color: #ffffff;
+}
+
+/* 预览画布容器 */
+.canvas {
+  width: 100%;
+  min-height: 280px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 44px 32px;
+  border: 1px solid;
+  transition: background 150ms ease, border-color 150ms ease;
+  box-sizing: border-box;
+}
+
+.canvas.themeLight {
+  background: #ffffff;
+  border-color: #e4e4e7;
+}
+
+.canvas.themeDark {
+  background: #0f0f12;
+  border-color: #27272a;
+}
+
+.canvasInner {
+  width: 100%;
+  max-width: 540px;
+}
+
+/* 代码用法 */
+.usageWrap {
+  margin-top: 36px;
+}
+
+.usageLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 10px;
+}
+
+.codeBox {
+  background: #111113;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 14px 16px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: #d4d4d8;
+  overflow-x: auto;
+  margin: 0;
+}

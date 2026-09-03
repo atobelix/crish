@@ -1,0 +1,604 @@
+/* ==========================================================================
+   ModernToolCall.module.css
+   纯粹中性黑白灰极简工具调用组件样式（零杂色、纯净灰阶、必要状态着色）
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. 结构化 JSON 工具卡片（截图 1 效果）
+   -------------------------------------------------------------------------- */
+.jsonToolCall {
+  display: flex;
+  flex-direction: column;
+  margin: 6px 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.jsonToolHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+  font-family: inherit;
+  text-align: left;
+  outline: none;
+  color: inherit;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 4px;
+  transition: opacity 120ms ease;
+}
+
+.jsonToolHead:hover {
+  opacity: 0.85;
+}
+
+.jsonToolHead:focus-visible {
+  outline: 1px solid var(--tint-focus-ring, rgba(0, 0, 0, 0.2));
+  outline-offset: 2px;
+}
+
+/* 折叠指示器：中性灰 Chevron */
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-tertiary, #888888);
+  flex-shrink: 0;
+  transition: transform 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.chevron.isOpen {
+  transform: rotate(90deg);
+}
+
+/* 动作文本：纯单色中性正文字体，禁止带绿或彩色 */
+.actionText {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary, #555555);
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+/* 参数胶囊 Pill：深灰/微灰底色、圆角、单色字 */
+.paramPill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--tint-hover, rgba(0, 0, 0, 0.06));
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--text-primary, #111111);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+/* 吃必要的东西才带颜色：完成态小绿勾 ✓ */
+.statusIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+.statusIconSuccess {
+  color: #10b981; /* 纯粹柔和成功绿 */
+}
+
+.statusIconError {
+  color: var(--accent-red, #ef4444);
+}
+
+.statusIconRunning {
+  color: var(--text-tertiary, #888888);
+}
+
+.pulseDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary, #888888);
+  animation: pulseDot 1.4s infinite ease-in-out;
+}
+
+@keyframes pulseDot {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}
+
+/* 展开卡片主体：纯净黑白灰圆角卡片 */
+.jsonToolCard {
+  margin-top: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
+  background: var(--bg-card, #ffffff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cardSection {
+  padding: 10px 14px;
+}
+
+.sectionLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-tertiary, #888888);
+  margin-bottom: 6px;
+  text-transform: capitalize;
+  user-select: none;
+}
+
+.sectionContent {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary, #111111);
+  word-break: break-word;
+}
+
+.jsonCode {
+  margin: 0;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary, #111111);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.resultText {
+  margin: 0;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary, #111111);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.divider {
+  height: 1px;
+  background: var(--tint-divider, rgba(0, 0, 0, 0.06));
+  margin: 0;
+  border: none;
+}
+
+/* --------------------------------------------------------------------------
+   2. 终端命令行工具卡片（截图 2 效果）
+   -------------------------------------------------------------------------- */
+.terminalCard {
+  margin: 8px 0;
+  border-radius: 10px;
+  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
+  background: var(--bg-card, #ffffff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.terminalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: transparent;
+  user-select: text;
+}
+
+.terminalCommandRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  color: var(--text-primary, #111111);
+}
+
+.terminalPromptDollar {
+  color: var(--text-tertiary, #888888);
+  font-weight: 600;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.terminalCommandText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.terminalActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.terminalCopyBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary, #888888);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.terminalCard:hover .terminalCopyBtn,
+.terminalCopyBtn:focus-visible {
+  opacity: 1;
+}
+
+.terminalCopyBtn:hover {
+  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-primary, #111111);
+}
+
+.terminalDivider {
+  height: 1px;
+  background: var(--tint-divider, rgba(0, 0, 0, 0.06));
+  margin: 0;
+  border: none;
+}
+
+.terminalBody {
+  position: relative;
+  width: 100%;
+}
+
+.terminalOutput {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary, #111111);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 240px;
+  overflow-y: auto;
+  cursor: text;
+  box-sizing: border-box;
+}
+
+/* 底部淡出遮罩（Fade Mask）：提示多行滚动、不撑爆高度 */
+.terminalFadeMask {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    var(--bg-card, #ffffff) 100%
+  );
+}
+
+/* 统一轻盈滚动条 */
+.terminalOutput::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.terminalOutput::-webkit-scrollbar-thumb {
+  background-color: var(--tint-divider, rgba(0, 0, 0, 0.15));
+  border-radius: 3px;
+}
+
+.terminalOutput::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* --------------------------------------------------------------------------
+   3. 高品味黑白灰权限询问卡片（Linear / Raycast 级精致设计）
+   -------------------------------------------------------------------------- */
+.approvalCard {
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
+  background: var(--bg-card, #ffffff);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+  box-sizing: border-box;
+  margin: 8px 0;
+  transition: border-color 150ms ease;
+}
+
+.approvalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+}
+
+.approvalTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.approvalShield {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-tertiary, #888888);
+}
+
+.approvalTitle {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary, #111111);
+}
+
+.approvalScopePill {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-weight: 500;
+  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-tertiary, #888888);
+}
+
+.approvalTimer {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11.5px;
+  color: var(--text-tertiary, #888888);
+}
+
+.approvalBody {
+  padding: 14px 16px;
+}
+
+.approvalDesc {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+  color: var(--text-secondary, #555555);
+}
+
+.approvalTargetBox {
+  border-radius: 8px;
+  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
+  background: var(--tint-hover, rgba(0, 0, 0, 0.02));
+  overflow: hidden;
+  font-family: var(--font-mono, monospace);
+}
+
+.approvalTargetHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  font-size: 12px;
+}
+
+.approvalPath {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+  color: var(--text-primary, #111111);
+}
+
+.approvalDiffStat {
+  display: flex;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.diffStatAdd {
+  color: #10b981;
+}
+
+.diffStatDel {
+  color: #ef4444;
+}
+
+.approvalCodePreview {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--text-primary, #111111);
+}
+
+.approvalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+}
+
+.approvalRemember {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary, #888888);
+  cursor: pointer;
+  user-select: none;
+}
+
+.approvalCheckbox {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.approvalBtns {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.approvalBtn {
+  padding: 6px 14px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 120ms ease;
+  outline: none;
+}
+
+.approvalBtnGhost {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary, #555555);
+}
+
+.approvalBtnGhost:hover {
+  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-primary, #111111);
+}
+
+.approvalBtnSecondary {
+  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.1));
+  background: var(--bg-card, #ffffff);
+  color: var(--text-primary, #111111);
+}
+
+.approvalBtnSecondary:hover {
+  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
+}
+
+.approvalBtnPrimary {
+  border: none;
+  font-weight: 600;
+  background: var(--text-primary, #111111);
+  color: var(--bg-card, #ffffff);
+}
+
+.approvalBtnPrimary:hover {
+  opacity: 0.9;
+}
+
+/* --------------------------------------------------------------------------
+   4. 极简 Code Block 卡片（对齐截图 3 纯净设计）
+   -------------------------------------------------------------------------- */
+.codeBlockCard {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
+  background: var(--bg-card, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  box-sizing: border-box;
+}
+
+.codeBlockHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  font-size: 12px;
+  color: var(--text-tertiary, #71717a);
+}
+
+.codeBlockTag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary, #111111);
+  font-weight: 500;
+}
+
+.codeBlockCopyBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary, #71717a);
+  font-size: 11.5px;
+  cursor: pointer;
+  font-family: var(--font-sans, inherit);
+  transition: color 100ms ease;
+}
+
+.codeBlockCopyBtn:hover {
+  color: var(--text-primary, #111111);
+}
+
+.codeBlockBody {
+  padding: 12px 14px;
+  display: flex;
+  gap: 16px;
+  line-height: 1.6;
+}
+
+.codeBlockLinenums {
+  user-select: none;
+  color: var(--text-tertiary, #888888);
+  text-align: right;
+  font-size: 12px;
+}
+
+.codeBlockPre {
+  margin: 0;
+  white-space: pre;
+  color: var(--text-primary, #111111);
+  font-size: 12px;
+  flex: 1;
+  overflow-x: auto;
+}
+
+
