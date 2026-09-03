@@ -369,3 +369,54 @@
     animation-duration: 1.6s;
   }
 }
+
+/* ── WorkflowConfirmCard 确认卡片（路径 B） ─────────────────────────── */
+
+.okIcon {
+  color: var(--text-success);
+}
+
+.confirmSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.confirmRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.confirmLabel {
+  flex-shrink: 0;
+  width: 56px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.confirmValue {
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.confirmPrompt {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--text-secondary);
+}
+
+.confirmErrorText {
+  margin: 6px 0;
+  color: var(--text-danger);
+  font-size: 11px;
+}
+
+.confirmActionRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}

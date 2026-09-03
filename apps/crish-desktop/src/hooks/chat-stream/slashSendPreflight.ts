@@ -28,9 +28,13 @@ import {
   takePendingFileAnnotations,
 } from '../../api/workspaceFsApi';
 import { GRILL_ME_PROMPT } from '../../prompts';
-import { contextInjectionDispatcher } from '../../api/contextInjectionDispatcher';
-import { estimateTextTokens } from '../../utils/tokenEstimator';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
+import {
+  dispatchGoalModeCard,
+  dispatchGrillMeCard,
+  dispatchSkillContextCard,
+  dispatchAttachmentCards,
+} from './slashContextCards';
 import {
   buildWorkflowAssistantContext,
   dispatchWorkflowAssistantCard,
@@ -219,16 +223,11 @@ export async function runPreflightChecks(
         ? `/skill:${resolved.skill.name} ${resolved.rest}`
         : `使用技能：${resolved.skill.name}`;
       // 技能上下文可见卡片（WYSIWYG：卡片正文 = wire 注入文本，单一来源）
-      contextInjectionDispatcher.inject(activeSessionId || '', {
-        kind: 'skill',
-        title: `🛠️ 技能上下文：${resolved.skill.name}`,
-        summary: resolved.skill.description || undefined,
-        status: 'active',
-        source: 'slash_command',
-        content: modelText,
-        tokenEstimate: estimateTextTokens(modelText),
-        metadata: { skillId: resolved.skill.id, scope: resolved.skill.scope },
-      });
+      dispatchSkillContextCard(
+        activeSessionId || '',
+        resolved.skill,
+        modelText
+      );
     } catch (e) {
       setChatInput('');
       setSlashMenuOpen(false);
@@ -353,21 +352,12 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
     );
     // 首次进入目标模式：派发可见目标卡片（后续轮次经 goalModeContinuation
     // 续期 wire 前缀，不重复派卡刷屏）
-    const goalCard = `[系统上下文注入 · 目标推进模式]\n\n${directive}`;
-    contextInjectionDispatcher.inject(sessionId, {
-      kind: 'runtime_steering',
-      title: '🎯 目标推进模式 (Goal Mode)',
-      summary: goalText,
-      status: 'active',
-      source: 'slash_command',
-      content: goalCard,
-      tokenEstimate: estimateTextTokens(goalCard),
-      metadata: {
-        mode: 'goal',
-        iteration: 0,
-        maxIterations: gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS,
-      },
-    });
+    dispatchGoalModeCard(
+      sessionId,
+      goalText,
+      directive,
+      gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS
+    );
     modelText = `${directive}${goalText}`;
   }
 
@@ -376,18 +366,9 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
     displayText = `/grill-me ${slash.topic}`;
     // 需求对齐模式可见卡片（WYSIWYG：卡片正文 = wire 注入文本，单一来源；
     // GRILL_ME_PREFIX 隐式前缀已清退——slash-prefixes.ts 物理删除）
-    const alignmentCard = `[系统上下文注入 · 需求对齐模式]\n\n${GRILL_ME_PROMPT.render({ topic: slash.topic })}`;
-    contextInjectionDispatcher.inject(sessionId, {
-      kind: 'runtime_steering',
-      title: '🤝 需求对齐模式 (Grill-Me)',
-      summary: slash.topic,
-      status: 'active',
-      source: 'slash_command',
-      content: alignmentCard,
-      tokenEstimate: estimateTextTokens(alignmentCard),
-      metadata: { mode: 'grill-me', permissionMode: 'plan' },
-    });
-    modelText = alignmentCard;
+    const rendered = GRILL_ME_PROMPT.render({ topic: slash.topic });
+    dispatchGrillMeCard(sessionId, slash.topic, rendered);
+    modelText = `[系统上下文注入 · 需求对齐模式]\n\n${rendered}`;
   }
 
   if (rawInput && slash.kind !== 'goal') {
@@ -410,23 +391,7 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
 
   // 附件可见卡片（被动直接注入）：图片/文本附件以 file_context 卡片进入
   // 时间线（所见即所知），wire 仍走既有 content parts / promptAttachBlock
-  for (const a of attachments) {
-    const isImage = Boolean(a.dataUrl);
-    const content = isImage
-      ? `[图片附件 · ${a.name}]\n已通过结构化 image_url 部分下发视觉分析。`
-      : `[文件附件 · ${a.name}]\n${a.text ? a.text.slice(0, 800) : ''}`;
-    contextInjectionDispatcher.inject(sessionId, {
-      kind: 'file_context',
-      title: `${isImage ? '🖼️' : '📎'} 附件：${a.name}`,
-      summary: isImage ? '图片（结构化下发）' : (a.text || '').slice(0, 80),
-      status: 'injected',
-      source: 'user_mention',
-      content,
-      tokenEstimate: estimateTextTokens(content),
-      targetPaths: [a.name],
-      metadata: isImage ? { kind: 'image' } : { kind: 'text-attachment' },
-    });
-  }
+  dispatchAttachmentCards(sessionId, attachments);
 
   let finalStreamOptions = streamOptions;
   if (finalStreamOptions?.content?.length && annBlock) {

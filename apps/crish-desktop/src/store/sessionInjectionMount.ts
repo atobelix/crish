@@ -60,13 +60,21 @@ export function appendInjectionToMessage(
     msg.injections.push(injection);
   }
   if (!msg.blocks) msg.blocks = [];
-  const hasBlock = msg.blocks.some(
+  const existingBlock = msg.blocks.find(
     (b) => b.type === 'context_injection' && b.id === injection.id
   );
-  if (!hasBlock) {
+  if (existingBlock) {
+    // 幂等更新：刷新块内联载荷（同 id 载荷变更时持久化面同步最新值）
+    existingBlock.injection = injection;
+  } else {
+    // 载荷内联进块（C1 最小改造面）：Rust session_messages 仅持久化
+    // blocks_json（无 injections_json 列），内联后重载经 timelineNormalizer
+    // 的 `|| b.injection` 回退恢复卡片渲染——零新增 DDL，符合
+    // 00-总方案 §三.5「复用 session_messages 表」裁决。
     const block: MessageTimelineBlock = {
       type: 'context_injection',
       id: injection.id,
+      injection,
     };
     msg.blocks.push(block);
   }
@@ -83,6 +91,9 @@ export function makeInjectionCarrierMessage(
     text: '',
     timestamp: injection.timestamp,
     injections: [injection],
-    blocks: [{ type: 'context_injection', id: injection.id }],
+    // 载荷内联进块（持久化/重载恢复，同 appendInjectionToMessage 注记）
+    blocks: [
+      { type: 'context_injection', id: injection.id, injection },
+    ],
   };
 }

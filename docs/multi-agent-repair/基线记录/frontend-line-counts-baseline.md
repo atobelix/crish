@@ -111,4 +111,8 @@
 
 <!-- BASELINE_START -->
 apps/crish-desktop/src/components/diff/ChangeOverviewCard.tsx 481
+apps/crish-desktop/src/components/sidebar/session-list/useSessionListDrag.ts 582
+apps/crish-desktop/src/components/ui/PreviewCard/PreviewCard.tsx 683
+apps/crish-desktop/src/store/layout-tree/layoutTreeStore.ts 435
+apps/crish-desktop/src/store/layout-tree/sessionTabMigration.ts 501
 <!-- BASELINE_END -->

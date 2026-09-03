@@ -13,6 +13,11 @@ import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { Priority } from '../../workers';
 import { MessageToolCallsSection } from '../chat-message-row/MessageToolCallsSection';
 import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
+import { WorkflowConfirmCard } from '../chat-injection/WorkflowConfirmCard';
+import {
+  extractWorkflowConfirmPayload,
+  stripWorkflowConfirmFence,
+} from '../../api/workflow-api/workflowConfirm';
 import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
 import { CompactInjectionRow } from '../chat-injection/CompactInjectionRow';
 
@@ -99,17 +104,26 @@ const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
           if (item.kind === 'text') {
             const bodyText = stripThoughtPlaceholders(item.content || '');
             if (!bodyText.trim()) return null;
+            // 路径 B 确认卡片（详案 05 §2.4.2）：识别 json:workflow-payload
+            // 围栏 → 卡片渲染取代 JSON 原文展示
+            const confirmPayload = extractWorkflowConfirmPayload(bodyText);
+            const displayText = confirmPayload
+              ? stripWorkflowConfirmFence(bodyText)
+              : bodyText;
             const imgs = extractImageRefs(bodyText);
             return (
               <div key={item.key} className={styles.timelineText}>
                 <StreamingMarkdownView
-                  text={bodyText}
+                  text={displayText}
                   isStreaming={false}
                   priority={
                     status === 'processing' ? Priority.Normal : Priority.High
                   }
                   messageId={msgId}
                 />
+                {confirmPayload ? (
+                  <WorkflowConfirmCard payload={confirmPayload} />
+                ) : null}
                 {imgs.length > 0 && (
                   <div className={styles.inlineImages}>
                     {imgs.map((src) => (
