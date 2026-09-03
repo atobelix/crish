@@ -1,7 +1,7 @@
 import React from 'react';
 import type { SessionState } from '../../../store/types';
 import { GENERAL_FOLDER } from '../../../api/projectStore';
-import { emitUiEvent } from '../../../api/uiEvents';
+import { navigateToNewDraft } from '../../../store/draft-routing';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import type { SessionListWindowRange } from '../../../api/sessionListWindow';
 import { WindowedSessionUl } from './WindowedSessionUl';
@@ -98,8 +98,7 @@ export function GeneralSection({
             aria-label="新建常规对话"
             onClick={(e) => {
               e.stopPropagation();
-              getCompositionRoot().shell.openNewDraftTab(GENERAL_FOLDER);
-              emitUiEvent('open-chat');
+              navigateToNewDraft(GENERAL_FOLDER);
             }}
             icon={<MessageCirclePlus size={14} strokeWidth={1.75} aria-hidden />}
           />

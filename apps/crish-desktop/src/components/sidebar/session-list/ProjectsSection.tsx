@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { SessionState } from '../../../store/types';
 import type { ProjectEntry } from '../../../api/projectStore';
 import { emitUiEvent } from '../../../api/uiEvents';
+import { navigateToNewDraft } from '../../../store/draft-routing';
 import { getCompositionRoot } from '../../../app/compositionRoot';
 import { Button, Tooltip } from '../../ui';
 import styles from '../SidebarSessionList.module.css';
@@ -162,8 +163,7 @@ export function ProjectsSection({
                         onClick={(e) => {
                           e.stopPropagation();
                           onOpenProject(p.id);
-                          getCompositionRoot().shell.openNewDraftTab(p.id);
-                          emitUiEvent('open-chat');
+                          navigateToNewDraft(p.id);
                         }}
                         icon={
                           <FilePlus2 size={14} strokeWidth={1.75} aria-hidden />

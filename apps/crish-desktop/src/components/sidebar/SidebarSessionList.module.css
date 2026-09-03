@@ -254,15 +254,15 @@
   height: 24px;
   min-width: 24px;
   min-height: 24px;
-  border: none !important;
+  border: none;
   border-radius: var(--radius-md, 6px);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  opacity: 0 !important;
+  opacity: 0;
   pointer-events: none;
-  padding: 0 !important;
-  margin: 0 !important;
+  padding: 0;
+  margin: 0;
   line-height: 1;
   transition: opacity var(--transition-micro), color var(--transition-micro), background-color var(--transition-micro);
 }
@@ -272,7 +272,7 @@
 .folderHeaderRow:hover :global(.button).folderNewBtn,
 .folderHeaderRow .folderNewBtn:focus-visible,
 .folderHeaderRow :global(.button).folderNewBtn:focus-visible {
-  opacity: 1 !important;
+  opacity: 1;
   pointer-events: auto;
 }
 

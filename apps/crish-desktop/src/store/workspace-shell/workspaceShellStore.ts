@@ -19,8 +19,13 @@ import {
   GENERAL_FOLDER,
   canonicalSessionFolder,
   getActiveProjectId,
+  activateWorkspaceForSessionFolder,
 } from '../../api/projectStore';
 import { isPendingDraft, mintDraftSessionId } from '../draftSession';
+import {
+  draftFolderRegistry,
+  resolveMostActiveProjectFolder,
+} from '../draft-routing';
 import { useSessionStore } from '../sessionStore';
 import { useLayoutStore } from '../layoutStore';
 import { currentWorkspaceFolderKey } from '../../api/workspaceChromeTabs';
@@ -259,17 +264,24 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
           listed.find((l) => l.id === args.leafId))) ||
       resolveActiveChatLeaf(get().lastChatLeafId);
 
-    const workspaceKey =
-      canonicalSessionFolder(args.workspaceKey) ||
-      workspaceKeyNow() ||
-      GENERAL_FOLDER;
+    const rawKey = args.workspaceKey?.trim();
+    const workspaceKey = rawKey
+      ? canonicalSessionFolder(rawKey)
+      : resolveMostActiveProjectFolder();
 
     treeAddTab(leaf.id, { workspaceKey });
     rememberChatLeaf(set, leaf.id);
     useLayoutStore.getState().setChatMainSurface('chat');
+    const draftId = mintDraftSessionId(leaf.id);
     useSessionStore.getState().enterDraftMode(workspaceKey, {
-      draftSessionId: mintDraftSessionId(leaf.id),
+      draftSessionId: draftId,
     });
+    draftFolderRegistry.set(draftId, workspaceKey);
+    try {
+      activateWorkspaceForSessionFolder(workspaceKey);
+    } catch {
+      /* ignore */
+    }
   },
 
   resetToCleanDraft: (workspaceKey) => {

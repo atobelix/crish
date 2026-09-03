@@ -60,7 +60,7 @@ export function useSidebarHandlers({
       if (filterType === 'pinned') setFilterType('all');
       setGeneralCollapsed(false);
       setRenamingSessionId(null);
-      navigateToNewDraft(getActiveProjectId() || undefined);
+      navigateToNewDraft();
     } finally {
       queueMicrotask(() => {
         newSessionLockRef.current = false;

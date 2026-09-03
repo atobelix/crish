@@ -82,16 +82,15 @@ export function navigateToChatSession(
   root.session.openOrFocusSession(sessionId, opts);
 }
 
-/**
- * 导航并进入新对话草稿（原子化完成：切回 chat 表面 + 打开新草稿）
- */
-export function navigateToNewDraft(workspaceKey?: string): void {
-  navigateToSurface('chat');
-  clearAgentPanelFocus();
+import {
+  resolveMostActiveProjectFolder,
+  navigateToNewDraft,
+} from './draft-routing';
 
-  const root = getCompositionRoot();
-  root.shell.openNewDraftTab(workspaceKey);
-}
+export {
+  resolveMostActiveProjectFolder,
+  navigateToNewDraft,
+};
 
 /**
  * React Hook：响应式读取当前主功能表面

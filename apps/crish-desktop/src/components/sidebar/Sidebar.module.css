@@ -46,7 +46,7 @@
   pointer-events: auto;
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
-  cursor: pointer !important;
+  cursor: pointer;
 }
 
 /* 整行语义化侧栏头部容器：占满宽度 100%，左侧折叠按钮，右侧预留扩展区域 */
@@ -93,7 +93,7 @@
   border: none;
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
-  cursor: pointer !important;
+  cursor: pointer;
   padding: 0;
   margin: 0;
   box-shadow: none;
@@ -103,10 +103,6 @@
   -webkit-app-region: no-drag !important;
   app-region: no-drag !important;
   pointer-events: auto;
-}
-
-.sidebarToggleBtn * {
-  cursor: pointer !important;
 }
 
 .sidebarToggleBtn:hover {
