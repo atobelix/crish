@@ -157,10 +157,11 @@ export async function createStreamSession(
 
     if (isRunDead(state)) return;
 
-    // I1-α②：取走暂存 context-state → run-task 下发 → 队列去重注入；取走即清空
+    // I1-α②：取走暂存 context-state（会话寻址——仅消费绑定本会话或未绑定
+    // 的暂存，跨会话串扰根除）→ run-task 下发 → 队列去重注入；取走即清空
     const contextState = (
       await import('../provider-profiles/contextStatePending')
-    ).takePendingContextState();
+    ).takePendingContextState(safeSessionId);
 
     await startRunTask(transport, {
       runId,

@@ -42,10 +42,8 @@ export function buildMultimodalFromAttachments(
         name: a.name,
         mime,
       });
-      const note = `用户粘贴了截图 ${a.name}，请结合 OCR/视觉理解分析（structured image_url 已一并下发）`;
-      promptChunks.push(
-        `[图片附件: ${a.name}]\ndataUrl: ${a.dataUrl}\n${note}\n![${a.name}](${a.dataUrl})`
-      );
+      const note = `用户粘贴了截图 ${a.name}，请结合 OCR/视觉理解分析（图片已通过结构化 image_url 部分下发）`;
+      promptChunks.push(`[图片附件: ${a.name}]\n${note}`);
     } else if (a.text) {
       meta.push({ name: a.name, kind: 'text' });
       const body = `${a.text.slice(0, 80_000)}${a.text.length > 80_000 ? '\n…(截断)' : ''}`;

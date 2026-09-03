@@ -9,7 +9,7 @@ import {
   normalizeCodeBlockIndent,
   rematerializeMarkdownHtml,
 } from '../../api/codeBlockIndent';
-import { useSettingsField } from '../../store/storeAccess';
+import { useSettingsField, useSessionStore } from '../../store/storeAccess';
 import {
   addPendingFileAnnotation,
   parseCsvPreview,
@@ -146,11 +146,15 @@ export const FilePreview = React.memo(function FilePreview({
 
   const submitSelectionComment = useCallback(() => {
     if (!selected || !selText.trim() || !commentDraft.trim()) return;
-    addPendingFileAnnotation({
-      path: selected,
-      selectedText: selText.trim(),
-      text: commentDraft.trim(),
-    });
+    addPendingFileAnnotation(
+      {
+        path: selected,
+        selectedText: selText.trim(),
+        text: commentDraft.trim(),
+      },
+      // 批注绑定产生时刻的活跃会话（会话隔离，禁全局暗流）
+      { targetSessionId: useSessionStore.getState().activeSessionId }
+    );
     setSelText('');
     setCommentDraft('');
     setSelAnchor(null);
