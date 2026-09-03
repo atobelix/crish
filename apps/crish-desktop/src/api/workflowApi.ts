@@ -24,6 +24,9 @@ export {
   validateWorkflowSchedule,
   normalizeWorkflowSchedule,
   scheduleLabel,
+  normalizeWorkspacePath,
+  areWorkspacePathsEqual,
+  filterWorkflowsByWorkspace,
 } from './workflow-api/workflowScheduler';
 
 // 草稿、预设模板与空态文案来自 workflowDraft（UI 契约层）

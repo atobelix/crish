@@ -32,9 +32,12 @@ async function listenWorkflowEvent(
   handler: WorkflowEventHandler,
 ): Promise<UnlistenFn> {
   try {
+    if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {
+      return () => {};
+    }
     const mod = await import('@tauri-apps/api/event');
     if (typeof mod?.listen !== 'function') return () => {};
-    return mod.listen(event, (e: { payload?: unknown }) => {
+    return await mod.listen(event, (e: { payload?: unknown }) => {
       handler((e?.payload ?? {}) as WorkflowEventPayload);
     });
   } catch {

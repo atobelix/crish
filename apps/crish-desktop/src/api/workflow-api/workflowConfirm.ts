@@ -81,7 +81,9 @@ export function extractWorkflowConfirmPayload(
     ...(scheduleType === 'cron' &&
       typeof o.cronExpression === 'string' &&
       o.cronExpression.trim() !== '' && { cronExpression: o.cronExpression.trim() }),
-    ...(typeof o.cwd === 'string' && o.cwd.trim() !== '' && { cwd: o.cwd.trim() }),
+    ...(typeof o.cwd === 'string' &&
+      o.cwd.trim() !== '' &&
+      !o.cwd.includes('..') && { cwd: o.cwd.trim() }),
     ...(typeof o.enabled === 'boolean' && { enabled: o.enabled }),
   };
 }

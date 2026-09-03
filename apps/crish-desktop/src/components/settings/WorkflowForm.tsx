@@ -249,15 +249,25 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
     );
   }
 
-  const projects = listProjects();
-  const projectOptions = [
-    { id: '', label: '默认工作区（全局）' },
-    ...projects.map((p) => ({
-      id: p.path,
-      label: p.name,
-      hint: p.path,
-    })),
-  ];
+  const projects = React.useMemo(() => listProjects(), []);
+  const projectOptions = React.useMemo(
+    () =>
+      projects.map((p) => ({
+        id: p.path,
+        label: p.name,
+        hint: p.path,
+      })),
+    [projects]
+  );
+
+  React.useEffect(() => {
+    if (!draft.cwd && projectOptions.length > 0) {
+      const defaultPath = workspacePath || projectOptions[0]?.id || '';
+      if (defaultPath) {
+        onDraftChange({ ...draft, cwd: defaultPath });
+      }
+    }
+  }, [draft.cwd, projectOptions, workspacePath]);
 
   const projectSelect = (
     <Select
@@ -266,7 +276,7 @@ export const WorkflowForm: React.FC<WorkflowFormProps> = ({
         : styles.schedSelect !== undefined
           ? { className: styles.schedSelect }
           : {})}
-      value={draft.cwd || ''}
+      value={draft.cwd || (projectOptions[0]?.id ?? '')}
       disabled={busy}
       options={projectOptions}
       onChange={(v) => onDraftChange({ ...draft, cwd: v })}

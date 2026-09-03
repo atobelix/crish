@@ -23,6 +23,7 @@ import {
   workflowEnabledLabel,
   workflowTriggerOkMessage,
   buildScheduleFromDraft,
+  filterWorkflowsByWorkspace,
   type WorkflowDefinition,
   type WorkflowRunEntry,
   type WorkflowScheduleDraft,
@@ -93,20 +94,28 @@ export function useWorkflowsState(
   const [ok, setOk] = useState('');
   const [filter, setFilter] = useState<ScheduleFilter>('all');
 
+  const scopedWorkflows = useMemo(
+    () =>
+      opts.workspacePath
+        ? filterWorkflowsByWorkspace(workflows, opts.workspacePath)
+        : workflows,
+    [workflows, opts.workspacePath]
+  );
+
   const filtered = useMemo(
-    () => workflows.filter((w) => matchesFilter(w, filter)),
-    [workflows, filter],
+    () => scopedWorkflows.filter((w) => matchesFilter(w, filter)),
+    [scopedWorkflows, filter],
   );
 
   const emptyCopy = useMemo(
     () =>
       resolveWorkflowJobsEmptyCopy({
         loading,
-        totalCount: workflows.length,
+        totalCount: scopedWorkflows.length,
         ...(surface === 'settings' ? { filteredCount: filtered.length } : {}),
         surface: surface === 'settings' ? 'settings' : 'list',
       }),
-    [loading, workflows.length, filtered.length, surface],
+    [loading, scopedWorkflows.length, filtered.length, surface],
   );
 
   const refresh = async () => {
@@ -305,10 +314,12 @@ export function useWorkflowsState(
     setBusy(true);
     setError('');
     try {
+      const targetCwd = (draft.cwd || '').trim() || opts.workspacePath || undefined;
       const res = await createWorkflow({
         name: draft.name.trim(),
         prompt: draft.prompt.trim(),
         schedule: schedGuard.schedule,
+        ...(targetCwd ? { cwd: targetCwd } : {}),
         enabled: true,
       });
       if (!res.ok) {

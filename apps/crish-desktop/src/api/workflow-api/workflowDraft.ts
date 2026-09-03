@@ -178,6 +178,9 @@ export function validateWorkflowDraft(
   if (!name) return '请填写名称';
   if (!prompt) return '请填写提示词';
 
+  const cwd = String(draft.cwd ?? '').trim();
+  if (!cwd) return '请选择所属工作区项目';
+
   const st = draft.scheduleType;
   if (st === 'daily') {
     const t = String(draft.dailyTime ?? '').trim();
@@ -198,14 +201,14 @@ export function validateWorkflowDraft(
   return '不支持的调度类型';
 }
 
-export function emptyWorkflowDraft(): WorkflowScheduleDraft {
+export function emptyWorkflowDraft(defaultCwd?: string): WorkflowScheduleDraft {
   return {
     name: '',
     prompt: '',
     scheduleType: 'manual',
     dailyTime: DEFAULT_DAILY_TIME,
     intervalMinutes: String(DEFAULT_INTERVAL_MINUTES),
-    cwd: '',
+    cwd: defaultCwd ? defaultCwd.trim() : '',
   };
 }
 

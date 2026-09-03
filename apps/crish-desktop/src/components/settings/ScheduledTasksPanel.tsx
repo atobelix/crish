@@ -40,7 +40,8 @@ type Props = {
 
 export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
   const { showToast } = useToast();
-  const state = useWorkflowsState({ surface: 'chat' });
+  const currentWorkspacePath = getWorkspacePath();
+  const state = useWorkflowsState({ surface: 'chat', workspacePath: currentWorkspacePath });
   const {
     workflows,
     runs,
@@ -61,7 +62,9 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
 
   const [showForm, setShowForm] = useState(false);
   const [editingWorkflow, setEditingWorkflow] = useState<WorkflowDefinition | null>(null);
-  const [draft, setDraft] = useState<WorkflowScheduleDraft>(emptyWorkflowDraft);
+  const [draft, setDraft] = useState<WorkflowScheduleDraft>(() =>
+    emptyWorkflowDraft(currentWorkspacePath)
+  );
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createBtnRef = React.useRef<HTMLButtonElement>(null);
 
@@ -72,7 +75,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     setEditingWorkflow(null);
     setError('');
     setOk('');
-    setDraft({ ...preset.draft });
+    setDraft({ ...preset.draft, cwd: currentWorkspacePath || preset.draft.cwd });
   };
 
   const closeForm = () => {
@@ -80,7 +83,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     setEditingWorkflow(null);
     setError('');
     setOk('');
-    setDraft(emptyWorkflowDraft());
+    setDraft(emptyWorkflowDraft(currentWorkspacePath));
   };
 
   const handleEdit = (w: WorkflowDefinition) => {
@@ -262,6 +265,7 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
           draft={draft}
           busy={busy}
           isEditing={Boolean(editingWorkflow)}
+          workspacePath={currentWorkspacePath}
           onDraftChange={setDraft}
           onApplyPreset={applyPreset}
           onNameBlur={() => maybeWatchHint(draft.name)}

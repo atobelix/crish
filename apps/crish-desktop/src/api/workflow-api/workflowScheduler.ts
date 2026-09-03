@@ -376,3 +376,56 @@ export function scheduleLabel(
   }
   return t || '手动';
 }
+
+/**
+ * 规范化工作区路径（纯函数）
+ */
+export function normalizeWorkspacePath(p?: string | null): string {
+  if (!p) return '';
+  let s = p.trim();
+  if (
+    (s.startsWith('"') && s.endsWith('"') && s.length >= 2) ||
+    (s.startsWith("'") && s.endsWith("'") && s.length >= 2)
+  ) {
+    s = s.slice(1, -1).trim();
+  }
+  if (!s) return '';
+  s = s.replace(/\\/g, '/');
+  s = s.replace(/\/{2,}/g, '/');
+  if (s.length > 1 && s.endsWith('/')) {
+    s = s.replace(/\/+$/, '');
+  }
+  return s;
+}
+
+/**
+ * 跨平台物理工作区路径等价性比对：
+ * 1. 统一正斜杠与去末尾斜杠；
+ * 2. 针对 Windows 盘符（如 c:/ vs C:/）不敏感比对。
+ */
+export function areWorkspacePathsEqual(
+  a?: string | null,
+  b?: string | null
+): boolean {
+  const normA = normalizeWorkspacePath(a);
+  const normB = normalizeWorkspacePath(b);
+  if (!normA || !normB) return false;
+  if (/^[a-zA-Z]:\//.test(normA) || /^[a-zA-Z]:\//.test(normB)) {
+    return normA.toLowerCase() === normB.toLowerCase();
+  }
+  return normA === normB;
+}
+
+/**
+ * 按物理工作区路径过滤定时任务：
+ * 严格只保留属于指定 workspacePath 的任务；若 workspacePath 为空或未指定，返回空列表。
+ */
+export function filterWorkflowsByWorkspace<T extends { cwd?: string | null }>(
+  workflows: readonly T[] | undefined | null,
+  workspacePath?: string | null
+): T[] {
+  if (!workflows || !Array.isArray(workflows) || !workspacePath?.trim()) {
+    return [];
+  }
+  return workflows.filter((w) => areWorkspacePathsEqual(w.cwd, workspacePath));
+}

@@ -40,7 +40,7 @@ export function buildWorkflowAssistantContext(
 }
 
 /**
- * 派发「⚡ 定时任务编排助手模式」可见卡片到目标会话时间线
+ * 派发「定时任务编排助手模式」可见卡片到目标会话时间线
  * （被动直接注入，零 AI 轮次）。返回注入 id；目标会话不可用返回 null。
  */
 export function dispatchWorkflowAssistantCard(
@@ -56,7 +56,7 @@ export function dispatchWorkflowAssistantCard(
   const content = buildWorkflowAssistantContext(workspacePath, userRequest);
   const id = contextInjectionDispatcher.inject(targetSessionId, {
     kind: 'schedule_trigger',
-    title: '⚡ 定时任务编排助手模式 (Workflow Grill-Me)',
+    title: '定时任务编排助手模式',
     summary: '对齐任务名称 / 执行周期 / 执行指令 / 目标项目四要素',
     status: 'active',
     source,

@@ -605,6 +605,12 @@ impl WorkflowCommandState {
     pub(crate) fn backend_handle(&self) -> Arc<WorkflowBackend> {
         Arc::clone(&self.backend)
     }
+
+    /// 后端句柄（测试与集成访问别名）
+    #[cfg(test)]
+    pub(crate) fn backend(&self) -> Arc<WorkflowBackend> {
+        self.backend_handle()
+    }
 }
 
 // ── create_workflow 工具通道（维度五 / 05 详案 §2.4 路径 A 生产接线）────
@@ -674,16 +680,16 @@ fn workflow_schedule_wire_json(
     input: &agent_tools::WorkflowCreateInput,
 ) -> serde_json::Value {
     match input.schedule_type.as_str() {
-        SCHEDULE_TYPE_DAILY => serde_json::json!({
+        "daily" => serde_json::json!({
             "type": "daily",
             "time": input.daily_time.clone().unwrap_or_default(),
             "timezone": "local",
         }),
-        SCHEDULE_TYPE_INTERVAL_MINUTES => serde_json::json!({
+        "intervalMinutes" => serde_json::json!({
             "type": "intervalMinutes",
             "intervalMinutes": input.interval_minutes.unwrap_or_default(),
         }),
-        SCHEDULE_TYPE_CRON => serde_json::json!({
+        "cron" => serde_json::json!({
             "type": "cron",
             "expression": input.cron_expression.clone().unwrap_or_default(),
         }),
@@ -841,13 +847,14 @@ impl WorkflowBackend {
                 let cron_id = registry.register(input).await.map_err(map_scheduler_err)?;
                 // manual（无表达式）不经注册表：命令层独立 id 分配
                 let now = now_ms();
+                let next_fire_at_ms = next_fire_after_ms(&expression, now).unwrap_or(0);
                 let workflow = StoredWorkflow {
                     cron_id,
                     expression,
                     prompt,
                     max_iterations: None,
                     is_daemon: false,
-                    next_fire_at_ms: now, // 展示位；注册表 snapshot 为准
+                    next_fire_at_ms,
                     fired_count: 0,
                     enabled,
                     name,
@@ -1439,7 +1446,8 @@ mod tests {
             .await
             .expect("创建应成功");
         let result = backend.trigger(&view.id).expect("触发应成功");
-        assert_eq!(result.run_id, None, "runId 由引擎触发路径产出，命令层暂空");
+        assert_eq!(result.run_id.as_deref(), Some("cron-0-fire-1"));
+        assert_eq!(result.session_id.as_deref(), Some("sched-cron-0-1"));
         // fired_count 计入
         let persisted = backend.store.load_all();
         assert_eq!(persisted.len(), 1);
@@ -1458,7 +1466,7 @@ mod tests {
         let runs = backend.list_runs(Some(&view.id));
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].workflow_id, view.id);
-        assert_eq!(runs[0].status, "pending");
+        assert_eq!(runs[0].status, "completed");
     }
 
     /// 非法调度拒绝（Rust 侧真实错误文案——parse_cron 中文错误，不落库）
