@@ -273,11 +273,10 @@ export function resolveSlashCommand(input: string): ResolvedSlashCommand {
 /**
  * 纯导航 slash：只开面板 / 切标签。
  * 调用方必须：不 createSession、不进主对话流、成功路径不 toast。
+ * （维度三 §2.6：/schedule 移出导航——对话流编排助手命令，见 isConversationSlash）
  */
 export function isNavigationSlash(kind: SlashCommandKind): boolean {
-  return (
-    kind === 'schedule' || kind === 'teamwork-preview' || kind === 'browser'
-  );
+  return kind === 'teamwork-preview' || kind === 'browser';
 }
 
 /**
@@ -288,9 +287,17 @@ export function isSideEffectSlash(kind: SlashCommandKind): boolean {
   return isNavigationSlash(kind) || kind === 'learn';
 }
 
-/** 是否为会改写 modelText 的「对话内」命令（goal/grill-me/skill），而非纯导航 */
+/**
+ * 是否为「对话内」命令（schedule/goal/grill-me/skill），而非纯导航。
+ * （维度三 §2.6：/schedule 归入对话流——助手卡片派发 + Grill-Me 对齐）
+ */
 export function isConversationSlash(kind: SlashCommandKind): boolean {
-  return kind === 'goal' || kind === 'grill-me' || kind === 'skill';
+  return (
+    kind === 'schedule' ||
+    kind === 'goal' ||
+    kind === 'grill-me' ||
+    kind === 'skill'
+  );
 }
 
 /**
@@ -367,7 +374,7 @@ export function canonicalSlashFill(
 ): string {
   switch (kind) {
     case 'schedule':
-      return '/schedule';
+      return '/schedule ';
     case 'teamwork-preview':
       return '/teamwork';
     case 'browser':
@@ -394,9 +401,9 @@ export function canonicalSlashFill(
  * - 需参命令：尾部空格便于续写
  * - 中文别名点选 → 规范英文 token fill（菜单一致）
  * - skill / 演示命令：同样尾空格
+ * （维度三 §2.6：/schedule 菜单点选改为填入对话模板，不再 open-schedule 跳面板）
  */
-export type SlashMenuPickResult =
-  { action: 'open-schedule' } | { action: 'fill'; text: string };
+export type SlashMenuPickResult = { action: 'fill'; text: string };
 
 function ensureSlashPrefix(token: string): string {
   const t = token.trim();
@@ -416,7 +423,7 @@ export function slashMenuPick(menuCmd: string): SlashMenuPickResult {
 
   switch (r.kind) {
     case 'schedule':
-      return { action: 'open-schedule' };
+      return { action: 'fill', text: canonicalSlashFill('schedule') };
     case 'teamwork-preview':
       return { action: 'fill', text: canonicalSlashFill('teamwork-preview') };
     case 'browser':

@@ -6,6 +6,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 const listWorkflowsMock = vi.hoisted(() => vi.fn(async () => []));
 const closeSettingsMock = vi.hoisted(() => vi.fn());
 const injectSeedMock = vi.hoisted(() => vi.fn());
+const dispatchCardMock = vi.hoisted(() => vi.fn(() => 'inj-test-1'));
 const emitUiEventMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../../api/workflowApi', async (importOriginal) => {
@@ -54,6 +55,12 @@ vi.mock('../../api/draft/sessionDraftManager', () => ({
   sessionDraftManager: {
     injectSeed: (...args: unknown[]) => injectSeedMock(...args),
   },
+}));
+
+vi.mock('../../api/workflow-api/workflowAssistantCard', () => ({
+  dispatchWorkflowAssistantCard: (...args: unknown[]) =>
+    dispatchCardMock(...args),
+  WORKFLOW_CREATE_TEMPLATE: '/schedule 模板',
 }));
 
 vi.mock('../../api/uiEvents', () => ({
@@ -143,6 +150,9 @@ describe('SettingsScheduleTab I4 死皮拉回', () => {
     };
     expect(payload.targetSessionId).toBe('sess-target-1');
     expect(payload.content).toMatch(/定时任务/);
+    // 可见助手卡片同步派发（维度五 TC-WG-01）
+    expect(dispatchCardMock).toHaveBeenCalledTimes(1);
+    expect(dispatchCardMock.mock.calls[0]?.[0]).toBe('sess-target-1');
     expect(closeSettingsMock).toHaveBeenCalled();
 
     await waitFor(() => {

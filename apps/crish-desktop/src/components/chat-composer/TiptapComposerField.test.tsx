@@ -239,18 +239,20 @@ describe('TiptapComposerField 适配层契约（T2）', () => {
     });
   });
 
-  it('斜杠 open-schedule 动作：/schedule 点选转交宿主回调，不落输入', async () => {
-    const onSlashMenuPick = vi.fn();
-    const { onChangeLog } = renderAdapter({ onSlashMenuPick });
+  it('斜杠 /schedule 点选：填入对话模板前缀（维度三 §2.6——不再转交宿主回调）', async () => {
+    const { onChangeLog } = renderAdapter({});
     await typeText('/');
     const scheduleItem = await screen.findByRole('option', {
       name: /\/schedule/,
     });
     fireEvent.click(scheduleItem);
+    // 编辑器内容注入 '/schedule '（尾空格供续写）；序列化回流尾随空格被 trim（宿主发送同样 trim，语义一致）
     await waitFor(() => {
-      expect(onSlashMenuPick).toHaveBeenCalledWith('/schedule');
+      expect(getEditorDom().textContent).toContain('/schedule');
     });
-    expect(onChangeLog.some((v) => v.includes('/schedule'))).toBe(false);
+    await waitFor(() => {
+      expect(onChangeLog).toContain('/schedule');
+    });
   });
 
   it('skill 命令接入：动态 skillSlashCommands 并入菜单并文本注入', async () => {

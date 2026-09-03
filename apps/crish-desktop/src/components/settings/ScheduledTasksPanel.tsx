@@ -22,7 +22,9 @@ import {
 } from '../../store/storeAccess';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useSessionStore } from '../../store/sessionStore';
+import { getWorkspacePath } from '../../api/projectStore';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
+import { dispatchWorkflowAssistantCard, WORKFLOW_CREATE_TEMPLATE } from '../../api/workflow-api/workflowAssistantCard';
 import styles from './ScheduledTasksPanel.module.css';
 import { Button, Tooltip, Menu } from '../ui';
 import type { SelectOptionItem } from '../ui';
@@ -113,14 +115,6 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
   };
 
   const handleCreateInChat = () => {
-    const promptTemplate = [
-      '/schedule 请帮我创建一个定时任务：',
-      '- 任务目标：[描述希望定时执行的任务，例如：每日代码体检 / PR 总结]',
-      '- 执行周期：[例如：每天 09:00 / 每 30 分钟 / 0 9 * * *]',
-      '- 所属项目：[例如：当前项目 / 全局]',
-      '- 具体指令：[每次触发时希望 Agent 执行的具体操作]',
-    ].join('\n');
-
     navigateToNewDraft();
     // 以 store 实际返回的会话 ID 定向注入（禁止 'draft' 字面量兜底）
     const activeSid = useSessionStore.getState().activeSessionId;
@@ -131,29 +125,17 @@ export const ScheduledTasksPanel: React.FC<Props> = ({ onBackToChat }) => {
     }
     sessionDraftManager.injectSeed({
       targetSessionId: activeSid,
-      content: promptTemplate,
+      content: WORKFLOW_CREATE_TEMPLATE,
       mode: 'safe_seed',
       metadata: { source: 'schedule_panel', title: '定时任务编排模版' },
     });
-
-    // 注入专属的定时任务助手引导 Prompt
-    const assistantGuideText = [
-      '**定时任务创建助手**',
-      '',
-      '工作指南：',
-      '1. 理解用户的定时任务目标、触发频率（例如：每天特定时间 HH:mm、间隔分钟数、或标准 5 段 cron 表达式）和工作目录（所属项目）；',
-      '2. 如果用户提供的信息不完整或模糊（例如未指定执行时间、未明确具体任务指令、或未确定工作目录），请主动以结构化形式向用户提问以补齐必要参数；',
-      '3. 确认所有参数完整后，为用户总结任务定义并指导完成注册。',
-      '',
-      '已为您准备好定时任务创建模版，您可以直接在下方输入框中补充具体需求并发送。如有任何疑问，随时向我提问。',
-    ].join('\n');
-
-    useSessionStore.getState().addMessage('default', activeSid, {
-      id: `system-prompt-${Date.now()}`,
-      sender: 'assistant',
-      text: assistantGuideText,
-      timestamp: Date.now(),
-    });
+    // 对话流可见助手卡片（被动直接注入，取代旧 addMessage 纯文本引导——
+    // 卡片正文 = 助手指令的 wire 投影文本，WYSIWYG 单一来源）
+    dispatchWorkflowAssistantCard(
+      activeSid,
+      getWorkspacePath() || '',
+      'schedule_panel'
+    );
 
     onBackToChat?.();
   };

@@ -16,6 +16,7 @@ import {
 } from '../../api/workflowApi';
 import { useSessionStore } from '../../store/sessionStore';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
+import { dispatchWorkflowAssistantCard } from '../../api/workflow-api/workflowAssistantCard';
 import { closeSettings } from '../../store/storeAccess';
 import styles from './SettingsScheduleTab.module.css';
 import { Button, SegmentedControl } from '../ui';
@@ -102,7 +103,7 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
     setWfDraft(draftFromWorkflow(w));
   };
 
-  /** 关闭设置，在对话里用 AI 写定时任务名称与提示词（定向注入当前会话草稿） */
+  /** 关闭设置，在对话里用 AI 写定时任务名称与提示词（定向注入 + 可见助手卡片） */
   const handleAiCreateSchedule = () => {
     // 以 store 当前活跃会话定向（返回对话时即该会话）；无活跃会话则中止注入
     const targetSid = useSessionStore.getState().activeSessionId;
@@ -117,6 +118,11 @@ export const SettingsScheduleTab: React.FC<Props> = ({ _onBlockingOverlayChange 
         mode: 'safe_seed',
         metadata: { source: 'settings_tab', title: '定时任务对话创建' },
       });
+      dispatchWorkflowAssistantCard(
+        targetSid,
+        workspacePath,
+        'schedule_panel'
+      );
     } else {
       console.warn('[SettingsScheduleTab] 无活跃会话，跳过草稿注入');
     }

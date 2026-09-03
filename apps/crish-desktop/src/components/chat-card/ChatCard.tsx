@@ -55,9 +55,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onPermissionChange={(m) => {
           state.setPermissionMode(m);
         }}
-        onOpenSchedule={() => {
-          state.setMainSurface('scheduled');
-        }}
         rightActions={
           state.showModelPicker ? (
             <ModelBadgePicker

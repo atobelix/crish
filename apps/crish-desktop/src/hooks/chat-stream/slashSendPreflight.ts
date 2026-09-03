@@ -4,8 +4,9 @@
  */
 import { checkEngineReadyRealtime } from '../../api/chat-bridge/ConnectionLifecycle';
 import { domainUserMessage } from '../../api/userFacingErrors';
+import { useSessionStore } from '../../store/sessionStore';
+import { navigateToNewDraft } from '../../store/storeAccess';
 import {
-  addMessage,
   openSettings,
   patchSession,
   setPermissionMode,
@@ -15,7 +16,6 @@ import {
   isNavigationSlash,
   slashMissingArg,
 } from '../../api/resolveSlashCommand';
-import { emitUiEvent } from '../../api/uiEvents';
 import { clientApi } from '../../api/clientApi';
 import { getWorkspacePath } from '../../api/projectStore';
 import {
@@ -27,7 +27,15 @@ import {
   formatAnnotationsForModel,
   takePendingFileAnnotations,
 } from '../../api/workspaceFsApi';
-import { GRILL_ME_PREFIX } from './slash-prefixes';
+import { GRILL_ME_PROMPT } from '../../prompts';
+import { contextInjectionDispatcher } from '../../api/contextInjectionDispatcher';
+import { estimateTextTokens } from '../../utils/tokenEstimator';
+import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
+import {
+  buildWorkflowAssistantContext,
+  dispatchWorkflowAssistantCard,
+  WORKFLOW_CREATE_TEMPLATE,
+} from '../../api/workflow-api/workflowAssistantCard';
 import { buildMultimodalFromAttachments } from './multimodal';
 import { canStreamLocalSession } from './helpers';
 import { getSessionById } from '../../store/sessionStore';
@@ -109,36 +117,71 @@ export async function runPreflightChecks(
   const slash = resolveSlashCommand(rawInput);
 
   if (isNavigationSlash(slash.kind)) {
-    if (slash.kind === 'schedule') {
-      const restText = rawInput.replace(/^\/(schedule|定时任务|定时)\s*/i, '').trim();
-      if (!restText) {
-        setChatInput('');
-        setSlashMenuOpen(false);
-        emitUiEvent('open-scheduled');
-        return { status: 'handled' };
-      }
-      // 携带任务参数时放行给 Agent 会话处理
+    setChatInput('');
+    setSlashMenuOpen(false);
+    if (slash.kind === 'teamwork-preview') {
+      void import('../../api/openAgentPanel').then(
+        ({ openAgentPanelBrowse }) => {
+          openAgentPanelBrowse({ sessionId: activeSessionId || undefined });
+        }
+      );
     } else {
-      setChatInput('');
-      setSlashMenuOpen(false);
-      if (slash.kind === 'teamwork-preview') {
-        void import('../../api/openAgentPanel').then(
-          ({ openAgentPanelBrowse }) => {
-            openAgentPanelBrowse({ sessionId: activeSessionId || undefined });
+      handleGlobalTabClick('preview');
+      if (slash.kind === 'browser' && slash.url) {
+        void import('../../api/previewBrowserStore').then(
+          ({ normalizeBrowseUrl, setPreviewUrl }) => {
+            setPreviewUrl(normalizeBrowseUrl(slash.url));
           }
         );
-      } else {
-        handleGlobalTabClick('preview');
-        if (slash.kind === 'browser' && slash.url) {
-          void import('../../api/previewBrowserStore').then(
-            ({ normalizeBrowseUrl, setPreviewUrl }) => {
-              setPreviewUrl(normalizeBrowseUrl(slash.url));
-            }
-          );
-        }
       }
+    }
+    return { status: 'handled' };
+  }
+
+  // /schedule：对话流编排助手（维度三 §2.6 / 维度五 TC-WG-01/02——绝不跳转设置页）
+  if (slash.kind === 'schedule') {
+    setSlashMenuOpen(false);
+    const restText = rawInput
+      .replace(/^\/(schedule|定时任务|定时)\s*/i, '')
+      .trim();
+    if (!restText) {
+      // 无参：确保存在会话（草稿态则新建）→ 预填四要素模板（可撤销）→
+      // 派发助手卡片，停留在输入框补全（被动直接注入，零 AI 轮次）
+      navigateToNewDraft();
+      const sid = useSessionStore.getState().activeSessionId;
+      if (!sid) {
+        showToast('会话不可用，请重试');
+        return { status: 'handled' };
+      }
+      sessionDraftManager.injectSeed({
+        targetSessionId: sid,
+        content: WORKFLOW_CREATE_TEMPLATE,
+        mode: 'safe_seed',
+        metadata: { source: 'slash_command', title: '/schedule 编排模板' },
+      });
+      dispatchWorkflowAssistantCard(
+        sid,
+        getWorkspacePath() || '',
+        'slash_command'
+      );
       return { status: 'handled' };
     }
+    // 带参：助手卡片可见派发 + wire 投影文本随消息下发（模型按卡片指令进入编排对齐）
+    dispatchWorkflowAssistantCard(
+      activeSessionId || '',
+      getWorkspacePath() || '',
+      'slash_command',
+      restText
+    );
+    return {
+      status: 'proceed',
+      slash,
+      modelText: buildWorkflowAssistantContext(
+        getWorkspacePath() || '',
+        restText
+      ),
+      displayText: rawInput,
+    };
   }
 
   if (slashMissingArg(slash)) {
@@ -175,6 +218,17 @@ export async function runPreflightChecks(
       displayText = resolved.rest
         ? `/skill:${resolved.skill.name} ${resolved.rest}`
         : `使用技能：${resolved.skill.name}`;
+      // 技能上下文可见卡片（WYSIWYG：卡片正文 = wire 注入文本，单一来源）
+      contextInjectionDispatcher.inject(activeSessionId || '', {
+        kind: 'skill',
+        title: `🛠️ 技能上下文：${resolved.skill.name}`,
+        summary: resolved.skill.description || undefined,
+        status: 'active',
+        source: 'slash_command',
+        content: modelText,
+        tokenEstimate: estimateTextTokens(modelText),
+        metadata: { skillId: resolved.skill.id, scope: resolved.skill.scope },
+      });
     } catch (e) {
       setChatInput('');
       setSlashMenuOpen(false);
@@ -291,13 +345,49 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
     const gm = createInitialGoalMode(goalText, GOAL_DEFAULT_MAX_ITERATIONS);
     patchSession(sessionId, { goalMode: gm });
     displayText = `/goal ${goalText}`;
-    modelText = `${buildGoalModePrefix(goalText, 0, gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS, gm.tasks)}${goalText}`;
+    const directive = buildGoalModePrefix(
+      goalText,
+      0,
+      gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS,
+      gm.tasks
+    );
+    // 首次进入目标模式：派发可见目标卡片（后续轮次经 goalModeContinuation
+    // 续期 wire 前缀，不重复派卡刷屏）
+    const goalCard = `[系统上下文注入 · 目标推进模式]\n\n${directive}`;
+    contextInjectionDispatcher.inject(sessionId, {
+      kind: 'runtime_steering',
+      title: '🎯 目标推进模式 (Goal Mode)',
+      summary: goalText,
+      status: 'active',
+      source: 'slash_command',
+      content: goalCard,
+      tokenEstimate: estimateTextTokens(goalCard),
+      metadata: {
+        mode: 'goal',
+        iteration: 0,
+        maxIterations: gm.maxIterations ?? GOAL_DEFAULT_MAX_ITERATIONS,
+      },
+    });
+    modelText = `${directive}${goalText}`;
   }
 
   if (slash.kind === 'grill-me') {
     setPermissionMode('plan');
     displayText = `/grill-me ${slash.topic}`;
-    modelText = `${GRILL_ME_PREFIX}主题：${slash.topic}`;
+    // 需求对齐模式可见卡片（WYSIWYG：卡片正文 = wire 注入文本，单一来源；
+    // GRILL_ME_PREFIX 隐式前缀已清退——slash-prefixes.ts 物理删除）
+    const alignmentCard = `[系统上下文注入 · 需求对齐模式]\n\n${GRILL_ME_PROMPT.render({ topic: slash.topic })}`;
+    contextInjectionDispatcher.inject(sessionId, {
+      kind: 'runtime_steering',
+      title: '🤝 需求对齐模式 (Grill-Me)',
+      summary: slash.topic,
+      status: 'active',
+      source: 'slash_command',
+      content: alignmentCard,
+      tokenEstimate: estimateTextTokens(alignmentCard),
+      metadata: { mode: 'grill-me', permissionMode: 'plan' },
+    });
+    modelText = alignmentCard;
   }
 
   if (rawInput && slash.kind !== 'goal') {
@@ -312,10 +402,31 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
     modelText,
     attachments
   );
-  const fileAnns = takePendingFileAnnotations();
+  // 批注按当前会话取走（会话隔离暂存池，详案 02 §3.2——跨会话串扰根除）
+  const fileAnns = takePendingFileAnnotations(sessionId);
   const annBlock = formatAnnotationsForModel(fileAnns);
   const input =
     (annBlock ? `${annBlock}\n\n` : '') + modelText + promptAttachBlock;
+
+  // 附件可见卡片（被动直接注入）：图片/文本附件以 file_context 卡片进入
+  // 时间线（所见即所知），wire 仍走既有 content parts / promptAttachBlock
+  for (const a of attachments) {
+    const isImage = Boolean(a.dataUrl);
+    const content = isImage
+      ? `[图片附件 · ${a.name}]\n已通过结构化 image_url 部分下发视觉分析。`
+      : `[文件附件 · ${a.name}]\n${a.text ? a.text.slice(0, 800) : ''}`;
+    contextInjectionDispatcher.inject(sessionId, {
+      kind: 'file_context',
+      title: `${isImage ? '🖼️' : '📎'} 附件：${a.name}`,
+      summary: isImage ? '图片（结构化下发）' : (a.text || '').slice(0, 80),
+      status: 'injected',
+      source: 'user_mention',
+      content,
+      tokenEstimate: estimateTextTokens(content),
+      targetPaths: [a.name],
+      metadata: isImage ? { kind: 'image' } : { kind: 'text-attachment' },
+    });
+  }
 
   let finalStreamOptions = streamOptions;
   if (finalStreamOptions?.content?.length && annBlock) {
@@ -335,15 +446,6 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
       content: [{ type: 'text', text: `${annBlock}\n\n${modelText}` }],
       hasImages: false,
     };
-  }
-
-  if (fileAnns.length) {
-    displayText = displayText
-      ? `${displayText}\n\n（含 ${fileAnns.length} 条文件批注）`
-      : `（${fileAnns.length} 条文件批注）`;
-  }
-  if (attachments.length > 0) {
-    displayText = `${displayText}${displayText ? '\n\n' : ''}📎 ${attachments.map((a: ChatAttachment) => a.name).join('、')}`;
   }
 
   return { input, displayText, finalStreamOptions };

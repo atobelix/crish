@@ -331,16 +331,16 @@ describe('resolveSlashCommand', () => {
   });
 
   it('classifies navigation vs side-effect vs conversation (错误流/幽灵会话边界)', () => {
-    // 纯导航：不建会话、成功不 toast
-    expect(isNavigationSlash('schedule')).toBe(true);
+    // 维度三 §2.6：/schedule 移出导航——对话流编排助手命令（有意建草稿会话）
+    expect(isNavigationSlash('schedule')).toBe(false);
     expect(isNavigationSlash('teamwork-preview')).toBe(true);
     expect(isNavigationSlash('browser')).toBe(true);
     expect(isNavigationSlash('learn')).toBe(false);
     expect(isNavigationSlash('goal')).toBe(false);
     expect(isNavigationSlash('none')).toBe(false);
 
-    // side-effect ⊇ navigation + learn
-    expect(isSideEffectSlash('schedule')).toBe(true);
+    // side-effect ⊇ navigation + learn（schedule 已归对话流）
+    expect(isSideEffectSlash('schedule')).toBe(false);
     expect(isSideEffectSlash('teamwork-preview')).toBe(true);
     expect(isSideEffectSlash('browser')).toBe(true);
     expect(isSideEffectSlash('learn')).toBe(true);
@@ -350,18 +350,19 @@ describe('resolveSlashCommand', () => {
     expect(isConversationSlash('goal')).toBe(true);
     expect(isConversationSlash('grill-me')).toBe(true);
     expect(isConversationSlash('skill')).toBe(true);
-    expect(isConversationSlash('schedule')).toBe(false);
+    expect(isConversationSlash('schedule')).toBe(true);
     expect(isConversationSlash('teamwork-preview')).toBe(false);
     expect(isConversationSlash('learn')).toBe(false);
   });
 
   it('isSessionlessSlash guards navigation + missingArg (no ghost session)', () => {
-    expect(isSessionlessSlash(resolveSlashCommand('/schedule'))).toBe(true);
+    // 维度三 §2.6：无参 /schedule 有意新建草稿会话并预填模板（非幽灵会话）
+    expect(isSessionlessSlash(resolveSlashCommand('/schedule'))).toBe(false);
     expect(isSessionlessSlash(resolveSlashCommand('/teamwork'))).toBe(true);
     expect(
       isSessionlessSlash(resolveSlashCommand('/browser https://a.com'))
     ).toBe(true);
-    expect(isSessionlessSlash(resolveSlashCommand('/定时'))).toBe(true);
+    expect(isSessionlessSlash(resolveSlashCommand('/定时'))).toBe(false);
     expect(isSessionlessSlash(resolveSlashCommand('/协作'))).toBe(true);
     expect(isSessionlessSlash(resolveSlashCommand('/浏览'))).toBe(true);
     expect(isSessionlessSlash(resolveSlashCommand('/goal'))).toBe(true);
@@ -412,7 +413,8 @@ describe('resolveSlashCommand', () => {
   });
 
   it('canonicalSlashFill and KNOWN_SLASH_TOKENS registry', () => {
-    expect(canonicalSlashFill('schedule')).toBe('/schedule');
+    // 维度三 §2.6：schedule fill 带尾空格（待续参，对齐 goal/grill-me）
+    expect(canonicalSlashFill('schedule')).toBe('/schedule ');
     expect(canonicalSlashFill('teamwork-preview')).toBe('/teamwork');
     expect(canonicalSlashFill('browser')).toBe('/browser ');
     expect(canonicalSlashFill('goal')).toBe('/goal ');
@@ -432,7 +434,8 @@ describe('resolveSlashCommand', () => {
   });
 
   it('slashMenuPick aligns menu fill with resolveSlashCommand kinds', () => {
-    expect(slashMenuPick('/schedule')).toEqual({ action: 'open-schedule' });
+    // 维度三 §2.6：/schedule 菜单点选改为填入对话模板（不再跳面板）
+    expect(slashMenuPick('/schedule')).toEqual({ action: 'fill', text: '/schedule ' });
     expect(slashMenuPick('/teamwork')).toEqual({
       action: 'fill',
       text: '/teamwork',
@@ -462,8 +465,8 @@ describe('resolveSlashCommand', () => {
       action: 'fill',
       text: '/simulate ',
     });
-    // 中文别名点选 → 规范英文 fill / open
-    expect(slashMenuPick('/定时')).toEqual({ action: 'open-schedule' });
+    // 中文别名点选 → 规范英文 fill（schedule 已归对话流）
+    expect(slashMenuPick('/定时')).toEqual({ action: 'fill', text: '/schedule ' });
     expect(slashMenuPick('协作')).toEqual({
       action: 'fill',
       text: '/teamwork',

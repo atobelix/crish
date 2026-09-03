@@ -113,7 +113,6 @@ export type ChatComposerProps = {
   setShowPlusMenu: (v: boolean) => void;
   permissionMode: PermissionMode;
   onPermissionChange: (m: PermissionMode) => void;
-  onOpenSchedule: () => void;
   onCloseSiblingMenus?: () => void;
   rightActions?: React.ReactNode;
   className?: string;
@@ -162,7 +161,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   setShowPlusMenu,
   permissionMode,
   onPermissionChange,
-  onOpenSchedule,
   onCloseSiblingMenus,
   rightActions,
   className,
@@ -226,13 +224,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
       el.focus();
     }
   }, []);
-
-  // tiptap 菜单 open-schedule 动作：清空输入并转交宿主开面板（不落输入，对齐原文本注入语义）
-  const handleSlashMenuPick = useCallback(() => {
-    setChatInput('');
-    onOpenSchedule();
-    requestAnimationFrame(focusComposerTextarea);
-  }, [focusComposerTextarea, onOpenSchedule, setChatInput]);
 
   const handleRemoveAttachment = useCallback(
     (name: string) => {
@@ -362,7 +353,6 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           <TiptapComposerFieldLazy
             {...fieldContract}
             baseSlashCommands={filteredCommands}
-            onSlashMenuPick={handleSlashMenuPick}
             emptyKind={emptyKind}
             onFilesSelected={onFilesSelected}
           />

@@ -95,7 +95,6 @@ const SKILL_COMMANDS = [{ cmd: '/skill:检视', desc: '检视代码质量' }];
 function renderChatComposer(opts: {
   onSend?: () => void;
   onPasteImage?: (e: React.ClipboardEvent) => void;
-  onOpenSchedule?: () => void;
   isProcessing?: boolean;
   queuedMessages?: ChatComposerProps['queuedMessages'];
   onEditQueued?: (id: string) => void;
@@ -114,7 +113,6 @@ function renderChatComposer(opts: {
         }
       })
   );
-  const onOpenSchedule = vi.fn(opts.onOpenSchedule ?? (() => {}));
   const sentValues: string[] = [];
 
   function Harness() {
@@ -158,7 +156,6 @@ function renderChatComposer(opts: {
         setShowPlusMenu={() => {}}
         permissionMode={permission}
         onPermissionChange={setPermission}
-        onOpenSchedule={onOpenSchedule}
         queuedMessages={opts.queuedMessages}
         onSendQueuedNow={opts.onSendQueuedNow}
         onEditQueued={opts.onEditQueued}
@@ -173,7 +170,6 @@ function renderChatComposer(opts: {
     loadSkillSlash,
     onSend,
     onPasteImage,
-    onOpenSchedule,
     sentValues,
   };
 }
@@ -282,7 +278,6 @@ describe('ChatComposer 全链（T6 接线）', () => {
           setShowPlusMenu={() => {}}
           permissionMode={permission}
           onPermissionChange={setPermission}
-          onOpenSchedule={vi.fn()}
         />
       );
     }
@@ -333,15 +328,15 @@ describe('ChatComposer 全链（T6 接线）', () => {
     });
   });
 
-  it('open-schedule 动作：/schedule 点选转交宿主开面板，不落输入', async () => {
-    const { onOpenSchedule } = renderChatComposer({});
+  it('/schedule 点选：填入对话模板前缀（维度三 §2.6——面板不再经斜杠打开）', async () => {
+    renderChatComposer({});
     await typeText('/sche');
     const scheduleItem = await screen.findByRole('option', {
       name: /\/schedule/,
     });
     fireEvent.click(scheduleItem);
     await waitFor(() => {
-      expect(onOpenSchedule).toHaveBeenCalledTimes(1);
+      expect(getEditorDom().textContent).toContain('/schedule');
     });
   });
 

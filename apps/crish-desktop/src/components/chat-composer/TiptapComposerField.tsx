@@ -79,8 +79,6 @@ export type TiptapComposerFieldProps = ComposerFieldProps & {
   skillSlashCommands?: ReadonlyArray<{ cmd: string; desc: string }>;
   /** 宿主系统斜杠命令（缺省用内置 BASE_SLASH 对齐集） */
   baseSlashCommands?: ReadonlyArray<{ cmd: string; desc: string }>;
-  /** 宿主点选系统命令回调（open-schedule 动作等） */
-  onSlashMenuPick?: (cmd: string) => void;
   /** 宿主文件选择链（编辑器拖放直达） */
   onFilesSelected?: (files: File[]) => void | Promise<void>;
   /** 提及候选人（@ 触发；未接入宿主候选人源时留空兜底） */
@@ -120,7 +118,6 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
   containerRef,
   skillSlashCommands,
   baseSlashCommands,
-  onSlashMenuPick,
   onFilesSelected,
   mentionCandidates,
   emptyKind,
@@ -237,12 +234,6 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
     [onFilesSelected]
   );
 
-  // ── 宿主斜杠命令桥（系统 + skill → 编辑器菜单项，slashMenuPick 文本注入）──────
-  const slashPickRef = useRef(onSlashMenuPick);
-  useEffect(() => {
-    slashPickRef.current = onSlashMenuPick;
-  }, [onSlashMenuPick]);
-
   // ── 定向注入响应：草稿模板命中活跃会话后聚焦并全选首个占位符 ───────────────
   useEffect(() => {
     if (!draftInjectionTick) return;
@@ -260,11 +251,6 @@ export const TiptapComposerField: React.FC<TiptapComposerFieldProps> = ({
         keywords: [c.cmd.replace(/^\/+/, '')],
         command: ({ editor, range }) => {
           const pick = slashMenuPick(c.cmd);
-          if (pick.action === 'open-schedule') {
-            // 定时任务：转交宿主开面板，不落输入
-            slashPickRef.current?.(c.cmd);
-            return;
-          }
           const chain = editor.chain().focus();
           if (range) chain.deleteRange(range);
           chain.insertContent(pick.text).run();
