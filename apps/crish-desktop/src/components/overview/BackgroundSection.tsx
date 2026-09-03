@@ -1,7 +1,8 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
 import { Button } from '../ui';
-import { ChevronDown, Terminal } from 'lucide-react';
+import { Terminal } from 'lucide-react';
+import { ChevronDownIcon } from '../../assets/icons';
 import { formatBgTaskMeta } from './helpers';
 import type { BackgroundTaskInfo } from '../../api/backgroundTasksApi';
 
@@ -34,8 +35,8 @@ export const BackgroundSection = React.memo(function BackgroundSection({
         {bgTasks.length > 0 ? (
           <span className={styles.pill}>{bgTasks.length}</span>
         ) : null}
-        <ChevronDown
-          size={14}
+        <ChevronDownIcon
+          size={13}
           className={`${styles.chev} ${open ? styles.open : ''}`}
           aria-hidden
         />

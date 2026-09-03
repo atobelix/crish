@@ -1,6 +1,7 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
-import { ChevronDown, Cpu } from 'lucide-react';
+import { Cpu } from 'lucide-react';
+import { ChevronDownIcon } from '../../assets/icons';
 
 interface UsageSectionProps {
   open: boolean;
@@ -19,7 +20,7 @@ export const UsageSection = React.memo(function UsageSection({
         <Cpu size={15} strokeWidth={1.75} aria-hidden />
         <span>用量</span>
         <span className={styles.pill}>${estimated.toFixed(3)}</span>
-        <ChevronDown size={14} className={`${styles.chev} ${open ? styles.open : ''}`} aria-hidden />
+        <ChevronDownIcon size={13} className={`${styles.chev} ${open ? styles.open : ''}`} aria-hidden />
       </button>
       {open ? (
         <div className={styles.secB}>

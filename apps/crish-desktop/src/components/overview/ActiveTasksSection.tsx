@@ -1,7 +1,8 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
 import { Button } from '../ui';
-import { Activity, ChevronDown } from 'lucide-react';
+import { Activity } from 'lucide-react';
+import { ChevronDownIcon } from '../../assets/icons';
 import { formatElapsed } from './helpers';
 import type { PendingApprovalInfo } from '../../api/engineStatus';
 
@@ -43,8 +44,8 @@ export const ActiveTasksSection = React.memo(function ActiveTasksSection({
         <Activity size={15} strokeWidth={1.75} aria-hidden />
         <span>活动任务</span>
         {total > 0 ? <span className={styles.pill}>{total}</span> : null}
-        <ChevronDown
-          size={14}
+        <ChevronDownIcon
+          size={13}
           className={`${styles.chev} ${open ? styles.open : ''}`}
           aria-hidden
         />

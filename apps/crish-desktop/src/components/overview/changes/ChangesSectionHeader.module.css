@@ -1,0 +1,108 @@
+/**
+ * ChangesSectionHeader.module.css — 改动面板头部操作栏样式
+ * 
+ * 对齐规范：
+ * 1. 结构与其它 Section 统一：折叠展开按钮统一靠在最右侧（margin-left: auto）；
+ * 2. 选择按钮（Select）紧挨在“改动”标题与数量的右侧；
+ * 3. 整行可点击展开/折叠，Select 阻止冒泡独立交互；
+ * 4. 标题文字温润柔和，无多余悬停底色。
+ */
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  max-height: 30px;
+  padding: 0 2px;
+  box-sizing: border-box;
+  user-select: none;
+  cursor: pointer;
+  background-color: transparent;
+  transition: color var(--transition-fast, 120ms ease);
+}
+
+.headerRow:hover {
+  background-color: transparent;
+}
+
+/* 左侧标题簇：图标 + 标题 + 数量 */
+.leftCluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.leftCluster svg {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: color var(--transition-fast, 120ms ease);
+}
+
+.headerRow:hover .leftCluster svg {
+  color: var(--text-secondary);
+}
+
+/* 标题文字：统一对齐左侧栏 (var(--text-secondary)) */
+.titleText {
+  flex-shrink: 0;
+  line-height: 24px;
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+  transition: color var(--transition-fast, 120ms ease);
+}
+
+.headerRow:hover .titleText {
+  color: var(--text-primary);
+}
+
+/* 纯文本数字：弱化浅灰展示 */
+.countText {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  line-height: 24px;
+  font-weight: var(--font-weight-normal, 400);
+}
+
+/* ── 改动右侧的选择按钮容器 ── */
+.selectWrapper {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  max-height: 24px;
+  flex-shrink: 0;
+}
+
+/* 官方 Select 尺寸微调（继承组件库原生卡片背景与 var(--tint-hover) 规范） */
+.headerSelect {
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  padding: 0 6px 0 8px;
+  font-size: 11px;
+  line-height: 22px;
+  border-radius: 6px;
+}
+
+/* ── 最右侧折叠指示符：与其它 Section 绝对对齐 ── */
+.chev {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  opacity: 0.85;
+  transition: transform var(--transition-fast, 120ms ease), opacity var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
+  flex-shrink: 0;
+}
+
+.headerRow:hover .chev {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.chev.open {
+  transform: rotate(180deg);
+}

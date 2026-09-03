@@ -89,10 +89,17 @@
   font-family: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
+  color: var(--text-secondary);
   cursor: pointer;
   text-align: left;
   box-sizing: border-box;
+  transition: color var(--transition-fast, 120ms ease);
+}
+
+.secH svg {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: color var(--transition-fast, 120ms ease);
 }
 
 .secH:hover {
@@ -100,14 +107,20 @@
   color: var(--text-primary);
 }
 
+.secH:hover svg {
+  color: var(--text-secondary);
+}
+
 .secH:hover .chev {
   color: var(--text-secondary);
+  opacity: 1;
 }
 
 .chev {
   margin-left: auto;
   color: var(--text-tertiary);
-  transition: transform var(--transition-fast);
+  opacity: 0.85;
+  transition: transform var(--transition-fast, 120ms ease), opacity var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
   flex-shrink: 0;
 }
 
@@ -549,48 +562,16 @@ button.liveRow:hover {
 }
 
 .quickPromptCard {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: var(--space-2, 8px);
   width: 100%;
-  min-width: 0;
-  min-height: var(--control-height-sm, 28px);
-  padding: var(--space-2, 8px) var(--space-3, 12px);
-  margin: 0;
-  border: 1px solid var(--border-color, var(--hairline, var(--border-subtle)));
-  border-radius: var(--radius-lg, 10px);
-  background: transparent;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--font-size-sm, 13px);
-  font-weight: var(--font-weight-normal, 400);
-  line-height: var(--line-height-ui, 1.35);
+  justify-content: flex-start;
   text-align: left;
-  cursor: pointer;
-  box-sizing: border-box;
-  appearance: none;
-  -webkit-appearance: none;
-  transition:
-    background-color var(--transition-fast, 150ms ease),
-    border-color var(--transition-fast, 150ms ease),
-    color var(--transition-fast, 150ms ease);
-}
-
-.quickPromptCard:hover {
-  background: var(--control-soft-bg-hover, var(--bg-hover));
-  border-color: var(--border-color, var(--hairline));
-  color: var(--text-primary);
-}
-
-.quickPromptCard:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring);
+  border-radius: var(--radius-lg, 10px);
 }
 
 .quickPromptCard .ico {
   flex-shrink: 0;
   color: var(--text-tertiary);
+  transition: color var(--transition-fast, 150ms ease);
 }
 
 .quickPromptCard:hover .ico {

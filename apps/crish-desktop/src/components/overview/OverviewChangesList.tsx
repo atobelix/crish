@@ -1,74 +1,12 @@
 import React, { useMemo, useState } from 'react';
-import {
-  File,
-  FileCode2,
-  FileText,
-  Image,
-  Table,
-} from 'lucide-react';
 import { Button, Tooltip } from '../ui';
 import type { GitStatusFile } from '../../api/gitTreeHelpers';
 import { GitStatusBadge, DiffStatBar } from './GitStatusBadge';
-import { detectFileKind } from '../../api/workspaceFsApi';
-import { fileExtColor } from '../../api/codeHighlight';
+import { FileFormatIcon } from '../../assets/icons';
 import styles from './OverviewChangesList.module.css';
 
 function FileIcon({ name }: { name: string }) {
-  const k = detectFileKind(name);
-  const color = fileExtColor(name);
-  const sz = 14;
-  if (k === 'image') {
-    return (
-      <Image
-        size={sz}
-        className={styles.fileTypeIcon}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  }
-  if (k === 'pdf') {
-    return (
-      <FileText
-        size={sz}
-        className={styles.fileTypeIcon}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  }
-  if (k === 'table') {
-    return (
-      <Table
-        size={sz}
-        className={styles.fileTypeIcon}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  }
-  if (
-    /\.(ts|tsx|js|jsx|mjs|cjs|rs|py|go|java|css|html|json|md|yml|yaml)$/i.test(
-      name
-    )
-  ) {
-    return (
-      <FileCode2
-        size={sz}
-        className={styles.fileTypeIcon}
-        style={{ color }}
-        aria-hidden
-      />
-    );
-  }
-  return (
-    <File
-      size={sz}
-      className={styles.fileTypeIcon}
-      style={{ color }}
-      aria-hidden
-    />
-  );
+  return <FileFormatIcon fileName={name} size={14} className={styles.fileTypeIcon} />;
 }
 
 export interface OverviewChangesListProps {
@@ -124,6 +62,26 @@ export const OverviewChangesList: React.FC<OverviewChangesListProps> = React.mem
             const diffAria = `${file.additions ? `+${file.additions}` : ''} ${file.deletions ? `-${file.deletions}` : ''}`.trim();
             const fullAriaLabel = `${fileName}, ${statusText}${diffAria ? `, ${diffAria}` : ''}`;
 
+            const statusClass =
+              file.status === 'M'
+                ? styles.statusM
+                : file.status === 'A'
+                  ? styles.statusA
+                  : file.status === 'D'
+                    ? styles.statusD
+                    : file.status === 'U' || file.status === '?'
+                      ? styles.statusU
+                      : styles.statusDefault;
+
+            const statusLabel =
+              file.status === 'M'
+                ? '已修改'
+                : file.status === 'A'
+                  ? '已新增'
+                  : file.status === 'D'
+                    ? '已删除'
+                    : '已变更';
+
             return (
               <li key={file.path} className={styles.changesItem}>
                 <button
@@ -132,14 +90,9 @@ export const OverviewChangesList: React.FC<OverviewChangesListProps> = React.mem
                   onClick={() => onOpenFile(file)}
                   aria-label={fullAriaLabel}
                 >
-                  <GitStatusBadge
-                    status={file.status}
-                    conflicted={file.conflicted}
-                    staged={file.staged}
-                  />
                   <FileIcon name={fileName} />
-                  <Tooltip content={file.path}>
-                    <span className={styles.fileName}>{fileName}</span>
+                  <Tooltip content={`${statusLabel} · ${file.path}`}>
+                    <span className={`${styles.fileName} ${statusClass}`}>{fileName}</span>
                   </Tooltip>
                   {dirPath ? (
                     <span className={styles.dirBreadcrumb}>

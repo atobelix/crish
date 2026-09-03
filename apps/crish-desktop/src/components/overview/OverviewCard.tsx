@@ -7,20 +7,18 @@ import {
   useSessionField,
 } from '../../store/storeAccess';
 import {
-  useTerminalField,
   useSettingsField,
-  selectActiveDiffSource,
-  selectDiffFiles,
   selectScheduledTasks,
   selectTokenUsage,
 } from '../../store/storeAccess';
-import { setActiveDiffSource } from '../../api/storeAccess';
 import { estimateCostUsd } from '../../api/pricingStore';
 import {
   getActiveModelId,
   resolveDisplayModelId,
 } from '../../api/providerProfiles';
 import { useEngineState } from '../../hooks/useEngineState';
+import { listProjects, getWorkspacePath } from '../../api/projectStore';
+import { filterWorkflowsByWorkspace } from '../../api/workflowApi';
 
 import { OverviewHeader } from './OverviewHeader';
 import { OverviewStats } from './OverviewStats';
@@ -29,7 +27,7 @@ import { ActiveTasksSection } from './ActiveTasksSection';
 import { AgentSection } from './AgentSection';
 import { BackgroundSection } from './BackgroundSection';
 import { ScheduleSection } from './ScheduleSection';
-import { ChangesSection } from './ChangesSection';
+import { ChangesSection } from './changes';
 import { useOverviewState } from './useOverviewState';
 
 export type OverviewCardProps = {
@@ -44,8 +42,6 @@ type SecKey =
 const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
   const activeSessionId = useSessionField(selectActiveSessionId);
   const session = useSessionField(selectActiveSession);
-  const diffFiles = useTerminalField(selectDiffFiles);
-  const activeDiffSource = useTerminalField(selectActiveDiffSource);
   const cronJobs = useSettingsField(selectScheduledTasks);
   const tokenUsage = useSettingsField(selectTokenUsage);
   const sessions = useSessionField(selectSessions);
@@ -65,8 +61,6 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
     gitLoading,
     openingPath,
     actionErr,
-    showAllFiles,
-    setShowAllFiles,
     bgOpeningId,
     approvalBusyId,
     liveTasks,
@@ -80,10 +74,6 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
     focusSession,
   } = useOverviewState(sessions, ds.activeRuns, onOpenPanel);
 
-  useEffect(() => {
-    setShowAllFiles(false);
-  }, [openSec.files, setShowAllFiles]);
-
   const toggle = (k: SecKey) => setOpenSec((s) => ({ ...s, [k]: !s[k] }));
 
   const modelId = resolveDisplayModelId() || getActiveModelId() || 'unknown';
@@ -93,17 +83,25 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
       : estimateCostUsd(modelId, tokenUsage.input, tokenUsage.output);
   const agents = session?.agents || [];
   const runningAgentCount = agents.filter((a) => a.status === 'running').length;
-  const convoFiles = useMemo(
-    () =>
-      diffFiles?.length
-        ? diffFiles
-        : activeDiffSource
-          ? [activeDiffSource]
-          : [],
-    [diffFiles, activeDiffSource]
-  );
 
   const branch = git?.found && git.branch ? git.branch : '';
+
+  const currentWorkspacePath = useMemo(() => {
+    const projects = listProjects();
+    const folder = session?.folder;
+    if (folder) {
+      const match = projects.find(
+        (p) => p.id === folder || p.name === folder || p.path === folder
+      );
+      if (match) return match.path;
+    }
+    return getWorkspacePath() || (projects[0]?.path ?? '');
+  }, [session?.folder]);
+
+  const workspaceWorkflows = useMemo(
+    () => filterWorkflowsByWorkspace(ds.workflows, currentWorkspacePath),
+    [ds.workflows, currentWorkspacePath]
+  );
 
   return (
     <div
@@ -156,8 +154,8 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
 
       <ScheduleSection
         open={openSec.cronJobs}
-        workflows={ds.workflows}
-        cronJobs={cronJobs}
+        workflows={workspaceWorkflows}
+        cronJobs={[]}
         onToggle={() => toggle('cronJobs')}
       />
 
@@ -165,19 +163,14 @@ const OverviewCardInner: React.FC<OverviewCardProps> = ({ onOpenPanel }) => {
         open={openSec.files}
         git={git}
         gitLoading={gitLoading}
-        gitErr={null}
-        convoFiles={convoFiles}
+        branch={branch}
         openingPath={openingPath}
         actionErr={actionErr}
-        showAllFiles={showAllFiles}
-        branch={branch}
         gitHelp={gitHelp}
         onToggle={() => toggle('files')}
         onRefreshGit={refreshGit}
         onOpenGitFile={openGitFile}
-        onSetShowAllFiles={setShowAllFiles}
         onOpenPanel={onOpenPanel}
-        onOpenDiffSource={(f) => setActiveDiffSource(f)}
       />
 
       <OverviewQuickActions onOpenPanel={onOpenPanel} />

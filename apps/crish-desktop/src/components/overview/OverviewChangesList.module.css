@@ -76,15 +76,41 @@
   justify-content: center;
 }
 
-/* 文件名称：等宽字体，加粗主显，优先保留空间 */
+.fileTypeIcon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+/* 文件名称：等宽字体，正常字重，优先保留空间 */
 .fileName {
   flex-shrink: 0;
-  max-width: 130px;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-family: var(--font-mono, monospace);
-  font-weight: var(--font-weight-medium, 500);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-primary);
+}
+
+.statusM {
+  color: var(--text-warning, #d97706);
+}
+
+.statusA {
+  color: var(--text-success, #16a34a);
+}
+
+.statusD {
+  color: var(--text-danger, #dc2626);
+}
+
+.statusU {
+  color: var(--text-secondary, #6b7280);
+}
+
+.statusDefault {
   color: var(--text-primary);
 }
 

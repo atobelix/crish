@@ -1,7 +1,8 @@
 import React from 'react';
 import styles from './OverviewCard.module.css';
 import { Button, Tooltip } from '../ui';
-import { Bot, ChevronDown } from 'lucide-react';
+import { Bot } from 'lucide-react';
+import { ChevronDownIcon } from '../../assets/icons';
 import { openAgentInSidePanel } from '../../api/openAgentPanel';
 import { agentOneLineLabel, agentStatusLabel } from './helpers';
 import type { SessionAgent } from '../../store/types';
@@ -49,8 +50,8 @@ export const AgentSection = React.memo(function AgentSection({
               : sortedAgents.length}
           </span>
         ) : null}
-        <ChevronDown
-          size={14}
+        <ChevronDownIcon
+          size={13}
           className={`${styles.chev} ${open ? styles.open : ''}`}
           aria-hidden
         />
