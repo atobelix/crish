@@ -72,12 +72,12 @@ pub fn strip_ansi_codes(input: &str) -> String {
                             chars.next();
                         }
                     }
-                    // OSC：ESC ] 内容 ... BEL(0x07) 或 ... ESC \
+                    // OSC：ESC ] 内容 ... BEL(0x07) 或 ... ESC \；遇 \n 强制终止防吞噬
                     Some(']') => {
                         chars.next();
                         while let Some(c2) = chars.next() {
                             match c2 {
-                                '\u{07}' => break,
+                                '\u{07}' | '\n' => break,
                                 '\u{1b}' => {
                                     // 尾随 ESC\（ST）；裸 ESC 则自行结束
                                     if chars.peek() == Some(&'\\') {
@@ -178,6 +178,13 @@ mod tests {
         assert_eq!(strip_ansi_codes(bel), "cargo");
         let st = "x\x1b]8;;https://example.com\x1b\\链接y";
         assert_eq!(strip_ansi_codes(st), "x链接y");
+    }
+
+    #[test]
+    fn unclosed_osc_does_not_swallow_subsequent_lines() {
+        // 破损/未闭合 OSC 遇换行及时跳出，保护后续正常行不被贪婪吞噬
+        let broken = "\x1b]0;破损标题\n第二行日志\n第三行报错";
+        assert_eq!(strip_ansi_codes(broken), "第二行日志\n第三行报错");
     }
 
     #[test]

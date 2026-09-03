@@ -12,11 +12,11 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
-      "inputPrice": 10.0,
-      "outputPrice": 50.0,
-      "cacheReadPrice": 1.0,
+      "inputPrice": 10,
+      "outputPrice": 50,
+      "cacheReadPrice": 1,
       "cacheWritePrice5m": 12.5,
-      "cacheWritePrice1h": 20.0,
+      "cacheWritePrice1h": 20,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -29,14 +29,25 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "最强已发布；新 tokenizer 同文本约多 30% tokens；写价 5m 1.25x / 1h 2x，命中 0.1x"
+      "notes": "最强已发布；新 tokenizer 同文本约多 30% tokens；写价 5m 1.25x / 1h 2x，命中 0.1x",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "thinkingFormat": "thinking_adaptive"
     },
     "anthropic::claude-mythos-5": {
       "model": "claude-mythos-5",
@@ -47,11 +58,11 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
-      "inputPrice": 10.0,
-      "outputPrice": 50.0,
-      "cacheReadPrice": 1.0,
+      "inputPrice": 10,
+      "outputPrice": 50,
+      "cacheReadPrice": 1,
       "cacheWritePrice5m": 12.5,
-      "cacheWritePrice1h": 20.0,
+      "cacheWritePrice1h": 20,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -64,14 +75,25 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "limited availability（Project Glasswing 邀请制）；规格同 Fable 5"
+      "notes": "limited availability（Project Glasswing 邀请制）；规格同 Fable 5",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "thinkingFormat": "thinking_adaptive"
     },
     "anthropic::claude-opus-5": {
       "model": "claude-opus-5",
@@ -82,11 +104,11 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
-      "inputPrice": 5.0,
-      "outputPrice": 25.0,
+      "inputPrice": 5,
+      "outputPrice": 25,
       "cacheReadPrice": 0.5,
       "cacheWritePrice5m": 6.25,
-      "cacheWritePrice1h": 10.0,
+      "cacheWritePrice1h": 10,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -99,14 +121,25 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "官方推荐默认旗舰；effort 默认 high，xhigh/max 不可关 thinking；fast mode 输入 $10/输出 $50"
+      "notes": "官方推荐默认旗舰；effort 默认 high，xhigh/max 不可关 thinking；fast mode 输入 $10/输出 $50",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "thinkingFormat": "thinking_adaptive"
     },
     "anthropic::claude-opus-4-8": {
       "model": "claude-opus-4-8",
@@ -117,11 +150,11 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
-      "inputPrice": 5.0,
-      "outputPrice": 25.0,
+      "inputPrice": 5,
+      "outputPrice": 25,
       "cacheReadPrice": 0.5,
       "cacheWritePrice5m": 6.25,
-      "cacheWritePrice1h": 10.0,
+      "cacheWritePrice1h": 10,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -134,14 +167,25 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "支持会话中 system 更新；fast mode 支持"
+      "notes": "支持会话中 system 更新；fast mode 支持",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "thinkingFormat": "thinking_adaptive"
     },
     "anthropic::claude-opus-4-7": {
       "model": "claude-opus-4-7",
@@ -152,11 +196,11 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
-      "inputPrice": 5.0,
-      "outputPrice": 25.0,
+      "inputPrice": 5,
+      "outputPrice": 25,
       "cacheReadPrice": 0.5,
       "cacheWritePrice5m": 6.25,
-      "cacheWritePrice1h": 10.0,
+      "cacheWritePrice1h": 10,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 2048,
@@ -169,14 +213,25 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "官方建议编码/agentic 从 xhigh 起步；新 tokenizer"
+      "notes": "官方建议编码/agentic 从 xhigh 起步；新 tokenizer",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "thinkingFormat": "thinking_adaptive"
     },
     "anthropic::claude-opus-4-6": {
       "model": "claude-opus-4-6",
@@ -187,11 +242,11 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
-      "inputPrice": 5.0,
-      "outputPrice": 25.0,
+      "inputPrice": 5,
+      "outputPrice": 25,
       "cacheReadPrice": 0.5,
       "cacheWritePrice5m": 6.25,
-      "cacheWritePrice1h": 10.0,
+      "cacheWritePrice1h": 10,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 4096,
@@ -204,14 +259,26 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "4.6 代起为无日期 pinned snapshot"
+      "notes": "4.6 代起为无日期 pinned snapshot",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      },
+      "thinkingFormat": "thinking_budget",
+      "thinkingBudgetDefault": 2048
     },
     "anthropic::claude-opus-4-5": {
       "model": "claude-opus-4-5",
@@ -222,11 +289,11 @@
       "unit": "per_1M",
       "contextWindow": 200000,
       "maxOutputTokens": 64000,
-      "inputPrice": 5.0,
-      "outputPrice": 25.0,
+      "inputPrice": 5,
+      "outputPrice": 25,
       "cacheReadPrice": 0.5,
       "cacheWritePrice5m": 6.25,
-      "cacheWritePrice1h": 10.0,
+      "cacheWritePrice1h": 10,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 4096,
@@ -239,14 +306,26 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "走 extended thinking 轨道；唯一 extended-thinking-only 支持 effort"
+      "notes": "走 extended thinking 轨道；唯一 extended-thinking-only 支持 effort",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      },
+      "thinkingFormat": "thinking_budget",
+      "thinkingBudgetDefault": 2048
     },
     "anthropic::claude-sonnet-5": {
       "model": "claude-sonnet-5",
@@ -257,11 +336,11 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
-      "inputPrice": 2.0,
-      "outputPrice": 10.0,
+      "inputPrice": 2,
+      "outputPrice": 10,
       "cacheReadPrice": 0.2,
       "cacheWritePrice5m": 2.5,
-      "cacheWritePrice1h": 4.0,
+      "cacheWritePrice1h": 4,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -274,7 +353,10 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
@@ -283,7 +365,15 @@
       "dataSource": "official",
       "promoExpiresAt": "2026-08-31",
       "promoReplacesAt": "2026-09-01",
-      "notes": "促销价 8/31 到期，9/1 起 $3/$15 标准价（P5 日期切换，9/1 价行不收录）；不支持会话中 system 更新"
+      "notes": "促销价 8/31 到期，9/1 起 $3/$15 标准价（P5 日期切换，9/1 价行不收录）；不支持会话中 system 更新",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max"
+      },
+      "thinkingFormat": "thinking_adaptive"
     },
     "anthropic::claude-sonnet-4-6": {
       "model": "claude-sonnet-4-6",
@@ -294,11 +384,11 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "maxOutputTokens": 128000,
-      "inputPrice": 3.0,
-      "outputPrice": 15.0,
+      "inputPrice": 3,
+      "outputPrice": 15,
       "cacheReadPrice": 0.3,
       "cacheWritePrice5m": 3.75,
-      "cacheWritePrice1h": 6.0,
+      "cacheWritePrice1h": 6,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -311,13 +401,25 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "dataVerifiedAt": "2026-08-03",
-      "dataSource": "official"
+      "dataSource": "official",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      },
+      "thinkingFormat": "thinking_budget",
+      "thinkingBudgetDefault": 2048
     },
     "anthropic::claude-sonnet-4-5": {
       "model": "claude-sonnet-4-5",
@@ -328,11 +430,11 @@
       "unit": "per_1M",
       "contextWindow": 200000,
       "maxOutputTokens": 64000,
-      "inputPrice": 3.0,
-      "outputPrice": 15.0,
+      "inputPrice": 3,
+      "outputPrice": 15,
       "cacheReadPrice": 0.3,
       "cacheWritePrice5m": 3.75,
-      "cacheWritePrice1h": 6.0,
+      "cacheWritePrice1h": 6,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -345,14 +447,26 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
       "sourceUrl": "https://docs.anthropic.com/en/docs/about-claude/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "extended thinking 轨道"
+      "notes": "extended thinking 轨道",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      },
+      "thinkingFormat": "thinking_budget",
+      "thinkingBudgetDefault": 2048
     },
     "anthropic::claude-haiku-4-5": {
       "model": "claude-haiku-4-5",
@@ -363,11 +477,11 @@
       "unit": "per_1M",
       "contextWindow": 200000,
       "maxOutputTokens": 64000,
-      "inputPrice": 1.0,
-      "outputPrice": 5.0,
+      "inputPrice": 1,
+      "outputPrice": 5,
       "cacheReadPrice": 0.1,
       "cacheWritePrice5m": 1.25,
-      "cacheWritePrice1h": 2.0,
+      "cacheWritePrice1h": 2,
       "cacheWriteFree": false,
       "priceStatus": "official",
       "promptCacheMinTokens": 4096,
@@ -380,7 +494,10 @@
       "breakpointMax": 4,
       "lookbackBlocks": 20,
       "cacheTtl": "5m",
-      "cacheTtlOptions": ["5m", "1h"],
+      "cacheTtlOptions": [
+        "5m",
+        "1h"
+      ],
       "supportsResponses": false,
       "supportsReasoning": false,
       "supportsReasoningEffort": false,
@@ -414,8 +531,8 @@
       "vendor": "cursor",
       "currency": "USD",
       "unit": "per_1M",
-      "inputPrice": 3.0,
-      "outputPrice": 15.0,
+      "inputPrice": 3,
+      "outputPrice": 15,
       "cacheReadPrice": null,
       "cacheWritePrice": null,
       "cacheWriteFree": false,
@@ -439,13 +556,16 @@
       "inputPrice": 0.14,
       "outputPrice": 0.28,
       "cacheReadPrice": 0.0028,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "reasoningPrice": 0.28,
       "priceStatus": "official",
       "peakPricing2x": true,
       "peakPricingSchedule": {
-        "windows": ["09:00-12:00", "14:00-18:00"],
+        "windows": [
+          "09:00-12:00",
+          "14:00-18:00"
+        ],
         "tz": "Asia/Shanghai",
         "effectiveFrom": null,
         "note": "生效日期待官方公告"
@@ -469,7 +589,13 @@
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "版本 DeepSeek-V4-Flash-0731（public beta，2026-07-31 发布）；命中价差 50 倍（2%）；最低缓存与 TTL 官方未公布（省略，TTL 路由按 vendor 默认）；前缀单元制自动磁盘缓存"
+      "notes": "版本 DeepSeek-V4-Flash-0731（public beta，2026-07-31 发布）；命中价差 50 倍（2%）；最低缓存与 TTL 官方未公布（省略，TTL 路由按 vendor 默认）；前缀单元制自动磁盘缓存",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "deepseek::deepseek-v4-pro": {
       "model": "deepseek-v4-pro",
@@ -483,12 +609,15 @@
       "inputPrice": 0.435,
       "outputPrice": 0.87,
       "cacheReadPrice": 0.003625,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "peakPricing2x": true,
       "peakPricingSchedule": {
-        "windows": ["09:00-12:00", "14:00-18:00"],
+        "windows": [
+          "09:00-12:00",
+          "14:00-18:00"
+        ],
         "tz": "Asia/Shanghai",
         "effectiveFrom": null,
         "note": "生效日期待官方公告"
@@ -512,7 +641,13 @@
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "命中价差 120 倍（≈0.83%）；supportsResponses 官方计划 2026 年 8 月初加入（抓取日未上线），8 月中旬刷新翻转；最低缓存与 TTL 未公布；reasoning_options 为 toggle + effort（high/max）（01-deepseek §4，models.dev 交叉确认）"
+      "notes": "命中价差 120 倍（≈0.83%）；supportsResponses 官方计划 2026 年 8 月初加入（抓取日未上线），8 月中旬刷新翻转；最低缓存与 TTL 未公布；reasoning_options 为 toggle + effort（high/max）（01-deepseek §4，models.dev 交叉确认）",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "gemini::gemini-3-6-flash": {
       "model": "gemini-3-6-flash",
@@ -527,7 +662,7 @@
       "inputPrice": 1.5,
       "outputPrice": 7.5,
       "cacheReadPrice": 0.15,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 4096,
@@ -541,13 +676,25 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": ["minimal", "low", "medium", "high"],
+      "reasoningEffortTiers": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "2026-07-21 发布；输出价低于 3.5-flash；显式缓存存储费未获取（R0 记 1.00 存疑，待复核）；音频输入 $1.00/命中 $0.10；隐式缓存命中价恒 = 输入 10%"
+      "notes": "2026-07-21 发布；输出价低于 3.5-flash；显式缓存存储费未获取（R0 记 1.00 存疑，待复核）；音频输入 $1.00/命中 $0.10；隐式缓存命中价恒 = 输入 10%",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-3-5-flash": {
       "model": "gemini-3-5-flash",
@@ -560,9 +707,9 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
       "inputPrice": 1.5,
-      "outputPrice": 9.0,
+      "outputPrice": 9,
       "cacheReadPrice": 0.15,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 4096,
@@ -576,13 +723,25 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": ["minimal", "low", "medium", "high"],
+      "reasoningEffortTiers": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "当前 flash 主力档；显式缓存存储费未获取（待复核）；音频输入 $1.00/命中 $0.10；标准价 $1.50（R0 记 $0.75 实为 Flex/Batch 档）"
+      "notes": "当前 flash 主力档；显式缓存存储费未获取（待复核）；音频输入 $1.00/命中 $0.10；标准价 $1.50（R0 记 $0.75 实为 Flex/Batch 档）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-3-5-flash-lite": {
       "model": "gemini-3-5-flash-lite",
@@ -597,7 +756,7 @@
       "inputPrice": 0.3,
       "outputPrice": 2.5,
       "cacheReadPrice": 0.03,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 4096,
@@ -611,13 +770,25 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": ["minimal", "low", "medium", "high"],
+      "reasoningEffortTiers": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "低成本档；显式缓存存储费未获取（待复核）"
+      "notes": "低成本档；显式缓存存储费未获取（待复核）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-3-1-pro-preview": {
       "model": "gemini-3-1-pro-preview",
@@ -629,10 +800,10 @@
       "unit": "per_1M",
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
-      "inputPrice": 2.0,
-      "outputPrice": 12.0,
+      "inputPrice": 2,
+      "outputPrice": 12,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "storagePricePer1mHour": 4.5,
       "priceStatus": "official",
@@ -648,21 +819,32 @@
         {
           "minTokens": 200000,
           "maxTokens": null,
-          "inputPrice": 4.0,
-          "outputPrice": 18.0,
+          "inputPrice": 4,
+          "outputPrice": 18,
           "cacheReadPrice": 0.4
         }
       ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": ["low", "medium", "high"],
+      "reasoningEffortTiers": [
+        "low",
+        "medium",
+        "high"
+      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": ">200K 长上下文全 token 2x/1.5x 计费；显式缓存 = cachedContents 资源（默认 TTL 1h，按 token×时长收存储费）；标准价 $2.00（R0 记 $1.25 实为 2.5 Pro 价）"
+      "notes": ">200K 长上下文全 token 2x/1.5x 计费；显式缓存 = cachedContents 资源（默认 TTL 1h，按 token×时长收存储费）；标准价 $2.00（R0 记 $1.25 实为 2.5 Pro 价）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-3-1-pro-preview-customtools": {
       "model": "gemini-3-1-pro-preview-customtools",
@@ -674,10 +856,10 @@
       "unit": "per_1M",
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
-      "inputPrice": 2.0,
-      "outputPrice": 12.0,
+      "inputPrice": 2,
+      "outputPrice": 12,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "storagePricePer1mHour": 4.5,
       "priceStatus": "official",
@@ -693,21 +875,32 @@
         {
           "minTokens": 200000,
           "maxTokens": null,
-          "inputPrice": 4.0,
-          "outputPrice": 18.0,
+          "inputPrice": 4,
+          "outputPrice": 18,
           "cacheReadPrice": 0.4
         }
       ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": ["low", "medium", "high"],
+      "reasoningEffortTiers": [
+        "low",
+        "medium",
+        "high"
+      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "自定义工具变体，价格同 3.1-pro-preview"
+      "notes": "自定义工具变体，价格同 3.1-pro-preview",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-3-pro-preview": {
       "model": "gemini-3-pro-preview",
@@ -719,10 +912,10 @@
       "unit": "per_1M",
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
-      "inputPrice": 2.0,
-      "outputPrice": 12.0,
+      "inputPrice": 2,
+      "outputPrice": 12,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "storagePricePer1mHour": 4.5,
       "priceStatus": "official",
@@ -738,21 +931,31 @@
         {
           "minTokens": 200000,
           "maxTokens": null,
-          "inputPrice": 4.0,
-          "outputPrice": 18.0,
+          "inputPrice": 4,
+          "outputPrice": 18,
           "cacheReadPrice": 0.4
         }
       ],
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": ["low", "high"],
+      "reasoningEffortTiers": [
+        "low",
+        "high"
+      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "2025-11-18 发布"
+      "notes": "2025-11-18 发布",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-3-flash-preview": {
       "model": "gemini-3-flash-preview",
@@ -765,11 +968,11 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
       "inputPrice": 0.5,
-      "outputPrice": 3.0,
+      "outputPrice": 3,
       "cacheReadPrice": 0.05,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 1.0,
+      "storagePricePer1mHour": 1,
       "priceStatus": "official",
       "promptCacheMinTokens": 4096,
       "cacheType": "auto",
@@ -785,7 +988,14 @@
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "2025-12-17 发布；输出上限 models.dev 记 65,535（官方 65,536）；音频 $1.00/命中 $0.10"
+      "notes": "2025-12-17 发布；输出上限 models.dev 记 65,535（官方 65,536）；音频 $1.00/命中 $0.10",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-3-1-flash-lite": {
       "model": "gemini-3-1-flash-lite",
@@ -800,9 +1010,9 @@
       "inputPrice": 0.25,
       "outputPrice": 1.5,
       "cacheReadPrice": 0.025,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 1.0,
+      "storagePricePer1mHour": 1,
       "priceStatus": "official",
       "promptCacheMinTokens": 4096,
       "cacheType": "auto",
@@ -818,7 +1028,14 @@
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "2026-05-07 发布；音频 $0.50/命中 $0.05"
+      "notes": "2026-05-07 发布；音频 $0.50/命中 $0.05",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-2-5-pro": {
       "model": "gemini-2-5-pro",
@@ -831,9 +1048,9 @@
       "contextWindow": 1048576,
       "maxOutputTokens": 65536,
       "inputPrice": 1.25,
-      "outputPrice": 10.0,
+      "outputPrice": 10,
       "cacheReadPrice": 0.13,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "storagePricePer1mHour": 4.5,
       "priceStatus": "official",
@@ -850,7 +1067,7 @@
           "minTokens": 200000,
           "maxTokens": null,
           "inputPrice": 2.5,
-          "outputPrice": 15.0,
+          "outputPrice": 15,
           "cacheReadPrice": 0.25
         }
       ],
@@ -875,9 +1092,9 @@
       "inputPrice": 0.3,
       "outputPrice": 2.5,
       "cacheReadPrice": 0.03,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 1.0,
+      "storagePricePer1mHour": 1,
       "priceStatus": "official",
       "promptCacheMinTokens": 2048,
       "cacheType": "auto",
@@ -908,9 +1125,9 @@
       "inputPrice": 0.1,
       "outputPrice": 0.4,
       "cacheReadPrice": 0.01,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 1.0,
+      "storagePricePer1mHour": 1,
       "priceStatus": "official",
       "promptCacheMinTokens": 2048,
       "cacheType": "auto",
@@ -937,9 +1154,9 @@
       "unit": "per_1M",
       "contextWindow": 131072,
       "inputPrice": 1.5,
-      "outputPrice": 9.0,
+      "outputPrice": 9,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -965,10 +1182,10 @@
       "currency": "USD",
       "unit": "per_1M",
       "contextWindow": 131072,
-      "inputPrice": 2.0,
-      "outputPrice": 12.0,
+      "inputPrice": 2,
+      "outputPrice": 12,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -992,10 +1209,10 @@
       "currency": "USD",
       "unit": "per_1M",
       "contextWindow": 131072,
-      "inputPrice": 2.0,
-      "outputPrice": 12.0,
+      "inputPrice": 2,
+      "outputPrice": 12,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -1021,9 +1238,9 @@
       "unit": "per_1M",
       "contextWindow": 65536,
       "inputPrice": 0.5,
-      "outputPrice": 3.0,
+      "outputPrice": 3,
       "cacheReadPrice": 0.05,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -1038,7 +1255,14 @@
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "P1 备查；Nano Banana 2；图像输出 $60/张另计；输入按 1120 tok/图"
+      "notes": "P1 备查；Nano Banana 2；图像输出 $60/张另计；输入按 1120 tok/图",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-3-1-flash-lite-image": {
       "model": "gemini-3-1-flash-lite-image",
@@ -1052,7 +1276,7 @@
       "inputPrice": 0.25,
       "outputPrice": 1.5,
       "cacheReadPrice": 0.025,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -1067,7 +1291,14 @@
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "P1 备查；Nano Banana 2 Lite；图像输出 $30/张另计"
+      "notes": "P1 备查；Nano Banana 2 Lite；图像输出 $30/张另计",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-3-pro-image": {
       "model": "gemini-3-pro-image",
@@ -1078,10 +1309,10 @@
       "currency": "USD",
       "unit": "per_1M",
       "contextWindow": 131072,
-      "inputPrice": 2.0,
-      "outputPrice": 12.0,
+      "inputPrice": 2,
+      "outputPrice": 12,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -1096,7 +1327,14 @@
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "P1 备查；Nano Banana Pro；图像输出 $120/张另计；输入按 560 tok/图"
+      "notes": "P1 备查；Nano Banana Pro；图像输出 $120/张另计；输入按 560 tok/图",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-2-5-flash-image": {
       "model": "gemini-2-5-flash-image",
@@ -1110,7 +1348,7 @@
       "inputPrice": 0.3,
       "outputPrice": 2.5,
       "cacheReadPrice": 0.075,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -1139,7 +1377,7 @@
       "inputPrice": 0.75,
       "outputPrice": 4.5,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -1154,7 +1392,14 @@
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "P1 备查；实时流式接口；音频输入 $3.00；cacheRead 未获取（null）"
+      "notes": "P1 备查；实时流式接口；音频输入 $3.00；cacheRead 未获取（null）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "gemini::gemini-2-5-pro-computer-use": {
       "model": "gemini-2-5-pro-computer-use",
@@ -1166,9 +1411,9 @@
       "unit": "per_1M",
       "contextWindow": 131072,
       "inputPrice": 1.25,
-      "outputPrice": 10.0,
+      "outputPrice": 10,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -1193,10 +1438,10 @@
       "currency": "USD",
       "unit": "per_1M",
       "contextWindow": 131072,
-      "inputPrice": 1.0,
-      "outputPrice": 5.0,
+      "inputPrice": 1,
+      "outputPrice": 5,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -1223,9 +1468,9 @@
       "unit": "per_1M",
       "contextWindow": 16384,
       "inputPrice": 3.5,
-      "outputPrice": 21.0,
+      "outputPrice": 21,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -1240,7 +1485,14 @@
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "P1 备查；同传翻译；cacheRead 未获取（null）"
+      "notes": "P1 备查；同传翻译；cacheRead 未获取（null）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "thinking_level"
     },
     "glm::glm-5-2": {
       "model": "glm-5-2",
@@ -1255,9 +1507,9 @@
       "inputPrice": 1.4,
       "outputPrice": 4.4,
       "cacheReadPrice": 0.26,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1281,7 +1533,13 @@
       "sourceUrl": "https://docs.z.ai/guides/overview/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "USD 国际站（zai）；命中 ≈ 输入价 18.6%；存储费限时免费至 2026-08-31（恢复价未获取）；最低可缓存 token 官方未标注（参考百炼通道 512）；cache_control 未实测保守 false；TTL 未公布"
+      "notes": "USD 国际站（zai）；命中 ≈ 输入价 18.6%；存储费限时免费至 2026-08-31（恢复价未获取）；最低可缓存 token 官方未标注（参考百炼通道 512）；cache_control 未实测保守 false；TTL 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-5-1": {
       "model": "glm-5-1",
@@ -1296,9 +1554,9 @@
       "inputPrice": 1.4,
       "outputPrice": 4.4,
       "cacheReadPrice": 0.26,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1314,7 +1572,13 @@
       "sourceUrl": "https://docs.z.ai/guides/overview/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "USD 国际站（zai）；存储费限时免费至 2026-08-31；最低缓存参考 512"
+      "notes": "USD 国际站（zai）；存储费限时免费至 2026-08-31；最低缓存参考 512",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-5": {
       "model": "glm-5",
@@ -1326,12 +1590,12 @@
       "unit": "per_1M",
       "contextWindow": 200000,
       "maxOutputTokens": 131072,
-      "inputPrice": 1.0,
+      "inputPrice": 1,
       "outputPrice": 3.2,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1347,7 +1611,13 @@
       "sourceUrl": "https://docs.z.ai/guides/overview/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "USD 国际站（zai）；存储费限时免费至 2026-08-31"
+      "notes": "USD 国际站（zai）；存储费限时免费至 2026-08-31",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-5-turbo": {
       "model": "glm-5-turbo",
@@ -1360,11 +1630,11 @@
       "contextWindow": 200000,
       "maxOutputTokens": 131072,
       "inputPrice": 1.2,
-      "outputPrice": 4.0,
+      "outputPrice": 4,
       "cacheReadPrice": 0.24,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1380,7 +1650,13 @@
       "sourceUrl": "https://docs.z.ai/guides/overview/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "USD 国际站（zai）；OpenClaw 场景优化；存储费限时免费至 2026-08-31"
+      "notes": "USD 国际站（zai）；OpenClaw 场景优化；存储费限时免费至 2026-08-31",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-4-7": {
       "model": "glm-4-7",
@@ -1395,9 +1671,9 @@
       "inputPrice": 0.6,
       "outputPrice": 2.2,
       "cacheReadPrice": 0.11,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1428,9 +1704,9 @@
       "inputPrice": 0.07,
       "outputPrice": 0.4,
       "cacheReadPrice": 0.01,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1461,9 +1737,9 @@
       "inputPrice": 0.6,
       "outputPrice": 2.2,
       "cacheReadPrice": 0.11,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1494,9 +1770,9 @@
       "inputPrice": 0.6,
       "outputPrice": 2.2,
       "cacheReadPrice": 0.11,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1524,9 +1800,9 @@
       "inputPrice": 2.2,
       "outputPrice": 8.9,
       "cacheReadPrice": 0.45,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1557,9 +1833,9 @@
       "inputPrice": 0.2,
       "outputPrice": 1.1,
       "cacheReadPrice": 0.03,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1587,9 +1863,9 @@
       "inputPrice": 1.1,
       "outputPrice": 4.5,
       "cacheReadPrice": 0.22,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1618,9 +1894,9 @@
       "inputPrice": 0.1,
       "outputPrice": 0.1,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1648,12 +1924,12 @@
       "unit": "per_1M",
       "contextWindow": 200000,
       "maxOutputTokens": 128000,
-      "inputPrice": 0.0,
-      "outputPrice": 0.0,
-      "cacheReadPrice": 0.0,
-      "cacheWritePrice": 0.0,
+      "inputPrice": 0,
+      "outputPrice": 0,
+      "cacheReadPrice": 0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1681,11 +1957,11 @@
       "contextWindow": 200000,
       "maxOutputTokens": 131072,
       "inputPrice": 1.2,
-      "outputPrice": 4.0,
+      "outputPrice": 4,
       "cacheReadPrice": 0.24,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1702,7 +1978,13 @@
       "sourceUrl": "https://docs.z.ai/guides/overview/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "USD 国际站（zai）；多模态输入按内容构成计费；存储费限时免费至 2026-08-31"
+      "notes": "USD 国际站（zai）；多模态输入按内容构成计费；存储费限时免费至 2026-08-31",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-4-6v": {
       "model": "glm-4-6v",
@@ -1717,9 +1999,9 @@
       "inputPrice": 0.3,
       "outputPrice": 0.9,
       "cacheReadPrice": 0.05,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1750,9 +2032,9 @@
       "inputPrice": 0.04,
       "outputPrice": 0.4,
       "cacheReadPrice": 0.004,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1780,12 +2062,12 @@
       "currency": "USD",
       "unit": "per_1M",
       "contextWindow": 128000,
-      "inputPrice": 0.0,
-      "outputPrice": 0.0,
-      "cacheReadPrice": 0.0,
-      "cacheWritePrice": 0.0,
+      "inputPrice": 0,
+      "outputPrice": 0,
+      "cacheReadPrice": 0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1815,9 +2097,9 @@
       "inputPrice": 0.6,
       "outputPrice": 1.8,
       "cacheReadPrice": 0.11,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1845,12 +2127,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 1000000,
-      "inputPrice": 8.0,
-      "outputPrice": 28.0,
-      "cacheReadPrice": 2.0,
-      "cacheWritePrice": 0.0,
+      "inputPrice": 8,
+      "outputPrice": 28,
+      "cacheReadPrice": 2,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1866,7 +2148,13 @@
       "sourceUrl": "https://open.bigmodel.cn/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "CNY 国内站（bigmodel）双条目（键后缀 -cny 区分同模型 USD 条目）；单档无分档；命中 25%；maxOutputTokens 未获取；存储费限时免费至 2026-08-31；最低缓存参考 512；cache_control 未实测保守 false"
+      "notes": "CNY 国内站（bigmodel）双条目（键后缀 -cny 区分同模型 USD 条目）；单档无分档；命中 25%；maxOutputTokens 未获取；存储费限时免费至 2026-08-31；最低缓存参考 512；cache_control 未实测保守 false",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-5-1-cny": {
       "model": "glm-5-1-cny",
@@ -1877,12 +2165,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 200000,
-      "inputPrice": 6.0,
-      "outputPrice": 24.0,
+      "inputPrice": 6,
+      "outputPrice": 24,
       "cacheReadPrice": 1.3,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1899,15 +2187,21 @@
         {
           "minTokens": 32000,
           "maxTokens": null,
-          "inputPrice": 8.0,
-          "outputPrice": 28.0,
-          "cacheReadPrice": 2.0
+          "inputPrice": 8,
+          "outputPrice": 28,
+          "cacheReadPrice": 2
         }
       ],
       "sourceUrl": "https://open.bigmodel.cn/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "CNY 国内站（bigmodel）双条目；基础价 = 输入 [0,32K) 档；[32K+) 档命中价用户数据未提供，取官方价 ¥2/¥8/¥28；存储费限时免费至 2026-08-31"
+      "notes": "CNY 国内站（bigmodel）双条目；基础价 = 输入 [0,32K) 档；[32K+) 档命中价用户数据未提供，取官方价 ¥2/¥8/¥28；存储费限时免费至 2026-08-31",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-5-turbo-cny": {
       "model": "glm-5-turbo-cny",
@@ -1918,12 +2212,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 200000,
-      "inputPrice": 5.0,
-      "outputPrice": 22.0,
+      "inputPrice": 5,
+      "outputPrice": 22,
       "cacheReadPrice": 1.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1940,15 +2234,21 @@
         {
           "minTokens": 32000,
           "maxTokens": null,
-          "inputPrice": 7.0,
-          "outputPrice": 26.0,
+          "inputPrice": 7,
+          "outputPrice": 26,
           "cacheReadPrice": 1.8
         }
       ],
       "sourceUrl": "https://open.bigmodel.cn/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "CNY 国内站（bigmodel）双条目；基础价 = 输入 [0,32K) 档；存储费限时免费至 2026-08-31"
+      "notes": "CNY 国内站（bigmodel）双条目；基础价 = 输入 [0,32K) 档；存储费限时免费至 2026-08-31",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-5-cny": {
       "model": "glm-5-cny",
@@ -1959,12 +2259,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 200000,
-      "inputPrice": 4.0,
-      "outputPrice": 18.0,
-      "cacheReadPrice": 1.0,
-      "cacheWritePrice": 0.0,
+      "inputPrice": 4,
+      "outputPrice": 18,
+      "cacheReadPrice": 1,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -1981,15 +2281,21 @@
         {
           "minTokens": 32000,
           "maxTokens": null,
-          "inputPrice": 6.0,
-          "outputPrice": 22.0,
+          "inputPrice": 6,
+          "outputPrice": 22,
           "cacheReadPrice": 1.5
         }
       ],
       "sourceUrl": "https://open.bigmodel.cn/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "CNY 国内站（bigmodel）双条目；基础价 = 输入 [0,32K) 档；存储费限时免费至 2026-08-31"
+      "notes": "CNY 国内站（bigmodel）双条目；基础价 = 输入 [0,32K) 档；存储费限时免费至 2026-08-31",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-4-7-cny": {
       "model": "glm-4-7-cny",
@@ -2000,12 +2306,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 200000,
-      "inputPrice": 2.0,
-      "outputPrice": 8.0,
+      "inputPrice": 2,
+      "outputPrice": 8,
       "cacheReadPrice": 0.4,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2024,15 +2330,15 @@
           "maxTokens": 32000,
           "minOutputTokens": 200000,
           "maxOutputTokens": null,
-          "inputPrice": 3.0,
-          "outputPrice": 14.0,
+          "inputPrice": 3,
+          "outputPrice": 14,
           "cacheReadPrice": 0.6
         },
         {
           "minTokens": 32000,
           "maxTokens": null,
-          "inputPrice": 4.0,
-          "outputPrice": 16.0,
+          "inputPrice": 4,
+          "outputPrice": 16,
           "cacheReadPrice": 0.8
         }
       ],
@@ -2051,11 +2357,11 @@
       "unit": "per_1M",
       "contextWindow": 128000,
       "inputPrice": 0.8,
-      "outputPrice": 2.0,
+      "outputPrice": 2,
       "cacheReadPrice": 0.16,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2075,14 +2381,14 @@
           "minOutputTokens": 200000,
           "maxOutputTokens": null,
           "inputPrice": 0.8,
-          "outputPrice": 6.0,
+          "outputPrice": 6,
           "cacheReadPrice": 0.16
         },
         {
           "minTokens": 32000,
           "maxTokens": null,
           "inputPrice": 1.2,
-          "outputPrice": 8.0,
+          "outputPrice": 8,
           "cacheReadPrice": 0.24
         }
       ],
@@ -2101,11 +2407,11 @@
       "unit": "per_1M",
       "contextWindow": 200000,
       "inputPrice": 0.5,
-      "outputPrice": 3.0,
+      "outputPrice": 3,
       "cacheReadPrice": 0.1,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2132,12 +2438,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 200000,
-      "inputPrice": 0.0,
-      "outputPrice": 0.0,
-      "cacheReadPrice": 0.0,
-      "cacheWritePrice": 0.0,
+      "inputPrice": 0,
+      "outputPrice": 0,
+      "cacheReadPrice": 0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2164,12 +2470,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 200000,
-      "inputPrice": 5.0,
-      "outputPrice": 22.0,
+      "inputPrice": 5,
+      "outputPrice": 22,
       "cacheReadPrice": 1.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2187,15 +2493,21 @@
         {
           "minTokens": 32000,
           "maxTokens": null,
-          "inputPrice": 7.0,
-          "outputPrice": 26.0,
+          "inputPrice": 7,
+          "outputPrice": 26,
           "cacheReadPrice": 1.8
         }
       ],
       "sourceUrl": "https://open.bigmodel.cn/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "CNY 国内站（bigmodel）双条目；基础价 = 输入 [0,32K) 档；多模态输入按内容构成计费；存储费限时免费至 2026-08-31"
+      "notes": "CNY 国内站（bigmodel）双条目；基础价 = 输入 [0,32K) 档；多模态输入按内容构成计费；存储费限时免费至 2026-08-31",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "glm::glm-4-6v-cny": {
       "model": "glm-4-6v-cny",
@@ -2206,12 +2518,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 128000,
-      "inputPrice": 1.0,
-      "outputPrice": 3.0,
+      "inputPrice": 1,
+      "outputPrice": 3,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2229,8 +2541,8 @@
         {
           "minTokens": 32000,
           "maxTokens": 128000,
-          "inputPrice": 2.0,
-          "outputPrice": 6.0,
+          "inputPrice": 2,
+          "outputPrice": 6,
           "cacheReadPrice": 0.4
         }
       ],
@@ -2251,9 +2563,9 @@
       "inputPrice": 0.15,
       "outputPrice": 1.5,
       "cacheReadPrice": 0.03,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2272,7 +2584,7 @@
           "minTokens": 32000,
           "maxTokens": 128000,
           "inputPrice": 0.3,
-          "outputPrice": 3.0,
+          "outputPrice": 3,
           "cacheReadPrice": 0.03
         }
       ],
@@ -2290,12 +2602,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 128000,
-      "inputPrice": 0.0,
-      "outputPrice": 0.0,
-      "cacheReadPrice": 0.0,
-      "cacheWritePrice": 0.0,
+      "inputPrice": 0,
+      "outputPrice": 0,
+      "cacheReadPrice": 0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2323,12 +2635,12 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 128000,
-      "inputPrice": 2.0,
-      "outputPrice": 6.0,
+      "inputPrice": 2,
+      "outputPrice": 6,
       "cacheReadPrice": 0.4,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
-      "storagePricePer1mHour": 0.0,
+      "storagePricePer1mHour": 0,
       "storagePriceFreeUntil": "2026-08-31",
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2346,8 +2658,8 @@
         {
           "minTokens": 32000,
           "maxTokens": 64000,
-          "inputPrice": 4.0,
-          "outputPrice": 12.0,
+          "inputPrice": 4,
+          "outputPrice": 12,
           "cacheReadPrice": 0.8
         }
       ],
@@ -2364,10 +2676,10 @@
       "currency": "USD",
       "unit": "per_1M",
       "contextWindow": 500000,
-      "inputPrice": 2.0,
-      "outputPrice": 6.0,
+      "inputPrice": 2,
+      "outputPrice": 6,
       "cacheReadPrice": 0.3,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -2379,13 +2691,17 @@
       "supportsResponses": true,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": ["low", "medium", "high"],
+      "reasoningEffortTiers": [
+        "low",
+        "medium",
+        "high"
+      ],
       "tieredPricing": [
         {
           "minTokens": 200000,
           "maxTokens": null,
-          "inputPrice": 4.0,
-          "outputPrice": 12.0,
+          "inputPrice": 4,
+          "outputPrice": 12,
           "cacheReadPrice": 0.6
         }
       ],
@@ -2405,7 +2721,7 @@
       "inputPrice": 1.25,
       "outputPrice": 2.5,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -2417,13 +2733,17 @@
       "supportsResponses": true,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": ["low", "medium", "high"],
+      "reasoningEffortTiers": [
+        "low",
+        "medium",
+        "high"
+      ],
       "tieredPricing": [
         {
           "minTokens": 200000,
           "maxTokens": null,
           "inputPrice": 2.5,
-          "outputPrice": 5.0,
+          "outputPrice": 5,
           "cacheReadPrice": 0.4
         }
       ],
@@ -2444,7 +2764,7 @@
       "inputPrice": 1.25,
       "outputPrice": 2.5,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -2461,7 +2781,7 @@
           "minTokens": 200000,
           "maxTokens": null,
           "inputPrice": 2.5,
-          "outputPrice": 5.0,
+          "outputPrice": 5,
           "cacheReadPrice": 0.4
         }
       ],
@@ -2482,7 +2802,7 @@
       "inputPrice": 1.25,
       "outputPrice": 2.5,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -2497,7 +2817,7 @@
           "minTokens": 200000,
           "maxTokens": null,
           "inputPrice": 2.5,
-          "outputPrice": 5.0,
+          "outputPrice": 5,
           "cacheReadPrice": 0.4
         }
       ],
@@ -2518,7 +2838,7 @@
       "inputPrice": 1.25,
       "outputPrice": 2.5,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -2535,7 +2855,7 @@
           "minTokens": 200000,
           "maxTokens": null,
           "inputPrice": 2.5,
-          "outputPrice": 5.0,
+          "outputPrice": 5,
           "cacheReadPrice": 0.4
         }
       ],
@@ -2553,10 +2873,10 @@
       "currency": "USD",
       "unit": "per_1M",
       "contextWindow": 256000,
-      "inputPrice": 1.0,
-      "outputPrice": 2.0,
+      "inputPrice": 1,
+      "outputPrice": 2,
       "cacheReadPrice": 0.2,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheType": "auto",
@@ -2571,8 +2891,8 @@
         {
           "minTokens": 200000,
           "maxTokens": null,
-          "inputPrice": 2.0,
-          "outputPrice": 4.0,
+          "inputPrice": 2,
+          "outputPrice": 4,
           "cacheReadPrice": 0.4
         }
       ],
@@ -2590,10 +2910,10 @@
       "unit": "per_1M",
       "contextWindow": 1048576,
       "maxOutputTokens": 131072,
-      "inputPrice": 20.0,
-      "outputPrice": 100.0,
-      "cacheReadPrice": 2.0,
-      "cacheWritePrice": 0.0,
+      "inputPrice": 20,
+      "outputPrice": 100,
+      "cacheReadPrice": 2,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 256,
@@ -2622,9 +2942,9 @@
       "unit": "per_1M",
       "contextWindow": 262144,
       "inputPrice": 6.5,
-      "outputPrice": 27.0,
+      "outputPrice": 27,
       "cacheReadPrice": 1.3,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 256,
@@ -2653,10 +2973,10 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 262144,
-      "inputPrice": 13.0,
-      "outputPrice": 54.0,
+      "inputPrice": 13,
+      "outputPrice": 54,
       "cacheReadPrice": 2.6,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 256,
@@ -2686,9 +3006,9 @@
       "unit": "per_1M",
       "contextWindow": 262144,
       "inputPrice": 6.5,
-      "outputPrice": 27.0,
+      "outputPrice": 27,
       "cacheReadPrice": 1.1,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 256,
@@ -2720,7 +3040,7 @@
       "inputPrice": 2.1,
       "outputPrice": 8.4,
       "cacheReadPrice": 0.42,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -2989,7 +3309,7 @@
       "inputPrice": 0.3,
       "outputPrice": 1.2,
       "cacheReadPrice": 0.06,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 512,
@@ -3254,8 +3574,8 @@
       "unit": "per_1M",
       "contextWindow": 1050000,
       "maxOutputTokens": 128000,
-      "inputPrice": 5.0,
-      "outputPrice": 30.0,
+      "inputPrice": 5,
+      "outputPrice": 30,
       "cacheReadPrice": 0.5,
       "cacheWritePrice": 6.25,
       "cacheWriteFree": false,
@@ -3268,14 +3588,16 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "30m",
-      "cacheTtlOptions": ["30m"],
+      "cacheTtlOptions": [
+        "30m"
+      ],
       "tieredPricing": [
         {
           "minTokens": 272000,
           "maxTokens": null,
-          "inputPrice": 10.0,
-          "outputPrice": 45.0,
-          "cacheReadPrice": 1.0,
+          "inputPrice": 10,
+          "outputPrice": 45,
+          "cacheReadPrice": 1,
           "cacheWritePrice": 12.5
         }
       ],
@@ -3285,7 +3607,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "5.6+ 新轨：隐式断点放最新 user/tool 消息，不回退找最长前缀；prompt_cache_options.ttl 唯一值 30m；断点上限 4 写/50 读；>272K 长上下文整请求 2x/1.5x；数据驻留区域端点 +10% 适用；gpt-5.6 为 alias 路由到本模型（不建独立条目）"
+      "notes": "5.6+ 新轨：隐式断点放最新 user/tool 消息，不回退找最长前缀；prompt_cache_options.ttl 唯一值 30m；断点上限 4 写/50 读；>272K 长上下文整请求 2x/1.5x；数据驻留区域端点 +10% 适用；gpt-5.6 为 alias 路由到本模型（不建独立条目）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.6-terra": {
       "model": "gpt-5.6-terra",
@@ -3296,8 +3625,8 @@
       "unit": "per_1M",
       "contextWindow": 1050000,
       "maxOutputTokens": 128000,
-      "inputPrice": 2.0,
-      "outputPrice": 12.0,
+      "inputPrice": 2,
+      "outputPrice": 12,
       "cacheReadPrice": 0.2,
       "cacheWritePrice": 2.5,
       "cacheWriteFree": false,
@@ -3310,15 +3639,17 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "30m",
-      "cacheTtlOptions": ["30m"],
+      "cacheTtlOptions": [
+        "30m"
+      ],
       "tieredPricing": [
         {
           "minTokens": 272000,
           "maxTokens": null,
-          "inputPrice": 4.0,
-          "outputPrice": 18.0,
+          "inputPrice": 4,
+          "outputPrice": 18,
           "cacheReadPrice": 0.4,
-          "cacheWritePrice": 5.0
+          "cacheWritePrice": 5
         }
       ],
       "supportsResponses": true,
@@ -3327,7 +3658,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "5.6 系缓存语义同 gpt-5.6-sol；TTL 30m；>272K 档 2x/1.5x"
+      "notes": "5.6 系缓存语义同 gpt-5.6-sol；TTL 30m；>272K 档 2x/1.5x",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.6-luna": {
       "model": "gpt-5.6-luna",
@@ -3352,7 +3690,9 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "30m",
-      "cacheTtlOptions": ["30m"],
+      "cacheTtlOptions": [
+        "30m"
+      ],
       "tieredPricing": [
         {
           "minTokens": 272000,
@@ -3369,7 +3709,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "5.6 系缓存语义同 gpt-5.6-sol；TTL 30m；>272K 档 2x/1.5x"
+      "notes": "5.6 系缓存语义同 gpt-5.6-sol；TTL 30m；>272K 档 2x/1.5x",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.5": {
       "model": "gpt-5.5",
@@ -3380,10 +3727,10 @@
       "unit": "per_1M",
       "contextWindow": 1050000,
       "maxOutputTokens": 128000,
-      "inputPrice": 5.0,
-      "outputPrice": 30.0,
+      "inputPrice": 5,
+      "outputPrice": 30,
       "cacheReadPrice": 0.5,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3394,14 +3741,16 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "24h",
-      "cacheTtlOptions": ["24h"],
+      "cacheTtlOptions": [
+        "24h"
+      ],
       "tieredPricing": [
         {
           "minTokens": 272000,
           "maxTokens": null,
-          "inputPrice": 10.0,
-          "outputPrice": 45.0,
-          "cacheReadPrice": 1.0
+          "inputPrice": 10,
+          "outputPrice": 45,
+          "cacheReadPrice": 1
         }
       ],
       "supportsResponses": true,
@@ -3410,7 +3759,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "快照 gpt-5.5-2026-04-23；写免费；prompt_cache_key 可选（路由优化）；数据驻留区域端点 +10% 适用"
+      "notes": "快照 gpt-5.5-2026-04-23；写免费；prompt_cache_key 可选（路由优化）；数据驻留区域端点 +10% 适用",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.5-pro": {
       "model": "gpt-5.5-pro",
@@ -3421,10 +3777,10 @@
       "unit": "per_1M",
       "contextWindow": 1050000,
       "maxOutputTokens": 128000,
-      "inputPrice": 30.0,
-      "outputPrice": 180.0,
+      "inputPrice": 30,
+      "outputPrice": 180,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3439,8 +3795,8 @@
         {
           "minTokens": 272000,
           "maxTokens": null,
-          "inputPrice": 60.0,
-          "outputPrice": 270.0
+          "inputPrice": 60,
+          "outputPrice": 270
         }
       ],
       "supportsResponses": true,
@@ -3449,7 +3805,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "pro 档无缓存折扣（官方 no cached input discount，读价未明确 null，P5 按全价计算）；仅 Responses、无 Batch；Batch 支持冲突存疑（定价页有价/模型页无）"
+      "notes": "pro 档无缓存折扣（官方 no cached input discount，读价未明确 null，P5 按全价计算）；仅 Responses、无 Batch；Batch 支持冲突存疑（定价页有价/模型页无）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.4": {
       "model": "gpt-5.4",
@@ -3461,9 +3824,9 @@
       "contextWindow": 1050000,
       "maxOutputTokens": 128000,
       "inputPrice": 2.5,
-      "outputPrice": 15.0,
+      "outputPrice": 15,
       "cacheReadPrice": 0.25,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3474,12 +3837,14 @@
       "supportsPromptCacheKey": true,
       "supportsCacheControl": false,
       "cacheTtl": "24h",
-      "cacheTtlOptions": ["24h"],
+      "cacheTtlOptions": [
+        "24h"
+      ],
       "tieredPricing": [
         {
           "minTokens": 272000,
           "maxTokens": null,
-          "inputPrice": 5.0,
+          "inputPrice": 5,
           "outputPrice": 22.5,
           "cacheReadPrice": 0.5
         }
@@ -3490,7 +3855,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "快照 gpt-5.4-2026-03-05；写免费；数据驻留区域端点 +10% 适用"
+      "notes": "快照 gpt-5.4-2026-03-05；写免费；数据驻留区域端点 +10% 适用",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.4-mini": {
       "model": "gpt-5.4-mini",
@@ -3504,7 +3876,7 @@
       "inputPrice": 0.75,
       "outputPrice": 4.5,
       "cacheReadPrice": 0.075,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3521,7 +3893,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "24h extended 支持未官方证实（存疑）；无长上下文档；最低缓存 1024-2048 区间未逐模型公布"
+      "notes": "24h extended 支持未官方证实（存疑）；无长上下文档；最低缓存 1024-2048 区间未逐模型公布",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.4-nano": {
       "model": "gpt-5.4-nano",
@@ -3535,7 +3914,7 @@
       "inputPrice": 0.2,
       "outputPrice": 1.25,
       "cacheReadPrice": 0.02,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3552,7 +3931,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "24h extended 支持未官方证实（存疑）；无长上下文档"
+      "notes": "24h extended 支持未官方证实（存疑）；无长上下文档",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.4-pro": {
       "model": "gpt-5.4-pro",
@@ -3563,10 +3949,10 @@
       "unit": "per_1M",
       "contextWindow": 1050000,
       "maxOutputTokens": 128000,
-      "inputPrice": 30.0,
-      "outputPrice": 180.0,
+      "inputPrice": 30,
+      "outputPrice": 180,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3581,8 +3967,8 @@
         {
           "minTokens": 272000,
           "maxTokens": null,
-          "inputPrice": 60.0,
-          "outputPrice": 270.0
+          "inputPrice": 60,
+          "outputPrice": 270
         }
       ],
       "supportsResponses": true,
@@ -3591,7 +3977,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "pro 档无缓存折扣（读价未明确 null，P5 按全价计算）；仅 Responses、无 Batch"
+      "notes": "pro 档无缓存折扣（读价未明确 null，P5 按全价计算）；仅 Responses、无 Batch",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.3-codex": {
       "model": "gpt-5.3-codex",
@@ -3603,9 +3996,9 @@
       "contextWindow": 400000,
       "maxOutputTokens": 128000,
       "inputPrice": 1.75,
-      "outputPrice": 14.0,
+      "outputPrice": 14,
       "cacheReadPrice": 0.175,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3623,7 +4016,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "仅 Responses；无 Batch；Fast mode 档 2x 存在；编码专用"
+      "notes": "仅 Responses；无 Batch；Fast mode 档 2x 存在；编码专用",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::chat-latest": {
       "model": "chat-latest",
@@ -3633,10 +4033,10 @@
       "currency": "USD",
       "unit": "per_1M",
       "contextWindow": 400000,
-      "inputPrice": 5.0,
-      "outputPrice": 30.0,
+      "inputPrice": 5,
+      "outputPrice": 30,
       "cacheReadPrice": 0.5,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3663,9 +4063,9 @@
       "contextWindow": 200000,
       "maxOutputTokens": 100000,
       "inputPrice": 1.5,
-      "outputPrice": 6.0,
+      "outputPrice": 6,
       "cacheReadPrice": 0.375,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3691,9 +4091,9 @@
       "currency": "USD",
       "unit": "per_1M",
       "inputPrice": 12.5,
-      "outputPrice": 75.0,
+      "outputPrice": 75,
       "cacheReadPrice": 1.25,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheMechanism": "prefix",
@@ -3704,7 +4104,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "P1 备查；网络安全特化；上下文窗口/输出上限未获取；缓存语义（TTL/机制）官方未公布，命中价 $1.25 为官方定价页值，不再沿用 5.5 系旧轨推断"
+      "notes": "P1 备查；网络安全特化；上下文窗口/输出上限未获取；缓存语义（TTL/机制）官方未公布，命中价 $1.25 为官方定价页值，不再沿用 5.5 系旧轨推断",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5-search-api": {
       "model": "gpt-5-search-api",
@@ -3714,9 +4121,9 @@
       "currency": "USD",
       "unit": "per_1M",
       "inputPrice": 1.25,
-      "outputPrice": 10.0,
+      "outputPrice": 10,
       "cacheReadPrice": 0.125,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "cacheMechanism": "prefix",
@@ -3728,7 +4135,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "P1 备查；搜索特化；上下文窗口/输出上限未获取；缓存语义（TTL/机制）官方未公布，命中价 $0.125 为官方定价页值，不再沿用 5.5 系旧轨推断"
+      "notes": "P1 备查；搜索特化；上下文窗口/输出上限未获取；缓存语义（TTL/机制）官方未公布，命中价 $0.125 为官方定价页值，不再沿用 5.5 系旧轨推断",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.2": {
       "model": "gpt-5.2",
@@ -3740,9 +4154,9 @@
       "contextWindow": 400000,
       "maxOutputTokens": 128000,
       "inputPrice": 1.75,
-      "outputPrice": 14.0,
+      "outputPrice": 14,
       "cacheReadPrice": 0.175,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3757,7 +4171,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；最低缓存 1024-2048 区间未逐模型公布（取 1024 保守拦截线）"
+      "notes": "旧轨 P1 备查；最低缓存 1024-2048 区间未逐模型公布（取 1024 保守拦截线）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.2-pro": {
       "model": "gpt-5.2-pro",
@@ -3768,10 +4189,10 @@
       "unit": "per_1M",
       "contextWindow": 400000,
       "maxOutputTokens": 128000,
-      "inputPrice": 21.0,
-      "outputPrice": 168.0,
+      "inputPrice": 21,
+      "outputPrice": 168,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3786,7 +4207,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；pro 档 read 语义未明确（无缓存折扣，读价 null）"
+      "notes": "旧轨 P1 备查；pro 档 read 语义未明确（无缓存折扣，读价 null）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.2-chat-latest": {
       "model": "gpt-5.2-chat-latest",
@@ -3798,9 +4226,9 @@
       "contextWindow": 128000,
       "maxOutputTokens": 16384,
       "inputPrice": 1.75,
-      "outputPrice": 14.0,
+      "outputPrice": 14,
       "cacheReadPrice": 0.175,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3815,7 +4243,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；ChatGPT Instant 快照"
+      "notes": "旧轨 P1 备查；ChatGPT Instant 快照",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.2-codex": {
       "model": "gpt-5.2-codex",
@@ -3827,9 +4262,9 @@
       "contextWindow": 400000,
       "maxOutputTokens": 128000,
       "inputPrice": 1.75,
-      "outputPrice": 14.0,
+      "outputPrice": 14,
       "cacheReadPrice": 0.175,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3845,7 +4280,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；官方模型页确认（非定价表）"
+      "notes": "旧轨 P1 备查；官方模型页确认（非定价表）",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5.1": {
       "model": "gpt-5.1",
@@ -3857,9 +4299,9 @@
       "contextWindow": 400000,
       "maxOutputTokens": 128000,
       "inputPrice": 1.25,
-      "outputPrice": 10.0,
+      "outputPrice": 10,
       "cacheReadPrice": 0.125,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3874,7 +4316,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查"
+      "notes": "旧轨 P1 备查",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5": {
       "model": "gpt-5",
@@ -3886,9 +4335,9 @@
       "contextWindow": 400000,
       "maxOutputTokens": 128000,
       "inputPrice": 1.25,
-      "outputPrice": 10.0,
+      "outputPrice": 10,
       "cacheReadPrice": 0.125,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3903,7 +4352,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查"
+      "notes": "旧轨 P1 备查",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5-mini": {
       "model": "gpt-5-mini",
@@ -3913,9 +4369,9 @@
       "currency": "USD",
       "unit": "per_1M",
       "inputPrice": 0.25,
-      "outputPrice": 2.0,
+      "outputPrice": 2,
       "cacheReadPrice": 0.025,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3930,7 +4386,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；上下文窗口未获取"
+      "notes": "旧轨 P1 备查；上下文窗口未获取",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5-nano": {
       "model": "gpt-5-nano",
@@ -3942,7 +4405,7 @@
       "inputPrice": 0.05,
       "outputPrice": 0.4,
       "cacheReadPrice": 0.005,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3957,7 +4420,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；上下文窗口未获取"
+      "notes": "旧轨 P1 备查；上下文窗口未获取",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-5-pro": {
       "model": "gpt-5-pro",
@@ -3966,10 +4436,10 @@
       "mode": "both",
       "currency": "USD",
       "unit": "per_1M",
-      "inputPrice": 15.0,
-      "outputPrice": 120.0,
+      "inputPrice": 15,
+      "outputPrice": 120,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -3984,7 +4454,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；pro 档无缓存折扣（读价 null）；上下文窗口未获取"
+      "notes": "旧轨 P1 备查；pro 档无缓存折扣（读价 null）；上下文窗口未获取",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::o1": {
       "model": "o1",
@@ -3993,10 +4470,10 @@
       "mode": "both",
       "currency": "USD",
       "unit": "per_1M",
-      "inputPrice": 15.0,
-      "outputPrice": 60.0,
+      "inputPrice": 15,
+      "outputPrice": 60,
       "cacheReadPrice": 7.5,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4012,7 +4489,13 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧 o 系 reasoning（P1 备查）；读价 = 输入 50%；上下文窗口未获取"
+      "notes": "旧 o 系 reasoning（P1 备查）；读价 = 输入 50%；上下文窗口未获取",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::o1-pro": {
       "model": "o1-pro",
@@ -4021,10 +4504,10 @@
       "mode": "chat",
       "currency": "USD",
       "unit": "per_1M",
-      "inputPrice": 150.0,
-      "outputPrice": 600.0,
+      "inputPrice": 150,
+      "outputPrice": 600,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4039,7 +4522,13 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；仅 Chat Completions；pro 档无缓存折扣（读价 null）；上下文窗口未获取"
+      "notes": "旧轨 P1 备查；仅 Chat Completions；pro 档无缓存折扣（读价 null）；上下文窗口未获取",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::o3": {
       "model": "o3",
@@ -4048,10 +4537,10 @@
       "mode": "both",
       "currency": "USD",
       "unit": "per_1M",
-      "inputPrice": 2.0,
-      "outputPrice": 8.0,
+      "inputPrice": 2,
+      "outputPrice": 8,
       "cacheReadPrice": 0.5,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4067,7 +4556,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；读价 = 输入 25%；上下文窗口未获取"
+      "notes": "旧轨 P1 备查；读价 = 输入 25%；上下文窗口未获取",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::o3-pro": {
       "model": "o3-pro",
@@ -4076,10 +4572,10 @@
       "mode": "chat",
       "currency": "USD",
       "unit": "per_1M",
-      "inputPrice": 20.0,
-      "outputPrice": 80.0,
+      "inputPrice": 20,
+      "outputPrice": 80,
       "cacheReadPrice": null,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4094,7 +4590,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；仅 Chat Completions；pro 档无缓存折扣（读价 null）；上下文窗口未获取"
+      "notes": "旧轨 P1 备查；仅 Chat Completions；pro 档无缓存折扣（读价 null）；上下文窗口未获取",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::o3-mini": {
       "model": "o3-mini",
@@ -4106,7 +4609,7 @@
       "inputPrice": 1.1,
       "outputPrice": 4.4,
       "cacheReadPrice": 0.55,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4122,7 +4625,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；读价 = 输入 50%；上下文窗口未获取"
+      "notes": "旧轨 P1 备查；读价 = 输入 50%；上下文窗口未获取",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::o4-mini": {
       "model": "o4-mini",
@@ -4134,7 +4644,7 @@
       "inputPrice": 1.1,
       "outputPrice": 4.4,
       "cacheReadPrice": 0.275,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4150,7 +4660,14 @@
       "sourceUrl": "https://developers.openai.com/api/docs/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "旧轨 P1 备查；读价 = 输入 25%；上下文窗口未获取"
+      "notes": "旧轨 P1 备查；读价 = 输入 25%；上下文窗口未获取",
+      "thinkingTiers": {
+        "minimal": "minimal",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "openai::gpt-4.1": {
       "model": "gpt-4.1",
@@ -4159,10 +4676,10 @@
       "mode": "both",
       "currency": "USD",
       "unit": "per_1M",
-      "inputPrice": 2.0,
-      "outputPrice": 8.0,
+      "inputPrice": 2,
+      "outputPrice": 8,
       "cacheReadPrice": 0.5,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4189,7 +4706,7 @@
       "inputPrice": 0.4,
       "outputPrice": 1.6,
       "cacheReadPrice": 0.1,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4216,7 +4733,7 @@
       "inputPrice": 0.1,
       "outputPrice": 0.4,
       "cacheReadPrice": 0.025,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4241,9 +4758,9 @@
       "currency": "USD",
       "unit": "per_1M",
       "inputPrice": 2.5,
-      "outputPrice": 10.0,
+      "outputPrice": 10,
       "cacheReadPrice": 1.25,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4270,7 +4787,7 @@
       "inputPrice": 0.15,
       "outputPrice": 0.6,
       "cacheReadPrice": 0.075,
-      "cacheWritePrice": 0.0,
+      "cacheWritePrice": 0,
       "cacheWriteFree": true,
       "priceStatus": "official",
       "promptCacheMinTokens": 1024,
@@ -4296,10 +4813,10 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 1000000,
-      "inputPrice": 12.0,
-      "outputPrice": 36.0,
+      "inputPrice": 12,
+      "outputPrice": 36,
       "cacheReadPrice": 1.2,
-      "cacheWritePrice": 15.0,
+      "cacheWritePrice": 15,
       "cacheWriteFree": false,
       "priceStatus": "derived",
       "derivation": {
@@ -4321,12 +4838,22 @@
       "supportsResponses": true,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": ["low", "medium", "xhigh"],
+      "reasoningEffortTiers": [
+        "low",
+        "medium",
+        "xhigh"
+      ],
       "supportsVision": true,
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "思考/非思考同价；effort 默认 xhigh；maxOutputTokens 官方未公布（省略）；官方发布时间公告未标注（models.dev 记 preview 2026-07-19）"
+      "notes": "思考/非思考同价；effort 默认 xhigh；maxOutputTokens 官方未公布（省略）；官方发布时间公告未标注（models.dev 记 preview 2026-07-19）",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-8-max-preview": {
       "model": "qwen3-8-max-preview",
@@ -4337,8 +4864,8 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 1000000,
-      "inputPrice": 12.0,
-      "outputPrice": 36.0,
+      "inputPrice": 12,
+      "outputPrice": 36,
       "cacheReadPrice": null,
       "cacheWritePrice": null,
       "cacheWriteFree": false,
@@ -4359,7 +4886,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "仅 Token Plan 可用（按量计费不可用）；显式/隐式缓存仅 Token Plan 下可用，缓存绝对价未给（null）；仅思考模式；maxOutputTokens 未公布"
+      "notes": "仅 Token Plan 可用（按量计费不可用）；显式/隐式缓存仅 Token Plan 下可用，缓存绝对价未给（null）；仅思考模式；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-7-max": {
       "model": "qwen3-7-max",
@@ -4370,10 +4903,10 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 1000000,
-      "inputPrice": 12.0,
-      "outputPrice": 36.0,
+      "inputPrice": 12,
+      "outputPrice": 36,
       "cacheReadPrice": 1.2,
-      "cacheWritePrice": 15.0,
+      "cacheWritePrice": 15,
       "cacheWriteFree": false,
       "priceStatus": "derived",
       "derivation": {
@@ -4398,7 +4931,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "限时 5 折（折后 6/18/0.6/7.5，到期日未标注，促销按原价收录）；apiModel 修正 qwen3.7-max；混合思考默认开启；maxOutputTokens 未公布"
+      "notes": "限时 5 折（折后 6/18/0.6/7.5，到期日未标注，促销按原价收录）；apiModel 修正 qwen3.7-max；混合思考默认开启；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-6-max-preview": {
       "model": "qwen3-6-max-preview",
@@ -4409,8 +4948,8 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 256000,
-      "inputPrice": 9.0,
-      "outputPrice": 54.0,
+      "inputPrice": 9,
+      "outputPrice": 54,
       "cacheReadPrice": 0.9,
       "cacheWritePrice": 11.25,
       "cacheWriteFree": false,
@@ -4438,8 +4977,8 @@
         {
           "minTokens": 128000,
           "maxTokens": null,
-          "inputPrice": 15.0,
-          "outputPrice": 90.0,
+          "inputPrice": 15,
+          "outputPrice": 90,
           "cacheReadPrice": 1.5,
           "cacheWritePrice": 18.75
         }
@@ -4447,7 +4986,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "≤128K / >128K 分档；maxOutputTokens 未公布"
+      "notes": "≤128K / >128K 分档；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-max": {
       "model": "qwen3-max",
@@ -4458,7 +5003,7 @@
       "unit": "per_1M",
       "contextWindow": 256000,
       "inputPrice": 2.5,
-      "outputPrice": 10.0,
+      "outputPrice": 10,
       "cacheReadPrice": 0.25,
       "cacheWritePrice": 3.125,
       "cacheWriteFree": false,
@@ -4486,16 +5031,16 @@
         {
           "minTokens": 32000,
           "maxTokens": 128000,
-          "inputPrice": 4.0,
-          "outputPrice": 16.0,
+          "inputPrice": 4,
+          "outputPrice": 16,
           "cacheReadPrice": 0.4,
-          "cacheWritePrice": 5.0
+          "cacheWritePrice": 5
         },
         {
           "minTokens": 128000,
           "maxTokens": null,
-          "inputPrice": 7.0,
-          "outputPrice": 28.0,
+          "inputPrice": 7,
+          "outputPrice": 28,
           "cacheReadPrice": 0.7,
           "cacheWritePrice": 8.75
         }
@@ -4503,7 +5048,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "混合思考默认关闭；快照 2026-01-23 同价（2025-09-23 快照为 6/10/15 元档）；maxOutputTokens 未公布"
+      "notes": "混合思考默认关闭；快照 2026-01-23 同价（2025-09-23 快照为 6/10/15 元档）；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-7-plus": {
       "model": "qwen3-7-plus",
@@ -4514,8 +5065,8 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 1000000,
-      "inputPrice": 2.0,
-      "outputPrice": 8.0,
+      "inputPrice": 2,
+      "outputPrice": 8,
       "cacheReadPrice": 0.2,
       "cacheWritePrice": 2.5,
       "cacheWriteFree": false,
@@ -4543,8 +5094,8 @@
         {
           "minTokens": 256000,
           "maxTokens": null,
-          "inputPrice": 6.0,
-          "outputPrice": 24.0,
+          "inputPrice": 6,
+          "outputPrice": 24,
           "cacheReadPrice": 0.6,
           "cacheWritePrice": 7.5
         }
@@ -4552,7 +5103,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "限时 8 折（折后 1.6/6.4/0.16/2.0 与 4.8/19.2/0.48/6.0，到期日未标注，按原价收录）；AI 编程/Agent 综合推荐；maxOutputTokens 未公布"
+      "notes": "限时 8 折（折后 1.6/6.4/0.16/2.0 与 4.8/19.2/0.48/6.0，到期日未标注，按原价收录）；AI 编程/Agent 综合推荐；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-6-plus": {
       "model": "qwen3-6-plus",
@@ -4563,8 +5120,8 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 1000000,
-      "inputPrice": 2.0,
-      "outputPrice": 12.0,
+      "inputPrice": 2,
+      "outputPrice": 12,
       "cacheReadPrice": 0.2,
       "cacheWritePrice": 2.5,
       "cacheWriteFree": false,
@@ -4592,16 +5149,22 @@
         {
           "minTokens": 256000,
           "maxTokens": null,
-          "inputPrice": 8.0,
-          "outputPrice": 48.0,
+          "inputPrice": 8,
+          "outputPrice": 48,
           "cacheReadPrice": 0.8,
-          "cacheWritePrice": 10.0
+          "cacheWritePrice": 10
         }
       ],
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "maxOutputTokens 未公布"
+      "notes": "maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-5-plus": {
       "model": "qwen3-5-plus",
@@ -4615,7 +5178,7 @@
       "inputPrice": 0.8,
       "outputPrice": 4.8,
       "cacheReadPrice": 0.08,
-      "cacheWritePrice": 1.0,
+      "cacheWritePrice": 1,
       "cacheWriteFree": false,
       "priceStatus": "derived",
       "derivation": {
@@ -4641,24 +5204,30 @@
         {
           "minTokens": 32000,
           "maxTokens": 128000,
-          "inputPrice": 2.0,
-          "outputPrice": 12.0,
+          "inputPrice": 2,
+          "outputPrice": 12,
           "cacheReadPrice": 0.2,
           "cacheWritePrice": 2.5
         },
         {
           "minTokens": 128000,
           "maxTokens": null,
-          "inputPrice": 4.0,
-          "outputPrice": 24.0,
+          "inputPrice": 4,
+          "outputPrice": 24,
           "cacheReadPrice": 0.4,
-          "cacheWritePrice": 5.0
+          "cacheWritePrice": 5
         }
       ],
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "maxOutputTokens 未公布"
+      "notes": "maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-7-flash": {
       "model": "qwen3-7-flash",
@@ -4715,7 +5284,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "高性价比推荐；思考/非思考同价；thinking_budget 上限 256K；maxOutputTokens 未公布"
+      "notes": "高性价比推荐；思考/非思考同价；thinking_budget 上限 256K；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-6-flash": {
       "model": "qwen3-6-flash",
@@ -4758,13 +5333,19 @@
           "inputPrice": 4.8,
           "outputPrice": 28.8,
           "cacheReadPrice": 0.48,
-          "cacheWritePrice": 6.0
+          "cacheWritePrice": 6
         }
       ],
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "thinking_budget 上限 128K；maxOutputTokens 未公布"
+      "notes": "thinking_budget 上限 128K；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-5-flash": {
       "model": "qwen3-5-flash",
@@ -4776,7 +5357,7 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "inputPrice": 0.2,
-      "outputPrice": 2.0,
+      "outputPrice": 2,
       "cacheReadPrice": 0.02,
       "cacheWritePrice": 0.25,
       "cacheWriteFree": false,
@@ -4805,15 +5386,15 @@
           "minTokens": 32000,
           "maxTokens": 128000,
           "inputPrice": 0.8,
-          "outputPrice": 8.0,
+          "outputPrice": 8,
           "cacheReadPrice": 0.08,
-          "cacheWritePrice": 1.0
+          "cacheWritePrice": 1
         },
         {
           "minTokens": 128000,
           "maxTokens": null,
           "inputPrice": 1.2,
-          "outputPrice": 12.0,
+          "outputPrice": 12,
           "cacheReadPrice": 0.12,
           "cacheWritePrice": 1.5
         }
@@ -4821,7 +5402,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "maxOutputTokens 未公布"
+      "notes": "maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-coder-plus": {
       "model": "qwen3-coder-plus",
@@ -4831,10 +5418,10 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 1000000,
-      "inputPrice": 4.0,
-      "outputPrice": 16.0,
+      "inputPrice": 4,
+      "outputPrice": 16,
       "cacheReadPrice": 0.4,
-      "cacheWritePrice": 5.0,
+      "cacheWritePrice": 5,
       "cacheWriteFree": false,
       "priceStatus": "derived",
       "derivation": {
@@ -4859,32 +5446,38 @@
         {
           "minTokens": 32000,
           "maxTokens": 128000,
-          "inputPrice": 6.0,
-          "outputPrice": 24.0,
+          "inputPrice": 6,
+          "outputPrice": 24,
           "cacheReadPrice": 0.6,
           "cacheWritePrice": 7.5
         },
         {
           "minTokens": 128000,
           "maxTokens": 256000,
-          "inputPrice": 10.0,
-          "outputPrice": 40.0,
-          "cacheReadPrice": 1.0,
+          "inputPrice": 10,
+          "outputPrice": 40,
+          "cacheReadPrice": 1,
           "cacheWritePrice": 12.5
         },
         {
           "minTokens": 256000,
           "maxTokens": null,
-          "inputPrice": 20.0,
-          "outputPrice": 200.0,
-          "cacheReadPrice": 2.0,
-          "cacheWritePrice": 25.0
+          "inputPrice": 20,
+          "outputPrice": 200,
+          "cacheReadPrice": 2,
+          "cacheWritePrice": 25
         }
       ],
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "Batch 半价；编程特化；不存在 qwen3-coder-ultra；maxOutputTokens 未公布"
+      "notes": "Batch 半价；编程特化；不存在 qwen3-coder-ultra；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-coder-flash": {
       "model": "qwen3-coder-flash",
@@ -4894,8 +5487,8 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 1000000,
-      "inputPrice": 1.0,
-      "outputPrice": 4.0,
+      "inputPrice": 1,
+      "outputPrice": 4,
       "cacheReadPrice": 0.1,
       "cacheWritePrice": 1.25,
       "cacheWriteFree": false,
@@ -4923,7 +5516,7 @@
           "minTokens": 32000,
           "maxTokens": 128000,
           "inputPrice": 1.5,
-          "outputPrice": 6.0,
+          "outputPrice": 6,
           "cacheReadPrice": 0.15,
           "cacheWritePrice": 1.875
         },
@@ -4931,15 +5524,15 @@
           "minTokens": 128000,
           "maxTokens": 256000,
           "inputPrice": 2.5,
-          "outputPrice": 10.0,
+          "outputPrice": 10,
           "cacheReadPrice": 0.25,
           "cacheWritePrice": 3.125
         },
         {
           "minTokens": 256000,
           "maxTokens": null,
-          "inputPrice": 5.0,
-          "outputPrice": 25.0,
+          "inputPrice": 5,
+          "outputPrice": 25,
           "cacheReadPrice": 0.5,
           "cacheWritePrice": 6.25
         }
@@ -4947,7 +5540,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "编程特化；maxOutputTokens 未公布"
+      "notes": "编程特化；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-coder-next": {
       "model": "qwen3-coder-next",
@@ -4957,8 +5556,8 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 256000,
-      "inputPrice": 1.0,
-      "outputPrice": 4.0,
+      "inputPrice": 1,
+      "outputPrice": 4,
       "cacheReadPrice": 0.1,
       "cacheWritePrice": 1.25,
       "cacheWriteFree": false,
@@ -4986,7 +5585,7 @@
           "minTokens": 32000,
           "maxTokens": 128000,
           "inputPrice": 1.5,
-          "outputPrice": 6.0,
+          "outputPrice": 6,
           "cacheReadPrice": 0.15,
           "cacheWritePrice": 1.875
         },
@@ -4994,7 +5593,7 @@
           "minTokens": 128000,
           "maxTokens": null,
           "inputPrice": 2.5,
-          "outputPrice": 10.0,
+          "outputPrice": 10,
           "cacheReadPrice": 0.25,
           "cacheWritePrice": 3.125
         }
@@ -5002,7 +5601,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "开源权重托管；maxOutputTokens 未公布"
+      "notes": "开源权重托管；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen-plus": {
       "model": "qwen-plus",
@@ -5013,9 +5618,9 @@
       "unit": "per_1M",
       "contextWindow": 1000000,
       "inputPrice": 0.8,
-      "outputPrice": 2.0,
+      "outputPrice": 2,
       "cacheReadPrice": 0.08,
-      "cacheWritePrice": 1.0,
+      "cacheWritePrice": 1,
       "cacheWriteFree": false,
       "priceStatus": "derived",
       "derivation": {
@@ -5042,17 +5647,17 @@
           "minTokens": 32000,
           "maxTokens": 128000,
           "inputPrice": 2.4,
-          "outputPrice": 20.0,
+          "outputPrice": 20,
           "cacheReadPrice": 0.24,
-          "cacheWritePrice": 3.0
+          "cacheWritePrice": 3
         },
         {
           "minTokens": 128000,
           "maxTokens": null,
           "inputPrice": 4.8,
-          "outputPrice": 48.0,
+          "outputPrice": 48,
           "cacheReadPrice": 0.48,
-          "cacheWritePrice": 6.0
+          "cacheWritePrice": 6
         }
       ],
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
@@ -5098,7 +5703,7 @@
           "minTokens": 32000,
           "maxTokens": 128000,
           "inputPrice": 0.6,
-          "outputPrice": 6.0,
+          "outputPrice": 6,
           "cacheReadPrice": 0.06,
           "cacheWritePrice": 0.75
         },
@@ -5106,7 +5711,7 @@
           "minTokens": 128000,
           "maxTokens": null,
           "inputPrice": 1.2,
-          "outputPrice": 12.0,
+          "outputPrice": 12,
           "cacheReadPrice": 0.12,
           "cacheWritePrice": 1.5
         }
@@ -5163,7 +5768,7 @@
       "unit": "per_1M",
       "contextWindow": 10000000,
       "inputPrice": 0.5,
-      "outputPrice": 2.0,
+      "outputPrice": 2,
       "cacheReadPrice": 0.05,
       "cacheWritePrice": 0.625,
       "cacheWriteFree": false,
@@ -5199,9 +5804,9 @@
       "unit": "per_1M",
       "contextWindow": 128000,
       "inputPrice": 1.6,
-      "outputPrice": 4.0,
+      "outputPrice": 4,
       "cacheReadPrice": 0.16,
-      "cacheWritePrice": 2.0,
+      "cacheWritePrice": 2,
       "cacheWriteFree": false,
       "priceStatus": "derived",
       "derivation": {
@@ -5236,8 +5841,8 @@
       "currency": "CNY",
       "unit": "per_1M",
       "contextWindow": 256000,
-      "inputPrice": 1.0,
-      "outputPrice": 10.0,
+      "inputPrice": 1,
+      "outputPrice": 10,
       "cacheReadPrice": 0.1,
       "cacheWritePrice": 1.25,
       "cacheWriteFree": false,
@@ -5265,15 +5870,15 @@
           "minTokens": 32000,
           "maxTokens": 128000,
           "inputPrice": 1.5,
-          "outputPrice": 15.0,
+          "outputPrice": 15,
           "cacheReadPrice": 0.15,
           "cacheWritePrice": 1.875
         },
         {
           "minTokens": 128000,
           "maxTokens": null,
-          "inputPrice": 3.0,
-          "outputPrice": 30.0,
+          "inputPrice": 3,
+          "outputPrice": 30,
           "cacheReadPrice": 0.3,
           "cacheWritePrice": 3.75
         }
@@ -5281,7 +5886,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "图像/视频按 token 计费；maxOutputTokens 未公布"
+      "notes": "图像/视频按 token 计费；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-vl-flash": {
       "model": "qwen3-vl-flash",
@@ -5320,7 +5931,7 @@
           "minTokens": 32000,
           "maxTokens": 128000,
           "inputPrice": 0.3,
-          "outputPrice": 3.0,
+          "outputPrice": 3,
           "cacheReadPrice": 0.03,
           "cacheWritePrice": 0.375
         },
@@ -5328,7 +5939,7 @@
           "minTokens": 128000,
           "maxTokens": null,
           "inputPrice": 0.6,
-          "outputPrice": 6.0,
+          "outputPrice": 6,
           "cacheReadPrice": 0.06,
           "cacheWritePrice": 0.75
         }
@@ -5336,7 +5947,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "图像/视频按 token 计费；maxOutputTokens 未公布"
+      "notes": "图像/视频按 token 计费；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen3-5-omni-plus": {
       "model": "qwen3-5-omni-plus",
@@ -5346,8 +5963,8 @@
       "mode": "chat",
       "currency": "CNY",
       "unit": "per_1M",
-      "inputPrice": 7.0,
-      "outputPrice": 40.0,
+      "inputPrice": 7,
+      "outputPrice": 40,
       "cacheReadPrice": null,
       "cacheWritePrice": null,
       "cacheWriteFree": false,
@@ -5358,7 +5975,13 @@
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "千问平台口径（百炼价以控制台为准）；输入：文本/图/视频 7、音频 53；输出：文本 40、文本+音频 213；缓存价未获取（null）；上下文窗口未获取；maxOutputTokens 未公布"
+      "notes": "千问平台口径（百炼价以控制台为准）；输入：文本/图/视频 7、音频 53；输出：文本 40、文本+音频 213；缓存价未获取（null）；上下文窗口未获取；maxOutputTokens 未公布",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "thinkingFormat": "reasoning_effort"
     },
     "qwen::qwen2-5-omni-7b": {
       "model": "qwen2-5-omni-7b",
