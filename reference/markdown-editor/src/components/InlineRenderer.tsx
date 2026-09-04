@@ -1,6 +1,6 @@
 import * as React from 'react';
 import type { InlineNode } from '../core/ast';
-import { type ActiveState } from '../core/measure';
+import { type ActiveState, locateRowIndexByPhysicalBisection } from '../core/measure';
 // R5-C：数学渲染统一走注入点（renderTheme 模块级；KaTeX 默认，可替换）
 import { renderMathToHtml } from '../core/renderTheme';
 // P3 B2（plan-A2 方案 B 样式预演）：未闭合行内标记检测结果类型——
@@ -331,28 +331,19 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 style={cellStyle}
                 onMouseDown={(e) => {
                   if (e.button === 2) return; // Ignore right click
-                  // Avoid breaking edit mode if we click on the already editing cell
-                  if (isCellEditing) return;
 
                   const tableStore = useTableStore.getState();
                   const editorStore = useEditorStore.getState();
 
-                  // 若单元格已处于选中状态，再次点击立即进入行内编辑模式并定位到鼠标物理点击位置
-                  if (isCellSelected && !isCellEditing) {
-                    tableStore.enterCellEdit(tableId || '', lineIndex ?? -1, colIndex);
-                    tableStore.setDraggingCell(false);
+                  // 1. 首次单击未选中：进入单元格单选模式
+                  if (!isCellSelected) {
+                    tableStore.enterCellSelection(tableId || '', lineIndex ?? -1, colIndex);
+                    tableStore.setDraggingCell(true);
+                    window.getSelection()?.removeAllRanges();
+                    editorStore.setSelection(start, start);
+                    editorStore.setCursorPos(start);
+                    e.preventDefault?.();
 
-                    const container = (e.currentTarget.closest('.editor-scroll-container') ||
-                      document.querySelector('.editor-scroll-container')) as HTMLElement;
-                    if (container) {
-                      const targetIdx = indexFromClientPoint(
-                        e.clientX,
-                        e.clientY,
-                        container,
-                        editorStore
-                      );
-                      editorStore.setCursorPos(targetIdx);
-                    }
                     setTimeout(() => {
                       const input = document.querySelector('textarea') as HTMLTextAreaElement;
                       if (input) input.focus({ preventScroll: true });
@@ -360,13 +351,31 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     return;
                   }
 
-                  // 首次单选：仅选中单元格，设置光标至单元格起始处保持视口锚定，由 CursorLayer 抑制光标绘制与全高灰色矩形
-                  tableStore.enterCellSelection(tableId || '', lineIndex ?? -1, colIndex);
-                  tableStore.setDraggingCell(true);
-                  window.getSelection()?.removeAllRanges();
-                  editorStore.setSelection(start, start);
+                  // 2. 单元格已处于选中状态或已在编辑中：
+                  // 再次点击直接进入/维持就地编辑模式，并在本单元格范围内高精物理定位光标
+                  if (!isCellEditing) {
+                    tableStore.enterCellEdit(tableId || '', lineIndex ?? -1, colIndex);
+                    tableStore.setDraggingCell(false);
+                  }
 
-                  // Ensure HiddenInput gets focus so keyboard navigation works immediately without scrolling
+                  // 使用 locateRowIndexByPhysicalBisection 仅在当前单元格 DOM 范围内精确测量，
+                  // 彻底避免跨单元格漂移或落入管道符
+                  const targetIdx = locateRowIndexByPhysicalBisection(
+                    e.currentTarget,
+                    e.clientX,
+                    start,
+                    len
+                  ) ?? start;
+
+                  // 严格将光标钳制在单元格自身范围 [start, start + len] 内
+                  const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
+
+                  // 折叠选区为 0 宽，杜绝跨单元格灰色选区块与全高背景
+                  editorStore.setSelection(clampedIdx, clampedIdx);
+                  editorStore.setCursorPos(clampedIdx);
+                  window.getSelection()?.removeAllRanges();
+                  e.preventDefault?.();
+
                   setTimeout(() => {
                     const input = document.querySelector('textarea') as HTMLTextAreaElement;
                     if (input) input.focus({ preventScroll: true });

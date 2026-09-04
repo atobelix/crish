@@ -753,8 +753,14 @@ export function locateRowIndexByPhysicalBisection(
       const p = n.parentElement;
       if (!p) return NodeFilter.FILTER_REJECT;
       // 检查当前元素及其祖先是否隐藏
-      if (p.closest('.syntax-hidden') || p.closest('.katex-html') || p.closest('.math-preview')) {
-        return NodeFilter.FILTER_REJECT;
+      const hiddenEl = p.closest('.syntax-hidden, .katex-html, .math-preview') as HTMLElement | null;
+      if (hiddenEl) {
+        if (typeof window !== 'undefined' && window.getComputedStyle) {
+          const disp = window.getComputedStyle(hiddenEl).display;
+          if (disp === 'none') return NodeFilter.FILTER_REJECT;
+        } else {
+          return NodeFilter.FILTER_REJECT;
+        }
       }
       const val = n.nodeValue;
       if (!val || val.length === 0) return NodeFilter.FILTER_REJECT;
@@ -782,24 +788,24 @@ export function locateRowIndexByPhysicalBisection(
 
   const range = getSharedRange();
 
-  // 2. 检查整行最左边界
+  // 2. 检查整行最左边界：若点击在最左可见字符左侧，锚定到最左可见字符起点（防跳回折叠语法前缀如 ### ）
   try {
     range.setStart(textEntries[0].node, 0);
     range.setEnd(textEntries[0].node, Math.min(1, textEntries[0].length));
     const firstRect = range.getBoundingClientRect();
     if (firstRect.width > 0 && clientX <= firstRect.left) {
-      return lineStart;
+      return textEntries[0].globalStart;
     }
   } catch {}
 
-  // 3. 检查整行最右边界
+  // 3. 检查整行最右边界：若点击在最右可见字符右侧，锚定到末尾可见字符末端
   try {
     const lastEntry = textEntries[textEntries.length - 1];
     range.setStart(lastEntry.node, Math.max(0, lastEntry.length - 1));
     range.setEnd(lastEntry.node, lastEntry.length);
     const lastRect = range.getBoundingClientRect();
     if (lastRect.width > 0 && clientX >= lastRect.right) {
-      return lineStart + lineLen;
+      return lastEntry.globalStart + lastEntry.length;
     }
   } catch {}
 

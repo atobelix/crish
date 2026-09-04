@@ -2186,14 +2186,27 @@ export const MarkdownEngine = React.forwardRef<
       }
     }
 
-    // 单一真源定位：indexFromClientPoint 统管 TextNode Range、物理二分、行几何与边距
-    const exactIndex = indexFromClientPoint(
-      e.clientX,
-      e.clientY,
-      parentRef.current,
-      st,
-      clickedLineIndex >= 0 ? clickedLineIndex : undefined
-    );
+    // 优先采用 mousedown 时在未展开 DOM 上计算的预先锚定索引，
+    // 杜绝点击后语法展开导致光标吸附到新出现的隐藏语法标记（如 ### 或 **）上
+    const preClick = (window as any).__CRISH_PRE_CLICK_INDEX;
+    let exactIndex: number;
+    if (
+      preClick &&
+      Math.abs(e.clientX - preClick.x) <= 4 &&
+      Math.abs(e.clientY - preClick.y) <= 4 &&
+      Date.now() - preClick.time < 800
+    ) {
+      exactIndex = preClick.index;
+      (window as any).__CRISH_PRE_CLICK_INDEX = null;
+    } else {
+      exactIndex = indexFromClientPoint(
+        e.clientX,
+        e.clientY,
+        parentRef.current,
+        st,
+        clickedLineIndex >= 0 ? clickedLineIndex : undefined
+      );
+    }
     setCursorPos(exactIndex);
   };
 

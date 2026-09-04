@@ -79,6 +79,7 @@ async function runDefenseSuite() {
             clientX,
             clientY,
             currentTarget: el,
+            preventDefault: () => {},
           });
           return true;
         }
@@ -374,6 +375,113 @@ async function runDefenseSuite() {
             details: passDrag
               ? '单元格拖选期间完全抑制多余 selection-rect，左上角首格零灰色矩形干扰'
               : `拖选期间检测到 ${selectionRectsDuringDrag} 个非法 selection-rect 泄露`,
+          });
+
+          // 步骤 4：单元格就地编辑点击移动与零选区泄露防御 (TABLE-INCELL-CLICK-MOVE)
+          const teamCell = currentCells.find(c => c.innerText.includes('负责团队')) || currentCells[3];
+          if (teamCell) {
+            const tRect = teamCell.getBoundingClientRect();
+            // 单击选择
+            triggerCellMouseDown(teamCell, tRect.left + 20, tRect.top + 15);
+            await waitForFrame(50);
+            // 二次点击进入编辑态（前部字符）
+            triggerCellMouseDown(teamCell, tRect.left + 35, tRect.top + 15);
+            await waitForFrame(50);
+            const pos1 = window.__editorStore.getState().cursorPos;
+
+            // 三次点击在编辑态中重新定位到后部字符（例如"队"）
+            const editingTeam = document.querySelector('.token-table-cell.is-cell-editing') || teamCell;
+            triggerCellMouseDown(editingTeam, tRect.left + 65, tRect.top + 15);
+            await waitForFrame(50);
+            const pos2 = window.__editorStore.getState().cursorPos;
+
+            const selRectsMove = document.querySelectorAll('.selection-rect').length;
+            const passMove = pos2 !== pos1 && selRectsMove === 0;
+
+            suiteResults.push({
+              id: 'TABLE-INCELL-CLICK-MOVE',
+              name: '单元格编辑态点击自由重定位契约 (In-cell Click Repositioning)',
+              passed: passMove,
+              details: passMove
+                ? `编辑态点击成功在单元格内移动光标 (${pos1} -> ${pos2})，零选区矩形泄露`
+                : `重定位异常: pos1=${pos1}, pos2=${pos2}, selRects=${selRectsMove}`,
+            });
+
+            // 步骤 5：单元格方向键边界与行列导航契约 (TABLE-KEYBOARD-NAV)
+            const textarea = document.querySelector('textarea');
+            if (textarea) {
+              // 左键单步移动
+              textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+              await waitForFrame(40);
+              const posAfterLeft = window.__editorStore.getState().cursorPos;
+              const movedLeft = posAfterLeft === pos2 - 1;
+
+              // 连续左键越过左边界进入上一列
+              for (let k = 0; k < 5; k++) {
+                textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+              }
+              await waitForFrame(40);
+              const colAfterCrossLeft = window.__tableStore.getState().selectedCell?.startCol;
+              const crossedLeft = colAfterCrossLeft !== undefined && colAfterCrossLeft < 3;
+
+              // 下键下跳到下一行数据单元格（跳过分隔行）
+              textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+              await waitForFrame(40);
+              const lineAfterDown = window.__tableStore.getState().selectedCell?.startLine;
+              const downSkippedSep = lineAfterDown !== undefined && lineAfterDown > 138;
+
+              const passNav = movedLeft && crossedLeft && downSkippedSep;
+              suiteResults.push({
+                id: 'TABLE-KEYBOARD-NAV',
+                name: '单元格方向键安全漫游与分隔行越障契约 (Cell Arrow Navigation)',
+                passed: passNav,
+                details: passNav
+                  ? '方向键单步移动、跨列漫游、跨分隔行越障完全正确'
+                  : `导航异常: movedLeft=${movedLeft} (pos2=${pos2}, posAfterLeft=${posAfterLeft}), crossedLeft=${crossedLeft}, downSkippedSep=${downSkippedSep}`,
+              });
+            }
+          }
+        }
+      }
+
+      // ============================================================
+      // 场景 6：隐藏语法标记折叠与预演点击锚定测试 (SYNTAX-HIDDEN-EXPANSION-ANCHOR)
+      // ============================================================
+      if (window.__tableStore) {
+        window.__tableStore.getState().clearCellSelection();
+      }
+      const headingEl = Array.from(document.querySelectorAll('.virtual-row')).find(r => {
+        return r.querySelector('.token-heading-prefix');
+      });
+      if (headingEl) {
+        const spans = headingEl.querySelectorAll('span[data-token-start]');
+        const textSpan = spans[1] || spans[0];
+        const tNode = textSpan.childNodes[0];
+        if (tNode) {
+          const range = document.createRange();
+          range.setStart(tNode, Math.min(2, (tNode.nodeValue || '').length - 1));
+          range.setEnd(tNode, Math.min(3, (tNode.nodeValue || '').length));
+          const charR = range.getBoundingClientRect();
+          const clickX = charR.left + charR.width / 2;
+          const clickY = charR.top + charR.height / 2;
+
+          headingEl.dispatchEvent(new MouseEvent('mousedown', { clientX: clickX, clientY: clickY, bubbles: true }));
+          await waitForFrame(20);
+          headingEl.dispatchEvent(new MouseEvent('click', { clientX: clickX, clientY: clickY, bubbles: true }));
+          await waitForFrame(60);
+
+          const cursorPos = window.__editorStore.getState().cursorPos;
+          const prefixLen = parseInt(spans[0].getAttribute('data-token-length') || '0', 10);
+          const lineStart = parseInt(headingEl.getAttribute('data-line-start') || '0', 10);
+          const anchorCorrect = cursorPos >= lineStart + prefixLen;
+
+          suiteResults.push({
+            id: 'SYNTAX-HIDDEN-ANCHOR',
+            name: '隐藏语法前缀展开光标视觉锚定防御 (Syntax Hidden Expansion Anchor)',
+            passed: anchorCorrect,
+            details: anchorCorrect
+              ? `光标严格锚定于点击之可见字符 (pos=${cursorPos} >= textStart=${lineStart + prefixLen})，零被折叠前缀抢占`
+              : `光标被折叠前缀抢占: pos=${cursorPos} < textStart=${lineStart + prefixLen}`,
           });
         }
       }

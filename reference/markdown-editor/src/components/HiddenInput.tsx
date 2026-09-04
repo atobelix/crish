@@ -18,6 +18,7 @@ import {
   findTableRange,
   clearCell,
   setCellContent,
+  parseRowCells,
 } from '../core/TableOperations';
 import { buildPasteText } from '../core/htmlToMarkdown';
 import type { LineOffsetTree } from '../core/SegmentTree';
@@ -984,6 +985,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     };
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (handleTableInteraction(e)) {
         return;
       }
@@ -1031,6 +1033,29 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       // 状态机与浏览器原生选择打架
       const selection = window.getSelection();
       if (selection && selection.toString().length > 0) return;
+
+      // 预先在 mousedown 阶段（DOM 尚未激活/展开隐藏语法前）以当前未展开物理状态计算目标字符索引，
+      // 保证后续 click 触发时光标锚定在用户视线所点击的文字上，而不是在展开后新插入的前缀/标记位置
+      try {
+        const clickedLineIndex = parseInt(
+          target?.closest('[data-index]')?.getAttribute('data-index') || '-1',
+          10
+        );
+        const preIndex = indexFromClientPoint(
+          e.clientX,
+          e.clientY,
+          container,
+          editorStore.getState(),
+          clickedLineIndex >= 0 ? clickedLineIndex : undefined
+        );
+        (window as any).__CRISH_PRE_CLICK_INDEX = {
+          x: e.clientX,
+          y: e.clientY,
+          index: preIndex,
+          time: Date.now(),
+        };
+      } catch {}
+
       dragSelectRef.current = {
         startX: e.clientX,
         startY: e.clientY,
@@ -1371,6 +1396,240 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         }
         return true;
       }
+
+      // 单元格内物理边界与键盘导航
+      const table = findTableRange(text, cursorPos);
+      if (table) {
+        const rowText = table.lines[table.activeLineIndex];
+        const lineOffset = table.lineOffsets[table.activeLineIndex];
+        const { pipePositions } = parseRowCells(rowText);
+        const col = table.activeCellIndex;
+
+        if (col >= 0 && col < pipePositions.length - 1) {
+          const rawCell = rowText.substring(
+            pipePositions[col] + 1,
+            pipePositions[col + 1]
+          );
+          const leadingSpaces = rawCell.match(/^\s*/)?.[0].length || 0;
+          const trailingSpaces = rawCell.match(/\s*$/)?.[0].length || 0;
+          const cellTextStart = lineOffset + pipePositions[col] + 1 + leadingSpaces;
+          const cellTextEnd = Math.max(
+            cellTextStart,
+            lineOffset + pipePositions[col + 1] - trailingSpaces
+          );
+
+          if (
+            e.key === 'ArrowLeft' &&
+            !e.shiftKey &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey
+          ) {
+            if (cursorPos > cellTextStart) {
+              const newPos = Math.max(cellTextStart, cursorPos - 1);
+              fastCursorMove(newPos);
+              editorStore.getState().setSelection(newPos, newPos);
+              e.preventDefault();
+              return true;
+            }
+            if (col > 0) {
+              const prevCol = col - 1;
+              const prevRaw = rowText.substring(
+                pipePositions[prevCol] + 1,
+                pipePositions[prevCol + 1]
+              );
+              const prevTrailing = prevRaw.match(/\s*$/)?.[0].length || 0;
+              const prevLeading = prevRaw.match(/^\s*/)?.[0].length || 0;
+              const prevStart =
+                lineOffset + pipePositions[prevCol] + 1 + prevLeading;
+              const prevEnd = Math.max(
+                prevStart,
+                lineOffset + pipePositions[prevCol + 1] - prevTrailing
+              );
+              fastCursorMove(prevEnd);
+              editorStore.getState().setSelection(prevEnd, prevEnd);
+              useTableStore
+                .getState()
+                .enterCellEdit(
+                  selectedCell.tableId,
+                  selectedCell.startLine,
+                  prevCol
+                );
+              e.preventDefault();
+              return true;
+            }
+            fastCursorMove(cellTextStart);
+            editorStore.getState().setSelection(cellTextStart, cellTextStart);
+            e.preventDefault();
+            return true;
+          }
+
+          if (
+            e.key === 'ArrowRight' &&
+            !e.shiftKey &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey
+          ) {
+            if (cursorPos < cellTextEnd) {
+              const newPos = Math.min(cellTextEnd, cursorPos + 1);
+              fastCursorMove(newPos);
+              editorStore.getState().setSelection(newPos, newPos);
+              e.preventDefault();
+              return true;
+            }
+            if (col < pipePositions.length - 2) {
+              const nextCol = col + 1;
+              const nextRaw = rowText.substring(
+                pipePositions[nextCol] + 1,
+                pipePositions[nextCol + 1]
+              );
+              const nextLeading = nextRaw.match(/^\s*/)?.[0].length || 0;
+              const nextStart =
+                lineOffset + pipePositions[nextCol] + 1 + nextLeading;
+              fastCursorMove(nextStart);
+              editorStore.getState().setSelection(nextStart, nextStart);
+              useTableStore
+                .getState()
+                .enterCellEdit(
+                  selectedCell.tableId,
+                  selectedCell.startLine,
+                  nextCol
+                );
+              e.preventDefault();
+              return true;
+            }
+            fastCursorMove(cellTextEnd);
+            editorStore.getState().setSelection(cellTextEnd, cellTextEnd);
+            e.preventDefault();
+            return true;
+          }
+
+          if (
+            e.key === 'ArrowUp' &&
+            !e.shiftKey &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey
+          ) {
+            let prevLineIdx = table.activeLineIndex - 1;
+            if (prevLineIdx === table.separatorLineIndex) prevLineIdx--;
+            if (prevLineIdx >= 0) {
+              const targetRowText = table.lines[prevLineIdx];
+              const targetLineOffset = table.lineOffsets[prevLineIdx];
+              const { pipePositions: targetPipes } = parseRowCells(targetRowText);
+              const targetCol = Math.min(col, targetPipes.length - 2);
+              if (targetCol >= 0) {
+                const targetRaw = targetRowText.substring(
+                  targetPipes[targetCol] + 1,
+                  targetPipes[targetCol + 1]
+                );
+                const targetLeading = targetRaw.match(/^\s*/)?.[0].length || 0;
+                const targetTrailing = targetRaw.match(/\s*$/)?.[0].length || 0;
+                const targetStart =
+                  targetLineOffset + targetPipes[targetCol] + 1 + targetLeading;
+                const targetEnd = Math.max(
+                  targetStart,
+                  targetLineOffset + targetPipes[targetCol + 1] - targetTrailing
+                );
+                const relOffset = cursorPos - cellTextStart;
+                const newPos = Math.min(targetEnd, targetStart + relOffset);
+                fastCursorMove(newPos);
+                editorStore.getState().setSelection(newPos, newPos);
+                const targetAbsLine = (table.startLineIndex ?? 0) + prevLineIdx;
+                useTableStore
+                  .getState()
+                  .enterCellEdit(
+                    selectedCell.tableId,
+                    targetAbsLine,
+                    targetCol
+                  );
+                e.preventDefault();
+                return true;
+              }
+            }
+            e.preventDefault();
+            return true;
+          }
+
+          if (
+            e.key === 'ArrowDown' &&
+            !e.shiftKey &&
+            !e.ctrlKey &&
+            !e.metaKey &&
+            !e.altKey
+          ) {
+            let nextLineIdx = table.activeLineIndex + 1;
+            if (nextLineIdx === table.separatorLineIndex) nextLineIdx++;
+            if (nextLineIdx < table.lines.length) {
+              const targetRowText = table.lines[nextLineIdx];
+              const targetLineOffset = table.lineOffsets[nextLineIdx];
+              const { pipePositions: targetPipes } = parseRowCells(targetRowText);
+              const targetCol = Math.min(col, targetPipes.length - 2);
+              if (targetCol >= 0) {
+                const targetRaw = targetRowText.substring(
+                  targetPipes[targetCol] + 1,
+                  targetPipes[targetCol + 1]
+                );
+                const targetLeading = targetRaw.match(/^\s*/)?.[0].length || 0;
+                const targetTrailing = targetRaw.match(/\s*$/)?.[0].length || 0;
+                const targetStart =
+                  targetLineOffset + targetPipes[targetCol] + 1 + targetLeading;
+                const targetEnd = Math.max(
+                  targetStart,
+                  targetLineOffset + targetPipes[targetCol + 1] - targetTrailing
+                );
+                const relOffset = cursorPos - cellTextStart;
+                const newPos = Math.min(targetEnd, targetStart + relOffset);
+                fastCursorMove(newPos);
+                editorStore.getState().setSelection(newPos, newPos);
+                const targetAbsLine = (table.startLineIndex ?? 0) + nextLineIdx;
+                useTableStore
+                  .getState()
+                  .enterCellEdit(
+                    selectedCell.tableId,
+                    targetAbsLine,
+                    targetCol
+                  );
+                e.preventDefault();
+                return true;
+              }
+            }
+            e.preventDefault();
+            return true;
+          }
+
+          if (e.key === 'Home') {
+            fastCursorMove(cellTextStart);
+            editorStore.getState().setSelection(cellTextStart, cellTextStart);
+            e.preventDefault();
+            return true;
+          }
+
+          if (e.key === 'End') {
+            fastCursorMove(cellTextEnd);
+            editorStore.getState().setSelection(cellTextEnd, cellTextEnd);
+            e.preventDefault();
+            return true;
+          }
+
+          if (e.key === 'Backspace') {
+            const { selectionStart, selectionEnd } = editorStore.getState();
+            if (selectionStart === selectionEnd && cursorPos <= cellTextStart) {
+              e.preventDefault();
+              return true;
+            }
+          }
+
+          if (e.key === 'Delete') {
+            const { selectionStart, selectionEnd } = editorStore.getState();
+            if (selectionStart === selectionEnd && cursorPos >= cellTextEnd) {
+              e.preventDefault();
+              return true;
+            }
+          }
+        }
+      }
     }
     return false;
   };
@@ -1429,6 +1688,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
 
     // --- 表格单元格交互状态机 (Excel Mode) ---
     if (handleTableInteraction(e)) {
+      e.stopPropagation();
       return;
     }
 
