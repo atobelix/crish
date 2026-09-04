@@ -751,6 +751,9 @@ mod tests {
         assert!(!events.is_empty(), "启动期必须有事件");
 
         watcher.stop();
+        // 契约：stop 返回后不再接受新事件；unwatch 生效前 OS 已入队的在途
+        // 事件属合法窗口，先排空再验证「停止后写入零新事件」。
+        drain(&mut rx, 150);
         ws.write_file("c.txt", "x");
         let events = drain(&mut rx, 500);
         assert!(events.is_empty(), "停止后必须无事件：{events:?}");

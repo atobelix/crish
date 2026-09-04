@@ -5962,50 +5962,6 @@
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
       "notes": "输入：文本 0.6/音频 38/图视频 2；输出：文本 2.4/音频 76/图视频 6；Qwen2.5 系仅存多模态在售；maxOutputTokens 未公布"
-    },
-    "grok::grok-4.6": {
-      "model": "grok-4.6",
-      "provider": "xai",
-      "vendor": "grok",
-      "mode": "both",
-      "currency": "USD",
-      "unit": "per_1M",
-      "contextWindow": 500000,
-      "inputPrice": 2,
-      "outputPrice": 6,
-      "cacheReadPrice": 0.5,
-      "cacheWritePrice": 0,
-      "cacheWriteFree": true,
-      "priceStatus": "official",
-      "cacheType": "auto",
-      "cacheMechanism": "prefix",
-      "supportsPromptCaching": true,
-      "supportsImplicitCaching": true,
-      "supportsPromptCacheKey": true,
-      "supportsCacheControl": false,
-      "supportsResponses": true,
-      "supportsReasoning": true,
-      "supportsReasoningEffort": true,
-      "tieredPricing": [
-        {
-          "minTokens": 200000,
-          "maxTokens": null,
-          "inputPrice": 4,
-          "outputPrice": 12,
-          "cacheReadPrice": 0.6
-        }
-      ],
-      "sourceUrl": "https://docs.x.ai/developers/pricing",
-      "dataVerifiedAt": "2026-08-03",
-      "dataSource": "official",
-      "notes": "≥200K 整请求全量 2x 计费（含缓存命中部分）；写免费为推断（官方定价结构无写价列）；输出上限官方未公布（models.dev 500K 仅参考）；最低缓存/TTL 未公布；无 Batch 折扣",
-      "thinkingTiers": {
-        "xhigh": "xhigh",
-        "high": "high",
-        "medium": "medium",
-        "low": "low"
-      },
-      "maxOutputTokens": 450000
     }
   }
 }

@@ -182,7 +182,7 @@ fn lr_t1_prod_inject_is_store_or_unwired() {
 
     let run = production_code(&read_utf8(&manifest.join("src/run/run_launch.rs")));
     assert!(
-        run.contains("note_backend: crate::note_runtime::try_backend()"),
+        run.contains("note_backend = crate::note_runtime::try_backend()"),
         "core_run 必须同源 try_backend"
     );
     assert!(
