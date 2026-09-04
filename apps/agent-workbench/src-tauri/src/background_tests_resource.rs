@@ -135,11 +135,12 @@ async fn resource_sample_collected() {
                 res.cpu_percent
             );
             assert!(res.rss_bytes > 0, "rss_bytes 应 > 0：{}", res.rss_bytes);
-            assert_eq!(
-                res.last_output_at_ms, status.last_output_at_ms,
-                "快照内 last_output_at_ms 与 status 一致（事件驱动刷新）"
-            );
-            break res.last_output_at_ms;
+            // 事件驱动刷新语义：快照 last_output_at_ms 与 status 最终一致。
+            // 竞态窗口：采样时刻与读取时刻之间输出事件可能到达（差一拍），
+            // 此处不立即断言，而是轮询等齐后再取首份对齐采样。
+            if res.last_output_at_ms == status.last_output_at_ms {
+                break res.last_output_at_ms;
+            }
         }
         assert!(
             tokio::time::Instant::now() < deadline,
