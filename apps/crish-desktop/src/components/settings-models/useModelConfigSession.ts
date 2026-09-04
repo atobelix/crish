@@ -58,12 +58,16 @@ export function useModelConfigSession(args: ModelConfigSessionArgs) {
         displayName: meta.displayName || '',
         contextLength:
           meta.contextLength != null ? String(meta.contextLength) : '',
+        maxOutputTokens:
+          meta.maxOutputTokens != null ? String(meta.maxOutputTokens) : '',
         caps: {
           tools: Boolean(meta.capabilities?.tools),
-          vision: Boolean(meta.capabilities?.vision),
+          image: Boolean(meta.capabilities?.image),
+          video: Boolean(meta.capabilities?.video),
           reasoning: Boolean(meta.capabilities?.reasoning),
         },
         thinkingLevel: meta.defaultThinkingLevel || 'default',
+        protocol: meta.protocol,
       });
     },
     [selected, setManualOpen, setConfigOpenId, setCfgDraft],

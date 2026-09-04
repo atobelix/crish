@@ -60,6 +60,10 @@ export type ModelPrice = {
    * 仅用于展示层标注，不做汇率换算。
    */
   currency?: 'USD' | 'CNY';
+  /** 计费模式：按 Token 计费 vs 按张生成计费（生图模型专精） */
+  billingUnit?: 'token' | 'per_image';
+  /** 单张生成单价（仅当 billingUnit 为 per_image 时使用） */
+  perImageCost?: number;
 };
 
 /** 币种（schema §1.2：必填，值域 USD | CNY；目录内不换算） */

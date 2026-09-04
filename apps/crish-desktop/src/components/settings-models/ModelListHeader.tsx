@@ -1,6 +1,6 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip, Input } from '../ui';
 import type { AddDraft } from './useModelProfilesState';
 import styles from './ModelsSettingsTab.module.css';
 
@@ -90,27 +90,16 @@ export const ModelListHeader: React.FC<{
             }
           />
         </Tooltip>
-        <div style={{ position: 'relative' }}>
-          <Lucide.Search
-            size={12}
-            style={{
-              position: 'absolute',
-              left: '8px',
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: 'var(--text-tertiary)',
-              pointerEvents: 'none',
-            }}
-          />
-          <input
-            type="text"
-            placeholder="搜索..."
-            value={modelFilter}
-            onChange={(e) => setModelFilter(e.target.value)}
-            className={`${styles.mrdSearch} mrd-search`}
-            spellCheck={false}
-          />
-        </div>
+        <Input
+          variant="search"
+          size="xs"
+          placeholder="搜索模型…"
+          value={modelFilter}
+          onChange={(e) => setModelFilter(e.target.value)}
+          clearable
+          onClear={() => setModelFilter('')}
+          style={{ width: '150px' }}
+        />
         <Tooltip content="手动添加模型">
           <Button
             type="button"

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button } from '../ui';
+import { Button, Input } from '../ui';
 import {
   saveProfileBaseUrl,
   upsertProfile,
@@ -31,8 +31,8 @@ export const ProviderProfileForm: React.FC<{
         <label className={`${styles.mrdFieldLabel} mrd-field-label`}>
           Base URL
         </label>
-        <input
-          className={`${styles.mrdFieldInput} mrd-field-input`}
+        <Input
+          size="sm"
           value={selected.baseUrl}
           placeholder="https://api.example.com/v1"
           spellCheck={false}
@@ -60,33 +60,30 @@ export const ProviderProfileForm: React.FC<{
           API Key
         </label>
         <div className={`${styles.mrdKeyRow} mrd-key-row`}>
-          <input
-            className={`${styles.mrdFieldInput} mrd-field-input`}
-            type="password"
-            placeholder={
-              hasKeySelected ? '••••••••••••••••••••' : '粘贴 API Key'
-            }
-            value={keyDraft}
-            onChange={(e) => setKeyDraft(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && keyDraft.trim()) {
-                e.preventDefault();
-                void saveKey();
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Input
+              variant="password"
+              size="sm"
+              placeholder={
+                hasKeySelected ? '••••••••••••••••••••' : '粘贴 API Key'
               }
-            }}
-          />
+              value={keyDraft}
+              onChange={(e) => setKeyDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && keyDraft.trim()) {
+                  e.preventDefault();
+                  void saveKey();
+                }
+              }}
+            />
+          </div>
           <Button
             type="button"
             variant="secondary"
             size="sm"
             disabled={!keyDraft.trim()}
             onClick={() => void saveKey()}
-            style={{
-              borderRadius: '7px',
-              height: '34px',
-              padding: '0 14px',
-              flexShrink: 0,
-            }}
+            style={{ flexShrink: 0 }}
           >
             保存
           </Button>

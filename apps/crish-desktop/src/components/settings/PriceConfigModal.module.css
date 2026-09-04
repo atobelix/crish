@@ -1,0 +1,143 @@
+/**
+ * PriceConfigModal.module.css
+ * 现代高质感模型单价配置弹窗样式（纯净、通透、严格对齐网格与白底输入框）
+ */
+
+.dialogContent {
+  display: flex;
+  flex-direction: column;
+  height: 520px;
+  max-height: 70vh;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  max-width: 260px;
+}
+
+.currencySwitch {
+  flex-shrink: 0;
+}
+
+/* 表格公用网格模板（表头、数据行、新增行 100% 严格同轨对齐） */
+.tableHeader,
+.tableRow,
+.addRow {
+  display: grid;
+  grid-template-columns: minmax(130px, 2.2fr) minmax(75px, 1fr) minmax(75px, 1fr) minmax(75px, 1fr) 110px 48px;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+/* 表头：纯净文本，标准 500 字重，统一系统字体 */
+.tableHeader {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  padding: 8px 12px;
+}
+
+/* 列表主体：带稳定滚动槽 */
+.tableBody {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* 价格行：默认透明，hover 柔和高光 */
+.tableRow {
+  background: transparent;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 40%, transparent);
+  transition: background 120ms ease;
+}
+
+.tableRow:hover {
+  background: var(--bg-hover, rgba(128, 128, 128, 0.08));
+}
+
+.colCell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* 对齐模型界面的输入框效果，背景色始终固定为纯白 #ffffff，字体字重标准统一 */
+.cellInput {
+  width: 100%;
+  height: 30px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 6px);
+  font-size: 13px;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-weight: 400;
+  background: #ffffff !important;
+  color: var(--text-primary);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 120ms ease;
+}
+
+.cellInput::placeholder {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.cellInput:hover:not(:focus) {
+  border-color: var(--border-color);
+}
+
+/* 焦点激活态：锁定柔和浅灰微调（~8%），严禁黑色描边与粗阴影环 (AGENTS.md §13) */
+.cellInput:focus,
+.cellInput:focus-visible {
+  outline: none;
+  background: #ffffff !important;
+  box-shadow: none !important;
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%) !important;
+}
+
+.rowActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+}
+
+.emptyTip {
+  text-align: center;
+  padding: 48px 0;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* 底部新增行：与 tableRow 完全相同栅格与内边距，顶部细分界线 */
+.addRow {
+  border-top: 1px solid var(--border-subtle);
+  background: transparent;
+  flex-shrink: 0;
+}
+
+/* 弹窗底部操作区 */
+.footerBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 100%;
+}

@@ -96,97 +96,172 @@ export const ModelList: React.FC<{
             }}
             style={{ cursor: 'pointer' }}
           >
-            <div className={`${styles.mrdModelInfo} mrd-model-info`}>
-              <span className={`${styles.mrdModelName} mrd-model-name`}>
-                {display}
-              </span>
-              <div className="mrd-model-meta">
-                {showCtx && (
-                  <span className={`${styles.mrdCtxPill} mrd-ctx-pill`}>
-                    {liveCtxLabel}
-                  </span>
-                )}
-                {meta.capabilities?.tools && (
-                  <span
-                    className={`${styles.mrdCapTag} mrd-cap-tag`}
-                    aria-label="支持工具调用"
-                  >
-                    <Lucide.Wrench size={10} />
-                  </span>
-                )}
-                {meta.capabilities?.vision && (
-                  <span
-                    className={`${styles.mrdCapTag} mrd-cap-tag`}
-                    aria-label="支持视觉"
-                  >
-                    <Lucide.Eye size={10} />
-                  </span>
-                )}
-                {meta.capabilities?.reasoning && (
-                  <span
-                    className={`${styles.mrdCapTag} mrd-cap-tag`}
-                    aria-label="支持思考"
-                  >
-                    <Lucide.BrainCircuit size={10} />
-                  </span>
-                )}
+            <div className={`${styles.mrdModelRowInner} mrd-model-row-inner`}>
+              <div className={`${styles.mrdModelInfo} mrd-model-info`}>
+                <span className={`${styles.mrdModelName} mrd-model-name`}>
+                  {display}
+                </span>
+                <div className="mrd-model-meta">
+                  {showCtx && (
+                    <span className={`${styles.mrdCtxPill} mrd-ctx-pill`}>
+                      {liveCtxLabel}
+                    </span>
+                  )}
+                  {meta.capabilities?.tools && (
+                    <span
+                      className={`${styles.mrdCapTag} mrd-cap-tag`}
+                      aria-label="支持工具调用"
+                    >
+                      <Lucide.Wrench size={10} />
+                    </span>
+                  )}
+                  {meta.capabilities?.image && (
+                    <span
+                      className={`${styles.mrdCapTag} mrd-cap-tag`}
+                      aria-label="支持图片理解"
+                    >
+                      <Lucide.Image size={10} />
+                    </span>
+                  )}
+                  {meta.capabilities?.video && (
+                    <span
+                      className={`${styles.mrdCapTag} mrd-cap-tag`}
+                      aria-label="支持视频理解"
+                    >
+                      <Lucide.Video size={10} />
+                    </span>
+                  )}
+                  {meta.capabilities?.reasoning && (
+                    <span
+                      className={`${styles.mrdCapTag} mrd-cap-tag`}
+                      aria-label="支持思考"
+                    >
+                      <Lucide.BrainCircuit size={10} />
+                    </span>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className={`${styles.mrdModelActions} mrd-model-actions`}>
-              <Tooltip content={off ? '已停用，点击启用' : '点击停用'}>
-                <Switch
-                  size="sm"
-                  className="mrd-model-toggle"
-                  checked={!off}
-                  aria-label={off ? '启用模型' : '停用模型'}
-                  onCheckedChange={(checked) => {
-                    setModelEnabled(providerId, m, checked);
-                    refresh();
-                  }}
-                />
-              </Tooltip>
-              <Tooltip content={CONFIGURE_LABEL}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label={CONFIGURE_LABEL}
-                  style={{
-                    padding: '0 5px',
-                    height: '26px',
-                    color: expanded
-                      ? 'var(--accent-primary)'
-                      : 'var(--text-tertiary)',
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (expanded) closeConfig();
-                    else openConfigFor(m);
-                  }}
-                  icon={<Lucide.SlidersHorizontal size={13} />}
-                />
-              </Tooltip>
-              <Tooltip content={DELETE_LABEL}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  aria-label={DELETE_LABEL}
-                  className="mrd-delete-btn"
-                  style={{
-                    padding: '0 5px',
-                    height: '26px',
-                    color: 'var(--text-tertiary)',
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removeModelFromProfile(providerId, m);
-                    if (configOpenId === m) closeConfig();
-                    refresh();
-                  }}
-                  icon={<Lucide.Trash2 size={13} />}
-                />
-              </Tooltip>
+              <div className={`${styles.mrdModelActions} mrd-model-actions`}>
+                {meta.lastTest && (
+                  <Tooltip
+                    content={
+                      meta.lastTest.error ||
+                      (meta.lastTest.ok ? '连通性正常' : '连通性异常')
+                    }
+                  >
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 500,
+                        padding: '1px 5px',
+                        borderRadius: '4px',
+                        userSelect: 'none',
+                        lineHeight: '16px',
+                        background: meta.lastTest.ok
+                          ? 'color-mix(in srgb, var(--accent-green, #10b981) 12%, transparent)'
+                          : 'color-mix(in srgb, var(--accent-red, #ef4444) 12%, transparent)',
+                        color: !meta.lastTest.ok
+                          ? 'var(--accent-red, #ef4444)'
+                          : (meta.lastTest.latencyMs || 0) < 400
+                            ? 'var(--accent-green, #10b981)'
+                            : (meta.lastTest.latencyMs || 0) < 1200
+                              ? 'var(--accent-orange, #f59e0b)'
+                              : 'var(--accent-red, #ef4444)',
+                      }}
+                    >
+                      {meta.lastTest.ok
+                        ? `${meta.lastTest.latencyMs}ms`
+                        : meta.lastTest.error?.includes('超时') ||
+                            meta.lastTest.error?.includes('timeout')
+                          ? '超时'
+                          : '失败'}
+                    </span>
+                  </Tooltip>
+                )}
+
+                <Tooltip content="检查网络连通性与延迟">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="检查连通性"
+                    disabled={testBusy === `${providerId}::${m}`}
+                    style={{
+                      padding: '0 5px',
+                      height: '26px',
+                      color: 'var(--text-tertiary)',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void runTest(m);
+                    }}
+                    icon={
+                      testBusy === `${providerId}::${m}` ? (
+                        <Lucide.Loader2
+                          size={13}
+                          className={styles.loadingSpinner}
+                        />
+                      ) : (
+                        <Lucide.Wifi size={13} />
+                      )
+                    }
+                  />
+                </Tooltip>
+                <Tooltip content={off ? '已停用，点击启用' : '点击停用'}>
+                  <Switch
+                    size="sm"
+                    className="mrd-model-toggle"
+                    checked={!off}
+                    aria-label={off ? '启用模型' : '停用模型'}
+                    onCheckedChange={(checked) => {
+                      setModelEnabled(providerId, m, checked);
+                      refresh();
+                    }}
+                  />
+                </Tooltip>
+                <Tooltip content={CONFIGURE_LABEL}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={CONFIGURE_LABEL}
+                    style={{
+                      padding: '0 5px',
+                      height: '26px',
+                      color: expanded
+                        ? 'var(--accent-primary)'
+                        : 'var(--text-tertiary)',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (expanded) closeConfig();
+                      else openConfigFor(m);
+                    }}
+                    icon={<Lucide.SlidersHorizontal size={13} />}
+                  />
+                </Tooltip>
+                <Tooltip content={DELETE_LABEL}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label={DELETE_LABEL}
+                    className="mrd-delete-btn"
+                    style={{
+                      padding: '0 5px',
+                      height: '26px',
+                      color: 'var(--text-tertiary)',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeModelFromProfile(providerId, m);
+                      if (configOpenId === m) closeConfig();
+                      refresh();
+                    }}
+                    icon={<Lucide.Trash2 size={13} />}
+                  />
+                </Tooltip>
+              </div>
             </div>
 
             {/* Expanded config sub-panel */}

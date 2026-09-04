@@ -27,10 +27,10 @@
   min-height: 32px;
   padding: 0 var(--space-3, 12px);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-md, 6px);
   font-size: var(--font-size-base, 14px);
   font-family: var(--font-sans, inherit);
-  background: var(--bg-primary);
+  background: color-mix(in srgb, var(--bg-primary) 40%, var(--bg-card));
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
@@ -39,21 +39,27 @@
   -webkit-appearance: none;
   transition:
     border-color var(--transition-micro, 120ms) ease,
-    background var(--transition-micro, 120ms) ease,
-    box-shadow var(--transition-micro, 120ms) ease;
+    background var(--transition-micro, 120ms) ease;
 }
 
 .input::placeholder {
   color: var(--text-tertiary);
 }
 
-/*    Focus Ring AGENTS.md   13            3%~10%  */
+.input:hover:not(:focus):not(:focus-visible):not(:disabled) {
+  border-color: var(--border-color);
+  background: color-mix(in srgb, var(--bg-primary) 20%, var(--bg-card));
+}
+
+/* 焦点激活态：锁定恒定同一灰度（~8%微调），无论 hover 与否完全零色差，严禁 box-shadow 粗描边环 */
 .input:focus,
-.input:focus-visible {
+.input:focus-visible,
+.input:focus:hover,
+.input:focus-visible:hover {
   outline: none;
   background: var(--bg-card);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: none;
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
 }
 
 .input:disabled {
@@ -61,13 +67,13 @@
   opacity: var(--opacity-disabled, 0.45);
 }
 
-/* 4          */
+/* 4 档尺寸定义 */
 .inputXs {
   height: 24px;
   min-height: 24px;
   padding: 0 var(--space-2, 8px);
   font-size: var(--font-size-xs, 12px);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-sm, 4px);
 }
 
 .inputSm {
@@ -75,7 +81,7 @@
   min-height: 28px;
   padding: 0 var(--space-2_5, 10px);
   font-size: var(--font-size-sm, 13px);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-md, 6px);
 }
 
 .inputMd {
@@ -83,7 +89,7 @@
   min-height: 32px;
   padding: 0 var(--space-3, 12px);
   font-size: var(--font-size-base, 14px);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-md, 6px);
 }
 
 .inputLg {
@@ -91,7 +97,7 @@
   min-height: 40px;
   padding: 0 var(--space-4, 16px);
   font-size: var(--font-size-md, 15px);
-  border-radius: var(--button-radius, 7px);
+  border-radius: var(--radius-lg, 8px);
 }
 
 /* search 变体：无前缀时不预留放大镜空位；圆角走 7px 锁 */
@@ -199,7 +205,7 @@
 .inputWrapError .input:focus,
 .inputWrapError .input:focus-visible {
   border-color: var(--color-error);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-error) 20%, transparent);
+  box-shadow: none;
 }
 
 .inputError {

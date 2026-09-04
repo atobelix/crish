@@ -1,0 +1,145 @@
+/**
+ * ScanResultsModal.module.css
+ * 探测可用模型多选同步器样式（通透高保真、手势多选、绿色高精勾选）
+ */
+
+.dialogContent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 480px;
+  max-height: 65vh;
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  max-width: 260px;
+}
+
+.quickActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 列表外框 */
+.listContainer {
+  flex: 1;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: transparent;
+  overflow-y: auto;
+  min-height: 0;
+  user-select: none;
+}
+
+/* 模型条目 */
+.modelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 40%, transparent);
+  transition: background 100ms ease;
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+}
+
+.modelRow:hover {
+  background: var(--bg-hover, rgba(128, 128, 128, 0.08));
+}
+
+.modelRowSelected {
+  background: color-mix(in srgb, var(--brand, #10b981) 6%, transparent);
+}
+
+.modelRowSelected:hover {
+  background: color-mix(in srgb, var(--brand, #10b981) 10%, transparent);
+}
+
+.modelRowLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* 自定义绿色 Checkbox（选中为绿色背景，白色勾） */
+.customCheckbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #ffffff;
+  transition: all 120ms ease;
+}
+
+.customCheckboxChecked {
+  background: var(--brand, #10b981);
+  border-color: var(--brand, #10b981);
+  color: #ffffff;
+}
+
+.modelId {
+  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.modelRowRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* 已存在：纯净的绿色对号 */
+.existingIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--brand, #10b981);
+}
+
+.emptyTip {
+  text-align: center;
+  padding: 40px 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: var(--font-sans, inherit);
+}
+
+.footerBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.footerCount {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-sans, inherit);
+}
+
+.footerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

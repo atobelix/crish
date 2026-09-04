@@ -18,6 +18,7 @@ import {
   upsertProfile,
   type ProviderProfile,
 } from '../../api/providerProfiles';
+import { applyMetaForModel } from './modelsIpcHelpers';
 
 export interface ModelProviderActionsArgs {
   selected: ProviderProfile | null;
@@ -31,6 +32,8 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
   const [testBusy, setTestBusy] = useState<string | null>(null);
   const [scanBusy, setScanBusy] = useState(false);
   const [checkBusy, setCheckBusy] = useState(false);
+  const [scanModalOpen, setScanModalOpen] = useState(false);
+  const [scannedModelsList, setScannedModelsList] = useState<string[]>([]);
 
   const runTest = useCallback(
     async (model: string) => {
@@ -61,24 +64,47 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
       if (!selected) return;
       setScanBusy(true);
       try {
-        await runAsLocalMutation(async () => {
-          const fresh =
-            loadProfiles().find((p) => p.id === selected.id) || selected;
-          const r = await scanProviderModels(fresh);
-          if (r.ok && r.models?.length) {
-            const merged = mergeModelIds(fresh.models, r.models);
-            upsertProfile({ ...fresh, models: merged });
-            refresh();
-            notify(true, `已自动获取 ${r.models.length} 个模型`);
-          } else {
-            notify(false, r.error || '未能检测到服务器可用模型');
-          }
-        });
+        const fresh =
+          loadProfiles().find((p) => p.id === selected.id) || selected;
+        const r = await scanProviderModels(fresh);
+        if (r.ok && r.models?.length) {
+          setScannedModelsList(r.models);
+          setScanModalOpen(true);
+        } else {
+          notify(false, r.error || '未能检测到服务器可用模型');
+        }
       } catch (e) {
         notify(false, e instanceof Error ? e.message : String(e));
       } finally {
         setScanBusy(false);
       }
+    },
+    [selected, notify],
+  );
+
+  const confirmScannedModels = useCallback(
+    (selectedModels: string[]) => {
+      if (!selected) return;
+      void runAsLocalMutation(() => {
+        const fresh =
+          loadProfiles().find((p) => p.id === selected.id) || selected;
+        const merged = mergeModelIds(fresh.models, selectedModels);
+        upsertProfile({ ...fresh, models: merged });
+        // 仅对新添加的模型预填默认能力与单价；已存在模型的手工配置零触碰
+        const existing = new Set(
+          fresh.models.map((m) => (typeof m === 'string' ? m.trim() : '')).filter(Boolean)
+        );
+        const newIds = selectedModels.filter((m) => m.trim() && !existing.has(m.trim()));
+        for (const m of newIds) {
+          applyMetaForModel(fresh.id, m, {
+            displayName: '',
+            contextLength: '',
+            caps: { tools: true, image: false, video: false, reasoning: false },
+          });
+        }
+        refresh();
+        notify(true, `已同步 ${selectedModels.length} 个模型（新增 ${newIds.length} 个）`);
+      });
     },
     [selected, runAsLocalMutation, refresh, notify],
   );
@@ -106,5 +132,16 @@ export function useModelProviderActions(args: ModelProviderActionsArgs) {
     [selected, notify],
   );
 
-  return { testBusy, scanBusy, checkBusy, runTest, runScan, runCheck };
+  return {
+    testBusy,
+    scanBusy,
+    checkBusy,
+    runTest,
+    runScan,
+    runCheck,
+    scanModalOpen,
+    setScanModalOpen,
+    scannedModelsList,
+    confirmScannedModels,
+  };
 }

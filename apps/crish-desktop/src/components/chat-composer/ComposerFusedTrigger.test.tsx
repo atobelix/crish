@@ -14,10 +14,10 @@ vi.mock('../../api/thinkingGear', () => ({
   THINKING_LEVEL_LABELS: {
     off: '关闭',
     high: '深入',
-    default: '提供方默认',
+    default: '默认',
   },
   thinkingLevelOptionsFor: () => [
-    { value: 'default', label: '提供方默认', isProviderDefault: true },
+    { value: 'default', label: '默认', isProviderDefault: true },
     { value: 'high', label: '深入', isProviderDefault: false },
   ],
   resolveCatalogEfforts: () => ({ offered: ['high'] }),
@@ -55,7 +55,7 @@ describe('ComposerFusedTrigger（S4 融合触发）', () => {
     expect(screen.getByTestId('composer-fused-trigger')).toBeTruthy();
     expect(screen.getByText('qwen3-coder')).toBeTruthy();
     expect(
-      screen.getByRole('button', { name: /思考档位：提供方默认/ })
+      screen.getByRole('button', { name: /思考档位：默认/ })
     ).toBeTruthy();
     expect(container.textContent).not.toMatch(/Claude 3\.7/);
     expect(container.querySelectorAll('[title]').length).toBe(0);

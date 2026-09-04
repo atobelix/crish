@@ -5,7 +5,7 @@ import {
   thinkingLevelOptionsFor,
   resolveCatalogEfforts,
 } from '../../api/thinkingGear';
-import { Button, Tooltip } from '../ui';
+import { Button, Select, Tooltip, Input } from '../ui';
 import { CapEditor } from './CapEditor';
 import type { CfgDraft } from './useModelProfilesState';
 import styles from './ModelsSettingsTab.module.css';
@@ -33,8 +33,41 @@ export const ModelConfigPanel: React.FC<{
   saveConfig,
 }) => {
   const thinkingOptions = React.useMemo(() => {
-    return thinkingLevelOptionsFor(resolveCatalogEfforts(m));
-  }, [m]);
+    const catalogOpts = thinkingLevelOptionsFor(resolveCatalogEfforts(m));
+    const standards = [
+      { value: 'default', label: '默认 (系统自适应)' },
+      { value: 'high', label: '高 (深度思考)' },
+      { value: 'medium', label: '中等思考' },
+      { value: 'low', label: '轻量思考' },
+      { value: 'minimal', label: '微弱思考' },
+      { value: 'xhigh', label: '超高思考' },
+      { value: 'max', label: '极限思考' },
+    ];
+    // 合并标准选项与目录推导选项，去重
+    const merged = [...standards];
+    for (const opt of catalogOpts) {
+      if (!merged.some((x) => x.value === opt.value)) {
+        merged.push({ value: opt.value, label: opt.label });
+      }
+    }
+    if (
+      cfgDraft.thinkingLevel &&
+      !merged.some((x) => x.value === cfgDraft.thinkingLevel)
+    ) {
+      merged.push({
+        value: cfgDraft.thinkingLevel,
+        label: cfgDraft.thinkingLevel,
+      });
+    }
+    return merged;
+  }, [m, cfgDraft.thinkingLevel]);
+
+  const protocolOptions = React.useMemo(() => [
+    { id: 'inherit', value: '', label: '跟随服务商默认协议' },
+    { id: 'openai/chat', value: 'openai/chat', label: 'OpenAI Chat (/v1/chat/completions)' },
+    { id: 'openai/responses', value: 'openai/responses', label: 'OpenAI Responses (/responses)' },
+    { id: 'anthropic/messages', value: 'anthropic/messages', label: 'Anthropic Messages (/v1/messages)' },
+  ], []);
 
   return (
     <div
@@ -42,12 +75,10 @@ export const ModelConfigPanel: React.FC<{
       onClick={(e) => e.stopPropagation()}
     >
       <div className={`${styles.mrdCfgFields} mrd-cfg-fields`}>
-        <label
-          className={`${styles.mrdCfgLabel} mrd-cfg-label`}
-        >
+        <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
           <span>展示名称</span>
-          <input
-            className={`${styles.mrdFieldInput} mrd-field-input`}
+          <Input
+            size="sm"
             value={cfgDraft.displayName}
             placeholder={m}
             onChange={(e) =>
@@ -57,43 +88,67 @@ export const ModelConfigPanel: React.FC<{
             }
           />
         </label>
-        <label
-          className={`${styles.mrdCfgLabel} mrd-cfg-label`}
-        >
+        <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
           <span>上下文长度</span>
-          <input
-            className={`${styles.mrdFieldInput} mrd-field-input`}
+          <Input
+            size="sm"
             value={cfgDraft.contextLength}
-            placeholder="如 1000000"
+            placeholder="如 128000"
             onChange={(e) =>
               setCfgDraft((d) =>
-                d
-                  ? { ...d, contextLength: e.target.value }
-                  : null
+                d ? { ...d, contextLength: e.target.value } : null
               )
             }
           />
         </label>
-        <label
-          className={`${styles.mrdCfgLabel} mrd-cfg-label`}
-        >
-          <span>思考强度</span>
-          <select
-            className={`${styles.mrdFieldInput} mrd-field-input`}
-            value={cfgDraft.thinkingLevel || 'default'}
+        <label className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
+          <span>最大输出 Token</span>
+          <Input
+            size="sm"
+            value={cfgDraft.maxOutputTokens || ''}
+            placeholder="如 4096 / 8192"
             onChange={(e) =>
               setCfgDraft((d) =>
-                d ? { ...d, thinkingLevel: e.target.value } : null
+                d ? { ...d, maxOutputTokens: e.target.value } : null
               )
             }
-          >
-            {thinkingOptions.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+          />
         </label>
+        <div className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
+          <span>思考强度</span>
+          <Select
+            size="sm"
+            value={cfgDraft.thinkingLevel || 'default'}
+            onChange={(val) =>
+              setCfgDraft((d) => (d ? { ...d, thinkingLevel: val } : null))
+            }
+            options={thinkingOptions.map((opt) => ({
+              id: opt.value,
+              value: opt.value,
+              label: opt.label,
+            }))}
+          />
+        </div>
+        <div className={`${styles.mrdCfgLabel} mrd-cfg-label`}>
+          <span>调用协议</span>
+          <Select
+            size="sm"
+            value={cfgDraft.protocol || ''}
+            onChange={(val) =>
+              setCfgDraft((d) =>
+                d
+                  ? {
+                      ...d,
+                      protocol:
+                        (val as 'openai/chat' | 'openai/responses' | 'anthropic/messages') ||
+                        undefined,
+                    }
+                  : null
+              )
+            }
+            options={protocolOptions}
+          />
+        </div>
       </div>
       <div className={`${styles.mrdCfgFooter} mrd-cfg-footer`}>
         <div className={`${styles.mrdCapGroup} mrd-cap-group`}>
@@ -114,59 +169,7 @@ export const ModelConfigPanel: React.FC<{
             }
           />
         </div>
-        <div
-          className={`${styles.mrdCfgActions} mrd-cfg-actions`}
-        >
-          {meta.lastTest && (
-            <Tooltip
-              content={
-                meta.lastTest.error ||
-                (meta.lastTest.ok ? '测试成功' : '测试失败')
-              }
-            >
-              <span
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 500,
-                  marginRight: '6px',
-                  userSelect: 'none',
-                  color: !meta.lastTest.ok
-                    ? 'var(--accent-red)'
-                    : (meta.lastTest.latencyMs || 0) < 400
-                      ? 'var(--accent-green)'
-                      : (meta.lastTest.latencyMs || 0) < 1200
-                        ? 'var(--accent-orange)'
-                        : 'var(--accent-red)',
-                }}
-              >
-                {meta.lastTest.ok
-                  ? `${meta.lastTest.latencyMs}ms`
-                  : meta.lastTest.error?.includes('超时') ||
-                      meta.lastTest.error?.includes('timeout')
-                    ? '超时'
-                    : '失败'}
-              </span>
-            </Tooltip>
-          )}
-          <Tooltip content="测试连通性">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={testBusy === tKey}
-              onClick={() => void runTest(m)}
-              icon={
-                testBusy === tKey ? (
-                  <Lucide.Loader2
-                    size={13}
-                    className={styles.loadingSpinner}
-                  />
-                ) : (
-                  <Lucide.Wifi size={13} />
-                )
-              }
-            />
-          </Tooltip>
+        <div className={`${styles.mrdCfgActions} mrd-cfg-actions`}>
           <Button
             type="button"
             variant="ghost"
@@ -180,6 +183,11 @@ export const ModelConfigPanel: React.FC<{
             variant="secondary"
             size="sm"
             onClick={saveConfig}
+            style={{
+              background: 'var(--brand, #10b981)',
+              color: '#fff',
+              border: 'none',
+            }}
           >
             保存
           </Button>

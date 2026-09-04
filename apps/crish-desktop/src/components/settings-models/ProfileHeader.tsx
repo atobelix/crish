@@ -39,10 +39,20 @@ export const ProfileHeader: React.FC<{
   setSelectedId: _setSelectedId,
 }) => {
   return (
-    <div className="mrd-head">
+    <div
+      className="mrd-head"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        width: '100%',
+        gap: '12px',
+        paddingBottom: '4px',
+      }}
+    >
       <div
         className="mrd-head-left"
-        style={{ display: 'inline-flex', alignItems: 'center' }}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}
       >
         {editingName && selected.id.startsWith('custom-') ? (
           <input
@@ -67,18 +77,18 @@ export const ProfileHeader: React.FC<{
             }}
             style={{
               border: 'none',
-              borderBottom: '1px dashed var(--accent-primary)',
+              borderBottom: '1px solid var(--border-color)',
               background: 'transparent',
               padding: '0',
               margin: '0',
               outline: 'none',
-              fontSize: '15px',
+              fontSize: '16px',
               fontWeight: 600,
               letterSpacing: '-0.015em',
               color: 'var(--text-primary)',
               fontFamily: 'inherit',
-              height: '27px',
-              lineHeight: '27px',
+              height: '28px',
+              lineHeight: '28px',
             }}
           />
         ) : selected.id.startsWith('custom-') ? (
@@ -91,33 +101,35 @@ export const ProfileHeader: React.FC<{
               }}
               style={{
                 cursor: 'pointer',
-                borderBottom: '1px dashed var(--border-subtle)',
-                transition: 'border-color 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--text-secondary)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-subtle)';
+                margin: 0,
+                fontSize: '16px',
+                fontWeight: 600,
+                color: 'var(--text-primary)',
               }}
             >
               {selectedLabel}
             </h3>
           </Tooltip>
         ) : (
-          <h3 className="mrd-title">{selectedLabel}</h3>
+          <h3
+            className="mrd-title"
+            style={{
+              margin: 0,
+              fontSize: '16px',
+              fontWeight: 600,
+              color: 'var(--text-primary)',
+            }}
+          >
+            {selectedLabel}
+          </h3>
         )}
-      </div>
-      <div
-        className="mrd-head-right"
-        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
-      >
+
         <Button
           type="button"
           size="sm"
           style={{
-            height: '26px',
-            padding: '0 10px',
+            height: '24px',
+            padding: '0 8px',
             fontSize: '12px',
             fontWeight: 500,
             borderRadius: '6px',
@@ -143,7 +155,12 @@ export const ProfileHeader: React.FC<{
         >
           {selected.enabled !== false ? '已启用' : '已停用'}
         </Button>
+      </div>
 
+      <div
+        className="mrd-head-right"
+        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
+      >
         {selected.id.startsWith('custom-') && (
           <div style={{ position: 'relative' }}>
             {confirmDeleteId === selected.id ? (

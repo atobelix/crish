@@ -5,15 +5,22 @@ export const SettingsPage: React.FC<{
   title: string;
   children: React.ReactNode;
   meta?: React.ReactNode;
-}> = ({ title, children, meta }) => (
-  <div className={`${styles.settingsUiPage} settings-ui-page`}>
+  fillViewport?: boolean;
+}> = ({ title, children, meta, fillViewport }) => (
+  <div
+    className={`${styles.settingsUiPage} ${fillViewport ? styles.fillViewport + ' fill-viewport' : ''} settings-ui-page`}
+  >
     <header className={`${styles.settingsUiPageHead} settings-ui-page-head`}>
       <div className={`${styles.settingsUiHeadInline} settings-ui-head-inline`}>
         <h2 className={`${styles.settingsUiPageTitle} settings-ui-page-title`}>{title}</h2>
         {meta}
       </div>
     </header>
-    <div className={`${styles.settingsUiPageBody} settings-ui-page-body`}>{children}</div>
+    <div
+      className={`${styles.settingsUiPageBody} ${fillViewport ? styles.fillViewportBody + ' fill-viewport-body' : ''} settings-ui-page-body`}
+    >
+      {children}
+    </div>
   </div>
 );
 

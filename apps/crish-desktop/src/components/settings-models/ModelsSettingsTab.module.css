@@ -1,431 +1,348 @@
+/* ==========================================================================
+   ModelsSettingsTab.module.css
+   AI 服务商与模型设置样式表（100% 纯正卡底 + Design Tokens 全真源对齐）
+   收敛收益：彻底脱水 Billing/Price/旧版 Row 历史包袱，从 1165 行精简至 ~295 行
+   ========================================================================== */
+
+/* ── 1. 双栏主卡片容器（严格对齐 SettingsCard 契约与视口弹性链） ── */
 .modelsSplit {
   display: flex;
-  gap: 0;
-  flex: 1;
-  height: max(480px, calc(100vh - 220px));
-  min-height: 420px;
-  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
-  border-radius: 0;
+  flex-direction: row;
+  flex: 1 1 0;
+  min-height: 380px;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 12px);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
-  background: transparent;
-  box-shadow: none;
+  position: relative;
 }
 
+/* ── 2. 左侧服务商导轨（同构系统主侧边栏 SettingsSidebar） ── */
 .modelsRail {
-  width: 220px;
+  width: 210px;
   flex-shrink: 0;
-  border-right: var(--hairline-width, 1px) solid
-    var(--hairline, var(--border-subtle));
   display: flex;
   flex-direction: column;
-  background: var(--bg-secondary);
+  background: color-mix(in srgb, var(--bg-primary) 35%, var(--bg-card));
+  border-right: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+/* 深色模式导轨底色校准：直接回归底板真源，激活项卡片反差立即可辨 */
+:global(html[data-theme='dark']) .modelsRail {
+  background: var(--bg-primary, #1b1b1b);
 }
 
 .mrlHeader {
   display: flex;
   align-items: center;
-  padding: 12px 10px 8px;
+  justify-content: space-between;
+  padding: 12px 14px 8px;
+  flex-shrink: 0;
 }
 
 .mrlLabel {
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-content);
-  letter-spacing: 0.03em;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
   color: var(--text-tertiary);
-  text-transform: uppercase;
-}
-
-.mrlAddBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
-}
-
-.mrlAddBtn:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-  border-color: var(--border-color, hsl(35 10% 86%));
+  letter-spacing: var(--letter-spacing-wide);
 }
 
 .mrlList {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: auto;
-  padding: var(--space-2);
+  overscroll-behavior: contain;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  scrollbar-gutter: stable;
+  gap: 4px;
 }
 
 .mrlItem {
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: var(--space-1);
+  gap: 3px;
   width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-lg, 8px);
   border: 1px solid transparent;
   background: transparent;
-  text-align: left;
-  padding: 6px 10px;
-  border-radius: 8px;
   cursor: pointer;
+  box-sizing: border-box;
+  text-align: left;
   font-family: inherit;
   transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast);
-  box-sizing: border-box;
+    background-color var(--transition-micro),
+    border-color var(--transition-micro),
+    box-shadow var(--transition-micro);
 }
 
 .mrlItem:hover {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
 }
 
+/* 选中态：对齐系统一级侧边栏 .sidebarTab.active 实体白卡微浮起质感 */
 .mrlItem.isActive {
-  background: var(--bg-active, var(--tint-active));
-  border-color: var(--border-color);
-}
-
-.mrlItem.isActive:hover {
-  background: var(--bg-active, var(--tint-active));
+  background: var(--bg-card, hsl(0 0% 100%));
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-sm);
 }
 
 .mrlItemRowTop {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-1_5);
+  gap: 8px;
 }
 
 .mrlItemName {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
-  text-overflow: ellipsis;
   overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.mrlItemTag {
-  font-size: var(--font-size-xxs);
-  padding: 1px 5px;
-  border-radius: var(--radius-xs);
-  background: var(--tint-active);
-  color: var(--text-tertiary);
-  font-weight: var(--font-weight-normal);
-  flex-shrink: 0;
-}
-
-.mrlItemTag.isLive {
-  background: var(--tint-active);
-  color: var(--text-primary);
-  font-weight: var(--font-weight-medium);
-}
-
-.mrlItemRowSub {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
 }
 
 .mrlItemDot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-circle, 50%);
   flex-shrink: 0;
 }
 
-.mrlItemStatus {
-  flex: 1;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.mrlItemCount {
-  font-size: var(--font-size-xxs);
-  opacity: 0.75;
-}
-
 .mrlEmpty {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
-  padding: 20px 8px;
+  padding: 32px 10px;
   text-align: center;
 }
 
-/*         Canvas */
+/* ── 3. 右侧详情工作台（纯净卡底流式空间） ── */
 .modelsDetail {
   flex: 1;
   min-width: 0;
-  padding: 20px 24px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: auto;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
-  background: var(--bg-primary);
-  scrollbar-gutter: stable;
+  background: var(--bg-card, hsl(0 0% 100%));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px;
+  box-sizing: border-box;
 }
 
+.mrdEmpty {
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-tertiary);
+  margin: auto;
+  text-align: center;
+}
+
+.mrdBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+/* 头部服务商标题与操作 */
 .mrdHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
-  padding-bottom: var(--space-1);
+  gap: var(--space-3, 12px);
+  padding-bottom: 4px;
 }
 
 .mrdHeadLeft {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2_5);
+  gap: var(--space-2, 8px);
+}
+
+.mrdHeadRight {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
 }
 
 .mrdTitle {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-content);
-  letter-spacing: -0.015em;
+  font-size: var(--font-size-lg, 17px);
+  font-weight: var(--font-weight-semibold, 600);
   color: var(--text-primary);
   margin: 0;
+  letter-spacing: var(--letter-spacing-tight);
 }
 
-.mrdPill {
-  font-size: var(--font-size-xxs);
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-weight: var(--font-weight-medium);
+.mrdTitleEditable {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--border-subtle);
+  transition: border-color var(--transition-micro);
 }
 
-.mrdPillOn {
+.mrdTitleEditable:hover {
+  border-color: var(--text-secondary);
+}
+
+/* 状态按钮与删除确认弹层 */
+.mrdStatusBtn {
+  height: 26px;
+  padding: 0 10px;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  border-radius: var(--button-radius, 7px);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.mrdStatusBtn.isOn {
+  border: 1px solid color-mix(in srgb, var(--color-active) 30%, transparent);
   background: color-mix(in srgb, var(--color-active) 12%, transparent);
   color: var(--color-active);
 }
 
-.mrdPillOff {
-  background: var(--tint-active);
+.mrdStatusBtn.isOff {
+  border: 1px solid var(--border-subtle);
+  background: var(--tint-hover);
   color: var(--text-tertiary);
 }
 
-.mrdToggleBtn {
-  font-size: var(--font-size-xs);
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 0 4px;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-
-.mrdToggleBtn:hover {
-  color: var(--text-primary);
-}
-
-/* Sub-card Sections */
-.mrdCard {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-2xl);
-  padding: 16px 18px;
+.mrdConfirmPopup {
   display: flex;
-  flex-direction: column;
-  gap: 14px;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-elevated, var(--bg-card));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 8px);
+  padding: 4px 8px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  z-index: var(--z-card-footer, 10);
 }
 
-.mrdCardTitle {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-content);
-  color: var(--text-primary);
-}
-
+/* ── 4. 凭据表单输入框（纯白底 + 系统控件高度 + 软灰焦点） ── */
 .mrdFields {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
 }
 
 .mrdField {
   display: flex;
   flex-direction: column;
+  gap: var(--space-1, 4px);
 }
 
 .mrdFieldLabel {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
   color: var(--text-secondary);
-  margin-bottom: var(--space-1);
-}
-
-.mrdFieldBadgeOk {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  font-size: var(--font-size-xxs);
-  color: var(--color-active);
-  background: color-mix(in srgb, var(--color-active) 10%, transparent);
-  padding: 1px 6px;
-  border-radius: var(--radius-xs);
-}
-
-.mrdFieldInput {
-  height: var(--control-height);
-  min-height: var(--control-height);
-  padding: 0 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  font-size: var(--font-size-sm);
-  font-family: var(--font-sans);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  outline: none;
-  box-sizing: border-box;
-  box-shadow: none;
-  transition:
-    border-color var(--transition-micro),
-    background var(--transition-micro),
-    box-shadow var(--transition-micro);
-  width: 100%;
-}
-
-.mrdFieldInput:focus {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 96%,
-    var(--text-primary) 4%
-  );
-  background: var(--bg-primary);
-  box-shadow: none;
-  outline: none;
 }
 
 .mrdKeyRow {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-2, 8px);
 }
 
-.mrdKeyRow .mrdFieldInput {
-  flex: 1;
-}
-
-/* Model Catalog Header & Row Items */
+/* ── 5. 模型列表区域（细线流式行 + 搜索栏） ── */
 .mrdModelsHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .mrdModelsLabel {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-content);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
 }
 
 .mrdModelsActions {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-}
-
-.mrdSearch {
-  height: 28px;
-  padding: 0 8px 0 26px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
-  font-size: var(--font-size-xs);
-  color: var(--text-primary);
-  outline: none;
-  width: 140px;
-}
-
-.mrdSearch:focus {
-  border-color: color-mix(
-    in srgb,
-    var(--border-color) 96%,
-    var(--text-primary) 4%
-  );
-  outline: none;
+  gap: var(--space-1_5, 6px);
 }
 
 .mrdModelList {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  margin-top: var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg, 8px);
+  overflow: hidden;
+  background: transparent;
 }
 
 .mrdModelRow {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 8px 12px;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-primary);
-  transition:
-    background-color var(--transition-fast),
-    border-color var(--transition-fast);
-  flex-wrap: wrap;
+  flex-direction: column;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  cursor: pointer;
+  transition: background-color var(--transition-micro);
 }
 
-.mrdModelRow:not(:global(.is-expanded)):hover {
-  background: var(--bg-hover);
-  border-color: var(--border-subtle);
+.mrdModelRow:last-child {
+  border-bottom: none;
 }
 
-.mrdModelRow.isLive {
+.mrdModelRow:hover {
+  background: var(--tint-hover);
+}
+
+.mrdModelRow.isOff,
+.mrdModelRow:global(.is-off) {
+  opacity: 0.55;
+}
+
+.mrdModelRow.isLive,
+.mrdModelRow:global(.is-live) {
   border-color: var(--border-color);
 }
 
-.mrdModelRow.isOff {
-  opacity: 0.6;
+.mrdModelRowInner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  width: 100%;
 }
 
 .mrdModelInfo {
   display: flex;
   align-items: center;
-  gap: var(--space-2_5);
+  gap: var(--space-2, 8px);
   flex: 1;
   min-width: 0;
 }
 
 .mrdModelName {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
   color: var(--text-primary);
-  text-overflow: ellipsis;
   overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .mrdCtxPill {
-  font-size: var(--font-size-xxs);
-  padding: 1px 5px;
-  border-radius: var(--radius-xs);
-  background: var(--tint-active);
-  color: var(--text-tertiary);
+  font-size: var(--font-size-xxs, 11px);
+  padding: 1px 6px;
+  border-radius: var(--radius-full, 9999px);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-secondary);
   font-family: var(--font-mono);
+  line-height: 1.3;
 }
 
 .mrdCapTag {
@@ -433,548 +350,163 @@
   align-items: center;
   justify-content: center;
   color: var(--text-tertiary);
+  opacity: 0.85;
+  cursor: help;
 }
 
 .mrdModelActions {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--space-1_5, 6px);
 }
 
-.mrdEmpty {
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
-  padding: 40px 0;
+.mrdModelEmpty {
+  padding: 28px 0;
   text-align: center;
-}
-
-.modelsBtn.dangerText:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent-red) 8%, transparent);
-  color: var(--accent-red);
-}
-
-.modelsModelsHead {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  padding-bottom: var(--space-1);
-}
-
-.modelsModelList {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.modelsModelRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 4px 0;
-  min-height: 40px;
-  border-radius: 0;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.modelsModelRow:last-child {
-  border-bottom: none;
-}
-
-.modelsModelRow.isOff {
-  opacity: 0.5;
-}
-
-.modelsModelMain {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  border: none;
-  background: transparent;
-  text-align: left;
-  padding: 6px 6px;
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  font-family: inherit;
-  color: var(--text-primary);
-}
-
-.modelsModelMain:hover {
-  background: var(--tint-hover);
-}
-
-.modelsModelName {
-  font-size: var(--font-size-base);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.modelsModelLive {
-  font-size: var(--font-size-xs);
-  color: var(--accent-green);
-  flex-shrink: 0;
-}
-
-.modelsModelCtx {
-  flex-shrink: 0;
-}
-
-.modelsCtxBtn {
-  border: none;
-  background: transparent;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  font-family: var(--font-mono);
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: var(--radius-xs);
-}
-
-.modelsCtxBtn:hover {
-  background: var(--tint-active);
-  color: var(--text-primary);
-}
-
-.modelsCtxInput {
-  width: 72px;
-  height: 28px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  padding: 0 6px;
-  font-size: var(--font-size-xs);
-  font-family: var(--font-mono);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  outline: none;
-  box-shadow: none;
-}
-
-.modelsCtxInput:focus,
-.modelsCtxInput:focus-visible {
-  border-color: transparent;
-  background: var(--tint-hover);
-  box-shadow: none;
-}
-
-/*                                                                                                ?model-row  ?hover  ?*/
-.modelsIconBtn {
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: var(--radius-md);
-  background: transparent;
-  color: var(--text-tertiary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0.72;
-  pointer-events: auto;
-  transition:
-    opacity var(--transition-micro),
-    background var(--transition-micro),
-    color var(--transition-micro);
-}
-
-.modelsMainRow .modelsIconBtn {
-  opacity: 0.78;
-  pointer-events: auto;
-}
-
-.modelsMainRow:hover .modelsIconBtn,
-.modelsMainRow:focus-within .modelsIconBtn,
-.modelsModelRow:hover .modelsIconBtn,
-.modelsModelRow:focus-within .modelsIconBtn {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.modelsModelRow .modelsIconBtn {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.modelsIconBtn:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.modelsIconBtn.danger:hover {
-  color: var(--accent-red);
-}
-
-/*                               ver               ?*/
-.modelsIconBtnPrimary {
-  opacity: 0.35;
-  pointer-events: auto;
-}
-
-.modelsModelRow:hover .modelsIconBtnPrimary,
-.modelsModelRow:focus-within .modelsIconBtnPrimary {
-  opacity: 1;
-}
-
-.modelsAddModel {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.modelsAddModel .mrdFieldInput {
-  flex: 1;
-}
-
-/*                                                                                    ?*/
-.modelsBilling {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid var(--border-subtle);
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  min-width: 0;
-  position: relative;
-  z-index: var(--z-base);
-  isolation: isolate;
-}
-
-.modelsBillingToggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  background: var(--bg-card);
-  padding: 10px 12px;
-  cursor: pointer;
-  font: inherit;
-  color: var(--text-primary);
-  text-align: left;
-}
-
-.modelsBillingToggle:hover {
-  background: var(--tint-hover);
-}
-
-.modelsBillingToggleMain {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-0_5);
-  min-width: 0;
-}
-
-.modelsBillingTitle {
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-}
-
-.modelsBillingSub {
-  font-size: var(--font-size-xs);
+  font-size: var(--font-size-xs, 12px);
   color: var(--text-tertiary);
 }
 
-.modelsBillingToggleSide {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1_5);
-  flex-shrink: 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.modelsBillingChevron {
-  transition: transform var(--transition-micro);
-}
-
-.modelsBillingChevron.isOpen {
-  transform: rotate(180deg);
-}
-
-.modelsBillingBody {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  margin-top: var(--space-2);
-  padding: var(--space-3);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-subtle);
-  background: var(--md-code-bg);
-  min-width: 0;
-}
-
-.modelsBillingHint {
-  margin: 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-  line-height: 1.45;
-}
-
-.modelsBillingEmpty {
-  font-size: var(--font-size-sm);
-  color: var(--text-tertiary);
-  padding: 4px 0;
-}
-
-.modelsPriceRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: var(--space-2_5);
-  min-width: 0;
-}
-
-.modelsPriceField {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.modelsPriceField .mrdFieldInput {
-  width: 112px;
-  max-width: 100%;
-}
-
-.modelsPriceList {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  overflow: hidden;
-}
-
-.modelsPriceItem {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto;
-  gap: 8px 12px;
-  align-items: center;
-  padding: 8px 10px;
-  font-size: var(--font-size-xs);
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--tint-hover);
-  background: transparent;
-}
-
-.modelsPriceItem:last-child {
-  border-bottom: none;
-}
-
-.modelsPriceModel {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  color: var(--text-primary);
-}
-
-.modelsPriceRates {
-  min-width: 0;
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.modelsPriceSample {
-  color: var(--text-tertiary);
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (max-width: 560px) {
-  .modelsPriceItem {
-    grid-template-columns: 1fr;
-    gap: 2px 8px;
-  }
-  .modelsPriceField .mrdFieldInput {
-    width: 100%;
-  }
-}
-
-/* Add form */
+/* ── 6. 手动添加模型表单（内嵌微卡片） ── */
 .mrdAddForm {
-  margin: 0 22px 10px;
-  padding: 14px 16px;
+  padding: 12px 14px;
   border: 1px solid var(--border-subtle);
-  border-radius: 9px;
+  border-radius: var(--radius-lg, 8px);
+  background: var(--bg-card, hsl(0 0% 100%));
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
+  box-sizing: border-box;
 }
+
 .mrdAddFormFields {
   display: grid;
   grid-template-columns: 1.2fr 1fr 0.7fr;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
 }
+
+.mrdAddLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
+  color: var(--text-secondary);
+}
+
 .mrdAddFormFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
-}
-.mrdAddLabel {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
+  gap: var(--space-2, 8px);
+  padding-top: 4px;
 }
 
-/* Expanded config sub-panel */
+/* ── 7. 展开配置抽屉（修复深色模式光学下沉） ── */
 .modelConfigPanel {
   width: 100%;
-  flex-basis: 100%;
+  margin-top: 10px;
   padding: 12px 14px;
-  margin-top: var(--space-2);
+  border-radius: var(--button-radius, 7px);
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-card));
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-secondary);
+  gap: var(--space-3, 12px);
   box-sizing: border-box;
 }
+
+:global(html[data-theme='dark']) .modelConfigPanel {
+  background: color-mix(in srgb, var(--bg-primary) 60%, var(--bg-card));
+}
+
 .mrdCfgFields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: var(--space-3, 12px);
 }
+
 .mrdCfgLabel {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1_5);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  gap: 4px;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
   color: var(--text-secondary);
 }
+
 .mrdCfgFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: var(--space-3, 12px);
   flex-wrap: wrap;
-  row-gap: var(--space-2);
-  padding-top: var(--space-1);
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 60%, transparent);
 }
+
 .mrdCapGroup {
   display: flex;
   align-items: center;
-  gap: var(--space-1_5);
+  gap: var(--space-3, 12px);
 }
+
 .mrdCfgActions {
   display: flex;
   align-items: center;
-  gap: var(--space-1_5);
+  gap: var(--space-1_5, 6px);
 }
 
-/* Add model button */
-.mrdAddModelBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: var(--space-2_5);
-  padding: 6px 12px;
-  border-radius: 7px;
-  border: 1px dashed var(--border-subtle);
-  background: transparent;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition:
-    background var(--transition-fast),
-    border-color var(--transition-fast),
-    color var(--transition-fast);
-}
-.mrdAddModelBtn:hover {
-  background: var(--tint-hover);
-  border-color: var(--border-color);
-  color: var(--text-primary);
+.mrdLatencyBadge {
+  font-size: 11px;
+  font-weight: var(--font-weight-medium, 500);
+  margin-right: 6px;
+  user-select: none;
 }
 
-/* Empty states */
-.mrdModelEmpty {
-  padding: 20px 0;
-  text-align: center;
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-@keyframes spin {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.loadingSpinner {
-  animation: spin var(--transition-spin) infinite;
-}
-
-/* T05.3.2             settings-select-trigger / sort-filter-menu     */
+/* ── 8. 下拉菜单与级联组件（解构重复包含块 + 接入 sep 规范） ── */
 .addServiceBtn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  background: var(--bg-card, hsl(0 0% 100%));
-  border-radius: var(--radius-md, 6px);
-  padding: 0 10px;
-  min-height: 28px;
-  height: 28px;
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--font-size-sm, 13px);
-  cursor: pointer;
-  box-sizing: border-box;
-  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
-.addServiceBtn:hover {
-  background: var(--tint-hover);
-  border-color: var(--border-color);
-}
-
-.addServiceBtn:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
-}
-
+/* 外层容器由 ui/Menu .menuContent 统一供给，此处剥离双重外壳 */
 .addProviderMenu {
+  min-width: 180px;
+}
+
+.cascadeList {
   min-width: 220px;
-  background: var(--sep-bg-panel, var(--bg-elevated));
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  box-shadow: var(--shadow-dropdown);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* 独立 Portal 逃逸飞出菜单（继承全套浮层阴影与圆角，杜绝幽灵 Token） */
+.cascadeFlyout,
+.cascadeFlyoutPortal {
+  min-width: 200px;
+  background: var(--bg-card, hsl(0 0% 100%));
+  border: 1px solid var(--border-color);
+  border-radius: var(--sep-radius-outer, 14px);
+  box-shadow: var(--sep-shadow);
   padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
   box-sizing: border-box;
+  z-index: var(--z-dropdown, 300);
 }
 
 .addMenuTitle {
-  padding: 4px 10px;
+  padding: 4px 8px;
   font-size: var(--font-size-xs, 11px);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-medium, 500);
   color: var(--text-tertiary);
   border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 2px;
@@ -984,17 +516,18 @@
   margin-top: 4px;
 }
 
-.addMenuOption {
+.addMenuOption,
+.cascadeRow,
+.cascadeOption {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
   width: 100%;
   min-height: 28px;
   height: 28px;
-  padding: 0 10px;
+  padding: 0 8px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--button-radius, 7px);
   background: transparent;
   color: var(--text-primary);
   font-size: var(--font-size-sm, 13px);
@@ -1002,15 +535,21 @@
   text-align: left;
   cursor: pointer;
   box-sizing: border-box;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--transition-micro);
 }
 
-.addMenuOption:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
+.addMenuOption:hover,
+.cascadeRow:hover,
+.cascadeOption:hover {
+  background: var(--tint-hover);
 }
 
-/* ModelsCascadeSelect (ModelProfileList) */
+.cascadeOption.isOn,
+.cascadeOption.isSelected {
+  background: var(--tint-active);
+  font-weight: var(--font-weight-medium, 500);
+}
+
 .cascadeSelectTrigger {
   display: inline-flex;
   align-items: center;
@@ -1018,49 +557,28 @@
   gap: 8px;
   border: 1px solid var(--border-color);
   background: var(--bg-card);
-  border-radius: var(--radius-md, 6px);
+  border-radius: var(--button-radius, 7px);
   padding: 0 10px;
-  height: 28px;
-  min-height: 28px;
+  height: var(--control-height-sm, 28px);
+  min-height: var(--control-height-sm, 28px);
   min-width: 220px;
   color: var(--text-primary);
   font-family: inherit;
   font-size: var(--font-size-sm, 13px);
   cursor: pointer;
   box-sizing: border-box;
-  transition: background-color 0.12s ease, border-color 0.12s ease;
+  transition: background-color var(--transition-micro);
 }
 
 .cascadeSelectTrigger:hover {
   background: var(--tint-hover);
-  border-color: var(--border-color);
-}
-
-.cascadeSelectTrigger:focus-visible {
-  outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
 .cascadeSelectValue {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
-  font-weight: 500;
-}
-
-.cascadeList {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 220px;
-  background: var(--sep-bg-panel, var(--bg-elevated));
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  box-shadow: var(--shadow-dropdown);
-  padding: 6px;
-  box-sizing: border-box;
+  font-weight: var(--font-weight-medium, 500);
 }
 
 .cascadeEmpty {
@@ -1070,85 +588,9 @@
   cursor: default;
 }
 
-.cascadeRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: 0 10px;
-  height: 28px;
-  min-height: 28px;
-  border-radius: 8px;
-  font-size: var(--font-size-sm, 13px);
-  color: var(--text-primary);
-  cursor: pointer;
-  position: relative;
-  box-sizing: border-box;
-  transition: background-color 0.12s ease, color 0.12s ease;
-}
-
-.cascadeRow:hover,
-.cascadeRow.isOpen {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
 .cascadeChev {
   color: var(--text-tertiary);
   flex-shrink: 0;
-}
-
-.cascadeFlyout {
-  position: absolute;
-  right: calc(100% + 4px);
-  top: 0;
-  min-width: 180px;
-  max-height: 280px;
-  height: auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  z-index: var(--z-dropdown-menu, 2000);
-  background: var(--sep-bg-panel, var(--bg-elevated));
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  border: 1px solid var(--border-subtle);
-  border-radius: 14px;
-  box-shadow: var(--shadow-dropdown);
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  box-sizing: border-box;
-}
-
-.cascadeOption {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: 0 10px;
-  height: 28px;
-  min-height: 28px;
-  border-radius: 8px;
-  font-size: var(--font-size-sm, 13px);
-  color: var(--text-primary);
-  cursor: pointer;
-  border: none;
-  background: transparent;
-  box-sizing: border-box;
-  transition: background-color 0.12s ease, color 0.12s ease;
-}
-
-.cascadeOption:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.cascadeOption.isSelected,
-.cascadeOption.isOn {
-  background: var(--bg-active, var(--tint-active));
-  color: var(--text-primary);
-  font-weight: 500;
 }
 
 .cascadeOptionText {
@@ -1161,4 +603,13 @@
 .cascadeCheck {
   color: var(--accent-color, var(--brand-deep));
   flex-shrink: 0;
+}
+
+.loadingSpinner {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }

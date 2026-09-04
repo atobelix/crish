@@ -203,6 +203,18 @@
   align-items: stretch;
 }
 
+/* ─────────────────────────────────────────────────────────────
+ * 【Task-E 核心锁定】工作区视口型 Tab 强约束（模型管理页）：
+ * 1. overflow: hidden 物理抹除外层 scrollport，彻底根除整个界面被滚走
+ * 2. overscroll-behavior: none 阻断任何向外溢出的动量
+ * 3. padding-bottom 收口为 24px，确保工作区紧凑对称
+ * ───────────────────────────────────────────────────────────── */
+.coverContent[data-settings-tab="models"] {
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: 20px 32px 24px;
+}
+
 .sidebarTab {
   display: flex;
   align-items: center;

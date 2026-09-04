@@ -35,27 +35,32 @@
   font-size: var(--font-size-base, 14px);
   line-height: var(--line-height-normal, 1.5);
   color: var(--text-primary);
-  background: var(--bg-primary);
+  background: color-mix(in srgb, var(--bg-primary) 40%, var(--bg-card));
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md, 6px);
   outline: none;
   transition:
     border-color var(--transition-micro, 120ms) ease,
-    background var(--transition-micro, 120ms) ease,
-    box-shadow var(--transition-micro, 120ms) ease;
+    background var(--transition-micro, 120ms) ease;
 }
 
 .nativeTextarea::placeholder {
   color: var(--text-tertiary);
 }
 
-/*    Focus Ring AGENTS.md   13            3%~10%  */
+.nativeTextarea:hover:not(:focus):not(:focus-visible):not(:disabled) {
+  border-color: var(--border-color);
+  background: color-mix(in srgb, var(--bg-primary) 20%, var(--bg-card));
+}
+
 .nativeTextarea:focus,
-.nativeTextarea:focus-visible {
+.nativeTextarea:focus-visible,
+.nativeTextarea:focus:hover,
+.nativeTextarea:focus-visible:hover {
   outline: none;
   background: var(--bg-card);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
-  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: none;
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
 }
 
 .nativeTextarea:disabled {
@@ -85,7 +90,7 @@
 .textareaWrapError .nativeTextarea:focus,
 .textareaWrapError .nativeTextarea:focus-visible {
   border-color: var(--color-error);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-error) 20%, transparent);
+  box-shadow: none;
 }
 
 .textareaError {

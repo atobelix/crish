@@ -78,6 +78,13 @@ export function useModelProfilesState(
   const [nameDraft, setNameDraft] = useState('');
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
+  const [activeProfileId, setActiveProfileIdState] = useState<string>(
+    () => getActiveProfileId() || ''
+  );
+  const [globalActiveModelId, setGlobalActiveModelIdState] = useState<string>(
+    () => getActiveModelId() || ''
+  );
+
   // ── R2-a ④ 设置页失效订阅（详案 §1.1-④ + analysis/15 §2.4）──────────────
   // 自身落盘（saveKey/addFrom*/handleManualAdd/runScan/saveConfig）经
   // localMutationRef 标记为本地变更，跳过「外部变更」提示；外部变更（其它
@@ -140,6 +147,8 @@ export function useModelProfilesState(
 
   const refresh = useCallback(() => {
     setProfiles(loadProfiles());
+    setActiveProfileIdState(getActiveProfileId() || '');
+    setGlobalActiveModelIdState(getActiveModelId() || '');
   }, [setProfiles]);
 
   useEffect(() => {
@@ -234,14 +243,24 @@ export function useModelProfilesState(
     runAsLocalMutation,
   });
 
-  // ── 服务商连通性动作子 hook（runTest / runScan / runCheck + busy 状态）──
-  const { testBusy, scanBusy, checkBusy, runTest, runScan, runCheck } =
-    useModelProviderActions({
-      selected,
-      refresh,
-      notify,
-      runAsLocalMutation,
-    });
+  // ── 服务商连通性动作子 hook（runTest / runScan / runCheck + busy 状态 + 扫描选择弹窗）──
+  const {
+    testBusy,
+    scanBusy,
+    checkBusy,
+    runTest,
+    runScan,
+    runCheck,
+    scanModalOpen,
+    setScanModalOpen,
+    scannedModelsList,
+    confirmScannedModels,
+  } = useModelProviderActions({
+    selected,
+    refresh,
+    notify,
+    runAsLocalMutation,
+  });
 
   const saveKey = async () => {
     if (!selected || !keyDraft.trim()) return;
@@ -324,7 +343,8 @@ export function useModelProfilesState(
             : snap.contextLength || '',
         caps: {
           tools: Boolean(meta.capabilities?.tools),
-          vision: Boolean(meta.capabilities?.vision),
+          image: Boolean(meta.capabilities?.image),
+          video: Boolean(meta.capabilities?.video),
           reasoning: Boolean(meta.capabilities?.reasoning),
         },
       });
@@ -348,8 +368,6 @@ export function useModelProfilesState(
     : 0;
   const selectedLabel = selected ? profileDisplayLabel(selected) : '';
   const hasKeySelected = selected ? profileHasKey(selected) : false;
-  const activeProfileId = getActiveProfileId();
-  const globalActiveModelId = getActiveModelId();
 
   return {
     profiles,
@@ -392,6 +410,10 @@ export function useModelProfilesState(
     runTest,
     runScan,
     runCheck,
+    scanModalOpen,
+    setScanModalOpen,
+    scannedModelsList,
+    confirmScannedModels,
     modelsList,
     modelsCount,
     selectedLabel,

@@ -28,7 +28,7 @@ export function modelMetaRevision(profileId: string, model: string): string {
     meta.displayName ?? '',
     meta.contextLength ?? null,
     meta.capabilities?.tools ?? false,
-    meta.capabilities?.vision ?? false,
+    meta.capabilities?.image ?? false,
     meta.capabilities?.reasoning ?? false,
   ]);
 }

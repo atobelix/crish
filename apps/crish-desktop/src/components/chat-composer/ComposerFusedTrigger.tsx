@@ -30,7 +30,7 @@ export type ComposerFusedTriggerProps = {
 };
 
 function levelLabel(value: string): string {
-  if (!value || value === 'default') return '提供方默认';
+  if (!value || value === 'default') return '默认';
   return THINKING_LEVEL_LABELS[value] ?? value;
 }
 
