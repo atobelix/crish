@@ -36,6 +36,7 @@ pub mod reader_pool;
 mod runs;
 mod schema;
 mod sessions;
+pub mod usage_analytics;
 
 pub use blocks::{BlockState, CompactionBlockRow, BLOCK_SCHEMA_VERSION};
 pub use cas_gc::{compute_sha256_hex, spawn_cas_gc_loop, CasBlobRow, CasGcConfig, GcScanStats};
@@ -58,6 +59,10 @@ pub use reader_pool::{
     DEFAULT_READER_POOL_SIZE, DEFAULT_SQLITE_BUSY_TIMEOUT_MS,
 };
 pub use runs::{ParseRunStatusError, PendingInput, RunStatus, StoredRun};
+pub use usage_analytics::{
+    ActivityMatrixCell, ActivityMatrixDto, InsertUsageRecordInput, UsageDashboardDto,
+    UsageHeroStats, UsageModelBreakdownItem, UsageRecordRow, UsageTimeseriesPoint,
+};
 
 use rusqlite::Connection;
 use std::path::Path;
@@ -87,13 +92,11 @@ pub struct LocalDb {
 /// v7：新增 compression_blocks 压缩块单表（T-15，R-A 复合主键，零既有列改动）；
 /// v8：新增 imported_bookmarks / imported_history 浏览器导入目标表
 /// （03-方案-书签历史入conex-db目标表 §3.2，纯建表 + 索引，零既有列改动）；
-/// v9：events 补 run_id 列 + idx_events_run 索引（agent 循环可追溯性战役
-/// D-01 DM-01：run 归属第一类数据，列 = 查询权威；存量行不回填诚实未知）、
-/// session_agents 补 sub_session_id 列（D-02 LK-04 主控代收列定义，
-/// 读写面轮 3 实现）——纯 ADD COLUMN + 索引，零既有列语义改动。
-pub const LATEST_VERSION: u32 = 9;
+/// v9：events 补 run_id 列 + idx_events_run 索引、session_agents 补 sub_session_id 列；
+/// v10：新增 usage_records 时序流水表及 4 组复合时序索引（用量监控系统全链路移植）。
+pub const LATEST_VERSION: u32 = 10;
 /// session_meta 中登记的 schema 版本字符串（与 PRAGMA user_version 保持一致）。
-pub const SCHEMA_VERSION_STRING: &str = "9";
+pub const SCHEMA_VERSION_STRING: &str = "10";
 /// 孤儿会话宽限期（毫秒）：updated_at 距今小于该值的会话不被清理（PE-08 T08.2）。
 pub const ORPHAN_GRACE_MS: i64 = 300_000;
 /// session_meta 中可配宽限期的键。
@@ -295,3 +298,5 @@ mod tests_cas_gc;
 mod tests_concurrency;
 #[cfg(test)]
 mod tests_migrations;
+#[cfg(test)]
+mod tests_usage;

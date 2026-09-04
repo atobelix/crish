@@ -1,0 +1,96 @@
+.heroGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.heroCard {
+  padding: 18px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  position: relative;
+  border-right: 1px solid var(--border-subtle);
+}
+
+.heroCard:last-child {
+  border-right: none;
+}
+
+.heroLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.labelDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.labelDotTokens {
+  background: var(--usage-color-brand);
+}
+
+.labelDotCost {
+  background: var(--usage-color-cost-total);
+}
+
+.heroVal {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+}
+
+.heroUnit {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.heroSubtext {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 2px;
+}
+
+.heroSubtextItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.heroSubtextVal {
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+@media (max-width: 640px) {
+  .heroGrid {
+    grid-template-columns: 1fr;
+  }
+  .heroCard {
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .heroCard:last-child {
+    border-bottom: none;
+  }
+}

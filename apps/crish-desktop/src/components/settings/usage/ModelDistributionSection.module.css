@@ -1,0 +1,251 @@
+.splitSection {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.splitHeader {
+  padding: 20px 22px 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.blockTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+}
+
+.splitBody {
+  display: flex;
+  align-items: center;
+  padding: 10px 22px 20px;
+  gap: 24px;
+}
+
+/* 左侧圆饼图面板 */
+.donutPanel {
+  width: 236px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+
+.donutBox {
+  width: 176px;
+  height: 176px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.donutSvg {
+  width: 176px;
+  height: 176px;
+  overflow: visible;
+}
+
+.donutTrack {
+  fill: none;
+  stroke: color-mix(in srgb, var(--border-subtle) 60%, transparent);
+  stroke-width: 24;
+}
+
+.donutSlice {
+  fill: none;
+  stroke-width: 24;
+  cursor: pointer;
+  transition: stroke-width 140ms ease, opacity 140ms ease;
+}
+
+.donutSlice:hover {
+  stroke-width: 28;
+  opacity: 0.92;
+}
+
+.donutCenterContent {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.donutCenterLbl {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.donutCenterVal {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.donutCenterUnit {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.donutLegendMini {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  max-width: 236px;
+}
+
+.legendMiniItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legendMiniDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+/* 中间非贯穿分割线 */
+.splitDivider {
+  width: 1px;
+  height: 200px;
+  background: var(--border-subtle);
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* 右侧胶囊进度列表 */
+.modelsPanel {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.capsuleList {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  overflow-y: auto;
+  max-height: 228px;
+  padding-right: 6px;
+}
+
+.modelCapsuleRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--usage-capsule-pad, 3px) 14px;
+  border-radius: var(--usage-capsule-outer-radius, 9px);
+  background: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 120ms ease, opacity 120ms ease;
+  height: 38px;
+  flex-shrink: 0;
+}
+
+.modelCapsuleRow:hover {
+  background: var(--bg-hover);
+}
+
+.capsuleBarBg {
+  position: absolute;
+  left: var(--usage-capsule-pad, 3px);
+  top: var(--usage-capsule-pad, 3px);
+  bottom: var(--usage-capsule-pad, 3px);
+  border-radius: var(--usage-capsule-inner-radius, 6px);
+  transition: width 240ms ease;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.capsuleLeft {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.modelDotIcon {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.capsuleModelName {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capsuleRight {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.capsuleTokenVal {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.capsulePctTag {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 38px;
+  text-align: right;
+}
+
+.emptyModels {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 12.5px;
+}
+
+@media (max-width: 720px) {
+  .splitBody {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .splitDivider {
+    width: 100%;
+    height: 1px;
+  }
+  .donutPanel {
+    width: 100%;
+  }
+}

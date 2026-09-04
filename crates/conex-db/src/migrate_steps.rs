@@ -434,3 +434,33 @@ pub(crate) fn migrate_v8_to_v9(tx: &rusqlite::Transaction<'_>) -> Result<(), rus
     }
     Ok(())
 }
+
+/// v9 → v10：新增 usage_records 时序流水表及 4 组复合时序索引（用量监控控制台全链路移植）。
+/// 纯建表 + 索引（无 DROP、无既有列语义改动）。
+pub(crate) fn migrate_v9_to_v10(tx: &rusqlite::Transaction<'_>) -> Result<(), rusqlite::Error> {
+    tx.execute_batch(
+        "CREATE TABLE IF NOT EXISTS usage_records (
+            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id           TEXT NOT NULL,
+            run_id               TEXT,
+            project_name         TEXT NOT NULL DEFAULT '',
+            model                TEXT NOT NULL,
+            provider             TEXT NOT NULL DEFAULT '',
+            prompt_tokens        INTEGER NOT NULL DEFAULT 0,
+            completion_tokens    INTEGER NOT NULL DEFAULT 0,
+            cache_read_tokens    INTEGER NOT NULL DEFAULT 0,
+            cache_write_tokens   INTEGER NOT NULL DEFAULT 0,
+            cost_cny             REAL NOT NULL DEFAULT 0.0,
+            cost_usd             REAL NOT NULL DEFAULT 0.0,
+            timestamp            INTEGER NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_usage_records_ts
+            ON usage_records(timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_usage_records_model_ts
+            ON usage_records(model, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_usage_records_project_ts
+            ON usage_records(project_name, timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_usage_records_session
+            ON usage_records(session_id, timestamp);",
+    )
+}

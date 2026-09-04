@@ -95,6 +95,7 @@ mod sched;
 mod subagent_spawner;
 mod system_power;
 mod timers;
+mod usage_commands;
 mod wakeup_summary;
 mod workflow_commands;
 
@@ -472,6 +473,21 @@ command_registry![
     ("resume_subagent", lifecycle_commands::resume_subagent),
     ("kill_all", lifecycle_commands::kill_all),
     ("kill_subagent", lifecycle_commands::kill_subagent),
+    // ── 用量监控与时序分析面（usage_*）──
+    (
+        "usage_get_dashboard_data",
+        usage_commands::usage_get_dashboard_data
+    ),
+    (
+        "usage_get_activity_matrix",
+        usage_commands::usage_get_activity_matrix
+    ),
+    ("usage_clear_history", usage_commands::usage_clear_history),
+    ("usage_record_delta", usage_commands::usage_record_delta),
+    (
+        "usage_import_legacy_snapshot",
+        usage_commands::usage_import_legacy_snapshot
+    ),
 ];
 
 // ── D4a：子代理显式恢复与关闭命令壳（D4 §3.1 双端登记第 ① 步）──────

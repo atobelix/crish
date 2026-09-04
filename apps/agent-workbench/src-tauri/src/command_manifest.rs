@@ -254,6 +254,12 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // 子集 = make_handlers! 注册面不变量（红线 6 禁止假接线；main.rs
         // 同批注册，E0 裁决 4 的「5→6」口径与本实现一致）
         entry("core_compact_now", "core", "engine", true),
+        // ── 用量监控与时序分析面（usage_*）──
+        entry("usage_get_dashboard_data", "usage", "gui", true),
+        entry("usage_get_activity_matrix", "usage", "gui", true),
+        entry("usage_clear_history", "usage", "gui", true),
+        entry("usage_record_delta", "usage", "gui", true),
+        entry("usage_import_legacy_snapshot", "usage", "gui", true),
     ],
 };
 
@@ -300,12 +306,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 126,
-            "总数 126（127 - core_jsonl_append 退役；与前端同步）"
+            total, 131,
+            "总数 131（126 + 5 条 usage_* 命令；与前端同步）"
         );
         assert_eq!(
-            registered, 126,
-            "注册面 126（全部为 registered=true 实装命令）"
+            registered, 131,
+            "注册面 131（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -427,8 +433,32 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 126);
+        assert_eq!(manifest.commands.len(), 131);
         assert_eq!(manifest.contract_version, "1.0.0");
+    }
+
+    /// 用量监控五命令登记且 registered=true
+    #[test]
+    fn manifest_registers_usage_commands() {
+        let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
+            .commands
+            .iter()
+            .map(|c| (c.name, c))
+            .collect();
+        for name in [
+            "usage_get_dashboard_data",
+            "usage_get_activity_matrix",
+            "usage_clear_history",
+            "usage_record_delta",
+            "usage_import_legacy_snapshot",
+        ] {
+            let entry = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} 必须登记 manifest"));
+            assert_eq!(entry.family, "usage", "{name} 属 usage 族");
+            assert_eq!(entry.surface, "gui", "{name} 属 gui 专属面");
+            assert!(entry.registered, "{name} 已接线应 registered=true");
+        }
     }
 
     /// Round7+：笔记 IPC 十命令登记且 registered=true（含 hydrate / recent / mirror / apply_ops / undo_text / redo_text）。

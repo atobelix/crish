@@ -231,6 +231,12 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // E2 扩展：core_compact_now 实现体已落（E2 实现轮，registered=true；
     // 与 Rust command_manifest.rs 同步）
     entry('core_compact_now', 'core', 'engine', true),
+    // ── 用量监控与时序分析面（usage_*，与 Rust command_manifest.rs 同步）──
+    entry('usage_get_dashboard_data', 'usage', 'gui'),
+    entry('usage_get_activity_matrix', 'usage', 'gui'),
+    entry('usage_clear_history', 'usage', 'gui'),
+    entry('usage_record_delta', 'usage', 'gui'),
+    entry('usage_import_legacy_snapshot', 'usage', 'gui'),
   ],
 };
 

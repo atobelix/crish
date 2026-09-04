@@ -1587,6 +1587,74 @@ html[data-theme='dark'] {
   --md-table-font-size: 14.5px;
   --md-table-cell-pad-x: 14px;
   --md-table-cell-pad-y: 10px;
+
+  /* ── 用量监控与时序分析（Usage Dashboard）专用系统设计规范 ── */
+  /* 分段选择器与同心圆角 */
+  --usage-seg-pad: 2px;
+  --usage-seg-radius: 7px;
+  --usage-seg-btn-radius: calc(var(--usage-seg-radius) - var(--usage-seg-pad)); /* 5px */
+  --usage-seg-sm-pad: 1.5px;
+  --usage-seg-sm-radius: 5px;
+  --usage-seg-sm-btn-radius: 3.5px;
+
+  /* 胶囊进度行：outer(9px) = inner(6px) + pad(3px) */
+  --usage-capsule-outer-radius: 9px;
+  --usage-capsule-pad: 3px;
+  --usage-capsule-inner-radius: calc(var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)); /* 6px */
+
+  /* 色彩体系回退 (sRGB) */
+  --usage-color-brand: #10b981;
+  --usage-color-brand-bg: rgba(16, 185, 129, 0.11);
+  --usage-color-claude: #f97316;
+  --usage-color-claude-bg: rgba(249, 115, 22, 0.11);
+  --usage-color-minimax: #8b5cf6;
+  --usage-color-minimax-bg: rgba(139, 92, 246, 0.11);
+  --usage-color-kimi: #0284c7;
+  --usage-color-kimi-bg: rgba(2, 132, 199, 0.11);
+  --usage-color-other: #f59e0b;
+  --usage-color-other-bg: rgba(245, 158, 11, 0.11);
+  --usage-color-input: #0284c7;
+  --usage-color-input-bg: rgba(2, 132, 199, 0.11);
+  --usage-color-cache: #8b5cf6;
+  --usage-color-cache-bg: rgba(139, 92, 246, 0.11);
+  --usage-color-cost-total: #2563eb;
+  --usage-color-cost-total-bg: rgba(37, 99, 235, 0.10);
+  --usage-color-total: #10b981;
+  --usage-color-total-bg: rgba(16, 185, 129, 0.11);
+  --usage-color-danger: #dc2626;
+  --usage-color-danger-bg: rgba(220, 38, 38, 0.08);
+
+  /* 热力图 5 级颜色 */
+  --usage-heat-0: color-mix(in srgb, var(--border-color) 40%, transparent);
+  --usage-heat-1: color-mix(in srgb, var(--brand, #10b981) 25%, transparent);
+  --usage-heat-2: color-mix(in srgb, var(--brand, #10b981) 50%, transparent);
+  --usage-heat-3: color-mix(in srgb, var(--brand, #10b981) 75%, transparent);
+  --usage-heat-4: var(--brand, #10b981);
+}
+
+@supports (color: oklch(0 0 0)) {
+  :root {
+    --usage-color-brand: oklch(0.72 0.16 150);
+    --usage-color-brand-bg: oklch(0.72 0.16 150 / 0.11);
+    --usage-color-claude: oklch(0.72 0.17 45);
+    --usage-color-claude-bg: oklch(0.72 0.17 45 / 0.11);
+    --usage-color-minimax: oklch(0.70 0.18 290);
+    --usage-color-minimax-bg: oklch(0.70 0.18 290 / 0.11);
+    --usage-color-kimi: oklch(0.70 0.16 230);
+    --usage-color-kimi-bg: oklch(0.70 0.16 230 / 0.11);
+    --usage-color-other: oklch(0.75 0.15 85);
+    --usage-color-other-bg: oklch(0.75 0.15 85 / 0.11);
+    --usage-color-input: oklch(0.70 0.16 230);
+    --usage-color-input-bg: oklch(0.70 0.16 230 / 0.11);
+    --usage-color-cache: oklch(0.70 0.18 290);
+    --usage-color-cache-bg: oklch(0.70 0.18 290 / 0.11);
+    --usage-color-cost-total: oklch(0.65 0.20 255);
+    --usage-color-cost-total-bg: oklch(0.65 0.20 255 / 0.10);
+    --usage-color-total: oklch(0.72 0.16 150);
+    --usage-color-total-bg: oklch(0.72 0.16 150 / 0.11);
+    --usage-color-danger: oklch(0.68 0.18 28);
+    --usage-color-danger-bg: oklch(0.68 0.18 28 / 0.09);
+  }
 }
 
 /*    html[data-perf-tier=...]        token

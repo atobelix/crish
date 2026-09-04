@@ -1,0 +1,252 @@
+.activitySection {
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: var(--bg-card);
+  position: relative;
+}
+
+.activityHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  gap: 12px;
+}
+
+.blockTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+}
+
+.activityHeaderControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.segmentedSm {
+  display: inline-flex;
+  align-items: center;
+  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
+  padding: var(--usage-seg-sm-pad, 1.5px);
+  border-radius: var(--usage-seg-sm-radius, 5px);
+  gap: 2px;
+}
+
+.segmentedBtn {
+  height: 19px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 19px;
+  border-radius: var(--usage-seg-sm-btn-radius, 3.5px);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 120ms ease;
+}
+
+.segmentedBtn:hover {
+  color: var(--text-primary);
+}
+
+.segmentedBtnActive {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, #000) 4%, transparent);
+}
+
+.activityLegend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.activityLegendCell {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+}
+
+.activityGridWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+  padding: 4px 2px 8px;
+}
+
+.activityMatrixContainer {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+
+.activityYAxis {
+  display: grid;
+  gap: 4.5px;
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  user-select: none;
+  width: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 2px 0;
+}
+
+.activityMatrix {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4.5px;
+  padding: 2px;
+  margin: -2px;
+  min-width: 0;
+}
+
+.activityRow {
+  display: grid;
+  gap: 4.5px;
+  width: 100%;
+}
+
+/* 正方形微圆角磁贴：严守 1:1 纯正正方形，宽屏上限约束（约 18px 细腻不过大），圆角 4px 连续柔和，间隙 4.5px 疏朗呼吸 */
+.activityCell {
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  max-width: 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 120ms ease;
+  transform-origin: center;
+}
+
+.activityCell:hover {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 8%, transparent);
+  position: relative;
+  z-index: 5;
+}
+
+.activityXAxis {
+  margin-left: 40px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  user-select: none;
+  padding-top: 4px;
+}
+
+/* 5 级色阶 */
+.actLvl0 {
+  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
+}
+.actLvl1 {
+  background: var(--usage-heat-1, #bbf7d0);
+}
+.actLvl2 {
+  background: var(--usage-heat-2, #86efac);
+}
+.actLvl3 {
+  background: var(--usage-heat-3, #4ade80);
+}
+.actLvl4 {
+  background: var(--usage-heat-4, #10b981);
+}
+
+@supports (color: oklch(0 0 0)) {
+  .actLvl1 {
+    background: oklch(0.75 0.155 148 / 0.20);
+  }
+  .actLvl2 {
+    background: oklch(0.75 0.155 148 / 0.45);
+  }
+  .actLvl3 {
+    background: oklch(0.75 0.155 148 / 0.72);
+  }
+  .actLvl4 {
+    background: oklch(0.75 0.155 148);
+  }
+}
+
+/* 活动专属浮动 Tooltip */
+.activityFloatingTip {
+  position: absolute;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md, 6px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  padding: 5px 9px;
+  font-size: 11px;
+  color: var(--text-primary);
+  pointer-events: none;
+  transform: translate(-50%, -100%);
+  transition: opacity 100ms ease;
+  white-space: nowrap;
+  z-index: 30;
+}
+
+/* 活动下属统计指标网格：纯净纯文字排版，零卡片无边框无 hover */
+.activityStatsGrid {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px 20px;
+}
+
+.actStatItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.actStatLabel {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  letter-spacing: -0.01em;
+}
+
+.actStatVal {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  letter-spacing: -0.02em;
+}
+
+.actStatValCode {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.actStatUnit {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 640px) {
+  .activityStatsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

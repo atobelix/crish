@@ -74,8 +74,9 @@ describe('commandManifest', () => {
       //   （124 → 123）
       // note_document_recent：最近一篇 persist 非空查询（123 → 124）
       // 模型字典真源三命令追加（124 → 127），core_jsonl_append 退役（127 → 126）
-      expect(registered).toBe(126);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(126);
+      // 用量监控与时序分析五命令追加（126 → 131）
+      expect(registered).toBe(131);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(131);
     });
 
     it('命令名唯一', () => {
@@ -140,6 +141,12 @@ describe('commandManifest', () => {
       expect(isRegisteredCommand('kill_subagent')).toBe(true);
       // E2 F4：core_compact_now 已接线（registered=true，可调用）
       expect(isRegisteredCommand('core_compact_now')).toBe(true);
+      // 用量监控面五命令已接线
+      expect(isRegisteredCommand('usage_get_dashboard_data')).toBe(true);
+      expect(isRegisteredCommand('usage_get_activity_matrix')).toBe(true);
+      expect(isRegisteredCommand('usage_clear_history')).toBe(true);
+      expect(isRegisteredCommand('usage_record_delta')).toBe(true);
+      expect(isRegisteredCommand('usage_import_legacy_snapshot')).toBe(true);
       // 未知名
       expect(isRegisteredCommand('nope')).toBe(false);
     });
@@ -284,8 +291,8 @@ describe('commandManifest', () => {
     it('断言二式：双端总数一致（总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(126);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(126);
+      expect(total).toBe(131);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(131);
     });
 
     it('断言三式：登记先行（registered=false）名集合双向一致', () => {

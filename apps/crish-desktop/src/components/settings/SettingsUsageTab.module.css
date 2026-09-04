@@ -1,446 +1,158 @@
-/* SettingsUsageTab.module.css extracted from inline styles in SettingsUsageTab.tsx */
+/* SettingsUsageTab.module.css - Conex / Crish 用量监控控制台主布局样式 */
 
-/* ----- Price row ----- */
-.priceRow {
+.headerTools {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 6px 0;
-  border-bottom: 1px solid var(--border-subtle);
+  gap: 12px;
 }
 
-.priceRowModel {
-  flex: 2;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--font-size-sm);
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-}
-
-.priceRowInput {
-  flex: 1;
-  height: 26px;
-  font-size: var(--font-size-xs);
-  padding: 0 6px;
-  width: 60px;
-}
-
-.priceRowBtn {
-  height: 26px;
-  padding: 0 8px;
-  font-size: var(--font-size-xxs);
-}
-
-/* ----- Config button (page header meta) ----- */
-.configBtn {
-  display: flex;
+.segmented {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-1_5);
-  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
+  padding: var(--usage-seg-pad, 2px);
+  border-radius: var(--usage-seg-radius, 7px);
+  gap: 2px;
 }
 
-/* ----- Pricing modal overlay ----- */
-.modalOverlay {
-  position: fixed;
-  inset: 0;
-  background: color-mix(in srgb, var(--bg-overlay) 40%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-}
-
-.modalBox {
-  width: 520px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-card, hsl(0 0% 100%));
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  border-radius: var(--radius-2xl);
-  padding: var(--space-5);
-  box-shadow: var(--shadow-lg);
-}
-
-.modalHeader {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-4);
-  gap: var(--space-4);
-}
-
-.modalTitle {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-content);
-  color: var(--text-primary);
-}
-
-.modalFilterInput {
-  width: 160px;
-  height: 28px;
-  font-size: var(--font-size-xs);
-}
-
-.modalList {
-  flex: 1;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-  padding-right: var(--space-1);
-}
-
-.modalEmptyState {
-  padding: 24px 0;
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm);
-  text-align: center;
-}
-
-.modalAddRow {
-  display: flex;
-  gap: var(--space-2);
-  border-top: 1px solid var(--border-subtle);
-  padding-top: var(--space-4);
-  align-items: center;
-}
-
-.modalAddInput {
-  height: 28px;
-  font-size: var(--font-size-xs);
-}
-
-.modalAddInputFlex2 {
-  height: 28px;
-  font-size: var(--font-size-xs);
-  flex: 2;
-}
-
-.modalAddInputFlex1 {
-  height: 28px;
-  font-size: var(--font-size-xs);
-  flex: 1;
-}
-
-.modalAddBtn {
-  height: 28px;
-  padding: 0 12px;
-  border-radius: var(--radius-md);
-}
-
-.modalFooter {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: var(--space-4);
-}
-
-.modalCloseBtn {
-  border-radius: var(--radius-md);
-}
-
-/* ----- Stats grid (top summary) ----- */
-.statsGrid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-4);
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-subtle);
-}
-
-.statItem {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.statLabel {
-  font-size: var(--font-size-xs);
-  color: var(--text-tertiary);
-}
-
-.statValue {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-content);
-  color: var(--text-primary);
-}
-
-.statValueCost {
-  font-size: var(--font-size-xl);
-  font-weight: var(--font-weight-content);
-  color: var(--color-active);
-}
-
-.statUnit {
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-secondary);
-}
-
-/* ----- Chart section ----- */
-.chartSection {
-  padding: 24px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.chartHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.chartTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-}
-
-.chartSegment {
-  display: flex;
-  gap: var(--space-0_5);
-  padding: var(--space-0_5);
-  background: var(--bg-primary);
-  border-radius: var(--radius-md);
-}
-
-.chartSegmentBtn {
-  padding: 4px 10px;
-  font-size: var(--font-size-xxs);
-  border-radius: var(--radius-xs);
+.segmentedBtn {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+  line-height: 24px;
+  border-radius: var(--usage-seg-btn-radius, 5px);
   border: none;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition:
-    background-color var(--transition-micro),
-    color var(--transition-micro);
+  font-weight: 500;
+  transition: all 120ms ease;
+  user-select: none;
 }
 
-.chartSegmentBtn:hover {
+.segmentedBtn:hover {
   color: var(--text-primary);
 }
 
-.chartSegmentBtn.active {
-  background: var(--bg-elevated);
+.segmentedBtnActive {
+  background: var(--bg-card);
   color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color, #000) 4%, transparent);
 }
 
-.chartBars {
-  display: flex;
-  height: 140px;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: var(--space-3);
-  padding: 10px 0;
-  border-bottom: 1px dashed var(--border-subtle);
-}
-
-.chartBarCol {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  justify-content: flex-end;
+.configBtn {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-1_5);
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-md, 6px);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  transition: background 120ms ease;
 }
 
-.chartBarInner {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
+.configBtn:hover {
+  background: var(--bg-hover);
 }
 
-/* bar wrapper: height is set dynamically via inline style */
-.chartBarStack {
-  width: 14px;
-  display: flex;
-  flex-direction: column;
-  border-radius: var(--radius-xs);
+.usageDashboardCard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl, 12px);
+  box-shadow: var(--shadow-card);
   overflow: hidden;
-}
-
-/* segment heights set dynamically via inline style */
-.chartBarOut {
-  width: 100%;
-  background: var(--accent-chart-out);
-  opacity: 0.85;
-}
-
-.chartBarIn {
-  width: 100%;
-  background: var(--accent-chart-in);
-}
-
-.chartBarEmpty {
-  width: 14px;
-  height: 4px;
-  background: var(--border-subtle);
-  border-radius: 2px;
-}
-
-.chartBarLabel {
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
-  white-space: nowrap;
-}
-
-.chartLegend {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-4);
-  font-size: var(--font-size-xxs);
-  color: var(--text-tertiary);
-}
-
-.chartLegendItem {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.chartLegendDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-}
-
-.chartLegendDotIn {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--accent-chart-in);
-}
-
-.chartLegendDotOut {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: var(--accent-chart-out);
-  opacity: 0.85;
-}
-
-/* ----- Model distribution ----- */
-.modelsSection {
-  border-top: 1px solid var(--border-subtle);
-  padding: 16px 20px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
 }
 
-.modelsSectionTitle {
-  font-size: var(--font-size-base);
-  font-weight: var(--font-weight-medium);
-  color: var(--text-primary);
-}
-
-.modelsList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.modelRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  font-size: var(--font-size-sm);
-}
-
-.modelName {
-  flex: 0 0 160px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-}
-
-.modelBarTrack {
-  flex: 1;
-  height: 6px;
-  background: var(--bg-tertiary);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-/* bar fill width set dynamically via inline style */
-.modelBarFill {
-  height: 100%;
-  background: var(--accent-primary);
-  border-radius: 3px;
-}
-
-.modelTokens {
-  flex: 0 0 100px;
-  text-align: right;
-  color: var(--text-primary);
-  font-weight: var(--font-weight-medium);
-}
-
-.modelTokensUnit {
-  font-size: var(--font-size-xxs);
-  font-weight: var(--font-weight-normal);
-  color: var(--text-secondary);
-}
-
-/*        T-48     /  /             */
-.modelCacheMeta {
-  flex: 0 0 auto;
-  font-size: var(--font-size-xxs);
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-  white-space: nowrap;
-}
-
-/* ----- Bottom actions bar ----- */
+/* 底栏操作区 */
 .actionsBar {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  padding: 12px 20px;
+  padding: 12px 22px;
   border-top: 1px solid var(--border-subtle);
-  background: var(--bg-subtle);
+  background: var(--bg-card);
 }
 
 .actionBtn {
-  font-size: var(--font-size-xs);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  border-radius: var(--radius-md);
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: var(--radius-md, 6px);
+  transition: all 120ms ease;
 }
 
-/* ----- Skeleton loading ----- */
-.skeletonSection {
-  padding: 24px 20px;
+.actionBtnRefresh {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.actionBtnRefresh:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.actionBtnClear {
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+}
+
+.actionBtnClear:hover {
+  background: var(--usage-color-danger-bg, rgba(220, 38, 38, 0.08));
+  color: var(--usage-color-danger, #dc2626);
+}
+
+/* 骨架屏驱动状态 */
+.skeletonContainer {
+  padding: 24px 22px;
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: 16px;
 }
 
-.skeletonBar {
-  height: 20px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-xs);
-  animation: shimmer var(--transition-skeleton) infinite;
+.skeletonHeader {
+  height: 60px;
+  background: var(--bg-subtle, #f5f5f5);
+  border-radius: var(--radius-md, 6px);
+  animation: shimmer 1.5s infinite ease-in-out;
+}
+
+.skeletonChart {
+  height: 180px;
+  background: var(--bg-subtle, #f5f5f5);
+  border-radius: var(--radius-md, 6px);
+  animation: shimmer 1.5s infinite ease-in-out;
+}
+
+.skeletonSection {
+  height: 140px;
+  background: var(--bg-subtle, #f5f5f5);
+  border-radius: var(--radius-md, 6px);
+  animation: shimmer 1.5s infinite ease-in-out;
 }
 
 @keyframes shimmer {
-  0%,
-  100% {
+  0%, 100% {
     opacity: 0.5;
   }
   50% {
-    opacity: 1;
+    opacity: 0.85;
   }
 }

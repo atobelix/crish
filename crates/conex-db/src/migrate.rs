@@ -156,7 +156,7 @@ impl LocalDb {
             // （backup_file_contains_pre_migration_data / upgrade_e2e_backup_*
             // 锚定 v3→v4 只产 .bak-v4，v5/v6/v7/v8/v9 不额外产生备份）
             if let Some(p) = &path {
-                if !(5..=9).contains(&version) {
+                if !(5..=10).contains(&version) {
                     // checkpoint 失败 → 备份内容不确定，按备份失败处理：
                     // 告警 + 跳过本次备份，不阻断迁移（裁定案）
                     if let Err(e) = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);") {
@@ -183,6 +183,7 @@ impl LocalDb {
                 7 => migrate_v6_to_v7(&tx),
                 8 => migrate_v7_to_v8(&tx),
                 9 => migrate_v8_to_v9(&tx),
+                10 => migrate_v9_to_v10(&tx),
                 _ => unreachable!(),
             };
             if let Err(e) = step_result {
