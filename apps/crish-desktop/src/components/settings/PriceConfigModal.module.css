@@ -87,7 +87,7 @@
   font-size: 13px;
   font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
   font-weight: 400;
-  background: #ffffff !important;
+  background: var(--bg-card, #ffffff);
   color: var(--text-primary);
   outline: none;
   box-sizing: border-box;
@@ -107,9 +107,9 @@
 .cellInput:focus,
 .cellInput:focus-visible {
   outline: none;
-  background: #ffffff !important;
-  box-shadow: none !important;
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%) !important;
+  background: var(--bg-card, #ffffff);
+  box-shadow: none;
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
 }
 
 .rowActions {

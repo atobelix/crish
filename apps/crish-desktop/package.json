@@ -6,6 +6,7 @@
   "type": "module",
   "description": "Crish desktop UI (consumer client)",
   "scripts": {
+    "predev": "node ../../scripts/ensure-dev-ports.mjs",
     "dev": "vite --force",
     "build": "tsc -b && vite build",
     "preview": "vite preview",

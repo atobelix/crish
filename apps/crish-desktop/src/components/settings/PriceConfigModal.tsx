@@ -263,8 +263,9 @@ export const PriceConfigModal: React.FC<{
         <div className={styles.addRow} ref={addBoxRef}>
           {/* 1. 模型 ID 输入框与智能建议 */}
           <div className={styles.colCell} style={{ position: 'relative' }}>
-            <input
+            <Input
               ref={addInputRef}
+              size="xs"
               placeholder="新模型 ID…"
               value={priceDraft.model}
               onChange={(e) => {
@@ -338,7 +339,8 @@ export const PriceConfigModal: React.FC<{
 
           {/* 2. 提示输入 */}
           <div className={styles.colCell}>
-            <input
+            <Input
+              size="xs"
               placeholder="0.0"
               value={priceDraft.input}
               onChange={(e) =>
@@ -350,7 +352,8 @@ export const PriceConfigModal: React.FC<{
 
           {/* 3. 生成补全 */}
           <div className={styles.colCell}>
-            <input
+            <Input
+              size="xs"
               placeholder="0.0"
               value={priceDraft.output}
               onChange={(e) =>
@@ -362,7 +365,8 @@ export const PriceConfigModal: React.FC<{
 
           {/* 4. 缓存命中 */}
           <div className={styles.colCell}>
-            <input
+            <Input
+              size="xs"
               placeholder="—"
               value={priceDraft.cacheRead}
               onChange={(e) =>

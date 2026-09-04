@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import type { ModelPrice } from '../../api/pricingStore';
-import { Button, Tooltip, Select } from '../ui';
+import { Button, Tooltip, Select, Input } from '../ui';
 import styles from './PriceConfigModal.module.css';
 
 const UNIT_OPTIONS = [
@@ -60,7 +60,8 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
       {/* 1. 模型名称（支持修改） */}
       <div className={styles.colCell}>
         <Tooltip content={`修改模型名称（当前: ${row.model}）`}>
-          <input
+          <Input
+            size="xs"
             value={modelVal}
             onChange={(e) => setModelVal(e.target.value)}
             className={styles.cellInput}
@@ -74,7 +75,8 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
       {/* 2. 提示词输入单价 */}
       <div className={styles.colCell}>
         <Tooltip content={`提示词输入单价 (${currencySymbol}/1M Tokens)`}>
-          <input
+          <Input
+            size="xs"
             value={inputVal}
             onChange={(e) => setInputVal(e.target.value)}
             className={styles.cellInput}
@@ -87,7 +89,8 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
       {/* 3. 生成补全单价 */}
       <div className={styles.colCell}>
         <Tooltip content={`生成补全单价 (${currencySymbol}/1M Tokens)`}>
-          <input
+          <Input
+            size="xs"
             value={outputVal}
             onChange={(e) => setOutputVal(e.target.value)}
             className={styles.cellInput}
@@ -100,7 +103,8 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
       {/* 4. 缓存命中单价 */}
       <div className={styles.colCell}>
         <Tooltip content={`缓存命中单价 (${currencySymbol}/1M Tokens)`}>
-          <input
+          <Input
+            size="xs"
             value={cacheReadVal}
             onChange={(e) => setCacheReadVal(e.target.value)}
             className={styles.cellInput}
@@ -144,30 +148,21 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
             </Button>
           )}
           <Tooltip content="删除该模型单价">
-            <button
+            <Button
               type="button"
+              variant="ghost"
+              size="xs"
               onClick={onDelete}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                color: 'var(--text-tertiary)',
-                cursor: 'pointer',
-                padding: '4px',
-                display: 'inline-flex',
-                alignItems: 'center',
-                borderRadius: '4px',
-                transition: 'color 150ms ease',
-              }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.color = 'var(--danger, #ef4444)')
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.color = 'var(--text-tertiary)')
-              }
               aria-label={`删除 ${row.model}`}
+              style={{
+                color: 'var(--text-tertiary)',
+                padding: '4px',
+                height: '24px',
+                minWidth: '24px',
+              }}
             >
               <Lucide.Trash2 size={13} />
-            </button>
+            </Button>
           </Tooltip>
         </div>
       </div>

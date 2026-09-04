@@ -29,6 +29,8 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   block?: boolean;
   /** 激活态 */
   active?: boolean;
+  /** 裸核心模式（不应用默认规格与文字包裹，专供复杂列表项/下拉选项等自定义布局按钮） */
+  bare?: boolean;
 }
 
 const VARIANT_CLASS: Record<ButtonVariant, string | undefined> = {
@@ -60,6 +62,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       loading = false,
       block = false,
       active = false,
+      bare = false,
       disabled,
       className,
       children,
@@ -68,6 +71,21 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) {
+    if (bare) {
+      return (
+        <button
+          ref={ref}
+          type={type}
+          className={className}
+          disabled={disabled || loading}
+          aria-busy={loading || undefined}
+          {...restProps}
+        >
+          {children}
+        </button>
+      );
+    }
+
     const classNames = [
       styles.button,
       VARIANT_CLASS[variant],

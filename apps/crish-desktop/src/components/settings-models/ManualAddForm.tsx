@@ -68,10 +68,10 @@ export const ManualAddForm: React.FC<{
   useEffect(() => {
     if (showSuggestions) {
       updateDropdownPos();
-      window.addEventListener('resize', updateDropdownPos);
+      window.addEventListener('app:window-resize-settled', updateDropdownPos, { passive: true });
       window.addEventListener('scroll', updateDropdownPos, true);
       return () => {
-        window.removeEventListener('resize', updateDropdownPos);
+        window.removeEventListener('app:window-resize-settled', updateDropdownPos);
         window.removeEventListener('scroll', updateDropdownPos, true);
       };
     }

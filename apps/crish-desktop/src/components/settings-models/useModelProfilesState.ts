@@ -45,9 +45,7 @@ export {
   type PresetProvider,
 };
 
-export function useModelProfilesState(
-  onShowToast?: (ok: boolean, msg: string) => void,
-) {
+export function useModelProfilesState() {
   const [profiles, setProfilesState] = useState<ProviderProfile[]>(() =>
     foldSettingsProfiles(loadProfiles())
   );
@@ -127,14 +125,10 @@ export function useModelProfilesState(
   /** 成功静默（含「已自动获取 N 个模型」）；失败才进 Toast，并带 error 皮。 */
   const notify = useCallback(
     (ok: boolean, msg: string) => {
-      if (onShowToast) {
-        onShowToast(ok, msg);
-        return;
-      }
       if (ok) return;
       toast.show(msg, undefined, { type: 'error' });
     },
-    [onShowToast],
+    [],
   );
 
   const setProfiles = useCallback((raw: ProviderProfile[]) => {

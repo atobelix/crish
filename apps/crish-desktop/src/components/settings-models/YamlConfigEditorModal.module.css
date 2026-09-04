@@ -23,13 +23,13 @@
   border-right: none;
 }
 
-.configMenuTrigger {
-  border-top-left-radius: 0 !important;
-  border-bottom-left-radius: 0 !important;
-  padding-left: 6px !important;
-  padding-right: 6px !important;
-  min-width: 26px !important;
-  border-left: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08)) !important;
+.configButtonCombo > .configMenuTrigger {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  padding-left: 6px;
+  padding-right: 6px;
+  min-width: 26px;
+  border-left: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 }
 
 .yamlDropdownMenu {
@@ -180,9 +180,9 @@
   box-sizing: border-box;
 }
 
-.gutterLineError {
-  background: rgba(239, 68, 68, 0.25) !important;
-  color: var(--danger-color, #ef4444) !important;
+.editorGutter .gutterLine.gutterLineError {
+  background: rgba(239, 68, 68, 0.25);
+  color: var(--danger-color, #ef4444);
   font-weight: 700;
 }
 
@@ -216,12 +216,12 @@
   color: var(--text-primary, #111111);
 }
 
-.highlightCode {
+.highlightLayer .highlightCode {
   font-family: inherit;
   font-size: inherit;
   line-height: inherit;
-  background: transparent !important;
-  padding: 0 !important;
+  background: transparent;
+  padding: 0;
 }
 
 /* 前景输入捕获层 */

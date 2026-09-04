@@ -6,7 +6,7 @@ import {
   upsertProfile,
   type ProviderProfile,
 } from '../../api/providerProfiles';
-import { Button, Tooltip } from '../ui';
+import { Button, Input, Tooltip } from '../ui';
 
 /**
  * 详情头部：重命名标题 / 启用状态按钮 / 自定义服务商删除确认组。
@@ -55,8 +55,9 @@ export const ProfileHeader: React.FC<{
         style={{ display: 'inline-flex', alignItems: 'center', gap: '10px' }}
       >
         {editingName && selected.id.startsWith('custom-') ? (
-          <input
+          <Input
             className="mrd-title"
+            size="sm"
             value={nameDraft}
             autoFocus
             onChange={(e) => setNameDraft(e.target.value)}

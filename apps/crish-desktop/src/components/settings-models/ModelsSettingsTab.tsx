@@ -124,26 +124,29 @@ export const AddProviderMenu: React.FC<{
     >
       <div role="menu" aria-label="添加服务商">
         <div className={styles.addMenuTitle}>接口类型</div>
-        <button
+        <Button
+          bare
           type="button"
           role="menuitem"
           className={styles.addMenuOption}
           onClick={() => onAddTemplate('openai')}
         >
           OpenAI 格式
-        </button>
-        <button
+        </Button>
+        <Button
+          bare
           type="button"
           role="menuitem"
           className={styles.addMenuOption}
           onClick={() => onAddTemplate('anthropic')}
         >
           Anthropic 格式
-        </button>
+        </Button>
 
         <div className={`${styles.addMenuTitle} ${styles.addMenuTitleGap}`}>常用服务</div>
         {PRESETS.map((pr) => (
-          <button
+          <Button
+            bare
             key={pr.id}
             type="button"
             role="menuitem"
@@ -151,7 +154,7 @@ export const AddProviderMenu: React.FC<{
             onClick={() => onAddPreset(pr)}
           >
             {pr.name}
-          </button>
+          </Button>
         ))}
       </div>
     </Menu>
@@ -345,7 +348,8 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
         >
           <div role="menu" aria-label="配置文件直达选项">
             <div className={yamlStyles.menuSectionTitle}>配置文件 (models.yaml)</div>
-            <button
+            <Button
+              bare
               type="button"
               role="menuitem"
               className={yamlStyles.menuItemBtn}
@@ -356,13 +360,14 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
             >
               <Lucide.Code size={13} aria-hidden />
               内置编辑器打开
-            </button>
+            </Button>
 
             <div className={yamlStyles.menuDivider} />
             <div className={yamlStyles.menuSectionTitle}>外部编辑器调起</div>
 
             {availableOpeners.map((op) => (
-              <button
+              <Button
+                bare
                 key={op.id}
                 type="button"
                 role="menuitem"
@@ -371,10 +376,11 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
               >
                 <Lucide.ExternalLink size={13} aria-hidden />
                 {op.displayName || op.label || op.id}
-              </button>
+              </Button>
             ))}
 
-            <button
+            <Button
+              bare
               type="button"
               role="menuitem"
               className={yamlStyles.menuItemBtn}
@@ -382,12 +388,13 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
             >
               <Lucide.ExternalLink size={13} aria-hidden />
               系统默认程序打开
-            </button>
+            </Button>
 
             <div className={yamlStyles.menuDivider} />
             <div className={yamlStyles.menuSectionTitle}>文件操作</div>
 
-            <button
+            <Button
+              bare
               type="button"
               role="menuitem"
               className={yamlStyles.menuItemBtn}
@@ -395,9 +402,10 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
             >
               <Lucide.FolderOpen size={13} aria-hidden />
               在文件资源管理器中定位
-            </button>
+            </Button>
 
-            <button
+            <Button
+              bare
               type="button"
               role="menuitem"
               className={yamlStyles.menuItemBtn}
@@ -405,7 +413,7 @@ export const ModelsSettingsTab: React.FC<Props> = ({ _onBlockingOverlayChange })
             >
               <Lucide.Copy size={13} aria-hidden />
               复制绝对路径
-            </button>
+            </Button>
           </div>
         </Menu>
       </div>

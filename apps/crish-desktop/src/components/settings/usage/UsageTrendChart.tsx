@@ -8,6 +8,7 @@ import {
   computeSeriesGeometry,
 } from './usageChartModel';
 import { clampViewportX } from './usageSpline';
+import { Button } from '../../ui';
 import styles from './UsageTrendChart.module.css';
 
 export interface UsageTrendChartProps {
@@ -120,8 +121,10 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
       <div className={styles.blockHeader}>
         <div className={styles.blockHeaderLeft}>
           <span className={styles.blockTitle}>吞吐趋势</span>
-          <button
+          <Button
             type="button"
+            variant="plain"
+            size="xs"
             className={`${styles.btnAvgToggle} ${showAvgLine ? styles.btnAvgToggleActive : ''}`}
             onClick={() => setShowAvgLine((prev) => !prev)}
             aria-pressed={showAvgLine}
@@ -139,31 +142,37 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
               <line x1="2" y1="12" x2="22" y2="12" strokeDasharray="3 3" />
             </svg>
             <span>均线参考</span>
-          </button>
+          </Button>
         </div>
 
         <div className={styles.segmentedSm}>
-          <button
+          <Button
             type="button"
+            variant="plain"
+            size="xs"
             className={`${styles.segmentedBtn} ${dimension === 'overview' ? styles.segmentedBtnActive : ''}`}
             onClick={() => setDimension('overview')}
           >
             吞吐总览
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="plain"
+            size="xs"
             className={`${styles.segmentedBtn} ${dimension === 'models' ? styles.segmentedBtnActive : ''}`}
             onClick={() => setDimension('models')}
           >
             模型对比
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="plain"
+            size="xs"
             className={`${styles.segmentedBtn} ${dimension === 'cost' ? styles.segmentedBtnActive : ''}`}
             onClick={() => setDimension('cost')}
           >
             费用走势
-          </button>
+          </Button>
         </div>
       </div>
 

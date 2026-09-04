@@ -8,7 +8,7 @@ import {
 import type { UsageDashboardDto } from '../../api/usageContracts';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 import { useToast } from '../../services/toast/ToastContext';
-import { ConfirmDialog } from '../ui';
+import { Button, ConfirmDialog } from '../ui';
 import { PriceConfigModal } from './PriceConfigModal';
 import { SettingsPage } from './SettingsUI';
 import { ActivityMatrixHeatmap } from './usage/ActivityMatrixHeatmap';
@@ -79,37 +79,45 @@ export const SettingsUsageTab: React.FC<Props> = () => {
   const headerMeta = (
     <div className={styles.headerTools}>
       <div className={styles.segmented}>
-        <button
+        <Button
           type="button"
+          variant="plain"
+          size="xs"
           className={`${styles.segmentedBtn} ${globalRange === '24h' ? styles.segmentedBtnActive : ''}`}
           onClick={() => setGlobalRange('24h')}
         >
           近 24 小时
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="plain"
+          size="xs"
           className={`${styles.segmentedBtn} ${globalRange === '7d' ? styles.segmentedBtnActive : ''}`}
           onClick={() => setGlobalRange('7d')}
         >
           近 7 日
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="plain"
+          size="xs"
           className={`${styles.segmentedBtn} ${globalRange === '30d' ? styles.segmentedBtnActive : ''}`}
           onClick={() => setGlobalRange('30d')}
         >
           近 30 日
-        </button>
+        </Button>
       </div>
 
-      <button
+      <Button
         type="button"
+        variant="plain"
+        size="xs"
         className={styles.configBtn}
         onClick={() => setPricesModalOpen(true)}
       >
         <Lucide.DollarSign size={14} />
         配置单价
-      </button>
+      </Button>
     </div>
   );
 
@@ -155,23 +163,27 @@ export const SettingsUsageTab: React.FC<Props> = () => {
 
               {/* 5. 底栏操作区 */}
               <div className={styles.actionsBar}>
-                <button
+                <Button
                   type="button"
+                  variant="plain"
+                  size="xs"
                   className={`${styles.actionBtn} ${styles.actionBtnRefresh}`}
                   onClick={() => void loadData(globalRange)}
                 >
                   <Lucide.RefreshCw size={13} />
                   刷新数据
-                </button>
+                </Button>
                 {(dashboardData.totalInput > 0 || dashboardData.totalOutput > 0) && (
-                  <button
+                  <Button
                     type="button"
+                    variant="plain"
+                    size="xs"
                     className={`${styles.actionBtn} ${styles.actionBtnClear}`}
                     onClick={() => void handleClearHistory()}
                   >
                     <Lucide.Trash2 size={13} />
                     清空历史
-                  </button>
+                  </Button>
                 )}
               </div>
             </>

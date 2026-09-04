@@ -30,7 +30,7 @@ import {
 import { formatModelDisplayName, getModelMeta } from '../../api/modelCatalog';
 import { useModelMetaTick } from '../../hooks/useModelMetaTick';
 import styles from './ModelsSettingsTab.module.css';
-import { Tooltip, Menu } from '../ui';
+import { Button, Tooltip, Menu } from '../ui';
 import { MenuContext } from '../ui/Menu/Menu';
 import { DialogOverlayContext } from '../ui/Dialog/dialogOverlayContext';
 import { useLayerRegistration } from '../ui/internal/layer-registration/useLayerRegistration';
@@ -119,7 +119,8 @@ const CascadeSubmenuFlyout: React.FC<CascadeSubmenuFlyoutProps> = ({
       {profile.models.map((m) => {
         const selected = profile.id === activeProfileId && m === activeModelId;
         return (
-          <button
+          <Button
+            bare
             key={m}
             type="button"
             role="option"
@@ -136,7 +137,7 @@ const CascadeSubmenuFlyout: React.FC<CascadeSubmenuFlyoutProps> = ({
             {selected && (
               <Lucide.Check size={14} className={styles.cascadeCheck} />
             )}
-          </button>
+          </Button>
         );
       })}
     </div>,
@@ -242,7 +243,8 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
       position={{ align: 'start', side: 'bottom', sideOffset: 4 }}
       panel={{ contentClassName: styles.cascadeMenuContent }}
       trigger={
-        <button
+        <Button
+          bare
           type="button"
           className={styles.cascadeSelectTrigger}
           style={{ minWidth: '220px', justifyContent: 'space-between' }}
@@ -254,7 +256,7 @@ export const ModelsCascadeSelect: React.FC<ModelsCascadeSelectProps> = ({
             size={14}
             style={{ opacity: 0.6, flexShrink: 0 }}
           />
-        </button>
+        </Button>
       }
     >
       <div
@@ -403,7 +405,8 @@ export const ModelProfileList: React.FC<ModelProfileListProps> = ({
             const enabled = p.enabled !== false;
 
             return (
-              <button
+              <Button
+                bare
                 key={p.id}
                 type="button"
                 role="listitem"
@@ -435,7 +438,7 @@ export const ModelProfileList: React.FC<ModelProfileListProps> = ({
                     />
                   </Tooltip>
                 </div>
-              </button>
+              </Button>
             );
           })
         )}

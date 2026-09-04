@@ -20,6 +20,13 @@ const mocks = vi.hoisted(() => ({
   isOpen: vi.fn(),
   loadProfiles: vi.fn(),
   getModelMeta: vi.fn(),
+  toastShow: vi.fn(),
+}));
+
+vi.mock('../../services/toast/ToastContext', () => ({
+  toast: {
+    show: mocks.toastShow,
+  },
 }));
 
 vi.mock('../../api/chat-bridge/editSessionConsumer', () => ({
@@ -104,6 +111,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
     mocks.commit.mockClear();
     mocks.invalidate.mockClear();
     mocks.isOpen.mockClear();
+    mocks.toastShow.mockClear();
   });
 
   afterEach(() => {
@@ -111,8 +119,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
   });
 
   it('外部 profiles 变更且无未保存草稿 → 直接 refresh 重载（不提示）', () => {
-    const onShowToast = vi.fn();
-    const { result } = renderHook(() => useModelProfilesState(onShowToast));
+    const { result } = renderHook(() => useModelProfilesState());
 
     expect(result.current.profiles.map((p) => p.id)).toEqual(['preset-openai']);
 
@@ -126,13 +133,12 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
       'gpt-4o',
       'gpt-4o-mini',
     ]);
-    expect(onShowToast).not.toHaveBeenCalled();
+    expect(mocks.toastShow).not.toHaveBeenCalled();
     expect(mocks.invalidate).not.toHaveBeenCalled();
   });
 
   it('外部变更且有未保存 cfgDraft → 提示 + 编辑会话 invalidate，不静默覆盖/不静默刷新', () => {
-    const onShowToast = vi.fn();
-    const { result } = renderHook(() => useModelProfilesState(onShowToast));
+    const { result } = renderHook(() => useModelProfilesState());
 
     act(() => {
       result.current.openConfigFor('gpt-4o');
@@ -146,9 +152,10 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
       emitUiEvent('profiles-changed');
     });
 
-    expect(onShowToast).toHaveBeenCalledWith(
-      false,
-      '配置已被外部修改，请确认后重载或丢弃草稿'
+    expect(mocks.toastShow).toHaveBeenCalledWith(
+      '配置已被外部修改，请确认后重载或丢弃草稿',
+      undefined,
+      { type: 'error' }
     );
     expect(mocks.invalidate).toHaveBeenCalledWith(
       'preset-openai::gpt-4o',
@@ -159,8 +166,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
   });
 
   it('saveConfig rev 核对（CT-01）：外部已变更 rev 不符 → 拒绝陈旧覆盖', () => {
-    const onShowToast = vi.fn();
-    const { result } = renderHook(() => useModelProfilesState(onShowToast));
+    const { result } = renderHook(() => useModelProfilesState());
 
     act(() => {
       result.current.openConfigFor('gpt-4o');
@@ -183,9 +189,10 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
       result.current.saveConfig();
     });
 
-    expect(onShowToast).toHaveBeenCalledWith(
-      false,
-      '配置已被外部修改，保存已取消，请重新确认'
+    expect(mocks.toastShow).toHaveBeenCalledWith(
+      '配置已被外部修改，保存已取消，请重新确认',
+      undefined,
+      { type: 'error' }
     );
     expect(mocks.invalidate).toHaveBeenCalledWith(
       'preset-openai::gpt-4o',
@@ -196,8 +203,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
   });
 
   it('saveConfig rev 一致 → 正常保存并 commit 编辑会话（推进 rev）', () => {
-    const onShowToast = vi.fn();
-    const { result } = renderHook(() => useModelProfilesState(onShowToast));
+    const { result } = renderHook(() => useModelProfilesState());
 
     act(() => {
       result.current.openConfigFor('gpt-4o');
@@ -214,7 +220,7 @@ describe('useModelProfilesState 失效订阅（R2-a ④）', () => {
 
     // commit(objectId) 已调用（会话提交关闭；CT-01 核对在本地 rev 比对完成）
     expect(mocks.commit).toHaveBeenCalledWith('preset-openai::gpt-4o');
-    expect(onShowToast).not.toHaveBeenCalled();
+    expect(mocks.toastShow).not.toHaveBeenCalled();
     // 保存后重开配置（新会话 + 新本地 rev）
     expect(mocks.open).toHaveBeenCalledTimes(2);
   });

@@ -28,6 +28,8 @@ export interface TextareaProps extends Omit<
   onEnter?: (value: string) => void;
   /** 自定义最大高度（超出滚动） */
   maxHeight?: number | string;
+  /** 裸核心模式（不渲染外层 wrap/shell/label/hint 装饰，保留 IME 守卫与属性透传，专供代码编辑器等复杂舞台） */
+  bare?: boolean;
 }
 
 export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
@@ -49,6 +51,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       onCompositionEnd,
       onEnter,
       maxHeight,
+      bare = false,
       style,
       'aria-describedby': ariaDescribedBy,
       ...restProps
@@ -127,6 +130,28 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
         : {}),
       ...style,
     };
+
+    if (bare) {
+      return (
+        <textarea
+          ref={ref}
+          id={id ?? textareaId}
+          className={className}
+          value={value}
+          defaultValue={defaultValue}
+          disabled={disabled}
+          readOnly={readOnly}
+          onChange={onChange}
+          onKeyDown={handleKeyDown}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={describedBy}
+          style={resolvedStyle}
+          {...restProps}
+        />
+      );
+    }
 
     return (
       <div className={wrapClasses} data-size={size}>

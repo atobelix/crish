@@ -6,6 +6,7 @@ import type {
   UsageHeroStats,
 } from '../../../api/usageContracts';
 import { formatCost, formatTokens } from './usageSpline';
+import { Button } from '../../ui';
 import styles from './ActivityMatrixHeatmap.module.css';
 
 export interface ActivityMatrixHeatmapProps {
@@ -94,27 +95,33 @@ export const ActivityMatrixHeatmap: React.FC<ActivityMatrixHeatmapProps> = ({
         <div className={styles.activityHeaderControls}>
           {/* 独立活动时间跨度选择器 */}
           <div className={styles.segmentedSm}>
-            <button
+            <Button
               type="button"
+              variant="plain"
+              size="xs"
               className={`${styles.segmentedBtn} ${matrixRange === '24h' ? styles.segmentedBtnActive : ''}`}
               onClick={() => setMatrixRange('24h')}
             >
               24 小时
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="plain"
+              size="xs"
               className={`${styles.segmentedBtn} ${matrixRange === '7d' ? styles.segmentedBtnActive : ''}`}
               onClick={() => setMatrixRange('7d')}
             >
               7 天
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="plain"
+              size="xs"
               className={`${styles.segmentedBtn} ${matrixRange === '30d' ? styles.segmentedBtnActive : ''}`}
               onClick={() => setMatrixRange('30d')}
             >
               30 天
-            </button>
+            </Button>
           </div>
 
           {/* 活跃度图例 */}

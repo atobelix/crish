@@ -20,7 +20,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
-import { Button, ConfirmDialog, Dialog, Tooltip } from '../ui';
+import { Button, ConfirmDialog, Dialog, Textarea, Tooltip } from '../ui';
 import { highlightCode } from '../../api/codeHighlight';
 import { invokeTyped } from '../../api/tauriInvoke';
 import { ensureModelsCatalogLoaded, getModelsCatalogPath } from '../../api/modelsCatalogStore';
@@ -452,7 +452,8 @@ export const YamlConfigEditorModal: React.FC<YamlConfigEditorModalProps> = ({
             </pre>
 
             {/* 前景文本输入捕获层 */}
-            <textarea
+            <Textarea
+              bare
               ref={textareaRef}
               className={styles.textareaInput}
               value={code}
