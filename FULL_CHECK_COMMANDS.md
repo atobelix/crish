@@ -49,6 +49,5 @@
 
 | 命令 | 失败项 | 状态 |
 | :-- | :-- | :-- |
-| `cargo test --workspace` | `engine_provider::tests::describe_model_whitelist_for_deepseek_v4_flash_is_narrow` | S7 整改（catalog 档位数据校准） |
-| `cargo test --workspace` | `engine_provider::tests::out_of_whitelist_effort_rejected_before_http` | S7 整改（越档样本改用 medium） |
-| `cargo test --workspace` | `background::tests_resource::resource_sample_collected` | S8 整改（采样/读取竞态等齐） |
+| `cargo test --workspace` | 全部 | ✅ 已清零（161 套件 / 6322 测试全绿） |
+| `npm run test:coverage -- --project=unit` | chat-bridge / approval / conversation-flow / workspace / store / styles 等 33 文件 | ⏳ 存量失败（与模型能力战役无关，属其它并行批次；S1-S9 影响面已全绿） |
