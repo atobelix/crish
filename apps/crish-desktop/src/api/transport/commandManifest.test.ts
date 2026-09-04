@@ -35,7 +35,7 @@ describe('commandManifest', () => {
       ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
       expect(pending).toBe(0);
-      // 与 Rust COMMAND_MANIFEST（94 = 注册面 90 + 登记先行 4）保持同步；
+      // 与 Rust COMMAND_MANIFEST（127 = 注册面 127 全实装）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 已接线
@@ -73,8 +73,9 @@ describe('commandManifest', () => {
       // 后端优化维度 1：computer_estop 退役（停止合并到输入框停止按钮）
       //   （124 → 123）
       // note_document_recent：最近一篇 persist 非空查询（123 → 124）
-      expect(registered).toBe(124);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(124);
+      // 模型字典真源三命令：read/validate/save models.yaml（124 → 127）
+      expect(registered).toBe(127);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(127);
     });
 
     it('命令名唯一', () => {
@@ -199,7 +200,7 @@ describe('commandManifest', () => {
   //   （monorepo 根；不停在子 workspace 的 package.json），不依赖 process.cwd()；
   // - 读失败/文件缺失 → 抛错（测试 fail），严禁 catch 后 skip——否则回归「摆设
   //   测试」（00 计划总文档 §6.1 风险 6）；
-  // - 哨兵：提取数 ≥ 88（真源 94），提取语法漂移/正则失配空集时直接 fail；
+  // - 哨兵：提取数 ≥ 120（真源 127），提取语法漂移/正则失配空集时直接 fail；
   // - 断言三式：registered 子集逐名带差异清单 + 总数一致 + 登记先行双向一致。
 
   /** Rust 真源相对仓库根的路径（路径耦合由 existsSync fail 兜底） */
@@ -238,9 +239,10 @@ describe('commandManifest', () => {
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/\/\/[^\n]*/g, '');
     // Rust entry() 签名恒四参（name/family/surface/registered），
+    // 尾逗号可选（多行缩进排版会带尾逗号）；
     // 勿复用 TS 三/四参正则（34 文档 §1.4 约定）
     const re =
-      /entry\(\s*"([^"]+)",\s*"[^"]+",\s*"[^"]+",\s*(true|false)\s*\)/g;
+      /entry\(\s*"([^"]+)",\s*"[^"]+",\s*"[^"]+",\s*(true|false)\s*,?\s*\)/g;
     const registered: string[] = [];
     const pending: string[] = [];
     let m: RegExpExecArray | null;
@@ -258,10 +260,10 @@ describe('commandManifest', () => {
   }
 
   describe('动态对照（镜像守门：直读 Rust command_manifest.rs 真源）', () => {
-    it('哨兵：Rust 提取数 ≥ 88（防提取语法漂移/正则失配空集摆设化）', () => {
+    it('哨兵：Rust 提取数 ≥ 120（防提取语法漂移/正则失配空集摆设化）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBeGreaterThanOrEqual(88);
+      expect(total).toBeGreaterThanOrEqual(120);
     });
 
     it('断言一式：前端 registered ⊇ Rust registered（逐名断言，缺失带差异清单）', () => {
@@ -272,21 +274,18 @@ describe('commandManifest', () => {
           .map((c) => c.name)
       );
       const missing = rust.registered.filter((name) => !frontend.has(name));
-      // computer_estop 仍在 Rust 注册面；前端快照已退役（停止合并到输入框）。
       expect(
         missing,
         `前端 registered 缺失 ${missing.length} 条：${missing.join(', ')}` +
           '（镜像守门：内置快照与 Rust 真源漂移）'
-      ).toEqual(['computer_estop']);
+      ).toEqual([]);
     });
 
-    it('断言二式：前端总数 = Rust 总数（125；总数一致 + 一式子集 ⇒ registered 全等）', () => {
+    it('断言二式：双端总数一致（总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      // Rust 仍登记 computer_estop（壳命令面在）；前端快照已退役该名。
-      // 本条只把 note_document_recent 双端都加上：Rust 125，前端 124。
-      expect(total).toBe(125);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(124);
+      expect(total).toBe(127);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(127);
     });
 
     it('断言三式：登记先行（registered=false）名集合双向一致', () => {

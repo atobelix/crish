@@ -36,6 +36,21 @@ export type UiEventMap = {
   'model-changed': { profileId: string; model: string };
   /** 服务商列表/密钥/模型表变更（设置页保存后刷新选择器） */
   'profiles-changed': void;
+  /**
+   * 模型元数据变更事件（启用/禁用、展示名、上下文长度、能力标签等）。
+   * 触发时驱动各级 Picker、CascadeSelect、SettingsTab 进行增量响应式刷新。
+   */
+  'model-meta-changed': {
+    profileId: string;
+    model: string;
+    enabled: boolean;
+    displayName?: string;
+  };
+  /**
+   * 模型字典镜像重载（真源 = ~/.conex/models.yaml）。
+   * 镜像加载 / 重置（含解析失败清空）后广播，驱动录入联想与价格预设重渲染。
+   */
+  'models-catalog-changed': void;
   /** 快捷键：聚焦主对话输入框 */
   'focus-composer': void;
   /** 快捷键：中断当前生成 */
@@ -94,6 +109,8 @@ export const UI_EVENT_NAMES = [
   'open-conversation-rewind',
   'model-changed',
   'profiles-changed',
+  'model-meta-changed',
+  'models-catalog-changed',
   'focus-composer',
   'stop-generation',
   'close-all-popovers',

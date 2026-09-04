@@ -45,7 +45,7 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（94 = 注册面 90 + 登记先行 4；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（127 = 注册面 127 全实装；与
  * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
@@ -72,6 +72,10 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('workbench_open_host_target', 'workbench', 'gui'),
     entry('workbench_open_path_default', 'workbench', 'gui'),
     entry('workbench_list_file_openers', 'workbench', 'gui'),
+    // 模型字典真源（models.yaml）：读（缺则播种）/ 校验 / 原子保存
+    entry('workbench_read_models_yaml', 'workbench', 'gui'),
+    entry('workbench_validate_models_yaml', 'workbench', 'gui'),
+    entry('workbench_save_models_yaml', 'workbench', 'gui'),
     // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（与 Rust 侧 manifest 同步）
     entry('workbench_list_background_tasks', 'workbench', 'gui'),
     entry('workbench_get_background_task_output', 'workbench', 'gui'),

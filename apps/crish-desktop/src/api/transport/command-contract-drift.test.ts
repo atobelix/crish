@@ -80,7 +80,8 @@ function extractManifestRegisteredNames(): string[] {
   const src = readFileSync(file, 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '')
     .replace(/\/\/[^\n]*/g, '');
-  const re = /entry\(\s*"([^"]+)",\s*"[^"]+",\s*"[^"]+",\s*true\s*\)/g;
+  // 尾逗号可选：多行缩进排版会带尾逗号（漏配会把该条静默挤出清单）
+  const re = /entry\(\s*"([^"]+)",\s*"[^"]+",\s*"[^"]+",\s*true\s*,?\s*\)/g;
   const names: string[] = [];
   for (const m of src.matchAll(re)) {
     if (m[1] !== undefined) names.push(m[1]);
