@@ -4,6 +4,8 @@ import {
   _getMemoryMetaCacheSnapshot,
   formatModelDisplayName,
   getModelMeta,
+  purgeMetaForProfile,
+  purgeOrphanMetaKeys,
   resetModelMetaCache,
   setModelCapability,
   setModelContextLength,
@@ -316,6 +318,56 @@ describe('modelCatalogMeta with In-Memory Cache', () => {
 
       // 内存镜像依然有效
       expect(getModelMeta('provider-1', 'model-fail').enabled).toBe(false);
+    });
+  });
+
+  describe('孤儿 meta 键清扫（档案删除 / 历史迁移残留）', () => {
+    it('purgeMetaForProfile：删除目标档案全部前缀键，其余档案不受影响', () => {
+      setModelEnabled('provider-1', 'model-a', true);
+      setModelEnabled('provider-1', 'model-b', false);
+      setModelEnabled('provider-2', 'model-x', true);
+
+      purgeMetaForProfile('provider-1');
+
+      const stored = JSON.parse(
+        localStorage.getItem('crish_model_meta_v1') ?? '{}'
+      ) as Record<string, unknown>;
+      expect(stored['provider-1::model-a']).toBeUndefined();
+      expect(stored['provider-1::model-b']).toBeUndefined();
+      expect(stored['provider-2::model-x']).toBeDefined();
+
+      // 幂等：再次清扫零写回零异常
+      purgeMetaForProfile('provider-1');
+      expect(getModelMeta('provider-2', 'model-x').enabled).toBe(true);
+    });
+
+    it('purgeOrphanMetaKeys：清除不在白名单的档案前缀键，含畸形键', () => {
+      setModelEnabled('live-a', 'm1', true);
+      setModelEnabled('live-b', 'm2', true);
+      setModelEnabled('orphan-x', 'm3', true);
+      setModelEnabled('orphan-y', 'm4', true);
+      // 无档案前缀的畸形键（历史脏数据）
+      const map = JSON.parse(
+        localStorage.getItem('crish_model_meta_v1') ?? '{}'
+      ) as Record<string, unknown>;
+      map['bare-key'] = { profileId: 'orphan-z', model: 'm5', enabled: true };
+      localStorage.setItem('crish_model_meta_v1', JSON.stringify(map));
+      resetModelMetaCache();
+
+      purgeOrphanMetaKeys(new Set(['live-a', 'live-b']));
+
+      const stored = JSON.parse(
+        localStorage.getItem('crish_model_meta_v1') ?? '{}'
+      ) as Record<string, unknown>;
+      expect(stored['live-a::m1']).toBeDefined();
+      expect(stored['live-b::m2']).toBeDefined();
+      expect(stored['orphan-x::m3']).toBeUndefined();
+      expect(stored['orphan-y::m4']).toBeUndefined();
+      expect(stored['bare-key']).toBeUndefined();
+
+      // 幂等：无孤儿时零写回
+      purgeOrphanMetaKeys(new Set(['live-a', 'live-b']));
+      expect(getModelMeta('live-a', 'm1').enabled).toBe(true);
     });
   });
 });

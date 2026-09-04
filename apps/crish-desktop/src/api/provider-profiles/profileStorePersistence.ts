@@ -24,6 +24,7 @@ import {
   LEGACY_MIGRATION_FLAG_KEY,
 } from './migrateLegacyProfiles';
 import { recordPendingContextState } from './contextStatePending';
+import { purgeMetaForProfile, purgeOrphanMetaKeys } from '../modelCatalogMeta';
 import {
   getActiveProfileId,
   clearActiveProfileId,
@@ -138,6 +139,8 @@ export function loadProfiles(): ProviderProfile[] {
       }
     }
     sanitizeGhostActiveModel(migrated);
+    // 孤儿 meta 清扫：档案已删除的 meta 键（profileId::model 前缀）一次性收敛
+    purgeOrphanMetaKeys(new Set(migrated.map((p) => p.id)));
     return migrated;
   } catch {
     const seeded = DEFAULT_PROFILES.map((p) => ({
@@ -204,6 +207,8 @@ export function removeProfile(profileId: string): ProviderProfile[] {
     clearActiveProfileId();
     clearActiveModelId();
   }
+  // 档案删除即 GC：该档案的模型元数据键一并清扫（避免孤儿残留）
+  purgeMetaForProfile(profileId);
   return next;
 }
 

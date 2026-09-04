@@ -108,6 +108,47 @@ export function _getMemoryMetaCacheSnapshot(): MetaMap | null {
 }
 
 /**
+ * 删除某服务商档案的全部元数据键（档案删除后的孤儿清扫）。
+ * 幂等：目标键不存在则零写回零广播。
+ */
+export function purgeMetaForProfile(profileId: string): void {
+  if (!profileId) return;
+  const map = loadMap();
+  const prefix = `${profileId}::`;
+  const keys = Object.keys(map).filter((k) => k.startsWith(prefix));
+  if (keys.length === 0) return;
+  for (const k of keys) delete map[k];
+  saveMap(map);
+  emitUiEvent('model-meta-changed', {
+    profileId,
+    model: '',
+    enabled: true,
+  });
+}
+
+/**
+ * 孤儿 meta 键清扫：删除所有「档案已不存在」的 `profileId::model` 键
+ * （档案删除 / 历史迁移残留的孤立数据，真机存量达 80+ 条）。
+ * 幂等：无孤儿则零写回零广播。
+ */
+export function purgeOrphanMetaKeys(validProfileIds: ReadonlySet<string>): void {
+  const map = loadMap();
+  const doomed = Object.keys(map).filter((k) => {
+    const sep = k.indexOf('::');
+    if (sep <= 0) return true; // 无档案前缀的畸形键，一并清
+    return !validProfileIds.has(k.slice(0, sep));
+  });
+  if (doomed.length === 0) return;
+  for (const k of doomed) delete map[k];
+  saveMap(map);
+  emitUiEvent('model-meta-changed', {
+    profileId: '',
+    model: '',
+    enabled: true,
+  });
+}
+
+/**
  * 读取模型元数据（O(1) 内存直读）
  */
 export function getModelMeta(profileId: string, model: string): ModelMeta {
