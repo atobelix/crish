@@ -354,32 +354,297 @@ function App() {
         alignItems: 'center',
       }}
     >
-      {/* 结构化现代化顶部控制栏 */}
+      {/* 结构化现代化顶部控制栏（Kami 美学：极简紧凑、分区明确、微微质感） */}
       <header
         style={{
-          width: 'min(880px, 94vw)',
+          width: 'min(920px, 95vw)',
           background: 'var(--ivory)',
           border: '1px solid var(--border-medium)',
           borderRadius: 8,
-          padding: '8px 14px',
+          padding: '6px 12px',
           marginBottom: 10,
           boxShadow: '0 1px 3px hsl(60 10% 10% / 0.04)',
           display: 'flex',
-          flexWrap: 'wrap',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: 10,
+          gap: 12,
           fontFamily: 'var(--font-sans)',
           boxSizing: 'border-box',
+          minHeight: 40,
         }}
       >
-        {/* 左侧：流式核心控制群组 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--near-black)', letterSpacing: '0.3px' }}>
-            ⚡ 流式驾驶舱
-          </span>
+        {/* 左区：Kami 标识与实时文档/流式状态胶囊 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 5,
+              padding: '3px 8px',
+              borderRadius: 5,
+              background: 'var(--warm-sand)',
+              color: 'var(--brand)',
+            }}
+          >
+            <svg
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+            </svg>
+            <span style={{ fontWeight: 600, fontSize: 12, letterSpacing: '0.2px' }}>Kami</span>
+          </div>
 
-          {/* 播放控制胶囊组 */}
+          <span
+            data-testid="stream-status"
+            data-phase={phase}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'var(--tag-standard-bg)',
+              color: 'var(--brand)',
+              padding: '3px 9px',
+              borderRadius: 12,
+              fontSize: 11,
+              fontWeight: 500,
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                backgroundColor:
+                  phase === 'streaming'
+                    ? 'hsl(142 60% 40%)'
+                    : phase === 'paused'
+                    ? 'hsl(38 92% 50%)'
+                    : 'var(--brand-light)',
+              }}
+            />
+            <span>{PHASE_TEXT[phase]}</span>
+            {progress ? <span style={{ opacity: 0.8 }}>({progress})</span> : null}
+            <span style={{ opacity: 0.5, fontSize: 10 }}>·</span>
+            <span style={{ opacity: 0.85 }}>{Number(textLength).toLocaleString()} 字符</span>
+          </span>
+        </div>
+
+        {/* 中区：高质感分段流式播放控制器（Segmented Pill） */}
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            border: '1px solid var(--border-medium)',
+            borderRadius: 6,
+            overflow: 'hidden',
+            background: 'var(--warm-sand)',
+            boxShadow: '0 1px 2px hsl(60 10% 10% / 0.03)',
+            flexShrink: 0,
+          }}
+        >
+          <button
+            type="button"
+            data-testid="stream-start"
+            onClick={startStreaming}
+            title="开始流式输出"
+            style={{
+              ...primaryBtnStyle,
+              padding: '3px 10px',
+              borderRadius: 0,
+              boxShadow: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              fontSize: 11,
+            }}
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            <span>开始流式</span>
+          </button>
+          <button
+            type="button"
+            data-testid="stream-pause"
+            onClick={pauseStreaming}
+            disabled={phase !== 'streaming'}
+            title="暂停流式"
+            style={{
+              ...secondaryBtnStyle,
+              padding: '3px 8px',
+              borderRadius: 0,
+              border: 'none',
+              borderLeft: '1px solid var(--border-medium)',
+              borderRight: '1px solid var(--border-medium)',
+              opacity: phase === 'streaming' ? 1 : 0.4,
+              cursor: phase === 'streaming' ? 'pointer' : 'default',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              fontSize: 11,
+            }}
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="4" width="4" height="16" />
+              <rect x="14" y="4" width="4" height="16" />
+            </svg>
+            <span>暂停</span>
+          </button>
+          <button
+            type="button"
+            data-testid="stream-resume"
+            onClick={resumeStreaming}
+            disabled={phase !== 'paused'}
+            title="继续流式"
+            style={{
+              ...secondaryBtnStyle,
+              padding: '3px 8px',
+              borderRadius: 0,
+              border: 'none',
+              borderRight: '1px solid var(--border-medium)',
+              opacity: phase === 'paused' ? 1 : 0.4,
+              cursor: phase === 'paused' ? 'pointer' : 'default',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              fontSize: 11,
+            }}
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3" />
+            </svg>
+            <span>继续</span>
+          </button>
+          <button
+            type="button"
+            data-testid="stream-stop"
+            onClick={stopStreaming}
+            disabled={phase !== 'streaming' && phase !== 'paused'}
+            title="中断并完成"
+            style={{
+              ...secondaryBtnStyle,
+              padding: '3px 8px',
+              borderRadius: 0,
+              border: 'none',
+              borderRight: '1px solid var(--border-medium)',
+              opacity: phase === 'streaming' || phase === 'paused' ? 1 : 0.4,
+              cursor: phase === 'streaming' || phase === 'paused' ? 'pointer' : 'default',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              fontSize: 11,
+            }}
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+            </svg>
+            <span>中断</span>
+          </button>
+          <button
+            type="button"
+            data-testid="stream-discard"
+            onClick={discardStreaming}
+            disabled={phase !== 'streaming' && phase !== 'paused'}
+            title="丢弃本次流式内容"
+            style={{
+              ...dangerBtnStyle,
+              padding: '3px 8px',
+              borderRadius: 0,
+              border: 'none',
+              opacity: phase === 'streaming' || phase === 'paused' ? 1 : 0.4,
+              cursor: phase === 'streaming' || phase === 'paused' ? 'pointer' : 'default',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 3,
+              fontSize: 11,
+            }}
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+            <span>丢弃</span>
+          </button>
+        </div>
+
+        {/* 右区：速率粒度微调、预置用例与文档导出 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+          {/* 速率与粒度下拉胶囊 */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 2,
+              background: 'var(--warm-sand)',
+              border: '1px solid var(--border-medium)',
+              borderRadius: 6,
+              padding: '2px 5px',
+            }}
+          >
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--stone)"
+              strokeWidth="2"
+              style={{ marginLeft: 2 }}
+            >
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            </svg>
+            <select
+              data-testid="rate-select"
+              value={rate}
+              onChange={(e) => setRate(Number(e.target.value))}
+              style={{
+                ...selectStyle,
+                border: 'none',
+                background: 'transparent',
+                padding: '1px 2px',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+              title="模拟输出速率 (tps)"
+            >
+              {RATE_OPTIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r} tps
+                </option>
+              ))}
+            </select>
+            <span style={{ color: 'var(--border-medium)', fontSize: 10 }}>/</span>
+            <select
+              data-testid="granularity-select"
+              value={granularity}
+              onChange={(e) => setGranularity(e.target.value as Granularity)}
+              style={{
+                ...selectStyle,
+                border: 'none',
+                background: 'transparent',
+                padding: '1px 2px',
+                fontSize: 11,
+                cursor: 'pointer',
+              }}
+              title="模拟注入粒度"
+            >
+              <option value="char">字符</option>
+              <option value="word">词</option>
+              <option value="line">行</option>
+            </select>
+          </div>
+
+          <div style={{ width: 1, height: 16, background: 'var(--border-medium)' }} />
+
+          {/* 预置文档管理组 */}
           <div
             style={{
               display: 'inline-flex',
@@ -392,140 +657,19 @@ function App() {
           >
             <button
               type="button"
-              data-testid="stream-start"
-              onClick={startStreaming}
-              style={{
-                ...primaryBtnStyle,
-                borderRadius: 0,
-                boxShadow: 'none',
-              }}
-            >
-              开始流式
-            </button>
-            <button
-              type="button"
-              data-testid="stream-pause"
-              onClick={pauseStreaming}
-              disabled={phase !== 'streaming'}
-              style={{
-                ...secondaryBtnStyle,
-                borderRadius: 0,
-                borderTop: 'none',
-                borderBottom: 'none',
-                borderLeft: '1px solid var(--border-medium)',
-                borderRight: '1px solid var(--border-medium)',
-              }}
-            >
-              暂停
-            </button>
-            <button
-              type="button"
-              data-testid="stream-resume"
-              onClick={resumeStreaming}
-              disabled={phase !== 'paused'}
-              style={{
-                ...secondaryBtnStyle,
-                borderRadius: 0,
-                borderTop: 'none',
-                borderBottom: 'none',
-                borderLeft: 'none',
-                borderRight: '1px solid var(--border-medium)',
-              }}
-            >
-              继续
-            </button>
-            <button
-              type="button"
-              data-testid="stream-stop"
-              onClick={stopStreaming}
-              disabled={phase !== 'streaming' && phase !== 'paused'}
-              style={{
-                ...secondaryBtnStyle,
-                borderRadius: 0,
-                borderTop: 'none',
-                borderBottom: 'none',
-                borderLeft: 'none',
-                borderRight: '1px solid var(--border-medium)',
-              }}
-            >
-              中断
-            </button>
-            <button
-              type="button"
-              data-testid="stream-discard"
-              onClick={discardStreaming}
-              disabled={phase !== 'streaming' && phase !== 'paused'}
-              style={{
-                ...dangerBtnStyle,
-                borderRadius: 0,
-                borderTop: 'none',
-                borderBottom: 'none',
-                borderLeft: 'none',
-                borderRight: 'none',
-              }}
-            >
-              丢弃
-            </button>
-          </div>
-
-          {/* 速率与粒度 */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--stone)' }}>
-              速率
-              <select
-                data-testid="rate-select"
-                value={rate}
-                onChange={(e) => setRate(Number(e.target.value))}
-                style={selectStyle}
-              >
-                {RATE_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r} tps
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--stone)' }}>
-              粒度
-              <select
-                data-testid="granularity-select"
-                value={granularity}
-                onChange={(e) => setGranularity(e.target.value as Granularity)}
-                style={selectStyle}
-              >
-                <option value="char">字符</option>
-                <option value="word">词</option>
-                <option value="line">行</option>
-              </select>
-            </label>
-          </div>
-        </div>
-
-        {/* 右侧：文档加载、导出与状态指示 */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {/* 文档管理组 */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              border: '1px solid var(--border-medium)',
-              borderRadius: 6,
-              overflow: 'hidden',
-            }}
-          >
-            <button
-              type="button"
               data-testid="load-massive"
               onClick={loadMassiveDoc}
               style={{
                 ...secondaryBtnStyle,
+                padding: '3px 8px',
+                fontSize: 11,
                 borderRadius: 0,
                 border: 'none',
                 borderRight: '1px solid var(--border-medium)',
               }}
               title="加载万行压力测试文档（2301个标题、45万字）"
             >
-              加载万行
+              万行压测
             </button>
             <button
               type="button"
@@ -533,6 +677,8 @@ function App() {
               onClick={clearDocument}
               style={{
                 ...secondaryBtnStyle,
+                padding: '3px 8px',
+                fontSize: 11,
                 borderRadius: 0,
                 border: 'none',
               }}
@@ -542,6 +688,8 @@ function App() {
             </button>
           </div>
 
+          <div style={{ width: 1, height: 16, background: 'var(--border-medium)' }} />
+
           {/* 导出组 */}
           <div
             style={{
@@ -550,6 +698,7 @@ function App() {
               border: '1px solid var(--border-medium)',
               borderRadius: 6,
               overflow: 'hidden',
+              background: 'var(--warm-sand)',
             }}
           >
             <button
@@ -558,12 +707,15 @@ function App() {
               onClick={() => exportDocument('markdown')}
               style={{
                 ...secondaryBtnStyle,
+                padding: '3px 8px',
+                fontSize: 11,
                 borderRadius: 0,
                 border: 'none',
                 borderRight: '1px solid var(--border-medium)',
               }}
+              title="导出 Markdown 原文"
             >
-              导出 MD
+              MD
             </button>
             <button
               type="button"
@@ -571,43 +723,16 @@ function App() {
               onClick={() => exportDocument('html')}
               style={{
                 ...secondaryBtnStyle,
+                padding: '3px 8px',
+                fontSize: 11,
                 borderRadius: 0,
                 border: 'none',
               }}
+              title="导出 HTML 格式"
             >
-              导出 HTML
+              HTML
             </button>
           </div>
-
-          {/* 状态药丸 */}
-          <span
-            data-testid="stream-status"
-            data-phase={phase}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'var(--tag-standard-bg)',
-              color: 'var(--brand)',
-              padding: '4px 10px',
-              borderRadius: 6,
-              fontSize: 11,
-              fontWeight: 500,
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                backgroundColor: phase === 'streaming' ? 'hsl(142 60% 40%)' : 'var(--brand-light)',
-              }}
-            />
-            {PHASE_TEXT[phase]}
-            {progress ? ` · ${progress}` : ''}
-            {' · ' + Number(textLength).toLocaleString() + ' 字符'}
-          </span>
         </div>
       </header>
 
