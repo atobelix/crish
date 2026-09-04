@@ -31,7 +31,7 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
             class="lucide lucide-circle-x"
             fill="none"
             height="14"
-            stroke="var(--accent-red)"
+            stroke="var(--accent-red, #c45c5c)"
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="1.6"
@@ -125,6 +125,8 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                 <button
                   aria-describedby="_r_8_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -223,6 +225,8 @@ exports[`ChatToolCallBlock snapshots > renders error tool 1`] = `
                 <button
                   aria-describedby="_r_9_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -344,8 +348,7 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
             class="_toolRowLive_d18ff4"
           >
             <span
-              class="loading-spinner"
-              style="width: 10px; height: 10px; border-width: 1.5px;"
+              class="_toolLivePulseDot_d18ff4"
             />
           </span>
         </span>
@@ -422,6 +425,8 @@ exports[`ChatToolCallBlock snapshots > renders running tool 1`] = `
                 <button
                   aria-describedby="_r_b_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -585,10 +590,10 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
         >
           <svg
             aria-hidden="true"
-            class="lucide lucide-circle-check"
+            class="lucide lucide-file-search"
             fill="none"
             height="14"
-            stroke="var(--accent-green)"
+            stroke="var(--text-tertiary, #8c877d)"
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="1.6"
@@ -596,13 +601,19 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
             width="14"
             xmlns="http://www.w3.org/2000/svg"
           >
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
+            <path
+              d="M14 2v4a2 2 0 0 0 2 2h4"
             />
             <path
-              d="m9 12 2 2 4-4"
+              d="M4.268 21a2 2 0 0 0 1.727 1H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"
+            />
+            <path
+              d="m9 18-1.5-1.5"
+            />
+            <circle
+              cx="5"
+              cy="14"
+              r="3"
             />
           </svg>
         </span>
@@ -631,6 +642,8 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
                   aria-describedby="_r_2_"
                   aria-label="在文件面板打开"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolPathAction_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -670,6 +683,8 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
                   aria-describedby="_r_3_"
                   aria-label="复制路径"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolPathAction_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -770,6 +785,8 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
                 <button
                   aria-describedby="_r_4_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -804,6 +821,8 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
                 <button
                   aria-describedby="_r_5_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -905,6 +924,8 @@ exports[`ChatToolCallBlock snapshots > renders successful tool 1`] = `
                 <button
                   aria-describedby="_r_6_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -990,10 +1011,10 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
         >
           <svg
             aria-hidden="true"
-            class="lucide lucide-circle-check"
+            class="lucide lucide-file-pen"
             fill="none"
             height="14"
-            stroke="var(--accent-green)"
+            stroke="var(--text-tertiary, #8c877d)"
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="1.6"
@@ -1001,13 +1022,14 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
             width="14"
             xmlns="http://www.w3.org/2000/svg"
           >
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
+            <path
+              d="M12.5 22H18a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v9.5"
             />
             <path
-              d="m9 12 2 2 4-4"
+              d="M14 2v4a2 2 0 0 0 2 2h4"
+            />
+            <path
+              d="M13.378 15.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z"
             />
           </svg>
         </span>
@@ -1036,6 +1058,8 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                   aria-describedby="_r_e_"
                   aria-label="在文件面板打开"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolPathAction_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -1075,6 +1099,8 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                   aria-describedby="_r_f_"
                   aria-label="复制路径"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolPathAction_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -1175,6 +1201,8 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                 <button
                   aria-describedby="_r_g_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -1209,6 +1237,8 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                 <button
                   aria-describedby="_r_h_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
@@ -1310,6 +1340,8 @@ exports[`ChatToolCallBlock snapshots > renders tool with duration 1`] = `
                 <button
                   aria-describedby="_r_i_"
                   class="_button_ae1db5 _buttonGhost_ae1db5 _buttonSm_ae1db5 _toolSectionActionBtn_d18ff4"
+                  data-size="sm"
+                  data-variant="ghost"
                   type="button"
                 >
                   <span
