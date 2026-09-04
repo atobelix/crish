@@ -157,19 +157,18 @@ describe('Tauri command registry', () => {
       .sort();
 
     expect([...registered]).toEqual(wired);
-    // Batch 2 校准：全量 registered 命令面（125 条 command_registry! 注册；
-    // R7 收口 125 → 124；note_document_recent 124 → 125）
-    expect(registered.size).toBe(125);
+    // 用量监控面五命令追加（126 → 131）
+    expect(registered.size).toBe(131);
   });
 
-  it('keeps the surface: 125 registered commands plus 0 registered-first entries', () => {
+  it('keeps the surface: 131 registered commands plus 0 registered-first entries', () => {
     const wired = REGISTERED_TAURI_COMMANDS.filter(shouldHaveTauriRegistration);
     const pending = REGISTERED_TAURI_COMMANDS.filter(
       (entry) => !shouldHaveTauriRegistration(entry)
     );
 
-    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(125);
-    expect(wired).toHaveLength(125);
+    expect(REGISTERED_TAURI_COMMANDS).toHaveLength(131);
+    expect(wired).toHaveLength(131);
     expect(pending).toHaveLength(0);
     expect(pending.map((entry) => entry.command).sort()).toEqual([]);
   });
@@ -252,8 +251,8 @@ describe('Tauri command registry', () => {
       isProductCapabilityCommand
     );
 
-    // Batch 2 校准：全量 125 条 registered 命令（note_document_recent 124 → 125）
-    expect(productCommands).toHaveLength(125);
+    // 校准：全量 131 条 registered 命令（含 models_yaml 三命令与 usage 五命令）
+    expect(productCommands).toHaveLength(131);
     expect(
       productCommands.every(
         (entry) => commandCapabilityStatus(entry) !== UNSUPPORTED_CODE

@@ -77,6 +77,21 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     feature: 'file association discovery',
   },
   {
+    command: 'workbench_read_models_yaml',
+    status: 'implemented',
+    feature: 'models.yaml read (seed if missing)',
+  },
+  {
+    command: 'workbench_validate_models_yaml',
+    status: 'implemented',
+    feature: 'models.yaml serde validation',
+  },
+  {
+    command: 'workbench_save_models_yaml',
+    status: 'implemented',
+    feature: 'models.yaml atomic save',
+  },
+  {
     command: 'workbench_select_folder',
     status: 'implemented',
     feature: 'workspace folder picker',
@@ -421,6 +436,12 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
   { command: 'trash_list', status: 'implemented', feature: 'trash list' },
   { command: 'trash_purge', status: 'implemented', feature: 'trash purge' },
   { command: 'trash_restore', status: 'implemented', feature: 'trash restore' },
+  // ── 用量监控域（usage_commands 模块，wire 名蛇形）──
+  { command: 'usage_get_dashboard_data', status: 'implemented', feature: 'usage dashboard data' },
+  { command: 'usage_get_activity_matrix', status: 'implemented', feature: 'usage activity matrix' },
+  { command: 'usage_clear_history', status: 'implemented', feature: 'usage history clear' },
+  { command: 'usage_record_delta', status: 'implemented', feature: 'usage delta record' },
+  { command: 'usage_import_legacy_snapshot', status: 'implemented', feature: 'usage legacy snapshot import' },
   // ── workflow 域六条（F9 T-CF-14，wire 名 kebab-case）──
   {
     command: 'create-workflow',
@@ -532,11 +553,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'browser_list_history',
     status: 'implemented',
     feature: 'browser history list',
-  },
-  {
-    command: 'computer_estop',
-    status: 'implemented',
-    feature: 'computer emergency stop',
   },
   {
     command: 'computer_session_disable',
