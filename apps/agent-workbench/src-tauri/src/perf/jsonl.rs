@@ -1,10 +1,6 @@
 //! 性能工具 - JSONL：行读取 / 追加 / 全量写入。
 //!
 //! 变更记录：
-//! - `core_jsonl_append` 已迁移到 `core_commands.rs`（复用本模块 `append_jsonl_lines`）；
-//! - G11a：`perf_jsonl_read` / `perf_jsonl_append` / `perf_jsonl_write` 命令
-//!   与 `resolve_path` / `read_jsonl_lines` 整段删除（PE-03 定删除注册；前端
-//!   TelemetryMonitor 旧名调用迁移至 core_jsonl_append 由前端域承接）；
 //! - `read_jsonl` / `write_jsonl` 保留为测试直接覆盖的核心实现（本文件测试
 //!   逐条断言），等待 core_* 命令面迁移时复用。
 

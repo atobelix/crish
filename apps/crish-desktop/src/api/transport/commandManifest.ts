@@ -45,7 +45,7 @@ function entry(
 }
 
 /**
- * 内置快照：镜像 Rust `COMMAND_MANIFEST`（127 = 注册面 127 全实装；与
+ * 内置快照：镜像 Rust `COMMAND_MANIFEST`（126 = 注册面 126 全实装；与
  * command_manifest.rs 行注释及 manifest_count_matches_registered_surface 测试对齐）。
  * 维护规则与 Rust 侧一致：registered 子集 = `make_handlers!` 注册面；新命令经
  * §7.2 登记表登记后追加在表尾（registered 随接线状态翻转）；双端漂移由
@@ -157,7 +157,7 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
     entry('core_md_render', 'core', 'engine'),
     entry('core_md_render_batch', 'core', 'engine'),
-    // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
+    // ── 工具 Worker 组（E，§2.2）──
     entry('core_hash_compute', 'core', 'engine'),
     entry('core_base64_encode', 'core', 'engine'),
     entry('core_base64_decode', 'core', 'engine'),
@@ -166,7 +166,6 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('core_parse_diff', 'core', 'engine'),
     entry('core_messages_to_jsonl', 'core', 'engine'),
     entry('core_jsonl_to_messages', 'core', 'engine'),
-    entry('core_jsonl_append', 'core', 'engine'),
     // ── 注册表单一化自身（T03.1）──
     entry('core_list_commands', 'core', 'engine'),
     // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh；C7 三处登记 ③）──

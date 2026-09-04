@@ -35,7 +35,7 @@ describe('commandManifest', () => {
       ).length;
       const pending = BUILTIN_COMMAND_MANIFEST.commands.length - registered;
       expect(pending).toBe(0);
-      // 与 Rust COMMAND_MANIFEST（127 = 注册面 127 全实装）保持同步；
+      // 与 Rust COMMAND_MANIFEST（126 = 注册面 126 全实装）保持同步；
       // 变更 Rust 侧时同步本快照，双向条数由两端测试锁定
       // PE-07：T07.3（git_run/fs_delete_file）+ T07.4（profile_apply/secret_reveal）已接线
       // P3 步骤 5（C7 ③）：catalog_get / catalog_refresh 已接线
@@ -73,9 +73,9 @@ describe('commandManifest', () => {
       // 后端优化维度 1：computer_estop 退役（停止合并到输入框停止按钮）
       //   （124 → 123）
       // note_document_recent：最近一篇 persist 非空查询（123 → 124）
-      // 模型字典真源三命令：read/validate/save models.yaml（124 → 127）
-      expect(registered).toBe(127);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(127);
+      // 模型字典真源三命令追加（124 → 127），core_jsonl_append 退役（127 → 126）
+      expect(registered).toBe(126);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(126);
     });
 
     it('命令名唯一', () => {
@@ -284,8 +284,8 @@ describe('commandManifest', () => {
     it('断言二式：双端总数一致（总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(127);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(127);
+      expect(total).toBe(126);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(126);
     });
 
     it('断言三式：登记先行（registered=false）名集合双向一致', () => {

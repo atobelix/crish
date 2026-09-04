@@ -465,7 +465,7 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     status: 'implemented',
     feature: 'markdown batch render',
   },
-  // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
+  // ── 工具 Worker 组（E，§2.2）──
   {
     command: 'core_hash_compute',
     status: 'implemented',
@@ -505,11 +505,6 @@ export const REGISTERED_TAURI_COMMANDS: readonly RegisteredTauriCommand[] = [
     command: 'core_jsonl_to_messages',
     status: 'implemented',
     feature: 'JSONL messages import',
-  },
-  {
-    command: 'core_jsonl_append',
-    status: 'implemented',
-    feature: 'JSONL append',
   },
   // ── 注册表单一化自身（T03.1；经 command_manifest 注册）──
   {

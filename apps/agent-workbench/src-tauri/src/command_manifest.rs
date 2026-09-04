@@ -69,7 +69,7 @@ const fn entry(
 ///（统一输入流收敛战役）后总数 125（注册面 120 → 121）；R7 收口 GUI fs 删除命令
 /// 幽灵退役（R6-D5 后零消费）后总数 124（注册面 121 → 120）；
 /// computer_estop 退役后 123；`note_document_recent` 追加后 124；
-/// 模型字典真源三命令（read/validate/save models.yaml）追加后 127。
+/// 模型字典真源三命令追加后 127；core_jsonl_append 退役（零消费）后 126。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -180,7 +180,7 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // ── Markdown（D，T03.4 更名 core_md_*，并入 core 族）──
         entry("core_md_render", "core", "engine", true),
         entry("core_md_render_batch", "core", "engine", true),
-        // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
+        // ── 工具 Worker 组（E，§2.2）──
         entry("core_hash_compute", "core", "engine", true),
         entry("core_base64_encode", "core", "engine", true),
         entry("core_base64_decode", "core", "engine", true),
@@ -189,7 +189,6 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("core_parse_diff", "core", "engine", true),
         entry("core_messages_to_jsonl", "core", "engine", true),
         entry("core_jsonl_to_messages", "core", "engine", true),
-        entry("core_jsonl_append", "core", "engine", true),
         // ── 注册表单一化自身（T03.1）──
         entry("core_list_commands", "core", "engine", true),
         // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh；C7 三处登记 ①）──
@@ -290,7 +289,7 @@ mod tests {
     /// core_session_retract 登记（统一输入流收敛战役）后总数 124 → 125（注册面 120 → 121）；
     /// R7 收口 GUI fs 删除命令幽灵退役（R6-D5 后零消费）后总数 125 → 124（注册面 121 → 120）；
     /// computer_estop 退役后 123；note_document_recent 追加后 124；
-    /// 模型字典真源三命令（read/validate/save models.yaml）追加后 127。
+    /// 模型字典真源三命令追加后 127；core_jsonl_append 退役（零消费）后 126。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -301,12 +300,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 127,
-            "总数 127（124 + 模型字典真源三命令；与前端同步）"
+            total, 126,
+            "总数 126（127 - core_jsonl_append 退役；与前端同步）"
         );
         assert_eq!(
-            registered, 127,
-            "注册面 127（全部为 registered=true 实装命令）"
+            registered, 126,
+            "注册面 126（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -428,7 +427,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 127);
+        assert_eq!(manifest.commands.len(), 126);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

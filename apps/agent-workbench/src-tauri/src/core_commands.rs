@@ -7,8 +7,7 @@
 //! - Worker 组下沉（Stream E）：`core_hash_compute` / `core_base64_*` /
 //!   `core_detect_encoding` / `core_decode_text` / `core_parse_diff` /
 //!   `core_messages_to_jsonl` / `core_jsonl_to_messages` / `core_text_encode`——
-//!   复用 `perf` 模块实现，CPU 密集走 `spawn_blocking`；`core_jsonl_append` 自 perf
-//!   迁移（fsync 语义保留，走 spawn_blocking，路径经 WorkspaceFsGuard 守卫）；
+//!   复用 `perf` 模块实现，CPU 密集走 `spawn_blocking`；
 //! - 共享 State：`SharedSearchState`（搜索索引 Arc 交换）、`SharedGatekeeper`
 //!   （命令闸门编译一次复用）、`SharedCompactionState`（PE-01 T01.2 压缩能力接线标记，
 //!   供 `core_get_status.compactionReady` 读取，未接线如实 false）；
@@ -506,36 +505,6 @@ pub async fn core_jsonl_to_messages(text: String) -> Result<Vec<serde_json::Valu
     result
 }
 
-/// JSONL 追加（自 perf 迁移；fsync 语义保留，走 spawn_blocking + WorkspaceFsGuard 守卫）。
-///
-/// - `path`：目标 JSONL 文件（相对路径相对 workspace_root 解析）；
-/// - `lines`：追加的行（原始文本，不二次序列化）；
-/// - `flush`：追加后是否 fsync（telemetry 落盘可靠性，S-9 保留）。
-#[tauri::command]
-pub async fn core_jsonl_append(
-    path: String,
-    lines: Vec<String>,
-    flush: Option<bool>,
-    workspace_root: Option<String>,
-) -> Result<(), CoreError> {
-    if path.trim().is_empty() {
-        return Err(CoreError::InvalidInput(
-            "path must not be empty".to_string(),
-        ));
-    }
-    if lines.is_empty() {
-        return Ok(());
-    }
-    let flush = flush.unwrap_or(false);
-    let result = tokio::task::spawn_blocking(move || -> Result<(), String> {
-        let resolved = resolve_guarded_path(&path, workspace_root.as_deref())?;
-        crate::perf::jsonl::append_jsonl_lines(&resolved, &lines, flush)
-    })
-    .await
-    .map_err(|e| CoreError::Internal(format!("core_jsonl_append join: {e}")))?;
-    result.map_err(map_jsonl_err)
-}
-
 /// 路径解析（WorkspaceFsGuard 守卫：根只能来自显式 root 或默认应用根，PE-07 T07.2）。
 fn resolve_guarded_path(
     path: &str,
@@ -825,22 +794,6 @@ mod tests {
             let state = app.state::<SharedGatekeeper>();
             let result = core_check_command("  ".to_string(), Vec::new(), state).await;
             assert!(matches!(result, Err(CoreError::InvalidInput(_))));
-        });
-    }
-
-    #[test]
-    fn jsonl_append_rejects_empty_path_and_empty_lines() {
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-        runtime.block_on(async {
-            let result =
-                core_jsonl_append("  ".to_string(), vec!["x".to_string()], None, None).await;
-            assert!(matches!(result, Err(CoreError::InvalidInput(_))));
-
-            let result = core_jsonl_append("a.jsonl".to_string(), Vec::new(), None, None).await;
-            assert!(result.is_ok(), "空行列表 = 成功 no-op");
         });
     }
 

@@ -355,7 +355,7 @@ command_registry![
     //    markdown_commands.rs，经 `#[tauri::command(rename = ...)]` 对齐 wire 名）──
     ("core_md_render", markdown_commands::md_render),
     ("core_md_render_batch", markdown_commands::md_render_batch),
-    // ── 工具 Worker 组（E，§2.2；core_jsonl_append 自 perf 迁移）──
+    // ── 工具 Worker 组（E，§2.2）──
     ("core_hash_compute", core_commands::core_hash_compute),
     ("core_base64_encode", core_commands::core_base64_encode),
     ("core_base64_decode", core_commands::core_base64_decode),
@@ -370,7 +370,6 @@ command_registry![
         "core_jsonl_to_messages",
         core_commands::core_jsonl_to_messages
     ),
-    ("core_jsonl_append", core_commands::core_jsonl_append),
     // ── 模型目录（P3 步骤 5：catalog_get / catalog_refresh）──
     ("catalog_get", catalog_commands::catalog_get),
     ("catalog_refresh", catalog_commands::catalog_refresh),
