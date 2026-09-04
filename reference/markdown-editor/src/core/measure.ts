@@ -647,6 +647,19 @@ export function getCoordinatesFromIndex(
   return null;
 }
 
+/** 清除容器内所有 Token 及位置缓存（装饰/语法展开/折叠状态切换时调用） */
+export function clearContainerMeasurementCache(container: HTMLElement | null): void {
+  if (!container) return;
+  const idx = indexMap.get(container);
+  if (!idx) return;
+  idx.posCache.clear();
+  for (let i = 0; i < idx.tokens.length; i++) {
+    const t = idx.tokens[i];
+    t.measCache = null;
+    t.textTable = null;
+  }
+}
+
 // 视口坐标 → 容器内容坐标（CursorLayer / HiddenInput 共享换算，消除重复代码）
 export function toContainerCoords(
   rect: MeasuredRect,

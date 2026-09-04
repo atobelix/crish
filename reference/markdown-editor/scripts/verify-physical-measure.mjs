@@ -187,6 +187,19 @@ async function runDefenseSuite() {
 
           // 探针 A：字符前半部（25% 处）点击 -> 光标应紧密贴合字符左边缘
           const clickX_left = charRect.left + charRect.width * 0.25;
+          matchedRow.dispatchEvent(new MouseEvent('mousedown', {
+            bubbles: true,
+            cancelable: true,
+            clientX: clickX_left,
+            clientY: clickY,
+          }));
+          await waitForFrame(20);
+          matchedRow.dispatchEvent(new MouseEvent('mouseup', {
+            bubbles: true,
+            cancelable: true,
+            clientX: clickX_left,
+            clientY: clickY,
+          }));
           matchedRow.dispatchEvent(new MouseEvent('click', {
             bubbles: true,
             cancelable: true,
@@ -195,14 +208,15 @@ async function runDefenseSuite() {
           }));
           await waitForFrame(80);
 
+          const activeCharRectA = getCharPhysicalRect(foundTn, charOffset);
           let cursor = document.querySelector('.cursor-caret');
           if (cursor) {
             const curRect = cursor.getBoundingClientRect();
-            const delta = Math.abs(curRect.left - charRect.left);
+            const delta = Math.abs(curRect.left - activeCharRectA.left);
             if (delta > scenarioMaxDelta) scenarioMaxDelta = delta;
             probesCount++;
             if (delta > maxTolerance) {
-              failureReason = `字符 "${targetChar}" 前半部点击误差 ${delta.toFixed(2)}px 超过门槛 ${maxTolerance}px (charLeft=${charRect.left.toFixed(2)}, caretLeft=${curRect.left.toFixed(2)})`;
+              failureReason = `字符 "${targetChar}" 前半部点击误差 ${delta.toFixed(2)}px 超过门槛 ${maxTolerance}px (charLeft=${activeCharRectA.left.toFixed(2)}, caretLeft=${curRect.left.toFixed(2)})`;
               break;
             }
           }
@@ -211,7 +225,19 @@ async function runDefenseSuite() {
           const charRectB = getCharPhysicalRect(foundTn, charOffset);
           const clickX_right = charRectB.left + charRectB.width * 0.75;
           const clickY_B = charRectB.top + charRectB.height / 2;
-          const posBeforeB = window.__editorStore ? window.__editorStore.getState().cursorPos : -1;
+          matchedRow.dispatchEvent(new MouseEvent('mousedown', {
+            bubbles: true,
+            cancelable: true,
+            clientX: clickX_right,
+            clientY: clickY_B,
+          }));
+          await waitForFrame(20);
+          matchedRow.dispatchEvent(new MouseEvent('mouseup', {
+            bubbles: true,
+            cancelable: true,
+            clientX: clickX_right,
+            clientY: clickY_B,
+          }));
           matchedRow.dispatchEvent(new MouseEvent('click', {
             bubbles: true,
             cancelable: true,
@@ -220,15 +246,15 @@ async function runDefenseSuite() {
           }));
           await waitForFrame(80);
 
+          const activeCharRectB = getCharPhysicalRect(foundTn, charOffset);
           cursor = document.querySelector('.cursor-caret');
-          const posAfterB = window.__editorStore ? window.__editorStore.getState().cursorPos : -1;
           if (cursor) {
             const curRect = cursor.getBoundingClientRect();
-            const delta = Math.abs(curRect.left - charRectB.right);
+            const delta = Math.abs(curRect.left - activeCharRectB.right);
             if (delta > scenarioMaxDelta) scenarioMaxDelta = delta;
             probesCount++;
             if (delta > maxTolerance) {
-              failureReason = `字符 "${targetChar}" 后半部点击误差 ${delta.toFixed(2)}px 超过门槛 ${maxTolerance}px (charRight=${charRectB.right.toFixed(2)}, caretLeft=${curRect.left.toFixed(2)})`;
+              failureReason = `字符 "${targetChar}" 后半部点击误差 ${delta.toFixed(2)}px 超过门槛 ${maxTolerance}px (charRight=${activeCharRectB.right.toFixed(2)}, caretLeft=${curRect.left.toFixed(2)})`;
               break;
             }
           }
@@ -482,6 +508,103 @@ async function runDefenseSuite() {
             details: anchorCorrect
               ? `光标严格锚定于点击之可见字符 (pos=${cursorPos} >= textStart=${lineStart + prefixLen})，零被折叠前缀抢占`
               : `光标被折叠前缀抢占: pos=${cursorPos} < textStart=${lineStart + prefixLen}`,
+          });
+        }
+      }
+
+      // ============================================================
+      // 场景 7：内联 HTML 标签折叠展开精准光标锚定测试 (HTML-SPAN-EXPANSION-ANCHOR)
+      // ============================================================
+      // 先将光标移到第 0 行，确保目标行处于未激活、折叠语法隐藏状态
+      if (window.__editorStore) {
+        window.__editorStore.getState().setCursorPos(0);
+      }
+      await waitForFrame(80);
+
+      // 滚动并查找包含 "这是蓝色文字吗" 的行
+      if (window.__editorStore) {
+        const st = window.__editorStore.getState();
+        let spanLineIdx = -1;
+        for (let i = 0; i < Math.min(300, st.getLineCount()); i++) {
+          const l = st.getLine(i);
+          if (l && l.includes('这是蓝色文字吗')) {
+            spanLineIdx = i;
+            break;
+          }
+        }
+        if (spanLineIdx !== -1) {
+          const rowEl = document.querySelector(`[data-index="${spanLineIdx}"]`);
+          if (rowEl) {
+            rowEl.scrollIntoView({ block: 'center' });
+          } else {
+            container.scrollTop = 3800;
+          }
+        }
+      }
+      await waitForFrame(120);
+
+      const htmlRow = Array.from(document.querySelectorAll('.virtual-row')).find(r => {
+        return r.textContent && r.textContent.includes('这是蓝色文字吗');
+      });
+
+      if (htmlRow) {
+        // 查找未激活状态下的目标 span
+        const targetSpan = Array.from(htmlRow.querySelectorAll('span[data-token-start]')).find(s => {
+          return s.textContent && s.textContent.includes('这是蓝色文字吗');
+        });
+        const textNode = targetSpan ? (targetSpan.firstChild?.nodeType === 3 ? targetSpan.firstChild : targetSpan.querySelector('span[data-token-start]')?.firstChild) : null;
+        if (textNode && textNode.nodeType === 3) {
+          // 测量字符 "字" (5) 与 "吗" (6) 的边界
+          const rangeZi = document.createRange();
+          rangeZi.setStart(textNode, 5);
+          rangeZi.setEnd(textNode, 6);
+          const rectZi = rangeZi.getBoundingClientRect();
+
+          const clickX = rectZi.right;
+          const clickY = (rectZi.top + rectZi.bottom) / 2;
+
+          // 在未展开状态下点击 "字" 与 "吗" 之间
+          htmlRow.dispatchEvent(new MouseEvent('mousedown', { clientX: clickX, clientY: clickY, bubbles: true }));
+          await waitForFrame(30);
+          htmlRow.dispatchEvent(new MouseEvent('mouseup', { clientX: clickX, clientY: clickY, bubbles: true }));
+          htmlRow.dispatchEvent(new MouseEvent('click', { clientX: clickX, clientY: clickY, bubbles: true }));
+          await waitForFrame(100);
+
+          // 此时语法标签展开，重新测量展开后 "字" 与 "吗" 的物理位置
+          const expandedSpan = Array.from(htmlRow.querySelectorAll('span[data-token-start]')).find(s => {
+            return s.textContent && s.textContent.includes('这是蓝色文字吗');
+          });
+          const expTextNode = expandedSpan ? (expandedSpan.firstChild?.nodeType === 3 ? expandedSpan.firstChild : expandedSpan.querySelector('span[data-token-start]')?.firstChild) : null;
+
+          let delta = 999;
+          let details = '未找到展开后文本节点';
+          let passed = false;
+
+          if (expTextNode && expTextNode.nodeType === 3) {
+            const expRangeZi = document.createRange();
+            expRangeZi.setStart(expTextNode, 5);
+            expRangeZi.setEnd(expTextNode, 6);
+            const expRectZi = expRangeZi.getBoundingClientRect();
+
+            const cursor = document.querySelector('.cursor-caret');
+            if (cursor) {
+              const curRect = cursor.getBoundingClientRect();
+              delta = Math.abs(curRect.left - expRectZi.right);
+              passed = delta <= maxTolerance;
+              details = passed
+                ? `光标在标签展开后严格贴合于 "字" 与 "吗" 之间，物理误差 ${delta.toFixed(3)}px <= ${maxTolerance}px`
+                : `光标在标签展开后错位，物理误差 ${delta.toFixed(3)}px > ${maxTolerance}px (caretLeft=${curRect.left.toFixed(2)}, ziRight=${expRectZi.right.toFixed(2)})`;
+            } else {
+              details = '展开后未找到光标 caret 元素';
+            }
+          }
+
+          suiteResults.push({
+            id: 'HTML-SPAN-EXPANSION-ANCHOR',
+            name: '内联 HTML 标签展开光标锚定与亚像素对齐防御',
+            passed,
+            maxDeltaX: delta < 900 ? delta : undefined,
+            details,
           });
         }
       }

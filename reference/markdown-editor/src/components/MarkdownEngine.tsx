@@ -26,6 +26,7 @@ import {
   DecorationSet,
   applyCursorSelectionDecorations,
 } from '../core/DecorationSet';
+import { clearContainerMeasurementCache } from '../core/measure';
 
 import { type CodeState } from '../core/parser';
 // P3 B1 scroll factor：逻辑↔物理滚动高度分段映射（超长文档防浏览器高度触顶）
@@ -814,6 +815,7 @@ export const MarkdownEngine = React.forwardRef<
     );
     decorations.remove('search');
     for (const r of searchRanges) decorations.add(r.from, r.to, 'search');
+    clearContainerMeasurementCache(parentRef.current);
     setDecorationVersion((v) => v + 1);
   }, [decorations, cursorPos, selectionStart, selectionEnd, searchRanges]);
 
@@ -2192,9 +2194,9 @@ export const MarkdownEngine = React.forwardRef<
     let exactIndex: number;
     if (
       preClick &&
-      Math.abs(e.clientX - preClick.x) <= 4 &&
-      Math.abs(e.clientY - preClick.y) <= 4 &&
-      Date.now() - preClick.time < 800
+      Math.abs(e.clientX - preClick.x) <= 8 &&
+      Math.abs(e.clientY - preClick.y) <= 8 &&
+      Date.now() - preClick.time < 1200
     ) {
       exactIndex = preClick.index;
       (window as any).__CRISH_PRE_CLICK_INDEX = null;
@@ -2382,8 +2384,13 @@ export const MarkdownEngine = React.forwardRef<
                 return `${first}-${last}-${lineCount}-${totalH}`;
               })()}
               store={engineStore}
+              decorationVersion={decorationVersion}
             />
-            <HiddenInput containerRef={parentRef} store={engineStore} />
+            <HiddenInput
+              containerRef={parentRef}
+              store={engineStore}
+              decorationVersion={decorationVersion}
+            />
             {/* R5-D：选区高亮消费统一装饰集（selection 装饰 + 版本号），
                 不再直读 store 选区字段 */}
             <SelectionHighlight

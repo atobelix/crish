@@ -42,6 +42,8 @@ interface HiddenInputProps {
    * （光标/选区/文本/组合/拖选）经 editorStore 闭包路由，实例隔离。
    */
   store?: EditorStore;
+  /** 装饰版本号：语法展开/折叠切换时驱动 IME 输入框重新实测物理定位 */
+  decorationVersion?: number;
 }
 
 // ============================================================
@@ -675,6 +677,7 @@ export async function applyDroppedContent(
 export const HiddenInput: React.FC<HiddenInputProps> = ({
   containerRef,
   store,
+  decorationVersion,
 }) => {
   // R5：绑定实例 store（缺省回退全局单例）；组件内所有 store 读写
   // （订阅 / getState / setState）统一经本变量，多实例输入互不串台
@@ -833,6 +836,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     mainLines,
     streamTail,
     lineCount,
+    decorationVersion,
   ]);
 
   // —— a11y 光标行 value 同步 + aria-live 播报（R4-H，04 §6.3 短程）——

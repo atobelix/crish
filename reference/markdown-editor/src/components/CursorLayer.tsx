@@ -12,12 +12,15 @@ interface CursorLayerProps {
    * 坐标读的是全局单例的光标位，与实例内容错位。
    */
   store?: EditorStore;
+  /** 行级/全局装饰版本：语法展开/折叠/高亮切换时驱动光标重新实测物理贴合 */
+  decorationVersion?: number;
 }
 
 export const CursorLayer: React.FC<CursorLayerProps> = ({
   containerRef,
   layoutDeps,
   store,
+  decorationVersion,
 }) => {
   // R5：绑定实例 store（缺省回退全局单例）；zustand 的 useStore 在
   // store 引用变化时自动切换订阅（useSyncExternalStore 重订阅语义）
@@ -72,7 +75,7 @@ export const CursorLayer: React.FC<CursorLayerProps> = ({
     return () => {
       if (rAF) cancelAnimationFrame(rAF);
     };
-  }, [cursorPos, selectionStart, selectionEnd, containerRef, layoutDeps]);
+  }, [cursorPos, selectionStart, selectionEnd, containerRef, layoutDeps, decorationVersion]);
 
   // Do not show the cursor if there is a text selection, or IME composing, or if in cell selection mode (not editing)
   const isCellSelectionMode = Boolean(selectedCell && !selectedCell.isEditing);
