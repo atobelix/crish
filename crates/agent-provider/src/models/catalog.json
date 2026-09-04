@@ -579,21 +579,14 @@
       "supportsResponses": true,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": {
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "max": "max"
-      },
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
       "notes": "版本 DeepSeek-V4-Flash-0731（public beta，2026-07-31 发布）；命中价差 50 倍（2%）；最低缓存与 TTL 官方未公布（省略，TTL 路由按 vendor 默认）；前缀单元制自动磁盘缓存",
       "thinkingTiers": {
-        "low": "low",
-        "medium": "medium",
-        "high": "high"
+        "max": "max",
+        "high": "high",
+        "low": "low"
       },
       "thinkingFormat": "reasoning_effort"
     },
@@ -631,21 +624,14 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": {
-        "minimal": null,
-        "low": null,
-        "medium": null,
-        "high": "high",
-        "max": "max"
-      },
       "sourceUrl": "https://api-docs.deepseek.com/quick_start/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
       "notes": "命中价差 120 倍（≈0.83%）；supportsResponses 官方计划 2026 年 8 月初加入（抓取日未上线），8 月中旬刷新翻转；最低缓存与 TTL 未公布；reasoning_options 为 toggle + effort（high/max）（01-deepseek §4，models.dev 交叉确认）",
       "thinkingTiers": {
-        "low": "low",
-        "medium": "medium",
-        "high": "high"
+        "max": "max",
+        "high": "high",
+        "low": "low"
       },
       "thinkingFormat": "reasoning_effort"
     },
@@ -676,12 +662,6 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": [
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
@@ -723,12 +703,6 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": [
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
@@ -770,12 +744,6 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": [
-        "minimal",
-        "low",
-        "medium",
-        "high"
-      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
@@ -827,11 +795,6 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": [
-        "low",
-        "medium",
-        "high"
-      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
@@ -883,11 +846,6 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": [
-        "low",
-        "medium",
-        "high"
-      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
@@ -939,10 +897,6 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": [
-        "low",
-        "high"
-      ],
       "supportsVision": true,
       "supportsAudioInput": true,
       "sourceUrl": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
@@ -1522,14 +1476,6 @@
       "supportsResponses": false,
       "supportsReasoning": true,
       "supportsReasoningEffort": false,
-      "reasoningEffortTiers": {
-        "off": null,
-        "minimal": null,
-        "low": "high",
-        "medium": "high",
-        "high": "high",
-        "max": "max"
-      },
       "sourceUrl": "https://docs.z.ai/guides/overview/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
@@ -2691,11 +2637,6 @@
       "supportsResponses": true,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": [
-        "low",
-        "medium",
-        "high"
-      ],
       "tieredPricing": [
         {
           "minTokens": 200000,
@@ -2708,7 +2649,12 @@
       "sourceUrl": "https://docs.x.ai/developers/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "≥200K 整请求全量 2x 计费（含缓存命中部分）；写免费为推断（官方定价结构无写价列）；输出上限官方未公布（models.dev 500K 仅参考）；最低缓存/TTL 未公布；无 Batch 折扣"
+      "notes": "≥200K 整请求全量 2x 计费（含缓存命中部分）；写免费为推断（官方定价结构无写价列）；输出上限官方未公布（models.dev 500K 仅参考）；最低缓存/TTL 未公布；无 Batch 折扣",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      }
     },
     "grok::grok-4.3": {
       "model": "grok-4.3",
@@ -2733,11 +2679,6 @@
       "supportsResponses": true,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": [
-        "low",
-        "medium",
-        "high"
-      ],
       "tieredPricing": [
         {
           "minTokens": 200000,
@@ -2750,7 +2691,12 @@
       "sourceUrl": "https://docs.x.ai/developers/pricing",
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
-      "notes": "Batch 8 折；输出上限官方未公布（models.dev 30K 仅参考）；写免费为推断"
+      "notes": "Batch 8 折；输出上限官方未公布（models.dev 30K 仅参考）；写免费为推断",
+      "thinkingTiers": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      }
     },
     "grok::grok-4-20-0309-reasoning": {
       "model": "grok-4-20-0309-reasoning",
@@ -4838,11 +4784,6 @@
       "supportsResponses": true,
       "supportsReasoning": true,
       "supportsReasoningEffort": true,
-      "reasoningEffortTiers": [
-        "low",
-        "medium",
-        "xhigh"
-      ],
       "supportsVision": true,
       "sourceUrl": "https://help.aliyun.com/zh/model-studio/billing-for-model-studio",
       "dataVerifiedAt": "2026-08-03",
@@ -6021,6 +5962,50 @@
       "dataVerifiedAt": "2026-08-03",
       "dataSource": "official",
       "notes": "输入：文本 0.6/音频 38/图视频 2；输出：文本 2.4/音频 76/图视频 6；Qwen2.5 系仅存多模态在售；maxOutputTokens 未公布"
+    },
+    "grok::grok-4.6": {
+      "model": "grok-4.6",
+      "provider": "xai",
+      "vendor": "grok",
+      "mode": "both",
+      "currency": "USD",
+      "unit": "per_1M",
+      "contextWindow": 500000,
+      "inputPrice": 2,
+      "outputPrice": 6,
+      "cacheReadPrice": 0.5,
+      "cacheWritePrice": 0,
+      "cacheWriteFree": true,
+      "priceStatus": "official",
+      "cacheType": "auto",
+      "cacheMechanism": "prefix",
+      "supportsPromptCaching": true,
+      "supportsImplicitCaching": true,
+      "supportsPromptCacheKey": true,
+      "supportsCacheControl": false,
+      "supportsResponses": true,
+      "supportsReasoning": true,
+      "supportsReasoningEffort": true,
+      "tieredPricing": [
+        {
+          "minTokens": 200000,
+          "maxTokens": null,
+          "inputPrice": 4,
+          "outputPrice": 12,
+          "cacheReadPrice": 0.6
+        }
+      ],
+      "sourceUrl": "https://docs.x.ai/developers/pricing",
+      "dataVerifiedAt": "2026-08-03",
+      "dataSource": "official",
+      "notes": "≥200K 整请求全量 2x 计费（含缓存命中部分）；写免费为推断（官方定价结构无写价列）；输出上限官方未公布（models.dev 500K 仅参考）；最低缓存/TTL 未公布；无 Batch 折扣",
+      "thinkingTiers": {
+        "xhigh": "xhigh",
+        "high": "high",
+        "medium": "medium",
+        "low": "low"
+      },
+      "maxOutputTokens": 450000
     }
   }
 }

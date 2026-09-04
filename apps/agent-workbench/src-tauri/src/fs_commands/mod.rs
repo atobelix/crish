@@ -6,7 +6,7 @@ pub(crate) mod types;
 pub(crate) mod write;
 
 pub(crate) use crate::core_error::CoreError;
-pub(crate) use types::{FileCommandError, WorkspaceFsGuard};
+pub(crate) use types::FileCommandError;
 
 /// 原生目录选择器：唯一「新授权」入口（PE-07 T07.2）。
 /// 选中路径 → WorkspaceRegistry::register(Dialog) → 返回 canonical 路径。
@@ -88,7 +88,8 @@ mod tests {
     };
 
     use crate::fs_commands::types::{self, FileCommandError, ReadPolicy, MAX_TEXT_FILE_BYTES};
-    use crate::fs_commands::{dialog, directory, read, write, WorkspaceFsGuard};
+    use crate::fs_commands::types::WorkspaceFsGuard;
+    use crate::fs_commands::{dialog, directory, read, write};
 
     struct TestDir {
         path: PathBuf,

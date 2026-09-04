@@ -29,7 +29,6 @@ use tauri::State;
 
 use crate::core_error::CoreError;
 use crate::fs_commands::types::path_is_same_or_child;
-use crate::fs_commands::WorkspaceFsGuard;
 use crate::workspace::WorkspaceRegistry;
 
 /// 并行搜索阈值（文件数 ≥ 该值走并行实现）。
@@ -505,34 +504,6 @@ pub async fn core_jsonl_to_messages(text: String) -> Result<Vec<serde_json::Valu
     result
 }
 
-/// 路径解析（WorkspaceFsGuard 守卫：根只能来自显式 root 或默认应用根，PE-07 T07.2）。
-fn resolve_guarded_path(
-    path: &str,
-    workspace_root: Option<&str>,
-) -> Result<std::path::PathBuf, String> {
-    let guard = match workspace_root {
-        Some(root) => WorkspaceFsGuard::new(root),
-        None => WorkspaceFsGuard::for_default_workspace(),
-    }
-    .map_err(|e| format!("workspace guard error: {}", e.message))?;
-    if std::path::Path::new(path).exists() {
-        guard.resolve_existing(path).map_err(|e| e.message)
-    } else {
-        guard.resolve_for_write(path).map_err(|e| e.message)
-    }
-}
-
-/// JSONL 追加错误映射：路径守卫违规（越界 / 非法目标）→ InvalidInput；
-/// 未找到 → NotFound；其余（IO 失败）→ Io（77 码 → store.io）。
-fn map_jsonl_err(e: String) -> CoreError {
-    if e.contains("outside the allowed workspace") || e.contains("Path is empty") {
-        CoreError::InvalidInput(e)
-    } else if e.contains("does not exist") {
-        CoreError::NotFound(e)
-    } else {
-        CoreError::Io(e)
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -628,22 +599,6 @@ mod tests {
         let allowed = check_command_verdict(&gatekeeper, "git", &["status"]);
         assert!(allowed.allowed && !allowed.requires_approval && !allowed.blocked);
         assert!(allowed.reason.is_none());
-    }
-
-    #[test]
-    fn map_jsonl_err_classifies_guard_and_io() {
-        match map_jsonl_err("Path is outside the allowed workspace root.".to_string()) {
-            CoreError::InvalidInput(_) => {}
-            other => panic!("expected InvalidInput, got {other:?}"),
-        }
-        match map_jsonl_err("Path does not exist.".to_string()) {
-            CoreError::NotFound(_) => {}
-            other => panic!("expected NotFound, got {other:?}"),
-        }
-        match map_jsonl_err("Failed to open JSONL file: permission denied".to_string()) {
-            CoreError::Io(_) => {}
-            other => panic!("expected Io, got {other:?}"),
-        }
     }
 
     #[test]

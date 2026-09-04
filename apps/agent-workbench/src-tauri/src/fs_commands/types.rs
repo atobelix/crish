@@ -1,7 +1,6 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-use crate::host_paths;
 
 pub(crate) const MAX_TEXT_FILE_BYTES: usize = 1024 * 1024;
 pub(crate) const DEFAULT_MAX_TEXT_FILE_LINES: usize = 2_000;
@@ -82,23 +81,12 @@ pub(crate) struct WriteFileContentResult {
 /// - `from_optional_root` 已删除：根只能来自 WorkspaceRegistry（B1 信任锚）；
 /// - `new` 严格化：canonicalize 全失败 → 返回错误（不再退化裸用传入根，
 ///   根不可达场景明确拒绝，T07.2 用例 13）；
-/// - `for_default_workspace` 保留：仅内部用于默认应用根。
 #[derive(Debug, Clone)]
 pub(crate) struct WorkspaceFsGuard {
     root: PathBuf,
 }
 
 impl WorkspaceFsGuard {
-    pub(crate) fn for_default_workspace() -> Result<Self, FileCommandError> {
-        let app_dir = host_paths::app_dir().map_err(|e| {
-            FileCommandError::new(
-                ERR_INTERNAL,
-                format!("Failed to locate application directory: {e}"),
-            )
-        })?;
-        Self::new(host_paths::workspace_root(&app_dir))
-    }
-
     /// 严格构造：canonicalize 失败即拒绝（不裸用传入根，P-02 关闭）；
     /// Windows 下剥离 `\\?\` 前缀，保证跨会话路径比较一致。
     pub(crate) fn new(root: impl AsRef<Path>) -> Result<Self, FileCommandError> {
