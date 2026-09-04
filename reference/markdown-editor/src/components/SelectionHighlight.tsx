@@ -1,5 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useEditorStore, type EditorStore } from '../core/EditorStore';
+import { useTableStore } from '../core/TableStore';
 import { getCoordinatesFromIndex } from '../core/measure';
 import {
   DecorationSet,
@@ -14,6 +15,8 @@ interface Rect {
 }
 
 interface SelectionHighlightProps {
+  /** 滚动内容容器 ref（与 CursorLayer 同款容器引用，保证坐标系 100% 同步） */
+  containerRef?: React.RefObject<HTMLDivElement | null>;
   /**
    * 显式 store 实例（R5 实例工厂）：缺省 = 全局默认单例（向后兼容）。
    * 多实例场景下选区高亮必须绑定与内容同一实例。
@@ -69,6 +72,7 @@ function useStandaloneSelectionDecorations(
 }
 
 export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
+  containerRef,
   store,
   decorations: externalDecorations,
   decorationVersion: externalVersion,
@@ -97,18 +101,26 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
     const start = sel.from;
     const end = sel.to;
 
-    const container = document.querySelector('.engine-container') as HTMLElement;
+    const container = (containerRef?.current ||
+      document.querySelector('.editor-scroll-container') ||
+      document.querySelector('.engine-container')) as HTMLElement;
     if (!container) return;
+
+    const tableState = useTableStore.getState();
+    const isCellSelectionMode = Boolean(
+      tableState.selectedCell && !tableState.selectedCell.isEditing
+    );
 
     const startCoord = getCoordinatesFromIndex(start, container);
     const endCoord = getCoordinatesFromIndex(end, container);
 
-    if (!startCoord || !endCoord) {
+    const lines = Array.from(container.querySelectorAll('[data-line-start]'));
+    if (lines.length === 0) {
       setRects([]);
       return;
     }
 
-    const lines = Array.from(container.querySelectorAll('[data-line-start]'));
+    const containerRect = container.getBoundingClientRect();
     const newRects: Rect[] = [];
 
     for (const line of lines) {
@@ -118,19 +130,24 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
 
       if (start <= lineEnd && end >= lineStart) {
         // Line intersects with selection
+        const isTableRow = Boolean(line.querySelector('.line-table-row'));
+        // 单元格单选/拖选模式下，表格自身具备油墨蓝背景与边框，抑制重复文本高亮层
+        if (isTableRow && isCellSelectionMode) {
+          continue;
+        }
+
         const lineRect = line.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
 
         let left = lineRect.left;
         let right = lineRect.right;
 
         // If this is the start line, restrict left side
-        if (start >= lineStart && start <= lineEnd) {
+        if (start >= lineStart && start <= lineEnd && startCoord) {
           left = startCoord.left;
         }
 
         // If this is the end line, restrict right side
-        if (end >= lineStart && end <= lineEnd) {
+        if (end >= lineStart && end <= lineEnd && endCoord) {
           right = endCoord.left;
         }
 
@@ -139,11 +156,20 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
           right = left + 5; // minimum width
         }
 
+        let top = lineRect.top - containerRect.top + container.scrollTop;
+        let height = lineRect.height;
+
+        // 表格行编辑态：选区高度贴合文本字高，消除 54px 全高灰色矩形
+        if (isTableRow && startCoord && start >= lineStart && start <= lineEnd) {
+          top = startCoord.top - containerRect.top + container.scrollTop;
+          height = startCoord.height;
+        }
+
         newRects.push({
-          top: lineRect.top - containerRect.top + container.scrollTop,
+          top,
           left: left - containerRect.left + container.scrollLeft,
           width: Math.max(0, right - left),
-          height: lineRect.height,
+          height,
         });
       }
     }

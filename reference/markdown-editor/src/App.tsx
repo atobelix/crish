@@ -6,6 +6,7 @@ import {
   type CSSProperties,
 } from 'react';
 import { useEditorStore } from './core/EditorStore';
+import { useTableStore } from './core/TableStore';
 import {
   MarkdownEngine,
   type MarkdownEngineHandle,
@@ -201,6 +202,8 @@ function App() {
   // engineRef 暴露（perf 直刷压测入口，05-宿主接口与场景.md P2）
   useEffect(() => {
     window.__CRISH_ENGINE__ = engineRef.current;
+    (window as any).__tableStore = useTableStore;
+    (window as any).__editorStore = useEditorStore;
   }, []);
 
   // 驾驶舱状态摘要轮询（流式/暂停期间展示 getStreamState）
@@ -351,132 +354,262 @@ function App() {
         alignItems: 'center',
       }}
     >
-      {/* 驾驶舱工具栏 */}
-      <div
+      {/* 结构化现代化顶部控制栏 */}
+      <header
         style={{
-          width: 'min(840px, 94vw)',
+          width: 'min(880px, 94vw)',
+          background: 'var(--ivory)',
+          border: '1px solid var(--border-medium)',
+          borderRadius: 8,
+          padding: '8px 14px',
+          marginBottom: 10,
+          boxShadow: '0 1px 3px hsl(60 10% 10% / 0.04)',
           display: 'flex',
           flexWrap: 'wrap',
           alignItems: 'center',
-          gap: 8,
-          padding: '8px 12px',
+          justifyContent: 'space-between',
+          gap: 10,
+          fontFamily: 'var(--font-sans)',
           boxSizing: 'border-box',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 12,
-          color: 'var(--text-secondary)',
         }}
       >
-        <span style={{ fontWeight: 600 }}>流式驾驶舱</span>
-        <button
-          type="button"
-          data-testid="stream-start"
-          onClick={startStreaming}
-          style={btnStyle}
-        >
-          开始流式
-        </button>
-        <button
-          type="button"
-          data-testid="stream-pause"
-          onClick={pauseStreaming}
-          disabled={phase !== 'streaming'}
-          style={btnStyle}
-        >
-          暂停
-        </button>
-        <button
-          type="button"
-          data-testid="stream-resume"
-          onClick={resumeStreaming}
-          disabled={phase !== 'paused'}
-          style={btnStyle}
-        >
-          继续
-        </button>
-        <button
-          type="button"
-          data-testid="stream-stop"
-          onClick={stopStreaming}
-          disabled={phase !== 'streaming' && phase !== 'paused'}
-          style={btnStyle}
-        >
-          中断
-        </button>
-        <button
-          type="button"
-          data-testid="stream-discard"
-          onClick={discardStreaming}
-          disabled={phase !== 'streaming' && phase !== 'paused'}
-          style={{ ...btnStyle, color: 'var(--danger-color)' }}
-        >
-          丢弃
-        </button>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          速率
-          <select
-            data-testid="rate-select"
-            value={rate}
-            onChange={(e) => setRate(Number(e.target.value))}
-            style={selectStyle}
+        {/* 左侧：流式核心控制群组 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--near-black)', letterSpacing: '0.3px' }}>
+            ⚡ 流式驾驶舱
+          </span>
+
+          {/* 播放控制胶囊组 */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              border: '1px solid var(--border-medium)',
+              borderRadius: 6,
+              overflow: 'hidden',
+              background: 'var(--warm-sand)',
+            }}
           >
-            {RATE_OPTIONS.map((r) => (
-              <option key={r} value={r}>
-                {r} tps
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          粒度
-          <select
-            data-testid="granularity-select"
-            value={granularity}
-            onChange={(e) => setGranularity(e.target.value as Granularity)}
-            style={selectStyle}
+            <button
+              type="button"
+              data-testid="stream-start"
+              onClick={startStreaming}
+              style={{
+                ...primaryBtnStyle,
+                borderRadius: 0,
+                boxShadow: 'none',
+              }}
+            >
+              开始流式
+            </button>
+            <button
+              type="button"
+              data-testid="stream-pause"
+              onClick={pauseStreaming}
+              disabled={phase !== 'streaming'}
+              style={{
+                ...secondaryBtnStyle,
+                borderRadius: 0,
+                borderTop: 'none',
+                borderBottom: 'none',
+                borderLeft: '1px solid var(--border-medium)',
+                borderRight: '1px solid var(--border-medium)',
+              }}
+            >
+              暂停
+            </button>
+            <button
+              type="button"
+              data-testid="stream-resume"
+              onClick={resumeStreaming}
+              disabled={phase !== 'paused'}
+              style={{
+                ...secondaryBtnStyle,
+                borderRadius: 0,
+                borderTop: 'none',
+                borderBottom: 'none',
+                borderLeft: 'none',
+                borderRight: '1px solid var(--border-medium)',
+              }}
+            >
+              继续
+            </button>
+            <button
+              type="button"
+              data-testid="stream-stop"
+              onClick={stopStreaming}
+              disabled={phase !== 'streaming' && phase !== 'paused'}
+              style={{
+                ...secondaryBtnStyle,
+                borderRadius: 0,
+                borderTop: 'none',
+                borderBottom: 'none',
+                borderLeft: 'none',
+                borderRight: '1px solid var(--border-medium)',
+              }}
+            >
+              中断
+            </button>
+            <button
+              type="button"
+              data-testid="stream-discard"
+              onClick={discardStreaming}
+              disabled={phase !== 'streaming' && phase !== 'paused'}
+              style={{
+                ...dangerBtnStyle,
+                borderRadius: 0,
+                borderTop: 'none',
+                borderBottom: 'none',
+                borderLeft: 'none',
+                borderRight: 'none',
+              }}
+            >
+              丢弃
+            </button>
+          </div>
+
+          {/* 速率与粒度 */}
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--stone)' }}>
+              速率
+              <select
+                data-testid="rate-select"
+                value={rate}
+                onChange={(e) => setRate(Number(e.target.value))}
+                style={selectStyle}
+              >
+                {RATE_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r} tps
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--stone)' }}>
+              粒度
+              <select
+                data-testid="granularity-select"
+                value={granularity}
+                onChange={(e) => setGranularity(e.target.value as Granularity)}
+                style={selectStyle}
+              >
+                <option value="char">字符</option>
+                <option value="word">词</option>
+                <option value="line">行</option>
+              </select>
+            </label>
+          </div>
+        </div>
+
+        {/* 右侧：文档加载、导出与状态指示 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {/* 文档管理组 */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              border: '1px solid var(--border-medium)',
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}
           >
-            <option value="char">字符</option>
-            <option value="word">词</option>
-            <option value="line">行</option>
-          </select>
-        </label>
-        <button
-          type="button"
-          data-testid="export-md"
-          onClick={() => exportDocument('markdown')}
-          style={btnStyle}
-        >
-          导出 Markdown
-        </button>
-        <button
-          type="button"
-          data-testid="export-html"
-          onClick={() => exportDocument('html')}
-          style={btnStyle}
-        >
-          导出 HTML
-        </button>
-        <button
-          type="button"
-          data-testid="load-massive"
-          onClick={loadMassiveDoc}
-          style={btnStyle}
-        >
-          加载万行压力文档
-        </button>
-        <button
-          type="button"
-          data-testid="clear-doc"
-          onClick={clearDocument}
-          style={btnStyle}
-        >
-          清空
-        </button>
-        <span data-testid="stream-status" data-phase={phase}>
-          {PHASE_TEXT[phase]}
-          {progress ? ` · 已注入 ${progress}` : ''}
-          {streamSummary ? ` · ${streamSummary}` : ''} · 文档 {textLength} 字符
-        </span>
-      </div>
+            <button
+              type="button"
+              data-testid="load-massive"
+              onClick={loadMassiveDoc}
+              style={{
+                ...secondaryBtnStyle,
+                borderRadius: 0,
+                border: 'none',
+                borderRight: '1px solid var(--border-medium)',
+              }}
+              title="加载万行压力测试文档（2301个标题、45万字）"
+            >
+              加载万行
+            </button>
+            <button
+              type="button"
+              data-testid="clear-doc"
+              onClick={clearDocument}
+              style={{
+                ...secondaryBtnStyle,
+                borderRadius: 0,
+                border: 'none',
+              }}
+              title="清空编辑器内容"
+            >
+              清空
+            </button>
+          </div>
+
+          {/* 导出组 */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              border: '1px solid var(--border-medium)',
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}
+          >
+            <button
+              type="button"
+              data-testid="export-md"
+              onClick={() => exportDocument('markdown')}
+              style={{
+                ...secondaryBtnStyle,
+                borderRadius: 0,
+                border: 'none',
+                borderRight: '1px solid var(--border-medium)',
+              }}
+            >
+              导出 MD
+            </button>
+            <button
+              type="button"
+              data-testid="export-html"
+              onClick={() => exportDocument('html')}
+              style={{
+                ...secondaryBtnStyle,
+                borderRadius: 0,
+                border: 'none',
+              }}
+            >
+              导出 HTML
+            </button>
+          </div>
+
+          {/* 状态药丸 */}
+          <span
+            data-testid="stream-status"
+            data-phase={phase}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: 'var(--tag-standard-bg)',
+              color: 'var(--brand)',
+              padding: '4px 10px',
+              borderRadius: 6,
+              fontSize: 11,
+              fontWeight: 500,
+              fontFamily: 'var(--font-mono)',
+            }}
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                backgroundColor: phase === 'streaming' ? 'hsl(142 60% 40%)' : 'var(--brand-light)',
+              }}
+            />
+            {PHASE_TEXT[phase]}
+            {progress ? ` · ${progress}` : ''}
+            {' · ' + Number(textLength).toLocaleString() + ' 字符'}
+          </span>
+        </div>
+      </header>
 
       {/* 导出结果面板 */}
       {exportPanel && (
@@ -526,7 +659,7 @@ function App() {
       {/* 纸张（既有 grid-paper 布局保留） */}
       <div
         className="grid-paper"
-        style={{ height: 'min(calc(100vh - 96px), 880px)' }}
+        style={{ width: 'min(880px, 94vw)', height: 'min(calc(100vh - 108px), 940px)' }}
       >
         <MarkdownEngine ref={engineRef} />
         <ContextMenu />
@@ -553,20 +686,55 @@ function App() {
   );
 }
 
-const btnStyle: CSSProperties = {
-  fontFamily: 'var(--font-mono)',
+const primaryBtnStyle: CSSProperties = {
+  fontFamily: 'var(--font-sans)',
   fontSize: 12,
-  padding: '2px 8px',
+  fontWeight: 500,
+  padding: '4px 12px',
   cursor: 'pointer',
-  borderRadius: 4,
-  border: '1px solid var(--border-medium)',
-  background: 'var(--white)',
-  color: 'var(--text-primary)',
+  borderRadius: 6,
+  border: 'none',
+  background: 'var(--brand)',
+  color: 'var(--ivory)',
+  boxShadow: '0 1px 2px hsl(215.5 55% 23.5% / 0.2)',
+  transition: 'all 0.15s ease',
 };
 
-const selectStyle: CSSProperties = {
-  fontFamily: 'var(--font-mono)',
+const secondaryBtnStyle: CSSProperties = {
+  fontFamily: 'var(--font-sans)',
   fontSize: 12,
+  padding: '4px 10px',
+  cursor: 'pointer',
+  borderRadius: 6,
+  border: '1px solid var(--border-medium)',
+  background: 'var(--warm-sand)',
+  color: 'var(--dark-warm)',
+  transition: 'all 0.15s ease',
+};
+
+const dangerBtnStyle: CSSProperties = {
+  fontFamily: 'var(--font-sans)',
+  fontSize: 12,
+  padding: '4px 10px',
+  cursor: 'pointer',
+  borderRadius: 6,
+  border: '1px solid hsl(359 53% 35.5% / 0.25)',
+  background: 'hsl(359 53% 35.5% / 0.08)',
+  color: 'var(--danger-color)',
+  transition: 'all 0.15s ease',
+};
+
+const btnStyle: CSSProperties = secondaryBtnStyle;
+
+const selectStyle: CSSProperties = {
+  fontFamily: 'var(--font-sans)',
+  fontSize: 12,
+  borderRadius: 6,
+  border: '1px solid var(--border-medium)',
+  background: 'var(--ivory)',
+  color: 'var(--dark-warm)',
+  padding: '3px 8px',
+  cursor: 'pointer',
 };
 
 export default App;

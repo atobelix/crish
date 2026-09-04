@@ -10,6 +10,7 @@ import {
   getGlobalIndexFromDOMNode,
   getArrowNavigationIndex,
   toContainerCoords,
+  locateRowIndexByPhysicalBisection,
 } from '../core/measure';
 import { useTableStore } from '../core/TableStore';
 import {
@@ -89,6 +90,8 @@ export interface MountedLineGeom {
   top: number;
   bottom: number;
   height: number;
+  /** 行 DOM 节点（物理二分实测入口） */
+  el?: HTMLElement;
 }
 
 /** 宽字符判定（全角按 2 倍等宽近似；镜像 measure.ts:753-763 列保持口径） */
@@ -272,6 +275,7 @@ function collectMountedLines(
       top: r.top - cr.top + container.scrollTop,
       bottom: r.bottom - cr.top + container.scrollTop,
       height: r.height,
+      el,
     });
   }
   return out;
@@ -297,7 +301,8 @@ function fallbackCharWidths(container: HTMLElement): {
 /**
  * 坐标 → 索引（拖选状态机单一真源）：
  * 1. 精确路径：caretRangeFromPoint 浏览器命中测试（视口内 token 级）；
- * 2. 几何回退：行几何估算（视口空白 / 目标行未挂载 / 无布局环境）。
+ * 2. 物理二分实测：命中行 DOM 真实 TextNode Range 精确二分定位（零字体猜测误差）；
+ * 3. 几何回退：行几何估算（视口空白 / 目标行未挂载 / 无布局环境）。
  * 返回文档索引（几何回退保证非空；行号收敛 [0, lineCount-1]）。
  */
 // oxlint-disable-next-line react/only-export-components
@@ -305,8 +310,37 @@ export function indexFromClientPoint(
   clientX: number,
   clientY: number,
   container: HTMLElement,
-  data: IndexDataLayer
+  data: IndexDataLayer,
+  hintLineIndex?: number
 ): number {
+  const cr = container.getBoundingClientRect();
+  const mounted = collectMountedLines(container, cr);
+  let lineIdx = hintLineIndex;
+  if (lineIdx === undefined || lineIdx < 0 || lineIdx >= data.getLineCount()) {
+    const contentY = clientY - cr.top + container.scrollTop;
+    lineIdx = estimateLineIndexFromContentY(
+      contentY,
+      data.getLineCount(),
+      mounted
+    );
+  }
+  const lineText = data.getLine(lineIdx) ?? '';
+  const lineStart = data.lineOffsets.getOffset(lineIdx);
+  const lineGeom = mounted.find((m) => m.index === lineIdx);
+
+  // 1. 物理二分优先：基于真实挂载 DOM 文本节点的 Range 测量，亚像素级物理贴合 (|ΔX| ≤ 0.5px)
+  // 彻底免疫 caretRangeFromPoint 在前缀语法（### / > ）、空隙与行末的飘移问题
+  if (lineGeom && lineGeom.el) {
+    const bisectIdx = locateRowIndexByPhysicalBisection(
+      lineGeom.el,
+      clientX,
+      lineStart,
+      lineText.length
+    );
+    if (bisectIdx !== null) return bisectIdx;
+  }
+
+  // 2. 次级回退：caretRangeFromPoint（若物理二分未命中可见文本）
   if (typeof document.caretRangeFromPoint === 'function') {
     try {
       const range = document.caretRangeFromPoint(clientX, clientY);
@@ -322,17 +356,8 @@ export function indexFromClientPoint(
       // 命中测试失败（无布局环境/异常）→ 几何回退
     }
   }
-  const cr = container.getBoundingClientRect();
-  const contentY = clientY - cr.top + container.scrollTop;
-  const mounted = collectMountedLines(container, cr);
-  const lineIdx = estimateLineIndexFromContentY(
-    contentY,
-    data.getLineCount(),
-    mounted
-  );
-  const lineText = data.getLine(lineIdx) ?? '';
-  const lineStart = data.lineOffsets.getOffset(lineIdx);
-  const lineGeom = mounted.find((m) => m.index === lineIdx);
+
+  // 3. 末级回退：几何列宽推算
   const relX = lineGeom
     ? clientX - lineGeom.left
     : clientX - contentLeftOf(container, cr);
@@ -717,10 +742,22 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     suppressed: boolean;
   } | null>(null);
 
+  const prevCursorPosRef = useRef<number>(cursorPos);
+  const prevSelectionStartRef = useRef<number | null>(selectionStart);
+  const prevSelectionEndRef = useRef<number | null>(selectionEnd);
+
   // Sync input value with current line text
   useLayoutEffect(() => {
     // Sync physical coordinates whenever cursor or text changes
     if (!containerRef.current) return;
+
+    const cursorMoved =
+      prevCursorPosRef.current !== cursorPos ||
+      prevSelectionStartRef.current !== selectionStart ||
+      prevSelectionEndRef.current !== selectionEnd;
+    prevCursorPosRef.current = cursorPos;
+    prevSelectionStartRef.current = selectionStart;
+    prevSelectionEndRef.current = selectionEnd;
 
     let rAF: number;
     let retries = 0;
@@ -756,19 +793,22 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         // We MUST NOT fight the browser by setting scrollTop manually here,
         // otherwise react-virtual and the browser scroll will fight each other causing a bounce loop.
         if (!(window as any).__CRISH_IS_MOUSE_DOWN) {
-          if (top < cTop) {
-            containerRef.current!.scrollTop = Math.max(0, top - 40);
-          } else if (top + height > cTop + cHeight) {
-            containerRef.current!.scrollTop = top + height - cHeight + 40;
+          if (cursorMoved) {
+            if (top < cTop) {
+              containerRef.current!.scrollTop = Math.max(0, top - 40);
+            } else if (top + height > cTop + cHeight) {
+              containerRef.current!.scrollTop = top + height - cHeight + 40;
+            }
           }
         }
-      } else if (retries < 10) {
+      } else if (cursorMoved && retries < 10) {
         retries++;
         // 光标行未挂载（越视口跳转——Ctrl+End/PageDown/搜索跳转后行在
         // 虚拟化视口外）：几何外推滚动到光标行，下一帧行挂载后精确
         // 测量接管（scrollLineIntoViewByGeometry 注释见模块级定义；
         // B2 词级跳选实测发现并修复：长文档 Ctrl+End 后测量持续失败 →
         // textarea 卸载 → 输入/词级导航失效）
+        // 仅在光标或选区主动变化时才拉动滚动条，避免用户浏览文档时滚动条弹回光标
         const st = editorStore.getState();
         scrollLineIntoViewByGeometry(
           containerRef.current!,

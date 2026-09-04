@@ -12,6 +12,7 @@ import {
 
 import { useTableStore } from '../core/TableStore';
 import { useEditorStore } from '../core/EditorStore';
+import { indexFromClientPoint } from './HiddenInput';
 
 /**
  * P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）：
@@ -332,18 +333,43 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   if (e.button === 2) return; // Ignore right click
                   // Avoid breaking edit mode if we click on the already editing cell
                   if (isCellEditing) return;
-                  
+
                   const tableStore = useTableStore.getState();
+                  const editorStore = useEditorStore.getState();
+
+                  // 若单元格已处于选中状态，再次点击立即进入行内编辑模式并定位到鼠标物理点击位置
+                  if (isCellSelected && !isCellEditing) {
+                    tableStore.enterCellEdit(tableId || '', lineIndex ?? -1, colIndex);
+                    tableStore.setDraggingCell(false);
+
+                    const container = (e.currentTarget.closest('.editor-scroll-container') ||
+                      document.querySelector('.editor-scroll-container')) as HTMLElement;
+                    if (container) {
+                      const targetIdx = indexFromClientPoint(
+                        e.clientX,
+                        e.clientY,
+                        container,
+                        editorStore
+                      );
+                      editorStore.setCursorPos(targetIdx);
+                    }
+                    setTimeout(() => {
+                      const input = document.querySelector('textarea') as HTMLTextAreaElement;
+                      if (input) input.focus({ preventScroll: true });
+                    }, 0);
+                    return;
+                  }
+
+                  // 首次单选：仅选中单元格，设置光标至单元格起始处保持视口锚定，由 CursorLayer 抑制光标绘制与全高灰色矩形
                   tableStore.enterCellSelection(tableId || '', lineIndex ?? -1, colIndex);
                   tableStore.setDraggingCell(true);
-                  
-                  if (start !== undefined) {
-                    useEditorStore.getState().setCursorPos(start + 1);
-                  }
-                  // Ensure HiddenInput gets focus so keyboard navigation works immediately
+                  window.getSelection()?.removeAllRanges();
+                  editorStore.setSelection(start, start);
+
+                  // Ensure HiddenInput gets focus so keyboard navigation works immediately without scrolling
                   setTimeout(() => {
-                    const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
-                    if (input) input.focus();
+                    const input = document.querySelector('textarea') as HTMLTextAreaElement;
+                    if (input) input.focus({ preventScroll: true });
                   }, 0);
                 }}
                 onMouseEnter={() => {
@@ -363,13 +389,26 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     (window as any).__CRISH_LAST_DRAG_END_TIME = Date.now();
                   }
                 }}
-                onDoubleClick={() => {
+                onDoubleClick={(e) => {
                   window.getSelection()?.removeAllRanges();
-                  useTableStore.getState().enterCellEdit(
+                  const tableStore = useTableStore.getState();
+                  const editorStore = useEditorStore.getState();
+                  tableStore.enterCellEdit(
                     tableId || '',
                     lineIndex ?? -1,
                     colIndex
                   );
+                  const container = (e.currentTarget.closest('.editor-scroll-container') ||
+                    document.querySelector('.editor-scroll-container')) as HTMLElement;
+                  if (container) {
+                    const targetIdx = indexFromClientPoint(
+                      e.clientX,
+                      e.clientY,
+                      container,
+                      editorStore
+                    );
+                    editorStore.setCursorPos(targetIdx);
+                  }
                   const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
                   if (input) input.focus();
                 }}

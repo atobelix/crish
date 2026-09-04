@@ -12,6 +12,7 @@
     "test:gate": "vitest run tests/gate tests/unit",
     "test:commonmark": "node tests/commonmark/run-compliance.mjs",
     "test:perf": "node tests/perf/baseline-collect.mjs",
+    "test:measure": "node scripts/verify-physical-measure.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

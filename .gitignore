@@ -477,3 +477,4 @@ orchestrator-snapshot.json.prev
 !reference/markdown-editor/tests/commonmark/compliance-report.json
 !reference/markdown-editor/compliance-report-baseline.json
 !reference/markdown-editor/perf.mjs
+!reference/markdown-editor/scripts/**

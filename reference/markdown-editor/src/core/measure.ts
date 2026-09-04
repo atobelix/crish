@@ -681,6 +681,7 @@ export function getGlobalIndexFromDOMNode(
       : (targetNode as HTMLElement);
   let foundTokenStart = -1;
   let lineStart = -1;
+  let lineLen = -1;
 
   while (el && el !== container) {
     if (el.hasAttribute('data-token-start') && foundTokenStart === -1) {
@@ -688,6 +689,7 @@ export function getGlobalIndexFromDOMNode(
     }
     if (el.hasAttribute('data-line-start') && lineStart === -1) {
       lineStart = attrInt(el, 'data-line-start', '-1');
+      lineLen = attrInt(el, 'data-line-length', '-1');
     }
     el = el.parentElement;
   }
@@ -714,10 +716,142 @@ export function getGlobalIndexFromDOMNode(
   }
 
   if (lineStart !== -1) {
+    // 修复边界：当命中行元素且 offset 达到或超过子节点总数时，归入行尾而非行首
+    if (!isText && offset >= node.childNodes.length && lineLen !== -1) {
+      return lineStart + lineLen;
+    }
     return lineStart + (isText ? offset : 0);
   }
 
   return null;
+}
+
+/** 物理行文本节点描述符 */
+interface MountedTextNodeEntry {
+  node: Text;
+  globalStart: number;
+  length: number;
+}
+
+/**
+ * 真实 DOM 文本节点物理二分探测器（Tier 2 SSOT 物理真理源）
+ * 当光标落于行首/行尾空白、Token 间隙或 Padding 时，彻底废除猜列算法，
+ * 在行内已挂载的可见 Text 节点上直接执行 Range 物理二分探测。
+ */
+export function locateRowIndexByPhysicalBisection(
+  rowEl: HTMLElement,
+  clientX: number,
+  lineStart: number,
+  lineLen: number
+): number | null {
+  if (lineLen <= 0) return lineStart;
+
+  // 1. 扫描行内可见 Text 节点
+  const textEntries: MountedTextNodeEntry[] = [];
+  const walker = document.createTreeWalker(rowEl, NodeFilter.SHOW_TEXT, {
+    acceptNode(n: Node) {
+      const p = n.parentElement;
+      if (!p) return NodeFilter.FILTER_REJECT;
+      // 检查当前元素及其祖先是否隐藏
+      if (p.closest('.syntax-hidden') || p.closest('.katex-html') || p.closest('.math-preview')) {
+        return NodeFilter.FILTER_REJECT;
+      }
+      const val = n.nodeValue;
+      if (!val || val.length === 0) return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+
+  const scrollContainer = rowEl.closest('.editor-scroll-container') as HTMLElement || document.body;
+  let curr = walker.nextNode();
+  while (curr) {
+    const tNode = curr as Text;
+    const gIdx = getGlobalIndexFromDOMNode(tNode, 0, scrollContainer);
+    if (gIdx !== null) {
+      textEntries.push({
+        node: tNode,
+        globalStart: gIdx,
+        length: tNode.nodeValue?.length || 0,
+      });
+    }
+    curr = walker.nextNode();
+  }
+
+  if (textEntries.length === 0) return null;
+  textEntries.sort((a, b) => a.globalStart - b.globalStart);
+
+  const range = getSharedRange();
+
+  // 2. 检查整行最左边界
+  try {
+    range.setStart(textEntries[0].node, 0);
+    range.setEnd(textEntries[0].node, Math.min(1, textEntries[0].length));
+    const firstRect = range.getBoundingClientRect();
+    if (firstRect.width > 0 && clientX <= firstRect.left) {
+      return lineStart;
+    }
+  } catch {}
+
+  // 3. 检查整行最右边界
+  try {
+    const lastEntry = textEntries[textEntries.length - 1];
+    range.setStart(lastEntry.node, Math.max(0, lastEntry.length - 1));
+    range.setEnd(lastEntry.node, lastEntry.length);
+    const lastRect = range.getBoundingClientRect();
+    if (lastRect.width > 0 && clientX >= lastRect.right) {
+      return lineStart + lineLen;
+    }
+  } catch {}
+
+  // 4. 二分物理探测：找出与 clientX 欧氏距离最小的字符边界
+  let bestDist = Infinity;
+  let bestPos = lineStart;
+
+  for (const entry of textEntries) {
+    const len = entry.length;
+    let lo = 0;
+    let hi = len - 1;
+
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      try {
+        range.setStart(entry.node, mid);
+        range.setEnd(entry.node, mid + 1);
+        const r = range.getBoundingClientRect();
+        if (r.width > 0 || r.height > 0) {
+          const midX = r.left + r.width / 2;
+          const distToLeft = Math.abs(r.left - clientX);
+          const distToRight = Math.abs(r.right - clientX);
+
+          // 黄金分割准则：判断吸附到该字符左侧还是右侧
+          if (distToLeft < bestDist) {
+            bestDist = distToLeft;
+            bestPos = entry.globalStart + mid;
+          }
+          if (distToRight < bestDist) {
+            bestDist = distToRight;
+            bestPos = entry.globalStart + mid + 1;
+          }
+
+          if (clientX < midX) {
+            hi = mid - 1;
+          } else {
+            lo = mid + 1;
+          }
+        } else {
+          lo = mid + 1;
+        }
+      } catch {
+        lo = mid + 1;
+      }
+    }
+  }
+
+  if (!Number.isFinite(bestDist)) {
+    return null;
+  }
+
+  return Math.min(lineStart + lineLen, Math.max(lineStart, bestPos));
 }
 
 export interface ActiveState {

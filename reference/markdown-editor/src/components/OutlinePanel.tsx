@@ -32,26 +32,47 @@ export interface OutlinePanelProps {
   /** 跳转标题行（引擎接线：virtualizer.scrollToIndex 定位） */
   onJump: (line: number) => void;
 }
-
-/** 面板容器内联样式（主题变量联动，与 FindReplacePanel 同构） */
+/** 面板容器内联样式（右上角悬浮，彻底消除对左侧正文与标题的遮挡） */
 const PANEL_STYLE: React.CSSProperties = {
   position: 'absolute',
-  top: 8,
-  left: 8,
+  top: 10,
+  right: 28,
   zIndex: 500,
-  width: 232,
+  width: 240,
   maxHeight: '60%',
   display: 'flex',
   flexDirection: 'column',
   gap: 4,
   padding: '8px 10px',
-  background: 'var(--bg-theme)',
+  background: 'var(--ivory)',
   border: '1px solid var(--border-medium)',
   borderRadius: 8,
-  boxShadow: '0 4px 16px hsl(80 10% 16% / 0.12)',
+  boxShadow: '0 4px 16px hsl(60 10% 10% / 0.12)',
   fontSize: 12,
   color: 'var(--text-primary)',
-  fontFamily: 'var(--font-mono)',
+  fontFamily: 'var(--font-sans)',
+};
+
+/** 折叠态紧凑药丸徽标样式（右上角紧凑停靠） */
+const COLLAPSED_PILL_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  top: 10,
+  right: 28,
+  zIndex: 500,
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+  padding: '4px 10px',
+  background: 'var(--ivory)',
+  border: '1px solid var(--border-medium)',
+  borderRadius: 6,
+  boxShadow: '0 2px 8px hsl(60 10% 10% / 0.08)',
+  fontSize: 11,
+  fontWeight: 500,
+  color: 'var(--dark-warm)',
+  cursor: 'pointer',
+  userSelect: 'none',
+  transition: 'all 0.15s ease',
 };
 
 /** 标题栏：面板名 + 条目计数 + 折叠开关 */
@@ -61,17 +82,19 @@ const HEADER_STYLE: React.CSSProperties = {
   justifyContent: 'space-between',
   gap: 6,
   userSelect: 'none',
+  paddingBottom: 6,
+  borderBottom: '1px solid var(--border-subtle)',
 };
 
 const HEADER_TITLE_STYLE: React.CSSProperties = {
   fontWeight: 600,
-  color: 'var(--text-primary)',
+  color: 'var(--near-black)',
 };
 
 const HEADER_COUNT_STYLE: React.CSSProperties = {
   flex: 1,
-  color: 'var(--text-muted)',
-  fontSize: 10,
+  color: 'var(--stone)',
+  fontSize: 11,
 };
 
 const TOGGLE_STYLE: React.CSSProperties = {
@@ -80,10 +103,10 @@ const TOGGLE_STYLE: React.CSSProperties = {
   padding: '1px 6px',
   fontSize: 11,
   lineHeight: '16px',
-  background: 'var(--white)',
-  color: 'var(--text-secondary)',
+  background: 'var(--warm-sand)',
+  color: 'var(--dark-warm)',
   cursor: 'pointer',
-  fontFamily: 'var(--font-mono)',
+  fontFamily: 'var(--font-sans)',
 };
 
 /** 条目列表容器（面板内部滚动，不触碰引擎滚动容器） */
@@ -93,14 +116,15 @@ const LIST_STYLE: React.CSSProperties = {
   gap: 1,
   overflowY: 'auto',
   minHeight: 0,
+  maxHeight: 360,
 };
 
-/** 条目基础样式（缩进/高亮由渲染处叠加） */
+/** 条目基础样式（flexShrink 0 坚决防止在多项时挤压折叠变形） */
 const ROW_BASE_STYLE: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 4,
-  padding: '2px 4px',
+  gap: 6,
+  padding: '3px 6px',
   borderRadius: 4,
   cursor: 'pointer',
   whiteSpace: 'nowrap',
@@ -109,31 +133,37 @@ const ROW_BASE_STYLE: React.CSSProperties = {
   border: 'none',
   background: 'transparent',
   textAlign: 'left',
-  color: 'var(--text-primary)',
+  color: 'var(--dark-warm)',
   fontSize: 12,
-  fontFamily: 'var(--font-mono)',
+  lineHeight: '18px',
+  fontFamily: 'var(--font-sans)',
+  flexShrink: 0,
+  minHeight: 22,
 };
 
-/** 当前章节高亮（主题淡黄，与搜索行同族） */
+/** 当前章节高亮 */
 const ROW_ACTIVE_STYLE: React.CSSProperties = {
-  background: 'var(--yellow-tint-2)',
+  background: 'var(--tag-standard-bg)',
+  color: 'var(--brand)',
+  fontWeight: 500,
 };
 
-/** 级别徽标（弱化显示，视觉区分标题级别） */
+/** 级别徽标 */
 const LEVEL_STYLE: React.CSSProperties = {
-  color: 'var(--text-muted)',
+  color: 'var(--stone)',
   fontSize: 10,
   flexShrink: 0,
+  letterSpacing: '0.4px',
 };
 
 /** 空态文案 */
 const EMPTY_STYLE: React.CSSProperties = {
-  color: 'var(--text-muted)',
-  padding: '4px 2px',
+  color: 'var(--stone)',
+  padding: '6px 2px',
   fontSize: 11,
 };
 
-/** 条目文本（行内代码字体，超长省略由父级接管） */
+/** 条目文本 */
 const TEXT_STYLE: React.CSSProperties = {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -145,10 +175,8 @@ export const OutlinePanel: React.FC<OutlinePanelProps> = ({
   resolveScrollLine,
   onJump,
 }) => {
-  // 面板主体可见态（默认展开；宿主用 outline prop 控制挂载，此为面板
-  // 内部收纳开关，不销毁监听）
-  const [collapsed, setCollapsed] = useState(false);
-  // 当前视口首行（滚动监听 rAF 节流维护；仅变化时 setState）
+  // 默认收起为紧凑小胶囊，绝不遮挡文档任何 H1 标题
+  const [collapsed, setCollapsed] = useState(true);
   const [activeLine, setActiveLine] = useState(-1);
 
   // 滚动监听：rAF 节流换算视口首行 → 当前章节（findHeadingSection 二分）。
@@ -166,7 +194,6 @@ export const OutlinePanel: React.FC<OutlinePanelProps> = ({
     const onScroll = () => {
       if (!raf) raf = requestAnimationFrame(update);
     };
-    // 挂载即算一次（初始滚动位置可能非 0）
     raf = requestAnimationFrame(update);
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => {
@@ -181,6 +208,26 @@ export const OutlinePanel: React.FC<OutlinePanelProps> = ({
     [headings, activeLine]
   );
 
+  if (collapsed) {
+    return (
+      <div
+        style={COLLAPSED_PILL_STYLE}
+        onClick={(e) => {
+          e.stopPropagation();
+          setCollapsed(false);
+        }}
+        title="点击展开大纲面板"
+        aria-label="展开大纲面板"
+      >
+        <span>📑 大纲</span>
+        <span style={{ opacity: 0.7, fontSize: 10 }}>
+          {headings.length ? `${headings.length}` : '0'}
+        </span>
+        <span style={{ fontSize: 9 }}>▸</span>
+      </div>
+    );
+  }
+
   return (
     <div style={PANEL_STYLE}>
       <div style={HEADER_STYLE}>
@@ -192,48 +239,43 @@ export const OutlinePanel: React.FC<OutlinePanelProps> = ({
           type="button"
           style={TOGGLE_STYLE}
           onClick={(e) => {
-            // 面板按钮必须阻断冒泡：容器 onClick（handleContainerClick）
-            // 会把面板点击解析为编辑器光标定位（FindReplacePanel 同款约定）
             e.stopPropagation();
-            setCollapsed((c) => !c);
+            setCollapsed(true);
           }}
-          aria-label={collapsed ? '展开大纲面板' : '收起大纲面板'}
+          aria-label="收起大纲面板"
+          title="收起大纲面板"
         >
-          {collapsed ? '▸' : '▾'}
+          ▴
         </button>
       </div>
-      {!collapsed && (
-        <div style={LIST_STYLE}>
-          {headings.length === 0 ? (
-            <div style={EMPTY_STYLE}>无标题（文档无 ATX 标题）</div>
-          ) : (
-            headings.map((entry) => {
-              const isActive = activeSection?.line === entry.line;
-              return (
-                <button
-                  key={entry.line}
-                  type="button"
-                  title={entry.text}
-                  onClick={(e) => {
-                    // 阻断冒泡：大纲点击是导航动作，不得触发容器光标定位
-                    // （编辑态光标不动；readOnly 下容器点击本就短路）
-                    e.stopPropagation();
-                    onJump(entry.line);
-                  }}
-                  style={{
-                    ...ROW_BASE_STYLE,
-                    paddingLeft: 4 + (entry.level - 1) * 12,
-                    ...(isActive ? ROW_ACTIVE_STYLE : null),
-                  }}
-                >
-                  <span style={LEVEL_STYLE}>H{entry.level}</span>
-                  <span style={TEXT_STYLE}>{entry.text}</span>
-                </button>
-              );
-            })
-          )}
-        </div>
-      )}
+      <div style={LIST_STYLE}>
+        {headings.length === 0 ? (
+          <div style={EMPTY_STYLE}>无标题（文档无 ATX 标题）</div>
+        ) : (
+          headings.map((entry) => {
+            const isActive = activeSection?.line === entry.line;
+            return (
+              <button
+                key={entry.line}
+                type="button"
+                title={entry.text}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onJump(entry.line);
+                }}
+                style={{
+                  ...ROW_BASE_STYLE,
+                  paddingLeft: 4 + (entry.level - 1) * 10,
+                  ...(isActive ? ROW_ACTIVE_STYLE : null),
+                }}
+              >
+                <span style={LEVEL_STYLE}>H{entry.level}</span>
+                <span style={TEXT_STYLE}>{entry.text}</span>
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 };

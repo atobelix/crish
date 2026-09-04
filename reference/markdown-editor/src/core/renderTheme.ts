@@ -49,6 +49,10 @@ export interface RenderThemeColors {
 export interface RenderThemeFonts {
   /** 等宽字体栈（代码/表格/数学） */
   mono: string;
+  /** 人文衬线字体栈（正文/标题/引用） */
+  serif?: string;
+  /** 现代无衬线字体栈（UI控件/标签） */
+  sans?: string;
 }
 
 /** 主题圆角 token */
@@ -86,6 +90,8 @@ export const DEFAULT_RENDER_THEME: RenderTheme = {
   },
   fonts: {
     mono: 'var(--font-mono)',
+    serif: 'var(--font-serif)',
+    sans: 'var(--font-sans)',
   },
   radius: {
     small: '4px',

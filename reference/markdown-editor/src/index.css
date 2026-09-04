@@ -1,40 +1,55 @@
 @import 'katex/dist/katex.min.css';
 
 :root {
-  /* 统一全白微偏暖底色 (FAFBF8 -> hsl(80 27.3% 97.8%)) 与纯净 HSL 空间 */
-  --bg-theme: hsl(80 27.3% 97.8%);
-  --white: hsl(80 27.3% 97.8%);
+  /* ── 1. Kami 紙核心色彩体系 (现代空格 HSL 语法) ── */
+  --parchment: hsl(52.5 28.6% 94.5%);
+  --ivory: hsl(48 33.3% 97.1%);
+  --warm-sand: hsl(50 18.5% 88.6%);
+  --border-soft: hsl(49 19% 87.3%);
+  --inline-code-bg: hsl(48 25% 92.5%);
+  --near-black: hsl(60 3.8% 7.3%);
+  --dark-warm: hsl(60 2.5% 23.9%);
+  --olive: hsl(43 4.3% 30.4%);
+  --stone: hsl(51 3.5% 40.6%);
+  --brand: hsl(215.5 55% 23.5%);
+  --brand-light: hsl(211 50.7% 35.9%);
+  --tag-calm-bg: hsl(213 38% 95.1%);
+  --tag-standard-bg: hsl(212.7 47% 92.9%);
+  --danger-color: hsl(359 53% 35.5%);
 
-  /* 柔和护眼文字与平滑灰阶系统 (符合 .agents/AGENTS.md 护眼对比度与灰阶约束) */
-  --black: hsl(80 10% 16%);
-  --text-primary: hsl(80 10% 16%);
-  --gray-45: hsl(80 6% 46%);
-  --text-secondary: hsl(80 6% 46%);
-  --gray-70: hsl(80 6% 64%);
-  --text-muted: hsl(80 6% 64%);
-  --gray-90: hsl(80 12% 93.5%);
+  /* ── 2. 既有 CSS 契约变量映射 (严格满足 css-contract G6.6 门禁) ── */
+  --bg-theme: var(--parchment);
+  --white: var(--ivory);
+  --black: var(--near-black);
+  --text-primary: var(--near-black);
+  --gray-45: var(--olive);
+  --text-secondary: var(--olive);
+  --gray-70: var(--stone);
+  --text-muted: var(--stone);
+  --gray-90: var(--warm-sand);
 
   /* 暖色调强调与高亮 */
-  --yellow-tint-2: hsl(45 100% 50% / 0.03);
-  --yellow-text: hsl(45 80% 32%);
+  --yellow-tint-2: hsl(48 100% 50% / 0.08);
+  --yellow-text: hsl(43 70% 30%);
 
-  /* 暖调柔和文本选择高亮 (摆脱刺眼冷蓝，与 #FAFBF8 自然融合) */
-  --selection-bg: hsl(80 30% 86% / 0.65);
-  --blue-selection: hsl(80 30% 86% / 0.65);
+  /* 暖调柔和文本选择高亮 (油墨蓝柔和微透) */
+  --selection-bg: hsl(215.5 55% 23.5% / 0.12);
+  --blue-selection: hsl(215.5 55% 23.5% / 0.12);
 
-  /* 暖调柔和边框与交互态 (严格遵循 3%~6% 柔和混合与 <10% 对比上限) */
-  --border-subtle: hsl(80 10% 88%);
-  --border-medium: hsl(80 10% 82%);
-  --border-focus: hsl(80 20% 68%);
+  /* 暖调柔和边框与交互态 */
+  --border-subtle: var(--border-soft);
+  --border-medium: var(--warm-sand);
+  --border-focus: var(--brand-light);
 
-  /* 滚动条背景 (F6F6F5 -> hsl(60 5.3% 96.3%)) 与滑块配色 */
-  --scrollbar-track: hsl(60 5.3% 96.3%);
-  --scrollbar-thumb: hsl(60 5% 82%);
-  --scrollbar-thumb-hover: hsl(60 6% 70%);
+  /* 滚动条背景与滑块配色 */
+  --scrollbar-track: var(--parchment);
+  --scrollbar-thumb: hsl(48 15% 80%);
+  --scrollbar-thumb-hover: hsl(48 18% 68%);
 
-  --font-mono:
-    Consolas, 'Fira Code', 'Courier New', 'Microsoft YaHei', -apple-system,
-    sans-serif;
+  /* ── 3. 字体系统解耦 ── */
+  --font-serif: "TsangerJinKai02", "Source Han Serif SC", "Source Han Serif CN", "Noto Serif SC", "Songti SC", Charter, Georgia, serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, Monaco, monospace;
   --grid-size: 28px;
 }
 
@@ -73,8 +88,10 @@
 html,
 body {
   background-color: var(--bg-theme);
-  color: var(--black);
+  color: var(--text-primary);
   font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: var(--grid-size);
   height: 100vh;
   width: 100vw;
   display: flex;
@@ -92,17 +109,18 @@ body {
   background-color: var(--bg-theme);
 }
 
-/* 现代化平坦优雅纸张容器 (已彻底移除格子网线条，呈现纯粹轻盈阅读界面) */
+/* 现代化平坦优雅纸张容器 (Kami 纸墨质感与微光柔和多层投影) */
 .grid-paper {
   position: relative;
-  width: min(840px, 94vw);
-  height: min(88vh, 880px);
+  width: min(880px, 94vw);
+  max-width: 880px;
+  height: min(calc(100vh - 108px), 940px);
   background-color: var(--white);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   box-shadow:
-    0 1px 3px hsl(80 10% 20% / 0.03),
-    0 8px 24px -4px hsl(80 10% 20% / 0.04);
+    0 1px 2px hsl(60 10% 10% / 0.02),
+    0 4px 16px hsl(60 10% 10% / 0.04);
   display: flex;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -135,7 +153,7 @@ body {
   background-color: var(--selection-bg);
 }
 
-/* 独立行块级结构 */
+/* 独立行块级结构 (严格保持 --grid-size 与等宽字体以保证光标与选区绝对精准) */
 .line-block {
   display: block;
   width: 100%;
@@ -144,33 +162,33 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
   font-family: var(--font-mono);
-  color: var(--black);
+  color: var(--text-primary);
   margin: 0;
   padding: 0;
 }
 
-/* 标题视觉层级与微调字距 */
+/* 标题视觉层级与微调字距 (保持 grid-size 继承，消除测量错位) */
 .line-h1 {
   font-size: 1.65rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: -0.015em;
-  color: var(--black);
+  color: var(--near-black);
 }
 .line-h2 {
   font-size: 1.35rem;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--black);
+  color: var(--near-black);
 }
 .line-h3 {
   font-size: 1.15rem;
   font-weight: 600;
-  color: var(--black);
+  color: var(--dark-warm);
 }
 .line-h4 {
   font-size: 1.02rem;
   font-weight: 600;
-  color: var(--black);
+  color: var(--dark-warm);
 }
 .line-h5 {
   font-size: 0.92rem;
@@ -198,12 +216,13 @@ body {
 }
 
 .line-quote {
-  border-left: 3px solid hsl(80 20% 75%);
-  padding-left: 12px;
+  border-left: 2px solid var(--warm-sand);
+  padding-left: 14px;
   margin: 4px 0;
-  color: var(--text-secondary);
-  background-color: hsl(80 15% 95.5% / 0.5);
-  border-radius: 0 4px 4px 0;
+  color: var(--olive);
+  background-color: transparent;
+  border-radius: 0;
+  font-style: italic;
 }
 
 .line-list {
@@ -218,7 +237,7 @@ body {
 
 .blockquote-guide {
   width: 12px;
-  border-left: 3px solid hsl(80 20% 75%);
+  border-left: 2px solid var(--warm-sand);
   margin-right: 4px;
 }
 
@@ -231,22 +250,23 @@ body {
   font-size: 14px;
 }
 
-/* 现代化 Markdown 表格与 Excel 式单元格交互样式 (温和大地暖调设计) */
+/* 现代化 Markdown 表格 (Kami 出版级横线表格，去除生硬竖向网格) */
 .line-table-row {
   display: flex;
   align-items: stretch;
   position: relative;
   border-bottom: 1px solid var(--border-subtle);
-  border-left: 1px solid var(--border-subtle);
+  border-left: none;
   background-color: transparent;
   min-height: 28px;
   box-sizing: border-box;
 }
 
 .table-header-row {
-  background-color: hsl(80 14% 95%);
-  font-weight: 600;
-  color: var(--text-primary);
+  background-color: var(--ivory);
+  border-bottom: 1.5px solid var(--border-medium);
+  font-weight: 500;
+  color: var(--stone);
 }
 
 .line-table-separator {
@@ -264,7 +284,7 @@ body {
   min-height: 28px !important;
   overflow: visible;
   opacity: 0.85;
-  background-color: hsl(80 14% 96%);
+  background-color: var(--ivory);
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -280,10 +300,10 @@ body {
   position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  padding: 6px 14px;
   box-sizing: border-box;
   min-height: 28px;
-  border-right: 1px solid var(--border-subtle);
+  border-right: none;
   cursor: cell;
   user-select: text;
   transition: background-color 0.12s ease;
@@ -301,12 +321,17 @@ body {
 }
 
 .token-table-cell:last-child {
-  border-right: 1px solid var(--border-subtle);
+  border-right: none;
 }
 
-/* 单元格单选态 (Single Click: Cell Selected Mode - 柔和暖色高亮，去蓝调) */
+/* 单元格悬停态 (Hover: 柔和极简微透底色) */
+.token-table-cell:not(.is-cell-selected):not(.is-cell-editing):hover {
+  background-color: hsl(215.5 55% 23.5% / 0.04);
+}
+
+/* 单元格单选态 (Single Click: Cell Selected Mode - 油墨蓝柔和微透) */
 .token-table-cell.is-cell-selected {
-  background-color: hsl(80 25% 92% / 0.7) !important;
+  background-color: hsl(215.5 55% 23.5% / 0.07) !important;
   z-index: 2;
   border-radius: 0;
   outline: none !important;
@@ -328,7 +353,7 @@ body {
 /* 单元格双击编辑态 (Double Click: Text In-place Edit Mode) */
 .token-table-cell.is-cell-editing {
   background-color: var(--white) !important;
-  outline: 1.5px solid hsl(80 22% 60%) !important;
+  outline: 1.5px solid var(--border-focus) !important;
   outline-offset: -1px;
   z-index: 4;
   border-radius: 2px;
@@ -380,8 +405,8 @@ body {
 }
 .style-inline-code {
   font-family: var(--font-mono);
-  color: var(--black);
-  background: hsl(80 15% 93% / 0.7);
+  color: var(--near-black);
+  background: var(--inline-code-bg);
   padding: 1px 5px;
   border-radius: 4px;
   font-size: 0.9em;
@@ -459,11 +484,12 @@ body {
 }
 
 .line-blockquote {
-  border-left: 3px solid hsl(80 20% 75%);
-  padding-left: 12px;
-  color: var(--black);
-  background-color: hsl(80 15% 95.5% / 0.5);
-  border-radius: 0 4px 4px 0;
+  border-left: 2px solid var(--warm-sand);
+  padding-left: 14px;
+  color: var(--olive);
+  background-color: transparent;
+  border-radius: 0;
+  font-style: italic;
 }
 .editor-scroll-container {
   overflow-anchor: none;
@@ -578,7 +604,7 @@ body {
   padding: 1px 5px;
   border-radius: 4px;
   border: 1px solid var(--border-medium);
-  border-bottom: 2px solid hsl(80 10% 76%);
+  border-bottom: 2px solid var(--border-medium);
 }
 .style-spoiler {
   color: transparent;
@@ -670,7 +696,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.5px;
   user-select: none;
-  background: hsl(80 12% 90% / 0.7);
+  background: var(--tag-standard-bg);
   padding: 1px 6px;
   border-radius: 4px;
 }
@@ -690,7 +716,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: hsl(80 27.3% 97.8% / 0.85);
+  background: hsl(52.5 28.6% 94.5% / 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -713,7 +739,7 @@ body {
 
 .custom-cursor-blink {
   animation: cursor-blink 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  box-shadow: 0 0 2px hsl(80 27.3% 97.8% / 0.5);
+  box-shadow: 0 0 2px hsl(52.5 28.6% 94.5% / 0.5);
 }
 
 .ime-hidden-input {

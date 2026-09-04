@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { BlockRenderer } from './BlockRenderer';
-import { HiddenInput } from './HiddenInput';
+import { HiddenInput, indexFromClientPoint } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
 import { SelectionHighlight } from './SelectionHighlight';
 import {
@@ -2141,9 +2141,6 @@ export const MarkdownEngine = React.forwardRef<
     // R5 readOnly：只读模式点击不移动光标（光标定位链路整体短路）——
     // 原生 DOM 文本选区/选择复制不受影响（浏览器默认行为，不 preventDefault）。
     if (readOnly) return;
-    // R3-B1：事件处理器统一取一次最新 store 快照，行内容/偏移经访问器
-    // （getLine / getLineCount / lineOffsets）读取——同一快照下与物化
-    // 视图语义完全一致，且不依赖闭包捕获的旧数组引用。
     const st = engineStore.getState();
 
     // If we just finished a drag selection, ignore the synthetic click
@@ -2151,6 +2148,12 @@ export const MarkdownEngine = React.forwardRef<
       return;
 
     const target = e.target as HTMLElement;
+
+    // 表格单元格点击由单元格自身状态机独立处理（单选、双击/二次点击编辑、光标定位）
+    if (target.closest('.token-table-cell')) {
+      return;
+    }
+
     if (!target.closest('.line-table-row')) {
       useTableStore.getState().clearCellSelection();
     }
@@ -2161,40 +2164,13 @@ export const MarkdownEngine = React.forwardRef<
       return;
     }
 
-    // 1. Try to find if we clicked on a rendered line wrapper
-    let clickedLineIndex = parseInt(
+    if (!parentRef.current) return;
+
+    // Prevent table separator from being clicked. Redirect to previous row (table header)
+    const clickedLineIndex = parseInt(
       target.closest('[data-index]')?.getAttribute('data-index') || '-1',
       10
     );
-
-    // 1.5 If clicked on padding/margins, try to resolve the line using vertical coordinates
-    // C1 契约：坐标换算统一走 HeightMap.indexAt（O(log n) 像素 → 行），
-    // 不再遍历 virtualRow 线性扫描（01 问题 1 blockAt 同款定位结构）；
-    // contentY 已是容器内容坐标（含 scrollTop、不含 padding），topOffset 传 0，
-    // 与行 top（内容坐标）同一空间。仅接受落在当前虚拟窗口内的命中，
-    // 窗口外的空白点击维持旧语义（回落文末）。
-    let clickedPadding = false;
-    if (clickedLineIndex === -1 && parentRef.current) {
-      const containerRect = parentRef.current.getBoundingClientRect();
-      // P3 B1：物理 scrollTop → 逻辑（点击定位在逻辑坐标系——HeightMap 行 top）
-      const physTop = parentRef.current.scrollTop;
-      const logicTop = scrollMapRef.current
-        ? scrollMapRef.current.inverse(physTop)
-        : physTop;
-      const contentY = e.clientY - containerRect.top + logicTop;
-
-      const hm = heightMapRef.current;
-      const items = virtualizer.getVirtualItems();
-      if (hm && items.length) {
-        const idx = hm.indexAt(contentY, 0);
-        if (idx >= items[0].index && idx <= items[items.length - 1].index) {
-          clickedLineIndex = idx;
-          clickedPadding = true;
-        }
-      }
-    }
-
-    // Prevent table separator from being clicked. Redirect to previous row (table header)
     if (
       clickedLineIndex !== -1 &&
       st
@@ -2210,191 +2186,15 @@ export const MarkdownEngine = React.forwardRef<
       }
     }
 
-    if (clickedPadding && clickedLineIndex !== -1 && parentRef.current) {
-      const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
-      const lineLen = st.getLine(clickedLineIndex).length;
-      const containerRect = parentRef.current.getBoundingClientRect();
-
-      if (e.clientX < containerRect.left + 50) {
-        // Clicked left padding/margin
-        setCursorPos(lineStart);
-      } else {
-        // Clicked right padding/margin
-        setCursorPos(lineStart + lineLen);
-      }
-      return;
-    }
-
-    let range: Range | null = null;
-    if (document.caretRangeFromPoint) {
-      range = document.caretRangeFromPoint(e.clientX, e.clientY);
-    } else if ((document as any).caretPositionFromPoint) {
-      const pos = (document as any).caretPositionFromPoint(
-        e.clientX,
-        e.clientY
-      );
-      if (pos) {
-        range = document.createRange();
-        range.setStart(pos.offsetNode, pos.offset);
-        range.collapse(true);
-      }
-    }
-
-    // Clamp the range to the cell we actually clicked on (to prevent clicking padding and jumping to next cell)
-    const clickedCell = target.closest('.token-table-cell') as HTMLElement;
-    if (clickedCell && range && range.startContainer) {
-      const resolvedNode =
-        range.startContainer.nodeType === Node.TEXT_NODE
-          ? range.startContainer.parentElement
-          : (range.startContainer as HTMLElement);
-
-      const resolvedCell = resolvedNode?.closest('.token-table-cell');
-      if (resolvedCell !== clickedCell) {
-        const cellStart = parseInt(
-          clickedCell.getAttribute('data-token-start') || '-1',
-          10
-        );
-        const cellLen = parseInt(
-          clickedCell.getAttribute('data-token-length') || '0',
-          10
-        );
-        if (cellStart !== -1) {
-          const rect = clickedCell.getBoundingClientRect();
-          // If we clicked left half, go to start of cell. Otherwise go to end.
-          if (e.clientX < rect.left + rect.width / 2) {
-            setCursorPos(cellStart + 1); // +1 because start is the table_cell token itself? Actually start is localOffset.
-          } else {
-            setCursorPos(cellStart + cellLen);
-          }
-          return;
-        }
-      }
-    }
-
-    // 3. Check if we clicked directly on an HR (thematic break)
-    if (target.tagName === 'HR' || target.classList.contains('hr-rendered')) {
-      const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
-      const lineLen = st.getLine(clickedLineIndex).length;
-      const rect = target.getBoundingClientRect();
-      if (e.clientX - rect.left < rect.width / 2) {
-        setCursorPos(lineStart);
-      } else {
-        setCursorPos(lineStart + lineLen);
-      }
-      return;
-    }
-
-    // 4. Try to use the exact token offset, BUT ONLY if it belongs to the clicked line!
-    if (range && range.startContainer) {
-      let el: HTMLElement | null =
-        range.startContainer.nodeType === Node.TEXT_NODE
-          ? range.startContainer.parentElement
-          : (range.startContainer as HTMLElement);
-
-      let foundTokenStart = -1;
-      let foundLineIndex = -1;
-
-      while (el && el !== parentRef.current) {
-        if (el.hasAttribute('data-token-start') && foundTokenStart === -1) {
-          foundTokenStart = parseInt(
-            el.getAttribute('data-token-start') || '-1',
-            10
-          );
-        }
-        if (el.hasAttribute('data-index')) {
-          foundLineIndex = parseInt(el.getAttribute('data-index') || '-1', 10);
-          break;
-        }
-        el = el.parentElement;
-      }
-
-      // Only use the precise offset if the browser snapped to the SAME line we clicked
-      if (foundLineIndex === clickedLineIndex) {
-        if (foundTokenStart !== -1) {
-          // It's inside a specific token (like a word)
-          // Find if there's an exact sub-offset element
-          let subOffset = 0;
-          let currentEl: HTMLElement | null =
-            range.startContainer.nodeType === Node.TEXT_NODE
-              ? range.startContainer.parentElement
-              : (range.startContainer as HTMLElement);
-
-          while (currentEl && currentEl !== parentRef.current) {
-            if (currentEl.hasAttribute('data-sub-offset')) {
-              subOffset = parseInt(
-                currentEl.getAttribute('data-sub-offset') || '0',
-                10
-              );
-              break;
-            }
-            if (currentEl.hasAttribute('data-token-start')) {
-              break; // Stop at token boundary
-            }
-            currentEl = currentEl.parentElement;
-          }
-
-          const rawPos = foundTokenStart + subOffset + (range.startOffset || 0);
-          const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
-          const lineLen = st.getLine(clickedLineIndex).length;
-          setCursorPos(Math.min(lineStart + lineLen, rawPos));
-        } else {
-          // Fallback to line start + offset
-          const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
-          const lineLen = st.getLine(clickedLineIndex).length;
-          setCursorPos(
-            Math.min(lineStart + lineLen, lineStart + (range.startOffset || 0))
-          );
-        }
-        return;
-      }
-    }
-
-    // 4. Fallback: User clicked an empty line, or empty space far away from text, or a preview element (HR, Math)
-    if (clickedLineIndex !== -1) {
-      // If user clicked the table separator empty space, redirect to the header row above it
-      if (
-        st
-          .getLine(clickedLineIndex)
-          ?.trim()
-          .match(/^\|?[\s:-]*[-]+[\s:-]*\|/)
-      ) {
-        if (clickedLineIndex > 0) {
-          const prevLineStart = st.lineOffsets.getOffset(clickedLineIndex - 1);
-          const prevLineLen = st.getLine(clickedLineIndex - 1).length;
-          setCursorPos(prevLineStart + prevLineLen);
-          return;
-        }
-      }
-      const lineStart = st.lineOffsets.getOffset(clickedLineIndex);
-      const lineLen = st.getLine(clickedLineIndex).length;
-
-      // Use token-mapping from closest rendered element
-      const tokenEl = (e.target as HTMLElement).closest('[data-token-start]');
-      if (tokenEl) {
-        const startStr = tokenEl.getAttribute('data-token-start');
-        if (startStr) {
-          const start = parseInt(startStr, 10);
-          if (!isNaN(start)) {
-            setCursorPos(start);
-            return; // We found the precise token!
-          }
-        }
-      }
-
-      // Final fallback to end of the line
-      console.log('Fallback to end of line:', lineStart + lineLen);
-      setCursorPos(lineStart + lineLen);
-    } else {
-      // Clicked in the container but outside any specific line (e.g. bottom empty space)
-      // Put cursor at the very end of the document
-      const lastLineIdx = st.getLineCount() - 1;
-      if (lastLineIdx >= 0) {
-        const lineStart = st.lineOffsets.getOffset(lastLineIdx);
-        const lineLen = st.getLine(lastLineIdx).length;
-        console.log('Fallback to end of doc:', lineStart + lineLen);
-        setCursorPos(lineStart + lineLen);
-      }
-    }
+    // 单一真源定位：indexFromClientPoint 统管 TextNode Range、物理二分、行几何与边距
+    const exactIndex = indexFromClientPoint(
+      e.clientX,
+      e.clientY,
+      parentRef.current,
+      st,
+      clickedLineIndex >= 0 ? clickedLineIndex : undefined
+    );
+    setCursorPos(exactIndex);
   };
 
   return (
@@ -2574,6 +2374,7 @@ export const MarkdownEngine = React.forwardRef<
             {/* R5-D：选区高亮消费统一装饰集（selection 装饰 + 版本号），
                 不再直读 store 选区字段 */}
             <SelectionHighlight
+              containerRef={parentRef}
               store={engineStore}
               decorations={decorations}
               decorationVersion={decorationVersion}
