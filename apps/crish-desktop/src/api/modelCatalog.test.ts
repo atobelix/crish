@@ -752,9 +752,9 @@ describe('modelCatalog', () => {
 
   describe('思考档位单源（描述接口 offered → 档位面板；T5.2b）', () => {
     describe('effortsFromEntryWire（Rust 描述接口档位映射 → 提供档位集 + 默认档位）', () => {
-      it('跨 thinkingLevelMap / reasoningEffortTiers 并集，仅收录提供档位，wire 排序', () => {
+      it('thinkingTiers 单一载体：仅收录提供档位，wire 排序', () => {
         const r = effortsFromEntryWire({
-          thinkingLevelMap: { high: 'high', low: 'low', medium: 'medium' },
+          thinkingTiers: { high: 'high', low: 'low', medium: 'medium' },
         });
         expect(r).toEqual({
           offered: ['high', 'low', 'medium'],
@@ -762,28 +762,29 @@ describe('modelCatalog', () => {
         });
       });
 
-      it('跨双映射并集（offered_levels 语义）：隐藏档（null）不入集，非 null wire 跨映射合并', () => {
+      it('隐藏档（null / 空串）不入集，default 键不入集', () => {
         const r = effortsFromEntryWire({
-          thinkingLevelMap: { low: null, medium: 'medium', high: 'high' },
-          reasoningEffortTiers: { low: 'low', minimal: 'minimal' },
+          thinkingTiers: {
+            low: null,
+            medium: 'medium',
+            high: 'high',
+            off: '',
+            default: 'default',
+          },
         });
-        // 并集语义（对齐 Rust offered_levels()）：
-        // thinkingLevelMap 的 low:null 隐藏不入集；reasoningEffortTiers 的 low:low / minimal 是提供档
-        expect(r?.offered).toEqual(['high', 'low', 'medium', 'minimal']);
+        expect(r?.offered).toEqual(['high', 'medium']);
         expect(r?.defaultEffort).toBe('high');
       });
 
-      it('两映射均缺省 / 全隐藏 → null（无能力元数据 → 档位面板回落提供方默认）', () => {
+      it('载体缺省 / 全隐藏 → null（无能力元数据 → 档位面板回落默认）', () => {
         expect(effortsFromEntryWire({})).toBeNull();
         expect(effortsFromEntryWire(undefined)).toBeNull();
-        expect(
-          effortsFromEntryWire({ thinkingLevelMap: { low: null } })
-        ).toBeNull();
+        expect(effortsFromEntryWire({ thinkingTiers: { low: null } })).toBeNull();
       });
     });
 
-    describe('thinkingLevelOptionsFor（档位面板渲染选项：能力档位 + 提供方默认）', () => {
-      it('能力元数据 ["low","medium","high"] → 只渲染这三项 + 提供方默认（首项）', () => {
+    describe('thinkingLevelOptionsFor（档位面板渲染选项：能力档位 + 默认）', () => {
+      it('能力元数据 ["low","medium","high"] → 只渲染这三项 + 默认（首项）', () => {
         const opts = thinkingLevelOptionsFor({
           offered: ['low', 'medium', 'high'],
           defaultEffort: 'low',
@@ -799,20 +800,20 @@ describe('modelCatalog', () => {
           isProviderDefault: true,
         });
         expect(opts.slice(1).every((o) => !o.isProviderDefault)).toBe(true);
-        expect(opts.find((o) => o.value === 'medium')?.label).toBe('详细');
+        expect(opts.find((o) => o.value === 'medium')?.label).toBe('中');
       });
 
-      it('无能力元数据 → 只有提供方默认项（不渲染自造档位）', () => {
+      it('无能力元数据 → 只有默认项（不渲染自造档位）', () => {
         const opts = thinkingLevelOptionsFor(null);
         expect(opts.map((o) => o.value)).toEqual(['default']);
         expect(opts[0].isProviderDefault).toBe(true);
         expect(thinkingLevelOptionsFor({ offered: [] })).toEqual([
-          { value: 'default', label: '提供方默认', isProviderDefault: true },
+          { value: 'default', label: '默认', isProviderDefault: true },
         ]);
       });
     });
 
-    it('isExplicitThinkingLevel：提供方默认 / 空 不注入显式档位，其余命中', () => {
+    it('isExplicitThinkingLevel：默认 / 空 不注入显式档位，其余命中', () => {
       expect(isExplicitThinkingLevel('default')).toBe(false);
       expect(isExplicitThinkingLevel('')).toBe(false);
       expect(isExplicitThinkingLevel('medium')).toBe(true);
@@ -825,16 +826,12 @@ describe('modelCatalog', () => {
         entries: [
           {
             model: 'deepseek-v4-flash',
-            reasoningEffortTiers: {
-              low: 'low',
-              medium: 'medium',
-              high: 'high',
-            },
+            thinkingTiers: { low: 'low', medium: 'medium', high: 'high' },
           },
           {
             model: 'gemini-3-1-pro',
             apiModel: 'gemini-3.1-pro-preview',
-            thinkingLevelMap: { low: 'low', medium: 'medium' },
+            thinkingTiers: { low: 'low', medium: 'medium' },
           },
         ],
       });

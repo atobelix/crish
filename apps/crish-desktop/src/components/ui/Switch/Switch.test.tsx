@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React, { useState } from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import { Switch } from './Switch';
 import styles from './Switch.module.css';
 
@@ -73,7 +73,7 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
 
       fireEvent.click(sw);
       expect(onChange).toHaveBeenCalledWith(true);
-      expect(sw).toHaveAttribute('aria-checked', 'false');
+      expect(sw).toHaveAttribute('aria-checked', 'true');
 
       rerender(<Switch checked={true} onCheckedChange={onChange} />);
       expect(sw).toHaveAttribute('aria-checked', 'true');
@@ -118,6 +118,172 @@ describe('ui/Switch (v2.0.0 纯白流体胶囊与中轴对称版)', () => {
     it('非受控模式：defaultChecked=true 时初始状态为开启', () => {
       render(<Switch defaultChecked={true} />);
       expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+    });
+  });
+
+  describe('2.1 0ms 乐观响应状态机与异常回滚防死锁', () => {
+    it('OPT-01: 受控模式下点击产生 0ms 乐观翻转，无需等待外部 rerender', () => {
+      const onChange = vi.fn();
+      render(<Switch checked={false} onCheckedChange={onChange} />);
+      const sw = screen.getByRole('switch');
+
+      // 点击前：unchecked
+      expect(sw).toHaveAttribute('aria-checked', 'false');
+      expect(sw).toHaveAttribute('data-state', 'unchecked');
+
+      // 0ms 点击发生
+      fireEvent.click(sw);
+
+      // 断言：回调已发出，且 DOM 在当前帧 0ms 立即翻转并激活动态类名
+      expect(onChange).toHaveBeenCalledWith(true);
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+      expect(sw).toHaveAttribute('data-state', 'checked');
+      expect(sw.className).toContain(styles.hasInteracted);
+    });
+
+    it('OPT-02: 外部受控真源确认到达后，乐观标记平滑收敛且无视觉跳变', () => {
+      const onChange = vi.fn();
+      const { rerender } = render(
+        <Switch checked={false} onCheckedChange={onChange} />
+      );
+      const sw = screen.getByRole('switch');
+
+      fireEvent.click(sw);
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+
+      // 模拟上层状态更新完成并重新传入 checked=true
+      rerender(<Switch checked={true} onCheckedChange={onChange} />);
+
+      // 依然维持 true，平滑过渡
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+      expect(sw).toHaveAttribute('data-state', 'checked');
+    });
+
+    it('OPT-03: Devil-01 极速连续点击 5 次，状态交替反转并最终收敛', () => {
+      const onChange = vi.fn();
+      render(<Switch checked={false} onCheckedChange={onChange} />);
+      const sw = screen.getByRole('switch');
+
+      // 连续极速点击 5 次
+      fireEvent.click(sw); // 1 -> true (opt)
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+
+      fireEvent.click(sw); // 2 -> false (back to external)
+      expect(sw).toHaveAttribute('aria-checked', 'false');
+
+      fireEvent.click(sw); // 3 -> true (opt)
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+
+      fireEvent.click(sw); // 4 -> false (back to external)
+      expect(sw).toHaveAttribute('aria-checked', 'false');
+
+      fireEvent.click(sw); // 5 -> true (opt)
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+
+      expect(onChange).toHaveBeenCalledTimes(5);
+      expect(onChange).toHaveBeenLastCalledWith(true);
+    });
+
+    it('OPT-04: 同步回调抛错时，乐观状态立即捕获并瞬时回滚', () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const buggyOnChange = vi.fn(() => {
+        throw new Error('Sync storage explosion');
+      });
+
+      render(<Switch checked={false} onCheckedChange={buggyOnChange} />);
+      const sw = screen.getByRole('switch');
+
+      // 点击触发异常
+      fireEvent.click(sw);
+
+      // 必须安全回滚回 false，不发生死锁
+      expect(sw).toHaveAttribute('aria-checked', 'false');
+      expect(sw).toHaveAttribute('data-state', 'unchecked');
+      errorSpy.mockRestore();
+    });
+
+    it('OPT-05: 异步 Promise Rejection 时，微任务捕获并自动回滚', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      let rejectHandler!: (err: Error) => void;
+      const asyncOnChange = vi.fn(
+        () =>
+          new Promise((_, reject) => {
+            rejectHandler = reject;
+          })
+      );
+
+      render(<Switch checked={false} onCheckedChange={asyncOnChange} />);
+      const sw = screen.getByRole('switch');
+
+      fireEvent.click(sw);
+      // 0ms 阶段处于乐观 true
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+
+      // 模拟异步失败 Reject
+      await act(async () => {
+        rejectHandler(new Error('IPC network error'));
+      });
+
+      // 断言：已被微任务捕获并安全回滚回 false
+      expect(sw).toHaveAttribute('aria-checked', 'false');
+      expect(sw).toHaveAttribute('data-state', 'unchecked');
+      errorSpy.mockRestore();
+    });
+
+    it('OPT-06: 超时防死锁机制，外部悬空 5000ms 时自动恢复真源', () => {
+      vi.useFakeTimers();
+      const onChange = vi.fn();
+      render(
+        <Switch
+          checked={false}
+          optimisticTimeout={1000}
+          onCheckedChange={onChange}
+        />
+      );
+      const sw = screen.getByRole('switch');
+
+      fireEvent.click(sw);
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+
+      // 时间推移 999ms，依然乐观
+      act(() => {
+        vi.advanceTimersByTime(999);
+      });
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+
+      // 达到 1000ms 超时窗口，防死锁回滚生效
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(sw).toHaveAttribute('aria-checked', 'false');
+      vi.useRealTimers();
+    });
+
+    it('OPT-07: optimistic=false 时禁用乐观响应，维持纯受控降级行为', () => {
+      const onChange = vi.fn();
+      const { rerender } = render(
+        <Switch checked={false} optimistic={false} onCheckedChange={onChange} />
+      );
+      const sw = screen.getByRole('switch');
+
+      fireEvent.click(sw);
+      expect(onChange).toHaveBeenCalledWith(true);
+      // 禁用乐观时，点击后 DOM 依然保持 false
+      expect(sw).toHaveAttribute('aria-checked', 'false');
+
+      rerender(<Switch checked={true} optimistic={false} onCheckedChange={onChange} />);
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+    });
+
+    it('OPT-08: 键盘 Space / Enter 触发 0ms 乐观响应', () => {
+      const onChange = vi.fn();
+      render(<Switch checked={false} onCheckedChange={onChange} />);
+      const sw = screen.getByRole('switch');
+
+      fireEvent.keyDown(sw, { key: ' ' });
+      expect(onChange).toHaveBeenCalledWith(true);
+      expect(sw).toHaveAttribute('aria-checked', 'true');
+      expect(sw).toHaveAttribute('data-state', 'checked');
     });
   });
 

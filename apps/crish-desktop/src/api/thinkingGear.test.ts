@@ -34,12 +34,12 @@ describe('fetchDescribeEffortsSnapshot（catalog_get → 档位快照单源）',
     entries: [
       {
         model: 'deepseek-v4-flash',
-        reasoningEffortTiers: { low: 'low', medium: 'medium', high: 'high' },
+        thinkingTiers: { low: 'low', medium: 'medium', high: 'high' },
       },
       {
         model: 'gpt-5',
         apiModel: 'gpt-5.2',
-        thinkingLevelMap: { low: 'low', medium: 'medium' },
+        thinkingTiers: { low: 'low', medium: 'medium' },
       },
     ],
   };
@@ -90,11 +90,44 @@ describe('applyCatalogEfforts / resolveCatalogEfforts 边界', () => {
     applyCatalogEfforts({});
     applyCatalogEfforts({ entries: [] as never[] });
     applyCatalogEfforts({
-      entries: [{ model: 'x', thinkingLevelMap: { low: null } }],
+      entries: [{ model: 'x', thinkingTiers: { low: null } }],
     });
     expect(resolveCatalogEfforts('anything')).toEqual({ offered: [] });
     expect(thinkingLevelOptionsFor(null)).toEqual([
-      { value: 'default', label: '提供方默认', isProviderDefault: true },
+      { value: 'default', label: '默认', isProviderDefault: true },
     ]);
+  });
+
+  it('thinkingTiers 单源正确解析', () => {
+    applyCatalogEfforts({
+      entries: [
+        {
+          model: 'claude-3-7-sonnet',
+          thinkingTiers: {
+            default: 'high',
+            off: 'off',
+            low: 'low',
+            medium: 'medium',
+            high: 'high',
+          },
+        },
+      ],
+    });
+    const efforts = resolveCatalogEfforts('claude-3-7-sonnet');
+    expect(efforts.offered).toEqual(['high', 'low', 'medium', 'off']);
+    const options = thinkingLevelOptionsFor(efforts);
+    expect(options.map((o) => o.label)).toEqual([
+      '默认',
+      '高',
+      '低',
+      '中',
+      '关闭',
+    ]);
+  });
+
+  it('推理模型智能保底：包含 spark / r1 等关键字自动提供思考档位', () => {
+    clearCatalogEfforts();
+    const efforts = resolveCatalogEfforts('muse-spark-1.3-contributor');
+    expect(efforts.offered).toEqual(['off', 'low', 'medium', 'high']);
   });
 });

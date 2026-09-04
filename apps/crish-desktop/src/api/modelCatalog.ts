@@ -40,7 +40,6 @@ export {
   formatLastTestLabel,
   isEmptyCatalog,
   guessContextLength,
-  guessModelCapabilities,
   formatContextLabel,
   formatContextLabelZh,
 } from './modelCatalogPure';
@@ -49,9 +48,11 @@ export {
   getModelMeta,
   setModelEnabled,
   setModelContextLength,
+  setModelMaxOutputTokens,
   setModelDisplayName,
   setModelCapability,
   setModelThinkingLevel,
+  setModelProtocol,
   formatModelDisplayName,
 } from './modelCatalogMeta';
 

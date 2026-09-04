@@ -311,20 +311,7 @@
   );
 }
 
-/* 统一轻盈滚动条 */
-.terminalOutput::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.terminalOutput::-webkit-scrollbar-thumb {
-  background-color: var(--tint-divider, rgba(0, 0, 0, 0.15));
-  border-radius: 3px;
-}
-
-.terminalOutput::-webkit-scrollbar-track {
-  background: transparent;
-}
+/* 滚动条走全局唯一出口 overlay-scrollbar.css（细条 + 透明轨道 + 主题 thumb），私有 webkit 块已按契约清退 */
 
 /* --------------------------------------------------------------------------
    3. 高品味黑白灰权限询问卡片（Linear / Raycast 级精致设计）

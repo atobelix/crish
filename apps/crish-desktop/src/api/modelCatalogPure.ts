@@ -7,7 +7,6 @@
 import type { ProviderProfile } from './providerProfiles';
 import type {
   CatalogModelEntry,
-  ModelCapabilities,
   ModelMeta,
   PickDefaultCatalogOpts,
   UsableCatalogOpts,
@@ -286,28 +285,6 @@ export function guessContextLength(model: string): number | undefined {
   if (m.includes('200k')) return 200_000;
   if (m.includes('1m') || m.includes('1000k')) return 1_000_000;
   return undefined;
-}
-
-export function guessModelCapabilities(model: string): ModelCapabilities {
-  if (!model) return { tools: true };
-  const m = model.toLowerCase();
-  const reasoning =
-    m.includes('reasoner') ||
-    m.includes('r1') ||
-    m.includes('v4') ||
-    m.includes('o1') ||
-    m.includes('o3') ||
-    m.includes('thinking') ||
-    m.includes('k2') ||
-    m.includes('deepseek');
-  const vision =
-    m.includes('vision') ||
-    m.includes('vl') ||
-    m.includes('4o') ||
-    m.includes('gemini') ||
-    m.includes('claude') ||
-    m.includes('flash');
-  return { reasoning, vision, tools: true };
 }
 
 /**

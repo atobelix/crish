@@ -25,8 +25,8 @@ import type {
   CatalogModelEntry,
   CatalogSnapshotEntryWire,
   CatalogSnapshotWire,
-  ModelCapabilities,
   ScannedModel,
+  ScannedModelCapabilities,
 } from './modelCatalogTypes';
 import {
   buildCatalogEntriesFromProfiles,
@@ -70,6 +70,8 @@ export async function scanProviderModels(
   return { ok: false, models: [], error: '扫描服务未就绪' };
 }
 
+export type { ScannedModelCapabilities };
+
 /**
  * 扫描结果 → catalog_refresh 上送形状（纯）。
  * 仅映射窗口 / 能力位；vendor / maxOutputTokens 扫描不提供 → 缺省。
@@ -77,7 +79,7 @@ export async function scanProviderModels(
 export function buildScannedModelWire(
   model: string,
   contextWindow?: number | undefined,
-  capabilities?: ModelCapabilities | undefined
+  capabilities?: ScannedModelCapabilities | undefined
 ): ScannedModel {
   const m = normalizeModelIdText(model);
   const out: ScannedModel = { model: m };

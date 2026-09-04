@@ -39,6 +39,46 @@ afterEach(() => {
 });
 
 describe('ui/Tooltip', () => {
+  it('组件型子元素：内部点击链不被注入覆盖吞掉（开关失效类缺陷回归）', () => {
+    const onInternal = vi.fn();
+    // 模拟 <Tooltip><Switch/></Tooltip> 用态：点击 handler 在组件内部，
+    // 元素 props 上没有任何 onClick（Tooltip 若盲目注入即吞掉点击）
+    function FakeSwitch({ onActivated }: { onActivated: () => void }) {
+      const [on, setOn] = React.useState(false);
+      return (
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          onClick={() => {
+            setOn((v) => !v);
+            onActivated();
+          }}
+        />
+      );
+    }
+    render(
+      <Tip content="点击切换">
+        <FakeSwitch onActivated={onInternal} />
+      </Tip>
+    );
+    const btn = screen.getByRole('switch');
+    fireEvent.click(btn);
+    expect(onInternal).toHaveBeenCalledTimes(1);
+    expect(btn.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('外部 onClick 经 restProps 与 Tooltip 合成链组合（既有行为不回退）', () => {
+    const external = vi.fn();
+    render(
+      <Tip content="提示" onClick={external}>
+        <button type="button">原生目标</button>
+      </Tip>
+    );
+    fireEvent.click(screen.getByText('原生目标'));
+    expect(external).toHaveBeenCalledTimes(1);
+  });
+
   it('mouseEnter 未满 delayShow 不渲染；停满才经 portal 出现', () => {
     vi.useFakeTimers();
     render(

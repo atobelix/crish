@@ -3,15 +3,16 @@
  * 仅承载类型 / 常量枚举，无 LS / 无网络副作用，便于跨模块共享。
  */
 
-/** 模型能力开关（手配；扫描不发明） */
-export type ModelCapabilityKey = 'tools' | 'vision' | 'reasoning';
+/** 模型能力开关（手配；扫描不发明；历史 vision 键在 meta 读取时一次性迁移为 image） */
+export type ModelCapabilityKey = 'tools' | 'image' | 'video' | 'reasoning';
 
 export const MODEL_CAPABILITY_OPTIONS: ReadonlyArray<{
   key: ModelCapabilityKey;
   label: string;
 }> = [
   { key: 'tools', label: '工具调用' },
-  { key: 'vision', label: '视觉' },
+  { key: 'image', label: '图片' },
+  { key: 'video', label: '视频' },
   { key: 'reasoning', label: '推理' },
 ];
 
@@ -26,10 +27,14 @@ export type ModelMeta = {
   enabled: boolean;
   /** 上下文 token 上限（可手改） */
   contextLength?: number | undefined;
+  /** 最大输出 token 上限（可手改） */
+  maxOutputTokens?: number | undefined;
   /** 支持的能力 */
   capabilities?: ModelCapabilities | undefined;
   /** 思考强度偏好（模型独立配置，缺省跟随全局或提供方） */
   defaultThinkingLevel?: string | undefined;
+  /** 模型调用协议格式覆盖（缺省跟随提供商 format） */
+  protocol?: 'openai/chat' | 'openai/responses' | 'anthropic/messages' | undefined;
   lastTest?:
     | {
         ok: boolean;
@@ -65,6 +70,17 @@ export type PickDefaultCatalogOpts = {
   requireKey?: boolean;
 };
 
+/**
+ * 扫描上送能力位（引擎 wire 契约：Rust `ScannedCapabilities` camelCase 镜像）。
+ * 注意与本地 meta 域的 `ModelCapabilities`（tools/image/video/reasoning）是
+ * 两个不同的契约域：引擎 catalog 契约键为 `vision`（→ supports_vision）。
+ */
+export type ScannedModelCapabilities = {
+  tools?: boolean;
+  vision?: boolean;
+  reasoning?: boolean;
+};
+
 /** 扫描上送单模型（catalog_refresh wire，camelCase；缺省字段 Rust 侧不合并） */
 export type ScannedModel = {
   /** API 模型标识（扫描列表原样；空串 Rust 侧忽略） */
@@ -75,8 +91,8 @@ export type ScannedModel = {
   contextWindow?: number | undefined;
   /** 输出上限（扫描结果不提供，恒缺省） */
   maxOutputTokens?: number | undefined;
-  /** 能力位猜测（对齐 ModelCapabilityKey 三键） */
-  capabilities?: ModelCapabilities | undefined;
+  /** 能力位猜测（引擎 wire 域，见 ScannedModelCapabilities） */
+  capabilities?: ScannedModelCapabilities | undefined;
 };
 
 /** catalog_get wire 条目（Rust ModelCatalogEntry camelCase 子集：定价面字段） */

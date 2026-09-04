@@ -6,7 +6,9 @@ import React, {
 } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ModelBadgePickerMenu.module.css';
+
 import { activateProfileModel } from '../../api/providerProfiles';
+import { useModelMetaTick } from '../../hooks/useModelMetaTick';
 import {
   formatModelDisplayName,
   getModelMeta,
@@ -53,9 +55,13 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
     (s) => s.appSettings?.defaultThinkingLevel ?? 'default'
   );
 
+  // 元数据变更信号：设置页开关切换后本面板即时重过滤
+  const metaTick = useModelMetaTick();
+
   const profiles = useMemo(() => {
     return listPickerProfiles().filter((p) => p.enabled !== false);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- metaTick 仅作重算信号
+  }, [metaTick]);
 
   const filteredGroups = useMemo(() => {
     const kw = keyword.trim().toLowerCase();
@@ -96,7 +102,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
       }
     }
     return groups;
-  }, [profiles, keyword]);
+  }, [profiles, keyword, metaTick]);
 
   const handleSelectModel = useCallback(
     async (profileId: string, modelId: string) => {

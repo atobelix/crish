@@ -471,6 +471,22 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
     const effectiveSide = clampedPos?.effectiveSide ?? side;
     const isPositionReady = clampedPos !== null;
 
+    // 点击/按下链组合守卫：只有当「子元素自身 props」或「外部 restProps」存在
+    // 同名处理器时才注入合成覆盖。组件型子元素（如 <Switch>）的点击 handler
+    // 在组件内部而非元素 props 上——盲目注入会让 handleClick 调到 undefined，
+    // 把子组件的内部点击链整个吞掉（开关失效类缺陷的根因）。
+    const childClick = childPropsRecord.onClick as
+      | ((e: unknown) => void)
+      | undefined;
+    const restClick = (restProps as { onClick?: unknown }).onClick as
+      | ((e: unknown) => void)
+      | undefined;
+    const childPointerDown = childPropsRecord.onPointerDown as
+      | ((e: unknown) => void)
+      | undefined;
+    const restPointerDown = (restProps as { onPointerDown?: unknown })
+      .onPointerDown as ((e: unknown) => void) | undefined;
+
     const clonedChild = React.cloneElement(child, {
       ref: mergedRef,
       ...rest,
@@ -482,8 +498,10 @@ export const Tooltip = forwardRef<HTMLElement, TooltipProps>(
       onMouseLeave: handleMouseLeave,
       onFocus: handleFocus,
       onBlur: handleBlur,
-      onPointerDown: handlePointerDown,
-      onClick: handleClick,
+      ...(childClick || restClick ? { onClick: handleClick } : {}),
+      ...(childPointerDown || restPointerDown
+        ? { onPointerDown: handlePointerDown }
+        : {}),
     });
 
     const tooltipStateClass = !isPositionReady
