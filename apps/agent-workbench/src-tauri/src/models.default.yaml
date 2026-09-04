@@ -1,0 +1,149 @@
+# ==============================================================================
+# Conex / Crish - 统一模型能力与参数配置文件 (models.yaml)
+# ==============================================================================
+# 本文件是全系统模型字典的【绝对唯一真源 (SSOT)】：模型能力、参数与计价均以此为准。
+# 首次启动时由应用播种到 ~/.conex/models.yaml，此后完全由用户维护。
+#
+# 字段说明：
+#   model             模型标识（必填，全表唯一）
+#   vendor            供应商标识（必填）
+#   vendorDisplayName 供应商展示名（可选）
+#   displayName       界面展示名（可选）
+#   contextWindow     上下文窗口上限（可选）
+#   maxOutputTokens   单次最大生成上限（可选）
+#   protocol          调用协议：openai/chat | openai/responses | anthropic/messages（可选）
+#   capabilities      能力开关：tools / image / video / reasoning（可选）
+#   pricing           计价（可选）：inputPerMTok / outputPerMTok / cacheReadPerMTok /
+#                     cacheWritePerMTok（$/1M Tokens）/ billingUnit(token|per_image) /
+#                     perImageCost / currency(USD|CNY)
+#
+# 数据来源：docs/model-capability/surveys/01-主流模型多源权威数据全景调研.md（官方一手核验）
+# ==============================================================================
+
+models:
+  # --- OpenAI ---
+  - model: gpt-5.6-sol
+    vendor: openai
+    vendorDisplayName: OpenAI
+    displayName: GPT-5.6 Sol
+    contextWindow: 1050000
+    maxOutputTokens: 128000
+    protocol: openai/responses
+    capabilities: { tools: true, image: true, reasoning: true }
+    pricing: { inputPerMTok: 4.0, outputPerMTok: 20.0, cacheReadPerMTok: 0.4, cacheWritePerMTok: 5.0, billingUnit: token, currency: USD }
+
+  - model: gpt-5.5
+    vendor: openai
+    vendorDisplayName: OpenAI
+    displayName: GPT-5.5
+    contextWindow: 1050000
+    maxOutputTokens: 128000
+    protocol: openai/chat
+    capabilities: { tools: true, image: true, reasoning: true }
+    pricing: { inputPerMTok: 5.0, outputPerMTok: 30.0, cacheReadPerMTok: 0.5, cacheWritePerMTok: 6.25, billingUnit: token, currency: USD }
+
+  # --- Anthropic ---
+  - model: claude-sonnet-5
+    vendor: anthropic
+    vendorDisplayName: Anthropic
+    displayName: Claude Sonnet 5
+    contextWindow: 1000000
+    maxOutputTokens: 128000
+    protocol: anthropic/messages
+    capabilities: { tools: true, image: true, reasoning: true }
+    pricing: { inputPerMTok: 2.0, outputPerMTok: 10.0, cacheReadPerMTok: 0.2, cacheWritePerMTok: 2.5, billingUnit: token, currency: USD }
+
+  - model: claude-opus-5
+    vendor: anthropic
+    vendorDisplayName: Anthropic
+    displayName: Claude Opus 5
+    contextWindow: 1000000
+    maxOutputTokens: 128000
+    protocol: anthropic/messages
+    capabilities: { tools: true, image: true, reasoning: true }
+    pricing: { inputPerMTok: 5.0, outputPerMTok: 25.0, cacheReadPerMTok: 0.5, cacheWritePerMTok: 6.25, billingUnit: token, currency: USD }
+
+  # --- Google ---
+  - model: gemini-3.8-flash
+    vendor: google
+    vendorDisplayName: Google
+    displayName: Gemini 3.8 Flash
+    contextWindow: 1048576
+    maxOutputTokens: 65536
+    capabilities: { tools: true, image: true, video: true, reasoning: true }
+    pricing: { inputPerMTok: 1.5, outputPerMTok: 7.5, cacheReadPerMTok: 0.15, billingUnit: token, currency: USD }
+
+  # --- DeepSeek ---
+  - model: deepseek-v4-pro
+    vendor: deepseek
+    vendorDisplayName: DeepSeek
+    displayName: DeepSeek V4 Pro
+    contextWindow: 1048576
+    maxOutputTokens: 384000
+    protocol: openai/chat
+    capabilities: { tools: true, reasoning: true }
+    pricing: { inputPerMTok: 1.32, outputPerMTok: 3.96, cacheReadPerMTok: 0.044, billingUnit: token, currency: USD }
+
+  - model: deepseek-v4-flash
+    vendor: deepseek
+    vendorDisplayName: DeepSeek
+    displayName: DeepSeek V4 Flash
+    contextWindow: 1048576
+    maxOutputTokens: 384000
+    protocol: openai/chat
+    capabilities: { tools: true, reasoning: true }
+    pricing: { inputPerMTok: 0.44, outputPerMTok: 1.32, cacheReadPerMTok: 0.014, billingUnit: token, currency: USD }
+
+  # --- 阿里云百炼 ---
+  - model: qwen3.8-max
+    vendor: qwen
+    vendorDisplayName: 阿里云百炼
+    displayName: Qwen3.8 Max
+    contextWindow: 1000000
+    maxOutputTokens: 65536
+    protocol: openai/chat
+    capabilities: { tools: true, reasoning: true }
+    pricing: { inputPerMTok: 2.0, outputPerMTok: 6.0, cacheReadPerMTok: 0.4, billingUnit: token, currency: USD }
+
+  # --- 智谱 BigModel ---
+  - model: glm-5.3
+    vendor: zai
+    vendorDisplayName: 智谱 BigModel
+    displayName: GLM-5.3
+    contextWindow: 1048576
+    maxOutputTokens: 262144
+    protocol: openai/chat
+    capabilities: { tools: true, reasoning: true }
+    pricing: { inputPerMTok: 1.4, outputPerMTok: 4.4, cacheReadPerMTok: 0.14, billingUnit: token, currency: USD }
+
+  - model: glm-5.3-flash
+    vendor: zai
+    vendorDisplayName: 智谱 BigModel
+    displayName: GLM-5.3 Flash
+    contextWindow: 200000
+    maxOutputTokens: 128000
+    protocol: openai/chat
+    capabilities: { tools: true, reasoning: true }
+    pricing: { inputPerMTok: 0.075, outputPerMTok: 0.25, cacheReadPerMTok: 0.015, billingUnit: token, currency: USD }
+
+  # --- Moonshot (Kimi) ---
+  - model: kimi-k3
+    vendor: moonshotai
+    vendorDisplayName: Moonshot (Kimi)
+    displayName: Kimi K3
+    contextWindow: 1048576
+    maxOutputTokens: 943718
+    protocol: openai/chat
+    capabilities: { tools: true, image: true, video: true, reasoning: true }
+    pricing: { inputPerMTok: 3.0, outputPerMTok: 15.0, cacheReadPerMTok: 0.3, billingUnit: token, currency: USD }
+
+  # --- xAI ---
+  - model: grok-4.6
+    vendor: xai
+    vendorDisplayName: xAI (Grok)
+    displayName: Grok 4.6
+    contextWindow: 500000
+    maxOutputTokens: 450000
+    protocol: openai/chat
+    capabilities: { tools: true, image: true, reasoning: true }
+    pricing: { inputPerMTok: 2.0, outputPerMTok: 6.0, cacheReadPerMTok: 0.5, billingUnit: token, currency: USD }

@@ -60,7 +60,7 @@ const fn entry(
     }
 }
 
-/// 命令清单（124 条 = 全部 registered=true 实装命令；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
+/// 命令清单（127 条 = 全部 registered=true 实装命令；与前端 `BUILTIN_COMMAND_MANIFEST` 双向镜像）。
 ///
 /// 注册面（registered=true）必须与 main.rs `make_handlers!` 注册一致；
 /// 登记先行（registered=false）为「已登记未接线」：workbench_open_workspace /
@@ -68,7 +68,8 @@ const fn entry(
 /// F-03（DM-07）：core_read_run_events 恢复激活；R1 撤回 core_session_retract 登记
 ///（统一输入流收敛战役）后总数 125（注册面 120 → 121）；R7 收口 GUI fs 删除命令
 /// 幽灵退役（R6-D5 后零消费）后总数 124（注册面 121 → 120）；
-/// computer_estop 退役后 123；`note_document_recent` 追加后 124。
+/// computer_estop 退役后 123；`note_document_recent` 追加后 124；
+/// 模型字典真源三命令（read/validate/save models.yaml）追加后 127。
 pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
     contract_version: COMMAND_MANIFEST_CONTRACT_VERSION,
     commands: &[
@@ -87,6 +88,10 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         entry("workbench_open_host_target", "workbench", "gui", true),
         entry("workbench_open_path_default", "workbench", "gui", true),
         entry("workbench_list_file_openers", "workbench", "gui", true),
+        // 模型字典真源（models.yaml）：读（缺则播种）/ 校验 / 原子保存
+        entry("workbench_read_models_yaml", "workbench", "gui", true),
+        entry("workbench_validate_models_yaml", "workbench", "gui", true),
+        entry("workbench_save_models_yaml", "workbench", "gui", true),
         // F1（R-AB1 T-AB-08）：后台任务三条查询命令恢复（B01/B02 查询面）
         entry("workbench_list_background_tasks", "workbench", "gui", true),
         entry(
@@ -284,7 +289,8 @@ mod tests {
     /// F-03（DM-07）core_read_run_events 恢复激活（注册面 119 → 120）；R1 撤回
     /// core_session_retract 登记（统一输入流收敛战役）后总数 124 → 125（注册面 120 → 121）；
     /// R7 收口 GUI fs 删除命令幽灵退役（R6-D5 后零消费）后总数 125 → 124（注册面 121 → 120）；
-    /// computer_estop 退役后 123；note_document_recent 追加后 124。
+    /// computer_estop 退役后 123；note_document_recent 追加后 124；
+    /// 模型字典真源三命令（read/validate/save models.yaml）追加后 127。
     #[test]
     fn manifest_count_matches_registered_surface() {
         let total = COMMAND_MANIFEST.commands.len();
@@ -295,12 +301,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 124,
-            "总数 124（123 + note_document_recent；与前端同步）"
+            total, 127,
+            "总数 127（124 + 模型字典真源三命令；与前端同步）"
         );
         assert_eq!(
-            registered, 124,
-            "注册面 124（全部为 registered=true 实装命令）"
+            registered, 127,
+            "注册面 127（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -422,7 +428,7 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 124);
+        assert_eq!(manifest.commands.len(), 127);
         assert_eq!(manifest.contract_version, "1.0.0");
     }
 

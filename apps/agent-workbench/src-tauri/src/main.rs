@@ -59,6 +59,7 @@ mod git;
 mod host_openers;
 mod host_paths;
 mod markdown_commands;
+mod models_yaml;
 mod retraction_commands;
 mod task_event_consumer;
 // 多端互通模块族（R1-06：TLS + 自签证书 + 指纹固定，multi_device/tls.rs；
@@ -190,6 +191,19 @@ command_registry![
     (
         "workbench_list_file_openers",
         host_openers::workbench_list_file_openers
+    ),
+    // 模型字典真源（models.yaml）：读（缺则播种）/ 校验 / 原子保存
+    (
+        "workbench_read_models_yaml",
+        models_yaml::workbench_read_models_yaml
+    ),
+    (
+        "workbench_validate_models_yaml",
+        models_yaml::workbench_validate_models_yaml
+    ),
+    (
+        "workbench_save_models_yaml",
+        models_yaml::workbench_save_models_yaml
     ),
     // T-F 06：fs 四命令经 `#[tauri::command(rename = "workbench_*")]` 对齐
     // wire 键（元组名 = manifest 登记名 = wire 键逐字一致，分裂已消除）

@@ -17,6 +17,8 @@ tauri-build.workspace = true
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
+# 模型字典真源（models.yaml）解析/校验：models_yaml.rs 唯一解析路径
+serde_yaml = "0.9"
 # protocol-asset：文件管理器图片/PDF 预览（convertFileSrc + asset://）；
 # test：壳测试（tauri::test 依赖，PE-11 测试策略）
 tauri = { workspace = true, features = ["protocol-asset", "test"] }
