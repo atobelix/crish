@@ -266,7 +266,10 @@ html[data-theme='light'] {
   --text-on-accent: #ffffff;
 
   /* semantic color roles */
-  --color-success: var(--accent-green);
+  /* 浅色对比度：--color-success 取 --ui-text-success（#2f9e44，3.45:1 ≥ 3:1）；
+     --text-success 取 --text-success-strong（#46724c，5.57:1 ≥ 4.5:1）——
+     回指 accent-green（2.19:1）会让成功态文字/徽标前景在浅底上不可读 */
+  --color-success: var(--ui-text-success);
   --color-success-bg: var(--accent-green-light);
   --color-success-border: var(--accent-green-muted);
   --color-warning: var(--accent-orange);
@@ -290,7 +293,7 @@ html[data-theme='light'] {
 
   /*       --text-danger/--text-success      /        --color-*      */
   --text-danger: var(--color-error);
-  --text-success: var(--color-success);
+  --text-success: var(--text-success-strong);
   /*         08     3/5 WCAG AA     4.5:1
    *   /    --accent-orange/--accent-green
    * --text-warning-strong #c2410c light   4.55:1 accent-orange   1.85:1
