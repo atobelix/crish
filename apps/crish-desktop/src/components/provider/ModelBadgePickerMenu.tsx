@@ -137,7 +137,10 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
   }, [onOpenChange, onClose]);
 
   const currentThinkingDisplay = useMemo(() => {
-    if (!storedThinking || storedThinking === 'default') return '提供方默认';
+    // 档位标签单源 = thinkingGear（default → 『默认』），不在此硬编码文案
+    if (!storedThinking || storedThinking === 'default') {
+      return THINKING_LEVEL_LABELS['default'] ?? '默认';
+    }
     return THINKING_LEVEL_LABELS[storedThinking] ?? storedThinking;
   }, [storedThinking]);
 
@@ -245,7 +248,7 @@ export const ModelBadgePickerMenu: React.FC<Props> = ({
                   <span className={styles.thinkingTitle}>思考强度</span>
                   <span className={styles.thinkingValue}>{currentThinkingDisplay}</span>
                 </div>
-                {/* 档位单源 = thinkingGear（catalog 描述接口白名单 + 提供方默认）；
+                {/* 档位单源 = thinkingGear（catalog 描述接口白名单 + 默认项）；
                     删除了 THINKING_PILLS 硬编码数组与 'High' 谎报（模型能力战役 v2） */}
                 <div className={styles.thinkingTrack}>
                   {thinkingLevelOptionsFor(resolveCatalogEfforts(activeModel ?? '')).map(
