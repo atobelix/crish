@@ -40,12 +40,12 @@ export const BROWSER_STATE_LABEL: Record<BrowserSessionState, string> = {
 
 /** 状态描述（状态区副标题） */
 export const BROWSER_STATE_DESC: Record<BrowserSessionState, string> = {
-  idle: 'AI 浏览器未启动。启动后将打开受管 Chrome 窗口（headed 形态，无帧流）。',
-  launching: '正在拉起受管浏览器窗口…',
-  running: '受管浏览器窗口已运行，供 AI 操作。',
-  stopping: '正在关闭受管浏览器窗口…',
-  stopped: '受管浏览器已停止，可随时重新启动。',
-  crashed: '受管浏览器进程异常退出，可重新启动；详情见引擎日志。',
+  idle: '浏览器未启动。启动后将打开专用 Chrome 窗口（headed 形态，无帧流）。',
+  launching: '正在拉起浏览器窗口…',
+  running: '浏览器窗口已运行，供自动化操作。',
+  stopping: '正在关闭浏览器窗口…',
+  stopped: '浏览器已停止，可随时重新启动。',
+  crashed: '浏览器进程异常退出，可重新启动；详情见引擎日志。',
   error: '引擎未返回可用状态，可重新启动重试。',
 };
 

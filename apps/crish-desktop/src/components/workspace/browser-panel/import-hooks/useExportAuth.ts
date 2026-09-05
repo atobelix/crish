@@ -80,6 +80,9 @@ export function useExportAuth({
       setExportPreviewOpen(false);
       setExportedJson('');
       setExportPreview(null);
+      const msg = '登录态凭据已导出';
+      onShowToast?.(msg);
+      toast.show(msg);
     } catch (err) {
       reportStorageError('登录态保存失败：', String(err ?? ''));
     }

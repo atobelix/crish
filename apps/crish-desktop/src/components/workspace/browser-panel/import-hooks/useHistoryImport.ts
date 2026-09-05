@@ -47,13 +47,17 @@ export function useHistoryImport({
     [onShowToast]
   );
 
-  const runHistoryImport = async () => {
-    if (busy || !historyPath.trim()) return;
+  const runHistoryImport = async (overridePath?: string) => {
+    const target = (overridePath ?? historyPath).trim() || 'default';
+    if (busy || !target) return;
     setBusy('history');
     setHistoryError('');
-    const res = await importHistory(historyPath.trim());
+    const res = await importHistory(target);
     if (res.status === 'ok') {
       setHistoryResult(res.data);
+      const msg = `历史记录导入成功：新增 ${res.data.inserted} 条，跳过 ${res.data.skippedDupes} 条`;
+      onShowToast?.(msg);
+      toast.show(msg);
     } else {
       reportHistoryError('历史导入失败：', resultMessage(res, ''));
     }

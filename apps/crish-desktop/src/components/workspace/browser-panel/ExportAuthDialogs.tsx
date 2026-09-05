@@ -42,7 +42,7 @@ export const ExportAuthDialogs: React.FC<ExportAuthDialogsProps> = ({
       title="授权读取登录态"
       description={
         <>
-          将读取受管浏览器会话的 cookie（<strong>仅内存传递，不写盘</strong>
+          将读取浏览器会话的 cookie（<strong>仅内存传递，不写盘</strong>
           ；含 cookie value 明文，请勿泄露至日志）。确认后先展示域名清单预览，
           由你再次确认后才导出文件。未授权不会执行读取（零副作用）。
         </>
@@ -66,7 +66,7 @@ export const ExportAuthDialogs: React.FC<ExportAuthDialogsProps> = ({
               ? `、${exportPreview.origins} 个 origin`
               : ''}
             ，涉及域名：
-            <code className={styles.domainList}>
+            <code>
               {exportPreview.domains.length > 0
                 ? exportPreview.domains.join('、')
                 : '（无）'}

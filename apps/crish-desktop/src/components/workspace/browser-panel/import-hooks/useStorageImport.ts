@@ -89,10 +89,43 @@ export function useStorageImport({
     const res = await importStorageState(storageJson);
     if (res.status === 'ok') {
       setStorageResult(res.data);
+      const msg = `登录态导入成功（cookies ${res.data.cookies} 条）`;
+      onShowToast?.(msg);
+      toast.show(msg);
     } else {
       reportStorageError('登录态导入失败：', resultMessage(res, ''));
     }
     setBusy(null);
+  };
+
+  const importStorageFile = async (file: File) => {
+    if (file.size > BROWSER_IMPORT_MAX_BYTES) {
+      reportStorageError(
+        '登录态导入失败：',
+        `文件超过 ${BROWSER_IMPORT_MAX_BYTES / 1024 / 1024}MB 上限`
+      );
+      return;
+    }
+    setBusy('storageImport');
+    setStorageError('');
+    try {
+      const text = await readFileAsText(file);
+      setStorageJson(text);
+      setStorageFileName(file.name);
+      const res = await importStorageState(text);
+      if (res.status === 'ok') {
+        setStorageResult(res.data);
+        const msg = `登录态导入成功：cookies ${res.data.cookies} 条`;
+        onShowToast?.(msg);
+        toast.show(msg);
+      } else {
+        reportStorageError('登录态导入失败：', resultMessage(res, ''));
+      }
+    } catch (err) {
+      reportStorageError('读取登录态文件失败：', String(err ?? ''));
+    } finally {
+      setBusy(null);
+    }
   };
 
   return {
@@ -106,5 +139,7 @@ export function useStorageImport({
     onStorageFileChange,
     runStorageImport,
     setStorageError,
+    applyStorageFile: importStorageFile,
+    importStorageFile,
   };
 }
