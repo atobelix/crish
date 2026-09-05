@@ -24,6 +24,8 @@ export const lightTokens = {
   textTertiary: 'rgba(85,85,85,0.7)',
   hairline: 'hsl(35,8%,91%)',
   hairlineStrong: 'hsl(35,10%,86%)',
+  // AGENTS.md §13 焦点态柔边：~5.8% 混入
+  focusBorder: 'hsl(35,10%,81%)',
   // R2-05 部分 11（R2-16 走查 §3.3 W-6）：浅色语义色作文字压暗至对比度 ≥4.5:1（R2UX §4.2）
   colorSuccess: 'hsl(142,35%,35%)',
   colorWarning: 'hsl(38,92%,30%)',
@@ -51,6 +53,8 @@ export const darkTokens: ThemeTokens = {
   textTertiary: 'rgba(163,163,163,0.62)',
   hairline: 'hsl(0,0%,14%)',
   hairlineStrong: 'hsl(0,0%,18%)',
+  // AGENTS.md §13 焦点态柔边：~5% 混入
+  focusBorder: 'hsl(0,0%,23%)',
   // R2-05 部分 11：深色语义色作文字提亮/压深至对比度 ≥4.5:1（colorSuccess 提亮、colorError 提亮）
   colorSuccess: 'hsl(142,35%,50%)',
   colorWarning: 'hsl(38,92%,50%)',
@@ -124,6 +128,9 @@ export function useTheme(): ThemeTokens {
   const systemTokens = useColorScheme() === 'dark' ? darkTokens : lightTokens;
   return projectThemeTokens(mode, systemTokens);
 }
+
+/** 兼容别名：useAppTheme 与 useTheme 函数恒等（单一真理源） */
+export const useAppTheme = useTheme;
 
 /** 测试隔离：主题偏好复位（仅测试调用） */
 export function resetThemeModeForTest(): void {

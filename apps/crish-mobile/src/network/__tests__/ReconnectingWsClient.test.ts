@@ -405,6 +405,43 @@ describe('ReconnectingWsClient connect 生命周期（M5 §4.3.1）', () => {
     expect(factory).toHaveBeenCalledTimes(1);
   });
 
+  test('时序竞态消除：onPhaseChange("open") 触发时 attachSend 已完成，可立即发帧', () => {
+    let sentOnOpen: boolean = false;
+    let sendError: unknown = null;
+    const { client, ws, gateway } = makeHarness({
+      onPhaseChange: (phase) => {
+        if (phase === 'open') {
+          try {
+            gateway.send('test.ping', { ping: true });
+            sentOnOpen = true;
+          } catch (e) {
+            sendError = e;
+          }
+        }
+      },
+    });
+    client.connect();
+    ws.emitOpen();
+    expect(sendError).toBeNull();
+    expect(sentOnOpen).toBe(true);
+    expect(ws.sent).toHaveLength(1);
+    expect(JSON.parse(ws.sent[0]!).kind).toBe('test.ping');
+  });
+
+  test('sendSubscribe 构造并发送 events.subscribe 订阅帧', () => {
+    const { client, ws } = makeHarness();
+    client.connect();
+    ws.emitOpen();
+    client.sendSubscribe(['s-1', 's-2'], { 's-1': 42 });
+    const subFrame = ws.sent.map((s) => JSON.parse(s) as { kind: string; body: unknown }).find((f) => f.kind === 'events.subscribe');
+    expect(subFrame).toBeDefined();
+    expect(subFrame!.body).toEqual({
+      sessions: ['s-1', 's-2'],
+      lastSequences: { 's-1': 42 },
+      ackMode: 'auto',
+    });
+  });
+
   test('onmessage → decodeFrame → 分发到订阅者；heartbeat.ok 更新回执', () => {
     const { client, ws, gateway } = makeHarness();
     client.connect();

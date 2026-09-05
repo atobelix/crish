@@ -274,7 +274,7 @@ describe('全链装配（begin → hello → ok → 派生 → 持久化 → 连
     expect(h.sessionCtxs).toHaveLength(1);
     expect(h.sessionCtxs[0]).toMatchObject({
       host: '192.168.1.5',
-      url: 'wss://192.168.1.5:8765',
+      url: 'wss://192.168.1.5:8765/v1/events',
       deviceId: s.pendingHello!.deviceId,
       desktopId: 'crish-desktop',
       token: 'tok-abc',
@@ -418,7 +418,7 @@ describe('冷启动恢复（hydrate：已配对 → 直接连接）', () => {
       deviceId: 'dev-cold-0001',
       desktopId: 'crish-desktop',
       host: '10.0.0.2',
-      url: 'wss://10.0.0.2:8765',
+      url: 'wss://10.0.0.2:8765/v1/events',
       token: 'tk-1',
       tokenKey: 'tk-1',
     });
@@ -1011,7 +1011,7 @@ describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联
       },
     });
     h.wiring.beginPairing({ code: VALID_CODE, host: '192.168.1.5' });
-    expect(urls[0]).toBe('wss://192.168.1.5:8765');
+    expect(urls[0]).toBe('wss://192.168.1.5:8765/v1/events');
     sockets[0]!.onopen!();
     h.wiring.getPairingClient()!.gateway.dispatchFrame(
       frame('pair.challenge', {
@@ -1030,7 +1030,7 @@ describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联
     );
     await flush();
     expect(h.sessionCtxs).toHaveLength(1);
-    expect(h.sessionCtxs[0]!.url).toBe('wss://192.168.1.5:8765');
+    expect(h.sessionCtxs[0]!.url).toBe('wss://192.168.1.5:8765/v1/events');
   });
 
   it('EXPO_PUBLIC_ENGINE_TLS=false：配对期连接解析 ws（明文豁免生效）', () => {
@@ -1043,8 +1043,8 @@ describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联
       },
     });
     h.wiring.beginPairing({ code: VALID_CODE, host: '10.0.2.2' });
-    expect(urls[0]).toBe('ws://10.0.2.2:8765');
-    expect(h.wiring.getPairingClient()!.url).toBe('ws://10.0.2.2:8765');
+    expect(urls[0]).toBe('ws://10.0.2.2:8765/v1/events');
+    expect(h.wiring.getPairingClient()!.url).toBe('ws://10.0.2.2:8765/v1/events');
   });
 
   it('EXPO_PUBLIC_ENGINE_TLS=false：配对成功会话连接解析 ws', async () => {
@@ -1078,7 +1078,7 @@ describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联
     );
     await flush();
     expect(h.sessionCtxs).toHaveLength(1);
-    expect(h.sessionCtxs[0]!.url).toBe('ws://192.168.1.5:8765');
+    expect(h.sessionCtxs[0]!.url).toBe('ws://192.168.1.5:8765/v1/events');
   });
 
   it('EXPO_PUBLIC_ENGINE_TLS=false：冷启动恢复（hydrate）会话连接解析 ws', async () => {
@@ -1104,7 +1104,7 @@ describe('配对端点明文开关（EXPO_PUBLIC_ENGINE_TLS，R2-16 裁决-1 联
     );
     expect(await wiring.hydrate()).toBe(true);
     expect(sessionCtxs).toHaveLength(1);
-    expect(sessionCtxs[0]!.url).toBe('ws://10.0.2.2:8765');
+    expect(sessionCtxs[0]!.url).toBe('ws://10.0.2.2:8765/v1/events');
   });
 
   it('engineTlsEnabled：仅精确值 false 关闭 TLS（缺省/其它值 → true）', () => {

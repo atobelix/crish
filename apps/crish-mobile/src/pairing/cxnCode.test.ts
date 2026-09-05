@@ -5,6 +5,7 @@
 import {
   extractCodeFromDraft,
   formatPairCode,
+  formatPairCodeDraft,
   generatePairCode,
   isValidPairCode,
   normalizePairCode,
@@ -179,6 +180,40 @@ describe('generatePairCode（字符集均匀采样）', () => {
       if (r.ok) {
         expect(r.data).toBe(code);
       }
+    }
+  });
+});
+
+describe('formatPairCodeDraft 与 extractCodeFromDraft 互逆闭环', () => {
+  it('输入空串返回空串', () => {
+    expect(formatPairCodeDraft('')).toBe('');
+  });
+
+  it('部分输入实时格式化带前缀与分隔符', () => {
+    expect(formatPairCodeDraft('7K4P')).toBe('CXN-7K4P');
+    expect(formatPairCodeDraft('7k4pq2')).toBe('CXN-7K4P-Q2');
+  });
+
+  it('12 位码完整格式化', () => {
+    expect(formatPairCodeDraft('7k4pq2mb9xrt')).toBe('CXN-7K4P-Q2MB-9XRT');
+  });
+
+  it('超 12 位截断', () => {
+    expect(formatPairCodeDraft('7K4PQ2MB9XRTZZZZ')).toBe('CXN-7K4P-Q2MB-9XRT');
+  });
+
+  it('extractCodeFromDraft(formatPairCodeDraft(raw)) 保持恒等', () => {
+    const rawCodes = [
+      'K',
+      'KC5Q',
+      'KC5QBNTV',
+      '7K4PQ2MB9XRT',
+      'CXN7K4PQ2MB9',
+    ];
+    for (const raw of rawCodes) {
+      const formatted = formatPairCodeDraft(raw);
+      const extracted = extractCodeFromDraft(formatted);
+      expect(extracted).toBe(raw.startsWith('CXN') && raw.length > 12 ? raw.slice(3) : raw);
     }
   });
 });

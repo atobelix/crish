@@ -4,6 +4,7 @@
 // - 按压反馈 ≤80ms（M4 §8.4-2：opacity 微降即时反馈，不引入 reanimated）。
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -89,6 +90,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    ...Platform.select({
+      android: {
+        minHeight: 48,
+      },
+    }),
   },
   content: {
     flexDirection: 'row',

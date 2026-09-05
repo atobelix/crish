@@ -21,11 +21,8 @@ import {
   BackHandler,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
-  TextInput,
-  useColorScheme,
   View,
 } from 'react-native';
 import {
@@ -42,9 +39,11 @@ import type {
 } from '@/adapters/wiring/pairingWiring';
 import { useConnectionStore } from '@/adapters/hooks/useAppStore';
 import { selectConnectionPhaseText } from '@/domain/store/connectionStore';
-import { useAppTheme, useThemeMode } from '@/adapters/settings/themeProjection';
+import { useTheme } from '@/adapters/platform/theme';
 import Button from '@/presentation/components/ui/Button';
 import Dialog from '@/presentation/components/ui/Dialog';
+import Input from '@/presentation/components/ui/Input';
+import HeaderBackButton from '@/presentation/components/ui/HeaderBackButton';
 import type { DialogAction } from '@/presentation/components/ui/Dialog';
 import {
   ensurePairingController,
@@ -63,10 +62,7 @@ export const PAIR_ABANDON_DIALOG_DESCRIPTION =
 export const PAIR_LOCKED_TEXT =
   '尝试次数过多，请在桌面端重新开启配对（冷却 5 分钟）';
 
-// 焦点边框（R2UX §13：焦点态须可见但柔软——hairlineStrong 向 textPrimary
-// 混入约 6%，不取深黑实线；token 面无焦点专用项，本处按规范量级落地）
-const FOCUS_BORDER_LIGHT = 'hsl(35,10%,81%)';
-const FOCUS_BORDER_DARK = 'hsl(0,0%,23%)';
+
 
 /** wire/接线错误码 → 人话文案（D3 §6.2 pair.* 全表 + 接线层本地码） */
 export const PAIR_ERROR_TEXT: Record<string, string> = {
@@ -141,7 +137,7 @@ export default function PairManualScreen({
   controller: controllerProp,
   onBack,
 }: PairManualScreenProps) {
-  const theme = useAppTheme();
+  const theme = useTheme();
   const controller = useMemo(
     () => controllerProp ?? ensurePairingController(),
     [controllerProp]
@@ -156,9 +152,6 @@ export default function PairManualScreen({
 
   const [host, setHost] = useState('');
   const [codeRaw, setCodeRaw] = useState('');
-  const [focusedField, setFocusedField] = useState<'host' | 'code' | null>(
-    null
-  );
   const [localError, setLocalError] = useState<string | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const submittingRef = useRef(false);
@@ -235,14 +228,6 @@ export default function PairManualScreen({
     },
   ];
 
-  // 焦点边框（R2UX §13：焦点态可见但柔软，hairlineStrong 向 textPrimary 约 6% 混入）；
-  // 有效配色 = 主题三选投影（跟随系统时取系统外观，对齐 themeProjection 语义）
-  const themeMode = useThemeMode((s) => s.mode);
-  const systemScheme = useColorScheme();
-  const effectiveDark =
-    themeMode === 'dark' || (themeMode === 'system' && systemScheme === 'dark');
-  const focusBorder = effectiveDark ? FOCUS_BORDER_DARK : FOCUS_BORDER_LIGHT;
-
   return (
     <KeyboardAvoidingView
       style={styles.flex}
@@ -250,58 +235,31 @@ export default function PairManualScreen({
     >
       <View style={[styles.container, { backgroundColor: theme.bgPrimary }]}>
         <View style={styles.header}>
-          <Pressable
+          <HeaderBackButton
             testID="pair-manual-back"
-            accessibilityRole="button"
             accessibilityLabel="返回"
+            label="‹ 返回"
             onPress={handleBack}
-            style={styles.backBtn}
-          >
-            <Text style={[styles.backText, { color: theme.textSecondary }]}>
-              ‹ 返回
-            </Text>
-          </Pressable>
+          />
           <Text style={[styles.title, { color: theme.textPrimary }]}>
             手动配对
           </Text>
         </View>
 
-        <TextInput
+        <Input
           testID="pair-host-input"
-          style={[
-            styles.input,
-            {
-              borderColor:
-                focusedField === 'host' ? focusBorder : theme.hairlineStrong,
-              color: theme.textPrimary,
-            },
-          ]}
           placeholder="主机 IP / 主机名"
-          placeholderTextColor={theme.textTertiary}
           value={host}
           onChangeText={setHost}
-          onFocus={() => setFocusedField('host')}
-          onBlur={() => setFocusedField(null)}
           autoCapitalize="none"
           autoCorrect={false}
           accessibilityLabel="主机 IP 或主机名"
         />
-        <TextInput
+        <Input
           testID="pair-code-input"
-          style={[
-            styles.input,
-            {
-              borderColor:
-                focusedField === 'code' ? focusBorder : theme.hairlineStrong,
-              color: theme.textPrimary,
-            },
-          ]}
           placeholder="配对码（CXN-XXXX-XXXX-XXXX）"
-          placeholderTextColor={theme.textTertiary}
           value={formatPairCodeDraft(codeRaw)}
           onChangeText={(text) => setCodeRaw(extractCodeFromDraft(text))}
-          onFocus={() => setFocusedField('code')}
-          onBlur={() => setFocusedField(null)}
           maxLength={PAIR_CODE_DISPLAY_MAX_LENGTH}
           autoCapitalize="characters"
           autoCorrect={false}
@@ -375,27 +333,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  backBtn: {
-    minHeight: 44,
-    minWidth: 44,
-    justifyContent: 'center',
-  },
-  backText: {
-    fontSize: 15,
-  },
   title: {
     flex: 1,
     fontSize: 22,
     fontWeight: '600',
     textAlign: 'center',
     marginRight: 44,
-  },
-  input: {
-    height: 48,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    fontSize: 15,
   },
   hint: {
     fontSize: 12,
