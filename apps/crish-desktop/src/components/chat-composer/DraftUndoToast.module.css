@@ -17,16 +17,13 @@
   max-width: min(460px, calc(100vw - 24px));
   padding: 6px 8px 6px 12px;
   border: var(--hairline-width, 1px) solid
-    color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 94%, var(--text-primary) 6%);
+    color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%);
   border-radius: 10px;
-  background: hsl(0 0% 100% / 0.96);
+  background: var(--bg-elevated, hsl(0 0% 100%));
   color: var(--text-primary);
   font-size: 12px;
   line-height: 1.4;
-  box-shadow:
-    0 16px 40px -8px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 12%, transparent),
-    0 4px 16px -2px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 5%, transparent);
-  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-lg);
   animation: undoToastIn 160ms ease-out;
 }
 

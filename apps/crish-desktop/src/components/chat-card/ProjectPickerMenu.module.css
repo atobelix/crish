@@ -94,10 +94,8 @@
   margin-left: 4px;
   min-width: 160px;
   border-radius: var(--sep-submenu-radius, 8px);
-  border: 1px solid var(--sep-border-color, #e2dfd9);
-  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
-  backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
-  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px)) saturate(160%);
+  border: 1px solid var(--sep-border-color, var(--border-color));
+  background: var(--sep-bg-panel-solid, var(--bg-elevated));
   box-shadow: var(--sep-shadow);
   padding: 4px;
 }

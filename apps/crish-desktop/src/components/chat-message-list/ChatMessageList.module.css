@@ -45,9 +45,8 @@
   border: var(--hairline-width, 1px) solid
     var(--hairline, var(--border-subtle, var(--border-color)));
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-primary) 88%, transparent);
+  background: var(--bg-primary);
   box-shadow: none;
-  backdrop-filter: blur(8px);
 }
 
 .pinnedBarToggle {

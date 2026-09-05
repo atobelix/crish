@@ -62,9 +62,7 @@
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--md-table-header-bg, color-mix(in srgb, var(--bg-secondary) 90%, transparent));
-  backdrop-filter: blur(var(--md-table-header-backdrop-blur, 12px));
-  -webkit-backdrop-filter: blur(var(--md-table-header-backdrop-blur, 12px));
+  background: var(--md-table-header-bg, var(--bg-secondary));
   font-weight: var(--md-table-header-font-weight, 600);
   color: var(--md-table-header-fg, var(--text-primary));
   border-bottom: var(--md-table-border-width, var(--hairline-width, 1px)) solid var(--md-table-header-border, var(--border-color));
