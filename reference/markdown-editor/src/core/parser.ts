@@ -2279,7 +2279,7 @@ export class MarkdownParser {
                   tokens.push({
                     type: 'list_number',
                     raw: numberMatch[0],
-                    content: numberMatch[2] + ' ',
+                    content: numberMatch[0],
                     indent: indent,
                     marker: numberMatch[2] + ' ',
                     localOffset: nestedLocalOffset,

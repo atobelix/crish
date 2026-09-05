@@ -43,9 +43,9 @@ html[data-theme='light'] {
    * Premium Light Theme
    * Pure neutral/monochrome greys
    */
-  --bg-primary: hsl(35 8% 94.5%); /* 外层底板大矩形背景 (Shell, 5.5% 灰度) */
-  --bg-secondary: hsl(35 8% 92.1%); /* 侧边栏/辅助层背景 (7.9% 灰度) */
-  --bg-tertiary: hsl(35 8% 89.7%); /* 悬浮/深一层背景 (10.3% 灰度) */
+  --bg-primary: hsl(30 2.5% 95.5%); /* 外层底板大矩形背景 (Shell, 4.5% 灰度，0.4% M + 0.8% Y 偏橙米黄) */
+  --bg-secondary: hsl(30 2.5% 93%); /* 侧边栏/辅助层背景 (7% 灰度) */
+  --bg-tertiary: hsl(30 2.5% 90%); /* 悬浮/深一层背景 (10% 灰度) */
   --bg-hover: var(--tint-hover); /*    tint         */
   --bg-active: var(--tint-active); /*    tint         */
   --bg-card: hsl(0 0% 100%); /* 小矩形/卡片纯白底色 (Paper) */
@@ -63,11 +63,11 @@ html[data-theme='light'] {
   --text-tertiary: #696969;
   --text-muted: var(--text-tertiary);
 
-  --tint-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent);
-  --tint-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
-  --tint-strong: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --tint-focus-ring: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --tint-divider: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  --tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  --tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --tint-strong: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --tint-focus-ring: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --tint-divider: color-mix(in srgb, var(--text-primary) 10%, transparent);
   /* ==========================================================================
      统一滚动条二元色彩与几何尺寸 Token 体系（Unified Scrollbar Design Tokens）
      遵循用户最高定案铁律：二元灰度 (8.2% vs 20.2%，差值死锁 12.0%)，四级宽度零裸写
@@ -136,8 +136,8 @@ html[data-theme='light'] {
   );
   --seg-slider-bg: var(--bg-card, hsl(0 0% 100%));
 
-  --border-color: hsl(35, 10%, 86%);
-  --border-subtle: hsl(35, 8%, 91%);
+  --border-color: hsl(30 2.5% 86%);
+  --border-subtle: hsl(30 2.5% 91%);
   --composer-bg: var(--bg-card, hsl(0 0% 100%));
   --composer-footer-bg: transparent;
   --hairline-width: 1px;
@@ -145,10 +145,10 @@ html[data-theme='light'] {
   --hairline-strong: var(--border-color);
 
   --control-soft-bg: var(--tint-hover);
-  --control-soft-bg-hover: var(--tint-active);
+  --control-soft-bg-hover: var(--tint-hover);
   --control-soft-bg-active: color-mix(
     in srgb,
-    var(--text-primary) 10%,
+    var(--text-primary) 8%,
     transparent
   );
   --sidebar-hover: var(--tint-hover);
@@ -177,7 +177,7 @@ html[data-theme='light'] {
   );
 
   --bg-page: #ffffff;
-  --bg-canvas: #f6f5f3;
+  --bg-canvas: hsl(30 2.5% 96%);
   --bg-item-hover: var(--tint-hover);
   --bg-item-active: var(--tint-active);
 
@@ -204,21 +204,21 @@ html[data-theme='light'] {
   --sep-font-size-sm: 11px;
   --sep-font-size-header: 10.5px;
 
-  --sep-bg-canvas: #f6f5f3;
+  --sep-bg-canvas: hsl(30 2.5% 96%);
   --sep-bg-panel: var(--bg-card, hsl(0 0% 100%));
   --sep-bg-panel-solid: #ffffff;
   --sep-bg-item-hover: var(--tint-hover);
   --sep-bg-item-selected: var(--tint-hover);
-  --sep-bg-input: rgba(29, 28, 26, 0.03);
+  --sep-bg-input: color-mix(in srgb, var(--text-primary) 3%, transparent);
 
-  --sep-border-color: #e2dfd9;
-  --sep-border-hover: #c9c5bc;
-  --sep-border-focus: #b2ada2;
-  --sep-divider-color: rgba(29, 28, 26, 0.06);
+  --sep-border-color: var(--border-color);
+  --sep-border-hover: color-mix(in srgb, var(--border-color) 80%, var(--text-primary) 20%);
+  --sep-border-focus: color-mix(in srgb, var(--border-color) 70%, var(--text-primary) 30%);
+  --sep-divider-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
-  --sep-text-primary: #1d1c1a;
-  --sep-text-secondary: #5c5954;
-  --sep-text-muted: #8b8780;
+  --sep-text-primary: #111111;
+  --sep-text-secondary: #555555;
+  --sep-text-muted: #767676;
 
   --sep-accent-color: hsl(160 84% 39%);
   --sep-accent-check: hsl(160 84% 39%);
@@ -229,7 +229,7 @@ html[data-theme='light'] {
   --sep-shadow:
     0 4px 16px -2px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 4%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 2%, transparent);
-  --sep-backdrop-blur: 28px;
+  --sep-backdrop-blur: 0px;
 
   --sep-ease-spring: cubic-bezier(0.22, 1.25, 0.36, 1);
   --sep-ease-shrink: cubic-bezier(0.4, 0, 1, 1);
@@ -364,7 +364,7 @@ html[data-theme='light'] {
   --xterm-bright-magenta: #d8b4fe;
   --xterm-bright-cyan: #67e8f9;
   --xterm-bright-white: #f9fafb;
-  --xterm-selection: rgba(255, 255, 255, 0.18);
+  --xterm-selection: hsl(0 0% 100% / 0.18);
 
   /* macOS traffic-light chrome (decorative terminal mockups) */
   --mac-dot-red: #ff5f56;
@@ -408,8 +408,8 @@ html[data-theme='light'] {
     0 1px 3px color-mix(in srgb, var(--shadow-color) 1%, transparent);
 
   /* Materials & Animations */
-  --bg-glass: rgba(255, 255, 255, 0.75);
-  --backdrop-blur: blur(16px);
+  --bg-glass: var(--bg-elevated);
+  --backdrop-blur: none;
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
   --transition-micro: 100ms ease-out;
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -533,7 +533,7 @@ html[data-theme='light'] {
   --md-code-inline-radius: 4px;
   --md-code-inline-padding: 0.15em 0.4em;
 
-  --md-code-block-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+  --md-code-block-bg: color-mix(in srgb, var(--text-primary) 2%, var(--bg-card));
   --md-code-block-border: var(--border-subtle);
   --md-code-block-radius: 8px;
   --md-code-block-padding: 12px 14px;
@@ -576,11 +576,11 @@ html[data-theme='light'] {
   --md-table-bg: var(--bg-secondary);
   --md-table-border: var(--hairline-strong, var(--border-color));
   --md-table-border-width: var(--hairline-width, 1px);
-  --md-table-border-color: var(--border-color, hsl(35 10% 86%));
-  --md-table-border-subtle: var(--border-subtle, hsl(35 8% 91%));
+  --md-table-border-color: var(--border-color);
+  --md-table-border-subtle: var(--border-subtle);
   --md-table-row-border: var(--hairline, var(--border-subtle));
   --md-table-header-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
-  --md-table-header-backdrop-blur: 12px;
+  --md-table-header-backdrop-blur: 0px;
   --md-table-header-fg: var(--text-primary);
   --md-table-header-font-weight: 600;
   --md-table-header-border: var(--hairline-strong, var(--border-color));
@@ -604,7 +604,7 @@ html[data-theme='light'] {
 
   /* --- 3. 自定义富交互与 Artifacts 体系 (Light) --- */
   --artifact-card-bg: var(--bg-card, #ffffff);
-  --artifact-card-border: var(--border-color, hsl(35 10% 86%));
+  --artifact-card-border: var(--border-color);
   --artifact-card-border-hover: color-mix(in srgb, var(--border-subtle) 95%, var(--text-primary) 5%);
   --artifact-card-radius: 8px;
   --artifact-card-shadow: var(--shadow-sm);
@@ -615,13 +615,13 @@ html[data-theme='light'] {
   --artifact-action-btn-bg: color-mix(in srgb, var(--text-primary) 4%, var(--bg-card));
   --artifact-action-btn-hover: color-mix(in srgb, var(--text-primary) 8%, var(--bg-card));
   --artifact-action-btn-border: var(--border-subtle);
-  --artifact-btn-bg: var(--bg-primary, hsl(35 8% 95.2%));
+  --artifact-btn-bg: var(--bg-primary);
   --artifact-btn-border: var(--border-subtle);
   --artifact-btn-hover-bg: var(--tint-hover);
   --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 92%, var(--text-primary) 8%);
   --artifact-btn-active-bg: var(--tint-active);
   --artifact-portal-overlay-bg: hsl(0 0% 0% / 0.45);
-  --artifact-portal-blur: 12px;
+  --artifact-portal-blur: 0px;
   --artifact-output-max-h: 600px;
 
   /* Diff 比对 (严格按照 WCAG AA 达标色阶) */
@@ -945,7 +945,7 @@ html[data-theme='dark'] {
     var(--bg-card, #242424)
   );
   --switch-thumb-bg: #ffffff;
-  --switch-thumb-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --switch-thumb-shadow: 0 1px 3px hsl(0 0% 0% / 0.4);
   --seg-track-bg: #181818;
   --seg-slider-bg: color-mix(
     in srgb,
@@ -998,7 +998,7 @@ html[data-theme='dark'] {
 
   --bg-page: #0c0c0b;
   --bg-canvas: #141412;
-  --bg-panel: rgba(24, 23, 21, 0.96);
+  --bg-panel: hsl(40 7% 9% / 0.96);
   --bg-item-hover: var(--tint-hover);
   --bg-item-active: var(--tint-active);
 
@@ -1020,16 +1020,16 @@ html[data-theme='dark'] {
   --sep-item-gap: 2px;
 
   --sep-bg-canvas: #0c0c0b;
-  --sep-bg-panel: rgba(24, 23, 21, 0.96);
+  --sep-bg-panel: hsl(40 7% 9% / 0.96);
   --sep-bg-panel-solid: #181715;
   --sep-bg-item-hover: var(--tint-hover);
   --sep-bg-item-selected: var(--tint-active);
-  --sep-bg-input: rgba(245, 244, 240, 0.04);
+  --sep-bg-input: hsl(48 20% 95% / 0.04);
 
   --sep-border-color: #2b2926;
   --sep-border-hover: #3d3a35;
   --sep-border-focus: #524e47;
-  --sep-divider-color: rgba(255, 255, 255, 0.07);
+  --sep-divider-color: hsl(0 0% 100% / 0.07);
 
   --sep-text-primary: #f5f4f0;
   --sep-text-secondary: #b5b2aa;
@@ -1042,9 +1042,9 @@ html[data-theme='dark'] {
   --sep-danger-light: hsl(0 84% 60% / 0.08);
 
   --sep-shadow:
-    0 4px 18px rgba(0, 0, 0, 0.28),
-    0 1px 3px rgba(0, 0, 0, 0.18);
-  --sep-backdrop-blur: 28px;
+    0 4px 18px hsl(0 0% 0% / 0.28),
+    0 1px 3px hsl(0 0% 0% / 0.18);
+  --sep-backdrop-blur: 0px;
 
   --accent-color: hsl(160 84% 45%);
   --accent-light: hsl(0 0% 16%);
@@ -1114,14 +1114,14 @@ html[data-theme='dark'] {
 
   /* Premium Soft Dark Shadows */
   --shadow-sm:
-    0 1px 2px rgba(0, 0, 0, 0.16),
-    0 1px 1px rgba(0, 0, 0, 0.10);
+    0 1px 2px hsl(0 0% 0% / 0.16),
+    0 1px 1px hsl(0 0% 0% / 0.10);
   --shadow-md:
-    0 2px 8px rgba(0, 0, 0, 0.20),
-    0 1px 2px rgba(0, 0, 0, 0.12);
+    0 2px 8px hsl(0 0% 0% / 0.20),
+    0 1px 2px hsl(0 0% 0% / 0.12);
   --shadow-lg:
-    0 4px 18px rgba(0, 0, 0, 0.28),
-    0 1px 3px rgba(0, 0, 0, 0.18);
+    0 4px 18px hsl(0 0% 0% / 0.28),
+    0 1px 3px hsl(0 0% 0% / 0.18);
   --shadow-drag:
     0 8px 16px color-mix(in srgb, var(--shadow-color) 25%, transparent),
     0 24px 48px color-mix(in srgb, var(--shadow-color) 35%, transparent),
@@ -1150,7 +1150,7 @@ html[data-theme='dark'] {
   --ui-text-warning: #ffa94d;
   --ui-text-primary: inherit;
 
-  --bg-glass: rgba(10, 10, 10, 0.75);
+  --bg-glass: var(--bg-elevated);
   --bg-overlay: var(--shadow-color);
 
   /* syntax highlighting dark */
@@ -1242,7 +1242,7 @@ html[data-theme='dark'] {
   --md-table-border-subtle: hsl(0 0% 14%);
   --md-table-row-border: var(--hairline, var(--border-subtle));
   --md-table-header-bg: hsl(0 0% 12%);
-  --md-table-header-backdrop-blur: 12px;
+  --md-table-header-backdrop-blur: 0px;
   --md-table-header-fg: var(--text-primary);
   --md-table-header-font-weight: 600;
   --md-table-header-border: var(--hairline-strong, var(--border-color));
@@ -1283,7 +1283,7 @@ html[data-theme='dark'] {
   --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 90%, var(--text-primary) 10%);
   --artifact-btn-active-bg: var(--tint-active);
   --artifact-portal-overlay-bg: hsl(0 0% 0% / 0.70);
-  --artifact-portal-blur: 16px;
+  --artifact-portal-blur: 0px;
   --artifact-output-max-h: 600px;
 
   /* Diff 比对 (Dark 高对比度) */
@@ -1419,6 +1419,38 @@ html[data-theme='dark'] {
   --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 3%, transparent);
   --stream-pulse-duration: 1.6s;
   --stream-chunk-gap: 0.85em;
+
+  /* --- 6. 用量监控与时序分析（Usage Dashboard）暗色体系 (Dark) --- */
+  --usage-capsule-outer-radius: 9px;
+  --usage-capsule-pad: 3px;
+  --usage-capsule-inner-radius: calc(var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)); /* 6px */
+
+  --usage-color-brand: hsl(160 84% 45%);
+  --usage-color-brand-bg: hsl(160 84% 45% / 0.18);
+  --usage-color-claude: hsl(25 95% 56%);
+  --usage-color-claude-bg: hsl(25 95% 56% / 0.18);
+  --usage-color-minimax: hsl(258 90% 70%);
+  --usage-color-minimax-bg: hsl(258 90% 70% / 0.18);
+  --usage-color-kimi: hsl(200 98% 48%);
+  --usage-color-kimi-bg: hsl(200 98% 48% / 0.18);
+  --usage-color-other: hsl(38 92% 55%);
+  --usage-color-other-bg: hsl(38 92% 55% / 0.18);
+  --usage-color-input: hsl(200 98% 48%);
+  --usage-color-input-bg: hsl(200 98% 48% / 0.18);
+  --usage-color-cache: hsl(258 90% 70%);
+  --usage-color-cache-bg: hsl(258 90% 70% / 0.18);
+  --usage-color-cost-total: hsl(221 83% 60%);
+  --usage-color-cost-total-bg: hsl(221 83% 60% / 0.18);
+  --usage-color-total: hsl(160 84% 45%);
+  --usage-color-total-bg: hsl(160 84% 45% / 0.18);
+  --usage-color-danger: hsl(0 84% 65%);
+  --usage-color-danger-bg: hsl(0 84% 65% / 0.16);
+
+  --usage-heat-0: color-mix(in srgb, var(--border-color) 60%, transparent);
+  --usage-heat-1: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 30%, transparent);
+  --usage-heat-2: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 55%, transparent);
+  --usage-heat-3: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 80%, transparent);
+  --usage-heat-4: var(--brand, hsl(160 84% 45%));
 
   color-scheme: dark;
 }
@@ -1587,42 +1619,36 @@ html[data-theme='dark'] {
   --md-table-font-size: 14.5px;
   --md-table-cell-pad-x: 14px;
   --md-table-cell-pad-y: 10px;
+}
 
-  /* ── 用量监控与时序分析（Usage Dashboard）专用系统设计规范 ── */
-  /* 分段选择器与同心圆角 */
-  --usage-seg-pad: 2px;
-  --usage-seg-radius: 7px;
-  --usage-seg-btn-radius: calc(var(--usage-seg-radius) - var(--usage-seg-pad)); /* 5px */
-  --usage-seg-sm-pad: 1.5px;
-  --usage-seg-sm-radius: 5px;
-  --usage-seg-sm-btn-radius: 3.5px;
-
+/* ── 用量监控与时序分析（Usage Dashboard）专用系统设计规范 ── */
+:root {
   /* 胶囊进度行：outer(9px) = inner(6px) + pad(3px) */
   --usage-capsule-outer-radius: 9px;
   --usage-capsule-pad: 3px;
   --usage-capsule-inner-radius: calc(var(--usage-capsule-outer-radius) - var(--usage-capsule-pad)); /* 6px */
 
-  /* 色彩体系回退 (sRGB) */
-  --usage-color-brand: #10b981;
-  --usage-color-brand-bg: rgba(16, 185, 129, 0.11);
-  --usage-color-claude: #f97316;
-  --usage-color-claude-bg: rgba(249, 115, 22, 0.11);
-  --usage-color-minimax: #8b5cf6;
-  --usage-color-minimax-bg: rgba(139, 92, 246, 0.11);
-  --usage-color-kimi: #0284c7;
-  --usage-color-kimi-bg: rgba(2, 132, 199, 0.11);
-  --usage-color-other: #f59e0b;
-  --usage-color-other-bg: rgba(245, 158, 11, 0.11);
-  --usage-color-input: #0284c7;
-  --usage-color-input-bg: rgba(2, 132, 199, 0.11);
-  --usage-color-cache: #8b5cf6;
-  --usage-color-cache-bg: rgba(139, 92, 246, 0.11);
-  --usage-color-cost-total: #2563eb;
-  --usage-color-cost-total-bg: rgba(37, 99, 235, 0.10);
-  --usage-color-total: #10b981;
-  --usage-color-total-bg: rgba(16, 185, 129, 0.11);
-  --usage-color-danger: #dc2626;
-  --usage-color-danger-bg: rgba(220, 38, 38, 0.08);
+  /* 色彩体系回退 (现代 HSL / 斜杠透明度，严格零 rgba) */
+  --usage-color-brand: hsl(160 84% 39%);
+  --usage-color-brand-bg: hsl(160 84% 39% / 0.11);
+  --usage-color-claude: hsl(25 95% 53%);
+  --usage-color-claude-bg: hsl(25 95% 53% / 0.11);
+  --usage-color-minimax: hsl(258 90% 66%);
+  --usage-color-minimax-bg: hsl(258 90% 66% / 0.11);
+  --usage-color-kimi: hsl(200 98% 39%);
+  --usage-color-kimi-bg: hsl(200 98% 39% / 0.11);
+  --usage-color-other: hsl(38 92% 50%);
+  --usage-color-other-bg: hsl(38 92% 50% / 0.11);
+  --usage-color-input: hsl(200 98% 39%);
+  --usage-color-input-bg: hsl(200 98% 39% / 0.11);
+  --usage-color-cache: hsl(258 90% 66%);
+  --usage-color-cache-bg: hsl(258 90% 66% / 0.11);
+  --usage-color-cost-total: hsl(221 83% 53%);
+  --usage-color-cost-total-bg: hsl(221 83% 53% / 0.10);
+  --usage-color-total: hsl(160 84% 39%);
+  --usage-color-total-bg: hsl(160 84% 39% / 0.11);
+  --usage-color-danger: hsl(0 84% 60%);
+  --usage-color-danger-bg: hsl(0 84% 60% / 0.08);
 
   /* 热力图 5 级颜色 */
   --usage-heat-0: color-mix(in srgb, var(--border-color) 40%, transparent);
@@ -1666,20 +1692,20 @@ html[data-theme='dark'] {
 
 /* HIGH SPEC TIER: Snappy, brisk, and premium transitions */
 html[data-perf-tier='high'] {
-  --backdrop-blur: blur(16px);
-  --bg-glass: rgba(255, 255, 255, 0.75);
+  --backdrop-blur: none;
+  --bg-glass: var(--bg-elevated);
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
-  --artifact-portal-blur: 16px;
+  --artifact-portal-blur: 0px;
   --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
 }
 html[data-perf-tier='high'][data-theme='dark'] {
-  --bg-glass: rgba(10, 10, 10, 0.75);
+  --bg-glass: var(--bg-elevated);
   --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 22%, transparent);
 }
 
 /* BALANCED SPEC TIER: Snappy layout transitions */
 html[data-perf-tier='balanced'] {
-  --backdrop-blur: blur(0px); /* Disable expensive GPU filters */
+  --backdrop-blur: none; /* Disable expensive GPU filters */
   --bg-glass: var(--bg-elevated); /* solid background fallback */
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
   --artifact-portal-blur: 0px;

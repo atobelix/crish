@@ -1,23 +1,23 @@
 @import 'katex/dist/katex.min.css';
 
 :root {
-  /* ── 1. Conex 核心色彩体系 (现代空格 HSL 语法) ── */
-  --parchment: hsl(52.5 28.6% 94.5%);
-  --ivory: hsl(48 33.3% 97.1%);
-  --warm-sand: hsl(50 18.5% 88.6%);
-  --border-soft: hsl(49 19% 87.3%);
-  --inline-code-bg: hsl(48 25% 92.5%);
-  --near-black: hsl(60 3.8% 7.3%);
-  --dark-warm: hsl(60 2.5% 23.9%);
-  --olive: hsl(43 4.3% 30.4%);
-  --stone: hsl(51 3.5% 40.6%);
+  /* ── 1. Conex 核心色彩体系 (现代空格 HSL 语法，0.4% M + 0.8% Y 米黄偏橙微暖，纯灰阶演化) ── */
+  --parchment: hsl(30 2.5% 95.5%);
+  --ivory: hsl(0 0% 100%);
+  --warm-sand: hsl(30 2.5% 86%);
+  --border-soft: hsl(30 2.5% 91%);
+  --inline-code-bg: color-mix(in srgb, hsl(0 0% 0%) 3%, var(--white));
+  --near-black: hsl(0 0% 8%);
+  --dark-warm: hsl(0 0% 20%);
+  --olive: hsl(0 0% 33%);
+  --stone: hsl(0 0% 46%);
   --brand: hsl(215.5 55% 23.5%);
   --brand-light: hsl(211 50.7% 35.9%);
   --tag-calm-bg: hsl(213 38% 95.1%);
   --tag-standard-bg: hsl(212.7 47% 92.9%);
   --danger-color: hsl(359 53% 35.5%);
   /* 纯灰度柔和代码与公式块底色 (相对于阅读底色纯黑混入 2%，零色彩倾向) */
-  --code-bg: color-mix(in srgb, black 2%, var(--white));
+  --code-bg: color-mix(in srgb, hsl(0 0% 0%) 2%, var(--white));
 
   /* ── 2. 既有 CSS 契约变量映射 (严格满足 css-contract G6.6 门禁) ── */
   --bg-theme: var(--parchment);
@@ -34,19 +34,19 @@
   --yellow-tint-2: hsl(48 100% 50% / 0.08);
   --yellow-text: hsl(43 70% 30%);
 
-  /* 极浅纯灰文本选择高亮 (约 4%~5% 纯灰半透，零色彩倾向，绝不遮挡文字与高亮) */
-  --selection-bg: color-mix(in srgb, black 5%, transparent);
-  --blue-selection: color-mix(in srgb, black 5%, transparent);
+  /* 极浅纯灰文本选择高亮 (约 4% 纯灰半透，零色彩倾向，绝不遮挡文字与高亮) */
+  --selection-bg: color-mix(in srgb, hsl(0 0% 0%) 4%, transparent);
+  --blue-selection: color-mix(in srgb, hsl(0 0% 0%) 4%, transparent);
 
   /* 暖调柔和边框与交互态 */
   --border-subtle: var(--border-soft);
   --border-medium: var(--warm-sand);
-  --border-focus: var(--brand-light);
+  --border-focus: color-mix(in srgb, var(--border-medium) 90%, var(--black) 10%);
 
-  /* 滚动条背景与滑块配色 */
+  /* 滚动条背景与滑块配色 (H=30 S=2.5% 二元灰度) */
   --scrollbar-track: var(--parchment);
-  --scrollbar-thumb: hsl(48 15% 80%);
-  --scrollbar-thumb-hover: hsl(48 18% 68%);
+  --scrollbar-thumb: hsl(30 2.5% 90%);
+  --scrollbar-thumb-hover: hsl(30 2.5% 78%);
 
   /* ── 3. 字体系统解耦 ── */
   --font-serif: "TsangerJinKai02", "Source Han Serif SC", "Source Han Serif CN", "Noto Serif SC", "Songti SC", Charter, Georgia, serif;
@@ -121,8 +121,8 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   box-shadow:
-    0 1px 2px hsl(60 10% 10% / 0.02),
-    0 4px 16px hsl(60 10% 10% / 0.04);
+    0 1px 2px hsl(0 0% 0% / 0.02),
+    0 4px 16px hsl(0 0% 0% / 0.04);
   display: flex;
   overflow: hidden;
   transition: all 0.2s ease;
@@ -286,7 +286,7 @@ body {
 }
 
 .code-copy-btn:hover {
-  background-color: color-mix(in srgb, black 4%, transparent);
+  background-color: color-mix(in srgb, black 2.5%, transparent);
   color: var(--text-primary);
 }
 
@@ -617,9 +617,8 @@ body {
   pointer-events: none;
 }
 
-.is-active-token .syntax-hidden .syntax-indent,
-.is-selected-token .syntax-hidden .syntax-indent {
-  display: none;
+.syntax-indent {
+  white-space: pre;
 }
 .style-sup {
   font-size: 0.8em;
@@ -715,26 +714,15 @@ body {
 .token-list-bullet {
   color: var(--text-muted);
   font-weight: 600;
-  margin-right: 8px;
-  display: inline-block;
-  min-width: 16px;
-  text-align: center;
   white-space: pre;
 }
 .token-list-number {
   color: var(--text-muted);
   font-weight: 600;
-  margin-right: 8px;
-  display: inline-block;
-  min-width: 16px;
-  text-align: center;
   white-space: pre;
 }
 .token-list-task {
-  margin-right: 8px;
-  display: inline-block;
-  min-width: 16px;
-  text-align: center;
+  color: var(--text-muted);
   white-space: pre;
 }
 .token-comment {
@@ -848,7 +836,7 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: hsl(52.5 28.6% 94.5% / 0.85);
+  background: hsl(30 2.5% 95.5% / 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -856,7 +844,6 @@ body {
   font-size: 1.1rem;
   font-weight: 600;
   color: var(--text-secondary);
-  backdrop-filter: blur(4px);
 }
 
 @keyframes cursor-blink {
@@ -871,7 +858,7 @@ body {
 
 .custom-cursor-blink {
   animation: cursor-blink 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  box-shadow: 0 0 2px hsl(52.5 28.6% 94.5% / 0.5);
+  box-shadow: 0 0 2px hsl(30 2.5% 95.5% / 0.5);
 }
 
 .ime-hidden-input {

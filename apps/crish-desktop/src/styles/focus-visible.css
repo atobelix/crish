@@ -1,25 +1,87 @@
-/* focus-visible.css             Phase 1        */
-/*    :focus-visible           focus ring         */
+/* apps/crish-desktop/src/styles/focus-visible.css
+ * 双态焦点环分流体系（Phase 4 DIM-04）
+ * - 鼠标常态 :focus:not(:focus-visible)：保持 3%~10% 柔和浅灰，视觉宁静（遵从 AGENTS.md §13）
+ * - 键盘导航 :focus-visible：双层微阴影外框，兼顾视觉宁静与 WCAG 3.0:1 对比度
+ * - 根除全仓 outline: none 导致键盘焦点隐形无替代问题
+ */
 
+:root {
+  --focus-ring-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+  --focus-border-color: color-mix(
+    in srgb,
+    var(--border-color) 90%,
+    var(--text-primary) 10%
+  );
+  --focus-ring-shadow: 0 0 0 1.5px var(--focus-ring-color);
+  --focus-visible-ring: color-mix(
+    in srgb,
+    var(--border-color) 40%,
+    var(--text-primary) 60%
+  );
+}
+
+/* 1. 鼠标/触控交互常态：3%~10% 极致柔和浅灰，保持视觉宁静（严格对齐 AGENTS.md §13） */
 :focus:not(:focus-visible) {
   outline: none;
   box-shadow: none;
 }
 
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+[contenteditable='true']:focus:not(:focus-visible) {
+  outline: none;
+  border-color: var(
+    --focus-border-color,
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%)
+  );
+  box-shadow: var(
+    --focus-ring-shadow,
+    0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
+  );
+}
+
+/* 2. 键盘导航 (:focus-visible)：注入双层高对比微阴影外框，满足 WCAG 2.1 SC 1.4.11 / 2.4.11 (≥ 3:1) */
 :focus-visible {
-  outline: 1.5px solid var(--focus-ring-color, color-mix(in srgb, var(--text-primary) 6%, transparent));
-  outline-offset: 1px;
+  outline: 2px solid var(
+    --focus-visible-ring,
+    color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%)
+  );
+  outline-offset: 2px;
 }
 
+/* 输入框与文本域键盘聚焦：双层微阴影防破界 */
 input:focus-visible,
-textarea:focus-visible {
-  outline-offset: -1px;
+textarea:focus-visible,
+[contenteditable='true']:focus-visible {
+  outline: none;
+  border-color: var(
+    --focus-border-color,
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%)
+  );
+  box-shadow:
+    0 0 0 1px var(--bg-card, var(--bg-canvas, #ffffff)),
+    0 0 0 3px var(
+      --focus-visible-ring,
+      color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%)
+    );
 }
 
+/* 按钮、链接、自定义交互组件：同心外微阴影规避 outline 对圆角的几何切角 */
 button:focus-visible,
 a:focus-visible,
 [role='button']:focus-visible,
+[role='tab']:focus-visible,
+[role='option']:focus-visible,
 [tabindex]:not([tabindex='-1']):focus-visible {
   outline: none;
-  box-shadow: var(--focus-ring, 0 0 0 1.5px color-mix(in srgb, var(--text-primary) 6%, transparent));
+  box-shadow:
+    0 0 0 1px var(--bg-card, var(--bg-canvas, #ffffff)),
+    0 0 0 3px var(
+      --focus-visible-ring,
+      color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%)
+    );
 }

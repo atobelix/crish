@@ -497,9 +497,136 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             );
           }
 
+          // Specialized handling for lists (list_number, list_bullet, list_task)
+          // Preserves full physical character offset alignment, zero artificial layout boxes
+          if (token.type === 'list_number') {
+            const indentLen = token.indent ? token.indent.length : 0;
+            return (
+              <span
+                key={key}
+                data-token-start={start}
+                data-token-length={len}
+                className={finalClassName}
+                style={token.style}
+              >
+                {token.indent ? (
+                  <>
+                    <span className="syntax-indent" data-sub-offset={0}>
+                      {token.indent}
+                    </span>
+                    <span
+                      className="syntax-marker"
+                      data-sub-offset={indentLen}
+                    >
+                      {token.marker || token.raw.slice(indentLen)}
+                    </span>
+                  </>
+                ) : (
+                  <span className="syntax-marker" data-sub-offset={0}>
+                    {token.raw}
+                  </span>
+                )}
+              </span>
+            );
+          }
+
+          if (token.type === 'list_bullet') {
+            const indentLen = token.indent ? token.indent.length : 0;
+            return (
+              <span
+                key={key}
+                data-token-start={start}
+                data-token-length={len}
+                className={finalClassName}
+                style={token.style}
+              >
+                {token.indent && (
+                  <span className="syntax-indent" data-sub-offset={0}>
+                    {token.indent}
+                  </span>
+                )}
+                <span
+                  className="syntax-hidden"
+                  data-sub-offset={indentLen}
+                >
+                  {token.marker || token.raw.slice(indentLen)}
+                </span>
+                <span
+                  className="syntax-content"
+                  data-sub-offset={indentLen}
+                >
+                  {'• '}
+                </span>
+              </span>
+            );
+          }
+
+          if (token.type === 'list_task') {
+            const indentLen = token.indent ? token.indent.length : 0;
+            const handleTaskClick = (e: React.MouseEvent) => {
+              if (start !== undefined) {
+                e.stopPropagation();
+                e.preventDefault();
+                const state = useEditorStore.getState();
+                const oldRaw = token.raw;
+                const newRaw = token.isChecked
+                  ? oldRaw.replace(/\[[xX]\]/, '[ ]')
+                  : oldRaw.replace(/\[ \]/, '[x]');
+                state.setSelection(start, start + len);
+                state.insertText(newRaw);
+              }
+            };
+            return (
+              <span
+                key={key}
+                data-token-start={start}
+                data-token-length={len}
+                className={finalClassName}
+                style={token.style}
+              >
+                {token.indent && (
+                  <span className="syntax-indent" data-sub-offset={0}>
+                    {token.indent}
+                  </span>
+                )}
+                <span
+                  className="syntax-hidden"
+                  data-sub-offset={indentLen}
+                >
+                  {token.marker || token.raw.slice(indentLen)}
+                </span>
+                <span
+                  className="syntax-content"
+                  data-sub-offset={indentLen}
+                  onClick={handleTaskClick}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    style={{
+                      verticalAlign: 'text-bottom',
+                      transform: 'translateY(-2px)',
+                      color: token.isChecked ? 'var(--text-primary)' : 'var(--text-muted)',
+                    }}
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="6" ry="6" />
+                    {token.isChecked && <polyline points="9 12 12 15 16 9" />}
+                  </svg>
+                </span>
+              </span>
+            );
+          }
+
           // If it's a token with `content` different from `raw`
           if (token.content !== undefined && token.content !== token.raw) {
-            const isListPrefix = ['list_bullet', 'list_number', 'list_task', 'blockquote_prefix'].includes(token.type);
+            const isListPrefix = ['blockquote_prefix'].includes(token.type);
             const prefixLen = token.raw.indexOf(token.content);
             if (!isListPrefix && prefixLen >= 0 && token.content !== '') {
               // Substring case (e.g. **bold**)
@@ -542,23 +669,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 </span>
               );
             } else {
-              // Complete replacement case (e.g. list_bullet "- " -> "• ", or heading_prefix "## " -> "")
-              const isTask = token.type === 'list_task';
-              const handleTaskClick = (e: React.MouseEvent) => {
-                if (isTask && start !== undefined) {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  const state = useEditorStore.getState();
-                  const oldRaw = token.raw;
-                  const newRaw = token.isChecked 
-                    ? oldRaw.replace(/\[[xX]\]/, '[ ]') 
-                    : oldRaw.replace(/\[ \]/, '[x]');
-                  
-                  state.setSelection(start, start + len);
-                  state.insertText(newRaw);
-                }
-              };
-
+              // Complete replacement case (e.g. heading_prefix "## " -> "")
               return (
                 <span
                   key={key}
@@ -568,42 +679,10 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   style={token.style}
                 >
                   <span data-sub-offset={0} className="syntax-hidden">
-                    {token.indent !== undefined ? (
-                      <>
-                        <span className="syntax-indent">{token.indent}</span>
-                        <span className="syntax-marker">{token.marker}</span>
-                      </>
-                    ) : (
-                      token.raw
-                    )}
+                    {token.raw}
                   </span>
-                  <span 
-                    className="syntax-content"
-                    onClick={isTask ? handleTaskClick : undefined}
-                    style={isTask ? { cursor: 'pointer' } : undefined}
-                  >
-                    {isTask ? (
-                      <svg
-                        width="16"
-                        height="16"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{
-                          verticalAlign: 'text-bottom',
-                          transform: 'translateY(-2px)',
-                          color: token.isChecked ? 'var(--text-primary)' : 'var(--text-muted)',
-                        }}
-                      >
-                        <rect x="3" y="3" width="18" height="18" rx="6" ry="6" />
-                        {token.isChecked && <polyline points="9 12 12 15 16 9" />}
-                      </svg>
-                    ) : (
-                      token.content
-                    )}
+                  <span className="syntax-content">
+                    {token.content}
                   </span>
                 </span>
               );

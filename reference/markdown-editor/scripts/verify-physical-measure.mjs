@@ -958,6 +958,93 @@ async function runDefenseSuite() {
         });
       }
 
+      // ============================================================
+      // 场景 10：嵌套列表符号宽度与前缀交互防御契约 (LIST-PREFIX-DEFENSE)
+      // 铁律：
+      // 1. 列表符号严禁人工特殊盒模型 (零 display: inline-block, 零 min-width: 16px, 零 margin-right: 8px)
+      // 2. 嵌套有序列表 (如 "   1. 嵌套的有序列表 1")：
+      //    - 点击数字 '1' 必须精准定位于 '1' 的全局索引 (不得跳回行首 0，不得塌陷)
+      //    - 光标实际物理 X 坐标与单字符 Range 边界偏差 |ΔX| <= 0.5px
+      // ============================================================
+      {
+        const st = window.__editorStore.getState();
+        let targetLineIdx = -1;
+        for (let i = 0; i < st.getLineCount(); i++) {
+          const t = st.getLine(i);
+          if (t && t.includes('嵌套的有序列表 1')) {
+            targetLineIdx = i;
+            break;
+          }
+        }
+
+        if (targetLineIdx !== -1) {
+          container.scrollTop = Math.max(0, targetLineIdx * 28 - 150);
+          await waitForFrame(80);
+
+          const lineText = st.getLine(targetLineIdx);
+          const lineOffset = st.lineOffsets.getOffset(targetLineIdx);
+          const rowEl = document.querySelector(`.virtual-row[data-index="${targetLineIdx}"]`);
+
+          if (rowEl) {
+            // 1. 检查样式规则：无特殊盒模型
+            const numEl = rowEl.querySelector('.token-list-number');
+            const numStyle = numEl ? window.getComputedStyle(numEl) : null;
+            const isBoxPristine = numStyle && numStyle.display !== 'inline-block' && parseInt(numStyle.marginRight || '0', 10) === 0;
+
+            // 2. 点击数字 '1'
+            const num1IdxInLine = lineText.indexOf('1');
+            const expectedNum1Index = lineOffset + num1IdxInLine;
+
+            // 找到包含 '1' 的文本节点
+            let walker = document.createTreeWalker(rowEl, NodeFilter.SHOW_TEXT);
+            let n = walker.nextNode();
+            let clicked = false;
+            let actualCursor = -1;
+            let deltaX = 0;
+
+            while (n) {
+              const val = n.nodeValue || '';
+              const idxInNode = val.indexOf('1');
+              if (idxInNode !== -1 && n.parentElement && !n.parentElement.classList.contains('syntax-hidden')) {
+                const charRect = getCharPhysicalRect(n, idxInNode);
+                const clickX = charRect.left + charRect.width / 2;
+                const clickY = charRect.top + charRect.height / 2;
+
+                rowEl.dispatchEvent(new MouseEvent('mousedown', { clientX: clickX, clientY: clickY, bubbles: true }));
+                await waitForFrame(20);
+                rowEl.dispatchEvent(new MouseEvent('mouseup', { clientX: clickX, clientY: clickY, bubbles: true }));
+                rowEl.dispatchEvent(new MouseEvent('click', { clientX: clickX, clientY: clickY, bubbles: true }));
+                await waitForFrame(60);
+
+                actualCursor = window.__editorStore.getState().cursorPos;
+                const caretEl = document.querySelector('.custom-cursor-blink');
+                if (caretEl) {
+                  const caretRect = caretEl.getBoundingClientRect();
+                  deltaX = Math.abs(caretRect.left - charRect.left);
+                }
+                clicked = true;
+                break;
+              }
+              n = walker.nextNode();
+            }
+
+            const cursorMatched = actualCursor === expectedNum1Index;
+            const alignPassed = deltaX <= maxTolerance;
+            const passed = isBoxPristine && clicked && cursorMatched && alignPassed;
+
+            suiteResults.push({
+              id: 'LIST-PREFIX-DEFENSE',
+              name: '嵌套列表符号宽度与前缀交互防御契约 (List Prefix Defense)',
+              passed,
+              maxDeltaX: deltaX,
+              details: passed
+                ? `符号盒模型纯净无特例 (display: ${numStyle?.display}, margin-right: ${numStyle?.marginRight})，点击 '1' 精准定位 (pos=${actualCursor}==${expectedNum1Index})，光标物理贴合 |ΔX|=${deltaX.toFixed(3)}px <= 0.5px`
+                : `列表前缀防御失败: 盒模型纯净=${isBoxPristine}, 已触发点击=${clicked}, 光标定位=${actualCursor}(预期 ${expectedNum1Index}), 物理对齐偏差=${deltaX.toFixed(3)}px`,
+            });
+          }
+        }
+      }
+
       return { suiteResults };
     }, TOLERANCE_PX);
 

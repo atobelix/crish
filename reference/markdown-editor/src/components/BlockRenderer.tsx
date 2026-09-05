@@ -1207,19 +1207,6 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
   activeState,
   rtl,
 }: BlockRendererComponentProps) {
-  // 列表缩进接线：统一使用每空格 8px 的缩进率（4空格=32px）。这样既更深，也确保对齐。
-  const baseIndentPx = Math.min(block.listIndent || 0, 12) * 8;
-  const indentStyle: React.CSSProperties | undefined = block.listIndent
-    ? { paddingLeft: `${baseIndentPx}px` }
-    : undefined;
-
-  if (block.listIndent && block.listIndent >= 2 && indentStyle) {
-    // 符号 min-width 是 16px，因此中心在 8px 处。周期设为 32px (对应4空格缩进)。
-    indentStyle.backgroundImage = `repeating-linear-gradient(to right, transparent 0, transparent 7px, hsl(0 0% 70% / 0.3) 7px, hsl(0 0% 70% / 0.3) 9px, transparent 9px, transparent 32px)`;
-    indentStyle.backgroundSize = `${baseIndentPx}px 100%`;
-    indentStyle.backgroundRepeat = 'no-repeat';
-  }
-
   let tokensToRender = block.inlineTokens || [];
   let isTruncated = false;
   let truncatedLength = 0;
@@ -1236,7 +1223,6 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
     // dir 属性，行为零变化）
     <div
       className="line-block"
-      style={indentStyle}
       dir={rtl ? 'rtl' : undefined}
     >
       {tokensToRender && tokensToRender.length > 0 ? (
