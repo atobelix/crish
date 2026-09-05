@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import styles from './Sidebar.module.css';
 import { Menu } from 'lucide-react';
-import { Button, Tooltip } from '../ui';
+import { IconButton } from '../ui';
 import { IconSidebarLeft } from './SidebarToggleIcons';
 import { SidebarNav } from './SidebarNav';
 
@@ -43,19 +43,18 @@ export const SidebarToggle: React.FC<{
       className={`${styles.sidebarHeader} sidebar-header`}
       data-mac={isMacDesktop ? 'true' : 'false'}
     >
-      <Tooltip content={toggleLabel}>
-        <button
-          type="button"
-          className={`${styles.sidebarToggleBtn} sidebar-toggle-btn`}
-          data-testid="sidebar-toggle"
-          aria-label={toggleLabel}
-          aria-expanded={!collapsed}
-          aria-controls="crish-sidebar"
-          onClick={onToggle}
-        >
-          <IconSidebarLeft size={16} aria-hidden="true" />
-        </button>
-      </Tooltip>
+      <IconButton
+        size="md"
+        variant="ghost"
+        tooltip={toggleLabel}
+        aria-label={toggleLabel}
+        aria-expanded={!collapsed}
+        aria-controls="crish-sidebar"
+        data-testid="sidebar-toggle"
+        className="sidebar-toggle-btn"
+        onClick={onToggle}
+        icon={<IconSidebarLeft size={16} aria-hidden="true" />}
+      />
     </div>
   );
 });
@@ -90,19 +89,18 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
         <header className={styles.sidebarHeaderBar} role="banner">
           <div className={styles.sidebarHeaderLeft}>
             {onToggle && (
-              <Tooltip content={toggleLabel}>
-                <button
-                  type="button"
-                  className={`${styles.sidebarToggleBtn} sidebar-toggle-btn`}
-                  data-testid="sidebar-header-toggle"
-                  aria-label={toggleLabel}
-                  aria-expanded={!collapsed}
-                  aria-controls="crish-sidebar"
-                  onClick={onToggle}
-                >
-                  <IconSidebarLeft size={16} aria-hidden="true" />
-                </button>
-              </Tooltip>
+              <IconButton
+                size="md"
+                variant="ghost"
+                tooltip={toggleLabel}
+                aria-label={toggleLabel}
+                aria-expanded={!collapsed}
+                aria-controls="crish-sidebar"
+                data-testid="sidebar-header-toggle"
+                className="sidebar-toggle-btn"
+                onClick={onToggle}
+                icon={<IconSidebarLeft size={16} aria-hidden="true" />}
+              />
             )}
           </div>
           <div className={styles.sidebarHeaderRight} data-testid="sidebar-header-extra">
@@ -111,15 +109,15 @@ export const SidebarHeader: React.FC<SidebarHeaderProps> = React.memo(
         </header>
 
         {sidebarBehavior === 'overlay' && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={`${styles.hamburger} ${isOverlayActive ? styles.hamburgerActive : ''}`}
+          <IconButton
+            variant="secondary"
+            size="md"
+            active={isOverlayActive}
+            className={styles.hamburger}
             aria-label={isOverlayActive ? '关闭侧栏菜单' : '打开侧栏菜单'}
             aria-expanded={isOverlayActive}
             onClick={onHamburgerClick}
-            icon={<Menu size={18} strokeWidth={1.75} aria-hidden />}
+            icon={<Menu size={18} strokeWidth={1.5} aria-hidden />}
           />
         )}
 

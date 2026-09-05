@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './Sidebar.module.css';
+import { Button } from '../ui';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
 import { useAuthStore } from '../../store/authStore';
 
@@ -28,7 +29,8 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
     return (
       <SettingsQuickMenu
         renderTrigger={({ open, triggerProps }) => (
-          <button
+          <Button
+            bare
             type="button"
             className={`${styles.userProfileCard}${open ? ` ${styles.isOpen}` : ''}`}
             data-testid="user-profile-card"
@@ -37,7 +39,7 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
           >
             <div className={styles.userAvatarContainer}>
               <div className={styles.userAvatar}>
-                <Lucide.User size={15} strokeWidth={2} aria-hidden />
+                <Lucide.User size={15} strokeWidth={1.5} aria-hidden />
               </div>
               <span
                 className={`${styles.userOnlineStatus}${!isLoggedIn ? ` ${styles.userOfflineStatus}` : ''}`}
@@ -50,11 +52,11 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
             </div>
             <Lucide.ChevronsUpDown
               size={13}
-              strokeWidth={1.75}
+              strokeWidth={1.5}
               className={styles.userChevron}
               aria-hidden
             />
-          </button>
+          </Button>
         )}
       />
     );

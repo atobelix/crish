@@ -81,39 +81,6 @@
   padding-left: 70px;
 }
 
-.sidebarToggleBtn {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-md);
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 0;
-  margin: 0;
-  box-shadow: none;
-  transition:
-    background-color var(--transition-fast, 150ms ease-out),
-    color var(--transition-fast, 150ms ease-out);
-  -webkit-app-region: no-drag !important;
-  app-region: no-drag !important;
-  pointer-events: auto;
-}
-
-.sidebarToggleBtn:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-}
-
-.sidebarToggleBtn:active {
-  background: var(--tint-active);
-}
-
 .sidebarTop {
   padding: 4px 10px 0 10px;
   display: flex;
@@ -166,7 +133,7 @@
   align-items: center;
   gap: var(--space-2);
   padding: 4px 8px;
-  border-radius: var(--radius-xl);
+  border-radius: var(--button-radius, 8px);
   border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
@@ -180,7 +147,7 @@
 }
 
 .userProfileCard:hover {
-  background: var(--tint-hover);
+  background: var(--sidebar-hover, var(--tint-hover));
   color: var(--text-primary);
 }
 
@@ -220,6 +187,10 @@
   box-shadow: 0 0 0 1.5px var(--bg-workspace, var(--bg-primary));
 }
 
+.userOfflineStatus {
+  background: var(--text-tertiary, hsl(0 0% 60%));
+}
+
 .userTextStack {
   flex: 1;
   min-width: 0;
@@ -251,36 +222,6 @@
   flex-shrink: 0;
 }
 
-.settingsGearBtn {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  border-radius: var(--radius-xl);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  transition:
-    background var(--transition-micro),
-    color var(--transition-micro);
-  box-sizing: border-box;
-}
-
-.settingsGearBtn:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-}
-
-.settingsGearBtn:active,
-.settingsGearBtn.isOpen {
-  background: var(--tint-active);
-  color: var(--text-primary);
-}
-
 .gearUpdatePulseDot {
   position: absolute;
   top: 4px;
@@ -290,76 +231,6 @@
   border-radius: var(--radius-full);
   background: var(--accent-green);
   box-shadow: 0 0 0 2px var(--bg-secondary);
-}
-
-.modeChip {
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-normal);
-  font-family: inherit;
-  padding: 3px 8px;
-  border-radius: 999px;
-  cursor: pointer;
-  min-height: 26px;
-  height: 26px;
-  box-sizing: border-box;
-  transition:
-    background var(--transition-micro),
-    color var(--transition-micro),
-    border-color var(--transition-micro);
-}
-
-.modeChip:hover {
-  background: var(--tint-hover);
-  color: var(--text-primary);
-}
-
-.modeChip:active {
-  background: var(--tint-active);
-  color: var(--text-primary);
-}
-
-.modeChip.isDemo {
-  background: var(--bg-tertiary);
-  border-color: var(--border-color);
-  color: var(--text-secondary);
-}
-
-.footerActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.footerUpdate {
-  display: none;
-  align-items: center;
-  gap: var(--space-1);
-  font-size: var(--font-size-xs);
-  padding: 0 8px;
-  min-width: auto;
-  height: 26px;
-  border-radius: 999px;
-  border: 1px solid var(--hairline, var(--border-subtle));
-  background: color-mix(in srgb, var(--accent-green) 12%, transparent);
-  color: var(--text-primary);
-  cursor: pointer;
-  box-sizing: border-box;
-}
-
-.footerUpdate.isVisible {
-  display: inline-flex;
-}
-
-.footerUpdate:hover {
-  background: color-mix(in srgb, var(--accent-green) 18%, transparent);
-}
-
-.footerUpdateLabel {
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-none);
 }
 
 .sidebarResizer {
@@ -415,25 +286,6 @@
   top: 8px;
   left: 8px;
   z-index: calc(var(--z-sidebar, 100) + 1);
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md, 8px);
-  cursor: pointer;
-  color: var(--text-primary);
-  transition: background var(--transition-fast);
-}
-
-.hamburger:hover {
-  background: var(--tint-hover);
-}
-
-.hamburgerActive {
-  background: var(--tint-active);
 }
 
 /* Icon-collapse mode */
@@ -483,10 +335,5 @@
 
 .iconCollapse .userTextStack,
 .iconCollapse .userChevron {
-  display: none;
-}
-
-.iconCollapse .modeChip > span,
-.iconCollapse .footerActions > span {
   display: none;
 }

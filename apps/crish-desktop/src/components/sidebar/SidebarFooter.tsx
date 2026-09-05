@@ -2,7 +2,7 @@ import { useToast } from '../../services/toast/ToastContext';
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './Sidebar.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, IconButton, Tooltip } from '../ui';
 import {
   toggleSettingsOverlay,
   useShowSettingsOverlay,
@@ -23,24 +23,27 @@ export const SettingsIconButton: React.FC<SettingsIconButtonProps> = React.memo(
     }`;
 
     return (
-      <Tooltip content={tooltipText}>
-        <button
-          type="button"
-          className={`${styles.settingsGearBtn}${showSettings ? ` ${styles.isOpen}` : ''}`}
-          data-testid="sidebar-settings-gear-btn"
-          aria-label={tooltipText}
-          aria-pressed={showSettings}
-          onClick={() => toggleSettingsOverlay()}
-        >
-          <Lucide.Settings size={16} strokeWidth={1.75} aria-hidden />
-          {updateAvailable && (
-            <span
-              className={styles.gearUpdatePulseDot}
-              aria-label="新版本可用提示"
-            />
-          )}
-        </button>
-      </Tooltip>
+      <IconButton
+        size="md"
+        variant="ghost"
+        tooltip={tooltipText}
+        aria-label={tooltipText}
+        aria-pressed={showSettings}
+        active={showSettings}
+        data-testid="sidebar-settings-gear-btn"
+        onClick={() => toggleSettingsOverlay()}
+        icon={
+          <>
+            <Lucide.Settings size={16} strokeWidth={1.5} aria-hidden />
+            {updateAvailable && (
+              <span
+                className={styles.gearUpdatePulseDot}
+                aria-label="新版本可用提示"
+              />
+            )}
+          </>
+        }
+      />
     );
   }
 );
@@ -79,7 +82,6 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={`${styles.footerUpdate} ${styles.isVisible}`}
                 aria-label="安装更新"
                 onClick={() => {
                   void (async () => {
@@ -91,17 +93,16 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
                   })();
                 }}
                 icon={
-                  <Lucide.RefreshCw size={14} strokeWidth={1.75} aria-hidden />
+                  <Lucide.RefreshCw size={14} strokeWidth={1.5} aria-hidden />
                 }
               >
-                <span className={styles.footerUpdateLabel}>更新</span>
+                更新
               </Button>
             </Tooltip>
           ) : null}
 
           <SettingsIconButton
             updateAvailable={updateAvailable}
-
             setUpdateAvailableState={setUpdateAvailableState}
           />
         </div>
