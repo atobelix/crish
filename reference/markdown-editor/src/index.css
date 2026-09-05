@@ -34,9 +34,9 @@
   --yellow-tint-2: hsl(48 100% 50% / 0.08);
   --yellow-text: hsl(43 70% 30%);
 
-  /* 极浅纯灰文本选择高亮 (约 4% 纯灰底，零色彩倾向) */
-  --selection-bg: color-mix(in srgb, black 4%, var(--white));
-  --blue-selection: color-mix(in srgb, black 4%, var(--white));
+  /* 极浅纯灰文本选择高亮 (约 4%~5% 纯灰半透，零色彩倾向，绝不遮挡文字与高亮) */
+  --selection-bg: color-mix(in srgb, black 5%, transparent);
+  --blue-selection: color-mix(in srgb, black 5%, transparent);
 
   /* 暖调柔和边框与交互态 */
   --border-subtle: var(--border-soft);
@@ -265,7 +265,7 @@ body {
   gap: 4px;
   font-size: 12px;
   line-height: 1;
-  padding: 4px 0;
+  padding: 4px 6px;
   border-radius: 4px;
   border: none;
   background: transparent;
@@ -273,11 +273,20 @@ body {
   font-family: var(--font-mono);
   cursor: pointer;
   user-select: none;
-  transition: color 0.15s ease, background-color 0.15s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.line-code-fence-start:hover .code-copy-btn,
+.code-fence-rendered:hover .code-copy-btn,
+.line-math-block:hover .code-copy-btn {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .code-copy-btn:hover {
-  background-color: transparent;
+  background-color: color-mix(in srgb, black 4%, transparent);
   color: var(--text-primary);
 }
 
@@ -334,7 +343,7 @@ body {
 
 .table-header-row {
   background-color: var(--ivory);
-  border-bottom: 1.5px solid var(--border-medium);
+  border-bottom: 1px solid var(--border-medium);
   font-weight: 500;
   color: var(--stone);
 }
@@ -345,7 +354,7 @@ body {
   overflow: hidden;
   margin: 0;
   padding: 0;
-  border-bottom: 2px solid var(--border-medium);
+  border-bottom: none;
   box-sizing: border-box;
 }
 
@@ -813,10 +822,11 @@ body {
 
 .code-lang-pill {
   display: inline-block;
-  font-size: 12px;
-  color: var(--stone);
+  font-size: 11.5px;
+  color: var(--text-muted);
   font-weight: 500;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
+  opacity: 0.8;
   user-select: none;
   background: transparent;
   padding: 0;

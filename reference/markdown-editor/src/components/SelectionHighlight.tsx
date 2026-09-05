@@ -198,6 +198,7 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
             width: rect.width,
             height: rect.height,
             backgroundColor: 'var(--blue-selection)',
+            mixBlendMode: 'multiply',
           }}
         />
       ))}

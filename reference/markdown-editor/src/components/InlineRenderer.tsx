@@ -335,15 +335,33 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   const tableStore = useTableStore.getState();
                   const editorStore = useEditorStore.getState();
 
-                  // 1. 首次单击未选中：进入单元格单选模式
-                  if (!isCellSelected) {
-                    tableStore.enterCellSelection(tableId || '', lineIndex ?? -1, colIndex);
-                    tableStore.setDraggingCell(true);
-                    window.getSelection()?.removeAllRanges();
-                    editorStore.setSelection(start, start);
-                    editorStore.setCursorPos(start);
+                  // 1. Shift+Click: 扩展单元格多选范围
+                  if (e.shiftKey && selectedCell && selectedCell.tableId === tableId) {
+                    tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
                     e.preventDefault?.();
+                    return;
+                  }
 
+                  // 2. 单元格处于编辑模式 (isCellEditing)：支持单元格内精确物理定位与划词拖选
+                  if (isCellEditing) {
+                    const targetIdx = locateRowIndexByPhysicalBisection(
+                      e.currentTarget,
+                      e.clientX,
+                      start,
+                      len
+                    ) ?? start;
+                    const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
+                    editorStore.setSelection(clampedIdx, clampedIdx);
+                    editorStore.setCursorPos(clampedIdx);
+
+                    (window as any).__CRISH_CELL_TEXT_DRAG = {
+                      cellEl: e.currentTarget,
+                      start,
+                      len,
+                      anchorIdx: clampedIdx,
+                    };
+
+                    e.preventDefault?.();
                     setTimeout(() => {
                       const input = document.querySelector('textarea') as HTMLTextAreaElement;
                       if (input) input.focus({ preventScroll: true });
@@ -351,29 +369,41 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     return;
                   }
 
-                  // 2. 单元格已处于选中状态或已在编辑中：
-                  // 再次点击直接进入/维持就地编辑模式，并在本单元格范围内高精物理定位光标
-                  if (!isCellEditing) {
+                  // 3. 单元格已单选且二次点击同一单元格：进入就地文本编辑
+                  if (
+                    isCellSelected &&
+                    !selectedCell?.isEditing &&
+                    selectedCell?.startLine === selectedCell?.endLine &&
+                    selectedCell?.startCol === selectedCell?.endCol &&
+                    selectedCell?.startLine === lineIndex &&
+                    selectedCell?.startCol === colIndex
+                  ) {
                     tableStore.enterCellEdit(tableId || '', lineIndex ?? -1, colIndex);
                     tableStore.setDraggingCell(false);
+
+                    const targetIdx = locateRowIndexByPhysicalBisection(
+                      e.currentTarget,
+                      e.clientX,
+                      start,
+                      len
+                    ) ?? start;
+                    const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
+                    editorStore.setSelection(clampedIdx, clampedIdx);
+                    editorStore.setCursorPos(clampedIdx);
+                    e.preventDefault?.();
+                    setTimeout(() => {
+                      const input = document.querySelector('textarea') as HTMLTextAreaElement;
+                      if (input) input.focus({ preventScroll: true });
+                    }, 0);
+                    return;
                   }
 
-                  // 使用 locateRowIndexByPhysicalBisection 仅在当前单元格 DOM 范围内精确测量，
-                  // 彻底避免跨单元格漂移或落入管道符
-                  const targetIdx = locateRowIndexByPhysicalBisection(
-                    e.currentTarget,
-                    e.clientX,
-                    start,
-                    len
-                  ) ?? start;
-
-                  // 严格将光标钳制在单元格自身范围 [start, start + len] 内
-                  const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
-
-                  // 折叠选区为 0 宽，杜绝跨单元格灰色选区块与全高背景
-                  editorStore.setSelection(clampedIdx, clampedIdx);
-                  editorStore.setCursorPos(clampedIdx);
+                  // 4. 单击/拖选进入单元格选择模式（支持从该单元格向外拖选多单元格）
+                  tableStore.enterCellSelection(tableId || '', lineIndex ?? -1, colIndex);
+                  tableStore.setDraggingCell(true);
                   window.getSelection()?.removeAllRanges();
+                  editorStore.setSelection(start, start);
+                  editorStore.setCursorPos(start);
                   e.preventDefault?.();
 
                   setTimeout(() => {
@@ -385,8 +415,16 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   const tableStore = useTableStore.getState();
                   if (tableStore.isDraggingCell) {
                     tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
-                    // Clear native selection so text isn't highlighted while dragging cells
                     window.getSelection()?.removeAllRanges();
+                  }
+                }}
+                onMouseMove={() => {
+                  const tableStore = useTableStore.getState();
+                  if (tableStore.isDraggingCell && tableStore.selectedCell) {
+                    if (tableStore.selectedCell.endLine !== lineIndex || tableStore.selectedCell.endCol !== colIndex) {
+                      tableStore.updateCellSelectionEnd(lineIndex ?? -1, colIndex);
+                      window.getSelection()?.removeAllRanges();
+                    }
                   }
                 }}
                 onMouseUp={(e) => {

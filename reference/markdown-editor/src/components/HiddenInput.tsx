@@ -740,10 +740,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
   const dragSelectRef = useRef<{
     startX: number;
     startY: number;
+    currentX: number;
+    currentY: number;
     anchor: number;
     lastIndex: number;
     active: boolean;
     suppressed: boolean;
+    rafId: number | null;
   } | null>(null);
 
   const prevCursorPosRef = useRef<number>(cursorPos);
@@ -981,6 +984,7 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     };
     const handleGlobalMouseUp = () => {
       (window as any).__CRISH_IS_MOUSE_DOWN = false;
+      (window as any).__CRISH_CELL_TEXT_DRAG = null;
       const tableStore = useTableStore.getState();
       if (tableStore.isDraggingCell) {
         tableStore.setDraggingCell(false);
@@ -1063,17 +1067,42 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       dragSelectRef.current = {
         startX: e.clientX,
         startY: e.clientY,
+        currentX: e.clientX,
+        currentY: e.clientY,
         anchor: -1,
         lastIndex: -1,
         active: false,
         suppressed: false,
+        rafId: null,
       };
     };
 
     const handleDragMouseMove = (e: MouseEvent) => {
+      // 单元格内划词拖选（当处于单元格就地文本编辑态时）
+      const cellDrag = (window as any).__CRISH_CELL_TEXT_DRAG;
+      if (cellDrag && cellDrag.cellEl) {
+        const headIdx = locateRowIndexByPhysicalBisection(
+          cellDrag.cellEl,
+          e.clientX,
+          cellDrag.start,
+          cellDrag.len
+        ) ?? cellDrag.start;
+        const clampedHead = Math.max(
+          cellDrag.start,
+          Math.min(cellDrag.start + cellDrag.len, headIdx)
+        );
+        editorStore.getState().setSelection(cellDrag.anchorIdx, clampedHead);
+        editorStore.getState().setCursorPos(clampedHead);
+        return;
+      }
+
       const d = dragSelectRef.current;
       const container = containerRef.current;
       if (!d || !container) return;
+
+      d.currentX = e.clientX;
+      d.currentY = e.clientY;
+
       if (!d.active) {
         // 移动阈值：未超阈值视为点击（mouseup 后由 click 定位，本状态机
         // 不干预——「mousedown 后 mousemove 才进拖选态」与点击定位协调）
@@ -1097,20 +1126,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         window.getSelection()?.removeAllRanges();
         editorStore.getState().setCursorPos(d.anchor);
       }
-      // 边缘滚动（视口外断选处理）：鼠标越出/压入容器边缘时步进滚动
-      // （滚动跟随），目标行未挂载期间由行几何估算兜底
-      const edgeStep = edgeScrollStep(e.clientY, container);
-      if (edgeStep !== 0) {
-        const maxTop = Math.max(
-          0,
-          (container.scrollHeight || 0) - container.clientHeight
-        );
-        container.scrollTop = Math.min(
-          maxTop,
-          Math.max(0, container.scrollTop + edgeStep)
-        );
-      }
-      // 坐标驱动：head 持续更新（anchor 不动；同索引跳过——高频去抖）
+
+      // 坐标驱动：head 同步更新（anchor 不动；同索引跳过——高频去抖）
       const index = indexFromClientPoint(
         e.clientX,
         e.clientY,
@@ -1121,11 +1138,71 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         d.lastIndex = index;
         editorStore.getState().moveHead(index);
       }
+
+      // 边缘自动滚动调度：边缘步进 + 持续 60fps 平滑滚屏（鼠标停在边缘时亦可持续滚动）
+      const edgeStep = edgeScrollStep(e.clientY, container);
+      if (edgeStep !== 0) {
+        const maxTop = Math.max(
+          0,
+          (container.scrollHeight || 0) - container.clientHeight
+        );
+        container.scrollTop = Math.min(
+          maxTop,
+          Math.max(0, container.scrollTop + edgeStep)
+        );
+
+        if (d.rafId === null) {
+          const tick = () => {
+            const cur = dragSelectRef.current;
+            const c = containerRef.current;
+            if (!cur || !cur.active || !c) {
+              if (cur) cur.rafId = null;
+              return;
+            }
+
+            const step = edgeScrollStep(cur.currentY, c);
+            if (step !== 0) {
+              const max = Math.max(
+                0,
+                (c.scrollHeight || 0) - c.clientHeight
+              );
+              c.scrollTop = Math.min(
+                max,
+                Math.max(0, c.scrollTop + step)
+              );
+
+              const idx = indexFromClientPoint(
+                cur.currentX,
+                cur.currentY,
+                c,
+                editorStore.getState()
+              );
+              if (idx !== cur.lastIndex) {
+                cur.lastIndex = idx;
+                editorStore.getState().moveHead(idx);
+              }
+              cur.rafId = requestAnimationFrame(tick);
+            } else {
+              cur.rafId = null;
+            }
+          };
+
+          d.rafId = requestAnimationFrame(tick);
+        }
+      } else if (d.rafId !== null) {
+        cancelAnimationFrame(d.rafId);
+        d.rafId = null;
+      }
     };
 
     const handleDragMouseUp = (e: MouseEvent) => {
+      (window as any).__CRISH_CELL_TEXT_DRAG = null;
       const d = dragSelectRef.current;
       if (!d) return;
+      if (d.rafId !== null) {
+        cancelAnimationFrame(d.rafId);
+        d.rafId = null;
+      }
       if (d.active && containerRef.current) {
         // 结算：mouseup 位置可能是最后一次 mousemove 之后的新坐标，
         // 补一次 head 更新（幂等）
@@ -1267,6 +1344,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       }
       window.removeEventListener('mousemove', handleDragMouseMove);
       window.removeEventListener('mouseup', handleDragMouseUp);
+      if (dragSelectRef.current?.rafId !== null && dragSelectRef.current?.rafId !== undefined) {
+        cancelAnimationFrame(dragSelectRef.current.rafId);
+        dragSelectRef.current.rafId = null;
+      }
     };
   }, [containerRef]);
 
@@ -1277,7 +1358,32 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     const cursorPos = editorStore.getState().cursorPos;
 
     if (!selectedCell.isEditing) {
-      // 1. 单元格模式 (Cell Selection Mode - 仅限单元格级别操作)
+      // 1. 单元格多选复制 (Ctrl+C / Cmd+C: 导出 TSV 格式制表符数据)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'c' || e.key === 'C')) {
+        const minLine = Math.min(selectedCell.startLine, selectedCell.endLine);
+        const maxLine = Math.max(selectedCell.startLine, selectedCell.endLine);
+        const minCol = Math.min(selectedCell.startCol, selectedCell.endCol);
+        const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
+        const lines = editorStore.getState().lines;
+        const copiedRows: string[] = [];
+        for (let r = minLine; r <= maxLine; r++) {
+          const lineText = lines[r] || '';
+          if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(lineText.trim())) continue;
+          const { cells } = parseRowCells(lineText);
+          const selectedRowCells: string[] = [];
+          for (let c = minCol; c <= maxCol; c++) {
+            selectedRowCells.push((cells[c] || '').trim());
+          }
+          copiedRows.push(selectedRowCells.join('\t'));
+        }
+        if (copiedRows.length > 0) {
+          e.preventDefault();
+          void navigator.clipboard.writeText(copiedRows.join('\n'));
+          return true;
+        }
+      }
+
+      // 2. 单元格模式快捷键 (Cell Selection Mode - 仅限单元格级别操作)
       if (e.key === 'F2') {
         e.preventDefault();
         useTableStore.getState().enterCellEdit();
@@ -1290,11 +1396,83 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       }
       if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
-        const res = clearCell(text, cursorPos);
-        if (res.newText !== text) {
-          editorStore.setState({ lines: res.newText.split('\n') });
+        const minLine = Math.min(selectedCell.startLine, selectedCell.endLine);
+        const maxLine = Math.max(selectedCell.startLine, selectedCell.endLine);
+        const minCol = Math.min(selectedCell.startCol, selectedCell.endCol);
+        const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
+
+        if (minLine === maxLine && minCol === maxCol) {
+          const res = clearCell(text, cursorPos);
+          if (res.newText !== text) {
+            editorStore.setState({ lines: res.newText.split('\n') });
+          }
+          editorStore.getState().setCursorPos(res.newCursorPos);
+        } else {
+          // 多单元格批量清空（保留管道符结构）
+          const currentLines = [...editorStore.getState().lines];
+          let hasChanges = false;
+          for (let r = minLine; r <= maxLine; r++) {
+            const lineText = currentLines[r] || '';
+            if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(lineText.trim())) continue;
+            const { pipePositions } = parseRowCells(lineText);
+            if (pipePositions.length <= 1) continue;
+            let modifiedLine = lineText;
+            for (let c = Math.min(maxCol, pipePositions.length - 2); c >= minCol; c--) {
+              const left = pipePositions[c];
+              const right = pipePositions[c + 1];
+              if (left !== undefined && right !== undefined) {
+                modifiedLine =
+                  modifiedLine.substring(0, left + 1) +
+                  '  ' +
+                  modifiedLine.substring(right);
+              }
+            }
+            if (modifiedLine !== lineText) {
+              currentLines[r] = modifiedLine;
+              hasChanges = true;
+            }
+          }
+          if (hasChanges) {
+            editorStore.setState({ lines: currentLines });
+          }
         }
-        editorStore.getState().setCursorPos(res.newCursorPos);
+        return true;
+      }
+
+      // Shift+方向键：扩展单元格多选范围（表格多选，支持跨越分隔行）
+      if (
+        e.shiftKey &&
+        (e.key === 'ArrowRight' ||
+          e.key === 'ArrowLeft' ||
+          e.key === 'ArrowDown' ||
+          e.key === 'ArrowUp')
+      ) {
+        e.preventDefault();
+        const tableStore = useTableStore.getState();
+        const currentLines = editorStore.getState().lines;
+        if (e.key === 'ArrowRight') {
+          tableStore.updateCellSelectionEnd(selectedCell.endLine, selectedCell.endCol + 1);
+        } else if (e.key === 'ArrowLeft') {
+          tableStore.updateCellSelectionEnd(selectedCell.endLine, Math.max(0, selectedCell.endCol - 1));
+        } else if (e.key === 'ArrowDown') {
+          let nextLine = selectedCell.endLine + 1;
+          const targetText = currentLines[nextLine] || '';
+          if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(targetText.trim())) {
+            nextLine++;
+          }
+          if (nextLine < currentLines.length && (currentLines[nextLine] || '').trim().startsWith('|')) {
+            tableStore.updateCellSelectionEnd(nextLine, selectedCell.endCol);
+          }
+        } else if (e.key === 'ArrowUp') {
+          let prevLine = selectedCell.endLine - 1;
+          const targetText = currentLines[prevLine] || '';
+          if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(targetText.trim())) {
+            prevLine--;
+          }
+          if (prevLine >= 0 && (currentLines[prevLine] || '').trim().startsWith('|')) {
+            tableStore.updateCellSelectionEnd(prevLine, selectedCell.endCol);
+          }
+        }
         return true;
       }
 
