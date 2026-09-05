@@ -23,21 +23,6 @@
   font-weight: var(--font-weight-medium, 500);
 }
 
-.inputField {
-  height: 32px;
-  padding: 0 10px;
-  border-radius: var(--radius-md, 6px);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  font-size: var(--font-size-sm, 13px);
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-
-.inputField:focus {
-  border-color: color-mix(in srgb, var(--border-subtle) 85%, var(--text-primary) 15%);
-}
 
 .formActions {
   display: flex;

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { SettingsCard } from './SettingsUI';
-import { Button, Tooltip } from '../ui';
+import { Button, Tooltip, Input } from '../ui';
 import styles from './AccountAuthCard.module.css';
 
 export const AccountAuthCard: React.FC = () => {
@@ -69,10 +69,10 @@ export const AccountAuthCard: React.FC = () => {
               <label className={styles.formLabel} htmlFor="auth-email-input">
                 账号邮箱
               </label>
-              <input
+              <Input
                 id="auth-email-input"
                 type="email"
-                className={styles.inputField}
+                size="sm"
                 placeholder="name@example.com"
                 value={email}
                 onChange={(e) => {
@@ -87,10 +87,10 @@ export const AccountAuthCard: React.FC = () => {
               <label className={styles.formLabel} htmlFor="auth-password-input">
                 密码
               </label>
-              <input
+              <Input
                 id="auth-password-input"
                 type="password"
-                className={styles.inputField}
+                size="sm"
                 placeholder="输入登录密码"
                 value={password}
                 onChange={(e) => {

@@ -10,7 +10,7 @@ import * as Lucide from 'lucide-react';
 import styles from './CheatsheetModal.module.css';
 import { ShortcutService } from '../../services/ShortcutService';
 import type { ShortcutMeta } from '../../services/ShortcutRegistry';
-import { Dialog } from '../ui';
+import { Dialog, Input } from '../ui';
 
 interface CheatsheetModalProps {
   onClose: () => void;
@@ -61,10 +61,9 @@ export function CheatsheetModal({ onClose, isOpen = true }: CheatsheetModalProps
       classNames={{ panel: styles.cheatsheetModal, overlay: styles.cheatsheetOverlay }}
     >
       <div className={styles.cheatsheetSearch}>
-        <Lucide.Search size={14} aria-hidden="true" />
-        <input
-          type="text"
-          className={styles.cheatsheetSearchInput}
+        <Input
+          variant="search"
+          size="sm"
           placeholder="搜索快捷键..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}

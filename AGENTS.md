@@ -331,3 +331,7 @@ _2026-08-13 主调度订正 · 附录 B 取代附录 A §3 的旧口径（16 上
    - 禁止在普通输入框、卡片、工具栏按钮随意声明 9999px 药丸胶囊（除系统级浮动 Badge、全局主底栏或特定开关外）；
    - 严禁出现生硬刺眼的 0px/1px 方角；
    - 严禁出现 17px、23px 等脱离 Design Tokens 阶梯的奇葩自由数字。遵循系统标尺（4px / 6px / 8px / 12px / 16px）。
+3. **全仓自动化刚性门禁闭环（check-input-guardrails）**：
+   - 运行 `node scripts/check-input-guardrails.mjs`（`npm run check:input-guard`，已接入 `check:desktop` 与单测）；
+   - 静态 AST 深度遍历全仓所有 CSS 规则与 TSX 标签，刚性阻断纯黑边框、厚重阴影、奇葩/生硬圆角、按钮果冻弹跳（`:active scale(0.96)` 等）；
+   - 拦截表单私有原生 `<input>`，强制统一复用原子 `@/components/ui`（形态 ③），任何 Agent 违背规范立即被门禁阻断。

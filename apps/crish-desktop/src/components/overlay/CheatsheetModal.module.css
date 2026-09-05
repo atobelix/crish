@@ -24,40 +24,7 @@
 }
 
 .cheatsheetSearch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   margin: 0 0 12px 0;
-  padding: 6px 10px;
-  background: var(--bg-hover);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md, 6px);
-  color: var(--text-tertiary);
-  transition:
-    border-color var(--transition-micro, 120ms) ease,
-    background-color var(--transition-micro, 120ms) ease;
-}
-
-.cheatsheetSearch:hover {
-  border-color: var(--border-color);
-}
-
-.cheatsheetSearch:focus-within {
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
-}
-
-.cheatsheetSearchInput {
-  flex: 1;
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 13px;
-  color: var(--text-primary);
-  font-family: inherit;
-}
-
-.cheatsheetSearchInput::placeholder {
-  color: var(--text-tertiary);
 }
 
 .cheatsheetBody {

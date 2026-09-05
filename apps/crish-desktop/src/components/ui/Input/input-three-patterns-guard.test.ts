@@ -67,4 +67,24 @@ describe('输入框四态体系刚性防御契约', () => {
     expect(inputCss).toContain('border-radius: var(--radius-md, 6px);');
     expect(inputCss).toMatch(/\.input:focus[^{]*\{[^}]*box-shadow:\s*none;/);
   });
+
+  it('形态 ③ 防御：标准原子 Textarea 必须保持微圆角与 Design Token 细边框，严禁原生硬黑框', () => {
+    const textareaCss = fs.readFileSync(
+      path.resolve(desktopSrc, 'components/ui/Input/Textarea.module.css'),
+      'utf-8'
+    );
+    expect(textareaCss).toContain('border: 1px solid var(--border-subtle);');
+    expect(textareaCss).toContain('border-radius: var(--radius-md, 6px);');
+    expect(textareaCss).toMatch(/\.nativeTextarea:focus[^{]*\{[^}]*box-shadow:\s*none;/);
+  });
+
+  it('全仓刚性守护：自动化静态守门脚本 check-input-guardrails.mjs 必须 100% 通过（0 错误）', async () => {
+    const { execSync } = await import('child_process');
+    const repoRoot = path.resolve(desktopSrc, '../../..');
+    const stdout = execSync('node scripts/check-input-guardrails.mjs', {
+      cwd: repoRoot,
+      encoding: 'utf-8',
+    });
+    expect(stdout).toContain('全仓输入框四态体系防倒退检查 100% 通过');
+  });
 });
