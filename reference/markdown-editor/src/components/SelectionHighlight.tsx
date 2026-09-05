@@ -15,6 +15,77 @@ interface Rect {
 }
 
 /**
+ * 视觉行高度与上边界归一化与水平无缝融合算法 (Visual Line Rect Normalization & Merge)
+ * 解决同一视觉行内不同元素（如前缀 widget 盒模型高度 28px vs 文本节点字形盒模型高度 21px）
+ * 导致选区出现阶梯断层、两块不同高度灰度矩形的问题。
+ * 将同一视觉行内的所有片段统一对齐至该行的最小 top 与最大 bottom，横向无缝融合。
+ */
+function mergeVisualLineRects(rects: Rect[]): Rect[] {
+  if (rects.length <= 1) return rects;
+
+  const groups: { top: number; bottom: number; rects: Rect[] }[] = [];
+
+  for (const r of rects) {
+    const rBottom = r.top + r.height;
+    // 判定是否属于同一视觉行：垂直区间存在显著重叠（大于任一高度的 35%）
+    let matchedGroup = groups.find((g) => {
+      const overlap = Math.min(g.bottom, rBottom) - Math.max(g.top, r.top);
+      const minH = Math.min(g.bottom - g.top, r.height);
+      return overlap > 0.35 * minH;
+    });
+
+    if (!matchedGroup) {
+      groups.push({
+        top: r.top,
+        bottom: rBottom,
+        rects: [r],
+      });
+    } else {
+      matchedGroup.top = Math.min(matchedGroup.top, r.top);
+      matchedGroup.bottom = Math.max(matchedGroup.bottom, rBottom);
+      matchedGroup.rects.push(r);
+    }
+  }
+
+  const result: Rect[] = [];
+
+  for (const g of groups) {
+    const unifiedTop = g.top;
+    const unifiedHeight = g.bottom - g.top;
+
+    // 按水平 left 升序排列
+    g.rects.sort((a, b) => a.left - b.left);
+
+    let cur: Rect = {
+      top: unifiedTop,
+      height: unifiedHeight,
+      left: g.rects[0].left,
+      width: g.rects[0].width,
+    };
+
+    for (let i = 1; i < g.rects.length; i++) {
+      const next = g.rects[i];
+      const curRight = cur.left + cur.width;
+      // 若水平相邻、重叠或微小间隙（容差 2px，覆盖字母间距亚像素）
+      if (next.left <= curRight + 2) {
+        cur.width = Math.max(curRight, next.left + next.width) - cur.left;
+      } else {
+        result.push(cur);
+        cur = {
+          top: unifiedTop,
+          height: unifiedHeight,
+          left: next.left,
+          width: next.width,
+        };
+      }
+    }
+    result.push(cur);
+  }
+
+  return result;
+}
+
+/**
  * 几何区间合并算法（1D/2D Rect Union）
  * 彻底消除内联嵌套元素（父子 span、Token 结构）在 Range.getClientRects() 产生的重叠矩形，
  * 保证任意视觉行内的选区矩形严格互斥，杜绝任何局部叠色或双层灰度。
@@ -199,6 +270,8 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
               range.setEnd(p2.node, p2.offset);
               const clientRects = range.getClientRects();
 
+              const lineRawRects: Rect[] = [];
+
               for (let i = 0; i < clientRects.length; i++) {
                 const r = clientRects[i];
                 if (r.width <= 0 || r.height <= 0) continue;
@@ -220,12 +293,18 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
                 // 过滤异常的整行/整容器级别的大块盒模型（例如父级 block div）
                 if (r.width >= containerRect.width - 20) continue;
 
-                newRects.push({
+                lineRawRects.push({
                   top: r.top - containerRect.top + container.scrollTop,
                   left: r.left - containerRect.left + container.scrollLeft,
                   width: r.width,
                   height: r.height,
                 });
+              }
+
+              // 对本行内部提取出的所有碎片矩形执行视觉行归一化与水平无缝合并
+              const mergedLineRects = mergeVisualLineRects(lineRawRects);
+              for (const mr of mergedLineRects) {
+                newRects.push(mr);
               }
             } catch (err) {
               console.error('getClientRects failed:', err);

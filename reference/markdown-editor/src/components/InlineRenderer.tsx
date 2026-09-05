@@ -220,20 +220,46 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             isStyleToken &&
             (!token.content || token.content.trim() === '');
             
-          const isListPrefix = ['list_bullet', 'list_number', 'list_task', 'blockquote_prefix'].includes(token.type);
           let isActive = false;
-          // 所有结构性列表符号与引用前缀均为标准视觉微组件，单行激活或划词选区时绝对保持视觉形态，不切入源码坍缩
-          if (activeState && !isListPrefix) {
-            if (activeState.selStart !== undefined && activeState.selEnd !== undefined && activeState.selStart !== activeState.selEnd) {
-              isActive = start < activeState.selEnd && (start + len) > activeState.selStart;
+          let isSelected = false;
+
+          if (activeState) {
+            const hasRangeSelection =
+              activeState.selStart !== undefined &&
+              activeState.selEnd !== undefined &&
+              activeState.selStart !== activeState.selEnd;
+
+            if (hasRangeSelection) {
+              const selMin = Math.min(activeState.selStart!, activeState.selEnd!);
+              const selMax = Math.max(activeState.selStart!, activeState.selEnd!);
+              isSelected = start < selMax && (start + len) > selMin;
+
+              if (token.type === 'list_bullet' || token.type === 'list_number') {
+                // 划词跨行选区保护：无序列表圆点在划词时不坍缩，保持常显
+                isActive = false;
+              } else if (token.type === 'list_task') {
+                // 划词选中任务项前缀区域时展开源码模式
+                isActive = isSelected;
+              } else if (token.type === 'blockquote_prefix') {
+                isActive = isSelected;
+              } else {
+                isActive = isSelected;
+              }
             } else {
-              isActive = activeState.cursor >= start && activeState.cursor <= start + len;
+              // 聚焦光标单点模式：支持键盘左移、边缘点击等触发源码编辑
+              if (token.type === 'list_bullet' || token.type === 'list_number') {
+                isActive = activeState.cursor >= start && activeState.cursor < start + len;
+              } else if (token.type === 'list_task') {
+                // 光标在任务项前缀区间内（键盘移动/边缘点击）触发源码模式；光标移至正文则恢复控件
+                isActive = activeState.cursor >= start && activeState.cursor < start + len;
+              } else if (token.type === 'blockquote_prefix') {
+                // 引用行激活时呈现源码模式 `> `
+                isActive = true;
+              } else {
+                isActive = activeState.cursor >= start && activeState.cursor <= start + len;
+              }
             }
           }
-          
-          const isSelected = activeState && activeState.selStart !== undefined && activeState.selEnd !== undefined 
-                             && activeState.selStart !== activeState.selEnd
-                             && start < activeState.selEnd && (start + len) > activeState.selStart;
 
           const baseClassName = isEmpty ? `${className} is-empty-token` : className;
           let finalClassName = isActive ? `${baseClassName} is-active-token` : baseClassName;
@@ -690,13 +716,13 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                             width="14"
                             height="14"
                             rx="3.5"
-                            fill="var(--text-primary)"
-                            stroke="var(--text-primary)"
+                            fill="var(--brand, oklch(0.696 0.149 162.48))"
+                            stroke="var(--brand, oklch(0.696 0.149 162.48))"
                             strokeWidth="1.2"
                           />
                           <path
                             d="M4.5 8.2L7 10.7L11.5 5.5"
-                            stroke="var(--bg-primary)"
+                            stroke="oklch(1 0 0)"
                             strokeWidth="1.8"
                             strokeLinecap="round"
                             strokeLinejoin="round"
