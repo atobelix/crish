@@ -271,11 +271,15 @@ export {
   openToolInSession,
   openToolInLeaf,
   openToolInActiveTab,
+  openFileViewerInSession,
+  setFileViewerModeOverride,
+  consumeFileViewerModeOverride,
   updateLeafDock,
+  updateTabDock,
   collapseActiveTabRightDock,
 } from './workspace-shell';
 
-export type { SessionTab } from './workspace-shell';
+export type { SessionTab, FileViewerInitialMode } from './workspace-shell';
 
 // ── streaming 热缓冲读面（view model 装配只经本读面；写仍走 streamingStore actions）─
 

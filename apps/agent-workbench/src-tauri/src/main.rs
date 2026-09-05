@@ -476,6 +476,19 @@ command_registry![
     ("note_apply_ops", note_commands::note_apply_ops),
     ("note_undo_text", note_commands::note_undo_text),
     ("note_redo_text", note_commands::note_redo_text),
+    ("note_document_list", note_commands::note_document_list),
+    (
+        "note_document_create",
+        note_commands::note_document_create
+    ),
+    (
+        "note_document_rename",
+        note_commands::note_document_rename
+    ),
+    (
+        "note_document_delete",
+        note_commands::note_document_delete
+    ),
     // ── D4a 命令面：子代理显式恢复与关闭（D4 §3.1/§3.2/§3.5）。
     //    Tauri 宏约束：命令函数须以模块限定路径注册（裸标识符路径触发
     //    generate_handler! 的 `__cmd__<name>` 宏命名冲突），故命令壳定义

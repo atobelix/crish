@@ -275,7 +275,7 @@ describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
       '2'
     );
     expect(screen.getByTestId('note-paper-strict-count').textContent).toMatch(
-      /2/
+      /4/
     );
   });
 
@@ -350,7 +350,7 @@ describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
     expect(panel.querySelector('[data-editor-store]')).toBeNull();
   });
 
-  it('w5b_strict_footer_declares_demo_neq_EL_boundary', async () => {
+  it('w5b_strict_root_declares_demo_neq_EL_boundary_without_footer', async () => {
     const transport = createFixtureHydrateTransport({
       d: {
         rev: 1,
@@ -365,17 +365,25 @@ describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
       },
     });
     render(<NotePaperStrictPanel docId="d" hydrateTransport={transport} />);
+
     await waitFor(() => {
-      expect(
-        screen.getByTestId('note-paper-strict-footer')
-      ).toBeInTheDocument();
+      expect(screen.getByTestId('note-paper-strict-panel')).toBeInTheDocument();
     });
-    const footer = screen.getByTestId('note-paper-strict-footer');
-    expect(footer.textContent).toMatch(/W5-B/);
-    expect(footer.textContent).toMatch(/Strict/i);
-    expect(footer.textContent).toMatch(/可演示≠EL-01|≠EL-01/);
-    expect(footer.textContent).toMatch(/EL-08|S5|W5-C/);
-    expect(footer.textContent).toMatch(/note-paper/);
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-package-id', 'W5-B');
+    expect(panel).toHaveAttribute('data-track', 'strict');
+
+    const boundary = panel.getAttribute('data-boundary') ?? '';
+    expect(boundary).toMatch(/W5-B/);
+    expect(boundary).toMatch(/Strict/i);
+    expect(boundary).toMatch(/可演示≠EL-01|≠EL-01/);
+    expect(boundary).toMatch(/EL-08|S5|W5-C/);
+    expect(panel).toHaveAttribute('data-surface', 'note-paper');
+
+    // 刚性防回潮断言：灰底 footer 与 mirrorDriftBar 零渲染
+    expect(screen.queryByTestId('note-paper-strict-footer')).toBeNull();
+    expect(screen.queryByTestId('mirror-drift-bar')).toBeNull();
   });
 
   it('conn_a1_strict_dom_exposes_hydrate_path_from_mock_ipc', async () => {

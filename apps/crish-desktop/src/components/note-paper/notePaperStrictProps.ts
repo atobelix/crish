@@ -149,10 +149,28 @@ export type NotePaperStrictPanelProps = {
   onClose?: () => void;
   className?: string;
   title?: string;
-  /** A-INV-02 方向；**≠ EL-03**；**≠ A-INV-02 全关** */
+  /** 标题行内重命名持久化回调 */
+  onRenameTitle?: (newTitle: string) => Promise<void> | void;
+  /** 保存与协同同步状态 */
+  saveStatus?: 'saved' | 'syncing' | 'unsaved';
+  /** 侧栏是否处于展开状态 */
+  isSidebarOpen?: boolean;
+  /** 切换侧栏抽屉展开/收起回调 */
+  onToggleSidebar?: () => void;
+  /** 多文档元信息列表（供轻量下拉切换触点使用） */
+  documents?: readonly { id?: string; docId?: string; title: string; updatedAt?: number; blockCount?: number }[];
+  /** 选择切换文档回调 */
+  onSelectDoc?: (docId: string) => void;
+  /** 新建文档回调 */
+  onCreateDoc?: () => void;
+  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
   mirrorDriftReport?: MirrorDriftReportView | null;
+  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
   mirrorWatchSource?: MirrorWatchSource;
+  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
   mirrorUnpushedOpCount?: number;
+  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
   showMirrorDriftBar?: boolean;
+  /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
   onMirrorThreeWay?: (decision: ThreeWayDecision) => void;
 };

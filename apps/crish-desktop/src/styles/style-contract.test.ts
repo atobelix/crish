@@ -509,20 +509,25 @@ describe('设置按钮圆角 8px 契约', () => {
   });
 });
 
-describe('批次 6 · T4 hover-only 键盘闭环契约（08-步5）', () => {
+describe('批次 6 · T4 hover-only 键盘闭环契约（08-步5 · 平直列表升级）', () => {
   it('DiffCard.hoverActions 不以 display:none 阻断 Tab 序，且 :hover/:focus-within 双揭示', () => {
-    // 规范化行尾：`\s*` 会吞 CRLF 的 \r，导致匹配串含换行
     const css = readFile('src/components/diff/DiffCard.module.css').replace(
       /\r\n/g,
       '\n'
     );
-    const block = css.match(/\.hoverActions\s*\{[\s\S]*?\}/)?.[0] ?? '';
-    expect(block, '.hoverActions 应存在').toContain('opacity: 0');
+    const block = css.match(/\.(rowActions|hoverActions)\s*\{[\s\S]*?\}/)?.[0] ?? '';
+    expect(block, '.rowActions/.hoverActions 应存在').toContain('opacity: 0');
     expect(block).toContain('visibility: hidden');
     expect(block).not.toContain('display: none');
-    expect(css).toContain('.accordionHeaderRow:hover .hoverActions');
-    expect(css).toContain('.accordionHeaderRow:focus-within .hoverActions');
-    expect(css).toContain('.accordionHeaderRow:focus-within .fileStat');
+
+    // 就地平滑迁移：支持平直列表行 .fileRow 与 .rowActions / .hoverActions，彻底切除旧手风琴 .accordionHeaderRow 依赖
+    const hasRowHover = css.includes('.fileRow:hover .rowActions') || css.includes('.fileRow:hover .hoverActions');
+    expect(hasRowHover, '必须支持 .fileRow:hover 揭示操作栏').toBe(true);
+    const hasRowFocus = css.includes('.fileRow:focus-within .rowActions') || css.includes('.fileRow:focus-within .hoverActions');
+    expect(hasRowFocus, '必须支持 .fileRow:focus-within 揭示操作栏').toBe(true);
+
+    // 刚性防回潮负向断言：旧手风琴选择器严禁在样式表中复活
+    expect(css, '严禁残留旧手风琴行类名 .accordionHeaderRow').not.toContain('.accordionHeaderRow');
   });
 
   it('DiffCardFileList 列表语义已降级为 role="list"（无 listbox/option 滥用）', () => {

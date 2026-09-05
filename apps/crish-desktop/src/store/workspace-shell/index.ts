@@ -15,6 +15,7 @@ export * from './types';
 export * from './adapterShape';
 export * from './workspaceShellStore';
 export * from './openTool';
+export * from './normalizeViewerPath';
 export * from './layoutRestorePolicy';
 export {
   pictureFromActiveLeaf,

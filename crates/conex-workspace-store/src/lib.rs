@@ -62,7 +62,12 @@
 mod cas;
 mod fts;
 mod in_flight_guard;
-mod migrate;
+pub mod migrate;
+pub mod migrations;
+pub mod note_documents;
+pub mod document_meta {
+    pub use crate::note_documents::*;
+}
 mod mirror;
 mod mirror_detect;
 mod mirror_export;
@@ -88,6 +93,9 @@ pub use mirror::{
 pub use mirror_os_watch::{
     detect_if_os_event_hits_mirror, poll_on_os_hint, FakeMirrorOsEventSource, MirrorOsEvent,
     MirrorOsEventKind, MirrorOsEventSource, MirrorOsWatchError, MirrorOsWatcher,
+};
+pub use note_documents::{
+    current_time_ms, normalize_timestamp_ms, DocMetaRow, NoteDocumentMeta,
 };
 pub use persist_plugin::SharedWorkspaceStore;
 pub use projection::{
@@ -128,7 +136,8 @@ pub const SNAPSHOT_UPDATE_THRESHOLD: usize = 100;
 /// - v5：block_refs 物化（W2-F+ 块引用 / 反向链接）
 /// - v6：blob_cas + block_attachments（**W2-D-S** CAS 附件骨架；≠ 生产 / ≠ GC）
 /// - v7：mirror_meta.content_hash + file_mtime_ms（W2-E P6 detect 指纹）
-pub const SCHEMA_VERSION: i64 = 7;
+/// - v8：doc_meta 补充 title, created_at（统一 13 位毫秒时间戳）与单列更新倒序索引 idx_doc_meta_updated（极简多笔记综合管理体系）
+pub const SCHEMA_VERSION: i64 = 8;
 
 #[derive(Debug, Error)]
 pub enum StoreError {

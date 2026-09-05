@@ -614,3 +614,53 @@ async fn note_undo_and_redo_text_ipc_roundtrip() {
 
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[tokio::test]
+async fn note_document_lifecycle_ipc_roundtrip() {
+    let (_guard, dir) = temp_install();
+
+    // 1. 列表初始为空或默认
+    let list_res = note_document_list(None).await.unwrap();
+    assert_eq!(list_res["ok"], true);
+
+    // 2. 创建新文档
+    let create_res = note_document_create(
+        Some("测试创建文档".to_string()),
+        Some("# 标题一\n内容详情".to_string()),
+        None,
+    )
+    .await
+    .unwrap();
+    assert_eq!(create_res["ok"], true, "create_res failed: {create_res}");
+    let doc = &create_res["document"];
+    let doc_id = doc["id"].as_str().unwrap().to_string();
+    assert_eq!(doc["title"], "测试创建文档");
+    assert_eq!(doc["blockCount"], 1);
+
+    // 3. 再次查询列表包含新文档
+    let list_res2 = note_document_list(None).await.unwrap();
+    assert_eq!(list_res2["ok"], true);
+    assert!(list_res2["totalCount"].as_u64().unwrap() >= 1);
+
+    // 4. 重命名文档
+    let rename_res = note_document_rename(doc_id.clone(), "已重命名标题".to_string())
+        .await
+        .unwrap();
+    assert_eq!(rename_res["ok"], true);
+    assert_eq!(rename_res["title"], "已重命名标题");
+
+    // 5. 删除文档（物理级联硬删除）
+    let delete_res = note_document_delete(doc_id.clone(), Some(true))
+        .await
+        .unwrap();
+    assert_eq!(delete_res["ok"], true);
+    assert_eq!(delete_res["hardDeleted"], true);
+
+    // 6. 确认删除后列表不再包含该文档
+    let list_res3 = note_document_list(None).await.unwrap();
+    let docs = list_res3["documents"].as_array().unwrap();
+    assert!(!docs.iter().any(|d| d["id"] == doc_id));
+
+    let _ = std::fs::remove_dir_all(dir);
+}
+

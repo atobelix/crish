@@ -253,6 +253,11 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // CRDT-01/03：文本级 CRDT 因果撤销与重做
         entry("note_undo_text", "note", "engine", true),
         entry("note_redo_text", "note", "engine", true),
+        // ── 多笔记综合管理体系 IPC（06-分维详案）──
+        entry("note_document_list", "note", "engine", true),
+        entry("note_document_create", "note", "engine", true),
+        entry("note_document_rename", "note", "engine", true),
+        entry("note_document_delete", "note", "engine", true),
         // ── D4a：子代理显式恢复与关闭命令面（D4 §3.1 双端四步登记；
         //    实现体 = main.rs lifecycle_commands 命令壳 + lifecycle 引擎侧）──
         entry("resume_subagent", "core", "engine", true),
@@ -314,12 +319,12 @@ mod tests {
             .count();
         let pending = total - registered;
         assert_eq!(
-            total, 131,
-            "总数 131（126 + 5 条 usage_* 命令；与前端同步）"
+            total, 142,
+            "总数 142（131 基线 + 7 auth_* + 4 条 note_document_* 核心管理命令；与前端保持同步）"
         );
         assert_eq!(
-            registered, 131,
-            "注册面 131（全部为 registered=true 实装命令）"
+            registered, 142,
+            "注册面 142（全部为 registered=true 实装命令）"
         );
         assert_eq!(pending, 0, "登记先行 0");
     }
@@ -441,8 +446,31 @@ mod tests {
     #[test]
     fn core_list_commands_returns_full_manifest() {
         let manifest = core_list_commands().unwrap();
-        assert_eq!(manifest.commands.len(), 131);
+        assert_eq!(manifest.commands.len(), 142);
         assert_eq!(manifest.contract_version, "1.0.0");
+    }
+
+    /// 多笔记四命令登记且 registered=true
+    #[test]
+    fn manifest_registers_all_four_note_document_commands() {
+        let by_name: std::collections::HashMap<&str, &CommandManifestEntry> = COMMAND_MANIFEST
+            .commands
+            .iter()
+            .map(|c| (c.name, c))
+            .collect();
+        for name in [
+            "note_document_list",
+            "note_document_create",
+            "note_document_rename",
+            "note_document_delete",
+        ] {
+            let entry = by_name
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} 必须登记 manifest"));
+            assert_eq!(entry.family, "note", "{name} 属 note 族");
+            assert_eq!(entry.surface, "engine", "{name} 属引擎契约面");
+            assert!(entry.registered, "{name} 已接线应 registered=true");
+        }
     }
 
     /// 用量监控五命令登记且 registered=true

@@ -1,9 +1,13 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff } from '../../store/types';
-import { openToolInSession } from '../../store/storeAccess';
+import {
+  openToolInSession,
+  useTerminalField,
+  selectDiffFiles,
+  consumeFileViewerModeOverride,
+} from '../../store/storeAccess';
 import { getCompositionRoot } from '../../app/compositionRoot';
-import { useTerminalField, selectDiffFiles } from '../../store/storeAccess';
 import {
   openPathDefault,
   openWithHostOpener,
@@ -17,6 +21,8 @@ import {
   revealInOs,
 } from '../../api/workspaceFsApi';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
+import { DiffCardUnifiedView } from '../diff/DiffCardUnifiedView';
+import { getComputedChanges } from '../diff/useDiffData';
 import { useToast } from '../../services/toast/ToastContext';
 import { Button, Tooltip, Menu } from '../ui';
 import styles from './FileViewerCard.module.css';
@@ -46,8 +52,38 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       );
     }, [diffFiles, filePath]);
 
-    // 模式切换状态
-    const [viewMode, setViewMode] = useState<'plain' | 'diff'>(initialMode);
+    // 模式切换状态：优先消费单轨模式意图，其次使用 initialMode (冷启动)
+    const [viewMode, setViewMode] = useState<'plain' | 'diff'>(() => {
+      const canonicalTabId = `file-viewer:${filePath}`;
+      const override = consumeFileViewerModeOverride(canonicalTabId);
+      return override || initialMode;
+    });
+
+    // 监听同名 Tab 热激活微任务事件（通道 1：解决已存在 Tab 热聚焦切模问题）
+    useEffect(() => {
+      const handleModeSwitch = (e: Event) => {
+        const customEvent = e as CustomEvent<{
+          canonicalTabId: string;
+          mode: 'plain' | 'diff';
+        }>;
+        if (!customEvent.detail) return;
+        const currentCanonical = `file-viewer:${filePath}`;
+        if (customEvent.detail.canonicalTabId === currentCanonical) {
+          setViewMode(customEvent.detail.mode);
+        }
+      };
+      window.addEventListener('conex:file-viewer-mode', handleModeSwitch);
+      return () => {
+        window.removeEventListener('conex:file-viewer-mode', handleModeSwitch);
+      };
+    }, [filePath]);
+
+    // 监听 initialMode prop 变动（通道 2：React 组件生命周期更新防死锁，彻底根除 HAL-06）
+    useEffect(() => {
+      if (initialMode) {
+        setViewMode(initialMode);
+      }
+    }, [initialMode]);
 
     // 独立读取完整文件源码
     const [plainCode, setPlainCode] = useState<string>('');
@@ -144,39 +180,16 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       });
     };
 
-    // 手写简单对比渲染，不污染主 diff 状态机
-    const renderSimpleDiff = () => {
-      if (!f || !f.changes || f.changes.length === 0) {
-        return (
-          <div className={styles.diffEmpty}>
-            <span>该文件目前没有本地改动</span>
-          </div>
-        );
-      }
-
-      return (
-        <div className={styles.diffContainer}>
-          {f.changes.map((line, idx) => {
-            let typeClass = '';
-            let prefix = ' ';
-            if (line.type === 'addition') {
-              typeClass = styles.diffAddition ?? '';
-              prefix = '+';
-            } else if (line.type === 'deletion') {
-              typeClass = styles.diffDeletion ?? '';
-              prefix = '-';
-            }
-
-            return (
-              <div key={idx} className={`${styles.diffLine} ${typeClass}`}>
-                <div className={styles.diffGutter}>{prefix}</div>
-                <div className={styles.diffContent}>{line.content}</div>
-              </div>
-            );
-          })}
-        </div>
-      );
-    };
+    // 系统单轨 Unified 比对渲染项计算（复用系统真实高保真对比数据结构）
+    const unifiedRenderItems = useMemo(() => {
+      if (!f || !f.changes) return [];
+      const computed = getComputedChanges(f);
+      return computed.map((item, idx) => ({
+        isCollapsedPlaceholder: false as const,
+        index: idx,
+        item,
+      }));
+    }, [f]);
 
     return (
       <div
@@ -344,8 +357,21 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             ) : (
               <VirtualPlainCodeViewer content={plainCode} filePath={filePath} />
             )
+          ) : f && f.changes && f.changes.length > 0 ? (
+            /* 系统单轨高保真比对视口（彻底替换 30 行手写简陋对比伪实现） */
+            <DiffCardUnifiedView
+              f={f}
+              renderItems={unifiedRenderItems}
+              onExpandBlock={() => {}}
+            />
           ) : (
-            renderSimpleDiff()
+            <div className={styles.diffEmpty}>
+              <Lucide.FileDiff size={22} style={{ opacity: 0.3 }} aria-hidden />
+              <div>该文件目前没有本地改动</div>
+              <div className={styles.diffEmptySub}>
+                本地工作区与基准版本完全一致。
+              </div>
+            </div>
           )}
         </div>
       </div>

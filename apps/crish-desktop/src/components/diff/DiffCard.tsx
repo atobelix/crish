@@ -4,8 +4,7 @@
  */
 import React, { useCallback, useDeferredValue, useState } from 'react';
 import styles from './DiffCard.module.css';
-import { Button, ConfirmDialog, Tooltip } from '../ui';
-import { useConfirmGate } from '../../hooks/useConfirmGate';
+import { Button, Tooltip } from '../ui';
 import { selectActiveSession, useSessionField } from '../../store/storeAccess';
 import type { FileDiff } from '../../store/types';
 import {
@@ -16,7 +15,6 @@ import {
 import * as Lucide from 'lucide-react';
 import { filterPublishableDiffs } from '../../api/publishToolDiffs';
 import type { DiffSourceMode } from '../../api/diffPanelHelpers';
-import { readTextFile } from '../../api/workspaceFsApi';
 import { DiffCardFileList } from './DiffCardFileList';
 import { DiffCardGitActions } from './DiffCardGitActions';
 import { DiffHeaderControls } from './DiffHeaderControls';
@@ -25,10 +23,6 @@ import { useDiffData } from './useDiffData';
 import { useDiffGitActions } from './useDiffGitActions';
 import { formatGitPatch } from './GitPatchFormatter';
 import { getWorkspacePath } from '../../api/projectStore';
-import {
-  acceptCurrentFile as acceptCurrentFileImpl,
-  rejectCurrentFile as rejectCurrentFileImpl,
-} from './DiffCardHandlers';
 
 import { useToast } from '../../services/toast/ToastContext';
 
@@ -58,8 +52,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
   const [panelErr, setPanelErr] = useState('');
   const [_softHint, setSoftHint] = useState('');
   const [commitPanelOpen, setCommitPanelOpen] = useState(false);
-  // window.confirm → ConfirmDialog Promise 桥（批次 4.1，04-detail §2.1.1）
-  const [confirmGate, renderConfirmGate] = useConfirmGate();
+
 
   const {
     aiTurns,
@@ -186,33 +179,6 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
     applyFiles(turn.files, 'session');
   };
 
-  const handleCopyCodeOfFile = async (filePath: string) => {
-    try {
-      const res = await readTextFile(filePath);
-      if (res.content) {
-        if (res.content.length > 3 * 1024 * 1024) {
-          const ok = await confirmGate({
-            title: '复制大文件',
-            description: `文件庞大 (${(res.content.length / 1024 / 1024).toFixed(2)} MB)，确定复制？`,
-            confirmLabel: '确定复制',
-          });
-          if (!ok) return;
-        }
-        await navigator.clipboard.writeText(res.content);
-        showToast('最新源码已复制到剪贴板');
-      }
-    } catch (err) {
-      showToast('复制失败：' + String(err));
-    }
-  };
-
-  const acceptCurrentFile = (f: FileDiff) =>
-    acceptCurrentFileImpl(f, applyBusy, setApplyBusy, removeDiffFile, setPanelErr, toastFail);
-
-  const rejectCurrentFile = useCallback(
-    (f: FileDiff) => rejectCurrentFileImpl(f, removeDiffFile),
-    [removeDiffFile]
-  );
 
   const switchSource = (mode: 'session' | 'git') => {
     if (mode === 'git') {
@@ -350,18 +316,12 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
             current={activeDiffSource}
             applyBusy={applyBusy}
             stagingPaths={stagingPaths}
-            aiTurns={aiTurns}
-            getFileCompareMode={getFileCompareMode}
-            onChangeCompareMode={changeFileCompareMode}
             onSetActiveDiffSource={setActiveDiffSource}
             onStageFile={handleStageFile}
             onUnstageFile={handleUnstageFile}
             onDiscardChanges={handleDiscardChanges}
             onStageAll={handleStageAll}
             onUnstageAll={handleUnstageAll}
-            onAcceptFile={acceptCurrentFile}
-            onRejectFile={rejectCurrentFile}
-            onCopyCode={handleCopyCodeOfFile}
             renderInlineDiffContent={renderInlineDiffContent}
             getFileDiffData={getFileDiffData}
           />
@@ -425,9 +385,8 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
         />
       )}
 
-      {/* 确认对话框渲染点：useDiffGitActions（放弃修改）+ 本组件（大文件复制） */}
+      {/* 确认对话框渲染点：useDiffGitActions（放弃修改） */}
       {confirmGateView}
-      {renderConfirmGate(<ConfirmDialog />)}
     </div>
   );
 };

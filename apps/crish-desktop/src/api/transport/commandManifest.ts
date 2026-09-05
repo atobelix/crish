@@ -102,6 +102,14 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     entry('multi_device_network_info', 'multi_device', 'engine'),
     // R1-11（G-1）：多端服务总开关（Rust 侧已登记，镜像同步）
     entry('multi_device_set_enabled', 'multi_device', 'engine'),
+    // ── 用户账号与云端设备管理面 ──
+    entry('auth_login', 'auth', 'engine'),
+    entry('auth_logout', 'auth', 'engine'),
+    entry('auth_get_session', 'auth', 'engine'),
+    entry('auth_refresh_token', 'auth', 'engine'),
+    entry('auth_list_devices', 'auth', 'engine'),
+    entry('auth_revoke_device', 'auth', 'engine'),
+    entry('auth_get_relay_ticket', 'auth', 'engine'),
     // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
     // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
     entry('config_get', 'config', 'engine'),
@@ -217,6 +225,11 @@ export const BUILTIN_COMMAND_MANIFEST: CommandManifest = {
     // CRDT-01/03：文本级 CRDT 因果撤销与重做
     entry('note_undo_text', 'note', 'engine'),
     entry('note_redo_text', 'note', 'engine'),
+    // ── 多笔记综合管理体系 IPC（06-分维详案）──
+    entry('note_document_list', 'note', 'engine'),
+    entry('note_document_create', 'note', 'engine'),
+    entry('note_document_rename', 'note', 'engine'),
+    entry('note_document_delete', 'note', 'engine'),
     // ── 电脑操作会话命令（06 遗留⑨：computer_session_enable/disable、
     //    computer_status；代理到 ComputerSlot，状态事件
     //    computer://state-changed；与 Rust command_manifest.rs 同步）──

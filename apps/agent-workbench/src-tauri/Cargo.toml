@@ -65,6 +65,7 @@ conex-markdown = { path = "../../../crates/conex-markdown" }
 dirs = "6"
 # Round7：真实笔记后端（DocSession + workspace.db 投影；独立于 sessions.db）
 conex-note-runtime = { path = "../../../crates/conex-note-runtime" }
+conex-workspace-store = { path = "../../../crates/conex-workspace-store" }
 # R 轮重写接线：事件存储 / 恢复快照（orchestrator）、会话循环与审批
 # （session-loop）、provider 适配（agent-provider）、内置工具（agent-tools）、
 # 结构化日志与崩溃文件（conex-telemetry）

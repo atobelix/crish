@@ -32,6 +32,7 @@ import type { HydrateUiStatus } from './useNoteHydrate';
 import {
   W5B_STRICT_PACKAGE_ID,
   W5B_STRICT_TRACK,
+  W5B_STRICT_BOUNDARY,
 } from './notePaperStrictTrack';
 
 // ---------------------------------------------------------------------------
@@ -124,6 +125,7 @@ export function buildStrictPanelSectionDataAttrs(
     'data-leaf-view-root': '1',
     'data-package-id': W5B_STRICT_PACKAGE_ID,
     'data-track': W5B_STRICT_TRACK,
+    'data-boundary': W5B_STRICT_BOUNDARY,
     'data-doc-id': input.docId,
     'data-rev': String(input.resolvedRev),
     'data-silent-level': input.silentLevel,

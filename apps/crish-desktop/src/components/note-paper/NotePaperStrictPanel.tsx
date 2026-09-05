@@ -1,3 +1,4 @@
+/** 目标 <400 行；SD-04-R 装配拆分；≠ EL-01 */
 /**
  * NotePaperStrictPanel — Workbench 笔记纸面 **Strict 轨**（W5-B）
  *
@@ -11,18 +12,15 @@
  * `react-rows` | `paper-list` | `debug-dual`（仅调试）；产品默认互斥，见 `presentationMode.ts`。
  * chrome 槽与 content 槽 **分槽共存**，不计入互斥。
  *
- * ## 诚实边界（钉死）
- * - **可演示 ≠ EL-01 / EL-08**；**≠ 打开完成（G-HYD）**；禁止 import 行级 EditorStore
- * - **CONN-A1**：可选 `data-hydrate-path`；path ≠ 打开完成 / ≠ EL-01/04/08
- * - **CONN-B**：无 sink → 只读 catalog；**CONN-B2** `/` / openSlash 打开
- * - **CONN-D2/D3**：`turnIntoSink` 经 `noteMdPrefixBridge`；content-row 叶 → 产品路径；
- *   provisional ≠ kind UI；**≠ A-BLK-08/09 全 e2e / ≠ EL-01**
- * - 要求注入 `hydrateTransport`；**≠** PaperList/W3-P/A-BLK e2e 满关
+ * ## 32px 紧凑顶栏与全高视口重构（DETAIL-PLAN-05）
+ * - 彻底物理切除底部 MirrorDriftStatusBar 与 <footer> 调试废弃块；
+ * - 顶栏全面升级为 32px 紧凑生产力架构，集成行内标题重命名、等宽字数统计、20x20px Chevron 下拉触点与全量 Tooltip；
+ * - 编辑区 100% 全高弹性视口直达底边缘，纸面背景纯净连贯；
+ * - 顶栏测试桩点严格保全：note-paper-strict-open-slash、refresh、close。
  *
  * ## SD-04-R / SD-15 装配拆分
  * Props → `notePaperStrictProps`；Header / Body / ChromeSlot；
  * 交互 → `useNotePaperStrictShell`；presentation·data-* → `notePaperStrictAssembly`。
- * 本文件仅装配壳（目标 &lt;400；SD-04-R-G 测钉防回涨）。**≠ EL-01**。
  */
 
 import React, { useMemo } from 'react';
@@ -33,15 +31,12 @@ import '@crish/block-paper/paper-list.css';
 import { NotePaperStrictBody } from './NotePaperStrictBody';
 import { NotePaperStrictChromeSlot } from './NotePaperStrictChromeSlot';
 import { NotePaperStrictHeader } from './NotePaperStrictHeader';
-import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import {
   buildStrictPanelSectionDataAttrs,
   resolveStrictContentPresentation,
 } from './notePaperStrictAssembly';
 import { useNoteHydrate } from './useNoteHydrate';
 import { useNotePaperStrictShell } from './useNotePaperStrictShell';
-import { W5B_STRICT_BOUNDARY } from './notePaperStrictTrack';
-import { MirrorDriftStatusBar } from './MirrorDriftStatusBar';
 import type { NotePaperStrictPanelProps } from './notePaperStrictProps';
 import styles from './NotePaperPanel.module.css';
 
@@ -51,7 +46,7 @@ export type {
 } from './notePaperStrictProps';
 
 /**
- * Strict 轨笔记纸面：hydrate 投影 + 内容宿主策略 + L0 chrome。
+ * Strict 轨笔记纸面：hydrate 投影 + 内容宿主策略 + 32px 紧凑顶栏 + 100% 全高编辑视口。
  * 写路径须经 Intent 桥；**不** 接行级 store / EditorStore。
  */
 export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
@@ -80,12 +75,14 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   onPaperListReady,
   onClose,
   className,
-  title = '笔记纸面（W5-B Strict · hydrate 投影）',
-  mirrorDriftReport = null,
-  mirrorWatchSource = 'unknown',
-  mirrorUnpushedOpCount = 0,
-  showMirrorDriftBar,
-  onMirrorThreeWay,
+  title = '无标题笔记',
+  onRenameTitle,
+  saveStatus = 'saved',
+  isSidebarOpen,
+  onToggleSidebar,
+  documents,
+  onSelectDoc,
+  onCreateDoc,
 }) => {
   const {
     paperListConfig,
@@ -149,6 +146,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
     onSlashOpenResult,
   });
 
+
   /** CONN-C：chrome focus → PaperList pin；≠ W3-P / ≠ EL-01 */
   const paperListFocusId =
     snapshot.focusedBlockId ?? paperListConfig.focusId ?? null;
@@ -188,14 +186,23 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
       tabIndex={-1}
     >
       <NotePaperStrictHeader
+        docId={docId}
         title={title}
-        resolvedRev={resolvedRev}
-        blockCount={blocks.length}
+        blocks={blocks}
+        saveStatus={saveStatus}
+        isSidebarOpen={isSidebarOpen}
+        onToggleSidebar={onToggleSidebar}
+        documents={documents}
+        onSelectDoc={onSelectDoc}
+        onCreateDoc={onCreateDoc}
+        onRenameTitle={onRenameTitle}
+        onReload={reload}
+        onClose={onClose}
+        isLoading={status === 'loading'}
         slashWriteMode={slashWriteMode}
         showOpenSlashButton={showOpenSlashButton}
-        onReload={reload}
         onOpenSlash={openSlashMenu}
-        onClose={onClose}
+        resolvedRev={resolvedRev}
       />
 
       <NotePaperStrictBody
@@ -203,8 +210,6 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
         errorReason={errorReason}
         errorCode={errorCode}
         blocks={blocks}
-        // CT-01 对象级 rev（R7 收口，主控裁决③）：hydrate 投影文档 rev 透传；
-        // 无真实 rev（未 hydrate / rev=0 占位）时保持 undefined
         baseRev={resolvedRev > 0 ? resolvedRev : undefined}
         renderReactRows={renderReactRows}
         chrome={chrome}
@@ -249,21 +254,6 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
           }}
         />
       </NotePaperStrictBody>
-
-      {/* A-INV-02 方向子集；≠ EL-03；≠ inotify 满关 */}
-      {showMirrorDriftBar === true || mirrorDriftReport != null ? (
-        <MirrorDriftStatusBar
-          report={mirrorDriftReport}
-          watchSource={mirrorWatchSource}
-          unpushedOpCount={mirrorUnpushedOpCount}
-          onAction={onMirrorThreeWay}
-        />
-      ) : null}
-
-      <footer className={styles.footer} data-testid="note-paper-strict-footer">
-        surface={EDITOR_SURFACE_NOTE_PAPER} · {W5B_STRICT_BOUNDARY}
-        {projection ? ` · source=${projection.source}` : ''}
-      </footer>
     </section>
   );
 };

@@ -20,7 +20,7 @@
  *     CONN-G2 产品 apply 见 `conn-g2.product-apply-note-doc-written.test.ts`
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { subscribeNoteDocWritten } from '../../bridges/note-doc-written';
 import type {
   DocHydrateProjection,
@@ -97,12 +97,23 @@ export function useNoteHydrate(
    */
   const [writeRefreshSeq, setWriteRefreshSeq] = useState(0);
 
+  // ── Generation Guard 请求序列令牌（防乱序异步返回污染）──────────────────────
+  const fetchSeqRef = useRef<number>(0);
+
   const reload = useCallback(async () => {
+    const currentSeq = ++fetchSeqRef.current;
+
     setStatus('loading');
     setErrorReason(null);
     setErrorCode(null);
+
     try {
       const outcome = await hydrateTransport.hydrate(docId);
+      // 若当前请求已被后续发起的切换动作废弃，直接丢弃结果，严禁修改状态！
+      if (currentSeq !== fetchSeqRef.current) {
+        return;
+      }
+
       if (!outcome.ok) {
         setProjection(null);
         setErrorReason(outcome.reason);
@@ -110,9 +121,13 @@ export function useNoteHydrate(
         setStatus('error');
         return;
       }
+
       setProjection(outcome.projection);
       setStatus(outcome.projection.blocks.length === 0 ? 'empty' : 'ready');
     } catch (e) {
+      if (currentSeq !== fetchSeqRef.current) {
+        return;
+      }
       // transport 契约应返回 ok:false；若仍抛，收成错误态（零半写 UI）
       setProjection(null);
       setErrorReason(e instanceof Error ? e.message : String(e));

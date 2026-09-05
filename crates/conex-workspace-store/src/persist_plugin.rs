@@ -91,10 +91,10 @@ impl PersistencePlugin for WorkspaceStore {
             Some(expect) => tx.execute(
                 r#"
                 INSERT INTO doc_meta(doc_id, rev, updated_at)
-                VALUES (?1, 1, strftime('%s','now'))
+                VALUES (?1, 1, (strftime('%s','now') * 1000))
                 ON CONFLICT(doc_id) DO UPDATE SET
                     rev = rev + 1,
-                    updated_at = strftime('%s','now')
+                    updated_at = (strftime('%s','now') * 1000)
                 WHERE doc_meta.rev = ?2
                 "#,
                 params![doc_id, expect as i64],
@@ -102,10 +102,10 @@ impl PersistencePlugin for WorkspaceStore {
             None => tx.execute(
                 r#"
                 INSERT INTO doc_meta(doc_id, rev, updated_at)
-                VALUES (?1, 1, strftime('%s','now'))
+                VALUES (?1, 1, (strftime('%s','now') * 1000))
                 ON CONFLICT(doc_id) DO UPDATE SET
                     rev = rev + 1,
-                    updated_at = strftime('%s','now')
+                    updated_at = (strftime('%s','now') * 1000)
                 "#,
                 params![doc_id],
             ),

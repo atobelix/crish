@@ -142,7 +142,7 @@ function extractFrontendInvokeNames(): {
   // 命令形态前缀：抽取到的字面量必须是命令名形态（tauriInvoke.ts 内部
   // `invoke(cmd, args)` 变量参数调用、`status: 'ok'` 等通用字符串不是命令）
   const COMMAND_PREFIX_RE =
-    /^(core_|workbench_|config_|provider_|multi_device_|browser_|note_|usage_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-|computer_|kill_|resume_)/;
+    /^(core_|workbench_|config_|provider_|multi_device_|browser_|note_|usage_|auth_|list_|get_|load_|save_|set_|import_|cleanup_|touch_|upsert_|trash_|catalog_|create-|update-|delete-|list-|trigger-|computer_|kill_|resume_)/;
   const constRe = /\bconst\s+[A-Z][A-Z0-9_]*\s*=\s*'([a-z][a-z0-9_-]*)'/g;
   const templateRe =
     /\b(invoke|invokeTyped|invokeResult|transport\.request|transport\.send)\s*\(\s*`/g;

@@ -399,3 +399,62 @@ export function transportAsSendToNoteSink(transport: NoteTransport): (intent: {
     return { ok: true, blockIds: [...outcome.blockIds] };
   };
 }
+
+export * from './noteDocumentContracts';
+
+import type {
+  NoteDocumentListResult,
+  NoteDocumentCreateParams,
+  NoteDocumentCreateResult,
+  NoteDocumentRenameParams,
+  NoteDocumentRenameResult,
+  NoteDocumentDeleteParams,
+  NoteDocumentDeleteResult,
+} from './noteDocumentContracts';
+
+export async function noteDocumentList(
+  includeArchived = false
+): Promise<NoteDocumentListResult> {
+  const res = await invokeTyped<NoteDocumentListResult>('note_document_list', {
+    includeArchived,
+  });
+  if (res.status === 'ok') return res.data;
+  const reason = res.status === 'error' ? res.message : 'command_missing';
+  return { ok: false, code: 'ipc_error', reason };
+}
+
+export async function noteDocumentCreate(
+  params: NoteDocumentCreateParams = {}
+): Promise<NoteDocumentCreateResult> {
+  const res = await invokeTyped<NoteDocumentCreateResult>('note_document_create', {
+    title: params.title,
+    initialMarkdown: params.initialMarkdown,
+  });
+  if (res.status === 'ok') return res.data;
+  const reason = res.status === 'error' ? res.message : 'command_missing';
+  return { ok: false, code: 'ipc_error', reason };
+}
+
+export async function noteDocumentRename(
+  params: NoteDocumentRenameParams
+): Promise<NoteDocumentRenameResult> {
+  const res = await invokeTyped<NoteDocumentRenameResult>('note_document_rename', {
+    docId: params.docId,
+    title: params.title,
+  });
+  if (res.status === 'ok') return res.data;
+  const reason = res.status === 'error' ? res.message : 'command_missing';
+  return { ok: false, code: 'ipc_error', reason };
+}
+
+export async function noteDocumentDelete(
+  params: NoteDocumentDeleteParams
+): Promise<NoteDocumentDeleteResult> {
+  const res = await invokeTyped<NoteDocumentDeleteResult>('note_document_delete', {
+    docId: params.docId,
+    hardDelete: params.hardDelete ?? true,
+  });
+  if (res.status === 'ok') return res.data;
+  const reason = res.status === 'error' ? res.message : 'command_missing';
+  return { ok: false, code: 'ipc_error', reason };
+}

@@ -29,8 +29,10 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
 
         CREATE TABLE IF NOT EXISTS doc_meta (
             doc_id TEXT PRIMARY KEY,
-            rev INTEGER NOT NULL DEFAULT 0,
-            updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))
+            rev INTEGER NOT NULL DEFAULT 1,
+            updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+            title TEXT NOT NULL DEFAULT '',
+            created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
         );
 
         CREATE TABLE IF NOT EXISTS doc_snapshots (
@@ -124,6 +126,9 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
     )?;
     // 兼容早期 doc_meta 无 updated_at
     ensure_column(conn, "doc_meta", "updated_at", "INTEGER NOT NULL DEFAULT 0")?;
+    // Migration v8 字段幂等补齐（极简 5 列真源）
+    ensure_column(conn, "doc_meta", "title", "TEXT NOT NULL DEFAULT ''")?;
+    ensure_column(conn, "doc_meta", "created_at", "INTEGER NOT NULL DEFAULT 0")?;
     // W2-E P6：detect 用 content_hash / file_mtime_ms（旧库幂等加列）
     ensure_column(
         conn,
@@ -157,6 +162,10 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
             ON block_attachments(hash);
         CREATE INDEX IF NOT EXISTS idx_block_attachments_block
             ON block_attachments(doc_id, block_id);
+
+        -- Migration v8: 单列更新倒序高效查询索引（极简覆盖）
+        CREATE INDEX IF NOT EXISTS idx_doc_meta_updated
+            ON doc_meta(updated_at DESC);
         "#,
     )?;
 
@@ -166,7 +175,7 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
     // 与 blocks 手动同步（非 content= 外部表）：reindex/remove 维护；损坏走 rebuild_fts。
     ensure_blocks_fts(conn)?;
 
-    // 登记 / 抬升 schema_version
+    // 登记 / 抬升 schema_version 并施加 BUG-A04 版本门闩
     let current: Option<i64> = conn
         .query_row("SELECT version FROM schema_version LIMIT 1", [], |r| {
             r.get(0)
@@ -180,12 +189,101 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
             )?;
         }
         Some(v) if v < SCHEMA_VERSION => {
+            if v < 8 {
+                backfill_legacy_doc_meta_v8(conn)?;
+            }
             conn.execute(
                 "UPDATE schema_version SET version = ?1",
                 params![SCHEMA_VERSION],
             )?;
         }
         Some(_) => {}
+    }
+
+    Ok(())
+}
+
+/// Migration v8 历史文档元数据安全回填门闩函数 (BUG-A04)
+///
+/// 纪律保证：
+/// 1. 仅在 current_version < 8 时由 migrate 执行，杜绝每次启动无条件扫描；
+/// 2. 仅扫描 title 为空或纯空白字符的存量历史行，绝对不覆盖用户自定义标题；
+/// 3. 从 blocks 中抽取首行 heading 或首段文本前 30 个字（字符感知，不截断多字节 UTF-8）；
+/// 4. 将 created_at 为 0 的老数据平滑初始化为 updated_at（并归一化为 13 位毫秒）。
+pub(crate) fn backfill_legacy_doc_meta_v8(conn: &Connection) -> Result<(), StoreError> {
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as i64;
+
+    // 1. 对所有 created_at = 0 的历史记录，对齐 created_at = updated_at
+    conn.execute(
+        "UPDATE doc_meta SET created_at = updated_at WHERE created_at = 0",
+        [],
+    )?;
+
+    // 2. 对存量 10 位标准秒级时间戳（< 10_000_000_000）安全乘以 1000 统一转换为 13 位毫秒级
+    conn.execute(
+        "UPDATE doc_meta SET updated_at = updated_at * 1000 WHERE updated_at > 0 AND updated_at < 10000000000",
+        [],
+    )?;
+    conn.execute(
+        "UPDATE doc_meta SET created_at = created_at * 1000 WHERE created_at > 0 AND created_at < 10000000000",
+        [],
+    )?;
+
+    // 若依然有 <= 0 的时间戳，补齐为当前毫秒
+    conn.execute(
+        "UPDATE doc_meta SET updated_at = ?1 WHERE updated_at <= 0",
+        params![now_ms],
+    )?;
+    conn.execute(
+        "UPDATE doc_meta SET created_at = updated_at WHERE created_at <= 0",
+        [],
+    )?;
+
+    // 3. 仅抓取 title 为空串的存量文档 ID
+    let mut stmt = conn.prepare(
+        "SELECT doc_id FROM doc_meta WHERE length(trim(title)) = 0",
+    )?;
+    let doc_ids: Vec<String> = stmt
+        .query_map([], |r| r.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+
+    for id in doc_ids {
+        // 从 blocks 寻找首个非空文本块
+        let candidate: Option<String> = conn
+            .query_row(
+                r#"
+                SELECT plain_text FROM blocks
+                WHERE doc_id = ?1 AND length(trim(plain_text)) > 0
+                ORDER BY order_key ASC, updated_at ASC
+                LIMIT 1
+                "#,
+                params![id],
+                |r| r.get(0),
+            )
+            .optional()?;
+
+        let resolved_title = match candidate {
+            Some(text) => {
+                let first_raw = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+                let first_line = first_raw.split("\\n").next().unwrap_or(first_raw).trim();
+                let clean = first_line.trim_start_matches('#').trim();
+                if clean.is_empty() {
+                    "未命名笔记".to_string()
+                } else {
+                    // 字符簇安全截断（取前 30 字符，不截断多字节 UTF-8）
+                    clean.chars().take(30).collect::<String>()
+                }
+            }
+            None => "未命名笔记".to_string(),
+        };
+
+        conn.execute(
+            "UPDATE doc_meta SET title = ?1 WHERE doc_id = ?2",
+            params![resolved_title, id],
+        )?;
     }
 
     Ok(())

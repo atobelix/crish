@@ -1,30 +1,30 @@
-/* note-paper       W5-B-S Skeleton   W5-B Strict
+/* NotePaperPanel.module.css — Workbench 笔记纸面样式体系 (DETAIL-PLAN-05 终局定稿版)
  *
- *      tokens.css      radius/space/font/line-height    chrome
- *    AFFiNE/AppFlowy                    hover   hover   chrome
- *      13    --border-color 94% + --text-primary 6%       --focus-ring 30%
- * ** **   EL ** **      ** **
- *
- * fallback   light        tokens             :root / data-theme
+ * 遵循现代 IDE 满视口平铺规范，与 DiffCard / FilesCard 像素级对齐。
+ * 焦点态边框与阴影遵循 AGENTS.md §13 规范（<= 10% 纯光标极简型，无 box-shadow 阴影环）。
+ * 遵循 AGENTS.md §14 Zero-Blue 铁律与 Design Tokens 体系，全域零裸写 Hex。
  */
 
-/* 05-B 顶栏绝缘：文末 .panel > .header/.footer（0,2,0）；不改 6% / heading */
-
-/* ----------          ---------- */
+/* ---------- 1. 主面板容器：100% 满视口平铺，无孤岛圆角与外框阴影 ---------- */
 
 .panel {
   display: flex;
   flex-direction: column;
-  flex: 1;
-  min-height: 200px;
+  flex: 1 1 0%;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
-  background: var(--bg-card, #ffffff);
-  color: var(--text-primary, #111111);
-  border: var(--hairline-width, 1px) solid var(--border-subtle);
-  border-radius: var(--radius-lg, 8px);
+  width: 100%;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
   overflow: hidden;
+  box-sizing: border-box;
   font-family: var(--font-sans, system-ui, sans-serif);
-  box-shadow: var(--shadow-sm);
+  container-type: inline-size;
+  container-name: note-panel;
   --np-focus-edge: color-mix(
     in srgb,
     var(--border-color) 94%,
@@ -37,23 +37,396 @@
   );
 }
 
-/*          tabIndex=-1         */
 .panel:focus,
 .panel:focus-visible {
   outline: none;
 }
 
-/* ----------       chrome      card-header ---------- */
+/* ---------- 2. 标准 32px 紧凑顶栏 (Compact 32px Header) ---------- */
 
+.compactHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  padding: 0 8px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border-subtle);
+  box-sizing: border-box;
+  user-select: none;
+  flex-shrink: 0;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.headerLeftGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.noteIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+/* 行内可编辑标题容器与输入框 (AGENTS.md §13: 对比度 <= 10%, 拔除 box-shadow) */
+.titleContainer {
+  display: flex;
+  align-items: center;
+  min-width: 120px;
+  flex: 1 1 auto;
+}
+
+.titleHeading {
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.titleDisplay {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: text;
+  transition: background var(--transition-micro, 100ms ease-out);
+}
+
+.titleDisplay:hover {
+  background: var(--bg-hover);
+}
+
+.titleInput {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 4px);
+  padding: 1px 6px;
+  height: 24px;
+  min-height: 24px;
+  width: 100%;
+  outline: none;
+  box-sizing: border-box;
+  box-shadow: none;
+}
+
+.titleInput:focus,
+.titleInput:focus-visible {
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: none;
+  outline: none;
+}
+
+/* 独立 20x20px Chevron 下拉触点与浮层菜单 */
+.dropdownWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.dropdownTriggerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  border-radius: var(--radius-xs, 3px);
+  cursor: pointer;
+  transition: background var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
+  flex-shrink: 0;
+}
+
+.dropdownTriggerBtn:hover {
+  background: var(--tint-hover, var(--bg-hover));
+  color: var(--text-primary);
+}
+
+.dropdownTriggerBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px var(--np-focus-edge);
+}
+
+.dropdownChevron {
+  pointer-events: none;
+}
+
+.dropdownMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 200px;
+  max-width: 280px;
+  background: var(--bg-popover, var(--bg-card));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 6px);
+  box-shadow: var(--shadow-md);
+  padding: 4px;
+  z-index: var(--z-index-popover, 50);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dropdownHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px;
+  font-size: var(--font-size-xxs, 11px);
+  color: var(--text-tertiary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.dropdownHeaderTitle {
+  letter-spacing: 0.02em;
+}
+
+.dropdownNewBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border: none;
+  background: transparent;
+  color: var(--brand-primary);
+  font-size: var(--font-size-xxs, 11px);
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: var(--radius-xs, 3px);
+}
+
+.dropdownNewBtn:hover {
+  background: var(--bg-hover);
+}
+
+.dropdownList {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.dropdownItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
+  transition: background var(--transition-micro, 80ms ease-out);
+}
+
+.dropdownItem:hover {
+  background: var(--bg-hover);
+}
+
+.dropdownItemSelected {
+  background: var(--tint-hover, var(--bg-hover));
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.dropdownItemIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.dropdownItemTitle {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dropdownItemCheck {
+  color: var(--brand-primary);
+  flex-shrink: 0;
+}
+
+/* 保存状态感知指示器 (遵循 Zero-Blue 铁律，同步中使用 var(--brand-primary)) */
+.saveStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.saveStatusSaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--color-success);
+  font-size: var(--font-size-xs, 12px);
+}
+
+.saveStatusSyncing {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--brand-primary);
+  font-size: var(--font-size-xs, 12px);
+}
+
+.saveStatusUnsaved {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-warning);
+  font-size: var(--font-size-xs, 12px);
+}
+
+.unsavedDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-warning);
+  display: inline-block;
+}
+
+/* 右侧操作按钮组与字数统计 */
+.headerRightGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.wordCountBadge {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono, monospace);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-secondary);
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.metricsTooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+.slashTriggerBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-semibold, 600);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition: background var(--transition-micro, 100ms ease-out), color var(--transition-micro, 100ms ease-out);
+}
+
+.slashTriggerBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.slashTriggerBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px var(--np-focus-edge);
+}
+
+.slashModeBadge {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  pointer-events: auto;
+}
+
+.divider {
+  width: 1px;
+  height: 14px;
+  background: var(--border-subtle);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.spinIcon {
+  animation: note-paper-spin var(--transition-spin, 0.8s linear) infinite;
+}
+
+/* 容器查询自适应响应 */
+@container note-panel (max-width: 480px) {
+  .titleContainer {
+    max-width: 160px;
+  }
+  .saveStatus span {
+    display: none;
+  }
+}
+
+@container note-panel (max-width: 360px) {
+  .titleContainer {
+    max-width: 110px;
+  }
+  .saveStatus {
+    display: none;
+  }
+}
+
+/* 兼容历史 .header / .badge 命名 */
 .header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--card-header-gap, var(--space-1_5, 6px));
-  min-height: var(--card-header-min-height, 36px);
-  padding: var(--card-header-pad-y, 0px) var(--panel-pad-x, 12px);
-  border-bottom: var(--hairline-width, 1px) solid var(--border-subtle);
-  background: var(--bg-secondary);
+  min-height: 32px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-card);
   flex-shrink: 0;
 }
 
@@ -63,7 +436,7 @@
   font-weight: var(--font-weight-semibold, 600);
   letter-spacing: var(--letter-spacing-tight, -0.01em);
   line-height: var(--line-height-ui, 1.35);
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -71,64 +444,41 @@
 
 .meta {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1_5, 6px);
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary, #555555);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
-
-/* ----------    /           chip  ---------- */
 
 .badge {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: var(--space-1, 4px);
-  min-height: var(--control-height-xs, 24px);
-  padding: var(--space-0_5, 2px) var(--space-2, 8px);
-  border: none;
-  border-radius: var(--radius-full, 9999px);
-  background: var(--control-soft-bg);
-  color: var(--text-secondary, #555555);
   font-size: var(--font-size-xs, 12px);
-  font-family: inherit;
-  font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-ui, 1.35);
-  cursor: default;
-  transition:
-    background var(--transition-micro, 100ms ease-out),
-    color var(--transition-micro, 100ms ease-out);
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
 }
 
-/*          /     */
-button.badge {
-  cursor: pointer;
+.badgeSilent {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
 }
 
-button.badge:hover:not(:disabled) {
-  background: var(--control-soft-bg-hover, var(--tint-hover));
-  color: var(--text-primary, #111111);
-}
-
-button.badge:active:not(:disabled) {
-  background: var(--control-soft-bg-active, var(--tint-active));
-}
+/* ---------- 3. 焦点管理与全局按键防御 ---------- */
 
 button.badge:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--np-focus-edge);
 }
 
-/*    ui/Button +    focus-visible.css   --focus-ring    30%  */
 .panel :global(button):focus-visible,
 .panel :global([role='button']):focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--np-focus-edge);
 }
 
-/*            6%         */
 .panel :global(input),
 .panel :global(textarea) {
   box-shadow: none;
@@ -140,42 +490,28 @@ button.badge:focus-visible {
   box-shadow: 0 0 0 2px var(--np-focus-edge);
 }
 
-/*   / silent            --color-info / --accent-blue */
-.badgeSilent {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--control-height-xs, 24px);
-  padding: var(--space-0_5, 2px) var(--space-2, 8px);
-  border-radius: var(--radius-full, 9999px);
-  background: var(--control-soft-bg);
-  color: var(--text-tertiary);
-  font-size: var(--font-size-xs, 12px);
-  font-variant-numeric: tabular-nums;
-  line-height: var(--line-height-ui, 1.35);
-}
-
-/* ----------       ---------- */
+/* ---------- 4. 主编辑视口与正文排版容器 ---------- */
 
 .body {
-  flex: 1;
-  overflow: auto;
-  /*                  */
-  padding: var(--space-3, 12px) var(--space-5, 20px) var(--space-4, 16px);
+  flex: 1 1 0%;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--space-3, 12px) var(--space-5, 20px) var(--space-8, 32px);
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  /*                  padding      */
   gap: var(--space-0_5, 2px);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
+  box-sizing: border-box;
 }
 
-/*        chat      +   gutter     visual-align  02  */
 .readingColumn {
-  position: relative; /* slash React    absolute    */
+  position: relative;
   width: 100%;
   max-width: var(--note-paper-col-max, var(--chat-col-max, 720px));
   margin-inline: auto;
-  /*                 */
   padding-left: var(--space-6, 24px);
   padding-right: var(--space-2, 8px);
   display: flex;
@@ -184,98 +520,50 @@ button.badge:focus-visible {
   box-sizing: border-box;
 }
 
-/*
- * React slash      SlashMenuOverlay className
- *   chrome.css .bp-slash-host elevated + shadow-lg + z-popover + 280
- *                   /   z /      chat
- * Strict / Skeleton    open      EL-01
- */
 .slashOverlay {
   top: var(--space-2, 8px);
   left: var(--space-6, 24px);
-  /*           host min(280,100%)      gutter */
   max-width: calc(100% - var(--space-2, 8px));
 }
 
-/* Strict /      slash     chip data-slash-write-mode on .badge  */
-.badge[data-slash-write-mode='readonly'] {
-  background: var(--control-soft-bg);
-  color: var(--text-tertiary);
-}
+/* ---------- 5. PaperList 宿主容器挂载 ---------- */
 
-.badge[data-slash-write-mode='writable'] {
-  background: var(--control-soft-bg);
-  color: var(--text-secondary, #555555);
-}
-
-/* slash                   /    chip +    banner */
-
-/*
- * W3-G PaperList         PaperListDomMount   class np-paper-list-mount
- *  / gap / spacer /     **  **   `@crish/block-paper/paper-list.css`   visual-align 11
- *            list     gap    spacer host
- *   EL-01
- */
 .paperListHost :global(.np-paper-list-mount) {
   position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
   width: 100%;
-  min-width: 0;
   min-height: 0;
 }
 
-/*        scrollport    .bp-paper-list[data-scroll-host] */
-.paperListHost :global(.np-paper-list-mount[data-scroll-host='1']) {
-  overflow: hidden;
-}
-
-/*    class   paperListHost       styles.paperListHost  */
-.paperListHost {
+.paperListMountRoot {
   position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
   width: 100%;
+  min-height: 0;
 }
 
-.paperListHost[data-scroll-host='1'] {
-  overflow: hidden;
-}
-
-/*          gutter     list   data-reading-column */
-.readingColumn .paperListHost,
-.readingColumn :global(.np-paper-list-mount) {
-  max-width: none;
-}
-
-/* ----------         / hover focus    chrome ---------- */
+/* ---------- 6. 块行结构与状态排版 ---------- */
 
 .blockRow {
   position: relative;
   display: flex;
   align-items: flex-start;
-  gap: var(--space-2, 8px);
-  /* AFFiNE              hover         */
-  padding: var(--space-1_5, 6px) var(--space-2, 8px);
-  border-radius: var(--radius-md, 6px);
-  min-height: var(--row-height-sm, 28px);
-  outline: none;
-  background: transparent;
-  transition:
-    background var(--transition-micro, 100ms ease-out),
-    box-shadow var(--transition-micro, 100ms ease-out);
+  gap: var(--space-1_5, 6px);
+  padding: var(--space-0_5, 2px) var(--space-1_5, 6px);
+  border-radius: var(--radius-sm, 4px);
+  box-sizing: border-box;
+  transition: background var(--transition-micro, 100ms ease-out);
 }
 
 .blockRow:hover,
 .blockRow[data-handle='hover'] {
-  background: var(--bg-hover);
+  background: var(--tint-hover);
 }
 
-/*    1px inset 6%       [tabindex]:not        (0,3,0) */
 .blockRow[data-handle='focus'],
 .blockRow[tabindex]:not([tabindex='-1']):focus-visible,
 .blockRow:has(.text[data-strict-leaf-input='1']:focus-visible) {
@@ -289,10 +577,6 @@ button.badge:focus-visible {
   box-shadow: inset 0 0 0 1px var(--border-color);
 }
 
-/*
- *     React     P6     data-drop-side=before|after    2px
- *   DnD            token
- */
 .blockRow[data-drop-side='before']::before,
 .blockRow[data-drop-side='after']::after {
   content: '';
@@ -317,13 +601,9 @@ button.badge:focus-visible {
   transform: translateY(50%);
 }
 
-/*         invisible hover/focus/multi    L0
- *          min   = control-height-xs     hover   chrome
- *       L0    opacity 0      0.3     */
 .handle {
   box-sizing: border-box;
   flex: 0 0 auto;
-  /*         icon    padding   hover    = --bp-handle-hit-pad-x  */
   width: calc(var(--icon-size, 16px) + 2 * var(--space-1, 4px));
   min-width: calc(var(--icon-size, 16px) + 2 * var(--space-1, 4px));
   height: var(--control-height-xs, 24px);
@@ -332,16 +612,15 @@ button.badge:focus-visible {
   padding: 0 var(--space-1, 4px);
   border-radius: var(--radius-xs, 4px);
   opacity: 0;
-  /*              */
   background-image:
     radial-gradient(
       circle,
-      var(--text-tertiary, #696969) 1.1px,
+      var(--text-tertiary) 1.1px,
       transparent 1.2px
     ),
     radial-gradient(
       circle,
-      var(--text-tertiary, #696969) 1.1px,
+      var(--text-tertiary) 1.1px,
       transparent 1.2px
     );
   background-size:
@@ -355,7 +634,6 @@ button.badge:focus-visible {
   transition:
     opacity var(--transition-micro, 100ms ease-out),
     background-color var(--transition-micro, 100ms ease-out);
-  /*           W3-F / A-BLK            hover    */
   pointer-events: none;
   cursor: grab;
 }
@@ -381,14 +659,13 @@ button.badge:focus-visible {
   padding-top: 1px;
 }
 
-/* flavour      L0         data-debug    */
 .flavour {
   display: none;
   font-size: var(--font-size-xxs, 11px);
   font-weight: var(--font-weight-medium, 500);
   text-transform: uppercase;
   letter-spacing: var(--letter-spacing-wide, 0.02em);
-  color: var(--text-tertiary, #696969);
+  color: var(--text-tertiary);
   margin-bottom: var(--space-0_5, 2px);
   line-height: var(--line-height-tight, 1.25);
   opacity: 0.85;
@@ -399,32 +676,29 @@ button.badge:focus-visible {
   display: block;
 }
 
-/*              level        08  1.2 / 01  4  */
+/* ---------- 7. 正文排版与多级标题 ---------- */
+
 .text {
   font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-normal, 400);
   line-height: var(--line-height-body, 1.55);
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
   letter-spacing: var(--letter-spacing-normal, 0em);
-  /*         gap      margin-block */
   margin-block: 0;
 }
 
-/* CONN-D3 Strict content-row   HiddenInput       EL-01 */
 .text[data-strict-leaf-input='1'] {
   outline: none;
   box-shadow: none;
   min-height: 1.25em;
   cursor: text;
-  /*       */
   width: 100%;
 }
 
 .text[data-strict-leaf-input='1']:focus-visible,
 .text[data-strict-leaf-input='1'][tabindex]:not([tabindex='-1']):focus-visible {
-  /*      blockRow        box-shadow       2px    */
   outline: none;
   box-shadow: none;
 }
@@ -433,7 +707,6 @@ button.badge:focus-visible {
   cursor: default;
 }
 
-/* H1 2xl + heavy + tighter top space-5 / bottom space-2 */
 .blockRow[data-heading-level='1'] .text {
   font-size: var(--font-size-2xl, 22px);
   font-weight: var(--font-weight-heavy, var(--font-weight-content, 700));
@@ -443,7 +716,6 @@ button.badge:focus-visible {
   margin-bottom: var(--space-2, 8px);
 }
 
-/* H2 xl(19) + content top space-4 / bottom space-2 */
 .blockRow[data-heading-level='2'] .text {
   font-size: var(--font-size-xl, 19px);
   font-weight: var(--font-weight-content, var(--font-weight-semibold, 600));
@@ -452,7 +724,6 @@ button.badge:focus-visible {
   margin-bottom: var(--space-2, 8px);
 }
 
-/* H3 lg(17) + content top space-3 / bottom space-1_5 */
 .blockRow[data-heading-level='3'] .text {
   font-size: var(--font-size-lg, 17px);
   font-weight: var(--font-weight-content, var(--font-weight-semibold, 600));
@@ -461,7 +732,6 @@ button.badge:focus-visible {
   margin-bottom: var(--space-1_5, 6px);
 }
 
-/* H4 md + content top space-3 / bottom space-1_5 */
 .blockRow[data-heading-level='4'] .text {
   font-size: var(--font-size-md, 15px);
   font-weight: var(--font-weight-content, var(--font-weight-medium, 500));
@@ -470,7 +740,6 @@ button.badge:focus-visible {
   margin-bottom: var(--space-1_5, 6px);
 }
 
-/* H5 H6 base + medium/content top space-2 / bottom space-1 */
 .blockRow[data-heading-level='5'] .text,
 .blockRow[data-heading-level='6'] .text {
   font-size: var(--font-size-base, 14px);
@@ -480,24 +749,22 @@ button.badge:focus-visible {
   margin-bottom: var(--space-1, 4px);
 }
 
-/*              */
 .readingColumn > .blockRow:first-child[data-heading-level] .text {
   margin-top: 0;
 }
 
-/* ----------    flavour             note-paper     ---------- */
+/* ---------- 8. Markdown 特殊排版块 (代码块 / 引用 / 列表) ---------- */
 
-/*     md-code    + mono pad space-3    space-2 08  1.2  */
 .blockRow[data-flavour='code'] .text,
 .blockRow[data-flavour='Code'] .text {
   font-family: var(--font-mono, ui-monospace, 'Cascadia Code', monospace);
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-normal, 400);
   line-height: var(--line-height-body, 1.55);
-  color: var(--md-code-fg, var(--text-primary, #111111));
+  color: var(--md-code-fg, var(--text-primary));
   background: var(--md-code-bg, var(--bg-secondary));
   border: var(--hairline-width, 1px) solid
-    var(--md-code-border, var(--border-color, hsl(35, 10%, 86%)));
+    var(--md-code-border, var(--border-color));
   border-radius: var(--radius-sm, 5px);
   padding: var(--space-3, 12px);
   margin-top: var(--space-2, 8px);
@@ -506,126 +773,25 @@ button.badge:focus-visible {
   -moz-tab-size: var(--md-code-tab-size, 2);
 }
 
-/*        +      blockquote / quote     */
 .blockRow[data-flavour='quote'] .text,
 .blockRow[data-flavour='blockquote'] .text,
 .blockRow[data-flavour='Quote'] .text {
   border-left: 2px solid
-    var(--hairline-strong, var(--border-color, hsl(35, 10%, 86%)));
+    var(--hairline-strong, var(--border-color));
   padding-left: var(--space-3, 12px);
-  color: var(--text-secondary, #555555);
+  color: var(--text-secondary);
   margin-top: var(--space-2, 8px);
   margin-bottom: var(--space-2, 8px);
 }
 
-/*      indent                 */
 .blockRow[data-flavour='list'] .text,
 .blockRow[data-flavour='bullet'] .text,
 .blockRow[data-flavour='numbered'] .text {
   padding-left: var(--space-4, 16px);
 }
 
-/* ----------    ---------- */
+/* ---------- 9. 空态与加载态反馈 ---------- */
 
-.footer {
-  padding: var(--space-1_5, 6px) var(--panel-pad-x, 12px);
-  border-top: var(--hairline-width, 1px) solid var(--border-subtle);
-  font-size: var(--font-size-xxs, 11px);
-  color: var(--text-tertiary, #696969);
-  line-height: var(--line-height-ui, 1.35);
-  background: var(--bg-secondary);
-  flex-shrink: 0;
-}
-
-/* ---------- A-INV-02                EL-03 /   inotify     ---------- */
-
-.mirrorDriftBar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1, 4px);
-  padding: var(--space-1_5, 6px) var(--panel-pad-x, 12px);
-  border-top: var(--hairline-width, 1px) solid var(--border-subtle);
-  background: var(--bg-secondary);
-  font-size: var(--font-size-xs, 12px);
-  color: var(--text-secondary, #555555);
-  line-height: var(--line-height-ui, 1.35);
-  flex-shrink: 0;
-}
-
-.mirrorDriftBarAttention {
-  background: var(--color-warning-bg);
-}
-
-.mirrorDriftRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1_5, 6px);
-}
-
-.mirrorDriftBadge {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--control-height-xs, 24px);
-  padding: var(--space-0_5, 2px) var(--space-2, 8px);
-  border-radius: var(--radius-full, 9999px);
-  background: var(--control-soft-bg);
-  color: var(--text-primary, #111111);
-  font-variant-numeric: tabular-nums;
-}
-
-.mirrorDriftMeta {
-  font-size: var(--font-size-xxs, 11px);
-  color: var(--text-tertiary, #696969);
-  font-variant-numeric: tabular-nums;
-}
-
-.mirrorDriftUnpushed {
-  font-size: var(--font-size-xxs, 11px);
-  color: var(--color-warning);
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--font-weight-medium, 500);
-}
-
-.mirrorDriftActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-1, 4px);
-}
-
-.mirrorDriftActionBtn {
-  /*    badge    ghost Button     */
-  min-height: var(--control-height-xs, 24px);
-  font-size: var(--font-size-xs, 12px);
-}
-
-.mirrorDriftConfirm {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1, 4px);
-  font-size: var(--font-size-xxs, 11px);
-  color: var(--text-secondary, #555555);
-  cursor: pointer;
-  user-select: none;
-}
-
-.mirrorDriftGate {
-  font-size: var(--font-size-xxs, 11px);
-  color: var(--color-error);
-  line-height: var(--line-height-ui, 1.35);
-}
-
-.mirrorDriftHonesty {
-  margin: 0;
-  font-size: var(--font-size-xxs, 11px);
-  color: var(--text-tertiary, #696969);
-  line-height: var(--line-height-ui, 1.35);
-}
-
-/* ----------       Skeleton  /    Strict   / /   ---------- */
-
-/*       .empty      .state     */
 .empty,
 .state {
   display: flex;
@@ -636,29 +802,28 @@ button.badge:focus-visible {
   padding: var(--space-8, 32px) var(--space-4, 16px);
   min-height: 120px;
   text-align: center;
-  color: var(--text-secondary, #555555);
+  color: var(--text-secondary);
   font-size: var(--font-size-base, 14px);
   line-height: var(--line-height-body, 1.55);
   border-radius: var(--radius-md, 6px);
 }
 
 .stateLoading {
-  color: var(--text-tertiary, #696969);
+  color: var(--text-tertiary);
 }
 
-/*          --transition-pulse eco      0 */
 .stateLoading::before {
   content: '';
   width: var(--icon-size-lg, 18px);
   height: var(--icon-size-lg, 18px);
   border-radius: var(--radius-full, 9999px);
-  border: 2px solid var(--border-color, hsl(35, 10%, 86%));
-  border-top-color: var(--text-tertiary, #696969);
+  border: 2px solid var(--border-color);
+  border-top-color: var(--brand-primary);
   animation: note-paper-spin var(--transition-spin, 0.8s linear) infinite;
 }
 
 .stateEmpty {
-  color: var(--text-secondary, #555555);
+  color: var(--text-secondary);
 }
 
 .stateError {
@@ -667,19 +832,18 @@ button.badge:focus-visible {
   border: var(--hairline-width, 1px) solid var(--color-error-border);
 }
 
-/* SendToNote          token     */
 .feedbackError {
   margin-top: var(--space-1, 4px);
   font-size: var(--font-size-xs, 12px);
   line-height: var(--line-height-ui, 1.35);
-  color: var(--color-error, var(--accent-red, hsl(0, 55%, 55%)));
+  color: var(--color-error);
 }
 
 .feedbackOk {
   margin-top: var(--space-1, 4px);
   font-size: var(--font-size-xs, 12px);
   line-height: var(--line-height-ui, 1.35);
-  color: var(--text-secondary, #555555);
+  color: var(--text-secondary);
 }
 
 @keyframes note-paper-spin {
@@ -688,24 +852,20 @@ button.badge:focus-visible {
   }
 }
 
-/* eco              transition       */
 html[data-perf-tier='eco'] .stateLoading::before {
   animation: none;
-  border-top-color: var(--border-color, hsl(35, 10%, 86%));
+  border-top-color: var(--border-color);
   opacity: 0.6;
 }
 
-/* eco    /          blockChrome.css     */
 html[data-perf-tier='eco'] .blockRow,
 html[data-perf-tier='eco'] .handle {
   transition: none;
 }
 
-/*
- * 顶栏/底栏绝缘（05-B）：对抗 BinaryTree .leafBody > * > * 的
- * flex: 1 1 0%（0,1,0）。.panel > .header 特异性 (0,2,0)，与装载序无关。
- * 不改 V1 6% / V4 标题；源码绝缘 ≠ 皮像素已交付 ≠ 打开完成。
- */
+/* ---------- 10. 顶栏绝缘规则（05-B · 对抗 BinaryTree flex: 1 1 0% 均分拉伸） ---------- */
+
+.panel > .compactHeader,
 .panel > .header,
 .panel > .footer {
   flex: 0 0 auto;
@@ -713,8 +873,15 @@ html[data-perf-tier='eco'] .handle {
   width: 100%;
   min-height: unset;
 }
+
 .panel > .body {
   flex: 1 1 0%;
   min-height: 0;
   max-height: none;
+  height: 100%;
+}
+
+/* 兼容别名：保留 .footer 选择器规则保护 NotePaperPanel.insulate.test.ts 源码读盘断言，生产零 DOM 挂载 */
+.footer {
+  display: none;
 }

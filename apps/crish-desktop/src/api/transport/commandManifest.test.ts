@@ -75,8 +75,10 @@ describe('commandManifest', () => {
       // note_document_recent：最近一篇 persist 非空查询（123 → 124）
       // 模型字典真源三命令追加（124 → 127），core_jsonl_append 退役（127 → 126）
       // 用量监控与时序分析五命令追加（126 → 131）
-      expect(registered).toBe(131);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(131);
+      // 多笔记综合管理体系四命令追加（131 → 135）
+      // 用户账号与云端设备管理面七命令追加（135 → 142）
+      expect(registered).toBe(142);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(142);
     });
 
     it('命令名唯一', () => {
@@ -291,8 +293,8 @@ describe('commandManifest', () => {
     it('断言二式：双端总数一致（总数一致 + 一式子集 ⇒ registered 全等）', () => {
       const rust = rustManifestOnce();
       const total = rust.registered.length + rust.pending.length;
-      expect(total).toBe(131);
-      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(131);
+      expect(total).toBe(142);
+      expect(BUILTIN_COMMAND_MANIFEST.commands.length).toBe(142);
     });
 
     it('断言三式：登记先行（registered=false）名集合双向一致', () => {

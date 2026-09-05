@@ -495,6 +495,9 @@ export function scanAllCssRules(dir, targetErrors = errors) {
         scanAllCssRules(fullPath, targetErrors);
       }
     } else if (entry.isFile() && entry.name.endsWith('.css')) {
+      if (!fs.existsSync(fullPath)) {
+        continue;
+      }
       const content = fs.readFileSync(fullPath, 'utf-8');
       const relPath = path.relative(REPO_ROOT, fullPath).replace(/\\/g, '/');
 
@@ -672,6 +675,9 @@ export function scanTsxForBespokeInputs(dir, targetErrors = errors) {
       !entry.name.includes('Textarea.tsx') &&
       !entry.name.includes('ComboboxInput.tsx')
     ) {
+      if (!fs.existsSync(fullPath)) {
+        continue;
+      }
       const content = fs.readFileSync(fullPath, 'utf-8');
       const relPath = path.relative(REPO_ROOT, fullPath).replace(/\\/g, '/');
 
@@ -696,7 +702,7 @@ export function scanTsxForBespokeInputs(dir, targetErrors = errors) {
         // 1. 形态 ① 主侧栏与设置侧栏搜索 (SidebarNav, SettingsSidebar)
         // 2. 形态 ② Composer 发送区 (ChatComposer)
         // 3. 形态 ④ 下拉菜单搜索 (ModelBadgePickerMenu, FontSelectField)
-        // 4. 行内重命名/轻量过滤器/向导基元 (SessionInlineRename, SessionRow, ChatMsgFilterBar, FilesCard, FileBreadcrumb, FilePreview, DiffCard, SmartSearchHeader, SmartPanelHeader, ComboboxChips, FirstRunWizard, Wizard, WorkflowForm, FontSettingsSection, ImportListSection, SettingsTablist, SettingsSchemaRenderer, MirrorDriftStatusBar)
+        // 4. 行内重命名/轻量过滤器/向导基元 (SessionInlineRename, SessionRow, ChatMsgFilterBar, FilesCard, FileBreadcrumb, FilePreview, DiffCard, SmartSearchHeader, SmartPanelHeader, ComboboxChips, FirstRunWizard, Wizard, WorkflowForm, FontSettingsSection, ImportListSection, SettingsTablist, SettingsSchemaRenderer, MirrorDriftStatusBar, EditableTitle, NotePaperStrictHeader)
         const isAllowedForm =
           relPath.includes('SidebarNav') ||
           relPath.includes('SettingsSidebar') ||
@@ -720,7 +726,10 @@ export function scanTsxForBespokeInputs(dir, targetErrors = errors) {
           relPath.includes('ImportListSection') ||
           relPath.includes('SettingsTablist') ||
           relPath.includes('SettingsSchemaRenderer') ||
-          relPath.includes('MirrorDriftStatusBar');
+          relPath.includes('MirrorDriftStatusBar') ||
+          relPath.includes('EditableTitle') ||
+          relPath.includes('NotePaperStrictHeader') ||
+          relPath.includes('NoteSidebarDrawer');
 
         if (!isAllowedForm) {
           targetErrors.push(

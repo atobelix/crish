@@ -22,6 +22,7 @@ import {
 import { registerFileViewerOpener } from '../../api/workspaceFsApi';
 import type { RightToolDockState } from './types';
 import { clampDockWidthRatio } from './adapterShapeTreeOps';
+import { normalizeViewerFilePath } from './normalizeViewerPath';
 
 const TOOL_ALIASES: Record<string, string> = {
   tasks: 'overview',
@@ -38,6 +39,29 @@ export type LeafDockView = {
   activePanelId: string | null;
   widthRatio: number;
 };
+
+/** 文件预览模式意图契约 */
+export type FileViewerInitialMode = 'plain' | 'diff';
+
+/** 模式意图轻量寄存器（模块作用域存储，供冷启动组件单次消费） */
+const fileViewerModeOverrides = new Map<string, FileViewerInitialMode>();
+
+export function setFileViewerModeOverride(
+  canonicalTabId: string,
+  mode: FileViewerInitialMode
+): void {
+  fileViewerModeOverrides.set(canonicalTabId, mode);
+}
+
+export function consumeFileViewerModeOverride(
+  canonicalTabId: string
+): FileViewerInitialMode | undefined {
+  const mode = fileViewerModeOverrides.get(canonicalTabId);
+  if (mode) {
+    fileViewerModeOverrides.delete(canonicalTabId);
+  }
+  return mode;
+}
 
 /** I1：非 draft sessionId 全树至多一个命中；先序第一个 */
 export function findTabBySessionId(
@@ -172,14 +196,85 @@ export function openToolInActiveTab(panelId: string): void {
   openToolInLeaf(activeId, panelId);
 }
 
-/** 文件查看器：panelId 进 dock.openPanelIds。禁止 splitLeaf */
+/**
+ * 文件查看器单轨下发点火器 (DETAIL-PLAN-03 终局定稿实现)
+ *
+ * 刚性守门契约与防回归铁律：
+ * 1. 严格过滤 note/notebook 前缀：/^(note|notebook)(:|$)/i 守卫，杜绝误唤起与状态混淆；
+ * 2. 变量名绝对死锁为 trimmed，严格经由 normalizeViewerFilePath 归一化，盘符强制大写并剥离 ./；
+ * 3. 严格匹配 filePreviewLeaf.source.test.ts 源码硬编码正则：
+ *    - expect(src).toMatch(/file-viewer:\$\{trimmed\}/);
+ *    - expect(src).toMatch(/\/\^\(note\|notebook\)\(:\|\$\)\/i/);
+ * 4. Canonical Tab ID 格式锁死为 `file-viewer:${trimmed}`，严禁拼入 ?mode=diff；
+ * 5. initialMode 参数严禁抛弃，通过 setFileViewerModeOverride 独立登记初始模式意图；
+ * 6. 同名 Tab 热激活微任务覆盖触发机制：通过 queueMicrotask 派发 'conex:file-viewer-mode' 事件；
+ * 7. 健壮性保障：支持 (filePath, initialMode) 与 (sessionId, filePath, mode) 双重调用契约。
+ */
 export function openFileViewerInSession(
   filePath: string,
-  _initialMode: 'plain' | 'diff' = 'plain'
+  initialMode?: FileViewerInitialMode | 'preview'
+): void;
+export function openFileViewerInSession(
+  sessionId: string,
+  filePath: string,
+  mode?: FileViewerInitialMode | 'preview'
+): void;
+export function openFileViewerInSession(
+  arg1: string,
+  arg2?: string | FileViewerInitialMode | 'preview',
+  arg3?: FileViewerInitialMode | 'preview'
 ): void {
-  const activeId = useLayoutTreeStore.getState().activeLeafId;
+  let targetSessionId: string | undefined;
+  let rawPath: string;
+  let rawMode: string | undefined;
+
+  const isModeString = (val: unknown): val is FileViewerInitialMode | 'preview' =>
+    val === 'plain' || val === 'diff' || val === 'preview';
+
+  if (arg3 !== undefined) {
+    targetSessionId = arg1;
+    rawPath = typeof arg2 === 'string' ? arg2 : '';
+    rawMode = arg3;
+  } else if (arg2 !== undefined) {
+    if (isModeString(arg2)) {
+      rawPath = arg1;
+      rawMode = arg2;
+    } else {
+      targetSessionId = arg1;
+      rawPath = arg2;
+    }
+  } else {
+    rawPath = arg1;
+  }
+
+  const raw = (rawPath || '').trim();
+  if (!raw || /^(note|notebook)(:|$)/i.test(raw)) return;
+
+  const trimmed = normalizeViewerFilePath(raw);
+  if (!trimmed) return;
+
+  const activeId =
+    (targetSessionId ? resolveLeafIdForSession(targetSessionId) : null) ||
+    useLayoutTreeStore.getState().activeLeafId;
   if (!activeId) return;
-  openToolInLeaf(activeId, `file-viewer:${filePath}`);
+
+  const initialMode: FileViewerInitialMode = rawMode === 'diff' ? 'diff' : 'plain';
+  const canonicalTabId = `file-viewer:${trimmed}`;
+
+  // 1. 登记初始呈现模式意图（供冷启动挂载读取）
+  setFileViewerModeOverride(canonicalTabId, initialMode);
+
+  // 2. 派发至坞状态机（使用 Canonical Tab ID 进行严格去重与激活）
+  openToolInLeaf(activeId, canonicalTabId);
+
+  // 3. 同名 Tab 热激活微任务覆盖触发机制（解决已存在激活 Tab 时的模式更新）
+  queueMicrotask(() => {
+    window.dispatchEvent(
+      new CustomEvent('conex:file-viewer-mode', {
+        detail: { canonicalTabId, mode: initialMode },
+      })
+    );
+  });
 }
 
 export function collapseActiveTabRightDock(collapsed: boolean): void {
