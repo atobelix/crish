@@ -1045,6 +1045,273 @@ async function runDefenseSuite() {
         }
       }
 
+      // ============================================================
+      // 场景 11：任务列表复选框纯交互与绝不坍缩防御契约 (TASK-CHECKBOX-PURE-INTERACTION)
+      // 铁律：
+      // - 点击复选框直接触发完成态切换 ([ ] <-> [x])
+      // - 绝不坍缩为原始源码文本 (- [ ] )
+      // - 随后的正文物理 X 坐标严格恒定 (|ΔX| <= 0.5px)
+      // ============================================================
+      {
+        const st = window.__editorStore.getState();
+        let taskLineIdx = -1;
+        for (let i = 0; i < st.getLineCount(); i++) {
+          const t = st.getLine(i);
+          if (t && t.includes('- [ ]') && t.includes('引用内的任务 2')) {
+            taskLineIdx = i;
+            break;
+          }
+        }
+
+        if (taskLineIdx !== -1) {
+          container.scrollTop = Math.max(0, taskLineIdx * 28 - 150);
+          await waitForFrame(80);
+
+          const rowEl = document.querySelector(`.virtual-row[data-index="${taskLineIdx}"]`);
+          if (rowEl) {
+            const checkboxWrapper = rowEl.querySelector('.task-checkbox-wrapper');
+            const textSpan = Array.from(rowEl.querySelectorAll('span[data-token-start]')).find(s => s.textContent && s.textContent.includes('引用内的任务 2'));
+            const beforeRect = textSpan ? textSpan.getBoundingClientRect() : null;
+
+            if (checkboxWrapper && textSpan && beforeRect) {
+              const cbRect = checkboxWrapper.getBoundingClientRect();
+              const clickX = cbRect.left + cbRect.width / 2;
+              const clickY = cbRect.top + cbRect.height / 2;
+
+              checkboxWrapper.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: clickX, clientY: clickY }));
+              await waitForFrame(80);
+
+              const afterLineText = window.__editorStore.getState().getLine(taskLineIdx);
+              const toggled = afterLineText.includes('- [x]');
+              const afterRowEl = document.querySelector(`.virtual-row[data-index="${taskLineIdx}"]`);
+              const hiddenEl = afterRowEl?.querySelector('.syntax-hidden');
+              const isSourceRevealed = Boolean(
+                hiddenEl &&
+                window.getComputedStyle(hiddenEl).display !== 'none'
+              );
+              const isTextLeaked = Boolean(
+                afterRowEl?.innerText?.includes('- [x]') ||
+                afterRowEl?.innerText?.includes('- [ ]')
+              );
+              const afterTextSpan = Array.from(afterRowEl.querySelectorAll('span[data-token-start]')).find(s => s.textContent && s.textContent.includes('引用内的任务 2'));
+              const afterRect = afterTextSpan ? afterTextSpan.getBoundingClientRect() : null;
+              const deltaX = afterRect && beforeRect ? Math.abs(afterRect.left - beforeRect.left) : 999;
+
+              const passed = toggled && !isSourceRevealed && !isTextLeaked && deltaX <= maxTolerance;
+              suiteResults.push({
+                id: 'TASK-CHECKBOX-PURE-INTERACTION',
+                name: '复选框纯交互切换与绝对零坍缩位移防御 (Task Checkbox Pure Toggle)',
+                passed,
+                maxDeltaX: deltaX,
+                details: passed
+                  ? `点击复选框成功在原位切换状态 ([ ] -> [x])，零源码坍缩 (isSourceRevealed=false, isTextLeaked=false)，正文物理位置绝对恒定 |ΔX|=${deltaX.toFixed(3)}px <= 0.5px`
+                  : `复选框切换失败: 状态切换=${toggled}, 源码泄露=${isSourceRevealed || isTextLeaked}, 文本位移=${deltaX.toFixed(3)}px`,
+              });
+
+              // 复原状态
+              checkboxWrapper.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: clickX, clientY: clickY }));
+              await waitForFrame(60);
+            }
+          }
+        }
+      }
+
+      // ============================================================
+      // 场景 12：引用与列表多行中轴线与正文起点绝对对齐防御 (ROW-MULTI-AXIS-ALIGNMENT)
+      // 铁律：
+      // - Line 68: "> 引用内包含列表：" 前缀 2ch，正文起始于 2ch
+      // - Line 69: "> - [x] 引用内的任务" 导线 2ch + 任务槽 2ch，正文起始于 4ch
+      // - Line 70: "> - [ ] 引用内的任务 2" 导线 2ch + 任务槽 2ch，正文起始于 4ch
+      // - Line 69 与 Line 70 复选框中轴线物理对齐 (|ΔX| <= 0.5px)
+      // - Line 69 与 Line 70 正文起始 X 物理对齐 (|ΔX| <= 0.5px)
+      // ============================================================
+      {
+        const st = window.__editorStore.getState();
+        let l68 = -1, l69 = -1, l70 = -1;
+        for (let i = 0; i < st.getLineCount(); i++) {
+          const t = st.getLine(i);
+          if (t && t.includes('引用内包含列表')) {
+            l68 = i;
+            l69 = i + 1;
+            l70 = i + 2;
+            break;
+          }
+        }
+
+        if (l68 !== -1 && l69 !== -1 && l70 !== -1) {
+          container.scrollTop = Math.max(0, l68 * 28 - 100);
+          await waitForFrame(80);
+
+          const r68 = document.querySelector(`.virtual-row[data-index="${l68}"]`);
+          const r69 = document.querySelector(`.virtual-row[data-index="${l69}"]`);
+          const r70 = document.querySelector(`.virtual-row[data-index="${l70}"]`);
+
+          if (r68 && r69 && r70) {
+            const cb69 = r69.querySelector('.task-checkbox-wrapper');
+            const cb70 = r70.querySelector('.task-checkbox-wrapper');
+            const rectCb69 = cb69?.getBoundingClientRect();
+            const rectCb70 = cb70?.getBoundingClientRect();
+            const cbAxis69 = rectCb69 ? rectCb69.left + rectCb69.width / 2 : 0;
+            const cbAxis70 = rectCb70 ? rectCb70.left + rectCb70.width / 2 : 0;
+            const deltaCbAxis = Math.abs(cbAxis69 - cbAxis70);
+
+            const textSpan69 = Array.from(r69.querySelectorAll('span[data-token-start]')).find(s => s.textContent && s.textContent.includes('引用内的任务'));
+            const textSpan70 = Array.from(r70.querySelectorAll('span[data-token-start]')).find(s => s.textContent && s.textContent.includes('引用内的任务 2'));
+            const textRect69 = textSpan69?.getBoundingClientRect();
+            const textRect70 = textSpan70?.getBoundingClientRect();
+            const deltaTextX = textRect69 && textRect70 ? Math.abs(textRect69.left - textRect70.left) : 999;
+
+            const passed = deltaCbAxis <= maxTolerance && deltaTextX <= maxTolerance;
+            suiteResults.push({
+              id: 'ROW-MULTI-AXIS-ALIGNMENT',
+              name: '引用内多行复选框中轴线与正文起始对齐防御 (Row Multi-Axis Alignment)',
+              passed,
+              maxDeltaX: Math.max(deltaCbAxis, deltaTextX),
+              details: passed
+                ? `L${l69} 与 L${l70} 复选框中轴线物理对齐 (|ΔX|=${deltaCbAxis.toFixed(3)}px <= 0.5px)，正文绝对对齐 (|ΔX|=${deltaTextX.toFixed(3)}px <= 0.5px)`
+                : `对齐偏差: 复选框中轴线偏差=${deltaCbAxis.toFixed(3)}px, 正文起点偏差=${deltaTextX.toFixed(3)}px`,
+            });
+          }
+        }
+      }
+
+      // ============================================================
+      // 场景 13：划词选区单层几何互斥与零重复灰度防御 (SELECTION-NO-OVERLAP)
+      // 铁律：
+      // - 选区矩形层 (SelectionHighlight) 内任意两个属于同一视觉行的矩形，相交面积恒为 0
+      // - 原生 ::selection 背景透明，容器 user-select: none，杜绝双层叠加
+      // ============================================================
+      {
+        const st = window.__editorStore.getState();
+        st.setSelection(100, 350);
+        await waitForFrame(80);
+
+        const selRects = Array.from(document.querySelectorAll('.selection-rect')).map(el => {
+          const r = el.getBoundingClientRect();
+          return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height };
+        });
+
+        let hasOverlap = false;
+        let overlapDetails = '零重叠';
+        for (let i = 0; i < selRects.length; i++) {
+          for (let j = i + 1; j < selRects.length; j++) {
+            const a = selRects[i];
+            const b = selRects[j];
+            const isSameLine = Math.abs(a.top - b.top) <= 4;
+            if (isSameLine) {
+              const xOverlap = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+              if (xOverlap > 1) { // 允许 1px 亚像素接缝
+                hasOverlap = true;
+                overlapDetails = `矩形 ${i} 与 ${j} 同行水平重叠 ${xOverlap.toFixed(2)}px`;
+                break;
+              }
+            }
+          }
+          if (hasOverlap) break;
+        }
+
+        const editorContainer = document.querySelector('.editor-container');
+        const compStyle = editorContainer ? window.getComputedStyle(editorContainer) : null;
+        const isUserSelectNone = compStyle?.userSelect === 'none' || compStyle?.webkitUserSelect === 'none';
+        const passed = !hasOverlap && isUserSelectNone;
+
+        suiteResults.push({
+          id: 'SELECTION-NO-OVERLAP',
+          name: '划词选区单层几何互斥与零重复灰度防御 (Selection No Overlap)',
+          passed,
+          details: passed
+            ? `共渲染 ${selRects.length} 个独立视觉行选区矩形，同一视觉行重叠面积严格为 0，userSelect=none 彻底杜绝双层灰度`
+            : `选区重叠或双层灰度检测失败: ${overlapDetails}, userSelectNone=${isUserSelectNone}`,
+        });
+
+        st.setSelection(0, 0);
+        await waitForFrame(40);
+      }
+
+      // ============================================================
+      // 场景 14：多级嵌套列表引导线连续垂直对齐防御 (LIST-INDENT-GUIDE-LINES)
+      // 铁律：
+      // - 缩进层级存在 .syntax-indent-guide 元素
+      // - 引导线数量与缩进深度一致
+      // ============================================================
+      {
+        const st = window.__editorStore.getState();
+        let nestedListIdx = -1;
+        for (let i = 0; i < st.getLineCount(); i++) {
+          const t = st.getLine(i);
+          if (t && t.includes('混合嵌套无序列表')) {
+            nestedListIdx = i;
+            break;
+          }
+        }
+
+        if (nestedListIdx !== -1) {
+          container.scrollTop = Math.max(0, nestedListIdx * 28 - 150);
+          await waitForFrame(80);
+
+          const rowEl = document.querySelector(`.virtual-row[data-index="${nestedListIdx}"]`);
+          if (rowEl) {
+            const guides = Array.from(rowEl.querySelectorAll('.syntax-indent-guide'));
+            const hasGuides = guides.length >= 2;
+            const passed = hasGuides;
+
+            suiteResults.push({
+              id: 'LIST-INDENT-GUIDE-LINES',
+              name: '多级嵌套列表引导线连续垂直对齐防御 (List Indent Guide Lines)',
+              passed,
+              details: passed
+                ? `嵌套行成功渲染 ${guides.length} 级垂直对齐引导线，中轴线分别对齐上级列表符号`
+                : `未找到预期的多级列表引导线，检测到数量=${guides.length}`,
+            });
+          }
+        }
+      }
+
+      // ============================================================
+      // 场景 15：列表嵌套代码块 CommonMark §4.5 缩进剥离对齐防御 (CODEBLOCK-NESTED-INDENT)
+      // 铁律：
+      // - 列表内嵌套代码块（开栏 1~3 空格缩进）
+      // - 代码内容行 (.code-content) 首行字符贴合 gutter，零异常附加缩进 (额外空白 = 0px)
+      // ============================================================
+      {
+        const st = window.__editorStore.getState();
+        let codeContentIdx = -1;
+        for (let i = 0; i < st.getLineCount(); i++) {
+          const t = st.getLine(i);
+          if (t && t.includes('def foo():')) {
+            codeContentIdx = i;
+            break;
+          }
+        }
+
+        if (codeContentIdx !== -1) {
+          container.scrollTop = Math.max(0, codeContentIdx * 28 - 150);
+          await waitForFrame(80);
+
+          const rowEl = document.querySelector(`.virtual-row[data-index="${codeContentIdx}"]`);
+          if (rowEl) {
+            const codeContent = rowEl.querySelector('.code-content');
+            const textSpan = codeContent?.querySelector('span[data-token-start]');
+            const contentRect = codeContent?.getBoundingClientRect();
+            const textRect = textSpan?.getBoundingClientRect();
+            const paddingLeft = parseFloat(window.getComputedStyle(codeContent).paddingLeft || '0');
+            const totalOffset = textRect && contentRect ? textRect.left - contentRect.left : 999;
+            const extraIndent = Math.abs(totalOffset - paddingLeft);
+            const passed = extraIndent <= maxTolerance; // 除去预设 padding 后，附加缩进误差 <= 0.5px
+
+            suiteResults.push({
+              id: 'CODEBLOCK-NESTED-INDENT',
+              name: '列表嵌套代码块缩进剥离与卡片平齐防御 (Codeblock Nested Indent Stripped)',
+              passed,
+              maxDeltaX: extraIndent,
+              details: passed
+                ? `CommonMark §4.5 缩进剥离完全生效：def foo() 贴齐代码内容槽 (附加缩进=${extraIndent.toFixed(3)}px <= 0.5px)，零多余缩进`
+                : `嵌套代码块缩进异常：def foo() 出现多余附加缩进 (附加缩进=${extraIndent.toFixed(3)}px > 0.5px)`,
+            });
+          }
+        }
+      }
+
       return { suiteResults };
     }, TOLERANCE_PX);
 

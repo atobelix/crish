@@ -19,7 +19,6 @@ import { describe, it, expect, afterEach } from 'vitest';
 import {
   renderMathToHtml,
   setMathRenderer,
-  getMathRenderer,
   clearMathRenderCache,
   MATH_RENDER_CACHE_CAPACITY,
   type MathRenderer,

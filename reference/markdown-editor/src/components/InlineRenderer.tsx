@@ -502,6 +502,11 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
           // Preserves full physical character offset alignment, zero artificial layout boxes
           if (token.type === 'list_number') {
             const indentLen = token.indent ? token.indent.length : 0;
+            const indentStep =
+              indentLen % 3 === 0 ? 3 : indentLen % 4 === 0 ? 4 : 2;
+            const indentGuidesCount =
+              indentLen > 0 ? Math.max(1, Math.floor(indentLen / indentStep)) : 0;
+
             return (
               <span
                 key={key}
@@ -514,6 +519,16 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   <>
                     <span className="syntax-indent" data-sub-offset={0}>
                       {token.indent}
+                      {Array.from({ length: indentGuidesCount }).map((_, i) => (
+                        <span
+                          key={i}
+                          className="syntax-indent-guide"
+                          style={{
+                            left: `calc(${i * indentStep}ch + 0.5ch - 0.5px)`,
+                          }}
+                          aria-hidden="true"
+                        />
+                      ))}
                     </span>
                     <span
                       className="syntax-marker"
@@ -533,6 +548,11 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
           if (token.type === 'list_bullet') {
             const indentLen = token.indent ? token.indent.length : 0;
+            const indentStep =
+              indentLen % 3 === 0 ? 3 : indentLen % 4 === 0 ? 4 : 2;
+            const indentGuidesCount =
+              indentLen > 0 ? Math.max(1, Math.floor(indentLen / indentStep)) : 0;
+
             return (
               <span
                 key={key}
@@ -544,6 +564,16 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 {token.indent && (
                   <span className="syntax-indent" data-sub-offset={0}>
                     {token.indent}
+                    {Array.from({ length: indentGuidesCount }).map((_, i) => (
+                      <span
+                        key={i}
+                        className="syntax-indent-guide"
+                        style={{
+                          left: `calc(${i * indentStep}ch + 0.5ch - 0.5px)`,
+                        }}
+                        aria-hidden="true"
+                      />
+                    ))}
                   </span>
                 )}
                 <span
@@ -556,7 +586,10 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   className="syntax-content"
                   data-sub-offset={indentLen}
                 >
-                  {'• '}
+                  <span className="token-bullet-char" aria-hidden="true">
+                    •
+                  </span>
+                  <span className="bullet-space">{' '}</span>
                 </span>
               </span>
             );
@@ -564,6 +597,11 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
           if (token.type === 'list_task') {
             const indentLen = token.indent ? token.indent.length : 0;
+            const indentStep =
+              indentLen % 3 === 0 ? 3 : indentLen % 4 === 0 ? 4 : 2;
+            const indentGuidesCount =
+              indentLen > 0 ? Math.max(1, Math.floor(indentLen / indentStep)) : 0;
+
             const handleTaskClick = (e: React.MouseEvent) => {
               if (start !== undefined) {
                 e.stopPropagation();
@@ -591,6 +629,16 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 {token.indent && (
                   <span className="syntax-indent" data-sub-offset={0}>
                     {token.indent}
+                    {Array.from({ length: indentGuidesCount }).map((_, i) => (
+                      <span
+                        key={i}
+                        className="syntax-indent-guide"
+                        style={{
+                          left: `calc(${i * indentStep}ch + 0.5ch - 0.5px)`,
+                        }}
+                        aria-hidden="true"
+                      />
+                    ))}
                   </span>
                 )}
                 <span
@@ -611,8 +659,8 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     title={token.isChecked ? '已完成（单击切换）' : '未完成（单击切换）'}
                   >
                     <svg
-                      width="15"
-                      height="15"
+                      width="14"
+                      height="14"
                       viewBox="0 0 16 16"
                       fill="none"
                       className="task-checkbox-svg"
@@ -654,7 +702,6 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   <span
                     className="task-space"
                     data-sub-offset={len - 1}
-                    style={{ display: 'inline', userSelect: 'none' }}
                   >
                     {' '}
                   </span>
@@ -670,14 +717,17 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 data-token-start={start}
                 data-token-length={len}
                 className={finalClassName}
-                style={token.style}
+                style={{
+                  ...token.style,
+                  width: `${len}ch`,
+                }}
               >
                 <span className="syntax-hidden" data-sub-offset={0}>
                   {token.raw}
                 </span>
                 <span className="syntax-content" data-sub-offset={len - 1}>
                   <span className="blockquote-bar" aria-hidden="true" />
-                  <span className="blockquote-space" style={{ display: 'inline', userSelect: 'none' }}>
+                  <span className="blockquote-space">
                     {' '}
                   </span>
                 </span>

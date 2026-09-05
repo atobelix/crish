@@ -12,7 +12,7 @@
  *   registerBlockRenderer('custom_block', MyRenderer)
  * 后，解析层产出的自定义 LineType 行直接命中注册表；移除后恢复兜底。
  */
-import React, { memo, useState, useMemo } from 'react';
+import React, { memo, useState } from 'react';
 import type { LineNode, InlineNode, LineType } from '../core/ast';
 import type { CodeState } from '../core/parser';
 import { checkIsActive, type ActiveState } from '../core/measure';
@@ -788,6 +788,7 @@ function CodeFenceStartBlock({
   store,
 }: BlockRendererComponentProps) {
   const lang = extractFenceLang(block.raw);
+  const langOffset = lang ? Math.max(0, block.raw.indexOf(lang)) : block.length;
   const isActive = checkIsActive(lineOffset, block.length, activeState ?? null);
   const editorStore = store ?? useEditorStore;
 
@@ -807,7 +808,9 @@ function CodeFenceStartBlock({
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        <span className="code-lang-pill">{lang}</span>
+        <span className="code-lang-pill" data-sub-offset={langOffset}>
+          {lang}
+        </span>
         <CopyButton
           dataAttr="code"
           label={`复制代码块（${lang}）`}
@@ -819,7 +822,7 @@ function CodeFenceStartBlock({
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        {block.raw.replace(/^ {1,3}/, '')}
+        {block.raw}
       </div>
     </div>
   );
@@ -843,7 +846,7 @@ function CodeFenceEndBlock({
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        {block.raw.replace(/^ {1,3}/, '')}
+        {block.raw}
       </div>
     </div>
   );
@@ -994,11 +997,16 @@ function CodeBlock({
   const fenceCtx = useFenceContext(index, store);
   const lineNo = getCodeLineNumber(index, fenceCtx, store);
   const effectiveTokens = React.useMemo(() => {
-    if (!block.inlineTokens || !fenceCtx || fenceCtx.indent <= 0) {
+    if (
+      !block.inlineTokens ||
+      !fenceCtx ||
+      !fenceCtx.indent ||
+      fenceCtx.indent <= 0
+    ) {
       return block.inlineTokens;
     }
     return stripCodeFenceIndent(block.inlineTokens, fenceCtx.indent);
-  }, [block.inlineTokens, fenceCtx?.indent]);
+  }, [block.inlineTokens, fenceCtx]);
 
   // 复制按钮：保留在首行内容锚点供 headless/测试（render-export.test.ts）定位
   const copyButton =
