@@ -455,8 +455,14 @@ body {
 
 /* 词法与标记样式 */
 .interactive-checkbox {
+  cursor: pointer;
   user-select: none;
-  display: inline-block;
+  display: inline-flex;
+  height: var(--grid-size);
+  line-height: 0;
+  align-items: center;
+  vertical-align: top;
+  box-sizing: border-box;
   padding: 0;
   color: var(--gray-45);
   font-weight: bold;
@@ -494,18 +500,22 @@ body {
   font-family: var(--font-mono);
   color: var(--near-black);
   background: var(--inline-code-bg);
-  padding: 1px 5px;
+  padding: 0 5px;
   border-radius: 4px;
   font-size: 0.9em;
+  line-height: inherit;
+  box-sizing: border-box;
 }
 .style-mark {
   font-weight: 500;
   color: var(--yellow-text);
   background-color: var(--yellow-tint-2);
-  padding: 1px 4px;
+  padding: 0 4px;
   border-radius: 3px;
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
+  line-height: inherit;
+  box-sizing: border-box;
 }
 .style-image {
   color: var(--gray-45);
@@ -537,13 +547,13 @@ body {
   display: none;
 }
 
-.interactive-checkbox {
-  cursor: pointer;
-  vertical-align: sub;
-}
 .style-sub {
-  font-size: 0.8em;
-  vertical-align: sub;
+  font-size: 0.75em;
+  line-height: 0 !important;
+  position: relative;
+  vertical-align: baseline !important;
+  display: inline-block;
+  bottom: -0.22em;
 }
 
 /* Block-level live preview styling */
@@ -708,14 +718,12 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
-  margin-left: 2px;
-  margin-right: 6px;
+  width: 5ch;
+  height: var(--grid-size);
+  margin: 0;
   cursor: pointer;
   user-select: none;
-  vertical-align: middle;
-  transform: translateY(-1px);
+  vertical-align: top;
   box-sizing: border-box;
 }
 
@@ -732,6 +740,45 @@ body {
   display: inline-block;
   width: 1ch;
   user-select: none;
+}
+
+/* 等宽槽位与幽灵字符流契约 */
+.task-slot-container {
+  position: relative;
+  display: inline-flex;
+  width: var(--task-marker-ch, 6ch);
+  height: var(--grid-size);
+  align-items: center;
+  vertical-align: top;
+  box-sizing: border-box;
+  line-height: 0;
+}
+
+.ghost-token-stream {
+  display: inline-block;
+  width: 100%;
+  white-space: pre;
+  opacity: 0;
+  color: transparent;
+  pointer-events: none;
+  user-select: none;
+  line-height: var(--grid-size);
+  vertical-align: top;
+  box-sizing: border-box;
+}
+
+.visual-overlay-widget {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 /* 引用前缀混合渲染：行激活或 token 激活时展开为源码 `> `，非激活态呈现原版优雅竖导线 */
@@ -766,14 +813,23 @@ body {
 .token-list-task .syntax-content,
 .token-blockquote-prefix .syntax-content {
   display: inline-flex;
+  height: var(--grid-size);
+  line-height: var(--grid-size);
+  vertical-align: top;
+  align-items: center;
 }
 
 .is-selected-token {
   /* 契约类保留：满足 css-contract 测试规范 */
 }
-.style-sup {
-  font-size: 0.8em;
-  vertical-align: super;
+.style-sup,
+.style-footnote {
+  font-size: 0.75em;
+  line-height: 0 !important;
+  position: relative;
+  vertical-align: baseline !important;
+  display: inline-block;
+  top: -0.42em;
 }
 .style-math {
   font-style: italic;

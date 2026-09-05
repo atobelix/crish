@@ -28,11 +28,11 @@ export type LineKind =
 /** 类型倍率（任务书口径）：heading 1.3× / 表格行 1.2× / 代码 1.0× / 正文 1.0× */
 const TYPE_MULTIPLIER: Record<LineKind, number> = {
   body: 1,
-  heading: 1.3,
+  heading: 1.0,
   table_row: 1.2,
   table_separator: 0,
   code: 1,
-  math: 1.15,
+  math: 2.5,
 };
 
 /** 表格分隔行判定（与 parser 的 table_separator 判定同源） */
@@ -217,6 +217,11 @@ export class HeightOracle {
       let rows = 1;
       if (maxSeg > colPerRow) rows += Math.ceil((maxSeg - colPerRow) / Math.max(1, colPerRow - 5));
       const base = Math.max(this.lineHeight * TYPE_MULTIPLIER[kind], rows * TABLE_CELL_HEIGHT + TABLE_CELL_PAD);
+      return base * this.correction[kind];
+    }
+    if (kind === 'math') {
+      const hasLargeStructures = raw.includes('\\frac') || raw.includes('\\sum') || raw.includes('\\int') || raw.includes('\\begin');
+      const base = hasLargeStructures ? Math.max(84, this.lineHeight * 3) : Math.max(42, this.lineHeight * 1.5);
       return base * this.correction[kind];
     }
     // 通用 wrap 长度模型（CM6 heightForLine 同款）：短行快路径跳过 Math.ceil

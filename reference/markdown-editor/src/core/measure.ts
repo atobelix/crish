@@ -520,55 +520,62 @@ function measureTokenOffset(
   return rect;
 }
 
-// 精确测量：文本节点定位 → 单次 Range（复用单例）→ 光标矩形
-function measureTokenExact(
+// Tier 1: 纯文本物理 Range 测量
+function measureTier1Range(
   entry: TokenEntry,
   offsetInToken: number
 ): MeasuredRect | null {
   const located = locateTextNode(entry, offsetInToken);
-  let rect: {
-    left: number;
-    top: number;
-    width: number;
-    height: number;
-    bottom?: number;
-  } | null = null;
+  if (!located) return null;
 
-  if (located) {
-    const range = getSharedRange();
-    try {
-      range.setStart(located.textNode, located.localOffset);
-      range.setEnd(located.textNode, located.localOffset);
-      const r = range.getBoundingClientRect();
-      // 折叠 Range 返回 0x0（行尾等场景）时退回元素矩形，与旧实现一致
-      if (r.height !== 0 || r.width !== 0) rect = r;
-    } catch (e) {
-      console.error('测量失败', e);
-      rect = null;
+  const range = getSharedRange();
+  try {
+    range.setStart(located.textNode, located.localOffset);
+    range.setEnd(located.textNode, located.localOffset);
+    const r = range.getBoundingClientRect();
+    if (r.height > 0 || r.width > 0) {
+      const fontSize = tokenFontSize(entry.el);
+      const cursorHeight = fontSize * 1.15;
+      return {
+        top: r.top + (r.height - cursorHeight) / 2,
+        left: r.left,
+        height: cursorHeight,
+        bottom: r.bottom ?? r.top + r.height,
+      };
     }
+  } catch (e) {
+    // 捕获异常，平滑跌入 Tier 2
   }
+  return null;
+}
 
-  if (!rect) {
-    const er = entry.el.getBoundingClientRect();
-    if (er.height === 0) return null;
-    const isStart = offsetInToken === 0;
-    rect = {
-      left: isStart ? er.left : er.right,
-      top: er.top,
-      width: 0,
-      height: er.height,
-      bottom: er.bottom,
-    };
-  }
-
+// Tier 2: 复合 Widget 盒模型比例线性插值投影 (Bounding-Box Linear Projection)
+function measureTier2WidgetProjection(
+  entry: TokenEntry,
+  offsetInToken: number
+): MeasuredRect {
+  const er = entry.el.getBoundingClientRect();
+  const tokenLen = Math.max(1, entry.length);
+  const ratio = Math.min(1, Math.max(0, offsetInToken / tokenLen));
   const fontSize = tokenFontSize(entry.el);
-  const cursorHeight = fontSize * 1.15; // 略高于字体（与旧实现一致）
+  const cursorHeight = fontSize * 1.15;
+
   return {
-    top: rect.top + (rect.height - cursorHeight) / 2,
-    left: rect.left,
+    left: er.left + ratio * er.width,
+    top: er.top + (er.height - cursorHeight) / 2,
     height: cursorHeight,
-    bottom: rect.bottom ?? rect.top + rect.height,
+    bottom: er.top + (er.height + cursorHeight) / 2,
   };
+}
+
+// 精确测量：双层投影体系（Tier 1 纯文本 Range + Tier 2 Widget 盒模型比例投影）
+function measureTokenExact(
+  entry: TokenEntry,
+  offsetInToken: number
+): MeasuredRect | null {
+  const t1 = measureTier1Range(entry, offsetInToken);
+  if (t1) return t1;
+  return measureTier2WidgetProjection(entry, offsetInToken);
 }
 
 // 行级回退：空行/行尾无 token 命中时，用行矩形测量光标（空行统一标准字号）
@@ -589,9 +596,24 @@ function measureLineFallback(idx: ContainerIndex, index: number): MeasuredRect |
       // 空行统一用标准字号，避免出现 28px 大光标（旧实现注释同款）
       const cursorHeight = 14 * 1.15;
       const topOffset = rect.top + ((rect.height || 28) - cursorHeight) / 2;
+
+      let cursorLeft = rect.left;
+      if (line.length > 0) {
+        for (let k = idx.tokens.length - 1; k >= 0; k--) {
+          const t = idx.tokens[k];
+          if (t.start >= line.start && t.start + t.length <= line.start + line.length && isTokenVisible(t.el)) {
+            const tr = t.el.getBoundingClientRect();
+            if (tr.width > 0 && tr.height > 0) {
+              cursorLeft = tr.right;
+              break;
+            }
+          }
+        }
+      }
+
       return {
         top: topOffset,
-        left: rect.left,
+        left: cursorLeft,
         height: cursorHeight,
         bottom: rect.bottom,
       };
@@ -603,9 +625,10 @@ function measureLineFallback(idx: ContainerIndex, index: number): MeasuredRect |
 // 单次测量（含同帧结果缓存：合并 CursorLayer 与 HiddenInput 双测量源）
 function measureOnce(idx: ContainerIndex, index: number): MeasuredRect | null {
   const container = idx.container;
-  // 视口坐标对滚动敏感，缓存键带上滚动位置；同帧内第二次调用（双测量源）
+  const decVersion = useEditorStore.getState().decorationVersion || 0;
+  // 视口坐标对滚动敏感，缓存键带上滚动位置与装饰版本；同帧内第二次调用（双测量源）
   // 直接命中，零 DOM 读取
-  const cacheKey = index + ':' + container.scrollTop + ':' + container.scrollLeft;
+  const cacheKey = index + ':' + container.scrollTop + ':' + container.scrollLeft + ':' + decVersion;
   if (idx.posCache.size >= POS_CACHE_LIMIT) idx.posCache.clear();
   const hit = idx.posCache.get(cacheKey);
   if (hit) return hit;
