@@ -354,7 +354,7 @@ function App() {
         alignItems: 'center',
       }}
     >
-      {/* 结构化现代化顶部控制栏（Kami 美学：极简紧凑、分区明确、微微质感） */}
+      {/* 结构化现代化顶部控制栏（极简紧凑、分区明确、微微质感） */}
       <header
         style={{
           width: 'min(920px, 95vw)',
@@ -373,7 +373,7 @@ function App() {
           minHeight: 40,
         }}
       >
-        {/* 左区：Kami 标识与实时文档/流式状态胶囊 */}
+        {/* 左区：Conex 标识与实时文档/流式状态胶囊 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <div
             style={{
@@ -399,12 +399,13 @@ function App() {
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
-            <span style={{ fontWeight: 600, fontSize: 12, letterSpacing: '0.2px' }}>Kami</span>
+            <span style={{ fontWeight: 600, fontSize: 12, letterSpacing: '0.2px' }}>Conex</span>
           </div>
 
           <span
             data-testid="stream-status"
             data-phase={phase}
+            title={streamSummary || undefined}
             style={{
               display: 'inline-flex',
               alignItems: 'center',

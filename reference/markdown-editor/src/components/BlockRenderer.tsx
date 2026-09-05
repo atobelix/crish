@@ -813,48 +813,68 @@ function CodeFenceEndBlock({
 
 function MathFenceStartBlock({
   block,
-  lineOffset,
+  index = 0,
+  lineOffset = 0,
   activeState,
+  store,
 }: BlockRendererComponentProps) {
+  const isActive = checkIsActive(lineOffset, block.length, activeState ?? null);
+  const editorStore = store ?? useEditorStore;
+
+  const handleCopy = () => {
+    const st = editorStore.getState();
+    const end = getFenceEndForStart(st, index);
+    if (end > index + 1) {
+      const lines = getFenceBlockLines(editorStore, index + 1, end);
+      void copyTextToClipboard(lines.join('\n'));
+    }
+  };
+
   return (
     <div className="line-block line-code-fence line-code-fence-start">
-      <span
-        className={`code-lang-pill code-fence-rendered ${checkIsActive(lineOffset, block.length, activeState ?? null) ? 'is-active-token' : ''}`.trim()}
+      <div
+        className={`code-fence-rendered ${isActive ? 'is-active-token' : ''}`.trim()}
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        math
-      </span>
-      <span
+        <span className="code-lang-pill">math</span>
+        <CopyButton
+          dataAttr="math-fence"
+          label="复制公式（LaTeX）"
+          onClick={handleCopy}
+        />
+      </div>
+      <div
         className="code-fence-source"
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
         {block.raw}
-      </span>
+      </div>
     </div>
   );
 }
 
 function MathFenceEndBlock({
   block,
-  lineOffset,
+  lineOffset = 0,
   activeState,
 }: BlockRendererComponentProps) {
+  const isActive = checkIsActive(lineOffset, block.length, activeState ?? null);
   return (
     <div className="line-block line-code-fence line-code-fence-end">
-      <span
-        className={`code-fence-rendered ${checkIsActive(lineOffset, block.length, activeState ?? null) ? 'is-active-token' : ''}`.trim()}
+      <div
+        className={`code-fence-rendered ${isActive ? 'is-active-token' : ''}`.trim()}
         data-token-start={lineOffset}
         data-token-length={block.length}
-      ></span>
-      <span
+      />
+      <div
         className="code-fence-source"
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
         {block.raw}
-      </span>
+      </div>
     </div>
   );
 }
