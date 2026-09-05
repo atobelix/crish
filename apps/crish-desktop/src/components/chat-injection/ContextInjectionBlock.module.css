@@ -128,12 +128,14 @@
 }
 
 .tokenBadge {
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   font-size: var(--font-size-nano, 10px);
   color: var(--text-tertiary);
   background: var(--tint-hover);
   padding: 1px 6px;
   border-radius: var(--radius-full, 9999px);
-  font-family: var(--font-mono);
   line-height: 1.5;
   white-space: nowrap;
 }

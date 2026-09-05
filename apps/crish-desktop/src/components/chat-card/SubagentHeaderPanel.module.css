@@ -13,7 +13,6 @@
   font-weight: 400;
   font-family: inherit;
   cursor: pointer;
-  outline: none;
   box-sizing: border-box;
   transition: background-color var(--transition-micro, 120ms) ease,
               color var(--transition-micro, 120ms) ease;
@@ -21,6 +20,14 @@
 
 .agentTrigger:hover,
 .breadcrumbAgentBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
+}
+
+.agentTrigger:focus-visible,
+.breadcrumbAgentBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px var(--focus-border-color);
   background: var(--tint-hover);
   color: var(--text-primary);
 }
@@ -60,6 +67,9 @@
 .triggerText,
 .bcAgentText {
   white-space: nowrap;
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 .bcChevron {
