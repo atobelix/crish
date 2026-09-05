@@ -3,6 +3,8 @@
  * ui/Button & ui/IconButton 基础测试：渲染/交互/a11y/尺寸变体正交
  */
 import React from 'react';
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { Button } from './Button';
@@ -171,6 +173,134 @@ describe('ui/Button', () => {
     fireEvent.click(btn);
     expect(handleClick).toHaveBeenCalledTimes(1);
   });
+
+  it('align="start" 属性正确透传 data-align="start"', () => {
+    render(
+      <Button align="start" data-testid="align-start-btn">
+        靠左对齐
+      </Button>
+    );
+    const btn = screen.getByTestId('align-start-btn');
+    expect(btn).toHaveAttribute('data-align', 'start');
+  });
+
+  it('align="center" 属性正确透传 data-align="center"', () => {
+    render(
+      <Button align="center" data-testid="align-center-btn">
+        居中对齐
+      </Button>
+    );
+    const btn = screen.getByTestId('align-center-btn');
+    expect(btn).toHaveAttribute('data-align', 'center');
+  });
+
+  it('未指定 align 时 data-align 缺省（不渲染属性）', () => {
+    render(<Button data-testid="align-default-btn">默认对齐</Button>);
+    const btn = screen.getByTestId('align-default-btn');
+    expect(btn).not.toHaveAttribute('data-align');
+  });
+
+  it('static={true} 属性正确透传 data-static="true"', () => {
+    render(
+      <Button static data-testid="static-btn">
+        静态按钮
+      </Button>
+    );
+    const btn = screen.getByTestId('static-btn');
+    expect(btn).toHaveAttribute('data-static', 'true');
+  });
+
+  it('static={false} 或未指定 static 时 data-static 缺省', () => {
+    const { rerender } = render(
+      <Button data-testid="non-static-btn">普通按钮</Button>
+    );
+    const btn = screen.getByTestId('non-static-btn');
+    expect(btn).not.toHaveAttribute('data-static');
+
+    rerender(
+      <Button static={false} data-testid="non-static-btn">
+        普通按钮
+      </Button>
+    );
+    expect(btn).not.toHaveAttribute('data-static');
+  });
+
+  it('bare 模式原生单节点透传 align 与 static 且不渲染内部包裹层', () => {
+    render(
+      <Button
+        bare
+        align="start"
+        static
+        className="custom-bare"
+        data-testid="bare-btn"
+      >
+        <span>自定义内容</span>
+      </Button>
+    );
+    const btn = screen.getByTestId('bare-btn');
+    expect(btn.tagName).toBe('BUTTON');
+    expect(btn).toHaveAttribute('data-align', 'start');
+    expect(btn).toHaveAttribute('data-static', 'true');
+    expect(btn).toHaveClass('custom-bare');
+    expect(btn.querySelector(`.${styles.buttonLabel}`)).toBeNull();
+    expect(screen.getByText('自定义内容')).toBeInTheDocument();
+  });
+
+  it('纯图标按钮无 children 时不产生 .buttonLabel 节点（杜绝误触发偏心）', () => {
+    render(
+      <Button
+        icon={<span data-testid="only-icon">⭐</span>}
+        data-testid="icon-only-btn"
+      />
+    );
+    const btn = screen.getByTestId('icon-only-btn');
+    expect(btn.querySelector(`.${styles.buttonIcon}`)).not.toBeNull();
+    expect(btn.querySelector(`.${styles.buttonLabel}`)).toBeNull();
+  });
+
+  it('前置图标与 label 正确生成相应结构供纯 CSS 光学微调命中', () => {
+    render(
+      <Button
+        icon={<span data-testid="leading-ico">📁</span>}
+        iconPosition="left"
+        data-testid="optics-leading-btn"
+      >
+        文件夹
+      </Button>
+    );
+    const btn = screen.getByTestId('optics-leading-btn');
+    const firstChild = btn.firstElementChild;
+    expect(firstChild).toHaveClass(styles.buttonIcon);
+    expect(btn.querySelector(`.${styles.buttonLabel}`)).toBeInTheDocument();
+  });
+
+  it('后置图标与 label 正确生成相应结构供纯 CSS 光学微调命中', () => {
+    render(
+      <Button
+        icon={<span data-testid="trailing-ico">➜</span>}
+        iconPosition="right"
+        data-testid="optics-trailing-btn"
+      >
+        下一步
+      </Button>
+    );
+    const btn = screen.getByTestId('optics-trailing-btn');
+    const lastChild = btn.lastElementChild;
+    expect(lastChild).toHaveClass(styles.buttonIcon);
+    expect(btn.querySelector(`.${styles.buttonLabel}`)).toBeInTheDocument();
+  });
+
+  it('loading 态前置 spinner 与 label 正确共存供纯 CSS 光学微调命中', () => {
+    render(
+      <Button loading data-testid="optics-loading-btn">
+        提交中
+      </Button>
+    );
+    const btn = screen.getByTestId('optics-loading-btn');
+    const firstChild = btn.firstElementChild;
+    expect(firstChild).toHaveClass(styles.spinner);
+    expect(btn.querySelector(`.${styles.buttonLabel}`)).toBeInTheDocument();
+  });
 });
 
 describe('ui/IconButton', () => {
@@ -201,5 +331,79 @@ describe('ui/IconButton', () => {
     );
     const btn = screen.getByRole('button', { name: '搜索' });
     expect(btn).toBeInTheDocument();
+  });
+
+  it('IconButton 支持透传 align 与 static 属性', () => {
+    render(
+      <IconButton
+        icon={<span>⚙</span>}
+        aria-label="设置"
+        align="start"
+        static
+        data-testid="icon-btn-props"
+      />
+    );
+    const btn = screen.getByTestId('icon-btn-props');
+    expect(btn).toHaveAttribute('data-align', 'start');
+    expect(btn).toHaveAttribute('data-static', 'true');
+  });
+
+  it('IconButton 支持传入 touchExpand 样式类', () => {
+    render(
+      <IconButton
+        icon={<span>✕</span>}
+        aria-label="关闭"
+        className={styles.touchExpand}
+        data-testid="icon-btn-expand"
+      />
+    );
+    const btn = screen.getByTestId('icon-btn-expand');
+    expect(btn).toHaveClass(styles.touchExpand);
+  });
+});
+
+describe('ui/Button 样式与物理动效契约 (Button.module.css)', () => {
+  const cssPath = path.resolve(__dirname, './Button.module.css');
+  const cssContent = fs.readFileSync(cssPath, 'utf-8');
+
+  it('彻底清除 7px 奇数圆角，升级为 8px fallback', () => {
+    expect(cssContent).toContain('--btn-radius: var(--button-radius, 8px)');
+    expect(cssContent).not.toContain('var(--button-radius, 7px)');
+  });
+
+  it('彻底去除点击果冻弹性缩放 scale，保持平稳扎实交互', () => {
+    expect(cssContent).not.toMatch(/\.button:active[^{]*\{[^}]*scale:/);
+    expect(cssContent).not.toContain('scale: 0.96;');
+    expect(cssContent).not.toContain('scale 140ms');
+  });
+
+  it('无冗余 scale 过渡与强制 scale 声明', () => {
+    expect(cssContent).not.toMatch(/\.button:disabled[\s\S]*?scale:/);
+  });
+
+  it('纯 CSS 光学微调规则完整性覆盖图标与 Spinner', () => {
+    expect(cssContent).toContain(
+      '.button:has(> :is(.buttonIcon, .spinner):first-child):has(> .buttonLabel)'
+    );
+    expect(cssContent).toContain(
+      '.button:has(> .buttonLabel):has(> :is(.buttonIcon, .spinner):last-child)'
+    );
+    expect(cssContent).toContain('padding-inline-start: max(0px, calc(var(--btn-px) - 2px));');
+    expect(cssContent).toContain('padding-inline-end: max(0px, calc(var(--btn-px) - 2px));');
+  });
+
+  it("[data-align='start'] 靠左排版对齐规则", () => {
+    expect(cssContent).toContain("[data-align='start']");
+    expect(cssContent).toContain('justify-content: flex-start;');
+    expect(cssContent).toContain('text-align: left;');
+  });
+
+  it('触控热区安全管理：常规紧凑按钮采用 inset: -2px 0，touchExpand 支持 40×40px', () => {
+    expect(cssContent).toContain('.buttonXs::after');
+    expect(cssContent).toContain('.buttonSm::after');
+    expect(cssContent).toContain('inset: -2px 0;');
+    expect(cssContent).toContain('.iconButton.touchExpand::after');
+    expect(cssContent).toContain('min-width: 40px;');
+    expect(cssContent).toContain('min-height: 40px;');
   });
 });

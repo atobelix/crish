@@ -4,7 +4,7 @@
 
 /* ── 1. 基础变量与尺寸几何映射 ── */
 .root {
-  --tab-spring-bezier: cubic-bezier(0.175, 0.885, 0.32, 1.5);
+  --tab-spring-bezier: cubic-bezier(0.2, 0, 0, 1);
   --tab-duration: 250ms;
   --tab-press-duration: 100ms;
 
@@ -81,8 +81,8 @@
   --tab-height: 28px;
   --tab-pad: 2px;
   --tab-gap: 2px;
-  --tab-outer-radius: var(--button-radius, 7px);
-  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 5px */
+  --tab-outer-radius: var(--button-radius, 8px);
+  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6px */
   --tab-font-size: var(--font-size-sm, 13px);
   --tab-item-px: var(--space-2_5, 10px);
   --tab-icon-size: 14px;
@@ -90,10 +90,10 @@
 
 .sizeMd {
   --tab-height: 32px;
-  --tab-pad: 3px;
-  --tab-gap: 3px;
+  --tab-pad: 2px;
+  --tab-gap: 2px;
   --tab-outer-radius: var(--radius-lg, 8px);
-  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 5px */
+  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6px */
   --tab-font-size: var(--font-size-base, 14px);
   --tab-item-px: var(--space-3, 12px);
   --tab-icon-size: 16px;
@@ -101,10 +101,10 @@
 
 .sizeLg {
   --tab-height: 38px;
-  --tab-pad: 3.5px;
+  --tab-pad: 4px;
   --tab-gap: 4px;
   --tab-outer-radius: var(--radius-xl, 10px);
-  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6.5px */
+  --tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad)); /* 6px */
   --tab-font-size: var(--font-size-md, 15px);
   --tab-item-px: var(--space-4, 16px);
   --tab-icon-size: 18px;

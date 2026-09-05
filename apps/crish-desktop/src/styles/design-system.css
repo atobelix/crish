@@ -128,9 +128,8 @@ html[data-theme="dark"] .elevation-4 {
   font-size: 11px;
   font-family: var(--font-sans, inherit);
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
@@ -168,11 +167,9 @@ html[data-theme="dark"] .elevation-4 {
 [data-sep-panel="true"] {
   border-radius: var(--sep-radius-outer, 14px);
   padding: var(--sep-padding, 6px);
-  border: 1px solid var(--sep-border-color, #e2dfd9);
-  background: var(--sep-bg-panel, rgba(255, 254, 252, 0.96));
+  border: 1px solid var(--sep-border-color, var(--border-color));
+  background: var(--sep-bg-panel-solid, var(--bg-elevated));
   box-shadow: var(--sep-shadow);
-  backdrop-filter: blur(var(--sep-backdrop-blur, 28px));
-  -webkit-backdrop-filter: blur(var(--sep-backdrop-blur, 28px));
 }
 
 /* Inner Container (L2: R_inner = 8px) */

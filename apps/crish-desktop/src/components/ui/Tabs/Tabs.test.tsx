@@ -311,7 +311,7 @@ describe('ui/Tabs', () => {
 
   it('物理动效与同心圆角 CSS 规范验证', () => {
     // 1. Appica 物理微回弹动效参数
-    expect(CSS_SRC).toContain('cubic-bezier(0.175, 0.885, 0.32, 1.5)');
+    expect(CSS_SRC).toContain('cubic-bezier(0.2, 0, 0, 1)');
     expect(CSS_SRC).toContain('--tab-duration: 250ms');
     expect(CSS_SRC).toContain('--tab-press-duration: 100ms');
 
@@ -325,7 +325,7 @@ describe('ui/Tabs', () => {
     // 4. 同心圆角几何体系 R_inner = R_outer - Padding
     expect(CSS_SRC).toContain('--tab-inner-radius: calc(var(--tab-outer-radius) - var(--tab-pad))');
     expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-md, 6px)');
-    expect(CSS_SRC).toContain('--tab-outer-radius: var(--button-radius, 7px)');
+    expect(CSS_SRC).toContain('--tab-outer-radius: var(--button-radius, 8px)');
     expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-lg, 8px)');
     expect(CSS_SRC).toContain('--tab-outer-radius: var(--radius-xl, 10px)');
 

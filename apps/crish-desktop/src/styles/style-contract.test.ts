@@ -410,24 +410,30 @@ describe('批次 2 · ⑦ 固定值双源同值（双层同源约束 2）', () =
       return m?.[1] ?? null;
     };
     expect(lightBlock).toContain('--control-soft-bg: var(--tint-hover)');
-    expect(lightBlock).toContain('--control-soft-bg-hover: var(--tint-active)');
+    expect(lightBlock).toContain('--control-soft-bg-hover: var(--tint-hover)');
     expect(lightBlock).toContain('--control-soft-bg-active: color-mix(');
   });
 
-  it('--bg-hover/--bg-active 语义别名接线到 tint 档位（3.5% / 6.5%）且两主题一致', () => {
+  it('--bg-hover/--bg-active 语义别名接线到 tint 档位且两主题对齐', () => {
     const css = readFile('src/styles/tokens.css');
     const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
     const darkBlock = css.match(DARK_BLOCK_RE)?.[0] ?? '';
     for (const block of [lightBlock, darkBlock]) {
       expect(block).toContain('--bg-hover: var(--tint-hover)');
       expect(block).toContain('--bg-active: var(--tint-active)');
-      expect(block).toContain(
-        '--tint-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent)'
-      );
-      expect(block).toContain(
-        '--tint-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent)'
-      );
     }
+    expect(lightBlock).toContain(
+      '--tint-hover: color-mix(in srgb, var(--text-primary) 2.5%, transparent)'
+    );
+    expect(lightBlock).toContain(
+      '--tint-active: color-mix(in srgb, var(--text-primary) 5%, transparent)'
+    );
+    expect(darkBlock).toContain(
+      '--tint-hover: color-mix(in srgb, var(--text-primary) 3.5%, transparent)'
+    );
+    expect(darkBlock).toContain(
+      '--tint-active: color-mix(in srgb, var(--text-primary) 6.5%, transparent)'
+    );
   });
 });
 
@@ -471,11 +477,12 @@ describe('批次 2 · ⑧ 悬空引用清零 + 静态兜底存在', () => {
   });
 });
 
-describe('设置按钮圆角 7px 契约', () => {
-  it('tokens.css 默认档 --button-radius 锁 7px，密度档不得改写', () => {
+describe('设置按钮圆角 8px 契约', () => {
+  it('tokens.css 默认档 --button-radius 锁 8px，密度档不得改写', () => {
     const css = readFile('src/styles/tokens.css');
     const lightBlock = css.match(LIGHT_BLOCK_RE)?.[0] ?? '';
-    expect(lightBlock).toMatch(/--button-radius:\s*7px/);
+    expect(lightBlock).toMatch(/--button-radius:\s*8px/);
+    expect(lightBlock).not.toMatch(/--button-radius:\s*7px/);
     expect(lightBlock).not.toMatch(/--button-radius:\s*var\(--radius-/);
     const sizeBlockRe = (size: string): RegExp =>
       new RegExp(`\\[data-ui-size=['"]${size}['"]\\]\\s*\\{[\\s\\S]*?\\n\\}`);
@@ -492,7 +499,7 @@ describe('设置按钮圆角 7px 契约', () => {
     const seg = readFile(
       'src/components/ui/SegmentedControl/SegmentedControl.module.css'
     );
-    expect(button).toContain('--btn-radius: var(--button-radius, 7px)');
+    expect(button).toContain('--btn-radius: var(--button-radius, 8px)');
     expect(seg).toContain('--seg-outer-radius: var(--button-radius, 7px)');
     expect(seg).toContain('--seg-inner-radius: calc(var(--seg-outer-radius) - var(--seg-pad))');
     expect(seg).toContain('border-radius: var(--seg-outer-radius)');

@@ -22,12 +22,12 @@ html.preload *:not(.app-initial-loader, .app-initial-loader *)::after {
   --breakpoint-lg: 1024px;
   --breakpoint-xl: 1280px;
 
-  /* 几何尺寸与圆角契约 (锁定 7px 按钮圆角与 9999px 胶囊圆角) */
-  --button-radius: 7px;
+  /* 几何尺寸与圆角契约 (锁定 8px 按钮圆角与 9999px 胶囊圆角) */
+  --button-radius: 8px;
   --radius-full: 9999px;
   --radius-tooltip: var(--radius-full);
-  --seg-outer-radius: var(--button-radius, 7px);
-  --seg-inner-radius: var(--button-radius, 7px);
+  --seg-outer-radius: var(--button-radius, 8px);
+  --seg-inner-radius: var(--button-radius, 8px);
 
   /* 悬空兼容易错别名兜底安全网 */
   --color-text-dim: var(--text-tertiary);
@@ -200,19 +200,13 @@ html[data-theme='light'] {
 
   --sep-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --sep-font-mono: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
-  --sep-font-size-base: 13px;
-  --sep-font-size-sm: 11px;
-  --sep-font-size-header: 10.5px;
 
-  --sep-bg-canvas: hsl(30 2.5% 96%);
   --sep-bg-panel: var(--bg-card, hsl(0 0% 100%));
   --sep-bg-panel-solid: #ffffff;
   --sep-bg-item-hover: var(--tint-hover);
-  --sep-bg-item-selected: var(--tint-hover);
   --sep-bg-input: color-mix(in srgb, var(--text-primary) 3%, transparent);
 
   --sep-border-color: var(--border-color);
-  --sep-border-hover: color-mix(in srgb, var(--border-color) 80%, var(--text-primary) 20%);
   --sep-border-focus: color-mix(in srgb, var(--border-color) 70%, var(--text-primary) 30%);
   --sep-divider-color: color-mix(in srgb, var(--text-primary) 6%, transparent);
 
@@ -220,9 +214,7 @@ html[data-theme='light'] {
   --sep-text-secondary: #555555;
   --sep-text-muted: #767676;
 
-  --sep-accent-color: hsl(160 84% 39%);
   --sep-accent-check: hsl(160 84% 39%);
-  --sep-accent-light: hsl(160 84% 39% / 0.12);
   --sep-danger-color: hsl(0 84% 60%);
   --sep-danger-light: hsl(0 84% 60% / 0.08);
 
@@ -231,10 +223,6 @@ html[data-theme='light'] {
     0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(0 0% 0%)) 2%, transparent);
   --sep-backdrop-blur: 0px;
 
-  --sep-ease-spring: cubic-bezier(0.22, 1.25, 0.36, 1);
-  --sep-ease-shrink: cubic-bezier(0.4, 0, 1, 1);
-  --sep-duration-open: 0.22s;
-  --sep-duration-close: 0.15s;
 
   --accent-color: hsl(160 84% 36%); /* 品牌翡翠绿活态签名 */
   --accent-light: hsl(35, 20%, 98.5%); /*      */
@@ -454,8 +442,8 @@ html[data-theme='light'] {
   --dropdown-padding: var(--space-1_5);
   --dropdown-gap: var(--space-0_5);
   --dropdown-radius: var(--radius-lg);
-  /* 设置/按钮圆角锁：默认档 7px，禁止再别名到 --radius-md 的 6 */
-  --button-radius: 7px;
+  /* 设置/按钮圆角锁：默认档 8px，禁止再别名到 --radius-md 的 6 */
+  --button-radius: 8px;
   --pill-radius: var(--radius-md);
   --item-padding: 8px 12px;
   --item-radius: var(--radius-md);
@@ -470,20 +458,24 @@ html[data-theme='light'] {
    * xxs/xs
    */
   --font-size-adjust: 0px;
-  --font-size-xxs: calc(11px + var(--font-size-adjust));
-  --font-size-xs: calc(12px + var(--font-size-adjust));
-  --font-size-sm: calc(13px + var(--font-size-adjust));
-  --font-size-base: calc(14px + var(--font-size-adjust));
-  --font-size-md: calc(15px + var(--font-size-adjust));
-  --font-size-lg: calc(17px + var(--font-size-adjust));
-  --font-size-xl: calc(19px + var(--font-size-adjust));
-  --font-size-nano: calc(10px + var(--font-size-adjust));
-  --font-size-micro: calc(11.5px + var(--font-size-adjust));
-  --font-size-xs-plus: calc(12.5px + var(--font-size-adjust));
-  --font-size-sm-plus: calc(13.5px + var(--font-size-adjust));
-  --font-size-xxl: calc(18px + var(--font-size-adjust));
-  --font-size-2xl: calc(22px + var(--font-size-adjust));
-  --font-size-chat: calc(13.5px + var(--font-size-adjust, 0px));
+  --font-size-xxs: calc(11px + var(--font-size-adjust, 0px));
+  --font-size-xs: calc(12px + var(--font-size-adjust, 0px));
+  --font-size-sm: calc(13px + var(--font-size-adjust, 0px));
+  --font-size-base: calc(14px + var(--font-size-adjust, 0px));
+  --font-size-md: calc(16px + var(--font-size-adjust, 0px));
+  --font-size-lg: calc(18px + var(--font-size-adjust, 0px));
+  --font-size-xl: calc(22px + var(--font-size-adjust, 0px));
+  --font-size-2xl: var(--font-size-xl);
+
+  /* ==========================================================================
+     DIM-01 Phase 1 别名桥接层 (Temporary Bridge - 仅在 Phase 1 存活)
+     ========================================================================== */
+  --font-size-nano: var(--font-size-xxs);      /* 10px -> 11px */
+  --font-size-micro: var(--font-size-xxs);     /* 11.5px -> 11px */
+  --font-size-xs-plus: var(--font-size-xs);    /* 12.5px -> 12px */
+  --font-size-sm-plus: var(--font-size-sm);    /* 13.5px -> 13px */
+  --font-size-chat: var(--font-size-base);     /* 13.5px -> 14px */
+  --font-size-xxl: var(--font-size-lg);       /* 18px -> 18px */
 
   /*
    *     ?
@@ -527,9 +519,7 @@ html[data-theme='light'] {
   --md-heading-margin-top: 0.6em;
   --md-heading-margin-bottom: 0.3em;
 
-  --md-code-inline-bg: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
   --md-code-inline-fg: hsl(0 0% 12%);
-  --md-code-inline-border: color-mix(in srgb, var(--border-color) 75%, transparent);
   --md-code-inline-radius: 4px;
   --md-code-inline-padding: 0.15em 0.4em;
 
@@ -561,13 +551,9 @@ html[data-theme='light'] {
   --md-quote-padding: 0.4em 0 0.4em 1em;
   --md-quote-margin: 0.6em 0;
 
-  --md-list-marker-color: var(--text-tertiary, #696969);
-  --md-list-marker-fade-duration: 120ms;
   --md-list-item-gap: 0.3em;
   --md-list-indent: 1.5em;
 
-  --md-hr-color: var(--border-subtle);
-  --md-hr-height: 1px;
   --md-link-color: var(--brand-deep, #059669);
   --md-link-hover-color: var(--brand, #10b981);
   --md-link-underline-offset: 3px;
@@ -576,30 +562,21 @@ html[data-theme='light'] {
   --md-table-bg: var(--bg-secondary);
   --md-table-border: var(--hairline-strong, var(--border-color));
   --md-table-border-width: var(--hairline-width, 1px);
-  --md-table-border-color: var(--border-color);
-  --md-table-border-subtle: var(--border-subtle);
   --md-table-row-border: var(--hairline, var(--border-subtle));
   --md-table-header-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
   --md-table-header-backdrop-blur: 0px;
   --md-table-header-fg: var(--text-primary);
   --md-table-header-font-weight: 600;
   --md-table-header-border: var(--hairline-strong, var(--border-color));
-  --md-table-header-z: 2;
-  --md-table-row-bg: var(--bg-card, #ffffff);
   --md-table-row-hover-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
-  --md-table-row-zebra-bg: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-card));
   --md-table-row-even-bg: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
-  --md-table-cell-pad-x: 12px;
-  --md-table-cell-pad-y: 8px;
   --md-table-cell-padding: var(--space-2, 8px) var(--space-3, 12px);
   --md-table-cell-padding-compact: var(--space-1_5, 6px) var(--space-2, 8px);
   --md-table-font-size: var(--font-size-sm, 13px);
   --md-table-line-height: 1.55;
   --md-table-radius: var(--radius-lg, 8px);
 
-  --stream-table-active-outline: 1px dashed var(--brand, hsl(160 84% 39%));
   --stream-table-active-bg: color-mix(in srgb, var(--brand) 4%, transparent);
-  --stream-table-pulse-border: color-mix(in srgb, var(--brand) 30%, transparent);
   --stream-table-intrinsic-h: 320px;
 
   /* --- 3. 自定义富交互与 Artifacts 体系 (Light) --- */
@@ -607,43 +584,29 @@ html[data-theme='light'] {
   --artifact-card-border: var(--border-color);
   --artifact-card-border-hover: color-mix(in srgb, var(--border-subtle) 95%, var(--text-primary) 5%);
   --artifact-card-radius: 8px;
-  --artifact-card-shadow: var(--shadow-sm);
   --artifact-header-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
   --artifact-header-border: var(--border-subtle);
-  --artifact-header-fg: var(--text-primary);
-  --artifact-header-height: 34px;
-  --artifact-action-btn-bg: color-mix(in srgb, var(--text-primary) 4%, var(--bg-card));
-  --artifact-action-btn-hover: color-mix(in srgb, var(--text-primary) 8%, var(--bg-card));
-  --artifact-action-btn-border: var(--border-subtle);
   --artifact-btn-bg: var(--bg-primary);
   --artifact-btn-border: var(--border-subtle);
   --artifact-btn-hover-bg: var(--tint-hover);
   --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 92%, var(--text-primary) 8%);
   --artifact-btn-active-bg: var(--tint-active);
-  --artifact-portal-overlay-bg: hsl(0 0% 0% / 0.45);
-  --artifact-portal-blur: 0px;
-  --artifact-output-max-h: 600px;
 
   /* Diff 比对 (严格按照 WCAG AA 达标色阶) */
   --diff-add-bg: hsl(142 35% 42% / 0.07);
-  --diff-add-border: hsl(142 71% 45% / 0.35);
   --diff-add-fg: hsl(142 65% 25%); /* 6.75:1 WCAG AA */
   --diff-add-word-bg: hsl(142 40% 40% / 0.20);
   --diff-add-gutter-bg: hsl(142 35% 42% / 0.10);
   --diff-add-gutter-fg: hsl(142 45% 30%);
 
   --diff-del-bg: hsl(0 55% 55% / 0.07);
-  --diff-del-border: hsl(0 84% 60% / 0.35);
   --diff-del-fg: hsl(0 68% 38%); /* 7.01:1 WCAG AAA */
   --diff-del-word-bg: hsl(0 60% 50% / 0.20);
   --diff-del-gutter-bg: hsl(0 55% 55% / 0.10);
   --diff-del-gutter-fg: hsl(0 55% 38%);
 
   --diff-linenum-fg: var(--text-tertiary, #696969);
-  --diff-context-fg: var(--text-secondary);
   --diff-gutter-bg: var(--bg-secondary);
-  --diff-gutter-text: var(--text-tertiary);
-  --diff-header-height: 34px;
   --diff-split-divider: var(--border-subtle);
   --diff-split-header-bg: var(--bg-secondary);
   --diff-split-header-fg: var(--text-secondary);
@@ -651,22 +614,8 @@ html[data-theme='light'] {
   --diff-mode-item-active-bg: var(--bg-card, #ffffff);
   --diff-mode-item-active-fg: var(--text-primary, #111111);
 
-  /* Legacy Diff 兼容映射 */
-  --diff-line-add-bg: var(--diff-add-bg);
-  --diff-line-add-border: var(--diff-add-border);
-  --diff-gutter-add-bg: var(--diff-add-gutter-bg);
-  --diff-gutter-add-fg: var(--diff-add-gutter-fg);
-  --diff-word-add-bg: var(--diff-add-word-bg);
-  --diff-line-del-bg: var(--diff-del-bg);
-  --diff-line-del-border: var(--diff-del-border);
-  --diff-gutter-del-bg: var(--diff-del-gutter-bg);
-  --diff-gutter-del-fg: var(--diff-del-gutter-fg);
-  --diff-word-del-bg: var(--diff-del-word-bg);
-  --diff-line-delete-bg: var(--diff-del-bg);
-  --diff-line-delete-border: var(--diff-del-border);
 
   /* FileTree 工程文件树 */
-  --filetree-bg: var(--bg-card, #ffffff);
   --filetree-indent-unit: 14px;
   --filetree-node-hover-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
   --filetree-node-active-bg: color-mix(in srgb, var(--brand) 10%, transparent);
@@ -687,11 +636,6 @@ html[data-theme='light'] {
   --filetree-badge-renamed-fg: hsl(270 60% 36%);
 
   /* AI 步骤卡片 */
-  --aicard-bg: var(--bg-card, #ffffff);
-  --aicard-border: var(--border-color);
-  --aicard-header-bg: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card));
-  --aicard-title-font-size: 13.5px;
-  --aicard-status-pulse-live: var(--brand, hsl(160 84% 39%));
   --aicard-status-running: var(--brand);
   --aicard-status-success: var(--text-secondary, #555555);
   --aicard-status-warning: var(--accent-orange, hsl(38 92% 50%));
@@ -699,46 +643,7 @@ html[data-theme='light'] {
   --aicard-badge-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
   --aicard-badge-fg: var(--text-tertiary);
 
-  /* --- 4. 极简思考链与状态横幅体系 (Light) --- */
-  --thought-header-bg: color-mix(in srgb, var(--text-primary) 2%, var(--bg-primary));
-  --thought-header-hover-bg: color-mix(in srgb, var(--text-primary) 4%, var(--bg-primary));
-  --thought-header-fg: var(--text-secondary, #555555);
-  --thought-header-hover-fg: var(--text-primary, #111111);
-  --thought-header-font-size: var(--font-size-sm, 13px);
-  --thought-header-line-height: 1.5;
-  --thought-border-color: var(--border-subtle);
-  --thought-indicator-bar: color-mix(in srgb, var(--text-primary) 15%, transparent);
-  --thought-live-title-fg: var(--brand-deep, #059669);
-  --thought-live-dot: var(--brand, #10b981);
-  --thought-live-glow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 20%, transparent);
-  --thought-chevron-fg: var(--text-tertiary, #696969);
-  --thought-chevron-hover-fg: var(--text-secondary, #555555);
-  --thought-chevron-color: var(--text-tertiary);
-  --thought-chevron-hover: var(--text-secondary);
-  --thought-rail-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --thought-rail-width: 2px;
-  --thought-body-bg: color-mix(in srgb, var(--text-primary) 1.5%, var(--bg-primary));
-  --thought-body-fg: var(--text-secondary, #555555);
-  --thought-body-font-size: var(--font-size-sm, 13px);
-  --thought-body-line-height: 1.65;
-  --thought-time-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
-  --thought-time-fg: var(--text-tertiary, #696969);
-  --thought-badge-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
-  --thought-badge-fg: var(--text-tertiary, #696969);
-  --thought-summary-indent: 0.35em;
-  --thought-font-size-meta: 12.5px;
-  --thought-scroll-max-h: 180px;
-  --thought-max-height: 240px;
-  --thought-mask-bg: var(--bg-card, #ffffff);
 
-  --banner-error-bg: color-mix(in srgb, var(--accent-red) 6%, var(--bg-card));
-  --banner-error-border: color-mix(in srgb, var(--accent-red) 22%, transparent);
-  --banner-error-fg: var(--text-primary, #111111);
-  --banner-error-icon: var(--color-error, #ef4444);
-  --banner-error-radius: var(--radius-md, 6px);
-  --banner-error-padding: var(--space-2, 8px) var(--space-3, 12px);
-  --banner-error-gap: var(--space-2, 8px);
-  --banner-error-font-size: var(--font-size-sm, 13px);
 
   /* --- 5. 流式动效与打字机光标体系 (Light) --- */
   --stream-caret-color: var(--brand-deep, hsl(160 84% 31%)); /* 4.88:1 WCAG AA */
@@ -756,7 +661,6 @@ html[data-theme='light'] {
   --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
   --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 2%, transparent);
   --stream-pulse-duration: 1.6s;
-  --stream-chunk-gap: 0.85em;
 
   /*         styles/z-index.css       */
   /* --font-mono-features   fontStore.ts
@@ -836,10 +740,6 @@ html[data-theme='light'] {
   --row-height: var(--control-height);
   --row-height-sm: var(--control-height-sm);
   /*              @container     md */
-  --diff-sidebar-width: 148px;
-  --diff-sidebar-width-md: 120px;
-  --diff-file-chip-min: 96px;
-  --diff-file-chip-min-xs: 80px;
 
   /*
    *         ?/  ?/ footer    /     ?
@@ -1019,15 +919,12 @@ html[data-theme='dark'] {
   --sep-item-padding-h: 10px;
   --sep-item-gap: 2px;
 
-  --sep-bg-canvas: #0c0c0b;
   --sep-bg-panel: hsl(40 7% 9% / 0.96);
   --sep-bg-panel-solid: #181715;
   --sep-bg-item-hover: var(--tint-hover);
-  --sep-bg-item-selected: var(--tint-active);
   --sep-bg-input: hsl(48 20% 95% / 0.04);
 
   --sep-border-color: #2b2926;
-  --sep-border-hover: #3d3a35;
   --sep-border-focus: #524e47;
   --sep-divider-color: hsl(0 0% 100% / 0.07);
 
@@ -1035,9 +932,7 @@ html[data-theme='dark'] {
   --sep-text-secondary: #b5b2aa;
   --sep-text-muted: #78756d;
 
-  --sep-accent-color: hsl(160 84% 45%);
   --sep-accent-check: hsl(160 84% 45%);
-  --sep-accent-light: hsl(160 84% 45% / 0.16);
   --sep-danger-color: hsl(0 84% 60%);
   --sep-danger-light: hsl(0 84% 60% / 0.08);
 
@@ -1189,9 +1084,7 @@ html[data-theme='dark'] {
   --md-heading-margin-top: 0.6em;
   --md-heading-margin-bottom: 0.3em;
 
-  --md-code-inline-bg: hsl(0 0% 14%);
   --md-code-inline-fg: hsl(0 0% 92%);
-  --md-code-inline-border: hsl(0 0% 20%);
   --md-code-inline-radius: 4px;
   --md-code-inline-padding: 0.15em 0.4em;
 
@@ -1223,13 +1116,9 @@ html[data-theme='dark'] {
   --md-quote-padding: 0.4em 0 0.4em 1em;
   --md-quote-margin: 0.6em 0;
 
-  --md-list-marker-color: var(--text-tertiary, #8f8f8f);
-  --md-list-marker-fade-duration: 120ms;
   --md-list-item-gap: 0.3em;
   --md-list-indent: 1.5em;
 
-  --md-hr-color: var(--border-subtle);
-  --md-hr-height: 1px;
   --md-link-color: var(--brand, #10b981);
   --md-link-hover-color: hsl(160 84% 55%);
   --md-link-underline-offset: 3px;
@@ -1238,30 +1127,21 @@ html[data-theme='dark'] {
   --md-table-bg: var(--bg-secondary);
   --md-table-border: var(--hairline-strong, var(--border-color));
   --md-table-border-width: var(--hairline-width, 1px);
-  --md-table-border-color: hsl(0 0% 18%);
-  --md-table-border-subtle: hsl(0 0% 14%);
   --md-table-row-border: var(--hairline, var(--border-subtle));
   --md-table-header-bg: hsl(0 0% 12%);
   --md-table-header-backdrop-blur: 0px;
   --md-table-header-fg: var(--text-primary);
   --md-table-header-font-weight: 600;
   --md-table-header-border: var(--hairline-strong, var(--border-color));
-  --md-table-header-z: 2;
-  --md-table-row-bg: hsl(0 0% 10%);
   --md-table-row-hover-bg: hsl(0 0% 13%);
-  --md-table-row-zebra-bg: hsl(0 0% 11%);
   --md-table-row-even-bg: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
-  --md-table-cell-pad-x: 12px;
-  --md-table-cell-pad-y: 8px;
   --md-table-cell-padding: var(--space-2, 8px) var(--space-3, 12px);
   --md-table-cell-padding-compact: var(--space-1_5, 6px) var(--space-2, 8px);
   --md-table-font-size: var(--font-size-sm, 13px);
   --md-table-line-height: 1.55;
   --md-table-radius: var(--radius-lg, 8px);
 
-  --stream-table-active-outline: 1px dashed var(--brand, hsl(160 84% 45%));
   --stream-table-active-bg: color-mix(in srgb, var(--brand) 6%, transparent);
-  --stream-table-pulse-border: color-mix(in srgb, var(--brand) 40%, transparent);
   --stream-table-intrinsic-h: 320px;
 
   /* --- 3. 自定义富交互与 Artifacts 体系 (Dark) --- */
@@ -1269,43 +1149,29 @@ html[data-theme='dark'] {
   --artifact-card-border: hsl(0 0% 18%);
   --artifact-card-border-hover: color-mix(in srgb, var(--border-subtle) 94%, var(--text-primary) 6%);
   --artifact-card-radius: 8px;
-  --artifact-card-shadow: var(--shadow-sm);
   --artifact-header-bg: hsl(0 0% 13%);
   --artifact-header-border: hsl(0 0% 14%);
-  --artifact-header-fg: var(--text-primary);
-  --artifact-header-height: 34px;
-  --artifact-action-btn-bg: hsl(0 0% 15%);
-  --artifact-action-btn-hover: hsl(0 0% 20%);
-  --artifact-action-btn-border: hsl(0 0% 22%);
   --artifact-btn-bg: hsl(0 0% 8%);
   --artifact-btn-border: hsl(0 0% 18%);
   --artifact-btn-hover-bg: var(--tint-hover);
   --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 90%, var(--text-primary) 10%);
   --artifact-btn-active-bg: var(--tint-active);
-  --artifact-portal-overlay-bg: hsl(0 0% 0% / 0.70);
-  --artifact-portal-blur: 0px;
-  --artifact-output-max-h: 600px;
 
   /* Diff 比对 (Dark 高对比度) */
   --diff-add-bg: hsl(142 40% 50% / 0.12);
-  --diff-add-border: hsl(142 71% 45% / 0.45);
   --diff-add-fg: hsl(142 75% 72%); /* 9.46:1 WCAG AAA */
   --diff-add-word-bg: hsl(142 45% 45% / 0.30);
   --diff-add-gutter-bg: hsl(142 40% 50% / 0.16);
   --diff-add-gutter-fg: hsl(142 45% 72%);
 
   --diff-del-bg: hsl(0 60% 55% / 0.12);
-  --diff-del-border: hsl(0 84% 60% / 0.45);
   --diff-del-fg: hsl(0 85% 75%); /* 7.21:1 WCAG AAA */
   --diff-del-word-bg: hsl(0 65% 50% / 0.30);
   --diff-del-gutter-bg: hsl(0 60% 55% / 0.16);
   --diff-del-gutter-fg: hsl(0 60% 75%);
 
   --diff-linenum-fg: hsl(0 0% 56%);
-  --diff-context-fg: var(--text-secondary);
   --diff-gutter-bg: var(--bg-secondary);
-  --diff-gutter-text: var(--text-tertiary);
-  --diff-header-height: 34px;
   --diff-split-divider: hsl(0 0% 16%);
   --diff-split-header-bg: hsl(0 0% 8%);
   --diff-split-header-fg: var(--text-secondary);
@@ -1313,22 +1179,8 @@ html[data-theme='dark'] {
   --diff-mode-item-active-bg: hsl(0 0% 18%);
   --diff-mode-item-active-fg: var(--text-primary, #f0f0f0);
 
-  /* Legacy Diff 兼容映射 */
-  --diff-line-add-bg: var(--diff-add-bg);
-  --diff-line-add-border: var(--diff-add-border);
-  --diff-gutter-add-bg: var(--diff-add-gutter-bg);
-  --diff-gutter-add-fg: var(--diff-add-gutter-fg);
-  --diff-word-add-bg: var(--diff-add-word-bg);
-  --diff-line-del-bg: var(--diff-del-bg);
-  --diff-line-del-border: var(--diff-del-border);
-  --diff-gutter-del-bg: var(--diff-del-gutter-bg);
-  --diff-gutter-del-fg: var(--diff-del-gutter-fg);
-  --diff-word-del-bg: var(--diff-del-word-bg);
-  --diff-line-delete-bg: var(--diff-del-bg);
-  --diff-line-delete-border: var(--diff-del-border);
 
   /* FileTree 工程文件树 */
-  --filetree-bg: hsl(0 0% 10%);
   --filetree-indent-unit: 14px;
   --filetree-node-hover-bg: color-mix(in srgb, var(--text-primary) 6%, transparent);
   --filetree-node-active-bg: color-mix(in srgb, var(--brand) 14%, transparent);
@@ -1349,11 +1201,6 @@ html[data-theme='dark'] {
   --filetree-badge-renamed-fg: hsl(270 70% 75%);
 
   /* AI 步骤卡片 */
-  --aicard-bg: hsl(0 0% 11%);
-  --aicard-border: hsl(0 0% 18%);
-  --aicard-header-bg: hsl(0 0% 13%);
-  --aicard-title-font-size: 13.5px;
-  --aicard-status-pulse-live: var(--brand, hsl(160 84% 45%));
   --aicard-status-running: var(--brand);
   --aicard-status-success: var(--text-secondary, #a3a3a3);
   --aicard-status-warning: var(--accent-orange, hsl(38 92% 50%));
@@ -1361,46 +1208,7 @@ html[data-theme='dark'] {
   --aicard-badge-bg: color-mix(in srgb, var(--text-primary) 7%, transparent);
   --aicard-badge-fg: var(--text-tertiary);
 
-  /* --- 4. 极简思考链与状态横幅体系 (Dark) --- */
-  --thought-header-bg: hsl(0 0% 10%);
-  --thought-header-hover-bg: hsl(0 0% 13%);
-  --thought-header-fg: var(--text-secondary, #a3a3a3);
-  --thought-header-hover-fg: var(--text-primary, #f0f0f0);
-  --thought-header-font-size: var(--font-size-sm, 13px);
-  --thought-header-line-height: 1.5;
-  --thought-border-color: hsl(0 0% 15%);
-  --thought-indicator-bar: hsl(0 0% 25%);
-  --thought-live-title-fg: var(--brand, #10b981);
-  --thought-live-dot: var(--brand, #10b981);
-  --thought-live-glow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 25%, transparent);
-  --thought-chevron-fg: var(--text-tertiary, #8f8f8f);
-  --thought-chevron-hover-fg: var(--text-secondary, #a3a3a3);
-  --thought-chevron-color: var(--text-tertiary);
-  --thought-chevron-hover: var(--text-secondary);
-  --thought-rail-color: color-mix(in srgb, var(--text-primary) 14%, transparent);
-  --thought-rail-width: 2px;
-  --thought-body-bg: hsl(0 0% 8%);
-  --thought-body-fg: var(--text-secondary, #a3a3a3);
-  --thought-body-font-size: var(--font-size-sm, 13px);
-  --thought-body-line-height: 1.65;
-  --thought-time-bg: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  --thought-time-fg: var(--text-tertiary, #8f8f8f);
-  --thought-badge-bg: color-mix(in srgb, var(--text-primary) 7%, transparent);
-  --thought-badge-fg: var(--text-tertiary);
-  --thought-summary-indent: 0.35em;
-  --thought-font-size-meta: 12.5px;
-  --thought-scroll-max-h: 180px;
-  --thought-max-height: 240px;
-  --thought-mask-bg: var(--bg-card, hsl(0 0% 11%));
 
-  --banner-error-bg: color-mix(in srgb, var(--accent-red) 12%, var(--bg-card));
-  --banner-error-border: color-mix(in srgb, var(--accent-red) 32%, transparent);
-  --banner-error-fg: var(--text-primary, #f0f0f0);
-  --banner-error-icon: hsl(0 60% 65%);
-  --banner-error-radius: var(--radius-md, 6px);
-  --banner-error-padding: var(--space-2, 8px) var(--space-3, 12px);
-  --banner-error-gap: var(--space-2, 8px);
-  --banner-error-font-size: var(--font-size-sm, 13px);
 
   /* --- 5. 流式动效与打字机光标体系 (Dark) --- */
   --stream-caret-color: var(--brand, hsl(160 84% 45%)); /* 8.92:1 WCAG AAA */
@@ -1418,7 +1226,6 @@ html[data-theme='dark'] {
   --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 22%, transparent);
   --stream-pulse-bg: color-mix(in srgb, var(--brand, hsl(160 84% 45%)) 3%, transparent);
   --stream-pulse-duration: 1.6s;
-  --stream-chunk-gap: 0.85em;
 
   /* --- 6. 用量监控与时序分析（Usage Dashboard）暗色体系 (Dark) --- */
   --usage-capsule-outer-radius: 9px;
@@ -1527,16 +1334,10 @@ html[data-theme='dark'] {
   --tab-tool-pad-right: 6px;
   --row-height: var(--control-height);
   --row-height-sm: var(--control-height-sm);
-  --diff-sidebar-width: 132px;
-  --diff-sidebar-width-md: 108px;
-  --diff-file-chip-min: 88px;
-  --diff-file-chip-min-xs: 72px;
 
   --md-text-size: 13px;
   --md-code-font-size: 11.5px;
   --md-table-font-size: 12px;
-  --md-table-cell-pad-x: 10px;
-  --md-table-cell-pad-y: 6px;
 }
 
 [data-ui-size='large'] {
@@ -1556,7 +1357,7 @@ html[data-theme='dark'] {
   --font-size-base: calc(16px + var(--font-size-adjust, 0px));
   --font-size-md: calc(17px + var(--font-size-adjust, 0px));
   --font-size-lg: calc(19px + var(--font-size-adjust, 0px));
-  --font-size-xl: calc(21px + var(--font-size-adjust, 0px));
+  --font-size-xl: calc(24px + var(--font-size-adjust, 0px));
 
   --icon-size: 17px;
   --icon-size-sm: 15px;
@@ -1609,16 +1410,10 @@ html[data-theme='dark'] {
   --tab-tool-pad-right: 10px;
   --row-height: var(--control-height);
   --row-height-sm: var(--control-height-sm);
-  --diff-sidebar-width: 160px;
-  --diff-sidebar-width-md: 128px;
-  --diff-file-chip-min: 104px;
-  --diff-file-chip-min-xs: 88px;
 
   --md-text-size: 16px;
   --md-code-font-size: 14px;
   --md-table-font-size: 14.5px;
-  --md-table-cell-pad-x: 14px;
-  --md-table-cell-pad-y: 10px;
 }
 
 /* ── 用量监控与时序分析（Usage Dashboard）专用系统设计规范 ── */
@@ -1695,7 +1490,6 @@ html[data-perf-tier='high'] {
   --backdrop-blur: none;
   --bg-glass: var(--bg-elevated);
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
-  --artifact-portal-blur: 0px;
   --stream-pulse-glow: 0 0 0 3px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 16%, transparent);
 }
 html[data-perf-tier='high'][data-theme='dark'] {
@@ -1708,7 +1502,6 @@ html[data-perf-tier='balanced'] {
   --backdrop-blur: none; /* Disable expensive GPU filters */
   --bg-glass: var(--bg-elevated); /* solid background fallback */
   --transition-spring-layout: cubic-bezier(0.16, 1, 0.3, 1) 220ms;
-  --artifact-portal-blur: 0px;
   --stream-anim-word-fade: 80ms;
   --stream-anim-word-offset-y: 1px;
   --stream-anim-marker-fade: 100ms;
@@ -1730,7 +1523,6 @@ html[data-perf-tier='eco'] {
   --transition-popover-exit: 0ms;
   --transition-modal-enter: 0ms;
   --transition-accordion: 0ms;
-  --artifact-portal-blur: 0px;
   --stream-anim-word-fade: 0ms;
   --stream-anim-marker-fade: 0ms;
   --stream-anim-word-offset-y: 0px;
@@ -1754,4 +1546,13 @@ html[data-perf-tier='eco'] {
     --stream-pulse-glow: none;
     --stream-pulse-bg: transparent;
   }
+}
+
+/* ==========================================================================
+   Western-First 等宽数值字体工具类 (防止 Windows 微软雅黑 tnum 缺失)
+   ========================================================================== */
+.tabular-nums {
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }

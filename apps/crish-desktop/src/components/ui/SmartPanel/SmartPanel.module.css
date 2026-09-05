@@ -16,10 +16,8 @@
   max-width: min(340px, 90vw);
   padding: 6px;
   border-radius: var(--sep-radius-outer, 14px);
-  background: var(--bg-card, hsl(35 10% 98%));
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
+  background: var(--sep-bg-panel-solid, var(--bg-elevated));
+  border: 1px solid var(--border-color);
   box-shadow: var(--sep-shadow);
   color: var(--text-primary, #1d1c1a);
   font-family: var(--font-sans, sans-serif);
@@ -28,8 +26,8 @@
 }
 
 :global(.dark) .panel {
-  background: var(--bg-card-dark, hsl(35 6% 12%));
-  border-color: var(--border-color-dark, hsl(35 6% 22%));
+  background: var(--sep-bg-panel-solid, var(--bg-elevated));
+  border-color: var(--border-color);
   box-shadow: var(--sep-shadow);
 }
 
@@ -170,11 +168,9 @@
   min-width: 160px;
   max-width: 280px;
   border-radius: 8px;
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  background: var(--bg-card, hsl(35 10% 98%));
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04), 0 6px 12px rgba(0, 0, 0, 0.06), 0 16px 32px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--border-color);
+  background: var(--sep-bg-panel-solid, var(--bg-elevated));
+  box-shadow: var(--shadow-md);
   padding: 4px;
   display: flex;
   flex-direction: column;

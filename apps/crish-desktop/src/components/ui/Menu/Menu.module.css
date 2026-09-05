@@ -24,11 +24,9 @@
 
   padding: 6px;
   border-radius: var(--sep-radius-outer, 14px);
-  border: 1px solid var(--border-color, hsl(35 10% 86%));
-  background: var(--bg-card, hsl(0 0% 100%));
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  box-shadow: var(--sep-shadow);
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated, hsl(0 0% 100%));
+  box-shadow: var(--shadow-lg);
   display: flex;
   flex-direction: column;
   gap: 2px;

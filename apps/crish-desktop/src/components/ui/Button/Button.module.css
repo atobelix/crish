@@ -8,7 +8,7 @@
   --btn-h: 32px;
   --btn-px: 12px;
   --btn-fs: var(--font-size-base, 14px);
-  --btn-radius: var(--button-radius, 7px);
+  --btn-radius: var(--button-radius, 8px);
   --btn-icon-size: 16px;
   --btn-gap: var(--space-1_5, 6px);
 
@@ -83,6 +83,12 @@
   display: none;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition: none;
+  }
+}
+
 /* 2. 尺寸规格 */
 .buttonXs,
 .button[data-size='xs'] {
@@ -99,7 +105,7 @@
   --btn-h: 28px;
   --btn-px: 10px;
   --btn-fs: var(--font-size-sm, 13px);
-  --btn-radius: var(--button-radius, 7px);
+  --btn-radius: var(--button-radius, 8px);
   --btn-icon-size: 14px;
   --btn-gap: var(--space-1_5, 6px);
 }
@@ -109,7 +115,7 @@
   --btn-h: 32px;
   --btn-px: 12px;
   --btn-fs: var(--font-size-base, 14px);
-  --btn-radius: var(--button-radius, 7px);
+  --btn-radius: var(--button-radius, 8px);
   --btn-icon-size: 16px;
   --btn-gap: var(--space-1_5, 6px);
 }
@@ -156,7 +162,7 @@
   --btn-bg: color-mix(in srgb, var(--text-primary) 10%, var(--bg-card, #242424));
   --btn-fg: var(--text-primary, #dddddd);
   --btn-border: color-mix(in srgb, var(--text-primary) 10%, transparent);
-  --btn-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --btn-shadow: 0 1px 3px hsl(0 0% 0% / 0.35);
   --btn-hover-overlay: var(--tint-hover);
   --btn-active-overlay: var(--tint-active);
 }
@@ -211,6 +217,17 @@
   width: 100%;
 }
 
+/* 排版对齐控制 */
+.button[data-align='start'],
+[data-align='start'] {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.button[data-align='start'] .buttonLabel {
+  flex: 1 1 auto;
+}
+
 .buttonLoading {
   cursor: progress;
 }
@@ -234,10 +251,56 @@
   text-overflow: ellipsis;
 }
 
+/* 纯 CSS 光学微调：首尾图符 2px 边距内缩补偿（纯 CSS :has 零 TSX 侵入） */
+.button:has(> :is(.buttonIcon, .spinner):first-child):has(> .buttonLabel) {
+  padding-inline-start: max(0px, calc(var(--btn-px) - 2px));
+}
+
+.button:has(> .buttonLabel):has(> :is(.buttonIcon, .spinner):last-child) {
+  padding-inline-end: max(0px, calc(var(--btn-px) - 2px));
+}
+
 .iconButton {
   width: var(--btn-h);
   padding: 0;
   flex-shrink: 0;
+}
+
+.touchExpand {}
+
+/* 触控热区安全管理：常规紧凑按钮采用 inset: -2px 0 垂直轻量外延，杜绝左右互叠 */
+.buttonXs::after,
+.buttonSm::after {
+  content: '';
+  position: absolute;
+  inset: -2px 0;
+  pointer-events: auto;
+}
+
+/* 孤立图标按钮显式声明 touchExpand 开启 40×40px 安全触控热区 */
+.iconButton.touchExpand::after,
+.iconButton:global(.touchExpand)::after,
+.button.touchExpand::after,
+.button:global(.touchExpand)::after,
+.button[data-touch-expand='true']::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 40px;
+  min-height: 40px;
+  width: 100%;
+  height: 100%;
+  inset: auto;
+  pointer-events: auto;
+  border-radius: inherit;
+  z-index: 1;
+}
+
+.button:disabled::after {
+  display: none;
+  pointer-events: none;
 }
 
 .spinner {

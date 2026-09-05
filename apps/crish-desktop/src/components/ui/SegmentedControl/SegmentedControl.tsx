@@ -12,7 +12,7 @@
  * 6. 100% 纯原生 React 18+ 与 CSS Modules，零外部 npm 组件库依赖。
  */
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { ResizeObserverManager } from '../../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../utils/ResizeObserverManager';
 import styles from './SegmentedControl.module.css';
 
 export type SegmentedControlSize = 'xs' | 'sm' | 'md' | 'lg' | 'panel';

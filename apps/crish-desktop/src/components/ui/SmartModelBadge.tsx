@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import styles from './SmartModelBadge.module.css';
-import { abbreviateModel, type ModelAbbrResult } from '../../api/modelAbbreviation';
+import { abbreviateModel, type ModelAbbrResult } from './utils/modelAbbreviation';
 import { Tooltip } from './Tooltip/Tooltip';
 
 export interface SmartModelBadgeProps {

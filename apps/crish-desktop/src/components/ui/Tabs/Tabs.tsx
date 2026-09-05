@@ -10,7 +10,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ResizeObserverManager } from '../../../services/ResizeObserverManager';
+import { ResizeObserverManager } from '../utils/ResizeObserverManager';
 import styles from './Tabs.module.css';
 import type {
   TabsContentProps,

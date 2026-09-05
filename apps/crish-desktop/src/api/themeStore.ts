@@ -1,4 +1,5 @@
 import { applyPersonalization } from './themePersonalization';
+import { withThemeTransitionFreeze } from './themeTransitionLatch';
 import {
   SETTINGS_KEY,
   SETTINGS_KEY_LEGACY,
@@ -26,6 +27,7 @@ export {
   getDynamicSolarAdjustments,
   applyPersonalization,
 } from './themePersonalization';
+export { withThemeTransitionFreeze } from './themeTransitionLatch';
 
 export function normalizeTheme(raw: unknown): UiTheme {
   if (raw === 'dark') return 'dark';
@@ -72,25 +74,27 @@ export function persistTheme(theme: UiTheme): void {
  * 必须在首屏 paint 前或切换时同步调用。
  */
 export function applyTheme(theme: UiTheme | string): UiTheme {
-  const t = normalizeTheme(theme);
-  const html = document.documentElement;
-  html.setAttribute('data-theme', t);
-  document.body.setAttribute('data-theme', t);
-  // 同步 class，便于排查与扩展
-  html.classList.toggle('theme-dark', t === 'dark');
-  html.classList.toggle('theme-light', t !== 'dark');
-  document.body.classList.toggle('theme-dark', t === 'dark');
-  document.body.classList.toggle('theme-light', t !== 'dark');
+  return withThemeTransitionFreeze(() => {
+    const t = normalizeTheme(theme);
+    const html = document.documentElement;
+    html.setAttribute('data-theme', t);
+    document.body.setAttribute('data-theme', t);
+    // 同步 class，便于排查与扩展
+    html.classList.toggle('theme-dark', t === 'dark');
+    html.classList.toggle('theme-light', t !== 'dark');
+    document.body.classList.toggle('theme-dark', t === 'dark');
+    document.body.classList.toggle('theme-light', t !== 'dark');
 
-  // Automatically apply stored personalization to prevent styling loss
-  try {
-    const p = readStoredPersonalization();
-    applyPersonalization(p, t);
-  } catch {
-    /* swallow-ok: early boot 或 SSR 环境无 DOM 时跳过个性化应用 */
-  }
+    // Automatically apply stored personalization to prevent styling loss
+    try {
+      const p = readStoredPersonalization();
+      applyPersonalization(p, t);
+    } catch {
+      /* swallow-ok: early boot 或 SSR 环境无 DOM 时跳过个性化应用 */
+    }
 
-  return t;
+    return t;
+  });
 }
 
 export function readStoredPersonalization(): PersonalizationSettings {
@@ -152,34 +156,36 @@ export function bootstrapTheme(): UiTheme {
 
 /** 切换并持久化（单真源写端入口） */
 export function setTheme(theme: UiTheme | string): UiTheme {
-  const t = applyTheme(theme);
-  persistTheme(t);
-  const p = readStoredPersonalization();
-  applyPersonalization(p, t);
-  try {
-    window.dispatchEvent(
-      new CustomEvent('crish-theme-changed', { detail: { theme: t } })
-    );
-  } catch {
-    /* swallow-ok: 主题变更事件分发失败不影响已应用样式 */
-  }
+  return withThemeTransitionFreeze(() => {
+    const t = applyTheme(theme);
+    persistTheme(t);
+    const p = readStoredPersonalization();
+    applyPersonalization(p, t);
+    try {
+      window.dispatchEvent(
+        new CustomEvent('crish-theme-changed', { detail: { theme: t } })
+      );
+    } catch {
+      /* swallow-ok: 主题变更事件分发失败不影响已应用样式 */
+    }
 
-  // 异步同步至 settingsStore 与磁盘持久化，保证全局单真源一致，消除旧值覆盖
-  try {
-    void import('../store/settingsStore').then(({ useSettingsStore }) => {
-      const current = useSettingsStore.getState().appSettings;
-      if (current && current.theme !== t) {
-        useSettingsStore.getState().setAppSettings({ ...current, theme: t });
-      }
-    });
-    void import('./clientApi').then(({ clientApi }) => {
-      void clientApi.saveSettingsEx('__global__', 'global', { theme: t });
-    });
-  } catch {
-    /* swallow-ok: 异步持久化尽力而为 */
-  }
+    // 异步同步至 settingsStore 与磁盘持久化，保证全局单真源一致，消除旧值覆盖
+    try {
+      void import('../store/settingsStore').then(({ useSettingsStore }) => {
+        const current = useSettingsStore.getState().appSettings;
+        if (current && current.theme !== t) {
+          useSettingsStore.getState().setAppSettings({ ...current, theme: t });
+        }
+      });
+      void import('./clientApi').then(({ clientApi }) => {
+        void clientApi.saveSettingsEx('__global__', 'global', { theme: t });
+      });
+    } catch {
+      /* swallow-ok: 异步持久化尽力而为 */
+    }
 
-  return t;
+    return t;
+  });
 }
 
 /** 卸载时光守护定时器 */

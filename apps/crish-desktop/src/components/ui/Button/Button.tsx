@@ -31,6 +31,10 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   active?: boolean;
   /** 裸核心模式（不应用默认规格与文字包裹，专供复杂列表项/下拉选项等自定义布局按钮） */
   bare?: boolean;
+  /** 对齐方式：center（默认居中）| start（靠左对齐，专供通栏导航条目等） */
+  align?: 'center' | 'start';
+  /** 静态模式：禁用 :active 按压缩放微触感 */
+  static?: boolean;
 }
 
 const VARIANT_CLASS: Record<ButtonVariant, string | undefined> = {
@@ -63,6 +67,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       block = false,
       active = false,
       bare = false,
+      align,
+      static: staticProp,
       disabled,
       className,
       children,
@@ -77,6 +83,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           ref={ref}
           type={type}
           className={className}
+          data-align={align}
+          data-static={staticProp ? 'true' : undefined}
           disabled={disabled || loading}
           aria-busy={loading || undefined}
           {...restProps}
@@ -113,6 +121,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         data-size={size}
         data-variant={variant}
         data-active={active || undefined}
+        data-align={align}
+        data-static={staticProp ? 'true' : undefined}
         disabled={disabled || loading}
         aria-busy={loading || undefined}
         {...restProps}

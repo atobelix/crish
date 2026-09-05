@@ -77,13 +77,13 @@ describe('ui/Input', () => {
     expect(input).toHaveAttribute('type', 'text');
   });
 
-  it('search 皮：appearance 抹平 + 7px + 无原生 search 装饰 + 无厚阴影', () => {
+  it('search 皮：appearance 抹平 + 圆角契约 + 无原生 search 装饰 + 无厚阴影', () => {
     // 不用 new URL('./*.module.css')：vitest 会把 CSS module 改写成非 file URL
     const cssDir = dirname(fileURLToPath(import.meta.url));
     const css = readFileSync(join(cssDir, 'Input.module.css'), 'utf8');
     expect(css).toContain('appearance: none');
     expect(css).toContain('-webkit-appearance: none');
-    expect(css).toContain('var(--button-radius, 7px)');
+    expect(css).toMatch(/var\(--(?:button-radius|radius-lg),\s*[78]px\)/);
     expect(css).toContain('::-webkit-search-decoration');
     expect(css).toContain('::-webkit-search-cancel-button');
     expect(css).toContain('box-shadow: none');
