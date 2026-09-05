@@ -40,8 +40,8 @@ describe('dispatchIngestActions feed 面路由', () => {
     ]);
     const window = eventStore.getState().windows['s-1'];
     expect(window).toBeDefined();
-    expect(window.entries).toHaveLength(1);
-    expect(window.entries[0]!.type).toBe('message-delta');
+    expect(window!.entries).toHaveLength(1);
+    expect(window!.entries[0]!.type).toBe('message-delta');
   });
 
   it('feed-hydrate 快照重建（entries + cursor）', () => {
@@ -53,8 +53,9 @@ describe('dispatchIngestActions feed 面路由', () => {
       { kind: 'feed-hydrate', sessionId: 's-1', events, cursor: 2 },
     ]);
     const window = eventStore.getState().windows['s-1'];
-    expect(window.entries).toHaveLength(2);
-    expect(window.lastSeq).toBe(2);
+    expect(window).toBeDefined();
+    expect(window!.entries).toHaveLength(2);
+    expect(window!.lastSeq).toBe(2);
   });
 
   it('feed-set-cursor 游标对齐（只升不降语义由 eventStore 保证）', () => {

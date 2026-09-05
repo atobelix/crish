@@ -21,7 +21,6 @@ function makeProps(
   return {
     runId: 'r-1',
     sessionTitle: '会话A',
-    badge: 'running',
     badgeLabel: '运行中',
     tone: 'info',
     startedAtMs: 1_720_000_000_000,
@@ -55,7 +54,6 @@ describe('RunDetailHeader 渲染', () => {
     await render(
       <RunDetailHeader
         {...makeProps({
-          badge: 'error',
           badgeLabel: '失败',
           tone: 'error',
           reason: 'exit code 1',
@@ -122,7 +120,7 @@ describe('memo 隔离（R2UX-05-08：状态条不参与重渲染）', () => {
     expect(renderCount).toHaveBeenCalledTimes(1);
     // 属性变化（新事件到达 → 徽标/时间更新）→ 重新渲染
     await rerender(
-      <Probe {...props} badge="terminal" badgeLabel="已完成" tone="success" />
+      <Probe {...props} badgeLabel="已完成" tone="success" />
     );
     expect(renderCount).toHaveBeenCalledTimes(2);
   });

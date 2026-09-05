@@ -144,18 +144,16 @@ describe('类型安全（编译期断言：分组名 / 字段越界拒绝）', (
       settingsStore.getState().set('nope', {});
       // @ts-expect-error 不存在的分组名编译期拒绝
       settingsStore.getState().get('nope');
+      // prettier-ignore
       // @ts-expect-error notification 组没有 responseStyle 字段（字段越界拒绝）
-      settingsStore
-        .getState()
-        .update('notification', { responseStyle: 'high' });
+      settingsStore.getState().update('notification', { responseStyle: 'high' });
       // @ts-expect-error theme 取值越界（非 system/light/dark）
       settingsStore.getState().update('appearance', { theme: 'blue' });
       // @ts-expect-error 整组替换类型不匹配（appearance 不接受 general 形状）
       settingsStore.getState().set('appearance', { responseStyle: 'low' });
+      // prettier-ignore
       // @ts-expect-error sceneFlags 键越界（无 unknown 场景）
-      settingsStore
-        .getState()
-        .update('notification', { sceneFlags: { unknown: true } });
+      settingsStore.getState().update('notification', { sceneFlags: { unknown: true } });
     }
     expect(typeof compileTimeOnly).toBe('function');
   });

@@ -11,6 +11,7 @@ import {
   resetFilesContextForTest,
   workspaceNameOf,
 } from './filesWiring';
+import type { WsSocket } from '@/network/ReconnectingWsClient';
 import {
   ensureObservationWiring,
   resetObservationWiringForTest,
@@ -21,7 +22,7 @@ function makeGateway(): WsGateway {
 }
 
 /** mock socket（ReconnectingWsClient 工厂注入面，避免 jest 环境真实 WS） */
-function mockSocketFactory(): unknown {
+function mockSocketFactory(): WsSocket {
   return {
     onopen: null,
     onmessage: null,

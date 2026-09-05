@@ -22,7 +22,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { buildPairHello, parsePairError, parsePairOk } from './pairProtocol';
-import type { PairErrorKind } from './pairProtocol';
+import type { BuildPairHelloInput, PairErrorKind } from './pairProtocol';
 import { formatPairCode, isValidPairCode, normalizePairCode } from './cxnCode';
 import { formatQrPayload, parseQrPayload, QR_SCHEME } from './qrPayload';
 import { DEVICE_ERROR_PROTOCOL } from '@crish/shared-types';
@@ -160,7 +160,7 @@ describe('buildPairHello × 注册表 pair.hello 字段集（device-protocol.jso
   });
 
   it('platform 值域与 Rust serde lowercase 一致（pair.rs:112-122；types.ts PLATFORM_VALUES）', () => {
-    for (const p of ['ios', 'android', 'other']) {
+    for (const p of ['ios', 'android', 'other'] as const) {
       const r = buildPairHello({
         code: 'CXN-7K4P-Q2MB-9XRT',
         deviceName: 'd',
@@ -508,7 +508,7 @@ describe('mock-daemon 发送形状对拍（scripts/mock-daemon 参考面）', ()
   // 与 src/connection.ts:148-175（onPairHello：必填字段检查 + platform 可选透传）。
 
   it('pair.hello 发送 fixture 可被 buildPairHello 承载（字段名/形状一致）', () => {
-    const mockHello = {
+    const mockHello: BuildPairHelloInput = {
       code: 'CXN-7K4P-Q2MB-9XRT',
       deviceId: 'dev-test-0001',
       mobilePub: 'mock-mobile-pub',

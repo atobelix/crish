@@ -10,9 +10,8 @@ function makeEntry(
 ): FileEntry {
   return {
     name,
-    kind: 'file',
+    isDir: false,
     size: 0,
-    modifiedMs: 1000,
     relPath: name,
     receivedAtMs: 1000,
     ...overrides,

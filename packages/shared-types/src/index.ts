@@ -324,8 +324,7 @@ export type {
 } from './cache-metrics';
 
 // 引擎生成面（generated/engine）公共 re-export 面。
-// 维度 3 步骤 1（3-D 第 1 步）：消除 apps/crish-desktop 对
-// `packages/shared-types/src/generated/engine` 深路径的直引，统一经本公共面。
+// 消除 apps/crish-desktop 与 apps/crish-mobile 对深路径的直引，统一经本公共面。
 //
 // 命名冲突处理：generated 的 `AgentMessage` / `AgentMessageBlock` 与上方
 // `./message` 的同名导出**字段不对齐**（generated.metadata 为 JsonValue、
@@ -342,13 +341,21 @@ export type {
   AgentMessageBlock as EngineAgentMessageBlock,
 } from './generated/engine/types';
 
-// generated/engine 运行期常量逐条 re-export（events.ts 的值常量；
-// types.ts 的 `as const` 值数组已由上方 `export *` 覆盖）。
+// 引擎事件全集（开放 57 类 Engine*Event 接口与 EngineEvent 联合类型）
+export * from './generated/engine/events';
+
+// 引擎解析器全集（开放 108 个 parseEngine*Event 解析函数）
+export * from './generated/engine/parser';
+
+// ESM 命名消歧：显式 Named Re-export 消除 6 个同名同构符号歧义（以 engine 为真源）
 export {
-  ENGINE_EVENT_TYPES,
-  ENGINE_EVENT_BACKPRESSURE,
-  SUBAGENT_EVENT_KIND_BACKPRESSURE,
-} from './generated/engine/events';
+  type ParseResult,
+  parseOk,
+  parseErr,
+  isParseOk,
+  isParseErr,
+  parseApprovalDecision,
+} from './generated/engine/parser';
 
 // 设备协议生成面（generated/device）公共 re-export 面。
 // 消除 apps/crish-mobile 对 `packages/shared-types/src/generated/device`
