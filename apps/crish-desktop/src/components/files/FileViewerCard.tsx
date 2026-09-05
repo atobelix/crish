@@ -204,9 +204,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             </Tooltip>
           </div>
 
-          <div className={styles.compareToggleRow}>
+          <div className={styles.compareToggleRow} role="tablist" aria-label="视图模式切换">
             <button
               type="button"
+              role="tab"
+              aria-selected={viewMode === 'diff'}
               className={`${styles.toggleTab} ${
                 viewMode === 'diff' ? styles.toggleTabActive : ''
               }`}
@@ -216,6 +218,8 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={viewMode === 'plain'}
               className={`${styles.toggleTab} ${
                 viewMode === 'plain' ? styles.toggleTabActive : ''
               }`}
@@ -366,7 +370,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             />
           ) : (
             <div className={styles.diffEmpty}>
-              <Lucide.FileDiff size={22} style={{ opacity: 0.3 }} aria-hidden />
+              <Lucide.FileDiff
+                size={22}
+                className={styles.diffEmptyIcon}
+                aria-hidden
+              />
               <div>该文件目前没有本地改动</div>
               <div className={styles.diffEmptySub}>
                 本地工作区与基准版本完全一致。

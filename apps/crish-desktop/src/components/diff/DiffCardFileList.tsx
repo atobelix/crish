@@ -240,24 +240,9 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
           </div>
 
           {/* =================================================================
-           * 子域 C：常驻增减统计与 Git 快捷操作 (物理隔离排布，Flex 盒流式并列，永不遮挡覆盖)
+           * 子域 C：统计与操作共用槽 (数字加减与暂存撤销共用区域，消除右侧空洞)
            * ================================================================= */}
-          <div className={styles.statAndActions}>
-            <span
-              className={styles.fileStat}
-              aria-label={`增加 ${additions} 行，删除 ${deletions} 行`}
-            >
-              {additions > 0 ? (
-                <span className={styles.statAdd}>+{additions}</span>
-              ) : null}
-              {deletions > 0 ? (
-                <span className={styles.statDel}>−{deletions}</span>
-              ) : null}
-              {additions === 0 && deletions === 0 ? (
-                <span className={styles.statNeutral}>0</span>
-              ) : null}
-            </span>
-
+          <div className={styles.statActionSlot}>
             {sourceMode === 'git' ? (
               <div
                 className={styles.rowActions}
@@ -273,8 +258,8 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                   <Tooltip content={TOOLTIP_UNSTAGE}>
                     <Button
                       type="button"
-                      variant="secondary"
-                      size="sm"
+                      variant="ghost"
+                      size="xs"
                       className={styles.rowActBtn}
                       aria-label={TOOLTIP_UNSTAGE}
                       disabled={applyBusy}
@@ -287,8 +272,8 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                     <Tooltip content={TOOLTIP_STAGE}>
                       <Button
                         type="button"
-                        variant="secondary"
-                        size="sm"
+                        variant="ghost"
+                        size="xs"
                         className={styles.rowActBtn}
                         aria-label={TOOLTIP_STAGE}
                         disabled={applyBusy}
@@ -299,8 +284,8 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                     <Tooltip content={TOOLTIP_DISCARD}>
                       <Button
                         type="button"
-                        variant="danger"
-                        size="sm"
+                        variant="ghost"
+                        size="xs"
                         className={`${styles.rowActBtn} ${styles.danger}`}
                         aria-label={TOOLTIP_DISCARD}
                         disabled={applyBusy}
@@ -312,6 +297,21 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                 )}
               </div>
             ) : null}
+
+            <span
+              className={styles.fileStat}
+              aria-label={`增加 ${additions} 行，删除 ${deletions} 行`}
+            >
+              {additions > 0 ? (
+                <span className={styles.statAdd}>+{additions}</span>
+              ) : null}
+              {deletions > 0 ? (
+                <span className={styles.statDel}>−{deletions}</span>
+              ) : null}
+              {additions === 0 && deletions === 0 ? (
+                <span className={styles.statNeutral}>0</span>
+              ) : null}
+            </span>
           </div>
         </div>
 
@@ -342,8 +342,8 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
               {stagedFiles.length > 0 ? (
                 <Button
                   type="button"
-                  variant="secondary"
-                  size="sm"
+                  variant="ghost"
+                  size="xs"
                   className={styles.groupActionBtn}
                   disabled={applyBusy}
                   onClick={onUnstageAll}
@@ -355,7 +355,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
             </div>
 
             {stagedFiles.length === 0 ? (
-              <div className={styles.groupEmptyHint}>无已暂存的文件</div>
+              <div className={styles.emptyGroup}>无已暂存的文件</div>
             ) : (
               <div className={styles.groupBody}>
                 {stagedFiles.map(renderFlatFileNode)}
@@ -372,8 +372,8 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
               {unstagedFiles.length > 0 ? (
                 <Button
                   type="button"
-                  variant="secondary"
-                  size="sm"
+                  variant="ghost"
+                  size="xs"
                   className={styles.groupActionBtn}
                   disabled={applyBusy}
                   onClick={onStageAll}
@@ -385,7 +385,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
             </div>
 
             {unstagedFiles.length === 0 ? (
-              <div className={styles.groupEmptyHint}>无未暂存的修改</div>
+              <div className={styles.emptyGroup}>无未暂存的修改</div>
             ) : (
               <div className={styles.groupBody}>
                 {unstagedFiles.map(renderFlatFileNode)}

@@ -1,4 +1,5 @@
 /**
+ * @deprecated 仅保留用于 mirrorThreeWayBridge.test.tsx 单元测试；生产主编辑视图 NotePaperStrictPanel 已彻底切断 DOM 挂载与引用
  * MirrorDriftStatusBar — A-INV-02 镜像漂移状态 + 三路操作入口骨架
  *
  * ## 完成定义（本包方向子集）

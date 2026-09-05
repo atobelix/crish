@@ -592,22 +592,24 @@ html[data-theme='light'] {
   --artifact-btn-hover-border: color-mix(in srgb, var(--border-subtle) 92%, var(--text-primary) 8%);
   --artifact-btn-active-bg: var(--tint-active);
 
-  /* Diff 比对 (严格按照 WCAG AA 达标色阶) */
-  --diff-add-bg: hsl(142 35% 42% / 0.07);
-  --diff-add-fg: hsl(142 65% 25%); /* 6.75:1 WCAG AA */
-  --diff-add-word-bg: hsl(142 40% 40% / 0.20);
-  --diff-add-gutter-bg: hsl(142 35% 42% / 0.10);
-  --diff-add-gutter-fg: hsl(142 45% 30%);
+  /* Diff 比对 (清爽通透配色) */
+  --diff-add-bg: hsl(150 65% 97%);
+  --diff-add-fg: #10b981;
+  --diff-add-word-bg: rgba(16, 185, 129, 0.22);
+  --diff-add-gutter-bg: transparent;
+  --diff-add-gutter-fg: #10b981;
+  --diff-add-indicator: #10b981;
 
-  --diff-del-bg: hsl(0 55% 55% / 0.07);
-  --diff-del-fg: hsl(0 68% 38%); /* 7.01:1 WCAG AAA */
-  --diff-del-word-bg: hsl(0 60% 50% / 0.20);
-  --diff-del-gutter-bg: hsl(0 55% 55% / 0.10);
-  --diff-del-gutter-fg: hsl(0 55% 38%);
+  --diff-del-bg: hsl(0 80% 98%);
+  --diff-del-fg: #ef4444;
+  --diff-del-word-bg: rgba(239, 68, 68, 0.18);
+  --diff-del-gutter-bg: transparent;
+  --diff-del-gutter-fg: #ef4444;
+  --diff-del-indicator: #ef4444;
 
   --diff-linenum-fg: var(--text-tertiary, #696969);
-  --diff-gutter-bg: var(--bg-secondary);
-  --diff-split-divider: var(--border-subtle);
+  --diff-gutter-bg: var(--bg-card);
+  --diff-split-divider: color-mix(in srgb, var(--border-subtle) 25%, transparent);
   --diff-split-header-bg: var(--bg-secondary);
   --diff-split-header-fg: var(--text-secondary);
   --diff-mode-segmented-bg: var(--bg-secondary, hsl(35 8% 92.1%));
@@ -1161,18 +1163,20 @@ html[data-theme='dark'] {
   --diff-add-bg: hsl(142 40% 50% / 0.12);
   --diff-add-fg: hsl(142 75% 72%); /* 9.46:1 WCAG AAA */
   --diff-add-word-bg: hsl(142 45% 45% / 0.30);
-  --diff-add-gutter-bg: hsl(142 40% 50% / 0.16);
+  --diff-add-gutter-bg: transparent;
   --diff-add-gutter-fg: hsl(142 45% 72%);
+  --diff-add-indicator: hsl(142 75% 72%);
 
   --diff-del-bg: hsl(0 60% 55% / 0.12);
   --diff-del-fg: hsl(0 85% 75%); /* 7.21:1 WCAG AAA */
   --diff-del-word-bg: hsl(0 65% 50% / 0.30);
-  --diff-del-gutter-bg: hsl(0 60% 55% / 0.16);
+  --diff-del-gutter-bg: transparent;
   --diff-del-gutter-fg: hsl(0 60% 75%);
+  --diff-del-indicator: hsl(0 85% 75%);
 
   --diff-linenum-fg: hsl(0 0% 56%);
-  --diff-gutter-bg: var(--bg-secondary);
-  --diff-split-divider: hsl(0 0% 16%);
+  --diff-gutter-bg: var(--bg-card);
+  --diff-split-divider: color-mix(in srgb, var(--border-subtle) 25%, transparent);
   --diff-split-header-bg: hsl(0 0% 8%);
   --diff-split-header-fg: var(--text-secondary);
   --diff-mode-segmented-bg: hsl(0 0% 8%);

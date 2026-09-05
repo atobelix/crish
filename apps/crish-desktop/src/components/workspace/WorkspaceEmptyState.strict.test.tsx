@@ -106,10 +106,13 @@ describe('WorkspaceEmptyState · Strict 夹具（≠ 产品入口 ≠ 打开完�
     expect(panel).toHaveAttribute('data-presentation-mode', 'react-rows');
     expect(screen.queryByTestId('note-paper-strict-paper-list')).toBeNull();
     expect(panel.querySelector('[data-bp-paper-list-mount]')).toBeNull();
-
-    const footer = screen.getByTestId('note-paper-strict-footer');
-    expect(footer.textContent).toMatch(/可演示≠EL-01|≠EL-01/);
-    expect(footer.textContent).toMatch(/W5-B/);
+    // 迁移后代码：断言根容器 data-boundary 与 data-package-id，并断言 footer 彻底不存在
+    expect(panel).toHaveAttribute('data-package-id', 'W5-B');
+    expect(panel.getAttribute('data-boundary')).toMatch(/可演示≠EL-01|≠EL-01/);
+    expect(panel.getAttribute('data-boundary')).toMatch(/W5-B/);
+    // 刚性防回潮负向断言：确保无用灰块绝不渲染
+    expect(screen.queryByTestId('note-paper-strict-footer')).toBeNull();
+    expect(screen.queryByTestId('mirror-drift-bar')).toBeNull();
   });
 
   it('w5b_product_empty_strict_close_returns_to_empty', async () => {

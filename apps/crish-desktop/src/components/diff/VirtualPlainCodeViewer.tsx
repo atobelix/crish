@@ -62,7 +62,7 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
         flex: 1,
         display: 'flex',
         flexDirection: 'column',
-        background: 'var(--diff-bg-pane, #ffffff)',
+        background: 'var(--bg-card)',
       }}
     >
       <div style={{ height: `${totalHeight}px`, width: '100%', position: 'relative', flex: 1 }}>

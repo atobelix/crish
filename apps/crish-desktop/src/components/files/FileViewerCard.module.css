@@ -3,7 +3,7 @@
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   overflow: hidden;
   box-sizing: border-box;
   -webkit-app-region: no-drag;
@@ -19,8 +19,8 @@
   max-height: 32px;
   padding: 0 8px;
   border-top: none;
-  border-bottom: 1px solid var(--hairline, var(--border-subtle));
-  background: var(--bg-card, #ffffff);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  background: var(--bg-card);
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -44,9 +44,9 @@
 .compareToggleRow {
   display: flex;
   align-items: center;
-  background: var(--control-soft-bg);
+  background: var(--bg-card);
   padding: 1px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
   border-radius: var(--radius-sm, 4px);
   margin: 0;
   height: 26px;
@@ -54,9 +54,9 @@
 }
 
 .toggleTab {
-  padding: 0 6px;
+  padding: 0 8px;
   font-size: var(--font-size-xs, 12px);
-  border: none;
+  border: 1px solid transparent;
   border-radius: var(--radius-xs, 2px);
   background: transparent;
   color: var(--text-secondary);
@@ -65,6 +65,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   transition: all var(--transition-fast);
 }
 
@@ -77,7 +78,13 @@
   background: var(--bg-card);
   color: var(--text-primary);
   font-weight: var(--font-weight-medium, 500);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 35%, transparent);
   box-shadow: var(--shadow-sm);
+}
+
+.toggleTabActive:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .rightActions {
@@ -104,6 +111,7 @@
 
 .actBtn:hover {
   color: var(--text-primary);
+  background: var(--tint-hover);
 }
 
 .bodyWrap {
@@ -113,7 +121,24 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
+  --diff-gutter-bg: var(--bg-card);
+}
+
+.bodyWrap :global(.scrollParent) {
+  height: 100%;
+  max-height: none;
+  flex: 1;
+  background: var(--bg-card);
+}
+
+.bodyWrap :global(.linesContainer) {
+  background: var(--bg-card);
+}
+
+.bodyWrap :global(.gutterNum) {
+  background: var(--bg-card);
+  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
 }
 
 .detailLoading {
@@ -133,9 +158,9 @@
 .filesOpenCapsule {
   display: inline-flex;
   align-items: stretch;
-  border: 1px solid var(--border-color, var(--border-subtle));
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
   border-radius: var(--radius-md, 6px);
-  background: transparent;
+  background: var(--bg-card);
   height: 26px;
   position: relative;
   box-sizing: border-box;
@@ -159,10 +184,12 @@
   cursor: pointer;
   white-space: nowrap;
   box-sizing: border-box;
+  transition: all var(--transition-fast);
 }
 
 .filesOpenCapsule .filesOpenMain:hover {
   color: var(--text-primary);
+  background: var(--tint-hover);
 }
 
 .filesOpenCapsule .filesOpenChev {
@@ -174,17 +201,19 @@
   height: 24px;
   min-height: 24px;
   border: none;
-  border-left: 1px solid var(--border-color, var(--border-subtle));
+  border-left: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
   border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
   box-sizing: border-box;
+  transition: all var(--transition-fast);
 }
 
 .filesOpenCapsule .filesOpenChev:hover {
   color: var(--text-primary);
+  background: var(--tint-hover);
 }
 
 /* Diff 视图 */
@@ -196,6 +225,7 @@
   overflow-y: auto;
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xs, 12px);
+  background: var(--bg-card);
 }
 
 .diffLine {
@@ -209,8 +239,8 @@
   color: var(--text-tertiary);
   text-align: right;
   padding-right: 8px;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
   user-select: none;
 }
 
@@ -221,30 +251,50 @@
 }
 
 .diffAddition {
-  background: var(--accent-green-light-adaptive);
+  background: var(--diff-add-bg, hsl(142 35% 42% / 0.07));
   color: var(--text-primary);
 }
 
 .diffAddition .diffGutter {
-  background: var(--accent-green-light-adaptive);
+  background: var(--diff-add-gutter-bg, hsl(142 35% 42% / 0.10));
+  color: var(--diff-add-gutter-fg, hsl(142 45% 30%));
 }
 
 .diffDeletion {
-  background: var(--accent-red-light-adaptive);
+  background: var(--diff-del-bg, hsl(0 55% 55% / 0.07));
   color: var(--text-primary);
 }
 
 .diffDeletion .diffGutter {
-  background: var(--accent-red-light-adaptive);
+  background: var(--diff-del-gutter-bg, hsl(0 55% 55% / 0.10));
+  color: var(--diff-del-gutter-fg, hsl(0 55% 38%));
 }
 
 .diffEmpty {
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   height: 100%;
-  color: var(--text-tertiary);
+  width: 100%;
+  background: var(--bg-card);
+  color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.diffEmptyIcon {
+  opacity: 0.35;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+
+.diffEmptySub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  opacity: 0.85;
 }
 
 /* 更多操作容器 */

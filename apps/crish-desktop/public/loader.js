@@ -55,6 +55,30 @@
       if (f && f.uiFont) root.setAttribute('data-ui-font', String(f.uiFont).indexOf('local:') === 0 ? 'local' : f.uiFont);
       if (f && f.monoFont) root.setAttribute('data-mono-font', String(f.monoFont).indexOf('local:') === 0 ? 'local' : f.monoFont);
     }
+
+    // 6. 首屏加载全屏拖拽兜底（窗口尚未挂载 React 前，允许鼠标按住任意位置拖拽无边框窗口）
+    window.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0) return;
+      var skel = document.getElementById('skel-app');
+      if (!skel) return;
+      if (e.target === skel || skel.contains(e.target)) {
+        try {
+          if (
+            window.__TAURI_INTERNALS__ &&
+            typeof window.__TAURI_INTERNALS__.invoke === 'function'
+          ) {
+            var label =
+              (window.__TAURI_INTERNALS__.metadata &&
+                window.__TAURI_INTERNALS__.metadata.currentWindow &&
+                window.__TAURI_INTERNALS__.metadata.currentWindow.label) ||
+              'main';
+            window.__TAURI_INTERNALS__.invoke('plugin:window|start_dragging', {
+              label: label,
+            });
+          }
+        } catch (_) {}
+      }
+    });
   } catch (err) {
     document.documentElement.setAttribute('data-theme', 'default');
     document.documentElement.classList.add('theme-light');

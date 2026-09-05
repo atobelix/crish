@@ -429,8 +429,7 @@
   width: 100%;
 }
 
-.leafBody :global([data-testid='note-paper-strict-panel']) > :global(header),
-.leafBody :global([data-testid='note-paper-strict-panel']) > :global(footer) {
+.leafBody :global([data-testid='note-paper-strict-panel']) > :global(header) {
   flex: 0 0 auto;
   max-height: none;
   width: 100%;

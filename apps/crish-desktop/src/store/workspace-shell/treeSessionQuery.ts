@@ -63,10 +63,12 @@ export function readOwnedLeaf(leaf: {
     .map(normalizeTab)
     .filter((t) => !isPendingDraft(t.sessionId));
   const activeTabId =
-    typeof leaf.activeTabId === 'string' &&
-    tabs.some((t) => t.tabId === leaf.activeTabId)
-      ? leaf.activeTabId
-      : (tabs[0]?.tabId || '');
+    leaf.activeTabId === ''
+      ? ''
+      : typeof leaf.activeTabId === 'string' &&
+        tabs.some((t) => t.tabId === leaf.activeTabId)
+        ? leaf.activeTabId
+        : (tabs[0]?.tabId || '');
   return {
     type: 'leaf',
     id: leaf.id,

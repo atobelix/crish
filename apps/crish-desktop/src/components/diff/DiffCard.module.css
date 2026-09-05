@@ -243,7 +243,7 @@
   box-sizing: border-box;
   border: none;
   border-radius: 0;
-  box-shadow: inset 0 -1px 0 0 var(--border-subtle);
+  box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--border-subtle) 25%, transparent);
   background-color: transparent;
   user-select: none;
   outline: none;
@@ -265,7 +265,7 @@
   background-color: var(--bg-active);
   box-shadow:
     inset 2px 0 0 var(--brand-primary),
-    inset 0 -1px 0 0 var(--border-subtle);
+    inset 0 -1px 0 0 color-mix(in srgb, var(--border-subtle) 25%, transparent);
 }
 
 .fileRow.isActive:hover {
@@ -285,7 +285,7 @@
   padding: 0;
   margin: 0 6px 0 0;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-xs, 3px);
   background: transparent;
   cursor: pointer;
   outline: none;
@@ -324,7 +324,7 @@
   font-size: 10px;
   font-weight: 600;
   line-height: 1;
-  border-radius: 0;
+  border-radius: var(--radius-xs, 3px);
   user-select: none;
 }
 
@@ -370,7 +370,7 @@
   padding: 0;
   margin: 0;
   border: none;
-  border-radius: 0;
+  border-radius: var(--radius-xs, 2px);
   background: transparent;
   cursor: pointer;
   text-align: left;
@@ -415,19 +415,23 @@
 }
 
 /* --------------------------------------------------------------------------
- * 6. 子域 C：常驻增减统计与 Git 快捷操作 (消除排版跳动与遮挡)
+ * 6. 子域 C：统计与操作共用槽 (数字加减与暂存撤销共用区域，消除右侧空洞)
  * -------------------------------------------------------------------------- */
+.statActionSlot,
 .statAndActions {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-2, 8px);
-  flex-shrink: 0;
+  justify-content: flex-end;
+  min-width: 64px;
   height: 100%;
+  flex-shrink: 0;
 }
 
 .fileStat {
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-1_5, 6px);
   font-family: var(--font-mono, monospace);
   font-size: var(--font-size-xxs, 11px);
@@ -435,6 +439,7 @@
   flex-shrink: 0;
   opacity: 1;
   user-select: none;
+  transition: opacity var(--transition-micro, 80ms);
 }
 
 .statAdd {
@@ -452,12 +457,18 @@
 }
 
 .rowActions {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-1, 4px);
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
+  z-index: 1;
   transition:
     opacity var(--transition-micro, 80ms),
     visibility var(--transition-micro, 80ms);
@@ -470,6 +481,15 @@
   pointer-events: auto;
 }
 
+/* Hover 或 focus-within 时，若存在 rowActions（Git 模式），fileStat 渐隐 */
+.fileRow:hover .rowActions ~ .fileStat,
+.fileRow:focus-within .rowActions ~ .fileStat,
+.fileRow:hover .statActionSlot:has(.rowActions) .fileStat,
+.fileRow:focus-within .statActionSlot:has(.rowActions) .fileStat {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .rowActBtn {
   display: inline-flex;
   align-items: center;
@@ -477,28 +497,43 @@
   width: 22px;
   height: 22px;
   min-width: 22px;
+  --btn-h: 22px;
+  --btn-px: 0;
   padding: 0;
-  border-radius: 0;
-  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  --btn-radius: var(--radius-sm, 4px);
+  border: none;
+  --btn-border: transparent;
   background: transparent;
+  --btn-bg: transparent;
+  box-shadow: none;
+  --btn-shadow: none;
   color: var(--text-secondary);
+  --btn-fg: var(--text-secondary);
+  --btn-hover-overlay: var(--tint-hover);
   cursor: pointer;
   transition:
     color var(--transition-micro, 80ms),
-    background-color var(--transition-micro, 80ms),
-    border-color var(--transition-micro, 80ms);
+    background-color var(--transition-micro, 80ms);
 }
 
 .rowActBtn:hover {
   color: var(--text-primary);
-  background: transparent;
-  border-color: var(--border-subtle);
+  background-color: var(--tint-hover);
+  border: none;
+}
+
+.rowActBtn.danger {
+  color: var(--text-secondary);
+  --btn-fg: var(--text-secondary);
 }
 
 .rowActBtn.danger:hover {
-  color: var(--diff-del-fg, hsl(0 68% 38%));
-  background: transparent;
-  border-color: color-mix(in srgb, var(--diff-del-fg, hsl(0 68% 38%)) 30%, transparent);
+  color: var(--color-error, var(--diff-del-fg, hsl(0 68% 38%)));
+  --btn-fg: var(--color-error, var(--diff-del-fg, hsl(0 68% 38%)));
+  --btn-hover-overlay: color-mix(in srgb, var(--color-error, hsl(0 75% 55%)) 12%, transparent);
+  background-color: color-mix(in srgb, var(--color-error, hsl(0 75% 55%)) 12%, transparent);
+  border: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -510,10 +545,11 @@
   width: 100%;
   margin: 0;
   padding: 0;
-  border: none;
-  border-bottom: 1px solid var(--border-subtle);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
   background: var(--bg-card);
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .diffPane :global(.scrollParent),
@@ -528,7 +564,7 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  border-radius: 0;
+  border-radius: 0 0 var(--radius-md, 8px) var(--radius-md, 8px);
   border: none;
 }
 
@@ -558,8 +594,8 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 0;
-  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  border: none;
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
@@ -567,8 +603,8 @@
 
 .hoverActBtn:hover {
   color: var(--text-primary);
-  background: transparent;
-  border-color: var(--border-subtle);
+  background: var(--tint-hover);
+  border: none;
 }
 
 /* 弹性视口容器 (DEL-16: 移除 380px 锁死；DEL-17: 移除滚轮劫持) */
@@ -624,6 +660,7 @@
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   min-height: 22px;
+  border-left: 3px solid transparent;
 }
 
 .gutterNum {
@@ -636,7 +673,7 @@
   user-select: none;
   opacity: 0.75;
   text-align: right;
-  border-right: 1px solid var(--border-subtle);
+  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
   background: var(--diff-gutter-bg, var(--bg-card));
 }
 
@@ -652,8 +689,9 @@
 
 .lineText {
   padding: 0 10px;
-  white-space: pre;
-  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  overflow-x: hidden;
   font-family: var(--font-mono);
   font-size: var(--font-size-xs);
   color: var(--diff-text-normal, var(--text-primary));
@@ -664,9 +702,10 @@
 /* 增删行 WCAG AAA 达标样式 */
 .lineAddition {
   background: var(--diff-add-bg);
+  border-left: 3px solid var(--diff-add-indicator, #10b981);
 }
 .lineAddition .gutterNum {
-  background: var(--diff-add-gutter-bg, var(--diff-add-bg));
+  background: var(--diff-add-gutter-bg, transparent);
   color: var(--diff-add-gutter-fg, var(--diff-add-fg));
 }
 .lineAddition .gutterMarker {
@@ -675,9 +714,10 @@
 
 .lineDeletion {
   background: var(--diff-del-bg);
+  border-left: 3px solid var(--diff-del-indicator, #ef4444);
 }
 .lineDeletion .gutterNum {
-  background: var(--diff-del-gutter-bg, var(--diff-del-bg));
+  background: var(--diff-del-gutter-bg, transparent);
   color: var(--diff-del-gutter-fg, var(--diff-del-fg));
 }
 .lineDeletion .gutterMarker {
@@ -691,6 +731,7 @@
 .lineHeader {
   background: transparent;
   border: none;
+  border-left: 3px solid transparent;
 }
 .lineHeader .gutterNum,
 .lineHeader .gutterMarker {
@@ -704,13 +745,13 @@
 /* 词法级行内修改高亮 (Intraline) */
 .diffWordAdd {
   background: var(--diff-add-word-bg);
-  border-radius: var(--radius-xs, 2px);
+  border-radius: 3px;
   padding: 0 1px;
 }
 
 .diffWordDel {
   background: var(--diff-del-word-bg);
-  border-radius: var(--radius-xs, 2px);
+  border-radius: 3px;
   padding: 0 1px;
 }
 
@@ -729,6 +770,7 @@
   font-family: var(--font-mono);
   line-height: 22px;
   min-width: 0;
+  border-left: 3px solid transparent;
 }
 
 .splitColumn:first-child {
@@ -755,6 +797,7 @@
   padding: 0 12px;
   cursor: pointer;
   border: none;
+  border-radius: var(--radius-sm, 4px);
   user-select: none;
   font-family: var(--font-sans);
   box-sizing: border-box;
@@ -778,9 +821,9 @@
   align-items: center;
   height: 32px;
   padding: 0 12px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--hairline, var(--border-subtle));
-  background: var(--bg-secondary);
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  background: var(--bg-card);
   cursor: pointer;
   transition:
     border-color var(--transition-fast),
@@ -791,19 +834,19 @@
 }
 
 .commitTriggerBar:hover {
-  background: color-mix(in srgb, var(--text-primary) 4%, var(--bg-secondary));
-  border-color: var(--border-color);
+  background: var(--tint-hover);
+  border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent);
 }
 
 .commitTriggerIcon {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
 .commitTriggerText {
   flex: 1;
   font-size: var(--font-size-xs, 12px);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -811,7 +854,7 @@
 }
 
 .commitTriggerArrow {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   opacity: 0.6;
   flex-shrink: 0;
 }
@@ -821,7 +864,7 @@
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  border-top: 1px solid var(--border-subtle);
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
   background: var(--bg-card);
   flex-shrink: 0;
   box-sizing: border-box;
@@ -861,8 +904,8 @@
 
 .commitInput {
   height: 48px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 30%, transparent);
+  border-radius: var(--radius-sm, 4px);
   background: var(--bg-card);
   padding: 8px 10px;
   font-size: var(--font-size-xs);
@@ -870,19 +913,24 @@
   color: var(--text-primary);
   resize: none;
   box-sizing: border-box;
+  transition: border-color var(--transition-fast);
 }
 
 .commitInput:focus-visible,
 .commitInput:focus {
   outline: none;
-  border-color: var(--focus-border-color);
-  box-shadow: var(--focus-ring-shadow);
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: none;
 }
 
 .commitActions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.commitActions button {
+  border-radius: var(--radius-sm, 4px);
 }
 
 .commitCharCount,
@@ -915,8 +963,8 @@
   max-height: 28px;
   padding: 0 12px;
   box-sizing: border-box;
-  background: var(--card-header-bg, var(--bg-secondary));
-  box-shadow: inset 0 -1px 0 0 var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: inset 0 -1px 0 0 color-mix(in srgb, var(--border-subtle) 25%, transparent);
   position: sticky;
   top: 0;
   z-index: 2;
@@ -931,14 +979,37 @@
 }
 
 .groupActionBtn {
-  font-size: var(--font-size-xxs, 11px);
   height: 22px;
-  padding: 0 6px;
-  border-radius: 0;
+  --btn-h: 22px;
+  font-size: var(--font-size-xxs, 11px);
+  --btn-fs: var(--font-size-xxs, 11px);
+  padding: 0 8px;
+  --btn-px: 8px;
+  border-radius: var(--radius-sm, 4px);
+  --btn-radius: var(--radius-sm, 4px);
+  border: none;
+  --btn-border: transparent;
+  background: transparent;
+  --btn-bg: transparent;
+  box-shadow: none;
+  --btn-shadow: none;
+  color: var(--text-secondary);
+  --btn-fg: var(--text-secondary);
+  --btn-hover-overlay: var(--tint-hover);
+  cursor: pointer;
+  transition:
+    color var(--transition-fast, 120ms),
+    background-color var(--transition-fast, 120ms);
+}
+
+.groupActionBtn:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+  border: none;
 }
 
 .btnIcon {
-  margin-right: 4px;
+  flex-shrink: 0;
 }
 
 .groupBody {
@@ -949,15 +1020,18 @@
   gap: 0;
 }
 
+.emptyGroup,
 .groupEmptyHint {
   font-family: var(--font-sans);
   font-size: var(--font-size-xxs, 11px);
   color: var(--text-tertiary);
-  padding: 10px 12px;
+  padding: 8px 12px;
   text-align: center;
-  box-shadow: inset 0 -1px 0 0 var(--border-subtle);
   background: transparent;
+  border: none;
+  box-shadow: none;
   border-radius: 0;
+  user-select: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -976,8 +1050,9 @@
     margin-right: 4px;
   }
 
+  .statActionSlot,
   .statAndActions {
-    gap: 4px;
+    min-width: 52px;
   }
 
   .fileStat {

@@ -57,21 +57,28 @@ describe('05 leafBody 绝缘 · 选择器文本', () => {
     expect(moduleCss).not.toMatch(/\.leafBody\s+\*\s*[,{]/);
   });
 
-  it('note 面板 header/footer 绝缘：flex 0 0 auto + max-height:none', () => {
+  it('note 面板 header 绝缘：flex 0 0 auto + max-height:none，且彻底切除 footer 绝缘', () => {
     const headerNeedle =
       ":global([data-testid='note-paper-strict-panel']) > :global(header)";
     const footerNeedle =
       ":global([data-testid='note-paper-strict-panel']) > :global(footer)";
+
+    // 1. 正向断言：顶栏绝缘规则坚挺存在，确保 32px 紧凑顶栏绝不坍缩
     expect(moduleCss).toContain(headerNeedle);
-    expect(moduleCss).toContain(footerNeedle);
     const idx = moduleCss.indexOf(headerNeedle);
     const open = moduleCss.indexOf('{', idx);
     const close = moduleCss.indexOf('}', open);
-    expect(close).toBeGreaterThan(open);
+    expect(close, '顶栏绝缘规则大括号必须正常闭合').toBeGreaterThan(open);
     const chrome = moduleCss.slice(open, close + 1);
     expect(chrome).toMatch(/flex:\s*0\s+0\s+auto/);
     expect(chrome).toMatch(/max-height:\s*none/);
     expect(chrome).not.toMatch(/rgba\s*\(/);
+
+    // 2. 负向刚性防回潮断言：note 面板底部灰块彻底拔除后，宿主叶子样式中严禁残留 footer 规则
+    expect(
+      moduleCss,
+      '宿主样式表 BinaryTreeWorkspace.module.css 严禁残留无效的 :global(footer) 绝缘选择器'
+    ).not.toContain(footerNeedle);
   });
 
   it('02 叶壳适配器是列 flex 吃满，不是 display:contents', () => {
