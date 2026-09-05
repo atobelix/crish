@@ -10,7 +10,6 @@ import {
 } from '@/presentation/components/dashboard/DashboardSkeleton';
 import { useQuickRunVm } from '@/adapters/viewmodels/useQuickRunVm';
 import { useDashboardVm } from '@/adapters/viewmodels/useDashboardVm';
-import PlaceholderScreen from '@/presentation/components/templates/PlaceholderScreen';
 
 // 首页仪表盘（F1）：连接状态卡 / 活跃 run / 待批概览 / 会话摘要 —— R2-05 落地
 // 通知入口（R2-04 部分 5 裁决：方案 a 首页顶部铃铛入口 + 未读角标，不新增 Tab——tab 已 5 个）：
@@ -61,13 +60,7 @@ export default function DashboardScreen() {
       {showSkeleton ? (
         <DashboardSkeleton />
       ) : (
-        <>
-          <QuickRunPanel vm={quickRunVm} />
-          <PlaceholderScreen
-            title="首页"
-            description="仪表盘：连接状态 / 活跃任务 / 待批概览（R2-05 落地）"
-          />
-        </>
+        <QuickRunPanel vm={quickRunVm} />
       )}
     </View>
   );

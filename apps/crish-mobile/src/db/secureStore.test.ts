@@ -6,9 +6,6 @@ import {
   clearPairing,
   hasPairing,
   loadPairingCredential,
-  saveExchangeNonce,
-  loadExchangeNonce,
-  clearExchangeNonce,
   savePairingCredential,
 } from './secureStore';
 
@@ -43,10 +40,10 @@ describe('密钥位清单（M5 §6.1 对齐）', () => {
     ]);
   });
 
-  it('全量 6 位（含 host_fingerprint 凭证位 + exchange_nonce 中间态位）', () => {
-    expect(ALL_KEY_SLOTS).toHaveLength(6);
+  it('全量 5 位（含 host_fingerprint 凭证位）', () => {
+    expect(ALL_KEY_SLOTS).toHaveLength(5);
     expect(ALL_KEY_SLOTS).toEqual(
-      expect.arrayContaining(['pair.host_fingerprint', 'pair.exchange_nonce'])
+      expect.arrayContaining(['pair.host_fingerprint'])
     );
   });
 });
@@ -112,7 +109,7 @@ describe('hasPairing / clearPairing / 配对中间态', () => {
     expect(await hasPairing(store)).toBe(true);
   });
 
-  it('clearPairing 清空全部 pair.* 与 device.keypair.*（含中间态），M5 §6.2 移除本机语义', async () => {
+  it('clearPairing 清空全部 pair.* 与 device.keypair.*，M5 §6.2 移除本机语义', async () => {
     const store = new InMemorySecureStore();
     await savePairingCredential(store, {
       tokenKey: 'tk-1',
@@ -121,19 +118,8 @@ describe('hasPairing / clearPairing / 配对中间态', () => {
       deviceKeypairPub: 'pub-1',
       hostFingerprint: 'fp-1',
     });
-    await saveExchangeNonce(store, 'nonce-1');
     await clearPairing(store);
     expect(await hasPairing(store)).toBe(false);
-    expect(await loadExchangeNonce(store)).toBeNull();
     expect(store.keys()).toEqual([]);
-  });
-
-  it('exchange_nonce 生命周期：写 → 读 → 清（配对完成后删除）', async () => {
-    const store = new InMemorySecureStore();
-    expect(await loadExchangeNonce(store)).toBeNull();
-    await saveExchangeNonce(store, 'nonce-abc');
-    expect(await loadExchangeNonce(store)).toBe('nonce-abc');
-    await clearExchangeNonce(store);
-    expect(await loadExchangeNonce(store)).toBeNull();
   });
 });

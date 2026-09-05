@@ -3,8 +3,6 @@ export { default as PairWelcomeScreen } from './pairWelcomeScreen';
 export type { PairWelcomeScreenProps } from './pairWelcomeScreen';
 export { default as PairManualScreen } from './pairManualScreen';
 export type { PairManualScreenProps } from './pairManualScreen';
-export { default as PairScanScreen } from './pairScanScreen';
-export type { PairScanScreenProps } from './pairScanScreen';
 export {
   ensurePairingController,
   ensurePairingWiringForApp,

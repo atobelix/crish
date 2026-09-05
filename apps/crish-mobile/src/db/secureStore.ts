@@ -9,8 +9,7 @@
  * 密钥位清单（M5 §6.3 KEYS 全量）：
  * - 4 个核心密钥位（任务书 R2-13「4 密钥位」，D4 §7.4 同口径）：
  *   token_key（会话令牌 HMAC 密钥材料）、refresh_key（重连令牌）、设备长期 X25519 密钥对 priv/pub；
- * - 2 个凭证/中间态辅助位：host_fingerprint（桌面自签证书指纹，证书固定用）、
- *   exchange_nonce（配对中间态一次性凭据，配对完成后删除）。
+ * - 1 个凭证辅助位：host_fingerprint（桌面自签证书指纹，证书固定用）。
  */
 export const KEYS = {
   /** 设备长期 X25519 私钥 Mpriv（base64）——4 密钥位之一 */
@@ -23,8 +22,6 @@ export const KEYS = {
   PAIR_REFRESH_KEY: 'pair.refresh_key',
   /** 桌面自签证书指纹（SHA-256 完整值，证书固定，D3 §4.6）——凭证位 */
   HOST_FINGERPRINT: 'pair.host_fingerprint',
-  /** 配对中间态一次性交换凭据（短期，配对完成后删除）——中间态位 */
-  EXCHANGE_NONCE: 'pair.exchange_nonce',
 } as const;
 
 /** 核心密钥位（4 位）：token_key / refresh_key / keypair priv / pub（M5 §6.1） */
@@ -35,11 +32,10 @@ export const CORE_KEY_SLOTS: readonly string[] = [
   KEYS.DEVICE_KEYPAIR_PUB,
 ];
 
-/** 全部安全键（核心 4 位 + 凭证/中间态 2 位） */
+/** 全部安全键（核心 4 位 + 凭证 1 位） */
 export const ALL_KEY_SLOTS: readonly string[] = [
   ...CORE_KEY_SLOTS,
   KEYS.HOST_FINGERPRINT,
-  KEYS.EXCHANGE_NONCE,
 ];
 
 /**
@@ -148,7 +144,7 @@ export async function loadPairingCredential(
 
 /**
  * 清空配对凭据（M5 §6.3 clearPairing / §6.2 移除本机）：
- * 无论桌面撤销是否成功都清空全部 pair.* 与 device.keypair.* 键（含配对中间态 exchange_nonce）。
+ * 无论桌面撤销是否成功都清空全部 pair.* 与 device.keypair.* 键。
  */
 export async function clearPairing(driver: SecureStoreDriver): Promise<void> {
   await Promise.all(ALL_KEY_SLOTS.map((key) => driver.deleteItem(key)));
@@ -157,28 +153,6 @@ export async function clearPairing(driver: SecureStoreDriver): Promise<void> {
 /** 启动判定（M5 §6.3 hasPairing）：核心 4 密钥位齐备即视为已配对 */
 export async function hasPairing(driver: SecureStoreDriver): Promise<boolean> {
   return (await loadPairingCredential(driver)) !== null;
-}
-
-/** 写入配对中间态一次性凭据（D3 §4.x 配对流程使用，配对完成后清除） */
-export async function saveExchangeNonce(
-  driver: SecureStoreDriver,
-  nonce: string
-): Promise<void> {
-  await driver.setItem(KEYS.EXCHANGE_NONCE, nonce);
-}
-
-/** 读取配对中间态凭据（不存在返回 null） */
-export async function loadExchangeNonce(
-  driver: SecureStoreDriver
-): Promise<string | null> {
-  return driver.getItem(KEYS.EXCHANGE_NONCE);
-}
-
-/** 清除配对中间态凭据（配对完成/失败/撤销时调用，M5 §6.2） */
-export async function clearExchangeNonce(
-  driver: SecureStoreDriver
-): Promise<void> {
-  await driver.deleteItem(KEYS.EXCHANGE_NONCE);
 }
 
 /**
