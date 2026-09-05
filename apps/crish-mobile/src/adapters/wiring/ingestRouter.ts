@@ -65,6 +65,15 @@ export function dispatchIngestActions(
           .getState()
           .applyApprovalDelta(action.sessionId, action.delta);
         break;
+      case 'session-unread-update':
+        sessionStore
+          .getState()
+          .applyLatestSeq(
+            action.sessionId,
+            action.latestSeq,
+            action.isAssistant
+          );
+        break;
       case 'ignore':
         // 宽容跳过留痕（未知 type / 域外 kind / 解析失败，D3 §10.3 不打断连接）
         console.debug(`[wiring] 忽略入站动作：${action.reason}`);

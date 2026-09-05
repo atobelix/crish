@@ -146,6 +146,50 @@ describe('mapIngestFrame（事件信封 → store 动作）', () => {
       delta: -1,
     });
   });
+
+  it('message-end 带 sequence 与 assistant role → session-unread-update 动作', () => {
+    const actions = mapIngestFrame(
+      {
+        type: 'message-end',
+        sessionId: 's-1',
+        sequence: 7,
+        message: { role: 'assistant' },
+      },
+      false
+    );
+    expect(actions).toEqual([
+      {
+        kind: 'feed-append',
+        sessionId: 's-1',
+        frame: expect.any(Object),
+        preview: false,
+      },
+      {
+        kind: 'session-unread-update',
+        sessionId: 's-1',
+        latestSeq: 7,
+        isAssistant: true,
+      },
+    ]);
+  });
+
+  it('message-end 带 sequence 与 user role → session-unread-update(isAssistant=false)', () => {
+    const actions = mapIngestFrame(
+      {
+        type: 'message-end',
+        sessionId: 's-1',
+        sequence: 8,
+        message: { role: 'user' },
+      },
+      false
+    );
+    expect(actions[1]).toEqual({
+      kind: 'session-unread-update',
+      sessionId: 's-1',
+      latestSeq: 8,
+      isAssistant: false,
+    });
+  });
 });
 
 describe('extractEnvelope（宽容信封解析，保留原对象引用不复制载荷）', () => {

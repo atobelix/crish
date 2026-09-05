@@ -4,7 +4,7 @@ import { terminalStore, linesOf } from './terminalStore';
 import {
   appendTerminalChunk,
   createTerminalLineBuffer,
-} from '@/presentation/components/terminal/terminalLineBuffer';
+} from '@/domain/pure/terminalLineBuffer';
 
 function resetStore(): void {
   terminalStore.setState({ runs: {} });

@@ -13,7 +13,7 @@ import {
   createTerminalLineBuffer,
   terminalLinesOf,
   type TerminalLineBufferState,
-} from '@/presentation/components/terminal/terminalLineBuffer';
+} from '@/domain/pure/terminalLineBuffer';
 
 /** 单个 run 的终端状态（行缓冲实例 + 游标） */
 export interface TerminalRunState {

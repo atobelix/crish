@@ -37,12 +37,18 @@ import {
   confirmResolved,
   createOutboxState,
   enqueueDecision,
+  hydrateOutbox,
   markSent,
   recordFailure,
+  snapshotOutbox,
   type EnqueueInput,
   type OutboxItem,
   type OutboxState,
 } from '@/domain/data/outbox';
+import {
+  createDefaultOutboxPersist,
+  type OutboxPersistAdapter,
+} from '@/domain/data/outboxPersist';
 import { parseEngineEvent } from '@crish/shared-types';
 import type { PermissionRequest } from '@crish/shared-types';
 import { parseListPendingApprovalsResult } from '@crish/shared-types';
@@ -211,12 +217,15 @@ export interface ApprovalWiringOptions {
   now?: () => number;
   /** 待审批对账仓库（缺省 = gatewayListPendingApprovals 网关实现） */
   listPendingApprovals?: ListPendingApprovalsRepository;
+  /** 持久化适配器（缺省 = SecureStoreOutboxAdapter，抗进程强杀） */
+  persistAdapter?: OutboxPersistAdapter;
 }
 
 export class ApprovalBridge {
   private readonly gateway: WsGateway;
   private readonly nowFn: () => number;
   private readonly listPendingRepo: ListPendingApprovalsRepository;
+  readonly persistAdapter?: OutboxPersistAdapter;
   private unsubscribers: Array<() => void> = [];
   /** outbox 重放单飞（M5 §4.6.1：禁止并发重放） */
   private replayInflight = false;
@@ -228,6 +237,28 @@ export class ApprovalBridge {
     this.nowFn = opts.now ?? (() => Date.now());
     this.listPendingRepo =
       opts.listPendingApprovals ?? gatewayListPendingApprovals;
+    this.persistAdapter = opts.persistAdapter;
+  }
+
+  private syncAndPersist(): void {
+    syncOutboxCount();
+    if (this.persistAdapter) {
+      void this.persistAdapter.save(snapshotOutbox(outboxState));
+    }
+  }
+
+  /** 从持久化安全存储水合恢复 Outbox 队列 */
+  async hydrate(): Promise<void> {
+    if (!this.persistAdapter) return;
+    try {
+      const persisted = await this.persistAdapter.load();
+      if (persisted.length > 0) {
+        outboxState = hydrateOutbox(persisted, this.nowFn());
+        syncOutboxCount();
+      }
+    } catch (e) {
+      console.warn('[approvalWiring] hydrate outbox failed:', e);
+    }
   }
 
   /** 订阅审批设备帧 + 连接就绪信号（幂等：重复 attach 先 detach） */
@@ -327,7 +358,7 @@ export class ApprovalBridge {
       store.handleResolved(view.toolCallId, view.decision, view.resolvedAtMs);
       // outbox 确认出队：sent 收口 / 事件先到（未发送）清理（M5 §4.6.2 冲突收敛表）
       outboxState = confirmResolved(outboxState, view.toolCallId);
-      store.setOutboxCount(approvalOutboxCount());
+      this.syncAndPersist();
       return;
     }
     // 其余类型（run-terminal 等）不属审批桥消费面，宽容跳过（D6 §6.4 即时失效后续轮次）
@@ -344,10 +375,17 @@ export class ApprovalBridge {
       for (;;) {
         const batch = collectReplayable(outboxState, this.nowFn());
         if (batch.length === 0) break;
+        let shouldStopBatch = false;
         for (const item of batch) {
-          await this.sendOne(item);
+          const ok = await this.sendOne(item);
+          if (!ok) {
+            // 快速失败防雪崩：遇底层断开或单次失败，中断当批后续串行
+            shouldStopBatch = true;
+            break;
+          }
         }
         syncOutboxCount();
+        if (shouldStopBatch) break;
       }
       this.scheduleBackoffRetry();
     } finally {
@@ -356,7 +394,7 @@ export class ApprovalBridge {
   }
 
   /** 单条决策发送：命令回执 ok → markSent + markDecisionSent；失败 → 退避/冲突收敛 */
-  private async sendOne(item: OutboxItem): Promise<void> {
+  private async sendOne(item: OutboxItem): Promise<boolean> {
     const now = this.nowFn();
     const req =
       item.decision === 'approved'
@@ -372,6 +410,8 @@ export class ApprovalBridge {
       approvalStore
         .getState()
         .markDecisionSent(item.toolCallId, item.decision, now);
+      this.syncAndPersist();
+      return true;
     } catch (err) {
       const code = err instanceof GatewayError ? err.code : 'internal';
       if (PERMANENT_DECISION_ERROR_CODES.has(code)) {
@@ -379,6 +419,8 @@ export class ApprovalBridge {
         // 队列收敛（出队）+ 条目置 conflict（F2 §11.2 冲突表「该请求已被其他设备处理」）
         outboxState = confirmResolved(outboxState, item.toolCallId);
         approvalStore.getState().markDecisionConflict(item.toolCallId);
+        this.syncAndPersist();
+        return true;
       } else {
         // 网络/超时/服务端瞬态：退避待重试（D6 §6.3 1s→4s→16s→60s 封顶）
         outboxState = recordFailure(
@@ -387,14 +429,15 @@ export class ApprovalBridge {
           err instanceof Error ? err.message : String(err),
           now
         );
+        this.syncAndPersist();
         this.scheduleBackoffRetry();
+        return false;
       }
     }
   }
 
-  /** 退避重试定时：以最近的可重试 failed 条目 nextRetryAtMs 为准（到点自动重放） */
+  /** 退避重试定时：以最近的可重试 failed 条目 nextRetryAtMs 为准（动态防饥饿聚合，到点自动重放） */
   private scheduleBackoffRetry(): void {
-    if (this.retryTimer !== null) return;
     const now = this.nowFn();
     let earliest: number | null = null;
     for (const item of outboxState.items) {
@@ -404,7 +447,17 @@ export class ApprovalBridge {
         }
       }
     }
-    if (earliest === null) return;
+    if (earliest === null) {
+      if (this.retryTimer !== null) {
+        clearTimeout(this.retryTimer);
+        this.retryTimer = null;
+      }
+      return;
+    }
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
     this.retryTimer = setTimeout(
       () => {
         this.retryTimer = null;
@@ -478,7 +531,12 @@ export function ensureApprovalWiring(
   if (singleton) return singleton;
   const gateway = opts.gateway ?? getObservationWiring()?.client.gateway;
   if (!gateway) return null;
-  singleton = startApprovalWiring({ ...opts, gateway });
+  singleton = startApprovalWiring({
+    persistAdapter: createDefaultOutboxPersist(),
+    ...opts,
+    gateway,
+  });
+  void singleton.bridge.hydrate();
   return singleton;
 }
 
@@ -519,6 +577,9 @@ export function enqueueApprovalDecision(
   const result = enqueueDecision(outboxState, input, nowMs);
   outboxState = result.state;
   syncOutboxCount();
+  if (singleton?.bridge.persistAdapter) {
+    void singleton.bridge.persistAdapter.save(snapshotOutbox(outboxState));
+  }
   if (result.outcome !== 'full') {
     void singleton?.flush();
   }

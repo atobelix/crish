@@ -147,6 +147,21 @@ describe('dispatchIngestActions 会话副作用路由（F1 §2.5「落/刷」列
     expect(sessionStore.getState().sessions[0]!.pendingApprovalCount).toBe(0);
   });
 
+  it('session-unread-update 路由到 sessionStore.applyLatestSeq 更新未读计数', () => {
+    dispatchIngestActions([
+      { kind: 'session-upsert', session: makeSession({ id: 's-1' }) },
+    ]);
+    dispatchIngestActions([
+      {
+        kind: 'session-unread-update',
+        sessionId: 's-1',
+        latestSeq: 5,
+        isAssistant: true,
+      },
+    ]);
+    expect(sessionStore.getState().sessions[0]!.unreadCount).toBe(5);
+  });
+
   it('会话不存在的副作用动作宽容跳过（不抛错）', () => {
     expect(() =>
       dispatchIngestActions([

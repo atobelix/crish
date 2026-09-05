@@ -70,7 +70,9 @@ export function useApprovalListVm(): ApprovalListVm {
   useEffect(() => {
     for (const item of pending) {
       if (
-        (item.status === 'pending' || item.status === 'deciding') &&
+        (item.status === 'pending' ||
+          item.status === 'deciding' ||
+          item.status === 'queued') &&
         now >= item.expiresAt
       ) {
         approvalStore.getState().markExpired(item.request.toolCallId, now);

@@ -41,6 +41,12 @@ export type StoreIngestAction =
   | { kind: 'run-active'; sessionId: string; runId: string }
   | { kind: 'run-terminal'; sessionId: string; runId: string; terminal: string }
   | { kind: 'approval-delta'; sessionId: string; delta: 1 | -1 }
+  | {
+      kind: 'session-unread-update';
+      sessionId: string;
+      latestSeq: number;
+      isAssistant: boolean;
+    }
   | { kind: 'ignore'; reason: string };
 
 // ── 事件 type → ingest 路由表（F1 §2.5「实+刷+落」列；生成面 ENGINE_EVENT_TYPES 驱动全量断言） ──
@@ -178,6 +184,19 @@ export function mapIngestFrame(
   const actions: StoreIngestAction[] = [
     { kind: 'feed-append', sessionId: frame.sessionId, frame, preview },
   ];
+  if (frame.type === 'message-end') {
+    const seq = readNumber(frame, 'sequence');
+    if (seq !== undefined) {
+      const msgObj = readRecord(frame['message']);
+      const isAssistant = msgObj?.['role'] === 'assistant';
+      actions.push({
+        kind: 'session-unread-update',
+        sessionId: frame.sessionId,
+        latestSeq: seq,
+        isAssistant,
+      });
+    }
+  }
   switch (route) {
     case 'run-active': {
       // 信封 runId（emit 层注入）；数据面/缺失 runId 无法维护活动标记，仅入 feed

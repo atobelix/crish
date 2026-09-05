@@ -1143,6 +1143,9 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
             let _ = serde_json::from_value::<EventAck>(envelope.body.clone());
             Action::Continue
         }
+        MessageKind::Remote(cmd) => {
+            handle_remote_command_frame(cmd.as_str(), envelope.body, envelope.msg_id.as_str(), ctx).await
+        }
         MessageKind::Error => {
             // 对端错误帧：记录（不关闭，宽容）
             tracing::debug!(target: "ws", conn_id = ctx.conn_id, "收到对端 error 帧");
@@ -1161,6 +1164,97 @@ async fn handle_text(text: String, ctx: &ConnCtx) -> Action {
             Action::Continue
         }
     }
+}
+
+/// remote.<cmd>：移动端远程命令处理（approve / deny / listPendingApprovals 等，消除 10s 黑洞）
+async fn handle_remote_command_frame(
+    cmd: &str,
+    body: Value,
+    msg_id: &str,
+    ctx: &ConnCtx,
+) -> Action {
+    let Some(backend) = ctx.state.backend() else {
+        let err_body = ErrorBody::new(
+            DeviceErrorCode::Internal,
+            "API backend not initialized",
+        );
+        let res = conex_types::device::commands::CommandResult::failure(msg_id, err_body);
+        return send_envelope(ctx, MessageKind::Result(cmd.to_string()), res).await;
+    };
+
+    let params_val = body.get("params").cloned().unwrap_or(body);
+
+    let result = match cmd {
+        "approve" => match serde_json::from_value::<conex_types::device::commands::ApproveParams>(params_val) {
+            Ok(params) => match backend.approve(params).await {
+                Ok(res) => match serde_json::to_value(res) {
+                    Ok(val) => conex_types::device::commands::CommandResult::success(msg_id, val),
+                    Err(e) => conex_types::device::commands::CommandResult::failure(
+                        msg_id,
+                        ErrorBody::new(DeviceErrorCode::Internal, e.to_string()),
+                    ),
+                },
+                Err(e) => conex_types::device::commands::CommandResult::failure(
+                    msg_id,
+                    ErrorBody::new(e.device_code(), e.to_string()),
+                ),
+            },
+            Err(e) => conex_types::device::commands::CommandResult::failure(
+                msg_id,
+                ErrorBody::new(
+                    DeviceErrorCode::CmdInvalid,
+                    format!("approve params invalid: {e}"),
+                ),
+            ),
+        },
+        "deny" => match serde_json::from_value::<conex_types::device::commands::DenyParams>(params_val) {
+            Ok(params) => match backend.deny(params).await {
+                Ok(res) => match serde_json::to_value(res) {
+                    Ok(val) => conex_types::device::commands::CommandResult::success(msg_id, val),
+                    Err(e) => conex_types::device::commands::CommandResult::failure(
+                        msg_id,
+                        ErrorBody::new(DeviceErrorCode::Internal, e.to_string()),
+                    ),
+                },
+                Err(e) => conex_types::device::commands::CommandResult::failure(
+                    msg_id,
+                    ErrorBody::new(e.device_code(), e.to_string()),
+                ),
+            },
+            Err(e) => conex_types::device::commands::CommandResult::failure(
+                msg_id,
+                ErrorBody::new(
+                    DeviceErrorCode::CmdInvalid,
+                    format!("deny params invalid: {e}"),
+                ),
+            ),
+        },
+        "listPendingApprovals" => {
+            let params = serde_json::from_value::<conex_types::device::commands::ListPendingApprovalsParams>(params_val).unwrap_or_default();
+            match backend.list_pending_approvals(params).await {
+                Ok(res) => match serde_json::to_value(res) {
+                    Ok(val) => conex_types::device::commands::CommandResult::success(msg_id, val),
+                    Err(e) => conex_types::device::commands::CommandResult::failure(
+                        msg_id,
+                        ErrorBody::new(DeviceErrorCode::Internal, e.to_string()),
+                    ),
+                },
+                Err(e) => conex_types::device::commands::CommandResult::failure(
+                    msg_id,
+                    ErrorBody::new(e.device_code(), e.to_string()),
+                ),
+            }
+        }
+        _ => conex_types::device::commands::CommandResult::failure(
+            msg_id,
+            ErrorBody::new(
+                DeviceErrorCode::CmdNotFound,
+                format!("Unsupported remote command: {cmd}"),
+            ),
+        ),
+    };
+
+    send_envelope(ctx, MessageKind::Result(cmd.to_string()), result).await
 }
 
 /// pair.hello：配对简化链（hello → pair.ok + device.ready；任务书「或直接
