@@ -762,6 +762,202 @@ async function runDefenseSuite() {
         }
       }
 
+      // ============================================================
+      // 场景 9：行内空白与行尾点击全类型覆盖防御契约 (LINE-TRAILING-CLICK-DEFENSE)
+      // 铁律：光标未选文字但在一行内时，点击空白处严格统一定位于当前行末尾 (lineStart + lineLen)
+      // 覆盖类型：标题行、普通段落行、列表项行、代码起始围栏、代码内容行、引用块行、行内加粗行、行内代码行、空行等
+      // ============================================================
+      {
+        const st = window.__editorStore.getState();
+        const testTargets = [
+          {
+            type: '标题行 (Heading)',
+            findLineIdx: () => {
+              for (let i = 0; i < st.getLineCount(); i++) {
+                const t = st.getLine(i);
+                if (t && (t.startsWith('# ') || t.startsWith('### '))) return i;
+              }
+              return -1;
+            },
+          },
+          {
+            type: '普通段落行 (Paragraph)',
+            findLineIdx: () => {
+              for (let i = 0; i < st.getLineCount(); i++) {
+                const t = st.getLine(i);
+                if (
+                  t &&
+                  t.length > 20 &&
+                  !t.startsWith('#') &&
+                  !t.startsWith('-') &&
+                  !t.startsWith('`') &&
+                  !t.startsWith('>') &&
+                  !t.startsWith('|') &&
+                  !t.startsWith('$')
+                )
+                  return i;
+              }
+              return -1;
+            },
+          },
+          {
+            type: '列表项行 (List Item)',
+            findLineIdx: () => {
+              for (let i = 0; i < st.getLineCount(); i++) {
+                const t = st.getLine(i);
+                if (t && (t.startsWith('- ') || t.startsWith('* '))) return i;
+              }
+              return -1;
+            },
+          },
+          {
+            type: '代码块起始行 (Code Fence Start)',
+            findLineIdx: () => {
+              for (let i = 0; i < st.getLineCount(); i++) {
+                const t = st.getLine(i);
+                if (t && (t.startsWith('```') || t.startsWith('~~~'))) return i;
+              }
+              return -1;
+            },
+          },
+          {
+            type: '代码块内容行 (Code Line)',
+            findLineIdx: () => {
+              for (let i = 0; i < st.getLineCount() - 1; i++) {
+                const t = st.getLine(i);
+                if (t && (t.startsWith('```') || t.startsWith('~~~'))) {
+                  const next = st.getLine(i + 1);
+                  if (next && !next.startsWith('```')) return i + 1;
+                }
+              }
+              return -1;
+            },
+          },
+          {
+            type: '引用块行 (Blockquote)',
+            findLineIdx: () => {
+              for (let i = 0; i < st.getLineCount(); i++) {
+                const t = st.getLine(i);
+                if (t && t.startsWith('>')) return i;
+              }
+              return -1;
+            },
+          },
+          {
+            type: '行内加粗格式化行 (Bold Inline)',
+            findLineIdx: () => {
+              for (let i = 0; i < st.getLineCount(); i++) {
+                const t = st.getLine(i);
+                if (t && t.includes('**') && !t.startsWith('#')) return i;
+              }
+              return -1;
+            },
+          },
+          {
+            type: '行内代码格式化行 (Inline Code)',
+            findLineIdx: () => {
+              for (let i = 0; i < st.getLineCount(); i++) {
+                const t = st.getLine(i);
+                if (t && t.includes('`') && !t.startsWith('```') && t.split('`').length >= 3) return i;
+              }
+              return -1;
+            },
+          },
+          {
+            type: '空行 (Empty Line)',
+            findLineIdx: () => {
+              for (let i = 0; i < st.getLineCount(); i++) {
+                const t = st.getLine(i);
+                if (t !== undefined && t.trim() === '') return i;
+              }
+              return -1;
+            },
+          },
+        ];
+
+        const trailingClickResults = [];
+
+        for (const target of testTargets) {
+          const targetLineIdx = target.findLineIdx();
+          if (targetLineIdx >= 0) {
+            // 通过 scrollTop 定位并将目标行置于可视区
+            container.scrollTop = Math.max(0, targetLineIdx * 28 - 150);
+            await waitForFrame(50);
+
+            const activeRow = document.querySelector(
+              `.virtual-row[data-index="${targetLineIdx}"]`
+            );
+            if (!activeRow) continue;
+
+            const lineStart = parseInt(
+              activeRow.getAttribute('data-line-start') || '0',
+              10
+            );
+            const lineLen = parseInt(
+              activeRow.getAttribute('data-line-length') || '0',
+              10
+            );
+            const expectedEnd = lineStart + lineLen;
+
+            const rowRect = activeRow.getBoundingClientRect();
+            // 在行内右侧空白区域点击（避免点击右上角可能存在的复制按钮）
+            const clickX = Math.min(
+              rowRect.right - 50,
+              rowRect.left + rowRect.width - 50
+            );
+            const clickY = rowRect.top + rowRect.height / 2;
+
+            activeRow.dispatchEvent(
+              new MouseEvent('mousedown', {
+                clientX: clickX,
+                clientY: clickY,
+                bubbles: true,
+              })
+            );
+            await waitForFrame(20);
+            activeRow.dispatchEvent(
+              new MouseEvent('mouseup', {
+                clientX: clickX,
+                clientY: clickY,
+                bubbles: true,
+              })
+            );
+            activeRow.dispatchEvent(
+              new MouseEvent('click', {
+                clientX: clickX,
+                clientY: clickY,
+                bubbles: true,
+              })
+            );
+            await waitForFrame(60);
+
+            const actualCursor = window.__editorStore.getState().cursorPos;
+            const isMatch = actualCursor === expectedEnd;
+            trailingClickResults.push({
+              type: target.type,
+              lineIdx: targetLineIdx,
+              expected: expectedEnd,
+              actual: actualCursor,
+              offset: actualCursor - expectedEnd,
+              passed: isMatch,
+            });
+          }
+        }
+
+        const allTrailingPassed =
+          trailingClickResults.length > 0 &&
+          trailingClickResults.every((r) => r.passed);
+        const failedItems = trailingClickResults.filter((r) => !r.passed);
+        suiteResults.push({
+          id: 'LINE-TRAILING-CLICK-DEFENSE',
+          name: '行内空白与行尾点击全类型覆盖防御契约 (Line Trailing Click Defense)',
+          passed: allTrailingPassed,
+          details: allTrailingPassed
+            ? `全部 ${trailingClickResults.length} 种行类型 (${trailingClickResults.map((r) => r.type).join(', ')}) 点击行内空白严格 100% 统一定位于行末 (lineStart + lineLen)，零偏差`
+            : `存在行尾点击定位偏差: ${failedItems.map((f) => `${f.type}(L${f.lineIdx}): 预期=${f.expected}, 实际=${f.actual}, 偏移=${f.offset}`).join('; ')}`,
+        });
+      }
+
       return { suiteResults };
     }, TOLERANCE_PX);
 

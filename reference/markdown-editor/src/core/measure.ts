@@ -779,7 +779,7 @@ export function locateRowIndexByPhysicalBisection(
       if (!p) return NodeFilter.FILTER_REJECT;
       // 检查当前元素及其祖先是否隐藏或明确忽略物理测量
       const ignoreEl = p.closest(
-        '.syntax-hidden, .katex-html, .math-preview, .code-gutter, [data-copy-button], [data-ignore-measure]'
+        '.syntax-hidden, .katex-mathml, .math-preview, .code-gutter, [data-copy-button], [data-ignore-measure]'
       ) as HTMLElement | null;
       if (ignoreEl) {
         if (
@@ -822,22 +822,34 @@ export function locateRowIndexByPhysicalBisection(
 
   // 2. 检查整行最左边界：若点击在最左可见字符左侧，锚定到最左可见字符起点（防跳回折叠语法前缀如 ### ）
   try {
-    range.setStart(textEntries[0].node, 0);
-    range.setEnd(textEntries[0].node, Math.min(1, textEntries[0].length));
-    const firstRect = range.getBoundingClientRect();
-    if (firstRect.width > 0 && clientX <= firstRect.left) {
-      return textEntries[0].globalStart;
+    for (let i = 0; i < textEntries.length; i++) {
+      const entry = textEntries[i];
+      range.setStart(entry.node, 0);
+      range.setEnd(entry.node, Math.min(1, entry.length));
+      const firstRect = range.getBoundingClientRect();
+      if (firstRect.width > 0) {
+        if (clientX <= firstRect.left) {
+          return entry.globalStart;
+        }
+        break;
+      }
     }
   } catch {}
 
-  // 3. 检查整行最右边界：若点击在最右可见字符右侧，锚定到末尾可见字符末端
+  // 3. 检查整行最右边界：若点击在当前行最右可见字符右侧（即行内空白区域），
+  // 严格统一将光标锚定到当前行末尾（lineStart + lineLen）
   try {
-    const lastEntry = textEntries[textEntries.length - 1];
-    range.setStart(lastEntry.node, Math.max(0, lastEntry.length - 1));
-    range.setEnd(lastEntry.node, lastEntry.length);
-    const lastRect = range.getBoundingClientRect();
-    if (lastRect.width > 0 && clientX >= lastRect.right) {
-      return lastEntry.globalStart + lastEntry.length;
+    for (let i = textEntries.length - 1; i >= 0; i--) {
+      const entry = textEntries[i];
+      range.setStart(entry.node, Math.max(0, entry.length - 1));
+      range.setEnd(entry.node, entry.length);
+      const lastRect = range.getBoundingClientRect();
+      if (lastRect.width > 0) {
+        if (clientX >= lastRect.right) {
+          return lineStart + lineLen;
+        }
+        break;
+      }
     }
   } catch {}
 
@@ -887,6 +899,11 @@ export function locateRowIndexByPhysicalBisection(
 
   if (!Number.isFinite(bestDist)) {
     return null;
+  }
+
+  const lastEntry = textEntries[textEntries.length - 1];
+  if (bestPos >= lastEntry.globalStart + lastEntry.length) {
+    return lineStart + lineLen;
   }
 
   return Math.min(lineStart + lineLen, Math.max(lineStart, bestPos));
