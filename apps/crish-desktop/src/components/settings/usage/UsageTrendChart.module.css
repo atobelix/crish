@@ -14,77 +14,11 @@
   min-height: 28px;
 }
 
-.blockHeaderLeft {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .blockTitle {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: -0.015em;
-}
-
-.btnAvgToggle {
-  height: 22px;
-  padding: 0 8px;
-  font-size: 11px;
-  border-radius: var(--usage-seg-sm-btn-radius, 5px);
-  color: var(--text-tertiary);
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  border: 1px solid transparent;
-  background: transparent;
-  cursor: pointer;
-  transition: all 120ms ease;
-}
-
-.btnAvgToggle:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.btnAvgToggleActive {
-  background: var(--bg-active, color-mix(in srgb, var(--text-primary) 6%, transparent));
-  color: var(--text-primary);
-  border-color: var(--border-color);
-}
-
-.segmentedSm {
-  display: inline-flex;
-  align-items: center;
-  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
-  padding: var(--usage-seg-sm-pad, 1.5px);
-  border-radius: var(--usage-seg-sm-radius, 5px);
-  gap: 2px;
-}
-
-.segmentedBtn {
-  height: 19px;
-  padding: 0 8px;
-  font-size: 11px;
-  line-height: 19px;
-  border-radius: var(--usage-seg-sm-btn-radius, 3.5px);
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 120ms ease;
-}
-
-.segmentedBtn:hover {
-  color: var(--text-primary);
-}
-
-.segmentedBtnActive {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-weight: 600;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, #000) 4%, transparent);
 }
 
 .svgChartViewport {
@@ -111,7 +45,9 @@
   right: 6px;
   font-size: 10px;
   color: var(--text-tertiary);
-  font-family: var(--font-sans);
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   transform: translateY(-50%);
   line-height: 1;
   white-space: nowrap;
@@ -160,12 +96,10 @@
 .chartTooltipCard {
   position: absolute;
   top: 10px;
-  background: color-mix(in srgb, var(--bg-card) 96%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: var(--bg-elevated, var(--bg-card));
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg, 8px);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-popover, var(--shadow-md));
   padding: 8px 12px;
   font-size: 11px;
   pointer-events: none;
@@ -200,24 +134,30 @@
 }
 
 .tooltipRowVal {
-  font-family: var(--font-mono);
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   font-weight: 600;
   color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
 }
 
-/* 纯净 HTML X 轴时间刻度，彻底根除 SVG 横向挤压拉伸形变与叠字 */
+/* 纯净 HTML X 轴时间刻度，绝对百分比锚点定位，彻底根除 24 小时叠字 */
 .chartXAxis {
-  display: flex;
-  justify-content: space-between;
-  padding: 6px 12px 0 38px;
-  font-size: 10.5px;
+  position: relative;
+  height: 18px;
+  margin-top: 4px;
   color: var(--text-tertiary);
+  font-size: 10.5px;
   user-select: none;
 }
 
 .axisTick {
-  text-align: center;
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 .tickNow {

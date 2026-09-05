@@ -139,13 +139,13 @@ fn query_usage_dashboard_7d_and_30d() {
 }
 
 #[test]
-fn query_activity_matrix_4x30() {
+fn query_activity_matrix_8x30() {
     let db = LocalDb::open_in_memory().unwrap();
     let now_ms = 1700000000000i64;
     let tz = -480;
 
     // 插入不同时段的数据
-    // 1. 今天下午 14:00 (属于下午 12-18 时段，第 2 行)
+    // 1. 今天下午 14:00 (属于 12-15 时段，第 4 行)
     db.insert_usage_record(InsertUsageRecordInput {
         session_id: "s1".to_string(),
         run_id: None,
@@ -163,12 +163,16 @@ fn query_activity_matrix_4x30() {
     .unwrap();
 
     let matrix = db.query_activity_matrix("30d", tz, Some(now_ms)).unwrap();
-    assert_eq!(matrix.rows.len(), 4, "30d 必须为 4 行时段");
+    assert_eq!(matrix.rows.len(), 8, "30d 必须为 8 行时段 (每 3 小时一段)");
+    assert_eq!(matrix.rows[0], "00-03");
+    assert_eq!(matrix.rows[7], "21-24");
     assert_eq!(matrix.cols.len(), 30, "30d 必须为 30 列日期");
-    assert_eq!(matrix.cells.len(), 120, "30d 必须包含严格 120 个单元格");
+    assert_eq!(matrix.cells.len(), 240, "30d 必须包含严格 240 个单元格");
 
     let active_cells: Vec<_> = matrix.cells.iter().filter(|c| c.tokens > 0).collect();
     assert!(!active_cells.is_empty(), "必须有单元格被命中");
+    assert_eq!(active_cells[0].row, 2, "h=6 落在第 2 行 (06-09)");
+    assert_eq!(active_cells[0].row_label, "06-09");
     assert!(active_cells[0].level >= 1 && active_cells[0].level <= 4);
 }
 

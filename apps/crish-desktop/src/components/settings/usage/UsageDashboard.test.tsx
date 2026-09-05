@@ -28,13 +28,13 @@ vi.mock('../../../api/tauriInvoke', () => ({
         status: 'ok',
         data: {
           range: '30d',
-          rows: ['凌晨', '上午', '下午', '晚间'],
+          rows: ['00-03', '03-06', '06-09', '09-12', '12-15', '15-18', '18-21', '21-24'],
           cols: ['09-01', '09-02', '09-03'],
           cells: [
             {
               row: 0,
               col: 0,
-              rowLabel: '凌晨',
+              rowLabel: '00-03',
               colLabel: '09-01',
               tokens: 1500,
               cost: 0.1,
@@ -58,7 +58,7 @@ const mockModels: UsageModelBreakdownItem[] = [
     model: 'deepseek-chat',
     provider: 'deepseek',
     tokens: 60000,
-    percentage: 0.6,
+    percentage: 60,
     cost: 1.2,
     cacheRatio: 0.8,
     callCount: 15,
@@ -67,7 +67,7 @@ const mockModels: UsageModelBreakdownItem[] = [
     model: 'claude-3-5-sonnet',
     provider: 'anthropic',
     tokens: 40000,
-    percentage: 0.4,
+    percentage: 40,
     cost: 3.5,
     cacheRatio: 0.5,
     callCount: 8,
@@ -130,19 +130,15 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
       <UsageSummaryHero
         totalTokens={100000}
         totalCost={4.7}
-        totalInput={80000}
-        totalOutput={20000}
-        totalCacheRead={60000}
-        dailyAverageTokens={50000}
-        dailyAverageCost={2.35}
       />
     );
 
     expect(screen.getByText('总用量')).toBeDefined();
     expect(screen.getByText('10.0 万')).toBeDefined();
+    expect(screen.getByText('tokens')).toBeDefined();
     expect(screen.getByText('预估金额')).toBeDefined();
-    expect(screen.getByText('¥ 4.70')).toBeDefined();
-    expect(screen.getByText('8.00 万')).toBeDefined();
+    expect(screen.getByText('4.70')).toBeDefined();
+    expect(screen.getByText('CNY')).toBeDefined();
   });
 
   it('ModelDistributionSection: 渲染饼图与同心圆角胶囊模型列表', () => {
@@ -160,7 +156,7 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
     expect(screen.getByText('40.0%')).toBeDefined();
   });
 
-  it('UsageTrendChart: 维度切换与均线切换', () => {
+  it('UsageTrendChart: 维度切换与折线图渲染', () => {
     render(
       <UsageTrendChart
         points={mockPoints}
@@ -180,10 +176,10 @@ describe('用量控制台组件集成测试 (Usage Dashboard Components)', () =>
     fireEvent.click(costBtn);
     expect(screen.getByText('预估总费用')).toBeDefined();
 
-    // 均线参考切换
-    const avgBtn = screen.getByText('均线参考');
-    fireEvent.click(avgBtn);
-    expect(screen.getByText(/均值/)).toBeDefined();
+    // 切换到模型对比
+    const modelsBtn = screen.getByText('模型对比');
+    fireEvent.click(modelsBtn);
+    expect(screen.getByText('deepseek-chat')).toBeDefined();
   });
 
   it('ActivityMatrixHeatmap: 渲染热力图与习惯偏好指标', async () => {

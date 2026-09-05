@@ -11,6 +11,7 @@ import {
   formatCost,
   formatTokens,
   getAreaSplinePath,
+  getModelColor,
   getMonotoneSplinePath,
   type SplinePoint,
 } from './usageSpline';
@@ -37,17 +38,8 @@ export interface ChartModelOutput {
   seriesList: ChartSeriesConfig[];
   yTicks: [string, string, string, string];
   yMax: number;
-  avgVal: number;
-  avgLabel: string;
   formatVal: (v: number) => string;
 }
-
-const PALETTE = [
-  'var(--usage-color-brand)',
-  'var(--usage-color-claude)',
-  'var(--usage-color-minimax)',
-  'var(--usage-color-kimi)',
-];
 
 export function buildChartSeriesConfig(
   dimension: 'overview' | 'models' | 'cost',
@@ -60,18 +52,14 @@ export function buildChartSeriesConfig(
     return {
       seriesList: [],
       yTicks: ['0', '0', '0', '0'],
-      yMax: 1,
-      avgVal: 0,
-      avgLabel: '均值: 0',
+      yMax: 0,
       formatVal: formatTokens,
     };
   }
 
   if (dimension === 'cost') {
-    const computedYMax = maxCost > 0 ? maxCost * 1.15 : 10;
+    const computedYMax = maxCost > 0 ? maxCost * 1.15 : 0;
     const totalCostPoints = points.map((p) => p.cost);
-    const sum = totalCostPoints.reduce((acc, c) => acc + c, 0);
-    const avg = sum / points.length;
 
     const series: ChartSeriesConfig[] = [
       {
@@ -93,24 +81,27 @@ export function buildChartSeriesConfig(
       series.push({
         id: `modelCost_${m.model}`,
         name: `${m.model} 费用`,
-        color: PALETTE[idx % PALETTE.length] ?? PALETTE[0] ?? 'var(--usage-color-brand)',
+        color: getModelColor(m.model, idx).stroke,
         width: 1.4,
         style: 'solid',
         data: points.map((p) => p.modelCosts?.[m.model] ?? 0),
       });
     });
 
+    const yTicks: [string, string, string, string] =
+      computedYMax > 0
+        ? [
+            formatCost(computedYMax),
+            formatCost(computedYMax * (2.0 / 3.0)),
+            formatCost(computedYMax * (1.0 / 3.0)),
+            '¥ 0.00',
+          ]
+        : ['¥ 0.00', '¥ 0.00', '¥ 0.00', '¥ 0.00'];
+
     return {
       seriesList: series,
-      yTicks: [
-        formatCost(computedYMax),
-        formatCost(computedYMax * 0.66),
-        formatCost(computedYMax * 0.33),
-        '¥ 0.00',
-      ],
+      yTicks,
       yMax: computedYMax,
-      avgVal: avg,
-      avgLabel: `均值: ${formatCost(avg)}`,
       formatVal: (v: number) => formatCost(v),
     };
   }
@@ -119,14 +110,14 @@ export function buildChartSeriesConfig(
     const topModels = models
       .slice(0, 4)
       .filter((m): m is UsageModelBreakdownItem => Boolean(m));
-    let localMax = 1;
+    let localMax = 0;
     const series: ChartSeriesConfig[] = topModels.map((m, idx) => {
       const data = points.map((p) => p.modelTokens?.[m.model] ?? 0);
       for (const val of data) localMax = Math.max(localMax, val);
       return {
         id: `model_${m.model}`,
         name: m.model,
-        color: PALETTE[idx % PALETTE.length] ?? PALETTE[0] ?? 'var(--usage-color-brand)',
+        color: getModelColor(m.model, idx).stroke,
         width: idx === 0 ? 1.6 : 1.4,
         style: 'solid',
         isTotal: idx === 0,
@@ -134,31 +125,28 @@ export function buildChartSeriesConfig(
       };
     });
 
-    const computedYMax = localMax * 1.15;
-    const firstSeriesData = series[0]?.data ?? [];
-    const sum = firstSeriesData.reduce((acc, c) => acc + c, 0);
-    const avg = firstSeriesData.length > 0 ? sum / firstSeriesData.length : 0;
+    const computedYMax = localMax > 0 ? localMax * 1.15 : 0;
+    const yTicks: [string, string, string, string] =
+      computedYMax > 0
+        ? [
+            formatTokens(computedYMax),
+            formatTokens(computedYMax * (2.0 / 3.0)),
+            formatTokens(computedYMax * (1.0 / 3.0)),
+            '0',
+          ]
+        : ['0', '0', '0', '0'];
 
     return {
       seriesList: series,
-      yTicks: [
-        formatTokens(computedYMax),
-        formatTokens(computedYMax * 0.66),
-        formatTokens(computedYMax * 0.33),
-        '0',
-      ],
+      yTicks,
       yMax: computedYMax,
-      avgVal: avg,
-      avgLabel: `均值: ${formatTokens(avg)}`,
       formatVal: formatTokens,
     };
   }
 
   // 默认 overview
-  const computedYMax = maxTokens > 0 ? maxTokens * 1.15 : 1000;
+  const computedYMax = maxTokens > 0 ? maxTokens * 1.15 : 0;
   const totals = points.map((p) => p.total);
-  const sum = totals.reduce((acc, c) => acc + c, 0);
-  const avg = sum / points.length;
 
   const series: ChartSeriesConfig[] = [
     {
@@ -197,17 +185,20 @@ export function buildChartSeriesConfig(
     },
   ];
 
+  const yTicks: [string, string, string, string] =
+    computedYMax > 0
+      ? [
+          formatTokens(computedYMax),
+          formatTokens(computedYMax * (2.0 / 3.0)),
+          formatTokens(computedYMax * (1.0 / 3.0)),
+          '0',
+        ]
+      : ['0', '0', '0', '0'];
+
   return {
     seriesList: series,
-    yTicks: [
-      formatTokens(computedYMax),
-      formatTokens(computedYMax * 0.66),
-      formatTokens(computedYMax * 0.33),
-      '0',
-    ],
+    yTicks,
     yMax: computedYMax,
-    avgVal: avg,
-    avgLabel: `均值: ${formatTokens(avg)}`,
     formatVal: formatTokens,
   };
 }

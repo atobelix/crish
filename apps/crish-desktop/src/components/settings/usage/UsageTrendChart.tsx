@@ -7,8 +7,8 @@ import {
   buildChartSeriesConfig,
   computeSeriesGeometry,
 } from './usageChartModel';
-import { clampViewportX } from './usageSpline';
-import { Button } from '../../ui';
+import { clampViewportX, computeDecimatedTicks } from './usageSpline';
+import { Button, SegmentedControl } from '../../ui';
 import styles from './UsageTrendChart.module.css';
 
 export interface UsageTrendChartProps {
@@ -16,6 +16,7 @@ export interface UsageTrendChartProps {
   maxTokens: number;
   maxCost: number;
   models: UsageModelBreakdownItem[];
+  range?: '24h' | '7d' | '30d';
 }
 
 export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
@@ -23,9 +24,9 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
   maxTokens,
   maxCost,
   models,
+  range = '24h',
 }) => {
   const [dimension, setDimension] = useState<'overview' | 'models' | 'cost'>('overview');
-  const [showAvgLine, setShowAvgLine] = useState(false);
   const [disabledSeries, setDisabledSeries] = useState<Set<string>>(new Set());
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverHighlightSeries, setHoverHighlightSeries] = useState<string | null>(null);
@@ -38,35 +39,32 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
     return buildChartSeriesConfig(dimension, points, maxTokens, maxCost, models);
   }, [dimension, points, maxTokens, maxCost, models]);
 
-  const { seriesList, yTicks, yMax, avgVal, avgLabel, formatVal } = chartModel;
+  const { seriesList, yTicks, yMax, formatVal } = chartModel;
 
   // 2. 几何坐标映射与样条路径计算
   const xStart = 40;
   const xEnd = 750;
   const yTop = 20;
   const yBottom = 140;
-  const ySpan = yBottom - yTop; // 120px
 
   const computedSeries = useMemo(() => {
     return computeSeriesGeometry(seriesList, points.length, yMax, xStart, xEnd, yTop, yBottom);
   }, [seriesList, points.length, yMax]);
 
-  // 3. 均值参考线坐标
-  const avgY = useMemo(() => {
-    if (yMax <= 0) return yBottom;
-    const ratio = Math.min(1, Math.max(0, avgVal / yMax));
-    return yBottom - ratio * ySpan;
-  }, [avgVal, yMax, yBottom, ySpan]);
+  // 3. X 轴刻度抽稀计算（显式使用 range，杜绝根据数据点数盲猜）
+  const decimatedTicks = useMemo(() => {
+    return computeDecimatedTicks(points, range, xStart, xEnd, 760);
+  }, [points, range, xStart, xEnd]);
 
   // 鼠标交互
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!containerRef.current || points.length === 0) return;
+    if (!containerRef.current || points.length === 0 || computedSeries.length === 0) return;
     const rect = containerRef.current.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const numPoints = points.length;
 
     let closest = 0;
-    let minDiff = 999999;
+    let minDiff = Number.POSITIVE_INFINITY;
     for (let i = 0; i < numPoints; i++) {
       const ptX = (computedSeries[0]?.points[i]?.x ?? xStart) / 760 * rect.width;
       const diff = Math.abs(ptX - mouseX);
@@ -119,64 +117,21 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
   return (
     <div className={styles.chartContainer}>
       <div className={styles.blockHeader}>
-        <div className={styles.blockHeaderLeft}>
-          <span className={styles.blockTitle}>吞吐趋势</span>
-          <Button
-            type="button"
-            variant="plain"
-            size="xs"
-            className={`${styles.btnAvgToggle} ${showAvgLine ? styles.btnAvgToggleActive : ''}`}
-            onClick={() => setShowAvgLine((prev) => !prev)}
-            aria-pressed={showAvgLine}
-          >
-            <svg
-              style={{
-                width: 12,
-                height: 12,
-                stroke: 'currentColor',
-                fill: 'none',
-                strokeWidth: 2,
-              }}
-              viewBox="0 0 24 24"
-            >
-              <line x1="2" y1="12" x2="22" y2="12" strokeDasharray="3 3" />
-            </svg>
-            <span>均线参考</span>
-          </Button>
-        </div>
+        <span className={styles.blockTitle}>吞吐趋势</span>
 
-        <div className={styles.segmentedSm}>
-          <Button
-            type="button"
-            variant="plain"
-            size="xs"
-            className={`${styles.segmentedBtn} ${dimension === 'overview' ? styles.segmentedBtnActive : ''}`}
-            onClick={() => setDimension('overview')}
-          >
-            吞吐总览
-          </Button>
-          <Button
-            type="button"
-            variant="plain"
-            size="xs"
-            className={`${styles.segmentedBtn} ${dimension === 'models' ? styles.segmentedBtnActive : ''}`}
-            onClick={() => setDimension('models')}
-          >
-            模型对比
-          </Button>
-          <Button
-            type="button"
-            variant="plain"
-            size="xs"
-            className={`${styles.segmentedBtn} ${dimension === 'cost' ? styles.segmentedBtnActive : ''}`}
-            onClick={() => setDimension('cost')}
-          >
-            费用走势
-          </Button>
-        </div>
+        <SegmentedControl
+          size="xs"
+          value={dimension}
+          onChange={(val) => setDimension(val as 'overview' | 'models' | 'cost')}
+          options={[
+            { value: 'overview', label: '吞吐总览' },
+            { value: 'models', label: '模型对比' },
+            { value: 'cost', label: '费用走势' },
+          ]}
+        />
       </div>
 
-      {points.length <= 1 ? (
+      {points.length <= 1 || (maxTokens === 0 && maxCost === 0 && models.length === 0) ? (
         <div className={styles.emptyChart}>暂无充足时序采样数据</div>
       ) : (
         <>
@@ -221,44 +176,6 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
                   />
                 </linearGradient>
               </defs>
-
-              {/* 均线参考层 */}
-              {showAvgLine && (
-                <g style={{ pointerEvents: 'none' }}>
-                  <line
-                    x1="40"
-                    y1={avgY.toFixed(1)}
-                    x2="750"
-                    y2={avgY.toFixed(1)}
-                    stroke="var(--text-tertiary)"
-                    strokeWidth="1.2"
-                    strokeDasharray="4 4"
-                    opacity="0.75"
-                  />
-                  <rect
-                    x="644"
-                    y={(avgY - 9).toFixed(1)}
-                    width="96"
-                    height="18"
-                    rx="4"
-                    fill="var(--bg-card)"
-                    stroke="var(--border-subtle)"
-                    strokeWidth="1"
-                  />
-                  <text
-                    x="692"
-                    y={(avgY + 3.5).toFixed(1)}
-                    textAnchor="middle"
-                    style={{
-                      fontSize: '9.5px',
-                      fill: 'var(--text-secondary)',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {avgLabel}
-                  </text>
-                </g>
-              )}
 
               {/* 辅助网格线 */}
               <line x1="40" y1="20" x2="750" y2="20" className={styles.gridLine} />
@@ -317,7 +234,7 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
                         cx={pt.x.toFixed(1)}
                         cy={pt.y.toFixed(1)}
                         r="3.5"
-                        fill="#ffffff"
+                        fill="var(--bg-card)"
                         stroke={ser.color}
                         strokeWidth="1.5"
                       />
@@ -407,14 +324,18 @@ export const UsageTrendChart: React.FC<UsageTrendChartProps> = ({
             </div>
           </div>
 
-          {/* HTML 纯净 X 轴时间刻度 */}
+          {/* HTML 纯净 X 轴时间刻度（抽稀锚点定位，杜绝 24 小时叠字） */}
           <div className={styles.chartXAxis}>
-            {points.map((pt, i) => (
+            {decimatedTicks.map((tick) => (
               <span
-                key={`xlbl_${pt.timestamp}_${i}`}
-                className={`${styles.axisTick} ${i === points.length - 1 ? styles.tickNow : ''}`}
+                key={`tick_${tick.index}_${tick.label}`}
+                className={`${styles.axisTick} ${tick.index === points.length - 1 ? styles.tickNow : ''}`}
+                style={{
+                  left: `${tick.leftPercent}%`,
+                  transform: tick.transform,
+                }}
               >
-                {pt.label}
+                {tick.label}
               </span>
             ))}
           </div>

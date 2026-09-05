@@ -8,9 +8,9 @@ import {
 import type { UsageDashboardDto } from '../../api/usageContracts';
 import { useConfirmGate } from '../../hooks/useConfirmGate';
 import { useToast } from '../../services/toast/ToastContext';
-import { Button, ConfirmDialog } from '../ui';
+import { Button, ConfirmDialog, SegmentedControl } from '../ui';
 import { PriceConfigModal } from './PriceConfigModal';
-import { SettingsPage } from './SettingsUI';
+import { SettingsHeadTools, SettingsPage } from './SettingsUI';
 import { ActivityMatrixHeatmap } from './usage/ActivityMatrixHeatmap';
 import { ModelDistributionSection } from './usage/ModelDistributionSection';
 import { UsageSummaryHero } from './usage/UsageSummaryHero';
@@ -29,6 +29,12 @@ function safeLoadPrices(): { list: ModelPrice[]; error: string | null } {
   }
 }
 
+const RANGE_OPTIONS = [
+  { value: '24h', label: '近 24 小时' },
+  { value: '7d', label: '近 7 日' },
+  { value: '30d', label: '近 30 日' },
+];
+
 export const SettingsUsageTab: React.FC<Props> = () => {
   const { showToast } = useToast();
   const [globalRange, setGlobalRange] = useState<'24h' | '7d' | '30d'>('24h');
@@ -41,6 +47,8 @@ export const SettingsUsageTab: React.FC<Props> = () => {
   );
 
   const [confirmGate, renderConfirmGate] = useConfirmGate();
+
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const loadData = useCallback(async (range: '24h' | '7d' | '30d') => {
     setLoading(true);
@@ -70,55 +78,37 @@ export const SettingsUsageTab: React.FC<Props> = () => {
     const cleared = await clearUsageHistory();
     if (cleared) {
       showToast('用量历史已清空');
+      setDashboardData(null);
+      setRefreshTick((t) => t + 1);
       void loadData(globalRange);
     } else {
       showToast('清空历史失败');
     }
   }, [confirmGate, globalRange, loadData, showToast]);
 
+  const hasUsageData = Boolean(
+    dashboardData && (dashboardData.totalInput > 0 || dashboardData.totalOutput > 0)
+  );
+
   const headerMeta = (
-    <div className={styles.headerTools}>
-      <div className={styles.segmented}>
-        <Button
-          type="button"
-          variant="plain"
-          size="xs"
-          className={`${styles.segmentedBtn} ${globalRange === '24h' ? styles.segmentedBtnActive : ''}`}
-          onClick={() => setGlobalRange('24h')}
-        >
-          近 24 小时
-        </Button>
-        <Button
-          type="button"
-          variant="plain"
-          size="xs"
-          className={`${styles.segmentedBtn} ${globalRange === '7d' ? styles.segmentedBtnActive : ''}`}
-          onClick={() => setGlobalRange('7d')}
-        >
-          近 7 日
-        </Button>
-        <Button
-          type="button"
-          variant="plain"
-          size="xs"
-          className={`${styles.segmentedBtn} ${globalRange === '30d' ? styles.segmentedBtnActive : ''}`}
-          onClick={() => setGlobalRange('30d')}
-        >
-          近 30 日
-        </Button>
-      </div>
+    <SettingsHeadTools className={styles.headerTools}>
+      <SegmentedControl
+        size="sm"
+        value={globalRange}
+        onChange={(val) => setGlobalRange(val as '24h' | '7d' | '30d')}
+        options={RANGE_OPTIONS}
+      />
 
       <Button
         type="button"
-        variant="plain"
-        size="xs"
-        className={styles.configBtn}
+        variant="secondary"
+        size="sm"
+        icon={<Lucide.DollarSign size={14} />}
         onClick={() => setPricesModalOpen(true)}
       >
-        <Lucide.DollarSign size={14} />
         配置单价
       </Button>
-    </div>
+    </SettingsHeadTools>
   );
 
   return (
@@ -133,23 +123,19 @@ export const SettingsUsageTab: React.FC<Props> = () => {
         ) : (
           dashboardData && (
             <>
-              {/* 1. 顶部核心指标 */}
+              {/* 1. 顶部核心指标：对齐真机截图 2 极简单行仪表盘 */}
               <UsageSummaryHero
                 totalTokens={dashboardData.totalInput + dashboardData.totalOutput}
                 totalCost={dashboardData.totalCost}
-                totalInput={dashboardData.totalInput}
-                totalOutput={dashboardData.totalOutput}
-                totalCacheRead={dashboardData.totalCacheRead}
-                dailyAverageTokens={dashboardData.hero.dailyAverageTokens}
-                dailyAverageCost={dashboardData.hero.dailyAverageCost}
               />
 
-              {/* 2. 连续时钟吞吐趋势折线图 */}
+              {/* 2. 连续时钟吞吐趋势折线图：显式 range 契约，清退均线 */}
               <UsageTrendChart
                 points={dashboardData.points}
                 maxTokens={dashboardData.maxTokens}
                 maxCost={dashboardData.maxCost}
                 models={dashboardData.models}
+                range={globalRange}
               />
 
               {/* 3. 模型用量占比圆环与同心圆角进度条 */}
@@ -158,30 +144,34 @@ export const SettingsUsageTab: React.FC<Props> = () => {
                 totalTokens={dashboardData.totalInput + dashboardData.totalOutput}
               />
 
-              {/* 4. 独立周期切换的热力图矩阵与偏好网格 */}
-              <ActivityMatrixHeatmap heroStats={dashboardData.hero} />
+              {/* 4. 独立周期切换的热力图矩阵与偏好网格：接入 refreshKey 保证严格同步 */}
+              <ActivityMatrixHeatmap
+                heroStats={dashboardData.hero}
+                refreshKey={refreshTick}
+              />
 
               {/* 5. 底栏操作区 */}
               <div className={styles.actionsBar}>
                 <Button
                   type="button"
-                  variant="plain"
-                  size="xs"
-                  className={`${styles.actionBtn} ${styles.actionBtnRefresh}`}
-                  onClick={() => void loadData(globalRange)}
+                  variant="ghost"
+                  size="sm"
+                  icon={<Lucide.RefreshCw size={14} />}
+                  onClick={() => {
+                    setRefreshTick((t) => t + 1);
+                    void loadData(globalRange);
+                  }}
                 >
-                  <Lucide.RefreshCw size={13} />
                   刷新数据
                 </Button>
-                {(dashboardData.totalInput > 0 || dashboardData.totalOutput > 0) && (
+                {hasUsageData && (
                   <Button
                     type="button"
-                    variant="plain"
-                    size="xs"
-                    className={`${styles.actionBtn} ${styles.actionBtnClear}`}
+                    variant="danger"
+                    size="sm"
+                    icon={<Lucide.Trash2 size={14} />}
                     onClick={() => void handleClearHistory()}
                   >
-                    <Lucide.Trash2 size={13} />
                     清空历史
                   </Button>
                 )}

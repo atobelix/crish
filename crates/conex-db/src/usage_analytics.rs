@@ -285,8 +285,20 @@ impl LocalDb {
                 let m: u32 = parts[1].parse().unwrap_or(1);
                 let d: u32 = parts[2].parse().unwrap_or(1);
 
-                let approx_days = (y as i64 - 1970) * 365 + ((y as i64 - 1969) / 4) + ((m as i64 - 1) * 30) + (d as i64 - 1);
-                let timestamp = approx_days * 86_400_000 + 12 * 3_600_000;
+                const DAYS_BEFORE_MONTH: [i64; 12] = [0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334];
+                let is_leap = (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0);
+                let m_idx = ((m as usize).saturating_sub(1)).min(11);
+                let mut days_in_year = DAYS_BEFORE_MONTH[m_idx] + (d as i64 - 1);
+                if is_leap && m > 2 {
+                    days_in_year += 1;
+                }
+                let mut total_days = 0i64;
+                for yr in 1970..y {
+                    let yr_leap = (yr % 4 == 0 && yr % 100 != 0) || (yr % 400 == 0);
+                    total_days += if yr_leap { 366 } else { 365 };
+                }
+                total_days += days_in_year;
+                let timestamp = total_days * 86_400_000 + 12 * 3_600_000;
 
                 conn.execute(
                     "INSERT INTO usage_records (
@@ -515,33 +527,45 @@ impl LocalDb {
             .collect();
         models.sort_by(|a, b| b.tokens.cmp(&a.tokens));
 
-        // 5. 计算 6 项核心指标
-        let top_model = models
-            .first()
-            .map(|m| m.model.clone())
-            .unwrap_or_else(|| "deepseek-v4-flash".to_string());
+        // 5. 计算 6 项核心指标（若无真实用量数据，严禁伪造假数据画像，统一返回 "—"）
+        let top_model = if grand_total_tokens > 0 {
+            models
+                .first()
+                .map(|m| m.model.clone())
+                .unwrap_or_else(|| "—".to_string())
+        } else {
+            "—".to_string()
+        };
 
-        let top_project = project_counts
-            .into_iter()
-            .max_by_key(|(_, cnt)| *cnt)
-            .map(|(p, _)| p)
-            .unwrap_or_else(|| "conex".to_string());
+        let top_project = if grand_total_tokens > 0 {
+            project_counts
+                .into_iter()
+                .max_by_key(|(_, cnt)| *cnt)
+                .map(|(p, _)| p)
+                .unwrap_or_else(|| "—".to_string())
+        } else {
+            "—".to_string()
+        };
 
-        // 计算峰值时段（3 小时连续滑动窗口）
-        let mut max_window_sum: u64 = 0;
-        let mut best_start_h: usize = 20; // 默认 20:00
+        // 计算峰值时段（3 小时连续滑动窗口，仅在有真实用量时计算）
+        let mut max_sum: u64 = 0;
+        let mut best_start_h: usize = 0;
         for h in 0..22 {
             let sum = hour_activity[h] + hour_activity[h + 1] + hour_activity[h + 2];
-            if sum > max_window_sum {
-                max_window_sum = sum;
+            if sum > max_sum {
+                max_sum = sum;
                 best_start_h = h;
             }
         }
-        let peak_active_hour_range = match best_start_h {
-            0..=5 => "凌晨 00:00 – 05:00".to_string(),
-            6..=11 => "上午 09:00 – 12:00".to_string(),
-            12..=17 => "下午 14:00 – 17:00".to_string(),
-            _ => "晚间 20:00 – 23:00".to_string(),
+        let peak_active_hour_range = if grand_total_tokens > 0 && max_sum > 0 {
+            match best_start_h {
+                0..=5 => "凌晨 00:00 – 05:00".to_string(),
+                6..=11 => "上午 09:00 – 12:00".to_string(),
+                12..=17 => "下午 14:00 – 17:00".to_string(),
+                _ => "晚间 20:00 – 23:00".to_string(),
+            }
+        } else {
+            "—".to_string()
         };
 
         let daily_average_tokens = (grand_total_tokens / days_count).max(0);
@@ -619,12 +643,16 @@ impl LocalDb {
                 (rows, cols, 7, 24, start)
             }
             _ => {
-                // 30d 模式：4 行（时段）x 30 列（日期）
+                // 30d 模式：8 行（时段，每 3 小时一段）x 30 列（日期）
                 let rows = vec![
-                    "凌晨 00-06".to_string(),
-                    "上午 06-12".to_string(),
-                    "下午 12-18".to_string(),
-                    "晚间 18-24".to_string(),
+                    "00-03".to_string(),
+                    "03-06".to_string(),
+                    "06-09".to_string(),
+                    "09-12".to_string(),
+                    "12-15".to_string(),
+                    "15-18".to_string(),
+                    "18-21".to_string(),
+                    "21-24".to_string(),
                 ];
                 let mut cols = Vec::with_capacity(30);
                 for i in 0..30 {
@@ -632,7 +660,7 @@ impl LocalDb {
                     cols.push(format_month_day(day_ts, tz_offset_minutes));
                 }
                 let start = now_ms - (30 * 86_400_000);
-                (rows, cols, 4, 30, start)
+                (rows, cols, 8, 30, start)
             }
         };
 
@@ -705,7 +733,7 @@ impl LocalDb {
                 }
                 "7d" => {
                     let diff_days = today_days - record_days;
-                    if (0..7).contains(&diff_days) {
+                    if (0..=7).contains(&diff_days) {
                         let dow = day_of_week(record_days); // 0=Mon..6=Sun
                         if dow < 7 && h < 24 {
                             let idx = dow * 24 + h;
@@ -722,12 +750,7 @@ impl LocalDb {
                     let diff_days = today_days - record_days;
                     if (0..30).contains(&diff_days) {
                         let col_idx = (29 - diff_days) as usize;
-                        let row_idx = match h {
-                            0..=5 => 0,
-                            6..=11 => 1,
-                            12..=17 => 2,
-                            _ => 3,
-                        };
+                        let row_idx = (h / 3).min(7);
                         let idx = row_idx * 30 + col_idx;
                         if let Some(cell) = cells.get_mut(idx) {
                             cell.tokens += tokens;
@@ -764,8 +787,16 @@ impl LocalDb {
                 let ln_min = (1.0 + min_nonzero as f64).ln();
                 let ln_max = (1.0 + max_tokens as f64).ln();
                 let ratio = ((ln_val - ln_min) / (ln_max - ln_min + 1e-6)).clamp(0.0, 1.0);
-                let lvl = 1 + (ratio * 3.0).floor() as u8;
-                cell.level = lvl.clamp(1, 4);
+                let lvl = if ratio < 0.25 {
+                    1
+                } else if ratio < 0.50 {
+                    2
+                } else if ratio < 0.75 {
+                    3
+                } else {
+                    4
+                };
+                cell.level = lvl;
             }
         }
 

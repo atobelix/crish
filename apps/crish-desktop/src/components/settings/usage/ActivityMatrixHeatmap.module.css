@@ -28,46 +28,13 @@
   gap: 12px;
 }
 
-.segmentedSm {
-  display: inline-flex;
-  align-items: center;
-  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
-  padding: var(--usage-seg-sm-pad, 1.5px);
-  border-radius: var(--usage-seg-sm-radius, 5px);
-  gap: 2px;
-}
-
-.segmentedBtn {
-  height: 19px;
-  padding: 0 8px;
-  font-size: 11px;
-  line-height: 19px;
-  border-radius: var(--usage-seg-sm-btn-radius, 3.5px);
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 120ms ease;
-}
-
-.segmentedBtn:hover {
-  color: var(--text-primary);
-}
-
-.segmentedBtnActive {
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-weight: 600;
-  box-shadow: 0 1px 2px color-mix(in srgb, var(--shadow-color, #000) 4%, transparent);
-}
-
 .activityLegend {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-tertiary);
+  user-select: none;
 }
 
 .activityLegendCell {
@@ -80,122 +47,143 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  overflow: hidden;
-  padding: 4px 2px 8px;
 }
 
-.activityMatrixContainer {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-  width: 100%;
-  min-width: 0;
-}
-
-.activityYAxis {
-  display: grid;
-  gap: 4.5px;
-  font-size: 10.5px;
-  color: var(--text-tertiary);
-  user-select: none;
-  width: 32px;
-  flex-shrink: 0;
-  align-items: center;
-  padding: 2px 0;
-}
-
-.activityMatrix {
-  flex: 1;
+.matrixRowsContainer {
   display: flex;
   flex-direction: column;
-  gap: 4.5px;
-  padding: 2px;
-  margin: -2px;
-  min-width: 0;
-}
-
-.activityRow {
-  display: grid;
-  gap: 4.5px;
+  gap: 4px;
   width: 100%;
 }
 
-/* 正方形微圆角磁贴：严守 1:1 纯正正方形，宽屏上限约束（约 18px 细腻不过大），圆角 4px 连续柔和，间隙 4.5px 疏朗呼吸 */
+.matrixRowLine {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+/* Y 轴刻度：纯净时间段标签，垂直居中与该行单元格同轴 */
+.yAxisRowHeader {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  line-height: 1.25;
+  width: 46px;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.yAxisTitle {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.yAxisSub {
+  font-size: 9.5px;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.cellsRow {
+  flex: 1;
+  display: grid;
+  gap: 4.5px;
+  min-width: 0;
+  align-items: center;
+  justify-items: center;
+}
+
+/* 正方形微圆角磁贴：严守 1:1 纯正正方形，圆角 3.5px 连续柔和，间隙 4.5px 疏朗呼吸 */
 .activityCell {
   aspect-ratio: 1 / 1;
   width: 100%;
-  max-width: 20px;
-  border-radius: 4px;
+  max-width: 18px;
+  border-radius: 3.5px;
   cursor: pointer;
   transition: transform 120ms ease;
   transform-origin: center;
+  outline: none;
 }
 
-.activityCell:hover {
-  transform: scale(1.12);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 8%, transparent);
+.activityCell:hover,
+.activityCell:focus-visible {
+  transform: scale(1.15);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--text-primary) 12%, transparent);
   position: relative;
   z-index: 5;
 }
 
-.activityXAxis {
-  margin-left: 40px;
+.activityXAxisWrapper {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.xAxisSpacer {
+  width: 46px;
+  flex-shrink: 0;
+}
+
+.activityXAxis {
+  flex: 1;
+  display: grid;
+  gap: 4.5px;
+  min-width: 0;
   font-size: 10px;
   color: var(--text-tertiary);
   user-select: none;
-  padding-top: 4px;
+  font-family: var(--font-mono);
+  justify-items: center;
 }
 
-/* 5 级色阶 */
-.actLvl0 {
-  background: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
-}
-.actLvl1 {
-  background: var(--usage-heat-1, #bbf7d0);
-}
-.actLvl2 {
-  background: var(--usage-heat-2, #86efac);
-}
-.actLvl3 {
-  background: var(--usage-heat-3, #4ade80);
-}
-.actLvl4 {
-  background: var(--usage-heat-4, #10b981);
-}
-
-@supports (color: oklch(0 0 0)) {
-  .actLvl1 {
-    background: oklch(0.75 0.155 148 / 0.20);
-  }
-  .actLvl2 {
-    background: oklch(0.75 0.155 148 / 0.45);
-  }
-  .actLvl3 {
-    background: oklch(0.75 0.155 148 / 0.72);
-  }
-  .actLvl4 {
-    background: oklch(0.75 0.155 148);
-  }
-}
-
-/* 活动专属浮动 Tooltip */
-.activityFloatingTip {
-  position: absolute;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md, 6px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-  padding: 5px 9px;
-  font-size: 11px;
-  color: var(--text-primary);
-  pointer-events: none;
-  transform: translate(-50%, -100%);
-  transition: opacity 100ms ease;
+.xAxisColLabel {
+  overflow: visible;
   white-space: nowrap;
-  z-index: 30;
+  line-height: 1;
 }
+
+.xAxisColFirst {
+  justify-self: start;
+}
+
+.xAxisColMid {
+  justify-self: center;
+}
+
+.xAxisColLast {
+  justify-self: end;
+}
+
+.xAxisColEmpty {
+  display: block;
+}
+
+/* 5 级活动热力颜色标尺 (对齐 tokens.css 语义变量) */
+.actLvl0 {
+  background: var(--usage-heat-0, color-mix(in srgb, var(--border-color) 40%, transparent));
+}
+
+.actLvl1 {
+  background: var(--usage-heat-1, color-mix(in srgb, var(--brand, #10b981) 25%, transparent));
+}
+
+.actLvl2 {
+  background: var(--usage-heat-2, color-mix(in srgb, var(--brand, #10b981) 50%, transparent));
+}
+
+.actLvl3 {
+  background: var(--usage-heat-3, color-mix(in srgb, var(--brand, #10b981) 75%, transparent));
+}
+
+.actLvl4 {
+  background: var(--usage-heat-4, var(--brand, #10b981));
+}
+
 
 /* 活动下属统计指标网格：纯净纯文字排版，零卡片无边框无 hover */
 .activityStatsGrid {
@@ -211,6 +199,7 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .actStatLabel {
@@ -231,7 +220,7 @@
 }
 
 .actStatValCode {
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 13px;
   font-weight: 500;
   overflow: hidden;

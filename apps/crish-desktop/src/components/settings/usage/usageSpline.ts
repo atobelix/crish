@@ -14,9 +14,10 @@ export interface SplinePoint {
  */
 export function formatTokens(v: number): string {
   if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) return '0';
-  if (v >= 100_000_000) {
+  // 若四舍五入后达 1 亿，直接进位至亿，杜绝 "10000 万"
+  if (v >= 99_950_000) {
     const yi = v / 100_000_000;
-    return `${yi >= 10 ? yi.toFixed(1) : yi.toFixed(2)} 亿`;
+    return `${yi.toFixed(1)} 亿`;
   }
   if (v >= 10_000) {
     const w = v / 10_000;
@@ -34,11 +35,157 @@ export function formatCost(v: number, prefix = '¥ '): string {
 }
 
 /**
+ * 比例归一化函数，将 0.0 ~ 100.0 的百分制数值规约为 0.0 ~ 1.0 的比例
+ * 杜绝启发式阈值截断，对 <= 1% 的小模型占比（如 0.5%）执行精确的除以 100
+ */
+export function normalizeModelRatio(rawVal: number): number {
+  if (typeof rawVal !== 'number' || !Number.isFinite(rawVal) || rawVal <= 0) {
+    return 0.0;
+  }
+  return Math.min(1.0, rawVal / 100.0);
+}
+
+/**
  * 格式化百分比
  */
 export function formatPercentage(ratio: number): string {
-  if (typeof ratio !== 'number' || !Number.isFinite(ratio) || ratio <= 0) return '0.0%';
-  return `${(ratio * 100).toFixed(1)}%`;
+  const norm = normalizeModelRatio(ratio);
+  return `${(norm * 100).toFixed(1)}%`;
+}
+
+export interface ModelColorTheme {
+  stroke: string;
+  bg: string;
+}
+
+export const GLOBAL_MODEL_PALETTE: ModelColorTheme[] = [
+  { stroke: 'var(--usage-color-brand)', bg: 'var(--usage-color-brand-bg)' },
+  { stroke: 'var(--usage-color-claude)', bg: 'var(--usage-color-claude-bg)' },
+  { stroke: 'var(--usage-color-minimax)', bg: 'var(--usage-color-minimax-bg)' },
+  { stroke: 'var(--usage-color-kimi)', bg: 'var(--usage-color-kimi-bg)' },
+  { stroke: 'var(--usage-color-other)', bg: 'var(--usage-color-other-bg)' },
+  { stroke: 'var(--usage-color-cost-total)', bg: 'var(--usage-color-cost-total-bg)' },
+];
+
+/**
+ * 全局统一的模型语义配色算法，杜绝跨组件颜色语义断层
+ */
+export function getModelColor(modelName: string, fallbackIdx = 0): ModelColorTheme {
+  const lower = (modelName || '').toLowerCase();
+  if (lower === 'other' || lower === '__others__') return GLOBAL_MODEL_PALETTE[4]!;
+  if (lower.includes('deepseek')) return GLOBAL_MODEL_PALETTE[0]!;
+  if (lower.includes('claude')) return GLOBAL_MODEL_PALETTE[1]!;
+  if (lower.includes('minimax')) return GLOBAL_MODEL_PALETTE[2]!;
+  if (lower.includes('kimi') || lower.includes('moonshot')) return GLOBAL_MODEL_PALETTE[3]!;
+  if (lower.includes('openai') || lower.includes('gpt')) return GLOBAL_MODEL_PALETTE[5]!;
+  return GLOBAL_MODEL_PALETTE[fallbackIdx % GLOBAL_MODEL_PALETTE.length] ?? GLOBAL_MODEL_PALETTE[0]!;
+}
+
+export interface DecimatedTick {
+  index: number;
+  label: string;
+  leftPercent: number;
+  transform: string;
+}
+
+/**
+ * X 轴刻度均匀抽稀算法，根据几何等分采样并施加 Delta >= 3 物理防碰撞保护，
+ * 杜绝在任意滑动时钟窗口下发生相邻刻度文字叠字。
+ */
+export function computeDecimatedTicks(
+  points: { label: string }[],
+  range: '24h' | '7d' | '30d',
+  xStart = 40,
+  xEnd = 750,
+  totalWidth = 760
+): DecimatedTick[] {
+  const n = points.length;
+  if (n === 0) return [];
+  if (n === 1) {
+    return [{ index: 0, label: points[0]!.label, leftPercent: 50, transform: 'translateX(-50%)' }];
+  }
+
+  // 7d 且采样点少于等于 8 时（如 7 天），相邻点物理跨距已达 ~118px，无需套用抽稀，全部保留输出
+  if (range === '7d' && n <= 8) {
+    return points.map((pt, idx) => {
+      const posRatio = idx / (n - 1);
+      const chartX = xStart + posRatio * (xEnd - xStart);
+      const leftPercent = (chartX / totalWidth) * 100;
+
+      let transform = 'translateX(-50%)';
+      if (idx === 0) transform = 'translateX(0%)';
+      else if (idx === n - 1) transform = 'translateX(-100%)';
+
+      return {
+        index: idx,
+        label: pt.label,
+        leftPercent,
+        transform,
+      };
+    });
+  }
+
+  const candidateIndices: number[] = [0];
+
+  if (range === '24h' && n >= 20) {
+    // 24h 序列采样 5 个点：首点、3个四等分点、尾点
+    const step = (n - 1) / 4;
+    for (let k = 1; k < 4; k++) {
+      candidateIndices.push(Math.round(k * step));
+    }
+  } else if (range === '30d' && n >= 25) {
+    const step = (n - 1) / 5;
+    for (let k = 1; k < 5; k++) {
+      candidateIndices.push(Math.round(k * step));
+    }
+  } else {
+    if (n <= 8) {
+      for (let i = 1; i < n - 1; i++) candidateIndices.push(i);
+    } else {
+      const step = (n - 1) / 4;
+      for (let k = 1; k < 4; k++) {
+        candidateIndices.push(Math.round(k * step));
+      }
+    }
+  }
+  candidateIndices.push(n - 1);
+
+  // 物理防碰撞过滤：确保任意相邻两点索引差值 >= 3 (物理间距 >= 90px)
+  const validIndices: number[] = [];
+  for (let i = 0; i < candidateIndices.length; i++) {
+    const cur = candidateIndices[i]!;
+    if (validIndices.length === 0) {
+      validIndices.push(cur);
+    } else {
+      const last = validIndices[validIndices.length - 1]!;
+      if (i === candidateIndices.length - 1) {
+        if (cur - last < 3 && validIndices.length > 1) {
+          validIndices.pop();
+        }
+        validIndices.push(cur);
+      } else if (cur - last >= 3) {
+        validIndices.push(cur);
+      }
+    }
+  }
+
+  return validIndices.map((idx) => {
+    const pt = points[idx]!;
+    const posRatio = idx / (n - 1);
+    const chartX = xStart + posRatio * (xEnd - xStart);
+    const leftPercent = (chartX / totalWidth) * 100;
+
+    let transform = 'translateX(-50%)';
+    if (idx === 0) transform = 'translateX(0%)';
+    else if (idx === n - 1) transform = 'translateX(-100%)';
+
+    return {
+      index: idx,
+      label: pt.label,
+      leftPercent,
+      transform,
+    };
+  });
 }
 
 /**

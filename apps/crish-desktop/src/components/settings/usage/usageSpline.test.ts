@@ -1,16 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampViewportX,
+  computeDecimatedTicks,
   formatCost,
   formatPercentage,
   formatTokens,
   getAreaSplinePath,
+  getModelColor,
   getMonotoneSplinePath,
+  normalizeModelRatio,
 } from './usageSpline';
 
 describe('usageSpline 纯数学与几何插值库', () => {
-  describe('格式化工具函数', () => {
-    it('formatTokens 正确格式化各数量级数值', () => {
+  describe('格式化与归一化守卫工具函数', () => {
+    it('formatTokens 正确格式化各数量级数值与临界进位', () => {
       expect(formatTokens(0)).toBe('0');
       expect(formatTokens(-10)).toBe('0');
       expect(formatTokens(500)).toBe('500');
@@ -18,7 +21,8 @@ describe('usageSpline 纯数学与几何插值库', () => {
       expect(formatTokens(10000)).toBe('1.00 万');
       expect(formatTokens(15800)).toBe('1.58 万');
       expect(formatTokens(1589000)).toBe('159 万');
-      expect(formatTokens(123456789)).toBe('1.23 亿');
+      expect(formatTokens(99960000)).toBe('1.0 亿'); // 修复 10000 万临界进位
+      expect(formatTokens(123456789)).toBe('1.2 亿');
     });
 
     it('formatCost 货币格式化与兜底', () => {
@@ -28,10 +32,65 @@ describe('usageSpline 纯数学与几何插值库', () => {
       expect(formatCost(128.5, '$ ')).toBe('$ 128.50');
     });
 
-    it('formatPercentage 百分比格式化', () => {
+    it('normalizeModelRatio 精确将百分制数值安全归一化为 0~1 比例', () => {
+      expect(normalizeModelRatio(0)).toBe(0);
+      expect(normalizeModelRatio(-1)).toBe(0);
+      expect(normalizeModelRatio(0.5)).toBeCloseTo(0.005, 4); // 修复 0.5% 小模型被放大 100 倍 Bug
+      expect(normalizeModelRatio(35.73)).toBeCloseTo(0.3573, 4);
+      expect(normalizeModelRatio(100)).toBe(1.0);
+      expect(normalizeModelRatio(150)).toBe(1.0);
+    });
+
+    it('formatPercentage 百分比格式化防二次放大', () => {
       expect(formatPercentage(0)).toBe('0.0%');
-      expect(formatPercentage(0.4256)).toBe('42.6%');
-      expect(formatPercentage(1)).toBe('100.0%');
+      expect(formatPercentage(0.5)).toBe('0.5%'); // 0.5% 小模型
+      expect(formatPercentage(100)).toBe('100.0%');
+      expect(formatPercentage(35.73)).toBe('35.7%'); // 修复 3573.3% 暴涨 Bug
+    });
+
+    it('getModelColor 正确映射语义配色且避免撞色与索引偏置错误', () => {
+      expect(getModelColor('deepseek-chat').stroke).toBe('var(--usage-color-brand)');
+      expect(getModelColor('claude-3-5-sonnet').stroke).toBe('var(--usage-color-claude)');
+      expect(getModelColor('minimax-abab6.5').stroke).toBe('var(--usage-color-minimax)');
+      expect(getModelColor('kimi-latest').stroke).toBe('var(--usage-color-kimi)');
+      expect(getModelColor('other', 4).stroke).toBe('var(--usage-color-other)');
+      expect(getModelColor('__others__').stroke).toBe('var(--usage-color-other)');
+      expect(getModelColor('gpt-4o').stroke).toBe('var(--usage-color-cost-total)');
+      // fallbackIdx 4 映射到 other
+      expect(getModelColor('unknown-custom-model', 4).stroke).toBe('var(--usage-color-other)');
+    });
+
+    it('computeDecimatedTicks 7d 完整保留 7 天日历刻度无遗漏', () => {
+      const points7d = [
+        { label: '08-29' },
+        { label: '08-30' },
+        { label: '08-31' },
+        { label: '09-01' },
+        { label: '09-02' },
+        { label: '09-03' },
+        { label: '09-04' },
+      ];
+      const ticks = computeDecimatedTicks(points7d, '7d');
+      expect(ticks).toHaveLength(7);
+      expect(ticks[0]!.label).toBe('08-29');
+      expect(ticks[6]!.label).toBe('09-04');
+      expect(ticks[0]!.transform).toBe('translateX(0%)');
+      expect(ticks[6]!.transform).toBe('translateX(-100%)');
+    });
+
+    it('computeDecimatedTicks 24h 滑动窗口防物理叠字碰撞', () => {
+      // 模拟滑动窗口：首点为 17:00，第二点为 18:00
+      const pointsSliding = Array.from({ length: 24 }, (_, i) => ({
+        label: `${String((17 + i) % 24).padStart(2, '0')}:00`,
+      }));
+      const ticks = computeDecimatedTicks(pointsSliding, '24h');
+      expect(ticks.length).toBeLessThanOrEqual(5);
+      // 验证任意相邻两项的 index 跨度 >= 3，物理上绝无文字叠字重叠
+      for (let i = 0; i < ticks.length - 1; i++) {
+        expect(ticks[i + 1]!.index - ticks[i]!.index).toBeGreaterThanOrEqual(3);
+      }
+      expect(ticks[0]!.transform).toBe('translateX(0%)');
+      expect(ticks[ticks.length - 1]!.transform).toBe('translateX(-100%)');
     });
   });
 

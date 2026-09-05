@@ -17,9 +17,9 @@ export const FALLBACK_USAGE_DASHBOARD: UsageDashboardDto = {
     dailyAverageTokens: 0,
     dailyAverageCost: 0,
     totalMessages: 0,
-    topModel: '无记录',
-    peakActiveHourRange: '09:00 - 18:00',
-    topProject: '默认工作区',
+    topModel: '—',
+    peakActiveHourRange: '—',
+    topProject: '—',
   },
   points: [],
   maxTokens: 0,
@@ -35,7 +35,7 @@ export const FALLBACK_USAGE_DASHBOARD: UsageDashboardDto = {
 /** 空热力图矩阵安全兜底假体 */
 export const FALLBACK_ACTIVITY_MATRIX: ActivityMatrixDto = {
   range: '30d',
-  rows: ['凌晨', '上午', '下午', '晚间'],
+  rows: ['00-03', '03-06', '06-09', '09-12', '12-15', '15-18', '18-21', '21-24'],
   cols: [],
   cells: [],
   maxTokens: 0,

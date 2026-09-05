@@ -1,96 +1,71 @@
-.heroGrid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border-subtle);
-}
+/* UsageSummaryHero.module.css - 纯净对齐系统 Design Tokens 与真机截图 2 极简规范 */
 
-.heroCard {
-  padding: 18px 24px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  position: relative;
-  border-right: 1px solid var(--border-subtle);
-}
-
-.heroCard:last-child {
-  border-right: none;
-}
-
-.heroLabel {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-tertiary);
+.heroContainer {
   display: flex;
   align-items: center;
+  padding: 18px 22px;
+  width: 100%;
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.heroColumn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
-.labelDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.columnTitle {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: 500;
+  color: var(--text-tertiary);
+  letter-spacing: -0.01em;
 }
 
-.labelDotTokens {
-  background: var(--usage-color-brand);
+.metricRow {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  line-height: 1.15;
 }
 
-.labelDotCost {
-  background: var(--usage-color-cost-total);
+.currencySymbol {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.heroVal {
+.metricNumber {
   font-size: 26px;
   font-weight: 600;
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
-  display: flex;
-  align-items: baseline;
-  gap: 5px;
   letter-spacing: -0.03em;
-  line-height: 1.2;
+  font-family: var(--font-sans);
 }
 
-.heroUnit {
-  font-size: 13px;
+.metricUnit {
+  font-size: var(--font-size-xs, 12px);
   font-weight: 400;
   color: var(--text-tertiary);
 }
 
-.heroSubtext {
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 2px;
-}
-
-.heroSubtextItem {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.heroSubtextVal {
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-  font-weight: 500;
+.divider {
+  width: 1px;
+  height: 38px;
+  background: var(--border-subtle);
+  margin: 0 24px;
 }
 
 @media (max-width: 640px) {
-  .heroGrid {
-    grid-template-columns: 1fr;
+  .heroContainer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
   }
-  .heroCard {
-    border-right: none;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-  .heroCard:last-child {
-    border-bottom: none;
+  .divider {
+    display: none;
   }
 }
