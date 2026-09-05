@@ -1312,6 +1312,104 @@ async function runDefenseSuite() {
         }
       }
 
+      // ============================================================
+      // 场景 16：列表划词选区与复选框零重叠、无序圆点常显与多级导线防御 (TASK-SELECTION-OVERLAP-DEFENSE)
+      // 铁律：
+      // - 划词选中任务列表时，复选框右边界严格在正文左边界之前 (cbRight <= textLeft)，零骑脸重叠
+      // - 无序列表在划词选区中圆点 • 始终可见，不蒸发
+      // - 4 空格嵌套行严格渲染 2 级引导线 (0.5ch 和 2.5ch)，零断线
+      // - 选区矩形绝不出现 100% 容器宽的整行漫溢色块
+      // ============================================================
+      {
+        const st = window.__editorStore.getState();
+        let targetIdx = -1;
+        for (let i = 0; i < st.getLineCount(); i++) {
+          if ((st.getLine(i) || '').includes('顶层已完成任务')) {
+            targetIdx = i;
+            break;
+          }
+        }
+
+        if (targetIdx !== -1) {
+          container.scrollTop = Math.max(0, targetIdx * 28 - 100);
+          await waitForFrame(80);
+
+          const off1 = st.lineOffsets.getOffset(targetIdx);
+          const lastLine = st.getLine(targetIdx + 6);
+          const off2 =
+            st.lineOffsets.getOffset(targetIdx + 6) +
+            (lastLine ? lastLine.length : 0);
+          st.setSelection(off1, off2);
+          await waitForFrame(120);
+
+          let hasOverlap = false;
+          let overlapDetails = '';
+          let bulletVisible = false;
+          let guidesTwoLevels = false;
+          let hasRunawayRect = false;
+
+          const containerRect = container.getBoundingClientRect();
+
+          for (let i = targetIdx; i <= targetIdx + 6; i++) {
+            const rowEl = document.querySelector(
+              `.virtual-row[data-index="${i}"]`
+            );
+            if (!rowEl) continue;
+
+            const cb = rowEl.querySelector('.task-checkbox-wrapper');
+            const bullet = rowEl.querySelector('.token-bullet-char');
+            const textSpan = rowEl.querySelector(
+              'span[data-token-start]:last-child'
+            );
+            const guides = Array.from(
+              rowEl.querySelectorAll('.syntax-indent-guide')
+            );
+
+            if (cb && textSpan) {
+              const cbRect = cb.getBoundingClientRect();
+              const textRect = textSpan.getBoundingClientRect();
+              if (cbRect.right > textRect.left + 0.5) {
+                hasOverlap = true;
+                overlapDetails = `Line ${i} 复选框 (right=${cbRect.right.toFixed(1)}) 与正文 (left=${textRect.left.toFixed(1)}) 发生重叠`;
+              }
+            }
+
+            if (bullet) {
+              const bRect = bullet.getBoundingClientRect();
+              if (bRect.width > 0) bulletVisible = true;
+            }
+
+            if (st.getLine(i)?.includes('二级嵌套未完成任务')) {
+              if (guides.length >= 2) guidesTwoLevels = true;
+            }
+          }
+
+          const selRects = Array.from(
+            document.querySelectorAll('.selection-rect')
+          ).map((el) => {
+            const r = el.getBoundingClientRect();
+            return { width: r.width };
+          });
+          hasRunawayRect = selRects.some(
+            (r) => r.width >= containerRect.width - 20
+          );
+
+          st.setSelection(0, 0);
+          await waitForFrame(40);
+
+          const passed =
+            !hasOverlap && bulletVisible && guidesTwoLevels && !hasRunawayRect;
+          suiteResults.push({
+            id: 'TASK-SELECTION-OVERLAP-DEFENSE',
+            name: '列表划词选区与复选框零重叠、圆点常显与多级导线防御 (Task Selection Overlap Defense)',
+            passed,
+            details: passed
+              ? '复选框严格排版于正文前方（零骑脸重叠）、无序圆点常显不蒸发、二级嵌套完整呈现2级引导线、选区零满宽跑冒'
+              : `防御未通过: hasOverlap=${hasOverlap} (${overlapDetails}), bulletVisible=${bulletVisible}, guidesTwoLevels=${guidesTwoLevels}, hasRunawayRect=${hasRunawayRect}`,
+          });
+        }
+      }
+
       return { suiteResults };
     }, TOLERANCE_PX);
 

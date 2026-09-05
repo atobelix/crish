@@ -36,6 +36,28 @@ const PREVIEW_CLASS_BY_HINT: Record<IncompleteInlineHint, string> = {
   math: 'is-preview-math',
 };
 
+function computeIndentGuides(
+  indentLen: number,
+  lineIndex?: number
+): { indentStep: number; indentGuidesCount: number } {
+  if (indentLen <= 0) return { indentStep: 2, indentGuidesCount: 0 };
+  let indentStep = 2;
+  if (indentLen % 3 === 0 && indentLen % 2 !== 0) {
+    indentStep = 3;
+  } else if (indentLen >= 6 && indentLen % 3 === 0) {
+    const prevLine =
+      lineIndex !== undefined && lineIndex > 0
+        ? useEditorStore.getState().getLine(lineIndex - 1)
+        : null;
+    const prevIndent = prevLine
+      ? (prevLine.match(/^ +/)?.[0]?.length || 0)
+      : 0;
+    indentStep = prevIndent === 3 || prevIndent === 6 ? 3 : 2;
+  }
+  const indentGuidesCount = Math.floor(indentLen / indentStep);
+  return { indentStep, indentGuidesCount };
+}
+
 interface InlineRendererProps {
   tokens: InlineNode[];
   lineOffset: number;
@@ -200,17 +222,12 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             
           const isListPrefix = ['list_bullet', 'list_number', 'list_task', 'blockquote_prefix'].includes(token.type);
           let isActive = false;
-          // list_task 为独立交互控件、blockquote_prefix 为导线结构，单行激活时绝不切入源码坍缩模式
-          if (activeState && token.type !== 'list_task' && token.type !== 'blockquote_prefix') {
+          // 所有结构性列表符号与引用前缀均为标准视觉微组件，单行激活或划词选区时绝对保持视觉形态，不切入源码坍缩
+          if (activeState && !isListPrefix) {
             if (activeState.selStart !== undefined && activeState.selEnd !== undefined && activeState.selStart !== activeState.selEnd) {
               isActive = start < activeState.selEnd && (start + len) > activeState.selStart;
             } else {
-              // For list prefixes, cursor at the very end of the prefix belongs to the following text, not the prefix itself.
-              if (isListPrefix) {
-                isActive = activeState.cursor >= start && activeState.cursor < start + len;
-              } else {
-                isActive = activeState.cursor >= start && activeState.cursor <= start + len;
-              }
+              isActive = activeState.cursor >= start && activeState.cursor <= start + len;
             }
           }
           
@@ -502,10 +519,10 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
           // Preserves full physical character offset alignment, zero artificial layout boxes
           if (token.type === 'list_number') {
             const indentLen = token.indent ? token.indent.length : 0;
-            const indentStep =
-              indentLen % 3 === 0 ? 3 : indentLen % 4 === 0 ? 4 : 2;
-            const indentGuidesCount =
-              indentLen > 0 ? Math.max(1, Math.floor(indentLen / indentStep)) : 0;
+            const { indentStep, indentGuidesCount } = computeIndentGuides(
+              indentLen,
+              lineIndex
+            );
 
             return (
               <span
@@ -548,10 +565,10 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
           if (token.type === 'list_bullet') {
             const indentLen = token.indent ? token.indent.length : 0;
-            const indentStep =
-              indentLen % 3 === 0 ? 3 : indentLen % 4 === 0 ? 4 : 2;
-            const indentGuidesCount =
-              indentLen > 0 ? Math.max(1, Math.floor(indentLen / indentStep)) : 0;
+            const { indentStep, indentGuidesCount } = computeIndentGuides(
+              indentLen,
+              lineIndex
+            );
 
             return (
               <span
@@ -597,10 +614,10 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
           if (token.type === 'list_task') {
             const indentLen = token.indent ? token.indent.length : 0;
-            const indentStep =
-              indentLen % 3 === 0 ? 3 : indentLen % 4 === 0 ? 4 : 2;
-            const indentGuidesCount =
-              indentLen > 0 ? Math.max(1, Math.floor(indentLen / indentStep)) : 0;
+            const { indentStep, indentGuidesCount } = computeIndentGuides(
+              indentLen,
+              lineIndex
+            );
 
             const handleTaskClick = (e: React.MouseEvent) => {
               if (start !== undefined) {

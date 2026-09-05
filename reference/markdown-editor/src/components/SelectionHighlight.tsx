@@ -160,48 +160,7 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
     const containerRect = container.getBoundingClientRect();
     const newRects: Rect[] = [];
 
-    // 1. 物理真理源：利用 Range.prototype.getClientRects() 原生提取选区在每个视觉折行上的独立矩形
-    const startPoint = getDOMPointFromIndex(start, container);
-    const endPoint = getDOMPointFromIndex(end, container);
-
-    if (startPoint && endPoint) {
-      try {
-        const range = document.createRange();
-        range.setStart(startPoint.node, startPoint.offset);
-        range.setEnd(endPoint.node, endPoint.offset);
-        const clientRects = range.getClientRects();
-
-        for (let i = 0; i < clientRects.length; i++) {
-          const r = clientRects[i];
-          if (r.width <= 0 || r.height <= 0) continue;
-
-          // 单元格单选/多选模式下，表格自身具备油墨蓝背景与边框，抑制重复文本高亮层
-          if (isCellSelectionMode) {
-            const elAtPoint = document.elementFromPoint(
-              r.left + r.width / 2,
-              r.top + r.height / 2
-            );
-            if (
-              elAtPoint &&
-              elAtPoint.closest('.token-table-cell, .line-table-row')
-            ) {
-              continue;
-            }
-          }
-
-          newRects.push({
-            top: r.top - containerRect.top + container.scrollTop,
-            left: r.left - containerRect.left + container.scrollLeft,
-            width: r.width,
-            height: r.height,
-          });
-        }
-      } catch (err) {
-        console.error('getClientRects failed:', err);
-      }
-    }
-
-    // 2. 跨空行选区补充占位矩形（空行在 DOM 中为 <br />，Range.getClientRects 经常为 0x0）
+    // 1. 物理真理源：按行提取选区在每个视觉折行上的独立矩形，严格杜绝跨行 block 容器包含产生的 100% 容器宽矩形与双层叠色
     const lines = Array.from(container.querySelectorAll('[data-line-start]'));
     for (const line of lines) {
       const lineStart = parseInt(
@@ -214,14 +173,65 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
       );
       const lineEnd = lineStart + lineLen;
 
-      if (lineLen === 0 && start <= lineEnd && end >= lineStart) {
-        const lineRect = line.getBoundingClientRect();
-        newRects.push({
-          top: lineRect.top - containerRect.top + container.scrollTop,
-          left: lineRect.left - containerRect.left + container.scrollLeft,
-          width: 5,
-          height: lineRect.height || 28,
-        });
+      if (start <= lineEnd && end >= lineStart) {
+        // 空行特殊处理：跨空行选区补充占位矩形（空行在 DOM 中为 <br />，Range.getClientRects 经常为 0x0）
+        if (lineLen === 0) {
+          const lineRect = line.getBoundingClientRect();
+          newRects.push({
+            top: lineRect.top - containerRect.top + container.scrollTop,
+            left: lineRect.left - containerRect.left + container.scrollLeft,
+            width: 5,
+            height: lineRect.height || 28,
+          });
+          continue;
+        }
+
+        const selStart = Math.max(start, lineStart);
+        const selEnd = Math.min(end, lineEnd);
+
+        if (selStart < selEnd) {
+          const p1 = getDOMPointFromIndex(selStart, container);
+          const p2 = getDOMPointFromIndex(selEnd, container);
+          if (p1 && p2) {
+            try {
+              const range = document.createRange();
+              range.setStart(p1.node, p1.offset);
+              range.setEnd(p2.node, p2.offset);
+              const clientRects = range.getClientRects();
+
+              for (let i = 0; i < clientRects.length; i++) {
+                const r = clientRects[i];
+                if (r.width <= 0 || r.height <= 0) continue;
+
+                // 单元格单选/多选模式下，表格自身具备油墨蓝背景与边框，抑制重复文本高亮层
+                if (isCellSelectionMode) {
+                  const elAtPoint = document.elementFromPoint(
+                    r.left + r.width / 2,
+                    r.top + r.height / 2
+                  );
+                  if (
+                    elAtPoint &&
+                    elAtPoint.closest('.token-table-cell, .line-table-row')
+                  ) {
+                    continue;
+                  }
+                }
+
+                // 过滤异常的整行/整容器级别的大块盒模型（例如父级 block div）
+                if (r.width >= containerRect.width - 20) continue;
+
+                newRects.push({
+                  top: r.top - containerRect.top + container.scrollTop,
+                  left: r.left - containerRect.left + container.scrollLeft,
+                  width: r.width,
+                  height: r.height,
+                });
+              }
+            } catch (err) {
+              console.error('getClientRects failed:', err);
+            }
+          }
+        }
       }
     }
 
@@ -286,7 +296,7 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
     // 4. 几何区间合并（彻底消除内联元素嵌套与跨层 DOM 产生的重叠矩形与双层叠色）
     const mergedRects = mergeOverlappingRects(newRects);
     setRects(mergedRects);
-  }, [decorations, decorationVersion]);
+  }, [decorations, decorationVersion, containerRef]);
 
   if (rects.length === 0) return null;
 
