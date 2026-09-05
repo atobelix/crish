@@ -34,7 +34,7 @@ export type HeadingExtractor = (
 /** 块引用前缀（与 EditorStore.updateLinesIncremental 同一正则：`> ` 可带缩进） */
 const BLOCKQUOTE_PREFIX_RE = /^\s*>\s?/;
 
-/** ATX 标题判定（与 parser.ts:1992 同源：1-6 个 # + 空白） */
+/** ATX 标题判定（与 parser 同源：1-6 个 # + 空白；前导空格不作为大纲标题索引） */
 const HEADING_RE = /^(#{1,6})\s+/;
 
 /**

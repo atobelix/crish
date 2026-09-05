@@ -75,12 +75,17 @@ export function classifyLine(raw: string, codeState: CodeState | boolean): LineK
 function classifyShape(raw: string): LineKind {
   const len = raw.length;
   if (len === 0) return 'body';
-  const c0 = raw.charCodeAt(0);
+  let s = raw;
+  let indent = 0;
+  while (indent < len && indent < 3 && raw.charCodeAt(indent) === 32) indent++;
+  if (indent > 0) s = raw.substring(indent);
+  const sLen = s.length;
+  const c0 = s.charCodeAt(0);
   if (c0 === 35) {
-    // ATX 标题：# 开头且紧跟空白（或连续 # 后接空白），与 parser /^(#{1,6})\s+/ 一致
+    // ATX 标题：允许至多 3 空格前置缩进（CommonMark §4.2），# 开头且紧跟空白
     let i = 1;
-    while (i < len && i < 6 && raw.charCodeAt(i) === 35) i++;
-    if (raw.charCodeAt(i) === 32) return 'heading';
+    while (i < sLen && i < 6 && s.charCodeAt(i) === 35) i++;
+    if (s.charCodeAt(i) === 32) return 'heading';
     return 'body'; // "#无空格" 非标题，按正文预测
   }
   if (c0 === 124) {
@@ -105,6 +110,20 @@ function classifyShape(raw: string): LineKind {
 }
 
 // ── 行高预测器（HeightOracle）──
+
+/** 计算字符串视觉当量长度（CJK 宽字符按 1.8x ASCII 计算，保证折行预测准确） */
+export function getVisualCharLength(text: string): number {
+  let len = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code >= 0x2e80 || (code >= 0x1100 && code <= 0x11ff) || (code >= 0xff01 && code <= 0xff60)) {
+      len += 1.8;
+    } else {
+      len += 1;
+    }
+  }
+  return len;
+}
 
 /**
  * 行高预测器：替代 MarkdownEngine 的 5 类前缀硬编码估计。
@@ -202,12 +221,17 @@ export class HeightOracle {
       let maxSeg = 0;
       let seg = 0;
       for (let i = 0; i < len; i++) {
-        if (raw.charCodeAt(i) === 124) {
+        const code = raw.charCodeAt(i);
+        if (code === 124) {
           pipes++;
           if (seg > maxSeg) maxSeg = seg;
           seg = 0;
         } else {
-          seg++;
+          if (code >= 0x2e80 || (code >= 0x1100 && code <= 0x11ff) || (code >= 0xff01 && code <= 0xff60)) {
+            seg += 1.8;
+          } else {
+            seg += 1;
+          }
         }
       }
       if (seg > maxSeg) maxSeg = seg;
@@ -216,6 +240,16 @@ export class HeightOracle {
       const colPerRow = Math.max(5, Math.floor((this.containerWidth - TABLE_CELL_PAD * 2 * cols) / cols / this.charWidth));
       let rows = 1;
       if (maxSeg > colPerRow) rows += Math.ceil((maxSeg - colPerRow) / Math.max(1, colPerRow - 5));
+      const brMatches = raw.match(/<br\s*\/?>/gi);
+      if (brMatches && brMatches.length > 0) {
+        const cells = raw.split('|');
+        let maxCellBrs = 0;
+        for (const cell of cells) {
+          const cBrs = (cell.match(/<br\s*\/?>/gi) || []).length;
+          if (cBrs > maxCellBrs) maxCellBrs = cBrs;
+        }
+        rows = Math.max(rows, maxCellBrs + 1);
+      }
       const base = Math.max(this.lineHeight * TYPE_MULTIPLIER[kind], rows * TABLE_CELL_HEIGHT + TABLE_CELL_PAD);
       return base * this.correction[kind];
     }
@@ -224,9 +258,17 @@ export class HeightOracle {
       const base = hasLargeStructures ? Math.max(84, this.lineHeight * 3) : Math.max(42, this.lineHeight * 1.5);
       return base * this.correction[kind];
     }
-    // 通用 wrap 长度模型（CM6 heightForLine 同款）：短行快路径跳过 Math.ceil
+    if (kind === 'code') {
+      // 代码行高度物理恒等于 lineHeight (28px)，行内水平滚动不折行，杜绝预测误差与空白断档
+      return this.lineHeight;
+    }
+    if (kind === 'table_separator') {
+      return 0;
+    }
+    // 通用 wrap 长度模型（CM6 heightForLine 同款）：带 CJK 宽字符权重
+    const visualLen = getVisualCharLength(raw);
     let rows = 1;
-    if (len > this.perRow) rows += Math.ceil((len - this.perRow) / this.step);
+    if (visualLen > this.perRow) rows += Math.ceil((visualLen - this.perRow) / this.step);
     return rows * this.lineHeight * TYPE_MULTIPLIER[kind] * this.correction[kind];
   }
 }

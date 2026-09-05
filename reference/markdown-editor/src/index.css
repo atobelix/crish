@@ -1,4 +1,4 @@
-﻿@import 'katex/dist/katex.min.css';
+@import 'katex/dist/katex.min.css';
 
 :root {
   /* ── 1. Conex 核心色彩体系 (现代空格 HSL 语法，0.4% M + 0.8% Y 米黄偏橙微暖，纯灰阶演化) ── */
@@ -419,10 +419,9 @@ body {
 /* 单元格单选态 (Single Click: Cell Selected Mode) */
 .token-table-cell.is-cell-selected {
   background-color: var(--blue-selection) !important;
-  outline: 1.5px solid var(--border-focus) !important;
-  outline-offset: -1px;
+  outline: none !important;
   z-index: 2;
-  border-radius: 1px;
+  position: relative;
 }
 
 .token-table-cell.is-selection-bottom-right::after {
@@ -430,19 +429,19 @@ body {
   position: absolute;
   right: -3px;
   bottom: -3px;
-  width: 5px;
-  height: 5px;
-  background-color: var(--border-focus);
+  width: 6px;
+  height: 6px;
+  background-color: var(--brand);
   border: 1px solid var(--white);
   border-radius: 1px;
-  z-index: 3;
+  z-index: 4;
 }
 
 /* 单元格双击编辑态 (Double Click: Text In-place Edit Mode) */
 .token-table-cell.is-cell-editing {
   background-color: var(--white) !important;
-  outline: 1.5px solid var(--border-focus) !important;
-  outline-offset: -1px;
+  outline: none !important;
+  box-shadow: inset 0 0 0 1.5px var(--brand), 0 0 0 1px var(--border-focus) !important;
   z-index: 4;
   border-radius: 2px;
   cursor: text;
@@ -470,17 +469,114 @@ body {
 }
 
 .interactive-link {
-  color: var(--text-secondary);
+  color: hsl(210 85% 48%);
   text-decoration: underline;
-  text-decoration-color: var(--border-medium);
-  text-underline-offset: 2px;
+  text-decoration-color: hsl(210 85% 75%);
+  text-underline-offset: 2.5px;
   position: relative;
   padding: 0 2px;
-  transition: color 0.15s ease;
+  cursor: pointer;
+  transition: color 0.15s ease, text-decoration-color 0.15s ease;
 }
 
 .interactive-link:hover {
-  color: var(--black);
+  color: hsl(210 95% 38%);
+  text-decoration-color: hsl(210 95% 45%);
+}
+
+.markdown-preview-image {
+  max-width: 100%;
+  max-height: 200px;
+  height: auto;
+  border-radius: 6px;
+  display: inline-block;
+  vertical-align: middle;
+  box-shadow: 0 1px 3px hsl(30 2.5% 10% / 0.08);
+  border: 1px solid var(--border-medium);
+  margin: 2px 4px;
+}
+
+.image-fallback-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--code-bg);
+  border: 1px dashed var(--border-medium);
+  color: var(--text-muted);
+  font-size: 0.85em;
+  vertical-align: middle;
+}
+
+.image-fallback-hint {
+  font-size: 0.8em;
+  opacity: 0.7;
+}
+
+/* ── Callout / Admonition 语法块规范 ── */
+.line-callout {
+  border-left: 3.5px solid var(--callout-border, hsl(210 100% 50%));
+  background-color: var(--callout-bg, hsl(210 50% 97% / 0.5));
+  padding-left: 12px;
+  box-sizing: border-box;
+  border-radius: 0 4px 4px 0;
+}
+
+.line-callout.callout-note {
+  --callout-border: hsl(210 100% 56%);
+  --callout-bg: hsl(210 100% 97% / 0.6);
+}
+
+.line-callout.callout-tip {
+  --callout-border: hsl(150 70% 40%);
+  --callout-bg: hsl(150 60% 97% / 0.6);
+}
+
+.line-callout.callout-important {
+  --callout-border: hsl(270 70% 55%);
+  --callout-bg: hsl(270 60% 97% / 0.6);
+}
+
+.line-callout.callout-warning {
+  --callout-border: hsl(35 90% 50%);
+  --callout-bg: hsl(35 90% 96% / 0.6);
+}
+
+.line-callout.callout-caution {
+  --callout-border: hsl(0 80% 55%);
+  --callout-bg: hsl(0 80% 97% / 0.6);
+}
+
+.line-callout .token-blockquote-prefix .blockquote-bar {
+  display: none;
+}
+
+.callout-header-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.92em;
+  color: var(--callout-border);
+  user-select: none;
+  height: var(--grid-size);
+  line-height: var(--grid-size);
+}
+
+.callout-header-banner .callout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.callout-title {
+  display: inline-block;
+  font-weight: 600;
+  color: inherit;
 }
 
 .style-bold {
@@ -521,6 +617,27 @@ body {
 .style-image {
   color: var(--gray-45);
   font-style: italic;
+}
+
+.token-image-wrapper {
+  display: inline-block;
+  vertical-align: middle;
+  line-height: normal;
+}
+
+/* 单元格选中态子元素着色与图片选区高亮 */
+.token-table-cell.is-cell-selected .style-inline-code,
+.token-table-cell.is-cell-selected .style-kbd,
+.token-table-cell.is-cell-selected .style-mark {
+  background-color: color-mix(in srgb, var(--blue-selection) 80%, white 20%) !important;
+  color: var(--text-primary) !important;
+}
+
+.token-table-cell.is-cell-selected img,
+.token-table-cell.is-cell-selected .markdown-preview-image {
+  opacity: 0.85;
+  filter: contrast(0.95);
+  box-shadow: 0 0 0 2px var(--blue-selection);
 }
 
 /* Syntax hiding logic for Live Preview (Obsidian style) */
@@ -584,12 +701,29 @@ body {
 }
 
 .line-blockquote {
-  border-left: 2px solid var(--warm-sand);
-  padding-left: 14px;
+  position: relative;
+  border-left: 2px solid var(--list-guide-line);
+  padding-left: 12px;
   color: var(--olive);
   background-color: transparent;
   border-radius: 0;
-  font-style: italic;
+  box-sizing: border-box;
+}
+
+.line-callout.line-blockquote {
+  border-left-width: 3px;
+  padding-left: 16px;
+}
+
+.line-blockquote .token-blockquote-prefix .blockquote-bar {
+  display: none;
+}
+
+.line-blockquote:not(.is-active-line) .token-blockquote-prefix {
+  display: inline-block;
+  width: 0 !important;
+  overflow: hidden;
+  vertical-align: top;
 }
 .editor-scroll-container {
   overflow-anchor: none;
@@ -676,8 +810,21 @@ body {
   bottom: 0;
   width: 0.5px;
   background-color: var(--list-guide-line);
+  opacity: 0.6;
   pointer-events: none;
   user-select: none;
+}
+
+/* 列表多级树状分支指引：在直接归属当前项的导线处渲染微型分支横线，层级归属一目了然 */
+.syntax-indent-guide.syntax-indent-guide-current::after {
+  content: '';
+  position: absolute;
+  top: calc(50% - 0.25px);
+  left: 0;
+  width: calc(1.5ch - 2px);
+  height: 0.5px;
+  background-color: inherit;
+  opacity: 0.8;
 }
 
 /* 列表符号居中与等宽槽位 (中轴线恒为 0.5ch) */

@@ -58,6 +58,30 @@ function computeIndentGuides(
   return { indentStep, indentGuidesCount };
 }
 
+const ImagePreviewWidget: React.FC<{ url: string; alt: string }> = ({ url, alt }) => {
+  const [hasError, setHasError] = React.useState(false);
+
+  if (hasError || !url) {
+    return (
+      <span className="image-fallback-badge" title={url || '无图片地址'}>
+        <span aria-hidden="true">🖼️</span>
+        <span>{alt || '图片'}</span>
+        <span className="image-fallback-hint">(无法加载)</span>
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={url}
+      alt={alt}
+      className="markdown-preview-image"
+      onError={() => setHasError(true)}
+      loading="lazy"
+    />
+  );
+};
+
 interface InlineRendererProps {
   tokens: InlineNode[];
   lineOffset: number;
@@ -312,6 +336,41 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             );
           }
 
+          if (token.type === 'image') {
+            const url = token.url || '';
+            const alt = token.content ? token.content.replace(/^🖼️\s*/, '') : '图片';
+            return (
+              <span
+                key={key}
+                data-token-start={start}
+                data-token-length={len}
+                className={`${finalClassName} token-image-wrapper`}
+                style={token.style}
+              >
+                <span className="syntax-hidden" data-sub-offset={0}>
+                  {token.raw}
+                </span>
+                <span className="syntax-content">
+                  <ImagePreviewWidget url={url} alt={alt} />
+                </span>
+              </span>
+            );
+          }
+
+          if (token.type === 'text') {
+            return (
+              <span
+                key={key}
+                data-token-start={start}
+                data-token-length={len}
+                className={finalClassName}
+                style={token.style}
+              >
+                {isActive ? token.raw : token.content}
+              </span>
+            );
+          }
+
           if (token.type === 'table_cell') {
             const colIndex = colIndexCounter++;
             const cellWidth = tableWidths?.[colIndex];
@@ -339,10 +398,11 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 const minCol = Math.min(selectedCell.startCol, selectedCell.endCol);
                 const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
                 
-                if (lineIndex === minLine) shadows.push('inset 0 1.5px 0 0 var(--border-focus)');
-                if (lineIndex === maxLine) shadows.push('inset 0 -1.5px 0 0 var(--border-focus)');
-                if (colIndex === minCol) shadows.push('inset 1.5px 0 0 0 var(--border-focus)');
-                if (colIndex === maxCol) shadows.push('inset -1.5px 0 0 0 var(--border-focus)');
+                const borderToken = 'var(--brand)';
+                if (lineIndex === minLine) shadows.push(`inset 0 1.5px 0 0 ${borderToken}`);
+                if (lineIndex === maxLine) shadows.push(`inset 0 -1.5px 0 0 ${borderToken}`);
+                if (colIndex === minCol) shadows.push(`inset 1.5px 0 0 0 ${borderToken}`);
+                if (colIndex === maxCol) shadows.push(`inset -1.5px 0 0 0 ${borderToken}`);
                 
                 selectionShadow = shadows.join(', ');
                 if (lineIndex === maxLine && colIndex === maxCol) {
@@ -382,7 +442,8 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                       e.currentTarget,
                       e.clientX,
                       start,
-                      len
+                      len,
+                      e.clientY
                     ) ?? start;
                     const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
                     editorStore.setSelection(clampedIdx, clampedIdx);
@@ -419,7 +480,8 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                       e.currentTarget,
                       e.clientX,
                       start,
-                      len
+                      len,
+                      e.clientY
                     ) ?? start;
                     const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
                     editorStore.setSelection(clampedIdx, clampedIdx);
@@ -479,19 +541,19 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     lineIndex ?? -1,
                     colIndex
                   );
-                  const container = (e.currentTarget.closest('.editor-scroll-container') ||
-                    document.querySelector('.editor-scroll-container')) as HTMLElement;
-                  if (container) {
-                    const targetIdx = indexFromClientPoint(
-                      e.clientX,
-                      e.clientY,
-                      container,
-                      editorStore
-                    );
-                    editorStore.setCursorPos(targetIdx);
-                  }
-                  const input = document.querySelector('.hidden-input') as HTMLTextAreaElement;
-                  if (input) input.focus();
+                  const targetIdx = locateRowIndexByPhysicalBisection(
+                    e.currentTarget,
+                    e.clientX,
+                    start,
+                    len,
+                    e.clientY
+                  ) ?? start;
+                  const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
+                  editorStore.setSelection(clampedIdx, clampedIdx);
+                  editorStore.setCursorPos(clampedIdx);
+                  const input = (document.querySelector('.hidden-input') ||
+                    document.querySelector('textarea')) as HTMLTextAreaElement;
+                  if (input) input.focus({ preventScroll: true });
                 }}
                 onContextMenu={(e) => {
                   // Prevent default context menu and trigger our custom one
@@ -555,7 +617,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                       {Array.from({ length: indentGuidesCount }).map((_, i) => (
                         <span
                           key={i}
-                          className="syntax-indent-guide"
+                          className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
                           style={{
                             left: `calc(${i * indentStep}ch + 0.5ch - 0.5px)`,
                           }}
@@ -600,7 +662,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     {Array.from({ length: indentGuidesCount }).map((_, i) => (
                       <span
                         key={i}
-                        className="syntax-indent-guide"
+                        className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
                         style={{
                           left: `calc(${i * indentStep}ch + 0.5ch - 0.5px)`,
                         }}
@@ -665,7 +727,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     {Array.from({ length: indentGuidesCount }).map((_, i) => (
                       <span
                         key={i}
-                        className="syntax-indent-guide"
+                        className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
                         style={{
                           left: `calc(${i * indentStep}ch + 0.5ch - 0.5px)`,
                         }}

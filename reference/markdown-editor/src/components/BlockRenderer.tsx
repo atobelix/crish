@@ -13,7 +13,7 @@
  * 后，解析层产出的自定义 LineType 行直接命中注册表；移除后恢复兜底。
  */
 import React, { memo, useState } from 'react';
-import type { LineNode, InlineNode, LineType } from '../core/ast';
+import type { LineNode, InlineNode, LineType, CalloutType } from '../core/ast';
 import type { CodeState } from '../core/parser';
 import { checkIsActive, type ActiveState } from '../core/measure';
 import { InlineRenderer } from './InlineRenderer';
@@ -58,6 +58,52 @@ function truncateTokens(tokens: InlineNode[], maxChars: number): InlineNode[] {
     }
   }
   return result;
+}
+
+function getCalloutIcon(type?: CalloutType): React.ReactNode {
+  switch (type) {
+    case 'tip':
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 18h6" />
+          <path d="M10 22h4" />
+          <path d="M12 2a7 7 0 0 0-7 7c0 2.5 1.5 4.5 3 6h8c1.5-1.5 3-3.5 3-6a7 7 0 0 0-7-7z" />
+        </svg>
+      );
+    case 'important':
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      );
+    case 'warning':
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+      );
+    case 'caution':
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      );
+    case 'note':
+    default:
+      return (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="16" x2="12" y2="12" />
+          <line x1="12" y1="8" x2="12.01" y2="8" />
+        </svg>
+      );
+  }
 }
 
 /**
@@ -224,10 +270,55 @@ function useSoftRender(index: number, store?: EditorStore): boolean {
   );
 }
 
-/** 空块渲染器（空行） */
-function EmptyBlock(_: BlockRendererComponentProps) {
+/** 计算指定行的行状态（双段存储兼顾） */
+export function getLineCodeState(state: EditorState, index: number): CodeState {
+  const { mainCodeState, streamTailCodeState, mainLines } = state;
+  const boundary = mainLines.length - 1;
+  return streamTailCodeState.length === 0
+    ? (mainCodeState[index] ?? 'none')
+    : index < boundary
+      ? (mainCodeState[index] ?? 'none')
+      : (streamTailCodeState[index - boundary] ?? 'none');
+}
+
+/** 空块渲染器（空行：若处于代码块或数学块内部，保持连续底色无断层白条；若处于 Callout 内部保持卡片底色） */
+function EmptyBlock({
+  block,
+  index = 0,
+  store,
+}: BlockRendererComponentProps) {
+  const editorStore = store ?? useEditorStore;
+  const st = editorStore((s) => getLineCodeState(s, index));
+  const isCode = st === 'code';
+  const isMath = st === 'math_block';
+
+  if (isCode) {
+    const fenceCtx = computeFenceContext(editorStore.getState(), index);
+    const lineNo = getCodeLineNumber(index, fenceCtx, editorStore);
+    return (
+      <div className="line-block line-code">
+        <div
+          className="code-gutter"
+          aria-hidden="true"
+          data-line-number={lineNo}
+          data-ignore-measure="true"
+        />
+        <div className="code-content">
+          <br />
+        </div>
+      </div>
+    );
+  }
+
+  let className = isMath ? 'line-block line-math-block' : 'line-block';
+  if (block?.blockquoteLevel) {
+    className += ' line-blockquote';
+  }
+  if (block?.calloutType) {
+    className += ` line-callout callout-${block.calloutType}`;
+  }
   return (
-    <div className="line-block">
+    <div className={className} data-blockquote-level={block?.blockquoteLevel}>
       <br />
     </div>
   );
@@ -961,15 +1052,17 @@ function MathBlock({
   // 闭合后 codeBlockState 尾部出现 math_fence_end，本分支自然切回
   // KaTeX 硬渲染（同一 AST 软/硬开关，05 分析「同一 AST 软/硬渲染」）。
   const softRender = useSoftRender(index, store);
+  const calloutClass = block.calloutType ? ` line-callout callout-${block.calloutType}` : '';
+
   if (softRender) {
     return (
-      <div className="line-block line-math-block line-code is-soft-render">
+      <div className={`line-block line-math-block line-code is-soft-render${calloutClass}`}>
         <span
           className="math-soft-text"
           data-token-start={lineOffset}
           data-token-length={block.length}
         >
-          {block.raw}
+          {block.raw || <br />}
         </span>
       </div>
     );
@@ -980,9 +1073,9 @@ function MathBlock({
     formula = formula.substring(bMatch[0].length);
   }
   formula = formula.trim();
-  const katexHtml = renderMathToHtml(formula, true);
+  const katexHtml = formula ? renderMathToHtml(formula, true) : '<br />';
   return (
-    <div className="line-block line-math-block">
+    <div className={`line-block line-math-block${calloutClass}`}>
       <div
         className="math-block-rendered"
         dangerouslySetInnerHTML={{ __html: katexHtml }}
@@ -994,15 +1087,12 @@ function MathBlock({
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        {block.raw}
+        {block.raw || <br />}
       </div>
-      {/* B4 N5：公式复制按钮——LaTeX 源 = math token raw（行原文） */}
       <CopyButton
         dataAttr="math"
-        label="复制公式 LaTeX 源"
-        onClick={() => {
-          void copyTextToClipboard(block.raw);
-        }}
+        label="复制公式（LaTeX）"
+        onClick={() => void copyTextToClipboard(formula)}
       />
     </div>
   );
@@ -1153,7 +1243,10 @@ function HeadingBlock({
   rtl,
 }: BlockRendererComponentProps) {
   const level = block.headingLevel || 1;
-  const className = `line-block line-h${level}`;
+  const calloutClass = block.calloutType
+    ? ` line-callout callout-${block.calloutType}${block.isCalloutHeader ? ' callout-header' : ''}`
+    : '';
+  const className = `line-block line-h${level}${calloutClass}`;
   return (
     // B5 bidi：整行 RTL（标题行级 dir——isRtlLine 对含前缀的整行检测，
     // 标题前缀 # 为 ASCII，不影响 RTL 判定；LTR 行无 dir 属性）
@@ -1200,8 +1293,11 @@ function BlockquoteBlock({
 }: BlockRendererComponentProps) {
   const prefixMatch = block.raw.match(/^(>\s?)+/);
   const prefix = prefixMatch ? prefixMatch[0] : '';
+  const calloutClass = block.calloutType
+    ? ` line-callout callout-${block.calloutType}${block.isCalloutHeader ? ' callout-header' : ''}`
+    : '';
   return (
-    <div className="line-block line-blockquote">
+    <div className={`line-block line-blockquote${calloutClass}`}>
       <span
         className="blockquote-source"
         data-token-start={lineOffset}
@@ -1299,12 +1395,39 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
     tokensToRender = truncateTokens(tokensToRender, MAX_VISIBLE_LINE_CHARS);
   }
 
+  const isLineActive = checkIsActive(lineOffset, block.length, activeState ?? null);
+  const calloutClass = block.calloutType
+    ? ` line-callout callout-${block.calloutType}${block.isCalloutHeader ? ' callout-header' : ''}`
+    : '';
+
+  if (block.isCalloutHeader && !isLineActive && block.calloutType) {
+    return (
+      <div
+        className={`line-block${calloutClass}`}
+        dir={rtl ? 'rtl' : undefined}
+        data-token-start={lineOffset}
+        data-token-length={block.length}
+      >
+        <div className="callout-header-banner">
+          <span className="callout-icon" aria-hidden="true">
+            {getCalloutIcon(block.calloutType)}
+          </span>
+          <span className="callout-title">
+            {block.calloutTitle || block.calloutType.toUpperCase()}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  const bqClass = block.blockquoteLevel ? ' line-blockquote' : '';
   return (
     // B5 bidi：整行级 RTL（body/列表/未知类型行统一落点——行级
     // dir 使 InlineRenderer 全部 token 继承 RTL 排版；LTR 行不设
     // dir 属性，行为零变化）
     <div
-      className="line-block"
+      className={`line-block${bqClass}${calloutClass}`}
+      data-blockquote-level={block.blockquoteLevel}
       dir={rtl ? 'rtl' : undefined}
     >
       {tokensToRender && tokensToRender.length > 0 ? (

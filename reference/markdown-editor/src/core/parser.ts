@@ -1,4 +1,4 @@
-import type { LineNode, InlineNode, MarkdownDocument } from './ast';
+import type { LineNode, InlineNode, MarkdownDocument, CalloutType } from './ast';
 import { LRUCache } from './LRUCache';
 // 行内规则插件体系（06 分析 §1）：INLINE_RULES 数组迁移为 ruler 注册表——
 // 内置规则初始注册见 buildInlineRuler，宿主自定义语法（@mention 等）经
@@ -339,6 +339,9 @@ export class MarkdownParser {
       listContexts,
       lazyContinuation,
       fenceLangs,
+      calloutTypes,
+      calloutTitles,
+      isCalloutHeaders,
     } = this.computeLineOffsets(text);
     const lines = text.split('\n');
     const lineNodes: LineNode[] = new Array(lines.length);
@@ -379,7 +382,10 @@ export class MarkdownParser {
         i === lines.length - 1 || lines[i + 1].trim() === '',
         // W2-5：围栏代码行的高亮语言键（computeLineOffsets 扫描产出；
         // 非代码行/无语言围栏为 null）
-        fenceLangs[i]
+        fenceLangs[i],
+        calloutTypes ? calloutTypes[i] : null,
+        calloutTitles ? calloutTitles[i] : null,
+        isCalloutHeaders ? isCalloutHeaders[i] : false
       );
     }
     return {
@@ -652,6 +658,10 @@ export class MarkdownParser {
     // code 行继承（含空行），fence_end 归 null。供 parseLine 按语言
     // 分发关键字表（S-T-2-08）。
     fenceLangs: (string | null)[];
+    // Callout 提示块类型与标题追踪（> [!NOTE] 等）
+    calloutTypes: (CalloutType | null)[];
+    calloutTitles: (string | null)[];
+    isCalloutHeaders: boolean[];
   } {
     const lines = text.split('\n');
     const offsets = new Array(lines.length);
@@ -666,6 +676,16 @@ export class MarkdownParser {
     );
     // W2-5：逐行围栏语言键（默认无语言；仅围栏代码内容行非 null）
     const fenceLangs: (string | null)[] = new Array(lines.length).fill(null);
+    const calloutTypes: (CalloutType | null)[] = new Array(lines.length).fill(
+      null
+    );
+    const calloutTitles: (string | null)[] = new Array(lines.length).fill(null);
+    const isCalloutHeaders: boolean[] = new Array(lines.length).fill(false);
+    let currentCallout: {
+      type: CalloutType;
+      title: string;
+      level: number;
+    } | null = null;
 
     let currentOffset = 0;
     let inCodeBlock = false;
@@ -722,6 +742,34 @@ export class MarkdownParser {
       const { level: bqSelfLevel, content: bqContent } =
         this.stripBlockquoteContext(lines[i]);
       const trimmed = bqContent.trim();
+
+      // Callout 提示块判定与延续（CommonMark / GFM Alert 语法）
+      const calloutMatch = trimmed.match(
+        /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i
+      );
+      if (bqSelfLevel > 0 && calloutMatch) {
+        currentCallout = {
+          type: calloutMatch[1].toLowerCase() as CalloutType,
+          title: calloutMatch[2]?.trim() || '',
+          level: bqSelfLevel,
+        };
+        calloutTypes[i] = currentCallout.type;
+        calloutTitles[i] = currentCallout.title;
+        isCalloutHeaders[i] = true;
+      } else if (
+        currentCallout &&
+        bqSelfLevel >= currentCallout.level &&
+        lines[i].trim() !== ''
+      ) {
+        calloutTypes[i] = currentCallout.type;
+        calloutTitles[i] = currentCallout.title;
+        isCalloutHeaders[i] = false;
+      } else if (
+        bqSelfLevel < (currentCallout?.level ?? 1) ||
+        lines[i].trim() === ''
+      ) {
+        currentCallout = null;
+      }
 
       // —— B8a：懒延续判定（spec 5.2 Laziness 规则 2）——
       // 前一非空白行是块引用内打开的段落（body 且层级 ≥1）且本行非空行后的
@@ -1136,6 +1184,9 @@ export class MarkdownParser {
       listContexts,
       lazyContinuation,
       fenceLangs,
+      calloutTypes,
+      calloutTitles,
+      isCalloutHeaders,
     };
   }
 
@@ -1677,10 +1728,13 @@ export class MarkdownParser {
     // 必须进缓存键——同文本行在不同语言的围栏内产出不同 keyword/comment
     // token（`def` 在 python 是关键字、在 js 是普通文本），不进键会导致
     // 跨文档/跨路径缓存串扰。
-    codeLang: string | null = null
+    codeLang: string | null = null,
+    calloutType: CalloutType | null = null,
+    calloutTitle: string | null = null,
+    isCalloutHeader: boolean = false
   ): LineNode {
     // 缓存键 = codeState + Setext 上下文 + 定义行标志 + 定义表 id + 列表上下文
-    // + 懒延续层级 + 块结束标志 + 围栏语言键 + 全局规则版本 + 完整行文本：
+    // + 懒延续层级 + 块结束标志 + 围栏语言键 + Callout 上下文 + 全局规则版本 + 完整行文本：
     // blockquote 前缀、fence/math 跨行状态、Setext 上下文均已编码在键内
     // （review-02 §7.1/§7.3：上下文必须进键，禁止回写缓存行），
     // token 偏移为行内相对值（与文档偏移解耦），因此命中节点可直接复用结构。
@@ -1706,6 +1760,8 @@ export class MarkdownParser {
       (blockEnd ? 'E1' : 'E0') +
       ':' +
       (codeLang ? 'K' + codeLang : 'Kx') +
+      ':' +
+      (calloutType ? 'C' + calloutType + (isCalloutHeader ? 'H' : 'B') : 'Cx') +
       ':' +
       lineText;
     const cached = this.astCache.get(cacheKey);
@@ -1894,7 +1950,10 @@ export class MarkdownParser {
       refDefs,
       listContext,
       lazyInherit,
-      blockEnd
+      blockEnd,
+      calloutType,
+      calloutTitle,
+      isCalloutHeader
     );
     // B8a：懒延续行的 blockquoteLevel 由上下文决定（parseLine 与
     // parseNormalLine 计算一致，此处幂等覆盖兜底）
@@ -2084,7 +2143,10 @@ export class MarkdownParser {
     lazyInherit: number | null = null,
     // B8c：本行是否为块结束（parse 预扫描产物，见 parseLine 注释）——
     // 硬换行标记的门控：块末尾行尾的 2+ 空格/反斜杠保持文本语义。
-    blockEnd: boolean = false
+    blockEnd: boolean = false,
+    calloutType: CalloutType | null = null,
+    calloutTitle: string | null = null,
+    isCalloutHeader: boolean = false
   ): LineNode {
     const tokens: InlineNode[] = [];
     let pos = 0;
@@ -2159,6 +2221,8 @@ export class MarkdownParser {
         type: 'empty',
         raw: lineText,
         blockquoteLevel: blockquoteLevel > 0 ? blockquoteLevel : undefined,
+        calloutType: calloutType ?? undefined,
+        calloutTitle: calloutTitle ?? undefined,
         inlineTokens: [
           {
             type: 'text',
@@ -2200,7 +2264,7 @@ export class MarkdownParser {
       }
 
       if (!isHr) {
-        const headingMatch = nestedText.match(/^(#{1,6})\s+/);
+        const headingMatch = nestedText.match(/^ {0,3}(#{1,6})\s+/);
         if (headingMatch) {
           lineType = 'heading';
           headingLevel = headingMatch[1].length;
@@ -2388,12 +2452,29 @@ export class MarkdownParser {
       listIndent = listContext.indent;
     }
 
+    let effectiveCalloutType = calloutType;
+    let effectiveCalloutTitle = calloutTitle;
+    let effectiveIsCalloutHeader = isCalloutHeader;
+    if (effectiveCalloutType === null && blockquoteLevel > 0) {
+      const calloutMatch = remainingTextForPrefix.trim().match(
+        /^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i
+      );
+      if (calloutMatch) {
+        effectiveCalloutType = calloutMatch[1].toLowerCase() as CalloutType;
+        effectiveCalloutTitle = calloutMatch[2]?.trim() || '';
+        effectiveIsCalloutHeader = true;
+      }
+    }
+
     return {
       id: this.generateId(),
       type: lineType,
       raw: lineText,
       headingLevel,
       blockquoteLevel: blockquoteLevel > 0 ? blockquoteLevel : undefined,
+      calloutType: effectiveCalloutType ?? undefined,
+      calloutTitle: effectiveCalloutTitle ?? undefined,
+      isCalloutHeader: effectiveIsCalloutHeader ? true : undefined,
       listIndent: listPrefix !== undefined ? listIndent : undefined,
       listPrefix: listPrefix ? listPrefix : undefined,
       listContinuation: isListContinuation ? true : undefined,
