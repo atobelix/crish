@@ -1101,20 +1101,32 @@ body {
 
 /* ── 顶部控制栏现代统一设计系统（28px 高度网格、统一 3% 纯灰悬停、零 raw hex） ── */
 .top-bar-header {
-  width: min(920px, 95vw);
+  width: min(1040px, 96vw);
   background: var(--ivory);
   border: 1px solid var(--border-medium);
   border-radius: 8px;
-  padding: 6px 12px;
+  padding: 8px 12px;
   margin-bottom: 10px;
   box-shadow: 0 1px 3px hsl(30 2.5% 10% / 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-sans);
+  box-sizing: border-box;
+}
+
+.top-bar-row {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-family: var(--font-sans);
-  box-sizing: border-box;
-  min-height: 40px;
+}
+
+.top-bar-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--border-soft);
 }
 
 .top-brand-badge {
@@ -1254,4 +1266,44 @@ body {
 
 .top-btn-group-danger {
   color: var(--danger-color);
+}
+
+.top-select {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  height: 26px;
+  line-height: 26px;
+  padding: 0 6px;
+  border: none;
+  border-right: 1px solid var(--border-medium);
+  background: var(--ivory);
+  color: var(--text-primary);
+  cursor: pointer;
+  outline: none;
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.top-select:focus {
+  background: var(--interactive-hover);
+}
+
+.top-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.top-control-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 0 6px;
+  border-right: 1px solid var(--border-medium);
+  background: var(--tag-standard-bg);
+  height: 26px;
+  line-height: 26px;
+  white-space: nowrap;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
 }

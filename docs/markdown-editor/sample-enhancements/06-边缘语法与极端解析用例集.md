@@ -1,0 +1,884 @@
+# CommonMark 边缘语法与极限解析用例集
+
+**文档代号**：`SPEC-SAMPLE-EDGE-PARSER-06`  
+**归属模块**：`docs/markdown-editor/sample-enhancements/06-边缘语法与极端解析用例集.md`  
+**适用对象**：Markdown 混合渲染编辑器（Live Preview）、AST 解析器、IFC 盒模型渲染引擎、双层光标投影测量系统（`measure.ts`）、自适应行高树（`HeightMap.ts`）  
+**规范基准**：CommonMark Spec 0.31.2 / GFM (GitHub Flavored Markdown)  
+**设计目标**：构建真实、严苛、无盲区的极端边界与防御性压力测试集，杜绝语法逃逸、排版跳动、光标卡顿失焦及渲染污染。
+
+---
+
+## 目录
+
+- [一、设计总则与验证维度矩阵](#一设计总则与验证维度矩阵)
+- [二、标题语法边缘与 ATX/Setext 歧义用例](#二标题语法边缘与-atxsetext-歧义用例)
+  - [TC-HEAD-01: H1–H6 阶梯边界与标准空格](#tc-head-01-h1h6-阶梯边界与标准空格)
+  - [TC-HEAD-02: ATX 闭合符剥离与非对称尾随 `#`](#tc-head-02-atx-闭合符剥离与非对称尾随-)
+  - [TC-HEAD-03: 前置缩进 0–3 空格 vs 4 空格（缩进代码块陷阱）](#tc-head-03-前置缩进-03-空格-vs-4-空格缩进代码块陷阱)
+  - [TC-HEAD-04: 制表符与多空格内部混合标题](#tc-head-04-制表符与多空格内部混合标题)
+  - [TC-HEAD-05: 7 级伪标题（语法逃逸为普通段落）](#tc-head-05-7-级伪标题语法逃逸为普通段落)
+  - [TC-HEAD-06: Setext 标题与段落/分隔线歧义（`---` 与 `===` 冲突陷阱）](#tc-head-06-setext-标题与段落分隔线歧义---与--冲突陷阱)
+  - [TC-HEAD-07: 标题内混入复合行内格式与行内代码](#tc-head-07-标题内混入复合行内格式与行内代码)
+- [三、缩进、空白符与块级前置剥离边界用例](#三缩进空白符与块级前置剥离边界用例)
+  - [TC-INDENT-01: 纯空引用行与带空格引用行混合嵌套](#tc-indent-01-纯空引用行与带空格引用行混合嵌套)
+  - [TC-INDENT-02: 空列表项与纯空格列表项（光标定锚与高度坍缩）](#tc-indent-02-空列表项与纯空格列表项光标定锚与高度坍缩)
+  - [TC-INDENT-03: 制表符停止位（Tab Stop 4-space align）与空格混合缩进](#tc-indent-03-制表符停止位tab-stop-4-space-align与空格混合缩进)
+  - [TC-INDENT-04: 列表项内嵌缩进代码块（CommonMark §4.5 4空格剥离 vs 8空格嵌入）](#tc-indent-04-列表项内嵌缩进代码块commonmark-45-4空格剥离-vs-8空格嵌入)
+  - [TC-INDENT-05: 围栏代码块前置 1–3 空格剥离机制](#tc-indent-05-围栏代码块前置-13-空格剥离机制)
+  - [TC-INDENT-06: 连续密集多空行与 HeightMap 虚拟滚动映射](#tc-indent-06-连续密集多空行与-heightmap-虚拟滚动映射)
+- [四、行内标记嵌套、冲突与未闭合状态用例](#四行内标记嵌套冲突与未闭合状态用例)
+  - [TC-INLINE-01: `***` 三星加粗斜体交织与左右侧翼（Flanking Delimiter）判定](#tc-inline-01--三星加粗斜体交织与左右侧翼flanking-delimiter判定)
+  - [TC-INLINE-02: 跨词加粗与下划线词内内联差异（`foo_bar_baz` vs `foo*bar*baz`）](#tc-inline-02-跨词加粗与下划线词内内联差异foo_bar_baz-vs-foobarbaz)
+  - [TC-INLINE-03: 未闭合标记与软渲染预演态（`**`、`*`、`~~`、`` ` `` 编辑中防御）](#tc-inline-03-未闭合标记与软渲染预演态-编辑中防御)
+  - [TC-INLINE-04: 多反引号代码跨距与反引号转义（首尾空格剥离规则）](#tc-inline-04-多反引号代码跨距与反引号转义首尾空格剥离规则)
+  - [TC-INLINE-05: 连续反引号逃逸与未闭合反引号单向破坏隔离](#tc-inline-05-连续反引号逃逸与未闭合反引号单向破坏隔离)
+  - [TC-INLINE-06: 复合嵌套深度压力：加粗嵌套链接嵌套删除线嵌套代码](#tc-inline-06-复合嵌套深度压力加粗嵌套链接嵌套删除线嵌套代码)
+- [五、HTML 实体、原始内联标签与安全防御用例](#五html-实体原始内联标签与安全防御用例)
+  - [TC-HTML-01: `<details><summary>` 原生折叠块与 Markdown 内容混编](#tc-html-01-detailssummary-原生折叠块与-markdown-内容混编)
+  - [TC-HTML-02: `<span style="...">` 样式注入与行盒（IFC）基线/高度守恒隔离](#tc-html-02-span-style-样式注入与行盒ifc-基线高度守恒隔离)
+  - [TC-HTML-03: 命名 HTML 实体与未闭合伪实体（`&amp;`, `&lt;`, `&notanentity;`）](#tc-html-03-命名-html-实体与未闭合伪实体amp-lt-notanentity)
+  - [TC-HTML-04: 十进制/十六进制实体与 Emoji/大码点字符（`&#128512;`, `&#x1F4BB;`）](#tc-html-04-十进制十六进制实体与-emoji大码点字符128512-x1f4bb)
+  - [TC-HTML-05: 防御性 XSS 攻击向量逃逸阻断（`<script>`, `onerror`, `javascript:`）](#tc-html-05-防御性-xss-攻击向量逃逸阻断script-onerror-javascript)
+- [六、极端排版尺寸与长短行几何压力用例](#六极端排版尺寸与长短行几何压力用例)
+  - [TC-SIZE-01: 1024 字符无空格连续英文/URL 溢出与换行计算](#tc-size-01-1024-字符无空格连续英文url-溢出与换行计算)
+  - [TC-SIZE-02: 2048 字符单行无断字 Base64 密文字符串（折行光标测量与双层投影）](#tc-size-02-2048-字符单行无断字-base64-密文字符串折行光标测量与双层投影)
+  - [TC-SIZE-03: 单字符超稀疏行与密集连续换行（HeightMap 极端高度抖动测试）](#tc-size-03-单字符超稀疏行与密集连续换行heightmap-极端高度抖动测试)
+  - [TC-SIZE-04: 10 级极端嵌套引用块（Blockquote 几何缩进与排版压力）](#tc-size-04-10-级极端嵌套引用块blockquote-几何缩进与排版压力)
+  - [TC-SIZE-05: 6 级深度混合列表（有序/无序/任务列表交错缩进）](#tc-size-05-6-级深度混合列表有序无序任务列表交错缩进)
+- [七、特殊分隔线与块级上下文歧义用例](#七特殊分隔线与块级上下文歧义用例)
+  - [TC-HR-01: 标准三种符号分隔线（`---`, `***`, `___`）](#tc-hr-01-标准三种符号分隔线---)
+  - [TC-HR-02: 稀疏空格分散分隔线（`- - -`, `* * *`, `_ _ _`, `-  -  -  -`）](#tc-hr-02-稀疏空格分散分隔线-----_-_-)
+  - [TC-HR-03: 极长符号分隔线（`-------------------------`）](#tc-hr-03-极长符号分隔线-------------------------)
+  - [TC-HR-04: 分隔线与 Setext 标题的接壤歧义（紧随段落 vs 空行隔离）](#tc-hr-04-分隔线与-setext-标题的接壤歧义紧随段落-vs-空行隔离)
+  - [TC-HR-05: 列表项内部的分隔线与列表终结判定](#tc-hr-05-列表项内部的分隔线与列表终结判定)
+- [八、测试自动化集成建议与断言矩阵](#八测试自动化集成建议与断言矩阵)
+
+---
+
+## 一、设计总则与验证维度矩阵
+
+### 1.1 设计哲学与防御性要求
+
+本测试用例集遵循以下核心准则：
+1. **真实性与严苛性统一**：每一个用例均源自 CommonMark 官方规范（Spec 0.31.2）中定义的边界规则、现实用户高频输入偏差、或富文本混合渲染引擎常见崩溃点。
+2. **拒绝无意义垃圾符号堆砌**：摒弃纯随机字符串，每个用例均配备 **【设计目的】**、**【测试重点】**、**【CommonMark 规范依据】**、**【预期 AST 结构】** 与 **【混合渲染（Live Preview）断言】**。
+3. **覆盖混合渲染双重形态**：
+   - **源码态（Source Mode）**：全文本等宽展开，幽灵标记完整可见，光标测量严格走 Tier 1 Range 投影。
+   - **渲染态（Rendered Mode）**：装饰性标记折叠/隐藏（等宽槽位守恒），行盒严格保持 28px 网格整数倍（$\Delta H \equiv 0$），光标测量走 Tier 2 复合 Widget 插值。
+
+### 1.2 四大验证维度矩阵
+
+| 维度编号 | 维度名称 | 检验核心系统 | 典型缺陷阻断目标 |
+| :--- | :--- | :--- | :--- |
+| **DIM-01** | **语法解析准确性** | Tokenizer / Parser / AST 构建 | 误解析 7 级标题、ATX 尾随闭合符误作为文本、Setext 吞噬段落 |
+| **DIM-02** | **几何排版守恒性** | IFC 盒模型 / `index.css` / 样式隔离 | HTML 标签破坏 28px 行高网格、超长字符导致容器横向穿透破损 |
+| **DIM-03** | **光标投影鲁棒性** | `measure.ts` / 双层光标测量管线 | 折行处光标行首退化（Line-start fallback bug）、未闭合标记导致坐标漂移 |
+| **DIM-04** | **虚拟滚动稳定性** | `HeightMap.ts` / 视口锚定调度器 | 密集空行引发行高累加坍缩、深度嵌套引用/列表触发动态高度死循环 |
+
+---
+
+## 二、标题语法边缘与 ATX/Setext 歧义用例
+
+### TC-HEAD-01: H1–H6 阶梯边界与标准空格
+
+- **设计目的**：验证标准 ATX 标题在 1 至 6 级完整阶梯下的层级递进、字体字阶、内联渲染高度及与紧邻段落的边界隔离。
+- **CommonMark 规范依据**：§4.2 ATX headings。`#` 数量必须为 1 至 6 个，且其后必须紧跟至少一个空白字符（空格或制表符）。
+- **预期 AST**：构建 `heading` 节点，`level` 分别为 1 至 6，其子节点包含对应的纯文本。
+
+#### 测试源文本展示区
+
+# 一级标题 H1 测试行（ATX Headings Level 1）
+## 二级标题 H2 测试行（ATX Headings Level 2）
+### 三级标题 H3 测试行（ATX Headings Level 3）
+#### 四级标题 H4 测试行（ATX Headings Level 4）
+##### 五级标题 H5 测试行（ATX Headings Level 5）
+###### 六级标题 H6 测试行（ATX Headings Level 6）
+
+> **[混合渲染断言 TC-HEAD-01]**
+> 1. 渲染态下各级标题高度必须整除基准行高（28px 网格倍数：如 H1 为 56px 即 2 行高，H2 为 56px/42px，H3-H6 为 28px）。
+> 2. 光标点击至各级标题行首时，X 坐标严格对其左边距，无负偏移。
+
+---
+
+### TC-HEAD-02: ATX 闭合符剥离与非对称尾随 `#`
+
+- **设计目的**：验证尾部闭合字符序列（Closing Sequence）的正则剥离能力，确保尾随 `#` 不被作为标题文本内容，且即使两端 `#` 数量不对称亦能正确剥离。
+- **CommonMark 规范依据**：§4.2。标题内容末尾可出现任意数量的 `#` 字符，前提是其前有空格或制表符。这些 `#` 及其前置空白不属于标题内容。
+- **预期 AST**：标题文本必须剥离尾部的 `#` 与空白符；`level` 保持为开头的 `#` 数量。
+
+#### 测试源文本展示区
+
+## 完美对称闭合标题 ##
+### 右侧不对称超长闭合序列标题 #######################
+# 单个尾随闭合符带空格 #   
+## 尾随带多个空格后接闭合符     ###
+
+> **[混合渲染断言 TC-HEAD-02]**
+> 1. 渲染后的标题文本分别为 `"完美对称闭合标题"`、`"右侧不对称超长闭合序列标题"`、`"单个尾随闭合符带空格"`、`"尾随带多个空格后接闭合符"`。
+> 2. 尾随闭合序列 `##` 在渲染态下应被隐去或转为低对比度幽灵标记，但在源码态光标移入时必须平滑展开且不发生几何位移。
+
+---
+
+### TC-HEAD-03: 前置缩进 0–3 空格 vs 4 空格（缩进代码块陷阱）
+
+- **设计目的**：验证标题前置空白对语法的截断敏感度。0 至 3 个空格仍为标题；4 个空格时立即转变为缩进代码块（Indented Code Block）。
+- **CommonMark 规范依据**：§4.2 & §4.5。ATX 标题前最多允许 3 个空格的缩进。4 个空格引导块级缩进代码块。
+- **预期 AST**：前三行解析为 Heading (Level 1)，最后一行必须解析为 `code_block` 且包含字面量 `# 4个空格前置变为代码块`。
+
+#### 测试源文本展示区
+
+# 0个空格前置的标准标题
+ # 1个空格前置的合法标题
+  # 2个空格前置的合法标题
+   # 3个空格前置的合法标题
+    # 4个空格前置变为代码块（严禁解析为标题）
+
+> **[混合渲染断言 TC-HEAD-03]**
+> 1. 前 4 行进入 Heading 样式类，行首缩进被规范化吸收。
+> 2. 第 5 行渲染为等宽代码块样式，文字带有背景色底框，字体为等宽字体，不能出现 H1 的大号字体字号。
+
+---
+
+### TC-HEAD-04: 制表符与多空格内部混合标题
+
+- **设计目的**：验证标题引导符 `#` 与内容之间、以及内容单词之间的极端空白符（Tab / 连续空格）排版渲染稳定性。
+- **CommonMark 规范依据**：§4.2。引导 `#` 与内容间可由制表符分隔；内容中的多个连续空白在 HTML 渲染中按标准空白折叠（WhiteSpace Collapse），但在源码态保留精确字宽。
+
+#### 测试源文本展示区
+
+#	制表符分隔的一级标题（Hash后直接跟Tab）
+##       多空格分隔的二级标题（7个连续空格）
+### 标题内部      连续多空格    与	混合制表符测试
+
+> **[混合渲染断言 TC-HEAD-04]**
+> 1. 编辑器在源码态时，Tab 键槽位与多空格槽位严格按照等宽网格渲染，光标向右移动时单步跳过 1 个字符或 4 字符 Tab 宽度。
+> 2. 切换至渲染态时，标题行盒不崩溃，不出现文字重叠，不出现 `NaN` 像素宽度。
+
+---
+
+### TC-HEAD-05: 7 级伪标题（语法逃逸为普通段落）
+
+- **设计目的**：验证标题最大级别边界防御。CommonMark 仅支持 1 至 6 级标题，7 个或更多 `#` 必须严格回退为纯段落文本。
+- **CommonMark 规范依据**：§4.2。超过 6 个 `#` 的起始行不构成 ATX 标题，应解析为普通的段落（Paragraph）。
+
+#### 测试源文本展示区
+
+####### 7级井号开头（严禁解析为H7，必须作为普通段落）
+######## 8级井号开头带尾随闭合 ########
+#NO_SPACE_AFTER_HASH（井号后无空格，严禁解析为标题）
+##无空格二级（井号后无空格，普通文本）
+
+> **[混合渲染断言 TC-HEAD-05]**
+> 1. 上述 4 行全量渲染为普通段落正文文本，继承正文 `font-size: 14px/16px`，行高严格为基准 28px。
+> 2. 行首的 `#######`、`########`、`#NO_SPACE...` 完整展现为字符字面量，不被剥离，不添加任何标题 CSS 类名。
+
+---
+
+### TC-HEAD-06: Setext 标题与段落/分隔线歧义（`---` 与 `===` 冲突陷阱）
+
+- **设计目的**：验证多行 Setext 标题的接壤判定，以及与水平分隔线（Thematic Break）的冲突边界。紧随文本后的 `---` 必须解析为 H2，而非分隔线；前有空行的 `---` 方为分隔线。
+- **CommonMark 规范依据**：§4.3 Setext headings & §4.1 Thematic breaks。
+- **预期 AST**：第一块被解析为 `heading` (level: 1)，第二块解析为 `heading` (level: 2)，第三块解析为 `paragraph` 紧跟 `thematic_break`。
+
+#### 测试源文本展示区
+
+这是一个单行文本
+===
+
+这是一个多行文本
+第一行段落正文
+第二行接壤文本
+---
+
+这是独立的普通段落，下方有空行间隔
+
+---
+
+> **[混合渲染断言 TC-HEAD-06]**
+> 1. 第一块 `这是一个单行文本` 渲染为 H1 样式的 Setext 标题。
+> 2. 第二块 `这是一个多行文本\n第一行段落正文\n第二行接壤文本` 整体合并为一个 H2 标题节点，下方紧邻的 `---` 作为底层下划线被 AST 消耗，**绝对不能渲染为水平分割线 `<hr>`**。
+> 3. 第三块文本后的空行有效隔离了下方的 `---`，该 `---` 必须正确渲染为 `<hr>` 分隔线。
+
+---
+
+### TC-HEAD-07: 标题内混入复合行内格式与行内代码
+
+- **设计目的**：测试标题容器内部嵌套加粗、斜体、删除线、行内代码与超链接时，IFC 行内格式化上下文与字体层叠样式的稳定性。
+- **CommonMark 规范依据**：§4.2。ATX 标题内部允许包含任意行内标记（Inline elements）。
+
+#### 测试源文本展示区
+
+## 标题内嵌套 **加粗强调**、*斜体文本* 与 ~~删除线内容~~
+### 标题内嵌套代码 `console.log("Edge Case: " + level);` 保持高亮
+# 标题内嵌套超链接 [CommonMark 官方规范](https://spec.commonmark.org) 与 *`斜体代码`*
+
+> **[混合渲染断言 TC-HEAD-07]**
+> 1. 标题内的加粗与普通标题字体粗细协同，行内代码继承标题字阶比例但保留等宽字体簇（`font-family: monospace`）。
+> 2. 行内代码背景色块不产生负边距溢出，行盒严格锁定在标题基线网格上，无跳行或重叠现象。
+
+---
+
+## 三、缩进、空白符与块级前置剥离边界用例
+
+### TC-INDENT-01: 纯空引用行与带空格引用行混合嵌套
+
+- **设计目的**：验证引用块在遇到纯 `>`（无空格）、`> `（尾随单空格）、`>    `（尾随多空格）及纯空行时的状态机保持与高度测量。
+- **CommonMark 规范依据**：§5.1 Block quotes。引用前缀符号 `>` 后可跟随最多 1 个可选的空格。仅有 `>` 的行构成引用内的空行（用于切分引用内段落）。
+
+#### 测试源文本展示区
+
+> 第一层引用第一段文本。
+>
+> 第一层引用第二段文本（上一行为纯 > 符号空行）。
+> 
+> 第一层引用第三段文本（上一行为 > 加空格）。
+>> 嵌套第二层引用第一段文本。
+>>
+>> 嵌套第二层引用第二段文本。
+>>> 嵌套第三层极其狭窄的引用文本区。
+
+> **[混合渲染断言 TC-INDENT-01]**
+> 1. 纯 `>` 符号构成的空行在渲染态中展现为引用内部的段落间距（高度为 14px 或 28px），左侧边框（Border-left）必须连续不断裂。
+> 2. 光标点击至 `>` 所在行时，光标精准悬浮于引用竖线内侧首个字符槽位，不得脱出至引用线外侧。
+
+---
+
+### TC-INDENT-02: 空列表项与纯空格列表项（光标定锚与高度坍缩）
+
+- **设计目的**：检验用户连续按回车创建空列表项、或输入仅包含空格的列表项时，编辑器的行高树（HeightMap）是否发生高度归零（0px 坍缩）导致光标无法选中的重大缺陷。
+- **CommonMark 规范依据**：§5.2 List items。空列表项是合法的，其包含空内容。
+
+#### 测试源文本展示区
+
+- 有内容的正常列表项 A
+- 
+-    
+- 有内容的正常列表项 B
+1. 有序正常项 1
+2. 
+3.    
+4. 有序正常项 2
+
+> **[混合渲染断言 TC-INDENT-02]**
+> 1. 空列表项（第 2、3、6、7 行）在 Live Preview 渲染态下的行高绝对不能为 0px，必须强制锁定为标准行高 28px。
+> 2. 列表圆点（Bullet）或序号在空行中正常显示，光标在空列表项中垂直居中对齐，支持正常退格键（Backspace）删除该项。
+
+---
+
+### TC-INDENT-03: 制表符停止位（Tab Stop 4-space align）与空格混合缩进
+
+- **设计目的**：验证 CommonMark 严格的 4 空格制表符停止位（Tab Stop）对齐逻辑。制表符不是简单的固定 4 字符，而是展开为使得当前列数对齐至下一个 4 的倍数的空格数（1 至 4 个空格）。
+- **CommonMark 规范依据**：§2.2 Tabs。制表符按 4 空格的倍数展开。
+
+#### 测试源文本展示区
+
+- 一级无序列表项
+	- 单个 Tab 缩进的二级列表项（列坐标自 4 开始）
+  - 2个空格后接单个 Tab 的混合缩进（展开为 2 个空格，总计 4 空格）
+    - 4个纯空格缩进的标准二级列表项
+		- 2个 Tab 缩进的三级列表项
+
+> **[混合渲染断言 TC-INDENT-03]**
+> 1. `单个 Tab`、`2空格+Tab` 与 `4个纯空格` 在 AST 解析后具有完全相同的层级（全部对齐为二级子列表）。
+> 2. 渲染树中的左边距（Padding-left / Margin-left）完全对齐，严禁出现因混合缩进导致的列表项目符错位。
+
+---
+
+### TC-INDENT-04: 列表项内嵌缩进代码块（CommonMark §4.5 4空格剥离 vs 8空格嵌入）
+
+- **设计目的**：CommonMark 中最容易出现解析分歧的核心边缘：在顶级文档中，4 个空格引导缩进代码块；但在列表项内部，4 个空格仅作为列表块的延续缩进（List Continuation Indent）！若要在列表内创建缩进代码块，必须提供至少 8 个空格（或 4 空格延续 + 4 空格代码缩进）。
+- **CommonMark 规范依据**：§4.5 & §5.2。
+
+#### 测试源文本展示区
+
+- 列表项主文本行
+
+    这是列表项内部的普通延续段落（4个空格缩进，属于列表内容，严禁解析为代码块）。
+
+        这是列表项内部的缩进代码块（8个空格缩进，属于内嵌 code_block）
+        int x = 42; // 代码第二行
+
+顶级段落文本行
+
+    这是顶级缩进代码块（4个空格缩进）
+    function topLevel() { return true; }
+
+> **[混合渲染断言 TC-INDENT-04]**
+> 1. `这是列表项内部的普通延续段落` 必须以普通段落渲染在列表容器内部，不能带代码样式底色。
+> 2. `int x = 42;` 必须正确高亮并包裹在 `<pre><code>` 样式块内，且该代码块仍嵌套在第一个列表项的缩进树下。
+> 3. 顶级缩进代码块正确渲染为顶级代码块。
+
+---
+
+### TC-INDENT-05: 围栏代码块前置 1–3 空格剥离机制
+
+- **设计目的**：测试围栏代码块（Fenced Code Block）允许前置最多 3 个空格，并且该数量的前置空格必须在代码块内部每一行中作为前导缩进被统一剥离（Indent Stripping）。
+- **CommonMark 规范依据**：§4.5 Fenced code blocks。开头的 1-3 空格确定了代码块内容行每行剥离的缩进空格数。
+
+#### 测试源文本展示区
+
+   ```javascript
+   // 围栏开头有 3 个前置空格
+   // 这一行同样有 3 个前置空格，剥离后本行应从第 0 列开始
+     // 这一行有 5 个前置空格，剥离 3 个后应保留 2 个空格的缩进
+   const PI = 3.1415926535;
+   ```
+
+> **[混合渲染断言 TC-INDENT-05]**
+> 1. 代码块文本节点中的内容严格剥离前导 3 个空格。
+> 2. `const PI = ...` 行首无缩进；`// 这一行有 5 个...` 行首保留严格的 2 个空格，代码对齐结构丝毫不乱。
+
+---
+
+### TC-INDENT-06: 连续密集多空行与 HeightMap 虚拟滚动映射
+
+- **设计目的**：在编辑器中，连续输入 5 到 10 个空行是非常常见的草稿占位行为。测试自平衡行高树（HeightMap）对密集连续空白行的空间分配、高度累加与滚动条抖动抑制能力。
+- **CommonMark 规范依据**：§4.9 Blank lines。多个空行在最终 HTML 块级折叠中折叠，但在编辑器 Live Preview 模式下，每一个物理空行都对应源文本的一行，必须维持确定的物理行高。
+
+#### 测试源文本展示区
+
+上方起始段落：准备进入连续空白行密集测试区。
+
+
+
+
+（此处物理存在 4 个连续空行，仅含换行符）
+（上方为单空行）
+下方结束段落：连续空白行密集测试结束。
+
+> **[混合渲染断言 TC-INDENT-06]**
+> 1. 在编辑器视口中，每个物理空行均渲染为一个高度严格为 28px 的空白行槽位（`.cm-empty-line`）。
+> 2. 虚拟滚动滚动条自上而下拖拽时，滚动 thumb 滑块平滑匀速移动，无突跳、回弹或视口闪烁（HeightMap 预测误差为 0）。
+
+---
+
+## 四、行内标记嵌套、冲突与未闭合状态用例
+
+### TC-INLINE-01: `***` 三星加粗斜体交织与左右侧翼（Flanking Delimiter）判定
+
+- **设计目的**：测试 3 个连续星号或下划线在加粗与斜体复合解析时的消歧逻辑。检验左右侧翼分隔符（Left-flanking / Right-flanking）算法是否符合 CommonMark §6.4 的严格规范。
+- **CommonMark 规范依据**：§6.4 Emphasis and strong emphasis。定界符运行（Delimiter Run）解析栈规则。
+
+#### 测试源文本展示区
+
+***完全同时加粗和斜体的文本***
+**加粗文本内部包裹 *独立斜体* 继续加粗**
+*斜体文本内部包裹 **独立加粗** 继续斜体*
+***前置斜体* 后半段加粗**
+**前半段加粗 *后置斜体***
+_**下划线外层与星号内层混合***_
+**_星号外层与下划线内层混合_**
+
+> **[混合渲染断言 TC-INLINE-01]**
+> 1. `***完全同时加粗和斜体的文本***` 在 DOM 中构建为 `<strong><em>...</em></strong>` 或 `<em><strong>...</strong></em>`，样式层叠为 `font-weight: bold; font-style: italic`。
+> 2. 混合交错项（如 `***前置斜体* 后半段加粗**`）正确闭合，不出现标记泄漏至行尾的异常。
+> 3. 行盒垂直高度严格守恒为 28px，不因同时施加加粗与斜体而产生字高撑开。
+
+---
+
+### TC-INLINE-02: 跨词加粗与下划线词内内联差异（`foo_bar_baz` vs `foo*bar*baz`）
+
+- **设计目的**：验证星号 `*` 与下划线 `_` 的核心分歧：星号允许词内强调（Intra-word emphasis），而下划线严格禁止词内强调（以防破坏变量名如 `my_special_variable`）。
+- **CommonMark 规范依据**：§6.4。下划线左右必须有空白或标点符号才能作为开头/闭合定界符。
+
+#### 测试源文本展示区
+
+这是星号词内强调：foo*bar*baz（bar 必须被成功斜体化）。
+这是星号词内加粗：foo**bar**baz（bar 必须被成功加粗）。
+这是下划线词内变量：foo_bar_baz（必须保持纯文本字面量，严禁将 bar 斜体化！）。
+这是多重下划线变量：API_KEY_TOKEN_SECRET_V2（严禁解析为强调！）。
+这是合法的下划线强调：这是一个 _独立的斜体短语_ 与 __独立的加粗短语__。
+
+> **[混合渲染断言 TC-INLINE-02]**
+> 1. `foo_bar_baz` 与 `API_KEY_TOKEN_SECRET_V2` 完整保持普通文本呈现，下划线作为可见字符输出。
+> 2. `foo*bar*baz` 正确将 `bar` 渲染为斜体。
+> 3. 避免了编程变量被 Markdown 语法误损毁灭的灾难性缺陷。
+
+---
+
+### TC-INLINE-03: 未闭合标记与软渲染预演态（`**`、`*`、`~~`、`` ` `` 编辑中防御）
+
+- **设计目的**：用户在编辑输入过程中，输入了左侧标记但尚未输入右侧标记是绝大多数常态。测试混合渲染编辑器在此过渡状态下的健壮性：严禁将整篇文档后续的所有段落全部误判为加粗/代码块！
+- **CommonMark 规范依据**：§6.4 & §6.3。未闭合的定界符必须退化为普通的字面量字符。
+
+#### 测试源文本展示区
+
+用户正在输入的未闭合加粗：**这里是正在输入的加粗内容尚未键入右侧双星号
+正常段落 A：此段落必须恢复完全正常的正文字体，绝对不能被上一行的未闭合标记污染加粗！
+
+用户正在输入的未闭合代码：`const unclosed = "editing...
+正常段落 B：此段落必须正常渲染，严禁变成全页代码块！
+
+用户正在输入的未闭合删除线：~~删除线到此为止
+正常段落 C：此段落文字严禁带有贯穿线！
+
+> **[混合渲染断言 TC-INLINE-03]**
+> 1. 未闭合标记仅影响本行内的预演状态或直接退化为普通文本，其语法作用域被严格限制，在换行处（Newline）绝对硬性阻断。
+> 2. 后续段落 A、B、C 保持 100% 纯净的标准正文渲染，行高、颜色与字体不受丝毫波及。
+
+---
+
+### TC-INLINE-04: 多反引号代码跨距与反引号转义（首尾空格剥离规则）
+
+- **设计目的**：验证包含反引号自身作为内容的代码块（Inline Code Span）转义机制，以及首尾空格的智能剥离。
+- **CommonMark 规范依据**：§6.3 Code spans。以 N 个反引号开头的行内代码，必须且仅能由下一个包含恰好 N 个连续反引号的定界符闭合；如果内容首尾均有一个空格，则这两个空格会被自动剥离（用于容纳边缘的反引号）。
+
+#### 测试源文本展示区
+
+单个普通行内代码：`console.log("hello world")`
+代码内容包含单个反引号（用双反引号包裹）：`` `foo` ``（渲染结果内容为 `foo`）
+代码内容首尾均为反引号：`` ` ``（渲染结果为单个反引号字符）
+三反引号包裹双反引号：``` ``code with double backticks`` ```
+首尾保留多余空格的代码：``  两边各有两个空格保留一个  ``
+
+> **[混合渲染断言 TC-INLINE-04]**
+> 1. `` `foo` `` 经过剥离后，渲染态 DOM 显示的内容严格为 `` `foo` ``。
+> 2. `` ` `` 渲染后的内容严格为单个反引号字符 `` ` ``。
+> 3. 代码槽位的幽灵字符（Ghost Tokens，即外部定界反引号）在光标移出时优雅隐藏，光标移入时光标无视物理跨度平滑定位到代码内部。
+
+---
+
+### TC-INLINE-05: 连续反引号逃逸与未闭合反引号单向破坏隔离
+
+- **设计目的**：测试极长连续反引号（如 5 个、7 个）作为文本或非对齐反引号序列时的错误恢复能力。
+- **CommonMark 规范依据**：§6.3。
+
+#### 测试源文本展示区
+
+这是 5 个反引号后接 2 个反引号：`````hello``world
+这是不匹配的反引号序列：`单个反引号 ``双反引号 ```三反引号 `闭合单个反引号
+反引号紧随普通字符：a`code`b 与 `code`text
+
+> **[混合渲染断言 TC-INLINE-05]**
+> 1. 语法树分析器不陷入无限回溯或死循环（ReDoS 防御验证）。
+> 2. 单向破坏被隔离在行内，解析器耗尽未匹配定界符后将其降级输出为文本字符。
+
+---
+
+### TC-INLINE-06: 复合嵌套深度压力：加粗嵌套链接嵌套删除线嵌套代码
+
+- **设计目的**：测试多种行内样式在单一行盒（IFC）内极深层复合嵌套时的渲染管线、测量管线及 DOM 层叠表现。
+- **CommonMark 规范依据**：§6.2–6.6。
+
+#### 测试源文本展示区
+
+**加粗 [链接在加粗内 *加粗链接内的斜体 ~~外加删除线 `以及行内代码`~~* 结束链接](https://example.com) 结束加粗**
+
+~~删除线嵌套 *斜体嵌套 **加粗嵌套 [`带有链接的代码`](https://test.org) 闭合加粗** 闭合斜体* 闭合删除线~~
+
+> **[混合渲染断言 TC-INLINE-06]**
+> 1. DOM 树严格对称嵌套：`<strong><a href="..."><em><del><code>...</code></del></em></a></strong>`。
+> 2. 双层光标测量引擎在光标从左向右逐字符穿越该行时，`measure.ts` 计算出的 X 坐标严格单调递增，无回退或跳变，无盲区。
+
+---
+
+## 五、HTML 实体、原始内联标签与安全防御用例
+
+### TC-HTML-01: `<details><summary>` 原生折叠块与 Markdown 内容混编
+
+- **设计目的**：验证 HTML 块（HTML Block Type 6/7）对折叠组件的支持，以及折叠展开时的动态高度捕获（HeightMap 实时刷新）。
+- **CommonMark 规范依据**：§4.6 HTML blocks。包含 `<details>` 标签的块作为原始 HTML 块处理。
+
+#### 测试源文本展示区
+
+<details>
+<summary>点击展开查看极限边缘测试配置参数（CommonMark 原生折叠）</summary>
+
+- 配置项 1: `strict_mode = true`
+- 配置项 2: `line_height_invariant = 28px`
+- 配置项 3: `cursor_projection_tier = 2`
+
+```json
+{
+  "parser": "commonmark-ast",
+  "version": "0.31.2",
+  "sandbox": "secure"
+}
+```
+
+</details>
+
+> **[混合渲染断言 TC-HTML-01]**
+> 1. 编辑器在原生展示 `<details>` 时能正常展开与折叠。
+> 2. 用户点击 `<summary>` 展开内容瞬间，高度测量系统通过 ResizeObserver 捕获容器高度突变，并向上通知 HeightMap 增量刷新总高度，保证视口下方内容不发生跳动。
+
+---
+
+### TC-HTML-02: `<span style="...">` 样式注入与行盒（IFC）基线/高度守恒隔离
+
+- **设计目的**：检验内联 HTML 标签中可能包含的恶意或特殊样式（如 `font-size: 48px`、`line-height: 200px`、`position: absolute`）是否会击穿编辑器的 28px 行高网格防护体系。
+- **防御架构基准**：严格网格锁定（Strict Grid-Line Invariance）与样式沙箱隔离。
+
+#### 测试源文本展示区
+
+普通基准文本行 A（高度基准：28px）。
+混合样式行：正常文本前缀 <span style="color: #2563eb; font-weight: 600;">蓝色加粗文本</span> 以及 <span style="background-color: #fef08a; padding: 2px 6px; border-radius: 4px;">黄色高亮标签</span> 正常文本后缀。
+恶意破坏测试行：正常文本前缀 <span style="font-size: 72px; line-height: 100px; display: inline-block;">大字体注入</span> 正常文本后缀。
+普通基准文本行 B（高度基准：28px）。
+
+> **[混合渲染断言 TC-HTML-02]**
+> 1. 正常的颜色与背景标签样式正常渲染，视觉清晰。
+> 2. 恶意破坏测试行中的 `font-size: 72px` 与 `line-height: 100px` 受到编辑器的 IFC 容器约束或清洗（Sanitization），或者被限制在行盒内，严禁将整个文档的垂直行距拉爆。
+
+---
+
+### TC-HTML-03: 命名 HTML 实体与未闭合伪实体（`&amp;`, `&lt;`, `&notanentity;`）
+
+- **设计目的**：验证 HTML 实体的准确转义。标准命名实体必须转换为对应字符；非法实体、未完成实体（缺少分号）或不存在的实体名称必须完整作为普通字面量文本显示。
+- **CommonMark 规范依据**：§2.5 Entity and numeric character references。
+
+#### 测试源文本展示区
+
+标准五大基本实体：&amp; （和号）、&lt; （小于号）、&gt; （大于号）、&quot; （双引号）、&apos; （单引号）
+常用排版命名实体：&copy; （版权）、&reg; （注册商标）、&trade; （商标）、&euro; （欧元）、&nbsp; （不换行空格）
+缺少分号的非法伪实体：&amp &lt &copy（必须原样保留为字面量文本，严禁转义！）
+不存在的伪实体名称：&notanentity; 与 &markdown;（必须原样显示）
+实体与代码块边界：`&amp; &lt; &copy;`（在代码块内部严禁转义，字面量呈现！）
+
+> **[混合渲染断言 TC-HTML-03]**
+> 1. `&amp;` 渲染为单个 `&` 字符；`&lt;` 渲染为 `<` 字符。
+> 2. `&amp`（无分号）原样显示为 `&amp` 4 个字符。
+> 3. 行内代码内部的 `&amp;` 必须显示为 `&amp;` 5 个字符，绝对不能被浏览器内部二次转义为 `&`。
+
+---
+
+### TC-HTML-04: 十进制/十六进制实体与 Emoji/大码点字符（`&#128512;`, `&#x1F4BB;`）
+
+- **设计目的**：验证基于 Unicode 码点的十进制与十六进制实体引用解析，以及高码点（Surrogate Pairs 代理对）Emoji 字符在光标投影计算时的 UTF-16 偏移对齐。
+- **CommonMark 规范依据**：§2.5。支持 `&#[0-9]{1,7};` 与 `&#[xX][0-9a-fA-F]{1,6};`。
+
+#### 测试源文本展示区
+
+十进制 ASCII 实体：&#65; （大写 A）、&#66; （大写 B）、&#67; （大写 C）
+十六进制 Unicode 实体：&#x3C; （小于号）、&#x3E; （大于号）、&#x26; （和号）
+高码点 Emoji 实体：&#128512; （😀 笑脸）、&#x1F4BB; （💻 笔记本电脑）、&#x1F680; （🚀 火箭）
+原生双字长 Emoji：👨‍👩‍👧‍👦 （家庭组合 Emoji，包含多个 ZWJ 零宽连字符）
+非法超出 Unicode 范围码点：&#99999999; 与 &#x110000;（必须替换为 Unicode 替换字符  或原样显示）
+
+> **[混合渲染断言 TC-HTML-04]**
+> 1. 高码点实体正确解码并呈现为对应的矢量 Emoji 图标。
+> 2. 在家庭 Emoji `👨‍👩‍👧‍👦` 内部移动光标时，光标测量管线（`measure.ts`）基于 Grapheme Cluster（字素簇）精准计算步长，不得出现光标停留在字符中半个代理对上的情况。
+
+---
+
+### TC-HTML-05: 防御性 XSS 攻击向量逃逸阻断（`<script>`, `onerror`, `javascript:`）
+
+- **设计目的**：极限安全红线验证。确保编辑器无论是直接渲染 Markdown、还是通过剪贴板粘贴包含恶意脚本的富文本时，100% 阻断 XSS 执行向量。
+- **安全基线**：OWASP XSS Prevention / DOMPurify / 安全沙箱基线。
+
+#### 测试源文本展示区
+
+纯标签注入阻断：<script>window.__CONEX_PWN__ = true; console.error("XSS Vulnerability!");</script>
+图片属性执行注入阻断：<img src="invalid-image-path.png" onerror="alert('XSS-IMG-ONERROR');" />
+超链接伪协议注入阻断：[点击领取免费算力红包](javascript:alert('XSS-LINK-CLICKED'))
+SVG 载荷注入阻断：<svg onload="alert('XSS-SVG-ONLOAD')"><circle cx="50" cy="50" r="40" /></svg>
+Iframe 挂马注入阻断：<iframe src="https://example.com" width="0" height="0"></iframe>
+
+> **[混合渲染断言 TC-HTML-05]**
+> 1. 任何 `alert` 或挂载在 `window` 上的恶意属性均未执行（执行断言：`window.__CONEX_PWN__ === undefined`）。
+> 2. `<script>` 标签内容要么被彻底过滤，要么作为安全纯文本实体显示，绝对不在 DOM 树中动态创建执行节点。
+> 3. 超链接的 `href` 若为 `javascript:` 协议，点击事件被安全拦截或 href 被清洗为 `about:blank`。
+
+---
+
+## 六、极端排版尺寸与长短行几何压力用例
+
+### TC-SIZE-01: 1024 字符无空格连续英文/URL 溢出与换行计算
+
+- **设计目的**：测试极长无自然空格断字符（Word Break）时容器的软换行（Soft Wrap）行为。若 CSS 缺少 `overflow-wrap: break-word` 或 `word-break: break-all`，将导致横向滚动条被粗暴拉出，破坏编辑器左右布局。
+- **测试重点**：IFC 盒模型多行折行、折行边界处的双层光标高度与 X 投影。
+
+#### 测试源文本展示区
+
+https://subdomain.example.org/api/v3/long-path-segment-for-testing-stress/query?param_a=abcdefghijklmnopqrstuvwxyz0123456789&param_b=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789&signature=e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855#final-anchor-token-verification
+
+> **[混合渲染断言 TC-SIZE-01]**
+> 1. 编辑器主工作区宽度保持为容器 100%，绝对不产生全页意外横向滚动（Horizontal Overflow ≡ 0）。
+> 2. 该超长 URL 在容器右边缘平滑软折行，折行为 $N$ 行，且该块级节点的实际测得高度严格等于 $N \times 28\text{px}$。
+
+---
+
+### TC-SIZE-02: 2048 字符单行无断字 Base64 密文字符串（折行光标测量与双层投影）
+
+- **设计目的**：极限单行长度测试。注入超过 2000 个无空格连续 Base64 字符。测试光标在第 500、1000、1500 字符处跳转时，测量引擎 `measure.ts` 能否精准计算跨行物理视口坐标。
+- **重点防御**：防止折行行末（Wrap Point）光标测量发生行首退化（Line-start fallback bug）。
+
+#### 测试源文本展示区
+
+```text
+MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7VdTBDv9m/7yLqSgH9nU5
+2048_CHAR_STRESS_PAYLOAD_BEGIN_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuv
+wxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789
++/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKL
+MNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZab
+cdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqr
+stuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01234567
+89+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJK
+LMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZa
+bcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopq
+rstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345
+6789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHI
+JKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWX
+YZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklm
+nopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz01
+23456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDE
+FGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRST
+UVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi
+jklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvw
+xyz0123456789+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+
+/ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/ABCDEFGHIJKLM
+NOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/2048_CHAR_STRESS_PAYLOAD_END
+```
+
+> **[混合渲染断言 TC-SIZE-02]**
+> 1. 代码块启用横向滚动或受控软折行，行号计数器（Gutter Line Numbers）与代码内容行保持 1:1 绝对垂直对齐。
+> 2. 光标在 Base64 文本中垂直上下方向键漫游时，X 坐标保持列对齐记忆，不卡死在首尾。
+
+---
+
+### TC-SIZE-03: 单字符超稀疏行与密集连续换行（HeightMap 极端高度抖动测试）
+
+- **设计目的**：测试密集单字符行（每个字符占一行）以及随后的多空行。行高预测器必须在每一行精准预估 28px，总高度为行数 $\times 28\text{px}$，严禁出现高度评估震荡。
+
+#### 测试源文本展示区
+
+a
+b
+c
+d
+e
+f
+g
+h
+i
+j
+
+> **[混合渲染断言 TC-SIZE-03]**
+> 1. 10 个单字符连续行构成清晰的竖向垂直排列，每一行行高严格为 28px。
+> 2. 高度树（HeightMap）对该区间的初始预测值与挂载后真实 DOM 测量值的残差（Residual Error）恒等于 0。
+
+---
+
+### TC-SIZE-04: 10 级极端嵌套引用块（Blockquote 几何缩进与排版压力）
+
+- **设计目的**：测试引用块（`>`）极端嵌套至 10 层时，左侧 Border 与内边距的层叠是否会导致内容区域宽度归零崩溃。
+- **CommonMark 规范依据**：§5.1。CommonMark 规范允许任意深度的引用嵌套。
+
+#### 测试源文本展示区
+
+> 1级引用外壳
+> > 2级引用嵌套
+> > > 3级引用嵌套
+> > > > 4级引用嵌套
+> > > > > 5级引用嵌套
+> > > > > > 6级引用嵌套
+> > > > > > > 7级引用嵌套
+> > > > > > > > 8级引用嵌套
+> > > > > > > > > 9级引用嵌套
+> > > > > > > > > > 10级深层核心：测试在极端狭小可用宽度下的文字渲染、折行与光标定位精度。
+
+> **[混合渲染断言 TC-SIZE-04]**
+> 1. 10 级边框清晰呈现为 10 条平行的竖线，颜色按照层级或统一柔和边框色渲染。
+> 2. 内部第 10 级文字在狭窄宽度下正常软折行，光标可自由进出该深层节点。
+
+---
+
+### TC-SIZE-05: 6 级深度混合列表（有序/无序/任务列表交错缩进）
+
+- **设计目的**：测试无序列表（`-`）、有序列表（`1.`）与 GFM 任务列表（`- [x]`）在 6 级深层交替嵌套时的缩进对齐与 AST 层级拓扑。
+- **CommonMark 规范依据**：§5.2 & §5.3。
+
+#### 测试源文本展示区
+
+- 1 顶级无序列表项
+  1. 2 嵌套有序列表项 A
+  2. 2 嵌套有序列表项 B
+     - [ ] 3 嵌套未完成任务列表项
+     - [x] 3 嵌套已完成任务列表项
+       - 4 嵌套无序列表项
+         1. 5 极深层嵌套有序项
+            - [x] 6 终极深度完成任务（验证复选框交互与文本删除线状态）
+
+> **[混合渲染断言 TC-SIZE-05]**
+> 1. 复选框（Checkbox Widget）渲染为原生或定制控件，垂直居中锁定在 28px 网格中。
+> 2. 勾选状态修改后，仅触发该行局部重绘，不引起全列表高度推倒重建。
+
+---
+
+## 七、特殊分隔线与块级上下文歧义用例
+
+### TC-HR-01: 标准三种符号分隔线（`---`, `***`, `___`）
+
+- **设计目的**：验证三种标准字符（减号、星号、下划线）构成的分隔线（Thematic Break）的解析与渲染。
+- **CommonMark 规范依据**：§4.1 Thematic breaks。由 3 个或更多连续非空白字符组成。
+
+#### 测试源文本展示区
+
+上方普通段落正文。
+
+---
+
+中间普通段落正文。
+
+***
+
+过渡普通段落正文。
+
+___
+
+下方普通段落正文。
+
+> **[混合渲染断言 TC-HR-01]**
+> 1. 三种符号分别生成 3 个独立的 `<hr>` 语义块级节点。
+> 2. 分隔线外层容器高度严格占满一个基准行高网格（28px），中间呈现 1px 细线，垂直完全居中。
+
+---
+
+### TC-HR-02: 稀疏空格分散分隔线（`- - -`, `* * *`, `_ _ _`, `-  -  -  -`）
+
+- **设计目的**：验证符号之间混入空格的分隔线。CommonMark 允许符号间出现任意数量的空格或制表符。
+- **CommonMark 规范依据**：§4.1。
+
+#### 测试源文本展示区
+
+- - -
+
+* * *
+
+_ _ _
+
+-   -   -   -   -
+
+*  *  *  *  *
+
+> **[混合渲染断言 TC-HR-02]**
+> 1. 上述 5 种不同空格间距的分隔线均被正确解析为 `thematic_break`。
+> 2. 绝对不能将 `- - -` 误解析为包含无序列表项的列表容器！
+
+---
+
+### TC-HR-03: 极长符号分隔线（`-------------------------`）
+
+- **设计目的**：测试用户输入非常长的连续减号、星号或下划线时，分隔线的解析性能与渲染呈现。
+- **CommonMark 规范依据**：§4.1。
+
+#### 测试源文本展示区
+
+--------------------------------------------------------------------------------
+
+********************************************************************************
+
+________________________________________________________________________________
+
+> **[混合渲染断言 TC-HR-03]**
+> 1. 词法分析器（Lexer）在 $O(N)$ 线性时间内瞬间完成判定，不造成主线程任何卡顿。
+> 2. 渲染器渲染为单条横向平铺的分割线，不出现水平滚动条。
+
+---
+
+### TC-HR-04: 分隔线与 Setext 标题的接壤歧义（紧随段落 vs 空行隔离）
+
+- **设计目的**：CommonMark 中最经典的块级歧义场景：若减号紧随普通文本之后，语法优先级赋予 Setext 标题；若减号前存在空行，则赋予分隔线。
+- **CommonMark 规范依据**：§4.1 & §4.3。
+
+#### 测试源文本展示区
+
+这是段落正文，下一行没有空行直接跟三个减号
+---
+（上方文本应被提升为 H2 标题，三个减号被消耗）
+
+这是段落正文，下一行有空行间隔
+
+---
+（下方有空行，上方有空行，此行为标准分隔线）
+
+> **[混合渲染断言 TC-HR-04]**
+> 1. 第一块渲染为粗体大号的 H2 标题节点。
+> 2. 第二块的 `---` 渲染为细实线 `<hr>` 分隔线节点。
+> 3. 编辑器撤销/重做（Undo/Redo）在二者间切换时状态机无缝更新。
+
+---
+
+### TC-HR-05: 列表项内部的分隔线与列表终结判定
+
+- **设计目的**：测试在列表项内部嵌入分隔线时的层级归属。若缩进在列表内，分隔线作为列表项的子块；若无缩进，分隔线将斩断并终结整个列表。
+- **CommonMark 规范依据**：§4.1 & §5.2。
+
+#### 测试源文本展示区
+
+- 列表项 1 主体文本
+  
+  ---
+  （上方分隔线前置 2 个空格，属于列表项 1 内部的子分隔线）
+  
+- 列表项 2 主体文本
+
+---
+（上方分隔线位于第 0 列顶格，彻底终结并切断上方的列表）
+
+- 这是一个全新独立的列表项 1
+
+> **[混合渲染断言 TC-HR-05]**
+> 1. 第一个分隔线被包裹在列表项 1 的 `<li>` 容器内部，左侧保留列表的项目缩进。
+> 2. 第二个分隔线跳出列表，横贯整个主视口宽度。
+> 3. 第三个列表项重新从根层级开始计算编号与结构。
+
+---
+
+## 八、测试自动化集成建议与断言矩阵
+
+### 8.1 自动化测试执行脚本与环境配置
+
+针对本用例集的自动化集成回归验证，建议配置如下 Vitest / Playwright 测试套件：
+
+```typescript
+// tests/unit/edge-commonmark-compliance.spec.ts
+import { describe, it, expect } from 'vitest';
+import { parseMarkdownToAST } from '@/core/parser';
+import { HeightMap } from '@/core/HeightMap';
+import { measureCursorPosition } from '@/core/measure';
+
+describe('CommonMark 边缘语法与极限解析合规套件 (SPEC-SAMPLE-EDGE-PARSER-06)', () => {
+  it('TC-HEAD-05: 7 级伪标题必须降级为段落', () => {
+    const ast = parseMarkdownToAST('####### 7级伪标题');
+    expect(ast.children[0].type).toBe('paragraph');
+    expect(ast.children[0].type).not.toBe('heading');
+  });
+
+  it('TC-HEAD-06: Setext 歧义判定与段落接壤优先级', () => {
+    const ast = parseMarkdownToAST('Paragraph\n---');
+    expect(ast.children[0].type).toBe('heading');
+    expect(ast.children[0].level).toBe(2);
+    expect(ast.children).toHaveLength(1); // hr 被消耗
+  });
+
+  it('TC-INLINE-02: 下划线词内变量严禁误斜体化', () => {
+    const ast = parseMarkdownToAST('const API_TOKEN_KEY = "val";');
+    const paragraph = ast.children[0];
+    const hasEmphasis = paragraph.children.some(node => node.type === 'emphasis');
+    expect(hasEmphasis).toBe(false);
+  });
+
+  it('TC-SIZE-01: 超长连续文本行高必须整除基准网格', async () => {
+    const container = document.createElement('div');
+    container.style.width = '600px';
+    // 渲染 TC-SIZE-01 文本...
+    const measuredHeight = container.getBoundingClientRect().height;
+    expect(measuredHeight % 28).toBe(0); // 必须是 28px 的精确整数倍
+  });
+});
+```
+
+### 8.2 持续集成守卫与回归预防断言矩阵
+
+| 测试用例编号 | 触发场景 | 守卫断言表达式 | 失败应急处置策略 |
+| :--- | :--- | :--- | :--- |
+| **TC-HEAD-02** | ATX 闭合序列包含尾随空白 | `node.text === "标题文本"` | 检查 Heading Tokenizer 正则末尾 `[ \t]*#+[ \t]*$` 剥离逻辑 |
+| **TC-INDENT-04** | 列表项内 4 空格 vs 8 空格 | `listChild.type === 'code_block'` 仅当 `indent >= 8` | 修正 CommonMark §4.5 列表块上下文缩进累加器 |
+| **TC-INLINE-03** | 未闭合 `**` 或 `` ` `` | 后续段落 AST 节点不存在继承样式污染 | 检查行尾换行符处的定界符栈（Delimiter Stack）截断与重置机制 |
+| **TC-HTML-05** | 输入 `<script>` / `onerror` | `DOMPurify.sanitize()` 移除危险节点 | 强化 `HtmlBlock` 与 `HtmlInline` 的安全沙箱过滤管线 |
+| **TC-SIZE-02** | 2048 字符单行无空格密文 | `cursor.y >= 0 && cursor.x <= containerWidth` | `measure.ts` Tier 2 投影开启折行点二分查找，阻断首列退化 |
+| **TC-HR-04** | 文本紧随 `---` | `ast.type === 'heading' && level === 2` | 确保 Block Parser 先尝试 Setext 标题匹配再进行 HR 匹配 |
+
+---
+**用例集版本说明**：本文件作为 Markdown 混合渲染引擎官方素材库第 06 专项测试套件，全面用于 CI 自动化巡检、压力测试基准（Benchmark）与日常交互视觉对齐。
