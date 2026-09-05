@@ -6,7 +6,7 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './PreviewCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { IconButton, Input } from '../ui';
 
 /** 预览状态（可回退/前进/空白/src/加载/地址/书签/历史/外部打开等收敛为单一子对象） */
 export interface PreviewToolbarPreviewProps {
@@ -88,63 +88,57 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
       role="toolbar"
       aria-label="预览浏览器工具栏"
     >
-      <Tooltip content="后退">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={styles.navBtn}
-          disabled={!canBack}
-          onClick={onBack}
-          aria-label="后退"
-          icon={<Lucide.ChevronLeft size={iconSz} strokeWidth={1.75} />}
-        />
-      </Tooltip>
-      <Tooltip content="前进">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={styles.navBtn}
-          disabled={!canForward}
-          onClick={onForward}
-          aria-label="前进"
-          icon={<Lucide.ChevronRight size={iconSz} strokeWidth={1.75} />}
-        />
-      </Tooltip>
-      <Tooltip content="主页（空白预览）">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={`${styles.navBtn} ${styles.hideNarrow}`}
-          onClick={onHome}
-          aria-label="主页"
-          icon={<Lucide.Home size={iconSz} strokeWidth={1.75} />}
-        />
-      </Tooltip>
-      <Tooltip content="刷新">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={styles.navBtn}
-          disabled={blank || !frameSrc}
-          onClick={onReload}
-          aria-label="刷新"
-          aria-busy={loading || undefined}
-        >
-          {loading ? (
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={!canBack}
+        onClick={onBack}
+        aria-label="后退"
+        tooltip="后退"
+        icon={<Lucide.ChevronLeft size={iconSz} strokeWidth={1.5} />}
+      />
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={!canForward}
+        onClick={onForward}
+        aria-label="前进"
+        tooltip="前进"
+        icon={<Lucide.ChevronRight size={iconSz} strokeWidth={1.5} />}
+      />
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={styles.hideNarrow}
+        onClick={onHome}
+        aria-label="主页"
+        tooltip="主页（空白预览）"
+        icon={<Lucide.Home size={iconSz} strokeWidth={1.5} />}
+      />
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        disabled={blank || !frameSrc}
+        onClick={onReload}
+        aria-label="刷新"
+        aria-busy={loading || undefined}
+        tooltip="刷新"
+        icon={
+          loading ? (
             <Lucide.Loader2
               size={iconSz}
-              strokeWidth={1.75}
+              strokeWidth={1.5}
               className={styles.spin}
             />
           ) : (
-            <Lucide.RotateCw size={iconSz} strokeWidth={1.75} />
-          )}
-        </Button>
-      </Tooltip>
+            <Lucide.RotateCw size={iconSz} strokeWidth={1.5} />
+          )
+        }
+      />
       <form
         className={styles.urlForm}
         aria-label="预览地址栏"
@@ -154,117 +148,100 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
           onUrlSubmit(urlInput.trim() ? urlInput : 'about:blank');
         }}
       >
-        <Lucide.Globe
-          size={iconSz}
-          className={styles.urlIco}
-          strokeWidth={1.75}
-          aria-hidden
-        />
-        <input
-          className={styles.urlInput}
+        <Input
+          variant="search"
+          size="sm"
           value={urlInput}
           placeholder="localhost:5173 或 https://…"
           onChange={(e) => onUrlChange(e.target.value)}
+          prefixIcon={
+            <Lucide.Globe size={iconSz} strokeWidth={1.5} aria-hidden />
+          }
+          clearable
+          onClear={onClearUrl}
           spellCheck={false}
           aria-label="预览地址"
           autoComplete="off"
           inputMode="url"
           enterKeyHint="go"
         />
-        {urlInput ? (
-          <Tooltip content="清空">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={styles.urlClear}
-              onClick={onClearUrl}
-              aria-label="清空地址"
-              icon={<Lucide.X size={12} strokeWidth={1.75} />}
-            />
-          </Tooltip>
-        ) : null}
       </form>
-      <Tooltip
-        content={
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        active={isInspectorActive}
+        className={isInspectorActive ? styles.inspectorActive : undefined}
+        onClick={onToggleInspector}
+        disabled={blank || !frameSrc}
+        aria-label="拾取页面元素"
+        aria-pressed={isInspectorActive}
+        tooltip={
           isInspectorActive
             ? '退出元素拾取 (Esc)'
             : '拾取页面元素 (Inspect)'
         }
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={`${styles.navBtn} ${isInspectorActive ? styles.inspectorActive : ''}`}
-          onClick={onToggleInspector}
-          disabled={blank || !frameSrc}
-          aria-label="拾取页面元素"
-          aria-pressed={isInspectorActive}
-          icon={
-            <Lucide.MousePointerClick
-              size={iconSz}
-              strokeWidth={1.75}
-            />
-          }
-        />
-      </Tooltip>
-      <Tooltip
-        content={
+        icon={
+          <Lucide.MousePointerClick
+            size={iconSz}
+            strokeWidth={isInspectorActive ? 2.0 : 1.5}
+          />
+        }
+      />
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        active={bookmarked}
+        onClick={onBookmark}
+        disabled={!canBookmark}
+        aria-label={bookmarked ? '取消书签' : '加入书签'}
+        aria-pressed={bookmarked}
+        tooltip={
           !canBookmark
             ? '空白页无法加入书签'
             : bookmarked
               ? '取消书签'
               : '加入书签'
         }
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={`${styles.navBtn} ${bookmarked ? styles.isOn : ''}`}
-          onClick={onBookmark}
-          disabled={!canBookmark}
-          aria-label={bookmarked ? '取消书签' : '加入书签'}
-          aria-pressed={bookmarked}
-          icon={
-            <Lucide.Star
-              size={iconSz}
-              strokeWidth={1.75}
-              fill={bookmarked ? 'currentColor' : 'none'}
-            />
-          }
-        />
-      </Tooltip>
-      <Tooltip content="历史与书签">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={`${styles.navBtn} ${showHist ? styles.isOn : ''}`}
-          data-hist-toggle=""
-          onClick={onToggleHist}
-          aria-label="历史与书签"
-          aria-expanded={showHist}
-          aria-controls="preview-hist-panel"
-          aria-haspopup="dialog"
-          icon={<Lucide.History size={iconSz} strokeWidth={1.75} />}
-        />
-      </Tooltip>
-      <Tooltip
-        content={canExternal ? '系统浏览器打开' : '当前地址无法外部打开'}
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className={`${styles.navBtn} ${styles.hideXNarrow}`}
-          onClick={onOpenExternal}
-          disabled={!canExternal}
-          aria-label="系统浏览器打开"
-          icon={<Lucide.ExternalLink size={iconSz} strokeWidth={1.75} />}
-        />
-      </Tooltip>
+        icon={
+          <Lucide.Star
+            size={iconSz}
+            strokeWidth={bookmarked ? 2.0 : 1.5}
+            fill={bookmarked ? 'currentColor' : 'none'}
+          />
+        }
+      />
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        active={showHist}
+        data-hist-toggle=""
+        onClick={onToggleHist}
+        aria-label="历史与书签"
+        aria-expanded={showHist}
+        aria-controls="preview-hist-panel"
+        aria-haspopup="dialog"
+        tooltip="历史与书签"
+        icon={
+          <Lucide.History
+            size={iconSz}
+            strokeWidth={showHist ? 2.0 : 1.5}
+          />
+        }
+      />
+      <IconButton
+        type="button"
+        variant="ghost"
+        size="sm"
+        className={styles.hideXNarrow}
+        onClick={onOpenExternal}
+        disabled={!canExternal}
+        aria-label="系统浏览器打开"
+        tooltip={canExternal ? '系统浏览器打开' : '当前地址无法外部打开'}
+        icon={<Lucide.ExternalLink size={iconSz} strokeWidth={1.5} />}
+      />
     </div>
   );
 };

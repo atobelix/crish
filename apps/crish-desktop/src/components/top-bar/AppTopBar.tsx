@@ -7,7 +7,7 @@
 
 import React, { useMemo, useCallback } from 'react';
 import { HelpCircle } from 'lucide-react';
-import { Button, Tooltip } from '../ui';
+import { IconButton } from '../ui';
 import { WindowControls } from '../shell/WindowControls';
 import styles from './AppTopBar.module.css';
 
@@ -55,19 +55,17 @@ export const AppTopBar: React.FC<AppTopBarProps> = React.memo(
           aria-label="窗口控制"
           data-app-top-bar-trail="true"
         >
-          <Tooltip content="快捷键与帮助">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={`${styles.helpBtn} app-top-bar__help-btn`}
-              aria-label="快捷键与帮助"
-              onClick={handleShowHelp}
-              icon={
-                <HelpCircle size={14} strokeWidth={1.75} aria-hidden="true" />
-              }
-            />
-          </Tooltip>
+          <IconButton
+            variant="ghost"
+            size="sm"
+            className="app-top-bar__help-btn"
+            aria-label="快捷键与帮助"
+            tooltip="快捷键与帮助"
+            onClick={handleShowHelp}
+            icon={
+              <HelpCircle size={14} strokeWidth={1.5} aria-hidden="true" />
+            }
+          />
           {!isMacDesktop && <WindowControls />}
         </div>
       </header>
