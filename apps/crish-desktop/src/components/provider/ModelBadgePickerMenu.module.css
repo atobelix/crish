@@ -2,12 +2,10 @@
   width: 290px;
   min-width: 280px;
   max-width: 320px;
-  background: var(--bg-card, hsl(35, 10%, 98%));
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
+  background: var(--bg-elevated, hsl(0 0% 100%));
   border: 1px solid var(--border-color);
   border-radius: var(--sep-radius-outer, 14px);
-  box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.12), 0 4px 16px -2px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-lg);
   padding: 6px;
   display: flex;
   flex-direction: column;
@@ -58,7 +56,11 @@
   flex-shrink: 0;
 }
 
-.searchInput {
+/* 形态 ④：内联浮层/下拉菜单搜索框（纯光标极简型，图 3 标号 ④ 锁定样式）
+ * 严格保持“只有光标闪烁，其他什么变化也没有”，全态无边框、无阴影、无多余变化 */
+.searchInput,
+.searchInput:focus,
+.searchInput:focus-visible {
   flex: 1;
   min-width: 0;
   border: none;
@@ -67,6 +69,7 @@
   font-size: var(--font-size-sm, 13px);
   color: var(--sep-text-primary, var(--text-primary));
   outline: none;
+  box-shadow: none;
   font-family: inherit;
 }
 

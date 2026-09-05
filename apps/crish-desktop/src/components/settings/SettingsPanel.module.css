@@ -82,49 +82,126 @@
   border-color: transparent;
 }
 
+.sidebarTopActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1_5, 6px);
+  margin-bottom: var(--space-1, 4px);
+}
+
+.sidebarBackBtn {
+  width: 100%;
+  justify-content: flex-start;
+  color: var(--text-secondary);
+  border-radius: var(--button-radius, 8px);
+}
+
+.sidebarBackBtn:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * 形态 ①：侧边栏无边框透明纯净型（图 1 标号 ① 锁定样式）
+ * 与主侧栏（SidebarNav）100% 共享无边框、无底框形式
+ * ───────────────────────────────────────────────────────────── */
 .searchWrap {
   position: relative;
-  margin: var(--space-1, 4px) 0 var(--space-2_5, 10px);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  height: var(--control-height, 32px);
+  min-height: var(--control-height, 32px);
+  box-sizing: border-box;
+  margin: var(--space-1, 4px) 0 var(--space-2, 8px);
+  padding: 0 8px;
+  border-radius: var(--radius-lg, 8px);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  transition: background var(--transition-micro, 120ms) ease;
   flex-shrink: 0;
+  cursor: text;
+}
+
+.searchWrap:hover,
+.searchWrap:focus-within {
+  background: var(--sidebar-hover);
+  border: none;
+  box-shadow: none;
 }
 
 .searchIco {
-  position: absolute;
-  left: var(--space-3, 12px);
-  top: 50%;
-  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   color: var(--text-tertiary);
   pointer-events: none;
+  transition: color var(--transition-micro, 120ms) ease;
 }
 
-.search {
+.searchWrap:focus-within .searchIco {
+  color: var(--text-secondary);
+}
+
+.search,
+.search:focus,
+.search:focus-visible {
+  flex: 1 1 auto;
+  min-width: 0;
   width: 100%;
-  height: var(--control-height-sm, 28px);
-  min-height: var(--control-height-sm, 28px);
-  padding: 0 var(--space-2_5, 10px) 0 calc(var(--space-6, 24px) + var(--space-1_5, 6px));
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg, 8px);
-  background: var(--bg-card, hsl(0 0% 100%));
-  color: var(--text-primary);
-  font-family: inherit;
-  font-size: var(--font-size-xs, 12px);
+  height: 100%;
+  padding: 0;
+  border: none;
   outline: none;
-  box-sizing: border-box;
+  background: transparent;
   box-shadow: none;
-  transition:
-    background var(--transition-micro, 100ms ease-out),
-    border-color var(--transition-micro, 100ms ease-out);
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  font-size: var(--font-size-base, 14px);
+  color: var(--text-primary);
+  box-sizing: border-box;
+  line-height: normal;
 }
 
 .search::placeholder {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
+  opacity: 0.9;
 }
 
-.search:focus,
-.search:focus-visible {
-  border-color: var(--border-color);
-  background: var(--bg-card, hsl(0 0% 100%));
-  box-shadow: none;
+.search::-webkit-search-cancel-button,
+.search::-webkit-search-decoration,
+.search::-webkit-search-results-button,
+.search::-webkit-search-results-decoration {
+  display: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background var(--transition-micro, 120ms) ease,
+    color var(--transition-micro, 120ms) ease;
+}
+
+.searchClear:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
 }
 
 .navScroll {

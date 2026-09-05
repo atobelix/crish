@@ -76,21 +76,35 @@
   box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
 }
 
-/* Specific to search input */
+/* Specific to search input (形态 ①：侧边栏无边框透明纯净型，图 1 标号 ① 锁定样式) */
 .navItem[role='search'] {
   cursor: text;
+  background: transparent;
+  border: none;
+  box-shadow: none;
 }
 
-.navItem input[type='search'] {
+.navItem[role='search']:hover,
+.navItem[role='search']:focus-within {
+  background: var(--sidebar-hover);
+  border: none;
+  box-shadow: none;
+}
+
+.navItem input[type='search'],
+.navItem input[type='search']:focus,
+.navItem input[type='search']:focus-visible {
   flex: 1 1 auto;
   min-width: 0;
   border: none;
   outline: none;
   background: transparent;
+  box-shadow: none;
   font: inherit;
   font-size: var(--font-size-base);
   color: var(--text-primary);
   padding: 0;
+  margin: 0;
 }
 
 .navItem input[type='search']::placeholder {

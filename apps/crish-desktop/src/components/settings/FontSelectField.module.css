@@ -119,7 +119,9 @@
   flex-shrink: 0;
 }
 
-.searchInput {
+.searchInput,
+.searchInput:focus,
+.searchInput:focus-visible {
   width: 100%;
   height: 22px;
   border: none;
@@ -129,6 +131,7 @@
   font-size: var(--font-size-xs, 12px);
   color: var(--text-primary);
   outline: none;
+  box-shadow: none;
   box-sizing: border-box;
 }
 

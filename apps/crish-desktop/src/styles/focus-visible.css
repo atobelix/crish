@@ -85,3 +85,26 @@ a:focus-visible,
       color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%)
     );
 }
+
+/* ─────────────────────────────────────────────────────────────
+ * 形态 ④【内联浮层/下拉菜单搜索框（纯光标极简型）】与形态 ①【侧边栏无边框纯净型】：
+ * 严禁全局焦点阴影穿透污染！全态只有光标闪烁，其他什么变化也没有！
+ * ───────────────────────────────────────────────────────────── */
+:is(
+  [role='search'],
+  [role='menu'],
+  [role='listbox'],
+  nav,
+  .searchHeader,
+  .mbInner,
+  .smartPanelHeader,
+  .sepHeader,
+  [data-embedded]
+) :is(input, textarea):is(:focus, :focus-visible),
+.searchInput:is(:focus, :focus-visible) {
+  outline: none !important;
+  border: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
