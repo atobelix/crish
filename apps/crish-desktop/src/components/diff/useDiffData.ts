@@ -26,7 +26,8 @@ type SourceMode = DiffSourceMode;
 export function getComputedChanges(f: FileDiff): ComputedChange[] {
   let o = 0,
     n = 0;
-  return f.changes.map((c, i) => {
+  const changes = f?.changes || [];
+  return changes.map((c, i) => {
     let ol: number | undefined, nl: number | undefined;
     const h = c.content.startsWith('@@') && c.type === 'normal';
     if (h) {
@@ -269,11 +270,36 @@ export function useDiffData(opts: {
           : [],
     [diffFiles, activeDiffSource]
   );
+  const getFileCompareMode = useCallback(
+    (fp: string) =>
+      fileCompareModes[fp] || (sourceMode === 'git' ? 'git' : 'session-merged'),
+    [fileCompareModes, sourceMode]
+  );
+
+  const getFileDiffData = useCallback(
+    (f: FileDiff) => {
+      const m = getFileCompareMode(f.filePath);
+      if (m === 'plain') return null;
+      if (m === 'git') return f;
+      if (m === 'session-merged')
+        return mergedSessionFiles.find((x) => x.filePath === f.filePath) || f;
+      if (m.startsWith('turn-')) {
+        const t = aiTurns.find((x) => x.msg.id === m.substring(5));
+        return t ? t.files.find((x) => x.filePath === f.filePath) || f : f;
+      }
+      return f;
+    },
+    [getFileCompareMode, mergedSessionFiles, aiTurns]
+  );
+
   const computedChangesByFile = useMemo(() => {
     const m = new Map<string, ComputedChange[]>();
-    for (const f of fileList) m.set(f.filePath, getComputedChanges(f));
+    for (const f of fileList) {
+      const targetDiff = getFileDiffData(f) ?? f;
+      m.set(f.filePath, getComputedChanges(targetDiff));
+    }
     return m;
-  }, [fileList]);
+  }, [fileList, getFileDiffData]);
   const hasAiTurns = aiTurns.length > 0;
 
   const turnOptions = useMemo(() => {
@@ -294,12 +320,6 @@ export function useDiffData(opts: {
       });
     return o;
   }, [aiTurns, hasAiTurns]);
-
-  const getFileCompareMode = useCallback(
-    (fp: string) =>
-      fileCompareModes[fp] || (sourceMode === 'git' ? 'git' : 'session-merged'),
-    [fileCompareModes, sourceMode]
-  );
 
   const changeFileCompareMode = useCallback(
     async (fp: string, mode: CompareMode) => {
@@ -325,22 +345,6 @@ export function useDiffData(opts: {
     [plainFileContents]
   );
 
-  const getFileDiffData = useCallback(
-    (f: FileDiff) => {
-      const m = getFileCompareMode(f.filePath);
-      if (m === 'plain') return null;
-      if (m === 'git') return f;
-      if (m === 'session-merged')
-        return mergedSessionFiles.find((x) => x.filePath === f.filePath) || f;
-      if (m.startsWith('turn-')) {
-        const t = aiTurns.find((x) => x.msg.id === m.substring(5));
-        return t ? t.files.find((x) => x.filePath === f.filePath) || f : f;
-      }
-      return f;
-    },
-    [getFileCompareMode, mergedSessionFiles, aiTurns]
-  );
-
   const handleExpandBlock = useCallback(
     (fileKey: string, si: number) =>
       setExpandedBlocks((p) => ({
@@ -354,19 +358,22 @@ export function useDiffData(opts: {
     if (diffViewMode !== 'unified')
       return new Map<string, UnifiedRenderItem[]>();
     const m = new Map<string, UnifiedRenderItem[]>();
-    for (const f of fileList)
+    for (const f of fileList) {
+      const targetDiff = getFileDiffData(f) ?? f;
       m.set(
         f.filePath,
         getUnifiedItems(
-          f,
+          targetDiff,
           diffSearchQuery,
           expandedBlocks,
           computedChangesByFile.get(f.filePath)
         )
       );
+    }
     return m;
   }, [
     fileList,
+    getFileDiffData,
     computedChangesByFile,
     diffSearchQuery,
     expandedBlocks,
@@ -376,19 +383,22 @@ export function useDiffData(opts: {
   const splitRenderCache = useMemo(() => {
     if (diffViewMode !== 'split') return new Map<string, SplitRenderItem[]>();
     const m = new Map<string, SplitRenderItem[]>();
-    for (const f of fileList)
+    for (const f of fileList) {
+      const targetDiff = getFileDiffData(f) ?? f;
       m.set(
         f.filePath,
         getSplitItems(
-          f,
+          targetDiff,
           diffSearchQuery,
           expandedBlocks,
           computedChangesByFile.get(f.filePath)
         )
       );
+    }
     return m;
   }, [
     fileList,
+    getFileDiffData,
     computedChangesByFile,
     diffSearchQuery,
     expandedBlocks,

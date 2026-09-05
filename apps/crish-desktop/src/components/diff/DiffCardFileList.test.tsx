@@ -61,4 +61,46 @@ describe('DiffCardFileList', () => {
     expect(selectTrigger).toBeDefined();
     expect(selectTrigger).not.toBeNull();
   });
+
+  it('renders targetDiff additions and deletions when getFileDiffData is provided', () => {
+    const dummyFile: FileDiff = {
+      filePath: 'src/main.ts',
+      additions: 0,
+      deletions: 0,
+      changes: [],
+    };
+    const mergedDiff: FileDiff = {
+      filePath: 'src/main.ts',
+      additions: 15,
+      deletions: 7,
+      changes: [{ type: 'addition', content: 'new code' }],
+    };
+
+    const { getByRole } = render(
+      <DiffCardFileList
+        files={[dummyFile]}
+        sourceMode="session"
+        current={null}
+        applyBusy={false}
+        stagingPaths={{}}
+        aiTurns={[]}
+        getFileCompareMode={() => 'session-merged'}
+        onChangeCompareMode={() => {}}
+        onSetActiveDiffSource={() => {}}
+        onStageFile={() => {}}
+        onUnstageFile={() => {}}
+        onDiscardChanges={() => {}}
+        onStageAll={() => {}}
+        onUnstageAll={() => {}}
+        onAcceptFile={() => {}}
+        onRejectFile={() => {}}
+        onCopyCode={() => {}}
+        renderInlineDiffContent={() => <div>diff</div>}
+        getFileDiffData={() => mergedDiff}
+      />
+    );
+
+    const btn = getByRole('button', { name: /main\.ts \+15 −7/ });
+    expect(btn).toBeDefined();
+  });
 });

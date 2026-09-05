@@ -72,6 +72,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
     plainFileContents,
     changeFileCompareMode,
     getFileCompareMode,
+    getFileDiffData,
     handleExpandBlock,
     unifiedRenderCache,
     splitRenderCache,
@@ -251,20 +252,23 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
     showToast('已复制标准 Git Patch 到剪贴板');
   }, [activeDiffSource, showToast]);
 
-  const renderInlineDiffContent = (f: FileDiff) => (
-    <DiffCodeViewer
-      f={f}
-      compareMode={getFileCompareMode(f.filePath)}
-      diffViewMode={diffViewMode}
-      diffSearchQuery={diffSearchQuery}
-      plainLoading={plainLoading[f.filePath]}
-      plainContent={plainFileContents[f.filePath]}
-      unifiedRenderItems={unifiedRenderCache.get(f.filePath) ?? []}
-      splitRenderItems={splitRenderCache.get(f.filePath) ?? []}
-      computed={computedChangesByFile.get(f.filePath) ?? []}
-      onExpandBlock={handleExpandBlock}
-    />
-  );
+  const renderInlineDiffContent = (f: FileDiff) => {
+    const targetDiff = getFileDiffData(f) ?? f;
+    return (
+      <DiffCodeViewer
+        f={targetDiff}
+        compareMode={getFileCompareMode(f.filePath)}
+        diffViewMode={diffViewMode}
+        diffSearchQuery={diffSearchQuery}
+        plainLoading={plainLoading[f.filePath]}
+        plainContent={plainFileContents[f.filePath]}
+        unifiedRenderItems={unifiedRenderCache.get(f.filePath) ?? []}
+        splitRenderItems={splitRenderCache.get(f.filePath) ?? []}
+        computed={computedChangesByFile.get(f.filePath) ?? []}
+        onExpandBlock={handleExpandBlock}
+      />
+    );
+  };
 
   return (
     <div
@@ -359,6 +363,7 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
             onRejectFile={rejectCurrentFile}
             onCopyCode={handleCopyCodeOfFile}
             renderInlineDiffContent={renderInlineDiffContent}
+            getFileDiffData={getFileDiffData}
           />
         ) : !gitLoading ? (
           <div className={styles.empty} role="status" aria-live="polite">

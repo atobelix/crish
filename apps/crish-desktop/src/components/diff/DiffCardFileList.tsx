@@ -56,6 +56,7 @@ interface DiffCardFileListProps {
   onRejectFile: (f: FileDiff) => void;
   onCopyCode: (filePath: string) => void;
   renderInlineDiffContent: (f: FileDiff) => React.ReactNode;
+  getFileDiffData?: (f: FileDiff) => FileDiff | null;
 }
 
 export type { DiffCardFileListProps };
@@ -79,6 +80,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
   onRejectFile,
   onCopyCode,
   renderInlineDiffContent,
+  getFileDiffData,
 }) => {
   const { showToast } = useToast();
   const { stagedFiles, unstagedFiles } = useMemo(() => {
@@ -105,8 +107,12 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
       t.files.some((m) => m.filePath === f.filePath)
     );
 
+    const targetDiff = getFileDiffData ? (getFileDiffData(f) ?? f) : f;
+    const additions = targetDiff.additions ?? f.additions;
+    const deletions = targetDiff.deletions ?? f.deletions;
+
     // 接受按钮文案随可应用性动态变化（同源约定：Tooltip content 与 aria-label 同引用）
-    const acceptLabel = classifyFileDiff(f).ok
+    const acceptLabel = classifyFileDiff(targetDiff).ok
       ? '接受并写入磁盘'
       : '此 diff 无法安全自动应用';
 
@@ -140,15 +146,15 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
               type="button"
               className={`${styles.fileItem} ${active ? styles.isActive : ''}`}
               onClick={() => onSetActiveDiffSource(active ? null : f)}
-              aria-label={`${basename(f.filePath)} +${f.additions} −${f.deletions}`}
+              aria-label={`${basename(f.filePath)} +${additions} −${deletions}`}
             >
               <span className={styles.fileNameLink}>
                 {basename(f.filePath)}
               </span>
 
               <span className={styles.fileStat} aria-hidden>
-                <span className="add">+{f.additions}</span>
-                <span className="del">−{f.deletions}</span>
+                <span className="add">+{additions}</span>
+                <span className="del">−{deletions}</span>
               </span>
             </button>
           </Tooltip>
@@ -251,7 +257,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                     size="sm"
                     className={styles.inlineIconBtn}
                     onClick={() => {
-                      const patch = formatGitPatch(f);
+                      const patch = formatGitPatch(targetDiff);
                       navigator.clipboard.writeText(patch);
                       showToast('标准 Git Patch 已复制到剪贴板');
                     }}
@@ -295,10 +301,10 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                     variant="ghost"
                     size="sm"
                     aria-label={acceptLabel}
-                    disabled={applyBusy || !classifyFileDiff(f).ok}
+                    disabled={applyBusy || !classifyFileDiff(targetDiff).ok}
                     onClick={(e) => {
                       e.stopPropagation();
-                      void onAcceptFile(f);
+                      void onAcceptFile(targetDiff);
                     }}
                     icon={<Lucide.Check size={14} aria-hidden />}
                   />
@@ -313,7 +319,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                     disabled={applyBusy}
                     onClick={(e) => {
                       e.stopPropagation();
-                      onRejectFile(f);
+                      onRejectFile(targetDiff);
                     }}
                     icon={<Lucide.X size={14} aria-hidden />}
                   />

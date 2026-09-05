@@ -80,4 +80,32 @@ describe('DiffHeaderControls Component Alignment & Behavior', () => {
     const searchBtn = screen.getByLabelText('搜索差异行');
     expect(searchBtn).toHaveAttribute('data-active', 'true');
   });
+
+  it('class="_rightActions" 内部全面换装原子组件 <IconButton size="sm"> 并拔除私有 .actionBtn 覆盖', () => {
+    const { container } = render(
+      <DiffHeaderControls
+        {...mockProps}
+        sourceMode="git"
+        fileListLength={3}
+        current={{ path: 'test.ts', hunks: [] } as any}
+        commitPanelOpen={true}
+        searchOpen={true}
+      />
+    );
+
+    const rightActions = container.querySelector(`[class*="rightActions"]`);
+    expect(rightActions).toBeInTheDocument();
+
+    // 断言所有按钮均具备 iconButton 原子类，且绝无 actionBtn 私有覆盖
+    const buttons = rightActions!.querySelectorAll('button');
+    expect(buttons.length).toBeGreaterThanOrEqual(4);
+
+    for (const btn of Array.from(buttons)) {
+      expect(btn.className).toContain('iconButton');
+      expect(btn.className).not.toContain('actionBtn');
+      expect(btn).toHaveAttribute('data-size', 'sm');
+      expect(btn).toHaveAttribute('aria-label');
+      expect(btn.getAttribute('aria-label')!.length).toBeGreaterThan(0);
+    }
+  });
 });

@@ -15,11 +15,10 @@ import {
   Sparkles,
 } from 'lucide-react';
 import {
-  Button,
+  IconButton,
   Select,
   SegmentedControl,
   type SegmentedControlOption,
-  Tooltip,
 } from '../ui';
 import styles from './DiffCard.module.css';
 import type { FileDiff } from '../../store/types';
@@ -151,92 +150,73 @@ export const DiffHeaderControls: React.FC<DiffHeaderControlsProps> = React.memo(
           </div>
         </div>
 
-        {/* 右侧：视图与操作按钮组 */}
+        {/* 右侧：视图与操作按钮组 (换装标准原子组件 IconButton size="sm" variant="ghost"，拔除私有 .actionBtn 覆盖) */}
         <div className={styles.rightActions}>
-          <Tooltip
-            content={
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-label={
+              diffViewMode === 'unified' ? '切换至分栏视图' : '切换至合并视图'
+            }
+            tooltip={
               diffViewMode === 'unified'
                 ? '切换至分栏视图 (Split View)'
                 : '切换至合并视图 (Unified View)'
             }
-          >
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={styles.actionBtn}
-              aria-label={
-                diffViewMode === 'unified' ? '切换至分栏视图' : '切换至合并视图'
-              }
-              onClick={onViewModeChange}
-              icon={
-                diffViewMode === 'unified' ? (
-                  <Columns2 size={14} aria-hidden />
-                ) : (
-                  <List size={14} aria-hidden />
-                )
-              }
-            />
-          </Tooltip>
+            onClick={onViewModeChange}
+            icon={
+              diffViewMode === 'unified' ? (
+                <Columns2 size={14} aria-hidden />
+              ) : (
+                <List size={14} aria-hidden />
+              )
+            }
+          />
 
           {onCopyPatch && current && (
-            <Tooltip content="复制当前文件为标准 Git Patch">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={styles.actionBtn}
-                aria-label="复制 Patch"
-                onClick={onCopyPatch}
-                icon={<Copy size={14} aria-hidden />}
-              />
-            </Tooltip>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              aria-label="复制 Patch"
+              tooltip="复制当前文件为标准 Git Patch"
+              onClick={onCopyPatch}
+              icon={<Copy size={14} aria-hidden />}
+            />
           )}
 
           {sourceMode === 'git' && fileListLength > 0 && (
-            <Tooltip
-              content={commitPanelOpen ? '隐藏提交面板' : '显示提交面板'}
-            >
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className={styles.actionBtn}
-                active={commitPanelOpen}
-                aria-label="切换提交面板"
-                onClick={onCommitPanelToggle}
-                icon={<GitCommit size={14} aria-hidden />}
-              />
-            </Tooltip>
+            <IconButton
+              size="sm"
+              variant="ghost"
+              active={commitPanelOpen}
+              aria-label="切换提交面板"
+              tooltip={commitPanelOpen ? '隐藏提交面板' : '显示提交面板'}
+              onClick={onCommitPanelToggle}
+              icon={<GitCommit size={14} aria-hidden />}
+            />
           )}
 
-          <Tooltip content="搜索差异行">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={styles.actionBtn}
-              active={searchOpen || searchActive}
-              aria-label="搜索差异行"
-              aria-pressed={searchOpen || searchActive}
-              onClick={() => onSearchOpenChange(!searchOpen)}
-              icon={<Search size={14} aria-hidden />}
-            />
-          </Tooltip>
+          <IconButton
+            size="sm"
+            variant="ghost"
+            active={searchOpen || searchActive}
+            aria-label="搜索差异行"
+            aria-pressed={searchOpen || searchActive}
+            tooltip="搜索差异行"
+            onClick={() => onSearchOpenChange(!searchOpen)}
+            icon={<Search size={14} aria-hidden />}
+          />
 
           {fileListLength > 0 && (
-            <Tooltip content="清空当前审查列表">
-              <Button
-                type="button"
-                variant="danger"
-                size="sm"
-                className={styles.actionBtn}
-                aria-label="清空变更列表"
-                disabled={applyBusy}
-                onClick={onClear}
-                icon={<Trash2 size={14} aria-hidden />}
-              />
-            </Tooltip>
+            <IconButton
+              size="sm"
+              variant="danger"
+              aria-label="清空变更列表"
+              tooltip="清空当前审查列表"
+              disabled={applyBusy}
+              onClick={onClear}
+              icon={<Trash2 size={14} aria-hidden />}
+            />
           )}
         </div>
       </div>
