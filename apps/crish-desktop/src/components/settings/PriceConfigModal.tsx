@@ -1,5 +1,4 @@
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { createPortal } from 'react-dom';
 import * as Lucide from 'lucide-react';
 import {
   upsertPrice,
@@ -28,7 +27,7 @@ export const PriceConfigModal: React.FC<{
   onListChange: (next: ModelPrice[]) => void;
   onClose: () => void;
 }> = ({ open, priceList, onListChange, onClose }) => {
-  const [currency, setCurrency] = useState<'USD' | 'CNY'>('USD');
+  const [currency, setCurrency] = useState<'USD' | 'CNY'>('CNY');
   const [priceDraft, setPriceDraft] = useState({
     model: '',
     input: '',
@@ -40,18 +39,6 @@ export const PriceConfigModal: React.FC<{
   const [showAddSuggestions, setShowAddSuggestions] = useState(false);
   const addBoxRef = useRef<HTMLDivElement | null>(null);
   const addInputRef = useRef<HTMLInputElement | null>(null);
-  const [addDropdownRect, setAddDropdownRect] = useState<{ top: number; left: number; width: number } | null>(null);
-
-  const updateAddDropdownPos = () => {
-    if (addInputRef.current) {
-      const rect = addInputRef.current.getBoundingClientRect();
-      setAddDropdownRect({
-        top: Math.max(10, rect.top - 186),
-        left: rect.left,
-        width: Math.max(rect.width, 240),
-      });
-    }
-  };
 
   // 过滤模型
   const filteredPrices = useMemo(() => {
@@ -203,7 +190,7 @@ export const PriceConfigModal: React.FC<{
           <div>生成补全 ({currencySymbol}/1M)</div>
           <div>缓存命中 ({currencySymbol}/1M)</div>
           <div>计费方式</div>
-          <div style={{ textAlign: 'right' }}>操作</div>
+          <div className={styles.headerColAction}>操作</div>
         </div>
 
         {/* 列表主体 */}
@@ -262,7 +249,7 @@ export const PriceConfigModal: React.FC<{
         {/* 底部新增行：与 tableRow 严格同轨对齐 */}
         <div className={styles.addRow} ref={addBoxRef}>
           {/* 1. 模型 ID 输入框与智能建议 */}
-          <div className={styles.colCell} style={{ position: 'relative' }}>
+          <div className={`${styles.colCell} ${styles.addModelCell}`}>
             <Input
               ref={addInputRef}
               size="xs"
@@ -271,70 +258,34 @@ export const PriceConfigModal: React.FC<{
               onChange={(e) => {
                 setPriceDraft((d) => ({ ...d, model: e.target.value }));
                 setShowAddSuggestions(true);
-                updateAddDropdownPos();
               }}
               onFocus={() => {
                 setShowAddSuggestions(true);
-                updateAddDropdownPos();
               }}
               className={styles.cellInput}
               spellCheck={false}
             />
-            {showAddSuggestions &&
-              addSuggestions.length > 0 &&
-              addDropdownRect &&
-              createPortal(
-                <div
-                  style={{
-                    position: 'fixed',
-                    top: addDropdownRect.top,
-                    left: addDropdownRect.left,
-                    width: addDropdownRect.width,
-                    zIndex: 'var(--z-tooltip, 9000)',
-                    background: 'var(--bg-card, #ffffff)',
-                    border: '1px solid var(--border-subtle)',
-                    borderRadius: 'var(--radius-md, 8px)',
-                    boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
-                    maxHeight: '180px',
-                    overflowY: 'auto',
-                    padding: '4px',
-                  }}
-                  onMouseDown={(e) => e.stopPropagation()}
-                >
-                  {addSuggestions.map((item) => (
-                    <div
-                      key={item.model}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '5px 8px',
-                        borderRadius: 'var(--radius-sm, 4px)',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        gap: '8px',
-                      }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.background = 'var(--bg-hover)')
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.background = 'transparent')
-                      }
-                      onClick={() => handleSelectAddSuggestion(item)}
-                    >
-                      <span style={{ color: 'var(--text-primary)' }}>
-                        {item.model}
-                      </span>
-                      <span style={{ color: 'var(--text-tertiary)', fontSize: '11px' }}>
-                        {item.pricing?.billingUnit === 'per_image'
-                          ? '按张'
-                          : `${currencySymbol}${item.pricing?.inputPerMTok ?? 0}/${item.pricing?.outputPerMTok ?? 0}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>,
-                document.body
-              )}
+            {showAddSuggestions && addSuggestions.length > 0 && (
+              <div
+                className={styles.suggestionsDropdown}
+                onMouseDown={(e) => e.stopPropagation()}
+              >
+                {addSuggestions.map((item) => (
+                  <div
+                    key={item.model}
+                    className={styles.suggestionItem}
+                    onClick={() => handleSelectAddSuggestion(item)}
+                  >
+                    <span>{item.model}</span>
+                    <span className={styles.suggestionItemMeta}>
+                      {item.pricing?.billingUnit === 'per_image'
+                        ? '按张'
+                        : `${currencySymbol}${item.pricing?.inputPerMTok ?? 0}/${item.pricing?.outputPerMTok ?? 0}`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* 2. 提示输入 */}
@@ -394,10 +345,9 @@ export const PriceConfigModal: React.FC<{
               <Button
                 type="button"
                 variant="secondary"
-                size="xs"
+                size="sm"
                 disabled={!canAttemptSave}
                 onClick={handleAddPrice}
-                style={{ height: '28px', padding: '0 8px' }}
               >
                 添加
               </Button>

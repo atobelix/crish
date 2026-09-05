@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import type { ModelPrice } from '../../api/pricingStore';
-import { Button, Tooltip, Select, Input } from '../ui';
+import { Button, IconButton, Tooltip, Select, Input } from '../ui';
 import styles from './PriceConfigModal.module.css';
 
 const UNIT_OPTIONS = [
@@ -54,6 +54,7 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
     unitVal !== (row.billingUnit || 'token');
 
   const currencySymbol = currency === 'CNY' ? '¥' : '$';
+  const unitLabel = unitVal === 'per_image' ? '张' : '1M Tokens';
 
   return (
     <div className={styles.tableRow}>
@@ -74,7 +75,7 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
 
       {/* 2. 提示词输入单价 */}
       <div className={styles.colCell}>
-        <Tooltip content={`提示词输入单价 (${currencySymbol}/1M Tokens)`}>
+        <Tooltip content={`提示词输入单价 (${currencySymbol}/${unitLabel})`}>
           <Input
             size="xs"
             value={inputVal}
@@ -88,7 +89,7 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
 
       {/* 3. 生成补全单价 */}
       <div className={styles.colCell}>
-        <Tooltip content={`生成补全单价 (${currencySymbol}/1M Tokens)`}>
+        <Tooltip content={`生成补全单价 (${currencySymbol}/${unitLabel})`}>
           <Input
             size="xs"
             value={outputVal}
@@ -102,7 +103,7 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
 
       {/* 4. 缓存命中单价 */}
       <div className={styles.colCell}>
-        <Tooltip content={`缓存命中单价 (${currencySymbol}/1M Tokens)`}>
+        <Tooltip content={`缓存命中单价 (${currencySymbol}/${unitLabel})`}>
           <Input
             size="xs"
             value={cacheReadVal}
@@ -131,7 +132,7 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
             <Button
               type="button"
               variant="secondary"
-              size="xs"
+              size="sm"
               disabled={
                 !modelVal.trim() ||
                 Number.isNaN(Number(inputVal)) ||
@@ -142,28 +143,18 @@ export const EditablePriceRow: React.FC<EditablePriceRowProps> = ({
                   cacheReadVal.trim() !== '' ? Number(cacheReadVal) : undefined;
                 onSave(modelVal.trim(), Number(inputVal), Number(outputVal), parsedCache, unitVal);
               }}
-              style={{ padding: '0 6px', height: '24px' }}
             >
               保存
             </Button>
           )}
-          <Tooltip content="删除该模型单价">
-            <Button
-              type="button"
-              variant="ghost"
-              size="xs"
-              onClick={onDelete}
-              aria-label={`删除 ${row.model}`}
-              style={{
-                color: 'var(--text-tertiary)',
-                padding: '4px',
-                height: '24px',
-                minWidth: '24px',
-              }}
-            >
-              <Lucide.Trash2 size={13} />
-            </Button>
-          </Tooltip>
+          <IconButton
+            variant="ghost"
+            size="sm"
+            icon={<Lucide.Trash2 size={14} />}
+            tooltip="删除该模型单价"
+            aria-label={`删除 ${row.model}`}
+            onClick={onDelete}
+          />
         </div>
       </div>
     </div>
