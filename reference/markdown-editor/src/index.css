@@ -16,6 +16,8 @@
   --tag-calm-bg: hsl(213 38% 95.1%);
   --tag-standard-bg: hsl(212.7 47% 92.9%);
   --danger-color: hsl(359 53% 35.5%);
+  /* 暖调柔和代码块底色 (相对于背景色约 2% 微灰底，自适应主题) */
+  --code-bg: color-mix(in srgb, var(--text-primary) 2%, var(--white));
 
   /* ── 2. 既有 CSS 契约变量映射 (严格满足 css-contract G6.6 门禁) ── */
   --bg-theme: var(--parchment);
@@ -208,9 +210,8 @@ body {
   font-size: 13.5px;
   font-family: var(--font-mono);
   color: var(--text-secondary);
-  background: var(--ivory);
-  border-left: 1px solid var(--border-soft);
-  border-right: 1px solid var(--border-soft);
+  background: var(--code-bg);
+  border: none;
   height: var(--grid-size);
   line-height: var(--grid-size);
   box-sizing: border-box;
@@ -227,12 +228,12 @@ body {
   width: 42px;
   flex-shrink: 0;
   text-align: right;
-  padding-right: 12px;
+  padding-right: 14px;
   color: var(--stone);
   font-size: 12px;
   line-height: var(--grid-size);
   user-select: none;
-  border-right: 1px solid var(--border-soft);
+  border: none;
   box-sizing: border-box;
 }
 
@@ -748,11 +749,10 @@ body {
 
 .line-code-fence-start {
   height: var(--grid-size);
-  line-height: calc(var(--grid-size) - 2px);
+  line-height: var(--grid-size);
   box-sizing: border-box;
-  background: var(--ivory);
-  border: 1px solid var(--border-soft);
-  border-bottom: 1px solid var(--border-soft);
+  background: var(--code-bg);
+  border: none;
   border-radius: 8px 8px 0 0;
   overflow: hidden;
   position: relative;
@@ -775,19 +775,17 @@ body {
   height: 100%;
   box-sizing: border-box;
   padding: 0 14px;
-  line-height: calc(var(--grid-size) - 2px);
+  line-height: var(--grid-size);
   font-size: 13px;
   color: var(--text-muted);
 }
 
 .line-code-fence-end {
   height: var(--grid-size);
-  line-height: calc(var(--grid-size) - 1px);
+  line-height: var(--grid-size);
   box-sizing: border-box;
-  background: var(--ivory);
-  border-left: 1px solid var(--border-soft);
-  border-right: 1px solid var(--border-soft);
-  border-bottom: 1px solid var(--border-soft);
+  background: var(--code-bg);
+  border: none;
   border-radius: 0 0 8px 8px;
   position: relative;
   overflow: hidden;
@@ -802,7 +800,7 @@ body {
 .line-code-fence-end .code-fence-source {
   display: none;
   height: 100%;
-  line-height: calc(var(--grid-size) - 1px);
+  line-height: var(--grid-size);
   font-size: 13px;
   color: var(--text-muted);
 }
