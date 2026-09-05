@@ -3,7 +3,6 @@ import {
   useEffect,
   useRef,
   useState,
-  type CSSProperties,
 } from 'react';
 import { useEditorStore } from './core/EditorStore';
 import { useTableStore } from './core/TableStore';
@@ -51,16 +50,15 @@ type StreamPhase = 'idle' | 'streaming' | 'paused' | 'done' | 'discarded';
 /** 注入粒度（chunk 切分方式） */
 type Granularity = 'char' | 'word' | 'line';
 
+const GRANULARITY_OPTIONS: Granularity[] = ['char', 'word', 'line'];
+const GRANULARITY_LABELS: Record<Granularity, string> = {
+  char: '字符',
+  word: '词语',
+  line: '整行',
+};
+
 /** 可调 token 率档位（tps = tokens per second） */
 const RATE_OPTIONS = [10, 50, 200, 500] as const;
-
-const PHASE_TEXT: Record<StreamPhase, string> = {
-  idle: '空闲',
-  streaming: '流式生成中',
-  paused: '已暂停',
-  done: '已完成',
-  discarded: '已丢弃',
-};
 
 // ── 预置演示内容（S-EL-12：展示流式全能力）──
 // 中文 + Markdown 混合：标题/列表/表格/代码块/公式 + 纯文本行。
@@ -160,12 +158,16 @@ function App() {
     setText(chunks.join('\n'));
   }, [setText]);
 
-  // 注入计时器 ref（chunk 游标 + 会话起点 + 暂停补偿）
+  // 注入计时器 ref（chunk 游标 + 会话起点 + 动态平滑调速）
   const timerRef = useRef<number | null>(null);
   const chunksRef = useRef<string[]>([]);
   const posRef = useRef(0);
   const sessionStartRef = useRef(0);
   const pausedAtRef = useRef(0);
+  const rateRef = useRef(rate);
+  rateRef.current = rate;
+  const targetTokensRef = useRef(0);
+  const lastTickTimeRef = useRef(0);
   // 编程式收口（开始流式前强制结束旧会话）的播报抑制开关
   const suppressEndAnnounceRef = useRef(false);
 
@@ -218,13 +220,15 @@ function App() {
     return () => window.clearInterval(t);
   }, [phase]);
 
-  /** 时间戳驱动注入节拍（10ms tick；按目标 token 率校准发射量） */
+  /** 时间戳驱动注入节拍（10ms tick；动态 rateRef 实时平滑调速） */
   const tick = useCallback(() => {
     const now = performance.now();
-    const elapsed = now - sessionStartRef.current;
+    const dt = now - lastTickTimeRef.current;
+    lastTickTimeRef.current = now;
+    targetTokensRef.current += (dt * rateRef.current) / 1000;
     const target = Math.min(
       chunksRef.current.length,
-      Math.floor((elapsed * rate) / 1000)
+      Math.floor(targetTokensRef.current)
     );
     while (posRef.current < target) {
       engineRef.current?.streamAppend(chunksRef.current[posRef.current]);
@@ -247,11 +251,13 @@ function App() {
       engineRef.current?.streamEnd();
       setPhase('done');
     }
-  }, [rate, stopTimer]);
+  }, [stopTimer]);
 
   const startTimer = useCallback(() => {
     stopTimer();
     sessionStartRef.current = performance.now();
+    lastTickTimeRef.current = performance.now();
+    targetTokensRef.current = posRef.current;
     timerRef.current = window.setInterval(tick, 10);
   }, [stopTimer, tick]);
 
@@ -321,6 +327,7 @@ function App() {
   const loadMassiveDoc = useCallback(() => {
     silentlyEndSession();
     setPhase('idle');
+    setProgress('');
     setExportPanel(null);
     const chunks: string[] = [];
     chunks.push(
@@ -336,9 +343,29 @@ function App() {
   const clearDocument = useCallback(() => {
     silentlyEndSession();
     setPhase('idle');
+    setProgress('');
     setExportPanel(null);
     setText('');
   }, [setText, silentlyEndSession]);
+
+  /** 点击循环切换模拟流式输出速率 (10 -> 50 -> 200 -> 500 -> 10) */
+  const cycleRate = useCallback(() => {
+    const idx = RATE_OPTIONS.indexOf(rate as any);
+    const nextIdx = (idx + 1) % RATE_OPTIONS.length;
+    const nextRate = RATE_OPTIONS[nextIdx];
+    setRate(nextRate);
+    rateRef.current = nextRate;
+    announce(`流式速率已切换为 ${nextRate} tps`);
+  }, [announce, rate]);
+
+  /** 点击循环切换流式注入粒度 (字符 -> 词语 -> 整行 -> 字符) */
+  const cycleGranularity = useCallback(() => {
+    const idx = GRANULARITY_OPTIONS.indexOf(granularity);
+    const nextIdx = (idx + 1) % GRANULARITY_OPTIONS.length;
+    const nextGran = GRANULARITY_OPTIONS[nextIdx];
+    setGranularity(nextGran);
+    announce(`注入粒度已切换为 ${GRANULARITY_LABELS[nextGran]}`);
+  }, [announce, granularity]);
 
   const streamSummary = streamState
     ? `active=${streamState.active} buffered=${streamState.bufferedChars} direct=${streamState.directPendingChars} follow=${streamState.followState}`
@@ -355,37 +382,11 @@ function App() {
       }}
     >
       {/* 结构化现代化顶部控制栏（极简紧凑、分区明确、微微质感） */}
-      <header
-        style={{
-          width: 'min(920px, 95vw)',
-          background: 'var(--ivory)',
-          border: '1px solid var(--border-medium)',
-          borderRadius: 8,
-          padding: '6px 12px',
-          marginBottom: 10,
-          boxShadow: '0 1px 3px hsl(60 10% 10% / 0.04)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 12,
-          fontFamily: 'var(--font-sans)',
-          boxSizing: 'border-box',
-          minHeight: 40,
-        }}
-      >
-        {/* 左区：Conex 标识与实时文档/流式状态胶囊 */}
+      {/* 结构化现代化顶部控制栏（统一 28px 网格基线、3% 纯灰交互、分区清晰） */}
+      <header className="top-bar-header">
+        {/* 左区：Conex 品牌徽标与实时文档/流式状态 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 5,
-              padding: '3px 8px',
-              borderRadius: 5,
-              background: 'var(--warm-sand)',
-              color: 'var(--brand)',
-            }}
-          >
+          <div className="top-brand-badge" title="Conex Markdown Editor">
             <svg
               width="13"
               height="13"
@@ -399,222 +400,149 @@ function App() {
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
               <polyline points="14 2 14 8 20 8" />
             </svg>
-            <span style={{ fontWeight: 600, fontSize: 12, letterSpacing: '0.2px' }}>Conex</span>
+            <span>Conex</span>
           </div>
 
           <span
             data-testid="stream-status"
             data-phase={phase}
-            title={streamSummary || undefined}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              background: 'var(--tag-standard-bg)',
-              color: 'var(--brand)',
-              padding: '3px 9px',
-              borderRadius: 12,
-              fontSize: 11,
-              fontWeight: 500,
-              fontFamily: 'var(--font-mono)',
-            }}
+            title={streamSummary || '文档统计与生成状态'}
+            className="top-status-badge"
           >
             <span
+              className="top-status-dot"
               style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
                 backgroundColor:
                   phase === 'streaming'
                     ? 'hsl(142 60% 40%)'
                     : phase === 'paused'
                     ? 'hsl(38 92% 50%)'
-                    : 'var(--brand-light)',
+                    : 'var(--brand)',
               }}
             />
-            <span>{PHASE_TEXT[phase]}</span>
-            {progress ? <span style={{ opacity: 0.8 }}>({progress})</span> : null}
-            <span style={{ opacity: 0.5, fontSize: 10 }}>·</span>
-            <span style={{ opacity: 0.85 }}>{Number(textLength).toLocaleString()} 字符</span>
+            {phase === 'streaming' ? (
+              <span>AI 生成中 {progress ? `(${progress})` : ''}</span>
+            ) : phase === 'paused' ? (
+              <span>已暂停</span>
+            ) : (
+              <span>{Number(textLength).toLocaleString()} 字符</span>
+            )}
           </span>
         </div>
 
-        {/* 中区：高质感分段流式播放控制器（Segmented Pill） */}
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            border: '1px solid var(--border-medium)',
-            borderRadius: 6,
-            overflow: 'hidden',
-            background: 'var(--warm-sand)',
-            boxShadow: '0 1px 2px hsl(60 10% 10% / 0.03)',
-            flexShrink: 0,
-          }}
-        >
+        {/* 中区：高质感流式播放控制器 */}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <button
             type="button"
             data-testid="stream-start"
             onClick={startStreaming}
             title="开始流式输出"
-            style={{
-              ...primaryBtnStyle,
-              padding: '3px 10px',
-              borderRadius: 0,
-              boxShadow: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              fontSize: 11,
-            }}
+            className="top-btn top-btn-primary"
           >
             <svg width="9" height="9" viewBox="0 0 24 24" fill="currentColor">
               <polygon points="5 3 19 12 5 21 5 3" />
             </svg>
             <span>开始流式</span>
           </button>
-          <button
-            type="button"
-            data-testid="stream-pause"
-            onClick={pauseStreaming}
-            disabled={phase !== 'streaming'}
-            title="暂停流式"
-            style={{
-              ...secondaryBtnStyle,
-              padding: '3px 8px',
-              borderRadius: 0,
-              border: 'none',
-              borderLeft: '1px solid var(--border-medium)',
-              borderRight: '1px solid var(--border-medium)',
-              opacity: phase === 'streaming' ? 1 : 0.4,
-              cursor: phase === 'streaming' ? 'pointer' : 'default',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 3,
-              fontSize: 11,
-            }}
-          >
-            <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="4" width="4" height="16" />
-              <rect x="14" y="4" width="4" height="16" />
-            </svg>
-            <span>暂停</span>
-          </button>
-          <button
-            type="button"
-            data-testid="stream-resume"
-            onClick={resumeStreaming}
-            disabled={phase !== 'paused'}
-            title="继续流式"
-            style={{
-              ...secondaryBtnStyle,
-              padding: '3px 8px',
-              borderRadius: 0,
-              border: 'none',
-              borderRight: '1px solid var(--border-medium)',
-              opacity: phase === 'paused' ? 1 : 0.4,
-              cursor: phase === 'paused' ? 'pointer' : 'default',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 3,
-              fontSize: 11,
-            }}
-          >
-            <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="5 3 19 12 5 21 5 3" />
-            </svg>
-            <span>继续</span>
-          </button>
-          <button
-            type="button"
-            data-testid="stream-stop"
-            onClick={stopStreaming}
-            disabled={phase !== 'streaming' && phase !== 'paused'}
-            title="中断并完成"
-            style={{
-              ...secondaryBtnStyle,
-              padding: '3px 8px',
-              borderRadius: 0,
-              border: 'none',
-              borderRight: '1px solid var(--border-medium)',
-              opacity: phase === 'streaming' || phase === 'paused' ? 1 : 0.4,
-              cursor: phase === 'streaming' || phase === 'paused' ? 'pointer' : 'default',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 3,
-              fontSize: 11,
-            }}
-          >
-            <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="4" y="4" width="16" height="16" rx="2" />
-            </svg>
-            <span>中断</span>
-          </button>
-          <button
-            type="button"
-            data-testid="stream-discard"
-            onClick={discardStreaming}
-            disabled={phase !== 'streaming' && phase !== 'paused'}
-            title="丢弃本次流式内容"
-            style={{
-              ...dangerBtnStyle,
-              padding: '3px 8px',
-              borderRadius: 0,
-              border: 'none',
-              opacity: phase === 'streaming' || phase === 'paused' ? 1 : 0.4,
-              cursor: phase === 'streaming' || phase === 'paused' ? 'pointer' : 'default',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 3,
-              fontSize: 11,
-            }}
-          >
-            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-            <span>丢弃</span>
-          </button>
+
+          <div className="top-btn-group">
+            <button
+              type="button"
+              data-testid="stream-pause"
+              onClick={pauseStreaming}
+              disabled={phase !== 'streaming'}
+              title="暂停流式"
+              className="top-btn-group-item"
+            >
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="4" width="4" height="16" />
+                <rect x="14" y="4" width="4" height="16" />
+              </svg>
+              <span>暂停</span>
+            </button>
+            <button
+              type="button"
+              data-testid="stream-resume"
+              onClick={resumeStreaming}
+              disabled={phase !== 'paused'}
+              title="继续流式"
+              className="top-btn-group-item"
+            >
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3" />
+              </svg>
+              <span>继续</span>
+            </button>
+            <button
+              type="button"
+              data-testid="stream-stop"
+              onClick={stopStreaming}
+              disabled={phase !== 'streaming' && phase !== 'paused'}
+              title="中断并完成"
+              className="top-btn-group-item"
+            >
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="4" y="4" width="16" height="16" rx="2" />
+              </svg>
+              <span>中断</span>
+            </button>
+            <button
+              type="button"
+              data-testid="stream-discard"
+              onClick={discardStreaming}
+              disabled={phase !== 'streaming' && phase !== 'paused'}
+              title="丢弃本次流式内容"
+              className="top-btn-group-item top-btn-group-danger"
+            >
+              <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              <span>丢弃</span>
+            </button>
+          </div>
         </div>
 
         {/* 右区：速率粒度微调、预置用例与文档导出 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-          {/* 速率与粒度下拉胶囊 */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 2,
-              background: 'var(--warm-sand)',
-              border: '1px solid var(--border-medium)',
-              borderRadius: 6,
-              padding: '2px 5px',
-            }}
-          >
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--stone)"
-              strokeWidth="2"
-              style={{ marginLeft: 2 }}
+          {/* 速率与粒度控制组（真实可点击 28px 按钮组 + 同步 select 保障 e2e 契约） */}
+          <div className="top-btn-group" title="流式速率与切分粒度设置">
+            <button
+              type="button"
+              onClick={cycleRate}
+              className="top-btn-group-item"
+              title={`点击切换输出速率 (当前: ${rate} tps，点击循环: 10 → 50 → 200 → 500)`}
             >
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              <span>{rate} tps</span>
+              <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>▾</span>
+            </button>
+            <button
+              type="button"
+              onClick={cycleGranularity}
+              className="top-btn-group-item"
+              title={`点击切换注入粒度 (当前: ${GRANULARITY_LABELS[granularity]}，点击循环: 字符 → 词语 → 整行)`}
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+              </svg>
+              <span>{GRANULARITY_LABELS[granularity]}</span>
+              <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>▾</span>
+            </button>
+            {/* 隐藏 select 用于与 Playwright selectOption 契约无损对齐 */}
             <select
               data-testid="rate-select"
               value={rate}
-              onChange={(e) => setRate(Number(e.target.value))}
-              style={{
-                ...selectStyle,
-                border: 'none',
-                background: 'transparent',
-                padding: '1px 2px',
-                fontSize: 11,
-                cursor: 'pointer',
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setRate(val);
+                rateRef.current = val;
               }}
-              title="模拟输出速率 (tps)"
+              style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+              tabIndex={-1}
+              aria-hidden="true"
             >
               {RATE_OPTIONS.map((r) => (
                 <option key={r} value={r}>
@@ -622,20 +550,13 @@ function App() {
                 </option>
               ))}
             </select>
-            <span style={{ color: 'var(--border-medium)', fontSize: 10 }}>/</span>
             <select
               data-testid="granularity-select"
               value={granularity}
               onChange={(e) => setGranularity(e.target.value as Granularity)}
-              style={{
-                ...selectStyle,
-                border: 'none',
-                background: 'transparent',
-                padding: '1px 2px',
-                fontSize: 11,
-                cursor: 'pointer',
-              }}
-              title="模拟注入粒度"
+              style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
+              tabIndex={-1}
+              aria-hidden="true"
             >
               <option value="char">字符</option>
               <option value="word">词</option>
@@ -646,28 +567,12 @@ function App() {
           <div style={{ width: 1, height: 16, background: 'var(--border-medium)' }} />
 
           {/* 预置文档管理组 */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              border: '1px solid var(--border-medium)',
-              borderRadius: 6,
-              overflow: 'hidden',
-              background: 'var(--warm-sand)',
-            }}
-          >
+          <div className="top-btn-group">
             <button
               type="button"
               data-testid="load-massive"
               onClick={loadMassiveDoc}
-              style={{
-                ...secondaryBtnStyle,
-                padding: '3px 8px',
-                fontSize: 11,
-                borderRadius: 0,
-                border: 'none',
-                borderRight: '1px solid var(--border-medium)',
-              }}
+              className="top-btn-group-item"
               title="加载万行压力测试文档（2301个标题、45万字）"
             >
               万行压测
@@ -676,13 +581,7 @@ function App() {
               type="button"
               data-testid="clear-doc"
               onClick={clearDocument}
-              style={{
-                ...secondaryBtnStyle,
-                padding: '3px 8px',
-                fontSize: 11,
-                borderRadius: 0,
-                border: 'none',
-              }}
+              className="top-btn-group-item"
               title="清空编辑器内容"
             >
               清空
@@ -692,28 +591,12 @@ function App() {
           <div style={{ width: 1, height: 16, background: 'var(--border-medium)' }} />
 
           {/* 导出组 */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              border: '1px solid var(--border-medium)',
-              borderRadius: 6,
-              overflow: 'hidden',
-              background: 'var(--warm-sand)',
-            }}
-          >
+          <div className="top-btn-group">
             <button
               type="button"
               data-testid="export-md"
               onClick={() => exportDocument('markdown')}
-              style={{
-                ...secondaryBtnStyle,
-                padding: '3px 8px',
-                fontSize: 11,
-                borderRadius: 0,
-                border: 'none',
-                borderRight: '1px solid var(--border-medium)',
-              }}
+              className="top-btn-group-item"
               title="导出 Markdown 原文"
             >
               MD
@@ -722,13 +605,7 @@ function App() {
               type="button"
               data-testid="export-html"
               onClick={() => exportDocument('html')}
-              style={{
-                ...secondaryBtnStyle,
-                padding: '3px 8px',
-                fontSize: 11,
-                borderRadius: 0,
-                border: 'none',
-              }}
+              className="top-btn-group-item"
               title="导出 HTML 格式"
             >
               HTML
@@ -761,7 +638,7 @@ function App() {
               type="button"
               data-testid="export-close"
               onClick={() => setExportPanel(null)}
-              style={btnStyle}
+              className="top-btn"
             >
               关闭
             </button>
@@ -811,56 +688,5 @@ function App() {
     </div>
   );
 }
-
-const primaryBtnStyle: CSSProperties = {
-  fontFamily: 'var(--font-sans)',
-  fontSize: 12,
-  fontWeight: 500,
-  padding: '4px 12px',
-  cursor: 'pointer',
-  borderRadius: 6,
-  border: 'none',
-  background: 'var(--brand)',
-  color: 'var(--ivory)',
-  boxShadow: '0 1px 2px hsl(215.5 55% 23.5% / 0.2)',
-  transition: 'all 0.15s ease',
-};
-
-const secondaryBtnStyle: CSSProperties = {
-  fontFamily: 'var(--font-sans)',
-  fontSize: 12,
-  padding: '4px 10px',
-  cursor: 'pointer',
-  borderRadius: 6,
-  border: '1px solid var(--border-medium)',
-  background: 'var(--warm-sand)',
-  color: 'var(--dark-warm)',
-  transition: 'all 0.15s ease',
-};
-
-const dangerBtnStyle: CSSProperties = {
-  fontFamily: 'var(--font-sans)',
-  fontSize: 12,
-  padding: '4px 10px',
-  cursor: 'pointer',
-  borderRadius: 6,
-  border: '1px solid hsl(359 53% 35.5% / 0.25)',
-  background: 'hsl(359 53% 35.5% / 0.08)',
-  color: 'var(--danger-color)',
-  transition: 'all 0.15s ease',
-};
-
-const btnStyle: CSSProperties = secondaryBtnStyle;
-
-const selectStyle: CSSProperties = {
-  fontFamily: 'var(--font-sans)',
-  fontSize: 12,
-  borderRadius: 6,
-  border: '1px solid var(--border-medium)',
-  background: 'var(--ivory)',
-  color: 'var(--dark-warm)',
-  padding: '3px 8px',
-  cursor: 'pointer',
-};
 
 export default App;

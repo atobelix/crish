@@ -32,25 +32,27 @@
   --text-muted: var(--stone);
   --gray-90: var(--warm-sand);
 
-  /* 暖色调强调与高亮 */
-  --yellow-tint-2: hsl(48 100% 50% / 0.08);
-  --yellow-text: hsl(43 70% 30%);
+  /* 暖色调强调与高亮 (柔和琥珀荧光色阶，绝不刺眼，清晰可辨) */
+  --yellow-tint-2: hsl(45 100% 50% / 0.28);
+  --yellow-text: hsl(38 75% 22%);
 
-  /* 极浅纯灰文本选择高亮 (约 4% 纯灰半透，零色彩倾向，绝不遮挡文字与高亮) */
-  --selection-bg: color-mix(in srgb, hsl(0 0% 0%) 4%, transparent);
-  --blue-selection: color-mix(in srgb, hsl(0 0% 0%) 4%, transparent);
+  /* 品牌微绿微光文本选择高亮 (翡翠微光，高透光率，绝不遮挡文字与高亮) */
+  --selection-bg: oklch(0.6959 0.149 162.48 / 0.10);
+  --blue-selection: oklch(0.6959 0.149 162.48 / 0.10);
 
-  /* 暖调柔和边框与交互态 */
+  /* 暖调柔和边框与交互态 (3% 纯黑微量混入纯白底) */
   --border-subtle: var(--border-soft);
   --border-medium: var(--warm-sand);
   --border-focus: color-mix(in srgb, var(--border-medium) 90%, var(--black) 10%);
+  --interactive-hover: color-mix(in srgb, hsl(0 0% 0%) 3%, var(--white));
+  --interactive-active: color-mix(in srgb, hsl(0 0% 0%) 6%, var(--white));
 
   /* 滚动条背景与滑块配色 (H=30 S=2.5% 二元灰度) */
   --scrollbar-track: var(--parchment);
   --scrollbar-thumb: hsl(30 2.5% 90%);
   --scrollbar-thumb-hover: hsl(30 2.5% 78%);
-  /* 列表与多级缩进引导线配色 (H=30 S=2.5% 微暖灰色) */
-  --list-guide-line: hsl(30 2.5% 78%);
+  /* 列表与多级缩进极细发丝引导线配色 (0.5px 发丝级微暖灰色) */
+  --list-guide-line: hsl(30 2.5% 80%);
 
   /* ── 3. 字体系统解耦 ── */
   --font-serif: "TsangerJinKai02", "Source Han Serif SC", "Source Han Serif CN", "Noto Serif SC", "Songti SC", Charter, Georgia, serif;
@@ -497,11 +499,13 @@ body {
   font-size: 0.9em;
 }
 .style-mark {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--yellow-text);
   background-color: var(--yellow-tint-2);
-  padding: 0 2px;
-  border-radius: 2px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 .style-image {
   color: var(--gray-45);
@@ -599,11 +603,14 @@ body {
 }
 
 /* 导线与列表符号绝对对齐体系 (2ch 等宽网格、中轴线 0.5ch 几何统一、零动态横移) */
+/* 导线与列表符号绝对对齐体系 (2ch 等宽网格、中轴线 0.5ch 几何统一、零动态横移、0px垂直无缝贯通) */
 .token-blockquote-prefix {
-  display: inline-block;
+  display: inline-flex;
   position: relative;
   white-space: pre;
-  vertical-align: baseline;
+  height: 100%;
+  align-items: stretch;
+  vertical-align: top;
 }
 
 .token-blockquote-prefix .syntax-hidden {
@@ -612,7 +619,7 @@ body {
 
 .token-blockquote-prefix .syntax-content {
   display: inline-flex;
-  align-items: center;
+  align-items: stretch;
   position: relative;
   width: 100%;
   height: 100%;
@@ -620,12 +627,12 @@ body {
 
 .token-blockquote-prefix .blockquote-bar {
   position: absolute;
-  left: calc(0.5ch - 1px);
-  top: 1px;
-  bottom: 1px;
-  width: 2.5px;
-  background-color: var(--warm-sand, hsl(30 2.5% 86%));
-  border-radius: 1.5px;
+  left: calc(0.5ch - 0.25px);
+  top: 0;
+  bottom: 0;
+  width: 0.5px;
+  background-color: var(--list-guide-line);
+  border-radius: 0;
   pointer-events: none;
 }
 
@@ -642,20 +649,22 @@ body {
   margin-right: 4px;
 }
 
-/* 列表多级缩进引导线 */
+/* 列表多级缩进引导线 (极细 0.5px，全行贯通 0 缝隙，保持 inline-block 确保精确图素测量) */
 .syntax-indent {
   white-space: pre;
   position: relative;
   display: inline-block;
-  vertical-align: baseline;
+  vertical-align: top;
+  height: var(--grid-size);
+  line-height: var(--grid-size);
 }
 
 .syntax-indent-guide {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 1px;
-  background-color: var(--list-guide-line, hsl(30 2.5% 78%));
+  width: 0.5px;
+  background-color: var(--list-guide-line);
   pointer-events: none;
   user-select: none;
 }
@@ -699,11 +708,15 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1ch;
+  width: 16px;
+  height: 16px;
+  margin-left: 2px;
+  margin-right: 6px;
   cursor: pointer;
   user-select: none;
   vertical-align: middle;
   transform: translateY(-1px);
+  box-sizing: border-box;
 }
 
 .task-checkbox-svg {
@@ -1028,4 +1041,161 @@ body {
 
 .token-table-cell:not(.is-cell-editing) .math-preview {
   display: inline-block !important;
+}
+
+/* ── 顶部控制栏现代统一设计系统（28px 高度网格、统一 3% 纯灰悬停、零 raw hex） ── */
+.top-bar-header {
+  width: min(920px, 95vw);
+  background: var(--ivory);
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 3px hsl(30 2.5% 10% / 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--font-sans);
+  box-sizing: border-box;
+  min-height: 40px;
+}
+
+.top-brand-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--interactive-hover);
+  color: var(--brand);
+  border: 1px solid var(--border-soft);
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.2px;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.top-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background: var(--tag-standard-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-soft);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.top-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.top-btn {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  height: 28px;
+  line-height: 26px;
+  padding: 0 10px;
+  cursor: pointer;
+  border-radius: 6px;
+  border: 1px solid var(--border-medium);
+  background: var(--ivory);
+  color: var(--text-primary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.top-btn:hover:not(:disabled) {
+  background: var(--interactive-hover);
+  border-color: var(--border-medium);
+}
+
+.top-btn:active:not(:disabled) {
+  background: var(--interactive-active);
+}
+
+.top-btn-primary {
+  background: var(--brand);
+  color: var(--ivory);
+  border: 1px solid transparent;
+  font-weight: 500;
+  box-shadow: 0 1px 2px hsl(162.48 50% 20% / 0.15);
+}
+
+.top-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.04);
+  background: var(--brand);
+}
+
+.top-btn-primary:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+
+.top-btn-group {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ivory);
+  box-sizing: border-box;
+}
+
+.top-btn-group-item {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  height: 26px;
+  line-height: 26px;
+  padding: 0 10px;
+  border: none;
+  border-right: 1px solid var(--border-medium);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition: all 0.12s ease;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.top-btn-group-item:last-child {
+  border-right: none;
+}
+
+.top-btn-group-item:hover:not(:disabled) {
+  background: var(--interactive-hover);
+}
+
+.top-btn-group-item:active:not(:disabled) {
+  background: var(--interactive-active);
+}
+
+.top-btn-group-item:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.top-btn-group-danger {
+  color: var(--danger-color);
 }

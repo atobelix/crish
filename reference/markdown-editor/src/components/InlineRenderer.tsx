@@ -637,33 +637,11 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
             const handleTaskClick = (e: React.MouseEvent) => {
               if (start !== undefined) {
-                const target = e.currentTarget as HTMLElement;
-                const rect = target.getBoundingClientRect();
-                const clickX = e.clientX - rect.left;
-                const clickY = e.clientY - rect.top;
-                const edgeMargin = 2;
-                const isEdgeClick =
-                  clickX < edgeMargin ||
-                  clickX > rect.width - edgeMargin ||
-                  clickY < edgeMargin ||
-                  clickY > rect.height - edgeMargin;
-
-                const markerOffset = token.raw.indexOf(token.isChecked ? '[x]' : '[ ]');
-
-                if (isEdgeClick) {
-                  // 用户在复选框按钮边沿位置点击：触发源码模式与就地编辑
-                  e.stopPropagation();
-                  e.preventDefault();
-                  const state = useEditorStore.getState();
-                  const targetCursor = start + (markerOffset >= 0 ? markerOffset : 0);
-                  state.setCursorPos(targetCursor);
-                  return;
-                }
-
-                // 核心交互区点击：功能优先，直接切换完成状态
+                // 核心交互区点击：功能优先，直接切换完成状态（彻底移除边缘模糊判定）
                 e.stopPropagation();
                 e.preventDefault();
                 const state = useEditorStore.getState();
+                const markerOffset = token.raw.indexOf(token.isChecked ? '[x]' : '[ ]');
                 const newMarker = token.isChecked ? '[ ]' : '[x]';
                 if (markerOffset >= 0) {
                   const from = start + markerOffset;

@@ -513,8 +513,21 @@ function getFenceBlockLines(
     return entry.lines;
   }
   const lines: string[] = [];
+  const fenceStartLine = state.getLine(contentStart - 1);
+  const bqFence = stripBlockquotePrefix(fenceStartLine);
+  const leadingSpaces = bqFence.match(/^ {1,3}/);
+  const fenceIndent = leadingSpaces ? leadingSpaces[0].length : 0;
+
   for (let i = contentStart; i < contentEnd; i++) {
-    lines.push(stripBlockquotePrefix(state.getLine(i)));
+    let line = stripBlockquotePrefix(state.getLine(i));
+    if (fenceIndent > 0) {
+      let spaces = 0;
+      while (spaces < fenceIndent && spaces < line.length && line[spaces] === ' ') {
+        spaces++;
+      }
+      if (spaces > 0) line = line.slice(spaces);
+    }
+    lines.push(line);
   }
   cache.set(key, { mainLines, streamTail, boundary, lines });
   return lines;
@@ -646,25 +659,42 @@ function stripCodeFenceIndent(
   indent: number
 ): InlineNode[] {
   if (indent <= 0 || tokens.length === 0) return tokens;
-  const first = tokens[0];
-  if (first.type === 'text') {
-    let spaces = 0;
-    while (
-      spaces < indent &&
-      spaces < first.content.length &&
-      first.content[spaces] === ' '
-    ) {
-      spaces++;
+  let remainingIndent = indent;
+  const result: InlineNode[] = [];
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token.type === 'blockquote_prefix') {
+      result.push(token);
+      continue;
     }
-    if (spaces > 0) {
-      const strippedFirst: InlineNode = {
-        ...first,
-        content: first.content.slice(spaces),
-      };
-      return [strippedFirst, ...tokens.slice(1)];
+    if (remainingIndent > 0 && token.type === 'text') {
+      let spaces = 0;
+      while (
+        spaces < remainingIndent &&
+        spaces < token.content.length &&
+        token.content[spaces] === ' '
+      ) {
+        spaces++;
+      }
+      remainingIndent -= spaces;
+      if (spaces > 0) {
+        const remainingContent = token.content.slice(spaces);
+        const remainingRaw = token.raw ? token.raw.slice(spaces) : remainingContent;
+        if (remainingContent.length > 0) {
+          result.push({
+            ...token,
+            raw: remainingRaw,
+            content: remainingContent,
+            length: remainingContent.length,
+          });
+        }
+        continue;
+      }
     }
+    result.push(token);
   }
-  return tokens;
+  return result;
 }
 
 /** 订阅「本行围栏上下文」：选择器返回稳定字符串键——仅上下文变化时
@@ -679,7 +709,7 @@ function useFenceContext(
     const ctx = computeFenceContext(state, index);
     return ctx === null
       ? ''
-      : `${ctx.lang}|${ctx.contentStart}|${ctx.contentEnd}|${ctx.isFirstContentLine ? 1 : 0}`;
+      : `${ctx.lang}|${ctx.contentStart}|${ctx.contentEnd}|${ctx.indent || 0}|${ctx.isFirstContentLine ? 1 : 0}`;
   });
   if (key === '') return null;
   return computeFenceContext(editorStore.getState(), index);
