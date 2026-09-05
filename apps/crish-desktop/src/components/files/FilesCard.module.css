@@ -106,23 +106,27 @@
   flex-shrink: 0;
 }
 
-.filesPathFilter {
+/* 形态 ④：卡片顶栏轻量筛选框（纯光标极简型）
+ * 全态只有光标闪烁，其他什么变化也没有！彻底消除粗黑边框、深黑描边与聚焦投影 */
+.filesPathFilter,
+.filesPathFilter:focus,
+.filesPathFilter:focus-visible {
   width: 88px;
   flex-shrink: 0;
   height: 26px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border: none;
   padding: 0 6px;
   background: transparent;
   font-size: var(--font-size-xs);
   font-family: inherit;
   color: var(--text-primary);
   outline: none;
+  box-shadow: none;
   box-sizing: border-box;
 }
 
-.filesPathFilter:focus {
-  border-color: var(--border-color);
+.filesPathFilter::placeholder {
+  color: var(--text-tertiary);
 }
 
 .filesSeg {

@@ -206,11 +206,26 @@
   --btn-active-overlay: color-mix(in srgb, var(--color-error) 20%, transparent);
 }
 
-/* 选中激活态 */
+/* 选中激活态：彻底消除硬编码黑框、硬黑边与厚重投影，统一接入柔和的 var(--tint-active) 微背景 */
 .buttonActive,
 .button[data-active='true'] {
-  --btn-bg: var(--control-soft-bg-active, var(--tint-active));
+  --btn-bg: var(--tint-active);
   --btn-fg: var(--text-primary);
+  --btn-border: transparent;
+  --btn-shadow: none;
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+/* 激活态焦点防御：消除点击或激活获得焦点时的生硬深黑边框/黑圈与厚重阴影 */
+.buttonActive:focus,
+.buttonActive:focus-visible,
+.button[data-active='true']:focus,
+.button[data-active='true']:focus-visible {
+  border-color: transparent;
+  box-shadow: none;
+  outline: none;
 }
 
 .buttonBlock {

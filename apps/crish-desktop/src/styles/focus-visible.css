@@ -19,8 +19,8 @@
   --focus-ring-shadow: 0 0 0 1.5px var(--focus-ring-color);
   --focus-visible-ring: color-mix(
     in srgb,
-    var(--border-color) 40%,
-    var(--text-primary) 60%
+    var(--border-color) 90%,
+    var(--text-primary) 10%
   );
 }
 
@@ -34,40 +34,25 @@ input:focus:not(:focus-visible),
 textarea:focus:not(:focus-visible),
 [contenteditable='true']:focus:not(:focus-visible) {
   outline: none;
-  border-color: var(
-    --focus-border-color,
-    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%)
-  );
-  box-shadow: var(
-    --focus-ring-shadow,
-    0 0 0 1.5px color-mix(in srgb, var(--border-color) 94%, var(--text-primary) 6%)
-  );
+  border-color: var(--focus-border-color);
+  box-shadow: var(--focus-ring-shadow);
 }
 
-/* 2. 键盘导航 (:focus-visible)：注入双层高对比微阴影外框，满足 WCAG 2.1 SC 1.4.11 / 2.4.11 (≥ 3:1) */
+/* 2. 键盘导航 (:focus-visible)：严格遵守 AGENTS.md §13 上限 10% 软灰，消除粗黑边框 */
 :focus-visible {
-  outline: 2px solid var(
-    --focus-visible-ring,
-    color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%)
-  );
-  outline-offset: 2px;
+  outline: 1.5px solid var(--focus-visible-ring);
+  outline-offset: 1px;
 }
 
-/* 输入框与文本域键盘聚焦：双层微阴影防破界 */
+/* 输入框与文本域键盘聚焦：微阴影防破界，绝无粗黑框 */
 input:focus-visible,
 textarea:focus-visible,
 [contenteditable='true']:focus-visible {
   outline: none;
-  border-color: var(
-    --focus-border-color,
-    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%)
-  );
+  border-color: var(--focus-border-color);
   box-shadow:
     0 0 0 1px var(--bg-card, var(--bg-canvas, #ffffff)),
-    0 0 0 3px var(
-      --focus-visible-ring,
-      color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%)
-    );
+    0 0 0 1.5px var(--focus-visible-ring);
 }
 
 /* 按钮、链接、自定义交互组件：同心外微阴影规避 outline 对圆角的几何切角 */
@@ -80,14 +65,11 @@ a:focus-visible,
   outline: none;
   box-shadow:
     0 0 0 1px var(--bg-card, var(--bg-canvas, #ffffff)),
-    0 0 0 3px var(
-      --focus-visible-ring,
-      color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%)
-    );
+    0 0 0 1.5px var(--focus-visible-ring);
 }
 
 /* ─────────────────────────────────────────────────────────────
- * 形态 ④【内联浮层/下拉菜单搜索框（纯光标极简型）】与形态 ①【侧边栏无边框纯净型】：
+ * 形态 ④【内联浮层/卡片顶栏筛选框（纯光标极简型）】与形态 ①【侧边栏无边框纯净型】：
  * 严禁全局焦点阴影穿透污染！全态只有光标闪烁，其他什么变化也没有！
  * ───────────────────────────────────────────────────────────── */
 :is(
@@ -101,7 +83,10 @@ a:focus-visible,
   .sepHeader,
   [data-embedded]
 ) :is(input, textarea):is(:focus, :focus-visible),
-.searchInput:is(:focus, :focus-visible) {
+.searchInput:is(:focus, :focus-visible),
+[class*='searchInput']:is(:focus, :focus-visible),
+[class*='filesPathFilter']:is(:focus, :focus-visible),
+input[type='search']:is(:focus, :focus-visible) {
   outline: none !important;
   border: none !important;
   border-color: transparent !important;

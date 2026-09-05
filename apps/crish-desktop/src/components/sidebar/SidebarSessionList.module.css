@@ -445,28 +445,28 @@
 .sessionTrailing {
   position: relative;
   flex-shrink: 0;
-  width: 44px;
+  min-width: 44px;
+  max-width: 68px;
   height: 24px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  margin-left: var(--space-1, 4px);
 }
 
 .sessionTime {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  display: inline-block;
+  height: 24px;
+  line-height: 24px;
+  font-family: inherit;
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium, 500);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
   color: var(--text-tertiary);
   flex-shrink: 0;
-  line-height: var(--line-height-none);
   white-space: nowrap;
-  max-width: 52px;
+  max-width: 68px;
   overflow: hidden;
   text-overflow: ellipsis;
   text-align: right;
@@ -662,6 +662,7 @@
 :global([data-sidebar-collapsed='1']) .sessionText,
 :global([data-sidebar-collapsed='1']) .sessionSearchSnippet,
 :global([data-sidebar-collapsed='1']) .sessionTime,
+:global([data-sidebar-collapsed='1']) .sessionTrailing,
 :global([data-sidebar-collapsed='1']) .sessionActionsBtn,
 :global([data-sidebar-collapsed='1']) .branchBadge,
 :global([data-sidebar-collapsed='1']) .emptyHint,
