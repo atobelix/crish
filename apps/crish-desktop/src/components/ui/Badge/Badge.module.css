@@ -19,7 +19,9 @@
   height: var(--badge-h);
   padding: 0 var(--badge-px);
   gap: var(--space-1, 4px);
-  font-family: var(--font-sans, inherit);
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   font-size: var(--badge-fs);
   font-weight: var(--font-weight-normal, 400);
   line-height: 1;

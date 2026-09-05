@@ -50,7 +50,10 @@
 .schedInChatCount {
   display: inline-block;
   margin-top: 0;
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   color: var(--text-tertiary);
   white-space: nowrap;
 }
@@ -165,7 +168,12 @@
 }
 
 .schedFieldInput:focus {
-  box-shadow: 0 0 0 1px var(--border-subtle);
+  box-shadow: 0 0 0 1px var(--focus-border-color);
+}
+
+.schedFieldInput:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px var(--focus-border-color);
 }
 
 .schedFieldTextarea {

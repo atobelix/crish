@@ -129,6 +129,9 @@
 }
 
 .pill {
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   font-size: var(--font-size-xs);
   padding: 0;
   border-radius: 0;
@@ -136,7 +139,6 @@
   border: none;
   color: var(--text-tertiary);
   line-height: var(--line-height-base);
-  font-variant-numeric: tabular-nums;
 }
 
 .agentEntry {
@@ -281,6 +283,9 @@
 }
 
 .itemMain em {
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   font-style: normal;
   font-size: var(--font-size-xs);
   color: var(--text-tertiary);
@@ -343,12 +348,14 @@ button.liveRow:hover {
 }
 
 .liveRow em {
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   font-style: normal;
   flex-shrink: 0;
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
   white-space: nowrap;
-  font-variant-numeric: tabular-nums;
 }
 
 .liveRow--goal {

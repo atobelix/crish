@@ -19,7 +19,10 @@
 }
 
 .skillsHeadStats {
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-size: var(--font-size-sm);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   color: var(--text-tertiary);
   white-space: nowrap;
   flex-shrink: 0;
@@ -199,7 +202,10 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-1_5);
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   color: var(--text-tertiary);
 }
 

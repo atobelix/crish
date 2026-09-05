@@ -107,6 +107,9 @@
   white-space: nowrap;
 }
 .mirrorCount {
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   color: var(--terminal-muted);
   font-weight: var(--font-weight-normal, 400);
   flex-shrink: 0;
@@ -363,6 +366,9 @@
   opacity: 0.65;
 }
 .searchCount {
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   font-size: var(--font-size-xxs);
   color: var(--terminal-muted);
   flex-shrink: 0;

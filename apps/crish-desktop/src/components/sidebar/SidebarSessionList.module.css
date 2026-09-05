@@ -153,7 +153,6 @@
 .pinnedDropZone.dragOver {
   border-color: transparent;
   background-color: transparent;
-  outline: none;
 }
 
 .pinnedList {
@@ -355,6 +354,12 @@
   box-shadow: none;
 }
 
+.sessionItem:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px var(--focus-border-color);
+  background-color: var(--tint-hover);
+}
+
 .sessionItem.branchSession {
   position: relative;
 }
@@ -452,8 +457,11 @@
   right: 0;
   top: 50%;
   transform: translateY(-50%);
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium, 500);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
   color: var(--text-tertiary);
   flex-shrink: 0;
   line-height: var(--line-height-none);
@@ -542,8 +550,7 @@
 .sessionItem.isRenaming {
   padding: 4px 8px 4px 10px;
   background: transparent;
-  outline: 1.5px solid var(--accent-primary);
-  outline-offset: -1.5px;
+  box-shadow: 0 0 0 1.5px var(--focus-border-color);
 }
 
 .sessionRunningSpinner {
