@@ -968,8 +968,27 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     };
 
     // Keep focus
-    const handleGlobalClick = () => {
-      // If text is selected on the screen, DO NOT steal focus!
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+
+      // 1. 如果点击目标在编辑器滚动/内容容器之外（如顶部工具栏、菜单、大纲面板、查找替换、导出弹窗等），严禁抢焦点！
+      // 保证各类 native <select> 下拉选项框、按钮、外部表单能够获得并保持原生焦点，不被 textarea 抢焦导致下拉框瞬闭
+      const container = containerRef.current;
+      if (!container || !container.contains(target)) {
+        return;
+      }
+
+      // 2. 如果点击目标属于可交互控件（下拉选择框、按钮、输入框、菜单项等），不抢焦
+      if (
+        target.closest(
+          'select, input, textarea:not(.ime-hidden-input), button, [role="button"], [role="menu"], [role="menuitem"], [role="dialog"], [role="listbox"], [role="option"], a, [tabindex]'
+        )
+      ) {
+        return;
+      }
+
+      // 3. If text is selected on the screen, DO NOT steal focus!
       // Stealing focus will immediately destroy the user's DOM text selection.
       const selection = window.getSelection();
       if (selection && selection.toString().length > 0) {
@@ -995,6 +1014,21 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return;
+
+      // 如果当前焦点位于编辑器之外的其他交互控件（例如外部输入框、下拉框、查找面板等），
+      // 不在此处劫持 Backspace/Delete 或表格按键
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (
+        activeEl &&
+        activeEl !== textareaRef.current &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'SELECT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.isContentEditable)
+      ) {
+        return;
+      }
+
       if (handleTableInteraction(e)) {
         return;
       }
@@ -1094,7 +1128,6 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
           Math.min(cellDrag.start + cellDrag.len, headIdx)
         );
         editorStore.getState().setSelection(cellDrag.anchorIdx, clampedHead);
-        editorStore.getState().setCursorPos(clampedHead);
         return;
       }
 

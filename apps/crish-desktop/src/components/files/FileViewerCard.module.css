@@ -119,10 +119,20 @@
   min-height: 0;
   width: 100%;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   overflow: hidden;
   background: var(--bg-card);
   --diff-gutter-bg: var(--bg-card);
+}
+
+.contentPane {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-card);
 }
 
 .bodyWrap :global(.scrollParent) {
@@ -315,4 +325,213 @@
   align-items: center;
   height: 26px;
   flex-shrink: 0;
+}
+
+/* 激活态操作按钮 */
+.actBtnActive {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+/* 历史记录侧边抽屉 */
+.historyDrawer {
+  width: 280px;
+  min-width: 240px;
+  max-width: 340px;
+  height: 100%;
+  border-left: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+
+.historyHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 8px 0 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  background: var(--bg-card);
+  box-sizing: border-box;
+}
+
+.historyTitleWrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-primary);
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.historyHeaderIcon {
+  color: var(--text-secondary);
+}
+
+.historyActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.drawerActBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border: none;
+  border-radius: var(--radius-xs, 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0;
+}
+
+.drawerActBtn:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+
+.historyBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.historyWorkingItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--tint-hover) 50%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--border-subtle) 40%, transparent);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.historyWorkingItem:hover {
+  background: var(--tint-hover);
+  border-color: color-mix(in srgb, var(--border-subtle) 70%, transparent);
+}
+
+.historyWorkingHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.workingBadge {
+  font-size: 11px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--accent-primary, #3b82f6);
+}
+
+.workingHint {
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.historyWorkingDesc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.historyList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.historyItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 20%, transparent);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-card);
+  transition: all var(--transition-fast);
+}
+
+.historyItem:hover {
+  background: var(--tint-hover);
+  border-color: color-mix(in srgb, var(--border-subtle) 40%, transparent);
+}
+
+.commitMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.hashBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  background: color-mix(in srgb, var(--tint-hover) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 30%, transparent);
+  border-radius: var(--radius-xs, 2px);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.hashBadge:hover {
+  background: var(--tint-hover);
+  color: var(--accent-primary, #3b82f6);
+}
+
+.commitIcon {
+  color: var(--text-secondary);
+}
+
+.commitMsg {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.historyEmpty,
+.historyLoading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 32px 16px;
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs, 12px);
+  text-align: center;
+}
+
+.historyEmptyIcon {
+  opacity: 0.35;
+  color: var(--text-secondary);
+}
+
+.historyEmptyTitle {
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.historyEmptySub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
 }

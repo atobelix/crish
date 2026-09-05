@@ -12,7 +12,7 @@ import {
 
 import { useTableStore } from '../core/TableStore';
 import { useEditorStore } from '../core/EditorStore';
-import { indexFromClientPoint } from './HiddenInput';
+import { doubleClickWordSelection, indexFromClientPoint } from './HiddenInput';
 
 /**
  * P3 B2 显示层乐观补全（plan-A2 方案 B 样式预演）：
@@ -399,14 +399,21 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
                 
                 const borderToken = 'var(--brand)';
-                if (lineIndex === minLine) shadows.push(`inset 0 1.5px 0 0 ${borderToken}`);
-                if (lineIndex === maxLine) shadows.push(`inset 0 -1.5px 0 0 ${borderToken}`);
-                if (colIndex === minCol) shadows.push(`inset 1.5px 0 0 0 ${borderToken}`);
-                if (colIndex === maxCol) shadows.push(`inset -1.5px 0 0 0 ${borderToken}`);
-                
-                selectionShadow = shadows.join(', ');
-                if (lineIndex === maxLine && colIndex === maxCol) {
-                  finalClassName += ' is-selection-bottom-right';
+                const isSingleCell = minLine === maxLine && minCol === maxCol;
+                if (isSingleCell) {
+                  selectionShadow = `0 0 0 1.5px ${borderToken}`;
+                  cellStyle.borderRadius = '2px';
+                  cellStyle.zIndex = 3;
+                } else {
+                  if (lineIndex === minLine) shadows.push(`inset 0 1.5px 0 0 ${borderToken}`);
+                  if (lineIndex === maxLine) shadows.push(`inset 0 -1.5px 0 0 ${borderToken}`);
+                  if (colIndex === minCol) shadows.push(`inset 1.5px 0 0 0 ${borderToken}`);
+                  if (colIndex === maxCol) shadows.push(`inset -1.5px 0 0 0 ${borderToken}`);
+
+                  selectionShadow = shadows.join(', ');
+                  if (lineIndex === maxLine && colIndex === maxCol) {
+                    finalClassName += ' is-selection-bottom-right';
+                  }
                 }
               }
             }
@@ -536,11 +543,6 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   window.getSelection()?.removeAllRanges();
                   const tableStore = useTableStore.getState();
                   const editorStore = useEditorStore.getState();
-                  tableStore.enterCellEdit(
-                    tableId || '',
-                    lineIndex ?? -1,
-                    colIndex
-                  );
                   const targetIdx = locateRowIndexByPhysicalBisection(
                     e.currentTarget,
                     e.clientX,
@@ -549,8 +551,27 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     e.clientY
                   ) ?? start;
                   const clampedIdx = Math.max(start, Math.min(start + len, targetIdx));
-                  editorStore.setSelection(clampedIdx, clampedIdx);
-                  editorStore.setCursorPos(clampedIdx);
+
+                  if (!isCellEditing) {
+                    tableStore.enterCellEdit(
+                      tableId || '',
+                      lineIndex ?? -1,
+                      colIndex
+                    );
+                    editorStore.setSelection(clampedIdx, clampedIdx);
+                    editorStore.setCursorPos(clampedIdx);
+                  } else {
+                    // 已处于就地编辑状态：双击触发单元格内词级划词选区
+                    const cellText = token.raw || '';
+                    const offsetInCell = clampedIdx - start;
+                    const sel = doubleClickWordSelection(cellText, offsetInCell);
+                    if (sel) {
+                      editorStore.setSelection(start + sel.start, start + sel.end);
+                    } else {
+                      editorStore.setSelection(clampedIdx, clampedIdx);
+                      editorStore.setCursorPos(clampedIdx);
+                    }
+                  }
                   const input = (document.querySelector('.hidden-input') ||
                     document.querySelector('textarea')) as HTMLTextAreaElement;
                   if (input) input.focus({ preventScroll: true });

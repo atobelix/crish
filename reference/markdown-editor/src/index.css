@@ -422,26 +422,18 @@ body {
   outline: none !important;
   z-index: 2;
   position: relative;
+  border-radius: 2px;
 }
 
 .token-table-cell.is-selection-bottom-right::after {
-  content: '';
-  position: absolute;
-  right: -3px;
-  bottom: -3px;
-  width: 6px;
-  height: 6px;
-  background-color: var(--brand);
-  border: 1px solid var(--white);
-  border-radius: 1px;
-  z-index: 4;
+  display: none;
 }
 
 /* 单元格双击编辑态 (Double Click: Text In-place Edit Mode) */
 .token-table-cell.is-cell-editing {
   background-color: var(--white) !important;
   outline: none !important;
-  box-shadow: inset 0 0 0 1.5px var(--brand), 0 0 0 1px var(--border-focus) !important;
+  box-shadow: 0 0 0 1.5px var(--brand), 0 0 0 1px var(--border-focus) !important;
   z-index: 4;
   border-radius: 2px;
   cursor: text;
@@ -719,10 +711,19 @@ body {
   display: none;
 }
 
+.virtual-row:not(.is-active-line) .line-blockquote .token-blockquote-prefix,
 .line-blockquote:not(.is-active-line) .token-blockquote-prefix {
   display: inline-block;
   width: 0 !important;
   overflow: hidden;
+  vertical-align: top;
+}
+
+.virtual-row.is-active-line .line-blockquote .token-blockquote-prefix,
+.line-blockquote.is-active-line .token-blockquote-prefix {
+  display: inline-flex;
+  width: auto !important;
+  overflow: visible;
   vertical-align: top;
 }
 .editor-scroll-container {
@@ -815,16 +816,9 @@ body {
   user-select: none;
 }
 
-/* 列表多级树状分支指引：在直接归属当前项的导线处渲染微型分支横线，层级归属一目了然 */
+/* 列表多级树状分支指引：保持纯净竖向参考线（对齐主流 Obsidian/VS Code 排版），消除横向分支毛刺造成层级指代混乱 */
 .syntax-indent-guide.syntax-indent-guide-current::after {
-  content: '';
-  position: absolute;
-  top: calc(50% - 0.25px);
-  left: 0;
-  width: calc(1.5ch - 2px);
-  height: 0.5px;
-  background-color: inherit;
-  opacity: 0.8;
+  display: none;
 }
 
 /* 列表符号居中与等宽槽位 (中轴线恒为 0.5ch) */
@@ -953,6 +947,26 @@ body {
 .is-active-token.token-list-bullet .syntax-content,
 .is-active-token.token-list-number .syntax-content {
   display: none !important;
+}
+
+/* 任务列表项源码态天然基线守恒（Baseline Invariance） */
+/* 处于源码编辑态或选区覆盖态时：卸载 inline-flex 居中容器，回归纯文本 IFC 基线排版 */
+.is-active-line .interactive-checkbox.is-active-token,
+.is-active-token.interactive-checkbox,
+.is-active-token.token-list-task {
+  display: inline !important;
+  height: auto !important;
+  line-height: inherit !important;
+  vertical-align: baseline !important;
+  font-weight: normal !important;
+  color: var(--text-muted) !important;
+}
+
+.is-active-line .interactive-checkbox.is-active-token .syntax-hidden,
+.is-active-token.interactive-checkbox .syntax-hidden,
+.is-active-token.token-list-task .syntax-hidden {
+  display: inline !important;
+  vertical-align: baseline !important;
 }
 
 /* 结构性前缀与列表符号默认正常文档流 inline-flex，绝对定位彻底归零 */

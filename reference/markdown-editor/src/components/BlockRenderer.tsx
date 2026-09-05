@@ -1426,7 +1426,7 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
     // dir 使 InlineRenderer 全部 token 继承 RTL 排版；LTR 行不设
     // dir 属性，行为零变化）
     <div
-      className={`line-block${bqClass}${calloutClass}`}
+      className={`line-block${bqClass}${calloutClass}${isLineActive ? ' is-active-line' : ''}`}
       data-blockquote-level={block.blockquoteLevel}
       dir={rtl ? 'rtl' : undefined}
     >

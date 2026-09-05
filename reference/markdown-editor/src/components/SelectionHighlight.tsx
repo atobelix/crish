@@ -23,26 +23,20 @@ interface Rect {
 function mergeVisualLineRects(rects: Rect[]): Rect[] {
   if (rects.length <= 1) return rects;
 
-  const groups: { top: number; bottom: number; rects: Rect[] }[] = [];
+  const groups: { top: number; height: number; rects: Rect[] }[] = [];
 
   for (const r of rects) {
-    const rBottom = r.top + r.height;
-    // 判定是否属于同一视觉行：垂直区间存在显著重叠（大于任一高度的 35%）
-    let matchedGroup = groups.find((g) => {
-      const overlap = Math.min(g.bottom, rBottom) - Math.max(g.top, r.top);
-      const minH = Math.min(g.bottom - g.top, r.height);
-      return overlap > 0.35 * minH;
-    });
+    // 判定是否属于同一视觉行：top 偏差在 3px 以内（经行盒网格规整化后的恒等基准）
+    const matchedGroup = groups.find((g) => Math.abs(g.top - r.top) <= 3);
 
     if (!matchedGroup) {
       groups.push({
         top: r.top,
-        bottom: rBottom,
+        height: r.height,
         rects: [r],
       });
     } else {
-      matchedGroup.top = Math.min(matchedGroup.top, r.top);
-      matchedGroup.bottom = Math.max(matchedGroup.bottom, rBottom);
+      matchedGroup.height = Math.max(matchedGroup.height, r.height);
       matchedGroup.rects.push(r);
     }
   }
@@ -51,7 +45,7 @@ function mergeVisualLineRects(rects: Rect[]): Rect[] {
 
   for (const g of groups) {
     const unifiedTop = g.top;
-    const unifiedHeight = g.bottom - g.top;
+    const unifiedHeight = g.height;
 
     // 按水平 left 升序排列
     g.rects.sort((a, b) => a.left - b.left);
@@ -66,8 +60,8 @@ function mergeVisualLineRects(rects: Rect[]): Rect[] {
     for (let i = 1; i < g.rects.length; i++) {
       const next = g.rects[i];
       const curRight = cur.left + cur.width;
-      // 若水平相邻、重叠或微小间隙（容差 2px，覆盖字母间距亚像素）
-      if (next.left <= curRight + 2) {
+      // 若水平相邻、重叠或微小间隙（容差 2.5px，覆盖字母间距亚像素）
+      if (next.left <= curRight + 2.5) {
         cur.width = Math.max(curRight, next.left + next.width) - cur.left;
       } else {
         result.push(cur);
@@ -224,8 +218,10 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
               range.setStart(p1.node, p1.offset);
               range.setEnd(p2.node, p2.offset);
               const clientRects = range.getClientRects();
-
               const lineRawRects: Rect[] = [];
+              const lineRect = line.getBoundingClientRect();
+              const LINE_HEIGHT = 28;
+              const isMultiVisualLine = lineRect.height > LINE_HEIGHT * 1.35;
 
               for (let i = 0; i < clientRects.length; i++) {
                 const r = clientRects[i];
@@ -248,11 +244,34 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
                 // 过滤异常的整行/整容器级别的大块盒模型（例如父级 block div）
                 if (r.width >= containerRect.width - 20) continue;
 
+                // 视觉行盒（Visual Line Box）网格规整化（彻底解决下沉与重叠）
+                // 废除基于 TextNode 字形盒（受 half-leading 影响天然下沉）的 Y 轴测量
+                // 选区 Y 轴严格绑定行容器（[data-line-start]）视觉网格，中轴量化折行索引
+                let sliceTop: number;
+                let sliceHeight: number;
+
+                if (!isMultiVisualLine) {
+                  sliceTop = lineRect.top - containerRect.top + container.scrollTop;
+                  sliceHeight = lineRect.height || LINE_HEIGHT;
+                } else {
+                  const yMid = r.top + r.height / 2;
+                  const visualLineIndex = Math.max(
+                    0,
+                    Math.floor((yMid - lineRect.top) / LINE_HEIGHT)
+                  );
+                  sliceTop =
+                    lineRect.top +
+                    visualLineIndex * LINE_HEIGHT -
+                    containerRect.top +
+                    container.scrollTop;
+                  sliceHeight = LINE_HEIGHT;
+                }
+
                 lineRawRects.push({
-                  top: r.top - containerRect.top + container.scrollTop,
+                  top: sliceTop,
                   left: r.left - containerRect.left + container.scrollLeft,
                   width: r.width,
-                  height: r.height,
+                  height: sliceHeight,
                 });
               }
 
@@ -340,7 +359,7 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
     <div
       className="selection-layer"
       aria-hidden="true"
-      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 0 }}
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'none', zIndex: 10 }}
     >
       {rects.map((rect, i) => (
         <div
