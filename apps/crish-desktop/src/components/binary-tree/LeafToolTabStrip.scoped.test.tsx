@@ -44,10 +44,10 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       expect(getAllByLabelText(/关闭/)).toHaveLength(2);
     });
 
-    it('单 Tab 时不显示关闭叉号（防止误删破损）', () => {
+    it('单 Tab 时也显示关闭叉号（允许关闭最后一个标签）', () => {
       const leaf = { tabs: ['files'], activeTab: 'files' };
       const { queryByLabelText } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />);
-      expect(queryByLabelText(/关闭/)).toBeNull();
+      expect(queryByLabelText(/关闭/)).toBeTruthy();
     });
 
     it('包含随流加号与固定区加号（双态加号结构）', () => {
@@ -75,13 +75,21 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
     it('支持最大化/恢复面板按钮切换与回调', () => {
       const onToggleMaximize = vi.fn();
       const leaf = { tabs: ['files'], activeTab: 'files' };
-      const { getByLabelText } = render(
-        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onToggleMaximize={onToggleMaximize} />
+      const { getByLabelText, rerender } = render(
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onToggleMaximize={onToggleMaximize} isMaximized={false} />
       );
       const maxBtn = getByLabelText('最大化面板');
       expect(maxBtn).toBeTruthy();
       fireEvent.click(maxBtn);
       expect(onToggleMaximize).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} onToggleMaximize={onToggleMaximize} isMaximized={true} />
+      );
+      const restoreBtn = getByLabelText('恢复面板');
+      expect(restoreBtn).toBeTruthy();
+      fireEvent.click(restoreBtn);
+      expect(onToggleMaximize).toHaveBeenCalledTimes(2);
     });
 
     it('Row 2 导航工具条在显式开启时展示，在未显式开启或普通视图不展示', () => {
@@ -147,9 +155,50 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       expect(onAddTab).toHaveBeenCalledWith('diff');
     });
 
-    it('断言 2.3：所有工具全部占用时，加号按钮渲染为 Tooltip 模式，不弹出空菜单', () => {
+    it('断言 2.3：浏览器标签允许无限添加，已存在 preview 时仍可点击加号打开 preview:2', async () => {
+      const onAddTab = vi.fn();
       const leaf = { tabs: ['files', 'diff', 'terminal', 'preview'], activeTab: 'files' };
-      const { container } = render(<LeafToolTabStrip leafId="tool-leaf-1" sessionId="sess-b" sessionTabId="tab-sess" tabs={leaf.tabs} activeTab={leaf.activeTab} />);
+      const { container } = render(
+        <LeafToolTabStrip
+          leafId="tool-leaf-1"
+          sessionId="sess-b"
+          sessionTabId="tab-sess"
+          tabs={leaf.tabs}
+          activeTab={leaf.activeTab}
+          onAddTab={onAddTab}
+        />
+      );
+
+      const addBtn = container.querySelector(
+        '.side-panel-add-btn.in-flow'
+      ) as HTMLButtonElement;
+      fireEvent.click(addBtn);
+
+      await waitFor(() => {
+        expect(screen.getByRole('menu')).toBeTruthy();
+      });
+
+      const previewItem = screen
+        .getAllByRole('menuitem')
+        .find((item) => item.textContent?.includes('preview'));
+      expect(previewItem).toBeTruthy();
+      fireEvent.click(previewItem!);
+
+      expect(onAddTab).toHaveBeenCalledWith('preview:2');
+    });
+
+    it('断言 2.4：工具列表完全为空时，加号按钮渲染为 Tooltip 模式，不弹出空菜单', () => {
+      vi.spyOn(viewRegistry, 'getToolViews').mockReturnValue([]);
+      const leaf = { tabs: ['files'], activeTab: 'files' };
+      const { container } = render(
+        <LeafToolTabStrip
+          leafId="tool-leaf-1"
+          sessionId="sess-b"
+          sessionTabId="tab-sess"
+          tabs={leaf.tabs}
+          activeTab={leaf.activeTab}
+        />
+      );
 
       const addBtn = container.querySelector(
         '.side-panel-add-btn.in-flow'
@@ -199,7 +248,7 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       vi.useRealTimers();
     });
 
-    it('断言 3.3：单 Tab 时鼠标中键点击不触发关闭（安全保护）', () => {
+    it('断言 3.3：单 Tab 时鼠标中键点击触发关闭', () => {
       vi.useFakeTimers();
       const onCloseTab = vi.fn();
       const leaf = { tabs: ['files'], activeTab: 'files' };
@@ -217,7 +266,7 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
         vi.advanceTimersByTime(250);
       });
 
-      expect(onCloseTab).not.toHaveBeenCalled();
+      expect(onCloseTab).toHaveBeenCalledWith('files');
       vi.useRealTimers();
     });
 
@@ -432,6 +481,32 @@ describe('LeafToolTabStrip 纯标签化、手势交互与状态机极限压测 (
       expect(filesCard).toBeTruthy();
       fireEvent.click(filesCard);
       expect(openToolSpy).toHaveBeenCalledWith('sess-b', 'files');
+    });
+
+    it('断言 4.7：关闭唯一 Tab 成功触发 onCloseTab 且在无外部回调时自动折叠 SessionTab dock', () => {
+      vi.useFakeTimers();
+      const onCloseTab = vi.fn();
+      const leaf = { tabs: ['files'], activeTab: 'files' };
+      const { getByLabelText } = render(
+        <LeafToolTabStrip
+          leafId="tool-leaf-1"
+          sessionId="sess-b"
+          sessionTabId="tab-sess"
+          tabs={leaf.tabs}
+          activeTab={leaf.activeTab}
+          onCloseTab={onCloseTab}
+        />
+      );
+
+      const closeFilesBtn = getByLabelText('关闭 files');
+      fireEvent.click(closeFilesBtn);
+
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+
+      expect(onCloseTab).toHaveBeenCalledWith('files');
+      vi.useRealTimers();
     });
   });
 

@@ -48,16 +48,17 @@ export function isLocalDevUrl(url: string): boolean {
 }
 
 /**
- * 外部网站自动代理：当输入的 URL 为外部网站时自动转为代理端点；
+ * 外部网站自动代理：当输入的 URL 为外部网站时自动转为同源代理端点；
  * 空白页、data: URL 或本地 dev server 直接加载。
  */
 export function toProxyPreviewUrl(url: string): string {
   if (!url || isAboutBlank(url)) return url;
   if (url.startsWith('data:') || url.startsWith('file://')) return url;
+  if (url.startsWith('/__crish_preview_proxy')) return url;
   if (url.startsWith('http://127.0.0.1:8765/v1/preview/proxy')) return url;
   if (/^https?:\/\//i.test(url)) {
     if (!isLocalDevUrl(url)) {
-      return `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent(url)}`;
+      return `/__crish_preview_proxy?url=${encodeURIComponent(url)}`;
     }
   }
   return url;
@@ -126,7 +127,7 @@ export function injectPreviewBridgeHtml(rawHtml: string, targetUrl: string): str
 
 /**
  * 仅当可安全内嵌时返回 iframe src；否则 null（禁止把危险/不可嵌 URL 写入 iframe）。
- * 外部网站自动转为 127.0.0.1:8765 代理端点；本地 dev server 与 data: URL 直接加载。
+ * 外部网站自动转为 /__crish_preview_proxy 代理端点；本地 dev server 与 data: URL 直接加载。
  */
 export function safeIframeSrc(url: string): string | null {
   if (!url || isAboutBlank(url)) return null;

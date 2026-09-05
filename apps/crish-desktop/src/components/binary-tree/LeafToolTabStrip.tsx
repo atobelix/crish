@@ -277,11 +277,11 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         viewRegistry
           .getToolViews()
           .map((v) => v.id)
-          .filter((pid) => !occupied.has(pid)),
+          .filter((pid) => pid === 'preview' || !occupied.has(pid)),
       [occupied, registryVersion]
     );
 
-    const showCloseBtn = tabs.length > 1;
+    const showCloseBtn = true;
     const isEmpty = tabs.length === 0;
 
     const isNavigableView = (id?: string) => {
@@ -327,7 +327,21 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
           id: pid,
           label: viewRegistry.getTitle(pid),
           icon: Icon ? <Icon size={13} /> : undefined,
-          onSelect: () => openPanel(pid),
+          onSelect: () => {
+            if (pid === 'preview') {
+              if (!tabs.includes('preview')) {
+                openPanel('preview');
+              } else {
+                let nextIdx = 2;
+                while (tabs.includes(`preview:${nextIdx}`)) {
+                  nextIdx++;
+                }
+                openPanel(`preview:${nextIdx}`);
+              }
+            } else {
+              openPanel(pid);
+            }
+          },
         };
       });
 

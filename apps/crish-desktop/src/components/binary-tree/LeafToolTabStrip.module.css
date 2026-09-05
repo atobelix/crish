@@ -21,6 +21,13 @@
   border-bottom: none;
 }
 
+.container.isEmpty {
+  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
+  flex: 1 1 0%;
+}
+
 /* Row 1: Tab Strip (38px 严格对齐左侧 chatTopHeader) */
 .header {
   display: flex;
@@ -396,7 +403,7 @@
 /* Centered Launcher Hub Component (Empty State: 0 Tabs) */
 .launcherHubWrapper {
   position: absolute;
-  top: 30px;
+  top: 38px;
   left: 0;
   right: 0;
   bottom: 0;
@@ -513,6 +520,57 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Active Port Capsule / Card */
+.activePortCard {
+  border: 1px solid color-mix(in srgb, var(--color-success, #10b981) 35%, transparent);
+  background: color-mix(in srgb, var(--color-success, #10b981) 6%, var(--bg-card, #ffffff));
+}
+
+.activePortCard:hover {
+  background: color-mix(in srgb, var(--color-success, #10b981) 12%, var(--bg-card, #ffffff));
+  border-color: color-mix(in srgb, var(--color-success, #10b981) 60%, transparent);
+}
+
+.activePortIconBox {
+  color: var(--color-success, #10b981);
+}
+
+.activePortDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--color-success, #10b981);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-success, #10b981) 25%, transparent);
+  animation: activePortPulse 2s infinite ease-in-out;
+}
+
+@keyframes activePortPulse {
+  0%, 100% {
+    transform: scale(0.9);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+.activePortArrow {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  margin-left: auto;
+  opacity: 0.6;
+  transition:
+    transform var(--transition-micro, 120ms) ease,
+    opacity var(--transition-micro, 120ms) ease;
+}
+
+.activePortCard:hover .activePortArrow {
+  opacity: 1;
+  transform: translateX(2px);
+  color: var(--text-primary);
 }
 
 .leafToolAddPanel {

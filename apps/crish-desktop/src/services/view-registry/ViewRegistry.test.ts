@@ -127,4 +127,27 @@ describe('ViewRegistry 视图注册中心与路由解析', () => {
     registerBuiltInViews(testFactories);
     expect(viewRegistry.getAllViews().length).toBeGreaterThan(0);
   });
+
+  it('URI 解析器正确解析 preview: 与 browser: 前缀支持无限浏览器标签', () => {
+    const resolvedPreview2 = viewRegistry.resolveView('preview:2');
+    expect(resolvedPreview2.definition?.id).toBe('preview');
+    expect(resolvedPreview2.params).toEqual({
+      target: '2',
+      instanceId: 'preview:2',
+    });
+
+    const resolvedBrowser3 = viewRegistry.resolveView('browser:3');
+    expect(resolvedBrowser3.definition?.id).toBe('preview');
+    expect(resolvedBrowser3.params).toEqual({
+      target: '3',
+      instanceId: 'browser:3',
+    });
+
+    expect(viewRegistry.getTitle('preview:2')).toBe('应用预览 2');
+    expect(viewRegistry.getTitle('preview:3')).toBe('应用预览 3');
+    expect(viewRegistry.getTitle('browser:2')).toBe('应用预览 2');
+    expect(viewRegistry.getTitle('preview:http://localhost:5173')).toBe(
+      '应用预览 (http://localhost:5173)'
+    );
+  });
 });

@@ -133,3 +133,68 @@ describe('PreviewToolbar Inspect 开关', () => {
     expect(btn).toBeDisabled();
   });
 });
+
+describe('PreviewToolbar 地址栏极简重塑', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('网址常态清晰可见且呈现当前 urlInput', () => {
+    const props = buildProps();
+    props.preview.urlInput = 'https://mysite.local:3000';
+    render(
+      <PreviewToolbar
+        preview={props.preview}
+        navigation={props.navigation}
+        actions={props.actions}
+      />
+    );
+    const input = screen.getByLabelText('预览地址') as HTMLInputElement;
+    expect(input).toBeInTheDocument();
+    expect(input.value).toBe('https://mysite.local:3000');
+  });
+
+  it('输入网址触发 onUrlChange 回调', () => {
+    const props = buildProps();
+    render(
+      <PreviewToolbar
+        preview={props.preview}
+        navigation={props.navigation}
+        actions={props.actions}
+      />
+    );
+    const input = screen.getByLabelText('预览地址');
+    fireEvent.change(input, { target: { value: 'https://new-url.com' } });
+    expect(props.navigation.onUrlChange).toHaveBeenCalledWith('https://new-url.com');
+  });
+
+  it('提交表单触发 onUrlSubmit 回调', () => {
+    const props = buildProps();
+    props.preview.urlInput = 'https://submit-test.com';
+    render(
+      <PreviewToolbar
+        preview={props.preview}
+        navigation={props.navigation}
+        actions={props.actions}
+      />
+    );
+    const form = screen.getByLabelText('预览地址栏');
+    fireEvent.submit(form);
+    expect(props.navigation.onUrlSubmit).toHaveBeenCalledWith('https://submit-test.com');
+  });
+
+  it('空网址提交时回退为 about:blank', () => {
+    const props = buildProps();
+    props.preview.urlInput = '   ';
+    render(
+      <PreviewToolbar
+        preview={props.preview}
+        navigation={props.navigation}
+        actions={props.actions}
+      />
+    );
+    const form = screen.getByLabelText('预览地址栏');
+    fireEvent.submit(form);
+    expect(props.navigation.onUrlSubmit).toHaveBeenCalledWith('about:blank');
+  });
+});

@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import net from 'node:net';
+import { Readable } from 'node:stream';
+import { createRequire } from 'node:module';
 
 /**
  * CSP 单一真源（06-步骤3 / T-G 批次 7.2）：
@@ -16,14 +19,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 const DEV_CSP =
   "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
   "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
-  "connect-src 'self' ipc: http: https: ws: wss:;";
+  "connect-src 'self' ipc: http: https: ws: wss:; " +
+  "frame-src 'self' http://localhost:* http://127.0.0.1:* http://*.localhost https://*.localhost asset: http://asset.localhost https://asset.localhost data: blob:;";
 
 const PROD_CSP_BASE =
   "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
   "font-src 'self' data:; img-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; " +
   "media-src 'self' data: blob: asset: http://asset.localhost https://asset.localhost; " +
   "connect-src 'self' ipc: http://ipc.localhost http://localhost:8765 http://127.0.0.1:8765 ws://localhost:8765 ws://127.0.0.1:8765; " +
-  "worker-src 'self' blob:; frame-src 'self' asset: http://asset.localhost https://asset.localhost; " +
+  "worker-src 'self' blob:; frame-src 'self' http://localhost:* http://127.0.0.1:* http://*.localhost https://*.localhost asset: http://asset.localhost https://asset.localhost data: blob:; " +
   "frame-ancestors 'self'; form-action 'self'; object-src 'none'; base-uri 'self'";
 
 // chunk 体积门禁阈值（06-步骤2，2026-08-10 拆分后实测校准"先拆分后定阈值"）：
@@ -219,6 +223,464 @@ function crishHttpProxyPlugin(): Plugin {
 }
 
 /**
+ * 活跃本地开发端口探测端点（50ms 内并行探测常用开发端口）：
+ * GET /__crish_active_ports
+ * 返回当前处于 LISTEN 状态的活跃端口列表 JSON，如 [5173]。
+ */
+const COMMON_DEV_PORTS = [
+  5173, 3000, 3001, 3002, 4200, 5000, 8000, 8080, 8081, 8888, 9000, 9999,
+];
+
+function probePort(port: number, timeoutMs = 50): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let settled = false;
+    const finish = (active: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(active);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+    try {
+      socket.connect(port, '127.0.0.1');
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+function crishActivePortsPlugin(): Plugin {
+  return {
+    name: 'crish-active-ports',
+    configureServer(server) {
+      server.middlewares.use(
+        async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+          if (!req.url?.startsWith('/__crish_active_ports')) {
+            next();
+            return;
+          }
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 204;
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            res.end();
+            return;
+          }
+          if (req.method !== 'GET') {
+            res.statusCode = 405;
+            res.end('Method Not Allowed');
+            return;
+          }
+
+          const selfPort =
+            typeof server.config.server.port === 'number'
+              ? server.config.server.port
+              : 5174;
+          const portsToProbe = COMMON_DEV_PORTS.filter((p) => p !== selfPort);
+          const probePromises = portsToProbe.map(async (port) => {
+            const active = await probePort(port, 50);
+            return active ? port : null;
+          });
+
+          const results = await Promise.all(probePromises);
+          const activePorts = results.filter((p): p is number => p !== null);
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify(activePorts));
+        }
+      );
+    },
+  };
+}
+
+/**
+ * 应用预览透明反向代理插件：
+ * 解决外部网站（如 Google）嵌入 iframe 时的 X-Frame-Options、CSP frame-ancestors 与跨域阻断。
+ * 拦截 GET /__crish_preview_proxy?url=<targetUrl>
+ */
+function crishPreviewProxyPlugin(): Plugin {
+  let envDispatcher: any = undefined;
+  try {
+    const req = createRequire(import.meta.url);
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { EnvHttpProxyAgent, setGlobalDispatcher } = req('undici');
+    if (EnvHttpProxyAgent) {
+      envDispatcher = new EnvHttpProxyAgent();
+      if (setGlobalDispatcher) {
+        setGlobalDispatcher(envDispatcher);
+      }
+    }
+  } catch {
+    // 运行环境无 undici 或加载失败时平滑降级为默认出站
+  }
+
+  return {
+    name: 'crish-preview-proxy',
+    configureServer(server) {
+      server.middlewares.use(
+        async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
+          const reqUrl = req.url || '';
+          if (!reqUrl.startsWith('/__crish_preview_proxy')) {
+            next();
+            return;
+          }
+
+          if (req.method === 'OPTIONS') {
+            res.statusCode = 204;
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', '*');
+            res.end();
+            return;
+          }
+
+          if (req.method !== 'GET' && req.method !== 'HEAD') {
+            res.statusCode = 405;
+            res.end('Method Not Allowed');
+            return;
+          }
+
+          // 宽松提取与解码 url 参数
+          let targetUrl = '';
+          try {
+            const parsed = new URL(reqUrl, 'http://localhost');
+            targetUrl = parsed.searchParams.get('url') || '';
+          } catch {
+            // fallback
+          }
+
+          if (!targetUrl) {
+            const match = reqUrl.match(/[?&]url=([^&]*)/);
+            if (match) {
+              try {
+                targetUrl = decodeURIComponent(match[1]);
+              } catch {
+                targetUrl = match[1];
+              }
+            }
+          }
+
+          targetUrl = targetUrl.trim();
+          if (targetUrl.includes('%')) {
+            try {
+              targetUrl = decodeURI(targetUrl);
+            } catch {
+              // 容错保留
+            }
+          }
+
+          if (!/^https?:\/\//i.test(targetUrl)) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.end('url parameter must be a valid http or https URL');
+            return;
+          }
+
+          try {
+            const fetchHeaders: Record<string, string> = {
+              'User-Agent':
+                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+              Accept:
+                'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+              'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
+            };
+
+            const init: RequestInit & { dispatcher?: any } = {
+              method: req.method,
+              headers: fetchHeaders,
+              redirect: 'follow',
+              ...(envDispatcher ? { dispatcher: envDispatcher } : {}),
+            };
+
+            const upstream = await fetch(targetUrl, init);
+
+            // 清洗阻断头：剔除 XFO / CSP / 长度与压缩头（Node fetch 会自动解压）
+            for (const [key, value] of upstream.headers.entries()) {
+              const lower = key.toLowerCase();
+              if (
+                lower === 'x-frame-options' ||
+                lower === 'content-security-policy' ||
+                lower === 'content-security-policy-report-only' ||
+                lower === 'frame-options' ||
+                lower === 'content-encoding' ||
+                lower === 'content-length' ||
+                lower === 'transfer-encoding' ||
+                lower === 'connection' ||
+                lower === 'keep-alive'
+              ) {
+                continue;
+              }
+              res.setHeader(key, value);
+            }
+
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.statusCode = upstream.status;
+
+            const contentType = upstream.headers.get('content-type') || '';
+            const isHtml = contentType.toLowerCase().includes('text/html');
+
+            if (isHtml) {
+              const finalUrl = upstream.url || targetUrl;
+              const rawHtml = await upstream.text();
+              const baseTag = `<base href="${finalUrl.replace(/"/g, '&quot;')}">`;
+              const bridgeScript = `<script id="__conex_preview_bridge">
+(function() {
+  if (window.__CONEX_PREVIEW_BRIDGE__) return;
+  window.__CONEX_PREVIEW_BRIDGE__ = true;
+
+  var inspectorActive = false;
+  var hoveredEl = null;
+
+  function toRect(el) {
+    var r = el.getBoundingClientRect();
+    return {
+      x: Math.round(r.x * 100) / 100,
+      y: Math.round(r.y * 100) / 100,
+      width: Math.round(r.width * 100) / 100,
+      height: Math.round(r.height * 100) / 100
+    };
+  }
+
+  function computeSelector(el) {
+    if (!el || el.nodeType !== 1) return '';
+    if (el.id) return '#' + el.id;
+    var tag = el.tagName.toLowerCase();
+    if (el.className && typeof el.className === 'string') {
+      var classes = el.className.trim().split(/\\s+/).filter(Boolean);
+      if (classes.length) return tag + '.' + classes.slice(0, 2).join('.');
+    }
+    return tag;
+  }
+
+  function getComputedStyles(el) {
+    var cs = window.getComputedStyle(el);
+    return {
+      display: cs.display || '',
+      position: cs.position || '',
+      color: cs.color || '',
+      backgroundColor: cs.backgroundColor || '',
+      fontSize: cs.fontSize || '',
+      margin: cs.margin || '',
+      padding: cs.padding || ''
+    };
+  }
+
+  window.addEventListener('message', function(e) {
+    try {
+      if (!e.data || e.data.source !== 'crish-preview-host') return;
+      if (e.data.type === 'INSPECT_TOGGLE') {
+        inspectorActive = Boolean(e.data.payload && e.data.payload.enabled);
+        if (!inspectorActive) {
+          hoveredEl = null;
+        }
+      }
+    } catch (_) {}
+  });
+
+  window.addEventListener('pointermove', function(e) {
+    if (!inspectorActive) return;
+    try {
+      var el = document.elementFromPoint(e.clientX, e.clientY);
+      if (!el || el === hoveredEl || el === document.documentElement || el === document.body) return;
+      hoveredEl = el;
+      var sel = computeSelector(el);
+      var rect = toRect(el);
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          source: 'crish-preview-inspector',
+          type: 'INSPECT_HOVER',
+          payload: {
+            tagName: el.tagName.toLowerCase(),
+            selector: sel,
+            rect: rect
+          }
+        }, '*');
+      }
+    } catch (_) {}
+  }, true);
+
+  window.addEventListener('keydown', function(e) {
+    if (!inspectorActive) return;
+    if (e.key === 'Escape') {
+      inspectorActive = false;
+      hoveredEl = null;
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            source: 'crish-preview-inspector',
+            type: 'INSPECT_TOGGLE',
+            payload: { enabled: false }
+          }, '*');
+        }
+      } catch (_) {}
+    }
+  }, true);
+
+  try {
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({
+        source: 'crish-preview-inspector',
+        type: 'INSPECT_READY',
+        payload: {}
+      }, '*');
+    }
+  } catch (_) {}
+
+  document.addEventListener('click', function(e) {
+    if (inspectorActive) {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        var el = e.target;
+        if (!el || el.nodeType !== 1) return;
+        var tag = el.tagName.toLowerCase();
+        var id = el.id || null;
+        var classes = (typeof el.className === 'string' ? el.className.trim().split(/\\s+/).filter(Boolean) : []);
+        var attrs = {};
+        for (var i = 0; i < el.attributes.length; i++) {
+          var a = el.attributes[i];
+          attrs[a.name] = a.value;
+        }
+        var bestSelector = computeSelector(el);
+        var rect = toRect(el);
+        var computedStyles = getComputedStyles(el);
+        var outer = el.outerHTML || '';
+        var outerSnippet = outer.length > 500 ? outer.slice(0, 500) + '...' : outer;
+        var text = (el.textContent || '').trim().slice(0, 200);
+
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({
+            source: 'crish-preview-inspector',
+            type: 'INSPECT_SELECT',
+            payload: {
+              tagName: tag,
+              id: id,
+              classes: classes,
+              attributes: attrs,
+              bestSelector: bestSelector,
+              xpath: '//' + tag,
+              rect: rect,
+              computedStyles: computedStyles,
+              outerHtmlSnippet: outerSnippet,
+              textContent: text
+            }
+          }, '*');
+        }
+      } catch (_) {}
+      return;
+    }
+
+    try {
+      var a = e.target;
+      while (a && a.tagName !== 'A') {
+        a = a.parentElement;
+      }
+      if (a && a.href && window.parent && window.parent !== window) {
+        var href = a.href;
+        if (href.startsWith('http://') || href.startsWith('https://')) {
+          e.preventDefault();
+          window.parent.postMessage({ type: 'preview:navigate', href: href }, '*');
+        }
+      }
+    } catch (_) {}
+  }, true);
+  document.addEventListener('submit', function(e) {
+    try {
+      var form = e.target;
+      if (form && form.tagName === 'FORM' && window.parent && window.parent !== window) {
+        var action = form.action || window.location.href;
+        if ((form.method || 'GET').toUpperCase() === 'GET') {
+          var formData = new FormData(form);
+          var params = new URLSearchParams(formData);
+          var fullUrl = action + (action.indexOf('?') === -1 ? '?' : '&') + params.toString();
+          e.preventDefault();
+          window.parent.postMessage({ type: 'preview:navigate', href: fullUrl }, '*');
+        }
+      }
+    } catch (_) {}
+  }, true);
+})();
+</script>`;
+              const injection = `${baseTag}\n${bridgeScript}`;
+
+              let injectedHtml: string;
+              const lowerHtml = rawHtml.toLowerCase();
+              const headIdx = lowerHtml.indexOf('<head');
+              if (headIdx !== -1) {
+                const headClose = lowerHtml.indexOf('>', headIdx);
+                if (headClose !== -1) {
+                  injectedHtml =
+                    rawHtml.slice(0, headClose + 1) +
+                    '\n' +
+                    injection +
+                    rawHtml.slice(headClose + 1);
+                } else {
+                  injectedHtml = `<head>${injection}</head>\n${rawHtml}`;
+                }
+              } else {
+                const htmlIdx = lowerHtml.indexOf('<html');
+                if (htmlIdx !== -1) {
+                  const htmlClose = lowerHtml.indexOf('>', htmlIdx);
+                  if (htmlClose !== -1) {
+                    injectedHtml =
+                      rawHtml.slice(0, htmlClose + 1) +
+                      '\n<head>' +
+                      injection +
+                      '</head>' +
+                      rawHtml.slice(htmlClose + 1);
+                  } else {
+                    injectedHtml = `<head>${injection}</head>\n${rawHtml}`;
+                  }
+                } else {
+                  injectedHtml = `<head>${injection}</head>\n${rawHtml}`;
+                }
+              }
+
+              res.setHeader('Content-Type', 'text/html; charset=utf-8');
+              res.end(injectedHtml);
+            } else {
+              if (upstream.body) {
+                const stream = Readable.fromWeb(upstream.body as any);
+                stream.on('error', () => {
+                  if (!res.headersSent) {
+                    res.statusCode = 502;
+                  }
+                  res.end();
+                });
+                stream.pipe(res);
+              } else {
+                res.end();
+              }
+            }
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            if (!res.headersSent) {
+              res.statusCode = 502;
+              res.setHeader('Content-Type', 'text/html; charset=utf-8');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end(
+                `<!DOCTYPE html><html><head><meta charset="utf-8"><title>代理访问异常</title></head><body style="font-family:sans-serif;padding:2rem;color:#444;"><h3>无法加载外部网站</h3><p>${msg}</p><p>URL: <code>${targetUrl}</code></p></body></html>`
+              );
+            } else {
+              res.end();
+            }
+          }
+        }
+      );
+    },
+  };
+}
+
+/**
  * MCP SDK stdio transport 会拉入 Node 内置（node:stream / child_process 等）。
  * 浏览器生产构建无法解析；对 node: 协议与 MCP SDK 引入的 bare builtin
  * 提供最小 stub，让 Rollup 完成打包。运行时 stdio 由 mcpClient 在非桌面环境拒绝。
@@ -298,6 +760,8 @@ export default defineConfig({
   plugins: [
     react(),
     crishHttpProxyPlugin(),
+    crishPreviewProxyPlugin(),
+    crishActivePortsPlugin(),
     nodeBuiltinStubPlugin(),
     cspPlugin(),
     chunkSizeGatePlugin(),

@@ -101,7 +101,7 @@ export async function startPtySession(deps: StartPtySessionDeps): Promise<void> 
   const reused = !!priorId;
 
   if (!ptyId) {
-    ptyId = await ensureOrAbort(reg, key, cancellation, onStatus);
+    ptyId = await ensureOrAbort(reg, key, cancellation, onStatus, cwdOpt);
     if (cancellation.isCancelled()) return;
   }
 
@@ -167,6 +167,19 @@ export async function startPtySession(deps: StartPtySessionDeps): Promise<void> 
     /* swallow-ok: 尺寸同步失败时 pty 保持旧尺寸，下次 resize 校正 */
   }
 
+  // 延迟一帧再次 fit，确保 DOM / 样式水合及字符网格完整铺开
+  requestAnimationFrame(() => {
+    if (cancellation.isCancelled()) return;
+    try {
+      fitAddon.fit();
+      if (ptyId) {
+        void ptyResize(ptyId, term.cols, term.rows);
+      }
+    } catch {
+      /* swallow-ok */
+    }
+  });
+
   try {
     term.focus();
   } catch {
@@ -180,10 +193,11 @@ async function ensureOrAbort(
   reg: typeof import('../../api/ptyRegistry'),
   key: string,
   cancellation: CancellationSlot,
-  onStatus: (status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited', detail?: string) => void
+  onStatus: (status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited', detail?: string) => void,
+  cwd?: string,
 ): Promise<string | null> {
   // ensure：走 spawn handler（bootstrap 注入）；失败再直连 ptyCreate
-  const ptyId = await reg.ensurePtyForSession(key);
+  const ptyId = await reg.ensurePtyForSession(key, cwd);
   if (cancellation.isCancelled()) {
     if (ptyId) {
       void reg.killPtySession(key);

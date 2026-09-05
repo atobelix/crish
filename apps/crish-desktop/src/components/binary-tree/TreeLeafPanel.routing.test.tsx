@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { TreeLeafPanel } from './TreeLeafPanel';
 import * as workspaceShellModule from '../../store/workspace-shell';
+import * as storeAccess from '../../store/storeAccess';
 import { useLayoutStore } from '../../store/layoutStore';
 import { useLayoutTreeStore } from '../../store/layout-tree';
 import type { LayoutLeaf, SessionState } from '../../store/types';
@@ -290,5 +291,126 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(
       container.querySelector('[data-leaf-id]')?.getAttribute('data-panel-id')
     ).toBe('chat');
+  });
+
+  it('计划任务管理界面 (chatMainSurface === "scheduled") 下，右侧工具坞绝对不渲染，顶栏坞开关隐藏', async () => {
+    act(() => {
+      useLayoutStore.setState({ chatMainSurface: 'scheduled' });
+    });
+
+    const leaf = makeChatLeaf({
+      id: 'chat-leaf-scheduled',
+      sessionId: 'session-123',
+      dock: {
+        collapsed: false,
+        openPanelIds: ['files'],
+        activePanelId: 'files',
+      },
+    });
+
+    const { container, queryByTestId } = render(
+      <TreeLeafPanel
+        leaf={leaf}
+        rect={{ x: 0, y: 0, width: 1, height: 1 }}
+        isActive={true}
+        isDragSource={false}
+      />
+    );
+
+    const root = container.querySelector('[data-leaf-id]') as HTMLElement;
+    expect(root.getAttribute('data-dock-open')).toBe('false');
+    expect(queryByTestId('top-quick-dock-btn')).toBeNull();
+    expect(container.querySelector('[data-leaf-dock-drawer="true"]')).toBeNull();
+    expect(container.querySelector('[data-unit-chrome-actions="true"]')).toBeNull();
+  });
+
+  it('点击右侧面板全屏/最大化按钮，抽屉获得 maximized 类名并覆盖，再次点击恢复', async () => {
+    act(() => {
+      useLayoutStore.setState({ chatMainSurface: 'chat' });
+    });
+
+    const leaf = makeChatLeaf({
+      id: 'chat-leaf-max',
+      sessionId: 'session-123',
+      dock: {
+        collapsed: false,
+        openPanelIds: ['files'],
+        activePanelId: 'files',
+      },
+    });
+
+    const { container, getByLabelText, getByTestId } = render(
+      <TreeLeafPanel
+        leaf={leaf}
+        rect={{ x: 0, y: 0, width: 1, height: 1 }}
+        isActive={true}
+        isDragSource={false}
+      />
+    );
+
+    const drawer = container.querySelector('[data-leaf-dock-drawer="true"]') as HTMLElement;
+    expect(drawer).toBeTruthy();
+    expect(drawer.getAttribute('data-maximized')).toBe('false');
+    expect(drawer.className).not.toContain('maximized');
+    expect(getByTestId('top-quick-dock-btn')).toBeTruthy();
+
+    const maxBtn = getByLabelText('最大化面板');
+    fireEvent.click(maxBtn);
+
+    expect(drawer.getAttribute('data-maximized')).toBe('true');
+    expect(drawer.className).toContain('maximized');
+    // 最大化全屏时，右侧边栏切换按钮仍常驻可见
+    expect(getByTestId('top-quick-dock-btn')).toBeTruthy();
+
+    const restoreBtn = getByLabelText('恢复面板');
+    fireEvent.click(restoreBtn);
+
+    expect(drawer.getAttribute('data-maximized')).toBe('false');
+    expect(drawer.className).not.toContain('maximized');
+    expect(getByTestId('top-quick-dock-btn')).toBeTruthy();
+  });
+
+  it('关闭最后一个标签时，触发 updateLeafDock 将 collapsed 置为 true 且清空 openPanelIds', async () => {
+    act(() => {
+      useLayoutStore.setState({ chatMainSurface: 'chat' });
+    });
+
+    vi.useFakeTimers();
+    const updateLeafDockSpy = vi
+      .spyOn(storeAccess, 'updateLeafDock')
+      .mockImplementation(() => {});
+
+    const leaf = makeChatLeaf({
+      id: 'chat-leaf-close-last',
+      sessionId: 'session-123',
+      dock: {
+        collapsed: false,
+        openPanelIds: ['files'],
+        activePanelId: 'files',
+      },
+    });
+
+    const { getByLabelText } = render(
+      <TreeLeafPanel
+        leaf={leaf}
+        rect={{ x: 0, y: 0, width: 1, height: 1 }}
+        isActive={true}
+        isDragSource={false}
+      />
+    );
+
+    const closeBtn = getByLabelText('关闭 文件');
+    fireEvent.click(closeBtn);
+
+    act(() => {
+      vi.advanceTimersByTime(250);
+    });
+
+    expect(updateLeafDockSpy).toHaveBeenCalledWith('chat-leaf-close-last', {
+      collapsed: true,
+      openPanelIds: [],
+      activePanelId: null,
+    });
+    vi.useRealTimers();
   });
 });

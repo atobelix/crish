@@ -22,7 +22,11 @@ import {
   type PreviewClientToHostMessage,
   type PreviewHostToClientMessage,
 } from './previewProtocol';
-import { computeBestSelector, extractElementPayload } from './previewDomInspector';
+import {
+  computeBestSelector,
+  extractElementPayload,
+  isElementNode,
+} from './previewDomInspector';
 
 /** 客户端桥安装选项（默认取全局 document/window，便于测试注入） */
 export interface PreviewInspectorClientOptions {
@@ -109,7 +113,7 @@ export function installPreviewInspectorClient(
   const handlePointerMove = (e: Event) => {
     if (!active) return;
     const target = e.target as Element | null;
-    if (!target || !(target instanceof Element) || !target.isConnected) return;
+    if (!target || !isElementNode(target) || !target.isConnected) return;
     // 同一元素连续悬停只上报一次，降低消息洪泛
     if (target === hoveredEl) return;
     hoveredEl = target;
@@ -132,7 +136,7 @@ export function installPreviewInspectorClient(
     e.stopImmediatePropagation();
 
     const target = (e.target as Element | null) ?? hoveredEl;
-    if (!target || !(target instanceof Element)) return;
+    if (!target || !isElementNode(target)) return;
 
     const detail = extractElementPayload(target);
     postToHost({

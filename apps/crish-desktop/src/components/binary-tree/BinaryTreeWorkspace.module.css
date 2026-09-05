@@ -104,7 +104,8 @@
   color: var(--text-secondary);
   padding: 0;
   outline: none;
-  z-index: var(--z-chrome);
+  /* 高于最大化抽屉 .leafDockDrawer.maximized (z-index: 150)，全屏下常驻可见并可点击 */
+  z-index: 160;
   pointer-events: auto;
   transition:
     background-color var(--transition-micro, 120ms) ease,
@@ -386,6 +387,23 @@
   flex-direction: column;
   overflow: hidden;
   border-left: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+}
+
+.leafDockDrawer.maximized,
+.leafDockDrawer[data-maximized='true'] {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0 !important;
+  right: 0;
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 1 1 100% !important;
+  min-width: 0;
+  height: 100%;
+  border-left: none;
+  z-index: 150;
+  background: var(--bg-card, #ffffff);
 }
 
 /*

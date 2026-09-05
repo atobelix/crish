@@ -38,8 +38,44 @@
 .urlForm {
   flex: 1;
   min-width: 0;
-  margin: 0;
+  margin: 0 4px;
+  display: flex;
+  align-items: center;
 }
+
+.urlForm > div {
+  width: 100%;
+}
+
+.urlInput {
+  height: 24px !important;
+  min-height: 24px !important;
+  font-size: var(--font-size-xs, 12px) !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: var(--radius-sm, 4px) !important;
+  box-shadow: none !important;
+  color: var(--text-primary);
+  transition:
+    background var(--transition-micro, 120ms) ease,
+    border-color var(--transition-micro, 120ms) ease;
+}
+
+.bar:hover .urlInput,
+.urlInput:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-primary) 20%, var(--bg-card)) !important;
+  border: 1px solid var(--border-subtle) !important;
+}
+
+.urlInput:focus,
+.urlInput:focus-visible,
+.bar:hover .urlInput:focus,
+.bar:hover .urlInput:focus-visible {
+  background: var(--bg-card) !important;
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%) !important;
+  box-shadow: none !important;
+}
+
 .spin {
   animation: spinKeyframe var(--transition-spin) infinite;
 }
@@ -328,6 +364,88 @@
   color: var(--text-tertiary);
   font-size: var(--font-size-xxs);
 }
+.activePortsRow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  max-width: 100%;
+}
+
+.activeServiceCapsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full, 9999px);
+  color: var(--text-secondary);
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all var(--transition-fast, 150ms) ease;
+  box-shadow: 0 1px 2px hsl(0 0% 0% / 0.03);
+  font-family: inherit;
+  outline: none;
+}
+
+.activeServiceCapsule:hover {
+  background: var(--bg-hover);
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+  color: var(--text-primary);
+  transform: translateY(-0.5px);
+  box-shadow: 0 2px 6px hsl(0 0% 0% / 0.05);
+}
+
+.activeServiceCapsule:focus-visible {
+  border-color: color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  box-shadow: var(--focus-ring, 0 0 0 2px var(--tint-focus-ring));
+  color: var(--text-primary);
+}
+
+.activeServicePulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand, hsl(160 84% 39%));
+  box-shadow: 0 0 6px var(--brand, hsl(160 84% 39%));
+  flex-shrink: 0;
+  animation: pulsePort 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulsePort {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activeServicePulse {
+    animation: none;
+  }
+}
+
+.activeServiceLabel {
+  font-weight: var(--font-weight-normal, 400);
+  letter-spacing: 0.01em;
+}
+
+.activeServicePort {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-weight: var(--font-weight-medium, 500);
+  font-size: 11.5px;
+  color: var(--brand, hsl(160 84% 39%));
+  background: color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 8%, transparent);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+}
+
 .localPath {
   display: flex;
   flex-direction: column;

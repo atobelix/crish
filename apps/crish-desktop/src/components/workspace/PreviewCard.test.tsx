@@ -34,6 +34,10 @@ import {
   CRISH_PREVIEW_HOST_SOURCE,
   CRISH_PREVIEW_INSPECTOR_SOURCE,
 } from './previewProtocol';
+import {
+  setCachedActivePorts,
+  clearActivePortCache,
+} from './activePortDetector';
 
 function renderCard() {
   return render(
@@ -47,6 +51,7 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
+    setCachedActivePorts([5173]);
     useSessionStore.setState({
       activeSessionId: '',
       sessionsById: {},
@@ -56,6 +61,7 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
   afterEach(() => {
     cleanup();
     localStorage.clear();
+    clearActivePortCache();
     useSessionStore.setState({
       activeSessionId: '',
       sessionsById: {},
@@ -63,19 +69,19 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
   });
 
   describe('1. 代理 URL 解析函数 (toProxyPreviewUrl / safeIframeSrc / isLocalDevUrl)', () => {
-    it('外部 HTTP/HTTPS URL：自动重定向至 127.0.0.1:8765 代理端点', () => {
+    it('外部 HTTP/HTTPS URL：自动重定向至 /__crish_preview_proxy 同源代理端点', () => {
       const ext1 = 'https://example.com';
       const ext2 = 'http://api.github.com/v1/docs';
       const ext3 = 'https://sub.domain.org:8443/page?query=1&sort=desc';
 
       expect(toProxyPreviewUrl(ext1)).toBe(
-        `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent(ext1)}`
+        `/__crish_preview_proxy?url=${encodeURIComponent(ext1)}`
       );
       expect(toProxyPreviewUrl(ext2)).toBe(
-        `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent(ext2)}`
+        `/__crish_preview_proxy?url=${encodeURIComponent(ext2)}`
       );
       expect(toProxyPreviewUrl(ext3)).toBe(
-        `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent(ext3)}`
+        `/__crish_preview_proxy?url=${encodeURIComponent(ext3)}`
       );
     });
 
@@ -128,16 +134,20 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       );
     });
 
-    it('已是 8765 代理端点的 URL：幂等处理，不重复封装', () => {
-      const proxyUrl =
+    it('已是代理端点的 URL：幂等处理，不重复封装', () => {
+      const proxyUrl1 =
+        '/__crish_preview_proxy?url=https%3A%2F%2Fexample.com';
+      expect(toProxyPreviewUrl(proxyUrl1)).toBe(proxyUrl1);
+
+      const proxyUrl2 =
         'http://127.0.0.1:8765/v1/preview/proxy?url=https%3A%2F%2Fexample.com';
-      expect(toProxyPreviewUrl(proxyUrl)).toBe(proxyUrl);
+      expect(toProxyPreviewUrl(proxyUrl2)).toBe(proxyUrl2);
     });
 
     it('safeIframeSrc 安全判定：对外部合法 URL 返回代理地址，对非法/危险 scheme 返回 null', () => {
       // 外部合法 URL 走代理
       expect(safeIframeSrc('https://example.com')).toBe(
-        `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent('https://example.com')}`
+        `/__crish_preview_proxy?url=${encodeURIComponent('https://example.com')}`
       );
       // 本地合法 URL 直连
       expect(safeIframeSrc('http://localhost:5173')).toBe('http://localhost:5173');
@@ -151,21 +161,30 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
   });
 
   describe('2. 基础渲染与快捷导航', () => {
-    it('默认空态：正确渲染标准 Toolbar 与空态引导', async () => {
+    it('默认无活跃端口时：保持纯净极简空白，无视觉杂质，不显示废话文字与地球图标', async () => {
+      setCachedActivePorts([]);
       renderCard();
-      await waitFor(() => expect(screen.getByText('预览浏览器')).toBeTruthy());
-      expect(screen.getByText(/输入本地地址/)).toBeTruthy();
-      expect(
-        screen.getByRole('toolbar', { name: '预览浏览器工具栏' })
-      ).toBeTruthy();
+      await waitFor(() => {
+        expect(
+          screen.getByRole('toolbar', { name: '预览浏览器工具栏' })
+        ).toBeTruthy();
+      });
+      expect(screen.queryByText('预览浏览器')).toBeNull();
+      expect(screen.queryByText(/输入本地地址/)).toBeNull();
+      expect(screen.queryByRole('button', { name: /localhost/ })).toBeNull();
       expect(screen.getByLabelText('后退')).toBeDisabled();
       expect(screen.getByLabelText('前进')).toBeDisabled();
       expect(screen.getByLabelText('加入书签')).toBeDisabled();
     });
 
-    it('点击快捷本地地址：自动填充并触发 iframe 导航', async () => {
+    it('检测到活跃端口：展示极简运行中的本地服务胶囊，点击直接导航', async () => {
+      setCachedActivePorts([5173]);
       renderCard();
-      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      const chip = await screen.findByRole('button', {
+        name: /localhost:5173/,
+      });
+      expect(chip.textContent).toContain('运行中的本地服务:');
+      expect(chip.textContent).toContain('localhost:5173');
       fireEvent.click(chip);
 
       await waitFor(() => {
@@ -175,7 +194,7 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       });
     });
 
-    it('外部网站自动转换为 8765 代理端点加载', async () => {
+    it('外部网站自动转换为同源代理端点加载', async () => {
       renderCard();
       const input = screen.getByLabelText('预览地址');
       fireEvent.change(input, { target: { value: 'https://example.com/demo' } });
@@ -185,7 +204,7 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
         const iframe = document.querySelector('iframe');
         expect(iframe).toBeTruthy();
         expect(iframe?.getAttribute('src')).toBe(
-          `http://127.0.0.1:8765/v1/preview/proxy?url=${encodeURIComponent('https://example.com/demo')}`
+          `/__crish_preview_proxy?url=${encodeURIComponent('https://example.com/demo')}`
         );
       });
     });
@@ -216,7 +235,7 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
     it('DOM 元素拾取器：点击切换激活态并向 iframe 发送 INSPECT_TOGGLE 指令', async () => {
       renderCard();
       // 先加载一个本地页面
-      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      const chip = await screen.findByRole('button', { name: /localhost:5173/ });
       fireEvent.click(chip);
 
       await waitFor(() => {
@@ -264,7 +283,7 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
     it('接收 INSPECT_SELECT 消息：展示选中详情卡（标签/尺寸/复制/发送到 AI）', async () => {
       renderCard();
       // 加载页面
-      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      const chip = await screen.findByRole('button', { name: /localhost:5173/ });
       fireEvent.click(chip);
 
       await waitFor(() => {
@@ -316,7 +335,7 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
 
     it('接收 INSPECT_HOVER 消息：展示悬停浮层（Tag/选择器/坐标）', async () => {
       renderCard();
-      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      const chip = await screen.findByRole('button', { name: /localhost:5173/ });
       fireEvent.click(chip);
 
       await waitFor(() => {
@@ -354,7 +373,7 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
     it('接收 crish:dom-inspected 消息：展示拾取结果 Badge 并支持手动清除', async () => {
       renderCard();
       // 加载页面
-      const chip = await screen.findByRole('button', { name: 'localhost:5173' });
+      const chip = await screen.findByRole('button', { name: /localhost:5173/ });
       fireEvent.click(chip);
 
       await waitFor(() => {

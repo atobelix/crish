@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import * as Lucide from 'lucide-react';
 import type { FileDiff } from '../../store/types';
 import {
@@ -18,6 +18,7 @@ import { logInternalError } from '../../api/userFacingErrors';
 import {
   readTextFile,
   getWorkspacePath,
+  pathRelativeToRoot,
   revealInOs,
 } from '../../api/workspaceFsApi';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
@@ -25,6 +26,8 @@ import { DiffCardUnifiedView } from '../diff/DiffCardUnifiedView';
 import { getComputedChanges } from '../diff/useDiffData';
 import { useToast } from '../../services/toast/ToastContext';
 import { Button, Tooltip, Menu } from '../ui';
+import type { SelectOptionItem } from '../ui/Menu/types';
+import { FileViewerHistoryDrawer } from './FileViewerHistoryDrawer';
 import styles from './FileViewerCard.module.css';
 
 export interface FileViewerCardProps {
@@ -32,9 +35,9 @@ export interface FileViewerCardProps {
   initialMode?: 'plain' | 'diff';
 }
 
-// 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
-const OPEN_WITH_LABEL = '选择打开方式';
-const COPY_SOURCE_LABEL = '复制完整源码';
+// 按钮文案与 Tooltip 同源常量
+const COPY_ALL_LABEL = '复制全部内容';
+const HISTORY_LABEL = '查看历史编辑情况';
 const MORE_ACTIONS_LABEL = '更多操作';
 
 export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
@@ -59,6 +62,9 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       return override || initialMode;
     });
 
+    // 历史编辑记录抽屉打开状态
+    const [historyOpen, setHistoryOpen] = useState(false);
+
     // 监听同名 Tab 热激活微任务事件（通道 1：解决已存在 Tab 热聚焦切模问题）
     useEffect(() => {
       const handleModeSwitch = (e: Event) => {
@@ -78,7 +84,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       };
     }, [filePath]);
 
-    // 监听 initialMode prop 变动（通道 2：React 组件生命周期更新防死锁，彻底根除 HAL-06）
+    // 监听 initialMode prop 变动（通道 2：React 组件生命周期更新防死锁）
     useEffect(() => {
       if (initialMode) {
         setViewMode(initialMode);
@@ -114,7 +120,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       };
     }, [filePath]);
 
-    // 打开方式（HostOpeners）与“更多操作”下拉状态
+    // 打开方式（HostOpeners）
     const [openDefaultLabel, setOpenDefaultLabel] =
       useState('在系统默认应用打开');
     const [fileOpeners, setFileOpeners] = useState<HostOpener[]>([]);
@@ -140,47 +146,70 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     }, [filePath]);
 
     const isAbsolute = filePath.startsWith('/') || filePath.includes(':');
-    // 相对路径接到工作区根下（SessionState 无 workspacePath，统一走 getWorkspacePath）
+    const workspaceRoot = getWorkspacePath() || '';
     const absolutePath = isAbsolute
       ? filePath
-      : `${getWorkspacePath() || ''}/${filePath}`;
+      : `${workspaceRoot}/${filePath}`.replace(/\/+/g, '/');
+    const relativePath = isAbsolute
+      ? pathRelativeToRoot(filePath, workspaceRoot) || filePath
+      : filePath;
     const baseName = filePath.replace(/^.*[\\/]/, '') || filePath;
 
-    const handleOpenDefault = () => {
+    const handleOpenDefault = useCallback(() => {
       void openPathDefault(absolutePath).catch((e) =>
         logInternalError('components/files/FileViewerCard/openDefault', e)
       );
-    };
+    }, [absolutePath]);
 
-    const handleCopyCode = async () => {
+    const handleCopyAll = useCallback(async () => {
       try {
-        const res = await readTextFile(filePath);
-        if (res.content) {
-          await navigator.clipboard.writeText(res.content);
-          showToast('文件源码已复制到剪贴板');
+        let text = plainCode;
+        if (!text) {
+          const res = await readTextFile(filePath);
+          text = res.content || '';
         }
+        await navigator.clipboard.writeText(text);
+        showToast('文件源码已复制到剪贴板');
       } catch (err) {
         showToast('复制失败：' + String(err));
       }
-    };
+    }, [filePath, plainCode, showToast]);
 
-    const handleLocateInFiles = () => {
+    const handleOpenSystemExplorer = useCallback(() => {
+      void revealInOs(absolutePath).catch((e) => {
+        logInternalError('components/files/FileViewerCard/revealInOs', e);
+        showToast('在资源管理器中定位失败');
+      });
+    }, [absolutePath, showToast]);
+
+    const handleCopyRelativePath = useCallback(async () => {
+      try {
+        await navigator.clipboard.writeText(relativePath);
+        showToast('相对路径已复制到剪贴板');
+      } catch (err) {
+        showToast('复制失败：' + String(err));
+      }
+    }, [relativePath, showToast]);
+
+    const handleCopyAbsolutePath = useCallback(async () => {
+      try {
+        await navigator.clipboard.writeText(absolutePath);
+        showToast('绝对路径已复制到剪贴板');
+      } catch (err) {
+        showToast('复制失败：' + String(err));
+      }
+    }, [absolutePath, showToast]);
+
+    const handleLocateInFiles = useCallback(() => {
       window.dispatchEvent(
         new CustomEvent('crish-open-file', { detail: { path: absolutePath } })
       );
       const sid = getCompositionRoot().session.getActiveSessionId();
       if (sid) openToolInSession(sid, 'files');
       showToast('已在本地文件树中定位该文件');
-    };
+    }, [absolutePath, showToast]);
 
-    const handleOpenSystemExplorer = () => {
-      void revealInOs(absolutePath).catch((e) => {
-        logInternalError('components/files/FileViewerCard/revealInOs', e);
-        showToast('在资源管理器中定位失败');
-      });
-    };
-
-    // 系统单轨 Unified 比对渲染项计算（复用系统真实高保真对比数据结构）
+    // 系统单轨 Unified 比对渲染项计算
     const unifiedRenderItems = useMemo(() => {
       if (!f || !f.changes) return [];
       const computed = getComputedChanges(f);
@@ -191,20 +220,106 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       }));
     }, [f]);
 
+    // “更多操作”下拉菜单选项（收纳路径与打开方式相关动作）
+    const moreMenuOptions = useMemo<SelectOptionItem[]>(() => {
+      const items: SelectOptionItem[] = [
+        {
+          id: 'open-file-path',
+          label: '打开文件路径',
+          icon: <Lucide.FolderOpen size={14} aria-hidden />,
+          onClick: handleOpenSystemExplorer,
+        },
+        {
+          id: 'copy-rel-path',
+          label: '复制相对路径',
+          icon: <Lucide.Copy size={14} aria-hidden />,
+          onClick: handleCopyRelativePath,
+        },
+        {
+          id: 'copy-abs-path',
+          label: '复制绝对路径',
+          icon: <Lucide.FileCode size={14} aria-hidden />,
+          onClick: handleCopyAbsolutePath,
+        },
+        {
+          id: 'open-with-default',
+          label: '选择打开方式',
+          hint: openDefaultLabel,
+          icon: <Lucide.ExternalLink size={14} aria-hidden />,
+          onClick: handleOpenDefault,
+        },
+      ];
+
+      for (const op of fileOpeners) {
+        items.push({
+          id: `open-with-${op.id}`,
+          label: `用 ${op.displayName} 打开`,
+          icon: op.iconDataUrl ? (
+            <img
+              src={op.iconDataUrl}
+              width={14}
+              height={14}
+              alt=""
+              style={{ flexShrink: 0, objectFit: 'contain' }}
+            />
+          ) : (
+            <Lucide.AppWindow
+              size={14}
+              style={{
+                flexShrink: 0,
+                color: 'var(--text-secondary)',
+              }}
+            />
+          ),
+          onClick: () => {
+            void openWithHostOpener(op.id, absolutePath).catch((e) =>
+              logInternalError('components/files/FileViewerCard/openWith', e)
+            );
+          },
+        });
+      }
+
+      items.push({
+        id: 'locate-tree',
+        label: '在应用文件树中定位',
+        icon: <Lucide.Locate size={14} aria-hidden />,
+        onClick: handleLocateInFiles,
+      });
+
+      return items;
+    }, [
+      absolutePath,
+      fileOpeners,
+      handleCopyAbsolutePath,
+      handleCopyRelativePath,
+      handleLocateInFiles,
+      handleOpenDefault,
+      handleOpenSystemExplorer,
+      openDefaultLabel,
+    ]);
+
     return (
       <div
         className={`${styles.card} chat-side-panel`}
         aria-label="单文件代码查看"
         data-file-preview-host="file-viewer"
       >
-        <div className={`${styles.header} side-panel-toolbar`} role="toolbar" aria-label="单文件查看工具栏">
+        <div
+          className={`${styles.header} side-panel-toolbar`}
+          role="toolbar"
+          aria-label="单文件查看工具栏"
+        >
           <div className={styles.titleArea}>
-            <Tooltip content={filePath}>
+            <Tooltip content={absolutePath || filePath}>
               <span className={styles.fileName}>{baseName}</span>
             </Tooltip>
           </div>
 
-          <div className={styles.compareToggleRow} role="tablist" aria-label="视图模式切换">
+          <div
+            className={styles.compareToggleRow}
+            role="tablist"
+            aria-label="视图模式切换"
+          >
             <button
               type="button"
               role="tab"
@@ -230,84 +345,34 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
           </div>
 
           <div className={styles.rightActions}>
-            {/* 打开方式（在...中编辑）胶囊下拉组件 */}
-            <div className={styles.filesOpenCapsule}>
-              <Tooltip content={`${openDefaultLabel}（系统默认）`}>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.filesOpenMain}
-                  onClick={handleOpenDefault}
-                  icon={<Lucide.AppWindow size={14} aria-hidden />}
-                >
-                  {openDefaultLabel}
-                </Button>
-              </Tooltip>
-
-              <Menu
-                position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
-                trigger={
-                  <Tooltip content={OPEN_WITH_LABEL}>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className={styles.filesOpenChev}
-                      aria-label={OPEN_WITH_LABEL}
-                      icon={<Lucide.ChevronDown size={14} aria-hidden />}
-                    />
-                  </Tooltip>
-                }
-                options={[
-                  ...fileOpeners.map((op) => ({
-                    id: op.id,
-                    label: op.displayName,
-                    icon: op.iconDataUrl ? (
-                      <img
-                        src={op.iconDataUrl}
-                        width={14}
-                        height={14}
-                        alt=""
-                        style={{ flexShrink: 0, objectFit: 'contain' }}
-                      />
-                    ) : (
-                      <Lucide.AppWindow
-                        size={14}
-                        style={{
-                          flexShrink: 0,
-                          color: 'var(--text-secondary)',
-                        }}
-                      />
-                    ),
-                    onClick: () => {
-                      void openWithHostOpener(op.id, absolutePath).catch(
-                        (e) =>
-                          logInternalError(
-                            'components/files/FileViewerCard/openWith',
-                            e
-                          )
-                      );
-                    },
-                  })),
-                ]}
-              />
-            </div>
-
-            {/* 常驻复制源码按钮 */}
-            <Tooltip content={COPY_SOURCE_LABEL}>
+            {/* ① 核心常用快捷操作：【复制全部内容】 */}
+            <Tooltip content={COPY_ALL_LABEL}>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 className={styles.actBtn}
-                aria-label={COPY_SOURCE_LABEL}
-                onClick={handleCopyCode}
+                aria-label={COPY_ALL_LABEL}
+                onClick={handleCopyAll}
                 icon={<Lucide.Copy size={14} />}
               />
             </Tooltip>
 
-            {/* 智能 More 面板收纳其余所有辅助动作 */}
+            {/* ② 核心常用快捷操作：【查看历史编辑情况】 */}
+            <Tooltip content={HISTORY_LABEL}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={`${styles.actBtn} ${historyOpen ? styles.actBtnActive : ''}`}
+                aria-label={HISTORY_LABEL}
+                aria-pressed={historyOpen}
+                onClick={() => setHistoryOpen((v) => !v)}
+                icon={<Lucide.History size={14} />}
+              />
+            </Tooltip>
+
+            {/* “更多操作”下拉菜单（收纳路径相关与外部打开方式） */}
             <div className={styles.filesMoreWrap}>
               <Menu
                 position={{ align: 'end', side: 'bottom', sideOffset: 4 }}
@@ -323,63 +388,51 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                     />
                   </Tooltip>
                 }
-                options={[
-                  {
-                    id: 'copy-abs-path',
-                    label: '复制绝对路径',
-                    icon: <Lucide.FileCode size={14} aria-hidden />,
-                    onClick: () => {
-                      navigator.clipboard.writeText(absolutePath);
-                      showToast('绝对路径已复制到剪贴板');
-                    },
-                  },
-                  {
-                    id: 'reveal-explorer',
-                    label: '在资源管理器中显示',
-                    icon: <Lucide.FolderOpen size={14} aria-hidden />,
-                    onClick: handleOpenSystemExplorer,
-                  },
-                  {
-                    id: 'locate-tree',
-                    label: '在应用文件树中定位',
-                    icon: <Lucide.Locate size={14} aria-hidden />,
-                    onClick: handleLocateInFiles,
-                  },
-                ]}
+                options={moreMenuOptions}
               />
             </div>
           </div>
         </div>
 
         <div className={styles.bodyWrap}>
-          {viewMode === 'plain' ? (
-            plainLoading ? (
-              <div className={styles.detailLoading}>
-                <Lucide.Loader2 size={16} className="spin" />
-                <span>正在加载源码...</span>
-              </div>
-            ) : (
-              <VirtualPlainCodeViewer content={plainCode} filePath={filePath} />
-            )
-          ) : f && f.changes && f.changes.length > 0 ? (
-            /* 系统单轨高保真比对视口（彻底替换 30 行手写简陋对比伪实现） */
-            <DiffCardUnifiedView
-              f={f}
-              renderItems={unifiedRenderItems}
-              onExpandBlock={() => {}}
-            />
-          ) : (
-            <div className={styles.diffEmpty}>
-              <Lucide.FileDiff
-                size={22}
-                className={styles.diffEmptyIcon}
-                aria-hidden
+          <div className={styles.contentPane}>
+            {viewMode === 'plain' ? (
+              plainLoading ? (
+                <div className={styles.detailLoading}>
+                  <Lucide.Loader2 size={16} className="spin" />
+                  <span>正在加载源码...</span>
+                </div>
+              ) : (
+                <VirtualPlainCodeViewer content={plainCode} filePath={filePath} />
+              )
+            ) : f && f.changes && f.changes.length > 0 ? (
+              <DiffCardUnifiedView
+                f={f}
+                renderItems={unifiedRenderItems}
+                onExpandBlock={() => {}}
               />
-              <div>该文件目前没有本地改动</div>
-              <div className={styles.diffEmptySub}>
-                本地工作区与基准版本完全一致。
+            ) : (
+              <div className={styles.diffEmpty}>
+                <Lucide.FileDiff
+                  size={22}
+                  className={styles.diffEmptyIcon}
+                  aria-hidden
+                />
+                <div>该文件目前没有本地改动</div>
+                <div className={styles.diffEmptySub}>
+                  本地工作区与基准版本完全一致。
+                </div>
               </div>
-            </div>
+            )}
+          </div>
+
+          {historyOpen && (
+            <FileViewerHistoryDrawer
+              filePath={filePath}
+              hasWorkingChanges={Boolean(f && f.changes && f.changes.length > 0)}
+              onSelectDiffView={() => setViewMode('diff')}
+              onClose={() => setHistoryOpen(false)}
+            />
           )}
         </div>
       </div>

@@ -150,12 +150,13 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
       >
         <Input
           variant="search"
-          size="sm"
+          size="xs"
+          className={styles.urlInput}
           value={urlInput}
           placeholder="localhost:5173 或 https://…"
           onChange={(e) => onUrlChange(e.target.value)}
           prefixIcon={
-            <Lucide.Globe size={iconSz} strokeWidth={1.5} aria-hidden />
+            <Lucide.Globe size={13} strokeWidth={1.5} aria-hidden />
           }
           clearable
           onClear={onClearUrl}

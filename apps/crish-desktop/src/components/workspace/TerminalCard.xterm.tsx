@@ -33,6 +33,8 @@ export type InteractiveXtermHandle = {
   getPtyId: () => string | null;
   /** 强制重建当前会话 PTY */
   restart: () => void;
+  /** 重新测量与适配终端尺寸 */
+  fit: () => void;
 };
 
 export type InteractiveXtermProps = {
@@ -67,6 +69,7 @@ export const InteractiveXtermTerminal = forwardRef<
     ptyIdRef,
     bumpLocalRestart,
     termRef,
+    fit,
   } = useXtermTerminal({
     sessionKey,
     cwd,
@@ -100,8 +103,9 @@ export const InteractiveXtermTerminal = forwardRef<
       },
       getPtyId: () => ptyIdRef.current,
       restart: () => bumpLocalRestart(),
+      fit: () => fit(),
     }),
-    [bumpLocalRestart, ptyIdRef, termRef],
+    [bumpLocalRestart, ptyIdRef, termRef, fit],
   );
 
   return (

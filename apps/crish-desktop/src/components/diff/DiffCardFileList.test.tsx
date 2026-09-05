@@ -5,6 +5,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { DiffCardFileList } from './DiffCardFileList';
 import type { FileDiff } from '../../store/types';
 import { classifyFileDiff } from '../../api/applyFileDiff';
+import { ToastStore } from '../../services/toast/ToastStore';
 
 describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
   const mockFileDiff: FileDiff = {
@@ -298,5 +299,112 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     // 3. 验证内部独立超链接按钮存在且具备完整 aria 标签
     const linkBtn = screen.getByRole('button', { name: /在独立标签页预览文件/ });
     expect(linkBtn.tagName.toLowerCase()).toBe('button');
+  });
+
+  it('三大正交子域验证：暂存旁边紧邻包含复制差异 Patch 按钮，点击触发剪贴板复制与 Toast 提示', async () => {
+    const handleSetActive = vi.fn();
+    const handleOpenFileViewer = vi.fn();
+    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextSpy,
+      },
+    });
+
+    render(
+      <DiffCardFileList
+        files={[mockFileDiff]}
+        sourceMode="git"
+        current={null}
+        applyBusy={false}
+        stagingPaths={{}}
+        onSetActiveDiffSource={handleSetActive}
+        onStageFile={vi.fn()}
+        onUnstageFile={vi.fn()}
+        onDiscardChanges={vi.fn()}
+        onStageAll={vi.fn()}
+        onUnstageAll={vi.fn()}
+        renderInlineDiffContent={() => null}
+        onOpenFileViewer={handleOpenFileViewer}
+      />
+    );
+
+    // 1. 查找复制差异 Patch 按钮
+    const copyBtn = screen.getByRole('button', { name: '复制此文件差异 Patch' });
+    expect(copyBtn).toBeInTheDocument();
+    expect(copyBtn).toHaveAttribute('data-size', 'xs');
+    expect(copyBtn).toHaveAttribute('data-variant', 'ghost');
+
+    const showSpy = vi.spyOn(ToastStore, 'show');
+
+    // 2. 点击复制按钮
+    fireEvent.click(copyBtn);
+
+    // 断言：触发了剪贴板写入与 Toast 提示，且阻止事件冒泡
+    expect(writeTextSpy).toHaveBeenCalledTimes(1);
+    expect(writeTextSpy.mock.calls[0][0]).toContain('diff --git a/src/components/Button.tsx');
+    expect(handleSetActive).not.toHaveBeenCalled();
+    expect(handleOpenFileViewer).not.toHaveBeenCalled();
+
+    expect(showSpy).toHaveBeenCalledWith('已复制 Button.tsx 差异 Patch', undefined, undefined);
+    showSpy.mockRestore();
+  });
+
+  it('已暂存文件条目同样具备复制差异 Patch 按钮与取消暂存按钮', () => {
+    const stagedDiff: FileDiff = {
+      ...mockFileDiff,
+      staged: true,
+    };
+
+    render(
+      <DiffCardFileList
+        files={[stagedDiff]}
+        sourceMode="git"
+        current={null}
+        applyBusy={false}
+        stagingPaths={{}}
+        onSetActiveDiffSource={vi.fn()}
+        onStageFile={vi.fn()}
+        onUnstageFile={vi.fn()}
+        onDiscardChanges={vi.fn()}
+        onStageAll={vi.fn()}
+        onUnstageAll={vi.fn()}
+        renderInlineDiffContent={() => null}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: '复制此文件差异 Patch' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消暂存此文件' })).toBeInTheDocument();
+  });
+
+  it('行操作区全面换装原子组件 <IconButton size="xs" variant="ghost">，常态中性且无私有黑混色', () => {
+    const { container } = render(
+      <DiffCardFileList
+        files={[mockFileDiff]}
+        sourceMode="git"
+        current={null}
+        applyBusy={false}
+        stagingPaths={{}}
+        onSetActiveDiffSource={vi.fn()}
+        onStageFile={vi.fn()}
+        onUnstageFile={vi.fn()}
+        onDiscardChanges={vi.fn()}
+        onStageAll={vi.fn()}
+        onUnstageAll={vi.fn()}
+        renderInlineDiffContent={() => null}
+      />
+    );
+
+    const rowActions = container.querySelector('[class*="rowActions"]');
+    expect(rowActions).toBeInTheDocument();
+
+    const buttons = rowActions!.querySelectorAll('button');
+    expect(buttons.length).toBe(3); // Stage, Copy, Discard
+
+    for (const btn of Array.from(buttons)) {
+      expect(btn.className).toContain('iconButton');
+      expect(btn).toHaveAttribute('data-size', 'xs');
+      expect(btn).toHaveAttribute('data-variant', 'ghost');
+    }
   });
 });

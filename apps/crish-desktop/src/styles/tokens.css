@@ -326,33 +326,33 @@ html[data-theme='light'] {
   --syntax-deletion: #dc2626;
   --syntax-meta: var(--text-secondary);
 
-  --terminal-bg: var(--bg-secondary);
-  --terminal-fg: var(--text-primary);
-  --terminal-err: var(--accent-red);
+  --terminal-bg: #ffffff;
+  --terminal-fg: var(--text-primary, #1e1e1e);
+  --terminal-err: #c50f1f;
   --terminal-muted: var(--text-tertiary);
   --terminal-border: var(--border-subtle);
-  --terminal-cmd: var(--text-primary);
-  --terminal-prompt: #4ade80; /* classic terminal prompt green */
-  --terminal-bar-fill: color-mix(in srgb, var(--shadow-color) 3%, transparent);
+  --terminal-cmd: var(--text-primary, #1e1e1e);
+  --terminal-prompt: #13a10e; /* Windows Terminal PowerShell prompt green */
+  --terminal-bar-fill: var(--bg-card, #ffffff);
 
-  /* xterm    16      TerminalCard.xterm.tsx                */
-  --xterm-black: #1e1e1e;
-  --xterm-red: #f87171;
-  --xterm-green: #4ade80;
-  --xterm-yellow: #fbbf24;
-  --xterm-blue: #60a5fa;
-  --xterm-magenta: #c084fc;
-  --xterm-cyan: #22d3ee;
-  --xterm-white: #e5e5e5;
-  --xterm-bright-black: #6b7280;
-  --xterm-bright-red: #fca5a5;
-  --xterm-bright-green: #86efac;
-  --xterm-bright-yellow: #fde68a;
-  --xterm-bright-blue: #93c5fd;
-  --xterm-bright-magenta: #d8b4fe;
-  --xterm-bright-cyan: #67e8f9;
-  --xterm-bright-white: #f9fafb;
-  --xterm-selection: hsl(0 0% 100% / 0.18);
+  /* xterm 16 色浅色主题调色板（对齐 Windows Terminal Campbell Light / VS Code Light+，解决 PowerShell 默认 ANSI 7/15 亮白在白底上隐形问题） */
+  --xterm-black: #0c0c0c;
+  --xterm-red: #c50f1f;
+  --xterm-green: #13a10e;
+  --xterm-yellow: #b45309;
+  --xterm-blue: #1d4ed8;
+  --xterm-magenta: #86198f;
+  --xterm-cyan: #0e7490;
+  --xterm-white: #24292f;
+  --xterm-bright-black: #57606a;
+  --xterm-bright-red: #dc2626;
+  --xterm-bright-green: #16a34a;
+  --xterm-bright-yellow: #ca8a04;
+  --xterm-bright-blue: #2563eb;
+  --xterm-bright-magenta: #9333ea;
+  --xterm-bright-cyan: #0891b2;
+  --xterm-bright-white: #0f1419;
+  --xterm-selection: rgba(0, 0, 0, 0.15);
 
   /* macOS traffic-light chrome (decorative terminal mockups) */
   --mac-dot-red: #ff5f56;
@@ -1028,14 +1028,32 @@ html[data-theme='dark'] {
     0 32px 64px color-mix(in srgb, var(--shadow-color) 40%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
 
-  --terminal-bg: hsl(0, 0%, 5%);
-  --terminal-fg: var(--text-primary);
+  --terminal-bg: #0c0c0c;
+  --terminal-fg: #cccccc;
   --terminal-err: var(--accent-red);
   --terminal-muted: var(--text-tertiary);
   --terminal-border: var(--border-subtle);
-  --terminal-cmd: var(--text-primary);
+  --terminal-cmd: #ffffff;
   --terminal-prompt: #4ade80;
   --terminal-bar-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --xterm-selection: hsl(0 0% 100% / 0.18);
+  /* xterm 16 色深色主题标准 Windows Terminal (Campbell) 调色板 */
+  --xterm-black: #0c0c0c;
+  --xterm-red: #c50f1f;
+  --xterm-green: #4ade80;
+  --xterm-yellow: #fbbf24;
+  --xterm-blue: #60a5fa;
+  --xterm-magenta: #c084fc;
+  --xterm-cyan: #22d3ee;
+  --xterm-white: #e5e5e5;
+  --xterm-bright-black: #6b7280;
+  --xterm-bright-red: #fca5a5;
+  --xterm-bright-green: #86efac;
+  --xterm-bright-yellow: #fde68a;
+  --xterm-bright-blue: #93c5fd;
+  --xterm-bright-magenta: #d8b4fe;
+  --xterm-bright-cyan: #67e8f9;
+  --xterm-bright-white: #f9fafb;
 
   /* F7-F27           dark     light   #868e96/#e8590c
    *             muted   4.6:1      dark      light

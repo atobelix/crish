@@ -4,12 +4,13 @@
  *
  * sessionId prop 优先（TreeLeafPanel 注入 leaf.sessionId）。
  */
-import React, { useCallback, useEffect, useId, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import styles from './TerminalCard.module.css';
 import { useSessionStore } from '../../store/storeAccess';
 import { getWorkspacePath } from '../../api/projectStore';
 import {
   InteractiveXtermTerminal,
+  type InteractiveXtermHandle,
   type InteractiveXtermStatus,
 } from './TerminalCard.xterm';
 
@@ -33,6 +34,22 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
   const [restartToken] = useState(0);
   const reactId = useId();
   const titleId = `${reactId}-term-title`;
+  const termHandleRef = useRef<InteractiveXtermHandle | null>(null);
+
+  useEffect(() => {
+    // 挂载后延迟一帧触发 fit，确保终端字符网格正常铺开
+    let innerRaf = 0;
+    const rafId = requestAnimationFrame(() => {
+      termHandleRef.current?.fit();
+      innerRaf = requestAnimationFrame(() => {
+        termHandleRef.current?.fit();
+      });
+    });
+    return () => {
+      cancelAnimationFrame(rafId);
+      if (innerRaf) cancelAnimationFrame(innerRaf);
+    };
+  }, []);
 
   useEffect(() => {
     const onProj = () => setCwdTick((n) => n + 1);
@@ -97,6 +114,7 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
         ) : (
           <div className={styles.xtermWrap}>
             <InteractiveXtermTerminal
+              ref={termHandleRef}
               sessionKey={sessionKey}
               cwd={fullCwd || undefined}
               restartToken={restartToken}

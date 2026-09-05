@@ -149,7 +149,10 @@ export function resolveLeafIdForSession(sessionId: string): string | null {
 export function openToolInLeaf(leafId: string, panelId: string): void {
   const id = (leafId || '').trim();
   if (!id) return;
-  const mapped = TOOL_ALIASES[panelId] || panelId;
+  let mapped = TOOL_ALIASES[panelId] || panelId;
+  if (panelId.startsWith('browser:')) {
+    mapped = `preview:${panelId.slice('browser:'.length)}`;
+  }
   const store = useLayoutTreeStore.getState();
   const node = findNodeById(store.tree.root, id);
   if (!node || !isLeaf(node)) return;

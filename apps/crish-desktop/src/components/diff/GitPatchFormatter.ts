@@ -4,7 +4,17 @@
  */
 import type { FileDiff } from '../../store/types';
 
-export function formatGitPatch(fileDiff: FileDiff): string {
+export function formatGitPatch(fileDiff: FileDiff | FileDiff[]): string {
+  if (Array.isArray(fileDiff)) {
+    return fileDiff
+      .map((d) => formatSingleGitPatch(d))
+      .filter(Boolean)
+      .join('\n\n');
+  }
+  return formatSingleGitPatch(fileDiff);
+}
+
+function formatSingleGitPatch(fileDiff: FileDiff): string {
   if (!fileDiff || !fileDiff.filePath) return '';
   const filePath = fileDiff.filePath.replace(/\\/g, '/');
   const lines: string[] = [

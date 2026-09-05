@@ -3,6 +3,7 @@ import { initVisualPresentationController } from './services/visualThemeControll
 import { bootstrapTheme } from './api/themeStore';
 import { memoryManager } from '@crish/shared-utils/browser';
 import { logger } from './services/LoggerService';
+import '@xterm/xterm/css/xterm.css';
 import './index.css';
 import { SIDEBAR_WIDTH_DEFAULT, CHAT_COL_MAX } from './constants/layout';
 import {
@@ -42,7 +43,9 @@ const builtinViewFactories: ViewFactoryMap = {
   terminal: () =>
     lazy(() =>
       import('./components/workspace/TerminalCard').then((m) => ({
-        default: (ctx: ViewRenderContext) => <m.TerminalCard sessionId={ctx.sessionId} />,
+        default: (ctx: ViewRenderContext) => (
+          <m.TerminalCard sessionId={ctx?.sessionId} />
+        ),
       }))
     ),
   preview: () =>

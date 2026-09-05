@@ -46,11 +46,16 @@ const OVERLAY_ROOT_ID = '__crish_dom_inspector_root__';
 const MAX_OUTER_HTML_LEN = 2000;
 const MAX_TEXT_CONTENT_LEN = 500;
 
+/** 跨 window / iframe realm 鲁棒检查 DOM 元素节点（避开跨域 realm 下 instanceof Element 判定失效） */
+export function isElementNode(val: unknown): val is Element {
+  return Boolean(val && typeof val === 'object' && (val as Node).nodeType === 1);
+}
+
 /**
  * 为指定 DOM 元素生成唯一且精确的 CSS Selector
  */
 export function generateCssSelector(el: Element): string {
-  if (!el || !(el instanceof Element)) return '';
+  if (!isElementNode(el)) return '';
   if (el.tagName.toLowerCase() === 'html') return 'html';
   if (el.tagName.toLowerCase() === 'body') return 'body';
 
@@ -149,7 +154,7 @@ const TAILWIND_ATOMIC_CLASS_RE = /^[a-z0-9]{6,}$/i;
  * 4. 保底：精确层级路径（复用 generateCssSelector）。
  */
 export function computeBestSelector(el: Element): string {
-  if (!el || !(el instanceof Element)) return '';
+  if (!isElementNode(el)) return '';
 
   const doc = el.ownerDocument || document;
 
@@ -205,7 +210,7 @@ export function computeBestSelector(el: Element): string {
  * 为指定 DOM 元素生成标准 XPath 路径
  */
 export function generateXPath(el: Element): string {
-  if (!el || !(el instanceof Element)) return '';
+  if (!isElementNode(el)) return '';
   if (el.nodeType === Node.DOCUMENT_NODE) return '/';
 
   const parts: string[] = [];

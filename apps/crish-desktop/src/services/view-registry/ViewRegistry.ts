@@ -59,6 +59,32 @@ class ViewRegistryImpl {
           };
         },
       },
+      {
+        prefix: 'preview:',
+        resolve: (uri) => {
+          const raw = uri.substring('preview:'.length);
+          return {
+            viewId: 'preview',
+            params: {
+              target: raw,
+              instanceId: uri,
+            },
+          };
+        },
+      },
+      {
+        prefix: 'browser:',
+        resolve: (uri) => {
+          const raw = uri.substring('browser:'.length);
+          return {
+            viewId: 'preview',
+            params: {
+              target: raw,
+              instanceId: uri,
+            },
+          };
+        },
+      },
     ];
   }
 
@@ -176,6 +202,14 @@ class ViewRegistryImpl {
         params,
       };
       return definition.title(fallbackCtx);
+    }
+    if (id.startsWith('preview:') || id.startsWith('browser:')) {
+      const prefix = id.startsWith('preview:') ? 'preview:' : 'browser:';
+      const suffix = id.slice(prefix.length);
+      if (/^\d+$/.test(suffix)) {
+        return `${definition.title} ${suffix}`;
+      }
+      return `${definition.title} (${suffix})`;
     }
     return definition.title;
   }

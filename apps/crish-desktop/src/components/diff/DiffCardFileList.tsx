@@ -1,10 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, IconButton, Tooltip } from '../ui';
 import type { FileDiff } from '../../store/types';
 import type { DiffSourceMode } from '../../api/diffPanelHelpers';
 import type { CompareMode } from './diffCardTypes';
+import { formatGitPatch } from './GitPatchFormatter';
+import { useToast } from '../../services/toast/ToastContext';
 
 /**
  * 差异面板文件列表组件属性契约
@@ -118,6 +120,7 @@ function resolveStatusBadge(f: FileDiff): {
 const TOOLTIP_STAGE = '暂存此文件';
 const TOOLTIP_UNSTAGE = '取消暂存此文件';
 const TOOLTIP_DISCARD = '放弃此文件的所有修改';
+const TOOLTIP_COPY_PATCH = '复制此文件差异 Patch';
 
 /**
  * 差异面板平直单轨文件列表组件
@@ -138,7 +141,23 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
   renderInlineDiffContent,
   getFileDiffData,
   onOpenFileViewer,
+  onCopyCode,
 }) => {
+  const { showToast } = useToast();
+
+  const copySingleFilePatch = useCallback(
+    (f: FileDiff) => {
+      const targetDiff = getFileDiffData ? (getFileDiffData(f) ?? f) : f;
+      const patch = formatGitPatch(targetDiff);
+      if (patch && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(patch).catch(() => {});
+      }
+      const { name } = splitFilePath(f.filePath);
+      showToast(`已复制 ${name} 差异 Patch`);
+      onCopyCode?.(f.filePath);
+    },
+    [getFileDiffData, showToast, onCopyCode]
+  );
   // Git 模式下按已暂存与未暂存正交分组
   const { stagedFiles, unstagedFiles } = useMemo(() => {
     const staged: FileDiff[] = [];
@@ -255,44 +274,60 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                     aria-label="正在处理暂存操作"
                   />
                 ) : f.staged ? (
-                  <Tooltip content={TOOLTIP_UNSTAGE}>
-                    <Button
-                      type="button"
-                      variant="ghost"
+                  <>
+                    <IconButton
                       size="xs"
-                      className={styles.rowActBtn}
+                      variant="ghost"
                       aria-label={TOOLTIP_UNSTAGE}
+                      tooltip={TOOLTIP_UNSTAGE}
                       disabled={applyBusy}
                       onClick={() => void onUnstageFile(f.filePath)}
                       icon={<Lucide.Minus size={13} />}
                     />
-                  </Tooltip>
+                    <IconButton
+                      size="xs"
+                      variant="ghost"
+                      aria-label={TOOLTIP_COPY_PATCH}
+                      tooltip={TOOLTIP_COPY_PATCH}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copySingleFilePatch(f);
+                      }}
+                      icon={<Lucide.Copy size={13} />}
+                    />
+                  </>
                 ) : (
                   <>
-                    <Tooltip content={TOOLTIP_STAGE}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className={styles.rowActBtn}
-                        aria-label={TOOLTIP_STAGE}
-                        disabled={applyBusy}
-                        onClick={() => void onStageFile(f.filePath)}
-                        icon={<Lucide.Plus size={13} />}
-                      />
-                    </Tooltip>
-                    <Tooltip content={TOOLTIP_DISCARD}>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="xs"
-                        className={`${styles.rowActBtn} ${styles.danger}`}
-                        aria-label={TOOLTIP_DISCARD}
-                        disabled={applyBusy}
-                        onClick={() => void onDiscardChanges(f.filePath)}
-                        icon={<Lucide.Undo2 size={13} />}
-                      />
-                    </Tooltip>
+                    <IconButton
+                      size="xs"
+                      variant="ghost"
+                      aria-label={TOOLTIP_STAGE}
+                      tooltip={TOOLTIP_STAGE}
+                      disabled={applyBusy}
+                      onClick={() => void onStageFile(f.filePath)}
+                      icon={<Lucide.Plus size={13} />}
+                    />
+                    <IconButton
+                      size="xs"
+                      variant="ghost"
+                      aria-label={TOOLTIP_COPY_PATCH}
+                      tooltip={TOOLTIP_COPY_PATCH}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copySingleFilePatch(f);
+                      }}
+                      icon={<Lucide.Copy size={13} />}
+                    />
+                    <IconButton
+                      size="xs"
+                      variant="ghost"
+                      className={`${styles.dangerBtn} ${styles.danger}`}
+                      aria-label={TOOLTIP_DISCARD}
+                      tooltip={TOOLTIP_DISCARD}
+                      disabled={applyBusy}
+                      onClick={() => void onDiscardChanges(f.filePath)}
+                      icon={<Lucide.Undo2 size={13} />}
+                    />
                   </>
                 )}
               </div>

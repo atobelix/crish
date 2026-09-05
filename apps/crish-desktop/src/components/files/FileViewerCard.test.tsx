@@ -6,6 +6,7 @@ import { FileViewerCard } from './FileViewerCard';
 import { ToastProvider } from '../../services/toast/ToastContext';
 import * as workspaceFsApi from '../../api/workspaceFsApi';
 import * as hostOpenersApi from '../../api/hostOpenersApi';
+import * as gitApi from '../../api/gitApi';
 import { useTerminalStore } from '../../store/terminalStore';
 
 vi.mock('../diff/DiffCardUnifiedView', () => ({
@@ -126,5 +127,139 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
 
     expect(await screen.findByTestId('diff-card-unified-view')).toBeDefined();
     expect(screen.queryByTestId('virtual-plain-code-viewer')).toBeNull();
+  });
+
+  it('6. 复制全部内容按钮点击后将完整源码写入剪贴板', async () => {
+    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextSpy,
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <FileViewerCard filePath="src/App.tsx" initialMode="plain" />
+      </ToastProvider>
+    );
+
+    const copyBtn = await screen.findByRole('button', { name: '复制全部内容' });
+    expect(copyBtn).toBeInTheDocument();
+
+    await act(async () => {
+      copyBtn.click();
+    });
+
+    expect(writeTextSpy).toHaveBeenCalledWith('console.log("hello world");');
+  });
+
+  it('7. 点击查看历史编辑情况展开 Git 提交历史抽屉并展示提交列表与未提交改动', async () => {
+    vi.spyOn(gitApi, 'runLocalGit').mockResolvedValue({
+      ok: true,
+      stdout: 'a1b2c3d feat: initial commit\ne4f5a6b fix: update button style\n',
+      stderr: '',
+    });
+
+    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextSpy,
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <FileViewerCard filePath="src/App.tsx" initialMode="plain" />
+      </ToastProvider>
+    );
+
+    const historyBtn = await screen.findByRole('button', { name: '查看历史编辑情况' });
+    expect(historyBtn).toBeInTheDocument();
+
+    await act(async () => {
+      historyBtn.click();
+    });
+
+    expect(await screen.findByText('提交历史 (2)')).toBeInTheDocument();
+    expect(screen.getByText('feat: initial commit')).toBeInTheDocument();
+    expect(screen.getByText('fix: update button style')).toBeInTheDocument();
+
+    // 点击复制提交哈希
+    const hashBtn = screen.getByRole('button', { name: '复制提交哈希 a1b2c3d' });
+    await act(async () => {
+      hashBtn.click();
+    });
+    expect(writeTextSpy).toHaveBeenCalledWith('a1b2c3d');
+
+    // 含有未提交修改提示
+    expect(screen.getByText('工作区未提交改动')).toBeInTheDocument();
+  });
+
+  it('8. 更多操作下拉菜单提供打开文件路径、复制相对/绝对路径与选择打开方式', async () => {
+    const revealSpy = vi.spyOn(workspaceFsApi, 'revealInOs').mockResolvedValue(true as any);
+    const openDefaultSpy = vi.spyOn(hostOpenersApi, 'openPathDefault').mockResolvedValue({} as any);
+
+    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextSpy,
+      },
+    });
+
+    render(
+      <ToastProvider>
+        <FileViewerCard filePath="src/App.tsx" initialMode="plain" />
+      </ToastProvider>
+    );
+
+    const moreBtn = await screen.findByRole('button', { name: '更多操作' });
+    expect(moreBtn).toBeInTheDocument();
+
+    // 1. 打开菜单并验证所有选项存在
+    await act(async () => {
+      moreBtn.click();
+    });
+
+    expect(await screen.findByText('打开文件路径')).toBeInTheDocument();
+    expect(screen.getByText('复制相对路径')).toBeInTheDocument();
+    expect(screen.getByText('复制绝对路径')).toBeInTheDocument();
+    expect(screen.getByText('选择打开方式')).toBeInTheDocument();
+
+    // 2. 测试复制相对路径
+    const copyRelOption = screen.getByText('复制相对路径');
+    await act(async () => {
+      copyRelOption.click();
+    });
+    expect(writeTextSpy).toHaveBeenCalledWith('src/App.tsx');
+
+    // 3. 再次打开菜单，测试复制绝对路径
+    await act(async () => {
+      moreBtn.click();
+    });
+    const copyAbsOption = await screen.findByText('复制绝对路径');
+    await act(async () => {
+      copyAbsOption.click();
+    });
+    expect(writeTextSpy).toHaveBeenCalledWith('C:/Software/conex/src/App.tsx');
+
+    // 4. 再次打开菜单，测试打开文件路径
+    await act(async () => {
+      moreBtn.click();
+    });
+    const openPathOption = await screen.findByText('打开文件路径');
+    await act(async () => {
+      openPathOption.click();
+    });
+    expect(revealSpy).toHaveBeenCalled();
+
+    // 5. 再次打开菜单，测试选择打开方式
+    await act(async () => {
+      moreBtn.click();
+    });
+    const openWithOption = await screen.findByText('选择打开方式');
+    await act(async () => {
+      openWithOption.click();
+    });
+    expect(openDefaultSpy).toHaveBeenCalled();
   });
 });

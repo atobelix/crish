@@ -135,13 +135,16 @@
 .panel[data-interactive-pty='false'] .mirrorBody {
   max-height: none;
 }
-/*                 /      */
+/* 交互式终端容器宿主 */
 .interactiveHost {
-  display: flex;
-  flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
-  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
   box-sizing: border-box;
 }
 .panel[data-interactive-pty='true'] .interactiveHost,
@@ -393,13 +396,15 @@
 
 /*        xterm                                                */
 .xtermWrap {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
-  background: var(--terminal-bg, hsl(0, 0%, 5%));
+  background: var(--terminal-bg);
   position: relative;
 }
 .xtermWrap[hidden],
@@ -416,7 +421,7 @@
   overflow: hidden;
   padding: 4px 6px 6px;
   box-sizing: border-box;
-  background: var(--terminal-bg, hsl(0, 0%, 5%));
+  background: var(--terminal-bg);
   cursor: text;
 }
 

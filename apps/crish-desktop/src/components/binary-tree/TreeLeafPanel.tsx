@@ -11,9 +11,11 @@
 import React, {
   Suspense,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
 } from 'react';
 import type { LayoutLeaf } from '../../store/types';
@@ -165,6 +167,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     const leafBodyRef = useRef<HTMLDivElement>(null);
     const tabModeEnabled = useLayoutStore(selectTabModeEnabled);
     const chatMainSurface = useLayoutStore((s) => s.chatMainSurface) ?? 'chat';
+    const isChatSurface = chatMainSurface === 'chat';
 
     const activeSessionId = useSessionStore((s) => s.activeSessionId);
     const isLeafDraft =
@@ -175,8 +178,19 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
       activeTab?.sessionId || mintDraftSessionId(leaf.id);
     const dock = activeTab?.dock ?? leaf.dock ?? COLLAPSED_DOCK;
     const dockOpen =
-      !isLeafDraft && dock.collapsed !== true && Boolean(dock.activePanelId);
+      isChatSurface &&
+      !isLeafDraft &&
+      dock.collapsed !== true &&
+      Boolean(dock.activePanelId);
     const sessionTabId = activeTab?.tabId;
+
+    const [isMaximized, setIsMaximized] = useState(false);
+
+    useEffect(() => {
+      if (!dockOpen && isMaximized) {
+        setIsMaximized(false);
+      }
+    }, [dockOpen, isMaximized]);
 
     const handleActivate = useCallback(
       (e?: React.PointerEvent) => {
@@ -276,6 +290,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
     );
 
     const handleToggleDock = useCallback(() => {
+      if (!isChatSurface) return;
       if (dockOpen) {
         updateLeafDock(leaf.id, { collapsed: true });
         return;
@@ -286,7 +301,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         openPanelIds:
           dock.openPanelIds.length > 0 ? dock.openPanelIds : ['overview'],
       });
-    }, [dock.activePanelId, dock.openPanelIds, dockOpen, leaf.id]);
+    }, [dock.activePanelId, dock.openPanelIds, dockOpen, isChatSurface, leaf.id]);
 
     const registryVersion = useSyncExternalStore(
       (cb) => viewRegistry.subscribe(cb),
@@ -402,7 +417,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           data-dock-open={dockOpen ? 'true' : 'false'}
         >
           <div className={styles.leafChatColumn}>
-            {chatMainSurface !== 'scheduled' && !isLeafDraft && (
+            {isChatSurface && !isLeafDraft && !isMaximized && (
               <UnitChromeActions
                 activeSessionId={sessionForPanel}
                 dockOpen={dockOpen}
@@ -434,15 +449,20 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           </div>
           {dockOpen ? (
             <>
-              <LeafDockResizer
-                leafBodyRef={leafBodyRef}
-                widthRatio={dock.widthRatio || 0.5}
-                onCommitRatio={handleCommitDockRatio}
-              />
+              {!isMaximized && (
+                <LeafDockResizer
+                  leafBodyRef={leafBodyRef}
+                  widthRatio={dock.widthRatio || 0.5}
+                  onCommitRatio={handleCommitDockRatio}
+                />
+              )}
               <div
-                className={`${styles.leafDockDrawer} chat-side-panel`}
+                className={`${styles.leafDockDrawer} ${
+                  isMaximized ? styles.maximized : ''
+                } chat-side-panel`}
                 data-drawer-strip="true"
                 data-leaf-dock-drawer="true"
+                data-maximized={isMaximized ? 'true' : 'false'}
               >
                 <LeafToolTabStrip
                   leafId={leaf.id}
@@ -453,6 +473,8 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                   onSelectTab={handleSelectToolTab}
                   onCloseTab={handleCloseToolTab}
                   onAddTab={handleOpenTool}
+                  isMaximized={isMaximized}
+                  onToggleMaximize={() => setIsMaximized((prev) => !prev)}
                 />
                 <AppErrorBoundary
                   compact
@@ -476,7 +498,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
             </>
           ) : null}
         </div>
-        {chatMainSurface !== 'scheduled' && !isLeafDraft && (
+        {isChatSurface && !isLeafDraft && (
           <button
             type="button"
             className={`${styles.topSidePanelBtn} top-action-btn top-side-panel-btn`}

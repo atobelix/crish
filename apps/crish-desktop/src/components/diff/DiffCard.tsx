@@ -11,6 +11,7 @@ import {
   useTerminalField,
   selectActiveDiffSource,
   selectDiffFiles,
+  openFileViewerInSession,
 } from '../../store/storeAccess';
 import * as Lucide from 'lucide-react';
 import { filterPublishableDiffs } from '../../api/publishToolDiffs';
@@ -267,7 +268,6 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
         onTurnSelect={onTurnSelect}
         onBranchChange={(val) => void handleSwitchBranch(val)}
         onCommitPanelToggle={() => setCommitPanelOpen((v) => !v)}
-        onCopyPatch={handleCopyPatch}
         onClear={clearList}
       />
 
@@ -324,6 +324,9 @@ const DiffCardInner: React.FC<DiffCardProps> = () => {
             onUnstageAll={handleUnstageAll}
             renderInlineDiffContent={renderInlineDiffContent}
             getFileDiffData={getFileDiffData}
+            onOpenFileViewer={(filePath) =>
+              openFileViewerInSession(filePath, 'plain')
+            }
           />
         ) : !gitLoading ? (
           <div className={styles.empty} role="status" aria-live="polite">

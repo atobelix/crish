@@ -10,6 +10,7 @@
  * 策略 A（折坞复用）：unmount / 切 sessionKey 不 kill；closeTab/reset/restart 经 registry.take。
  */
 import { useEffect, useId, useRef, useState } from 'react';
+import '@xterm/xterm/css/xterm.css';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -28,6 +29,83 @@ function readCssVar(name: string, fallback = ''): string {
   } catch {
     return fallback;
   }
+}
+
+/**
+ * 根据当前文档主题及 CSS 变量构建 xterm 调色板。
+ * 遵循主题色动态自适应规范：
+ * - 浅色模式（light/default/无属性）：纯白底色（#ffffff / --bg-card），深灰/黑前景色（--text-primary）与光标；
+ * - 深色模式（dark）：深黑底色（#0c0c0c），亮灰前景色（#cccccc）与白色光标。
+ */
+export function getXtermTheme() {
+  const isDark =
+    typeof document !== 'undefined' &&
+    document.documentElement.getAttribute('data-theme') === 'dark';
+  const defaultBg = isDark ? '#0c0c0c' : '#ffffff';
+  const defaultFg = isDark ? '#cccccc' : '#111111';
+  const defaultCursor = isDark ? '#ffffff' : '#111111';
+  const defaultSelection = isDark
+    ? 'rgba(255, 255, 255, 0.25)'
+    : 'rgba(0, 0, 0, 0.15)';
+
+  const bg = readCssVar('--terminal-bg', defaultBg) || defaultBg;
+  const fg = readCssVar('--terminal-fg', defaultFg) || defaultFg;
+  const cursor = readCssVar('--terminal-cmd', defaultCursor) || defaultCursor;
+  const selection =
+    readCssVar('--xterm-selection', defaultSelection) || defaultSelection;
+
+  return {
+    background: bg,
+    foreground: fg,
+    cursor,
+    cursorAccent: bg,
+    selectionBackground: selection,
+    selectionForeground: fg,
+    black: readCssVar('--xterm-black', '#0c0c0c') || '#0c0c0c',
+    red: readCssVar('--xterm-red', '#c50f1f') || '#c50f1f',
+    green:
+      readCssVar('--xterm-green', isDark ? '#4ade80' : '#13a10e') ||
+      (isDark ? '#4ade80' : '#13a10e'),
+    yellow:
+      readCssVar('--xterm-yellow', isDark ? '#fbbf24' : '#b45309') ||
+      (isDark ? '#fbbf24' : '#b45309'),
+    blue:
+      readCssVar('--xterm-blue', isDark ? '#60a5fa' : '#1d4ed8') ||
+      (isDark ? '#60a5fa' : '#1d4ed8'),
+    magenta:
+      readCssVar('--xterm-magenta', isDark ? '#c084fc' : '#86198f') ||
+      (isDark ? '#c084fc' : '#86198f'),
+    cyan:
+      readCssVar('--xterm-cyan', isDark ? '#22d3ee' : '#0e7490') ||
+      (isDark ? '#22d3ee' : '#0e7490'),
+    white:
+      readCssVar('--xterm-white', isDark ? '#e5e5e5' : '#24292f') ||
+      (isDark ? '#e5e5e5' : '#24292f'),
+    brightBlack:
+      readCssVar('--xterm-bright-black', isDark ? '#6b7280' : '#57606a') ||
+      (isDark ? '#6b7280' : '#57606a'),
+    brightRed:
+      readCssVar('--xterm-bright-red', isDark ? '#fca5a5' : '#dc2626') ||
+      (isDark ? '#fca5a5' : '#dc2626'),
+    brightGreen:
+      readCssVar('--xterm-bright-green', isDark ? '#86efac' : '#16a34a') ||
+      (isDark ? '#86efac' : '#16a34a'),
+    brightYellow:
+      readCssVar('--xterm-bright-yellow', isDark ? '#fde68a' : '#ca8a04') ||
+      (isDark ? '#fde68a' : '#ca8a04'),
+    brightBlue:
+      readCssVar('--xterm-bright-blue', isDark ? '#93c5fd' : '#2563eb') ||
+      (isDark ? '#93c5fd' : '#2563eb'),
+    brightMagenta:
+      readCssVar('--xterm-bright-magenta', isDark ? '#d8b4fe' : '#9333ea') ||
+      (isDark ? '#d8b4fe' : '#9333ea'),
+    brightCyan:
+      readCssVar('--xterm-bright-cyan', isDark ? '#67e8f9' : '#0891b2') ||
+      (isDark ? '#67e8f9' : '#0891b2'),
+    brightWhite:
+      readCssVar('--xterm-bright-white', isDark ? '#f9fafb' : '#0f1419') ||
+      (isDark ? '#f9fafb' : '#0f1419'),
+  };
 }
 
 export interface UseXtermTerminalArgs {
@@ -51,6 +129,8 @@ export interface UseXtermTerminalResult {
   bumpLocalRestart: () => void;
   /** 终端实例 ref（imperative handle.focus/clear 读取） */
   termRef: React.RefObject<Terminal | null>;
+  /** 手动重新测量与适配尺寸 */
+  fit: () => void;
 }
 
 /**
@@ -93,11 +173,6 @@ export function useXtermTerminal({
     const container = containerRef.current;
     if (!container) return;
 
-    const bg = readCssVar('--terminal-bg');
-    const fg = readCssVar('--terminal-fg');
-    const cursor = readCssVar('--terminal-cmd');
-    const selection = readCssVar('--xterm-selection');
-
     const term = new Terminal({
       cursorBlink: true,
       cursorStyle: 'bar',
@@ -107,36 +182,29 @@ export function useXtermTerminal({
       fontFamily:
         "'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Consolas', 'Segoe UI Mono', monospace",
       lineHeight: 1.35,
-      theme: {
-        background: bg,
-        foreground: fg,
-        cursor,
-        cursorAccent: bg,
-        selectionBackground: selection,
-        selectionForeground: fg,
-        black: readCssVar('--xterm-black'),
-        red: readCssVar('--xterm-red'),
-        green: readCssVar('--xterm-green'),
-        yellow: readCssVar('--xterm-yellow'),
-        blue: readCssVar('--xterm-blue'),
-        magenta: readCssVar('--xterm-magenta'),
-        cyan: readCssVar('--xterm-cyan'),
-        white: readCssVar('--xterm-white'),
-        brightBlack: readCssVar('--xterm-bright-black'),
-        brightRed: readCssVar('--xterm-bright-red'),
-        brightGreen: readCssVar('--xterm-bright-green'),
-        brightYellow: readCssVar('--xterm-bright-yellow'),
-        brightBlue: readCssVar('--xterm-bright-blue'),
-        brightMagenta: readCssVar('--xterm-bright-magenta'),
-        brightCyan: readCssVar('--xterm-bright-cyan'),
-        brightWhite: readCssVar('--xterm-bright-white'),
-      },
+      theme: getXtermTheme(),
       allowTransparency: false,
       convertEol: true,
       scrollback: 5000,
       cols: 80,
       rows: 24,
     });
+
+    // 监听 html[data-theme] 属性变化，当主题在 light/dark 间切换时，实时动态同步 xterm 主题色彩
+    let themeObserver: MutationObserver | null = null;
+    if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
+      themeObserver = new MutationObserver(() => {
+        try {
+          term.options.theme = getXtermTheme();
+        } catch {
+          /* swallow-ok: 终端卸载或已被 dispose 时更新静默跳过 */
+        }
+      });
+      themeObserver.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ['data-theme'],
+      });
+    }
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -158,12 +226,26 @@ export function useXtermTerminal({
       // swallow-ok: WebGL 不可用时静默降级 canvas 2d
     }
 
-    requestAnimationFrame(() => {
+    let innerRaf = 0;
+    const rafId = requestAnimationFrame(() => {
       try {
         fitAddon.fit();
       } catch {
         /* swallow-ok: 容器尚未布局完成时 fit 失败，下一帧重试 */
       }
+      // 延迟一帧再次 fit，确保终端字符网格正常铺开
+      innerRaf = requestAnimationFrame(() => {
+        try {
+          fitAddon.fit();
+          const t = termRef.current;
+          const id = ptyIdRef.current;
+          if (t && id) {
+            void ptyResize(id, t.cols, t.rows);
+          }
+        } catch {
+          /* swallow-ok */
+        }
+      });
     });
 
     // stdin → PTY（按当前 ptyId 过滤，避免会话切换竞态）
@@ -176,6 +258,11 @@ export function useXtermTerminal({
     termRef.current = term;
 
     return () => {
+      if (themeObserver) {
+        themeObserver.disconnect();
+      }
+      cancelAnimationFrame(rafId);
+      if (innerRaf) cancelAnimationFrame(innerRaf);
       dataDisp.dispose();
       try {
         term.dispose();
@@ -370,6 +457,21 @@ export function useXtermTerminal({
     };
   }, []);
 
+  const fit = () => {
+    const term = termRef.current;
+    const fitAddon = fitAddonRef.current;
+    if (!term || !fitAddon) return;
+    try {
+      fitAddon.fit();
+      const id = ptyIdRef.current;
+      if (id) {
+        void ptyResize(id, term.cols, term.rows);
+      }
+    } catch {
+      /* swallow-ok: 容器尚未布局完成时 fit 失败，下一帧重试 */
+    }
+  };
+
   return {
     containerRef,
     termDomId,
@@ -377,5 +479,6 @@ export function useXtermTerminal({
     localRestart,
     bumpLocalRestart: () => setLocalRestart((n) => n + 1),
     termRef,
+    fit,
   };
 }

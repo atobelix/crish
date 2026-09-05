@@ -5,14 +5,15 @@ import { Button, Tooltip } from '../ui';
 import { usePreviewNavigation } from './usePreviewNavigation';
 import { PreviewToolbar } from './PreviewToolbar';
 import { PreviewHistoryPanel } from './PreviewHistoryPanel';
+import { useActiveDevPorts } from './activePortDetector';
 import {
-  QUICK_LOCAL,
   buildInspectorAiSnippet,
   buildInspectorElementLabel,
   hasInspectorComputedStyles,
   convertInspectedElementPayload,
 } from './previewCardLib';
 import { enableInspector, subscribeToInspector } from './previewHostBridge';
+import { installPreviewInspectorClient } from './previewClientBridge';
 import {
   CRISH_PREVIEW_HOST_SOURCE,
   CRISH_PREVIEW_INSPECTOR_SOURCE,
@@ -43,6 +44,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
 }) => {
   const { showToast } = useToast();
   const nav = usePreviewNavigation();
+  const { ports: activePorts } = useActiveDevPorts();
   const session = useSessionField(selectActiveSession);
   const isAiStreaming = Boolean(
     session?.messages?.some((m) => m.status === 'processing') ||
@@ -101,6 +103,16 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
   const handleToggleInspector = React.useCallback(() => {
     const next = !isInspectorActiveRef.current;
     setIsInspectorActive(next);
+    try {
+      if (next && iframeRef.current?.contentDocument && iframeRef.current.contentWindow) {
+        installPreviewInspectorClient({
+          doc: iframeRef.current.contentDocument,
+          win: iframeRef.current.contentWindow,
+        });
+      }
+    } catch {
+      // 跨源 iframe 忽略，由代理注入脚本处理
+    }
     enableInspector(iframeRef.current, next);
     if (!next) setHoverElement(null);
   }, [iframeRef]);
@@ -177,6 +189,16 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
 
   const handleFrameLoad = () => {
     nav.onFrameLoad();
+    try {
+      if (iframeRef.current?.contentDocument && iframeRef.current.contentWindow) {
+        installPreviewInspectorClient({
+          doc: iframeRef.current.contentDocument,
+          win: iframeRef.current.contentWindow,
+        });
+      }
+    } catch {
+      // 跨源 iframe 忽略，由代理注入脚本处理
+    }
     if (isInspectorActive) {
       enableInspector(iframeRef.current, true);
     }
@@ -294,39 +316,31 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
         )}
             {!canEmbed || blank || !frameSrc ? (
               <div className={styles.empty}>
-                <Lucide.Globe
-                  size={22}
-                  strokeWidth={1.5}
-                  className={styles.emptyIco}
-                  aria-hidden
-                />
-                <div className={styles.emptyTitle}>预览浏览器</div>
-                <div className={styles.emptyDesc}>
-                  输入本地地址（如 <code>localhost:5173</code>）或完整 URL。
-                  <span className={styles.browserNote}>
-                    {' '}
-                    部分站点禁止嵌入；可用外部打开。
-                  </span>
-                </div>
-                <div
-                  className={styles.quickRow}
-                  role="group"
-                  aria-label="快捷本地地址"
-                >
-                  {QUICK_LOCAL.map((u) => (
-                    <Tooltip key={u} content={u}>
-                      <Button
+                {activePorts.length > 0 ? (
+                  <div
+                    className={styles.activePortsRow}
+                    role="group"
+                    aria-label="运行中的本地服务"
+                  >
+                    {activePorts.map((port) => (
+                      <button
+                        key={port}
                         type="button"
-                        variant="secondary"
-                        size="sm"
-                        className={styles.quickChip}
-                        onClick={() => navigate(u)}
+                        className={styles.activeServiceCapsule}
+                        onClick={() => navigate(`http://localhost:${port}`)}
+                        aria-label={`运行中的本地服务: localhost:${port}`}
                       >
-                        {u.replace(/^https?:\/\//, '')}
-                      </Button>
-                    </Tooltip>
-                  ))}
-                </div>
+                        <span className={styles.activeServicePulse} aria-hidden />
+                        <span className={styles.activeServiceLabel}>
+                          运行中的本地服务:
+                        </span>
+                        <span className={styles.activeServicePort}>
+                          localhost:{port}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
                 {!canEmbed && !blank ? (
                   <div className={styles.localPath}>
                     <code className={styles.localCode}>{activeUrl}</code>
