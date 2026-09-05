@@ -6,8 +6,8 @@
   width: 220px;
   min-width: 220px;
   max-width: 220px;
-  background: var(--bg-primary);
-  border-right: 1px solid var(--border-color);
+  background: var(--bg-card);
+  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
   box-sizing: border-box;
   overflow: hidden;
   transition: width 200ms cubic-bezier(0.2, 0, 1, 1), opacity 200ms ease;
@@ -34,8 +34,8 @@
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--border-color);
-  background: var(--bg-primary);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  background: var(--bg-card);
 }
 
 .titleRow {
@@ -98,8 +98,8 @@
   padding: 0 6px 0 24px;
   font-size: 11px;
   background: var(--bg-card);
-  border: none;
-  border-radius: var(--radius-xs, 3px);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
+  border-radius: var(--radius-sm, 4px);
   color: var(--text-primary);
   outline: none;
   box-shadow: none;
@@ -148,9 +148,9 @@
 }
 
 .card.isActive {
-  background: var(--bg-active, var(--tint-active));
-  border-left: 2px solid var(--accent-primary, var(--brand-primary, var(--color-primary)));
-  border-color: var(--border-color);
+  background: var(--tint-active);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 20%, transparent);
+  border-left: 3px solid var(--diff-add-indicator, #10b981);
 }
 
 .cardHeader {

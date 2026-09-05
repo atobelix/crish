@@ -594,18 +594,18 @@ html[data-theme='light'] {
 
   /* Diff 比对 (清爽通透配色) */
   --diff-add-bg: hsl(150 65% 97%);
-  --diff-add-fg: #10b981;
-  --diff-add-word-bg: rgba(16, 185, 129, 0.22);
+  --diff-add-fg: hsl(150 70% 32%);
+  --diff-add-word-bg: hsl(150 70% 32% / 0.18);
   --diff-add-gutter-bg: transparent;
-  --diff-add-gutter-fg: #10b981;
-  --diff-add-indicator: #10b981;
+  --diff-add-gutter-fg: var(--diff-add-fg);
+  --diff-add-indicator: var(--diff-add-fg);
 
   --diff-del-bg: hsl(0 80% 98%);
-  --diff-del-fg: #ef4444;
-  --diff-del-word-bg: rgba(239, 68, 68, 0.18);
+  --diff-del-fg: hsl(0 72% 45%);
+  --diff-del-word-bg: hsl(0 72% 45% / 0.16);
   --diff-del-gutter-bg: transparent;
-  --diff-del-gutter-fg: #ef4444;
-  --diff-del-indicator: #ef4444;
+  --diff-del-gutter-fg: var(--diff-del-fg);
+  --diff-del-indicator: var(--diff-del-fg);
 
   --diff-linenum-fg: var(--text-tertiary, #696969);
   --diff-gutter-bg: var(--bg-card);

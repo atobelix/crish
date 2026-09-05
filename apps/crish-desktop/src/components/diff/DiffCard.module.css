@@ -17,6 +17,15 @@
   box-sizing: border-box;
 }
 
+.bodyWrap {
+  flex: 1 1 0%;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
 /* 32px 紧凑工具栏与响应式治理 (DEL-27: 移除 border-top !important) */
 .compactHeader {
   display: flex;
@@ -27,7 +36,7 @@
   max-height: 32px;
   padding: 0 8px;
   background: var(--bg-card);
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
   box-sizing: border-box;
   user-select: none;
   flex-shrink: 0;
@@ -53,7 +62,7 @@
 .headerDivider {
   width: 1px;
   height: 14px;
-  background: var(--border-subtle);
+  background: color-mix(in srgb, var(--border-subtle) 25%, transparent);
   flex-shrink: 0;
 }
 
@@ -156,17 +165,6 @@
   width: 18px;
   height: 18px;
   color: inherit;
-}
-
-/* 主体容器 */
-.bodyWrap {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-  max-width: 100%;
-  background: var(--bg-card);
 }
 
 /* --------------------------------------------------------------------------
@@ -702,7 +700,7 @@
 /* 增删行 WCAG AAA 达标样式 */
 .lineAddition {
   background: var(--diff-add-bg);
-  border-left: 3px solid var(--diff-add-indicator, #10b981);
+  border-left: 3px solid var(--diff-add-indicator, var(--diff-add-fg));
 }
 .lineAddition .gutterNum {
   background: var(--diff-add-gutter-bg, transparent);
@@ -714,7 +712,7 @@
 
 .lineDeletion {
   background: var(--diff-del-bg);
-  border-left: 3px solid var(--diff-del-indicator, #ef4444);
+  border-left: 3px solid var(--diff-del-indicator, var(--diff-del-fg));
 }
 .lineDeletion .gutterNum {
   background: var(--diff-del-gutter-bg, transparent);
@@ -913,6 +911,8 @@
   color: var(--text-primary);
   resize: none;
   box-sizing: border-box;
+  box-shadow: none;
+  outline: none;
   transition: border-color var(--transition-fast);
 }
 
