@@ -85,51 +85,6 @@ function mergeVisualLineRects(rects: Rect[]): Rect[] {
   return result;
 }
 
-/**
- * 几何区间合并算法（1D/2D Rect Union）
- * 彻底消除内联嵌套元素（父子 span、Token 结构）在 Range.getClientRects() 产生的重叠矩形，
- * 保证任意视觉行内的选区矩形严格互斥，杜绝任何局部叠色或双层灰度。
- */
-function mergeOverlappingRects(rawRects: Rect[]): Rect[] {
-  if (rawRects.length <= 1) return rawRects;
-
-  const valid = rawRects.filter((r) => r.width > 0 && r.height > 0);
-  if (valid.length <= 1) return valid;
-
-  // 按垂直 top 升序排序，同视觉行按水平 left 升序排序
-  valid.sort((a, b) => {
-    const dTop = a.top - b.top;
-    if (Math.abs(dTop) > 3) return dTop;
-    return a.left - b.left;
-  });
-
-  const merged: Rect[] = [];
-  let current = { ...valid[0] };
-
-  for (let i = 1; i < valid.length; i++) {
-    const next = valid[i];
-    const isSameVisualLine = Math.abs(current.top - next.top) <= 4;
-
-    if (isSameVisualLine) {
-      const currentRight = current.left + current.width;
-      // 若下一个矩形与当前矩形相交、包含或接壤（容差 1px 亚像素）
-      if (next.left <= currentRight + 1) {
-        const newRight = Math.max(currentRight, next.left + next.width);
-        current.width = newRight - current.left;
-        current.top = Math.min(current.top, next.top);
-        current.height = Math.max(current.height, next.height);
-      } else {
-        merged.push(current);
-        current = { ...next };
-      }
-    } else {
-      merged.push(current);
-      current = { ...next };
-    }
-  }
-  merged.push(current);
-  return merged;
-}
 
 interface SelectionHighlightProps {
   /** 滚动内容容器 ref（与 CursorLayer 同款容器引用，保证坐标系 100% 同步） */
@@ -372,8 +327,8 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
       }
     }
 
-    // 4. 几何区间合并（彻底消除内联元素嵌套与跨层 DOM 产生的重叠矩形与双层叠色）
-    const mergedRects = mergeOverlappingRects(newRects);
+    // 4. 视觉行归一化与水平无缝融合（彻底消除跨行/内联嵌套产生的重叠矩形、阶梯断层与双层灰度）
+    const mergedRects = mergeVisualLineRects(newRects);
     setRects(mergedRects);
   }, [decorations, decorationVersion, containerRef]);
 

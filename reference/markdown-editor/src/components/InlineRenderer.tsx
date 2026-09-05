@@ -233,18 +233,8 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
               const selMin = Math.min(activeState.selStart!, activeState.selEnd!);
               const selMax = Math.max(activeState.selStart!, activeState.selEnd!);
               isSelected = start < selMax && (start + len) > selMin;
-
-              if (token.type === 'list_bullet' || token.type === 'list_number') {
-                // 划词跨行选区保护：无序列表圆点在划词时不坍缩，保持常显
-                isActive = false;
-              } else if (token.type === 'list_task') {
-                // 划词选中任务项前缀区域时展开源码模式
-                isActive = isSelected;
-              } else if (token.type === 'blockquote_prefix') {
-                isActive = isSelected;
-              } else {
-                isActive = isSelected;
-              }
+              // 划词选中区域时统一展开源码模式（混合渲染核心不变量：选区覆盖处皆为源码，所见即所得，零只渲染开倒车）
+              isActive = isSelected;
             } else {
               // 聚焦光标单点模式：支持键盘左移、边缘点击等触发源码编辑
               if (token.type === 'list_bullet' || token.type === 'list_number') {
@@ -647,12 +637,34 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
             const handleTaskClick = (e: React.MouseEvent) => {
               if (start !== undefined) {
+                const target = e.currentTarget as HTMLElement;
+                const rect = target.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const clickY = e.clientY - rect.top;
+                const edgeMargin = 2;
+                const isEdgeClick =
+                  clickX < edgeMargin ||
+                  clickX > rect.width - edgeMargin ||
+                  clickY < edgeMargin ||
+                  clickY > rect.height - edgeMargin;
+
+                const markerOffset = token.raw.indexOf(token.isChecked ? '[x]' : '[ ]');
+
+                if (isEdgeClick) {
+                  // 用户在复选框按钮边沿位置点击：触发源码模式与就地编辑
+                  e.stopPropagation();
+                  e.preventDefault();
+                  const state = useEditorStore.getState();
+                  const targetCursor = start + (markerOffset >= 0 ? markerOffset : 0);
+                  state.setCursorPos(targetCursor);
+                  return;
+                }
+
+                // 核心交互区点击：功能优先，直接切换完成状态
                 e.stopPropagation();
                 e.preventDefault();
                 const state = useEditorStore.getState();
-                const oldMarker = token.isChecked ? '[x]' : '[ ]';
                 const newMarker = token.isChecked ? '[ ]' : '[x]';
-                const markerOffset = token.raw.indexOf(oldMarker);
                 if (markerOffset >= 0) {
                   const from = start + markerOffset;
                   const to = from + 3;

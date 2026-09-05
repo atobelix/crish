@@ -11,12 +11,12 @@
   --dark-warm: hsl(0 0% 20%);
   --olive: hsl(0 0% 33%);
   --stone: hsl(0 0% 46%);
-  --brand: oklch(0.696 0.149 162.48);
+  --brand: oklch(0.6959 0.149 162.48);
   --brand-light: oklch(0.76 0.13 162.48);
-  --brand-focus: oklch(0.696 0.149 162.48 / 0.25);
-  --brand-surface: oklch(0.696 0.149 162.48 / 0.08);
-  --tag-calm-bg: oklch(0.696 0.149 162.48 / 0.08);
-  --tag-standard-bg: oklch(0.696 0.149 162.48 / 0.12);
+  --brand-focus: oklch(0.6959 0.149 162.48 / 0.25);
+  --brand-surface: oklch(0.6959 0.149 162.48 / 0.08);
+  --tag-calm-bg: oklch(0.6959 0.149 162.48 / 0.08);
+  --tag-standard-bg: oklch(0.6959 0.149 162.48 / 0.12);
   --danger-color: hsl(359 53% 35.5%);
   /* 纯灰度柔和代码与公式块底色 (相对于阅读底色纯黑混入 2%，零色彩倾向) */
   --code-bg: color-mix(in srgb, hsl(0 0% 0%) 2%, var(--white));

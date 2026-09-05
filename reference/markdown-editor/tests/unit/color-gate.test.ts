@@ -7,6 +7,11 @@ import {
   hslToRgbString,
   hslToHexString,
   generateColorFallback,
+  parseOklchString,
+  oklchToRgb,
+  oklchToRgbString,
+  oklchToHexString,
+  generateOklchFallback,
   scanContentForColorViolations,
 } from '../../src/core/colorAdaptor';
 
@@ -17,6 +22,31 @@ describe('1. Color Adaptor & Mathematical Backup Conversion Engine', () => {
     expect(parsed.s).toBeCloseTo(27.3, 1);
     expect(parsed.l).toBeCloseTo(97.8, 1);
     expect(parsed.a).toBe(0.65);
+  });
+
+  it('accurately parses modern OKLCH syntax and converts emerald green theme to HEX #10B981', () => {
+    const oklchBrand = 'oklch(0.6959 0.149 162.48)';
+    const parsed = parseOklchString(oklchBrand);
+    expect(parsed.l).toBeCloseTo(0.6959, 3);
+    expect(parsed.c).toBeCloseTo(0.149, 3);
+    expect(parsed.h).toBeCloseTo(162.48, 2);
+
+    const rgb = oklchToRgb(parsed.l, parsed.c, parsed.h);
+    // #10b981 evaluates to r=16, g=185, b=129
+    expect(rgb.r).toBeCloseTo(16, -1);
+    expect(rgb.g).toBeCloseTo(185, -1);
+    expect(rgb.b).toBeCloseTo(129, -1);
+
+    const hex = oklchToHexString(oklchBrand);
+    expect(hex.toUpperCase()).toBe('#10B981');
+  });
+
+  it('accurately parses and converts OKLCH with alpha channel', () => {
+    const oklchFocus = 'oklch(0.696 0.149 162.48 / 0.25)';
+    const fallback = generateOklchFallback(oklchFocus);
+    expect(fallback.rgbaObject.a).toBe(0.25);
+    expect(fallback.rgbString).toContain('rgba(');
+    expect(fallback.rgbString).toContain('0.25)');
   });
 
   it('accurately converts #FAFBF8 HSL definition back to RGB and HEX', () => {

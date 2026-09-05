@@ -1374,8 +1374,11 @@ async function runDefenseSuite() {
               }
             }
 
-            if (bullet) {
-              const bRect = bullet.getBoundingClientRect();
+            const bulletSpan = rowEl.querySelector('.token-list-bullet');
+            if (bulletSpan) {
+              const bRect = (bullet && bullet.getBoundingClientRect().width > 0)
+                ? bullet.getBoundingClientRect()
+                : bulletSpan.getBoundingClientRect();
               if (bRect.width > 0) bulletVisible = true;
             }
 
