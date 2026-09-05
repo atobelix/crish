@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from '../ui';
 import styles from './ModernToolCall.module.css';
 
 export interface ModernApprovalCardProps {
@@ -34,23 +35,23 @@ export const ModernApprovalCard: React.FC<ModernApprovalCardProps> = ({
         <pre className={styles.approvalCodePreview}>$ {command}</pre>
       </div>
 
-      <div className={styles.approvalDivider} />
-
       <div className={styles.approvalFooter}>
-        <button
+        <Button
           type="button"
-          className={styles.approvalBtnGhost}
+          variant="ghost"
+          size="sm"
           onClick={onDeny}
         >
           拒绝
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
-          className={styles.approvalBtnPrimary}
+          variant="primary"
+          size="sm"
           onClick={onAllow}
         >
           允许执行
-        </button>
+        </Button>
       </div>
     </div>
   );

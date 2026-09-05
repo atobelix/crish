@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Copy, Check } from 'lucide-react';
+import { Tooltip } from '../ui';
 import styles from './ModernToolCall.module.css';
 
 export interface ModernTerminalToolCallProps {
@@ -51,25 +52,28 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
       <div className={styles.terminalHead}>
         <div className={styles.terminalCommandRow}>
           <span className={styles.terminalPromptDollar} aria-hidden="true">$</span>
-          <span className={styles.terminalCommandText} title={command}>
-            {command}
-          </span>
+          <Tooltip content={command}>
+            <span className={styles.terminalCommandText}>
+              {command}
+            </span>
+          </Tooltip>
         </div>
 
         <div className={styles.terminalActions}>
-          <button
-            type="button"
-            className={styles.terminalCopyBtn}
-            onClick={handleCopy}
-            title={copied ? '已复制命令' : '复制命令'}
-            aria-label="复制命令行"
-          >
-            {copied ? (
-              <Check size={12} strokeWidth={2.4} style={{ color: '#10b981' }} />
-            ) : (
-              <Copy size={12} strokeWidth={2} />
-            )}
-          </button>
+          <Tooltip content={copied ? '已复制命令' : '复制命令'}>
+            <button
+              type="button"
+              className={styles.terminalCopyBtn}
+              onClick={handleCopy}
+              aria-label="复制命令行"
+            >
+              {copied ? (
+                <Check size={12} strokeWidth={2.4} style={{ color: '#10b981' }} />
+              ) : (
+                <Copy size={12} strokeWidth={2} />
+              )}
+            </button>
+          </Tooltip>
         </div>
       </div>
 

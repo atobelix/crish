@@ -5,6 +5,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { ModernJsonToolCall } from './ModernJsonToolCall';
 import { ModernTerminalToolCall } from './ModernTerminalToolCall';
 import { ModernToolCall } from './ModernToolCall';
+import { ModernApprovalCard } from './ModernApprovalCard';
 
 describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
   beforeEach(() => {
@@ -174,6 +175,43 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       expect(screen.getByText('Request')).toBeDefined();
       expect(screen.getByText('Result')).toBeDefined();
       expect(screen.getByText('3 matches found')).toBeDefined();
+    });
+  });
+
+  describe('4. ModernApprovalCard 高危命令授权卡片 (DIM-04.1 一屏一主色治理)', () => {
+    it('正确渲染标题、命令预览与原子按钮（Primary允许 + Ghost拒绝）', () => {
+      const onAllow = vi.fn();
+      const onDeny = vi.fn();
+
+      render(
+        <ModernApprovalCard
+          id="appr-1"
+          command="rm -rf ./target/release"
+          summary="高危删除执行确认"
+          onAllow={onAllow}
+          onDeny={onDeny}
+        />
+      );
+
+      expect(screen.getByText('高危删除执行确认')).toBeDefined();
+      expect(screen.getByText('$ rm -rf ./target/release')).toBeDefined();
+
+      const allowBtn = screen.getByRole('button', { name: '允许执行' });
+      const denyBtn = screen.getByRole('button', { name: '拒绝' });
+
+      expect(allowBtn).toBeDefined();
+      expect(denyBtn).toBeDefined();
+
+      // 验证单一主色契约：允许执行必须为 primary，拒绝必须为 ghost
+      expect(allowBtn.getAttribute('data-variant')).toBe('primary');
+      expect(denyBtn.getAttribute('data-variant')).toBe('ghost');
+
+      fireEvent.click(denyBtn);
+      expect(onDeny).toHaveBeenCalledTimes(1);
+      expect(onAllow).not.toHaveBeenCalled();
+
+      fireEvent.click(allowBtn);
+      expect(onAllow).toHaveBeenCalledTimes(1);
     });
   });
 });

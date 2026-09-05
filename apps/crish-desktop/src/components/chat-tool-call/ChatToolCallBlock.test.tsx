@@ -105,4 +105,47 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
     // 渲染端零重分组标记：无「Parallel（N）」字面
     expect(container.textContent).not.toContain('Parallel');
   });
+
+  it('批量待审批工具（>=2）渲染 BatchApprovalBar，恢复权威 Primary 实心填充', () => {
+    const onBatchApprove = vi.fn();
+    const onBatchDeny = vi.fn();
+
+    const { container } = render(
+      <ChatToolStack
+        items={[
+          {
+            kind: 'group',
+            id: 'grp-pending',
+            label: '待审批工具 · 2 步',
+            tools: [
+              tc('p1', 'run_command', 'pending_approval'),
+              tc('p2', 'run_command', 'pending_approval'),
+            ],
+          },
+        ]}
+        msgId="m-appr"
+        actions={{
+          onBatchApprove,
+          onBatchDeny,
+        }}
+        {...baseProps()}
+      />
+    );
+
+    expect(container.textContent).toContain('待确认工具（2）');
+
+    const approveBtn = container.querySelector('button[data-variant="primary"]');
+    const denyBtn = container.querySelector('button[data-variant="danger"]');
+
+    expect(approveBtn).not.toBeNull();
+    expect(approveBtn?.textContent).toContain('全部批准');
+    expect(denyBtn).not.toBeNull();
+    expect(denyBtn?.textContent).toContain('全部拒绝');
+
+    approveBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onBatchApprove).toHaveBeenCalledWith(['m-appr', 'm-appr'], ['p1', 'p2']);
+
+    denyBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onBatchDeny).toHaveBeenCalledWith(['m-appr', 'm-appr'], ['p1', 'p2']);
+  });
 });

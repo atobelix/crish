@@ -90,7 +90,6 @@ function BatchApprovalBar({
           type="button"
           variant="primary"
           size="sm"
-          className={`${styles.batchBarBtn} ${styles.batchBarApprove}`}
           onClick={() => onApprove(msgIds, toolIds)}
           icon={<Check size={12} />}
         >
@@ -102,7 +101,6 @@ function BatchApprovalBar({
           type="button"
           variant="danger"
           size="sm"
-          className={`${styles.batchBarBtn} ${styles.batchBarDeny}`}
           onClick={() => onDeny(msgIds, toolIds)}
           icon={<X size={12} />}
         >

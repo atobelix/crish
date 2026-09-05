@@ -472,49 +472,6 @@
   gap: 8px;
 }
 
-.approvalBtn {
-  padding: 6px 14px;
-  border-radius: 7px;
-  font-size: 12.5px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 120ms ease;
-  outline: none;
-}
-
-.approvalBtnGhost {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-secondary, #555555);
-}
-
-.approvalBtnGhost:hover {
-  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #111111);
-}
-
-.approvalBtnSecondary {
-  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.1));
-  background: var(--bg-card, #ffffff);
-  color: var(--text-primary, #111111);
-}
-
-.approvalBtnSecondary:hover {
-  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
-}
-
-.approvalBtnPrimary {
-  border: none;
-  font-weight: 600;
-  background: var(--text-primary, #111111);
-  color: var(--bg-card, #ffffff);
-}
-
-.approvalBtnPrimary:hover {
-  opacity: 0.9;
-}
-
 /* --------------------------------------------------------------------------
    4. 极简 Code Block 卡片（对齐截图 3 纯净设计）
    -------------------------------------------------------------------------- */

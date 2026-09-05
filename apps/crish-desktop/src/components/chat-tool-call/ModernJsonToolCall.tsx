@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { ChevronRight, Check, X } from 'lucide-react';
+import { Tooltip } from '../ui';
 import styles from './ModernToolCall.module.css';
 
 export interface ModernJsonToolCallProps {
@@ -109,9 +110,11 @@ export const ModernJsonToolCall: React.FC<ModernJsonToolCallProps> = ({
         <span className={styles.actionText}>{displayActionText}</span>
 
         {paramPill ? (
-          <span className={styles.paramPill} title={paramPill}>
-            {paramPill}
-          </span>
+          <Tooltip content={paramPill}>
+            <span className={styles.paramPill}>
+              {paramPill}
+            </span>
+          </Tooltip>
         ) : null}
 
         <span className={styles.statusIcon} aria-hidden="true">

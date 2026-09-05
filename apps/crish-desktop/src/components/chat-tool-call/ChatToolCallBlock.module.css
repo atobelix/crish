@@ -291,44 +291,6 @@
   flex: 1;
 }
 
-.batchBarBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-primary);
-  border-radius: var(--radius-md);
-  padding: 3px 8px;
-  font-size: var(--font-size-xxs);
-  font-family: inherit;
-  cursor: pointer;
-  white-space: nowrap;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.batchBarBtn:hover {
-  background: var(--bg-hover);
-}
-
-.batchBarApprove {
-  color: var(--accent-green);
-  border-color: color-mix(in srgb, var(--accent-green) 40%, transparent);
-}
-
-.batchBarApprove:hover {
-  background: color-mix(in srgb, var(--accent-green) 10%, var(--bg-hover));
-}
-
-.batchBarDeny {
-  color: var(--accent-red);
-  border-color: color-mix(in srgb, var(--accent-red) 40%, transparent);
-}
-
-.batchBarDeny:hover {
-  background: color-mix(in srgb, var(--accent-red) 10%, var(--bg-hover));
-}
 
 /* Tool Result Body (Dual-Section Container) */
 .toolResultBody {
