@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './DiffCard.module.css';
-import { Button, Select, Tooltip } from '../ui';
+import { Button, IconButton, Select, Tooltip } from '../ui';
 import { classifyFileDiff } from '../../api/applyFileDiff';
 import { openPathDefault } from '../../api/hostOpenersApi';
 import { getWorkspacePath } from '../../api/projectStore';
@@ -290,11 +290,10 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                 <div className={styles.actionDivider} />
 
                 <Tooltip content={acceptLabel}>
-                  <Button
+                  <IconButton
                     type="button"
-                    variant="primary"
+                    variant="ghost"
                     size="sm"
-                    className={`${styles.inlineActionBtn} ${styles.inlineActionAccept}`}
                     aria-label={acceptLabel}
                     disabled={applyBusy || !classifyFileDiff(f).ok}
                     onClick={(e) => {
@@ -306,11 +305,10 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                 </Tooltip>
 
                 <Tooltip content={REJECT_LABEL}>
-                  <Button
+                  <IconButton
                     type="button"
                     variant="danger"
                     size="sm"
-                    className={styles.inlineActionBtn}
                     aria-label={REJECT_LABEL}
                     disabled={applyBusy}
                     onClick={(e) => {

@@ -286,6 +286,7 @@
 .fileStat {
   font-size: var(--font-size-xxs);
   font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   display: flex;
   gap: var(--space-2);
   flex-shrink: 0;
@@ -425,39 +426,6 @@
   height: 14px;
   background-color: var(--border-subtle);
   margin: 0 4px;
-}
-
-.inlineActionBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  border-radius: var(--radius-sm, 4px);
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.inlineActionBtn:hover {
-  color: var(--text-primary);
-  border-color: var(--border-subtle);
-}
-
-.inlineActionAccept:hover:not(:disabled) {
-  background: var(
-    --accent-green-light-adaptive,
-    color-mix(in srgb, var(--accent-green) 10%, var(--bg-card))
-  );
-  color: var(--accent-green);
-  border-color: var(--accent-green);
-}
-
-.inlineActionBtn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* 弹性视口容器 (DEL-16: 移除 380px 锁死；DEL-17: 移除滚轮劫持) */
@@ -696,6 +664,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .commitTriggerArrow {
@@ -763,14 +732,24 @@
 .commitInput:focus-visible,
 .commitInput:focus {
   outline: none;
-  border-color: var(--brand, hsl(160 84% 39%));
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--brand, hsl(160 84% 39%)) 25%, transparent);
+  border-color: var(--focus-border-color);
+  box-shadow: var(--focus-ring-shadow);
 }
 
 .commitActions {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.commitCharCount,
+.commitCounter {
+  font-size: var(--font-size-xxs, 11px);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  margin-left: auto;
+  user-select: none;
 }
 
 /* Git 分组列表 */
@@ -800,6 +779,7 @@
   font-size: var(--font-size-xs, 12px);
   font-weight: var(--font-weight-content, 600);
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .groupActionBtn {

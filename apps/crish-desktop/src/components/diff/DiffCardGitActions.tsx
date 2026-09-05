@@ -118,7 +118,7 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
             ? '提交中…'
             : stagedCount > 0
               ? '提交已暂存'
-              : '暂存并提交'}
+              : '暂存并提交全部'}
         </Button>
         <Tooltip content="将本地提交推送至远程仓库">
           <Button
@@ -133,6 +133,11 @@ export const DiffCardGitActions: React.FC<DiffCardGitActionsProps> = ({
             {pushLoading ? '推送中…' : '推送 (Push)'}
           </Button>
         </Tooltip>
+        {commitMsg.length > 0 && (
+          <span className={styles.commitCharCount} aria-label={`已输入 ${commitMsg.length} 个字符`}>
+            {commitMsg.length}
+          </span>
+        )}
       </div>
     </div>
   );
