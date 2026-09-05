@@ -17,9 +17,9 @@
 // 常量真源 = crates/conex-types/src/device/version.rs 协议常量表：
 // HEARTBEAT_INTERVAL_MS=30_000（D3 §9.3 移动端 30s 心跳）、
 // HEARTBEAT_TIMEOUT_FACTOR=3（3×间隔无消息 → 判定断线，90s 假死）、
-// RECONCILE_REBUILD_THRESHOLD=5000（游标落后超阈值 → 快照重建，M6 §9.3 ③）。
 import type { WsPhase } from '@/domain/pure/selectors';
 import { WsGateway, GatewayError, decodeFrame } from './WsGateway';
+import { buildAuthenticatedWsUrl } from './EndpointResolver';
 
 /** 注入的 WebSocket 最小接口（RN 内建 WebSocket 子集；mock 用同一形状） */
 export interface WsSocket {
@@ -60,6 +60,10 @@ export interface ReconnectingWsClientOptions {
   gateway?: WsGateway;
   /** 会话令牌（R2-03 配对派生后替换注入源：secure-store 读取；当前为接线占位） */
   token?: string;
+  /** 中继票据（云端中继模式下注入短效 Ticket） */
+  ticket?: string;
+  /** 中继角色（默认 client） */
+  role?: 'client' | 'host';
   /** 对账输入源（R2-05 接线点：本地投影快照/outbox；缺省空输入） */
   projections?: () => ReconnectProjectionSource;
   /** 相位变化回调（R2-03 接线点：连接 store 投影 mapWsPhase 消费） */
@@ -329,6 +333,18 @@ export class ReconnectingWsClient {
     return this.opts.token;
   }
 
+  /** 中继票据（云端中继短效 Ticket） */
+  get ticket(): string | undefined {
+    return this.opts.ticket;
+  }
+
+  /** 动态更新认证凭据（支持动态刷新 token / ticket 避免重构连接实例） */
+  setAuth(params: { token?: string; ticket?: string; role?: 'client' | 'host' }): void {
+    if (params.token !== undefined) this.opts.token = params.token;
+    if (params.ticket !== undefined) this.opts.ticket = params.ticket;
+    if (params.role !== undefined) this.opts.role = params.role;
+  }
+
   /** 连续失败次数（诊断 / 单测断言） */
   get retryCount(): number {
     return this.retryCountValue;
@@ -342,6 +358,19 @@ export class ReconnectingWsClient {
   /** 最近一次 heartbeat.ok 回执（时钟校准输入：serverTime - 本地接收时刻，R2-03） */
   get lastHeartbeatOk(): { ts: number; serverTime: number } | null {
     return this.lastHeartbeatOkValue;
+  }
+
+  /** 发送首帧事件订阅（D3 §9.3 / 协议契约 events.subscribe） */
+  sendSubscribe(
+    sessions: string[] = [],
+    lastSequences: Record<string, number> = {},
+    ackMode: 'auto' | 'manual' = 'auto'
+  ): void {
+    this.gateway.send('events.subscribe', {
+      sessions: sessions.slice(0, 32),
+      lastSequences,
+      ackMode,
+    });
   }
 
   /** 建立连接（idle/dead → connecting → open）。已连接/连接中 → noop（防双连接，
@@ -383,7 +412,12 @@ export class ReconnectingWsClient {
 
   private openSocket(): void {
     const factory = this.opts.factory ?? defaultFactory;
-    const ws = factory(this.opts.url);
+    const connectUrl = buildAuthenticatedWsUrl(this.opts.url, {
+      token: this.opts.token,
+      ticket: this.opts.ticket,
+      role: this.opts.role,
+    });
+    const ws = factory(connectUrl);
     this.ws = ws;
     ws.onopen = () => this.handleOpen(ws);
     ws.onmessage = (ev) => this.handleMessage(ev.data);
@@ -394,11 +428,11 @@ export class ReconnectingWsClient {
   private handleOpen(ws: WsSocket): void {
     this.cancelReconnectTimer();
     this.retryCountValue = 0;
-    this.setPhase('open');
-    // 出站接线：发送闭包绑定当前 socket；socket 换代后旧闭包自动失效（防错发）
+    // 出站接线：优先完成出站管道绑定，保证任何下游回调发起出站帧时 sendFn 已可用
     this.gateway.attachSend((raw) => {
       if (this.ws === ws) ws.send(raw);
     });
+    this.setPhase('open');
     this.startHeartbeat();
     this.markRx();
     this.driveProjection();
@@ -533,17 +567,8 @@ export class ReconnectingWsClient {
     ws.onerror = null;
   }
 
-  /** 消息路由骨架（R2-02：只接分发，业务语义 R2-05 域实现） */
+  /** 消息路由骨架（心跳回执；业务事件路由由上层接线如 FeedBridge 接入） */
   private setupRoutes(): void {
-    this.gateway.on('events.subscribe.ok', () => {
-      // R2-05：① 订阅对账——逐会话 nextSequence/stale 驱动 resume/full-replay 分类
-    });
-    this.gateway.on('events.resume.page', () => {
-      // R2-05：续传分页应用（EventPage 契约；游标推进，(sessionId, sequence) 去重）
-    });
-    this.gateway.on('events.resume.done', () => {
-      // R2-05：续传完成（resumedTo 水位；桌面恢复实时推流）
-    });
     this.gateway.on('heartbeat.ok', (env) => {
       // 完整实现（R2-02）：收到 heartbeat.ok → 重置假死计时 + 时钟校准留点
       this.markRx();

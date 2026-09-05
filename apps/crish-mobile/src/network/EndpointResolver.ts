@@ -17,13 +17,19 @@ export const GATEWAY_PORT_RANGE_MAX = 8775;
 /** 中继端口占位（中继服务本期不实现，D3 §3.1 仅协议留位） */
 export const DEFAULT_RELAY_PORT = 8765;
 
-/** WS 地址构造（生产强制 wss，v1 无「信任所有证书」开关，D4 §6.1.5；无 TLS 降级需显式开启） */
+/** WS 地址构造（必须挂载 /v1/events 路由；已认证会话携带 ?token= 查询参数） */
 export function resolveWsUrl(
   host: string,
   port = DEFAULT_GATEWAY_PORT,
-  tls = true
+  tls = true,
+  token?: string
 ): string {
-  return `${tls ? 'wss' : 'ws'}://${host}:${port}`;
+  const protocol = tls ? 'wss' : 'ws';
+  const basePath = `${protocol}://${host}:${port}/v1/events`;
+  if (token && token.trim().length > 0) {
+    return `${basePath}?token=${encodeURIComponent(token.trim())}`;
+  }
+  return basePath;
 }
 
 /** HTTP 地址构造（配对握手 / 令牌刷新走 https 同端口） */
@@ -35,13 +41,39 @@ export function resolveHttpUrl(
   return `${tls ? 'https' : 'http'}://${host}:${port}`;
 }
 
-/** 中继地址占位（D3 §3.1 / M2 中继服务未实现；接口留位供 R2-04+ 接线） */
+/** 中继地址构造（D3 §3.1 / 支持直连与中继票据） */
 export function resolveRelayUrl(
   relayHost: string,
   port = DEFAULT_RELAY_PORT,
-  tls = true
+  tls = true,
+  ticket?: string
 ): string {
-  return `${tls ? 'wss' : 'ws'}://${relayHost}:${port}`;
+  const base = `${tls ? 'wss' : 'ws'}://${relayHost}:${port}`;
+  if (ticket) {
+    return `${base}/relay?ticket=${encodeURIComponent(ticket)}&role=client`;
+  }
+  return base;
+}
+
+/** 注入鉴权/票据参数的 WS 地址安全构造 */
+export function buildAuthenticatedWsUrl(
+  rawUrl: string,
+  params: { token?: string; ticket?: string; role?: string }
+): string {
+  if (!params.token && !params.ticket && !params.role) return rawUrl;
+  const separator = rawUrl.includes('?') ? '&' : '?';
+  const queryParts: string[] = [];
+  if (params.token && !rawUrl.includes('token=')) {
+    queryParts.push(`token=${encodeURIComponent(params.token)}`);
+  }
+  if (params.ticket && !rawUrl.includes('ticket=')) {
+    queryParts.push(`ticket=${encodeURIComponent(params.ticket)}`);
+  }
+  if (params.role && !rawUrl.includes('role=')) {
+    queryParts.push(`role=${encodeURIComponent(params.role)}`);
+  }
+  if (queryParts.length === 0) return rawUrl;
+  return `${rawUrl}${separator}${queryParts.join('&')}`;
 }
 
 /** 候选端点（host × 端口；tls 承载标记） */

@@ -30,6 +30,8 @@
 //! - **退出钩子**：`RunEvent::Exit` 时 PTY 清理 + 多端服务优雅关停
 //!   （ServerLifecycle 槽）+ [CoreRunState::save_snapshot_blocking]（独立线程）。
 
+mod auth;
+mod auth_commands;
 mod background;
 mod browser;
 mod browser_commands;
@@ -328,6 +330,14 @@ command_registry![
         "multi_device_set_enabled",
         multi_device_commands::multi_device_set_enabled
     ),
+    // ── 用户账号与云端设备管理面 ──
+    ("auth_login", auth_commands::auth_login),
+    ("auth_logout", auth_commands::auth_logout),
+    ("auth_get_session", auth_commands::auth_get_session),
+    ("auth_refresh_token", auth_commands::auth_refresh_token),
+    ("auth_list_devices", auth_commands::auth_list_devices),
+    ("auth_revoke_device", auth_commands::auth_revoke_device),
+    ("auth_get_relay_ticket", auth_commands::auth_get_relay_ticket),
     // ── 会话持久化（B，§2.2）──
     ("list_sessions", session_commands::list_sessions),
     ("load_session_body", session_commands::load_session_body),
@@ -820,6 +830,10 @@ fn main() {
                 Arc::clone(&ws_registry),
             ));
             app.manage(Arc::clone(&pairing));
+
+            // 用户账号中心管理与系统级凭据安全存储（DPAPI）
+            let auth_manager = crate::auth::AuthManager::new(setup_app_dir.clone(), None);
+            app.manage(auth_manager);
 
             // ⑥ 状态诊断 manage（与 CoreRunState 共享同一实例）
             app.manage(Arc::clone(diagnostics));

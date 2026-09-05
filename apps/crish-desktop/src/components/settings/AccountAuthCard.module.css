@@ -1,0 +1,177 @@
+.cardContent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 16px);
+  padding: var(--spacing-md, 16px);
+}
+
+.loginForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 12px);
+}
+
+.formRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.formLabel {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.inputField {
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm, 13px);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.inputField:focus {
+  border-color: color-mix(in srgb, var(--border-subtle) 85%, var(--text-primary) 15%);
+}
+
+.formActions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.loginHint {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+.errorText {
+  font-size: var(--font-size-xs, 12px);
+  color: hsl(0 72% 51%);
+}
+
+.userCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--spacing-sm, 12px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.userInfo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.userAvatar {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-primary);
+}
+
+.userMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.userName {
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-semibold, 600);
+  color: var(--text-primary);
+}
+
+.userEmail {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+}
+
+.statusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full, 9999px);
+  background: hsl(142 76% 36% / 0.1);
+  color: hsl(142 76% 36%);
+  font-size: 11px;
+  font-weight: var(--font-weight-medium, 500);
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full, 9999px);
+  background: hsl(142 76% 46%);
+}
+
+.deviceListSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.deviceListHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.deviceListTitle {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
+}
+
+.deviceItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.deviceLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.deviceIcon {
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+}
+
+.deviceName {
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+}
+
+.deviceMeta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.emptyDevices {
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
+  padding: 8px 0;
+}

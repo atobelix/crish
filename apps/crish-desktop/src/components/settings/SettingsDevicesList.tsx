@@ -36,8 +36,9 @@ export const SettingsDevicesList: React.FC<SettingsDevicesListProps> = ({
       <SettingsCard>
         {devices.length === 0 ? (
           <div className={styles.emptyState} data-testid="devices-empty">
-            <Lucide.TabletSmartphone size={28} aria-hidden />
-            <p>暂无已配对设备。开启配对模式后，手机端扫码即可加入。</p>
+            <Lucide.Smartphone size={24} aria-hidden />
+            <p className={styles.emptyTitle}>暂无已配对设备</p>
+            <p className={styles.emptySub}>开启配对模式后，手机端扫码即可加入</p>
           </div>
         ) : (
           <ul className={styles.deviceList} data-testid="device-list">

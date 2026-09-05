@@ -21,6 +21,7 @@ import {
 } from './SettingsUI';
 import { Button, Tooltip } from '../ui';
 import { ExternalSessionImport } from './ExternalSessionImport';
+import { AccountAuthCard } from './AccountAuthCard';
 import styles from './SettingsProfileTab.module.css';
 
 type Props = {
@@ -168,6 +169,10 @@ export const SettingsProfileTab: React.FC<Props> = ({ _onBlockingOverlayChange }
         ) : null
       }
     >
+      <SettingsSection title="Flowbit 账号与多端协同">
+        <AccountAuthCard />
+      </SettingsSection>
+
       <SettingsSection title="当前环境">
         <SettingsCard>
           <SettingsRow

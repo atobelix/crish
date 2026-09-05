@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './Sidebar.module.css';
 import { SettingsQuickMenu } from '../settings/SettingsQuickMenu';
+import { useAuthStore } from '../../store/authStore';
 
 export interface UserProfileCardProps {
   username?: string;
@@ -10,6 +11,20 @@ export interface UserProfileCardProps {
 
 export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
   ({ username = 'orange', workspaceName = 'Conex Workspace' }) => {
+    const { isLoggedIn, user, initialized, initSession } = useAuthStore();
+
+    useEffect(() => {
+      if (!initialized) {
+        void initSession();
+      }
+    }, [initialized, initSession]);
+
+    const activeUser =
+      isLoggedIn && user?.email
+        ? user.name || user.email.split('@')[0]
+        : username;
+    const activeWorkspace = workspaceName;
+
     return (
       <SettingsQuickMenu
         renderTrigger={({ open, triggerProps }) => (
@@ -17,18 +32,21 @@ export const UserProfileCard: React.FC<UserProfileCardProps> = React.memo(
             type="button"
             className={`${styles.userProfileCard}${open ? ` ${styles.isOpen}` : ''}`}
             data-testid="user-profile-card"
-            aria-label={`用户卡片：${username}，点击打开快捷菜单`}
+            aria-label={`用户卡片：${activeUser}，点击打开快捷菜单`}
             {...triggerProps}
           >
             <div className={styles.userAvatarContainer}>
               <div className={styles.userAvatar}>
                 <Lucide.User size={15} strokeWidth={2} aria-hidden />
               </div>
-              <span className={styles.userOnlineStatus} aria-label="在线" />
+              <span
+                className={`${styles.userOnlineStatus}${!isLoggedIn ? ` ${styles.userOfflineStatus}` : ''}`}
+                aria-label="在线"
+              />
             </div>
             <div className={styles.userTextStack}>
-              <span className={styles.userName}>{username}</span>
-              <span className={styles.userWorkspace}>{workspaceName}</span>
+              <span className={styles.userName}>{activeUser}</span>
+              <span className={styles.userWorkspace}>{activeWorkspace}</span>
             </div>
             <Lucide.ChevronsUpDown
               size={13}

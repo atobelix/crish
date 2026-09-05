@@ -123,6 +123,14 @@ pub static COMMAND_MANIFEST: CommandManifest = CommandManifest {
         // R1-11 G-1：多端服务总开关（D5 D-01 红线 1——enabled=false 时
         // 不 bind 任何端口；状态衔接 multi_device_pair_status）
         entry("multi_device_set_enabled", "multi_device", "engine", true),
+        // ── 用户账号与云端设备管理面 ──
+        entry("auth_login", "auth", "engine", true),
+        entry("auth_logout", "auth", "engine", true),
+        entry("auth_get_session", "auth", "engine", true),
+        entry("auth_refresh_token", "auth", "engine", true),
+        entry("auth_list_devices", "auth", "engine", true),
+        entry("auth_revoke_device", "auth", "engine", true),
+        entry("auth_get_relay_ticket", "auth", "engine", true),
         // ── 配置族（§2.2-C，F5 终态名：config_get/config_update/config_secret_*）──
         // PE-07 T07.4（K-01/K-02）：config_profile_apply / config_secret_reveal 已接线
         entry("config_get", "config", "engine", true),

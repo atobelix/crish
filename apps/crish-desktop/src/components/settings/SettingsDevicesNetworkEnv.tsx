@@ -8,8 +8,10 @@ import styles from './SettingsDevicesTab.module.css';
 import {
   SettingsSection,
   SettingsCard,
+  SettingsRow,
 } from './SettingsUI';
 import type { NetworkEnvInfo } from '../../api/multiDevice';
+import { useToast } from '../../services/toast/ToastContext';
 
 /** 网络配置文件类别 → 展示名（Rust multi_device_network_info 四态） */
 const PROFILE_LABELS: Record<NetworkEnvInfo['profile'], string> = {
@@ -26,58 +28,97 @@ export interface SettingsDevicesNetworkEnvProps {
 export const SettingsDevicesNetworkEnv: React.FC<SettingsDevicesNetworkEnvProps> = ({
   netEnv,
 }) => {
+  const { showToast } = useToast();
+  const ips = (netEnv.usableIps ?? netEnv.usable_ips ?? []).filter(
+    (ip) => ip !== '0.0.0.0'
+  );
+
+  const isPublic = netEnv.profile === 'public';
+  const isPrivate = netEnv.profile === 'private';
+
+  const badgeClass = isPublic
+    ? styles.profileBadgeWarn
+    : isPrivate
+    ? styles.profileBadgeSuccess
+    : styles.profileBadge;
+
+  const handleCopyIp = async (ip: string) => {
+    try {
+      await navigator.clipboard.writeText(ip);
+      showToast(`已复制 IP 地址：${ip}`);
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <SettingsSection title="网络环境">
       <SettingsCard>
-        <div className={styles.networkEnv} data-testid="network-env">
-          <div className={styles.networkProfile}>
-            <Lucide.Wifi size={16} aria-hidden />
-            <span>
-              当前网络：{PROFILE_LABELS[netEnv.profile] ?? netEnv.profile}
-            </span>
-            {netEnv.profile === 'public' && (
-              <span className={styles.networkPublicBadge}>公用网络</span>
-            )}
-          </div>
-          {netEnv.profile === 'public' && (
+        <div className={styles.networkCardContent} data-testid="network-env">
+          <SettingsRow
+            icon={<Lucide.Wifi size={18} aria-hidden />}
+            title="网络类型"
+            desc={
+              isPublic
+                ? '当前处于公用网络，Windows 防火墙可能阻断手机访问'
+                : isPrivate
+                ? '专用网络环境，局域网直连通畅'
+                : '网络配置文件状态'
+            }
+            control={
+              <span className={badgeClass}>
+                {PROFILE_LABELS[netEnv.profile] ?? netEnv.profile}
+              </span>
+            }
+          />
+
+          {isPublic && (
             <div
-              className={styles.firewallHint}
+              className={styles.networkWarnBanner}
               data-testid="network-public-hint"
             >
               <Lucide.ShieldAlert size={14} aria-hidden />
-              请切换到专用网络，否则 Windows 防火墙会阻止手机访问本机服务。
+              <span>
+                请切换到专用网络，否则 Windows 防火墙会阻止手机访问本机服务。
+              </span>
             </div>
           )}
-          <div className={styles.ipList}>
-            <span className={styles.ipListTitle}>
-              手机可直连地址（AP 隔离时手动输入）：
-            </span>
-            {(() => {
-              const ips = netEnv.usable_ips.filter(
-                (ip) => ip !== '0.0.0.0'
-              );
-              return ips.length > 0 ? (
-                <ul>
+
+          <SettingsRow
+            icon={<Lucide.Network size={18} aria-hidden />}
+            title="手机直连地址"
+            desc="扫码失败或跨网段时手动输入"
+            control={
+              ips.length > 0 ? (
+                <div className={styles.ipBadgeGroup}>
                   {ips.map((ip) => (
-                    <li key={ip}>
+                    <button
+                      key={ip}
+                      type="button"
+                      className={styles.ipBadge}
+                      onClick={() => void handleCopyIp(ip)}
+                      title="点击复制 IP 地址"
+                    >
                       <code>{ip}</code>
-                    </li>
+                      <Lucide.Copy size={11} aria-hidden />
+                    </button>
                   ))}
-                </ul>
+                </div>
               ) : (
                 <span className={styles.ipListEmpty}>
                   未检测到可直连地址，请检查网络连接。
                 </span>
-              );
-            })()}
-          </div>
+              )
+            }
+          />
+
           {netEnv.hint && (
             <div
-              className={styles.apIsolationHint}
+              className={styles.networkFooterHint}
               data-testid="network-hint"
             >
-              <Lucide.Router size={14} aria-hidden />
-              {netEnv.hint}
+              <Lucide.Info size={13} aria-hidden />
+              <span>{netEnv.hint}</span>
             </div>
           )}
         </div>

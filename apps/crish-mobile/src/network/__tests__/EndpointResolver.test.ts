@@ -10,16 +10,29 @@ import {
   resolveRelayUrl,
   resolveWsUrl,
   selectEndpoint,
+  buildAuthenticatedWsUrl,
 } from '../EndpointResolver';
 
 describe('resolveWsUrl / resolveHttpUrl（wss/https 同端口映射，D4 §6.3）', () => {
-  test('默认 wss + 默认端口 8765（裁决修正 6）', () => {
-    expect(resolveWsUrl('192.168.1.10')).toBe('wss://192.168.1.10:8765');
+  test('默认 wss + 默认端口 8765 + /v1/events', () => {
+    expect(resolveWsUrl('192.168.1.10')).toBe('wss://192.168.1.10:8765/v1/events');
+    expect(resolveWsUrl('192.168.1.5', 8765, true)).toBe(
+      'wss://192.168.1.5:8765/v1/events'
+    );
+  });
+
+  test('显式携带 token 参数追加 ?token=xxx', () => {
+    expect(resolveWsUrl('192.168.1.5', 8765, true, 'token_xyz')).toBe(
+      'wss://192.168.1.5:8765/v1/events?token=token_xyz'
+    );
+    expect(resolveWsUrl('host.local', 8765, false, 'abc 123')).toBe(
+      'ws://host.local:8765/v1/events?token=abc%20123'
+    );
   });
 
   test('显式端口 + 非 TLS 降级（仅限可信局域网，D4 §6.1.5）', () => {
     expect(resolveWsUrl('192.168.1.10', 9000, false)).toBe(
-      'ws://192.168.1.10:9000'
+      'ws://192.168.1.10:9000/v1/events'
     );
     expect(resolveHttpUrl('192.168.1.10', 9000, false)).toBe(
       'http://192.168.1.10:9000'
@@ -43,7 +56,7 @@ describe('candidateEndpoints（端口范围 8765-8775 探测候选，纯函数�
     const first = candidates[0];
     expect(first).toBeDefined();
     expect(first).toMatchObject({ host: '10.0.2.2', port: 8765, tls: true });
-    expect(first!.wsUrl).toBe('wss://10.0.2.2:8765');
+    expect(first!.wsUrl).toBe('wss://10.0.2.2:8765/v1/events');
     expect(first!.httpUrl).toBe('https://10.0.2.2:8765');
     // 每个端口至少出现一次（对每个 host）
     for (
@@ -63,8 +76,8 @@ describe('candidateEndpoints（端口范围 8765-8775 探测候选，纯函数�
       tls: false,
     });
     expect(candidates.map((c) => c.wsUrl)).toEqual([
-      'ws://h1:9000',
-      'ws://h1:9001',
+      'ws://h1:9000/v1/events',
+      'ws://h1:9001/v1/events',
     ]);
     expect(candidates.map((c) => c.httpUrl)).toEqual([
       'http://h1:9000',
@@ -134,7 +147,7 @@ describe('selectEndpoint（探测结果纯选择逻辑）', () => {
   });
 });
 
-describe('resolveRelayUrl（中继占位，D3 §3.1 本期不实现）', () => {
+describe('resolveRelayUrl（中继构造与票据支持）', () => {
   test('占位接口可用（wss + 中继默认端口）', () => {
     expect(resolveRelayUrl('relay.crish.example')).toBe(
       `wss://relay.crish.example:${DEFAULT_RELAY_PORT}`
@@ -142,5 +155,34 @@ describe('resolveRelayUrl（中继占位，D3 §3.1 本期不实现）', () => {
     expect(resolveRelayUrl('relay.crish.example', 443)).toBe(
       'wss://relay.crish.example:443'
     );
+  });
+
+  test('携带 ticket 时追加 /relay 路径与查询参数', () => {
+    expect(
+      resolveRelayUrl('relay.flowbit.me', 443, true, 'tkt-123456')
+    ).toBe('wss://relay.flowbit.me:443/relay?ticket=tkt-123456&role=client');
+  });
+});
+
+describe('buildAuthenticatedWsUrl（安全注入鉴权参数）', () => {
+  test('注入 token 参数', () => {
+    expect(
+      buildAuthenticatedWsUrl('wss://192.168.1.100:8765', { token: 'tok_abc' })
+    ).toBe('wss://192.168.1.100:8765?token=tok_abc');
+  });
+
+  test('已有 query 参数时使用 & 连接', () => {
+    expect(
+      buildAuthenticatedWsUrl('wss://192.168.1.100:8765?v=1', { token: 'tok_abc' })
+    ).toBe('wss://192.168.1.100:8765?v=1&token=tok_abc');
+  });
+
+  test('注入中继 ticket 和 role', () => {
+    expect(
+      buildAuthenticatedWsUrl('wss://relay.flowbit.me:443/relay', {
+        ticket: 'tkt_xyz',
+        role: 'client',
+      })
+    ).toBe('wss://relay.flowbit.me:443/relay?ticket=tkt_xyz&role=client');
   });
 });

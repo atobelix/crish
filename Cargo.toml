@@ -16,6 +16,7 @@ members = [
     "crates/conex-md-ast",
     "crates/conex-workspace-store",
     "crates/conex-note-runtime",
+    "crates/conex-relay",
     "crates/conex-sandbox",
     "crates/conex-search",
     "crates/conex-shared",

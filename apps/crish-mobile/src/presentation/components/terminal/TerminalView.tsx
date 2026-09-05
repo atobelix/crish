@@ -4,7 +4,7 @@
 // - 自动滚底跟随（R2UX-05-03：吸底跟随阈值 40dp，上翻暂停，跟随恢复由「回到底部」触发）；
 // - 「已截断 N 行」顶部标记（F3 §4.3，ListHeader 不参与行键）；
 // - 空态（M4 §5.9：主文案 + 副文案，禁「0 误导」）。
-import { memo, useEffect, useRef } from 'react';
+import { memo, useRef } from 'react';
 import type { RefObject } from 'react';
 import {
   FlatList,
@@ -12,10 +12,9 @@ import {
   StyleSheet,
   Text,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 import { useTheme } from '@/adapters/platform/theme';
+import { useTerminalScrollFilter } from './useTerminalScrollFilter';
 
 /** 固定行高（R2UX-05-07 固定行高数据面；getItemLayout 虚拟化依赖） */
 export const TERMINAL_LINE_HEIGHT = 24;
@@ -56,21 +55,17 @@ export function TerminalView({
   const internalRef = useRef<FlatList<string> | null>(null);
   const targetRef = listRef ?? internalRef;
 
-  // 自动滚底（R2UX-05-03）：跟随态下新行到达滚到底；getItemLayout 保证定位不抖动
-  useEffect(() => {
-    if (follow && lines.length > 0) {
-      targetRef.current?.scrollToEnd({ animated: false });
-    }
-  }, [follow, lines.length, targetRef]);
-
-  const handleScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    const distanceFromEnd =
-      contentSize.height - (contentOffset.y + layoutMeasurement.height);
-    const following = distanceFromEnd <= AUTO_FOLLOW_THRESHOLD_DP;
-    // 仅在状态翻转时通知（避免滚动事件风暴触发父级重渲染）
-    if (following !== follow) onFollowChange?.(following);
-  };
+  const {
+    handleScroll,
+    handleScrollBeginDrag,
+    handleScrollEndDrag,
+    handleMomentumScrollEnd,
+  } = useTerminalScrollFilter({
+    follow,
+    onFollowChange,
+    listRef: targetRef,
+    lineCount: lines.length,
+  });
 
   return (
     <FlatList
@@ -93,6 +88,9 @@ export function TerminalView({
       maxToRenderPerBatch={40}
       windowSize={11}
       onScroll={handleScroll}
+      onScrollBeginDrag={handleScrollBeginDrag}
+      onScrollEndDrag={handleScrollEndDrag}
+      onMomentumScrollEnd={handleMomentumScrollEnd}
       scrollEventThrottle={16}
       ListHeaderComponent={
         truncatedCount > 0 ? (

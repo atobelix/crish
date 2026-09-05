@@ -92,9 +92,16 @@ pub fn multi_device_rename_device(
 
 /// 网络环境检测（R1-09 G-4）：网络配置文件类别（公用/专用/域，注册表
 /// NetworkList\Profiles）+ 可直连 IP 列表 + 引导文案（防火墙/AP 隔离）。
+/// 异步执行（spawn_blocking 卸载至后台线程，彻底杜绝 COM/网卡枚举阻塞 IPC 消息循环）。
 #[tauri::command]
-pub fn multi_device_network_info() -> NetworkEnvInfo {
-    crate::multi_device_network::network_env_info()
+pub async fn multi_device_network_info() -> NetworkEnvInfo {
+    tokio::task::spawn_blocking(crate::multi_device_network::network_env_info)
+        .await
+        .unwrap_or_else(|_| NetworkEnvInfo {
+            profile: "unknown".to_string(),
+            usable_ips: vec!["0.0.0.0".to_string()],
+            hint: String::new(),
+        })
 }
 
 /// 多端服务总开关（R1-11 G-1 / D5 D-01 红线 1）：控制服务本身启停——

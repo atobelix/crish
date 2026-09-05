@@ -98,6 +98,22 @@ export class FeedBridge {
       this.handleResumePage(frame);
       return;
     }
+
+    // 序列空洞探测（Sequence Gap Detection）：
+    // 若收到 events.push 且 sequence 大于当前游标 + 1，触发增量回放补洞自愈
+    if (frame.kind === 'events.push') {
+      const body = readRecord(frame.body) ?? {};
+      const ev = readRecord(body['event']) ?? {};
+      const sessionId = typeof ev['sessionId'] === 'string' ? ev['sessionId'] : null;
+      const seq = typeof ev['sequence'] === 'number' ? ev['sequence'] : null;
+      if (sessionId && seq !== null) {
+        const currentSeq = lastSeqOf(sessionId);
+        if (currentSeq > 0 && seq > currentSeq + 1) {
+          this.resumeSession(sessionId, currentSeq);
+        }
+      }
+    }
+
     const actions = mapDeviceFrame({ kind: frame.kind, body: frame.body });
     this.applyActions(actions);
     // 窗口活跃度刷新（feed 面帧计入卸载候选的活跃度）

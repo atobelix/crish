@@ -1239,6 +1239,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "conex-relay"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "futures-util",
+ "hex",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.19",
+ "tokio",
+ "tokio-tungstenite 0.29.0",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "conex-sandbox"
 version = "0.1.0"
 dependencies = [

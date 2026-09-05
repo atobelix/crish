@@ -135,17 +135,32 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
     showToast,
   });
 
+  const inFlightRef = useRef(false);
+  const netEnvFetchedRef = useRef(false);
+
   // load 实现延后赋值（此时所有 dispatch 已就绪），避免 TDZ
-  loadRef.current = async () => {
-    const [s, d, n] = await Promise.all([
-      pairStatus(),
-      listDevices(),
-      networkEnvInfo(),
-    ]);
-    if (!mountedRef.current) return;
-    if (s) dispatchPairing({ type: 'setStatus', status: s });
-    dispatchDeviceList({ type: 'setDevices', devices: d });
-    if (n) dispatchNetEnv({ type: 'setNetEnv', netEnv: n });
+  loadRef.current = async (fetchNet = false) => {
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
+    try {
+      const needNet = fetchNet || !netEnvFetchedRef.current;
+      const [s, d, n] = await Promise.all([
+        pairStatus(),
+        listDevices(),
+        needNet ? networkEnvInfo() : Promise.resolve(null),
+      ]);
+      if (!mountedRef.current) return;
+      if (s) {
+        dispatchPairing({ type: 'setStatus', status: s });
+      }
+      dispatchDeviceList({ type: 'setDevices', devices: d });
+      if (n) {
+        netEnvFetchedRef.current = true;
+        dispatchNetEnv({ type: 'setNetEnv', netEnv: n });
+      }
+    } finally {
+      inFlightRef.current = false;
+    }
   };
 
   useEffect(() => {
@@ -197,9 +212,31 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
           {pairing.serviceEnabled ? (
             <>
               <SettingsRow
+                icon={<Lucide.Radio size={18} aria-hidden />}
+                title="多端互通服务"
+                desc={
+                  <span
+                    className={styles.serviceDesc}
+                    data-testid="service-disable-hint"
+                  >
+                    服务运行中 · 关闭服务将断开所有已配对设备
+                  </span>
+                }
+                control={
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => void handleDisableService()}
+                    disabled={pairing.busy}
+                  >
+                    <Lucide.Power size={14} aria-hidden /> 关闭服务
+                  </Button>
+                }
+              />
+              <SettingsRow
                 icon={<Lucide.QrCode size={18} aria-hidden />}
                 title="开启局域网配对"
-                desc="开启后生成一次性配对码，手机扫码即可连接本机（仅同一局域网可直达；公网走中继/P2P 属后续阶段）"
+                desc="生成一次性配对码，移动端扫码即可连接本机"
                 control={
                   <Switch
                     checked={enabled}
@@ -224,94 +261,79 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                   data-testid="pair-code-missing"
                 >
                   <Lucide.Info size={14} aria-hidden />
-                  配对已开启但配对码已过期（重启后不保留）。点击上方开关关闭后重新开启即可生成新码。
+                  配对已开启但配对码已过期。点击上方开关重新开启即可生成新码。
                 </div>
               )}
-              {pairing.status && (
-                <div className={styles.pairMeta} data-testid="pair-meta">
-                  <span>状态：{pairing.status.state}</span>
-                  <span>绑定：{pairing.status.bind_mode}</span>
-                  <span>已配对设备：{pairing.status.token_count}</span>
-                  {pairing.status.failed_attempts > 0 && (
-                    <span className={styles.pairMetaWarn}>
-                      验证失败次数：{pairing.status.failed_attempts}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div className={styles.serviceControl}>
-                <Button
-                  size="sm"
-                  variant="danger"
-                  onClick={() => void handleDisableService()}
-                  disabled={pairing.busy}
-                >
-                  <Lucide.Power size={14} aria-hidden /> 关闭服务
-                </Button>
-                <span
-                  className={styles.serviceDisableHint}
-                  data-testid="service-disable-hint"
-                >
-                  关闭服务将断开所有已配对设备（令牌保留，重新开启服务后可直接重连）
-                </span>
-              </div>
             </>
           ) : (
-            <div className={styles.serviceOff} data-testid="service-off">
-              <div className={styles.serviceOffTitle}>
-                <Lucide.PowerOff size={16} aria-hidden />
-                <span>多端互通服务未开启</span>
-              </div>
-              <p className={styles.serviceOffDesc}>
-                服务默认关闭（不监听任何端口，本机不可被手机连接）。开启服务后本机开始监听，
-                即可进入配对模式生成一次性配对码。
-              </p>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={() => void handleEnableService()}
-                disabled={pairing.busy}
-              >
-                <Lucide.Power size={14} aria-hidden /> 开启服务
-              </Button>
+            <div data-testid="service-off">
+              <SettingsRow
+                icon={<Lucide.Radio size={18} aria-hidden />}
+                title="多端互通服务未开启"
+                desc="开启后本机可被局域网内的移动设备发现并连接"
+                control={
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => void handleEnableService()}
+                    disabled={pairing.busy}
+                  >
+                    <Lucide.Power size={14} aria-hidden /> 开启服务
+                  </Button>
+                }
+              />
             </div>
           )}
         </SettingsCard>
       </SettingsSection>
 
-      {enabled && netEnv && <SettingsDevicesNetworkEnv netEnv={netEnv} />}
-
       {showPairCard && (
         <SettingsSection title="扫码配对">
           <SettingsCard>
             <div className={styles.qrWrap} data-testid="pair-qr-card">
-              <QRCodeSVG
-                value={pairing.pairResult!.qr}
-                size={200}
-                level="M"
-                aria-label="配对二维码"
-              />
-              <div className={styles.qrCodeText} data-testid="pair-code">
-                {pairing.pairResult!.code}
+              <div className={styles.qrBox}>
+                <QRCodeSVG
+                  value={pairing.pairResult!.qr}
+                  size={180}
+                  level="M"
+                  aria-label="配对二维码"
+                />
               </div>
-              <div className={styles.qrMeta}>
-                <span>
-                  剩余有效时间：
-                  {formatRemaining(pairing.status?.code_remaining_ms ?? null)}
+              <div className={styles.codeContainer}>
+                <span className={styles.qrCodeText} data-testid="pair-code">
+                  {pairing.pairResult!.code}
                 </span>
-                <span>验证失败次数：{pairing.status?.failed_attempts ?? 0}</span>
-              </div>
-              <div className={styles.qrActions}>
                 <Button
                   size="sm"
                   variant="secondary"
                   onClick={() => void handleCopyCode()}
+                  title="复制配对码"
                 >
-                  <Lucide.Copy size={14} aria-hidden /> 复制配对码
+                  <Lucide.Copy size={13} aria-hidden /> 复制配对码
                 </Button>
+              </div>
+              <div className={styles.qrMeta}>
+                <Lucide.Clock size={13} aria-hidden />
+                <span>
+                  剩余有效时间：
+                  {formatRemaining(pairing.status?.code_remaining_ms ?? null)}
+                </span>
+              </div>
+              <div className={styles.qrCardFooter}>
+                {pairing.pairResult!.firewall_hint ? (
+                  <div
+                    className={styles.firewallHint}
+                    data-testid="firewall-hint"
+                  >
+                    <Lucide.ShieldAlert size={14} aria-hidden />
+                    <span>{pairing.pairResult!.firewall_hint}</span>
+                  </div>
+                ) : (
+                  <div />
+                )}
                 <Button
                   size="sm"
-                  variant="secondary"
+                  variant="ghost"
                   onClick={() =>
                     dispatchPairing({
                       type: 'setConfirmClosePairing',
@@ -319,23 +341,17 @@ export const SettingsDevicesTab: React.FC<Props> = ({ _onBlockingOverlayChange }
                     })
                   }
                   disabled={pairing.busy}
+                  className={styles.closePairBtn}
                 >
                   <Lucide.X size={14} aria-hidden /> 关闭配对
                 </Button>
               </div>
-              {pairing.pairResult!.firewall_hint && (
-                <div
-                  className={styles.firewallHint}
-                  data-testid="firewall-hint"
-                >
-                  <Lucide.ShieldAlert size={14} aria-hidden />
-                  {pairing.pairResult!.firewall_hint}
-                </div>
-              )}
             </div>
           </SettingsCard>
         </SettingsSection>
       )}
+
+      {enabled && netEnv && <SettingsDevicesNetworkEnv netEnv={netEnv} />}
 
       <SettingsDevicesList
         devices={deviceList.devices}

@@ -59,6 +59,52 @@ describe('FeedBridge 帧消费（M6 §3.1 分发表子集）', () => {
     bridge.detach();
   });
 
+  it('events.push 帧发现序列空洞（seq > currentSeq + 1）时自动发起 events.resume 补洞自愈', async () => {
+    const gateway = new WsGateway();
+    const sendSpy = jest.fn();
+    gateway.attachSend(sendSpy);
+    const bridge = new FeedBridge({ gateway });
+    bridge.attach();
+
+    // 先推入 sequence 1
+    await act(async () => {
+      gateway.dispatchFrame(
+        frame('events.push', {
+          event: {
+            type: 'message-delta',
+            sessionId: 's-gap',
+            sequence: 1,
+            text: '第1条',
+          },
+        })
+      );
+    });
+    expect(lastSeqOf('s-gap')).toBe(1);
+
+    // 跳过 2, 3，直接推入 sequence 4
+    await act(async () => {
+      gateway.dispatchFrame(
+        frame('events.push', {
+          event: {
+            type: 'message-delta',
+            sessionId: 's-gap',
+            sequence: 4,
+            text: '第4条',
+          },
+        })
+      );
+    });
+
+    // 验证发出了 events.resume 请求（afterSequence = 1）
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.stringContaining('"kind":"events.resume"')
+    );
+    expect(sendSpy).toHaveBeenCalledWith(
+      expect.stringContaining('"afterSequence":1')
+    );
+    bridge.detach();
+  });
+
   it('session.updated 帧 → sessionStore upsert', async () => {
     const gateway = new WsGateway();
     const bridge = new FeedBridge({ gateway });

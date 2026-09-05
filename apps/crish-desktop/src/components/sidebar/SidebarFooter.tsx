@@ -4,12 +4,6 @@ import * as Lucide from 'lucide-react';
 import styles from './Sidebar.module.css';
 import { Button, Tooltip } from '../ui';
 import {
-  canUseDemoMode,
-  getAppMode,
-  isDemoMode,
-  switchAppMode,
-} from '../../api/appMode';
-import {
   toggleSettingsOverlay,
   useShowSettingsOverlay,
 } from '../../store/settingsUiStore';
@@ -71,26 +65,6 @@ export const SidebarFooter: React.FC<SidebarFooterProps> = React.memo(
         aria-hidden={chromeHidden || undefined}
         inert={chromeHidden ? true : undefined}
       >
-        {canUseDemoMode() && (
-          <Tooltip content="开发切换：正式 / 演示 (正式包不会出现)">
-            <button
-              type="button"
-              className={`${styles.modeChip} ${isDemoMode() ? styles.isDemo : ''}`}
-              aria-label={
-                isDemoMode()
-                  ? '当前演示模式，点击切换为正式'
-                  : '当前正式模式，点击切换为演示'
-              }
-              aria-pressed={isDemoMode()}
-              onClick={() => {
-                const next = getAppMode() === 'demo' ? 'normal' : 'demo';
-                switchAppMode(next);
-              }}
-            >
-              {isDemoMode() ? '演示' : '正式'}
-            </button>
-          </Tooltip>
-        )}
 
         {/* 底部左列：用户个人卡片与快捷设置菜单 */}
         <div className={styles.footerUserCol}>

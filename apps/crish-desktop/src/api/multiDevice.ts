@@ -33,12 +33,13 @@ export interface DeviceInfo {
   revoked: boolean;
 }
 
-/** 网络环境检测结果（R1-09 G-4：网络配置文件类别 + 可直连 IP + 引导文案） */
 export interface NetworkEnvInfo {
   /** 网络配置文件类别：public / private / domain / unknown */
   profile: 'public' | 'private' | 'domain' | 'unknown';
-  /** 可直连 IP 列表（推荐 IP 恒在首位；空网络含 0.0.0.0 占位） */
-  usable_ips: string[];
+  /** 可直连 IP 列表（serde camelCase 真实输出） */
+  usableIps?: string[];
+  /** 兼容既有蛇形测试用例（usable_ips） */
+  usable_ips?: string[];
   /** 引导文案（公用网络切换 / AP 隔离兜底，UI 直接渲染） */
   hint: string;
 }
@@ -120,13 +121,21 @@ export async function renameDevice(
   return false;
 }
 
-/** 网络环境检测（配对页消费：公用网络切换提示 / AP 隔离引导手动输 IP） */
 export async function networkEnvInfo(): Promise<NetworkEnvInfo | null> {
   const res = await invokeTyped<NetworkEnvInfo>(
     'multi_device_network_info',
     {}
   );
-  if (res.status === 'ok') return res.data;
+  if (res.status === 'ok') {
+    const raw = res.data;
+    const ips = raw.usableIps ?? raw.usable_ips ?? [];
+    return {
+      profile: raw.profile,
+      usableIps: ips,
+      usable_ips: ips,
+      hint: raw.hint,
+    };
+  }
   logInternalError(
     'networkEnvInfo',
     `multi_device_network_info ${res.status === 'missing' ? 'missing' : res.message}`
