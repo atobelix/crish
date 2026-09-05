@@ -696,6 +696,7 @@ export function getGlobalIndexFromDOMNode(
   let lineStart = -1;
   let lineLen = -1;
 
+  let isGutterOrIgnored = false;
   while (el && el !== container) {
     if (el.hasAttribute('data-token-start') && foundTokenStart === -1) {
       foundTokenStart = attrInt(el, 'data-token-start', '-1');
@@ -704,7 +705,18 @@ export function getGlobalIndexFromDOMNode(
       lineStart = attrInt(el, 'data-line-start', '-1');
       lineLen = attrInt(el, 'data-line-length', '-1');
     }
+    if (
+      el.classList.contains('code-gutter') ||
+      el.hasAttribute('data-ignore-measure')
+    ) {
+      isGutterOrIgnored = true;
+    }
     el = el.parentElement;
+  }
+
+  // 若点击在行号槽位（code-gutter）或明确忽略测量的元素上，直接锚定到行首
+  if (isGutterOrIgnored && lineStart !== -1) {
+    return lineStart;
   }
 
   if (foundTokenStart !== -1) {
@@ -765,11 +777,18 @@ export function locateRowIndexByPhysicalBisection(
     acceptNode(n: Node) {
       const p = n.parentElement;
       if (!p) return NodeFilter.FILTER_REJECT;
-      // 检查当前元素及其祖先是否隐藏
-      const hiddenEl = p.closest('.syntax-hidden, .katex-html, .math-preview') as HTMLElement | null;
-      if (hiddenEl) {
+      // 检查当前元素及其祖先是否隐藏或明确忽略物理测量
+      const ignoreEl = p.closest(
+        '.syntax-hidden, .katex-html, .math-preview, .code-gutter, [data-copy-button], [data-ignore-measure]'
+      ) as HTMLElement | null;
+      if (ignoreEl) {
+        if (
+          p.closest('.code-gutter, [data-copy-button], [data-ignore-measure]')
+        ) {
+          return NodeFilter.FILTER_REJECT;
+        }
         if (typeof window !== 'undefined' && window.getComputedStyle) {
-          const disp = window.getComputedStyle(hiddenEl).display;
+          const disp = window.getComputedStyle(ignoreEl).display;
           if (disp === 'none') return NodeFilter.FILTER_REJECT;
         } else {
           return NodeFilter.FILTER_REJECT;

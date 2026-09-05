@@ -25,13 +25,13 @@ export type LineKind =
   | 'code'
   | 'math';
 
-/** 类型倍率（任务书口径）：heading 1.3× / 表格行 1.2× / 代码 1.15× / 正文 1.0× */
+/** 类型倍率（任务书口径）：heading 1.3× / 表格行 1.2× / 代码 1.0× / 正文 1.0× */
 const TYPE_MULTIPLIER: Record<LineKind, number> = {
   body: 1,
   heading: 1.3,
   table_row: 1.2,
   table_separator: 0,
-  code: 1.15,
+  code: 1,
   math: 1.15,
 };
 

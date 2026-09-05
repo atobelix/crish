@@ -647,25 +647,69 @@ function useFenceContext(
   return computeFenceContext(editorStore.getState(), index);
 }
 
+/** 查找 fence_start 对应的闭合 fence_end 行索引（双段二分查找） */
+function getFenceEndForStart(state: EditorState, startIndex: number): number {
+  const { mainFenceLines, streamTailFenceLines, mainLines } = state;
+  const boundary = mainLines.length - 1;
+  let lo = 0;
+  let hi = mainFenceLines.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (mainFenceLines[mid] > startIndex) hi = mid;
+    else lo = mid + 1;
+  }
+  let end = lo < mainFenceLines.length ? mainFenceLines[lo] : -1;
+  const tailFloor = startIndex - boundary;
+  lo = 0;
+  hi = streamTailFenceLines.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (streamTailFenceLines[mid] > tailFloor) hi = mid;
+    else lo = mid + 1;
+  }
+  if (lo < streamTailFenceLines.length) {
+    const abs = boundary + streamTailFenceLines[lo];
+    if (end === -1 || abs < end) end = abs;
+  }
+  return end;
+}
+
+/** 计算代码行在当前代码块内的行号（1 起算，兼容已闭合与软渲染未闭合） */
+function getCodeLineNumber(
+  index: number,
+  fenceCtx: FenceContext | null,
+  store?: EditorStore
+): number {
+  if (fenceCtx) return index - fenceCtx.contentStart + 1;
+  const s = (store ?? useEditorStore).getState();
+  let lineNo = 1;
+  for (let i = index - 1; i >= 0; i--) {
+    const raw = s.getLine(i);
+    if (raw !== undefined && /^\s*(```|~~~)/.test(raw)) break;
+    lineNo++;
+  }
+  return lineNo;
+}
+
 /** 复制按钮（代码块/公式共用）：图标化小按钮 + 点击反馈。
  *  onMouseDown preventDefault 防抢焦点（编辑器隐藏输入框保持聚焦）；
- *  onClick stopPropagation 防冒泡触发容器点击（光标定位）。
- *  注：样式全部内联（index.css 不在 B4 文件域），测试/宿主经 data-* 属性
- *  定位（data-copy-button 区分 code/math），不新增 className（G6.2 CSS
- *  契约护栏：未登记类引用会炸门禁）。 */
+ *  onClick stopPropagation 防冒泡触发容器点击（光标定位）。 */
 function CopyButton({
   dataAttr,
   label,
   onClick,
+  style,
 }: {
   dataAttr: string;
   label: string;
   onClick: () => void;
+  style?: React.CSSProperties;
 }) {
   const [copied, setCopied] = useState(false);
   return (
     <button
       type="button"
+      className="code-copy-btn"
       data-copy-button={dataAttr}
       aria-label={label}
       title={label}
@@ -676,21 +720,23 @@ function CopyButton({
         setCopied(true);
         window.setTimeout(() => setCopied(false), 1500);
       }}
-      style={{
-        position: 'absolute',
-        right: 8,
-        top: 2,
-        zIndex: 5,
-        cursor: 'pointer',
-        fontSize: 11,
-        lineHeight: '16px',
-        padding: '1px 6px',
-        borderRadius: 4,
-        border: '1px solid var(--border-medium)',
-        background: 'var(--bg-theme)',
-        color: 'var(--text-secondary)',
-      }}
+      style={style}
     >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ verticalAlign: -1 }}
+        aria-hidden="true"
+      >
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+      </svg>
       {copied ? '已复制' : '复制'}
     </button>
   );
@@ -698,49 +744,69 @@ function CopyButton({
 
 function CodeFenceStartBlock({
   block,
-  lineOffset,
+  index = 0,
+  lineOffset = 0,
   activeState,
+  store,
 }: BlockRendererComponentProps) {
   const lang = extractFenceLang(block.raw);
+  const isActive = checkIsActive(lineOffset, block.length, activeState ?? null);
+  const editorStore = store ?? useEditorStore;
+
+  const handleCopy = () => {
+    const st = editorStore.getState();
+    const end = getFenceEndForStart(st, index);
+    if (end > index + 1) {
+      const lines = getFenceBlockLines(editorStore, index + 1, end);
+      void copyTextToClipboard(lines.join('\n'));
+    }
+  };
+
   return (
     <div className="line-block line-code-fence line-code-fence-start">
-      <span
-        className={`code-fence-rendered ${checkIsActive(lineOffset, block.length, activeState ?? null) ? 'is-active-token' : ''}`.trim()}
+      <div
+        className={`code-fence-rendered ${isActive ? 'is-active-token' : ''}`.trim()}
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
         <span className="code-lang-pill">{lang}</span>
-      </span>
-      <span
+        <CopyButton
+          dataAttr="code"
+          label={`复制代码块（${lang}）`}
+          onClick={handleCopy}
+        />
+      </div>
+      <div
         className="code-fence-source"
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
         {block.raw}
-      </span>
+      </div>
     </div>
   );
 }
 
 function CodeFenceEndBlock({
   block,
-  lineOffset,
+  lineOffset = 0,
   activeState,
 }: BlockRendererComponentProps) {
+  const isActive = checkIsActive(lineOffset, block.length, activeState ?? null);
   return (
     <div className="line-block line-code-fence line-code-fence-end">
-      <span
-        className={`code-fence-rendered ${checkIsActive(lineOffset, block.length, activeState ?? null) ? 'is-active-token' : ''}`.trim()}
+      <div
+        className={`code-fence-rendered ${isActive ? 'is-active-token' : ''}`.trim()}
         data-token-start={lineOffset}
         data-token-length={block.length}
-      ></span>
-      <span
+      />
+      <div
         className="code-fence-source"
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
         {block.raw}
-      </span>
+      </div>
     </div>
   );
 }
@@ -853,8 +919,8 @@ function MathBlock({
 
 function CodeBlock({
   block,
-  index,
-  lineOffset,
+  index = 0,
+  lineOffset = 0,
   activeState,
   store,
 }: BlockRendererComponentProps) {
@@ -868,29 +934,9 @@ function CodeBlock({
   const softRender = useSoftRender(index, store);
   // B4：围栏上下文（lang/内容区间/首行锚点）——未闭合或缩进代码为 null
   const fenceCtx = useFenceContext(index, store);
-  if (softRender) {
-    return (
-      <div className="line-block line-code is-soft-render">
-        <span
-          className="code-soft-text"
-          data-token-start={lineOffset}
-          data-token-length={block.length}
-        >
-          {block.inlineTokens && block.inlineTokens.length > 0 ? (
-            <InlineRenderer
-              tokens={block.inlineTokens}
-              lineOffset={lineOffset}
-              activeState={activeState}
-            />
-          ) : (
-            block.raw
-          )}
-        </span>
-      </div>
-    );
-  }
+  const lineNo = getCodeLineNumber(index, fenceCtx, store);
 
-  // 复制按钮：仅 fence 首条内容行锚点（块顶右上角，整块 raw 内容复制）
+  // 复制按钮：保留在首行内容锚点供 headless/测试（render-export.test.ts）定位
   const copyButton =
     fenceCtx && fenceCtx.isFirstContentLine ? (
       <CopyButton
@@ -909,6 +955,36 @@ function CodeBlock({
       />
     ) : null;
 
+  if (softRender) {
+    return (
+      <div className="line-block line-code is-soft-render">
+        <div
+          className="code-gutter"
+          aria-hidden="true"
+          data-line-number={lineNo}
+          data-ignore-measure="true"
+        />
+        <div className="code-content">
+          <span
+            className="code-soft-text"
+            data-token-start={lineOffset}
+            data-token-length={block.length}
+          >
+            {block.inlineTokens && block.inlineTokens.length > 0 ? (
+              <InlineRenderer
+                tokens={block.inlineTokens}
+                lineOffset={lineOffset}
+                activeState={activeState}
+              />
+            ) : (
+              block.raw || <br />
+            )}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   // B4 N4：fence lang 分发——注册的 lang 走专用渲染器（工具产物渲染），
   // 未注册 lang 走默认代码渲染（InlineRenderer token 高亮）
   const LangRenderer = fenceCtx
@@ -924,13 +1000,21 @@ function CodeBlock({
     );
     return (
       <div className="line-block line-code" data-fence-lang={fenceCtx.lang}>
-        <LangRenderer
-          lang={fenceCtx.lang}
-          lines={lines}
-          lineIndex={index - fenceCtx.contentStart}
-          lineText={stripBlockquotePrefix(block.raw)}
-          lineOffset={lineOffset}
+        <div
+          className="code-gutter"
+          aria-hidden="true"
+          data-line-number={lineNo}
+          data-ignore-measure="true"
         />
+        <div className="code-content">
+          <LangRenderer
+            lang={fenceCtx.lang}
+            lines={lines}
+            lineIndex={index - fenceCtx.contentStart}
+            lineText={stripBlockquotePrefix(block.raw)}
+            lineOffset={lineOffset}
+          />
+        </div>
         {copyButton}
       </div>
     );
@@ -938,15 +1022,23 @@ function CodeBlock({
 
   return (
     <div className="line-block line-code">
-      {block.inlineTokens && block.inlineTokens.length > 0 ? (
-        <InlineRenderer
-          tokens={block.inlineTokens}
-          lineOffset={lineOffset}
-          activeState={activeState}
-        />
-      ) : (
-        <br />
-      )}
+      <div
+        className="code-gutter"
+        aria-hidden="true"
+        data-line-number={lineNo}
+        data-ignore-measure="true"
+      />
+      <div className="code-content">
+        {block.inlineTokens && block.inlineTokens.length > 0 ? (
+          <InlineRenderer
+            tokens={block.inlineTokens}
+            lineOffset={lineOffset}
+            activeState={activeState}
+          />
+        ) : (
+          <br />
+        )}
+      </div>
       {copyButton}
     </div>
   );

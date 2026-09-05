@@ -119,11 +119,36 @@ async function runDefenseSuite() {
           matcher: (t) => t.includes('当前渲染规模'),
           sampleChars: ['当', '前', '规', '模'],
         },
+        {
+          id: 'SCENARIO-5',
+          name: '代码块内容行 (带行号槽位的等宽代码物理对齐)',
+          selector: '.virtual-row',
+          matcher: (t) =>
+            t.includes('import React') ||
+            t.includes('function demo') ||
+            t.includes('MarkdownEngine'),
+          sampleChars: ['i', 'm', 'p', 'o', 'r', 't', 'f', 'u', 'n', 'c'],
+        },
       ];
 
       for (const sc of alignmentScenarios) {
-        const rows = Array.from(document.querySelectorAll(sc.selector));
-        const matchedRow = rows.find(r => r.textContent && sc.matcher(r.textContent));
+        let rows = Array.from(document.querySelectorAll(sc.selector));
+        let matchedRow = rows.find(r => r.textContent && sc.matcher(r.textContent));
+        if (!matchedRow && window.__editorStore) {
+          const store = window.__editorStore.getState();
+          const totalLines = store.getLineCount();
+          for (let i = 0; i < Math.min(200, totalLines); i++) {
+            const lineText = store.getLine(i);
+            if (lineText && sc.matcher(lineText)) {
+              container.scrollTop = i * 28;
+              container.dispatchEvent(new Event('scroll'));
+              await waitForFrame(100);
+              rows = Array.from(document.querySelectorAll(sc.selector));
+              matchedRow = rows.find(r => r.textContent && sc.matcher(r.textContent));
+              break;
+            }
+          }
+        }
         if (!matchedRow) {
           suiteResults.push({
             id: sc.id,
@@ -606,6 +631,134 @@ async function runDefenseSuite() {
             maxDeltaX: delta < 900 ? delta : undefined,
             details,
           });
+        }
+
+        // ============================================================
+        // 场景 12：代码块点击编辑前后绝对零跳动物理防御 (|ΔY| <= 0.5px)
+        // ============================================================
+        {
+          const startEl = document.querySelector('.line-code-fence-start');
+          const endEl = document.querySelector('.line-code-fence-end');
+          if (startEl && endEl) {
+            startEl.scrollIntoView({ block: 'center', behavior: 'instant' });
+            container.dispatchEvent(new Event('scroll'));
+            await waitForFrame(80);
+
+            const getBlockSnapshot = () => {
+              const rows = Array.from(
+                document.querySelectorAll(
+                  '.line-code-fence-start, .line-code, .line-code-fence-end'
+                )
+              );
+              return rows.map((r) => {
+                const rect = r.getBoundingClientRect();
+                return {
+                  contentTop: rect.top + container.scrollTop,
+                  height: rect.height,
+                };
+              });
+            };
+
+            const baseline = getBlockSnapshot();
+
+            // 点击 fence_start (进入编辑态)
+            const startRect = startEl.getBoundingClientRect();
+            startEl.dispatchEvent(
+              new MouseEvent('mousedown', {
+                bubbles: true,
+                cancelable: true,
+                clientX: startRect.left + 20,
+                clientY: startRect.top + 10,
+              })
+            );
+            await waitForFrame(20);
+            startEl.dispatchEvent(
+              new MouseEvent('mouseup', {
+                bubbles: true,
+                cancelable: true,
+                clientX: startRect.left + 20,
+                clientY: startRect.top + 10,
+              })
+            );
+            startEl.dispatchEvent(
+              new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                clientX: startRect.left + 20,
+                clientY: startRect.top + 10,
+              })
+            );
+            await waitForFrame(80);
+
+            const activeStartSnapshot = getBlockSnapshot();
+            let maxJumpY = 0;
+            for (let i = 0; i < baseline.length; i++) {
+              if (activeStartSnapshot[i]) {
+                const dy = Math.abs(
+                  activeStartSnapshot[i].contentTop - baseline[i].contentTop
+                );
+                const dh = Math.abs(
+                  activeStartSnapshot[i].height - baseline[i].height
+                );
+                if (dy > maxJumpY) maxJumpY = dy;
+                if (dh > maxJumpY) maxJumpY = dh;
+              }
+            }
+
+            // 点击 fence_end
+            const endRect = endEl.getBoundingClientRect();
+            endEl.dispatchEvent(
+              new MouseEvent('mousedown', {
+                bubbles: true,
+                cancelable: true,
+                clientX: endRect.left + 20,
+                clientY: endRect.top + 10,
+              })
+            );
+            await waitForFrame(20);
+            endEl.dispatchEvent(
+              new MouseEvent('mouseup', {
+                bubbles: true,
+                cancelable: true,
+                clientX: endRect.left + 20,
+                clientY: endRect.top + 10,
+              })
+            );
+            endEl.dispatchEvent(
+              new MouseEvent('click', {
+                bubbles: true,
+                cancelable: true,
+                clientX: endRect.left + 20,
+                clientY: endRect.top + 10,
+              })
+            );
+            await waitForFrame(80);
+
+            const activeEndSnapshot = getBlockSnapshot();
+            for (let i = 0; i < baseline.length; i++) {
+              if (activeEndSnapshot[i]) {
+                const dy = Math.abs(
+                  activeEndSnapshot[i].contentTop - baseline[i].contentTop
+                );
+                const dh = Math.abs(
+                  activeEndSnapshot[i].height - baseline[i].height
+                );
+                if (dy > maxJumpY) maxJumpY = dy;
+                if (dh > maxJumpY) maxJumpY = dh;
+              }
+            }
+
+            const passed = maxJumpY <= maxTolerance;
+            suiteResults.push({
+              id: 'CODE-ZERO-JUMP-DEFENSE',
+              name: '代码块点击编辑前后绝对零上下跳动防御',
+              passed,
+              maxDeltaX: maxJumpY,
+              details: passed
+                ? `代码块围栏与各代码行在点击前后位移与高度严格恒定，最大物理偏差 ${maxJumpY.toFixed(3)}px <= ${maxTolerance}px`
+                : `代码块点击前后发生跳变，最大偏差 ${maxJumpY.toFixed(3)}px > ${maxTolerance}px`,
+            });
+          }
         }
       }
 
