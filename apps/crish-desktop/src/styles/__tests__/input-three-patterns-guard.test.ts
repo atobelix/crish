@@ -8,6 +8,11 @@ import {
   analyzeBoxShadowSpread,
   analyzeFormFourMinimalist,
   analyzeButtonActiveBorder,
+  analyzeFormFourContainer,
+  analyzeMissingBorderReset,
+  isInputSelector,
+  isFormFourSelector,
+  isFormFourContainerSelector,
 } from '../../../../../scripts/check-input-guardrails.mjs';
 
 /**
@@ -244,6 +249,61 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       border-color: var(--border-subtle);
     `);
     expect(cleanButtonActive).toEqual([]);
+  });
+
+  it('容器联动防御：形态 ④ 容器严禁声明 border 与 box-shadow', () => {
+    const borderViolation = analyzeFormFourContainer('.titleContainer', 'border: 1px solid var(--border-color);');
+    expect(borderViolation.length).toBeGreaterThan(0);
+    expect(borderViolation.some(v => v.type === 'FORM_FOUR_CONTAINER_BORDER')).toBe(true);
+
+    const shadowViolation = analyzeFormFourContainer('.renameContainer', 'box-shadow: 0 4px 12px rgba(0,0,0,0.1);');
+    expect(shadowViolation.length).toBeGreaterThan(0);
+    expect(shadowViolation.some(v => v.type === 'FORM_FOUR_CONTAINER_SHADOW')).toBe(true);
+
+    const clean = analyzeFormFourContainer('.titleContainer', 'padding: 4px; display: flex;');
+    expect(clean).toEqual([]);
+  });
+
+  it('AST 刚性拦截：形态 ④ 基础规则缺失 4 项强制声明（border: none, background: transparent, box-shadow: none, outline: none）刚性报错', () => {
+    const missing = analyzeFormFourMinimalist('.renameInput', 'background: transparent;');
+    expect(missing.length).toBeGreaterThan(0);
+    expect(missing.some(v => v.type === 'FORM_FOUR_MISSING_BORDER_NONE')).toBe(true);
+    expect(missing.some(v => v.type === 'FORM_FOUR_MISSING_BOX_SHADOW_NONE')).toBe(true);
+    expect(missing.some(v => v.type === 'FORM_FOUR_MISSING_OUTLINE_NONE')).toBe(true);
+
+    const full = analyzeFormFourMinimalist('.renameInput', 'border: none; background: transparent; box-shadow: none; outline: none;');
+    expect(full).toEqual([]);
+  });
+
+  it('AST 刚性拦截：输入框默认边框未重置拦截分析器 analyzeMissingBorderReset', () => {
+    const unreset = analyzeMissingBorderReset('.customInput', 'height: 32px; padding: 4px; background: #fff;');
+    expect(unreset.length).toBeGreaterThan(0);
+    expect(unreset.some(v => v.type === 'MISSING_BORDER_RESET')).toBe(true);
+
+    const resetNone = analyzeMissingBorderReset('.customInput', 'height: 32px; padding: 4px; border: none;');
+    expect(resetNone).toEqual([]);
+
+    const resetBorder = analyzeMissingBorderReset('.customInput', 'height: 32px; padding: 4px; border: 1px solid var(--border-subtle);');
+    expect(resetBorder).toEqual([]);
+  });
+
+  it('选择器判定契约：isInputSelector 与 isFormFourSelector 完备性', () => {
+    expect(isInputSelector('.titleInput')).toBe(true);
+    expect(isInputSelector('.renameInput')).toBe(true);
+    expect(isInputSelector('.searchInput')).toBe(true);
+    expect(isInputSelector('textarea.commitInput')).toBe(true);
+    expect(isInputSelector('.inputWrapper')).toBe(false);
+    expect(isInputSelector('.titleContainer')).toBe(false);
+
+    expect(isFormFourSelector('.titleInput')).toBe(true);
+    expect(isFormFourSelector('.renameInput')).toBe(true);
+    expect(isFormFourSelector('.sessionRenameInput')).toBe(true);
+    expect(isFormFourSelector('.searchInput')).toBe(true);
+    expect(isFormFourSelector('.titleContainer')).toBe(false);
+
+    expect(isFormFourContainerSelector('.titleContainer')).toBe(true);
+    expect(isFormFourContainerSelector('.renameContainer')).toBe(true);
+    expect(isFormFourContainerSelector('.titleInput')).toBe(false);
   });
 
   it('全仓刚性守护：自动化静态守门脚本 check-input-guardrails.mjs 必须 100% 通过（0 错误）', () => {

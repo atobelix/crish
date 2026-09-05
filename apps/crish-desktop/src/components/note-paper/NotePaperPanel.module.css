@@ -74,12 +74,16 @@
   flex-shrink: 0;
 }
 
-/* 行内可编辑标题容器与输入框 (AGENTS.md §13: 对比度 <= 10%, 拔除 box-shadow) */
+/* 行内可编辑标题容器与输入框 (AGENTS.md §13: 纯光标无边框保全，拔除 box-shadow 与边框) */
 .titleContainer {
   display: flex;
   align-items: center;
   min-width: 120px;
   flex: 1 1 auto;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
 }
 
 .titleHeading {
@@ -111,10 +115,10 @@
 }
 
 .titleInput {
-  background: transparent;
-  border: none;
-  outline: none;
-  box-shadow: none;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
   padding: 0;
   font-size: var(--font-size-sm, 13px);
   font-weight: var(--font-weight-medium, 500);
@@ -126,9 +130,14 @@
 
 .titleInput:focus,
 .titleInput:focus-visible {
-  border: none;
-  outline: none;
-  box-shadow: none;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.titleInput::selection {
+  background: color-mix(in srgb, var(--brand-primary, #10b981) 18%, transparent);
+  color: inherit;
 }
 
 /* 独立 20x20px Chevron 下拉触点与浮层菜单 */
@@ -490,6 +499,19 @@ button.badge:focus-visible {
 .panel :global(textarea):focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--np-focus-edge);
+}
+
+/* 拔除来自 .panel :global(input) 等全局规则对标题输入框可能的继承边框或聚焦外圈 */
+.panel :global(input).titleInput,
+.panel :global(input).titleInput:focus,
+.panel :global(input).titleInput:focus-visible,
+.panel :global(input[data-testid='note-paper-strict-title-input']),
+.panel :global(input[data-testid='note-paper-strict-title-input']):focus,
+.panel :global(input[data-testid='note-paper-strict-title-input']):focus-visible {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 /* ---------- 4. 主编辑视口与正文排版容器 ---------- */

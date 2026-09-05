@@ -356,6 +356,7 @@
   min-width: 0;
   border: none;
   outline: none;
+  box-shadow: none;
   background: transparent;
   color: var(--terminal-fg);
   font-family: var(--font-mono);

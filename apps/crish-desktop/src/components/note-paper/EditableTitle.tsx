@@ -82,13 +82,32 @@ export const EditableTitle: React.FC<EditableTitleProps> = React.memo(
       [handleCommit, title, placeholder]
     );
 
+    const containerClasses = [styles.titleContainer, className]
+      .filter(Boolean)
+      .filter((val, idx, arr) => arr.indexOf(val) === idx)
+      .join(' ');
+
     if (isEditing) {
       return (
-        <div className={[styles.titleContainer, className].filter(Boolean).join(' ')}>
+        <div
+          className={containerClasses}
+          style={{
+            border: 'none',
+            outline: 'none',
+            boxShadow: 'none',
+            background: 'transparent',
+          }}
+        >
           <input
             ref={inputRef}
             type="text"
             className={styles.titleInput}
+            style={{
+              border: 'none',
+              outline: 'none',
+              boxShadow: 'none',
+              background: 'transparent',
+            }}
             value={draftText}
             maxLength={120}
             placeholder={placeholder}
@@ -105,7 +124,15 @@ export const EditableTitle: React.FC<EditableTitleProps> = React.memo(
     }
 
     return (
-      <div className={[styles.titleContainer, className].filter(Boolean).join(' ')}>
+      <div
+        className={containerClasses}
+        style={{
+          border: 'none',
+          outline: 'none',
+          boxShadow: 'none',
+          background: 'transparent',
+        }}
+      >
         <Tooltip content="点击编辑笔记标题">
           <span
             className={styles.titleDisplay}

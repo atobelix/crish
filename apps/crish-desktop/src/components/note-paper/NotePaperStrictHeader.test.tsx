@@ -93,6 +93,10 @@ describe('NotePaperStrictHeader · 32px 紧凑顶栏平滑迁移测试套件', (
     expect(input).toBeInTheDocument();
     expect(input).toHaveValue('纸面标题');
     expect(input).toHaveAttribute('aria-label', '编辑笔记标题');
+    expect(input.style.borderStyle).toBe('none');
+    expect(input.style.outline).toBe('none');
+    expect(input.style.boxShadow).toBe('none');
+    expect(input.style.background).toBe('transparent');
 
     // 4. 输入新名称并回车确认重命名
     fireEvent.change(input, { target: { value: '重构架构详案' } });

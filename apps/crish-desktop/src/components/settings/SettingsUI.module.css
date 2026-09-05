@@ -144,6 +144,7 @@
 .filterInputGrow :global(input) {
   appearance: none;
   -webkit-appearance: none;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--button-radius, 7px);
   box-shadow: none;
 }

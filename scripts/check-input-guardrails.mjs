@@ -218,19 +218,48 @@ export function analyzeBoxShadowSpread(body) {
 }
 
 /**
- * 规则 3 分析器：强制形态 ④（搜索/筛选输入框）必须为无边框极简型，严禁出现非透明 border 或深色焦点外框
+ * 形态 ④ 选择器判定：覆盖所有行内编辑（.titleInput, .renameInput, *title*input* 等）与行内/卡片极简输入（.searchInput, .filesPathFilter 等）
+ */
+export function isFormFourSelector(selector) {
+  if (/(?:Icon|ClearBtn|Wrapper|Container|Header|Btn|Button)\b/i.test(selector)) {
+    return false;
+  }
+  return /(?:searchInput|searchField|searchFilter|pathFilter|fileFilter|diffSearch|filesSearch|searchbox|search-input|search-box|titleInput|renameInput|sessionRenameInput|inlineRename|inlineInput|[a-zA-Z0-9_-]*title[a-zA-Z0-9_-]*input|[a-zA-Z0-9_-]*rename[a-zA-Z0-9_-]*input)\b/i.test(
+    selector
+  );
+}
+
+/**
+ * 承载形态 ④ 的容器选择器判定（如 .titleContainer, .renameContainer 等）
+ */
+export function isFormFourContainerSelector(selector) {
+  return /(?:titleContainer|renameContainer|[a-zA-Z0-9_-]*(?:title|rename)[a-zA-Z0-9_-]*(?:Container|Wrap|Wrapper|Shell))\b/i.test(
+    selector
+  );
+}
+
+/**
+ * 规则 3 分析器：正本清源形态 ④（纯光标极简型）
+ * 强制断言具备 border: none (或 0)、background: transparent、box-shadow: none、outline: none；
+ * 严禁任何非零、非透明的 border 声明（哪怕是浅灰 var(--border-color) 也直接拦截）。
  */
 export function analyzeFormFourMinimalist(selector, body) {
   const violations = [];
   const isFocusOrHover = /(?::focus|:focus-visible|:focus-within|:hover|:active)\b/i.test(selector);
+  const isPseudoElement = /(?:::placeholder|::selection|::-webkit)\b/i.test(selector);
 
-  // 1. 常态与全部状态：严禁非透明 border / border-color
+  // 伪元素（如 ::placeholder, ::selection）不执行边框与背景断言
+  if (isPseudoElement) {
+    return violations;
+  }
+
+  // 1. 边框检查：全态严禁任何非零、非透明的 border / border-color 声明
   const borderMatches = body.match(/border\s*:\s*([^;]+);/gi) || [];
   for (const bm of borderMatches) {
     const bVal = bm.replace(/^border\s*:\s*/i, '').replace(/;$/, '').trim();
     const bClean = bVal.replace(/\s*!important/i, '').trim();
     if (!/^(?:none|0|0px|transparent)$/i.test(bClean) && !/transparent/i.test(bClean)) {
-      violations.push({ type: 'FORM_FOUR_NON_TRANSPARENT_BORDER', snippet: bm });
+      violations.push({ type: 'FORM_FOUR_NON_TRANSPARENT_BORDER', snippet: bm.trim() });
     }
   }
 
@@ -239,28 +268,179 @@ export function analyzeFormFourMinimalist(selector, body) {
     const bcVal = bcm.replace(/^border-color\s*:\s*/i, '').replace(/;$/, '').trim();
     const bcClean = bcVal.replace(/\s*!important/i, '').trim();
     if (!/^(?:transparent|none|0)$/i.test(bcClean)) {
-      violations.push({ type: 'FORM_FOUR_NON_TRANSPARENT_BORDER_COLOR', snippet: bcm });
+      violations.push({ type: 'FORM_FOUR_NON_TRANSPARENT_BORDER_COLOR', snippet: bcm.trim() });
     }
   }
 
+  // 2. 轮廓检查：全态严禁出现可见轮廓
   const outlineMatches = body.match(/outline\s*:\s*([^;]+);/gi) || [];
   for (const om of outlineMatches) {
     const oVal = om.replace(/^outline\s*:\s*/i, '').replace(/;$/, '').trim();
     const oClean = oVal.replace(/\s*!important/i, '').trim();
     if (!/^(?:none|0|0px|transparent)$/i.test(oClean) && !/transparent/i.test(oClean)) {
-      violations.push({ type: 'FORM_FOUR_VISIBLE_OUTLINE', snippet: om });
+      violations.push({ type: 'FORM_FOUR_VISIBLE_OUTLINE', snippet: om.trim() });
     }
   }
 
-  // 2. 焦点/悬浮/激活态：严禁添加任何阴影投影或外框
-  if (isFocusOrHover) {
-    const shadowMatches = body.match(/box-shadow\s*:\s*([^;]+);/gi) || [];
-    for (const sm of shadowMatches) {
-      const sVal = sm.replace(/^box-shadow\s*:\s*/i, '').replace(/;$/, '').trim();
-      if (sVal !== 'none' && !sVal.includes('none !important')) {
-        violations.push({ type: 'FORM_FOUR_FOCUS_SHADOW', snippet: sm });
-      }
+  // 3. 阴影检查：全态严禁添加任何非 none 阴影投影
+  const shadowMatches = body.match(/box-shadow\s*:\s*([^;]+);/gi) || [];
+  for (const sm of shadowMatches) {
+    const sVal = sm.replace(/^box-shadow\s*:\s*/i, '').replace(/;$/, '').trim();
+    if (sVal !== 'none' && !sVal.includes('none !important')) {
+      violations.push({
+        type: isFocusOrHover ? 'FORM_FOUR_FOCUS_SHADOW' : 'FORM_FOUR_VISIBLE_SHADOW',
+        snippet: sm.trim(),
+      });
     }
+  }
+
+  // 4. 背景检查：全态严禁声明非 transparent / none 背景
+  const bgMatches = body.match(/(?:background|background-color)\s*:\s*([^;]+);/gi) || [];
+  for (const bgm of bgMatches) {
+    const bgVal = bgm.replace(/^(?:background|background-color)\s*:\s*/i, '').replace(/;$/, '').trim();
+    const bgClean = bgVal.replace(/\s*!important/i, '').trim();
+    if (!/^(?:transparent|none)$/i.test(bgClean)) {
+      violations.push({ type: 'FORM_FOUR_NON_TRANSPARENT_BG', snippet: bgm.trim() });
+    }
+  }
+
+  // 5. 常态（基础规则）强制四项刚性断言：border: none, background: transparent, box-shadow: none, outline: none
+  if (!isFocusOrHover) {
+    const hasBorderNone =
+      /border\s*:\s*(?:none|0|0px|transparent)\b/i.test(body) ||
+      /border-width\s*:\s*0/i.test(body) ||
+      /border-style\s*:\s*none/i.test(body);
+    if (!hasBorderNone) {
+      violations.push({
+        type: 'FORM_FOUR_MISSING_BORDER_NONE',
+        snippet: '缺少强制声明 border: none (或 0)',
+      });
+    }
+
+    const hasBgTransparent =
+      /(?:background|background-color)\s*:\s*(?:transparent|none)\b/i.test(body);
+    if (!hasBgTransparent) {
+      violations.push({
+        type: 'FORM_FOUR_MISSING_TRANSPARENT_BG',
+        snippet: '缺少强制声明 background: transparent',
+      });
+    }
+
+    const hasShadowNone = /box-shadow\s*:\s*none\b/i.test(body);
+    if (!hasShadowNone) {
+      violations.push({
+        type: 'FORM_FOUR_MISSING_BOX_SHADOW_NONE',
+        snippet: '缺少强制声明 box-shadow: none',
+      });
+    }
+
+    const hasOutlineNone = /outline\s*:\s*(?:none|0|0px)\b/i.test(body);
+    if (!hasOutlineNone) {
+      violations.push({
+        type: 'FORM_FOUR_MISSING_OUTLINE_NONE',
+        snippet: '缺少强制声明 outline: none',
+      });
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * 容器联动防御分析器：对承载形态 ④ 的容器（如 .titleContainer, .renameContainer 等），严禁声明任何 border 与 box-shadow
+ */
+export function analyzeFormFourContainer(selector, body) {
+  const violations = [];
+
+  // 1. 严禁声明任何非透明/非零边框
+  const borderMatches = body.match(/\bborder(?:-top|-bottom|-left|-right|-color)?\s*:\s*([^;]+);/gi) || [];
+  for (const bm of borderMatches) {
+    const bVal = bm.replace(/^border(?:-top|-bottom|-left|-right|-color)?\s*:\s*/i, '').replace(/;$/, '').trim();
+    const bClean = bVal.replace(/\s*!important/i, '').trim();
+    if (!/^(?:none|0|0px|transparent)$/i.test(bClean) && !/transparent/i.test(bClean)) {
+      violations.push({ type: 'FORM_FOUR_CONTAINER_BORDER', snippet: bm.trim() });
+    }
+  }
+
+  // 2. 严禁声明任何非 none 的 box-shadow
+  const shadowMatches = body.match(/box-shadow\s*:\s*([^;]+);/gi) || [];
+  for (const sm of shadowMatches) {
+    const sVal = sm.replace(/^box-shadow\s*:\s*/i, '').replace(/;$/, '').trim();
+    if (sVal !== 'none' && !sVal.includes('none !important')) {
+      violations.push({ type: 'FORM_FOUR_CONTAINER_SHADOW', snippet: sm.trim() });
+    }
+  }
+
+  return violations;
+}
+
+/**
+ * 默认边框未重置拦截分析器：凡是命中 input 的非组件原子规则，如果规则体完全漏写 border 声明，发出刚性报错
+ */
+export function analyzeMissingBorderReset(selector, body) {
+  const violations = [];
+  const subSelectors = splitSelectors(selector);
+
+  // 排除伪状态、伪类与伪元素
+  if (
+    subSelectors.every((s) =>
+      /(?::focus|:focus-visible|:focus-within|:hover|:active|:disabled|::placeholder|::selection|::-webkit|\[disabled\])\b/i.test(
+        s
+      )
+    )
+  ) {
+    return violations;
+  }
+
+  // 排除隐藏元素与无视觉渲染
+  if (/display\s*:\s*none/i.test(body) || /opacity\s*:\s*0/i.test(body)) {
+    return violations;
+  }
+
+  // 排除已确认为形态 ④ 容器的选择器
+  if (subSelectors.some((s) => isFormFourContainerSelector(s))) {
+    return violations;
+  }
+
+  // 检查是否作为末尾目标定位至具体 input/textarea
+  const isTargetingInputElement = subSelectors.some((s) => {
+    const parts = s.trim().split(/[\s>+~]+/);
+    const lastPart = parts[parts.length - 1];
+    return (
+      isInputSelector(lastPart) &&
+      !/(?:Icon|ClearBtn|Wrapper|Container|Header|Btn|Button)\b/i.test(lastPart) &&
+      !/\[data-/i.test(lastPart)
+    );
+  });
+
+  if (!isTargetingInputElement) {
+    return violations;
+  }
+
+  // 排除后代字体/行高修饰规则（如 .containerDense .textarea）
+  const isDescendantModifier = subSelectors.some(
+    (s) =>
+      /[\s>+~]/.test(s) &&
+      !/(?:input|textarea)\[/i.test(s) &&
+      !/:global\(input\)/i.test(s)
+  );
+  if (isDescendantModifier) {
+    return violations;
+  }
+
+  // 检查是否具备视觉输入样式声明（高度、内边距、背景、字体、阴影、外观等）
+  const definesInputStyling = /(?:height|padding|background|font|color|box-shadow|appearance)\s*:/i.test(
+    body
+  );
+  const hasBorderDecl = /\bborder(?:-top|-bottom|-left|-right|-color|-width|-style)?\s*:/i.test(
+    body
+  );
+
+  if (definesInputStyling && !hasBorderDecl) {
+    violations.push({
+      type: 'MISSING_BORDER_RESET',
+      snippet: selector,
+    });
   }
 
   return violations;
@@ -617,6 +797,103 @@ export function runCheckFileSuite(targetErrors = errors) {
     ],
     targetErrors
   );
+  // 14. 检查形态 ④：会话行内重命名输入框 (SessionInlineRename.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/chat-card/SessionInlineRename.module.css'),
+    '形态 ④ 会话行内重命名输入框 (SessionInlineRename.module.css)',
+    [
+      {
+        regex: /\.renameInput[^{]*\{[^}]*background:\s*transparent/,
+        message: '常态背景必须为 transparent，保持纯光标形式',
+      },
+      {
+        regex: /\.renameInput[^{]*\{[^}]*border:\s*none/,
+        message: '必须保持形态 ④ border: none 极简形式（无边框）',
+      },
+      {
+        regex: /\.renameInput[^{]*\{[^}]*outline:\s*none/,
+        message: '必须保持形态 ④ outline: none 纯光标形式',
+      },
+      {
+        regex: /\.renameInput[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '必须保持形态 ④ box-shadow: none，杜绝生硬黑框',
+      },
+      {
+        regex: /\.renameInput:focus(?:-visible)?[^{]*\{[^}]*border:\s*none/,
+        message: '聚焦态必须保持形态 ④ border: none 极简形式',
+      },
+      {
+        regex: /\.renameInput:focus(?:-visible)?[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '聚焦态必须保持形态 ④ box-shadow: none',
+      },
+    ],
+    targetErrors
+  );
+
+  // 15. 检查形态 ④：侧边栏会话行内重命名输入框 (SidebarSessionList.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/sidebar/SidebarSessionList.module.css'),
+    '形态 ④ 侧边栏行内重命名输入框 (SidebarSessionList.module.css)',
+    [
+      {
+        regex: /\.sessionRenameInput[^{]*\{[^}]*background:\s*transparent/,
+        message: '常态背景必须为 transparent',
+      },
+      {
+        regex: /\.sessionRenameInput[^{]*\{[^}]*border:\s*none/,
+        message: '必须保持形态 ④ border: none 极简形式',
+      },
+      {
+        regex: /\.sessionRenameInput[^{]*\{[^}]*outline:\s*none/,
+        message: '必须保持形态 ④ outline: none',
+      },
+      {
+        regex: /\.sessionRenameInput[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '必须保持形态 ④ box-shadow: none',
+      },
+      {
+        regex: /\.sessionRenameInput:focus(?:-visible)?[^{]*\{[^}]*border:\s*none/,
+        message: '聚焦态必须保持形态 ④ border: none',
+      },
+      {
+        regex: /\.sessionRenameInput:focus(?:-visible)?[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '聚焦态必须保持形态 ④ box-shadow: none',
+      },
+    ],
+    targetErrors
+  );
+
+  // 16. 容器联动防御：形态 ④ 容器严禁声明边框与阴影
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/chat-card/SessionInlineRename.module.css'),
+    '形态 ④ 容器联动防御 (SessionInlineRename.module.css)',
+    [
+      {
+        notIncludes: '.renameContainer {\n  border:',
+        message: '.renameContainer 容器严禁声明边框',
+      },
+      {
+        notIncludes: '.renameContainer {\n  box-shadow:',
+        message: '.renameContainer 容器严禁声明阴影',
+      },
+    ],
+    targetErrors
+  );
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/note-paper/NotePaperPanel.module.css'),
+    '形态 ④ 容器联动防御 (NotePaperPanel.module.css)',
+    [
+      {
+        notIncludes: '.titleContainer {\n  border:',
+        message: '.titleContainer 容器严禁声明边框',
+      },
+      {
+        notIncludes: '.titleContainer {\n  box-shadow:',
+        message: '.titleContainer 容器严禁声明阴影',
+      },
+    ],
+    targetErrors
+  );
 }
 
 /**
@@ -632,21 +909,36 @@ export function isInputSelector(selector) {
     return false;
   }
 
-  // 1. 文本类属性选择器：[type="text"], [type="search"], [type="password"], [type="email"], [type="url"], [type="number"], [type="tel"] 等
-  if (/\[type\*?=['"]?(?:text|search|password|email|url|number|tel)['"]?\]/i.test(selector)) {
-    return true;
+  // 容器反向隔离：纯容器/包装层类名严禁误判为 input
+  if (/(?:Wrapper|Container|Shell|Row|Group|Header|Icon|ClearBtn|Btn|Button)\b(?![a-zA-Z0-9_-])/i.test(selector)) {
+    // 除非包含后代 input/textarea（如 .inputWrapper input, .searchContainer > textarea）
+    if (!/[\s>+~](?:input|textarea)\b(?![a-zA-Z0-9_-])/i.test(selector)) {
+      return false;
+    }
   }
-  if (/\[role=['"]?searchbox['"]?\]/i.test(selector)) {
+
+  // 1. 原生标签：input, textarea
+  if (/(?:^|[\s,>+~(:(\[])(?:input|textarea)\b(?![a-zA-Z0-9_-])/i.test(selector)) {
     return true;
   }
 
-  // 2. 标签名或驼峰/连接符/下划线命名的 input/textarea 类与 ID（如 .titleInput, .commitInput, .searchInput, .tagInput 等）
-  // 前导符号支持：起始行、空格、子代选择器(>)、相邻兄弟(+)、通用兄弟(~)、类点(.)、伪类冒号(:)、属性括号([)、双引号(")、单引号(')、分组圆括号(()、ID(#)
+  // 2. 驼峰/后缀/前缀类名与 ID：.titleInput, #searchbox, .renameInput, .inputField, .inputSearch, .searchField 等
   if (
-    /(?:^|[\s,>+~.:(#\[\'"])(?:[a-zA-Z0-9_-]*(?:input|textarea)|searchbox|searchField|inputField|nativeTextarea|cellInput|schedFieldInput|firstRunInput|titleInput|commitInput|searchInput|tagInput|chipsInput|comboboxInput|filterInput|inputSearch|leaf-input)\b/i.test(
+    /(?:\.[a-zA-Z0-9_-]*(?:input|textarea|searchbox)|#[a-zA-Z0-9_-]*(?:input|textarea|searchbox)|\[class\*?=['"][a-zA-Z0-9_-]*(?:input|textarea|searchbox))\b(?![a-zA-Z0-9_-])/i.test(
       selector
     )
   ) {
+    return true;
+  }
+  if (/(?:\.input[a-zA-Z0-9_-]*|#input[a-zA-Z0-9_-]*|\.searchField|#searchField)\b(?![a-zA-Z0-9_-])/i.test(selector)) {
+    return true;
+  }
+
+  // 3. 属性选择器：[type="text"], [type="search"] 等以及 [role="searchbox"]
+  if (/[type=['"]?(?:text|search|password|email|url|number|tel)['"]?\]/i.test(selector)) {
+    return true;
+  }
+  if (/[role=['"]?searchbox['"]?\]/i.test(selector)) {
     return true;
   }
 
@@ -702,14 +994,28 @@ export function scanAllCssRules(dir, targetErrors = errors) {
           /(?::active|\.active|\.isActive)\b/i.test(s)
         );
 
-        // 是否属于形态 ④ 搜索/筛选/纯光标输入框
+        // 是否属于形态 ④ 容器
+        const isFormFourContainer = subSelectors.some((s) =>
+          isFormFourContainerSelector(s)
+        );
+        if (isFormFourContainer) {
+          const containerViolations = analyzeFormFourContainer(
+            rawSelector,
+            ruleBody
+          );
+          for (const v of containerViolations) {
+            targetErrors.push(
+              `[形态 ④ 容器联动拦截] 在 ${relPath} (${rawSelector}) 中发现承载形态 ④ 的容器声明了边框或阴影: "${v.snippet}". 形态 ④ 容器严禁声明 border 与 box-shadow！`
+            );
+          }
+        }
+
+        // 是否属于形态 ④ 搜索/筛选/纯光标输入框与行内编辑
         const isFormFourSearch =
-          subSelectors.some(
-            (s) =>
-              /(?:searchInput|searchField|searchFilter|filterInput|pathFilter|fileFilter|diffSearch|filesSearch|searchbox|search-input|search-box|titleInput)\b/i.test(
-                s
-              ) && !/(?:Icon|ClearBtn|Wrapper|Container|Header)\b/i.test(s)
-          ) && !relPath.includes('Input/Input.module.css');
+          subSelectors.some((s) => isFormFourSelector(s)) &&
+          !relPath.includes('Input/Input.module.css') &&
+          !relPath.includes('Input/Textarea.module.css') &&
+          !relPath.includes('SettingsUI.module.css');
 
         // --- 规则 A：全仓输入框严禁纯黑 / 硬色边框 ---
         if (isInputTarget) {
@@ -753,7 +1059,7 @@ export function scanAllCssRules(dir, targetErrors = errors) {
           }
         }
 
-        // --- 规则 3：强制形态 ④（搜索/筛选输入框）必须为无边框极简型，严禁出现非透明 border 或深色焦点外框 ---
+        // --- 规则 3：强制形态 ④（搜索/筛选/行内重命名输入框）必须为无边框极简型，严禁出现非透明 border 或深色焦点外框 ---
         if (isFormFourSearch) {
           const formFourViolations = analyzeFormFourMinimalist(rawSelector, ruleBody);
           for (const v of formFourViolations) {
@@ -761,11 +1067,35 @@ export function scanAllCssRules(dir, targetErrors = errors) {
               targetErrors.push(
                 `[形态 ④ 焦点外框拦截] 在 ${relPath} (${rawSelector}) 中发现焦点/悬浮态外框阴影: "${v.snippet}". 形态 ④ 必须保持“全态只有光标闪烁，其他全无变化”，严禁深色焦点外框！`
               );
+            } else if (v.type === 'FORM_FOUR_NON_TRANSPARENT_BG') {
+              targetErrors.push(
+                `[形态 ④ 背景拦截] 在 ${relPath} (${rawSelector}) 中发现非透明背景: "${v.snippet}". 形态 ④ 必须保持 background: transparent，严禁给外层画底色框！`
+              );
+            } else if (v.type.startsWith('FORM_FOUR_MISSING_')) {
+              targetErrors.push(
+                `[形态 ④ 缺失强制声明] 在 ${relPath} (${rawSelector}) 中未声明必需属性: "${v.snippet}". 形态 ④ 必须强制显式声明 border: none, background: transparent, box-shadow: none, outline: none！`
+              );
             } else {
               targetErrors.push(
-                `[形态 ④ 极简约束拦截] 在 ${relPath} (${rawSelector}) 中发现非极简边框/轮廓声明: "${v.snippet}". 形态 ④（搜索/筛选输入框）必须为无边框极简型，严禁出现非透明 border！`
+                `[形态 ④ 极简约束拦截] 在 ${relPath} (${rawSelector}) 中发现非极简边框/轮廓声明: "${v.snippet}". 形态 ④（搜索/筛选/行内重命名输入框）必须为无边框极简型，严禁出现非透明 border！`
               );
             }
+          }
+        }
+
+        // --- 规则 E：输入框默认边框未重置拦截 (Default Border Not Reset) ---
+        if (
+          isInputTarget &&
+          !isFormFourSearch &&
+          !relPath.includes('Input/Input.module.css') &&
+          !relPath.includes('Input/Textarea.module.css') &&
+          !relPath.includes('SettingsUI.module.css')
+        ) {
+          const missingBorderViolations = analyzeMissingBorderReset(rawSelector, ruleBody);
+          for (const v of missingBorderViolations) {
+            targetErrors.push(
+              `[默认边框未重置拦截] 在 ${relPath} (${rawSelector}) 中输入框规则定义了视觉外观样式但未重置/声明 border。必须显式声明 border: none 或规范 border 边框，防止原生 2px 凹陷重边框！`
+            );
           }
         }
 

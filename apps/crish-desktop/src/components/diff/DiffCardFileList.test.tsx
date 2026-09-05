@@ -170,6 +170,43 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     expect(handleOpenFileViewer).not.toHaveBeenCalled();
   });
 
+  it('三大正交子域验证：点击 Git 放弃修改（撤回）按钮仅触发放弃修改，严格阻止冒泡', () => {
+    const handleSetActive = vi.fn();
+    const handleDiscardChanges = vi.fn();
+    const handleOpenFileViewer = vi.fn();
+
+    render(
+      <DiffCardFileList
+        files={[mockFileDiff]}
+        sourceMode="git"
+        current={null}
+        applyBusy={false}
+        stagingPaths={{}}
+        onSetActiveDiffSource={handleSetActive}
+        onStageFile={vi.fn()}
+        onUnstageFile={vi.fn()}
+        onDiscardChanges={handleDiscardChanges}
+        onStageAll={vi.fn()}
+        onUnstageAll={vi.fn()}
+        renderInlineDiffContent={() => <div>Inline Diff View</div>}
+        onOpenFileViewer={handleOpenFileViewer}
+      />
+    );
+
+    // 1. 查找放弃修改（撤回）按钮 (子域 C)
+    const discardBtn = screen.getByRole('button', { name: '放弃此文件的所有修改' });
+    expect(discardBtn).toBeInTheDocument();
+
+    // 2. 点击放弃修改按钮
+    fireEvent.click(discardBtn);
+
+    // 断言：仅触发放弃修改，严格未触发折叠或新 Tab
+    expect(handleDiscardChanges).toHaveBeenCalledTimes(1);
+    expect(handleDiscardChanges).toHaveBeenCalledWith('src/components/Button.tsx');
+    expect(handleSetActive).not.toHaveBeenCalled();
+    expect(handleOpenFileViewer).not.toHaveBeenCalled();
+  });
+
   it('常驻统计验证：增减数字常驻可见且格式正确，且绝无行内工具条', () => {
     const { container } = render(
       <DiffCardFileList

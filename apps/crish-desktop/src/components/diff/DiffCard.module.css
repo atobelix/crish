@@ -498,7 +498,8 @@
   pointer-events: none;
 }
 
-.rowActBtn {
+.rowActBtn,
+.rowActBtn[data-variant] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -518,30 +519,53 @@
   --btn-shadow: none;
   color: var(--text-secondary);
   --btn-fg: var(--text-secondary);
-  --btn-hover-overlay: var(--tint-hover);
+  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 10%, transparent);
   cursor: pointer;
   transition:
     color var(--transition-micro, 80ms),
     background-color var(--transition-micro, 80ms);
 }
 
-.rowActBtn:hover {
+.rowActBtn:hover,
+.rowActBtn[data-variant]:hover {
   color: var(--text-primary);
-  background-color: var(--tint-hover);
+  --btn-fg: var(--text-primary);
+  background-color: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --btn-hover-overlay: color-mix(in srgb, var(--text-primary) 10%, transparent);
   border: none;
 }
 
-.rowActBtn.danger {
+.rowActBtn:active,
+.rowActBtn[data-variant]:active {
+  background-color: color-mix(in srgb, var(--text-primary) 16%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--text-primary) 16%, transparent);
+}
+
+.rowActBtn.danger,
+.rowActBtn.danger[data-variant] {
   color: var(--text-secondary);
   --btn-fg: var(--text-secondary);
+  --btn-hover-overlay: color-mix(in srgb, var(--diff-del-fg, hsl(0 75% 50%)) 14%, transparent);
 }
 
-.rowActBtn.danger:hover {
-  color: var(--color-error, var(--diff-del-fg, hsl(0 68% 38%)));
-  --btn-fg: var(--color-error, var(--diff-del-fg, hsl(0 68% 38%)));
-  --btn-hover-overlay: color-mix(in srgb, var(--color-error, hsl(0 75% 55%)) 12%, transparent);
-  background-color: color-mix(in srgb, var(--color-error, hsl(0 75% 55%)) 12%, transparent);
+.rowActBtn.danger:hover,
+.rowActBtn.danger[data-variant]:hover {
+  color: var(--diff-del-fg, hsl(0 75% 50%));
+  --btn-fg: var(--diff-del-fg, hsl(0 75% 50%));
+  background-color: color-mix(in srgb, var(--diff-del-fg, hsl(0 75% 50%)) 14%, transparent);
+  --btn-hover-overlay: color-mix(in srgb, var(--diff-del-fg, hsl(0 75% 50%)) 14%, transparent);
   border: none;
+}
+
+.rowActBtn.danger:active,
+.rowActBtn.danger[data-variant]:active {
+  background-color: color-mix(in srgb, var(--diff-del-fg, hsl(0 75% 50%)) 22%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--diff-del-fg, hsl(0 75% 50%)) 22%, transparent);
+}
+
+.rowActBtn svg {
+  color: inherit;
+  stroke: currentColor;
 }
 
 /* --------------------------------------------------------------------------

@@ -19,11 +19,6 @@
   flex-shrink: 0;
 }
 
-.searchInput {
-  flex: 1;
-  max-width: 260px;
-}
-
 .quickActions {
   display: flex;
   align-items: center;

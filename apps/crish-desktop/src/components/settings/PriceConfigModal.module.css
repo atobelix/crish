@@ -25,10 +25,6 @@
   flex-shrink: 0;
 }
 
-.searchInput {
-  width: 160px;
-}
-
 /* 表格公用网格模板（表头、数据行、新增行 100% 严格同轨对齐） */
 .tableHeader,
 .tableRow,
