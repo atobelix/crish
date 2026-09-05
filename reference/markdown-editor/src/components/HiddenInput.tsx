@@ -338,7 +338,8 @@ export function indexFromClientPoint(
       lineGeom.el,
       clientX,
       lineStart,
-      lineText.length
+      lineText.length,
+      clientY
     );
     if (bisectIdx !== null) return bisectIdx;
   }
@@ -1085,7 +1086,8 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
           cellDrag.cellEl,
           e.clientX,
           cellDrag.start,
-          cellDrag.len
+          cellDrag.len,
+          e.clientY
         ) ?? cellDrag.start;
         const clampedHead = Math.max(
           cellDrag.start,

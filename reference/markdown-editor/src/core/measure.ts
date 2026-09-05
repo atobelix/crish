@@ -758,16 +758,73 @@ interface MountedTextNodeEntry {
   length: number;
 }
 
+// 从字符全局索引定位真实挂载 DOM 文本节点与偏移（选区/物理 Range 依赖）
+export function getDOMPointFromIndex(
+  index: number,
+  container: HTMLElement
+): { node: Node; offset: number } | null {
+  if (!container) return null;
+  const idx = getIndex(container);
+  const entry = locateToken(idx, index);
+  if (entry) {
+    if (!validateEntry(entry)) {
+      rebuildIndex(idx);
+      const fresh = indexMap.get(container);
+      if (fresh) {
+        const freshEntry = locateToken(fresh, index);
+        if (freshEntry) {
+          const loc = locateTextNode(freshEntry, index - freshEntry.start);
+          if (loc) return { node: loc.textNode, offset: loc.localOffset };
+        }
+      }
+    } else {
+      const loc = locateTextNode(entry, index - entry.start);
+      if (loc) return { node: loc.textNode, offset: loc.localOffset };
+    }
+  }
+
+  // 行级文本节点定位回退
+  const lines = idx.lines;
+  let lo = 0;
+  let hi = lines.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (lines[mid].start <= index) lo = mid + 1;
+    else hi = mid;
+  }
+  for (let j = lo - 1; j >= 0; j--) {
+    const line = lines[j];
+    if (line.start + line.length < index) break;
+    if (index <= line.start + line.length) {
+      const walker = document.createTreeWalker(line.el, NodeFilter.SHOW_TEXT);
+      const t = walker.nextNode();
+      if (t) {
+        return {
+          node: t,
+          offset: Math.min(
+            t.nodeValue?.length || 0,
+            Math.max(0, index - line.start)
+          ),
+        };
+      }
+      return { node: line.el, offset: 0 };
+    }
+  }
+  return null;
+}
+
 /**
  * 真实 DOM 文本节点物理二分探测器（Tier 2 SSOT 物理真理源）
  * 当光标落于行首/行尾空白、Token 间隙或 Padding 时，彻底废除猜列算法，
  * 在行内已挂载的可见 Text 节点上直接执行 Range 物理二分探测。
+ * 支持传入可选 clientY，对多视觉折行段落精准锁定当前视觉行并执行行内单调二分。
  */
 export function locateRowIndexByPhysicalBisection(
   rowEl: HTMLElement,
   clientX: number,
   lineStart: number,
-  lineLen: number
+  lineLen: number,
+  clientY?: number
 ): number | null {
   if (lineLen <= 0) return lineStart;
 
@@ -800,7 +857,8 @@ export function locateRowIndexByPhysicalBisection(
     },
   });
 
-  const scrollContainer = rowEl.closest('.editor-scroll-container') as HTMLElement || document.body;
+  const scrollContainer =
+    (rowEl.closest('.editor-scroll-container') as HTMLElement) || document.body;
   let curr = walker.nextNode();
   while (curr) {
     const tNode = curr as Text;
@@ -820,38 +878,144 @@ export function locateRowIndexByPhysicalBisection(
 
   const range = getSharedRange();
 
-  // 2. 检查整行最左边界：若点击在最左可见字符左侧，锚定到最左可见字符起点（防跳回折叠语法前缀如 ### ）
+  // 2. 检查整行物理矩形边界
+  let firstRect: DOMRect | null = null;
+  let lastRect: DOMRect | null = null;
   try {
-    for (let i = 0; i < textEntries.length; i++) {
-      const entry = textEntries[i];
-      range.setStart(entry.node, 0);
-      range.setEnd(entry.node, Math.min(1, entry.length));
-      const firstRect = range.getBoundingClientRect();
-      if (firstRect.width > 0) {
-        if (clientX <= firstRect.left) {
-          return entry.globalStart;
-        }
-        break;
-      }
-    }
+    const firstEntry = textEntries[0];
+    range.setStart(firstEntry.node, 0);
+    range.setEnd(firstEntry.node, Math.min(1, firstEntry.length));
+    firstRect = range.getBoundingClientRect();
+
+    const lastEntry = textEntries[textEntries.length - 1];
+    range.setStart(lastEntry.node, Math.max(0, lastEntry.length - 1));
+    range.setEnd(lastEntry.node, lastEntry.length);
+    lastRect = range.getBoundingClientRect();
   } catch {}
 
-  // 3. 检查整行最右边界：若点击在当前行最右可见字符右侧（即行内空白区域），
-  // 严格统一将光标锚定到当前行末尾（lineStart + lineLen）
-  try {
-    for (let i = textEntries.length - 1; i >= 0; i--) {
-      const entry = textEntries[i];
-      range.setStart(entry.node, Math.max(0, entry.length - 1));
-      range.setEnd(entry.node, entry.length);
-      const lastRect = range.getBoundingClientRect();
-      if (lastRect.width > 0) {
-        if (clientX >= lastRect.right) {
-          return lineStart + lineLen;
-        }
-        break;
+  // 若传入 clientY 且行发生折行 (firstRect.top 与 lastRect.top 存在显著高度差)
+  const isWrapped =
+    firstRect &&
+    lastRect &&
+    firstRect.height > 0 &&
+    lastRect.height > 0 &&
+    Math.abs(firstRect.top - lastRect.top) > 5;
+
+  if (clientY !== undefined && isWrapped && firstRect && lastRect) {
+    // 视觉行定位：若点击在首行上方，锚定首行起点
+    if (clientY < firstRect.top) {
+      return textEntries[0].globalStart;
+    }
+    // 若点击在末行下方，锚定行末
+    if (clientY > lastRect.bottom) {
+      return lineStart + lineLen;
+    }
+
+    // 收集所有可见字符及其外接矩形以精确定位视觉行切片
+    interface CharInfo {
+      node: Text;
+      offset: number;
+      globalPos: number;
+      rect: DOMRect;
+    }
+    const chars: CharInfo[] = [];
+    for (const entry of textEntries) {
+      for (let c = 0; c < entry.length; c++) {
+        try {
+          range.setStart(entry.node, c);
+          range.setEnd(entry.node, c + 1);
+          const cr = range.getBoundingClientRect();
+          if (cr.width > 0 || cr.height > 0) {
+            chars.push({
+              node: entry.node,
+              offset: c,
+              globalPos: entry.globalStart + c,
+              rect: cr,
+            });
+          }
+        } catch {}
       }
     }
-  } catch {}
+
+    if (chars.length === 0) return lineStart;
+
+    // 找出与 clientY 垂直重叠最近的视觉行字符切片
+    let matchedChars = chars.filter(
+      (c) => c.rect.top - 2 <= clientY && clientY <= c.rect.bottom + 2
+    );
+
+    if (matchedChars.length === 0) {
+      let minDy = Infinity;
+      let closestTop = chars[0].rect.top;
+      for (const c of chars) {
+        const midY = c.rect.top + c.rect.height / 2;
+        const dy = Math.abs(midY - clientY);
+        if (dy < minDy) {
+          minDy = dy;
+          closestTop = c.rect.top;
+        }
+      }
+      matchedChars = chars.filter((c) => Math.abs(c.rect.top - closestTop) < 4);
+    }
+
+    if (matchedChars.length > 0) {
+      const lineFirstChar = matchedChars[0];
+      const lineLastChar = matchedChars[matchedChars.length - 1];
+
+      // 若点击在当前视觉行最左侧
+      if (clientX <= lineFirstChar.rect.left) {
+        return lineFirstChar.globalPos;
+      }
+      // 若点击在当前视觉行最右侧
+      if (clientX >= lineLastChar.rect.right) {
+        // 若当前视觉行是该段落末行，锚定至当前行末尾
+        if (lineLastChar.globalPos >= chars[chars.length - 1].globalPos) {
+          return lineStart + lineLen;
+        }
+        // 若是段落中间视觉行，锚定至该视觉行行尾
+        return lineLastChar.globalPos + 1;
+      }
+
+      // 在该单视觉行内执行二分搜索（midX 严格单调递增）
+      let lo = 0;
+      let hi = matchedChars.length - 1;
+      let bestDist = Infinity;
+      let bestPos = lineFirstChar.globalPos;
+
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        const c = matchedChars[mid];
+        const midX = c.rect.left + c.rect.width / 2;
+        const dLeft = Math.abs(c.rect.left - clientX);
+        const dRight = Math.abs(c.rect.right - clientX);
+
+        if (dLeft < bestDist) {
+          bestDist = dLeft;
+          bestPos = c.globalPos;
+        }
+        if (dRight < bestDist) {
+          bestDist = dRight;
+          bestPos = c.globalPos + 1;
+        }
+
+        if (clientX < midX) {
+          hi = mid - 1;
+        } else {
+          lo = mid + 1;
+        }
+      }
+
+      return Math.min(lineStart + lineLen, Math.max(lineStart, bestPos));
+    }
+  }
+
+  // 3. 单行或未命中折行快速路径：
+  if (firstRect && firstRect.width > 0 && clientX <= firstRect.left) {
+    return textEntries[0].globalStart;
+  }
+  if (lastRect && lastRect.width > 0 && clientX >= lastRect.right) {
+    return lineStart + lineLen;
+  }
 
   // 4. 二分物理探测：找出与 clientX 欧氏距离最小的字符边界
   let bestDist = Infinity;

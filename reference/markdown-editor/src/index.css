@@ -47,6 +47,8 @@
   --scrollbar-track: var(--parchment);
   --scrollbar-thumb: hsl(30 2.5% 90%);
   --scrollbar-thumb-hover: hsl(30 2.5% 78%);
+  /* 列表与多级缩进引导线配色 (H=30 S=2.5% 微暖灰色) */
+  --list-guide-line: hsl(30 2.5% 78%);
 
   /* ── 3. 字体系统解耦 ── */
   --font-serif: "TsangerJinKai02", "Source Han Serif SC", "Source Han Serif CN", "Noto Serif SC", "Songti SC", Charter, Georgia, serif;
@@ -148,6 +150,8 @@ body {
   width: 100%;
   height: 100%;
   cursor: text;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .editor-container::selection,

@@ -2112,9 +2112,9 @@ export const MarkdownEngine = React.forwardRef<
   //   放行浏览器默认复制（渲染文本兜底）。
   const handleCopy = useCallback(
     (e: React.ClipboardEvent<HTMLDivElement>) => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed) return;
       if (readOnly) {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed) return;
         const md = selectionToMarkdown(
           selection,
           engineStore.getState().getText
@@ -2134,6 +2134,11 @@ export const MarkdownEngine = React.forwardRef<
           state.getText().substring(start, end)
         );
         e.preventDefault();
+      } else {
+        const selection = window.getSelection();
+        if (selection && !selection.isCollapsed) {
+          // 兜底原生选区复制
+        }
       }
     },
     [readOnly, engineStore]

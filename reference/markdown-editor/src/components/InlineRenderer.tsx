@@ -200,7 +200,8 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             
           const isListPrefix = ['list_bullet', 'list_number', 'list_task', 'blockquote_prefix'].includes(token.type);
           let isActive = false;
-          if (activeState) {
+          // list_task 为独立交互控件、blockquote_prefix 为导线结构，单行激活时绝不切入源码坍缩模式
+          if (activeState && token.type !== 'list_task' && token.type !== 'blockquote_prefix') {
             if (activeState.selStart !== undefined && activeState.selEnd !== undefined && activeState.selStart !== activeState.selEnd) {
               isActive = start < activeState.selEnd && (start + len) > activeState.selStart;
             } else {
@@ -568,12 +569,15 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 e.stopPropagation();
                 e.preventDefault();
                 const state = useEditorStore.getState();
-                const oldRaw = token.raw;
-                const newRaw = token.isChecked
-                  ? oldRaw.replace(/\[[xX]\]/, '[ ]')
-                  : oldRaw.replace(/\[ \]/, '[x]');
-                state.setSelection(start, start + len);
-                state.insertText(newRaw);
+                const oldMarker = token.isChecked ? '[x]' : '[ ]';
+                const newMarker = token.isChecked ? '[ ]' : '[x]';
+                const markerOffset = token.raw.indexOf(oldMarker);
+                if (markerOffset >= 0) {
+                  const from = start + markerOffset;
+                  const to = from + 3;
+                  const cur = state.cursorPos;
+                  state.applyChange(from, to, newMarker, { cursorAfter: cur });
+                }
               }
             };
             return (
@@ -598,27 +602,84 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 <span
                   className="syntax-content"
                   data-sub-offset={indentLen}
-                  onClick={handleTaskClick}
-                  style={{ cursor: 'pointer' }}
                 >
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    style={{
-                      verticalAlign: 'text-bottom',
-                      transform: 'translateY(-2px)',
-                      color: token.isChecked ? 'var(--text-primary)' : 'var(--text-muted)',
-                    }}
+                  <span
+                    className="task-checkbox-wrapper"
+                    onClick={handleTaskClick}
+                    role="checkbox"
+                    aria-checked={token.isChecked}
+                    title={token.isChecked ? '已完成（单击切换）' : '未完成（单击切换）'}
                   >
-                    <rect x="3" y="3" width="18" height="18" rx="6" ry="6" />
-                    {token.isChecked && <polyline points="9 12 12 15 16 9" />}
-                  </svg>
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 16 16"
+                      fill="none"
+                      className="task-checkbox-svg"
+                    >
+                      {token.isChecked ? (
+                        <>
+                          <rect
+                            x="1"
+                            y="1"
+                            width="14"
+                            height="14"
+                            rx="3.5"
+                            fill="var(--text-primary)"
+                            stroke="var(--text-primary)"
+                            strokeWidth="1.2"
+                          />
+                          <path
+                            d="M4.5 8.2L7 10.7L11.5 5.5"
+                            stroke="var(--bg-primary)"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </>
+                      ) : (
+                        <rect
+                          x="1.5"
+                          y="1.5"
+                          width="13"
+                          height="13"
+                          rx="3.5"
+                          fill="transparent"
+                          stroke="var(--border-strong, hsl(30 2.5% 65%))"
+                          strokeWidth="1.5"
+                        />
+                      )}
+                    </svg>
+                  </span>
+                  <span
+                    className="task-space"
+                    data-sub-offset={len - 1}
+                    style={{ display: 'inline', userSelect: 'none' }}
+                  >
+                    {' '}
+                  </span>
+                </span>
+              </span>
+            );
+          }
+
+          if (token.type === 'blockquote_prefix') {
+            return (
+              <span
+                key={key}
+                data-token-start={start}
+                data-token-length={len}
+                className={finalClassName}
+                style={token.style}
+              >
+                <span className="syntax-hidden" data-sub-offset={0}>
+                  {token.raw}
+                </span>
+                <span className="syntax-content" data-sub-offset={len - 1}>
+                  <span className="blockquote-bar" aria-hidden="true" />
+                  <span className="blockquote-space" style={{ display: 'inline', userSelect: 'none' }}>
+                    {' '}
+                  </span>
                 </span>
               </span>
             );

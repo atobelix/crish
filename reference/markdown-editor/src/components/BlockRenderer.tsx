@@ -12,7 +12,7 @@
  *   registerBlockRenderer('custom_block', MyRenderer)
  * 后，解析层产出的自定义 LineType 行直接命中注册表；移除后恢复兜底。
  */
-import { memo, useState } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import type { LineNode, InlineNode, LineType } from '../core/ast';
 import type { CodeState } from '../core/parser';
 import { checkIsActive, type ActiveState } from '../core/measure';
@@ -534,6 +534,8 @@ export interface FenceContext {
   contentEnd: number;
   /** 本行是否为围栏首条内容行（复制按钮锚点） */
   isFirstContentLine: boolean;
+  /** CommonMark §4.5 围栏开栏前导缩进列数（1~3 空格） */
+  indent?: number;
 }
 
 /**
@@ -621,12 +623,48 @@ export function computeFenceContext(
   // 未闭合（end 缺失或非 fence_end）→ 软渲染域，无上下文
   if (end === -1 || stateAt(end) !== 'fence_end') return null;
 
+  const startLine = state.getLine(start);
+  const bqContent = stripBlockquotePrefix(startLine);
+  const leadingSpaces = bqContent.match(/^ {1,3}/);
+  const indent = leadingSpaces ? leadingSpaces[0].length : 0;
+
   return {
-    lang: extractFenceLang(state.getLine(start)),
+    lang: extractFenceLang(startLine),
     contentStart: start + 1,
     contentEnd: end,
     isFirstContentLine: index === start + 1,
+    ...(indent > 0 ? { indent } : {}),
   };
+}
+
+/**
+ * CommonMark §4.5: 若开围栏行有 1~3 空格缩进（常见于列表内嵌套代码块），
+ * 则代码块内每行至多剥除对应空格数，消除异常缩进，保持卡片对齐与精准光标。
+ */
+function stripCodeFenceIndent(
+  tokens: InlineNode[],
+  indent: number
+): InlineNode[] {
+  if (indent <= 0 || tokens.length === 0) return tokens;
+  const first = tokens[0];
+  if (first.type === 'text') {
+    let spaces = 0;
+    while (
+      spaces < indent &&
+      spaces < first.content.length &&
+      first.content[spaces] === ' '
+    ) {
+      spaces++;
+    }
+    if (spaces > 0) {
+      const strippedFirst: InlineNode = {
+        ...first,
+        content: first.content.slice(spaces),
+      };
+      return [strippedFirst, ...tokens.slice(1)];
+    }
+  }
+  return tokens;
 }
 
 /** 订阅「本行围栏上下文」：选择器返回稳定字符串键——仅上下文变化时
@@ -781,7 +819,7 @@ function CodeFenceStartBlock({
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        {block.raw}
+        {block.raw.replace(/^ {1,3}/, '')}
       </div>
     </div>
   );
@@ -805,7 +843,7 @@ function CodeFenceEndBlock({
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        {block.raw}
+        {block.raw.replace(/^ {1,3}/, '')}
       </div>
     </div>
   );
@@ -955,6 +993,12 @@ function CodeBlock({
   // B4：围栏上下文（lang/内容区间/首行锚点）——未闭合或缩进代码为 null
   const fenceCtx = useFenceContext(index, store);
   const lineNo = getCodeLineNumber(index, fenceCtx, store);
+  const effectiveTokens = React.useMemo(() => {
+    if (!block.inlineTokens || !fenceCtx || fenceCtx.indent <= 0) {
+      return block.inlineTokens;
+    }
+    return stripCodeFenceIndent(block.inlineTokens, fenceCtx.indent);
+  }, [block.inlineTokens, fenceCtx?.indent]);
 
   // 复制按钮：保留在首行内容锚点供 headless/测试（render-export.test.ts）定位
   const copyButton =
@@ -990,9 +1034,9 @@ function CodeBlock({
             data-token-start={lineOffset}
             data-token-length={block.length}
           >
-            {block.inlineTokens && block.inlineTokens.length > 0 ? (
+            {effectiveTokens && effectiveTokens.length > 0 ? (
               <InlineRenderer
-                tokens={block.inlineTokens}
+                tokens={effectiveTokens}
                 lineOffset={lineOffset}
                 activeState={activeState}
               />
@@ -1049,9 +1093,9 @@ function CodeBlock({
         data-ignore-measure="true"
       />
       <div className="code-content">
-        {block.inlineTokens && block.inlineTokens.length > 0 ? (
+        {effectiveTokens && effectiveTokens.length > 0 ? (
           <InlineRenderer
-            tokens={block.inlineTokens}
+            tokens={effectiveTokens}
             lineOffset={lineOffset}
             activeState={activeState}
           />

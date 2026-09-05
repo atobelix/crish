@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useEditorStore, type EditorStore } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
-import { getCoordinatesFromIndex } from '../core/measure';
+import { getCoordinatesFromIndex, getDOMPointFromIndex } from '../core/measure';
 import {
   DecorationSet,
   applyCursorSelectionDecorations,
@@ -12,6 +12,52 @@ interface Rect {
   left: number;
   width: number;
   height: number;
+}
+
+/**
+ * 几何区间合并算法（1D/2D Rect Union）
+ * 彻底消除内联嵌套元素（父子 span、Token 结构）在 Range.getClientRects() 产生的重叠矩形，
+ * 保证任意视觉行内的选区矩形严格互斥，杜绝任何局部叠色或双层灰度。
+ */
+function mergeOverlappingRects(rawRects: Rect[]): Rect[] {
+  if (rawRects.length <= 1) return rawRects;
+
+  const valid = rawRects.filter((r) => r.width > 0 && r.height > 0);
+  if (valid.length <= 1) return valid;
+
+  // 按垂直 top 升序排序，同视觉行按水平 left 升序排序
+  valid.sort((a, b) => {
+    const dTop = a.top - b.top;
+    if (Math.abs(dTop) > 3) return dTop;
+    return a.left - b.left;
+  });
+
+  const merged: Rect[] = [];
+  let current = { ...valid[0] };
+
+  for (let i = 1; i < valid.length; i++) {
+    const next = valid[i];
+    const isSameVisualLine = Math.abs(current.top - next.top) <= 4;
+
+    if (isSameVisualLine) {
+      const currentRight = current.left + current.width;
+      // 若下一个矩形与当前矩形相交、包含或接壤（容差 1px 亚像素）
+      if (next.left <= currentRight + 1) {
+        const newRight = Math.max(currentRight, next.left + next.width);
+        current.width = newRight - current.left;
+        current.top = Math.min(current.top, next.top);
+        current.height = Math.max(current.height, next.height);
+      } else {
+        merged.push(current);
+        current = { ...next };
+      }
+    } else {
+      merged.push(current);
+      current = { ...next };
+    }
+  }
+  merged.push(current);
+  return merged;
 }
 
 interface SelectionHighlightProps {
@@ -111,70 +157,135 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
       tableState.selectedCell && !tableState.selectedCell.isEditing
     );
 
-    const startCoord = getCoordinatesFromIndex(start, container);
-    const endCoord = getCoordinatesFromIndex(end, container);
-
-    const lines = Array.from(container.querySelectorAll('[data-line-start]'));
-    if (lines.length === 0) {
-      setRects([]);
-      return;
-    }
-
     const containerRect = container.getBoundingClientRect();
     const newRects: Rect[] = [];
 
+    // 1. 物理真理源：利用 Range.prototype.getClientRects() 原生提取选区在每个视觉折行上的独立矩形
+    const startPoint = getDOMPointFromIndex(start, container);
+    const endPoint = getDOMPointFromIndex(end, container);
+
+    if (startPoint && endPoint) {
+      try {
+        const range = document.createRange();
+        range.setStart(startPoint.node, startPoint.offset);
+        range.setEnd(endPoint.node, endPoint.offset);
+        const clientRects = range.getClientRects();
+
+        for (let i = 0; i < clientRects.length; i++) {
+          const r = clientRects[i];
+          if (r.width <= 0 || r.height <= 0) continue;
+
+          // 单元格单选/多选模式下，表格自身具备油墨蓝背景与边框，抑制重复文本高亮层
+          if (isCellSelectionMode) {
+            const elAtPoint = document.elementFromPoint(
+              r.left + r.width / 2,
+              r.top + r.height / 2
+            );
+            if (
+              elAtPoint &&
+              elAtPoint.closest('.token-table-cell, .line-table-row')
+            ) {
+              continue;
+            }
+          }
+
+          newRects.push({
+            top: r.top - containerRect.top + container.scrollTop,
+            left: r.left - containerRect.left + container.scrollLeft,
+            width: r.width,
+            height: r.height,
+          });
+        }
+      } catch (err) {
+        console.error('getClientRects failed:', err);
+      }
+    }
+
+    // 2. 跨空行选区补充占位矩形（空行在 DOM 中为 <br />，Range.getClientRects 经常为 0x0）
+    const lines = Array.from(container.querySelectorAll('[data-line-start]'));
     for (const line of lines) {
-      const lineStart = parseInt(line.getAttribute('data-line-start') || '0', 10);
-      const lineLen = parseInt(line.getAttribute('data-line-length') || '0', 10);
+      const lineStart = parseInt(
+        line.getAttribute('data-line-start') || '0',
+        10
+      );
+      const lineLen = parseInt(
+        line.getAttribute('data-line-length') || '0',
+        10
+      );
       const lineEnd = lineStart + lineLen;
 
-      if (start <= lineEnd && end >= lineStart) {
-        // Line intersects with selection
-        const isTableRow = Boolean(line.querySelector('.line-table-row'));
-        // 单元格单选/拖选模式下，表格自身具备油墨蓝背景与边框，抑制重复文本高亮层
-        if (isTableRow && isCellSelectionMode) {
-          continue;
-        }
-
+      if (lineLen === 0 && start <= lineEnd && end >= lineStart) {
         const lineRect = line.getBoundingClientRect();
-
-        let left = lineRect.left;
-        let right = lineRect.right;
-
-        // If this is the start line, restrict left side
-        if (start >= lineStart && start <= lineEnd && startCoord) {
-          left = startCoord.left;
-        }
-
-        // If this is the end line, restrict right side
-        if (end >= lineStart && end <= lineEnd && endCoord) {
-          right = endCoord.left;
-        }
-
-        // For empty lines selected across
-        if (right < left) {
-          right = left + 5; // minimum width
-        }
-
-        let top = lineRect.top - containerRect.top + container.scrollTop;
-        let height = lineRect.height;
-
-        // 表格行编辑态：选区高度贴合文本字高，消除 54px 全高灰色矩形
-        if (isTableRow && startCoord && start >= lineStart && start <= lineEnd) {
-          top = startCoord.top - containerRect.top + container.scrollTop;
-          height = startCoord.height;
-        }
-
         newRects.push({
-          top,
-          left: left - containerRect.left + container.scrollLeft,
-          width: Math.max(0, right - left),
-          height,
+          top: lineRect.top - containerRect.top + container.scrollTop,
+          left: lineRect.left - containerRect.left + container.scrollLeft,
+          width: 5,
+          height: lineRect.height || 28,
         });
       }
     }
 
-    setRects(newRects);
+    // 3. 次级几何兜底（未挂载/无布局环境/单测无 Range getClientRects 时）
+    if (newRects.length === 0 && lines.length > 0) {
+      const startCoord = getCoordinatesFromIndex(start, container);
+      const endCoord = getCoordinatesFromIndex(end, container);
+
+      for (const line of lines) {
+        const lineStart = parseInt(
+          line.getAttribute('data-line-start') || '0',
+          10
+        );
+        const lineLen = parseInt(
+          line.getAttribute('data-line-length') || '0',
+          10
+        );
+        const lineEnd = lineStart + lineLen;
+
+        if (start <= lineEnd && end >= lineStart) {
+          const isTableRow = Boolean(line.querySelector('.line-table-row'));
+          if (isTableRow && isCellSelectionMode) {
+            continue;
+          }
+
+          const lineRect = line.getBoundingClientRect();
+          let left = lineRect.left;
+          let right = lineRect.right;
+
+          if (start >= lineStart && start <= lineEnd && startCoord) {
+            left = startCoord.left;
+          }
+          if (end >= lineStart && end <= lineEnd && endCoord) {
+            right = endCoord.left;
+          }
+          if (right < left) {
+            right = left + 5;
+          }
+
+          let top = lineRect.top - containerRect.top + container.scrollTop;
+          let height = lineRect.height;
+          if (
+            isTableRow &&
+            startCoord &&
+            start >= lineStart &&
+            start <= lineEnd
+          ) {
+            top = startCoord.top - containerRect.top + container.scrollTop;
+            height = startCoord.height;
+          }
+
+          newRects.push({
+            top,
+            left: left - containerRect.left + container.scrollLeft,
+            width: Math.max(0, right - left),
+            height,
+          });
+        }
+      }
+    }
+
+    // 4. 几何区间合并（彻底消除内联元素嵌套与跨层 DOM 产生的重叠矩形与双层叠色）
+    const mergedRects = mergeOverlappingRects(newRects);
+    setRects(mergedRects);
   }, [decorations, decorationVersion]);
 
   if (rects.length === 0) return null;

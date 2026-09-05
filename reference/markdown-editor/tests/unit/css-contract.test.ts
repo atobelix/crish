@@ -125,6 +125,11 @@ const INLINE_STYLE_EXEMPTIONS: Record<string, string> = {
   'is-soft-render': '软渲染行标记（BlockRenderer 分支）',
   'context-menu': 'ContextMenu.tsx（菜单容器）',
   'context-menu-divider': 'ContextMenu.tsx（菜单分隔线）',
+  'task-checkbox-wrapper': 'InlineRenderer.tsx（任务项复选框包裹）',
+  'task-checkbox-svg': 'InlineRenderer.tsx（任务项复选框图标）',
+  'task-space': 'InlineRenderer.tsx（任务项前缀空格）',
+  'blockquote-bar': 'InlineRenderer.tsx（块引用导线条）',
+  'blockquote-space': 'InlineRenderer.tsx（块引用前缀空格）',
 };
 
 /** 剥离 CSS 注释（块注释 + 行注释），供颜色字面量门禁扫描 */
