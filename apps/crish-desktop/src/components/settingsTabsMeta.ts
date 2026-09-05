@@ -198,12 +198,12 @@ export const TAB_META: TabMeta[] = [
   },
   {
     id: 'browser',
-    label: '受管浏览器',
+    label: '浏览器',
     icon: Lucide.Compass,
     group: '工作',
     keywords: [
-      '受管浏览器',
       '浏览器',
+      '受管浏览器',
       '书签',
       '历史',
       'Cookies',

@@ -1,7 +1,6 @@
 import React from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './SettingsPanel.module.css';
-import navStyles from '../sidebar/SidebarNav.module.css';
 import { Button, Tooltip } from '../ui';
 import type { TabMeta, TabType } from '../settingsTabsMeta';
 import { SidebarFooter } from '../sidebar/SidebarFooter';
@@ -74,14 +73,14 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
         data-density="compact"
         data-testid="settings-sidebar"
       >
-        <div className={navStyles.topActions}>
+        <div className={styles.sidebarTopActions}>
           {onBack ? (
             <Tooltip content="返回应用 (Esc)">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className={`${navStyles.navItem} no-drag`}
+                className={`${styles.sidebarBackBtn} no-drag`}
                 onClick={onBack}
                 aria-label="返回应用，关闭设置"
                 icon={
@@ -94,16 +93,19 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
           ) : null}
 
           <div
-            className={`${navStyles.navItem} no-drag`}
+            className={`${styles.searchWrap} no-drag`}
             role="search"
             aria-label="设置搜索"
-            style={{ cursor: 'text' }}
+            onClick={() => searchInputRef.current?.focus()}
           >
-            <Lucide.Search size={16} strokeWidth={1.75} aria-hidden="true" />
+            <span className={styles.searchIco} aria-hidden="true">
+              <Lucide.Search size={16} strokeWidth={1.75} />
+            </span>
             <input
               ref={searchInputRef}
               id={searchId}
               type="search"
+              className={styles.search}
               placeholder="搜索设置…"
               value={searchQuery}
               onChange={(e) => onSearchChange(e.target.value)}
@@ -115,6 +117,20 @@ export const SettingsSidebar: React.FC<SettingsSidebarProps> = React.memo(
               spellCheck={false}
               enterKeyHint="search"
             />
+            {searchQuery ? (
+              <button
+                type="button"
+                className={styles.searchClear}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSearchChange('');
+                  searchInputRef.current?.focus();
+                }}
+                aria-label="清空搜索"
+              >
+                <Lucide.X size={12} strokeWidth={2} />
+              </button>
+            ) : null}
           </div>
         </div>
 

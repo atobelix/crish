@@ -16,7 +16,6 @@
   justify-content: center;
   overflow: hidden;
   font-family: inherit;
-  backdrop-filter: blur(2px);
 }
 
 .strip {
@@ -35,7 +34,6 @@
     transparent
   );
   border: 1.5px dashed var(--border-subtle, hsl(0 0% 0% / 0.18));
-  backdrop-filter: blur(4px);
 }
 
 .title {
