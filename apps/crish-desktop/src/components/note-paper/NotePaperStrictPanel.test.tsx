@@ -8,7 +8,7 @@
  * 诚实边界：本测绿 ≠ EL-01/EL-08 关闭；≠ 打开完成；≠ W5-C 隔离全关。
  */
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SlashMenuModel, type SlashOpenResult } from '@crish/block-paper';
 import { createMemoryNoteTransport } from '../../api/noteApi';
@@ -536,5 +536,138 @@ describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
       await screen.findByTestId('note-paper-strict-slash-overlay')
     ).toBeInTheDocument();
     expect(menu.getSnapshot().blockId).toBe('c-blk');
+  });
+
+  // -------------------------------------------------------------------------
+  // 正文直接修改持久化写盘与顶栏状态同步契约
+  // -------------------------------------------------------------------------
+
+  it('strict_text_edit_persistence_and_save_status_lifecycle', async () => {
+    const transport = createFixtureHydrateTransport({
+      'doc-persist-test': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'b-edit-1',
+            flavour: 'paragraph',
+            text: '初始正文',
+            index: 0,
+          }),
+        ],
+      },
+    });
+
+    const recordedOps: string[] = [];
+    const applyOpsMock = vi.fn(async (opsJson: string) => {
+      recordedOps.push(opsJson);
+      return { ok: true };
+    });
+
+    render(
+      <NotePaperStrictPanel
+        docId="doc-persist-test"
+        hydrateTransport={transport}
+        paperList={true}
+        applyOps={applyOpsMock}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    expect(panel).toHaveAttribute('data-save-status', 'saved');
+    const saveStatusBadge = screen.getByTestId('note-paper-strict-save-status');
+    expect(saveStatusBadge).toHaveAttribute('data-save-status', 'saved');
+
+    // 找到挂载在 PaperList 上的正文块 DOM
+    const blockEl = panel.querySelector('[data-block-id="b-edit-1"]') as HTMLElement;
+    expect(blockEl).toBeTruthy();
+    expect(blockEl.textContent).toBe('初始正文');
+
+    // 模拟用户在正文块内输入并触发 blur / commit
+    blockEl.textContent = '修改后的正文内容';
+    fireEvent.input(blockEl);
+    fireEvent.blur(blockEl);
+
+    // 断言 applyOps 真实接收到 text_edit collab op
+    await waitFor(() => {
+      expect(applyOpsMock).toHaveBeenCalled();
+    });
+
+    const parsedOp = JSON.parse(recordedOps[0]);
+    expect(parsedOp).toEqual([
+      expect.objectContaining({
+        op: 'text_edit',
+        id: 'b-edit-1',
+        start: 0,
+        end: 4, // '初始正文' length
+        insert: '修改后的正文内容',
+      }),
+    ]);
+
+    // 最终状态必须为 saved
+    await waitFor(() => {
+      expect(panel).toHaveAttribute('data-save-status', 'saved');
+      expect(saveStatusBadge).toHaveAttribute('data-save-status', 'saved');
+    });
+  });
+
+  it('strict_rename_title_triggers_saving_to_saved_transition', async () => {
+    const transport = createFixtureHydrateTransport({
+      'doc-rename-test': {
+        rev: 1,
+        blocks: [
+          makeHydratedBlock({
+            id: 'b-rename-1',
+            flavour: 'paragraph',
+            text: '正文',
+            index: 0,
+          }),
+        ],
+      },
+    });
+
+    let savedTitle = '';
+    const onRenameTitle = vi.fn(async (newTitle: string) => {
+      savedTitle = newTitle;
+    });
+
+    render(
+      <NotePaperStrictPanel
+        docId="doc-rename-test"
+        title="原标题"
+        hydrateTransport={transport}
+        onRenameTitle={onRenameTitle}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'ready'
+      );
+    });
+
+    const panel = screen.getByTestId('note-paper-strict-panel');
+    const titleEl = screen.getByTestId('note-paper-strict-title');
+    fireEvent.click(titleEl);
+
+    const input = screen.getByTestId('note-paper-strict-title-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '新笔记标题' } });
+    fireEvent.blur(input);
+
+    await waitFor(() => {
+      expect(onRenameTitle).toHaveBeenCalledWith('新笔记标题');
+    });
+    expect(savedTitle).toBe('新笔记标题');
+
+    await waitFor(() => {
+      expect(panel).toHaveAttribute('data-save-status', 'saved');
+    });
   });
 });

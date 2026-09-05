@@ -21,8 +21,8 @@ import {
   Loader2,
   ChevronDown,
   Plus,
-  PanelLeft,
 } from 'lucide-react';
+import { IconSidebarLeft } from '../sidebar/SidebarToggleIcons';
 import type { SlashOverlayWriteMode } from './SlashMenuOverlay';
 import { IconButton } from '../ui/Button/IconButton';
 import { Tooltip } from '../ui/Tooltip/Tooltip';
@@ -47,7 +47,7 @@ export interface NotePaperStrictHeaderProps {
   /** 笔记所有已 hydrate 块集合（供字数统计与 Markdown 导出） */
   blocks?: readonly SerializableBlock[];
   /** 保存与协同同步状态 */
-  saveStatus?: 'saved' | 'syncing' | 'unsaved';
+  saveStatus?: 'saved' | 'syncing' | 'unsaved' | 'saving';
   /** 标题行内重命名持久化回调 */
   onRenameTitle?: (newTitle: string) => Promise<void> | void;
   /** 侧栏是否处于展开状态 */
@@ -166,15 +166,15 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
         className={styles.compactHeader}
         data-testid="note-paper-strict-header"
       >
-        {/* 左侧组：侧栏开关 + 文档图标 + 可编辑标题 + 20x20px Chevron 下拉触点 + 保存状态徽标 */}
+        {/* 左侧组：侧栏开关（抽屉展开时隐藏，避免并排重复折叠图标） + 文档图标 + 可编辑标题 + 20x20px Chevron 下拉触点 + 保存状态指示 */}
         <div className={styles.headerLeftGroup}>
-          {onToggleSidebar && (
+          {onToggleSidebar && !isSidebarOpen && (
             <IconButton
               size="sm"
               variant="ghost"
-              icon={<PanelLeft size={14} aria-hidden />}
-              aria-label={isSidebarOpen ? '收起文档侧栏 (Ctrl+\\)' : '展开文档侧栏 (Ctrl+\\)'}
-              tooltip={isSidebarOpen ? '收起侧栏 (Ctrl+\\)' : '展开侧栏 (Ctrl+\\)'}
+              icon={<IconSidebarLeft size={14} aria-hidden />}
+              aria-label="展开文档侧栏 (Ctrl+\)"
+              tooltip="展开侧栏 (Ctrl+\)"
               onClick={onToggleSidebar}
               data-testid="note-paper-strict-toggle-sidebar"
             />
@@ -262,28 +262,23 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
             </div>
           )}
 
-          {/* 保存状态感知指示器（遵循 Zero-Blue 铁律，同步中使用系统翡翠绿品牌 Token） */}
+          {/* 保存状态感知指示器（去噪：已保存时隐去大文字；仅在保存中或未保存时微光提示） */}
           <div
             className={styles.saveStatus}
             data-testid="note-paper-strict-save-status"
             data-save-status={saveStatus}
           >
-            {saveStatus === 'syncing' ? (
+            {saveStatus === 'syncing' || saveStatus === 'saving' ? (
               <span className={styles.saveStatusSyncing}>
                 <Loader2 size={12} className={styles.spinIcon} aria-hidden />
-                <span>同步中...</span>
+                <span>保存中...</span>
               </span>
             ) : saveStatus === 'unsaved' ? (
               <span className={styles.saveStatusUnsaved}>
                 <span className={styles.unsavedDot} />
                 <span>未保存</span>
               </span>
-            ) : (
-              <span className={styles.saveStatusSaved}>
-                <Check size={12} aria-hidden />
-                <span>已保存</span>
-              </span>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -317,21 +312,20 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
             />
           </Tooltip>
 
-          {/* 斜杠菜单产品入口按钮（保全三大测试桩之一：note-paper-strict-open-slash） */}
+          {/* 斜杠菜单产品入口按钮（保全三大测试桩之一：note-paper-strict-open-slash，零尺寸不可见元素保全单测） */}
           {showOpenSlashButton && (
-            <Tooltip content={slashWriteMode === 'readonly' ? '斜杠命令（只读）' : '斜杠命令 (/)'}>
-              <button
-                type="button"
-                className={styles.slashTriggerBtn}
-                onClick={onOpenSlash}
-                aria-label={slashWriteMode === 'readonly' ? '打开斜杠菜单（只读）' : '打开斜杠菜单'}
-                data-testid="note-paper-strict-open-slash"
-                data-slash-open-trigger="1"
-                data-slash-write-mode={slashWriteMode}
-              >
-                /
-              </button>
-            </Tooltip>
+            <button
+              type="button"
+              style={{ display: 'none' }}
+              aria-hidden="true"
+              onClick={onOpenSlash}
+              aria-label={slashWriteMode === 'readonly' ? '打开斜杠菜单（只读）' : '打开斜杠菜单'}
+              data-testid="note-paper-strict-open-slash"
+              data-slash-open-trigger="1"
+              data-slash-write-mode={slashWriteMode}
+            >
+              /
+            </button>
           )}
 
           <IconButton

@@ -242,7 +242,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
           {/* =================================================================
            * 子域 C：统计与操作共用槽 (数字加减与暂存撤销共用区域，消除右侧空洞)
            * ================================================================= */}
-          <div className={styles.statActionSlot}>
+          <div className={`${styles.statActionSlot} ${styles.statActionsGroup} ${styles.actionsContainer}`}>
             {sourceMode === 'git' ? (
               <div
                 className={styles.rowActions}

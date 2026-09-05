@@ -9,6 +9,7 @@ import {
   noteDocumentRename,
   noteDocumentDelete,
 } from '../../api/noteApi';
+import { subscribeNoteDocWritten } from '../../bridges/note-doc-written';
 
 export interface UseNoteDocumentManagerOptions {
   wsId: string;
@@ -29,6 +30,7 @@ export interface UseNoteDocumentManagerResult {
   renameDocument: (docId: string, newTitle: string) => Promise<boolean>;
   deleteDocument: (docId: string) => Promise<boolean>;
   refreshList: () => Promise<void>;
+  touchDocument: (docId: string, timestamp?: number) => void;
 }
 
 export function useNoteDocumentManager({
@@ -89,15 +91,41 @@ export function useNoteDocumentManager({
     void refreshList();
   }, [refreshList]);
 
+  // 触碰/更新文档更新时间戳（使抽屉列表中的相对时间响应式变为“刚刚”，并置顶）
+  const touchDocument = useCallback((docId: string, timestamp?: number) => {
+    if (!docId) return;
+    const now = timestamp ?? Date.now();
+    setDocuments((prev) => {
+      const idx = prev.findIndex((d) => d.id === docId);
+      const item = prev[idx];
+      if (idx === -1 || !item) return prev;
+      const target: NoteDocumentMeta = { ...item, updatedAt: now };
+      const rest = prev.filter((_, i) => i !== idx);
+      return [target, ...rest];
+    });
+  }, []);
+
   useEffect(() => {
-    const handleDocWritten = () => {
+    const handleDocWritten = (e: Event) => {
+      const customEvent = e as CustomEvent<{ docId?: string }>;
+      const docId = customEvent?.detail?.docId;
+      if (docId) {
+        touchDocument(docId);
+      }
       void refreshList();
     };
     window.addEventListener('conex:note-doc-written', handleDocWritten);
+    const unsubscribeWritten = subscribeNoteDocWritten((event) => {
+      if (event.docId) {
+        touchDocument(event.docId);
+      }
+      void refreshList();
+    });
     return () => {
       window.removeEventListener('conex:note-doc-written', handleDocWritten);
+      unsubscribeWritten();
     };
-  }, [refreshList]);
+  }, [refreshList, touchDocument]);
 
   // 2. 切换文档：500ms 超时刷盘防假死 + Generation Token 守卫
   const switchDocument = useCallback(
@@ -238,6 +266,7 @@ export function useNoteDocumentManager({
     renameDocument,
     deleteDocument,
     refreshList,
+    touchDocument,
   };
 }
 

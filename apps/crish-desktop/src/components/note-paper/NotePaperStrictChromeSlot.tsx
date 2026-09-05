@@ -63,6 +63,8 @@ export interface NotePaperSlotNoteProps {
   paperListDefaultVisibleCount?: number;
   paperListDefaultEstimatePx?: number;
   onPaperListReady?: (list: PaperList | null) => void;
+  onBlockChange?: (blockId: string, newText: string) => void;
+  onTextCommit?: (blockId: string, newText: string) => void;
 }
 
 /** slash 浮层域（catalog → Intent → sink；CONN-B 写模式诚实）。 */
@@ -114,6 +116,8 @@ export const NotePaperStrictChromeSlot: React.FC<
     paperListDefaultVisibleCount,
     paperListDefaultEstimatePx,
     onPaperListReady,
+    onBlockChange,
+    onTextCommit,
   } = note;
   const {
     slashMenu,
@@ -143,6 +147,8 @@ export const NotePaperStrictChromeSlot: React.FC<
           defaultVisibleCount={paperListDefaultVisibleCount}
           defaultEstimatePx={paperListDefaultEstimatePx}
           onListReady={onPaperListReady}
+          onBlockChange={onBlockChange}
+          onTextCommit={onTextCommit}
           testId="note-paper-strict-paper-list"
         />
       ) : null}

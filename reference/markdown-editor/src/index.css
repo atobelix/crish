@@ -1,4 +1,4 @@
-@import 'katex/dist/katex.min.css';
+﻿@import 'katex/dist/katex.min.css';
 
 :root {
   /* ── 1. Conex 核心色彩体系 (现代空格 HSL 语法，0.4% M + 0.8% Y 米黄偏橙微暖，纯灰阶演化) ── */
@@ -416,12 +416,13 @@ body {
   background-color: color-mix(in srgb, black 2%, var(--white));
 }
 
-/* 单元格单选态 (Single Click: Cell Selected Mode - 约 4% 纯灰底) */
+/* 单元格单选态 (Single Click: Cell Selected Mode) */
 .token-table-cell.is-cell-selected {
-  background-color: color-mix(in srgb, black 4%, var(--white)) !important;
+  background-color: var(--blue-selection) !important;
+  outline: 1.5px solid var(--border-focus) !important;
+  outline-offset: -1px;
   z-index: 2;
-  border-radius: 0;
-  outline: none !important;
+  border-radius: 1px;
 }
 
 .token-table-cell.is-selection-bottom-right::after {
@@ -1268,12 +1269,21 @@ body {
   color: var(--danger-color);
 }
 
+/* ── 下拉选择框深度定制与对齐 ── */
+.top-select-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+}
+
 .top-select {
   font-family: var(--font-sans);
   font-size: 11.5px;
+  font-weight: 500;
   height: 26px;
   line-height: 26px;
-  padding: 0 6px;
+  padding: 0 20px 0 8px;
   border: none;
   border-right: 1px solid var(--border-medium);
   background: var(--ivory);
@@ -1282,15 +1292,55 @@ body {
   outline: none;
   box-sizing: border-box;
   user-select: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.top-select:last-child,
+.top-select-wrapper:last-child .top-select {
+  border-right: none;
+}
+
+.top-select-arrow {
+  position: absolute;
+  right: 6px;
+  pointer-events: none;
+  color: var(--stone);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.top-select-wrapper:hover .top-select-arrow {
+  color: var(--brand);
+}
+
+.top-select:hover:not(:disabled) {
+  background: var(--interactive-hover);
 }
 
 .top-select:focus {
   background: var(--interactive-hover);
+  box-shadow: inset 0 0 0 1px var(--brand);
 }
 
 .top-select:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
+}
+
+.top-select optgroup {
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--ivory);
+  padding: 4px 0;
+}
+
+.top-select option {
+  font-weight: 400;
+  color: var(--text-primary);
+  background: var(--ivory);
+  padding: 4px 8px;
 }
 
 .top-control-label {
@@ -1306,4 +1356,98 @@ body {
   user-select: none;
   display: inline-flex;
   align-items: center;
+}
+
+
+
+/* ── 浮动 Toast 反馈提示 ── */
+.conex-toast {
+  position: fixed;
+  bottom: 42px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  background: var(--dark-warm);
+  color: var(--ivory);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  border-radius: 20px;
+  box-shadow: 0 4px 16px hsl(0 0% 0% / 0.18);
+  z-index: 9999;
+  animation: toast-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+@keyframes toast-fade-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ── 导出浮动面板深度样式 ── */
+.export-panel-card {
+  width: min(880px, 94vw);
+  box-sizing: border-box;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--ivory);
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px hsl(0 0% 0% / 0.06);
+  font-family: var(--font-sans);
+  animation: toast-fade-in 0.2s ease;
+}
+
+.export-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.export-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.export-panel-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--code-bg);
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 120px;
+  max-height: 320px;
+}
+
+.status-bar-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: var(--code-bg);
+  border-radius: 10px;
+  border: 1px solid var(--border-soft);
 }

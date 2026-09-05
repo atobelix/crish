@@ -137,7 +137,7 @@
 }
 
 .bodyWrap :global(.gutterNum) {
-  background: var(--bg-card);
+  background: var(--diff-gutter-bg, var(--bg-card));
   border-right: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
 }
 
@@ -216,7 +216,7 @@
   background: var(--tint-hover);
 }
 
-/* Diff 视图 */
+/* Diff 视图 (与 DiffCard 视觉风格 100% 全量对齐) */
 .diffContainer {
   display: flex;
   flex-direction: column;
@@ -231,15 +231,16 @@
 .diffLine {
   display: grid;
   grid-template-columns: 50px 1fr;
-  min-height: 20px;
-  line-height: 20px;
+  min-height: 22px;
+  line-height: 22px;
+  border-left: 3px solid transparent;
 }
 
 .diffGutter {
-  color: var(--text-tertiary);
+  color: var(--diff-linenum-fg, var(--text-tertiary));
   text-align: right;
   padding-right: 8px;
-  background: var(--bg-card);
+  background: var(--diff-gutter-bg, var(--bg-card));
   border-right: 1px solid color-mix(in srgb, var(--border-subtle) 25%, transparent);
   user-select: none;
 }
@@ -248,26 +249,36 @@
   padding-left: 8px;
   white-space: pre-wrap;
   word-break: break-all;
+  color: var(--diff-text-normal, var(--text-primary));
 }
 
 .diffAddition {
-  background: var(--diff-add-bg, hsl(142 35% 42% / 0.07));
-  color: var(--text-primary);
+  background: var(--diff-add-bg);
+  border-left: 3px solid var(--diff-add-indicator, var(--diff-add-fg));
+  color: var(--diff-text-normal, var(--text-primary));
 }
 
 .diffAddition .diffGutter {
-  background: var(--diff-add-gutter-bg, hsl(142 35% 42% / 0.10));
-  color: var(--diff-add-gutter-fg, hsl(142 45% 30%));
+  background: var(--diff-add-gutter-bg, transparent);
+  color: var(--diff-add-gutter-fg, var(--diff-add-fg));
 }
 
 .diffDeletion {
-  background: var(--diff-del-bg, hsl(0 55% 55% / 0.07));
-  color: var(--text-primary);
+  background: var(--diff-del-bg);
+  border-left: 3px solid var(--diff-del-indicator, var(--diff-del-fg));
+  color: var(--diff-text-normal, var(--text-primary));
 }
 
 .diffDeletion .diffGutter {
-  background: var(--diff-del-gutter-bg, hsl(0 55% 55% / 0.10));
-  color: var(--diff-del-gutter-fg, hsl(0 55% 38%));
+  background: var(--diff-del-gutter-bg, transparent);
+  color: var(--diff-del-gutter-fg, var(--diff-del-fg));
+}
+
+.diffWordAdd,
+.diffWordDel {
+  background: transparent;
+  border-radius: 3px;
+  padding: 0 1px;
 }
 
 .diffEmpty {

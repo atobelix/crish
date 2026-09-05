@@ -134,6 +134,13 @@ export function NoteLeafHost(ctx: ViewRenderContext): React.ReactElement {
             onSelectDoc={docManager.switchDocument}
             onCreateDoc={() => void docManager.createDocument()}
             onRenameTitle={(title) => void docManager.renameDocument(activeDocId, title)}
+            applyOps={paper.applyOps}
+            onBlockChange={(_id, _text) => {
+              docManager.touchDocument(activeDocId);
+            }}
+            onTextCommit={(_id, _text) => {
+              docManager.touchDocument(activeDocId);
+            }}
           />
         </div>
       </div>

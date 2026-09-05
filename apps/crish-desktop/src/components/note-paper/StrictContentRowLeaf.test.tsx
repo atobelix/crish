@@ -19,6 +19,7 @@ import {
   waitFor,
 } from '@testing-library/react';
 import {
+  BlockChromeModel,
   buildSlashInsertIntent,
   createMockIntentSink,
   createMockTurnIntoSink,
@@ -38,6 +39,7 @@ import {
   tryCommitStrictLeafMdPrefix,
 } from './StrictContentRowLeaf';
 import { NotePaperStrictPanel } from './NotePaperStrictPanel';
+import { NotePaperStrictBody } from './NotePaperStrictBody';
 import { EditSessionRegistry } from '../../api/editSession';
 
 // ---------------------------------------------------------------------------
@@ -399,5 +401,90 @@ describe('NotePaperStrictPanel · CONN-D3 叶路径接线', () => {
     });
     expect(mdMock.calls).toHaveLength(1);
     expect(mdMock.calls[0]!.flavour).toBe('heading-1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 普通文本输入与空笔记态直接编辑交互
+// ---------------------------------------------------------------------------
+
+describe('StrictContentRowLeaf & NotePaperStrictBody · 直接编辑交互', () => {
+  it('strict_leaf_plain_text_input_triggers_callbacks_and_not_blocked', async () => {
+    const onTextChange = vi.fn();
+    const onTextCommit = vi.fn();
+    const sessions = new EditSessionRegistry();
+    render(
+      <StrictContentRowLeaf
+        blockId="leaf-plain"
+        flavour="paragraph"
+        text=""
+        turnIntoSink={createMockTurnIntoSink().sink}
+        onTextChange={onTextChange}
+        onTextCommit={onTextCommit}
+        editSession={sessions}
+      />
+    );
+    const leaf = screen.getByTestId('note-strict-leaf-leaf-plain');
+
+    // 键入普通中文文本（非 Markdown 前缀）
+    await act(async () => {
+      leaf.textContent = '普通汉字文本输入内容';
+      fireEvent.input(leaf);
+    });
+
+    // 正常更新状态并触发 onTextChange 回调，不被阻断
+    expect(onTextChange).toHaveBeenCalledWith(
+      'leaf-plain',
+      '普通汉字文本输入内容'
+    );
+    expect(sessions.isOpen('leaf-plain')).toBe(true);
+
+    // 回车提交
+    await act(async () => {
+      fireEvent.keyDown(leaf, { key: 'Enter' });
+    });
+    expect(onTextCommit).toHaveBeenCalledWith(
+      'leaf-plain',
+      '普通汉字文本输入内容'
+    );
+
+    // 失焦提交
+    await act(async () => {
+      fireEvent.blur(leaf);
+    });
+    expect(onTextCommit).toHaveBeenCalledTimes(2);
+  });
+
+  it('strict_body_empty_click_initializes_first_row_and_focuses', async () => {
+    const onInit = vi.fn();
+    const chrome = new BlockChromeModel();
+    render(
+      <NotePaperStrictBody
+        status="empty"
+        errorReason={null}
+        errorCode={null}
+        blocks={[]}
+        renderReactRows={true}
+        chrome={chrome}
+        onInitFirstBlock={onInit}
+      />
+    );
+
+    const empty = screen.getByTestId('note-paper-strict-empty');
+    expect(empty).toBeInTheDocument();
+
+    // 点击空白正文区域
+    await act(async () => {
+      fireEvent.click(empty);
+    });
+
+    // 自动初始化第一行
+    expect(onInit).toHaveBeenCalledTimes(1);
+    const firstBlock = screen.getByTestId('note-strict-block-init-first-block');
+    expect(firstBlock).toBeInTheDocument();
+    const editableLeaf = screen.getByTestId(
+      'note-strict-leaf-init-first-block'
+    );
+    expect(editableLeaf).toHaveAttribute('contenteditable', 'true');
   });
 });

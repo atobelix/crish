@@ -60,6 +60,12 @@ export type NotePaperStrictBodyProps = {
   baseRev?: number;
   /** 内容宿主 B / chrome / slash 等兄弟槽（由面板传入） */
   children?: React.ReactNode;
+  /** 空笔记态点击空白区域初始化首行回调 */
+  onInitFirstBlock?: () => void;
+  /** 块文本变更回调 */
+  onBlockChange?: (blockId: string, newText: string) => void;
+  /** 块文本失焦提交回调 */
+  onTextCommit?: (blockId: string, newText: string) => void;
 };
 
 /**
@@ -81,12 +87,72 @@ export const NotePaperStrictBody = React.forwardRef<
     mdPrefix,
     baseRev,
     children,
+    onInitFirstBlock,
+    onBlockChange,
+    onTextCommit,
   },
   ref
 ) {
+  const [emptyInitRow, setEmptyInitRow] = React.useState(false);
+  const firstBlockRef = React.useRef<HTMLDivElement | null>(null);
+
+  // 状态变更时若离开 empty 则复位
+  React.useEffect(() => {
+    if (status !== 'empty') {
+      setEmptyInitRow(false);
+    }
+  }, [status]);
+
+  const handleEmptyAreaClick = React.useCallback(
+    (e: React.MouseEvent) => {
+      if (status !== 'empty') return;
+      if (
+        emptyInitRow &&
+        e.target instanceof HTMLElement &&
+        e.target.closest('[contenteditable="true"]')
+      ) {
+        return;
+      }
+      onInitFirstBlock?.();
+      setEmptyInitRow(true);
+    },
+    [status, emptyInitRow, onInitFirstBlock]
+  );
+
+  React.useEffect(() => {
+    if (!emptyInitRow || status !== 'empty') {
+      return;
+    }
+    const timer = setTimeout(() => {
+      const leaf =
+        firstBlockRef.current?.querySelector<HTMLElement>(
+          '[contenteditable="true"]'
+        ) ?? firstBlockRef.current;
+      if (leaf) {
+        leaf.focus();
+        try {
+          const sel = window.getSelection?.();
+          if (sel) {
+            const range = document.createRange();
+            range.selectNodeContents(leaf);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        } catch {
+          // ignore in jsdom
+        }
+      }
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [emptyInitRow, status]);
+
   return (
     <div ref={ref} className={styles.body} data-testid="note-paper-strict-body">
-      <div className={styles.readingColumn}>
+      <div
+        className={styles.readingColumn}
+        onClick={status === 'empty' ? handleEmptyAreaClick : undefined}
+      >
         {status === 'loading' ? (
           <div
             className={`${styles.state} ${styles.stateLoading}`}
@@ -110,12 +176,66 @@ export const NotePaperStrictBody = React.forwardRef<
         ) : null}
 
         {status === 'empty' ? (
-          <div
-            className={`${styles.state} ${styles.stateEmpty}`}
-            data-testid="note-paper-strict-empty"
-          >
-            空文档投影（hydrate 成功 · 0 块）
-          </div>
+          emptyInitRow ? (
+            <div
+              ref={firstBlockRef}
+              className={styles.blockRow}
+              data-block-id="init-first-block"
+              data-content-row="1"
+              data-block-index="0"
+              data-flavour="paragraph"
+              data-testid="note-strict-block-init-first-block"
+              tabIndex={0}
+            >
+              <span
+                className={styles.handle}
+                data-testid="note-strict-handle-init-first-block"
+                aria-hidden
+              />
+              <div className={styles.blockContent}>
+                <span className={styles.flavour}>paragraph</span>
+                <StrictContentRowLeaf
+                  blockId="init-first-block"
+                  flavour="paragraph"
+                  text=""
+                  baseRev={baseRev}
+                  turnIntoSink={mdPrefix?.turnIntoSink}
+                  mdPrefixWriteMode={mdPrefix?.mdPrefixWriteMode ?? 'writable'}
+                  mdPrefixSinkSource={mdPrefix?.mdPrefixSinkSource}
+                  mdPrefixBinding={
+                    mdPrefix?.mdPrefixBinding ?? {
+                      mode:
+                        (mdPrefix?.mdPrefixWriteMode ?? 'writable') ===
+                        'disabled'
+                          ? 'disabled'
+                          : 'writable',
+                      sink: mdPrefix?.turnIntoSink,
+                      collab: null,
+                      source: 'injected-sink',
+                    }
+                  }
+                  onMdPrefixCommit={mdPrefix?.onMdPrefixCommit}
+                  onCommittedIntent={mdPrefix?.onMdPrefixCommittedIntent}
+                  onTextChange={onBlockChange}
+                  onTextCommit={onTextCommit}
+                />
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`${styles.state} ${styles.stateEmpty}`}
+              data-testid="note-paper-strict-empty"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  handleEmptyAreaClick(e as unknown as React.MouseEvent);
+                }
+              }}
+            >
+              空文档投影（hydrate 成功 · 0 块）
+            </div>
+          )
         ) : null}
 
         {/*
@@ -168,6 +288,8 @@ export const NotePaperStrictBody = React.forwardRef<
                       mdPrefixBinding={mdPrefix?.mdPrefixBinding}
                       onMdPrefixCommit={mdPrefix?.onMdPrefixCommit}
                       onCommittedIntent={mdPrefix?.onMdPrefixCommittedIntent}
+                      onTextChange={onBlockChange}
+                      onTextCommit={onTextCommit}
                     />
                   </div>
                 </div>

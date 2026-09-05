@@ -13,8 +13,8 @@
  * **≠ EL-01**；**≠ W3-P**；**≠** 权威树。
  */
 import React, { useState } from 'react';
-import { describe, expect, it, beforeEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, beforeEach, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import {
   BP_CHROME_ROOT,
   BP_PAPER_BLOCK,
@@ -679,5 +679,219 @@ describe('NotePaperStrictPanel · PaperList 产品挂载', () => {
     expect(
       paperList!.getBlockElement('lv4-h1')?.hasAttribute('data-bp-focus')
     ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 直接打字与编辑交互契约
+// ---------------------------------------------------------------------------
+
+describe('PaperListDomMount · 直接打字与编辑交互契约', () => {
+  let list: PaperList | null = null;
+
+  beforeEach(() => {
+    list = null;
+    vi.useRealTimers();
+  });
+
+  it('w3g_desktop_direct_typing_input_and_debounce: 打字更新草稿并触发回调', async () => {
+    const onBlockInput = vi.fn();
+    const onBlockChange = vi.fn();
+
+    render(
+      <PaperListDomMount
+        blocks={[
+          { id: 'blk-1', flavour: 'paragraph', text: '初始文本' },
+          { id: 'blk-2', flavour: 'paragraph', text: '第二行' },
+        ]}
+        window={{ startIndex: 0, endIndex: 2 }}
+        overscan={0}
+        onBlockInput={onBlockInput}
+        onBlockChange={onBlockChange}
+        debounceMs={100}
+        onListReady={(l) => {
+          list = l;
+        }}
+      />
+    );
+
+    expect(list).not.toBeNull();
+    const blockEl = list!.getBlockElement('blk-1');
+    expect(blockEl).toBeTruthy();
+    expect(blockEl!.getAttribute('contenteditable')).toBe('plaintext-only');
+
+    // 模拟用户键入
+    fireEvent(blockEl!, new Event('beforeinput', { bubbles: true }));
+    blockEl!.textContent = '编辑后的文本内容';
+    fireEvent.input(blockEl!);
+
+    // 立即触发 onBlockInput
+    expect(onBlockInput).toHaveBeenCalledWith('blk-1', '编辑后的文本内容');
+    expect(onBlockChange).not.toHaveBeenCalled();
+
+    // 防抖后触发 onBlockChange
+    await waitFor(() => {
+      expect(onBlockChange).toHaveBeenCalledWith('blk-1', '编辑后的文本内容');
+    });
+  });
+
+  it('w3g_desktop_chinese_ime_composition_guards: 中文输入法组合期间不提前提交', async () => {
+    const onBlockInput = vi.fn();
+    const onBlockChange = vi.fn();
+
+    render(
+      <PaperListDomMount
+        blocks={[{ id: 'ime-1', flavour: 'paragraph', text: '' }]}
+        window={{ startIndex: 0, endIndex: 1 }}
+        overscan={0}
+        onBlockInput={onBlockInput}
+        onBlockChange={onBlockChange}
+        debounceMs={50}
+        onListReady={(l) => {
+          list = l;
+        }}
+      />
+    );
+
+    const blockEl = list!.getBlockElement('ime-1')!;
+
+    // 组合输入开始（如拼音 "zhongwen"）
+    fireEvent.compositionStart(blockEl);
+    blockEl.textContent = 'zhongwen';
+    fireEvent.input(blockEl);
+
+    // 组合期间不触发输入回调
+    expect(onBlockInput).not.toHaveBeenCalled();
+    expect(onBlockChange).not.toHaveBeenCalled();
+
+    // 组合确认完成（上屏为 "中文"）
+    blockEl.textContent = '中文';
+    fireEvent.compositionEnd(blockEl);
+
+    expect(onBlockInput).toHaveBeenCalledWith('ime-1', '中文');
+    await waitFor(() => {
+      expect(onBlockChange).toHaveBeenCalledWith('ime-1', '中文');
+    });
+  });
+
+  it('w3g_desktop_keydown_enter_and_backspace: 回车提交/插入与退格自动前移焦点', async () => {
+    const onTextCommit = vi.fn();
+    const onBlockChange = vi.fn();
+    const onEnter = vi.fn();
+    const onBlockInsert = vi.fn();
+    const onBackspace = vi.fn();
+    const onBlockDelete = vi.fn();
+
+    render(
+      <PaperListDomMount
+        blocks={[
+          { id: 'k-1', flavour: 'paragraph', text: '段落一' },
+          { id: 'k-2', flavour: 'paragraph', text: '' },
+        ]}
+        window={{ startIndex: 0, endIndex: 2 }}
+        overscan={0}
+        onTextCommit={onTextCommit}
+        onBlockChange={onBlockChange}
+        onEnter={onEnter}
+        onBlockInsert={onBlockInsert}
+        onBackspace={onBackspace}
+        onBlockDelete={onBlockDelete}
+        onListReady={(l) => {
+          list = l;
+        }}
+      />
+    );
+
+    const el1 = list!.getBlockElement('k-1')!;
+    const el2 = list!.getBlockElement('k-2')!;
+
+    // 在 k-1 按 Enter：触发提交与插入段落
+    fireEvent.keyDown(el1, { key: 'Enter' });
+    expect(onTextCommit).toHaveBeenCalledWith('k-1', '段落一');
+    expect(onBlockChange).toHaveBeenCalledWith('k-1', '段落一');
+    expect(onEnter).toHaveBeenCalledWith('k-1', '段落一');
+    expect(onBlockInsert).toHaveBeenCalledWith('k-1', '');
+
+    // 在 k-2（空段落）按 Backspace：触发删除并前移焦点
+    fireEvent.keyDown(el2, { key: 'Backspace' });
+    expect(onBackspace).toHaveBeenCalledWith('k-2', '');
+    expect(onBlockDelete).toHaveBeenCalledWith('k-2');
+  });
+
+  it('w3g_desktop_blur_commits_text: 失焦触发提交向外派发', async () => {
+    const onTextCommit = vi.fn();
+    const onBlockChange = vi.fn();
+
+    render(
+      <PaperListDomMount
+        blocks={[{ id: 'blur-1', flavour: 'paragraph', text: '原文' }]}
+        window={{ startIndex: 0, endIndex: 1 }}
+        overscan={0}
+        onTextCommit={onTextCommit}
+        onBlockChange={onBlockChange}
+        debounceMs={1000} // 长防抖
+        onListReady={(l) => {
+          list = l;
+        }}
+      />
+    );
+
+    const blockEl = list!.getBlockElement('blur-1')!;
+    blockEl.textContent = '失焦前修改的文本';
+    fireEvent.input(blockEl);
+
+    // 防抖未到时不触发
+    expect(onBlockChange).not.toHaveBeenCalled();
+    expect(onTextCommit).not.toHaveBeenCalled();
+
+    // 失去焦点立即提交
+    fireEvent.blur(blockEl);
+    expect(onBlockChange).toHaveBeenCalledWith('blur-1', '失焦前修改的文本');
+    expect(onTextCommit).toHaveBeenCalledWith('blur-1', '失焦前修改的文本');
+  });
+
+  it('w3g_desktop_active_editing_protection: 打字期间外部投影刷新不冲掉本地文本与光标', async () => {
+    let setExternalBlocks: React.Dispatch<
+      React.SetStateAction<
+        { id: string; flavour: string; text: string }[]
+      >
+    > = () => {};
+
+    function TestHost() {
+      const [blocks, setBlocks] = useState([
+        { id: 'p-1', flavour: 'paragraph', text: '原始外部投影' },
+      ]);
+      setExternalBlocks = setBlocks;
+      return (
+        <PaperListDomMount
+          blocks={blocks}
+          window={{ startIndex: 0, endIndex: 1 }}
+          overscan={0}
+          onListReady={(l) => {
+            list = l;
+          }}
+        />
+      );
+    }
+
+    render(<TestHost />);
+
+    const blockEl = list!.getBlockElement('p-1')!;
+    expect(blockEl.textContent).toBe('原始外部投影');
+
+    // 用户开始打字，更新本地 draft
+    fireEvent(blockEl, new Event('beforeinput', { bubbles: true }));
+    blockEl.textContent = '用户正在打字的内容';
+    fireEvent.input(blockEl);
+
+    // 外部由于其他原因下发了旧的外部投影刷新
+    act(() => {
+      setExternalBlocks([
+        { id: 'p-1', flavour: 'paragraph', text: '外部旧投影刷新' },
+      ]);
+    });
+
+    // 活跃输入状态保护：textContent 仍然保持为用户打字的内容，不被覆写
+    expect(blockEl.textContent).toBe('用户正在打字的内容');
   });
 });

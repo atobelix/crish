@@ -594,15 +594,15 @@ html[data-theme='light'] {
 
   /* Diff 比对 (清爽通透配色) */
   --diff-add-bg: hsl(150 65% 97%);
-  --diff-add-fg: hsl(150 70% 32%);
-  --diff-add-word-bg: hsl(150 70% 32% / 0.18);
+  --diff-add-fg: hsl(152 75% 36%);
+  --diff-add-word-bg: transparent;
   --diff-add-gutter-bg: transparent;
   --diff-add-gutter-fg: var(--diff-add-fg);
   --diff-add-indicator: var(--diff-add-fg);
 
   --diff-del-bg: hsl(0 80% 98%);
-  --diff-del-fg: hsl(0 72% 45%);
-  --diff-del-word-bg: hsl(0 72% 45% / 0.16);
+  --diff-del-fg: hsl(0 75% 50%);
+  --diff-del-word-bg: transparent;
   --diff-del-gutter-bg: transparent;
   --diff-del-gutter-fg: var(--diff-del-fg);
   --diff-del-indicator: var(--diff-del-fg);
@@ -1162,14 +1162,14 @@ html[data-theme='dark'] {
   /* Diff 比对 (Dark 高对比度) */
   --diff-add-bg: hsl(142 40% 50% / 0.12);
   --diff-add-fg: hsl(142 75% 72%); /* 9.46:1 WCAG AAA */
-  --diff-add-word-bg: hsl(142 45% 45% / 0.30);
+  --diff-add-word-bg: transparent;
   --diff-add-gutter-bg: transparent;
   --diff-add-gutter-fg: hsl(142 45% 72%);
   --diff-add-indicator: hsl(142 75% 72%);
 
   --diff-del-bg: hsl(0 60% 55% / 0.12);
   --diff-del-fg: hsl(0 85% 75%); /* 7.21:1 WCAG AAA */
-  --diff-del-word-bg: hsl(0 65% 50% / 0.30);
+  --diff-del-word-bg: transparent;
   --diff-del-gutter-bg: transparent;
   --diff-del-gutter-fg: hsl(0 60% 75%);
   --diff-del-indicator: hsl(0 85% 75%);

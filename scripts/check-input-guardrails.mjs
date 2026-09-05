@@ -228,7 +228,8 @@ export function analyzeFormFourMinimalist(selector, body) {
   const borderMatches = body.match(/border\s*:\s*([^;]+);/gi) || [];
   for (const bm of borderMatches) {
     const bVal = bm.replace(/^border\s*:\s*/i, '').replace(/;$/, '').trim();
-    if (!/^(?:none|0|0px|transparent)$/i.test(bVal) && !/transparent/i.test(bVal)) {
+    const bClean = bVal.replace(/\s*!important/i, '').trim();
+    if (!/^(?:none|0|0px|transparent)$/i.test(bClean) && !/transparent/i.test(bClean)) {
       violations.push({ type: 'FORM_FOUR_NON_TRANSPARENT_BORDER', snippet: bm });
     }
   }
@@ -236,7 +237,8 @@ export function analyzeFormFourMinimalist(selector, body) {
   const borderColorMatches = body.match(/border-color\s*:\s*([^;]+);/gi) || [];
   for (const bcm of borderColorMatches) {
     const bcVal = bcm.replace(/^border-color\s*:\s*/i, '').replace(/;$/, '').trim();
-    if (!/^(?:transparent|none)$/i.test(bcVal)) {
+    const bcClean = bcVal.replace(/\s*!important/i, '').trim();
+    if (!/^(?:transparent|none|0)$/i.test(bcClean)) {
       violations.push({ type: 'FORM_FOUR_NON_TRANSPARENT_BORDER_COLOR', snippet: bcm });
     }
   }
@@ -244,7 +246,8 @@ export function analyzeFormFourMinimalist(selector, body) {
   const outlineMatches = body.match(/outline\s*:\s*([^;]+);/gi) || [];
   for (const om of outlineMatches) {
     const oVal = om.replace(/^outline\s*:\s*/i, '').replace(/;$/, '').trim();
-    if (!/^(?:none|0|transparent)$/i.test(oVal) && !/transparent/i.test(oVal)) {
+    const oClean = oVal.replace(/\s*!important/i, '').trim();
+    if (!/^(?:none|0|0px|transparent)$/i.test(oClean) && !/transparent/i.test(oClean)) {
       violations.push({ type: 'FORM_FOUR_VISIBLE_OUTLINE', snippet: om });
     }
   }
@@ -289,202 +292,368 @@ export function runCheckFileSuite(targetErrors = errors) {
   // 1. 检查形态 ①：主侧栏会话搜索框 (SidebarNav.module.css)
   checkFile(
     path.resolve(DESKTOP_SRC, 'components/sidebar/SidebarNav.module.css'),
-  '形态 ① 主侧栏搜索框 (SidebarNav.module.css)',
-  [
-    {
-      regex: /\.navItem\[role=['"]search['"]\]\s*\{[^}]*background:\s*transparent/,
-      message: '常态背景必须为 transparent，严禁给外层画底色框',
-    },
-    {
-      regex: /\.navItem\[role=['"]search['"]\]\s*\{[^}]*border:\s*none/,
-      message: '常态边框必须为 none，严禁给外层画边框',
-    },
-    {
-      regex: /\.navItem input\[type=['"]search['"]\][^{]*\{[^}]*border:\s*none/,
-      message: '内芯 input 必须带 border: none',
-    },
-    {
-      regex: /\.navItem input\[type=['"]search['"]\][^{]*\{[^}]*box-shadow:\s*none/,
-      message: '内芯 input 必须带 box-shadow: none，防止全局黑框污染',
-    },
-  ]
-);
+    '形态 ① 主侧栏搜索框 (SidebarNav.module.css)',
+    [
+      {
+        regex: /\.navItem\[role=['"]search['"]\]\s*\{[^}]*background:\s*transparent/,
+        message: '常态背景必须为 transparent，严禁给外层画底色框',
+      },
+      {
+        regex: /\.navItem\[role=['"]search['"]\]\s*\{[^}]*border:\s*none/,
+        message: '常态边框必须为 none，严禁给外层画边框',
+      },
+      {
+        regex: /\.navItem input\[type=['"]search['"]\][^{]*\{[^}]*border:\s*none/,
+        message: '内芯 input 必须带 border: none',
+      },
+      {
+        regex: /\.navItem input\[type=['"]search['"]\][^{]*\{[^}]*box-shadow:\s*none/,
+        message: '内芯 input 必须带 box-shadow: none，防止全局黑框污染',
+      },
+    ],
+    targetErrors
+  );
 
-// 2. 检查形态 ①：设置侧边栏搜索框 (SettingsPanel.module.css)
-checkFile(
-  path.resolve(DESKTOP_SRC, 'components/settings/SettingsPanel.module.css'),
-  '形态 ① 设置侧栏搜索框 (SettingsPanel.module.css)',
-  [
-    {
-      regex: /\.searchWrap\s*\{[^}]*background:\s*transparent/,
-      message: '常态背景必须为 transparent，与主侧栏保持 100% 共享纯无边框形式',
-    },
-    {
-      regex: /\.searchWrap\s*\{[^}]*border:\s*none/,
-      message: '常态边框必须为 none',
-    },
-    {
-      regex: /\.search[^{]*\{[^}]*border:\s*none/,
-      message: '内芯 search 必须带 border: none',
-    },
-    {
-      regex: /\.search[^{]*\{[^}]*box-shadow:\s*none/,
-      message: '内芯 search 必须带 box-shadow: none',
-    },
-  ]
-);
+  // 2. 检查形态 ①：设置侧边栏搜索框 (SettingsPanel.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/settings/SettingsPanel.module.css'),
+    '形态 ① 设置侧栏搜索框 (SettingsPanel.module.css)',
+    [
+      {
+        regex: /\.searchWrap\s*\{[^}]*background:\s*transparent/,
+        message: '常态背景必须为 transparent，与主侧栏保持 100% 共享纯无边框形式',
+      },
+      {
+        regex: /\.searchWrap\s*\{[^}]*border:\s*none/,
+        message: '常态边框必须为 none',
+      },
+      {
+        regex: /\.search[^{]*\{[^}]*border:\s*none/,
+        message: '内芯 search 必须带 border: none',
+      },
+      {
+        regex: /\.search[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '内芯 search 必须带 box-shadow: none',
+      },
+    ],
+    targetErrors
+  );
 
-// 3. 检查形态 ④：下拉菜单与浮层搜索框 (ModelBadgePickerMenu.module.css)
-checkFile(
-  path.resolve(DESKTOP_SRC, 'components/provider/ModelBadgePickerMenu.module.css'),
-  '形态 ④ 模型选择菜单搜索框 (ModelBadgePickerMenu.module.css)',
-  [
-    {
-      includes: '.searchInput:focus',
-      message: '必须包含 .searchInput:focus 显式声明',
-    },
-    {
-      includes: '.searchInput:focus-visible',
-      message: '必须包含 .searchInput:focus-visible 显式声明',
-    },
-    {
-      regex: /\.searchInput[^{]*\{[^}]*border:\s*none/,
-      message: '必须保持全态 border: none，只有光标闪烁，其他全无变化',
-    },
-    {
-      regex: /\.searchInput[^{]*\{[^}]*box-shadow:\s*none/,
-      message: '必须保持全态 box-shadow: none，杜绝生硬黑框',
-    },
-    {
-      regex: /\.searchInput[^{]*\{[^}]*outline:\s*none/,
-      message: '必须保持全态 outline: none',
-    },
-  ]
-);
+  // 3. 检查形态 ④：下拉菜单与浮层搜索框 (ModelBadgePickerMenu.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/provider/ModelBadgePickerMenu.module.css'),
+    '形态 ④ 模型选择菜单搜索框 (ModelBadgePickerMenu.module.css)',
+    [
+      {
+        includes: '.searchInput:focus',
+        message: '必须包含 .searchInput:focus 显式声明',
+      },
+      {
+        includes: '.searchInput:focus-visible',
+        message: '必须包含 .searchInput:focus-visible 显式声明',
+      },
+      {
+        regex: /\.searchInput[^{]*\{[^}]*border:\s*none/,
+        message: '必须保持全态 border: none，只有光标闪烁，其他全无变化',
+      },
+      {
+        regex: /\.searchInput[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '必须保持全态 box-shadow: none，杜绝生硬黑框',
+      },
+      {
+        regex: /\.searchInput[^{]*\{[^}]*outline:\s*none/,
+        message: '必须保持全态 outline: none',
+      },
+    ],
+    targetErrors
+  );
 
-// 4. 检查形态 ④：字体选择浮层搜索框 (FontSelectField.module.css)
-checkFile(
-  path.resolve(DESKTOP_SRC, 'components/settings/FontSelectField.module.css'),
-  '形态 ④ 字体选择浮层搜索框 (FontSelectField.module.css)',
-  [
-    {
-      regex: /\.searchInput[^{]*\{[^}]*border:\s*none/,
-      message: '必须保持全态 border: none',
-    },
-    {
-      regex: /\.searchInput[^{]*\{[^}]*box-shadow:\s*none/,
-      message: '必须保持全态 box-shadow: none',
-    },
-  ]
-);
+  // 4. 检查形态 ④：字体选择浮层搜索框 (FontSelectField.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/settings/FontSelectField.module.css'),
+    '形态 ④ 字体选择浮层搜索框 (FontSelectField.module.css)',
+    [
+      {
+        regex: /\.searchInput[^{]*\{[^}]*border:\s*none/,
+        message: '必须保持全态 border: none',
+      },
+      {
+        regex: /\.searchInput[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '必须保持全态 box-shadow: none',
+      },
+    ],
+    targetErrors
+  );
 
-// 5. 检查全局焦点样式防御 (styles/focus-visible.css)
-checkFile(
-  path.resolve(DESKTOP_SRC, 'styles/focus-visible.css'),
-  '全局焦点防御门禁 (focus-visible.css)',
-  [
-    {
-      regex: /:is\([^)]*role=['"]search['"][^)]*role=['"]menu['"][^)]*role=['"]listbox['"][^)]*\)/,
-      message: '必须包含对 role=search, role=menu, role=listbox 的全局排除拦截',
-    },
-    {
-      includes: 'box-shadow: none !important;',
-      message: '必须全局剔除内嵌搜索输入框的 box-shadow 污染',
-    },
-    {
-      regex: /(?:\.searchInput|\[class\*=['"]searchInput['"]\]):is\(:focus,\s*:focus-visible\)/,
-      message: '必须显式阻断全局样式对 .searchInput 的阴影侵蚀',
-    },
-    {
-      notIncludes: '0 0 0 3px',
-      message: '严禁声明 3px 粗重焦点投影环，上限必须严格保持 1.5px (AGENTS.md §13)',
-    },
-    {
-      notIncludes: 'var(--text-primary) 60%',
-      message: '严禁混入 60% 文本深黑，上限必须严格保持 <= 10% (AGENTS.md §13)',
-    },
-  ]
-);
+  // 5. 检查全局焦点样式防御 (styles/focus-visible.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'styles/focus-visible.css'),
+    '全局焦点防御门禁 (focus-visible.css)',
+    [
+      {
+        regex: /:is\([^)]*role=['"]search['"][^)]*role=['"]menu['"][^)]*role=['"]listbox['"][^)]*\)/,
+        message: '必须包含对 role=search, role=menu, role=listbox 的全局排除拦截',
+      },
+      {
+        includes: 'box-shadow: none !important;',
+        message: '必须全局剔除内嵌搜索输入框的 box-shadow 污染',
+      },
+      {
+        regex: /(?:\.searchInput|\[class\*=['"]searchInput['"]\]):is\(:focus,\s*:focus-visible\)/,
+        message: '必须显式阻断全局样式对 .searchInput 的阴影侵蚀',
+      },
+      {
+        notIncludes: '0 0 0 3px',
+        message: '严禁声明 3px 粗重焦点投影环，上限必须严格保持 1.5px (AGENTS.md §13)',
+      },
+      {
+        notIncludes: 'var(--text-primary) 60%',
+        message: '严禁混入 60% 文本深黑，上限必须严格保持 <= 10% (AGENTS.md §13)',
+      },
+    ],
+    targetErrors
+  );
 
-// 6. 检查形态 ③：标准原子 Input (components/ui/Input/Input.module.css)
-checkFile(
-  path.resolve(DESKTOP_SRC, 'components/ui/Input/Input.module.css'),
-  '形态 ③ 标准原子组件 Input (Input.module.css)',
-  [
-    {
-      includes: 'border: 1px solid var(--border-subtle);',
-      message: '必须使用 var(--border-subtle) 细边框，严禁硬编码',
-    },
-    {
-      includes: 'border-radius: var(--radius-md, 6px);',
-      message: '必须使用标准圆角',
-    },
-    {
-      regex: /\.input:focus[^{]*\{[^}]*box-shadow:\s*none;/,
-      message: '鼠标焦点态必须维持 box-shadow: none，遵守 AGENTS.md §13 软灰规范',
-    },
-  ]
-);
+  // 6. 检查形态 ③：标准原子 Input (components/ui/Input/Input.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/ui/Input/Input.module.css'),
+    '形态 ③ 标准原子组件 Input (Input.module.css)',
+    [
+      {
+        includes: 'border: 1px solid var(--border-subtle);',
+        message: '必须使用 var(--border-subtle) 细边框，严禁硬编码',
+      },
+      {
+        includes: 'border-radius: var(--radius-md, 6px);',
+        message: '必须使用标准圆角',
+      },
+      {
+        regex: /\.input:focus[^{]*\{[^}]*box-shadow:\s*none;/,
+        message: '鼠标焦点态必须维持 box-shadow: none，遵守 AGENTS.md §13 软灰规范',
+      },
+    ],
+    targetErrors
+  );
 
-// 7. 检查形态 ③：原子多行文本 Textarea (components/ui/Input/Textarea.module.css)
-checkFile(
-  path.resolve(DESKTOP_SRC, 'components/ui/Input/Textarea.module.css'),
-  '形态 ③ 原子组件 Textarea (Textarea.module.css)',
-  [
-    {
-      includes: 'border: 1px solid var(--border-subtle);',
-      message: '必须使用 var(--border-subtle) 细边框',
-    },
-    {
-      includes: 'border-radius: var(--radius-md, 6px);',
-      message: '必须使用标准圆角',
-    },
-    {
-      regex: /\.nativeTextarea:focus[^{]*\{[^}]*box-shadow:\s*none;/,
-      message: '鼠标焦点态必须维持 box-shadow: none',
-    },
-  ]
-);
+  // 7. 检查形态 ③：原子多行文本 Textarea (components/ui/Input/Textarea.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/ui/Input/Textarea.module.css'),
+    '形态 ③ 原子组件 Textarea (Textarea.module.css)',
+    [
+      {
+        includes: 'border: 1px solid var(--border-subtle);',
+        message: '必须使用 var(--border-subtle) 细边框',
+      },
+      {
+        includes: 'border-radius: var(--radius-md, 6px);',
+        message: '必须使用标准圆角',
+      },
+      {
+        regex: /\.nativeTextarea:focus[^{]*\{[^}]*box-shadow:\s*none;/,
+        message: '鼠标焦点态必须维持 box-shadow: none',
+      },
+    ],
+    targetErrors
+  );
 
-// 8. 检查形态 ④：Diff 搜索筛选框 (DiffCard.module.css)
-checkFile(
-  path.resolve(DESKTOP_SRC, 'components/diff/DiffCard.module.css'),
-  '形态 ④ Diff 搜索筛选框 (DiffCard.module.css)',
-  [
-    {
-      regex: /\.searchInput[^{]*\{[^}]*border:\s*none/,
-      message: 'Diff 搜索框必须保持形态 ④ border: none 极简形式',
-    },
-    {
-      regex: /\.searchInput[^{]*\{[^}]*box-shadow:\s*none/,
-      message: 'Diff 搜索框必须保持形态 ④ box-shadow: none，杜绝生硬黑框',
-    },
-    {
-      notIncludes: '.searchInput:focus {\n  border-color:',
-      message: 'Diff 搜索框聚焦态严禁出现非透明 border-color',
-    },
-  ]
-);
+  // 8. 检查形态 ④：Diff 搜索筛选框 (DiffCard.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/diff/DiffCard.module.css'),
+    '形态 ④ Diff 搜索筛选框 (DiffCard.module.css)',
+    [
+      {
+        regex: /\.searchInput[^{]*\{[^}]*border:\s*none/,
+        message: 'Diff 搜索框必须保持形态 ④ border: none 极简形式',
+      },
+      {
+        regex: /\.searchInput[^{]*\{[^}]*box-shadow:\s*none/,
+        message: 'Diff 搜索框必须保持形态 ④ box-shadow: none，杜绝生硬黑框',
+      },
+      {
+        notIncludes: '.searchInput:focus {\n  border-color:',
+        message: 'Diff 搜索框聚焦态严禁出现非透明 border-color',
+      },
+    ],
+    targetErrors
+  );
 
-// 9. 检查形态 ④：文件树轻量筛选框 (FilesCard.module.css)
-checkFile(
-  path.resolve(DESKTOP_SRC, 'components/files/FilesCard.module.css'),
-  '形态 ④ 文件轻量筛选框 (FilesCard.module.css)',
-  [
-    {
-      regex: /\.filesPathFilter[^{]*\{[^}]*border:\s*none/,
-      message: '文件筛选框必须保持形态 ④ border: none 极简形式',
-    },
-    {
-      regex: /\.filesPathFilter[^{]*\{[^}]*box-shadow:\s*none/,
-      message: '文件筛选框必须保持形态 ④ box-shadow: none，杜绝生硬黑框',
-    },
-  ],
-  targetErrors
-);
+  // 9. 检查形态 ④：文件树轻量筛选框 (FilesCard.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/files/FilesCard.module.css'),
+    '形态 ④ 文件轻量筛选框 (FilesCard.module.css)',
+    [
+      {
+        regex: /\.filesPathFilter[^{]*\{[^}]*border:\s*none/,
+        message: '文件筛选框必须保持形态 ④ border: none 极简形式',
+      },
+      {
+        regex: /\.filesPathFilter[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '文件筛选框必须保持形态 ④ box-shadow: none，杜绝生硬黑框',
+      },
+    ],
+    targetErrors
+  );
+
+  // 10. 检查形态 ④：笔记纸面行内标题输入框 (NotePaperPanel.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/note-paper/NotePaperPanel.module.css'),
+    '形态 ④ 笔记纸面标题输入框 (NotePaperPanel.module.css)',
+    [
+      {
+        regex: /\.titleInput[^{]*\{[^}]*background:\s*transparent/,
+        message: '常态背景必须为 transparent，严禁底色框（无底色）',
+      },
+      {
+        regex: /\.titleInput[^{]*\{[^}]*border:\s*none/,
+        message: '必须保持形态 ④ border: none 极简形式（无边框）',
+      },
+      {
+        regex: /\.titleInput[^{]*\{[^}]*outline:\s*none/,
+        message: '必须保持形态 ④ outline: none 纯光标形式（纯光标）',
+      },
+      {
+        regex: /\.titleInput[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '必须保持形态 ④ box-shadow: none，杜绝生硬黑框（无阴影）',
+      },
+      {
+        includes: '.titleInput:focus',
+        message: '必须包含 .titleInput:focus 显式声明',
+      },
+      {
+        includes: '.titleInput:focus-visible',
+        message: '必须包含 .titleInput:focus-visible 显式声明',
+      },
+      {
+        regex: /\.titleInput:focus(?:-visible)?[^{]*\{[^}]*border:\s*none/,
+        message: '聚焦态必须保持形态 ④ border: none 极简形式',
+      },
+      {
+        regex: /\.titleInput:focus(?:-visible)?[^{]*\{[^}]*outline:\s*none/,
+        message: '聚焦态必须保持形态 ④ outline: none 纯光标形式',
+      },
+      {
+        regex: /\.titleInput:focus(?:-visible)?[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '聚焦态必须保持形态 ④ box-shadow: none，杜绝生硬黑框',
+      },
+    ],
+    targetErrors
+  );
+
+  // 11. 检查形态 ③ / 卡片提交输入框：Diff 提交输入框 (DiffCard.module.css)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/diff/DiffCard.module.css'),
+    '形态 ③ Diff 提交输入框 (DiffCard.module.css)',
+    [
+      {
+        regex: /\.commitInput[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '提交输入框常态必须维持 box-shadow: none，杜绝默认重阴影',
+      },
+      {
+        regex: /\.commitInput[^{]*\{[^}]*outline:\s*none/,
+        message: '提交输入框常态必须声明 outline: none',
+      },
+      {
+        regex: /\.commitInput[^{]*\{[^}]*border-radius:\s*var\(--radius-(?:sm|md),\s*(?:4|6)px\)/,
+        message: '提交输入框必须采用标准微圆角 (4px/6px)',
+      },
+      {
+        regex: /\.commitInput[^{]*\{[^}]*border:\s*1px solid color-mix/,
+        message: '提交输入框必须使用微透明 Design Token 细边框，严禁硬黑框',
+      },
+      {
+        includes: '.commitInput:focus',
+        message: '必须包含 .commitInput:focus 显式声明',
+      },
+      {
+        includes: '.commitInput:focus-visible',
+        message: '必须包含 .commitInput:focus-visible 显式声明',
+      },
+      {
+        regex: /\.commitInput:(?:focus-visible|focus)[^{]*\{[^}]*box-shadow:\s*none/,
+        message: '提交输入框聚焦态必须维持 box-shadow: none，严禁粗重焦点投影',
+      },
+      {
+        regex: /\.commitInput:(?:focus-visible|focus)[^{]*\{[^}]*outline:\s*none/,
+        message: '提交输入框聚焦态必须维持 outline: none',
+      },
+      {
+        regex: /\.commitInput:(?:focus-visible|focus)[^{]*\{[^}]*border-color:\s*color-mix\(.*?var\(--text-primary\)\s*(?:[1-9]|10)%\)/,
+        message: '提交输入框聚焦态混入文本色上限必须严格保持 <= 10% (AGENTS.md §13)',
+      },
+    ],
+    targetErrors
+  );
+
+  // 12. 检查 DiffCardGitActions 提交输入框组件绑定 (DiffCardGitActions.tsx)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/diff/DiffCardGitActions.tsx'),
+    'DiffCardGitActions 提交输入框组件 (DiffCardGitActions.tsx)',
+    [
+      {
+        includes: 'className={styles.commitInput}',
+        message: '必须绑定 styles.commitInput 规范样式类',
+      },
+      {
+        regex: /<textarea[^>]*className=\{styles\.commitInput\}/,
+        message: '必须使用绑定了 styles.commitInput 的 textarea 提交文本域',
+      },
+    ],
+    targetErrors
+  );
+
+  // 13. 检查笔记纸面标题行内组件绑定 (EditableTitle.tsx)
+  checkFile(
+    path.resolve(DESKTOP_SRC, 'components/note-paper/EditableTitle.tsx'),
+    '笔记纸面标题行内组件 (EditableTitle.tsx)',
+    [
+      {
+        includes: 'className={styles.titleInput}',
+        message: '必须绑定 styles.titleInput 规范样式类',
+      },
+      {
+        regex: /<input[^>]*className=\{styles\.titleInput\}/,
+        message: '必须使用绑定了 styles.titleInput 的 input 文本控件',
+      },
+    ],
+    targetErrors
+  );
 }
 
-// 10. 全仓 CSS 规则级静态深度扫描
+/**
+ * 精准输入框/文本域目标选择器断言函数
+ * 确保对驼峰命名（.titleInput, .commitInput, .searchInput, .tagInput 等）、
+ * 属性选择器（[type="text"], [type="search"] 等）以及任意组合选择器（div > input, .card .commitInput 等）无死角匹配。
+ */
+export function isInputSelector(selector) {
+  // 排除单纯的非文本控件（如 checkbox, radio, file, hidden, submit, button, range, color, image），
+  // 但允许在 :not(...) 中排他的声明（如 input:not([type="checkbox"])）
+  const nonTextInputRegex = /(?<!:not\()\[type=['"]?(?:checkbox|radio|file|hidden|submit|button|range|color|image)['"]?\]/i;
+  if (nonTextInputRegex.test(selector)) {
+    return false;
+  }
+
+  // 1. 文本类属性选择器：[type="text"], [type="search"], [type="password"], [type="email"], [type="url"], [type="number"], [type="tel"] 等
+  if (/\[type\*?=['"]?(?:text|search|password|email|url|number|tel)['"]?\]/i.test(selector)) {
+    return true;
+  }
+  if (/\[role=['"]?searchbox['"]?\]/i.test(selector)) {
+    return true;
+  }
+
+  // 2. 标签名或驼峰/连接符/下划线命名的 input/textarea 类与 ID（如 .titleInput, .commitInput, .searchInput, .tagInput 等）
+  // 前导符号支持：起始行、空格、子代选择器(>)、相邻兄弟(+)、通用兄弟(~)、类点(.)、伪类冒号(:)、属性括号([)、双引号(")、单引号(')、分组圆括号(()、ID(#)
+  if (
+    /(?:^|[\s,>+~.:(#\[\'"])(?:[a-zA-Z0-9_-]*(?:input|textarea)|searchbox|searchField|inputField|nativeTextarea|cellInput|schedFieldInput|firstRunInput|titleInput|commitInput|searchInput|tagInput|chipsInput|comboboxInput|filterInput|inputSearch|leaf-input)\b/i.test(
+      selector
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+// 14. 全仓 CSS 规则级静态深度扫描
 // 涵盖：焦点纯黑混入拦截 (>10%)、粗重投影拦截 (>1.5px)、形态 ④ 极简约束、按钮激活纯黑边框、极端圆角拦截、果冻弹跳拦截
 export function scanAllCssRules(dir, targetErrors = errors) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -510,29 +679,37 @@ export function scanAllCssRules(dir, targetErrors = errors) {
       const rules = extractCssRules(content);
 
       for (const { selector: rawSelector, body: ruleBody } of rules) {
-        const isInputTarget =
-          /(?:^|[\s,>+~.])(?:input|textarea|searchbox|searchInput|searchField|inputField|nativeTextarea|cellInput|schedFieldInput|firstRunInput)\b/i.test(
-            rawSelector
-          ) &&
-          !/type=['"](?:checkbox|radio|file|hidden)['"]/i.test(rawSelector);
+        // 使用 splitSelectors 对可能由逗号组合的复杂选择器列表拆分，以实现无死角精准判定
+        const subSelectors = splitSelectors(rawSelector);
 
-        const isFocusState =
-          /(?::focus|:focus-visible|:focus-within)\b/i.test(rawSelector);
+        // 是否包含输入框目标（支持驼峰命名如 .titleInput, .commitInput, .searchInput, .tagInput，属性选择器 [type="text"], [type="search"]，原生标签及任意组合选择器）
+        const isInputTarget = subSelectors.some((s) => isInputSelector(s));
 
-        const isButtonTarget =
+        // 是否处于焦点状态
+        const isFocusState = subSelectors.some((s) =>
+          /(?::focus|:focus-visible|:focus-within)\b/i.test(s)
+        );
+
+        // 是否包含按钮目标
+        const isButtonTarget = subSelectors.some((s) =>
           /(?:^|[\s,>+~.])(?:button|\.btn|IconButton|headerBtn|footerAction|actionBtn|iconBtn)\b|\[role=['"]?button['"]?\]/i.test(
-            rawSelector
-          );
+            s
+          )
+        );
 
-        const isActiveState =
-          /(?::active|\.active|\.isActive)\b/i.test(rawSelector);
+        // 是否处于激活状态
+        const isActiveState = subSelectors.some((s) =>
+          /(?::active|\.active|\.isActive)\b/i.test(s)
+        );
 
+        // 是否属于形态 ④ 搜索/筛选/纯光标输入框
         const isFormFourSearch =
-          /(?:searchInput|searchField|searchFilter|filterInput|pathFilter|fileFilter|diffSearch|filesSearch|searchbox|search-input|search-box)\b/i.test(
-            rawSelector
-          ) &&
-          !relPath.includes('Input/Input.module.css') &&
-          !/(?:Icon|ClearBtn|Wrapper|Container|Header)\b/i.test(rawSelector);
+          subSelectors.some(
+            (s) =>
+              /(?:searchInput|searchField|searchFilter|filterInput|pathFilter|fileFilter|diffSearch|filesSearch|searchbox|search-input|search-box|titleInput)\b/i.test(
+                s
+              ) && !/(?:Icon|ClearBtn|Wrapper|Container|Header)\b/i.test(s)
+          ) && !relPath.includes('Input/Input.module.css');
 
         // --- 规则 A：全仓输入框严禁纯黑 / 硬色边框 ---
         if (isInputTarget) {
@@ -565,11 +742,14 @@ export function scanAllCssRules(dir, targetErrors = errors) {
           (isInputTarget && isFocusState) ||
           (relPath.includes('focus-visible.css') && isInputTarget)
         ) {
-          const shadowViolations = analyzeBoxShadowSpread(ruleBody);
-          for (const v of shadowViolations) {
-            targetErrors.push(
-              `[粗重投影拦截] 在 ${relPath} (${rawSelector}) 中发现大于 1.5px 的粗重焦点投影 (${v.spread}px > 1.5px): "box-shadow: ${v.snippet}". 输入框与焦点态严禁大于 1.5px 的粗重外扩光晕与黑环 (AGENTS.md §13)！`
-            );
+          // NotePaperPanel 的 :global(input):focus-visible 走独立的 05-C 纸面软环规范（--np-focus-edge 6%），由 notePaperFocusRing.contract.test.ts 刚性锁定
+          if (!(relPath.includes('NotePaperPanel.module.css') && rawSelector.includes(':global(input)'))) {
+            const shadowViolations = analyzeBoxShadowSpread(ruleBody);
+            for (const v of shadowViolations) {
+              targetErrors.push(
+                `[粗重投影拦截] 在 ${relPath} (${rawSelector}) 中发现大于 1.5px 的粗重焦点投影 (${v.spread}px > 1.5px): "box-shadow: ${v.snippet}". 输入框与焦点态严禁大于 1.5px 的粗重外扩光晕与黑环 (AGENTS.md §13)！`
+              );
+            }
           }
         }
 

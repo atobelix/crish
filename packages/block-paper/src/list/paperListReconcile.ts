@@ -105,9 +105,14 @@ export function paintPaperBlock(
   } else {
     el.removeAttribute(BP_PAPER_FOCUS);
   }
-  // 正文仅呈现；**非**权威
+  // 正文直接编辑支持（Direct Manipulation 纯光标文本编辑）
+  el.setAttribute('contenteditable', 'plaintext-only');
+  el.contentEditable = 'plaintext-only';
+  el.setAttribute('spellcheck', 'false');
+  el.setAttribute('tabindex', '0');
+
   const text = proj?.text ?? '';
-  if (el.textContent !== text) {
+  if (el.ownerDocument?.activeElement !== el && el.textContent !== text) {
     el.textContent = text;
   }
 }

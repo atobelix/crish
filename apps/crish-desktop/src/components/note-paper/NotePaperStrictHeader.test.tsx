@@ -145,4 +145,84 @@ describe('NotePaperStrictHeader · 32px 紧凑顶栏平滑迁移测试套件', (
     fireEvent.click(closeBtn);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('侧栏折叠按钮在抽屉展开(isSidebarOpen=true)时隐藏以消除并排重复，收起时展示且使用 IconSidebarLeft', () => {
+    const onToggleSidebar = vi.fn();
+    const { rerender } = renderHeader('readonly', {
+      isSidebarOpen: true,
+      onToggleSidebar,
+    });
+
+    // 抽屉展开时，顶栏不渲染侧栏折叠按钮，避免与抽屉内部的收起按钮并排
+    expect(screen.queryByTestId('note-paper-strict-toggle-sidebar')).toBeNull();
+
+    // 抽屉收起时，顶栏展示展开按钮
+    rerender(
+      <NotePaperStrictHeader
+        title="纸面标题"
+        isSidebarOpen={false}
+        onToggleSidebar={onToggleSidebar}
+        onReload={vi.fn()}
+      />
+    );
+
+    const toggleBtn = screen.getByTestId('note-paper-strict-toggle-sidebar');
+    expect(toggleBtn).toBeInTheDocument();
+    expect(toggleBtn).toHaveAttribute('aria-label', '展开文档侧栏 (Ctrl+\\)');
+    fireEvent.click(toggleBtn);
+    expect(onToggleSidebar).toHaveBeenCalledTimes(1);
+  });
+
+  it('保存状态去噪：已保存时不展示冗余文字；仅在 saving/syncing 与 unsaved 时提示', () => {
+    const { rerender } = renderHeader('readonly', { saveStatus: 'saved' });
+
+    const statusEl = screen.getByTestId('note-paper-strict-save-status');
+    expect(statusEl).toHaveAttribute('data-save-status', 'saved');
+    // 去噪：已保存时不应包含“已保存”大文字霸占正文视线
+    expect(statusEl).toBeEmptyDOMElement();
+
+    // saving / syncing 时展示保存中...
+    rerender(
+      <NotePaperStrictHeader
+        title="纸面标题"
+        saveStatus="syncing"
+        onReload={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('note-paper-strict-save-status')).toHaveTextContent('保存中...');
+
+    rerender(
+      <NotePaperStrictHeader
+        title="纸面标题"
+        saveStatus="saving"
+        onReload={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('note-paper-strict-save-status')).toHaveTextContent('保存中...');
+
+    // unsaved 时展示未保存
+    rerender(
+      <NotePaperStrictHeader
+        title="纸面标题"
+        saveStatus="unsaved"
+        onReload={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('note-paper-strict-save-status')).toHaveTextContent('未保存');
+  });
+
+  it('斜杠命令按钮从顶栏物理视觉中隐藏(display: none)，但测试桩完整保留可正常触发', () => {
+    const onOpenSlash = vi.fn();
+    renderHeader('readonly', {
+      showOpenSlashButton: true,
+      onOpenSlash,
+    });
+
+    const slashBtn = screen.getByTestId('note-paper-strict-open-slash');
+    expect(slashBtn).toBeInTheDocument();
+    expect(slashBtn).toHaveStyle({ display: 'none' });
+    expect(slashBtn).toHaveAttribute('aria-hidden', 'true');
+    fireEvent.click(slashBtn);
+    expect(onOpenSlash).toHaveBeenCalledTimes(1);
+  });
 });

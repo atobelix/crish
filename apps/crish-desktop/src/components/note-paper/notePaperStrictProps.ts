@@ -4,6 +4,7 @@
  */
 
 import type {
+  ApplyOpsAdapter,
   BlockChromeDomHost,
   BlockChromeModel,
   BlockSelectionBridge,
@@ -151,8 +152,17 @@ export type NotePaperStrictPanelProps = {
   title?: string;
   /** 标题行内重命名持久化回调 */
   onRenameTitle?: (newTitle: string) => Promise<void> | void;
+  /**
+   * 底层 applyOps 适配通道（写锥后端）。
+   * 省略时自动从当前环境/docId 解析。
+   */
+  applyOps?: ApplyOpsAdapter;
+  /** 文本块变更回调（防抖停顿或编辑时触发） */
+  onBlockChange?: (blockId: string, newText: string) => void;
+  /** 文本块提交回调（失焦或回车时触发） */
+  onTextCommit?: (blockId: string, newText: string) => void;
   /** 保存与协同同步状态 */
-  saveStatus?: 'saved' | 'syncing' | 'unsaved';
+  saveStatus?: 'saved' | 'syncing' | 'unsaved' | 'saving';
   /** 侧栏是否处于展开状态 */
   isSidebarOpen?: boolean;
   /** 切换侧栏抽屉展开/收起回调 */

@@ -54,6 +54,10 @@ export type StrictContentRowLeafProps = {
   /** 编辑会话注册表（测注入独立实例；缺省 = 前端全局单例） */
   editSession?: EditSessionRegistry;
   className?: string;
+  /** 普通文本输入或变更回调（非 Markdown 前缀输入时正常触发） */
+  onTextChange?: (blockId: string, newText: string) => void;
+  /** 失焦或确认提交回调 */
+  onTextCommit?: (blockId: string, newText: string) => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -123,7 +127,14 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
   baseRev,
   editSession: editSessionProp,
   className,
+  onTextChange,
+  onTextCommit,
 }) => {
+  const onTextChangeRef = useRef(onTextChange);
+  onTextChangeRef.current = onTextChange;
+  const onTextCommitRef = useRef(onTextCommit);
+  onTextCommitRef.current = onTextCommit;
+
   const binding = useMemo(
     () =>
       bindingProp ??
@@ -135,7 +146,13 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
     [bindingProp, turnIntoSink, mdPrefixWriteMode, mdPrefixSinkSource]
   );
 
-  const writable = binding.mode === 'writable' && Boolean(binding.sink);
+  const writable =
+    mdPrefixWriteMode !== 'disabled' &&
+    binding.mode !== 'disabled' &&
+    (Boolean(binding.sink) ||
+      Boolean(onTextChange) ||
+      Boolean(onTextCommit) ||
+      mdPrefixWriteMode === 'writable');
   const composingRef = useRef(false);
   const elRef = useRef<HTMLDivElement | null>(null);
   /** 防 input 重入 / 未完成 commit 交错 */
@@ -187,6 +204,9 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
           // 编辑会话提交并失效：推进 rev、清会话、广播失效（订阅方刷新）。
           // 显式复位「投影不可覆盖本地编辑」保护——叶重新可被投影刷新写入。
           editSession.commit(blockId);
+        } else {
+          // 普通文本输入（非 Markdown 前缀，如常规汉字或英文），正常更新状态并触发回调，不被阻断
+          onTextChangeRef.current?.(blockId, plain);
         }
       } finally {
         commitInFlight.current = false;
@@ -213,6 +233,7 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
       // 声明编辑持有（无竞态建会话，记录 baseRev）；提交成功后 commit 关闭
       editSession.open(blockId, baseRev);
       const plain = ev.currentTarget.textContent ?? '';
+      onTextChangeRef.current?.(blockId, plain);
       void runCommit(plain);
     },
     [runCommit, editSession, blockId, baseRev]
@@ -223,10 +244,31 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
       // 首次合法输入声明编辑持有；提交成功后 commit 关闭（幂等，已持有不覆盖）
       editSession.open(blockId, baseRev);
       const plain = ev.currentTarget.textContent ?? '';
+      onTextChangeRef.current?.(blockId, plain);
       if (composingRef.current) return;
       void runCommit(plain);
     },
     [runCommit, editSession, blockId, baseRev]
+  );
+
+  const onBlur = useCallback(
+    (ev: React.FocusEvent<HTMLDivElement>) => {
+      const plain = ev.currentTarget.textContent ?? '';
+      onTextChangeRef.current?.(blockId, plain);
+      onTextCommitRef.current?.(blockId, plain);
+    },
+    [blockId]
+  );
+
+  const onKeyDown = useCallback(
+    (ev: React.KeyboardEvent<HTMLDivElement>) => {
+      if (composingRef.current) return;
+      if (ev.key === 'Enter') {
+        const plain = ev.currentTarget.textContent ?? '';
+        onTextCommitRef.current?.(blockId, plain);
+      }
+    },
+    [blockId]
   );
 
   const rootClass = [styles.text, className].filter(Boolean).join(' ');
@@ -265,6 +307,8 @@ export const StrictContentRowLeaf: React.FC<StrictContentRowLeafProps> = ({
       onCompositionStart={onCompositionStart}
       onCompositionEnd={onCompositionEnd}
       onInput={onInput}
+      onBlur={onBlur}
+      onKeyDown={onKeyDown}
     />
   );
 };

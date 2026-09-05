@@ -1,13 +1,14 @@
 import React, { useState, useId, useCallback } from 'react';
 import {
   Plus,
-  PanelLeftClose,
   Search,
   Edit2,
   Trash2,
 } from 'lucide-react';
 import type { NoteDocumentMeta } from '../../api/noteDocumentContracts';
+import { formatRelativeActivity } from '../../api/sessionTime';
 import { Tooltip } from '../ui/Tooltip/Tooltip';
+import { IconSidebarLeft } from '../sidebar/SidebarToggleIcons';
 import styles from './NoteSidebarDrawer.module.css';
 
 export interface NoteSidebarDrawerProps {
@@ -68,11 +69,7 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
   const formatRelativeTime = (ts: number): string => {
     // 兼容 13 位标准毫秒级与历史 10 位秒级
     const tsMs = ts < 10_000_000_000 ? ts * 1000 : ts;
-    const diff = Date.now() - tsMs;
-    if (diff < 60_000) return '刚刚';
-    if (diff < 3600_000) return `${Math.floor(diff / 60_000)}分钟前`;
-    if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}小时前`;
-    return `${Math.floor(diff / 86400_000)}天前`;
+    return formatRelativeActivity(tsMs) || '刚刚';
   };
 
   return (
@@ -102,18 +99,19 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                 className={styles.iconBtn}
                 onClick={onClose}
                 aria-label="收起侧栏"
+                data-testid="note-sidebar-close-btn"
               >
-                <PanelLeftClose size={14} />
+                <IconSidebarLeft size={15} aria-hidden="true" />
               </button>
             </Tooltip>
           </div>
         </div>
 
-        <div className={styles.searchRow}>
-          <Search size={13} className={styles.searchIcon} />
+        <div className={styles.searchRow} role="search" aria-label="搜索笔记">
+          <Search size={14} className={styles.searchIcon} aria-hidden="true" />
           <input
             id={searchInputId}
-            type="text"
+            type="search"
             className={styles.searchInput}
             placeholder="搜索笔记标题..."
             value={searchQuery}
@@ -137,59 +135,76 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
               <div
                 key={doc.id}
                 role="listitem"
-                className={`${styles.card} ${isActive ? styles.isActive : ''}`}
+                tabIndex={0}
+                className={`${styles.sessionItem} ${styles.item} ${styles.card} ${isActive ? `${styles.active} ${styles.isActive}` : ''}`}
                 onClick={() => onSelectDoc(doc.id)}
+                onKeyDown={(e) => {
+                  if (isEditing) return;
+                  if (e.key === 'Enter') {
+                    onSelectDoc(doc.id);
+                  } else if (e.key === 'F2') {
+                    e.preventDefault();
+                    setEditingDocId(doc.id);
+                    setEditTitle(doc.title);
+                  }
+                }}
                 data-testid={`note-card-${doc.id}`}
               >
-                <div className={styles.cardHeader}>
-                  {isEditing ? (
-                    <input
-                      type="text"
-                      className={styles.renameInput}
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      onBlur={() => commitRename(doc.id)}
-                      onKeyDown={(e) => handleKeyDown(e, doc.id)}
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <span className={styles.cardTitle} title={doc.title}>
-                      {doc.title || '未命名笔记'}
+                {isEditing ? (
+                  <input
+                    type="text"
+                    className={`${styles.sessionRenameInput} ${styles.renameInput}`}
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onBlur={() => commitRename(doc.id)}
+                    onKeyDown={(e) => handleKeyDown(e, doc.id)}
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                    maxLength={48}
+                    aria-label="重命名笔记"
+                  />
+                ) : (
+                  <>
+                    <span className={`${styles.sessionTextCol} ${styles.itemTextCol}`}>
+                      <span className={`${styles.sessionText} ${styles.itemTitle} ${styles.cardTitle}`} title={doc.title}>
+                        {doc.title || '未命名笔记'}
+                      </span>
                     </span>
-                  )}
-                </div>
 
-                <div className={styles.cardMeta}>
-                  <span className={styles.timeTag}>{formatRelativeTime(doc.updatedAt)}</span>
-                  <span className={styles.blockBadge}>{doc.blockCount} 块</span>
-
-                  <div className={styles.hoverActions}>
-                    <Tooltip content="重命名">
-                      <button
-                        type="button"
-                        className={styles.miniBtn}
-                        onClick={(e) => startRename(doc, e)}
-                        aria-label="重命名"
-                      >
-                        <Edit2 size={12} />
-                      </button>
-                    </Tooltip>
-                    <Tooltip content="删除笔记">
-                      <button
-                        type="button"
-                        className={styles.miniBtn}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPendingDeleteId(doc.id);
-                        }}
-                        aria-label="删除笔记"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </Tooltip>
-                  </div>
-                </div>
+                    <span className={`${styles.sessionTrailing} ${styles.itemTrailing}`}>
+                      <time className={`${styles.sessionTime} ${styles.itemTime} ${styles.timeTag}`}>
+                        {formatRelativeTime(doc.updatedAt)}
+                      </time>
+                      <div className={`${styles.sessionActions} ${styles.itemActions} ${styles.hoverActions}`}>
+                        <Tooltip content="重命名">
+                          <button
+                            type="button"
+                            className={`${styles.sessionActionBtn} ${styles.actionBtn} ${styles.miniBtn}`}
+                            onClick={(e) => startRename(doc, e)}
+                            aria-label="重命名"
+                            tabIndex={-1}
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="删除笔记">
+                          <button
+                            type="button"
+                            className={`${styles.sessionActionBtn} ${styles.actionBtn} ${styles.miniBtn}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPendingDeleteId(doc.id);
+                            }}
+                            aria-label="删除笔记"
+                            tabIndex={-1}
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </Tooltip>
+                      </div>
+                    </span>
+                  </>
+                )}
               </div>
             );
           })

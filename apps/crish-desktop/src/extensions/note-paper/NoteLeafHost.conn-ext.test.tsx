@@ -14,6 +14,7 @@ import React, { Suspense, useSyncExternalStore } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import * as projectStore from '../../api/projectStore';
+import * as noteApi from '../../api/noteApi';
 import { createMemoryNoteTransport } from '../../api/noteApi';
 import { createMockNoteMirrorIpc } from '../../api/noteMirrorIpc';
 import {
@@ -404,5 +405,45 @@ describe('CONN-EXT · 扩展叶工厂 / 注销（≠ EL · ≠ 打开完成 · �
     expect(e2p).toMatch(/conn_e2p_workspace_product_host_enables_detect_schedule/);
     expect(e2p).toMatch(/conn_e2p_empty_state_direct_still_defaults_off/);
     expect(e2p).toMatch(/conn_e2p_no_tauri_does_not_fabricate_report/);
+  });
+
+  it('conn_ext_document_edit_updates_updated_at_to_just_now', async () => {
+    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+    vi.spyOn(noteApi, 'noteDocumentList').mockResolvedValue({
+      ok: true,
+      documents: [
+        {
+          id: 'doc-ext-drawer-test',
+          title: '抽屉联动测试笔记',
+          createdAt: tenMinutesAgo,
+          updatedAt: tenMinutesAgo,
+          blockCount: 1,
+        },
+      ],
+    });
+
+    render(<NoteLeafHost {...ctx({ params: { docId: 'doc-ext-drawer-test' } })} />);
+    await screen.findByTestId('note-paper-strict-panel');
+
+    // 抽屉中初始相对时间为 10 分钟前
+    const drawer = screen.getByTestId('note-sidebar-drawer');
+    expect(drawer).toBeInTheDocument();
+    expect(screen.getByText('抽屉联动测试笔记')).toBeInTheDocument();
+    const timeEl = drawer.querySelector('time');
+    expect(timeEl?.textContent).toMatch(/10分钟前|10 分钟前/);
+
+    // 触发文档写入/编辑事件
+    act(() => {
+      notifyNoteDocWritten({
+        docId: 'doc-ext-drawer-test',
+        source: 'product_apply',
+      });
+    });
+
+    // 抽屉中的相对时间响应式更新为“刚刚”
+    await waitFor(() => {
+      const updatedTimeEl = drawer.querySelector('time');
+      expect(updatedTimeEl?.textContent).toBe('刚刚');
+    });
   });
 });

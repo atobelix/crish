@@ -26,6 +26,11 @@ function renderTokens(
   if (!tokens || tokens.length === 0) {
     return (
       <span
+        style={{
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          overflowWrap: 'anywhere',
+        }}
         dangerouslySetInnerHTML={{
           __html: highlightCode(fallbackText, lang),
         }}
@@ -33,7 +38,17 @@ function renderTokens(
     );
   }
   return (
-    <span style={{ position: 'relative', display: 'inline-block' }}>
+    <span
+      style={{
+        position: 'relative',
+        display: 'inline-block',
+        width: '100%',
+        maxWidth: '100%',
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-word',
+        overflowWrap: 'anywhere',
+      }}
+    >
       <span
         style={{
           position: 'absolute',
@@ -42,7 +57,9 @@ function renderTokens(
           right: 0,
           bottom: 0,
           pointerEvents: 'none',
-          whiteSpace: 'pre',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          overflowWrap: 'anywhere',
           color: 'transparent',
           userSelect: 'none',
         }}
@@ -66,7 +83,13 @@ function renderTokens(
         })}
       </span>
       <span
-        style={{ position: 'relative', background: 'transparent' }}
+        style={{
+          position: 'relative',
+          background: 'transparent',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          overflowWrap: 'anywhere',
+        }}
         dangerouslySetInnerHTML={{
           __html: highlightCode(fallbackText, lang),
         }}
@@ -114,7 +137,7 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
         className={styles.scrollParent}
         onScroll={onScroll}
         tabIndex={0}
-        style={{ position: 'relative', overflowY: 'auto', outline: 'none' }}
+        style={{ position: 'relative', overflowY: 'auto', overflowX: 'hidden', outline: 'none' }}
       >
         <div
           style={{
@@ -222,6 +245,11 @@ export const DiffCardUnifiedView: React.FC<DiffCardUnifiedViewProps> = ({
                       renderTokens(tokens, targetType, change.content, codeLang)
                     ) : (
                       <span
+                        style={{
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          overflowWrap: 'anywhere',
+                        }}
                         dangerouslySetInnerHTML={{
                           __html: highlightCode(change.content, codeLang),
                         }}

@@ -52,6 +52,7 @@ export type WorkspaceEmptyStatePaperBindings = {
   mdPrefixBinding: ProductMdPrefixBinding;
   productPaperListAttr: '0' | '1';
   paperListProp: true | undefined;
+  applyOps?: ApplyOpsAdapter;
 };
 
 /**
@@ -157,6 +158,7 @@ export function useWorkspaceEmptyStatePaperBindings(
     mdPrefixBinding,
     productPaperListAttr,
     paperListProp: enableProductPaperList === true ? true : undefined,
+    applyOps: applyResolution.applyOps,
   };
 }
 

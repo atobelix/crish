@@ -61,6 +61,29 @@ function toPaperBlockProjection(
   return proj;
 }
 
+function findBlockElement(
+  target: EventTarget | null,
+  container: HTMLElement | null
+): HTMLElement | null {
+  if (!target || !(target instanceof HTMLElement) || !container) return null;
+  const blockEl = target.closest<HTMLElement>(
+    '.bp-paper-block, [data-bp-paper-block="1"], [data-block-id], [data-bp-paper-block-id]'
+  );
+  if (blockEl && container.contains(blockEl)) {
+    return blockEl;
+  }
+  return null;
+}
+
+function getBlockId(el: HTMLElement | null): string | null {
+  if (!el) return null;
+  return (
+    el.getAttribute('data-block-id') ??
+    el.getAttribute('data-bp-paper-block-id') ??
+    null
+  );
+}
+
 export type PaperListDomMountProps = {
   /**
    * 投影块序列（order = 数组序）。
@@ -97,6 +120,20 @@ export type PaperListDomMountProps = {
   className?: string;
   /** 挂载根 data-testid；默认 note-paper-paper-list */
   testId?: string;
+  /** 文本变更或防抖停顿持久化回调 */
+  onBlockChange?: (blockId: string, newText: string) => void;
+  /** 文本提交回调（失焦或回车时派发） */
+  onTextCommit?: (blockId: string, newText: string) => void;
+  /** 单块实时输入事件 */
+  onBlockInput?: (blockId: string, newText: string) => void;
+  /** 回车插入新段落 */
+  onBlockInsert?: (afterBlockId: string, initialText?: string) => void;
+  onEnter?: (blockId: string, currentText: string) => void;
+  /** 退格键空段落删除 */
+  onBlockDelete?: (blockId: string) => void;
+  onBackspace?: (blockId: string, currentText: string) => void;
+  /** 防抖时长（毫秒，默认 300） */
+  debounceMs?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -122,11 +159,41 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
   onListReady,
   className,
   testId = 'note-paper-paper-list',
+  onBlockChange,
+  onTextCommit,
+  onBlockInput,
+  onBlockInsert,
+  onEnter,
+  onBlockDelete,
+  onBackspace,
+  debounceMs = 300,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const listRef = useRef<PaperList | null>(null);
   const onListReadyRef = useRef(onListReady);
   onListReadyRef.current = onListReady;
+
+  // 活跃打字状态记录，避免外层 projection refresh 冲掉光标与最新文本
+  const activeEditingBlockIdRef = useRef<string | null>(null);
+  const activeDraftsRef = useRef<Map<string, string>>(new Map());
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isComposingRef = useRef(false);
+
+  // 回调引用保持最新，避免 effect 重复注销绑定
+  const onBlockChangeRef = useRef(onBlockChange);
+  onBlockChangeRef.current = onBlockChange;
+  const onTextCommitRef = useRef(onTextCommit);
+  onTextCommitRef.current = onTextCommit;
+  const onBlockInputRef = useRef(onBlockInput);
+  onBlockInputRef.current = onBlockInput;
+  const onBlockInsertRef = useRef(onBlockInsert);
+  onBlockInsertRef.current = onBlockInsert;
+  const onEnterRef = useRef(onEnter);
+  onEnterRef.current = onEnter;
+  const onBlockDeleteRef = useRef(onBlockDelete);
+  onBlockDeleteRef.current = onBlockDelete;
+  const onBackspaceRef = useRef(onBackspace);
+  onBackspaceRef.current = onBackspace;
 
   // 块 id 序签名：仅 id 序列变化才重建（避免每 render 新数组引用）
   const orderKey = blocks.map((b) => b.id).join('|');
@@ -166,9 +233,17 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
       return;
     }
 
-    const projections: PaperBlockProjection[] = specs.map(
-      toPaperBlockProjection
-    );
+    const activeId = activeEditingBlockIdRef.current;
+    const projections: PaperBlockProjection[] = specs.map((b) => {
+      const proj = toPaperBlockProjection(b);
+      if (b.id === activeId) {
+        const draft = activeDraftsRef.current.get(b.id);
+        if (draft !== undefined) {
+          proj.text = draft;
+        }
+      }
+      return proj;
+    });
 
     const opts: ConstructorParameters<typeof PaperList>[1] = {
       order: specs.map((b) => b.id),
@@ -239,11 +314,213 @@ export const PaperListDomMount: React.FC<PaperListDomMountProps> = ({
     const list = listRef.current;
     if (!list) return;
     void projKey;
-    const projections: PaperBlockProjection[] = blocksRef.current.map(
-      toPaperBlockProjection
-    );
+    const activeId = activeEditingBlockIdRef.current;
+    const projections: PaperBlockProjection[] = blocksRef.current.map((b) => {
+      const proj = toPaperBlockProjection(b);
+      // 活跃输入状态保护：在当前元素打字期间，避免外层 projection refresh 覆写其 textContent 或破坏光标位置
+      if (b.id === activeId) {
+        const draft = activeDraftsRef.current.get(b.id);
+        if (draft !== undefined) {
+          proj.text = draft;
+        }
+      }
+      return proj;
+    });
     list.setProjections(projections);
+
+    // 针对正在打字的活跃块，确保 DOM 中的 textContent 不被意外冲刷
+    if (activeId && mountRef.current) {
+      const draft = activeDraftsRef.current.get(activeId);
+      if (draft !== undefined) {
+        const el = mountRef.current.querySelector<HTMLElement>(
+          `[data-block-id="${activeId}"], [data-bp-paper-block-id="${activeId}"]`
+        );
+        if (el && el.textContent !== draft) {
+          el.textContent = draft;
+        }
+      }
+    }
   }, [projKey]);
+
+  // 4) 挂载直接打字与编辑交互的 DOM 事件监听
+  useEffect(() => {
+    const parent = mountRef.current;
+    if (!parent) return;
+
+    let lastBlurBlockId: string | null = null;
+    let lastBlurTime = 0;
+
+    const handleBeforeInput = (e: Event) => {
+      const blockEl = findBlockElement(e.target, parent);
+      const blockId = getBlockId(blockEl);
+      if (!blockId || !blockEl) return;
+      activeEditingBlockIdRef.current = blockId;
+    };
+
+    const handleInput = (e: Event) => {
+      const blockEl = findBlockElement(e.target, parent);
+      const blockId = getBlockId(blockEl);
+      if (!blockId || !blockEl) return;
+
+      activeEditingBlockIdRef.current = blockId;
+      const newText = blockEl.textContent ?? '';
+      activeDraftsRef.current.set(blockId, newText);
+
+      if (isComposingRef.current) {
+        return;
+      }
+
+      onBlockInputRef.current?.(blockId, newText);
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        onBlockChangeRef.current?.(blockId, newText);
+      }, debounceMs);
+    };
+
+    const handleCompositionStart = (e: CompositionEvent) => {
+      isComposingRef.current = true;
+      const blockEl = findBlockElement(e.target, parent);
+      const blockId = getBlockId(blockEl);
+      if (blockId) {
+        activeEditingBlockIdRef.current = blockId;
+      }
+    };
+
+    const handleCompositionEnd = (e: CompositionEvent) => {
+      isComposingRef.current = false;
+      const blockEl = findBlockElement(e.target, parent);
+      const blockId = getBlockId(blockEl);
+      if (!blockId || !blockEl) return;
+
+      const newText = blockEl.textContent ?? '';
+      activeDraftsRef.current.set(blockId, newText);
+      onBlockInputRef.current?.(blockId, newText);
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = setTimeout(() => {
+        onBlockChangeRef.current?.(blockId, newText);
+      }, debounceMs);
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const blockEl = findBlockElement(e.target, parent);
+      const blockId = getBlockId(blockEl);
+      if (!blockId || !blockEl) return;
+
+      if (e.key === 'Enter') {
+        if (isComposingRef.current) return;
+        e.preventDefault();
+        if (debounceTimerRef.current) {
+          clearTimeout(debounceTimerRef.current);
+          debounceTimerRef.current = null;
+        }
+        const currentText = blockEl.textContent ?? '';
+        onTextCommitRef.current?.(blockId, currentText);
+        onBlockChangeRef.current?.(blockId, currentText);
+        onEnterRef.current?.(blockId, currentText);
+        onBlockInsertRef.current?.(blockId, '');
+        return;
+      }
+
+      if (e.key === 'Backspace') {
+        if (isComposingRef.current) return;
+        const currentText = blockEl.textContent ?? '';
+        if (currentText === '') {
+          e.preventDefault();
+          if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+            debounceTimerRef.current = null;
+          }
+          // 段落为空时：自动前移焦点至前一可编辑块
+          const prevEl = blockEl.previousElementSibling as HTMLElement | null;
+          if (prevEl && prevEl.getAttribute('contenteditable')) {
+            prevEl.focus();
+            try {
+              const sel = window.getSelection?.();
+              if (sel) {
+                const range = document.createRange();
+                range.selectNodeContents(prevEl);
+                range.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(range);
+              }
+            } catch {
+              // ignore
+            }
+          }
+          onBackspaceRef.current?.(blockId, currentText);
+          onBlockDeleteRef.current?.(blockId);
+          return;
+        }
+      }
+    };
+
+    const handleBlur = (e: FocusEvent) => {
+      const blockEl = findBlockElement(e.target, parent);
+      const blockId = getBlockId(blockEl);
+      if (!blockId || !blockEl) return;
+
+      const now = Date.now();
+      if (lastBlurBlockId === blockId && now - lastBlurTime < 50) {
+        return;
+      }
+      lastBlurBlockId = blockId;
+      lastBlurTime = now;
+
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+
+      const currentText = blockEl.textContent ?? '';
+      onBlockChangeRef.current?.(blockId, currentText);
+      onTextCommitRef.current?.(blockId, currentText);
+
+      if (activeEditingBlockIdRef.current === blockId) {
+        activeEditingBlockIdRef.current = null;
+        activeDraftsRef.current.delete(blockId);
+      }
+    };
+
+    const handleFocus = (e: FocusEvent) => {
+      const blockEl = findBlockElement(e.target, parent);
+      const blockId = getBlockId(blockEl);
+      if (blockId) {
+        activeEditingBlockIdRef.current = blockId;
+      }
+    };
+
+    parent.addEventListener('beforeinput', handleBeforeInput);
+    parent.addEventListener('input', handleInput);
+    parent.addEventListener('compositionstart', handleCompositionStart);
+    parent.addEventListener('compositionend', handleCompositionEnd);
+    parent.addEventListener('keydown', handleKeyDown);
+    parent.addEventListener('blur', handleBlur, true);
+    parent.addEventListener('focusout', handleBlur);
+    parent.addEventListener('focus', handleFocus, true);
+    parent.addEventListener('focusin', handleFocus);
+
+    return () => {
+      parent.removeEventListener('beforeinput', handleBeforeInput);
+      parent.removeEventListener('input', handleInput);
+      parent.removeEventListener('compositionstart', handleCompositionStart);
+      parent.removeEventListener('compositionend', handleCompositionEnd);
+      parent.removeEventListener('keydown', handleKeyDown);
+      parent.removeEventListener('blur', handleBlur, true);
+      parent.removeEventListener('focusout', handleBlur);
+      parent.removeEventListener('focus', handleFocus, true);
+      parent.removeEventListener('focusin', handleFocus);
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+    };
+  }, [debounceMs]);
 
   const rootClass = ['np-paper-list-mount', className]
     .filter(Boolean)

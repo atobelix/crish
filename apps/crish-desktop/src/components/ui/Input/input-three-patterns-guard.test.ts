@@ -8,6 +8,7 @@ import {
   analyzeBoxShadowSpread,
   analyzeFormFourMinimalist,
   analyzeButtonActiveBorder,
+  isInputSelector,
 } from '../../../../../../scripts/check-input-guardrails.mjs';
 
 /**
@@ -227,6 +228,112 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
       border-color: var(--border-subtle);
     `);
     expect(cleanButtonActive).toEqual([]);
+  });
+
+  it('形态 ④ 防御：笔记纸面行内标题输入框 (NotePaperPanel.module.css 与 EditableTitle.tsx) 必须保持纯光标极简型（全态无框无阴影纯光标）', () => {
+    const notePaperCss = fs.readFileSync(
+      path.resolve(desktopSrc, 'components/note-paper/NotePaperPanel.module.css'),
+      'utf-8'
+    );
+    expect(notePaperCss).toMatch(/\.titleInput[^{]*\{[^}]*background:\s*transparent/);
+    expect(notePaperCss).toMatch(/\.titleInput[^{]*\{[^}]*border:\s*none/);
+    expect(notePaperCss).toMatch(/\.titleInput[^{]*\{[^}]*outline:\s*none/);
+    expect(notePaperCss).toMatch(/\.titleInput[^{]*\{[^}]*box-shadow:\s*none/);
+    expect(notePaperCss).toContain('.titleInput:focus');
+    expect(notePaperCss).toContain('.titleInput:focus-visible');
+    expect(notePaperCss).toMatch(/\.titleInput:focus(?:-visible)?[^{]*\{[^}]*border:\s*none/);
+    expect(notePaperCss).toMatch(/\.titleInput:focus(?:-visible)?[^{]*\{[^}]*outline:\s*none/);
+    expect(notePaperCss).toMatch(/\.titleInput:focus(?:-visible)?[^{]*\{[^}]*box-shadow:\s*none/);
+
+    const editableTitleTsx = fs.readFileSync(
+      path.resolve(desktopSrc, 'components/note-paper/EditableTitle.tsx'),
+      'utf-8'
+    );
+    expect(editableTitleTsx).toContain('className={styles.titleInput}');
+  });
+
+  it('形态 ③ / 卡片提交输入框防御：DiffCard 提交输入框 (.commitInput 与 DiffCardGitActions) 必须保持微圆角与克制软灰焦点态', () => {
+    const diffCardCss = fs.readFileSync(
+      path.resolve(desktopSrc, 'components/diff/DiffCard.module.css'),
+      'utf-8'
+    );
+    expect(diffCardCss).toMatch(/\.commitInput[^{]*\{[^}]*box-shadow:\s*none/);
+    expect(diffCardCss).toMatch(/\.commitInput[^{]*\{[^}]*outline:\s*none/);
+    expect(diffCardCss).toMatch(/\.commitInput[^{]*\{[^}]*border-radius:\s*var\(--radius-(?:sm|md),\s*(?:4|6)px\)/);
+    expect(diffCardCss).toMatch(/\.commitInput[^{]*\{[^}]*border:\s*1px solid color-mix/);
+    expect(diffCardCss).toContain('.commitInput:focus');
+    expect(diffCardCss).toContain('.commitInput:focus-visible');
+    expect(diffCardCss).toMatch(/\.commitInput:(?:focus-visible|focus)[^{]*\{[^}]*box-shadow:\s*none/);
+    expect(diffCardCss).toMatch(/\.commitInput:(?:focus-visible|focus)[^{]*\{[^}]*outline:\s*none/);
+    expect(diffCardCss).toMatch(/\.commitInput:(?:focus-visible|focus)[^{]*\{[^}]*border-color:\s*color-mix\(.*?var\(--text-primary\)\s*(?:[1-9]|10)%\)/);
+
+    const gitActionsTsx = fs.readFileSync(
+      path.resolve(desktopSrc, 'components/diff/DiffCardGitActions.tsx'),
+      'utf-8'
+    );
+    expect(gitActionsTsx).toContain('className={styles.commitInput}');
+  });
+
+  it('AST 刚性拦截：全形态驼峰输入框、属性选择器（[type="text"], [type="search"]）与组合选择器无死角扫描与拦截', () => {
+    // 1. 验证驼峰命名、属性选择器与复杂组合选择器被 isInputSelector 准确识别
+    const validInputs = [
+      '.titleInput',
+      '.titleInput:focus',
+      '.commitInput',
+      '.commitInput:focus-visible, .commitInput:focus',
+      '.searchInput',
+      '.tagInput',
+      '.filterInput',
+      '.customInput',
+      '.textInput',
+      '[type="text"]',
+      '[type="search"]',
+      '[type=\'text\']',
+      '[type=search]',
+      'input[type="text"]',
+      'input[type="search"]',
+      'div > [type="text"]',
+      '.card .commitInput:focus',
+      'form > .titleInput',
+      '[type=\'search\']:focus-visible',
+      '[type=text]:focus',
+      ':is(input, textarea)',
+      ':is(.titleInput, .commitInput)',
+      ':is([type="text"], [type="search"])',
+      '.navItem input[type=\'search\']',
+      'textarea.commitInput',
+      'input.titleInput',
+    ];
+    for (const sel of validInputs) {
+      expect(isInputSelector(sel)).toBe(true);
+    }
+
+    // 2. 验证非输入框选择器（容器、外壳、图标、按钮、复选框等）不被误判为输入框
+    const nonInputs = [
+      '.inputWrapper',
+      '.inputContainer',
+      '.inputShell',
+      '.inputRow',
+      '.searchRow',
+      '.searchIcon',
+      '.searchClearBtn',
+      'input[type="checkbox"]',
+      'input[type="radio"]',
+      'input[type="file"]',
+    ];
+    for (const sel of nonInputs) {
+      expect(isInputSelector(sel)).toBe(false);
+    }
+
+    // 3. 验证属性选择器与驼峰类名输入框中的深色投影与超标混入会被 AST 分析器严格拦截
+    const shadowViolation = analyzeBoxShadowSpread('box-shadow: 0 0 0 3px #000;');
+    expect(shadowViolation.length).toBeGreaterThan(0);
+
+    const darkMixViolation = analyzeFocusDarkMix('border-color: color-mix(in srgb, var(--border-color) 40%, var(--text-primary) 60%);');
+    expect(darkMixViolation.length).toBeGreaterThan(0);
+
+    const formFourShadow = analyzeFormFourMinimalist('.titleInput:focus', 'box-shadow: 0 0 0 1.5px var(--focus-border-color);');
+    expect(formFourShadow.length).toBeGreaterThan(0);
   });
 
   it('全仓刚性守护：自动化静态守门脚本 check-input-guardrails.mjs 必须 100% 通过（0 错误）', () => {
