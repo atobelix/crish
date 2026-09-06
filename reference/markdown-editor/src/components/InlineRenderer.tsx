@@ -708,32 +708,34 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 style={token.style}
               >
                 {token.indent ? (
-                  <>
-                    <span className="syntax-indent" data-sub-offset={0}>
+                  <span
+                    className="syntax-indent"
+                    data-sub-offset={0}
+                    style={{
+                      width: `calc(var(--grid-size) * ${indentGuidesCount})`,
+                    }}
+                  >
+                    <span className="syntax-hidden" data-sub-offset={0}>
                       {token.indent}
-                      {Array.from({ length: indentGuidesCount }).map((_, i) => (
-                        <span
-                          key={i}
-                          className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
-                          style={{
-                            left: `calc(${i * indentStep}ch + 0.5ch - 0.5px)`,
-                          }}
-                          aria-hidden="true"
-                        />
-                      ))}
                     </span>
-                    <span
-                      className="syntax-marker"
-                      data-sub-offset={indentLen}
-                    >
-                      {token.marker || token.raw.slice(indentLen)}
-                    </span>
-                  </>
-                ) : (
-                  <span className="syntax-marker" data-sub-offset={0}>
-                    {token.raw}
+                    {Array.from({ length: indentGuidesCount }).map((_, i) => (
+                      <span
+                        key={i}
+                        className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
+                        style={{
+                          left: `calc(${i} * var(--grid-size) + var(--grid-size) / 2 - 0.25px)`,
+                        }}
+                        aria-hidden="true"
+                      />
+                    ))}
                   </span>
-                )}
+                ) : null}
+                <span
+                  className="syntax-marker"
+                  data-sub-offset={indentLen}
+                >
+                  {token.indent ? (token.marker || token.raw.slice(indentLen)) : token.raw}
+                </span>
               </span>
             );
           }
@@ -754,14 +756,22 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 style={token.style}
               >
                 {token.indent && (
-                  <span className="syntax-indent" data-sub-offset={0}>
-                    {token.indent}
+                  <span
+                    className="syntax-indent"
+                    data-sub-offset={0}
+                    style={{
+                      width: `calc(var(--grid-size) * ${indentGuidesCount})`,
+                    }}
+                  >
+                    <span className="syntax-hidden" data-sub-offset={0}>
+                      {token.indent}
+                    </span>
                     {Array.from({ length: indentGuidesCount }).map((_, i) => (
                       <span
                         key={i}
                         className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
                         style={{
-                          left: `calc(${i * indentStep}ch + 0.5ch - 0.5px)`,
+                          left: `calc(${i} * var(--grid-size) + var(--grid-size) / 2 - 0.25px)`,
                         }}
                         aria-hidden="true"
                       />
@@ -823,14 +833,22 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 style={token.style}
               >
                 {token.indent && (
-                  <span className="syntax-indent" data-sub-offset={0}>
-                    {token.indent}
+                  <span
+                    className="syntax-indent"
+                    data-sub-offset={0}
+                    style={{
+                      width: `calc(var(--grid-size) * ${indentGuidesCount})`,
+                    }}
+                  >
+                    <span className="syntax-hidden" data-sub-offset={0}>
+                      {token.indent}
+                    </span>
                     {Array.from({ length: indentGuidesCount }).map((_, i) => (
                       <span
                         key={i}
                         className={`syntax-indent-guide${i === indentGuidesCount - 1 ? ' syntax-indent-guide-current' : ''}`}
                         style={{
-                          left: `calc(${i * indentStep}ch + 0.5ch - 0.5px)`,
+                          left: `calc(${i} * var(--grid-size) + var(--grid-size) / 2 - 0.25px)`,
                         }}
                         aria-hidden="true"
                       />

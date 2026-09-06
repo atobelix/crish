@@ -960,19 +960,22 @@ body {
 .syntax-indent {
   white-space: pre;
   position: relative;
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   vertical-align: top;
   height: var(--grid-size);
   line-height: var(--grid-size);
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .syntax-indent-guide {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 1px;
+  width: 0.5px;
   background-color: var(--list-guide-line);
-  opacity: 0.75;
+  opacity: 0.45;
   pointer-events: none;
   user-select: none;
 }
@@ -993,7 +996,8 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2em;
+  width: var(--grid-size);
+  height: var(--grid-size);
   text-align: center;
   font-size: 1.1em;
   line-height: 1;
