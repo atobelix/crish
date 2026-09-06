@@ -1,4 +1,7 @@
+import type React from 'react';
 import type { FileDiff, SessionAgent, SessionMessage } from '../../store/types';
+import type { PermissionMode } from '../../api/permissionModes';
+import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type {
   ChatNarrativeRenderThought,
   ChatNarrativeRenderTools,
@@ -90,3 +93,97 @@ export interface ChatMessageListProps {
    */
   renderThought?: ChatNarrativeRenderThought;
 }
+
+/** 固定消息条目契约 */
+export interface PinnedItem {
+  id: string;
+  sender: 'user' | 'assistant';
+  snippet: string;
+}
+
+/** 固定消息 (Pin) 控制器域 */
+export interface MessageVirtualizerPinsProps {
+  pinnedItems: PinnedItem[];
+  pinsOpen: boolean;
+  setPinsOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  jumpToPinned: (id: string) => void;
+  togglePin: (id: string) => void;
+}
+
+/** 流程与思考流控制域 */
+export interface MessageVirtualizerFlowControlProps {
+  hideThinkingBlock: boolean;
+  inPlanMode: boolean;
+  planApproved: boolean;
+  lastAssistantId: string | null;
+  lastUserId?: string | null;
+  thinkingMsgId?: string;
+  clearHeightsSignal?: number;
+  showAllMessages: boolean;
+}
+
+/** 交互与折叠展开状态域 */
+export interface MessageVirtualizerInteractionProps {
+  expandedUserMsgs: Record<string, boolean>;
+  onToggleExpandUser: (msgId: string) => void;
+  dismissedFollowUps: Record<string, true>;
+  handleDismissFollowUp: (msgId: string) => void;
+  handleMarkdownClick: (e: React.MouseEvent) => void;
+  toolStackProps: ChatToolStackSharedProps;
+}
+
+/** 单轨折叠产出的不可变视图快照（可选单轨槽） */
+export interface ConversationSnapshot {
+  readonly order?: readonly string[];
+  readonly nodes?: ReadonlyMap<string, unknown>;
+  readonly revision?: number;
+  readonly [key: string]: unknown;
+}
+
+/** 虚拟滚动消息列表 Props：收敛为 8 大领域分组对象及数据源，支持双向兼容扁平映射 */
+export interface MessageVirtualizerProps {
+  messages: SessionMessage[];
+  activeSessionId: string;
+  navigation?: ChatMessageListNavigationProps;
+  approval?: ChatMessageListApprovalProps;
+  composer?: ChatMessageListComposerProps;
+  generation?: ChatMessageListGenerationProps;
+  pins?: MessageVirtualizerPinsProps;
+  flowControl?: MessageVirtualizerFlowControlProps;
+  interaction?: MessageVirtualizerInteractionProps;
+  searchHighlightQuery?: string;
+  renderSnapshot?: ConversationSnapshot;
+
+  // 扁平字段双向兼容映射（为了确保 MessageVirtualizer.tsx 在本轮尚未重构完时不发生破坏）
+  pinnedItems?: PinnedItem[];
+  pinsOpen?: boolean;
+  setPinsOpen?: React.Dispatch<React.SetStateAction<boolean>>;
+  jumpToPinned?: (id: string) => void;
+  togglePin?: (id: string) => void;
+  expandedUserMsgs?: Record<string, boolean>;
+  onToggleExpandUser?: (msgId: string) => void;
+  hideThinkingBlock?: boolean;
+  inPlanMode?: boolean;
+  planApproved?: boolean;
+  lastAssistantId?: string | null;
+  lastUserId?: string | null;
+  onRetract?: () => void;
+  thinkingMsgId?: string;
+  toolStackProps?: ChatToolStackSharedProps;
+  handleRegenerateRow?: (assistantMsgId: string) => void;
+  onBranch?: () => void;
+  onOpenDiff?: (diff: FileDiff) => void;
+  onOpenDiffPanel?: () => void;
+  setPermissionMode?: (mode: PermissionMode) => void;
+  setPlanApproved?: (v: boolean) => void;
+  handleFillFollowUp?: (prompt: string) => void;
+  onSendFollowUp?: (prompt: string) => void;
+  handleSendFollowUp?: (prompt: string) => void;
+  dismissedFollowUps?: Record<string, true>;
+  handleDismissFollowUp?: (msgId: string) => void;
+  showAllMessages?: boolean;
+  handleMarkdownClick?: (e: React.MouseEvent) => void;
+  clearHeightsSignal?: number;
+  onOpenPath?: (filePath: string) => void;
+}
+

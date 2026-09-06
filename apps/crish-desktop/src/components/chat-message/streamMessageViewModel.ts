@@ -24,131 +24,60 @@ export type MsgWithTools = {
 };
 
 /**
- * 将流式文本无损合入 SessionMessage 的纯函数视图模型转换器
- * Merge live stream text into a message view-model for timeline rendering.
- * Prefers full cumulative stream text; appends trailing delta after durable
- * blocks when tools already committed a text prefix into the session store.
+ * 单轨流式正文直通纯函数
+ * Pass-through authoritative stream text into message view model.
+ * 彻底废除基于 startsWith 与 trailing delta 的盲猜切片拼接，以单轨权威正文直通。
  */
 export function applyStreamTextToMessage<T extends MsgWithBlocks>(
   msg: T,
   streamText: string | undefined
 ): T {
-  if (streamText == null) return msg;
-  const committed = msg.text || '';
-  if (streamText === committed) return msg;
-
-  if (!msg.blocks?.length) {
-    return { ...msg, text: streamText };
+  if (streamText == null || streamText === msg.text) {
+    return msg;
   }
-
-  const trailing =
-    committed && streamText.startsWith(committed)
-      ? streamText.slice(committed.length)
-      : committed
-        ? null
-        : streamText;
-
-  if (trailing === null) {
-    // Divergence: use stream as authoritative full text for display.
-    return { ...msg, text: streamText };
-  }
-  if (!trailing) {
-    return { ...msg, text: streamText };
-  }
-
-  const blocks = msg.blocks.map((b) => ({ ...b }));
-  const last = blocks[blocks.length - 1];
-  if (last?.type === 'text') {
-    blocks[blocks.length - 1] = {
-      ...last,
-      content: (last.content || '') + trailing,
-    };
-  } else {
-    blocks.push({ type: 'text', content: trailing });
-  }
-  return { ...msg, text: streamText, blocks };
+  return { ...msg, text: streamText };
 }
 
 /**
- * 将流式中间工具状态无损合入 SessionMessage 的纯函数视图模型转换器
- * Merge intermediate tool rows from streamingStore into a message view-model.
- * Does not downgrade terminal session statuses (success/error).
- * Ensures tool_call blocks exist so timeline cards render live.
+ * 单轨流式工具状态直通纯函数
+ * Merge live tool calls into message view model without Map ledger or race guessing.
+ * 不降级已完成终态（success/error），保持 tool_call 块对齐。
  */
 export function applyStreamToolsToMessage<T extends MsgWithTools>(
   msg: T,
   tools: Record<string, StreamToolLive> | undefined
 ): T {
   if (!tools) return msg;
-  const ids = Object.keys(tools);
-  if (ids.length === 0) return msg;
+  const entries = Object.entries(tools);
+  if (entries.length === 0) return msg;
 
   const toolCalls = [...(msg.toolCalls || [])];
-  const indexById = new Map(toolCalls.map((t, i) => [t.id, i]));
   let changed = false;
 
-  for (const toolId of ids) {
-    const live = tools[toolId];
+  for (const [toolId, live] of entries) {
     if (!live) continue;
-    const idx = indexById.get(toolId);
-    if (idx === undefined) {
-      const tc: MessageToolCall = {
+    const idx = toolCalls.findIndex((t) => t.id === toolId);
+    if (idx === -1) {
+      const { id: _liveId, ...restLive } = live;
+      toolCalls.push({
         id: toolId,
         name: live.name || 'tool',
         status: live.status || 'running',
-        ...(live.arguments !== undefined ? { arguments: live.arguments } : {}),
-        ...(live.explanation !== undefined
-          ? { explanation: live.explanation }
-          : {}),
-        ...(live.output !== undefined ? { output: live.output } : {}),
-        ...(live.startedAt !== undefined ? { startedAt: live.startedAt } : {}),
-        ...(live.approvalMeta !== undefined
-          ? { approvalMeta: live.approvalMeta }
-          : {}),
-      };
-      indexById.set(toolId, toolCalls.length);
-      toolCalls.push(tc);
+        ...restLive,
+      });
       changed = true;
-      continue;
-    }
-    const existing = toolCalls[idx]!;
-    // Never let intermediate lite state clobber durable terminal rows.
-    if (existing.status === 'success' || existing.status === 'error') {
-      continue;
-    }
-    const merged: MessageToolCall = {
-      ...existing,
-      ...(live.name !== undefined ? { name: live.name } : {}),
-      ...(live.arguments !== undefined ? { arguments: live.arguments } : {}),
-      ...(live.explanation !== undefined
-        ? { explanation: live.explanation }
-        : {}),
-      ...(live.status !== undefined ? { status: live.status } : {}),
-      ...(live.output !== undefined ? { output: live.output } : {}),
-      ...(live.startedAt !== undefined ? { startedAt: live.startedAt } : {}),
-      ...(live.approvalMeta !== undefined
-        ? { approvalMeta: live.approvalMeta }
-        : {}),
-    };
-    if (
-      merged.name !== existing.name ||
-      merged.arguments !== existing.arguments ||
-      merged.explanation !== existing.explanation ||
-      merged.status !== existing.status ||
-      merged.output !== existing.output ||
-      merged.startedAt !== existing.startedAt ||
-      merged.approvalMeta !== existing.approvalMeta
-    ) {
-      toolCalls[idx] = merged;
+    } else {
+      const existing = toolCalls[idx]!;
+      if (existing.status === 'success' || existing.status === 'error') {
+        continue;
+      }
+      toolCalls[idx] = { ...existing, ...live };
       changed = true;
     }
   }
 
   if (!changed) return msg;
 
-  // V1-δ（对齐单源）：tool_call 块补齐复用 normalizeAssistantTimeline 的
-  // 单一对齐纯函数 alignToolCallBlocks（原内联 append 补齐已删；插位语义
-  // 与持久化/水合路径一致——仅 text/空块置前，否则插到最后 text 块之前）。
   return {
     ...msg,
     toolCalls,
@@ -156,7 +85,7 @@ export function applyStreamToolsToMessage<T extends MsgWithTools>(
   };
 }
 
-/** 流式渲染 view model（T4 A1：投影链单源装配产物，页面壳层只收此结果） */
+/** 流式渲染 view model（单轨装配产物） */
 export interface StreamMessageViewModel {
   /** 已合并流式正文/工具的渲染消息投影（热缓冲无条目时 = 原消息引用） */
   msg: SessionMessage;
@@ -164,23 +93,16 @@ export interface StreamMessageViewModel {
   streamText: string | undefined;
 }
 
-/** 稳定空切片：非 live 行在 byKey tick 上零重渲染（原 MessageContent 内联常量上移） */
+/** 稳定空切片：非 live 行在 byKey tick 上零重渲染 */
 const EMPTY_STREAM_BODY: {
   text: string | undefined;
   tools: Record<string, StreamToolLive> | undefined;
 } = { text: undefined, tools: undefined };
 
 /**
- * 流式 view model 装配（T4 A1：渲染期 merge 从组件内联上移到壳层单点）。
- *
- * - 订阅 streamingStore 热缓冲 byKey（useShallow 浅比较，与旧内联订阅同构）；
- * - 防撕裂平滑三元降级公式（原 MessageContent「关键防御 2」原样上移）：
- *   1. 仅当持久化 msg.text 非空且状态 completed 才完全信任持久化 text；
- *   2. 否则 streamText 存在时无条件优先；
- *   3. 兜底 msg.text；
- * - 工具中间态经 applyStreamToolsToMessage 合并（不降级终态行）。
- * 热缓冲写入/清理路径（streamingStore actions + commitStreamToSession 的
- * queueMicrotask clearStream 时序闭环）不在此触碰。
+ * 流式 view model 装配纯受控挂载点。
+ * 订阅 streamingStore 单轨热缓冲，废除防撕裂平滑三元降级补丁，
+ * 直接以单轨流式数据驱动纯函数直通。
  */
 export function useStreamMessageViewModel(
   msg: SessionMessage,
@@ -197,14 +119,8 @@ export function useStreamMessageViewModel(
 
   const merged = useMemo(() => {
     let next: SessionMessage = msg;
-    const hasCommittedText = Boolean(msg.text && msg.text.trim().length > 0);
-    const activeText =
-      hasCommittedText && msg.status === 'completed'
-        ? msg.text
-        : (streamText ?? msg.text);
-
-    if (activeText != null && activeText !== msg.text) {
-      next = applyStreamTextToMessage(next, activeText) as SessionMessage;
+    if (streamText != null && streamText !== msg.text) {
+      next = applyStreamTextToMessage(next, streamText);
     }
     if (streamTools) {
       next = applyStreamToolsToMessage(next, streamTools);

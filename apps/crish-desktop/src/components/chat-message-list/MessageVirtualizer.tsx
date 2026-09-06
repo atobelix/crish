@@ -24,39 +24,60 @@ import {
 
 export type { MessageVirtualizerProps, PinnedItem };
 
-const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
-  messages,
-  pinnedItems,
-  pinsOpen,
-  setPinsOpen,
-  jumpToPinned,
-  togglePin,
-  searchHighlightQuery,
-  expandedUserMsgs,
-  onToggleExpandUser,
-  hideThinkingBlock,
-  inPlanMode,
-  planApproved,
-  lastAssistantId,
-  lastUserId,
-  onRetract,
-  thinkingMsgId,
-  toolStackProps,
-  handleRegenerateRow,
-  onBranch,
-  onOpenDiff,
-  onOpenDiffPanel,
-  setPermissionMode,
-  setPlanApproved,
-  handleFillFollowUp,
-  onSendFollowUp,
-  handleSendFollowUp,
-  dismissedFollowUps,
-  handleDismissFollowUp,
-  showAllMessages,
-  activeSessionId,
-  handleMarkdownClick,
-}) => {
+const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
+  const {
+    messages,
+    activeSessionId,
+    searchHighlightQuery,
+    pins,
+    flowControl,
+    interaction,
+    generation,
+    navigation,
+    approval: _approval,
+    composer,
+  } = props;
+
+  // 对象优先与扁平兼容映射（双向兼容映射，避免编译红与运行时异常）
+  const pinnedItems = pins?.pinnedItems ?? props.pinnedItems ?? [];
+  const pinsOpen = pins?.pinsOpen ?? props.pinsOpen ?? false;
+  const setPinsOpen = pins?.setPinsOpen ?? props.setPinsOpen ?? (() => {});
+  const jumpToPinned = pins?.jumpToPinned ?? props.jumpToPinned ?? (() => {});
+  const togglePin = pins?.togglePin ?? props.togglePin ?? (() => {});
+
+  const hideThinkingBlock = flowControl?.hideThinkingBlock ?? props.hideThinkingBlock ?? false;
+  const inPlanMode = flowControl?.inPlanMode ?? props.inPlanMode ?? false;
+  const planApproved = flowControl?.planApproved ?? props.planApproved ?? false;
+  const lastAssistantId = flowControl?.lastAssistantId !== undefined ? flowControl.lastAssistantId : (props.lastAssistantId ?? null);
+  const lastUserId = flowControl?.lastUserId !== undefined ? flowControl.lastUserId : props.lastUserId;
+  const thinkingMsgId = flowControl?.thinkingMsgId !== undefined ? flowControl.thinkingMsgId : props.thinkingMsgId;
+  const showAllMessages = flowControl?.showAllMessages ?? props.showAllMessages ?? true;
+
+  const expandedUserMsgs = interaction?.expandedUserMsgs ?? props.expandedUserMsgs ?? {};
+  const onToggleExpandUser = interaction?.onToggleExpandUser ?? props.onToggleExpandUser ?? (() => {});
+  const dismissedFollowUps = interaction?.dismissedFollowUps ?? props.dismissedFollowUps ?? {};
+  const handleDismissFollowUp = interaction?.handleDismissFollowUp ?? props.handleDismissFollowUp ?? (() => {});
+  const handleMarkdownClick = interaction?.handleMarkdownClick ?? props.handleMarkdownClick ?? (() => {});
+  const toolStackProps =
+    interaction?.toolStackProps ??
+    props.toolStackProps ??
+    ({ activeSessionId } as import('../chat-tool-call/ChatToolCallBlock').ChatToolStackSharedProps);
+
+  const onOpenDiff = navigation?.onOpenDiff ?? props.onOpenDiff ?? (() => {});
+  const onOpenDiffPanel = navigation?.onOpenDiffPanel ?? props.onOpenDiffPanel;
+  const onOpenPath = navigation?.onOpenPath ?? props.onOpenPath;
+
+  const onBranch = generation?.onBranch ?? props.onBranch ?? (() => {});
+  const onRetract = generation?.onRetract ?? props.onRetract;
+  const handleRegenerateRow = generation?.onRegenerate
+    ? ((assistantId: string) => generation!.onRegenerate('', assistantId))
+    : (props.handleRegenerateRow ?? (() => {}));
+
+  const setPermissionMode = props.setPermissionMode ?? (() => {});
+  const setPlanApproved = props.setPlanApproved ?? (() => {});
+  const handleFillFollowUp = composer?.onSetChatInput ?? props.handleFillFollowUp ?? (() => {});
+  const onSendFollowUp = composer?.onSendFollowUp ?? props.onSendFollowUp;
+  const handleSendFollowUp = composer?.onSendFollowUp ?? props.handleSendFollowUp ?? (() => {});
   const msgIds = useMemo(() => messages.map((m) => m.id), [messages]);
   const vs = useVirtualScroll({
     ids: msgIds,
@@ -252,6 +273,7 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = ({
                     onRetract={onRetract}
                     messageIndex={virtualIndex}
                     virtualScrollManager={manager}
+                    onOpenPath={onOpenPath}
                   />
                 </div>
               </AppErrorBoundary>

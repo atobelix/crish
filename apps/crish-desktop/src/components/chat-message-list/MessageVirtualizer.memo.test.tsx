@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * MessageVirtualizer memo 契约测试（审计 F7-F16）
+ * MessageVirtualizer memo 契约测试（审计 F7-F16 与 DIM-DATA 8 大领域对象化收敛）
  */
 import React from 'react';
 import { render } from '@testing-library/react';
@@ -15,6 +15,7 @@ import {
   MEMO_COMPARE_FIELDS as ROW_MEMO_COMPARE_FIELDS,
 } from '../chat-message-row/chatMessageRowUtils';
 import type { SessionMessage } from '../../store/types';
+import type { MessageVirtualizerProps } from './chatMessageListProps';
 
 globalThis.ResizeObserver = class ResizeObserver {
   observe() {}
@@ -70,6 +71,60 @@ function createProps(messages: SessionMessage[]) {
   };
 }
 
+function createGroupedProps(messages: SessionMessage[]): MessageVirtualizerProps {
+  return {
+    messages,
+    activeSessionId: 'sess-1',
+    navigation: {
+      onOpenDiff: vi.fn(),
+      onOpenPath: vi.fn(),
+      onOpenTerminal: vi.fn(),
+    },
+    approval: {
+      approvalBusy: false,
+      pendingApprovalMsgId: '',
+      onApprovalAllow: vi.fn(),
+      onApprovalDeny: vi.fn(),
+    },
+    composer: {
+      onSetChatInput: vi.fn(),
+      onSendFollowUp: vi.fn(),
+    },
+    generation: {
+      onRegenerate: vi.fn(),
+      onBranch: vi.fn(),
+    },
+    pins: {
+      pinnedItems: [],
+      pinsOpen: false,
+      setPinsOpen: vi.fn(),
+      jumpToPinned: vi.fn(),
+      togglePin: vi.fn(),
+    },
+    flowControl: {
+      hideThinkingBlock: false,
+      inPlanMode: false,
+      planApproved: false,
+      lastAssistantId: null,
+      showAllMessages: true,
+    },
+    interaction: {
+      expandedUserMsgs: {},
+      onToggleExpandUser: vi.fn(),
+      dismissedFollowUps: {},
+      handleDismissFollowUp: vi.fn(),
+      handleMarkdownClick: vi.fn(),
+      toolStackProps: {
+        activeSessionId: 'sess-1',
+        onShowToast: vi.fn(),
+        onOpenDiff: vi.fn(),
+        onOpenDiffPanel: vi.fn(),
+      },
+    },
+    searchHighlightQuery: '',
+  };
+}
+
 describe('MessageVirtualizer memo 契约（F7-F16）', () => {
   it('messages 同长换引用时放行重渲染（撤回/编辑不回显 stale）', () => {
     const first = [msg('m1', '第一版'), msg('m2', '第二版')];
@@ -97,10 +152,10 @@ describe('MessageVirtualizer memo 契约（F7-F16）', () => {
 });
 
 // ──────────────────────────────────────────────
-describe('比较器字段清单（T4.3，R-06 守卫）', () => {
-  it('MEMO_COMPARE_FIELDS 收录全部 props（类型级穷尽检查的运行时镜像）', () => {
-    // 编译期已由 _exhaustedCheck 强制；此处锁定清单非空且与 props 面一致
-    expect(MEMO_COMPARE_FIELDS.length).toBeGreaterThanOrEqual(25);
+describe('比较器字段清单（T4.3，R-06 守卫 与 DIM-DATA 收敛契约）', () => {
+  it('MEMO_COMPARE_FIELDS 收录全部 8 大领域分组与核心字段', () => {
+    // 清单覆盖收敛后的核心领域字段契约
+    expect(MEMO_COMPARE_FIELDS.length).toBeGreaterThanOrEqual(10);
     expect(new Set(MEMO_COMPARE_FIELDS).size).toBe(MEMO_COMPARE_FIELDS.length);
   });
 
@@ -122,5 +177,42 @@ describe('比较器字段清单（T4.3，R-06 守卫）', () => {
         `assistantRowPropsEqual 源码缺少字段「${field}」`
       ).toBe(true);
     }
+  });
+
+  it('对象化属性浅比对：8 大分组对象引用恒定时命中 memo，对象变更时精确放行', () => {
+    const msgs = [msg('m1', '问'), msg('m2', '答')];
+    const baseProps = createGroupedProps(msgs);
+
+    // 1. 同引用对象比较 -> 命中 memo 返回 true
+    const clonedProps = { ...baseProps };
+    expect(messageVirtualizerPropsEqual(baseProps, clonedProps)).toBe(true);
+
+    // 2. pins 变更 -> 浅比对不相等放行
+    const pinsChanged = {
+      ...baseProps,
+      pins: { ...baseProps.pins! },
+    };
+    expect(messageVirtualizerPropsEqual(baseProps, pinsChanged)).toBe(false);
+
+    // 3. flowControl 变更 -> 放行
+    const flowChanged = {
+      ...baseProps,
+      flowControl: { ...baseProps.flowControl!, inPlanMode: true },
+    };
+    expect(messageVirtualizerPropsEqual(baseProps, flowChanged)).toBe(false);
+
+    // 4. interaction 变更 -> 放行
+    const interactionChanged = {
+      ...baseProps,
+      interaction: { ...baseProps.interaction!, expandedUserMsgs: { m1: true } },
+    };
+    expect(messageVirtualizerPropsEqual(baseProps, interactionChanged)).toBe(false);
+
+    // 5. navigation / generation / composer / approval 变更 -> 放行
+    const navChanged = {
+      ...baseProps,
+      navigation: { ...baseProps.navigation! },
+    };
+    expect(messageVirtualizerPropsEqual(baseProps, navChanged)).toBe(false);
   });
 });

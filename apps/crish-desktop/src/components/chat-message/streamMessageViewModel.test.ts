@@ -10,60 +10,52 @@ describe('applyStreamTextToMessage', () => {
     expect(applyStreamTextToMessage(msg, undefined)).toBe(msg);
   });
 
+  it('returns msg reference when streamText equals msg.text', () => {
+    const msg = { text: 'already committed' };
+    expect(applyStreamTextToMessage(msg, 'already committed')).toBe(msg);
+  });
+
   it('sets text when no blocks', () => {
     expect(applyStreamTextToMessage({ text: '' }, 'hi')).toEqual({
       text: 'hi',
     });
   });
 
-  it('appends trailing delta to last text block after committed prefix', () => {
+  it('preserves message blocks without string slicing or block mutation', () => {
+    const blocks = [
+      { type: 'text', content: 'AB' },
+      { type: 'tool_call', id: 't1' },
+      { type: 'text', content: 'CD' },
+    ];
     const msg = {
-      text: 'AB',
-      blocks: [
-        { type: 'text', content: 'AB' },
-        { type: 'tool_call', id: 't1' },
-        { type: 'text', content: 'CD' },
-      ],
-    };
-    const committed = {
       text: 'ABCD',
-      blocks: msg.blocks,
-    };
-    const next = applyStreamTextToMessage(committed, 'ABCDEF');
-    expect(next.text).toBe('ABCDEF');
-    expect(next.blocks?.[2]).toEqual({ type: 'text', content: 'CDEF' });
-  });
-
-  it('pushes new text block when last block is a tool', () => {
-    const msg = {
-      text: 'hi',
-      blocks: [
-        { type: 'text', content: 'hi' },
-        { type: 'tool_call', id: 't1' },
-      ],
-    };
-    const next = applyStreamTextToMessage(msg, 'hi there');
-    expect(next.blocks?.[2]).toEqual({ type: 'text', content: ' there' });
-  });
-
-  it('分叉兜底：stream 不以 committed 开头 → 以 stream 全量为权威正文', () => {
-    const msg = {
-      text: 'OLD-COMMITTED',
-      blocks: [{ type: 'text', content: 'OLD-COMMITTED' }],
-    };
-    const next = applyStreamTextToMessage(msg, 'BRAND-NEW-STREAM');
-    expect(next.text).toBe('BRAND-NEW-STREAM');
-    expect(next.blocks).toBe(msg.blocks);
-  });
-
-  it('同源增量：stream 以 committed 开头 → trailing delta 追加', () => {
-    const msg = {
-      text: 'AB',
-      blocks: [{ type: 'text', content: 'AB' }],
+      blocks,
     };
     const next = applyStreamTextToMessage(msg, 'ABCDEF');
     expect(next.text).toBe('ABCDEF');
-    expect(next.blocks?.[0]).toEqual({ type: 'text', content: 'ABCDEF' });
+    expect(next.blocks).toBe(blocks);
+  });
+
+  it('单轨权威流正文：直接以 streamText 为准更新正文，不切片拼接 blocks', () => {
+    const blocks = [{ type: 'text', content: 'OLD-COMMITTED' }];
+    const msg = {
+      text: 'OLD-COMMITTED',
+      blocks,
+    };
+    const next = applyStreamTextToMessage(msg, 'BRAND-NEW-STREAM');
+    expect(next.text).toBe('BRAND-NEW-STREAM');
+    expect(next.blocks).toBe(blocks);
+  });
+
+  it('单轨权威流正文：同源增量直接直通全量流正文', () => {
+    const blocks = [{ type: 'text', content: 'AB' }];
+    const msg = {
+      text: 'AB',
+      blocks,
+    };
+    const next = applyStreamTextToMessage(msg, 'ABCDEF');
+    expect(next.text).toBe('ABCDEF');
+    expect(next.blocks).toBe(blocks);
   });
 });
 
