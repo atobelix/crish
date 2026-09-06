@@ -796,11 +796,15 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
             const handleTaskClick = (e: React.MouseEvent) => {
               if (start !== undefined) {
-                // 核心交互区点击：功能优先，直接切换完成状态（彻底移除边缘模糊判定）
+                // 核心交互区点击：功能优先，直接切换完成状态（彻底移除边缘模糊判定，兼容 [x] 与 [X]）
                 e.stopPropagation();
                 e.preventDefault();
                 const state = useEditorStore.getState();
-                const markerOffset = token.raw.indexOf(token.isChecked ? '[x]' : '[ ]');
+                const match = token.raw.match(/\[([xX\s])\]/);
+                const markerOffset =
+                  match && match.index !== undefined
+                    ? match.index
+                    : token.raw.indexOf(token.isChecked ? '[x]' : '[ ]');
                 const newMarker = token.isChecked ? '[ ]' : '[x]';
                 if (markerOffset >= 0) {
                   const from = start + markerOffset;
@@ -851,8 +855,8 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     title={token.isChecked ? '已完成（单击切换）' : '未完成（单击切换）'}
                   >
                     <svg
-                      width="14"
-                      height="14"
+                      width="15"
+                      height="15"
                       viewBox="0 0 16 16"
                       fill="none"
                       className="task-checkbox-svg"
@@ -865,13 +869,13 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                             width="14"
                             height="14"
                             rx="3.5"
-                            fill="var(--brand, oklch(0.696 0.149 162.48))"
-                            stroke="var(--brand, oklch(0.696 0.149 162.48))"
+                            fill="var(--task-checked-bg, hsl(217 91% 60%))"
+                            stroke="var(--task-checked-border, hsl(217 91% 60%))"
                             strokeWidth="1.2"
                           />
                           <path
                             d="M4.5 8.2L7 10.7L11.5 5.5"
-                            stroke="oklch(1 0 0)"
+                            stroke="hsl(0 0% 100%)"
                             strokeWidth="1.8"
                             strokeLinecap="round"
                             strokeLinejoin="round"
@@ -885,8 +889,8 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                           height="13"
                           rx="3.5"
                           fill="transparent"
-                          stroke="var(--border-strong, hsl(30 2.5% 65%))"
-                          strokeWidth="1.5"
+                          stroke="var(--task-unchecked-border, hsl(215 16% 75%))"
+                          strokeWidth="1.4"
                         />
                       )}
                     </svg>

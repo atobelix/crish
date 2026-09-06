@@ -52,12 +52,19 @@
   --scrollbar-track: var(--parchment);
   --scrollbar-thumb: hsl(30 2.5% 90%);
   --scrollbar-thumb-hover: hsl(30 2.5% 78%);
-  /* 列表与多级缩进极细发丝引导线配色 (0.5px 发丝级微暖灰色) */
-  --list-guide-line: hsl(30 2.5% 80%);
+  /* 列表与多级缩进发丝引导线配色 (纯净优雅中性灰) */
+  --list-guide-line: hsl(220 13% 88%);
+
+  /* 现代任务复选框与列表微件配色 (对齐主流现代笔记/Obsidian/Notion) */
+  --task-checked-bg: hsl(217 91% 60%);
+  --task-checked-border: hsl(217 91% 60%);
+  --task-unchecked-border: hsl(215 16% 75%);
+  --task-unchecked-hover: hsl(215 16% 55%);
+  --list-bullet-color: hsl(215 14% 50%);
 
   /* ── 3. 字体系统解耦 ── */
   --font-serif: "TsangerJinKai02", "Source Han Serif SC", "Source Han Serif CN", "Noto Serif SC", "Songti SC", Charter, Georgia, serif;
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", Consolas, Monaco, monospace;
   --grid-size: 28px;
 }
@@ -98,9 +105,12 @@ html,
 body {
   background-color: var(--bg-theme);
   color: var(--text-primary);
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: 14px;
   line-height: var(--grid-size);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   height: 100vh;
   width: 100vw;
   display: flex;
@@ -164,7 +174,7 @@ body {
   background-color: transparent;
 }
 
-/* 独立行块级结构 (严格保持 --grid-size 与等宽字体以保证光标与选区绝对精准) */
+/* 独立行块级结构 (严格保持 --grid-size 与优雅无衬线字体以保证可读性与光标精准) */
 .line-block {
   display: block;
   width: 100%;
@@ -172,7 +182,7 @@ body {
   line-height: var(--grid-size);
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   color: var(--text-primary);
   margin: 0;
   padding: 0;
@@ -181,33 +191,35 @@ body {
 /* 标题视觉层级与微调字距 (保持 grid-size 继承，消除测量错位) */
 .line-h1 {
   font-size: 1.65rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   color: var(--near-black);
 }
 .line-h2 {
   font-size: 1.35rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
   color: var(--near-black);
 }
 .line-h3 {
-  font-size: 1.15rem;
+  font-size: 1.18rem;
   font-weight: 600;
-  color: var(--dark-warm);
+  letter-spacing: -0.01em;
+  color: var(--near-black);
 }
 .line-h4 {
-  font-size: 1.02rem;
+  font-size: 1.05rem;
   font-weight: 600;
+  letter-spacing: -0.005em;
   color: var(--dark-warm);
 }
 .line-h5 {
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-secondary);
 }
 .line-h6 {
-  font-size: 0.85rem;
+  font-size: 0.88rem;
   font-weight: 600;
   color: var(--text-muted);
 }
@@ -958,9 +970,9 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 0.5px;
+  width: 1px;
   background-color: var(--list-guide-line);
-  opacity: 0.6;
+  opacity: 0.75;
   pointer-events: none;
   user-select: none;
 }
@@ -983,10 +995,11 @@ body {
   justify-content: center;
   width: 2em;
   text-align: center;
-  font-size: 1em;
+  font-size: 1.1em;
   line-height: 1;
   user-select: none;
   box-sizing: border-box;
+  color: var(--list-bullet-color, hsl(215 14% 50%));
 }
 
 .token-list-bullet .bullet-space {
@@ -1020,10 +1033,37 @@ body {
 .task-checkbox-svg {
   flex-shrink: 0;
   display: block;
+  transition: transform 0.12s ease;
 }
 
-.task-checkbox-wrapper:hover .task-checkbox-svg rect {
-  filter: brightness(0.97);
+.task-checkbox-wrapper:hover .task-checkbox-svg rect[fill="transparent"] {
+  stroke: var(--task-unchecked-hover, hsl(215 16% 55%));
+}
+
+.task-checkbox-wrapper:hover .task-checkbox-svg {
+  transform: scale(1.05);
+}
+
+.task-checkbox-wrapper:active .task-checkbox-svg {
+  transform: scale(0.95);
+}
+
+/* 任务列表已完成样式 (对齐主流高品质笔记软件：删除线与柔和置灰) */
+.line-block.is-task-completed,
+.is-task-completed {
+  color: var(--text-muted);
+}
+
+.line-block.is-task-completed .token-list-task ~ span:not(.syntax-hidden) {
+  text-decoration: line-through;
+  text-decoration-color: var(--text-muted);
+  color: var(--text-muted);
+}
+
+.line-block.is-task-completed .token-list-task ~ span .style-bold,
+.line-block.is-task-completed .token-list-task ~ span .style-italic,
+.line-block.is-task-completed .token-list-task ~ span .style-inline-code {
+  color: var(--text-muted);
 }
 
 .task-space {

@@ -1667,6 +1667,10 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
   }
 
   const isLineActive = checkIsActive(lineOffset, block.length, activeState ?? null);
+  const isTaskCompleted = block.inlineTokens?.some(
+    (t) => t.type === 'list_task' && t.isChecked
+  );
+  const taskCompletedClass = isTaskCompleted ? ' is-task-completed' : '';
   const calloutClass = block.calloutType
     ? ` line-callout callout-${block.calloutType}${block.isCalloutHeader ? ' callout-header' : ''}`
     : '';
@@ -1712,7 +1716,7 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
     // dir 使 InlineRenderer 全部 token 继承 RTL 排版；LTR 行不设
     // dir 属性，行为零变化）
     <div
-      className={`line-block${bqClass}${calloutClass}${isLineActive ? ' is-active-line' : ''}`}
+      className={`line-block${bqClass}${calloutClass}${isLineActive ? ' is-active-line' : ''}${taskCompletedClass}`}
       data-blockquote-level={block.blockquoteLevel}
       dir={rtl ? 'rtl' : undefined}
       style={bqStyle}
