@@ -20,7 +20,7 @@
 /* Tool Row */
 .toolRow {
   border: none;
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-md, 6px);
   background: transparent;
   min-height: 0;
   contain: layout style;
@@ -57,28 +57,30 @@
 .toolRowHead {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   width: 100%;
   border: none;
   background: transparent;
-  padding: 6px 8px;
-  border-radius: var(--radius-xl);
+  padding: 0 8px;
+  border-radius: var(--radius-md, 6px);
   cursor: pointer;
   font-family: inherit;
   text-align: left;
   color: var(--text-secondary);
-  min-height: 32px;
-  height: auto;
-  max-height: none;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  line-height: 24px;
+  box-sizing: border-box;
   font-weight: var(--font-weight-normal);
   overflow: hidden;
   white-space: nowrap;
-  box-sizing: border-box;
   box-shadow: none;
+  outline: none;
   flex-shrink: 0;
   transition:
-    background var(--transition-micro),
-    color var(--transition-micro);
+    background var(--transition-micro, 120ms ease),
+    color var(--transition-micro, 120ms ease);
 }
 
 .toolRowHead.toolRowHeadStatic {
@@ -88,50 +90,73 @@
 .toolRowHeadMain {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   min-width: 0;
   flex: 1;
   overflow: hidden;
+  white-space: nowrap;
+  height: 24px;
+  line-height: 24px;
 }
 
 .toolRowIcoSlot {
   flex: 0 0 16px;
   width: 16px;
   height: 16px;
-  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   overflow: visible;
   background: transparent;
   border: none;
-  color: var(--accent-green);
+  color: var(--text-tertiary, #8c877d);
   box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+/* 100ms 原地替换指示翻转契约 */
+.toolRow[data-in-place-flipping="true"] .toolRowIcoSlot,
+.toolRow.inPlaceFlipping .toolRowIcoSlot {
+  animation: toolIndicatorFlip 100ms cubic-bezier(0.2, 0, 0, 1) forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes toolIndicatorFlip {
+  0% {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: rotateY(90deg) scale(0.85);
+    opacity: 0.4;
+  }
+  100% {
+    transform: rotateY(0deg) scale(1);
+    opacity: 1;
+  }
 }
 
 .toolRowChevronSlot {
-  flex: 0 0 18px;
-  width: 18px;
-  height: 18px;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-left: auto;
   flex-shrink: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs, 4px);
   color: var(--text-tertiary);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--transition-micro);
+  opacity: 0.65;
+  transition: opacity var(--transition-micro, 120ms ease);
 }
 
 .toolRowChevronSlot.isToggle {
-  opacity: 0;
+  opacity: 0.65;
 }
 
 .toolRowHead:hover {
-  background: var(--tint-hover);
-  color: var(--text-secondary);
+  background: var(--tint-hover, hsl(0 0% 0% / 0.04));
+  color: var(--text-primary);
 }
 
 .toolRowHead:hover .toolRowSummary,
@@ -142,42 +167,83 @@
 .toolRowHead:hover .toolRowIcoSlot {
   background: transparent;
   border: none;
-  color: var(--accent-green);
 }
 
-.toolRowHead:hover .toolRowChevronSlot.isToggle {
-  opacity: 0.55;
+.toolRowHead:hover .toolRowChevronSlot {
+  opacity: 1;
 }
 
 .toolRowText {
   display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
   align-items: center;
-  gap: var(--space-1_5);
   min-width: 0;
   flex: 1;
   overflow: hidden;
   white-space: nowrap;
+  height: 24px;
+  line-height: 24px;
 }
 
 .toolRowSummary {
-  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
   max-width: 100%;
-  font-size: var(--font-size-sm);
-  line-height: var(--line-height-base);
+  font-size: 13px;
+  line-height: 24px;
   font-weight: var(--font-weight-normal);
+  color: var(--text-secondary);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.toolActionText {
+  font-size: 13px;
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+  flex-shrink: 0;
+  white-space: nowrap;
+  line-height: 24px;
+}
+
+.dotSeparator {
+  width: 2px;
+  height: 2px;
+  min-width: 2px;
+  min-height: 2px;
+  border-radius: 50%;
+  background: var(--text-tertiary, #8c877d);
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.toolParamText {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+  line-height: 24px;
+}
+
+.toolRowHeadRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+  height: 24px;
+  line-height: 24px;
 }
 
 .toolRowChevron {
   flex-shrink: 0;
   opacity: 1;
-  transition: transform var(--transition-fast);
+  transition: transform var(--transition-fast, 150ms ease);
 }
 
 .toolRowChevron.rot {
@@ -208,11 +274,12 @@
 /* Duration display */
 .duration {
   font-variant-numeric: tabular-nums;
-  font-size: var(--font-size-xxs);
+  font-size: 11px;
   color: var(--text-tertiary);
   margin-left: auto;
   flex-shrink: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-mono, monospace);
+  line-height: 24px;
 }
 
 /* Retry button */
@@ -220,17 +287,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xs, 4px);
   background: transparent;
-  color: var(--accent-red);
+  color: var(--accent-red, #ef4444);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  margin-left: 2px;
-  opacity: 0.6;
+  opacity: 0.75;
   transition:
     opacity 0.15s ease,
     background 0.15s ease;
@@ -243,19 +309,20 @@
 
 /* Diff stats in collapsed row */
 .diffStats {
-  font-family: var(--font-mono);
-  font-size: var(--font-size-xxs);
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
   flex-shrink: 0;
-  margin-left: 4px;
   white-space: nowrap;
+  line-height: 24px;
 }
 
 .diffStatsAdd {
-  color: var(--accent-green);
+  color: var(--accent-green, #10b981);
+  margin-right: 4px;
 }
 
 .diffStatsDel {
-  color: var(--accent-red);
+  color: var(--accent-red, #ef4444);
 }
 
 /*        V1-          inspect /        group  */
@@ -621,25 +688,25 @@
 
 .toolPathWrap:hover .toolPathActions,
 .toolPathWrap:focus-within .toolPathActions {
-  max-width: 56px;
+  max-width: 44px;
   opacity: 1;
-  margin-left: var(--space-1);
+  margin-left: 2px;
 }
 
 .toolPathAction {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 16px;
+  height: 16px;
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xs, 4px);
   background: transparent;
   color: var(--text-tertiary);
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
-  transform: translateX(4px);
+  transform: translateX(2px);
   transition:
     color 0.15s ease,
     background 0.15s ease,

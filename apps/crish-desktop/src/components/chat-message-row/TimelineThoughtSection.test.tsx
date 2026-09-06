@@ -71,4 +71,42 @@ describe('TimelineThoughtSection', () => {
     expect(screen.queryByRole('button', { name: /查看完整思考链/i })).toBeNull();
     expect(container.querySelector('[class*="thoughtScrollBody"]')).not.toBeNull();
   });
+
+  it('切除 168px 局部内部滚动与吸底：展开时在文档流内自然展开，不劫持内部滚动与吸底', () => {
+    const { container, rerender } = render(
+      <TimelineThoughtSection
+        content="第 1 批思考 Token"
+        isLive={true}
+        defaultExpanded={true}
+      />
+    );
+
+    const scrollBody = container.querySelector('[class*="thoughtScrollBody"]') as HTMLDivElement;
+    expect(scrollBody).not.toBeNull();
+    // 确认未挂载内部 onscroll 监听劫持
+    expect(scrollBody.onscroll).toBeNull();
+
+    // 追踪 scrollTop 是否被内部逻辑篡改
+    let scrollTopAssigned = false;
+    Object.defineProperty(scrollBody, 'scrollTop', {
+      get: () => 0,
+      set: () => {
+        scrollTopAssigned = true;
+      },
+      configurable: true,
+    });
+
+    // 模拟流式追加内容
+    rerender(
+      <TimelineThoughtSection
+        content="第 1 批思考 Token\n第 2 批思考 Token\n第 3 批思考 Token..."
+        isLive={true}
+        defaultExpanded={true}
+      />
+    );
+
+    // 内部不再主动执行 el.scrollTop = el.scrollHeight 局部吸底，交由全局视口宿主统一管理
+    expect(scrollTopAssigned).toBe(false);
+  });
 });
+

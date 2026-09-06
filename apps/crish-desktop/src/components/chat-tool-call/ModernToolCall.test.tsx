@@ -3,9 +3,11 @@ import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { ModernJsonToolCall } from './ModernJsonToolCall';
-import { ModernTerminalToolCall } from './ModernTerminalToolCall';
+import { ModernTerminalToolCall, TerminalCard } from './ModernTerminalToolCall';
 import { ModernToolCall } from './ModernToolCall';
 import { ModernApprovalCard } from './ModernApprovalCard';
+import { ToolCallDiffPreview, DiffCard } from './ToolCallDiffPreview';
+import type { FileDiff } from '../../store/types';
 
 describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
   beforeEach(() => {
@@ -132,6 +134,43 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       fireEvent.click(copyBtn);
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith('npm test');
     });
+
+    it('超过 30 行时默认截断为首尾 15 行并展示展开药丸，点击后展开全量行', () => {
+      const sixtyLines = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n');
+      render(
+        <TerminalCard command="cargo test" output={sixtyLines} />
+      );
+
+      // 默认展示首尾
+      expect(screen.getByText('line 1')).toBeDefined();
+      expect(screen.getByText('line 60')).toBeDefined();
+      expect(screen.queryByText('line 30')).toBeNull();
+
+      // 点击展开药丸
+      const expandBtn = screen.getByRole('button', { name: /展开中间剩余 30 行/ });
+      fireEvent.click(expandBtn);
+
+      // 展开后全量展示
+      expect(screen.getByText('line 30')).toBeDefined();
+
+      // 点击收起
+      const collapseBtn = screen.getByRole('button', { name: '收起中间日志输出' });
+      fireEvent.click(collapseBtn);
+      expect(screen.queryByText('line 30')).toBeNull();
+    });
+
+    it('正确解析 ANSI 彩色转义序列', () => {
+      render(
+        <ModernTerminalToolCall
+          command="make test"
+          output={'\x1b[32mPASS_ALL_TESTS\x1b[0m'}
+        />
+      );
+
+      const coloredNode = screen.getByText('PASS_ALL_TESTS');
+      expect(coloredNode).toBeDefined();
+      expect(coloredNode.style.color).toBe('rgb(110, 231, 183)');
+    });
   });
 
   describe('3. ModernToolCall 智能路由分发', () => {
@@ -212,6 +251,97 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
 
       fireEvent.click(allowBtn);
       expect(onAllow).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('5. ToolCallDiffPreview / DiffCard 差异比对卡片平铺视图测试', () => {
+    const mockDiff: FileDiff = {
+      filePath: 'src/components/Button.tsx',
+      additions: 12,
+      deletions: 3,
+      changes: [
+        { type: 'normal', content: 'import React from "react";', lineNum: 1 },
+        { type: 'deletion', content: 'export const OldButton = () => null;', lineNum: 2 },
+        { type: 'addition', content: 'export const Button = () => <button />;', lineNum: 2 },
+        { type: 'addition', content: 'export default Button;', lineNum: 3 },
+      ],
+    };
+
+    it('正确渲染差异卡片头部、+A -R 统计胶囊与代码行三列对齐', () => {
+      const { container } = render(<DiffCard diff={mockDiff} />);
+
+      // 文件路径
+      expect(container.textContent).toContain('src/components/Button.tsx');
+      // +12 增与 -3 删统计胶囊
+      expect(container.textContent).toContain('+12');
+      expect(container.textContent).toContain('-3');
+
+      // 变动符号列与代码文本
+      expect(container.textContent).toContain('+');
+      expect(container.textContent).toContain('-');
+      expect(container.textContent).toContain('export const Button');
+      expect(container.textContent).toContain('export const OldButton');
+      expect(container.textContent).toContain('import React from "react";');
+    });
+
+    it('点击复制差异按钮应将清洗后的 Unified Diff 纯文本复制至剪贴板', () => {
+      render(<ToolCallDiffPreview diff={mockDiff} />);
+
+      const copyBtn = screen.getByRole('button', { name: '复制差异内容' });
+      fireEvent.click(copyBtn);
+
+      expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1);
+      const copiedText = vi.mocked(navigator.clipboard.writeText).mock.calls[0]?.[0];
+      expect(copiedText).toContain('+ export const Button = () => <button />;');
+      expect(copiedText).toContain('- export const OldButton = () => null;');
+      expect(copiedText).toContain('  import React from "react";');
+    });
+
+    it('点击在右侧查看或卡片头部应触发 onOpenDiff 回调', () => {
+      const onOpenDiff = vi.fn();
+      render(<DiffCard diff={mockDiff} onOpenDiff={onOpenDiff} />);
+
+      const openTag = screen.getByRole('button', { name: '在右侧面板查看完整差异' });
+      fireEvent.click(openTag);
+      expect(onOpenDiff).toHaveBeenCalledWith(mockDiff);
+
+      // 头部点击
+      const header = screen.getByRole('button', { name: '查看差异：src/components/Button.tsx' });
+      fireEvent.click(header);
+      expect(onOpenDiff).toHaveBeenCalledTimes(2);
+    });
+
+    it('超过平铺门限时支持平铺展开与收起', () => {
+      const longChanges = Array.from({ length: 30 }, (_, i) => ({
+        type: 'addition' as const,
+        content: `const val${i + 1} = ${i + 1};`,
+        lineNum: i + 1,
+      }));
+
+      const longDiff: FileDiff = {
+        filePath: 'src/constants.ts',
+        additions: 30,
+        deletions: 0,
+        changes: longChanges,
+      };
+
+      const { container } = render(<ToolCallDiffPreview diff={longDiff} />);
+
+      // 默认展示前 24 行，未展开第 28 行
+      expect(container.textContent).toContain('const val1 = 1;');
+      expect(container.textContent).not.toContain('const val28 = 28;');
+
+      // 点击平铺展开
+      const expandBtn = screen.getByRole('button', { name: /平铺展开剩余 6 行/ });
+      fireEvent.click(expandBtn);
+
+      // 全量平铺呈现
+      expect(container.textContent).toContain('const val28 = 28;');
+
+      // 点击收起
+      const collapseBtn = screen.getByRole('button', { name: '收起部分平铺行' });
+      fireEvent.click(collapseBtn);
+      expect(container.textContent).not.toContain('const val28 = 28;');
     });
   });
 });

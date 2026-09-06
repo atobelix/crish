@@ -1,6 +1,7 @@
 import React, { Suspense, useState, useMemo, useEffect } from 'react';
 import styles from './ChatToolCallBlock.module.css';
 import type { MessageToolCall } from '../../store/types';
+import type { VirtualScrollManager } from '../../api/VirtualScrollManager';
 import { ApprovalAskCard } from '../agent-card/ApprovalAskCard';
 import { slotCore } from '../../services/view-registry/SlotCore';
 import '../chat-card/workspaceChatComposerAbove.slot';
@@ -10,10 +11,8 @@ import {
   formatToolDiffStat,
   isToolRowDefaultOpen,
   normalizeToolDiffStat,
-  resolveToolRowOpen,
   toolCommandPreview,
   toolDiffLineStats,
-  toolHasExpandableBody,
   toolHumanLabel,
   toolPathDisplayName,
   toolRowTone,
@@ -23,12 +22,19 @@ import type { ChatToolStackProps } from './ChatToolCallBlock';
 import { ToolCallHeader } from './ToolCallHeader';
 import { ToolCallOutput } from './ToolCallOutput';
 import { toolStatusZh, toolResultBodyId, findAgentForTool } from './chatToolCallUtils';
+import {
+  useToolExpansionState,
+  findPreviousToolInItems,
+} from './toolExpansionState';
 
 export interface CompactToolRowProps {
   tc: MessageToolCall;
   rowKey: string | number;
   msgId?: string | undefined;
   props: ChatToolStackProps;
+  prevTc?: MessageToolCall | undefined;
+  scrollerRef?: React.RefObject<HTMLElement | null> | undefined;
+  vsm?: VirtualScrollManager | null | undefined;
 }
 
 export const CompactToolRow: React.FC<CompactToolRowProps> = ({
@@ -36,6 +42,9 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
   rowKey,
   msgId,
   props,
+  prevTc,
+  scrollerRef,
+  vsm,
 }) => {
   const {
     agents,
@@ -139,7 +148,9 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
                     />
                   </span>
                 </span>
-                <span className={styles.toolRowSummary}>协作子任务…</span>
+                <span className={styles.toolRowSummary}>
+                  <span className={styles.toolActionText}>协作子任务…</span>
+                </span>
               </div>
             </div>
           }
@@ -150,14 +161,35 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
     }
   }
 
-  const expandable = toolHasExpandableBody(tc);
+  // 定位前驱工具（支持显式 prevTc 注入或从 props.items 中按索引检索）
+  const effectivePrevTc = useMemo(() => {
+    if (prevTc) return prevTc;
+    return findPreviousToolInItems(props?.items, tc.id);
+  }, [prevTc, props?.items, tc.id]);
+
+  // 100ms 原地替换缓冲契约、展开防抖与 usePreActionAnchor 相对位移状态机
+  const {
+    isOpen,
+    canToggle,
+    isFlipping,
+    shouldReplace,
+    handleToggle,
+    rowRef,
+  } = useToolExpansionState({
+    tc,
+    prevTc: effectivePrevTc,
+    expandedTools,
+    onToggleTool,
+    activeSessionId,
+    scrollerRef,
+    vsm,
+  });
+
   const defaultOpen = isToolRowDefaultOpen(tc);
-  const isOpen = resolveToolRowOpen(expandedTools, tc.id, tc);
   const human = toolHumanLabel(tc);
   const running = tc.status === 'running';
   const tone = toolRowTone(tc.status);
   const statusZhText = toolStatusZh(tc.status);
-  const canToggle = expandable;
   const bodyId = toolResultBodyId(tc.id);
   const filePath = extractFilePathFromToolArgs(tc.arguments || '');
   const n = (tc.name || '').toLowerCase();
@@ -185,6 +217,7 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
 
   return (
     <div
+      ref={rowRef}
       className={`${styles.toolRow} ${
         tone === 'running'
           ? `${styles.isRunning} is-running`
@@ -193,13 +226,17 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
             : tone === 'pending'
               ? `${styles.isPending} is-pending`
               : ''
-      } ${isOpen ? `${styles.isOpen} is-open` : `${styles.isCollapsed} is-collapsed`} tool-row`}
+      } ${isOpen ? `${styles.isOpen} is-open` : `${styles.isCollapsed} is-collapsed`} ${
+        isFlipping ? `${styles.inPlaceFlipping} is-in-place-flipping` : ''
+      } tool-row`}
       key={rowKey}
       data-tool-id={tc.id}
       data-tool-label={human}
       data-tool-status={statusZhText}
       data-default-collapsed={defaultOpen ? 'false' : 'true'}
       data-diff-stat={diffStatLabel || undefined}
+      data-in-place-replace={shouldReplace ? 'true' : undefined}
+      data-in-place-flipping={isFlipping ? 'true' : undefined}
       aria-busy={running || undefined}
     >
       <ToolCallHeader
@@ -216,7 +253,7 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
         pathLabel={pathLabel}
         rowAriaLabel={rowAriaLabel}
         bodyId={bodyId}
-        onToggleTool={onToggleTool}
+        onToggleTool={handleToggle}
         onOpenPath={onOpenPath}
         onRetryTool={onRetryTool}
       />

@@ -40,7 +40,7 @@
 }
 
 .jsonToolHead:focus-visible {
-  outline: 1px solid var(--tint-focus-ring, rgba(0, 0, 0, 0.2));
+  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
   outline-offset: 2px;
 }
 
@@ -168,6 +168,9 @@
   color: var(--text-primary, #111111);
   white-space: pre-wrap;
   word-break: break-word;
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
 }
 
 .resultText {
@@ -178,6 +181,9 @@
   color: var(--text-primary, #111111);
   white-space: pre-wrap;
   word-break: break-word;
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
 }
 
 .divider {
@@ -269,6 +275,11 @@
   color: var(--text-primary, #111111);
 }
 
+.terminalCopyBtn:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
+  outline-offset: 1px;
+}
+
 .terminalDivider {
   height: 1px;
   background: var(--tint-divider, rgba(0, 0, 0, 0.06));
@@ -279,6 +290,9 @@
 .terminalBody {
   position: relative;
   width: 100%;
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
 }
 
 .terminalOutput {
@@ -290,28 +304,92 @@
   color: var(--text-primary, #111111);
   white-space: pre-wrap;
   word-break: break-all;
-  max-height: 240px;
-  overflow-y: auto;
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
   cursor: text;
   box-sizing: border-box;
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 96%, var(--text-primary, #111111) 4%);
 }
 
-/* 底部淡出遮罩（Fade Mask）：提示多行滚动、不撑爆高度 */
-.terminalFadeMask {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 28px;
-  pointer-events: none;
-  background: linear-gradient(
-    to bottom,
-    transparent 0%,
-    var(--bg-card, #ffffff) 100%
-  );
+.terminalLine {
+  display: block;
+  min-height: 18px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
-/* 滚动条走全局唯一出口 overlay-scrollbar.css（细条 + 透明轨道 + 主题 thumb），私有 webkit 块已按契约清退 */
+.terminalMidFoldBarWrapper {
+  display: flex;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 4px 0;
+}
+
+.terminalMidFoldBar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 92%, var(--text-primary, #111111) 8%);
+  border: none;
+  border-top: 1px dashed var(--tint-divider, rgba(0, 0, 0, 0.1));
+  border-bottom: 1px dashed var(--tint-divider, rgba(0, 0, 0, 0.1));
+  color: var(--text-secondary, #555555);
+  font-size: 11.5px;
+  font-family: var(--font-sans, inherit);
+  cursor: pointer;
+  user-select: none;
+  border-radius: 4px;
+  box-sizing: border-box;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.terminalMidFoldBar:hover {
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 88%, var(--text-primary, #111111) 12%);
+  color: var(--text-primary, #111111);
+}
+
+.terminalMidFoldBar:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
+  outline-offset: -1px;
+}
+
+.midFoldIcon {
+  font-size: 12px;
+  line-height: 1;
+  color: var(--text-tertiary, #888888);
+}
+
+.terminalCollapseBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 5px 12px;
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 95%, var(--text-primary, #111111) 5%);
+  border: none;
+  border-top: 1px dashed var(--tint-divider, rgba(0, 0, 0, 0.08));
+  color: var(--text-tertiary, #888888);
+  font-size: 11px;
+  font-family: var(--font-sans, inherit);
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.terminalCollapseBtn:hover {
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 90%, var(--text-primary, #111111) 10%);
+  color: var(--text-primary, #111111);
+}
+
+.terminalCollapseBtn:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
+  outline-offset: -1px;
+}
 
 /* --------------------------------------------------------------------------
    3. 高品味黑白灰权限询问卡片（Linear / Raycast 级精致设计）
@@ -522,11 +600,19 @@
   color: var(--text-primary, #111111);
 }
 
+.codeBlockCopyBtn:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
+  outline-offset: 1px;
+}
+
 .codeBlockBody {
   padding: 12px 14px;
   display: flex;
   gap: 16px;
   line-height: 1.6;
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
 }
 
 .codeBlockLinenums {
@@ -543,6 +629,314 @@
   font-size: 12px;
   flex: 1;
   overflow-x: auto;
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
+}
+
+/* --------------------------------------------------------------------------
+   5. 专有 Diff 差异比对卡片（简洁平铺视图、无内部第二重滚动条）
+   -------------------------------------------------------------------------- */
+.diffCard,
+.gitDiffCard {
+  margin: 8px 0;
+  border-radius: 10px;
+  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
+  background: var(--bg-card, #ffffff);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
+}
+
+.diffCardHeader,
+.gitDiffCardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 97%, var(--text-primary, #111111) 3%);
+  border-bottom: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.diffCardHeader:hover,
+.gitDiffCardHeader:hover {
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 94%, var(--text-primary, #111111) 6%);
+}
+
+.diffCardHeader:focus-visible,
+.gitDiffCardHeader:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
+  outline-offset: -1px;
+}
+
+.diffFileInfo,
+.gitDiffFileInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.diffFileIcon {
+  color: var(--text-secondary, #555555);
+  flex-shrink: 0;
+}
+
+.diffFilename,
+.gitDiffFilename {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary, #111111);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diffRightSection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.diffBadge,
+.gitDiffBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.diffStatAdd,
+.gitDiffAdd {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, #10b981 12%, transparent);
+  color: #10b981;
+}
+
+.diffStatDel,
+.gitDiffDel {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, #ef4444 12%, transparent);
+  color: #ef4444;
+}
+
+.diffActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.diffActionBtn,
+.diffCopyBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-tertiary, #888888);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.diffActionBtn:hover,
+.diffCopyBtn:hover {
+  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-primary, #111111);
+}
+
+.diffActionBtn:focus-visible,
+.diffCopyBtn:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
+  outline-offset: 1px;
+}
+
+.diffPreviewTag,
+.gitDiffPreviewTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--text-secondary, #555555);
+  background: var(--tint-hover, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.diffPreviewTag:hover,
+.gitDiffPreviewTag:hover {
+  background: var(--tint-hover, rgba(0, 0, 0, 0.08));
+  color: var(--text-primary, #111111);
+}
+
+.diffPreviewTag:focus-visible,
+.gitDiffPreviewTag:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
+  outline-offset: 1px;
+}
+
+.diffLinesContainer,
+.gitDiffLinesContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--bg-card, #ffffff);
+  height: auto;
+  max-height: none;
+  overflow-y: visible;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+.diffLineRow,
+.gitDiffLineRow {
+  display: flex;
+  align-items: stretch;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  min-width: 100%;
+  width: fit-content;
+  background: var(--bg-card, #ffffff);
+}
+
+.diffLineRow.addition,
+.gitDiffLineRow.addition,
+.addition {
+  background-color: color-mix(in srgb, #10b981 8%, transparent);
+}
+
+.diffLineRow.deletion,
+.gitDiffLineRow.deletion,
+.deletion {
+  background-color: color-mix(in srgb, #ef4444 8%, transparent);
+}
+
+.diffGutterCol,
+.lineNumCol {
+  width: 36px;
+  min-width: 36px;
+  text-align: right;
+  user-select: none;
+  padding: 1px 8px 1px 0;
+  color: var(--text-tertiary, #888888);
+  font-size: 11px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.diffSignCol {
+  width: 16px;
+  min-width: 16px;
+  text-align: center;
+  user-select: none;
+  font-weight: 600;
+  padding: 1px 0;
+  flex-shrink: 0;
+  color: var(--text-tertiary, #888888);
+}
+
+.addition .diffSignCol,
+.gitDiffLineRow.addition .lineNumCol {
+  color: #10b981;
+}
+
+.deletion .diffSignCol,
+.gitDiffLineRow.deletion .lineNumCol {
+  color: #ef4444;
+}
+
+.diffLineContent,
+.lineContent {
+  margin: 0;
+  padding: 1px 10px;
+  white-space: pre;
+  overflow-x: visible;
+  flex: 1;
+  color: var(--text-primary, #111111);
+  font-family: inherit;
+  font-size: inherit;
+  word-break: normal;
+}
+
+.addition .diffLineContent,
+.gitDiffLineRow.addition .lineContent {
+  color: color-mix(in srgb, #10b981 80%, var(--text-primary, #111111) 20%);
+}
+
+.deletion .diffLineContent,
+.gitDiffLineRow.deletion .lineContent {
+  color: color-mix(in srgb, #ef4444 80%, var(--text-primary, #111111) 20%);
+}
+
+.diffMoreIndicator,
+.gitDiffMoreIndicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--bg-card, #ffffff) 96%, var(--text-primary, #111111) 4%);
+  color: var(--text-secondary, #555555);
+  font-size: 11.5px;
+  border-top: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.diffMoreBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.1));
+  background: var(--bg-card, #ffffff);
+  color: var(--text-secondary, #555555);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.diffMoreBtn:hover {
+  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
+  color: var(--text-primary, #111111);
+}
+
+.diffMoreBtn:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
+  outline-offset: 1px;
+}
+
+.diffEmpty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-tertiary, #888888);
+  font-size: 12px;
 }
 
 

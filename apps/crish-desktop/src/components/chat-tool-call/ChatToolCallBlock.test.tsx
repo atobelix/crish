@@ -148,4 +148,92 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
     denyBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(onBatchDeny).toHaveBeenCalledWith(['m-appr', 'm-appr'], ['p1', 'p2']);
   });
+
+  describe('DIM-04 24px 极简单行与 Figma 规范', () => {
+    it('文件读取工具：左侧渲染 14px 图标 + 人类友好动作「读取文件」+ 核心参数文件名', () => {
+      const { container } = render(
+        <ChatToolStack
+          items={[
+            {
+              kind: 'single',
+              tc: tc('read-1', 'read_file', 'success', {
+                arguments: JSON.stringify({ filePath: 'src/main.ts' }),
+                output: 'console.log("hello");',
+              }),
+            },
+          ]}
+          msgId="m-read"
+          {...baseProps()}
+        />
+      );
+
+      // 验证存在 24px 单行外层头部
+      const head = container.querySelector('.tool-row-head');
+      expect(head).not.toBeNull();
+
+      // 验证人类友好动作「读取文件」
+      expect(container.textContent).toContain('读取文件');
+      // 验证核心参数「main.ts」
+      expect(container.textContent).toContain('main.ts');
+      // 验证存在分隔圆点
+      expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();
+      // 验证存在极简折叠指示符
+      const chevron = container.querySelector('svg.lucide-chevron-right');
+      expect(chevron).not.toBeNull();
+    });
+
+    it('Shell 执行命令工具：渲染「执行命令」与命令行核心参数', () => {
+      const { container } = render(
+        <ChatToolStack
+          items={[
+            {
+              kind: 'single',
+              tc: tc('cmd-1', 'run_command', 'running', {
+                arguments: JSON.stringify({ CommandLine: 'cargo test --workspace' }),
+                startedAt: Date.now() - 1500,
+              }),
+            },
+          ]}
+          msgId="m-cmd"
+          {...baseProps()}
+        />
+      );
+
+      expect(container.textContent).toContain('执行命令');
+      expect(container.textContent).toContain('cargo test --workspace');
+      // 运行态指标验证
+      const runningRow = container.querySelector('.is-running');
+      expect(runningRow).not.toBeNull();
+    });
+
+    it('错误态工具：渲染错误状态与重试按钮', () => {
+      const onRetryTool = vi.fn();
+      const { container } = render(
+        <ChatToolStack
+          items={[
+            {
+              kind: 'single',
+              tc: tc('err-1', 'run_command', 'error', {
+                arguments: JSON.stringify({ CommandLine: 'npm run fail' }),
+                output: 'Command failed',
+              }),
+            },
+          ]}
+          msgId="m-err"
+          actions={{
+            onRetryTool,
+          }}
+          {...baseProps()}
+        />
+      );
+
+      // 验证存在错误行
+      expect(container.querySelector('.is-error')).not.toBeNull();
+      // 验证存在重试按钮
+      const retryBtn = container.querySelector('button[aria-label="重试"]');
+      expect(retryBtn).not.toBeNull();
+      retryBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(onRetryTool).toHaveBeenCalledWith('err-1');
+    });
+  });
 });

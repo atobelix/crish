@@ -1,0 +1,314 @@
+/* ───── ReasoningRow 24px 极简单行与扫光微交互规范 (DIM-03 §1.1) ───── */
+
+.reasoningContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+/* 未展开态严格执行 24px 硬件级尺寸隔离，切断流式回流风暴 */
+.reasoningContainer:not([data-expanded='true']) {
+  contain: size layout;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+/* 24px 极简交互单行按钮：防 Chromium 内核宽度坍塌与单行高度失锁 */
+.reasoningRow {
+  display: flex;
+  width: 100%;
+  max-width: 100%;
+  height: 24px;
+  min-height: 24px;
+  max-height: 24px;
+  box-sizing: border-box;
+  contain: size layout;
+  align-items: center;
+  margin: 0;
+  padding: 0 var(--space-1, 4px);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  user-select: none;
+  font-family: inherit;
+  font-size: var(--font-size-sm, 13px);
+  line-height: 24px;
+  color: var(--text-secondary);
+  text-align: left;
+  transition: color var(--transition-fast, 150ms ease);
+}
+
+.reasoningRow:hover {
+  color: var(--text-primary);
+  background: transparent;
+}
+
+/* Conex §13 双层微弱焦点软环规范（对比度上限约 10%） */
+.reasoningRow:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  border-radius: var(--radius-sm, 4px);
+}
+
+/* 极简状态指示灯（流式运行态 5px 脉冲微光） */
+.statusDot {
+  width: 5px;
+  height: 5px;
+  min-width: 5px;
+  min-height: 5px;
+  border-radius: 50%;
+  background: var(--brand, #10b981);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
+  animation: thought-dot-pulse 1.4s ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+@keyframes thought-dot-pulse {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.7;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 18%, transparent);
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 1;
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand, #10b981) 32%, transparent);
+  }
+}
+
+/* 静态语义标签 */
+.reasoningLabel {
+  font-weight: 500;
+  color: inherit;
+  flex-shrink: 0;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.isLive .reasoningLabel {
+  color: var(--brand-deep, #059669);
+}
+
+/* 微型分割点 */
+.dotSeparator {
+  flex-shrink: 0;
+  margin: 0 4px;
+  color: var(--text-tertiary, #9ca3af);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 动态文字追踪窗：尾窗追踪截断 (Tail-Window Tracking) */
+.reasoningSummary {
+  min-width: 0;
+  overflow: hidden;
+  flex: 1 1 auto;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm, 13px);
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.summaryText {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 右对齐打字机动态跟随：靠右硬截断，让左侧较早文字溢出可视边界外 */
+.reasoningSummary[data-follow-end='true'] {
+  display: flex;
+  justify-content: flex-end;
+  text-align: right;
+  direction: ltr;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+
+.reasoningSummary[data-follow-end='true'] .summaryText {
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 100%;
+  overflow: visible;
+  text-align: right;
+  text-overflow: clip;
+}
+
+/* 扫光微交互（@keyframes sweep-shine） */
+@keyframes sweep-shine {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+@keyframes reasoning-row-sweep {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.sweepShine {
+  background: linear-gradient(
+    90deg,
+    var(--text-tertiary, #9ca3af) 0%,
+    color-mix(in srgb, var(--text-primary, #111827) 75%, transparent) 50%,
+    var(--text-tertiary, #9ca3af) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: sweep-shine 2.6s ease-in-out infinite;
+  font-weight: 500;
+}
+
+/* 无障碍降级：系统偏好减弱动态效果时关停扫光 */
+@media (prefers-reduced-motion: reduce) {
+  .sweepShine {
+    animation: none;
+    background: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    -webkit-text-fill-color: initial;
+    color: var(--text-secondary);
+  }
+  .statusDot {
+    animation: none;
+  }
+}
+
+/* 终态耗时文案：数字等宽对齐 font-variant-numeric: tabular-nums */
+.durationBadge {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary, #9ca3af);
+  font-size: var(--font-size-sm, 13px);
+  line-height: 24px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 折叠旋转指示符：12x12，0 抖动 */
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  color: var(--text-tertiary, #9ca3af);
+  transition:
+    transform var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.reasoningRow:hover .chevron {
+  color: var(--text-secondary);
+}
+
+.chevron.isOpen {
+  transform: rotate(90deg);
+}
+
+/* 展开态自然文档流：解除所有固定高度与局部视口限制，零内部滚动条 */
+.reasoningBody {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 4px 0 8px calc(var(--space-1, 4px) + 2px);
+  overflow: visible;
+  height: auto;
+  max-height: none;
+}
+
+.reasoningActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.copyButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border-color, #e5e7eb);
+  background: var(--bg-surface, #ffffff);
+  color: var(--text-secondary, #6b7280);
+  font-size: var(--font-size-xs, 12px);
+  cursor: pointer;
+  transition: all var(--transition-fast, 150ms ease);
+  line-height: 1.4;
+  user-select: none;
+}
+
+.copyButton:hover {
+  color: var(--text-primary, #111827);
+  background: var(--bg-hover, #f3f4f6);
+  border-color: var(--border-color-hover, #d1d5db);
+}
+
+.copyButton:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.reasoningContent {
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.65;
+  user-select: text;
+  overflow: visible;
+}
+
+.liveContent {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 保留兼容 ThinkingTimer 轻量样式类名 */
+.thinkingSec {
+  display: inline-flex;
+  align-items: baseline;
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.thinkingSep {
+  margin: 0 2px;
+  color: inherit;
+  opacity: 0.6;
+}
+
+.thinkingTick {
+  font-variant-numeric: tabular-nums;
+  display: inline-block;
+}

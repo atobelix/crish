@@ -1,66 +1,202 @@
-import React, { useMemo } from 'react';
-import { FileCode } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { FileCode, Copy, Check, ExternalLink } from 'lucide-react';
 import type { FileDiff } from '../../store/types';
-import styles from './ChatToolCallBlock.module.css';
+import styles from './ModernToolCall.module.css';
 import { highlightCode, langFromFilename } from '../../api/codeHighlight';
+import { Tooltip } from '../ui';
 
 export interface ToolCallDiffPreviewProps {
   diff: FileDiff;
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
+  className?: string;
 }
 
+export const DIFF_FLAT_PREVIEW_LIMIT = 24;
+
+/**
+ * 专有 Diff 差异比对卡片（简洁平铺视图与单一滚动宿主合规）
+ * 包含：文件头 + 行号与符号三列对齐 + 增删统计药丸 + 专属防误触复制 + 平铺展开
+ * 绝无内部嵌套第二重纵向滚动条，卡片高度完全自适应融入文档流
+ */
 export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
   diff,
   onOpenDiff,
+  className = '',
 }) => {
+  const [copied, setCopied] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+
   const codeLang = useMemo(() => langFromFilename(diff.filePath), [diff.filePath]);
 
+  const changes = diff.changes || [];
+  const hasMore = changes.length > DIFF_FLAT_PREVIEW_LIMIT;
+  const displayedChanges = showAll || !hasMore
+    ? changes
+    : changes.slice(0, DIFF_FLAT_PREVIEW_LIMIT);
+
+  const handleCopyDiff = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const unifiedText = changes
+      .map((c) => {
+        const prefix = c.type === 'addition' ? '+' : c.type === 'deletion' ? '-' : ' ';
+        return `${prefix} ${c.content}`;
+      })
+      .join('\n');
+    void navigator.clipboard.writeText(unifiedText);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleOpenDiff = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    onOpenDiff?.(diff);
+  };
+
   return (
-    <div className={styles.gitDiffCard} key={diff.filePath}>
+    <div className={`${styles.diffCard} ${className}`} key={diff.filePath}>
+      {/* 卡片头部 */}
       <div
-        className={styles.gitDiffCardHeader}
-        onClick={() => onOpenDiff?.(diff)}
+        className={styles.diffCardHeader}
+        onClick={handleOpenDiff}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleOpenDiff();
+          }
+        }}
+        aria-label={`查看差异：${diff.filePath}`}
       >
-        <div className={styles.gitDiffFileInfo}>
-          <FileCode size={16} style={{ color: 'var(--accent-color)' }} />
-          <span className={styles.gitDiffFilename}>{diff.filePath}</span>
-          <span className={styles.gitDiffPreviewTag}>在右侧查看</span>
+        <div className={styles.diffFileInfo}>
+          <FileCode size={15} className={styles.diffFileIcon} aria-hidden="true" />
+          <Tooltip content={diff.filePath}>
+            <span className={styles.diffFilename}>{diff.filePath}</span>
+          </Tooltip>
         </div>
-        <div className={styles.gitDiffBadge}>
-          <span className={styles.gitDiffAdd}>+{diff.additions}</span>
-          <span className={styles.gitDiffDel}>-{diff.deletions}</span>
+
+        <div className={styles.diffRightSection}>
+          {/* +A -R 变动统计 */}
+          <div className={styles.diffBadge}>
+            <span className={styles.diffStatAdd}>+{diff.additions}</span>
+            <span className={styles.diffStatDel}>-{diff.deletions}</span>
+          </div>
+
+          <div className={styles.diffActions}>
+            {/* 复制纯净 Diff 按钮 */}
+            <Tooltip content={copied ? '已复制差异' : '复制差异'}>
+              <button
+                type="button"
+                className={styles.diffCopyBtn}
+                onClick={handleCopyDiff}
+                aria-label="复制差异内容"
+              >
+                {copied ? (
+                  <Check size={13} strokeWidth={2.4} style={{ color: '#10b981' }} />
+                ) : (
+                  <Copy size={13} strokeWidth={2} />
+                )}
+              </button>
+            </Tooltip>
+
+            {/* 在右侧打开 */}
+            {onOpenDiff && (
+              <Tooltip content="在右侧面板查看完整差异">
+                <button
+                  type="button"
+                  className={styles.diffPreviewTag}
+                  onClick={handleOpenDiff}
+                  aria-label="在右侧面板查看完整差异"
+                >
+                  <span>在右侧查看</span>
+                  <ExternalLink size={11} aria-hidden="true" />
+                </button>
+              </Tooltip>
+            )}
+          </div>
         </div>
       </div>
-      <div className={styles.gitDiffLinesContainer}>
-        {diff.changes.slice(0, 8).map((change, i) => (
-          <div
-            key={i}
-            className={`${styles.gitDiffLineRow} ${styles[change.type] || change.type}`}
-          >
-            <div className={styles.lineNumCol}>
-              {change.type === 'addition'
-                ? '+'
-                : change.type === 'deletion'
-                  ? '-'
-                  : ' '}
+
+      {/* 简洁平铺视图：行号对齐 + 符号列 + 语法高亮代码列 */}
+      <div className={styles.diffLinesContainer}>
+        {displayedChanges.map((change, i) => {
+          const sign =
+            change.type === 'addition'
+              ? '+'
+              : change.type === 'deletion'
+                ? '-'
+                : ' ';
+          const lineNum = change.lineNum ?? i + 1;
+
+          return (
+            <div
+              key={i}
+              className={`${styles.diffLineRow} ${styles[change.type] || change.type}`}
+            >
+              {/* 行号列 */}
+              <div className={styles.diffGutterCol} aria-hidden="true">
+                {lineNum}
+              </div>
+              {/* 符号列 */}
+              <div className={styles.diffSignCol} aria-hidden="true">
+                {sign}
+              </div>
+              {/* 代码列 */}
+              <pre
+                className={styles.diffLineContent}
+                dangerouslySetInnerHTML={{
+                  __html: highlightCode(change.content, codeLang),
+                }}
+              />
             </div>
-            <pre
-              className={styles.lineContent}
-              dangerouslySetInnerHTML={{
-                __html: highlightCode(change.content, codeLang),
-              }}
-            />
-          </div>
-        ))}
-        {diff.changes.length > 8 && (
-          <div
-            className={styles.gitDiffMoreIndicator}
-            onClick={() => onOpenDiff?.(diff)}
-          >
-            还有 {diff.changes.length - 8} 行 · 点击在右侧查看完整 diff
+          );
+        })}
+
+        {/* 超过平铺门限时的平铺控制栏 */}
+        {hasMore && (
+          <div className={styles.diffMoreIndicator}>
+            {!showAll ? (
+              <button
+                type="button"
+                className={styles.diffMoreBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAll(true);
+                }}
+                aria-label={`平铺展开剩余 ${changes.length - DIFF_FLAT_PREVIEW_LIMIT} 行`}
+              >
+                平铺展开剩余 {changes.length - DIFF_FLAT_PREVIEW_LIMIT} 行
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={styles.diffMoreBtn}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowAll(false);
+                }}
+                aria-label="收起部分平铺行"
+              >
+                收起平铺行
+              </button>
+            )}
+
+            {onOpenDiff && (
+              <button
+                type="button"
+                className={styles.diffMoreBtn}
+                onClick={handleOpenDiff}
+                aria-label="点击在右侧查看完整 diff"
+              >
+                还有 {changes.length - (showAll ? 0 : DIFF_FLAT_PREVIEW_LIMIT)} 行 · 点击在右侧查看完整 diff
+              </button>
+            )}
           </div>
         )}
       </div>
     </div>
   );
 };
+
+export const DiffCard = ToolCallDiffPreview;

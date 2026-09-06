@@ -1,6 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Copy, Check } from 'lucide-react';
 import { Tooltip } from '../ui';
+import { parseAnsi } from '../../utils/parseAnsi';
 import styles from './ModernToolCall.module.css';
 
 export interface ModernTerminalToolCallProps {
@@ -11,9 +12,14 @@ export interface ModernTerminalToolCallProps {
   className?: string;
 }
 
+export const TERMINAL_FOLD_THRESHOLD = 30;
+export const TERMINAL_HEAD_LINES = 15;
+export const TERMINAL_TAIL_LINES = 15;
+
 /**
- * 终端命令行工具卡片（对齐设计截图 2）
- * 包含：$ 命令头行 + 悬浮复制 + 微细分割线 + 单色等宽终端日志流 + 底部渐变淡出遮罩
+ * 终端命令行工具卡片（自适应高度与单一滚动宿主合规）
+ * 包含：$ 命令头行 + 悬浮复制 + 微细分割线 + ANSI 原生轻量高亮日志流 + 渐进截断折叠
+ * 绝不包含内部嵌套第二重纵向滚动条，高度完全自适应融入主文档流
  */
 export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
   id,
@@ -23,16 +29,7 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
   className = '',
 }) => {
   const [copied, setCopied] = useState(false);
-  const [isOverflowing, setIsOverflowing] = useState(false);
-  const outputRef = useRef<HTMLPreElement>(null);
-
-  // 检测输出内容是否超高，以决定是否渲染底部渐变淡出遮罩
-  useEffect(() => {
-    const el = outputRef.current;
-    if (el) {
-      setIsOverflowing(el.scrollHeight > el.clientHeight + 4);
-    }
-  }, [output]);
+  const [isFullExpanded, setIsFullExpanded] = useState(false);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -41,6 +38,19 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
+
+  // ANSI 解析与渐进截断折叠切片
+  const normalizedOutput = useMemo(() => {
+    if (!output) return '';
+    return output.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  }, [output]);
+
+  const lines = useMemo(() => {
+    if (!normalizedOutput) return [];
+    return normalizedOutput.split('\n');
+  }, [normalizedOutput]);
+
+  const shouldFold = lines.length > TERMINAL_FOLD_THRESHOLD && !isFullExpanded;
 
   return (
     <div
@@ -52,7 +62,7 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
       <div className={styles.terminalHead}>
         <div className={styles.terminalCommandRow}>
           <span className={styles.terminalPromptDollar} aria-hidden="true">$</span>
-          <Tooltip content={command}>
+          <Tooltip content={command || '$'}>
             <span className={styles.terminalCommandText}>
               {command}
             </span>
@@ -79,13 +89,68 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
 
       <div className={styles.terminalDivider} />
 
-      {/* 终端输出日志流 */}
+      {/* 终端输出日志流：自适应高度，无局部滚动条 */}
       <div className={styles.terminalBody}>
-        <pre ref={outputRef} className={styles.terminalOutput}>
-          {output || '(no output)'}
+        <pre className={styles.terminalOutput}>
+          {!output ? (
+            '(no output)'
+          ) : shouldFold ? (
+            <>
+              {lines.slice(0, TERMINAL_HEAD_LINES).map((line, i) => (
+                <div key={`head-${i}`} className={styles.terminalLine}>
+                  {parseAnsi(line)}
+                </div>
+              ))}
+              <div className={styles.terminalMidFoldBarWrapper}>
+                <button
+                  type="button"
+                  className={styles.terminalMidFoldBar}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsFullExpanded(true);
+                  }}
+                  aria-label={`展开中间剩余 ${lines.length - (TERMINAL_HEAD_LINES + TERMINAL_TAIL_LINES)} 行日志输出`}
+                >
+                  <span className={styles.midFoldIcon} aria-hidden="true">⤢</span>
+                  <span>
+                    展开中间剩余 {lines.length - (TERMINAL_HEAD_LINES + TERMINAL_TAIL_LINES)} 行日志输出
+                  </span>
+                </button>
+              </div>
+              {lines.slice(-TERMINAL_TAIL_LINES).map((line, i) => (
+                <div key={`tail-${i}`} className={styles.terminalLine}>
+                  {parseAnsi(line)}
+                </div>
+              ))}
+            </>
+          ) : (
+            <>
+              {lines.map((line, i) => (
+                <div key={`line-${i}`} className={styles.terminalLine}>
+                  {parseAnsi(line)}
+                </div>
+              ))}
+              {lines.length > TERMINAL_FOLD_THRESHOLD && isFullExpanded && (
+                <div className={styles.terminalMidFoldBarWrapper}>
+                  <button
+                    type="button"
+                    className={styles.terminalCollapseBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsFullExpanded(false);
+                    }}
+                    aria-label="收起中间日志输出"
+                  >
+                    <span>收起部分日志输出</span>
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </pre>
-        {isOverflowing ? <div className={styles.terminalFadeMask} aria-hidden="true" /> : null}
       </div>
     </div>
   );
 };
+
+export const TerminalCard = ModernTerminalToolCall;

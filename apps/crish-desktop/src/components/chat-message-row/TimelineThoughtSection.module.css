@@ -160,46 +160,14 @@
 
 .thinkingBodyContainer {
   position: relative;
-  max-height: 168px;
-  overflow: hidden;
-}
-
-.thinkingBodyContainer::before,
-.thinkingBodyContainer::after {
-  content: '';
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 20px;
-  pointer-events: none;
-  z-index: 2;
-  transition: opacity var(--transition-fast, 150ms ease);
-}
-
-.thinkingBodyContainer::before {
-  top: 0;
-  background: linear-gradient(
-    to bottom,
-    var(--bg-page, #ffffff) 0%,
-    color-mix(in srgb, var(--bg-page, #ffffff) 88%, transparent) 40%,
-    transparent 100%
-  );
-}
-
-.thinkingBodyContainer::after {
-  bottom: 0;
-  background: linear-gradient(
-    to top,
-    var(--bg-page, #ffffff) 0%,
-    color-mix(in srgb, var(--bg-page, #ffffff) 88%, transparent) 40%,
-    transparent 100%
-  );
+  max-height: none;
+  overflow: visible;
 }
 
 .thoughtScrollBody {
-  max-height: 168px;
+  max-height: none;
   box-sizing: border-box;
-  overflow-y: auto;
+  overflow: visible;
   padding: 6px 0 10px;
   margin: 0;
   font-size: var(--font-size-sm, 13px);
@@ -207,7 +175,6 @@
   color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
-  overscroll-behavior-y: auto;
   border: none;
   background: transparent;
 }

@@ -6,9 +6,9 @@
  * - 彻底废除厚重带外框的灰色大卡片，采用极简行内流排布；
  * - 已完成态：`思考了 3.4秒 >`（或 `第 1 阶段思考 · 2.4s >`，font-variant-numeric: tabular-nums）；
  * - 实时运行态（Live）：`🟢 思考中 · 1.8秒`（5px 翡翠绿脉冲高亮）；
- * - 思考内容直接在折叠面板内通过 `thoughtScrollBody` 完整滚动渲染。
+ * - 思考内容直接在折叠面板内自然流式展开，由单一物理滚动容器负责整体滚动（切除内部 168px 矮盒卡死与脆弱吸底）。
  */
-import React, { useLayoutEffect, useRef, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import styles from './TimelineThoughtSection.module.css';
 import { StreamingMarkdownView } from './StreamingMarkdownView';
 import { Priority } from '../../workers';
@@ -31,32 +31,6 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
   defaultExpanded,
 }) => {
   const [isOpen, setIsOpen] = useState(defaultExpanded ?? isLive);
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const userScrolledUpRef = useRef(false);
-  const prevIsLiveRef = useRef(isLive);
-
-  // 当 isLive 重新开启时，复位用户手动滚动标志，确保自动追尾吸底
-  useLayoutEffect(() => {
-    if (!prevIsLiveRef.current && isLive) {
-      userScrolledUpRef.current = false;
-    }
-    prevIsLiveRef.current = isLive;
-  }, [isLive]);
-
-  // 随流式内容自适应吸底滚动（用户向上滚时暂停吸底）
-  useLayoutEffect(() => {
-    if (!isLive || !isOpen || !bodyRef.current) return;
-    const el = bodyRef.current;
-    if (!userScrolledUpRef.current) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [content, isLive, isOpen]);
-
-  const handleScroll = () => {
-    if (!bodyRef.current || !isLive) return;
-    const { scrollTop, scrollHeight, clientHeight } = bodyRef.current;
-    userScrolledUpRef.current = scrollHeight - (scrollTop + clientHeight) > 36;
-  };
 
   const durationLabel = useMemo(() => {
     if (durationMs != null && durationMs > 0) {
@@ -119,11 +93,7 @@ export const TimelineThoughtSection: React.FC<TimelineThoughtSectionProps> = ({
       >
         <div className={styles.thoughtAccordionInner}>
           <div className={styles.thinkingBodyContainer}>
-            <div
-              ref={bodyRef}
-              onScroll={handleScroll}
-              className={styles.thoughtScrollBody}
-            >
+            <div className={styles.thoughtScrollBody}>
               {isLive ? (
                 <div
                   style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
