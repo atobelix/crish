@@ -88,9 +88,12 @@ function syncSessionFromActiveLeaf(lastChatLeafId: string | null): void {
   const session = useSessionStore.getState();
   if (!tab) {
     const leaf = resolveActiveChatLeaf(lastChatLeafId);
-    session.enterDraftMode(workspaceKeyNow() || GENERAL_FOLDER, {
-      draftSessionId: mintDraftSessionId(leaf.id),
-    });
+    const draftId = mintDraftSessionId(leaf.id);
+    if (session.activeSessionId !== draftId) {
+      session.enterDraftMode(workspaceKeyNow() || GENERAL_FOLDER, {
+        draftSessionId: draftId,
+      });
+    }
     return;
   }
   if (isPendingDraft(tab.sessionId)) {
@@ -306,9 +309,8 @@ export const useWorkspaceShellStore = create<WorkspaceShellStore>((set, get) => 
     const chats = ownedChatLeaves(useLayoutTreeStore.getState().tree.root);
     const leaf = chats.find((l) => l.id === leafId);
     if (!leaf) return;
-    const targetTabId = leaf.activeTabId || leaf.tabs[0]?.tabId;
-    if (targetTabId) {
-      treeActivateTab(leafId, targetTabId);
+    if (leaf.activeTabId) {
+      treeActivateTab(leafId, leaf.activeTabId);
     } else {
       useLayoutTreeStore.getState().setActiveLeaf(leafId);
     }

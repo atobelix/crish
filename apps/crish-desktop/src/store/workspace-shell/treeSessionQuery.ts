@@ -165,5 +165,6 @@ export function pictureFromActiveLeaf(
   lastChatLeafId: string | null
 ): SessionTab | null {
   const leaf = resolveActiveChatLeaf(lastChatLeafId);
-  return leaf.tabs.find((t) => t.tabId === leaf.activeTabId) ?? leaf.tabs[0] ?? null;
+  if (!leaf.activeTabId) return null;
+  return leaf.tabs.find((t) => t.tabId === leaf.activeTabId) ?? null;
 }

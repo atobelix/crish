@@ -103,18 +103,9 @@ function readActiveTab(
 ): LeafSessionTab | undefined {
   const tabs = readLeafTabs(leaf);
   if (tabs.length === 0) return undefined;
-
   const activeTabId = readActiveTabId(leaf);
-  // 当本叶处于确定性新对话草稿态时，返回 undefined 进入草稿面板
-  if (activeTabId === '' && isComposingDraft) {
-    return undefined;
-  }
-  if (activeTabId) {
-    const match = tabs.find((t) => t.tabId === activeTabId);
-    if (match) return match;
-  }
-
-  // 自愈防线：若非明确草稿态但 activeTabId 为空或失效，默认收敛至首个真实 Tab
+  if (activeTabId === '' && isComposingDraft) return undefined;
+  if (activeTabId) return tabs.find((t) => t.tabId === activeTabId) ?? tabs[0];
   return tabs[0];
 }
 
@@ -122,43 +113,35 @@ function rectPropsEqual(
   a: TreeLeafPanelProps['rect'],
   b: TreeLeafPanelProps['rect']
 ): boolean {
-  return (
-    a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
-  );
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
 }
 
 function dockPropsEqual(
-  a: LeafSessionTab['dock'] | undefined,
-  b: LeafSessionTab['dock'] | undefined
+  a?: LeafSessionTab['dock'],
+  b?: LeafSessionTab['dock']
 ): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  if (a.collapsed !== b.collapsed) return false;
-  if (a.activePanelId !== b.activePanelId) return false;
-  if (a.widthRatio !== b.widthRatio) return false;
-  if (a.openPanelIds.length !== b.openPanelIds.length) return false;
-  for (let i = 0; i < a.openPanelIds.length; i++) {
-    if (a.openPanelIds[i] !== b.openPanelIds[i]) return false;
-  }
-  return true;
+  return (
+    a.collapsed === b.collapsed &&
+    a.activePanelId === b.activePanelId &&
+    a.widthRatio === b.widthRatio &&
+    a.openPanelIds.length === b.openPanelIds.length &&
+    a.openPanelIds.every((id, i) => id === b.openPanelIds[i])
+  );
 }
 
 function leafPropsEqual(a: LayoutLeaf, b: LayoutLeaf): boolean {
   if (a === b) return true;
-  if (a.id !== b.id) return false;
-  if (readActiveTabId(a) !== readActiveTabId(b)) return false;
+  if (a.id !== b.id || readActiveTabId(a) !== readActiveTabId(b)) return false;
   if (!dockPropsEqual(a.dock, b.dock)) return false;
   const at = readLeafTabs(a);
   const bt = readLeafTabs(b);
   if (at.length !== bt.length) return false;
-  for (let i = 0; i < at.length; i++) {
-    const x = at[i]!;
+  return at.every((x, i) => {
     const y = bt[i]!;
-    if (x.tabId !== y.tabId) return false;
-    if (x.sessionId !== y.sessionId) return false;
-    if (!dockPropsEqual(x.dock, y.dock)) return false;
-  }
-  return true;
+    return x.tabId === y.tabId && x.sessionId === y.sessionId && dockPropsEqual(x.dock, y.dock);
+  });
 }
 
 export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
@@ -271,15 +254,14 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
         // 用户铁律：只要终端标签页关闭了，该终端关联的底层 PTY 进程肯定就没了；切 Tab / 折坞则保活
         if (panelId === 'terminal' || panelId.startsWith('terminal:')) {
           void import('../../api/ptyRegistry').then((m) => {
-            const sKey = sessionForPanel || '_global';
-            const targetKey =
-              panelId === 'terminal'
-                ? sKey
-                : `${sKey}:${panelId}`;
-            void m.killPtyForSession(targetKey);
-            void m.killPtyForSession(panelId);
-            void m.killPtyForSession(`${targetKey}:split-2`);
-            void m.killPtyForSession(`${panelId}:split-2`);
+            // 精准推导（audit-repair-202609 T3）：TerminalCard 的 registry key
+            // 恒为 `<sid>`（主格）/ `<sid>:split-2`（主格分屏副格）；
+            // terminal:N 主格 key 为 `<sid>:terminal:N`（分屏副格再加 :split-2）。
+            // sessionForPanel 在派生处保证非空，不存在无前缀 key。
+            const sKey = sessionForPanel;
+            const panelKey = panelId === 'terminal' ? sKey : `${sKey}:${panelId}`;
+            void m.killPtyForSession(panelKey);
+            void m.killPtyForSession(`${panelKey}:split-2`);
           });
         }
         const nextIds = dock.openPanelIds.filter((id) => id !== panelId);

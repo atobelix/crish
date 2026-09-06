@@ -678,3 +678,28 @@ describe('shell 状态收缩', () => {
     expect('lastChatLeafId' in st).toBe(true);
   });
 });
+
+describe('focusLeaf 契约', () => {
+  it('聚焦处于新会话草稿态（activeTabId 为空）的叶子时，不强制激活 tabs[0] 并保持草稿哨兵', () => {
+    sessionEnterDraftMode.mockClear();
+    resetLayout(
+      {
+        version: 3,
+        root: {
+          type: 'leaf',
+          id: 'L-draft',
+          panelId: 'chat',
+          tabs: [tab('s-real', 't-real')],
+          activeTabId: '',
+        },
+      },
+      'L-draft'
+    );
+    useWorkspaceShellStore.getState().focusLeaf('L-draft');
+    const leafNode = ownedChatLeaves(useLayoutTreeStore.getState().tree.root)[0]!;
+    expect(leafNode.activeTabId).toBe('');
+    expect(useLayoutTreeStore.getState().activeLeafId).toBe('L-draft');
+    expect(useWorkspaceShellStore.getState().lastChatLeafId).toBe('L-draft');
+    expect(sessionEnterDraftMode).toHaveBeenCalled();
+  });
+});
