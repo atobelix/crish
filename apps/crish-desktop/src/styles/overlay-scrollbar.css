@@ -17,53 +17,23 @@
 ::-webkit-scrollbar-thumb {
   background: var(--tint-scrollbar-thumb);
   background-clip: padding-box;
-  border-right: 2px solid transparent; /* 右侧留出 2px 物理安全空隙，防误触，滑块净宽 8px 饱满舒适 */
-  border-radius: var(--radius-full);
+  border-left: 2px solid transparent;
+  border-right: 2px solid transparent;
+  border-radius: var(--radius-full, 9999px);
 }
 
 ::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:active {
   background: var(--scrollbar-thumb-active);
   background-clip: padding-box;
+  border-left: 2px solid transparent;
   border-right: 2px solid transparent;
 }
 
-/* 上下端点大圆角贝塞尔三角按钮：三个角均采用 Q 贝塞尔平滑圆角，与默认滚动条严格保持 10% 相同灰度 */
-::-webkit-scrollbar-button:vertical:start:decrement {
-  display: block;
-  height: 12px;
-  background-color: transparent;
-  background-repeat: no-repeat;
-  background-position: center center;
-  background-size: 8px 6px;
-  background-clip: padding-box;
-  border-right: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M 4.0 1.4 Q 4.5 0.5 5.0 1.4 L 8.1 4.9 Q 8.6 5.6 7.8 5.6 L 1.2 5.6 Q 0.4 5.6 0.9 4.9 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
-}
-
-::-webkit-scrollbar-button:vertical:end:increment {
-  display: block;
-  height: 12px;
-  background-color: transparent;
-  background-repeat: no-repeat;
-  background-position: center center;
-  background-size: 8px 6px;
-  background-clip: padding-box;
-  border-right: 2px solid transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M 4.0 4.6 Q 4.5 5.5 5.0 4.6 L 8.1 1.1 Q 8.6 0.4 7.8 0.4 L 1.2 0.4 Q 0.4 0.4 0.9 1.1 Z' fill='%23e6e6e5'/%3E%3C/svg%3E");
-}
-
-::-webkit-scrollbar-button:vertical:start:decrement:hover,
-::-webkit-scrollbar-button:vertical:start:decrement:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M 4.0 1.4 Q 4.5 0.5 5.0 1.4 L 8.1 4.9 Q 8.6 5.6 7.8 5.6 L 1.2 5.6 Q 0.4 5.6 0.9 4.9 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
-}
-
-::-webkit-scrollbar-button:vertical:end:increment:hover,
-::-webkit-scrollbar-button:vertical:end:increment:active {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 6'%3E%3Cpath d='M 4.0 4.6 Q 4.5 5.5 5.0 4.6 L 8.1 1.1 Q 8.6 0.4 7.8 0.4 L 1.2 0.4 Q 0.4 0.4 0.9 1.1 Z' fill='%23c8c7c6'/%3E%3C/svg%3E");
-}
-
-::-webkit-scrollbar-button:horizontal {
+::-webkit-scrollbar-button,
+::-webkit-scrollbar-button:single-button,
+::-webkit-scrollbar-button:start:decrement,
+::-webkit-scrollbar-button:end:increment {
   display: none;
   width: 0;
   height: 0;

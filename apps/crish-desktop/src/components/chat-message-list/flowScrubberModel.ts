@@ -60,7 +60,13 @@ export function buildScrubberSegments(
     total += safe;
     if (msg.sender === 'user') userCount += 1;
   }
-  if (userCount === 0 || total <= 0) return [];
+  if (userCount === 0) return [];
+  if (total <= 0) {
+    total = messages.length * 100;
+    for (let i = 0; i < heights.length; i++) {
+      heights[i] = 100;
+    }
+  }
 
   const segs: ScrubberSegment[] = [];
   let pendingGap = 0;

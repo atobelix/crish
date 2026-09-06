@@ -49,7 +49,7 @@ const FlowScrubberTick: React.FC<{
   onJump: (id: string) => void;
 }> = React.memo(function FlowScrubberTick({ tick, tooltip, onJump }) {
   return (
-    <div className={styles.tickSlot} style={{ flexGrow: tick.flex }}>
+    <div className={styles.tickSlot}>
       <Tooltip content={tooltip} side="left">
         <button
           type="button"
@@ -107,52 +107,102 @@ const FlowScrubberInner: React.FC<FlowScrubberProps> = ({
   useEffect(() => {
     const wrap = wrapperRef.current;
     const scrollEl = scrollerRef.current;
-    if (!wrap || !scrollEl || typeof IntersectionObserver === 'undefined') {
-      return;
-    }
+    if (!wrap || !scrollEl) return;
 
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const target = entry.target;
-          if (!(target instanceof HTMLElement)) continue;
-          const id = target.dataset.msgId;
-          if (!id) continue;
-          const tick = wrap.querySelector(
-            `[data-flow-scrubber-tick][data-msg-id="${CSS.escape(id)}"]`
-          );
-          if (tick instanceof HTMLElement && activeClass) {
-            tick.classList.toggle(activeClass, entry.isIntersecting);
+    const updateActiveTicks = () => {
+      const activeIds = new Set<string>();
+
+      // 1. 从当前挂载在 DOM 中的用户气泡检查相交状态
+      const bubbles = scrollEl.querySelectorAll(USER_BUBBLE_SELECTOR);
+      const scrollerRect = scrollEl.getBoundingClientRect();
+      bubbles.forEach((node) => {
+        if (node instanceof HTMLElement && node.dataset.msgId) {
+          const rect = node.getBoundingClientRect();
+          if (rect.bottom >= scrollerRect.top && rect.top <= scrollerRect.bottom) {
+            activeIds.add(node.dataset.msgId);
           }
         }
-      },
-      { root: scrollEl, threshold: 0 }
-    );
+      });
 
-    let timer: number | null = null;
-    const observeUsers = () => {
-      io.disconnect();
-      scrollEl.querySelectorAll(USER_BUBBLE_SELECTOR).forEach((node) => {
-        io.observe(node);
+      // 2. 结合 VSM 视口偏移量兜底（防止虚拟滚动未完全挂载时失活）
+      const scrollTop = scrollEl.scrollTop;
+      const viewH = scrollEl.clientHeight;
+      if (viewH > 0 && manager) {
+        const order = manager.getOrder();
+        for (let i = 0; i < order.length; i++) {
+          const id = order[i]!;
+          const offset = manager.getOffset(i);
+          const h = manager.getHeight(id);
+          if (offset + h >= scrollTop && offset <= scrollTop + viewH) {
+            activeIds.add(id);
+          }
+        }
+      }
+
+      wrap.querySelectorAll<HTMLElement>('[data-flow-scrubber-tick]').forEach((tick) => {
+        const id = tick.dataset.msgId;
+        if (id && activeClass) {
+          tick.classList.toggle(activeClass, activeIds.has(id));
+        }
       });
     };
-    observeUsers();
 
-    const mo = new MutationObserver(() => {
-      if (timer != null) window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        timer = null;
-        observeUsers();
-      }, 80);
-    });
-    mo.observe(scrollEl, { childList: true, subtree: true });
+    scrollEl.addEventListener('scroll', updateActiveTicks, { passive: true });
+
+    let io: IntersectionObserver | null = null;
+    let timer: number | null = null;
+    let mo: MutationObserver | null = null;
+
+    if (typeof IntersectionObserver !== 'undefined') {
+      io = new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            const target = entry.target;
+            if (!(target instanceof HTMLElement)) continue;
+            const id = target.dataset.msgId;
+            if (!id) continue;
+            const tick = wrap.querySelector(
+              `[data-flow-scrubber-tick][data-msg-id="${CSS.escape(id)}"]`
+            );
+            if (tick instanceof HTMLElement && activeClass) {
+              tick.classList.toggle(activeClass, entry.isIntersecting);
+            }
+          }
+        },
+        { root: scrollEl, threshold: 0 }
+      );
+
+      const observeUsers = () => {
+        if (!io) return;
+        io.disconnect();
+        scrollEl.querySelectorAll(USER_BUBBLE_SELECTOR).forEach((node) => {
+          io?.observe(node);
+        });
+      };
+      observeUsers();
+
+      if (typeof MutationObserver !== 'undefined') {
+        mo = new MutationObserver(() => {
+          if (timer != null) window.clearTimeout(timer);
+          timer = window.setTimeout(() => {
+            timer = null;
+            observeUsers();
+            updateActiveTicks();
+          }, 80);
+        });
+        mo.observe(scrollEl, { childList: true, subtree: true });
+      }
+    }
+
+    updateActiveTicks();
 
     return () => {
+      scrollEl.removeEventListener('scroll', updateActiveTicks);
       if (timer != null) window.clearTimeout(timer);
-      io.disconnect();
-      mo.disconnect();
+      io?.disconnect();
+      mo?.disconnect();
     };
-  }, [activeClass, scrollerRef, segments]);
+  }, [activeClass, manager, scrollerRef, segments]);
 
   if (segments.length === 0) return null;
 

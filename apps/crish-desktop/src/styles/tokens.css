@@ -74,11 +74,19 @@ html[data-theme='light'] {
      ========================================================================== */
 
   /* --- 1. 二元色彩与灰度系统 (Binary Optical Color System) --- */
-  /* 未激活态滑块：微调至 10.0% 灰度 (H=30 S=2% L=90%)，物理像素 #e6e6e5，确保浅色底板清晰可见 (SSOT) */
-  --scrollbar-thumb-bg: #e6e6e5;
+  /* 未激活态滑块：自然半透明中性灰 (~18% text-primary)，清晰可见，杜绝近白发丝隐形 (SSOT) */
+  --scrollbar-thumb-bg: color-mix(
+    in srgb,
+    var(--text-primary, #111827) 18%,
+    transparent
+  );
 
-  /* 激活态滑块：黄色/色相饱和度绝对不动 (H=30 S=2%)，灰度下调至 21.8% (L=78%)，物理像素 #c8c7c6，差值严格死锁约 12% */
-  --scrollbar-thumb-active: #c8c7c6;
+  /* 激活态滑块：Hover 与 Active 加深至 ~34%，触感沉着明确 */
+  --scrollbar-thumb-active: color-mix(
+    in srgb,
+    var(--text-primary, #111827) 34%,
+    transparent
+  );
 
   /* 轨道背景：完全透明，消除轨道占位边缘对内容的侵入感 */
   --scrollbar-track-bg: transparent;
@@ -97,13 +105,13 @@ html[data-theme='light'] {
     transparent
   );
 
-  /* --- 2. 四级宽度 Token 体系 (Four-Tier Width System，包含 2px 右侧防误触间距) --- */
-  --scrollbar-width-xs: 6px; /* 超细纤薄型：滑块净宽 4px + 2px 边距 */
-  --scrollbar-width-sm: 7px; /* 紧凑型：滑块净宽 5px + 2px 边距 */
-  --scrollbar-width-md: 9px; /* 标准默认型 (SSOT)：滑块净宽 7px + 2px 边距，告别 4px 过细 */
-  --scrollbar-width-lg: 11px; /* 宽屏大视口型：滑块净宽 9px + 2px 边距 */
+  /* --- 2. 四级宽度 Token 体系 (Four-Tier Width System，包含 2px 左右防误触间距) --- */
+  --scrollbar-width-xs: 6px; /* 超细纤薄型：滑块净宽 4px */
+  --scrollbar-width-sm: 8px; /* 紧凑型：滑块净宽 4px + 边距 */
+  --scrollbar-width-md: 10px; /* 标准默认型 (SSOT)：总宽 10px，左右透明挤压各 2px，滑块净宽 6px 胶囊舒适 */
+  --scrollbar-width-lg: 12px; /* 宽屏大视口型：总宽 12px，滑块净宽 8px */
 
-  /* 全局默认滑块宽度映射：未指定时默认走标准 md (9px 总宽，7px 净宽) */
+  /* 全局默认滑块宽度映射：未指定时默认走标准 md (10px 总宽，6px 净宽) */
   --scrollbar-width: var(--scrollbar-width-md);
   --scrollbar-thumb-width: var(--scrollbar-width);
 
