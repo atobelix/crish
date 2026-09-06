@@ -833,6 +833,87 @@ function getFenceEndForStart(state: EditorState, startIndex: number): number {
   return end;
 }
 
+/** 查找包含 index 的闭合数学围栏区间 [start, end] */
+function getMathFenceRange(
+  state: EditorState,
+  index: number
+): { start: number; end: number } | null {
+  const { mainCodeState, streamTailCodeState, mainLines } = state;
+  const boundary = mainLines.length - 1;
+  const stateAt = (i: number): CodeState =>
+    streamTailCodeState.length === 0
+      ? mainCodeState[i]
+      : i < boundary
+        ? mainCodeState[i]
+        : streamTailCodeState[i - boundary];
+
+  const currentSt = stateAt(index);
+  if (
+    currentSt !== 'math_fence_start' &&
+    currentSt !== 'math_block' &&
+    currentSt !== 'math_fence_end'
+  ) {
+    return null;
+  }
+
+  let start = -1;
+  let end = -1;
+
+  if (currentSt === 'math_fence_start') {
+    start = index;
+    end = getFenceEndForStart(state, start);
+  } else {
+    const { mainFenceLines, streamTailFenceLines } = state;
+    let lo = 0;
+    let hi = mainFenceLines.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (mainFenceLines[mid] < index) lo = mid + 1;
+      else hi = mid;
+    }
+    start = lo > 0 ? mainFenceLines[lo - 1] : -1;
+    const tailLimit = index - boundary;
+    lo = 0;
+    hi = streamTailFenceLines.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (streamTailFenceLines[mid] < tailLimit) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo > 0) {
+      const abs = boundary + streamTailFenceLines[lo - 1];
+      if (abs > start) start = abs;
+    }
+
+    if (currentSt === 'math_fence_end') {
+      end = index;
+    } else {
+      end = getFenceEndForStart(state, start);
+    }
+  }
+
+  if (start === -1 || end === -1 || start >= end) return null;
+  if (stateAt(start) !== 'math_fence_start' || stateAt(end) !== 'math_fence_end') {
+    return null;
+  }
+
+  return { start, end };
+}
+
+/** 判定数学围栏整体是否处于活跃编辑状态（光标或选区落在 [start, end] 内） */
+function isMathFenceActive(
+  state: EditorState,
+  range: { start: number; end: number },
+  activeState: ActiveState | null | undefined
+): boolean {
+  if (!activeState) return false;
+  const startOffset = state.lineOffsets.getOffset(range.start);
+  const endOffset = state.lineOffsets.getOffset(range.end);
+  const endLineLen = (state.getLine(range.end) ?? '').length;
+  const totalLen = endOffset + endLineLen - startOffset;
+  return checkIsActive(startOffset, totalLen, activeState);
+}
+
 /** 计算代码行在当前代码块内的行号（1 起算，兼容已闭合与软渲染未闭合） */
 function getCodeLineNumber(
   index: number,
@@ -980,38 +1061,38 @@ function MathFenceStartBlock({
   activeState,
   store,
 }: BlockRendererComponentProps) {
-  const isActive = checkIsActive(lineOffset, block.length, activeState ?? null);
   const editorStore = store ?? useEditorStore;
+  const state = editorStore.getState();
+  const range = getMathFenceRange(state, index);
+  const isFenceActive = range
+    ? isMathFenceActive(state, range, activeState)
+    : checkIsActive(lineOffset, block.length, activeState ?? null);
+  const calloutClass = block.calloutType
+    ? ` line-callout callout-${block.calloutType}`
+    : '';
 
-  const handleCopy = () => {
-    const st = editorStore.getState();
-    const end = getFenceEndForStart(st, index);
-    if (end > index + 1) {
-      const lines = getFenceBlockLines(editorStore, index + 1, end);
-      void copyTextToClipboard(lines.join('\n'));
-    }
-  };
+  if (range && !isFenceActive) {
+    return (
+      <div
+        className="line-block line-code-fence line-code-fence-start math-block-collapsed"
+        data-token-start={lineOffset}
+        data-token-length={block.length}
+      />
+    );
+  }
 
   return (
-    <div className="line-block line-code-fence line-code-fence-start">
+    <div
+      className={`line-block line-code line-math-block is-active-line${calloutClass}`}
+      data-token-start={lineOffset}
+      data-token-length={block.length}
+    >
       <div
-        className={`code-fence-rendered ${isActive ? 'is-active-token' : ''}`.trim()}
+        className="math-block-source"
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        <span className="code-lang-pill">math</span>
-        <CopyButton
-          dataAttr="math-fence"
-          label="复制公式（LaTeX）"
-          onClick={handleCopy}
-        />
-      </div>
-      <div
-        className="code-fence-source"
-        data-token-start={lineOffset}
-        data-token-length={block.length}
-      >
-        {block.raw}
+        {block.raw || <br />}
       </div>
     </div>
   );
@@ -1019,23 +1100,43 @@ function MathFenceStartBlock({
 
 function MathFenceEndBlock({
   block,
+  index = 0,
   lineOffset = 0,
   activeState,
+  store,
 }: BlockRendererComponentProps) {
-  const isActive = checkIsActive(lineOffset, block.length, activeState ?? null);
-  return (
-    <div className="line-block line-code-fence line-code-fence-end">
+  const editorStore = store ?? useEditorStore;
+  const state = editorStore.getState();
+  const range = getMathFenceRange(state, index);
+  const isFenceActive = range
+    ? isMathFenceActive(state, range, activeState)
+    : checkIsActive(lineOffset, block.length, activeState ?? null);
+  const calloutClass = block.calloutType
+    ? ` line-callout callout-${block.calloutType}`
+    : '';
+
+  if (range && !isFenceActive) {
+    return (
       <div
-        className={`code-fence-rendered ${isActive ? 'is-active-token' : ''}`.trim()}
+        className="line-block line-code-fence line-code-fence-end math-block-collapsed"
         data-token-start={lineOffset}
         data-token-length={block.length}
       />
+    );
+  }
+
+  return (
+    <div
+      className={`line-block line-code line-math-block is-active-line${calloutClass}`}
+      data-token-start={lineOffset}
+      data-token-length={block.length}
+    >
       <div
-        className="code-fence-source"
+        className="math-block-source"
         data-token-start={lineOffset}
         data-token-length={block.length}
       >
-        {block.raw}
+        {block.raw || <br />}
       </div>
     </div>
   );
@@ -1043,20 +1144,21 @@ function MathFenceEndBlock({
 
 function MathBlock({
   block,
-  index,
-  lineOffset,
+  index = 0,
+  lineOffset = 0,
+  activeState,
   store,
 }: BlockRendererComponentProps) {
-  // R3-C 流式软渲染：math fence 未闭合期间不调用 KaTeX renderToString
-  //（CPU 重，流式每帧重渲染会积压开销），显示源文本 + 等宽样式；
-  // 闭合后 codeBlockState 尾部出现 math_fence_end，本分支自然切回
-  // KaTeX 硬渲染（同一 AST 软/硬开关，05 分析「同一 AST 软/硬渲染」）。
   const softRender = useSoftRender(index, store);
-  const calloutClass = block.calloutType ? ` line-callout callout-${block.calloutType}` : '';
+  const calloutClass = block.calloutType
+    ? ` line-callout callout-${block.calloutType}`
+    : '';
 
   if (softRender) {
     return (
-      <div className={`line-block line-math-block line-code is-soft-render${calloutClass}`}>
+      <div
+        className={`line-block line-math-block line-code is-soft-render${calloutClass}`}
+      >
         <span
           className="math-soft-text"
           data-token-start={lineOffset}
@@ -1067,21 +1169,89 @@ function MathBlock({
       </div>
     );
   }
+
+  const editorStore = store ?? useEditorStore;
+  const state = editorStore.getState();
+  const range = getMathFenceRange(state, index);
+
+  if (range) {
+    const isFenceActive = isMathFenceActive(state, range, activeState);
+    if (!isFenceActive) {
+      if (index === range.start + 1) {
+        const lines = getFenceBlockLines(editorStore, range.start + 1, range.end);
+        const formula = lines.join('\n').trim();
+        const katexHtml = formula ? renderMathToHtml(formula, true) : '<br />';
+
+        return (
+          <div
+            className={`line-block line-math-block${calloutClass}`}
+            data-token-start={lineOffset}
+            data-token-length={block.length}
+          >
+            <div
+              className="math-block-rendered"
+              dangerouslySetInnerHTML={{ __html: katexHtml }}
+              data-token-start={lineOffset}
+              data-token-length={block.length}
+            />
+            <CopyButton
+              dataAttr="math"
+              label="复制公式（LaTeX）"
+              onClick={() => void copyTextToClipboard(formula)}
+            />
+          </div>
+        );
+      } else {
+        return (
+          <div
+            className="line-block line-math-block math-block-collapsed"
+            data-token-start={lineOffset}
+            data-token-length={block.length}
+          />
+        );
+      }
+    }
+  }
+
   let formula = block.raw.trim();
   let bMatch;
   while ((bMatch = formula.match(/^\s*>\s?/))) {
     formula = formula.substring(bMatch[0].length);
   }
   formula = formula.trim();
-  const katexHtml = formula ? renderMathToHtml(formula, true) : '<br />';
+
+  if (!range) {
+    const katexHtml = formula ? renderMathToHtml(formula, true) : '<br />';
+    return (
+      <div className={`line-block line-math-block${calloutClass}`}>
+        <div
+          className="math-block-rendered"
+          dangerouslySetInnerHTML={{ __html: katexHtml }}
+          data-token-start={lineOffset}
+          data-token-length={block.length}
+        />
+        <div
+          className="math-block-source"
+          data-token-start={lineOffset}
+          data-token-length={block.length}
+        >
+          {block.raw || <br />}
+        </div>
+        <CopyButton
+          dataAttr="math"
+          label="复制公式（LaTeX）"
+          onClick={() => void copyTextToClipboard(formula)}
+        />
+      </div>
+    );
+  }
+
   return (
-    <div className={`line-block line-math-block${calloutClass}`}>
-      <div
-        className="math-block-rendered"
-        dangerouslySetInnerHTML={{ __html: katexHtml }}
-        data-token-start={lineOffset}
-        data-token-length={block.length}
-      />
+    <div
+      className={`line-block line-code line-math-block is-active-line${calloutClass}`}
+      data-token-start={lineOffset}
+      data-token-length={block.length}
+    >
       <div
         className="math-block-source"
         data-token-start={lineOffset}
@@ -1089,11 +1259,6 @@ function MathBlock({
       >
         {block.raw || <br />}
       </div>
-      <CopyButton
-        dataAttr="math"
-        label="复制公式（LaTeX）"
-        onClick={() => void copyTextToClipboard(formula)}
-      />
     </div>
   );
 }
@@ -1150,12 +1315,6 @@ function CodeBlock({
   if (softRender) {
     return (
       <div className="line-block line-code is-soft-render">
-        <div
-          className="code-gutter"
-          aria-hidden="true"
-          data-line-number={lineNo}
-          data-ignore-measure="true"
-        />
         <div className="code-content">
           <span
             className="code-soft-text"
@@ -1192,12 +1351,6 @@ function CodeBlock({
     );
     return (
       <div className="line-block line-code" data-fence-lang={fenceCtx.lang}>
-        <div
-          className="code-gutter"
-          aria-hidden="true"
-          data-line-number={lineNo}
-          data-ignore-measure="true"
-        />
         <div className="code-content">
           <LangRenderer
             lang={fenceCtx.lang}
@@ -1214,12 +1367,6 @@ function CodeBlock({
 
   return (
     <div className="line-block line-code">
-      <div
-        className="code-gutter"
-        aria-hidden="true"
-        data-line-number={lineNo}
-        data-ignore-measure="true"
-      />
       <div className="code-content">
         {effectiveTokens && effectiveTokens.length > 0 ? (
           <InlineRenderer
@@ -1287,22 +1434,42 @@ function HrBlock({
 
 function BlockquoteBlock({
   block,
-  lineOffset,
+  lineOffset = 0,
   activeState,
   rtl,
 }: BlockRendererComponentProps) {
-  const prefixMatch = block.raw.match(/^(>\s?)+/);
-  const prefix = prefixMatch ? prefixMatch[0] : '';
+  const isLineActive = checkIsActive(lineOffset, block.length, activeState ?? null);
+  const level = block.blockquoteLevel || 1;
   const calloutClass = block.calloutType
     ? ` line-callout callout-${block.calloutType}${block.isCalloutHeader ? ' callout-header' : ''}`
     : '';
-  const activeLineClass = activeState ? ' is-active-line' : '';
+  const activeLineClass = isLineActive ? ' is-active-line' : '';
+
+  const bqStyle: React.CSSProperties = {
+    paddingLeft: `${(level - 1) * 16 + 14}px`,
+    ...(level > 1
+      ? {
+          boxShadow: Array.from({ length: level - 1 })
+            .map((_, i) => `inset ${(i + 1) * 16}px 0 0 0 var(--list-guide-line)`)
+            .join(', '),
+        }
+      : null),
+  };
+
+  const prefixMatch = block.raw.match(/^(>\s?)+/);
+  const prefix = prefixMatch ? prefixMatch[0] : '';
+
   return (
-    <div className={`line-block line-blockquote${calloutClass}${activeLineClass}`}>
+    <div
+      className={`line-block line-blockquote${calloutClass}${activeLineClass}`}
+      data-blockquote-level={level}
+      style={bqStyle}
+    >
       <span
         className="blockquote-source"
         data-token-start={lineOffset}
         data-token-length={prefix.length}
+        style={!isLineActive ? { display: 'none' } : undefined}
       >
         {prefix}
       </span>
@@ -1421,7 +1588,22 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
     );
   }
 
-  const bqClass = block.blockquoteLevel ? ' line-blockquote' : '';
+  const level = block.blockquoteLevel || 0;
+  const bqClass = level > 0 ? ' line-blockquote' : '';
+  const bqStyle: React.CSSProperties | undefined =
+    level > 0
+      ? {
+          paddingLeft: `${(level - 1) * 16 + 14}px`,
+          ...(level > 1
+            ? {
+                boxShadow: Array.from({ length: level - 1 })
+                  .map((_, i) => `inset ${(i + 1) * 16}px 0 0 0 var(--list-guide-line)`)
+                  .join(', '),
+              }
+            : null),
+        }
+      : undefined;
+
   return (
     // B5 bidi：整行级 RTL（body/列表/未知类型行统一落点——行级
     // dir 使 InlineRenderer 全部 token 继承 RTL 排版；LTR 行不设
@@ -1430,6 +1612,7 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
       className={`line-block${bqClass}${calloutClass}${isLineActive ? ' is-active-line' : ''}`}
       data-blockquote-level={block.blockquoteLevel}
       dir={rtl ? 'rtl' : undefined}
+      style={bqStyle}
     >
       {tokensToRender && tokensToRender.length > 0 ? (
         <>

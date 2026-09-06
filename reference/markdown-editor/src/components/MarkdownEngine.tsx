@@ -614,15 +614,18 @@ const LineItem = React.memo(
     // B2 搜索行内联背景：仅命中行附加淡黄底色（useMemo 保持引用
     // 稳定——依赖只有行类型与搜索标记，变化时才换新对象，不影响
     // React.memo 命中）；class is-search-line 同时保留供宿主自定义
+    const isTableRow =
+      lineNode.type === 'table_row' || lineNode.type === 'table_separator';
     const rowStyle = React.useMemo(
       () => ({
         position: 'absolute' as const,
         left: 0,
-        width: '100%',
+        width: isTableRow ? 'max-content' : '100%',
+        minWidth: '100%',
         minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
         ...(hasSearchDecoration ? { backgroundColor: SEARCH_LINE_BG } : null),
       }),
-      [lineNode.type, hasSearchDecoration]
+      [lineNode.type, isTableRow, hasSearchDecoration]
     );
 
     return (
@@ -2419,7 +2422,8 @@ export const MarkdownEngine = React.forwardRef<
             contentDivRef.current = node;
           }}
           style={{
-            width: '100%',
+            width: 'max-content',
+            minWidth: '100%',
             position: 'relative',
             marginTop: '14px',
           }}

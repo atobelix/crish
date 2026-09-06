@@ -234,22 +234,7 @@ body {
   font-family: inherit;
 }
 .code-gutter {
-  width: 42px;
-  flex-shrink: 0;
-  text-align: right;
-  padding-right: 14px;
-  color: var(--stone);
-  font-size: 12px;
-  line-height: var(--grid-size);
-  user-select: none;
-  border: none;
-  box-sizing: border-box;
-}
-
-.code-gutter::before {
-  content: attr(data-line-number);
-  display: block;
-  width: 100%;
+  display: none;
 }
 
 .code-content {
@@ -339,6 +324,11 @@ body {
 }
 
 /* 现代化 Markdown 表格 (Conex 出版级横线表格，去除生硬竖向网格) */
+.line-table {
+  width: max-content;
+  min-width: 100%;
+}
+
 .line-table-row {
   display: flex;
   align-items: stretch;
@@ -348,6 +338,8 @@ body {
   background-color: transparent;
   min-height: 28px;
   box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
 }
 
 .table-header-row {
@@ -365,6 +357,8 @@ body {
   padding: 0;
   border-bottom: none;
   box-sizing: border-box;
+  width: max-content;
+  min-width: 100%;
 }
 
 .is-active-line.line-table-separator {
@@ -419,7 +413,7 @@ body {
 
 /* 单元格单选态 (Single Click: Cell Selected Mode) */
 .token-table-cell.is-cell-selected {
-  background-color: var(--blue-selection) !important;
+  background-color: var(--selection-bg) !important;
   outline: none !important;
   z-index: 2;
   position: relative;
@@ -434,7 +428,7 @@ body {
 .token-table-cell.is-cell-editing {
   background-color: var(--white) !important;
   outline: none !important;
-  box-shadow: 0 0 0 1.5px var(--blue-selection-border), 0 0 0 1px var(--border-focus) !important;
+  box-shadow: 0 0 0 1.5px var(--border-focus), 0 0 0 1px var(--border-focus) !important;
   z-index: 4;
   border-radius: 2px;
   cursor: text;
@@ -630,7 +624,7 @@ body {
 .token-table-cell.is-cell-selected .style-inline-code,
 .token-table-cell.is-cell-selected .style-kbd,
 .token-table-cell.is-cell-selected .style-mark {
-  background-color: color-mix(in srgb, var(--blue-selection) 80%, white 20%) !important;
+  background-color: color-mix(in srgb, var(--selection-bg) 80%, white 20%) !important;
   color: var(--text-primary) !important;
 }
 
@@ -638,7 +632,7 @@ body {
 .token-table-cell.is-cell-selected .markdown-preview-image {
   opacity: 0.85;
   filter: contrast(0.95);
-  box-shadow: 0 0 0 2px var(--blue-selection);
+  box-shadow: 0 0 0 2px var(--border-focus);
 }
 
 /* Syntax hiding logic for Live Preview (Obsidian style) */
@@ -830,7 +824,7 @@ body {
   display: none;
 }
 
-/* 列表符号居中与等宽槽位 (中轴线恒为 0.5ch) */
+/* 列表符号居中与等宽槽位 (2em 等宽槽位，中轴线 1em 几何绝对对齐) */
 .token-list-bullet {
   color: var(--text-muted);
   font-weight: 600;
@@ -841,17 +835,16 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1ch;
+  width: 2em;
   text-align: center;
-  font-size: 1.1em;
+  font-size: 1em;
   line-height: 1;
   user-select: none;
+  box-sizing: border-box;
 }
 
 .token-list-bullet .bullet-space {
-  display: inline-block;
-  width: 1ch;
-  user-select: none;
+  display: none;
 }
 
 .token-list-number {
@@ -869,7 +862,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 5ch;
+  width: 2em;
   height: var(--grid-size);
   margin: 0;
   cursor: pointer;
@@ -888,9 +881,7 @@ body {
 }
 
 .task-space {
-  display: inline-block;
-  width: 1ch;
-  user-select: none;
+  display: none;
 }
 
 /* 等宽槽位与幽灵字符流契约 */
@@ -1029,6 +1020,15 @@ body {
 }
 
 /* Block Math KaTeX */
+.math-block-collapsed {
+  height: 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+}
+
 .line-math-block {
   text-align: center;
   font-size: 1.1em;

@@ -398,7 +398,9 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
           if (token.type === 'table_cell') {
             const colIndex = colIndexCounter++;
             const cellWidth = tableWidths?.[colIndex];
-            const cellStyle: React.CSSProperties = cellWidth ? { ...token.style, flex: `0 0 ${cellWidth}px` } : { ...token.style, flex: '1 1 0%' };
+            const cellStyle: React.CSSProperties = cellWidth
+              ? { ...token.style, flex: `0 0 ${cellWidth}px`, minWidth: `${cellWidth}px` }
+              : { ...token.style, minWidth: '100px', flex: '1 0 auto' };
             
             const isCellSelected = selectedCell &&
               lineIndex !== undefined &&
@@ -422,7 +424,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 const minCol = Math.min(selectedCell.startCol, selectedCell.endCol);
                 const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
                 
-                const borderToken = 'var(--blue-selection-border)';
+                const borderToken = 'var(--border-focus)';
                 const isSingleCell = minLine === maxLine && minCol === maxCol;
                 if (isSingleCell) {
                   selectionShadow = `0 0 0 1.5px ${borderToken}`;

@@ -1410,17 +1410,38 @@ export class MarkdownParser {
    * prev 为上一非空白行的形态，用于 Setext 下划线形态（`====`）的两行级判定：
    * 上一行是段落 → 该行为 Setext 标题（heading），否则只是普通段落（body）。
    */
+  /**
+   * 统计行内真实结构性表格管道符数：
+   * 排除转义管道符 \|、代码块/反引号 `...`、行内/块级数学公式 $...$ / $$...$$、剧透标签 ||...||
+   * 内部的管道符，避免数学绝对值符号（如 $|\mathbf{u}|^2$）或逻辑运算符误触发表格判定。
+   */
+  public static countStructuralPipes(text: string): number {
+    if (!text || text.indexOf('|') === -1) return 0;
+    let s = text.replace(/\\\|/g, '');
+    s = s.replace(/`[^`\n]+`/g, '');
+    s = s.replace(/\$\$[\s\S]*?\$\$/g, '');
+    s = s.replace(/\$(?:[^\$\n\\]|\\.)+\$/g, '');
+    const matches = s.match(/\|/g);
+    return matches ? matches.length : 0;
+  }
+
+  /**
+   * 轻量行首形态分类（computeLineOffsets 专用，供缩进代码判定的「上一行」上下文）：
+   * 与 parseNormalLine 的块级判定顺序一致（hr → ATX → 表格 → 列表），
+   * 只做行首前缀匹配、不解析内容——避免 computeLineOffsets 依赖 parseLine（递归）。
+   * prev 为上一非空白行的形态，用于 Setext 下划线形态（`====`）的两行级判定：
+   * 上一行是段落 → 该行为 Setext 标题（heading），否则只是普通段落（body）。
+   */
   private static guessBlockKind(line: string, prev: BlockKind): BlockKind {
     const s = line.replace(/^ {0,3}/, '');
     if (!s.trim()) return 'blank';
     if (/^([-*+_]){3,}\s*$/.test(s)) return 'hr';
     if (/^=+[ \t]*$/.test(s)) return prev === 'body' ? 'heading' : 'body';
     if (/^#{1,6}\s/.test(s)) return 'heading';
-    const pipeCount = (s.match(/\|/g) || []).length;
+    const pipeCount = MarkdownParser.countStructuralPipes(s);
     if (
       /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/.test(s) ||
-      (pipeCount >= 1 && s.trim().startsWith('|')) ||
-      pipeCount >= 2
+      (pipeCount >= 2 && (s.trim().startsWith('|') || s.trim().endsWith('|') || pipeCount >= 3))
     ) {
       return 'table';
     }
@@ -2356,10 +2377,13 @@ export class MarkdownParser {
             }
 
             if (!isList && nestedText.length <= 10000) {
-              const pipeCount = (nestedText.match(/\|/g) || []).length;
+              const pipeCount = MarkdownParser.countStructuralPipes(nestedText);
+              const trimmedNested = nestedText.trim();
               if (
-                (pipeCount >= 1 && nestedText.trim().startsWith('|')) ||
-                pipeCount >= 2
+                pipeCount >= 2 &&
+                (trimmedNested.startsWith('|') ||
+                  trimmedNested.endsWith('|') ||
+                  pipeCount >= 3)
               ) {
                 lineType = 'table_row';
               }

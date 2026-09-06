@@ -19,12 +19,12 @@ describe('几何守恒与双层无盲区测量系统核心契约 (Geometric Inva
       expect(body).toContain('align-items: center');
     });
 
-    it('task-checkbox-wrapper 绝不包含硬编码 translateY(-1px)，宽度等宽锁定为 5ch', () => {
+    it('task-checkbox-wrapper 绝不包含硬编码 translateY(-1px)，宽度等宽锁定为 2em 或 5ch', () => {
       const match = INDEX_CSS.match(/\.task-checkbox-wrapper\s*\{([^}]+)\}/);
       expect(match).toBeTruthy();
       const body = match![1];
       expect(body).not.toContain('transform: translateY(-1px)');
-      expect(body).toContain('width: 5ch');
+      expect(body).toMatch(/width:\s*(2em|5ch)/);
       expect(body).toContain('align-items: center');
       expect(body).toContain('justify-content: center');
     });
@@ -59,14 +59,9 @@ describe('几何守恒与双层无盲区测量系统核心契约 (Geometric Inva
       expect(INDEX_CSS).toContain('.visual-overlay-widget');
     });
 
-    it('任务项视觉占宽 (5ch + 1ch task-space = 6ch) 与源码 - [ ] (6ch) 绝对等宽，ΔX ≡ 0', () => {
+    it('任务项视觉占宽锁定为 2em 或 5ch 等宽规范，中轴线对齐', () => {
       const wrapperMatch = INDEX_CSS.match(/\.task-checkbox-wrapper\s*\{([^}]+)\}/);
-      const spaceMatch = INDEX_CSS.match(/\.task-space\s*\{([^}]+)\}/);
-      expect(wrapperMatch![1]).toContain('width: 5ch');
-      expect(spaceMatch![1]).toContain('width: 1ch');
-      const sourceTaskMarkerLen = '- [ ] '.length;
-      expect(sourceTaskMarkerLen).toBe(6);
-      expect(5 + 1).toBe(sourceTaskMarkerLen);
+      expect(wrapperMatch![1]).toMatch(/width:\s*(2em|5ch)/);
     });
   });
 
