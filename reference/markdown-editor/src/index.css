@@ -592,7 +592,7 @@ body {
   padding: 0 5px;
   border-radius: 4px;
   font-size: 0.9em;
-  line-height: inherit;
+  line-height: 1;
   box-sizing: border-box;
 }
 .style-mark {

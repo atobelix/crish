@@ -942,15 +942,6 @@ export function locateRowIndexByPhysicalBisection(
     Math.abs(firstRect.top - lastRect.top) > 5;
 
   if (clientY !== undefined && isWrapped && firstRect && lastRect) {
-    // 视觉行定位：若点击在首行上方，锚定首行起点
-    if (clientY < firstRect.top) {
-      return textEntries[0].globalStart;
-    }
-    // 若点击在末行下方，锚定行末
-    if (clientY > lastRect.bottom) {
-      return lineStart + lineLen;
-    }
-
     // 收集所有可见字符及其外接矩形以精确定位视觉行切片
     interface CharInfo {
       node: Text;
