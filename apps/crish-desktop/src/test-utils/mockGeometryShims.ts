@@ -245,7 +245,7 @@ export function installElementShim(
       role === 'listbox' ||
       this.classList.contains('menuContent')
     ) {
-      // 菜单/弹窗默认尺寸：宽 200px, 高 240px
+      // 菜单/弹窗默认规格：宽 200px, 高 240px
       return new DOMRect(100, 100, 200, 240);
     }
     if (role === 'tooltip') {

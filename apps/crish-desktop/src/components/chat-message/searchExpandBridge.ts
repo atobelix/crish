@@ -192,10 +192,19 @@ export const bindMessagesToSession = (sessionId: string, msgIds: string[]): void
 export const getMessageSession = (msgId: string): string | undefined =>
   searchExpandBridge.getMessageSession(msgId);
 
+export interface VirtualScrollModelLike {
+  getOrder?: () => string[];
+  getOffset?: (index: number) => number;
+}
+
+export type ScrollerLike =
+  | HTMLElement
+  | { scrollTo?: (opts: { top?: number; behavior?: ScrollBehavior }) => void; scrollTop?: number };
+
 export function jumpToSearchHit(
   msgId: string,
-  vsm: any,
-  scroller: HTMLElement | { scrollTo?: (opts: any) => void; scrollTop?: number }
+  vsm?: VirtualScrollModelLike | null,
+  scroller?: ScrollerLike | null
 ): void {
   if (!msgId || !vsm || !scroller) return;
   const order = typeof vsm.getOrder === 'function' ? vsm.getOrder() : null;
@@ -204,10 +213,10 @@ export function jumpToSearchHit(
   if (index === -1) return;
 
   const top = typeof vsm.getOffset === 'function' ? vsm.getOffset(index) : 0;
-  if (typeof (scroller as any).scrollTo === 'function') {
-    (scroller as any).scrollTo({ top, behavior: 'auto' });
-  } else if ('scrollTop' in scroller) {
-    (scroller as any).scrollTop = top;
+  if ('scrollTo' in scroller && typeof scroller.scrollTo === 'function') {
+    scroller.scrollTo({ top, behavior: 'auto' });
+  } else if ('scrollTop' in scroller && typeof scroller.scrollTop === 'number') {
+    scroller.scrollTop = top;
   }
 
   expandMessageProcess(msgId);
