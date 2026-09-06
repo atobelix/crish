@@ -926,7 +926,7 @@ async function runNodeMode() {
     // 1) append@1M：主数组重建 + 物化 + clone + 端到端 + 净值
     await loadDoc(1_000_000, LOAD_TIMEOUT_BY_SIZE[1000000]);
     const mainBefore = get().mainLines;
-    const lenBefore = get().getLineCount();
+    const _lenBefore = get().getLineCount();
     get().appendText('W');
     const mainAfter = get().mainLines;
     const spreadSamples = [];

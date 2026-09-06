@@ -341,8 +341,8 @@ function rebuildIndex(idx: ContainerIndex): void {
 // 命中定位（二分，替代全扫）
 // ============================================================
 
-// 二分定位：优先"包含 index"的可见 token（DOM 序第一个，即最外层），
-// 其次"恰好结束于 index"的可见 token（DOM 序最后一个，对齐旧遍历语义）。
+// 二分定位：优先"包含 index"的可见 token（取最小 length 的最内层精确 token），
+// 其次"恰好结束于 index"的可见 token（取最小 length 的最内层精确 token）。
 function locateToken(idx: ContainerIndex, index: number): TokenEntry | null {
   const tokens = idx.tokens;
   let lo = 0;
@@ -353,20 +353,37 @@ function locateToken(idx: ContainerIndex, index: number): TokenEntry | null {
     else hi = mid;
   }
 
-  // 主命中：包含 index 的连续区间（数组序 = DOM 序），取第一个可见的
+  // 主命中：包含 index 的连续区间，在所有可见 token 中优先取最内层精确 token（最小 length）
   let left = lo - 1;
   while (left >= 0 && tokens[left].start + tokens[left].length > index) left--;
   left++;
+  let bestToken: TokenEntry | null = null;
+  let minLength = Infinity;
   for (let j = left; j < lo; j++) {
-    if (isTokenVisible(tokens[j].el)) return tokens[j];
+    const t = tokens[j];
+    if (isTokenVisible(t.el)) {
+      if (t.length < minLength) {
+        minLength = t.length;
+        bestToken = t;
+      }
+    }
   }
+  if (bestToken) return bestToken;
 
-  // 尾部命中：start + length === index 的条目，从右向左取第一个可见的（DOM 序最后）
+  // 尾部命中：start + length === index 的条目，优先取最内层精确 token（最小 length）
+  let bestTailToken: TokenEntry | null = null;
+  let minTailLength = Infinity;
   for (let j = lo - 1; j >= 0; j--) {
     const t = tokens[j];
     if (t.start + t.length < index) break;
-    if (t.start + t.length === index && isTokenVisible(t.el)) return t;
+    if (t.start + t.length === index && isTokenVisible(t.el)) {
+      if (t.length < minTailLength) {
+        minTailLength = t.length;
+        bestTailToken = t;
+      }
+    }
   }
+  if (bestTailToken) return bestTailToken;
 
   return null;
 }
@@ -625,7 +642,7 @@ function measureLineFallback(idx: ContainerIndex, index: number): MeasuredRect |
 // 单次测量（含同帧结果缓存：合并 CursorLayer 与 HiddenInput 双测量源）
 function measureOnce(idx: ContainerIndex, index: number): MeasuredRect | null {
   const container = idx.container;
-  const decVersion = useEditorStore.getState().decorationVersion || 0;
+  const decVersion = (useEditorStore.getState() as any).decorationVersion || 0;
   // 视口坐标对滚动敏感，缓存键带上滚动位置与装饰版本；同帧内第二次调用（双测量源）
   // 直接命中，零 DOM 读取
   const cacheKey = index + ':' + container.scrollTop + ':' + container.scrollLeft + ':' + decVersion;

@@ -17,7 +17,53 @@ import {
 } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
 import { MarkdownParser } from '../core/parser';
+import type { CalloutType } from '../core/ast';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
+
+/** 获取当前行的 Callout 上下文（支持多行 Callout 向上回溯继承） */
+function getCalloutContext(
+  getLine: (i: number) => string,
+  index: number
+): {
+  type: CalloutType;
+  title: string;
+  isHeader: boolean;
+} | null {
+  const line = getLine(index);
+  if (!line || !/^ {0,3}>\s?/.test(line)) return null;
+
+  const headerMatch = line.match(
+    /^ {0,3}>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i
+  );
+  if (headerMatch) {
+    return {
+      type: headerMatch[1].toLowerCase() as CalloutType,
+      title: headerMatch[2]?.trim() || '',
+      isHeader: true,
+    };
+  }
+
+  // 向前扫描至多 50 行，寻找所属的 Callout 头部
+  let prevIdx = index - 1;
+  while (prevIdx >= 0 && index - prevIdx <= 50) {
+    const prevLine = getLine(prevIdx);
+    if (!prevLine || !/^ {0,3}>\s?/.test(prevLine)) {
+      break;
+    }
+    const prevMatch = prevLine.match(
+      /^ {0,3}>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i
+    );
+    if (prevMatch) {
+      return {
+        type: prevMatch[1].toLowerCase() as CalloutType,
+        title: prevMatch[2]?.trim() || '',
+        isHeader: false,
+      };
+    }
+    prevIdx--;
+  }
+  return null;
+}
 // W1-1（D-4）：不可直刷 chunk 的 rAF 帧批缓冲（500 token/s → ≤60 提交/s）
 import { StreamBuffer } from '../core/StreamBuffer';
 // R5-D 装饰层统一（06 §2）：active/选区/搜索统一进 DecorationSet——
@@ -463,7 +509,26 @@ const LineItem = React.memo(
       return `table-${firstTableIndex}`;
     });
 
-    const lineNode = MarkdownParser.parseLine(lineText, offset, isCode);
+    const calloutCtx = React.useMemo(() => {
+      if (!/^ {0,3}>\s?/.test(lineText)) return null;
+      return getCalloutContext((i) => store.getState().getLine(i), index);
+    }, [lineText, index, store]);
+
+    const lineNode = MarkdownParser.parseLine(
+      lineText,
+      offset,
+      isCode,
+      0,
+      null,
+      false,
+      null,
+      null,
+      false,
+      null,
+      calloutCtx ? calloutCtx.type : null,
+      calloutCtx ? calloutCtx.title : null,
+      calloutCtx ? calloutCtx.isHeader : false
+    );
 
     // P3 B2 流式末行判定（plan-A2 §3 作用范围）：预演仅作用于「流式会话
     // 进行中的文档末行」——编辑态/非末行/代码行一律不预演。
@@ -2024,6 +2089,7 @@ export const MarkdownEngine = React.forwardRef<
     lineCount,
     windowKey,
     flushStreamBuffer,
+    decorationVersion,
   ]);
 
   // ── B3 内容变更增量维护：大纲索引平移/重建 + 折叠区间平移/行高批量修正 ──

@@ -119,17 +119,16 @@ const LIST_STYLE: React.CSSProperties = {
   maxHeight: 360,
 };
 
-/** 条目基础样式（flexShrink 0 坚决防止在多项时挤压折叠变形） */
+/** 条目基础样式（支持自适应折行，杜绝长标题挤叠） */
 const ROW_BASE_STYLE: React.CSSProperties = {
   display: 'flex',
-  alignItems: 'center',
+  alignItems: 'flex-start',
   gap: 6,
-  padding: '3px 6px',
+  padding: '4px 6px',
   borderRadius: 4,
   cursor: 'pointer',
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
+  width: '100%',
+  boxSizing: 'border-box',
   border: 'none',
   background: 'transparent',
   textAlign: 'left',
@@ -154,6 +153,7 @@ const LEVEL_STYLE: React.CSSProperties = {
   fontSize: 10,
   flexShrink: 0,
   letterSpacing: '0.4px',
+  lineHeight: '18px',
 };
 
 /** 空态文案 */
@@ -163,10 +163,13 @@ const EMPTY_STYLE: React.CSSProperties = {
   fontSize: 11,
 };
 
-/** 条目文本 */
+/** 条目文本：自动折行，杜绝横向挤压与文字重叠 */
 const TEXT_STYLE: React.CSSProperties = {
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
+  flex: 1,
+  minWidth: 0,
+  whiteSpace: 'normal',
+  wordBreak: 'break-word',
+  lineHeight: '1.4',
 };
 
 export const OutlinePanel: React.FC<OutlinePanelProps> = ({

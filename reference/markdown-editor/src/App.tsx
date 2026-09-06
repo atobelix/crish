@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -55,22 +56,22 @@ declare global {
 type StreamPhase = 'idle' | 'streaming' | 'paused' | 'done' | 'discarded';
 
 /** 注入粒度（chunk 切分方式） */
-type Granularity = 'char' | 'word' | 'line';
+export type Granularity = 'char' | 'word' | 'line';
 
-const GRANULARITY_OPTIONS: Granularity[] = ['char', 'word', 'line'];
-const GRANULARITY_LABELS: Record<Granularity, string> = {
+export const GRANULARITY_OPTIONS: Granularity[] = ['char', 'word', 'line'];
+export const GRANULARITY_LABELS: Record<Granularity, string> = {
   char: '字符',
   word: '词语',
   line: '整行',
 };
 
 /** 可调 token 率档位（tps = tokens per second） */
-const RATE_OPTIONS = [10, 50, 200, 500] as const;
+export const RATE_OPTIONS = [10, 50, 200, 500] as const;
 
 // ── 预置演示内容（S-EL-12：展示流式全能力）──
 // 默认采用 05 号工业级高并发推送引擎方案（178行），完美兼顾 e2e 测试契约与全能力压测
 const DEFAULT_DEMO = buildStreamingContent('05-streaming');
-const DEMO_LINES: readonly string[] = DEFAULT_DEMO.lines;
+export const DEMO_LINES: readonly string[] = DEFAULT_DEMO.lines;
 const DEMO_CONTENT = DEFAULT_DEMO.content;
 
 /** 演示内容暴露到 window（e2e 终态一致性断言数据源） */
@@ -113,6 +114,18 @@ function App() {
   } | null>(null);
   const [selectedStreamTarget, setSelectedStreamTarget] = useState<string>('05-streaming');
   const [selectedStressDoc, setSelectedStressDoc] = useState<string>('00-baseline');
+  const [toast, setToast] = useState<{ message: string; type?: 'info' | 'success' | 'warn' } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  const showToast = useCallback((message: string, type: 'info' | 'success' | 'warn' = 'info') => {
+    setToast({ message, type });
+    if (toastTimerRef.current !== null) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+    }, 2500);
+  }, []);
 
   // 既有静态文档能力保留（共存设计）：挂载即加载万行压力文档（100 ×
   // test-document ≈ 1.5 万行）。流式驾驶舱的「开始流式」会先 setText('')
@@ -150,11 +163,12 @@ function App() {
     }
   }, []);
 
-  /** aria-live 播报（清空再写，保证同文案可重复播报） */
-  const announce = useCallback((text: string) => {
+  /** aria-live 播报与视觉 Toast 同步联动 */
+  const announce = useCallback((text: string, type: 'info' | 'success' | 'warn' = 'info') => {
     setAnnouncement('');
     requestAnimationFrame(() => setAnnouncement(text));
-  }, []);
+    showToast(text, type);
+  }, [showToast]);
 
   // ── 引擎完成/丢弃信号 → aria-live 播报（R-8 三态之二/三）──
   // 注册一次（引擎恒挂载）；编程式收口经 suppressEndAnnounceRef 抑制。
@@ -342,24 +356,7 @@ function App() {
     setText('');
   }, [setText, silentlyEndSession]);
 
-  /** 点击循环切换模拟流式输出速率 (10 -> 50 -> 200 -> 500 -> 10) */
-  const cycleRate = useCallback(() => {
-    const idx = RATE_OPTIONS.indexOf(rate as any);
-    const nextIdx = (idx + 1) % RATE_OPTIONS.length;
-    const nextRate = RATE_OPTIONS[nextIdx];
-    setRate(nextRate);
-    rateRef.current = nextRate;
-    announce(`流式速率已切换为 ${nextRate} tps`);
-  }, [announce, rate]);
 
-  /** 点击循环切换流式注入粒度 (字符 -> 词语 -> 整行 -> 字符) */
-  const cycleGranularity = useCallback(() => {
-    const idx = GRANULARITY_OPTIONS.indexOf(granularity);
-    const nextIdx = (idx + 1) % GRANULARITY_OPTIONS.length;
-    const nextGran = GRANULARITY_OPTIONS[nextIdx];
-    setGranularity(nextGran);
-    announce(`注入粒度已切换为 ${GRANULARITY_LABELS[nextGran]}`);
-  }, [announce, granularity]);
 
   const streamSummary = streamState
     ? `active=${streamState.active} buffered=${streamState.bufferedChars} direct=${streamState.directPendingChars} follow=${streamState.followState}`
@@ -430,30 +427,35 @@ function App() {
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <div className="top-btn-group" title="选择流式剧本（支持单篇独立流式与多篇连续连跑）">
               <span className="top-control-label">流式剧本</span>
-              <select
-                data-testid="stream-target-select"
-                value={selectedStreamTarget}
-                onChange={(e) => setSelectedStreamTarget(e.target.value)}
-                disabled={phase === 'streaming' || phase === 'paused'}
-                className="top-select"
-                style={{ maxWidth: 210 }}
-                title="选择流式输出剧本：单篇专业领域或多篇全流程连续流式"
-              >
-                <optgroup label="单篇独立流式输出">
-                  {SAMPLE_DOCS.map((d) => (
-                    <option key={d.id} value={d.id}>
-                      {d.shortTitle} ({d.linesCount}行)
-                    </option>
-                  ))}
-                </optgroup>
-                <optgroup label="多篇全流程连续渲染（多篇连跑）">
-                  {MULTI_STREAM_PRESETS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.title}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
+              <div className="top-select-wrapper">
+                <select
+                  data-testid="stream-target-select"
+                  value={selectedStreamTarget}
+                  onChange={(e) => setSelectedStreamTarget(e.target.value)}
+                  disabled={phase === 'streaming' || phase === 'paused'}
+                  className="top-select"
+                  style={{ maxWidth: 210 }}
+                  title="选择流式输出剧本：单篇专业领域或多篇全流程连续流式"
+                >
+                  <optgroup label="单篇独立流式输出">
+                    {SAMPLE_DOCS.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.shortTitle} ({d.linesCount}行)
+                      </option>
+                    ))}
+                  </optgroup>
+                  <optgroup label="多篇全流程连续渲染（多篇连跑）">
+                    {MULTI_STREAM_PRESETS.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+                <svg className="top-select-arrow" width="8" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 1l4 4 4-4" />
+                </svg>
+              </div>
             </div>
 
             <button
@@ -527,63 +529,59 @@ function App() {
             </div>
           </div>
 
-          {/* 右区：速率与粒度 */}
+          {/* 右区：速率与粒度下拉选择 */}
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-            <div className="top-btn-group" title="流式速率与切分粒度设置">
-              <button
-                type="button"
-                onClick={cycleRate}
-                className="top-btn-group-item"
-                title={`点击切换输出速率 (当前: ${rate} tps，点击循环: 10 → 50 → 200 → 500)`}
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            <div className="top-btn-group" title="流式速率设置 (tps = tokens per second)">
+              <span className="top-control-label">速率</span>
+              <div className="top-select-wrapper">
+                <select
+                  data-testid="rate-select"
+                  value={rate}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    setRate(val);
+                    rateRef.current = val;
+                    announce(`流式速率已切换为 ${val} tps`);
+                  }}
+                  className="top-select"
+                  style={{ width: 88 }}
+                  title="选择流式输出速率 (tps)"
+                >
+                  {RATE_OPTIONS.map((r) => (
+                    <option key={r} value={r}>
+                      {r} tps
+                    </option>
+                  ))}
+                </select>
+                <svg className="top-select-arrow" width="8" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 1l4 4 4-4" />
                 </svg>
-                <span>{rate} tps</span>
-                <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>▾</span>
-              </button>
-              <button
-                type="button"
-                onClick={cycleGranularity}
-                className="top-btn-group-item"
-                title={`点击切换注入粒度 (当前: ${GRANULARITY_LABELS[granularity]}，点击循环: 字符 → 词语 → 整行)`}
-              >
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M4 7V4h16v3M9 20h6M12 4v16" />
+              </div>
+            </div>
+
+            <div className="top-btn-group" title="流式注入切分粒度设置">
+              <span className="top-control-label">粒度</span>
+              <div className="top-select-wrapper">
+                <select
+                  data-testid="granularity-select"
+                  value={granularity}
+                  onChange={(e) => {
+                    const g = e.target.value as Granularity;
+                    setGranularity(g);
+                    announce(`注入粒度已切换为 ${GRANULARITY_LABELS[g]}`);
+                  }}
+                  className="top-select"
+                  style={{ width: 84 }}
+                  title="选择流式注入切分粒度"
+                >
+                  <option value="char">字符 (char)</option>
+                  <option value="word">词语 (word)</option>
+                  <option value="line">整行 (line)</option>
+                </select>
+                <svg className="top-select-arrow" width="8" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 1l4 4 4-4" />
                 </svg>
-                <span>{GRANULARITY_LABELS[granularity]}</span>
-                <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 1 }}>▾</span>
-              </button>
-              <select
-                data-testid="rate-select"
-                value={rate}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  setRate(val);
-                  rateRef.current = val;
-                }}
-                style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
-                tabIndex={-1}
-                aria-hidden="true"
-              >
-                {RATE_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r} tps
-                  </option>
-                ))}
-              </select>
-              <select
-                data-testid="granularity-select"
-                value={granularity}
-                onChange={(e) => setGranularity(e.target.value as Granularity)}
-                style={{ position: 'absolute', width: 0, height: 0, opacity: 0, pointerEvents: 'none' }}
-                tabIndex={-1}
-                aria-hidden="true"
-              >
-                <option value="char">字符</option>
-                <option value="word">词</option>
-                <option value="line">行</option>
-              </select>
+              </div>
             </div>
           </div>
         </div>
@@ -597,20 +595,29 @@ function App() {
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
             <div className="top-btn-group" title="选择文档载入或启动万行压测">
               <span className="top-control-label">文档库</span>
-              <select
-                data-testid="stress-target-select"
-                value={selectedStressDoc}
-                onChange={(e) => setSelectedStressDoc(e.target.value)}
-                className="top-select"
-                style={{ maxWidth: 260 }}
-                title="选择进行万行压测或载入的文档界面"
-              >
-                {SAMPLE_DOCS.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.title}
-                  </option>
-                ))}
-              </select>
+              <div className="top-select-wrapper">
+                <select
+                  data-testid="stress-target-select"
+                  value={selectedStressDoc}
+                  onChange={(e) => {
+                    const docId = e.target.value;
+                    setSelectedStressDoc(docId);
+                    loadSingleDoc(docId);
+                  }}
+                  className="top-select"
+                  style={{ maxWidth: 260 }}
+                  title="选择进行万行压测或载入的文档界面"
+                >
+                  {SAMPLE_DOCS.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.title}
+                    </option>
+                  ))}
+                </select>
+                <svg className="top-select-arrow" width="8" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 1l4 4 4-4" />
+                </svg>
+              </div>
               <button
                 type="button"
                 data-testid="load-massive"
@@ -669,59 +676,118 @@ function App() {
         </div>
       </header>
 
-      {/* 导出结果面板 */}
+      {/* 导出结果卡片 */}
       {exportPanel && (
-        <div
-          data-testid="export-panel"
-          style={{
-            width: 'min(840px, 94vw)',
-            boxSizing: 'border-box',
-            padding: '4px 12px 8px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 4,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <strong>
-              导出 {exportPanel.kind === 'markdown' ? 'Markdown' : 'HTML'}（
-              {exportPanel.text.length} 字符）
-            </strong>
-            <button
-              type="button"
-              data-testid="export-close"
-              onClick={() => setExportPanel(null)}
-              className="top-btn"
-            >
-              关闭
-            </button>
+        <div data-testid="export-panel" className="export-panel-card">
+          <div className="export-panel-header">
+            <div className="export-panel-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              <span>
+                导出 {exportPanel.kind === 'markdown' ? 'Markdown 原文' : 'HTML 静态富文本'}
+              </span>
+              <span className="status-bar-badge">
+                {exportPanel.text.length.toLocaleString()} 字符
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(exportPanel.text).then(() => {
+                    announce('已复制导出内容到剪贴板！', 'success');
+                  }).catch(() => {
+                    announce('剪贴板写入失败，请手动全选复制', 'warn');
+                  });
+                }}
+                className="top-btn"
+                style={{ color: 'var(--brand)', fontWeight: 600 }}
+                title="复制导出文本到系统剪贴板"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                <span>一键复制</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const ext = exportPanel.kind === 'markdown' ? 'md' : 'html';
+                  const mime = exportPanel.kind === 'markdown' ? 'text/markdown;charset=utf-8' : 'text/html;charset=utf-8';
+                  const blob = new Blob([exportPanel.text], { type: mime });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `conex-export-${Date.now()}.${ext}`;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  announce(`已下载导出文件：${a.download}`, 'success');
+                }}
+                className="top-btn"
+                title="下载为本地文件"
+              >
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+                <span>下载文件</span>
+              </button>
+              <button
+                type="button"
+                data-testid="export-close"
+                onClick={() => setExportPanel(null)}
+                className="top-btn"
+                title="关闭导出面板"
+              >
+                关闭
+              </button>
+            </div>
           </div>
           <textarea
             data-testid="export-output"
             readOnly
             value={exportPanel.text}
-            rows={6}
-            style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              fontFamily: 'var(--font-mono)',
-              fontSize: 12,
-              resize: 'vertical',
-            }}
+            rows={7}
+            className="export-panel-textarea"
           />
         </div>
       )}
 
-      {/* 纸张（既有 grid-paper 布局保留） */}
+      {/* 纸张（既有 grid-paper 布局保留，扩展为主画幅） */}
       <div
         className="grid-paper"
-        style={{ width: 'min(880px, 94vw)', height: 'min(calc(100vh - 108px), 940px)' }}
+        style={{ width: 'min(880px, 94vw)', height: 'calc(100vh - 84px)' }}
       >
         <MarkdownEngine ref={engineRef} />
         <ContextMenu />
       </div>
+
+      {/* 悬浮轻量 Toast 提示 */}
+      {toast && (
+        <div className="conex-toast" role="status" aria-live="polite">
+          <span
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              backgroundColor:
+                toast.type === 'success'
+                  ? 'hsl(142 60% 45%)'
+                  : toast.type === 'warn'
+                  ? 'hsl(38 92% 50%)'
+                  : 'var(--brand)',
+            }}
+          />
+          <span>{toast.message}</span>
+        </div>
+      )}
 
       {/* aria-live 播报（R-8：开始/完成/丢弃三态，视觉隐藏但可读） */}
       <div

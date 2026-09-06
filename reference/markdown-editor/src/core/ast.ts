@@ -64,6 +64,8 @@ export interface InlineNode {
     style?: Record<string, any>;
 }
 
+export type CalloutType = 'note' | 'tip' | 'important' | 'warning' | 'caution';
+
 export interface LineNode {
     id: string;
     type: LineType;
@@ -71,6 +73,9 @@ export interface LineNode {
     content?: string;
     headingLevel?: number;
     blockquoteLevel?: number;
+    calloutType?: CalloutType;
+    calloutTitle?: string;
+    isCalloutHeader?: boolean;
     listIndent?: number;
     listPrefix?: string;
     // 列表项延续（R1.5-B）：空行后缩进 ≥ 列表项内容缩进列的 body 行——
