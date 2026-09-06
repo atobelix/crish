@@ -1853,6 +1853,10 @@ export const MarkdownEngine = React.forwardRef<
       const st = getLineState(s, i);
       return oracle.predict(classifyLine(raw, st), raw, st);
     });
+    const scrollEl = parentRef.current;
+    const currentScrollTop = scrollEl ? scrollEl.scrollTop : 0;
+    let deltaHeightAbove = 0;
+
     for (const item of virtualizer.getVirtualItems()) {
       const el = rowRefs.current.get(item.index);
       // 已卸载行（DOM 已断开）直接从注册表剔除，防 stale 条目污染批量测量
@@ -1866,16 +1870,30 @@ export const MarkdownEngine = React.forwardRef<
       const kind = classifyLine(raw, st);
       const predicted = oracle.predict(kind, raw, st);
       const measured = el.offsetHeight;
+      // 容错与无布局环境（JSDOM/未完成排版）防护：实测高度必须为合法正数
+      if (measured <= 0) continue;
       // 样本校准：所有实测样本都进 EMA（不设 0.5px 过滤——一旦预测接近实测，
       // 过滤会把样本全部剔除导致校准停摆；EMA 自身已平均噪声）
       oracle.calibrate(kind, predicted, measured);
       // 稳定点检测内置于 setHeight（与已存储高度比，|Δ| < 0.5px 不回写），
       // 终止测量-回填-重排回环（CM6 Epsilon 同款护栏）；仅实际回填时刷新 tanstack 缓存
+      const oldH = hm.getHeight(item.index) ?? predicted;
       if (hm.setHeight(item.index, measured)) {
         virtualizer.resizeItem(item.index, measured);
+        // 若该行物理位置完全在当前视口顶线之上，其高度修正将推移视口内内容；
+        // 累加高度差，执行视口滚动锚定（Scroll Anchoring）
+        if (item.start + oldH <= currentScrollTop) {
+          deltaHeightAbove += (measured - oldH);
+        }
       }
     }
     hm.flush();
+
+    // 视口物理滚动锚定补偿：当视口上方内容因实测产生高度差时，原子补偿 scrollTop，使阅读视口内内容绝对静止（ΔY_screen ≡ 0）
+    // 门禁：仅在非流式追加会话时执行（流式会话由 W1-2 滚动跟随三态独占控制，paused 期间引擎严禁主动修改 scrollTop）
+    if (!s.streamActive && deltaHeightAbove !== 0 && scrollEl && followStateRef.current !== 'follow') {
+      scrollEl.scrollTop += deltaHeightAbove;
+    }
     // P3 B1（review-P3 修订）：内容容器高度同帧覆盖为物理总高——
     // tanstack applyContainerSize（directDomUpdates 内）写逻辑总高，
     // 本 effect 声明序在其后（渲染后），同帧覆盖 f(H)，避免浏览器

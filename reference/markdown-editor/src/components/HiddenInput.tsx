@@ -1233,6 +1233,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     };
 
     const handleDragMouseUp = (e: MouseEvent) => {
+      if ((window as any).__CRISH_CELL_TEXT_DRAG) {
+        (window as any).__CRISH_LAST_DRAG_END_TIME = Date.now();
+      }
       (window as any).__CRISH_CELL_TEXT_DRAG = null;
       const d = dragSelectRef.current;
       if (!d) return;
