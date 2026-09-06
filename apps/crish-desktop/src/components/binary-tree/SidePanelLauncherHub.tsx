@@ -146,7 +146,7 @@ export const SidePanelLauncherHub: React.FC<SidePanelLauncherHubProps> = ({
               <span
                 className={`${styles.launcherCardTitle} launcher-card-title`}
               >
-                应用预览
+                浏览器
               </span>
             </div>
           </button>

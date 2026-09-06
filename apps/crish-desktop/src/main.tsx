@@ -44,7 +44,10 @@ const builtinViewFactories: ViewFactoryMap = {
     lazy(() =>
       import('./components/workspace/TerminalCard').then((m) => ({
         default: (ctx: ViewRenderContext) => (
-          <m.TerminalCard sessionId={ctx?.sessionId} />
+          <m.TerminalCard
+            sessionId={ctx?.sessionId}
+            panelId={ctx?.panelId}
+          />
         ),
       }))
     ),

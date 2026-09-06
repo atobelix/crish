@@ -277,7 +277,9 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
         viewRegistry
           .getToolViews()
           .map((v) => v.id)
-          .filter((pid) => pid === 'preview' || !occupied.has(pid)),
+          .filter(
+            (pid) => pid === 'preview' || pid === 'terminal' || !occupied.has(pid)
+          ),
       [occupied, registryVersion]
     );
 
@@ -337,6 +339,16 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                   nextIdx++;
                 }
                 openPanel(`preview:${nextIdx}`);
+              }
+            } else if (pid === 'terminal') {
+              if (!tabs.includes('terminal')) {
+                openPanel('terminal');
+              } else {
+                let nextIdx = 2;
+                while (tabs.includes(`terminal:${nextIdx}`)) {
+                  nextIdx++;
+                }
+                openPanel(`terminal:${nextIdx}`);
               }
             } else {
               openPanel(pid);

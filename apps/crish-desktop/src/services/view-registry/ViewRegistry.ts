@@ -85,6 +85,19 @@ class ViewRegistryImpl {
           };
         },
       },
+      {
+        prefix: 'terminal:',
+        resolve: (uri) => {
+          const raw = uri.substring('terminal:'.length);
+          return {
+            viewId: 'terminal',
+            params: {
+              instanceId: uri,
+              index: raw,
+            },
+          };
+        },
+      },
     ];
   }
 
@@ -206,6 +219,13 @@ class ViewRegistryImpl {
     if (id.startsWith('preview:') || id.startsWith('browser:')) {
       const prefix = id.startsWith('preview:') ? 'preview:' : 'browser:';
       const suffix = id.slice(prefix.length);
+      if (/^\d+$/.test(suffix)) {
+        return `${definition.title} ${suffix}`;
+      }
+      return `${definition.title} (${suffix})`;
+    }
+    if (id.startsWith('terminal:')) {
+      const suffix = id.slice('terminal:'.length);
       if (/^\d+$/.test(suffix)) {
         return `${definition.title} ${suffix}`;
       }

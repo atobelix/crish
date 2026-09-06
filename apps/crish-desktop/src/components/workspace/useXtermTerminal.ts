@@ -203,9 +203,11 @@ export function useXtermTerminal({
       cursorStyle: 'bar',
       disableStdin: false,
       fontSize: 13,
-      // canvas 不解析 CSS 变量；用实际字体名，与 --font-mono 默认栈一致
+      fontWeight: '500',
+      fontWeightBold: '700',
+      // canvas 不解析 CSS 变量；优先使用专业编程代码字体 JetBrains Mono，与 --font-mono 栈一致
       fontFamily:
-        "'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Consolas', 'Segoe UI Mono', monospace",
+        "'JetBrains Mono', 'Cascadia Code', 'Cascadia Mono', 'Consolas', monospace",
       lineHeight: 1.35,
       theme: getXtermTheme(),
       allowTransparency: true,

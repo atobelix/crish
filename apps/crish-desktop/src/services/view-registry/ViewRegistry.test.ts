@@ -104,7 +104,7 @@ describe('ViewRegistry 视图注册中心与路由解析', () => {
     expect(viewRegistry.getTitle('chat')).toBe('对话');
     expect(viewRegistry.getTitle('files')).toBe('文件');
     expect(viewRegistry.getTitle('terminal')).toBe('终端');
-    expect(viewRegistry.getTitle('preview')).toBe('应用预览');
+    expect(viewRegistry.getTitle('preview')).toBe('浏览器');
     expect(viewRegistry.getTitle('flow-dag')).toBe('编排图');
 
     // file-viewer 动态标题提取文件名 (包含 Windows 反斜杠)
@@ -143,11 +143,11 @@ describe('ViewRegistry 视图注册中心与路由解析', () => {
       instanceId: 'browser:3',
     });
 
-    expect(viewRegistry.getTitle('preview:2')).toBe('应用预览 2');
-    expect(viewRegistry.getTitle('preview:3')).toBe('应用预览 3');
-    expect(viewRegistry.getTitle('browser:2')).toBe('应用预览 2');
+    expect(viewRegistry.getTitle('preview:2')).toBe('浏览器 2');
+    expect(viewRegistry.getTitle('preview:3')).toBe('浏览器 3');
+    expect(viewRegistry.getTitle('browser:2')).toBe('浏览器 2');
     expect(viewRegistry.getTitle('preview:http://localhost:5173')).toBe(
-      '应用预览 (http://localhost:5173)'
+      '浏览器 (http://localhost:5173)'
     );
   });
 });

@@ -198,7 +198,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           const target = e.target as HTMLElement;
           if (
             target.closest(
-              'button, input, textarea, select, a, summary, [role="button"], [role="menuitem"], [role="menu"], [role="combobox"], [role="listbox"], [role="option"], [role="tab"], [role="switch"], [role="dialog"], [role="toolbar"], [contenteditable="true"], [data-interactive], [data-radix-popper-content-wrapper], [data-interactive="true"]'
+              'button, input, textarea, select, a, summary, [role="button"], [role="menuitem"], [role="menu"], [role="combobox"], [role="listbox"], [role="option"], [role="tab"], [role="switch"], [role="dialog"], [role="toolbar"], [contenteditable="true"], [data-interactive], [data-radix-popper-content-wrapper], [data-interactive="true"], [data-pty-host], [class*="xtermHost"], .xterm, canvas, .xterm-screen'
             )
           ) {
             return;
@@ -268,6 +268,20 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
 
     const handleCloseToolTab = useCallback(
       (panelId: string) => {
+        // 用户铁律：只要终端标签页关闭了，该终端关联的底层 PTY 进程肯定就没了；切 Tab / 折坞则保活
+        if (panelId === 'terminal' || panelId.startsWith('terminal:')) {
+          void import('../../api/ptyRegistry').then((m) => {
+            const sKey = sessionForPanel || '_global';
+            const targetKey =
+              panelId === 'terminal'
+                ? sKey
+                : `${sKey}:${panelId}`;
+            void m.killPtyForSession(targetKey);
+            void m.killPtyForSession(panelId);
+            void m.killPtyForSession(`${targetKey}:split-2`);
+            void m.killPtyForSession(`${panelId}:split-2`);
+          });
+        }
         const nextIds = dock.openPanelIds.filter((id) => id !== panelId);
         if (nextIds.length === 0) {
           updateLeafDock(leaf.id, {
@@ -286,7 +300,7 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
           activePanelId: nextActive,
         });
       },
-      [dock.activePanelId, dock.openPanelIds, leaf.id]
+      [dock.activePanelId, dock.openPanelIds, leaf.id, sessionForPanel]
     );
 
     const handleToggleDock = useCallback(() => {

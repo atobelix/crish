@@ -78,10 +78,10 @@ export function registerBuiltInViews(factories: ViewFactoryMap): void {
     component: factories['terminal']?.() ?? fallbackComponent,
   });
 
-  // 3. Web 预览卡片 (Tool)
+  // 3. 浏览器卡片 (Tool)
   viewRegistry.registerView({
     id: 'preview',
-    title: '应用预览',
+    title: '浏览器',
     icon: Globe,
     category: 'tool',
     component: factories['preview']?.() ?? fallbackComponent,

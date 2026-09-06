@@ -173,12 +173,13 @@ export function openToolInLeaf(leafId: string, panelId: string): void {
     activePanelId: mapped,
   });
 
-  if (mapped === 'terminal') {
+  if (mapped === 'terminal' || mapped.startsWith('terminal:')) {
     const sid =
       node.tabs.find((t) => t.tabId === node.activeTabId)?.sessionId ?? '';
     if (sid) {
+      const termKey = mapped === 'terminal' ? sid : `${sid}:${mapped}`;
       void import('../../api/ptyRegistry')
-        .then((m) => m.ensurePtyForSession(sid))
+        .then((m) => m.ensurePtyForSession(termKey))
         .catch(() => {
           /* PTY 与树无关；C2 未就绪时 no-op */
         });
@@ -197,6 +198,58 @@ export function openToolInActiveTab(panelId: string): void {
   const activeId = useLayoutTreeStore.getState().activeLeafId;
   if (!activeId) return;
   openToolInLeaf(activeId, panelId);
+}
+
+/** 在指定叶或当前活动叶中新建一个全新独立的终端标签页（如 terminal:2, terminal:3 等） */
+export function openNewTerminalInLeaf(leafId: string): void {
+  const id = (leafId || '').trim();
+  if (!id) return;
+  const store = useLayoutTreeStore.getState();
+  const node = findNodeById(store.tree.root, id);
+  if (!node || !isLeaf(node)) return;
+  const dock = readLeafDock(node);
+
+  let targetId = 'terminal';
+  if (dock.openPanelIds.includes('terminal')) {
+    let nextIdx = 2;
+    while (dock.openPanelIds.includes(`terminal:${nextIdx}`)) {
+      nextIdx++;
+    }
+    targetId = `terminal:${nextIdx}`;
+  }
+  openToolInLeaf(id, targetId);
+}
+
+export function openNewTerminalInActiveTab(): void {
+  const activeId = useLayoutTreeStore.getState().activeLeafId;
+  if (!activeId) return;
+  openNewTerminalInLeaf(activeId);
+}
+
+/** 在指定叶或当前活动叶中新建一个全新独立的浏览器标签页（如 preview:2, preview:3 等） */
+export function openNewBrowserInLeaf(leafId: string): void {
+  const id = (leafId || '').trim();
+  if (!id) return;
+  const store = useLayoutTreeStore.getState();
+  const node = findNodeById(store.tree.root, id);
+  if (!node || !isLeaf(node)) return;
+  const dock = readLeafDock(node);
+
+  let targetId = 'preview';
+  if (dock.openPanelIds.includes('preview')) {
+    let nextIdx = 2;
+    while (dock.openPanelIds.includes(`preview:${nextIdx}`)) {
+      nextIdx++;
+    }
+    targetId = `preview:${nextIdx}`;
+  }
+  openToolInLeaf(id, targetId);
+}
+
+export function openNewBrowserInActiveTab(): void {
+  const activeId = useLayoutTreeStore.getState().activeLeafId;
+  if (!activeId) return;
+  openNewBrowserInLeaf(activeId);
 }
 
 /**

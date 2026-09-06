@@ -84,6 +84,11 @@ pub(crate) struct PtySession {
     pub(crate) state: Mutex<PtyLivenessState>,
     /// 游离断连起始时刻（Active -> Detached 时更新）
     pub(crate) detached_at_ms: AtomicU64,
+    /// 在 Windows ConPTY 下，slave 持有伪控制台句柄（HPCON）。
+    /// 若过早 drop 会触发 ClosePseudoConsole 导致子进程秒死；
+    /// 必须在会话生命周期内随 PtySession 保活。
+    #[allow(dead_code)]
+    pub(crate) _slave: Option<Box<dyn portable_pty::SlavePty + Send>>,
 }
 
 impl PtySession {
@@ -103,6 +108,7 @@ impl PtySession {
             last_activity_at_ms: AtomicU64::new(now_ms),
             state: Mutex::new(PtyLivenessState::Active),
             detached_at_ms: AtomicU64::new(0),
+            _slave: None,
         }
     }
 
@@ -250,15 +256,11 @@ fn build_shell_command(cwd: &Path) -> CommandBuilder {
     #[cfg(windows)]
     {
         let mut cmd = if which_on_path("pwsh") || which_on_path("pwsh.exe") {
-            let mut c = CommandBuilder::new("pwsh.exe");
-            c.arg("-NoLogo");
-            c
+            CommandBuilder::new("pwsh.exe")
         } else if let Ok(pf) = std::env::var("ProgramFiles") {
             let pwsh7_path = Path::new(&pf).join("PowerShell").join("7").join("pwsh.exe");
             if pwsh7_path.is_file() {
-                let mut c = CommandBuilder::new(pwsh7_path);
-                c.arg("-NoLogo");
-                c
+                CommandBuilder::new(pwsh7_path)
             } else if let Ok(root) = std::env::var("SystemRoot") {
                 let system_ps = Path::new(&root)
                     .join("System32")
@@ -266,18 +268,12 @@ fn build_shell_command(cwd: &Path) -> CommandBuilder {
                     .join("v1.0")
                     .join("powershell.exe");
                 if system_ps.is_file() {
-                    let mut c = CommandBuilder::new(system_ps);
-                    c.arg("-NoLogo");
-                    c
+                    CommandBuilder::new(system_ps)
                 } else {
-                    let mut c = CommandBuilder::new("powershell.exe");
-                    c.arg("-NoLogo");
-                    c
+                    CommandBuilder::new("powershell.exe")
                 }
             } else {
-                let mut c = CommandBuilder::new("powershell.exe");
-                c.arg("-NoLogo");
-                c
+                CommandBuilder::new("powershell.exe")
             }
         } else if let Ok(root) = std::env::var("SystemRoot") {
             let system_ps = Path::new(&root)
@@ -286,18 +282,12 @@ fn build_shell_command(cwd: &Path) -> CommandBuilder {
                 .join("v1.0")
                 .join("powershell.exe");
             if system_ps.is_file() {
-                let mut c = CommandBuilder::new(system_ps);
-                c.arg("-NoLogo");
-                c
+                CommandBuilder::new(system_ps)
             } else {
-                let mut c = CommandBuilder::new("powershell.exe");
-                c.arg("-NoLogo");
-                c
+                CommandBuilder::new("powershell.exe")
             }
         } else {
-            let mut c = CommandBuilder::new("powershell.exe");
-            c.arg("-NoLogo");
-            c
+            CommandBuilder::new("powershell.exe")
         };
         cmd.cwd(cwd);
         // Prefer UTF-8 for child tools
@@ -425,8 +415,15 @@ pub(crate) fn create_session(
         }
     }
 
-    // Drop slave end in this process so the child is the only holder.
-    drop(pair.slave);
+    // Windows ConPTY: pair.slave 持有伪控制台句柄（HPCON），若立即 drop 会直接 ClosePseudoConsole 杀掉子进程！
+    // 必须随 PtySession 保活；Unix 平台保持 drop 惯例。
+    #[cfg(windows)]
+    let slave_holder = Some(pair.slave);
+    #[cfg(not(windows))]
+    let slave_holder = {
+        drop(pair.slave);
+        None
+    };
 
     let mut reader = pair
         .master
@@ -447,6 +444,7 @@ pub(crate) fn create_session(
         last_activity_at_ms: AtomicU64::new(crate::server::now_ms()),
         state: Mutex::new(PtyLivenessState::Active),
         detached_at_ms: AtomicU64::new(0),
+        _slave: slave_holder,
     };
 
     {

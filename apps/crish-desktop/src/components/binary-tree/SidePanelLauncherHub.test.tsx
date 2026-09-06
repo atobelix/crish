@@ -15,14 +15,14 @@ describe('SidePanelLauncherHub 空状态与运行中端口直达', () => {
     vi.clearAllMocks();
   });
 
-  it('展示核心双入口：应用预览与代码产物与文件', () => {
+  it('展示核心双入口：浏览器与代码产物与文件', () => {
     const { getByTestId, getByText } = render(
       <SidePanelLauncherHub onOpenPanel={onOpenPanel} detectedPort={null} />
     );
 
     expect(getByTestId('launcher-card-preview')).toBeTruthy();
     expect(getByTestId('launcher-card-files')).toBeTruthy();
-    expect(getByText('应用预览')).toBeTruthy();
+    expect(getByText('浏览器')).toBeTruthy();
     expect(getByText('代码产物与文件')).toBeTruthy();
   });
 
