@@ -1,7 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useEditorStore, type EditorStore } from '../core/EditorStore';
 import { useTableStore } from '../core/TableStore';
-import { getCoordinatesFromIndex, getDOMPointFromIndex } from '../core/measure';
+import { getCoordinatesFromIndex, getDOMPointFromIndex, syncDOMSelection } from '../core/measure';
 import {
   DecorationSet,
   applyCursorSelectionDecorations,
@@ -366,6 +366,9 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
     // 4. 视觉行归一化与水平无缝融合（彻底消除跨行/内联嵌套产生的重叠矩形、阶梯断层与双层灰度）
     const mergedRects = mergeVisualLineRects(newRects);
     setRects(mergedRects);
+
+    // 5. 同步浏览器原生 DOM 选区 (window.getSelection)，使 Chrome 右键菜单、快捷键与文本服务原生可识别
+    syncDOMSelection(container, start, end);
   }, [decorations, decorationVersion, containerRef]);
 
   if (rects.length === 0) return null;

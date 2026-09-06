@@ -41,6 +41,7 @@ vi.mock('../../src/core/measure', () => ({
   getGlobalIndexFromDOMNode: () => null,
   getArrowNavigationIndex: () => null,
   getDOMPointFromIndex: () => null,
+  syncDOMSelection: () => {},
 }));
 
 // React 19 act 要求显式声明测试环境（与 ime-composition.test.ts 同款）

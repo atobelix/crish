@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   findTableRange,
+  parseRowCells,
+  setCellContent,
   insertRow,
   insertColumn,
   deleteRow,
@@ -67,9 +69,63 @@ function applyTableAction(
     onDone();
   };
 
-  // 编辑模式动作（isEditing 菜单）：保持焦点语义，文本变换走编辑器
-  // 既有快捷键通道（Ctrl+C 行复制 / Ctrl+V 粘贴 / Ctrl+B/I 样式）
-  if (['copy', 'paste', 'bold', 'italic'].includes(action)) {
+  // 编辑模式动作（isEditing 菜单）
+  if (action === 'copy') {
+    const s = window.getSelection();
+    if (s && !s.isCollapsed) {
+      void navigator.clipboard.writeText(s.toString());
+    }
+    finish();
+    return;
+  }
+  if (action === 'paste') {
+    void navigator.clipboard.readText().then((clipText) => {
+      if (!clipText) return;
+      const s = useEditorStore.getState();
+      s.applyChange(s.selectionStart, s.selectionEnd, clipText, { merge: 'none' });
+    });
+    finish();
+    return;
+  }
+  if (action === 'copy-cell') {
+    const sel = useTableStore.getState().selectedCell;
+    if (sel) {
+      const minLine = Math.min(sel.startLine, sel.endLine);
+      const maxLine = Math.max(sel.startLine, sel.endLine);
+      const minCol = Math.min(sel.startCol, sel.endCol);
+      const maxCol = Math.max(sel.startCol, sel.endCol);
+      const lines = useEditorStore.getState().lines;
+      const copiedRows: string[] = [];
+      for (let r = minLine; r <= maxLine; r++) {
+        const lineText = lines[r] || '';
+        if (/^\|?[\s:-]*[-]+[\s:-]*\|/.test(lineText.trim())) continue;
+        const { cells } = parseRowCells(lineText);
+        const selectedRowCells: string[] = [];
+        for (let c = minCol; c <= maxCol; c++) {
+          selectedRowCells.push((cells[c] || '').trim());
+        }
+        copiedRows.push(selectedRowCells.join('\t'));
+      }
+      if (copiedRows.length > 0) {
+        void navigator.clipboard.writeText(copiedRows.join('\n'));
+      }
+    }
+    finish();
+    return;
+  }
+  if (action === 'paste-cell') {
+    void navigator.clipboard.readText().then((clipText) => {
+      if (!clipText) return;
+      const curState = useEditorStore.getState();
+      const res = setCellContent(curState.getText(), curState.cursorPos, clipText);
+      if (res && res.newText !== curState.getText()) {
+        curState.applyTableChange(0, curState.getText().length, res.newText, res.newCursorPos);
+      }
+    });
+    finish();
+    return;
+  }
+  if (['bold', 'italic'].includes(action)) {
     finish();
     return;
   }
@@ -389,6 +445,9 @@ export const ContextMenu: React.FC = () => {
       ) : (
         // Cell Mode Actions（B5 项 3 接线：菜单项 → TableOperations → applyTableChange）
         <>
+          <div className="context-menu-item" onClick={() => handleAction('copy-cell')}>复制单元格内容 <span style={{ float: 'right', color: 'var(--text-muted)' }}>Ctrl+C</span></div>
+          <div className="context-menu-item" onClick={() => handleAction('paste-cell')}>粘贴到单元格 <span style={{ float: 'right', color: 'var(--text-muted)' }}>Ctrl+V</span></div>
+          <div className="context-menu-divider" style={{ borderBottom: '1px solid var(--border-subtle)', margin: '4px 0' }} />
           <div className="context-menu-item" onClick={() => handleAction('edit-cell')}>编辑单元格 <span style={{ float: 'right', color: 'var(--text-muted)' }}>F2</span></div>
           <div className="context-menu-item" onClick={() => handleAction('merge-cells')}>合并单元格</div>
           <div className="context-menu-item" onClick={() => handleAction('unmerge-cells')}>拆分单元格</div>

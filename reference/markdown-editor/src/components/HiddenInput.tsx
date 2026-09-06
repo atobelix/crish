@@ -11,6 +11,7 @@ import {
   getArrowNavigationIndex,
   toContainerCoords,
   locateRowIndexByPhysicalBisection,
+  syncDOMSelection,
 } from '../core/measure';
 import { useTableStore } from '../core/TableStore';
 import {
@@ -1261,10 +1262,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       }
       if (d.suppressed) {
         const container = containerRef.current;
-        if (container) container.style.userSelect = '';
-        window.getSelection()?.removeAllRanges();
+        if (container) {
+          container.style.userSelect = '';
+          const s = editorStore.getState();
+          syncDOMSelection(container, s.selectionStart, s.selectionEnd);
+        }
       }
       dragSelectRef.current = null;
+      textareaRef.current?.focus({ preventScroll: true });
     };
 
     // —— B2 双击选词（词级，04 §3.3 状态机独立分支）——
@@ -1421,6 +1426,20 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
           void navigator.clipboard.writeText(copiedRows.join('\n'));
           return true;
         }
+      }
+
+      // 单元格粘贴 (Ctrl+V / Cmd+V)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'v' || e.key === 'V')) {
+        e.preventDefault();
+        void navigator.clipboard.readText().then((clipText) => {
+          if (!clipText) return;
+          const curState = editorStore.getState();
+          const res = setCellContent(curState.getText(), curState.cursorPos, clipText);
+          if (res && res.newText !== curState.getText()) {
+            curState.applyTableChange(0, curState.getText().length, res.newText, res.newCursorPos);
+          }
+        });
+        return true;
       }
 
       // 2. 单元格模式快捷键 (Cell Selection Mode - 仅限单元格级别操作)

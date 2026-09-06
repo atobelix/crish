@@ -854,6 +854,57 @@ export function getDOMPointFromIndex(
 }
 
 /**
+ * 将编辑器的选区状态同步至浏览器原生 DOM Selection (window.getSelection)
+ * 使得浏览器上下文菜单（右键复制/剪切/搜索/翻译）、辅助工具与系统剪贴板原生感知选区
+ */
+export function syncDOMSelection(
+  container: HTMLElement | null,
+  start: number,
+  end: number
+): void {
+  if (!container) return;
+  const winSel = typeof window !== 'undefined' ? window.getSelection() : null;
+  if (!winSel) return;
+
+  const lo = Math.min(start, end);
+  const hi = Math.max(start, end);
+
+  // 单点光标：清空原生选区，避免留下残留的高亮
+  if (lo === hi) {
+    if (winSel.rangeCount > 0 && !winSel.isCollapsed) {
+      winSel.removeAllRanges();
+    }
+    return;
+  }
+
+  const p1 = getDOMPointFromIndex(lo, container);
+  const p2 = getDOMPointFromIndex(hi, container);
+  if (!p1 || !p2) return;
+
+  try {
+    const range = document.createRange();
+    const cmp = p1.node.compareDocumentPosition(p2.node);
+    if (p1.node === p2.node) {
+      if (p1.offset <= p2.offset) {
+        range.setStart(p1.node, p1.offset);
+        range.setEnd(p2.node, p2.offset);
+      } else {
+        range.setStart(p2.node, p2.offset);
+        range.setEnd(p1.node, p1.offset);
+      }
+    } else if (cmp & Node.DOCUMENT_POSITION_FOLLOWING) {
+      range.setStart(p1.node, p1.offset);
+      range.setEnd(p2.node, p2.offset);
+    } else {
+      range.setStart(p2.node, p2.offset);
+      range.setEnd(p1.node, p1.offset);
+    }
+    winSel.removeAllRanges();
+    winSel.addRange(range);
+  } catch {}
+}
+
+/**
  * 真实 DOM 文本节点物理二分探测器（Tier 2 SSOT 物理真理源）
  * 当光标落于行首/行尾空白、Token 间隙或 Padding 时，彻底废除猜列算法，
  * 在行内已挂载的可见 Text 节点上直接执行 Range 物理二分探测。

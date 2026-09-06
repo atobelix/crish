@@ -111,8 +111,9 @@ import { type CodeState } from '../core/parser';
 // P3 B1 scroll factor：逻辑↔物理滚动高度分段映射（超长文档防浏览器高度触顶）
 import { ScrollMap } from '../core/scrollMap';
 // B4 N9：只读复制为 Markdown——DOM 选区 → 源码偏移映射 + getText 切片
-// W3-1（D-8）：导出聚合（exportHtml）复用 renderToHtml 纯函数
 import { renderToHtml, selectionToMarkdown } from '../core/renderToHtml';
+import { buildPasteText } from '../core/htmlToMarkdown';
+import { setCellContent } from '../core/TableOperations';
 // W3-4（S-EL-10）：流式专项指标接线（append 耗时/提交计数/直刷占比）
 import { metrics } from '../core/metrics';
 // W3-3（S-EL-11）：M6 表格列宽定型登记点（perf suite 表格流式场景读判）
@@ -2267,17 +2268,62 @@ export const MarkdownEngine = React.forwardRef<
       const start = Math.min(state.selectionStart, state.selectionEnd);
       const end = Math.max(state.selectionStart, state.selectionEnd);
       if (start !== end) {
-        e.clipboardData.setData(
-          'text/plain',
-          state.getText().substring(start, end)
-        );
+        const rawText = state.getText().substring(start, end);
+        e.clipboardData.setData('text/plain', rawText);
+        try {
+          const parsed = MarkdownParser.parse(rawText);
+          const html = renderToHtml(parsed);
+          if (html) {
+            e.clipboardData.setData('text/html', html);
+          }
+        } catch {
+          // ignore
+        }
         e.preventDefault();
       } else {
         const selection = window.getSelection();
         if (selection && !selection.isCollapsed) {
-          // 兜底原生选区复制
+          const raw = selection.toString();
+          if (raw) {
+            e.clipboardData.setData('text/plain', raw);
+          }
         }
       }
+    },
+    [readOnly, engineStore]
+  );
+
+  const handlePaste = useCallback(
+    (e: React.ClipboardEvent<HTMLDivElement>) => {
+      if (readOnly) return;
+      const cd = e.clipboardData;
+      if (!cd) return;
+      const s = engineStore.getState();
+      const plain = cd.getData('text/plain') ?? '';
+      const html = cd.getData('text/html') ?? '';
+
+      // 1. 如果处于表格单元格选择模式（Cell Selection Mode），直接替换选中单元格内容
+      const tableStore = useTableStore.getState();
+      if (tableStore.selectedCell && !tableStore.selectedCell.isEditing) {
+        const text = s.getText();
+        const res = setCellContent(text, s.cursorPos, plain);
+        if (res && res.newText !== text) {
+          e.preventDefault();
+          s.applyTableChange(0, text.length, res.newText, res.newCursorPos);
+          return;
+        }
+      }
+
+      // 2. 正常选区/光标粘贴
+      const start = Math.min(s.selectionStart, s.selectionEnd);
+      const end = Math.max(s.selectionStart, s.selectionEnd);
+      const selectionText = s.getText().substring(start, end);
+      const transformed = buildPasteText(plain, html, selectionText);
+      if (transformed == null) return;
+      e.preventDefault();
+      s.applyChange(start, end, transformed, {
+        merge: 'none',
+      });
     },
     [readOnly, engineStore]
   );
@@ -2394,15 +2440,13 @@ export const MarkdownEngine = React.forwardRef<
         onClick={handleContainerClick}
         onScroll={handleScrollFlush}
         onCopy={handleCopy}
+        onPaste={handlePaste}
         onCut={
           // R5 readOnly：只读模式无剪切（禁用删除语义）——不绑定处理器，
           // 交给浏览器默认（只读容器下用户无可编辑内容，无副作用）。
           readOnly
             ? undefined
             : (e) => {
-                const selection = window.getSelection();
-                if (!selection || selection.isCollapsed) return;
-
                 const state = engineStore.getState();
                 const start = Math.min(
                   state.selectionStart,
@@ -2413,10 +2457,18 @@ export const MarkdownEngine = React.forwardRef<
                 if (start !== end) {
                   const rawText = state.getText().substring(start, end);
                   e.clipboardData.setData('text/plain', rawText);
+                  try {
+                    const parsed = MarkdownParser.parse(rawText);
+                    const html = renderToHtml(parsed);
+                    if (html) {
+                      e.clipboardData.setData('text/html', html);
+                    }
+                  } catch {
+                    // ignore
+                  }
                   state.deleteSelection(start, end);
                   window.getSelection()?.removeAllRanges();
                   e.preventDefault();
-                  // Optional: return focus to textarea if possible, though it's hidden
                 }
               }
         }

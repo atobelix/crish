@@ -647,6 +647,9 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   if (input) input.focus({ preventScroll: true });
                 }}
                 onContextMenu={(e) => {
+                  // Shift + 右键：放行 Chrome 原生上下文菜单（识别复制/搜索/翻译）
+                  if (e.shiftKey) return;
+
                   // Prevent default context menu and trigger our custom one
                   e.preventDefault();
                   e.stopPropagation();
