@@ -78,6 +78,22 @@ export function useComposerMultiline(opts: {
       '[contenteditable="true"], textarea'
     ) as HTMLElement | null;
 
+    // DOM 多行实体判定：检查编辑器中是否存在多个段落、硬换行或滚动高度溢出
+    const hasDomMultiBlocks = Boolean(
+      editable &&
+        ((editable instanceof HTMLTextAreaElement && editable.value.includes('\n')) ||
+          editable.children.length > 1 ||
+          editable.querySelector(
+            'p + p, pre, blockquote, ul, ol, li, br:not(.ProseMirror-trailingBreak)'
+          ) ||
+          editable.scrollHeight > 32)
+    );
+
+    if (hasDomMultiBlocks) {
+      setMultiline(true);
+      return;
+    }
+
     const layoutW = layout.clientWidth;
     const used =
       (left?.offsetWidth ?? 0) +
@@ -131,25 +147,41 @@ export function useComposerMultiline(opts: {
   useLayoutEffect(() => {
     measure();
     const el = layoutRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
+    if (!el) return;
+
+    // 用户在输入框按回车或输入时，input 事件同步触发，0ms 立即切换多行展开
+    const onInput = () => {
+      measure();
+    };
+    el.addEventListener('input', onInput);
 
     let rafId: number | null = null;
-    const ro = new ResizeObserver(() => {
-      if (typeof window !== 'undefined' && window.requestAnimationFrame) {
-        if (rafId !== null) {
-          window.cancelAnimationFrame(rafId);
-        }
-        rafId = window.requestAnimationFrame(() => {
-          rafId = null;
-          measure();
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      try {
+        ro = new ResizeObserver(() => {
+          if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+            if (rafId !== null) {
+              window.cancelAnimationFrame(rafId);
+            }
+            rafId = window.requestAnimationFrame(() => {
+              rafId = null;
+              measure();
+            });
+          } else {
+            measure();
+          }
         });
-      } else {
-        measure();
+        if (ro && typeof ro.observe === 'function') {
+          ro.observe(el);
+        }
+      } catch {
+        ro = null;
       }
-    });
+    }
 
-    ro.observe(el);
     return () => {
+      el.removeEventListener('input', onInput);
       if (
         rafId !== null &&
         typeof window !== 'undefined' &&
@@ -157,7 +189,9 @@ export function useComposerMultiline(opts: {
       ) {
         window.cancelAnimationFrame(rafId);
       }
-      ro.disconnect();
+      if (ro && typeof ro.disconnect === 'function') {
+        ro.disconnect();
+      }
     };
   }, [layoutRef, measure]);
 

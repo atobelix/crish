@@ -286,4 +286,16 @@ describe('T5 双向 roundtrip 保真（40 方案 T5）', () => {
     expect(bulletText).toContain('- 顶层');
     expect(bulletText).toContain('- 子项');
   });
+
+  it('回车产生的末尾空段落应保留换行符，防止多行态被 trim 抹除', () => {
+    const astWithTrailingEmptyParagraph = {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: '你好呀' }] },
+        { type: 'paragraph' },
+      ],
+    };
+    const serialized = serializeToMarkdown(astWithTrailingEmptyParagraph);
+    expect(serialized).toBe('你好呀\n');
+  });
 });

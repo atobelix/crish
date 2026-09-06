@@ -215,6 +215,22 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
           return true;
         }
 
+        // 换行结构变更（Enter / Shift+Enter）：取消防抖并在帧内立即同步最新 markdown，消除高度响应延迟
+        if (event.key === 'Enter') {
+          if (bridge.debounceTimerRef.current) {
+            clearTimeout(bridge.debounceTimerRef.current);
+            bridge.debounceTimerRef.current = null;
+          }
+          requestAnimationFrame(() => {
+            const editor = bridge.editorRef.current;
+            if (!editor || editor.isDestroyed) return;
+            const markdown = serializeToMarkdown(editor.getJSON());
+            bridge.lastContentRef.current = markdown;
+            checkOversize(markdown);
+            bridge.callbacksRef.current.onMarkdownChange?.(markdown);
+          });
+        }
+
         return false;
       },
       handleClickOn: (

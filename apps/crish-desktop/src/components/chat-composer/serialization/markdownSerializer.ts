@@ -209,6 +209,10 @@ function serializeBlockNodes(nodes: JSONContent[], indent = ''): string {
     }
   }
 
+  if (blocks.length > 1 && blocks[blocks.length - 1] === '') {
+    return blocks.slice(0, -1).join('\n\n') + '\n';
+  }
+
   return blocks.join('\n\n');
 }
 
@@ -218,13 +222,16 @@ function serializeBlockNodes(nodes: JSONContent[], indent = ''): string {
 export function serializeToMarkdown(doc: JSONContent | null | undefined): string {
   if (!doc) return '';
 
-  if (doc.type === 'doc' && doc.content) {
-    return serializeBlockNodes(doc.content).trim();
-  }
+  const raw =
+    doc.type === 'doc' && doc.content
+      ? serializeBlockNodes(doc.content)
+      : Array.isArray(doc.content)
+        ? serializeBlockNodes(doc.content)
+        : serializeInline(doc);
 
-  if (Array.isArray(doc.content)) {
-    return serializeBlockNodes(doc.content).trim();
-  }
+  if (!raw) return '';
+  if (!raw.trim()) return '';
 
-  return serializeInline(doc).trim();
+  const leadingTrimmed = raw.replace(/^\s+/, '');
+  return leadingTrimmed.replace(/[ \t]+$/, '');
 }

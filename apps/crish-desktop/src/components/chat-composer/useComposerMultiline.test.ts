@@ -253,4 +253,40 @@ describe('useComposerMultiline 状态机与交互优化', () => {
     unmount();
     expect(disconnectMock).toHaveBeenCalled();
   });
+
+  it('当 DOM 中出现多个段落或换行结构时立即判定为多行态且 input 事件触发 0ms 展开', () => {
+    const container = document.createElement('div');
+    Object.defineProperty(container, 'clientWidth', {
+      configurable: true,
+      value: 600,
+    });
+
+    const editable = document.createElement('div');
+    editable.setAttribute('contenteditable', 'true');
+    container.appendChild(editable);
+
+    const layoutRef = { current: container };
+
+    // 初始单段落短文本：单行态
+    const p1 = document.createElement('p');
+    p1.textContent = 'hello';
+    editable.appendChild(p1);
+
+    const { result } = renderHook(() =>
+      useComposerMultiline({ text: 'hello', hasAttachments: false, layoutRef })
+    );
+    expect(result.current).toBe(false);
+
+    // 用户在富文本中按下回车，ProseMirror 产生第二个空段落并派发 input 事件
+    act(() => {
+      const p2 = document.createElement('p');
+      const br = document.createElement('br');
+      p2.appendChild(br);
+      editable.appendChild(p2);
+
+      editable.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(result.current).toBe(true);
+  });
 });
