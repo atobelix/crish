@@ -1537,9 +1537,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         const res = navigateTable(text, cursorPos, action);
         if (res) {
           if (res.newText !== text) {
-            editorStore.setState({ lines: res.newText.split('\n') });
+            editorStore.getState().applyTableChange(0, text.length, res.newText, res.newCursorPos);
+          } else {
+            editorStore.getState().setCursorPos(res.newCursorPos);
           }
-          editorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
             useTableStore
@@ -1559,9 +1560,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         e.preventDefault();
         const res = setCellContent(text, cursorPos, e.key);
         if (res.newText !== text) {
-          editorStore.setState({ lines: res.newText.split('\n') });
+          editorStore.getState().applyTableChange(0, text.length, res.newText, res.newCursorPos);
+        } else {
+          editorStore.getState().setCursorPos(res.newCursorPos);
         }
-        editorStore.getState().setCursorPos(res.newCursorPos);
         useTableStore.getState().enterCellEdit();
         return true;
       }
@@ -1581,9 +1583,10 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         );
         if (res) {
           if (res.newText !== text) {
-            editorStore.setState({ lines: res.newText.split('\n') });
+            editorStore.getState().applyTableChange(0, text.length, res.newText, res.newCursorPos);
+          } else {
+            editorStore.getState().setCursorPos(res.newCursorPos);
           }
-          editorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
             useTableStore
@@ -1597,14 +1600,23 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         }
         return true;
       }
+      if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        editorStore.getState().applyChange(cursorPos, cursorPos, '<br>', {
+          cursorAfter: cursorPos + 4,
+          merge: 'none',
+        });
+        return true;
+      }
       if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
         e.preventDefault();
         const res = navigateTable(text, cursorPos, 'enter');
         if (res) {
           if (res.newText !== text) {
-            editorStore.setState({ lines: res.newText.split('\n') });
+            editorStore.getState().applyTableChange(0, text.length, res.newText, res.newCursorPos);
+          } else {
+            editorStore.getState().setCursorPos(res.newCursorPos);
           }
-          editorStore.getState().setCursorPos(res.newCursorPos);
           const newTable = findTableRange(res.newText, res.newCursorPos);
           if (newTable) {
             useTableStore

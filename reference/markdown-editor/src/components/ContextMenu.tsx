@@ -6,6 +6,9 @@ import {
   deleteRow,
   deleteColumn,
   clearCell,
+  mergeSelectedCells,
+  unmergeCells,
+  setColumnAlign,
   type TableOperationResult,
   type TableRange,
 } from '../core/TableOperations';
@@ -85,6 +88,33 @@ function applyTableAction(
   }
   let res: TableOperationResult | null = null;
   switch (action) {
+    case 'merge-cells': {
+      const sel = useTableStore.getState().selectedCell;
+      if (sel) {
+        res = mergeSelectedCells(text, sel.startLine, sel.startCol, sel.endLine, sel.endCol);
+      }
+      break;
+    }
+    case 'unmerge-cells': {
+      const sel = useTableStore.getState().selectedCell;
+      if (sel) {
+        res = unmergeCells(text, sel.startLine, sel.startCol);
+      }
+      break;
+    }
+    case 'align-left':
+    case 'align-center':
+    case 'align-right': {
+      const sel = useTableStore.getState().selectedCell;
+      const align = action.replace('align-', '') as 'left' | 'center' | 'right';
+      res = setColumnAlign(text, cursorPos, align, sel?.startCol);
+      if (sel) {
+        const curAligns = [...(useTableStore.getState().tableAlignments[sel.tableId] || [])];
+        curAligns[sel.startCol] = align;
+        useTableStore.getState().setTableAlignments(sel.tableId, curAligns);
+      }
+      break;
+    }
     case 'insert-row-above':
       res = insertRow(text, cursorPos, 'above');
       break;
@@ -360,6 +390,12 @@ export const ContextMenu: React.FC = () => {
         // Cell Mode Actions（B5 项 3 接线：菜单项 → TableOperations → applyTableChange）
         <>
           <div className="context-menu-item" onClick={() => handleAction('edit-cell')}>编辑单元格 <span style={{ float: 'right', color: 'var(--text-muted)' }}>F2</span></div>
+          <div className="context-menu-item" onClick={() => handleAction('merge-cells')}>合并单元格</div>
+          <div className="context-menu-item" onClick={() => handleAction('unmerge-cells')}>拆分单元格</div>
+          <div className="context-menu-divider" style={{ borderBottom: '1px solid var(--border-subtle)', margin: '4px 0' }} />
+          <div className="context-menu-item" onClick={() => handleAction('align-left')}>文本左对齐</div>
+          <div className="context-menu-item" onClick={() => handleAction('align-center')}>文本居中对齐</div>
+          <div className="context-menu-item" onClick={() => handleAction('align-right')}>文本右对齐</div>
           <div className="context-menu-divider" style={{ borderBottom: '1px solid var(--border-subtle)', margin: '4px 0' }} />
           <div className="context-menu-item" onClick={() => handleAction('insert-row-above')}>向上插入行</div>
           <div className="context-menu-item" onClick={() => handleAction('insert-row-below')}>向下插入行</div>

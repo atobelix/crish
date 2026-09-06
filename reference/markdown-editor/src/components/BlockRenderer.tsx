@@ -22,6 +22,8 @@ import {
   type EditorStore,
   type EditorState,
 } from '../core/EditorStore';
+import { useTableStore } from '../core/TableStore';
+import { parseTableAlignments } from '../core/TableOperations';
 import { renderMathToHtml } from '../core/renderTheme';
 // B4 N5：复制按钮剪贴板工具 + 引用前缀剥离（与导出投影器共享单源）
 import {
@@ -1493,11 +1495,48 @@ function BlockquoteBlock({
 
 function TableSeparatorBlock({
   block,
+  index,
   lineOffset,
   activeState,
+  tableId,
 }: BlockRendererComponentProps) {
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const isSyncingRef = React.useRef(false);
+  const scrollLeft = useTableStore(
+    React.useCallback((s) => (tableId ? s.tableScrollLeft[tableId] ?? 0 : 0), [tableId])
+  );
+
+  React.useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (Math.abs(el.scrollLeft - scrollLeft) > 0.5) {
+      isSyncingRef.current = true;
+      el.scrollLeft = scrollLeft;
+      requestAnimationFrame(() => {
+        isSyncingRef.current = false;
+      });
+    }
+  }, [scrollLeft]);
+
+  const handleScroll = React.useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (isSyncingRef.current || !tableId) return;
+      const newLeft = e.currentTarget.scrollLeft;
+      const current = useTableStore.getState().tableScrollLeft[tableId] ?? 0;
+      if (Math.abs(newLeft - current) > 1) {
+        useTableStore.getState().setTableScrollLeft(tableId, newLeft);
+      }
+    },
+    [tableId]
+  );
+
   return (
-    <div className="line-table">
+    <div
+      className="line-table"
+      data-table-id={tableId}
+      ref={containerRef}
+      onScroll={handleScroll}
+    >
       <div
         className="line-table-separator"
         data-token-start={lineOffset}
@@ -1508,6 +1547,8 @@ function TableSeparatorBlock({
             tokens={block.inlineTokens}
             lineOffset={lineOffset}
             activeState={activeState}
+            tableId={tableId}
+            lineIndex={index}
           />
         )}
       </div>
@@ -1523,8 +1564,70 @@ function TableRowBlock({
   tableId,
 }: BlockRendererComponentProps) {
   const isHeaderRow = tableId === `table-${index}`;
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const isSyncingRef = React.useRef(false);
+
+  // 自动初始化该表的对齐规则 (如果尚未缓存)
+  React.useEffect(() => {
+    if (!tableId) return;
+    const store = useTableStore.getState();
+    if (!store.tableAlignments[tableId]) {
+      const match = tableId.match(/^table-(\d+)$/);
+      if (match) {
+        const headerIdx = parseInt(match[1], 10);
+        const sepLine = useEditorStore.getState().getLine(headerIdx + 1);
+        if (sepLine) {
+          const aligns = parseTableAlignments(sepLine);
+          if (aligns.length > 0) {
+            store.setTableAlignments(tableId, aligns);
+          }
+        }
+      }
+    }
+  }, [tableId]);
+
+  // 判定是否为当前表格的最后一行 (最后一行显示细薄横向滚动条)
+  const isLastRow = React.useMemo(() => {
+    const store = useEditorStore.getState();
+    const nextLine = store.getLine(index + 1);
+    return !nextLine || !nextLine.trim().startsWith('|');
+  }, [index]);
+
+  const scrollLeft = useTableStore(
+    React.useCallback((s) => (tableId ? s.tableScrollLeft[tableId] ?? 0 : 0), [tableId])
+  );
+
+  React.useLayoutEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    if (Math.abs(el.scrollLeft - scrollLeft) > 0.5) {
+      isSyncingRef.current = true;
+      el.scrollLeft = scrollLeft;
+      requestAnimationFrame(() => {
+        isSyncingRef.current = false;
+      });
+    }
+  }, [scrollLeft]);
+
+  const handleScroll = React.useCallback(
+    (e: React.UIEvent<HTMLDivElement>) => {
+      if (isSyncingRef.current || !tableId) return;
+      const newLeft = e.currentTarget.scrollLeft;
+      const current = useTableStore.getState().tableScrollLeft[tableId] ?? 0;
+      if (Math.abs(newLeft - current) > 1) {
+        useTableStore.getState().setTableScrollLeft(tableId, newLeft);
+      }
+    },
+    [tableId]
+  );
+
   return (
-    <div className="line-table">
+    <div
+      className={`line-table ${isLastRow ? 'table-last-row' : ''}`}
+      data-table-id={tableId}
+      ref={containerRef}
+      onScroll={handleScroll}
+    >
       <div
         className={`line-table-row ${isHeaderRow ? 'table-header-row' : ''}`}
       >

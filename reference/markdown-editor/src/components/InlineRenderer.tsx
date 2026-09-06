@@ -93,6 +93,7 @@ interface InlineRendererProps {
 export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
   ({ tokens, lineOffset, activeState, tableId, lineIndex }) => {
     const tableWidths = useTableStore(state => tableId ? state.tableWidths[tableId] : null);
+    const tableAlignments = useTableStore(state => tableId ? state.tableAlignments[tableId] : null);
     const selectedCell = useTableStore(state => state.selectedCell);
     // P3 B2：预演提示（LineItem 注入；React.memo 不拦截 context 更新——
     // 预演类随提示变化即时刷新，非预演恒 null 引用稳定零重渲染）
@@ -397,10 +398,49 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
 
           if (token.type === 'table_cell') {
             const colIndex = colIndexCounter++;
-            const cellWidth = tableWidths?.[colIndex];
-            const cellStyle: React.CSSProperties = cellWidth
+
+            // 从属合并单元格 (isMergedSlave: > 或 ^)：在非源码激活态下彻底隐藏
+            if (token.isMergedSlave && !isActive) {
+              return (
+                <span
+                  key={key}
+                  data-token-start={start}
+                  data-token-length={len}
+                  data-col-index={colIndex}
+                  data-line-index={lineIndex}
+                  data-table-id={tableId}
+                  className="token-table-cell token-table-cell-slave"
+                  style={{ display: 'none' }}
+                />
+              );
+            }
+
+            // 计算跨列物理总宽
+            let cellWidth = 0;
+            if (token.isMergedMaster && token.colSpan && token.colSpan > 1) {
+              for (let c = 0; c < token.colSpan; c++) {
+                cellWidth += tableWidths?.[colIndex + c] ?? 100;
+              }
+            } else {
+              cellWidth = tableWidths?.[colIndex] ?? 0;
+            }
+
+            const cellStyle: React.CSSProperties = cellWidth > 0
               ? { ...token.style, flex: `0 0 ${cellWidth}px`, minWidth: `${cellWidth}px` }
               : { ...token.style, minWidth: '100px', flex: '1 0 auto' };
+
+            // 动态列文本对齐 (左对齐 / 居中 / 右对齐)
+            const align = tableAlignments?.[colIndex] || 'left';
+            if (align === 'center') {
+              cellStyle.justifyContent = 'center';
+              cellStyle.textAlign = 'center';
+            } else if (align === 'right') {
+              cellStyle.justifyContent = 'flex-end';
+              cellStyle.textAlign = 'right';
+            } else {
+              cellStyle.justifyContent = 'flex-start';
+              cellStyle.textAlign = 'left';
+            }
             
             const isCellSelected = selectedCell &&
               lineIndex !== undefined &&
@@ -413,6 +453,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             const isCellEditing = isCellSelected && selectedCell?.isEditing && selectedCell.startLine === selectedCell.endLine && selectedCell.startCol === selectedCell.endCol;
 
             let selectionShadow = '';
+            let isBottomRight = false;
             if (isCellSelected) {
               if (isCellEditing) {
                 finalClassName += ' is-cell-editing';
@@ -430,6 +471,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   selectionShadow = `0 0 0 1.5px ${borderToken}`;
                   cellStyle.borderRadius = '2px';
                   cellStyle.zIndex = 3;
+                  isBottomRight = true;
                 } else {
                   if (lineIndex === minLine) shadows.push(`inset 0 1.5px 0 0 ${borderToken}`);
                   if (lineIndex === maxLine) shadows.push(`inset 0 -1.5px 0 0 ${borderToken}`);
@@ -437,8 +479,9 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                   if (colIndex === maxCol) shadows.push(`inset -1.5px 0 0 0 ${borderToken}`);
 
                   selectionShadow = shadows.join(', ');
-                  if (lineIndex === maxLine && colIndex === maxCol) {
+                  if (lineIndex === maxLine && (colIndex === maxCol || (!!token.colSpan && colIndex + token.colSpan - 1 >= maxCol))) {
                     finalClassName += ' is-selection-bottom-right';
+                    isBottomRight = true;
                   }
                 }
               }
@@ -454,6 +497,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 data-token-length={len}
                 data-col-index={colIndex}
                 data-line-index={lineIndex}
+                data-table-id={tableId}
                 className={finalClassName}
                 style={cellStyle}
                 onMouseDown={(e) => {
@@ -636,6 +680,9 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                     />
                   )}
                 </span>
+                {isBottomRight && (
+                  <span className="table-fill-handle" aria-hidden="true" />
+                )}
               </span>
             );
           }

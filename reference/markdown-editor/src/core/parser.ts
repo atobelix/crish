@@ -2572,6 +2572,29 @@ export class MarkdownParser {
       if (!isJustEmptySpace) flushCell();
     }
 
+    // 标注表格合并单元格属性 (colSpan / isMergedMaster / isMergedSlave)
+    const cellNodes = result.filter((t) => t.type === 'table_cell');
+    let currentMaster: InlineNode | null = null;
+    for (const cell of cellNodes) {
+      const trimmed = cell.raw.trim();
+      if (trimmed === '>') {
+        cell.isMergedSlave = true;
+        cell.mergeType = 'horizontal';
+        if (currentMaster) {
+          currentMaster.isMergedMaster = true;
+          currentMaster.colSpan = (currentMaster.colSpan ?? 1) + 1;
+        }
+      } else if (trimmed === '^') {
+        cell.isMergedSlave = true;
+        cell.mergeType = 'vertical';
+        currentMaster = null;
+      } else {
+        cell.colSpan = 1;
+        cell.rowSpan = 1;
+        currentMaster = cell;
+      }
+    }
+
     return result;
   }
 

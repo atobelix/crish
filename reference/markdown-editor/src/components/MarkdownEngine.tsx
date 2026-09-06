@@ -10,6 +10,7 @@ import { BlockRenderer } from './BlockRenderer';
 import { HiddenInput, indexFromClientPoint } from './HiddenInput';
 import { CursorLayer } from './CursorLayer';
 import { SelectionHighlight } from './SelectionHighlight';
+import { TableToolbar } from './TableToolbar';
 import {
   useEditorStore,
   type EditorState,
@@ -620,12 +621,14 @@ const LineItem = React.memo(
       () => ({
         position: 'absolute' as const,
         left: 0,
-        width: isTableRow ? 'max-content' : '100%',
+        width: '100%',
+        maxWidth: '100%',
         minWidth: '100%',
+        boxSizing: 'border-box' as const,
         minHeight: lineNode.type === 'table_separator' ? '0px' : '28px',
         ...(hasSearchDecoration ? { backgroundColor: SEARCH_LINE_BG } : null),
       }),
-      [lineNode.type, isTableRow, hasSearchDecoration]
+      [lineNode.type, hasSearchDecoration]
     );
 
     return (
@@ -1012,8 +1015,10 @@ export const MarkdownEngine = React.forwardRef<
       // A5 防跳动清单①（review-P3 §3.5 取整点钉死）：oracle 预测输出
       // Math.round——未回填的预测行（oracle 输出 rows × 28 × 倍率 ×
       // correction 可能非整数）经取整后写 transform，杜绝亚像素抖动
+      const kind = classifyLine(raw, st);
+      if (kind === 'table_separator') return 0;
       if (oracle)
-        return Math.round(oracle.predict(classifyLine(raw, st), raw, st));
+        return Math.round(oracle.predict(kind, raw, st));
       return 28;
     },
     overscan: 40, // Buffer for smooth scrolling
@@ -1873,6 +1878,20 @@ export const MarkdownEngine = React.forwardRef<
       const kind = classifyLine(raw, st);
       const predicted = oracle.predict(kind, raw, st);
       const measured = el.offsetHeight;
+
+      // table_separator 物理高度在非激活态恒为 0（激活编辑态为 measured > 0）
+      if (kind === 'table_separator') {
+        const targetH = measured > 0 ? measured : 0;
+        const oldH = hm.getHeight(item.index) ?? 0;
+        if (hm.setHeight(item.index, targetH)) {
+          virtualizer.resizeItem(item.index, targetH);
+          if (item.start + oldH <= currentScrollTop) {
+            deltaHeightAbove += (targetH - oldH);
+          }
+        }
+        continue;
+      }
+
       // 容错与无布局环境（JSDOM/未完成排版）防护：实测高度必须为合法正数
       if (measured <= 0) continue;
       // 样本校准：所有实测样本都进 EMA（不设 0.5px 过滤——一旦预测接近实测，
@@ -2407,7 +2426,8 @@ export const MarkdownEngine = React.forwardRef<
         data-render-mode={renderMode}
         style={{
           height: '100%',
-          overflow: 'auto',
+          overflowX: 'hidden',
+          overflowY: 'auto',
           padding: '14px 1rem',
           position: 'relative',
         }}
@@ -2422,8 +2442,10 @@ export const MarkdownEngine = React.forwardRef<
             contentDivRef.current = node;
           }}
           style={{
-            width: 'max-content',
+            width: '100%',
+            maxWidth: '100%',
             minWidth: '100%',
+            boxSizing: 'border-box',
             position: 'relative',
             marginTop: '14px',
           }}
@@ -2493,6 +2515,7 @@ export const MarkdownEngine = React.forwardRef<
             粘贴全部不生效；滚动/虚拟化/token 映射不受影响 */}
         {!readOnly && (
           <>
+            <TableToolbar />
             <CursorLayer
               containerRef={parentRef}
               // layoutDeps 紧凑化（01 问题 2 §2.2-C 的布局陷阱消除）：不再每帧生成

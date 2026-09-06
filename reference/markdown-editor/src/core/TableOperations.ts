@@ -360,7 +360,12 @@ export function deleteColumn(text: string, cursorPos: number): TableOperationRes
 /**
  * 切换列对齐方式
  */
-export function setColumnAlign(text: string, cursorPos: number, align: 'left' | 'center' | 'right'): TableOperationResult {
+export function setColumnAlign(
+  text: string,
+  cursorPos: number,
+  align: 'left' | 'center' | 'right',
+  targetCol?: number
+): TableOperationResult {
   const table = findTableRange(text, cursorPos);
   if (!table || table.separatorLineIndex === -1) return { newText: text, newCursorPos: cursorPos };
 
@@ -371,7 +376,7 @@ export function setColumnAlign(text: string, cursorPos: number, align: 'left' | 
     cells.push('---');
   }
 
-  const colIdx = table.activeCellIndex;
+  const colIdx = targetCol !== undefined ? targetCol : table.activeCellIndex;
   if (colIdx >= 0 && colIdx < cells.length) {
     if (align === 'center') cells[colIdx] = ':---:';
     else if (align === 'right') cells[colIdx] = '---:';
@@ -646,3 +651,182 @@ export function setCellContent(text: string, cursorPos: number, content: string)
   return { newText, newCursorPos };
 }
 
+/**
+ * 解析表格分隔行各列的对齐特征
+ */
+export function parseTableAlignments(sepLine: string): ('left' | 'center' | 'right')[] {
+  const { cells } = parseRowCells(sepLine);
+  return cells.map((cell) => {
+    const trimmed = cell.trim();
+    const starts = trimmed.startsWith(':');
+    const ends = trimmed.endsWith(':');
+    if (starts && ends) return 'center';
+    if (ends) return 'right';
+    return 'left';
+  });
+}
+
+/**
+ * 在表格尾部自动追加一个新数据行（用于末格按 Tab 键自动扩充）
+ */
+export function appendRowAtEnd(text: string, cursorPos: number): TableOperationResult {
+  const table = findTableRange(text, cursorPos);
+  if (!table) return { newText: text, newCursorPos: cursorPos };
+
+  const emptyCells = Array(table.columnCount).fill('  ');
+  const newRowText = `| ${emptyCells.join(' | ')} |`;
+  const newLines = [...table.lines, newRowText];
+
+  const before = text.substring(0, table.startOffset);
+  const after = text.substring(table.endOffset);
+  const newTableText = newLines.join('\n');
+  const newText = before + newTableText + after;
+
+  // 定位新行第一个单元格
+  const newRowStart = table.startOffset + table.lines.join('\n').length + 1;
+  const newCursorPos = newRowStart + 2;
+  return { newText, newCursorPos };
+}
+
+/**
+ * Excel 级真实单元格合并（Merge Selected Cells）
+ * 支持任意矩形选区 [minLine..maxLine] x [minCol..maxCol]
+ * - 规则：左上角 (minLine, minCol) 为主合并格，右侧填补 '>'（水平合并占位），下方填补 '^'（垂直合并占位）
+ * - 内容：合并选区内所有非空文字
+ */
+export function mergeSelectedCells(
+  text: string,
+  startLine: number,
+  startCol: number,
+  endLine: number,
+  endCol: number
+): TableOperationResult {
+  const minLine = Math.min(startLine, endLine);
+  const maxLine = Math.max(startLine, endLine);
+  const minCol = Math.min(startCol, endCol);
+  const maxCol = Math.max(startCol, endCol);
+
+  if (minLine === maxLine && minCol === maxCol) {
+    return { newText: text, newCursorPos: 0 };
+  }
+
+  const allLines = text.split('\n');
+  if (minLine < 0 || maxLine >= allLines.length) return { newText: text, newCursorPos: 0 };
+
+  // 收集非空文本
+  const collectedTexts: string[] = [];
+  for (let r = minLine; r <= maxLine; r++) {
+    const { cells } = parseRowCells(allLines[r]);
+    for (let c = minCol; c <= maxCol; c++) {
+      const cellText = (cells[c] ?? '').trim();
+      if (cellText && cellText !== '>' && cellText !== '^') {
+        collectedTexts.push(cellText);
+      }
+    }
+  }
+  const mergedContent = collectedTexts.join(' ') || '  ';
+
+  // 更新各行单元格
+  for (let r = minLine; r <= maxLine; r++) {
+    const { cells } = parseRowCells(allLines[r]);
+    while (cells.length <= maxCol) cells.push('  ');
+
+    for (let c = minCol; c <= maxCol; c++) {
+      if (r === minLine && c === minCol) {
+        cells[c] = ` ${mergedContent} `;
+      } else if (r === minLine) {
+        cells[c] = ' > ';
+      } else {
+        cells[c] = ' ^ ';
+      }
+    }
+    allLines[r] = `| ${cells.join(' | ')} |`;
+  }
+
+  const newText = allLines.join('\n');
+  let targetOffset = 0;
+  for (let i = 0; i < minLine; i++) {
+    targetOffset += allLines[i].length + 1;
+  }
+  const { pipePositions } = parseRowCells(allLines[minLine]);
+  const newCursorPos = targetOffset + (pipePositions[minCol] ?? 0) + 2;
+
+  return { newText, newCursorPos };
+}
+
+/**
+ * Excel 级拆分单元格（Unmerge Cells）
+ * 还原选中的主合并格或从属格所关联的所有 '>' 和 '^'
+ */
+export function unmergeCells(
+  text: string,
+  targetLine: number,
+  targetCol: number
+): TableOperationResult {
+  const allLines = text.split('\n');
+  if (targetLine < 0 || targetLine >= allLines.length) return { newText: text, newCursorPos: 0 };
+
+  let startLine = targetLine;
+  while (startLine > 0 && isTableLine(allLines[startLine - 1])) startLine--;
+  let endLine = targetLine;
+  while (endLine < allLines.length - 1 && isTableLine(allLines[endLine + 1])) endLine++;
+
+  let masterRow = targetLine;
+  let masterCol = targetCol;
+
+  // 向上回溯 ^
+  while (masterRow > startLine) {
+    const { cells } = parseRowCells(allLines[masterRow]);
+    if ((cells[masterCol] ?? '').trim() === '^') {
+      masterRow--;
+    } else {
+      break;
+    }
+  }
+  // 向左回溯 >
+  while (masterCol > 0) {
+    const { cells } = parseRowCells(allLines[masterRow]);
+    if ((cells[masterCol] ?? '').trim() === '>') {
+      masterCol--;
+    } else {
+      break;
+    }
+  }
+
+  const { cells: masterRowCells } = parseRowCells(allLines[masterRow]);
+  let spanCols = 1;
+  while (masterCol + spanCols < masterRowCells.length && masterRowCells[masterCol + spanCols].trim() === '>') {
+    spanCols++;
+  }
+
+  let spanRows = 1;
+  while (masterRow + spanRows <= endLine) {
+    const { cells: nextRowCells } = parseRowCells(allLines[masterRow + spanRows]);
+    if (nextRowCells[masterCol]?.trim() === '^') {
+      spanRows++;
+    } else {
+      break;
+    }
+  }
+
+  for (let r = masterRow; r < masterRow + spanRows; r++) {
+    const { cells } = parseRowCells(allLines[r]);
+    for (let c = masterCol; c < masterCol + spanCols; c++) {
+      if (r === masterRow && c === masterCol) continue;
+      if (cells[c] && (cells[c].trim() === '>' || cells[c].trim() === '^')) {
+        cells[c] = '  ';
+      }
+    }
+    allLines[r] = `| ${cells.join(' | ')} |`;
+  }
+
+  const newText = allLines.join('\n');
+  let targetOffset = 0;
+  for (let i = 0; i < masterRow; i++) {
+    targetOffset += allLines[i].length + 1;
+  }
+  const { pipePositions } = parseRowCells(allLines[masterRow]);
+  const newCursorPos = targetOffset + (pipePositions[masterCol] ?? 0) + 2;
+
+  return { newText, newCursorPos };
+}

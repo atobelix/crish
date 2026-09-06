@@ -9,12 +9,18 @@ export interface CellSelection {
   isEditing: boolean; // false = cell selection mode (range), true = cell in-place text edit mode (single)
 }
 
+export type ColumnAlignment = 'left' | 'center' | 'right';
+
 interface TableState {
   tableWidths: Record<string, number[]>; // key: table block ID, value: column widths in px
+  tableScrollLeft: Record<string, number>; // key: table block ID, value: horizontal scrollLeft in px
+  tableAlignments: Record<string, ColumnAlignment[]>; // key: table block ID, value: alignments per column
   selectedCell: CellSelection | null;
   isDraggingCell: boolean;
   setColumnWidth: (tableId: string, colIndex: number, width: number) => void;
   setTableWidths: (tableId: string, widths: number[]) => void;
+  setTableScrollLeft: (tableId: string, scrollLeft: number) => void;
+  setTableAlignments: (tableId: string, alignments: ColumnAlignment[]) => void;
   setSelectedCell: (cell: CellSelection | null) => void;
   setCellEditing: (isEditing: boolean) => void;
   setDraggingCell: (isDragging: boolean) => void;
@@ -27,6 +33,8 @@ interface TableState {
 
 export const useTableStore = create<TableState>((set) => ({
   tableWidths: {},
+  tableScrollLeft: {},
+  tableAlignments: {},
   selectedCell: null,
   isDraggingCell: false,
   setColumnWidth: (tableId, colIndex, width) =>
@@ -46,6 +54,23 @@ export const useTableStore = create<TableState>((set) => ({
       tableWidths: {
         ...state.tableWidths,
         [tableId]: widths,
+      },
+    })),
+  setTableScrollLeft: (tableId, scrollLeft) =>
+    set((state) => {
+      if (state.tableScrollLeft[tableId] === scrollLeft) return state;
+      return {
+        tableScrollLeft: {
+          ...state.tableScrollLeft,
+          [tableId]: scrollLeft,
+        },
+      };
+    }),
+  setTableAlignments: (tableId, alignments) =>
+    set((state) => ({
+      tableAlignments: {
+        ...state.tableAlignments,
+        [tableId]: alignments,
       },
     })),
   setSelectedCell: (cell) =>
@@ -114,5 +139,3 @@ export const useTableStore = create<TableState>((set) => ({
       selectedCell: null,
     })),
 }));
-
-

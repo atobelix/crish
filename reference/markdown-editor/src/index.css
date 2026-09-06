@@ -323,10 +323,46 @@ body {
   font-size: 14px;
 }
 
-/* 现代化 Markdown 表格 (Conex 出版级横线表格，去除生硬竖向网格) */
+/* 现代化 Markdown 表格 (Conex 出版级横线表格，去除生硬竖向网格，表格内部独立横向滚动) */
 .line-table {
-  width: max-content;
-  min-width: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  box-sizing: border-box;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.line-table::-webkit-scrollbar {
+  display: none;
+}
+
+.line-table.table-last-row {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-medium) transparent;
+}
+
+.line-table.table-last-row::-webkit-scrollbar {
+  display: block;
+  height: 6px;
+}
+
+.line-table.table-last-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.line-table.table-last-row::-webkit-scrollbar-thumb {
+  background: var(--border-medium);
+  border-radius: 3px;
+}
+
+.line-table.table-last-row::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+.token-table-cell-slave {
+  display: none !important;
 }
 
 .line-table-row {
@@ -439,6 +475,110 @@ body {
 }
 .token-br {
   display: inline;
+}
+
+/* Excel 风格右下角填充柄 (Fill Handle) */
+.table-fill-handle {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 6px;
+  height: 6px;
+  background-color: var(--border-focus);
+  border: 1px solid var(--white);
+  border-radius: 1px;
+  cursor: crosshair;
+  z-index: 10;
+}
+
+/* 表格浮动工具栏 (Excel / Notion 风格操作条) */
+.table-floating-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  background: var(--white);
+  border: 1px solid var(--border-medium);
+  border-radius: 6px;
+  box-shadow: 0 4px 14px hsl(0 0% 0% / 0.08), 0 1px 3px hsl(0 0% 0% / 0.05);
+  font-size: 12px;
+  user-select: none;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+}
+
+.table-toolbar-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbar-btn-icon {
+  display: inline-block;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.toolbar-btn-text {
+  display: inline-block;
+  font-size: 12px;
+  margin-left: 2px;
+}
+
+.table-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 24px;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.table-toolbar-btn:hover:not(:disabled) {
+  background-color: var(--border-subtle);
+  color: var(--brand);
+}
+
+.table-toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.table-toolbar-separator {
+  width: 1px;
+  height: 14px;
+  background-color: var(--border-medium);
+  margin: 0 3px;
+}
+
+.table-toolbar-btn.font-bold {
+  font-weight: 700;
+}
+.table-toolbar-btn.font-italic {
+  font-style: italic;
+}
+.table-toolbar-btn.font-strike {
+  text-decoration: line-through;
+}
+.table-toolbar-btn.font-code {
+  font-family: var(--font-mono);
+}
+.table-toolbar-btn.font-br {
+  font-size: 11px;
+  color: var(--brand);
+}
+.table-toolbar-btn.text-danger {
+  color: var(--danger-color);
+}
+.table-toolbar-btn.text-danger:hover {
+  background-color: hsl(0 100% 95%);
 }
 
 .thematic-break {

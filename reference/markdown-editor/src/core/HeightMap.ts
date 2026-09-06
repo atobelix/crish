@@ -35,8 +35,8 @@ const TYPE_MULTIPLIER: Record<LineKind, number> = {
   math: 2.5,
 };
 
-/** 表格分隔行判定（与 parser 的 table_separator 判定同源） */
-const TABLE_SEP_RE = /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/;
+/** 表格分隔行判定（与 parser 的 table_separator 判定同源，支持首尾空白） */
+const TABLE_SEP_RE = /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?\s*$/;
 
 /** 校准学习率：实测样本对修正系数的指数滑动平均权重（0.05：样本噪声下涟漪 ±0.3% 级，收敛仍快） */
 const CAL_LEARN = 0.05;

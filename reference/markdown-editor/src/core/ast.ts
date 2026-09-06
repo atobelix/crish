@@ -62,6 +62,11 @@ export interface InlineNode {
     tagName?: string;
     attributes?: Record<string, string>;
     style?: Record<string, any>;
+    colSpan?: number;
+    rowSpan?: number;
+    isMergedMaster?: boolean;
+    isMergedSlave?: boolean;
+    mergeType?: 'horizontal' | 'vertical';
 }
 
 export type CalloutType = 'note' | 'tip' | 'important' | 'warning' | 'caution';
