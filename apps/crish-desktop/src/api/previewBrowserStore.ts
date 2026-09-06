@@ -248,6 +248,32 @@ export function getPreviewHistory(): string[] {
   return readUrlList(HIST_KEY);
 }
 
+const FAVICON_MAP = new Map<string, string>();
+
+/** 获取指定 URL 的 Favicon，若未缓存则返回 null */
+export function getPreviewFavicon(url?: string): string | null {
+  if (!url || isAboutBlank(url)) return null;
+  return FAVICON_MAP.get(url) ?? null;
+}
+
+/** 写入 Favicon 并向全局广播更新事件 */
+export function setPreviewFavicon(url: string, favicon: string): void {
+  if (!url || isAboutBlank(url) || !favicon) return;
+  if (FAVICON_MAP.get(url) === favicon) return;
+  FAVICON_MAP.set(url, favicon);
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('crish-preview-favicon', {
+          detail: { url, favicon },
+        })
+      );
+    } catch {
+      /* swallow-ok: Favicon 事件广播失败不影响主流程 */
+    }
+  }
+}
+
 /**
  * 纯函数：将 url 置顶去重并截断到 max。
  * 空串 / about:blank / 危险与未知 scheme → 返回原列表浅拷贝。

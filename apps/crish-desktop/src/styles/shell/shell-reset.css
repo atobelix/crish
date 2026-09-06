@@ -91,3 +91,17 @@ samp,
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+/* 拖拽 Resizer 期间：封锁所有 iframe / webview 的 pointer-events，防粘手 */
+body.is-resizing iframe,
+body.is-resizing webview,
+body.is-resizing object,
+body.is-resizing embed {
+  pointer-events: none !important;
+}
+
+/* 拖拽期间强制 col-resize 光标，不被子元素覆盖 */
+body.leaf-dock-resizing,
+body.leaf-dock-resizing * {
+  cursor: col-resize !important;
+}

@@ -31,6 +31,105 @@ import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import { viewRegistry } from '../../services/view-registry';
 import { SidePanelNavToolbar } from './SidePanelNavToolbar';
 import styles from './LeafToolTabStrip.module.css';
+import {
+  getPreviewFavicon,
+  getPreviewUrl,
+  isAboutBlank,
+} from '../../api/previewBrowserStore';
+
+function isBrowserTabId(tabId: string): boolean {
+  return (
+    tabId === 'preview' ||
+    tabId.startsWith('preview:') ||
+    tabId.startsWith('browser:') ||
+    tabId === 'preview-browser' ||
+    tabId.startsWith('preview-browser-')
+  );
+}
+
+function resolveBrowserTabUrl(tabId: string): string | null {
+  if (tabId.startsWith('preview:http://') || tabId.startsWith('preview:https://')) {
+    return tabId.substring('preview:'.length);
+  }
+  if (tabId.startsWith('browser:http://') || tabId.startsWith('browser:https://')) {
+    return tabId.substring('browser:'.length);
+  }
+  const current = getPreviewUrl();
+  return current && !isAboutBlank(current) ? current : null;
+}
+
+/**
+ * 为浏览器标签动态展示网站 Favicon；其余标签照常使用 viewRegistry Icon。
+ */
+function TabFaviconIcon({
+  tabId,
+  Icon,
+}: {
+  tabId: string;
+  Icon?: ReturnType<typeof viewRegistry.getIcon> | null;
+}) {
+  const [faviconUrl, setFaviconUrl] = useState<string | null>(null);
+
+  const isBrowserTab = isBrowserTabId(tabId);
+
+  useEffect(() => {
+    if (!isBrowserTab) return;
+
+    const refresh = () => {
+      const url = resolveBrowserTabUrl(tabId);
+      if (!url || isAboutBlank(url)) {
+        setFaviconUrl(null);
+        return;
+      }
+      const fav = getPreviewFavicon(url);
+      setFaviconUrl(fav ?? null);
+    };
+
+    refresh();
+
+    const onFavicon = (e: Event) => {
+      const customEvent = e as CustomEvent<{ url?: string; favicon?: string }>;
+      const targetUrl = resolveBrowserTabUrl(tabId);
+      if (
+        customEvent.detail &&
+        targetUrl &&
+        customEvent.detail.url === targetUrl &&
+        customEvent.detail.favicon
+      ) {
+        setFaviconUrl(customEvent.detail.favicon);
+      } else {
+        refresh();
+      }
+    };
+    const onUrl = () => refresh();
+
+    window.addEventListener('crish-preview-favicon', onFavicon);
+    window.addEventListener('crish-preview-url', onUrl);
+    return () => {
+      window.removeEventListener('crish-preview-favicon', onFavicon);
+      window.removeEventListener('crish-preview-url', onUrl);
+    };
+  }, [tabId, isBrowserTab]);
+
+  if (isBrowserTab && faviconUrl) {
+    return (
+      <img
+        src={faviconUrl}
+        alt=""
+        aria-hidden
+        width={13}
+        height={13}
+        style={{ objectFit: 'contain', flexShrink: 0 }}
+        onError={(e) => {
+          (e.currentTarget as HTMLImageElement).style.display = 'none';
+        }}
+      />
+    );
+  }
+
+  if (!Icon) return null;
+  return <Icon size={13} aria-hidden />;
+}
 
 export interface LeafToolTabStripProps {
   leaf?: LayoutLeaf;
@@ -439,9 +538,9 @@ export const LeafToolTabStrip: React.FC<LeafToolTabStripProps> = React.memo(
                     data-tool-tab-id={tabId}
                     data-tab-id={tabId}
                   >
-                    {Icon && (
+                    {(Icon || isBrowserTabId(tabId)) && (
                       <span className={`${styles.tabIcon} side-panel-tab-icon`}>
-                        <Icon size={13} aria-hidden />
+                        <TabFaviconIcon tabId={tabId} Icon={Icon} />
                       </span>
                     )}
                     <span className={`${styles.tabLabel} tab-item-title`}>

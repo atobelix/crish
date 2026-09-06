@@ -348,33 +348,48 @@
   position: relative;
 }
 
+/* 0px 占位 + 负外边距对称跨越，精确与 leafDockDrawer border-left 视觉重合
+   热区 ::before 8px，不产生任何布局偏移 */
 .leafDockResizer {
-  flex: 0 0 6px;
-  width: 6px;
+  flex: 0 0 0;
+  width: 0;
+  margin-left: -4px;
+  margin-right: -4px;
   cursor: col-resize;
   touch-action: none;
   position: relative;
-  z-index: 2;
+  z-index: 20;
   background: transparent;
   align-self: stretch;
 }
 
+/* 扩展热区，不参与布局 */
+.leafDockResizer::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  pointer-events: auto;
+}
+
+/* 高亮线居中于 border-left */
 .leafDockResizer::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: 2.5px;
-  width: 1px;
+  left: -1px;
+  width: 2px;
   background: transparent;
   pointer-events: none;
+  transition: background 0.15s ease;
 }
 
 .leafDockResizer:hover::after,
 .leafDockResizer[data-dragging='true']::after {
-  background: var(--accent-green, #10b981);
-  width: 2px;
-  left: 2px;
+  background: var(--border-color, rgba(128, 128, 128, 0.4));
 }
 
 .leafDockDrawer {

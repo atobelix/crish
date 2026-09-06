@@ -75,6 +75,27 @@ export function injectPreviewBridgeHtml(rawHtml: string, targetUrl: string): str
 (function() {
   if (window.__CONEX_PREVIEW_BRIDGE__) return;
   window.__CONEX_PREVIEW_BRIDGE__ = true;
+
+  function reportFavicon() {
+    try {
+      var icon = document.querySelector('link[rel~="icon"], link[rel*="icon"]');
+      var faviconUrl = icon && icon.href ? icon.href : (window.location.origin + '/favicon.ico');
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          type: 'preview:favicon',
+          favicon: faviconUrl,
+          url: window.location.href
+        }, '*');
+      }
+    } catch (_) {}
+  }
+
+  if (document.readyState === 'complete') {
+    reportFavicon();
+  } else {
+    window.addEventListener('load', reportFavicon);
+  }
+
   document.addEventListener('click', function(e) {
     try {
       var a = e.target;

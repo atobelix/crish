@@ -27,6 +27,10 @@ import {
   useSessionStore,
 } from '../../store/storeAccess';
 import { useToast } from '../../services/toast/ToastContext';
+import {
+  setPreviewFavicon,
+  isAboutBlank,
+} from '../../api/previewBrowserStore';
 
 export interface PreviewCardProps {
   wsId?: string;
@@ -95,6 +99,15 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
     clearHistoryAll,
     removeHistoryAt,
   } = nav;
+
+  // 最近访问（最多展示 3 条，排除当前空白或空串）
+  const recentPages = React.useMemo(() => {
+    return (history || [])
+      .filter((u): u is string => Boolean(u && !isAboutBlank(u)))
+      .slice(0, 3);
+  }, [history]);
+
+  const hasEmptyContent = activePorts.length > 0 || recentPages.length > 0;
 
   // 当前拾取态 ref：供桥回调读取最新值，避免闭包过期
   const isInspectorActiveRef = React.useRef(isInspectorActive);
@@ -174,6 +187,13 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
         navigate(event.data.href);
         return;
       }
+      if (
+        event.data?.type === 'preview:favicon' &&
+        typeof event.data.favicon === 'string'
+      ) {
+        setPreviewFavicon(event.data.url || activeUrl, event.data.favicon);
+        return;
+      }
       const payload = convertInspectedElementPayload(
         parseInspectedElementPayload(event.data)
       );
@@ -185,10 +205,28 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [navigate, showToast]);
+  }, [navigate, showToast, activeUrl]);
 
   const handleFrameLoad = () => {
     nav.onFrameLoad();
+    try {
+      if (iframeRef.current?.contentDocument) {
+        const doc = iframeRef.current.contentDocument;
+        const icon = doc.querySelector<HTMLLinkElement>(
+          'link[rel~="icon"], link[rel*="icon"]'
+        );
+        const faviconUrl =
+          icon?.href ||
+          (activeUrl && !isAboutBlank(activeUrl)
+            ? new URL('/favicon.ico', activeUrl).href
+            : null);
+        if (faviconUrl && activeUrl) {
+          setPreviewFavicon(activeUrl, faviconUrl);
+        }
+      }
+    } catch {
+      // 跨源忽略，由代理注入脚本处理
+    }
     try {
       if (iframeRef.current?.contentDocument && iframeRef.current.contentWindow) {
         installPreviewInspectorClient({
@@ -315,33 +353,61 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
           </div>
         )}
             {!canEmbed || blank || !frameSrc ? (
-              <div className={styles.empty}>
-                {activePorts.length > 0 ? (
-                  <div
-                    className={styles.activePortsRow}
-                    role="group"
-                    aria-label="运行中的本地服务"
-                  >
-                    {activePorts.map((port) => (
-                      <button
-                        key={port}
-                        type="button"
-                        className={styles.activeServiceCapsule}
-                        onClick={() => navigate(`http://localhost:${port}`)}
-                        aria-label={`运行中的本地服务: localhost:${port}`}
-                      >
-                        <span className={styles.activeServicePulse} aria-hidden />
-                        <span className={styles.activeServiceLabel}>
-                          运行中的本地服务:
-                        </span>
-                        <span className={styles.activeServicePort}>
-                          localhost:{port}
-                        </span>
-                      </button>
-                    ))}
+              <div className={styles.emptyContainer}>
+                {hasEmptyContent ? (
+                  <div className={styles.minimalEmptyContent}>
+                    {activePorts.length > 0 && (
+                      <div className={styles.emptySection} role="group" aria-label="运行中的本地服务">
+                        <div className={styles.textLinksColumn}>
+                          {activePorts.map((port) => (
+                            <button
+                              key={port}
+                              type="button"
+                              className={styles.pureTextLink}
+                              onClick={() => navigate(`http://localhost:${port}`)}
+                              aria-label={`运行中的本地服务: localhost:${port}`}
+                            >
+                              <span className={styles.portLabel}>运行中的本地服务: </span>
+                              <span className={styles.portValue}>localhost:{port}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {recentPages.length > 0 && (
+                      <div className={styles.emptySection} role="group" aria-label="最近访问">
+                        <span className={styles.emptySectionTitle}>最近访问</span>
+                        <div className={styles.textLinksColumn}>
+                          {recentPages.map((url) => {
+                            let displayHost = url;
+                            try {
+                              const u = new URL(url);
+                              displayHost = `${u.hostname}${u.port ? `:${u.port}` : ''}${u.pathname !== '/' ? u.pathname : ''}`;
+                            } catch {
+                              displayHost = url.replace(/^https?:\/\//, '');
+                            }
+                            return (
+                              <button
+                                key={url}
+                                type="button"
+                                className={styles.pureTextLinkWithIcon}
+                                onClick={() => navigate(url)}
+                                title={url}
+                                aria-label={`打开最近网页 ${displayHost}`}
+                              >
+                                <Lucide.Globe size={12} className={styles.recentIcon} aria-hidden />
+                                <span className={styles.recentText}>{displayHost}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ) : null}
-                {!canEmbed && !blank ? (
+                ) : (
+                  <div className={styles.pureBlankCanvas} aria-hidden="true" />
+                )}
+                {!canEmbed && !blank && (
                   <div className={styles.localPath}>
                     <code className={styles.localCode}>{activeUrl}</code>
                     <Button
@@ -355,37 +421,23 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
                       外部打开
                     </Button>
                   </div>
-                ) : null}
+                )}
               </div>
-            ) : loadError || !showFrame ? (
-              <div className={styles.empty} role="alert">
-                <Lucide.AlertTriangle
-                  size={20}
-                  strokeWidth={1.5}
-                  className={styles.emptyIco}
-                  aria-hidden
-                />
-                <div className={styles.emptyTitle}>
-                  {loadError ? '无法内嵌加载' : '预览空白'}
-                </div>
-                <div className={styles.emptyDesc}>
-                  {loadError
-                    ? '站点可能设置了 X-Frame-Options / CSP，或地址无效。'
-                    : '输入地址后在此内嵌打开；不支持的协议不会加载。'}
-                </div>
+            ) : loadError ? (
+              <div className={styles.errorState} role="alert">
+                <div className={styles.emptyTitle}>无法加载此页面</div>
+                <div className={styles.emptyDesc}>站点可能设置了 X-Frame-Options / CSP，或地址无效。</div>
                 <div className={styles.quickRow}>
-                  {loadError ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      className={styles.quickChip}
-                      onClick={reload}
-                    >
-                      重试
-                    </Button>
-                  ) : null}
-                  {!blank ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className={styles.quickChip}
+                    onClick={reload}
+                  >
+                    重试
+                  </Button>
+                  {!blank && (
                     <Button
                       type="button"
                       variant="secondary"
@@ -396,7 +448,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
                     >
                       系统浏览器打开
                     </Button>
-                  ) : null}
+                  )}
                 </div>
               </div>
             ) : (

@@ -33,7 +33,7 @@ export interface PreviewToolbarNavigationProps {
   onReload: () => void;
   onUrlSubmit: (raw: string) => void;
   onUrlChange: (v: string) => void;
-  onClearUrl: () => void;
+  onClearUrl?: () => void;
 }
 
 /** 工具栏动作域（书签/历史切换/外部打开/DOM 检查器收敛为单一子对象） */
@@ -153,18 +153,19 @@ export const PreviewToolbar: React.FC<PreviewToolbarProps> = ({
           size="xs"
           className={styles.urlInput}
           value={urlInput}
-          placeholder="localhost:5173 或 https://…"
+          placeholder="请输入网址"
           onChange={(e) => onUrlChange(e.target.value)}
           prefixIcon={
             <Lucide.Globe size={13} strokeWidth={1.5} aria-hidden />
           }
-          clearable
-          onClear={onClearUrl}
           spellCheck={false}
           aria-label="预览地址"
           autoComplete="off"
           inputMode="url"
           enterKeyHint="go"
+          onFocus={(e) => {
+            e.currentTarget.select();
+          }}
         />
       </form>
       <IconButton
