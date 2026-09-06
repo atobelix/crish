@@ -16,6 +16,18 @@ import {
   deactivateNotePaper,
 } from '../../extensions/note-paper';
 
+// audit-repair-202609 T3：mock ptyRegistry（TreeLeafPanel 经动态 import 调用）
+vi.mock('../../api/ptyRegistry', () => ({
+  ensurePtyForSession: vi.fn(async () => 'pty-mock'),
+  killPtyForSession: vi.fn(async () => undefined),
+  killPtyForSessionBackground: vi.fn(),
+  ptyRegistry: new Map(),
+  bindSessionPty: vi.fn(),
+  getSessionPty: vi.fn(),
+  registerPtyBinding: vi.fn(),
+  unbind: vi.fn(),
+}));
+
 // Mock the lazy components to verify props and routing
 vi.mock('../chat-card/ChatCard', () => ({
   ChatCard: (props: any) => (
@@ -479,5 +491,44 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     expect(terminalPane.getAttribute('data-active-panel')).toBe('true');
     expect(terminalPane.getAttribute('aria-hidden')).toBe('false');
     expect(terminalPane.style.display).toBe('flex');
+  });
+
+  it('closing terminal tab kills exactly the session-scoped pty keys (T3)', async () => {
+    const ptyRegistryModule = await import('../../api/ptyRegistry');
+    const killSpy = vi.mocked(ptyRegistryModule.killPtyForSession);
+    killSpy.mockClear();
+
+    const leaf = makeChatLeaf({
+      id: 'term-leaf-1',
+      sessionId: 'session-123',
+      dock: {
+        collapsed: false,
+        openPanelIds: ['terminal'],
+        activePanelId: 'terminal',
+      },
+    });
+    useLayoutTreeStore.setState({
+      activeLeafId: leaf.id,
+      tree: { root: leaf, version: 1 },
+    });
+
+    render(
+      <TreeLeafPanel
+        leaf={leaf}
+        rect={{ x: 0, y: 0, width: 0.5, height: 1 }}
+        isActive={true}
+        isDragSource={false}
+      />
+    );
+
+    const closeBtn = await screen.findByRole('button', { name: '关闭 终端' });
+    fireEvent.click(closeBtn);
+
+    // 精准断言：只杀 `<sid>` 与 `<sid>:split-2`，禁止无前缀霰弹 key
+    await waitFor(() => {
+      expect(killSpy).toHaveBeenCalled();
+    });
+    const killedKeys = killSpy.mock.calls.map((c) => c[0]).sort();
+    expect(killedKeys).toEqual(['session-123', 'session-123:split-2']);
   });
 });

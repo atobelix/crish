@@ -348,13 +348,11 @@
   position: relative;
 }
 
-/* 0px 占位 + 负外边距对称跨越，精确与 leafDockDrawer border-left 视觉重合
-   热区 ::before 8px，不产生任何布局偏移 */
+/* 0px 占位，精确与 leafDockDrawer border-left 视觉重合，零布局侵占 */
 .leafDockResizer {
   flex: 0 0 0;
   width: 0;
-  margin-left: -4px;
-  margin-right: -4px;
+  margin: 0;
   cursor: col-resize;
   touch-action: none;
   position: relative;
@@ -363,25 +361,25 @@
   align-self: stretch;
 }
 
-/* 扩展热区，不参与布局 */
+/* 扩展热区：居中偏向抽屉内侧，绝不遮挡左侧聊天视口的滚动条滑块 */
 .leafDockResizer::before {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -4px;
+  left: -2px;
   width: 8px;
   pointer-events: auto;
 }
 
-/* 高亮线居中于 border-left */
+/* 高亮线与 border-left 完美对齐重合 */
 .leafDockResizer::after {
   content: '';
   position: absolute;
   top: 0;
   bottom: 0;
-  left: -1px;
-  width: 2px;
+  left: 0;
+  width: 1px;
   background: transparent;
   pointer-events: none;
   transition: background 0.15s ease;
