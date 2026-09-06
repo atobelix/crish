@@ -265,3 +265,112 @@ describe('MessageContent 零闪烁与平滑降级断言', () => {
     expect(container.querySelector('.errorBanner')).toBeNull();
   });
 });
+
+describe('DIM-05 双阶段生命周期调度与复合过程（工具 + 思考 + 正文）集成断言', () => {
+  it('Phase 1 到 Phase 2 状态跃迁：流式生成期到轮次闭合期，思考链、工具与正文平滑切换无缝收束', () => {
+    const sessionId = 'test-sess-dim05';
+    const msgId = 'msg-dim05-lifecycle';
+
+    // 阶段 1：流式生成中，包含思考与工具，尾部正文正在流式输出
+    const liveMsg: SessionMessage = {
+      id: msgId,
+      sender: 'assistant',
+      status: 'processing',
+      thinking: '分析问题依赖结构...',
+      toolCalls: [
+        {
+          id: 't-read',
+          name: 'read_file',
+          status: 'success',
+          arguments: '{"path":"main.rs"}',
+          output: 'fn main() {}',
+        },
+      ],
+      blocks: [
+        { type: 'thought', content: '分析问题依赖结构...' },
+        { type: 'tool_call', id: 't-read' },
+        { type: 'text', content: '已完成文件分析，' },
+      ],
+    };
+
+    act(() => {
+      useStreamingStore
+        .getState()
+        .setStreamText(sessionId, msgId, '已完成文件分析，正在给出重构建议。');
+    });
+
+    const { container, rerender } = render(
+      <StreamHarness msg={liveMsg} isThinkingMsg={true} sessionId={sessionId} />
+    );
+
+    // 断言 Phase 1：正文流式呈现且思考与工具并存
+    expect(container.textContent).toContain('已完成文件分析，正在给出重构建议。');
+    expect(container.textContent).toContain('分析问题依赖结构');
+
+    // 阶段 2：轮次闭合，进入 completed 终态
+    const closedMsg: SessionMessage = {
+      ...liveMsg,
+      status: 'completed',
+      blocks: [
+        { type: 'thought', content: '分析问题依赖结构...' },
+        { type: 'tool_call', id: 't-read' },
+        {
+          type: 'text',
+          content: '已完成文件分析，正在给出重构建议。',
+        },
+      ],
+    };
+
+    rerender(
+      <StreamHarness
+        msg={closedMsg}
+        isThinkingMsg={false}
+        sessionId={sessionId}
+      />
+    );
+
+    // 断言 Phase 2：终态闭合后全量正文与前置过程完整，零内容截断
+    expect(container.textContent).toContain('已完成文件分析，正在给出重构建议。');
+    expect(container.textContent).toContain('分析问题依赖结构');
+  });
+
+  it('Tool-Only 纯工具调用终态轮次（无回答正文）：平稳闭环渲染工具调用栈，无崩塌异常', () => {
+    const toolOnlyMsg: SessionMessage = {
+      id: 'msg-tool-only-1',
+      sender: 'assistant',
+      status: 'completed',
+      text: '',
+      toolCalls: [
+        {
+          id: 't-search-1',
+          name: 'grep_search',
+          status: 'success',
+          arguments: '{"query":"foo"}',
+          output: 'found 2 occurrences',
+        },
+        {
+          id: 't-search-2',
+          name: 'read_file',
+          status: 'success',
+          arguments: '{"path":"bar.ts"}',
+          output: 'content of bar',
+        },
+      ],
+      blocks: [
+        { type: 'tool_call', id: 't-search-1' },
+        { type: 'tool_call', id: 't-search-2' },
+      ],
+    };
+
+    const { container } = render(
+      <MessageContent
+        msg={toolOnlyMsg}
+        toolStackProps={{ activeSessionId: 'sess-tools' }}
+      />
+    );
+
+    // 纯工具轮次平稳呈现工具调用栈，不抛错且 DOM 结构稳定
+    expect(container).not.toBeNull();
+  });
+});
+

@@ -1,7 +1,6 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useCallback } from 'react';
 import { useNarrativeRenderSlots } from './narrativeRenderSlots';
-import { AlertCircle } from 'lucide-react';
-import styles from '../chat-message-row/ChatMessageRow.module.css';
+import styles from './MessageContent.module.css';
 import type { SessionMessage } from '../../store/types';
 import type { ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import {
@@ -20,6 +19,12 @@ import {
 } from '../../api/workflow-api/workflowConfirm';
 import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
 import { CompactInjectionRow } from '../chat-injection/CompactInjectionRow';
+import { TurnProcessNodeView } from './TurnProcessNodeView';
+import { deriveTurnProcessState, countProcessMetrics } from './turnProcessState';
+import {
+  useMessageProcessExpanded,
+  toggleMessageProcessExpanded,
+} from './searchExpandBridge';
 
 export interface MessageContentProps {
   /**
@@ -39,151 +44,140 @@ export interface MessageContentProps {
   className?: string;
 }
 
-const EMPTY_TIMELINE: AssistantTimelineItem[] = [];
-
-/** 流式区图片增量扫描的尾窗长度（覆盖最长的 markdown 图片语法跨帧拆分段） */
-const _IMAGE_TAIL_WINDOW = 256;
-/** 流式区图片上限（与 extractImageRefs 的 8 张上限对齐） */
 const STREAM_IMAGE_MAX = 8;
 
-/**
- * Timeline 主体（08-detail D6/T1.5）：思考链 + 工具卡 + 稳定文本块。
- * memo 化 + 流式期间签名缓存命中（timeline 引用稳定）→ 纯文本帧零重渲染；
- * 流式增长的最后 text 项由调用方剔除，走 StreamingMarkdownView 渐进分块渲染。
- */
-interface TimelineBodyProps {
-  items: AssistantTimelineItem[];
-  toolStackProps?: ChatToolStackSharedProps;
+interface ProcessItemRendererProps {
+  item: AssistantTimelineItem;
   msgId: string;
   status: SessionMessage['status'];
-  isThinkingMsg?: boolean;
-  hideThinkingBlock?: boolean;
+  isThinkingMsg: boolean;
+  thoughtDefaultOpen: boolean;
+  renderThought?: ReturnType<typeof useNarrativeRenderSlots>['renderThought'];
+  renderTools?: ReturnType<typeof useNarrativeRenderSlots>['renderTools'];
+  toolStackProps?: ChatToolStackSharedProps;
+  streamPhase?: number;
 }
 
-const TimelineBody: React.FC<TimelineBodyProps> = React.memo(
-  function TimelineBody({
-    items,
-    toolStackProps,
+const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.memo(
+  function ProcessItemRenderer({
+    item,
     msgId,
     status,
-    isThinkingMsg = false,
-    hideThinkingBlock = false,
+    isThinkingMsg,
+    thoughtDefaultOpen,
+    renderThought,
+    renderTools,
+    toolStackProps,
+    streamPhase,
   }) {
-    const { renderTools, renderThought } = useNarrativeRenderSlots();
-    const thoughtDefaultOpen = !hideThinkingBlock;
-    return (
-      <>
-        {items.map((item) => {
-          if (item.kind === 'thought') {
-            if (renderThought) {
-              return (
-                <React.Fragment key={item.key}>
-                  {renderThought({
-                    content: item.content,
-                    isLive: item.isLive ?? isThinkingMsg,
-                    durationMs: item.durationMs,
-                    turnIndex: item.turnIndex,
-                    messageId: msgId,
-                    defaultOpen: thoughtDefaultOpen,
-                  })}
-                </React.Fragment>
-              );
-            }
-            return (
-              <TimelineThoughtSection
-                key={item.key}
-                content={item.content}
-                isLive={item.isLive ?? isThinkingMsg}
-                durationMs={item.durationMs}
-                turnIndex={item.turnIndex}
-                messageId={msgId}
-                defaultExpanded={thoughtDefaultOpen}
-              />
-            );
-          }
-          if (item.kind === 'text') {
-            const bodyText = stripThoughtPlaceholders(item.content || '');
-            if (!bodyText.trim()) return null;
-            // 路径 B 确认卡片（详案 05 §2.4.2）：识别 json:workflow-payload
-            // 围栏 → 卡片渲染取代 JSON 原文展示
-            const confirmPayload = extractWorkflowConfirmPayload(bodyText);
-            const displayText = confirmPayload
-              ? stripWorkflowConfirmFence(bodyText)
-              : bodyText;
-            const imgs = extractImageRefs(bodyText);
-            return (
-              <div key={item.key} className={styles.timelineText}>
-                <StreamingMarkdownView
-                  text={displayText}
-                  isStreaming={false}
-                  priority={
-                    status === 'processing' ? Priority.Normal : Priority.High
-                  }
-                  messageId={msgId}
+    if (item.kind === 'thought') {
+      if (renderThought) {
+        return (
+          <React.Fragment key={item.key}>
+            {renderThought({
+              content: item.content,
+              isLive: item.isLive ?? isThinkingMsg,
+              durationMs: item.durationMs,
+              turnIndex: item.turnIndex,
+              messageId: msgId,
+              defaultOpen: thoughtDefaultOpen,
+            })}
+          </React.Fragment>
+        );
+      }
+      return (
+        <TimelineThoughtSection
+          key={item.key}
+          content={item.content}
+          isLive={item.isLive ?? isThinkingMsg}
+          durationMs={item.durationMs}
+          turnIndex={item.turnIndex}
+          messageId={msgId}
+          defaultExpanded={thoughtDefaultOpen}
+        />
+      );
+    }
+    if (item.kind === 'text') {
+      const bodyText = stripThoughtPlaceholders(item.content || '');
+      if (!bodyText.trim()) return null;
+      const confirmPayload = extractWorkflowConfirmPayload(bodyText);
+      const displayText = confirmPayload
+        ? stripWorkflowConfirmFence(bodyText)
+        : bodyText;
+      const imgs = extractImageRefs(bodyText);
+      return (
+        <div key={item.key} className={styles.contentText}>
+          <StreamingMarkdownView
+            text={displayText}
+            isStreaming={false}
+            priority={status === 'processing' ? Priority.Normal : Priority.High}
+            messageId={msgId}
+          />
+          {confirmPayload ? (
+            <WorkflowConfirmCard payload={confirmPayload} />
+          ) : null}
+          {imgs.length > 0 && (
+            <div className={styles.inlineImages}>
+              {imgs.map((src) => (
+                <img
+                  key={src}
+                  src={src}
+                  alt=""
+                  className={styles.mdImg}
+                  loading="lazy"
                 />
-                {confirmPayload ? (
-                  <WorkflowConfirmCard payload={confirmPayload} />
-                ) : null}
-                {imgs.length > 0 && (
-                  <div className={styles.inlineImages}>
-                    {imgs.map((src) => (
-                      <img
-                        key={src}
-                        src={src}
-                        alt=""
-                        className={styles.mdImg}
-                        loading="lazy"
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          }
-          if (item.kind === 'tools' && renderTools && toolStackProps) {
-            return (
-              <React.Fragment key={item.key}>
-                {renderTools({
-                  items: item.items,
-                  msgId,
-                  toolStackProps,
-                })}
-              </React.Fragment>
-            );
-          }
-          if (item.kind === 'injection') {
-            // 可见注入卡片（Prompt 注入管线 · 维度二）：同构 CompactToolRow
-            return (
-              <CompactInjectionRow
-                key={item.key}
-                rowKey={item.key}
-                injection={item.injection}
-                activeSessionId={toolStackProps?.activeSessionId ?? ''}
-                msgId={msgId}
-                {...(toolStackProps?.actions?.onOpenDiff
-                  ? { onOpenDiff: toolStackProps.actions.onOpenDiff }
-                  : {})}
-                {...(toolStackProps?.actions?.onOpenPath
-                  ? { onOpenPath: toolStackProps.actions.onOpenPath }
-                  : {})}
-              />
-            );
-          }
-          return toolStackProps ? (
-            <MessageToolCallsSection
-              key={item.key}
-              items={item.items}
-              msgId={msgId}
-              toolStackProps={toolStackProps}
-            />
-          ) : null;
-        })}
-      </>
-    );
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    if (item.kind === 'tools') {
+      const itemsToPass = streamPhase ? [...item.items] : item.items;
+      if (renderTools && toolStackProps) {
+        return (
+          <React.Fragment key={item.key}>
+            {renderTools({
+              items: itemsToPass,
+              msgId,
+              toolStackProps,
+            })}
+          </React.Fragment>
+        );
+      }
+      return toolStackProps ? (
+        <MessageToolCallsSection
+          key={item.key}
+          items={itemsToPass}
+          msgId={msgId}
+          toolStackProps={toolStackProps}
+        />
+      ) : null;
+    }
+    if (item.kind === 'injection') {
+      if (item.injection?.kind === 'file_context') {
+        return null;
+      }
+      return (
+        <CompactInjectionRow
+          key={item.key}
+          rowKey={item.key}
+          injection={item.injection}
+          activeSessionId={toolStackProps?.activeSessionId ?? ''}
+          msgId={msgId}
+          {...(toolStackProps?.actions?.onOpenDiff
+            ? { onOpenDiff: toolStackProps.actions.onOpenDiff }
+            : {})}
+          {...(toolStackProps?.actions?.onOpenPath
+            ? { onOpenPath: toolStackProps.actions.onOpenPath }
+            : {})}
+        />
+      );
+    }
+    return null;
   }
 );
-
-TimelineBody.displayName = 'TimelineBody';
+ProcessItemRenderer.displayName = 'ProcessItemRenderer';
 
 export const MessageContent: React.FC<MessageContentProps> = React.memo(
   ({
@@ -194,59 +188,26 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     toolStackProps,
     className,
   }) => {
-    // T4 A1：热缓冲订阅与 view model 合并已上移页面壳层（useStreamMessageViewModel），
-    // 本组件只收「已合并 view model」（msg）+ 流式累积正文（streamText）。
-    // 防撕裂平滑三元降级公式与 live 门禁语义由壳层装配点承载——即使 msg.status
-    // 已转 completed、只要热缓冲仍有条目，壳层依然返回缓冲内容，直到
-    // commitStreamToSession 在微任务中安全清理（queueMicrotask clearStream 时序闭环）。
     const displayMsg = msg;
+    const { renderTools, renderThought } = useNarrativeRenderSlots();
+    const thoughtDefaultOpen = !hideThinkingBlock;
 
-    // T1.2 签名缓存：纯文本流式帧命中（最后 text 块内容不进签名）→ 复用上次
-    // timeline 引用（TimelineBody memo 全链路零重渲染）。按 msg.id 复位。
+    const isExpanded = useMessageProcessExpanded(msg.id);
+    const onToggleExpand = useCallback((targetMsgId: string) => {
+      toggleMessageProcessExpanded(targetMsgId);
+    }, []);
+
+    // timeline 签名缓存
     const timelineCacheRef = useRef<{
       msgId: string;
       sig: string | null;
       timeline: AssistantTimelineItem[] | null;
     }>({ msgId: '', sig: null, timeline: null });
+
     if (timelineCacheRef.current.msgId !== msg.id) {
       timelineCacheRef.current = { msgId: msg.id, sig: null, timeline: null };
     }
 
-    // 跟踪上一帧流式状态与消息状态，落实防线 2
-    const prevStreamingRef = useRef(false);
-    const prevStatusRef = useRef(msg.status);
-
-    // 状态跃迁检测：流式态结束 或 processing 转为 completed/stopped/error
-    if (
-      (prevStreamingRef.current && !isThinkingMsg) ||
-      (prevStatusRef.current === 'processing' && msg.status !== 'processing')
-    ) {
-      timelineCacheRef.current.sig = null;
-      timelineCacheRef.current.timeline = null;
-    }
-
-    /** 主体拆分缓存：timeline 引用稳定 → 拆分数组引用稳定（TimelineBody memo 依赖） */
-    const splitRef = useRef<{
-      timeline: AssistantTimelineItem[];
-      streamIdx: number;
-      before: AssistantTimelineItem[];
-      after: AssistantTimelineItem[];
-    }>({
-      timeline: EMPTY_TIMELINE,
-      streamIdx: -1,
-      before: EMPTY_TIMELINE,
-      after: EMPTY_TIMELINE,
-    });
-
-    if (
-      (prevStreamingRef.current && !isThinkingMsg) ||
-      (prevStatusRef.current === 'processing' && msg.status !== 'processing')
-    ) {
-      splitRef.current.timeline = EMPTY_TIMELINE;
-      splitRef.current.streamIdx = -1;
-    }
-
-    // timeline 构建（签名缓存 + 全量重建兜底）；构建失败走 catch 兜底路径
     let timeline: AssistantTimelineItem[];
     try {
       const cached = timelineCacheRef.current;
@@ -266,21 +227,66 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       timeline = [];
     }
 
-    const textItems = timeline.filter((i) => i.kind === 'text');
-    const lastTextKey = textItems.length
-      ? textItems[textItems.length - 1]!.key
-      : null;
-    // 流式区条件（与既有语义一致：思考中助手消息的最后 text 项）。
-    // streamText 为空串时不进流式区：空内容尾块会被 timeline 排除（c.trim()
-    // 判空），lastTextKey 将回落到历史 text 块——若此时抢占其位置会导致
-    // 历史块重挂载（memo 击穿）与内容错位（F1-08 流式区定位回归）。
-    const streaming =
-      isThinkingMsg &&
-      lastTextKey != null &&
-      streamText != null &&
-      streamText.length > 0;
+    // 识别最终答案项与过程项：
+    // 若时间线末尾为 text 项，该末尾项为最终答案；若末尾为工具调用，则为纯工具轮次或过程轮次
+    const lastItem = timeline.length > 0 ? timeline[timeline.length - 1] : null;
+    const endsWithText = lastItem?.kind === 'text';
 
-    // 纯派生流式图片列表（0 render setState，StrictMode 纯净幂等）
+    // 流式区判定：助手思考中且累积流式正文有效
+    const streaming = Boolean(
+      isThinkingMsg && streamText != null && streamText.length > 0
+    );
+
+    // 跟踪流式相位变更（首帧流式正文接入时微重排单次通知）
+    const prevStreamingRef = useRef(false);
+    const streamPhaseRef = useRef(0);
+    if (prevStreamingRef.current !== streaming) {
+      streamPhaseRef.current += 1;
+      prevStreamingRef.current = streaming;
+    }
+
+    const hasFinalAnswer = Boolean(streaming || endsWithText);
+    const lastTextIndex = endsWithText ? timeline.length - 1 : -1;
+    const finalAnswerItem = endsWithText ? lastItem : null;
+
+    const processItems = useMemo(
+      () =>
+        lastTextIndex >= 0
+          ? timeline.filter((_, idx) => idx !== lastTextIndex)
+          : timeline,
+      [timeline, lastTextIndex]
+    );
+
+    const isTurnLive = Boolean(isThinkingMsg || msg.status === 'processing');
+
+    const { toolCount, thoughtCount } = useMemo(
+      () => countProcessMetrics(processItems),
+      [processItems]
+    );
+
+    const hasToolsOrThinking = toolCount > 0 || thoughtCount > 0;
+
+    const foldingState = useMemo(
+      () =>
+        deriveTurnProcessState({
+          isTurnLive,
+          msgStatus: msg.status,
+          itemKind: hasFinalAnswer ? 'text' : 'tools',
+          isFinalAnswer: hasFinalAnswer,
+          hasToolsOrThinking,
+          toolCount,
+          userExpanded: isExpanded,
+        }),
+      [
+        isTurnLive,
+        msg.status,
+        hasFinalAnswer,
+        hasToolsOrThinking,
+        toolCount,
+        isExpanded,
+      ]
+    );
+
     const currentStreamImages = useMemo(() => {
       if (!streaming || !streamText) return [];
       const found: string[] = [];
@@ -293,32 +299,45 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       return found;
     }, [streaming, streamText]);
 
-    const streamIdx = streaming
-      ? timeline.findIndex((i) => i.key === lastTextKey)
-      : -1;
-    // 主体拆分：流式区两侧的稳定项（缓存保证引用稳定 → TimelineBody memo 命中）
-    if (
-      splitRef.current.timeline !== timeline ||
-      splitRef.current.streamIdx !== streamIdx
-    ) {
-      const before = streamIdx >= 0 ? timeline.slice(0, streamIdx) : timeline;
-      const after =
-        streamIdx >= 0 ? timeline.slice(streamIdx + 1) : EMPTY_TIMELINE;
-      splitRef.current = { timeline, streamIdx, before, after };
-    }
-    const stableBefore = splitRef.current.before;
-    const stableAfter = splitRef.current.after;
+    const renderProcessChildren = useCallback(
+      () => (
+        <>
+          {processItems.map((item) => (
+            <ProcessItemRenderer
+              key={item.key}
+              item={item}
+              msgId={msg.id}
+              status={msg.status}
+              isThinkingMsg={isThinkingMsg}
+              thoughtDefaultOpen={thoughtDefaultOpen}
+              renderThought={renderThought}
+              renderTools={renderTools}
+              toolStackProps={toolStackProps}
+              streamPhase={streamPhaseRef.current}
+            />
+          ))}
+        </>
+      ),
+      [
+        processItems,
+        msg.id,
+        msg.status,
+        isThinkingMsg,
+        thoughtDefaultOpen,
+        renderThought,
+        renderTools,
+        toolStackProps,
+      ]
+    );
 
-    prevStreamingRef.current = streaming;
-    prevStatusRef.current = msg.status;
-
+    // Timeline 为空时的降级渲染
     if (!timeline.length) {
       if (msg.status === 'error') {
         const fallback = stripThoughtPlaceholders(displayMsg.text || '');
         if (!fallback.trim()) return null;
         return (
           <div className={className}>
-            <div className={styles.timelineText}>
+            <div className={styles.contentText}>
               <StreamingMarkdownView
                 text={fallback}
                 isStreaming={false}
@@ -333,9 +352,8 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       if (!fallback.trim()) {
         return null;
       }
-      // 降级路径：当 timeline.length === 0 时，通过 StreamingMarkdownView 进行渐进真流式分块渲染
       return (
-        <div className={`${styles.timelineText} ${className || ''}`}>
+        <div className={`${styles.contentText} ${className || ''}`}>
           <StreamingMarkdownView
             text={fallback}
             isStreaming={isThinkingMsg}
@@ -348,27 +366,65 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       );
     }
 
-    return (
-      <div className={className}>
-        <TimelineBody
-          items={stableBefore}
-          toolStackProps={toolStackProps}
-          msgId={msg.id}
-          status={msg.status}
-          isThinkingMsg={isThinkingMsg}
-          hideThinkingBlock={hideThinkingBlock}
-        />
-        {streaming && (
-          <div className={styles.timelineText}>
+    // 最终答案节点
+    let finalAnswerNode: React.ReactNode = null;
+    if (streaming) {
+      finalAnswerNode = (
+        <div
+          className={`${styles.contentText} ${
+            foldingState.compactAnswer ? styles.compactAnswer : ''
+          }`}
+        >
+          <StreamingMarkdownView
+            text={stripThoughtPlaceholders(streamText || '')}
+            isStreaming={true}
+            priority={Priority.Normal}
+            messageId={msg.id}
+          />
+          {currentStreamImages.length > 0 && (
+            <div className={styles.inlineImages}>
+              {currentStreamImages.map((src) => (
+                <img
+                  key={src}
+                  src={src}
+                  alt=""
+                  className={styles.mdImg}
+                  loading="lazy"
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    } else if (finalAnswerItem && finalAnswerItem.kind === 'text') {
+      const bodyText = stripThoughtPlaceholders(finalAnswerItem.content || '');
+      if (bodyText.trim()) {
+        const confirmPayload = extractWorkflowConfirmPayload(bodyText);
+        const displayText = confirmPayload
+          ? stripWorkflowConfirmFence(bodyText)
+          : bodyText;
+        const imgs = extractImageRefs(bodyText);
+        finalAnswerNode = (
+          <div
+            key={finalAnswerItem.key}
+            className={`${styles.contentText} ${
+              foldingState.compactAnswer ? styles.compactAnswer : ''
+            }`}
+          >
             <StreamingMarkdownView
-              text={stripThoughtPlaceholders(streamText || '')}
-              isStreaming={true}
-              priority={Priority.Normal}
+              text={displayText}
+              isStreaming={false}
+              priority={
+                msg.status === 'processing' ? Priority.Normal : Priority.High
+              }
               messageId={msg.id}
             />
-            {currentStreamImages.length > 0 && (
+            {confirmPayload ? (
+              <WorkflowConfirmCard payload={confirmPayload} />
+            ) : null}
+            {imgs.length > 0 && (
               <div className={styles.inlineImages}>
-                {currentStreamImages.map((src) => (
+                {imgs.map((src) => (
                   <img
                     key={src}
                     src={src}
@@ -380,15 +436,26 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
               </div>
             )}
           </div>
+        );
+      }
+    }
+
+    return (
+      <div className={className}>
+        {processItems.length > 0 && (
+          <TurnProcessNodeView
+            msgId={msg.id}
+            items={processItems}
+            isTurnLive={isTurnLive}
+            hasFinalAnswer={hasFinalAnswer}
+            turnStatus={msg.status}
+            isExpanded={isExpanded}
+            onToggleExpand={onToggleExpand}
+            renderChildren={renderProcessChildren}
+            streamPhase={streamPhaseRef.current}
+          />
         )}
-        <TimelineBody
-          items={stableAfter}
-          toolStackProps={toolStackProps}
-          msgId={msg.id}
-          status={msg.status}
-          isThinkingMsg={isThinkingMsg}
-          hideThinkingBlock={hideThinkingBlock}
-        />
+        {finalAnswerNode}
       </div>
     );
   }

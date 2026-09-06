@@ -43,14 +43,6 @@ export function userBubbleExpandAria(isExpanded: boolean): string {
   return isExpanded ? '收起全文' : '展开全文';
 }
 
-export function thinkingFoldAria(opts: {
-  isLive: boolean;
-  isOpen: boolean;
-}): string {
-  if (opts.isLive) return '思考中';
-  return opts.isOpen ? '收起思考' : '展开思考';
-}
-
 export function formatMsgTime(ts?: number): string {
   if (!ts) return '';
   const date = new Date(ts);

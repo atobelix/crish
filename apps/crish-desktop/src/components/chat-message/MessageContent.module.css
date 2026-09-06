@@ -1,0 +1,112 @@
+/* apps/crish-desktop/src/components/chat-message/MessageContent.module.css */
+/* 轮次过程折叠状态机与 33px 发丝底线栏样式规范 */
+
+.turnProcessContainer {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.turnProcessControlBar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 33px;
+  padding: 6px 0;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 0.5px solid var(--border-subtle, hsl(0 0% 100% / 0.08));
+  cursor: pointer;
+  text-align: left;
+  box-sizing: border-box;
+  font-family: inherit;
+  color: var(--text-secondary);
+  transition: color 150ms ease;
+  user-select: none;
+}
+
+.turnProcessControlBar:hover {
+  color: var(--text-primary);
+}
+
+.turnProcessControlBar:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-right: 6px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-tertiary, var(--text-secondary));
+  transform: rotate(0deg);
+  transition: transform 100ms ease;
+  flex-shrink: 0;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.summaryLabel {
+  font-size: var(--font-size-xs, 12px);
+  line-height: 1.2;
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.processHiddenSlot {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.processHiddenSlot:not([hidden]) {
+  padding-top: var(--space-2, 8px);
+  padding-bottom: var(--space-2, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+
+.liveProcessStream {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  width: 100%;
+}
+
+.contentText {
+  width: 100%;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.compactAnswer {
+  margin-top: 8px;
+}
+
+.inlineImages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-2, 8px);
+}
+
+.mdImg {
+  max-width: min(100%, 420px);
+  max-height: 280px;
+  border-radius: var(--radius-xl, 12px);
+  border: var(--hairline-width, 1px) solid var(--hairline, var(--border-subtle));
+  object-fit: contain;
+  background: var(--bg-secondary);
+}

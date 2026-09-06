@@ -28,9 +28,13 @@ const thoughtMsg: SessionMessage = {
 function ThoughtSlotProbe({
   hideThinkingBlock,
   onRenderThought,
+  msg = thoughtMsg,
+  isThinkingMsg = false,
 }: {
   hideThinkingBlock: boolean;
   onRenderThought: (args: ChatNarrativeRenderThoughtArgs) => void;
+  msg?: SessionMessage;
+  isThinkingMsg?: boolean;
 }): React.ReactElement {
   return (
     <NarrativeRenderSlotsContext.Provider
@@ -41,12 +45,17 @@ function ThoughtSlotProbe({
             <div
               data-testid="thought-slot"
               data-open={String(args.defaultOpen)}
+              data-live={String(args.isLive)}
             />
           );
         },
       }}
     >
-      <MessageContent msg={thoughtMsg} hideThinkingBlock={hideThinkingBlock} />
+      <MessageContent
+        msg={msg}
+        hideThinkingBlock={hideThinkingBlock}
+        isThinkingMsg={isThinkingMsg}
+      />
     </NarrativeRenderSlotsContext.Provider>
   );
 }
@@ -107,3 +116,104 @@ describe('MessageContent hideThinkingBlock', () => {
     );
   });
 });
+
+describe('DIM-05 双阶段生命周期调度与思考折叠规范契约', () => {
+  it('Phase 1（流式生成期）：isThinkingMsg=true 时，思考槽 isLive=true 且保持流式直出', () => {
+    const liveThoughtMsg: SessionMessage = {
+      id: 'msg-live-1',
+      sender: 'assistant',
+      text: '',
+      thinking: '正在实时进行逻辑推演...',
+      status: 'processing',
+    };
+
+    let receivedArgs: ChatNarrativeRenderThoughtArgs | undefined;
+    render(
+      <ThoughtSlotProbe
+        msg={liveThoughtMsg}
+        isThinkingMsg={true}
+        hideThinkingBlock={true}
+        onRenderThought={(args) => {
+          receivedArgs = args;
+        }}
+      />
+    );
+
+    expect(receivedArgs).toBeDefined();
+    expect(receivedArgs?.isLive).toBe(true);
+    expect(receivedArgs?.content).toBe('正在实时进行逻辑推演...');
+  });
+
+  it('Phase 2（轮次闭合期）：status="completed", isThinkingMsg=false 时，进入终态结算，isLive=false', () => {
+    const closedThoughtMsg: SessionMessage = {
+      id: 'msg-closed-1',
+      sender: 'assistant',
+      text: '最终回答结论',
+      thinking: '已完成的前置思考推演',
+      status: 'completed',
+    };
+
+    let receivedArgs: ChatNarrativeRenderThoughtArgs | undefined;
+    render(
+      <ThoughtSlotProbe
+        msg={closedThoughtMsg}
+        isThinkingMsg={false}
+        hideThinkingBlock={false}
+        onRenderThought={(args) => {
+          receivedArgs = args;
+        }}
+      />
+    );
+
+    expect(receivedArgs).toBeDefined();
+    expect(receivedArgs?.isLive).toBe(false);
+    expect(receivedArgs?.defaultOpen).toBe(true);
+  });
+
+  it('透传指标统计字段 durationMs 与 turnIndex，为 33px 控制栏摘要汇总提供度量基准', () => {
+    const timedThoughtMsg: SessionMessage = {
+      id: 'msg-timed-1',
+      sender: 'assistant',
+      text: '回答',
+      status: 'completed',
+      blocks: [
+        {
+          type: 'thought',
+          content: '耗时分析与执行步骤规划',
+          durationMs: 3500,
+        },
+        {
+          type: 'text',
+          content: '回答',
+        },
+      ],
+    };
+
+    let receivedArgs: ChatNarrativeRenderThoughtArgs | undefined;
+    render(
+      <ThoughtSlotProbe
+        msg={timedThoughtMsg}
+        isThinkingMsg={false}
+        hideThinkingBlock={false}
+        onRenderThought={(args) => {
+          receivedArgs = args;
+        }}
+      />
+    );
+
+    expect(receivedArgs).toBeDefined();
+    expect(receivedArgs?.durationMs).toBe(3500);
+    expect(receivedArgs?.content).toBe('耗时分析与执行步骤规划');
+  });
+
+  it('默认无叙事插槽时，DOM 节点具备正确 data-kind="thought" 与折叠展开 aria 契约', () => {
+    const { container } = render(
+      <MessageContent msg={thoughtMsg} hideThinkingBlock={true} />
+    );
+    const thoughtElem = container.querySelector('[data-kind="thought"]');
+    expect(thoughtElem).not.toBeNull();
+    expect(thoughtElem?.getAttribute('data-kind')).toBe('thought');
+    expect(thoughtElem?.querySelector('[aria-expanded="false"]')).not.toBeNull();
+  });
+});
+

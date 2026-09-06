@@ -12,7 +12,6 @@ import {
   messageRowAriaLabel,
   pinToggleLabels,
   shouldHostToolStack,
-  thinkingFoldAria,
   toolStackSharedPropsEqual,
   userBubbleDisplayText,
   userBubbleExpandAria,
@@ -149,12 +148,9 @@ describe('pin / expand / thinking a11y labels', () => {
     });
   });
 
-  it('userBubbleExpandAria / thinkingFoldAria Chinese', () => {
+  it('userBubbleExpandAria Chinese', () => {
     expect(userBubbleExpandAria(false)).toBe('展开全文');
     expect(userBubbleExpandAria(true)).toBe('收起全文');
-    expect(thinkingFoldAria({ isLive: true, isOpen: true })).toBe('思考中');
-    expect(thinkingFoldAria({ isLive: false, isOpen: false })).toBe('展开思考');
-    expect(thinkingFoldAria({ isLive: false, isOpen: true })).toBe('收起思考');
   });
 });
 
