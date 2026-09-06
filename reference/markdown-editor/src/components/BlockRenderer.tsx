@@ -1448,8 +1448,8 @@ function BlockquoteBlock({
   const activeLineClass = isLineActive ? ' is-active-line' : '';
 
   const bqStyle: React.CSSProperties = {
-    paddingLeft: `${(level - 1) * 16 + 14}px`,
-    ...(level > 1
+    paddingLeft: isLineActive ? 0 : `${(level - 1) * 16 + 14}px`,
+    ...(level > 1 && !isLineActive
       ? {
           boxShadow: Array.from({ length: level - 1 })
             .map((_, i) => `inset ${(i + 1) * 16}px 0 0 0 var(--list-guide-line)`)
@@ -1696,8 +1696,8 @@ export const DefaultBlockRenderer = function DefaultBlockRenderer({
   const bqStyle: React.CSSProperties | undefined =
     level > 0
       ? {
-          paddingLeft: `${(level - 1) * 16 + 14}px`,
-          ...(level > 1
+          paddingLeft: isLineActive ? 0 : `${(level - 1) * 16 + 14}px`,
+          ...(level > 1 && !isLineActive
             ? {
                 boxShadow: Array.from({ length: level - 1 })
                   .map((_, i) => `inset ${(i + 1) * 16}px 0 0 0 var(--list-guide-line)`)

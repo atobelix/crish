@@ -882,6 +882,7 @@ export function syncDOMSelection(
   if (!p1 || !p2) return;
 
   try {
+    (window as any).__CRISH_SYNCING_DOM_SELECTION = true;
     const range = document.createRange();
     const cmp = p1.node.compareDocumentPosition(p2.node);
     if (p1.node === p2.node) {
@@ -901,7 +902,9 @@ export function syncDOMSelection(
     }
     winSel.removeAllRanges();
     winSel.addRange(range);
-  } catch {}
+  } catch {} finally {
+    (window as any).__CRISH_SYNCING_DOM_SELECTION = false;
+  }
 }
 
 /**

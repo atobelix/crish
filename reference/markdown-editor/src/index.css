@@ -862,6 +862,12 @@ body {
   vertical-align: top;
 }
 
+.virtual-row.is-active-line .line-blockquote:not(.line-callout),
+.line-blockquote.is-active-line:not(.line-callout) {
+  border-left: none !important;
+  padding-left: 0 !important;
+}
+
 .virtual-row.is-active-line .line-blockquote .token-blockquote-prefix,
 .line-blockquote.is-active-line .token-blockquote-prefix {
   display: inline-flex;

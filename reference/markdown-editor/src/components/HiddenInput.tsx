@@ -922,12 +922,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
   useEffect(() => {
     const handleSelectionChange = () => {
       if (!containerRef.current) return;
+      if (dragSelectRef.current && dragSelectRef.current.active) return;
+      if ((window as any).__CRISH_SYNCING_DOM_SELECTION) return;
+
       const selection = window.getSelection();
       if (isComposing) {
         setIsComposing(false);
       }
       if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-        console.log('handleSelectionChange: collapsed or no selection');
         return;
       }
 
@@ -945,27 +947,13 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         containerRef.current
       );
 
-      console.log('handleSelectionChange: range', {
-        startIdx,
-        endIdx,
-        s: range.startContainer,
-        e: range.endContainer,
-      });
-
       if (startIdx !== null && endIdx !== null) {
-        const s = Math.min(startIdx, endIdx);
-        const e = Math.max(startIdx, endIdx);
-
-        // If it's a drag or double-click selection, update store.
+        // If it's a drag or double-click selection, update store using setSelection to preserve directionality.
         // If it's a collapsed click (s === e), we IGNORE it here because MarkdownEngine.tsx's onClick
         // will handle it using caretRangeFromPoint, which is more precise.
         // This prevents the "two cursor changes" jitter on mousedown -> click.
-        if (s !== e) {
-          editorStore.setState({
-            cursorPos: e,
-            selectionStart: s,
-            selectionEnd: e,
-          });
+        if (startIdx !== endIdx) {
+          editorStore.getState().setSelection(startIdx, endIdx);
         }
       }
     };
@@ -1074,11 +1062,14 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       ) {
         return;
       }
-      // 已有 DOM 文本选区（双击选词/外部拖选结果）：不干预——原生选区路径
-      // （selectionchange → getGlobalIndexFromDOMNode）继续接管，避免引擎
-      // 状态机与浏览器原生选择打架
+      // 若存在外部原生 DOM 选区（非编辑器自身内部选区，如外部文本/测试注入）：
+      // 不干预——原生选区路径继续保留；但若为编辑器自身已有选区，允许 mousedown 启动新一轮拖选（支持倒着向上拖选）
+      const st = editorStore.getState();
+      const isInternalSelection = st.selectionStart !== st.selectionEnd;
       const selection = window.getSelection();
-      if (selection && selection.toString().length > 0) return;
+      if (!isInternalSelection && selection && selection.toString().length > 0) {
+        return;
+      }
 
       // 预先在 mousedown 阶段（DOM 尚未激活/展开隐藏语法前）以当前未展开物理状态计算目标字符索引，
       // 保证后续 click 触发时光标锚定在用户视线所点击的文字上，而不是在展开后新插入的前缀/标记位置

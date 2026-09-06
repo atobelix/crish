@@ -2335,8 +2335,9 @@ export const MarkdownEngine = React.forwardRef<
     const st = engineStore.getState();
 
     // If we just finished a drag selection, ignore the synthetic click
-    if (Date.now() - ((window as any).__CRISH_LAST_DRAG_END_TIME || 0) < 50)
-      return;
+    const timeSinceDragEnd = Date.now() - ((window as any).__CRISH_LAST_DRAG_END_TIME || 0);
+    if (timeSinceDragEnd < 400) return;
+    if (st.selectionStart !== st.selectionEnd && timeSinceDragEnd < 600) return;
 
     const target = e.target as HTMLElement;
 
