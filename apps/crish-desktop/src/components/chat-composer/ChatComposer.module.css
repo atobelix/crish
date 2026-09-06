@@ -755,6 +755,11 @@
    ========================================================================== */
 
 .composerCard {
+  /* 同心几何标尺：外圆角 = 内边距 + 内圆角 (Ro = P + Ri) */
+  --composer-radius-inner: 16px;
+  --composer-pad-y: 8px;
+  --composer-pad-x: 10px;
+  --composer-radius-outer: calc(var(--composer-radius-inner) + var(--composer-pad-y));
   position: relative;
   z-index: var(--z-dock);
   display: flex;
@@ -762,12 +767,16 @@
   gap: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: 6px 10px;
+  padding: var(--composer-pad-y) var(--composer-pad-x);
   border: 1px solid var(--border-color);
-  border-radius: 22px;
+  border-radius: var(--composer-radius-outer, 24px);
   background: var(--composer-bg, var(--bg-composer, var(--bg-elevated)));
   box-shadow: none;
   transition: border-color var(--transition-fast, 120ms ease);
+}
+
+.composerCard.isMultiline {
+  padding: 10px 12px 8px 12px;
 }
 
 .composerCard.isMultiline:has(.attachStrip),
@@ -798,7 +807,7 @@
   display: grid;
   width: 100%;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
 }
 
 /* 单行模式（默认）：所有控件位于同一行：左侧[＋]，中间输入框，右侧权限[🛡️]与动作组 */
@@ -807,20 +816,20 @@
   grid-template-columns: auto 1fr auto auto;
 }
 
-/* 多行模式：输入框占满顶部，控制按钮移至底部 */
+/* 多行模式：输入框占满顶部，控制按钮移至底部，充足呼吸间距 */
 .composerCard.isMultiline .inputMainLayout {
   grid-template-areas:
     'text text text text'
     'left-ctrl perm . actions';
   grid-template-columns: auto auto 1fr auto;
-  row-gap: 6px;
+  row-gap: 10px;
 }
 
 .actionLeft {
   grid-area: left-ctrl;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
   position: relative;
   height: 32px;
@@ -846,7 +855,7 @@
   flex-shrink: 0;
   justify-self: end;
   height: 32px;
-  gap: 4px;
+  gap: 8px;
 }
 
 /* ---- Plus Button (32x32 正圆按钮，无边框，轻柔微光) ---- */
@@ -1235,6 +1244,8 @@
 
 .composerCard.isMultiline .fieldInGrid {
   --composer-min-lines: 2;
+  --composer-line-height: 1.55;
+  padding: 2px 2px 0 2px;
 }
 
 .composerCard.isMultiline .fieldInGrid .textarea,
@@ -1243,6 +1254,7 @@
   overflow-y: auto;
   min-height: 24px;
   max-height: 220px;
+  line-height: var(--composer-line-height, 1.55);
 }
 
 .dropMask {
@@ -1253,7 +1265,7 @@
   align-items: center;
   justify-content: center;
   gap: 10px;
-  border-radius: 22px;
+  border-radius: var(--composer-radius-outer, 24px);
   background: var(--bg-elevated, var(--composer-bg));
   color: var(--text-tertiary);
   font-size: var(--font-size-sm, 13px);

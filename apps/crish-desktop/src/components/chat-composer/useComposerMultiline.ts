@@ -78,15 +78,14 @@ export function useComposerMultiline(opts: {
       '[contenteditable="true"], textarea'
     ) as HTMLElement | null;
 
-    // DOM 多行实体判定：检查编辑器中是否存在多个段落、硬换行或滚动高度溢出
+    // DOM 多行实体判定：检查编辑器中是否存在多个段落、硬换行或特定多行块
     const hasDomMultiBlocks = Boolean(
       editable &&
         ((editable instanceof HTMLTextAreaElement && editable.value.includes('\n')) ||
           editable.children.length > 1 ||
           editable.querySelector(
             'p + p, pre, blockquote, ul, ol, li, br:not(.ProseMirror-trailingBreak)'
-          ) ||
-          editable.scrollHeight > 32)
+          ))
     );
 
     if (hasDomMultiBlocks) {
