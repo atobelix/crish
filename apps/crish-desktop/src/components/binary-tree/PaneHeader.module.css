@@ -81,9 +81,7 @@
   flex: 0 0 var(--tab-item-width, 240px);
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  padding: 0 6px 0 10px;
+  padding: 0;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-lg, 8px);
@@ -101,14 +99,24 @@
               color var(--dur-fast, 120ms) var(--ease-default, ease-out),
               border-color var(--dur-fast, 120ms) var(--ease-default, ease-out),
               box-shadow var(--dur-fast, 120ms) var(--ease-default, ease-out),
-              width 120ms cubic-bezier(0, 0, 0.2, 1),
-              min-width 120ms cubic-bezier(0, 0, 0.2, 1),
-              max-width 120ms cubic-bezier(0, 0, 0.2, 1),
-              flex-basis 120ms cubic-bezier(0, 0, 0.2, 1),
-              padding 120ms cubic-bezier(0, 0, 0.2, 1),
-              margin 120ms cubic-bezier(0, 0, 0.2, 1),
-              border-width 120ms cubic-bezier(0, 0, 0.2, 1),
-              opacity 100ms ease-out;
+              width 140ms cubic-bezier(0.2, 0, 0, 1),
+              max-width 140ms cubic-bezier(0.2, 0, 0, 1),
+              flex-basis 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* 标签内部固定尺寸容器：揭幕式展开，文字与关闭按钮不挤压变形，拒绝膨胀充气感 */
+.tabItemInner {
+  width: var(--tab-item-width, 240px);
+  min-width: var(--tab-item-width, 240px);
+  max-width: var(--tab-item-width, 240px);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 0 6px 0 10px;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 /* 关闭缓冲锁定态：连续关闭期间锁定宽度，防止向右放大位移，实现原地连击关闭 */
@@ -117,6 +125,12 @@
   max-width: var(--tab-locked-width, 240px) !important;
   min-width: 0 !important;
   flex: 0 0 var(--tab-locked-width, 240px) !important;
+}
+
+.tabsContainer[data-locked="true"] .tabItem:not(.tabItemLeaving) .tabItemInner {
+  width: var(--tab-locked-width, 240px) !important;
+  min-width: var(--tab-locked-width, 240px) !important;
+  max-width: var(--tab-locked-width, 240px) !important;
 }
 
 .tabItem:hover:not(.tabItemActive) {
@@ -140,70 +154,36 @@
   box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 8%, transparent), 0 1px 1.5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
 }
 
-/* 入场生长动画：自然舒展、柔和生长，拒绝突兀与油滑果冻特效 */
+/* 入场生长动画：自然舒展、无膨胀充气感（纯净槽位展开与柔和淡入） */
 @keyframes tabGrowIn {
   0% {
     width: 0;
     max-width: 0;
     min-width: 0;
     flex-basis: 0px;
-    padding-left: 0;
-    padding-right: 0;
-    margin-right: -4px;
-    border-width: 0;
-    border-color: transparent;
     opacity: 0;
-  }
-  30% {
-    opacity: 0.6;
-    border-width: 1px;
   }
   100% {
     width: var(--tab-item-width, 240px);
     max-width: var(--tab-item-width, 240px);
     min-width: 0;
     flex-basis: var(--tab-item-width, 240px);
-    padding-left: 10px;
-    padding-right: 6px;
-    margin-right: 0;
-    border-width: 1px;
     opacity: 1;
   }
 }
 
 .tabItemEntering {
-  animation: tabGrowIn 180ms cubic-bezier(0.2, 0, 0, 1) forwards;
+  animation: tabGrowIn 160ms cubic-bezier(0.2, 0, 0, 1) forwards;
   will-change: width, max-width, flex-basis, opacity;
 }
 
-.tabItemEntering .tabTitle,
-.tabItemEntering .tabCloseBtn {
-  animation: tabContentFadeIn 150ms ease-out forwards;
-}
-
-@keyframes tabContentFadeIn {
-  0% {
-    opacity: 0;
-  }
-  40% {
-    opacity: 0.2;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-/* 自然消失动画：尺寸与间距平滑收缩，内容迅速淡出，邻居顺畅靠拢 */
+/* 自然消失动画：内容瞬间淡隐，尺寸平滑收拢，邻居顺畅靠拢 */
 @keyframes tabShrinkOut {
   0% {
     width: var(--tab-item-width, 240px);
     max-width: var(--tab-item-width, 240px);
     min-width: 0;
     flex-basis: var(--tab-item-width, 240px);
-    padding-left: 10px;
-    padding-right: 6px;
-    margin-right: 0;
-    border-width: 1px;
     opacity: 1;
   }
   100% {
@@ -211,25 +191,19 @@
     max-width: 0;
     min-width: 0;
     flex-basis: 0px;
-    padding-left: 0;
-    padding-right: 0;
-    margin-right: -4px;
-    border-width: 0;
-    border-color: transparent;
     opacity: 0;
   }
 }
 
 .tabItem.tabItemLeaving {
-  animation: tabShrinkOut 180ms cubic-bezier(0.2, 0, 0, 1) forwards !important;
+  animation: tabShrinkOut 160ms cubic-bezier(0.2, 0, 0, 1) forwards !important;
   pointer-events: none !important;
   overflow: hidden !important;
 }
 
-.tabItem.tabItemLeaving .tabTitle,
-.tabItem.tabItemLeaving .tabCloseBtn {
+.tabItem.tabItemLeaving .tabItemInner {
   opacity: 0 !important;
-  transition: opacity 80ms ease-out !important;
+  transition: opacity 60ms ease-out !important;
 }
 
 .tabTitle {
