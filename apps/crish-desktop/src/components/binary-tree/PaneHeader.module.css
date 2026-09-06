@@ -50,7 +50,7 @@
   height: 100%;
   display: flex;
   align-items: center;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: hidden;
   scrollbar-width: none;
   gap: 4px;
@@ -64,19 +64,21 @@
   align-items: center;
   gap: 4px;
   height: 100%;
-  flex-shrink: 0;
+  flex: 0 0 auto;
+  min-width: 0;
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
 
-/* 单个会话/工具标签项 (28px 严格对标侧栏胶囊卡片，8px 圆角) */
+/* 单个会话/工具标签项 (28px 严格对标侧栏胶囊卡片，8px 圆角，绝对等宽严格锁定) */
 .tabItem {
   height: 28px;
   min-height: 28px;
   max-height: 28px;
-  max-width: 180px;
+  width: var(--tab-item-width, 240px);
+  max-width: var(--tab-item-width, 240px);
   min-width: 0;
-  flex: 0 1 150px;
+  flex: 0 0 var(--tab-item-width, 240px);
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
@@ -99,16 +101,22 @@
               color var(--dur-fast, 120ms) var(--ease-default, ease-out),
               border-color var(--dur-fast, 120ms) var(--ease-default, ease-out),
               box-shadow var(--dur-fast, 120ms) var(--ease-default, ease-out),
-              max-width 220ms cubic-bezier(0.16, 1, 0.3, 1),
-              flex-basis 220ms cubic-bezier(0.16, 1, 0.3, 1),
-              padding 220ms cubic-bezier(0.16, 1, 0.3, 1),
-              margin 220ms cubic-bezier(0.16, 1, 0.3, 1),
-              opacity 180ms ease,
-              transform 140ms cubic-bezier(0.2, 0, 0, 1);
+              width 120ms cubic-bezier(0, 0, 0.2, 1),
+              min-width 120ms cubic-bezier(0, 0, 0.2, 1),
+              max-width 120ms cubic-bezier(0, 0, 0.2, 1),
+              flex-basis 120ms cubic-bezier(0, 0, 0.2, 1),
+              padding 120ms cubic-bezier(0, 0, 0.2, 1),
+              margin 120ms cubic-bezier(0, 0, 0.2, 1),
+              border-width 120ms cubic-bezier(0, 0, 0.2, 1),
+              opacity 100ms ease-out;
 }
 
-.tabItem:active {
-  transform: scale(0.985);
+/* 关闭缓冲锁定态：连续关闭期间锁定宽度，防止向右放大位移，实现原地连击关闭 */
+.tabsContainer[data-locked="true"] .tabItem:not(.tabItemLeaving) {
+  width: var(--tab-locked-width, 240px) !important;
+  max-width: var(--tab-locked-width, 240px) !important;
+  min-width: 0 !important;
+  flex: 0 0 var(--tab-locked-width, 240px) !important;
 }
 
 .tabItem:hover:not(.tabItemActive) {
@@ -132,45 +140,96 @@
   box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 8%, transparent), 0 1px 1.5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
 }
 
-/* 入场与离场动画 */
-@keyframes tabSlideIn {
-  from {
-    opacity: 0;
-    transform: scale(0.92) translateX(-6px);
+/* 入场生长动画：自然舒展、柔和生长，拒绝突兀与油滑果冻特效 */
+@keyframes tabGrowIn {
+  0% {
+    width: 0;
     max-width: 0;
+    min-width: 0;
     flex-basis: 0px;
     padding-left: 0;
     padding-right: 0;
     margin-right: -4px;
+    border-width: 0;
+    border-color: transparent;
+    opacity: 0;
   }
-  to {
-    opacity: 1;
-    transform: scale(1) translateX(0);
-    max-width: 180px;
-    flex-basis: 150px;
-    padding-left: 8px;
-    padding-right: 4px;
+  30% {
+    opacity: 0.6;
+    border-width: 1px;
+  }
+  100% {
+    width: var(--tab-item-width, 240px);
+    max-width: var(--tab-item-width, 240px);
+    min-width: 0;
+    flex-basis: var(--tab-item-width, 240px);
+    padding-left: 10px;
+    padding-right: 6px;
     margin-right: 0;
+    border-width: 1px;
+    opacity: 1;
   }
 }
 
 .tabItemEntering {
-  animation: tabSlideIn 220ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: tabGrowIn 180ms cubic-bezier(0.2, 0, 0, 1) forwards;
+  will-change: width, max-width, flex-basis, opacity;
+}
+
+.tabItemEntering .tabTitle,
+.tabItemEntering .tabCloseBtn {
+  animation: tabContentFadeIn 150ms ease-out forwards;
+}
+
+@keyframes tabContentFadeIn {
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 0.2;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* 自然消失动画：尺寸与间距平滑收缩，内容迅速淡出，邻居顺畅靠拢 */
+@keyframes tabShrinkOut {
+  0% {
+    width: var(--tab-item-width, 240px);
+    max-width: var(--tab-item-width, 240px);
+    min-width: 0;
+    flex-basis: var(--tab-item-width, 240px);
+    padding-left: 10px;
+    padding-right: 6px;
+    margin-right: 0;
+    border-width: 1px;
+    opacity: 1;
+  }
+  100% {
+    width: 0;
+    max-width: 0;
+    min-width: 0;
+    flex-basis: 0px;
+    padding-left: 0;
+    padding-right: 0;
+    margin-right: -4px;
+    border-width: 0;
+    border-color: transparent;
+    opacity: 0;
+  }
 }
 
 .tabItem.tabItemLeaving {
-  max-width: 0;
-  min-width: 0;
-  flex-basis: 0px;
-  padding-left: 0;
-  padding-right: 0;
-  margin-left: 0;
-  margin-right: -4px;
-  opacity: 0;
-  transform: scale(0.88) translateX(-4px);
-  pointer-events: none;
-  border-color: transparent;
-  box-shadow: none;
+  animation: tabShrinkOut 180ms cubic-bezier(0.2, 0, 0, 1) forwards !important;
+  pointer-events: none !important;
+  overflow: hidden !important;
+}
+
+.tabItem.tabItemLeaving .tabTitle,
+.tabItem.tabItemLeaving .tabCloseBtn {
+  opacity: 0 !important;
+  transition: opacity 80ms ease-out !important;
 }
 
 .tabTitle {
@@ -182,10 +241,10 @@
 }
 
 .tabCloseBtn {
-  width: 16px;
-  height: 16px;
-  min-width: 16px;
-  border-radius: 3px;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  border-radius: 4px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -194,8 +253,18 @@
   color: var(--text-tertiary);
   cursor: pointer;
   padding: 0;
-  opacity: 0.4;
+  opacity: 0.45;
+  position: relative;
   transition: background var(--dur-fast, 120ms), opacity var(--dur-fast, 120ms), color var(--dur-fast, 120ms), transform var(--dur-fast, 120ms);
+}
+
+.tabCloseBtn::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: -4px;
+  right: -4px;
 }
 
 .tabItem:hover .tabCloseBtn {
@@ -214,7 +283,7 @@
 }
 
 .tabCloseBtn:active {
-  transform: scale(0.9);
+  background: var(--tint-active, rgba(0, 0, 0, 0.12));
 }
 
 /* 新建标签按钮（加号）- 28px × 28px / 8px 圆角 */
