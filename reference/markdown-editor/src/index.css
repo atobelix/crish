@@ -36,9 +36,10 @@
   --yellow-tint-2: hsl(45 100% 50% / 0.28);
   --yellow-text: hsl(38 75% 22%);
 
-  /* 品牌微绿微光文本选择高亮 (翡翠微光，高透光率，绝不遮挡文字与高亮) */
-  --selection-bg: oklch(0.6959 0.149 162.48 / 0.10);
-  --blue-selection: oklch(0.6959 0.149 162.48 / 0.10);
+  /* 现代出版级高品质油墨蓝选区高亮 (明晰澄澈，与主流专业笔记/编辑器对齐，绝不遮挡文字) */
+  --selection-bg: hsl(212 100% 50% / 0.12);
+  --blue-selection: hsl(212 100% 50% / 0.12);
+  --blue-selection-border: hsl(212 90% 52%);
 
   /* 暖调柔和边框与交互态 (3% 纯黑微量混入纯白底) */
   --border-subtle: var(--border-soft);
@@ -433,10 +434,17 @@ body {
 .token-table-cell.is-cell-editing {
   background-color: var(--white) !important;
   outline: none !important;
-  box-shadow: 0 0 0 1.5px var(--brand), 0 0 0 1px var(--border-focus) !important;
+  box-shadow: 0 0 0 1.5px var(--blue-selection-border), 0 0 0 1px var(--border-focus) !important;
   z-index: 4;
   border-radius: 2px;
   cursor: text;
+}
+
+.token-br-wrapper {
+  display: inline;
+}
+.token-br {
+  display: inline;
 }
 
 .thematic-break {

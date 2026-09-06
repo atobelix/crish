@@ -1864,6 +1864,105 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
     // We don't need manual dom manipulation here anymore, since useEffect handles it on cursorPos change
   };
 
+  /**
+   * 智能退格（Smart Backspace）：
+   * 在任务列表（`- [ ] `）、有序/无序列表（`1. ` / `- `）、块引用（`> `）等前缀边界处，
+   * 一键清除前缀或反缩进，彻底根除敲 6~8 次退格逐字符删除隐藏语法字符的恶劣体验。
+   * 处理了前缀返回 true；否则返回 false 交由底层单字符删除。
+   */
+  const handleSmartBackspace = (): boolean => {
+    const s = editorStore.getState();
+    if (s.selectionStart !== s.selectionEnd) return false;
+
+    const pos = s.cursorPos;
+    const lineIdx = s.lineOffsets.findLineIndex(pos);
+    const lineStart = s.lineOffsets.getOffset(lineIdx);
+    const lineText = s.getLine(lineIdx) ?? '';
+    const inLine = pos - lineStart;
+
+    // 1. 任务列表项智能退格（例如 `- [ ] ` 或 `  - [ ] `）
+    const taskMatch = lineText.match(/^(\s*)([-*+]|\d+\.)\s+(\[[ xX]\])\s*/);
+    if (taskMatch) {
+      const prefixLen = taskMatch[0].length;
+      if (inLine <= prefixLen && inLine > 0) {
+        const indent = taskMatch[1];
+        const bullet = taskMatch[2];
+        const normalListPrefix = `${indent}${bullet} `;
+        const rest = lineText.slice(prefixLen);
+        s.applyChange(
+          lineStart,
+          lineStart + lineText.length,
+          normalListPrefix + rest,
+          { cursorAfter: lineStart + normalListPrefix.length }
+        );
+        return true;
+      }
+    }
+
+    // 2. 普通无序/有序列表项智能退格（例如 `- ` 或 `1. `）
+    const listMatch = lineText.match(/^(\s*)([-*+]|\d+\.)\s*/);
+    if (listMatch) {
+      const prefixLen = listMatch[0].length;
+      if (inLine <= prefixLen && inLine > 0) {
+        const indent = listMatch[1];
+        if (indent.length >= 2) {
+          // 有缩进：一键减少 2 个空格缩进（反缩进）
+          const newIndent = indent.slice(2);
+          const newPrefix = `${newIndent}${listMatch[2]} `;
+          const rest = lineText.slice(prefixLen);
+          s.applyChange(
+            lineStart,
+            lineStart + lineText.length,
+            newPrefix + rest,
+            { cursorAfter: lineStart + newPrefix.length }
+          );
+          return true;
+        }
+        // 无缩进：一键移除前缀，变为普通段落
+        const rest = lineText.slice(prefixLen);
+        s.applyChange(
+          lineStart,
+          lineStart + lineText.length,
+          rest,
+          { cursorAfter: lineStart }
+        );
+        return true;
+      }
+    }
+
+    // 3. 块引用 / Callout 智能退格（> ）
+    const bqMatch = lineText.match(/^(\s*)(>+)\s*/);
+    if (bqMatch) {
+      const prefixLen = bqMatch[0].length;
+      if (inLine <= prefixLen && inLine > 0) {
+        const indent = bqMatch[1];
+        const quotes = bqMatch[2];
+        const rest = lineText.slice(prefixLen);
+        if (quotes.length > 1) {
+          // 多级引用：减少一级引用深度
+          const newPrefix = `${indent}${'>'.repeat(quotes.length - 1)} `;
+          s.applyChange(
+            lineStart,
+            lineStart + lineText.length,
+            newPrefix + rest,
+            { cursorAfter: lineStart + newPrefix.length }
+          );
+          return true;
+        }
+        // 单级引用：一键清除引用前缀，变为普通正文
+        s.applyChange(
+          lineStart,
+          lineStart + lineText.length,
+          indent + rest,
+          { cursorAfter: lineStart + indent.length }
+        );
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     const { selectionStart, selectionEnd } = editorStore.getState();
     const cursorPos = editorStore.getState().cursorPos;
@@ -1987,7 +2086,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       // 合成中退格删除的是候选文本（浏览器经 value 缓冲处理），
       // 绝不触达文档——防误删已提交内容（composition 内不重复处理）
       if (isComposingRef.current) return;
-      deleteText(true);
+      if (!handleSmartBackspace()) {
+        deleteText(true);
+      }
       // B5 自动补全：删除后重新检测（触发词可能仍在——@alic → @ali）
       maybeOpenAutocomplete();
     } else if (e.key === 'Delete') {
@@ -1997,62 +2098,153 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       maybeOpenAutocomplete();
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      if (isComposing) return;
+      if (isComposingRef.current) return;
 
-      if (!e.shiftKey) {
-        const state = editorStore.getState();
-        const text = state.getText();
-        const pos = state.cursorPos;
+      const state = editorStore.getState();
+      const pos = state.cursorPos;
+      const lineIdx = state.lineOffsets.findLineIndex(pos);
+      const lineStart = state.lineOffsets.getOffset(lineIdx);
+      const lineText = state.getLine(lineIdx) ?? '';
+      const inLine = pos - lineStart;
+      const textBeforeCursor = lineText.slice(0, inLine);
 
-        let lineStart = 0;
-        for (let i = pos - 1; i >= 0; i--) {
-          if (text[i] === '\n') {
-            lineStart = i + 1;
-            break;
-          }
+      // 1. 表格环境（Table Row）判定：优先保障表格结构与单元格多行编辑
+      const isTableRow = /^\s*\|/.test(lineText) || /\|\s*$/.test(lineText);
+      if (isTableRow) {
+        if (e.shiftKey) {
+          // 表格单元格内 Shift+Enter：插入 <br> 标签以支持多行编辑（遵循 CommonMark 规范，杜绝破坏行结构）
+          state.applyChange(pos, pos, '<br>', { cursorAfter: pos + 4 });
+          return;
         }
 
-        let lineEnd = text.length;
-        for (let i = pos; i < text.length; i++) {
-          if (text[i] === '\n') {
-            lineEnd = i;
-            break;
-          }
+        // 普通 Enter：检查当前行是否为带格式的纯空行（除了管道符和空白外无任何有效文本）
+        const isEmptyRow = lineText.replace(/[|\s]/g, '') === '';
+        if (isEmptyRow) {
+          // 空表格行二次回车：跳出表格，转为普通正文空行
+          state.applyChange(lineStart, lineStart + lineText.length, '', {
+            cursorAfter: lineStart,
+          });
+          return;
         }
 
-        const textBeforeCursor = text.substring(lineStart, pos);
-        const textAfterCursor = text.substring(pos, lineEnd);
-        const listMatch = textBeforeCursor.match(
-          /^(\s*)([-*+]|\d+\.)\s+(\[[ xX]\]\s+)?/
-        );
-
-        if (listMatch) {
-          if (
-            textBeforeCursor === listMatch[0] &&
-            textAfterCursor.trim() === ''
-          ) {
-            // Empty list item: break out of the list
-            state.deleteSelection(lineStart, lineEnd);
-          } else {
-            // Continue the list
-            let newPrefix = listMatch[0];
-            const numberMatch = newPrefix.match(/(\d+)\./);
-            if (numberMatch) {
-              const nextNum = parseInt(numberMatch[1], 10) + 1;
-              newPrefix = newPrefix.replace(/\d+\./, `${nextNum}.`);
-            }
-            // Reset task list to unchecked
-            newPrefix = newPrefix.replace(/\[[xX]\]/, '[ ]');
-
-            insertText('\n' + newPrefix);
-          }
-        } else {
-          insertText('\n');
+        // 分隔行（例如 |:---|:---|）：直接在下方续建新行
+        const isSeparatorRow = /^\s*\|?[\s:-]+(?:\|[\s:-]+)+\|?\s*$/.test(lineText);
+        if (isSeparatorRow) {
+          state.applyChange(pos, pos, '\n', { cursorAfter: pos + 1 });
+          return;
         }
-      } else {
-        // Shift+Enter
-        insertText('\n');
+
+        // 格式复用：统计当前表格列数，在下方续建同列数的新行（格式复用：带格式的空行）
+        const cellPipes = lineText.match(/\|/g);
+        const colCount = Math.max(1, (cellPipes ? cellPipes.length : 2) - 1);
+        const emptyCells = Array(colCount).fill('  ').join(' | ');
+        const newRowText = `| ${emptyCells} |`;
+        
+        const insertPos = lineStart + lineText.length;
+        const newCursorPos = insertPos + 1 + 2; // 定位到新行第 1 单元格内部
+        state.applyChange(insertPos, insertPos, '\n' + newRowText, {
+          cursorAfter: newCursorPos,
+        });
+
+        // 驱动 TableStore 自动聚焦新行首个单元格编辑
+        const tableStore = useTableStore.getState();
+        if (tableStore.selectedCell) {
+          tableStore.enterCellEdit(
+            tableStore.selectedCell.tableId,
+            lineIdx + 1,
+            0
+          );
+        }
+        return;
       }
+
+      if (e.shiftKey) {
+        // 非表格下 Shift+Enter 直接换行
+        state.applyChange(pos, pos, '\n', { cursorAfter: pos + 1 });
+        return;
+      }
+
+      // 2. 块引用 / Callout（Blockquote）环境判定（> ）
+      const bqMatch = textBeforeCursor.match(/^(\s*(?:>\s*)+)/);
+      if (bqMatch) {
+        const prefix = bqMatch[0];
+        const contentAfterPrefix = lineText.slice(prefix.length).trim();
+        if (contentAfterPrefix === '') {
+          // 当前引用行为空行：跳出引用或降级一层引用
+          const quoteCount = (prefix.match(/>/g) || []).length;
+          if (quoteCount > 1) {
+            const newPrefix = prefix.replace(/>\s*$/, '');
+            state.applyChange(lineStart, lineStart + lineText.length, newPrefix, {
+              cursorAfter: lineStart + newPrefix.length,
+            });
+          } else {
+            // 顶层引用直接退出，变为空行
+            state.applyChange(lineStart, lineStart + lineText.length, '', {
+              cursorAfter: lineStart,
+            });
+          }
+          return;
+        }
+
+        // 非空引用行：格式复用，新行自动延续引用前缀
+        const cleanPrefix = prefix.endsWith(' ') ? prefix : prefix + ' ';
+        state.applyChange(pos, pos, '\n' + cleanPrefix, {
+          cursorAfter: pos + 1 + cleanPrefix.length,
+        });
+        return;
+      }
+
+      // 3. 任务列表 / 有序列表 / 无序列表环境判定（- [ ] , - , 1. ）
+      const listMatch = textBeforeCursor.match(
+        /^(\s*)([-*+]|\d+\.)\s+(\[[ xX]\]\s+)?/
+      );
+      if (listMatch) {
+        const fullPrefix = listMatch[0];
+        const indent = listMatch[1];
+        const marker = listMatch[2];
+        const isTask = Boolean(listMatch[3]);
+        const restContent = lineText.slice(fullPrefix.length).trim();
+
+        if (restContent === '') {
+          // 空列表行：回车优雅跳出或反缩进
+          if (indent.length >= 2) {
+            // 缩进列表：反缩进 2 格
+            const newIndent = indent.slice(2);
+            const newPrefix = isTask
+              ? `${newIndent}${marker} [ ] `
+              : `${newIndent}${marker} `;
+            state.applyChange(lineStart, lineStart + lineText.length, newPrefix, {
+              cursorAfter: lineStart + newPrefix.length,
+            });
+          } else {
+            // 顶层列表：一键退出列表，转为普通正文空行
+            state.applyChange(lineStart, lineStart + lineText.length, '', {
+              cursorAfter: lineStart,
+            });
+          }
+          return;
+        }
+
+        // 非空列表行：格式复用，续建下一列表项
+        let newPrefix = fullPrefix;
+        const numberMatch = marker.match(/^(\d+)\./);
+        if (numberMatch) {
+          const nextNum = parseInt(numberMatch[1], 10) + 1;
+          newPrefix = newPrefix.replace(/^\s*\d+\./, `${indent}${nextNum}.`);
+        }
+        // 任务列表续写时统一重置为未选中态 [ ]
+        if (isTask) {
+          newPrefix = newPrefix.replace(/\[[xX]\]/, '[ ]');
+        }
+
+        state.applyChange(pos, pos, '\n' + newPrefix, {
+          cursorAfter: pos + 1 + newPrefix.length,
+        });
+        return;
+      }
+
+      // 4. 普通正文回车
+      state.applyChange(pos, pos, '\n', { cursorAfter: pos + 1 });
     } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       // R6-P1：全选边界用 textLength（O(1)），不再全文 getText()
@@ -2401,7 +2593,9 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
       if (ta) ta.value = '';
     } else if (inputType === 'deleteContentBackward') {
       native.preventDefault();
-      s.deleteText(true);
+      if (!handleSmartBackspace()) {
+        s.deleteText(true);
+      }
       if (ta) ta.value = '';
     } else if (inputType === 'deleteContentForward') {
       native.preventDefault();

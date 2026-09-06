@@ -357,6 +357,30 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
             );
           }
 
+          // Specialized <br> handling (html_tag / html_element):
+          // Render a real visual line break in rendered mode, while preserving source for live preview editing.
+          if (token.type === 'html_tag' || token.type === 'html_element') {
+            const rawLower = (token.raw || '').toLowerCase().trim();
+            if (rawLower === '<br>' || rawLower === '<br/>' || rawLower === '<br />') {
+              return (
+                <span
+                  key={key}
+                  data-token-start={start}
+                  data-token-length={len}
+                  className={`${finalClassName} token-br-wrapper`}
+                  style={token.style}
+                >
+                  <span className="syntax-hidden" data-sub-offset={0}>
+                    {token.raw}
+                  </span>
+                  <span className="syntax-content">
+                    <br className="token-br" />
+                  </span>
+                </span>
+              );
+            }
+          }
+
           if (token.type === 'text') {
             return (
               <span
@@ -398,7 +422,7 @@ export const InlineRenderer: React.FC<InlineRendererProps> = React.memo(
                 const minCol = Math.min(selectedCell.startCol, selectedCell.endCol);
                 const maxCol = Math.max(selectedCell.startCol, selectedCell.endCol);
                 
-                const borderToken = 'var(--brand)';
+                const borderToken = 'var(--blue-selection-border)';
                 const isSingleCell = minLine === maxLine && minCol === maxCol;
                 if (isSingleCell) {
                   selectionShadow = `0 0 0 1.5px ${borderToken}`;

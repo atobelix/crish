@@ -215,7 +215,22 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
           if (p1 && p2) {
             try {
               const range = document.createRange();
-              range.setStart(p1.node, p1.offset);
+              const cmp = p1.node.compareDocumentPosition(p2.node);
+              if (p1.node === p2.node) {
+                if (p1.offset <= p2.offset) {
+                  range.setStart(p1.node, p1.offset);
+                  range.setEnd(p2.node, p2.offset);
+                } else {
+                  range.setStart(p2.node, p2.offset);
+                  range.setEnd(p1.node, p1.offset);
+                }
+              } else if (cmp & Node.DOCUMENT_POSITION_FOLLOWING) {
+                range.setStart(p1.node, p1.offset);
+                range.setEnd(p2.node, p2.offset);
+              } else {
+                range.setStart(p2.node, p2.offset);
+                range.setEnd(p1.node, p1.offset);
+              }
               const clientRects =
                 typeof range.getClientRects === 'function'
                   ? range.getClientRects()
