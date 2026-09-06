@@ -20,32 +20,60 @@ import { MarkdownParser } from '../core/parser';
 import type { CalloutType } from '../core/ast';
 import { HeightMap, HeightOracle, classifyLine } from '../core/HeightMap';
 
-/** 获取当前行的 Callout 上下文（支持多行 Callout 向上回溯继承） */
+// 引入块区间拓扑与 Callout 上下文支持
+import { BlockIntervalTree, type CalloutContext } from '../core/BlockIntervalTree';
+import { LRUCache } from '../core/LRUCache';
+
+const calloutContextCache = new LRUCache<string, CalloutContext | null>(1000);
+
+/** 获取当前行的 Callout 上下文（支持任意长度多行 Callout 向上继承，无 50 行截断） */
 function getCalloutContext(
   getLine: (i: number) => string,
   index: number
-): {
-  type: CalloutType;
-  title: string;
-  isHeader: boolean;
-} | null {
+): CalloutContext | null {
   const line = getLine(index);
   if (!line || !/^ {0,3}>\s?/.test(line)) return null;
+
+  const cacheKey = `${index}:${line}`;
+  const cached = calloutContextCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
 
   const headerMatch = line.match(
     /^ {0,3}>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i
   );
   if (headerMatch) {
-    return {
+    const res: CalloutContext = {
       type: headerMatch[1].toLowerCase() as CalloutType,
       title: headerMatch[2]?.trim() || '',
       isHeader: true,
     };
+    calloutContextCache.set(cacheKey, res);
+    return res;
   }
 
-  // 向前扫描至多 50 行，寻找所属的 Callout 头部
+  // 快速前驱检查：如果前一行就是 Callout，本行以 O(1) 立即继承
+  if (index > 0) {
+    const prevLine = getLine(index - 1);
+    if (prevLine && /^ {0,3}>\s?/.test(prevLine)) {
+      const prevKey = `${index - 1}:${prevLine}`;
+      const prevCtx = calloutContextCache.get(prevKey);
+      if (prevCtx) {
+        const res: CalloutContext = {
+          type: prevCtx.type,
+          title: prevCtx.title,
+          isHeader: false,
+        };
+        calloutContextCache.set(cacheKey, res);
+        return res;
+      }
+    }
+  }
+
+  // 向上连续扫描连续引用行，彻底消除 50 行截断限制
   let prevIdx = index - 1;
-  while (prevIdx >= 0 && index - prevIdx <= 50) {
+  while (prevIdx >= 0) {
     const prevLine = getLine(prevIdx);
     if (!prevLine || !/^ {0,3}>\s?/.test(prevLine)) {
       break;
@@ -54,14 +82,18 @@ function getCalloutContext(
       /^ {0,3}>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\](?:\s+(.*))?$/i
     );
     if (prevMatch) {
-      return {
+      const res: CalloutContext = {
         type: prevMatch[1].toLowerCase() as CalloutType,
         title: prevMatch[2]?.trim() || '',
         isHeader: false,
       };
+      calloutContextCache.set(cacheKey, res);
+      return res;
     }
     prevIdx--;
   }
+
+  calloutContextCache.set(cacheKey, null);
   return null;
 }
 // W1-1（D-4）：不可直刷 chunk 的 rAF 帧批缓冲（500 token/s → ≤60 提交/s）

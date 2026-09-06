@@ -216,8 +216,10 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
             try {
               const range = document.createRange();
               range.setStart(p1.node, p1.offset);
-              range.setEnd(p2.node, p2.offset);
-              const clientRects = range.getClientRects();
+              const clientRects =
+                typeof range.getClientRects === 'function'
+                  ? range.getClientRects()
+                  : [];
               const lineRawRects: Rect[] = [];
               const lineRect = line.getBoundingClientRect();
               const LINE_HEIGHT = 28;
@@ -252,7 +254,7 @@ export const SelectionHighlight: React.FC<SelectionHighlightProps> = ({
 
                 if (!isMultiVisualLine) {
                   sliceTop = lineRect.top - containerRect.top + container.scrollTop;
-                  sliceHeight = lineRect.height || LINE_HEIGHT;
+                  sliceHeight = LINE_HEIGHT;
                 } else {
                   const yMid = r.top + r.height / 2;
                   const visualLineIndex = Math.max(

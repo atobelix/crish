@@ -1296,8 +1296,9 @@ function BlockquoteBlock({
   const calloutClass = block.calloutType
     ? ` line-callout callout-${block.calloutType}${block.isCalloutHeader ? ' callout-header' : ''}`
     : '';
+  const activeLineClass = activeState ? ' is-active-line' : '';
   return (
-    <div className={`line-block line-blockquote${calloutClass}`}>
+    <div className={`line-block line-blockquote${calloutClass}${activeLineClass}`}>
       <span
         className="blockquote-source"
         data-token-start={lineOffset}

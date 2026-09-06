@@ -802,10 +802,12 @@ export const HiddenInput: React.FC<HiddenInputProps> = ({
         // otherwise react-virtual and the browser scroll will fight each other causing a bounce loop.
         if (!(window as any).__CRISH_IS_MOUSE_DOWN) {
           if (cursorMoved) {
-            if (top < cTop) {
-              containerRef.current!.scrollTop = Math.max(0, top - 40);
-            } else if (top + height > cTop + cHeight) {
-              containerRef.current!.scrollTop = top + height - cHeight + 40;
+            // 视口安全边缘阈值：仅当光标确凿超出可见范围时才贴边对齐，杜绝魔术 40px 抢拉颠簸
+            const threshold = 1.0;
+            if (top < cTop - threshold) {
+              containerRef.current!.scrollTop = Math.max(0, top);
+            } else if (top + height > cTop + cHeight + threshold) {
+              containerRef.current!.scrollTop = top + height - cHeight;
             }
           }
         }
