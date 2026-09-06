@@ -2,7 +2,7 @@
 import React from 'react';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
-import { FileViewerCard } from './FileViewerCard';
+import { FileViewerCard, FileViewerCardView } from './FileViewerCard';
 import { ToastProvider } from '../../services/toast/ToastContext';
 import * as workspaceFsApi from '../../api/workspaceFsApi';
 import * as hostOpenersApi from '../../api/hostOpenersApi';
@@ -261,5 +261,24 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
       openWithOption.click();
     });
     expect(openDefaultSpy).toHaveBeenCalled();
+  });
+
+  it('9. FileViewerCardView 视图适配器正确消费 ViewRenderContext 参数并挂载', async () => {
+    render(
+      <ToastProvider>
+        <FileViewerCardView
+          panelId="file-viewer"
+          leafId="leaf-1"
+          isActive={true}
+          openView={vi.fn()}
+          params={{
+            filePath: 'src/App.tsx',
+            initialMode: 'diff',
+          }}
+        />
+      </ToastProvider>
+    );
+
+    expect(await screen.findByTestId('diff-card-unified-view')).toBeDefined();
   });
 });

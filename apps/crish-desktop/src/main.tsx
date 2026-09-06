@@ -95,18 +95,7 @@ const builtinViewFactories: ViewFactoryMap = {
   'file-viewer': () =>
     lazy(() =>
       import('./components/files/FileViewerCard').then((m) => ({
-        default: (ctx: ViewRenderContext) => {
-          const filePath = (ctx.params?.filePath as string) || '';
-          const initialMode =
-            (ctx.params?.initialMode as 'plain' | 'diff') || 'plain';
-          return (
-            <m.FileViewerCard
-              key={filePath}
-              filePath={filePath}
-              initialMode={initialMode}
-            />
-          );
-        },
+        default: m.FileViewerCardView,
       }))
     ),
 };

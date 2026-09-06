@@ -17,6 +17,11 @@ import {
   ptyWrite,
   subscribePtyExit,
   subscribePtyOutput,
+  getPtyOutputHistory,
+  clearPtyOutputHistory,
+  recordPtyOutputHistory,
+  resetPtyHistoryForTests,
+  PTY_HISTORY_MAX_BYTES,
   type PtyCreateResult,
 } from './ptySessionApi';
 
@@ -24,6 +29,7 @@ const mockedInvoke = vi.mocked(invokeResult);
 
 beforeEach(() => {
   mockedInvoke.mockReset();
+  resetPtyHistoryForTests();
 });
 
 afterEach(() => {
@@ -289,5 +295,75 @@ describe('PtySessionManager', () => {
     expect(mgr.getPtyId('sB')).toBeUndefined();
     const killCalls = mockedInvoke.mock.calls.filter((c) => c[0] === 'workbench_pty_kill');
     expect(killCalls).toHaveLength(2);
+  });
+});
+
+// ── PTY Output History Ring Buffer ────────────────────────────────
+
+describe('PTY Output History Ring Buffer', () => {
+  it('returns empty array for unknown or empty ptyId', () => {
+    expect(getPtyOutputHistory('')).toEqual([]);
+    expect(getPtyOutputHistory('   ')).toEqual([]);
+    expect(getPtyOutputHistory('non-existent')).toEqual([]);
+  });
+
+  it('records chunks and returns a snapshot', () => {
+    recordPtyOutputHistory('pty-hist-1', 'hello ');
+    recordPtyOutputHistory('pty-hist-1', 'world\r\n');
+
+    const history = getPtyOutputHistory('pty-hist-1');
+    expect(history).toEqual(['hello ', 'world\r\n']);
+
+    // mutating returned snapshot does not corrupt internal history
+    history.push('extra');
+    expect(getPtyOutputHistory('pty-hist-1')).toEqual(['hello ', 'world\r\n']);
+  });
+
+  it('ignores empty chunk or empty ptyId in record', () => {
+    recordPtyOutputHistory('', 'something');
+    recordPtyOutputHistory('pty-hist-2', '');
+    expect(getPtyOutputHistory('pty-hist-2')).toEqual([]);
+  });
+
+  it('clearPtyOutputHistory purges history for specified ptyId', () => {
+    recordPtyOutputHistory('pty-a', 'chunk-a');
+    recordPtyOutputHistory('pty-b', 'chunk-b');
+
+    clearPtyOutputHistory('pty-a');
+    expect(getPtyOutputHistory('pty-a')).toEqual([]);
+    expect(getPtyOutputHistory('pty-b')).toEqual(['chunk-b']);
+  });
+
+  it('ptyKill automatically clears output history', async () => {
+    recordPtyOutputHistory('pty-kill-target', 'pre-kill output');
+    expect(getPtyOutputHistory('pty-kill-target')).toEqual(['pre-kill output']);
+
+    mockedInvoke.mockResolvedValueOnce({ status: 'ok', data: null });
+    await ptyKill('pty-kill-target');
+
+    expect(getPtyOutputHistory('pty-kill-target')).toEqual([]);
+  });
+
+  it('pops oldest chunks from head when totalBytes exceeds PTY_HISTORY_MAX_BYTES', () => {
+    // 256KB limit: create 3 chunks of 100KB each (total 300KB)
+    const chunk100k = 'A'.repeat(100 * 1024);
+    recordPtyOutputHistory('pty-overflow', 'chunk1_' + chunk100k);
+    recordPtyOutputHistory('pty-overflow', 'chunk2_' + chunk100k);
+    recordPtyOutputHistory('pty-overflow', 'chunk3_' + chunk100k);
+
+    const history = getPtyOutputHistory('pty-overflow');
+    // chunk 1 should be shifted out to stay under 256KB
+    expect(history.length).toBe(2);
+    expect(history[0]).toContain('chunk2_');
+    expect(history[1]).toContain('chunk3_');
+  });
+
+  it('truncates a single chunk exceeding PTY_HISTORY_MAX_BYTES to fit within 256KB', () => {
+    const hugeChunk = 'X'.repeat(300 * 1024);
+    recordPtyOutputHistory('pty-huge', hugeChunk);
+
+    const history = getPtyOutputHistory('pty-huge');
+    expect(history.length).toBe(1);
+    expect(history[0].length).toBe(PTY_HISTORY_MAX_BYTES);
   });
 });

@@ -1,5 +1,6 @@
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import * as Lucide from 'lucide-react';
+import type { ViewRenderContext } from '../../services/view-registry/ViewTypes';
 import type { FileDiff } from '../../store/types';
 import {
   openToolInSession,
@@ -441,3 +442,17 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 );
 
 FileViewerCard.displayName = 'FileViewerCard';
+
+export const FileViewerCardView: React.FC<ViewRenderContext> = (ctx) => {
+  const filePath = (ctx.params?.filePath as string) || '';
+  const initialMode = (ctx.params?.initialMode as 'plain' | 'diff') || 'plain';
+  return (
+    <FileViewerCard
+      key={filePath}
+      filePath={filePath}
+      initialMode={initialMode}
+    />
+  );
+};
+
+FileViewerCardView.displayName = 'FileViewerCardView';

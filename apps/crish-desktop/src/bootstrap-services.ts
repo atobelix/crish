@@ -23,6 +23,7 @@ import { eventBus } from './services/EventBus';
 import { WindowResizeBridge } from './services/WindowResizeBridge';
 import { sessionRuntimeRegistry } from './api/SessionRuntimeRegistry';
 import { getActiveSessionId } from './api/storeAccess';
+import { getWorkspacePath } from './api/projectStore';
 import { registerLayoutAnimationBridge } from './store/layoutAnimationStore';
 import { registerTreeDockSync } from './store/workspace-shell/workspaceShellStore';
 import {
@@ -92,11 +93,13 @@ export function bootstrapServices(): () => void {
   void import('./api/ptySessionApi').then(({ ptyCreate, ptyKill }) => {
     void import('./api/ptyRegistry').then(({ registerPtyHandlers }) => {
       registerPtyHandlers({
-        spawn: async (sessionId) => {
+        spawn: async (sessionId, sessionCwd) => {
+          const cwd = sessionCwd || getWorkspacePath();
           const res = await ptyCreate({
             sessionKey: sessionId,
             cols: 80,
             rows: 24,
+            ...(cwd ? { cwd } : {}),
           });
           return res.status === 'ok' ? res.data.ptyId : null;
         },

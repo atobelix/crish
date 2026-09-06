@@ -485,13 +485,41 @@ export const TreeLeafPanel: React.FC<TreeLeafPanelProps> = React.memo(
                       <div className={styles.emptyState}>加载中…</div>
                     }
                   >
-                    {tabModeEnabled
-                      ? renderToolOutlet(toolPanelId)
-                      : stackedPanelIds.map((pid) => (
-                          <React.Fragment key={pid}>
-                            {renderToolOutlet(pid)}
-                          </React.Fragment>
-                        ))}
+                    {tabModeEnabled ? (
+                      dock.openPanelIds.length > 0 ? (
+                        dock.openPanelIds.map((pid) => {
+                          const isActive = pid === toolPanelId;
+                          return (
+                            <div
+                              key={pid}
+                              className={styles.dockPanelPane}
+                              style={{
+                                display: isActive ? 'flex' : 'none',
+                                flex: '1 1 auto',
+                                width: '100%',
+                                height: '100%',
+                                minHeight: 0,
+                                minWidth: 0,
+                                flexDirection: 'column',
+                              }}
+                              data-panel-id={pid}
+                              data-active-panel={isActive ? 'true' : 'false'}
+                              aria-hidden={!isActive}
+                            >
+                              {renderToolOutlet(pid)}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        renderToolOutlet(toolPanelId)
+                      )
+                    ) : (
+                      stackedPanelIds.map((pid) => (
+                        <React.Fragment key={pid}>
+                          {renderToolOutlet(pid)}
+                        </React.Fragment>
+                      ))
+                    )}
                   </Suspense>
                 </AppErrorBoundary>
               </div>

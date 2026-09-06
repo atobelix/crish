@@ -13,18 +13,20 @@
   font-weight: 500;
   font-family: inherit;
   color: var(--text-primary);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
+  background: transparent;
+  border: none;
   border-radius: var(--radius-sm, 4px);
   outline: none;
   box-shadow: none;
   width: 100%;
   box-sizing: border-box;
-  transition: border-color var(--transition-micro, 120ms) ease;
 }
 
-.renameInput:focus {
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+.renameInput:focus,
+.renameInput:focus-visible {
+  outline: none;
+  border: none;
+  box-shadow: none;
 }
 
 .titleBtn {

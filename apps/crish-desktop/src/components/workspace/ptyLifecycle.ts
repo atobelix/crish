@@ -7,6 +7,7 @@
 import type { Terminal } from '@xterm/xterm';
 import type { FitAddon } from '@xterm/addon-fit';
 import {
+  getPtyOutputHistory,
   ptyCreate,
   ptyKill,
   ptyResize,
@@ -156,6 +157,22 @@ export async function startPtySession(deps: StartPtySessionDeps): Promise<void> 
     onStatus,
     addDisposable,
   });
+
+  if (reused && ptyId) {
+    // 复用 PTY 时，从环形历史缓冲重放已有屏幕输出，防止由于 PTY 空闲导致新终端空白
+    const history = getPtyOutputHistory(ptyId);
+    if (history && history.length > 0) {
+      for (const chunk of history) {
+        term.write(chunk);
+      }
+    }
+    try {
+      fitAddon.fit();
+      term.refresh(0, Math.max(0, (term.rows || 24) - 1));
+    } catch {
+      /* swallow-ok: 历史重放后自适应与刷新失败不阻断后续流 */
+    }
+  }
 
   // 对齐尺寸（复用 / 新建后 layout 可能变化）
   try {

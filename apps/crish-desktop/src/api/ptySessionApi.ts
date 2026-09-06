@@ -12,30 +12,143 @@
 
 import { invokeResult, type InvokeResult } from './tauriInvoke';
 import { logger } from '../services/LoggerService';
+import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 // ── Types ────────────────────────────────────────────────────────────
 
 export type PtyCreateResult = { ptyId: string };
-
-export type PtyCreateOptions = {
-  sessionKey: string;
-  cols: number;
-  rows: number;
-  cwd?: string;
-};
-
+export type PtyCreateOptions = { sessionKey: string; cols: number; rows: number; cwd?: string };
 export type PtyOutputPayload = { ptyId: string; data: string };
 export type PtyExitPayload = { ptyId: string; code?: number | null };
-
 export type PtyInvokeOk<T> = { status: 'ok'; data: T };
 export type PtyInvokeMissing = { status: 'missing' };
 export type PtyInvokeErr = { status: 'error'; message: string };
-export type PtyInvokeResult<T> =
-  PtyInvokeOk<T> | PtyInvokeMissing | PtyInvokeErr;
+export type PtyInvokeResult<T> = PtyInvokeOk<T> | PtyInvokeMissing | PtyInvokeErr;
 
 const EVENT_PTY_OUTPUT = 'workbench://pty-output';
 const EVENT_PTY_EXIT = 'workbench://pty-exit';
 const EVENT_PTY_GC_KILLED = 'workbench://pty-gc-killed';
+
+// ── Event fan-out state ──────────────────────────────────────────────
+
+type FanoutEntry<T> = {
+  handlers: Set<(p: T) => void>;
+  unlisten: UnlistenFn | null;
+  starting: Promise<void> | null;
+};
+
+const createFanout = <T>(): FanoutEntry<T> => ({
+  handlers: new Set(),
+  unlisten: null,
+  starting: null,
+});
+
+const outputFanout = createFanout<PtyOutputPayload>();
+const exitFanout = createFanout<PtyExitPayload>();
+const gcKilledFanout = createFanout<PtyExitPayload>();
+
+// ── PTY Output History Ring Buffer ────────────────────────────────────
+
+export const PTY_HISTORY_MAX_BYTES = 256 * 1024; // 256KB 环形缓冲
+
+export type PtyHistoryEntry = {
+  chunks: string[];
+  totalBytes: number;
+};
+
+const ptyHistoryMap = new Map<string, PtyHistoryEntry>();
+
+function checkCleanupUnlisten<T>(entry: FanoutEntry<T>): void {
+  if (entry.handlers.size === 0 && entry.unlisten && ptyHistoryMap.size === 0) {
+    try {
+      entry.unlisten();
+    } catch {
+      /* ignore */
+    }
+    entry.unlisten = null;
+  }
+}
+
+const textEncoder =
+  typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
+
+function getChunkBytes(chunk: string): number {
+  if (textEncoder) {
+    return textEncoder.encode(chunk).length;
+  }
+  return chunk.length;
+}
+
+/**
+ * 记录指定 ptyId 的输出历史到环形缓冲。
+ * 超过 PTY_HISTORY_MAX_BYTES 时从队首依次淘汰旧 chunk 直至低于上限。
+ */
+export function recordPtyOutputHistory(ptyId: string, data: string): void {
+  const id = (ptyId || '').trim();
+  if (!id || !data) return;
+
+  let entry = ptyHistoryMap.get(id);
+  if (!entry) {
+    entry = { chunks: [], totalBytes: 0 };
+    ptyHistoryMap.set(id, entry);
+  }
+
+  const chunkBytes = getChunkBytes(data);
+  entry.chunks.push(data);
+  entry.totalBytes += chunkBytes;
+
+  while (entry.totalBytes > PTY_HISTORY_MAX_BYTES && entry.chunks.length > 0) {
+    if (entry.chunks.length === 1 && entry.totalBytes > PTY_HISTORY_MAX_BYTES) {
+      const single = entry.chunks[0];
+      if (!single) break;
+      let trimmed = single.slice(-PTY_HISTORY_MAX_BYTES);
+      if (
+        trimmed.length > 0 &&
+        trimmed.charCodeAt(0) >= 0xdc00 &&
+        trimmed.charCodeAt(0) <= 0xdfff
+      ) {
+        trimmed = trimmed.slice(1);
+      }
+      entry.chunks[0] = trimmed;
+      entry.totalBytes = getChunkBytes(trimmed);
+      break;
+    }
+    const oldest = entry.chunks.shift();
+    if (oldest) {
+      entry.totalBytes -= getChunkBytes(oldest);
+    }
+  }
+
+  if (entry.totalBytes < 0) {
+    entry.totalBytes = 0;
+  }
+}
+
+/** 返回该 ptyId 的历史 chunks 快照 */
+export function getPtyOutputHistory(ptyId: string): string[] {
+  const id = (ptyId || '').trim();
+  if (!id) return [];
+  const entry = ptyHistoryMap.get(id);
+  if (!entry || entry.chunks.length === 0) return [];
+  return [...entry.chunks];
+}
+
+/** 清除指定 ptyId 的历史缓冲 */
+export function clearPtyOutputHistory(ptyId: string): void {
+  const id = (ptyId || '').trim();
+  if (!id) return;
+  ptyHistoryMap.delete(id);
+  if (ptyHistoryMap.size === 0) {
+    checkCleanupUnlisten(outputFanout);
+    checkCleanupUnlisten(exitFanout);
+    checkCleanupUnlisten(gcKilledFanout);
+  }
+}
+
+/** 测试辅助：清空所有 PTY 历史缓冲 */
+export function resetPtyHistoryForTests(): void {
+  ptyHistoryMap.clear();
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -83,8 +196,7 @@ function parseOutputPayload(raw: unknown): PtyOutputPayload | null {
   if (!rec) return null;
   const ptyId = coerceText(rec.ptyId ?? rec.pty_id).trim();
   if (!ptyId) return null;
-  const data = coerceText(rec.data ?? rec.chunk ?? rec.output);
-  return { ptyId, data };
+  return { ptyId, data: coerceText(rec.data ?? rec.chunk ?? rec.output) };
 }
 
 function parseExitPayload(raw: unknown): PtyExitPayload | null {
@@ -129,114 +241,71 @@ export async function ptyCreate(
       message: 'workbench_pty_create returned no ptyId',
     };
   }
+
+  if (!ptyHistoryMap.has(ptyId)) {
+    ptyHistoryMap.set(ptyId, { chunks: [], totalBytes: 0 });
+  }
+  void ensureTauriListen(EVENT_PTY_OUTPUT, outputFanout, parseOutputPayload);
+  void ensureTauriListen(EVENT_PTY_EXIT, exitFanout, parseExitPayload);
+  void ensureTauriListen(EVENT_PTY_GC_KILLED, gcKilledFanout, parseExitPayload);
+
   return { status: 'ok', data: { ptyId } };
 }
 
 /** Write raw bytes/text to a live PTY. */
-export async function ptyWrite(
-  ptyId: string,
-  data: string
-): Promise<PtyInvokeResult<void>> {
+export async function ptyWrite(ptyId: string, data: string): Promise<PtyInvokeResult<void>> {
   const id = (ptyId || '').trim();
   if (!id) return { status: 'error', message: 'ptyId is empty' };
-
-  const res = await invokeResult<unknown>('workbench_pty_write', {
-    ptyId: id,
-    data: data ?? '',
-  });
-  if (res.status === 'ok') return { status: 'ok', data: undefined };
-  return mapInvoke(res);
+  const res = await invokeResult<unknown>('workbench_pty_write', { ptyId: id, data: data ?? '' });
+  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
 }
 
 /** Resize PTY window (cols × rows). */
-export async function ptyResize(
-  ptyId: string,
-  cols: number,
-  rows: number
-): Promise<PtyInvokeResult<void>> {
+export async function ptyResize(ptyId: string, cols: number, rows: number): Promise<PtyInvokeResult<void>> {
   const id = (ptyId || '').trim();
   if (!id) return { status: 'error', message: 'ptyId is empty' };
-  const c = Math.max(1, Math.floor(Number(cols) || 1));
-  const r = Math.max(1, Math.floor(Number(rows) || 1));
-
   const res = await invokeResult<unknown>('workbench_pty_resize', {
     ptyId: id,
-    cols: c,
-    rows: r,
+    cols: Math.max(1, Math.floor(Number(cols) || 1)),
+    rows: Math.max(1, Math.floor(Number(rows) || 1)),
   });
-  if (res.status === 'ok') return { status: 'ok', data: undefined };
-  return mapInvoke(res);
+  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
 }
 
 /** Detach PTY to background (e.g. Tab switch / unmount). */
 export async function ptyDetach(ptyId: string): Promise<PtyInvokeResult<void>> {
   const id = (ptyId || '').trim();
   if (!id) return { status: 'error', message: 'ptyId is empty' };
-
-  const res = await invokeResult<unknown>('workbench_pty_detach', {
-    ptyId: id,
-  });
-  if (res.status === 'ok') return { status: 'ok', data: undefined };
-  return mapInvoke(res);
+  const res = await invokeResult<unknown>('workbench_pty_detach', { ptyId: id });
+  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
 }
 
 /** Re-attach PTY from background to foreground. */
 export async function ptyAttach(ptyId: string): Promise<PtyInvokeResult<void>> {
   const id = (ptyId || '').trim();
   if (!id) return { status: 'error', message: 'ptyId is empty' };
-
-  const res = await invokeResult<unknown>('workbench_pty_attach', {
-    ptyId: id,
-  });
-  if (res.status === 'ok') return { status: 'ok', data: undefined };
-  return mapInvoke(res);
+  const res = await invokeResult<unknown>('workbench_pty_attach', { ptyId: id });
+  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
 }
 
 /** Ping PTY session to refresh heartbeat. */
 export async function ptyPing(ptyId: string): Promise<PtyInvokeResult<void>> {
   const id = (ptyId || '').trim();
   if (!id) return { status: 'error', message: 'ptyId is empty' };
-
-  const res = await invokeResult<unknown>('workbench_pty_ping', {
-    ptyId: id,
-  });
-  if (res.status === 'ok') return { status: 'ok', data: undefined };
-  return mapInvoke(res);
+  const res = await invokeResult<unknown>('workbench_pty_ping', { ptyId: id });
+  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
 }
 
 /** Kill / dispose a PTY process. */
 export async function ptyKill(ptyId: string): Promise<PtyInvokeResult<void>> {
   const id = (ptyId || '').trim();
   if (!id) return { status: 'error', message: 'ptyId is empty' };
-
-  const res = await invokeResult<unknown>('workbench_pty_kill', {
-    ptyId: id,
-  });
-  if (res.status === 'ok') return { status: 'ok', data: undefined };
-  return mapInvoke(res);
+  clearPtyOutputHistory(id);
+  const res = await invokeResult<unknown>('workbench_pty_kill', { ptyId: id });
+  return res.status === 'ok' ? { status: 'ok', data: undefined } : mapInvoke(res);
 }
 
 // ── Event subscriptions (shared Tauri listen, multi-handler fan-out) ─
-
-type UnlistenFn = () => void;
-
-type FanoutEntry<T> = {
-  handlers: Set<(p: T) => void>;
-  unlisten: UnlistenFn | null;
-  starting: Promise<void> | null;
-};
-
-const outputFanout: FanoutEntry<PtyOutputPayload> = {
-  handlers: new Set(),
-  unlisten: null,
-  starting: null,
-};
-
-const exitFanout: FanoutEntry<PtyExitPayload> = {
-  handlers: new Set(),
-  unlisten: null,
-  starting: null,
-};
 
 async function ensureTauriListen<T>(
   eventName: string,
@@ -250,8 +319,6 @@ async function ensureTauriListen<T>(
 
   entry.starting = (async () => {
     try {
-      const mod = await import('@tauri-apps/api/event');
-      const listen = mod?.listen;
       if (typeof listen !== 'function') return;
 
       entry.unlisten = await listen(
@@ -259,6 +326,18 @@ async function ensureTauriListen<T>(
         (event: { payload?: unknown }) => {
           const payload = parse(event?.payload);
           if (!payload) return;
+
+          if (eventName === EVENT_PTY_OUTPUT) {
+            const out = payload as unknown as PtyOutputPayload;
+            recordPtyOutputHistory(out.ptyId, out.data);
+          } else if (
+            eventName === EVENT_PTY_EXIT ||
+            eventName === EVENT_PTY_GC_KILLED
+          ) {
+            const exit = payload as unknown as PtyExitPayload;
+            clearPtyOutputHistory(exit.ptyId);
+          }
+
           for (const h of entry.handlers) {
             try {
               h(payload);
@@ -295,14 +374,7 @@ function subscribeFanout<T>(
 
   return () => {
     entry.handlers.delete(handler);
-    if (entry.handlers.size === 0 && entry.unlisten) {
-      try {
-        entry.unlisten();
-      } catch {
-        /* ignore */
-      }
-      entry.unlisten = null;
-    }
+    checkCleanupUnlisten(entry);
   };
 }
 
@@ -310,6 +382,9 @@ function subscribeFanout<T>(
 export function subscribePtyOutput(
   handler: (p: PtyOutputPayload) => void
 ): () => void {
+  void ensureTauriListen(EVENT_PTY_EXIT, exitFanout, parseExitPayload);
+  void ensureTauriListen(EVENT_PTY_GC_KILLED, gcKilledFanout, parseExitPayload);
+
   return subscribeFanout(
     EVENT_PTY_OUTPUT,
     outputFanout,
@@ -317,12 +392,6 @@ export function subscribePtyOutput(
     handler
   );
 }
-
-const gcKilledFanout: FanoutEntry<PtyExitPayload> = {
-  handlers: new Set(),
-  unlisten: null,
-  starting: null,
-};
 
 /** Subscribe to PTY process exit. Returns unsubscribe. */
 export function subscribePtyExit(

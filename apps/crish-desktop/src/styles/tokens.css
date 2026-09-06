@@ -326,12 +326,12 @@ html[data-theme='light'] {
   --syntax-deletion: #dc2626;
   --syntax-meta: var(--text-secondary);
 
-  --terminal-bg: #ffffff;
-  --terminal-fg: var(--text-primary, #1e1e1e);
+  --terminal-bg: var(--bg-card, #ffffff);
+  --terminal-fg: var(--text-primary, #111111);
   --terminal-err: #c50f1f;
   --terminal-muted: var(--text-tertiary);
   --terminal-border: var(--border-subtle);
-  --terminal-cmd: var(--text-primary, #1e1e1e);
+  --terminal-cmd: var(--text-primary, #111111);
   --terminal-prompt: #13a10e; /* Windows Terminal PowerShell prompt green */
   --terminal-bar-fill: var(--bg-card, #ffffff);
 
@@ -1028,14 +1028,14 @@ html[data-theme='dark'] {
     0 32px 64px color-mix(in srgb, var(--shadow-color) 40%, transparent),
     0 1px 3px color-mix(in srgb, var(--shadow-color) 15%, transparent);
 
-  --terminal-bg: #0c0c0c;
-  --terminal-fg: #cccccc;
+  --terminal-bg: var(--bg-card, #0c0c0c);
+  --terminal-fg: var(--text-primary, #cccccc);
   --terminal-err: var(--accent-red);
   --terminal-muted: var(--text-tertiary);
   --terminal-border: var(--border-subtle);
-  --terminal-cmd: #ffffff;
+  --terminal-cmd: var(--text-primary, #ffffff);
   --terminal-prompt: #4ade80;
-  --terminal-bar-fill: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  --terminal-bar-fill: var(--bg-card, #0c0c0c);
   --xterm-selection: hsl(0 0% 100% / 0.18);
   /* xterm 16 色深色主题标准 Windows Terminal (Campbell) 调色板 */
   --xterm-black: #0c0c0c;
@@ -1053,7 +1053,7 @@ html[data-theme='dark'] {
   --xterm-bright-blue: #93c5fd;
   --xterm-bright-magenta: #d8b4fe;
   --xterm-bright-cyan: #67e8f9;
-  --xterm-bright-white: #f9fafb;
+  --xterm-bright-white: #ffffff;
 
   /* F7-F27           dark     light   #868e96/#e8590c
    *             muted   4.6:1      dark      light

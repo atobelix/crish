@@ -93,6 +93,15 @@ export function notifyNoteDocWritten(event: NoteDocWrittenEvent): void {
       });
     }
   }
+  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
+    try {
+      window.dispatchEvent(
+        new CustomEvent('conex:note-doc-written', { detail: event })
+      );
+    } catch {
+      // ignore
+    }
+  }
 }
 
 /** 测试用：清空全部订阅（防测间泄漏） */

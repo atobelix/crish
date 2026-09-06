@@ -134,6 +134,18 @@ describe('ensurePtyForSession', () => {
     expect(ptyRegistry.get('sess-9')).toBe('pty-for-sess-9');
   });
 
+  it('透传 cwd 参数到 spawn handler', async () => {
+    const spawn = vi.fn(async (sid: string, cwd?: string) => `pty-for-${sid}-${cwd}`);
+    registerPtyHandlers({ spawn });
+    await expect(
+      ensurePtyForSession('sess-cwd', 'C:/Projects/my-app'),
+    ).resolves.toBe('pty-for-sess-cwd-C:/Projects/my-app');
+    expect(spawn).toHaveBeenCalledWith('sess-cwd', 'C:/Projects/my-app');
+    expect(ptyRegistry.get('sess-cwd')).toBe(
+      'pty-for-sess-cwd-C:/Projects/my-app',
+    );
+  });
+
   it('spawn 抛错 → null 且不留绑定', async () => {
     registerPtyHandlers({
       spawn: async () => {
@@ -245,5 +257,17 @@ describe('策略 A：ensure 复用 + kill 必 take', () => {
     expect(ptyRegistry.unbind('s1')).toBe('pty-1');
     expect(ptyRegistry.has('s1')).toBe(false);
     expect(kill).not.toHaveBeenCalled();
+  });
+
+  it('spawnHandler 支持传入 cwd 参数并在 ensurePtyForSession 中正确透传', async () => {
+    let capturedCwd: string | undefined;
+    const spawn = vi.fn(async (_sid: string, cwd?: string) => {
+      capturedCwd = cwd;
+      return 'pty-ok';
+    });
+    registerPtyHandlers({ spawn });
+
+    await ensurePtyForSession('sess-with-cwd', 'D:/work/repo');
+    expect(capturedCwd).toBe('D:/work/repo');
   });
 });

@@ -15,16 +15,28 @@ import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import { ptyResize, ptyWrite } from '../../api/ptySessionApi';
+import { parseColorToOklch } from '../../api/oklchColorGuard';
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import { useLayoutAnimationStore } from '../../store/layoutAnimationStore';
 import type { InteractiveXtermStatus } from './TerminalCard.xterm';
 import { startPtySession } from './ptyLifecycle';
 
-/** 读取 CSS 变量，缺失或 SSR 时回落 fallback。 */
+/** 读取 CSS 变量，缺失或 SSR 时回落 fallback。支持多级 var(--x, fallback) 嵌套解包。 */
 function readCssVar(name: string, fallback = ''): string {
   try {
     if (typeof document === 'undefined') return fallback;
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    let v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    if (!v) return fallback;
+    let depth = 0;
+    while (v.startsWith('var(') && depth < 5) {
+      depth++;
+      const match = v.match(/^var\(\s*(--[\w-]+)(?:\s*,\s*([\s\S]+?))?\s*\)$/);
+      if (!match || !match[1]) break;
+      const innerName = match[1];
+      const innerFallback = match[2]?.trim() || '';
+      const resolved = getComputedStyle(document.documentElement).getPropertyValue(innerName).trim();
+      v = resolved || innerFallback;
+    }
     return v || fallback;
   } catch {
     return fallback;
@@ -49,10 +61,23 @@ export function getXtermTheme() {
     : 'rgba(0, 0, 0, 0.15)';
 
   const bg = readCssVar('--terminal-bg', defaultBg) || defaultBg;
-  const fg = readCssVar('--terminal-fg', defaultFg) || defaultFg;
+  let fg = readCssVar('--terminal-fg', defaultFg) || defaultFg;
   const cursor = readCssVar('--terminal-cmd', defaultCursor) || defaultCursor;
   const selection =
     readCssVar('--xterm-selection', defaultSelection) || defaultSelection;
+
+  // 确保背景色与前景色具备足够对比度，防止在浅色/深色主题下前景色隐形
+  try {
+    const bgOklch = parseColorToOklch(bg, isDark);
+    const fgOklch = parseColorToOklch(fg, isDark);
+    if (!Number.isNaN(bgOklch.l) && !Number.isNaN(fgOklch.l)) {
+      if (Math.abs(bgOklch.l - fgOklch.l) < 0.35) {
+        fg = bgOklch.l > 0.52 ? '#111111' : '#cccccc';
+      }
+    }
+  } catch {
+    /* swallow-ok: 颜色解析异常时维持原值 */
+  }
 
   return {
     background: bg,
@@ -103,8 +128,8 @@ export function getXtermTheme() {
       readCssVar('--xterm-bright-cyan', isDark ? '#67e8f9' : '#0891b2') ||
       (isDark ? '#67e8f9' : '#0891b2'),
     brightWhite:
-      readCssVar('--xterm-bright-white', isDark ? '#f9fafb' : '#0f1419') ||
-      (isDark ? '#f9fafb' : '#0f1419'),
+      readCssVar('--xterm-bright-white', isDark ? '#ffffff' : '#0f1419') ||
+      (isDark ? '#ffffff' : '#0f1419'),
   };
 }
 
@@ -190,19 +215,20 @@ export function useXtermTerminal({
       rows: 24,
     });
 
-    // 监听 html[data-theme] 属性变化，当主题在 light/dark 间切换时，实时动态同步 xterm 主题色彩
+    // 监听 html[data-theme] 与 style 属性变化，当主题在 light/dark 或个性化皮肤调色切换时，实时动态同步 xterm 主题色彩
     let themeObserver: MutationObserver | null = null;
     if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
       themeObserver = new MutationObserver(() => {
         try {
           term.options.theme = getXtermTheme();
+          term.refresh(0, Math.max(0, term.rows - 1));
         } catch {
           /* swallow-ok: 终端卸载或已被 dispose 时更新静默跳过 */
         }
       });
       themeObserver.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ['data-theme'],
+        attributeFilter: ['data-theme', 'style'],
       });
     }
 

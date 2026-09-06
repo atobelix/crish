@@ -388,6 +388,11 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     }
     root.style.setProperty('--composer-bg', composerBg);
 
+    const termBg = isDarkPreset ? (bgCard || '#0c0c0c') : (bgCard || '#ffffff');
+    root.style.setProperty('--terminal-bg', termBg);
+    root.style.setProperty('--terminal-fg', textPrimary);
+    root.style.setProperty('--terminal-cmd', textPrimary);
+
     // Dynamic OKLCH contrast guard to automatically enforce WCAG AA contrast ratios
     applyTextContrastGuard(bgPrimary, isDarkPreset, {
       isCustomSkin: p.skin === 'custom',
@@ -413,5 +418,8 @@ export function applyPersonalization(p: PersonalizationSettings, activeTheme: 'd
     root.style.removeProperty('--control-soft-bg-hover');
     root.style.removeProperty('--control-soft-bg-active');
     root.style.removeProperty('--composer-bg');
+    root.style.removeProperty('--terminal-bg');
+    root.style.removeProperty('--terminal-fg');
+    root.style.removeProperty('--terminal-cmd');
   }
 }

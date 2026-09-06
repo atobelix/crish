@@ -767,6 +767,7 @@ export default defineConfig({
     chunkSizeGatePlugin(),
   ],
   resolve: {
+    dedupe: ['react', 'react-dom', 'react-dom/client'],
     alias: [
       { find: '@', replacement: resolve(__dirname, 'src') },
       { find: '@crish/block-paper/chrome.css', replacement: resolve(__dirname, '../../packages/block-paper/src/chrome/blockChrome.css') },
@@ -784,7 +785,27 @@ export default defineConfig({
   optimizeDeps: {
     // 避免 dev prebundle 把 Node-only stdio transport 打进浏览器 deps
     exclude: ['@modelcontextprotocol/sdk'],
-    include: ['react', 'react-dom', 'react-dom/client', '@radix-ui/react-popover', '@tauri-apps/api/window', 'dompurify', 'lucide-react', 'zustand', 'immer', 'highlight.js'],
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      '@radix-ui/react-popover',
+      '@tauri-apps/api/window',
+      'dompurify',
+      'lucide-react',
+      'zustand',
+      'immer',
+      'highlight.js',
+      'use-sync-external-store',
+      'use-sync-external-store/shim',
+      '@codemirror/state',
+      '@codemirror/view',
+      '@codemirror/commands',
+      '@codemirror/lang-javascript',
+      '@xterm/xterm',
+      '@xterm/addon-fit',
+      '@xterm/addon-webgl',
+    ],
   },
   server: {
     port: 5174,

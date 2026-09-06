@@ -413,4 +413,71 @@ describe('TreeLeafPanel 真实路由分发与 Props 透传 (Task 1)', () => {
     });
     vi.useRealTimers();
   });
+
+  it('在 tabModeEnabled 模式下，已打开的多个 Dock 标签保持 Keep-Alive 常驻保活，仅通过 display 切换显隐', async () => {
+    act(() => {
+      useLayoutStore.setState({ chatMainSurface: 'chat' });
+    });
+
+    const leafWithTwoTabs = makeChatLeaf({
+      id: 'chat-leaf-keep-alive',
+      sessionId: 'session-123',
+      dock: {
+        collapsed: false,
+        openPanelIds: ['files', 'terminal'],
+        activePanelId: 'files',
+      },
+    });
+
+    const { container, rerender } = render(
+      <TreeLeafPanel
+        leaf={leafWithTwoTabs}
+        rect={{ x: 0, y: 0, width: 1, height: 1 }}
+        isActive={true}
+        isDragSource={false}
+      />
+    );
+
+    const filesPane = container.querySelector('div[data-panel-id="files"]') as HTMLElement;
+    const terminalPane = container.querySelector('div[data-panel-id="terminal"]') as HTMLElement;
+
+    expect(filesPane).toBeTruthy();
+    expect(terminalPane).toBeTruthy();
+
+    expect(filesPane.getAttribute('data-active-panel')).toBe('true');
+    expect(filesPane.getAttribute('aria-hidden')).toBe('false');
+    expect(filesPane.style.display).toBe('flex');
+
+    expect(terminalPane.getAttribute('data-active-panel')).toBe('false');
+    expect(terminalPane.getAttribute('aria-hidden')).toBe('true');
+    expect(terminalPane.style.display).toBe('none');
+
+    // 切换到 terminal 标签
+    const updatedLeaf = makeChatLeaf({
+      id: 'chat-leaf-keep-alive',
+      sessionId: 'session-123',
+      dock: {
+        collapsed: false,
+        openPanelIds: ['files', 'terminal'],
+        activePanelId: 'terminal',
+      },
+    });
+
+    rerender(
+      <TreeLeafPanel
+        leaf={updatedLeaf}
+        rect={{ x: 0, y: 0, width: 1, height: 1 }}
+        isActive={true}
+        isDragSource={false}
+      />
+    );
+
+    expect(filesPane.getAttribute('data-active-panel')).toBe('false');
+    expect(filesPane.getAttribute('aria-hidden')).toBe('true');
+    expect(filesPane.style.display).toBe('none');
+
+    expect(terminalPane.getAttribute('data-active-panel')).toBe('true');
+    expect(terminalPane.getAttribute('aria-hidden')).toBe('false');
+    expect(terminalPane.style.display).toBe('flex');
+  });
 });
