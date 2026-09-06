@@ -102,7 +102,15 @@ export async function startPtySession(deps: StartPtySessionDeps): Promise<void> 
   const reused = !!priorId;
 
   if (!ptyId) {
-    ptyId = await ensureOrAbort(reg, key, cancellation, onStatus, cwdOpt);
+    ptyId = await ensureOrAbort(
+      reg,
+      key,
+      cancellation,
+      onStatus,
+      cwdOpt,
+      cols,
+      rows
+    );
     if (cancellation.isCancelled()) return;
   }
 
@@ -212,9 +220,11 @@ async function ensureOrAbort(
   cancellation: CancellationSlot,
   onStatus: (status: 'connecting' | 'ready' | 'missing' | 'error' | 'exited', detail?: string) => void,
   cwd?: string,
+  cols?: number,
+  rows?: number,
 ): Promise<string | null> {
   // ensure：走 spawn handler（bootstrap 注入）；失败再直连 ptyCreate
-  const ptyId = await reg.ensurePtyForSession(key, cwd);
+  const ptyId = await reg.ensurePtyForSession(key, cwd, cols, rows);
   if (cancellation.isCancelled()) {
     if (ptyId) {
       void reg.killPtySession(key);

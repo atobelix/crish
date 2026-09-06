@@ -93,12 +93,12 @@ export function bootstrapServices(): () => void {
   void import('./api/ptySessionApi').then(({ ptyCreate, ptyKill }) => {
     void import('./api/ptyRegistry').then(({ registerPtyHandlers }) => {
       registerPtyHandlers({
-        spawn: async (sessionId, sessionCwd) => {
+        spawn: async (sessionId, sessionCwd, cols, rows) => {
           const cwd = sessionCwd || getWorkspacePath();
           const res = await ptyCreate({
             sessionKey: sessionId,
-            cols: 80,
-            rows: 24,
+            cols: cols && cols > 0 ? cols : 80,
+            rows: rows && rows > 0 ? rows : 24,
             ...(cwd ? { cwd } : {}),
           });
           return res.status === 'ok' ? res.data.ptyId : null;

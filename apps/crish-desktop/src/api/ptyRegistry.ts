@@ -149,7 +149,12 @@ export const ptyRegistry = new PtyRegistry();
 
 // ── 可选后端注入（C2 ptySessionApi） ──────────────────────────────
 
-export type PtySpawnFn = (sessionId: string, cwd?: string) => Promise<string | null>;
+export type PtySpawnFn = (
+  sessionId: string,
+  cwd?: string,
+  cols?: number,
+  rows?: number
+) => Promise<string | null>;
 export type PtyKillFn = (ptyId: string, sessionId: string) => Promise<void> | void;
 
 let spawnHandler: PtySpawnFn | null = null;
@@ -199,6 +204,8 @@ export function registerPtyBinding(sessionId: string, ptyId: string): void {
 export async function ensurePtyForSession(
   sessionId: string | null | undefined,
   cwd?: string,
+  cols?: number,
+  rows?: number,
 ): Promise<string | null> {
   const sid = normalizeSessionId(sessionId);
   if (!sid) return null;
@@ -209,7 +216,10 @@ export async function ensurePtyForSession(
   if (!spawnHandler) return null;
 
   try {
-    const ptyId = await spawnHandler(sid, cwd);
+    const ptyId =
+      cols !== undefined || rows !== undefined
+        ? await spawnHandler(sid, cwd, cols, rows)
+        : await spawnHandler(sid, cwd);
     const pid = normalizePtyId(ptyId);
     if (!pid) return null;
     ptyRegistry.bind(sid, pid);

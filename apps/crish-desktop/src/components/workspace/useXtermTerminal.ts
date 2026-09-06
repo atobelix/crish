@@ -208,7 +208,7 @@ export function useXtermTerminal({
         "'Cascadia Mono', 'Cascadia Code', 'JetBrains Mono', 'Consolas', 'Segoe UI Mono', monospace",
       lineHeight: 1.35,
       theme: getXtermTheme(),
-      allowTransparency: false,
+      allowTransparency: true,
       convertEol: true,
       scrollback: 5000,
       cols: 80,
