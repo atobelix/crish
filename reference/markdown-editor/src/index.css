@@ -545,7 +545,7 @@ body {
 }
 
 .callout-header-banner {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   font-weight: 600;
@@ -554,6 +554,7 @@ body {
   user-select: none;
   height: var(--grid-size);
   line-height: var(--grid-size);
+  vertical-align: top;
 }
 
 .callout-header-banner .callout-icon {
@@ -1000,12 +1001,12 @@ body {
 
 /* Inline Math & KaTeX rendering */
 .token-math-wrapper {
-  display: inline-block;
-  vertical-align: middle;
+  display: inline;
+  vertical-align: baseline;
 }
 .token-math-wrapper .math-preview {
-  display: inline-block;
-  vertical-align: middle;
+  display: inline;
+  vertical-align: baseline;
 }
 .token-math-wrapper .math-source {
   display: none;

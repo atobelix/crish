@@ -88,10 +88,21 @@ function classifyShape(raw: string): LineKind {
     if (s.charCodeAt(i) === 32) return 'heading';
     return 'body'; // "#无空格" 非标题，按正文预测
   }
+  // 表格分隔行（- | - 或 | --- | --- |）：仅包含破折号、冒号、空白与管道符
+  if (raw.indexOf('-') !== -1 && TABLE_SEP_RE.test(raw)) {
+    return 'table_separator';
+  }
   if (c0 === 124) {
-    // 行首 '|'：直接进入表格判定（分隔行仅在含 '-' 时跑正则）
-    if (raw.indexOf('-') !== -1 && TABLE_SEP_RE.test(raw)) return 'table_separator';
     return 'table_row';
+  }
+  // 列表（- , * , + , 1. ）与引用（> ）前缀：包含管道时不应误判为表格
+  if (c0 === 42 || c0 === 45 || c0 === 43 || c0 === 62) {
+    if ((sLen > 1 && (s.charCodeAt(1) === 32 || s.charCodeAt(1) === 9)) || /^[-*+]\s*\[[xX\s]\]/.test(s)) {
+      return 'body';
+    }
+  }
+  if (c0 >= 48 && c0 <= 57 && /^\d+[.)]\s+/.test(s)) {
+    return 'body';
   }
   // 非 '|' 开头：仅当行内含管道时统计数量（indexOf 为 SIMD 快速路径；
   // 按 parser 口径 ≥2 个管道才判定表格，单管道且非行首按正文）

@@ -2278,26 +2278,25 @@ export class MarkdownParser {
           });
           pos += prefixLen;
         } else {
+          // 表格分隔行检测（优先判定）：- | - 或 | --- | --- | 仅包含破折号、冒号、空白与管道符
+          let isTableSep = false;
           if (nestedText.length <= 10000) {
             const tableSeparatorMatch = nestedText.match(
               /^\|?(\s*:?-+:?\s*\|)+\s*:?-+:?\s*\|?$/
             );
             if (tableSeparatorMatch) {
               lineType = 'table_separator';
-            } else {
-              const pipeCount = (nestedText.match(/\|/g) || []).length;
-              if (
-                (pipeCount >= 1 && nestedText.trim().startsWith('|')) ||
-                pipeCount >= 2
-              ) {
-                lineType = 'table_row';
-              }
+              isTableSep = true;
             }
           }
 
-          if (lineType !== 'table_row' && lineType !== 'table_separator') {
+          if (!isTableSep) {
+            // 列表项检测（优先于普通表格行）：CommonMark/GFM 铁律——列表前缀（- , * , + , 1. , - [ ]）
+            // 拥有更高排版优先级，行内包含 ||spoiler|| 或 | 绝不可将列表项误判为表格
+            let isList = false;
             const taskMatch = nestedText.match(/^(\s*)([-*+]\s*\[[xX\s]\])\s+/);
             if (taskMatch) {
+              isList = true;
               const prefixLen = taskMatch[0].length;
               const indent = taskMatch[1];
               const checkRaw = taskMatch[2];
@@ -2319,6 +2318,7 @@ export class MarkdownParser {
             } else {
               const bulletMatch = nestedText.match(/^(\s*)([-*+])\s+/);
               if (bulletMatch) {
+                isList = true;
                 const prefixLen = bulletMatch[0].length;
                 const indent = bulletMatch[1];
                 listIndent = indent.length;
@@ -2336,6 +2336,7 @@ export class MarkdownParser {
               } else {
                 const numberMatch = nestedText.match(/^(\s*)(\d+\.)\s+/);
                 if (numberMatch) {
+                  isList = true;
                   const prefixLen = numberMatch[0].length;
                   const indent = numberMatch[1];
                   listIndent = indent.length;
@@ -2351,6 +2352,16 @@ export class MarkdownParser {
                   });
                   pos += prefixLen;
                 }
+              }
+            }
+
+            if (!isList && nestedText.length <= 10000) {
+              const pipeCount = (nestedText.match(/\|/g) || []).length;
+              if (
+                (pipeCount >= 1 && nestedText.trim().startsWith('|')) ||
+                pipeCount >= 2
+              ) {
+                lineType = 'table_row';
               }
             }
           }

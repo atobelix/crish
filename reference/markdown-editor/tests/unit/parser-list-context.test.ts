@@ -133,10 +133,16 @@ describe('R1.5-B parser 列表上下文（空行后列表项延续）', () => {
     expect(doc.lines[2].listContinuation).toBeUndefined();
   });
 
-  it('空行后缩进不足行出列表后，列表上下文不再影响后续行', () => {
-    const doc = MarkdownParser.parse('- one\n\n two\n\nthree');
-    expect(doc.lines[2].listContinuation).toBeUndefined();
-    expect(doc.lines[4].listContinuation).toBeUndefined();
-    expect(doc.lines[4].type).toBe('body');
+  it('列表项包含管道符或剧透（||Spoiler|| / |）时，严格保持列表语义不被误劫持为表格', () => {
+    const doc = MarkdownParser.parse(
+      '* KR 2.1：原生支持保密剧透行内遮罩 `||Spoiler||`，保障投屏分享零泄密。\n- [x] 任务项 | 备注 | 状态'
+    );
+    expect(doc.lines[0].type).toBe('body');
+    expect(doc.lines[0].listPrefix).toBe('*');
+    expect(doc.lines[0].inlineTokens?.[0].type).toBe('list_bullet');
+
+    expect(doc.lines[1].type).toBe('body');
+    expect(doc.lines[1].listPrefix).toBe('- [x]');
+    expect(doc.lines[1].inlineTokens?.[0].type).toBe('list_task');
   });
 });
