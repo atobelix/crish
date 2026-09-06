@@ -13,6 +13,10 @@ import {
   userBubbleExpandAria,
 } from './chatMessageRowUtils';
 import { UserMessageActionsBar } from './MessageActionsBar';
+import { FileFormatIcon } from '../../assets/icons';
+import { openFileInPanel } from '../../api/filePanelOpener';
+import { convertFileSrc } from '@tauri-apps/api/core';
+import { isAbsoluteFsPath } from '../../api/workspaceFsApi';
 
 export type ChatUserMessageRowProps = {
   msg: SessionMessage;
@@ -26,6 +30,7 @@ export type ChatUserMessageRowProps = {
   onRetract?: () => void;
   messageIndex: number;
   virtualScrollManager: VirtualScrollManager | null;
+  onOpenPath?: (filePath: string) => void;
 };
 
 function userRowPropsEqual(
@@ -44,6 +49,11 @@ function userRowPropsEqual(
     prev.onTogglePin === next.onTogglePin &&
     prev.isLastUser === next.isLastUser &&
     prev.onRetract === next.onRetract &&
+    prev.messageIndex === next.messageIndex &&
+    prev.virtualScrollManager === next.virtualScrollManager &&
+    prev.onOpenPath === next.onOpenPath &&
+    prev.msg.images === next.msg.images &&
+    prev.msg.attachments === next.msg.attachments &&
     true
   );
 }
@@ -59,6 +69,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   onRetract,
   messageIndex: _messageIndex,
   virtualScrollManager,
+  onOpenPath,
 }) => {
   void _messageIndex;
   const { showToast } = useToast();
@@ -72,6 +83,25 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
     status: msg.status,
   });
 
+  const images = msg.images ?? [];
+  const nonImageAttachments = (msg.attachments ?? []).filter(
+    (a) => !a.dataUrl && (!a.mime || !a.mime.startsWith('image/'))
+  );
+  const hasImages = images.length > 0;
+  const hasAttachments = nonImageAttachments.length > 0;
+
+  const handleOpenPath = useCallback(
+    (path: string) => {
+      if (!path) return;
+      if (onOpenPath) {
+        onOpenPath(path);
+        return;
+      }
+      openFileInPanel(path);
+    },
+    [onOpenPath]
+  );
+
   useEffect(
     () => () => {
       if (copiedTimer.current != null) window.clearTimeout(copiedTimer.current);
@@ -83,7 +113,14 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   useEffect(() => {
     if (msg.status === 'processing') return;
     virtualScrollManager?.invalidateActual(msg.id);
-  }, [msg.text, msg.id, msg.status, virtualScrollManager]);
+  }, [
+    msg.text,
+    msg.id,
+    msg.status,
+    msg.images,
+    msg.attachments,
+    virtualScrollManager,
+  ]);
 
   const handleCopy = useCallback(() => {
     const text = msg.text || '';
@@ -123,6 +160,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
   return (
     <div
       className={`${styles.row} ${styles.rowUser} msg-row msg-row-user${isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
+      data-testid="chat-user-message-row"
       data-msg-id={msg.id}
       data-role="user"
       data-pinned={isPinned ? 'true' : undefined}
@@ -139,7 +177,7 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           </Tooltip>
         ) : null}
         <div
-          className={`${styles.userBubble} ${isExpanded ? 'expanded' : ''}`}
+          className={styles.userBubble}
           onClick={toggleExpand}
           onKeyDown={onBubbleKeyDown}
           style={{
@@ -150,7 +188,66 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
           aria-expanded={isLong ? isExpanded : undefined}
           aria-label={isLong ? userBubbleExpandAria(isExpanded) : undefined}
         >
-          <span className={styles.userText}>{displayText}</span>
+          {hasImages ? (
+            <div className={styles.userImages} data-testid="user-images-gallery">
+              {images.map((img) => {
+                const imgSrc =
+                  img.resolvedUrl ||
+                  (img.source?.startsWith('data:') ||
+                  img.source?.startsWith('blob:') ||
+                  img.source?.startsWith('http')
+                    ? img.source
+                    : isAbsoluteFsPath(img.source)
+                      ? convertFileSrc(img.source)
+                      : img.source);
+                return (
+                  <Tooltip
+                    key={img.id || img.source}
+                    content={img.alt || '查看图片'}
+                  >
+                    <div
+                      className={styles.userImageWrapper}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleOpenPath(img.source);
+                      }}
+                    >
+                      <img
+                        src={imgSrc}
+                        alt={img.alt || '图片附件'}
+                        className={styles.userImage}
+                        loading="lazy"
+                      />
+                    </div>
+                  </Tooltip>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {hasAttachments ? (
+            <div
+              className={styles.userAttachments}
+              data-testid="user-attachments-strip"
+            >
+              {nonImageAttachments.map((a) => (
+                <Tooltip key={a.name} content={a.path || a.name}>
+                  <span
+                    className={styles.userAttachmentChip}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenPath(a.path || a.name);
+                    }}
+                  >
+                    <FileFormatIcon fileName={a.name} size={14} />
+                    <span className={styles.userAttachmentName}>{a.name}</span>
+                  </span>
+                </Tooltip>
+              ))}
+            </div>
+          ) : null}
+
+          {displayText ? displayText : null}
           {msg.status === 'queued' && (
             <span className={styles.queued}>排队中</span>
           )}

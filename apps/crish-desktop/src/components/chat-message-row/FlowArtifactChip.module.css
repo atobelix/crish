@@ -1,0 +1,94 @@
+/* ───── 代码产物胶囊与实时同步行（Artifact Chip & Sync Line） ───── */
+.flowArtifactRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding-left: var(--space-0_5, 2px);
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary);
+  margin: 2px 0;
+}
+
+.flowArtifactIcon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.flowArtifactChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  vertical-align: baseline;
+  max-width: 280px;
+  padding: 0 2px;
+  margin: 0 2px;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--brand-deep, #059669);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--brand-line, rgba(16, 185, 129, 0.35));
+  line-height: inherit;
+  height: auto;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: none;
+  transition: color var(--transition-fast, 150ms ease), text-decoration-color var(--transition-fast, 150ms ease);
+}
+
+.flowArtifactChip:hover {
+  background: transparent;
+  color: var(--brand, #10b981);
+  text-decoration-color: var(--brand, #10b981);
+  box-shadow: none;
+}
+
+.flowSyncLine {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary);
+  margin: 2px 0;
+  padding-left: var(--space-0_5, 2px);
+}
+
+.flowSyncDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand, #10b981);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
+  animation: sync-dot-pulse 1.4s ease-in-out infinite;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+@keyframes sync-dot-pulse {
+  0%, 100% {
+    transform: scale(0.85);
+    opacity: 0.7;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 18%, transparent);
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 1;
+    box-shadow: 0 0 0 4.5px color-mix(in srgb, var(--brand, #10b981) 32%, transparent);
+  }
+}
+
+.flowSyncDone {
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 13px);
+}

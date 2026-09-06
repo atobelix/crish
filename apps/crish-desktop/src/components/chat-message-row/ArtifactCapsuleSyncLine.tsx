@@ -12,7 +12,7 @@
  */
 import React from 'react';
 import { Tooltip } from '../ui';
-import styles from './ChatMessageRow.module.css';
+import styles from './FlowArtifactChip.module.css';
 
 export interface ArtifactCapsuleProps {
   name: string;

@@ -136,10 +136,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     if (idx < 0) return;
     const id = messages[idx]?.id;
     if (!id) return;
-    const t = window.setTimeout(() => {
-      scrollToMessage(id);
-    }, 40);
-    return () => window.clearTimeout(t);
+    scrollToMessage(id);
   }, [searchHighlightQuery, activeSessionId, messages]);
 
   const permissionMode = usePermissionField(selectPermissionMode);
@@ -189,7 +186,10 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   if (messages.length === 0) {
     if (!activeSessionId) return null;
     return (
-      <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+      <div
+        data-chat-scroll-container=""
+        style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}
+      >
         <EphemeralStatusSlot
           sessionId={activeSessionId}
         />
@@ -232,6 +232,7 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
           showAllMessages={showAllMessages}
           activeSessionId={activeSessionId}
           handleMarkdownClick={handleMarkdownClick}
+          onOpenPath={onOpenPath}
         />
       </NarrativeRenderSlotsContext.Provider>
     </AppErrorBoundary>

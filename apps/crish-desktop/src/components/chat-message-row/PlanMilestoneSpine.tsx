@@ -10,7 +10,7 @@
  * - 纯净有机流排布，绝无沉重外框与卡片包袱。
  */
 import React, { useState } from 'react';
-import styles from './ChatMessageRow.module.css';
+import styles from './FlowPlanMilestone.module.css';
 
 export interface PlanSubstepItem {
   id: string;

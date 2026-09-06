@@ -1,0 +1,165 @@
+/* ───── 步骤进度里程碑（Plan Step & Milestone Spine） ───── */
+.flowPlanRoot {
+  --plan-gap: 4px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--plan-gap);
+  background: transparent;
+  border: none;
+  position: relative;
+  width: 100%;
+}
+
+.flowPlanStep {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 纵向 0.75px 脊柱线，精准居中于 16px 圆点下 (left: 7.625px) */
+.flowPlanStep::after {
+  content: '';
+  position: absolute;
+  top: 30px;
+  bottom: calc(var(--plan-gap) * -1);
+  left: 7.625px;
+  width: 0.75px;
+  background-color: var(--border-color, rgba(0, 0, 0, 0.15));
+  z-index: 0;
+}
+
+.flowPlanStep:last-child::after {
+  bottom: 8px;
+}
+
+.flowPlanStep.isCollapsed:last-child::after,
+.flowPlanStep:last-child:not(:has(> .flowPlanStepBody))::after {
+  display: none;
+}
+
+.flowPlanStepHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 0;
+  user-select: none;
+  cursor: pointer;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  font-family: inherit;
+  text-align: left;
+}
+
+.flowPlanStepNum {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-page, #ffffff);
+  color: var(--text-secondary, #5c5850);
+  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.15));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  z-index: 1;
+}
+
+.flowPlanStep.isDone .flowPlanStepNum {
+  background: var(--bg-page, #ffffff);
+  color: var(--text-primary, #1c1b18);
+  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
+}
+
+.flowPlanStep.isRunning .flowPlanStepNum {
+  background: color-mix(in srgb, var(--brand, #10b981) 12%, var(--bg-page, #ffffff));
+  color: var(--brand, #10b981);
+  border-color: color-mix(in srgb, var(--brand, #10b981) 40%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 15%, transparent);
+  animation: plan-num-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes plan-num-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 15%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand, #10b981) 30%, transparent);
+  }
+}
+
+.flowPlanStepTitle {
+  font-size: var(--font-size-base, 14px);
+  font-weight: 600;
+  color: var(--text-primary, #1c1b18);
+  flex: 0 1 auto;
+  letter-spacing: -0.01em;
+  line-height: 1.5;
+}
+
+.flowPlanStepChevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted, #8c877d);
+  transition: transform var(--transition-fast, 150ms ease), color var(--transition-fast, 150ms ease);
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+.flowPlanStepHead:hover .flowPlanStepChevron {
+  color: var(--text-primary, #1c1b18);
+}
+
+.flowPlanStep:not(.isCollapsed) .flowPlanStepChevron {
+  transform: rotate(90deg);
+}
+
+.flowPlanStep.isCollapsed .flowPlanStepChevron {
+  transform: rotate(0deg);
+}
+
+.flowPlanStepBody {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 6px 0;
+  margin-left: 22px;
+}
+
+.flowPlanStep.isCollapsed .flowPlanStepBody {
+  display: none;
+}
+
+.flowPlanSubstep {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm, 13px);
+  color: var(--text-secondary, #5c5850);
+  padding: 2px 0;
+}
+
+.flowPlanSubstepDot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-tertiary, #a3a3a3);
+  flex-shrink: 0;
+}

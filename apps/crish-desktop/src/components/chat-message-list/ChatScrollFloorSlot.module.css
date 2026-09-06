@@ -1,0 +1,81 @@
+/* apps/crish-desktop/src/components/chat-message-list/ChatScrollFloorSlot.module.css */
+
+/* 零高度 Sticky 到底卡槽：严格不占据任何视口物理高度（0px），彻底消除旧架构硬编码 148px 空间挤压 */
+.floorSlot {
+  position: sticky;
+  bottom: 0;
+  height: 0;
+  max-height: 0;
+  width: 100%;
+  pointer-events: none;
+  z-index: 8;
+  display: flex;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  overflow: visible;
+  max-width: min(var(--chat-col-max, 760px), 100%);
+  margin-left: auto;
+  margin-right: auto;
+  padding-right: 18px;
+}
+
+/* 交互锚点：局部恢复点击穿透 */
+.buttonAnchor {
+  pointer-events: auto;
+  display: inline-flex;
+}
+
+/* 回底轻量浮钮：使用负 margin 向上反向抽离自身可视高度，实现 ΔscrollHeight ≡ 0 */
+.chatScrollFab {
+  margin-top: -46px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--border-subtle, hsl(0 0% 100% / 0.08));
+  background: var(--bg-elevated, hsl(0 0% 100% / 0.9));
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px hsl(0 0% 0% / 0.12), 0 0 0 1px hsl(0 0% 0% / 0.04);
+  padding: 0;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease, color 120ms ease;
+  position: relative;
+}
+
+.chatScrollFab:hover {
+  transform: translateY(-1px);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+  background: var(--bg-hover, hsl(0 0% 100%));
+}
+
+.chatScrollFab:active {
+  transform: translateY(0);
+}
+
+/* 遵循 AGENTS.md §13 软环焦点态：对比度 <= 10%，杜绝粗黑硬边 */
+.chatScrollFab:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 0.5px color-mix(in srgb, var(--text-primary) 6%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.unreadBadge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: var(--brand, hsl(210 100% 50%));
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 14px;
+  height: 14px;
+  min-width: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  text-align: center;
+  box-sizing: border-box;
+}

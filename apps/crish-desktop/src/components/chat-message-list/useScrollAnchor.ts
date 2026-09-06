@@ -9,17 +9,77 @@ export function pinSnippet(text?: string, max = 72): string {
   return t.length > max ? `${t.slice(0, max)}…` : t;
 }
 
-function findMessageElement(messageId: string): HTMLElement | null {
-  const el = document.querySelector(
-    `[data-msg-id="${CSS.escape(messageId)}"]`
+function findScrollContainer(el?: HTMLElement | null): HTMLElement | null {
+  const byAttr = document.querySelector<HTMLElement>(
+    '[data-chat-scroll-container]'
   );
+  if (byAttr) return byAttr;
+  if (el) {
+    const closest = el.closest<HTMLElement>(
+      '[data-chat-scroll-container], [data-virtual-scroll="true"], .list'
+    );
+    if (closest) return closest;
+  }
+  return document.querySelector<HTMLElement>(
+    '[data-virtual-scroll="true"], [role="region"][aria-label="会话消息"]'
+  );
+}
+
+function findMessageElement(
+  messageId: string,
+  container?: HTMLElement | null
+): HTMLElement | null {
+  const escaped = CSS.escape(messageId);
+  const selector = `[data-msg-id="${escaped}"], [data-vindex="${escaped}"], [data-chat-node-key="${escaped}"]`;
+  const el = container
+    ? container.querySelector(selector)
+    : document.querySelector(selector);
   return el instanceof HTMLElement ? el : null;
 }
 
 export function scrollToMessage(messageId: string): boolean {
-  const el = findMessageElement(messageId);
+  const container = findScrollContainer();
+  const el = findMessageElement(messageId, container);
   if (!el) return false;
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+  const scroller =
+    container ??
+    findScrollContainer(el) ??
+    el.parentElement;
+
+  if (scroller) {
+    const elRect = el.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+    const diff = elRect.top - scrollerRect.top;
+
+    let relativeOffsetTop = diff + scroller.scrollTop;
+
+    // 亚像素/无布局引擎环境（如 Vitest jsdom）回退处理：沿 offsetParent 链累加 offsetTop
+    if (diff === 0) {
+      let offset = 0;
+      let curr: HTMLElement | null = el;
+      while (curr && curr !== scroller) {
+        offset += curr.offsetTop || 0;
+        curr = curr.offsetParent as HTMLElement | null;
+      }
+      if (offset > 0) {
+        relativeOffsetTop = offset;
+      } else if (el.offsetTop > 0) {
+        relativeOffsetTop = el.offsetTop;
+      }
+    }
+
+    const viewportHeight = scroller.clientHeight;
+    const targetHeight = el.clientHeight;
+    let targetScrollTop = relativeOffsetTop;
+    if (viewportHeight > 0) {
+      // 居中视口对齐，消除视口被动向上扯动的顽疾，仅向单一滚动宿主写入 scrollTop
+      targetScrollTop =
+        relativeOffsetTop - Math.max(0, (viewportHeight - targetHeight) / 2);
+    }
+    scroller.scrollTop = Math.max(0, targetScrollTop);
+  }
+
   const flashClass = styles.rowPinFlash;
   if (flashClass) {
     el.classList.add(flashClass);
@@ -84,6 +144,10 @@ export function useScrollAnchor({
     const inList = listForPin.some((m) => m.id === messageId);
     if (!inList) {
       toast('未找到该固定消息');
+      return;
+    }
+
+    if (scrollToMessage(messageId)) {
       return;
     }
 

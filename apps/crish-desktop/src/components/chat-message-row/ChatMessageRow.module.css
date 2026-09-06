@@ -2,7 +2,9 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  margin-bottom: 22px;
+  /* 纯净画纸：旧外边距已清除，垂直节奏统一由 Adjacent Sibling-combinator 接管 */
+  margin-top: 0;
+  margin-bottom: 0;
   /*      ?token         ?720/680px    ?*/
   max-width: min(var(--chat-col-max, 760px), 100%);
   min-width: 0;
@@ -32,13 +34,11 @@
 
 .rowUser {
   align-items: flex-end;
-  margin-bottom: var(--space-5);
 }
 
 .rowAssistant {
   align-items: flex-start;
   max-width: min(var(--chat-col-max, 760px), 100%);
-  margin-bottom: var(--space-5);
 }
 
 .rowAssistant .assistantMeta {
@@ -46,25 +46,24 @@
 }
 
 .rowAssistant.isFollowup {
-  margin-top: -2px;
-  margin-bottom: var(--space-3);
+  /* 旧外边距链与负 margin 补丁已拔除，统一由相邻兄弟选择器接管 */
 }
 
 .userStack {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  max-width: min(78%, 560px);
+  max-width: min(70.2%, 560px);
   min-width: min-content;
   gap: var(--space-1_5);
 }
 
 .userBubble {
-  /* 5.5% 灰度底，无描边 */
+  /* DIM-01 §1.3: 70.2% 比例气泡与 5.5% 灰度混入，消除多余描边与阴影，22px 超椭圆圆角 */
   background: color-mix(in srgb, var(--text-primary) 5.5%, var(--bg-card));
   color: var(--text-primary);
-  border-radius: 14px 14px 4px 14px;
-  padding: 10px 14px;
+  border-radius: 22px;
+  padding: 10px 16px;
   font-size: var(--font-size-base, 14px);
   font-weight: var(--font-weight-normal);
   line-height: 1.5;
@@ -74,17 +73,77 @@
   border: none;
   box-shadow: none;
   width: fit-content;
-  max-width: 100%;
+  max-width: min(70.2%, 560px);
   min-width: min-content;
   -webkit-user-select: text;
   user-select: text;
 }
 
-.userText {
+.userBubble:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.userImages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.userImageWrapper {
+  cursor: pointer;
+  border-radius: var(--radius-lg, 10px);
+  overflow: hidden;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  background: var(--bg-card, #1e1e1e);
+  transition: transform var(--transition-base, 150ms ease), border-color var(--transition-base, 150ms ease);
+}
+
+.userImageWrapper:hover {
+  border-color: var(--border-color);
+  transform: scale(1.01);
+}
+
+.userImage {
   display: block;
-  font-weight: var(--font-weight-normal);
-  -webkit-user-select: text;
-  user-select: text;
+  max-width: min(100%, 320px);
+  max-height: 240px;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.userAttachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1_5, 6px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.userAttachmentChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.userAttachmentChip:hover {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  color: var(--text-primary);
+}
+
+.userAttachmentName {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .userMeta {
@@ -92,6 +151,7 @@
   align-items: center;
   gap: 0;
   min-height: 22px;
+  margin-top: 6px;
   opacity: 0;
   transition: opacity var(--transition-fast);
   padding-right: var(--space-0_5);
@@ -682,7 +742,7 @@
 }
 
 .queued {
-  display: inline-block;
+  display: block;
   margin-top: var(--space-1_5);
   font-size: var(--font-size-xxs);
   color: var(--text-tertiary);
@@ -804,7 +864,7 @@
   }
   .userStack,
   .userBubble {
-    max-width: min(92%, 100%);
+    max-width: min(82%, 100%);
   }
 }
 
@@ -837,265 +897,4 @@
   background-size: 200% 100%;
   animation: skeleton-shimmer var(--transition-skeleton) infinite;
   margin-bottom: var(--space-1_5);
-}
-
-/* ───── 步骤进度里程碑（Plan Step & Milestone Spine） ───── */
-.flowPlanRoot {
-  --plan-gap: 4px;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--plan-gap);
-  background: transparent;
-  border: none;
-  position: relative;
-  width: 100%;
-}
-
-.flowPlanStep {
-  position: relative;
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* 纵向 0.75px 脊柱线，精准居中于 16px 圆点下 (left: 7.625px) */
-.flowPlanStep::after {
-  content: '';
-  position: absolute;
-  top: 30px;
-  bottom: calc(var(--plan-gap) * -1);
-  left: 7.625px;
-  width: 0.75px;
-  background-color: var(--border-color, rgba(0, 0, 0, 0.15));
-  z-index: 0;
-}
-
-.flowPlanStep:last-child::after {
-  bottom: 8px;
-}
-
-.flowPlanStep.isCollapsed:last-child::after,
-.flowPlanStep:last-child:not(:has(> .flowPlanStepBody))::after {
-  display: none;
-}
-
-.flowPlanStepHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 28px;
-  padding: 4px 0;
-  user-select: none;
-  cursor: pointer;
-  width: 100%;
-  max-width: 100%;
-  box-sizing: border-box;
-  background: transparent;
-  border: none;
-  font-family: inherit;
-  text-align: left;
-}
-
-.flowPlanStepNum {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 600;
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-  background: var(--bg-page, #ffffff);
-  color: var(--text-secondary, #5c5850);
-  border: 1px solid var(--border-color, rgba(0, 0, 0, 0.15));
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-  z-index: 1;
-}
-
-.flowPlanStep.isDone .flowPlanStepNum {
-  background: var(--bg-page, #ffffff);
-  color: var(--text-primary, #1c1b18);
-  border-color: color-mix(in srgb, var(--border-color) 92%, var(--text-primary) 8%);
-}
-
-.flowPlanStep.isRunning .flowPlanStepNum {
-  background: color-mix(in srgb, var(--brand, #10b981) 12%, var(--bg-page, #ffffff));
-  color: var(--brand, #10b981);
-  border-color: color-mix(in srgb, var(--brand, #10b981) 40%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 15%, transparent);
-  animation: plan-num-pulse 1.4s ease-in-out infinite;
-}
-
-@keyframes plan-num-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 15%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand, #10b981) 30%, transparent);
-  }
-}
-
-.flowPlanStepTitle {
-  font-size: var(--font-size-base, 14px);
-  font-weight: 600;
-  color: var(--text-primary, #1c1b18);
-  flex: 0 1 auto;
-  letter-spacing: -0.01em;
-  line-height: 1.5;
-}
-
-.flowPlanStepChevron {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  color: var(--text-muted, #8c877d);
-  transition: transform var(--transition-fast, 150ms ease), color var(--transition-fast, 150ms ease);
-  margin-left: 2px;
-  flex-shrink: 0;
-}
-
-.flowPlanStepHead:hover .flowPlanStepChevron {
-  color: var(--text-primary, #1c1b18);
-}
-
-.flowPlanStep:not(.isCollapsed) .flowPlanStepChevron {
-  transform: rotate(90deg);
-}
-
-.flowPlanStep.isCollapsed .flowPlanStepChevron {
-  transform: rotate(0deg);
-}
-
-.flowPlanStepBody {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 2px 0 6px 0;
-  margin-left: 22px;
-}
-
-.flowPlanStep.isCollapsed .flowPlanStepBody {
-  display: none;
-}
-
-.flowPlanSubstep {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--font-size-sm, 13px);
-  color: var(--text-secondary, #5c5850);
-  padding: 2px 0;
-}
-
-.flowPlanSubstepDot {
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--text-tertiary, #a3a3a3);
-  flex-shrink: 0;
-}
-
-/* ───── 代码产物胶囊与实时同步行（Artifact Chip & Sync Line） ───── */
-.flowArtifactRow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 24px;
-  padding-left: var(--space-0_5, 2px);
-  font-size: var(--font-size-sm, 13px);
-  color: var(--text-secondary);
-  margin: 2px 0;
-}
-
-.flowArtifactIcon {
-  width: 16px;
-  height: 16px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.flowArtifactChip {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  vertical-align: baseline;
-  max-width: 280px;
-  padding: 0 2px;
-  margin: 0 2px;
-  border: none;
-  background: transparent;
-  border-radius: 0;
-  font-family: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--brand-deep, #059669);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  text-decoration-color: var(--brand-line, rgba(16, 185, 129, 0.35));
-  line-height: inherit;
-  height: auto;
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  box-shadow: none;
-  transition: color var(--transition-fast, 150ms ease), text-decoration-color var(--transition-fast, 150ms ease);
-}
-
-.flowArtifactChip:hover {
-  background: transparent;
-  color: var(--brand, #10b981);
-  text-decoration-color: var(--brand, #10b981);
-  box-shadow: none;
-}
-
-.flowSyncLine {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--font-size-sm, 13px);
-  color: var(--text-secondary);
-  margin: 2px 0;
-  padding-left: var(--space-0_5, 2px);
-}
-
-.flowSyncDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--brand, #10b981);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
-  animation: sync-dot-pulse 1.4s ease-in-out infinite;
-  display: inline-block;
-  flex-shrink: 0;
-}
-
-@keyframes sync-dot-pulse {
-  0%, 100% {
-    transform: scale(0.85);
-    opacity: 0.7;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 18%, transparent);
-  }
-  50% {
-    transform: scale(1.2);
-    opacity: 1;
-    box-shadow: 0 0 0 4.5px color-mix(in srgb, var(--brand, #10b981) 32%, transparent);
-  }
-}
-
-.flowSyncDone {
-  color: var(--text-tertiary);
-  font-size: var(--font-size-sm, 13px);
 }

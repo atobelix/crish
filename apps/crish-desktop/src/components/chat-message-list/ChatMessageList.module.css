@@ -8,10 +8,12 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  background: var(--bg-primary);
 }
 
-/*              chat            */
-.list {
+/* chat — 严格贯彻 DIM-02 §1.1 契约：确立 [data-chat-scroll-container] 为会话内唯一的 overflow-y: auto 滚动容器 */
+.list,
+:global([data-chat-scroll-container]) {
   width: 100%;
   max-width: none;
   min-width: 0;
@@ -34,6 +36,21 @@
   padding: 48px 20px 16px;
   box-sizing: border-box;
   min-width: 0;
+}
+
+/* 纯净画纸与垂直节奏体系（DIM-01）：基于直接相邻兄弟选择器统一赋予 16px 垂直间距 */
+[data-chat-list-inner] > :not([hidden]) + :not([hidden]) {
+  margin-top: 16px;
+}
+
+/* 兼容 ErrorBoundary contents 包装下消息行容器间距 */
+[data-chat-list-inner] > :not([hidden]) + :not([hidden]) > [data-vindex] {
+  margin-top: 16px;
+}
+
+/* 虚拟化 Spacer 保持几何占位但通过 hidden 属性被相邻兄弟选择器排除 */
+[data-vsm-spacer] {
+  display: block;
 }
 
 .pinnedBar {
@@ -85,8 +102,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-0_5);
-  max-height: 160px;
-  overflow-y: auto;
+  overflow-y: visible;
 }
 
 .pinnedItem {

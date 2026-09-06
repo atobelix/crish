@@ -152,7 +152,7 @@ describe('applyStreamTextToMessage', () => {
     });
   });
 
-  it('appends trailing delta to last text block after committed prefix', () => {
+  it('appends trailing delta to text while preserving blocks without slicing', () => {
     const msg = {
       text: 'AB',
       blocks: [
@@ -169,10 +169,10 @@ describe('applyStreamTextToMessage', () => {
     };
     const next = applyStreamTextToMessage(committed, 'ABCDEF');
     expect(next.text).toBe('ABCDEF');
-    expect(next.blocks?.[2]).toEqual({ type: 'text', content: 'CDEF' });
+    expect(next.blocks).toBe(msg.blocks);
   });
 
-  it('pushes new text block when last block is a tool', () => {
+  it('preserves existing blocks when stream text extends message', () => {
     const msg = {
       text: 'hi',
       blocks: [
@@ -181,7 +181,8 @@ describe('applyStreamTextToMessage', () => {
       ],
     };
     const next = applyStreamTextToMessage(msg, 'hi there');
-    expect(next.blocks?.[2]).toEqual({ type: 'text', content: ' there' });
+    expect(next.text).toBe('hi there');
+    expect(next.blocks).toBe(msg.blocks);
   });
 
   // D1 锁（T-E 批次 5）：分叉兜底分支——既有 streamingStore 旧值与 committed 正文
@@ -198,16 +199,15 @@ describe('applyStreamTextToMessage', () => {
     expect(next.blocks).toBe(msg.blocks);
   });
 
-  // D1 锁：committed 有正文、stream 与 committed 同源但更长 → 尾部增量拼到
-  // 最后一个 text block（非分叉路径的对照，锁 merge 兜底分支语义）
-  it('同源增量：stream 以 committed 开头 → trailing delta 追加', () => {
+  // D1 锁：单轨权威正文直通，blocks 保持既有结构
+  it('同源增量：stream 以 committed 开头 → 权威正文直通且保持 blocks', () => {
     const msg = {
       text: 'AB',
       blocks: [{ type: 'text', content: 'AB' }],
     };
     const next = applyStreamTextToMessage(msg, 'ABCDEF');
     expect(next.text).toBe('ABCDEF');
-    expect(next.blocks?.[0]).toEqual({ type: 'text', content: 'ABCDEF' });
+    expect(next.blocks).toBe(msg.blocks);
   });
 });
 

@@ -1,4 +1,11 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import styles from './ChatMessageList.module.css';
 import { AppErrorBoundary } from '../AppErrorBoundary';
 import { Button, Tooltip } from '../ui';
@@ -15,12 +22,18 @@ import {
 import { useUndoWithScrollAnchor } from './useUndoWithScrollAnchor';
 import { FlowScrubber } from './FlowScrubber';
 import { EphemeralStatusSlot } from './EphemeralStatusSlot';
+import { ChatScrollFloorSlot } from './ChatScrollFloorSlot';
 
 import {
   messageVirtualizerPropsEqual,
   type MessageVirtualizerProps,
   type PinnedItem,
 } from './messageVirtualizerMemo';
+
+/** 浮点亚像素容差常量（px，DIM-02 §1.3.2 规范） */
+const SCROLL_FLOOR_EPSILON = 2.0;
+/** 离底显现阈值常量（px） */
+const SCROLL_BOTTOM_THRESHOLD = 120;
 
 export type { MessageVirtualizerProps, PinnedItem };
 
@@ -87,8 +100,16 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
   });
   const { containerRef, setActual, clearHeights, manager } = vs;
 
+  const isAtBottomRef = useRef<boolean>(true);
+  const [isAtBottom, setIsAtBottom] = useState<boolean>(true);
+  const observedTopRef = useRef<number>(0);
+  const [showFloorButton, setShowFloorButton] = useState<boolean>(false);
+
   useEffect(() => {
     clearHeights();
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+    setShowFloorButton(false);
   }, [activeSessionId, clearHeights]);
 
   useEffect(() => {
@@ -117,6 +138,16 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
           const msgId = el.dataset.vindex;
           if (msgId != null && entry.contentRect.height > 0) {
             setActual(msgId, entry.contentRect.height);
+          }
+        }
+        if (isAtBottomRef.current) {
+          const c = containerRef.current;
+          if (c) {
+            const maxScroll = Math.max(0, c.scrollHeight - c.clientHeight);
+            if (c.scrollTop < maxScroll) {
+              c.scrollTop = maxScroll;
+              observedTopRef.current = maxScroll;
+            }
           }
         }
       });
@@ -167,6 +198,79 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     [pinnedItems]
   );
 
+  const handleScroll = useCallback<React.UIEventHandler<HTMLDivElement>>(
+    (e) => {
+      vs.onScroll(e);
+
+      const el = e.currentTarget;
+      const currentScrollTop = el.scrollTop;
+      const currentScrollHeight = el.scrollHeight;
+      const currentClientHeight = el.clientHeight;
+      const maxScrollTop = Math.max(0, currentScrollHeight - currentClientHeight);
+
+      // 1. 评估与物理底部的亚像素距离
+      const distanceToBottom = Math.max(0, maxScrollTop - currentScrollTop);
+      const isPhysicallyAtBottom = distanceToBottom <= SCROLL_FLOOR_EPSILON;
+
+      // 2. 检测地表收缩钳位（Floor Clamping）防误杀
+      const previousTop = observedTopRef.current;
+      const isShrinkingDownwards = currentScrollTop < previousTop;
+
+      if (isPhysicallyAtBottom) {
+        if (!isAtBottomRef.current) {
+          isAtBottomRef.current = true;
+          setIsAtBottom(true);
+        }
+        setShowFloorButton(false);
+      } else if (isShrinkingDownwards && isAtBottomRef.current) {
+        // 关键拦截：高度骤降引发的被动回落，只要偏差在容差内，保持吸底
+        if (distanceToBottom <= SCROLL_FLOOR_EPSILON) {
+          setShowFloorButton(false);
+        } else {
+          isAtBottomRef.current = false;
+          setIsAtBottom(false);
+          setShowFloorButton(distanceToBottom > SCROLL_BOTTOM_THRESHOLD);
+        }
+      } else {
+        if (isAtBottomRef.current && distanceToBottom > SCROLL_FLOOR_EPSILON) {
+          isAtBottomRef.current = false;
+          setIsAtBottom(false);
+        }
+        setShowFloorButton(distanceToBottom > SCROLL_BOTTOM_THRESHOLD);
+      }
+
+      // 3. 更新真理账本
+      observedTopRef.current = currentScrollTop;
+    },
+    [vs]
+  );
+
+  const handleScrollToBottom = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    if (typeof container.scrollTo === 'function') {
+      container.scrollTo({ top: maxScroll, behavior: 'smooth' });
+    } else {
+      container.scrollTop = maxScroll;
+    }
+    isAtBottomRef.current = true;
+    setIsAtBottom(true);
+    setShowFloorButton(false);
+  }, [containerRef]);
+
+  // 流式打字自动跟随：处于底部时，随内容增长无感平滑向下贴紧底部
+  useLayoutEffect(() => {
+    if (!isAtBottomRef.current) return;
+    const container = containerRef.current;
+    if (!container) return;
+    const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+    if (Math.abs(container.scrollTop - maxScroll) > SCROLL_FLOOR_EPSILON) {
+      container.scrollTop = maxScroll;
+      observedTopRef.current = maxScroll;
+    }
+  }, [messages, totalHeight, containerRef]);
+
   return (
     <div className={styles.streamHost} data-chat-stream-host="">
       <div
@@ -177,10 +281,12 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         data-total-count={messages.length}
         data-show-all={showAllMessages ? 'true' : 'false'}
         data-virtual-scroll="true"
+        data-chat-scroll-container=""
+        data-testid="chat-scroll-container"
         onClick={handleMarkdownClick}
-        onScroll={vs.onScroll}
+        onScroll={handleScroll}
       >
-        <div className={styles.listInner}>
+        <div className={styles.listInner} data-chat-list-inner="">
         {pinnedItems.length > 0 ? (
           <div
             className={styles.pinnedBar}
@@ -245,7 +351,12 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
           </div>
         ) : null}
 
-        <div style={{ height: startOffset, flexShrink: 0 }} aria-hidden />
+        <div
+          hidden
+          data-vsm-spacer=""
+          style={{ height: startOffset, flexShrink: 0 }}
+          aria-hidden
+        />
 
         {/* 渲染身份（C2）：key / 高度缓存键 = message.id；stream 与 final 共用同一行 id */}
         {messages.slice(startIndex, endIndex).map((msg, i) => {
@@ -317,6 +428,8 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
         })}
 
         <div
+          hidden
+          data-vsm-spacer=""
           style={{
             height: Math.max(0, estimatedTotalHeight - endOffset),
             flexShrink: 0,
@@ -335,6 +448,11 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
           />
         )}
         </div>
+        <ChatScrollFloorSlot
+          visible={showFloorButton}
+          isAtBottom={isAtBottom}
+          onScrollToBottom={handleScrollToBottom}
+        />
       </div>
       <FlowScrubber
         messages={messages}
