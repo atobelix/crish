@@ -39,6 +39,9 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
   const [cwdTick, setCwdTick] = useState(0);
   const [ptyStatus, setPtyStatus] = useState<InteractiveXtermStatus>('idle');
   const [ptyError, setPtyError] = useState('');
+  // 分屏副格（pane 2）独立状态：失败可见，不与主格互相覆盖（T5）
+  const [pane2Status, setPane2Status] = useState<InteractiveXtermStatus>('idle');
+  const [pane2Error, setPane2Error] = useState('');
   const [restartToken] = useState(0);
 
   // 标签页内分屏状态
@@ -74,6 +77,8 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
   useEffect(() => {
     setPtyStatus('idle');
     setPtyError('');
+    setPane2Status('idle');
+    setPane2Error('');
   }, [boundSessionId]);
 
   const fullCwd = (() => {
@@ -92,6 +97,19 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
 
   const handlePtyMissing = useCallback(() => {
     setPtyStatus('missing');
+  }, []);
+
+  const handlePane2Status = useCallback(
+    (status: InteractiveXtermStatus, detail?: string) => {
+      setPane2Status(status);
+      if (status === 'error' && detail) setPane2Error(detail);
+      else if (status === 'ready') setPane2Error('');
+    },
+    []
+  );
+
+  const handlePane2Missing = useCallback(() => {
+    setPane2Status('missing');
   }, []);
 
   // 工具栏动作
@@ -213,12 +231,21 @@ export const TerminalCard: React.FC<TerminalCardProps> = ({
               }`}
               onClick={() => setActivePaneIndex(1)}
             >
-              <InteractiveXtermTerminal
-                ref={termHandleRef2}
-                sessionKey={`${sessionKey}:split-2`}
-                cwd={fullCwd || undefined}
-                restartToken={restartToken}
-              />
+              {pane2Status === 'missing' ? (
+                <div className={styles.fallbackBanner} role="status">
+                  <span>分屏终端不可用（需桌面应用 PTY）。</span>
+                  {pane2Error ? <span> {pane2Error}</span> : null}
+                </div>
+              ) : (
+                <InteractiveXtermTerminal
+                  ref={termHandleRef2}
+                  sessionKey={`${sessionKey}:split-2`}
+                  cwd={fullCwd || undefined}
+                  restartToken={restartToken}
+                  onStatusChange={handlePane2Status}
+                  onPtyMissing={handlePane2Missing}
+                />
+              )}
             </div>
           </div>
         )}

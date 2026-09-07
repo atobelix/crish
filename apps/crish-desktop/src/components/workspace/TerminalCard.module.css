@@ -74,7 +74,7 @@
   font-family: var(--font-mono);
   color: var(--text-secondary);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 2px);
   background: transparent;
   font-weight: 500;
 }
@@ -104,7 +104,7 @@
   font-family: var(--font-mono);
   color: var(--text-secondary);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs, 2px);
   background: transparent;
   border: none;
   cursor: pointer;

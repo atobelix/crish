@@ -130,7 +130,7 @@ describe('activePortDetector 活跃端口探测引擎', () => {
       expect(result.current.ports).toEqual([5173]);
     });
 
-    it('支持数组解构语法与对象解构语法双向兼容', async () => {
+    it('返回纯对象 API（ports/loading/refresh），不再支持数组解构（T25 收敛）', async () => {
       setCachedActivePorts([4200]);
 
       const { result } = renderHook(() => useActiveDevPorts());
@@ -140,14 +140,14 @@ describe('activePortDetector 活跃端口探测引擎', () => {
       });
 
       // 对象解构
-      const { ports, loading } = result.current;
+      const { ports, loading, refresh } = result.current;
       expect(ports).toEqual([4200]);
       expect(loading).toBe(false);
-
-      // 数组解构
-      const [portsArr, loadingArr] = result.current as unknown as [number[], boolean];
-      expect(portsArr).toEqual([4200]);
-      expect(loadingArr).toBe(false);
+      expect(typeof refresh).toBe('function');
+      // Iterable 通道已移除：hook 返回值不再是可迭代对象
+      expect(
+        (result.current as unknown as Record<symbol, unknown>)[Symbol.iterator]
+      ).toBeUndefined();
     });
 
     it('调用 refresh 手动刷新端口列表', async () => {

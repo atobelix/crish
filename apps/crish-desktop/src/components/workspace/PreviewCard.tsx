@@ -8,19 +8,15 @@ import { PreviewHistoryPanel } from './PreviewHistoryPanel';
 import { useActiveDevPorts } from './activePortDetector';
 import {
   buildInspectorAiSnippet,
-  buildInspectorElementLabel,
-  hasInspectorComputedStyles,
-  convertInspectedElementPayload,
 } from './previewCardLib';
+import { PreviewCardInspectorOverlay } from './PreviewCardInspectorOverlay';
 import { enableInspector, subscribeToInspector } from './previewHostBridge';
-import { installPreviewInspectorClient } from './previewClientBridge';
 import {
   CRISH_PREVIEW_HOST_SOURCE,
   CRISH_PREVIEW_INSPECTOR_SOURCE,
   type InspectHoverPayload,
   type InspectSelectPayload,
 } from './previewProtocol';
-import { parseInspectedElementPayload } from './previewDomInspector';
 import {
   selectActiveSession,
   useSessionField,
@@ -34,17 +30,26 @@ import {
 
 export interface PreviewCardProps {
   wsId?: string;
+  /**
+   * 初始目标 URL（audit-repair-202609 · T20 接线）：
+   * 由 view-registry `preview:`/`browser:` resolver 的 `params.target` 透传
+   * （main.tsx 工厂），挂载时经 validateBrowseUrl 校合法后导航一次；
+   * 「带 URL 打开浏览器标签」链路由此贯通。
+   */
+  initialTarget?: string | null;
 }
 
 /**
- * 内置原生预览浏览器：地址栏 + 原生 iframe（外部站点经 127.0.0.1:8765 透明代理
- * 加载，剥离 XFO/CSP 并注入 postMessage 桥接脚本）。
+ * 内置原生预览浏览器：地址栏 + 原生 iframe（外部站点经透明代理加载，
+ * 剥离 XFO/CSP 并注入 postMessage 桥接脚本）。
  * DOM 拾取链路：工具栏 Inspect 开关 → previewHostBridge 向 iframe postMessage
- * INSPECT_TOGGLE → iframe 客户端桥上报 INSPECT_HOVER / INSPECT_SELECT →
- * 宿主展示悬停浮层 / 选中详情卡（复制选择器 / 复制 HTML / 发送到 AI / Esc 退出）。
+ * INSPECT_TOGGLE → 代理注入桥（dev-server/previewBridgeScript.ts）上报
+ * INSPECT_HOVER / INSPECT_SELECT → 宿主展示悬停浮层 / 选中详情卡
+ *（复制选择器 / 复制 HTML / 发送到 AI / Esc 退出）。
  */
 export const PreviewCard: React.FC<PreviewCardProps> = ({
   wsId: _wsId,
+  initialTarget,
 }) => {
   const { showToast } = useToast();
   const nav = usePreviewNavigation();
@@ -93,8 +98,7 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
     reload,
     goHome,
     openExternal,
-    onBookmark,
-    pickHistory,
+    onBookmark,    pickHistory,
     removeBookmarkAt,
     clearHistoryAll,
     removeHistoryAt,
@@ -107,6 +111,16 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
       .slice(0, 3);
   }, [history]);
 
+  // T20：`preview:<target>` 带目标打开——挂载时导航一次（ref 锁防重入；
+  // navigate 内部经 validateBrowseUrl 校验，非法目标被拒并 toast）。
+  const initialTargetRef = React.useRef<string | null | undefined>(initialTarget);
+  React.useEffect(() => {
+    const target = initialTargetRef.current;
+    initialTargetRef.current = undefined;
+    if (!target) return;
+    navigate(target);
+  }, [navigate]);
+
   const hasEmptyContent = activePorts.length > 0 || recentPages.length > 0;
 
   // 当前拾取态 ref：供桥回调读取最新值，避免闭包过期
@@ -116,16 +130,9 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
   const handleToggleInspector = React.useCallback(() => {
     const next = !isInspectorActiveRef.current;
     setIsInspectorActive(next);
-    try {
-      if (next && iframeRef.current?.contentDocument && iframeRef.current.contentWindow) {
-        installPreviewInspectorClient({
-          doc: iframeRef.current.contentDocument,
-          win: iframeRef.current.contentWindow,
-        });
-      }
-    } catch {
-      // 跨源 iframe 忽略，由代理注入脚本处理
-    }
+    // T19 单轨：客户端桥脚本由预览代理注入 iframe（跨源可用），宿主只发
+    // INSPECT_TOGGLE 指令；不再向 contentDocument 安装第二套拾取器
+    //（历史双轨在同源代理页上会双发 INSPECT_HOVER/SELECT）。
     enableInspector(iframeRef.current, next);
     if (!next) setHoverElement(null);
   }, [iframeRef]);
@@ -171,9 +178,8 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
     return () => window.removeEventListener('keydown', onKey);
   }, [isInspectorActive, handleToggleInspector]);
 
-  // 预览导航事件 + 旧协议 crish:dom-inspected 兼容（previewDomInspector 运行时上报）。
-  // 新协议消息（source = crish-preview-inspector / crish-preview-host）由
-  // previewHostBridge 订阅处理，此处一律跳过，避免旧解析器吞掉新协议载荷。
+  // 预览导航 / favicon 事件（注入桥上报；inspect 协议消息由 previewHostBridge
+  // 订阅处理，此处按 source 跳过，避免吞掉新协议载荷）。
   React.useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const source = event.data?.source;
@@ -187,25 +193,14 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
         navigate(event.data.href);
         return;
       }
-      if (
-        event.data?.type === 'preview:favicon' &&
-        typeof event.data.favicon === 'string'
-      ) {
-        setPreviewFavicon(event.data.url || activeUrl, event.data.favicon);
-        return;
-      }
-      const payload = convertInspectedElementPayload(
-        parseInspectedElementPayload(event.data)
-      );
-      if (!payload) return;
-      setHoverElement(null);
-      setSelectedElement(payload);
-      showToast(`已拾取 DOM 元素：<${payload.bestSelector || payload.tagName}>`);
+      // audit-repair-202609 T19：preview:favicon 分支已删——其唯一生产者
+      // （srcDoc 版注入桥 injectPreviewBridgeHtml）随双轨清退删除；favicon
+      // 由 handleFrameLoad 经同源 contentDocument 提取。
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [navigate, showToast, activeUrl]);
+  }, [navigate]);
 
   const handleFrameLoad = () => {
     nav.onFrameLoad();
@@ -226,16 +221,6 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
       }
     } catch {
       // 跨源忽略，由代理注入脚本处理
-    }
-    try {
-      if (iframeRef.current?.contentDocument && iframeRef.current.contentWindow) {
-        installPreviewInspectorClient({
-          doc: iframeRef.current.contentDocument,
-          win: iframeRef.current.contentWindow,
-        });
-      }
-    } catch {
-      // 跨源 iframe 忽略，由代理注入脚本处理
     }
     if (isInspectorActive) {
       enableInspector(iframeRef.current, true);
@@ -466,112 +451,15 @@ export const PreviewCard: React.FC<PreviewCardProps> = ({
               />
             )}
 
-        {hoverElement && isInspectorActive ? (
-          <div
-            className={styles.inspectorHover}
-            data-inspector-hover=""
-            style={{
-              left: hoverElement.rect.x,
-              top: hoverElement.rect.y,
-              width: hoverElement.rect.width,
-              height: hoverElement.rect.height,
-            }}
-            aria-hidden
-          >
-            <span className={styles.inspectorHoverTag}>
-              <code>{hoverElement.tagName}</code>
-              {hoverElement.selector ? (
-                <em>{hoverElement.selector}</em>
-              ) : null}
-            </span>
-          </div>
-        ) : null}
-
-        {selectedElement ? (
-          <div
-            className={styles.inspectorBadge}
-            role="status"
-            aria-label="DOM 拾取结果"
-          >
-            <div className={styles.inspectorResultText}>
-              <Lucide.ScanSearch
-                size={13}
-                className={styles.inspectorResultIcon}
-                aria-hidden
-              />
-              <span>已拾取 DOM 元素：</span>
-              <code className={styles.inspectorCode}>
-                {`<${buildInspectorElementLabel(
-                  selectedElement.tagName,
-                  selectedElement.id,
-                  selectedElement.classes
-                )}>`}
-              </code>
-              {selectedElement.bestSelector ? (
-                <span className={styles.inspectorSelector}>
-                  ({selectedElement.bestSelector})
-                </span>
-              ) : null}
-              <span className={styles.inspectorDim}>
-                {Math.round(selectedElement.rect.width)}×
-                {Math.round(selectedElement.rect.height)}
-              </span>
-            </div>
-            {hasInspectorComputedStyles(selectedElement) ? (
-              <div className={styles.inspectorDetail}>
-                <code>display: {selectedElement.computedStyles.display}</code>
-                <code>position: {selectedElement.computedStyles.position}</code>
-                <code>font-size: {selectedElement.computedStyles.fontSize}</code>
-              </div>
-            ) : null}
-            <div className={styles.inspectorActions}>
-              <Tooltip content="复制选择器">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.inspectorActionBtn}
-                  onClick={handleCopySelector}
-                  aria-label="复制选择器"
-                  icon={<Lucide.Copy size={12} strokeWidth={1.75} />}
-                />
-              </Tooltip>
-              <Tooltip content="复制 HTML 片段">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.inspectorActionBtn}
-                  onClick={handleCopyHtml}
-                  aria-label="复制 HTML 片段"
-                  icon={<Lucide.Code2 size={12} strokeWidth={1.75} />}
-                />
-              </Tooltip>
-              <Tooltip content="发送到 AI">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.inspectorActionBtn}
-                  onClick={handleSendToAi}
-                  aria-label="发送到 AI"
-                  icon={<Lucide.Send size={12} strokeWidth={1.75} />}
-                />
-              </Tooltip>
-              <Tooltip content="清除">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={styles.inspectorActionBtn}
-                  onClick={() => setSelectedElement(null)}
-                  aria-label="清除拾取结果"
-                  icon={<Lucide.X size={12} strokeWidth={1.75} />}
-                />
-              </Tooltip>
-            </div>
-          </div>
-        ) : null}
+        <PreviewCardInspectorOverlay
+          isInspectorActive={isInspectorActive}
+          hoverElement={hoverElement}
+          selectedElement={selectedElement}
+          onCopySelector={handleCopySelector}
+          onCopyHtml={handleCopyHtml}
+          onSendToAi={handleSendToAi}
+          onClearSelected={() => setSelectedElement(null)}
+        />
       </div>
     </div>
   );

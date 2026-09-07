@@ -4,7 +4,8 @@
  * 职责：
  * 1. `enableInspector(iframeRef, enabled)`：向预览 iframe 的 contentWindow
  *    postMessage `INSPECT_TOGGLE`（source = crish-preview-host），激活/关闭
- *    iframe 内 DOM 拾取器（客户端桥 previewClientBridge.ts 监听并响应）。
+ *    iframe 内 DOM 拾取器（客户端实现 = dev-server/previewBridgeScript.ts
+ *    注入桥，由预览代理在服务端注入；监听并响应 INSPECT_TOGGLE）。
  * 2. `subscribeToInspector(callback)`：监听宿主 window 的 message 事件，
  *    仅接受 source = crish-preview-inspector 的客户端消息，过滤未知 type，
  *    向回调派发 INSPECT_READY / INSPECT_TOGGLE（客户端 Esc 退出）/

@@ -1,6 +1,11 @@
 /**
  * PreviewCard 纯函数层：iframe 安全 src 判定 + 常量。
  * 从 PreviewCard.tsx 抽出，零副作用，可独立单测。
+ *
+ * audit-repair-202609 · T19 清退：`injectPreviewBridgeHtml`（与 dev-server/
+ * previewBridgeScript.ts 双轨的 srcDoc 版桥，零调用方）、
+ * `convertInspectedElementPayload`（legacy crish:dom-inspected 协议换轨层）、
+ * `QUICK_LOCAL`（被 activePortDetector 取代）均已删除。
  */
 import {
   isAboutBlank,
@@ -8,14 +13,7 @@ import {
   isEmbeddablePreviewUrl,
   validateBrowseUrl,
 } from '../../api/previewBrowserStore';
-import { parseInspectedElementPayload } from './previewDomInspector';
 import type { InspectSelectPayload } from './previewProtocol';
-
-export const QUICK_LOCAL = [
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://127.0.0.1:8765',
-] as const;
 
 /** iframe 加载卡住时收 loading，避免转圈永驻（不 toast，状态条已反馈） */
 export const LOAD_TIMEOUT_MS = 20_000;
@@ -50,100 +48,22 @@ export function isLocalDevUrl(url: string): boolean {
 /**
  * 外部网站自动代理：当输入的 URL 为外部网站时自动转为同源代理端点；
  * 空白页、data: URL 或本地 dev server 直接加载。
+ *
+ * audit-repair-202609 · T20：代理是 dev server 中间件（configureServer），
+ * 生产构建不存在该端点——非 dev 环境一律返回原 URL，走 canEmbed 判定
+ * 与「禁止嵌入可外部打开」既有降级，不再打到必 404 的代理路径。
  */
 export function toProxyPreviewUrl(url: string): string {
   if (!url || isAboutBlank(url)) return url;
   if (url.startsWith('data:') || url.startsWith('file://')) return url;
   if (url.startsWith('/__crish_preview_proxy')) return url;
   if (url.startsWith('http://127.0.0.1:8765/v1/preview/proxy')) return url;
-  if (/^https?:\/\//i.test(url)) {
+  if (import.meta.env.DEV && /^https?:\/\//i.test(url)) {
     if (!isLocalDevUrl(url)) {
       return `/__crish_preview_proxy?url=${encodeURIComponent(url)}`;
     }
   }
   return url;
-}
-
-/**
- * 为网页 HTML 注入 <base href="..."> 与 postMessage 导航拦截桥接脚本，
- * 确保 srcDoc 渲染时相对资源定位正确，且点击 <a> 链接时可协同通知父级。
- */
-export function injectPreviewBridgeHtml(rawHtml: string, targetUrl: string): string {
-  if (!rawHtml || typeof rawHtml !== 'string') return '';
-  const baseTag = `<base href="${targetUrl.replace(/"/g, '&quot;')}">`;
-  const bridgeScript = `<script id="__conex_preview_bridge">
-(function() {
-  if (window.__CONEX_PREVIEW_BRIDGE__) return;
-  window.__CONEX_PREVIEW_BRIDGE__ = true;
-
-  function reportFavicon() {
-    try {
-      var icon = document.querySelector('link[rel~="icon"], link[rel*="icon"]');
-      var faviconUrl = icon && icon.href ? icon.href : (window.location.origin + '/favicon.ico');
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({
-          type: 'preview:favicon',
-          favicon: faviconUrl,
-          url: window.location.href
-        }, '*');
-      }
-    } catch (_) {}
-  }
-
-  if (document.readyState === 'complete') {
-    reportFavicon();
-  } else {
-    window.addEventListener('load', reportFavicon);
-  }
-
-  document.addEventListener('click', function(e) {
-    try {
-      var a = e.target;
-      while (a && a.tagName !== 'A') {
-        a = a.parentElement;
-      }
-      if (a && a.href && window.parent && window.parent !== window) {
-        var href = a.href;
-        if (href.startsWith('http://') || href.startsWith('https://')) {
-          e.preventDefault();
-          window.parent.postMessage({ type: 'preview:navigate', href: href }, '*');
-        }
-      }
-    } catch (_) {}
-  }, true);
-})();
-</script>`;
-
-  const injection = `${baseTag}\n${bridgeScript}`;
-  const lower = rawHtml.toLowerCase();
-  const headIdx = lower.indexOf('<head');
-  if (headIdx !== -1) {
-    const headClose = lower.indexOf('>', headIdx);
-    if (headClose !== -1) {
-      return (
-        rawHtml.slice(0, headClose + 1) +
-        '\n' +
-        injection +
-        rawHtml.slice(headClose + 1)
-      );
-    }
-  }
-
-  const htmlIdx = lower.indexOf('<html');
-  if (htmlIdx !== -1) {
-    const htmlClose = lower.indexOf('>', htmlIdx);
-    if (htmlClose !== -1) {
-      return (
-        rawHtml.slice(0, htmlClose + 1) +
-        '\n<head>' +
-        injection +
-        '</head>' +
-        rawHtml.slice(htmlClose + 1)
-      );
-    }
-  }
-
-  return `<head>${injection}</head>\n${rawHtml}`;
 }
 
 /**
@@ -202,41 +122,4 @@ export function hasInspectorComputedStyles(
     s &&
       (s.display || s.position || s.fontSize || s.color || s.backgroundColor)
   );
-}
-
-/**
- * 将 InspectedElementPayload 收敛为 INSPECT_SELECT 载荷
- * （承接 previewDomInspector 运行时 crish:dom-inspected 上报）。
- */
-export function convertInspectedElementPayload(
-  p: ReturnType<typeof parseInspectedElementPayload>
-): InspectSelectPayload | null {
-  if (!p) return null;
-  return {
-    tagName: p.tagName,
-    id: p.id || null,
-    classes: p.className
-      ? p.className.trim().split(/\s+/).filter(Boolean)
-      : [],
-    attributes: p.attributes,
-    bestSelector: p.selector,
-    xpath: p.xpath,
-    rect: {
-      x: p.rect.x,
-      y: p.rect.y,
-      width: p.rect.width,
-      height: p.rect.height,
-    },
-    computedStyles: {
-      display: '',
-      position: '',
-      color: '',
-      backgroundColor: '',
-      fontSize: '',
-      margin: '',
-      padding: '',
-    },
-    outerHtmlSnippet: p.outerHtml,
-    textContent: p.textContent,
-  };
 }

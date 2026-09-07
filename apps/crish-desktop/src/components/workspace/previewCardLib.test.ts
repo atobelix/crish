@@ -3,8 +3,9 @@
  * previewCardLib 纯函数层测试（拾取辅助工具）：
  * 1. buildInspectorElementLabel：tag#id.class 标签组装；
  * 2. buildInspectorAiSnippet：发送到 AI 的结构化 Prompt；
- * 3. hasInspectorComputedStyles：computedStyles 摘要有效性判断；
- * 4. legacyToSelectPayload：旧协议载荷收敛为新契约。
+ * 3. hasInspectorComputedStyles：computedStyles 摘要有效性判断。
+ * （audit-repair-202609 T19：convertInspectedElementPayload 随 legacy
+ *   crish:dom-inspected 协议清退而删除，对应用例一并移除。）
  * 遵循测试资产保护铁律（UTF-8 无 BOM，中文注释）。
  */
 import { describe, expect, it } from 'vitest';
@@ -12,7 +13,6 @@ import {
   buildInspectorAiSnippet,
   buildInspectorElementLabel,
   hasInspectorComputedStyles,
-  convertInspectedElementPayload,
 } from './previewCardLib';
 
 describe('previewCardLib 拾取辅助工具', () => {
@@ -78,40 +78,6 @@ describe('previewCardLib 拾取辅助工具', () => {
           },
         })
       ).toBe(false);
-    });
-  });
-
-  describe('convertInspectedElementPayload', () => {
-    it('将 InspectedElementPayload 收敛为规范载荷字段', () => {
-      const input = {
-        tagName: 'button',
-        id: 'btn-1',
-        className: 'btn primary',
-        selector: 'button.btn.primary',
-        xpath: '/html/body/button[1]',
-        outerHtml: '<button class="btn primary">Click</button>',
-        textContent: 'Click',
-        rect: { x: 1, y: 2, width: 80, height: 30, top: 2, left: 1 },
-        attributes: { id: 'btn-1' },
-      };
-      const out = convertInspectedElementPayload(input as never);
-      expect(out).not.toBeNull();
-      expect(out?.tagName).toBe('button');
-      expect(out?.classes).toEqual(['btn', 'primary']);
-      expect(out?.bestSelector).toBe('button.btn.primary');
-      expect(out?.computedStyles).toEqual({
-        display: '',
-        position: '',
-        color: '',
-        backgroundColor: '',
-        fontSize: '',
-        margin: '',
-        padding: '',
-      });
-    });
-
-    it('null 输入返回 null', () => {
-      expect(convertInspectedElementPayload(null)).toBeNull();
     });
   });
 });

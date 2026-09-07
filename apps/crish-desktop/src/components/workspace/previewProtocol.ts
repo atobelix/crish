@@ -4,10 +4,11 @@
  * 本文件为跨窗口消息契约的唯一权威定义：
  * - 宿主侧（PreviewCard / previewHostBridge.ts）以 `crish-preview-host` 为 source
  *   发送 INSPECT_TOGGLE 激活/关闭 iframe 内拾取器；
- * - iframe 内客户端桥（previewClientBridge.ts，另一 Agent 负责）以
- *   `crish-preview-inspector` 为 source 上报 INSPECT_READY / INSPECT_HOVER /
- *   INSPECT_SELECT，并在拾取态按 Esc 退出时上报 INSPECT_TOGGLE(enabled:false)
- *   请求宿主复位工具栏拾取态。
+ * - iframe 内客户端实现 = dev-server/previewBridgeScript.ts（预览代理注入
+ *   桥，audit-repair-202609 T19 单轨唯一真源）以 `crish-preview-inspector`
+ *   为 source 上报 INSPECT_READY / INSPECT_HOVER / INSPECT_SELECT，并在
+ *   拾取态按 Esc 退出时上报 INSPECT_TOGGLE(enabled:false) 请求宿主复位
+ *   工具栏拾取态。
  * source 字段区分消息方向，接收方校验 source 与 type，不匹配的消息一律静默丢弃。
  */
 

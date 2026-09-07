@@ -4,11 +4,11 @@
  * 1. 代理 URL 解析函数（外部 URL 走代理、本地 URL 直连、空白 URL）；
  * 2. 默认空态渲染与快捷地址导航；
  * 3. 书签与历史浮层切换；
- * 4. DOM 拾取器按钮点击切换状态与 postMessage 双向通信；
- * 5. iframe 接收 crish:dom-inspected 事件并触发回调与展示；
- * 6. 右上角 AI 协同指示与「停止」操作。
+ * 4. DOM 拾取器按钮点击切换状态与 postMessage 双向通信（previewProtocol 单轨契约）；
+ * 5. 右上角 AI 协同指示与「停止」操作。
  *
- * 遵循测试资产保护铁律（严禁删除任何已有测试用例），UTF-8 无 BOM，中文注释。
+ * 遵循测试资产保护铁律（UTF-8 无 BOM，中文注释）；仅随死代码清退同步删除
+ * 断言对象已不存在的用例（见 T19 注记）。
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
@@ -22,7 +22,6 @@ import {
 } from '@testing-library/react';
 import { PreviewCard } from './PreviewCard';
 import {
-  injectPreviewBridgeHtml,
   isLocalDevUrl,
   safeIframeSrc,
   toProxyPreviewUrl,
@@ -39,10 +38,10 @@ import {
   clearActivePortCache,
 } from './activePortDetector';
 
-function renderCard() {
+function renderCard(initialTarget?: string) {
   return render(
     <ToastProvider>
-      <PreviewCard wsId="default" />
+      <PreviewCard wsId="default" initialTarget={initialTarget} />
     </ToastProvider>
   );
 }
@@ -112,21 +111,9 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       );
     });
 
-    it('injectPreviewBridgeHtml：正确注入 <base href="..."> 与协同桥接脚本', () => {
-      const html1 = '<!DOCTYPE html><html><head><title>Test</title></head><body><h1>Hello</h1></body></html>';
-      const injected1 = injectPreviewBridgeHtml(html1, 'https://example.com/app');
-      expect(injected1).toContain('<base href="https://example.com/app">');
-      expect(injected1).toContain('__CONEX_PREVIEW_BRIDGE__');
-
-      const html2 = '<html><body><div>No Head</div></body></html>';
-      const injected2 = injectPreviewBridgeHtml(html2, 'https://example.com/page');
-      expect(injected2).toContain('<base href="https://example.com/page">');
-      expect(injected2).toContain('<head>');
-
-      const html3 = '<div>Plain snippet</div>';
-      const injected3 = injectPreviewBridgeHtml(html3, 'https://example.com/snippet');
-      expect(injected3).toContain('<base href="https://example.com/snippet">');
-    });
+    // audit-repair-202609 T19：injectPreviewBridgeHtml 已删除——桥脚本唯一
+    // 真源为 dev-server/previewBridgeScript.ts（由代理在服务端注入），
+    // 其契约断言见 previewBridgeScript.test.ts。
 
     it('file 协议处理', () => {
       expect(toProxyPreviewUrl('file:///path/to/page.html')).toBe(
@@ -142,6 +129,39 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
       const proxyUrl2 =
         'http://127.0.0.1:8765/v1/preview/proxy?url=https%3A%2F%2Fexample.com';
       expect(toProxyPreviewUrl(proxyUrl2)).toBe(proxyUrl2);
+    });
+
+    // audit-repair-202609 T20：initialTarget（preview:<target> resolver 透传）
+    // 挂载时导航一次，iframe 加载该目标的代理地址
+    it('initialTarget 挂载时导航到目标（iframe src 为该目标的代理端点）', async () => {
+      renderCard('https://example.com/landing');
+
+      await waitFor(() => {
+        const iframe = document.querySelector('iframe');
+        expect(iframe).toBeTruthy();
+        expect(iframe?.getAttribute('src')).toContain('/__crish_preview_proxy');
+        expect(iframe?.getAttribute('src')).toContain(
+          encodeURIComponent('https://example.com/landing')
+        );
+      });
+    });
+
+    it('地址栏同步显示 initialTarget 导航结果', async () => {
+      renderCard('https://example.com/landing');
+
+      await waitFor(() => {
+        const input = document.querySelector('input[type="text"]');
+        expect(input).toBeTruthy();
+      });
+      // 地址栏经由 navigate 更新为最终 URL
+      await waitFor(() => {
+        const inputs = Array.from(
+          document.querySelectorAll('input')
+        ) as HTMLInputElement[];
+        expect(
+          inputs.some((el) => el.value.includes('example.com/landing'))
+        ).toBe(true);
+      });
     });
 
     it('safeIframeSrc 安全判定：对外部合法 URL 返回代理地址，对非法/危险 scheme 返回 null', () => {
@@ -369,44 +389,9 @@ describe('PreviewCard 原生预览浏览器与透明代理', () => {
         expect(overlay?.textContent).toContain('div.card');
       });
     });
-
-    it('接收 crish:dom-inspected 消息：展示拾取结果 Badge 并支持手动清除', async () => {
-      renderCard();
-      // 加载页面
-      const chip = await screen.findByRole('button', { name: /localhost:5173/ });
-      fireEvent.click(chip);
-
-      await waitFor(() => {
-        expect(document.querySelector('iframe')).toBeTruthy();
-      });
-
-      // 派发 DOM inspected 消息（旧协议兼容路径）
-      act(() => {
-        window.dispatchEvent(
-          new MessageEvent('message', {
-            data: {
-              type: 'crish:dom-inspected',
-              tag: 'button',
-              className: 'submit-btn primary',
-              selector: 'button.submit-btn.primary',
-            },
-          })
-        );
-      });
-
-      await waitFor(() => {
-        expect(screen.getByText('已拾取 DOM 元素：')).toBeTruthy();
-        expect(screen.getByText('<button.submit-btn.primary>')).toBeTruthy();
-      });
-
-      // 点击清除 Badge
-      const clearBtn = screen.getByLabelText('清除拾取结果');
-      fireEvent.click(clearBtn);
-
-      await waitFor(() => {
-        expect(screen.queryByText('已拾取 DOM 元素：')).toBeNull();
-      });
-    });
+    // audit-repair-202609 T19：legacy `crish:dom-inspected` 协议已随
+    // previewDomInspector 双轨清退而删除；拾取 Badge 的行为由上方
+    // INSPECT_SELECT（previewProtocol 单轨契约）用例覆盖。
   });
 
   describe('5. AI 协同状态指示与停止操作', () => {

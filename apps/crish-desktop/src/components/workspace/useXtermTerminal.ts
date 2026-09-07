@@ -205,9 +205,16 @@ export function useXtermTerminal({
       fontSize: 13,
       fontWeight: '500',
       fontWeightBold: '700',
-      // canvas 不解析 CSS 变量；优先使用专业编程代码字体 JetBrains Mono，与 --font-mono 栈一致
+      // 字体 SSOT（audit-repair-202609 T4）：canvas 不解析 CSS 变量，经
+      // computed style 读取 --font-mono 的具体字体栈（与全应用等宽字一致，
+      // fontStore 个性化后亦自动跟随）；读取失败回落内置兜底栈。
       fontFamily:
-        "'JetBrains Mono', 'Cascadia Code', 'Cascadia Mono', 'Consolas', monospace",
+        readCssVar(
+          '--font-mono',
+          "'Cascadia Mono', 'Cascadia Code', 'Consolas', monospace"
+        )
+          .replace(/\s+/g, ' ')
+          .trim() || "'Cascadia Mono', 'Cascadia Code', 'Consolas', monospace",
       lineHeight: 1.35,
       theme: getXtermTheme(),
       allowTransparency: true,

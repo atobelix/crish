@@ -66,6 +66,13 @@ export async function fetchActiveDevPorts(
     return [...cachedPorts];
   }
 
+  // audit-repair-202609 · T20：探测端点是 dev server 中间件，生产构建
+  // 不存在——非 dev 环境直接返回空（不发必 404 请求），空态不展示
+  // 「运行中的本地服务」。
+  if (!import.meta.env.DEV) {
+    return [];
+  }
+
   // 跨运行环境判断：若无 globalThis.fetch 则回退
   if (typeof fetch !== 'function') {
     return cachedPorts ? [...cachedPorts] : [];
@@ -114,11 +121,10 @@ export interface ActiveDevPortsState {
 
 /**
  * React Hook: 获取并订阅当前活跃的本地开发端口。
- * 组件挂载时自动探测，同时支持对象解构与数组解构语法：
- * - `const { ports, loading } = useActiveDevPorts();`
- * - `const [ports, loading] = useActiveDevPorts();`
+ * 组件挂载时自动探测；纯对象 API（audit-repair-202609 · T25：移除为支持
+ * 数组解构而生的 Iterable 杂交通道——唯一消费方只做对象解构）。
  */
-export function useActiveDevPorts(): ActiveDevPortsState & Iterable<unknown> {
+export function useActiveDevPorts(): ActiveDevPortsState {
   const [ports, setPorts] = React.useState<number[]>(() => cachedPorts ?? []);
   const [loading, setLoading] = React.useState<boolean>(cachedPorts === null);
 
@@ -153,20 +159,12 @@ export function useActiveDevPorts(): ActiveDevPortsState & Iterable<unknown> {
     };
   }, []);
 
-  return React.useMemo(() => {
-    const state: ActiveDevPortsState = {
+  return React.useMemo(
+    () => ({
       ports,
       loading,
       refresh,
-    };
-    const iterableState: ActiveDevPortsState & Iterable<unknown> = {
-      ...state,
-      *[Symbol.iterator]() {
-        yield ports;
-        yield loading;
-        yield refresh;
-      },
-    };
-    return iterableState;
-  }, [ports, loading, refresh]);
+    }),
+    [ports, loading, refresh]
+  );
 }
