@@ -47,50 +47,68 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
     interaction,
     generation,
     navigation,
-    approval: _approval,
     composer,
   } = props;
 
-  // 对象优先与扁平兼容映射（双向兼容映射，避免编译红与运行时异常）
-  const pinnedItems = pins?.pinnedItems ?? props.pinnedItems ?? [];
-  const pinsOpen = pins?.pinsOpen ?? props.pinsOpen ?? false;
-  const setPinsOpen = pins?.setPinsOpen ?? props.setPinsOpen ?? (() => {});
-  const jumpToPinned = pins?.jumpToPinned ?? props.jumpToPinned ?? (() => {});
-  const togglePin = pins?.togglePin ?? props.togglePin ?? (() => {});
+  // 领域分组对象直接解构（切除双向兼容与扁平回退代码）
+  const pinnedItems = pins?.pinnedItems ?? [];
+  const pinsOpen = pins?.pinsOpen ?? false;
+  const setPinsOpen = pins?.setPinsOpen ?? (() => {});
+  const jumpToPinned = pins?.jumpToPinned ?? (() => {});
+  const togglePin = pins?.togglePin ?? (() => {});
 
-  const hideThinkingBlock = flowControl?.hideThinkingBlock ?? props.hideThinkingBlock ?? false;
-  const inPlanMode = flowControl?.inPlanMode ?? props.inPlanMode ?? false;
-  const planApproved = flowControl?.planApproved ?? props.planApproved ?? false;
-  const lastAssistantId = flowControl?.lastAssistantId !== undefined ? flowControl.lastAssistantId : (props.lastAssistantId ?? null);
-  const lastUserId = flowControl?.lastUserId !== undefined ? flowControl.lastUserId : props.lastUserId;
-  const thinkingMsgId = flowControl?.thinkingMsgId !== undefined ? flowControl.thinkingMsgId : props.thinkingMsgId;
-  const showAllMessages = flowControl?.showAllMessages ?? props.showAllMessages ?? true;
+  const hideThinkingBlock = flowControl?.hideThinkingBlock ?? false;
+  const inPlanMode = flowControl?.inPlanMode ?? false;
+  const planApproved = flowControl?.planApproved ?? false;
+  const setPermissionMode = flowControl?.setPermissionMode ?? (() => {});
+  const setPlanApproved = flowControl?.setPlanApproved ?? (() => {});
+  const lastAssistantId = flowControl?.lastAssistantId ?? null;
+  const lastUserId = flowControl?.lastUserId;
+  const thinkingMsgId = flowControl?.thinkingMsgId;
+  const showAllMessages = flowControl?.showAllMessages ?? true;
 
-  const expandedUserMsgs = interaction?.expandedUserMsgs ?? props.expandedUserMsgs ?? {};
-  const onToggleExpandUser = interaction?.onToggleExpandUser ?? props.onToggleExpandUser ?? (() => {});
-  const dismissedFollowUps = interaction?.dismissedFollowUps ?? props.dismissedFollowUps ?? {};
-  const handleDismissFollowUp = interaction?.handleDismissFollowUp ?? props.handleDismissFollowUp ?? (() => {});
-  const handleMarkdownClick = interaction?.handleMarkdownClick ?? props.handleMarkdownClick ?? (() => {});
-  const toolStackProps =
-    interaction?.toolStackProps ??
-    props.toolStackProps ??
-    ({ activeSessionId } as import('../chat-tool-call/ChatToolCallBlock').ChatToolStackSharedProps);
+  const expandedUserMsgs = interaction?.expandedUserMsgs ?? {};
+  const onToggleExpandUser = interaction?.onToggleExpandUser ?? (() => {});
+  const dismissedFollowUps = interaction?.dismissedFollowUps ?? {};
+  const handleDismissFollowUp = interaction?.handleDismissFollowUp ?? (() => {});
+  const handleMarkdownClick = interaction?.handleMarkdownClick ?? (() => {});
+  const fallbackToolStackProps = useMemo<
+    import('../chat-tool-call/ChatToolCallBlock').ChatToolStackSharedProps
+  >(
+    () => ({
+      activeSessionId,
+      agents: [],
+      expandedTools: {},
+      onToggleTool: () => {},
+      approvalBusy: false,
+      actions: {
+        onOpenDiff: navigation?.onOpenDiff ?? (() => {}),
+        onOpenPath: navigation?.onOpenPath,
+        onOpenTerminal: navigation?.onOpenTerminal,
+        onApprovalAllow: () => {},
+        onApprovalDeny: () => {},
+      },
+    }),
+    [
+      activeSessionId,
+      navigation?.onOpenDiff,
+      navigation?.onOpenPath,
+      navigation?.onOpenTerminal,
+    ]
+  );
+  const toolStackProps = interaction?.toolStackProps ?? fallbackToolStackProps;
 
-  const onOpenDiff = navigation?.onOpenDiff ?? props.onOpenDiff ?? (() => {});
-  const onOpenDiffPanel = navigation?.onOpenDiffPanel ?? props.onOpenDiffPanel;
-  const onOpenPath = navigation?.onOpenPath ?? props.onOpenPath;
+  const onOpenDiff = navigation?.onOpenDiff ?? (() => {});
+  const onOpenDiffPanel = navigation?.onOpenDiffPanel;
+  const onOpenPath = navigation?.onOpenPath;
 
-  const onBranch = generation?.onBranch ?? props.onBranch ?? (() => {});
-  const onRetract = generation?.onRetract ?? props.onRetract;
-  const handleRegenerateRow = generation?.onRegenerate
-    ? ((assistantId: string) => generation!.onRegenerate('', assistantId))
-    : (props.handleRegenerateRow ?? (() => {}));
+  const onBranch = generation?.onBranch ?? (() => {});
+  const onRetract = generation?.onRetract;
+  const handleRegenerateRow = generation?.handleRegenerateRow ?? (() => {});
 
-  const setPermissionMode = props.setPermissionMode ?? (() => {});
-  const setPlanApproved = props.setPlanApproved ?? (() => {});
-  const handleFillFollowUp = composer?.onSetChatInput ?? props.handleFillFollowUp ?? (() => {});
-  const onSendFollowUp = composer?.onSendFollowUp ?? props.onSendFollowUp;
-  const handleSendFollowUp = composer?.onSendFollowUp ?? props.handleSendFollowUp ?? (() => {});
+  const handleFillFollowUp = composer?.handleFillFollowUp ?? (() => {});
+  const onSendFollowUp = composer?.onSendFollowUp;
+  const handleSendFollowUp = composer?.handleSendFollowUp ?? (() => {});
   const msgIds = useMemo(() => messages.map((m) => m.id), [messages]);
   const vs = useVirtualScroll({
     ids: msgIds,
@@ -135,9 +153,11 @@ const MessageVirtualizerInner: React.FC<MessageVirtualizerProps> = (props) => {
           const el = entry.target;
           if (!(el instanceof HTMLElement)) continue;
           // data-vindex 存 messageId（稳定键），不再用数字下标
+          // 统一度量入口（Plan 05 §2.2 / DEF-13）：使用 el.offsetHeight 度量完整盒模型外框高度（content + padding + border，严格排除外部 margin）
           const msgId = el.dataset.vindex;
-          if (msgId != null && entry.contentRect.height > 0) {
-            setActual(msgId, entry.contentRect.height);
+          const measuredHeight = el.offsetHeight || Math.ceil(entry.contentRect.height);
+          if (msgId != null && measuredHeight > 0) {
+            setActual(msgId, measuredHeight);
           }
         }
         if (isAtBottomRef.current) {

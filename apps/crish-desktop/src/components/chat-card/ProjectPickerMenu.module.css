@@ -33,7 +33,7 @@
   right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: var(--sep-accent-check, #059669);
+  color: var(--accent-color);
   pointer-events: none;
   flex-shrink: 0;
 }
@@ -41,9 +41,9 @@
 .rowDeleteBtn {
   border: none;
   background: transparent;
-  color: var(--sep-text-muted, #8b8780);
+  color: var(--text-tertiary);
   cursor: pointer;
-  border-radius: var(--sep-btn-radius, var(--button-radius, 6px));
+  border-radius: var(--radius-sm, 6px);
   width: 20px;
   height: 20px;
   display: flex;

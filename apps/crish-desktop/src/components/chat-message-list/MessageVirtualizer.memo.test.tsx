@@ -32,43 +32,8 @@ function msg(id: string, text: string): SessionMessage {
   } as SessionMessage;
 }
 
-function createProps(messages: SessionMessage[]) {
-  return {
-    messages,
-    pinnedItems: [],
-    pinsOpen: false,
-    setPinsOpen: vi.fn(),
-    jumpToPinned: vi.fn(),
-    togglePin: vi.fn(),
-    searchHighlightQuery: '',
-    expandedUserMsgs: {},
-    onToggleExpandUser: vi.fn(),
-    onShowToast: vi.fn(),
-    hideThinkingBlock: false,
-    inPlanMode: false,
-    planApproved: false,
-    lastAssistantId: null,
-    toolStackProps: {
-      activeSessionId: 'sess-1',
-      onShowToast: vi.fn(),
-      onOpenDiff: vi.fn(),
-      onOpenDiffPanel: vi.fn(),
-    },
-    handleRegenerateRow: vi.fn(),
-    onBranch: vi.fn(),
-    onOpenDiff: vi.fn(),
-    onOpenDiffPanel: vi.fn(),
-    setPermissionMode: vi.fn(),
-    setPlanApproved: vi.fn(),
-    handleFillFollowUp: vi.fn(),
-    onSendFollowUp: vi.fn(),
-    handleSendFollowUp: vi.fn(),
-    dismissedFollowUps: {},
-    handleDismissFollowUp: vi.fn(),
-    showAllMessages: true,
-    activeSessionId: 'sess-1',
-    handleMarkdownClick: vi.fn(),
-  };
+function createProps(messages: SessionMessage[]): MessageVirtualizerProps {
+  return createGroupedProps(messages);
 }
 
 function createGroupedProps(messages: SessionMessage[]): MessageVirtualizerProps {

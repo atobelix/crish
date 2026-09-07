@@ -34,6 +34,8 @@ import {
   type PlanRibbonState,
 } from './PlanGoalRibbons';
 import { ApprovalDock } from './ApprovalDock';
+import { RetrySlotNotice } from './RetrySlotNotice';
+import { RunNoticeBar } from './RunNoticeBar';
 import { useContinuityUiStore } from '../../api/continuity/continuityUiStore';
 import { useConnectionStatus } from '../../hooks/useConnectionStatus';
 import { connectionManager } from '../../services/ConnectionManager';
@@ -75,9 +77,8 @@ export interface StreamingRibbonProps {
   localHasKey: boolean;
   onOpenModelSettings: () => void;
   onOpenModelDropdown: () => void;
-  /** 回到最新 FAB */
-  showScrollToBottom: boolean;
-  onScrollToBottom: () => void;
+  showScrollToBottom?: boolean;
+  onScrollToBottom?: () => void;
   /** 系统 run 提示（错误/空回复等） */
   runNotice: RunNotice | null;
   onDismissRunNotice: () => void;
@@ -156,8 +157,6 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
     localHasKey,
     onOpenModelSettings,
     onOpenModelDropdown,
-    showScrollToBottom,
-    onScrollToBottom,
     runNotice,
     onDismissRunNotice,
   } = sp;
@@ -220,7 +219,7 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
   );
 
   const hasActivePlan =
-    inPlanMode || goalModeActive || checklistProgress.total > 0;
+    goalModeActive || checklistProgress.total > 0;
   // 盖层生命周期优先于 LS gate（密钥步落盘后向导仍可能打开）
   const firstRunOpen = isFirstRunOverlayOpen();
   const engineOk = engineHint == null ? null : engineHint.ok;
@@ -359,24 +358,19 @@ export const ChatStatusRibbons: React.FC<ChatStatusRibbonsProps> = ({
         <PlanGoalRibbons plan={planState} goal={goalState} />
       )}
 
-      {/* 回到最新：浮在对话区右下角，仅图标 */}
-      {showScrollToBottom ? (
-        <Tooltip content="回到最新">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={styles.chatScrollFab}
-            aria-label="回到最新"
-            onClick={onScrollToBottom}
-            icon={<Lucide.ChevronDown size={16} strokeWidth={2} aria-hidden />}
-          />
-        </Tooltip>
-      ) : null}
-
       {between}
 
+      {/* 临时通知老虎机滚动（D8 §3.7.4）：重连进度单起一行，不进对话历史；
+          空态不挂载（retryNotice null）防幽灵条 */}
+      {retryNotice ? (
+        <RetrySlotNotice
+          attempt={retryNotice.attempt}
+          maxAttempts={retryNotice.maxAttempts}
+        />
+      ) : null}
 
+      {/* 系统提示：错误/空回复 — 明确非 AI 输出；空文案不挂载（防幽灵条） */}
+      <RunNoticeBar runNotice={runNotice} onDismiss={onDismissRunNotice} />
 
       {/* 审批 sticky：队列/子 agent 待确认时显示；单条主时间线靠 ApprovalAskCard */}
       {omitApprovalDock ? null : (

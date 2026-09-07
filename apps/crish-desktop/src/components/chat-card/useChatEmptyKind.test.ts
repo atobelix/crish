@@ -84,7 +84,8 @@ describe('useChatEmptyKind', () => {
     const { result } = renderHook(() =>
       useChatEmptyKind({
         activeSessionId: 'sess-1',
-        messages: [msg('m1', 'hello')],
+        messageCount: 1,
+        displayCount: 0,
         localMsgFilter: 'zzzz',
         mainSurface: 'chat',
         hydratedFromEngine: true,

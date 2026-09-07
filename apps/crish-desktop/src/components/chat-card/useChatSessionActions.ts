@@ -1,6 +1,17 @@
 import { useCallback, useEffect } from 'react';
 import { onUiEvent } from '../../api/uiEvents';
-import { openFileInPanel } from '../../api/workspaceFsApi';
+import {
+  openFileInPanel,
+  resolveWorkspacePath,
+  isAbsoluteFsPath,
+  readTextFile,
+  openPathDefault,
+} from '../../api/workspaceFsApi';
+import {
+  openToolInActiveTab,
+  openFileViewerInSession,
+} from '../../store/workspace-shell';
+import { toast } from '../../services/toast/ToastContext';
 import { getCompositionRoot } from '../../app/compositionRoot';
 import { getActiveProjectId } from '../../api/projectStore';
 import { useChatHandlers } from './useChatHandlers';
@@ -61,8 +72,84 @@ export function useChatSessionActions({
   );
 
   const openPathInFilesPanel = useCallback((filePath: string) => {
-    // S6：单一进叶。openFileInPanel 按类型分流 files / file-viewer，禁止再叠开 files。
-    openFileInPanel(filePath);
+    if (!filePath?.trim()) {
+      toast.show('文件不存在');
+      return;
+    }
+    const trimmed = filePath.trim();
+    if (/^(note|notebook)(:|$)/i.test(trimmed)) {
+      openFileInPanel(filePath);
+      return;
+    }
+
+    // 安全红线：禁止通过聊天界面文件直链拉起可执行二进制程序（防御 RCE）
+    if (/\.(exe|bat|cmd|msi|ps1|vbs|com|sh|bin)$/i.test(trimmed)) {
+      toast.show('出于安全保护，禁止直接运行可执行文件');
+      return;
+    }
+
+    // 剥离代码行号/列号锚点（如 src/main.rs:42 或 index.ts:15:3），避免文件系统路径校验失败
+    const cleanPath = trimmed.replace(/:\d+(:\d+)?$/, '');
+
+    const isOfficeOrBinary =
+      /\.(pptx?|docx?|xlsx?|pdf|zip|rar|7z|tar|gz|png|jpe?g|gif|webp|bmp|ico|tiff?|mp4|mov|webm|mp3|wav)$/i.test(
+        cleanPath
+      );
+
+    const resolved = resolveWorkspacePath(cleanPath);
+    if (resolved) {
+      // 项目内文件：在右侧文件管理器打开
+      readTextFile(resolved, 1)
+        .then(() => {
+          openToolInActiveTab('files');
+          window.dispatchEvent(
+            new CustomEvent('crish-open-file', { detail: { path: resolved } })
+          );
+          if (isOfficeOrBinary) {
+            void openPathDefault(resolved).catch(() => {});
+          }
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (
+            msg.includes('not_found') ||
+            msg.includes('Path does not exist') ||
+            msg.includes('No such file')
+          ) {
+            toast.show('文件不存在');
+            return;
+          }
+          // 二进制或非文本文件：在右侧文件管理器打开，同时若是 Office/PPT 则拉起系统关联
+          openToolInActiveTab('files');
+          window.dispatchEvent(
+            new CustomEvent('crish-open-file', { detail: { path: resolved } })
+          );
+          if (isOfficeOrBinary) {
+            void openPathDefault(resolved).catch(() => {});
+          }
+        });
+      return;
+    }
+
+    // 项目外文件：检查是否为绝对路径
+    if (isAbsoluteFsPath(trimmed)) {
+      if (isOfficeOrBinary) {
+        // Office/PPT/二进制外部文件：通过系统默认程序打开
+        void openPathDefault(trimmed).catch(() => {
+          toast.show('文件不存在');
+        });
+        return;
+      }
+      // 文本代码类：新建标签页（代码预览）打开
+      openFileViewerInSession(trimmed, 'plain');
+      return;
+    }
+
+    // 无法解析且非绝对路径：回落 openFileInPanel；若返回 null，提示文件不存在
+    const host = openFileInPanel(filePath);
+    if (!host) {
+      toast.show('文件不存在');
+    }
   }, []);
 
   const {

@@ -182,21 +182,36 @@ export function useChatMessageState({
     [sessionKey]
   );
 
+  const onOpenPathRef = useRef(onOpenPath);
+  onOpenPathRef.current = onOpenPath;
+
   const handleMarkdownClick = useCallback(
     (e: React.MouseEvent) => {
       const target = e.target;
       if (!(target instanceof HTMLElement)) return;
-      const btn = target.closest('.md-code-copy');
-      if (!(btn instanceof HTMLElement)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      const text =
-        btn.closest('.md-code-block')?.querySelector('pre')?.textContent ?? '';
-      if (!text) return;
-      void navigator.clipboard.writeText(text).then(
-        () => {},
-        () => toast.show('复制失败')
-      );
+      const copyBtn = target.closest('.md-code-copy');
+      if (copyBtn instanceof HTMLElement) {
+        e.preventDefault();
+        e.stopPropagation();
+        const text =
+          copyBtn.closest('.md-code-block')?.querySelector('pre')?.textContent ?? '';
+        if (!text) return;
+        void navigator.clipboard.writeText(text).then(
+          () => {},
+          () => toast.show('复制失败')
+        );
+        return;
+      }
+      const pathBtn = target.closest('.md-path-link');
+      if (pathBtn instanceof HTMLElement) {
+        e.preventDefault();
+        e.stopPropagation();
+        const path = pathBtn.getAttribute('data-path') || pathBtn.textContent || '';
+        if (path.trim()) {
+          onOpenPathRef.current?.(path.trim());
+        }
+        return;
+      }
     },
     []
   );

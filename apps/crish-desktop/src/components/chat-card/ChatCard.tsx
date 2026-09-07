@@ -1,6 +1,5 @@
 import React, { Suspense, lazy } from 'react';
 import styles from './ChatCard.module.css';
-import type {} from '../../hooks/useToastQueue';
 import { ChatMessageList } from '../chat-message-list/ChatMessageList';
 import type { ChatMessageListProps } from '../chat-message-list/chatMessageListProps';
 import '../chat-message-list/workspaceChatStream.slot';
@@ -13,6 +12,8 @@ import { useChatCardState } from './useChatCardState';
 import { anyProfileHasKey } from '../../api/providerProfiles';
 import { ChatComposerWrapper } from './ChatComposerWrapper';
 import { openSettings, patchSession } from '../../api/storeAccess';
+import { hasFiles } from '../chat-composer/ComposerDropHost';
+import * as Lucide from 'lucide-react';
 
 const ScheduledTasksPanel = lazy(() =>
   import('../settings/ScheduledTasksPanel').then((m) => ({
@@ -20,25 +21,65 @@ const ScheduledTasksPanel = lazy(() =>
   }))
 );
 
-import { useToast } from '../../services/toast/ToastContext';
+import { useIpcListener } from '../../hooks/useIpcListener';
 
 export interface ChatCardProps {
   handleGlobalTabClick: (cardId: string) => void;
   sessionId?: string | null;
-  /** @deprecated @see ChatCard 保持可选向后兼容 */
   wsId?: string;
-  colIdx?: number;
-  groupIdx?: number;
 }
 
 export const ChatCard: React.FC<ChatCardProps> = React.memo(
   ({ wsId = 'default', handleGlobalTabClick, sessionId }) => {
-    const { showToast: _showToast } = useToast();
     const state = useChatCardState({
       wsId,
       handleGlobalTabClick,
       sessionId,
     });
+
+    const [isDragOver, setIsDragOver] = React.useState(false);
+    const dragDepthRef = React.useRef(0);
+
+    useIpcListener<{ paths?: string[] }>('tauri://drag-enter', () => {
+      setIsDragOver(true);
+    });
+    useIpcListener('tauri://drag-leave', () => {
+      setIsDragOver(false);
+    });
+    useIpcListener<{ paths?: string[] }>('tauri://drag-drop', (event) => {
+      setIsDragOver(false);
+      dragDepthRef.current = 0;
+      const paths = event.payload?.paths ?? [];
+      if (paths.length > 0) {
+        void state.composerProps.handlePathsSelected(paths);
+      }
+    });
+
+    React.useEffect(() => {
+      const onWindowDragOver = (e: DragEvent) => {
+        if (hasFiles(e.dataTransfer)) {
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        }
+      };
+      const onWindowDrop = (e: DragEvent) => {
+        if (hasFiles(e.dataTransfer)) {
+          e.preventDefault();
+          setIsDragOver(false);
+          dragDepthRef.current = 0;
+          const files = Array.from(e.dataTransfer?.files ?? []);
+          if (files.length > 0) {
+            void state.composerProps.handleFilesSelected(files);
+          }
+        }
+      };
+      window.addEventListener('dragover', onWindowDragOver);
+      window.addEventListener('drop', onWindowDrop);
+      return () => {
+        window.removeEventListener('dragover', onWindowDragOver);
+        window.removeEventListener('drop', onWindowDrop);
+      };
+    }, [state.composerProps]);
 
     // R2-5 B1（P1-12 聚合）：ChatComposer 主要 props 经 spread 传递；
     // on* 命名差异字段（handle* → on*）保持显式映射（消除 30 字段逐项拆包）
@@ -49,6 +90,7 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
         onStop={state.composerProps.handleStopGeneration}
         onForceStop={state.composerProps.handleForceCancelGeneration}
         onFilesSelected={state.composerProps.handleFilesSelected}
+        onPickFiles={state.composerProps.handlePickFiles}
         onOpenPath={state.openPathInFilesPanel}
         isProcessing={state.isProcessing}
         permissionMode={state.permissionMode}
@@ -85,8 +127,6 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
           localHasKey: anyProfileHasKey(),
           onOpenModelSettings: () => openSettings('models'),
           onOpenModelDropdown: () => state.setShowModelDropdown(true),
-          showScrollToBottom: state.showScrollToBottom,
-          onScrollToBottom: state.scrollToBottom,
         },
         goal: {
           inPlanMode: state.inPlanMode,
@@ -171,12 +211,56 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
                 : 'unknown'
           }
           data-approval-mode={state.approvalState.approvalUiPlan.mode}
+          onDragEnter={(e) => {
+            if (!hasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            dragDepthRef.current += 1;
+            setIsDragOver(true);
+          }}
+          onDragOver={(e) => {
+            if (!hasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+          }}
+          onDragLeave={() => {
+            dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+            if (dragDepthRef.current === 0) {
+              setIsDragOver(false);
+            }
+          }}
+          onDrop={(e) => {
+            if (!hasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            e.stopPropagation();
+            dragDepthRef.current = 0;
+            setIsDragOver(false);
+            const files = Array.from(e.dataTransfer.files ?? []);
+            if (files.length > 0) {
+              void state.composerProps.handleFilesSelected(files);
+            }
+          }}
         >
+          {isDragOver && (
+            <div
+              className={styles.dropOverlay}
+              data-testid="chat-drop-overlay"
+              aria-hidden
+            >
+              <Lucide.Upload
+                className={styles.dropOverlayIcon}
+                size={28}
+                strokeWidth={1.75}
+                aria-hidden
+              />
+              <span className={styles.dropOverlayText}>
+                释放文件以添加为附件
+              </span>
+            </div>
+          )}
           <div
             className={styles.chatDocFlow}
             data-testid="chat-doc-flow"
             data-empty={state.emptyKind != null ? 'true' : undefined}
-            ref={state.chatFlowRef}
             aria-busy={state.messagesLoading || undefined}
           >
             {state.mainSurface === 'scheduled' ? (
@@ -233,6 +317,8 @@ export const ChatCard: React.FC<ChatCardProps> = React.memo(
             activeSessionId={state.activeSessionId}
             openSidePanel={state.openSidePanel}
             handleGlobalTabClick={handleGlobalTabClick}
+            isProcessing={state.isProcessing}
+            onStopGeneration={state.composerProps.handleStopGeneration}
           />
         </div>
       </>

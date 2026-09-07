@@ -129,7 +129,7 @@ export const PlanDrawer: React.FC<PlanDrawerProps> = ({
   onClose,
   drawerRef,
 }) => {
-  if (!shouldRender) return null;
+  if (!shouldRender || progressItems.length === 0) return null;
   return (
     <div
       ref={drawerRef}

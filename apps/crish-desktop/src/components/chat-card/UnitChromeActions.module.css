@@ -12,10 +12,10 @@
   pointer-events: none;
   background: linear-gradient(
     to bottom,
-    var(--bg-card, #ffffff) 0%,
-    var(--bg-card, #ffffff) 65%,
-    color-mix(in srgb, var(--bg-card, #ffffff) 94%, transparent) 82%,
-    color-mix(in srgb, var(--bg-card, #ffffff) 45%, transparent) 94%,
+    var(--bg-card, var(--bg-primary)) 0%,
+    var(--bg-card, var(--bg-primary)) 65%,
+    color-mix(in srgb, var(--bg-card, var(--bg-primary)) 94%, transparent) 82%,
+    color-mix(in srgb, var(--bg-card, var(--bg-primary)) 45%, transparent) 94%,
     transparent 100%
   );
   display: flex;
@@ -75,7 +75,7 @@
   align-items: center;
   border: none;
   background: transparent;
-  color: var(--text-secondary, #777777);
+  color: var(--text-secondary);
   font-weight: 500;
   font-size: 13px;
   font-family: inherit;
@@ -150,11 +150,14 @@
 }
 
 /*
- * 坞收起时右侧空出 36px，给绝对定位的坞开关让位；
+ * 坞收起时右侧空出叶上坞开关让位区（--leaf-corner-btn-size + --leaf-corner-btn-inset），
+ * 与 BinaryTreeWorkspace .topSidePanelBtn、LeafToolTabStrip .fixedCluster 同源；
  * 坞展开后开关移交给右侧面板自己的标签行，这里回收边距。
  */
 .topActions.withDockMargin {
-  margin-right: 36px;
+  margin-right: calc(
+    var(--leaf-corner-btn-size) + var(--leaf-corner-btn-inset)
+  );
 }
 
 .topActionBtn {

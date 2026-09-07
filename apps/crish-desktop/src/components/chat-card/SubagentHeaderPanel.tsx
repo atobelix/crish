@@ -124,6 +124,7 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
         trailingAction: isRunning ? (
           <Tooltip content="终止子代理">
             <IconButton
+              aria-label="终止子代理"
               size="xs"
               variant="ghost"
               className={styles.killBtn}
@@ -131,7 +132,6 @@ export const SubagentHeaderPanel: React.FC<SubagentHeaderPanelProps> = ({
                 e.stopPropagation();
                 killSubagent(parentSessionId, agent.id);
               }}
-              aria-label="终止子代理"
               icon={<XOctagon size={12} />}
             />
           </Tooltip>

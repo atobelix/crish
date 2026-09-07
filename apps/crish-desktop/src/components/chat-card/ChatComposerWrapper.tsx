@@ -6,14 +6,18 @@ import {
   type GoalRibbonProps,
   type ApprovalRibbonProps,
 } from './ChatStatusRibbons';
-import type { } from '../../hooks/useToastQueue';
 import type { RunNotice } from '../../hooks/useChatStream';
 import { SlotOutlet } from '../../services/view-registry';
 import { slotCore } from '../../services/view-registry/SlotCore';
 import type { ChatComposerAboveProps } from './chatComposerAboveProps';
 import './workspaceChatComposerAbove.slot';
 import { ApprovalDock } from './ApprovalDock';
-import { PlanGoalRibbons } from './PlanGoalRibbons';
+import { getSessionById } from '../../store/storeAccess';
+import { resolveSessionProgressItems } from '../../api/sessionProgressApi';
+import {
+  ComposerPlanProgressBar,
+  type PlanStepItem,
+} from '../chat-composer/ComposerPlanProgressBar';
 
 /**
  * R2-5 B3（P1-12 聚合）：ChatStatusRibbons 专属字段分组（ribbons 对象由调用方
@@ -45,6 +49,8 @@ export interface ChatComposerWrapperProps {
   activeSessionId: string | null;
   openSidePanel: (panelId: 'terminal' | 'diff' | 'preview' | 'tasks' | 'files') => void;
   handleGlobalTabClick: (cardId: string) => void;
+  isProcessing?: boolean;
+  onStopGeneration?: () => void;
 }
 
 export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.memo(({
@@ -62,7 +68,48 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
   onApprovalAllow,
   onApprovalDeny,
   activeSessionId,
+  isProcessing = false,
+  onStopGeneration,
 }) => {
+  const currentSession = activeSessionId
+    ? getSessionById(activeSessionId)
+    : null;
+  const progressItems = useMemo(
+    () => resolveSessionProgressItems(currentSession),
+    [currentSession]
+  );
+
+  const planSteps: PlanStepItem[] = useMemo(() => {
+    if (!progressItems || progressItems.length === 0) return [];
+    const firstIncompleteIdx = progressItems.findIndex((t) => !t.done);
+    return progressItems.map((item, idx) => ({
+      id: item.id || `step-${idx + 1}`,
+      text: item.text,
+      status: item.done
+        ? 'completed'
+        : idx === firstIncompleteIdx
+          ? 'active'
+          : 'pending',
+    }));
+  }, [progressItems]);
+
+  const isGoalActive = Boolean(ribbons.goal?.goalModeActive);
+  const hasActiveTasks = planSteps.length > 0;
+  const showPlanBar = isGoalActive || hasActiveTasks;
+
+  const activeStepText = useMemo(() => {
+    if (isGoalActive && ribbons.goal?.goalText) {
+      return ribbons.goal.goalText;
+    }
+    const activeStep = planSteps.find((s) => s.status === 'active');
+    return activeStep?.text || planSteps[0]?.text || '';
+  }, [isGoalActive, ribbons.goal?.goalText, planSteps]);
+
+  const activeStepIndex = useMemo(() => {
+    const idx = planSteps.findIndex((s) => s.status === 'active');
+    return idx >= 0 ? idx + 1 : (planSteps.length > 0 ? planSteps.length : 1);
+  }, [planSteps]);
+
   const liftApproval = useSyncExternalStore(
     (cb) => slotCore.subscribe('workspace.chat.composerAbove', cb),
     () => Boolean(slotCore.getSingle('workspace.chat.composerAbove'))
@@ -101,8 +148,7 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
 
   const floatHasContent =
     pendingApprovalCount > 0 ||
-    ribbons.goal.inPlanMode ||
-    ribbons.goal.goalModeActive;
+    showPlanBar;
 
   return (
     <div
@@ -143,22 +189,26 @@ export const ChatComposerWrapper: React.FC<ChatComposerWrapperProps> = React.mem
                 activeSessionId={activeSessionId}
               />
             )}
-            <PlanGoalRibbons
-              docked
-              plan={{
-                inPlanMode: ribbons.goal.inPlanMode,
-                planApproved: ribbons.goal.planApproved,
-                onApprovePlan: ribbons.goal.onApprovePlan,
-              }}
-              goal={{
-                goalModeActive: ribbons.goal.goalModeActive,
-                goalText: ribbons.goal.goalText,
-                goalIteration: ribbons.goal.goalIteration,
-                goalTasksDone: ribbons.goal.goalTasksDone ?? 0,
-                goalTasksTotal: ribbons.goal.goalTasksTotal ?? 0,
-                onStopGoal: ribbons.goal.onStopGoal,
-              }}
-            />
+            {showPlanBar ? (
+              <ComposerPlanProgressBar
+                active={true}
+                mode={isGoalActive ? 'goal' : 'plan'}
+                modeLabel={isGoalActive ? '目标模式' : '计划模式'}
+                currentStep={activeStepIndex}
+                totalSteps={planSteps.length}
+                steps={planSteps}
+                activeStepText={activeStepText}
+                isRunning={isProcessing}
+                onApprovePlan={
+                  ribbons.goal?.planApproved ? undefined : ribbons.goal?.onApprovePlan
+                }
+                onStop={
+                  isGoalActive
+                    ? ribbons.goal?.onStopGoal
+                    : onStopGeneration
+                }
+              />
+            ) : null}
           </div>
 
           {/* composer 始终在 .chatFooter 渲染（不再注入到 ChatEmptyState 内）。 */}

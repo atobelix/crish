@@ -9,11 +9,11 @@
 .moreBtn {
   background: none;
   border: none;
-  color: var(--sep-text-secondary, #5c5954);
+  color: var(--text-secondary);
   width: 28px;
   height: 28px;
   min-width: 28px;
-  border-radius: var(--sep-btn-radius, 6px);
+  border-radius: var(--radius-sm, 6px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -32,7 +32,6 @@
 
 .moreBtn:hover,
 .moreBtn.isOpen,
-.moreBtn:hover,
 .moreBtn:focus-visible,
 .moreWrap:hover .moreBtn,
 .moreWrap.isOpen .moreBtn {
@@ -46,7 +45,7 @@
 
 .moreBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--sep-border-focus, #b2ada2);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .moreMenu {

@@ -20,43 +20,59 @@ function assistantMsg(id: string, text: string): SessionMessage {
   } as SessionMessage;
 }
 
-function createVirtualizerProps(messages: SessionMessage[]) {
+function createVirtualizerProps(messages: SessionMessage[]): MessageVirtualizerProps {
   return {
     messages,
-    pinnedItems: [],
-    pinsOpen: false,
-    setPinsOpen: vi.fn(),
-    jumpToPinned: vi.fn(),
-    togglePin: vi.fn(),
-    searchHighlightQuery: '',
-    expandedUserMsgs: {},
-    onToggleExpandUser: vi.fn(),
-    hideThinkingBlock: false,
-    inPlanMode: false,
-    planApproved: false,
-    lastAssistantId: messages.find((m) => m.sender === 'assistant')?.id ?? null,
-    lastUserId: [...messages].reverse().find((m) => m.sender === 'user')?.id ?? null,
-    onRetract: vi.fn(),
-    toolStackProps: {
-      activeSessionId: 'sess-1',
-      onShowToast: vi.fn(),
-      onOpenDiff: vi.fn(),
-      onOpenDiffPanel: vi.fn(),
-    },
-    handleRegenerateRow: vi.fn(),
-    onBranch: vi.fn(),
-    onOpenDiff: vi.fn(),
-    onOpenDiffPanel: vi.fn(),
-    setPermissionMode: vi.fn(),
-    setPlanApproved: vi.fn(),
-    handleFillFollowUp: vi.fn(),
-    onSendFollowUp: vi.fn(),
-    handleSendFollowUp: vi.fn(),
-    dismissedFollowUps: {},
-    handleDismissFollowUp: vi.fn(),
-    showAllMessages: true,
     activeSessionId: 'sess-1',
-    handleMarkdownClick: vi.fn(),
+    navigation: {
+      onOpenDiff: vi.fn(),
+      onOpenPath: vi.fn(),
+      onOpenTerminal: vi.fn(),
+    },
+    approval: {
+      approvalBusy: false,
+      pendingApprovalMsgId: '',
+      onApprovalAllow: vi.fn(),
+      onApprovalDeny: vi.fn(),
+    },
+    composer: {
+      onSetChatInput: vi.fn(),
+      onSendFollowUp: vi.fn(),
+    },
+    generation: {
+      onRegenerate: vi.fn(),
+      onBranch: vi.fn(),
+      onRetract: vi.fn(),
+    },
+    pins: {
+      pinnedItems: [],
+      pinsOpen: false,
+      setPinsOpen: vi.fn(),
+      jumpToPinned: vi.fn(),
+      togglePin: vi.fn(),
+    },
+    flowControl: {
+      hideThinkingBlock: false,
+      inPlanMode: false,
+      planApproved: false,
+      lastAssistantId: messages.find((m) => m.sender === 'assistant')?.id ?? null,
+      lastUserId: [...messages].reverse().find((m) => m.sender === 'user')?.id ?? null,
+      showAllMessages: true,
+    },
+    interaction: {
+      expandedUserMsgs: {},
+      onToggleExpandUser: vi.fn(),
+      dismissedFollowUps: {},
+      handleDismissFollowUp: vi.fn(),
+      handleMarkdownClick: vi.fn(),
+      toolStackProps: {
+        activeSessionId: 'sess-1',
+        onShowToast: vi.fn(),
+        onOpenDiff: vi.fn(),
+        onOpenDiffPanel: vi.fn(),
+      },
+    },
+    searchHighlightQuery: '',
   };
 }
 

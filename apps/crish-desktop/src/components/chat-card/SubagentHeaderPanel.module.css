@@ -8,7 +8,7 @@
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--text-secondary, #666666);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 400;
   font-family: inherit;
@@ -42,7 +42,7 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--brand, var(--brand-primary, #10b981));
+  background: var(--accent-color);
   flex-shrink: 0;
   animation: agentDotPulse 1.4s ease-in-out infinite;
 }
@@ -55,7 +55,7 @@
   50% {
     transform: scale(1.35);
     opacity: 1;
-    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+    box-shadow: 0 0 6px color-mix(in srgb, var(--accent-color) 60%, transparent);
   }
 }
 
@@ -141,18 +141,18 @@
 }
 
 .statusBadge.running {
-  background: color-mix(in srgb, var(--accent-green, #10b981) 15%, transparent);
-  color: var(--accent-green, #10b981);
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  color: var(--accent-color);
 }
 
 .statusBadge.completed {
-  background: color-mix(in srgb, var(--brand, #10b981) 10%, transparent);
-  color: var(--brand-deep, #047857);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  color: var(--accent-color);
 }
 
 .statusBadge.failed {
-  background: color-mix(in srgb, var(--status-error, #ef4444) 15%, transparent);
-  color: var(--status-error, #ef4444);
+  background: color-mix(in srgb, var(--danger-color) 15%, transparent);
+  color: var(--danger-color);
 }
 
 .statusBadge.stopped {
@@ -175,5 +175,5 @@
 }
 
 .killBtn:hover {
-  color: var(--status-error, #ef4444);
+  color: var(--danger-color);
 }

@@ -7,7 +7,6 @@ import {
 import { rememberPrefixFromToolArgs } from '../../api/approvalMeta';
 import { extractCommandForMatch } from '../../api/commandPermissions';
 import { engineApproveTool, engineDenyTool } from '../../api/chatBridge';
-import type { } from '../../hooks/useToastQueue';
 import { toast } from '../../services/toast/ToastContext';
 import {
   shouldSkipApprovalRollback,

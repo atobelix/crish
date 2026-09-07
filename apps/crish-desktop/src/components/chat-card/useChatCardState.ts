@@ -4,7 +4,6 @@ import { useChatModelPicker } from './useChatModelPicker';
 import { useChatMessages } from './useChatMessages';
 import { useChatApproval } from './useChatApproval';
 import { useChatDiffPanel } from './useChatDiffPanel';
-import { useChatScroll } from './useChatScroll';
 import { useChatSessionActions } from './useChatSessionActions';
 import { useChatComposerProps } from './useChatComposerProps';
 
@@ -79,14 +78,6 @@ export function useChatCardState({
     composerProps,
   });
 
-  // 9. 滚动控制域（依赖 openPathInFilesPanel）
-  const scroll = useChatScroll({
-    messages: chatMessages.messages,
-    isProcessing: chatMessages.isProcessing,
-    activeSessionId: sessionMeta.activeSessionId,
-    onOpenPathInFilesPanel: sessionActions.openPathInFilesPanel,
-  });
-
   // engineOk 派生（engineHint == null ? null : engineHint.ok）
   const engineOk: boolean | null =
     modelPicker.engineHint == null ? null : modelPicker.engineHint.ok;
@@ -132,9 +123,6 @@ export function useChatCardState({
     openSidePanel: sessionActions.openSidePanel,
     isProcessing: chatMessages.isProcessing,
     openPathInFilesPanel: sessionActions.openPathInFilesPanel,
-    chatFlowRef: scroll.chatFlowRef,
-    showScrollToBottom: scroll.showScrollToBottom,
-    scrollToBottom: scroll.scrollToBottom,
     composerProps,
     handleRegenerate: sessionActions.handleRegenerate,
     handleBranch: sessionActions.handleBranch,
