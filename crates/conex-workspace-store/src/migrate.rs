@@ -29,7 +29,8 @@ pub fn migrate(conn: &Connection) -> Result<(), StoreError> {
 
         CREATE TABLE IF NOT EXISTS doc_meta (
             doc_id TEXT PRIMARY KEY,
-            rev INTEGER NOT NULL DEFAULT 1,
+            -- rev 默认 0（DEF-NOTE-CAS-01）。新建未提交文档 rev=0；首笔 commit_ops CAS expect_rev=0 推进至 1。
+            rev INTEGER NOT NULL DEFAULT 0,
             updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
             title TEXT NOT NULL DEFAULT '',
             created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
@@ -267,9 +268,17 @@ pub(crate) fn backfill_legacy_doc_meta_v8(conn: &Connection) -> Result<(), Store
 
         let resolved_title = match candidate {
             Some(text) => {
-                let first_raw = text.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
-                let first_line = first_raw.split("\\n").next().unwrap_or(first_raw).trim();
-                let clean = first_line.trim_start_matches('#').trim();
+                // blocks.plain_text 可能残留字面量 `\n` 转义序列（SQL 种子 /
+                // 镜像导入历史），先归一化为真实换行再取首个非空行。
+                let normalized = text.replace("\\n", "\n");
+                let first_line = normalized
+                    .lines()
+                    .map(|l| l.trim())
+                    .find(|l| !l.is_empty())
+                    .unwrap_or("")
+                    .trim_start_matches('#')
+                    .trim();
+                let clean = first_line;
                 if clean.is_empty() {
                     "未命名笔记".to_string()
                 } else {

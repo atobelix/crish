@@ -623,19 +623,40 @@ async fn note_document_lifecycle_ipc_roundtrip() {
     let list_res = note_document_list(None).await.unwrap();
     assert_eq!(list_res["ok"], true);
 
-    // 2. 创建新文档
-    let create_res = note_document_create(
-        Some("测试创建文档".to_string()),
-        Some("# 标题一\n内容详情".to_string()),
-        None,
-    )
-    .await
-    .unwrap();
+    // 2. 创建新文档（audit-repair-202609 T10：砍除 initial_markdown 参数）
+    let create_res = note_document_create(Some("测试创建文档".to_string()))
+        .await
+        .unwrap();
     assert_eq!(create_res["ok"], true, "create_res failed: {create_res}");
     let doc = &create_res["document"];
     let doc_id = doc["id"].as_str().unwrap().to_string();
     assert_eq!(doc["title"], "测试创建文档");
-    assert_eq!(doc["blockCount"], 1);
+    assert_eq!(doc["blockCount"], 0);
+    assert_eq!(doc["rev"], 0, "新建文档初始 rev 必须为 0 (DEF-NOTE-CAS-01)");
+
+    // 2.1 验证新建文档首笔编辑（note_apply_ops）零 CAS 冲突且版本前进
+    let block_uuid = "11111111-2222-3333-4444-555555555555";
+    let ops_json = format!(
+        r#"[{{
+          "op": "insert",
+          "id": "{block_uuid}",
+          "parent": null,
+          "order": "a0",
+          "kind": "paragraph",
+          "props": {{ "attrs": {{}} }}
+        }}]"#
+    );
+    let apply_res = note_apply_ops(NoteApplyOpsArgs {
+        doc_id: doc_id.clone(),
+        ops_json,
+        intent_id: Some("intent-created-doc-first-edit".into()),
+        origin: Some("user".into()),
+    })
+    .await
+    .unwrap();
+    assert_eq!(apply_res["ok"], true, "新建文档首笔编辑必须成功提交不触发 CAS 冲突: {apply_res}");
+    assert_eq!(apply_res["applied"], 1);
+    assert_eq!(apply_res["rev"], 1, "首笔编辑成功后 rev 必须前进至 1");
 
     // 3. 再次查询列表包含新文档
     let list_res2 = note_document_list(None).await.unwrap();

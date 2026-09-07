@@ -3,7 +3,9 @@
 //! 铁律（遵循 AGENTS.md 与 AUDIT-SIMPLICITY-FINAL）：
 //! 1. 严格杜绝 tags_json、is_archived、is_pinned 等过度设计；
 //! 2. 统一使用 13 位毫秒 Unix 时间戳（< 10_000_000_000 自动 * 1000 归一化）；
-//! 3. 彻底事务级联物理硬删除 9 张关联表（含 blocks_fts）。
+//! 3. 彻底事务级联物理硬删除 9 张关联表（含 blocks_fts）；
+//! 4. 新建文档初始 rev 规范为 0（DEF-NOTE-CAS-01），对齐内存水合 DocSession 初始态 rev = 0，
+//!    根除首笔编辑 expect_rev = 0 触发的 CAS 乐观锁版本冲突。
 
 use crate::{StoreError, WorkspaceStore};
 use rusqlite::params;
@@ -140,14 +142,14 @@ impl WorkspaceStore {
         conn.execute(
             r#"
             INSERT INTO doc_meta (doc_id, rev, updated_at, title, created_at)
-            VALUES (?1, 1, ?2, ?3, ?2);
+            VALUES (?1, 0, ?2, ?3, ?2);
             "#,
             params![doc_id, effective_now, final_title],
         )?;
 
         Ok(DocMetaRow {
             doc_id: doc_id.to_string(),
-            rev: 1,
+            rev: 0,
             updated_at: effective_now,
             title: final_title.to_string(),
             created_at: effective_now,
@@ -236,11 +238,7 @@ impl WorkspaceStore {
     }
 
     /// 对齐 doc 06 §3.2: 兼容 create_document
-    pub fn create_document(
-        &self,
-        title: Option<&str>,
-        initial_markdown: Option<&str>,
-    ) -> Result<NoteDocumentMeta, StoreError> {
+    pub fn create_document(&self, title: Option<&str>) -> Result<NoteDocumentMeta, StoreError> {
         let now_ms = current_time_ms();
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -262,33 +260,11 @@ impl WorkspaceStore {
 
         let row = self.create_note_document(&doc_id, initial_title, now_ms)?;
 
-        let mut block_count = 0;
-        if let Some(md) = initial_markdown {
-            let trimmed = md.trim();
-            if !trimmed.is_empty() {
-                let conn = self.conn.lock().map_err(|e| StoreError::Lock(e.to_string()))?;
-                let block_id = format!("b_{}", &hash_hex[8..16]);
-                conn.execute(
-                    r#"
-                    INSERT INTO blocks (doc_id, block_id, kind, plain_text, updated_at)
-                    VALUES (?1, ?2, 'heading_1', ?3, ?4);
-                    "#,
-                    params![doc_id, block_id, trimmed, now_ms],
-                )?;
-                // 同步写入 blocks_fts 索引，确保 structure_gate.rs 门禁一致性
-                conn.execute(
-                    r#"
-                    INSERT INTO blocks_fts (plain_text, block_id, doc_id)
-                    VALUES (?1, ?2, ?3);
-                    "#,
-                    params![trimmed, block_id, doc_id],
-                )?;
-                block_count = 1;
-            }
-        }
+        // audit-repair-202609 T10：砍除 initial_markdown 直插单块分支——
+        // 该分支绕过 CRDT 记账（doc_clocks / DocSession）属伪实现；带内容建
+        // 文档的唯一路径 = create 空文档 + `note_document_apply_md` 事务。
 
-        let mut meta = row.into_meta();
-        meta.block_count = block_count;
+        let meta = row.into_meta();
         Ok(meta)
     }
 

@@ -26,13 +26,13 @@ pub struct HistoryMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub thinking: Option<String>,
     /// 完整 `AgentMessageBlock` 序列 JSON（块保真优先，message.rs:100-126）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, alias = "blocks_json", skip_serializing_if = "Option::is_none")]
     pub blocks_json: Option<String>,
     /// 工具调用 JSON（老数据兜底）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, alias = "tool_calls_json", skip_serializing_if = "Option::is_none")]
     pub tool_calls_json: Option<String>,
     /// 工具结果 JSON（老数据兜底）
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(default, alias = "tool_call_results_json", skip_serializing_if = "Option::is_none")]
     pub tool_call_results_json: Option<String>,
     /// 完成态判定（completed 或历史无 status 字段才进 LLM 上下文，§3.2.3）
     #[serde(default, skip_serializing_if = "Option::is_none")]

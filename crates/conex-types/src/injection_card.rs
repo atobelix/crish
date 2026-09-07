@@ -58,6 +58,22 @@ pub enum ContextInjectionStatus {
     Failed,
 }
 
+/// 上下文注入卡片中的文件差异项契约（wire：camelCase；对齐 TS `ContextInjectionDiff`）
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextInjectionDiff {
+    pub path: String,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub additions: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deletions: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub patch: Option<String>,
+}
+
 /// 统一可见上下文注入卡片载荷（详案 02 §2.1.2 Rust 模型；wire：camelCase）
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -83,6 +99,9 @@ pub struct ContextInjectionCardPayload {
     /// 关联的目标文件路径列表
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_paths: Option<Vec<String>>,
+    /// 差异文件列表（对齐 TS ContextInjectionDiff）
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diffs: Option<Vec<ContextInjectionDiff>>,
     /// 注入时间戳（epoch ms）
     pub timestamp: u64,
     /// 是否支持展开查看详情（默认 true）
@@ -187,6 +206,7 @@ mod tests {
             content: "# AGENTS.md\n- 反退避".into(),
             token_estimate: Some(320),
             target_paths: None,
+            diffs: None,
             timestamp: 1_700_000_000_000,
             is_foldable: Some(true),
             default_folded: Some(true),
@@ -222,6 +242,7 @@ mod tests {
             content: "export function addMessage() {}".into(),
             token_estimate: None,
             target_paths: Some(vec!["apps/crish-desktop/src/store/sessionStore.ts".into()]),
+            diffs: None,
             timestamp: 1_700_000_000_001,
             is_foldable: None,
             default_folded: None,
@@ -266,5 +287,41 @@ mod tests {
         assert_eq!(card.default_folded, None);
         assert_eq!(card.error_message, None);
         assert_eq!(card.metadata, None);
+        assert_eq!(card.diffs, None);
+    }
+
+    #[test]
+    fn card_payload_roundtrip_with_diffs() {
+        let card = ContextInjectionCardPayload {
+            id: "card_git_01".into(),
+            kind: ContextInjectionCardKind::GitStatus,
+            title: "Git 变更快照".into(),
+            summary: Some("2 个文件改动".into()),
+            status: ContextInjectionStatus::Injected,
+            source: "git_diff".into(),
+            content: "diff summary".into(),
+            token_estimate: Some(150),
+            target_paths: Some(vec!["src/main.rs".into()]),
+            diffs: Some(vec![ContextInjectionDiff {
+                path: "src/main.rs".into(),
+                status: "modified".into(),
+                old_path: None,
+                additions: Some(10),
+                deletions: Some(2),
+                patch: Some("@@ -1,3 +1,11 @@".into()),
+            }]),
+            timestamp: 1_700_000_000_002,
+            is_foldable: Some(true),
+            default_folded: Some(false),
+            error_message: None,
+            metadata: None,
+        };
+        let json = serde_json::to_string(&card).unwrap();
+        let back: ContextInjectionCardPayload = serde_json::from_str(&json).unwrap();
+        assert_eq!(card, back);
+        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(value["diffs"][0]["path"], "src/main.rs");
+        assert_eq!(value["diffs"][0]["status"], "modified");
+        assert_eq!(value["diffs"][0]["additions"], 10);
     }
 }
