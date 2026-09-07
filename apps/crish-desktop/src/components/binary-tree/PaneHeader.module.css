@@ -187,6 +187,7 @@
     width: 0;
     max-width: 0;
     opacity: 0;
+    margin-right: calc(-1 * var(--tab-gap));
   }
 }
 
@@ -294,8 +295,7 @@
     background var(--duration-micro) var(--ease-standard),
     color var(--duration-micro) var(--ease-standard),
     border-color var(--duration-micro) var(--ease-standard),
-    box-shadow var(--duration-micro) var(--ease-standard),
-    transform 100ms var(--ease-standard);
+    box-shadow var(--duration-micro) var(--ease-standard);
 }
 
 .newTabBtn:hover {
@@ -307,5 +307,4 @@
 
 .newTabBtn:active {
   background: var(--tint-active, hsl(0 0% 0% / 0.09));
-  transform: scale(0.96);
 }
