@@ -37,10 +37,18 @@ export const PaneTabItem: React.FC<PaneTabItemProps> = React.memo(
     onDragStart,
     onLeaveTransitionEnd,
   }) => {
+    const wasActiveRef = React.useRef(isSelected);
+    if (!isLeaving) {
+      wasActiveRef.current = isSelected;
+    }
+    const wasActive = isLeaving && wasActiveRef.current;
+    const showActiveStyle = isSelected || wasActive;
+
     return (
       <div
-        className={`${styles.tabItem} ${isSelected ? styles.tabItemActive : ''}`}
+        className={`${styles.tabItem} ${showActiveStyle ? styles.tabItemActive : ''}`}
         data-leaving={isLeaving || undefined}
+        data-was-active={wasActive || undefined}
         tabIndex={isSelected ? 0 : -1}
         onClick={() => onSelect(tab)}
         onMouseDown={(e) => {
@@ -83,7 +91,7 @@ export const PaneTabItem: React.FC<PaneTabItemProps> = React.memo(
             onClick={(e) => onClose(e, tab)}
             aria-label={`关闭 ${title}`}
           >
-            <X size={10} strokeWidth={2.2} />
+            <X size={10} strokeWidth={1.8} />
           </button>
         </div>
       </div>

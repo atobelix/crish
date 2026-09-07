@@ -191,20 +191,22 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
     useEffect(() => {
       if (lockedTabWidth == null) return;
 
+      const headerEl = containerRef.current?.closest(
+        '[data-pane-header="true"]'
+      );
+      if (!headerEl) {
+        clearLockedWidth();
+        return;
+      }
+      // 锁定期间顶栏物理矩形位置固定，初始读取并缓存，杜绝 pointermove 高频触发 forced reflow
+      const cachedRect = headerEl.getBoundingClientRect();
+
       const handlePointerMove = (e: PointerEvent) => {
-        const headerEl = containerRef.current?.closest(
-          '[data-pane-header="true"]'
-        );
-        if (!headerEl) {
-          clearLockedWidth();
-          return;
-        }
-        const rect = headerEl.getBoundingClientRect();
         if (
-          e.clientX < rect.left ||
-          e.clientX > rect.right ||
-          e.clientY < rect.top ||
-          e.clientY > rect.bottom
+          e.clientX < cachedRect.left ||
+          e.clientX > cachedRect.right ||
+          e.clientY < cachedRect.top ||
+          e.clientY > cachedRect.bottom
         ) {
           clearLockedWidth();
         }
@@ -240,8 +242,12 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       const el = containerRef.current;
       if (!el) return;
 
-      const checkMetrics = () => {
-        setContainerWidth(el.clientWidth);
+      const checkMetrics = (entry?: ResizeObserverEntry) => {
+        const w =
+          typeof entry?.contentRect?.width === 'number'
+            ? Math.round(entry.contentRect.width)
+            : el.clientWidth;
+        setContainerWidth(w);
       };
 
       checkMetrics();
@@ -252,7 +258,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       return () => {
         ro.unobserve(el, checkMetrics);
       };
-    }, [visibleTabs.length]);
+    }, []);
 
     const effectiveTabWidth =
       lockedTabWidth ??
@@ -324,7 +330,9 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           if (nextActiveId) {
             const raf1 = requestAnimationFrame(() => {
               const raf2 = requestAnimationFrame(() => {
-                sessionShell().activateTab(leaf.id, nextActiveId);
+                React.startTransition(() => {
+                  sessionShell().activateTab(leaf.id, nextActiveId);
+                });
                 pendingActivateRafsRef.current = pendingActivateRafsRef.current.filter(
                   (id) => id !== raf2
                 );

@@ -60,6 +60,7 @@
   scrollbar-width: none;
   gap: var(--tab-gap);
   padding-left: 2px;
+  contain: layout;
 }
 
 .tabsList {
@@ -98,6 +99,8 @@
   overflow: visible;
   position: relative;
   transform-origin: left center;
+  contain: layout style;
+  will-change: flex-basis, width;
   transition:
     background var(--duration-micro) var(--ease-standard),
     color var(--duration-micro) var(--ease-standard),
