@@ -11,8 +11,10 @@ import {
 } from '../../api/noteApi';
 import { subscribeNoteDocWritten } from '../../bridges/note-doc-written';
 
+/** 历史存量默认文档 ID（doc_meta 出现前的单文档时代遗留；仅作自愈兜底） */
+const LEGACY_DEFAULT_DOC_ID = 'strict-default';
+
 export interface UseNoteDocumentManagerOptions {
-  wsId: string;
   initialDocId?: string | null;
   flushPendingDraft?: () => Promise<void>;
 }
@@ -34,7 +36,6 @@ export interface UseNoteDocumentManagerResult {
 }
 
 export function useNoteDocumentManager({
-  wsId,
   initialDocId,
   flushPendingDraft,
 }: UseNoteDocumentManagerOptions): UseNoteDocumentManagerResult {
@@ -59,14 +60,13 @@ export function useNoteDocumentManager({
           // 自愈机制：空库冷启动无任何笔记时，自动静默创建首篇默认笔记，防止 docId="" 导致白屏
           const createRes = await noteDocumentCreate({
             title: '未命名笔记',
-            initialMarkdown: '',
           });
           if (currentSeq !== listGenerationRef.current) return;
           if (createRes.ok && createRes.document) {
             setDocuments([createRes.document]);
             setActiveDocId(createRes.document.id);
           } else {
-            setActiveDocId(`strict-${wsId}`);
+            setActiveDocId(LEGACY_DEFAULT_DOC_ID);
           }
         } else {
           setDocuments(res.documents);
@@ -84,7 +84,7 @@ export function useNoteDocumentManager({
         setLoading(false);
       }
     }
-  }, [wsId]);
+  }, []);
 
   // 初始化拉取并监听全局写入微事件联动刷新（避免幽灵总线）
   useEffect(() => {
@@ -134,15 +134,12 @@ export function useNoteDocumentManager({
 
       const currentSeq = ++switchGenerationRef.current;
 
-      // 切换前脏数据强制刷盘（带 500ms 赛马超时守卫，防底层 I/O 挂死导致 UI 假死）
+      // 切换前脏数据强制可靠刷盘，杜绝 500ms 强杀丢数据
       if (flushPendingDraft) {
         try {
-          const timeoutPromise = new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error('flush_timeout')), 500)
-          );
-          await Promise.race([flushPendingDraft(), timeoutPromise]);
-        } catch {
-          // 超时或失败均静默放行，确保 UI 切换流畅
+          await flushPendingDraft();
+        } catch (err) {
+          console.error('[useNoteDocumentManager] switchDocument: flushPendingDraft error', err);
         }
       }
 
@@ -152,24 +149,20 @@ export function useNoteDocumentManager({
     [activeDocId, flushPendingDraft]
   );
 
-  // 3. 新建文档并立即切换激活（带 500ms 刷盘超时守卫）
+  // 3. 新建文档并立即切换激活（可靠等待草稿刷盘，杜绝 500ms 强杀）
   const createDocument = useCallback(
     async (params?: NoteDocumentCreateParams): Promise<NoteDocumentMeta | null> => {
-      // 新建前同样带 500ms 超时刷盘既有草稿
+      // 新建前同样可靠刷盘既有草稿，杜绝 500ms 强杀丢数据
       if (flushPendingDraft) {
         try {
-          const timeoutPromise = new Promise<void>((_, reject) =>
-            setTimeout(() => reject(new Error('flush_timeout')), 500)
-          );
-          await Promise.race([flushPendingDraft(), timeoutPromise]);
-        } catch {
-          // 超时或失败均静默放行
+          await flushPendingDraft();
+        } catch (err) {
+          console.error('[useNoteDocumentManager] createDocument: flushPendingDraft error', err);
         }
       }
 
       const res = await noteDocumentCreate({
         title: params?.title,
-        initialMarkdown: params?.initialMarkdown,
       });
 
       if (res.ok && res.document) {
@@ -219,14 +212,13 @@ export function useNoteDocumentManager({
           // 自愈保护：若删除了最后一篇文档，自动创建一篇默认空白笔记
           const createRes = await noteDocumentCreate({
             title: '未命名笔记',
-            initialMarkdown: '',
           });
           if (createRes.ok && createRes.document) {
             setDocuments([createRes.document]);
             setActiveDocId(createRes.document.id);
           } else {
             setDocuments([]);
-            setActiveDocId(`strict-${wsId}`);
+            setActiveDocId(LEGACY_DEFAULT_DOC_ID);
           }
         } else {
           setDocuments(nextDocs);
@@ -238,7 +230,7 @@ export function useNoteDocumentManager({
       }
       return false;
     },
-    [activeDocId, documents, wsId]
+    [activeDocId, documents]
   );
 
   // 6. 搜索过滤后的视图列表（极简单轨：纯标题过滤）
