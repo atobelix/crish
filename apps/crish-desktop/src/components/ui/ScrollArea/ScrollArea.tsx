@@ -101,6 +101,7 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
     ref
   ) => {
     const internalViewportRef = useRef<HTMLDivElement | null>(null);
+    const thumbRef = useRef<HTMLDivElement | null>(null);
     const idleTimerRef = useRef<number | null>(null);
     const pulseDelayTimerRef = useRef<number | null>(null);
     const pulseIntervalRef = useRef<number | null>(null);
@@ -169,19 +170,44 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       const { scrollTop, scrollLeft, scrollHeight, scrollWidth, clientHeight, clientWidth } = el;
       const maxY = Math.max(0, scrollHeight - clientHeight);
       const maxX = Math.max(0, scrollWidth - clientWidth);
-      setMetrics({
-        scrollTop,
-        scrollLeft,
-        scrollHeight,
-        scrollWidth,
-        clientHeight,
-        clientWidth,
-        isAtTop: scrollTop <= 1,
-        isAtBottom: maxY <= 0 || scrollTop >= maxY - 1,
-        isAtLeft: scrollLeft <= 1,
-        isAtRight: maxX <= 0 || scrollLeft >= maxX - 1,
-        progressY: maxY > 0 ? Math.min(1, Math.max(0, scrollTop / maxY)) : 0,
-        progressX: maxX > 0 ? Math.min(1, Math.max(0, scrollLeft / maxX)) : 0,
+      const isAtTop = scrollTop <= 1;
+      const isAtBottom = maxY <= 0 || scrollTop >= maxY - 1;
+      const isAtLeft = scrollLeft <= 1;
+      const isAtRight = maxX <= 0 || scrollLeft >= maxX - 1;
+      const progressY = maxY > 0 ? Math.min(1, Math.max(0, scrollTop / maxY)) : 0;
+      const progressX = maxX > 0 ? Math.min(1, Math.max(0, scrollLeft / maxX)) : 0;
+
+      setMetrics((prev) => {
+        if (
+          prev.scrollTop === scrollTop &&
+          prev.scrollLeft === scrollLeft &&
+          prev.scrollHeight === scrollHeight &&
+          prev.scrollWidth === scrollWidth &&
+          prev.clientHeight === clientHeight &&
+          prev.clientWidth === clientWidth &&
+          prev.isAtTop === isAtTop &&
+          prev.isAtBottom === isAtBottom &&
+          prev.isAtLeft === isAtLeft &&
+          prev.isAtRight === isAtRight &&
+          Math.abs(prev.progressY - progressY) < 0.0001 &&
+          Math.abs(prev.progressX - progressX) < 0.0001
+        ) {
+          return prev;
+        }
+        return {
+          scrollTop,
+          scrollLeft,
+          scrollHeight,
+          scrollWidth,
+          clientHeight,
+          clientWidth,
+          isAtTop,
+          isAtBottom,
+          isAtLeft,
+          isAtRight,
+          progressY,
+          progressX,
+        };
       });
     }, []);
 
@@ -276,20 +302,6 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       [executeStep, rigidBrake]
     );
 
-    const handleScroll = useCallback(
-      (e: React.UIEvent<HTMLDivElement>) => {
-        updateMetrics();
-        setIsScrolling(true);
-        if (idleTimerRef.current !== null) window.clearTimeout(idleTimerRef.current);
-        idleTimerRef.current = window.setTimeout(() => {
-          setIsScrolling(false);
-          onScrollIdle?.();
-        }, 150);
-        onScroll?.(e);
-      },
-      [updateMetrics, onScroll, onScrollIdle]
-    );
-
     // 18px 真实物理像素夹持与基于轨道的绝对偏移
     const minThumbSize = 18;
     const rawThumbHeight =
@@ -300,6 +312,27 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       actualTrackHeight > 0 ? Math.min(actualTrackHeight, Math.max(minThumbSize, rawThumbHeight)) : 0;
     const maxTravelPx = Math.max(0, actualTrackHeight - thumbHeightPx);
     const thumbTopPx = metrics.progressY * maxTravelPx;
+
+    const handleScroll = useCallback(
+      (e: React.UIEvent<HTMLDivElement>) => {
+        const el = e.currentTarget;
+        const maxY = Math.max(0, el.scrollHeight - el.clientHeight);
+        if (maxTravelPx > 0 && maxY > 0 && thumbRef.current) {
+          const progressY = Math.min(1, Math.max(0, el.scrollTop / maxY));
+          const topPx = progressY * maxTravelPx;
+          thumbRef.current.style.transform = `translate3d(0, ${topPx}px, 0)`;
+        }
+        updateMetrics();
+        setIsScrolling(true);
+        if (idleTimerRef.current !== null) window.clearTimeout(idleTimerRef.current);
+        idleTimerRef.current = window.setTimeout(() => {
+          setIsScrolling(false);
+          onScrollIdle?.();
+        }, 150);
+        onScroll?.(e);
+      },
+      [maxTravelPx, updateMetrics, onScroll, onScrollIdle]
+    );
 
     // W3C Pointer Capture 鼠标抓取拖拽引擎
     const handleThumbPointerDown = useCallback(
@@ -331,7 +364,12 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
       const { startY, startScrollTop, maxTravel, maxScroll } = dragStateRef.current;
       if (maxTravel > 0 && internalViewportRef.current) {
         const scrollDelta = ((e.clientY - startY) / maxTravel) * maxScroll;
-        internalViewportRef.current.scrollTop = Math.max(0, Math.min(startScrollTop + scrollDelta, maxScroll));
+        const nextScroll = Math.max(0, Math.min(startScrollTop + scrollDelta, maxScroll));
+        internalViewportRef.current.scrollTop = nextScroll;
+        const topPx = maxScroll > 0 ? (nextScroll / maxScroll) * maxTravel : 0;
+        if (thumbRef.current) {
+          thumbRef.current.style.transform = `translate3d(0, ${topPx}px, 0)`;
+        }
       }
     }, []);
 
@@ -434,10 +472,11 @@ export const ScrollArea = forwardRef<ScrollAreaHandle, ScrollAreaProps>(
 
             <div className={styles.isolatedTrack}>
               <div
+                ref={thumbRef}
                 className={`${styles.thumbIndicator} ${isDragging ? styles.dragging : ''}`}
                 style={{
                   height: `${thumbHeightPx}px`,
-                  top: `${thumbTopPx}px`,
+                  transform: `translate3d(0, ${thumbTopPx}px, 0)`,
                 }}
                 onPointerDown={handleThumbPointerDown}
                 onPointerMove={handleThumbPointerMove}

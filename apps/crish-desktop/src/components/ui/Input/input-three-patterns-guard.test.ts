@@ -190,6 +190,40 @@ describe('输入框四态体系与焦点/激活态刚性防御契约', () => {
     expect(allowedNone).toEqual([]);
   });
 
+  it('T22 阴影语义精确化：spread/同心光晕拦截，带偏移柔投影放行', () => {
+    // 带偏移的柔和投影（offsetY=4, blur=8, 无 spread）：不是外扩环 → 放行
+    const offsetSoft = analyzeBoxShadowSpread(`
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+    `);
+    expect(offsetSoft).toEqual([]);
+
+    // 同心光晕（offset 均为 0 且 blur > 1.5px）：外扩光晕 → 拦截
+    const concentricGlow = analyzeBoxShadowSpread(`
+      box-shadow: 0 0 8px rgba(0, 0, 0, 0.25);
+    `);
+    expect(concentricGlow.length).toBeGreaterThan(0);
+    expect(concentricGlow[0].spread).toBe(8);
+
+    // 多段阴影：环段（第二段 spread=3）拦截，柔段不影响
+    const mixed = analyzeBoxShadowSpread(`
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), 0 0 0 3px var(--focus-visible-ring);
+    `);
+    expect(mixed.length).toBeGreaterThan(0);
+    expect(mixed[0].spread).toBe(3);
+
+    // spread ≤ 1.5px 的偏移投影：放行
+    const smallSpread = analyzeBoxShadowSpread(`
+      box-shadow: 0 1px 2px 1px rgba(0, 0, 0, 0.08);
+    `);
+    expect(smallSpread).toEqual([]);
+
+    // 负偏移（-2px 2px 6px）：有偏移即非同心，blur 不构成外扩 → 放行
+    const negativeOffset = analyzeBoxShadowSpread(`
+      box-shadow: -2px 2px 6px rgba(0, 0, 0, 0.15);
+    `);
+    expect(negativeOffset).toEqual([]);
+  });
+
   it('AST 刚性拦截：强制形态 ④（搜索/筛选输入框）必须为无边框极简型，浅灰边框（如 border: 1px solid var(--border-color)）与深色焦点外框必须被刚性拦截报错', () => {
     // 1. 浅灰边框 (border: 1px solid var(--border-color)) 即使属于微弱 Design Token，在形态 ④ 中亦必须被 100% 刚性阻断
     const grayBorderViolation = analyzeFormFourMinimalist('.searchInput', `

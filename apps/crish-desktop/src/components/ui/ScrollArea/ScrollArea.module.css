@@ -43,6 +43,7 @@
   box-sizing: border-box;
   outline: none;
   scrollbar-width: none;
+  overflow-anchor: none;
 }
 
 .content {
@@ -128,6 +129,7 @@
 /* 轨道内滑块：二元灰度绝对死锁 (未激活 vs 激活)，基于轨道绝对定位与拖拽手柄 */
 .thumbIndicator {
   position: absolute;
+  top: 0;
   left: 0;
   width: 100%;
   border-radius: var(--scrollbar-thumb-radius, var(--radius-full, 9999px));
@@ -136,6 +138,8 @@
   cursor: grab;
   user-select: none;
   touch-action: none;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
 }
 
 /* 铁律：滑块 Hover、Active 与 Dragging 拖拽统统同色（--scrollbar-thumb-active），严禁第三态！ */
