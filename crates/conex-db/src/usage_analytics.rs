@@ -733,7 +733,10 @@ impl LocalDb {
                 }
                 "7d" => {
                     let diff_days = today_days - record_days;
-                    if (0..=7).contains(&diff_days) {
+                    // audit-repair-202609 T21：行轴为星期（7 行），只纳入
+                    // diff_days 0..=6 —— 恰好 7 个日历日且每星期行仅对应
+                    // 唯一一天；含 8 会让同一星期行叠加两天的数据。
+                    if (0..7).contains(&diff_days) {
                         let dow = day_of_week(record_days); // 0=Mon..6=Sun
                         if dow < 7 && h < 24 {
                             let idx = dow * 24 + h;

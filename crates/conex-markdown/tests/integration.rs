@@ -489,10 +489,15 @@ fn returns_empty_for_whitespace_only_and_nullish_like_blanks() {
     assert_eq!(render_markdown("\n\n\t\n"), "");
     assert_eq!(render_markdown("   \r\n  \r\n"), "");
     assert_eq!(strip_thought_placeholders("   \n\t  "), "");
-    assert_eq!(strip_thought_placeholders("---"), "---"); // strip 不剥 HR;render 会
-    assert_eq!(render_markdown("---"), "");
-    assert_eq!(render_markdown("***"), "");
-    assert_eq!(render_markdown("___"), "");
+    assert_eq!(strip_thought_placeholders("---"), "---");
+}
+
+#[test]
+fn renders_standard_horizontal_rule() {
+    setup();
+    assert_eq!(render_markdown("---"), "<hr class=\"md-hr\" />");
+    assert_eq!(render_markdown("***"), "<hr class=\"md-hr\" />");
+    assert_eq!(render_markdown("___"), "<hr class=\"md-hr\" />");
 }
 
 // ── XSS-safe escapes ─────────────────────────────────────────
@@ -565,18 +570,17 @@ fn inserts_wbr_between_cjk_and_latin_for_narrow_wrap() {
 }
 
 #[test]
-fn inserts_wbr_in_long_pure_cjk_runs_table_cells_plus_paragraphs() {
+fn pure_cjk_runs_do_not_insert_wbr_in_table_cells_or_paragraphs() {
     setup();
     let long = "这是一段很长的中文用于测试窄屏表格单元格断行效果如何";
     let cjk_count = long.chars().filter(|c| ('\u{4e00}'..='\u{9fff}').contains(c)).count();
     assert!(cjk_count > 10);
     let para = render_markdown(long);
-    assert!(para.contains("<wbr>"));
-    assert!(count_substr(&para, "<wbr>") >= 1);
+    assert!(!para.contains("<wbr>"));
 
     let table = render_markdown(&format!("| 列 | 值 |\n| --- | --- |\n| {} | 短 |\n", long));
     assert!(table.contains("md-td"));
-    assert!(table.contains("<wbr>"));
+    assert!(!table.contains("<wbr>"));
     // 属性里不得被插入 wbr
     assert_not_match(&table, r#"class="md-td"[^>]*<wbr>"#);
 }
@@ -1116,4 +1120,52 @@ fn italic_does_not_eat_list_markers() {
     assert!(html.contains("<ul"));
     assert_eq!(count_substr(&html, "<li"), 2);
     assert!(!html.contains("<em>item"));
+}
+
+// ── GFM Emoji shortcodes ─────────────────────────────────────
+
+#[test]
+fn translates_gfm_emoji_in_various_markdown_elements() {
+    setup();
+    let html = render_markdown("Status: :white_check_mark: and :x: and :rocket:");
+    assert!(html.contains("Status: ✅ and ❌ and 🚀"));
+
+    let table = render_markdown("| 任务 | 结果 |\n| --- | --- |\n| 单元测试 | :white_check_mark: 通过 |\n| 门禁 | :warning: 告警 |\n");
+    assert!(table.contains("✅ 通过"));
+    assert!(table.contains("⚠️ 告警"));
+
+    let list = render_markdown("- :tada: 完成发布\n- :bug: 待修问题\n");
+    assert!(list.contains("🎉 完成发布"));
+    assert!(list.contains("🐛 待修问题"));
+
+    let heading = render_markdown("# :bulb: 架构设计\n");
+    assert!(heading.contains("💡 架构设计"));
+}
+
+#[test]
+fn does_not_translate_emoji_in_code_blocks_or_inline_code() {
+    setup();
+    let inline = render_markdown("Inline code `:white_check_mark:` and `:x:` should remain untouched");
+    assert!(inline.contains("<code class=\"md-inline-code\">:white_check_mark:</code>"));
+    assert!(inline.contains("<code class=\"md-inline-code\">:x:</code>"));
+    assert!(!inline.contains("✅"));
+    assert!(!inline.contains("❌"));
+
+    let fence = render_markdown("```bash\necho :x:\necho :white_check_mark:\n```");
+    assert!(fence.contains(":x:"));
+    assert!(fence.contains(":white_check_mark:"));
+    assert!(!fence.contains("❌"));
+    assert!(!fence.contains("✅"));
+}
+
+#[test]
+fn exports_lookup_and_translate_gfm_emoji_directly() {
+    assert_eq!(conex_markdown::lookup_gfm_emoji("white_check_mark"), Some("✅"));
+    assert_eq!(conex_markdown::lookup_gfm_emoji("x"), Some("❌"));
+    assert_eq!(conex_markdown::lookup_gfm_emoji("unknown_code"), None);
+
+    assert_eq!(
+        conex_markdown::translate_gfm_emoji("测试 :white_check_mark: 与 :x:"),
+        "测试 ✅ 与 ❌"
+    );
 }

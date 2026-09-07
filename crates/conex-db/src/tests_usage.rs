@@ -193,6 +193,45 @@ fn query_activity_matrix_24h_and_7d() {
     assert_eq!(m_7d.cells.len(), 168);
 }
 
+/// audit-repair-202609 T21：7d 星期矩阵只纳入 diff_days 0..=6（7 个日历日），
+/// 第 8 天（diff_days = 7，同一星期）不得叠加进同一行。
+#[test]
+fn query_activity_matrix_7d_excludes_eighth_calendar_day() {
+    let db = LocalDb::open_in_memory().unwrap();
+    let now_ms = 1700000000000i64;
+    let tz = -480;
+
+    let insert = |db: &LocalDb, session: &str, ts: i64, tokens: u64| {
+        db.insert_usage_record(InsertUsageRecordInput {
+            session_id: session.to_string(),
+            run_id: None,
+            project_name: "conex".to_string(),
+            model: "test-model".to_string(),
+            provider: "test".to_string(),
+            prompt_tokens: tokens,
+            completion_tokens: 0,
+            cache_read_tokens: 0,
+            cache_write_tokens: 0,
+            cost_cny: 0.0,
+            cost_usd: 0.0,
+            timestamp: ts,
+        })
+        .unwrap();
+    };
+
+    // 今天（diff 0）与 6 天前（diff 6）纳入；7 天前（diff 7）排除
+    insert(&db, "today", now_ms, 500);
+    insert(&db, "six-days-ago", now_ms - 6 * 86_400_000, 700);
+    insert(&db, "seven-days-ago", now_ms - 7 * 86_400_000, 900);
+
+    let m = db.query_activity_matrix("7d", tz, Some(now_ms)).unwrap();
+    let total: u64 = m.cells.iter().map(|c| c.tokens).sum();
+    assert_eq!(
+        total, 1200u64,
+        "7d 星期矩阵只应包含今天(500)+6天前(700)，第 8 个日历日(900)不得计入"
+    );
+}
+
 #[test]
 fn import_legacy_usage_snapshot_idempotent() {
     let db = LocalDb::open_in_memory().unwrap();

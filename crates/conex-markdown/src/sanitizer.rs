@@ -218,8 +218,8 @@ pub fn is_local_path_ref(s: &str) -> bool {
 }
 
 /// 窄屏 CJK 断行: 在标签外文本插入 `<wbr>`。
-/// - CJK ↔ 拉丁/数字/路径字符边界
-/// - 长纯 CJK 串每隔 10 字(表格窄列、列表长句)
+/// - CJK ↔ 拉丁/数字/路径字符边界插入 `<wbr>`
+/// - 纯 CJK 长文本不再强插 `<wbr>`，交由现代 CSS 引擎接管，杜绝表格单元格列宽畸变。
 pub fn wrap_cjk_text_segment(text: &str) -> String {
     use std::sync::OnceLock;
     static BOUNDARY_RE: OnceLock<Regex> = OnceLock::new();
@@ -231,7 +231,7 @@ pub fn wrap_cjk_text_segment(text: &str) -> String {
         Regex::new(&pattern).expect("valid cjk boundary regex")
     });
 
-    let s = boundary_re
+    boundary_re
         .replace_all(text, |caps: &regex::Captures| {
             // 1+2 or 3+4 — 任一匹配
             if let (Some(a), Some(b)) = (caps.get(1), caps.get(2)) {
@@ -242,49 +242,7 @@ pub fn wrap_cjk_text_segment(text: &str) -> String {
                 String::new()
             }
         })
-        .to_string();
-
-    // 长纯 CJK 串每隔 10 字插 <wbr>(不在串末尾插)。
-    // 手写遍历替代 lookahead regex(regex crate 不支持 lookahead)。
-    split_long_cjk_runs(&s)
-}
-
-/// 判断字符是否为 CJK(与 CJK_CLASS 范围一致)。
-fn is_cjk_char(c: char) -> bool {
-    ('\u{3400}'..='\u{4dbf}').contains(&c)
-        || ('\u{4e00}'..='\u{9fff}').contains(&c)
-        || ('\u{f900}'..='\u{faff}').contains(&c)
-}
-
-/// 在连续 CJK 串中每隔 10 字插 `<wbr>`,不在串末尾插。
-fn split_long_cjk_runs(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + s.len() / 10 * 5);
-    let mut cjk_buf: Vec<char> = Vec::new();
-    let flush = |buf: &mut Vec<char>, out: &mut String| {
-        let total = buf.len();
-        for (i, c) in buf.iter().enumerate() {
-            out.push(*c);
-            // 每 10 字插 <wbr>,但不在串末尾插
-            if (i + 1) % 10 == 0 && i + 1 < total {
-                out.push_str("<wbr>");
-            }
-        }
-        buf.clear();
-    };
-    for c in s.chars() {
-        if is_cjk_char(c) {
-            cjk_buf.push(c);
-        } else {
-            if !cjk_buf.is_empty() {
-                flush(&mut cjk_buf, &mut out);
-            }
-            out.push(c);
-        }
-    }
-    if !cjk_buf.is_empty() {
-        flush(&mut cjk_buf, &mut out);
-    }
-    out
+        .to_string()
 }
 
 /// 从 markdown 链目标字符串取出 URL(去掉可选 title;支持尖括号)。
@@ -347,5 +305,19 @@ mod tests {
     #[test]
     fn link_destination_handles_angle_brackets() {
         assert_eq!(link_destination_url("<https://ex.com>"), "https://ex.com");
+    }
+
+    #[test]
+    fn wrap_cjk_does_not_insert_wbr_in_pure_cjk() {
+        let text = "这是一段非常非常长的连续纯中文字符串用于断言绝不强插断字标签";
+        let wrapped = wrap_cjk_text_segment(text);
+        assert_eq!(wrapped, text);
+    }
+
+    #[test]
+    fn wrap_cjk_inserts_wbr_at_latin_cjk_boundary() {
+        let text = "修复Bug完成";
+        let wrapped = wrap_cjk_text_segment(text);
+        assert_eq!(wrapped, "修复<wbr>Bug<wbr>完成");
     }
 }

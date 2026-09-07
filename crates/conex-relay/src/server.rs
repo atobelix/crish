@@ -4,7 +4,7 @@
 
 use crate::protocol::{FrameType, RelayFrame};
 use crate::session::{SessionRegistry, CHANNEL_BUFFER_CAPACITY};
-use crate::ticket::{TicketClaims, DEFAULT_SECRET};
+use crate::ticket::TicketClaims;
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use std::net::SocketAddr;
@@ -22,10 +22,13 @@ pub struct RelayServer {
 }
 
 impl RelayServer {
-    pub fn new(addr: SocketAddr, secret: Option<String>) -> Self {
+    /// `secret` 必填（audit-repair-202609 T15）：票据签名密钥由部署方提供
+    /// （`RELAY_SECRET` 环境变量，≥32 字节），历史源码默认密钥已删除——
+    /// 源码即钥匙的兜底属于硬编码漏洞。
+    pub fn new(addr: SocketAddr, secret: String) -> Self {
         Self {
             addr,
-            secret: secret.unwrap_or_else(|| DEFAULT_SECRET.to_string()),
+            secret,
             registry: Arc::new(SessionRegistry::new()),
         }
     }

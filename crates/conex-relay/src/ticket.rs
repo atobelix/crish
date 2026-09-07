@@ -1,16 +1,23 @@
-//! 短效票据（Relay Ticket）自校验模块
+//! 短效票据（Relay Ticket）自校验模块（audit-repair-202609 · T15 加固）
 //!
-//! 基于 HMAC-SHA256 签名机制，零 DB 查询即可在高并发下自校验权限。
-//! 票据格式: `<payload_base64>.<hmac_hex>`
+//! 基于 **HMAC-SHA256** 对称签名机制，零 DB 查询即可在高并发下自校验权限。
+//! 票据格式: `<payload_base64url>.<hmac_hex>`
 //! 有效期严格限制在 60 秒内，防御重放攻击。
+//!
+//! ## 纪律
+//! - **签名密钥必须由部署方提供**（`RELAY_SECRET` 环境变量，≥32 字节），
+//!   本 crate 不再提供任何默认密钥——源码即钥匙的历史默认值已删除；
+//! - 算法为 HMAC-SHA256（正确性由 RFC 4231 标准向量测试钉死）。历史提交
+//!   宣称的「Ed25519」与实现不符；如需签发/验签密钥分离的非对称架构，
+//!   须与云端签发服务协同改造后另立战役，禁止只改一边；
+//! - HMAC 实现保留手写（ipad/opad 标准结构，向量测试锁定），引入 `hmac`
+//!   crate 需新增依赖获取路径，收益不抵构建脆弱性。
 
 use anyhow::{bail, Context, Result};
 use hex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-pub const DEFAULT_SECRET: &str = "conex-flowbit-relay-secret-key-2026";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TicketClaims {
@@ -37,7 +44,7 @@ impl TicketClaims {
     pub fn sign(&self, secret: &str) -> Result<String> {
         let json = serde_json::to_string(self)?;
         let b64 = base64_encode(json.as_bytes());
-        let sig = compute_hmac(secret, b64.as_bytes());
+        let sig = compute_hmac(secret.as_bytes(), b64.as_bytes());
         Ok(format!("{}.{}", b64, hex::encode(sig)))
     }
 
@@ -52,7 +59,7 @@ impl TicketClaims {
         let sig_hex = parts[1];
 
         // 验证签名
-        let expected_sig = compute_hmac(secret, payload_b64.as_bytes());
+        let expected_sig = compute_hmac(secret.as_bytes(), payload_b64.as_bytes());
         let given_sig = hex::decode(sig_hex).context("Invalid signature hex")?;
 
         if !constant_time_eq(&expected_sig, &given_sig) {
@@ -71,9 +78,9 @@ impl TicketClaims {
     }
 }
 
-/// 简易 HMAC-SHA256 实现（零额外重型依赖）
-fn compute_hmac(key: &str, data: &[u8]) -> [u8; 32] {
-    let key_bytes = key.as_bytes();
+/// 简易 HMAC-SHA256 实现（零额外重型依赖；正确性由 RFC 4231 向量测试锁定）
+fn compute_hmac(key: &[u8], data: &[u8]) -> [u8; 32] {
+    let key_bytes = key;
     let mut k_ipad = [0x36u8; 64];
     let mut k_opad = [0x5cu8; 64];
 
@@ -185,6 +192,9 @@ fn base64_decode(s: &str) -> Result<Vec<u8>> {
 mod tests {
     use super::*;
 
+    /// 测试密钥（仅测试；生产必须经 RELAY_SECRET 提供）
+    const TEST_SECRET: &str = "test-secret-0123456789abcdef01234567";
+
     #[test]
     fn test_ticket_sign_and_verify() {
         let now = SystemTime::now()
@@ -200,10 +210,10 @@ mod tests {
             exp: now + 60, // 60s
         };
 
-        let token = claims.sign(DEFAULT_SECRET).expect("Signing must succeed");
+        let token = claims.sign(TEST_SECRET).expect("Signing must succeed");
         assert!(token.contains('.'));
 
-        let verified = TicketClaims::verify(&token, DEFAULT_SECRET).expect("Verification must succeed");
+        let verified = TicketClaims::verify(&token, TEST_SECRET).expect("Verification must succeed");
         assert_eq!(claims, verified);
     }
 
@@ -217,9 +227,70 @@ mod tests {
             exp: 1000, // Long expired
         };
 
-        let token = claims.sign(DEFAULT_SECRET).unwrap();
-        let err = TicketClaims::verify(&token, DEFAULT_SECRET);
+        let token = claims.sign(TEST_SECRET).unwrap();
+        let err = TicketClaims::verify(&token, TEST_SECRET);
         assert!(err.is_err());
         assert!(err.unwrap_err().to_string().contains("expired"));
+    }
+
+    /// T15：篡改 payload / 签名必须验证失败（恒定时间比较不放过时序侧信道）
+    #[test]
+    fn test_ticket_tamper_rejected() {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let claims = TicketClaims {
+            account_id: "user-1".to_string(),
+            device_id: "dev-1".to_string(),
+            target_device_id: None,
+            role: "client".to_string(),
+            exp: now + 60,
+        };
+        let token = claims.sign(TEST_SECRET).unwrap();
+
+        // 篡改签名最后一个字符
+        let mut parts = token.split('.').collect::<Vec<_>>();
+        let mut sig = parts[1].to_string();
+        let last = sig.pop().unwrap();
+        sig.push(if last == '0' { '1' } else { '0' });
+        parts[1] = Box::leak(sig.into_boxed_str());
+        let tampered_sig = parts.join(".");
+        assert!(TicketClaims::verify(&tampered_sig, TEST_SECRET).is_err());
+
+        // 用错误密钥签发
+        let wrong_key_token = claims.sign("another-secret-0123456789abcdef0123").unwrap();
+        assert!(TicketClaims::verify(&wrong_key_token, TEST_SECRET).is_err());
+    }
+
+    /// T15：RFC 4231 (HMAC-SHA256) 标准向量，锁定手写 compute_hmac 的正确性。
+    /// Test Case 1 / 2 / 6 来自 RFC 4231 §4.2。
+    #[test]
+    fn test_hmac_rfc4231_vectors() {
+        // Test Case 1: key = 0x0b 重复 20 次, data = "Hi There"
+        let key = [0x0bu8; 20];
+        let hmac = compute_hmac(&key, b"Hi There");
+        assert_eq!(
+            hex::encode(hmac),
+            "b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7",
+            "RFC 4231 Test Case 1 failed"
+        );
+
+        // Test Case 2: key = "Jefe", data = "what do ya want for nothing?"
+        let hmac = compute_hmac(b"Jefe", b"what do ya want for nothing?");
+        assert_eq!(
+            hex::encode(hmac),
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843",
+            "RFC 4231 Test Case 2 failed"
+        );
+
+        // Test Case 6（key 超过 64 字节块：验证 hash-key 分支）
+        let big_key = [0xaau8; 131];
+        let hmac_big = compute_hmac(
+            &big_key,
+            b"Test Using Larger Than Block-Size Key - Hash Key First",
+        );
+        assert_eq!(
+            hex::encode(hmac_big),
+            "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54",
+            "RFC 4231 Test Case 6 failed"
+        );
     }
 }

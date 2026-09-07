@@ -20,15 +20,13 @@ use crate::sanitizer::{
     is_local_path_ref, is_safe_href, is_safe_img_src, link_destination_url, sanitize_url_candidate,
     wrap_cjk_text_segment,
 };
-use crate::table::{stripe_class, table_cell_align_attr, Align};
+use crate::table::{normalize_alignments, stripe_class, table_cell_align_attr, Align};
 use crate::MAX_MARKDOWN_INPUT;
 
 /// 思考占位 / "本轮总结" 噪音标题行(标题/粗体/方括号/裸行)。
 const RE_ROUND_SUMMARY_ZH: &str = r"本(?:轮|回合)(?:工作|内容|完成)?(?:总结|小结|回顾)";
 const RE_ROUND_SUMMARY_EN: &str = r"(?:Round|Session|Turn)\s+summary";
 
-static HR_LINE_RE: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"^[ \t]*(-{3,}|_{3,}|\*{3,})[ \t]*$").expect("valid hr regex"));
 static MULTI_BLANK_RE: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"\n{3,}").expect("valid multi blank regex"));
 static THOUGHT_RE: Lazy<Regex> = Lazy::new(|| {
@@ -73,6 +71,8 @@ impl ListState {
 struct TableState {
     /// 列对齐(已对齐到 col_count)。
     alignments: Vec<Align>,
+    /// 基准列数 C(以表头列数为准)。
+    col_count: usize,
     /// 是否在 thead 阶段。
     in_thead: bool,
     /// tbody 行索引(0-based),用于斑马纹。
@@ -229,7 +229,8 @@ impl Renderer {
         // - Rust regex crate 不支持 lookbehind, 改用 find_iter + 检查前一个字符的方式
         //   实现 `(?<!["`>])` 等效语义 (避免在 HTML 属性内识别路径)。
         // - 路径段输出 button, 非路径段走 escape_html + wrap_cjk_text_segment。
-        let html = wrap_bare_paths_and_escape(text);
+        let emoji_translated = translate_gfm_emoji(text);
+        let html = wrap_bare_paths_and_escape(&emoji_translated);
         self.output.push_str(&html);
     }
 
@@ -276,8 +277,7 @@ impl Renderer {
     }
 
     fn handle_rule(&mut self) {
-        // JS 实现删除 HR(测试期望 render("---") 返回 "")
-        // pulldown-cmark 把 --- 解析为 Rule 事件
+        self.output.push_str("<hr class=\"md-hr\" />");
     }
 
     fn handle_task_marker(&mut self, checked: bool) {
@@ -546,8 +546,10 @@ impl Renderer {
 
     fn start_table(&mut self, alignments: Vec<pulldown_cmark::Alignment>) {
         let aligns: Vec<Align> = alignments.iter().map(|a| Align::from_pulldown(*a)).collect();
+        let col_count = aligns.len();
         self.table = Some(TableState {
             alignments: aligns,
+            col_count,
             in_thead: false,
             body_row_index: 0,
             cell_index: 0,
@@ -587,6 +589,10 @@ impl Renderer {
     fn end_table_head(&mut self) {
         if let Some(t) = &mut self.table {
             t.in_thead = false;
+            if t.cell_index > 0 {
+                t.col_count = t.cell_index;
+                t.alignments = normalize_alignments(&t.alignments, t.col_count);
+            }
         }
         self.output.push_str("</tr></thead>");
     }
@@ -610,6 +616,13 @@ impl Renderer {
     fn end_table_row(&mut self) {
         if let Some(t) = &mut self.table {
             if !t.in_thead {
+                while t.cell_index < t.col_count {
+                    let align = t.alignments.get(t.cell_index).copied().unwrap_or(Align::Left);
+                    let align_attr = table_cell_align_attr(align);
+                    self.output
+                        .push_str(&format!("<td class=\"md-td\"{}></td>", align_attr));
+                    t.cell_index += 1;
+                }
                 t.body_row_index += 1;
             }
         }
@@ -713,10 +726,8 @@ fn render_markdown_uncached(raw: &str) -> String {
     if stripped.is_empty() {
         return String::new();
     }
-    // 4. 删除 HR 行(JS 实现行为)
-    let no_hr = HR_LINE_RE.replace_all(&stripped, "").to_string();
-    // 5. 压缩 3+ 空行为 2 空
-    let compact = MULTI_BLANK_RE.replace_all(&no_hr, "\n\n").to_string();
+    // 4. 压缩 3+ 空行为 2 空
+    let compact = MULTI_BLANK_RE.replace_all(&stripped, "\n\n").to_string();
     if compact.trim().is_empty() {
         return String::new();
     }
@@ -1098,19 +1109,169 @@ fn build_code_fence_html_shell(lang: &str, file_path: Option<&str>, inner: Strin
         String::new()
     };
 
+    let actions = format!(
+        "<div class=\"md-code-actions\">{}<button type=\"button\" class=\"md-code-copy\" title=\"复制\" aria-label=\"复制代码\">复制</button></div>",
+        lang_badge
+    );
+
     format!(
-        "<div class=\"md-code-block\"{}>{}{}<button type=\"button\" class=\"md-code-copy\" title=\"复制\" aria-label=\"复制代码\">复制</button><pre class=\"md-code-pre hljs\"><code class=\"language-{}\">{}</code></pre></div>",
+        "<div class=\"md-code-block\"{}>{}{}<pre class=\"md-code-pre hljs\"><code class=\"language-{}\">{}</code></pre></div>",
         block_attr,
         breadcrumb,
-        lang_badge,
+        actions,
         escape_html(lang),
         inner
     )
 }
 
+// ── GFM Emoji 短代码转义 ────────────────────────────────────────
+
+/// GFM Emoji 短代码核心字典映射（编译期常量跳转表）
+#[inline(always)]
+pub fn lookup_gfm_emoji(name: &str) -> Option<&'static str> {
+    match name {
+        // 状态与检查（工程高频）
+        "white_check_mark" => Some("✅"),
+        "heavy_check_mark" => Some("✔️"),
+        "check" => Some("✓"),
+        "x" => Some("❌"),
+        "negative_squared_cross_mark" => Some("❎"),
+        "ballot_box_with_check" => Some("☑️"),
+        "warning" => Some("⚠️"),
+        "rotating_light" => Some("🚨"),
+        "stop_sign" => Some("🛑"),
+        "exclamation" => Some("❗"),
+        "question" => Some("❓"),
+        "bulb" => Some("💡"),
+        "bug" => Some("🐛"),
+        "wrench" => Some("🔧"),
+        "gear" => Some("⚙️"),
+        "package" => Some("📦"),
+        "rocket" => Some("🚀"),
+        "tada" => Some("🎉"),
+        "sparkles" => Some("✨"),
+        "fire" => Some("🔥"),
+        "zap" => Some("⚡"),
+        "memo" | "pencil" => Some("📝"),
+        "pencil2" => Some("✏️"),
+        "bookmark" => Some("🔖"),
+        "link" => Some("🔗"),
+        "lock" => Some("🔒"),
+        "unlock" => Some("🔓"),
+        "info" => Some("ℹ️"),
+
+        // 反馈与评审
+        "+1" | "thumbsup" => Some("👍"),
+        "-1" | "thumbsdown" => Some("👎"),
+        "heart" => Some("❤️"),
+        "star" => Some("⭐"),
+        "star2" => Some("🌟"),
+        "100" => Some("💯"),
+        "eyes" => Some("👀"),
+        "speech_balloon" => Some("💬"),
+
+        // 状态圆圈指示器
+        "white_circle" => Some("⚪"),
+        "black_circle" => Some("⚫"),
+        "red_circle" => Some("🔴"),
+        "blue_circle" | "large_blue_circle" => Some("🔵"),
+        "green_circle" => Some("🟢"),
+        "yellow_circle" => Some("🟡"),
+
+        // 箭头与方向
+        "arrow_right" => Some("➡️"),
+        "arrow_left" => Some("⬅️"),
+        "arrow_up" => Some("⬆️"),
+        "arrow_down" => Some("⬇️"),
+        "soon" => Some("🔜"),
+        "top" => Some("🔝"),
+
+        // 设备与环境
+        "computer" => Some("💻"),
+        "hourglass" => Some("⌛"),
+        "hourglass_flowing_sand" => Some("⏳"),
+        "apple" => Some("🍎"),
+        "penguin" => Some("🐧"),
+
+        _ => None,
+    }
+}
+
+/// 将文本中的 GFM Emoji 短代码转义为 Unicode 字符。
+/// 保证 O(N) 复杂度，无短代码时零内存拷贝。
+pub fn translate_gfm_emoji(text: &str) -> String {
+    // 快速启发式路径：如果不含冒号，直接借用
+    if !text.contains(':') {
+        return text.to_string();
+    }
+
+    let mut out = String::with_capacity(text.len());
+    let mut last_idx = 0;
+    let bytes = text.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        if bytes[i] == b':' {
+            let start = i;
+            let mut j = i + 1;
+            let mut valid = false;
+            // 短代码最大限制 32 字节，只允许小写英文字母、数字、下划线、加号、减号
+            while j < len && (j - start) <= 33 {
+                let b = bytes[j];
+                if b == b':' {
+                    if j > start + 1 {
+                        valid = true;
+                    }
+                    break;
+                }
+                if !(b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'+' || b == b'-') {
+                    break;
+                }
+                j += 1;
+            }
+
+            if valid && j < len && bytes[j] == b':' {
+                let key = &text[start + 1..j];
+                if let Some(emoji) = lookup_gfm_emoji(key) {
+                    out.push_str(&text[last_idx..start]);
+                    out.push_str(emoji);
+                    i = j + 1;
+                    last_idx = i;
+                    continue;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    if last_idx == 0 {
+        return text.to_string();
+    }
+
+    if last_idx < len {
+        out.push_str(&text[last_idx..]);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gfm_emoji_translation_and_lookup() {
+        assert_eq!(translate_gfm_emoji("hello :white_check_mark: world"), "hello ✅ world");
+        assert_eq!(translate_gfm_emoji(":x:"), "❌");
+        assert_eq!(translate_gfm_emoji("no emoji here"), "no emoji here");
+        assert_eq!(translate_gfm_emoji("http://foo.bar"), "http://foo.bar");
+        assert_eq!(translate_gfm_emoji(":::"), ":::");
+        assert_eq!(translate_gfm_emoji(":unknown_code:"), ":unknown_code:");
+        assert_eq!(translate_gfm_emoji(":rocket::tada:"), "🚀🎉");
+        assert_eq!(translate_gfm_emoji("中文:rocket:测试"), "中文🚀测试");
+        assert_eq!(lookup_gfm_emoji("fire"), Some("🔥"));
+        assert_eq!(lookup_gfm_emoji("nonexistent"), None);
+    }
 
     /// C-01：CJK 多字节字符在非 char boundary 处截断会 panic；
     /// `floor_char_boundary` 回退到前一个字符边界，截断后首尾字符完整。

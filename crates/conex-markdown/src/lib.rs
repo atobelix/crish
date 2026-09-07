@@ -19,11 +19,14 @@ pub mod renderer;
 pub mod sanitizer;
 pub mod table;
 
-pub use renderer::{render_markdown, render_markdown_batch, render_markdown_stream, strip_thought_placeholders};
+pub use renderer::{
+    lookup_gfm_emoji, render_markdown, render_markdown_batch, render_markdown_stream,
+    strip_thought_placeholders, translate_gfm_emoji,
+};
 pub use highlight::{clear_cache, highlight_code};
 
-/// 输入长度上限:超过截断,避免恶意长输入拖垮渲染线程。
-pub const MAX_MARKDOWN_INPUT: usize = 100_000;
+/// 输入长度上限:超过截断(5MB),避免恶意长输入拖垮渲染线程,杜绝100KB~256KB文件静默截断。
+pub const MAX_MARKDOWN_INPUT: usize = 5 * 1024 * 1024;
 
 /// 渲染过程中产生的错误类型。
 #[derive(Debug, thiserror::Error)]
