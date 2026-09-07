@@ -18,8 +18,19 @@ vi.mock('../diff/DiffCardUnifiedView', () => ({
 }));
 
 vi.mock('../diff/VirtualPlainCodeViewer', () => ({
-  VirtualPlainCodeViewer: ({ content, filePath }: { content: string; filePath: string }) => (
-    <div data-testid="virtual-plain-code-viewer">
+  VirtualPlainCodeViewer: ({
+    content,
+    filePath,
+    wordWrap,
+  }: {
+    content: string;
+    filePath: string;
+    wordWrap?: boolean;
+  }) => (
+    <div
+      data-testid="virtual-plain-code-viewer"
+      data-wordwrap={String(wordWrap)}
+    >
       Plain code for {filePath}: {content}
     </div>
   ),
@@ -280,5 +291,38 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
     );
 
     expect(await screen.findByTestId('diff-card-unified-view')).toBeDefined();
+  });
+
+  it('10. 支持工具栏自动换行切换按钮并向 VirtualPlainCodeViewer 传递 wordWrap 属性', async () => {
+    localStorage.removeItem('crish:file-viewer-word-wrap');
+
+    render(
+      <ToastProvider>
+        <FileViewerCard filePath="src/App.tsx" initialMode="plain" />
+      </ToastProvider>
+    );
+
+    const viewer = await screen.findByTestId('virtual-plain-code-viewer');
+    // 默认开启换行
+    expect(viewer.getAttribute('data-wordwrap')).toBe('true');
+
+    const wrapBtn = screen.getByRole('button', { name: '关闭自动换行' });
+    expect(wrapBtn).toBeDefined();
+
+    // 点击切换为关闭
+    await act(async () => {
+      wrapBtn.click();
+    });
+
+    expect(viewer.getAttribute('data-wordwrap')).toBe('false');
+    expect(localStorage.getItem('crish:file-viewer-word-wrap')).toBe('false');
+
+    // 再次点击切换为开启
+    await act(async () => {
+      wrapBtn.click();
+    });
+
+    expect(viewer.getAttribute('data-wordwrap')).toBe('true');
+    expect(localStorage.getItem('crish:file-viewer-word-wrap')).toBe('true');
   });
 });

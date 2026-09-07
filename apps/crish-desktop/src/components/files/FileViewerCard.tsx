@@ -21,7 +21,10 @@ import {
   getWorkspacePath,
   pathRelativeToRoot,
   revealInOs,
+  isAbsoluteFsPath,
+  resolveWorkspacePath,
 } from '../../api/workspaceFsApi';
+import { readLocalTextBestEffort } from '../../api/localFileReader';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { DiffCardUnifiedView } from '../diff/DiffCardUnifiedView';
 import { getComputedChanges } from '../diff/useDiffData';
@@ -40,6 +43,7 @@ export interface FileViewerCardProps {
 const COPY_ALL_LABEL = '复制全部内容';
 const HISTORY_LABEL = '查看历史编辑情况';
 const MORE_ACTIONS_LABEL = '更多操作';
+const WORD_WRAP_LABEL = '自动换行';
 
 export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
   ({ filePath, initialMode = 'plain' }) => {
@@ -62,6 +66,31 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       const override = consumeFileViewerModeOverride(canonicalTabId);
       return override || initialMode;
     });
+
+    // 自动换行状态（默认开启，持久化到 localStorage）
+    const [wordWrap, setWordWrap] = useState<boolean>(() => {
+      try {
+        const saved = localStorage.getItem('crish:file-viewer-word-wrap');
+        if (saved !== null) {
+          return saved === 'true';
+        }
+      } catch {
+        /* swallow */
+      }
+      return true;
+    });
+
+    const toggleWordWrap = useCallback(() => {
+      setWordWrap((prev) => {
+        const next = !prev;
+        try {
+          localStorage.setItem('crish:file-viewer-word-wrap', String(next));
+        } catch {
+          /* swallow */
+        }
+        return next;
+      });
+    }, []);
 
     // 历史编辑记录抽屉打开状态
     const [historyOpen, setHistoryOpen] = useState(false);
@@ -101,11 +130,31 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       async function load() {
         setPlainLoading(true);
         try {
+          const isAbsolute = isAbsoluteFsPath(filePath);
+          const inWorkspace = Boolean(resolveWorkspacePath(filePath));
+
+          if (isAbsolute && !inWorkspace) {
+            const localText = await readLocalTextBestEffort(filePath);
+            if (active && typeof localText === 'string') {
+              setPlainCode(localText);
+              return;
+            }
+          }
+
           const res = await readTextFile(filePath);
           if (active) {
             setPlainCode(res.content || '');
           }
         } catch (err) {
+          try {
+            const localText = await readLocalTextBestEffort(filePath);
+            if (active && typeof localText === 'string') {
+              setPlainCode(localText);
+              return;
+            }
+          } catch {
+            /* swallow */
+          }
           if (active) {
             setPlainCode(`读取源码失败：${String(err)}`);
           }
@@ -346,7 +395,21 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
           </div>
 
           <div className={styles.rightActions}>
-            {/* ① 核心常用快捷操作：【复制全部内容】 */}
+            {/* ① 切换自动换行 */}
+            <Tooltip content={wordWrap ? '关闭自动换行' : '开启自动换行'}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className={`${styles.actBtn} ${wordWrap ? styles.actBtnActive : ''}`}
+                aria-label={wordWrap ? '关闭自动换行' : '开启自动换行'}
+                aria-pressed={wordWrap}
+                onClick={toggleWordWrap}
+                icon={<Lucide.WrapText size={14} />}
+              />
+            </Tooltip>
+
+            {/* ② 核心常用快捷操作：【复制全部内容】 */}
             <Tooltip content={COPY_ALL_LABEL}>
               <Button
                 type="button"
@@ -359,7 +422,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
               />
             </Tooltip>
 
-            {/* ② 核心常用快捷操作：【查看历史编辑情况】 */}
+            {/* ③ 核心常用快捷操作：【查看历史编辑情况】 */}
             <Tooltip content={HISTORY_LABEL}>
               <Button
                 type="button"
@@ -404,7 +467,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                   <span>正在加载源码...</span>
                 </div>
               ) : (
-                <VirtualPlainCodeViewer content={plainCode} filePath={filePath} />
+                <VirtualPlainCodeViewer
+                  content={plainCode}
+                  filePath={filePath}
+                  wordWrap={wordWrap}
+                />
               )
             ) : f && f.changes && f.changes.length > 0 ? (
               <DiffCardUnifiedView

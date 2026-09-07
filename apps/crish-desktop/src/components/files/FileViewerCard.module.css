@@ -114,6 +114,11 @@
   background: var(--tint-hover);
 }
 
+.actBtnActive {
+  color: var(--text-primary);
+  background: var(--tint-active, var(--tint-hover));
+}
+
 .bodyWrap {
   flex: 1;
   min-height: 0;

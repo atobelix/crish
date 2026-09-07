@@ -1,15 +1,14 @@
 // @vitest-environment jsdom
 /**
- * diff/VirtualPlainCodeViewer 行高契约测试（审计 F7-F15）
+ * diff/VirtualPlainCodeViewer 换行与行高契约测试
  *
- * 缺陷：固定行高 20px + whiteSpace: pre-wrap 折行假设失效——
- * 长行折成多行后实际行高 > 20px，虚拟窗口 startIndex/offsetTop 错位、
- * totalHeight 偏小导致底部内容滚动不到；ui-size 缩放后行高整体漂移。
- *
- * 修复契约：
- * 1. 行文本不折行（white-space: pre + 横向滚动，与 .lineText 基类一致）——
- *    行高恒定，虚拟滚动数学保持精确；
- * 2. 行高按首行实测（offsetHeight）而非硬编码 20px——ui-size 缩放安全。
+ * 重构契约：
+ * 1. 默认开启自动换行（wordWrap = true）：
+ *    行文本 white-space: pre-wrap + break-word，单行严禁出现独立滚动条（overflow-x: hidden）；
+ * 2. 关闭自动换行（wordWrap = false）：
+ *    行文本 white-space: pre，单行依然严禁独立滚动条，横向滚动由外部容器统一接管（overflow-x: auto）；
+ * 3. 行高按实测高度动态适配（ui-size 缩放安全）；
+ * 4. 动态折行高度推算：长行折行后能准确定位视口高度，触底完整可达。
  */
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -22,14 +21,40 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('diff/VirtualPlainCodeViewer 行高契约（F7-F15）', () => {
-  it('长行不折行：行文本 white-space: pre + 横向滚动', () => {
+describe('diff/VirtualPlainCodeViewer 换行与行高契约', () => {
+  it('默认自动换行：行文本 white-space: pre-wrap，杜绝单行独立横向滚动条', () => {
     const { container } = render(
       <VirtualPlainCodeViewer
         content={'x'.repeat(500) + '\n短行'}
         filePath="a.ts"
       />
     );
+    const outer = container.firstElementChild as HTMLElement;
+    expect(outer.style.overflowX).toBe('hidden');
+
+    const lineTexts = Array.from(
+      container.querySelectorAll(`.${styles.lineText}`)
+    );
+    expect(lineTexts.length).toBeGreaterThan(0);
+    for (const el of lineTexts) {
+      const styleEl = el as HTMLElement;
+      expect(styleEl.style.whiteSpace).toBe('pre-wrap');
+      expect(styleEl.style.overflowX).toBe('hidden');
+      expect(styleEl.style.overflowX).not.toBe('auto');
+    }
+  });
+
+  it('关闭自动换行：行文本 white-space: pre，外部容器接管横向滚动，单行仍无独立滚动条', () => {
+    const { container } = render(
+      <VirtualPlainCodeViewer
+        content={'x'.repeat(500) + '\n短行'}
+        filePath="a.ts"
+        wordWrap={false}
+      />
+    );
+    const outer = container.firstElementChild as HTMLElement;
+    expect(outer.style.overflowX).toBe('auto');
+
     const lineTexts = Array.from(
       container.querySelectorAll(`.${styles.lineText}`)
     );
@@ -37,7 +62,8 @@ describe('diff/VirtualPlainCodeViewer 行高契约（F7-F15）', () => {
     for (const el of lineTexts) {
       const styleEl = el as HTMLElement;
       expect(styleEl.style.whiteSpace).toBe('pre');
-      expect(styleEl.style.overflowX).toBe('auto');
+      expect(styleEl.style.overflowX).toBe('hidden');
+      expect(styleEl.style.overflowX).not.toBe('auto');
     }
   });
 
@@ -60,4 +86,17 @@ describe('diff/VirtualPlainCodeViewer 行高契约（F7-F15）', () => {
     expect(heightDiv.style.height).toBe(`${3 * 34}px`);
     expect(heightDiv.style.height).not.toBe(`${3 * 20}px`);
   });
+
+  it('折行高度动态估算：超长行在换行模式下参与总高度累加', () => {
+    const longLine = 'a'.repeat(800);
+    const { container } = render(
+      <VirtualPlainCodeViewer content={`${longLine}\nb`} filePath="c.ts" wordWrap={true} />
+    );
+    const outer = container.firstElementChild as HTMLElement;
+    const heightDiv = outer.firstElementChild as HTMLElement;
+    const parsedHeight = parseFloat(heightDiv.style.height);
+    // 800 字符长行按 ~80 字符/行计算折成多行，总高度远大于 2 * 22px
+    expect(parsedHeight).toBeGreaterThan(2 * 22);
+  });
 });
+
