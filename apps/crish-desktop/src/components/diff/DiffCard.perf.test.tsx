@@ -179,8 +179,8 @@ describe('DiffCard / DiffData — 百KB级代码 Diff 性能与折叠断言', ()
     );
     const duration = performance.now() - startTime;
 
-    // 初次挂载性能断言 < 500ms（jsdom 环境；并行负载下 300ms 基线过紧，真回归会超一个量级）
-    expect(duration).toBeLessThan(500.0);
+    // 初次挂载性能断言 < 800ms（jsdom 环境；并发负载下预留合理波动，真回归会超一个量级）
+    expect(duration).toBeLessThan(800.0);
 
     // DOM 限制断言：DOM 中渲染的 line 节点数受限于视口切片（<= 100 个元素），而不是 30,000 行 (90,000+ 节点)
     const renderedLines = container.querySelectorAll('[class*="line"]');

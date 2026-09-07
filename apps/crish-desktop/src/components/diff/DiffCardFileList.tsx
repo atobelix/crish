@@ -146,15 +146,22 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
   const { showToast } = useToast();
 
   const copySingleFilePatch = useCallback(
-    (f: FileDiff) => {
+    // audit-repair-202609 T24：await 写剪贴板结果后再提示——写失败不得假报「已复制」
+    async (f: FileDiff) => {
       const targetDiff = getFileDiffData ? (getFileDiffData(f) ?? f) : f;
       const patch = formatGitPatch(targetDiff);
-      if (patch && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(patch).catch(() => {});
-      }
       const { name } = splitFilePath(f.filePath);
-      showToast(`已复制 ${name} 差异 Patch`);
-      onCopyCode?.(f.filePath);
+      if (!patch || typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+        showToast(`复制失败：暂无 ${name} 的差异内容`);
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(patch);
+        showToast(`已复制 ${name} 差异 Patch`);
+        onCopyCode?.(f.filePath);
+      } catch {
+        showToast('复制失败：剪贴板不可用');
+      }
     },
     [getFileDiffData, showToast, onCopyCode]
   );
@@ -291,7 +298,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                       tooltip={TOOLTIP_COPY_PATCH}
                       onClick={(e) => {
                         e.stopPropagation();
-                        copySingleFilePatch(f);
+                        void copySingleFilePatch(f);
                       }}
                       icon={<Lucide.Copy size={13} />}
                     />
@@ -314,7 +321,7 @@ export const DiffCardFileList: React.FC<DiffCardFileListProps> = ({
                       tooltip={TOOLTIP_COPY_PATCH}
                       onClick={(e) => {
                         e.stopPropagation();
-                        copySingleFilePatch(f);
+                        void copySingleFilePatch(f);
                       }}
                       icon={<Lucide.Copy size={13} />}
                     />

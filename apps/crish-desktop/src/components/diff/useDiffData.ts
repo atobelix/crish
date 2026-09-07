@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   assistantTurnLabel,
   collectMessageDiffs,
@@ -321,17 +321,29 @@ export function useDiffData(opts: {
     return o;
   }, [aiTurns, hasAiTurns]);
 
+  const plainCacheOrderRef = useRef<string[]>([]);
+
   const changeFileCompareMode = useCallback(
     async (fp: string, mode: CompareMode) => {
       setFileCompareModes((p) => ({ ...p, [fp]: mode }));
       if (mode === 'plain' && plainFileContents[fp] === undefined) {
         setPlainLoading((p) => ({ ...p, [fp]: true }));
         try {
-          const r = await readTextFile(fp, 1000000);
-          setPlainFileContents((p) => ({
-            ...p,
-            [fp]: r.content || '（空文件或读取失败）',
-          }));
+          const r = await readTextFile(fp, 20000);
+          setPlainFileContents((p) => {
+            const next = {
+              ...p,
+              [fp]: r.content || '（空文件或读取失败）',
+            };
+            const order = plainCacheOrderRef.current.filter((k) => k !== fp);
+            order.push(fp);
+            if (order.length > 5) {
+              const evict = order.shift()!;
+              delete next[evict];
+            }
+            plainCacheOrderRef.current = order;
+            return next;
+          });
         } catch (err) {
           setPlainFileContents((p) => ({
             ...p,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { DiffCardFileList } from './DiffCardFileList';
 import type { FileDiff } from '../../store/types';
 import { classifyFileDiff } from '../../api/applyFileDiff';
@@ -341,12 +341,15 @@ describe('DiffCardFileList (平直单轨与正交子域专项测试)', () => {
     fireEvent.click(copyBtn);
 
     // 断言：触发了剪贴板写入与 Toast 提示，且阻止事件冒泡
+    //（T24：写入经 await 后才提示，断言须等微任务完成）
     expect(writeTextSpy).toHaveBeenCalledTimes(1);
     expect(writeTextSpy.mock.calls[0][0]).toContain('diff --git a/src/components/Button.tsx');
     expect(handleSetActive).not.toHaveBeenCalled();
     expect(handleOpenFileViewer).not.toHaveBeenCalled();
 
-    expect(showSpy).toHaveBeenCalledWith('已复制 Button.tsx 差异 Patch', undefined, undefined);
+    await waitFor(() => {
+      expect(showSpy).toHaveBeenCalledWith('已复制 Button.tsx 差异 Patch', undefined, undefined);
+    });
     showSpy.mockRestore();
   });
 

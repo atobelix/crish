@@ -521,7 +521,7 @@
 .rowActBtn.danger[data-variant]:hover {
   color: var(--diff-del-fg, hsl(0 75% 50%));
   --btn-fg: var(--diff-del-fg, hsl(0 75% 50%));
-  --btn-hover-overlay: color-mix(in srgb, var(--color-error, #ef4444) 12%, transparent);
+  --btn-hover-overlay: color-mix(in srgb, var(--color-error) 12%, transparent);
 }
 
 .dangerBtn:active,
@@ -530,7 +530,7 @@
 .danger[data-variant]:active,
 .rowActBtn.danger:active,
 .rowActBtn.danger[data-variant]:active {
-  --btn-active-overlay: color-mix(in srgb, var(--color-error, #ef4444) 20%, transparent);
+  --btn-active-overlay: color-mix(in srgb, var(--color-error) 20%, transparent);
 }
 
 .rowActBtn,
@@ -640,6 +640,7 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+  overflow-anchor: none;
 }
 
 /* 比对行容器 (DEL-22: 拔除 --bg-primary 脏灰底) */
@@ -853,7 +854,7 @@
   border-right: none;
   border-bottom: none;
   border-radius: 0;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   cursor: pointer;
   transition:
     border-color var(--transition-fast, 120ms),
@@ -901,7 +902,7 @@
   gap: var(--space-2, 8px);
   padding: 10px 12px;
   border-top: 1px solid color-mix(in srgb, var(--border-subtle) 18%, transparent);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -942,7 +943,7 @@
   height: 52px;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 20%, transparent);
   border-radius: var(--radius-md, 6px);
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   padding: 8px 10px;
   font-size: var(--font-size-xs, 12px);
   font-family: inherit;
@@ -972,7 +973,7 @@
 .commitInput:disabled {
   opacity: var(--opacity-disabled, 0.5);
   cursor: not-allowed;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
 }
 
 .commitActions {
