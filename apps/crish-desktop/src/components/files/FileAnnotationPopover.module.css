@@ -1,0 +1,145 @@
+/* ==========================================================================
+   FileAnnotationPopover.module.css
+   极简高级胶囊选区批注浮层 (Design Token SSOT)
+   严禁硬编码色彩与粗大实心色块，遵照 §13 严格控制焦点对比度不超过 10%
+   ========================================================================== */
+
+:global(::highlight(file-annotation-active-selection)) {
+  background-color: color-mix(
+    in srgb,
+    var(--accent-color) 30%,
+    transparent
+  );
+  color: inherit;
+}
+
+.popover {
+  position: absolute;
+  z-index: var(--z-modal, 100);
+  width: 300px;
+  min-height: 36px;
+  height: auto;
+  box-sizing: border-box;
+  padding: 6px 6px 6px 12px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  background: var(--bg-elevated, #ffffff);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-color);
+  border-radius: 18px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.09), 0 1px 3px rgba(0, 0, 0, 0.04);
+  animation: popoverFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: auto;
+  transition: border-color var(--transition-fast, 120ms ease), border-radius 120ms ease;
+}
+
+.popover:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
+}
+
+@keyframes popoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.nativeInput,
+.nativeTextarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 22px;
+  max-height: 120px;
+  line-height: 20px;
+  border: none !important;
+  outline: none !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  box-sizing: border-box !important;
+  padding: 1px 0 !important;
+  margin: 0 !important;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+  resize: none;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.nativeInput::placeholder,
+.nativeTextarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.actionGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 1px;
+}
+
+.actionBtn {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  padding: 0;
+  margin: 0;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: none;
+  outline: none;
+  transition:
+    background var(--transition-fast, 120ms ease),
+    color var(--transition-fast, 120ms ease),
+    transform var(--transition-fast, 120ms ease);
+}
+
+.actionBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* 激活态（有输入内容）：不使用大块纯绿矩形，采用柔和高雅的主题色与微量 tint */
+.actionBtnActive {
+  color: var(--accent-color);
+}
+
+.actionBtnActive:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+  transform: scale(1.05);
+}
+
+.closeBtn {
+  color: var(--text-muted);
+}
+
+.closeBtn:hover {
+  color: var(--text-primary);
+  background: var(--tint-hover);
+}
+

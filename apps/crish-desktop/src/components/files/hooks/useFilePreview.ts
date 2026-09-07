@@ -1,9 +1,11 @@
-import { createElement, useCallback, useEffect, useRef, useState } from 'react';
-import { countPendingFileAnnotations, detectFileKind, FILE_PREVIEW_CHUNK_LINES, FILE_PREVIEW_MAX_LINES, isMarkdownFilename, nextFilePreviewLineBudget, pathBasename, readTextFile, resolveWorkspacePath, toAssetUrl, writeTextFile } from '../../../api/workspaceFsApi';
+import { createElement, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { countPendingFileAnnotations, detectFileKind, FILE_PREVIEW_CHUNK_LINES, FILE_PREVIEW_CODE_BUDGET, FILE_PREVIEW_MAX_LINES, isMarkdownFilename, nextFilePreviewLineBudget, pathBasename, readTextFile, resolveWorkspacePath, toAssetUrl, writeTextFile } from '../../../api/workspaceFsApi';
 import { listOpenOptionsForFile, type HostOpener } from '../../../api/hostOpenersApi';
 import { pathRelativeToRoot } from '../../../api/workspaceFsApi';
 import { ConfirmDialog } from '../../ui';
 import { useConfirmGate } from '../../../hooks/useConfirmGate';
+import { useWordWrapPreference } from './useWordWrapPreference';
+import { isJsonFileOrContent, formatJsonSafe } from '../jsonFormatUtils';
 
 export type ViewMode = 'browse' | 'detail';
 
@@ -45,7 +47,7 @@ export function useFilePreview() {
     detailLoading: false,
     loadingMore: false,
     truncated: false,
-    lineBudget: FILE_PREVIEW_CHUNK_LINES,
+    lineBudget: FILE_PREVIEW_CODE_BUDGET,
   });
   const detailLoading = loadState.detailLoading;
   const loadingMore = loadState.loadingMore;
@@ -103,19 +105,58 @@ export function useFilePreview() {
     onDirtyChangeRef.current?.(dirty);
   }, [dirty]);
 
+  const [wordWrap, toggleWordWrap] = useWordWrapPreference();
+  const [isFormatted, setIsFormatted] = useState(false);
+  const [formattedContent, setFormattedContent] = useState('');
+
   const kind = selected ? detectFileKind(pathBasename(selected)) : 'binary';
   const isMd = Boolean(view === 'detail' && selected && isMarkdownFilename(pathBasename(selected)) && !editing);
   const canEdit = kind === 'text' || kind === 'table';
   const canLoadMore = truncated && lineBudget < FILE_PREVIEW_MAX_LINES && (kind === 'text' || kind === 'table') && !editing;
 
+  const isJson = Boolean(
+    selected && (kind === 'text' || kind === 'table') && isJsonFileOrContent(selected, content)
+  );
+
+  const toggleFormatJson = useCallback(async () => {
+    if (isFormatted) {
+      setIsFormatted(false);
+      setFormattedContent('');
+      return;
+    }
+
+    let raw = content;
+    if (truncated && selected) {
+      try {
+        const full = await readTextFile(selected, FILE_PREVIEW_MAX_LINES);
+        raw = full.content;
+        setContent(full.content);
+        setTruncated(full.truncated);
+        setLineBudget(FILE_PREVIEW_MAX_LINES);
+      } catch (err) {
+        showActionHint(`加载完整文件失败：${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+    }
+
+    const res = formatJsonSafe(raw, 2);
+    if (res.success) {
+      setFormattedContent(res.formatted);
+      setIsFormatted(true);
+    } else {
+      showActionHint(`JSON 格式化失败：${res.error || '语法错误'}`);
+    }
+  }, [isFormatted, content, truncated, selected, showActionHint]);
+
   const openFile = useCallback(async (filePath: string) => {
     const resolved = resolveWorkspacePath(filePath);
     setSelected(resolved); setView('detail'); setEditing(false); setDirty(false); setDetailLoading(true);
     setContent(''); setEditBuf(''); setAssetUrl(null); setActionHint(null); setTruncated(false);
+    setIsFormatted(false); setFormattedContent('');
     void listOpenOptionsForFile(resolved).then((opts) => { setFileOpeners(opts.openers); setOpenDefaultLabel(opts.defaultLabel || '打开'); }).catch(() => { setFileOpeners([]); setOpenDefaultLabel('打开'); });
-    const initBudget = detectFileKind(pathBasename(resolved)) === 'table' ? 200 : FILE_PREVIEW_CHUNK_LINES;
-    setLineBudget(initBudget); setMdMode('render'); setLoadingMore(false);
     const k = detectFileKind(pathBasename(resolved));
+    const initBudget = k === 'table' ? 200 : FILE_PREVIEW_CODE_BUDGET;
+    setLineBudget(initBudget); setMdMode('render'); setLoadingMore(false);
     try {
       if (k === 'image' || k === 'pdf') { const url = await toAssetUrl(resolved); setAssetUrl(url); if (!url) setActionHint('无法生成预览（需桌面壳 · 资源协议）'); }
       else if (k === 'text' || k === 'table') { const res = await readTextFile(resolved, initBudget); setContent(res.content); setEditBuf(res.content); openedContentRef.current = res.content; setTruncated(res.truncated); }
@@ -145,7 +186,7 @@ export function useFilePreview() {
         });
         if (!ok) return;
       }
-      await writeTextFile(selected, editBuf); setContent(editBuf); openedContentRef.current = editBuf; setDirty(false); setEditing(false);
+      await writeTextFile(selected, editBuf, true); setContent(editBuf); openedContentRef.current = editBuf; setDirty(false); setEditing(false);
     } catch (e) { showActionHint(e instanceof Error ? e.message : '保存失败'); }
   }, [selected, editing, editBuf, clearActionHint, showActionHint, confirmGate]);
 
@@ -159,11 +200,13 @@ export function useFilePreview() {
   const resetPreview = useCallback(() => {
     setSelected(null); setView('browse'); setEditing(false); setDirty(false);
     setContent(''); setEditBuf(''); setAssetUrl(null); setActionHint(null); setTruncated(false);
+    setIsFormatted(false); setFormattedContent('');
   }, []);
 
   const ret = {
     selected, view, content, editBuf, editing, dirty, truncated, lineBudget, loadingMore, mdMode, assetUrl, detailLoading,
     fileOpeners, openDefaultLabel, actionHint, pendingCount, kind, isMd, canEdit, canLoadMore, openedContentRef,
+    wordWrap, toggleWordWrap, isJson, isFormatted, formattedContent, toggleFormatJson,
     openFile, loadMoreLines, saveFile, copyPath, setView, setMdMode, setEditing, setEditBuf, setDirty,
     setSelected, clearActionHint, showActionHint, resetPreview, defaultEditor, actionHintTimerRef, setPendingCount,
     confirmGateView: renderConfirmGate(createElement(ConfirmDialog)),

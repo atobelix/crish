@@ -325,4 +325,44 @@ describe('FileViewerCard 单轨差异比对与模式响应', () => {
     expect(viewer.getAttribute('data-wordwrap')).toBe('true');
     expect(localStorage.getItem('crish:file-viewer-word-wrap')).toBe('true');
   });
+
+  it('11. 当打开 JSON 文件时渲染格式化按钮，点击格式化后显示缩进内容并可还原', async () => {
+    vi.mocked(workspaceFsApi.readTextFile).mockResolvedValueOnce({
+      content: '{"hello":"world","count":10}',
+      lineCount: 1,
+      truncated: false,
+      path: 'data/config.json',
+    });
+
+    render(
+      <ToastProvider>
+        <FileViewerCard filePath="data/config.json" initialMode="plain" />
+      </ToastProvider>
+    );
+
+    const viewer = await screen.findByTestId('virtual-plain-code-viewer');
+    expect(viewer.textContent).toContain('{"hello":"world","count":10}');
+
+    const formatBtn = screen.getByRole('button', { name: '格式化 JSON 排版' });
+    expect(formatBtn).toBeDefined();
+
+    // 点击格式化
+    await act(async () => {
+      formatBtn.click();
+    });
+
+    // 格式化后包含 2 空格缩进换行
+    expect(viewer.textContent).toContain('{\n  "hello": "world"');
+
+    // 按钮文案变为还原
+    const restoreBtn = screen.getByRole('button', { name: '还原紧凑格式' });
+    expect(restoreBtn).toBeDefined();
+
+    // 点击还原
+    await act(async () => {
+      restoreBtn.click();
+    });
+
+    expect(viewer.textContent).toContain('{"hello":"world","count":10}');
+  });
 });

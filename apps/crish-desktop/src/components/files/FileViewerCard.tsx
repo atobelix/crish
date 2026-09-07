@@ -1,6 +1,5 @@
-import React, { useMemo, useState, useEffect, useCallback } from 'react';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
 import * as Lucide from 'lucide-react';
-import type { ViewRenderContext } from '../../services/view-registry/ViewTypes';
 import type { FileDiff } from '../../store/types';
 import {
   openToolInSession,
@@ -23,8 +22,9 @@ import {
   revealInOs,
   isAbsoluteFsPath,
   resolveWorkspacePath,
+  FILE_PREVIEW_MAX_LINES,
 } from '../../api/workspaceFsApi';
-import { readLocalTextBestEffort } from '../../api/localFileReader';
+import { usePlainCodeLoader } from './hooks/usePlainCodeLoader';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import { DiffCardUnifiedView } from '../diff/DiffCardUnifiedView';
 import { getComputedChanges } from '../diff/useDiffData';
@@ -32,6 +32,9 @@ import { useToast } from '../../services/toast/ToastContext';
 import { Button, Tooltip, Menu } from '../ui';
 import type { SelectOptionItem } from '../ui/Menu/types';
 import { FileViewerHistoryDrawer } from './FileViewerHistoryDrawer';
+import { useWordWrapPreference } from './hooks/useWordWrapPreference';
+import { isJsonFileOrContent, formatJsonSafe } from './jsonFormatUtils';
+import { FileAnnotationPopover } from './FileAnnotationPopover';
 import styles from './FileViewerCard.module.css';
 
 export interface FileViewerCardProps {
@@ -67,30 +70,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       return override || initialMode;
     });
 
-    // 自动换行状态（默认开启，持久化到 localStorage）
-    const [wordWrap, setWordWrap] = useState<boolean>(() => {
-      try {
-        const saved = localStorage.getItem('crish:file-viewer-word-wrap');
-        if (saved !== null) {
-          return saved === 'true';
-        }
-      } catch {
-        /* swallow */
-      }
-      return true;
-    });
+    // 根卡片容器引用（供选区批注几何锚定）
+    const cardRef = useRef<HTMLDivElement>(null);
 
-    const toggleWordWrap = useCallback(() => {
-      setWordWrap((prev) => {
-        const next = !prev;
-        try {
-          localStorage.setItem('crish:file-viewer-word-wrap', String(next));
-        } catch {
-          /* swallow */
-        }
-        return next;
-      });
-    }, []);
+    // 自动换行状态（统一单一真理源 Hook）
+    const [wordWrap, toggleWordWrap] = useWordWrapPreference();
 
     // 历史编辑记录抽屉打开状态
     const [historyOpen, setHistoryOpen] = useState(false);
@@ -122,53 +106,37 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
     }, [initialMode]);
 
     // 独立读取完整文件源码
-    const [plainCode, setPlainCode] = useState<string>('');
-    const [plainLoading, setPlainLoading] = useState<boolean>(false);
+    const { plainCode, plainLoading, plainTruncated, plainLineCount } =
+      usePlainCodeLoader(filePath);
+
+    // JSON 检测与格式化排版状态
+    const [isFormatted, setIsFormatted] = useState(false);
+    const [formattedCode, setFormattedCode] = useState('');
+    const isJson = useMemo(
+      () => isJsonFileOrContent(filePath, plainCode),
+      [filePath, plainCode]
+    );
+    const displayCode = isFormatted && formattedCode ? formattedCode : plainCode;
 
     useEffect(() => {
-      let active = true;
-      async function load() {
-        setPlainLoading(true);
-        try {
-          const isAbsolute = isAbsoluteFsPath(filePath);
-          const inWorkspace = Boolean(resolveWorkspacePath(filePath));
-
-          if (isAbsolute && !inWorkspace) {
-            const localText = await readLocalTextBestEffort(filePath);
-            if (active && typeof localText === 'string') {
-              setPlainCode(localText);
-              return;
-            }
-          }
-
-          const res = await readTextFile(filePath);
-          if (active) {
-            setPlainCode(res.content || '');
-          }
-        } catch (err) {
-          try {
-            const localText = await readLocalTextBestEffort(filePath);
-            if (active && typeof localText === 'string') {
-              setPlainCode(localText);
-              return;
-            }
-          } catch {
-            /* swallow */
-          }
-          if (active) {
-            setPlainCode(`读取源码失败：${String(err)}`);
-          }
-        } finally {
-          if (active) {
-            setPlainLoading(false);
-          }
-        }
-      }
-      void load();
-      return () => {
-        active = false;
-      };
+      setIsFormatted(false);
+      setFormattedCode('');
     }, [filePath]);
+
+    const toggleFormatJson = useCallback(() => {
+      if (isFormatted) {
+        setIsFormatted(false);
+        setFormattedCode('');
+        return;
+      }
+      const res = formatJsonSafe(plainCode, 2);
+      if (res.success) {
+        setFormattedCode(res.formatted);
+        setIsFormatted(true);
+      } else {
+        showToast(`JSON 格式化失败：${res.error || '语法错误'}`);
+      }
+    }, [isFormatted, plainCode, showToast]);
 
     // 打开方式（HostOpeners）
     const [openDefaultLabel, setOpenDefaultLabel] =
@@ -215,7 +183,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
       try {
         let text = plainCode;
         if (!text) {
-          const res = await readTextFile(filePath);
+          const res = await readTextFile(filePath, 20000);
           text = res.content || '';
         }
         await navigator.clipboard.writeText(text);
@@ -350,9 +318,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 
     return (
       <div
+        ref={cardRef}
         className={`${styles.card} chat-side-panel`}
         aria-label="单文件代码查看"
         data-file-preview-host="file-viewer"
+        style={{ position: 'relative' }}
       >
         <div
           className={`${styles.header} side-panel-toolbar`}
@@ -395,7 +365,25 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
           </div>
 
           <div className={styles.rightActions}>
-            {/* ① 切换自动换行 */}
+            {/* ① JSON 格式化排版 */}
+            {isJson && viewMode === 'plain' ? (
+              <Tooltip content={isFormatted ? '还原紧凑格式' : '格式化 JSON 排版'}>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={`${styles.actBtn} ${isFormatted ? styles.actBtnActive : ''}`}
+                  aria-label={isFormatted ? '还原紧凑格式' : '格式化 JSON 排版'}
+                  aria-pressed={isFormatted}
+                  onClick={toggleFormatJson}
+                  icon={<Lucide.Braces size={14} />}
+                >
+                  {isFormatted ? '还原' : '格式化'}
+                </Button>
+              </Tooltip>
+            ) : null}
+
+            {/* ② 切换自动换行 */}
             <Tooltip content={wordWrap ? '关闭自动换行' : '开启自动换行'}>
               <Button
                 type="button"
@@ -404,7 +392,7 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                 className={`${styles.actBtn} ${wordWrap ? styles.actBtnActive : ''}`}
                 aria-label={wordWrap ? '关闭自动换行' : '开启自动换行'}
                 aria-pressed={wordWrap}
-                onClick={toggleWordWrap}
+                onClick={() => toggleWordWrap()}
                 icon={<Lucide.WrapText size={14} />}
               />
             </Tooltip>
@@ -467,11 +455,18 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
                   <span>正在加载源码...</span>
                 </div>
               ) : (
-                <VirtualPlainCodeViewer
-                  content={plainCode}
-                  filePath={filePath}
-                  wordWrap={wordWrap}
-                />
+                <>
+                  <VirtualPlainCodeViewer
+                    content={displayCode}
+                    filePath={filePath}
+                    wordWrap={wordWrap}
+                  />
+                  {plainTruncated && (
+                    <div className={styles.truncNotice} role="status">
+                      已加载前 {plainLineCount} 行（超出 {FILE_PREVIEW_MAX_LINES} 行上限已截断），如需完整内容请用系统关联程序打开
+                    </div>
+                  )}
+                </>
               )
             ) : f && f.changes && f.changes.length > 0 ? (
               <DiffCardUnifiedView
@@ -503,6 +498,11 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
             />
           )}
         </div>
+
+        <FileAnnotationPopover
+          filePath={absolutePath}
+          containerRef={cardRef}
+        />
       </div>
     );
   }
@@ -510,16 +510,4 @@ export const FileViewerCard: React.FC<FileViewerCardProps> = React.memo(
 
 FileViewerCard.displayName = 'FileViewerCard';
 
-export const FileViewerCardView: React.FC<ViewRenderContext> = (ctx) => {
-  const filePath = (ctx.params?.filePath as string) || '';
-  const initialMode = (ctx.params?.initialMode as 'plain' | 'diff') || 'plain';
-  return (
-    <FileViewerCard
-      key={filePath}
-      filePath={filePath}
-      initialMode={initialMode}
-    />
-  );
-};
-
-FileViewerCardView.displayName = 'FileViewerCardView';
+export { FileViewerCardView } from './FileViewerCardView';

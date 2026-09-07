@@ -1,20 +1,11 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useRef } from 'react';
 import styles from './FilesCard.module.css';
-import { Button, Tooltip } from '../ui';
+import { Button, MarkdownDocumentView, Tooltip } from '../ui';
 import { ExternalLink, X } from 'lucide-react';
-import { pathBasename } from '../../api/workspaceFsApi';
-import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
-import {
-  normalizeCodeBlockIndent,
-  rematerializeMarkdownHtml,
-} from '../../api/codeBlockIndent';
-import { useSettingsField, useSessionStore } from '../../store/storeAccess';
-import {
-  addPendingFileAnnotation,
-  parseCsvPreview,
-} from '../../api/workspaceFsApi';
+import { parseCsvPreview, pathBasename } from '../../api/workspaceFsApi';
 import { FileEditor } from './FileEditor';
 import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
+import { FileAnnotationPopover } from './FileAnnotationPopover';
 import type { ViewMode } from './hooks/useFilePreview';
 
 /** files 叶内预览。禁止挂 document.body 或整屏覆盖层。 */
@@ -42,6 +33,9 @@ interface FilePreviewPreviewProps {
   mdMode: 'render' | 'source';
   assetUrl: string | null;
   canLoadMore: boolean;
+  wordWrap?: boolean;
+  formattedContent?: string;
+  isFormatted?: boolean;
 }
 
 /** 预览操作回调域（加载更多、编辑缓冲变更、错误清除、外部打开）。 */
@@ -78,22 +72,16 @@ export const FilePreview = React.memo(function FilePreview({
     mdMode,
     assetUrl,
     canLoadMore,
+    wordWrap = true,
+    formattedContent,
+    isFormatted,
   } = previewState;
   const { onLoadMore, onEditBufChange, onError, onOpenFile } = actions;
   const previewPaneRef = useRef<HTMLDivElement>(null);
-  const [selText, setSelText] = useState('');
-  const [commentDraft, setCommentDraft] = useState('');
-  const [selAnchor, setSelAnchor] = useState<{
-    top: number;
-    left: number;
-  } | null>(null);
-  const { html: mdHtml } = useAsyncMarkdownHtml(
-    isMd && mdMode === 'render' ? content || '（空文件）' : ''
-  );
-  const codeIndent = useSettingsField((s) =>
-    normalizeCodeBlockIndent(s.appSettings?.markdown?.codeBlockIndent)
-  );
-  const mdHtmlIndented = rematerializeMarkdownHtml(mdHtml, codeIndent);
+
+  const displayContent =
+    isFormatted && formattedContent ? formattedContent : content;
+
 
   const onPreviewScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
@@ -104,60 +92,6 @@ export const FilePreview = React.memo(function FilePreview({
     },
     [canLoadMore, onLoadMore]
   );
-
-  const onTextSelect = useCallback(() => {
-    requestAnimationFrame(() => {
-      const selection = window.getSelection();
-      const text = selection?.toString().trim() || '';
-      if (!text.length) {
-        setSelText('');
-        setSelAnchor(null);
-        return;
-      }
-      setSelText(text.slice(0, 2000));
-      try {
-        if (!selection || selection.rangeCount === 0) {
-          setSelAnchor(null);
-          return;
-        }
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
-        const pane = previewPaneRef.current;
-        if (!pane || !rect || (rect.width === 0 && rect.height === 0)) {
-          setSelAnchor(null);
-          return;
-        }
-        const paneRect = pane.getBoundingClientRect();
-        const top = Math.min(
-          Math.max(rect.bottom - paneRect.top + pane.scrollTop + 6, 8),
-          Math.max(pane.scrollHeight - 120, 8)
-        );
-        const left = Math.min(
-          Math.max(rect.left - paneRect.left + pane.scrollLeft, 8),
-          Math.max(pane.clientWidth - 280, 8)
-        );
-        setSelAnchor({ top, left });
-      } catch {
-        setSelAnchor(null);
-      }
-    });
-  }, []);
-
-  const submitSelectionComment = useCallback(() => {
-    if (!selected || !selText.trim() || !commentDraft.trim()) return;
-    addPendingFileAnnotation(
-      {
-        path: selected,
-        selectedText: selText.trim(),
-        text: commentDraft.trim(),
-      },
-      // 批注绑定产生时刻的活跃会话（会话隔离，禁全局暗流）
-      { targetSessionId: useSessionStore.getState().activeSessionId }
-    );
-    setSelText('');
-    setCommentDraft('');
-    setSelAnchor(null);
-  }, [selected, selText, commentDraft]);
 
   if (!selected) {
     return (
@@ -267,34 +201,38 @@ export const FilePreview = React.memo(function FilePreview({
             />
           ) : isMd && mdMode === 'render' ? (
             <div className={styles.filesMdWrap}>
-              <div
-                className={`${styles.filesMdBody} md-rendered msg-assistant-text`}
-                dangerouslySetInnerHTML={{ __html: mdHtmlIndented }}
+              <MarkdownDocumentView
+                content={displayContent || '（空文件）'}
+                filePath={selected || ''}
+                variant="document"
+                wordWrap={wordWrap}
+                onOpenPath={onOpenFile}
+                onScroll={onPreviewScroll}
+                footerSlot={
+                  canLoadMore ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className={styles.filesLoadMore}
+                      disabled={loadingMore}
+                      onClick={onLoadMore}
+                    >
+                      {loadingMore ? '加载中…' : '继续加载更多'}
+                    </Button>
+                  ) : truncated ? (
+                    <div className={styles.filesTrunc}>已达预览上限</div>
+                  ) : null
+                }
               />
-              {canLoadMore ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className={styles.filesLoadMore}
-                  disabled={loadingMore}
-                  onClick={onLoadMore}
-                >
-                  {loadingMore ? '加载中…' : '继续加载更多'}
-                </Button>
-              ) : null}
             </div>
           ) : (
-            <div
-              className={styles.filesCodeViewerWrap}
-              onMouseUp={onTextSelect}
-              onKeyUp={onTextSelect}
-            >
+            <div className={styles.filesCodeViewerWrap}>
               <div className={styles.filesCodeViewerBody}>
                 <VirtualPlainCodeViewer
-                  content={content || ''}
+                  content={displayContent || ''}
                   filePath={selected || ''}
-                  wordWrap={true}
+                  wordWrap={wordWrap}
                 />
               </div>
               {canLoadMore ? (
@@ -334,62 +272,15 @@ export const FilePreview = React.memo(function FilePreview({
             </Button>
           </div>
         )}
-      </div>
 
-      {selText && !editing ? (
-        <div
-          className={`${styles.filesSelBar} ${selAnchor ? styles.isAnchored : ''}`}
-          role="region"
-          aria-label="选区批注"
-          style={
-            selAnchor ? { top: selAnchor.top, left: selAnchor.left } : undefined
-          }
-        >
-          <div className={styles.filesSelPreview}>
-            {selText.length > 80 ? `${selText.slice(0, 80)}…` : selText}
-          </div>
-          <div className={styles.filesSelForm}>
-            <input
-              value={commentDraft}
-              onChange={(e) => setCommentDraft(e.target.value)}
-              placeholder="批注…"
-              autoFocus
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') submitSelectionComment();
-                if (e.key === 'Escape') {
-                  setSelText('');
-                  setCommentDraft('');
-                  setSelAnchor(null);
-                }
-              }}
-            />
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              className={`${styles.filesSoftBtn} ${styles.filesSoftBtnEmphasis}`}
-              disabled={!commentDraft.trim()}
-              onClick={submitSelectionComment}
-            >
-              添加
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className={styles.filesSoftBtn}
-              onClick={() => {
-                setSelText('');
-                setCommentDraft('');
-                setSelAnchor(null);
-              }}
-            >
-              取消
-            </Button>
-          </div>
-          <div className={styles.filesSelHint}>随下一条消息发送 · Esc</div>
-        </div>
-      ) : null}
+        {selected ? (
+          <FileAnnotationPopover
+            filePath={selected}
+            containerRef={previewPaneRef}
+            disabled={editing}
+          />
+        ) : null}
+      </div>
     </div>
   );
 });

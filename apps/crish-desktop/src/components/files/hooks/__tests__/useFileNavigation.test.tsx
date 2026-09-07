@@ -10,6 +10,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, renderHook, screen, fireEvent, cleanup, act } from '@testing-library/react';
 import React from 'react';
 import { useFileNavigation } from '../useFileNavigation';
+import * as workspaceFsApi from '../../../../api/workspaceFsApi';
+import * as projectStore from '../../../../api/projectStore';
 
 /** 宿主 Harness：渲染 hook 的 confirmGateView（等价 FilesCard 的挂载方式） */
 function Harness({ dirty }: { dirty: boolean }) {
@@ -111,6 +113,85 @@ describe('useFileNavigation', () => {
       openDialog();
       await settle('cancel');
       expect(window.__navResult).toBe(false);
+    });
+  });
+
+  describe('revealPath 路径漫游与祖先级联展开', () => {
+    it('对工作区内部文件级联展开所有祖先目录，并保持根目录完整不被冲掉', async () => {
+      vi.spyOn(workspaceFsApi, 'resolveWorkspacePath').mockImplementation((p) =>
+        p.replace(/\\/g, '/')
+      );
+      vi.spyOn(workspaceFsApi, 'listDirectory').mockImplementation(
+        async (dir) => {
+          const d = dir.replace(/\\/g, '/');
+          if (d === 'C:/project') {
+            return [
+              {
+                name: 'skill',
+                path: 'C:/project/skill',
+                isDir: true,
+                size: 0,
+                mtime: 0,
+              },
+              {
+                name: 'README.md',
+                path: 'C:/project/README.md',
+                isDir: false,
+                size: 100,
+                mtime: 0,
+              },
+            ];
+          }
+          if (d === 'C:/project/skill') {
+            return [
+              {
+                name: 'design',
+                path: 'C:/project/skill/design',
+                isDir: true,
+                size: 0,
+                mtime: 0,
+              },
+            ];
+          }
+          if (d === 'C:/project/skill/design') {
+            return [
+              {
+                name: 'jakub-skills',
+                path: 'C:/project/skill/design/jakub-skills',
+                isDir: true,
+                size: 0,
+                mtime: 0,
+              },
+              {
+                name: 'apple-design.md',
+                path: 'C:/project/skill/design/apple-design.md',
+                isDir: false,
+                size: 200,
+                mtime: 0,
+              },
+            ];
+          }
+          return [];
+        }
+      );
+
+      vi.spyOn(projectStore, 'getWorkspacePath').mockReturnValue('C:/project');
+
+      const { result } = renderHook(() => useFileNavigation());
+
+      await act(async () => {
+        result.current.setCwd('C:/project');
+        await result.current.revealPath(
+          'C:/project/skill/design/apple-design.md'
+        );
+      });
+
+
+      // 验证根目录保持为 C:/project，未被暴力截断为 C:/project/skill/design
+      expect(result.current.cwd).toBe('C:/project');
+      // 验证祖先目录均已被级联展开
+      expect(result.current.expanded['C:/project/skill']).toBeDefined();
+      expect(result.current.expanded['C:/project/skill/design']).toBeDefined();
     });
   });
 });

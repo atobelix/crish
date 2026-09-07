@@ -136,12 +136,12 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
       async (path: string) => {
         if (!(await nav.confirmNavigation())) return;
         const resolved = resolveWorkspacePath(path);
-        const parent = pathDirname(resolved);
-        if (parent) nav.setCwd(parent);
+        await nav.revealPath(resolved);
         await preview.openFile(path);
       },
       [nav, preview]
     );
+
 
     const handleRefresh = useCallback(
       async (dir?: string) => {
@@ -248,16 +248,12 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
         if (!path) return;
         takePendingOpenPath();
         const resolved = resolveWorkspacePath(path);
-        const parent = pathDirname(resolved);
-        if (parent) {
-          void nav.refresh(parent).finally(() => void handleOpenFile(resolved));
-        } else {
-          void handleOpenFile(resolved);
-        }
+        void handleOpenFile(resolved);
       };
       window.addEventListener('crish-open-file', onOpen);
       return () => window.removeEventListener('crish-open-file', onOpen);
-    }, [nav, handleOpenFile]);
+    }, [handleOpenFile]);
+
 
     useEffect(() => {
       const onAnn = () =>
@@ -402,6 +398,11 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 dirty={preview.dirty}
                 openDefaultLabel={preview.openDefaultLabel}
                 fileOpeners={preview.fileOpeners}
+                isJson={preview.isJson}
+                isFormatted={preview.isFormatted}
+                onToggleFormatJson={() => void preview.toggleFormatJson()}
+                wordWrap={preview.wordWrap}
+                onToggleWordWrap={() => preview.toggleWordWrap()}
                 onEdit={() => {
                   preview.setEditing(true);
                   preview.setEditBuf(preview.content);
@@ -509,6 +510,9 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                   mdMode: preview.mdMode,
                   assetUrl: preview.assetUrl,
                   canLoadMore: preview.canLoadMore,
+                  wordWrap: preview.wordWrap,
+                  formattedContent: preview.formattedContent,
+                  isFormatted: preview.isFormatted,
                 }}
                 actions={{
                   onLoadMore: () => void preview.loadMoreLines(),

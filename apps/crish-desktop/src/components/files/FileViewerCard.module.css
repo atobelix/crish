@@ -439,7 +439,7 @@
 .workingBadge {
   font-size: 11px;
   font-weight: var(--font-weight-medium, 500);
-  color: var(--accent-primary, #3b82f6);
+  color: var(--accent-color);
 }
 
 .workingHint {
@@ -498,7 +498,7 @@
 
 .hashBadge:hover {
   background: var(--tint-hover);
-  color: var(--accent-primary, #3b82f6);
+  color: var(--accent-color);
 }
 
 .commitIcon {

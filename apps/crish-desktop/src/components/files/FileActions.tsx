@@ -3,12 +3,14 @@ import styles from './FilesCard.module.css';
 import { Button, Tooltip, Menu } from '../ui';
 import {
   AppWindow,
+  Braces,
   ChevronDown,
   Copy,
   FolderOpen,
   MoreHorizontal,
   Pencil,
   Save,
+  WrapText,
 } from 'lucide-react';
 import { revealInOs } from '../../api/workspaceFsApi';
 import {
@@ -55,6 +57,11 @@ interface FileActionsProps {
   dirty: boolean;
   openDefaultLabel: string;
   fileOpeners: HostOpener[];
+  isJson?: boolean;
+  isFormatted?: boolean;
+  onToggleFormatJson?: () => void;
+  wordWrap?: boolean;
+  onToggleWordWrap?: () => void;
   onEdit: () => void;
   onSave: () => void;
   onCancel: () => void;
@@ -74,6 +81,11 @@ export const FileActions = React.memo(function FileActions({
   dirty,
   openDefaultLabel,
   fileOpeners,
+  isJson,
+  isFormatted,
+  onToggleFormatJson,
+  wordWrap,
+  onToggleWordWrap,
   onEdit,
   onSave,
   onCancel,
@@ -100,6 +112,33 @@ export const FileActions = React.memo(function FileActions({
         logInternalError('components/files/FileActions/openWith', e)
       );
   };
+
+  const systemFileManager = fileOpeners.find(
+    (op) => op.id === 'system-file-manager'
+  );
+  const revealIcon = systemFileManager?.iconDataUrl ? (
+    <img
+      src={systemFileManager.iconDataUrl}
+      width={14}
+      height={14}
+      alt=""
+      style={{ flexShrink: 0, objectFit: 'contain' }}
+    />
+  ) : (
+    <FolderOpen size={14} aria-hidden />
+  );
+  const defaultOpener = fileOpeners[0];
+  const defaultOpenIcon = defaultOpener?.iconDataUrl ? (
+    <img
+      src={defaultOpener.iconDataUrl}
+      width={14}
+      height={14}
+      alt=""
+      style={{ flexShrink: 0, objectFit: 'contain' }}
+    />
+  ) : (
+    <AppWindow size={14} aria-hidden />
+  );
 
   return (
     <>
@@ -170,6 +209,36 @@ export const FileActions = React.memo(function FileActions({
               </Button>
             </>
           ) : null}
+          {isJson && !editing && onToggleFormatJson ? (
+            <Tooltip content={isFormatted ? '还原紧凑格式' : '格式化 JSON 排版'}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className={`${styles.filesSoftBtn} ${isFormatted ? styles.filesSoftBtnEmphasis : ''}`}
+                aria-label={isFormatted ? '还原紧凑格式' : '格式化 JSON 排版'}
+                aria-pressed={isFormatted}
+                onClick={onToggleFormatJson}
+                icon={<Braces size={14} />}
+              >
+                {isFormatted ? '还原' : '格式化'}
+              </Button>
+            </Tooltip>
+          ) : null}
+          {!editing && onToggleWordWrap ? (
+            <Tooltip content={wordWrap ? '关闭自动换行' : '开启自动换行'}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className={`${styles.filesSoftBtn} ${wordWrap ? styles.filesSoftBtnEmphasis : ''}`}
+                aria-label={wordWrap ? '关闭自动换行' : '开启自动换行'}
+                aria-pressed={wordWrap}
+                onClick={onToggleWordWrap}
+                icon={<WrapText size={14} />}
+              />
+            </Tooltip>
+          ) : null}
           {selected ? (
             <div className={styles.filesOpenCapsule}>
               <Tooltip content={`${openDefaultLabel}（系统默认）`}>
@@ -179,7 +248,7 @@ export const FileActions = React.memo(function FileActions({
                   size="sm"
                   className={styles.filesOpenMain}
                   onClick={handleOpenDefault}
-                  icon={<AppWindow size={14} aria-hidden />}
+                  icon={defaultOpenIcon}
                 >
                   {openDefaultLabel}
                 </Button>
@@ -208,7 +277,7 @@ export const FileActions = React.memo(function FileActions({
                   {
                     id: 'reveal-file',
                     label: '在资源管理器中显示',
-                    icon: <FolderOpen size={14} aria-hidden />,
+                    icon: revealIcon,
                     onClick: handleReveal,
                   },
                   ...fileOpeners.map((op) => ({
@@ -255,7 +324,7 @@ export const FileActions = React.memo(function FileActions({
             {
               id: 'reveal-sys',
               label: '在资源管理器中显示',
-              icon: <FolderOpen size={14} aria-hidden />,
+              icon: revealIcon,
               onClick: handleReveal,
             },
           ]}

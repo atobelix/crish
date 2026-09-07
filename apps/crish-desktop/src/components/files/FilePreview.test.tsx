@@ -112,4 +112,35 @@ describe('FilePreview 渲染与虚拟源码展示', () => {
     });
     expect(loadMoreBtn).toBeDefined();
   });
+
+  it('5. 当 wordWrap 设置为 false 时，正确传递给 VirtualPlainCodeViewer', () => {
+    render(
+      <FilePreview
+        file={defaultFileProps}
+        preview={{ ...defaultPreviewProps, wordWrap: false }}
+        actions={defaultActionsProps}
+      />
+    );
+
+    const viewer = screen.getByTestId('virtual-plain-code-viewer');
+    expect(viewer.getAttribute('data-wordwrap')).toBe('false');
+  });
+
+  it('6. 当 isFormatted 为 true 时，优先呈现 formattedContent', () => {
+    render(
+      <FilePreview
+        file={defaultFileProps}
+        preview={{
+          ...defaultPreviewProps,
+          content: '{"raw":"one-line"}',
+          isFormatted: true,
+          formattedContent: '{\n  "raw": "one-line"\n}',
+        }}
+        actions={defaultActionsProps}
+      />
+    );
+
+    const viewer = screen.getByTestId('virtual-plain-code-viewer');
+    expect(viewer.textContent).toContain('{\n  "raw": "one-line"\n}');
+  });
 });

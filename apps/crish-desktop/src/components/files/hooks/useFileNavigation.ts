@@ -3,6 +3,7 @@ import { getWorkspacePath } from '../../../api/projectStore';
 import {
   listDirectory,
   pathDirname,
+  pathRelativeToRoot,
   resolveWorkspacePath,
   type FsDirEntry,
 } from '../../../api/workspaceFsApi';
@@ -86,6 +87,74 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
     }
   }, [cwd, root, refresh]);
 
+  const revealPath = useCallback(
+    async (filePath: string) => {
+      const r = getWorkspacePath();
+      if (r) setRoot(r);
+      const effectiveRoot = r || root;
+      if (!effectiveRoot) return;
+
+      const normalizedPath = resolveWorkspacePath(filePath);
+      const normalizedRoot = resolveWorkspacePath(effectiveRoot);
+
+      // 检查文件是否位于工作区内
+      const rel = pathRelativeToRoot(normalizedPath, normalizedRoot);
+      const isInside =
+        rel && rel !== '.' && !rel.startsWith('..') && !rel.includes(':');
+
+      if (!isInside) {
+        // 工作区外部文件：回退为加载其父目录
+        const parent = pathDirname(normalizedPath);
+        if (parent) await refresh(parent);
+        return;
+      }
+
+      // 如果当前树并未锚定在工作区根节点，或条目为空，重置并拉取工作区全量根节点
+      if (cwd !== normalizedRoot || entries.length === 0) {
+        try {
+          const rootEntries = await loadDir(normalizedRoot);
+          setEntries(rootEntries);
+          setCwd(normalizedRoot);
+        } catch {
+          /* ignore */
+        }
+      }
+
+      // 沿路径向下逐层级联收集所有祖先目录
+      const parentDir = pathDirname(normalizedPath);
+      const ancestors: string[] = [];
+      let curr = parentDir;
+      const normRootLower = normalizedRoot.toLowerCase().replace(/\\/g, '/');
+      while (curr) {
+        const currLower = curr.toLowerCase().replace(/\\/g, '/');
+        if (
+          currLower === normRootLower ||
+          currLower.length <= normRootLower.length
+        )
+          break;
+        ancestors.unshift(curr);
+        curr = pathDirname(curr);
+      }
+
+      // 逐级异步拉取并注入 expanded 缓存，保持树结构完整展开
+      if (ancestors.length > 0) {
+        const toLoad = ancestors.filter((p) => !expanded[p]);
+        if (toLoad.length > 0) {
+          const results: Record<string, FsDirEntry[]> = {};
+          for (const p of toLoad) {
+            try {
+              results[p] = await loadDir(p);
+            } catch {
+              /* ignore */
+            }
+          }
+          setExpanded((prev) => ({ ...prev, ...results }));
+        }
+      }
+    },
+    [root, cwd, entries.length, expanded, loadDir, refresh]
+  );
+
   const flatTree: TreeNode[] = useMemo(() => {
     const q = filter.trim().toLowerCase();
     const out: TreeNode[] = [];
@@ -145,9 +214,10 @@ export function useFileNavigation(getIsDirty?: () => boolean) {
 
   return {
     root, cwd, entries, expanded, loading, error, filter, filterMode, gitStatusMap,
-    loadDir, refresh, toggleExpand, goUp,
+    loadDir, refresh, toggleExpand, revealPath, goUp,
     setFilter, setFilterMode, setError, setCwd, setExpanded, setEntries, setLoading, flatTree,
     isDirty, confirmNavigation,
     confirmGateView: renderConfirmGate(createElement(ConfirmDialog)),
   };
+
 }

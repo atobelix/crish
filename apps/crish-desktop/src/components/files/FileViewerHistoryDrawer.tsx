@@ -183,9 +183,11 @@ export const FileViewerHistoryDrawer: React.FC<FileViewerHistoryDrawerProps> = (
                     </button>
                   </Tooltip>
                 </div>
-                <div className={styles.commitMsg} title={commit.message}>
-                  {commit.message}
-                </div>
+                <Tooltip content={commit.message}>
+                  <div className={styles.commitMsg}>
+                    {commit.message}
+                  </div>
+                </Tooltip>
               </div>
             ))}
           </div>
