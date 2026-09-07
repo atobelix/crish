@@ -71,4 +71,24 @@ describe('buildMultimodalFromAttachments', () => {
       kind: 'file',
     });
   });
+
+  it('非视觉模型优雅降级：不生成 image_url 并以源数据/元数据形式下发', () => {
+    const attachments: ChatAttachment[] = [
+      {
+        name: 'diagram.png',
+        dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        mime: 'image/png',
+        path: 'c:/project/diagram.png',
+      },
+    ];
+
+    const res = buildMultimodalFromAttachments('请解释流程', attachments, false);
+
+    expect(res.streamOptions?.hasImages).toBe(false);
+    expect(res.streamOptions?.content).toHaveLength(2); // text (prompt) + text (image source data)
+    expect(res.streamOptions?.content?.some((c) => c.type === 'image_url')).toBe(false);
+    const imageTextPart = res.streamOptions?.content?.find((c) => c.type === 'text' && c.text.includes('图片源数据附件'));
+    expect(imageTextPart).toBeDefined();
+    expect(res.promptAttachBlock).toContain('图片源数据附件: diagram.png');
+  });
 });

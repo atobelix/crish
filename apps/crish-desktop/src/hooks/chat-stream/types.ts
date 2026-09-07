@@ -2,10 +2,17 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { StreamRequestOptions } from '../../api/chatApi';
 
 export type ChatAttachment = {
+  id?: string;
   name: string;
+  path?: string;
   text?: string;
   dataUrl?: string;
   mime?: string;
+  annotation?: {
+    id: string;
+    selectedText: string;
+    comment: string;
+  };
 };
 
 export interface QueuedMessage {

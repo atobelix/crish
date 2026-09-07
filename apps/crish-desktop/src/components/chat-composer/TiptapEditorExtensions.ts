@@ -249,6 +249,20 @@ export function buildTiptapEditorOptions(bridge: TiptapEditorBridge) {
         openFileInPanel(id);
         return true;
       },
+      handleDragOver: (_view: any, event: DragEvent | any) => {
+        if (
+          event.dataTransfer &&
+          (event.dataTransfer.files?.length > 0 ||
+            Array.from(event.dataTransfer.types ?? []).some((t: any) =>
+              String(t).toLowerCase() === 'files'
+            ))
+        ) {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          return true;
+        }
+        return false;
+      },
       handleDrop: (
         view: any,
         event: DragEvent | any,

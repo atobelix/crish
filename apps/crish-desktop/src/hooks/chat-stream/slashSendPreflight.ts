@@ -33,7 +33,6 @@ import {
   dispatchGoalModeCard,
   dispatchGrillMeCard,
   dispatchSkillContextCard,
-  dispatchAttachmentCards,
 } from './slashContextCards';
 import {
   buildWorkflowAssistantContext,
@@ -41,6 +40,8 @@ import {
   WORKFLOW_CREATE_TEMPLATE,
 } from '../../api/workflow-api/workflowAssistantCard';
 import { buildMultimodalFromAttachments } from './multimodal';
+import { isModelVisionSupported } from '../../api/modelVisionSupport';
+import { getActiveModelId, getActiveProfileId } from '../../api/providerProfiles';
 import { canStreamLocalSession } from './helpers';
 import { getSessionById } from '../../store/sessionStore';
 import { generateMessageId } from '../../utils/generateMessageId';
@@ -368,7 +369,7 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
     // GRILL_ME_PREFIX 隐式前缀已清退——slash-prefixes.ts 物理删除）
     const rendered = GRILL_ME_PROMPT.render({ topic: slash.topic });
     dispatchGrillMeCard(sessionId, slash.topic, rendered);
-    modelText = `[系统上下文注入 · 需求对齐模式]\n\n${rendered}`;
+    modelText = rendered;
   }
 
   if (rawInput && slash.kind !== 'goal') {
@@ -379,19 +380,30 @@ export function assembleChatPayload(opts: AssembleChatPayloadOptions): {
     }
   }
 
+  const activeModel = (getActiveModelId() || '').trim();
+  const activeProfileId = getActiveProfileId();
+  const isVisionSupported = isModelVisionSupported(activeModel, activeProfileId);
+  const hasImage = attachments.some((a) => Boolean(a.dataUrl));
+
+  if (hasImage && !isVisionSupported) {
+    toast.show(
+      '当前模型不支持图片视觉理解，图片已作为源数据引用传递；如需分析图片，建议切换至多模态模型。'
+    );
+  }
+
   const { promptAttachBlock, streamOptions } = buildMultimodalFromAttachments(
     modelText,
-    attachments
+    attachments,
+    isVisionSupported
   );
   // 批注按当前会话取走（会话隔离暂存池，详案 02 §3.2——跨会话串扰根除）
   const fileAnns = takePendingFileAnnotations(sessionId);
-  const annBlock = formatAnnotationsForModel(fileAnns);
+  const unattachedAnns = fileAnns.filter(
+    (fa) => !attachments.some((att) => att.annotation?.id === fa.id)
+  );
+  const annBlock = formatAnnotationsForModel(unattachedAnns);
   const input =
     (annBlock ? `${annBlock}\n\n` : '') + modelText + promptAttachBlock;
-
-  // 附件可见卡片（被动直接注入）：图片/文本附件以 file_context 卡片进入
-  // 时间线（所见即所知），wire 仍走既有 content parts / promptAttachBlock
-  dispatchAttachmentCards(sessionId, attachments);
 
   let finalStreamOptions = streamOptions;
   if (finalStreamOptions?.content?.length && annBlock) {

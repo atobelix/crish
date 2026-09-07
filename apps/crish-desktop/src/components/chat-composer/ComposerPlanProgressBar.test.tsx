@@ -8,7 +8,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { ComposerPlanProgressBar } from './ComposerPlanProgressBar';
 
 describe('ComposerPlanProgressBar (Layer 2 目标/计划进度条)', () => {
-  it('渲染单行 Anchored Hub：计划模式徽标 + 2/5 进度计数器 + 当前步骤 + 耗时 84:09 + 快捷操作', () => {
+  it('渲染单行 Anchored Hub：计划模式文字 + 当前步骤 + 耗时 84:09 + 快捷操作（无多余累计胶囊）', () => {
     const onEdit = vi.fn();
     const onPause = vi.fn();
     const onStop = vi.fn();
@@ -28,11 +28,11 @@ describe('ComposerPlanProgressBar (Layer 2 目标/计划进度条)', () => {
     expect(bar).toBeTruthy();
 
     expect(screen.getByText('计划模式')).toBeTruthy();
-    expect(screen.getByText('2/5')).toBeTruthy();
+    expect(screen.queryByText('2/5')).toBeNull();
     expect(screen.getByText('84:09')).toBeTruthy();
-    expect(screen.getByRole('button', { name: '编辑目标描述' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '暂停任务' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: '终止任务' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '编辑目标' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '暂停' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '终止' })).toBeTruthy();
   });
 
   it('点击徽标或任务栏切换抽屉展开/折叠，并展示步骤列表', () => {
@@ -73,7 +73,7 @@ describe('ComposerPlanProgressBar (Layer 2 目标/计划进度条)', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '暂停任务' }));
+    fireEvent.click(screen.getByRole('button', { name: '暂停' }));
     expect(onTogglePause).toHaveBeenCalledTimes(1);
 
     rerender(
@@ -84,10 +84,10 @@ describe('ComposerPlanProgressBar (Layer 2 目标/计划进度条)', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: '继续任务' }));
+    fireEvent.click(screen.getByRole('button', { name: '继续' }));
     expect(onTogglePause).toHaveBeenCalledTimes(2);
 
-    fireEvent.click(screen.getByRole('button', { name: '终止任务' }));
+    fireEvent.click(screen.getByRole('button', { name: '终止' }));
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 });

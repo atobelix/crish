@@ -601,9 +601,9 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 6px;
-  padding: 0;
-  margin: 0;
+  gap: 8px;
+  padding: 4px 6px;
+  margin: -4px -6px;
   overflow-x: auto;
   overflow-y: visible;
   overscroll-behavior-x: contain;
@@ -726,10 +726,10 @@
 .fileRemove,
 .attachRemove {
   position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 15px;
-  height: 15px;
+  top: -2px;
+  right: -2px;
+  width: 16px;
+  height: 16px;
   background: var(--color-error);
   color: var(--text-on-brand, white);
   border-radius: 50%;
@@ -797,18 +797,23 @@
 }
 
 .annPopoverCard {
+  /* 同心几何标尺：外圆角 = 内圆角 + 内边距 (Ro = Ri + P = 6 + 12 = 18px) */
+  --ann-pad: 12px;
+  --ann-radius-inner: 6px;
+  --ann-radius-outer: calc(var(--ann-radius-inner) + var(--ann-pad));
+
   position: fixed;
-  z-index: var(--z-modal, 1000);
+  z-index: var(--z-modal);
   width: 320px;
   max-width: calc(100vw - 24px);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg, 12px);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.03);
-  padding: 12px 14px 10px 14px;
+  border-radius: var(--ann-radius-outer);
+  box-shadow: 0 16px 36px hsl(0 0% 0% / 0.08), 0 2px 8px hsl(0 0% 0% / 0.03);
+  padding: var(--ann-pad);
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   animation: annPopoverFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
   box-sizing: border-box;
 }
@@ -827,61 +832,69 @@
 .annPopoverHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  line-height: 1;
-  padding: 0;
-}
-
-.annHeaderLeft {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.annHeaderIcon {
-  color: var(--text-tertiary);
-  flex-shrink: 0;
+  line-height: 1.2;
+  padding: 0 2px;
 }
 
 .annPopoverFileName {
   font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
+  font-weight: 600;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 
-.annCloseBtn {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: none;
-  background: transparent;
+/* 分区容器与语义标签：建立清晰直观的排版层级 */
+.annSectionBlock {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.annSectionLabel {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 0;
-  transition: background var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
+  user-select: none;
+  line-height: 1;
+  padding-left: 1px;
 }
 
-.annCloseBtn:hover {
-  background: var(--bg-primary);
-  color: var(--text-primary);
-}
-
-.annSnippetBox {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.04));
-  border-radius: var(--radius-sm, 6px);
-  padding: 8px 10px;
+/* 引用代码块：无灰色实体背景，采用极简品牌引用竖线，紧凑且可平滑滚动 */
+.annSnippetQuote {
+  margin: 0;
+  padding: 3px 0 3px 8px;
+  border-left: 2px solid color-mix(in srgb, var(--brand) 40%, var(--border-color));
+  background: transparent;
   max-height: 80px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
+}
+
+.annSnippetQuote::-webkit-scrollbar {
+  width: 4px;
+}
+
+.annSnippetQuote::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.annSnippetQuote::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 4px;
+}
+
+.annSnippetQuote:hover::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+}
+
+.annSnippetQuote::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .annSnippetText {
@@ -895,9 +908,14 @@
   tab-size: 2;
 }
 
-/* 浑然一体无外框纯白输入区（无实体外框，与卡片浑然天成） */
-.annEditArea {
-  padding: 2px 0;
+/* 批注输入区：采用约 2% 的设计 Token 柔和微底色，遵循几何同心法则 (Ri = 6px) */
+.annInputContainer {
+  background: var(--md-code-block-bg, color-mix(in srgb, var(--text-primary) 2%, var(--bg-card)));
+  border: 1px solid transparent;
+  border-radius: var(--ann-radius-inner);
+  padding: 6px 8px;
+  box-sizing: border-box;
+  transition: background var(--transition-fast, 120ms ease), border-color var(--transition-fast, 120ms ease);
 }
 
 .annCommentInput {
@@ -911,11 +929,11 @@
   margin: 0 !important;
   font-family: inherit;
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--text-primary);
   caret-color: var(--text-primary);
   resize: none;
-  min-height: 38px;
+  min-height: 42px;
   max-height: 140px;
   overflow-y: auto;
   white-space: pre-wrap;
@@ -923,38 +941,47 @@
 }
 
 .annCommentInput::placeholder {
-  color: var(--text-muted);
-  opacity: 0.7;
+  color: var(--text-tertiary);
+  opacity: 0.85;
 }
 
+/* 底部操作区：无冗余分割线与噪声文字，纯净右对齐双按钮组 */
 .annFooter {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding-top: 8px;
-  border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.05));
-  margin-top: 2px;
-}
-
-.annHint {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  user-select: none;
-}
-
-.annBtnGroup {
-  display: flex;
-  align-items: center;
+  justify-content: flex-end;
   gap: 6px;
+  padding-top: 2px;
+}
+
+.annCancelBtn {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--ann-radius-inner);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 400;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
+}
+
+.annCancelBtn:hover {
+  background: var(--tint-hover);
+  color: var(--text-primary);
 }
 
 .annSaveBtn {
   height: 24px;
   padding: 0 12px;
-  border-radius: var(--radius-full, 9999px);
+  border-radius: var(--ann-radius-inner);
   border: none;
-  background: var(--text-primary);
-  color: var(--bg-card);
+  background: var(--brand);
+  color: var(--text-on-brand, var(--bg-card));
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;

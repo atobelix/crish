@@ -6,9 +6,16 @@ import React, { useCallback, useRef, useState } from 'react';
 import * as Lucide from 'lucide-react';
 import styles from './ChatComposer.module.css';
 
-function hasFiles(dt: DataTransfer | null | undefined): boolean {
+export function hasFiles(dt: DataTransfer | null | undefined): boolean {
   if (!dt) return false;
-  return Array.from(dt.types ?? []).includes('Files');
+  if (dt.files && dt.files.length > 0) return true;
+  if (dt.items && dt.items.length > 0) {
+    for (let i = 0; i < dt.items.length; i++) {
+      if (dt.items[i]?.kind === 'file') return true;
+    }
+  }
+  const types = Array.from(dt.types ?? []);
+  return types.some((t) => t.toLowerCase() === 'files');
 }
 
 export type ComposerDropHostProps = {
@@ -47,7 +54,6 @@ export const ComposerDropHost = React.forwardRef<
       }}
       onDragLeave={(e) => {
         onDragLeave?.(e);
-        if (!hasFiles(e.dataTransfer)) return;
         depthRef.current = Math.max(0, depthRef.current - 1);
         if (depthRef.current === 0) setOver(false);
       }}
@@ -57,10 +63,6 @@ export const ComposerDropHost = React.forwardRef<
         e.dataTransfer.dropEffect = 'copy';
       }}
       onDrop={(e) => {
-        if (e.defaultPrevented) {
-          reset();
-          return;
-        }
         if (!hasFiles(e.dataTransfer)) return;
         e.preventDefault();
         e.stopPropagation();

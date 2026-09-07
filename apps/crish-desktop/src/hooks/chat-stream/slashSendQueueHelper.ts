@@ -14,6 +14,8 @@ export interface EnqueueFollowUpParams {
   displayText: string;
   liveHandleRunId?: string | null;
   reason?: string;
+  images?: import('../../store/types').MessageImageRef[];
+  attachments?: import('../../store/types').SessionMessageAttachment[];
 }
 
 /**
@@ -35,8 +37,16 @@ export { isSessionAiBusy };
  * 将消息以 queued 状态入库并派发 followUp 事件
  */
 export function enqueueFollowUpMessage(params: EnqueueFollowUpParams): boolean {
-  const { wsId, sessionId, userMsgId, displayText, liveHandleRunId, reason } =
-    params;
+  const {
+    wsId,
+    sessionId,
+    userMsgId,
+    displayText,
+    liveHandleRunId,
+    reason,
+    images,
+    attachments,
+  } = params;
   try {
     addMessage(wsId, sessionId, {
       id: userMsgId,
@@ -44,6 +54,8 @@ export function enqueueFollowUpMessage(params: EnqueueFollowUpParams): boolean {
       text: displayText,
       timestamp: Date.now(),
       status: 'queued',
+      ...(images?.length ? { images } : {}),
+      ...(attachments?.length ? { attachments } : {}),
     });
 
     void getCompositionRoot().runControl.followUp({

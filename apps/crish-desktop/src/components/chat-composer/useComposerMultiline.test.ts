@@ -46,7 +46,7 @@ describe('useComposerMultiline 状态机与交互优化', () => {
     expect(width).toBe(50); // 5 * 10px
   });
 
-  it('附件或显式换行时强制判定为多行态', () => {
+  it('附件或显式换行时正常展开多行态', () => {
     const layoutRef = { current: null };
 
     // 初始有换行符
@@ -59,7 +59,7 @@ describe('useComposerMultiline 状态机与交互优化', () => {
     );
     expect(r1.current).toBe(true);
 
-    // 初始有附件
+    // 初始有附件：正常展开为多行态
     const { result: r2 } = renderHook(() =>
       useComposerMultiline({
         text: 'single line',

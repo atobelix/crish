@@ -162,6 +162,29 @@ export function useSlashSend(
     // 7. 保存草稿快照
     saveDraftSnapshot(sessionId, rawInput);
 
+    const userImages: import('../../store/types').MessageImageRef[] =
+      activeAttachments
+        .filter((a) =>
+          Boolean(a.dataUrl || (a.mime && a.mime.startsWith('image/')))
+        )
+        .map((a, idx) => ({
+          id: `img-${userMsgId}-${idx}`,
+          source: a.dataUrl || a.path || a.name,
+          kind: (a.dataUrl ? 'data' : 'local') as 'data' | 'local',
+          resolvedUrl: a.dataUrl,
+          mime: a.mime || 'image/png',
+          alt: a.name,
+        }));
+
+    const userAttachments: import('../../store/types').SessionMessageAttachment[] =
+      activeAttachments.map((a) => ({
+        name: a.name,
+        path: a.path,
+        mime: a.mime,
+        text: a.text,
+        dataUrl: a.dataUrl,
+      }));
+
     // 8. 消息入库与派发
     if (isFollowUp) {
       const enqueued = enqueueFollowUpMessage({
@@ -171,6 +194,8 @@ export function useSlashSend(
         displayText,
         liveHandleRunId: liveHandle?.runId,
         reason: 'ui-send-while-running',
+        images: userImages,
+        attachments: userAttachments,
       });
       if (enqueued) {
         clearDraftSnapshot(sessionId, setChatInput);
@@ -193,6 +218,8 @@ export function useSlashSend(
         text: displayText,
         timestamp: Date.now(),
         status: 'processing',
+        ...(userImages.length ? { images: userImages } : {}),
+        ...(userAttachments.length ? { attachments: userAttachments } : {}),
       });
       enqueued = !!getSessionById(sessionId)?.messages?.some(
         (m: SessionMessage) => m.id === userMsgId

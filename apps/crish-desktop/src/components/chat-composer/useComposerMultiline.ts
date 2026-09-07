@@ -34,10 +34,10 @@ export function measureTextWidthCanvas(text: string, font: string): number {
 
 export function useComposerMultiline(opts: {
   text: string;
-  hasAttachments: boolean;
+  hasAttachments?: boolean;
   layoutRef: React.RefObject<HTMLElement | null>;
 }): boolean {
-  const { text, hasAttachments, layoutRef } = opts;
+  const { text, hasAttachments = false, layoutRef } = opts;
   const [multiline, setMultiline] = useState(
     () => hasAttachments || text.includes('\n')
   );

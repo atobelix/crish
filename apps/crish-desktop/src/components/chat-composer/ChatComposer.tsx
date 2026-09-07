@@ -38,6 +38,7 @@ import { ComposerPlanProgressBar } from './ComposerPlanProgressBar';
 import { ChatQueuePanel } from './ChatQueuePanel';
 import { ComposerDropHost } from './ComposerDropHost';
 import { ComposerFusedTrigger } from './ComposerFusedTrigger';
+import { removePendingFileAnnotation } from '../../api/workspaceFsApi';
 import { ComposerSendControls } from './ComposerSendControls';
 import { useComposerMultiline } from './useComposerMultiline';
 
@@ -107,6 +108,7 @@ export type ChatComposerProps = {
   setAttachments: React.Dispatch<React.SetStateAction<ChatAttachment[]>>;
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFilesSelected: (files: File[]) => void | Promise<void>;
+  onPickFiles?: () => void | Promise<void>;
   /** 点附件 / 文件 mention → files / file-viewer 叶；不传则不接线 */
   onOpenPath?: (filePath: string) => void;
   showPlusMenu: boolean;
@@ -156,6 +158,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   setAttachments,
   fileInputRef,
   onFilesSelected,
+  onPickFiles,
   onOpenPath,
   showPlusMenu,
   setShowPlusMenu,
@@ -226,8 +229,18 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   }, []);
 
   const handleRemoveAttachment = useCallback(
-    (name: string) => {
-      setAttachments((prev) => prev.filter((x) => x.name !== name));
+    (identifier: string) => {
+      setAttachments((prev) => {
+        const targetIndex = prev.findIndex(
+          (x) => (x.id && x.id === identifier) || x.name === identifier
+        );
+        if (targetIndex === -1) return prev;
+        const target = prev[targetIndex];
+        if (target?.annotation?.id) {
+          removePendingFileAnnotation(target.annotation.id);
+        }
+        return prev.filter((_, idx) => idx !== targetIndex);
+      });
     },
     [setAttachments]
   );
@@ -400,19 +413,21 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
           </div>
         ) : null}
 
-        {/* 主输入卡片（Layer 3: 附件卡片 + Layer 4: 输入网格） */}
+        {/* 主输入卡片（Layer 4: 输入网格） */}
         <div
           className={`${styles.composerCard}${isMultiline ? ` ${styles.isMultiline}` : ''}`}
           data-composer-card=""
           data-multiline={isMultiline ? '1' : '0'}
           data-empty-kind={emptyKind}
         >
-          {/* Layer 3: 上下文与文件引用卡片区 */}
-          <ComposerAttachmentBar
-            attachments={attachments}
-            onRemoveAttachment={handleRemoveAttachment}
-            {...(onOpenPath ? { onOpenPath } : {})}
-          />
+          {/* Layer 3: 附件与批注卡片区（内嵌于主输入卡片顶部，对齐图四） */}
+          {attachments.length > 0 && (
+            <ComposerAttachmentBar
+              attachments={attachments}
+              onRemoveAttachment={handleRemoveAttachment}
+              {...(onOpenPath ? { onOpenPath } : {})}
+            />
+          )}
 
           {/* Layer 4: 主输入区网格布局 */}
           <div
@@ -421,7 +436,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             data-composer-layout=""
             data-composer-footer="1"
           >
-            {/* 左侧控制区：[ ＋ 加号按钮 ] + [ 🛡️ 权限盾牌按钮 ]（icon-only 模式） */}
+            {/* 左侧控制区：[ ＋ 加号按钮 ] + [ 权限盾牌按钮 ]（icon-only 模式） */}
             <div className={styles.actionLeft} data-composer-grid="left">
               <Tooltip content="添加文件、技能、扩展…" disabled={showPlusMenu}>
                 <Button
@@ -451,7 +466,18 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 id={plusMenuId}
                 open={showPlusMenu}
                 onClose={() => setShowPlusMenu(false)}
-                onAddFiles={() => fileInputRef.current?.click()}
+                onAddFiles={() => {
+                  if (onPickFiles) {
+                    void onPickFiles();
+                    return;
+                  }
+                  requestAnimationFrame(() => {
+                    if (fileInputRef.current) {
+                      fileInputRef.current.value = '';
+                      fileInputRef.current.click();
+                    }
+                  });
+                }}
                 onInsertSkillSlash={() => {
                   if (!chatInput.startsWith('/')) {
                     setChatInput(chatInput ? `/${chatInput}` : '/');
