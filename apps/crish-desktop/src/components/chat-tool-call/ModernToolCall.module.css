@@ -9,7 +9,7 @@
 .jsonToolCall {
   display: flex;
   flex-direction: column;
-  margin: 6px 0;
+  margin: var(--space-1_5, 6px) 0;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -18,7 +18,7 @@
 .jsonToolHead {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   background: transparent;
   border: none;
   padding: 4px 0;
@@ -31,8 +31,8 @@
   color: inherit;
   width: fit-content;
   max-width: 100%;
-  border-radius: 4px;
-  transition: opacity 120ms ease;
+  border-radius: var(--radius-sm, 4px);
+  transition: opacity var(--transition-micro, 120ms ease);
 }
 
 .jsonToolHead:hover {
@@ -40,8 +40,8 @@
 }
 
 .jsonToolHead:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 /* 折叠指示器：中性灰 Chevron */
@@ -51,7 +51,7 @@
   justify-content: center;
   width: 14px;
   height: 14px;
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
   flex-shrink: 0;
   transition: transform 150ms cubic-bezier(0.2, 0, 0, 1);
 }
@@ -62,9 +62,9 @@
 
 /* 动作文本：纯单色中性正文字体，禁止带绿或彩色 */
 .actionText {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary, #555555);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-secondary);
   line-height: 1.4;
   flex-shrink: 0;
 }
@@ -74,11 +74,11 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 6px;
-  background: var(--tint-hover, rgba(0, 0, 0, 0.06));
+  border-radius: var(--radius-md, 6px);
+  background: var(--tint-hover);
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
-  color: var(--text-primary, #111111);
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
   max-width: 320px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -98,22 +98,22 @@
 }
 
 .statusIconSuccess {
-  color: #10b981; /* 纯粹柔和成功绿 */
+  color: var(--color-success);
 }
 
 .statusIconError {
-  color: var(--accent-red, #ef4444);
+  color: var(--color-error);
 }
 
 .statusIconRunning {
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
 }
 
 .pulseDot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--text-tertiary, #888888);
+  background: var(--text-tertiary);
   animation: pulseDot 1.4s infinite ease-in-out;
 }
 
@@ -130,42 +130,42 @@
 
 /* 展开卡片主体：纯净黑白灰圆角卡片 */
 .jsonToolCard {
-  margin-top: 8px;
-  border-radius: 10px;
-  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
-  background: var(--bg-card, #ffffff);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  margin-top: var(--space-2, 8px);
+  border-radius: var(--radius-xl, 10px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: none;
   overflow: hidden;
   width: 100%;
   box-sizing: border-box;
 }
 
 .cardSection {
-  padding: 10px 14px;
+  padding: var(--space-2_5, 10px) var(--space-3_5, 14px);
 }
 
 .sectionLabel {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-tertiary, #888888);
-  margin-bottom: 6px;
+  font-size: var(--font-size-micro, 11px);
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-1_5, 6px);
   text-transform: capitalize;
   user-select: none;
 }
 
 .sectionContent {
-  font-size: 12px;
+  font-size: var(--font-size-xs, 12px);
   line-height: 1.5;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   word-break: break-word;
 }
 
 .jsonCode {
   margin: 0;
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: var(--font-size-xs, 12px);
   line-height: 1.5;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
   height: auto;
@@ -176,9 +176,9 @@
 .resultText {
   margin: 0;
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--font-size-xs, 12px);
   line-height: 1.5;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
   height: auto;
@@ -188,7 +188,7 @@
 
 .divider {
   height: 1px;
-  background: var(--tint-divider, rgba(0, 0, 0, 0.06));
+  background: var(--border-subtle);
   margin: 0;
   border: none;
 }
@@ -197,11 +197,11 @@
    2. 终端命令行工具卡片（截图 2 效果）
    -------------------------------------------------------------------------- */
 .terminalCard {
-  margin: 8px 0;
-  border-radius: 10px;
-  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
-  background: var(--bg-card, #ffffff);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  margin: var(--space-2, 8px) 0;
+  border-radius: var(--radius-xl, 10px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: none;
   overflow: hidden;
   position: relative;
   width: 100%;
@@ -212,8 +212,8 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
   background: transparent;
   user-select: text;
 }
@@ -221,16 +221,16 @@
 .terminalCommandRow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   min-width: 0;
   overflow: hidden;
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
-  color: var(--text-primary, #111111);
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-primary);
 }
 
 .terminalPromptDollar {
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
   font-weight: 600;
   user-select: none;
   flex-shrink: 0;
@@ -246,7 +246,7 @@
 .terminalActions {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1, 4px);
   flex-shrink: 0;
 }
 
@@ -256,13 +256,13 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   border: none;
   background: transparent;
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+  transition: opacity var(--transition-micro, 120ms ease), background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
 .terminalCard:hover .terminalCopyBtn,
@@ -271,18 +271,22 @@
 }
 
 .terminalCopyBtn:hover {
-  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #111111);
+  background: var(--tint-hover);
+  color: var(--text-primary);
 }
 
 .terminalCopyBtn:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+}
+
+.copiedCheckIcon {
+  color: var(--color-success, var(--brand-deep, hsl(160 84% 30%)));
 }
 
 .terminalDivider {
   height: 1px;
-  background: var(--tint-divider, rgba(0, 0, 0, 0.06));
+  background: var(--border-subtle);
   margin: 0;
   border: none;
 }
@@ -297,11 +301,11 @@
 
 .terminalOutput {
   margin: 0;
-  padding: 10px 12px;
+  padding: var(--space-2_5, 10px) var(--space-3, 12px);
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: var(--font-size-xs, 12px);
   line-height: 1.5;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-all;
   height: auto;
@@ -309,7 +313,7 @@
   overflow-y: visible;
   cursor: text;
   box-sizing: border-box;
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 96%, var(--text-primary, #111111) 4%);
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--text-primary) 4%);
 }
 
 .terminalLine {
@@ -334,34 +338,34 @@
   gap: 6px;
   width: 100%;
   padding: 6px 12px;
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 92%, var(--text-primary, #111111) 8%);
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--text-primary) 8%);
   border: none;
-  border-top: 1px dashed var(--tint-divider, rgba(0, 0, 0, 0.1));
-  border-bottom: 1px dashed var(--tint-divider, rgba(0, 0, 0, 0.1));
-  color: var(--text-secondary, #555555);
-  font-size: 11.5px;
+  border-top: 1px dashed var(--border-subtle);
+  border-bottom: 1px dashed var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans, inherit);
   cursor: pointer;
   user-select: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm, 4px);
   box-sizing: border-box;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
 .terminalMidFoldBar:hover {
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 88%, var(--text-primary, #111111) 12%);
-  color: var(--text-primary, #111111);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--text-primary) 12%);
+  color: var(--text-primary);
 }
 
 .terminalMidFoldBar:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
-  outline-offset: -1px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .midFoldIcon {
-  font-size: 12px;
+  font-size: var(--font-size-xs, 12px);
   line-height: 1;
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
 }
 
 .terminalCollapseBtn {
@@ -370,25 +374,25 @@
   justify-content: center;
   width: 100%;
   padding: 5px 12px;
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 95%, var(--text-primary, #111111) 5%);
+  background: color-mix(in srgb, var(--bg-card) 95%, var(--text-primary) 5%);
   border: none;
-  border-top: 1px dashed var(--tint-divider, rgba(0, 0, 0, 0.08));
-  color: var(--text-tertiary, #888888);
-  font-size: 11px;
+  border-top: 1px dashed var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans, inherit);
   cursor: pointer;
   user-select: none;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
 .terminalCollapseBtn:hover {
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 90%, var(--text-primary, #111111) 10%);
-  color: var(--text-primary, #111111);
+  background: color-mix(in srgb, var(--bg-card) 90%, var(--text-primary) 10%);
+  color: var(--text-primary);
 }
 
 .terminalCollapseBtn:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
-  outline-offset: -1px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 /* --------------------------------------------------------------------------
@@ -396,29 +400,29 @@
    -------------------------------------------------------------------------- */
 .approvalCard {
   width: 100%;
-  border-radius: 12px;
-  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
-  background: var(--bg-card, #ffffff);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+  border-radius: var(--radius-xl, 12px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: none;
   overflow: hidden;
   box-sizing: border-box;
-  margin: 8px 0;
-  transition: border-color 150ms ease;
+  margin: var(--space-2, 8px) 0;
+  transition: border-color var(--transition-fast, 150ms ease);
 }
 
 .approvalHead {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .approvalTitleGroup {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
 }
 
 .approvalShield {
@@ -427,25 +431,25 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
-  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-tertiary, #888888);
+  border-radius: var(--radius-md, 6px);
+  background: var(--tint-hover);
+  color: var(--text-tertiary);
 }
 
 .approvalTitle {
   font-size: 13.5px;
   font-weight: 600;
   letter-spacing: -0.01em;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
 }
 
 .approvalScopePill {
-  font-size: 11px;
+  font-size: var(--font-size-micro, 11px);
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full, 999px);
   font-weight: 500;
-  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-tertiary, #888888);
+  background: var(--tint-hover);
+  color: var(--text-tertiary);
 }
 
 .approvalTimer {
@@ -453,8 +457,8 @@
   align-items: center;
   gap: 5px;
   font-family: var(--font-mono, monospace);
-  font-size: 11.5px;
-  color: var(--text-tertiary, #888888);
+  font-size: var(--font-size-micro, 11px);
+  color: var(--text-tertiary);
 }
 
 .approvalBody {
@@ -462,16 +466,16 @@
 }
 
 .approvalDesc {
-  font-size: 13px;
+  font-size: var(--font-size-sm, 13px);
   line-height: 1.5;
-  margin-bottom: 12px;
-  color: var(--text-secondary, #555555);
+  margin-bottom: var(--space-3, 12px);
+  color: var(--text-secondary);
 }
 
 .approvalTargetBox {
-  border-radius: 8px;
-  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
-  background: var(--tint-hover, rgba(0, 0, 0, 0.02));
+  border-radius: var(--radius-lg, 8px);
+  border: 1px solid var(--border-subtle);
+  background: var(--tint-hover);
   overflow: hidden;
   font-family: var(--font-mono, monospace);
 }
@@ -481,8 +485,8 @@
   align-items: center;
   justify-content: space-between;
   padding: 7px 12px;
-  border-bottom: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
-  font-size: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-xs, 12px);
 }
 
 .approvalPath {
@@ -490,49 +494,49 @@
   align-items: center;
   gap: 6px;
   font-weight: 500;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
 }
 
 .approvalDiffStat {
   display: flex;
   gap: 6px;
-  font-size: 11.5px;
+  font-size: var(--font-size-micro, 11px);
   font-weight: 600;
 }
 
 .diffStatAdd {
-  color: #10b981;
+  color: var(--color-success);
 }
 
 .diffStatDel {
-  color: #ef4444;
+  color: var(--color-error);
 }
 
 .approvalCodePreview {
   margin: 0;
   padding: 10px 12px;
-  font-size: 11.5px;
+  font-size: var(--font-size-micro, 11px);
   line-height: 1.55;
   white-space: pre;
   overflow-x: auto;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
 }
 
 .approvalFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-3, 12px);
   padding: 12px 16px;
-  border-top: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  border-top: 1px solid var(--border-subtle);
 }
 
 .approvalRemember {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: var(--text-tertiary, #888888);
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
   cursor: pointer;
   user-select: none;
 }
@@ -540,14 +544,14 @@
 .approvalCheckbox {
   width: 14px;
   height: 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs, 4px);
   cursor: pointer;
 }
 
 .approvalBtns {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
 }
 
 /* --------------------------------------------------------------------------
@@ -555,13 +559,13 @@
    -------------------------------------------------------------------------- */
 .codeBlockCard {
   width: 100%;
-  border-radius: 8px;
-  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
-  background: var(--bg-card, #ffffff);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  border-radius: var(--radius-lg, 8px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: none;
   overflow: hidden;
   font-family: var(--font-mono, monospace);
-  font-size: 12.5px;
+  font-size: var(--md-code-font-size, 12.5px);
   box-sizing: border-box;
 }
 
@@ -570,16 +574,16 @@
   align-items: center;
   justify-content: space-between;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
-  font-size: 12px;
-  color: var(--text-tertiary, #71717a);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-tertiary);
 }
 
 .codeBlockTag {
   display: flex;
   align-items: center;
   gap: 6px;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   font-weight: 500;
 }
 
@@ -589,20 +593,20 @@
   gap: 4px;
   background: transparent;
   border: none;
-  color: var(--text-tertiary, #71717a);
-  font-size: 11.5px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-micro, 11px);
   cursor: pointer;
   font-family: var(--font-sans, inherit);
-  transition: color 100ms ease;
+  transition: color var(--transition-micro, 100ms ease);
 }
 
 .codeBlockCopyBtn:hover {
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
 }
 
 .codeBlockCopyBtn:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .codeBlockBody {
@@ -617,16 +621,16 @@
 
 .codeBlockLinenums {
   user-select: none;
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
   text-align: right;
-  font-size: 12px;
+  font-size: var(--font-size-xs, 12px);
 }
 
 .codeBlockPre {
   margin: 0;
   white-space: pre;
-  color: var(--text-primary, #111111);
-  font-size: 12px;
+  color: var(--text-primary);
+  font-size: var(--font-size-xs, 12px);
   flex: 1;
   overflow-x: auto;
   height: auto;
@@ -639,11 +643,11 @@
    -------------------------------------------------------------------------- */
 .diffCard,
 .gitDiffCard {
-  margin: 8px 0;
-  border-radius: 10px;
-  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.08));
-  background: var(--bg-card, #ffffff);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
+  margin: var(--space-2, 8px) 0;
+  border-radius: var(--radius-xl, 10px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: none;
   overflow: hidden;
   position: relative;
   width: 100%;
@@ -658,49 +662,49 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 97%, var(--text-primary, #111111) 3%);
-  border-bottom: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  background: color-mix(in srgb, var(--bg-card) 97%, var(--text-primary) 3%);
+  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
   user-select: none;
-  transition: background 120ms ease;
+  transition: background var(--transition-micro, 120ms ease);
   min-height: 36px;
   box-sizing: border-box;
 }
 
 .diffCardHeader:hover,
 .gitDiffCardHeader:hover {
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 94%, var(--text-primary, #111111) 6%);
+  background: color-mix(in srgb, var(--bg-card) 94%, var(--text-primary) 6%);
 }
 
 .diffCardHeader:focus-visible,
 .gitDiffCardHeader:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
-  outline-offset: -1px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .diffFileInfo,
 .gitDiffFileInfo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
 }
 
 .diffFileIcon {
-  color: var(--text-secondary, #555555);
+  color: var(--text-secondary);
   flex-shrink: 0;
 }
 
 .diffFilename,
 .gitDiffFilename {
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: var(--font-size-xs, 12px);
   font-weight: 500;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -709,7 +713,7 @@
 .diffRightSection {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   flex-shrink: 0;
 }
 
@@ -719,24 +723,24 @@
   align-items: center;
   gap: 4px;
   font-family: var(--font-mono, monospace);
-  font-size: 11px;
+  font-size: var(--font-size-micro, 11px);
   font-weight: 600;
 }
 
 .diffStatAdd,
 .gitDiffAdd {
   padding: 1px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, #10b981 12%, transparent);
-  color: #10b981;
+  border-radius: var(--radius-xs, 4px);
+  background: color-mix(in srgb, var(--color-success) 12%, transparent);
+  color: var(--color-success);
 }
 
 .diffStatDel,
 .gitDiffDel {
   padding: 1px 6px;
-  border-radius: 4px;
-  background: color-mix(in srgb, #ef4444 12%, transparent);
-  color: #ef4444;
+  border-radius: var(--radius-xs, 4px);
+  background: color-mix(in srgb, var(--color-error) 12%, transparent);
+  color: var(--color-error);
 }
 
 .diffActions {
@@ -752,24 +756,24 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 4px;
+  border-radius: var(--radius-xs, 4px);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
 .diffActionBtn:hover,
 .diffCopyBtn:hover {
-  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #111111);
+  background: var(--tint-hover);
+  color: var(--text-primary);
 }
 
 .diffActionBtn:focus-visible,
 .diffCopyBtn:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .diffPreviewTag,
@@ -778,25 +782,25 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 11px;
-  color: var(--text-secondary, #555555);
-  background: var(--tint-hover, rgba(0, 0, 0, 0.04));
-  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  border-radius: var(--radius-xs, 4px);
+  font-size: var(--font-size-micro, 11px);
+  color: var(--text-secondary);
+  background: var(--tint-hover);
+  border: 1px solid var(--border-subtle);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
 .diffPreviewTag:hover,
 .gitDiffPreviewTag:hover {
-  background: var(--tint-hover, rgba(0, 0, 0, 0.08));
-  color: var(--text-primary, #111111);
+  background: var(--tint-active);
+  color: var(--text-primary);
 }
 
 .diffPreviewTag:focus-visible,
 .gitDiffPreviewTag:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .diffLinesContainer,
@@ -804,7 +808,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   height: auto;
   max-height: none;
   overflow-y: visible;
@@ -817,23 +821,23 @@
   display: flex;
   align-items: stretch;
   font-family: var(--font-mono, monospace);
-  font-size: 12px;
+  font-size: var(--font-size-xs, 12px);
   line-height: 1.5;
   min-width: 100%;
   width: fit-content;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
 }
 
 .diffLineRow.addition,
 .gitDiffLineRow.addition,
 .addition {
-  background-color: color-mix(in srgb, #10b981 8%, transparent);
+  background-color: color-mix(in srgb, var(--color-success) 8%, transparent);
 }
 
 .diffLineRow.deletion,
 .gitDiffLineRow.deletion,
 .deletion {
-  background-color: color-mix(in srgb, #ef4444 8%, transparent);
+  background-color: color-mix(in srgb, var(--color-error) 8%, transparent);
 }
 
 .diffGutterCol,
@@ -843,8 +847,8 @@
   text-align: right;
   user-select: none;
   padding: 1px 8px 1px 0;
-  color: var(--text-tertiary, #888888);
-  font-size: 11px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-micro, 11px);
   box-sizing: border-box;
   flex-shrink: 0;
 }
@@ -857,17 +861,17 @@
   font-weight: 600;
   padding: 1px 0;
   flex-shrink: 0;
-  color: var(--text-tertiary, #888888);
+  color: var(--text-tertiary);
 }
 
 .addition .diffSignCol,
 .gitDiffLineRow.addition .lineNumCol {
-  color: #10b981;
+  color: var(--color-success);
 }
 
 .deletion .diffSignCol,
 .gitDiffLineRow.deletion .lineNumCol {
-  color: #ef4444;
+  color: var(--color-error);
 }
 
 .diffLineContent,
@@ -877,7 +881,7 @@
   white-space: pre;
   overflow-x: visible;
   flex: 1;
-  color: var(--text-primary, #111111);
+  color: var(--text-primary);
   font-family: inherit;
   font-size: inherit;
   word-break: normal;
@@ -885,12 +889,12 @@
 
 .addition .diffLineContent,
 .gitDiffLineRow.addition .lineContent {
-  color: color-mix(in srgb, #10b981 80%, var(--text-primary, #111111) 20%);
+  color: color-mix(in srgb, var(--color-success) 80%, var(--text-primary) 20%);
 }
 
 .deletion .diffLineContent,
 .gitDiffLineRow.deletion .lineContent {
-  color: color-mix(in srgb, #ef4444 80%, var(--text-primary, #111111) 20%);
+  color: color-mix(in srgb, var(--color-error) 80%, var(--text-primary) 20%);
 }
 
 .diffMoreIndicator,
@@ -898,12 +902,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--space-3, 12px);
   padding: 8px 12px;
-  background: color-mix(in srgb, var(--bg-card, #ffffff) 96%, var(--text-primary, #111111) 4%);
-  color: var(--text-secondary, #555555);
-  font-size: 11.5px;
-  border-top: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.06));
+  background: color-mix(in srgb, var(--bg-card) 96%, var(--text-primary) 4%);
+  color: var(--text-secondary);
+  font-size: var(--font-size-micro, 11px);
+  border-top: 1px solid var(--border-subtle);
   user-select: none;
   box-sizing: border-box;
 }
@@ -913,30 +917,30 @@
   align-items: center;
   gap: 4px;
   padding: 3px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--tint-divider, rgba(0, 0, 0, 0.1));
-  background: var(--bg-card, #ffffff);
-  color: var(--text-secondary, #555555);
-  font-size: 11.5px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--font-size-micro, 11px);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background var(--transition-micro, 120ms ease), color var(--transition-micro, 120ms ease);
 }
 
 .diffMoreBtn:hover {
-  background: var(--tint-hover, rgba(0, 0, 0, 0.05));
-  color: var(--text-primary, #111111);
+  background: var(--tint-hover);
+  color: var(--text-primary);
 }
 
 .diffMoreBtn:focus-visible {
-  outline: 1px solid color-mix(in srgb, var(--border-color, rgba(0, 0, 0, 0.15)) 90%, var(--text-primary, #111111) 10%);
-  outline-offset: 1px;
+  outline: none;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .diffEmpty {
   padding: 12px;
   text-align: center;
-  color: var(--text-tertiary, #888888);
-  font-size: 12px;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-xs, 12px);
 }
 
 

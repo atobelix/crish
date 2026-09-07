@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, FileText } from 'lucide-react';
 import { Tooltip } from '../ui';
 import { parseAnsi } from '../../utils/parseAnsi';
 import styles from './ModernToolCall.module.css';
@@ -29,7 +29,14 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
   className = '',
 }) => {
   const [copied, setCopied] = useState(false);
+  const [copiedOutput, setCopiedOutput] = useState(false);
   const [isFullExpanded, setIsFullExpanded] = useState(false);
+
+  // ANSI 解析与渐进截断折叠切片
+  const normalizedOutput = useMemo(() => {
+    if (!output) return '';
+    return output.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  }, [output]);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -39,11 +46,13 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
     setTimeout(() => setCopied(false), 1500);
   };
 
-  // ANSI 解析与渐进截断折叠切片
-  const normalizedOutput = useMemo(() => {
-    if (!output) return '';
-    return output.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  }, [output]);
+  const handleCopyOutput = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!normalizedOutput) return;
+    void navigator.clipboard.writeText(normalizedOutput);
+    setCopiedOutput(true);
+    setTimeout(() => setCopiedOutput(false), 1500);
+  };
 
   const lines = useMemo(() => {
     if (!normalizedOutput) return [];
@@ -78,12 +87,28 @@ export const ModernTerminalToolCall: React.FC<ModernTerminalToolCallProps> = ({
               aria-label="复制命令行"
             >
               {copied ? (
-                <Check size={12} strokeWidth={2.4} style={{ color: '#10b981' }} />
+                <Check size={12} strokeWidth={2.4} className={styles.copiedCheckIcon} />
               ) : (
                 <Copy size={12} strokeWidth={2} />
               )}
             </button>
           </Tooltip>
+          {Boolean(normalizedOutput) && (
+            <Tooltip content={copiedOutput ? '已复制输出' : '复制终端输出'}>
+              <button
+                type="button"
+                className={styles.terminalCopyBtn}
+                onClick={handleCopyOutput}
+                aria-label="复制终端输出"
+              >
+                {copiedOutput ? (
+                  <Check size={12} strokeWidth={2.4} className={styles.copiedCheckIcon} />
+                ) : (
+                  <FileText size={12} strokeWidth={2} />
+                )}
+              </button>
+            </Tooltip>
+          )}
         </div>
       </div>
 

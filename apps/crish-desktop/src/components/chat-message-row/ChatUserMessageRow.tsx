@@ -236,7 +236,11 @@ const ChatUserMessageRowInner: React.FC<ChatUserMessageRowProps> = ({
                     className={styles.userAttachmentChip}
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleOpenPath(a.path || a.name);
+                      if (a.path && a.path.trim()) {
+                        handleOpenPath(a.path.trim());
+                      } else {
+                        showToast('该附件无关联本地物理路径');
+                      }
                     }}
                   >
                     <FileFormatIcon fileName={a.name} size={14} />

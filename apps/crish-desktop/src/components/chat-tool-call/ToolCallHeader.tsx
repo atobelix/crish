@@ -34,7 +34,6 @@ export interface ToolCallHeaderProps {
   bodyId: string;
   onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
   onOpenPath?: ((filePath: string) => void) | undefined;
-  onRetryTool?: ((toolId: string) => void) | undefined;
 }
 
 export interface ResolvedToolAction {
@@ -252,7 +251,6 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
   bodyId,
   onToggleTool,
   onOpenPath,
-  onRetryTool,
 }) => {
   const { actionText, paramText, isPath } = resolveToolActionAndParam(
     tc,
@@ -309,7 +307,7 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         <XCircle
           size={sz}
           strokeWidth={sw}
-          color="var(--accent-red, #c45c5c)"
+          color="var(--color-error, var(--accent-red))"
         />
       );
     } else {
@@ -319,7 +317,7 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         <KindIcon
           size={sz}
           strokeWidth={sw}
-          color="var(--text-tertiary, #8c877d)"
+          color="var(--text-tertiary)"
         />
       );
     }
@@ -401,20 +399,6 @@ export const ToolCallHeader: React.FC<ToolCallHeaderProps> = ({
         ) : null}
         {durationStr ? (
           <span className={styles.duration}>{durationStr}</span>
-        ) : null}
-        {tc.status === 'error' && onRetryTool ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={styles.retryBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              onRetryTool(tc.id);
-            }}
-            aria-label="重试"
-            icon={<RotateCcw size={12} aria-hidden />}
-          />
         ) : null}
         {canToggle ? (
           <span className={styles.toolRowChevronSlot}>

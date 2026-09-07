@@ -234,13 +234,13 @@
 }
 
 .approvalCardBtn.allow {
-  background: var(--brand-deep, #047857);
+  background: var(--accent-color);
   border-color: transparent;
-  color: #ffffff;
+  color: var(--text-on-accent, hsl(0 0% 100%));
 }
 
 .approvalCardBtn.allow:hover:not(:disabled) {
-  background: var(--brand, #10b981);
+  background: var(--accent-hover, var(--accent-color));
 }
 
 .approvalCardBtn.allow.isArmed {

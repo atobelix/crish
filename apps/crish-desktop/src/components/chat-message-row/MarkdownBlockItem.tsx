@@ -166,6 +166,7 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
         data-sealed="false"
         data-turbo={isTurboMode ? 'true' : 'false'}
         data-contains-table={containsTable ? 'true' : 'false'}
+        data-md-variant="chat"
       />
     );
   }
@@ -178,6 +179,7 @@ export const MarkdownBlockItem = React.memo(function MarkdownBlockItem({
       data-streaming="false"
       data-sealed="true"
       data-contains-table={containsTable ? 'true' : 'false'}
+      data-md-variant="chat"
     >
       {failed && !html ? (
         <pre className={`${styles.mdTextFallback} md-text-fallback`}>

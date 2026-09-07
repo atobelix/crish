@@ -15,27 +15,26 @@
 }
 
 .hit {
-  color: var(--accent-green, #10b981);
-  background: color-mix(in srgb, var(--accent-green, #10b981) 12%, transparent);
-  border: 1px solid
-    color-mix(in srgb, var(--accent-green, #10b981) 25%, transparent);
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent);
 }
 
 .write {
-  color: var(--accent-primary, #0288d1);
+  color: var(--color-info, var(--text-primary));
   background: color-mix(
     in srgb,
-    var(--accent-primary, #0288d1) 12%,
+    var(--color-info, var(--text-primary)) 10%,
     transparent
   );
   border: 1px solid
-    color-mix(in srgb, var(--accent-primary, #0288d1) 25%, transparent);
+    color-mix(in srgb, var(--color-info, var(--text-primary)) 20%, transparent);
 }
 
 .miss {
-  color: var(--text-tertiary, #94a3b8);
-  background: color-mix(in srgb, var(--border-color, #334155) 30%, transparent);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  color: var(--text-tertiary);
+  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  border: 1px solid var(--border-subtle);
 }
 
 .tooltipContent {
@@ -49,21 +48,21 @@
 
 .tooltipTitle {
   font-weight: 600;
-  color: var(--text-primary, #f8fafc);
+  color: var(--text-primary);
   margin-bottom: 2px;
 }
 
 .tooltipRow {
-  color: var(--text-secondary, #cbd5e1);
+  color: var(--text-secondary);
 }
 
 .tooltipHighlight {
-  color: var(--accent-green, #10b981);
+  color: var(--accent-color);
   font-weight: 500;
   margin-top: 2px;
 }
 
 .tooltipDesc {
-  color: var(--text-tertiary, #94a3b8);
+  color: var(--text-tertiary);
   font-size: 11px;
 }

@@ -245,6 +245,7 @@ export function assistantRowPropsEqual(
     prev.msg.thinking === next.msg.thinking &&
     prev.msg.toolCalls === next.msg.toolCalls &&
     prev.msg.blocks === next.msg.blocks &&
+    prev.msg.injections === next.msg.injections &&
     prev.msg.thinkingTime === next.msg.thinkingTime &&
     prev.msg.timestamp === next.msg.timestamp &&
     prev.msg.cacheMetrics === next.msg.cacheMetrics &&

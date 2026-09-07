@@ -41,7 +41,7 @@ export const ModernCodeBlock: React.FC<ModernCodeBlockProps> = ({
         >
           {copied ? (
             <>
-              <Check size={12} strokeWidth={2.4} style={{ color: '#10b981' }} />
+              <Check size={12} strokeWidth={2.4} className={styles.copiedCheckIcon} />
               <span>Copied!</span>
             </>
           ) : (

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Check, Copy, PinOff } from 'lucide-react';
+import { Check, Copy, Pin, PinOff } from 'lucide-react';
 import styles from './ChatMessageRow.module.css';
 import { Button, Tooltip } from '../ui';
 import { formatMsgTime, pinToggleLabels } from './chatMessageRowUtils';
@@ -46,20 +46,18 @@ export const UserMessageActionsBar: React.FC<UserMessageActionsBarProps> = ({
         />
       </Tooltip>
       {onRetract ? <RetractActionButton onRetract={onRetract} /> : null}
-      {isPinned ? (
-        <Tooltip content={pinLabels.title}>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className={`${styles.iconBtn} ${styles.isPinnedActive}`}
-            aria-label={pinLabels.ariaLabel}
-            aria-pressed
-            onClick={onTogglePin}
-            icon={<PinOff size={14} />}
-          />
-        </Tooltip>
-      ) : null}
+      <Tooltip content={pinLabels.title}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={`${styles.iconBtn}${isPinned ? ` ${styles.isPinnedActive}` : ''}`}
+          aria-label={pinLabels.ariaLabel}
+          aria-pressed={isPinned}
+          onClick={onTogglePin}
+          icon={isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+        />
+      </Tooltip>
     </div>
   );
 };

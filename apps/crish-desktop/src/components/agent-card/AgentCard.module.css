@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   color: var(--text-primary);
 }
 
@@ -33,7 +33,7 @@
   max-height: 32px;
   border-top: none;
   border-bottom: 1px solid var(--hairline, var(--border-subtle));
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -235,7 +235,7 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  background: var(--bg-card, #ffffff);
+  background: var(--bg-card);
 }
 
 .agentLaunchBody {

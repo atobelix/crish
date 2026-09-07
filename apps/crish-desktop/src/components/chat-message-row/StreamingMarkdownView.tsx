@@ -97,6 +97,7 @@ export const StreamingMarkdownView: React.FC<StreamingMarkdownViewProps> = React
         className={`conex-streaming-root ${styles.streamingMarkdownRoot || ''} ${className || ''}`.trim()}
         data-streaming={isStreaming ? 'true' : 'false'}
         data-tier={currentTier}
+        data-md-variant="chat"
       >
         {blocks.map((blk, idx) => {
           const isLast = idx === blocks.length - 1;

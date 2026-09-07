@@ -342,18 +342,23 @@
 }
 
 .streamingMarkdownRoot > .assistantText {
-  margin-bottom: 0.85em;
+  margin-bottom: 0.65em;
 }
 
 .streamingMarkdownRoot > .assistantText:last-child {
   margin-bottom: 0;
 }
 
+/* 混合排版：当块内以标题结尾时，向下的间距收紧，避免标题与下文空行过大脱节 */
+.streamingMarkdownRoot > .assistantText:has(> :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6):last-child) {
+  margin-bottom: 0.28em;
+}
+
 .assistantText {
   font-family: var(--md-text-font, var(--font-sans));
   font-size: var(--md-text-size, 14px);
   font-weight: var(--font-weight-normal, 400);
-  line-height: var(--md-text-line-height, 1.65);
+  line-height: var(--md-text-line-height, 1.68);
   letter-spacing: 0.005em;
   color: var(--md-text-color, var(--text-primary));
   background: transparent;
@@ -375,10 +380,25 @@
 /* 段落垂直节奏 */
 .assistantText :global(.md-p) {
   margin: 0 0 var(--md-text-paragraph-gap, 0.85em) 0;
-  line-height: var(--md-text-line-height, 1.65);
+  line-height: var(--md-text-line-height, 1.68);
 }
 
 .assistantText :global(.md-p:last-child) {
+  margin-bottom: 0;
+}
+
+/* 块内末尾元素清零外下边距，由父容器统一调度垂直节奏 */
+.assistantText > :last-child,
+.assistantText :global(.md-h1:last-child),
+.assistantText :global(.md-h2:last-child),
+.assistantText :global(.md-h3:last-child),
+.assistantText :global(.md-h4:last-child),
+.assistantText :global(.md-h5:last-child),
+.assistantText :global(.md-h6:last-child),
+.assistantText :global(.md-ul:last-child),
+.assistantText :global(.md-ol:last-child),
+.assistantText :global(.md-table-wrap:last-child),
+.assistantText :global(.md-quote:last-child) {
   margin-bottom: 0;
 }
 
@@ -388,7 +408,7 @@
   font-weight: var(--md-heading-font-weight, 600);
   line-height: var(--md-heading-line-height, 1.35);
   color: var(--md-heading-color, var(--text-primary));
-  margin: var(--md-heading-margin-top, 0.65em) 0 var(--md-heading-margin-bottom, 0.35em);
+  margin: var(--md-heading-margin-top, 0.65em) 0 var(--md-heading-margin-bottom, 0.28em);
 }
 
 .assistantText :global(.md-h2) {
@@ -396,7 +416,7 @@
   font-weight: var(--md-heading-font-weight, 600);
   line-height: var(--md-heading-line-height, 1.35);
   color: var(--md-heading-color, var(--text-primary));
-  margin: var(--md-heading-margin-top, 0.55em) 0 var(--md-heading-margin-bottom, 0.30em);
+  margin: var(--md-heading-margin-top, 0.55em) 0 var(--md-heading-margin-bottom, 0.24em);
 }
 
 .assistantText :global(.md-h3) {
@@ -404,7 +424,7 @@
   font-weight: var(--md-heading-font-weight, 600);
   line-height: var(--md-heading-line-height, 1.35);
   color: var(--md-heading-color, var(--text-primary));
-  margin: var(--md-heading-margin-top, 0.45em) 0 var(--md-heading-margin-bottom, 0.25em);
+  margin: var(--md-heading-margin-top, 0.45em) 0 var(--md-heading-margin-bottom, 0.22em);
 }
 
 .assistantText :global(.md-h4) {
@@ -412,7 +432,7 @@
   font-weight: var(--md-heading-font-weight, 600);
   line-height: var(--md-heading-line-height, 1.35);
   color: var(--md-heading-color, var(--text-primary));
-  margin: var(--md-heading-margin-top, 0.40em) 0 var(--md-heading-margin-bottom, 0.20em);
+  margin: var(--md-heading-margin-top, 0.40em) 0 var(--md-heading-margin-bottom, 0.18em);
 }
 
 .assistantText :global(.md-h5) {
@@ -420,7 +440,7 @@
   font-weight: var(--md-heading-font-weight, 600);
   line-height: var(--md-heading-line-height, 1.35);
   color: var(--md-heading-color, var(--text-primary));
-  margin: var(--md-heading-margin-top, 0.35em) 0 var(--md-heading-margin-bottom, 0.20em);
+  margin: var(--md-heading-margin-top, 0.35em) 0 var(--md-heading-margin-bottom, 0.16em);
 }
 
 .assistantText :global(.md-h6) {
@@ -428,7 +448,7 @@
   font-weight: var(--font-weight-medium, 500);
   line-height: var(--md-heading-line-height, 1.35);
   color: var(--text-secondary);
-  margin: var(--md-heading-margin-top, 0.30em) 0 var(--md-heading-margin-bottom, 0.15em);
+  margin: var(--md-heading-margin-top, 0.30em) 0 var(--md-heading-margin-bottom, 0.14em);
 }
 
 /* 行内代码：3.5% 灰度底，无描边 */
@@ -448,46 +468,45 @@
   -webkit-box-decoration-break: clone;
 }
 
-/* 本地路径交互微胶囊 */
+/* 本地路径交互（做减法：去除描边与背景色，自然下划线） */
 .assistantText :global(.md-path-link) {
   appearance: none;
   -webkit-appearance: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 1px 6px;
-  margin: 0 2px;
-  background: var(--md-path-link-bg);
-  color: var(--md-path-link-fg);
-  border: 1px solid var(--md-path-link-border);
-  border-radius: var(--md-path-link-radius, 4px);
+  display: inline;
+  padding: 0;
+  margin: 0;
+  background: var(--md-path-link-bg, transparent);
+  color: var(--md-path-link-fg, var(--text-secondary));
+  border: var(--md-path-link-border, none);
+  border-radius: 0;
   font-family: var(--font-mono);
-  font-size: var(--font-size-xs, 12px);
+  font-size: 0.9em;
   cursor: pointer;
   vertical-align: baseline;
-  line-height: var(--line-height-compact, 1.3);
-  text-decoration: none;
+  line-height: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-secondary) 35%, transparent);
+  text-underline-offset: 3px;
   box-sizing: border-box;
   transition:
-    background-color var(--transition-fast, 150ms ease),
-    border-color var(--transition-fast, 150ms ease),
-    color var(--transition-fast, 150ms ease),
-    box-shadow var(--transition-fast, 150ms ease);
+    color var(--transition-fast, 120ms ease),
+    text-decoration-color var(--transition-fast, 120ms ease);
 }
 
 .assistantText :global(.md-path-link:hover) {
-  background: var(--md-path-link-hover-bg);
-  border-color: color-mix(in srgb, var(--brand) 40%, transparent);
-  color: var(--brand);
+  background: transparent;
+  color: var(--text-primary);
+  text-decoration-color: var(--text-primary);
 }
 
 .assistantText :global(.md-path-link:active) {
-  background: var(--md-path-link-active-bg);
+  background: transparent;
+  color: var(--text-primary);
 }
 
 .assistantText :global(.md-path-link:focus-visible) {
   outline: none;
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--brand) 20%, transparent);
+  text-decoration-color: var(--text-primary);
 }
 
 /* 超链接 */
@@ -605,23 +624,45 @@
   font-weight: var(--font-weight-medium, 500);
 }
 
-.assistantText :global(.md-code-lang) {
+/* 代码块右上角操作中枢：语言在左，复制在右，flex 自动排布彻底消除重叠 */
+.assistantText :global(.md-code-actions) {
   position: absolute;
   top: 6px;
-  right: 64px;
+  right: 8px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  pointer-events: none;
+}
+
+.assistantText :global(.md-code-actions > *) {
+  pointer-events: auto;
+}
+
+.assistantText :global(.md-code-lang) {
+  display: inline-flex;
+  align-items: center;
   font-family: var(--font-mono);
   font-size: var(--font-size-micro, 11px);
   color: var(--text-tertiary);
   text-transform: lowercase;
   user-select: none;
   pointer-events: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  line-height: 1.3;
+}
+
+/* 兼容无 .md-code-actions 外壳的旧结构降级绝对定位 */
+.assistantText :global(.md-code-block > .md-code-lang) {
+  position: absolute;
+  top: 6px;
+  right: 76px;
 }
 
 .assistantText :global(.md-code-copy) {
-  position: absolute;
-  top: 6px;
-  right: 8px;
-  z-index: 5;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1, 4px);
@@ -630,13 +671,12 @@
   font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans, inherit);
   color: var(--text-secondary);
-  background: var(--bg-elevated);
+  background: var(--bg-card);
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm, 4px);
   cursor: pointer;
   opacity: 0;
-  pointer-events: none;
   transition:
     opacity var(--transition-fast, 150ms ease),
     background-color var(--transition-fast, 150ms ease),
@@ -644,10 +684,16 @@
     border-color var(--transition-fast, 150ms ease);
 }
 
+/* 兼容无 .md-code-actions 外壳的旧结构降级绝对定位 */
+.assistantText :global(.md-code-block > .md-code-copy) {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}
+
 .assistantText :global(.md-code-block:hover .md-code-copy),
 .assistantText :global(.md-code-copy:focus-visible) {
   opacity: 1;
-  pointer-events: auto;
 }
 
 .assistantText :global(.md-code-copy:hover) {
@@ -658,6 +704,9 @@
 
 .assistantText :global(.md-code-copy.is-copied) {
   color: var(--brand, hsl(160 84% 39%));
+  border-color: color-mix(in srgb, var(--brand) 40%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-card));
+  opacity: 1;
 }
 
 .assistantText :global(.md-code-pre) {

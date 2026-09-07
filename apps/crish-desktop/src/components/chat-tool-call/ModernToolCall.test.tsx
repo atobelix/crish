@@ -135,6 +135,20 @@ describe('ModernToolCall 极简黑白灰工具调用组件套件', () => {
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith('npm test');
     });
 
+    it('点击复制终端输出按钮应复制输出到剪贴板', () => {
+      render(
+        <ModernTerminalToolCall
+          id="t-term-copy-output"
+          command="npm test"
+          output="Tests passed successfully"
+        />
+      );
+
+      const copyOutputBtn = screen.getByRole('button', { name: '复制终端输出' });
+      fireEvent.click(copyOutputBtn);
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith('Tests passed successfully');
+    });
+
     it('超过 30 行时默认截断为首尾 15 行并展示展开药丸，点击后展开全量行', () => {
       const sixtyLines = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n');
       render(

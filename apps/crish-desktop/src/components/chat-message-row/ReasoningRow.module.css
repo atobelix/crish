@@ -68,8 +68,8 @@
   min-width: 5px;
   min-height: 5px;
   border-radius: 50%;
-  background: var(--brand, #10b981);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
+  background: var(--accent-color);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--accent-color) 22%, transparent);
   animation: thought-dot-pulse 1.4s ease-in-out infinite;
   display: inline-block;
   flex-shrink: 0;
@@ -80,12 +80,12 @@
   0%, 100% {
     transform: scale(0.85);
     opacity: 0.7;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 18%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 18%, transparent);
   }
   50% {
     transform: scale(1.15);
     opacity: 1;
-    box-shadow: 0 0 0 5px color-mix(in srgb, var(--brand, #10b981) 32%, transparent);
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-color) 32%, transparent);
   }
 }
 
@@ -99,14 +99,14 @@
 }
 
 .isLive .reasoningLabel {
-  color: var(--brand-deep, #059669);
+  color: var(--accent-color);
 }
 
 /* 微型分割点 */
 .dotSeparator {
   flex-shrink: 0;
   margin: 0 4px;
-  color: var(--text-tertiary, #9ca3af);
+  color: var(--text-tertiary);
   pointer-events: none;
   user-select: none;
 }
@@ -171,9 +171,9 @@
 .sweepShine {
   background: linear-gradient(
     90deg,
-    var(--text-tertiary, #9ca3af) 0%,
-    color-mix(in srgb, var(--text-primary, #111827) 75%, transparent) 50%,
-    var(--text-tertiary, #9ca3af) 100%
+    var(--text-tertiary) 0%,
+    var(--text-primary) 50%,
+    var(--text-tertiary) 100%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
@@ -201,7 +201,7 @@
 /* 终态耗时文案：数字等宽对齐 font-variant-numeric: tabular-nums */
 .durationBadge {
   font-variant-numeric: tabular-nums;
-  color: var(--text-tertiary, #9ca3af);
+  color: var(--text-tertiary);
   font-size: var(--font-size-sm, 13px);
   line-height: 24px;
   flex-shrink: 0;
@@ -216,7 +216,7 @@
   width: 12px;
   height: 12px;
   margin-left: auto;
-  color: var(--text-tertiary, #9ca3af);
+  color: var(--text-tertiary);
   transition:
     transform var(--transition-fast, 150ms ease),
     color var(--transition-fast, 150ms ease);
@@ -256,9 +256,9 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: var(--radius-sm, 4px);
-  border: 1px solid var(--border-color, #e5e7eb);
-  background: var(--bg-surface, #ffffff);
-  color: var(--text-secondary, #6b7280);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
   font-size: var(--font-size-xs, 12px);
   cursor: pointer;
   transition: all var(--transition-fast, 150ms ease);
@@ -267,9 +267,9 @@
 }
 
 .copyButton:hover {
-  color: var(--text-primary, #111827);
-  background: var(--bg-hover, #f3f4f6);
-  border-color: var(--border-color-hover, #d1d5db);
+  color: var(--text-primary);
+  background: var(--tint-hover);
+  border-color: var(--border-color);
 }
 
 .copyButton:focus-visible {

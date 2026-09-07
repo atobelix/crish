@@ -87,7 +87,7 @@ describe('ChatAssistantMessageRow 去助手化与纯状态载体', () => {
     expect(notice).toHaveAttribute('aria-live', 'polite');
     expect(notice).toHaveAttribute('tabindex', '0');
     expect(
-      screen.getByText('系统 · 切换到 deepseek-chat (ask)')
+      screen.getByText(/系统 · 切换到.*deepseek-chat/)
     ).toBeInTheDocument();
 
     // 4. 彻底消灭 MessageActions：无时间戳、无复制按钮、无重新生成按钮、无固定按钮

@@ -60,14 +60,13 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
     onOpenTerminal,
     onApprovalAllow,
     onApprovalDeny,
-    onRetryTool,
     renderLinkedAgentPanel,
   } = props.actions ?? {};
 
   const [liveNow, setLiveNow] = useState(Date.now());
   useEffect(() => {
     if (tc.status !== 'running' || !tc.startedAt) return;
-    const id = setInterval(() => setLiveNow(Date.now()), 100);
+    const id = setInterval(() => setLiveNow(Date.now()), 500);
     return () => clearInterval(id);
   }, [tc.status, tc.startedAt]);
 
@@ -255,7 +254,6 @@ export const CompactToolRow: React.FC<CompactToolRowProps> = ({
         bodyId={bodyId}
         onToggleTool={handleToggle}
         onOpenPath={onOpenPath}
-        onRetryTool={onRetryTool}
       />
       {canToggle ? (
         <div

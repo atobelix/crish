@@ -33,10 +33,10 @@
   font-family: inherit;
   font-size: 13px;
   font-weight: 500;
-  color: var(--brand-deep, #059669);
+  color: var(--accent-color);
   text-decoration: underline;
   text-underline-offset: 3px;
-  text-decoration-color: var(--brand-line, rgba(16, 185, 129, 0.35));
+  text-decoration-color: color-mix(in srgb, var(--accent-color) 35%, transparent);
   line-height: inherit;
   height: auto;
   cursor: pointer;
@@ -49,8 +49,8 @@
 
 .flowArtifactChip:hover {
   background: transparent;
-  color: var(--brand, #10b981);
-  text-decoration-color: var(--brand, #10b981);
+  color: var(--accent-hover, var(--accent-color));
+  text-decoration-color: var(--accent-hover, var(--accent-color));
   box-shadow: none;
 }
 
@@ -68,8 +68,8 @@
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--brand, #10b981);
-  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--brand, #10b981) 22%, transparent);
+  background: var(--accent-color);
+  box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--accent-color) 22%, transparent);
   animation: sync-dot-pulse 1.4s ease-in-out infinite;
   display: inline-block;
   flex-shrink: 0;
@@ -79,12 +79,12 @@
   0%, 100% {
     transform: scale(0.85);
     opacity: 0.7;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand, #10b981) 18%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 18%, transparent);
   }
   50% {
     transform: scale(1.2);
     opacity: 1;
-    box-shadow: 0 0 0 4.5px color-mix(in srgb, var(--brand, #10b981) 32%, transparent);
+    box-shadow: 0 0 0 4.5px color-mix(in srgb, var(--accent-color) 32%, transparent);
   }
 }
 

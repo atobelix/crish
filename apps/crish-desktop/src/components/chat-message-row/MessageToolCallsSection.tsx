@@ -5,10 +5,9 @@
  * 核心特性：
  * - 整合 24px 极简思考行（ReasoningRow）与 24px 工具单行（ChatToolStack）；
  * - 展开或收拢思考/工具时，联动 ResizeObserver 触发 VSM 树状数组动态测高自愈（invalidateActual + setActual）；
- * - 响应 clearHeightsSignal 信号，零重排撕裂；
  * - 保持关联子 agent 行渲染器（InlineAgentPanel）懒加载注入。
  */
-import React, { lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import React, { lazy, useCallback, useLayoutEffect, useMemo, useRef } from 'react';
 import styles from './ChatMessageRow.module.css';
 import { ChatToolStack, type ChatToolStackSharedProps } from '../chat-tool-call/ChatToolCallBlock';
 import type { ToolRenderItem } from '../../api/toolPresentation';
@@ -52,10 +51,6 @@ export interface MessageToolCallsSectionProps {
   thinking?: MessageThinkingConfig | undefined;
   /** 可选：VSM 树状数组动态高度管理器，用于展开/折叠时测高自愈 */
   virtualScrollManager?: VirtualScrollManager | null | undefined;
-  /** 可选：高度失效自愈信号 */
-  clearHeightsSignal?: number | undefined;
-  /** 可选：高度变化回调 */
-  onHeightChange?: (() => void) | undefined;
 }
 
 export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> = ({
@@ -64,8 +59,6 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> = (
   toolStackProps,
   thinking,
   virtualScrollManager,
-  clearHeightsSignal,
-  onHeightChange,
 }) => {
   const sectionRef = useRef<HTMLDivElement>(null);
 
@@ -110,17 +103,15 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> = (
   const handleToggleTool = useCallback(
     (toolId: string, currentlyOpen: boolean) => {
       toolStackProps.onToggleTool?.(toolId, currentlyOpen);
-      onHeightChange?.();
       virtualScrollManager?.invalidateActual(msgId);
     },
-    [toolStackProps, onHeightChange, virtualScrollManager, msgId]
+    [toolStackProps, virtualScrollManager, msgId]
   );
 
   // 4. 思考行展开/折叠回调：立即使 VSM 旧实测高度失效
   const handleToggleThinking = useCallback(() => {
-    onHeightChange?.();
     virtualScrollManager?.invalidateActual(msgId);
-  }, [onHeightChange, virtualScrollManager, msgId]);
+  }, [virtualScrollManager, msgId]);
 
   // 5. 监听 DOM 尺寸变化：联动 ResizeObserver 驱动 VSM 动态测高自愈
   useLayoutEffect(() => {
@@ -129,22 +120,13 @@ export const MessageToolCallsSection: React.FC<MessageToolCallsSectionProps> = (
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect.height > 0) {
-          onHeightChange?.();
           virtualScrollManager?.invalidateActual(msgId);
         }
       }
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [msgId, virtualScrollManager, onHeightChange]);
-
-  // 6. clearHeightsSignal 信号联动自愈
-  useEffect(() => {
-    if (clearHeightsSignal !== undefined && clearHeightsSignal > 0) {
-      virtualScrollManager?.invalidateActual(msgId);
-      onHeightChange?.();
-    }
-  }, [clearHeightsSignal, msgId, virtualScrollManager, onHeightChange]);
+  }, [msgId, virtualScrollManager]);
 
   if (!hasTools && !hasThinking) return null;
 

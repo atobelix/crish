@@ -206,8 +206,7 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
       expect(runningRow).not.toBeNull();
     });
 
-    it('错误态工具：渲染错误状态与重试按钮', () => {
-      const onRetryTool = vi.fn();
+    it('错误态工具：正确渲染错误状态样式', () => {
       const { container } = render(
         <ChatToolStack
           items={[
@@ -220,20 +219,12 @@ describe('ChatToolStack V1-γ 折叠单源渲染', () => {
             },
           ]}
           msgId="m-err"
-          actions={{
-            onRetryTool,
-          }}
           {...baseProps()}
         />
       );
 
       // 验证存在错误行
       expect(container.querySelector('.is-error')).not.toBeNull();
-      // 验证存在重试按钮
-      const retryBtn = container.querySelector('button[aria-label="重试"]');
-      expect(retryBtn).not.toBeNull();
-      retryBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      expect(onRetryTool).toHaveBeenCalledWith('err-1');
     });
   });
 });

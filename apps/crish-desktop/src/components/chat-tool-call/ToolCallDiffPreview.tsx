@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { FileCode, Copy, Check, ExternalLink } from 'lucide-react';
 import type { FileDiff } from '../../store/types';
 import styles from './ModernToolCall.module.css';
-import { highlightCode, langFromFilename } from '../../api/codeHighlight';
+import { highlightCodeSafe, langFromFilename } from '../../api/codeHighlight';
 import { Tooltip } from '../ui';
 
 export interface ToolCallDiffPreviewProps {
@@ -12,6 +12,7 @@ export interface ToolCallDiffPreviewProps {
 }
 
 export const DIFF_FLAT_PREVIEW_LIMIT = 24;
+export const DIFF_FLAT_EXPAND_MAX = 200;
 
 /**
  * 专有 Diff 差异比对卡片（简洁平铺视图与单一滚动宿主合规）
@@ -30,9 +31,12 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
 
   const changes = diff.changes || [];
   const hasMore = changes.length > DIFF_FLAT_PREVIEW_LIMIT;
-  const displayedChanges = showAll || !hasMore
+  const isCapped = showAll && changes.length > DIFF_FLAT_EXPAND_MAX;
+  const displayedChanges = !hasMore
     ? changes
-    : changes.slice(0, DIFF_FLAT_PREVIEW_LIMIT);
+    : showAll
+      ? changes.slice(0, DIFF_FLAT_EXPAND_MAX)
+      : changes.slice(0, DIFF_FLAT_PREVIEW_LIMIT);
 
   const handleCopyDiff = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -93,7 +97,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
                 aria-label="复制差异内容"
               >
                 {copied ? (
-                  <Check size={13} strokeWidth={2.4} style={{ color: '#10b981' }} />
+                  <Check size={13} strokeWidth={2.4} className={styles.copiedCheckIcon} />
                 ) : (
                   <Copy size={13} strokeWidth={2} />
                 )}
@@ -146,7 +150,7 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
               <pre
                 className={styles.diffLineContent}
                 dangerouslySetInnerHTML={{
-                  __html: highlightCode(change.content, codeLang),
+                  __html: highlightCodeSafe(change.content, codeLang),
                 }}
               />
             </div>
@@ -180,6 +184,12 @@ export const ToolCallDiffPreview: React.FC<ToolCallDiffPreviewProps> = ({
               >
                 收起平铺行
               </button>
+            )}
+
+            {isCapped && (
+              <span className={styles.diffMoreBtn} style={{ opacity: 0.8 }}>
+                已展示前 {DIFF_FLAT_EXPAND_MAX} 行（共 {changes.length} 行）
+              </span>
             )}
 
             {onOpenDiff && (
