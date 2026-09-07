@@ -27,18 +27,15 @@ import { getCompositionRoot } from '../../app/compositionRoot';
 import { isPendingDraft, mintDraftSessionId } from '../../store/draftSession';
 import { useSessionTabDrag } from '../shell/SessionTabDragContext';
 import {
-  exceedsSessionTabDragThresholdL1,
-} from '../shell/sessionTabDragFeel';
-import {
   CLOSE_HIT_PAD_PX,
   DRAG_THRESHOLD_PX,
+  NON_TAB_SPACE_PX,
   TAB_GAP_PX,
   TAB_HEIGHT_PX,
   TAB_WIDTH_MAX_PX,
   TAB_WIDTH_MIN_PX,
 } from '../../utils/tabStripGeometry';
 import { DURATION_FAST_MS, readTransitionMs } from '../../utils/motionTokens';
-import { useNonPassiveWheel } from '../../hooks/useNonPassiveWheel';
 import { useTablistKeyboard } from '../../hooks/useTablistKeyboard';
 import { ResizeObserverManager } from '../../services/ResizeObserverManager';
 import {
@@ -190,6 +187,43 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       [clearLockedWidth]
     );
 
+    // 当存在锁定宽度时，监听全局指针移动：一旦光标脱离整个顶栏物理区域，平滑解除锁定还原自然宽
+    useEffect(() => {
+      if (lockedTabWidth == null) return;
+
+      const handlePointerMove = (e: PointerEvent) => {
+        const headerEl = containerRef.current?.closest(
+          '[data-pane-header="true"]'
+        );
+        if (!headerEl) {
+          clearLockedWidth();
+          return;
+        }
+        const rect = headerEl.getBoundingClientRect();
+        if (
+          e.clientX < rect.left ||
+          e.clientX > rect.right ||
+          e.clientY < rect.top ||
+          e.clientY > rect.bottom
+        ) {
+          clearLockedWidth();
+        }
+      };
+
+      const handleBlur = () => {
+        clearLockedWidth();
+      };
+
+      window.addEventListener('pointermove', handlePointerMove, {
+        passive: true,
+      });
+      window.addEventListener('blur', handleBlur);
+      return () => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('blur', handleBlur);
+      };
+    }, [lockedTabWidth, clearLockedWidth]);
+
     // 组件卸载：清保险丝计时与未决的邻居激活帧
     useEffect(
       () => () => {
@@ -224,16 +258,20 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
       lockedTabWidth ??
       computeNaturalTabWidth(visibleTabs.length, containerWidth);
 
-    const handleWheel = useCallback((e: WheelEvent) => {
+    // 强制阻止任何横向滚动漂移，保障全量标签永远在视口内全景显示
+    const handleScroll = useCallback(() => {
       const el = containerRef.current;
-      if (!el) return;
-      if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        el.scrollLeft += e.deltaY;
-        e.preventDefault();
+      if (el && el.scrollLeft !== 0) {
+        el.scrollLeft = 0;
       }
     }, []);
 
-    useNonPassiveWheel(containerRef, handleWheel);
+    useEffect(() => {
+      const el = containerRef.current;
+      if (el && el.scrollLeft !== 0) {
+        el.scrollLeft = 0;
+      }
+    }, [containerWidth, visibleTabs.length, lockedTabWidth]);
 
     const handleTablistKeyDown = useTablistKeyboard(containerRef, {
       tabSelector: '[role="tab"]',
@@ -333,11 +371,21 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
             containerRect && e.clientX > 0
               ? e.clientX - baseLeft + (containerEl?.scrollLeft || 0)
               : null;
+          const maxFittingWidth =
+            containerWidth > 0
+              ? Math.floor(
+                  (containerWidth -
+                    NON_TAB_SPACE_PX -
+                    (remainingCount - 1) * TAB_GAP_PX) /
+                    remainingCount
+                )
+              : undefined;
           const lockWidth = computeCloseLockWidth({
             isRightmost,
             remainingCount,
             mouseXInContainer,
             measuredWidth,
+            maxFittingWidth,
           });
           if (isRightmost) {
             // 分支 B：末尾摘除后无右邻补位，几何已变，必须整体覆盖锁宽重新对齐光标
@@ -418,6 +466,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
           }
           data-locked={lockedTabWidth != null ? 'true' : 'false'}
           data-booted={booted ? 'true' : 'false'}
+          onScroll={handleScroll}
           onMouseLeave={handleHeaderMouseLeave}
           onKeyDown={handleTablistKeyDown}
           onDoubleClick={(e) => {
@@ -464,7 +513,7 @@ export const PaneHeader: React.FC<PaneHeaderProps> = React.memo(
             aria-label="新对话"
             data-tauri-drag-region="false"
           >
-            <Plus size={13} strokeWidth={2} />
+            <Plus size={14} strokeWidth={1.8} />
           </button>
         </div>
       </div>

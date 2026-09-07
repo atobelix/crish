@@ -95,7 +95,8 @@
   white-space: nowrap;
   box-sizing: border-box;
   user-select: none;
-  overflow: hidden;
+  overflow: visible;
+  position: relative;
   transform-origin: left center;
   transition:
     background var(--duration-micro) var(--ease-standard),
@@ -111,6 +112,32 @@
   app-region: no-drag;
 }
 
+/* 未激活标签之间的细线分隔：静止态辅助视觉区隔，存在感克制 */
+.tabItem::after {
+  content: '';
+  position: absolute;
+  right: calc(-1 * (var(--tab-gap) / 2) - 0.5px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 14px;
+  background: color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 60%, transparent);
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity var(--duration-micro) var(--ease-standard);
+}
+
+/* 激活态、悬浮态、离场态及其相邻标签，以及末尾标签，优雅隐去分隔线 */
+.tabItem:last-child::after,
+.tabItemActive::after,
+.tabItem:has(+ .tabItemActive)::after,
+.tabItem:hover::after,
+.tabItem:has(+ .tabItem:hover)::after,
+.tabItem[data-leaving='true']::after,
+.tabItem:has(+ [data-leaving='true'])::after {
+  opacity: 0;
+}
+
 /* 标签内部容器：自适应外壳宽度流动，尺寸伸缩时关闭按钮平滑跟随；离场时保持原宽不挤压文字 */
 .tabItemInner {
   width: 100%;
@@ -124,6 +151,8 @@
   padding: 0 6px 0 10px;
   box-sizing: border-box;
   flex-shrink: 0;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
 }
 
 .tabItem:hover:not(.tabItemActive) {
@@ -138,13 +167,13 @@
   color: var(--text-primary);
   font-weight: 500;
   border-color: var(--border-subtle, color-mix(in srgb, var(--border-color, hsl(35 10% 86%)) 80%, transparent));
-  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 6%, transparent), 0 1px 1px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 6%, transparent);
 }
 
 .tabItemActive:hover {
   background: var(--bg-card, #ffffff);
   border-color: var(--border-color, hsl(35 10% 86%));
-  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 8%, transparent), 0 1px 1.5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 4%, transparent);
+  box-shadow: 0 2px 5px color-mix(in srgb, var(--shadow-color, hsl(35 5% 11%)) 8%, transparent);
 }
 
 /* 入场：@starting-style 首帧以左侧实际落地位置为锚点展开，无纵向浮动漂移；首轮挂载由 data-booted 关闭。
@@ -202,9 +231,13 @@
   color: var(--text-tertiary);
   cursor: pointer;
   padding: 0;
-  opacity: 0.45;
+  opacity: 0;
   position: relative;
-  transition: background var(--duration-micro) var(--ease-standard), opacity var(--duration-micro) var(--ease-standard), color var(--duration-micro) var(--ease-standard);
+  transition:
+    background var(--duration-micro) var(--ease-standard),
+    opacity var(--duration-micro) var(--ease-standard),
+    color var(--duration-micro) var(--ease-standard),
+    transform 100ms var(--ease-standard);
 }
 
 .tabCloseBtn::before {
@@ -217,11 +250,11 @@
 }
 
 .tabItem:hover .tabCloseBtn {
-  opacity: 0.75;
+  opacity: 0.7;
 }
 
 .tabItemActive .tabCloseBtn {
-  opacity: 0.75;
+  opacity: 0.7;
 }
 
 .tabItem .tabCloseBtn:hover,
@@ -233,6 +266,7 @@
 
 .tabCloseBtn:active {
   background: var(--tint-active, hsl(0 0% 0% / 0.12));
+  transform: scale(0.92);
 }
 
 /* 新建标签按钮（加号）：28px 与标签同高、8px 圆角，纯流式紧贴末尾标签 */
@@ -257,7 +291,8 @@
     background var(--duration-micro) var(--ease-standard),
     color var(--duration-micro) var(--ease-standard),
     border-color var(--duration-micro) var(--ease-standard),
-    box-shadow var(--duration-micro) var(--ease-standard);
+    box-shadow var(--duration-micro) var(--ease-standard),
+    transform 100ms var(--ease-standard);
 }
 
 .newTabBtn:hover {
@@ -269,4 +304,5 @@
 
 .newTabBtn:active {
   background: var(--tint-active, hsl(0 0% 0% / 0.09));
+  transform: scale(0.96);
 }

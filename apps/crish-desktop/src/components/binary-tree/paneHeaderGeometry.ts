@@ -61,28 +61,43 @@ export interface CloseLockInput {
   mouseXInContainer: number | null;
   /** 事件派发期内同步量测到的当前标签宽度 */
   measuredWidth: number;
+  /** 容器可用最大宽度（可选防御，防止锁宽超过容器导致横向溢出） */
+  maxFittingWidth?: number;
 }
 
 /**
- * 关闭锁定宽度：分支 A（右侧还有存活标签）直接用实测等宽让右邻补位；
- * 分支 B（删末尾标签）按光标位置反推等宽，使前序标签的叉号精准落到光标下，
- * 反推值超出标准宽度时严格钳制在 240px，绝不强行拉伸。
+ * 关闭锁定宽度：
+ * 分支 A（右侧还有存活标签）：直接用实测等宽让右邻补位；
+ * 分支 B（删末尾标签）：按光标位置反推等宽，使前序标签的叉号精准落到光标下，
+ * 反推值超出标准宽度或容器容纳极限时严格钳制，绝不强行拉伸或横向溢出。
+ * 坐标缺失时安全回退当前宽度 measuredWidth。
  */
 export function computeCloseLockWidth(input: CloseLockInput): number {
-  const { isRightmost, remainingCount, mouseXInContainer, measuredWidth } =
-    input;
-  if (!isRightmost) {
+  const {
+    isRightmost,
+    remainingCount,
+    mouseXInContainer,
+    measuredWidth,
+    maxFittingWidth,
+  } = input;
+  if (!isRightmost || remainingCount <= 0) {
     return measuredWidth;
   }
+  const maxWidth =
+    maxFittingWidth != null && maxFittingWidth > 0
+      ? Math.min(TAB_WIDTH_MAX_PX, maxFittingWidth)
+      : TAB_WIDTH_MAX_PX;
+
   if (mouseXInContainer != null && mouseXInContainer > 0) {
     const neededWidth =
       (mouseXInContainer +
         CLOSE_BTN_RIGHT_OFFSET_PX -
         (remainingCount - 1) * TAB_GAP_PX) /
       remainingCount;
-    if (neededWidth <= TAB_WIDTH_MAX_PX) {
+    if (neededWidth <= maxWidth) {
       return Math.max(TAB_WIDTH_MIN_PX, Math.round(neededWidth));
     }
+    return maxWidth;
   }
-  return TAB_WIDTH_MAX_PX;
+  return Math.min(measuredWidth, maxWidth);
 }
