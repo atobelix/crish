@@ -1184,66 +1184,42 @@ async fn handle_remote_command_frame(
 
     let params_val = body.get("params").cloned().unwrap_or(body);
 
+    // audit-repair-202609 T26：三命令的「反序列化 → 调用 → 序列化回包」
+    // 样板收敛为泛型骨架（行为与原逐字段等价）；cmd 名进错误文案与原实现一致。
     let result = match cmd {
-        "approve" => match serde_json::from_value::<conex_types::device::commands::ApproveParams>(params_val) {
-            Ok(params) => match backend.approve(params).await {
-                Ok(res) => match serde_json::to_value(res) {
-                    Ok(val) => conex_types::device::commands::CommandResult::success(msg_id, val),
-                    Err(e) => conex_types::device::commands::CommandResult::failure(
-                        msg_id,
-                        ErrorBody::new(DeviceErrorCode::Internal, e.to_string()),
-                    ),
-                },
-                Err(e) => conex_types::device::commands::CommandResult::failure(
-                    msg_id,
-                    ErrorBody::new(e.device_code(), e.to_string()),
-                ),
-            },
-            Err(e) => conex_types::device::commands::CommandResult::failure(
-                msg_id,
-                ErrorBody::new(
-                    DeviceErrorCode::CmdInvalid,
-                    format!("approve params invalid: {e}"),
-                ),
-            ),
-        },
-        "deny" => match serde_json::from_value::<conex_types::device::commands::DenyParams>(params_val) {
-            Ok(params) => match backend.deny(params).await {
-                Ok(res) => match serde_json::to_value(res) {
-                    Ok(val) => conex_types::device::commands::CommandResult::success(msg_id, val),
-                    Err(e) => conex_types::device::commands::CommandResult::failure(
-                        msg_id,
-                        ErrorBody::new(DeviceErrorCode::Internal, e.to_string()),
-                    ),
-                },
-                Err(e) => conex_types::device::commands::CommandResult::failure(
-                    msg_id,
-                    ErrorBody::new(e.device_code(), e.to_string()),
-                ),
-            },
-            Err(e) => conex_types::device::commands::CommandResult::failure(
-                msg_id,
-                ErrorBody::new(
-                    DeviceErrorCode::CmdInvalid,
-                    format!("deny params invalid: {e}"),
-                ),
-            ),
-        },
+        "approve" => {
+            let be = backend.clone();
+            run_remote_command("approve", msg_id, params_val, move |p| {
+                let be = be.clone();
+                async move { be.approve(p).await }
+            })
+            .await
+        }
+        "deny" => {
+            let be = backend.clone();
+            run_remote_command("deny", msg_id, params_val, move |p| {
+                let be = be.clone();
+                async move { be.deny(p).await }
+            })
+            .await
+        }
         "listPendingApprovals" => {
-            let params = serde_json::from_value::<conex_types::device::commands::ListPendingApprovalsParams>(params_val).unwrap_or_default();
-            match backend.list_pending_approvals(params).await {
-                Ok(res) => match serde_json::to_value(res) {
-                    Ok(val) => conex_types::device::commands::CommandResult::success(msg_id, val),
-                    Err(e) => conex_types::device::commands::CommandResult::failure(
-                        msg_id,
-                        ErrorBody::new(DeviceErrorCode::Internal, e.to_string()),
-                    ),
+            // 契约宽容：缺省参数 unwrap_or_default（与原实现一致）
+            let params = serde_json::from_value::<
+                conex_types::device::commands::ListPendingApprovalsParams,
+            >(params_val)
+            .unwrap_or_default();
+            let be = backend.clone();
+            run_remote_command(
+                "listPendingApprovals",
+                msg_id,
+                serde_json::Value::Null,
+                move |_p: conex_types::device::commands::ListPendingApprovalsParams| {
+                    let be = be.clone();
+                    async move { be.list_pending_approvals(params).await }
                 },
-                Err(e) => conex_types::device::commands::CommandResult::failure(
-                    msg_id,
-                    ErrorBody::new(e.device_code(), e.to_string()),
-                ),
-            }
+            )
+            .await
         }
         _ => conex_types::device::commands::CommandResult::failure(
             msg_id,
@@ -1255,6 +1231,46 @@ async fn handle_remote_command_frame(
     };
 
     send_envelope(ctx, MessageKind::Result(cmd.to_string()), result).await
+}
+
+/// remote 命令通用执行骨架：
+/// 1. `params_val` → `P`（失败 = `CmdInvalid`，文案含 cmd 名）；
+/// 2. 调用 backend（业务错误 `e.device_code()` 原样透传）；
+/// 3. 成功结果序列化（失败 = `Internal`）。
+async fn run_remote_command<P, R, F, Fut>(
+    cmd_name: &'static str,
+    msg_id: &str,
+    params_val: Value,
+    call: F,
+) -> conex_types::device::commands::CommandResult
+where
+    P: serde::de::DeserializeOwned,
+    R: serde::Serialize,
+    F: FnOnce(P) -> Fut,
+    Fut: std::future::Future<Output = Result<R, ServerError>>,
+{
+    match serde_json::from_value::<P>(params_val) {
+        Ok(params) => match call(params).await {
+            Ok(res) => match serde_json::to_value(res) {
+                Ok(val) => conex_types::device::commands::CommandResult::success(msg_id, val),
+                Err(e) => conex_types::device::commands::CommandResult::failure(
+                    msg_id,
+                    ErrorBody::new(DeviceErrorCode::Internal, e.to_string()),
+                ),
+            },
+            Err(e) => conex_types::device::commands::CommandResult::failure(
+                msg_id,
+                ErrorBody::new(e.device_code(), e.to_string()),
+            ),
+        },
+        Err(e) => conex_types::device::commands::CommandResult::failure(
+            msg_id,
+            ErrorBody::new(
+                DeviceErrorCode::CmdInvalid,
+                format!("{cmd_name} params invalid: {e}"),
+            ),
+        ),
+    }
 }
 
 /// pair.hello：配对简化链（hello → pair.ok + device.ready；任务书「或直接

@@ -290,32 +290,33 @@ pub(crate) fn open_path_with_default_app(path: String) -> Result<HostOpenResult,
     #[cfg(windows)]
     {
         // P1-S5 修复：弃用 `cmd /C start "" <target>`——cmd 对命令行的
-        // 字符串二次解释是注入根源（`&` 拆命令、`%` 变量展开等），即使
-        // 参数数组直传也无法避免（CreateProcess 拼串后由 cmd 重新解析）。
-        // 改 ShellExecuteW 直调：目标以 UTF-16 参数直接交给 shell 执行
-        // 引擎（ShellExecute），无任何命令行解释层（R1 复核 F6-02
-        // 修复建议 1「首选」）。
-        match open_with_shell_execute(&target) {
-            Ok(()) => Ok(HostOpenResult {
-                ok: true,
-                opener_id: "system-default".to_string(),
-                target_kind: HostOpenTargetKindForResult::Path,
-                target: target.clone(),
-                command: "ShellExecute".to_string(),
-                diagnostic: host_opener_diagnostic(
-                    "host-opener-launched",
-                    "Opened path with system default association.",
-                    Some("ShellExecute".to_string()),
-                    Some(target),
-                ),
-            }),
-            Err(error) => Err(to_core_error(host_opener_error(
-                "host-opener-spawn-failed",
-                format!("Failed to open with system default: {error}"),
+        // 字符串二次解释是注入根源（`&` 拆命令、`%` 变量展开等）。
+        // 改 ShellExecuteW 直调并在独立线程拉起，防止 DDE/COM 阻塞 IPC 消息循环；
+        // 若 ShellExecuteW 异常则回落 explorer.exe。
+        let target_clone = target.clone();
+        let handle = std::thread::spawn(move || {
+            let res = open_with_shell_execute(&target_clone);
+            if res.is_err() {
+                let _ = std::process::Command::new("explorer.exe")
+                    .arg(&target_clone)
+                    .spawn();
+            }
+        });
+        drop(handle);
+
+        Ok(HostOpenResult {
+            ok: true,
+            opener_id: "system-default".to_string(),
+            target_kind: HostOpenTargetKindForResult::Path,
+            target: target.clone(),
+            command: "ShellExecute".to_string(),
+            diagnostic: host_opener_diagnostic(
+                "host-opener-launched",
+                "Opened path with system default association.",
                 Some("ShellExecute".to_string()),
                 Some(target),
-            ))),
-        }
+            ),
+        })
     }
 
     #[cfg(target_os = "macos")]

@@ -37,7 +37,8 @@ pub async fn auth_get_session(
 /// 手动触发 Token 静默续期
 #[tauri::command]
 pub async fn auth_refresh_token(auth_mgr: State<'_, Arc<AuthManager>>) -> Result<bool, String> {
-    auth_mgr.check_and_refresh_token().await;
+    // RefreshOutcome 只驱动守护循环退避；命令面仅回报登录态是否仍然有效
+    let _outcome = auth_mgr.check_and_refresh_token().await;
     let s = auth_mgr.get_session_snapshot().await;
     Ok(s.is_logged_in)
 }

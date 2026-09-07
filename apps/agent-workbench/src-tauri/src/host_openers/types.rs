@@ -36,6 +36,8 @@ pub(crate) struct HostOpener {
     pub(crate) availability: HostOpenerAvailability,
     pub(crate) available: bool,
     pub(crate) reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) icon_data_url: Option<String>,
     pub(crate) diagnostic: HostOpenerDiagnostic,
 }
 

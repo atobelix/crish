@@ -2,9 +2,9 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 
-pub(crate) const MAX_TEXT_FILE_BYTES: usize = 1024 * 1024;
+pub(crate) const MAX_TEXT_FILE_BYTES: usize = 4 * 1024 * 1024;
 pub(crate) const DEFAULT_MAX_TEXT_FILE_LINES: usize = 2_000;
-pub(crate) const MAX_TEXT_FILE_LINES: usize = 5_000;
+pub(crate) const MAX_TEXT_FILE_LINES: usize = 20_000;
 pub(crate) const BINARY_SCAN_BYTES: usize = 8192;
 pub(crate) const READ_CHUNK_BYTES: usize = 8192;
 

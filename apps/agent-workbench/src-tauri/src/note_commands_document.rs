@@ -53,23 +53,16 @@ pub async fn note_document_list(
     }
 }
 
-/// 2. 新建笔记文档
+/// 2. 新建笔记文档（audit-repair-202609 T10：砍除 initial_markdown——
+/// 内容初始化唯一路径为 `note_document_apply_md`，直插单块属伪实现）
 #[tauri::command]
-pub async fn note_document_create(
-    title: Option<String>,
-    initial_markdown: Option<String>,
-    tags: Option<Vec<String>>,
-) -> Result<JsonValue, CoreError> {
-    let _ = tags; // 保持契约宽容，底层不持久化死属性
+pub async fn note_document_create(title: Option<String>) -> Result<JsonValue, CoreError> {
     let Some(backend) = note_runtime::try_store_backend() else {
         return Ok(super::unwired_failure());
     };
 
     let joined = tokio::task::spawn_blocking(move || -> Result<NoteDocumentMeta, StoreError> {
-        backend.store().create_document(
-            title.as_deref(),
-            initial_markdown.as_deref(),
-        )
+        backend.store().create_document(title.as_deref())
     })
     .await;
 

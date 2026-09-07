@@ -8,7 +8,7 @@
     "typecheck": "tsc --noEmit",
     "dev": "npm --prefix ../crish-desktop run dev",
     "build": "npm --prefix ../crish-desktop run build",
-    "tauri": "tauri",
+    "tauri": "node ../../node_modules/@tauri-apps/cli/tauri.js",
     "cli:check": "tsc --noEmit && npm run command-registry:check",
     "command-registry:check": "vitest run src/core/tauri-command-registry.test.ts src/shared/chinese-text-regression.test.ts"
   },

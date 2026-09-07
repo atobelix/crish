@@ -5,6 +5,7 @@
 
 pub(crate) mod discovery;
 pub(crate) mod execute;
+pub(crate) mod icon;
 pub(crate) mod resolve;
 pub(crate) mod types;
 
@@ -98,6 +99,23 @@ mod tests {
             editor.reason.as_deref(),
             Some("No matching command or known installation path was discovered on this host.")
         );
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn extract_icon_from_windows_explorer_returns_valid_png_data_url() {
+        use std::path::Path;
+        let windir = std::env::var("WINDIR").unwrap_or_else(|_| r"C:\Windows".to_string());
+        let explorer = Path::new(&windir).join("explorer.exe");
+        if explorer.exists() {
+            let data_url = super::icon::extract_icon_data_url(&explorer);
+            assert!(data_url.is_some(), "explorer.exe icon should be extracted");
+            let url = data_url.unwrap();
+            assert!(url.starts_with("data:image/png;base64,"));
+            // 验证缓存二次读取有效
+            let cached = super::icon::extract_icon_data_url(&explorer);
+            assert_eq!(cached.as_deref(), Some(url.as_str()));
+        }
     }
 
     fn path_env(paths: &[&str]) -> OsString {

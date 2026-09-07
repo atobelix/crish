@@ -45,7 +45,10 @@ getrandom = "0.2"
 hex.workspace = true
 
 sha2 = "0.10"
+# 敏感缓冲 best-effort 清零（audit-repair-202609 T13）
+zeroize = "1"
 base64 = "0.22"
+miniz_oxide = "0.8"
 chardetng = "0.1"
 encoding_rs = "0.8"
 memmap2 = "0.9"
@@ -117,7 +120,8 @@ ring = "0.17"
 # G-4 网络环境检测（pairing.rs 枚举本机网卡 IP，GetAdaptersAddresses）
 # Win32_System_Registry：R1-09 G-4 网络配置文件检测（multi_device_network.rs
 # 读 NetworkList\Profiles 的 Category 值判定公用/专用/域）
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Power", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_Threading", "Win32_System_Registry", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
+# Win32_Graphics_Gdi：host_openers 提取应用与资源管理器原生图标位图
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_JobObjects", "Win32_System_Power", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_Graphics_Gdi", "Win32_System_Threading", "Win32_System_Registry", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_Networking_WinSock"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

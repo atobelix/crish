@@ -84,11 +84,6 @@ pub(crate) struct PtySession {
     pub(crate) state: Mutex<PtyLivenessState>,
     /// 游离断连起始时刻（Active -> Detached 时更新）
     pub(crate) detached_at_ms: AtomicU64,
-    /// 在 Windows ConPTY 下，slave 持有伪控制台句柄（HPCON）。
-    /// 若过早 drop 会触发 ClosePseudoConsole 导致子进程秒死；
-    /// 必须在会话生命周期内随 PtySession 保活。
-    #[allow(dead_code)]
-    pub(crate) _slave: Option<Box<dyn portable_pty::SlavePty + Send>>,
 }
 
 impl PtySession {
@@ -108,7 +103,6 @@ impl PtySession {
             last_activity_at_ms: AtomicU64::new(now_ms),
             state: Mutex::new(PtyLivenessState::Active),
             detached_at_ms: AtomicU64::new(0),
-            _slave: None,
         }
     }
 
@@ -251,16 +245,25 @@ fn resolve_cwd(cwd: Option<&str>) -> PathBuf {
     PathBuf::from(".")
 }
 
+/// Windows PowerShell 系 shell 构造（audit-repair-202609 T2）：
+/// 产品终端默认隐藏版权横幅，`-NoLogo` 在此单点封装——各 shell 分支只负责
+/// 选程序路径，不再重复拼参（与 process.rs:243 的 -NoLogo 口径保持一致）。
+fn new_windows_shell_command(program: impl AsRef<std::ffi::OsStr>) -> CommandBuilder {
+    let mut c = CommandBuilder::new(program);
+    c.arg("-NoLogo");
+    c
+}
+
 /// Default interactive shell: Windows prefers pwsh then powershell.exe; Unix bash/$SHELL.
 fn build_shell_command(cwd: &Path) -> CommandBuilder {
     #[cfg(windows)]
     {
         let mut cmd = if which_on_path("pwsh") || which_on_path("pwsh.exe") {
-            CommandBuilder::new("pwsh.exe")
+            new_windows_shell_command("pwsh.exe")
         } else if let Ok(pf) = std::env::var("ProgramFiles") {
             let pwsh7_path = Path::new(&pf).join("PowerShell").join("7").join("pwsh.exe");
             if pwsh7_path.is_file() {
-                CommandBuilder::new(pwsh7_path)
+                new_windows_shell_command(pwsh7_path)
             } else if let Ok(root) = std::env::var("SystemRoot") {
                 let system_ps = Path::new(&root)
                     .join("System32")
@@ -268,12 +271,12 @@ fn build_shell_command(cwd: &Path) -> CommandBuilder {
                     .join("v1.0")
                     .join("powershell.exe");
                 if system_ps.is_file() {
-                    CommandBuilder::new(system_ps)
+                    new_windows_shell_command(system_ps)
                 } else {
-                    CommandBuilder::new("powershell.exe")
+                    new_windows_shell_command("powershell.exe")
                 }
             } else {
-                CommandBuilder::new("powershell.exe")
+                new_windows_shell_command("powershell.exe")
             }
         } else if let Ok(root) = std::env::var("SystemRoot") {
             let system_ps = Path::new(&root)
@@ -282,12 +285,12 @@ fn build_shell_command(cwd: &Path) -> CommandBuilder {
                 .join("v1.0")
                 .join("powershell.exe");
             if system_ps.is_file() {
-                CommandBuilder::new(system_ps)
+                new_windows_shell_command(system_ps)
             } else {
-                CommandBuilder::new("powershell.exe")
+                new_windows_shell_command("powershell.exe")
             }
         } else {
-            CommandBuilder::new("powershell.exe")
+            new_windows_shell_command("powershell.exe")
         };
         cmd.cwd(cwd);
         // Prefer UTF-8 for child tools
@@ -415,15 +418,14 @@ pub(crate) fn create_session(
         }
     }
 
-    // Windows ConPTY: pair.slave 持有伪控制台句柄（HPCON），若立即 drop 会直接 ClosePseudoConsole 杀掉子进程！
-    // 必须随 PtySession 保活；Unix 平台保持 drop 惯例。
-    #[cfg(windows)]
-    let slave_holder = Some(pair.slave);
-    #[cfg(not(windows))]
-    let slave_holder = {
-        drop(pair.slave);
-        None
-    };
+    // spawn 完成后即 drop slave（Unix/Windows 统一惯例）。
+    // 所有权事实（audit-repair-202609 T1，已核对 portable-pty 0.9.0 源码
+    // win/conpty.rs openpty）：ConPtySlavePty { inner: master.inner.clone() }
+    // —— slave 与 master 共享同一 Arc，本会话持有的 master 会保活 HPCON
+    // 直至会话结束；drop slave 不可能触发 ClosePseudoConsole。
+    // 历史上「保活 slave」的修复基于误诊，已回退；所有权结构若因升级变化，
+    // 由 conpty_slave_drop_regression_anchor 探针测试拦截。
+    drop(pair.slave);
 
     let mut reader = pair
         .master
@@ -444,7 +446,6 @@ pub(crate) fn create_session(
         last_activity_at_ms: AtomicU64::new(crate::server::now_ms()),
         state: Mutex::new(PtyLivenessState::Active),
         detached_at_ms: AtomicU64::new(0),
-        _slave: slave_holder,
     };
 
     {
@@ -712,6 +713,53 @@ pub(crate) fn kill_all() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 回归锚（audit-repair-202609 T1）：portable-pty 0.9.0 Windows ConPTY
+    /// 下 drop slave 不会杀子进程（slave/master 共享 Arc，HPCON 随 master
+    /// 保活）。若未来 crate 升级后本测变红，说明所有权结构已变化，需重新
+    /// 评估 create_session 的 slave 处理——禁止凭感觉重新加回保活代码。
+    #[test]
+    fn conpty_slave_drop_regression_anchor() {
+        let pty_system = portable_pty::native_pty_system();
+        let pair = pty_system
+            .openpty(PtySize {
+                rows: 24,
+                cols: 80,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .expect("openpty failed");
+
+        #[cfg(windows)]
+        let cmd = {
+            let mut c = CommandBuilder::new("cmd.exe");
+            c.arg("/c");
+            c.arg("ping -n 3 127.0.0.1 > nul");
+            c
+        };
+        #[cfg(not(windows))]
+        let cmd = {
+            let mut c = CommandBuilder::new("sleep");
+            c.arg("2");
+            c
+        };
+
+        let mut child = pair
+            .slave
+            .spawn_command(cmd)
+            .expect("spawn failed");
+        drop(pair.slave);
+
+        std::thread::sleep(std::time::Duration::from_millis(1200));
+        let status = child
+            .try_wait()
+            .expect("try_wait failed");
+        assert!(
+            status.is_none(),
+            "drop slave 后子进程不得退出（HPCON 应仍由 master 保活）: {status:?}"
+        );
+        let _ = child.kill();
+    }
 
     #[test]
     fn test_resolve_cwd_fallbacks() {

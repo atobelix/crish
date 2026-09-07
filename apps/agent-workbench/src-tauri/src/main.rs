@@ -844,8 +844,14 @@ fn main() {
             ));
             app.manage(Arc::clone(&pairing));
 
-            // 用户账号中心管理与系统级凭据安全存储（DPAPI）
-            let auth_manager = crate::auth::AuthManager::new(setup_app_dir.clone(), None);
+            // 用户账号中心管理与系统级凭据安全存储（DPAPI）。
+            // Base URL 配置化（audit-repair-202609 T16）：缺省生产地址
+            // auth.flowbit.me，可经 CRISH_AUTH_BASE_URL 环境变量覆盖。
+            let auth_base_url = std::env::var("CRISH_AUTH_BASE_URL")
+                .ok()
+                .filter(|v| !v.trim().is_empty());
+            let auth_manager =
+                crate::auth::AuthManager::new(setup_app_dir.clone(), auth_base_url);
             app.manage(auth_manager);
 
             // ⑥ 状态诊断 manage（与 CoreRunState 共享同一实例）
