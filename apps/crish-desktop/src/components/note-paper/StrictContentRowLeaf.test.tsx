@@ -26,6 +26,7 @@ import {
   submitIntent,
   type ApplyOpsAdapter,
 } from '@crish/block-paper';
+import { isUuidV4, newNoteBlockId } from './noteBlockId';
 import {
   createFixtureHydrateTransport,
   makeHydratedBlock,
@@ -456,6 +457,57 @@ describe('StrictContentRowLeaf & NotePaperStrictBody · 直接编辑交互', () 
   });
 
   it('strict_body_empty_click_initializes_first_row_and_focuses', async () => {
+    // audit-repair-202609 T7 新契约：面板点击 → 生成合法 UUID → insert 落盘
+    // 后以真实块 ID 回填 initBlockId；Body 行绑定真实 ID，测试定位用
+    // testid 保持 init-first-block 字面量。幽灵 ID 行为已根除。
+    const onInit = vi.fn();
+    const chrome = new BlockChromeModel();
+    function Harness() {
+      const [initBlockId, setInitBlockId] = React.useState<string | null>(null);
+      return (
+        <NotePaperStrictBody
+          status="empty"
+          errorReason={null}
+          errorCode={null}
+          blocks={[]}
+          renderReactRows={true}
+          chrome={chrome}
+          onInitFirstBlock={() => {
+            onInit();
+            setInitBlockId(newNoteBlockId());
+          }}
+          initBlockId={initBlockId}
+        />
+      );
+    }
+    render(<Harness />);
+
+    const empty = screen.getByTestId('note-paper-strict-empty');
+    expect(empty).toBeInTheDocument();
+
+    // 点击空白正文区域 → 面板回填真实块 ID → 初始化行出现
+    await act(async () => {
+      fireEvent.click(empty);
+    });
+
+    expect(onInit).toHaveBeenCalledTimes(1);
+    const firstBlock = screen.getByTestId('note-strict-block-init-first-block');
+    expect(firstBlock).toBeInTheDocument();
+    // 行绑定的必须是合法 UUID（引擎 BlockId::parse 硬约束），禁止幽灵字面量
+    expect(isUuidV4(firstBlock.getAttribute('data-block-id') ?? '')).toBe(true);
+    const editableLeaf = firstBlock.querySelector(
+      'div[contenteditable="true"]'
+    );
+    expect(editableLeaf).not.toBeNull();
+    // 聚焦由 Body 的 setTimeout(0) 效果完成
+    await waitFor(() => {
+      expect(document.activeElement).toBe(editableLeaf);
+    });
+  });
+
+  it('strict_body_init_row_never_renders_without_real_block_id', async () => {
+    // insert 失败路径：面板不回填 initBlockId → Body 不得渲染可编辑行
+    //（杜绝把打字导向不存在的块），空态占位保持可见。
     const onInit = vi.fn();
     const chrome = new BlockChromeModel();
     render(
@@ -467,24 +519,18 @@ describe('StrictContentRowLeaf & NotePaperStrictBody · 直接编辑交互', () 
         renderReactRows={true}
         chrome={chrome}
         onInitFirstBlock={onInit}
+        initBlockId={null}
       />
     );
 
-    const empty = screen.getByTestId('note-paper-strict-empty');
-    expect(empty).toBeInTheDocument();
-
-    // 点击空白正文区域
     await act(async () => {
-      fireEvent.click(empty);
+      fireEvent.click(screen.getByTestId('note-paper-strict-empty'));
     });
 
-    // 自动初始化第一行
     expect(onInit).toHaveBeenCalledTimes(1);
-    const firstBlock = screen.getByTestId('note-strict-block-init-first-block');
-    expect(firstBlock).toBeInTheDocument();
-    const editableLeaf = screen.getByTestId(
-      'note-strict-leaf-init-first-block'
-    );
-    expect(editableLeaf).toHaveAttribute('contenteditable', 'true');
+    expect(
+      screen.queryByTestId('note-strict-block-init-first-block')
+    ).toBeNull();
+    expect(screen.getByTestId('note-paper-strict-empty')).toBeInTheDocument();
   });
 });

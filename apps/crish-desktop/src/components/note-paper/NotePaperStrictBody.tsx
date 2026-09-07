@@ -62,6 +62,13 @@ export type NotePaperStrictBodyProps = {
   children?: React.ReactNode;
   /** 空笔记态点击空白区域初始化首行回调 */
   onInitFirstBlock?: () => void;
+  /**
+   * 空笔记初始化首块的**真实块 ID**（audit-repair-202609 · T7）。
+   * 面板生成合法 UUID 并 insert 落盘后回填；为 null 时初始化行不渲染可编辑
+   * 叶——历史幽灵 ID `"init-first-block"` 会在引擎 `ops_from_json_str` 处直接
+   * 失败，禁止回落。测试定位用 `data-testid` 保持 `init-first-block` 字面量。
+   */
+  initBlockId?: string | null;
   /** 块文本变更回调 */
   onBlockChange?: (blockId: string, newText: string) => void;
   /** 块文本失焦提交回调 */
@@ -88,6 +95,7 @@ export const NotePaperStrictBody = React.forwardRef<
     baseRev,
     children,
     onInitFirstBlock,
+    initBlockId,
     onBlockChange,
     onTextCommit,
   },
@@ -102,6 +110,19 @@ export const NotePaperStrictBody = React.forwardRef<
       setEmptyInitRow(false);
     }
   }, [status]);
+
+  // 初始化首块 insert 失败时面板会把 initBlockId 复位为 null：同步回退空态占位
+  const prevInitBlockIdRef = React.useRef<string | null | undefined>(initBlockId);
+  React.useEffect(() => {
+    if (
+      prevInitBlockIdRef.current !== null &&
+      prevInitBlockIdRef.current !== undefined &&
+      initBlockId === null
+    ) {
+      setEmptyInitRow(false);
+    }
+    prevInitBlockIdRef.current = initBlockId;
+  }, [initBlockId]);
 
   const handleEmptyAreaClick = React.useCallback(
     (e: React.MouseEvent) => {
@@ -176,11 +197,11 @@ export const NotePaperStrictBody = React.forwardRef<
         ) : null}
 
         {status === 'empty' ? (
-          emptyInitRow ? (
+          emptyInitRow && initBlockId ? (
             <div
               ref={firstBlockRef}
               className={styles.blockRow}
-              data-block-id="init-first-block"
+              data-block-id={initBlockId}
               data-content-row="1"
               data-block-index="0"
               data-flavour="paragraph"
@@ -195,20 +216,19 @@ export const NotePaperStrictBody = React.forwardRef<
               <div className={styles.blockContent}>
                 <span className={styles.flavour}>paragraph</span>
                 <StrictContentRowLeaf
-                  blockId="init-first-block"
+                  blockId={initBlockId}
                   flavour="paragraph"
                   text=""
                   baseRev={baseRev}
                   turnIntoSink={mdPrefix?.turnIntoSink}
-                  mdPrefixWriteMode={mdPrefix?.mdPrefixWriteMode ?? 'writable'}
+                  // 初始化行的可写性由「insert 已成功」保证（本行渲染前提 =
+                  // 面板写锥有效），文本落盘走 onTextChange/applyOps 通道；
+                  // 不得被 shell 的 mdPrefix disabled 态（turnInto 通道）压制。
+                  mdPrefixWriteMode="writable"
                   mdPrefixSinkSource={mdPrefix?.mdPrefixSinkSource}
                   mdPrefixBinding={
                     mdPrefix?.mdPrefixBinding ?? {
-                      mode:
-                        (mdPrefix?.mdPrefixWriteMode ?? 'writable') ===
-                        'disabled'
-                          ? 'disabled'
-                          : 'writable',
+                      mode: 'writable',
                       sink: mdPrefix?.turnIntoSink,
                       collab: null,
                       source: 'injected-sink',

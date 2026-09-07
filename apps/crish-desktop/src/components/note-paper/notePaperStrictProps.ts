@@ -173,6 +173,12 @@ export type NotePaperStrictPanelProps = {
   onSelectDoc?: (docId: string) => void;
   /** 新建文档回调 */
   onCreateDoc?: () => void;
+  /**
+   * 向宿主注册/注销「待落盘文本冲刷器」（audit-repair-202609 · T8）。
+   * 宿主（NoteLeafHost）把它交给 useNoteDocumentManager：切换 / 新建文档前
+   * 先冲刷当前面板的 pending 差量，避免编辑丢失。注销传 null。
+   */
+  registerPendingFlush?: (flush: (() => Promise<void>) | null) => void;
   /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */
   mirrorDriftReport?: MirrorDriftReportView | null;
   /** @deprecated 仅保留类型兼容，生产主面板已切除 DOM 挂载 */

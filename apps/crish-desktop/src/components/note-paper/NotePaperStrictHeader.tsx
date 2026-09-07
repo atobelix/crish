@@ -170,13 +170,13 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
         <div className={styles.headerLeftGroup}>
           {onToggleSidebar && !isSidebarOpen && (
             <IconButton
+              aria-label="展开文档侧栏 (Ctrl+\)"
               size="sm"
               variant="ghost"
-              icon={<IconSidebarLeft size={14} aria-hidden />}
-              aria-label="展开文档侧栏 (Ctrl+\)"
               tooltip="展开侧栏 (Ctrl+\)"
               onClick={onToggleSidebar}
               data-testid="note-paper-strict-toggle-sidebar"
+              icon={<IconSidebarLeft size={14} aria-hidden />}
             />
           )}
 
@@ -329,29 +329,36 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
           )}
 
           <IconButton
+            aria-label="复制全文 Markdown"
             size="sm"
             variant="ghost"
-            icon={<Copy size={14} aria-hidden />}
-            aria-label="复制全文 Markdown"
             tooltip="复制全文 (Markdown)"
             onClick={handleCopyMarkdown}
             data-testid="note-paper-strict-copy"
+            icon={<Copy size={14} aria-hidden />}
           />
 
           <IconButton
+            aria-label="导出为 Markdown 文件"
             size="sm"
             variant="ghost"
-            icon={<Download size={14} aria-hidden />}
-            aria-label="导出为 Markdown 文件"
             tooltip="导出 Markdown (.md)"
             onClick={handleExportMarkdown}
             data-testid="note-paper-strict-export"
+            icon={<Download size={14} aria-hidden />}
           />
 
           {/* 重新加载投影（保全三大测试桩之二：note-paper-strict-refresh） */}
           <IconButton
+            aria-label="重新加载投影"
             size="sm"
             variant="ghost"
+            tooltip="重新加载投影"
+            disabled={isLoading}
+            onClick={() => {
+              void onReload();
+            }}
+            data-testid="note-paper-strict-refresh"
             icon={
               <RotateCw
                 size={14}
@@ -359,13 +366,6 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
                 aria-hidden
               />
             }
-            aria-label="重新加载投影"
-            tooltip="重新加载投影"
-            disabled={isLoading}
-            onClick={() => {
-              void onReload();
-            }}
-            data-testid="note-paper-strict-refresh"
           />
 
           {/* 关闭当前面板（保全三大测试桩之三：note-paper-strict-close） */}
@@ -373,13 +373,13 @@ export const NotePaperStrictHeader: React.FC<NotePaperStrictHeaderProps> = React
             <>
               <div className={styles.divider} />
               <IconButton
+                aria-label="关闭当前面板"
                 size="sm"
                 variant="ghost"
-                icon={<X size={14} aria-hidden />}
-                aria-label="关闭当前面板"
                 tooltip="关闭当前面板"
                 onClick={onClose}
                 data-testid="note-paper-strict-close"
+                icon={<X size={14} aria-hidden />}
               />
             </>
           )}

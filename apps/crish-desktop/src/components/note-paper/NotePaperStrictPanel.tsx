@@ -23,10 +23,8 @@
  * 交互 → `useNotePaperStrictShell`；presentation·data-* → `notePaperStrictAssembly`。
  */
 
-import React, { useState, useCallback, useRef, useMemo } from 'react';
-import type { CollabTextEditOpWire } from '@crish/block-paper-contract';
-import { resolveProductStrictApplyOps } from '../../api/noteApplyOpsIpc';
-import { notifyNoteDocWritten } from '../../bridges/note-doc-written';
+import React, { useCallback, useMemo } from 'react';
+import { useNoteTextPersistence } from './useNoteTextPersistence';
 /** DomHost chrome 皮；≠ EL-01 */
 import '@crish/block-paper/chrome.css';
 /** W3-G PaperList 挂载皮；≠ EL-01 */
@@ -89,6 +87,7 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   documents,
   onSelectDoc,
   onCreateDoc,
+  registerPendingFlush,
 }) => {
   const {
     paperListConfig,
@@ -153,82 +152,23 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
   });
 
 
-  const [localSaveStatus, setLocalSaveStatus] = useState<
-    'saved' | 'syncing' | 'unsaved' | 'saving' | null
-  >(null);
+  const {
+    localSaveStatus,
+    setLocalSaveStatus,
+    initBlockId,
+    handleInitFirstBlock,
+    handleBlockChange,
+    handleTextCommit,
+  } = useNoteTextPersistence({
+    docId,
+    applyOpsProp,
+    blocks,
+    onBlockChangeProp,
+    onTextCommitProp,
+    registerPendingFlush,
+  });
+
   const effectiveSaveStatus = localSaveStatus ?? saveStatusProp;
-
-  const resolvedApplyOps = useMemo(() => {
-    if (applyOpsProp) return applyOpsProp;
-    return resolveProductStrictApplyOps({ docId }).applyOps;
-  }, [applyOpsProp, docId]);
-
-  const lastPersistedTextRef = useRef<Map<string, string>>(new Map());
-
-  const persistBlockText = useCallback(
-    async (blockId: string, newText: string) => {
-      const oldBlock = blocks.find((b) => b.id === blockId);
-      const prevRecorded = lastPersistedTextRef.current.get(blockId);
-      const oldText = prevRecorded ?? oldBlock?.text ?? '';
-
-      if (prevRecorded !== undefined && prevRecorded === newText) {
-        return;
-      }
-
-      setLocalSaveStatus('saving');
-      lastPersistedTextRef.current.set(blockId, newText);
-
-      try {
-        if (resolvedApplyOps) {
-          const op: CollabTextEditOpWire = {
-            op: 'text_edit',
-            id: blockId,
-            start: 0,
-            end: [...oldText].length,
-            insert: newText,
-          };
-          const opsJson = JSON.stringify([op]);
-          const intentId = `text-edit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          const outcome = await resolvedApplyOps(opsJson, { intentId });
-          if (outcome.ok) {
-            setLocalSaveStatus('saved');
-            notifyNoteDocWritten({
-              docId,
-              intentId,
-              source: 'product_apply',
-            });
-          } else {
-            setLocalSaveStatus('unsaved');
-          }
-        } else {
-          setLocalSaveStatus('saved');
-          notifyNoteDocWritten({
-            docId,
-            source: 'product_apply',
-          });
-        }
-      } catch {
-        setLocalSaveStatus('unsaved');
-      }
-    },
-    [blocks, docId, resolvedApplyOps]
-  );
-
-  const handleBlockChange = useCallback(
-    (blockId: string, newText: string) => {
-      onBlockChangeProp?.(blockId, newText);
-      void persistBlockText(blockId, newText);
-    },
-    [onBlockChangeProp, persistBlockText]
-  );
-
-  const handleTextCommit = useCallback(
-    (blockId: string, newText: string) => {
-      onTextCommitProp?.(blockId, newText);
-      void persistBlockText(blockId, newText);
-    },
-    [onTextCommitProp, persistBlockText]
-  );
 
   const handleRenameTitle = useCallback(
     async (newTitle: string) => {
@@ -321,6 +261,10 @@ export const NotePaperStrictPanel: React.FC<NotePaperStrictPanelProps> = ({
           onMdPrefixCommit,
           onMdPrefixCommittedIntent,
         }}
+        onInitFirstBlock={handleInitFirstBlock}
+        initBlockId={initBlockId}
+        onBlockChange={handleBlockChange}
+        onTextCommit={handleTextCommit}
       >
         <NotePaperStrictChromeSlot
           note={{

@@ -9,7 +9,7 @@
  */
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SlashMenuModel, type SlashOpenResult } from '@crish/block-paper';
 import { createMemoryNoteTransport } from '../../api/noteApi';
 import {
@@ -18,6 +18,7 @@ import {
   makeHydratedBlock,
 } from './hydrateProjection';
 import { NotePaperStrictPanel } from './NotePaperStrictPanel';
+import { isUuidV4 } from './noteBlockId';
 import { EDITOR_SURFACE_NOTE_PAPER } from './editorSurface';
 import {
   W5B_STRICT_PACKAGE_ID,
@@ -668,6 +669,77 @@ describe('NotePaperStrictPanel · W5-B Strict · w5b_strict_panel', () => {
 
     await waitFor(() => {
       expect(panel).toHaveAttribute('data-save-status', 'saved');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // audit-repair-202609 · T7/T8：空笔记首块闭环 + 差量落盘契约
+  // -------------------------------------------------------------------------
+
+  it('strict_empty_doc_click_creates_real_block_and_persists_typing', async () => {
+    const transport = createFixtureHydrateTransport(); // 空文档成功投影
+    const recordedOps: string[] = [];
+    const applyOpsMock = vi.fn(async (opsJson: string) => {
+      recordedOps.push(opsJson);
+      return { ok: true };
+    });
+
+    render(
+      <NotePaperStrictPanel
+        docId="doc-init-flow"
+        hydrateTransport={transport}
+        applyOps={applyOpsMock}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-hydrate-status',
+        'empty'
+      );
+    });
+
+    // 点击空白 → insert paragraph（合法 UUID 块 ID）落盘
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('note-paper-strict-empty'));
+    });
+    await waitFor(() => {
+      expect(applyOpsMock).toHaveBeenCalledTimes(1);
+    });
+    const insertOp = JSON.parse(recordedOps[0])[0];
+    expect(insertOp.op).toBe('insert');
+    expect(insertOp.kind).toBe('paragraph');
+    expect(insertOp.parent).toBeNull();
+    expect(isUuidV4(insertOp.id)).toBe(true);
+
+    // 初始化行必须绑定该真实块 ID（杜绝幽灵 init-first-block ID）
+    const row = screen.getByTestId('note-strict-block-init-first-block');
+    expect(row.getAttribute('data-block-id')).toBe(insertOp.id);
+
+    // 打字 → 失焦：text_edit 差量 op 落到同一块（UTF-8 无 BOM 全链真实形状）
+    const leaf = row.querySelector('div[contenteditable="true"]');
+    expect(leaf).not.toBeNull();
+    await act(async () => {
+      (leaf as HTMLElement).textContent = '新内容';
+      fireEvent.input(leaf as HTMLElement);
+      fireEvent.blur(leaf as HTMLElement);
+    });
+    await waitFor(() => {
+      expect(applyOpsMock).toHaveBeenCalledTimes(2);
+    });
+    const editOp = JSON.parse(recordedOps[1])[0];
+    expect(editOp).toEqual({
+      op: 'text_edit',
+      id: insertOp.id,
+      start: 0,
+      end: 0,
+      insert: '新内容',
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('note-paper-strict-panel')).toHaveAttribute(
+        'data-save-status',
+        'saved'
+      );
     });
   });
 });

@@ -166,9 +166,11 @@ export const NoteSidebarDrawer: React.FC<NoteSidebarDrawerProps> = ({
                 ) : (
                   <>
                     <span className={`${styles.sessionTextCol} ${styles.itemTextCol}`}>
-                      <span className={`${styles.sessionText} ${styles.itemTitle} ${styles.cardTitle}`} title={doc.title}>
-                        {doc.title || '未命名笔记'}
-                      </span>
+                      <Tooltip content={doc.title || '未命名笔记'}>
+                        <span className={`${styles.sessionText} ${styles.itemTitle} ${styles.cardTitle}`}>
+                          {doc.title || '未命名笔记'}
+                        </span>
+                      </Tooltip>
                     </span>
 
                     <span className={`${styles.sessionTrailing} ${styles.itemTrailing}`}>
