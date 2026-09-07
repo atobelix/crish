@@ -60,12 +60,16 @@
   padding: 0 10px;
   box-sizing: border-box;
   flex-shrink: 0;
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 
 .sidebarHeaderLeft {
   display: flex;
   align-items: center;
   gap: 4px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .sidebarHeaderRight {

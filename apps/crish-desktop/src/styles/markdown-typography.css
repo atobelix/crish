@@ -1,0 +1,850 @@
+/* ==========================================================================
+   CONEX MARKDOWN TYPOGRAPHY BASE ENGINE
+   文件路径: apps/crish-desktop/src/styles/markdown-typography.css
+   架构角色: 全局统一 Markdown 排版基座与双模态引擎（Document vs Chat）
+   权威命名空间: .conex-markdown, .md-rendered
+   规范约束: 100% Design Tokens 驱动、零裸 Hex、现代 color-mix / hsl 语法
+   ========================================================================== */
+
+/* ==========================================================================
+   一、Markdown 专属语义化 Design Tokens
+   ========================================================================== */
+:root {
+  /* --- 1. 排版字阶与行高基准 --- */
+  --md-font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  --md-font-mono: var(--font-mono, SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace);
+  --md-line-height-body: 1.68;
+  --md-line-height-chat: 1.65;
+  --md-paragraph-margin-bottom: 0.88em;
+  --md-paragraph-margin-bottom-chat: 0.82em;
+
+  /* --- 2. 标题体系基准 --- */
+  --md-heading-font-weight: 600;
+  --md-heading-color: var(--text-primary);
+  --md-h1-size: 1.85em;
+  --md-h1-margin: 0.85em 0 0.36em;
+  --md-h1-border: 1px solid var(--border-subtle);
+  --md-h2-size: 1.45em;
+  --md-h2-margin: 0.75em 0 0.30em;
+  --md-h2-border: 1px solid var(--border-subtle);
+  --md-h3-size: 1.25em;
+  --md-h3-margin: 0.65em 0 0.26em;
+  --md-h4-size: 1.1em;
+  --md-h4-margin: 0.55em 0 0.22em;
+  --md-h5-size: 1em;
+  --md-h5-margin: 0.45em 0 0.18em;
+  --md-h6-size: 0.9em;
+  --md-h6-margin: 0.38em 0 0.15em;
+
+  /* --- 3. 表格系统基准 (彻底解决列宽粘连与截图崩溃) --- */
+  --md-table-border: var(--border-color);
+  --md-table-radius: var(--radius-lg, 8px);
+  --md-table-header-bg: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
+  --md-table-header-fg: var(--text-primary);
+  --md-table-cell-padding: 10px 14px;
+  --md-table-cell-padding-compact: 7px 10px;
+  --md-table-row-alt-bg: color-mix(in srgb, var(--text-primary) 1.5%, transparent);
+  --md-table-row-hover-bg: color-mix(in srgb, var(--text-primary) 3%, var(--bg-card));
+
+  /* --- 4. 列表与引用系统基准 --- */
+  --md-list-padding-left: 1.6em;
+  --md-list-item-margin: 0.28em 0;
+  --md-quote-border: 3px solid var(--border-color);
+  --md-quote-bg: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  --md-quote-padding: 0.45em 0 0.45em 1.1em;
+  --md-quote-margin: 0.68em 0;
+
+  /* --- 5. 行内微排版与交互胶囊 --- */
+  --md-code-inline-bg: color-mix(in srgb, var(--text-primary) 3.5%, var(--bg-card));
+  --md-code-inline-fg: var(--text-primary);
+  --md-code-inline-radius: 4px;
+  --md-code-inline-padding: 0.15em 0.4em;
+  --md-code-inline-size: 0.9em;
+
+  --md-path-link-bg: transparent;
+  --md-path-link-hover-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --md-path-link-active-bg: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  --md-path-link-fg: var(--text-secondary);
+  --md-path-link-border: transparent;
+  --md-path-link-radius: var(--radius-sm, 4px);
+
+  /* --- 6. 链接体系 --- */
+  --md-link-color: var(--brand-deep, hsl(160 84% 30%));
+  --md-link-hover-color: var(--brand, hsl(160 84% 39%));
+  --md-link-underline-offset: 3px;
+  --md-link-underline-color: color-mix(in srgb, var(--md-link-color) 35%, transparent);
+}
+
+html[data-theme='dark'] {
+  --md-table-header-bg: hsl(0 0% 13%);
+  --md-table-row-alt-bg: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+  --md-table-row-hover-bg: hsl(0 0% 15%);
+  --md-code-inline-bg: color-mix(in srgb, var(--text-primary) 5%, var(--bg-card));
+  --md-code-inline-fg: var(--text-primary);
+  --md-link-color: var(--brand, hsl(160 84% 39%));
+  --md-link-hover-color: hsl(160 84% 55%);
+}
+
+/* ==========================================================================
+   二、顶级通用命名空间与容器基准 (Reset & Base)
+   ========================================================================== */
+:is(.conex-markdown, .md-rendered) {
+  font-family: var(--md-font-family);
+  color: var(--text-primary);
+  background: transparent;
+  max-width: 100%;
+  box-sizing: border-box;
+  -webkit-user-select: text;
+  user-select: text;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* --- Document 模式排版变体 (Long Document Mode: 精致留白与边距) --- */
+:is(.conex-markdown, .md-rendered)[data-md-variant='document'] {
+  padding: var(--space-2_5, 10px) var(--space-3, 12px) var(--space-5, 20px);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* --- Chat 模式排版变体 (Compact Bubble Mode: 气泡紧凑) --- */
+:is(.conex-markdown, .md-rendered)[data-md-variant='chat'] {
+  padding: 0;
+}
+:is(.conex-markdown, .md-rendered)[data-md-variant='chat'] > :last-child {
+  margin-bottom: 0 !important;
+}
+
+/* 消除子级首项向上塌陷 */
+:is(.conex-markdown, .md-rendered) > :first-child {
+  margin-top: 0 !important;
+}
+
+/* ==========================================================================
+   三、表格物理排版与极细行间分割线（去除沉重框线，极细细线在行间）
+   ========================================================================== */
+
+/* 外壳 .md-rendered .md-table-wrap */
+.md-rendered .md-table-wrap,
+.conex-markdown .md-table-wrap,
+:is(.conex-markdown, .md-rendered) :is(.md-table-wrap, [role="region"][aria-label="表格"]) {
+  position: relative;
+  width: 100%;
+  margin: 0.75em 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  container-type: inline-size;
+  container-name: mdTableWrap;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 内部表格 .md-rendered .md-table */
+.md-rendered .md-table,
+.conex-markdown .md-table,
+:is(.conex-markdown, .md-rendered) :is(.md-table, table) {
+  width: 100%;
+  min-width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  border: none;
+  font-size: var(--font-size-sm, 13px);
+  line-height: var(--md-line-height-body);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+}
+
+/* 吸顶表头 .md-rendered .md-th */
+.md-rendered .md-th,
+.conex-markdown .md-th,
+:is(.conex-markdown, .md-rendered) :is(.md-th, th) {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: var(--bg-card);
+  font-weight: 600;
+  text-align: left;
+  padding: var(--md-table-cell-padding);
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+/* 单元格与极细行间细线 */
+.md-rendered .md-td,
+.conex-markdown .md-td,
+:is(.conex-markdown, .md-rendered) :is(.md-td, td) {
+  padding: var(--md-table-cell-padding);
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+  box-sizing: border-box;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+/* 首末列边缘对齐 (Edge Alignment) */
+:is(.conex-markdown, .md-rendered) :is(.md-th, th):first-child,
+:is(.conex-markdown, .md-rendered) :is(.md-td, td):first-child {
+  padding-left: 2px;
+}
+
+:is(.conex-markdown, .md-rendered) :is(.md-th, th):last-child,
+:is(.conex-markdown, .md-rendered) :is(.md-td, td):last-child {
+  padding-right: 2px;
+}
+
+/* 末行单元格维持极细细线闭合 */
+.md-rendered .md-tr:last-child .md-td,
+.conex-markdown .md-tr:last-child .md-td,
+:is(.conex-markdown, .md-rendered) :is(.md-tr:last-child, tr:last-child) :is(.md-td, td) {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* 斑马纹收敛为极简透明，仅保留行悬停轻微反馈 */
+.md-rendered .md-tr-alt,
+.md-rendered tbody tr:nth-child(even),
+.conex-markdown .md-tr-alt,
+.conex-markdown tbody tr:nth-child(even),
+:is(.conex-markdown, .md-rendered) :is(.md-tr-alt, tbody tr:nth-child(even)) {
+  background-color: transparent;
+}
+
+/* 行悬停极微反馈 */
+:is(.conex-markdown, .md-rendered) tbody :is(.md-tr:hover, tr:hover) {
+  background-color: color-mix(in srgb, var(--text-primary) 2%, transparent);
+  transition: background-color var(--transition-fast, 120ms ease);
+}
+
+/* 表格容器查询响应式适配 (Container Queries) */
+@container mdTableWrap (max-width: 540px) {
+  :is(.conex-markdown, .md-rendered) :is(.md-table, table) {
+    font-size: var(--font-size-xs, 12px);
+  }
+  :is(.conex-markdown, .md-rendered) :is(.md-th, th),
+  :is(.conex-markdown, .md-rendered) :is(.md-td, td) {
+    padding: var(--md-table-cell-padding-compact);
+  }
+}
+
+/* ==========================================================================
+   四、列表与标题排版基准
+   ========================================================================== */
+
+/* 列表 .md-ul, .md-ol */
+.md-rendered .md-ul,
+.md-rendered .md-ol,
+.conex-markdown .md-ul,
+.conex-markdown .md-ol,
+:is(.conex-markdown, .md-rendered) :is(.md-ul, ul),
+:is(.conex-markdown, .md-rendered) :is(.md-ol, ol) {
+  padding-left: var(--md-list-padding-left);
+  margin: 0.36em 0;
+  box-sizing: border-box;
+}
+
+/* 列表项 .md-li */
+.md-rendered .md-li,
+.conex-markdown .md-li,
+:is(.conex-markdown, .md-rendered) :is(.md-li, li) {
+  margin: var(--md-list-item-margin);
+  line-height: var(--md-line-height-body);
+}
+
+/* 嵌套列表 */
+:is(.conex-markdown, .md-rendered) :is(.md-ul-nested, ul ul, ol ul, ul ol, ol ol) {
+  margin: 0.18em 0;
+  padding-left: 1.4em;
+}
+
+/* 分割线 .md-hr */
+.md-rendered .md-hr,
+.conex-markdown .md-hr,
+:is(.conex-markdown, .md-rendered) :is(.md-hr, hr) {
+  border: none;
+  border-top: 1px solid var(--border-subtle);
+  margin: 0.85em 0;
+  height: 0;
+  box-sizing: content-box;
+}
+
+/* 段落基准 .md-p */
+.md-rendered .md-p,
+.conex-markdown .md-p,
+:is(.conex-markdown, .md-rendered) :is(.md-p, p) {
+  margin-top: 0;
+  margin-bottom: var(--md-paragraph-margin-bottom);
+  line-height: var(--md-line-height-body);
+  letter-spacing: 0.005em;
+}
+
+/* 标题基准 H1 ~ H6 */
+.md-rendered .md-h1,
+.conex-markdown .md-h1,
+:is(.conex-markdown, .md-rendered) :is(.md-h1, h1) {
+  font-size: var(--md-h1-size);
+  font-weight: var(--md-heading-font-weight);
+  margin: var(--md-h1-margin);
+  line-height: 1.25;
+  color: var(--md-heading-color);
+}
+
+.md-rendered .md-h2,
+.conex-markdown .md-h2,
+:is(.conex-markdown, .md-rendered) :is(.md-h2, h2) {
+  font-size: var(--md-h2-size);
+  font-weight: var(--md-heading-font-weight);
+  margin: var(--md-h2-margin);
+  line-height: 1.3;
+  color: var(--md-heading-color);
+}
+
+.md-rendered .md-h3,
+.conex-markdown .md-h3,
+:is(.conex-markdown, .md-rendered) :is(.md-h3, h3) {
+  font-size: var(--md-h3-size);
+  font-weight: var(--md-heading-font-weight);
+  margin: var(--md-h3-margin);
+  line-height: 1.35;
+  color: var(--md-heading-color);
+}
+
+.md-rendered .md-h4,
+.conex-markdown .md-h4,
+:is(.conex-markdown, .md-rendered) :is(.md-h4, h4) {
+  font-size: var(--md-h4-size);
+  font-weight: var(--md-heading-font-weight);
+  margin: var(--md-h4-margin);
+  line-height: 1.38;
+  color: var(--md-heading-color);
+}
+
+.md-rendered .md-h5,
+.conex-markdown .md-h5,
+:is(.conex-markdown, .md-rendered) :is(.md-h5, h5) {
+  font-size: var(--md-h5-size);
+  font-weight: var(--md-heading-font-weight);
+  margin: var(--md-h5-margin);
+  line-height: 1.4;
+  color: var(--md-heading-color);
+}
+
+.md-rendered .md-h6,
+.conex-markdown .md-h6,
+:is(.conex-markdown, .md-rendered) :is(.md-h6, h6) {
+  font-size: var(--md-h6-size);
+  font-weight: 500;
+  margin: var(--md-h6-margin);
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   五、双模态排版变体架构 (Document vs Chat)
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   变体 A: Document 模式 (.md-rendered[data-md-variant="document"])
+   类似 Typora / GitHub 长文档排版规范，专用于文档阅读面 (FilePreview, SkillDetailPreview)
+   -------------------------------------------------------------------------- */
+.md-rendered[data-md-variant="document"],
+.conex-markdown[data-md-variant="document"],
+[data-md-variant="document"] .md-rendered,
+[data-md-variant="document"] .conex-markdown,
+:is(.conex-markdown, .md-rendered)[data-md-variant="document"] {
+  --md-line-height-body: 1.68;
+  --md-paragraph-margin-bottom: 0.92em;
+  --md-h1-size: 1.85em;
+  --md-h1-margin: 0.95em 0 0.40em;
+  --md-h1-border: 1px solid var(--border-subtle);
+  --md-h2-size: 1.45em;
+  --md-h2-margin: 0.85em 0 0.32em;
+  --md-h2-border: 1px solid var(--border-subtle);
+  --md-list-padding-left: 1.6em;
+  --md-list-item-margin: 0.30em 0;
+  max-width: min(920px, 100%);
+}
+
+.md-rendered[data-md-variant="document"] :is(.md-h1, h1),
+.conex-markdown[data-md-variant="document"] :is(.md-h1, h1),
+[data-md-variant="document"] :is(.conex-markdown, .md-rendered) :is(.md-h1, h1) {
+  font-size: var(--md-h1-size);
+  margin: var(--md-h1-margin);
+  padding-bottom: 0.3em;
+  border-bottom: var(--md-h1-border);
+  line-height: 1.25;
+}
+
+.md-rendered[data-md-variant="document"] :is(.md-h2, h2),
+.conex-markdown[data-md-variant="document"] :is(.md-h2, h2),
+[data-md-variant="document"] :is(.conex-markdown, .md-rendered) :is(.md-h2, h2) {
+  font-size: var(--md-h2-size);
+  margin: var(--md-h2-margin);
+  padding-bottom: 0.25em;
+  border-bottom: var(--md-h2-border);
+  line-height: 1.3;
+}
+
+.md-rendered[data-md-variant="document"] .md-p,
+.md-rendered[data-md-variant="document"] :is(.md-p, p),
+.conex-markdown[data-md-variant="document"] .md-p,
+.conex-markdown[data-md-variant="document"] :is(.md-p, p),
+[data-md-variant="document"] :is(.conex-markdown, .md-rendered) :is(.md-p, p) {
+  margin-bottom: var(--md-paragraph-margin-bottom);
+  line-height: var(--md-line-height-body);
+}
+
+/* --------------------------------------------------------------------------
+   变体 B: Chat 模式 (.md-rendered[data-md-variant="chat"])
+   面向对话流气泡紧凑排版，高密度、防溢出、末段贴底消除多余内边距
+   -------------------------------------------------------------------------- */
+.md-rendered[data-md-variant="chat"],
+.conex-markdown[data-md-variant="chat"],
+[data-md-variant="chat"] .md-rendered,
+[data-md-variant="chat"] .conex-markdown,
+:is(.conex-markdown, .md-rendered)[data-md-variant="chat"] {
+  --md-line-height-body: 1.65;
+  --md-paragraph-margin-bottom: 0.82em;
+  --md-h1-size: 1.45em;
+  --md-h1-margin: 0.65em 0 0.26em;
+  --md-h1-border: none;
+  --md-h2-size: 1.25em;
+  --md-h2-margin: 0.55em 0 0.22em;
+  --md-h2-border: none;
+  --md-list-padding-left: 1.4em;
+  --md-list-item-margin: 0.22em 0;
+  max-width: 100%;
+}
+
+.md-rendered[data-md-variant="chat"] :is(.md-h1, h1),
+.conex-markdown[data-md-variant="chat"] :is(.md-h1, h1),
+[data-md-variant="chat"] :is(.conex-markdown, .md-rendered) :is(.md-h1, h1) {
+  font-size: var(--md-h1-size);
+  margin: var(--md-h1-margin);
+  padding-bottom: 0;
+  border-bottom: none;
+  line-height: 1.3;
+}
+
+.md-rendered[data-md-variant="chat"] :is(.md-h2, h2),
+.conex-markdown[data-md-variant="chat"] :is(.md-h2, h2),
+[data-md-variant="chat"] :is(.conex-markdown, .md-rendered) :is(.md-h2, h2) {
+  font-size: var(--md-h2-size);
+  margin: var(--md-h2-margin);
+  padding-bottom: 0;
+  border-bottom: none;
+  line-height: 1.32;
+}
+
+.md-rendered[data-md-variant="chat"] .md-p,
+.md-rendered[data-md-variant="chat"] :is(.md-p, p),
+.conex-markdown[data-md-variant="chat"] .md-p,
+.conex-markdown[data-md-variant="chat"] :is(.md-p, p),
+[data-md-variant="chat"] :is(.conex-markdown, .md-rendered) :is(.md-p, p) {
+  margin-bottom: var(--md-paragraph-margin-bottom);
+  line-height: var(--md-line-height-body);
+}
+
+/* 容器铁律：消除最后一个子元素的外边距溢出 */
+:is(.conex-markdown, .md-rendered) > :last-child,
+.md-rendered[data-md-variant="chat"] > :last-child,
+[data-md-variant="chat"] :is(.conex-markdown, .md-rendered) > :last-child {
+  margin-bottom: 0 !important;
+}
+
+/* 混合排版相邻规则：避免某些地方空行过大 */
+/* 标题紧随段落/列表/表格之后：顶部留白充足明确区分章节 */
+:is(.conex-markdown, .md-rendered) :is(.md-p, p, .md-ul, ul, .md-ol, ol, .md-table-wrap) + :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6) {
+  margin-top: 0.65em;
+}
+
+/* 标题紧随正文/列表/表格：去除多余外顶边距，紧密归属 */
+:is(.conex-markdown, .md-rendered) :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6) + :is(.md-p, p, .md-ul, ul, .md-ol, ol, .md-table-wrap) {
+  margin-top: 0;
+}
+
+/* 段落紧随列表/表格：过渡平滑，消除段前空洞 */
+:is(.conex-markdown, .md-rendered) :is(.md-p, p) + :is(.md-ul, ul, .md-ol, ol, .md-table-wrap) {
+  margin-top: 0.15em;
+}
+
+:is(.conex-markdown, .md-rendered) :is(.md-ul, ul, .md-ol, ol, .md-table-wrap) + :is(.md-p, p) {
+  margin-top: 0.35em;
+}
+
+/* 分割线与相邻元素平滑过渡，消除空行重叠 */
+:is(.conex-markdown, .md-rendered) :is(.md-p, p, .md-ul, ul, .md-ol, ol) + :is(.md-hr, hr) {
+  margin-top: 0.55em;
+}
+
+:is(.conex-markdown, .md-rendered) :is(.md-hr, hr) + :is(.md-h1, .md-h2, .md-h3, .md-h4, .md-h5, .md-h6, h1, h2, h3, h4, h5, h6) {
+  margin-top: 0.55em;
+}
+
+/* ==========================================================================
+   六、通用 Markdown 块与行内微排版
+   ========================================================================== */
+
+/* --- 引用块 (Blockquote) --- */
+.md-rendered .md-quote,
+.conex-markdown .md-quote,
+:is(.conex-markdown, .md-rendered) :is(.md-quote, blockquote) {
+  margin: var(--md-quote-margin);
+  padding: var(--md-quote-padding);
+  border-left: var(--md-quote-border);
+  background: var(--md-quote-bg);
+  border-radius: 0 var(--radius-sm, 4px) var(--radius-sm, 4px) 0;
+  color: var(--text-secondary);
+  box-sizing: border-box;
+}
+
+:is(.conex-markdown, .md-rendered) :is(.md-quote, blockquote) > :last-child {
+  margin-bottom: 0 !important;
+}
+
+/* --- 行内代码与快捷键胶囊 (Inline Code & Kbd) --- */
+.md-rendered .md-inline-code,
+.conex-markdown .md-inline-code,
+:is(.conex-markdown, .md-rendered) :is(.md-inline-code, code:not(pre code)) {
+  font-family: var(--md-font-mono);
+  font-size: var(--md-code-inline-size);
+  font-weight: 400;
+  padding: var(--md-code-inline-padding);
+  margin: 0 0.25em;
+  border-radius: var(--md-code-inline-radius);
+  background: var(--md-code-inline-bg);
+  color: var(--md-code-inline-fg);
+  border: none;
+  word-break: break-word;
+  white-space: pre-wrap;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.md-rendered .md-kbd,
+.conex-markdown .md-kbd,
+:is(.conex-markdown, .md-rendered) :is(.md-kbd, kbd) {
+  display: inline-block;
+  font-family: var(--md-font-mono);
+  font-size: 0.85em;
+  padding: 0.1em 0.45em;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 2.5%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--border-color) 85%, var(--text-primary) 15%);
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* --- 本地文件路径交互微胶囊 (.md-path-link: 纯净文本减法，去除描边与背景色，自然下划线) --- */
+.md-rendered .md-path-link,
+.conex-markdown .md-path-link,
+:is(.conex-markdown, .md-rendered) .md-path-link {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline;
+  padding: 0;
+  margin: 0;
+  background: var(--md-path-link-bg, transparent);
+  color: var(--md-path-link-fg, var(--text-secondary));
+  border: none;
+  border-radius: 0;
+  font-family: var(--md-font-mono);
+  font-size: 0.9em;
+  cursor: pointer;
+  vertical-align: baseline;
+  line-height: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--text-secondary) 35%, transparent);
+  text-underline-offset: 3px;
+  box-sizing: border-box;
+  transition:
+    color var(--transition-fast, 120ms ease),
+    text-decoration-color var(--transition-fast, 120ms ease);
+}
+
+:is(.conex-markdown, .md-rendered) .md-path-link:hover {
+  background: transparent;
+  color: var(--text-primary);
+  text-decoration-color: var(--text-primary);
+}
+
+:is(.conex-markdown, .md-rendered) .md-path-link:active {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+:is(.conex-markdown, .md-rendered) .md-path-link:focus-visible {
+  outline: none;
+  text-decoration-color: var(--text-primary);
+}
+
+/* --- 链接体系 (Links) --- */
+.md-rendered .md-a,
+.conex-markdown .md-a,
+:is(.conex-markdown, .md-rendered) :is(.md-a, a) {
+  color: var(--md-link-color);
+  text-decoration: underline;
+  text-underline-offset: var(--md-link-underline-offset);
+  text-decoration-color: var(--md-link-underline-color);
+  transition:
+    color var(--transition-fast, 150ms ease),
+    text-decoration-color var(--transition-fast, 150ms ease);
+}
+
+:is(.conex-markdown, .md-rendered) :is(.md-a:hover, a:hover) {
+  color: var(--md-link-hover-color);
+  text-decoration-color: var(--md-link-hover-color);
+}
+
+/* --- 代码块容器与头部元信息 (.md-code-block) --- */
+.md-rendered .md-code-block,
+.conex-markdown .md-code-block,
+:is(.conex-markdown, .md-rendered) .md-code-block {
+  position: relative;
+  margin: 1.15em 0;
+  border-radius: var(--radius-lg, 8px);
+  border: 1px solid var(--md-code-block-border, var(--border-subtle));
+  background: var(--md-code-block-bg, hsl(30 2.5% 96%));
+  overflow: hidden;
+}
+
+.md-rendered .md-code-breadcrumb,
+.conex-markdown .md-code-breadcrumb,
+:is(.conex-markdown, .md-rendered) .md-code-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  padding: var(--space-1_5, 6px) var(--space-3, 12px);
+  font-family: var(--md-font-mono);
+  font-size: var(--font-size-xs, 12px);
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-primary) 3%, var(--md-code-block-bg, hsl(30 2.5% 96%)));
+  border-bottom: 1px solid var(--border-subtle);
+  user-select: none;
+}
+
+.md-rendered .md-code-breadcrumb-segment,
+.conex-markdown .md-code-breadcrumb-segment,
+:is(.conex-markdown, .md-rendered) .md-code-breadcrumb-segment {
+  color: var(--text-tertiary);
+}
+
+.md-rendered .md-code-breadcrumb-separator,
+.conex-markdown .md-code-breadcrumb-separator,
+:is(.conex-markdown, .md-rendered) .md-code-breadcrumb-separator {
+  color: var(--border-color);
+}
+
+.md-rendered .md-code-breadcrumb-file,
+.conex-markdown .md-code-breadcrumb-file,
+:is(.conex-markdown, .md-rendered) .md-code-breadcrumb-file {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
+}
+
+/* 代码块右上角操作中枢：语言在左，复制在右，flex 自动排布彻底消除重叠 */
+.md-rendered .md-code-actions,
+.conex-markdown .md-code-actions,
+:is(.conex-markdown, .md-rendered) .md-code-actions {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  pointer-events: none;
+}
+
+.md-rendered .md-code-actions > *,
+.conex-markdown .md-code-actions > *,
+:is(.conex-markdown, .md-rendered) .md-code-actions > * {
+  pointer-events: auto;
+}
+
+.md-rendered .md-code-lang,
+.conex-markdown .md-code-lang,
+:is(.conex-markdown, .md-rendered) .md-code-lang {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--md-font-mono);
+  font-size: var(--font-size-micro, 11px);
+  color: var(--text-tertiary);
+  text-transform: lowercase;
+  user-select: none;
+  pointer-events: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  line-height: 1.3;
+}
+
+/* 兼容无 .md-code-actions 外壳的旧结构降级绝对定位 */
+:is(.conex-markdown, .md-rendered) > .md-code-lang {
+  position: absolute;
+  top: 6px;
+  right: 76px;
+}
+
+.md-rendered .md-code-copy,
+.conex-markdown .md-code-copy,
+:is(.conex-markdown, .md-rendered) .md-code-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
+  height: 22px;
+  padding: 0 var(--space-2, 8px);
+  font-size: var(--font-size-micro, 11px);
+  font-family: var(--md-font-sans, var(--font-sans));
+  color: var(--text-secondary);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity var(--transition-fast, 150ms ease),
+    background-color var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease);
+}
+
+/* 兼容无 .md-code-actions 外壳的旧结构降级绝对定位 */
+:is(.conex-markdown, .md-rendered) > .md-code-copy {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}
+
+:is(.conex-markdown, .md-rendered) .md-code-block:hover .md-code-copy,
+.md-rendered .md-code-block:hover .md-code-copy,
+.conex-markdown .md-code-block:hover .md-code-copy,
+:is(.conex-markdown, .md-rendered) .md-code-copy:focus-visible,
+.md-rendered .md-code-copy:focus-visible,
+.conex-markdown .md-code-copy:focus-visible {
+  opacity: 1;
+}
+
+:is(.conex-markdown, .md-rendered) .md-code-copy:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-color: var(--border-color);
+}
+
+:is(.conex-markdown, .md-rendered) .md-code-copy.is-copied,
+.md-rendered .md-code-copy.is-copied,
+.conex-markdown .md-code-copy.is-copied {
+  color: var(--brand, hsl(160 84% 39%));
+  border-color: color-mix(in srgb, var(--brand) 40%, transparent);
+  background: color-mix(in srgb, var(--brand) 8%, var(--bg-card));
+  opacity: 1;
+}
+
+.md-rendered .md-code-pre,
+.conex-markdown .md-code-pre,
+:is(.conex-markdown, .md-rendered) .md-code-pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-family: var(--md-font-mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  tab-size: 2;
+  color: var(--text-primary);
+  background: transparent;
+}
+
+/* --- GFM 任务清单列表 --- */
+.md-rendered .md-task-item,
+.conex-markdown .md-task-item,
+:is(.conex-markdown, .md-rendered) .md-task-item {
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2, 8px);
+  margin: var(--md-list-item-margin) 0;
+  margin-left: -1.35em;
+}
+
+.md-rendered .md-task-box,
+.conex-markdown .md-task-box,
+:is(.conex-markdown, .md-rendered) .md-task-box {
+  width: 14px;
+  height: 14px;
+  min-width: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  background: var(--bg-card);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(2px);
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.md-rendered .md-task-box.checked,
+.conex-markdown .md-task-box.checked,
+:is(.conex-markdown, .md-rendered) .md-task-box.checked {
+  background: var(--brand, hsl(160 84% 39%));
+  border-color: var(--brand, hsl(160 84% 39%));
+}
+
+.md-rendered .md-task-box.checked::after,
+.conex-markdown .md-task-box.checked::after,
+:is(.conex-markdown, .md-rendered) .md-task-box.checked::after {
+  content: '';
+  width: 3.5px;
+  height: 7px;
+  border: solid var(--bg-card);
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg) translate(-0.5px, -0.5px);
+}
+
+.md-rendered .md-task-item.done,
+.conex-markdown .md-task-item.done,
+:is(.conex-markdown, .md-rendered) .md-task-item.done {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+/* --- 多媒体与行内文字强调 --- */
+.md-rendered .md-img,
+.conex-markdown .md-img,
+:is(.conex-markdown, .md-rendered) :is(.md-img, img:not(.emoji)) {
+  max-width: 100%;
+  max-height: 520px;
+  border-radius: var(--radius-lg, 8px);
+  border: 1px solid var(--border-subtle);
+  object-fit: contain;
+  margin: 0.8em 0;
+  display: block;
+}
+
+.md-rendered .md-strong,
+.conex-markdown .md-strong,
+:is(.conex-markdown, .md-rendered) :is(.md-strong, strong) {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.md-rendered .md-em,
+.conex-markdown .md-em,
+:is(.conex-markdown, .md-rendered) :is(.md-em, em) {
+  font-style: italic;
+}
+
+.md-rendered .md-del,
+.conex-markdown .md-del,
+:is(.conex-markdown, .md-rendered) :is(.md-del, del) {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}

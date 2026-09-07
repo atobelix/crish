@@ -60,13 +60,6 @@
   user-select: none;
 }
 
-/* 顶行最右叶子：抽屉处于右上角时让出窗口控制三键空间，macOS 让出交通灯/问号 */
-:global([data-top-row="true"][data-right-edge="true"]) .header {
-  padding-right: var(--edge-reserve-right-win);
-}
-:global([data-platform="macos"]) :global([data-top-row="true"][data-right-edge="true"]) .header {
-  padding-right: var(--edge-reserve-right-macos);
-}
 
 /* Tabs Track：复刻参考 .side-panel-tabs-track（横向滚动 + 滚动条全隐） */
 .tabsTrack {

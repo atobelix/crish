@@ -270,7 +270,6 @@
 
 .tabCloseBtn:active {
   background: var(--tint-active, hsl(0 0% 0% / 0.12));
-  transform: scale(0.92);
 }
 
 /* 新建标签按钮（加号）：28px 与标签同高、8px 圆角，纯流式紧贴末尾标签 */
