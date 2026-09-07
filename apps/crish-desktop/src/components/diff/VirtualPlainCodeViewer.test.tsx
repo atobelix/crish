@@ -98,5 +98,19 @@ describe('diff/VirtualPlainCodeViewer 换行与行高契约', () => {
     // 800 字符长行按 ~80 字符/行计算折成多行，总高度远大于 2 * 22px
     expect(parsedHeight).toBeGreaterThan(2 * 22);
   });
+
+  it('紧凑排版契约：清除多余边框与冗余边距，行号与文本保持微距视觉分离', () => {
+    const { container } = render(
+      <VirtualPlainCodeViewer content="console.log('compact');" filePath="d.ts" />
+    );
+    const line = container.querySelector(`.${styles.line}`) as HTMLElement;
+    expect(line.style.borderLeftStyle).toBe('none');
+
+    const gutter = container.querySelector(`.${styles.gutterNum}`) as HTMLElement;
+    expect(gutter.style.padding).toBe('0px 3px');
+
+    const text = container.querySelector(`.${styles.lineText}`) as HTMLElement;
+    expect(text.style.padding).toBe('0px 2px 0px 6px');
+  });
 });
 

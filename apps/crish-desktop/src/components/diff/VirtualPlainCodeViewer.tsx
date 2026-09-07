@@ -73,9 +73,9 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
     const firstLineRef = useRef<HTMLDivElement | null>(null);
     const measureSpanRef = useRef<HTMLSpanElement | null>(null);
 
-    // 动态行号宽度（支持 5 位数以上行号，确保不溢出不折行）
+    // 动态行号宽度（根据总行数与字符宽度动态计算紧凑行号区，避免小文件出现巨大空白）
     const gutterDigits = Math.max(2, String(totalLines).length);
-    const gutterWidth = Math.max(40, gutterDigits * 8 + 16);
+    const gutterWidth = Math.max(22, Math.ceil(gutterDigits * (charWidth || 7.2)) + 8);
 
     // 监听容器宽度变化（以便动态推算每行折行数）
     useEffect(() => {
@@ -129,8 +129,8 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
         return heights;
       }
 
-      // 可用内容宽度 = 容器宽 - 行号区宽 - padding
-      const availableWidth = Math.max(80, containerWidth - gutterWidth - 24);
+      // 可用内容宽度 = 容器宽 - 行号区宽 - padding (text 左右共 8px)
+      const availableWidth = Math.max(80, containerWidth - gutterWidth - 8);
       const charsPerLine = Math.max(8, Math.floor(availableWidth / charWidth));
 
       for (let i = 0; i < totalLines; i++) {
@@ -234,6 +234,7 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
                   gridTemplateColumns: `${gutterWidth}px 1fr`,
                   width: wordWrap ? '100%' : 'max-content',
                   minWidth: '100%',
+                  borderLeft: 'none',
                 }}
               >
                 <div
@@ -243,7 +244,7 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
                     width: `${gutterWidth}px`,
                     minWidth: `${gutterWidth}px`,
                     textAlign: 'right',
-                    paddingRight: '8px',
+                    padding: '0 3px',
                     boxSizing: 'border-box',
                   }}
                 >
@@ -257,6 +258,7 @@ export const VirtualPlainCodeViewer: React.FC<VirtualPlainCodeViewerProps> = Rea
                     overflowWrap: wordWrap ? 'anywhere' : 'normal',
                     overflowX: 'hidden',
                     minWidth: 0,
+                    padding: '0 2px 0 6px',
                   }}
                   dangerouslySetInnerHTML={{ __html: highlightCode(l.content, codeLang) }}
                 />
