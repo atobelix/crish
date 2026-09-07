@@ -3,7 +3,6 @@ import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
 import { ExternalLink, X } from 'lucide-react';
 import { pathBasename } from '../../api/workspaceFsApi';
-import { highlightCode, langFromFilename } from '../../api/codeHighlight';
 import { useAsyncMarkdownHtml } from '../../api/markdownRenderAsync';
 import {
   normalizeCodeBlockIndent,
@@ -15,6 +14,7 @@ import {
   parseCsvPreview,
 } from '../../api/workspaceFsApi';
 import { FileEditor } from './FileEditor';
+import { VirtualPlainCodeViewer } from '../diff/VirtualPlainCodeViewer';
 import type { ViewMode } from './hooks/useFilePreview';
 
 /** files 叶内预览。禁止挂 document.body 或整屏覆盖层。 */
@@ -81,7 +81,6 @@ export const FilePreview = React.memo(function FilePreview({
   } = previewState;
   const { onLoadMore, onEditBufChange, onError, onOpenFile } = actions;
   const previewPaneRef = useRef<HTMLDivElement>(null);
-  const textRef = useRef<HTMLPreElement>(null);
   const [selText, setSelText] = useState('');
   const [commentDraft, setCommentDraft] = useState('');
   const [selAnchor, setSelAnchor] = useState<{
@@ -286,35 +285,35 @@ export const FilePreview = React.memo(function FilePreview({
               ) : null}
             </div>
           ) : (
-            <>
-              <pre
-                ref={textRef}
-                className={`${styles.filesTextPre} hljs`}
-                onMouseUp={onTextSelect}
-                onKeyUp={onTextSelect}
-                dangerouslySetInnerHTML={{
-                  __html:
-                    highlightCode(
-                      content || '（空文件）',
-                      langFromFilename(selected || '')
-                    ) || '',
-                }}
-              />
+            <div
+              className={styles.filesCodeViewerWrap}
+              onMouseUp={onTextSelect}
+              onKeyUp={onTextSelect}
+            >
+              <div className={styles.filesCodeViewerBody}>
+                <VirtualPlainCodeViewer
+                  content={content || ''}
+                  filePath={selected || ''}
+                  wordWrap={true}
+                />
+              </div>
               {canLoadMore ? (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className={styles.filesLoadMore}
-                  disabled={loadingMore}
-                  onClick={onLoadMore}
-                >
-                  {loadingMore ? '加载中…' : `继续加载（已 ${lineBudget} 行）`}
-                </Button>
+                <div className={styles.filesLoadMoreBar}>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className={styles.filesLoadMore}
+                    disabled={loadingMore}
+                    onClick={onLoadMore}
+                  >
+                    {loadingMore ? '加载中…' : `继续加载（已 ${lineBudget} 行）`}
+                  </Button>
+                </div>
               ) : truncated ? (
                 <div className={styles.filesTrunc}>已达预览上限</div>
               ) : null}
-            </>
+            </div>
           )
         ) : (
           <div className={`${styles.filesEmpty} ${styles.filesEmptyCompact}`}>

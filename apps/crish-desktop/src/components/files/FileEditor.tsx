@@ -17,13 +17,15 @@ export const FileEditor = React.memo(function FileEditor({
   onChange,
 }: FileEditorProps) {
   return (
-    <textarea
-      className={styles.editor}
-      value={editBuf}
-      onChange={(e) => onChange(e.target.value, e.target.value !== content)}
-      spellCheck={false}
-      aria-label="源码编辑区域"
-    />
+    <div className={styles.editorWrapper}>
+      <textarea
+        className={styles.editor}
+        value={editBuf}
+        onChange={(e) => onChange(e.target.value, e.target.value !== content)}
+        spellCheck={false}
+        aria-label="源码编辑区域"
+      />
+    </div>
   );
 });
 

@@ -20,4 +20,18 @@ describe('FileEditor Pure White Paper Surface', () => {
     // 验证内联样式中绝对没有 'var(--bg-primary)'
     expect(textarea.style.background).not.toContain('var(--bg-primary)');
   });
+
+  it('renders textarea inside editorWrapper container', () => {
+    const { container } = render(
+      <FileEditor
+        editBuf="const a = 1;"
+        content="const a = 1;"
+        dirty={false}
+        onChange={vi.fn()}
+      />
+    );
+
+    const textarea = screen.getByRole('textbox', { name: '源码编辑区域' });
+    expect(textarea.parentElement?.className).toContain('editorWrapper');
+  });
 });

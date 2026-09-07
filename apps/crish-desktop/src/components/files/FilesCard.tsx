@@ -1,5 +1,5 @@
 import { useToast } from '../../services/toast/ToastContext';
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styles from './FilesCard.module.css';
 import { Button, Tooltip } from '../ui';
 import { CornerLeftUp, RotateCw, Search, X } from 'lucide-react';
@@ -27,6 +27,7 @@ interface FilesCardProps {
 // 无名称图标按钮文案（同源约定）：aria-label 与 Tooltip content 同引用，禁止两处各写
 const PARENT_DIR_LABEL = '上级目录';
 const REFRESH_LABEL = '刷新';
+const FILES_SPLIT_RATIO_KEY = 'crish:files-list-ratio';
 
 export const FilesCard: React.FC<FilesCardProps> = React.memo(
   ({ initialPath }) => {
@@ -34,6 +35,102 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
     const preview = useFilePreview();
     const nav = useFileNavigation(() => preview.dirty);
     const filterInputRef = useRef<HTMLInputElement>(null);
+    const bodySplitRef = useRef<HTMLDivElement>(null);
+    const [isResizing, setIsResizing] = useState(false);
+    const [listWidthRatio, setListWidthRatio] = useState<number>(() => {
+      try {
+        const saved = localStorage.getItem(FILES_SPLIT_RATIO_KEY);
+        if (saved) {
+          const val = parseFloat(saved);
+          if (!isNaN(val) && val >= 15 && val <= 75) return val;
+        }
+      } catch {
+        // fallback
+      }
+      return 35;
+    });
+
+    const handleSplitResizeStart = useCallback(
+      (
+        e:
+          | React.PointerEvent<HTMLDivElement>
+          | React.MouseEvent<HTMLDivElement>
+      ) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        const container = bodySplitRef.current;
+        if (!container) return;
+
+        const handleEl = e.currentTarget;
+        if ('setPointerCapture' in handleEl && 'pointerId' in e) {
+          try {
+            handleEl.setPointerCapture((e as React.PointerEvent).pointerId);
+          } catch {
+            /* ignore */
+          }
+        }
+
+        setIsResizing(true);
+        const containerRect = container.getBoundingClientRect();
+
+        const handleMove = (moveEv: MouseEvent | PointerEvent) => {
+          const currentWidth = containerRect.width;
+          if (currentWidth <= 0) return;
+          const offsetX = moveEv.clientX - containerRect.left;
+          const newRatio = Math.max(
+            15,
+            Math.min(75, (offsetX / currentWidth) * 100)
+          );
+          setListWidthRatio(newRatio);
+        };
+
+        const handleUp = (upEv: MouseEvent | PointerEvent) => {
+          if ('releasePointerCapture' in handleEl && 'pointerId' in upEv) {
+            try {
+              if (
+                handleEl.hasPointerCapture?.(
+                  (upEv as PointerEvent).pointerId
+                )
+              ) {
+                handleEl.releasePointerCapture(
+                  (upEv as PointerEvent).pointerId
+                );
+              }
+            } catch {
+              /* ignore */
+            }
+          }
+          window.removeEventListener('pointermove', handleMove);
+          window.removeEventListener('pointerup', handleUp);
+          window.removeEventListener('pointercancel', handleUp);
+          window.removeEventListener('mousemove', handleMove);
+          window.removeEventListener('mouseup', handleUp);
+          setIsResizing(false);
+
+          const currentWidth = containerRect.width;
+          if (currentWidth > 0) {
+            const offsetX = upEv.clientX - containerRect.left;
+            const finalRatio = Math.max(
+              15,
+              Math.min(75, (offsetX / currentWidth) * 100)
+            );
+            setListWidthRatio(finalRatio);
+            try {
+              localStorage.setItem(FILES_SPLIT_RATIO_KEY, finalRatio.toFixed(2));
+            } catch {
+              // ignore
+            }
+          }
+        };
+
+        window.addEventListener('pointermove', handleMove);
+        window.addEventListener('pointerup', handleUp);
+        window.addEventListener('pointercancel', handleUp);
+        window.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleUp);
+      },
+      []
+    );
 
     const handleOpenFile = useCallback(
       async (path: string) => {
@@ -356,8 +453,14 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
             </div>
           ) : (
             <div
+              ref={bodySplitRef}
               className={`${styles.filesBody} ${styles.filesBodySplit}`}
               data-mode={preview.view}
+              style={
+                {
+                  '--files-list-ratio': `${listWidthRatio}%`,
+                } as React.CSSProperties
+              }
             >
               <FileTreeView
                 root={nav.root}
@@ -376,6 +479,14 @@ export const FilesCard: React.FC<FilesCardProps> = React.memo(
                 onFilterChange={(v) => nav.setFilter(v)}
                 onFilterModeToggle={() => nav.setFilterMode(!nav.filterMode)}
                 onErrorDismiss={() => nav.setError('')}
+              />
+              <div
+                className={`${styles.filesSplitResizer} ${isResizing ? styles.isResizing : ''}`}
+                onPointerDown={handleSplitResizeStart}
+                onMouseDown={handleSplitResizeStart}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="调整目录树与预览宽度"
               />
               <FilePreview
                 file={{
