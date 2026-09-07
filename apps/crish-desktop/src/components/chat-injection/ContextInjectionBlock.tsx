@@ -8,6 +8,7 @@ import React from 'react';
 import styles from './ContextInjectionBlock.module.css';
 import type { ContextInjectionBlockProps } from './contextInjectionTypes';
 import { CompactInjectionRow } from './CompactInjectionRow';
+import { isContextStateInjection } from './contextInjectionUtils';
 
 export const ContextInjectionBlock: React.FC<ContextInjectionBlockProps> =
   React.memo(function ContextInjectionBlock({
@@ -16,6 +17,24 @@ export const ContextInjectionBlock: React.FC<ContextInjectionBlockProps> =
     ...sharedProps
   }) {
     if (!injections || injections.length === 0) return null;
+    const isAllState = injections.every(isContextStateInjection);
+    if (isAllState) {
+      return (
+        <div
+          className={`${styles.stateNoticeStack} ${className || ''}`}
+          role="none"
+        >
+          {injections.map((inj) => (
+            <CompactInjectionRow
+              key={inj.id}
+              rowKey={inj.id}
+              injection={inj}
+              {...sharedProps}
+            />
+          ))}
+        </div>
+      );
+    }
     return (
       <div
         className={`${styles.injectionStack} ${className || ''}`}

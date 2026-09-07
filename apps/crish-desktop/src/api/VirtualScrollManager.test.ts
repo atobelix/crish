@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { VirtualScrollManager } from './VirtualScrollManager';
+import { VirtualScrollManager, estimateTimelineMessageHeight } from './VirtualScrollManager';
+import type { SessionMessage } from '../store/types';
 
 function ids(n: number, prefix = 'm'): string[] {
   return Array.from({ length: n }, (_, i) => `${prefix}${i}`);
@@ -496,3 +497,17 @@ describe('Fenwick Tree (BIT) Dynamic Height & Binary Search Precision', () => {
   });
 });
 
+describe('estimateTimelineMessageHeight 几何稳定测试', () => {
+  it('PureCarrier 消息高度必须精确估算为 24px，杜绝 100px 保底 (DEF-11)', () => {
+    const carrierMsg: SessionMessage = {
+      id: 'carrier-1',
+      sender: 'assistant',
+      text: '',
+      injections: [{ id: 's1', metadata: { mode: 'context-state' } }],
+      blocks: [{ type: 'context_injection', id: 's1', injection: { metadata: { mode: 'context-state' } } }],
+    };
+
+    const estHeight = estimateTimelineMessageHeight(carrierMsg);
+    expect(estHeight).toBe(24);
+  });
+});

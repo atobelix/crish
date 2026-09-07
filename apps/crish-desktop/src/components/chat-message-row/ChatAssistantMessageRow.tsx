@@ -25,11 +25,12 @@ import { MessageContent } from '../chat-message/MessageContent';
 import { MessageActions } from '../chat-message/MessageActions';
 import { CacheMetricsBadge } from './CacheMetricsBadge';
 import { RetractActionButton } from './RetractActionButton';
+import { isContextStateCarrierMessage } from '../../store/sessionInjectionMount';
 
 export type { ChatAssistantMessageRowProps } from './chatMessageRowUtils';
 
 const ChatAssistantMessageRowInner: React.FC<
-  ChatAssistantMessageRowProps & { clearHeightsSignal?: number }
+  ChatAssistantMessageRowProps
 > = ({
   msg,
   streamText,
@@ -56,7 +57,6 @@ const ChatAssistantMessageRowInner: React.FC<
   onRetract,
   messageIndex: _messageIndex,
   virtualScrollManager,
-  clearHeightsSignal,
 }) => {
   void _onBranch;
   void _messageIndex;
@@ -85,7 +85,8 @@ const ChatAssistantMessageRowInner: React.FC<
     if (!el || !virtualScrollManager) return;
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
-        const h = entry.contentRect.height;
+        // 统一度量入口（Plan 05 §2.2）：使用 el.offsetHeight 度量完整盒模型高度
+        const h = el.offsetHeight || Math.ceil(entry.contentRect.height);
         if (h > 0) {
           virtualScrollManager.setActual(msg.id, h);
         }
@@ -112,14 +113,7 @@ const ChatAssistantMessageRowInner: React.FC<
     virtualScrollManager,
   ]);
 
-  // 3. 响应外部 clearHeightsSignal 信号
-  useEffect(() => {
-    if (clearHeightsSignal !== undefined && clearHeightsSignal > 0) {
-      virtualScrollManager?.invalidateActual(msg.id);
-    }
-  }, [clearHeightsSignal, msg.id, virtualScrollManager]);
-
-  // 4. 增强 toolStackProps：工具展开/收起时立即作废旧测高，联动 ResizeObserver 动态测高自愈
+  // 3. 增强 toolStackProps：工具展开/收起时立即作废旧测高，联动 ResizeObserver 动态测高自愈
   const augmentedToolStackProps = useMemo(() => {
     if (!toolStackProps) return toolStackProps;
     return {
@@ -128,11 +122,21 @@ const ChatAssistantMessageRowInner: React.FC<
         toolStackProps.onToggleTool?.(toolId, currentlyOpen);
         virtualScrollManager?.invalidateActual(msg.id);
       },
+      onToggleInjection: (injectionId: string, currentlyOpen: boolean) => {
+        toolStackProps.onToggleInjection?.(injectionId, currentlyOpen);
+        virtualScrollManager?.invalidateActual(msg.id);
+      },
     };
   }, [toolStackProps, virtualScrollManager, msg.id]);
 
   const isLive = isThinkingMsg || msg.status === 'processing';
-  const showLiveRetract = Boolean(onRetract) && isLastAssistant && isLive;
+  const isPureCarrier = useMemo(() => {
+    // 完善 isPureCarrier 判定：处于深度思考、流式输出、或消息本身包含实质数据时不为纯载体
+    if (isThinkingMsg || (streamText || '').trim().length > 0) return false;
+    return isContextStateCarrierMessage(msg);
+  }, [msg, isThinkingMsg, streamText]);
+  const showLiveRetract =
+    !isPureCarrier && Boolean(onRetract) && isLastAssistant && isLive;
 
   const handleCopy = useCallback(() => {
     // T4 A1：壳层已装配合并 view model——流式期间 msg.text 即热缓冲累积正文，
@@ -156,16 +160,16 @@ const ChatAssistantMessageRowInner: React.FC<
   return (
     <div
       ref={rowRef}
-      className={`${styles.row} ${styles.rowAssistant} msg-row msg-row-assistant ${isFollowUp ? styles.isFollowup : ''}${isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${isPinned ? ` ${styles.isPinned}` : ''}`}
+      className={`${styles.row} ${isPureCarrier ? styles.rowCarrier : styles.rowAssistant} msg-row ${isPureCarrier ? 'msg-row-carrier' : 'msg-row-assistant'} ${!isPureCarrier && isFollowUp ? styles.isFollowup : ''}${!isPureCarrier && isSearchHit ? ` ${styles.searchHit} msg-search-hit` : ''}${!isPureCarrier && isPinned ? ` ${styles.isPinned}` : ''}`}
       data-msg-id={msg.id}
-      data-role="assistant"
-      data-pinned={isPinned ? 'true' : undefined}
-      data-followup={isFollowUp ? 'true' : undefined}
-      role="article"
-      aria-label={rowAria}
+      data-role={isPureCarrier ? 'system' : 'assistant'}
+      data-pinned={!isPureCarrier && isPinned ? 'true' : undefined}
+      data-followup={!isPureCarrier && isFollowUp ? 'true' : undefined}
+      role={isPureCarrier ? 'region' : 'article'}
+      aria-label={isPureCarrier ? '系统状态提示行' : rowAria}
     >
       {/* 拔除置顶独立的 MessageThinkingBlock，所有思维链下放至 MessageContent 自然交错渲染 */}
-      <div className={styles.assistantBody} data-message-body="assistant">
+      <div className={isPureCarrier ? styles.carrierBody : styles.assistantBody} data-message-body={isPureCarrier ? 'carrier' : 'assistant'}>
         <MessageContent
           msg={msg}
           streamText={streamText}
@@ -180,7 +184,7 @@ const ChatAssistantMessageRowInner: React.FC<
           <RetractActionButton onRetract={onRetract} />
         </div>
       ) : null}
-      {!isLive && (
+      {!isLive && !isPureCarrier && (
         <MessageActions
           msg={msg}
           state={{

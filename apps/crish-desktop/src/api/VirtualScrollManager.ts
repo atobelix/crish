@@ -4,6 +4,7 @@
  */
 
 import type { SessionMessage } from '../store/types';
+import { isContextStateCarrierMessage } from '../store/sessionInjectionMount';
 
 export interface VisibleRange {
   startIndex: number;
@@ -25,6 +26,12 @@ export const MESSAGE_ESTIMATED_ROW_HEIGHT = FALLBACK_HEIGHT;
  * 结构化多步骤消息高度估算模型（误差收敛至 ≤15%）
  */
 export function estimateTimelineMessageHeight(msg: SessionMessage): number {
+  // 核心守卫：PureCarrier 消息精准估算为 24px（20px 高度 + 4px 垂直节奏）
+  // 杜绝进入后续 Math.max(h, 100) 强制 100px 保底引发的 80px 树状数组下陷颠簸 (DEF-11)
+  if (isContextStateCarrierMessage(msg)) {
+    return 24;
+  }
+
   let h = 48; // Base Row Padding + Actions
   const blocks = msg.blocks || [];
 

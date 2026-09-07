@@ -17,6 +17,7 @@
  */
 import React, { useCallback, useMemo, useState } from 'react';
 import styles from './ContextInjectionBlock.module.css';
+import { Tooltip } from '../ui';
 import type { CompactInjectionRowProps } from './contextInjectionTypes';
 import {
   INJECTION_COLLAPSE_CHAR_THRESHOLD,
@@ -49,29 +50,24 @@ export const CompactInjectionRow: React.FC<RowProps> = React.memo(
     onOpenDiff,
     onRetryInjection,
   }) {
-    // 彻底杜绝在时间线中复读冗余的文件上下文卡片（极简模式，不渲染）
-    if (injection?.kind === 'file_context') {
-      return null;
-    }
-
-    // 状态切换感知项（模型/服务商/权限/档位切换通知）：以极简灰色纯文字提示呈现，
-    // 杜绝大卡片、粗彩边框、图标徽章与 100% 冗余复读的展开 Body
+    // 状态切换感知项（模型/服务商/权限/档位切换通知）：以 20px 极简发丝微提示呈现，
+    // 杜绝大卡片、粗彩边框、图标徽章、折叠箭头与 100% 冗余复读的展开 Body
     if (isContextStateInjection(injection)) {
-      const rawText =
-        injection.content || injection.summary || injection.title || '';
-      const displayText = formatContextStateDisplayText(rawText);
+      const displayText = formatContextStateDisplayText(injection);
       return (
-        <div
-          key={rowKey}
-          className={styles.contextStateNotice}
-          role="status"
-          aria-label={displayText}
-          data-injection-id={injection.id}
-          data-injection-kind={injection.kind}
-          data-testid={`context-state-notice-${injection.id}`}
-        >
-          <span className={styles.contextStateText}>{displayText}</span>
-        </div>
+        <Tooltip content={displayText} side="top" key={rowKey}>
+          <div
+            className={styles.contextStateNotice}
+            role="status"
+            aria-live="polite"
+            tabIndex={0}
+            data-injection-id={injection.id}
+            data-injection-kind={injection.kind}
+            data-testid={`context-state-notice-${injection.id}`}
+          >
+            <span className={styles.contextStateText}>{displayText}</span>
+          </div>
+        </Tooltip>
       );
     }
 
@@ -81,8 +77,13 @@ export const CompactInjectionRow: React.FC<RowProps> = React.memo(
     // 可折叠 = 有正文或有关联展示（Diff/路径）且未被显式禁折
     const canToggle = injection.isFoldable !== false && (hasContent || hasDiffs || hasPaths);
 
+    // file_context 默认折叠（不霸道铺屏，清晰呈现文件上下文并保留展开阅读能力）
     const defaultOpen =
-      !(injection.defaultFolded ?? ((injection.content || '').length > INJECTION_COLLAPSE_CHAR_THRESHOLD));
+      injection.defaultFolded !== undefined
+        ? !injection.defaultFolded
+        : injection.kind === 'file_context'
+          ? false
+          : !((injection.content || '').length > INJECTION_COLLAPSE_CHAR_THRESHOLD);
     const [localOpen, setLocalOpen] = useState(defaultOpen);
     // 受控优先：容器传入 expandedInjections 时以其为准；否则本地 state
     const controlled = expandedInjections?.[injection.id];
@@ -160,6 +161,8 @@ export const CompactInjectionRow: React.FC<RowProps> = React.memo(
           isPending={isPending}
           onToggle={handleToggle}
           rowAriaLabel={rowAriaLabel}
+          onOpenPath={onOpenPath}
+          onOpenDiff={onOpenDiff}
           onRetryInjection={onRetryInjection}
         />
         {canToggle && isOpen ? (
@@ -175,3 +178,5 @@ export const CompactInjectionRow: React.FC<RowProps> = React.memo(
 );
 
 CompactInjectionRow.displayName = 'CompactInjectionRow';
+
+export const ContextInjectionCard = CompactInjectionRow;

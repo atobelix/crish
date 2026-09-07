@@ -26,6 +26,7 @@ import {
   NarrativeRenderSlotsContext,
 } from '../chat-message/narrativeRenderSlots';
 import { EphemeralStatusSlot } from './EphemeralStatusSlot';
+import { isContextStateCarrierMessage } from '../../store/sessionInjectionMount';
 
 export type {
   ChatMessageListApprovalProps,
@@ -152,7 +153,14 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
   const lastAssistantId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
-      if (msg && msg.sender === 'assistant') return msg.id;
+      // 关键断言：必须是 assistant 且坚决排除纯状态 Carrier 消息，保全上一轮实质助手的操作栏 (DEF-07)
+      if (
+        msg &&
+        msg.sender === 'assistant' &&
+        !isContextStateCarrierMessage(msg)
+      ) {
+        return msg.id;
+      }
     }
     return null;
   }, [messages]);
@@ -197,42 +205,92 @@ const ChatMessageListInner: React.FC<ChatMessageListProps> = ({
     );
   }
 
+  const pins = useMemo(
+    () => ({
+      pinnedItems,
+      pinsOpen,
+      setPinsOpen,
+      jumpToPinned,
+      togglePin,
+    }),
+    [pinnedItems, pinsOpen, jumpToPinned, togglePin]
+  );
+
+  const flowControl = useMemo(
+    () => ({
+      hideThinkingBlock,
+      inPlanMode,
+      planApproved,
+      setPermissionMode,
+      setPlanApproved,
+      lastAssistantId,
+      lastUserId,
+      thinkingMsgId,
+      showAllMessages,
+    }),
+    [
+      hideThinkingBlock,
+      inPlanMode,
+      planApproved,
+      setPermissionMode,
+      setPlanApproved,
+      lastAssistantId,
+      lastUserId,
+      thinkingMsgId,
+      showAllMessages,
+    ]
+  );
+
+  const interaction = useMemo(
+    () => ({
+      expandedUserMsgs,
+      onToggleExpandUser,
+      dismissedFollowUps,
+      handleDismissFollowUp,
+      handleMarkdownClick,
+      toolStackProps,
+    }),
+    [
+      expandedUserMsgs,
+      onToggleExpandUser,
+      dismissedFollowUps,
+      handleDismissFollowUp,
+      handleMarkdownClick,
+      toolStackProps,
+    ]
+  );
+
+  const virtualizerGeneration = useMemo(
+    () => ({
+      ...generation,
+      handleRegenerateRow,
+    }),
+    [generation, handleRegenerateRow]
+  );
+
+  const virtualizerComposer = useMemo(
+    () => ({
+      ...composer,
+      handleFillFollowUp,
+      handleSendFollowUp,
+    }),
+    [composer, handleFillFollowUp, handleSendFollowUp]
+  );
+
   return (
     <AppErrorBoundary variant="compact" title="消息列表出错">
       <NarrativeRenderSlotsContext.Provider value={narrativeSlots}>
         <MessageVirtualizer
           messages={messages}
-          pinnedItems={pinnedItems}
-          pinsOpen={pinsOpen}
-          setPinsOpen={setPinsOpen}
-          jumpToPinned={jumpToPinned}
-          togglePin={togglePin}
-          searchHighlightQuery={searchHighlightQuery}
-          expandedUserMsgs={expandedUserMsgs}
-          onToggleExpandUser={onToggleExpandUser}
-          hideThinkingBlock={hideThinkingBlock}
-          inPlanMode={inPlanMode}
-          planApproved={planApproved}
-          lastAssistantId={lastAssistantId}
-          lastUserId={lastUserId}
-          onRetract={onRetract}
-          thinkingMsgId={thinkingMsgId}
-          toolStackProps={toolStackProps}
-          handleRegenerateRow={handleRegenerateRow}
-          onBranch={onBranch}
-          onOpenDiff={onOpenDiff}
-          onOpenDiffPanel={onOpenDiffPanel}
-          setPermissionMode={setPermissionMode}
-          setPlanApproved={setPlanApproved}
-          handleFillFollowUp={handleFillFollowUp}
-          onSendFollowUp={onSendFollowUp}
-          handleSendFollowUp={handleSendFollowUp}
-          dismissedFollowUps={dismissedFollowUps}
-          handleDismissFollowUp={handleDismissFollowUp}
-          showAllMessages={showAllMessages}
           activeSessionId={activeSessionId}
-          handleMarkdownClick={handleMarkdownClick}
-          onOpenPath={onOpenPath}
+          navigation={navigation}
+          approval={approval}
+          composer={virtualizerComposer}
+          generation={virtualizerGeneration}
+          pins={pins}
+          flowControl={flowControl}
+          interaction={interaction}
+          searchHighlightQuery={searchHighlightQuery}
         />
       </NarrativeRenderSlotsContext.Provider>
     </AppErrorBoundary>

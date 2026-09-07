@@ -171,6 +171,42 @@ describe('消息级撤回入口', () => {
     expect(onRetract).toHaveBeenCalledTimes(1);
   });
 
+  it('UserMessageActionsBar 未固定时渲染固定按钮，点击触发 onTogglePin', () => {
+    const onTogglePin = vi.fn();
+    render(
+      <UserMessageActionsBar
+        timestamp={1}
+        isPinned={false}
+        copied={false}
+        onCopy={vi.fn()}
+        onTogglePin={onTogglePin}
+      />
+    );
+    const pinBtn = screen.getByRole('button', { name: '固定消息' });
+    expect(pinBtn).toBeInTheDocument();
+    fireEvent.click(pinBtn);
+    expect(onTogglePin).toHaveBeenCalledTimes(1);
+  });
+
+  it('AssistantMessageActionsBar 未固定时渲染固定按钮，点击触发 onTogglePin', () => {
+    const onTogglePin = vi.fn();
+    render(
+      <AssistantMessageActionsBar
+        timestamp={1}
+        copied={false}
+        isLastAssistant={false}
+        isPinned={false}
+        onCopy={vi.fn()}
+        onRegenerate={vi.fn()}
+        onTogglePin={onTogglePin}
+      />
+    );
+    const pinBtn = screen.getByRole('button', { name: '固定消息' });
+    expect(pinBtn).toBeInTheDocument();
+    fireEvent.click(pinBtn);
+    expect(onTogglePin).toHaveBeenCalledTimes(1);
+  });
+
   it('撤回皮：7px token + appearance none，无 scale 果冻', () => {
     const css = readFileSync(join(here, 'ChatMessageRow.module.css'), 'utf8');
     expect(css).toMatch(/\.retractBtn\s*\{[^}]*appearance:\s*none/s);

@@ -1,7 +1,7 @@
 /* ==========================================================================
    对话流可见注入卡片样式（ContextInjectionBlock.module.css）
    遵循 AGENTS.md §13~14：无重阴影、柔和微光、HSLA/color-mix、焦点混入 ≤10%。
-   7 色语义色调矩阵 + memory/workspace_env 中性兜底。
+   极简纯净单色发丝边框，去除彩虹粗边框。
    ========================================================================== */
 
 .injectionStack {
@@ -17,10 +17,9 @@
 
 .injectionRow {
   position: relative;
-  border-radius: var(--radius-lg, 8px);
-  background: var(--bg-card, hsl(0 0% 100%));
-  border: 1px solid var(--border-subtle, hsl(35 8% 91%));
-  border-left-width: 2.5px;
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   contain: layout style;
   color: var(--text-secondary);
   box-shadow: none;
@@ -61,7 +60,9 @@
 .rowHead:focus-visible,
 .retryBtn:focus-visible,
 .pathChipBtn:focus-visible,
-.diffChipBtn:focus-visible {
+.diffChipBtn:focus-visible,
+.headerActionBtn:focus-visible,
+.largeFileBtn:focus-visible {
   outline: none;
   /* 焦点混入 ≤10%（AGENTS.md §13 上限量级） */
   border-radius: var(--radius-sm, 4px);
@@ -140,6 +141,28 @@
   white-space: nowrap;
 }
 
+.lineBadge {
+  font-family: 'Segoe UI', -apple-system, var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  font-size: var(--font-size-nano, 10px);
+  color: var(--text-tertiary);
+  background: var(--tint-hover);
+  padding: 1px 6px;
+  border-radius: var(--radius-full, 9999px);
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.fileTypeIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+
+
 .retryBtn {
   display: inline-flex;
   align-items: center;
@@ -158,6 +181,42 @@
 .retryBtn:hover {
   color: var(--text-danger);
   background: color-mix(in srgb, var(--accent-red) 8%, transparent);
+}
+
+.headerActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--border-subtle, hsl(35 8% 91%));
+  border-radius: var(--radius-sm, 4px);
+  background: var(--tint-hover);
+  color: var(--text-secondary);
+  font-size: var(--font-size-nano, 10px);
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease),
+    border-color var(--transition-micro, 100ms ease);
+}
+
+.headerActionBtn:hover {
+  background: var(--tint-active);
+  color: var(--text-primary);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
+}
+
+.headerActionBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 90%, var(--text-primary) 10%);
 }
 
 .chevronSlot {
@@ -192,7 +251,7 @@
 /* ── 展开详情区 ────────────────────────────────────────────────────────── */
 
 .rowBody {
-  border-top: 1px solid var(--border-subtle, hsl(35 8% 91%));
+  border-top: 1px solid var(--border-subtle);
   padding: var(--space-2, 8px) var(--space-3, 12px);
   font-size: var(--font-size-xs, 12px);
   background: color-mix(in srgb, var(--text-primary) 2%, transparent);
@@ -285,75 +344,108 @@
   );
 }
 
-/* ── 7 色语义色调矩阵（柔和微光；左缘 + 图标槽着色，边框混入克制）──────── */
-
-.toneRule {
-  border-left-color: var(--accent-green, hsl(142 72% 46%));
-}
-.toneRule .iconSlot {
-  color: var(--accent-green, hsl(142 72% 46%));
-}
-
-.toneSkill {
-  border-left-color: var(--accent-orange, hsl(38 92% 50%));
-}
-.toneSkill .iconSlot {
-  color: var(--accent-orange, hsl(38 92% 50%));
-}
-
-.toneFile {
-  border-left-color: var(--accent-blue, hsl(217 91% 60%));
-}
-.toneFile .iconSlot {
-  color: var(--accent-blue, hsl(217 91% 60%));
+.largeFileNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
+  padding: var(--space-1_5, 6px) var(--space-2_5, 10px);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--tint-hover);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--font-size-micro, 11px);
+  color: var(--text-secondary);
 }
 
-.toneGit {
-  border-left-color: var(--accent-cyan, hsl(187 85% 45%));
-}
-.toneGit .iconSlot {
-  color: var(--accent-cyan, hsl(187 85% 45%));
-}
-
-.toneTerminal {
-  border-left-color: var(--accent-violet, hsl(258 90% 66%));
-}
-.toneTerminal .iconSlot {
-  color: var(--accent-violet, hsl(258 90% 66%));
+.largeFileHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
+  min-width: 0;
 }
 
-.toneSteering {
-  border-left-color: var(--text-danger, hsl(0 68% 55%));
-}
-.toneSteering .iconSlot {
-  color: var(--text-danger, hsl(0 68% 55%));
+.largeFileIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
 }
 
-.toneSchedule {
-  border-left-color: var(--brand-deep, hsl(160 84% 30%));
-}
-.toneSchedule .iconSlot {
-  color: var(--brand-deep, hsl(160 84% 30%));
+.largeFileActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1_5, 6px);
 }
 
-/* memory / workspace_env 中性兜底 */
+.largeFileBtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: var(--font-size-micro, 11px);
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--transition-micro, 100ms ease),
+    color var(--transition-micro, 100ms ease),
+    border-color var(--transition-micro, 100ms ease);
+}
+
+.largeFileBtn:hover {
+  background: var(--tint-active);
+  color: var(--text-primary);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 92%,
+    var(--text-primary) 8%
+  );
+}
+
+
+/* ── 语义分类样式（极简纯净单色发丝，去除彩虹粗边框）──────── */
+
+.toneRule,
+.toneSkill,
+.toneFile,
+.toneGit,
+.toneTerminal,
+.toneSteering,
+.toneSchedule,
+.toneMemory,
+.toneWorkspace,
 .toneDefault {
-  border-left-color: var(--border-color, hsl(35 10% 86%));
+  border-left-color: var(--border-subtle);
 }
+
+.toneRule .iconSlot,
+.toneSkill .iconSlot,
+.toneFile .iconSlot,
+.toneGit .iconSlot,
+.toneTerminal .iconSlot,
+.toneSteering .iconSlot,
+.toneSchedule .iconSlot,
+.toneMemory .iconSlot,
+.toneWorkspace .iconSlot,
 .toneDefault .iconSlot {
   color: var(--text-tertiary);
 }
 
 /* ── 状态强化（失败标红 + 待注入脉冲边框）────────────────────────────── */
 
+.injectionRow.isFailed,
 .injectionBlock.isFailed {
-  border-left-color: var(--text-danger, hsl(0 68% 55%));
-  border-color: color-mix(in srgb, var(--accent-red) 30%, var(--border-color));
-  background: color-mix(in srgb, var(--accent-red) 3%, var(--bg-card));
+  border-left-color: var(--danger-color);
+  border-color: color-mix(in srgb, var(--danger-color) 30%, var(--border-color));
+  background: color-mix(in srgb, var(--danger-color) 3%, var(--bg-card));
 }
 
 .isPending {
-  border-left-color: var(--brand, hsl(160 84% 39%));
+  border-left-color: var(--brand);
 }
 
 .isOpen {
@@ -381,21 +473,21 @@
 .confirmSummary {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  margin-bottom: 8px;
+  gap: var(--space-1, 4px);
+  margin-bottom: var(--space-2, 8px);
 }
 
 .confirmRow {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2, 8px);
 }
 
 .confirmLabel {
   flex-shrink: 0;
   width: 56px;
   color: var(--text-tertiary);
-  font-size: 11px;
+  font-size: var(--font-size-micro, 11px);
 }
 
 .confirmValue {
@@ -412,15 +504,15 @@
 }
 
 .confirmErrorText {
-  margin: 6px 0;
+  margin: var(--space-1_5, 6px) 0;
   color: var(--text-danger);
-  font-size: 11px;
+  font-size: var(--font-size-micro, 11px);
 }
 
 .confirmActionRow {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-2, 8px);
 }
 
 /* ── 状态切换极简发丝微分割线（Status Divider：无图标、无卡片外框、发丝居中微提示） ── */
@@ -428,31 +520,59 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  gap: var(--space-3, 12px);
   width: 100%;
-  padding: 4px 0;
-  margin: 8px 0;
+  height: 20px;
+  min-height: 20px;
+  max-height: 20px;
+  padding: 0;
+  margin: var(--space-1, 4px) 0;
   background: transparent;
   border: none;
   box-shadow: none;
   user-select: text;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.contextStateNotice:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%);
 }
 
 .contextStateNotice::before,
 .contextStateNotice::after {
   content: '';
   flex: 1;
+  min-width: 16px;
   height: 0.5px;
-  background: var(--border-subtle, hsl(0 0% 100% / 0.08));
+  background: var(--border-subtle);
 }
 
 .contextStateText {
   font-family: inherit;
-  font-size: var(--font-size-xs, 12px);
+  font-size: var(--font-size-micro, 11px);
   font-weight: var(--font-weight-normal, 400);
-  line-height: 1.5;
-  color: var(--text-tertiary, #8f8f8f);
+  line-height: 20px;
+  color: var(--text-tertiary);
   text-align: center;
-  white-space: pre-wrap;
-  word-break: break-word;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 80%;
+  padding: 0 var(--space-2, 8px);
+}
+
+.stateNoticeStack {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
 }
