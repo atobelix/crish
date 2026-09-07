@@ -292,6 +292,15 @@ export interface MessageImageRef {
   height?: number;
 }
 
+/** 消息附件（用户发送的图片/文本/代码/文件） */
+export interface SessionMessageAttachment {
+  name: string;
+  path?: string;
+  mime?: string;
+  text?: string;
+  dataUrl?: string;
+}
+
 /** 助手消息上的单次工具调用（含可选 diff / 审批元数据） */
 export interface MessageToolCall {
   id: string;
@@ -393,6 +402,19 @@ export type ContextInjectionStatus =
   | 'failed';
 
 /**
+ * 上下文状态切换（Context State Switch）结构化元数据标准契约（SSOT 单一真理源）。
+ * 取代基于字符串正则匹配（regex scraping）的脆弱打补丁模式，建立类型化元数据。
+ */
+export interface ContextStateMetadata {
+  mode: 'context-state';
+  model: string;
+  profile?: string;
+  permission?: string;
+  thinking?: string;
+  [key: string]: unknown;
+}
+
+/**
  * 统一可见上下文注入卡片实体（对话流一等公民，同构于 ToolCard）。
  * 对应对话流中独立呈现的可见注入卡片，无需 AI 主动调用，由系统直接注入。
  * 字段名契约：`summary`（非 description）、`tokenEstimate`（非 estimatedTokens）。
@@ -426,7 +448,7 @@ export interface MessageContextInjection {
   defaultFolded?: boolean;
   /** 失败时的错误诊断信息（status='failed' 时展示） */
   errorMessage?: string;
-  /** 结构化扩展元数据（附件截断信息 / 行号锚点 / 退出码等挂载于此） */
+  /** 结构化扩展元数据（状态切换契约 ContextStateMetadata / 附件截断 / 退出码等） */
   metadata?: Record<string, unknown>;
 }
 
@@ -526,6 +548,8 @@ export interface SessionMessage extends Pick<
   thinkingTime?: number | undefined;
   /** 本条消息中所有图片的结构化索引（跨 text block + tool call 汇总） */
   images?: MessageImageRef[] | undefined;
+  /** 本条消息携带的附件信息（用户上传或拖拽的图片/文件/代码段） */
+  attachments?: SessionMessageAttachment[] | undefined;
   /**
    * 运行错误诊断详情。
    * @deprecated 历史持久化/向后兼容字段；新流式会话错误已收敛至 ephemeralChatStore 瞬态进行时状态。
@@ -716,6 +740,8 @@ export interface SessionState {
   engineLastRunId?: string;
   /** 已从引擎补全过正文 */
   hydratedFromEngine?: boolean;
+  /** 标记该会话是否已经完成从底层 SQLite/Engine 的消息回灌或用户显式清空操作 */
+  messagesHydrated?: boolean;
   /**
    * 引擎懒水合「未完整」标记（P1-D2）：hydrate 分页拉全超限/异常截断时置位。
    * 置位期间持久化熔断——禁止截断态正文经 save_session_body 先删后插回写 SQLite

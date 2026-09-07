@@ -1289,6 +1289,20 @@ describe('sessionActions failure branches (C8)', () => {
     expect(h.getState()).toBe(before);
   });
 
+  it('clearSessionMessages on session with messages empties messages and marks messagesHydrated', () => {
+    const h = makeHarness([
+      makeMessage({ id: 'm1', text: 'message 1' }),
+      makeMessage({ id: 'm2', text: 'message 2' }),
+    ]);
+    expect(getSessionOrThrow(h.getState(), 's1').messages).toHaveLength(2);
+    expect(getSessionOrThrow(h.getState(), 's1').messagesHydrated).toBeUndefined();
+
+    h.actions.clearSessionMessages('s1');
+    const updated = getSessionOrThrow(h.getState(), 's1');
+    expect(updated.messages).toHaveLength(0);
+    expect(updated.messagesHydrated).toBe(true);
+  });
+
   it('deleteSession of active when no fallback exists enters draft mode', () => {
     // 唯一会话被删除后 active 不得为空字符串 → 进入草稿哨兵
     const h = makeHarnessFromState(
@@ -1306,6 +1320,76 @@ describe('sessionActions failure branches (C8)', () => {
     const st = h.getState();
     expect(st.sessionsById.only).toBeUndefined();
     expect(st.sessions).toHaveLength(0);
+    // 彻底消灭悬垂指针与空字符串白屏
+    expect(st.activeSessionId).toBe(PENDING_DRAFT_SESSION_ID);
+  });
+
+  it('deleteSession of active session prioritizes right neighbor', () => {
+    const s1 = emptyShell({ id: 's1', title: 'S1' });
+    const s2 = emptyShell({ id: 's2', title: 'S2' });
+    const s3 = emptyShell({ id: 's3', title: 'S3' });
+
+    const h = makeHarnessFromState(
+      makeStateFromSessions([s1, s2, s3], 's2')
+    );
+    expect(h.getState().activeSessionId).toBe('s2');
+
+    // 删除居中的 s2，右邻居为 s3，应原子转移到 s3
+    expect(h.actions.deleteSession('s2')).toBe(true);
+    const st = h.getState();
+    expect(st.sessionsById.s2).toBeUndefined();
+    expect(st.activeSessionId).toBe('s3');
+  });
+
+  it('deleteSession of active session at tail falls back to left neighbor', () => {
+    const s1 = emptyShell({ id: 's1', title: 'S1' });
+    const s2 = emptyShell({ id: 's2', title: 'S2' });
+    const s3 = emptyShell({ id: 's3', title: 'S3' });
+
+    const h = makeHarnessFromState(
+      makeStateFromSessions([s1, s2, s3], 's3')
+    );
+    expect(h.getState().activeSessionId).toBe('s3');
+
+    // 删除末尾的 s3，无右邻居，应退化转移至左邻居 s2
+    expect(h.actions.deleteSession('s3')).toBe(true);
+    const st = h.getState();
+    expect(st.sessionsById.s3).toBeUndefined();
+    expect(st.activeSessionId).toBe('s2');
+  });
+
+  it('deleteSession of active session at head transfers to right neighbor', () => {
+    const s1 = emptyShell({ id: 's1', title: 'S1' });
+    const s2 = emptyShell({ id: 's2', title: 'S2' });
+    const s3 = emptyShell({ id: 's3', title: 'S3' });
+
+    const h = makeHarnessFromState(
+      makeStateFromSessions([s1, s2, s3], 's1')
+    );
+    expect(h.getState().activeSessionId).toBe('s1');
+
+    // 删除首个 s1，应转移至右邻居 s2
+    expect(h.actions.deleteSession('s1')).toBe(true);
+    const st = h.getState();
+    expect(st.sessionsById.s1).toBeUndefined();
+    expect(st.activeSessionId).toBe('s2');
+  });
+
+  it('deleteSession of non-active session preserves activeSessionId intact', () => {
+    const s1 = emptyShell({ id: 's1', title: 'S1' });
+    const s2 = emptyShell({ id: 's2', title: 'S2' });
+    const s3 = emptyShell({ id: 's3', title: 'S3' });
+
+    const h = makeHarnessFromState(
+      makeStateFromSessions([s1, s2, s3], 's1')
+    );
+    expect(h.getState().activeSessionId).toBe('s1');
+
+    // 删除非活动的 s2，activeSessionId 保持 s1 不变
+    expect(h.actions.deleteSession('s2')).toBe(true);
+    const st = h.getState();
+    expect(st.sessionsById.s2).toBeUndefined();
+    expect(st.activeSessionId).toBe('s1');
   });
 
   describe('moveSessionRealtime ordering dynamics', () => {

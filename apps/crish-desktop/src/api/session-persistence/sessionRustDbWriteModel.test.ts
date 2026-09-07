@@ -46,6 +46,7 @@ import {
 } from './migrateFromLocalStorage';
 import {
   hydrateSessionsFromRust,
+  isLazySessionShell,
   persistAllSessionsRust,
   persistAllSessionsSyncViaLocalStorage,
 } from './sessionRustDb';
@@ -1007,5 +1008,154 @@ describe('S1 降级可感知：persistenceStatus 状态推进（D-05）', () => 
       sessionsToIndex,
     });
     expect(errorStore.getState().persistenceStatus).toBe('healthy');
+  });
+});
+
+describe('清空消息持久化与防僵尸复活事务（DEF-03 / DEF-SESS-12）', () => {
+  it('用户清空消息（messages: [] 且 messagesHydrated: true）必须调用 save_session_body 清空 SQLite 底层', async () => {
+    const { db, call } = makeFakeDb();
+    installFakeTransport(call);
+
+    // 1. 会话最初有 2 条消息并已落盘
+    const s = sess('s1', [msg('m1', 'user'), msg('m2', 'assistant')]);
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+    expect(db.sessions.get('s1')?.messages).toHaveLength(2);
+
+    // 2. 用户执行清空操作：messages 为空且标记 messagesHydrated: true
+    const cleared = sess('s1', [], { messagesHydrated: true });
+    await persistAllSessionsRust([cleared], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    // 核心断言：save_session_body 必须被下发且 payload 为 []
+    const saveCalls = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body' && c[1]?.sessionId === 's1'
+    );
+    expect(saveCalls.length).toBe(2);
+    const lastSaveArgs = saveCalls[saveCalls.length - 1][1];
+    expect(lastSaveArgs.messages).toEqual([]);
+    expect(db.sessions.get('s1')?.messages).toHaveLength(0);
+
+    // 3. 模拟刷新后回水水合（hydrate）：确认消息已被真正清空，绝无僵尸复活
+    const hydrated = await hydrateSessionsFromRust();
+    const hydratedSess = hydrated.sessions.find((x) => x.id === 's1');
+    expect(hydratedSess).toBeDefined();
+    expect(hydratedSess?.messages).toHaveLength(0);
+  });
+
+  it('活跃会话（s.id === activeSessionId）即使未标记 messagesHydrated 也必须调用 save_session_body 清空底层', async () => {
+    const { db, call } = makeFakeDb();
+    installFakeTransport(call);
+
+    // 预先存入 1 条历史消息
+    const s = sess('s1', [msg('m1', 'user')]);
+    await persistAllSessionsRust([s], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+    expect(db.sessions.get('s1')?.messages).toHaveLength(1);
+
+    // 活跃状态下消息为 0（如直接在界面清空）
+    const emptyActive = sess('s1', []);
+    await persistAllSessionsRust([emptyActive], 's1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    const saveCalls = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body' && c[1]?.sessionId === 's1'
+    );
+    expect(saveCalls.length).toBe(2);
+    expect(saveCalls[1][1].messages).toEqual([]);
+    expect(db.sessions.get('s1')?.messages).toHaveLength(0);
+  });
+
+  it('已从引擎补全过正文（hydratedFromEngine: true）的会话消息为 0 时必须下发 save_session_body', async () => {
+    const { db, call } = makeFakeDb();
+    installFakeTransport(call);
+
+    const s = sess('s1', [], { hydratedFromEngine: true });
+    await persistAllSessionsRust([s], 'other-active', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    const saveCalls = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body' && c[1]?.sessionId === 's1'
+    );
+    expect(saveCalls.length).toBe(1);
+    expect(saveCalls[0][1].messages).toEqual([]);
+  });
+
+  it('真实未水合的远程懒壳（非活跃、未水合、无消息）跳过 save_session_body 保护历史', async () => {
+    const { db, call } = makeFakeDb();
+    // 模拟 SQLite 数据库里已存在远端历史消息
+    db.sessions.set('remote-lazy', {
+      entry: { id: 'remote-lazy', title: 'Remote' },
+      messages: [{ id: 'm-remote', seq: 0 }],
+      agents: [],
+    });
+    installFakeTransport(call);
+
+    // 内存中的远程懒壳：非当前活跃、无消息、无水合标记
+    const lazyShell = sess('remote-lazy', []);
+    const activeSess = sess('active-1', [msg('m1', 'user')]);
+
+    await persistAllSessionsRust([lazyShell, activeSess], 'active-1', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    // 核心断言：remote-lazy 绝不可调用 save_session_body 擦除远端历史
+    const lazySaves = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body' && c[1]?.sessionId === 'remote-lazy'
+    );
+    expect(lazySaves).toHaveLength(0);
+    expect(db.sessions.get('remote-lazy')?.messages).toHaveLength(1);
+  });
+
+  it('截断会话（hydrateTruncated: true）触发熔断守卫，跳过 save_session_body', async () => {
+    const { db, call } = makeFakeDb();
+    installFakeTransport(call);
+
+    const truncSess = sess('s-trunc', [], {
+      hydratedFromEngine: true,
+      hydrateTruncated: true,
+    });
+    await persistAllSessionsRust([truncSess], 's-trunc', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    const saves = call.mock.calls.filter(
+      (c) => c[0] === 'save_session_body' && c[1]?.sessionId === 's-trunc'
+    );
+    expect(saves).toHaveLength(0);
+  });
+
+  it('localStorage 回退路径下已清空会话同步写入空消息镜像，根除 LS 僵尸消息', async () => {
+    // 模拟 invoke 不可用（未安装 transport）走回退路径
+    localStorage.setItem(
+      SESSION_BODY_PREFIX + 's-cleared',
+      JSON.stringify([msg('m1', 'user')])
+    );
+
+    const clearedSess = sess('s-cleared', [], { messagesHydrated: true });
+    await persistAllSessionsRust([clearedSess], 's-cleared', [DEFAULT_SESSION_FOLDER], {
+      sessionsToIndex,
+    });
+
+    expect(localStorage.getItem(SESSION_BODY_PREFIX + 's-cleared')).toBe('[]');
+  });
+
+  it('isLazySessionShell 判定准则边界穷举测试', () => {
+    // 1. 有消息：绝不是懒壳
+    expect(isLazySessionShell({ id: 's', messages: [msg('m', 'user')] }, 'other')).toBe(false);
+    // 2. 显式清空/已水合：绝不是懒壳
+    expect(isLazySessionShell({ id: 's', messages: [], messagesHydrated: true }, 'other')).toBe(false);
+    // 3. 引擎已水合：绝不是懒壳
+    expect(isLazySessionShell({ id: 's', messages: [], hydratedFromEngine: true }, 'other')).toBe(false);
+    // 4. 当前活跃会话：绝不是懒壳
+    expect(isLazySessionShell({ id: 's', messages: [] }, 's')).toBe(false);
+    // 5. 真实未水合非活跃空壳：是懒壳
+    expect(isLazySessionShell({ id: 's', messages: [] }, 'other')).toBe(true);
+    expect(isLazySessionShell({ id: 's', messages: [] }, null)).toBe(true);
   });
 });

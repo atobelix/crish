@@ -50,6 +50,25 @@ import { coerceSessionTimestamp } from '../sessionTime';
 import { prepareSessionsForUi } from '../sessionTitle';
 import { normalizeAssistantTimeline } from '../toolPresentation';
 
+/**
+ * 判断是否为未水合的远程懒壳（未访问、未水合、无消息）。
+ * 仅对此类真实未水合懒壳跳过 save_session_body，避免覆盖底层历史。
+ * 当会话处于活跃状态、已从 SQLite/Engine 水合、或被显式清空时，必须正常下发持久化指令（即使为空数组）。
+ */
+export function isLazySessionShell(
+  session: Pick<
+    SessionState,
+    'id' | 'messages' | 'messagesHydrated' | 'hydratedFromEngine'
+  >,
+  activeSessionId?: string | null
+): boolean {
+  if (session.messages && session.messages.length > 0) return false;
+  if (session.messagesHydrated === true) return false;
+  if (session.hydratedFromEngine === true) return false;
+  if (activeSessionId && session.id === activeSessionId) return false;
+  return true;
+}
+
 // ── 复合 API：hydrateSessionsFromRust ──────────────────────────────────────
 
 /**
@@ -128,6 +147,7 @@ export async function hydrateSessionsFromRust(): Promise<{
         isArchived: e.isArchived,
         timestamp: coerceSessionTimestamp(e.id, e.timestamp, sanitized),
         messages: sanitized,
+        messagesHydrated: true,
         agents,
         ...(e.branchParentId !== undefined
           ? { branchParentId: e.branchParentId }
@@ -251,8 +271,9 @@ export async function persistAllSessionsRust(
     }
 
     // 1. 写入每个会话的 body + agents（并发）
-    // 空 messages 不调用 save_session_body：Rust 侧是先删后插，空数组会擦掉已落盘正文。
-    // boot 窗口里 seed 的远程懒壳 messages=[] 很常见；等 SQLite 回灌 / 引擎 hydrate 后再写。
+    // 彻底修复 msgs.length === 0 跳过 saveSessionBody 导致的“清空后刷新僵尸复活”漏洞：
+    // 仅对真实未水合的懒壳跳过；当会话处于活跃/已水合状态或用户显式清空时，
+    // 必须调用 saveSessionBody(s.id, msgs, batchVersion) 清空 SQLite 底层存储。
     const keepIds = new Set<string>();
     const bodyJobs: Promise<void>[] = [];
     for (const s of list) {
@@ -261,7 +282,10 @@ export async function persistAllSessionsRust(
       const msgs = (s.messages || []).map((m) =>
         m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
       );
-      if (msgs.length > 0 && !isHydrateTruncated(s)) {
+      const shouldSaveBody =
+        !isHydrateTruncated(s) &&
+        (msgs.length > 0 || !isLazySessionShell(s, activePersistable));
+      if (shouldSaveBody) {
         bodyJobs.push(saveSessionBody(s.id, msgs, batchVersion));
       }
       bodyJobs.push(saveSessionAgents(s.id, s.agents || []));
@@ -310,13 +334,16 @@ function persistAllSessionsLocalFallback(
   );
   const keep = new Set(list.map((s) => s.id).filter(Boolean) as string[]);
 
-  // 写入 keep 集合中的 body / agents（空 body 不覆盖，防懒壳擦掉已有 LS 正文）
+  // 写入 keep 集合中的 body / agents（真实未水合懒壳不覆盖，防擦掉已有 LS 正文；已水合/活跃/显式清空则同步持久化）
   for (const s of list) {
     if (!s?.id) continue;
     const msgs = (s.messages || []).map((m) =>
       m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
-    if (msgs.length > 0 && !isHydrateTruncated(s)) {
+    const shouldSaveBody =
+      !isHydrateTruncated(s) &&
+      (msgs.length > 0 || !isLazySessionShell(s, activeSessionId));
+    if (shouldSaveBody) {
       lsSaveSessionBody(s.id, msgs);
     }
     lsSaveSessionAgents(s.id, s.agents || []);
@@ -391,9 +418,12 @@ export function persistAllSessionsSyncViaLocalStorage(
     const msgs = (s.messages || []).map((m) =>
       m.sender === 'assistant' ? normalizeAssistantTimeline(m) : m
     );
-    // beforeunload 同步路径：仅镜像非空正文，避免把未 hydrate 懒壳写成 [];
+    // beforeunload 同步路径：真实未水合懒壳跳过，防覆盖已有正文；已水合/活跃/显式清空正常镜像；
     // P1-D2 熔断：未完整（截断）会话同样跳过，防截断态固化 LS 镜像
-    if (msgs.length > 0 && !isHydrateTruncated(s)) {
+    const shouldSaveBody =
+      !isHydrateTruncated(s) &&
+      (msgs.length > 0 || !isLazySessionShell(s, activePersistable));
+    if (shouldSaveBody) {
       lsSaveSessionBody(s.id, msgs);
     }
     lsSaveSessionAgents(s.id, s.agents || []);

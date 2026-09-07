@@ -45,6 +45,7 @@ export {
 
 export {
   hydrateSessionsFromRust,
+  isLazySessionShell,
   persistAllSessionsRust,
   persistAllSessionsSyncViaLocalStorage,
 } from './sessionRustDbHydrate';

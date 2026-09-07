@@ -96,6 +96,7 @@ export function createSessionStateActions<T extends SessionStoreSlice>(
         if (!sess) return;
         if (!sess.messages?.length) return;
         sess.messages = [];
+        sess.messagesHydrated = true;
         state.sessionsById[sessionId] = sess;
       }),
   };

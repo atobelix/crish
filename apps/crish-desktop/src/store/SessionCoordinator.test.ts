@@ -239,7 +239,7 @@ describe('SessionCoordinator', () => {
     expect(useSessionStore.getState().sessionsById['trim-me']).toBeUndefined();
   });
 
-  it('cascade delete 不拿 sessions[] 邻居覆盖画面会话', () => {
+  it('cascade delete of active session atomically converges focus to adjacent neighbor', () => {
     const s1: SessionState = {
       id: 'active-sess',
       title: 'Active',
@@ -264,8 +264,8 @@ describe('SessionCoordinator', () => {
 
     expect(useSessionStore.getState().sessionsById['active-sess']).toBeUndefined();
     expect(useSessionStore.getState().sessionsById['fallback-sess']).toBeDefined();
-    // 画面校正归 shell.syncSessionFromActiveLeaf，数据面不得抢邻居
-    expect(useSessionStore.getState().activeSessionId).not.toBe('fallback-sess');
+    // DEF-SESS-08 / DEF-04 修复：删除活动会话时原子转移焦点至相邻会话
+    expect(useSessionStore.getState().activeSessionId).toBe('fallback-sess');
   });
 
   it('cascade delete of non-active session does not change activeSessionId', () => {

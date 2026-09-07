@@ -43,10 +43,12 @@ import {
 } from './sessionDraftActions';
 // 批量状态 actions（setSessions / patchSession / clearSessionMessages）从子模块导入
 import { createSessionStateActions } from './sessionStateActions';
+import { triggerSessionMessageHydrateIfNeeded } from './sessionActivateHydrate';
 // 可见注入卡片挂载辅助纯函数（addContextInjection 复用，见 sessionInjectionMount.ts）
 import {
   appendInjectionToMessage,
   findInjectionMountTarget,
+  isContextStateCarrierMessage,
   makeInjectionCarrierMessage,
 } from './sessionInjectionMount';
 
@@ -304,18 +306,71 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
       const id = typeof sessionId === 'string' ? sessionId.trim() : '';
       if (!id) return false;
       let removed = false;
+      let isDeletingActive = false;
+      let nextActiveIdToSwitch: string | null = null;
+
       set((state) => {
+        // 1. 检查被删除的是否为当前活跃会话
+        isDeletingActive = state.activeSessionId === id;
+
+        if (isDeletingActive) {
+          // 原子计算相邻会话焦点转移（优先右邻居，退化左邻居，无则切安全空会话）
+          const currentIdx = state.sessions.findIndex((s) => s.id === id);
+          if (currentIdx !== -1) {
+            const candidate =
+              state.sessions[currentIdx + 1] || state.sessions[currentIdx - 1];
+            nextActiveIdToSwitch = candidate ? candidate.id : null;
+          }
+        }
+
+        // 2. 从索引与数组中物理删除目标会话
         removed = deleteSessionFromIndexed(state, id);
         if (!removed) return;
         dropTerminalForSession(state, id);
-        // 纯数据面：只删目标。不拿 sessions[] 邻居覆盖画面，也不在删除路径
-        // prune 邻居空壳（那会把未打开的历史会话一并 GC）。画面由
-        // shell.deleteSessionAndCloseTab → syncSessionFromActiveLeaf 校正。
+
+        // 3. 关键：若是活跃会话被删除，在同一次 set 原子事务中转移焦点，彻底消灭悬垂指针与白屏
+        if (isDeletingActive) {
+          if (nextActiveIdToSwitch && state.sessionsById[nextActiveIdToSwitch]) {
+            state.activeSessionId = nextActiveIdToSwitch;
+            state.draftFolder = '';
+            state.activeAgentId = null;
+            state.panelAgentId = null;
+            syncActiveTerminalSession(nextActiveIdToSwitch);
+          } else if (state.sessions.length > 0 && state.sessions[0]) {
+            // 兜底：若邻居未命中但仍有剩余会话，切到首个有效会话
+            const fallbackId = state.sessions[0].id;
+            state.activeSessionId = fallbackId;
+            state.draftFolder = '';
+            state.activeAgentId = null;
+            state.panelAgentId = null;
+            syncActiveTerminalSession(fallbackId);
+          } else {
+            // 无剩余会话：原子切入安全草稿态，绝不残留悬垂 ID 或空串导致全白崩溃
+            applyDraftModeToState(state);
+          }
+        }
       });
+
       if (removed) {
         sessionRuntimeRegistry.remove(id);
         clearMessageSnapshots(id);
         useStreamingStore.getState().clearSession(id);
+
+        // 若当前活动会话发生了焦点转移且切入具体真实会话，触发必要的工作区激活与懒加载
+        if (isDeletingActive && !isDemoMode()) {
+          const newActiveId = get().activeSessionId;
+          if (newActiveId && !isPendingDraft(newActiveId)) {
+            const nextSess = getSessionById(get(), newActiveId);
+            if (nextSess) {
+              void import('../api/projectStore').then(
+                ({ activateWorkspaceForSessionFolder }) => {
+                  activateWorkspaceForSessionFolder(nextSess.folder);
+                }
+              );
+              triggerSessionMessageHydrateIfNeeded(newActiveId, get, set);
+            }
+          }
+        }
       }
       return removed;
     },
@@ -357,19 +412,37 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
         const target = findInjectionMountTarget(sess.messages);
         if (target) {
           appendInjectionToMessage(target, injection);
+          if (injection.metadata?.mode === 'context-state') {
+            // 清理紧邻目标之前的冗余纯 context-state 载体消息（彻底治愈历史连续堆叠病灶）
+            const targetIdx = sess.messages.indexOf(target);
+            if (targetIdx > 0) {
+              let pruneStart = targetIdx;
+              while (
+                pruneStart > 0 &&
+                isContextStateCarrierMessage(sess.messages[pruneStart - 1])
+              ) {
+                pruneStart--;
+              }
+              if (pruneStart < targetIdx) {
+                sess.messages.splice(pruneStart, targetIdx - pruneStart);
+              }
+            }
+          }
         } else {
           sess.messages.push(makeInjectionCarrierMessage(injection));
         }
-        if (
-          typeof injection.timestamp === 'number' &&
-          Number.isFinite(injection.timestamp)
-        ) {
-          sess.timestamp = new Date(injection.timestamp).toISOString();
-        } else {
-          sess.timestamp = nowIsoTimestamp();
-        }
-        if (sess.timestampSource !== 'local') {
-          sess.timestampSource = 'local';
+        if (injection.metadata?.mode !== 'context-state') {
+          if (
+            typeof injection.timestamp === 'number' &&
+            Number.isFinite(injection.timestamp)
+          ) {
+            sess.timestamp = new Date(injection.timestamp).toISOString();
+          } else {
+            sess.timestamp = nowIsoTimestamp();
+          }
+          if (sess.timestampSource !== 'local') {
+            sess.timestampSource = 'local';
+          }
         }
         rebindSessionById(state, sessionId, sess);
       });
@@ -385,69 +458,5 @@ export function createSessionCrudActions<T extends SessionStoreSlice>(
   return { ...actions, ...draftActions, ...stateActions };
 }
 
-/**
- * 跨模块可复用的会话正文懒水合触发器。
- * 只要会话处于 needsEngineMessageHydrate（正文为空且未完成引擎水合），
- * 即刻自发拉取，避免画面沦为空白草稿。
- */
-export function triggerSessionMessageHydrateIfNeeded(
-  sessionId: string,
-  get?: SessionStoreGet,
-  set?: SessionImmerSet
-): void {
-  if (!sessionId || isPendingDraft(sessionId)) return;
-
-  const resolveGet = async () => {
-    if (get) return get();
-    const { useSessionStore } = await import('./sessionStore');
-    return useSessionStore.getState();
-  };
-
-  const resolveSet = async () => {
-    if (set) return set;
-    const { useSessionStore } = await import('./sessionStore');
-    return useSessionStore.setState;
-  };
-
-  void resolveGet().then((state) => {
-    const sess = getSessionById(state, sessionId);
-    if (!sess || !needsEngineMessageHydrate(sess)) return;
-
-    void Promise.all([
-      import('../api/sessionEventHydrate'),
-      resolveSet(),
-    ]).then(([{ hydrateSessionMessagesFromEngine, mergeMessagesById }, setter]) => {
-      void hydrateSessionMessagesFromEngine(sessionId).then((res) => {
-        if (!res.ok) return;
-        setter((draft) => {
-          const s = getSessionForWrite(draft, sessionId);
-          if (!s) return;
-          if (res.messages.length > 0) {
-            s.messages = mergeMessagesById(
-              s.messages || [],
-              res.messages
-            );
-            s.timestamp = nowIsoTimestamp();
-            s.timestampSource = 'remote';
-            maybeAutoTitleSession(draft, s);
-          } else if (s.messages && s.messages.length > 0) {
-            maybeAutoTitleSession(draft, s);
-          }
-          s.engineCursor = Math.max(
-            s.engineCursor ?? 0,
-            res.nextAfterSequence
-          );
-          if (res.lastRunId) s.engineLastRunId = res.lastRunId;
-          s.hydratedFromEngine = true;
-          if (res.truncated === true) {
-            s.hydrateTruncated = true;
-          } else {
-            delete s.hydrateTruncated;
-          }
-          draft.sessionsById[sessionId] = s;
-        });
-      });
-    });
-  });
-}
+export { triggerSessionMessageHydrateIfNeeded } from './sessionActivateHydrate';
 
