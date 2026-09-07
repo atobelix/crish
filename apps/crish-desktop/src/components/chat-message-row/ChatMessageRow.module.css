@@ -2,10 +2,13 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  /* 纯净画纸：旧外边距已清除，垂直节奏统一由 Adjacent Sibling-combinator 接管 */
+  /* 纯净垂直节奏（DEF-13）：消除外部 margin 黑洞，垂直间距收敛为行内部盒模型 padding-bottom */
   margin-top: 0;
   margin-bottom: 0;
-  /*      ?token         ?720/680px    ?*/
+  padding-bottom: 16px;
+  /* 仅保留布局与绘制隔离（DEF-14），坚决剔除 content-visibility 与 contain-intrinsic-size 属性，交由 JS 虚拟化单轨调度 */
+  contain: layout paint;
+  /* 对齐栅格列宽最大值 */
   max-width: min(var(--chat-col-max, 760px), 100%);
   min-width: 0;
   margin-left: auto;
@@ -13,8 +16,6 @@
   box-sizing: border-box;
   scroll-margin-top: 56px;
   scroll-margin-bottom: var(--space-4);
-  content-visibility: auto;
-  contain-intrinsic-size: auto 120px;
 }
 
 .row.isPinned {
@@ -24,7 +25,10 @@
 .row.searchHit {
   background: color-mix(in srgb, var(--accent-color) 8%, transparent);
   border-radius: var(--radius-xl);
-  padding: 4px 6px;
+  padding-top: 4px;
+  padding-bottom: 16px;
+  padding-left: 6px;
+  padding-right: 6px;
   margin-left: -6px;
   margin-right: -6px;
   width: calc(100% + 12px);
@@ -46,7 +50,32 @@
 }
 
 .rowAssistant.isFollowup {
-  /* 旧外边距链与负 margin 补丁已拔除，统一由相邻兄弟选择器接管 */
+  /* 旧外边距链与负 margin 补丁已拔除，统一由内部盒模型接管 */
+}
+
+.rowCarrier {
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  /* 纯状态微提示载体消息（PureCarrier）：彻底清除外部 margin，赋予紧凑 4px 内部间距 (DEF-13) */
+  margin: 0;
+  padding: 0 0 4px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.carrierBody {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
 }
 
 .userStack {
@@ -95,8 +124,8 @@
   cursor: pointer;
   border-radius: var(--radius-lg, 10px);
   overflow: hidden;
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
-  background: var(--bg-card, #1e1e1e);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
   transition: transform var(--transition-base, 150ms ease), border-color var(--transition-base, 150ms ease);
 }
 
@@ -123,9 +152,9 @@
 .userAttachmentChip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  font-size: 12px;
+  gap: var(--space-1_5, 6px);
+  padding: var(--space-1, 4px) var(--space-2, 8px);
+  font-size: var(--font-size-xs, 12px);
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   border-radius: var(--radius-md, 6px);
   border: 1px solid var(--border-subtle);
@@ -151,7 +180,7 @@
   align-items: center;
   gap: 0;
   min-height: 22px;
-  margin-top: 6px;
+  margin-top: var(--space-1_5, 6px);
   opacity: 0;
   transition: opacity var(--transition-fast);
   padding-right: var(--space-0_5);
@@ -189,7 +218,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  margin: 8px 0 2px;
+  margin: var(--space-2, 8px) 0 var(--space-0_5, 2px);
 }
 
 .planApproveChip {
@@ -213,7 +242,7 @@
   display: flex;
   align-items: flex-start;
   gap: var(--space-1_5);
-  margin: 10px 0 4px;
+  margin: var(--space-2_5, 10px) 0 var(--space-1, 4px);
   max-width: 100%;
   min-width: 0;
 }
@@ -290,10 +319,7 @@
 .followupChipSend:focus-visible,
 .followupDismiss:focus-visible {
   outline: none;
-  box-shadow: var(
-    --focus-ring,
-    0 0 0 2px color-mix(in srgb, var(--text-tertiary) 15%, transparent)
-  );
+  box-shadow: var(--focus-ring);
 }
 
 .followupDismiss {
@@ -399,7 +425,7 @@
 
 .assistantText :global(.md-h6) {
   font-size: var(--md-heading-h6-size, 0.9em);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium, 500);
   line-height: var(--md-heading-line-height, 1.35);
   color: var(--text-secondary);
   margin: var(--md-heading-margin-top, 0.30em) 0 var(--md-heading-margin-bottom, 0.15em);
@@ -461,7 +487,7 @@
 
 .assistantText :global(.md-path-link:focus-visible) {
   outline: none;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 25%, transparent);
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--brand) 20%, transparent);
 }
 
 /* 超链接 */
@@ -483,7 +509,7 @@
   list-style: none;
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--space-2, 8px);
   margin: var(--md-list-item-gap, 0.3em) 0;
   margin-left: -1.4em;
 }
@@ -503,15 +529,15 @@
 }
 
 .assistantText :global(.md-task-box.checked) {
-  background: var(--brand, #10b981);
-  border-color: var(--brand, #10b981);
+  background: var(--accent-color);
+  border-color: var(--accent-color);
 }
 
 .assistantText :global(.md-task-box.checked::after) {
   content: '';
   width: 4px;
   height: 8px;
-  border: solid #ffffff;
+  border: solid var(--text-on-accent, hsl(0 0% 100%));
   border-width: 0 1.5px 1.5px 0;
   transform: rotate(45deg) translate(-0.5px, -0.5px);
 }
@@ -556,8 +582,8 @@
 .assistantText :global(.md-code-breadcrumb) {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 12px;
+  gap: var(--space-1, 4px);
+  padding: var(--space-1_5, 6px) var(--space-3, 12px);
   font-family: var(--font-mono);
   font-size: var(--font-size-xs, 12px);
   color: var(--text-secondary);
@@ -576,7 +602,7 @@
 
 .assistantText :global(.md-code-breadcrumb-file) {
   color: var(--text-primary);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium, 500);
 }
 
 .assistantText :global(.md-code-lang) {
@@ -584,7 +610,7 @@
   top: 6px;
   right: 64px;
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--font-size-micro, 11px);
   color: var(--text-tertiary);
   text-transform: lowercase;
   user-select: none;
@@ -598,10 +624,10 @@
   z-index: 5;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1, 4px);
   height: 22px;
-  padding: 0 8px;
-  font-size: 11px;
+  padding: 0 var(--space-2, 8px);
+  font-size: var(--font-size-micro, 11px);
   font-family: var(--font-sans, inherit);
   color: var(--text-secondary);
   background: var(--bg-elevated);
@@ -803,26 +829,12 @@
   border-bottom: none;
 }
 
-.timelineText {
-  margin: 0 0 4px;
-  border: none;
-}
-
-.timelineText + .timelineTools,
-.timelineTools + .timelineText {
-  margin-top: var(--space-0_5);
-}
-
-.timelineTools + .timelineTools {
-  margin-top: 1px;
-}
-
 .errorBannerWrapper {
   width: 100%;
 }
 
 .errorBanner {
-  padding: 10px 14px;
+  padding: var(--space-2_5, 10px) var(--space-3_5, 14px);
   background: var(--color-error-bg, color-mix(in srgb, var(--color-error) 6%, transparent));
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md, 6px);

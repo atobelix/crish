@@ -407,7 +407,7 @@
 }
 
 .planExpandedStep.completed .planStepDot {
-  background: var(--text-primary);
+  background: var(--text-secondary);
 }
 
 .planExpandedStep.pending .planStepDot {
@@ -602,9 +602,10 @@
   flex-wrap: nowrap;
   align-items: center;
   gap: 6px;
-  padding: 0 2px 4px 2px;
+  padding: 0;
+  margin: 0;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
   overscroll-behavior-x: contain;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -626,7 +627,9 @@
   padding: 0 8px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-card, 6px);
+  border-radius: calc(
+    var(--composer-radius-outer, 24px) - var(--composer-pad-y, 8px)
+  );
 
   cursor: pointer;
   user-select: none;
@@ -650,20 +653,25 @@
 }
 
 .attachChipImage {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   padding: 0;
-  border: none;
-  max-width: 24px;
-  border-radius: 4px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+  max-width: 28px;
+  border-radius: calc(
+    var(--composer-radius-outer, 24px) - var(--composer-pad-y, 8px)
+  );
+  box-sizing: border-box;
 }
 
 .fileThumbnail,
 .attachThumb {
-  width: 24px;
-  height: 24px;
+  width: 100%;
+  height: 100%;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: calc(
+    var(--composer-radius-outer, 24px) - var(--composer-pad-y, 8px) - 1px
+  );
   display: block;
   flex-shrink: 0;
   background: var(--bg-primary);
@@ -696,21 +704,34 @@
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  display: inline-flex;
+  align-items: center;
+}
+
+.annotationTag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 2px 4px;
+  margin-right: 4px;
+  border-radius: var(--radius-xs, 3px);
+  background: color-mix(in srgb, var(--accent-color) 14%, transparent);
+  color: var(--accent-color);
+  letter-spacing: -0.01em;
+  flex-shrink: 0;
 }
 
 .fileRemove,
 .attachRemove {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  width: 14px;
-  height: 14px;
-  background: color-mix(
-    in srgb,
-    var(--text-primary) 13%,
-    var(--bg-elevated) 87%
-  );
-  color: var(--text-tertiary);
+  top: -4px;
+  right: -4px;
+  width: 15px;
+  height: 15px;
+  background: var(--color-error);
+  color: var(--text-on-brand, white);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -719,11 +740,24 @@
   opacity: 0;
   transform: scale(0.7);
   pointer-events: none;
-  transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 140ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 140ms cubic-bezier(0.16, 1, 0.3, 1);
   z-index: var(--z-popover);
   border: none;
   padding: 0;
-  box-shadow: 0 1px 2px var(--shadow-color, rgba(0, 0, 0, 0.08));
+  box-shadow: none;
+  filter: none;
+  outline: none;
+}
+
+/* 扩展无缝命中区，防止鼠标从卡片边界移动向叉号时失焦 */
+.fileRemove::before,
+.attachRemove::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
 }
 
 .fileRemove svg,
@@ -738,16 +772,204 @@
 .attachChip:hover .fileRemove,
 .attachChip:hover .attachRemove,
 .attachChip:focus-within .fileRemove,
-.attachChip:focus-within .attachRemove {
-  opacity: 1;
-  transform: scale(1);
-  pointer-events: auto;
+.attachChip:focus-within .attachRemove,
+.fileRemove:hover,
+.attachRemove:hover {
+  opacity: 1 !important;
+  transform: scale(1) !important;
+  pointer-events: auto !important;
 }
 
 .fileRemove:hover,
 .attachRemove:hover {
-  background: var(--sem-error);
-  color: var(--bg-elevated);
+  background: color-mix(in srgb, var(--color-error) 85%, black 15%) !important;
+  color: var(--text-on-brand, white) !important;
+}
+
+/* ==========================================================================
+   选区批注卡片浮层 (Design Token SSOT - 少就是多，极简高阶排版)
+   ========================================================================== */
+
+.dotSep {
+  margin: 0 2px;
+  color: var(--text-tertiary);
+  user-select: none;
+}
+
+.annPopoverCard {
+  position: fixed;
+  z-index: var(--z-modal, 1000);
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.03);
+  padding: 12px 14px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: annPopoverFadeIn 0.14s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+}
+
+@keyframes annPopoverFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.annPopoverHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  line-height: 1;
+  padding: 0;
+}
+
+.annHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.annHeaderIcon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.annPopoverFileName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.annCloseBtn {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 0;
+  transition: background var(--transition-fast, 120ms ease), color var(--transition-fast, 120ms ease);
+}
+
+.annCloseBtn:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.annSnippetBox {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.04));
+  border-radius: var(--radius-sm, 6px);
+  padding: 8px 10px;
+  max-height: 80px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.annSnippetText {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  tab-size: 2;
+}
+
+/* 浑然一体无外框纯白输入区（无实体外框，与卡片浑然天成） */
+.annEditArea {
+  padding: 2px 0;
+}
+
+.annCommentInput {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-primary);
+  caret-color: var(--text-primary);
+  resize: none;
+  min-height: 38px;
+  max-height: 140px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.annCommentInput::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.annFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.05));
+  margin-top: 2px;
+}
+
+.annHint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  user-select: none;
+}
+
+.annBtnGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.annSaveBtn {
+  height: 24px;
+  padding: 0 12px;
+  border-radius: var(--radius-full, 9999px);
+  border: none;
+  background: var(--text-primary);
+  color: var(--bg-card);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity var(--transition-fast, 120ms ease), transform var(--transition-fast, 120ms ease);
+}
+
+.annSaveBtn:hover {
+  opacity: 0.88;
+}
+
+.annSaveBtn:active {
+  opacity: 0.8;
 }
 
 /* ==========================================================================
@@ -758,7 +980,7 @@
   /* 同心几何标尺：外圆角 = 内边距 + 内圆角 (Ro = P + Ri) */
   --composer-radius-inner: 16px;
   --composer-pad-y: 8px;
-  --composer-pad-x: 10px;
+  --composer-pad-x: 12px;
   --composer-radius-outer: calc(var(--composer-radius-inner) + var(--composer-pad-y));
   position: relative;
   z-index: var(--z-dock);
@@ -776,12 +998,12 @@
 }
 
 .composerCard.isMultiline {
-  padding: 10px 12px 8px 12px;
+  padding: 8px 12px 6px 12px;
 }
 
-.composerCard.isMultiline:has(.attachStrip),
-.composerCard.isMultiline:has(.fileZone) {
-  gap: 6px;
+.composerCard:has(.attachStrip),
+.composerCard:has(.fileZone) {
+  gap: 4px;
 }
 
 .composerCard:focus-within {
@@ -810,7 +1032,7 @@
   gap: 8px;
 }
 
-/* 单行模式（默认）：所有控件位于同一行：左侧[＋]，中间输入框，右侧权限[🛡️]与动作组 */
+/* 单行模式（默认）：所有控件位于同一行：左侧[＋]，中间输入框，右侧权限与动作组 */
 .composerCard:not(.isMultiline) .inputMainLayout {
   grid-template-areas: 'left-ctrl text perm actions';
   grid-template-columns: auto 1fr auto auto;
@@ -822,7 +1044,7 @@
     'text text text text'
     'left-ctrl perm . actions';
   grid-template-columns: auto auto 1fr auto;
-  row-gap: 10px;
+  row-gap: 6px;
 }
 
 .actionLeft {
@@ -1209,6 +1431,194 @@
   color: var(--text-secondary);
 }
 
+/* ==========================================================================
+   Composer Field in Grid & Fallback Textarea styles
+   ========================================================================== */
+
+.container {
+  --composer-line-height: 1.45;
+  --composer-min-lines: 2;
+  --composer-max-lines: 10;
+  --composer-shell-bg: var(--composer-bg);
+  --composer-shell-bg-focus: var(--composer-bg);
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  background: var(--composer-shell-bg);
+  background-color: var(--composer-shell-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  padding: 10px 14px;
+  gap: var(--space-2);
+  min-height: calc(
+    1em * var(--composer-line-height) * var(--composer-min-lines) + 16px
+  );
+  transition: border-color var(--transition-fast);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.container:focus-within {
+  background: var(--composer-shell-bg-focus);
+  background-color: var(--composer-shell-bg-focus);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+  box-shadow: none;
+  outline: none;
+}
+
+.container[data-empty-kind='session-empty']:focus-within {
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 95%,
+    var(--text-primary) 5%
+  );
+}
+
+.containerDense {
+  --composer-line-height: 1.4;
+  padding: 6px 10px;
+  gap: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--composer-shell-bg);
+  background-color: var(--composer-shell-bg);
+  border: 1px solid var(--border-color);
+}
+
+.containerDense:focus-within {
+  background: var(--composer-shell-bg-focus);
+  background-color: var(--composer-shell-bg-focus);
+  border-color: color-mix(
+    in srgb,
+    var(--border-color) 94%,
+    var(--text-primary) 6%
+  );
+}
+
+.textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  align-self: center;
+  background: transparent;
+  background-color: transparent;
+  border: none;
+  outline: none;
+  box-shadow: none;
+  appearance: none;
+  -webkit-appearance: none;
+  color-scheme: inherit;
+  caret-color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-normal);
+  resize: none;
+  min-height: calc(
+    1em * var(--composer-line-height) * var(--composer-min-lines)
+  );
+  max-height: calc(
+    1em * var(--composer-line-height) * var(--composer-max-lines)
+  );
+  color: var(--text-primary);
+  line-height: var(--composer-line-height);
+  padding: 0;
+  margin: 0;
+  overflow-y: hidden;
+  box-sizing: content-box;
+  field-sizing: content;
+  vertical-align: middle;
+}
+
+.textarea::placeholder {
+  color: var(--text-tertiary);
+  opacity: 1;
+}
+
+.textarea:disabled {
+  background: transparent;
+  background-color: transparent;
+  opacity: 0.72;
+  color: var(--text-secondary);
+}
+
+.containerDense .textarea {
+  font-size: var(--font-size-sm, 13px);
+  line-height: var(--composer-line-height);
+}
+
+.buttons {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  flex-shrink: 0;
+  padding: 0;
+  align-self: center;
+}
+
+.sendBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  width: var(--control-height, 32px);
+  height: var(--control-height, 32px);
+  border-radius: var(--radius-lg, 8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    color var(--transition-micro, 80ms ease),
+    background var(--transition-micro, 80ms ease);
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.sendBtn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.sendBtn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.sendBtn svg {
+  width: var(--icon-size-sm, 14px);
+  height: var(--icon-size-sm, 14px);
+}
+
+.stop {
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.stop:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.queue {
+  width: auto;
+  height: var(--control-height-sm, 28px);
+  padding: 0 8px;
+  gap: var(--space-1);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-size: var(--font-size-sm, 13px);
+  font-weight: var(--font-weight-medium, 500);
+  border-radius: var(--radius-md, 6px);
+  font-family: var(--font-sans);
+}
+
+.queue:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
 .fieldInGrid {
   --composer-min-lines: 1;
   background: transparent;
@@ -1243,9 +1653,10 @@
 }
 
 .composerCard.isMultiline .fieldInGrid {
-  --composer-min-lines: 2;
-  --composer-line-height: 1.55;
-  padding: 2px 2px 0 2px;
+  --composer-min-lines: 1;
+  --composer-line-height: 1.5;
+  padding: 0;
+  margin: 0;
 }
 
 .composerCard.isMultiline .fieldInGrid .textarea,
@@ -1254,7 +1665,9 @@
   overflow-y: auto;
   min-height: 24px;
   max-height: 220px;
-  line-height: var(--composer-line-height, 1.55);
+  line-height: var(--composer-line-height, 1.5);
+  padding: 0;
+  margin: 0;
 }
 
 .dropMask {

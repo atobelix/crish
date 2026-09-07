@@ -37,17 +37,11 @@
   min-width: 0;
 }
 
-/* 纯净画纸与垂直节奏体系（DIM-01）：基于直接相邻兄弟选择器统一赋予 16px 垂直间距 */
-[data-chat-list-inner] > :not([hidden]) + :not([hidden]) {
-  margin-top: 16px;
-}
+/* 纯净垂直节奏体系（DEF-13）：彻底消除相邻兄弟选择器与外部 margin 黑洞。
+   行垂直间距全面收敛为消息行内部盒模型（.row padding-bottom: 16px / .rowCarrier padding-bottom: 4px），
+   保证 DOM Physical Height (offsetHeight) 与 VSM 实测高度 100% 恒等，杜绝切片卸载时 1600px 累积高度蒸发与视口跳跃。 */
 
-/* 兼容 ErrorBoundary contents 包装下消息行容器间距 */
-[data-chat-list-inner] > :not([hidden]) + :not([hidden]) > [data-vindex] {
-  margin-top: 16px;
-}
-
-/* 虚拟化 Spacer 保持几何占位但通过 hidden 属性被相邻兄弟选择器排除 */
+/* 虚拟化 Spacer 保持几何占位但通过 hidden 属性隐藏 */
 [data-vsm-spacer] {
   display: block;
 }
