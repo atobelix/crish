@@ -150,4 +150,72 @@ describe('CompactInjectionRow 渲染与交互', () => {
     expect(head).toHaveAttribute('aria-expanded', 'false');
     expect(head).toHaveAttribute('aria-controls', 'injection-body-inj_test_1');
   });
+
+  it('状态切换提示（打样）：渲染为极简灰色纯文字，无图标、无分类徽章、无展开卡片', () => {
+    const rawScreenshotContent =
+      '[系统上下文注入 · 状态切换]\n\n当前已切换到模型 muse-spark-1.2-contributor (服务端 custom-ms983y2d)。权限模式: full。';
+    const inj = makeInjection({
+      id: 'inj_state_switch',
+      kind: 'workspace_env',
+      title: '上下文状态切换',
+      summary:
+        '当前已切换到模型 muse-spark-1.2-contributor (服务端 custom-ms983y2d)。权限模式: full。',
+      content: rawScreenshotContent,
+      tokenEstimate: 37,
+      metadata: { mode: 'context-state' },
+    });
+
+    const { container } = render(
+      <CompactInjectionRow
+        injection={inj}
+        rowKey="test-state"
+        activeSessionId="s1"
+        msgId="m1"
+      />
+    );
+
+    // 1. 验证目标纯文字输出，格式必须为：系统 · 切换到muse-spark-1.2-contributor。 权限模式：full。
+    expect(
+      screen.getByText('系统 · 切换到muse-spark-1.2-contributor。 权限模式：full。')
+    ).toBeInTheDocument();
+
+    // 2. 验证去除了冗余标签与徽标
+    expect(screen.queryByText('工作区环境')).not.toBeInTheDocument();
+    expect(screen.queryByText('37 t')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('[系统上下文注入 · 状态切换]')
+    ).not.toBeInTheDocument();
+
+    // 3. 验证无可展开按钮（无 role="button"）与无 svg 图标
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(container.querySelectorAll('svg')).toHaveLength(0);
+
+    // 4. 验证具有 status 无障碍角色
+    expect(screen.getByRole('status')).toBeInTheDocument();
+  });
+
+  it('状态切换格式化：支持带思考档位的完整文本', () => {
+    const inj = makeInjection({
+      id: 'inj_state_thinking',
+      kind: 'workspace_env',
+      title: '上下文状态切换',
+      content:
+        '当前已切换到模型 deepseek-chat（服务商 DeepSeek）。权限模式：ask。思考档位：high。',
+    });
+
+    render(
+      <CompactInjectionRow
+        injection={inj}
+        rowKey="test-thinking"
+        activeSessionId="s1"
+        msgId="m1"
+      />
+    );
+
+    expect(
+      screen.getByText(
+        '系统 · 切换到deepseek-chat。 权限模式：ask。 思考档位：high。'
+      )
+    ).toBeInTheDocument();
+  });
 });

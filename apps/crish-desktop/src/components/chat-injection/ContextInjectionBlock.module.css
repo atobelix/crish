@@ -422,3 +422,37 @@
   gap: 8px;
   margin-top: 8px;
 }
+
+/* ── 状态切换极简发丝微分割线（Status Divider：无图标、无卡片外框、发丝居中微提示） ── */
+.contextStateNotice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  padding: 4px 0;
+  margin: 8px 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  user-select: text;
+}
+
+.contextStateNotice::before,
+.contextStateNotice::after {
+  content: '';
+  flex: 1;
+  height: 0.5px;
+  background: var(--border-subtle, hsl(0 0% 100% / 0.08));
+}
+
+.contextStateText {
+  font-family: inherit;
+  font-size: var(--font-size-xs, 12px);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 1.5;
+  color: var(--text-tertiary, #8f8f8f);
+  text-align: center;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

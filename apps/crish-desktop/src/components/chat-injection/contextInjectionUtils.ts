@@ -15,7 +15,7 @@ import {
   Sparkles,
   Terminal,
 } from 'lucide-react';
-import type { ContextInjectionKind } from '../../store/types';
+import type { ContextInjectionKind, MessageContextInjection } from '../../store/types';
 
 /** 注入图标组件签名（统一 size / strokeWidth / className，方便槽位套用） */
 export type InjectionIconComponent = React.FC<{
@@ -151,4 +151,74 @@ export function sanitizeInjectionTitle(title: string): string {
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * 判定注入实体是否为状态切换感知项（模型/服务商/权限/档位切换通知）。
+ * 覆盖 metadata.mode、title、content、summary 等多种上游产生路径。
+ */
+export function isContextStateInjection(
+  injection: Partial<MessageContextInjection> | undefined
+): boolean {
+  if (!injection) return false;
+  if (
+    injection.metadata &&
+    (injection.metadata as Record<string, unknown>).mode === 'context-state'
+  ) {
+    return true;
+  }
+  const title = injection.title || '';
+  if (title.includes('状态切换') || title.includes('上下文状态切换')) {
+    return true;
+  }
+  const content = injection.content || '';
+  if (
+    content.includes('[系统上下文注入 · 状态切换]') ||
+    content.includes('当前已切换到模型') ||
+    content.startsWith('切换到') ||
+    content.startsWith('系统 · 切换到')
+  ) {
+    return true;
+  }
+  const summary = injection.summary || '';
+  if (summary.includes('当前已切换到模型') || summary.includes('状态切换')) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 格式化上下文状态切换在对话流中的展示文案（极简纯文字打样）。
+ * 剥离内部机器标头与服务端标识噪点，统一输出为：
+ * `系统 · 切换到<model>。 权限模式：<mode>。`（若含思考档位则追加）。
+ */
+export function formatContextStateDisplayText(rawText: string): string {
+  if (!rawText) return '系统 · 状态切换';
+
+  let text = rawText.trim();
+
+  // 1. 去掉方括号标头（如 [系统上下文注入 · 状态切换]）
+  text = text.replace(/^\[系统上下文注入\s*[·\-_]\s*状态切换\]\s*/i, '').trim();
+
+  // 2. 去掉服务商/服务端等内部 profile 标识，如 "(服务端 custom-ms983y2d)" 或 "（服务商 p1）"
+  text = text.replace(/[(（](?:服务商|服务端)\s*[^)）]+[)）]\s*/g, '');
+
+  // 3. 将 "当前已切换到模型" 或 "已切换到模型" 规范为 "切换到"
+  text = text.replace(/(?:当前)?已切换到模型\s*/g, '切换到');
+
+  // 4. 清理标点符号前的多余空格，例如 "muse-spark-1.2-contributor 。" -> "muse-spark-1.2-contributor。"
+  text = text.replace(/\s+([。！？:：])/g, '$1');
+
+  // 5. 规范标点："权限模式: full" -> "权限模式：full"
+  text = text.replace(/权限模式\s*[:：]\s*/g, '权限模式：');
+  text = text.replace(/思考档位\s*[:：]\s*/g, '思考档位：');
+
+  // 6. 规范句子之间的空格分隔，例如 "。权限模式：" -> "。 权限模式："
+  text = text.replace(/([。！？])\s*([^\s。！？])/g, '$1 $2');
+
+  // 7. 统一前缀为 "系统 · "（避免重复添加）
+  text = text.replace(/^系统\s*[·\-_]\s*/, '');
+  text = `系统 · ${text.trim()}`;
+
+  return text;
 }

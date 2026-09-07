@@ -28,6 +28,8 @@ import {
   getInjectionIcon,
   getInjectionKindLabel,
   getInjectionToneClass,
+  isContextStateInjection,
+  formatContextStateDisplayText,
 } from './contextInjectionUtils';
 
 /** 从共享 props 中切出本组件需要的回调（与详案 02 装配语义一致） */
@@ -47,6 +49,32 @@ export const CompactInjectionRow: React.FC<RowProps> = React.memo(
     onOpenDiff,
     onRetryInjection,
   }) {
+    // 彻底杜绝在时间线中复读冗余的文件上下文卡片（极简模式，不渲染）
+    if (injection?.kind === 'file_context') {
+      return null;
+    }
+
+    // 状态切换感知项（模型/服务商/权限/档位切换通知）：以极简灰色纯文字提示呈现，
+    // 杜绝大卡片、粗彩边框、图标徽章与 100% 冗余复读的展开 Body
+    if (isContextStateInjection(injection)) {
+      const rawText =
+        injection.content || injection.summary || injection.title || '';
+      const displayText = formatContextStateDisplayText(rawText);
+      return (
+        <div
+          key={rowKey}
+          className={styles.contextStateNotice}
+          role="status"
+          aria-label={displayText}
+          data-injection-id={injection.id}
+          data-injection-kind={injection.kind}
+          data-testid={`context-state-notice-${injection.id}`}
+        >
+          <span className={styles.contextStateText}>{displayText}</span>
+        </div>
+      );
+    }
+
     const hasContent = (injection.content || '').trim().length > 0;
     const hasDiffs = (injection.diffs?.length ?? 0) > 0;
     const hasPaths = (injection.targetPaths?.length ?? 0) > 0;

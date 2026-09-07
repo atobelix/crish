@@ -19,6 +19,10 @@ import {
 } from '../../api/workflow-api/workflowConfirm';
 import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
 import { CompactInjectionRow } from '../chat-injection/CompactInjectionRow';
+import {
+  isContextStateInjection,
+  formatContextStateDisplayText,
+} from '../chat-injection/contextInjectionUtils';
 import { TurnProcessNodeView } from './TurnProcessNodeView';
 import { deriveTurnProcessState, countProcessMetrics } from './turnProcessState';
 import {
@@ -249,13 +253,36 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
     const lastTextIndex = endsWithText ? timeline.length - 1 : -1;
     const finalAnswerItem = endsWithText ? lastItem : null;
 
-    const processItems = useMemo(
-      () =>
+    const processItems = useMemo(() => {
+      const raw =
         lastTextIndex >= 0
           ? timeline.filter((_, idx) => idx !== lastTextIndex)
-          : timeline,
-      [timeline, lastTextIndex]
-    );
+          : timeline;
+      // 过滤连续重复的状态切换提示（避免模型多次切换或重试产生的连续复读微提示）
+      const deduped: AssistantTimelineItem[] = [];
+      let lastStateText = '';
+      for (const item of raw) {
+        if (
+          item.kind === 'injection' &&
+          isContextStateInjection(item.injection)
+        ) {
+          const rawText =
+            item.injection?.content ||
+            item.injection?.summary ||
+            item.injection?.title ||
+            '';
+          const currentText = formatContextStateDisplayText(rawText);
+          if (currentText === lastStateText) {
+            continue;
+          }
+          lastStateText = currentText;
+        } else {
+          lastStateText = '';
+        }
+        deduped.push(item);
+      }
+      return deduped;
+    }, [timeline, lastTextIndex]);
 
     const isTurnLive = Boolean(isThinkingMsg || msg.status === 'processing');
 

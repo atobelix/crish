@@ -11,6 +11,7 @@ import styles from './ContextInjectionBlock.module.css';
 import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
 import { Priority } from '../../workers';
 import { Tooltip } from '../ui';
+import { pathBasename } from '../../api/workspaceFsApi';
 import type { MessageContextInjection } from '../../store/types';
 import type { InjectionBodyProps } from './contextInjectionTypes';
 
@@ -46,7 +47,7 @@ export const InjectionBody: React.FC<InjectionBodyProps> = React.memo(
                     onClick={() => onOpenPath?.(p)}
                     data-injection-path={p}
                   >
-                    {p}
+                    {pathBasename(p) || p}
                   </button>
                 </Tooltip>
               ))}
