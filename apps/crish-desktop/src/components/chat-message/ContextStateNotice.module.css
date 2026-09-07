@@ -1,0 +1,51 @@
+/* ── 状态切换极简发丝微分割线（Status Divider：无图标、无卡片外框、发丝居中微提示） ── */
+.contextStateNotice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3, 12px);
+  width: 100%;
+  height: 20px;
+  min-height: 20px;
+  max-height: 20px;
+  padding: 0;
+  margin: var(--space-1, 4px) 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  user-select: text;
+  box-sizing: border-box;
+  outline: none;
+}
+
+.contextStateNotice:focus-visible {
+  outline: none;
+  border-radius: var(--radius-sm, 4px);
+  box-shadow: 0 0 0 1.5px
+    color-mix(in srgb, var(--border-color) 95%, var(--text-primary) 5%);
+}
+
+.contextStateNotice::before,
+.contextStateNotice::after {
+  content: '';
+  flex: 1;
+  min-width: 16px;
+  height: 0.5px;
+  background: var(--border-subtle);
+}
+
+.contextStateText {
+  font-family: inherit;
+  font-size: var(--font-size-micro, 11px);
+  font-weight: var(--font-weight-normal, 400);
+  line-height: 20px;
+  color: var(--text-tertiary);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 80%;
+  padding: 0 var(--space-2, 8px);
+}

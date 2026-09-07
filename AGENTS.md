@@ -298,6 +298,13 @@ _2026-08-13 主调度订正 · 附录 B 取代附录 A §3 的旧口径（16 上
 4. **本次梳理就地修订清单**（无纪律丢失，均为口径统一或消歧义）：§2（每轮数量并入附录 B 口径；空返回接续模式并入正文）；§3（整节按附录 B #1 重写，「允许并行提交」废止）；§7（「调用 DevTools」→「经运行时调试通道（Tauri MCP）」，消除与 9222 禁令的歧义）；§15（整节重写，见本附录第 1 条）；§16（默认开启，见第 2 条）；§17（同轮计数 [6,16] → [5,12] 对齐附录 B；冲突处理改为「就地修订 + 附录 C 留痕」）；附录 A（#1 维护模式、#3 冲突取舍更新）；`.agents/AGENTS.md` 入口指针同步更新维护模式表述。
 5. **战役工作区结构规范（用户裁决，2026-08-21 二次补充）**：§17「实现波调度」条目去掉具体战役目录名（原指向 `docs/block-workspace-architecture/`，含其下两个具体文件名一并移除），改为通用工作区约定；§4 新增「战役工作区结构规范」五条（主控拟名 / 根目录三类白名单 / 子文件夹仅一级 / 归类充分禁碎片文件夹 / README §3 降为细则引用）；§10 项目背景同步去除该目录的过细内容标注。被移除的旧指针内容（`19-实现波调度状态.md`、`22-续航锚点-压缩后必读.md`、`block-workspace-architecture` 目录名）属「过细路径示例」而非纪律本体，实际文档仍在原位未动。
 
+### 2026-09-07 · 对话流注入卡片彻底物理废除与防回潮裁决（用户）
+
+1. **废弃卡片彻底物理销毁（翻转 BATCH-07 尝试保留并折叠注入卡片的旧方案）**：彻底物理删除 `apps/crish-desktop/src/components/chat-injection/` 全部 12 个历史文件；严禁任何形式的上下文卡片（`file_context`、`skill`、`goal`、`schedule`）以大卡片或抽屉形式侵入对话时间线。
+2. **定时配置确认解耦独立（用户裁决「定时配置那个改改还能用」）**：`WorkflowConfirmCard` 从注入体系解耦，作为独立业务交互组件迁移至 `apps/crish-desktop/src/components/workflow-confirm/`。
+3. **系统状态切换微提示单一真理源**：统一收敛为 20px 极简发丝分割线 `ContextStateNotice`。
+4. **全系统杜绝 Emoji 表情与资产保护铁律**：严禁任何 Emoji 字符出现在界面中；强制保护 `apps/crish-desktop/src/assets/` 下全部图标资产。详见正文 §21 与专项记录。
+
 ---
 
 ## 19. UI：输入框四态体系与全生命周期防倒退铁律（2026-09-05 用户裁决）
@@ -335,3 +342,21 @@ _2026-08-13 主调度订正 · 附录 B 取代附录 A §3 的旧口径（16 上
    - 运行 `node scripts/check-input-guardrails.mjs`（`npm run check:input-guard`，已接入 `check:desktop` 与单测）；
    - 静态 AST 深度遍历全仓所有 CSS 规则与 TSX 标签，刚性阻断纯黑边框、厚重阴影、奇葩/生硬圆角、按钮果冻弹跳（`:active scale(0.96)` 等）；
    - 拦截表单私有原生 `<input>`，强制统一复用原子 `@/components/ui`（形态 ③），任何 Agent 违背规范立即被门禁阻断。
+
+## 21. 对话流上下文注入卡片彻底物理废除与防回潮铁律（2026-09-07 用户裁决）
+
+1. **废弃卡片彻底物理销毁**：
+   - 彻底物理删除 `apps/crish-desktop/src/components/chat-injection/` 全量文件（包括 `CompactInjectionRow`、`ContextInjectionBlock`、`ContextInjectionCard`、`InjectionHeader`、`InjectionBody`、`contextInjectionTypes`、`contextInjectionUtils` 以及关联单元测试）；
+   - 严禁任何形式的上下文卡片（`file_context`、`skill`、`goal`、`schedule` 等）重新包装成大卡片、带背景外框或折叠抽屉侵入对话时间线；
+   - 详案与专项记录见 `docs/chat-flow-systemic-remediation/00-专项记录-对话流注入卡片彻底物理废除与防回潮铁律.md`。
+2. **全系统界面杜绝 Emoji 表情**：
+   - 全系统 UI 界面（包括状态提示、确认卡片、文案、按钮、占位符等）**绝对杜绝任何 Emoji 字符**（如 📄、📝、🖼️、🐍、✨、🧭、⏰、🛠️、🎯 等）；
+   - 图标统一使用项目内置的标准矢量图标（Lucide 图标库）；
+   - 严禁删除或篡改现存图标资产（`apps/crish-desktop/src/assets/` 下全部图标资产受强制保护）。
+3. **合法呈现单一真理源（SSOT）**：
+   - **系统状态切换**：必须且仅允许使用 20px 居中极简发丝微提示 `ContextStateNotice`（高度刚性锁定 20px，两端 `0.5px` 发丝线，纯黑白灰微提示，无边框、无阴影、无抽屉、无交互按钮，零 Emoji）；
+   - **定时配置确认**：作为独立业务交互组件解耦维护于 `apps/crish-desktop/src/components/workflow-confirm/WorkflowConfirmCard.tsx`（保留「修改配置」回填与「确认创建并激活」完整业务链路，零 Emoji，矢量图标）；
+   - **生成链路拦截**：斜杠命令与助手卡片派发接口（`slashContextCards.ts` / `workflowAssistantCard.ts`）全部置空或统一走输入框 safe_seed，严禁向会话历史写入幽灵卡片。
+4. **永久禁止恢复与回潮**：
+   - 任何 Agent 严禁以任何借口复活已被物理删除的注入大卡片体系，严禁私自恢复被删除的文件；
+   - 门禁与守护单测（`ContextStateNotice.test.tsx`、`WorkflowConfirmCard.test.tsx`）保持强制守护。

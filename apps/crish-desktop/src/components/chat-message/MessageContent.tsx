@@ -12,17 +12,17 @@ import { stripThoughtPlaceholders } from '../../api/markdownRenderLite';
 import { Priority } from '../../workers';
 import { MessageToolCallsSection } from '../chat-message-row/MessageToolCallsSection';
 import { StreamingMarkdownView } from '../chat-message-row/StreamingMarkdownView';
-import { WorkflowConfirmCard } from '../chat-injection/WorkflowConfirmCard';
+import { WorkflowConfirmCard } from '../workflow-confirm/WorkflowConfirmCard';
 import {
   extractWorkflowConfirmPayload,
   stripWorkflowConfirmFence,
 } from '../../api/workflow-api/workflowConfirm';
 import { TimelineThoughtSection } from '../chat-message-row/TimelineThoughtSection';
-import { CompactInjectionRow } from '../chat-injection/CompactInjectionRow';
+import { ContextStateNotice } from './ContextStateNotice';
 import {
   isContextStateInjection,
   formatContextStateDisplayText,
-} from '../chat-injection/contextInjectionUtils';
+} from './contextStateUtils';
 import { TurnProcessNodeView } from './TurnProcessNodeView';
 import { deriveTurnProcessState, countProcessMetrics } from './turnProcessState';
 import {
@@ -159,27 +159,16 @@ const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.memo(
       ) : null;
     }
     if (item.kind === 'injection') {
-      return (
-        <CompactInjectionRow
-          key={item.key}
-          rowKey={item.key}
-          injection={item.injection}
-          activeSessionId={toolStackProps?.activeSessionId ?? ''}
-          msgId={msgId}
-          {...(toolStackProps?.actions?.onOpenDiff
-            ? { onOpenDiff: toolStackProps.actions.onOpenDiff }
-            : {})}
-          {...(toolStackProps?.actions?.onOpenPath
-            ? { onOpenPath: toolStackProps.actions.onOpenPath }
-            : {})}
-          {...(toolStackProps?.actions?.onRetryInjection
-            ? { onRetryInjection: toolStackProps.actions.onRetryInjection }
-            : {})}
-          {...(toolStackProps?.onToggleInjection
-            ? { onToggleInjection: toolStackProps.onToggleInjection }
-            : {})}
-        />
-      );
+      if (isContextStateInjection(item.injection)) {
+        return (
+          <ContextStateNotice
+            key={item.key}
+            rowKey={item.key}
+            injection={item.injection}
+          />
+        );
+      }
+      return null;
     }
     return null;
   }
@@ -291,7 +280,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           isContextStateInjection(item.injection)
         ) {
           states.push(item);
-        } else {
+        } else if (item.kind !== 'injection') {
           processes.push(item);
         }
       }

@@ -7,6 +7,8 @@ import {
 } from './useScopedSessionField';
 import type { SessionMessage, SessionAgent } from '../../store/types';
 import { triggerSessionMessageHydrateIfNeeded } from '../../store/sessionCrudActions';
+import { messageMatchesSearch } from '../../api/sessionSearch';
+import { dedupeStateCarrierMessages } from '../chat-message/contextStateUtils';
 
 export interface UseChatMessagesOptions {
   resolveSessionId: (s: SessionStoreStateShape) => string;
@@ -58,15 +60,21 @@ export function useChatMessages({
     triggerSessionMessageHydrateIfNeeded(activeSessionId);
   }, [activeSessionId]);
 
+  const displayMessages = useMemo(() => {
+    const q = localMsgFilter.trim();
+    const base = q ? messages.filter((m) => messageMatchesSearch(m, q)) : messages;
+    return dedupeStateCarrierMessages(base);
+  }, [messages, localMsgFilter]);
+
   const {
-    displayMessages,
     messagesLoading,
     emptyKind,
     onEmptySurface,
     chatRegionAria,
   } = useChatEmptyKind({
     activeSessionId,
-    messages,
+    messageCount: messages.length,
+    displayCount: displayMessages.length,
     localMsgFilter,
     mainSurface,
     hydratedFromEngine,

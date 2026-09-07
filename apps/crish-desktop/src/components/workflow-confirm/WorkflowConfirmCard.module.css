@@ -1,0 +1,99 @@
+.confirmCard {
+  position: relative;
+  border-radius: var(--radius-md, 6px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  overflow: hidden;
+  margin: var(--space-2, 8px) 0;
+  box-shadow: none;
+}
+
+.confirmHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: 8px 12px;
+  background: var(--tint-hover);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--font-size-xs, 12px);
+}
+
+.iconSlot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text-tertiary);
+}
+
+.kindBadge {
+  font-size: var(--font-size-nano, 10px);
+  font-weight: var(--font-weight-medium, 500);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm, 4px);
+  background: var(--tint-hover);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.titleText {
+  font-weight: var(--font-weight-medium, 500);
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.okIcon {
+  color: var(--accent-green, #10b981);
+}
+
+.failIcon {
+  color: var(--text-danger, #ef4444);
+}
+
+.confirmBody {
+  padding: 10px 14px;
+  font-size: var(--font-size-xs, 12px);
+}
+
+.confirmRow {
+  display: flex;
+  margin-bottom: var(--space-1_5, 6px);
+  line-height: 1.5;
+}
+
+.confirmLabel {
+  width: 72px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.confirmValue {
+  color: var(--text-primary);
+  font-weight: var(--font-weight-medium, 500);
+  word-break: break-word;
+}
+
+.confirmPromptBlock {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-micro, 11px);
+  background: var(--tint-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 4px);
+  padding: 6px 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: var(--text-secondary);
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-2_5, 10px);
+  padding-top: var(--space-2, 8px);
+  border-top: 1px solid var(--border-subtle);
+}

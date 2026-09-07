@@ -1,16 +1,13 @@
 /**
- * WorkflowConfirmCard —— 路径 B 确认卡片（详案 05 §2.4.2 / TC-WG-05）。
+ * WorkflowConfirmCard —— 定时任务配置确认卡片（独立业务交互组件）。
  *
  * 模型在对话流输出 `json:workflow-payload` 围栏后，本卡片将结构化载荷
  * 渲染为「确认创建并激活 / 修改配置」交互面；点击确认经
- * registerWorkflowFromGrillMe 走 create-workflow 落盘（零额外 AI 轮次）。
- *
- * 视觉对齐 chat-injection 卡片族（圆角 + 语义微光 + 无重阴影），
- * 成功/失败状态以 toast + 卡片内状态徽标双通道呈现。
+ * registerWorkflowFromGrillMe 走 create-workflow 落盘。
  */
 import React, { useCallback, useMemo, useState } from 'react';
-import { CheckCircle2, AlertCircle, Loader2, Clock } from 'lucide-react';
-import styles from './ContextInjectionBlock.module.css';
+import { CheckCircle2, AlertCircle, Clock } from 'lucide-react';
+import styles from './WorkflowConfirmCard.module.css';
 import { Button, Tooltip } from '../ui';
 import { useToast } from '../../services/toast/ToastContext';
 import { sessionDraftManager } from '../../api/draft/sessionDraftManager';
@@ -82,7 +79,7 @@ export const WorkflowConfirmCard: React.FC<WorkflowConfirmCardProps> =
       } finally {
         setBusy(false);
       }
-    }, [busy, payload, toast]);
+    }, [busy, payload, toast, sig, result]);
 
     /** 修改配置：把载荷回填到输入框并引导继续对齐（不落盘） */
     const handleModify = useCallback(() => {
@@ -101,88 +98,86 @@ export const WorkflowConfirmCard: React.FC<WorkflowConfirmCardProps> =
 
     return (
       <div
-        className={`${styles.injectionRow} ${styles.toneSchedule}`}
+        className={styles.confirmCard}
         data-testid="workflow-confirm-card"
         role="region"
         aria-label="定时任务确认卡片"
       >
-        <div className={styles.rowHead}>
-          <div className={styles.rowHeadMain}>
-            <span className={styles.iconSlot} aria-hidden>
-              <Clock size={14} />
-            </span>
-            <span className={styles.kindBadge}>任务确认</span>
-            <span className={styles.titleText}>定时任务配置确认</span>
-            {result === 'ok' ? (
-              <Tooltip content="已成功创建">
-                <CheckCircle2
-                  size={14}
-                  className={styles.okIcon}
-                  data-testid="confirm-ok"
-                />
-              </Tooltip>
-            ) : null}
-            {result === 'error' ? (
-              <Tooltip content={errorMsg || '创建失败'}>
-                <AlertCircle
-                  size={14}
-                  className={styles.failIcon}
-                  data-testid="confirm-error"
-                />
-              </Tooltip>
-            ) : null}
-          </div>
+        <div className={styles.confirmHead}>
+          <span className={styles.iconSlot} aria-hidden>
+            <Clock size={14} />
+          </span>
+          <span className={styles.kindBadge}>任务确认</span>
+          <span className={styles.titleText}>定时任务配置确认</span>
+          {result === 'ok' ? (
+            <Tooltip content="已成功创建">
+              <CheckCircle2
+                size={14}
+                className={styles.okIcon}
+                data-testid="confirm-ok"
+              />
+            </Tooltip>
+          ) : null}
+          {result === 'error' ? (
+            <Tooltip content={errorMsg || '创建失败'}>
+              <AlertCircle
+                size={14}
+                className={styles.failIcon}
+                data-testid="confirm-error"
+              />
+            </Tooltip>
+          ) : null}
         </div>
-        <div className={styles.rowBody}>
-          <div className={styles.bodyInner}>
-            <div className={styles.confirmSummary}>
-              <div className={styles.confirmRow}>
-                <span className={styles.confirmLabel}>任务名称</span>
-                <span className={styles.confirmValue}>{payload.name}</span>
-              </div>
-              <div className={styles.confirmRow}>
-                <span className={styles.confirmLabel}>执行周期</span>
-                <span className={styles.confirmValue}>
-                  {scheduleSummary(payload)}
-                </span>
-              </div>
-              <div className={styles.confirmRow}>
-                <span className={styles.confirmLabel}>执行指令</span>
-                <span className={`${styles.confirmValue} ${styles.confirmPrompt}`}>
-                  {payload.prompt}
-                </span>
-              </div>
+        <div className={styles.confirmBody}>
+          <div className={styles.confirmRow}>
+            <span className={styles.confirmLabel}>任务名称</span>
+            <span className={styles.confirmValue}>{payload.name}</span>
+          </div>
+          <div className={styles.confirmRow}>
+            <span className={styles.confirmLabel}>执行周期</span>
+            <span className={styles.confirmValue}>
+              {scheduleSummary(payload)}
+            </span>
+          </div>
+          <div className={styles.confirmRow}>
+            <span className={styles.confirmLabel}>执行指令</span>
+            <span className={styles.confirmValue} style={{ flex: 1 }}>
+              <pre className={styles.confirmPromptBlock}>
+                {payload.prompt}
+              </pre>
+            </span>
+          </div>
+          {payload.cwd ? (
+            <div className={styles.confirmRow}>
+              <span className={styles.confirmLabel}>工作目录</span>
+              <span className={styles.confirmValue}>
+                {payload.cwd}
+              </span>
             </div>
-            {errorMsg && result === 'error' ? (
-              <div className={styles.confirmErrorText} role="alert">
-                {errorMsg}
-              </div>
-            ) : null}
-            <div className={styles.confirmActionRow}>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                loading={busy}
-                disabled={result === 'ok'}
-                onClick={() => void handleConfirm()}
-              >
-                {result === 'ok'
+          ) : null}
+          <div className={styles.confirmActions}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleModify}
+              disabled={busy}
+            >
+              修改配置
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleConfirm}
+              disabled={busy || result === 'ok'}
+            >
+              {busy
+                ? '创建中...'
+                : result === 'ok'
                   ? '已创建'
-                  : busy
-                    ? '创建中…'
-                    : '确认创建并激活'}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                disabled={busy || result === 'ok'}
-                onClick={handleModify}
-              >
-                修改配置
-              </Button>
-            </div>
+                  : '确认创建并激活'}
+            </Button>
           </div>
         </div>
       </div>
