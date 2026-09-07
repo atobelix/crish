@@ -159,9 +159,6 @@ const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.memo(
       ) : null;
     }
     if (item.kind === 'injection') {
-      if (item.injection?.kind === 'file_context') {
-        return null;
-      }
       return (
         <CompactInjectionRow
           key={item.key}
@@ -174,6 +171,12 @@ const ProcessItemRenderer: React.FC<ProcessItemRendererProps> = React.memo(
             : {})}
           {...(toolStackProps?.actions?.onOpenPath
             ? { onOpenPath: toolStackProps.actions.onOpenPath }
+            : {})}
+          {...(toolStackProps?.actions?.onRetryInjection
+            ? { onRetryInjection: toolStackProps.actions.onRetryInjection }
+            : {})}
+          {...(toolStackProps?.onToggleInjection
+            ? { onToggleInjection: toolStackProps.onToggleInjection }
             : {})}
         />
       );
@@ -266,12 +269,7 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
           item.kind === 'injection' &&
           isContextStateInjection(item.injection)
         ) {
-          const rawText =
-            item.injection?.content ||
-            item.injection?.summary ||
-            item.injection?.title ||
-            '';
-          const currentText = formatContextStateDisplayText(rawText);
+          const currentText = formatContextStateDisplayText(item.injection);
           if (currentText === lastStateText) {
             continue;
           }
@@ -284,11 +282,27 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       return deduped;
     }, [timeline, lastTextIndex]);
 
+    const { stateItems, turnProcessItems } = useMemo(() => {
+      const states: AssistantTimelineItem[] = [];
+      const processes: AssistantTimelineItem[] = [];
+      for (const item of processItems) {
+        if (
+          item.kind === 'injection' &&
+          isContextStateInjection(item.injection)
+        ) {
+          states.push(item);
+        } else {
+          processes.push(item);
+        }
+      }
+      return { stateItems: states, turnProcessItems: processes };
+    }, [processItems]);
+
     const isTurnLive = Boolean(isThinkingMsg || msg.status === 'processing');
 
     const { toolCount, thoughtCount } = useMemo(
-      () => countProcessMetrics(processItems),
-      [processItems]
+      () => countProcessMetrics(turnProcessItems),
+      [turnProcessItems]
     );
 
     const hasToolsOrThinking = toolCount > 0 || thoughtCount > 0;
@@ -326,10 +340,10 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
       return found;
     }, [streaming, streamText]);
 
-    const renderProcessChildren = useCallback(
-      () => (
+    const renderItemList = useCallback(
+      (items: AssistantTimelineItem[]) => (
         <>
-          {processItems.map((item) => (
+          {items.map((item) => (
             <ProcessItemRenderer
               key={item.key}
               item={item}
@@ -346,7 +360,6 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
         </>
       ),
       [
-        processItems,
         msg.id,
         msg.status,
         isThinkingMsg,
@@ -355,6 +368,11 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
         renderTools,
         toolStackProps,
       ]
+    );
+
+    const renderProcessChildren = useCallback(
+      () => renderItemList(turnProcessItems),
+      [renderItemList, turnProcessItems]
     );
 
     // Timeline 为空时的降级渲染
@@ -469,10 +487,11 @@ export const MessageContent: React.FC<MessageContentProps> = React.memo(
 
     return (
       <div className={className}>
-        {processItems.length > 0 && (
+        {stateItems.length > 0 && renderItemList(stateItems)}
+        {turnProcessItems.length > 0 && (
           <TurnProcessNodeView
             msgId={msg.id}
-            items={processItems}
+            items={turnProcessItems}
             isTurnLive={isTurnLive}
             hasFinalAnswer={hasFinalAnswer}
             turnStatus={msg.status}

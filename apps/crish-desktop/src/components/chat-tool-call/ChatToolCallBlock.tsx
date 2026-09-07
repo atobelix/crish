@@ -25,10 +25,11 @@ export interface ChatToolStackActions {
   onOpenDiff?: ((diff: FileDiff) => void) | undefined;
   onOpenPath?: ((filePath: string) => void) | undefined;
   onOpenTerminal?: (() => void) | undefined;
+  onRetryInjection?: ((injectionId: string) => void) | undefined;
+  onRetryTool?: ((toolId: string) => void) | undefined;
   onApprovalAllow?:
     ((toolId: string, msgId: string, remember?: boolean) => void) | undefined;
   onApprovalDeny?: ((toolId: string, msgId: string) => void) | undefined;
-  onRetryTool?: ((toolId: string) => void) | undefined;
   /** 批量批准：msgIds 与 toolIds 等长，按 bar 内相邻 pending 组 */
   onBatchApprove?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
   onBatchDeny?: ((msgIds: string[], toolIds: string[]) => void) | undefined;
@@ -49,6 +50,7 @@ export interface ChatToolStackProps {
   activeSessionId: string;
   expandedTools: Record<string, boolean>;
   onToggleTool: (toolId: string, currentlyOpen: boolean) => void;
+  onToggleInjection?: ((injectionId: string, currentlyOpen: boolean) => void) | undefined;
   approvalBusy: boolean;
   pendingApprovalMsgId?: string | undefined;
   /** 操作回调与关联渲染器组（打开/审批/重试/批量/子 agent） */
