@@ -29,6 +29,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 export const REPO_ROOT = path.resolve(__dirname, '..');
 export const DESKTOP_SRC = path.resolve(REPO_ROOT, 'apps/crish-desktop/src');
+/** packages 扫描根（T22：对齐 §19.5「全仓」扫描宣称） */
+export const PACKAGES_ROOT = path.resolve(REPO_ROOT, 'packages');
 
 export let errors = [];
 
@@ -197,19 +199,49 @@ export function analyzeFocusDarkMix(body) {
 }
 
 /**
- * 规则 2 分析器：扫描并拦截大于 1.5px 的粗重焦点投影（如 0 0 0 3px 黑环）
+ * 规则 2 分析器：扫描并拦截输入框焦点态的粗重环形/外扩投影（如 0 0 0 3px 黑环）
+ * （audit-repair-202609 · T22 精确化）：
+ * - 按投影语法解析每段阴影的长度语义：offsetX offsetY [blur] [spread]；
+ * - 拦截条件 = spread > 1.5px（外扩环）**或** 同心光晕（offset 均为 0 且
+ *   blur > 1.5px）；带偏移的柔和投影（如 0 2px 4px）不再误判为粗环；
+ * - 纯黑/文本色投影的禁令不受影响（见 analyzeButtonActiveBorder / 规则 1）。
  */
 export function analyzeBoxShadowSpread(body) {
   const violations = [];
-  const shadowMatches = body.match(/box-shadow\s*:\s*([^;]+);/gi) || [];
+  const shadowMatches = body.match(/box-shadow\s*:\s*[^;]+;/gi) || [];
   for (const match of shadowMatches) {
     const val = match.replace(/^box-shadow\s*:\s*/i, '').replace(/;$/, '').trim();
-    if (val === 'none' || val.includes('none !important')) continue;
-    const pxMatches = val.match(/(\d+(?:\.\d+)?)\s*px/g) || [];
-    for (const px of pxMatches) {
-      const num = parseFloat(px);
-      if (num > 1.5) {
-        violations.push({ type: 'SHADOW_EXCEEDS_1_5PX', spread: num, snippet: val });
+    const valClean = val.replace(/\s*!important/i, '').trim();
+    if (/^none$/i.test(valClean)) continue;
+
+    // 顶层逗号拆分多段阴影（rgb()/color-mix() 内逗号不打碎），逐段解析
+    for (const seg of splitSelectors(valClean)) {
+      // 剥离函数组（rgba()/var()/color-mix() 等，避免内部数字混入长度序列）
+      let cleaned = seg;
+      let prevCleaned = '';
+      while (cleaned !== prevCleaned) {
+        prevCleaned = cleaned;
+        cleaned = cleaned.replace(/[\w-]*\([^()]*\)/g, ' ');
+      }
+      // 长度序列（按出现顺序）：offsetX offsetY [blur] [spread]。
+      // CSS 允许长度写为无单位 0（如 `0 0 0 3px`），故数值均按长度计。
+      const lens = (cleaned.match(/-?(?:\d+(?:\.\d+)?|\.\d+)(?:px)?/gi) || []).map(
+        (v) => parseFloat(v)
+      );
+      if (lens.length < 2) continue; // 无有效长度语义（如 var(--ring)），跳过
+
+      const spread = lens.length >= 4 ? lens[3] : 0;
+      const blur = lens.length >= 3 ? lens[2] : 0;
+      const offsetX = lens[0];
+      const offsetY = lens[1];
+      const isConcentricGlow = offsetX === 0 && offsetY === 0 && blur > 1.5;
+
+      if (spread > 1.5 || isConcentricGlow) {
+        violations.push({
+          type: 'SHADOW_EXCEEDS_1_5PX',
+          spread: Math.max(spread, isConcentricGlow ? blur : 0),
+          snippet: val,
+        });
         break;
       }
     }
@@ -982,9 +1014,9 @@ export function scanAllCssRules(dir, targetErrors = errors) {
           /(?::focus|:focus-visible|:focus-within)\b/i.test(s)
         );
 
-        // 是否包含按钮目标
+        // 是否包含按钮目标：任何词素含 btn / button 的类名、原生 button 标签、[role="button"]
         const isButtonTarget = subSelectors.some((s) =>
-          /(?:^|[\s,>+~.])(?:button|\.btn|IconButton|headerBtn|footerAction|actionBtn|iconBtn)\b|\[role=['"]?button['"]?\]/i.test(
+          /\w*(?:btn|button)\b|(?:^|[\s,>+~.])button\b|\[role=['"]?button['"]?\]/i.test(
             s
           )
         );
@@ -1251,12 +1283,52 @@ export function scanTsxForBespokeInputs(dir, targetErrors = errors) {
   }
 }
 
+// --- 规则 E：binary-tree 标签条动效单一真理路径守卫 ---
+// 1) 幽灵 token（--dur-fast / --ease-default）禁入——时长/缓动必须引用 tokens.css；
+// 2) @keyframes 禁止动画布局属性——条带几何展开/收拢必须走 transition 单轨
+//   （@starting-style 入场 / [data-leaving] 离场），keyframes 仅允许 transform/opacity/色彩。
+export function scanStripMotionGuards(targetErrors = errors) {
+  const stripDir = path.join(DESKTOP_SRC, 'components', 'binary-tree');
+  if (!fs.existsSync(stripDir)) return;
+  const entries = fs.readdirSync(stripDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.css')) continue;
+    const fullPath = path.join(stripDir, entry.name);
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    const relPath = path.relative(REPO_ROOT, fullPath).replace(/\\/g, '/');
+
+    if (/--dur-fast|--ease-default/.test(content)) {
+      targetErrors.push(
+        `[幽灵 token 拦截] 在 ${relPath} 发现不存在的动效 token（--dur-fast / --ease-default）。时长与缓动必须引用 tokens.css 的 --duration-* / --ease-* 阶梯！`
+      );
+    }
+
+    const keyframesMatches = content.matchAll(
+      /@keyframes\s+([\w-]+)\s*\{([\s\S]*?)\n\}/g
+    );
+    const layoutPropPattern =
+      /(?:^|[;{\s])(?:width|max-width|min-width|height|flex-basis|flex|padding(?:-(?:left|right|top|bottom))?\s*:|margin(?:-(?:left|right|top|bottom))?\s*:|top\s*:|left\s*:|right\s*:|bottom\s*:|border-width\s*:)/;
+    for (const kf of keyframesMatches) {
+      if (layoutPropPattern.test(kf[2])) {
+        targetErrors.push(
+          `[布局属性动画拦截] 在 ${relPath} 的 @keyframes ${kf[1]} 中发现布局属性动画。条带几何展开/收拢必须走 transition 单轨（@starting-style 入场 / [data-leaving] 离场），keyframes 仅允许 transform/opacity/色彩！`
+        );
+      }
+    }
+  }
+}
+
 export function runGuardrails() {
   errors = [];
   console.log('🔍 开始执行全仓输入框四态体系防倒退与焦点态刚性静态扫描...');
   runCheckFileSuite(errors);
   scanAllCssRules(DESKTOP_SRC, errors);
+  // audit-repair-202609 T22：扫描根对齐 AGENTS.md §19.5「全仓」宣称——
+  // packages/ 的 CSS（block-paper chrome/paper-list 等）纳入同一分析器
+  //（当前无输入框选择器、零违规，接入为防回潮覆盖面）。
+  scanAllCssRules(PACKAGES_ROOT, errors);
   scanTsxForBespokeInputs(path.resolve(DESKTOP_SRC, 'components'), errors);
+  scanStripMotionGuards(errors);
   return errors;
 }
 
